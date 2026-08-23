@@ -10,5 +10,5 @@ export const DRAFTING_PROMPT = `## drafting
 
 润色可以重组段落、重写对白与叙述、调整节奏，但不可静默改变主线事件、关键因果、人物核心动机、关系结果、权限、伤亡、知情范围或已确认事实。这些问题应指出并退回 planning。
 
-动笔前先 compile_context；缺材料就问人或保持未知。改正文必须调用 propose_patch 或 write_chapter，一次一个文件。不要把 Chat 里的段落当作已保存；返回 awaiting_user 后停下，等作者在稿纸确认。续写接到文末用 write_chapter（placement=append）。不要用通用 Write/Edit 覆盖打开的正文。
+缺材料就要求作者提供必要片段或保持未知。不要把 Chat 里的段落当作已保存，也不要调用通用 Write/Edit 覆盖正文、设定或其他项目文件。作者自行决定是否采用并保存草稿。
 `

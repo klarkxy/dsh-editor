@@ -1,7 +1,7 @@
 {
   "name": "dsh-grill",
   "version": "0.1.0",
-  "description": "DSH novel-writing workflow: scaffold, proposal tools, four-mode system prompt",
+  "description": "DSH novel-writing workflow: scaffold tool and four-mode system prompt",
   "license": "MIT",
   "type": "module",
   "main": "./lib/tools.js",
@@ -37,7 +37,7 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --config ../../vitest.config.ts"
+    "test": "vitest run --root ../.. packages/dsh-grill/test"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

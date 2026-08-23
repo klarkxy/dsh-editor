@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { assembleGrillPrompt } from '../src/prompts/index.ts'
-import {
-  SCAFFOLD_TOOL_NAME,
-  createCanonTools,
-  createContextTool,
-  createProposalTools,
-  createScaffoldTool,
-  createScanTool,
-} from '../src/tools.ts'
-import type { GrillHost } from '../src/host.ts'
+import { SCAFFOLD_TOOL_NAME, apply, createScaffoldTool, scaffoldPreExecute } from '../src/tools.ts'
+import type { GrillHost, ToolExecLike } from '../src/host.ts'
 
 describe('grill prompt router', () => {
   it('assembles four modes and keeps review report-only', () => {
@@ -18,13 +11,7 @@ describe('grill prompt router', () => {
     expect(text).toMatch(/review/)
     expect(text).toMatch(/first-reader/)
     expect(text).toMatch(/默认只出审查报告，不改正文/)
-    expect(text).toMatch(/web_search/)
-    expect(text).toMatch(/propose_patch/)
-    expect(text).toMatch(/write_chapter/)
-    expect(text).toMatch(/awaiting_user/)
-    expect(text).toMatch(/compile_context/)
-    expect(text).toMatch(/scan_scene/)
-    expect(text).toMatch(/propose_character_card_update/)
+    expect(text).toMatch(/作者自行决定是否采用并保存草稿/)
     expect(text).not.toMatch(/scan_ai_flavor/)
     expect(text).not.toMatch(/llm-request/)
     expect(text).not.toMatch(/AI腔机械/)
@@ -48,20 +35,28 @@ describe('grill tools', () => {
     expect(tool.parameters).not.toHaveProperty('target')
   })
 
-  it('exposes proposal tools that do not write the manuscript themselves', () => {
-    const tools = createProposalTools()
-    expect(tools.patch.name).toBe('propose_patch')
-    expect(tools.chapter.name).toBe('write_chapter')
-    expect(tools.patch.parameters).toMatchObject({ type: 'object' })
-    expect(tools.chapter.parameters).toMatchObject({ type: 'object' })
-    expect(tools.patch.isConcurrencySafe?.({})).toBe(false)
+  const exec = (name: string, cwd?: string): ToolExecLike => ({
+    name,
+    signal: new AbortController().signal,
+    agent: cwd ? { session: { header: { cwd } } } : undefined,
   })
 
-  it('exposes compile_context, scan_scene, and canon proposal tools', () => {
-    expect(createContextTool().name).toBe('compile_context')
-    expect(createScanTool().name).toBe('scan_scene')
-    const canon = createCanonTools()
-    expect(canon.card.name).toBe('propose_character_card_update')
-    expect(canon.world.name).toBe('propose_worldbook_update')
+  it('asks for scaffold approval, denies a missing session, and ignores other tools', async () => {
+    const next = async () => ({ kind: 'allow' as const })
+    await expect(scaffoldPreExecute(exec(SCAFFOLD_TOOL_NAME, 'D:/workspace'), next)).resolves.toMatchObject({ kind: 'ask' })
+    await expect(scaffoldPreExecute(exec(SCAFFOLD_TOOL_NAME), next)).resolves.toMatchObject({ kind: 'deny' })
+    await expect(scaffoldPreExecute(exec('other_tool'), next)).resolves.toEqual({ kind: 'allow' })
+  })
+
+  it('registers only scaffold_novel in its host entry', () => {
+    const registered: string[] = []
+    let preExecute: unknown
+    apply({
+      tools: { register(tool: { name: string }) { registered.push(tool.name); return () => {} } },
+      on(_event: string, handler: unknown) { preExecute = handler; return () => {} },
+      get() { return undefined },
+    } as never)
+    expect(registered).toEqual([SCAFFOLD_TOOL_NAME])
+    expect(preExecute).toEqual(expect.any(Function))
   })
 })
