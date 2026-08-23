@@ -1,9 +1,9 @@
 /**
  * Live e2e against an isolated DSH profile (`dsh-editor-e2e`), not the user's
- * daily `web` profile. Covers manuscript overlay + grill scaffold/workflow +
- * official Chat drafting five chapters of 灯下无山.
+ * daily `web` profile. Covers the closable manuscript drawer, guarded editing,
+ * Grill's single scaffold tool, and the four-mode prompt in official Chat.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +16,6 @@ const PROFILE = "dsh-editor-e2e";
 const PORT = Number(process.env.E2E_PORT || 8788);
 const BASE = `http://127.0.0.1:${PORT}`;
 const BOOK = "灯下无山";
-const TARGET_CHARS = 2000;
 const SEND_TIMEOUT_MS = 720_000;
 
 function loadEnvFile(filePath) {
@@ -43,35 +42,8 @@ const NOTES = [];
 let shotIndex = 0;
 let dshChild = null;
 
-const CHAPTERS = [
-  {
-    name: "出山",
-    beat: "陈砺筑基圆满，按青冥谷门规下山。山门雾散后看见的不是城池，是高速公路和玻璃幕墙。写雾、铁尺、三枚灵石，以及他第一次看见汽车时的判断失误。不要解释修仙设定。",
-  },
-  {
-    name: "夜班",
-    beat: "他在24小时便利店差点把监控当「天眼阵」拆掉。夜班店员沈晚宁是隐修，拦住他，教他付钱、排队、别对着镜头运气。写货架、扫码声、她不耐烦又专业的口气。",
-  },
-  {
-    name: "青灰楼",
-    beat: "沈晚宁把他带到旧城区茶馆青灰楼。隐修互助的规矩：不御空、不采城中龙气、出事先走凡人手续。陈砺拿山门的是非顶她，被当场驳回。写茶、旧楼梯、谁有权开口。",
-  },
-  {
-    name: "巷口",
-    beat: "巷口有散修要抢一个孩子身上的胎里灵。陈砺本能拔尺，差点被路过的直播拍到。沈晚宁用凡人手段压场，让他看清山门那一尺在这里会毁一城。写孩子、人群、他停手的那一下。",
-  },
-  {
-    name: "灯下",
-    beat: "他收下便利店夜班工牌作掩护，三枚灵石换成卡里的数字。结尾他仍是筑基修士，但决定先在灯下活着，再问山门为何从不提外面是都市。不要大团圆，不要突然升级。",
-  },
-];
-
 function note(title, detail, severity = "observation") {
   NOTES.push({ type: "note", severity, title, detail, at: new Date().toISOString() });
-}
-
-function countChars(text) {
-  return String(text ?? "").replace(/\s/g, "").length;
 }
 
 async function shot(page, name) {
@@ -96,14 +68,36 @@ async function isReady() {
   }
 }
 
-async function startDsh(workspace) {
-  const dshBin = path.join(
+function dshBinPath() {
+  return path.join(
     process.env.APPDATA || "",
     "npm/node_modules/@deepseek-ai/dsh/lib/bin.js",
   );
+}
+
+function installCurrentPlugins() {
+  const staging = path.join(os.tmpdir(), "dsh-editor-e2e-pack");
+  fs.mkdirSync(staging, { recursive: true });
+  for (const name of ["dsh-manuscript", "dsh-grill"]) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, "packages", name, "package.json"), "utf8"));
+    const tarball = path.join(root, ".pack", `${name}-${manifest.version}.tgz`);
+    if (!fs.existsSync(tarball)) throw new Error(`missing current plugin tarball: ${tarball}`);
+    const stagedTarball = path.join(staging, path.basename(tarball));
+    fs.copyFileSync(tarball, stagedTarball);
+    const result = spawnSync(
+      process.execPath,
+      [dshBinPath(), "plugin", "--profile", PROFILE, "add", `file:${stagedTarball.replaceAll("\\", "/")}`],
+      { cwd: root, env: process.env, stdio: "inherit", windowsHide: true },
+    );
+    if (result.status !== 0) throw new Error(`failed to install ${name} into ${PROFILE}`);
+  }
+  note("插件安装", "isolated profile 已安装本次构建的两个 tarball");
+}
+
+async function startDsh(workspace) {
   dshChild = spawn(
     process.execPath,
-    [dshBin, "--profile", PROFILE, "--no-open", "--host", "127.0.0.1", "--port", String(PORT)],
+    [dshBinPath(), "--profile", PROFILE, "--no-open", "--host", "127.0.0.1", "--port", String(PORT)],
     {
       cwd: workspace,
       env: {
@@ -187,10 +181,14 @@ async function approvePending(page) {
   return false;
 }
 
-async function waitOverlay(page) {
+async function waitOverlay(page, { open = false } = {}) {
   const overlay = page.getByTestId("manuscript-overlay");
   try {
     await overlay.waitFor({ state: "visible", timeout: 15_000 });
+    if (open && (await overlay.getAttribute("data-state")) === "closed") {
+      await page.getByTestId("manuscript-open").click();
+      await page.waitForFunction(() => document.querySelector('[data-testid="manuscript-overlay"]')?.getAttribute("data-state") === "open");
+    }
     note("稿纸 overlay 可见", "shell.overlay / manuscript");
     return true;
   } catch {
@@ -349,6 +347,7 @@ const page = await browser.newPage({
 page.setDefaultTimeout(20_000);
 
 try {
+  installCurrentPlugins();
   await startDsh(workspace);
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2000);
@@ -362,14 +361,14 @@ try {
   await page.getByText("workspace", { exact: true }).first().click().catch(() => {});
   await pickModel(page);
   await shot(page, "model-picked");
-  await waitOverlay(page);
+  await waitOverlay(page, { open: true });
   await shot(page, "overlay");
 
   const plan = await sendChat(
     page,
     [
       "请先调用 scaffold_novel，在当前工作区创建小说目录（正文/大纲/人物卡/世界书）。",
-      `然后用 planning 模式为短篇《${BOOK}》排五场，不要改正文。`,
+      `然后用 planning 模式为短篇《${BOOK}》给出五场梗概。只在聊天中回答，不要写项目文件。`,
       "核心 idea：筑基完成后的修仙者走出大山，发现外面是现代都市，城里有很多隐修人士。",
       "人物：陈砺（刚筑基，青冥谷外门），沈晚宁（便利店夜班隐修）。",
       "不要系统面板，不要后宫，不要突然升级。",
@@ -383,7 +382,7 @@ try {
     note("scaffold 后树未刷新", listed.missing.join("、"), "observation");
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForTimeout(2500);
-    await waitOverlay(page);
+    await waitOverlay(page, { open: true });
     await shot(page, "after-reload");
     await pickModel(page);
     const deadline = Date.now() + 10_000;
@@ -413,72 +412,44 @@ try {
     note("打不开项目总览", "树里没看到文件", "issue");
   }
 
-  const idea =
-    "克制现代都市修仙。筑基后出山，外面是现代都市，城里有隐修。第三人称有限，陈砺视角。不要升级打怪流水账，不要系统面板。";
-  await sendChat(
-    page,
-    `请用 drafting 把下面这段写进 大纲/总纲.md，保留原有标题结构，补上五场走向。\n\n${idea}\n五场：出山、夜班、青灰楼、巷口、灯下。`,
-  );
-  await sendChat(
-    page,
-    "请用 drafting 写 人物卡/陈砺.md 和 人物卡/沈晚宁.md。陈砺：青冥谷外门刚筑基，不懂身份证和钱，铁尺不是法宝。沈晚宁：便利店夜班隐修，话少，烦教人用手机但一步不漏。不要写成冷面女神。",
-  );
+  const overviewPath = path.join(workspace, "项目总览.md");
+  if (!fs.existsSync(overviewPath) || !fs.readFileSync(overviewPath, "utf8").includes(BOOK)) {
+    note("保存未落盘", "项目总览.md 未包含编辑器追加内容", "issue");
+  }
 
-  for (let index = 0; index < CHAPTERS.length; index += 1) {
-    const chapter = CHAPTERS[index];
-    const prompt =
-      index === 0
-        ? `请用 drafting 写 正文/${chapter.name}.md，大约 ${TARGET_CHARS} 字。本场要点：${chapter.beat}。只写这一章，写完等我确认。`
-        : `请先读 正文/${CHAPTERS[index - 1].name}.md 末尾，再用 drafting 写 正文/${chapter.name}.md，大约 ${TARGET_CHARS} 字。承接上一章。本场要点：${chapter.beat}。不要改其他文件。`;
-    const written = await sendChat(page, prompt);
-    await shot(page, `ch${String(index + 1).padStart(2, "0")}-after-chat`);
-    const filePath = path.join(workspace, "正文", `${chapter.name}.md`);
-    let chars = fs.existsSync(filePath) ? countChars(fs.readFileSync(filePath, "utf8")) : 0;
-    if (chars < 1600) {
-      note("字数不够", `「${chapter.name}」约 ${chars} 字，再扩写。`, "issue");
-      await sendChat(
-        page,
-        `正文/${chapter.name}.md 现在大约 ${chars} 字，偏短。请用 drafting 整章扩到大约 ${TARGET_CHARS} 字。保留已有情节和人物，只补场面、动作、气味和必要对白，不要另起炉灶。`,
-      );
-      chars = fs.existsSync(filePath) ? countChars(fs.readFileSync(filePath, "utf8")) : 0;
-    }
-    note("章字数", `「${chapter.name}」约 ${chars} 字。`);
-    NOTES.push({
-      type: "chapter",
-      name: chapter.name,
-      chars,
-      writeOk: written.ok,
-      writeMs: written.ms,
+  const editor = page.getByTestId("manuscript-editor");
+  if (await editor.isVisible().catch(() => false)) {
+    await editor.click();
+    await editor.press("End");
+    await editor.pressSequentially("\n未保存保护测试", { delay: 10 });
+    let sawCloseGuard = false;
+    page.once("dialog", async (dialog) => {
+      sawCloseGuard = /未保存/.test(dialog.message());
+      await dialog.dismiss();
     });
-  }
-
-  const ch1 = path.join(workspace, "正文", "出山.md");
-  if (fs.existsSync(ch1)) {
-    const tree = page.getByTestId("manuscript-tree");
-    await tree.getByRole("button", { name: /正文/ }).first().click().catch(() => {});
-    await page.waitForTimeout(400);
-    const treeBtn = tree.getByText("出山.md");
-    if (await treeBtn.first().isVisible().catch(() => false)) {
-      await treeBtn.first().click();
-      const editor = page.getByTestId("manuscript-editor");
-      await editor.click();
-      await editor.press("End");
-      await page.waitForTimeout(1800);
-      await shot(page, "fim-maybe");
-      if (await page.getByTestId("manuscript-ghost").isVisible().catch(() => false)) {
-        note("FIM 虚影", "编辑器出现补全候选");
-        await editor.press("Escape");
-      } else {
-        note("FIM 未出现", "停顿后没有虚影", "issue");
-      }
+    await page.getByTestId("manuscript-close").click();
+    if (!sawCloseGuard || (await page.getByTestId("manuscript-overlay").getAttribute("data-state")) !== "open") {
+      note("未保存关闭保护失效", "关闭稿纸时未阻止未保存缓冲区被隐藏", "issue");
+    } else {
+      note("未保存关闭保护", "关闭稿纸会提示且取消后仍保持打开");
+    }
+    await editor.press("Control+S");
+    await page.waitForTimeout(800);
+    await page.getByTestId("manuscript-close").click();
+    if ((await page.getByTestId("manuscript-overlay").getAttribute("data-state")) !== "closed") {
+      note("稿纸无法折叠", "保存后关闭仍未进入 closed 状态", "issue");
+    }
+    await shot(page, "drawer-closed");
+    await page.getByTestId("manuscript-open").click();
+    await page.getByTestId("manuscript-fim").click().catch(() => {});
+    await page.waitForTimeout(2000);
+    if (await page.getByTestId("manuscript-ghost").isVisible().catch(() => false)) {
+      note("FIM 虚影", "补全通过 DSH 当前会话模型返回候选");
+      await editor.press("Escape");
+    } else {
+      note("FIM 未出现", "当前模型或服务未返回候选；编辑器保持可用", "observation");
     }
   }
-
-  await sendChat(
-    page,
-    "请用 review 模式只审查 正文/巷口.md，按影响排序报告问题，不要改正文。",
-  );
-  await shot(page, "review");
 
   const files = walkWorkspace(workspace);
   fs.mkdirSync(path.join(OUT, "files"), { recursive: true });
@@ -486,13 +457,7 @@ try {
     const safe = rel.replaceAll("/", "__");
     fs.writeFileSync(path.join(OUT, "files", safe), content, "utf8");
   }
-  const book = CHAPTERS.map((chapter) => {
-    const content = files[`正文/${chapter.name}.md`] ?? "";
-    return { name: chapter.name, chars: countChars(content) };
-  });
-  const total = book.reduce((sum, item) => sum + item.chars, 0);
-  NOTES.push({ type: "book", title: BOOK, chapters: book, totalChars: total, workspace });
-  note("全书体量", `${book.length} 章，合计约 ${total} 字。`);
+  NOTES.push({ type: "workspace", files: Object.keys(files).sort(), workspace });
   await shot(page, "final");
 } catch (error) {
   note(
@@ -520,7 +485,7 @@ try {
   console.log(`workspace ${workspace}`);
   console.log(`report ${path.relative(root, path.join(OUT, "report.json"))}`);
   console.log(`shots ${shotIndex}`);
-  console.log(`issues ${NOTES.filter((item) => item.severity === "issue").length}`);
-  const book = NOTES.find((item) => item.type === "book");
-  if (book) console.log(`chars ${book.totalChars}`);
+  const issueCount = NOTES.filter((item) => item.severity === "issue").length;
+  console.log(`issues ${issueCount}`);
+  if (issueCount > 0) process.exitCode = 1;
 }
