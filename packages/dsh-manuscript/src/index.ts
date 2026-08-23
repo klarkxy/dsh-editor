@@ -1,12 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { asHost } from './host.ts'
+import { asHost, resolveWorkspaceAccess, WorkspaceAuthorityError } from './host.ts'
 import { completeFim } from './rpc/fim.ts'
-import { createTextFile, FileOpError, listDir, readTextFile, renameTextFile, writeTextFile } from './rpc/files.ts'
+import { createTextFile, FileOpError, listDir, readTextFile, writeTextFile } from './rpc/files.ts'
 import { PathConfineError } from './rpc/paths.ts'
-import { acceptProposal, listProposals, ProposalApplyError, rejectProposal } from './rpc/proposal.ts'
 
 export const name = 'dsh-manuscript'
-export const inject = ['connection'] as const
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'llm'] as const
 
 type RpcOk<T> = { ok: true; value: T }
 type RpcErr = { ok: false; error: { code: string; message: string; details: Record<string, unknown> } }
@@ -16,23 +15,36 @@ function fail(code: string, message: string, details: Record<string, unknown> = 
   return { ok: false, error: { code, message, details } }
 }
 
-function mapError(error: unknown): RpcErr {
-  if (error instanceof PathConfineError) {
-    return fail('workspace-invalid-path', error.message, { path: '' })
-  }
-  if (error instanceof ProposalApplyError) {
-    return fail('internal', error.message)
-  }
-  if (error instanceof FileOpError) {
-    if (error.code === 'STALE') return fail('internal', error.message)
-    if (error.code === 'NOT_FOUND' || error.code === 'NOT_DIRECTORY' || error.code === 'PARENT_MISSING') {
-      return fail('directory-unreadable', error.message, { path: '' })
+export function mapError(error: unknown): RpcErr {
+  if (error instanceof WorkspaceAuthorityError) {
+    const codes: Record<WorkspaceAuthorityError['code'], string> = {
+      SESSION_REQUIRED: 'session-required',
+      SESSION_NOT_FOUND: 'session-not-found',
+      SESSION_CWD_MISSING: 'session-workspace-missing',
+      WORKSPACE_NOT_FOUND: 'session-workspace-missing',
+      WORKSPACE_MISMATCH: 'session-workspace-mismatch',
+      WORKSPACE_UNAVAILABLE: 'session-workspace-unavailable',
     }
-    return fail('internal', error.message)
+    return fail(codes[error.code], error.message)
   }
-  if (error instanceof Error && error.name === 'AbortError') {
-    return fail('cancelled', 'cancelled')
+  if (error instanceof PathConfineError) return fail('workspace-invalid-path', error.message, { path: '' })
+  if (error instanceof FileOpError) {
+    const codes: Record<FileOpError['code'], string> = {
+      NOT_FOUND: 'file-not-found',
+      NOT_DIRECTORY: 'directory-unreadable',
+      EXISTS: 'file-exists',
+      STALE: 'file-stale',
+      NOT_TEXT: 'file-not-text',
+      PARENT_MISSING: 'directory-unreadable',
+      TOO_LARGE: 'file-too-large',
+      DENIED: 'sandbox-denied',
+      SYMLINK: 'workspace-symlink-denied',
+      CANCELLED: 'cancelled',
+      IO: 'internal',
+    }
+    return fail(codes[error.code], error.message)
   }
+  if (error instanceof Error && error.name === 'AbortError') return fail('cancelled', 'cancelled')
   return fail('internal', error instanceof Error ? error.message : String(error))
 }
 
@@ -43,41 +55,32 @@ function str(payload: Payload, key: string): string {
   return typeof value === 'string' ? value : ''
 }
 
-async function dispatch(ctx: Context, endpoint: string, payload: unknown, signal: AbortSignal): Promise<unknown> {
+export async function dispatch(
+  ctx: Context,
+  endpoint: string,
+  payload: unknown,
+  signal: AbortSignal,
+): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Payload) : {}
-  const cwd = str(body, 'cwd')
+  const host = asHost(ctx)
+  const access = await resolveWorkspaceAccess(host, str(body, 'sessionId'), signal)
+  const files = {
+    fs: host.fs,
+    cwd: access.workspace.path,
+    root: access.root,
+    policy: access.policy,
+    signal,
+  }
   const rel = str(body, 'path')
-  if (endpoint === 'tree.list') return { entries: await listDir(cwd, rel) }
-  if (endpoint === 'file.read') return await readTextFile(cwd, rel)
-  if (endpoint === 'file.create') return await createTextFile(cwd, rel, str(body, 'text'))
-  if (endpoint === 'file.write') {
-    return await writeTextFile(cwd, rel, str(body, 'text'), str(body, 'version'))
-  }
-  if (endpoint === 'file.rename') {
-    return await renameTextFile(cwd, rel, str(body, 'name'))
-  }
-  if (endpoint === 'proposal.list') return await listProposals(cwd, rel)
-  if (endpoint === 'proposal.reject') return await rejectProposal(cwd, str(body, 'id'))
-  if (endpoint === 'proposal.accept') {
-    const text = typeof body.text === 'string' ? body.text : undefined
-    return await acceptProposal(cwd, str(body, 'id'), str(body, 'version'), text)
-  }
+  if (endpoint === 'tree.list') return { entries: await listDir(files, rel) }
+  if (endpoint === 'file.read') return await readTextFile(files, rel)
+  if (endpoint === 'file.create') return await createTextFile(files, rel, str(body, 'text'))
+  if (endpoint === 'file.write') return await writeTextFile(files, rel, str(body, 'text'), str(body, 'version'))
   if (endpoint === 'fim.complete') {
-    const llm = ctx.get('llm') as
-      | {
-          listProviders?: () => { id: string }[]
-          listModels?: (provider: string) => Promise<{ id: string }[]>
-        }
-      | undefined
-    const selection = ctx.get('agentDefaultModel') as
-      | { currentSelection?: () => { provider?: string; model?: string } | undefined }
-      | undefined
-    const current = selection?.currentSelection?.()
-    const providers = llm?.listProviders?.() ?? []
-    const provider = str(body, 'provider') || current?.provider || providers[0]?.id || ''
-    const models = provider && llm?.listModels ? await llm.listModels(provider) : []
-    const model = str(body, 'model') || current?.model || models[0]?.id || ''
-    if (!provider || !model) return { text: '', route: 'chat' }
+    const config = access.session.requestHeader?.()?.config
+    const provider = typeof config?.provider === 'string' ? config.provider : ''
+    const model = typeof config?.model === 'string' ? config.model : ''
+    if (!provider || !model) return { text: '', route: 'dsh-llm' }
     return await completeFim({
       ctx,
       provider,
@@ -103,6 +106,8 @@ export function apply(ctx: Context): void {
           return mapError(error)
         }
       },
+      // This fence limits exposure to the local DSH process. The selected
+      // session is still explicit RPC input; generic RPC has no caller identity.
       { authority: 'loopback' },
     ),
   )

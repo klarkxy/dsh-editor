@@ -23,7 +23,7 @@ export default defineConfig([
     target: 'es2022',
     sourcemap: true,
     hash: false,
-    external: ['react'],
+    deps: { neverBundle: ['react'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },
 ])

@@ -41,7 +41,7 @@
   "scripts": {
     "build": "tsdown && node ../../scripts/wrap-client.mjs dsh-manuscript",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --config ../../vitest.config.ts"
+    "test": "vitest run --root ../.. packages/dsh-manuscript/src"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1"

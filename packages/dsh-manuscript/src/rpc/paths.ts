@@ -1,5 +1,3 @@
-import path from 'node:path'
-
 export class PathConfineError extends Error {
   readonly code = 'PATH_ESCAPE'
   constructor(message: string) {
@@ -8,38 +6,34 @@ export class PathConfineError extends Error {
   }
 }
 
-/** Resolve `relative` under `cwd`. Rejects absolute paths, `..` escapes, and empty names. */
-export function confinePath(cwd: string, relative: string): string {
-  if (typeof cwd !== 'string' || cwd.length === 0) {
-    throw new PathConfineError('workspace cwd is required')
+/**
+ * Validate and normalize a workspace-relative path without consulting the host
+ * filesystem. Canonical containment is checked separately with `ctx.fs`.
+ */
+export function normalizeWorkspaceRelative(relative: string): string {
+  if (typeof relative !== 'string') throw new PathConfineError('path must be a string')
+  if (relative.includes('\0')) throw new PathConfineError('path contains NUL')
+  const path = relative.replace(/\\/g, '/')
+  if (path.startsWith('/') || /^[a-zA-Z]:/.test(path) || path.includes(':')) {
+    throw new PathConfineError('absolute and device paths are not allowed')
   }
-  if (typeof relative !== 'string') {
-    throw new PathConfineError('path must be a string')
+
+  const parts: string[] = []
+  for (const part of path.split('/')) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      if (parts.length === 0) throw new PathConfineError('path escapes workspace')
+      parts.pop()
+      continue
+    }
+    parts.push(part)
   }
-  const trimmed = relative.replace(/\\/g, '/').trim()
-  if (trimmed.length === 0 || trimmed === '.') {
-    return path.resolve(cwd)
-  }
-  if (path.win32.isAbsolute(trimmed) || path.posix.isAbsolute(trimmed)) {
-    throw new PathConfineError('absolute paths are not allowed')
-  }
-  if (/^[a-zA-Z]:/.test(trimmed)) {
-    throw new PathConfineError('absolute paths are not allowed')
-  }
-  if (trimmed.includes('\0')) {
-    throw new PathConfineError('path contains NUL')
-  }
-  const root = path.resolve(cwd)
-  const resolved = path.resolve(root, trimmed)
-  const rel = path.relative(root, resolved)
-  if (rel.startsWith('..') || path.isAbsolute(rel)) {
-    throw new PathConfineError('path escapes workspace')
-  }
-  return resolved
+  return parts.length === 0 ? '.' : parts.join('/')
 }
 
-export function toPosixRelative(cwd: string, absolute: string): string {
-  const root = path.resolve(cwd)
-  const rel = path.relative(root, absolute)
-  return rel.split(path.sep).join('/')
+export function parentRelative(relative: string): string {
+  const normalized = normalizeWorkspaceRelative(relative)
+  if (normalized === '.') return '.'
+  const index = normalized.lastIndexOf('/')
+  return index < 0 ? '.' : normalized.slice(0, index)
 }

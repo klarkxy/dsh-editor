@@ -16,8 +16,76 @@ export type SlotSpec = {
   children?: Record<string, { kind: string; scope: string }>
 }
 
+export type FsTargetLike = {
+  targetKey: string
+  displayPath: string
+}
+
+export type FsVersionLike = string
+
+export type FsInfoLike = {
+  version: FsVersionLike
+  type: 'file' | 'directory' | 'other'
+  size?: number
+}
+
+export type FsPathInfoLike = {
+  version: FsVersionLike
+  type: 'file' | 'directory' | 'symlink' | 'other'
+  size?: number
+}
+
+export type FsDirEntryLike = {
+  name: string
+  type: 'file' | 'directory' | 'other'
+  target: FsTargetLike
+  version?: FsVersionLike
+  size?: number
+}
+
+export type FsWriteIntentLike =
+  | { kind: 'createIfAbsent' }
+  | { kind: 'replaceIfVersion'; version: FsVersionLike }
+
+export type SandboxExecutionPolicyLike = {
+  mode: 'read-only' | 'workspace-write' | 'danger-full-access'
+  workspaceRoot: string
+  sessionId?: string
+}
+
+export type FileSystemLike = {
+  resolve: (path: string, opts?: { cwd?: string; signal?: AbortSignal }) => Promise<FsTargetLike>
+  contains: (parent: FsTargetLike, child: FsTargetLike) => boolean
+  stat: (target: FsTargetLike, signal?: AbortSignal) => Promise<FsInfoLike | undefined>
+  lstat: (path: string, opts?: { cwd?: string }, signal?: AbortSignal) => Promise<FsPathInfoLike | undefined>
+  readText: (target: FsTargetLike, signal?: AbortSignal) => Promise<string>
+  listDir: (target: FsTargetLike, signal?: AbortSignal) => Promise<FsDirEntryLike[]>
+  writeText: (
+    target: FsTargetLike,
+    content: string,
+    expected?: FsWriteIntentLike,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicyLike,
+  ) => Promise<{ operation: 'create' | 'update'; version: FsVersionLike; before: string | null; after: string }>
+}
+
+export type SessionLike = {
+  readonly id: string
+  readonly header: { readonly cwd?: string }
+  requestHeader?: () => { config?: { provider?: string; model?: string } } | undefined
+}
+
+export type WorkspaceLike = {
+  readonly path: string
+  readonly sessionIds: readonly string[]
+}
+
 export type ManuscriptHost = Context & {
   connection: { rpc: RpcBag }
+  sessions: { get: (id: string) => SessionLike | undefined }
+  workspaceRegistry: { resolveByPath: (path: string) => Promise<WorkspaceLike | undefined> }
+  sandboxPolicy: { resolve: (request: { session: SessionLike }) => SandboxExecutionPolicyLike }
+  fs: FileSystemLike
 }
 
 export type SessionListSnapshot = {
@@ -40,6 +108,73 @@ export type ManuscriptClient = Context & {
     }
   }
   connection: { rpc: RpcBag }
+}
+
+export class WorkspaceAuthorityError extends Error {
+  constructor(
+    message: string,
+    readonly code:
+      | 'SESSION_REQUIRED'
+      | 'SESSION_NOT_FOUND'
+      | 'SESSION_CWD_MISSING'
+      | 'WORKSPACE_NOT_FOUND'
+      | 'WORKSPACE_MISMATCH'
+      | 'WORKSPACE_UNAVAILABLE',
+    options?: ErrorOptions,
+  ) {
+    super(message, options)
+    this.name = 'WorkspaceAuthorityError'
+  }
+}
+
+export type WorkspaceAccess = {
+  session: SessionLike
+  workspace: WorkspaceLike
+  root: FsTargetLike
+  policy: SandboxExecutionPolicyLike
+}
+
+/**
+ * Select a live session and derive its registered canonical workspace.
+ *
+ * This is deliberately a live-session selection boundary, not caller
+ * authentication: generic loopback RPC does not expose connection identity.
+ */
+export async function resolveWorkspaceAccess(
+  host: ManuscriptHost,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<WorkspaceAccess> {
+  if (!sessionId) throw new WorkspaceAuthorityError('session id is required', 'SESSION_REQUIRED')
+  const session = host.sessions.get(sessionId)
+  if (!session) throw new WorkspaceAuthorityError('session is not live', 'SESSION_NOT_FOUND')
+  const cwd = session.header.cwd
+  if (typeof cwd !== 'string' || cwd.length === 0) {
+    throw new WorkspaceAuthorityError('session has no workspace cwd', 'SESSION_CWD_MISSING')
+  }
+
+  let workspace: WorkspaceLike | undefined
+  try {
+    workspace = await host.workspaceRegistry.resolveByPath(cwd)
+  } catch (error) {
+    throw new WorkspaceAuthorityError('session workspace is unavailable', 'WORKSPACE_UNAVAILABLE', { cause: error })
+  }
+  if (!workspace) throw new WorkspaceAuthorityError('session cwd is not a registered workspace', 'WORKSPACE_NOT_FOUND')
+  if (!workspace.sessionIds.some((id) => String(id) === String(session.id))) {
+    throw new WorkspaceAuthorityError('session is not attached to this workspace', 'WORKSPACE_MISMATCH')
+  }
+
+  const root = await host.fs.resolve('.', { cwd: workspace.path, signal })
+  const rootInfo = await host.fs.stat(root, signal)
+  if (!rootInfo || rootInfo.type !== 'directory') {
+    throw new WorkspaceAuthorityError('registered workspace is not a readable directory', 'WORKSPACE_UNAVAILABLE')
+  }
+  return {
+    session,
+    workspace,
+    root,
+    policy: host.sandboxPolicy.resolve({ session }),
+  }
 }
 
 export function asHost(ctx: Context): ManuscriptHost {

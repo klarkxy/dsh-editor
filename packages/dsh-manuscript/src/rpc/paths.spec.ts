@@ -1,29 +1,31 @@
-import os from 'node:os'
-import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { confinePath, PathConfineError } from './paths.ts'
+import { normalizeWorkspaceRelative, parentRelative, PathConfineError } from './paths.ts'
 
-const cwd = path.join(os.tmpdir(), 'dsh-ms-root')
-
-describe('confinePath', () => {
-  it('resolves a nested relative path inside cwd', () => {
-    expect(confinePath(cwd, '正文/一.md')).toBe(path.resolve(cwd, '正文', '一.md'))
+describe('workspace-relative paths', () => {
+  it('normalizes a nested relative path', () => {
+    expect(normalizeWorkspaceRelative('./正文/第一章.md')).toBe('正文/第一章.md')
+    expect(normalizeWorkspaceRelative('notes/../正文/第一章.md')).toBe('正文/第一章.md')
+    expect(parentRelative('正文/第一章.md')).toBe('正文')
   })
 
-  it('rejects absolute posix paths', () => {
-    expect(() => confinePath(cwd, '/etc/passwd')).toThrow(PathConfineError)
+  it('keeps the workspace root as a dot', () => {
+    expect(normalizeWorkspaceRelative('')).toBe('.')
+    expect(normalizeWorkspaceRelative('.')).toBe('.')
   })
 
-  it('rejects windows absolute paths', () => {
-    expect(() => confinePath(cwd, 'C:/Windows/notepad.exe')).toThrow(PathConfineError)
+  it('rejects absolute paths in both platform spellings', () => {
+    expect(() => normalizeWorkspaceRelative('/etc/passwd')).toThrow(PathConfineError)
+    expect(() => normalizeWorkspaceRelative('C:/Windows/notepad.exe')).toThrow(PathConfineError)
+    expect(() => normalizeWorkspaceRelative('C:\\Windows\\notepad.exe')).toThrow(PathConfineError)
   })
 
-  it('rejects parent traversal', () => {
-    expect(() => confinePath(cwd, '../secret.txt')).toThrow(PathConfineError)
-    expect(() => confinePath(cwd, 'a/../../x')).toThrow(PathConfineError)
+  it('rejects parent traversal outside the workspace', () => {
+    expect(() => normalizeWorkspaceRelative('../secret.txt')).toThrow(PathConfineError)
+    expect(() => normalizeWorkspaceRelative('a/../../x')).toThrow(PathConfineError)
   })
 
-  it('rejects empty cwd', () => {
-    expect(() => confinePath('', 'a.md')).toThrow(PathConfineError)
+  it('rejects NUL and device or alternate-stream spellings', () => {
+    expect(() => normalizeWorkspaceRelative('a\0b')).toThrow(PathConfineError)
+    expect(() => normalizeWorkspaceRelative('chapter.md:secret')).toThrow(PathConfineError)
   })
 })
