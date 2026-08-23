@@ -1,0 +1,12 @@
+- insert:
+    - id: grill-tools
+      name: dsh-grill/tools
+    - id: grill-workflow
+      name: dsh-grill/workflow
+# dsh-web-app disables tool-web. Grill turns search back on so official
+# DeepSeek web_search (server-side) is available to Chat. Fetch stays off.
+- id: tool-web
+  disabled: false
+  config:
+    fetch: false
+    searchTimeoutMs: 60000
