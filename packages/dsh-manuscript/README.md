@@ -9,3 +9,5 @@ Host file operations accept a live `sessionId`, derive the canonical workspace f
 FIM uses the provider/model recorded on the live session request header and calls DSH `llm.stream`. It never reads provider credentials directly and returns no completion when the session has no model selection.
 
 Compatible with `@deepseek-ai/dsh` 0.1.1-rc.1 (nested first-party packages 0.1.1-rc.2). Dual-face package: host ESM plus lazy-CJS `./client`.
+
+Requires Node.js 22 or newer. Build and installation, verification, removal, rollback, and residual-risk instructions are maintained in the repository root README. The host DSH Web profile supplies Cordis and the client runtime (including React); the isolated install matrix verifies that runtime contract from the packed tarball.

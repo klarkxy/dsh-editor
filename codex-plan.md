@@ -74,9 +74,9 @@ The scaffold tool uses the calling Agent session workspace, checks the resolved 
 - Build and typecheck both packages.
 - Run unit tests for workspace authority, path attacks, symlinks, atomic create/save, stale versions, read-only policy, dirty/conflict/draft state, late-response rejection, FIM routing, scaffold idempotence/approval, and four-mode prompts.
 - Search source and packed artifacts for removed proposal/scan/Web-tool features and direct Node filesystem/provider-credential access in Manuscript.
-- Pack exactly two plugin tarballs and inspect their exports, loader patches, client wrapper, licenses, and dependency closure.
+- Pack exactly two plugin tarballs, reject stale artifacts, inspect their exports, loader patches, client wrapper, licenses, dependency closure, and generate SHA-256 checksums.
 - In an isolated DSH profile, verify scaffold approval, tree refresh/reload, editor save, dirty close guard, collapsed drawer behavior, and optional FIM. The live script must exit non-zero when any required check fails.
-- Before release, run the four installation states: Manuscript only, Grill only, both, and removal of either. Publishing remains a separate explicit action.
+- Before release, run `pnpm verify:delivery`. Its fresh-DSH matrix proves Manuscript only, Grill only, both, and removal of either; publishing remains a separate explicit action.
 
 ## Compatibility and residual risks
 
