@@ -4,6 +4,9 @@
   "description": "DSH manuscript GUI: generic workspace tree, prose editor, ghost completion",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "exports": {

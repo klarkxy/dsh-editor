@@ -4,6 +4,9 @@
   "description": "DSH novel-writing workflow: scaffold tool and four-mode system prompt",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "./lib/tools.js",
   "types": "./lib/tools.d.ts",
   "exports": {

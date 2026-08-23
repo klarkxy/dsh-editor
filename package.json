@@ -3,13 +3,18 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "dev": "node scripts/dev.mjs",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck",
-    "pack:plugins": "pnpm --filter dsh-manuscript pack --pack-destination .pack && pnpm --filter dsh-grill pack --pack-destination .pack",
-    "test:e2e:live": "pnpm build && pnpm pack:plugins && node e2e/dsh-editor-live.mjs"
+    "pack:plugins": "node scripts/prepare-pack.mjs && pnpm --filter dsh-manuscript pack --pack-destination .pack && pnpm --filter dsh-grill pack --pack-destination .pack && node scripts/verify-artifacts.mjs",
+    "test:e2e:live": "pnpm build && pnpm pack:plugins && node e2e/dsh-editor-live.mjs",
+    "test:e2e:matrix": "pnpm build && pnpm pack:plugins && node e2e/plugin-matrix.mjs",
+    "verify:delivery": "pnpm typecheck && pnpm test && pnpm test:e2e:matrix"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

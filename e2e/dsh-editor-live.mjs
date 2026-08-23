@@ -1,7 +1,8 @@
 /**
- * Live e2e against an isolated DSH profile (`dsh-editor-e2e`), not the user's
- * daily `web` profile. Covers the closable manuscript drawer, guarded editing,
- * Grill's single scaffold tool, and the four-mode prompt in official Chat.
+ * Credentialed live e2e against a dedicated DSH profile (`dsh-editor-e2e`),
+ * not the user's daily `web` profile. This profile intentionally persists so
+ * it can reuse configured model credentials. For a truly fresh, credential-free
+ * DSH_HOME and install/remove coverage, use plugin-matrix.mjs.
  */
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -9,14 +10,17 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { resolveDshInstallation } from "../scripts/dsh-cli.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(root, "e2e/out/live-xianxia");
 const PROFILE = "dsh-editor-e2e";
+if (PROFILE === "web") throw new Error("live e2e must not target the daily web profile");
 const PORT = Number(process.env.E2E_PORT || 8788);
 const BASE = `http://127.0.0.1:${PORT}`;
 const BOOK = "灯下无山";
 const SEND_TIMEOUT_MS = 720_000;
+const dshInstallation = resolveDshInstallation();
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -69,10 +73,7 @@ async function isReady() {
 }
 
 function dshBinPath() {
-  return path.join(
-    process.env.APPDATA || "",
-    "npm/node_modules/@deepseek-ai/dsh/lib/bin.js",
-  );
+  return dshInstallation.cliPath;
 }
 
 function installCurrentPlugins() {
@@ -91,7 +92,7 @@ function installCurrentPlugins() {
     );
     if (result.status !== 0) throw new Error(`failed to install ${name} into ${PROFILE}`);
   }
-  note("插件安装", "isolated profile 已安装本次构建的两个 tarball");
+  note("插件安装", "dedicated credentialed profile 已安装本次构建的两个 tarball");
 }
 
 async function startDsh(workspace) {
