@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cwdFromSessionList } from './session-cwd.ts'
+import { activeWorkspaceFromSessionList, cwdFromSessionList } from './session-cwd.ts'
 
 describe('cwdFromSessionList', () => {
   it('binds cwd from snapshot.current, not a root sessionId prop', () => {
@@ -11,6 +11,7 @@ describe('cwdFromSessionList', () => {
       },
     }
     expect(cwdFromSessionList(snap)).toBe('D:/novel')
+    expect(activeWorkspaceFromSessionList(snap)).toEqual({ sessionId: 'sess-2', cwd: 'D:/novel' })
   })
 
   it('returns empty when nothing is current', () => {

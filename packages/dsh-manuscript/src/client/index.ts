@@ -1,7 +1,18 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createElement as e, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { asClient, type ManuscriptClient, type RpcBag } from '../host.ts'
-import { cwdFromSessionList } from './session-cwd.ts'
+import {
+  documentKey,
+  draftStorageKey,
+  hasUnsavedChanges,
+  isStaleWriteError,
+  parseStoredDraft,
+  shouldApplyRead,
+  shouldRetainDraftAfterSave,
+  type DocumentTarget,
+  type EditorStatus,
+} from './editor-state.ts'
+import { activeWorkspaceFromSessionList, type ActiveWorkspace } from './session-cwd.ts'
 import { registerManuscriptUi, type SlotHandle } from './slots.ts'
 
 export const name = 'dsh-manuscript-client'
@@ -9,15 +20,15 @@ export const inject = ['slots', 'sessions', 'connection'] as const
 
 type Entry = { name: string; type: 'file' | 'directory' | 'other' }
 
-function useCwd(ctx: ManuscriptClient): string {
-  const [cwd, setCwd] = useState(() => cwdFromSessionList(ctx.sessions.list?.getSnapshot?.()))
+function useWorkspace(ctx: ManuscriptClient): ActiveWorkspace | null {
+  const [workspace, setWorkspace] = useState(() => activeWorkspaceFromSessionList(ctx.sessions.list?.getSnapshot?.()))
   useEffect(() => {
     const list = ctx.sessions.list
-    const sync = () => setCwd(cwdFromSessionList(list?.getSnapshot?.()))
+    const sync = () => setWorkspace(activeWorkspaceFromSessionList(list?.getSnapshot?.()))
     sync()
     return list?.subscribe?.(sync)
   }, [ctx])
-  return cwd
+  return workspace
 }
 
 function parentOf(rel: string): string {
@@ -26,6 +37,7 @@ function parentOf(rel: string): string {
 }
 
 function Tree(props: {
+  sessionId: string
   cwd: string
   rpc: RpcBag
   onOpen: (path: string) => void
@@ -37,13 +49,13 @@ function Tree(props: {
   openRef.current = open
   const load = useCallback(
     async (rel: string) => {
-      const result = await props.rpc.call('/manuscript', 'tree.list', { cwd: props.cwd, path: rel })
+      const result = await props.rpc.call('/manuscript', 'tree.list', { sessionId: props.sessionId, path: rel })
       if (result.ok) {
         const value = result.value as { entries: Entry[] }
         setOpen((cur) => ({ ...cur, [rel]: value.entries }))
       }
     },
-    [props.cwd, props.rpc],
+    [props.sessionId, props.cwd, props.rpc],
   )
   useEffect(() => {
     void load('.')
@@ -96,127 +108,65 @@ const EDITOR_PAD = 16
 const EDITOR_SIZE = 16
 const EDITOR_LINE = 1.7
 
-type ProposalKind = 'patch' | 'replace' | 'append'
-type Proposal = {
-  id: string
-  path: string
-  kind: ProposalKind
-  segments: { old_text: string; new_text: string }[]
-  body?: string
-}
-
-function proposalLabel(kind: ProposalKind): string {
-  if (kind === 'replace') return '整章替换'
-  if (kind === 'append') return '接到文末'
-  return '修改稿'
-}
-
-function proposalPreview(item: Proposal): string {
-  if (item.kind === 'patch') {
-    const first = item.segments[0]
-    if (!first) return ''
-    const next = first.new_text.replace(/\s+/g, ' ').slice(0, 80)
-    return item.segments.length > 1 ? `${next} · ${item.segments.length} 段` : next
-  }
-  return (item.body || '').replace(/\s+/g, ' ').slice(0, 80)
-}
-
-function ProposalBar(props: {
-  item: Proposal
-  busy: boolean
-  error: string
-  onAccept: () => void
-  onReject: () => void
-}) {
-  const acceptLabel = props.item.kind === 'append' ? '接到文末' : props.item.kind === 'replace' ? '整章替换' : '同意'
-  return e('div', {
-    'data-testid': 'manuscript-proposal',
-    'data-kind': props.item.kind,
-    style: { padding: '8px 8px 6px', borderTop: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', fontSize: 12 },
-  },
-    e('div', { style: { fontWeight: 600, marginBottom: 4 } }, proposalLabel(props.item.kind)),
-    proposalPreview(props.item) ? e('div', { style: { opacity: 0.7, marginBottom: 6, lineHeight: 1.4 } }, proposalPreview(props.item)) : null,
-    e('div', { style: { display: 'flex', gap: 8 } },
-      e('button', {
-        type: 'button',
-        'data-testid': 'manuscript-proposal-accept',
-        disabled: props.busy,
-        onClick: props.onAccept,
-      }, acceptLabel),
-      e('button', {
-        type: 'button',
-        'data-testid': 'manuscript-proposal-reject',
-        disabled: props.busy,
-        onClick: props.onReject,
-      }, '拒绝'),
-    ),
-    props.error ? e('div', { style: { marginTop: 6, color: '#8a3a30' } }, props.error) : null,
-  )
-}
-
 function countChars(text: string): number {
   return text.replace(/\s/g, '').length
 }
 
 function rewritePrompt(path: string, selection: string): string {
-  return `请用 drafting 改这段。文件：${path}\n请对下面选区调用 propose_patch（old_text 必须与选区完全一致），不要直接写盘。\n\n${selection}`
+  return `请改写这段。文件：${path}\n请在回复中给出修改稿，不要直接写入文件。\n\n${selection}`
 }
 
-type DomArea = {
-  closest: (sel: string) => unknown
-  getAttribute: (name: string) => string | null
-  focus: () => void
-  dispatchEvent: (ev: { type: string }) => void
-}
-
-async function sendSelectionToChat(path: string, selection: string): Promise<'composer' | 'clipboard' | 'failed'> {
-  const text = rewritePrompt(path, selection)
-  const g = globalThis as unknown as {
-    document?: { querySelectorAll: (sel: string) => ArrayLike<DomArea> }
-    HTMLTextAreaElement?: { prototype: object }
-    Event?: new (type: string, init?: { bubbles?: boolean }) => { type: string }
-    navigator?: { clipboard?: { writeText: (value: string) => Promise<void> } }
-  }
-  const boxes = g.document ? Array.from(g.document.querySelectorAll('textarea')) : []
-  const box = boxes.find((el) => {
-    if (el.closest('[data-testid="manuscript-overlay"]')) return false
-    const ph = `${el.getAttribute('placeholder') || ''} ${el.getAttribute('aria-label') || ''}`
-    return /智能体|Message|Ask|描述你想要|发消息/.test(ph)
-  }) || boxes.find((el) => !el.closest('[data-testid="manuscript-overlay"]'))
-  if (box) {
-    const desc = g.HTMLTextAreaElement ? Object.getOwnPropertyDescriptor(g.HTMLTextAreaElement.prototype, 'value') : undefined
-    desc?.set?.call(box, text)
-    const Ev = g.Event
-    if (Ev) {
-      box.dispatchEvent(new Ev('input', { bubbles: true }))
-      box.dispatchEvent(new Ev('change', { bubbles: true }))
-    }
-    box.focus()
-    return 'composer'
-  }
+async function copySelectionPrompt(path: string, selection: string): Promise<boolean> {
   try {
-    if (!g.navigator?.clipboard?.writeText) return 'failed'
-    await g.navigator.clipboard.writeText(text)
-    return 'clipboard'
+    const clipboard = globalThis.navigator?.clipboard
+    if (!clipboard) return false
+    await clipboard.writeText(rewritePrompt(path, selection))
+    return true
   } catch {
-    return 'failed'
+    return false
+  }
+}
+
+type LoadedDocument = DocumentTarget & { text: string; version: string }
+
+function readDraft(target: DocumentTarget) {
+  try {
+    return parseStoredDraft(globalThis.sessionStorage?.getItem(draftStorageKey(target)) ?? null, target)
+  } catch {
+    return null
+  }
+}
+
+function persistDraft(document: LoadedDocument, text: string) {
+  try {
+    globalThis.sessionStorage?.setItem(draftStorageKey(document), JSON.stringify({ ...document, text }))
+  } catch {
+    // Draft recovery is best effort; the editor buffer remains authoritative.
+  }
+}
+
+function discardDraft(target: DocumentTarget) {
+  try {
+    globalThis.sessionStorage?.removeItem(draftStorageKey(target))
+  } catch {
+    // Storage can be disabled by the host browser.
   }
 }
 
 function Editor(props: {
+  sessionId: string
   cwd: string
   path: string
   rpc: RpcBag
-  onTreeMutate?: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const [text, setText] = useState('')
-  const [version, setVersion] = useState('')
+  const [document, setDocument] = useState<LoadedDocument | null>(null)
+  const [status, setStatus] = useState<EditorStatus>('loading')
+  const [pendingTarget, setPendingTarget] = useState<DocumentTarget | null>(null)
   const [ghost, setGhost] = useState('')
   const [ghostAt, setGhostAt] = useState(0)
   const [error, setError] = useState('')
-  const [proposal, setProposal] = useState<Proposal | null>(null)
-  const [proposalBusy, setProposalBusy] = useState(false)
-  const [proposalError, setProposalError] = useState('')
   const [notice, setNotice] = useState('')
   const [hasSelection, setHasSelection] = useState(false)
   const ta = useRef<HTMLTextAreaElement | null>(null)
@@ -224,9 +174,34 @@ function Editor(props: {
   const abort = useRef<AbortController | null>(null)
   const composing = useRef(false)
   const textRef = useRef(text)
-  const versionRef = useRef(version)
+  const documentRef = useRef<LoadedDocument | null>(document)
+  const readRequest = useRef(0)
+  const editGeneration = useRef(0)
   textRef.current = text
-  versionRef.current = version
+  documentRef.current = document
+  const target: DocumentTarget = { sessionId: props.sessionId, cwd: props.cwd, path: props.path }
+  const targetRef = useRef(target)
+  targetRef.current = target
+  const dirty = !!document && hasUnsavedChanges(text, document.text)
+
+  const updateText = (next: string) => {
+    editGeneration.current += 1
+    textRef.current = next
+    setText(next)
+    const current = documentRef.current
+    if (current && hasUnsavedChanges(next, current.text)) {
+      persistDraft(current, next)
+      setStatus('dirty')
+    } else if (current) {
+      discardDraft(current)
+      setStatus('saved')
+    }
+  }
+
+  const updateDocument = (next: LoadedDocument | null) => {
+    documentRef.current = next
+    setDocument(next)
+  }
 
   const syncMirror = () => {
     if (ta.current && mirror.current) {
@@ -236,77 +211,116 @@ function Editor(props: {
   }
 
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const result = await props.rpc.call('/manuscript', 'file.read', { cwd: props.cwd, path: props.path })
-      if (cancelled) return
-      if (!result.ok) {
-        setError(result.error.message)
-        return
-      }
-      const value = result.value as { text: string; version: string }
-      setText(value.text)
-      setVersion(value.version)
-      setError('')
-      setGhost('')
-      setGhostAt(0)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [props.cwd, props.path, props.rpc])
+    props.onDirtyChange?.(dirty)
+  }, [dirty, props.onDirtyChange])
 
   useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      const result = await props.rpc.call('/manuscript', 'proposal.list', { cwd: props.cwd, path: props.path })
-      if (cancelled) return
-      if (!result.ok) return
-      const items = (result.value as { proposals?: Proposal[] }).proposals ?? []
-      setProposal(items[items.length - 1] ?? null)
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
     }
-    void load()
-    const timer = window.setInterval(() => { void load() }, 1500)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [props.cwd, props.path, props.rpc])
+    globalThis.addEventListener('beforeunload', warn)
+    return () => globalThis.removeEventListener('beforeunload', warn)
+  }, [dirty])
 
-  const save = async () => {
-    const result = await props.rpc.call('/manuscript', 'file.write', {
-      cwd: props.cwd,
-      path: props.path,
-      text,
-      version,
-    })
+  const loadDocument = useCallback(async (nextTarget: DocumentTarget) => {
+    const requestId = ++readRequest.current
+    setStatus('loading')
+    setError('')
+    const result = await props.rpc.call('/manuscript', 'file.read', { sessionId: nextTarget.sessionId, path: nextTarget.path })
+    if (!shouldApplyRead(requestId, readRequest.current, nextTarget, targetRef.current)) return
     if (!result.ok) {
+      setStatus('error')
       setError(result.error.message)
       return
     }
-    setVersion((result.value as { version: string }).version)
+    const value = result.value as { text: string; version: string }
+    const loaded = { ...nextTarget, text: value.text, version: value.version }
+    const draft = readDraft(nextTarget)
+    updateDocument(loaded)
+    if (draft) {
+      updateText(draft.text)
+      setStatus(draft.version === value.version ? 'dirty' : 'conflict')
+      setNotice(draft.version === value.version ? '已恢复未保存草稿。' : '已恢复未保存草稿；磁盘版本已变化，请确认后再保存。')
+    } else {
+      textRef.current = value.text
+      setText(value.text)
+      setStatus('saved')
+    }
+    setPendingTarget(null)
     setError('')
+    setGhost('')
+    setGhostAt(0)
+  }, [props.rpc])
+
+  useEffect(() => {
+    const current = documentRef.current
+    if (current && documentKey(current) === documentKey(target)) return
+    if (current && hasUnsavedChanges(textRef.current, current.text)) {
+      setPendingTarget(target)
+      setStatus('conflict')
+      setNotice('当前文件有未保存修改。请保存或明确放弃后再切换。')
+      return
+    }
+    void loadDocument(target)
+  }, [props.sessionId, props.cwd, props.path, loadDocument])
+
+  const save = async () => {
+    const current = documentRef.current
+    if (!current) return
+    const draft = textRef.current
+    const submittedGeneration = editGeneration.current
+    const result = await props.rpc.call('/manuscript', 'file.write', {
+      sessionId: current.sessionId,
+      path: current.path,
+      text: draft,
+      version: current.version,
+    })
+    if (!result.ok) {
+      setError(result.error.message)
+      setStatus(isStaleWriteError(result.error.message) ? 'conflict' : 'dirty')
+      return
+    }
+    const saved = { ...current, text: draft, version: (result.value as { version: string }).version }
+    updateDocument(saved)
+    setError('')
+    const retainDraft = shouldRetainDraftAfterSave(draft, textRef.current, submittedGeneration, editGeneration.current)
+    if (retainDraft) {
+      persistDraft(saved, textRef.current)
+      setStatus('dirty')
+    } else {
+      discardDraft(saved)
+      setStatus('saved')
+    }
+    const desired = targetRef.current
+    if (documentKey(saved) !== documentKey(desired)) {
+      if (retainDraft) setPendingTarget(desired)
+      else void loadDocument(desired)
+    }
   }
 
   const requestFim = () => {
-    if (composing.current || !props.path) return
+    const current = documentRef.current
+    if (composing.current || !current?.path) return
     const el = ta.current
     if (!el) return
     abort.current?.abort()
     const ac = new AbortController()
     abort.current = ac
     const caret = el.selectionStart
-    const prefix = text.slice(0, caret)
-    const suffix = text.slice(caret)
+    const currentText = textRef.current
+    const prefix = currentText.slice(0, caret)
+    const suffix = currentText.slice(caret)
     setGhostAt(caret)
     void (async () => {
       const result = await props.rpc.call(
         '/manuscript',
         'fim.complete',
-        { cwd: props.cwd, path: props.path, prefix, suffix },
+        { sessionId: current.sessionId, path: current.path, prefix, suffix },
         ac.signal,
       )
-      if (ac.signal.aborted) return
+      if (ac.signal.aborted || documentKey(documentRef.current ?? current) !== documentKey(current)) return
       if (!result.ok) {
         setGhost('')
         return
@@ -319,14 +333,14 @@ function Editor(props: {
   const selectedText = () => {
     const el = ta.current
     if (!el) return ''
-    return text.slice(el.selectionStart, el.selectionEnd)
+    return textRef.current.slice(el.selectionStart, el.selectionEnd)
   }
 
   const accept = () => {
     if (!ghost) return
     const caret = ghostAt
-    const next = text.slice(0, caret) + ghost + text.slice(caret)
-    setText(next)
+    const next = textRef.current.slice(0, caret) + ghost + textRef.current.slice(caret)
+    updateText(next)
     setGhost('')
     requestAnimationFrame(() => {
       const el = ta.current
@@ -354,8 +368,9 @@ function Editor(props: {
     e('div', {
       style: { padding: '4px 8px', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
     },
-      e('span', { 'data-testid': 'manuscript-path', style: { opacity: 0.7, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' } }, props.path || '未打开文件'),
+      e('span', { 'data-testid': 'manuscript-path', style: { opacity: 0.7, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' } }, document?.path || props.path || '未打开文件'),
       e('span', { 'data-testid': 'manuscript-wordcount', style: { opacity: 0.55 } }, `${countChars(text)} 字`),
+      e('span', { 'data-testid': 'manuscript-save-state', style: { opacity: 0.55 } }, status === 'saved' ? '已保存' : status === 'dirty' ? '未保存' : status === 'conflict' ? '需处理' : status === 'loading' ? '读取中' : '读取失败'),
     ),
     e('div', { style: { padding: '0 8px 6px', display: 'flex', gap: 6, flexWrap: 'wrap' } },
       e('button', {
@@ -365,10 +380,8 @@ function Editor(props: {
         onClick: () => {
           const selection = selectedText()
           if (!selection) return
-          void sendSelectionToChat(props.path, selection).then((how) => {
-            if (how === 'composer') setNotice('已填入 Chat')
-            else if (how === 'clipboard') setNotice('已复制，粘到 Chat')
-            else setNotice('无法送到 Chat')
+          void copySelectionPrompt(document?.path || props.path, selection).then((copied) => {
+            setNotice(copied ? '已复制改写请求，请粘贴到官方 Chat。' : '无法访问剪贴板，请手动复制选区后在官方 Chat 请求改写。')
           })
         },
       }, '改这段'),
@@ -395,7 +408,7 @@ function Editor(props: {
         value: text,
         disabled: !props.path,
         onChange: (ev: { target: { value: string } }) => {
-          setText(ev.target.value)
+          updateText(ev.target.value)
           setGhost('')
           abort.current?.abort()
         },
@@ -438,49 +451,26 @@ function Editor(props: {
       }),
     ),
     ghost ? e('div', { style: { padding: '4px 8px', fontSize: 12, opacity: 0.55 } }, '补全 · Tab 采纳 · Esc 关掉') : null,
-    proposal ? e(ProposalBar, {
-      item: proposal,
-      busy: proposalBusy,
-      error: proposalError,
-      onAccept: () => {
-        if (proposalBusy) return
-        setProposalBusy(true)
-        setProposalError('')
-        void (async () => {
-          const result = await props.rpc.call('/manuscript', 'proposal.accept', {
-            cwd: props.cwd,
-            id: proposal.id,
-            version: versionRef.current,
-            text: textRef.current,
-          })
-          setProposalBusy(false)
-          if (!result.ok) {
-            setProposalError(result.error.message)
-            return
-          }
-          const value = result.value as { text: string; version: string }
-          setText(value.text)
-          setVersion(value.version)
-          setProposal(null)
-          setGhost('')
-          props.onTreeMutate?.()
-        })()
-      },
-      onReject: () => {
-        if (proposalBusy) return
-        setProposalBusy(true)
-        setProposalError('')
-        void (async () => {
-          const result = await props.rpc.call('/manuscript', 'proposal.reject', { cwd: props.cwd, id: proposal.id })
-          setProposalBusy(false)
-          if (!result.ok) {
-            setProposalError(result.error.message)
-            return
-          }
-          setProposal(null)
-        })()
-      },
-    }) : null,
+    pendingTarget ? e('div', { 'data-testid': 'manuscript-switch-guard', style: { padding: '6px 8px', borderTop: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', fontSize: 12 } },
+      e('span', null, '目标已变更，当前草稿尚未处理。'),
+      e('button', { type: 'button', style: { marginLeft: 8 }, onClick: () => { void save() } }, '保存后切换'),
+      e('button', { type: 'button', style: { marginLeft: 6 }, onClick: () => {
+        const current = documentRef.current
+        if (current) discardDraft(current)
+        textRef.current = current?.text || ''
+        setText(current?.text || '')
+        setPendingTarget(null)
+        void loadDocument(pendingTarget)
+      } }, '放弃修改并切换'),
+    ) : null,
+    status === 'conflict' && !pendingTarget ? e('div', { 'data-testid': 'manuscript-conflict-guard', style: { padding: '6px 8px', borderTop: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', fontSize: 12 } },
+      e('span', null, '当前草稿与磁盘版本不一致，已保留本地内容。'),
+      e('button', { type: 'button', style: { marginLeft: 8 }, onClick: () => {
+        const current = documentRef.current
+        if (current) discardDraft(current)
+        void loadDocument(targetRef.current)
+      } }, '放弃草稿并重新读取'),
+    ) : null,
     notice ? e('div', { 'data-testid': 'manuscript-notice', style: { padding: '4px 8px', fontSize: 12, opacity: 0.7 } }, notice) : null,
     error ? e('div', { style: { padding: 8, color: '#8a3a30', fontSize: 12 } }, error) : null,
   )
@@ -488,11 +478,20 @@ function Editor(props: {
 
 function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
   const rpc = props.ctx.connection.rpc
-  const cwd = useCwd(props.ctx)
+  const workspace = useWorkspace(props.ctx)
+  const cwd = workspace?.cwd ?? ''
+  const sessionId = workspace?.sessionId ?? ''
   const [path, setPath] = useState('')
   const [revision, setRevision] = useState(0)
   const [siblings, setSiblings] = useState<string[]>([])
+  const [dirty, setDirty] = useState(false)
+  const [open, setOpen] = useState(false)
   const mutate = () => setRevision((n) => n + 1)
+  const requestPath = (next: string) => { if (next !== path) setPath(next) }
+  const requestClose = () => {
+    if (dirty && !window.confirm('当前文件有未保存的修改。关闭稿纸后会保留草稿，确定关闭吗？')) return
+    setOpen(false)
+  }
 
   useEffect(() => {
     if (!cwd || !path) {
@@ -501,7 +500,7 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
     }
     const dir = parentOf(path)
     void (async () => {
-      const result = await rpc.call('/manuscript', 'tree.list', { cwd, path: dir })
+      const result = await rpc.call('/manuscript', 'tree.list', { sessionId, path: dir })
       if (!result.ok) return
       const entries = (result.value as { entries: Entry[] }).entries || []
       setSiblings(
@@ -510,16 +509,16 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
           .map((entry) => (dir === '.' ? entry.name : `${dir}/${entry.name}`)),
       )
     })()
-  }, [cwd, path, rpc, revision])
+  }, [sessionId, cwd, path, rpc, revision])
 
   const siblingIndex = siblings.indexOf(path)
   const go = (delta: number) => {
     const next = siblings[siblingIndex + delta]
-    if (next) setPath(next)
+    if (next) requestPath(next)
   }
 
   const createFile = () => {
-    if (!cwd) return
+    if (!cwd || !sessionId) return
     const raw = window.prompt('新文件名（不含路径）', '未命名')
     if (!raw) return
     const dir = path ? parentOf(path) : '.'
@@ -527,67 +526,63 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
     const target = dir === '.' ? name : `${dir}/${name}`
     const stem = name.replace(/\.md$/i, '')
     void (async () => {
-      const result = await rpc.call('/manuscript', 'file.create', { cwd, path: target, text: `# ${stem}\n\n` })
+      const result = await rpc.call('/manuscript', 'file.create', { sessionId, path: target, text: `# ${stem}\n\n` })
       if (!result.ok) {
         window.alert(result.error.message)
         return
       }
-      setPath(target)
-      mutate()
-    })()
-  }
-
-  const renameFile = () => {
-    if (!cwd || !path) return
-    const current = path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path
-    const raw = window.prompt('新文件名', current.replace(/\.md$/i, ''))
-    if (!raw) return
-    void (async () => {
-      const result = await rpc.call('/manuscript', 'file.rename', { cwd, path, name: raw })
-      if (!result.ok) {
-        window.alert(result.error.message)
-        return
-      }
-      const value = result.value as { path: string }
-      setPath(value.path)
+      requestPath(target)
       mutate()
     })()
   }
 
   return e('div', {
     'data-testid': 'manuscript-overlay',
+    'data-state': open ? 'open' : 'closed',
     style: {
       position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: 360,
-      pointerEvents: 'auto',
-      display: 'grid',
-      gridTemplateRows: 'auto 40% 1fr',
-      background: 'var(--dsw-alias-bg-base, Canvas)',
-      color: 'var(--dsw-alias-text-primary, CanvasText)',
-      boxShadow: '4px 0 16px rgba(0,0,0,0.12)',
-      borderRight: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))',
+      inset: 0,
+      pointerEvents: 'none',
     },
   },
-    e('header', {
+    !open ? e('button', {
+      type: 'button',
+      'data-testid': 'manuscript-open',
+      onClick: () => setOpen(true),
+      style: { position: 'absolute', left: 8, top: 8, pointerEvents: 'auto' },
+    }, '稿纸') : e('section', {
+      style: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 360,
+        pointerEvents: 'auto',
+        display: 'grid',
+        gridTemplateRows: 'auto 40% 1fr',
+        background: 'var(--dsw-alias-bg-base, Canvas)',
+        color: 'var(--dsw-alias-text-primary, CanvasText)',
+        boxShadow: '4px 0 16px rgba(0,0,0,0.12)',
+        borderRight: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))',
+      },
+    }, e('header', {
       style: { padding: '8px 8px 6px', borderBottom: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))' },
     },
       e('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 6 } }, '稿纸'),
       e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+        e('button', { type: 'button', 'data-testid': 'manuscript-close', onClick: requestClose }, '关闭'),
         e('button', { type: 'button', 'data-testid': 'manuscript-new', disabled: !cwd, onClick: createFile }, '新建'),
-        e('button', { type: 'button', 'data-testid': 'manuscript-rename', disabled: !path, onClick: renameFile }, '改名'),
         e('button', { type: 'button', 'data-testid': 'manuscript-prev', disabled: siblingIndex <= 0, onClick: () => go(-1) }, '上一篇'),
         e('button', { type: 'button', 'data-testid': 'manuscript-next', disabled: siblingIndex < 0 || siblingIndex >= siblings.length - 1, onClick: () => go(1) }, '下一篇'),
       ),
     ),
     e('aside', { style: { borderBottom: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', minHeight: 0 } },
-      cwd ? e(Tree, { cwd, rpc, onOpen: setPath, active: path, revision }) : e('div', { style: { padding: 12 } }, '没有工作区'),
+      cwd && sessionId ? e(Tree, { sessionId, cwd, rpc, onOpen: requestPath, active: path, revision }) : e('div', { style: { padding: 12 } }, '没有工作区'),
     ),
     e('main', { style: { minHeight: 0 } }, cwd && path
-      ? e(Editor, { cwd, path, rpc, onTreeMutate: mutate })
+      ? e(Editor, { sessionId, cwd, path, rpc, onDirtyChange: setDirty })
       : e('div', { style: { padding: 24 } }, '从上方打开文本文件')),
+    ),
   )
 }
 
