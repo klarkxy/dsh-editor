@@ -1,0 +1,24 @@
+{
+  "name": "dsh-editor",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "node scripts/dev.mjs",
+    "test": "vitest run",
+    "typecheck": "pnpm -r typecheck",
+    "pack:plugins": "pnpm --filter dsh-manuscript pack --pack-destination .pack && pnpm --filter dsh-grill pack --pack-destination .pack",
+    "test:e2e:live": "node e2e/dsh-editor-live.mjs",
+    "test:e2e:proposal": "node e2e/proposal-bar.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "~18.3.1",
+    "playwright": "^1.62.1",
+    "react": "^18.2.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules
+lib
+.pack
+*.tgz
+dist
+.env
+.env.*
+.opendesign-project-id.txt
+.opendesign-run.json
+.codex-plan-prompt.txt
+e2e/out
