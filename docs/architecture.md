@@ -31,6 +31,8 @@ Electron（窗口、资源校验、子进程生命周期）
 
 没有 BFF、第二份 Chat 历史、provider registry、数据库、模式状态、工作流引擎、索引服务、云同步或后台守护进程。Chat Renderer 不执行工具或直接调用模型。打开已有作品时，产品只向当前 DSH 会话提交一次受限初始化任务：Agent 把工作区内容视为不可信数据，不改正文，唯一目标写入为 `.dsh-editor/作品索引.md`；实际工具权限、审批和沙箱仍由 DSH 权威控制。
 
+外部作品导入同样只经过 `/manuscript`：两端必须是已解析、已注册且附着 live session 的工作区，Renderer 不传递 cwd 或绝对文件路径。Probe 只读取源、检查空目标并产生绑定两端 canonical root key 与文件版本/哈希的 token；Apply 会完整重 probe 后才以 `.dsh-editor-import.json` 的 `copying` 清单开始 no-clobber 写入 `正文/`。TXT 保持文本内容而改为 `.md`，隐藏路径、链接和非文本均跳过；完整项目不支持撤销。中断仅能在重新选择同一源后续传，或在每个清单拥有文件的哈希仍匹配时显式清理。Node 目录操作仅在 Host 已解析的根内逐组件拒绝 symlink/junction 后使用，文件内容和清单仍经版本化 manuscript 文件 API 读写。
+
 ## Desktop profile 与数据
 
 开发模式使用 `.dev/desktop-home`。便携版遵循 `DSH_HOME`，未设置时使用 DSH 默认 home；应用只原子部署 `profiles/dsh-editor` 和带 owner marker 的 `runtime/dsh-editor-runtime`，遇到无应用标记的同名目录会拒绝覆盖。

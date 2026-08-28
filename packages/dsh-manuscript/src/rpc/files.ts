@@ -156,6 +156,19 @@ async function listDirNodeFallback(root: string, relative: string): Promise<DirE
 }
 
 export async function listDir(context: WorkspaceFileContext, relative: string): Promise<DirEntry[]> {
+  try {
+    return await listDirStrict(context, relative)
+  } catch (error) {
+    if (error instanceof PathConfineError) throw error
+    if (error instanceof FileOpError && (error.code === 'DENIED' || error.code === 'IO')) {
+      return await listDirNodeFallback(context.cwd, relative)
+    }
+    throw error
+  }
+}
+
+/** Provider-confined directory listing with no native fallback, for security-sensitive walks. */
+export async function listDirStrict(context: WorkspaceFileContext, relative: string): Promise<DirEntry[]> {
   const resolved = await resolveScoped(context, relative)
   if (!resolved.info) throw new FileOpError('directory not found', 'NOT_FOUND')
   if (resolved.info.type !== 'directory') throw new FileOpError('not a directory', 'NOT_DIRECTORY')
@@ -167,15 +180,8 @@ export async function listDir(context: WorkspaceFileContext, relative: string): 
         .map((entry) => ({ name: entry.name, type: entry.type })),
     )
   } catch (error) {
-    if (error instanceof PathConfineError) throw error
-    let mapped: unknown = error
-    if (!(error instanceof FileOpError)) {
-      try { mapFsError(error) } catch (cause) { mapped = cause }
-    }
-    if (mapped instanceof FileOpError && (mapped.code === 'DENIED' || mapped.code === 'IO')) {
-      return await listDirNodeFallback(context.cwd, relative)
-    }
-    throw mapped
+    if (error instanceof PathConfineError || error instanceof FileOpError) throw error
+    mapFsError(error)
   }
 }
 

@@ -123,6 +123,22 @@ describe('manuscript Host workspace authority', () => {
     expect(writes).not.toHaveBeenCalled()
   })
 
+  it('resolves import source and target from separate live sessions', async () => {
+    const { host } = fixture()
+    const get = vi.fn((sessionId: string) => sessionId === 'session-1'
+      ? { id: 'session-1', header: { cwd: '/header/workspace' }, requestHeader: () => undefined }
+      : undefined)
+    host.sessions.get = get as ManuscriptHost['sessions']['get']
+    await expect(dispatch(
+      host as unknown as Context,
+      'project.importProbe',
+      { targetSessionId: 'session-1', sourceSessionId: 'forged-or-dead-source', cwd: '/forged/outside' },
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' })
+    expect(get).toHaveBeenCalledWith('session-1')
+    expect(get).toHaveBeenCalledWith('forged-or-dead-source')
+  })
+
   it('does not accept provider or model guesses from the RPC payload', async () => {
     const { host } = fixture()
     await expect(dispatch(

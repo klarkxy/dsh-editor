@@ -7,6 +7,7 @@ import { createDraftStore, draftDomainSpec, DraftInputError, type DraftStore } f
 import { PathConfineError } from './rpc/paths.ts'
 import { initializeProject, prepareNovelIndex, ProjectInitError } from './rpc/project.ts'
 import { applyProposal, parseProposal, prepareProposal, ProposalError } from './rpc/proposal.ts'
+import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './rpc/import.ts'
 
 export const name = 'dsh-manuscript'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'llm', 'storageDomain'] as const
@@ -61,6 +62,11 @@ export function mapError(error: unknown): RpcErr {
     if (error.code === 'READ_ONLY') return fail({ code: 'directory-unreadable', message: error.message, details: { path: '' } })
     return fail({ code: 'workspace-invalid-path', message: error.message, details: { path: '' } })
   }
+  if (error instanceof ImportError) {
+    if (error.code === 'READ_ONLY') return fail({ code: 'directory-unreadable', message: error.message, details: { path: '' } })
+    if (error.code === 'STALE' || error.code === 'BLOCKED' || error.code === 'TARGET_NOT_EMPTY' || error.code === 'NESTED' || error.code === 'CLEANUP_BLOCKED') return badRequest(error.message)
+    return fail({ code: 'internal', message: error.message, details: {} })
+  }
   if (error instanceof ProposalError || error instanceof PatchInputError || error instanceof DraftInputError) return badRequest(error.message)
   if (error instanceof FileOpError) {
     if (error.code === 'CANCELLED') return fail({ code: 'cancelled', message: error.message, details: {} })
@@ -92,7 +98,8 @@ export async function dispatch(
 ): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Payload) : {}
   const host = asHost(ctx)
-  const access = await resolveWorkspaceAccess(host, str(body, 'sessionId'), signal)
+  const targetSessionId = endpoint.startsWith('project.import') ? str(body, 'targetSessionId') : str(body, 'sessionId')
+  const access = await resolveWorkspaceAccess(host, targetSessionId, signal)
   const files = {
     fs: host.fs,
     cwd: access.workspace.path,
@@ -101,6 +108,22 @@ export async function dispatch(
     signal,
   }
   const rel = str(body, 'path')
+  const importAccess = (value: typeof access): ImportAccess => ({
+    path: value.workspace.path,
+    rootKey: value.root.targetKey,
+    mode: value.policy.mode,
+    files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
+  })
+  if (endpoint === 'project.importProbe') {
+    const sourceSessionId = str(body, 'sourceSessionId')
+    const source = sourceSessionId ? await resolveWorkspaceAccess(host, sourceSessionId, signal) : undefined
+    return await probeImport({ target: importAccess(access), source: source ? importAccess(source) : undefined })
+  }
+  if (endpoint === 'project.importApply') {
+    const source = await resolveWorkspaceAccess(host, str(body, 'sourceSessionId'), signal)
+    return await applyImport({ source: importAccess(source), target: importAccess(access), token: str(body, 'probeToken') })
+  }
+  if (endpoint === 'project.importCleanup') return await cleanupImport({ target: importAccess(access), receiptId: str(body, 'receiptId') })
   if (endpoint.startsWith('draft.') && !drafts) throw new Error('manuscript draft storage is unavailable')
   if (endpoint === 'draft.get') return { draft: drafts!.get(access.workspace.path, body) }
   if (endpoint === 'draft.put') return await drafts!.put(access.workspace.path, body)

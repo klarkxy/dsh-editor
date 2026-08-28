@@ -56,6 +56,7 @@ import { buildNovelIndexPrompt } from './novel-index.ts'
 import { buildExport, type ChapterExport, type ExportFormat } from './export.ts'
 import { documentTemplate, nextChapterPath, nextDocumentPath, type DocumentKind } from './project-files.ts'
 import type { ProposalMarker } from './proposal-tool.ts'
+import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 
 export const name = 'dsh-editor-shell-client'
 export const inject = ['slots', 'sessions', 'workspaces', 'connection'] as const
@@ -640,6 +641,50 @@ function ProjectContextReceiptView({ receipt }: { receipt: ProjectContextReceipt
   )
 }
 
+function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): void; onContinue(): void; onCleanup(): void }) {
+  const focus = useRef<HTMLButtonElement | null>(null)
+  const dialog = useRef<HTMLElement | null>(null)
+  useEffect(() => { if (focus.current) focus.current.focus(); else dialog.current?.focus() }, [props.flow.kind])
+  if (props.flow.kind === 'idle') return null
+  const working = props.flow.kind === 'working'
+  const recover = props.flow.kind === 'recover'
+  const cleanup = props.flow.kind === 'cleanup-confirm'
+  const probe = props.flow.kind === 'review' || props.flow.kind === 'recover' ? props.flow.probe : undefined
+  const cleaning = recover && probe?.message === 'cleaning'
+  return e('div', { className: 'import-overlay', onKeyDown: (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && !working) props.onCancel()
+    if (event.key !== 'Tab' || working || !dialog.current) return
+    const buttons = [...dialog.current.querySelectorAll<HTMLButtonElement>('button:not([disabled])')]
+    if (!buttons.length) return
+    const first = buttons[0]; const last = buttons[buttons.length - 1]
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  } },
+    e('section', { ref: dialog, className: 'import-dialog', role: 'dialog', tabIndex: -1, 'aria-modal': true, 'aria-labelledby': 'import-dialog-title' },
+      e('h2', { id: 'import-dialog-title' }, working ? '正在导入作品' : cleanup ? '清理未完成导入？' : recover ? '发现未完成导入' : '确认导入作品'),
+      working ? e('p', { role: 'status', 'aria-live': 'polite' }, props.flow.kind === 'working' ? props.flow.message : '')
+        : cleanup ? e('p', null, '只会删除清单拥有且内容未变化的导入文件；不会删除目标文件夹或其他文件。')
+          : recover ? e('div', null,
+              e('p', null, cleaning ? '上次清理尚未完成。只能继续安全清理。' : `上次导入未完成（${importSummary(probe!)}）。重新选择原源目录后可以继续，或安全清理。`),
+              probe?.message && !cleaning ? e('p', { className: 'warning', role: 'alert' }, probe.message) : null,
+            )
+            : e('div', null,
+              e('p', null, `将导入 ${importSummary(probe!)}；源目录不会被修改。`),
+              probe!.skipped.length ? e('p', null, `将跳过 ${probe!.skipped.length} 项。`) : null,
+              e('ul', null, probe!.preview.map((item: string) => e('li', { key: item }, item))),
+              probe!.skipped.length ? e('ul', { 'aria-label': '跳过项目示例' }, probe!.skipped.slice(0, 8).map((item) => e('li', { key: `${item.reason}:${item.path}` }, `${item.path} — ${item.reason}`))) : null,
+            ),
+      !working ? e('footer', null,
+        e('button', { ref: focus, type: 'button', onClick: props.onCancel }, '取消'),
+        recover && !cleaning ? e('button', { type: 'button', onClick: props.onContinue }, '继续导入') : null,
+        recover ? e('button', { type: 'button', onClick: () => props.onCleanup() }, '清理未完成导入') : null,
+        cleanup ? e('button', { type: 'button', onClick: props.onCleanup }, '确认清理') : null,
+        props.flow.kind === 'review' ? e('button', { type: 'button', onClick: props.onApply }, '开始导入') : null,
+      ) : null,
+    ),
+  )
+}
+
 function Chat({ ctx, session, workspaceId, onClose, onConfigure, onApplied }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; onClose(): void; onConfigure(): void; onApplied(path: string): void }) {
   const snapshot = useObservable<ConversationSnapshot>(session)
   const connected = useObservable(ctx.connection.hostDescription)
@@ -804,6 +849,9 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const indexedWorkspaces = useRef(new Set<string>())
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState('')
+  const [importFlow, setImportFlow] = useState<ImportFlow>(idleImportFlow)
+  const importReturnFocus = useRef<HTMLElement | null>(null)
+  const probedImportSessions = useRef(new Set<string>())
   const current = sessions.current
   useEffect(() => { document.title = 'DSH Editor' }, [])
   useEffect(() => { setPath(''); setFiles([]) }, [current])
@@ -867,6 +915,24 @@ function Root({ ctx }: { ctx: ShellContext }) {
   }
   const currentCwd = current ? sessions.byId[current]?.cwd : undefined
   const currentWorkspace = workspaces.items.find((workspace) => workspace.path === currentCwd)
+  useEffect(() => {
+    if (!current || !currentWorkspace || probedImportSessions.current.has(current)) return
+    probedImportSessions.current.add(current)
+    let live = true
+    void safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', { targetSessionId: current }))
+      .then((recovery) => {
+        if (!live) return
+        if (!recovery.ok) {
+          ctx.sessions.clear()
+          setHomeNote('作品中的导入状态无法验证，已停止打开。')
+          return
+        }
+        if (recovery.value.state !== 'recoverable') return
+        importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        setImportFlow(recoverImport(current, currentWorkspace.workspaceId, recovery.value))
+      })
+    return () => { live = false }
+  }, [ctx.connection.rpc, current, currentWorkspace?.workspaceId])
   const triggerExistingIndex = (workspaceId: WorkspaceId, sessionId: SessionId, force = false) => {
     if (!force && indexedWorkspaces.current.has(workspaceId)) return
     indexedWorkspaces.current.add(workspaceId)
@@ -887,8 +953,21 @@ function Root({ ctx }: { ctx: ShellContext }) {
       const initialized = await ctx.connection.rpc.call('/manuscript', 'project.init', { sessionId, newProject: true }) as RpcResult
       if (!initialized.ok) throw new Error(errorMessage(initialized))
     }
+    if (!newProject) {
+      probedImportSessions.current.add(sessionId)
+      const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', { targetSessionId: sessionId }))
+      if (!recovery.ok) {
+        setHomeNote('作品中的导入状态无法验证，已停止打开。')
+        setExportNote('作品中的导入状态无法验证，未切换工作区。')
+        return
+      }
+      if (recovery.ok && recovery.value.state === 'recoverable') {
+        importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        setImportFlow(recoverImport(sessionId, workspaceId, recovery.value)); return
+      }
+      triggerExistingIndex(workspaceId, sessionId)
+    }
     ctx.sessions.open(sessionId)
-    if (!newProject) triggerExistingIndex(workspaceId, sessionId)
   }
   const openWorkspacePath = async (path: string, newProject: boolean) => {
     const workspace = await ctx.workspaces.create({ path })
@@ -931,6 +1010,92 @@ function Root({ ctx }: { ctx: ShellContext }) {
       setOpeningWorkspace(false)
     }
   }
+  const closeImportFlow = (restoreFocus = true) => {
+    const target = importReturnFocus.current
+    importReturnFocus.current = null
+    setImportFlow(idleImportFlow)
+    if (restoreFocus && target) globalThis.setTimeout(() => target.focus(), 0)
+  }
+  const selectImportSource = async (targetSessionId?: SessionId, targetWorkspaceId?: WorkspaceId) => {
+    if (!targetSessionId) importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const sourcePath = await ctx.workspaces.pickDirectory()
+    if (!sourcePath) { closeImportFlow(); return }
+    let sourceWorkspace: Awaited<ReturnType<typeof ctx.workspaces.create>> | undefined
+    try {
+      sourceWorkspace = await ctx.workspaces.create({ path: sourcePath })
+      const sourceSessionId = await ctx.workspaces.connectWorkspace(sourceWorkspace.workspaceId)
+      let destinationSessionId = targetSessionId
+      let destinationWorkspaceId = targetWorkspaceId
+      if (!destinationSessionId || !destinationWorkspaceId) {
+        const targetPath = await ctx.workspaces.pickDirectory()
+        if (!targetPath) { closeImportFlow(); return }
+        const targetWorkspace = await ctx.workspaces.create({ path: targetPath })
+        destinationWorkspaceId = targetWorkspace.workspaceId
+        destinationSessionId = await ctx.workspaces.connectWorkspace(destinationWorkspaceId)
+      }
+      setImportFlow({ kind: 'working', message: '正在检查可导入的文件…' })
+      const probe = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', {
+        sourceSessionId, targetSessionId: destinationSessionId,
+      }))
+      if (!probe.ok || probe.value.state !== 'ready') {
+        closeImportFlow(); setHomeNote(probe.ok ? probe.value.message ?? '目录不能导入。' : '导入检查没有完成。'); return
+      }
+      setImportFlow(importReview(sourceSessionId, destinationSessionId as string, destinationWorkspaceId as string, probe.value))
+    } catch (error) {
+      throw error
+    }
+  }
+  const applyImportFlow = async () => {
+    if (importFlow.kind !== 'review') return
+    const flow = importFlow
+    setImportFlow({ kind: 'working', message: '正在复制作品文件…' })
+    const applied = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'project.importApply', {
+      sourceSessionId: flow.sourceSessionId, targetSessionId: flow.targetSessionId, probeToken: flow.probe.token,
+    }))
+    if (!applied.ok) {
+      const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', { targetSessionId: flow.targetSessionId }))
+      if (recovery.ok && recovery.value.state === 'recoverable') setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, recovery.value))
+      else { closeImportFlow(false); setHomeNote('导入没有完成，请重试。') }
+      return
+    }
+    const initialized = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'project.init', { sessionId: flow.targetSessionId, newProject: false }))
+    if (!initialized.ok) { closeImportFlow(false); setHomeNote('导入已完成，但项目初始化没有完成。'); return }
+    ctx.sessions.open(flow.targetSessionId as SessionId)
+    triggerExistingIndex(flow.targetWorkspaceId as WorkspaceId, flow.targetSessionId as SessionId)
+    closeImportFlow(false)
+  }
+  const cleanupImportFlow = async () => {
+    if (importFlow.kind === 'recover') { setImportFlow({ kind: 'cleanup-confirm', targetSessionId: importFlow.targetSessionId, targetWorkspaceId: importFlow.targetWorkspaceId, receiptId: importFlow.probe.receiptId! }); return }
+    if (importFlow.kind !== 'cleanup-confirm') return
+    const flow = importFlow
+    setImportFlow({ kind: 'working', message: '正在安全清理未完成导入…' })
+    const cleaned = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'project.importCleanup', { targetSessionId: flow.targetSessionId, receiptId: flow.receiptId }))
+    if (cleaned.ok) {
+      if (current === flow.targetSessionId) ctx.sessions.clear()
+      closeImportFlow()
+      setHomeNote('已清理未完成导入。')
+      return
+    }
+    const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', { targetSessionId: flow.targetSessionId }))
+    if (recovery.ok && recovery.value.state === 'recoverable') {
+      setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, { ...recovery.value, message: recovery.value.message ?? '清理没有完成；文件未被自动删除。' }))
+      return
+    }
+    if (current === flow.targetSessionId) ctx.sessions.clear()
+    closeImportFlow()
+    setHomeNote('清理没有完成；文件未被自动删除。')
+  }
+  const renderImportDialog = () => e(ImportDialog, {
+    flow: importFlow,
+    onCancel: () => {
+      const flow = importFlow
+      if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
+      closeImportFlow()
+    },
+    onApply: () => void applyImportFlow(),
+    onContinue: () => importFlow.kind === 'recover' ? void selectImportSource(importFlow.targetSessionId as SessionId, importFlow.targetWorkspaceId as WorkspaceId).catch(() => closeImportFlow()) : undefined,
+    onCleanup: () => void cleanupImportFlow(),
+  })
 
   if (view === 'settings' || setupGate !== 'ready') {
     return e('div', { className: 'settings-shell' },
@@ -980,6 +1145,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
           e('div', { className: 'home-actions' },
             e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspace(false) }, openingWorkspace ? '打开中' : '打开作品', e('span', { 'aria-hidden': 'true' }, '↗')),
             e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspace(true) }, '新建'),
+            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void selectImportSource().catch(() => { closeImportFlow(); setHomeNote('导入目录没有打开，请重试。') }) }, '导入作品'),
           ),
           manualWorkspaceMode ? e('form', { className: 'path-fallback', onSubmit: submitWorkspacePath },
             e('label', null,
@@ -1013,6 +1179,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
           ),
         ),
       ),
+      renderImportDialog(),
     )
   }
 
@@ -1076,6 +1243,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       'aria-expanded': false,
       onClick: () => setAssistantOpen(true),
     }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')),
+    renderImportDialog(),
   )
 }
 
@@ -1106,6 +1274,7 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .shell:not(.no-session){grid-template-columns:248px minmax(0,1fr)}.chat{position:fixed;z-index:10;inset:52px 0 0 auto;width:min(404px,calc(100vw - 280px));grid-column:auto;border:1px solid #d8d0bf;border-right:0;border-bottom:0;border-radius:22px 0 0 0;box-shadow:-24px 0 64px #4d41261f;overflow:hidden}.chat-header{align-items:center}.chat-header-actions{display:flex;gap:4px}.assistant-launcher{position:fixed;z-index:9;right:24px;bottom:24px;display:flex;align-items:center;gap:9px;padding:10px 15px 10px 10px;border:1px solid #95a89a;border-radius:22px 7px 22px 22px;background:#fffdf6ef;color:#244f3c;box-shadow:0 16px 42px #4d412626;backdrop-filter:blur(14px);cursor:pointer;animation:launcher-in 420ms var(--ease) both}.assistant-launcher span{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#dce9dd;font-size:17px;animation:mark-float 3s ease-in-out infinite}.assistant-launcher strong{font-size:13px}.assistant-launcher:hover{transform:translateY(-5px) rotate(-1deg);box-shadow:0 22px 50px #4d412633}.model-panel>label>span,.provider-tabs legend{color:#42594c!important;font-weight:500}.model-panel input[type=password],.model-panel input:not([type]){color:#2e4438!important}.model-panel input::placeholder{color:#7d857e!important;opacity:1}@keyframes launcher-in{from{opacity:0;transform:translateY(12px) scale(.9)}to{opacity:1;transform:none}}@media(max-width:1320px){.shell:not(.no-session){grid-template-columns:216px minmax(0,1fr)}}@media(prefers-reduced-motion:reduce){.assistant-launcher,.assistant-launcher span{animation:none!important}.assistant-launcher:hover{transform:none!important}}
 .model-indicator{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#647268}
 .project-context-receipt{margin-top:7px;color:#637269;font-size:11px}.project-context-receipt summary{cursor:pointer}.project-context-receipt ul{display:grid;gap:3px;margin:6px 0 0;padding-left:16px}.project-context-receipt code{font-size:10px;color:#466354}
+.import-overlay{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:24px;background:#1f2d2570}.import-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:14px;padding:24px;border:1px solid #d8cfbd;border-radius:16px 4px 16px 4px;background:#fffdf6;box-shadow:0 28px 80px #1c28221f}.import-dialog h2,.import-dialog p{margin:0}.import-dialog ul{max-height:170px;margin:0;overflow:auto;padding-left:20px;color:#5c6e62}.import-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.import-dialog button{padding:7px 11px;border:1px solid #b9c8ba;border-radius:4px;background:#f5f1e6;color:#2c5744;cursor:pointer}
 `
 
 const homeStyles = `
