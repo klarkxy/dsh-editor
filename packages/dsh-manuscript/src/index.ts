@@ -8,6 +8,7 @@ import { PathConfineError } from './rpc/paths.ts'
 import { initializeProject, prepareNovelIndex, ProjectInitError } from './rpc/project.ts'
 import { applyProposal, parseProposal, prepareProposal, ProposalError } from './rpc/proposal.ts'
 import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './rpc/import.ts'
+import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './rpc/snapshot.ts'
 
 export const name = 'dsh-manuscript'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'llm', 'storageDomain'] as const
@@ -67,6 +68,11 @@ export function mapError(error: unknown): RpcErr {
     if (error.code === 'STALE' || error.code === 'BLOCKED' || error.code === 'TARGET_NOT_EMPTY' || error.code === 'NESTED' || error.code === 'CLEANUP_BLOCKED') return badRequest(error.message)
     return fail({ code: 'internal', message: error.message, details: {} })
   }
+  if (error instanceof SnapshotError) {
+    if (error.code === 'READ_ONLY') return fail({ code: 'directory-unreadable', message: error.message, details: { path: '' } })
+    if (error.code === 'BLOCKED' || error.code === 'STALE' || error.code === 'CLEANUP_BLOCKED') return badRequest(error.message)
+    return fail({ code: 'internal', message: error.message, details: {} })
+  }
   if (error instanceof ProposalError || error instanceof PatchInputError || error instanceof DraftInputError) return badRequest(error.message)
   if (error instanceof FileOpError) {
     if (error.code === 'CANCELLED') return fail({ code: 'cancelled', message: error.message, details: {} })
@@ -98,7 +104,7 @@ export async function dispatch(
 ): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Payload) : {}
   const host = asHost(ctx)
-  const targetSessionId = endpoint.startsWith('project.import') ? str(body, 'targetSessionId') : str(body, 'sessionId')
+  const targetSessionId = endpoint.startsWith('project.import') || endpoint.startsWith('snapshot.restore') ? str(body, 'targetSessionId') : str(body, 'sessionId')
   const access = await resolveWorkspaceAccess(host, targetSessionId, signal)
   const files = {
     fs: host.fs,
@@ -114,6 +120,24 @@ export async function dispatch(
     mode: value.policy.mode,
     files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
   })
+  const snapshotAccess = (value: typeof access): SnapshotAccess => ({
+    path: value.workspace.path,
+    rootKey: value.root.targetKey,
+    mode: value.policy.mode,
+    files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
+  })
+  if (endpoint === 'snapshot.list') return await listSnapshots(snapshotAccess(access))
+  if (endpoint === 'snapshot.create') return await createSnapshot(snapshotAccess(access), str(body, 'label'))
+  if (endpoint === 'snapshot.restoreProbe') {
+    const sourceId = str(body, 'sourceSessionId')
+    const source = sourceId ? await resolveWorkspaceAccess(host, sourceId, signal) : undefined
+    return await restoreProbe({ source: source ? snapshotAccess(source) : undefined, target: snapshotAccess(access), snapshotId: str(body, 'snapshotId') || undefined })
+  }
+  if (endpoint === 'snapshot.restoreApply') {
+    const source = await resolveWorkspaceAccess(host, str(body, 'sourceSessionId'), signal)
+    return await restoreApply({ source: snapshotAccess(source), target: snapshotAccess(access), snapshotId: str(body, 'snapshotId'), token: str(body, 'token') })
+  }
+  if (endpoint === 'snapshot.restoreCleanup') return await restoreCleanup({ target: snapshotAccess(access), receiptId: str(body, 'receiptId') })
   if (endpoint === 'project.importProbe') {
     const sourceSessionId = str(body, 'sourceSessionId')
     const source = sourceSessionId ? await resolveWorkspaceAccess(host, sourceSessionId, signal) : undefined

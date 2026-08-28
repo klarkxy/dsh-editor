@@ -13,6 +13,8 @@
 
 Host 由 live `sessionId` 获取 immutable workspace，验证 registered membership 与 sandbox policy，再使用 DSH `ctx.fs`。创建采用 `createIfAbsent`，保存采用 `replaceIfVersion`。绝对路径、traversal、symlink、超过 2 MB 的文本、stale version、未知 session 和 read-only 写入都会 fail closed。
 
+作品文本快照使用 `.dsh-editor/snapshots` 的 staged directory 发布；快照只包含符合限制的 Markdown/TXT 正文文件，不包含浏览器中尚未保存的编辑内容。恢复总是进入新的空工作区，并带可校验、可续传的 restore receipt；不会覆盖原工作区。
+
 generic RPC 没有 caller principal，因此该 loopback channel 只适用于 DSH 本地单用户模型，不得暴露成远程多用户 API。
 
 ## 兼容与包形态

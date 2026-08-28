@@ -5,6 +5,7 @@ import { resolveWorkspaceAccess, WorkspaceAuthorityError } from './host.ts'
 import { dispatch, mapError } from './index.ts'
 import { createDraftStore, type DraftTableLike } from './rpc/draft.ts'
 import { FileOpError } from './rpc/files.ts'
+import { SnapshotError } from './rpc/snapshot.ts'
 
 function draftStoreFixture() {
   const rows = new Map<string, ReturnType<DraftTableLike['get']>>()
@@ -105,6 +106,9 @@ describe('manuscript Host workspace authority', () => {
       ok: false,
       error: { code: 'internal', message: 'boom', details: {} },
     })
+    expect(mapError(new SnapshotError('snapshot drift', 'STALE'))).toMatchObject({
+      error: { code: 'bad-request', details: { issues: [{ message: 'snapshot drift' }] } },
+    })
   })
 
   it('rejects a session absent from the canonical workspace account', async () => {
@@ -133,6 +137,22 @@ describe('manuscript Host workspace authority', () => {
       host as unknown as Context,
       'project.importProbe',
       { targetSessionId: 'session-1', sourceSessionId: 'forged-or-dead-source', cwd: '/forged/outside' },
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' })
+    expect(get).toHaveBeenCalledWith('session-1')
+    expect(get).toHaveBeenCalledWith('forged-or-dead-source')
+  })
+
+  it('resolves snapshot restore source and target from separate live sessions', async () => {
+    const { host } = fixture()
+    const get = vi.fn((sessionId: string) => sessionId === 'session-1'
+      ? { id: 'session-1', header: { cwd: '/header/workspace' }, requestHeader: () => undefined }
+      : undefined)
+    host.sessions.get = get as ManuscriptHost['sessions']['get']
+    await expect(dispatch(
+      host as unknown as Context,
+      'snapshot.restoreProbe',
+      { targetSessionId: 'session-1', sourceSessionId: 'forged-or-dead-source', snapshotId: '00000000-0000-4000-8000-000000000000', cwd: '/forged/outside' },
       new AbortController().signal,
     )).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' })
     expect(get).toHaveBeenCalledWith('session-1')

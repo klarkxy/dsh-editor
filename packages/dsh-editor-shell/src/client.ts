@@ -57,6 +57,17 @@ import { buildExport, type ChapterExport, type ExportFormat } from './export.ts'
 import { documentTemplate, nextChapterPath, nextDocumentPath, type DocumentKind } from './project-files.ts'
 import type { ProposalMarker } from './proposal-tool.ts'
 import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
+import {
+  blocksWorkspaceOpen,
+  idleSnapshotFlow,
+  recoverSnapshot,
+  restoreSummary,
+  snapshotReview,
+  snapshotSummary,
+  type RestoreView,
+  type SnapshotFlow,
+  type SnapshotView,
+} from './snapshot-flow.ts'
 
 export const name = 'dsh-editor-shell-client'
 export const inject = ['slots', 'sessions', 'workspaces', 'connection'] as const
@@ -180,8 +191,9 @@ function Editor(props: {
   onOpen(path: string): void
   create(): void
   externalRevision: number
+  onDirtyChange(dirty: boolean): void
 }) {
-  const { ctx, session, path, files, onOpen, create, externalRevision } = props
+  const { ctx, session, path, files, onOpen, create, externalRevision, onDirtyChange } = props
   const [doc, setDoc] = useState<EditorDocument | null>(null)
   const [text, setTextState] = useState('')
   const [ghost, setGhost] = useState('')
@@ -207,6 +219,11 @@ function Editor(props: {
   textRef.current = text
   revisionRef.current = revision
   const state = saveState(doc, text, conflict)
+
+  useEffect(() => {
+    onDirtyChange(Boolean(doc && isDirty(doc, text)) || conflict)
+    return () => onDirtyChange(false)
+  }, [doc, text, conflict, onDirtyChange])
 
   const setText = (value: string) => {
     setTextState(value)
@@ -685,6 +702,77 @@ function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): vo
   )
 }
 
+function SnapshotDialog(props: {
+  flow: SnapshotFlow
+  dirty: boolean
+  onCancel(): void
+  onCreate(): void
+  onSelect(snapshot: SnapshotView): void
+  onApply(): void
+  onContinue(): void
+  onCleanup(): void
+}) {
+  const focus = useRef<HTMLButtonElement | null>(null)
+  const dialog = useRef<HTMLElement | null>(null)
+  useEffect(() => { if (focus.current) focus.current.focus(); else dialog.current?.focus() }, [props.flow.kind])
+  if (props.flow.kind === 'idle') return null
+  const working = props.flow.kind === 'working'
+  const list = props.flow.kind === 'list' ? props.flow : undefined
+  const review = props.flow.kind === 'review' ? props.flow : undefined
+  const recover = props.flow.kind === 'recover' ? props.flow : undefined
+  const cleanup = props.flow.kind === 'cleanup-confirm'
+  return e('div', { className: 'import-overlay', onKeyDown: (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && !working) props.onCancel()
+    if (event.key !== 'Tab' || working || !dialog.current) return
+    const buttons = [...dialog.current.querySelectorAll<HTMLButtonElement>('button:not([disabled])')]
+    if (!buttons.length) return
+    const first = buttons[0]; const last = buttons[buttons.length - 1]
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  } },
+    e('section', { ref: dialog, className: 'import-dialog snapshot-dialog', role: 'dialog', tabIndex: -1, 'aria-modal': true, 'aria-labelledby': 'snapshot-dialog-title' },
+      e('h2', { id: 'snapshot-dialog-title' }, working ? '作品快照' : cleanup ? '清理未完成恢复？' : recover ? '发现未完成恢复' : review ? '确认恢复为新副本' : '作品快照'),
+      working ? e('p', { role: 'status', 'aria-live': 'polite' }, props.flow.kind === 'working' ? props.flow.message : '') : null,
+      list ? e('div', null,
+        e('p', null, '快照只保存已经写入磁盘的 Markdown/TXT 作品文件；不包含未保存内容、对话、隐藏目录或构建文件。'),
+        list.note ? e('p', { className: 'success', role: 'status' }, list.note) : null,
+        props.dirty ? e('p', { className: 'warning', role: 'alert' }, '当前有未保存内容，请先保存再创建快照。') : null,
+        list.snapshots.length
+          ? e('ul', { className: 'snapshot-list', 'aria-label': '可恢复快照' }, list.snapshots.map((snapshot) => e('li', { key: snapshot.snapshotId },
+              e('div', null,
+                e('strong', null, snapshot.label || new Date(snapshot.createdAt).toLocaleString()),
+                e('small', null, snapshotSummary(snapshot)),
+              ),
+              e('button', { type: 'button', onClick: () => props.onSelect(snapshot) }, '恢复为新副本'),
+            )))
+          : e('p', { className: 'muted' }, '还没有作品快照。'),
+      ) : null,
+      review ? e('div', null,
+        e('p', null, '将在新的空文件夹中恢复，不覆盖或修改当前作品。'),
+        review.snapshot ? e('p', null, `快照时间：${new Date(review.snapshot.createdAt).toLocaleString()}`) : null,
+        e('p', null, restoreSummary(review.probe)),
+        e('p', null, '当前未保存内容不会进入恢复副本。'),
+        review.probe.preview.length ? e('ul', { 'aria-label': '恢复文件示例' }, review.probe.preview.map((item) => e('li', { key: item }, item))) : null,
+        review.probe.excluded.length ? e('p', null, `快照创建时排除了 ${review.probe.excluded.length} 项。`) : null,
+      ) : null,
+      recover ? e('div', null,
+        e('p', null, `上次恢复未完成（${restoreSummary(recover.probe)}）。目标不会作为完整作品打开。`),
+        e('p', null, '可以重新选择创建快照的原作品继续，或安全清理已复制且内容未变化的文件。'),
+        recover.probe.message ? e('p', { className: 'warning', role: 'alert' }, recover.probe.message) : null,
+      ) : null,
+      cleanup ? e('p', null, '只会删除恢复清单拥有且内容仍匹配的文件；检测到作者修改、链接或路径变化时会停止。') : null,
+      !working ? e('footer', null,
+        e('button', { ref: focus, type: 'button', onClick: props.onCancel }, '取消'),
+        list ? e('button', { type: 'button', disabled: props.dirty, onClick: props.onCreate }, '创建快照') : null,
+        review ? e('button', { type: 'button', onClick: props.onApply }, '确认恢复为新副本') : null,
+        recover && recover.probe.message !== 'cleaning' ? e('button', { type: 'button', onClick: props.onContinue }, '选择原作品并继续') : null,
+        recover ? e('button', { type: 'button', onClick: props.onCleanup }, '清理未完成恢复') : null,
+        cleanup ? e('button', { type: 'button', onClick: props.onCleanup }, '确认安全清理') : null,
+      ) : null,
+    ),
+  )
+}
+
 function Chat({ ctx, session, workspaceId, onClose, onConfigure, onApplied }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; onClose(): void; onConfigure(): void; onApplied(path: string): void }) {
   const snapshot = useObservable<ConversationSnapshot>(session)
   const connected = useObservable(ctx.connection.hostDescription)
@@ -850,11 +938,19 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState('')
   const [importFlow, setImportFlow] = useState<ImportFlow>(idleImportFlow)
+  const [snapshotNote, setSnapshotNote] = useState('')
+  const [snapshotBusy, setSnapshotBusy] = useState(false)
+  const [snapshotFlow, setSnapshotFlow] = useState<SnapshotFlow>(idleSnapshotFlow)
+  const [editorDirty, setEditorDirty] = useState(false)
   const importReturnFocus = useRef<HTMLElement | null>(null)
+  const snapshotReturnFocus = useRef<HTMLElement | null>(null)
   const probedImportSessions = useRef(new Set<string>())
+  const probedRestoreSessions = useRef(new Set<string>())
+  const verifiedRestoreSessions = useRef(new Set<string>())
+  const [, refreshRestoreGate] = useState(0)
   const current = sessions.current
   useEffect(() => { document.title = 'DSH Editor' }, [])
-  useEffect(() => { setPath(''); setFiles([]) }, [current])
+  useEffect(() => { setPath(''); setFiles([]); setEditorDirty(false) }, [current])
   useEffect(() => {
     let live = true
     void ctx.connection.api.credentials.describe({ refs: ['DEEPSEEK_API_KEY', 'DSH_EDITOR_CUSTOM_API_KEY'] }).then((response) => {
@@ -933,6 +1029,30 @@ function Root({ ctx }: { ctx: ShellContext }) {
       })
     return () => { live = false }
   }, [ctx.connection.rpc, current, currentWorkspace?.workspaceId])
+  useEffect(() => {
+    if (!current || !currentWorkspace || probedRestoreSessions.current.has(current)) return
+    probedRestoreSessions.current.add(current)
+    let live = true
+    void safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', { targetSessionId: current }))
+      .then((recovery) => {
+        if (!live) return
+        if (!recovery.ok) {
+          ctx.sessions.clear()
+          setHomeNote('作品中的恢复状态无法验证，已停止打开。')
+          return
+        }
+        if (!blocksWorkspaceOpen(recovery.value)) {
+          verifiedRestoreSessions.current.add(current)
+          refreshRestoreGate((value) => value + 1)
+          return
+        }
+        snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        ctx.sessions.clear()
+        setSnapshotFlow(recoverSnapshot(current, currentWorkspace.workspaceId, recovery.value))
+        return
+      })
+    return () => { live = false }
+  }, [ctx.connection.rpc, current, currentWorkspace?.workspaceId])
   const triggerExistingIndex = (workspaceId: WorkspaceId, sessionId: SessionId, force = false) => {
     if (!force && indexedWorkspaces.current.has(workspaceId)) return
     indexedWorkspaces.current.add(workspaceId)
@@ -965,6 +1085,19 @@ function Root({ ctx }: { ctx: ShellContext }) {
         importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
         setImportFlow(recoverImport(sessionId, workspaceId, recovery.value)); return
       }
+      probedRestoreSessions.current.add(sessionId)
+      const restore = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', { targetSessionId: sessionId }))
+      if (!restore.ok) {
+        setHomeNote('作品中的恢复状态无法验证，已停止打开。')
+        setExportNote('作品中的恢复状态无法验证，未切换工作区。')
+        return
+      }
+      if (blocksWorkspaceOpen(restore.value)) {
+        snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        setSnapshotFlow(recoverSnapshot(sessionId, workspaceId, restore.value))
+        return
+      }
+      verifiedRestoreSessions.current.add(sessionId)
       triggerExistingIndex(workspaceId, sessionId)
     }
     ctx.sessions.open(sessionId)
@@ -1085,6 +1218,156 @@ function Root({ ctx }: { ctx: ShellContext }) {
     closeImportFlow()
     setHomeNote('清理没有完成；文件未被自动删除。')
   }
+  const closeSnapshotFlow = (restoreFocus = true) => {
+    const target = snapshotReturnFocus.current
+    snapshotReturnFocus.current = null
+    setSnapshotFlow(idleSnapshotFlow)
+    if (restoreFocus && target) globalThis.setTimeout(() => target.focus(), 0)
+  }
+  const loadSnapshotList = async (note?: string) => {
+    if (!session) return
+    setSnapshotBusy(true)
+    setSnapshotFlow({ kind: 'working', message: '正在读取作品快照…' })
+    const listed = await safeRpcCall<SnapshotView[]>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.list', { sessionId: session.sessionId }))
+    setSnapshotBusy(false)
+    if (!listed.ok) { closeSnapshotFlow(false); setSnapshotNote('快照列表没有读取完成，请重试。'); return }
+    setSnapshotFlow({ kind: 'list', snapshots: listed.value, note })
+  }
+  const openSnapshotPanel = () => {
+    snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    void loadSnapshotList()
+  }
+  const createSnapshot = async () => {
+    if (!session) return
+    if (editorDirty) { setSnapshotNote('请先保存当前未保存内容，再创建快照。'); return }
+    setSnapshotBusy(true)
+    setSnapshotFlow({ kind: 'working', message: '正在创建整部作品文本快照…' })
+    const result = await safeRpcCall<SnapshotView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.create', { sessionId: session.sessionId }))
+    setSnapshotBusy(false)
+    if (!result.ok) { closeSnapshotFlow(false); setSnapshotNote('快照没有创建，请重试。'); return }
+    setSnapshotNote(`已创建快照：${snapshotSummary(result.value)}`)
+    await loadSnapshotList('快照已创建。')
+  }
+  const restoreAsCopy = async (snapshot: SnapshotView) => {
+    if (!session) return
+    setSnapshotBusy(true)
+    setSnapshotFlow({ kind: 'working', message: '请选择一个新的空文件夹作为恢复目标…' })
+    const targetPath = await ctx.workspaces.pickDirectory()
+    if (!targetPath) { setSnapshotBusy(false); await loadSnapshotList('已取消选择恢复目标。'); return }
+    try {
+      const target = await ctx.workspaces.create({ path: targetPath })
+      const targetSessionId = await ctx.workspaces.connectWorkspace(target.workspaceId)
+      const probe = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', {
+        sourceSessionId: session.sessionId,
+        targetSessionId,
+        snapshotId: snapshot.snapshotId,
+      }))
+      setSnapshotBusy(false)
+      if (!probe.ok || probe.value.state !== 'ready' || !probe.value.token) {
+        closeSnapshotFlow(false)
+        setSnapshotNote(probe.ok ? probe.value.message ?? '目标目录不能用于恢复。' : '恢复检查没有完成。')
+        return
+      }
+      setSnapshotFlow(snapshotReview(session.sessionId, targetSessionId, target.workspaceId, probe.value, snapshot))
+    } catch {
+      setSnapshotBusy(false)
+      closeSnapshotFlow(false)
+      setSnapshotNote('恢复目标没有打开，请重试。')
+    }
+  }
+  const finishRestoredCopy = (targetSessionId: string, targetWorkspaceId: string) => {
+    probedRestoreSessions.current.add(targetSessionId)
+    verifiedRestoreSessions.current.add(targetSessionId)
+    ctx.sessions.open(targetSessionId as SessionId)
+    triggerExistingIndex(targetWorkspaceId as WorkspaceId, targetSessionId as SessionId)
+    closeSnapshotFlow(false)
+    setSnapshotNote('已恢复为新的作品副本。')
+  }
+  const applySnapshotRestore = async () => {
+    if (snapshotFlow.kind !== 'review') return
+    const flow = snapshotFlow
+    setSnapshotBusy(true)
+    setSnapshotFlow({ kind: 'working', message: '正在恢复新的作品副本…' })
+    const applied = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreApply', {
+      sourceSessionId: flow.sourceSessionId,
+      targetSessionId: flow.targetSessionId,
+      snapshotId: flow.probe.snapshotId,
+      token: flow.probe.token,
+    }))
+    setSnapshotBusy(false)
+    if (applied.ok) { finishRestoredCopy(flow.targetSessionId, flow.targetWorkspaceId); return }
+    const recovery = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', { targetSessionId: flow.targetSessionId }))
+    if (recovery.ok && recovery.value.state === 'complete') {
+      finishRestoredCopy(flow.targetSessionId, flow.targetWorkspaceId)
+      return
+    }
+    if (recovery.ok && recovery.value.state === 'recoverable') {
+      setSnapshotFlow(recoverSnapshot(flow.targetSessionId, flow.targetWorkspaceId, recovery.value))
+      return
+    }
+    closeSnapshotFlow(false)
+    setSnapshotNote('恢复没有完成；目标文件未被当成完整作品打开。')
+  }
+  const continueSnapshotRestore = async () => {
+    if (snapshotFlow.kind !== 'recover') return
+    const recover = snapshotFlow
+    setSnapshotBusy(true)
+    setSnapshotFlow({ kind: 'working', message: '请选择创建这份快照的原作品目录…' })
+    const sourcePath = await ctx.workspaces.pickDirectory()
+    if (!sourcePath) { setSnapshotBusy(false); setSnapshotFlow(recover); return }
+    try {
+      const source = await ctx.workspaces.create({ path: sourcePath })
+      const sourceSessionId = await ctx.workspaces.connectWorkspace(source.workspaceId)
+      const probe = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', {
+        sourceSessionId,
+        targetSessionId: recover.targetSessionId,
+        snapshotId: recover.probe.snapshotId,
+      }))
+      setSnapshotBusy(false)
+      if (probe.ok && probe.value.state === 'ready' && probe.value.token) {
+        setSnapshotFlow(snapshotReview(sourceSessionId, recover.targetSessionId, recover.targetWorkspaceId, probe.value))
+        return
+      }
+      setSnapshotFlow({ ...recover, probe: { ...recover.probe, message: probe.ok ? probe.value.message ?? '所选原作品不匹配。' : '原作品没有验证完成。' } })
+    } catch {
+      setSnapshotBusy(false)
+      setSnapshotFlow({ ...recover, probe: { ...recover.probe, message: '原作品目录没有打开。' } })
+    }
+  }
+  const cleanupSnapshotRestore = async () => {
+    if (snapshotFlow.kind === 'recover') {
+      setSnapshotFlow({
+        kind: 'cleanup-confirm',
+        targetSessionId: snapshotFlow.targetSessionId,
+        targetWorkspaceId: snapshotFlow.targetWorkspaceId,
+        receiptId: snapshotFlow.probe.receiptId!,
+      })
+      return
+    }
+    if (snapshotFlow.kind !== 'cleanup-confirm') return
+    const flow = snapshotFlow
+    setSnapshotBusy(true)
+    setSnapshotFlow({ kind: 'working', message: '正在安全清理未完成恢复…' })
+    const cleaned = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreCleanup', {
+      targetSessionId: flow.targetSessionId,
+      receiptId: flow.receiptId,
+    }))
+    setSnapshotBusy(false)
+    if (cleaned.ok) {
+      if (current === flow.targetSessionId) ctx.sessions.clear()
+      closeSnapshotFlow()
+      setHomeNote('已清理未完成恢复。')
+      return
+    }
+    const recovery = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', { targetSessionId: flow.targetSessionId }))
+    if (recovery.ok && recovery.value.state === 'recoverable') {
+      setSnapshotFlow(recoverSnapshot(flow.targetSessionId, flow.targetWorkspaceId, { ...recovery.value, message: recovery.value.message ?? '清理没有完成；文件未被自动删除。' }))
+      return
+    }
+    if (current === flow.targetSessionId) ctx.sessions.clear()
+    closeSnapshotFlow()
+    setHomeNote('清理没有完成；文件未被自动删除。')
+  }
   const renderImportDialog = () => e(ImportDialog, {
     flow: importFlow,
     onCancel: () => {
@@ -1095,6 +1378,20 @@ function Root({ ctx }: { ctx: ShellContext }) {
     onApply: () => void applyImportFlow(),
     onContinue: () => importFlow.kind === 'recover' ? void selectImportSource(importFlow.targetSessionId as SessionId, importFlow.targetWorkspaceId as WorkspaceId).catch(() => closeImportFlow()) : undefined,
     onCleanup: () => void cleanupImportFlow(),
+  })
+  const renderSnapshotDialog = () => e(SnapshotDialog, {
+    flow: snapshotFlow,
+    dirty: editorDirty,
+    onCancel: () => {
+      const flow = snapshotFlow
+      if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
+      closeSnapshotFlow()
+    },
+    onCreate: () => void createSnapshot(),
+    onSelect: (snapshot: SnapshotView) => void restoreAsCopy(snapshot),
+    onApply: () => void applySnapshotRestore(),
+    onContinue: () => void continueSnapshotRestore(),
+    onCleanup: () => void cleanupSnapshotRestore(),
   })
 
   if (view === 'settings' || setupGate !== 'ready') {
@@ -1107,6 +1404,19 @@ function Root({ ctx }: { ctx: ShellContext }) {
         onConfigured: () => { setSetupGate('ready'); setView('workspace') },
         onTestFailure: () => { setSetupGate('required'); setView('settings') },
       }),
+    )
+  }
+
+  if (session && current && !verifiedRestoreSessions.current.has(current)) {
+    return e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
+      e('style', null, redesignedStyles),
+      e('style', null, playfulStyles),
+      e('section', { className: 'empty-paper', 'aria-label': '正在验证作品恢复状态' },
+        e('h1', null, '正在检查作品'),
+        e('p', { role: 'status', 'aria-live': 'polite' }, '确认没有未完成恢复后再打开编辑器…'),
+      ),
+      renderImportDialog(),
+      renderSnapshotDialog(),
     )
   }
 
@@ -1180,6 +1490,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         ),
       ),
       renderImportDialog(),
+      renderSnapshotDialog(),
     )
   }
 
@@ -1197,6 +1508,11 @@ function Root({ ctx }: { ctx: ShellContext }) {
         },
       }, workspaces.items.map((workspace) => e('option', { key: workspace.workspaceId, value: workspace.workspaceId }, workspace.title || workspace.path)))),
       e('div', { className: 'export-actions' },
+        e('button', {
+          type: 'button',
+          disabled: snapshotBusy,
+          onClick: openSnapshotPanel,
+        }, snapshotBusy ? '快照处理中' : '作品快照'),
         e('details', { className: 'export-menu' },
           e('summary', null, exporting ? '导出中' : '导出'),
           e('div', null,
@@ -1204,6 +1520,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
             e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('text') }, 'TXT'),
           ),
         ),
+        snapshotNote ? e('span', { role: /没有|请先|失败|未/.test(snapshotNote) ? 'alert' : 'status' }, snapshotNote) : null,
         exportNote ? e('span', { role: /无法|失败|为空/.test(exportNote) ? 'alert' : 'status' }, exportNote) : null,
         e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: () => setView('settings') }, '⌁'),
       ),
@@ -1225,7 +1542,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       ) : null,
       e(Tree, { ctx, sessionId: session.sessionId, active: path, onOpen: setPath, revision: treeRevision, onOrder: setFiles }),
     ),
-    e(Editor, { ctx, session, path, files, onOpen: setPath, create: () => { void create('chapter') }, externalRevision: contentRevision }),
+    e(Editor, { ctx, session, path, files, onOpen: setPath, create: () => { void create('chapter') }, externalRevision: contentRevision, onDirtyChange: setEditorDirty }),
     assistantOpen ? e(Chat, {
       ctx,
       session,
@@ -1244,6 +1561,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       onClick: () => setAssistantOpen(true),
     }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')),
     renderImportDialog(),
+    renderSnapshotDialog(),
   )
 }
 
@@ -1274,7 +1592,7 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .shell:not(.no-session){grid-template-columns:248px minmax(0,1fr)}.chat{position:fixed;z-index:10;inset:52px 0 0 auto;width:min(404px,calc(100vw - 280px));grid-column:auto;border:1px solid #d8d0bf;border-right:0;border-bottom:0;border-radius:22px 0 0 0;box-shadow:-24px 0 64px #4d41261f;overflow:hidden}.chat-header{align-items:center}.chat-header-actions{display:flex;gap:4px}.assistant-launcher{position:fixed;z-index:9;right:24px;bottom:24px;display:flex;align-items:center;gap:9px;padding:10px 15px 10px 10px;border:1px solid #95a89a;border-radius:22px 7px 22px 22px;background:#fffdf6ef;color:#244f3c;box-shadow:0 16px 42px #4d412626;backdrop-filter:blur(14px);cursor:pointer;animation:launcher-in 420ms var(--ease) both}.assistant-launcher span{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#dce9dd;font-size:17px;animation:mark-float 3s ease-in-out infinite}.assistant-launcher strong{font-size:13px}.assistant-launcher:hover{transform:translateY(-5px) rotate(-1deg);box-shadow:0 22px 50px #4d412633}.model-panel>label>span,.provider-tabs legend{color:#42594c!important;font-weight:500}.model-panel input[type=password],.model-panel input:not([type]){color:#2e4438!important}.model-panel input::placeholder{color:#7d857e!important;opacity:1}@keyframes launcher-in{from{opacity:0;transform:translateY(12px) scale(.9)}to{opacity:1;transform:none}}@media(max-width:1320px){.shell:not(.no-session){grid-template-columns:216px minmax(0,1fr)}}@media(prefers-reduced-motion:reduce){.assistant-launcher,.assistant-launcher span{animation:none!important}.assistant-launcher:hover{transform:none!important}}
 .model-indicator{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#647268}
 .project-context-receipt{margin-top:7px;color:#637269;font-size:11px}.project-context-receipt summary{cursor:pointer}.project-context-receipt ul{display:grid;gap:3px;margin:6px 0 0;padding-left:16px}.project-context-receipt code{font-size:10px;color:#466354}
-.import-overlay{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:24px;background:#1f2d2570}.import-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:14px;padding:24px;border:1px solid #d8cfbd;border-radius:16px 4px 16px 4px;background:#fffdf6;box-shadow:0 28px 80px #1c28221f}.import-dialog h2,.import-dialog p{margin:0}.import-dialog ul{max-height:170px;margin:0;overflow:auto;padding-left:20px;color:#5c6e62}.import-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.import-dialog button{padding:7px 11px;border:1px solid #b9c8ba;border-radius:4px;background:#f5f1e6;color:#2c5744;cursor:pointer}
+.import-overlay{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:24px;background:#1f2d2570}.import-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:14px;padding:24px;border:1px solid #d8cfbd;border-radius:16px 4px 16px 4px;background:#fffdf6;box-shadow:0 28px 80px #1c28221f}.import-dialog h2,.import-dialog p{margin:0}.import-dialog ul{max-height:170px;margin:0;overflow:auto;padding-left:20px;color:#5c6e62}.import-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.import-dialog button{padding:7px 11px;border:1px solid #b9c8ba;border-radius:4px;background:#f5f1e6;color:#2c5744;cursor:pointer}.snapshot-dialog{width:min(620px,100%)}.snapshot-list{display:grid;gap:8px;max-height:280px!important;padding:0!important;list-style:none}.snapshot-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #ded6c7;border-radius:8px;background:#faf6ec}.snapshot-list li div{display:grid;gap:3px;min-width:0}.snapshot-list li strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294938}.snapshot-list li small{color:#6b776e}
 `
 
 const homeStyles = `
