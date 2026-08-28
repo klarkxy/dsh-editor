@@ -3,6 +3,17 @@ import { describe, expect, it, vi } from 'vitest'
 import type { FileSystemLike, ManuscriptHost, SandboxExecutionPolicyLike } from './host.ts'
 import { resolveWorkspaceAccess, WorkspaceAuthorityError } from './host.ts'
 import { dispatch, mapError } from './index.ts'
+import { createDraftStore, type DraftTableLike } from './rpc/draft.ts'
+import { FileOpError } from './rpc/files.ts'
+
+function draftStoreFixture() {
+  const rows = new Map<string, ReturnType<DraftTableLike['get']>>()
+  return createDraftStore({
+    get: (key) => rows.get(key),
+    async put(key, value) { rows.set(key, value) },
+    async delete(key) { return rows.delete(key) },
+  })
+}
 
 function fixture(options: { live?: boolean; member?: boolean; mode?: SandboxExecutionPolicyLike['mode'] } = {}) {
   const canonical = '/canonical/workspace'
@@ -65,7 +76,35 @@ describe('manuscript Host workspace authority', () => {
   it('rejects an unknown or non-live session', async () => {
     const { host } = fixture({ live: false })
     await expect(resolveWorkspaceAccess(host, 'missing')).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' })
-    expect(mapError(new WorkspaceAuthorityError('missing', 'SESSION_NOT_FOUND')).error.code).toBe('session-not-found')
+    expect(mapError(new WorkspaceAuthorityError('missing', 'SESSION_NOT_FOUND', { sessionId: 'missing' }))).toEqual({
+      ok: false,
+      error: { code: 'session-not-found', message: 'missing', details: { sessionId: 'missing' } },
+    })
+  })
+
+  it('maps manuscript failures into the closed DSH Host error contract', () => {
+    expect(mapError(new WorkspaceAuthorityError('detached', 'WORKSPACE_MISMATCH', {
+      sessionId: 'session-1',
+      workspacePath: '/canonical/workspace',
+    }))).toEqual({
+      ok: false,
+      error: {
+        code: 'workspace-attach-failed',
+        message: 'detached',
+        details: { sessionId: 'session-1', workspaceId: '/canonical/workspace' },
+      },
+    })
+    expect(mapError(new FileOpError('missing', 'NOT_FOUND'))).toEqual({
+      ok: false,
+      error: { code: 'directory-unreadable', message: 'missing', details: { path: '' } },
+    })
+    expect(mapError(new FileOpError('stale', 'STALE'))).toMatchObject({
+      error: { code: 'bad-request', details: { issues: [{ code: 'custom', path: [], message: 'stale' }] } },
+    })
+    expect(mapError(new Error('boom'))).toEqual({
+      ok: false,
+      error: { code: 'internal', message: 'boom', details: {} },
+    })
   })
 
   it('rejects a session absent from the canonical workspace account', async () => {
@@ -92,5 +131,24 @@ describe('manuscript Host workspace authority', () => {
       { sessionId: 'session-1', provider: 'forged', model: 'forged', prefix: '', suffix: '' },
       new AbortController().signal,
     )).resolves.toEqual({ text: '', route: 'dsh-llm' })
+  })
+
+  it('keeps drafts behind the same live-session workspace authority', async () => {
+    const { host } = fixture()
+    const drafts = draftStoreFixture()
+    await expect(dispatch(
+      host as unknown as Context,
+      'draft.put',
+      { sessionId: 'session-1', cwd: '/forged/outside', path: 'notes/a.md', text: '草稿', baseText: '原文', baseVersion: 'v1' },
+      new AbortController().signal,
+      drafts,
+    )).resolves.toEqual({ stored: true })
+    await expect(dispatch(
+      host as unknown as Context,
+      'draft.get',
+      { sessionId: 'session-1', path: 'notes/a.md' },
+      new AbortController().signal,
+      drafts,
+    )).resolves.toEqual({ draft: { path: 'notes/a.md', text: '草稿', baseText: '原文', baseVersion: 'v1' } })
   })
 })

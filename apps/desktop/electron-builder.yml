@@ -1,0 +1,33 @@
+appId: com.dsh-editor.desktop
+productName: DSH Editor
+electronVersion: 37.2.6
+npmRebuild: false
+afterPack: ../../scripts/after-pack-desktop.cjs
+directories:
+  output: ../../.pack/desktop
+asar: true
+asarUnpack:
+  - "**/*.node"
+files:
+  - "dist/**"
+  - "package.json"
+  - "preload.cjs"
+extraResources:
+  # Primary integration must materialize these exact, dependency-closed inputs.
+  - from: ../../.pack/desktop-runtime/node-24.16.0
+    to: node
+  - from: ../../.pack/desktop-runtime/dsh-0.1.1-rc.2
+    to: dsh
+  - from: ../../.pack/desktop-runtime/manifest.json
+    to: runtime-manifest.json
+  - from: ../../.pack/desktop-runtime/profile
+    to: profile-template
+win:
+  signAndEditExecutable: false
+  target:
+    - target: portable
+      arch:
+        - x64
+portable:
+  artifactName: "${productName}-${version}-win-x64.${ext}"
+  useZip: true

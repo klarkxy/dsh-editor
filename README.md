@@ -1,36 +1,53 @@
 # DSH Editor
 
-DSH Editor 为官方 DSH 提供两个可独立安装的小说写作插件。它不会替换 DSH 的 Chat、Agent、模型、审批或会话系统。
+DSH Editor 是 Windows x64 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示稿件树与中央稿纸；写作搭档按需从右侧抽屉打开。
 
-| 插件 | 面向谁 | 提供什么 |
+仓库同时保留两个可独立安装到普通 DSH Web profile 的公开插件：
+
+| 组件 | 用途 | 数据所有者 |
 | --- | --- | --- |
-| `dsh-manuscript` | 需要在 DSH 内查看和编辑本地稿件的作者 | 可折叠“稿纸”、工作区文件树、安全保存、本地草稿、字数、前后篇导航和可选补全 |
-| `dsh-grill` | 需要小说协作提示和项目脚手架的作者 | `scaffold_novel` 工具，以及 planning、drafting、review、first-reader 四种协作模式 |
+| Windows 桌面应用 | 项目初始化、Markdown 写作、写作助手、修改确认与导出 | 本地作品目录与应用私有数据 |
+| `dsh-manuscript` | Web 中的可关闭稿纸抽屉、文件/FIM RPC | DSH workspace、sandbox 与版本化文件 API |
+| `dsh-grill` | `scaffold_novel` 与四种小说协作模式 | DSH 工具、审批与官方 Chat |
+| `dsh-editor-shell` | 仅供桌面 `dsh-editor` profile 使用的私有根界面 | 不发布、不安装到日常 `web` profile |
 
-两者没有运行时依赖：可以只安装一个、同时安装，或分别卸载。
+## 开发启动
 
-## 从这里开始
-
-- **我是使用者**：阅读 [使用者指南](docs/user-guide.md)，完成插件选择、安装、首次使用、升级、回滚、卸载和故障排查。
-- **我是开发者**：阅读 [开发者指南](docs/development.md)，了解仓库结构、本地开发、测试、打包和交付流程。
-- **我要审查设计**：阅读 [架构与边界](docs/architecture.md)。
-- **我要查看版本变化**：阅读 [CHANGELOG.md](CHANGELOG.md)。
-
-## 当前兼容范围
-
-- Windows
-- `@deepseek-ai/dsh` `0.1.1-rc.1`
-- 插件版本 `0.1.0`
-- 从源码构建时需要 Node.js 22+ 与 pnpm 10.14.0
-
-这是已经验证的范围，不代表其他 DSH 版本也兼容。交付产物位于 `.pack`，标准交付闸门为：
+开发环境固定为 Windows x64、Node `24.16.0`、pnpm `10.14.0` 和 DSH `0.1.1-rc.2`：
 
 ```powershell
-pnpm verify:delivery
+pnpm install --frozen-lockfile
+pnpm run dev
 ```
 
-本仓库不会自动推送、打标签或发布；这些动作需要单独授权。
+`pnpm run dev` 构建并监听三个包，然后启动 Electron。Electron 使用仓库内 `.dev/desktop-home`，以随机 loopback 端口启动应用自有 DSH 子进程；不会打开默认浏览器，也不会修改日常 `web` profile。
 
-## 重要安全边界
+公开 Web 插件的旧式调试入口仍保留：
 
-`dsh-manuscript` 只适用于 DSH 的本地单用户、loopback 信任模型。不要把它作为远程多用户文件接口暴露。详情见 [架构与边界](docs/architecture.md#已知限制与兼容风险)。
+```powershell
+pnpm run dev:web
+```
+
+## 验证与便携 EXE
+
+```powershell
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm test:e2e:desktop
+pnpm prepare:desktop-runtime
+pnpm pack:desktop
+```
+
+`pack:desktop` 使用 Electron Builder 的 `portable` target，在 `.pack/desktop` 生成未签名 Windows x64 EXE。它内置 Node、DSH、专用 profile 模板，以及桌面需要的 `dsh-editor-shell`、`dsh-manuscript` 两个包；首次启动会把经过整树哈希校验的运行时原子部署到应用自有缓存，之后不调用系统 Node、pnpm 或全局 dsh。Windows SmartScreen 可能提示未知发布者。
+
+公开插件的 tarball 与安装/卸载矩阵仍使用 `pnpm pack:plugins` 和 `pnpm test:e2e:matrix`。仓库脚本不会自动 commit、push、tag、publish 或 release。
+
+## 文档
+
+- [使用者指南](docs/user-guide.md)：桌面启动、两栏写作、搭档抽屉、回滚与公开插件使用
+- [开发者指南](docs/development.md)：运行时准备、调试、测试与打包
+- [架构与边界](docs/architecture.md)：DSH 权威边界、profile、RPC 与安全约束
+- [CHANGELOG](CHANGELOG.md)：版本变化
+
+DSH Editor 的 loopback RPC 只适用于本地单用户信任模型，不应暴露成远程多用户文件接口。

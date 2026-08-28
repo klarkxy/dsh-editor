@@ -1,0 +1,18 @@
+{
+  "name": "@dsh-editor/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --root ../.. apps/desktop/test"
+  },
+  "devDependencies": {
+    "electron": "37.2.6",
+    "electron-builder": "26.0.12",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

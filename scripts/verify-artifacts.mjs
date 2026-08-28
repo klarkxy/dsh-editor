@@ -108,7 +108,7 @@ const releaseManifest = {
     dirty: Boolean(git(['status', '--porcelain', '--untracked-files=normal'])),
   },
   compatibility: {
-    dsh: '0.1.1-rc.1',
+    dsh: '0.1.1-rc.2',
     node: '>=22',
     pnpm: '10.14.0',
   },

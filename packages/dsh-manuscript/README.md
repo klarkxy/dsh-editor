@@ -18,14 +18,14 @@ generic RPC 没有 caller principal，因此该 loopback channel 只适用于 DS
 ## 兼容与包形态
 
 - 插件版本：`0.1.0`
-- DSH：`0.1.1-rc.1`
+- DSH：`0.1.1-rc.2`
 - Node.js：22+
 - dual-face：Host ESM 加 lazy-CJS `./client`
 - host-provided peer/runtime：Cordis、DSH client runtime（含 React）
 
 ## 安装、验证与卸载
 
-先停止目标 Web profile，并确认 `dsh --version` 为 `0.1.1-rc.1`。在 tarball 所在目录运行：
+先停止目标 Web profile，并确认 `dsh --version` 为 `0.1.1-rc.2`。在 tarball 所在目录运行：
 
 ```powershell
 $packagePath = (Resolve-Path .\dsh-manuscript-0.1.0.tgz).Path.Replace('\', '/')

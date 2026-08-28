@@ -1,90 +1,102 @@
 # DSH Editor 架构与边界
 
-## 当前决策
+## 产品结构
 
-本仓库只包含两个可独立安装的 DSH 插件。它不实现另一套应用外壳、Chat、Agent runtime、审批系统、provider store 或会话数据库。
+DSH Editor V1 是 Windows x64 的 GUI-first 桌面应用，不是另一套 Agent runtime。
 
 ```text
-官方 DSH
-├─ Chat / Agent / tools / approvals / providers / sessions
-├─ dsh-manuscript
-│  ├─ 默认收起的 shell.overlay 稿纸抽屉
-│  ├─ 通用工作区文件树与正文 buffer
-│  └─ loopback RPC → live session → registered workspace → DSH fs/sandbox
-└─ dsh-grill
-   ├─ 通过官方工具/审批流程执行 scaffold_novel
-   └─ additive 四模式写作提示
+Electron（窗口、资源校验、子进程生命周期）
+└─ 内置 Node 24.16.0
+   └─ 内置 DSH 0.1.1-rc.2，127.0.0.1:随机端口
+      └─ 专用 profiles/dsh-editor
+         ├─ DSH base / web runtime / connection / renderer
+         ├─ dsh-manuscript Host RPC
+         └─ dsh-editor-shell 私有根界面
+            ├─ 左：工作区、会话与稿件树
+            ├─ 中：Markdown 稿纸、草稿、冲突、FIM、选段改写
+            ├─ 内部：只读小说经验知识卡与静态主题白名单
+            └─ 右：DshChatPort → 唯一 DSH SessionFace 快照
 ```
 
-当前公共 DSH API 只提供 additive overlay，没有插件重组官方根布局的稳定接口。因此 Manuscript 使用可关闭的 360px 抽屉；关闭后不拦截全屏 pointer。真正的编辑器加 Chat 永久三栏需要上游 shell composition API。
+普通 DSH `web` profile 仍可独立安装 `dsh-manuscript` 和 `dsh-grill`。桌面 profile 才加载私有 `dsh-editor-shell`；它以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.1-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
 
 ## 所有权边界
 
-- 官方 DSH：Chat、Agent 执行、工具调度、审批 UI、权限 preset、会话生命周期、模型/provider、streaming 和对话持久化。
-- `dsh-manuscript`：稿件界面、本地编辑状态、loopback 文件/FIM RPC adapter。
-- `dsh-grill`：一个 scaffold 工具和一个 additive prompt section。
-- 两个插件没有互相 import、RPC、文件、schema 或运行时状态。安装或卸载任意一个不得改变另一个的契约。
+- DSH：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry、sandbox、文件 API 与持久化。
+- Electron：单窗口、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。
+- `dsh-editor-shell` Renderer：编辑 buffer、选区和视图状态；通过既有 `/manuscript` RPC 读取项目上下文；不读取凭据、绝对路径或 Node 文件系统。
+- `dsh-editor-shell` Host：最小写作边界、只读 `novel_knowledge` 与预览式修改提案；不保存模式状态，也不装载完整 skill。
+- `dsh-manuscript` Host：`/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、DSH_HOME 草稿、FIM 与 `patch.complete`。
+- `dsh-grill`：保持为普通 DSH 可独立安装的公共插件，不进入桌面 profile 或桌面运行依赖。
 
-## Manuscript Host 边界
+没有 BFF、第二份 Chat 历史、provider registry、数据库、模式状态、工作流引擎、索引服务、云同步或后台守护进程。Chat Renderer 不执行工具或直接调用模型。打开已有作品时，产品只向当前 DSH 会话提交一次受限初始化任务：Agent 把工作区内容视为不可信数据，不改正文，唯一目标写入为 `.dsh-editor/作品索引.md`；实际工具权限、审批和沙箱仍由 DSH 权威控制。
 
-浏览器文件请求携带 `{ sessionId, path, ... }`；浏览器提供的 `cwd`、provider 和 model 会被忽略。
+## Desktop profile 与数据
 
-每个请求按以下顺序处理：
+开发模式使用 `.dev/desktop-home`。便携版遵循 `DSH_HOME`，未设置时使用 DSH 默认 home；应用只原子部署 `profiles/dsh-editor` 和带 owner marker 的 `runtime/dsh-editor-runtime`，遇到无应用标记的同名目录会拒绝覆盖。
 
-1. 解析 live session ID；
+profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记，启动会拒绝覆盖并在窗口显示诊断与重试。每次部署先写同级 stage，原子替换已标记 profile；home 级 credentials、settings、sessions、storages 和真实 workspace 不会被复制或删除。
+
+桌面资源固定包含 Node `24.16.0`、DSH `0.1.1-rc.2`、`dsh-editor-shell`、`dsh-manuscript` 及 profile。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
+
+## DshChatPort
+
+`DshChatPort` 只消费 DSH 发布的 `SessionFace`、`ConversationSnapshot` 与 connection/runtime API，并保持一个事件消费者。它暴露：
+
+- 会话打开/新建、历史分页；
+- user/assistant/tool/notice/unknown 行与 partial stream；
+- send、cancel、loadOlder；
+- 模型与 permission preset 读取/切换；
+- 工具审批 allow-once/reject；
+- 批量用户问题回答；
+- connection 状态与重连提示。
+
+每次非空发送先按固定顺序读取最多五份 Markdown：`项目总览.md`、`大纲/总纲.md`、`人物卡/人物索引.md`、`世界书/设定总汇.md`、可选的 `.dsh-editor/作品索引.md`。每份最多纳入 4,000 字符，总计最多 12,000 字符；读取结果和原始请求以版本化 JSON 信封一次提交给同一 DSH session。文件文本是不可信数据，缺失或读取失败只记录在每条消息可展开的回执中，不阻塞发送；Renderer 仅显示原请求和回执，DSH 历史保留完整信封。`novel_knowledge` 不属于该回执，深层或最新事实仍由 Agent 通过 `glob`、`grep`、`read` 验证。
+
+未知节点或工具显示通用降级卡。Renderer 不持久化对话副本；刷新后仍以 DSH snapshot 为准。
+
+## Manuscript RPC
+
+所有 RPC 都携带 `sessionId` 和工作区相对路径。Host 忽略浏览器提供的 cwd/provider/model，按下列顺序建立 authority：
+
+1. 取得 live session；
 2. 读取 immutable `session.header.cwd`；
-3. 解析 registered workspace，并确认 session membership；
-4. 解析该 session 的 sandbox policy；
-5. 规范化工作区相对路径，拒绝绝对/device/traversal 输入；
-6. 使用 DSH `ctx.fs` 做 canonical resolution、containment、逐组件 symlink 拒绝、stat/list/read/write；
-7. 创建使用 `createIfAbsent`，保存使用 `replaceIfVersion`，并把 policy 传给原子写入。
+3. 解析 registered workspace 与 membership；
+4. 取得 session sandbox policy；
+5. 拒绝 absolute/device/traversal/symlink；
+6. 通过 DSH `ctx.fs` list/read/create/replaceIfVersion；
+7. 保存冲突时保留 Renderer buffer。
 
-文本 I/O 上限为 2 MB。binary、非普通文件、父目录不存在、stale version、symlink、read-only 写入、未知 session 和 workspace mismatch 都 fail closed。
+文本上限 2 MB。创建使用 `createIfAbsent`，保存使用 `replaceIfVersion`。binary、非普通文件、父目录不存在、stale version、read-only、未知 session 和 workspace mismatch 都 fail closed。
 
-GUI 刻意不提供 rename、delete、move 和目录创建，因为当前公共 DSH 文件契约无法以相同的原子安全级别实现它们。
+`patch.complete` 输入 session、文件、选区和有界前后文；Host 从 live session request header 选择 provider/model，再使用 DSH `llm.stream`。返回只是一条短建议。Renderer 以文档 revision、选区起止与选区文本组成 ticket；请求过期、abort 或选区改变时丢弃响应。“用这句”只改 buffer，仍需显式保存。
 
-RPC channel 是 `loopback`。当前 DSH generic RPC handler 没有 connection/session principal；传入的 session ID 只能选择一个 live session，不能证明浏览器 caller 拥有它。因此这个边界只适用于本地单用户 DSH。远程或多用户暴露必须等上游提供 caller-bound identity 或 capability。
+FIM 同样由 Host 选模型。候选只改 buffer，支持 loading、Tab 接受、Esc 放弃和下一候选；空白章不会自动生成正文。
 
-## Manuscript 客户端状态
+## Electron 安全与进程边界
 
-- 抽屉默认关闭，可随时重新打开，不修改官方 root surface。
-- 每个文档跟踪 saved text、local text、opaque filesystem version，以及 `loading | saved | dirty | conflict | error`。
-- 未保存文本按 workspace path 存入当前浏览器会话；恢复后仍需显式保存。
-- 切换文件/session/workspace 前必须保存或明确放弃当前 buffer。
-- 保存失败或 stale write 保留 buffer；target 变化后的晚到 read/FIM 会被丢弃。
-- “改这段”只复制提示到剪贴板，不读取或修改官方 Chat DOM。
+BrowserWindow 使用 `nodeIntegration: false`、`contextIsolation: true`、renderer sandbox、`webSecurity: true`，拒绝所有权限、新窗口和非本次 loopback origin 导航。CSP 限定 self、data/blob 图片、同源及 loopback WebSocket；DSH `0.1.1-rc.2` 的客户端模块加载器需要 `unsafe-eval`，这是已验证的固定版本例外，窗口仍不加载外部 origin。
 
-FIM 只从 live session request header 派生 provider/model，并调用官方 `llm.stream`。缺少选择或服务时返回空；候选只修改本地 buffer，磁盘写入仍需 `Ctrl+S`。
+Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正常关闭先发优雅终止，超时后仅对记录的子进程 PID 使用 Windows process-tree fallback。启动超时、版本错误和意外退出都进入应用内诊断页；关闭验收必须证明端口已释放。
 
-## Grill v1
+## 公开 Web 插件边界
 
-`dsh-grill` 只注册 `scaffold_novel` 和一个含 `planning`、`drafting`、`review`、`first-reader` 的 additive prompt section。
+`dsh-manuscript` 在普通 `web` profile 中继续使用 `shell.overlay` 抽屉，不占官方 root；`dsh-grill` 继续只注册工具和提示。两者仍可单独安装、共存和任意顺序卸载。桌面 shell 不进入公开 tarball。
 
-scaffold 使用调用 Agent 的 session workspace，检查 sandbox policy，经 DSH 官方 pre-execute seam 请求审批，不覆盖已有路径，并保持幂等。prompt 只指导官方 Chat，不写稿、不扫描 scene、不编译隐藏 context、不访问 Web、不排队 proposal，也不依赖 Manuscript。
+## 非目标与后置
 
-## 非目标
-
-- 第二套 Chat/Agent 或替代对话界面；
-- 自动把 Chat 文本写入磁盘；
-- proposal store 或跨插件协议；
-- Manuscript rename/delete/move/建目录、watch、index、Git 或 migration UI；
-- Grill scene/AI-flavor scanner、外部模型生成、canon state 或复制 Skill 资产；
-- 未经单独授权的 commit、push、tag、publish 或 release。
+- 安装器、自动更新、代码签名、发布；
+- 句内卡片、`/`/`@` 面板、审阅 gutter、附件和完整官方高级管理界面；
+- rename/delete/move/建目录、watch、index、Git UI；
+- Android、远程多用户、云同步；
+- 未经授权的 commit、push、tag 或 release。
 
 ## 验证闸门
 
-- 两个包 build 和 typecheck；
-- unit 覆盖 workspace authority、路径攻击、symlink、原子 create/save、stale version、read-only、dirty/conflict/draft、晚到响应、FIM routing、scaffold approval/idempotence 和四模式 prompt；
-- source/packed artifact 搜索已移除功能、Manuscript 的 Node 文件直写/provider credential 读取，以及任何跨插件耦合；Grill 的审批式 scaffold 刻意使用 Node FS，并由 workspace containment、逐组件 symlink 检查和 exclusive create 约束；
-- 恰好打包两个 tarball，核对 exports、loader patch、client wrapper、license、dependency closure，并生成 SHA-256；
-- fresh `DSH_HOME` 安装矩阵验证单装、共存和双向卸载；
-- credentialed live E2E 验证 scaffold 审批、tree refresh、editor save、dirty close guard、drawer collapse 和可选 FIM。
+- 全 workspace typecheck、unit 与 build；
+- Chat adapter、patch stale/abort/bounds、profile collision/atomic deploy、supervisor timeout/exit/cleanup；
+- 公开插件打包及 fresh-home 安装/卸载矩阵；
+- Playwright Electron 当前源码窗口：DSH Editor 标题、私有 `.shell`、双栏写作身份、1280×720 外窗和关闭端口释放；
+- portable EXE：固定资源版本/哈希、启动、核心旅程、关闭与无遗留进程。
 
-标准交付闸门是 `pnpm verify:delivery`；发布仍是另一项需要授权的动作。
-
-## 已知限制与兼容风险
-
-- 当前只验证 `@deepseek-ai/dsh` `0.1.1-rc.1`，部分内置包为 `0.1.1-rc.2`。未作为稳定第三方类型导出的 Host seam 使用 structural typing 和 contract tests；每次 DSH 升级必须重跑真实加载和文件测试。
-- DSH userspace filesystem sandbox 不是 kernel isolation boundary。本插件在 canonical resolution 前后检查路径组件，并依赖官方 sandbox backend 在原子写前复核，但仍必须留在 DSH 的本地信任模型内。
-- 永久三栏布局需要上游 shell composition API。
-- FIM 是可选能力；模型无候选时安全降级为空。
+历史报告不能替代当前源码证据。兼容版本只声明 `0.1.1-rc.2`；升级必须重新验证公开会话契约、root priority、CSP、profile patch、RPC 和真实 EXE。

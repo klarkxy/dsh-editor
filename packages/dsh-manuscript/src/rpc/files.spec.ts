@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type {
   FileSystemLike,
@@ -188,5 +191,33 @@ describe('manuscript files through the DSH filesystem', () => {
     fs.nodes.set('/workspace/notes/big.md', { type: 'file', version: 'big', text: 'x'.repeat(MAX_TEXT_BYTES + 1) })
     await expect(readTextFile(context, 'notes/big.md')).rejects.toMatchObject({ code: 'TOO_LARGE' })
     await expect(createTextFile(context, 'notes/new.md', 'x'.repeat(MAX_TEXT_BYTES + 1))).rejects.toMatchObject({ code: 'TOO_LARGE' })
+  })
+
+  it('falls back to a local listing when the provider cannot realpath a child', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'dsh-list-'))
+    await writeFile(join(dir, 'keep.md'), 'ok')
+    const denied = Object.assign(new Error('cannot list: permission denied'), { code: 'FS_PERMISSION_DENIED' })
+    const localFs = {
+      ...fs,
+      async resolve(path: string, options?: { cwd?: string }) {
+        const abs = join(options?.cwd ?? dir, path === '.' ? '' : path)
+        return { targetKey: abs, displayPath: abs }
+      },
+      async lstat() { return { type: 'directory' as const } },
+      async stat() { return { type: 'directory' as const } },
+      contains() { return true },
+      async listDir() { throw denied },
+    }
+    const localContext = {
+      fs: localFs,
+      cwd: dir,
+      root: { targetKey: dir, displayPath: dir },
+      policy,
+    }
+    try {
+      expect(await listDir(localContext, '.')).toEqual(expect.arrayContaining([{ name: 'keep.md', type: 'file' }]))
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })

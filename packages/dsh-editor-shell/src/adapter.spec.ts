@@ -1,0 +1,97 @@
+import { describe, expect, it, vi } from 'vitest'
+import { answerApproval, answerQuestions, chatRows, parseProposalMarker, partialText, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
+import { compileProjectContext } from './project-context.ts'
+
+describe('DSH snapshot adapter', () => {
+  it('recognizes only exact versioned proposal markers', () => {
+    expect(parseProposalMarker(JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'create', path: '正文/001.md', summary: '创建', text: '# 第一章' }))).toMatchObject({ kind: 'create' })
+    expect(parseProposalMarker(JSON.stringify({ marker: 'dsh-editor.proposal', version: 2 }))).toBeUndefined()
+  })
+  it('renders published prose while hiding unknown runtime details', () => {
+    const snapshot = { nodes: [
+      { kind: 'user', seq: 1, content: [{ type: 'text', text: '审这一段' }] },
+      { kind: 'assistant', seq: 2, blocks: [{ kind: 'text', text: '先看动机。' }] },
+      { kind: 'unknown', seq: 3, type: 'future/event', data: {} },
+    ] }
+    expect(chatRows(snapshot as never)).toMatchObject([
+      { role: 'user', text: '审这一段' },
+      { role: 'assistant', text: '先看动机。' },
+      { role: 'unknown', text: '收到一项暂时无法显示的消息。' },
+    ])
+  })
+  it('completely hides bundled knowledge tool results', () => {
+    const snapshot = { nodes: [
+      { kind: 'assistant', seq: 1, blocks: [{ kind: 'tool-call', name: 'novel_knowledge', argsRaw: '{"topics":["planning"]}' }] },
+      { kind: 'tool-result', seq: 2, callId: 'knowledge', call: { name: 'novel_knowledge', argsRaw: '{"topics":["planning"]}' }, content: [{ type: 'text', text: 'internal card' }], isError: false },
+      { kind: 'tool-result', seq: 2.5, callId: 'knowledge-outside-window', call: null, content: [{ type: 'text', text: '<novel_knowledge topic="canon" version="1">internal card</novel_knowledge>' }], isError: false },
+      { kind: 'assistant', seq: 3, blocks: [{ kind: 'text', text: '这一章可以从误判开始。' }] },
+    ] }
+    expect(chatRows(snapshot as never)).toEqual([
+      { id: 'assistant:3', role: 'assistant', text: '这一章可以从误判开始。', detail: undefined },
+    ])
+    expect(JSON.stringify(chatRows(snapshot as never))).not.toContain('novel_knowledge')
+    expect(JSON.stringify(chatRows(snapshot as never))).not.toContain('internal card')
+    expect(visibleRunningCalls([
+      { name: 'novel_knowledge', callId: 'hidden' },
+      { name: 'read', callId: 'visible' },
+    ])).toEqual([{ name: 'read', callId: 'visible' }])
+  })
+  it('does not start another connection to send or cancel', async () => {
+    const prompt = vi.fn().mockResolvedValue({ ok: true })
+    const cancel = vi.fn().mockResolvedValue({ ok: true })
+    const session = { prompt, cancel } as never
+    await send(session, '  问剧情  ')
+    await stop(session)
+    expect(prompt).toHaveBeenCalledWith([{ type: 'text', text: '问剧情' }], 'queue')
+    expect(cancel).toHaveBeenCalledTimes(1)
+  })
+  it('submits one project-context envelope and projects its user request and receipt back to the UI', async () => {
+    const prompt = vi.fn().mockResolvedValue({ ok: true })
+    const session = { prompt } as never
+    const sent = await sendProjectContext(session, '  请审这一段  ', async (path) => ({ ok: true as const, value: { text: `资料 ${path}`, version: 'v1' } }))
+    expect(prompt).toHaveBeenCalledTimes(1)
+    const canonical = prompt.mock.calls[0]?.[0]?.[0]?.text
+    const compiled = await compileProjectContext('请审这一段', async (path) => ({ ok: true as const, value: { text: `资料 ${path}`, version: 'v1' } }))
+    expect(canonical).toBe(compiled.serialized)
+    const [row] = chatRows({ nodes: [{ kind: 'user', seq: 1, content: [{ type: 'text', text: canonical }] }] } as never)
+    expect(row).toMatchObject({ role: 'user', text: '请审这一段' })
+    expect(row?.projectContextReceipt).toEqual(sent?.receipt)
+  })
+  it('keeps historical plain user messages unchanged', () => {
+    const [row] = chatRows({ nodes: [{ kind: 'user', seq: 1, content: [{ type: 'text', text: '普通旧消息' }] }] } as never)
+    expect(row).toEqual({ id: 'user:1', role: 'user', text: '普通旧消息', projectContextReceipt: undefined })
+  })
+  it('keeps host-owned approval and question payloads generic', () => {
+    expect(pendingRows([{ key: 'a', kind: 'approval', payload: { toolName: 'write' } }, { key: 'q', kind: 'question', payload: { questions: [] } }] as never)).toMatchObject([
+      { text: '等待确认一项操作' }, { text: '等待你的回答' },
+    ])
+  })
+  it('renders partial text and answers pending waits through their public response carrier', async () => {
+    expect(partialText({ partial: { blocks: [{ kind: 'text', text: '流式正文' }] } } as never)).toBe('流式正文')
+    const approvalRespond = vi.fn().mockResolvedValue({ accepted: true })
+    await answerApproval({
+      kind: 'approval', sessionId: 's', payload: { approvalId: 'a', toolName: 'write' }, respond: approvalRespond,
+    } as never, 'allowed-once')
+    expect(approvalRespond).toHaveBeenCalledWith({ ok: true, value: { sessionId: 's', approvalId: 'a', outcome: 'allowed-once' } })
+    const questionRespond = vi.fn().mockResolvedValue({ accepted: true })
+    await answerQuestions({
+      kind: 'question', sessionId: 's', payload: { questions: [] }, respond: questionRespond,
+    } as never, [{ id: 'q', selected: ['继续'] }])
+    expect(questionRespond).toHaveBeenCalledWith({ ok: true, value: { sessionId: 's', answer: { answers: [{ id: 'q', selected: ['继续'] }] } } })
+  })
+  it('never exposes raw tool output, error codes, names, or nested calls', () => {
+    const row = toolResultRow({
+      kind: 'tool-result', seq: 8, callId: 'root', call: { name: '写入', argsRaw: '{"path":"x"}' },
+      content: [{ type: 'text', text: '写入被拒绝' }], isError: true, error: { name: 'Denied', code: 'sandbox-denied' },
+      subCalls: [{ callId: 'child', name: '检查路径', argsRaw: '', turn: 1, step: 1, time: 1, callView: null, subCalls: [] }],
+    } as never)
+    expect(row).toMatchObject({ role: 'tool', text: '这项操作没有执行', detail: '写作助手无法完成这项操作。' })
+    expect(JSON.stringify(row)).not.toContain('Denied')
+    expect(JSON.stringify(row)).not.toContain('检查路径')
+    const long = toolResultRow({
+      kind: 'tool-result', seq: 9, callId: 'long', call: null,
+      content: [{ type: 'text', text: 'x'.repeat(1300) }], isError: false, subCalls: [],
+    } as never)
+    expect(long).toMatchObject({ text: '操作已完成', detail: '已完成' })
+  })
+})

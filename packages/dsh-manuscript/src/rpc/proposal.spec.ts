@@ -1,0 +1,33 @@
+import { describe, expect, it } from 'vitest'
+import { applyProposal, parseProposal, prepareProposal } from './proposal.ts'
+import { createMemoryContext } from './test-helpers.ts'
+
+describe('proposal workflow', () => {
+  it('previews and applies one version-guarded edit', async () => {
+    const context = createMemoryContext({ '正文/001.md': '# 第一章\n旧句。\n' })
+    const proposal = parseProposal({ kind: 'edit', path: '正文/001.md', oldText: '旧句。', newText: '新句。', summary: '替换一句' })
+    const prepared = await prepareProposal(context, proposal)
+    expect(prepared).toMatchObject({ applicable: true, before: '旧句。', after: '新句。' })
+    const result = await applyProposal(context, proposal, String(prepared.version))
+    expect(result.operation).toBe('edit')
+    await expect(context.fs.readText(await context.fs.resolve('正文/001.md'))).resolves.toContain('新句。')
+  })
+
+  it('rejects ambiguous and stale edits', async () => {
+    const context = createMemoryContext({ '正文/001.md': '重复 重复' })
+    const ambiguous = parseProposal({ kind: 'edit', path: '正文/001.md', oldText: '重复', newText: '唯一', summary: '修改' })
+    await expect(prepareProposal(context, ambiguous)).rejects.toMatchObject({ code: 'AMBIGUOUS' })
+    const exact = parseProposal({ kind: 'edit', path: '正文/001.md', oldText: '重复 重复', newText: '唯一', summary: '修改' })
+    const prepared = await prepareProposal(context, exact)
+    await context.fs.writeText(await context.fs.resolve('正文/001.md'), '外部修改', { kind: 'replaceIfVersion', version: String(prepared.version) })
+    await expect(applyProposal(context, exact, String(prepared.version))).rejects.toMatchObject({ code: 'STALE' })
+  })
+
+  it('creates a Markdown file only when absent', async () => {
+    const context = createMemoryContext({ '正文/说明.txt': '' })
+    const proposal = parseProposal({ kind: 'create', path: '正文/001.md', text: '# 第一章\n', summary: '创建首章' })
+    await expect(prepareProposal(context, proposal)).resolves.toMatchObject({ applicable: true })
+    await expect(applyProposal(context, proposal, '')).resolves.toMatchObject({ operation: 'create' })
+    await expect(prepareProposal(context, proposal)).rejects.toMatchObject({ code: 'STALE' })
+  })
+})

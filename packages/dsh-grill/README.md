@@ -13,14 +13,14 @@ Host-only DSH 小说协作插件。它只增加一个 `scaffold_novel` 工具和
 ## 兼容与宿主契约
 
 - 插件版本：`0.1.0`
-- DSH：`0.1.1-rc.1`
+- DSH：`0.1.1-rc.2`
 - Node.js：22+
 - host-provided peers：Cordis、`dsh-tools`
 - Cordis entries：`grill-tools`、`grill-workflow`
 
 ## 安装、验证与卸载
 
-先停止目标 Web profile，并确认 `dsh --version` 为 `0.1.1-rc.1`。在 tarball 所在目录运行：
+先停止目标 Web profile，并确认 `dsh --version` 为 `0.1.1-rc.2`。在 tarball 所在目录运行：
 
 ```powershell
 $packagePath = (Resolve-Path .\dsh-grill-0.1.0.tgz).Path.Replace('\', '/')

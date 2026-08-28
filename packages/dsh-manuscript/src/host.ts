@@ -120,6 +120,7 @@ export class WorkspaceAuthorityError extends Error {
       | 'WORKSPACE_NOT_FOUND'
       | 'WORKSPACE_MISMATCH'
       | 'WORKSPACE_UNAVAILABLE',
+    readonly context: { sessionId?: string; workspacePath?: string } = {},
     options?: ErrorOptions,
   ) {
     super(message, options)
@@ -145,29 +146,48 @@ export async function resolveWorkspaceAccess(
   sessionId: string,
   signal?: AbortSignal,
 ): Promise<WorkspaceAccess> {
-  if (!sessionId) throw new WorkspaceAuthorityError('session id is required', 'SESSION_REQUIRED')
+  if (!sessionId) throw new WorkspaceAuthorityError('session id is required', 'SESSION_REQUIRED', { sessionId })
   const session = host.sessions.get(sessionId)
-  if (!session) throw new WorkspaceAuthorityError('session is not live', 'SESSION_NOT_FOUND')
+  if (!session) throw new WorkspaceAuthorityError('session is not live', 'SESSION_NOT_FOUND', { sessionId })
   const cwd = session.header.cwd
   if (typeof cwd !== 'string' || cwd.length === 0) {
-    throw new WorkspaceAuthorityError('session has no workspace cwd', 'SESSION_CWD_MISSING')
+    throw new WorkspaceAuthorityError('session has no workspace cwd', 'SESSION_CWD_MISSING', { sessionId })
   }
 
   let workspace: WorkspaceLike | undefined
   try {
     workspace = await host.workspaceRegistry.resolveByPath(cwd)
   } catch (error) {
-    throw new WorkspaceAuthorityError('session workspace is unavailable', 'WORKSPACE_UNAVAILABLE', { cause: error })
+    throw new WorkspaceAuthorityError(
+      'session workspace is unavailable',
+      'WORKSPACE_UNAVAILABLE',
+      { sessionId, workspacePath: cwd },
+      { cause: error },
+    )
   }
-  if (!workspace) throw new WorkspaceAuthorityError('session cwd is not a registered workspace', 'WORKSPACE_NOT_FOUND')
+  if (!workspace) {
+    throw new WorkspaceAuthorityError(
+      'session cwd is not a registered workspace',
+      'WORKSPACE_NOT_FOUND',
+      { sessionId, workspacePath: cwd },
+    )
+  }
   if (!workspace.sessionIds.some((id) => String(id) === String(session.id))) {
-    throw new WorkspaceAuthorityError('session is not attached to this workspace', 'WORKSPACE_MISMATCH')
+    throw new WorkspaceAuthorityError(
+      'session is not attached to this workspace',
+      'WORKSPACE_MISMATCH',
+      { sessionId, workspacePath: workspace.path },
+    )
   }
 
   const root = await host.fs.resolve('.', { cwd: workspace.path, signal })
   const rootInfo = await host.fs.stat(root, signal)
   if (!rootInfo || rootInfo.type !== 'directory') {
-    throw new WorkspaceAuthorityError('registered workspace is not a readable directory', 'WORKSPACE_UNAVAILABLE')
+    throw new WorkspaceAuthorityError(
+      'registered workspace is not a readable directory',
+      'WORKSPACE_UNAVAILABLE',
+      { sessionId, workspacePath: workspace.path },
+    )
   }
   return {
     session,

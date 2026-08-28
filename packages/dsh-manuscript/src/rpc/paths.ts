@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 export class PathConfineError extends Error {
   readonly code = 'PATH_ESCAPE'
   constructor(message: string) {
@@ -36,4 +38,14 @@ export function parentRelative(relative: string): string {
   if (normalized === '.') return '.'
   const index = normalized.lastIndexOf('/')
   return index < 0 ? '.' : normalized.slice(0, index)
+}
+
+export function confineAbsolute(root: string, relative: string): string {
+  if (typeof root !== 'string' || root.length === 0) throw new PathConfineError('workspace cwd is required')
+  const base = path.resolve(root)
+  const normalized = normalizeWorkspaceRelative(relative)
+  const target = normalized === '.' ? base : path.resolve(base, ...normalized.split('/'))
+  const rel = path.relative(base, target)
+  if (rel.startsWith('..') || path.isAbsolute(rel)) throw new PathConfineError('path escapes workspace')
+  return target
 }

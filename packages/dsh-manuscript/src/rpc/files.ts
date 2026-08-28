@@ -1,10 +1,11 @@
+import { readdir } from 'node:fs/promises'
 import type {
   FileSystemLike,
   FsInfoLike,
   FsTargetLike,
   SandboxExecutionPolicyLike,
 } from '../host.ts'
-import { normalizeWorkspaceRelative, parentRelative, PathConfineError } from './paths.ts'
+import { confineAbsolute, normalizeWorkspaceRelative, parentRelative, PathConfineError } from './paths.ts'
 
 export type DirKind = 'file' | 'directory' | 'other'
 
@@ -124,24 +125,57 @@ async function resolveScoped(context: WorkspaceFileContext, relativeInput: strin
   return { relative, target, info }
 }
 
+function sortDirEntries(entries: DirEntry[]): DirEntry[] {
+  return [...entries].sort((a, b) => {
+    if (a.type === b.type) return a.name.localeCompare(b.name)
+    if (a.type === 'directory') return -1
+    if (b.type === 'directory') return 1
+    return a.name.localeCompare(b.name)
+  })
+}
+
+async function listDirNodeFallback(root: string, relative: string): Promise<DirEntry[]> {
+  const abs = confineAbsolute(root, relative)
+  let listed
+  try {
+    listed = await readdir(abs, { withFileTypes: true })
+  } catch (error) {
+    mapFsError(error)
+  }
+  const entries: DirEntry[] = []
+  for (const entry of listed) {
+    if (entry.name === '.' || entry.name === '..') continue
+    try {
+      const type: DirKind = entry.isSymbolicLink() ? 'other' : entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other'
+      entries.push({ name: entry.name, type })
+    } catch {
+      continue
+    }
+  }
+  return sortDirEntries(entries)
+}
+
 export async function listDir(context: WorkspaceFileContext, relative: string): Promise<DirEntry[]> {
   const resolved = await resolveScoped(context, relative)
   if (!resolved.info) throw new FileOpError('directory not found', 'NOT_FOUND')
   if (resolved.info.type !== 'directory') throw new FileOpError('not a directory', 'NOT_DIRECTORY')
   try {
     const entries = await context.fs.listDir(resolved.target, context.signal)
-    return entries
-      .filter((entry) => entry.name !== '.' && entry.name !== '..')
-      .map((entry) => ({ name: entry.name, type: entry.type }))
-      .sort((a, b) => {
-        if (a.type === b.type) return a.name.localeCompare(b.name)
-        if (a.type === 'directory') return -1
-        if (b.type === 'directory') return 1
-        return a.name.localeCompare(b.name)
-      })
+    return sortDirEntries(
+      entries
+        .filter((entry) => entry.name !== '.' && entry.name !== '..')
+        .map((entry) => ({ name: entry.name, type: entry.type })),
+    )
   } catch (error) {
-    if (error instanceof FileOpError || error instanceof PathConfineError) throw error
-    mapFsError(error)
+    if (error instanceof PathConfineError) throw error
+    let mapped: unknown = error
+    if (!(error instanceof FileOpError)) {
+      try { mapFsError(error) } catch (cause) { mapped = cause }
+    }
+    if (mapped instanceof FileOpError && (mapped.code === 'DENIED' || mapped.code === 'IO')) {
+      return await listDirNodeFallback(context.cwd, relative)
+    }
+    throw mapped
   }
 }
 

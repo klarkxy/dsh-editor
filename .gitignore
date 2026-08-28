@@ -1,4 +1,6 @@
 node_modules
+.pnpm-store
+*.log
 lib
 .pack
 *.tgz
@@ -9,3 +11,4 @@ dist
 .opendesign-run.json
 .codex-plan-prompt.txt
 e2e/out
+.dev

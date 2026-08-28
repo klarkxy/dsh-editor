@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-export const EXPECTED_DSH_VERSION = '0.1.1-rc.1'
+export const EXPECTED_DSH_VERSION = '0.1.1-rc.2'
 
 function candidatePackageRoots() {
   const configuredCli = process.env.DSH_CLI_PATH?.trim()
@@ -33,16 +33,18 @@ export function resolveDshInstallation(expectedVersion = EXPECTED_DSH_VERSION) {
     if (!fs.existsSync(manifestPath) || !fs.existsSync(cliPath)) continue
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
     if (manifest.name !== '@deepseek-ai/dsh') continue
-    if (manifest.version !== expectedVersion) {
+    if (expectedVersion && manifest.version !== expectedVersion) {
       throw new Error(`DSH version mismatch: expected ${expectedVersion}, found ${manifest.version} at ${packageRoot}`)
     }
     return { cliPath, packageRoot, version: manifest.version, source }
   }
 
   if (process.env.DSH_CLI_PATH?.trim()) {
-    throw new Error(`DSH_CLI_PATH does not point to an installed @deepseek-ai/dsh ${expectedVersion} CLI`)
+    const version = expectedVersion ? ` ${expectedVersion}` : ''
+    throw new Error(`DSH_CLI_PATH does not point to an installed @deepseek-ai/dsh${version} CLI`)
   }
+  const version = expectedVersion ? ` ${expectedVersion}` : ''
   throw new Error(
-    `DSH ${expectedVersion} was not found from PATH. Set DSH_CLI_PATH to the absolute @deepseek-ai/dsh/lib/bin.js path.`,
+    `DSH${version} was not found from PATH. Set DSH_CLI_PATH to the absolute @deepseek-ai/dsh/lib/bin.js path.`,
   )
 }
