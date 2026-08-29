@@ -8,6 +8,8 @@
 
 编辑器把 `/manuscript` 的 FIM 与选段 patch 显式呈现为可放弃的稿纸建议；只有作者接受后才进入本地草稿，生成期间正文或文档发生变化时旧结果不会应用。
 
+工作台提供可见的键盘快捷键表，以及文件栏、搭档栏、专注模式、设置、聊天聚焦和章节切换的全局快捷键；对话框区分 Enter 发送、Shift+Enter 换行与输入法组合态。
+
 Private client shell for the dedicated `dsh-editor` profile. It owns the root
 surface only in that profile and consumes DSH `0.1.1-rc.2` public runtime and
 connection contracts. It is not a public installable plugin.

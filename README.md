@@ -1,6 +1,6 @@
 # DSH Editor
 
-DSH Editor 是 Windows x64 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示稿件树与中央稿纸；写作搭档按需从右侧抽屉打开。
+DSH Editor 是 Windows x64 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示稿件树与中央稿纸；写作搭档按需作为可调宽的第三栏打开。
 
 仓库同时保留两个可独立安装到普通 DSH Web profile 的公开插件：
 
@@ -45,7 +45,7 @@ pnpm pack:desktop
 
 ## 文档
 
-- [使用者指南](docs/user-guide.md)：桌面启动、两栏写作、搭档抽屉、回滚与公开插件使用
+- [使用者指南](docs/user-guide.md)：桌面启动、灵活工作台、AI 编辑、快捷键、回滚与公开插件使用
 - [开发者指南](docs/development.md)：运行时准备、调试、测试与打包
 - [架构与边界](docs/architecture.md)：DSH 权威边界、profile、RPC 与安全约束
 - [CHANGELOG](CHANGELOG.md)：版本变化

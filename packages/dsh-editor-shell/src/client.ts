@@ -126,6 +126,54 @@ export class LatestRequestGate {
 }
 
 export type ResizablePanelSide = 'left' | 'right'
+export type WorkspaceShortcutAction = 'settings' | 'toggle-sidebar' | 'toggle-assistant' | 'toggle-focus' | 'focus-assistant' | 'previous-chapter' | 'next-chapter'
+
+type ShortcutInput = {
+  key: string
+  code?: string
+  ctrlKey: boolean
+  metaKey: boolean
+  altKey: boolean
+  shiftKey: boolean
+}
+
+export function workspaceShortcut(input: ShortcutInput): WorkspaceShortcutAction | null {
+  const mod = input.ctrlKey || input.metaKey
+  const key = input.key.toLowerCase()
+  if (mod && !input.altKey && !input.shiftKey) {
+    if (key === ',') return 'settings'
+    if (key === 'b') return 'toggle-sidebar'
+    if (key === 'j') return 'toggle-assistant'
+    if (key === '\\') return 'toggle-focus'
+    if (key === 'l') return 'focus-assistant'
+  }
+  if (!mod && input.altKey && !input.shiftKey) {
+    if (input.code === 'BracketLeft' || key === '[') return 'previous-chapter'
+    if (input.code === 'BracketRight' || key === ']') return 'next-chapter'
+  }
+  return null
+}
+
+export function shouldSubmitComposer(input: { key: string; shiftKey: boolean; isComposing?: boolean }): boolean {
+  return input.key === 'Enter' && !input.shiftKey && !input.isComposing
+}
+
+export function canSubmitComposer(input: { draft: string; connected: boolean; removed: boolean; outgoingState?: 'sending' | 'accepted' | 'failed' }): boolean {
+  return Boolean(input.draft.trim()) && input.connected && !input.removed && (!input.outgoingState || input.outgoingState === 'failed')
+}
+
+const WORKSPACE_SHORTCUTS = [
+  ['Ctrl+S', '保存当前文档'],
+  ['Ctrl+,', '打开接口设置'],
+  ['Ctrl+B', '显示或隐藏文件栏'],
+  ['Ctrl+J', '显示或隐藏写作搭档'],
+  ['Ctrl+\\', '进入或退出专注写作'],
+  ['Ctrl+L', '打开并聚焦写作搭档'],
+  ['Alt+[ / Alt+]', '上一章 / 下一章'],
+  ['Tab / Esc', '接受 / 放弃补全建议'],
+  ['Ctrl+Enter', '应用选段修改建议'],
+  ['Enter / Shift+Enter', '发送消息 / 消息内换行'],
+] as const
 
 export function clampPanelWidth(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, Math.round(value)))
@@ -199,6 +247,31 @@ function PanelResizer(props: {
       props.onChange(resizedPanelWidth(props.side, props.value, event.key === 'ArrowRight' ? 12 : -12, props.minimum, props.maximum))
     },
   }, e('span', { 'aria-hidden': 'true' }))
+}
+
+function ShortcutDialog({ onClose }: { onClose(): void }) {
+  const dialog = useRef<HTMLElement | null>(null)
+  const close = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => { close.current?.focus() }, [])
+  return e('div', { className: 'shortcut-overlay', onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') { event.preventDefault(); onClose(); return }
+    if (event.key !== 'Tab' || !dialog.current) return
+    const controls = [...dialog.current.querySelectorAll<HTMLElement>('button:not([disabled]),[tabindex="0"]')]
+    if (!controls.length) return
+    const first = controls[0]!
+    const last = controls[controls.length - 1]!
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  } },
+    e('section', { ref: dialog, className: 'shortcut-dialog', role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'shortcut-dialog-title' },
+      e('header', null,
+        e('div', null, e('small', null, 'WORKBENCH'), e('h2', { id: 'shortcut-dialog-title' }, '键盘快捷键')),
+        e('button', { ref: close, className: 'icon-button', type: 'button', onClick: onClose, 'aria-label': '关闭快捷键' }, '×'),
+      ),
+      e('p', null, '也可以按 Ctrl+K，再按 Ctrl+S 打开本页。'),
+      e('dl', null, WORKSPACE_SHORTCUTS.map(([keys, label]) => e('div', { key: keys }, e('dt', null, keys), e('dd', null, label)))),
+    ),
+  )
 }
 
 function useObservable<T>(source: { getSnapshot(): T; subscribe(listener: () => void): () => void }): T {
@@ -1135,13 +1208,19 @@ function Chat({ ctx, session, workspaceId, onClose, onConfigure, onApplied }: { 
   const rows = chatRows(snapshot)
   const outgoingIsCanonical = Boolean(outgoing && rows.slice(outgoing.afterRows)
     .some((row) => row.role === 'user' && row.text.trim() === outgoing.text))
+  const composerCanSubmit = canSubmitComposer({
+    draft,
+    connected: Boolean(connected),
+    removed: snapshot.removed,
+    outgoingState: outgoing?.state,
+  })
   useEffect(() => {
     if (outgoingIsCanonical) setOutgoing(null)
   }, [outgoingIsCanonical])
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    if (!composerCanSubmit) return
     const value = draft.trim()
-    if (!value || (outgoing && outgoing.state !== 'failed')) return
     setOutgoing({ text: value, state: 'sending', afterRows: rows.length })
     setDraft('')
     setNote('')
@@ -1203,6 +1282,11 @@ function Chat({ ctx, session, workspaceId, onClose, onConfigure, onApplied }: { 
       e('textarea', {
         value: draft,
         onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setDraft(event.target.value),
+        onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
+          if (!shouldSubmitComposer({ key: event.key, shiftKey: event.shiftKey, isComposing: event.nativeEvent.isComposing })) return
+          event.preventDefault()
+          event.currentTarget.form?.requestSubmit()
+        },
         placeholder: '问剧情、审一段、对质人物……',
         'aria-label': '输入消息',
       }),
@@ -1211,7 +1295,7 @@ function Chat({ ctx, session, workspaceId, onClose, onConfigure, onApplied }: { 
         snapshot.running ? e('button', { type: 'button', onClick: () => void stop(session) }, '停止') : null,
         e('button', {
           type: 'submit',
-          disabled: !draft.trim() || snapshot.removed || !connected || Boolean(outgoing && outgoing.state !== 'failed'),
+          disabled: !composerCanSubmit,
         }, '发送'),
       ),
     ),
@@ -1317,6 +1401,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
   const [focusMode, setFocusMode] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [chatFocusNonce, setChatFocusNonce] = useState(0)
   const [setupGate, setSetupGate] = useState<'checking' | 'required' | 'ready'>('checking')
   const [indexStatus, setIndexStatus] = useState<Record<string, 'initializing' | 'queued' | 'failed'>>({})
   const indexedWorkspaces = useRef(new Set<string>())
@@ -1338,6 +1424,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const importReturnFocus = useRef<HTMLElement | null>(null)
   const snapshotReturnFocus = useRef<HTMLElement | null>(null)
   const fileManageReturnFocus = useRef<HTMLElement | null>(null)
+  const shortcutReturnFocus = useRef<HTMLElement | null>(null)
+  const shortcutChordAt = useRef(0)
   const temporaryFlowWorkspaces = useRef(new Set<string>())
   const temporarySourceWorkspaces = useRef(new Map<string, string>())
   const probedImportSessions = useRef(new Set<string>())
@@ -1374,6 +1462,15 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const preserveFlowWorkspace = (workspaceId: string) => {
     temporaryFlowWorkspaces.current.delete(workspaceId)
   }
+  const openShortcuts = () => {
+    shortcutReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setShortcutsOpen(true)
+  }
+  const closeShortcuts = () => {
+    const target = shortcutReturnFocus.current
+    setShortcutsOpen(false)
+    if (target) globalThis.setTimeout(() => target.focus(), 0)
+  }
   useEffect(() => { document.title = 'DSH Editor' }, [])
   useEffect(() => {
     try { globalThis.localStorage?.setItem('dsh-editor.layout.sidebar-open', String(sidebarOpen)) } catch { /* View preferences remain optional. */ }
@@ -1384,6 +1481,54 @@ function Root({ ctx }: { ctx: ShellContext }) {
   useEffect(() => {
     try { globalThis.localStorage?.setItem('dsh-editor.layout.assistant-width', String(assistantWidth)) } catch { /* View preferences remain optional. */ }
   }, [assistantWidth])
+  useEffect(() => {
+    const hotkey = (event: globalThis.KeyboardEvent) => {
+      const mod = event.ctrlKey || event.metaKey
+      const key = event.key.toLowerCase()
+      if (shortcutsOpen) {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeShortcuts() }
+        return
+      }
+      if (document.querySelector('[aria-modal="true"]')) return
+      if (mod && !event.altKey && !event.shiftKey && key === 'k') {
+        event.preventDefault(); event.stopPropagation(); shortcutChordAt.current = Date.now(); return
+      }
+      if (mod && !event.altKey && !event.shiftKey && key === 's' && Date.now() - shortcutChordAt.current < 2_000) {
+        event.preventDefault(); event.stopPropagation(); shortcutChordAt.current = 0; openShortcuts(); return
+      }
+      if (!['Control', 'Meta', 'Alt', 'Shift'].includes(event.key)) shortcutChordAt.current = 0
+      const action = workspaceShortcut(event)
+      if (!action || event.repeat) return
+      if (action !== 'settings' && (!session || view !== 'workspace')) return
+      event.preventDefault()
+      if (action === 'settings') { setView('settings'); return }
+      if (action === 'toggle-sidebar') {
+        if (focusMode) { setFocusMode(false); setSidebarOpen(true) } else setSidebarOpen((value) => !value)
+        return
+      }
+      if (action === 'toggle-assistant') {
+        if (focusMode) { setFocusMode(false); setAssistantOpen(true) } else setAssistantOpen((value) => !value)
+        return
+      }
+      if (action === 'toggle-focus') { setFocusMode((value) => !value); return }
+      if (action === 'focus-assistant') {
+        setFocusMode(false)
+        setAssistantOpen(true)
+        setChatFocusNonce((value) => value + 1)
+        return
+      }
+      if (editorDirty) return
+      const buttons = document.querySelectorAll<HTMLButtonElement>('[aria-label="章节导航"] button')
+      const button = action === 'previous-chapter' ? buttons[0] : buttons[1]
+      if (button && !button.disabled) button.click()
+    }
+    globalThis.addEventListener('keydown', hotkey, true)
+    return () => globalThis.removeEventListener('keydown', hotkey, true)
+  }, [editorDirty, focusMode, session?.sessionId, shortcutsOpen, view])
+  useEffect(() => {
+    if (!chatFocusNonce || !assistantOpen || focusMode) return
+    globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
+  }, [assistantOpen, chatFocusNonce, focusMode])
   useEffect(() => {
     setPath(''); setFiles([]); setReveal(null); setWorkbenchNote(''); setEditorDirty(false)
     setManagePath(null); setManageNote(''); setArchives([]); setArchiveInvalid(0); setArchiveNote('')
@@ -2188,6 +2333,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         ),
         snapshotNote ? e('span', { role: /没有|请先|失败|未/.test(snapshotNote) ? 'alert' : 'status' }, snapshotNote) : null,
         exportNote ? e('span', { role: /无法|失败|为空/.test(exportNote) ? 'alert' : 'status' }, exportNote) : null,
+        e('button', { className: 'settings-link icon-button', type: 'button', title: '键盘快捷键', 'aria-label': '键盘快捷键', onClick: openShortcuts }, '?'),
         e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: () => setView('settings') }, '⌁'),
       ),
     ),
@@ -2277,6 +2423,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       'aria-expanded': false,
       onClick: () => setAssistantOpen(true),
     }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')) : null,
+    shortcutsOpen ? e(ShortcutDialog, { onClose: closeShortcuts }) : null,
     renderImportDialog(),
     renderSnapshotDialog(),
     managePath ? e(FileManageDialog, {
@@ -2310,6 +2457,7 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .paper-input{transition:transform 360ms var(--ease),box-shadow 360ms ease,border-color 360ms ease}.paper-input:focus{transform:translateY(-2px);border-color:#b9c9ba;box-shadow:0 18px 44px #4b67471c,0 0 0 4px #5c8a6820}
 .composer{transition:background-color 240ms ease,box-shadow 240ms ease}.composer:focus-within{background:#fffaf0;box-shadow:0 -12px 34px #5a4d3210}.composer textarea:focus{border-color:#73917d;box-shadow:0 0 0 3px #4d7d5d17}
 .ghost-suggestion{box-sizing:border-box;max-height:42%;display:grid;gap:8px;overflow:auto;padding:12px 14px;border:1px solid #b9cbb9;border-radius:14px 4px 14px 14px;background:#f5faef;box-shadow:0 12px 32px #3f624719;pointer-events:auto}.ghost-suggestion strong,.proposal>strong{color:#28523f}.ghost-suggestion p{margin:0;overflow:auto;white-space:pre-wrap;line-height:1.7}.ghost-suggestion div,.proposal-actions{display:flex;gap:7px}.ghost-suggestion button,.proposal button{padding:5px 9px;border:1px solid #b8c5b7;border-radius:9px 3px 9px 9px;background:#fffdf7;color:#285640;cursor:pointer}.proposal{box-sizing:border-box;max-height:56%;overflow:auto}.selection-diff{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px!important;margin:9px 0}.selection-diff section{min-width:0;padding:8px;border:1px solid #ddd5c6;border-radius:7px;background:#f8f4e9}.selection-diff small{color:#68776d}.selection-diff p{max-height:150px;overflow:auto;white-space:pre-wrap;line-height:1.65}.proposal-actions{justify-content:flex-end}@media(max-width:1320px){.ghost-suggestion{max-width:72%}.proposal{width:min(430px,58%)}}
+.export-actions .settings-link{margin-left:0}.shortcut-overlay{position:fixed;z-index:60;inset:0;display:grid;place-items:center;padding:24px;background:#202a246b;backdrop-filter:blur(5px)}.shortcut-dialog{box-sizing:border-box;width:min(620px,100%);max-height:min(760px,calc(100dvh - 48px));display:grid;gap:14px;overflow:auto;padding:26px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 30px 90px #222a2538}.shortcut-dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.shortcut-dialog header>div{display:grid;gap:4px}.shortcut-dialog h2,.shortcut-dialog p{margin:0}.shortcut-dialog h2{color:#244b39;font:600 28px/1.25 "Noto Serif SC","Songti SC",serif}.shortcut-dialog header small{color:#708078;font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.16em}.shortcut-dialog>p{color:#6c756d}.shortcut-dialog dl{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:0}.shortcut-dialog dl>div{display:flex;align-items:center;gap:12px;padding:10px 11px;border:1px solid #e0d8c9;border-radius:10px 3px 10px 10px;background:#f8f3e8}.shortcut-dialog dt{flex:none;min-width:112px;padding:3px 6px;border:1px solid #c7cebf;border-radius:5px;background:#fffdf7;color:#285640;font:11px/1.4 ui-monospace,Consolas,monospace}.shortcut-dialog dd{margin:0;color:#53645b;font-size:12px}@media(max-width:720px){.shortcut-dialog dl{grid-template-columns:1fr}}
 .chat-row,.pending-card{animation:message-in 360ms var(--ease) both}.chat-row.user{transform-origin:right bottom}.chat-row.assistant{transform-origin:left bottom}.chat-row.tool strong::after{content:'···';display:inline-block;width:1.5em;overflow:hidden;vertical-align:bottom;animation:dots 1.2s steps(4,end) infinite}
 .index-status{animation:index-breathe 2.4s ease-in-out infinite}.index-status button:hover{transform:translateX(2px)}
 .export-actions{position:relative;z-index:12}.export-menu{position:relative}.export-menu summary{padding:5px 10px;border:1px solid #c9c5b4;border-radius:16px;background:#fbf8ef;color:#304f41;cursor:pointer;list-style:none}.export-menu summary::-webkit-details-marker{display:none}.export-menu[open] summary{background:#dce9dd}.export-menu>div{position:absolute;z-index:13;top:calc(100% + 8px);right:0;display:grid;min-width:130px;padding:6px;border:1px solid #d8cfbd;border-radius:10px 3px 10px 10px;background:#fffdf6;box-shadow:0 16px 40px #4e42261f;animation:menu-pop 180ms var(--ease)}.export-menu>div button{border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px}.export-menu>div button:hover{background:#e4eee1}

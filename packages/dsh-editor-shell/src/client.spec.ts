@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { clampPanelWidth, createFlowWorkspace, errorMessage, isStaleFailure, LatestRequestGate, resizedPanelWidth, safeRpcCall } from './client.ts'
+import { canSubmitComposer, clampPanelWidth, createFlowWorkspace, errorMessage, isStaleFailure, LatestRequestGate, resizedPanelWidth, safeRpcCall, shouldSubmitComposer, workspaceShortcut } from './client.ts'
 
 describe('shell manuscript RPC safety', () => {
   it('drops superseded or cross-session async responses', () => {
@@ -19,6 +19,31 @@ describe('shell manuscript RPC safety', () => {
     expect(resizedPanelWidth('left', 248, 32, 196, 420)).toBe(280)
     expect(resizedPanelWidth('right', 384, 32, 300, 560)).toBe(352)
     expect(resizedPanelWidth('right', 384, -500, 300, 560)).toBe(560)
+  })
+
+  it('maps workspace shortcuts without stealing modified variants', () => {
+    const key = (value: string, extra: Partial<KeyboardEvent> = {}) => ({
+      key: value, ctrlKey: true, metaKey: false, altKey: false, shiftKey: false, ...extra,
+    })
+    expect(workspaceShortcut(key('b'))).toBe('toggle-sidebar')
+    expect(workspaceShortcut(key('j'))).toBe('toggle-assistant')
+    expect(workspaceShortcut(key('\\'))).toBe('toggle-focus')
+    expect(workspaceShortcut(key('l'))).toBe('focus-assistant')
+    expect(workspaceShortcut(key(',', { ctrlKey: false, metaKey: true }))).toBe('settings')
+    expect(workspaceShortcut(key('[', { ctrlKey: false, altKey: true, code: 'BracketLeft' }))).toBe('previous-chapter')
+    expect(workspaceShortcut(key('b', { shiftKey: true }))).toBeNull()
+  })
+
+  it('sends chat on plain Enter but preserves newlines and IME composition', () => {
+    expect(shouldSubmitComposer({ key: 'Enter', shiftKey: false })).toBe(true)
+    expect(shouldSubmitComposer({ key: 'Enter', shiftKey: true })).toBe(false)
+    expect(shouldSubmitComposer({ key: 'Enter', shiftKey: false, isComposing: true })).toBe(false)
+    expect(shouldSubmitComposer({ key: 'a', shiftKey: false })).toBe(false)
+    expect(canSubmitComposer({ draft: '写下去', connected: true, removed: false })).toBe(true)
+    expect(canSubmitComposer({ draft: '写下去', connected: false, removed: false })).toBe(false)
+    expect(canSubmitComposer({ draft: '写下去', connected: true, removed: true })).toBe(false)
+    expect(canSubmitComposer({ draft: '写下去', connected: true, removed: false, outgoingState: 'sending' })).toBe(false)
+    expect(canSubmitComposer({ draft: '重试', connected: true, removed: false, outgoingState: 'failed' })).toBe(true)
   })
 
   it('keeps a successful result unchanged', async () => {

@@ -144,10 +144,26 @@ try {
   const completeButton = window.getByRole('button', { name: '补全', exact: true })
   const patchButton = window.getByRole('button', { name: '修改选段', exact: true })
   await completeButton.waitFor({ state: 'visible' })
-  if (!(await completeButton.isEnabled())) failures.push('正文打开后补全入口不可用')
+  await window.waitForFunction(() => {
+    const button = [...document.querySelectorAll('button')].find((node) => node.textContent === '补全')
+    return button instanceof HTMLButtonElement && !button.disabled
+  })
   if (await patchButton.isEnabled()) failures.push('没有选中文字时修改选段入口仍可点击')
 
-  const layoutControls = window.locator('.layout-controls')
+  await window.keyboard.press('Control+b')
+  await window.locator('.sidebar').waitFor({ state: 'detached' })
+  await window.keyboard.press('Control+b')
+  await window.locator('.sidebar').waitFor({ state: 'visible' })
+
+  await window.keyboard.press('Control+k')
+  await window.keyboard.press('Control+s')
+  const shortcutDialog = window.getByRole('dialog', { name: '键盘快捷键' })
+  await shortcutDialog.waitFor({ state: 'visible' })
+  if (!(await shortcutDialog.textContent())?.includes('Ctrl+B')) failures.push('快捷键表缺少文件栏快捷键')
+  await window.screenshot({ path: resolve(output, 'shortcuts.png'), fullPage: true })
+  await window.keyboard.press('Escape')
+  await shortcutDialog.waitFor({ state: 'detached' })
+
   const leftResizer = window.locator('.panel-resizer.left')
   const sidebarBefore = Number(await leftResizer.getAttribute('aria-valuenow'))
   await leftResizer.press('ArrowRight')
@@ -157,19 +173,21 @@ try {
   const storedSidebarWidth = await window.evaluate(() => localStorage.getItem('dsh-editor.layout.sidebar-width'))
   if (storedSidebarWidth !== String(sidebarAfter)) failures.push('文件栏宽度没有保存为界面偏好')
 
-  await layoutControls.getByRole('button', { name: '搭档', exact: true }).click()
+  await window.keyboard.press('Control+j')
   await window.locator('.chat').waitFor({ state: 'visible' })
   if (await window.locator('.panel-resizer').count() !== 2) failures.push('三栏模式没有提供两个调宽分隔条')
   const chatPosition = await window.locator('.chat').evaluate((node) => getComputedStyle(node).position)
   if (chatPosition === 'fixed') failures.push('写作搭档仍是浮动抽屉，没有进入第三栏')
 
-  await layoutControls.getByRole('button', { name: '专注', exact: true }).click()
+  await window.keyboard.press('Control+Backslash')
   await window.locator('.shell.focus-mode').waitFor({ state: 'visible' })
   if (await window.locator('.sidebar,.chat,.panel-resizer').count()) failures.push('专注模式没有隐藏两侧栏与调宽条')
-  await layoutControls.getByRole('button', { name: '退出专注', exact: true }).click()
+  await window.keyboard.press('Control+Backslash')
   await window.locator('.sidebar').waitFor({ state: 'visible' })
   await window.locator('.chat').waitFor({ state: 'visible' })
-  await layoutControls.getByRole('button', { name: '搭档', exact: true }).click()
+  await window.keyboard.press('Control+l')
+  await window.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '输入消息')
+  await window.keyboard.press('Control+j')
   await window.locator('.chat').waitFor({ state: 'detached' })
   await window.screenshot({ path: resolve(output, 'editor-ai-controls.png'), fullPage: true })
 
@@ -237,8 +255,8 @@ try {
 
   const archiveRoots = await readdir(resolve(workspace, '.dsh-editor', 'archive'))
   if (!archiveRoots.length) failures.push('归档审计记录缺失')
-  const emptyPaperWidth = await window.locator('.empty-paper').evaluate((node) => node.getBoundingClientRect().width)
-  if (emptyPaperWidth < 700) failures.push(`空白页没有占满中央写作区：${emptyPaperWidth}px`)
+  const centralPaneWidth = await window.locator('.editor,.empty-paper').first().evaluate((node) => node.getBoundingClientRect().width)
+  if (centralPaneWidth < 700) failures.push(`中央写作区没有占满可用空间：${centralPaneWidth}px`)
   await window.screenshot({ path: resolve(output, 'workbench.png'), fullPage: true })
   if (browserErrors.length) failures.push(...browserErrors)
 } catch (error) {
