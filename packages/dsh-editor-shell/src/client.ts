@@ -56,7 +56,7 @@ import { ModelSetup } from './model-setup.ts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 import { buildExport, type ChapterExport, type ExportFormat } from './export.ts'
 import { archiveStateText, documentName, visibleArchives, type ArchiveView } from './file-lifecycle.ts'
-import { documentTemplate, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from './project-files.ts'
+import { documentTemplate, manuscriptGroupPath, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from './project-files.ts'
 import { WORKBENCH_RPC_CHANNEL } from './workbench-rpc.ts'
 import type { ProposalMarker } from './proposal-tool.ts'
 import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
@@ -294,9 +294,11 @@ export function errorMessage(result: RpcResult): string {
   if (result.ok) return ''
   const blob = rpcFailureText(result)
   if (/stale|changed|version|版本/i.test(blob)) return '磁盘文件已经变化。'
+  if (/directory-exists|already exists/i.test(blob)) return '同名文件或目录已经存在。'
+  if (/workspace-invalid-path|invalid path/i.test(blob)) return '名称或路径不符合规则。'
+  if (/read-only|permission|denied/i.test(blob)) return '当前文件无法写入，请检查目录权限。'
   if (/directory-unreadable|unreadable/i.test(blob)) return '没有读取到作品目录，请重试。'
   if (/not-found|missing/i.test(blob)) return '没有找到所需的文件。'
-  if (/read-only|permission|denied/i.test(blob)) return '当前文件无法写入，请检查目录权限。'
   return '操作没有完成，请重试。'
 }
 
@@ -311,8 +313,9 @@ function Tree(props: {
   revision: number
   onOpen(path: string): void
   onManage(path: string): void
+  onCreateChapter(directory: string): void
 }) {
-  const { ctx, sessionId, active, revision, onOpen, onManage } = props
+  const { ctx, sessionId, active, revision, onOpen, onManage, onCreateChapter } = props
   const [open, setOpen] = useState<Record<string, Entry[]>>({})
   const [note, setNote] = useState('')
 
@@ -337,13 +340,22 @@ function Tree(props: {
       const child = path ? `${path}/${item.name}` : item.name
       if (item.type === 'directory') {
         return e('div', { key: child },
-          e('button', {
-            className: 'tree-row', type: 'button', style: { paddingLeft: 14 + level * 14 },
-            'aria-expanded': child in open,
-            onClick: () => child in open
-              ? setOpen((old) => { const next = { ...old }; delete next[child]; return next })
-              : void load(child),
-          }, `${child in open ? '⌄' : '›'} ${item.name}`),
+          e('div', { className: 'tree-directory-row' },
+            e('button', {
+              className: 'tree-row', type: 'button', style: { paddingLeft: 14 + level * 14 },
+              'aria-expanded': child in open,
+              onClick: () => child in open
+                ? setOpen((old) => { const next = { ...old }; delete next[child]; return next })
+                : void load(child),
+            }, `${child in open ? '⌄' : '›'} ${item.name}`),
+            child.startsWith('正文/') ? e('button', {
+              className: 'tree-directory-add',
+              type: 'button',
+              title: `在 ${item.name} 中新建章节`,
+              'aria-label': `在 ${item.name} 中新建章节`,
+              onClick: () => onCreateChapter(child),
+            }, '＋') : null,
+          ),
           child in open ? rows(child, level + 1) : null,
         )
       }
@@ -433,6 +445,69 @@ function SearchPanel(props: {
         e('span', null, `第 ${hit.line} 行 · ${hit.excerpt}`),
       ),
     ))) : null,
+  )
+}
+
+type CreateRequest = { kind: DocumentKind | 'group'; directory: string }
+
+function CreateDocumentDialog(props: {
+  request: CreateRequest
+  busy: boolean
+  note: string
+  onClose(): void
+  onCreate(title: string): void
+}) {
+  const { request } = props
+  const [title, setTitle] = useState('')
+  const dialog = useRef<HTMLDivElement | null>(null)
+  const input = useRef<HTMLInputElement | null>(null)
+  const label = request.kind === 'group'
+    ? '卷或部名称'
+    : request.kind === 'chapter'
+      ? '章节标题'
+      : request.kind === 'outline'
+        ? '大纲名称'
+        : request.kind === 'character'
+          ? '人物名称'
+          : '设定名称'
+  const heading = request.kind === 'group' ? '新建卷/部' : request.kind === 'chapter' ? '新建章节' : `新建${label.replace('名称', '')}`
+  useEffect(() => { setTitle(''); globalThis.setTimeout(() => input.current?.focus(), 0) }, [request.kind, request.directory])
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && !props.busy) { event.preventDefault(); props.onClose(); return }
+    if (event.key !== 'Tab' || !dialog.current) return
+    const focusable = [...dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled)')]
+    if (!focusable.length) return
+    const first = focusable[0]!
+    const last = focusable.at(-1)!
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  }
+  return e('div', { className: 'file-dialog-overlay' },
+    e('div', { ref: dialog, className: 'file-dialog create-dialog', role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'create-dialog-title', onKeyDown },
+      e('header', null,
+        e('div', null,
+          e('h2', { id: 'create-dialog-title' }, heading),
+          e('small', null, request.kind === 'group' ? '建立真实目录；现有章节不会移动。' : `保存到 ${request.directory}`),
+        ),
+        e('button', { className: 'icon-button', type: 'button', disabled: props.busy, 'aria-label': '关闭', onClick: props.onClose }, '×'),
+      ),
+      e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (title.trim()) props.onCreate(title.trim()) } },
+        e('label', null, label,
+          e('input', {
+            ref: input,
+            value: title,
+            maxLength: 80,
+            placeholder: request.kind === 'group' ? '例如：第一卷' : request.kind === 'chapter' ? '例如：第一章 风起' : '',
+            onChange: (event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value),
+          }),
+        ),
+        props.note ? e('p', { className: 'warning', role: 'alert' }, props.note) : null,
+        e('footer', null,
+          e('button', { type: 'button', disabled: props.busy, onClick: props.onClose }, '取消'),
+          e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !title.trim() }, props.busy ? '创建中…' : '创建'),
+        ),
+      ),
+    ),
   )
 }
 
@@ -1589,6 +1664,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [contentRevision, setContentRevision] = useState(0)
   const [homeNote, setHomeNote] = useState('')
   const [createNote, setCreateNote] = useState('')
+  const [createRequest, setCreateRequest] = useState<CreateRequest | null>(null)
+  const [createBusy, setCreateBusy] = useState(false)
   const [openingWorkspace, setOpeningWorkspace] = useState(false)
   const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | 'new' | null>(null)
   const [manualWorkspacePath, setManualWorkspacePath] = useState('')
@@ -1632,6 +1709,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const importReturnFocus = useRef<HTMLElement | null>(null)
   const snapshotReturnFocus = useRef<HTMLElement | null>(null)
   const fileManageReturnFocus = useRef<HTMLElement | null>(null)
+  const createReturnFocus = useRef<HTMLElement | null>(null)
   const workspaceManageReturnFocus = useRef<HTMLElement | null>(null)
   const shortcutReturnFocus = useRef<HTMLElement | null>(null)
   const shortcutChordAt = useRef(0)
@@ -1906,33 +1984,60 @@ function Root({ ctx }: { ctx: ShellContext }) {
     })
     return () => { live = false }
   }, [ctx.connection])
-  const create = async (kind: DocumentKind = 'chapter') => {
+  const openCreateDialog = (kind: DocumentKind | 'group', directory = '正文') => {
     if (!session) return
     if (editorDirty) { setCreateNote('请先保存当前文档。'); return }
+    createReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setCreateNote('')
+    setCreateRequest({ kind, directory })
+  }
+  const closeCreateDialog = () => {
+    if (createBusy) return
+    const target = createReturnFocus.current
+    setCreateRequest(null)
+    setCreateNote('')
+    globalThis.setTimeout(() => target?.focus(), 0)
+  }
+  const create = async (title: string) => {
+    if (!session || !createRequest) return
+    const request = createRequest
+    setCreateBusy(true)
+    setCreateNote('')
+    if (request.kind === 'group') {
+      const groupPath = manuscriptGroupPath(title)
+      const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'structure.groupCreate', {
+        sessionId: session.sessionId,
+        path: groupPath,
+      }))
+      setCreateBusy(false)
+      if (!result.ok) { setCreateNote(errorMessage(result)); return }
+      setCreateRequest(null)
+      setTreeRevision((old) => old + 1)
+      setWorkbenchNote(`已创建 ${result.value.path}`)
+      return
+    }
+    const kind: DocumentKind = request.kind
     let workspaceFiles: string[]
     try {
       workspaceFiles = await collectWorkspaceFiles(ctx, session.sessionId)
     } catch {
+      setCreateBusy(false)
       setCreateNote('没有读取到完整目录，请重试。')
       return
     }
-    const chapterPath = kind === 'chapter' ? nextChapterPath(workspaceFiles) : ''
-    const chapterNumber = Number(/(\d+)\.md$/.exec(chapterPath)?.[1] ?? 1)
-    const title = globalThis.prompt?.(
-      kind === 'chapter' ? '章节标题' : kind === 'outline' ? '大纲名称' : kind === 'character' ? '人物名称' : '设定名称',
-      kind === 'chapter' ? `第${chapterNumber}章` : '',
-    )?.trim()
-    if (!title) return
-    const file = kind === 'chapter' ? chapterPath : nextDocumentPath(kind, title, workspaceFiles)
-    void safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'file.create', {
+    const file = kind === 'chapter'
+      ? nextChapterPath(workspaceFiles, request.directory)
+      : nextDocumentPath(kind, title, workspaceFiles)
+    const result = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'file.create', {
       sessionId: session.sessionId,
       path: file,
       text: documentTemplate(kind, title),
-    })).then((result) => {
-      if (result.ok) { openDocument(file); setTreeRevision((old) => old + 1); return }
-      setCreateNote(errorMessage(result))
-    })
+    }))
+    setCreateBusy(false)
+    if (!result.ok) { setCreateNote(errorMessage(result)); return }
+    setCreateRequest(null)
+    openDocument(file)
+    setTreeRevision((old) => old + 1)
   }
   const exportNovel = async (format: ExportFormat) => {
     if (!session) return
@@ -2619,13 +2724,14 @@ function Root({ ctx }: { ctx: ShellContext }) {
       ),
     ),
     sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
-      e('div', { className: 'side-title' }, e('span', null, '文件'), e('button', { className: 'icon-button', type: 'button', onClick: () => void create('chapter'), title: '新建章节', 'aria-label': '新建章节' }, '＋')),
+      e('div', { className: 'side-title' }, e('span', null, '文件'), e('button', { className: 'icon-button', type: 'button', onClick: () => openCreateDialog('chapter'), title: '新建章节', 'aria-label': '新建章节' }, '＋')),
       e('details', { className: 'project-actions' },
         e('summary', null, '新建资料'),
         e('div', null,
-          e('button', { type: 'button', onClick: () => void create('outline') }, '大纲'),
-          e('button', { type: 'button', onClick: () => void create('character') }, '人物'),
-          e('button', { type: 'button', onClick: () => void create('world') }, '设定'),
+          e('button', { type: 'button', onClick: () => openCreateDialog('group') }, '卷/部'),
+          e('button', { type: 'button', onClick: () => openCreateDialog('outline') }, '大纲'),
+          e('button', { type: 'button', onClick: () => openCreateDialog('character') }, '人物'),
+          e('button', { type: 'button', onClick: () => openCreateDialog('world') }, '设定'),
         ),
       ),
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
@@ -2666,7 +2772,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         e('span', null, indexStatus[currentWorkspace.workspaceId] === 'initializing' ? '索引中' : indexStatus[currentWorkspace.workspaceId] === 'queued' ? '索引已排队' : indexStatus[currentWorkspace.workspaceId] === 'failed' ? '索引失败' : '未索引'),
         e('button', { type: 'button', onClick: () => triggerExistingIndex(currentWorkspace.workspaceId, session.sessionId, true) }, indexStatus[currentWorkspace.workspaceId] === 'failed' ? '重试' : '重建索引'),
       ) : null,
-      e(Tree, { ctx, sessionId: session.sessionId, active: path, onOpen: openDocument, onManage: openManage, revision: treeRevision }),
+      e(Tree, { ctx, sessionId: session.sessionId, active: path, onOpen: openDocument, onManage: openManage, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), revision: treeRevision }),
     ) : null,
     sidebarVisible ? e(PanelResizer, {
       side: 'left',
@@ -2677,7 +2783,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       label: '调整文件栏宽度',
       onChange: setSidebarWidth,
     }) : null,
-    e(Editor, { ctx, session, path, files, onOpen: openDocument, create: () => { void create('chapter') }, externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal }),
+    e(Editor, { ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'), externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal }),
     assistantVisible ? e(PanelResizer, {
       side: 'right',
       value: assistantWidth,
@@ -2710,6 +2816,14 @@ function Root({ ctx }: { ctx: ShellContext }) {
       onClick: () => setAssistantOpen(true),
     }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')) : null,
     shortcutsOpen ? e(ShortcutDialog, { onClose: closeShortcuts }) : null,
+    createRequest ? e(CreateDocumentDialog, {
+      key: `${createRequest.kind}:${createRequest.directory}`,
+      request: createRequest,
+      busy: createBusy,
+      note: createNote,
+      onClose: closeCreateDialog,
+      onCreate: (title: string) => void create(title),
+    }) : null,
     workspaceManage ? e(WorkspaceManageDialog, {
       workspace: workspaceManage,
       busy: workspaceManageBusy,
@@ -2742,7 +2856,7 @@ const playfulStyles = `
 :root{--ink:#173f30;--leaf:#3d755a;--mint:#dcebdd;--paper:#fffdf6;--sand:#f2ecdf;--line:#d8cfbd;--ease:cubic-bezier(.22,1,.36,1)}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .search-panel{display:grid;gap:7px;padding:9px 10px;border-bottom:1px solid var(--line);background:#f5efe2}.search-panel form{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:5px}.search-panel input,.search-panel select{box-sizing:border-box;min-width:0;border:1px solid #c9c3b5;background:#fffdf7;color:#294638}.search-panel input{padding:7px 9px;border-radius:12px 3px 3px 12px}.search-panel form>button{padding:0;border:1px solid #b9c5b8;border-radius:3px 10px 10px 3px;background:#dfeadd;color:#285c45}.search-panel select{grid-column:1/-1;padding:4px 7px;border:0;background:transparent;color:#657168;font-size:11px}.search-summary{display:flex;gap:6px;flex-wrap:wrap;color:#687168;font-size:11px}.search-summary strong{color:#9a4b3b}.search-results{max-height:210px;margin:0;padding:0;overflow:auto;list-style:none;display:grid;gap:4px}.search-results button{box-sizing:border-box;width:100%;display:grid;gap:2px;padding:7px 8px;border:0;border-radius:5px;background:#fffaf0;text-align:left;color:#304a3d}.search-results button:hover:not(:disabled){background:#dfeadd;transform:translateX(2px)}.search-results button:disabled{opacity:.55}.search-results strong,.search-results span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.search-results strong{font-size:11px}.search-results span{font-size:11px;color:#687168}.search-panel p{margin:0;font-size:11px}.chapter-navigation{display:flex;align-items:center;gap:5px;margin-left:auto}.chapter-navigation button{width:26px;height:26px;padding:0;border:1px solid #c7c4b7;border-radius:50%;background:#fffdf7;color:#315b47;font-size:18px;line-height:1}.chapter-navigation span{min-width:48px;text-align:center;color:#6a746b;font-variant-numeric:tabular-nums}.editor-header>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.editor-header>span:last-child{white-space:nowrap;margin-left:10px}
-.tree-file-row{position:relative;display:flex;align-items:center}.tree-file-row .tree-main{min-width:0;padding-right:34px}.tree-file-row .tree-manage{position:absolute;right:4px;width:28px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;color:#667269;opacity:0}.tree-file-row:hover .tree-manage,.tree-file-row:focus-within .tree-manage{opacity:1}.tree-manage:hover{background:#d5e3d3!important;transform:none!important}.archive-panel{border-bottom:1px solid var(--line);background:#eee8da}.archive-panel>summary{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;color:#596a60;list-style:none}.archive-panel>summary::-webkit-details-marker{display:none}.archive-panel>summary small{display:grid;place-items:center;min-width:19px;height:19px;border-radius:50%;background:#d5e3d3}.archive-list{display:grid;gap:6px;max-height:230px;padding:0 9px 9px;overflow:auto}.archive-list>p{margin:4px;font-size:11px}.archive-list article{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid #d7d0c1;border-radius:7px;background:#fffaf0}.archive-list article>div{min-width:0;display:grid;gap:1px;margin-right:auto}.archive-list article strong,.archive-list article small,.archive-list article code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archive-list article small,.archive-list article code{color:#6c756d;font-size:10px}.archive-list article>button{flex:none;padding:4px 7px;border:1px solid #b9c5b8;border-radius:10px;background:#e3ecdf;color:#285c45}.archive-list article>p{flex-basis:100%;margin:0}.file-dialog-overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:#272a2666;backdrop-filter:blur(4px)}.file-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:18px;padding:24px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 28px 90px #2c2d2838}.file-dialog header,.file-dialog footer{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.file-dialog header>div{min-width:0;display:grid;gap:3px}.file-dialog h2{margin:0;color:#264b3a;font:600 26px/1.25 "Noto Serif SC","Songti SC",serif}.file-dialog small,.file-dialog code,.file-dialog p{color:#687168}.file-dialog code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-dialog-actions{display:grid;gap:8px}.file-dialog-actions>button{display:grid;gap:3px;padding:13px 14px;border:1px solid #d7d0c1;border-radius:12px 4px 12px 4px;background:#f8f3e8;text-align:left;color:#2f4e40}.file-dialog-actions>button span{color:#6c756d;font-size:12px}.file-dialog form,.archive-confirm{display:grid;gap:12px}.file-dialog label{display:grid;gap:6px}.file-dialog input{box-sizing:border-box;width:100%;padding:10px 11px;border:1px solid #c9c3b5;border-radius:8px;background:#fff}.file-dialog footer{justify-content:flex-end;align-items:center}.file-dialog footer button{padding:7px 12px;border:1px solid #bfc5b8;border-radius:12px 4px 12px 4px;background:#fff;color:#2c5744}.file-dialog footer .primary-action{background:#315e48;color:#fff}.file-dialog footer .danger-action{border-color:#a9695f;background:#8f4d43;color:#fff}.file-dialog>.warning{margin:0}.archive-confirm p{margin:0;line-height:1.7}
+.tree-file-row,.tree-directory-row{position:relative;display:flex;align-items:center}.tree-file-row .tree-main,.tree-directory-row .tree-row{min-width:0;padding-right:34px}.tree-file-row .tree-manage,.tree-directory-row .tree-directory-add{position:absolute;right:4px;width:28px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;color:#667269;opacity:0}.tree-file-row:hover .tree-manage,.tree-file-row:focus-within .tree-manage,.tree-directory-row:hover .tree-directory-add,.tree-directory-row:focus-within .tree-directory-add{opacity:1}.tree-manage:hover,.tree-directory-add:hover{background:#d5e3d3!important;transform:none!important}.archive-panel{border-bottom:1px solid var(--line);background:#eee8da}.archive-panel>summary{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;color:#596a60;list-style:none}.archive-panel>summary::-webkit-details-marker{display:none}.archive-panel>summary small{display:grid;place-items:center;min-width:19px;height:19px;border-radius:50%;background:#d5e3d3}.archive-list{display:grid;gap:6px;max-height:230px;padding:0 9px 9px;overflow:auto}.archive-list>p{margin:4px;font-size:11px}.archive-list article{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid #d7d0c1;border-radius:7px;background:#fffaf0}.archive-list article>div{min-width:0;display:grid;gap:1px;margin-right:auto}.archive-list article strong,.archive-list article small,.archive-list article code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archive-list article small,.archive-list article code{color:#6c756d;font-size:10px}.archive-list article>button{flex:none;padding:4px 7px;border:1px solid #b9c5b8;border-radius:10px;background:#e3ecdf;color:#285c45}.archive-list article>p{flex-basis:100%;margin:0}.file-dialog-overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:#272a2666;backdrop-filter:blur(4px)}.file-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:18px;padding:24px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 28px 90px #2c2d2838}.file-dialog header,.file-dialog footer{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.file-dialog header>div{min-width:0;display:grid;gap:3px}.file-dialog h2{margin:0;color:#264b3a;font:600 26px/1.25 "Noto Serif SC","Songti SC",serif}.file-dialog small,.file-dialog code,.file-dialog p{color:#687168}.file-dialog code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-dialog-actions{display:grid;gap:8px}.file-dialog-actions>button{display:grid;gap:3px;padding:13px 14px;border:1px solid #d7d0c1;border-radius:12px 4px 12px 4px;background:#f8f3e8;text-align:left;color:#2f4e40}.file-dialog-actions>button span{color:#6c756d;font-size:12px}.file-dialog form,.archive-confirm{display:grid;gap:12px}.file-dialog label{display:grid;gap:6px}.file-dialog input{box-sizing:border-box;width:100%;padding:10px 11px;border:1px solid #c9c3b5;border-radius:8px;background:#fff}.file-dialog footer{justify-content:flex-end;align-items:center}.file-dialog footer button{padding:7px 12px;border:1px solid #bfc5b8;border-radius:12px 4px 12px 4px;background:#fff;color:#2c5744}.file-dialog footer .primary-action{background:#315e48;color:#fff}.file-dialog footer .danger-action{border-color:#a9695f;background:#8f4d43;color:#fff}.file-dialog>.warning{margin:0}.archive-confirm p{margin:0;line-height:1.7}
 button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--ease),background-color 220ms ease,border-color 220ms ease,color 220ms ease,box-shadow 220ms ease}button:active,.tree-row:active,summary:active{transform:scale(.96)}
 .icon-button{display:grid!important;place-items:center;min-width:30px!important;width:30px;height:30px;padding:0!important;border-radius:50%!important;font-size:17px;line-height:1}.icon-button:hover{transform:rotate(8deg) scale(1.06)!important}
 .chrome{animation:bar-drop 520ms var(--ease) both}.shell>.sidebar{animation:panel-left 560ms 70ms var(--ease) both}.shell>.editor,.shell>.empty-paper{animation:panel-rise 560ms 120ms var(--ease) both}.shell>.chat{animation:panel-right 560ms 170ms var(--ease) both}

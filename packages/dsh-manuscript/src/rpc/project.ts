@@ -4,7 +4,7 @@ import path from 'node:path'
 export class ProjectInitError extends Error {
   constructor(
     message: string,
-    readonly code: 'READ_ONLY' | 'SYMLINK' | 'NOT_DIRECTORY' | 'CANCELLED' | 'IO',
+    readonly code: 'READ_ONLY' | 'SYMLINK' | 'NOT_DIRECTORY' | 'CANCELLED' | 'IO' | 'INVALID_PATH' | 'EXISTS',
     options?: ErrorOptions,
   ) {
     super(message, options)
@@ -94,6 +94,56 @@ async function ensureDirectory(root: string, relative: string, signal?: AbortSig
     }
   }
   return created
+}
+
+const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i
+
+function manuscriptGroupName(relative: string): string {
+  const normalized = relative.replace(/\\/g, '/')
+  const match = /^正文\/([^/]+)$/.exec(normalized)
+  const name = match?.[1] ?? ''
+  if (
+    !name
+    || name !== name.trim()
+    || name.length > 80
+    || name.startsWith('.')
+    || /[<>:"/\\|?*\u0000-\u001f]/.test(name)
+    || /[. ]$/.test(name)
+    || WINDOWS_DEVICE_NAME.test(name)
+  ) throw new ProjectInitError('manuscript group name is invalid', 'INVALID_PATH')
+  return name
+}
+
+/** Create one visible volume/part directly below 正文 without touching its contents. */
+export async function createManuscriptGroup(input: {
+  root: string
+  mode: string
+  relative: string
+  signal?: AbortSignal
+}): Promise<{ path: string }> {
+  if (input.mode === 'read-only') throw new ProjectInitError('project folder is read-only', 'READ_ONLY')
+  throwIfAborted(input.signal)
+  const root = path.resolve(input.root)
+  const name = manuscriptGroupName(input.relative)
+  await assertDirectory(root, 'project folder')
+  const manuscriptRoot = path.join(root, '正文')
+  await assertDirectory(manuscriptRoot, 'manuscript folder')
+  const target = path.join(manuscriptRoot, name)
+  const state = await lstatOptional(target)
+  if (state) {
+    if (state.isSymbolicLink()) throw new ProjectInitError('manuscript group cannot be a symbolic link', 'SYMLINK')
+    throw new ProjectInitError('manuscript group already exists', 'EXISTS')
+  }
+  try {
+    await fs.mkdir(target)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new ProjectInitError('manuscript group already exists', 'EXISTS', { cause: error })
+    }
+    throw new ProjectInitError('failed to create manuscript group', 'IO', { cause: error })
+  }
+  await assertDirectory(target, 'manuscript group')
+  return { path: `正文/${name}` }
 }
 
 async function createFile(root: string, relative: string, text: string, signal?: AbortSignal): Promise<boolean> {

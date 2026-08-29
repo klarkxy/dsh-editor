@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { documentTemplate, nextChapterPath, nextDocumentPath, sortChapterPaths } from './project-files.ts'
+import { documentTemplate, manuscriptGroupPath, nextChapterPath, nextDocumentPath, sortChapterPaths } from './project-files.ts'
 
 describe('project file naming', () => {
   it('allocates stable numeric chapters', () => {
     expect(nextChapterPath(['正文/001.md', '正文/007.md', 'notes.md'])).toBe('正文/008.md')
+    expect(nextChapterPath(['正文/第一卷/001.md', '正文/第一卷/009.md', '正文/第二卷/020.md'], '正文/第一卷')).toBe('正文/第一卷/010.md')
   })
 
   it('sanitizes document names and avoids collisions', () => {
     expect(nextDocumentPath('character', '阿/明', [])).toBe('人物卡/阿-明.md')
     expect(nextDocumentPath('world', '魔法', ['世界书/魔法.md', '世界书/魔法-2.md'])).toBe('世界书/魔法-3.md')
     expect(nextDocumentPath('world', '.秘密', [])).toBe('世界书/秘密.md')
+    expect(manuscriptGroupPath(' 第一/卷 ')).toBe('正文/第一-卷')
   })
 
   it('creates useful Markdown templates', () => {

@@ -8,17 +8,22 @@ export function sortChapterPaths(paths: readonly string[]): string[] {
     .sort((left, right) => chapterCollator.compare(left, right))
 }
 
-export function nextChapterPath(paths: readonly string[]): string {
+export function nextChapterPath(paths: readonly string[], directory = '正文'): string {
+  const prefix = `${directory}/`
   const next = paths.reduce((max, path) => {
-    const match = /^正文\/(\d+)\.md$/i.exec(path)
+    const match = path.startsWith(prefix) ? /^(\d+)\.md$/i.exec(path.slice(prefix.length)) : null
     return match ? Math.max(max, Number(match[1])) : max
   }, 0) + 1
-  return `正文/${String(next).padStart(3, '0')}.md`
+  return `${directory}/${String(next).padStart(3, '0')}.md`
 }
 
 function safeStem(title: string): string {
   const cleaned = title.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/^\.+/, '').replace(/[. ]+$/g, '').slice(0, 80)
   return cleaned || '未命名'
+}
+
+export function manuscriptGroupPath(title: string): string {
+  return `正文/${safeStem(title)}`
 }
 
 export function nextDocumentPath(kind: Exclude<DocumentKind, 'chapter'>, title: string, paths: readonly string[]): string {

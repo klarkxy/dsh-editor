@@ -4,7 +4,7 @@ import { asHost, resolveWorkspaceAccess } from './host.ts'
 import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
 import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './rpc/import.ts'
 import { archiveDocument, LifecycleError, listArchives, renameDocument, restoreArchive, type LifecycleAccess } from './rpc/lifecycle.ts'
-import { initializeProject, prepareNovelIndex, ProjectInitError } from './rpc/project.ts'
+import { createManuscriptGroup, initializeProject, prepareNovelIndex, ProjectInitError } from './rpc/project.ts'
 import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './rpc/snapshot.ts'
 import { compileContext } from './rpc/context.ts'
 
@@ -27,6 +27,7 @@ export function mapEditorFilesError(error: unknown): RpcResult {
     if (error.code === 'CANCELLED') return { ok: false, error: { code: 'cancelled', message: error.message, details: {} } }
     if (error.code === 'IO') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
     if (error.code === 'READ_ONLY') return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
+    if (error.code === 'EXISTS') return { ok: false, error: { code: 'directory-exists', message: error.message, details: { path: '' } } }
     return { ok: false, error: { code: 'workspace-invalid-path', message: error.message, details: { path: '' } } }
   }
   if (error instanceof ImportError) {
@@ -78,6 +79,7 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
 
   if (endpoint === 'project.init') return await initializeProject({ root: access.workspace.path, mode: access.policy.mode, newProject: body.newProject === true, signal })
   if (endpoint === 'project.prepareIndex') return await prepareNovelIndex({ root: access.workspace.path, mode: access.policy.mode, signal })
+  if (endpoint === 'structure.groupCreate') return await createManuscriptGroup({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
   if (endpoint === 'context.compile') return await compileContext(files, str(body, 'userRequest'), str(body, 'activePath') || undefined)
   if (endpoint === 'project.importProbe') {
     const sourceSessionId = str(body, 'sourceSessionId')

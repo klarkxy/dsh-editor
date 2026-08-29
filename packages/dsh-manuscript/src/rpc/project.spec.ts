@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { initializeProject, NOVEL_INDEX_PATH, prepareNovelIndex, PROJECT_FILES } from './project.ts'
+import { createManuscriptGroup, initializeProject, NOVEL_INDEX_PATH, prepareNovelIndex, PROJECT_FILES } from './project.ts'
 
 let root = ''
 
@@ -21,6 +21,23 @@ describe('initializeProject', () => {
     for (const relative of Object.keys(PROJECT_FILES)) {
       await expect(fs.stat(path.join(root, ...relative.split('/')))).resolves.toBeTruthy()
     }
+  })
+
+  it('creates one visible manuscript group without moving or overwriting chapters', async () => {
+    await initializeProject({ root, mode: 'workspace-write', newProject: true })
+    await expect(createManuscriptGroup({ root, mode: 'workspace-write', relative: '正文/第一卷' })).resolves.toEqual({ path: '正文/第一卷' })
+    expect((await fs.stat(path.join(root, '正文', '第一卷'))).isDirectory()).toBe(true)
+    await expect(fs.readFile(path.join(root, '正文', '001.md'), 'utf8')).resolves.toBe('# 第一章\n\n')
+    await expect(createManuscriptGroup({ root, mode: 'workspace-write', relative: '正文/第一卷' })).rejects.toMatchObject({ code: 'EXISTS' })
+  })
+
+  it('rejects hidden, nested, reserved and read-only manuscript groups', async () => {
+    await initializeProject({ root, mode: 'workspace-write', newProject: false })
+    for (const relative of ['正文/.秘密', '正文/第一卷/上部', '正文/CON', '../正文/越界']) {
+      await expect(createManuscriptGroup({ root, mode: 'workspace-write', relative })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    }
+    await expect(createManuscriptGroup({ root, mode: 'read-only', relative: '正文/第一卷' })).rejects.toMatchObject({ code: 'READ_ONLY' })
+    expect(await fs.readdir(path.join(root, '正文'))).toEqual([])
   })
 
   it('adds templates to an existing project without creating a first chapter', async () => {

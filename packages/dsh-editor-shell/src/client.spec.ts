@@ -66,6 +66,12 @@ describe('shell manuscript RPC safety', () => {
     expect(errorMessage(result)).toBe('磁盘文件已经变化。')
   })
 
+  it('explains structure creation failures without exposing Host details', () => {
+    expect(errorMessage({ ok: false, error: { code: 'directory-exists', message: 'manuscript group already exists' } })).toBe('同名文件或目录已经存在。')
+    expect(errorMessage({ ok: false, error: { code: 'directory-unreadable', message: 'project folder is read-only' } })).toBe('当前文件无法写入，请检查目录权限。')
+    expect(errorMessage({ ok: false, error: { code: 'workspace-invalid-path', message: 'manuscript group name is invalid' } })).toBe('名称或路径不符合规则。')
+  })
+
   it('uses the Host-created flag instead of a possibly stale workspace list', async () => {
     const workspace = { workspaceId: 'workspace-1', path: 'D:\\novel', title: 'novel', sessionIds: [], createdAt: '', updatedAt: '' }
     const createHost = vi.fn(async () => ({ result: { ok: true as const, value: { workspace, created: true } } }))

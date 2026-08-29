@@ -135,6 +135,12 @@ describe('manuscript Host workspace authority', () => {
       { sessionId: 'session-1', path: 'notes/a.md', newName: 'b.md' },
       new AbortController().signal,
     )).rejects.toThrow('unknown endpoint file.rename')
+    await expect(dispatch(
+      host as unknown as Context,
+      'structure.groupCreate',
+      { sessionId: 'session-1', path: '正文/第一卷' },
+      new AbortController().signal,
+    )).rejects.toThrow('unknown endpoint structure.groupCreate')
   })
 
   it('does not accept provider or model guesses from the RPC payload', async () => {
