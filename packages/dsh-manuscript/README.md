@@ -1,6 +1,6 @@
 # dsh-manuscript
 
-面向 DSH Web 的稿件 GUI 插件，提供工作区文本文件树、正文编辑、安全保存、浏览器会话草稿、字数、前后篇导航、剪贴板改写交接和可选补全。它不依赖 `dsh-grill`；官方 DSH 仍是唯一的 Chat 和 Agent 界面。
+面向 DSH Web 的稿件 GUI 插件，提供工作区文本文件树、正文编辑、安全保存、浏览器会话草稿、字数、前后篇导航、全文搜索、剪贴板改写交接和可选补全。它不依赖 `dsh-grill`；官方 DSH 仍是唯一的 Chat 和 Agent 界面。
 
 ## 使用行为
 
@@ -13,7 +13,7 @@
 
 Host 由 live `sessionId` 获取 immutable workspace，验证 registered membership 与 sandbox policy，再使用 DSH `ctx.fs`。创建采用 `createIfAbsent`，保存采用 `replaceIfVersion`。绝对路径、traversal、symlink、超过 2 MB 的文本、stale version、未知 session 和 read-only 写入都会 fail closed。
 
-作品文本快照使用 `.dsh-editor/snapshots` 的 staged directory 发布；快照只包含符合限制的 Markdown/TXT 正文文件，不包含浏览器中尚未保存的编辑内容。恢复总是进入新的空工作区，并带可校验、可续传的 restore receipt；不会覆盖原工作区。
+全文搜索只扫描有界的 Markdown/TXT 字面文本并跳过隐藏、生成和链接路径。桌面产品的项目导入、作品快照、安全重命名与可恢复归档属于私有 `dsh-editor-shell` Host，不进入本公开插件的 RPC 或 tarball。
 
 generic RPC 没有 caller principal，因此该 loopback channel 只适用于 DSH 本地单用户模型，不得暴露成远程多用户 API。
 

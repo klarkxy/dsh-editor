@@ -1,30 +1,18 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { asHost, resolveWorkspaceAccess, WorkspaceAuthorityError } from './host.ts'
+import { asHost, resolveWorkspaceAccess } from './host.ts'
 import { completeFim } from './rpc/fim.ts'
-import { createTextFile, FileOpError, listDir, readTextFile, writeTextFile } from './rpc/files.ts'
+import { createTextFile, listDir, readTextFile, writeTextFile } from './rpc/files.ts'
 import { completePatch, parsePatchRequest, PatchInputError } from './rpc/patch.ts'
 import { createDraftStore, draftDomainSpec, DraftInputError, type DraftStore } from './rpc/draft.ts'
-import { PathConfineError } from './rpc/paths.ts'
-import { initializeProject, prepareNovelIndex, ProjectInitError } from './rpc/project.ts'
 import { applyProposal, parseProposal, prepareProposal, ProposalError } from './rpc/proposal.ts'
-import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './rpc/import.ts'
-import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './rpc/snapshot.ts'
+import { SearchError, searchWorkspaceText } from './rpc/search.ts'
+import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
 
 export const name = 'dsh-manuscript'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'llm', 'storageDomain'] as const
 
 type RpcOk<T> = { ok: true; value: T }
-type RpcIssue = { code: 'custom'; path: string[]; message: string }
-type RpcError =
-  | { code: 'bad-request'; message: string; details: { issues: RpcIssue[] } }
-  | { code: 'cancelled'; message: string; details: Record<string, never> }
-  | { code: 'session-not-found'; message: string; details: { sessionId: string } }
-  | { code: 'workspace-attach-failed'; message: string; details: { sessionId: string; workspaceId: string } }
-  | { code: 'workspace-not-found'; message: string; details: { workspaceId: string } }
-  | { code: 'workspace-invalid-path'; message: string; details: { path: string } }
-  | { code: 'directory-unreadable'; message: string; details: { path: string } }
-  | { code: 'directory-exists'; message: string; details: { path: string } }
-  | { code: 'internal'; message: string; details: Record<string, never> }
+type RpcError = HostRpcError
 type RpcErr = { ok: false; error: RpcError }
 type RpcResult<T> = RpcOk<T> | RpcErr
 
@@ -32,59 +20,14 @@ function fail(error: RpcError): RpcErr {
   return { ok: false, error }
 }
 
-function badRequest(message: string): RpcErr {
-  return fail({ code: 'bad-request', message, details: { issues: [{ code: 'custom', path: [], message }] } })
-}
-
 export function mapError(error: unknown): RpcErr {
-  if (error instanceof WorkspaceAuthorityError) {
-    if (error.code === 'SESSION_REQUIRED') return badRequest(error.message)
-    if (error.code === 'SESSION_NOT_FOUND') {
-      return fail({ code: 'session-not-found', message: error.message, details: { sessionId: error.context.sessionId ?? '' } })
-    }
-    if (error.code === 'WORKSPACE_NOT_FOUND') {
-      return fail({ code: 'workspace-not-found', message: error.message, details: { workspaceId: error.context.workspacePath ?? '' } })
-    }
-    if (error.code === 'WORKSPACE_MISMATCH') {
-      return fail({
-        code: 'workspace-attach-failed',
-        message: error.message,
-        details: { sessionId: error.context.sessionId ?? '', workspaceId: error.context.workspacePath ?? '' },
-      })
-    }
-    return fail({ code: 'directory-unreadable', message: error.message, details: { path: error.context.workspacePath ?? '' } })
-  }
-  if (error instanceof PathConfineError) {
-    return fail({ code: 'workspace-invalid-path', message: error.message, details: { path: '' } })
-  }
-  if (error instanceof ProjectInitError) {
-    if (error.code === 'CANCELLED') return fail({ code: 'cancelled', message: error.message, details: {} })
-    if (error.code === 'IO') return fail({ code: 'internal', message: error.message, details: {} })
-    if (error.code === 'READ_ONLY') return fail({ code: 'directory-unreadable', message: error.message, details: { path: '' } })
-    return fail({ code: 'workspace-invalid-path', message: error.message, details: { path: '' } })
-  }
-  if (error instanceof ImportError) {
-    if (error.code === 'READ_ONLY') return fail({ code: 'directory-unreadable', message: error.message, details: { path: '' } })
-    if (error.code === 'STALE' || error.code === 'BLOCKED' || error.code === 'TARGET_NOT_EMPTY' || error.code === 'NESTED' || error.code === 'CLEANUP_BLOCKED') return badRequest(error.message)
-    return fail({ code: 'internal', message: error.message, details: {} })
-  }
-  if (error instanceof SnapshotError) {
-    if (error.code === 'READ_ONLY') return fail({ code: 'directory-unreadable', message: error.message, details: { path: '' } })
-    if (error.code === 'BLOCKED' || error.code === 'STALE' || error.code === 'CLEANUP_BLOCKED') return badRequest(error.message)
+  const hostError = mapHostError(error)
+  if (hostError) return hostError
+  if (error instanceof SearchError) {
+    if (error.code === 'BAD_QUERY') return badRequest(error.message)
     return fail({ code: 'internal', message: error.message, details: {} })
   }
   if (error instanceof ProposalError || error instanceof PatchInputError || error instanceof DraftInputError) return badRequest(error.message)
-  if (error instanceof FileOpError) {
-    if (error.code === 'CANCELLED') return fail({ code: 'cancelled', message: error.message, details: {} })
-    if (error.code === 'IO') return fail({ code: 'internal', message: error.message, details: {} })
-    if (error.code === 'SYMLINK') return fail({ code: 'workspace-invalid-path', message: error.message, details: { path: '' } })
-    if (error.code === 'EXISTS') return fail({ code: 'directory-exists', message: error.message, details: { path: '' } })
-    if (error.code === 'NOT_FOUND' || error.code === 'NOT_DIRECTORY' || error.code === 'PARENT_MISSING' || error.code === 'DENIED') {
-      return fail({ code: 'directory-unreadable', message: error.message, details: { path: '' } })
-    }
-    return badRequest(error.message)
-  }
-  if (error instanceof Error && error.name === 'AbortError') return fail({ code: 'cancelled', message: 'cancelled', details: {} })
   return fail({ code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} })
 }
 
@@ -104,7 +47,7 @@ export async function dispatch(
 ): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Payload) : {}
   const host = asHost(ctx)
-  const targetSessionId = endpoint.startsWith('project.import') || endpoint.startsWith('snapshot.restore') ? str(body, 'targetSessionId') : str(body, 'sessionId')
+  const targetSessionId = str(body, 'sessionId')
   const access = await resolveWorkspaceAccess(host, targetSessionId, signal)
   const files = {
     fs: host.fs,
@@ -114,40 +57,6 @@ export async function dispatch(
     signal,
   }
   const rel = str(body, 'path')
-  const importAccess = (value: typeof access): ImportAccess => ({
-    path: value.workspace.path,
-    rootKey: value.root.targetKey,
-    mode: value.policy.mode,
-    files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
-  })
-  const snapshotAccess = (value: typeof access): SnapshotAccess => ({
-    path: value.workspace.path,
-    rootKey: value.root.targetKey,
-    mode: value.policy.mode,
-    files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
-  })
-  if (endpoint === 'snapshot.list') return await listSnapshots(snapshotAccess(access))
-  if (endpoint === 'snapshot.create') return await createSnapshot(snapshotAccess(access), str(body, 'label'))
-  if (endpoint === 'snapshot.restoreProbe') {
-    const sourceId = str(body, 'sourceSessionId')
-    const source = sourceId ? await resolveWorkspaceAccess(host, sourceId, signal) : undefined
-    return await restoreProbe({ source: source ? snapshotAccess(source) : undefined, target: snapshotAccess(access), snapshotId: str(body, 'snapshotId') || undefined })
-  }
-  if (endpoint === 'snapshot.restoreApply') {
-    const source = await resolveWorkspaceAccess(host, str(body, 'sourceSessionId'), signal)
-    return await restoreApply({ source: snapshotAccess(source), target: snapshotAccess(access), snapshotId: str(body, 'snapshotId'), token: str(body, 'token') })
-  }
-  if (endpoint === 'snapshot.restoreCleanup') return await restoreCleanup({ target: snapshotAccess(access), receiptId: str(body, 'receiptId') })
-  if (endpoint === 'project.importProbe') {
-    const sourceSessionId = str(body, 'sourceSessionId')
-    const source = sourceSessionId ? await resolveWorkspaceAccess(host, sourceSessionId, signal) : undefined
-    return await probeImport({ target: importAccess(access), source: source ? importAccess(source) : undefined })
-  }
-  if (endpoint === 'project.importApply') {
-    const source = await resolveWorkspaceAccess(host, str(body, 'sourceSessionId'), signal)
-    return await applyImport({ source: importAccess(source), target: importAccess(access), token: str(body, 'probeToken') })
-  }
-  if (endpoint === 'project.importCleanup') return await cleanupImport({ target: importAccess(access), receiptId: str(body, 'receiptId') })
   if (endpoint.startsWith('draft.') && !drafts) throw new Error('manuscript draft storage is unavailable')
   if (endpoint === 'draft.get') return { draft: drafts!.get(access.workspace.path, body) }
   if (endpoint === 'draft.put') return await drafts!.put(access.workspace.path, body)
@@ -156,21 +65,11 @@ export async function dispatch(
   if (endpoint === 'file.read') return await readTextFile(files, rel)
   if (endpoint === 'file.create') return await createTextFile(files, rel, str(body, 'text'))
   if (endpoint === 'file.write') return await writeTextFile(files, rel, str(body, 'text'), str(body, 'version'))
-  if (endpoint === 'project.init') {
-    return await initializeProject({
-      root: access.workspace.path,
-      mode: access.policy.mode,
-      newProject: body.newProject === true,
-      signal,
-    })
-  }
-  if (endpoint === 'project.prepareIndex') {
-    return await prepareNovelIndex({
-      root: access.workspace.path,
-      mode: access.policy.mode,
-      signal,
-    })
-  }
+  if (endpoint === 'search.text') return await searchWorkspaceText({
+    files,
+    query: str(body, 'query'),
+    scope: str(body, 'scope') === 'manuscript' ? 'manuscript' : 'project',
+  })
   if (endpoint === 'proposal.prepare') return await prepareProposal(files, parseProposal(body))
   if (endpoint === 'proposal.apply') {
     return await applyProposal(files, parseProposal(body), str(body, 'expectedVersion'))

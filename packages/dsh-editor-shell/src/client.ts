@@ -54,7 +54,9 @@ import { registerRoot } from './root-registration.ts'
 import { ModelSetup } from './model-setup.ts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 import { buildExport, type ChapterExport, type ExportFormat } from './export.ts'
-import { documentTemplate, nextChapterPath, nextDocumentPath, type DocumentKind } from './project-files.ts'
+import { archiveStateText, documentName, visibleArchives, type ArchiveView } from './file-lifecycle.ts'
+import { documentTemplate, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from './project-files.ts'
+import { WORKBENCH_RPC_CHANNEL } from './workbench-rpc.ts'
 import type { ProposalMarker } from './proposal-tool.ts'
 import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import {
@@ -73,6 +75,10 @@ export const name = 'dsh-editor-shell-client'
 export const inject = ['slots', 'sessions', 'workspaces', 'connection'] as const
 
 type Entry = { name: string; type: 'file' | 'directory' | 'other' }
+type SearchHit = { path: string; line: number; column: number; start: number; end: number; excerpt: string; version: string }
+type SearchResponse = { results: SearchHit[]; scannedFiles: number; scannedBytes: number; skipped: number; truncated: boolean }
+type ArchiveListResponse = { items: ArchiveView[]; invalid: number }
+type RevealRequest = SearchHit & { nonce: number }
 type RpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: RpcError | { code?: string; message?: string } }
 type ShellContext = ClientContext & { connection: ConnectionHandle }
 
@@ -84,6 +90,30 @@ export async function safeRpcCall<T>(request: () => Promise<unknown>): Promise<R
       ok: false,
       error: { code: 'internal', message: error instanceof Error ? error.message : 'request failed' },
     }
+  }
+}
+
+type RequestTicket = Readonly<{ scope: string; sequence: number }>
+
+/** Keeps late async responses from crossing session/revision boundaries. */
+export class LatestRequestGate {
+  private scope = ''
+  private sequence = 0
+
+  setScope(scope: string): void {
+    if (scope === this.scope) return
+    this.scope = scope
+    this.sequence += 1
+  }
+
+  begin(scope: string): RequestTicket {
+    this.setScope(scope)
+    this.sequence += 1
+    return { scope, sequence: this.sequence }
+  }
+
+  isCurrent(ticket: RequestTicket): boolean {
+    return ticket.scope === this.scope && ticket.sequence === this.sequence
   }
 }
 
@@ -121,9 +151,9 @@ function Tree(props: {
   active: string
   revision: number
   onOpen(path: string): void
-  onOrder(paths: string[]): void
+  onManage(path: string): void
 }) {
-  const { ctx, sessionId, active, revision, onOpen, onOrder } = props
+  const { ctx, sessionId, active, revision, onOpen, onManage } = props
   const [open, setOpen] = useState<Record<string, Entry[]>>({})
   const [note, setNote] = useState('')
 
@@ -141,18 +171,6 @@ function Tree(props: {
     setOpen({})
     void load('')
   }, [sessionId, revision])
-  useEffect(() => {
-    const files: string[] = []
-    const collect = (path: string) => {
-      for (const item of open[path] ?? []) {
-        const child = path ? `${path}/${item.name}` : item.name
-        if (item.type === 'directory') { if (child in open) collect(child) }
-        else if (item.type === 'file') files.push(child)
-      }
-    }
-    collect('')
-    onOrder(files)
-  }, [open])
 
   const rows = (path: string, level: number): ReactNode[] => (open[path] ?? [])
     .filter((item) => !item.name.startsWith('.'))
@@ -170,17 +188,162 @@ function Tree(props: {
           child in open ? rows(child, level + 1) : null,
         )
       }
-      return e('button', {
-        key: child,
-        className: 'tree-row',
-        type: 'button',
-        'aria-current': active === child ? 'page' : undefined,
-        style: { paddingLeft: 28 + level * 14 },
-        onClick: () => onOpen(child),
-      }, item.name)
+      return e('div', { key: child, className: 'tree-file-row' },
+        e('button', {
+          className: 'tree-row tree-main',
+          type: 'button',
+          'aria-current': active === child ? 'page' : undefined,
+          style: { paddingLeft: 28 + level * 14 },
+          onClick: () => onOpen(child),
+        }, item.name),
+        /\.(md|txt)$/i.test(child) ? e('button', {
+          className: 'tree-manage',
+          type: 'button',
+          title: `管理 ${item.name}`,
+          'aria-label': `管理 ${item.name}`,
+          onClick: () => onManage(child),
+        }, '···') : null,
+      )
     })
 
   return e('nav', { className: 'tree', 'aria-label': '稿件目录' }, rows('', 0), note ? e('p', { className: 'warning pad' }, note) : null)
+}
+
+function SearchPanel(props: {
+  ctx: ShellContext
+  sessionId: string
+  revision: number
+  navigationBlocked: boolean
+  onOpen(hit: SearchHit): void
+}) {
+  const [query, setQuery] = useState('')
+  const [scope, setScope] = useState<'project' | 'manuscript'>('project')
+  const [result, setResult] = useState<SearchResponse | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const requestGate = useRef(new LatestRequestGate()).current
+  const requestScope = `${props.sessionId}\u0000${props.revision}`
+  requestGate.setScope(requestScope)
+
+  useEffect(() => { setQuery(''); setResult(null); setNote(''); setBusy(false) }, [props.sessionId, props.revision])
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const value = query.trim()
+    if (!value) { setNote('请输入要查找的文字。'); return }
+    const ticket = requestGate.begin(requestScope)
+    setBusy(true); setNote('')
+    const searched = await safeRpcCall<SearchResponse>(() => props.ctx.connection.rpc.call('/manuscript', 'search.text', {
+      sessionId: props.sessionId,
+      query: value,
+      scope,
+    }))
+    if (!requestGate.isCurrent(ticket)) return
+    setBusy(false)
+    if (!searched.ok) { setResult(null); setNote(errorMessage(searched)); return }
+    setResult(searched.value)
+    setNote(searched.value.results.length ? '' : '没有找到匹配内容。')
+  }
+
+  return e('section', { className: 'search-panel', 'aria-label': '全文搜索' },
+    e('form', { role: 'search', onSubmit: (event: FormEvent) => void submit(event) },
+      e('input', {
+        value: query,
+        maxLength: 120,
+        placeholder: '查找人物、地点或句子',
+        'aria-label': '搜索作品文字',
+        onChange: (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value),
+      }),
+      e('button', { type: 'submit', disabled: busy || !query.trim(), 'aria-label': '开始搜索' }, busy ? '…' : '查'),
+      e('select', {
+        value: scope,
+        'aria-label': '搜索范围',
+        onChange: (event: ChangeEvent<HTMLSelectElement>) => setScope(event.target.value === 'manuscript' ? 'manuscript' : 'project'),
+      }, e('option', { value: 'project' }, '整部作品'), e('option', { value: 'manuscript' }, '仅正文')),
+    ),
+    result ? e('div', { className: 'search-summary', role: 'status' },
+      `${result.results.length} 处 · 已查 ${result.scannedFiles} 份文件`,
+      result.truncated ? e('strong', null, '结果已达安全上限') : null,
+      result.skipped ? e('span', null, `跳过 ${result.skipped} 项`) : null,
+    ) : null,
+    props.navigationBlocked && result?.results.length ? e('p', { className: 'warning', role: 'alert' }, '请先保存当前文档，再跳转搜索结果。') : null,
+    note ? e('p', { className: 'muted', role: 'status' }, note) : null,
+    result?.results.length ? e('ol', { className: 'search-results' }, result.results.map((hit, index) => e('li', { key: `${hit.path}:${hit.start}:${index}` },
+      e('button', { type: 'button', disabled: props.navigationBlocked, onClick: () => props.onOpen(hit) },
+        e('strong', null, hit.path),
+        e('span', null, `第 ${hit.line} 行 · ${hit.excerpt}`),
+      ),
+    ))) : null,
+  )
+}
+
+function FileManageDialog(props: {
+  path: string
+  busy: boolean
+  note: string
+  onClose(): void
+  onRename(name: string): void
+  onArchive(): void
+}) {
+  const [mode, setMode] = useState<'menu' | 'rename' | 'archive'>('menu')
+  const [name, setName] = useState(() => documentName(props.path))
+  const dialog = useRef<HTMLDivElement | null>(null)
+  const first = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => { setMode('menu'); setName(documentName(props.path)); globalThis.setTimeout(() => first.current?.focus(), 0) }, [props.path])
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && !props.busy) { event.preventDefault(); props.onClose(); return }
+    if (event.key !== 'Tab' || !dialog.current) return
+    const focusable = [...dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled)')]
+    if (!focusable.length) return
+    const firstItem = focusable[0]!
+    const lastItem = focusable.at(-1)!
+    if (event.shiftKey && document.activeElement === firstItem) { event.preventDefault(); lastItem.focus() }
+    else if (!event.shiftKey && document.activeElement === lastItem) { event.preventDefault(); firstItem.focus() }
+  }
+
+  return e('div', { className: 'file-dialog-overlay' },
+    e('div', {
+      ref: dialog,
+      className: 'file-dialog',
+      role: 'dialog',
+      'aria-modal': true,
+      'aria-labelledby': 'file-dialog-title',
+      onKeyDown,
+    },
+    e('header', null,
+      e('div', null,
+        e('small', null, '文档管理'),
+        e('h2', { id: 'file-dialog-title' }, documentName(props.path)),
+        e('code', null, props.path),
+      ),
+      e('button', { ref: first, className: 'icon-button', type: 'button', disabled: props.busy, onClick: props.onClose, 'aria-label': '关闭' }, '×'),
+    ),
+    mode === 'menu' ? e('div', { className: 'file-dialog-actions' },
+      e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('rename') },
+        e('strong', null, '重命名'), e('span', null, '保留文件类型，只修改当前文档名称。')),
+      e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('archive') },
+        e('strong', null, '归档'), e('span', null, '从文件树移出，以后可以恢复，不会永久删除。')),
+    ) : null,
+    mode === 'rename' ? e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); props.onRename(name) } },
+      e('label', null, e('span', null, '新名称'), e('input', { value: name, maxLength: 120, autoFocus: true, onChange: (event: ChangeEvent<HTMLInputElement>) => setName(event.target.value) })),
+      e('p', null, '文件夹和 .md/.txt 类型保持不变。'),
+      e('footer', null,
+        e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
+        e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !name.trim() }, props.busy ? '处理中…' : '保存新名称'),
+      ),
+    ) : null,
+    mode === 'archive' ? e('div', { className: 'archive-confirm' },
+      e('p', null, '归档后，文档会从当前文件树消失，但内容会保留在本地作品中。'),
+      e('strong', null, '这不是永久删除。'),
+      e('footer', null,
+        e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
+        e('button', { className: 'danger-action', type: 'button', disabled: props.busy, onClick: props.onArchive }, props.busy ? '归档中…' : '确认归档'),
+      ),
+    ) : null,
+    props.note ? e('p', { className: 'warning', role: 'alert' }, props.note) : null,
+    ),
+  )
 }
 
 function Editor(props: {
@@ -192,8 +355,9 @@ function Editor(props: {
   create(): void
   externalRevision: number
   onDirtyChange(dirty: boolean): void
+  reveal: RevealRequest | null
 }) {
-  const { ctx, session, path, files, onOpen, create, externalRevision, onDirtyChange } = props
+  const { ctx, session, path, files, onOpen, create, externalRevision, onDirtyChange, reveal } = props
   const [doc, setDoc] = useState<EditorDocument | null>(null)
   const [text, setTextState] = useState('')
   const [ghost, setGhost] = useState('')
@@ -266,6 +430,21 @@ function Editor(props: {
     })
     return () => { live = false; patchAbort.current?.abort() }
   }, [path, session.sessionId, externalRevision])
+
+  useEffect(() => {
+    if (!doc || !reveal || reveal.path !== doc.path || !ta.current) return
+    if (reveal.version !== doc.version) {
+      setNote('搜索后文件已变化，已打开文档但未强制定位。')
+      return
+    }
+    const start = Math.max(0, Math.min(text.length, reveal.start))
+    const end = Math.max(start, Math.min(text.length, reveal.end))
+    globalThis.setTimeout(() => {
+      if (!ta.current) return
+      ta.current.focus()
+      ta.current.setSelectionRange(start, end)
+    }, 0)
+  }, [doc?.path, doc?.version, reveal?.nonce])
 
   useEffect(() => {
     if (!doc) return
@@ -421,9 +600,15 @@ function Editor(props: {
   }
 
   const index = files.indexOf(path)
+  const navigationBlocked = state === 'draft' || state === 'conflict'
   return e('section', { className: 'editor', 'aria-label': '正文编辑区' },
     e('header', { className: 'editor-header' },
       e('span', null, doc?.path ?? path),
+      e('nav', { className: 'chapter-navigation', 'aria-label': '章节导航' },
+        e('button', { type: 'button', onClick: () => index > 0 && onOpen(files[index - 1]!), disabled: navigationBlocked || index <= 0, title: navigationBlocked ? '请先保存' : '上一章' }, '‹'),
+        e('span', null, index >= 0 ? `${index + 1} / ${files.length}` : `— / ${files.length}`),
+        e('button', { type: 'button', onClick: () => index >= 0 && index < files.length - 1 && onOpen(files[index + 1]!), disabled: navigationBlocked || index < 0 || index >= files.length - 1, title: navigationBlocked ? '请先保存' : '下一章' }, '›'),
+      ),
       e('span', null, `${text.replace(/\s/g, '').length} 字 · ${state === 'draft' ? '草稿未保存' : state === 'conflict' ? '版本冲突' : state === 'saved' ? '已保存' : '读取中'}`),
     ),
     e('textarea', {
@@ -440,8 +625,6 @@ function Editor(props: {
       },
     }),
     e('footer', { className: 'editor-tools' },
-      e('button', { type: 'button', onClick: () => index > 0 && onOpen(files[index - 1]), disabled: index <= 0 }, '上一篇'),
-      e('button', { type: 'button', onClick: () => index >= 0 && index < files.length - 1 && onOpen(files[index + 1]), disabled: index < 0 || index >= files.length - 1 }, '下一篇'),
       e('button', { type: 'button', onClick: () => void save(), disabled: !doc || !isDirty(doc, text) || conflict }, '保存'),
       conflict ? e('button', { type: 'button', onClick: () => void reloadDisk() }, '重新载入磁盘版本') : null,
       conflict ? e('button', { type: 'button', onClick: () => void saveConflictCopy() }, '另存冲突副本') : null,
@@ -907,6 +1090,34 @@ async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string): Prom
   return files
 }
 
+export class FlowWorkspaceCleanupError extends Error {
+  constructor(options?: ErrorOptions) {
+    super('workspace projection failed and its registration could not be removed', options)
+    this.name = 'FlowWorkspaceCleanupError'
+  }
+}
+
+export async function createFlowWorkspace(ctx: ShellContext, workspacePath: string) {
+  const created = await ctx.connection.api.workspace.create({ path: workspacePath })
+  if (!created.result.ok) throw new Error(created.result.error.message)
+  try {
+    const workspace = await ctx.workspaces.create({ path: created.result.value.workspace.path })
+    return { workspace, created: created.result.value.created }
+  } catch (error) {
+    if (created.result.value.created) {
+      let cleanupFailed = false
+      try {
+        const cleanup = await ctx.connection.api.workspace.delete({ workspaceId: created.result.value.workspace.workspaceId })
+        cleanupFailed = !cleanup.result.ok
+      } catch {
+        cleanupFailed = true
+      }
+      if (cleanupFailed) throw new FlowWorkspaceCleanupError({ cause: error })
+    }
+    throw error
+  }
+}
+
 function downloadExport(filename: string, content: string, format: ExportFormat): void {
   const blob = new Blob([content], { type: format === 'markdown' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8' })
   const href = URL.createObjectURL(blob)
@@ -923,6 +1134,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const session = currentSession(ctx)
   const [path, setPath] = useState('')
   const [files, setFiles] = useState<string[]>([])
+  const [reveal, setReveal] = useState<RevealRequest | null>(null)
+  const [workbenchNote, setWorkbenchNote] = useState('')
   const [treeRevision, setTreeRevision] = useState(0)
   const [contentRevision, setContentRevision] = useState(0)
   const [homeNote, setHomeNote] = useState('')
@@ -942,15 +1155,168 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [snapshotBusy, setSnapshotBusy] = useState(false)
   const [snapshotFlow, setSnapshotFlow] = useState<SnapshotFlow>(idleSnapshotFlow)
   const [editorDirty, setEditorDirty] = useState(false)
+  const [managePath, setManagePath] = useState<string | null>(null)
+  const [manageBusy, setManageBusy] = useState(false)
+  const [manageNote, setManageNote] = useState('')
+  const [archives, setArchives] = useState<ArchiveView[]>([])
+  const [archiveInvalid, setArchiveInvalid] = useState(0)
+  const [archiveBusy, setArchiveBusy] = useState(false)
+  const [archiveNote, setArchiveNote] = useState('')
+  const archiveRequestGate = useRef(new LatestRequestGate()).current
   const importReturnFocus = useRef<HTMLElement | null>(null)
   const snapshotReturnFocus = useRef<HTMLElement | null>(null)
+  const fileManageReturnFocus = useRef<HTMLElement | null>(null)
+  const temporaryFlowWorkspaces = useRef(new Set<string>())
+  const temporarySourceWorkspaces = useRef(new Map<string, string>())
   const probedImportSessions = useRef(new Set<string>())
   const probedRestoreSessions = useRef(new Set<string>())
   const verifiedRestoreSessions = useRef(new Set<string>())
   const [, refreshRestoreGate] = useState(0)
   const current = sessions.current
+  archiveRequestGate.setScope(current ?? '')
+  const registerFlowWorkspace = async (workspacePath: string) => {
+    const registration = await createFlowWorkspace(ctx, workspacePath)
+    if (registration.created) temporaryFlowWorkspaces.current.add(registration.workspace.workspaceId)
+    return registration
+  }
+  const bindTemporarySource = (sessionId: string, workspaceId: string, created: boolean) => {
+    if (created) temporarySourceWorkspaces.current.set(sessionId, workspaceId)
+  }
+  const cleanupFlowWorkspace = async (workspaceId: string): Promise<boolean> => {
+    if (!temporaryFlowWorkspaces.current.has(workspaceId)) return true
+    try {
+      await ctx.workspaces.delete(workspaceId as WorkspaceId)
+      temporaryFlowWorkspaces.current.delete(workspaceId)
+      return true
+    } catch {
+      return false
+    }
+  }
+  const cleanupTemporarySource = async (sessionId: string): Promise<boolean> => {
+    const workspaceId = temporarySourceWorkspaces.current.get(sessionId)
+    if (!workspaceId) return true
+    const cleaned = await cleanupFlowWorkspace(workspaceId)
+    if (cleaned) temporarySourceWorkspaces.current.delete(sessionId)
+    return cleaned
+  }
+  const preserveFlowWorkspace = (workspaceId: string) => {
+    temporaryFlowWorkspaces.current.delete(workspaceId)
+  }
   useEffect(() => { document.title = 'DSH Editor' }, [])
-  useEffect(() => { setPath(''); setFiles([]); setEditorDirty(false) }, [current])
+  useEffect(() => {
+    setPath(''); setFiles([]); setReveal(null); setWorkbenchNote(''); setEditorDirty(false)
+    setManagePath(null); setManageNote(''); setArchives([]); setArchiveInvalid(0); setArchiveNote('')
+  }, [current])
+  useEffect(() => {
+    if (!session) { setFiles([]); return }
+    let live = true
+    void collectWorkspaceFiles(ctx, session.sessionId).then((paths) => {
+      if (live) setFiles(sortChapterPaths(paths))
+    }).catch(() => {
+      if (live) { setFiles([]); setWorkbenchNote('没有读取到完整章节顺序。') }
+    })
+    return () => { live = false }
+  }, [ctx.connection.rpc, session?.sessionId, treeRevision])
+  const openDocument = (nextPath: string, hit?: SearchHit) => {
+    if (editorDirty && (nextPath !== path || hit)) {
+      setWorkbenchNote('请先保存当前文档。')
+      return
+    }
+    setWorkbenchNote('')
+    setPath(nextPath)
+    setReveal(hit ? { ...hit, nonce: Date.now() } : null)
+  }
+  const loadArchives = async () => {
+    if (!session) return
+    const ticket = archiveRequestGate.begin(session.sessionId)
+    setArchiveBusy(true); setArchiveNote('')
+    const result = await safeRpcCall<ArchiveListResponse>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.list', { sessionId: session.sessionId }))
+    if (!archiveRequestGate.isCurrent(ticket)) return
+    setArchiveBusy(false)
+    if (!result.ok) { setArchiveNote(errorMessage(result)); return }
+    setArchives(result.value.items)
+    setArchiveInvalid(result.value.invalid)
+  }
+  const openManage = (selectedPath: string) => {
+    if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
+    fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setManagePath(selectedPath); setManageNote('')
+  }
+  const closeManage = () => {
+    if (manageBusy) return
+    const target = fileManageReturnFocus.current
+    setManagePath(null); setManageNote('')
+    if (target) globalThis.setTimeout(() => target.focus(), 0)
+  }
+  const observedVersion = async (selectedPath: string): Promise<string | undefined> => {
+    if (!session) return undefined
+    const read = await safeRpcCall<{ version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', { sessionId: session.sessionId, path: selectedPath }))
+    if (!read.ok) { setManageNote(errorMessage(read)); return undefined }
+    return read.value.version
+  }
+  const renameManaged = async (name: string) => {
+    if (!session || !managePath || manageBusy) return
+    setManageBusy(true); setManageNote('')
+    const version = await observedVersion(managePath)
+    if (!version) { setManageBusy(false); return }
+    const renamed = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.rename', {
+      sessionId: session.sessionId,
+      path: managePath,
+      newName: name,
+      expectedVersion: version,
+    }))
+    setManageBusy(false)
+    if (!renamed.ok) { setManageNote(errorMessage(renamed)); return }
+    if (path === managePath) { setPath(renamed.value.path); setReveal(null) }
+    setTreeRevision((value) => value + 1)
+    setWorkbenchNote(`已重命名为 ${renamed.value.path}`)
+    setManagePath(null)
+  }
+  const archiveManaged = async () => {
+    if (!session || !managePath || manageBusy) return
+    setManageBusy(true); setManageNote('')
+    const version = await observedVersion(managePath)
+    if (!version) { setManageBusy(false); return }
+    const archived = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', {
+      sessionId: session.sessionId,
+      path: managePath,
+      expectedVersion: version,
+    }))
+    setManageBusy(false)
+    if (!archived.ok) { setManageNote(errorMessage(archived)); return }
+    if (archived.value.state !== 'archived') { setManageNote('归档未完成，请在已归档列表中检查。'); await loadArchives(); return }
+    if (path === managePath) { setPath(''); setReveal(null) }
+    setManagePath(null)
+    setTreeRevision((value) => value + 1)
+    setWorkbenchNote(`已归档 ${archived.value.path}`)
+    await loadArchives()
+  }
+  const continueArchive = async (item: ArchiveView) => {
+    if (!session || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote('请先保存当前文档。'); return }
+    setArchiveBusy(true); setArchiveNote('')
+    const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', { sessionId: session.sessionId, archiveId: item.archiveId }))
+    setArchiveBusy(false)
+    if (!result.ok) { setArchiveNote(errorMessage(result)); return }
+    setTreeRevision((value) => value + 1)
+    await loadArchives()
+  }
+  const restoreArchived = async (item: ArchiveView) => {
+    if (!session || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote('请先保存当前文档。'); return }
+    if (!item.version) { setArchiveNote('归档状态无法验证，未恢复。'); return }
+    setArchiveBusy(true); setArchiveNote('')
+    const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.restore', {
+      sessionId: session.sessionId,
+      archiveId: item.archiveId,
+      expectedVersion: item.version,
+    }))
+    setArchiveBusy(false)
+    if (!result.ok) { setArchiveNote(errorMessage(result)); return }
+    if (result.value.state !== 'restored') { setArchiveNote('原路径已有文件或归档已变化，未覆盖。'); await loadArchives(); return }
+    setTreeRevision((value) => value + 1)
+    openDocument(result.value.path)
+    setWorkbenchNote(`已恢复 ${result.value.path}`)
+    await loadArchives()
+  }
   useEffect(() => {
     let live = true
     void ctx.connection.api.credentials.describe({ refs: ['DEEPSEEK_API_KEY', 'DSH_EDITOR_CUSTOM_API_KEY'] }).then((response) => {
@@ -968,6 +1334,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   }, [ctx.connection])
   const create = async (kind: DocumentKind = 'chapter') => {
     if (!session) return
+    if (editorDirty) { setCreateNote('请先保存当前文档。'); return }
     setCreateNote('')
     let workspaceFiles: string[]
     try {
@@ -989,7 +1356,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       path: file,
       text: documentTemplate(kind, title),
     })).then((result) => {
-      if (result.ok) { setPath(file); setTreeRevision((old) => old + 1); return }
+      if (result.ok) { openDocument(file); setTreeRevision((old) => old + 1); return }
       setCreateNote(errorMessage(result))
     })
   }
@@ -1015,7 +1382,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (!current || !currentWorkspace || probedImportSessions.current.has(current)) return
     probedImportSessions.current.add(current)
     let live = true
-    void safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', { targetSessionId: current }))
+    void safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: current }))
       .then((recovery) => {
         if (!live) return
         if (!recovery.ok) {
@@ -1025,6 +1392,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         }
         if (recovery.value.state !== 'recoverable') return
         importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        ctx.sessions.clear()
         setImportFlow(recoverImport(current, currentWorkspace.workspaceId, recovery.value))
       })
     return () => { live = false }
@@ -1033,7 +1401,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (!current || !currentWorkspace || probedRestoreSessions.current.has(current)) return
     probedRestoreSessions.current.add(current)
     let live = true
-    void safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', { targetSessionId: current }))
+    void safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: current }))
       .then((recovery) => {
         if (!live) return
         if (!recovery.ok) {
@@ -1058,7 +1426,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     indexedWorkspaces.current.add(workspaceId)
     setIndexStatus((old) => ({ ...old, [workspaceId]: 'initializing' }))
     void Promise.resolve().then(async () => {
-      const prepared = await ctx.connection.rpc.call('/manuscript', 'project.prepareIndex', { sessionId }) as RpcResult
+      const prepared = await ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.prepareIndex', { sessionId }) as RpcResult
       if (!prepared.ok) throw new Error(errorMessage(prepared))
       const indexedSession = ctx.sessions.binding(sessionId)?.session
       if (!indexedSession) throw new Error('session unavailable')
@@ -1070,12 +1438,12 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const connectAndInitialize = async (workspaceId: WorkspaceId, newProject: boolean) => {
     const sessionId = await ctx.workspaces.connectWorkspace(workspaceId)
     if (newProject) {
-      const initialized = await ctx.connection.rpc.call('/manuscript', 'project.init', { sessionId, newProject: true }) as RpcResult
+      const initialized = await ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.init', { sessionId, newProject: true }) as RpcResult
       if (!initialized.ok) throw new Error(errorMessage(initialized))
     }
     if (!newProject) {
       probedImportSessions.current.add(sessionId)
-      const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', { targetSessionId: sessionId }))
+      const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: sessionId }))
       if (!recovery.ok) {
         setHomeNote('作品中的导入状态无法验证，已停止打开。')
         setExportNote('作品中的导入状态无法验证，未切换工作区。')
@@ -1086,7 +1454,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         setImportFlow(recoverImport(sessionId, workspaceId, recovery.value)); return
       }
       probedRestoreSessions.current.add(sessionId)
-      const restore = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', { targetSessionId: sessionId }))
+      const restore = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: sessionId }))
       if (!restore.ok) {
         setHomeNote('作品中的恢复状态无法验证，已停止打开。')
         setExportNote('作品中的恢复状态无法验证，未切换工作区。')
@@ -1153,28 +1521,52 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (!targetSessionId) importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const sourcePath = await ctx.workspaces.pickDirectory()
     if (!sourcePath) { closeImportFlow(); return }
-    let sourceWorkspace: Awaited<ReturnType<typeof ctx.workspaces.create>> | undefined
+    let sourceSessionId: SessionId | undefined
+    let createdSourceWorkspaceId: WorkspaceId | undefined
+    let createdTargetWorkspaceId: WorkspaceId | undefined
     try {
-      sourceWorkspace = await ctx.workspaces.create({ path: sourcePath })
-      const sourceSessionId = await ctx.workspaces.connectWorkspace(sourceWorkspace.workspaceId)
+      const sourceRegistration = await registerFlowWorkspace(sourcePath)
+      if (sourceRegistration.created) createdSourceWorkspaceId = sourceRegistration.workspace.workspaceId
+      sourceSessionId = await ctx.workspaces.connectWorkspace(sourceRegistration.workspace.workspaceId)
+      bindTemporarySource(sourceSessionId, sourceRegistration.workspace.workspaceId, sourceRegistration.created)
       let destinationSessionId = targetSessionId
       let destinationWorkspaceId = targetWorkspaceId
       if (!destinationSessionId || !destinationWorkspaceId) {
         const targetPath = await ctx.workspaces.pickDirectory()
-        if (!targetPath) { closeImportFlow(); return }
-        const targetWorkspace = await ctx.workspaces.create({ path: targetPath })
-        destinationWorkspaceId = targetWorkspace.workspaceId
+        if (!targetPath) {
+          const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
+          closeImportFlow()
+          if (!sourceCleaned) setHomeNote('已取消导入，但临时来源入口未能自动移除。')
+          return
+        }
+        const targetRegistration = await registerFlowWorkspace(targetPath)
+        destinationWorkspaceId = targetRegistration.workspace.workspaceId
+        if (targetRegistration.created) createdTargetWorkspaceId = destinationWorkspaceId
         destinationSessionId = await ctx.workspaces.connectWorkspace(destinationWorkspaceId)
       }
       setImportFlow({ kind: 'working', message: '正在检查可导入的文件…' })
-      const probe = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', {
+      const probe = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', {
         sourceSessionId, targetSessionId: destinationSessionId,
       }))
       if (!probe.ok || probe.value.state !== 'ready') {
-        closeImportFlow(); setHomeNote(probe.ok ? probe.value.message ?? '目录不能导入。' : '导入检查没有完成。'); return
+        const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
+        const targetCleaned = createdTargetWorkspaceId ? await cleanupFlowWorkspace(createdTargetWorkspaceId) : true
+        closeImportFlow()
+        const note = probe.ok ? probe.value.message ?? '目录不能导入。' : '导入检查没有完成。'
+        setHomeNote(sourceCleaned && targetCleaned ? note : `${note} 临时工作区入口未能自动移除。`)
+        return
       }
       setImportFlow(importReview(sourceSessionId, destinationSessionId as string, destinationWorkspaceId as string, probe.value))
     } catch (error) {
+      const sourceCleaned = sourceSessionId
+        ? await cleanupTemporarySource(sourceSessionId)
+        : createdSourceWorkspaceId ? await cleanupFlowWorkspace(createdSourceWorkspaceId) : true
+      const targetCleaned = createdTargetWorkspaceId ? await cleanupFlowWorkspace(createdTargetWorkspaceId) : true
+      if (error instanceof FlowWorkspaceCleanupError || !sourceCleaned || !targetCleaned) {
+        closeImportFlow()
+        setHomeNote('导入没有开始；临时工作区入口未能自动移除。')
+        return
+      }
       throw error
     }
   }
@@ -1182,34 +1574,49 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (importFlow.kind !== 'review') return
     const flow = importFlow
     setImportFlow({ kind: 'working', message: '正在复制作品文件…' })
-    const applied = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'project.importApply', {
+    const applied = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importApply', {
       sourceSessionId: flow.sourceSessionId, targetSessionId: flow.targetSessionId, probeToken: flow.probe.token,
     }))
     if (!applied.ok) {
-      const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', { targetSessionId: flow.targetSessionId }))
-      if (recovery.ok && recovery.value.state === 'recoverable') setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, recovery.value))
-      else { closeImportFlow(false); setHomeNote('导入没有完成，请重试。') }
+      const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: flow.targetSessionId }))
+      const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
+      if (recovery.ok && recovery.value.state === 'recoverable') {
+        setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, recovery.value))
+        if (!sourceCleaned) setHomeNote('未完成导入仍可恢复，但临时来源入口未能自动移除。')
+      } else {
+        const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
+        closeImportFlow(false)
+        setHomeNote(sourceCleaned && targetCleaned ? '导入没有完成，请重试。' : '导入没有完成；临时工作区入口未能自动移除。')
+      }
       return
     }
-    const initialized = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'project.init', { sessionId: flow.targetSessionId, newProject: false }))
-    if (!initialized.ok) { closeImportFlow(false); setHomeNote('导入已完成，但项目初始化没有完成。'); return }
+    const initialized = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.init', { sessionId: flow.targetSessionId, newProject: false }))
+    const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
+    preserveFlowWorkspace(flow.targetWorkspaceId)
+    if (!initialized.ok) {
+      closeImportFlow(false)
+      setHomeNote(sourceCleaned ? '导入已完成，但项目初始化没有完成。' : '导入已完成，但项目初始化和临时入口清理没有完成。')
+      return
+    }
     ctx.sessions.open(flow.targetSessionId as SessionId)
     triggerExistingIndex(flow.targetWorkspaceId as WorkspaceId, flow.targetSessionId as SessionId)
     closeImportFlow(false)
+    if (!sourceCleaned) setHomeNote('作品已导入；临时来源入口未能自动移除。')
   }
   const cleanupImportFlow = async () => {
     if (importFlow.kind === 'recover') { setImportFlow({ kind: 'cleanup-confirm', targetSessionId: importFlow.targetSessionId, targetWorkspaceId: importFlow.targetWorkspaceId, receiptId: importFlow.probe.receiptId! }); return }
     if (importFlow.kind !== 'cleanup-confirm') return
     const flow = importFlow
     setImportFlow({ kind: 'working', message: '正在安全清理未完成导入…' })
-    const cleaned = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'project.importCleanup', { targetSessionId: flow.targetSessionId, receiptId: flow.receiptId }))
+    const cleaned = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importCleanup', { targetSessionId: flow.targetSessionId, receiptId: flow.receiptId }))
     if (cleaned.ok) {
       if (current === flow.targetSessionId) ctx.sessions.clear()
+      const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
       closeImportFlow()
-      setHomeNote('已清理未完成导入。')
+      setHomeNote(targetCleaned ? '已清理未完成导入。' : '已清理未完成导入，但临时工作区入口未能自动移除。')
       return
     }
-    const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call('/manuscript', 'project.importProbe', { targetSessionId: flow.targetSessionId }))
+    const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: flow.targetSessionId }))
     if (recovery.ok && recovery.value.state === 'recoverable') {
       setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, { ...recovery.value, message: recovery.value.message ?? '清理没有完成；文件未被自动删除。' }))
       return
@@ -1228,7 +1635,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (!session) return
     setSnapshotBusy(true)
     setSnapshotFlow({ kind: 'working', message: '正在读取作品快照…' })
-    const listed = await safeRpcCall<SnapshotView[]>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.list', { sessionId: session.sessionId }))
+    const listed = await safeRpcCall<SnapshotView[]>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.list', { sessionId: session.sessionId }))
     setSnapshotBusy(false)
     if (!listed.ok) { closeSnapshotFlow(false); setSnapshotNote('快照列表没有读取完成，请重试。'); return }
     setSnapshotFlow({ kind: 'list', snapshots: listed.value, note })
@@ -1242,7 +1649,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (editorDirty) { setSnapshotNote('请先保存当前未保存内容，再创建快照。'); return }
     setSnapshotBusy(true)
     setSnapshotFlow({ kind: 'working', message: '正在创建整部作品文本快照…' })
-    const result = await safeRpcCall<SnapshotView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.create', { sessionId: session.sessionId }))
+    const result = await safeRpcCall<SnapshotView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.create', { sessionId: session.sessionId }))
     setSnapshotBusy(false)
     if (!result.ok) { closeSnapshotFlow(false); setSnapshotNote('快照没有创建，请重试。'); return }
     setSnapshotNote(`已创建快照：${snapshotSummary(result.value)}`)
@@ -1254,59 +1661,75 @@ function Root({ ctx }: { ctx: ShellContext }) {
     setSnapshotFlow({ kind: 'working', message: '请选择一个新的空文件夹作为恢复目标…' })
     const targetPath = await ctx.workspaces.pickDirectory()
     if (!targetPath) { setSnapshotBusy(false); await loadSnapshotList('已取消选择恢复目标。'); return }
+    let createdTargetWorkspaceId: WorkspaceId | undefined
     try {
-      const target = await ctx.workspaces.create({ path: targetPath })
+      const targetRegistration = await registerFlowWorkspace(targetPath)
+      const target = targetRegistration.workspace
+      if (targetRegistration.created) createdTargetWorkspaceId = target.workspaceId
       const targetSessionId = await ctx.workspaces.connectWorkspace(target.workspaceId)
-      const probe = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', {
+      const probe = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', {
         sourceSessionId: session.sessionId,
         targetSessionId,
         snapshotId: snapshot.snapshotId,
       }))
       setSnapshotBusy(false)
       if (!probe.ok || probe.value.state !== 'ready' || !probe.value.token) {
+        const targetCleaned = createdTargetWorkspaceId ? await cleanupFlowWorkspace(createdTargetWorkspaceId) : true
         closeSnapshotFlow(false)
-        setSnapshotNote(probe.ok ? probe.value.message ?? '目标目录不能用于恢复。' : '恢复检查没有完成。')
+        const note = probe.ok ? probe.value.message ?? '目标目录不能用于恢复。' : '恢复检查没有完成。'
+        setSnapshotNote(targetCleaned ? note : `${note} 临时工作区入口未能自动移除。`)
         return
       }
       setSnapshotFlow(snapshotReview(session.sessionId, targetSessionId, target.workspaceId, probe.value, snapshot))
-    } catch {
+    } catch (error) {
+      const targetCleaned = createdTargetWorkspaceId ? await cleanupFlowWorkspace(createdTargetWorkspaceId) : true
       setSnapshotBusy(false)
       closeSnapshotFlow(false)
-      setSnapshotNote('恢复目标没有打开，请重试。')
+      setSnapshotNote(error instanceof FlowWorkspaceCleanupError || !targetCleaned
+        ? '恢复没有开始；临时工作区入口未能自动移除。'
+        : '恢复目标没有打开，请重试。')
     }
   }
-  const finishRestoredCopy = (targetSessionId: string, targetWorkspaceId: string) => {
+  const finishRestoredCopy = async (targetSessionId: string, targetWorkspaceId: string, sourceSessionId: string) => {
+    const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
+    preserveFlowWorkspace(targetWorkspaceId)
     probedRestoreSessions.current.add(targetSessionId)
     verifiedRestoreSessions.current.add(targetSessionId)
     ctx.sessions.open(targetSessionId as SessionId)
     triggerExistingIndex(targetWorkspaceId as WorkspaceId, targetSessionId as SessionId)
     closeSnapshotFlow(false)
-    setSnapshotNote('已恢复为新的作品副本。')
+    setSnapshotNote(sourceCleaned ? '已恢复为新的作品副本。' : '已恢复作品副本；临时来源入口未能自动移除。')
   }
   const applySnapshotRestore = async () => {
     if (snapshotFlow.kind !== 'review') return
     const flow = snapshotFlow
     setSnapshotBusy(true)
     setSnapshotFlow({ kind: 'working', message: '正在恢复新的作品副本…' })
-    const applied = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreApply', {
+    const applied = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreApply', {
       sourceSessionId: flow.sourceSessionId,
       targetSessionId: flow.targetSessionId,
       snapshotId: flow.probe.snapshotId,
       token: flow.probe.token,
     }))
     setSnapshotBusy(false)
-    if (applied.ok) { finishRestoredCopy(flow.targetSessionId, flow.targetWorkspaceId); return }
-    const recovery = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', { targetSessionId: flow.targetSessionId }))
+    if (applied.ok) { await finishRestoredCopy(flow.targetSessionId, flow.targetWorkspaceId, flow.sourceSessionId); return }
+    const recovery = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: flow.targetSessionId }))
     if (recovery.ok && recovery.value.state === 'complete') {
-      finishRestoredCopy(flow.targetSessionId, flow.targetWorkspaceId)
+      await finishRestoredCopy(flow.targetSessionId, flow.targetWorkspaceId, flow.sourceSessionId)
       return
     }
     if (recovery.ok && recovery.value.state === 'recoverable') {
+      const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
       setSnapshotFlow(recoverSnapshot(flow.targetSessionId, flow.targetWorkspaceId, recovery.value))
+      if (!sourceCleaned) setSnapshotNote('未完成恢复仍可继续，但临时来源入口未能自动移除。')
       return
     }
+    const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
+    const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
     closeSnapshotFlow(false)
-    setSnapshotNote('恢复没有完成；目标文件未被当成完整作品打开。')
+    setSnapshotNote(sourceCleaned && targetCleaned
+      ? '恢复没有完成；目标文件未被当成完整作品打开。'
+      : '恢复没有完成；临时工作区入口未能自动移除。')
   }
   const continueSnapshotRestore = async () => {
     if (snapshotFlow.kind !== 'recover') return
@@ -1315,10 +1738,15 @@ function Root({ ctx }: { ctx: ShellContext }) {
     setSnapshotFlow({ kind: 'working', message: '请选择创建这份快照的原作品目录…' })
     const sourcePath = await ctx.workspaces.pickDirectory()
     if (!sourcePath) { setSnapshotBusy(false); setSnapshotFlow(recover); return }
+    let sourceSessionId: SessionId | undefined
+    let createdSourceWorkspaceId: WorkspaceId | undefined
     try {
-      const source = await ctx.workspaces.create({ path: sourcePath })
-      const sourceSessionId = await ctx.workspaces.connectWorkspace(source.workspaceId)
-      const probe = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', {
+      const sourceRegistration = await registerFlowWorkspace(sourcePath)
+      const source = sourceRegistration.workspace
+      if (sourceRegistration.created) createdSourceWorkspaceId = source.workspaceId
+      sourceSessionId = await ctx.workspaces.connectWorkspace(source.workspaceId)
+      bindTemporarySource(sourceSessionId, source.workspaceId, sourceRegistration.created)
+      const probe = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', {
         sourceSessionId,
         targetSessionId: recover.targetSessionId,
         snapshotId: recover.probe.snapshotId,
@@ -1328,10 +1756,17 @@ function Root({ ctx }: { ctx: ShellContext }) {
         setSnapshotFlow(snapshotReview(sourceSessionId, recover.targetSessionId, recover.targetWorkspaceId, probe.value))
         return
       }
+      const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
       setSnapshotFlow({ ...recover, probe: { ...recover.probe, message: probe.ok ? probe.value.message ?? '所选原作品不匹配。' : '原作品没有验证完成。' } })
-    } catch {
+      if (!sourceCleaned) setSnapshotNote('临时来源入口未能自动移除。')
+    } catch (error) {
+      const sourceCleaned = sourceSessionId
+        ? await cleanupTemporarySource(sourceSessionId)
+        : createdSourceWorkspaceId ? await cleanupFlowWorkspace(createdSourceWorkspaceId) : true
       setSnapshotBusy(false)
-      setSnapshotFlow({ ...recover, probe: { ...recover.probe, message: '原作品目录没有打开。' } })
+      setSnapshotFlow({ ...recover, probe: { ...recover.probe, message: error instanceof FlowWorkspaceCleanupError || !sourceCleaned
+        ? '临时来源入口未能自动移除。'
+        : '原作品目录没有打开。' } })
     }
   }
   const cleanupSnapshotRestore = async () => {
@@ -1348,18 +1783,19 @@ function Root({ ctx }: { ctx: ShellContext }) {
     const flow = snapshotFlow
     setSnapshotBusy(true)
     setSnapshotFlow({ kind: 'working', message: '正在安全清理未完成恢复…' })
-    const cleaned = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreCleanup', {
+    const cleaned = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreCleanup', {
       targetSessionId: flow.targetSessionId,
       receiptId: flow.receiptId,
     }))
     setSnapshotBusy(false)
     if (cleaned.ok) {
       if (current === flow.targetSessionId) ctx.sessions.clear()
+      const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
       closeSnapshotFlow()
-      setHomeNote('已清理未完成恢复。')
+      setHomeNote(targetCleaned ? '已清理未完成恢复。' : '已清理未完成恢复，但临时工作区入口未能自动移除。')
       return
     }
-    const recovery = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call('/manuscript', 'snapshot.restoreProbe', { targetSessionId: flow.targetSessionId }))
+    const recovery = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: flow.targetSessionId }))
     if (recovery.ok && recovery.value.state === 'recoverable') {
       setSnapshotFlow(recoverSnapshot(flow.targetSessionId, flow.targetWorkspaceId, { ...recovery.value, message: recovery.value.message ?? '清理没有完成；文件未被自动删除。' }))
       return
@@ -1368,13 +1804,33 @@ function Root({ ctx }: { ctx: ShellContext }) {
     closeSnapshotFlow()
     setHomeNote('清理没有完成；文件未被自动删除。')
   }
+  const cancelImportFlow = async () => {
+    const flow = importFlow
+    let cleaned = true
+    if (flow.kind === 'review') {
+      const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
+      const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
+      cleaned = sourceCleaned && targetCleaned
+    }
+    if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
+    closeImportFlow()
+    if (!cleaned) setHomeNote('已取消导入，但临时工作区入口未能自动移除。')
+  }
+  const cancelSnapshotFlow = async () => {
+    const flow = snapshotFlow
+    let cleaned = true
+    if (flow.kind === 'review') {
+      const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
+      const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
+      cleaned = sourceCleaned && targetCleaned
+    }
+    if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
+    closeSnapshotFlow()
+    if (!cleaned) setSnapshotNote('已取消恢复，但临时工作区入口未能自动移除。')
+  }
   const renderImportDialog = () => e(ImportDialog, {
     flow: importFlow,
-    onCancel: () => {
-      const flow = importFlow
-      if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
-      closeImportFlow()
-    },
+    onCancel: () => void cancelImportFlow(),
     onApply: () => void applyImportFlow(),
     onContinue: () => importFlow.kind === 'recover' ? void selectImportSource(importFlow.targetSessionId as SessionId, importFlow.targetWorkspaceId as WorkspaceId).catch(() => closeImportFlow()) : undefined,
     onCleanup: () => void cleanupImportFlow(),
@@ -1382,11 +1838,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const renderSnapshotDialog = () => e(SnapshotDialog, {
     flow: snapshotFlow,
     dirty: editorDirty,
-    onCancel: () => {
-      const flow = snapshotFlow
-      if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
-      closeSnapshotFlow()
-    },
+    onCancel: () => void cancelSnapshotFlow(),
     onCreate: () => void createSnapshot(),
     onSelect: (snapshot: SnapshotView) => void restoreAsCopy(snapshot),
     onApply: () => void applySnapshotRestore(),
@@ -1536,13 +1988,46 @@ function Root({ ctx }: { ctx: ShellContext }) {
         ),
       ),
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
+      e(SearchPanel, {
+        ctx,
+        sessionId: session.sessionId,
+        revision: treeRevision,
+        navigationBlocked: editorDirty,
+        onOpen: (hit: SearchHit) => openDocument(hit.path, hit),
+      }),
+      e('details', { className: 'archive-panel', onToggle: (event: ChangeEvent<HTMLDetailsElement>) => { if (event.currentTarget.open) void loadArchives() } },
+        e('summary', null,
+          e('span', null, '已归档'),
+          visibleArchives(archives).length ? e('small', null, visibleArchives(archives).length) : null,
+        ),
+        e('div', { className: 'archive-list' },
+          archiveBusy && !archives.length ? e('p', { className: 'muted' }, '读取中…') : null,
+          !archiveBusy && !visibleArchives(archives).length ? e('p', { className: 'muted' }, '还没有归档文档。') : null,
+          visibleArchives(archives).map((item) => e('article', { key: item.archiveId },
+            e('div', null,
+              e('strong', null, documentName(item.path)),
+              e('small', null, `${archiveStateText(item)} · ${new Date(item.createdAt).toLocaleString()}`),
+              e('code', null, item.path),
+            ),
+            item.state === 'archived' || item.state === 'pending-restore'
+              ? e('button', { type: 'button', disabled: archiveBusy || editorDirty, onClick: () => void restoreArchived(item) }, item.state === 'pending-restore' ? '继续恢复' : '恢复')
+              : item.state === 'pending-archive'
+                ? e('button', { type: 'button', disabled: archiveBusy || editorDirty, onClick: () => void continueArchive(item) }, '继续归档')
+                : null,
+            item.message ? e('p', { className: 'warning' }, '归档内容无法安全操作，已停止。') : null,
+          )),
+          archiveInvalid ? e('p', { className: 'warning', role: 'alert' }, `${archiveInvalid} 条归档记录已损坏，未提供恢复操作。`) : null,
+          archiveNote ? e('p', { className: 'warning', role: 'alert' }, archiveNote) : null,
+        ),
+      ),
+      workbenchNote ? e('p', { className: 'warning pad', role: 'alert' }, workbenchNote) : null,
       currentWorkspace && indexStatus[currentWorkspace.workspaceId] ? e('div', { className: 'index-status', role: indexStatus[currentWorkspace.workspaceId] === 'failed' ? 'alert' : 'status' },
         e('span', null, indexStatus[currentWorkspace.workspaceId] === 'initializing' ? '索引中' : indexStatus[currentWorkspace.workspaceId] === 'queued' ? '索引已排队' : indexStatus[currentWorkspace.workspaceId] === 'failed' ? '索引失败' : '未索引'),
         e('button', { type: 'button', onClick: () => triggerExistingIndex(currentWorkspace.workspaceId, session.sessionId, true) }, indexStatus[currentWorkspace.workspaceId] === 'failed' ? '重试' : '重建索引'),
       ) : null,
-      e(Tree, { ctx, sessionId: session.sessionId, active: path, onOpen: setPath, revision: treeRevision, onOrder: setFiles }),
+      e(Tree, { ctx, sessionId: session.sessionId, active: path, onOpen: openDocument, onManage: openManage, revision: treeRevision }),
     ),
-    e(Editor, { ctx, session, path, files, onOpen: setPath, create: () => { void create('chapter') }, externalRevision: contentRevision, onDirtyChange: setEditorDirty }),
+    e(Editor, { ctx, session, path, files, onOpen: openDocument, create: () => { void create('chapter') }, externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal }),
     assistantOpen ? e(Chat, {
       ctx,
       session,
@@ -1562,6 +2047,15 @@ function Root({ ctx }: { ctx: ShellContext }) {
     }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')),
     renderImportDialog(),
     renderSnapshotDialog(),
+    managePath ? e(FileManageDialog, {
+      key: managePath,
+      path: managePath,
+      busy: manageBusy,
+      note: manageNote,
+      onClose: closeManage,
+      onRename: (name: string) => void renameManaged(name),
+      onArchive: () => void archiveManaged(),
+    }) : null,
   )
 }
 
@@ -1574,6 +2068,8 @@ const redesignedStyles = `${styles}
 const playfulStyles = `
 :root{--ink:#173f30;--leaf:#3d755a;--mint:#dcebdd;--paper:#fffdf6;--sand:#f2ecdf;--line:#d8cfbd;--ease:cubic-bezier(.22,1,.36,1)}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.search-panel{display:grid;gap:7px;padding:9px 10px;border-bottom:1px solid var(--line);background:#f5efe2}.search-panel form{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:5px}.search-panel input,.search-panel select{box-sizing:border-box;min-width:0;border:1px solid #c9c3b5;background:#fffdf7;color:#294638}.search-panel input{padding:7px 9px;border-radius:12px 3px 3px 12px}.search-panel form>button{padding:0;border:1px solid #b9c5b8;border-radius:3px 10px 10px 3px;background:#dfeadd;color:#285c45}.search-panel select{grid-column:1/-1;padding:4px 7px;border:0;background:transparent;color:#657168;font-size:11px}.search-summary{display:flex;gap:6px;flex-wrap:wrap;color:#687168;font-size:11px}.search-summary strong{color:#9a4b3b}.search-results{max-height:210px;margin:0;padding:0;overflow:auto;list-style:none;display:grid;gap:4px}.search-results button{box-sizing:border-box;width:100%;display:grid;gap:2px;padding:7px 8px;border:0;border-radius:5px;background:#fffaf0;text-align:left;color:#304a3d}.search-results button:hover:not(:disabled){background:#dfeadd;transform:translateX(2px)}.search-results button:disabled{opacity:.55}.search-results strong,.search-results span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.search-results strong{font-size:11px}.search-results span{font-size:11px;color:#687168}.search-panel p{margin:0;font-size:11px}.chapter-navigation{display:flex;align-items:center;gap:5px;margin-left:auto}.chapter-navigation button{width:26px;height:26px;padding:0;border:1px solid #c7c4b7;border-radius:50%;background:#fffdf7;color:#315b47;font-size:18px;line-height:1}.chapter-navigation span{min-width:48px;text-align:center;color:#6a746b;font-variant-numeric:tabular-nums}.editor-header>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.editor-header>span:last-child{white-space:nowrap;margin-left:10px}
+.tree-file-row{position:relative;display:flex;align-items:center}.tree-file-row .tree-main{min-width:0;padding-right:34px}.tree-file-row .tree-manage{position:absolute;right:4px;width:28px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;color:#667269;opacity:0}.tree-file-row:hover .tree-manage,.tree-file-row:focus-within .tree-manage{opacity:1}.tree-manage:hover{background:#d5e3d3!important;transform:none!important}.archive-panel{border-bottom:1px solid var(--line);background:#eee8da}.archive-panel>summary{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;color:#596a60;list-style:none}.archive-panel>summary::-webkit-details-marker{display:none}.archive-panel>summary small{display:grid;place-items:center;min-width:19px;height:19px;border-radius:50%;background:#d5e3d3}.archive-list{display:grid;gap:6px;max-height:230px;padding:0 9px 9px;overflow:auto}.archive-list>p{margin:4px;font-size:11px}.archive-list article{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid #d7d0c1;border-radius:7px;background:#fffaf0}.archive-list article>div{min-width:0;display:grid;gap:1px;margin-right:auto}.archive-list article strong,.archive-list article small,.archive-list article code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archive-list article small,.archive-list article code{color:#6c756d;font-size:10px}.archive-list article>button{flex:none;padding:4px 7px;border:1px solid #b9c5b8;border-radius:10px;background:#e3ecdf;color:#285c45}.archive-list article>p{flex-basis:100%;margin:0}.file-dialog-overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:#272a2666;backdrop-filter:blur(4px)}.file-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:18px;padding:24px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 28px 90px #2c2d2838}.file-dialog header,.file-dialog footer{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.file-dialog header>div{min-width:0;display:grid;gap:3px}.file-dialog h2{margin:0;color:#264b3a;font:600 26px/1.25 "Noto Serif SC","Songti SC",serif}.file-dialog small,.file-dialog code,.file-dialog p{color:#687168}.file-dialog code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-dialog-actions{display:grid;gap:8px}.file-dialog-actions>button{display:grid;gap:3px;padding:13px 14px;border:1px solid #d7d0c1;border-radius:12px 4px 12px 4px;background:#f8f3e8;text-align:left;color:#2f4e40}.file-dialog-actions>button span{color:#6c756d;font-size:12px}.file-dialog form,.archive-confirm{display:grid;gap:12px}.file-dialog label{display:grid;gap:6px}.file-dialog input{box-sizing:border-box;width:100%;padding:10px 11px;border:1px solid #c9c3b5;border-radius:8px;background:#fff}.file-dialog footer{justify-content:flex-end;align-items:center}.file-dialog footer button{padding:7px 12px;border:1px solid #bfc5b8;border-radius:12px 4px 12px 4px;background:#fff;color:#2c5744}.file-dialog footer .primary-action{background:#315e48;color:#fff}.file-dialog footer .danger-action{border-color:#a9695f;background:#8f4d43;color:#fff}.file-dialog>.warning{margin:0}.archive-confirm p{margin:0;line-height:1.7}
 button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--ease),background-color 220ms ease,border-color 220ms ease,color 220ms ease,box-shadow 220ms ease}button:active,.tree-row:active,summary:active{transform:scale(.96)}
 .icon-button{display:grid!important;place-items:center;min-width:30px!important;width:30px;height:30px;padding:0!important;border-radius:50%!important;font-size:17px;line-height:1}.icon-button:hover{transform:rotate(8deg) scale(1.06)!important}
 .chrome{animation:bar-drop 520ms var(--ease) both}.shell>.sidebar{animation:panel-left 560ms 70ms var(--ease) both}.shell>.editor,.shell>.empty-paper{animation:panel-rise 560ms 120ms var(--ease) both}.shell>.chat{animation:panel-right 560ms 170ms var(--ease) both}

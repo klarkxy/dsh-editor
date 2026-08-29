@@ -1,11 +1,10 @@
-import { readdir } from 'node:fs/promises'
 import type {
   FileSystemLike,
   FsInfoLike,
   FsTargetLike,
   SandboxExecutionPolicyLike,
 } from '../host.ts'
-import { confineAbsolute, normalizeWorkspaceRelative, parentRelative, PathConfineError } from './paths.ts'
+import { normalizeWorkspaceRelative, parentRelative, PathConfineError } from './paths.ts'
 
 export type DirKind = 'file' | 'directory' | 'other'
 
@@ -134,37 +133,8 @@ function sortDirEntries(entries: DirEntry[]): DirEntry[] {
   })
 }
 
-async function listDirNodeFallback(root: string, relative: string): Promise<DirEntry[]> {
-  const abs = confineAbsolute(root, relative)
-  let listed
-  try {
-    listed = await readdir(abs, { withFileTypes: true })
-  } catch (error) {
-    mapFsError(error)
-  }
-  const entries: DirEntry[] = []
-  for (const entry of listed) {
-    if (entry.name === '.' || entry.name === '..') continue
-    try {
-      const type: DirKind = entry.isSymbolicLink() ? 'other' : entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other'
-      entries.push({ name: entry.name, type })
-    } catch {
-      continue
-    }
-  }
-  return sortDirEntries(entries)
-}
-
 export async function listDir(context: WorkspaceFileContext, relative: string): Promise<DirEntry[]> {
-  try {
-    return await listDirStrict(context, relative)
-  } catch (error) {
-    if (error instanceof PathConfineError) throw error
-    if (error instanceof FileOpError && (error.code === 'DENIED' || error.code === 'IO')) {
-      return await listDirNodeFallback(context.cwd, relative)
-    }
-    throw error
-  }
+  return await listDirStrict(context, relative)
 }
 
 /** Provider-confined directory listing with no native fallback, for security-sensitive walks. */

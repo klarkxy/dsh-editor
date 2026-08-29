@@ -7,6 +7,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,7 +20,7 @@ const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-matrix-'))
 const dshHome = path.join(runRoot, 'home')
 const staging = path.join(runRoot, 'packages')
 const profile = 'web'
-const basePort = Number(process.env.E2E_MATRIX_PORT || 8790)
+const configuredBasePort = process.env.E2E_MATRIX_PORT ? Number(process.env.E2E_MATRIX_PORT) : undefined
 const dshInstallation = resolveDshInstallation()
 const dshBin = dshInstallation.cliPath
 const report = {
@@ -151,6 +152,19 @@ async function waitReady(port, child) {
   throw new Error(`DSH did not become ready at ${base}`)
 }
 
+async function freeLoopbackPort() {
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.unref()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : 0
+      server.close((error) => error ? reject(error) : resolve(port))
+    })
+  })
+}
+
 async function stopTree(child) {
   if (!child?.pid || child.exitCode != null) return
   const exited = new Promise((resolve) => child.once('exit', resolve))
@@ -171,7 +185,7 @@ async function probeWeb(browser, name, expectedPlugins, index) {
   const workspace = path.join(out, 'workspaces', name)
   fs.mkdirSync(workspace, { recursive: true })
   fs.writeFileSync(path.join(workspace, '交付验证.md'), '# 交付验证\n', 'utf8')
-  const port = basePort + index
+  const port = configuredBasePort === undefined ? await freeLoopbackPort() : configuredBasePort + index
   const stdout = []
   const stderr = []
   const child = spawn(

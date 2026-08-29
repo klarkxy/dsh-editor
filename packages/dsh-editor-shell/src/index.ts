@@ -1,9 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { registerEditorFilesRpc } from '../../dsh-manuscript/src/editor-files.ts'
 import { createNovelKnowledgeTool } from './novel-knowledge.ts'
 import { createProposalTool, editorToolGuard, EDITOR_PROMPT } from './proposal-tool.ts'
 
 export const name = 'dsh-editor-shell'
-export const inject = ['tools', 'systemPrompt'] as const
+export const inject = ['tools', 'systemPrompt', 'connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
 
 type HostContext = Context & {
   tools: {
@@ -19,5 +20,6 @@ export function apply(ctx: Context): void {
   host.tools.register(createNovelKnowledgeTool())
   host.tools.register(createProposalTool())
   ctx.effect(() => host.tools.guard(editorToolGuard))
+  ctx.effect(() => registerEditorFilesRpc(ctx), 'dsh-editor-shell.editorFilesRpc')
   host.systemPrompt.section({ name: 'dsh-editor:novel-kernel', order: 90, text: EDITOR_PROMPT })
 }

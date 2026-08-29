@@ -24,16 +24,20 @@ Electron（窗口、资源校验、子进程生命周期）
 
 - DSH：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry、sandbox、文件 API 与持久化。
 - Electron：单窗口、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。
-- `dsh-editor-shell` Renderer：编辑 buffer、选区和视图状态；通过既有 `/manuscript` RPC 读取项目上下文；不读取凭据、绝对路径或 Node 文件系统。
-- `dsh-editor-shell` Host：最小写作边界、只读 `novel_knowledge` 与预览式修改提案；不保存模式状态，也不装载完整 skill。
-- `dsh-manuscript` Host：`/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、DSH_HOME 草稿、FIM 与 `patch.complete`。
+- `dsh-editor-shell` Renderer：编辑 buffer、选区和视图状态；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；不读取凭据、绝对路径或 Node 文件系统。
+- `dsh-editor-shell` Host：loopback-only 项目导入、快照、安全重命名、可恢复归档，以及只读 `novel_knowledge` 与预览式修改提案；复用同一 live-session workspace authority，不保存模式状态，也不装载完整 skill。
+- `dsh-manuscript` Host：公开 `/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、全文搜索、DSH_HOME 草稿、FIM 与 `patch.complete`；公开产物不含 Node 文件系统能力。
 - `dsh-grill`：保持为普通 DSH 可独立安装的公共插件，不进入桌面 profile 或桌面运行依赖。
 
 没有 BFF、第二份 Chat 历史、provider registry、数据库、模式状态、工作流引擎、索引服务、云同步或后台守护进程。Chat Renderer 不执行工具或直接调用模型。打开已有作品时，产品只向当前 DSH 会话提交一次受限初始化任务：Agent 把工作区内容视为不可信数据，不改正文，唯一目标写入为 `.dsh-editor/作品索引.md`；实际工具权限、审批和沙箱仍由 DSH 权威控制。
 
-外部作品导入同样只经过 `/manuscript`：两端必须是已解析、已注册且附着 live session 的工作区，Renderer 不传递 cwd 或绝对文件路径。Probe 只读取源、检查空目标并产生绑定两端 canonical root key 与文件版本/哈希的 token；Apply 会完整重 probe 后才以 `.dsh-editor-import.json` 的 `copying` 清单开始 no-clobber 写入 `正文/`。TXT 保持文本内容而改为 `.md`，隐藏路径、链接和非文本均跳过；完整项目不支持撤销。中断仅能在重新选择同一源后续传，或在每个清单拥有文件的哈希仍匹配时显式清理。Node 目录操作仅在 Host 已解析的根内逐组件拒绝 symlink/junction 后使用，文件内容和清单仍经版本化 manuscript 文件 API 读写。
+外部作品导入只经过私有 `/dsh-editor-workbench`：两端必须是已解析、已注册且附着 live session 的工作区，Renderer 不传递 cwd 或绝对文件路径。Probe 只读取源、检查空目标并产生绑定两端 canonical root key 与文件版本/哈希的 token；Apply 会完整重 probe 后才以 `.dsh-editor-import.json` 的 `copying` 清单开始 no-clobber 写入 `正文/`。TXT 保持文本内容而改为 `.md`，隐藏路径、链接和非文本均跳过；完整项目不支持撤销。中断仅能在重新选择同一源后续传，或在每个清单拥有文件的哈希仍匹配时显式清理。Node 目录操作仅在 Host 已解析的根内逐组件拒绝 symlink/junction 后使用，文件内容和清单仍经版本化稿件文件原语读写。
 
-整部作品文本快照保存在源工作区 `.dsh-editor/snapshots/<uuid>/`：先在同级 `.creating-<uuid>` 写入逐文件文本 payload 和校验 manifest，再同父目录 rename 发布。快照不包含未保存编辑 buffer。恢复只能经 `snapshot.restore*` 到新的空目标；`.dsh-editor-restore.json` 绑定源根、目标根、快照、token 与清单，支持显式续传或在哈希未变时安全清理，绝不原地覆盖源作品。
+整部作品文本快照保存在源工作区 `.dsh-editor/snapshots/<uuid>/`：先在同级 `.creating-<uuid>` 写入逐文件文本 payload 和校验 manifest，再同父目录 rename 发布。快照不包含未保存编辑 buffer。恢复只能经私有通道的 `snapshot.restore*` 到新的空目标；`.dsh-editor-restore.json` 绑定源根、目标根、快照、token 与清单，支持显式续传或在哈希未变时安全清理，绝不原地覆盖源作品。
+
+文件整理仍由 live session 建立工作区 authority，并只在私有通道开放。`file.rename` 仅允许同目录、保留扩展名的 Markdown/TXT 改名；`archive.*` 把文档移动到 `.dsh-editor/archive/<timestamp>-<uuid>/`，用 root-bound、hash-protected manifest 记录 `moving/archived/restoring/restored`。Windows 实际移动使用经过运行时验证的 `System.IO.File.Move(source,target)` no-replace 原语，经固定 PowerShell 脚本、最小环境和 15 秒超时调用；目标存在、源版本变化、链接路径或完整性异常均 fail closed，不回退到 copy-delete 或普通覆盖式 rename。损坏归档会计数并展示，但不会被宣传为可恢复项。
+
+`search.text` 仅做有界、字面量、大小写不敏感的 Markdown/TXT 扫描，拒绝正则与控制字符，跳过隐藏、生成和链接路径，并限制文件数、总字节和结果数。Renderer 只接收路径、行列、片段、偏移和版本；定位前再次比较版本。章节导航由递归工作区列表中完整的 `正文/**/*.{md,txt}` 自然排序产生，不依赖用户是否展开文件树。
 
 ## Desktop profile 与数据
 
@@ -59,9 +63,9 @@ profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记�
 
 未知节点或工具显示通用降级卡。Renderer 不持久化对话副本；刷新后仍以 DSH snapshot 为准。
 
-## Manuscript RPC
+## Host RPC
 
-所有 RPC 都携带 `sessionId` 和工作区相对路径。Host 忽略浏览器提供的 cwd/provider/model，按下列顺序建立 authority：
+公开 `/manuscript` 与私有 `/dsh-editor-workbench` 都携带 `sessionId` 和工作区相对路径。Host 忽略浏览器提供的 cwd/provider/model，并复用同一条 authority 链：
 
 1. 取得 live session；
 2. 读取 immutable `session.header.cwd`；
@@ -85,13 +89,13 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 
 ## 公开 Web 插件边界
 
-`dsh-manuscript` 在普通 `web` profile 中继续使用 `shell.overlay` 抽屉，不占官方 root；`dsh-grill` 继续只注册工具和提示。两者仍可单独安装、共存和任意顺序卸载。桌面 shell 不进入公开 tarball。
+`dsh-manuscript` 在普通 `web` profile 中继续使用 `shell.overlay` 抽屉，不占官方 root；其公开 tarball 只含 provider-confined 稿件能力，不含 Node 文件系统或桌面生命周期端点。`dsh-grill` 继续只注册工具和提示。两者仍可单独安装、共存和任意顺序卸载；桌面 shell 与 `/dsh-editor-workbench` 不进入公开 tarball。
 
 ## 非目标与后置
 
 - 安装器、自动更新、代码签名、发布；
 - 句内卡片、`/`/`@` 面板、审阅 gutter、附件和完整官方高级管理界面；
-- rename/delete/move/建目录、watch、index、Git UI；
+- 永久删除、跨目录移动、任意建目录、watch、独立索引服务、Git UI；
 - Android、远程多用户、云同步；
 - 未经授权的 commit、push、tag 或 release。
 

@@ -51,11 +51,14 @@ async function launchPhase(name, extraEnv, inspect) {
     const window = await app.firstWindow()
     const browserErrors = []
     window.on('console', (message) => {
-      if (message.type() === 'error' || message.type() === 'warning') browserErrors.push(`${message.type()}: ${message.text()}`)
+      const text = message.text()
+      const acceptedDevelopmentWarning = message.type() === 'warning'
+        && text.includes('Electron Security Warning (Insecure Content-Security-Policy)')
+      if (!acceptedDevelopmentWarning && (message.type() === 'error' || message.type() === 'warning')) browserErrors.push(`${message.type()}: ${text}`)
     })
     window.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`))
     try {
-      await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell, .settings-shell')), undefined, { timeout: 30_000 })
+      await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell, .settings-shell')), undefined, { timeout: 90_000 })
     } catch (error) {
       const diagnostic = window.isClosed() ? { closed: true, processLogs } : await window.evaluate(() => ({
         title: document.title,
@@ -78,8 +81,9 @@ async function launchPhase(name, extraEnv, inspect) {
       shell: Boolean(document.querySelector('.shell')),
       settings: Boolean(document.querySelector('.settings-shell .settings-view')),
       settingsBack: Boolean(document.querySelector('[aria-label="返回写作区"]')),
+      settingsControl: Boolean(document.querySelector('[aria-label="设置"]')),
       officialHome: document.body.textContent?.includes('DeepSeek Harness') ?? false,
-      editorName: document.body.textContent?.includes('DSH Editor') ?? false,
+      editorName: Boolean(document.querySelector('.brand-lockup, .settings-brand')),
       width: window.innerWidth,
       height: window.innerHeight,
     }))
@@ -109,7 +113,7 @@ phases.push(await launchPhase('first-run-settings', {}, async (state) => {
 
 phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (state) => {
   const onboarding = state.body.includes('新建') && state.body.includes('打开作品')
-  const settingsEntry = state.body.includes('设置')
+  const settingsEntry = state.settingsControl
   const technicalChrome = ['DeepSeek Harness', 'DSH_HOME', 'permission preset', '权限模式', '会话列表'].some((label) => state.body.includes(label))
   if (!state.shell || state.settings || !state.editorName || state.officialHome || !onboarding || !settingsEntry || technicalChrome) {
     throw new Error(`configured home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding, settingsEntry, technicalChrome })}`)

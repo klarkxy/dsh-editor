@@ -5,7 +5,7 @@ import { resolveWorkspaceAccess, WorkspaceAuthorityError } from './host.ts'
 import { dispatch, mapError } from './index.ts'
 import { createDraftStore, type DraftTableLike } from './rpc/draft.ts'
 import { FileOpError } from './rpc/files.ts'
-import { SnapshotError } from './rpc/snapshot.ts'
+import { SearchError } from './rpc/search.ts'
 
 function draftStoreFixture() {
   const rows = new Map<string, ReturnType<DraftTableLike['get']>>()
@@ -106,8 +106,8 @@ describe('manuscript Host workspace authority', () => {
       ok: false,
       error: { code: 'internal', message: 'boom', details: {} },
     })
-    expect(mapError(new SnapshotError('snapshot drift', 'STALE'))).toMatchObject({
-      error: { code: 'bad-request', details: { issues: [{ message: 'snapshot drift' }] } },
+    expect(mapError(new SearchError('bad query', 'BAD_QUERY'))).toMatchObject({
+      error: { code: 'bad-request', details: { issues: [{ message: 'bad query' }] } },
     })
   })
 
@@ -127,36 +127,14 @@ describe('manuscript Host workspace authority', () => {
     expect(writes).not.toHaveBeenCalled()
   })
 
-  it('resolves import source and target from separate live sessions', async () => {
+  it('does not expose desktop-only workspace lifecycle endpoints', async () => {
     const { host } = fixture()
-    const get = vi.fn((sessionId: string) => sessionId === 'session-1'
-      ? { id: 'session-1', header: { cwd: '/header/workspace' }, requestHeader: () => undefined }
-      : undefined)
-    host.sessions.get = get as ManuscriptHost['sessions']['get']
     await expect(dispatch(
       host as unknown as Context,
-      'project.importProbe',
-      { targetSessionId: 'session-1', sourceSessionId: 'forged-or-dead-source', cwd: '/forged/outside' },
+      'file.rename',
+      { sessionId: 'session-1', path: 'notes/a.md', newName: 'b.md' },
       new AbortController().signal,
-    )).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' })
-    expect(get).toHaveBeenCalledWith('session-1')
-    expect(get).toHaveBeenCalledWith('forged-or-dead-source')
-  })
-
-  it('resolves snapshot restore source and target from separate live sessions', async () => {
-    const { host } = fixture()
-    const get = vi.fn((sessionId: string) => sessionId === 'session-1'
-      ? { id: 'session-1', header: { cwd: '/header/workspace' }, requestHeader: () => undefined }
-      : undefined)
-    host.sessions.get = get as ManuscriptHost['sessions']['get']
-    await expect(dispatch(
-      host as unknown as Context,
-      'snapshot.restoreProbe',
-      { targetSessionId: 'session-1', sourceSessionId: 'forged-or-dead-source', snapshotId: '00000000-0000-4000-8000-000000000000', cwd: '/forged/outside' },
-      new AbortController().signal,
-    )).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' })
-    expect(get).toHaveBeenCalledWith('session-1')
-    expect(get).toHaveBeenCalledWith('forged-or-dead-source')
+    )).rejects.toThrow('unknown endpoint file.rename')
   })
 
   it('does not accept provider or model guesses from the RPC payload', async () => {
@@ -186,5 +164,16 @@ describe('manuscript Host workspace authority', () => {
       new AbortController().signal,
       drafts,
     )).resolves.toEqual({ draft: { path: 'notes/a.md', text: '草稿', baseText: '原文', baseVersion: 'v1' } })
+  })
+
+  it('keeps search behind the live-session workspace authority', async () => {
+    const { host, canonical, resolveCalls } = fixture()
+    await expect(dispatch(
+      host as unknown as Context,
+      'search.text',
+      { sessionId: 'session-1', cwd: '/forged/outside', query: 'needle', scope: 'project' },
+      new AbortController().signal,
+    )).resolves.toMatchObject({ results: [], scannedFiles: 0 })
+    expect(resolveCalls.every((call) => call.cwd === canonical)).toBe(true)
   })
 })
