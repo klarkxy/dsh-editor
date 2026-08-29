@@ -3,7 +3,7 @@ import { WORKBENCH_RPC_CHANNEL } from '../../dsh-editor-shell/src/workbench-rpc.
 import { asHost, resolveWorkspaceAccess } from './host.ts'
 import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
 import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './rpc/import.ts'
-import { archiveDocument, LifecycleError, listArchives, renameDocument, restoreArchive, type LifecycleAccess } from './rpc/lifecycle.ts'
+import { archiveDocument, LifecycleError, listArchives, moveManuscriptDocument, renameDocument, restoreArchive, type LifecycleAccess } from './rpc/lifecycle.ts'
 import { createManuscriptGroup, initializeProject, prepareNovelIndex, ProjectInitError } from './rpc/project.ts'
 import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './rpc/snapshot.ts'
 import { compileContext } from './rpc/context.ts'
@@ -104,6 +104,7 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
   }
   if (endpoint === 'snapshot.restoreCleanup') return await restoreCleanup({ target: snapshotAccess(access), receiptId: str(body, 'receiptId') })
   if (endpoint === 'file.rename') return await renameDocument({ access: lifecycleAccess(access), path: rel, newName: str(body, 'newName'), expectedVersion: str(body, 'expectedVersion') })
+  if (endpoint === 'file.moveManuscript') return await moveManuscriptDocument({ access: lifecycleAccess(access), path: rel, targetDirectory: str(body, 'targetDirectory'), expectedVersion: str(body, 'expectedVersion') })
   if (endpoint === 'archive.list') return await listArchives(lifecycleAccess(access))
   if (endpoint === 'archive.apply') return await archiveDocument({
     access: lifecycleAccess(access),

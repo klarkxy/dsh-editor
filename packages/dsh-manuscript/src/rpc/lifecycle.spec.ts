@@ -11,6 +11,7 @@ import {
   archiveDocument,
   LifecycleError,
   listArchives,
+  moveManuscriptDocument,
   moveWindowsNoReplace,
   renameDocument,
   restoreArchive,
@@ -87,6 +88,40 @@ describe('safe document lifecycle', () => {
     await expect(renameDocument({ access: access(root), path: '正文/002.md', newName: '已存在', expectedVersion: second.version })).rejects.toMatchObject({ code: 'EXISTS' })
     await expect(fs.readFile(path.join(root, '正文', '已存在.md'), 'utf8')).resolves.toBe('keep')
     await expect(fs.readFile(path.join(root, '正文', '002.md'), 'utf8')).resolves.toBe('two')
+  })
+
+  it('moves a saved manuscript document between visible manuscript directories without overwriting', async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, '正文', '第一卷'))
+    await fs.writeFile(path.join(root, '正文', '001.md'), '# one')
+    const observed = await readTextFile(access(root).files, '正文/001.md')
+    await expect(moveManuscriptDocument({ access: access(root), path: '正文/001.md', targetDirectory: '正文/第一卷', expectedVersion: observed.version }))
+      .resolves.toMatchObject({ path: '正文/第一卷/001.md' })
+    await expect(fs.readFile(path.join(root, '正文', '第一卷', '001.md'), 'utf8')).resolves.toBe('# one')
+    await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await fs.writeFile(path.join(root, '正文', '002.md'), 'source')
+    await fs.writeFile(path.join(root, '正文', '第一卷', '002.md'), 'occupied')
+    const second = await readTextFile(access(root).files, '正文/002.md')
+    await expect(moveManuscriptDocument({ access: access(root), path: '正文/002.md', targetDirectory: '正文/第一卷', expectedVersion: second.version })).rejects.toMatchObject({ code: 'EXISTS' })
+    await expect(fs.readFile(path.join(root, '正文', '002.md'), 'utf8')).resolves.toBe('source')
+    await expect(fs.readFile(path.join(root, '正文', '第一卷', '002.md'), 'utf8')).resolves.toBe('occupied')
+  })
+
+  it('rejects stale, same-directory, non-manuscript and linked move targets', async () => {
+    const root = await project(); const outside = path.join(base, 'move-outside')
+    await fs.mkdir(path.join(root, '正文', '第一卷'))
+    await fs.mkdir(outside)
+    await fs.writeFile(path.join(root, '正文', '001.md'), 'before')
+    const observed = await readTextFile(access(root).files, '正文/001.md')
+    await fs.writeFile(path.join(root, '正文', '001.md'), 'after')
+    await expect(moveManuscriptDocument({ access: access(root), path: '正文/001.md', targetDirectory: '正文/第一卷', expectedVersion: observed.version })).rejects.toMatchObject({ code: 'STALE' })
+    const latest = await readTextFile(access(root).files, '正文/001.md')
+    await expect(moveManuscriptDocument({ access: access(root), path: '正文/001.md', targetDirectory: '正文', expectedVersion: latest.version })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(moveManuscriptDocument({ access: access(root), path: '人物卡/001.md', targetDirectory: '正文/第一卷', expectedVersion: latest.version })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await fs.symlink(outside, path.join(root, '正文', '链接'), 'junction')
+    await expect(moveManuscriptDocument({ access: access(root), path: '正文/001.md', targetDirectory: '正文/链接', expectedVersion: latest.version })).rejects.toMatchObject({ code: 'BLOCKED' })
+    await expect(fs.readFile(path.join(root, '正文', '001.md'), 'utf8')).resolves.toBe('after')
   })
 
   it('rejects stale, read-only, escaping, case-only, and linked paths', async () => {

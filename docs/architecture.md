@@ -35,7 +35,7 @@ Electron（窗口、资源校验、子进程生命周期）
 
 整部作品文本快照保存在源工作区 `.dsh-editor/snapshots/<uuid>/`：先在同级 `.creating-<uuid>` 写入逐文件文本 payload 和校验 manifest，再同父目录 rename 发布。快照不包含未保存编辑 buffer。恢复只能经私有通道的 `snapshot.restore*` 到新的空目标；`.dsh-editor-restore.json` 绑定源根、目标根、快照、token 与清单，支持显式续传或在哈希未变时安全清理，绝不原地覆盖源作品。
 
-文件整理仍由 live session 建立工作区 authority，并只在私有通道开放。`structure.groupCreate` 只允许在 `正文` 下建立一个可见的一级卷/部目录，拒绝隐藏名、设备名、嵌套路径、链接、已占用目标和只读工作区；目录本身就是结构来源，不新增 `structure.json`。卷内章节继续通过公开 `file.create` 的既有父目录检查与 `createIfAbsent` 写入。`file.rename` 仅允许同目录、保留扩展名的 Markdown/TXT 改名；`archive.*` 把文档移动到 `.dsh-editor/archive/<timestamp>-<uuid>/`，用 root-bound、hash-protected manifest 记录 `moving/archived/restoring/restored`。Windows 实际移动使用经过运行时验证的 `System.IO.File.Move(source,target)` no-replace 原语，经固定 PowerShell 脚本、最小环境和 15 秒超时调用；目标存在、源版本变化、链接路径或完整性异常均 fail closed，不回退到 copy-delete 或普通覆盖式 rename。损坏归档会计数并展示，但不会被宣传为可恢复项。
+文件整理仍由 live session 建立工作区 authority，并只在私有通道开放。`structure.groupCreate` 只允许在 `正文` 下建立一个可见的一级卷/部目录，拒绝隐藏名、设备名、嵌套路径、链接、已占用目标和只读工作区；目录本身就是结构来源，不新增 `structure.json`。卷内章节继续通过公开 `file.create` 的既有父目录检查与 `createIfAbsent` 写入。`file.moveManuscript` 只允许已保存的可见 Markdown/TXT 在 `正文` 目录树内部跨目录移动，保留文件名和类型，并复用与归档相同的 expectedVersion、内容哈希、逐组件 no-follow、目标 absent 与 no-replace 原子移动检查。`file.rename` 仅允许同目录、保留扩展名的 Markdown/TXT 改名；`archive.*` 把文档移动到 `.dsh-editor/archive/<timestamp>-<uuid>/`，用 root-bound、hash-protected manifest 记录 `moving/archived/restoring/restored`。Windows 实际移动使用经过运行时验证的 `System.IO.File.Move(source,target)` no-replace 原语，经固定 PowerShell 脚本、最小环境和 15 秒超时调用；目标存在、源版本变化、链接路径或完整性异常均 fail closed，不回退到 copy-delete 或普通覆盖式 rename。损坏归档会计数并展示，但不会被宣传为可恢复项。
 
 `search.text` 仅做有界、字面量、大小写不敏感的 Markdown/TXT 扫描，拒绝正则与控制字符，跳过隐藏、生成和链接路径，并限制文件数、总字节和结果数。Renderer 只接收路径、行列、片段、偏移和版本；定位前再次比较版本。章节导航由递归工作区列表中完整的 `正文/**/*.{md,txt}` 自然排序产生，不依赖用户是否展开文件树。
 
@@ -99,7 +99,7 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 
 - 安装器、自动更新、代码签名、发布；
 - 句内卡片、`/`/`@` 面板、审阅 gutter、附件和完整官方高级管理界面；
-- 永久删除、跨目录移动、卷/部之外的任意建目录、watch、独立索引服务、Git UI；
+- 永久删除、`正文` 之外的跨目录移动、卷/部之外的任意建目录、watch、独立索引服务、Git UI；
 - Android、远程多用户、云同步；
 - 未经授权的 commit、push、tag 或 release。
 

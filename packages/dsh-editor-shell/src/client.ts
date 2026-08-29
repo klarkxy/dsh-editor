@@ -596,15 +596,21 @@ function FileManageDialog(props: {
   path: string
   busy: boolean
   note: string
+  moveDirectories: string[] | null
   onClose(): void
   onRename(name: string): void
+  onMove(directory: string): void
   onArchive(): void
 }) {
-  const [mode, setMode] = useState<'menu' | 'rename' | 'archive'>('menu')
+  const [mode, setMode] = useState<'menu' | 'rename' | 'move' | 'archive'>('menu')
   const [name, setName] = useState(() => documentName(props.path))
+  const [targetDirectory, setTargetDirectory] = useState('')
   const dialog = useRef<HTMLDivElement | null>(null)
   const first = useRef<HTMLButtonElement | null>(null)
   useEffect(() => { setMode('menu'); setName(documentName(props.path)); globalThis.setTimeout(() => first.current?.focus(), 0) }, [props.path])
+  useEffect(() => {
+    setTargetDirectory((current) => props.moveDirectories?.includes(current) ? current : (props.moveDirectories?.[0] ?? ''))
+  }, [props.moveDirectories])
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape' && !props.busy) { event.preventDefault(); props.onClose(); return }
@@ -635,6 +641,9 @@ function FileManageDialog(props: {
       e('button', { ref: first, className: 'icon-button', type: 'button', disabled: props.busy, onClick: props.onClose, 'aria-label': '关闭' }, '×'),
     ),
     mode === 'menu' ? e('div', { className: 'file-dialog-actions' },
+      props.path.startsWith('正文/') ? e('button', { type: 'button', disabled: props.busy || !props.moveDirectories?.length, onClick: () => setMode('move') },
+        e('strong', null, '移动到卷/部'),
+        e('span', null, props.moveDirectories === null ? '正在读取可用位置…' : props.moveDirectories.length ? '保留文件名，把章节整理到其他正文目录。' : '没有其他可用位置；可以先新建卷/部。')) : null,
       e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('rename') },
         e('strong', null, '重命名'), e('span', null, '保留文件类型，只修改当前文档名称。')),
       e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('archive') },
@@ -646,6 +655,20 @@ function FileManageDialog(props: {
       e('footer', null,
         e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
         e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !name.trim() }, props.busy ? '处理中…' : '保存新名称'),
+      ),
+    ) : null,
+    mode === 'move' ? e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (targetDirectory) props.onMove(targetDirectory) } },
+      e('label', null, e('span', null, '目标卷/部'), e('select', {
+        value: targetDirectory,
+        autoFocus: true,
+        'aria-label': '目标卷或部',
+        onChange: (event: ChangeEvent<HTMLSelectElement>) => setTargetDirectory(event.target.value),
+      }, props.moveDirectories?.map((directory) => e('option', { key: directory, value: directory }, directory === '正文' ? '正文（根目录）' : directory.slice('正文/'.length))))),
+      targetDirectory ? e('p', null, `移动后：${targetDirectory}/${props.path.split('/').at(-1)}`) : null,
+      e('p', null, '不会覆盖同名文件；移动前会再次核对当前磁盘版本。'),
+      e('footer', null,
+        e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
+        e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !targetDirectory }, props.busy ? '移动中…' : '确认移动'),
       ),
     ) : null,
     mode === 'archive' ? e('div', { className: 'archive-confirm' },
@@ -1712,6 +1735,24 @@ async function collectChapters(ctx: ShellContext, sessionId: string): Promise<Ch
   }))
 }
 
+async function collectManuscriptDirectories(ctx: ShellContext, sessionId: string): Promise<string[]> {
+  const queue = ['正文']
+  const directories = ['正文']
+  while (queue.length) {
+    const directory = queue.shift()!
+    const listed = await safeRpcCall<{ entries?: Entry[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId, path: directory }))
+    if (!listed.ok) throw new Error(errorMessage(listed))
+    for (const entry of listed.value.entries ?? []) {
+      if (entry.type !== 'directory' || entry.name.startsWith('.')) continue
+      const child = `${directory}/${entry.name}`
+      directories.push(child)
+      if (directories.length > 256 || child.split('/').length > 12) throw new Error('manuscript directories exceed the workbench limit')
+      queue.push(child)
+    }
+  }
+  return directories
+}
+
 async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string): Promise<string[]> {
   const queue = ['']
   const files: string[] = []
@@ -1824,6 +1865,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [managePath, setManagePath] = useState<string | null>(null)
   const [manageBusy, setManageBusy] = useState(false)
   const [manageNote, setManageNote] = useState('')
+  const [manageDirectories, setManageDirectories] = useState<string[] | null>(null)
   const [workspaceManage, setWorkspaceManage] = useState<ManagedWorkspace | null>(null)
   const [workspaceManageBusy, setWorkspaceManageBusy] = useState(false)
   const [workspaceManageNote, setWorkspaceManageNote] = useState('')
@@ -1832,6 +1874,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveNote, setArchiveNote] = useState('')
   const archiveRequestGate = useRef(new LatestRequestGate()).current
+  const manageDirectoryGate = useRef(new LatestRequestGate()).current
   const importReturnFocus = useRef<HTMLElement | null>(null)
   const snapshotReturnFocus = useRef<HTMLElement | null>(null)
   const fileManageReturnFocus = useRef<HTMLElement | null>(null)
@@ -1980,11 +2023,24 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
     fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setManagePath(selectedPath); setManageNote('')
+    if (!session || !selectedPath.startsWith('正文/')) { setManageDirectories([]); return }
+    setManageDirectories(null)
+    const ticket = manageDirectoryGate.begin(`${session.sessionId}\0${selectedPath}`)
+    const currentDirectory = selectedPath.slice(0, selectedPath.lastIndexOf('/'))
+    void collectManuscriptDirectories(ctx, session.sessionId).then((directories) => {
+      if (!manageDirectoryGate.isCurrent(ticket)) return
+      setManageDirectories(directories.filter((directory) => directory.normalize('NFC').toLocaleLowerCase() !== currentDirectory.normalize('NFC').toLocaleLowerCase()))
+    }).catch(() => {
+      if (!manageDirectoryGate.isCurrent(ticket)) return
+      setManageDirectories([])
+      setManageNote('没有读取到可用卷/部；重命名和归档仍可使用。')
+    })
   }
   const closeManage = () => {
     if (manageBusy) return
     const target = fileManageReturnFocus.current
-    setManagePath(null); setManageNote('')
+    manageDirectoryGate.setScope('')
+    setManagePath(null); setManageNote(''); setManageDirectories(null)
     if (target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const openWorkspaceManage = (workspace: { workspaceId: WorkspaceId; title?: string; path: string }, removable: boolean) => {
@@ -2048,6 +2104,28 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (path === managePath) { setPath(renamed.value.path); setReveal(null) }
     setTreeRevision((value) => value + 1)
     setWorkbenchNote(`已重命名为 ${renamed.value.path}`)
+    manageDirectoryGate.setScope('')
+    setManageDirectories(null)
+    setManagePath(null)
+  }
+  const moveManaged = async (targetDirectory: string) => {
+    if (!session || !managePath || manageBusy) return
+    setManageBusy(true); setManageNote('')
+    const version = await observedVersion(managePath)
+    if (!version) { setManageBusy(false); return }
+    const moved = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.moveManuscript', {
+      sessionId: session.sessionId,
+      path: managePath,
+      targetDirectory,
+      expectedVersion: version,
+    }))
+    setManageBusy(false)
+    if (!moved.ok) { setManageNote(errorMessage(moved)); return }
+    if (path === managePath) { setPath(moved.value.path); setReveal(null) }
+    manageDirectoryGate.setScope('')
+    setManageDirectories(null)
+    setTreeRevision((value) => value + 1)
+    setWorkbenchNote(`已移动到 ${moved.value.path}`)
     setManagePath(null)
   }
   const archiveManaged = async () => {
@@ -2064,6 +2142,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (!archived.ok) { setManageNote(errorMessage(archived)); return }
     if (archived.value.state !== 'archived') { setManageNote('归档未完成，请在已归档列表中检查。'); await loadArchives(); return }
     if (path === managePath) { setPath(''); setReveal(null) }
+    manageDirectoryGate.setScope('')
+    setManageDirectories(null)
     setManagePath(null)
     setTreeRevision((value) => value + 1)
     setWorkbenchNote(`已归档 ${archived.value.path}`)
@@ -2972,8 +3052,10 @@ function Root({ ctx }: { ctx: ShellContext }) {
       path: managePath,
       busy: manageBusy,
       note: manageNote,
+      moveDirectories: manageDirectories,
       onClose: closeManage,
       onRename: (name: string) => void renameManaged(name),
+      onMove: (directory: string) => void moveManaged(directory),
       onArchive: () => void archiveManaged(),
     }) : null,
   )
@@ -2989,7 +3071,7 @@ const playfulStyles = `
 :root{--ink:#173f30;--leaf:#3d755a;--mint:#dcebdd;--paper:#fffdf6;--sand:#f2ecdf;--line:#d8cfbd;--ease:cubic-bezier(.22,1,.36,1)}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .search-panel{display:grid;gap:7px;padding:9px 10px;border-bottom:1px solid var(--line);background:#f5efe2}.search-panel form{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:5px}.search-panel input,.search-panel select{box-sizing:border-box;min-width:0;border:1px solid #c9c3b5;background:#fffdf7;color:#294638}.search-panel input{padding:7px 9px;border-radius:12px 3px 3px 12px}.search-panel form>button{padding:0;border:1px solid #b9c5b8;border-radius:3px 10px 10px 3px;background:#dfeadd;color:#285c45}.search-panel select{grid-column:1/-1;padding:4px 7px;border:0;background:transparent;color:#657168;font-size:11px}.search-summary{display:flex;gap:6px;flex-wrap:wrap;color:#687168;font-size:11px}.search-summary strong{color:#9a4b3b}.search-results{max-height:210px;margin:0;padding:0;overflow:auto;list-style:none;display:grid;gap:4px}.search-results button{box-sizing:border-box;width:100%;display:grid;gap:2px;padding:7px 8px;border:0;border-radius:5px;background:#fffaf0;text-align:left;color:#304a3d}.search-results button:hover:not(:disabled){background:#dfeadd;transform:translateX(2px)}.search-results button:disabled{opacity:.55}.search-results strong,.search-results span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.search-results strong{font-size:11px}.search-results span{font-size:11px;color:#687168}.search-panel p{margin:0;font-size:11px}.chapter-navigation{display:flex;align-items:center;gap:5px;margin-left:auto}.chapter-navigation button{width:26px;height:26px;padding:0;border:1px solid #c7c4b7;border-radius:50%;background:#fffdf7;color:#315b47;font-size:18px;line-height:1}.chapter-navigation span{min-width:48px;text-align:center;color:#6a746b;font-variant-numeric:tabular-nums}.editor-header>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.editor-header>span:last-child{white-space:nowrap;margin-left:10px}
-.tree-file-row,.tree-directory-row{position:relative;display:flex;align-items:center}.tree-file-row .tree-main,.tree-directory-row .tree-row{min-width:0;padding-right:34px}.tree-file-row .tree-manage,.tree-directory-row .tree-directory-add{position:absolute;right:4px;width:28px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;color:#667269;opacity:0}.tree-file-row:hover .tree-manage,.tree-file-row:focus-within .tree-manage,.tree-directory-row:hover .tree-directory-add,.tree-directory-row:focus-within .tree-directory-add{opacity:1}.tree-manage:hover,.tree-directory-add:hover{background:#d5e3d3!important;transform:none!important}.archive-panel{border-bottom:1px solid var(--line);background:#eee8da}.archive-panel>summary{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;color:#596a60;list-style:none}.archive-panel>summary::-webkit-details-marker{display:none}.archive-panel>summary small{display:grid;place-items:center;min-width:19px;height:19px;border-radius:50%;background:#d5e3d3}.archive-list{display:grid;gap:6px;max-height:230px;padding:0 9px 9px;overflow:auto}.archive-list>p{margin:4px;font-size:11px}.archive-list article{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid #d7d0c1;border-radius:7px;background:#fffaf0}.archive-list article>div{min-width:0;display:grid;gap:1px;margin-right:auto}.archive-list article strong,.archive-list article small,.archive-list article code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archive-list article small,.archive-list article code{color:#6c756d;font-size:10px}.archive-list article>button{flex:none;padding:4px 7px;border:1px solid #b9c5b8;border-radius:10px;background:#e3ecdf;color:#285c45}.archive-list article>p{flex-basis:100%;margin:0}.file-dialog-overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:#272a2666;backdrop-filter:blur(4px)}.file-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:18px;padding:24px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 28px 90px #2c2d2838}.file-dialog header,.file-dialog footer{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.file-dialog header>div{min-width:0;display:grid;gap:3px}.file-dialog h2{margin:0;color:#264b3a;font:600 26px/1.25 "Noto Serif SC","Songti SC",serif}.file-dialog small,.file-dialog code,.file-dialog p{color:#687168}.file-dialog code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-dialog-actions{display:grid;gap:8px}.file-dialog-actions>button{display:grid;gap:3px;padding:13px 14px;border:1px solid #d7d0c1;border-radius:12px 4px 12px 4px;background:#f8f3e8;text-align:left;color:#2f4e40}.file-dialog-actions>button span{color:#6c756d;font-size:12px}.file-dialog form,.archive-confirm{display:grid;gap:12px}.file-dialog label{display:grid;gap:6px}.file-dialog input{box-sizing:border-box;width:100%;padding:10px 11px;border:1px solid #c9c3b5;border-radius:8px;background:#fff}.file-dialog footer{justify-content:flex-end;align-items:center}.file-dialog footer button{padding:7px 12px;border:1px solid #bfc5b8;border-radius:12px 4px 12px 4px;background:#fff;color:#2c5744}.file-dialog footer .primary-action{background:#315e48;color:#fff}.file-dialog footer .danger-action{border-color:#a9695f;background:#8f4d43;color:#fff}.file-dialog>.warning{margin:0}.archive-confirm p{margin:0;line-height:1.7}
+.tree-file-row,.tree-directory-row{position:relative;display:flex;align-items:center}.tree-file-row .tree-main,.tree-directory-row .tree-row{min-width:0;padding-right:34px}.tree-file-row .tree-manage,.tree-directory-row .tree-directory-add{position:absolute;right:4px;width:28px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;color:#667269;opacity:0}.tree-file-row:hover .tree-manage,.tree-file-row:focus-within .tree-manage,.tree-directory-row:hover .tree-directory-add,.tree-directory-row:focus-within .tree-directory-add{opacity:1}.tree-manage:hover,.tree-directory-add:hover{background:#d5e3d3!important;transform:none!important}.archive-panel{border-bottom:1px solid var(--line);background:#eee8da}.archive-panel>summary{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;color:#596a60;list-style:none}.archive-panel>summary::-webkit-details-marker{display:none}.archive-panel>summary small{display:grid;place-items:center;min-width:19px;height:19px;border-radius:50%;background:#d5e3d3}.archive-list{display:grid;gap:6px;max-height:230px;padding:0 9px 9px;overflow:auto}.archive-list>p{margin:4px;font-size:11px}.archive-list article{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid #d7d0c1;border-radius:7px;background:#fffaf0}.archive-list article>div{min-width:0;display:grid;gap:1px;margin-right:auto}.archive-list article strong,.archive-list article small,.archive-list article code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archive-list article small,.archive-list article code{color:#6c756d;font-size:10px}.archive-list article>button{flex:none;padding:4px 7px;border:1px solid #b9c5b8;border-radius:10px;background:#e3ecdf;color:#285c45}.archive-list article>p{flex-basis:100%;margin:0}.file-dialog-overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:#272a2666;backdrop-filter:blur(4px)}.file-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:18px;padding:24px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 28px 90px #2c2d2838}.file-dialog header,.file-dialog footer{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.file-dialog header>div{min-width:0;display:grid;gap:3px}.file-dialog h2{margin:0;color:#264b3a;font:600 26px/1.25 "Noto Serif SC","Songti SC",serif}.file-dialog small,.file-dialog code,.file-dialog p{color:#687168}.file-dialog code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-dialog-actions{display:grid;gap:8px}.file-dialog-actions>button{display:grid;gap:3px;padding:13px 14px;border:1px solid #d7d0c1;border-radius:12px 4px 12px 4px;background:#f8f3e8;text-align:left;color:#2f4e40}.file-dialog-actions>button span{color:#6c756d;font-size:12px}.file-dialog form,.archive-confirm{display:grid;gap:12px}.file-dialog label{display:grid;gap:6px}.file-dialog input,.file-dialog select{box-sizing:border-box;width:100%;padding:10px 11px;border:1px solid #c9c3b5;border-radius:8px;background:#fff}.file-dialog footer{justify-content:flex-end;align-items:center}.file-dialog footer button{padding:7px 12px;border:1px solid #bfc5b8;border-radius:12px 4px 12px 4px;background:#fff;color:#2c5744}.file-dialog footer .primary-action{background:#315e48;color:#fff}.file-dialog footer .danger-action{border-color:#a9695f;background:#8f4d43;color:#fff}.file-dialog>.warning{margin:0}.archive-confirm p{margin:0;line-height:1.7}
 button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--ease),background-color 220ms ease,border-color 220ms ease,color 220ms ease,box-shadow 220ms ease}button:active,.tree-row:active,summary:active{transform:scale(.96)}
 .icon-button{display:grid!important;place-items:center;min-width:30px!important;width:30px;height:30px;padding:0!important;border-radius:50%!important;font-size:17px;line-height:1}.icon-button:hover{transform:rotate(8deg) scale(1.06)!important}
 .chrome{animation:bar-drop 520ms var(--ease) both}.shell>.sidebar{animation:panel-left 560ms 70ms var(--ease) both}.shell>.editor,.shell>.empty-paper{animation:panel-rise 560ms 120ms var(--ease) both}.shell>.chat{animation:panel-right 560ms 170ms var(--ease) both}

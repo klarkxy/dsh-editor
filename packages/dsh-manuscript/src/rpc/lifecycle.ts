@@ -113,6 +113,27 @@ function safeNewName(value: string, extension: string): string {
   return `${name}${extension}`
 }
 
+function manuscriptDocument(value: string): string {
+  const relative = authorPath(value)
+  if (!relative.startsWith('正文/')) throw new LifecycleError('only manuscript documents can be moved', 'INVALID_PATH')
+  return relative
+}
+
+function manuscriptDirectory(value: string): string {
+  let relative: string
+  try {
+    relative = normalizeWorkspaceRelative(value)
+  } catch (error) {
+    throw new LifecycleError('manuscript directory is invalid', 'INVALID_PATH', { cause: error })
+  }
+  if (relative !== value.replace(/\\/g, '/')
+    || (relative !== '正文' && !relative.startsWith('正文/'))
+    || relative.split('/').some((part) => part.startsWith('.'))) {
+    throw new LifecycleError('manuscript directory is invalid', 'INVALID_PATH')
+  }
+  return relative
+}
+
 function recordHash(value: Omit<ArchiveManifest, 'recordHash'>): string {
   return hash(JSON.stringify(value))
 }
@@ -345,6 +366,23 @@ export async function renameDocument(input: {
   if (source.normalize('NFC').toLocaleLowerCase() === target.normalize('NFC').toLocaleLowerCase()) {
     throw new LifecycleError('case-only or unchanged rename is not supported', 'INVALID_PATH')
   }
+  const moved = await moveChecked({ access: input.access, source, target, expectedVersion: input.expectedVersion })
+  return { path: target, version: moved.version }
+}
+
+export async function moveManuscriptDocument(input: {
+  access: LifecycleAccess
+  path: string
+  targetDirectory: string
+  expectedVersion: string
+}): Promise<{ path: string; version: string }> {
+  const source = manuscriptDocument(input.path)
+  const directory = manuscriptDirectory(input.targetDirectory)
+  const sourceDirectory = path.posix.dirname(source)
+  if (sourceDirectory.normalize('NFC').toLocaleLowerCase() === directory.normalize('NFC').toLocaleLowerCase()) {
+    throw new LifecycleError('document is already in that manuscript directory', 'INVALID_PATH')
+  }
+  const target = `${directory}/${path.posix.basename(source)}`
   const moved = await moveChecked({ access: input.access, source, target, expectedVersion: input.expectedVersion })
   return { path: target, version: moved.version }
 }
