@@ -1,3 +1,5 @@
+import { AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from './author-preferences.ts'
+
 export const PROJECT_CONTEXT_SCHEMA = 'dsh-editor.project-context'
 export const PROJECT_CONTEXT_VERSION = 1
 export const PROJECT_CONTEXT_CURRENT_VERSION = 2
@@ -34,7 +36,7 @@ export type ProjectContextReceipt = {
   matchedBy?: WorldbookMatchedBy
   matchedTriggers?: string[]
 }
-export type ProjectContextReceiptBundle = { sources: ProjectContextReceipt[]; scan?: WorldbookScanSummary }
+export type ProjectContextReceiptBundle = { sources: ProjectContextReceipt[]; scan?: WorldbookScanSummary; authorPreferencesChars?: number }
 export type ProjectContextSource = ProjectContextReceipt & { text?: string }
 export type ProjectContextEnvelopeV1 = {
   schema: typeof PROJECT_CONTEXT_SCHEMA
@@ -46,6 +48,7 @@ export type ProjectContextEnvelopeV2 = {
   schema: typeof PROJECT_CONTEXT_SCHEMA
   version: typeof PROJECT_CONTEXT_CURRENT_VERSION
   project_context: { sources: ProjectContextSource[]; scan: WorldbookScanSummary }
+  author_preferences?: string
   user_request: string
 }
 export type ProjectContextEnvelope = ProjectContextEnvelopeV1 | ProjectContextEnvelopeV2
@@ -297,6 +300,7 @@ export async function compileProjectContextV2(
     activePath?: string
     savedDocumentText?: string
     scan?: Partial<WorldbookScanSummary>
+    authorPreferences?: string
   },
 ): Promise<ProjectContextCompilation> {
   const fixed = await compileFixedSources(read, true)
@@ -340,13 +344,15 @@ export async function compileProjectContextV2(
     })
   }
   const sources = [...fixed, ...dynamic]
+  const authorPreferences = normalizeAuthorPreferences(options.authorPreferences)
   const envelope: ProjectContextEnvelopeV2 = {
     schema: PROJECT_CONTEXT_SCHEMA,
     version: PROJECT_CONTEXT_CURRENT_VERSION,
     project_context: { sources, scan },
+    ...(authorPreferences ? { author_preferences: authorPreferences } : {}),
     user_request: userRequest,
   }
-  return { envelope, serialized: JSON.stringify(envelope), receipt: { sources: stripText(sources), scan } }
+  return { envelope, serialized: JSON.stringify(envelope), receipt: { sources: stripText(sources), scan, ...(authorPreferences ? { authorPreferencesChars: authorPreferences.length } : {}) } }
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -392,6 +398,9 @@ function validateFixed(sources: ProjectContextSource[], withKind: boolean, allow
 }
 
 function validateV2(envelope: ProjectContextEnvelopeV2): boolean {
+  if (envelope.author_preferences !== undefined && (typeof envelope.author_preferences !== 'string'
+    || !envelope.author_preferences || envelope.author_preferences.length > AUTHOR_PREFERENCES_MAX_CHARS
+    || envelope.author_preferences !== normalizeAuthorPreferences(envelope.author_preferences))) return false
   const sources = envelope.project_context.sources
   if (sources.length > PROJECT_CONTEXT_SOURCE_PATHS.length + 64 || !validateFixed(sources, true) || !isScan(envelope.project_context.scan)) return false
   const seen = new Set<string>()
@@ -429,6 +438,7 @@ export function parseProjectContextEnvelope(text: string): ProjectContextEnvelop
   const sources = (envelope.project_context as { sources?: unknown }).sources
   if (!Array.isArray(sources)) return undefined
   if (envelope.version === PROJECT_CONTEXT_VERSION) {
+    if ('author_preferences' in envelope) return undefined
     if (sources.length !== PROJECT_CONTEXT_SOURCE_PATHS.length || !validateFixed(sources as ProjectContextSource[], false, true)) return undefined
     return envelope as ProjectContextEnvelopeV1
   }
@@ -440,5 +450,6 @@ export function projectContextReceipt(envelope: ProjectContextEnvelope): Project
   return {
     sources: stripText(envelope.project_context.sources),
     ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION ? { scan: envelope.project_context.scan } : {}),
+    ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION && envelope.author_preferences ? { authorPreferencesChars: envelope.author_preferences.length } : {}),
   }
 }

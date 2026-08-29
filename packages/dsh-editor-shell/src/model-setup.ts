@@ -2,6 +2,7 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import { createElement as e, useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { friendlyModelError, providerWrite, validateModelForm, type DiscoveredModel, type ModelForm, type ModelInterface } from './model-config.ts'
 import type { CompletionPreference } from './completion-preference.ts'
+import { AUTHOR_PREFERENCES_MAX_CHARS } from './author-preferences.ts'
 
 const KEY_REFS = ['DEEPSEEK_API_KEY', 'DSH_EDITOR_CUSTOM_API_KEY'] as const
 
@@ -12,6 +13,8 @@ type ModelSetupProps = {
   onTestFailure?(): void
   completionPreference?: CompletionPreference
   onCompletionPreferenceChange?(value: CompletionPreference): void
+  authorPreferences?: string
+  onAuthorPreferencesChange?(value: string): void
 }
 
 export function ModelSetup(props: ModelSetupProps) {
@@ -145,6 +148,18 @@ export function ModelSetup(props: ModelSetupProps) {
           }),
           label,
         )),
+      ) : null,
+      props.onBack && props.authorPreferences !== undefined && props.onAuthorPreferencesChange ? e('label', { className: 'author-preferences' },
+        e('span', null, '跨作品作者约定'),
+        e('textarea', {
+          value: props.authorPreferences,
+          maxLength: AUTHOR_PREFERENCES_MAX_CHARS,
+          rows: 4,
+          placeholder: '例如：第三人称限知；少用感叹号；对白保持克制。',
+          'aria-label': '跨作品作者约定',
+          onChange: (event: ChangeEvent<HTMLTextAreaElement>) => props.onAuthorPreferencesChange?.(event.target.value),
+        }),
+        e('small', null, `${props.authorPreferences.length} / ${AUTHOR_PREFERENCES_MAX_CHARS} 字；只存本机，所有作品的搭档、补全和选段修改都会参考。`),
       ) : null,
       note ? e('p', { className: /成功/.test(note) ? 'success' : 'warning', role: /成功/.test(note) ? 'status' : 'alert' }, note) : null,
       e('footer', null,

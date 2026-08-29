@@ -1,5 +1,6 @@
 import { collectInsertText } from './completion.ts'
 import { normalizeWorkspaceRelative, PathConfineError } from './paths.ts'
+import { parseAuthorPreferences, withAuthorPreferences } from './author-preferences.ts'
 
 export type PatchRoute = 'dsh-llm'
 
@@ -24,6 +25,7 @@ export type PatchRequest = {
   selectedText: string
   before: string
   after: string
+  authorPreferences: string
 }
 
 export type PatchStreamChunk = { type: string; text?: string; reason?: { kind?: string } }
@@ -69,6 +71,7 @@ export function parsePatchRequest(payload: Record<string, unknown>): PatchReques
     selectedText,
     before: textField(payload, 'before').slice(-PATCH_LIMITS.context),
     after: textField(payload, 'after').slice(0, PATCH_LIMITS.context),
+    authorPreferences: parseAuthorPreferences(payload.authorPreferences),
   }
 }
 
@@ -86,7 +89,7 @@ async function streamPatch(input: {
       model: input.model,
       maxTokens: 512,
       signal: input.signal,
-      system: PATCH_SYSTEM,
+      system: withAuthorPreferences(PATCH_SYSTEM, input.request.authorPreferences),
       messages: [
         {
           role: 'user',

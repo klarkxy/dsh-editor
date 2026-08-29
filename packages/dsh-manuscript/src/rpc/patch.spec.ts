@@ -54,10 +54,13 @@ describe('patch.complete', () => {
       selectedText: '改写对象',
       before: `d${'a'.repeat(PATCH_LIMITS.context)}`,
       after: `${'b'.repeat(PATCH_LIMITS.context)}e`,
+      authorPreferences: `  保持克制\r\n${'x'.repeat(1_300)}  `,
     })
     expect(request.path).toBe('chapters/one.md')
     expect(request.before).toBe('a'.repeat(PATCH_LIMITS.context))
     expect(request.after).toBe('b'.repeat(PATCH_LIMITS.context))
+    expect(request.authorPreferences.startsWith('保持克制\n')).toBe(true)
+    expect(request.authorPreferences.length).toBe(1_200)
   })
 
   it('derives provider and model from the live session, never from RPC input', async () => {
@@ -69,6 +72,17 @@ describe('patch.complete', () => {
       new AbortController().signal,
     )).resolves.toEqual({ text: '雨落在窗台上。', route: 'dsh-llm' })
     expect(stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'configured-provider', model: 'configured-model' }))
+  })
+
+  it('keeps author preferences in system guidance instead of replacement text', async () => {
+    const { host, stream } = fixture()
+    await dispatch(
+      host as unknown as Context,
+      'patch.complete',
+      { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句', before: '前文', after: '后文', authorPreferences: '对白保持克制' },
+      new AbortController().signal,
+    )
+    expect(stream).toHaveBeenCalledWith(expect.objectContaining({ system: expect.stringContaining('【作者跨作品约定】\n对白保持克制') }))
   })
 
   it('returns an empty proposal without a configured live-session model', async () => {

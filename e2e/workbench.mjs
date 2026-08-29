@@ -339,6 +339,18 @@ try {
   await completionSettings.waitFor({ state: 'visible' })
   await completionSettings.getByLabel('停顿后提示').check()
   await window.waitForFunction(() => localStorage.getItem('dsh-editor.writing.completion') === 'pause')
+  const authorPreferences = window.getByLabel('跨作品作者约定')
+  await authorPreferences.fill('第三人称限知；对白保持克制；少用感叹号。')
+  await window.waitForFunction(() => localStorage.getItem('dsh-editor.writing.author-preferences') === '第三人称限知；对白保持克制；少用感叹号。')
+  await window.waitForFunction(() => {
+    const panel = document.querySelector('.model-panel')
+    const preferences = document.querySelector('.author-preferences')
+    return panel && preferences
+      && panel.getAnimations().every((animation) => animation.playState === 'finished')
+      && preferences.getAnimations().every((animation) => animation.playState === 'finished')
+      && Number.parseFloat(getComputedStyle(panel).opacity || '1') >= 0.99
+      && Number.parseFloat(getComputedStyle(preferences).opacity || '1') >= 0.99
+  })
   await window.screenshot({ path: resolve(output, 'completion-settings.png'), fullPage: true })
   await completionSettings.getByLabel('仅手动').check()
   await window.waitForFunction(() => localStorage.getItem('dsh-editor.writing.completion') === 'manual')

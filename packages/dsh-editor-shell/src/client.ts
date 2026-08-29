@@ -63,6 +63,7 @@ import type { ProposalMarker } from './proposal-tool.ts'
 import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ConversationRenameQueue, conversationRows, nextAutomaticConversationTitle, shouldConfirmConversationSwitch } from './conversation-lifecycle.ts'
 import { automaticCompletionReady, COMPLETION_PREFERENCE_KEY, readCompletionPreference, type CompletionPreference } from './completion-preference.ts'
+import { AUTHOR_PREFERENCES_KEY, normalizeAuthorPreferences, readAuthorPreferences } from './author-preferences.ts'
 import {
   blocksWorkspaceOpen,
   idleSnapshotFlow,
@@ -753,8 +754,9 @@ function Editor(props: {
   onDirtyChange(dirty: boolean): void
   reveal: RevealRequest | null
   completionPreference: CompletionPreference
+  authorPreferences: string
 }) {
-  const { ctx, session, path, files, onOpen, create, externalRevision, onDirtyChange, reveal, completionPreference } = props
+  const { ctx, session, path, files, onOpen, create, externalRevision, onDirtyChange, reveal, completionPreference, authorPreferences } = props
   const [doc, setDoc] = useState<EditorDocument | null>(null)
   const [text, setTextState] = useState('')
   const [ghostCandidates, setGhostCandidates] = useState<string[]>([])
@@ -967,6 +969,7 @@ function Editor(props: {
       path: doc.path,
       prefix: text.slice(0, pos),
       suffix: text.slice(pos),
+      authorPreferences,
     }, controller.signal))
     if (fimAbort.current === controller) {
       fimAbort.current = null
@@ -1039,6 +1042,7 @@ function Editor(props: {
       selectedText: ticket.selectedText,
       before: text.slice(Math.max(0, ticket.start - 4000), ticket.start),
       after: text.slice(ticket.end, ticket.end + 4000),
+      authorPreferences,
     }, controller.signal))
     if (patchAbort.current === controller) {
       patchAbort.current = null
@@ -1397,7 +1401,7 @@ function ProjectContextReceiptView({ receipt }: { receipt: ProjectContextReceipt
   const worldbook = receipt.sources.filter((item) => item.kind === 'worldbook')
   const matchedByText = (value: string | undefined) => value === 'both' ? '请求与当前文稿' : value === 'saved-document' ? '当前文稿' : '本次请求'
   return e('details', { className: 'project-context-receipt' },
-    e('summary', null, `项目上下文：固定 ${includedFixed}/${fixed.length}，触发世界书 ${worldbook.length}`),
+    e('summary', null, `项目上下文：固定 ${includedFixed}/${fixed.length}，触发世界书 ${worldbook.length}${receipt.authorPreferencesChars ? `，作者约定 ${receipt.authorPreferencesChars} 字` : ''}`),
     e('ul', null, receipt.sources.map((item) => e('li', { key: item.path },
       e('code', null, item.path),
       ` · ${item.status === 'included'
@@ -1582,7 +1586,7 @@ function SnapshotDialog(props: {
   )
 }
 
-function Chat({ ctx, session, workspaceId, activePath, hidden, onClose, onConfigure, onApplied, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden, onClose, onConfigure, onApplied, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const snapshot = useObservable<ConversationSnapshot>(session)
   const sessionList = useObservable(ctx.sessions.list)
   const workspaceList = useObservable(ctx.workspaces.list)
@@ -1669,7 +1673,7 @@ function Chat({ ctx, session, workspaceId, activePath, hidden, onClose, onConfig
     setNote('')
     let contextCompileFailed = false
     void sendProjectContext(session, value, async () => {
-      const compiled = await safeRpcCall<{ serialized: string; receipt: ProjectContextReceiptBundle }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'context.compile', { sessionId: session.sessionId, userRequest: value, activePath }))
+      const compiled = await safeRpcCall<{ serialized: string; receipt: ProjectContextReceiptBundle }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'context.compile', { sessionId: session.sessionId, userRequest: value, activePath, authorPreferences }))
       if (!compiled.ok) { contextCompileFailed = true; throw new Error('context unavailable') }
       return { serialized: compiled.value.serialized, receipt: compiled.value.receipt }
     }).then((outcome) => {
@@ -1897,6 +1901,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
   const [completionPreference, setCompletionPreference] = useState(() => readCompletionPreference(globalThis.localStorage))
+  const [authorPreferences, setAuthorPreferences] = useState(() => readAuthorPreferences(globalThis.localStorage))
   const [assistantDraftDirty, setAssistantDraftDirty] = useState(false)
   const [leaveConfirm, setLeaveConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   useEffect(() => () => leaveConfirm?.resolve(false), [leaveConfirm])
@@ -2004,6 +2009,9 @@ function Root({ ctx }: { ctx: ShellContext }) {
   useEffect(() => {
     try { globalThis.localStorage?.setItem(COMPLETION_PREFERENCE_KEY, completionPreference) } catch { /* Writing preferences remain optional. */ }
   }, [completionPreference])
+  useEffect(() => {
+    try { globalThis.localStorage?.setItem(AUTHOR_PREFERENCES_KEY, normalizeAuthorPreferences(authorPreferences)) } catch { /* Writing preferences remain optional. */ }
+  }, [authorPreferences])
   useEffect(() => {
     const hotkey = (event: globalThis.KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey
@@ -2811,6 +2819,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
         onTestFailure: () => { setSetupGate('required'); setView('settings') },
         completionPreference,
         onCompletionPreferenceChange: setCompletionPreference,
+        authorPreferences,
+        onAuthorPreferencesChange: setAuthorPreferences,
       }),
     )
   }
@@ -3057,7 +3067,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       label: '调整文件栏宽度',
       onChange: setSidebarWidth,
     }) : null,
-    e(Editor, { ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'), externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal, completionPreference }),
+    e(Editor, { ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'), externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal, completionPreference, authorPreferences: normalizeAuthorPreferences(authorPreferences) }),
     assistantVisible ? e(PanelResizer, {
       side: 'right',
       value: assistantWidth,
@@ -3073,6 +3083,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       session,
       workspaceId: currentWorkspace?.workspaceId,
       activePath: path,
+      authorPreferences: normalizeAuthorPreferences(authorPreferences),
       hidden: !assistantVisible,
       onClose: () => setAssistantOpen(false),
       onConfigure: openSettings,
@@ -3138,6 +3149,7 @@ const redesignedStyles = `${styles}
 
 const playfulStyles = `
 :root{--ink:#173f30;--leaf:#3d755a;--mint:#dcebdd;--paper:#fffdf6;--sand:#f2ecdf;--line:#d8cfbd;--ease:cubic-bezier(.22,1,.36,1)}
+.author-preferences{display:grid!important;gap:6px;padding-top:13px;border-top:1px solid #ded6c7}.author-preferences>span{color:#294938;font-weight:600}.author-preferences textarea{box-sizing:border-box;width:100%;min-height:82px;padding:9px 10px;border:1px solid #cbc5b7;border-radius:10px 4px 10px 4px;background:#fffdf7;color:#28382f;font:13px/1.65 inherit;resize:vertical}.author-preferences textarea:focus{border-color:#6d8c79;outline:2px solid #386a50;outline-offset:2px}.author-preferences small{color:#69766e;font-size:11px}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .search-panel{display:grid;gap:7px;padding:9px 10px;border-bottom:1px solid var(--line);background:#f5efe2}.search-panel form{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:5px}.search-panel input,.search-panel select{box-sizing:border-box;min-width:0;border:1px solid #c9c3b5;background:#fffdf7;color:#294638}.search-panel input{padding:7px 9px;border-radius:12px 3px 3px 12px}.search-panel form>button{padding:0;border:1px solid #b9c5b8;border-radius:3px 10px 10px 3px;background:#dfeadd;color:#285c45}.search-panel select{grid-column:1/-1;padding:4px 7px;border:0;background:transparent;color:#657168;font-size:11px}.search-summary{display:flex;gap:6px;flex-wrap:wrap;color:#687168;font-size:11px}.search-summary strong{color:#9a4b3b}.search-results{max-height:210px;margin:0;padding:0;overflow:auto;list-style:none;display:grid;gap:4px}.search-results button{box-sizing:border-box;width:100%;display:grid;gap:2px;padding:7px 8px;border:0;border-radius:5px;background:#fffaf0;text-align:left;color:#304a3d}.search-results button:hover:not(:disabled){background:#dfeadd;transform:translateX(2px)}.search-results button:disabled{opacity:.55}.search-results strong,.search-results span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.search-results strong{font-size:11px}.search-results span{font-size:11px;color:#687168}.search-panel p{margin:0;font-size:11px}.chapter-navigation{display:flex;align-items:center;gap:5px;margin-left:auto}.chapter-navigation button{width:26px;height:26px;padding:0;border:1px solid #c7c4b7;border-radius:50%;background:#fffdf7;color:#315b47;font-size:18px;line-height:1}.chapter-navigation span{min-width:48px;text-align:center;color:#6a746b;font-variant-numeric:tabular-nums}.editor-header>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.editor-header>span:last-child{white-space:nowrap;margin-left:10px}
 .tree-file-row,.tree-directory-row{position:relative;display:flex;align-items:center}.tree-file-row .tree-main,.tree-directory-row .tree-row{min-width:0;padding-right:34px}.tree-file-row .tree-manage,.tree-directory-row .tree-directory-add{position:absolute;right:4px;width:28px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;color:#667269;opacity:0}.tree-file-row:hover .tree-manage,.tree-file-row:focus-within .tree-manage,.tree-directory-row:hover .tree-directory-add,.tree-directory-row:focus-within .tree-directory-add{opacity:1}.tree-manage:hover,.tree-directory-add:hover{background:#d5e3d3!important;transform:none!important}.archive-panel{border-bottom:1px solid var(--line);background:#eee8da}.archive-panel>summary{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;color:#596a60;list-style:none}.archive-panel>summary::-webkit-details-marker{display:none}.archive-panel>summary small{display:grid;place-items:center;min-width:19px;height:19px;border-radius:50%;background:#d5e3d3}.archive-list{display:grid;gap:6px;max-height:230px;padding:0 9px 9px;overflow:auto}.archive-list>p{margin:4px;font-size:11px}.archive-list article{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid #d7d0c1;border-radius:7px;background:#fffaf0}.archive-list article>div{min-width:0;display:grid;gap:1px;margin-right:auto}.archive-list article strong,.archive-list article small,.archive-list article code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archive-list article small,.archive-list article code{color:#6c756d;font-size:10px}.archive-list article>button{flex:none;padding:4px 7px;border:1px solid #b9c5b8;border-radius:10px;background:#e3ecdf;color:#285c45}.archive-list article>p{flex-basis:100%;margin:0}.file-dialog-overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:#272a2666;backdrop-filter:blur(4px)}.file-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:18px;padding:24px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 28px 90px #2c2d2838}.file-dialog header,.file-dialog footer{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.file-dialog header>div{min-width:0;display:grid;gap:3px}.file-dialog h2{margin:0;color:#264b3a;font:600 26px/1.25 "Noto Serif SC","Songti SC",serif}.file-dialog small,.file-dialog code,.file-dialog p{color:#687168}.file-dialog code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-dialog-actions{display:grid;gap:8px}.file-dialog-actions>button{display:grid;gap:3px;padding:13px 14px;border:1px solid #d7d0c1;border-radius:12px 4px 12px 4px;background:#f8f3e8;text-align:left;color:#2f4e40}.file-dialog-actions>button span{color:#6c756d;font-size:12px}.file-dialog form,.archive-confirm{display:grid;gap:12px}.file-dialog label{display:grid;gap:6px}.file-dialog input,.file-dialog select{box-sizing:border-box;width:100%;padding:10px 11px;border:1px solid #c9c3b5;border-radius:8px;background:#fff}.file-dialog footer{justify-content:flex-end;align-items:center}.file-dialog footer button{padding:7px 12px;border:1px solid #bfc5b8;border-radius:12px 4px 12px 4px;background:#fff;color:#2c5744}.file-dialog footer .primary-action{background:#315e48;color:#fff}.file-dialog footer .danger-action{border-color:#a9695f;background:#8f4d43;color:#fff}.file-dialog>.warning{margin:0}.archive-confirm p{margin:0;line-height:1.7}

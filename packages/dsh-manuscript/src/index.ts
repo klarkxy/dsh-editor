@@ -3,6 +3,7 @@ import { asHost, resolveWorkspaceAccess } from './host.ts'
 import { completeFim } from './rpc/fim.ts'
 import { createTextFile, listDir, readTextFile, writeTextFile } from './rpc/files.ts'
 import { completePatch, parsePatchRequest, PatchInputError } from './rpc/patch.ts'
+import { parseAuthorPreferences } from './rpc/author-preferences.ts'
 import { createDraftStore, draftDomainSpec, DraftInputError, type DraftStore } from './rpc/draft.ts'
 import { applyProposal, parseProposal, prepareProposal, ProposalError } from './rpc/proposal.ts'
 import { SearchError, searchWorkspaceText } from './rpc/search.ts'
@@ -85,6 +86,7 @@ export async function dispatch(
       model,
       prefix: str(body, 'prefix'),
       suffix: str(body, 'suffix'),
+      authorPreferences: parseAuthorPreferences(body.authorPreferences),
       signal,
     })
   }

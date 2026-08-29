@@ -92,6 +92,7 @@ export async function compileContext(
   files: WorkspaceFileContext,
   userRequest: string,
   activePath?: string,
+  authorPreferences?: string,
 ): Promise<ProjectContextCompilation> {
   const { candidates, scan } = await scanWorldbook(files)
   const activeDocument = await savedDocument(files, activePath)
@@ -113,5 +114,6 @@ export async function compileContext(
     activePath: activeDocument?.path,
     savedDocumentText: activeDocument?.text,
     scan,
+    authorPreferences,
   })
 }

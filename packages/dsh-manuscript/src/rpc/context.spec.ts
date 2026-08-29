@@ -20,6 +20,13 @@ describe('authority-bound context compiler', () => {
     expect(JSON.parse(compiled.serialized).version).toBe(2)
   })
 
+  it('normalizes Renderer author preferences into a bounded canonical field', async () => {
+    const compiled = await compileContext(createMemoryContext(fixed), '继续', undefined, '  保持克制\r\n少用感叹号\u0000  ')
+    expect(compiled.envelope).toMatchObject({ user_request: '继续', author_preferences: '保持克制\n少用感叹号' })
+    expect(compiled.receipt.authorPreferencesChars).toBe('保持克制\n少用感叹号'.length)
+    expect(parseProjectContextEnvelope(compiled.serialized)).toEqual(compiled.envelope)
+  })
+
   it('matches visible worldbook files through the saved active document', async () => {
     const context = createMemoryContext({
       ...fixed,

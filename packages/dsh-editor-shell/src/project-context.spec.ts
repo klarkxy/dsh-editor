@@ -79,6 +79,18 @@ describe('project context compiler', () => {
     expect(projectContextReceipt(compiled.envelope)).toEqual(compiled.receipt)
   })
 
+  it('keeps bounded author preferences separate from the request and project canon', async () => {
+    const compiled = await compileProjectContextV2('继续写', async () => ({ ok: true as const, value: { text: '资料', version: 'v1' } }), {
+      candidates: [],
+      authorPreferences: '  第三人称限知\r\n少用感叹号\u0000  ',
+    })
+    expect(compiled.envelope).toMatchObject({ user_request: '继续写', author_preferences: '第三人称限知\n少用感叹号' })
+    expect(compiled.receipt.authorPreferencesChars).toBe('第三人称限知\n少用感叹号'.length)
+    expect(parseProjectContextEnvelope(compiled.serialized)).toEqual(compiled.envelope)
+    const forged = JSON.parse(compiled.serialized); forged.author_preferences = 'x'.repeat(1_201)
+    expect(parseProjectContextEnvelope(JSON.stringify(forged))).toBeUndefined()
+  })
+
   it('rejects forged V2 source order, duplicate paths, budgets, and text-length receipts', async () => {
     const compiled = await compileProjectContextV2('港口', async () => ({ ok: true as const, value: { text: '资料', version: 'v1' } }), {
       candidates: [{ path: '世界书/港口.md', version: 'w1', text: '港口资料' }],
@@ -107,6 +119,7 @@ describe('project context compiler', () => {
     }))
     const legacy = { schema: 'dsh-editor.project-context', version: 1, project_context: { sources }, user_request: '继续' }
     expect(parseProjectContextEnvelope(JSON.stringify(legacy))?.user_request).toBe('继续')
+    expect(parseProjectContextEnvelope(JSON.stringify({ ...legacy, author_preferences: '伪造' }))).toBeUndefined()
   })
 
   it('edits worldbook metadata while preserving the document body and newline style', () => {

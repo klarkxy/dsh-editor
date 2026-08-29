@@ -61,6 +61,8 @@ profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记�
 
 每次非空发送先按固定顺序读取最多五份 Markdown：`项目总览.md`、`大纲/总纲.md`、`人物卡/人物索引.md`、`世界书/设定总汇.md`、可选的 `.dsh-editor/作品索引.md`。每份最多纳入 4,000 字符，总计最多 12,000 字符。Host 随后在 live session 绑定的 canonical workspace authority 内，以 no-follow/provider-confined 文件 API 扫描可见的 `世界书/**/*.md`（排除固定 `设定总汇.md`）：最多 64 个候选、64 个目录、8 层、单文件 64 KiB、总扫描 512 KiB。严格 frontmatter 提供 `triggers`、`enabled`、`priority`；无 frontmatter 的旧文件以相对文件名触发。匹配仅使用原始请求、当前已保存文档的相对路径和最多 8,000 字符已保存内容，不读取 Renderer 未保存草稿。动态项按优先级和稳定路径排序，单份最多 3,000 字符、合计最多 6,000 字符，绝不挤占固定五份的 12,000 字符预算。
 
+Renderer 另维护最多 1,200 字符的本机跨作品作者约定，并在 V2 JSON 信封的可选 `author_preferences` 字段中与 `user_request`、`project_context` 分离。Host 会重新规范化并限制长度；canonical parser 同样验证边界，V1 历史不接受伪造的新增字段。对话回执只暴露字符数，不回显原文。FIM 与选段修改经各自 RPC 的同名有界字段带入 system guidance，仍由 Host 选择 live-session provider/model；该字段不属于作品 canon、不扩大文件权限，也不改变 stale/abort 规则。
+
 固定与动态读取结果、扫描计数和原始请求以 V2 JSON 信封一次提交给同一 DSH session；解析器仍严格接受历史 V1。文件文本是不可信数据，单文件缺失、格式无效、超限或读取失败只进入有界回执；整个 Host 编译失败则不调用 `session.prompt`。Renderer 仅显示原请求和不含原文的回执，DSH 历史保留完整信封。`novel_knowledge` 不属于该回执，深层或最新事实仍由 Agent 通过 `glob`、`grep`、`read` 验证。
 
 普通世界书编辑器在同一正文 buffer 上提供 `triggers/enabled/priority` 可视化设置；应用时只规范化有界 frontmatter，文件正文逐字保留，随后复用现有草稿、自动保存、expectedVersion 与冲突处理。没有 frontmatter 的旧文件可升级为规范头；显式但损坏的 frontmatter 禁止表单写入，必须先由作者手工修复。该表单不建立第二份世界书状态或存储。

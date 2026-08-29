@@ -1,4 +1,5 @@
 import { collectInsertText } from './completion.ts'
+import { withAuthorPreferences } from './author-preferences.ts'
 
 export type FimRoute = 'dsh-llm'
 
@@ -21,6 +22,7 @@ async function streamCompletion(input: {
   model: string
   prefix: string
   suffix: string
+  authorPreferences: string
   signal: AbortSignal
 }): Promise<string> {
   if (!input.llm.stream) return ''
@@ -29,7 +31,7 @@ async function streamCompletion(input: {
     model: input.model,
     maxTokens: 96,
     signal: input.signal,
-    system: CHAT_SYSTEM,
+    system: withAuthorPreferences(CHAT_SYSTEM, input.authorPreferences),
     messages: [
       {
         role: 'user',
@@ -51,6 +53,7 @@ export async function completeFim(input: {
   model: string
   prefix: string
   suffix: string
+  authorPreferences?: string
   signal: AbortSignal
 }): Promise<{ text: string; route: FimRoute }> {
   const llm = (input.ctx.get?.('llm') ?? {}) as LlmBag
@@ -60,6 +63,7 @@ export async function completeFim(input: {
     model: input.model,
     prefix: input.prefix,
     suffix: input.suffix,
+    authorPreferences: input.authorPreferences ?? '',
     signal: input.signal,
   })
   return { text, route: 'dsh-llm' }
