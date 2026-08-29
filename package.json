@@ -21,6 +21,7 @@
     "test:e2e:desktop": "node e2e/desktop.mjs",
     "test:e2e:shell-web": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/shell-web.mjs",
     "test:e2e:workbench": "pnpm build && node e2e/workbench.mjs",
+    "test:e2e:author-flow": "pnpm build && node e2e/author-flow-live.mjs",
     "test:e2e:portable": "node e2e/portable.mjs",
     "verify:desktop": "pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e:desktop && node e2e/workbench.mjs",
     "verify:delivery": "pnpm verify:desktop && pnpm test:e2e:matrix && pnpm pack:desktop && pnpm test:e2e:portable"
