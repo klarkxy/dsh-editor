@@ -450,6 +450,87 @@ function SearchPanel(props: {
 
 type CreateRequest = { kind: DocumentKind | 'group'; directory: string }
 
+function ConfirmDialog(props: {
+  id: string
+  title: string
+  message: string
+  confirmLabel: string
+  onCancel(): void
+  onConfirm(): void
+}) {
+  const dialog = useRef<HTMLDivElement | null>(null)
+  const cancel = useRef<HTMLButtonElement | null>(null)
+  const returnFocus = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    globalThis.setTimeout(() => cancel.current?.focus(), 0)
+    return () => { const target = returnFocus.current; globalThis.setTimeout(() => { if (target?.isConnected) target.focus() }, 0) }
+  }, [])
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') { event.preventDefault(); props.onCancel(); return }
+    if (event.key !== 'Tab' || !dialog.current) return
+    const buttons = [...dialog.current.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+    const first = buttons[0]; const last = buttons.at(-1)
+    if (!first || !last) return
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  }
+  return e('div', { className: 'file-dialog-overlay' },
+    e('div', { ref: dialog, className: 'file-dialog confirm-dialog', role: 'alertdialog', 'aria-modal': true, 'aria-labelledby': `${props.id}-title`, 'aria-describedby': `${props.id}-message`, onKeyDown },
+      e('header', null, e('h2', { id: `${props.id}-title` }, props.title)),
+      e('p', { id: `${props.id}-message` }, props.message),
+      e('footer', null,
+        e('button', { ref: cancel, type: 'button', onClick: props.onCancel }, '取消'),
+        e('button', { className: 'danger-action', type: 'button', onClick: props.onConfirm }, props.confirmLabel),
+      ),
+    ),
+  )
+}
+
+function TextPromptDialog(props: {
+  id: string
+  title: string
+  label: string
+  initialValue: string
+  confirmLabel: string
+  onCancel(): void
+  onConfirm(value: string): void
+}) {
+  const [value, setValue] = useState(props.initialValue)
+  const dialog = useRef<HTMLDivElement | null>(null)
+  const input = useRef<HTMLInputElement | null>(null)
+  const returnFocus = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    globalThis.setTimeout(() => { input.current?.focus(); input.current?.select() }, 0)
+    return () => { const target = returnFocus.current; globalThis.setTimeout(() => { if (target?.isConnected) target.focus() }, 0) }
+  }, [])
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') { event.preventDefault(); props.onCancel(); return }
+    if (event.key !== 'Tab' || !dialog.current) return
+    const controls = [...dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled)')]
+    const first = controls[0]; const last = controls.at(-1)
+    if (!first || !last) return
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  }
+  return e('div', { className: 'file-dialog-overlay' },
+    e('div', { ref: dialog, className: 'file-dialog prompt-dialog', role: 'dialog', 'aria-modal': true, 'aria-labelledby': `${props.id}-title`, onKeyDown },
+      e('header', null,
+        e('h2', { id: `${props.id}-title` }, props.title),
+        e('button', { className: 'icon-button', type: 'button', 'aria-label': '关闭', onClick: props.onCancel }, '×'),
+      ),
+      e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (value.trim()) props.onConfirm(value.trim()) } },
+        e('label', null, props.label, e('input', { ref: input, value, maxLength: 80, onChange: (event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value) })),
+        e('footer', null,
+          e('button', { type: 'button', onClick: props.onCancel }, '取消'),
+          e('button', { className: 'primary-action', type: 'submit', disabled: !value.trim() }, props.confirmLabel),
+        ),
+      ),
+    ),
+  )
+}
+
 function CreateDocumentDialog(props: {
   request: CreateRequest
   busy: boolean
@@ -659,6 +740,7 @@ function Editor(props: {
   const [selection, setSelection] = useState({ start: 0, end: 0 })
   const [proposal, setProposal] = useState<{ ticket: SelectionTicket; text: string } | null>(null)
   const [patching, setPatching] = useState(false)
+  const [reloadConfirm, setReloadConfirm] = useState(false)
   const ta = useRef<HTMLTextAreaElement | null>(null)
   const fimAbort = useRef<AbortController | null>(null)
   const patchAbort = useRef<AbortController | null>(null)
@@ -700,6 +782,7 @@ function Editor(props: {
     setProposal(null)
     setGhost('')
     setConflict(false)
+    setReloadConfirm(false)
     if (!path) { setDoc(null); setTextState(''); setNote(''); return }
     let live = true
     void Promise.all([
@@ -807,12 +890,14 @@ function Editor(props: {
   }, [doc, text])
 
   const reloadDisk = async () => {
-    if (!doc || !globalThis.confirm?.('放弃本地草稿并重新载入磁盘版本？')) return
+    if (!doc) return
+    setReloadConfirm(false)
     const result = await ctx.connection.rpc.call('/manuscript', 'file.read', { sessionId: doc.sessionId, path: doc.path }) as RpcResult<{ text: string; version: string }>
     if (!result.ok) { setNote(errorMessage(result)); return }
     const next = { ...doc, text: result.value.text, version: result.value.version }
     setDoc(next); setTextState(next.text); setConflict(false); setNote('已重新载入磁盘版本')
     await draftQueue.current!.run('draft.delete', { sessionId: doc.sessionId, path: doc.path })
+    globalThis.setTimeout(() => ta.current?.focus(), 0)
   }
 
   const saveConflictCopy = async () => {
@@ -1009,10 +1094,18 @@ function Editor(props: {
           setNote('已停止改写。')
         },
       }, patching ? '停止改写' : '修改选段'),
-      conflict ? e('button', { type: 'button', onClick: () => void reloadDisk() }, '重新载入磁盘版本') : null,
+      conflict ? e('button', { type: 'button', onClick: () => setReloadConfirm(true) }, '重新载入磁盘版本') : null,
       conflict ? e('button', { type: 'button', onClick: () => void saveConflictCopy() }, '另存冲突副本') : null,
       note ? e('span', { role: conflict ? 'alert' : 'status' }, note) : null,
     ),
+    reloadConfirm ? e(ConfirmDialog, {
+      id: 'reload-disk-confirm',
+      title: '放弃本地草稿？',
+      message: '将重新载入磁盘版本；当前未保存内容不会被写入。',
+      confirmLabel: '放弃并重新载入',
+      onCancel: () => setReloadConfirm(false),
+      onConfirm: () => void reloadDisk(),
+    }) : null,
   )
 }
 
@@ -1045,7 +1138,7 @@ function NewConversationPicker(props: {
   ctx: ShellContext
   session: SessionFace
   workspaceId?: WorkspaceId
-  canStart(): boolean
+  canStart(): Promise<boolean>
   onOpen(sessionId: SessionId): void
   onClose(): void
   onConfigure(): void
@@ -1074,8 +1167,8 @@ function NewConversationPicker(props: {
     event.preventDefault()
     const [provider, model] = value.split('\0')
     if (!workspaceId || !provider || !model) return
-    if (!canStart()) return
     setBusy(true); setNote('')
+    if (!(await canStart())) { setBusy(false); return }
     try {
       const sessionId = await ctx.workspaces.connectWorkspace(workspaceId)
       const selected = await selectModel(ctx.connection, sessionId, provider, model)
@@ -1412,6 +1505,8 @@ function Chat({ ctx, session, workspaceId, activePath, hidden, onClose, onConfig
   const [note, setNote] = useState('')
   const [outgoing, setOutgoing] = useState<{ text: string; state: 'sending' | 'accepted' | 'failed'; afterRows: number; projectContextReceipt?: ProjectContextReceiptBundle } | null>(null)
   const [creatingConversation, setCreatingConversation] = useState(false)
+  const [renamingConversation, setRenamingConversation] = useState(false)
+  const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   const titleAttempted = useRef(new Set<string>())
   const partial = partialText(snapshot)
   const rows = chatRows(snapshot)
@@ -1446,18 +1541,24 @@ function Chat({ ctx, session, workspaceId, activePath, hidden, onClose, onConfig
     queueConversationRename(title, '对话名称没有自动保存，可以手动重命名。')
   }, [rows, session.sessionId, sessionList.byId])
   useEffect(() => { onDraftDirtyChange(Boolean(draft.trim())) }, [draft, onDraftDirtyChange])
-  const canDiscardDraft = (nextId: string) => !shouldConfirmConversationSwitch(draft, nextId, session.sessionId)
-    || Boolean(globalThis.confirm?.('未发送的消息将不会带到新对话，继续切换？'))
+  useEffect(() => () => draftConfirm?.resolve(false), [draftConfirm])
+  const canDiscardDraft = async (nextId: string): Promise<boolean> => {
+    if (!shouldConfirmConversationSwitch(draft, nextId, session.sessionId)) return true
+    return await new Promise<boolean>((resolve) => setDraftConfirm({ resolve }))
+  }
+  const resolveDraftConfirm = (value: boolean) => {
+    draftConfirm?.resolve(value)
+    setDraftConfirm(null)
+  }
   const openConversation = (nextId: SessionId) => {
     setDraft(''); setNote(''); setOutgoing(null); onDraftDirtyChange(false); ctx.sessions.open(nextId)
   }
-  const switchConversation = (nextId: string) => {
-    if (!canDiscardDraft(nextId)) return
+  const switchConversation = async (nextId: string) => {
+    if (!(await canDiscardDraft(nextId))) return
     openConversation(nextId as SessionId)
   }
-  const renameConversation = () => {
-    const title = globalThis.prompt?.('对话名称', sessionList.byId?.[session.sessionId]?.title ?? '')?.trim()
-    if (!title) return
+  const renameConversation = (title: string) => {
+    setRenamingConversation(false)
     titleAttempted.current.add(session.sessionId)
     setNote('')
     queueConversationRename(title, '对话名称没有保存，请重试。')
@@ -1505,11 +1606,11 @@ function Chat({ ctx, session, workspaceId, activePath, hidden, onClose, onConfig
   return e('aside', { className: 'chat', 'aria-label': '写作助手', hidden },
     e('header', { className: 'chat-header' },
       e('strong', null, connected ? '搭档' : '重连中'),
-      e('label', { className: 'conversation-select' }, e('span', { className: 'sr-only' }, '切换对话'), e('select', { value: session.sessionId, 'aria-label': '切换对话', onChange: (event: ChangeEvent<HTMLSelectElement>) => switchConversation(event.target.value) }, conversations.map((item) => e('option', { key: item.id, value: item.id }, item.title)))),
+      e('label', { className: 'conversation-select' }, e('span', { className: 'sr-only' }, '切换对话'), e('select', { value: session.sessionId, 'aria-label': '切换对话', onChange: (event: ChangeEvent<HTMLSelectElement>) => void switchConversation(event.target.value) }, conversations.map((item) => e('option', { key: item.id, value: item.id }, item.title)))),
       e('div', { className: 'chat-controls' }, e(ModelIndicator, { ctx, session, onConfigure })),
       e('div', { className: 'chat-header-actions' },
         e('button', { className: 'icon-button', type: 'button', title: '新对话', 'aria-label': '新对话', onClick: () => setCreatingConversation(true) }, '＋'),
-        e('button', { className: 'icon-button', type: 'button', title: '重命名对话', 'aria-label': '重命名对话', onClick: renameConversation }, '✎'),
+        e('button', { className: 'icon-button', type: 'button', title: '重命名对话', 'aria-label': '重命名对话', onClick: () => setRenamingConversation(true) }, '✎'),
         e('button', { className: 'icon-button', type: 'button', title: '收起搭档', 'aria-label': '收起搭档', onClick: onClose }, '×'),
       ),
     ),
@@ -1571,6 +1672,23 @@ function Chat({ ctx, session, workspaceId, activePath, hidden, onClose, onConfig
         }, '发送'),
       ),
     ),
+    renamingConversation ? e(TextPromptDialog, {
+      id: 'rename-conversation',
+      title: '重命名对话',
+      label: '对话名称',
+      initialValue: sessionList.byId?.[session.sessionId]?.title ?? '',
+      confirmLabel: '保存名称',
+      onCancel: () => setRenamingConversation(false),
+      onConfirm: renameConversation,
+    }) : null,
+    draftConfirm ? e(ConfirmDialog, {
+      id: 'discard-message-draft',
+      title: '放弃未发送的消息？',
+      message: '这段文字不会带到另一个对话，也不会自动保存。',
+      confirmLabel: '放弃并继续',
+      onCancel: () => resolveDraftConfirm(false),
+      onConfirm: () => resolveDraftConfirm(true),
+    }) : null,
   )
 }
 
@@ -1675,10 +1793,18 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
   const [assistantDraftDirty, setAssistantDraftDirty] = useState(false)
-  const canLeaveAssistantDraft = () => !assistantDraftDirty
-    || Boolean(globalThis.confirm?.('写作搭档中还有未发送的消息，离开后不会保留。继续？'))
-  const openSettings = () => {
-    if (!canLeaveAssistantDraft()) return
+  const [leaveConfirm, setLeaveConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
+  useEffect(() => () => leaveConfirm?.resolve(false), [leaveConfirm])
+  const canLeaveAssistantDraft = async (): Promise<boolean> => {
+    if (!assistantDraftDirty) return true
+    return await new Promise<boolean>((resolve) => setLeaveConfirm({ resolve }))
+  }
+  const resolveLeaveConfirm = (value: boolean) => {
+    leaveConfirm?.resolve(value)
+    setLeaveConfirm(null)
+  }
+  const openSettings = async () => {
+    if (!(await canLeaveAssistantDraft())) return
     setAssistantDraftDirty(false)
     setView('settings')
   }
@@ -1788,7 +1914,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       if (!action || event.repeat) return
       if (action !== 'settings' && (!session || view !== 'workspace')) return
       event.preventDefault()
-      if (action === 'settings') { openSettings(); return }
+      if (action === 'settings') { void openSettings(); return }
       if (action === 'toggle-sidebar') {
         if (focusMode) { setFocusMode(false); setSidebarOpen(true) } else setSidebarOpen((value) => !value)
         return
@@ -2381,7 +2507,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   }
   const applySnapshotRestore = async () => {
     if (snapshotFlow.kind !== 'review') return
-    if (!canLeaveAssistantDraft()) return
+    if (!(await canLeaveAssistantDraft())) return
     setAssistantDraftDirty(false)
     const flow = snapshotFlow
     setSnapshotBusy(true)
@@ -2658,14 +2784,14 @@ function Root({ ctx }: { ctx: ShellContext }) {
         type: 'button',
         title: '返回作品列表',
         'aria-label': '返回作品列表',
-        onClick: () => {
+        onClick: () => void (async () => {
           if (editorDirty) { setWorkbenchNote('请先保存当前文档，再返回作品列表。'); return }
-          if (!canLeaveAssistantDraft()) return
+          if (!(await canLeaveAssistantDraft())) return
           setAssistantDraftDirty(false)
           setAssistantOpen(false)
           setFocusMode(false)
           ctx.sessions.clear()
-        },
+        })(),
       }, '作品'),
       e('label', { className: 'workspace-select' }, e('span', { className: 'sr-only' }, '工作区'), e('select', {
         'aria-label': '选择工作区',
@@ -2673,12 +2799,11 @@ function Root({ ctx }: { ctx: ShellContext }) {
         onChange: (event: ChangeEvent<HTMLSelectElement>) => {
           const id = event.target.value as WorkspaceId
           if (!id || id === currentWorkspace?.workspaceId) return
-          if (!canLeaveAssistantDraft()) {
-            event.currentTarget.value = currentWorkspace?.workspaceId ?? ''
-            return
-          }
-          setAssistantDraftDirty(false)
-          void connectAndInitialize(id, false).catch(() => setExportNote('工作区没有打开，请重试。'))
+          void (async () => {
+            if (!(await canLeaveAssistantDraft())) return
+            setAssistantDraftDirty(false)
+            await connectAndInitialize(id, false).catch(() => setExportNote('工作区没有打开，请重试。'))
+          })()
         },
       }, workspaces.items.map((workspace) => e('option', { key: workspace.workspaceId, value: workspace.workspaceId }, workspace.title || workspace.path)))),
       currentWorkspace ? e('button', { className: 'workspace-current-manage icon-button', type: 'button', 'aria-label': '管理当前作品', title: '修改作品显示名', onClick: () => openWorkspaceManage(currentWorkspace, false) }, '···') : null,
@@ -2816,6 +2941,14 @@ function Root({ ctx }: { ctx: ShellContext }) {
       onClick: () => setAssistantOpen(true),
     }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')) : null,
     shortcutsOpen ? e(ShortcutDialog, { onClose: closeShortcuts }) : null,
+    leaveConfirm ? e(ConfirmDialog, {
+      id: 'leave-assistant-draft',
+      title: '放弃未发送的消息？',
+      message: '离开当前作品或打开设置后，这段文字不会自动保存。',
+      confirmLabel: '放弃并继续',
+      onCancel: () => resolveLeaveConfirm(false),
+      onConfirm: () => resolveLeaveConfirm(true),
+    }) : null,
     createRequest ? e(CreateDocumentDialog, {
       key: `${createRequest.kind}:${createRequest.directory}`,
       request: createRequest,

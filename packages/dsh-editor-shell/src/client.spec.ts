@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { canSubmitComposer, clampPanelWidth, createFlowWorkspace, errorMessage, isStaleFailure, LatestRequestGate, resizedPanelWidth, safeRpcCall, shouldSubmitComposer, workspaceShortcut } from './client.ts'
 
 describe('shell manuscript RPC safety', () => {
+  it('keeps browser-native prompt and confirm out of the workbench UI', () => {
+    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    expect(source).not.toContain('globalThis.prompt')
+    expect(source).not.toContain('globalThis.confirm')
+  })
+
   it('drops superseded or cross-session async responses', () => {
     const gate = new LatestRequestGate()
     const first = gate.begin('session-a')
