@@ -141,6 +141,11 @@ try {
   await window.locator('.tree-row', { hasText: '001.md' }).first().click()
   await window.getByRole('textbox', { name: '正文' }).waitFor({ state: 'visible' })
   await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('1 / 3'))
+  const completeButton = window.getByRole('button', { name: '补全', exact: true })
+  const patchButton = window.getByRole('button', { name: '修改选段', exact: true })
+  await completeButton.waitFor({ state: 'visible' })
+  if (!(await completeButton.isEnabled())) failures.push('正文打开后补全入口不可用')
+  if (await patchButton.isEnabled()) failures.push('没有选中文字时修改选段入口仍可点击')
 
   const layoutControls = window.locator('.layout-controls')
   const leftResizer = window.locator('.panel-resizer.left')
@@ -166,6 +171,7 @@ try {
   await window.locator('.chat').waitFor({ state: 'visible' })
   await layoutControls.getByRole('button', { name: '搭档', exact: true }).click()
   await window.locator('.chat').waitFor({ state: 'detached' })
+  await window.screenshot({ path: resolve(output, 'editor-ai-controls.png'), fullPage: true })
 
   await window.getByTitle('下一章').click()
   await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('2 / 3'))
@@ -191,6 +197,10 @@ try {
     return input.value.slice(input.selectionStart, input.selectionEnd)
   })
   if (selection !== '月下银桥') failures.push(`搜索定位错误：${selection}`)
+  await window.waitForFunction(() => {
+    const button = [...document.querySelectorAll('button')].find((node) => node.textContent === '修改选段')
+    return button instanceof HTMLButtonElement && !button.disabled
+  })
 
   const secondChapterManager = window.getByRole('button', { name: '管理 002.md' })
   if (!(await secondChapterManager.isVisible())) {

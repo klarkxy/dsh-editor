@@ -454,6 +454,7 @@ function Editor(props: {
   const [proposal, setProposal] = useState<{ ticket: SelectionTicket; text: string } | null>(null)
   const [patching, setPatching] = useState(false)
   const ta = useRef<HTMLTextAreaElement | null>(null)
+  const fimAbort = useRef<AbortController | null>(null)
   const patchAbort = useRef<AbortController | null>(null)
   const draftQueue = useRef<DraftSyncQueue | null>(null)
   const saving = useRef(false)
@@ -474,6 +475,11 @@ function Editor(props: {
   }, [doc, text, conflict, onDirtyChange])
 
   const setText = (value: string) => {
+    if (loadingFim || patching) setNote('正文已变化，已停止旧建议。')
+    fimAbort.current?.abort()
+    patchAbort.current?.abort()
+    setLoadingFim(false)
+    setPatching(false)
     setTextState(value)
     setRevision((old) => old + 1)
     setGhost('')
@@ -481,7 +487,10 @@ function Editor(props: {
   }
 
   useEffect(() => {
+    fimAbort.current?.abort()
     patchAbort.current?.abort()
+    setLoadingFim(false)
+    setPatching(false)
     setProposal(null)
     setGhost('')
     setConflict(false)
@@ -512,7 +521,7 @@ function Editor(props: {
         setNote('')
       }
     })
-    return () => { live = false; patchAbort.current?.abort() }
+    return () => { live = false; fimAbort.current?.abort(); patchAbort.current?.abort() }
   }, [path, session.sessionId, externalRevision])
 
   useEffect(() => {
@@ -527,6 +536,7 @@ function Editor(props: {
       if (!ta.current) return
       ta.current.focus()
       ta.current.setSelectionRange(start, end)
+      setSelection({ start, end })
     }, 0)
   }, [doc?.path, doc?.version, reveal?.nonce])
 
@@ -616,52 +626,74 @@ function Editor(props: {
 
   const complete = async () => {
     if (!doc || !ta.current) return
+    fimAbort.current?.abort()
+    patchAbort.current?.abort()
+    setProposal(null)
     const requestDoc = doc
     const requestRevision = revision
     const pos = ta.current.selectionStart
     const controller = new AbortController()
+    fimAbort.current = controller
     setLoadingFim(true)
-    const result = await ctx.connection.rpc.call('/manuscript', 'fim.complete', {
+    setNote('正在生成补全…')
+    const result = await safeRpcCall<{ text?: string }>(() => ctx.connection.rpc.call('/manuscript', 'fim.complete', {
       sessionId: doc.sessionId,
       path: doc.path,
       prefix: text.slice(0, pos),
       suffix: text.slice(pos),
-    }, controller.signal) as RpcResult<{ text?: string }>
-    setLoadingFim(false)
+    }, controller.signal))
+    if (fimAbort.current === controller) {
+      fimAbort.current = null
+      setLoadingFim(false)
+    }
+    if (controller.signal.aborted) return
     if (docRef.current?.sessionId !== requestDoc.sessionId || docRef.current.path !== requestDoc.path || revisionRef.current !== requestRevision) return
     if (!result.ok) { setNote(errorMessage(result)); return }
-    setGhost(String(result.value.text ?? ''))
+    const suggestion = String(result.value.text ?? '')
+    if (!suggestion.trim()) { setNote('模型没有返回可用补全。'); return }
+    setGhost(suggestion)
     setGhostAt(pos)
+    setNote('补全已就绪；确认后才会写入正文。')
   }
 
   const requestPatch = async () => {
     if (!doc) return
     const ticket = selectionTicket(doc, text, revision, selection.start, selection.end)
     if (!ticket) { setNote('请先选择需要改写的文字。'); return }
+    fimAbort.current?.abort()
+    setGhost('')
     patchAbort.current?.abort()
     const controller = new AbortController()
     patchAbort.current = controller
     setPatching(true)
-    const result = await ctx.connection.rpc.call('/manuscript', 'patch.complete', {
+    setNote('正在生成选段修改…')
+    const result = await safeRpcCall<{ text?: string }>(() => ctx.connection.rpc.call('/manuscript', 'patch.complete', {
       sessionId: ticket.sessionId,
       path: ticket.path,
       selectedText: ticket.selectedText,
       before: text.slice(Math.max(0, ticket.start - 4000), ticket.start),
       after: text.slice(ticket.end, ticket.end + 4000),
-    }, controller.signal) as RpcResult<{ text?: string }>
-    setPatching(false)
+    }, controller.signal))
+    if (patchAbort.current === controller) {
+      patchAbort.current = null
+      setPatching(false)
+    }
     if (controller.signal.aborted || !isSelectionCurrent(ticket, docRef.current, textRef.current, revisionRef.current)) return
     if (!result.ok) { setNote(errorMessage(result)); return }
     const replacement = String(result.value.text ?? '').trim()
     if (!replacement) { setNote('模型没有返回可用改写。'); return }
     setProposal({ ticket, text: replacement })
+    setNote('修改建议已就绪；确认后才会写入正文。')
   }
 
   const acceptGhost = () => {
     if (!canApplyGhost(state, ghost)) return
+    const cursor = ghostAt + ghost.length
     setText(applyGhost(text, ghostAt, ghost))
+    setSelection({ start: cursor, end: cursor })
     setGhost('')
-    ta.current?.focus()
+    setNote('补全已加入草稿，正在自动保存。')
+    globalThis.setTimeout(() => { ta.current?.focus(); ta.current?.setSelectionRange(cursor, cursor) }, 0)
   }
 
   const acceptPatch = () => {
@@ -670,9 +702,12 @@ function Editor(props: {
       setNote('选区已经变化，已丢弃过期建议。')
       return
     }
+    const cursor = proposal.ticket.start + proposal.text.length
     setText(applySelectionPatch(text, proposal.ticket, proposal.text))
+    setSelection({ start: cursor, end: cursor })
     setProposal(null)
-    ta.current?.focus()
+    setNote('修改已加入草稿，正在自动保存。')
+    globalThis.setTimeout(() => { ta.current?.focus(); ta.current?.setSelectionRange(cursor, cursor) }, 0)
   }
 
   if (!path) {
@@ -704,12 +739,61 @@ function Editor(props: {
       onSelect: (event: ChangeEvent<HTMLTextAreaElement>) => setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd }),
       onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() }
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && proposal) { event.preventDefault(); acceptPatch() }
         if (event.key === 'Tab' && ghost) { event.preventDefault(); acceptGhost() }
-        if (event.key === 'Escape') { patchAbort.current?.abort(); setGhost(''); setProposal(null) }
+        if (event.key === 'Escape' && (loadingFim || patching || ghost || proposal)) {
+          event.preventDefault()
+          fimAbort.current?.abort()
+          patchAbort.current?.abort()
+          setLoadingFim(false)
+          setPatching(false)
+          setGhost('')
+          setProposal(null)
+          setNote('已放弃当前建议。')
+        }
       },
     }),
+    ghost ? e('section', { className: 'ghost ghost-suggestion', 'aria-label': '补全建议', 'aria-live': 'polite' },
+      e('strong', null, '补全建议'),
+      e('p', null, ghost),
+      e('div', null,
+        e('button', { type: 'button', onClick: acceptGhost }, '接受补全'),
+        e('button', { type: 'button', onClick: () => { setGhost(''); setNote('已放弃补全。'); ta.current?.focus() } }, '放弃'),
+      ),
+    ) : null,
+    proposal ? e('section', { className: 'proposal', 'aria-label': '选段修改建议', 'aria-live': 'polite' },
+      e('strong', null, '选段修改建议'),
+      e('div', { className: 'selection-diff' },
+        e('section', null, e('small', null, '原文'), e('p', null, proposal.ticket.selectedText)),
+        e('section', null, e('small', null, '修改后'), e('p', null, proposal.text)),
+      ),
+      e('div', { className: 'proposal-actions' },
+        e('button', { type: 'button', onClick: acceptPatch }, '应用修改'),
+        e('button', { type: 'button', onClick: () => { setProposal(null); setNote('已放弃修改建议。'); ta.current?.focus() } }, '放弃'),
+      ),
+    ) : null,
     e('footer', { className: 'editor-tools' },
       e('button', { type: 'button', onClick: () => void save(), disabled: !doc || !isDirty(doc, text) || conflict }, '保存'),
+      e('button', {
+        type: 'button',
+        disabled: !doc || conflict || patching,
+        onClick: () => {
+          if (!loadingFim) { void complete(); return }
+          fimAbort.current?.abort()
+          setLoadingFim(false)
+          setNote('已停止补全。')
+        },
+      }, loadingFim ? '停止补全' : '补全'),
+      e('button', {
+        type: 'button',
+        disabled: !doc || conflict || loadingFim || (!patching && selection.start === selection.end),
+        onClick: () => {
+          if (!patching) { void requestPatch(); return }
+          patchAbort.current?.abort()
+          setPatching(false)
+          setNote('已停止改写。')
+        },
+      }, patching ? '停止改写' : '修改选段'),
       conflict ? e('button', { type: 'button', onClick: () => void reloadDisk() }, '重新载入磁盘版本') : null,
       conflict ? e('button', { type: 'button', onClick: () => void saveConflictCopy() }, '另存冲突副本') : null,
       note ? e('span', { role: conflict ? 'alert' : 'status' }, note) : null,
@@ -2225,6 +2309,7 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .tree-row:hover{transform:translateX(4px)!important}.tree-row[aria-current=page]{box-shadow:inset 3px 0 #3d755a}.tree-row[aria-expanded=true]{color:var(--ink);font-weight:600}
 .paper-input{transition:transform 360ms var(--ease),box-shadow 360ms ease,border-color 360ms ease}.paper-input:focus{transform:translateY(-2px);border-color:#b9c9ba;box-shadow:0 18px 44px #4b67471c,0 0 0 4px #5c8a6820}
 .composer{transition:background-color 240ms ease,box-shadow 240ms ease}.composer:focus-within{background:#fffaf0;box-shadow:0 -12px 34px #5a4d3210}.composer textarea:focus{border-color:#73917d;box-shadow:0 0 0 3px #4d7d5d17}
+.ghost-suggestion{box-sizing:border-box;max-height:42%;display:grid;gap:8px;overflow:auto;padding:12px 14px;border:1px solid #b9cbb9;border-radius:14px 4px 14px 14px;background:#f5faef;box-shadow:0 12px 32px #3f624719;pointer-events:auto}.ghost-suggestion strong,.proposal>strong{color:#28523f}.ghost-suggestion p{margin:0;overflow:auto;white-space:pre-wrap;line-height:1.7}.ghost-suggestion div,.proposal-actions{display:flex;gap:7px}.ghost-suggestion button,.proposal button{padding:5px 9px;border:1px solid #b8c5b7;border-radius:9px 3px 9px 9px;background:#fffdf7;color:#285640;cursor:pointer}.proposal{box-sizing:border-box;max-height:56%;overflow:auto}.selection-diff{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px!important;margin:9px 0}.selection-diff section{min-width:0;padding:8px;border:1px solid #ddd5c6;border-radius:7px;background:#f8f4e9}.selection-diff small{color:#68776d}.selection-diff p{max-height:150px;overflow:auto;white-space:pre-wrap;line-height:1.65}.proposal-actions{justify-content:flex-end}@media(max-width:1320px){.ghost-suggestion{max-width:72%}.proposal{width:min(430px,58%)}}
 .chat-row,.pending-card{animation:message-in 360ms var(--ease) both}.chat-row.user{transform-origin:right bottom}.chat-row.assistant{transform-origin:left bottom}.chat-row.tool strong::after{content:'···';display:inline-block;width:1.5em;overflow:hidden;vertical-align:bottom;animation:dots 1.2s steps(4,end) infinite}
 .index-status{animation:index-breathe 2.4s ease-in-out infinite}.index-status button:hover{transform:translateX(2px)}
 .export-actions{position:relative;z-index:12}.export-menu{position:relative}.export-menu summary{padding:5px 10px;border:1px solid #c9c5b4;border-radius:16px;background:#fbf8ef;color:#304f41;cursor:pointer;list-style:none}.export-menu summary::-webkit-details-marker{display:none}.export-menu[open] summary{background:#dce9dd}.export-menu>div{position:absolute;z-index:13;top:calc(100% + 8px);right:0;display:grid;min-width:130px;padding:6px;border:1px solid #d8cfbd;border-radius:10px 3px 10px 10px;background:#fffdf6;box-shadow:0 16px 40px #4e42261f;animation:menu-pop 180ms var(--ease)}.export-menu>div button{border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px}.export-menu>div button:hover{background:#e4eee1}

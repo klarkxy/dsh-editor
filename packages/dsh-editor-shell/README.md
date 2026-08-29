@@ -6,6 +6,8 @@
 
 工作区采用可折叠、可键盘调整宽度的文件/稿纸/搭档三栏布局；专注模式临时只保留稿纸。栏宽与文件栏开合仅作为本机 Renderer 界面偏好保存，不进入作品文件或 Host 状态。
 
+编辑器把 `/manuscript` 的 FIM 与选段 patch 显式呈现为可放弃的稿纸建议；只有作者接受后才进入本地草稿，生成期间正文或文档发生变化时旧结果不会应用。
+
 Private client shell for the dedicated `dsh-editor` profile. It owns the root
 surface only in that profile and consumes DSH `0.1.1-rc.2` public runtime and
 connection contracts. It is not a public installable plugin.
