@@ -1,6 +1,7 @@
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import { createElement as e, useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { friendlyModelError, providerWrite, validateModelForm, type DiscoveredModel, type ModelForm, type ModelInterface } from './model-config.ts'
+import type { CompletionPreference } from './completion-preference.ts'
 
 const KEY_REFS = ['DEEPSEEK_API_KEY', 'DSH_EDITOR_CUSTOM_API_KEY'] as const
 
@@ -9,6 +10,8 @@ type ModelSetupProps = {
   onBack?(): void
   onConfigured(provider: string, model: string): void
   onTestFailure?(): void
+  completionPreference?: CompletionPreference
+  onCompletionPreferenceChange?(value: CompletionPreference): void
 }
 
 export function ModelSetup(props: ModelSetupProps) {
@@ -130,6 +133,19 @@ export function ModelSetup(props: ModelSetupProps) {
         placeholder: configured[write.keyRef] ? '已配置；留空保持不变' : '粘贴 API Key',
         onChange: (event: ChangeEvent<HTMLInputElement>) => setForm((old) => ({ ...old, apiKey: event.target.value })),
       })),
+      props.onBack && props.completionPreference && props.onCompletionPreferenceChange ? e('fieldset', { className: 'completion-preference' },
+        e('legend', null, '自动补全'),
+        e('p', null, '默认只在你点击“补全”时请求。停顿提示也只生成建议，必须由你确认后才写入正文。'),
+        ([['manual', '仅手动'], ['pause', '停顿后提示']] as const).map(([value, label]) => e('label', { key: value },
+          e('input', {
+            type: 'radio',
+            name: 'completion-preference',
+            checked: props.completionPreference === value,
+            onChange: () => props.onCompletionPreferenceChange?.(value),
+          }),
+          label,
+        )),
+      ) : null,
       note ? e('p', { className: /成功/.test(note) ? 'success' : 'warning', role: /成功/.test(note) ? 'status' : 'alert' }, note) : null,
       e('footer', null,
         props.onBack ? e('button', { type: 'button', onClick: props.onBack, disabled: busy }, '返回') : null,

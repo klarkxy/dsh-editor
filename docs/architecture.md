@@ -83,6 +83,8 @@ profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记�
 
 `patch.complete` 输入 session、文件、选区和有界前后文；Host 从 live session request header 选择 provider/model，再使用 DSH `llm.stream`。返回只是一条短建议。Renderer 以文档 revision、选区起止与选区文本组成 ticket；请求过期、abort 或选区改变时丢弃响应。“用这句”只改 buffer，仍需显式保存。
 
+补全偏好只保存在 Renderer 的本机界面存储中，默认 `manual`。`pause` 模式以每次真实键入 revision 为一次性触发票据，只对 `正文` Markdown/TXT 生效；稿纸失焦、非折叠选区、短前文、冲突、已有建议或正在执行其他建议时不发请求。停顿 1.5 秒后仍满足条件才复用同一 `fim.complete`，失败不会在无新键入时自行重试，响应仍走既有 revision/path/abort 校验并需要作者确认。
+
 FIM 同样由 Host 选模型。候选只改 buffer，支持 loading、Tab 接受、Esc 放弃和下一候选；空白章不会自动生成正文。
 
 ## Electron 安全与进程边界

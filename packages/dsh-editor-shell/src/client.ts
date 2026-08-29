@@ -61,6 +61,7 @@ import { WORKBENCH_RPC_CHANNEL } from './workbench-rpc.ts'
 import type { ProposalMarker } from './proposal-tool.ts'
 import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ConversationRenameQueue, conversationRows, nextAutomaticConversationTitle, shouldConfirmConversationSwitch } from './conversation-lifecycle.ts'
+import { automaticCompletionReady, COMPLETION_PREFERENCE_KEY, readCompletionPreference, type CompletionPreference } from './completion-preference.ts'
 import {
   blocksWorkspaceOpen,
   idleSnapshotFlow,
@@ -750,8 +751,9 @@ function Editor(props: {
   externalRevision: number
   onDirtyChange(dirty: boolean): void
   reveal: RevealRequest | null
+  completionPreference: CompletionPreference
 }) {
-  const { ctx, session, path, files, onOpen, create, externalRevision, onDirtyChange, reveal } = props
+  const { ctx, session, path, files, onOpen, create, externalRevision, onDirtyChange, reveal, completionPreference } = props
   const [doc, setDoc] = useState<EditorDocument | null>(null)
   const [text, setTextState] = useState('')
   const [ghost, setGhost] = useState('')
@@ -764,11 +766,13 @@ function Editor(props: {
   const [proposal, setProposal] = useState<{ ticket: SelectionTicket; text: string } | null>(null)
   const [patching, setPatching] = useState(false)
   const [reloadConfirm, setReloadConfirm] = useState(false)
+  const [userEditRevision, setUserEditRevision] = useState(0)
   const ta = useRef<HTMLTextAreaElement | null>(null)
   const fimAbort = useRef<AbortController | null>(null)
   const patchAbort = useRef<AbortController | null>(null)
   const draftQueue = useRef<DraftSyncQueue | null>(null)
   const saving = useRef(false)
+  const lastAutomaticCompletion = useRef(0)
   if (!draftQueue.current) {
     draftQueue.current = new DraftSyncQueue((endpoint, payload) => ctx.connection.rpc.call('/manuscript', endpoint, payload))
   }
@@ -806,6 +810,8 @@ function Editor(props: {
     setGhost('')
     setConflict(false)
     setReloadConfirm(false)
+    setUserEditRevision(0)
+    lastAutomaticCompletion.current = 0
     if (!path) { setDoc(null); setTextState(''); setNote(''); return }
     let live = true
     void Promise.all([
@@ -940,6 +946,8 @@ function Editor(props: {
 
   const complete = async () => {
     if (!doc || !ta.current) return
+    // A manual request also consumes the pending pause trigger for this edit.
+    lastAutomaticCompletion.current = Math.max(lastAutomaticCompletion.current, userEditRevision)
     fimAbort.current?.abort()
     patchAbort.current?.abort()
     setProposal(null)
@@ -969,6 +977,40 @@ function Editor(props: {
     setGhostAt(pos)
     setNote('补全已就绪；确认后才会写入正文。')
   }
+
+  useEffect(() => {
+    if (!doc || !ta.current) return
+    const cursor = ta.current.selectionStart
+    if (!automaticCompletionReady({
+      preference: completionPreference,
+      manuscript: /^正文\/.+\.(?:md|txt)$/i.test(doc.path),
+      userEditRevision,
+      requestedRevision: lastAutomaticCompletion.current,
+      focused: document.activeElement === ta.current,
+      collapsedSelection: ta.current.selectionStart === ta.current.selectionEnd,
+      prefix: text.slice(0, cursor),
+      busy: loadingFim || patching,
+      blocked: conflict || Boolean(ghost) || Boolean(proposal),
+    })) return
+    const timer = globalThis.setTimeout(() => {
+      if (!ta.current) return
+      const currentCursor = ta.current.selectionStart
+      if (!automaticCompletionReady({
+        preference: completionPreference,
+        manuscript: /^正文\/.+\.(?:md|txt)$/i.test(doc.path),
+        userEditRevision,
+        requestedRevision: lastAutomaticCompletion.current,
+        focused: document.activeElement === ta.current,
+        collapsedSelection: ta.current.selectionStart === ta.current.selectionEnd,
+        prefix: textRef.current.slice(0, currentCursor),
+        busy: loadingFim || patching,
+        blocked: conflict || Boolean(ghost) || Boolean(proposal),
+      })) return
+      lastAutomaticCompletion.current = userEditRevision
+      void complete()
+    }, 1_500)
+    return () => globalThis.clearTimeout(timer)
+  }, [completionPreference, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision])
 
   const requestPatch = async () => {
     if (!doc) return
@@ -1058,7 +1100,10 @@ function Editor(props: {
       value: text,
       className: 'paper-input',
       'aria-label': '正文',
-      onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setText(event.target.value),
+      onChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
+        setText(event.target.value)
+        setUserEditRevision((old) => old + 1)
+      },
       onSelect: (event: ChangeEvent<HTMLTextAreaElement>) => setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd }),
       onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() }
@@ -1833,6 +1878,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
+  const [completionPreference, setCompletionPreference] = useState(() => readCompletionPreference(globalThis.localStorage))
   const [assistantDraftDirty, setAssistantDraftDirty] = useState(false)
   const [leaveConfirm, setLeaveConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   useEffect(() => () => leaveConfirm?.resolve(false), [leaveConfirm])
@@ -1937,6 +1983,9 @@ function Root({ ctx }: { ctx: ShellContext }) {
   useEffect(() => {
     try { globalThis.localStorage?.setItem('dsh-editor.layout.assistant-width', String(assistantWidth)) } catch { /* View preferences remain optional. */ }
   }, [assistantWidth])
+  useEffect(() => {
+    try { globalThis.localStorage?.setItem(COMPLETION_PREFERENCE_KEY, completionPreference) } catch { /* Writing preferences remain optional. */ }
+  }, [completionPreference])
   useEffect(() => {
     const hotkey = (event: globalThis.KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey
@@ -2742,6 +2791,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
         onBack: setupGate === 'ready' ? () => setView('workspace') : undefined,
         onConfigured: () => { setSetupGate('ready'); setView('workspace') },
         onTestFailure: () => { setSetupGate('required'); setView('settings') },
+        completionPreference,
+        onCompletionPreferenceChange: setCompletionPreference,
       }),
     )
   }
@@ -2988,7 +3039,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       label: '调整文件栏宽度',
       onChange: setSidebarWidth,
     }) : null,
-    e(Editor, { ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'), externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal }),
+    e(Editor, { ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'), externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal, completionPreference }),
     assistantVisible ? e(PanelResizer, {
       side: 'right',
       value: assistantWidth,
@@ -3064,7 +3115,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
 const styles = `.shell{height:100vh;min-width:1280px;display:grid;grid-template-columns:220px minmax(0,1fr) 360px;grid-template-rows:40px minmax(0,1fr);background:#faf9f5;color:#171714;font:13px "Noto Sans SC","Microsoft YaHei",sans-serif}.chrome{grid-column:1/-1;display:flex;gap:18px;align-items:center;padding:0 14px;border-bottom:1px solid #e3e0d6}.chrome>span{color:#6b6a64;overflow:hidden;text-overflow:ellipsis}.workspace-select,.compact-control{display:flex;align-items:center;gap:6px;color:#6b6a64}.compact-control label{display:flex;align-items:center;gap:5px}.model-empty{align-items:flex-start;flex-wrap:wrap}.model-empty small{flex-basis:100%}.workspace-select select,.compact-control select{max-width:210px;border:0;background:transparent;color:#35342f}.sidebar{grid-column:1;border-right:1px solid #e3e0d6;min-height:0;display:flex;flex-direction:column;background:#f4f2ea}.side-title,.editor-header,.chat-header,.editor-tools{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #e3e0d6}.project-actions{display:flex;gap:3px;padding:6px;border-bottom:1px solid #e3e0d6}.project-actions button,.export-actions button{padding:4px 7px;border:1px solid #d2cec2;border-radius:3px;background:#fffef9;color:inherit;cursor:pointer}.export-actions{margin-left:auto;display:flex;align-items:center;gap:6px;color:#6b6a64}.export-actions span{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.session-list{padding:6px;border-bottom:1px solid #e3e0d6;display:flex;gap:3px;flex-direction:column;max-height:132px;overflow:auto}.session-list button,.tree-row{display:block;width:100%;padding:5px 7px;text-align:left;border:0;border-radius:3px;background:none;color:inherit;cursor:pointer}.session-list .selected,.tree-row[aria-current=page]{background:#e0e9f2;color:#1b365d}.tree{overflow:auto;min-height:0;padding:7px 0}.editor{grid-column:2;min-width:0;min-height:0;display:grid;position:relative;grid-template-rows:auto minmax(0,1fr) auto;background:#faf9f5}.editor-header{font-size:12px;color:#6b6a64}.paper-input{box-sizing:border-box;width:100%;height:100%;padding:42px max(48px,10%);border:0;resize:none;background:transparent;color:#171714;font:18px/1.9 "Noto Serif SC","Songti SC",serif;outline:0}.ghost{position:absolute;left:10%;bottom:52px;max-width:58%;padding:5px 8px;color:#77746c;background:#f2f0e8;border-radius:3px;font:16px/1.8 "Noto Serif SC",serif;pointer-events:none}.proposal{position:absolute;right:18px;bottom:54px;width:min(380px,48%);padding:12px;border:1px solid #d5d1c5;border-radius:5px;background:#fffef9;box-shadow:0 8px 28px #342f251a}.proposal p{margin:4px 0 10px;white-space:pre-wrap}.proposal div,.pending-card div{display:flex;gap:8px}.editor-tools{border-top:1px solid #e3e0d6;border-bottom:0;justify-content:flex-start;gap:9px;color:#6b6a64;overflow:auto}.chat{grid-column:3;min-width:0;min-height:0;border-left:1px solid #e3e0d6;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:#f4f2ea}.chat-header{align-items:flex-start;gap:8px}.chat-controls{display:grid;gap:4px;min-width:0}.chat-history{overflow:auto;padding:12px;display:flex;gap:9px;flex-direction:column}.chat-row,.pending-card{margin:0;padding:9px 10px;border:1px solid #dedbd1;border-radius:5px;background:#fffef9}.chat-row p,.pending-card p{margin:0;white-space:pre-wrap;line-height:1.6}.chat-row.user{margin-left:24px;background:#e0e9f2}.chat-row.tool,.chat-row.notice,.chat-row.unknown{font-size:12px;color:#504e49}.pending-card{display:grid;gap:8px;border-color:#c8a86a;background:#fffaf0}.pending-card fieldset{border:0;padding:0;margin:0;display:grid;gap:5px}.pending-card input{box-sizing:border-box;width:100%;padding:6px}.composer{border-top:1px solid #e3e0d6;padding:9px}.composer textarea{box-sizing:border-box;width:100%;min-height:66px;border:1px solid #d8d4c8;border-radius:4px;padding:7px;background:#fffef9;resize:vertical}.composer div{display:flex;justify-content:flex-end;gap:8px;padding-top:6px}.composer button,.editor-tools button,.proposal button,.pending-card button,.empty-paper button,.model-empty button,.home-actions button,.compact-control button,.model-panel button,.proposal-card button{padding:4px 9px;border:1px solid #d2cec2;border-radius:3px;background:#fffef9;color:inherit;cursor:pointer}.warning{color:#8a3a30}.success{color:#2f6b42}.muted{color:#77746c}.pad{padding:8px}.empty-paper{grid-column:2;display:grid;place-content:center;gap:12px;padding:48px;text-align:center;font:16px/1.8 "Noto Serif SC","Songti SC",serif}.empty-paper h1{font-size:28px;font-weight:500}.home-actions{display:flex;justify-content:center;gap:10px}.no-session{display:block;min-width:0}.no-session .empty-paper{height:100vh}.proposal-card{display:grid;gap:9px;padding:10px;border:1px solid #c8a86a;border-radius:6px;background:#fffaf0}.proposal-card header,.proposal-card footer{display:flex;align-items:center;justify-content:space-between;gap:7px}.proposal-card code{font-size:11px;color:#6b6a64}.proposal-diff{display:grid;gap:7px}.proposal-card pre{max-height:180px;margin:3px 0 0;padding:7px;overflow:auto;white-space:pre-wrap;border-radius:3px;background:#f4f2ea;font:12px/1.55 monospace}.proposal-card footer span{margin-right:auto;font-size:12px;color:#6b6a64}.proposal-card.expired{border-color:#b56a61}.proposal-card.applied{border-color:#6d9a78}.model-overlay{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:#25231f66}.model-panel{width:min(520px,calc(100vw - 48px));box-sizing:border-box;padding:22px;display:grid;gap:15px;border:1px solid #d4d0c4;border-radius:8px;background:#fffef9;box-shadow:0 24px 80px #17171433}.model-panel header,.model-panel footer{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.model-panel h2,.model-panel p{margin:0}.model-panel header p{margin-top:5px;color:#77746c}.model-panel>label{display:grid;gap:6px}.model-panel input[type=password],.model-panel input:not([type]){box-sizing:border-box;width:100%;padding:9px;border:1px solid #cbc7ba;border-radius:4px;background:white}.provider-tabs{display:flex;gap:16px;border:0;padding:0;margin:0}.provider-tabs legend{margin-bottom:7px}.provider-tabs label{display:flex;gap:5px}.model-panel footer{justify-content:flex-end}button:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #1b365d;outline-offset:2px}@media(max-width:1320px){.shell{grid-template-columns:210px minmax(0,1fr) 340px}.paper-input{padding-inline:42px}}`
 
 const redesignedStyles = `${styles}
-.shell{height:100dvh;min-width:1280px;grid-template-columns:248px minmax(520px,1fr) 384px;grid-template-rows:52px minmax(0,1fr);background:#f5f0e5;color:#253b32;font:14px/1.5 "Noto Sans SC","Microsoft YaHei",sans-serif}.chrome{gap:14px;padding:0 20px;background:#fbf8ef;border-color:#d8d0bf}.chrome strong{font-family:"Noto Serif SC","Songti SC",serif;font-size:17px;letter-spacing:.04em}.chrome>span{color:#6d7468}.sidebar{background:#eee8da;border-color:#d8d0bf}.side-title,.editor-header,.chat-header,.editor-tools{padding:10px 14px;border-color:#ddd5c6}.side-title{font-weight:600;letter-spacing:.04em}.project-actions{display:block;padding:8px 12px;border-color:#ddd5c6}.project-actions summary{cursor:pointer;color:#647268}.project-actions div{display:flex;gap:6px;padding-top:7px}.project-actions button,.export-actions button,.settings-link{border-color:#c9c5b4;background:#fbf8ef;color:#304f41}.tree{padding:8px}.tree-row{padding:7px 8px;border-radius:4px;transition:transform 160ms ease,background-color 160ms ease,color 160ms ease}.tree-row:hover{background:#e1eadc;transform:translateX(2px)}.session-list .selected,.tree-row[aria-current=page]{background:#dbe8d7;color:#214838;font-weight:600}.index-status{display:grid;gap:6px;margin:10px 12px;padding:9px 10px;border-left:2px solid #5d806b;background:#f8f4e9;color:#53665a;font-size:12px}.index-status button{justify-self:start;padding:3px 0;border:0;background:transparent;color:#285c45;text-decoration:underline;cursor:pointer}.editor{background:#f8f3e8}.editor-header{color:#697269;background:#f3ecdf;font-variant-numeric:tabular-nums}.paper-input{margin:22px auto;width:min(100% - 48px,880px);height:calc(100% - 44px);padding:58px clamp(34px,7vw,92px);border:1px solid #e2dac9;border-radius:2px;background:#fffdf6;box-shadow:0 8px 26px #5a4d3510;color:#28382f;font:19px/1.95 "Noto Serif SC","Songti SC",serif}.editor-tools{background:#f3ecdf}.chat{border-color:#d8d0bf;background:#f0ebdf}.chat-header{background:#f7f3e9}.chat-row,.pending-card{border-color:#ddd5c6;border-radius:4px;background:#fffdf7}.chat-row.user{background:#dce9dd}.composer{border-color:#d8d0bf;background:#f7f3e9}.composer textarea{border-color:#cbc5b7;border-radius:3px;background:#fffdf7}.composer button,.editor-tools button,.proposal button,.pending-card button,.empty-paper button,.model-empty button,.home-actions button,.compact-control button,.model-panel button,.proposal-card button{border-color:#bfc5b8;border-radius:3px;background:#fffdf7;color:#2c5744;transition:transform 160ms ease,background-color 160ms ease}.composer button:hover,.editor-tools button:hover,.proposal button:hover,.pending-card button:hover,.empty-paper button:hover,.model-empty button:hover,.home-actions button:hover,.compact-control button:hover,.model-panel button:hover,.proposal-card button:hover{background:#e1eadc;transform:translateY(-1px)}.empty-paper{background:#f8f3e8;color:#33483c}.no-session .empty-paper{height:100dvh}.settings-shell{min-height:100dvh;background:#f5f0e5}.settings-view{box-sizing:border-box;min-height:100dvh;display:grid;place-items:center;padding:32px}.model-panel{width:min(620px,100%);padding:34px 36px;border:1px solid #d9d0bd;border-left:4px solid #386a50;border-radius:4px;background:#fffdf6;box-shadow:0 18px 48px #56483314}.settings-brand{margin:0 0 8px!important;color:#557062!important;font-size:12px;letter-spacing:.1em}.model-panel h2{margin:0;font:600 28px/1.25 "Noto Serif SC","Songti SC",serif;color:#294938}.model-panel header p{max-width:36em;line-height:1.7}.provider-tabs{gap:10px}.provider-tabs label{min-width:128px;padding:10px 12px;border:1px solid #d6d2c4;border-radius:4px;background:#fbf8ef;color:#315640;cursor:pointer}.provider-tabs input{accent-color:#386a50}.model-panel>label input{transition:border-color 160ms ease,box-shadow 160ms ease}.model-panel>label input:focus{border-color:#6d8c79;box-shadow:0 0 0 3px #386a5014}.model-panel footer{padding-top:8px}.model-panel .primary-action{border-color:#315e48;background:#315e48;color:#fff}.model-panel .primary-action:hover{background:#284f3c}.settings-link{margin-left:auto;padding:5px 10px;cursor:pointer}.warning{color:#9a4b3b}.success{color:#356446}button:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #386a50;outline-offset:3px}@media(max-width:1320px){.shell{grid-template-columns:216px minmax(440px,1fr) 330px}.paper-input{width:calc(100% - 32px);padding-inline:42px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:0.01ms!important;animation-duration:0.01ms!important}}
+.shell{height:100dvh;min-width:1280px;grid-template-columns:248px minmax(520px,1fr) 384px;grid-template-rows:52px minmax(0,1fr);background:#f5f0e5;color:#253b32;font:14px/1.5 "Noto Sans SC","Microsoft YaHei",sans-serif}.chrome{gap:14px;padding:0 20px;background:#fbf8ef;border-color:#d8d0bf}.chrome strong{font-family:"Noto Serif SC","Songti SC",serif;font-size:17px;letter-spacing:.04em}.chrome>span{color:#6d7468}.sidebar{background:#eee8da;border-color:#d8d0bf}.side-title,.editor-header,.chat-header,.editor-tools{padding:10px 14px;border-color:#ddd5c6}.side-title{font-weight:600;letter-spacing:.04em}.project-actions{display:block;padding:8px 12px;border-color:#ddd5c6}.project-actions summary{cursor:pointer;color:#647268}.project-actions div{display:flex;gap:6px;padding-top:7px}.project-actions button,.export-actions button,.settings-link{border-color:#c9c5b4;background:#fbf8ef;color:#304f41}.tree{padding:8px}.tree-row{padding:7px 8px;border-radius:4px;transition:transform 160ms ease,background-color 160ms ease,color 160ms ease}.tree-row:hover{background:#e1eadc;transform:translateX(2px)}.session-list .selected,.tree-row[aria-current=page]{background:#dbe8d7;color:#214838;font-weight:600}.index-status{display:grid;gap:6px;margin:10px 12px;padding:9px 10px;border-left:2px solid #5d806b;background:#f8f4e9;color:#53665a;font-size:12px}.index-status button{justify-self:start;padding:3px 0;border:0;background:transparent;color:#285c45;text-decoration:underline;cursor:pointer}.editor{background:#f8f3e8}.editor-header{color:#697269;background:#f3ecdf;font-variant-numeric:tabular-nums}.paper-input{margin:22px auto;width:min(100% - 48px,880px);height:calc(100% - 44px);padding:58px clamp(34px,7vw,92px);border:1px solid #e2dac9;border-radius:2px;background:#fffdf6;box-shadow:0 8px 26px #5a4d3510;color:#28382f;font:19px/1.95 "Noto Serif SC","Songti SC",serif}.editor-tools{background:#f3ecdf}.chat{border-color:#d8d0bf;background:#f0ebdf}.chat-header{background:#f7f3e9}.chat-row,.pending-card{border-color:#ddd5c6;border-radius:4px;background:#fffdf7}.chat-row.user{background:#dce9dd}.composer{border-color:#d8d0bf;background:#f7f3e9}.composer textarea{border-color:#cbc5b7;border-radius:3px;background:#fffdf7}.composer button,.editor-tools button,.proposal button,.pending-card button,.empty-paper button,.model-empty button,.home-actions button,.compact-control button,.model-panel button,.proposal-card button{border-color:#bfc5b8;border-radius:3px;background:#fffdf7;color:#2c5744;transition:transform 160ms ease,background-color 160ms ease}.composer button:hover,.editor-tools button:hover,.proposal button:hover,.pending-card button:hover,.empty-paper button:hover,.model-empty button:hover,.home-actions button:hover,.compact-control button:hover,.model-panel button:hover,.proposal-card button:hover{background:#e1eadc;transform:translateY(-1px)}.empty-paper{background:#f8f3e8;color:#33483c}.no-session .empty-paper{height:100dvh}.settings-shell{min-height:100dvh;background:#f5f0e5}.settings-view{box-sizing:border-box;min-height:100dvh;display:grid;place-items:center;padding:32px}.model-panel{width:min(620px,100%);padding:34px 36px;border:1px solid #d9d0bd;border-left:4px solid #386a50;border-radius:4px;background:#fffdf6;box-shadow:0 18px 48px #56483314}.settings-brand{margin:0 0 8px!important;color:#557062!important;font-size:12px;letter-spacing:.1em}.model-panel h2{margin:0;font:600 28px/1.25 "Noto Serif SC","Songti SC",serif;color:#294938}.model-panel header p{max-width:36em;line-height:1.7}.provider-tabs{gap:10px}.provider-tabs label{min-width:128px;padding:10px 12px;border:1px solid #d6d2c4;border-radius:4px;background:#fbf8ef;color:#315640;cursor:pointer}.provider-tabs input{accent-color:#386a50}.completion-preference{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px;margin:0;padding:14px 0 0;border:0;border-top:1px solid #ded6c7}.completion-preference legend{padding:0;color:#294938;font-weight:600}.completion-preference p{grid-column:1/-1;color:#69766e;font-size:12px;line-height:1.65}.completion-preference label{display:flex;align-items:center;gap:7px;padding:9px 11px;border-radius:12px 4px 12px 4px;background:#f1ecdf;color:#315640;cursor:pointer}.completion-preference label:has(input:checked){background:#dce9dd;box-shadow:inset 0 0 0 1px #78917f}.completion-preference input{accent-color:#386a50}.model-panel>label input{transition:border-color 160ms ease,box-shadow 160ms ease}.model-panel>label input:focus{border-color:#6d8c79;box-shadow:0 0 0 3px #386a5014}.model-panel footer{padding-top:8px}.model-panel .primary-action{border-color:#315e48;background:#315e48;color:#fff}.model-panel .primary-action:hover{background:#284f3c}.settings-link{margin-left:auto;padding:5px 10px;cursor:pointer}.warning{color:#9a4b3b}.success{color:#356446}button:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #386a50;outline-offset:3px}@media(max-width:1320px){.shell{grid-template-columns:216px minmax(440px,1fr) 330px}.paper-input{width:calc(100% - 32px);padding-inline:42px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:0.01ms!important;animation-duration:0.01ms!important}}
 `
 
 const playfulStyles = `

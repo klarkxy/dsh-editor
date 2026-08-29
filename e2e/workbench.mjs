@@ -334,6 +334,17 @@ try {
   await window.locator('.chat').waitFor({ state: 'hidden' })
   await window.screenshot({ path: resolve(output, 'editor-ai-controls.png'), fullPage: true })
 
+  await window.getByRole('button', { name: '设置' }).click()
+  const completionSettings = window.getByRole('group', { name: '自动补全' })
+  await completionSettings.waitFor({ state: 'visible' })
+  await completionSettings.getByLabel('停顿后提示').check()
+  await window.waitForFunction(() => localStorage.getItem('dsh-editor.writing.completion') === 'pause')
+  await window.screenshot({ path: resolve(output, 'completion-settings.png'), fullPage: true })
+  await completionSettings.getByLabel('仅手动').check()
+  await window.waitForFunction(() => localStorage.getItem('dsh-editor.writing.completion') === 'manual')
+  await window.getByRole('button', { name: '返回写作区' }).click()
+  await window.getByRole('textbox', { name: '正文' }).waitFor({ state: 'visible' })
+
   await window.getByTitle('下一章').click()
   await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('2 / 4'))
   await window.waitForFunction(() => {
