@@ -37,7 +37,7 @@ import {
   visibleRunningCalls,
   type QuestionAnswerItem,
 } from './adapter.ts'
-import type { ProjectContextReceiptBundle } from './project-context.ts'
+import { formatWorldbookTriggerLines, parseWorldbookTriggerLines, worldbookEditorMetadata, writeWorldbookFrontmatter, type ProjectContextReceiptBundle } from './project-context.ts'
 import type { EditorDraft } from './drafts.ts'
 import { DraftSyncQueue } from './drafts.ts'
 import {
@@ -851,6 +851,8 @@ function Editor(props: {
 
   const index = files.indexOf(path)
   const navigationBlocked = state === 'draft' || state === 'conflict'
+  const editableWorldbook = Boolean(doc && /^世界书\/.+\.md$/i.test(doc.path)
+    && doc.path.toLowerCase() !== '世界书/设定总汇.md'.toLowerCase())
   return e('section', { className: 'editor', 'aria-label': '正文编辑区' },
     e('header', { className: 'editor-header' },
       e('span', null, doc?.path ?? path),
@@ -861,6 +863,13 @@ function Editor(props: {
       ),
       e('span', null, `${text.replace(/\s/g, '').length} 字 · ${state === 'draft' ? '草稿未保存' : state === 'conflict' ? '版本冲突' : state === 'saved' ? '已保存' : '读取中'}`),
     ),
+    editableWorldbook && doc ? e(WorldbookSettings, {
+      key: `${doc.path}:${doc.version}`,
+      path: doc.path,
+      text,
+      onChange: setText,
+      onNote: setNote,
+    }) : null,
     e('textarea', {
       ref: ta,
       value: text,
@@ -1145,6 +1154,62 @@ function ProjectContextReceiptView({ receipt }: { receipt: ProjectContextReceipt
       item.version ? ` · ${item.version}` : '',
     ))),
     receipt.scan ? e('p', { className: 'muted' }, `世界书扫描 ${receipt.scan.scanned} 份：未匹配 ${receipt.scan.unmatched}，已停用 ${receipt.scan.disabled}，格式无效 ${receipt.scan.invalid}，超过限制 ${receipt.scan.limits}，读取失败 ${receipt.scan.readErrors}`) : null,
+  )
+}
+
+function WorldbookSettings(props: { path: string; text: string; onChange(text: string): void; onNote(note: string): void }) {
+  const metadata = worldbookEditorMetadata(props.path, props.text)
+  const [triggers, setTriggers] = useState(formatWorldbookTriggerLines(metadata.triggers))
+  const [enabled, setEnabled] = useState(metadata.enabled)
+  const [priority, setPriority] = useState(String(metadata.priority))
+  const apply = () => {
+    const values = parseWorldbookTriggerLines(triggers)
+    const numericPriority = Number(priority)
+    if (!metadata.valid) { props.onNote('世界书文件头格式无效；为避免丢失未知内容，请先在正文中手工修复。'); return }
+    if (!values.length) { props.onNote('请至少填写一个世界书触发词。'); return }
+    if (values.length > 16 || values.some((value) => value.length > 64 || /[\u0000-\u001f\u007f]/.test(value))) {
+      props.onNote('世界书最多填写 16 个触发词，每个不超过 64 个字符。')
+      return
+    }
+    if (!/^-?\d+$/.test(priority.trim()) || !Number.isSafeInteger(numericPriority) || numericPriority < -100 || numericPriority > 100) {
+      props.onNote('世界书优先级必须是 -100 到 100 的整数。')
+      return
+    }
+    try {
+      props.onChange(writeWorldbookFrontmatter(props.text, { triggers: values, enabled, priority: numericPriority }))
+      props.onNote('世界书触发设置已加入草稿，正在自动保存。')
+    } catch {
+      props.onNote('世界书文件头没有正确闭合，请先在正文中修复后再应用。')
+    }
+  }
+  return e('section', { className: 'worldbook-settings', 'aria-label': '世界书触发设置' },
+    e('div', null,
+      e('strong', null, '触发设置'),
+      e('small', null, '只决定何时把这篇设定带给搭档；规则正文仍写在下方。'),
+      !metadata.valid ? e('span', { className: 'warning', role: 'alert' }, '现有文件头格式无效，当前不会触发。') : null,
+    ),
+    e('label', null, e('span', null, '触发词（一行一个）'), e('textarea', {
+      value: triggers,
+      disabled: !metadata.valid,
+      rows: Math.min(3, Math.max(1, triggers.split(/\r?\n/).length)),
+      onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setTriggers(event.target.value),
+      placeholder: '每行填写一个触发词',
+      'aria-label': '世界书触发词',
+    })),
+    e('label', { className: 'worldbook-enabled' }, e('input', {
+      type: 'checkbox',
+      checked: enabled,
+      disabled: !metadata.valid,
+      onChange: (event: ChangeEvent<HTMLInputElement>) => setEnabled(event.target.checked),
+    }), e('span', null, '启用')),
+    e('label', null, e('span', null, '优先级'), e('input', {
+      type: 'number', min: -100, max: 100, step: 1,
+      value: priority,
+      disabled: !metadata.valid,
+      onChange: (event: ChangeEvent<HTMLInputElement>) => setPriority(event.target.value),
+      'aria-label': '世界书优先级',
+    })),
+    e('button', { type: 'button', onClick: apply, disabled: !metadata.valid }, '应用设置'),
   )
 }
 
@@ -2699,6 +2764,7 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .shell:not(.no-session){grid-template-columns:248px minmax(0,1fr)}.chat{position:fixed;z-index:10;inset:52px 0 0 auto;width:min(404px,calc(100vw - 280px));grid-column:auto;border:1px solid #d8d0bf;border-right:0;border-bottom:0;border-radius:22px 0 0 0;box-shadow:-24px 0 64px #4d41261f;overflow:hidden}.chat-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center}.conversation-select{grid-column:2;grid-row:1;min-width:0}.conversation-select select{box-sizing:border-box;width:100%;min-width:84px;max-width:none;padding:4px 22px 4px 7px;border:1px solid #d6d0c2;border-radius:4px;background:#fffdf7;color:#315640;text-overflow:ellipsis}.chat-controls{grid-column:1/-1;grid-row:2}.chat-controls .compact-control{min-width:0}.chat-controls .model-indicator{max-width:280px}.chat-header-actions{grid-column:3;grid-row:1;display:flex;gap:4px}.assistant-launcher{position:fixed;z-index:9;right:24px;bottom:24px;display:flex;align-items:center;gap:9px;padding:10px 15px 10px 10px;border:1px solid #95a89a;border-radius:22px 7px 22px 22px;background:#fffdf6ef;color:#244f3c;box-shadow:0 16px 42px #4d412626;backdrop-filter:blur(14px);cursor:pointer;animation:launcher-in 420ms var(--ease) both}.assistant-launcher span{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#dce9dd;font-size:17px;animation:mark-float 3s ease-in-out infinite}.assistant-launcher strong{font-size:13px}.assistant-launcher:hover{transform:translateY(-5px) rotate(-1deg);box-shadow:0 22px 50px #4d412633}.model-panel>label>span,.provider-tabs legend{color:#42594c!important;font-weight:500}.model-panel input[type=password],.model-panel input:not([type]){color:#2e4438!important}.model-panel input::placeholder{color:#7d857e!important;opacity:1}@keyframes launcher-in{from{opacity:0;transform:translateY(12px) scale(.9)}to{opacity:1;transform:none}}@media(max-width:1320px){.shell:not(.no-session){grid-template-columns:216px minmax(0,1fr)}}@media(prefers-reduced-motion:reduce){.assistant-launcher,.assistant-launcher span{animation:none!important}.assistant-launcher:hover{transform:none!important}}
 .model-indicator{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#647268}
 .project-context-receipt{margin-top:7px;color:#637269;font-size:11px}.project-context-receipt summary{cursor:pointer}.project-context-receipt ul{display:grid;gap:3px;margin:6px 0 0;padding-left:16px}.project-context-receipt code{font-size:10px;color:#466354}
+.editor:has(>.worldbook-settings){grid-template-rows:auto auto minmax(0,1fr) auto}.worldbook-settings{display:grid;grid-template-columns:minmax(160px,1fr) auto 88px auto;align-items:end;gap:8px 12px;padding:10px 14px;border-bottom:1px solid #ddd5c6;background:#f7f3e9;color:#53665a}.worldbook-settings>div{grid-column:1/-1;display:flex;align-items:baseline;gap:9px;min-width:0}.worldbook-settings>div small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.worldbook-settings>div .warning{margin-left:auto}.worldbook-settings label{display:grid;gap:3px;font-size:11px}.worldbook-settings textarea,.worldbook-settings input[type=number],.worldbook-settings label:not(.worldbook-enabled)>input{box-sizing:border-box;width:100%;min-width:0;padding:6px 7px;border:1px solid #cbc5b7;border-radius:4px;background:#fffdf7;color:#28382f}.worldbook-settings textarea{min-height:30px;max-height:78px;resize:vertical;font:inherit}.worldbook-settings .worldbook-enabled{display:flex;align-items:center;gap:5px;padding-bottom:6px;white-space:nowrap}.worldbook-settings button{margin-bottom:0;padding:6px 9px;border:1px solid #bfc5b8;border-radius:3px;background:#fffdf7;color:#2c5744;cursor:pointer}.worldbook-settings button:hover{background:#e1eadc}.worldbook-settings button:disabled,.worldbook-settings input:disabled,.worldbook-settings textarea:disabled{cursor:not-allowed;opacity:.55}@media(max-width:1180px){.worldbook-settings>div small{display:none}.worldbook-settings{grid-template-columns:minmax(130px,1fr) auto 78px auto;gap-inline:8px}}
 .import-overlay{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:24px;background:#1f2d2570}.import-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:14px;padding:24px;border:1px solid #d8cfbd;border-radius:16px 4px 16px 4px;background:#fffdf6;box-shadow:0 28px 80px #1c28221f}.import-dialog h2,.import-dialog p{margin:0}.import-dialog ul{max-height:170px;margin:0;overflow:auto;padding-left:20px;color:#5c6e62}.import-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.import-dialog button{padding:7px 11px;border:1px solid #b9c8ba;border-radius:4px;background:#f5f1e6;color:#2c5744;cursor:pointer}.snapshot-dialog{width:min(620px,100%)}.snapshot-list{display:grid;gap:8px;max-height:280px!important;padding:0!important;list-style:none}.snapshot-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #ded6c7;border-radius:8px;background:#faf6ec}.snapshot-list li div{display:grid;gap:3px;min-width:0}.snapshot-list li strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294938}.snapshot-list li small{color:#6b776e}
 .layout-shell{grid-template-rows:52px minmax(0,1fr);overflow:hidden}.layout-shell>.sidebar,.layout-shell>.editor,.layout-shell>.empty-paper,.layout-shell>.chat,.layout-shell>.panel-resizer{grid-column:auto;grid-row:2;min-width:0}.layout-shell>.chat{position:relative;z-index:1;inset:auto;width:auto;min-width:0;border:0;border-left:1px solid #d8d0bf;border-radius:0;box-shadow:none;overflow:hidden}.layout-shell>.chat[hidden]{display:none!important}.layout-shell>.editor{grid-column:auto}.layout-shell>.sidebar{grid-column:auto}.layout-controls{display:flex;align-items:center;gap:3px;padding:3px;border:1px solid #d8d0bf;border-radius:15px 5px 15px 15px;background:#f1ecdf}.layout-controls button{min-width:42px;padding:4px 8px;border:0;border-radius:11px 3px 11px 11px;background:transparent;color:#526b5d;cursor:pointer}.layout-controls button[aria-pressed=true]{background:#d8e6d8;color:#183f2f;font-weight:600}.layout-controls button:disabled{cursor:not-allowed;opacity:.45}.panel-resizer{position:relative;z-index:4;min-width:0;cursor:col-resize;touch-action:none;user-select:none;background:#e6dfd1;transition:background-color 140ms ease}.panel-resizer span{position:absolute;inset:0 2px;border-radius:4px;background:transparent}.panel-resizer:hover,.panel-resizer:focus-visible,.panel-resizer[aria-valuenow]{outline:0}.panel-resizer:hover span,.panel-resizer:focus-visible span{background:#6f927c}.layout-shell.focus-mode .paper-input{width:min(calc(100% - 64px),980px);padding-inline:clamp(52px,10vw,128px);box-shadow:0 14px 42px #4b674719}.layout-shell.focus-mode .editor-header{padding-inline:20px}.layout-shell.focus-mode .editor-tools{justify-content:center}.layout-shell.assistant-open .assistant-launcher{display:none}@media(max-width:1180px){.layout-controls button{min-width:36px;padding-inline:6px}.layout-shell .paper-input{width:calc(100% - 28px);padding-inline:34px}}@media(prefers-reduced-motion:reduce){.panel-resizer{transition:none!important}}
 `

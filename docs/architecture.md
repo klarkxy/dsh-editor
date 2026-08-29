@@ -63,6 +63,8 @@ profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记�
 
 固定与动态读取结果、扫描计数和原始请求以 V2 JSON 信封一次提交给同一 DSH session；解析器仍严格接受历史 V1。文件文本是不可信数据，单文件缺失、格式无效、超限或读取失败只进入有界回执；整个 Host 编译失败则不调用 `session.prompt`。Renderer 仅显示原请求和不含原文的回执，DSH 历史保留完整信封。`novel_knowledge` 不属于该回执，深层或最新事实仍由 Agent 通过 `glob`、`grep`、`read` 验证。
 
+普通世界书编辑器在同一正文 buffer 上提供 `triggers/enabled/priority` 可视化设置；应用时只规范化有界 frontmatter，文件正文逐字保留，随后复用现有草稿、自动保存、expectedVersion 与冲突处理。没有 frontmatter 的旧文件可升级为规范头；显式但损坏的 frontmatter 禁止表单写入，必须先由作者手工修复。该表单不建立第二份世界书状态或存储。
+
 未知节点或工具显示通用降级卡。Renderer 不持久化对话副本；刷新后仍以 DSH snapshot 为准。
 
 ## Host RPC

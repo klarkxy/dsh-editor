@@ -109,6 +109,24 @@ export async function compileProjectContext(
 }
 
 type ParsedWorldbook = { enabled: boolean; priority: number; triggers: string[] }
+export type WorldbookEditorMetadata = ParsedWorldbook & { valid: boolean; explicit: boolean }
+
+export function formatWorldbookTriggerLines(triggers: readonly string[]): string {
+  return triggers.join('\n')
+}
+
+export function parseWorldbookTriggerLines(value: string): string[] {
+  return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+}
+
+function withoutBom(text: string): string {
+  return text.startsWith('\uFEFF') ? text.slice(1) : text
+}
+
+function hasExplicitFrontmatter(text: string): boolean {
+  const source = withoutBom(text)
+  return source.startsWith('---\n') || source.startsWith('---\r\n')
+}
 
 function parseTriggerValue(value: string): string | undefined {
   const trimmed = value.trim()
@@ -162,16 +180,17 @@ function validTriggers(values: string[]): string[] | undefined {
 }
 
 export function parseWorldbookFrontmatter(path: string, text: string): ParsedWorldbook | undefined {
-  if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) {
+  const source = withoutBom(text)
+  if (!source.startsWith('---\n') && !source.startsWith('---\r\n')) {
     const legacy = path.replace(/^世界书\//, '').replace(/\.md$/i, '')
     const triggers = validTriggers([legacy])
     return triggers ? { enabled: true, priority: 0, triggers } : undefined
   }
   const close = /\r?\n---(?:\r?\n|$)/g
-  close.lastIndex = text.indexOf('\n') + 1
-  const match = close.exec(text)
+  close.lastIndex = source.indexOf('\n') + 1
+  const match = close.exec(source)
   if (!match || match.index > 4_096) return undefined
-  const body = text.slice(text.indexOf('\n') + 1, match.index)
+  const body = source.slice(source.indexOf('\n') + 1, match.index)
   const lines = body.split(/\r?\n/)
   let enabled = true
   let priority = 0
@@ -214,6 +233,52 @@ export function parseWorldbookFrontmatter(path: string, text: string): ParsedWor
   }
   const checked = sawTriggers && triggers ? validTriggers(triggers) : undefined
   return checked ? { enabled, priority, triggers: checked } : undefined
+}
+
+export function worldbookEditorMetadata(path: string, text: string): WorldbookEditorMetadata {
+  const explicit = hasExplicitFrontmatter(text)
+  const parsed = parseWorldbookFrontmatter(path, text)
+  if (parsed) return { ...parsed, valid: true, explicit }
+  if (!explicit) {
+    const fallback = path.split('/').at(-1)?.replace(/\.md$/i, '').trim().slice(0, 64) || '设定'
+    return { triggers: [fallback], enabled: true, priority: 0, valid: true, explicit: false }
+  }
+  return { triggers: [], enabled: false, priority: 0, valid: false, explicit: true }
+}
+
+/** Rewrites only the bounded metadata header and preserves the document body byte-for-byte. */
+export function writeWorldbookFrontmatter(
+  text: string,
+  input: { triggers: string[]; enabled: boolean; priority: number },
+): string {
+  const triggers = validTriggers(input.triggers)
+  if (!triggers) throw new Error('invalid worldbook triggers')
+  if (!Number.isSafeInteger(input.priority) || input.priority < -100 || input.priority > 100) {
+    throw new Error('invalid worldbook priority')
+  }
+  const bom = text.startsWith('\uFEFF') ? '\uFEFF' : ''
+  const source = withoutBom(text)
+  const newline = source.includes('\r\n') ? '\r\n' : '\n'
+  let body = source
+  let comments: string[] = []
+  if (hasExplicitFrontmatter(text)) {
+    if (!parseWorldbookFrontmatter('世界书/编辑中.md', text)) throw new Error('invalid worldbook frontmatter')
+    const close = /\r?\n---(?:\r?\n|$)/g
+    close.lastIndex = source.indexOf('\n') + 1
+    const match = close.exec(source)
+    if (!match || match.index > 4_096) throw new Error('invalid worldbook frontmatter')
+    comments = source.slice(source.indexOf('\n') + 1, match.index).split(/\r?\n/).filter((line) => /^\s*#/.test(line))
+    body = source.slice(match.index + match[0].length)
+  }
+  const header = [
+    '---',
+    ...comments,
+    `triggers: [${triggers.map((trigger) => JSON.stringify(trigger)).join(', ')}]`,
+    `enabled: ${input.enabled ? 'true' : 'false'}`,
+    `priority: ${input.priority}`,
+    '---',
+  ].join(newline)
+  return `${bom}${header}${newline}${body}`
 }
 
 function stripText(sources: ProjectContextSource[]): ProjectContextReceipt[] {
