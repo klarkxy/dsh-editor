@@ -159,10 +159,22 @@ export async function readTextFile(
   context: WorkspaceFileContext,
   relative: string,
 ): Promise<{ text: string; version: string }> {
+  return await readTextFileLimited(context, relative, MAX_TEXT_BYTES)
+}
+
+/** Read through the same canonical fence with a caller-specific byte ceiling. */
+export async function readTextFileLimited(
+  context: WorkspaceFileContext,
+  relative: string,
+  maxBytes: number,
+): Promise<{ text: string; version: string }> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > MAX_TEXT_BYTES) {
+    throw new FileOpError('invalid file size limit', 'TOO_LARGE')
+  }
   const resolved = await resolveScoped(context, relative)
   if (!resolved.info) throw new FileOpError('file not found', 'NOT_FOUND')
   if (resolved.info.type !== 'file') throw new FileOpError('not a regular file', 'NOT_TEXT')
-  if (resolved.info.size !== undefined && resolved.info.size > MAX_TEXT_BYTES) {
+  if (resolved.info.size !== undefined && resolved.info.size > maxBytes) {
     throw new FileOpError('file too large', 'TOO_LARGE')
   }
   let text: string
@@ -171,7 +183,7 @@ export async function readTextFile(
   } catch (error) {
     mapFsError(error)
   }
-  if (byteLength(text) > MAX_TEXT_BYTES) throw new FileOpError('file too large', 'TOO_LARGE')
+  if (byteLength(text) > maxBytes) throw new FileOpError('file too large', 'TOO_LARGE')
 
   let after: FsInfoLike | undefined
   try {

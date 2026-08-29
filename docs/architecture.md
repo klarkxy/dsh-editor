@@ -59,7 +59,9 @@ profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记�
 - 批量用户问题回答；
 - connection 状态与重连提示。
 
-每次非空发送先按固定顺序读取最多五份 Markdown：`项目总览.md`、`大纲/总纲.md`、`人物卡/人物索引.md`、`世界书/设定总汇.md`、可选的 `.dsh-editor/作品索引.md`。每份最多纳入 4,000 字符，总计最多 12,000 字符；读取结果和原始请求以版本化 JSON 信封一次提交给同一 DSH session。文件文本是不可信数据，缺失或读取失败只记录在每条消息可展开的回执中，不阻塞发送；Renderer 仅显示原请求和回执，DSH 历史保留完整信封。`novel_knowledge` 不属于该回执，深层或最新事实仍由 Agent 通过 `glob`、`grep`、`read` 验证。
+每次非空发送先按固定顺序读取最多五份 Markdown：`项目总览.md`、`大纲/总纲.md`、`人物卡/人物索引.md`、`世界书/设定总汇.md`、可选的 `.dsh-editor/作品索引.md`。每份最多纳入 4,000 字符，总计最多 12,000 字符。Host 随后在 live session 绑定的 canonical workspace authority 内，以 no-follow/provider-confined 文件 API 扫描可见的 `世界书/**/*.md`（排除固定 `设定总汇.md`）：最多 64 个候选、64 个目录、8 层、单文件 64 KiB、总扫描 512 KiB。严格 frontmatter 提供 `triggers`、`enabled`、`priority`；无 frontmatter 的旧文件以相对文件名触发。匹配仅使用原始请求、当前已保存文档的相对路径和最多 8,000 字符已保存内容，不读取 Renderer 未保存草稿。动态项按优先级和稳定路径排序，单份最多 3,000 字符、合计最多 6,000 字符，绝不挤占固定五份的 12,000 字符预算。
+
+固定与动态读取结果、扫描计数和原始请求以 V2 JSON 信封一次提交给同一 DSH session；解析器仍严格接受历史 V1。文件文本是不可信数据，单文件缺失、格式无效、超限或读取失败只进入有界回执；整个 Host 编译失败则不调用 `session.prompt`。Renderer 仅显示原请求和不含原文的回执，DSH 历史保留完整信封。`novel_knowledge` 不属于该回执，深层或最新事实仍由 Agent 通过 `glob`、`grep`、`read` 验证。
 
 未知节点或工具显示通用降级卡。Renderer 不持久化对话副本；刷新后仍以 DSH snapshot 为准。
 

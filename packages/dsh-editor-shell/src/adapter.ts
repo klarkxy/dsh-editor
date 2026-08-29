@@ -16,13 +16,7 @@ import type {
   SessionModels,
 } from '@deepseek-ai/dsh-client-connection/client'
 import type { ProposalMarker } from './proposal-tool.ts'
-import {
-  compileProjectContext,
-  parseProjectContextEnvelope,
-  projectContextReceipt,
-  type ProjectContextReadResult,
-  type ProjectContextReceipt,
-} from './project-context.ts'
+import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from './project-context.ts'
 
 const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge'])
 
@@ -36,7 +30,7 @@ export type ChatRow = {
   text: string
   detail?: string
   proposal?: ProposalMarker
-  projectContextReceipt?: ProjectContextReceipt[]
+  projectContextReceipt?: ProjectContextReceiptBundle
 }
 
 export type QuestionAnswerItem = { id: string; selected: string[]; custom?: string }
@@ -151,11 +145,11 @@ export async function send(session: SessionFace, text: string): Promise<RpcResul
 export async function sendProjectContext(
   session: SessionFace,
   userRequest: string,
-  read: (path: '项目总览.md' | '大纲/总纲.md' | '人物卡/人物索引.md' | '世界书/设定总汇.md' | '.dsh-editor/作品索引.md') => Promise<ProjectContextReadResult>,
-): Promise<{ result: RpcResult<{ accepted: true }> | undefined; receipt: ProjectContextReceipt[] } | undefined> {
+  compile: () => Promise<{ serialized: string; receipt: ProjectContextReceiptBundle }>,
+): Promise<{ result: RpcResult<{ accepted: true }> | undefined; receipt: ProjectContextReceiptBundle } | undefined> {
   const trimmed = userRequest.trim()
   if (!trimmed) return undefined
-  const compiled = await compileProjectContext(trimmed, read)
+  const compiled = await compile()
   return { result: await send(session, compiled.serialized), receipt: compiled.receipt }
 }
 

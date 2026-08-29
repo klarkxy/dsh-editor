@@ -37,7 +37,7 @@ import {
   visibleRunningCalls,
   type QuestionAnswerItem,
 } from './adapter.ts'
-import type { ProjectContextReceipt } from './project-context.ts'
+import type { ProjectContextReceiptBundle } from './project-context.ts'
 import type { EditorDraft } from './drafts.ts'
 import { DraftSyncQueue } from './drafts.ts'
 import {
@@ -1128,18 +1128,23 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
   )
 }
 
-function ProjectContextReceiptView({ receipt }: { receipt: ProjectContextReceipt[] }) {
-  const included = receipt.filter((item) => item.status === 'included' && item.includedChars > 0).length
+function ProjectContextReceiptView({ receipt }: { receipt: ProjectContextReceiptBundle }) {
+  const fixed = receipt.sources.filter((item) => item.kind !== 'worldbook')
+  const includedFixed = fixed.filter((item) => item.status === 'included' && item.includedChars > 0).length
+  const worldbook = receipt.sources.filter((item) => item.kind === 'worldbook')
+  const matchedByText = (value: string | undefined) => value === 'both' ? '请求与当前文稿' : value === 'saved-document' ? '当前文稿' : '本次请求'
   return e('details', { className: 'project-context-receipt' },
-    e('summary', null, `项目上下文：${included}/${receipt.length} 份资料已纳入`),
-    e('ul', null, receipt.map((item) => e('li', { key: item.path },
+    e('summary', null, `项目上下文：固定 ${includedFixed}/${fixed.length}，触发世界书 ${worldbook.length}`),
+    e('ul', null, receipt.sources.map((item) => e('li', { key: item.path },
       e('code', null, item.path),
       ` · ${item.status === 'included'
         ? item.includedChars > 0 ? `纳入 ${item.includedChars} 字符` : item.truncated ? '未纳入（已达总量上限）' : '空文件'
         : item.status === 'missing' ? '未找到' : '读取失败'}`,
       item.truncated ? '（已截断）' : '',
+      item.kind === 'worldbook' ? ` · 优先级 ${item.priority ?? 0} · 匹配：${matchedByText(item.matchedBy)}${item.matchedTriggers?.length ? `（${item.matchedTriggers.join('、')}）` : ''}` : '',
       item.version ? ` · ${item.version}` : '',
     ))),
+    receipt.scan ? e('p', { className: 'muted' }, `世界书扫描 ${receipt.scan.scanned} 份：未匹配 ${receipt.scan.unmatched}，已停用 ${receipt.scan.disabled}，格式无效 ${receipt.scan.invalid}，超过限制 ${receipt.scan.limits}，读取失败 ${receipt.scan.readErrors}`) : null,
   )
 }
 
@@ -1258,14 +1263,14 @@ function SnapshotDialog(props: {
   )
 }
 
-function Chat({ ctx, session, workspaceId, hidden, onClose, onConfigure, onApplied, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+function Chat({ ctx, session, workspaceId, activePath, hidden, onClose, onConfigure, onApplied, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const snapshot = useObservable<ConversationSnapshot>(session)
   const sessionList = useObservable(ctx.sessions.list)
   const workspaceList = useObservable(ctx.workspaces.list)
   const connected = useObservable(ctx.connection.hostDescription)
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
-  const [outgoing, setOutgoing] = useState<{ text: string; state: 'sending' | 'accepted' | 'failed'; afterRows: number; projectContextReceipt?: ProjectContextReceipt[] } | null>(null)
+  const [outgoing, setOutgoing] = useState<{ text: string; state: 'sending' | 'accepted' | 'failed'; afterRows: number; projectContextReceipt?: ProjectContextReceiptBundle } | null>(null)
   const [creatingConversation, setCreatingConversation] = useState(false)
   const titleAttempted = useRef(new Set<string>())
   const partial = partialText(snapshot)
@@ -1335,9 +1340,12 @@ function Chat({ ctx, session, workspaceId, hidden, onClose, onConfigure, onAppli
     setOutgoing({ text: value, state: 'sending', afterRows: rows.length })
     setDraft('')
     setNote('')
-    void sendProjectContext(session, value, async (path) => safeRpcCall<{ text: string; version: string }>(
-      () => ctx.connection.rpc.call('/manuscript', 'file.read', { sessionId: session.sessionId, path }),
-    )).then((outcome) => {
+    let contextCompileFailed = false
+    void sendProjectContext(session, value, async () => {
+      const compiled = await safeRpcCall<{ serialized: string; receipt: ProjectContextReceiptBundle }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'context.compile', { sessionId: session.sessionId, userRequest: value, activePath }))
+      if (!compiled.ok) { contextCompileFailed = true; throw new Error('context unavailable') }
+      return { serialized: compiled.value.serialized, receipt: compiled.value.receipt }
+    }).then((outcome) => {
       const result = outcome?.result
       if (outcome) setOutgoing((current) => current?.text === value ? { ...current, projectContextReceipt: outcome.receipt } : current)
       if (!result || !result.ok) {
@@ -1348,7 +1356,10 @@ function Chat({ ctx, session, workspaceId, hidden, onClose, onConfigure, onAppli
       setOutgoing((current) => current?.text === value ? { ...current, state: 'accepted' } : current)
     }).catch(() => {
       setOutgoing((current) => current?.text === value ? { ...current, state: 'failed' } : current)
-      setNote('消息没有发送成功，请重试。')
+      if (contextCompileFailed) {
+        setDraft((current) => current || value)
+        setNote('项目资料暂时无法整理，消息未发送。内容已保留，请重试。')
+      } else setNote('消息没有发送成功，请重试。')
     })
   }
   return e('aside', { className: 'chat', 'aria-label': '写作助手', hidden },
@@ -2616,6 +2627,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       ctx,
       session,
       workspaceId: currentWorkspace?.workspaceId,
+      activePath: path,
       hidden: !assistantVisible,
       onClose: () => setAssistantOpen(false),
       onConfigure: openSettings,

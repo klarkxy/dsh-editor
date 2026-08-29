@@ -23,6 +23,7 @@ function normalized(value: string): string {
 
 class MemoryFileSystem implements FileSystemLike {
   readonly nodes = new Map<string, Node>([['/workspace', { type: 'directory', version: 'root' }]])
+  readonly readPaths: string[] = []
   private counter = 0
 
   async resolve(value: string, opts?: { cwd?: string }): Promise<FsTargetLike> {
@@ -44,6 +45,7 @@ class MemoryFileSystem implements FileSystemLike {
   }
 
   async readText(target: FsTargetLike): Promise<string> {
+    this.readPaths.push(target.targetKey)
     const node = this.nodes.get(target.targetKey)
     if (!node) throw Object.assign(new Error('missing'), { code: 'FS_NOT_FOUND' })
     if (node.type !== 'file') throw Object.assign(new Error('not text'), { code: 'FS_NOT_TEXT' })

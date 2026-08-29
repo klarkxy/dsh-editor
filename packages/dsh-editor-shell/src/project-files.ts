@@ -17,7 +17,7 @@ export function nextChapterPath(paths: readonly string[]): string {
 }
 
 function safeStem(title: string): string {
-  const cleaned = title.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/g, '').slice(0, 80)
+  const cleaned = title.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/^\.+/, '').replace(/[. ]+$/g, '').slice(0, 80)
   return cleaned || '未命名'
 }
 
@@ -36,5 +36,6 @@ export function documentTemplate(kind: DocumentKind, title: string): string {
   if (kind === 'chapter') return `# ${heading}\n\n`
   if (kind === 'outline') return `# ${heading}\n\n## 目标\n\n## 关键事件\n\n## 待确认\n\n`
   if (kind === 'character') return `# ${heading}\n\n## 身份\n\n## 欲望与矛盾\n\n## 人物关系\n\n## 知情边界\n\n`
-  return `# ${heading}\n\n## 已确认\n\n## 暂定\n\n## 连续性提醒\n\n`
+  const trigger = heading.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 64) || '未命名'
+  return `---\ntriggers: [${JSON.stringify(trigger)}]\nenabled: true\npriority: 0\n---\n\n# ${heading}\n\n## 已确认\n\n## 暂定\n\n## 连续性提醒\n\n`
 }

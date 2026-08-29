@@ -6,6 +6,7 @@ import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess
 import { archiveDocument, LifecycleError, listArchives, renameDocument, restoreArchive, type LifecycleAccess } from './rpc/lifecycle.ts'
 import { initializeProject, prepareNovelIndex, ProjectInitError } from './rpc/project.ts'
 import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './rpc/snapshot.ts'
+import { compileContext } from './rpc/context.ts'
 
 type Payload = Record<string, unknown>
 type RpcError =
@@ -77,6 +78,7 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
 
   if (endpoint === 'project.init') return await initializeProject({ root: access.workspace.path, mode: access.policy.mode, newProject: body.newProject === true, signal })
   if (endpoint === 'project.prepareIndex') return await prepareNovelIndex({ root: access.workspace.path, mode: access.policy.mode, signal })
+  if (endpoint === 'context.compile') return await compileContext(files, str(body, 'userRequest'), str(body, 'activePath') || undefined)
   if (endpoint === 'project.importProbe') {
     const sourceSessionId = str(body, 'sourceSessionId')
     const source = sourceSessionId ? await resolveWorkspaceAccess(host, sourceSessionId, signal) : undefined

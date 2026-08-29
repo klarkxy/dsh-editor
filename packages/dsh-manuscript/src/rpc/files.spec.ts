@@ -8,7 +8,7 @@ import type {
   FsWriteIntentLike,
   SandboxExecutionPolicyLike,
 } from '../host.ts'
-import { createTextFile, FileOpError, listDir, MAX_TEXT_BYTES, readTextFile, writeTextFile, type WorkspaceFileContext } from './files.ts'
+import { createTextFile, FileOpError, listDir, MAX_TEXT_BYTES, readTextFile, readTextFileLimited, writeTextFile, type WorkspaceFileContext } from './files.ts'
 import { PathConfineError } from './paths.ts'
 
 type Node = { type: 'file' | 'directory' | 'other'; version: string; text?: string }
@@ -188,6 +188,11 @@ describe('manuscript files through the DSH filesystem', () => {
     fs.nodes.set('/workspace/notes/big.md', { type: 'file', version: 'big', text: 'x'.repeat(MAX_TEXT_BYTES + 1) })
     await expect(readTextFile(context, 'notes/big.md')).rejects.toMatchObject({ code: 'TOO_LARGE' })
     await expect(createTextFile(context, 'notes/new.md', 'x'.repeat(MAX_TEXT_BYTES + 1))).rejects.toMatchObject({ code: 'TOO_LARGE' })
+  })
+
+  it('applies a smaller caller-specific ceiling before returning text', async () => {
+    await expect(readTextFileLimited(context, 'notes/a.md', 4)).rejects.toMatchObject({ code: 'TOO_LARGE' })
+    await expect(readTextFileLimited(context, 'notes/a.md', 5)).resolves.toEqual({ text: 'hello', version: 'opaque-a' })
   })
 
 })

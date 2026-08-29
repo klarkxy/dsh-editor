@@ -1,5 +1,6 @@
 export const PROJECT_CONTEXT_SCHEMA = 'dsh-editor.project-context'
 export const PROJECT_CONTEXT_VERSION = 1
+export const PROJECT_CONTEXT_CURRENT_VERSION = 2
 export const PROJECT_CONTEXT_SOURCE_PATHS = [
   '项目总览.md',
   '大纲/总纲.md',
@@ -9,89 +10,370 @@ export const PROJECT_CONTEXT_SOURCE_PATHS = [
 ] as const
 export const PROJECT_CONTEXT_MAX_CHARS_PER_FILE = 4_000
 export const PROJECT_CONTEXT_MAX_TOTAL_CHARS = 12_000
+export const WORLDBOOK_MAX_CHARS_PER_FILE = 3_000
+export const WORLDBOOK_MAX_TOTAL_CHARS = 6_000
 
 export type ProjectContextStatus = 'included' | 'missing' | 'error'
+export type WorldbookMatchedBy = 'task' | 'saved-document' | 'both'
+export type WorldbookScanSummary = {
+  scanned: number
+  unmatched: number
+  disabled: number
+  invalid: number
+  limits: number
+  readErrors: number
+}
 export type ProjectContextReceipt = {
   path: string
+  kind?: 'fixed' | 'worldbook'
   version?: string
   includedChars: number
   status: ProjectContextStatus
   truncated: boolean
+  priority?: number
+  matchedBy?: WorldbookMatchedBy
+  matchedTriggers?: string[]
 }
+export type ProjectContextReceiptBundle = { sources: ProjectContextReceipt[]; scan?: WorldbookScanSummary }
 export type ProjectContextSource = ProjectContextReceipt & { text?: string }
-export type ProjectContextEnvelope = {
+export type ProjectContextEnvelopeV1 = {
   schema: typeof PROJECT_CONTEXT_SCHEMA
   version: typeof PROJECT_CONTEXT_VERSION
   project_context: { sources: ProjectContextSource[] }
   user_request: string
 }
+export type ProjectContextEnvelopeV2 = {
+  schema: typeof PROJECT_CONTEXT_SCHEMA
+  version: typeof PROJECT_CONTEXT_CURRENT_VERSION
+  project_context: { sources: ProjectContextSource[]; scan: WorldbookScanSummary }
+  user_request: string
+}
+export type ProjectContextEnvelope = ProjectContextEnvelopeV1 | ProjectContextEnvelopeV2
 export type ProjectContextReadResult =
   | { ok: true; value: { text: string; version: string } }
   | { ok: false; error?: { code?: string; message?: string } }
-export type ProjectContextCompilation = { envelope: ProjectContextEnvelope; serialized: string; receipt: ProjectContextReceipt[] }
+export type ProjectContextCompilation = { envelope: ProjectContextEnvelope; serialized: string; receipt: ProjectContextReceiptBundle }
+export type WorldbookCandidate = { path: string; text: string; version: string }
+
+const EMPTY_SCAN: WorldbookScanSummary = { scanned: 0, unmatched: 0, disabled: 0, invalid: 0, limits: 0, readErrors: 0 }
 
 function isMissing(result: Exclude<ProjectContextReadResult, { ok: true }>): boolean {
-  return /not[- ]found|missing/i.test(`${result.error?.code ?? ''} ${result.error?.message ?? ''}`)
+  return /not[- _]found|missing/i.test(`${result.error?.code ?? ''} ${result.error?.message ?? ''}`)
 }
 
-/** File contents stay JSON string data and are never interpolated into the request. */
-export async function compileProjectContext(
-  userRequest: string,
+async function compileFixedSources(
   read: (path: typeof PROJECT_CONTEXT_SOURCE_PATHS[number]) => Promise<ProjectContextReadResult>,
-): Promise<ProjectContextCompilation> {
+  includeKind: boolean,
+): Promise<ProjectContextSource[]> {
   let remaining = PROJECT_CONTEXT_MAX_TOTAL_CHARS
   const sources: ProjectContextSource[] = []
   for (const path of PROJECT_CONTEXT_SOURCE_PATHS) {
     try {
       const result = await read(path)
       if (!result.ok) {
-        sources.push({ path, includedChars: 0, status: isMissing(result) ? 'missing' : 'error', truncated: false })
+        sources.push({ path, ...(includeKind ? { kind: 'fixed' as const } : {}), includedChars: 0, status: isMissing(result) ? 'missing' : 'error', truncated: false })
         continue
       }
       const text = result.value.text
       const includedChars = Math.min(text.length, PROJECT_CONTEXT_MAX_CHARS_PER_FILE, remaining)
-      const source: ProjectContextSource = {
-        path, version: result.value.version, includedChars, status: 'included', truncated: includedChars < text.length,
-      }
-      if (includedChars > 0) source.text = text.slice(0, includedChars)
-      sources.push(source)
+      sources.push({
+        path,
+        ...(includeKind ? { kind: 'fixed' as const } : {}),
+        version: result.value.version,
+        includedChars,
+        status: 'included',
+        truncated: includedChars < text.length,
+        text: text.slice(0, includedChars),
+      })
       remaining -= includedChars
     } catch {
-      sources.push({ path, includedChars: 0, status: 'error', truncated: false })
+      sources.push({ path, ...(includeKind ? { kind: 'fixed' as const } : {}), includedChars: 0, status: 'error', truncated: false })
     }
   }
-  const envelope: ProjectContextEnvelope = {
+  return sources
+}
+
+/** Legacy V1 compiler retained so historical sessions remain readable. */
+export async function compileProjectContext(
+  userRequest: string,
+  read: (path: typeof PROJECT_CONTEXT_SOURCE_PATHS[number]) => Promise<ProjectContextReadResult>,
+): Promise<ProjectContextCompilation> {
+  const sources = await compileFixedSources(read, false)
+  const envelope: ProjectContextEnvelopeV1 = {
     schema: PROJECT_CONTEXT_SCHEMA,
     version: PROJECT_CONTEXT_VERSION,
     project_context: { sources },
     user_request: userRequest,
   }
-  return { envelope, serialized: JSON.stringify(envelope), receipt: sources.map(({ text: _text, ...item }) => item) }
+  return { envelope, serialized: JSON.stringify(envelope), receipt: { sources: stripText(sources) } }
 }
 
-function isReceipt(value: unknown): value is ProjectContextReceipt {
-  if (!value || typeof value !== 'object') return false
-  const item = value as Partial<ProjectContextReceipt>
-  return typeof item.path === 'string'
-    && (item.status === 'included' || item.status === 'missing' || item.status === 'error')
-    && typeof item.includedChars === 'number' && Number.isInteger(item.includedChars) && item.includedChars >= 0
-    && typeof item.truncated === 'boolean' && (item.version === undefined || typeof item.version === 'string')
-    && (!Object.hasOwn(item, 'text') || typeof (item as ProjectContextSource).text === 'string')
+type ParsedWorldbook = { enabled: boolean; priority: number; triggers: string[] }
+
+function parseTriggerValue(value: string): string | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    const inner = trimmed.slice(1, -1)
+    if (trimmed.startsWith('"')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        return typeof parsed === 'string' ? parsed : undefined
+      } catch { return undefined }
+    }
+    return inner.replace(/''/g, "'")
+  }
+  return trimmed
+}
+
+function splitInlineTriggers(value: string): string[] | undefined {
+  const trimmed = value.trim()
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return undefined
+  const body = trimmed.slice(1, -1)
+  if (!body.trim()) return []
+  const parts: string[] = []
+  let quote = ''
+  let escaped = false
+  let start = 0
+  for (let index = 0; index < body.length; index++) {
+    const char = body[index]!
+    if (escaped) { escaped = false; continue }
+    if (quote === '"' && char === '\\') { escaped = true; continue }
+    if (quote) { if (char === quote) quote = ''; continue }
+    if (char === '"' || char === "'") { quote = char; continue }
+    if (char === ',') { parts.push(body.slice(start, index)); start = index + 1 }
+  }
+  if (quote) return undefined
+  parts.push(body.slice(start))
+  const parsed = parts.map(parseTriggerValue)
+  return parsed.every((item): item is string => item !== undefined) ? parsed : undefined
+}
+
+function validTriggers(values: string[]): string[] | undefined {
+  const unique: string[] = []
+  const seen = new Set<string>()
+  for (const raw of values) {
+    const value = raw.trim()
+    const folded = value.toLowerCase()
+    if (!value || value.length > 64 || /[\u0000-\u001f\u007f]/.test(value)) return undefined
+    if (!seen.has(folded)) { unique.push(value); seen.add(folded) }
+  }
+  return unique.length > 0 && unique.length <= 16 ? unique : undefined
+}
+
+export function parseWorldbookFrontmatter(path: string, text: string): ParsedWorldbook | undefined {
+  if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) {
+    const legacy = path.replace(/^世界书\//, '').replace(/\.md$/i, '')
+    const triggers = validTriggers([legacy])
+    return triggers ? { enabled: true, priority: 0, triggers } : undefined
+  }
+  const close = /\r?\n---(?:\r?\n|$)/g
+  close.lastIndex = text.indexOf('\n') + 1
+  const match = close.exec(text)
+  if (!match || match.index > 4_096) return undefined
+  const body = text.slice(text.indexOf('\n') + 1, match.index)
+  const lines = body.split(/\r?\n/)
+  let enabled = true
+  let priority = 0
+  let triggers: string[] | undefined
+  let sawTriggers = false
+  let sawEnabled = false
+  let sawPriority = false
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!
+    if (!line.trim() || /^\s*#/.test(line)) continue
+    if (/^\s/.test(line)) return undefined
+    const field = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line)
+    if (!field) return undefined
+    const key = field[1]!
+    const value = field[2]!
+    if (key === 'triggers') {
+      if (sawTriggers) return undefined
+      sawTriggers = true
+      if (value.trim()) triggers = splitInlineTriggers(value)
+      else {
+        const values: string[] = []
+        while (index + 1 < lines.length && /^\s+-\s+/.test(lines[index + 1]!)) {
+          const parsed = parseTriggerValue(lines[++index]!.replace(/^\s+-\s+/, ''))
+          if (parsed === undefined) return undefined
+          values.push(parsed)
+        }
+        triggers = values
+      }
+      if (!triggers) return undefined
+    } else if (key === 'enabled') {
+      if (sawEnabled || (value !== 'true' && value !== 'false')) return undefined
+      sawEnabled = true
+      enabled = value === 'true'
+    } else if (key === 'priority') {
+      if (sawPriority || !/^-?\d+$/.test(value)) return undefined
+      sawPriority = true
+      priority = Number(value)
+      if (!Number.isSafeInteger(priority) || priority < -100 || priority > 100) return undefined
+    } else return undefined
+  }
+  const checked = sawTriggers && triggers ? validTriggers(triggers) : undefined
+  return checked ? { enabled, priority, triggers: checked } : undefined
+}
+
+function stripText(sources: ProjectContextSource[]): ProjectContextReceipt[] {
+  return sources.map(({ text: _text, ...source }) => source)
+}
+
+function bumpScan(scan: WorldbookScanSummary, key: keyof WorldbookScanSummary, maximum: number): void {
+  scan[key] = Math.min(maximum, scan[key] + 1)
+}
+
+export async function compileProjectContextV2(
+  userRequest: string,
+  read: (path: typeof PROJECT_CONTEXT_SOURCE_PATHS[number]) => Promise<ProjectContextReadResult>,
+  options: {
+    candidates: WorldbookCandidate[]
+    activePath?: string
+    savedDocumentText?: string
+    scan?: Partial<WorldbookScanSummary>
+  },
+): Promise<ProjectContextCompilation> {
+  const fixed = await compileFixedSources(read, true)
+  const scan: WorldbookScanSummary = { ...EMPTY_SCAN, ...options.scan }
+  const taskHaystack = `${userRequest}\n${options.activePath ?? ''}`.toLowerCase()
+  const savedHaystack = (options.savedDocumentText ?? '').slice(0, 8_000).toLowerCase()
+  const matched: Array<WorldbookCandidate & ParsedWorldbook & { matchedBy: WorldbookMatchedBy; matchedTriggers: string[] }> = []
+  for (const candidate of options.candidates) {
+    const config = parseWorldbookFrontmatter(candidate.path, candidate.text)
+    if (!config) { bumpScan(scan, 'invalid', 64); continue }
+    if (!config.enabled) { bumpScan(scan, 'disabled', 64); continue }
+    const taskHits = config.triggers.filter((trigger) => taskHaystack.includes(trigger.toLowerCase()))
+    const savedHits = config.triggers.filter((trigger) => savedHaystack.includes(trigger.toLowerCase()))
+    const hits = validTriggers([...taskHits, ...savedHits])
+    if (!hits) { bumpScan(scan, 'unmatched', 64); continue }
+    matched.push({
+      ...candidate,
+      ...config,
+      matchedBy: taskHits.length && savedHits.length ? 'both' : taskHits.length ? 'task' : 'saved-document',
+      matchedTriggers: hits,
+    })
+  }
+  matched.sort((left, right) => right.priority - left.priority || (left.path < right.path ? -1 : left.path > right.path ? 1 : 0))
+  let remaining = WORLDBOOK_MAX_TOTAL_CHARS
+  const dynamic: ProjectContextSource[] = []
+  for (const item of matched) {
+    if (remaining <= 0) { bumpScan(scan, 'limits', 1_024); continue }
+    const includedChars = Math.min(item.text.length, WORLDBOOK_MAX_CHARS_PER_FILE, remaining)
+    remaining -= includedChars
+    dynamic.push({
+      path: item.path,
+      kind: 'worldbook',
+      version: item.version,
+      includedChars,
+      status: 'included',
+      truncated: includedChars < item.text.length,
+      priority: item.priority,
+      matchedBy: item.matchedBy,
+      matchedTriggers: item.matchedTriggers,
+      text: item.text.slice(0, includedChars),
+    })
+  }
+  const sources = [...fixed, ...dynamic]
+  const envelope: ProjectContextEnvelopeV2 = {
+    schema: PROJECT_CONTEXT_SCHEMA,
+    version: PROJECT_CONTEXT_CURRENT_VERSION,
+    project_context: { sources, scan },
+    user_request: userRequest,
+  }
+  return { envelope, serialized: JSON.stringify(envelope), receipt: { sources: stripText(sources), scan } }
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function isScan(value: unknown): value is WorldbookScanSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const scan = value as Partial<WorldbookScanSummary>
+  return isNonNegativeInteger(scan.scanned) && scan.scanned <= 64
+    && isNonNegativeInteger(scan.unmatched) && scan.unmatched <= 64
+    && isNonNegativeInteger(scan.disabled) && scan.disabled <= 64
+    && isNonNegativeInteger(scan.invalid) && scan.invalid <= 64
+    && isNonNegativeInteger(scan.limits) && scan.limits <= 1_024
+    && isNonNegativeInteger(scan.readErrors) && scan.readErrors <= 1_024
+}
+
+function isBaseSource(value: unknown, allowLegacyZeroWithoutText = false): value is ProjectContextSource {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const item = value as Partial<ProjectContextSource>
+  if (typeof item.path !== 'string' || !isNonNegativeInteger(item.includedChars)
+    || (item.status !== 'included' && item.status !== 'missing' && item.status !== 'error')
+    || typeof item.truncated !== 'boolean' || (item.version !== undefined && typeof item.version !== 'string')) return false
+  if (item.status === 'included') {
+    if (typeof item.version !== 'string') return false
+    if (typeof item.text === 'string') return item.text.length === item.includedChars
+    return allowLegacyZeroWithoutText && item.includedChars === 0 && item.text === undefined
+  }
+  return item.includedChars === 0 && item.truncated === false && item.text === undefined && item.version === undefined
+}
+
+function validateFixed(sources: ProjectContextSource[], withKind: boolean, allowLegacyZeroWithoutText = false): boolean {
+  if (sources.length < PROJECT_CONTEXT_SOURCE_PATHS.length) return false
+  let total = 0
+  for (let index = 0; index < PROJECT_CONTEXT_SOURCE_PATHS.length; index++) {
+    const source = sources[index]!
+    if (!isBaseSource(source, allowLegacyZeroWithoutText) || source.path !== PROJECT_CONTEXT_SOURCE_PATHS[index]) return false
+    if (withKind ? source.kind !== 'fixed' : source.kind !== undefined) return false
+    if (source.includedChars > PROJECT_CONTEXT_MAX_CHARS_PER_FILE) return false
+    total += source.includedChars
+  }
+  return total <= PROJECT_CONTEXT_MAX_TOTAL_CHARS
+}
+
+function validateV2(envelope: ProjectContextEnvelopeV2): boolean {
+  const sources = envelope.project_context.sources
+  if (sources.length > PROJECT_CONTEXT_SOURCE_PATHS.length + 64 || !validateFixed(sources, true) || !isScan(envelope.project_context.scan)) return false
+  const seen = new Set<string>()
+  let dynamicTotal = 0
+  let previousDynamic: ProjectContextSource | undefined
+  for (let index = 0; index < sources.length; index++) {
+    const source = sources[index]!
+    if (seen.has(source.path)) return false
+    seen.add(source.path)
+    if (index < PROJECT_CONTEXT_SOURCE_PATHS.length) continue
+    if (!isBaseSource(source) || source.kind !== 'worldbook' || source.status !== 'included') return false
+    const segments = source.path.split('/')
+    if (!/^世界书\/[^\u0000-\u001f\\]+\.md$/i.test(source.path) || source.path.toLowerCase() === '世界书/设定总汇.md'.toLowerCase()
+      || segments.some((part) => !part || part === '.' || part === '..' || part.startsWith('.'))) return false
+    if (!Number.isInteger(source.priority) || source.priority! < -100 || source.priority! > 100) return false
+    if (source.matchedBy !== 'task' && source.matchedBy !== 'saved-document' && source.matchedBy !== 'both') return false
+    const checkedTriggers = Array.isArray(source.matchedTriggers) ? validTriggers(source.matchedTriggers) : undefined
+    if (!checkedTriggers || checkedTriggers.length !== source.matchedTriggers!.length) return false
+    if (source.includedChars > WORLDBOOK_MAX_CHARS_PER_FILE) return false
+    if (previousDynamic && (previousDynamic.priority! < source.priority!
+      || (previousDynamic.priority === source.priority && previousDynamic.path > source.path))) return false
+    previousDynamic = source
+    dynamicTotal += source.includedChars
+  }
+  return dynamicTotal <= WORLDBOOK_MAX_TOTAL_CHARS
 }
 
 export function parseProjectContextEnvelope(text: string): ProjectContextEnvelope | undefined {
   let value: unknown
   try { value = JSON.parse(text) } catch { return undefined }
-  if (!value || typeof value !== 'object') return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
   const envelope = value as Partial<ProjectContextEnvelope>
-  if (envelope.schema !== PROJECT_CONTEXT_SCHEMA || envelope.version !== PROJECT_CONTEXT_VERSION || typeof envelope.user_request !== 'string') return undefined
+  if (envelope.schema !== PROJECT_CONTEXT_SCHEMA || typeof envelope.user_request !== 'string') return undefined
   if (!envelope.project_context || typeof envelope.project_context !== 'object' || Array.isArray(envelope.project_context)) return undefined
   const sources = (envelope.project_context as { sources?: unknown }).sources
-  if (!Array.isArray(sources) || sources.length !== PROJECT_CONTEXT_SOURCE_PATHS.length) return undefined
-  if (!sources.every((source, index) => isReceipt(source) && source.path === PROJECT_CONTEXT_SOURCE_PATHS[index])) return undefined
-  return envelope as ProjectContextEnvelope
+  if (!Array.isArray(sources)) return undefined
+  if (envelope.version === PROJECT_CONTEXT_VERSION) {
+    if (sources.length !== PROJECT_CONTEXT_SOURCE_PATHS.length || !validateFixed(sources as ProjectContextSource[], false, true)) return undefined
+    return envelope as ProjectContextEnvelopeV1
+  }
+  if (envelope.version === PROJECT_CONTEXT_CURRENT_VERSION && validateV2(envelope as ProjectContextEnvelopeV2)) return envelope as ProjectContextEnvelopeV2
+  return undefined
 }
 
-export function projectContextReceipt(envelope: ProjectContextEnvelope): ProjectContextReceipt[] {
-  return envelope.project_context.sources.map(({ text: _text, ...item }) => item)
+export function projectContextReceipt(envelope: ProjectContextEnvelope): ProjectContextReceiptBundle {
+  return {
+    sources: stripText(envelope.project_context.sources),
+    ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION ? { scan: envelope.project_context.scan } : {}),
+  }
 }

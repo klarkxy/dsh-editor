@@ -9,11 +9,14 @@ describe('project file naming', () => {
   it('sanitizes document names and avoids collisions', () => {
     expect(nextDocumentPath('character', '阿/明', [])).toBe('人物卡/阿-明.md')
     expect(nextDocumentPath('world', '魔法', ['世界书/魔法.md', '世界书/魔法-2.md'])).toBe('世界书/魔法-3.md')
+    expect(nextDocumentPath('world', '.秘密', [])).toBe('世界书/秘密.md')
   })
 
   it('creates useful Markdown templates', () => {
     expect(documentTemplate('outline', '第一卷')).toContain('## 关键事件')
     expect(documentTemplate('character', '阿明')).toContain('## 知情边界')
+    expect(documentTemplate('world', '星港')).toContain('triggers: ["星港"]\nenabled: true\npriority: 0')
+    expect(documentTemplate('world', '星港\n规则')).toContain('triggers: ["星港 规则"]')
   })
 
   it('builds a complete natural chapter order without hidden or non-manuscript files', () => {

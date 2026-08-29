@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { answerApproval, answerQuestions, chatRows, parseProposalMarker, partialText, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
-import { compileProjectContext } from './project-context.ts'
+import { compileProjectContext, compileProjectContextV2 } from './project-context.ts'
 
 describe('DSH snapshot adapter', () => {
   it('recognizes only exact versioned proposal markers', () => {
@@ -48,14 +48,30 @@ describe('DSH snapshot adapter', () => {
   it('submits one project-context envelope and projects its user request and receipt back to the UI', async () => {
     const prompt = vi.fn().mockResolvedValue({ ok: true })
     const session = { prompt } as never
-    const sent = await sendProjectContext(session, '  请审这一段  ', async (path) => ({ ok: true as const, value: { text: `资料 ${path}`, version: 'v1' } }))
+    const compiled = await compileProjectContext('请审这一段', async (path) => ({ ok: true as const, value: { text: `资料 ${path}`, version: 'v1' } }))
+    const sent = await sendProjectContext(session, '  请审这一段  ', async () => compiled)
     expect(prompt).toHaveBeenCalledTimes(1)
     const canonical = prompt.mock.calls[0]?.[0]?.[0]?.text
-    const compiled = await compileProjectContext('请审这一段', async (path) => ({ ok: true as const, value: { text: `资料 ${path}`, version: 'v1' } }))
     expect(canonical).toBe(compiled.serialized)
     const [row] = chatRows({ nodes: [{ kind: 'user', seq: 1, content: [{ type: 'text', text: canonical }] }] } as never)
     expect(row).toMatchObject({ role: 'user', text: '请审这一段' })
     expect(row?.projectContextReceipt).toEqual(sent?.receipt)
+  })
+  it('does not prompt when project-context compilation fails', async () => {
+    const prompt = vi.fn()
+    await expect(sendProjectContext({ prompt } as never, '请审这一段', async () => { throw new Error('compile failed') })).rejects.toThrow('compile failed')
+    expect(prompt).not.toHaveBeenCalled()
+  })
+  it('projects a canonical V2 message without exposing source text in the UI receipt', async () => {
+    const compiled = await compileProjectContextV2('写港口冲突', async () => ({ ok: true as const, value: { text: '固定秘密', version: 'v1' } }), {
+      candidates: [{ path: '世界书/港口.md', version: 'w1', text: '绝不能出现在回执里的港口原文' }],
+      scan: { scanned: 1 },
+    })
+    const [row] = chatRows({ nodes: [{ kind: 'user', seq: 2, content: [{ type: 'text', text: compiled.serialized }] }] } as never)
+    expect(row?.text).toBe('写港口冲突')
+    expect(row?.projectContextReceipt?.sources.some((item) => item.kind === 'worldbook')).toBe(true)
+    expect(JSON.stringify(row?.projectContextReceipt)).not.toContain('绝不能出现在回执里的港口原文')
+    expect(JSON.stringify(row?.projectContextReceipt)).not.toContain('固定秘密')
   })
   it('keeps historical plain user messages unchanged', () => {
     const [row] = chatRows({ nodes: [{ kind: 'user', seq: 1, content: [{ type: 'text', text: '普通旧消息' }] }] } as never)

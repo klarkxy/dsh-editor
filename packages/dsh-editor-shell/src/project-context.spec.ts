@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PROJECT_CONTEXT_MAX_CHARS_PER_FILE, PROJECT_CONTEXT_SOURCE_PATHS, compileProjectContext, parseProjectContextEnvelope } from './project-context.ts'
+import { PROJECT_CONTEXT_MAX_CHARS_PER_FILE, PROJECT_CONTEXT_SOURCE_PATHS, compileProjectContext, compileProjectContextV2, parseProjectContextEnvelope, parseWorldbookFrontmatter, projectContextReceipt } from './project-context.ts'
 
 describe('project context compiler', () => {
   it('reads the five fixed sources in order and serializes successful input byte-stably', async () => {
@@ -20,9 +20,9 @@ describe('project context compiler', () => {
       ok: true as const,
       value: { text: path === PROJECT_CONTEXT_SOURCE_PATHS[0] ? 'a'.repeat(PROJECT_CONTEXT_MAX_CHARS_PER_FILE + 1) : 'b'.repeat(PROJECT_CONTEXT_MAX_CHARS_PER_FILE), version: 'v1' },
     }))
-    expect(compiled.receipt.map((item) => item.includedChars)).toEqual([4000, 4000, 4000, 0, 0])
-    expect(compiled.receipt.map((item) => item.truncated)).toEqual([true, false, false, true, true])
-    expect(compiled.receipt.reduce((sum, item) => sum + item.includedChars, 0)).toBe(12_000)
+    expect(compiled.receipt.sources.map((item) => item.includedChars)).toEqual([4000, 4000, 4000, 0, 0])
+    expect(compiled.receipt.sources.map((item) => item.truncated)).toEqual([true, false, false, true, true])
+    expect(compiled.receipt.sources.reduce((sum, item) => sum + item.includedChars, 0)).toBe(12_000)
   })
 
   it('degrades missing and failed reads without blocking the envelope', async () => {
@@ -31,7 +31,7 @@ describe('project context compiler', () => {
       if (path === PROJECT_CONTEXT_SOURCE_PATHS[1]) throw new Error('offline')
       return { ok: true as const, value: { text: '可用', version: 'v1' } }
     })
-    expect(compiled.receipt.map((item) => item.status)).toEqual(['missing', 'error', 'included', 'included', 'included'])
+    expect(compiled.receipt.sources.map((item) => item.status)).toEqual(['missing', 'error', 'included', 'included', 'included'])
     expect(parseProjectContextEnvelope(compiled.serialized)?.user_request).toBe('继续')
   })
 
@@ -48,5 +48,64 @@ describe('project context compiler', () => {
     const malformed = JSON.parse(compiled.serialized) as { project_context: { sources: Array<{ text?: unknown }> } }
     malformed.project_context.sources[0]!.text = { not: 'text' }
     expect(parseProjectContextEnvelope(JSON.stringify(malformed))).toBeUndefined()
+  })
+
+  it('parses strict inline and multiline worldbook metadata and rejects malformed declarations', () => {
+    expect(parseWorldbookFrontmatter('世界书/港口.md', '---\r\ntriggers:\r\n  - 港口\r\n  - "海关"\r\nenabled: true\r\npriority: 8\r\n---\r\n正文')).toEqual({ enabled: true, priority: 8, triggers: ['港口', '海关'] })
+    expect(parseWorldbookFrontmatter('世界书/旧设定.md', '# 旧设定')).toEqual({ enabled: true, priority: 0, triggers: ['旧设定'] })
+    expect(parseWorldbookFrontmatter('世界书/坏.md', '---\npriority: 1\n---\n正文')).toBeUndefined()
+    expect(parseWorldbookFrontmatter('世界书/坏.md', '---\ntriggers: [港口]\nenabled: maybe\n---\n正文')).toBeUndefined()
+    expect(parseWorldbookFrontmatter('世界书/坏.md', '---\ntriggers: [港口]\nenable: false\n---\n正文')).toBeUndefined()
+  })
+
+  it('matches task and saved text, sorts by priority, and preserves fixed budgets', async () => {
+    const compiled = await compileProjectContextV2('请写港口冲突', async () => ({ ok: true as const, value: { text: '固定'.repeat(3000), version: 'fixed-v1' } }), {
+      activePath: '正文/001.md',
+      savedDocumentText: '海关官员正在等候',
+      candidates: [
+        { path: '世界书/港口.md', version: 'w1', text: '---\ntriggers: [港口, 海关]\nenabled: true\npriority: 8\n---\n' + '甲'.repeat(4000) },
+        { path: '世界书/次要.md', version: 'w2', text: '---\ntriggers: [港口]\nenabled: true\npriority: 2\n---\n' + '乙'.repeat(4000) },
+        { path: '世界书/关闭.md', version: 'w3', text: '---\ntriggers: [港口]\nenabled: false\npriority: 99\n---\n忽略' },
+      ],
+      scan: { scanned: 3 },
+    })
+    const worldbook = compiled.receipt.sources.filter((item) => item.kind === 'worldbook')
+    expect(worldbook.map((item) => [item.path, item.includedChars, item.matchedBy])).toEqual([
+      ['世界书/港口.md', 3000, 'both'],
+      ['世界书/次要.md', 3000, 'task'],
+    ])
+    expect(compiled.receipt.scan).toMatchObject({ scanned: 3, disabled: 1 })
+    expect(parseProjectContextEnvelope(compiled.serialized)).toEqual(compiled.envelope)
+    expect(projectContextReceipt(compiled.envelope)).toEqual(compiled.receipt)
+  })
+
+  it('rejects forged V2 source order, duplicate paths, budgets, and text-length receipts', async () => {
+    const compiled = await compileProjectContextV2('港口', async () => ({ ok: true as const, value: { text: '资料', version: 'v1' } }), {
+      candidates: [{ path: '世界书/港口.md', version: 'w1', text: '港口资料' }],
+    })
+    const mutate = () => JSON.parse(compiled.serialized) as { project_context: { sources: Array<Record<string, unknown>> } }
+    const wrongOrder = mutate(); [wrongOrder.project_context.sources[0], wrongOrder.project_context.sources[1]] = [wrongOrder.project_context.sources[1]!, wrongOrder.project_context.sources[0]!]
+    expect(parseProjectContextEnvelope(JSON.stringify(wrongOrder))).toBeUndefined()
+    const duplicate = mutate(); duplicate.project_context.sources[5]!.path = PROJECT_CONTEXT_SOURCE_PATHS[0]
+    expect(parseProjectContextEnvelope(JSON.stringify(duplicate))).toBeUndefined()
+    const wrongLength = mutate(); wrongLength.project_context.sources[5]!.includedChars = 99
+    expect(parseProjectContextEnvelope(JSON.stringify(wrongLength))).toBeUndefined()
+    const hidden = mutate(); hidden.project_context.sources[5]!.path = '世界书/.港口.md'
+    expect(parseProjectContextEnvelope(JSON.stringify(hidden))).toBeUndefined()
+    const forgedScan = mutate(); (forgedScan as { project_context: { scan: { scanned: number } } }).project_context.scan.scanned = 65
+    expect(parseProjectContextEnvelope(JSON.stringify(forgedScan))).toBeUndefined()
+  })
+
+  it('accepts canonical V1 history whose empty or budget-exhausted sources omitted text', () => {
+    const sources = PROJECT_CONTEXT_SOURCE_PATHS.map((path, index) => ({
+      path,
+      version: 'v1',
+      includedChars: index < 3 ? 4000 : 0,
+      status: 'included',
+      truncated: index !== 3,
+      ...(index < 3 ? { text: 'x'.repeat(4000) } : {}),
+    }))
+    const legacy = { schema: 'dsh-editor.project-context', version: 1, project_context: { sources }, user_request: '继续' }
+    expect(parseProjectContextEnvelope(JSON.stringify(legacy))?.user_request).toBe('继续')
   })
 })
