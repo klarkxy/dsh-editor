@@ -22,7 +22,7 @@ Electron（窗口、资源校验、子进程生命周期）
 
 ## 所有权边界
 
-- DSH：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry、sandbox、文件 API 与持久化。
+- DSH：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry（含显示名与最近入口）、sandbox、文件 API 与持久化。
 - Electron：单窗口、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。
 - `dsh-editor-shell` Renderer：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据、绝对路径或 Node 文件系统。
 - `dsh-editor-shell` Host：loopback-only 项目导入、快照、安全重命名、可恢复归档，以及只读 `novel_knowledge` 与预览式修改提案；复用同一 live-session workspace authority，不保存模式状态，也不装载完整 skill。

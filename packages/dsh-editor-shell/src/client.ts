@@ -503,6 +503,62 @@ function FileManageDialog(props: {
   )
 }
 
+type ManagedWorkspace = { workspaceId: WorkspaceId; title: string; path: string; removable: boolean }
+
+function WorkspaceManageDialog(props: {
+  workspace: ManagedWorkspace
+  busy: boolean
+  note: string
+  onClose(): void
+  onRename(title: string): void
+  onRemove(): void
+}) {
+  const [title, setTitle] = useState(props.workspace.title)
+  const [removing, setRemoving] = useState(false)
+  const dialog = useRef<HTMLDivElement | null>(null)
+  const close = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => { close.current?.focus() }, [])
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && !props.busy) { event.preventDefault(); props.onClose(); return }
+    if (event.key !== 'Tab' || !dialog.current) return
+    const controls = [...dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled)')]
+    if (!controls.length) return
+    const first = controls[0]!
+    const last = controls.at(-1)!
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  }
+  return e('div', { className: 'file-dialog-overlay' },
+    e('div', { ref: dialog, className: 'file-dialog workspace-dialog', role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'workspace-dialog-title', onKeyDown },
+      e('header', null,
+        e('div', null,
+          e('small', null, '作品管理'),
+          e('h2', { id: 'workspace-dialog-title' }, props.workspace.title),
+          e('code', null, props.workspace.path),
+        ),
+        e('button', { ref: close, className: 'icon-button', type: 'button', disabled: props.busy, onClick: props.onClose, 'aria-label': '关闭作品管理' }, '×'),
+      ),
+      removing ? e('div', { className: 'archive-confirm' },
+        e('p', null, '这里只移除首页的作品入口。作品文件夹、正文、会话和日志都不会删除。'),
+        e('strong', null, '以后仍可用“打开作品”重新加入。'),
+        e('footer', null,
+          e('button', { type: 'button', disabled: props.busy, onClick: () => setRemoving(false) }, '返回'),
+          e('button', { className: 'danger-action', type: 'button', disabled: props.busy, onClick: props.onRemove }, props.busy ? '移除中…' : '确认从最近移除'),
+        ),
+      ) : e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); props.onRename(title) } },
+        e('label', null, e('span', null, '作品显示名'), e('input', { value: title, maxLength: 120, autoFocus: true, onChange: (event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value) })),
+        e('p', null, '只修改应用内显示名，不移动或重命名作品文件夹。'),
+        e('footer', null,
+          props.workspace.removable ? e('button', { className: 'danger-link', type: 'button', disabled: props.busy, onClick: () => setRemoving(true) }, '从最近移除') : null,
+          e('button', { type: 'button', disabled: props.busy, onClick: props.onClose }, '取消'),
+          e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !title.trim() || title.trim() === props.workspace.title }, props.busy ? '保存中…' : '保存显示名'),
+        ),
+      ),
+      props.note ? e('p', { className: 'warning', role: 'alert' }, props.note) : null,
+    ),
+  )
+}
+
 function Editor(props: {
   ctx: ShellContext
   session: SessionFace
@@ -1416,6 +1472,9 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [managePath, setManagePath] = useState<string | null>(null)
   const [manageBusy, setManageBusy] = useState(false)
   const [manageNote, setManageNote] = useState('')
+  const [workspaceManage, setWorkspaceManage] = useState<ManagedWorkspace | null>(null)
+  const [workspaceManageBusy, setWorkspaceManageBusy] = useState(false)
+  const [workspaceManageNote, setWorkspaceManageNote] = useState('')
   const [archives, setArchives] = useState<ArchiveView[]>([])
   const [archiveInvalid, setArchiveInvalid] = useState(0)
   const [archiveBusy, setArchiveBusy] = useState(false)
@@ -1424,6 +1483,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const importReturnFocus = useRef<HTMLElement | null>(null)
   const snapshotReturnFocus = useRef<HTMLElement | null>(null)
   const fileManageReturnFocus = useRef<HTMLElement | null>(null)
+  const workspaceManageReturnFocus = useRef<HTMLElement | null>(null)
   const shortcutReturnFocus = useRef<HTMLElement | null>(null)
   const shortcutChordAt = useRef(0)
   const temporaryFlowWorkspaces = useRef(new Set<string>())
@@ -1573,6 +1633,45 @@ function Root({ ctx }: { ctx: ShellContext }) {
     const target = fileManageReturnFocus.current
     setManagePath(null); setManageNote('')
     if (target) globalThis.setTimeout(() => target.focus(), 0)
+  }
+  const openWorkspaceManage = (workspace: { workspaceId: WorkspaceId; title?: string; path: string }, removable: boolean) => {
+    workspaceManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setWorkspaceManage({ workspaceId: workspace.workspaceId, title: workspace.title || workspace.path, path: workspace.path, removable })
+    setWorkspaceManageNote('')
+  }
+  const closeWorkspaceManage = (force = false) => {
+    if (workspaceManageBusy && !force) return
+    const target = workspaceManageReturnFocus.current
+    setWorkspaceManage(null)
+    setWorkspaceManageNote('')
+    if (target) globalThis.setTimeout(() => target.focus(), 0)
+  }
+  const renameWorkspace = async (title: string) => {
+    if (!workspaceManage || workspaceManageBusy) return
+    setWorkspaceManageBusy(true); setWorkspaceManageNote('')
+    try {
+      await ctx.workspaces.rename(workspaceManage.workspaceId, title.trim())
+      setWorkspaceManageBusy(false)
+      closeWorkspaceManage(true)
+      if (session) setExportNote('作品显示名已更新。')
+      else setHomeNote('作品显示名已更新。')
+    } catch {
+      setWorkspaceManageBusy(false)
+      setWorkspaceManageNote('作品名没有修改；请检查是否与其他作品重名。')
+    }
+  }
+  const removeWorkspace = async () => {
+    if (!workspaceManage?.removable || workspaceManageBusy) return
+    setWorkspaceManageBusy(true); setWorkspaceManageNote('')
+    try {
+      await ctx.workspaces.delete(workspaceManage.workspaceId)
+      setWorkspaceManageBusy(false)
+      closeWorkspaceManage(true)
+      setHomeNote('已从最近移除；磁盘中的作品没有删除。')
+    } catch {
+      setWorkspaceManageBusy(false)
+      setWorkspaceManageNote('最近入口没有移除，请重试。')
+    }
   }
   const observedVersion = async (selectedPath: string): Promise<string | undefined> => {
     if (!session) return undefined
@@ -2218,12 +2317,14 @@ function Root({ ctx }: { ctx: ShellContext }) {
           e('span', { className: 'folder-glyph', 'aria-hidden': 'true' }),
           e('small', null, '未打开'),
         ),
-        workspaces.items.map((workspace) => e('button', {
-          className: 'tree-row',
-          key: workspace.workspaceId,
-          type: 'button',
-          onClick: () => void connectAndInitialize(workspace.workspaceId, false).catch(() => setHomeNote('工作区没有打开，请重试。')),
-        }, workspace.title || workspace.path)),
+        workspaces.items.map((workspace) => e('div', { className: 'workspace-row', key: workspace.workspaceId },
+          e('button', {
+            className: 'tree-row',
+            type: 'button',
+            onClick: () => void connectAndInitialize(workspace.workspaceId, false).catch(() => setHomeNote('工作区没有打开，请重试。')),
+          }, workspace.title || workspace.path),
+          e('button', { className: 'workspace-manage icon-button', type: 'button', 'aria-label': `管理作品 ${workspace.title || workspace.path}`, title: '管理作品', onClick: () => openWorkspaceManage(workspace, true) }, '···'),
+        )),
       ),
       e('section', { className: 'empty-paper home-stage', 'aria-label': '空白稿纸' },
         e('div', { className: 'home-ink', 'aria-hidden': 'true' }, '写'),
@@ -2267,6 +2368,14 @@ function Root({ ctx }: { ctx: ShellContext }) {
           ),
         ),
       ),
+      workspaceManage ? e(WorkspaceManageDialog, {
+        workspace: workspaceManage,
+        busy: workspaceManageBusy,
+        note: workspaceManageNote,
+        onClose: () => closeWorkspaceManage(),
+        onRename: (title: string) => void renameWorkspace(title),
+        onRemove: () => void removeWorkspace(),
+      }) : null,
       renderImportDialog(),
       renderSnapshotDialog(),
     )
@@ -2288,6 +2397,18 @@ function Root({ ctx }: { ctx: ShellContext }) {
     e('style', null, playfulStyles),
     e('header', { className: 'chrome' },
       e('strong', null, 'DSH'),
+      e('button', {
+        className: 'workspace-home-button',
+        type: 'button',
+        title: '返回作品列表',
+        'aria-label': '返回作品列表',
+        onClick: () => {
+          if (editorDirty) { setWorkbenchNote('请先保存当前文档，再返回作品列表。'); return }
+          setAssistantOpen(false)
+          setFocusMode(false)
+          ctx.sessions.clear()
+        },
+      }, '作品'),
       e('label', { className: 'workspace-select' }, e('span', { className: 'sr-only' }, '工作区'), e('select', {
         'aria-label': '选择工作区',
         value: currentWorkspace?.workspaceId ?? '',
@@ -2296,6 +2417,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
           if (id) void connectAndInitialize(id, false).catch(() => setExportNote('工作区没有打开，请重试。'))
         },
       }, workspaces.items.map((workspace) => e('option', { key: workspace.workspaceId, value: workspace.workspaceId }, workspace.title || workspace.path)))),
+      currentWorkspace ? e('button', { className: 'workspace-current-manage icon-button', type: 'button', 'aria-label': '管理当前作品', title: '修改作品显示名', onClick: () => openWorkspaceManage(currentWorkspace, false) }, '···') : null,
       e('nav', { className: 'layout-controls', 'aria-label': '工作台布局' },
         e('button', {
           type: 'button',
@@ -2424,6 +2546,14 @@ function Root({ ctx }: { ctx: ShellContext }) {
       onClick: () => setAssistantOpen(true),
     }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')) : null,
     shortcutsOpen ? e(ShortcutDialog, { onClose: closeShortcuts }) : null,
+    workspaceManage ? e(WorkspaceManageDialog, {
+      workspace: workspaceManage,
+      busy: workspaceManageBusy,
+      note: workspaceManageNote,
+      onClose: () => closeWorkspaceManage(),
+      onRename: (title: string) => void renameWorkspace(title),
+      onRemove: () => void removeWorkspace(),
+    }) : null,
     renderImportDialog(),
     renderSnapshotDialog(),
     managePath ? e(FileManageDialog, {
@@ -2458,6 +2588,7 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .composer{transition:background-color 240ms ease,box-shadow 240ms ease}.composer:focus-within{background:#fffaf0;box-shadow:0 -12px 34px #5a4d3210}.composer textarea:focus{border-color:#73917d;box-shadow:0 0 0 3px #4d7d5d17}
 .ghost-suggestion{box-sizing:border-box;max-height:42%;display:grid;gap:8px;overflow:auto;padding:12px 14px;border:1px solid #b9cbb9;border-radius:14px 4px 14px 14px;background:#f5faef;box-shadow:0 12px 32px #3f624719;pointer-events:auto}.ghost-suggestion strong,.proposal>strong{color:#28523f}.ghost-suggestion p{margin:0;overflow:auto;white-space:pre-wrap;line-height:1.7}.ghost-suggestion div,.proposal-actions{display:flex;gap:7px}.ghost-suggestion button,.proposal button{padding:5px 9px;border:1px solid #b8c5b7;border-radius:9px 3px 9px 9px;background:#fffdf7;color:#285640;cursor:pointer}.proposal{box-sizing:border-box;max-height:56%;overflow:auto}.selection-diff{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px!important;margin:9px 0}.selection-diff section{min-width:0;padding:8px;border:1px solid #ddd5c6;border-radius:7px;background:#f8f4e9}.selection-diff small{color:#68776d}.selection-diff p{max-height:150px;overflow:auto;white-space:pre-wrap;line-height:1.65}.proposal-actions{justify-content:flex-end}@media(max-width:1320px){.ghost-suggestion{max-width:72%}.proposal{width:min(430px,58%)}}
 .export-actions .settings-link{margin-left:0}.shortcut-overlay{position:fixed;z-index:60;inset:0;display:grid;place-items:center;padding:24px;background:#202a246b;backdrop-filter:blur(5px)}.shortcut-dialog{box-sizing:border-box;width:min(620px,100%);max-height:min(760px,calc(100dvh - 48px));display:grid;gap:14px;overflow:auto;padding:26px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 30px 90px #222a2538}.shortcut-dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.shortcut-dialog header>div{display:grid;gap:4px}.shortcut-dialog h2,.shortcut-dialog p{margin:0}.shortcut-dialog h2{color:#244b39;font:600 28px/1.25 "Noto Serif SC","Songti SC",serif}.shortcut-dialog header small{color:#708078;font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.16em}.shortcut-dialog>p{color:#6c756d}.shortcut-dialog dl{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:0}.shortcut-dialog dl>div{display:flex;align-items:center;gap:12px;padding:10px 11px;border:1px solid #e0d8c9;border-radius:10px 3px 10px 10px;background:#f8f3e8}.shortcut-dialog dt{flex:none;min-width:112px;padding:3px 6px;border:1px solid #c7cebf;border-radius:5px;background:#fffdf7;color:#285640;font:11px/1.4 ui-monospace,Consolas,monospace}.shortcut-dialog dd{margin:0;color:#53645b;font-size:12px}@media(max-width:720px){.shortcut-dialog dl{grid-template-columns:1fr}}
+.workspace-row{position:relative;display:flex;align-items:center;margin:0 9px}.workspace-row>.tree-row{min-width:0;padding-right:38px}.workspace-manage{position:absolute;right:3px;opacity:0}.workspace-row:hover .workspace-manage,.workspace-row:focus-within .workspace-manage{opacity:1}.workspace-home-button{padding:4px 9px;border:1px solid #d0c8b8;border-radius:12px 3px 12px 12px;background:#f7f2e8;color:#456250;cursor:pointer}.workspace-current-manage{flex:none;padding:3px 6px!important;border:0!important;background:transparent!important;color:#65756b!important}.workspace-dialog form>footer .danger-link{margin-right:auto;border-color:transparent;background:transparent;color:#914b40}.workspace-dialog form>footer .danger-link:hover{background:#f4e5df}.workspace-dialog code{max-width:420px}
 .chat-row,.pending-card{animation:message-in 360ms var(--ease) both}.chat-row.user{transform-origin:right bottom}.chat-row.assistant{transform-origin:left bottom}.chat-row.tool strong::after{content:'···';display:inline-block;width:1.5em;overflow:hidden;vertical-align:bottom;animation:dots 1.2s steps(4,end) infinite}
 .index-status{animation:index-breathe 2.4s ease-in-out infinite}.index-status button:hover{transform:translateX(2px)}
 .export-actions{position:relative;z-index:12}.export-menu{position:relative}.export-menu summary{padding:5px 10px;border:1px solid #c9c5b4;border-radius:16px;background:#fbf8ef;color:#304f41;cursor:pointer;list-style:none}.export-menu summary::-webkit-details-marker{display:none}.export-menu[open] summary{background:#dce9dd}.export-menu>div{position:absolute;z-index:13;top:calc(100% + 8px);right:0;display:grid;min-width:130px;padding:6px;border:1px solid #d8cfbd;border-radius:10px 3px 10px 10px;background:#fffdf6;box-shadow:0 16px 40px #4e42261f;animation:menu-pop 180ms var(--ease)}.export-menu>div button{border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px}.export-menu>div button:hover{background:#e4eee1}

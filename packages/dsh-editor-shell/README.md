@@ -10,6 +10,8 @@
 
 工作台提供可见的键盘快捷键表，以及文件栏、搭档栏、专注模式、设置、聊天聚焦和章节切换的全局快捷键；对话框区分 Enter 发送、Shift+Enter 换行与输入法组合态。
 
+作品显示名和最近列表直接复用 DSH workspace registry：改名只影响显示；“从最近移除”只删除 registration，不删除目录、正文、会话或日志。
+
 Private client shell for the dedicated `dsh-editor` profile. It owns the root
 surface only in that profile and consumes DSH `0.1.1-rc.2` public runtime and
 connection contracts. It is not a public installable plugin.

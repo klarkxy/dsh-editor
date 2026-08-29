@@ -150,6 +150,19 @@ try {
   })
   if (await patchButton.isEnabled()) failures.push('没有选中文字时修改选段入口仍可点击')
 
+  const workspaceSelect = window.getByLabel('选择工作区')
+  const originalWorkspaceTitle = await workspaceSelect.locator('option:checked').textContent() || 'workbench-e2e-workspace'
+  await window.getByRole('button', { name: '管理当前作品' }).click()
+  let workspaceDialog = window.locator('.workspace-dialog')
+  await workspaceDialog.getByLabel('作品显示名').fill('验收作品')
+  await workspaceDialog.getByRole('button', { name: '保存显示名' }).click()
+  await window.waitForFunction(() => document.querySelector('select[aria-label="选择工作区"] option:checked')?.textContent === '验收作品')
+  await window.getByRole('button', { name: '管理当前作品' }).click()
+  workspaceDialog = window.locator('.workspace-dialog')
+  await workspaceDialog.getByLabel('作品显示名').fill(originalWorkspaceTitle)
+  await workspaceDialog.getByRole('button', { name: '保存显示名' }).click()
+  await window.waitForFunction((expected) => document.querySelector('select[aria-label="选择工作区"] option:checked')?.textContent === expected, originalWorkspaceTitle)
+
   await window.keyboard.press('Control+b')
   await window.locator('.sidebar').waitFor({ state: 'detached' })
   await window.keyboard.press('Control+b')
@@ -258,6 +271,17 @@ try {
   const centralPaneWidth = await window.locator('.editor,.empty-paper').first().evaluate((node) => node.getBoundingClientRect().width)
   if (centralPaneWidth < 700) failures.push(`中央写作区没有占满可用空间：${centralPaneWidth}px`)
   await window.screenshot({ path: resolve(output, 'workbench.png'), fullPage: true })
+
+  await window.getByRole('button', { name: '返回作品列表' }).click()
+  await window.locator('.home-stage').waitFor({ state: 'visible' })
+  const recentManage = window.getByRole('button', { name: `管理作品 ${originalWorkspaceTitle}` })
+  await recentManage.click()
+  const recentDialog = window.locator('.workspace-dialog')
+  await recentDialog.getByRole('button', { name: '从最近移除' }).click()
+  await recentDialog.getByRole('button', { name: '确认从最近移除' }).click()
+  await recentManage.waitFor({ state: 'detached' })
+  if (!(await exists(workspace))) failures.push('从最近移除误删了磁盘作品目录')
+  await window.screenshot({ path: resolve(output, 'home-after-remove.png'), fullPage: true })
   if (browserErrors.length) failures.push(...browserErrors)
 } catch (error) {
   if (window) await window.screenshot({ path: resolve(output, 'failure.png'), fullPage: true }).catch(() => undefined)
