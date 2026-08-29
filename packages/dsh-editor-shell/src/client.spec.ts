@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { canSubmitComposer, clampPanelWidth, createFlowWorkspace, errorMessage, isStaleFailure, LatestRequestGate, resizedPanelWidth, safeRpcCall, shouldSubmitComposer, workspaceShortcut } from './client.ts'
+import { authorFlowExamples, canSubmitComposer, clampPanelWidth, createFlowWorkspace, errorMessage, isStaleFailure, LatestRequestGate, resizedPanelWidth, safeRpcCall, shouldSubmitComposer, workspaceShortcut } from './client.ts'
 
 describe('shell manuscript RPC safety', () => {
   it('keeps browser-native prompt and confirm out of the workbench UI', () => {
@@ -51,6 +51,14 @@ describe('shell manuscript RPC safety', () => {
     expect(canSubmitComposer({ draft: '写下去', connected: true, removed: true })).toBe(false)
     expect(canSubmitComposer({ draft: '写下去', connected: true, removed: false, outgoingState: 'sending' })).toBe(false)
     expect(canSubmitComposer({ draft: '重试', connected: true, removed: false, outgoingState: 'failed' })).toBe(true)
+  })
+
+  it('offers the complete author flow as editable chat examples', () => {
+    const examples = authorFlowExamples('正文/003 潮汐.md')
+    expect(examples.map((item) => item.label)).toEqual(['从零规划', '建立人物卡', '编排十章', '生成正文'])
+    expect(examples[2]?.prompt).toContain('前 10 章章纲')
+    expect(examples[3]?.prompt).toContain('当前章节《003 潮汐》')
+    expect(examples[3]?.prompt).toContain('至少 2000 字')
   })
 
   it('keeps a successful result unchanged', async () => {

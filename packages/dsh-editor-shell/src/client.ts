@@ -95,6 +95,40 @@ const conversationRenameQueue = new ConversationRenameQueue()
 const ASSISTANT_MIN = 300
 const ASSISTANT_MAX = 560
 
+export type AuthorFlowExample = Readonly<{
+  label: string
+  description: string
+  prompt: string
+}>
+
+export function authorFlowExamples(activePath?: string): readonly AuthorFlowExample[] {
+  const chapterTarget = activePath?.startsWith('正文/')
+    ? `当前章节《${documentName(activePath)}》`
+    : '第一章'
+  return [
+    {
+      label: '从零规划',
+      description: '先确认题材、冲突与结局，再建立世界观。',
+      prompt: '我要从零规划一部长篇小说。请先用少量关键问题确认题材、主角、核心冲突和结局方向，再为项目总览与世界观提出可应用的文件建议。',
+    },
+    {
+      label: '建立人物卡',
+      description: '整理主角、配角、关系和人物弧光。',
+      prompt: '请阅读现有项目资料，建立主要人物卡和人物索引，写清目标、动机、秘密、关系、成长弧与说话习惯，并以可应用的文件建议给我。',
+    },
+    {
+      label: '编排十章',
+      description: '把总纲拆成连续、可执行的十章章纲。',
+      prompt: '请基于世界观和人物卡规划故事总纲，并编排前 10 章章纲。每章写清目标、冲突、转折、结果和下一章钩子，以可应用的文件建议给我。',
+    },
+    {
+      label: '生成正文',
+      description: `依据资料起草${chapterTarget}，先提案后写入。`,
+      prompt: `请阅读项目总览、世界观、人物卡、总纲和章纲，为${chapterTarget}生成至少 2000 字正文。保持设定一致、场景完整，并以可应用的文件建议给我。`,
+    },
+  ]
+}
+
 export async function safeRpcCall<T>(request: () => Promise<unknown>): Promise<RpcResult<T>> {
   try {
     return await request() as RpcResult<T>
@@ -1084,6 +1118,7 @@ function Editor(props: {
     return e('section', { className: 'empty-paper', 'aria-label': '空白章' },
       e('span', { className: 'empty-paper-mark', 'aria-hidden': 'true' }, '〆'),
       e('h1', null, '空白页'),
+      e('p', null, '从左侧打开资料或章节；也可以先让搭档规划世界观、人物卡与章纲。'),
       e('button', { type: 'button', onClick: create }, '新建一章'),
     )
   }
@@ -1392,6 +1427,7 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
       state === 'ready' ? e('button', { type: 'button', onClick: () => void apply() }, '应用') : null,
       state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote('已忽略') } }, '忽略') : null,
     ),
+    state === 'ready' ? e('small', { className: 'proposal-help' }, '应用后才会写入作品；忽略不会修改文件。') : null,
   )
 }
 
@@ -1663,6 +1699,8 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
     removed: snapshot.removed,
     outgoingState: outgoing?.state,
   })
+  const examples = authorFlowExamples(activePath)
+  const showGuide = rows.length === 0 && !outgoing && !snapshot.running && !partial && snapshot.pending.length === 0
   useEffect(() => {
     if (outgoingIsCanonical) setOutgoing(null)
   }, [outgoingIsCanonical])
@@ -1716,6 +1754,22 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
       onConfigure,
     }) : null,
     e('div', { className: 'chat-history' },
+      showGuide ? e('section', { className: 'chat-guide', 'aria-label': '写作搭档功能与示例' },
+        e('header', null,
+          e('strong', null, '从构思到正文'),
+          e('small', null, '搭档会读取项目总览、总纲、人物卡与世界书；所有文件修改都会先成为提案。'),
+        ),
+        e('div', { className: 'chat-guide-examples' }, examples.map((item) => e('button', {
+          key: item.label,
+          type: 'button',
+          onClick: () => setDraft(item.prompt),
+          title: `填入示例：${item.label}`,
+        },
+        e('strong', null, item.label),
+        e('span', null, item.description),
+        ))),
+        e('small', null, '点击示例只会填入输入框，发送前仍可修改。'),
+      ) : null,
       snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? '加载中…' : '加载更早消息') : null,
       rows.map((row) => row.proposal
         ? e(ProposalCard, { key: row.id, ctx, sessionId: session.sessionId, proposal: row.proposal, onApplied })
@@ -2874,6 +2928,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         e('div', { className: 'home-card' },
           e('p', { className: 'home-eyebrow' }, 'DSH EDITOR'),
           e('h1', null, '开始写。'),
+          e('p', null, '从世界观、人物卡、总纲和章纲一路写到正文；搭档先提出修改建议，由你确认后再写入作品。'),
           e('div', { className: 'home-actions' },
             e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspace(false) }, openingWorkspace ? '打开中' : '打开作品', e('span', { 'aria-hidden': 'true' }, '↗')),
             e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspace(true) }, '新建'),
@@ -3162,6 +3217,7 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .tree-row:hover{transform:translateX(4px)!important}.tree-row[aria-current=page]{box-shadow:inset 3px 0 #3d755a}.tree-row[aria-expanded=true]{color:var(--ink);font-weight:600}
 .paper-input{transition:transform 360ms var(--ease),box-shadow 360ms ease,border-color 360ms ease}.paper-input:focus{transform:translateY(-2px);border-color:#b9c9ba;box-shadow:0 18px 44px #4b67471c,0 0 0 4px #5c8a6820}
 .composer{transition:background-color 240ms ease,box-shadow 240ms ease}.composer:focus-within{background:#fffaf0;box-shadow:0 -12px 34px #5a4d3210}.composer textarea:focus{border-color:#73917d;box-shadow:0 0 0 3px #4d7d5d17}
+.empty-paper>p{max-width:34em;margin:0;text-align:center;color:#68776d;line-height:1.75}.chat-guide{display:grid;gap:13px;padding:14px;border:1px solid #d5cebe;border-left:3px solid #5d806b;border-radius:5px 14px 5px 5px;background:#faf6ec;color:#53665a}.chat-guide>header{display:grid;gap:4px}.chat-guide>header strong{color:#264b3a;font:600 18px/1.3 "Noto Serif SC","Songti SC",serif}.chat-guide>header small,.chat-guide>small{line-height:1.55}.chat-guide-examples{display:grid;grid-template-columns:1fr 1fr;gap:7px}.chat-guide-examples button{display:grid;gap:3px;min-width:0;padding:9px 10px;border:1px solid #d5cebe;border-radius:10px 3px 10px 10px;background:#fffdf7;text-align:left;color:#315640;cursor:pointer}.chat-guide-examples button:hover{border-color:#92a995;background:#e5eee2;transform:translateY(-1px)}.chat-guide-examples button strong{font-size:12px}.chat-guide-examples button span{color:#6b776e;font-size:10px;line-height:1.45}.proposal-help{display:block;margin-top:7px;color:#6b776e;font-size:11px;line-height:1.5}
 .ghost-suggestion{box-sizing:border-box;max-height:42%;display:grid;gap:8px;overflow:auto;padding:12px 14px;border:1px solid #b9cbb9;border-radius:14px 4px 14px 14px;background:#f5faef;box-shadow:0 12px 32px #3f624719;pointer-events:auto}.ghost-suggestion header{display:flex;align-items:center;justify-content:space-between;gap:12px}.ghost-suggestion header small{color:#6b796f;font:11px/1.4 ui-monospace,Consolas,monospace}.ghost-suggestion strong,.proposal>strong{color:#28523f}.ghost-suggestion p{margin:0;overflow:auto;white-space:pre-wrap;line-height:1.7}.ghost-suggestion div,.ghost-suggestion nav,.proposal-actions{display:flex;gap:7px}.ghost-suggestion nav{justify-content:flex-end}.ghost-suggestion button,.proposal button{padding:5px 9px;border:1px solid #b8c5b7;border-radius:9px 3px 9px 9px;background:#fffdf7;color:#285640;cursor:pointer}.ghost-suggestion button:disabled{cursor:not-allowed;opacity:.45}.proposal{box-sizing:border-box;max-height:56%;overflow:auto}.selection-diff{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px!important;margin:9px 0}.selection-diff section{min-width:0;padding:8px;border:1px solid #ddd5c6;border-radius:7px;background:#f8f4e9}.selection-diff small{color:#68776d}.selection-diff p{max-height:150px;overflow:auto;white-space:pre-wrap;line-height:1.65}.proposal-actions{justify-content:flex-end}@media(max-width:1320px){.ghost-suggestion{max-width:72%}.proposal{width:min(430px,58%)}}
 .export-actions .settings-link{margin-left:0}.shortcut-overlay{position:fixed;z-index:60;inset:0;display:grid;place-items:center;padding:24px;background:#202a246b;backdrop-filter:blur(5px)}.shortcut-dialog{box-sizing:border-box;width:min(620px,100%);max-height:min(760px,calc(100dvh - 48px));display:grid;gap:14px;overflow:auto;padding:26px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 30px 90px #222a2538}.shortcut-dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.shortcut-dialog header>div{display:grid;gap:4px}.shortcut-dialog h2,.shortcut-dialog p{margin:0}.shortcut-dialog h2{color:#244b39;font:600 28px/1.25 "Noto Serif SC","Songti SC",serif}.shortcut-dialog header small{color:#708078;font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.16em}.shortcut-dialog>p{color:#6c756d}.shortcut-dialog dl{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:0}.shortcut-dialog dl>div{display:flex;align-items:center;gap:12px;padding:10px 11px;border:1px solid #e0d8c9;border-radius:10px 3px 10px 10px;background:#f8f3e8}.shortcut-dialog dt{flex:none;min-width:112px;padding:3px 6px;border:1px solid #c7cebf;border-radius:5px;background:#fffdf7;color:#285640;font:11px/1.4 ui-monospace,Consolas,monospace}.shortcut-dialog dd{margin:0;color:#53645b;font-size:12px}@media(max-width:720px){.shortcut-dialog dl{grid-template-columns:1fr}}
 .workspace-row{position:relative;display:flex;align-items:center;margin:0 9px}.workspace-row>.tree-row{min-width:0;padding-right:38px}.workspace-manage{position:absolute;right:3px;opacity:0}.workspace-row:hover .workspace-manage,.workspace-row:focus-within .workspace-manage{opacity:1}.workspace-home-button{padding:4px 9px;border:1px solid #d0c8b8;border-radius:12px 3px 12px 12px;background:#f7f2e8;color:#456250;cursor:pointer}.workspace-current-manage{flex:none;padding:3px 6px!important;border:0!important;background:transparent!important;color:#65756b!important}.workspace-dialog form>footer .danger-link{margin-right:auto;border-color:transparent;background:transparent;color:#914b40}.workspace-dialog form>footer .danger-link:hover{background:#f4e5df}.workspace-dialog code{max-width:420px}
