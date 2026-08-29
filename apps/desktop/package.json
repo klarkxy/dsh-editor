@@ -12,6 +12,7 @@
   "devDependencies": {
     "electron": "37.2.6",
     "electron-builder": "26.0.12",
+    "electron-winstaller": "5.4.0",
     "typescript": "5.9.3",
     "vitest": "3.2.7"
   }

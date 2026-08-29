@@ -48,6 +48,7 @@ app.whenReady().then(async () => {
   const window = new BrowserWindow({
     title: 'DSH Editor', width: 1440, height: 900, minWidth: 1280, minHeight: 720,
     show: false, autoHideMenuBar: true, backgroundColor: '#faf9f5',
+    icon: join(desktopRoot, 'build', 'icon.png'),
     webPreferences: {
       preload: join(desktopRoot, 'preload.cjs'),
       nodeIntegration: false, contextIsolation: true, sandbox: true,

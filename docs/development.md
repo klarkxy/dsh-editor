@@ -39,6 +39,7 @@ e2e/desktop.mjs                Playwright Electron 当前源码验收
 | --- | --- |
 | `pnpm run dev` | 构建/监听三个包并启动 Electron DSH Editor |
 | `pnpm run dev:web` | 仅调试两个公开插件的 DSH Web 行为 |
+| `pnpm render:icon` | 从受版本控制的 SVG 源重新生成桌面 PNG 与 Windows ICO |
 | `pnpm typecheck` | 全 workspace 类型检查 |
 | `pnpm test` | 全部 Vitest contract/behavior 测试 |
 | `pnpm build` | 构建桌面 main、私有 shell 与两个公开插件 |
@@ -136,6 +137,8 @@ pnpm pack:desktop
 - `manifest.json` 中的文件数、字节数与 tree SHA-256。
 
 Electron Builder 读取这些已校验资源，以 `portable` x64 target 输出 `.pack/desktop/DSH Editor-0.1.0-win-x64.exe`。应用未签名，不能把 SmartScreen 提示当作构建失败；但签名、安装器、更新器和发布都不在 V1 授权范围。
+
+桌面品牌图标的单一源文件是 `apps/desktop/build/icon.svg`。修改后运行 `pnpm render:icon`，同步生成并提交 `icon.png` 与包含 16–256 像素尺寸的 `icon.ico`；开发窗口使用 PNG，打包钩子用固定版本的 standalone `rcedit` 写入应用 EXE，NSIS 将同一 ICO 写入 portable 外壳。这样无需为了未签名构建解压 electron-builder 的跨平台签名工具包；生成命令仍需要仓库 Playwright 浏览器与 Python Pillow 环境。
 
 ## 安全审查清单
 

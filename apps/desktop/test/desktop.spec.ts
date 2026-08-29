@@ -57,6 +57,33 @@ describe('DSH URL trust root', () => {
   })
 })
 
+describe('desktop branding assets', () => {
+  it('keeps the source icon, window icon, and Windows package icon wired together', async () => {
+    const repo = join(import.meta.dirname, '..', '..', '..')
+    const build = join(repo, 'apps', 'desktop', 'build')
+    const [svg, png, ico, main, builder, afterPack] = await Promise.all([
+      readFile(join(build, 'icon.svg'), 'utf8'),
+      readFile(join(build, 'icon.png')),
+      readFile(join(build, 'icon.ico')),
+      readFile(join(repo, 'apps', 'desktop', 'src', 'main.ts'), 'utf8'),
+      readFile(join(repo, 'apps', 'desktop', 'electron-builder.yml'), 'utf8'),
+      readFile(join(repo, 'scripts', 'after-pack-desktop.cjs'), 'utf8'),
+    ])
+    expect(svg).toContain('<title>DSH Editor</title>')
+    expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
+    expect(png.readUInt32BE(16)).toBe(1024)
+    expect(png.readUInt32BE(20)).toBe(1024)
+    expect(ico.readUInt16LE(0)).toBe(0)
+    expect(ico.readUInt16LE(2)).toBe(1)
+    expect(ico.readUInt16LE(4)).toBe(7)
+    expect(main).toContain("build', 'icon.png")
+    expect(builder).toContain('icon: build/icon.ico')
+    expect(builder).toContain('installerIcon: build/icon.ico')
+    expect(builder).toContain('signAndEditExecutable: false')
+    expect(afterPack).toContain("electron-winstaller/vendor/rcedit.exe")
+  })
+})
+
 describe('profile deployment', () => {
   it('honors DSH_HOME before the conventional home directory', () => {
     expect(resolveDshHome({ DSH_HOME: 'D:/custom' }, 'D:/Users/example')).toBe('D:/custom')

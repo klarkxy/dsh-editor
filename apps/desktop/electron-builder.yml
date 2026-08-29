@@ -5,11 +5,13 @@ npmRebuild: false
 afterPack: ../../scripts/after-pack-desktop.cjs
 directories:
   output: ../../.pack/desktop
+  buildResources: build
 asar: true
 asarUnpack:
   - "**/*.node"
 files:
   - "dist/**"
+  - "build/icon.png"
   - "package.json"
   - "preload.cjs"
 extraResources:
@@ -23,6 +25,10 @@ extraResources:
   - from: ../../.pack/desktop-runtime/profile
     to: profile-template
 win:
+  icon: build/icon.ico
+  # Resource editing is handled in afterPack with the already-pinned standalone
+  # rcedit binary. electron-builder's cross-platform signing archive requires
+  # Windows symlink privileges even for an unsigned local build.
   signAndEditExecutable: false
   target:
     - target: portable
@@ -31,3 +37,5 @@ win:
 portable:
   artifactName: "${productName}-${version}-win-x64.${ext}"
   useZip: true
+nsis:
+  installerIcon: build/icon.ico
