@@ -4,6 +4,8 @@
 
 作者工作台还提供整部作品/仅正文全文搜索、完整章节前后导航、同目录安全重命名和可恢复归档。所有跳转与文件整理都服从未保存内容/冲突门禁；归档记录损坏、目标冲突或文件版本变化会在界面中停止并说明，不提供永久删除。
 
+工作区采用可折叠、可键盘调整宽度的文件/稿纸/搭档三栏布局；专注模式临时只保留稿纸。栏宽与文件栏开合仅作为本机 Renderer 界面偏好保存，不进入作品文件或 Host 状态。
+
 Private client shell for the dedicated `dsh-editor` profile. It owns the root
 surface only in that profile and consumes DSH `0.1.1-rc.2` public runtime and
 connection contracts. It is not a public installable plugin.

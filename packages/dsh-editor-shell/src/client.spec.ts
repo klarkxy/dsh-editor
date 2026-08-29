@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createFlowWorkspace, errorMessage, isStaleFailure, LatestRequestGate, safeRpcCall } from './client.ts'
+import { clampPanelWidth, createFlowWorkspace, errorMessage, isStaleFailure, LatestRequestGate, resizedPanelWidth, safeRpcCall } from './client.ts'
 
 describe('shell manuscript RPC safety', () => {
   it('drops superseded or cross-session async responses', () => {
@@ -11,6 +11,14 @@ describe('shell manuscript RPC safety', () => {
     expect(gate.isCurrent(newer)).toBe(true)
     gate.setScope('session-b')
     expect(gate.isCurrent(newer)).toBe(false)
+  })
+
+  it('clamps both panel resize directions to their accessible bounds', () => {
+    expect(clampPanelWidth(120, 196, 420)).toBe(196)
+    expect(clampPanelWidth(520, 196, 420)).toBe(420)
+    expect(resizedPanelWidth('left', 248, 32, 196, 420)).toBe(280)
+    expect(resizedPanelWidth('right', 384, 32, 300, 560)).toBe(352)
+    expect(resizedPanelWidth('right', 384, -500, 300, 560)).toBe(560)
   })
 
   it('keeps a successful result unchanged', async () => {

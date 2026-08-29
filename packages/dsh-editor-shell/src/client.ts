@@ -21,6 +21,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
 import {
@@ -82,6 +83,13 @@ type RevealRequest = SearchHit & { nonce: number }
 type RpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: RpcError | { code?: string; message?: string } }
 type ShellContext = ClientContext & { connection: ConnectionHandle }
 
+const SIDEBAR_DEFAULT = 248
+const SIDEBAR_MIN = 196
+const SIDEBAR_MAX = 420
+const ASSISTANT_DEFAULT = 384
+const ASSISTANT_MIN = 300
+const ASSISTANT_MAX = 560
+
 export async function safeRpcCall<T>(request: () => Promise<unknown>): Promise<RpcResult<T>> {
   try {
     return await request() as RpcResult<T>
@@ -115,6 +123,82 @@ export class LatestRequestGate {
   isCurrent(ticket: RequestTicket): boolean {
     return ticket.scope === this.scope && ticket.sequence === this.sequence
   }
+}
+
+export type ResizablePanelSide = 'left' | 'right'
+
+export function clampPanelWidth(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, Math.round(value)))
+}
+
+export function resizedPanelWidth(side: ResizablePanelSide, start: number, pointerDelta: number, minimum: number, maximum: number): number {
+  return clampPanelWidth(start + (side === 'left' ? pointerDelta : -pointerDelta), minimum, maximum)
+}
+
+function storedPanelWidth(key: string, fallback: number, minimum: number, maximum: number): number {
+  try {
+    const raw = globalThis.localStorage?.getItem(key)
+    if (raw === null || raw === undefined) return fallback
+    const value = Number(raw)
+    return Number.isFinite(value) ? clampPanelWidth(value, minimum, maximum) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function storedPanelOpen(key: string, fallback: boolean): boolean {
+  try {
+    const raw = globalThis.localStorage?.getItem(key)
+    return raw === null || raw === undefined ? fallback : raw === 'true'
+  } catch {
+    return fallback
+  }
+}
+
+function PanelResizer(props: {
+  side: ResizablePanelSide
+  value: number
+  minimum: number
+  maximum: number
+  defaultValue: number
+  label: string
+  onChange(value: number): void
+}) {
+  const drag = useRef<{ pointerId: number; startX: number; startValue: number } | null>(null)
+  const move = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const active = drag.current
+    if (!active || active.pointerId !== event.pointerId) return
+    props.onChange(resizedPanelWidth(props.side, active.startValue, event.clientX - active.startX, props.minimum, props.maximum))
+  }
+  return e('div', {
+    className: `panel-resizer ${props.side}`,
+    role: 'separator',
+    tabIndex: 0,
+    'aria-label': props.label,
+    'aria-orientation': 'vertical',
+    'aria-valuemin': props.minimum,
+    'aria-valuemax': props.maximum,
+    'aria-valuenow': props.value,
+    title: `${props.label}（可拖动或使用方向键）`,
+    onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => {
+      drag.current = { pointerId: event.pointerId, startX: event.clientX, startValue: props.value }
+      event.currentTarget.setPointerCapture(event.pointerId)
+    },
+    onPointerMove: move,
+    onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (drag.current?.pointerId === event.pointerId) drag.current = null
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    },
+    onLostPointerCapture: () => { drag.current = null },
+    onDoubleClick: () => props.onChange(props.defaultValue),
+    onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Home') { event.preventDefault(); props.onChange(props.defaultValue); return }
+      if (event.key === 'End') { event.preventDefault(); props.onChange(props.maximum); return }
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      event.preventDefault()
+      props.onChange(resizedPanelWidth(props.side, props.value, event.key === 'ArrowRight' ? 12 : -12, props.minimum, props.maximum))
+    },
+  }, e('span', { 'aria-hidden': 'true' }))
 }
 
 function useObservable<T>(source: { getSnapshot(): T; subscribe(listener: () => void): () => void }): T {
@@ -1144,7 +1228,11 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | 'new' | null>(null)
   const [manualWorkspacePath, setManualWorkspacePath] = useState('')
   const [view, setView] = useState<'workspace' | 'settings'>('workspace')
+  const [sidebarOpen, setSidebarOpen] = useState(() => storedPanelOpen('dsh-editor.layout.sidebar-open', true))
+  const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(false)
+  const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
+  const [focusMode, setFocusMode] = useState(false)
   const [setupGate, setSetupGate] = useState<'checking' | 'required' | 'ready'>('checking')
   const [indexStatus, setIndexStatus] = useState<Record<string, 'initializing' | 'queued' | 'failed'>>({})
   const indexedWorkspaces = useRef(new Set<string>())
@@ -1203,6 +1291,15 @@ function Root({ ctx }: { ctx: ShellContext }) {
     temporaryFlowWorkspaces.current.delete(workspaceId)
   }
   useEffect(() => { document.title = 'DSH Editor' }, [])
+  useEffect(() => {
+    try { globalThis.localStorage?.setItem('dsh-editor.layout.sidebar-open', String(sidebarOpen)) } catch { /* View preferences remain optional. */ }
+  }, [sidebarOpen])
+  useEffect(() => {
+    try { globalThis.localStorage?.setItem('dsh-editor.layout.sidebar-width', String(sidebarWidth)) } catch { /* View preferences remain optional. */ }
+  }, [sidebarWidth])
+  useEffect(() => {
+    try { globalThis.localStorage?.setItem('dsh-editor.layout.assistant-width', String(assistantWidth)) } catch { /* View preferences remain optional. */ }
+  }, [assistantWidth])
   useEffect(() => {
     setPath(''); setFiles([]); setReveal(null); setWorkbenchNote(''); setEditorDirty(false)
     setManagePath(null); setManageNote(''); setArchives([]); setArchiveInvalid(0); setArchiveNote('')
@@ -1946,7 +2043,18 @@ function Root({ ctx }: { ctx: ShellContext }) {
     )
   }
 
-  return e('main', { className: 'shell', style: { minWidth: 0 } },
+  const sidebarVisible = sidebarOpen && !focusMode
+  const assistantVisible = assistantOpen && !focusMode
+  const layoutColumns = [
+    sidebarVisible ? `${sidebarWidth}px 7px` : '',
+    'minmax(420px,1fr)',
+    assistantVisible ? `7px ${assistantWidth}px` : '',
+  ].filter(Boolean).join(' ')
+
+  return e('main', {
+    className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarVisible ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}`,
+    style: { minWidth: 0, gridTemplateColumns: layoutColumns },
+  },
     e('style', null, redesignedStyles),
     e('style', null, playfulStyles),
     e('header', { className: 'chrome' },
@@ -1959,6 +2067,28 @@ function Root({ ctx }: { ctx: ShellContext }) {
           if (id) void connectAndInitialize(id, false).catch(() => setExportNote('工作区没有打开，请重试。'))
         },
       }, workspaces.items.map((workspace) => e('option', { key: workspace.workspaceId, value: workspace.workspaceId }, workspace.title || workspace.path)))),
+      e('nav', { className: 'layout-controls', 'aria-label': '工作台布局' },
+        e('button', {
+          type: 'button',
+          disabled: focusMode,
+          'aria-pressed': sidebarOpen,
+          title: sidebarOpen ? '隐藏文件栏' : '显示文件栏',
+          onClick: () => setSidebarOpen((value) => !value),
+        }, '文件'),
+        e('button', {
+          type: 'button',
+          'aria-pressed': focusMode,
+          title: focusMode ? '退出专注写作' : '进入专注写作',
+          onClick: () => setFocusMode((value) => !value),
+        }, focusMode ? '退出专注' : '专注'),
+        e('button', {
+          type: 'button',
+          disabled: focusMode,
+          'aria-pressed': assistantOpen,
+          title: assistantOpen ? '隐藏写作搭档' : '显示写作搭档',
+          onClick: () => setAssistantOpen((value) => !value),
+        }, '搭档'),
+      ),
       e('div', { className: 'export-actions' },
         e('button', {
           type: 'button',
@@ -1977,7 +2107,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: () => setView('settings') }, '⌁'),
       ),
     ),
-    e('aside', { className: 'sidebar' },
+    sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
       e('div', { className: 'side-title' }, e('span', null, '文件'), e('button', { className: 'icon-button', type: 'button', onClick: () => void create('chapter'), title: '新建章节', 'aria-label': '新建章节' }, '＋')),
       e('details', { className: 'project-actions' },
         e('summary', null, '新建资料'),
@@ -2026,9 +2156,27 @@ function Root({ ctx }: { ctx: ShellContext }) {
         e('button', { type: 'button', onClick: () => triggerExistingIndex(currentWorkspace.workspaceId, session.sessionId, true) }, indexStatus[currentWorkspace.workspaceId] === 'failed' ? '重试' : '重建索引'),
       ) : null,
       e(Tree, { ctx, sessionId: session.sessionId, active: path, onOpen: openDocument, onManage: openManage, revision: treeRevision }),
-    ),
+    ) : null,
+    sidebarVisible ? e(PanelResizer, {
+      side: 'left',
+      value: sidebarWidth,
+      minimum: SIDEBAR_MIN,
+      maximum: SIDEBAR_MAX,
+      defaultValue: SIDEBAR_DEFAULT,
+      label: '调整文件栏宽度',
+      onChange: setSidebarWidth,
+    }) : null,
     e(Editor, { ctx, session, path, files, onOpen: openDocument, create: () => { void create('chapter') }, externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal }),
-    assistantOpen ? e(Chat, {
+    assistantVisible ? e(PanelResizer, {
+      side: 'right',
+      value: assistantWidth,
+      minimum: ASSISTANT_MIN,
+      maximum: ASSISTANT_MAX,
+      defaultValue: ASSISTANT_DEFAULT,
+      label: '调整写作搭档宽度',
+      onChange: setAssistantWidth,
+    }) : null,
+    assistantVisible ? e(Chat, {
       ctx,
       session,
       workspaceId: currentWorkspace?.workspaceId,
@@ -2038,13 +2186,13 @@ function Root({ ctx }: { ctx: ShellContext }) {
         setTreeRevision((old) => old + 1)
         if (appliedPath === path) setContentRevision((old) => old + 1)
       },
-    }) : e('button', {
+    }) : !focusMode ? e('button', {
       className: 'assistant-launcher',
       type: 'button',
       'aria-label': '打开写作搭档',
       'aria-expanded': false,
       onClick: () => setAssistantOpen(true),
-    }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')),
+    }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')) : null,
     renderImportDialog(),
     renderSnapshotDialog(),
     managePath ? e(FileManageDialog, {
@@ -2089,6 +2237,7 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .model-indicator{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#647268}
 .project-context-receipt{margin-top:7px;color:#637269;font-size:11px}.project-context-receipt summary{cursor:pointer}.project-context-receipt ul{display:grid;gap:3px;margin:6px 0 0;padding-left:16px}.project-context-receipt code{font-size:10px;color:#466354}
 .import-overlay{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:24px;background:#1f2d2570}.import-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:14px;padding:24px;border:1px solid #d8cfbd;border-radius:16px 4px 16px 4px;background:#fffdf6;box-shadow:0 28px 80px #1c28221f}.import-dialog h2,.import-dialog p{margin:0}.import-dialog ul{max-height:170px;margin:0;overflow:auto;padding-left:20px;color:#5c6e62}.import-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.import-dialog button{padding:7px 11px;border:1px solid #b9c8ba;border-radius:4px;background:#f5f1e6;color:#2c5744;cursor:pointer}.snapshot-dialog{width:min(620px,100%)}.snapshot-list{display:grid;gap:8px;max-height:280px!important;padding:0!important;list-style:none}.snapshot-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #ded6c7;border-radius:8px;background:#faf6ec}.snapshot-list li div{display:grid;gap:3px;min-width:0}.snapshot-list li strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294938}.snapshot-list li small{color:#6b776e}
+.layout-shell{grid-template-rows:52px minmax(0,1fr);overflow:hidden}.layout-shell>.sidebar,.layout-shell>.editor,.layout-shell>.empty-paper,.layout-shell>.chat,.layout-shell>.panel-resizer{grid-column:auto;grid-row:2;min-width:0}.layout-shell>.chat{position:relative;z-index:1;inset:auto;width:auto;min-width:0;border:0;border-left:1px solid #d8d0bf;border-radius:0;box-shadow:none;overflow:hidden}.layout-shell>.editor{grid-column:auto}.layout-shell>.sidebar{grid-column:auto}.layout-controls{display:flex;align-items:center;gap:3px;padding:3px;border:1px solid #d8d0bf;border-radius:15px 5px 15px 15px;background:#f1ecdf}.layout-controls button{min-width:42px;padding:4px 8px;border:0;border-radius:11px 3px 11px 11px;background:transparent;color:#526b5d;cursor:pointer}.layout-controls button[aria-pressed=true]{background:#d8e6d8;color:#183f2f;font-weight:600}.layout-controls button:disabled{cursor:not-allowed;opacity:.45}.panel-resizer{position:relative;z-index:4;min-width:0;cursor:col-resize;touch-action:none;user-select:none;background:#e6dfd1;transition:background-color 140ms ease}.panel-resizer span{position:absolute;inset:0 2px;border-radius:4px;background:transparent}.panel-resizer:hover,.panel-resizer:focus-visible,.panel-resizer[aria-valuenow]{outline:0}.panel-resizer:hover span,.panel-resizer:focus-visible span{background:#6f927c}.layout-shell.focus-mode .paper-input{width:min(calc(100% - 64px),980px);padding-inline:clamp(52px,10vw,128px);box-shadow:0 14px 42px #4b674719}.layout-shell.focus-mode .editor-header{padding-inline:20px}.layout-shell.focus-mode .editor-tools{justify-content:center}.layout-shell.assistant-open .assistant-launcher{display:none}@media(max-width:1180px){.layout-controls button{min-width:36px;padding-inline:6px}.layout-shell .paper-input{width:calc(100% - 28px);padding-inline:34px}}@media(prefers-reduced-motion:reduce){.panel-resizer{transition:none!important}}
 `
 
 const homeStyles = `

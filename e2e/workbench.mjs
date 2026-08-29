@@ -142,6 +142,31 @@ try {
   await window.getByRole('textbox', { name: '正文' }).waitFor({ state: 'visible' })
   await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('1 / 3'))
 
+  const layoutControls = window.locator('.layout-controls')
+  const leftResizer = window.locator('.panel-resizer.left')
+  const sidebarBefore = Number(await leftResizer.getAttribute('aria-valuenow'))
+  await leftResizer.press('ArrowRight')
+  const sidebarAfter = Number(await leftResizer.getAttribute('aria-valuenow'))
+  if (!(sidebarAfter > sidebarBefore)) failures.push('文件栏键盘调宽没有生效')
+  await window.waitForFunction((expected) => localStorage.getItem('dsh-editor.layout.sidebar-width') === String(expected), sidebarAfter)
+  const storedSidebarWidth = await window.evaluate(() => localStorage.getItem('dsh-editor.layout.sidebar-width'))
+  if (storedSidebarWidth !== String(sidebarAfter)) failures.push('文件栏宽度没有保存为界面偏好')
+
+  await layoutControls.getByRole('button', { name: '搭档', exact: true }).click()
+  await window.locator('.chat').waitFor({ state: 'visible' })
+  if (await window.locator('.panel-resizer').count() !== 2) failures.push('三栏模式没有提供两个调宽分隔条')
+  const chatPosition = await window.locator('.chat').evaluate((node) => getComputedStyle(node).position)
+  if (chatPosition === 'fixed') failures.push('写作搭档仍是浮动抽屉，没有进入第三栏')
+
+  await layoutControls.getByRole('button', { name: '专注', exact: true }).click()
+  await window.locator('.shell.focus-mode').waitFor({ state: 'visible' })
+  if (await window.locator('.sidebar,.chat,.panel-resizer').count()) failures.push('专注模式没有隐藏两侧栏与调宽条')
+  await layoutControls.getByRole('button', { name: '退出专注', exact: true }).click()
+  await window.locator('.sidebar').waitFor({ state: 'visible' })
+  await window.locator('.chat').waitFor({ state: 'visible' })
+  await layoutControls.getByRole('button', { name: '搭档', exact: true }).click()
+  await window.locator('.chat').waitFor({ state: 'detached' })
+
   await window.getByTitle('下一章').click()
   await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('2 / 3'))
   await window.waitForFunction(() => {
@@ -167,7 +192,11 @@ try {
   })
   if (selection !== '月下银桥') failures.push(`搜索定位错误：${selection}`)
 
-  await window.getByRole('button', { name: '管理 002.md' }).click()
+  const secondChapterManager = window.getByRole('button', { name: '管理 002.md' })
+  if (!(await secondChapterManager.isVisible())) {
+    await window.locator('.tree-row', { hasText: '正文' }).first().click()
+  }
+  await secondChapterManager.click()
   const dialog = window.locator('.file-dialog')
   await dialog.waitFor({ state: 'visible' })
   await dialog.locator('.file-dialog-actions > button').filter({ hasText: '重命名' }).click()
@@ -177,8 +206,11 @@ try {
   if (await exists(resolve(workspace, '正文', '002.md'))) failures.push('重命名后旧路径仍存在')
   await window.waitForFunction(() => !document.querySelector('.search-results'))
 
-  await window.locator('.tree-row', { hasText: '正文' }).first().click()
-  await window.getByRole('button', { name: '管理 第二章.md' }).click()
+  const renamedChapterManager = window.getByRole('button', { name: '管理 第二章.md' })
+  if (!(await renamedChapterManager.isVisible())) {
+    await window.locator('.tree-row', { hasText: '正文' }).first().click()
+  }
+  await renamedChapterManager.click()
   const archiveDialog = window.locator('.file-dialog')
   await archiveDialog.waitFor({ state: 'visible' })
   await archiveDialog.locator('.file-dialog-actions > button').filter({ hasText: '归档' }).click()
@@ -195,6 +227,8 @@ try {
 
   const archiveRoots = await readdir(resolve(workspace, '.dsh-editor', 'archive'))
   if (!archiveRoots.length) failures.push('归档审计记录缺失')
+  const emptyPaperWidth = await window.locator('.empty-paper').evaluate((node) => node.getBoundingClientRect().width)
+  if (emptyPaperWidth < 700) failures.push(`空白页没有占满中央写作区：${emptyPaperWidth}px`)
   await window.screenshot({ path: resolve(output, 'workbench.png'), fullPage: true })
   if (browserErrors.length) failures.push(...browserErrors)
 } catch (error) {
