@@ -7,6 +7,14 @@ describe('DSH snapshot adapter', () => {
     expect(parseProposalMarker(JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'create', path: '正文/001.md', summary: '创建', text: '# 第一章' }))).toMatchObject({ kind: 'create' })
     expect(parseProposalMarker(JSON.stringify({ marker: 'dsh-editor.proposal', version: 2 }))).toBeUndefined()
   })
+  it('renders proposals from the canonical nested tool-result content block', () => {
+    const marker = JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'edit', path: '项目总览.md', summary: '完善总览', oldText: '旧', newText: '新' })
+    const [row] = chatRows({ nodes: [{
+      kind: 'tool-result', seq: 3, callId: 'proposal', call: { name: 'novel_propose', argsRaw: '{}' },
+      content: [{ type: 'tool-result', toolCallId: 'proposal', content: [{ type: 'text', text: marker }] }], isError: false,
+    }] } as never)
+    expect(row).toMatchObject({ role: 'tool', proposal: { path: '项目总览.md', oldText: '旧', newText: '新' } })
+  })
   it('renders published prose while hiding unknown runtime details', () => {
     const snapshot = { nodes: [
       { kind: 'user', seq: 1, content: [{ type: 'text', text: '审这一段' }] },

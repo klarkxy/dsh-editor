@@ -6,8 +6,6 @@
   disabled: true
 - id: ui-settings-plugin-inventory
   disabled: true
-- id: ui-conversation
-  disabled: true
 - id: ui-brand-official
   disabled: true
 - id: ui-attachment

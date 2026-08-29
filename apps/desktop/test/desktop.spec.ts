@@ -85,6 +85,10 @@ describe('desktop branding assets', () => {
 })
 
 describe('profile deployment', () => {
+  it('keeps the conversation domain enabled for the custom chat projection', async () => {
+    const patch = await readFile(join(import.meta.dirname, '..', 'resources', 'profile', 'cordis.patch.yml'), 'utf8')
+    expect(patch).not.toMatch(/- id: ui-conversation\s+disabled: true/)
+  })
   it('honors DSH_HOME before the conventional home directory', () => {
     expect(resolveDshHome({ DSH_HOME: 'D:/custom' }, 'D:/Users/example')).toBe('D:/custom')
     expect(resolveDshHome({}, 'D:/Users/example')).toBe(join('D:/Users/example', '.dsh'))

@@ -8,6 +8,21 @@ describe('editor proposal boundary', () => {
     })
   })
 
+  it('normalizes common snake-case edit arguments from compatible providers', () => {
+    expect(proposalMarker({ kind: 'edit', path: '项目总览.md', summary: '完善总览', old_string: '旧', newText: '新' })).toMatchObject({
+      kind: 'edit', path: '项目总览.md', oldText: '旧', newText: '新',
+    })
+    expect(proposalMarker({ kind: 'edit', path: '正文/001.md', summary: '扩写', old_text: '原段', new_string: '原段\n新增' })).toMatchObject({
+      kind: 'edit', path: '正文/001.md', oldText: '原段', newText: '原段\n新增',
+    })
+  })
+
+  it('keeps canonical edit arguments authoritative', () => {
+    expect(proposalMarker({
+      kind: 'edit', path: '正文/001.md', summary: '润色', oldText: '规范旧文', old_string: '别名旧文', newText: '规范新文', new_string: '别名新文',
+    })).toMatchObject({ oldText: '规范旧文', newText: '规范新文' })
+  })
+
   it('allows only Markdown search/read/propose tools', () => {
     expect(editorToolGuard({ name: 'read', arguments: { file_path: '世界书/设定总汇.md' } })).toBeUndefined()
     expect(editorToolGuard({ name: 'grep', arguments: { pattern: '名字', include: '*.md' } })).toBeUndefined()

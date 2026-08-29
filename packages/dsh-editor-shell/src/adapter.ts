@@ -40,11 +40,12 @@ export type PermissionProjection = {
   options: Array<{ value: string; name: string; description?: string }>
 }
 
-export function blocksText(blocks: readonly AssistantBlock[] | readonly unknown[]): string {
+export function blocksText(blocks: readonly AssistantBlock[] | readonly unknown[], depth = 0): string {
   return blocks.map((block) => {
     if (!block || typeof block !== 'object') return String(block ?? '')
-    const value = block as { kind?: string; type?: string; text?: string; name?: string; argsRaw?: string }
+    const value = block as { kind?: string; type?: string; text?: string; name?: string; argsRaw?: string; content?: unknown[] }
     if (value.kind === 'text' || value.kind === 'reasoning' || value.type === 'text') return value.text ?? ''
+    if (value.type === 'tool-result' && Array.isArray(value.content) && depth < 2) return blocksText(value.content, depth + 1)
     if (value.kind === 'tool-call') return ''
     return value.text ?? ''
   }).filter(Boolean).join('\n')

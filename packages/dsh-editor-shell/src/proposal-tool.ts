@@ -19,6 +19,13 @@ function cleanString(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
+function aliasedString(args: Record<string, unknown>, names: string[]): string {
+  for (const name of names) {
+    if (typeof args[name] === 'string') return args[name]
+  }
+  return ''
+}
+
 export function proposalMarker(args: Record<string, unknown>): ProposalMarker {
   const kind = cleanString(args.kind)
   const path = cleanString(args.path).replace(/\\/g, '/')
@@ -28,8 +35,11 @@ export function proposalMarker(args: Record<string, unknown>): ProposalMarker {
     throw new Error('path must be a project-relative Markdown file')
   }
   if (kind === 'edit') {
-    const oldText = cleanString(args.oldText)
-    const newText = cleanString(args.newText)
+    // Some OpenAI-compatible providers translate camelCase tool parameters to
+    // snake_case. Normalize the two common edit aliases at the tool boundary so
+    // the proposal remains preview-only and is still validated canonically.
+    const oldText = aliasedString(args, ['oldText', 'old_text', 'old_string'])
+    const newText = aliasedString(args, ['newText', 'new_text', 'new_string'])
     if (!oldText || oldText === newText) throw new Error('edit requires different oldText and newText')
     return { marker: PROPOSAL_MARKER, version: 1, kind, path, summary, oldText, newText }
   }

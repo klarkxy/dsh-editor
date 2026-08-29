@@ -1597,6 +1597,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [renamingConversation, setRenamingConversation] = useState(false)
   const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
+  const [modelRevision, setModelRevision] = useState(0)
   const titleAttempted = useRef(new Set<string>())
   const partial = partialText(snapshot)
   const rows = chatRows(snapshot)
@@ -1642,6 +1643,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
   }
   const openConversation = (nextId: SessionId) => {
     setDraft(''); setNote(''); setOutgoing(null); onDraftDirtyChange(false); ctx.sessions.open(nextId)
+    setModelRevision((value) => value + 1)
   }
   const switchConversation = async (nextId: string) => {
     if (!(await canDiscardDraft(nextId))) return
@@ -1697,7 +1699,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
     e('header', { className: 'chat-header' },
       e('strong', null, connected ? '搭档' : '重连中'),
       e('label', { className: 'conversation-select' }, e('span', { className: 'sr-only' }, '切换对话'), e('select', { value: session.sessionId, 'aria-label': '切换对话', onChange: (event: ChangeEvent<HTMLSelectElement>) => void switchConversation(event.target.value) }, conversations.map((item) => e('option', { key: item.id, value: item.id }, item.title)))),
-      e('div', { className: 'chat-controls' }, e(ModelIndicator, { ctx, session, onConfigure })),
+      e('div', { className: 'chat-controls' }, e(ModelIndicator, { key: `${session.sessionId}:${modelRevision}`, ctx, session, onConfigure })),
       e('div', { className: 'chat-header-actions' },
         e('button', { className: 'icon-button', type: 'button', title: '新对话', 'aria-label': '新对话', onClick: () => setCreatingConversation(true) }, '＋'),
         e('button', { className: 'icon-button', type: 'button', title: '重命名对话', 'aria-label': '重命名对话', onClick: () => setRenamingConversation(true) }, '✎'),
