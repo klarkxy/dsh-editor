@@ -30,6 +30,20 @@ export function applyGhost(text: string, at: number, ghost: string): string {
   return `${text.slice(0, caret)}${ghost}${text.slice(caret)}`
 }
 
+export function addCompletionCandidate(
+  candidates: readonly string[],
+  candidate: string,
+  maximum = 3,
+): { candidates: string[]; index: number; added: boolean } {
+  const existing = candidates.indexOf(candidate)
+  if (existing >= 0) return { candidates: [...candidates], index: existing, added: false }
+  if (!candidate.trim() || candidates.length >= maximum) {
+    return { candidates: [...candidates], index: Math.max(0, candidates.length - 1), added: false }
+  }
+  const next = [...candidates, candidate]
+  return { candidates: next, index: next.length - 1, added: true }
+}
+
 export function selectionTicket(
   document: EditorDocument,
   text: string,

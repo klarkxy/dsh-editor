@@ -41,6 +41,7 @@ import { formatWorldbookTriggerLines, parseWorldbookTriggerLines, worldbookEdito
 import type { EditorDraft } from './drafts.ts'
 import { DraftSyncQueue } from './drafts.ts'
 import {
+  addCompletionCandidate,
   applyGhost,
   applySelectionPatch,
   canApplyGhost,
@@ -756,7 +757,8 @@ function Editor(props: {
   const { ctx, session, path, files, onOpen, create, externalRevision, onDirtyChange, reveal, completionPreference } = props
   const [doc, setDoc] = useState<EditorDocument | null>(null)
   const [text, setTextState] = useState('')
-  const [ghost, setGhost] = useState('')
+  const [ghostCandidates, setGhostCandidates] = useState<string[]>([])
+  const [ghostIndex, setGhostIndex] = useState(0)
   const [ghostAt, setGhostAt] = useState(0)
   const [loadingFim, setLoadingFim] = useState(false)
   const [conflict, setConflict] = useState(false)
@@ -783,6 +785,8 @@ function Editor(props: {
   textRef.current = text
   revisionRef.current = revision
   const state = saveState(doc, text, conflict)
+  const ghost = ghostCandidates[ghostIndex] ?? ''
+  const clearGhost = () => { setGhostCandidates([]); setGhostIndex(0) }
 
   useEffect(() => {
     onDirtyChange(Boolean(doc && isDirty(doc, text)) || conflict)
@@ -797,7 +801,7 @@ function Editor(props: {
     setPatching(false)
     setTextState(value)
     setRevision((old) => old + 1)
-    setGhost('')
+    clearGhost()
     setProposal(null)
   }
 
@@ -807,7 +811,7 @@ function Editor(props: {
     setLoadingFim(false)
     setPatching(false)
     setProposal(null)
-    setGhost('')
+    clearGhost()
     setConflict(false)
     setReloadConfirm(false)
     setUserEditRevision(0)
@@ -944,7 +948,7 @@ function Editor(props: {
     await draftQueue.current!.run('draft.delete', { sessionId: doc.sessionId, path: doc.path })
   }
 
-  const complete = async () => {
+  const complete = async (append = false) => {
     if (!doc || !ta.current) return
     // A manual request also consumes the pending pause trigger for this edit.
     lastAutomaticCompletion.current = Math.max(lastAutomaticCompletion.current, userEditRevision)
@@ -953,7 +957,7 @@ function Editor(props: {
     setProposal(null)
     const requestDoc = doc
     const requestRevision = revision
-    const pos = ta.current.selectionStart
+    const pos = append && ghost ? ghostAt : ta.current.selectionStart
     const controller = new AbortController()
     fimAbort.current = controller
     setLoadingFim(true)
@@ -973,9 +977,15 @@ function Editor(props: {
     if (!result.ok) { setNote(errorMessage(result)); return }
     const suggestion = String(result.value.text ?? '')
     if (!suggestion.trim()) { setNote('模型没有返回可用补全。'); return }
-    setGhost(suggestion)
+    const next = append
+      ? addCompletionCandidate(ghostCandidates, suggestion)
+      : { candidates: [suggestion], index: 0, added: true }
+    setGhostCandidates(next.candidates)
+    setGhostIndex(next.index)
     setGhostAt(pos)
-    setNote('补全已就绪；确认后才会写入正文。')
+    setNote(next.added
+      ? `补全候选 ${next.index + 1}/${next.candidates.length} 已就绪；确认后才会写入正文。`
+      : '新候选与已有建议相同，已保留原建议。')
   }
 
   useEffect(() => {
@@ -1017,7 +1027,7 @@ function Editor(props: {
     const ticket = selectionTicket(doc, text, revision, selection.start, selection.end)
     if (!ticket) { setNote('请先选择需要改写的文字。'); return }
     fimAbort.current?.abort()
-    setGhost('')
+    clearGhost()
     patchAbort.current?.abort()
     const controller = new AbortController()
     patchAbort.current = controller
@@ -1047,7 +1057,7 @@ function Editor(props: {
     const cursor = ghostAt + ghost.length
     setText(applyGhost(text, ghostAt, ghost))
     setSelection({ start: cursor, end: cursor })
-    setGhost('')
+    clearGhost()
     setNote('补全已加入草稿，正在自动保存。')
     globalThis.setTimeout(() => { ta.current?.focus(); ta.current?.setSelectionRange(cursor, cursor) }, 0)
   }
@@ -1115,18 +1125,26 @@ function Editor(props: {
           patchAbort.current?.abort()
           setLoadingFim(false)
           setPatching(false)
-          setGhost('')
+          clearGhost()
           setProposal(null)
           setNote('已放弃当前建议。')
         }
       },
     }),
     ghost ? e('section', { className: 'ghost ghost-suggestion', 'aria-label': '补全建议', 'aria-live': 'polite' },
-      e('strong', null, '补全建议'),
+      e('header', null,
+        e('strong', null, '补全建议'),
+        e('small', null, `候选 ${ghostIndex + 1} / ${ghostCandidates.length}`),
+      ),
       e('p', null, ghost),
+      ghostCandidates.length > 1 ? e('nav', { 'aria-label': '切换补全候选' },
+        e('button', { type: 'button', disabled: ghostIndex <= 0, onClick: () => setGhostIndex((old) => Math.max(0, old - 1)) }, '上一条'),
+        e('button', { type: 'button', disabled: ghostIndex >= ghostCandidates.length - 1, onClick: () => setGhostIndex((old) => Math.min(ghostCandidates.length - 1, old + 1)) }, '下一条'),
+      ) : null,
       e('div', null,
         e('button', { type: 'button', onClick: acceptGhost }, '接受补全'),
-        e('button', { type: 'button', onClick: () => { setGhost(''); setNote('已放弃补全。'); ta.current?.focus() } }, '放弃'),
+        e('button', { type: 'button', disabled: loadingFim || ghostCandidates.length >= 3, onClick: () => void complete(true) }, loadingFim ? '生成中…' : ghostCandidates.length >= 3 ? '已满 3 条' : '再来一个'),
+        e('button', { type: 'button', onClick: () => { clearGhost(); setNote('已放弃补全。'); ta.current?.focus() } }, '放弃'),
       ),
     ) : null,
     proposal ? e('section', { className: 'proposal', 'aria-label': '选段修改建议', 'aria-live': 'polite' },
@@ -1151,7 +1169,7 @@ function Editor(props: {
           setLoadingFim(false)
           setNote('已停止补全。')
         },
-      }, loadingFim ? '停止补全' : '补全'),
+      }, loadingFim ? '停止补全' : ghost ? '重新补全' : '补全'),
       e('button', {
         type: 'button',
         disabled: !doc || conflict || loadingFim || (!patching && selection.start === selection.end),
@@ -3130,7 +3148,7 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .tree-row:hover{transform:translateX(4px)!important}.tree-row[aria-current=page]{box-shadow:inset 3px 0 #3d755a}.tree-row[aria-expanded=true]{color:var(--ink);font-weight:600}
 .paper-input{transition:transform 360ms var(--ease),box-shadow 360ms ease,border-color 360ms ease}.paper-input:focus{transform:translateY(-2px);border-color:#b9c9ba;box-shadow:0 18px 44px #4b67471c,0 0 0 4px #5c8a6820}
 .composer{transition:background-color 240ms ease,box-shadow 240ms ease}.composer:focus-within{background:#fffaf0;box-shadow:0 -12px 34px #5a4d3210}.composer textarea:focus{border-color:#73917d;box-shadow:0 0 0 3px #4d7d5d17}
-.ghost-suggestion{box-sizing:border-box;max-height:42%;display:grid;gap:8px;overflow:auto;padding:12px 14px;border:1px solid #b9cbb9;border-radius:14px 4px 14px 14px;background:#f5faef;box-shadow:0 12px 32px #3f624719;pointer-events:auto}.ghost-suggestion strong,.proposal>strong{color:#28523f}.ghost-suggestion p{margin:0;overflow:auto;white-space:pre-wrap;line-height:1.7}.ghost-suggestion div,.proposal-actions{display:flex;gap:7px}.ghost-suggestion button,.proposal button{padding:5px 9px;border:1px solid #b8c5b7;border-radius:9px 3px 9px 9px;background:#fffdf7;color:#285640;cursor:pointer}.proposal{box-sizing:border-box;max-height:56%;overflow:auto}.selection-diff{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px!important;margin:9px 0}.selection-diff section{min-width:0;padding:8px;border:1px solid #ddd5c6;border-radius:7px;background:#f8f4e9}.selection-diff small{color:#68776d}.selection-diff p{max-height:150px;overflow:auto;white-space:pre-wrap;line-height:1.65}.proposal-actions{justify-content:flex-end}@media(max-width:1320px){.ghost-suggestion{max-width:72%}.proposal{width:min(430px,58%)}}
+.ghost-suggestion{box-sizing:border-box;max-height:42%;display:grid;gap:8px;overflow:auto;padding:12px 14px;border:1px solid #b9cbb9;border-radius:14px 4px 14px 14px;background:#f5faef;box-shadow:0 12px 32px #3f624719;pointer-events:auto}.ghost-suggestion header{display:flex;align-items:center;justify-content:space-between;gap:12px}.ghost-suggestion header small{color:#6b796f;font:11px/1.4 ui-monospace,Consolas,monospace}.ghost-suggestion strong,.proposal>strong{color:#28523f}.ghost-suggestion p{margin:0;overflow:auto;white-space:pre-wrap;line-height:1.7}.ghost-suggestion div,.ghost-suggestion nav,.proposal-actions{display:flex;gap:7px}.ghost-suggestion nav{justify-content:flex-end}.ghost-suggestion button,.proposal button{padding:5px 9px;border:1px solid #b8c5b7;border-radius:9px 3px 9px 9px;background:#fffdf7;color:#285640;cursor:pointer}.ghost-suggestion button:disabled{cursor:not-allowed;opacity:.45}.proposal{box-sizing:border-box;max-height:56%;overflow:auto}.selection-diff{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px!important;margin:9px 0}.selection-diff section{min-width:0;padding:8px;border:1px solid #ddd5c6;border-radius:7px;background:#f8f4e9}.selection-diff small{color:#68776d}.selection-diff p{max-height:150px;overflow:auto;white-space:pre-wrap;line-height:1.65}.proposal-actions{justify-content:flex-end}@media(max-width:1320px){.ghost-suggestion{max-width:72%}.proposal{width:min(430px,58%)}}
 .export-actions .settings-link{margin-left:0}.shortcut-overlay{position:fixed;z-index:60;inset:0;display:grid;place-items:center;padding:24px;background:#202a246b;backdrop-filter:blur(5px)}.shortcut-dialog{box-sizing:border-box;width:min(620px,100%);max-height:min(760px,calc(100dvh - 48px));display:grid;gap:14px;overflow:auto;padding:26px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 30px 90px #222a2538}.shortcut-dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.shortcut-dialog header>div{display:grid;gap:4px}.shortcut-dialog h2,.shortcut-dialog p{margin:0}.shortcut-dialog h2{color:#244b39;font:600 28px/1.25 "Noto Serif SC","Songti SC",serif}.shortcut-dialog header small{color:#708078;font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.16em}.shortcut-dialog>p{color:#6c756d}.shortcut-dialog dl{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:0}.shortcut-dialog dl>div{display:flex;align-items:center;gap:12px;padding:10px 11px;border:1px solid #e0d8c9;border-radius:10px 3px 10px 10px;background:#f8f3e8}.shortcut-dialog dt{flex:none;min-width:112px;padding:3px 6px;border:1px solid #c7cebf;border-radius:5px;background:#fffdf7;color:#285640;font:11px/1.4 ui-monospace,Consolas,monospace}.shortcut-dialog dd{margin:0;color:#53645b;font-size:12px}@media(max-width:720px){.shortcut-dialog dl{grid-template-columns:1fr}}
 .workspace-row{position:relative;display:flex;align-items:center;margin:0 9px}.workspace-row>.tree-row{min-width:0;padding-right:38px}.workspace-manage{position:absolute;right:3px;opacity:0}.workspace-row:hover .workspace-manage,.workspace-row:focus-within .workspace-manage{opacity:1}.workspace-home-button{padding:4px 9px;border:1px solid #d0c8b8;border-radius:12px 3px 12px 12px;background:#f7f2e8;color:#456250;cursor:pointer}.workspace-current-manage{flex:none;padding:3px 6px!important;border:0!important;background:transparent!important;color:#65756b!important}.workspace-dialog form>footer .danger-link{margin-right:auto;border-color:transparent;background:transparent;color:#914b40}.workspace-dialog form>footer .danger-link:hover{background:#f4e5df}.workspace-dialog code{max-width:420px}
 .chat-row,.pending-card{animation:message-in 360ms var(--ease) both}.chat-row.user{transform-origin:right bottom}.chat-row.assistant{transform-origin:left bottom}.chat-row.tool strong::after{content:'···';display:inline-block;width:1.5em;overflow:hidden;vertical-align:bottom;animation:dots 1.2s steps(4,end) infinite}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGhost, applySelectionPatch, canApplyGhost, isDirty, isSelectionCurrent, saveState, selectionTicket } from './editor-state.ts'
+import { addCompletionCandidate, applyGhost, applySelectionPatch, canApplyGhost, isDirty, isSelectionCurrent, saveState, selectionTicket } from './editor-state.ts'
 
 describe('writer editor states', () => {
   const document = { sessionId: 's', path: '正文/01.md', text: '原文', version: 'v1' }
@@ -12,6 +12,12 @@ describe('writer editor states', () => {
     expect(canApplyGhost('saved', '续写')).toBe(true)
     expect(canApplyGhost('conflict', '续写')).toBe(false)
     expect(applyGhost('雨还没停。', 4, '她没有开灯。')).toBe('雨还没停她没有开灯。。')
+  })
+  it('keeps usable completion candidates while deduplicating and bounding alternatives', () => {
+    expect(addCompletionCandidate([], '第一条')).toEqual({ candidates: ['第一条'], index: 0, added: true })
+    expect(addCompletionCandidate(['第一条'], '第二条')).toEqual({ candidates: ['第一条', '第二条'], index: 1, added: true })
+    expect(addCompletionCandidate(['第一条', '第二条'], '第一条')).toEqual({ candidates: ['第一条', '第二条'], index: 0, added: false })
+    expect(addCompletionCandidate(['一', '二', '三'], '四')).toEqual({ candidates: ['一', '二', '三'], index: 2, added: false })
   })
   it('rejects a stale selection before applying a short patch', () => {
     const ticket = selectionTicket(document, '原文需要修改', 2, 2, 6)!
