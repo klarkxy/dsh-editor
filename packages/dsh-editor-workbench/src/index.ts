@@ -1,28 +1,23 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { WORKBENCH_RPC_CHANNEL } from '../../dsh-editor-shell/src/workbench-rpc.ts'
-import { asHost, resolveWorkspaceAccess } from './host.ts'
-import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
-import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './rpc/import.ts'
-import { archiveDocument, LifecycleError, listArchives, moveManuscriptDocument, renameDocument, restoreArchive, type LifecycleAccess } from './rpc/lifecycle.ts'
-import { createManuscriptGroup, initializeProject, prepareNovelIndex, ProjectInitError } from './rpc/project.ts'
-import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './rpc/snapshot.ts'
-import { compileContext } from './rpc/context.ts'
+import { asHost, badRequest, mapHostError, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
+import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
+import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './import.ts'
+import { archiveDocument, LifecycleError, listArchives, moveManuscriptDocument, renameDocument, restoreArchive, type LifecycleAccess } from './lifecycle.ts'
+import { createManuscriptGroup, initializeProject, prepareNovelIndex, ProjectInitError } from './project.ts'
+import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './snapshot.ts'
+import { compileContext } from './context.ts'
+
+export const name = 'dsh-editor-workbench'
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
 
 type Payload = Record<string, unknown>
-type RpcError =
-  | HostRpcError
-  | { code: 'directory-unreadable'; message: string; details: { path: string } }
-  | { code: 'directory-exists'; message: string; details: { path: string } }
-  | { code: 'workspace-invalid-path'; message: string; details: { path: string } }
-  | { code: 'internal'; message: string; details: Record<string, never> }
-type RpcResult = { ok: true; value: unknown } | { ok: false; error: RpcError }
 
 function str(payload: Payload, key: string): string {
   const value = payload[key]
   return typeof value === 'string' ? value : ''
 }
 
-export function mapEditorFilesError(error: unknown): RpcResult {
+export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
   if (error instanceof ProjectInitError) {
     if (error.code === 'CANCELLED') return { ok: false, error: { code: 'cancelled', message: error.message, details: {} } }
     if (error.code === 'IO') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
@@ -120,7 +115,7 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
   throw new Error(`unknown workbench endpoint ${endpoint}`)
 }
 
-export function registerEditorFilesRpc(ctx: Context): () => void {
+export function registerWorkbenchRpc(ctx: Context): () => void {
   const host = asHost(ctx)
   return host.connection.rpc.handle(WORKBENCH_RPC_CHANNEL, async (endpoint: string, payload: unknown, signal: AbortSignal) => {
     try {
@@ -129,4 +124,8 @@ export function registerEditorFilesRpc(ctx: Context): () => void {
       return mapEditorFilesError(error)
     }
   }, { authority: 'loopback' })
+}
+
+export function apply(ctx: Context): void {
+  ctx.effect(() => registerWorkbenchRpc(ctx), 'dsh-editor-workbench.rpc')
 }

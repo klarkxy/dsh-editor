@@ -7,7 +7,6 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   ConnectionHandle,
-  RpcError,
   SessionId,
   SessionModels,
   WorkspaceId,
@@ -25,6 +24,17 @@ import {
   type ReactNode,
 } from 'react'
 import {
+  WORKBENCH_RPC_CHANNEL,
+  formatWorldbookTriggerLines,
+  parseWorldbookTriggerLines,
+  worldbookEditorMetadata,
+  writeWorldbookFrontmatter,
+  type WorkbenchRpcResult,
+  type ArchiveListResponse,
+  type ProjectContextReceiptBundle,
+} from 'dsh-editor-workbench/contracts'
+import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+import {
   answerApproval,
   answerQuestions,
   chatRows,
@@ -37,7 +47,6 @@ import {
   visibleRunningCalls,
   type QuestionAnswerItem,
 } from './adapter.ts'
-import { formatWorldbookTriggerLines, parseWorldbookTriggerLines, worldbookEditorMetadata, writeWorldbookFrontmatter, type ProjectContextReceiptBundle } from './project-context.ts'
 import type { EditorDraft } from './drafts.ts'
 import { DraftSyncQueue } from './drafts.ts'
 import {
@@ -58,8 +67,6 @@ import { buildNovelIndexPrompt } from './novel-index.ts'
 import { buildExport, type ChapterExport, type ExportFormat } from './export.ts'
 import { archiveStateText, documentName, visibleArchives, type ArchiveView } from './file-lifecycle.ts'
 import { documentTemplate, manuscriptGroupPath, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from './project-files.ts'
-import { WORKBENCH_RPC_CHANNEL } from './workbench-rpc.ts'
-import type { ProposalMarker } from './proposal-tool.ts'
 import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ConversationRenameQueue, conversationRows, nextAutomaticConversationTitle, shouldConfirmConversationSwitch } from './conversation-lifecycle.ts'
 import { automaticCompletionReady, COMPLETION_PREFERENCE_KEY, readCompletionPreference, type CompletionPreference } from './completion-preference.ts'
@@ -82,9 +89,8 @@ export const inject = ['slots', 'sessions', 'workspaces', 'connection'] as const
 type Entry = { name: string; type: 'file' | 'directory' | 'other' }
 type SearchHit = { path: string; line: number; column: number; start: number; end: number; excerpt: string; version: string }
 type SearchResponse = { results: SearchHit[]; scannedFiles: number; scannedBytes: number; skipped: number; truncated: boolean }
-type ArchiveListResponse = { items: ArchiveView[]; invalid: number }
 type RevealRequest = SearchHit & { nonce: number }
-type RpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: RpcError | { code?: string; message?: string } }
+type RpcResult<T = unknown> = WorkbenchRpcResult<T>
 type ShellContext = ClientContext & { connection: ConnectionHandle }
 
 const SIDEBAR_DEFAULT = 248
@@ -135,7 +141,7 @@ export async function safeRpcCall<T>(request: () => Promise<unknown>): Promise<R
   } catch (error) {
     return {
       ok: false,
-      error: { code: 'internal', message: error instanceof Error ? error.message : 'request failed' },
+      error: { code: 'internal', message: error instanceof Error ? error.message : 'request failed', details: {} },
     }
   }
 }

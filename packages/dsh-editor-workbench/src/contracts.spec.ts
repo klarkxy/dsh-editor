@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PROJECT_CONTEXT_MAX_CHARS_PER_FILE, PROJECT_CONTEXT_SOURCE_PATHS, compileProjectContext, compileProjectContextV2, formatWorldbookTriggerLines, parseProjectContextEnvelope, parseWorldbookFrontmatter, parseWorldbookTriggerLines, projectContextReceipt, worldbookEditorMetadata, writeWorldbookFrontmatter } from './project-context.ts'
+import { PROJECT_CONTEXT_MAX_CHARS_PER_FILE, PROJECT_CONTEXT_SOURCE_PATHS, compileProjectContext, compileProjectContextV2, formatWorldbookTriggerLines, parseProjectContextEnvelope, parseWorldbookFrontmatter, parseWorldbookTriggerLines, projectContextReceipt, worldbookEditorMetadata, writeWorldbookFrontmatter } from './contracts.ts'
 
 describe('project context compiler', () => {
   it('reads the five fixed sources in order and serializes successful input byte-stably', async () => {

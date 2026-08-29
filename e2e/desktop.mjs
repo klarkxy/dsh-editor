@@ -48,7 +48,13 @@ async function launchPhase(name, extraEnv, inspect) {
     const processLogs = []
     app.process().stdout?.on('data', (chunk) => processLogs.push(`stdout: ${String(chunk)}`))
     app.process().stderr?.on('data', (chunk) => processLogs.push(`stderr: ${String(chunk)}`))
-    const window = await app.firstWindow()
+    let firstWindowTimer
+    const window = await Promise.race([
+      app.firstWindow(),
+      new Promise((_, reject) => {
+        firstWindowTimer = setTimeout(() => reject(new Error(`desktop window was not created within 90 seconds: ${JSON.stringify(processLogs)}`)), 90_000)
+      }),
+    ]).finally(() => clearTimeout(firstWindowTimer))
     const browserErrors = []
     window.on('console', (message) => {
       const text = message.text()
@@ -84,6 +90,7 @@ async function launchPhase(name, extraEnv, inspect) {
       settingsControl: Boolean(document.querySelector('[aria-label="设置"]')),
       officialHome: document.body.textContent?.includes('DeepSeek Harness') ?? false,
       editorName: Boolean(document.querySelector('.brand-lockup, .settings-brand')),
+      bootEntries: globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [],
       width: window.innerWidth,
       height: window.innerHeight,
     }))
@@ -115,8 +122,10 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   const onboarding = state.body.includes('新建') && state.body.includes('打开作品')
   const settingsEntry = state.settingsControl
   const technicalChrome = ['DeepSeek Harness', 'DSH_HOME', 'permission preset', '权限模式', '会话列表'].some((label) => state.body.includes(label))
-  if (!state.shell || state.settings || !state.editorName || state.officialHome || !onboarding || !settingsEntry || technicalChrome) {
-    throw new Error(`configured home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding, settingsEntry, technicalChrome })}`)
+  const clientBoundaryReady = state.bootEntries.filter((entry) => entry === 'dsh-editor-shell').length === 1
+    && state.bootEntries.every((entry) => entry !== 'dsh-editor-workbench' && entry !== 'dsh-editor-novel-kernel')
+  if (!state.shell || state.settings || !state.editorName || state.officialHome || !onboarding || !settingsEntry || technicalChrome || !clientBoundaryReady) {
+    throw new Error(`configured home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding, settingsEntry, technicalChrome, clientBoundaryReady })}`)
   }
 }))
 

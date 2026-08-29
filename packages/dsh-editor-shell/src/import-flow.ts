@@ -1,4 +1,6 @@
-export type ImportProbeView = { state: 'none' | 'ready' | 'blocked' | 'recoverable' | 'complete'; token?: string; receiptId?: string; files: number; bytes: number; skipped: Array<{ path: string; reason: string }>; preview: string[]; message?: string }
+import type { ImportProbeResponse } from 'dsh-editor-workbench/contracts'
+
+export type ImportProbeView = ImportProbeResponse
 export type ImportFlow =
   | { kind: 'idle' }
   | { kind: 'review'; sourceSessionId: string; targetSessionId: string; targetWorkspaceId: string; probe: ImportProbeView }

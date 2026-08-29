@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { answerApproval, answerQuestions, chatRows, parseProposalMarker, partialText, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
-import { compileProjectContext, compileProjectContextV2 } from './project-context.ts'
+import { compileProjectContext, compileProjectContextV2 } from 'dsh-editor-workbench/contracts'
 
 describe('DSH snapshot adapter', () => {
   it('recognizes only exact versioned proposal markers', () => {

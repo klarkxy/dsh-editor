@@ -15,8 +15,10 @@ import type {
   SessionId,
   SessionModels,
 } from '@deepseek-ai/dsh-client-connection/client'
-import type { ProposalMarker } from './proposal-tool.ts'
-import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from './project-context.ts'
+import { parseProposalMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
+
+export { parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 
 const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge'])
 
@@ -68,18 +70,6 @@ export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-resu
 function isHiddenToolResult(node: Extract<ConversationNode, { kind: 'tool-result' }>): boolean {
   if (node.call && HIDDEN_TOOL_NAMES.has(node.call.name)) return true
   return blocksText(node.content).includes('<novel_knowledge ')
-}
-
-export function parseProposalMarker(text: string): ProposalMarker | undefined {
-  let value: unknown
-  try { value = JSON.parse(text) } catch { return undefined }
-  if (!value || typeof value !== 'object') return undefined
-  const row = value as Partial<ProposalMarker>
-  if (row.marker !== 'dsh-editor.proposal' || row.version !== 1) return undefined
-  if ((row.kind !== 'edit' && row.kind !== 'create') || typeof row.path !== 'string' || typeof row.summary !== 'string') return undefined
-  if (row.kind === 'edit' && (typeof row.oldText !== 'string' || typeof row.newText !== 'string')) return undefined
-  if (row.kind === 'create' && typeof row.text !== 'string') return undefined
-  return row as ProposalMarker
 }
 
 export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {

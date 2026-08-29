@@ -1,23 +1,7 @@
-export type SnapshotView = {
-  snapshotId: string
-  label?: string
-  createdAt: string
-  files: number
-  bytes: number
-  excluded: number
-}
+import type { RestoreProbeResponse, SnapshotResponse } from 'dsh-editor-workbench/contracts'
 
-export type RestoreView = {
-  state: 'none' | 'ready' | 'blocked' | 'recoverable' | 'complete'
-  token?: string
-  receiptId?: string
-  snapshotId?: string
-  files: number
-  bytes: number
-  excluded: Array<{ path: string; reason: string }>
-  preview: string[]
-  message?: string
-}
+export type SnapshotView = SnapshotResponse
+export type RestoreView = RestoreProbeResponse
 
 export type SnapshotFlow =
   | { kind: 'idle' }

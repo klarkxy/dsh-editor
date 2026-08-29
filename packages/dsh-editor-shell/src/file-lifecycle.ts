@@ -1,12 +1,6 @@
-export type ArchiveView = {
-  archiveId: string
-  path: string
-  createdAt: string
-  bytes: number
-  state: 'archived' | 'pending-archive' | 'pending-restore' | 'restored' | 'blocked'
-  version?: string
-  message?: string
-}
+import type { ArchiveResponse } from 'dsh-editor-workbench/contracts'
+
+export type ArchiveView = ArchiveResponse
 
 export function documentName(path: string): string {
   const filename = path.split('/').at(-1) ?? path

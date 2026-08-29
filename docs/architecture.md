@@ -1,5 +1,7 @@
 # DSH Editor 架构与边界
 
+插件分级、RPC/Tool/slot 接口目录以及修改、替换和新建插件流程见 [plugin-architecture.md](plugin-architecture.md)。
+
 ## 产品结构
 
 DSH Editor V1 是 Windows x64 的 GUI-first 桌面应用，不是另一套 Agent runtime。
@@ -10,22 +12,25 @@ Electron（窗口、资源校验、子进程生命周期）
    └─ 内置 DSH 0.1.1-rc.2，127.0.0.1:随机端口
       └─ 专用 profiles/dsh-editor
          ├─ DSH base / web runtime / connection / renderer
-         ├─ dsh-manuscript Host RPC
-         └─ dsh-editor-shell 私有根界面
+         ├─ dsh-manuscript：公开稿件 Host RPC 与 overlay
+         ├─ dsh-editor-workbench：私有项目生命周期与 context Host
+         ├─ dsh-editor-novel-kernel：私有小说 Tool、guard、prompt 与知识卡
+         └─ dsh-editor-shell：私有根界面
             ├─ 左：工作区、会话与稿件树
             ├─ 中：Markdown 稿纸、草稿、冲突、FIM、选段改写
-            ├─ 内部：只读小说经验知识卡与静态主题白名单
             └─ 右：DshChatPort → 唯一 DSH SessionFace 快照
 ```
 
-普通 DSH `web` profile 仍可独立安装 `dsh-manuscript` 和 `dsh-grill`。桌面 profile 才加载私有 `dsh-editor-shell`；它以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.1-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
+普通 DSH `web` profile 仍可独立安装 `dsh-manuscript` 和 `dsh-grill`。桌面 profile 另外加载 workbench、novel-kernel 与 shell；shell 以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.1-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
 
 ## 所有权边界
 
 - DSH：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry（含显示名与最近入口）、sandbox、文件 API 与持久化。
 - Electron：单窗口、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。
 - `dsh-editor-shell` Renderer：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；新建、重命名、放弃草稿和离开保护均使用应用内、锁定焦点的对话框，不依赖浏览器 `prompt/confirm`；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据、绝对路径或 Node 文件系统。
-- `dsh-editor-shell` Host：loopback-only 项目导入、快照、安全重命名、可恢复归档，以及只读 `novel_knowledge` 与预览式修改提案；复用同一 live-session workspace authority，不保存模式状态，也不装载完整 skill。
+- `dsh-editor-shell` Host：仅保留加载唯一 root client 所需的最小 Cordis 入口；Renderer 继续拥有界面、编辑 buffer 与作者确认流程。
+- `dsh-editor-workbench` Host：loopback-only 项目结构、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。
+- `dsh-editor-novel-kernel` Host：只读 `novel_knowledge`、预览式 `novel_propose`、工具 guard 与 system prompt；没有 RPC，也不直接写正文。
 - `dsh-manuscript` Host：公开 `/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、全文搜索、DSH_HOME 草稿、FIM 与 `patch.complete`；公开产物不含 Node 文件系统能力。
 - `dsh-grill`：保持为普通 DSH 可独立安装的公共插件，不进入桌面 profile 或桌面运行依赖。
 
@@ -45,7 +50,7 @@ Electron（窗口、资源校验、子进程生命周期）
 
 profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记，启动会拒绝覆盖并在窗口显示诊断与重试。每次部署先写同级 stage，原子替换已标记 profile；home 级 credentials、settings、sessions、storages 和真实 workspace 不会被复制或删除。
 
-桌面资源固定包含 Node `24.16.0`、DSH `0.1.1-rc.2`、`dsh-editor-shell`、`dsh-manuscript` 及 profile。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
+桌面资源固定包含 Node `24.16.0`、DSH `0.1.1-rc.2`、manuscript、workbench、novel-kernel、shell 及 profile。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
 
 ## DshChatPort
 

@@ -7,7 +7,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceTemplate = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 const template = resolve(root, '.dev', 'desktop-profile-template')
 const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime')
-const packages = ['dsh-editor-shell', 'dsh-manuscript']
+const packages = ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-editor-shell']
 
 if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.node !== '24.16.0') {
   throw new Error(`desktop development requires Windows x64 Node 24.16.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)

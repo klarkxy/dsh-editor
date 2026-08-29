@@ -75,7 +75,7 @@ for (const path of [prepareDesktopDev, electronCli]) {
 }
 
 console.log(`dev: DSH ${dsh.version}, isolated home ${devHome}`)
-console.log('dev: building the desktop shell and two public plugins')
+console.log('dev: building the desktop profile plugins')
 await runNode(pnpmCli, ['-r', 'build'])
 
 await runNode(prepareDesktopDev, [])
@@ -86,11 +86,12 @@ if (process.env.DSH_DESKTOP_PREPARE_ONLY === '1') {
 }
 
 const children = [
-  spawnNode(pnpmCli, ['--filter', 'dsh-grill', 'exec', 'tsdown', '--watch', '--no-clean']),
   spawnNode(pnpmCli, [
     '--filter', 'dsh-manuscript', 'exec', 'tsdown', '--watch', '--no-clean',
     '--on-success', 'node ../../scripts/wrap-client.mjs dsh-manuscript',
   ]),
+  spawnNode(pnpmCli, ['--filter', 'dsh-editor-workbench', 'exec', 'tsdown', '--watch', '--no-clean']),
+  spawnNode(pnpmCli, ['--filter', 'dsh-editor-novel-kernel', 'exec', 'tsdown', '--watch', '--no-clean']),
   spawnNode(pnpmCli, [
     '--filter', 'dsh-editor-shell', 'exec', 'tsdown', '--watch', '--no-clean',
     '--on-success', 'node ../../scripts/wrap-client.mjs dsh-editor-shell',

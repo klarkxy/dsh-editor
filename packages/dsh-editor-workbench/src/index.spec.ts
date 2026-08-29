@@ -1,8 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { dispatchEditorFiles, registerEditorFilesRpc } from '../../dsh-manuscript/src/editor-files.ts'
-import type { FileSystemLike, ManuscriptHost } from '../../dsh-manuscript/src/host.ts'
-import { WORKBENCH_RPC_CHANNEL } from './workbench-rpc.ts'
+import type { FileSystemLike, ManuscriptHost } from 'dsh-manuscript/host-api'
+import { WORKBENCH_RPC_CHANNEL } from './contracts.ts'
+import { dispatchEditorFiles, registerWorkbenchRpc } from './index.ts'
 
 function fixture() {
   const canonical = '/canonical/workspace'
@@ -40,7 +40,7 @@ function fixture() {
 describe('private editor workbench Host RPC', () => {
   it('registers only on the loopback workbench channel', () => {
     const { host, handle } = fixture()
-    registerEditorFilesRpc(host as unknown as Context)
+    registerWorkbenchRpc(host as unknown as Context)
     expect(handle).toHaveBeenCalledWith(
       WORKBENCH_RPC_CHANNEL,
       expect.any(Function),

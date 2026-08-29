@@ -12,6 +12,12 @@
     "types": ["node"],
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "dsh-manuscript/host-api": ["packages/dsh-manuscript/src/host-api.ts"],
+      "dsh-editor-workbench/contracts": ["packages/dsh-editor-workbench/src/contracts.ts"],
+      "dsh-editor-novel-kernel/contracts": ["packages/dsh-editor-novel-kernel/src/contracts.ts"]
+    }
   }
 }

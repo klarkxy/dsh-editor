@@ -2,8 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { FileSystemLike, FsTargetLike, SandboxExecutionPolicyLike } from '../host.ts'
-import type { WorkspaceFileContext } from './files.ts'
+import type { FileSystemLike, FsTargetLike, SandboxExecutionPolicyLike, WorkspaceFileContext } from 'dsh-manuscript/host-api'
 import {
   createSnapshot,
   listSnapshots,

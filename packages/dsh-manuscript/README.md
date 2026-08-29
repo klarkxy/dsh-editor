@@ -13,7 +13,9 @@
 
 Host 由 live `sessionId` 获取 immutable workspace，验证 registered membership 与 sandbox policy，再使用 DSH `ctx.fs`。创建采用 `createIfAbsent`，保存采用 `replaceIfVersion`。绝对路径、traversal、symlink、超过 2 MB 的文本、stale version、未知 session 和 read-only 写入都会 fail closed。
 
-全文搜索只扫描有界的 Markdown/TXT 字面文本并跳过隐藏、生成和链接路径。桌面产品的项目导入、作品快照、安全重命名与可恢复归档属于私有 `dsh-editor-shell` Host，不进入本公开插件的 RPC 或 tarball。
+全文搜索只扫描有界的 Markdown/TXT 字面文本并跳过隐藏、生成和链接路径。桌面产品的项目导入、作品快照、安全重命名与可恢复归档属于桌面私有 Host，不进入本公开插件的 RPC 或 tarball。
+
+`dsh-manuscript/host-api` 是给同进程 Host 插件复用的窄 authority/file 子入口；它不增加公开 RPC，也不允许绕过 live session、sandbox、路径与版本门禁。
 
 generic RPC 没有 caller principal，因此该 loopback channel 只适用于 DSH 本地单用户模型，不得暴露成远程多用户 API。
 

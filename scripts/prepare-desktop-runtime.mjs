@@ -12,6 +12,7 @@ const outputRoot = resolve(root, '.pack', 'desktop-runtime')
 const nodeOutput = resolve(outputRoot, `node-${NODE_VERSION}`)
 const dshOutput = resolve(outputRoot, `dsh-${DSH_VERSION}`)
 const profileOutput = resolve(outputRoot, 'profile')
+const privateProfilePackages = ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-editor-shell']
 
 function assertSafeOutput(path) {
   const packRoot = resolve(root, '.pack') + sep
@@ -78,7 +79,7 @@ if (process.versions.node !== NODE_VERSION) {
 }
 
 const dsh = resolveDshInstallation(DSH_VERSION)
-for (const packageName of ['dsh-editor-shell', 'dsh-manuscript']) {
+for (const packageName of privateProfilePackages) {
   const packageRoot = resolve(root, 'packages', packageName)
   const manifest = await readJson(resolve(packageRoot, 'package.json'))
   if (manifest.name !== packageName) throw new Error(`unexpected package identity at ${packageRoot}`)
@@ -98,7 +99,7 @@ await cp(dsh.packageRoot, dshOutput, {
   filter: dshCopyFilter,
 })
 
-for (const packageName of ['dsh-editor-shell', 'dsh-manuscript']) {
+for (const packageName of privateProfilePackages) {
   const source = resolve(root, 'packages', packageName)
   const destination = resolve(dshOutput, 'node_modules', packageName)
   await rm(destination, { recursive: true, force: true })
@@ -121,7 +122,7 @@ await rename(resolve(dshOutput, 'node_modules'), resolve(dshOutput, 'vendor-depe
 
 const profileSource = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 await cp(profileSource, profileOutput, { recursive: true })
-for (const packageName of ['dsh-editor-shell', 'dsh-manuscript']) {
+for (const packageName of privateProfilePackages) {
   await cp(resolve(root, 'packages', packageName), resolve(profileOutput, 'node_modules', packageName), {
     recursive: true,
     filter: packageCopyFilter,
@@ -134,6 +135,8 @@ const expectedBundles = [
   '@deepseek-ai/dsh-base',
   '@deepseek-ai/dsh-web-app',
   'dsh-manuscript',
+  'dsh-editor-workbench',
+  'dsh-editor-novel-kernel',
   'dsh-editor-shell',
 ]
 if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify(expectedBundles)) {

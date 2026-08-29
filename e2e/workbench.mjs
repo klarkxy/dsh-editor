@@ -131,6 +131,11 @@ try {
   })
   await window.goto(started.url.href)
   await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 45_000 })
+  const bootEntries = await window.evaluate(() => globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [])
+  if (bootEntries.filter((entry) => entry === 'dsh-editor-shell').length !== 1) failures.push('shell client entry must load exactly once')
+  for (const id of ['dsh-editor-workbench', 'dsh-editor-novel-kernel']) {
+    if (bootEntries.includes(id)) failures.push(`host-only plugin leaked into browser boot entries: ${id}`)
+  }
 
   await window.getByRole('button', { name: '打开作品' }).first().click()
   const pathBox = window.getByLabel('作品文件夹路径')

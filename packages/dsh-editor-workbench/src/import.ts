@@ -1,9 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { WorkspaceFileContext } from './files.ts'
-import { createTextFile, FileOpError, listDirStrict, readTextFile, writeTextFile } from './files.ts'
-import { normalizeWorkspaceRelative } from './paths.ts'
+import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
 
 export const IMPORT_RECEIPT_PATH = '.dsh-editor-import.json'
 const MAX_FILES = 2_000

@@ -23,7 +23,10 @@ export default defineConfig([
     target: 'es2022',
     sourcemap: true,
     hash: false,
-    deps: { neverBundle: ['react'] },
+    deps: {
+      neverBundle: ['react'],
+      alwaysBundle: ['dsh-editor-workbench/contracts', 'dsh-editor-novel-kernel/contracts'],
+    },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },
 ])

@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { NOVEL_KNOWLEDGE_TOOL_NAME } from './contracts.ts'
 
-export const NOVEL_KNOWLEDGE_TOOL_NAME = 'novel_knowledge'
+export { NOVEL_KNOWLEDGE_TOOL_NAME } from './contracts.ts'
 export const NOVEL_KNOWLEDGE_VERSION = 1
 export const NOVEL_KNOWLEDGE_MAX_TOPICS = 3
 export const NOVEL_KNOWLEDGE_MAX_CARD_CHARS = 6_000

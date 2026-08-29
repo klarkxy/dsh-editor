@@ -1,52 +1,14 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { isNovelKnowledgeArguments, NOVEL_KNOWLEDGE_TOOL_NAME } from './novel-knowledge.ts'
+import { isNovelKnowledgeArguments } from './novel-knowledge.ts'
+import {
+  NOVEL_KNOWLEDGE_TOOL_NAME,
+  PROPOSAL_MARKER,
+  PROPOSAL_TOOL_NAME,
+  proposalMarker,
+  type ProposalMarker,
+} from './contracts.ts'
 
-export const PROPOSAL_TOOL_NAME = 'novel_propose'
-export const PROPOSAL_MARKER = 'dsh-editor.proposal'
-
-export type ProposalMarker = {
-  marker: typeof PROPOSAL_MARKER
-  version: 1
-  kind: 'edit' | 'create'
-  path: string
-  summary: string
-  oldText?: string
-  newText?: string
-  text?: string
-}
-
-function cleanString(value: unknown): string {
-  return typeof value === 'string' ? value : ''
-}
-
-function aliasedString(args: Record<string, unknown>, names: string[]): string {
-  for (const name of names) {
-    if (typeof args[name] === 'string') return args[name]
-  }
-  return ''
-}
-
-export function proposalMarker(args: Record<string, unknown>): ProposalMarker {
-  const kind = cleanString(args.kind)
-  const path = cleanString(args.path).replace(/\\/g, '/')
-  const summary = cleanString(args.summary).trim()
-  if ((kind !== 'edit' && kind !== 'create') || !path || !summary) throw new Error('kind, path and summary are required')
-  if (path.startsWith('/') || /^[a-z]:/i.test(path) || path.split('/').includes('..') || !/\.md$/i.test(path)) {
-    throw new Error('path must be a project-relative Markdown file')
-  }
-  if (kind === 'edit') {
-    // Some OpenAI-compatible providers translate camelCase tool parameters to
-    // snake_case. Normalize the two common edit aliases at the tool boundary so
-    // the proposal remains preview-only and is still validated canonically.
-    const oldText = aliasedString(args, ['oldText', 'old_text', 'old_string'])
-    const newText = aliasedString(args, ['newText', 'new_text', 'new_string'])
-    if (!oldText || oldText === newText) throw new Error('edit requires different oldText and newText')
-    return { marker: PROPOSAL_MARKER, version: 1, kind, path, summary, oldText, newText }
-  }
-  const text = cleanString(args.text)
-  if (!text) throw new Error('create requires text')
-  return { marker: PROPOSAL_MARKER, version: 1, kind, path, summary, text }
-}
+export { PROPOSAL_MARKER, PROPOSAL_TOOL_NAME, proposalMarker, type ProposalMarker } from './contracts.ts'
 
 export function createProposalTool() {
   return defineTool({

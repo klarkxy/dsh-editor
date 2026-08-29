@@ -48,10 +48,10 @@ for (const key of ['node', 'dsh', 'profile']) {
 }
 const dsh = await json(resolve(resources, 'dsh', 'package.json'))
 if (dsh.name !== '@deepseek-ai/dsh' || dsh.version !== '0.1.1-rc.2') throw new Error('packaged DSH identity mismatch')
-for (const packageName of ['dsh-editor-shell', 'dsh-manuscript']) {
+for (const packageName of ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-editor-shell']) {
   await stat(resolve(resources, 'profile-template', 'node_modules', packageName, 'package.json'))
 }
-const knowledgeRoot = resolve(resources, 'profile-template', 'node_modules', 'dsh-editor-shell', 'resources', 'novel-knowledge')
+const knowledgeRoot = resolve(resources, 'profile-template', 'node_modules', 'dsh-editor-novel-kernel', 'resources', 'novel-knowledge')
 for (const fileName of [
   'planning.md', 'characters.md', 'drafting.md', 'dialogue.md', 'interiority.md',
   'style.md', 'review.md', 'chinese-flow.md', 'first-reader.md', 'canon.md', 'SOURCES.md',

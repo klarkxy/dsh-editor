@@ -5,8 +5,8 @@ import {
   type ProjectContextReadResult,
   type WorldbookCandidate,
   type WorldbookScanSummary,
-} from '../../../dsh-editor-shell/src/project-context.ts'
-import { FileOpError, listDirStrict, readTextFile, readTextFileLimited, type WorkspaceFileContext } from './files.ts'
+} from './contracts.ts'
+import { FileOpError, listDirStrict, readTextFile, readTextFileLimited, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
 
 const WORLDBOOK_ROOT = '世界书'
 const FIXED_WORLDBOOK_PATH = '世界书/设定总汇.md'

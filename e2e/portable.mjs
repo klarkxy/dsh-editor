@@ -119,8 +119,11 @@ try {
       Boolean(document.querySelector('.empty-paper, .editor')),
     ],
     permanentChat: Boolean(document.querySelector('.no-session > .chat')),
+    bootEntries: globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [],
   }))
-  if (!state.shell || state.settings || !state.editorName || state.officialHome || !state.onboarding || state.technicalChrome || state.permanentChat || state.columns.some((value) => !value)) {
+  const clientBoundaryReady = state.bootEntries.filter((entry) => entry === 'dsh-editor-shell').length === 1
+    && state.bootEntries.every((entry) => entry !== 'dsh-editor-workbench' && entry !== 'dsh-editor-novel-kernel')
+  if (!state.shell || state.settings || !state.editorName || state.officialHome || !state.onboarding || state.technicalChrome || state.permanentChat || state.columns.some((value) => !value) || !clientBoundaryReady) {
     throw new Error(`portable identity assertion failed: ${JSON.stringify(state)}`)
   }
   await window.screenshot({ path: resolve(output, 'window.png') })

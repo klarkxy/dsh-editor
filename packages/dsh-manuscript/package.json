@@ -15,6 +15,11 @@
       "import": "./lib/index.js",
       "default": "./lib/index.js"
     },
+    "./host-api": {
+      "types": "./lib/host-api.d.ts",
+      "import": "./lib/host-api.js",
+      "default": "./lib/host-api.js"
+    },
     "./client": {
       "default": "./lib/client.js"
     },
@@ -24,6 +29,11 @@
     "lib/index.js",
     "lib/index.js.map",
     "lib/index.d.ts",
+    "lib/host-api.js",
+    "lib/host-api.d.ts",
+    "lib/host-error.js",
+    "lib/host-error.js.map",
+    "lib/host-error.d.ts",
     "lib/client.js",
     "cordis.patch.yml",
     "README.md",

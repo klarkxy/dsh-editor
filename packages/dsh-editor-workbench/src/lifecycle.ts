@@ -2,9 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { WorkspaceFileContext } from './files.ts'
-import { createTextFile, FileOpError, listDirStrict, readTextFile, writeTextFile } from './files.ts'
-import { normalizeWorkspaceRelative } from './paths.ts'
+import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
 
 export const ARCHIVE_DIRECTORY = '.dsh-editor/archive'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i

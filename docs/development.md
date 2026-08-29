@@ -1,5 +1,7 @@
 # DSH Editor 开发者指南
 
+需要修改、替换或建立插件时，先阅读 [插件架构与接口](plugin-architecture.md)。
+
 ## 环境与固定版本
 
 - Windows x64
@@ -21,6 +23,8 @@ pnpm install --frozen-lockfile
 ```text
 apps/desktop/                  Electron main、profile 部署、进程监督与 portable 配置
 packages/dsh-editor-shell/     仅桌面 profile 加载的私有写作客户端
+packages/dsh-editor-workbench/ 私有项目生命周期与 context Host
+packages/dsh-editor-novel-kernel/ 私有小说 Tool、guard、prompt 与知识卡
 packages/dsh-manuscript/       Host RPC 与公开 Web 稿纸插件
 packages/dsh-grill/            Host 工具和写作 workflow
 scripts/dev.mjs                GUI-first 桌面开发入口
@@ -37,20 +41,22 @@ e2e/desktop.mjs                Playwright Electron 当前源码验收
 
 | 命令 | 作用 |
 | --- | --- |
-| `pnpm run dev` | 构建/监听三个包并启动 Electron DSH Editor |
+| `pnpm run dev` | 构建 workspace、监听四个桌面插件并启动 Electron DSH Editor |
 | `pnpm run dev:web` | 仅调试两个公开插件的 DSH Web 行为 |
 | `pnpm render:icon` | 从受版本控制的 SVG 源重新生成桌面 PNG 与 Windows ICO |
 | `pnpm typecheck` | 全 workspace 类型检查 |
 | `pnpm test` | 全部 Vitest contract/behavior 测试 |
-| `pnpm build` | 构建桌面 main、私有 shell 与两个公开插件 |
+| `pnpm build` | 构建桌面 main、三个私有插件与两个公开插件 |
 | `pnpm test:e2e:desktop` | 驱动真实 Electron 当前源码窗口 |
+| `pnpm test:e2e:workbench` | 驱动真实 DSH Host 与浏览器完成工作区生命周期 |
+| `pnpm test:e2e:missing-private` | 隔离移除每个必需私有 Host 包并确认 DSH 启动失败 |
 | `pnpm prepare:desktop-runtime` | 物化并哈希 Node、DSH、profile 与包闭包 |
 | `pnpm test:e2e:portable` | 真正启动 portable 外层 EXE，检查双栏 GUI、退出码与端口清理 |
 | `pnpm pack:desktop` | 生成未签名 Windows x64 portable EXE |
 | `pnpm pack:plugins` | 生成两个公开插件 tarball |
 | `pnpm test:e2e:matrix` | 公开插件 fresh-home 安装/卸载矩阵 |
 | `pnpm verify:desktop` | 桌面 typecheck、unit、build、E2E |
-| `pnpm verify:delivery` | 桌面验证加公开插件打包/矩阵 |
+| `pnpm verify:delivery` | 桌面验证、公开插件矩阵、缺包负向 smoke、桌面打包和 portable E2E |
 
 ## `pnpm run dev`
 
@@ -58,9 +64,9 @@ e2e/desktop.mjs                Playwright Electron 当前源码验收
 
 1. 验证 Windows x64、Node 和 DSH 精确版本；
 2. 将 DSH 依赖闭包物化到 `.dev/desktop-dsh-runtime`；
-3. 将 `dsh-editor-shell` 与 `dsh-manuscript` 物化到 `.dev/desktop-profile-template/node_modules`；
+3. 将 manuscript、workbench、novel-kernel、shell 物化到 `.dev/desktop-profile-template/node_modules`；
 4. 使用 `.dev/desktop-home`；
-5. 启动三个 watcher 和 Electron；
+5. 启动四个桌面插件 watcher 和 Electron；
 6. Electron 部署带 owner marker 的 `profiles/dsh-editor`；
 7. 以 `127.0.0.1:0 --no-open` 启动 DSH 并加载返回的同源 URL。
 
@@ -68,7 +74,7 @@ e2e/desktop.mjs                Playwright Electron 当前源码验收
 
 `DSH_DESKTOP_PREPARE_ONLY=1` 只做构建和开发资源准备，供诊断使用。
 
-## 三个包的职责
+## 插件包职责
 
 ### `dsh-editor-shell`
 
@@ -77,6 +83,18 @@ e2e/desktop.mjs                Playwright Electron 当前源码验收
 - 通过 root slot `priority: -100` 遮蔽官方 priority 0 AppFrame；最低 priority 渲染。该行为与 rc.2 root 类型声明中的普通插件指导相冲突，只允许在固定 `0.1.1-rc.2`、私有 `dsh-editor` profile 和完整 E2E 闸门下使用；它是明确的升级阻断点。
 - 客户端只注入 runtime、connection、sessions、workspaces 和 slots。
 - `DshChatPort` 只投影单一 `ConversationSnapshot`，不 `connection.start()`、不持久化 Chat。
+
+### `dsh-editor-workbench`
+
+- Host-only 私有包，独占 `/dsh-editor-workbench`。
+- 负责项目结构、context、导入、快照、移动与归档；复用 `dsh-manuscript/host-api` 的同一 workspace authority。
+- `./contracts` 只含 browser-safe channel、类型、解析器与纯函数，并由 Shell client 构建内联。
+
+### `dsh-editor-novel-kernel`
+
+- Host-only 私有包，独占 `novel_knowledge`、`novel_propose`、guard 与 `dsh-editor:novel-kernel` prompt。
+- Tool 只返回知识或预览提案，正文写入仍由 Shell 展示并经 `/manuscript proposal.prepare/apply` 完成。
+- `./contracts` 只含工具名、proposal marker 类型和严格解析器。
 
 ### `dsh-manuscript`
 
@@ -132,7 +150,7 @@ pnpm pack:desktop
 
 - `node-24.16.0/node.exe`；
 - 完整、dereference 后的 DSH `0.1.1-rc.2` 依赖闭包；
-- 三个当前构建包；
+- manuscript、workbench、novel-kernel、shell 四个当前构建包；
 - 含私有依赖的 profile 模板；
 - `manifest.json` 中的文件数、字节数与 tree SHA-256。
 

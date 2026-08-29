@@ -13,6 +13,11 @@ const expectedEntries = {
     'package/README.md',
     'package/cordis.patch.yml',
     'package/lib/client.js',
+    'package/lib/host-api.d.ts',
+    'package/lib/host-api.js',
+    'package/lib/host-error.d.ts',
+    'package/lib/host-error.js',
+    'package/lib/host-error.js.map',
     'package/lib/index.d.ts',
     'package/lib/index.js',
     'package/lib/index.js.map',
@@ -84,11 +89,31 @@ for (const name of packageNames) {
 
   const codeEntries = entries.filter((entry) => /package\/lib\/.*\.js$/.test(entry))
   const code = codeEntries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
-  const forbidden = name === 'dsh-manuscript'
-    ? ['dsh-grill', 'node:fs', 'proposal.list', 'proposal.accept', 'proposal.reject']
+  const runtimeForbidden = name === 'dsh-manuscript'
+    ? [
+        'dsh-grill',
+        'proposal.list',
+        'proposal.accept',
+        'proposal.reject',
+      ]
     : ['dsh-manuscript', 'proposal.list', 'proposal.accept', 'proposal.reject']
-  for (const token of forbidden) {
+  for (const token of runtimeForbidden) {
     if (code.includes(token)) throw new Error(`${name} packed code contains forbidden coupling: ${token}`)
+  }
+  if (name === 'dsh-manuscript') {
+    const archiveText = entries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
+    const archiveForbidden = [
+      'dsh-editor-workbench',
+      'dsh-editor-novel-kernel',
+      '/dsh-editor-workbench',
+      'novel_knowledge',
+      'novel_propose',
+      'novel-knowledge',
+      'node:fs',
+    ]
+    for (const token of archiveForbidden) {
+      if (archiveText.includes(token)) throw new Error(`${name} tarball contains private implementation token: ${token}`)
+    }
   }
 
   const bytes = fs.readFileSync(absolute)

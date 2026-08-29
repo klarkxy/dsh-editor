@@ -1,5 +1,117 @@
 import { AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from './author-preferences.ts'
 
+export { AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from './author-preferences.ts'
+
+/** Loopback-only Host RPC channel for desktop workspace lifecycle operations. */
+export const WORKBENCH_RPC_CHANNEL = '/dsh-editor-workbench'
+
+export type WorkbenchEndpoint =
+  | 'project.init'
+  | 'project.prepareIndex'
+  | 'structure.groupCreate'
+  | 'context.compile'
+  | 'project.importProbe'
+  | 'project.importApply'
+  | 'project.importCleanup'
+  | 'snapshot.list'
+  | 'snapshot.create'
+  | 'snapshot.restoreProbe'
+  | 'snapshot.restoreApply'
+  | 'snapshot.restoreCleanup'
+  | 'file.rename'
+  | 'file.moveManuscript'
+  | 'archive.list'
+  | 'archive.apply'
+  | 'archive.restore'
+
+export type ProjectInitResponse = { created: string[]; skipped: string[] }
+export type WorkbenchPathResponse = { path: string; version?: string }
+export type ImportProbeResponse = {
+  state: 'none' | 'ready' | 'blocked' | 'recoverable' | 'complete'
+  token?: string
+  receiptId?: string
+  files: number
+  bytes: number
+  skipped: Array<{ path: string; reason: 'hidden' | 'symlink' | 'other' | 'nonText' }>
+  preview: string[]
+  message?: string
+}
+export type SnapshotResponse = { snapshotId: string; label?: string; createdAt: string; files: number; bytes: number; excluded: number }
+export type RestoreProbeResponse = {
+  state: 'none' | 'ready' | 'blocked' | 'recoverable' | 'complete'
+  token?: string
+  receiptId?: string
+  snapshotId?: string
+  files: number
+  bytes: number
+  excluded: Array<{ path: string; reason: 'hidden' | 'generated' | 'other' }>
+  preview: string[]
+  message?: string
+}
+export type ArchiveResponse = {
+  archiveId: string
+  path: string
+  createdAt: string
+  bytes: number
+  state: 'archived' | 'pending-archive' | 'pending-restore' | 'restored' | 'blocked'
+  version?: string
+  message?: string
+}
+export type ArchiveListResponse = { items: ArchiveResponse[]; invalid: number }
+
+export type WorkbenchRequestMap = {
+  'project.init': { sessionId: string; newProject: boolean }
+  'project.prepareIndex': { sessionId: string }
+  'structure.groupCreate': { sessionId: string; path: string }
+  'context.compile': { sessionId: string; userRequest: string; activePath?: string; authorPreferences?: string }
+  'project.importProbe': { targetSessionId: string; sourceSessionId?: string }
+  'project.importApply': { targetSessionId: string; sourceSessionId: string; probeToken: string }
+  'project.importCleanup': { targetSessionId: string; receiptId: string }
+  'snapshot.list': { sessionId: string }
+  'snapshot.create': { sessionId: string; label?: string }
+  'snapshot.restoreProbe': { targetSessionId: string; sourceSessionId?: string; snapshotId?: string }
+  'snapshot.restoreApply': { targetSessionId: string; sourceSessionId: string; snapshotId: string; token: string }
+  'snapshot.restoreCleanup': { targetSessionId: string; receiptId: string }
+  'file.rename': { sessionId: string; path: string; newName: string; expectedVersion: string }
+  'file.moveManuscript': { sessionId: string; path: string; targetDirectory: string; expectedVersion: string }
+  'archive.list': { sessionId: string }
+  'archive.apply': { sessionId: string; path?: string; expectedVersion?: string; archiveId?: string }
+  'archive.restore': { sessionId: string; archiveId: string; expectedVersion?: string }
+}
+
+export type WorkbenchResponseMap = {
+  'project.init': ProjectInitResponse
+  'project.prepareIndex': ProjectInitResponse
+  'structure.groupCreate': WorkbenchPathResponse
+  'context.compile': ProjectContextCompilation
+  'project.importProbe': ImportProbeResponse
+  'project.importApply': { imported: number; skipped: number }
+  'project.importCleanup': { removed: number }
+  'snapshot.list': SnapshotResponse[]
+  'snapshot.create': SnapshotResponse
+  'snapshot.restoreProbe': RestoreProbeResponse
+  'snapshot.restoreApply': { restored: number; skipped: number; complete: true }
+  'snapshot.restoreCleanup': { removed: number }
+  'file.rename': Required<WorkbenchPathResponse>
+  'file.moveManuscript': Required<WorkbenchPathResponse>
+  'archive.list': ArchiveListResponse
+  'archive.apply': ArchiveResponse
+  'archive.restore': ArchiveResponse
+}
+
+export type WorkbenchRpcIssue = { code: 'custom'; path: string[]; message: string }
+export type WorkbenchRpcError =
+  | { code: 'bad-request'; message: string; details: { issues: WorkbenchRpcIssue[] } }
+  | { code: 'cancelled'; message: string; details: Record<string, never> }
+  | { code: 'session-not-found'; message: string; details: { sessionId: string } }
+  | { code: 'workspace-attach-failed'; message: string; details: { sessionId: string; workspaceId: string } }
+  | { code: 'workspace-not-found'; message: string; details: { workspaceId: string } }
+  | { code: 'workspace-invalid-path'; message: string; details: { path: string } }
+  | { code: 'directory-unreadable'; message: string; details: { path: string } }
+  | { code: 'directory-exists'; message: string; details: { path: string } }
+  | { code: 'internal'; message: string; details: Record<string, never> }
+export type WorkbenchRpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: WorkbenchRpcError }
+
 export const PROJECT_CONTEXT_SCHEMA = 'dsh-editor.project-context'
 export const PROJECT_CONTEXT_VERSION = 1
 export const PROJECT_CONTEXT_CURRENT_VERSION = 2

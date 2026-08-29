@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createMemoryContext } from './test-helpers.ts'
 import { compileContext } from './context.ts'
-import { parseProjectContextEnvelope } from '../../../dsh-editor-shell/src/project-context.ts'
+import { parseProjectContextEnvelope } from './contracts.ts'
 
 const fixed = {
   '项目总览.md': '项目',

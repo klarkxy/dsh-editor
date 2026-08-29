@@ -71,7 +71,7 @@ describe('shell manuscript RPC safety', () => {
   it('folds a rejected tree request into a renderable Host failure', async () => {
     await expect(safeRpcCall(async () => { throw new Error('invalid wire result') })).resolves.toEqual({
       ok: false,
-      error: { code: 'internal', message: 'invalid wire result' },
+      error: { code: 'internal', message: 'invalid wire result', details: {} },
     })
   })
 
