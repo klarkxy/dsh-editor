@@ -60,6 +60,7 @@ import { documentTemplate, nextChapterPath, nextDocumentPath, sortChapterPaths, 
 import { WORKBENCH_RPC_CHANNEL } from './workbench-rpc.ts'
 import type { ProposalMarker } from './proposal-tool.ts'
 import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
+import { ConversationRenameQueue, conversationRows, nextAutomaticConversationTitle, shouldConfirmConversationSwitch } from './conversation-lifecycle.ts'
 import {
   blocksWorkspaceOpen,
   idleSnapshotFlow,
@@ -87,6 +88,7 @@ const SIDEBAR_DEFAULT = 248
 const SIDEBAR_MIN = 196
 const SIDEBAR_MAX = 420
 const ASSISTANT_DEFAULT = 384
+const conversationRenameQueue = new ConversationRenameQueue()
 const ASSISTANT_MIN = 300
 const ASSISTANT_MAX = 560
 
@@ -959,10 +961,12 @@ function NewConversationPicker(props: {
   ctx: ShellContext
   session: SessionFace
   workspaceId?: WorkspaceId
+  canStart(): boolean
+  onOpen(sessionId: SessionId): void
   onClose(): void
   onConfigure(): void
 }) {
-  const { ctx, session, workspaceId, onClose, onConfigure } = props
+  const { ctx, session, workspaceId, canStart, onOpen, onClose, onConfigure } = props
   const [models, setModels] = useState<SessionModels | null>(null)
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
@@ -986,12 +990,13 @@ function NewConversationPicker(props: {
     event.preventDefault()
     const [provider, model] = value.split('\0')
     if (!workspaceId || !provider || !model) return
+    if (!canStart()) return
     setBusy(true); setNote('')
     try {
       const sessionId = await ctx.workspaces.connectWorkspace(workspaceId)
       const selected = await selectModel(ctx.connection, sessionId, provider, model)
       if (!selected.ok) throw new Error(selected.error.message)
-      ctx.sessions.open(sessionId)
+      onOpen(sessionId)
       onClose()
     } catch {
       setNote('新对话未建立')
@@ -1253,15 +1258,65 @@ function SnapshotDialog(props: {
   )
 }
 
-function Chat({ ctx, session, workspaceId, onClose, onConfigure, onApplied }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; onClose(): void; onConfigure(): void; onApplied(path: string): void }) {
+function Chat({ ctx, session, workspaceId, hidden, onClose, onConfigure, onApplied, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const snapshot = useObservable<ConversationSnapshot>(session)
+  const sessionList = useObservable(ctx.sessions.list)
+  const workspaceList = useObservable(ctx.workspaces.list)
   const connected = useObservable(ctx.connection.hostDescription)
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
   const [outgoing, setOutgoing] = useState<{ text: string; state: 'sending' | 'accepted' | 'failed'; afterRows: number; projectContextReceipt?: ProjectContextReceipt[] } | null>(null)
   const [creatingConversation, setCreatingConversation] = useState(false)
+  const titleAttempted = useRef(new Set<string>())
   const partial = partialText(snapshot)
   const rows = chatRows(snapshot)
+  const workspace = workspaceList.items.find((item) => item.workspaceId === workspaceId)
+  const sessionIds = sessionList.ids.filter((id) => workspace?.sessionIds.includes(id))
+  const conversations = conversationRows({
+    workspaceSessionIds: sessionIds.length ? sessionIds : [session.sessionId],
+    archivedIds: workspaceList.archivedSessionIds,
+    reusableBlankIds: Object.values(sessionList.byId ?? {}).filter((item) => item.blank).map((item) => item.id),
+    currentId: session.sessionId,
+    titles: Object.fromEntries(Object.entries(sessionList.byId ?? {}).map(([id, value]) => [id, value.displayTitle])),
+  })
+  const queueConversationRename = (title: string, failureNote: string) => {
+    void conversationRenameQueue.enqueue(session.sessionId, async () => {
+      try {
+        const result = await session.rename(title)
+        if (!result.ok) setNote(failureNote)
+      } catch {
+        setNote(failureNote)
+      }
+    })
+  }
+  useEffect(() => {
+    const currentTitle = sessionList.byId?.[session.sessionId]?.title?.trim()
+    const title = nextAutomaticConversationTitle({
+      durableTitle: currentTitle,
+      assistantReplies: rows.filter((row) => row.role === 'assistant').map((row) => row.text),
+      attempted: titleAttempted.current.has(session.sessionId),
+    })
+    if (!title) return
+    titleAttempted.current.add(session.sessionId)
+    queueConversationRename(title, '对话名称没有自动保存，可以手动重命名。')
+  }, [rows, session.sessionId, sessionList.byId])
+  useEffect(() => { onDraftDirtyChange(Boolean(draft.trim())) }, [draft, onDraftDirtyChange])
+  const canDiscardDraft = (nextId: string) => !shouldConfirmConversationSwitch(draft, nextId, session.sessionId)
+    || Boolean(globalThis.confirm?.('未发送的消息将不会带到新对话，继续切换？'))
+  const openConversation = (nextId: SessionId) => {
+    setDraft(''); setNote(''); setOutgoing(null); onDraftDirtyChange(false); ctx.sessions.open(nextId)
+  }
+  const switchConversation = (nextId: string) => {
+    if (!canDiscardDraft(nextId)) return
+    openConversation(nextId as SessionId)
+  }
+  const renameConversation = () => {
+    const title = globalThis.prompt?.('对话名称', sessionList.byId?.[session.sessionId]?.title ?? '')?.trim()
+    if (!title) return
+    titleAttempted.current.add(session.sessionId)
+    setNote('')
+    queueConversationRename(title, '对话名称没有保存，请重试。')
+  }
   const outgoingIsCanonical = Boolean(outgoing && rows.slice(outgoing.afterRows)
     .some((row) => row.role === 'user' && row.text.trim() === outgoing.text))
   const composerCanSubmit = canSubmitComposer({
@@ -1296,16 +1351,26 @@ function Chat({ ctx, session, workspaceId, onClose, onConfigure, onApplied }: { 
       setNote('消息没有发送成功，请重试。')
     })
   }
-  return e('aside', { className: 'chat', 'aria-label': '写作助手' },
+  return e('aside', { className: 'chat', 'aria-label': '写作助手', hidden },
     e('header', { className: 'chat-header' },
       e('strong', null, connected ? '搭档' : '重连中'),
+      e('label', { className: 'conversation-select' }, e('span', { className: 'sr-only' }, '切换对话'), e('select', { value: session.sessionId, 'aria-label': '切换对话', onChange: (event: ChangeEvent<HTMLSelectElement>) => switchConversation(event.target.value) }, conversations.map((item) => e('option', { key: item.id, value: item.id }, item.title)))),
       e('div', { className: 'chat-controls' }, e(ModelIndicator, { ctx, session, onConfigure })),
       e('div', { className: 'chat-header-actions' },
         e('button', { className: 'icon-button', type: 'button', title: '新对话', 'aria-label': '新对话', onClick: () => setCreatingConversation(true) }, '＋'),
+        e('button', { className: 'icon-button', type: 'button', title: '重命名对话', 'aria-label': '重命名对话', onClick: renameConversation }, '✎'),
         e('button', { className: 'icon-button', type: 'button', title: '收起搭档', 'aria-label': '收起搭档', onClick: onClose }, '×'),
       ),
     ),
-    creatingConversation ? e(NewConversationPicker, { ctx, session, workspaceId, onClose: () => setCreatingConversation(false), onConfigure }) : null,
+    creatingConversation ? e(NewConversationPicker, {
+      ctx,
+      session,
+      workspaceId,
+      canStart: () => canDiscardDraft('__new-conversation__'),
+      onOpen: openConversation,
+      onClose: () => setCreatingConversation(false),
+      onConfigure,
+    }) : null,
     e('div', { className: 'chat-history' },
       snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? '加载中…' : '加载更早消息') : null,
       rows.map((row) => row.proposal
@@ -1456,6 +1521,14 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
+  const [assistantDraftDirty, setAssistantDraftDirty] = useState(false)
+  const canLeaveAssistantDraft = () => !assistantDraftDirty
+    || Boolean(globalThis.confirm?.('写作搭档中还有未发送的消息，离开后不会保留。继续？'))
+  const openSettings = () => {
+    if (!canLeaveAssistantDraft()) return
+    setAssistantDraftDirty(false)
+    setView('settings')
+  }
   const [focusMode, setFocusMode] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [chatFocusNonce, setChatFocusNonce] = useState(0)
@@ -1561,7 +1634,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       if (!action || event.repeat) return
       if (action !== 'settings' && (!session || view !== 'workspace')) return
       event.preventDefault()
-      if (action === 'settings') { setView('settings'); return }
+      if (action === 'settings') { openSettings(); return }
       if (action === 'toggle-sidebar') {
         if (focusMode) { setFocusMode(false); setSidebarOpen(true) } else setSidebarOpen((value) => !value)
         return
@@ -1584,7 +1657,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [editorDirty, focusMode, session?.sessionId, shortcutsOpen, view])
+  }, [assistantDraftDirty, editorDirty, focusMode, session?.sessionId, shortcutsOpen, view])
   useEffect(() => {
     if (!chatFocusNonce || !assistantOpen || focusMode) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
@@ -2127,6 +2200,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
   }
   const applySnapshotRestore = async () => {
     if (snapshotFlow.kind !== 'review') return
+    if (!canLeaveAssistantDraft()) return
+    setAssistantDraftDirty(false)
     const flow = snapshotFlow
     setSnapshotBusy(true)
     setSnapshotFlow({ kind: 'working', message: '正在恢复新的作品副本…' })
@@ -2309,7 +2384,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
           e('strong', null, 'DSH'),
         ),
         e('span', { className: 'local-state' }, e('i', { 'aria-hidden': 'true' }), '本地'),
-        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: () => setView('settings') }, '⌁'),
+        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: openSettings }, '⌁'),
       ),
       e('aside', { className: 'sidebar', 'aria-label': '工作区与稿件' },
         e('div', { className: 'side-title' }, e('span', null, '文件')),
@@ -2404,6 +2479,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
         'aria-label': '返回作品列表',
         onClick: () => {
           if (editorDirty) { setWorkbenchNote('请先保存当前文档，再返回作品列表。'); return }
+          if (!canLeaveAssistantDraft()) return
+          setAssistantDraftDirty(false)
           setAssistantOpen(false)
           setFocusMode(false)
           ctx.sessions.clear()
@@ -2414,7 +2491,13 @@ function Root({ ctx }: { ctx: ShellContext }) {
         value: currentWorkspace?.workspaceId ?? '',
         onChange: (event: ChangeEvent<HTMLSelectElement>) => {
           const id = event.target.value as WorkspaceId
-          if (id) void connectAndInitialize(id, false).catch(() => setExportNote('工作区没有打开，请重试。'))
+          if (!id || id === currentWorkspace?.workspaceId) return
+          if (!canLeaveAssistantDraft()) {
+            event.currentTarget.value = currentWorkspace?.workspaceId ?? ''
+            return
+          }
+          setAssistantDraftDirty(false)
+          void connectAndInitialize(id, false).catch(() => setExportNote('工作区没有打开，请重试。'))
         },
       }, workspaces.items.map((workspace) => e('option', { key: workspace.workspaceId, value: workspace.workspaceId }, workspace.title || workspace.path)))),
       currentWorkspace ? e('button', { className: 'workspace-current-manage icon-button', type: 'button', 'aria-label': '管理当前作品', title: '修改作品显示名', onClick: () => openWorkspaceManage(currentWorkspace, false) }, '···') : null,
@@ -2456,7 +2539,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         snapshotNote ? e('span', { role: /没有|请先|失败|未/.test(snapshotNote) ? 'alert' : 'status' }, snapshotNote) : null,
         exportNote ? e('span', { role: /无法|失败|为空/.test(exportNote) ? 'alert' : 'status' }, exportNote) : null,
         e('button', { className: 'settings-link icon-button', type: 'button', title: '键盘快捷键', 'aria-label': '键盘快捷键', onClick: openShortcuts }, '?'),
-        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: () => setView('settings') }, '⌁'),
+        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: openSettings }, '⌁'),
       ),
     ),
     sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
@@ -2528,17 +2611,21 @@ function Root({ ctx }: { ctx: ShellContext }) {
       label: '调整写作搭档宽度',
       onChange: setAssistantWidth,
     }) : null,
-    assistantVisible ? e(Chat, {
+    e(Chat, {
+      key: session.sessionId,
       ctx,
       session,
       workspaceId: currentWorkspace?.workspaceId,
+      hidden: !assistantVisible,
       onClose: () => setAssistantOpen(false),
-      onConfigure: () => setView('settings'),
+      onConfigure: openSettings,
+      onDraftDirtyChange: setAssistantDraftDirty,
       onApplied: (appliedPath: string) => {
         setTreeRevision((old) => old + 1)
         if (appliedPath === path) setContentRevision((old) => old + 1)
       },
-    }) : !focusMode ? e('button', {
+    }),
+    !assistantVisible && !focusMode ? e('button', {
       className: 'assistant-launcher',
       type: 'button',
       'aria-label': '打开写作搭档',
@@ -2597,11 +2684,11 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .brand-mark{animation:mark-arrive 620ms 120ms var(--ease) both}.brand-mark:hover{transform:rotate(7deg) scale(1.08)!important}.empty-paper-mark{display:block;color:#72927e;font-size:34px;animation:mark-float 3s ease-in-out infinite}.empty-paper h1{margin:0}.empty-paper>button{margin-inline:auto}
 @keyframes bar-drop{from{opacity:0;transform:translateY(-100%)}to{opacity:1;transform:none}}@keyframes panel-left{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}@keyframes panel-right{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}@keyframes panel-rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}@keyframes message-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}@keyframes menu-pop{from{opacity:0;transform:translateY(-5px) scale(.96)}to{opacity:1;transform:none}}@keyframes conversation-in{from{opacity:0;transform:translateY(-8px) scale(.96);transform-origin:top right}to{opacity:1;transform:none}}@keyframes signal{60%,100%{box-shadow:0 0 0 10px #4c8a6800}}@keyframes dots{0%{width:0}100%{width:1.5em}}@keyframes index-breathe{50%{border-left-color:#9db7a2;background:#f5f2e6}}@keyframes orbit-drift{50%{transform:translate(28px,18px) rotate(35deg)}}@keyframes blob-drift{to{transform:translate(-36px,-22px) scale(1.18);border-radius:38% 62% 54% 46%}}@keyframes settings-pop{from{opacity:0;transform:translateY(24px) rotate(.8deg) scale(.97)}to{opacity:1;transform:none}}@keyframes field-in{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}@keyframes mark-arrive{from{opacity:0;transform:rotate(-18deg) scale(.6)}to{opacity:1;transform:rotate(-2deg) scale(1)}}@keyframes mark-float{50%{transform:translateY(-7px) rotate(5deg)}}
 @media(prefers-reduced-motion:reduce){.chrome,.shell>.sidebar,.shell>.editor,.shell>.empty-paper,.shell>.chat,.chat-row,.pending-card,.conversation-setup,.model-panel,.model-panel>label,.provider-tabs,.brand-mark,.empty-paper-mark,.settings-view::before,.settings-view::after,.local-state i,.live-dot,.index-status{animation:none!important}.paper-input:focus,.tree-row:hover,.icon-button:hover,.model-panel .primary-action:hover{transform:none!important}}
-.shell:not(.no-session){grid-template-columns:248px minmax(0,1fr)}.chat{position:fixed;z-index:10;inset:52px 0 0 auto;width:min(404px,calc(100vw - 280px));grid-column:auto;border:1px solid #d8d0bf;border-right:0;border-bottom:0;border-radius:22px 0 0 0;box-shadow:-24px 0 64px #4d41261f;overflow:hidden}.chat-header{align-items:center}.chat-header-actions{display:flex;gap:4px}.assistant-launcher{position:fixed;z-index:9;right:24px;bottom:24px;display:flex;align-items:center;gap:9px;padding:10px 15px 10px 10px;border:1px solid #95a89a;border-radius:22px 7px 22px 22px;background:#fffdf6ef;color:#244f3c;box-shadow:0 16px 42px #4d412626;backdrop-filter:blur(14px);cursor:pointer;animation:launcher-in 420ms var(--ease) both}.assistant-launcher span{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#dce9dd;font-size:17px;animation:mark-float 3s ease-in-out infinite}.assistant-launcher strong{font-size:13px}.assistant-launcher:hover{transform:translateY(-5px) rotate(-1deg);box-shadow:0 22px 50px #4d412633}.model-panel>label>span,.provider-tabs legend{color:#42594c!important;font-weight:500}.model-panel input[type=password],.model-panel input:not([type]){color:#2e4438!important}.model-panel input::placeholder{color:#7d857e!important;opacity:1}@keyframes launcher-in{from{opacity:0;transform:translateY(12px) scale(.9)}to{opacity:1;transform:none}}@media(max-width:1320px){.shell:not(.no-session){grid-template-columns:216px minmax(0,1fr)}}@media(prefers-reduced-motion:reduce){.assistant-launcher,.assistant-launcher span{animation:none!important}.assistant-launcher:hover{transform:none!important}}
+.shell:not(.no-session){grid-template-columns:248px minmax(0,1fr)}.chat{position:fixed;z-index:10;inset:52px 0 0 auto;width:min(404px,calc(100vw - 280px));grid-column:auto;border:1px solid #d8d0bf;border-right:0;border-bottom:0;border-radius:22px 0 0 0;box-shadow:-24px 0 64px #4d41261f;overflow:hidden}.chat-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center}.conversation-select{grid-column:2;grid-row:1;min-width:0}.conversation-select select{box-sizing:border-box;width:100%;min-width:84px;max-width:none;padding:4px 22px 4px 7px;border:1px solid #d6d0c2;border-radius:4px;background:#fffdf7;color:#315640;text-overflow:ellipsis}.chat-controls{grid-column:1/-1;grid-row:2}.chat-controls .compact-control{min-width:0}.chat-controls .model-indicator{max-width:280px}.chat-header-actions{grid-column:3;grid-row:1;display:flex;gap:4px}.assistant-launcher{position:fixed;z-index:9;right:24px;bottom:24px;display:flex;align-items:center;gap:9px;padding:10px 15px 10px 10px;border:1px solid #95a89a;border-radius:22px 7px 22px 22px;background:#fffdf6ef;color:#244f3c;box-shadow:0 16px 42px #4d412626;backdrop-filter:blur(14px);cursor:pointer;animation:launcher-in 420ms var(--ease) both}.assistant-launcher span{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#dce9dd;font-size:17px;animation:mark-float 3s ease-in-out infinite}.assistant-launcher strong{font-size:13px}.assistant-launcher:hover{transform:translateY(-5px) rotate(-1deg);box-shadow:0 22px 50px #4d412633}.model-panel>label>span,.provider-tabs legend{color:#42594c!important;font-weight:500}.model-panel input[type=password],.model-panel input:not([type]){color:#2e4438!important}.model-panel input::placeholder{color:#7d857e!important;opacity:1}@keyframes launcher-in{from{opacity:0;transform:translateY(12px) scale(.9)}to{opacity:1;transform:none}}@media(max-width:1320px){.shell:not(.no-session){grid-template-columns:216px minmax(0,1fr)}}@media(prefers-reduced-motion:reduce){.assistant-launcher,.assistant-launcher span{animation:none!important}.assistant-launcher:hover{transform:none!important}}
 .model-indicator{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#647268}
 .project-context-receipt{margin-top:7px;color:#637269;font-size:11px}.project-context-receipt summary{cursor:pointer}.project-context-receipt ul{display:grid;gap:3px;margin:6px 0 0;padding-left:16px}.project-context-receipt code{font-size:10px;color:#466354}
 .import-overlay{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:24px;background:#1f2d2570}.import-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:14px;padding:24px;border:1px solid #d8cfbd;border-radius:16px 4px 16px 4px;background:#fffdf6;box-shadow:0 28px 80px #1c28221f}.import-dialog h2,.import-dialog p{margin:0}.import-dialog ul{max-height:170px;margin:0;overflow:auto;padding-left:20px;color:#5c6e62}.import-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.import-dialog button{padding:7px 11px;border:1px solid #b9c8ba;border-radius:4px;background:#f5f1e6;color:#2c5744;cursor:pointer}.snapshot-dialog{width:min(620px,100%)}.snapshot-list{display:grid;gap:8px;max-height:280px!important;padding:0!important;list-style:none}.snapshot-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #ded6c7;border-radius:8px;background:#faf6ec}.snapshot-list li div{display:grid;gap:3px;min-width:0}.snapshot-list li strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294938}.snapshot-list li small{color:#6b776e}
-.layout-shell{grid-template-rows:52px minmax(0,1fr);overflow:hidden}.layout-shell>.sidebar,.layout-shell>.editor,.layout-shell>.empty-paper,.layout-shell>.chat,.layout-shell>.panel-resizer{grid-column:auto;grid-row:2;min-width:0}.layout-shell>.chat{position:relative;z-index:1;inset:auto;width:auto;min-width:0;border:0;border-left:1px solid #d8d0bf;border-radius:0;box-shadow:none;overflow:hidden}.layout-shell>.editor{grid-column:auto}.layout-shell>.sidebar{grid-column:auto}.layout-controls{display:flex;align-items:center;gap:3px;padding:3px;border:1px solid #d8d0bf;border-radius:15px 5px 15px 15px;background:#f1ecdf}.layout-controls button{min-width:42px;padding:4px 8px;border:0;border-radius:11px 3px 11px 11px;background:transparent;color:#526b5d;cursor:pointer}.layout-controls button[aria-pressed=true]{background:#d8e6d8;color:#183f2f;font-weight:600}.layout-controls button:disabled{cursor:not-allowed;opacity:.45}.panel-resizer{position:relative;z-index:4;min-width:0;cursor:col-resize;touch-action:none;user-select:none;background:#e6dfd1;transition:background-color 140ms ease}.panel-resizer span{position:absolute;inset:0 2px;border-radius:4px;background:transparent}.panel-resizer:hover,.panel-resizer:focus-visible,.panel-resizer[aria-valuenow]{outline:0}.panel-resizer:hover span,.panel-resizer:focus-visible span{background:#6f927c}.layout-shell.focus-mode .paper-input{width:min(calc(100% - 64px),980px);padding-inline:clamp(52px,10vw,128px);box-shadow:0 14px 42px #4b674719}.layout-shell.focus-mode .editor-header{padding-inline:20px}.layout-shell.focus-mode .editor-tools{justify-content:center}.layout-shell.assistant-open .assistant-launcher{display:none}@media(max-width:1180px){.layout-controls button{min-width:36px;padding-inline:6px}.layout-shell .paper-input{width:calc(100% - 28px);padding-inline:34px}}@media(prefers-reduced-motion:reduce){.panel-resizer{transition:none!important}}
+.layout-shell{grid-template-rows:52px minmax(0,1fr);overflow:hidden}.layout-shell>.sidebar,.layout-shell>.editor,.layout-shell>.empty-paper,.layout-shell>.chat,.layout-shell>.panel-resizer{grid-column:auto;grid-row:2;min-width:0}.layout-shell>.chat{position:relative;z-index:1;inset:auto;width:auto;min-width:0;border:0;border-left:1px solid #d8d0bf;border-radius:0;box-shadow:none;overflow:hidden}.layout-shell>.chat[hidden]{display:none!important}.layout-shell>.editor{grid-column:auto}.layout-shell>.sidebar{grid-column:auto}.layout-controls{display:flex;align-items:center;gap:3px;padding:3px;border:1px solid #d8d0bf;border-radius:15px 5px 15px 15px;background:#f1ecdf}.layout-controls button{min-width:42px;padding:4px 8px;border:0;border-radius:11px 3px 11px 11px;background:transparent;color:#526b5d;cursor:pointer}.layout-controls button[aria-pressed=true]{background:#d8e6d8;color:#183f2f;font-weight:600}.layout-controls button:disabled{cursor:not-allowed;opacity:.45}.panel-resizer{position:relative;z-index:4;min-width:0;cursor:col-resize;touch-action:none;user-select:none;background:#e6dfd1;transition:background-color 140ms ease}.panel-resizer span{position:absolute;inset:0 2px;border-radius:4px;background:transparent}.panel-resizer:hover,.panel-resizer:focus-visible,.panel-resizer[aria-valuenow]{outline:0}.panel-resizer:hover span,.panel-resizer:focus-visible span{background:#6f927c}.layout-shell.focus-mode .paper-input{width:min(calc(100% - 64px),980px);padding-inline:clamp(52px,10vw,128px);box-shadow:0 14px 42px #4b674719}.layout-shell.focus-mode .editor-header{padding-inline:20px}.layout-shell.focus-mode .editor-tools{justify-content:center}.layout-shell.assistant-open .assistant-launcher{display:none}@media(max-width:1180px){.layout-controls button{min-width:36px;padding-inline:6px}.layout-shell .paper-input{width:calc(100% - 28px);padding-inline:34px}}@media(prefers-reduced-motion:reduce){.panel-resizer{transition:none!important}}
 `
 
 const homeStyles = `
