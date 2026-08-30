@@ -17,10 +17,13 @@ import type {
 } from '@deepseek-ai/dsh-client-connection/client'
 import { parseProposalMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
+import { stripReasoningText } from './conversation-lifecycle.ts'
+import { isNovelIndexJobPrompt } from './novel-index.ts'
 
 export { parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 
 const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge'])
+const HIDDEN_REASONING_BLOCKS = new Set(['reasoning', 'thinking', 'thought', 'analysis'])
 
 export function visibleRunningCalls<T extends { name: string }>(calls: readonly T[]): T[] {
   return calls.filter((call) => !HIDDEN_TOOL_NAMES.has(call.name))
@@ -43,14 +46,17 @@ export type PermissionProjection = {
 }
 
 export function blocksText(blocks: readonly AssistantBlock[] | readonly unknown[], depth = 0): string {
-  return blocks.map((block) => {
+  const text = blocks.map((block) => {
     if (!block || typeof block !== 'object') return String(block ?? '')
     const value = block as { kind?: string; type?: string; text?: string; name?: string; argsRaw?: string; content?: unknown[] }
-    if (value.kind === 'text' || value.kind === 'reasoning' || value.type === 'text') return value.text ?? ''
+    const blockKind = (value.kind ?? value.type ?? '').toLocaleLowerCase()
+    if (HIDDEN_REASONING_BLOCKS.has(blockKind)) return ''
+    if (value.kind === 'text' || value.type === 'text') return value.text ?? ''
     if (value.type === 'tool-result' && Array.isArray(value.content) && depth < 2) return blocksText(value.content, depth + 1)
     if (value.kind === 'tool-call') return ''
     return value.text ?? ''
   }).filter(Boolean).join('\n')
+  return stripReasoningText(text)
 }
 
 export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-result' }>): ChatRow {
@@ -74,11 +80,16 @@ function isHiddenToolResult(node: Extract<ConversationNode, { kind: 'tool-result
 
 export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
   const rows: ChatRow[] = []
+  let hidingIndexTurn = false
   for (const node of snapshot.nodes) {
-    if (node.kind === 'tool-result' && isHiddenToolResult(node)) continue
     const common = { id: `${node.kind}:${node.seq}` }
     if (node.kind === 'user' || node.kind === 'steering') {
       const text = blocksText(node.content)
+      if (isNovelIndexJobPrompt(text)) {
+        hidingIndexTurn = true
+        continue
+      }
+      hidingIndexTurn = false
       const envelope = parseProjectContextEnvelope(text)
       rows.push({
         ...common,
@@ -88,14 +99,10 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
       })
       continue
     }
+    if (hidingIndexTurn) continue
     if (node.kind === 'assistant') {
       const assistantText = blocksText(node.blocks)
-      const onlyHiddenToolCall = !assistantText && node.blocks.some((block) => {
-        if (!block || typeof block !== 'object') return false
-        const value = block as { kind?: string; name?: string }
-        return value.kind === 'tool-call' && value.name !== undefined && HIDDEN_TOOL_NAMES.has(value.name)
-      })
-      if (onlyHiddenToolCall) continue
+      if (!assistantText || isNovelIndexJobPrompt(assistantText)) continue
       rows.push({
         ...common,
         role: 'assistant',
@@ -104,17 +111,30 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
       })
       continue
     }
-    if (node.kind === 'tool-result') rows.push(toolResultRow(node))
+    if (node.kind === 'tool-result') {
+      if (isHiddenToolResult(node)) continue
+      const row = toolResultRow(node)
+      if (row.proposal) rows.push(row)
+    }
     else if (node.kind === 'turn-error') rows.push({ ...common, role: 'notice', text: '写作助手未能完成这次请求，请重试。' })
     else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: '写作助手正在重新尝试…' })
-    else if (node.kind === 'unknown') rows.push({ ...common, role: 'unknown', text: '收到一项暂时无法显示的消息。' })
-    else rows.push({ ...common, role: 'notice', text: '状态已更新。' })
   }
   return rows
 }
 
+export function internalIndexTurnActive(snapshot: ConversationSnapshot): boolean {
+  let active = false
+  for (const node of snapshot.nodes) {
+    if (node.kind === 'user' || node.kind === 'steering') active = isNovelIndexJobPrompt(blocksText(node.content))
+  }
+  return active
+}
+
 export function partialText(snapshot: ConversationSnapshot): string {
-  return snapshot.partial ? blocksText(snapshot.partial.blocks) : ''
+  if (!snapshot.partial) return ''
+  return blocksText(snapshot.partial.blocks)
+    .replace(/<t(?:h(?:i(?:n(?:k(?:\s[^>]*)?)?)?)?)?$/iu, '')
+    .trim()
 }
 
 export function pendingRows(pending: readonly PendingInteraction[]): ChatRow[] {

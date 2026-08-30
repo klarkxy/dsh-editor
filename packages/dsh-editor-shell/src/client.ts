@@ -38,6 +38,7 @@ import {
   answerApproval,
   answerQuestions,
   chatRows,
+  internalIndexTurnActive,
   loadOlder,
   partialText,
   readModels,
@@ -100,6 +101,75 @@ const ASSISTANT_DEFAULT = 384
 const conversationRenameQueue = new ConversationRenameQueue()
 const ASSISTANT_MIN = 300
 const ASSISTANT_MAX = 560
+
+export function createDialogDirectory(kind: DocumentKind | 'group', directory?: string): string {
+  if (kind === 'outline') return '大纲'
+  if (kind === 'character') return '人物卡'
+  if (kind === 'world') return '世界书'
+  return directory || '正文'
+}
+
+export function orderTreeEntries<T extends { type: 'file' | 'directory' | 'other' }>(path: string, entries: readonly T[]): T[] {
+  if (path) return [...entries]
+  return [...entries].sort((left, right) => {
+    const leftRootFile = left.type === 'file' ? 0 : 1
+    const rightRootFile = right.type === 'file' ? 0 : 1
+    return leftRootFile - rightRootFile
+  })
+}
+
+export function treeRowPadding(level: number): number {
+  return 14 + Math.max(0, level) * 14
+}
+
+export function isChapterDocumentPath(path: string): boolean {
+  return /^正文\/.+\.(?:md|txt)$/i.test(path)
+}
+
+export function treeExpansionPaths(path: string): string[] {
+  if (!path.startsWith('正文/')) return []
+  const parts = path.split('/').filter(Boolean)
+  return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('/'))
+}
+
+export function proposalAppliedNavigation(appliedPath: string, currentPath: string, editorDirty: boolean): {
+  openPath?: string
+  expandPath?: string
+  refreshContent: boolean
+} {
+  return {
+    ...(!editorDirty ? { openPath: appliedPath } : {}),
+    ...(appliedPath.startsWith('正文/') ? { expandPath: appliedPath } : {}),
+    refreshContent: !editorDirty && appliedPath === currentPath,
+  }
+}
+
+export function worldbookPaperProjection(path: string, text: string): { text: string; offset: number } {
+  if (!/^世界书\/.+\.md$/i.test(path)) return { text, offset: 0 }
+  const metadata = worldbookEditorMetadata(path, text)
+  if (!metadata.valid || !metadata.explicit) return { text, offset: 0 }
+  const bomLength = text.startsWith('\uFEFF') ? 1 : 0
+  const source = text.slice(bomLength)
+  const close = /\r?\n---(?:\r?\n|$)/g
+  close.lastIndex = source.indexOf('\n') + 1
+  const match = close.exec(source)
+  if (!match) return { text, offset: 0 }
+  const offset = bomLength + match.index + match[0].length
+  return { text: text.slice(offset), offset }
+}
+
+export function replaceWorldbookPaperText(path: string, text: string, paperText: string): string {
+  const projection = worldbookPaperProjection(path, text)
+  return projection.offset ? `${text.slice(0, projection.offset)}${paperText}` : paperText
+}
+
+export function isSuccessWorkbenchNote(note: string): boolean {
+  return /^已(?:创建|重命名为|移动到|归档|恢复)(?:\s|$)/.test(note)
+}
+
+export function searchSkippedText(skipped: number): string {
+  return skipped > 0 ? `未搜索 ${skipped} 个隐藏、生成、非文本或过大项目` : ''
+}
 
 export type AuthorFlowExample = Readonly<{
   label: string
@@ -353,12 +423,13 @@ function Tree(props: {
   ctx: ShellContext
   sessionId: string
   active: string
+  expandPath: string
   revision: number
   onOpen(path: string): void
   onManage(path: string): void
   onCreateChapter(directory: string): void
 }) {
-  const { ctx, sessionId, active, revision, onOpen, onManage, onCreateChapter } = props
+  const { ctx, sessionId, active, expandPath, revision, onOpen, onManage, onCreateChapter } = props
   const [open, setOpen] = useState<Record<string, Entry[]>>({})
   const [note, setNote] = useState('')
 
@@ -375,9 +446,10 @@ function Tree(props: {
   useEffect(() => {
     setOpen({})
     void load('')
-  }, [sessionId, revision])
+    for (const directory of treeExpansionPaths(expandPath)) void load(directory)
+  }, [sessionId, revision, expandPath])
 
-  const rows = (path: string, level: number): ReactNode[] => (open[path] ?? [])
+  const rows = (path: string, level: number): ReactNode[] => orderTreeEntries(path, open[path] ?? [])
     .filter((item) => !item.name.startsWith('.'))
     .map((item) => {
       const child = path ? `${path}/${item.name}` : item.name
@@ -385,12 +457,13 @@ function Tree(props: {
         return e('div', { key: child },
           e('div', { className: 'tree-directory-row' },
             e('button', {
-              className: 'tree-row', type: 'button', style: { paddingLeft: 14 + level * 14 },
+              className: 'tree-row', type: 'button', style: { paddingLeft: treeRowPadding(level) },
+              'data-tree-depth': level,
               'aria-expanded': child in open,
               onClick: () => child in open
                 ? setOpen((old) => { const next = { ...old }; delete next[child]; return next })
                 : void load(child),
-            }, `${child in open ? '⌄' : '›'} ${item.name}`),
+            }, e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, child in open ? '⌄' : '›'), e('span', null, item.name)),
             child.startsWith('正文/') ? e('button', {
               className: 'tree-directory-add',
               type: 'button',
@@ -407,9 +480,10 @@ function Tree(props: {
           className: 'tree-row tree-main',
           type: 'button',
           'aria-current': active === child ? 'page' : undefined,
-          style: { paddingLeft: 28 + level * 14 },
+          style: { paddingLeft: treeRowPadding(level) },
+          'data-tree-depth': level,
           onClick: () => onOpen(child),
-        }, item.name),
+        }, e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, '·'), e('span', null, item.name)),
         /\.(md|txt)$/i.test(child) ? e('button', {
           className: 'tree-manage',
           type: 'button',
@@ -478,7 +552,7 @@ function SearchPanel(props: {
     result ? e('div', { className: 'search-summary', role: 'status' },
       `${result.results.length} 处 · 已查 ${result.scannedFiles} 份文件`,
       result.truncated ? e('strong', null, '结果已达安全上限') : null,
-      result.skipped ? e('span', null, `跳过 ${result.skipped} 项`) : null,
+      result.skipped ? e('span', null, searchSkippedText(result.skipped)) : null,
     ) : null,
     props.navigationBlocked && result?.results.length ? e('p', { className: 'warning', role: 'alert' }, '请先保存当前文档，再跳转搜索结果。') : null,
     note ? e('p', { className: 'muted', role: 'status' }, note) : null,
@@ -826,6 +900,10 @@ function Editor(props: {
   docRef.current = doc
   textRef.current = text
   revisionRef.current = revision
+  const documentPath = doc?.path ?? path
+  const paperProjection = worldbookPaperProjection(documentPath, text)
+  const paperText = paperProjection.text
+  const paperOffset = paperProjection.offset
   const state = saveState(doc, text, conflict)
   const ghost = ghostCandidates[ghostIndex] ?? ''
   const clearGhost = () => { setGhostCandidates([]); setGhostIndex(0) }
@@ -899,7 +977,7 @@ function Editor(props: {
     globalThis.setTimeout(() => {
       if (!ta.current) return
       ta.current.focus()
-      ta.current.setSelectionRange(start, end)
+      ta.current.setSelectionRange(Math.max(0, start - paperOffset), Math.max(0, end - paperOffset))
       setSelection({ start, end })
     }, 0)
   }, [doc?.path, doc?.version, reveal?.nonce])
@@ -999,7 +1077,7 @@ function Editor(props: {
     setProposal(null)
     const requestDoc = doc
     const requestRevision = revision
-    const pos = append && ghost ? ghostAt : ta.current.selectionStart
+    const pos = append && ghost ? ghostAt : ta.current.selectionStart + paperOffset
     const controller = new AbortController()
     fimAbort.current = controller
     setLoadingFim(true)
@@ -1103,7 +1181,7 @@ function Editor(props: {
     setSelection({ start: cursor, end: cursor })
     clearGhost()
     setNote('补全已加入草稿，正在自动保存。')
-    globalThis.setTimeout(() => { ta.current?.focus(); ta.current?.setSelectionRange(cursor, cursor) }, 0)
+    globalThis.setTimeout(() => { ta.current?.focus(); ta.current?.setSelectionRange(Math.max(0, cursor - paperOffset), Math.max(0, cursor - paperOffset)) }, 0)
   }
 
   const acceptPatch = () => {
@@ -1117,7 +1195,7 @@ function Editor(props: {
     setSelection({ start: cursor, end: cursor })
     setProposal(null)
     setNote('修改已加入草稿，正在自动保存。')
-    globalThis.setTimeout(() => { ta.current?.focus(); ta.current?.setSelectionRange(cursor, cursor) }, 0)
+    globalThis.setTimeout(() => { ta.current?.focus(); ta.current?.setSelectionRange(Math.max(0, cursor - paperOffset), Math.max(0, cursor - paperOffset)) }, 0)
   }
 
   if (!path) {
@@ -1136,12 +1214,12 @@ function Editor(props: {
   return e('section', { className: 'editor', 'aria-label': '正文编辑区' },
     e('header', { className: 'editor-header' },
       e('span', null, doc?.path ?? path),
-      e('nav', { className: 'chapter-navigation', 'aria-label': '章节导航' },
+      isChapterDocumentPath(documentPath) ? e('nav', { className: 'chapter-navigation', 'aria-label': '章节导航' },
         e('button', { type: 'button', onClick: () => index > 0 && onOpen(files[index - 1]!), disabled: navigationBlocked || index <= 0, title: navigationBlocked ? '请先保存' : '上一章' }, '‹'),
         e('span', null, index >= 0 ? `${index + 1} / ${files.length}` : `— / ${files.length}`),
         e('button', { type: 'button', onClick: () => index >= 0 && index < files.length - 1 && onOpen(files[index + 1]!), disabled: navigationBlocked || index < 0 || index >= files.length - 1, title: navigationBlocked ? '请先保存' : '下一章' }, '›'),
-      ),
-      e('span', null, `${text.replace(/\s/g, '').length} 字 · ${state === 'draft' ? '草稿未保存' : state === 'conflict' ? '版本冲突' : state === 'saved' ? '已保存' : '读取中'}`),
+      ) : null,
+      e('span', null, `${paperText.replace(/\s/g, '').length} 字 · ${state === 'draft' ? '草稿未保存' : state === 'conflict' ? '版本冲突' : state === 'saved' ? '已保存' : '读取中'}`),
     ),
     editableWorldbook && doc ? e(WorldbookSettings, {
       key: `${doc.path}:${doc.version}`,
@@ -1152,14 +1230,14 @@ function Editor(props: {
     }) : null,
     e('textarea', {
       ref: ta,
-      value: text,
+      value: paperText,
       className: 'paper-input',
       'aria-label': '正文',
       onChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
-        setText(event.target.value)
+        setText(replaceWorldbookPaperText(documentPath, text, event.target.value))
         setUserEditRevision((old) => old + 1)
       },
-      onSelect: (event: ChangeEvent<HTMLTextAreaElement>) => setSelection({ start: event.target.selectionStart, end: event.target.selectionEnd }),
+      onSelect: (event: ChangeEvent<HTMLTextAreaElement>) => setSelection({ start: event.target.selectionStart + paperOffset, end: event.target.selectionEnd + paperOffset }),
       onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() }
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && proposal) { event.preventDefault(); acceptPatch() }
@@ -1403,7 +1481,7 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
     }).then((raw: unknown) => {
       if (!live) return
       const result = raw as RpcResult<{ version?: string; before?: string; after?: string; text?: string }>
-      if (!result.ok) { setState('expired'); setNote('文件已经变化，这项建议需要重新生成。'); return }
+      if (!result.ok) { setState('expired'); setNote('文件已经变化，没有写入任何内容；请重新询问写作助手生成建议。'); return }
       setPrepared(result.value); setState('ready'); setNote('可以安全应用')
     })
     return () => { live = false }
@@ -1417,7 +1495,7 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
       ...props.proposal,
       expectedVersion: prepared.version ?? '',
     }) as RpcResult<{ path: string }>
-    if (!result.ok) { setState('expired'); setNote('文件已经变化，未写入任何内容。请让写作助手重新生成建议。'); return }
+    if (!result.ok) { setState('expired'); setNote('文件已经变化，没有写入任何内容；请重新询问写作助手生成建议。'); return }
     setState('applied'); setNote('已应用到作品')
     props.onApplied(result.value.path)
   }
@@ -1641,8 +1719,10 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
   const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   const [modelRevision, setModelRevision] = useState(0)
   const titleAttempted = useRef(new Set<string>())
-  const partial = partialText(snapshot)
+  const internalIndexActive = internalIndexTurnActive(snapshot)
+  const partial = internalIndexActive ? '' : partialText(snapshot)
   const rows = chatRows(snapshot)
+  const hasTurnError = rows.some((row) => row.id.startsWith('turn-error:'))
   const workspace = workspaceList.items.find((item) => item.workspaceId === workspaceId)
   const sessionIds = sessionList.ids.filter((id) => workspace?.sessionIds.includes(id))
   const conversations = conversationRows({
@@ -1706,7 +1786,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
     outgoingState: outgoing?.state,
   })
   const examples = authorFlowExamples(activePath)
-  const showGuide = rows.length === 0 && !outgoing && !snapshot.running && !partial && snapshot.pending.length === 0
+  const showGuide = rows.length === 0 && !outgoing && (!snapshot.running || internalIndexActive) && !partial && snapshot.pending.length === 0
   useEffect(() => {
     if (outgoingIsCanonical) setOutgoing(null)
   }, [outgoingIsCanonical])
@@ -1794,14 +1874,14 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
       outgoing?.state === 'accepted' && !outgoingIsCanonical
         ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, '正在回复…')
         : null,
-      visibleRunningCalls(snapshot.runningCalls).map((call) => e('article', { className: 'chat-row tool', key: `running:${call.callId}` }, e('strong', null,
+      (internalIndexActive ? [] : visibleRunningCalls(snapshot.runningCalls)).map((call) => e('article', { className: 'chat-row tool', key: `running:${call.callId}` }, e('strong', null,
         call.name === 'glob' || call.name === 'grep' ? '正在查找作品资料…' : call.name === 'read' ? '正在阅读作品资料…' : call.name === 'novel_propose' ? '正在准备修改建议…' : '正在处理…'
       ))),
-      snapshot.queue.map((item) => e('article', { className: 'chat-row notice', key: `queue:${item.id}` }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? '已排队' : '正在转向'))),
+      (internalIndexActive ? [] : snapshot.queue).map((item) => e('article', { className: 'chat-row notice', key: `queue:${item.id}` }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? '已排队' : '正在转向'))),
       partial ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, e('p', null, partial)) : snapshot.partial ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, '正在回复…') : null,
       snapshot.pending.map((item) => e(PendingCard, { key: item.key, item })),
       snapshot.openState === 'error' ? e('p', { className: 'warning' }, '连接暂时中断，正在恢复…') : null,
-      snapshot.promptError ? e('p', { className: 'warning' }, '写作助手未能完成这次请求，请重试。') : null,
+      snapshot.promptError && !internalIndexActive && !hasTurnError ? e('p', { className: 'warning' }, '写作助手未能完成这次请求，请重试。') : null,
     ),
     e('form', { className: 'composer', onSubmit: submit },
       e('textarea', {
@@ -1949,6 +2029,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
   const [workbenchNote, setWorkbenchNote] = useState('')
   const [treeRevision, setTreeRevision] = useState(0)
+  const [treeExpansionPath, setTreeExpansionPath] = useState('')
   const [contentRevision, setContentRevision] = useState(0)
   const [homeNote, setHomeNote] = useState('')
   const [createNote, setCreateNote] = useState('')
@@ -2123,7 +2204,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
   }, [assistantOpen, chatFocusNonce, focusMode])
   useEffect(() => {
-    setPath(''); setFiles([]); setReveal(null); setWorkbenchNote(''); setEditorDirty(false)
+    setPath(''); setFiles([]); setReveal(null); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
     setManagePath(null); setManageNote(''); setArchives([]); setArchiveInvalid(0); setArchiveNote('')
   }, [current])
   useEffect(() => {
@@ -2327,12 +2408,12 @@ function Root({ ctx }: { ctx: ShellContext }) {
     })
     return () => { live = false }
   }, [ctx.connection])
-  const openCreateDialog = (kind: DocumentKind | 'group', directory = '正文') => {
+  const openCreateDialog = (kind: DocumentKind | 'group', directory?: string) => {
     if (!session) return
     if (editorDirty) { setCreateNote('请先保存当前文档。'); return }
     createReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setCreateNote('')
-    setCreateRequest({ kind, directory })
+    setCreateRequest({ kind, directory: createDialogDirectory(kind, directory) })
   }
   const closeCreateDialog = () => {
     if (createBusy) return
@@ -2496,25 +2577,21 @@ function Root({ ctx }: { ctx: ShellContext }) {
     const workspace = await ctx.workspaces.create({ path })
     await connectAndInitialize(workspace.workspaceId, newProject)
   }
-  const pickWorkspace = async (newProject: boolean) => {
+  const showWorkspacePath = (newProject: boolean) => {
     setManualWorkspaceMode(newProject ? 'new' : 'existing')
-    setHomeNote('也可以直接输入作品路径。')
+    setHomeNote('')
+  }
+  const pickWorkspaceDirectory = async () => {
     try {
       const path = await ctx.workspaces.pickDirectory()
       if (!path) {
-        setHomeNote('没有选择目录，也可以在下方输入作品路径。')
+        setHomeNote('没有选择文件夹，也可以直接输入路径。')
         return
       }
-      setOpeningWorkspace(true)
-      try {
-        await openWorkspacePath(path, newProject)
-        setManualWorkspaceMode(null)
-        setHomeNote('')
-      } finally {
-        setOpeningWorkspace(false)
-      }
+      setManualWorkspacePath(path)
+      setHomeNote('')
     } catch {
-      setHomeNote('目录选择器暂时不可用，请在下方输入作品路径。')
+      setHomeNote('目录选择器暂时不可用，请直接输入作品路径。')
     }
   }
   const submitWorkspacePath = async (event: FormEvent) => {
@@ -2539,52 +2616,33 @@ function Root({ ctx }: { ctx: ShellContext }) {
     setImportFlow(idleImportFlow)
     if (restoreFocus && target) globalThis.setTimeout(() => target.focus(), 0)
   }
-  const selectImportSource = async (targetSessionId?: SessionId, targetWorkspaceId?: WorkspaceId) => {
-    if (!targetSessionId) importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const selectImportSource = async (targetSessionId: SessionId, targetWorkspaceId: WorkspaceId) => {
     const sourcePath = await ctx.workspaces.pickDirectory()
     if (!sourcePath) { closeImportFlow(); return }
     let sourceSessionId: SessionId | undefined
     let createdSourceWorkspaceId: WorkspaceId | undefined
-    let createdTargetWorkspaceId: WorkspaceId | undefined
     try {
       const sourceRegistration = await registerFlowWorkspace(sourcePath)
       if (sourceRegistration.created) createdSourceWorkspaceId = sourceRegistration.workspace.workspaceId
       sourceSessionId = await ctx.workspaces.connectWorkspace(sourceRegistration.workspace.workspaceId)
       bindTemporarySource(sourceSessionId, sourceRegistration.workspace.workspaceId, sourceRegistration.created)
-      let destinationSessionId = targetSessionId
-      let destinationWorkspaceId = targetWorkspaceId
-      if (!destinationSessionId || !destinationWorkspaceId) {
-        const targetPath = await ctx.workspaces.pickDirectory()
-        if (!targetPath) {
-          const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
-          closeImportFlow()
-          if (!sourceCleaned) setHomeNote('已取消导入，但临时来源入口未能自动移除。')
-          return
-        }
-        const targetRegistration = await registerFlowWorkspace(targetPath)
-        destinationWorkspaceId = targetRegistration.workspace.workspaceId
-        if (targetRegistration.created) createdTargetWorkspaceId = destinationWorkspaceId
-        destinationSessionId = await ctx.workspaces.connectWorkspace(destinationWorkspaceId)
-      }
       setImportFlow({ kind: 'working', message: '正在检查可导入的文件…' })
       const probe = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', {
-        sourceSessionId, targetSessionId: destinationSessionId,
+        sourceSessionId, targetSessionId,
       }))
       if (!probe.ok || probe.value.state !== 'ready') {
         const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
-        const targetCleaned = createdTargetWorkspaceId ? await cleanupFlowWorkspace(createdTargetWorkspaceId) : true
         closeImportFlow()
         const note = probe.ok ? probe.value.message ?? '目录不能导入。' : '导入检查没有完成。'
-        setHomeNote(sourceCleaned && targetCleaned ? note : `${note} 临时工作区入口未能自动移除。`)
+        setHomeNote(sourceCleaned ? note : `${note} 临时工作区入口未能自动移除。`)
         return
       }
-      setImportFlow(importReview(sourceSessionId, destinationSessionId as string, destinationWorkspaceId as string, probe.value))
+      setImportFlow(importReview(sourceSessionId, targetSessionId, targetWorkspaceId, probe.value))
     } catch (error) {
       const sourceCleaned = sourceSessionId
         ? await cleanupTemporarySource(sourceSessionId)
         : createdSourceWorkspaceId ? await cleanupFlowWorkspace(createdSourceWorkspaceId) : true
-      const targetCleaned = createdTargetWorkspaceId ? await cleanupFlowWorkspace(createdTargetWorkspaceId) : true
-      if (error instanceof FlowWorkspaceCleanupError || !sourceCleaned || !targetCleaned) {
+      if (error instanceof FlowWorkspaceCleanupError || !sourceCleaned) {
         closeImportFlow()
         setHomeNote('导入没有开始；临时工作区入口未能自动移除。')
         return
@@ -2936,13 +2994,12 @@ function Root({ ctx }: { ctx: ShellContext }) {
           e('h1', null, '开始写。'),
           e('p', null, '从世界观、人物卡、总纲和章纲一路写到正文；搭档先提出修改建议，由你确认后再写入作品。'),
           e('div', { className: 'home-actions' },
-            e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspace(false) }, openingWorkspace ? '打开中' : '打开作品', e('span', { 'aria-hidden': 'true' }, '↗')),
-            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspace(true) }, '新建'),
-            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void selectImportSource().catch(() => { closeImportFlow(); setHomeNote('导入目录没有打开，请重试。') }) }, '导入作品'),
+            e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => showWorkspacePath(false) }, '打开作品', e('span', { 'aria-hidden': 'true' }, '↗')),
+            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => showWorkspacePath(true) }, '新建'),
           ),
           manualWorkspaceMode ? e('form', { className: 'path-fallback', onSubmit: submitWorkspacePath },
             e('label', null,
-              e('span', null, '作品文件夹路径'),
+              e('span', null, manualWorkspaceMode === 'new' ? '新作品文件夹路径' : '作品文件夹路径'),
               e('input', {
                 value: manualWorkspacePath,
                 onChange: (event: ChangeEvent<HTMLInputElement>) => setManualWorkspacePath(event.target.value),
@@ -2952,6 +3009,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
               }),
             ),
             e('div', null,
+              e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspaceDirectory() }, '选择文件夹'),
               e('button', { className: 'primary-action', type: 'submit', disabled: openingWorkspace },
                 openingWorkspace ? '打开中' : manualWorkspaceMode === 'new' ? '在此新建' : '打开此目录',
               ),
@@ -3114,12 +3172,12 @@ function Root({ ctx }: { ctx: ShellContext }) {
           archiveNote ? e('p', { className: 'warning', role: 'alert' }, archiveNote) : null,
         ),
       ),
-      workbenchNote ? e('p', { className: 'warning pad', role: 'alert' }, workbenchNote) : null,
+      workbenchNote ? e('p', { className: `${isSuccessWorkbenchNote(workbenchNote) ? 'success' : 'warning'} pad`, role: isSuccessWorkbenchNote(workbenchNote) ? 'status' : 'alert' }, workbenchNote) : null,
+      e(Tree, { ctx, sessionId: session.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onManage: openManage, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), revision: treeRevision }),
       currentWorkspace && indexStatus[currentWorkspace.workspaceId] ? e('div', { className: 'index-status', role: indexStatus[currentWorkspace.workspaceId] === 'failed' ? 'alert' : 'status' },
-        e('span', null, indexStatus[currentWorkspace.workspaceId] === 'initializing' ? '索引中' : indexStatus[currentWorkspace.workspaceId] === 'queued' ? '索引已排队' : indexStatus[currentWorkspace.workspaceId] === 'failed' ? '索引失败' : '未索引'),
-        e('button', { type: 'button', onClick: () => triggerExistingIndex(currentWorkspace.workspaceId, session.sessionId, true) }, indexStatus[currentWorkspace.workspaceId] === 'failed' ? '重试' : '重建索引'),
+        e('span', null, indexStatus[currentWorkspace.workspaceId] === 'initializing' ? '正在整理作品资料…' : indexStatus[currentWorkspace.workspaceId] === 'queued' ? '作品资料正在后台整理' : indexStatus[currentWorkspace.workspaceId] === 'failed' ? '作品资料暂未整理好' : '作品资料尚未整理'),
+        e('button', { type: 'button', onClick: () => triggerExistingIndex(currentWorkspace.workspaceId, session.sessionId, true) }, indexStatus[currentWorkspace.workspaceId] === 'failed' ? '重试整理' : '重新整理'),
       ) : null,
-      e(Tree, { ctx, sessionId: session.sessionId, active: path, onOpen: openDocument, onManage: openManage, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), revision: treeRevision }),
     ) : null,
     sidebarVisible ? e(PanelResizer, {
       side: 'left',
@@ -3152,8 +3210,15 @@ function Root({ ctx }: { ctx: ShellContext }) {
       onConfigure: openSettings,
       onDraftDirtyChange: setAssistantDraftDirty,
       onApplied: (appliedPath: string) => {
+        const navigation = proposalAppliedNavigation(appliedPath, path, editorDirty)
         setTreeRevision((old) => old + 1)
-        if (appliedPath === path) setContentRevision((old) => old + 1)
+        if (navigation.expandPath) setTreeExpansionPath(navigation.expandPath)
+        if (!navigation.openPath) {
+          setWorkbenchNote('建议已应用；当前未保存文档已保留，请先保存后再打开应用的文件。')
+          return
+        }
+        openDocument(navigation.openPath)
+        if (navigation.refreshContent) setContentRevision((old) => old + 1)
       },
     }),
     !assistantVisible && !focusMode ? e('button', {
@@ -3241,6 +3306,8 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .editor:has(>.worldbook-settings){grid-template-rows:auto auto minmax(0,1fr) auto}.worldbook-settings{display:grid;grid-template-columns:minmax(160px,1fr) auto 88px auto;align-items:end;gap:8px 12px;padding:10px 14px;border-bottom:1px solid #ddd5c6;background:#f7f3e9;color:#53665a}.worldbook-settings>div{grid-column:1/-1;display:flex;align-items:baseline;gap:9px;min-width:0}.worldbook-settings>div small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.worldbook-settings>div .warning{margin-left:auto}.worldbook-settings label{display:grid;gap:3px;font-size:11px}.worldbook-settings textarea,.worldbook-settings input[type=number],.worldbook-settings label:not(.worldbook-enabled)>input{box-sizing:border-box;width:100%;min-width:0;padding:6px 7px;border:1px solid #cbc5b7;border-radius:4px;background:#fffdf7;color:#28382f}.worldbook-settings textarea{min-height:30px;max-height:78px;resize:vertical;font:inherit}.worldbook-settings .worldbook-enabled{display:flex;align-items:center;gap:5px;padding-bottom:6px;white-space:nowrap}.worldbook-settings button{margin-bottom:0;padding:6px 9px;border:1px solid #bfc5b8;border-radius:3px;background:#fffdf7;color:#2c5744;cursor:pointer}.worldbook-settings button:hover{background:#e1eadc}.worldbook-settings button:disabled,.worldbook-settings input:disabled,.worldbook-settings textarea:disabled{cursor:not-allowed;opacity:.55}@media(max-width:1180px){.worldbook-settings>div small{display:none}.worldbook-settings{grid-template-columns:minmax(130px,1fr) auto 78px auto;gap-inline:8px}}
 .import-overlay{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:24px;background:#1f2d2570}.import-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:14px;padding:24px;border:1px solid #d8cfbd;border-radius:16px 4px 16px 4px;background:#fffdf6;box-shadow:0 28px 80px #1c28221f}.import-dialog h2,.import-dialog p{margin:0}.import-dialog ul{max-height:170px;margin:0;overflow:auto;padding-left:20px;color:#5c6e62}.import-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.import-dialog button{padding:7px 11px;border:1px solid #b9c8ba;border-radius:4px;background:#f5f1e6;color:#2c5744;cursor:pointer}.snapshot-dialog{width:min(620px,100%)}.snapshot-list{display:grid;gap:8px;max-height:280px!important;padding:0!important;list-style:none}.snapshot-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #ded6c7;border-radius:8px;background:#faf6ec}.snapshot-list li div{display:grid;gap:3px;min-width:0}.snapshot-list li strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294938}.snapshot-list li small{color:#6b776e}
 .layout-shell{grid-template-rows:52px minmax(0,1fr);overflow:hidden}.layout-shell>.sidebar,.layout-shell>.editor,.layout-shell>.empty-paper,.layout-shell>.chat,.layout-shell>.panel-resizer{grid-column:auto;grid-row:2;min-width:0}.layout-shell>.chat{position:relative;z-index:1;inset:auto;width:auto;min-width:0;border:0;border-left:1px solid #d8d0bf;border-radius:0;box-shadow:none;overflow:hidden}.layout-shell>.chat[hidden]{display:none!important}.layout-shell>.editor{grid-column:auto}.layout-shell>.sidebar{grid-column:auto}.layout-controls{display:flex;align-items:center;gap:3px;padding:3px;border:1px solid #d8d0bf;border-radius:15px 5px 15px 15px;background:#f1ecdf}.layout-controls button{min-width:42px;padding:4px 8px;border:0;border-radius:11px 3px 11px 11px;background:transparent;color:#526b5d;cursor:pointer}.layout-controls button[aria-pressed=true]{background:#d8e6d8;color:#183f2f;font-weight:600}.layout-controls button:disabled{cursor:not-allowed;opacity:.45}.panel-resizer{position:relative;z-index:4;min-width:0;cursor:col-resize;touch-action:none;user-select:none;background:#e6dfd1;transition:background-color 140ms ease}.panel-resizer span{position:absolute;inset:0 2px;border-radius:4px;background:transparent}.panel-resizer:hover,.panel-resizer:focus-visible,.panel-resizer[aria-valuenow]{outline:0}.panel-resizer:hover span,.panel-resizer:focus-visible span{background:#6f927c}.layout-shell.focus-mode .paper-input{width:min(calc(100% - 64px),980px);padding-inline:clamp(52px,10vw,128px);box-shadow:0 14px 42px #4b674719}.layout-shell.focus-mode .editor-header{padding-inline:20px}.layout-shell.focus-mode .editor-tools{justify-content:center}.layout-shell.assistant-open .assistant-launcher{display:none}@media(max-width:1180px){.layout-controls button{min-width:36px;padding-inline:6px}.layout-shell .paper-input{width:calc(100% - 28px);padding-inline:34px}}@media(prefers-reduced-motion:reduce){.panel-resizer{transition:none!important}}
+.tree{flex:1 1 auto}.tree-marker{display:inline-block;width:14px;color:#718078;text-align:center}
+.layout-shell:has(.export-menu[open]){overflow:visible}
 `
 
 const homeStyles = `

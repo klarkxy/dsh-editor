@@ -1,22 +1,51 @@
+import { isNovelIndexJobTitle } from './novel-index.ts'
+
 export type ConversationRow = { id: string; title: string; current: boolean }
+
+export function stripReasoningText(text: string): string {
+  return text
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think\s*>/giu, '')
+    .replace(/<think\b[^>]*>[\s\S]*$/giu, '')
+    .replace(/<\/?think\b[^>]*>/giu, '')
+    .trim()
+}
+
+export function isUnnamedConversationTitle(title: string | undefined): boolean {
+  const normalized = title?.trim() ?? ''
+  if (!normalized || isNovelIndexJobTitle(normalized)) return true
+  if (/dsh-editor\.project-context|project-context/i.test(normalized)) return true
+  if (!/^(?:\{|\[)/.test(normalized)) return false
+  try {
+    const parsed = JSON.parse(normalized) as unknown
+    return typeof parsed === 'object' && parsed !== null
+  } catch {
+    return /^\{\s*"?(?:schema|user_request|project_context)"?\s*:/i.test(normalized)
+  }
+}
 
 export function conversationRows(input: { workspaceSessionIds: readonly string[]; archivedIds?: readonly string[]; currentId?: string; titles?: Record<string, string | undefined>; reusableBlankIds?: readonly string[] }): ConversationRow[] {
   const archived = new Set(input.archivedIds ?? [])
   const blank = new Set(input.reusableBlankIds ?? [])
   return input.workspaceSessionIds
     .filter((id) => !archived.has(id) && (id === input.currentId || !blank.has(id)))
-    .map((id) => ({ id, title: input.titles?.[id]?.trim() || '新对话', current: id === input.currentId }))
+    .map((id) => {
+      const title = input.titles?.[id]?.trim() ?? ''
+      return { id, title: isUnnamedConversationTitle(title) ? '新对话' : title, current: id === input.currentId }
+    })
 }
 
 export function conversationTitle(text: string, limit = 36): string {
-  const normalized = text.replace(/\s+/g, ' ').trim().replace(/[。！？!?].*$/u, '').trim()
+  const normalized = stripReasoningText(text).replace(/\s+/g, ' ').trim().replace(/[。！？!?].*$/u, '').trim()
   if (!normalized) return ''
   return normalized.length > limit ? `${normalized.slice(0, limit - 1)}…` : normalized
 }
 
 export function nextAutomaticConversationTitle(input: { durableTitle?: string; assistantReplies: readonly string[]; attempted: boolean }, limit = 36): string {
-  if (input.durableTitle?.trim() || input.attempted) return ''
-  const reply = input.assistantReplies.find((text) => text.trim())
+  const durableTitle = input.durableTitle?.trim() ?? ''
+  if (!isUnnamedConversationTitle(durableTitle) || input.attempted) return ''
+  const reply = input.assistantReplies
+    .map(stripReasoningText)
+    .find((text) => text && !isNovelIndexJobTitle(text))
   return reply ? conversationTitle(reply, limit) : ''
 }
 

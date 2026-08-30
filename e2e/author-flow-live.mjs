@@ -26,7 +26,7 @@ const output = resolve(root, 'e2e', 'out', 'author-flow-live')
 const reset = process.env.E2E_AUTHOR_FLOW_RESUME !== '1'
 const sendTimeout = Number(process.env.E2E_AUTHOR_FLOW_SEND_TIMEOUT_MS || 720_000)
 const book = '雾港回声'
-const minChapterChars = 2_000
+const minChapterChars = 4_000
 
 for (const target of [workspace, home]) {
   if (!target.startsWith(`${devRoot}${sep}`)) throw new Error(`unsafe test path: ${target}`)
@@ -182,7 +182,7 @@ async function answerPending(page) {
   return false
 }
 
-async function waitForProposal(page, previousCount, previousAssistantCount, label) {
+async function waitForProposal(page, previousCount, previousAssistantCount, label, expectedPath) {
   const cards = page.getByRole('article', { name: '文件修改建议' })
   const deadline = Date.now() + sendTimeout
   let completedWithoutProposalAt = 0
@@ -193,8 +193,15 @@ async function waitForProposal(page, previousCount, previousAssistantCount, labe
     const count = await cards.count()
     if (count > previousCount) {
       const card = cards.last()
-      await card.getByText('可以安全应用', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
-      return card
+      const text = await card.innerText().catch(() => '')
+      if (expectedPath && !text.includes(expectedPath)) {
+        await delay(400)
+        continue
+      }
+      if (/文件已经变化|需要重新生成/.test(text)) throw new Error(`${label}: stale-proposal`)
+      const ready = await card.getByText('可以安全应用', { exact: true }).isVisible().catch(() => false)
+      const applied = await card.getByText('已应用到作品', { exact: true }).isVisible().catch(() => false)
+      if (ready || applied) return card
     }
     const promptError = page.locator('.chat-history .warning').filter({ hasText: /未能完成|中断/ }).last()
     if (await promptError.isVisible().catch(() => false)) {
@@ -231,7 +238,7 @@ async function waitForProposal(page, previousCount, previousAssistantCount, labe
   throw new Error(`${label}: no proposal within timeout; chat tail=${sanitize(tail)}`)
 }
 
-async function sendAndApply(page, prompt, expectedPath, label) {
+async function sendAndApply(page, prompt, expectedPath, label, attempt = 0) {
   const cards = page.getByRole('article', { name: '文件修改建议' })
   const before = await cards.count()
   const assistantBefore = await page.locator('.chat-row.assistant').count()
@@ -244,12 +251,77 @@ async function sendAndApply(page, prompt, expectedPath, label) {
     if (await cards.count() > before) return true
     return await page.getByRole('button', { name: /停止/ }).isVisible().catch(() => false)
   }, `${label}: turn started`, 30_000)
-  const card = await waitForProposal(page, before, assistantBefore, label)
-  const cardText = await card.innerText()
-  if (!cardText.includes(expectedPath)) throw new Error(`${label}: proposed unexpected path: ${cardText.slice(0, 300)}`)
-  await card.getByRole('button', { name: '应用', exact: true }).click()
-  await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
-  recordPhase(label, expectedPath)
+  try {
+    const card = await waitForProposal(page, before, assistantBefore, label, expectedPath)
+    const cardText = await card.innerText()
+    if (!cardText.includes(expectedPath)) throw new Error(`${label}: proposed unexpected path: ${cardText.slice(0, 300)}`)
+    await shot(page, `${label}-proposal`)
+    if (!(await card.getByText('已应用到作品', { exact: true }).isVisible().catch(() => false))) {
+      await card.getByRole('button', { name: '应用', exact: true }).click()
+      await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
+    }
+    recordPhase(label, expectedPath)
+  } catch (error) {
+    if (attempt < 1 && String(error).includes('stale-proposal')) {
+      recordPhase(`${label} 旧建议失效，重试`)
+      await delay(800)
+      return sendAndApply(page, prompt, expectedPath, label, attempt + 1)
+    }
+    throw error
+  }
+}
+
+async function sendMaybeApply(page, prompt, expectedPath, label) {
+  const cards = page.getByRole('article', { name: '文件修改建议' })
+  const before = await cards.count()
+  const assistantBefore = await page.locator('.chat-row.assistant').count()
+  const composer = page.getByRole('textbox', { name: '输入消息' })
+  await composer.fill(prompt)
+  const send = page.getByRole('button', { name: '发送', exact: true })
+  await waitFor(async () => await send.isEnabled().catch(() => false), `${label}: send enabled`, 30_000)
+  await send.click()
+  await waitFor(async () => {
+    if (await cards.count() > before) return true
+    return await page.getByRole('button', { name: /停止/ }).isVisible().catch(() => false)
+  }, `${label}: turn started`, 30_000)
+  const deadline = Date.now() + sendTimeout
+  let completedAt = 0
+  while (Date.now() < deadline) {
+    await answerPending(page)
+    if (await cards.count() > before) {
+      const card = cards.last()
+      const ready = await card.getByText('可以安全应用', { exact: true }).isVisible().catch(() => false)
+      const applied = await card.getByText('已应用到作品', { exact: true }).isVisible().catch(() => false)
+      if (!ready && !applied) {
+        await delay(400)
+        continue
+      }
+      const cardText = await card.innerText()
+      if (!cardText.includes(expectedPath)) {
+        await delay(400)
+        continue
+      }
+      await shot(page, `${label}-proposal`)
+      if (!applied) {
+        await card.getByRole('button', { name: '应用', exact: true }).click()
+        await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
+      }
+      recordPhase(label, `applied ${expectedPath}`)
+      return 'applied'
+    }
+    const assistantCount = await page.locator('.chat-row.assistant').count()
+    const stopVisible = await page.getByRole('button', { name: /停止/ }).isVisible().catch(() => false)
+    if (assistantCount > assistantBefore && !stopVisible) {
+      if (!completedAt) completedAt = Date.now()
+      if (Date.now() - completedAt > 6_000) {
+        await shot(page, `${label}-chat`)
+        recordPhase(label, 'chat-only, no file proposal')
+        return 'chat-only'
+      }
+    } else completedAt = 0
+    await delay(500)
+  }
+  throw new Error(`${label}: timed out without proposal or finished turn`)
 }
 
 async function configureMiniMax(page) {
@@ -345,13 +417,21 @@ function chapterPrompt(number, kind) {
   const id = String(number).padStart(3, '0')
   const path = `正文/${id}.md`
   const previous = number > 1 ? `正文/${String(number - 1).padStart(3, '0')}.md` : ''
-  return `现在写《${book}》第${number}章。请先读取 项目总览.md、世界书/设定总汇.md、人物卡/人物索引.md、大纲/总纲.md${previous ? ` 和上一章 ${previous}` : ` 以及现有 ${path}`}。只调用一次 novel_propose，对 ${path} 使用 ${kind}；${kind === 'edit' ? '完整替换模板内容' : '创建新文件'}。正文先写成约1600至1800个去空白字符，第三人称限知，场景化叙事，有动作、感官、对白和心理承接，严格执行对应章纲，不能写总结说明、创作注释或“未完待续”。不要提问，不要只在聊天回答。`
+  return `现在写《${book}》第${number}章。请先读取 项目总览.md、世界书/设定总汇.md、人物卡/人物索引.md、大纲/总纲.md${previous ? ` 和上一章 ${previous}` : ` 以及现有 ${path}`}。只调用一次 novel_propose，对 ${path} 使用 ${kind}；${kind === 'edit' ? '完整替换模板内容' : '创建新文件'}。正文先写成约2800至3200个去空白字符，第三人称限知，场景化叙事，有动作、感官、对白和心理承接，严格执行对应章纲，不能写总结说明、创作注释或“未完待续”。不要提问，不要只在聊天回答。`
 }
 
 function expansionPrompt(number, count) {
   const id = String(number).padStart(3, '0')
   const path = `正文/${id}.md`
-  return `第${number}章 ${path} 当前只有约${count}个去空白字符，未达到2000字验收。请读取该文件和 大纲/总纲.md，只调用一次 novel_propose，以 edit 方式扩写。请选择文件末尾一个唯一、完整的段落作为 oldText；newText 必须保留这个段落并自然追加一段约700至900个去空白字符的完整场景，使冲突、动作、感官或人物余波更充分，但不得改变既定结局、硬设定和下一章接口。不要完整重写全章，不要提问，不要只在聊天回答。`
+  return `第${number}章 ${path} 当前只有约${count}个去空白字符，未达到4000字验收。请读取该文件和 大纲/总纲.md，只调用一次 novel_propose，以 edit 方式扩写。请选择文件末尾一个唯一、完整的段落作为 oldText；newText 必须保留这个段落并自然追加一段约900至1200个去空白字符的完整场景，使冲突、动作、感官或人物余波更充分，但不得改变既定结局、硬设定和下一章接口。不要完整重写全章，不要提问，不要只在聊天回答。`
+}
+
+function dialogueCorrectionPrompt() {
+  return `第1章里林简的对白偏完整、像在解释设定。请读取 正文/001.md 和 人物卡/人物索引.md，只调用一次 novel_propose，对 正文/001.md 使用 edit。选一段林简的对白作为 oldText；newText 改成更短、更冲、不解释记忆税或系统，但不得改变情节和下一章接口。不要提问，不要只在聊天回答。`
+}
+
+function canonCheckPrompt() {
+  return `请对照 世界书/设定总汇.md 和 人物卡/人物索引.md 审读 正文/005.md。若存在违反记忆税规则或人物底线的硬冲突，只调用一次 novel_propose，对 正文/005.md 使用 edit，只替换冲突段落。若没有硬冲突，不要改文件，在聊天里写「校验通过」和一句具体理由。不要提问。`
 }
 
 if (reset) {
@@ -444,7 +524,7 @@ try {
       count = compactChars(await readFile(absolute, 'utf8'))
     }
     let expansions = 0
-    while (count < minChapterChars && expansions < 3) {
+    while (count < minChapterChars && expansions < 5) {
       expansions += 1
       await sendAndApply(page, expansionPrompt(number, count), relative, `扩写第${number}章-${expansions}`)
       count = compactChars(await readFile(absolute, 'utf8'))
@@ -453,6 +533,11 @@ try {
     if (count < minChapterChars) throw new Error(`${relative} only has ${count} non-whitespace characters`)
     recordPhase(`第${number}章验收`, `${count}字`)
     await shot(page, `chapter-${id}`)
+    if (number === 1) {
+      await sendAndApply(page, dialogueCorrectionPrompt(), relative, '对话纠正第1章对白')
+      report.chapters[report.chapters.length - 1].chars = compactChars(await readFile(absolute, 'utf8'))
+      await shot(page, 'chapter-001-corrected')
+    }
   }
 
   const markdown = await listMarkdown(workspace)
@@ -461,9 +546,14 @@ try {
   for (const required of ['项目总览.md', '世界书/设定总汇.md', '人物卡/人物索引.md', '大纲/总纲.md']) {
     if (!markdown.includes(required)) throw new Error(`missing planning artifact: ${required}`)
   }
+  const check = await sendMaybeApply(page, canonCheckPrompt(), '正文/005.md', '对话校验第5章设定')
+  report.canonCheck = check
+  const chatTail = sanitize((await page.locator('.chat-history').innerText().catch(() => '')).slice(-2_500))
+  const leaked = ['novel_propose', '.dsh-editor/作品索引.md', '状态已更新。', '为当前工作区建立作品索引'].filter((item) => chatTail.includes(item))
+  if (leaked.length) fail(`搭档栏泄露内部内容：${leaked.join('、')}`)
   await verifyChaptersInEditor(page)
   await shot(page, 'complete')
-  recordPhase('完整作者流程通过', `10章，每章至少${minChapterChars}字`)
+  recordPhase('完整作者流程通过', `10章，每章至少${minChapterChars}字；第5章校验=${check}`)
 } catch (error) {
   fail(sanitize(error instanceof Error ? error.stack || error.message : String(error)))
   if (page) {
