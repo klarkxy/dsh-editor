@@ -8,6 +8,8 @@ export const WORKBENCH_RPC_CHANNEL = '/dsh-editor-workbench'
 export type WorkbenchEndpoint =
   | 'project.init'
   | 'project.prepareIndex'
+  | 'project.overview'
+  | 'chapter.statusSet'
   | 'structure.groupCreate'
   | 'context.compile'
   | 'project.importProbe'
@@ -25,7 +27,37 @@ export type WorkbenchEndpoint =
   | 'archive.restore'
 
 export type ProjectInitResponse = { created: string[]; skipped: string[] }
-export type WorkbenchPathResponse = { path: string; version?: string }
+export type WorkbenchPathResponse = { path: string; version?: string; metadataWarning?: string }
+export type ChapterStatus = 'draft' | 'revising' | 'final'
+export type ChapterSummary = {
+  path: string
+  title: string
+  status: ChapterStatus
+  chars: number
+  empty: boolean
+  excerpt: string
+  modifiedAt: string | null
+}
+export type OutlineSummary = {
+  path: string
+  title: string
+  chars: number
+  excerpt: string
+  modifiedAt: string | null
+}
+export type ProjectOverview = {
+  statusRevision: string | null
+  chapters: ChapterSummary[]
+  outlines: OutlineSummary[]
+  totals: {
+    chapters: number
+    chars: number
+    byStatus: Record<ChapterStatus, number>
+  }
+  recent: ChapterSummary | null
+  truncated: boolean
+  skipped: number
+}
 export type ImportProbeResponse = {
   state: 'none' | 'ready' | 'blocked' | 'recoverable' | 'complete'
   token?: string
@@ -56,12 +88,15 @@ export type ArchiveResponse = {
   state: 'archived' | 'pending-archive' | 'pending-restore' | 'restored' | 'blocked'
   version?: string
   message?: string
+  metadataWarning?: string
 }
 export type ArchiveListResponse = { items: ArchiveResponse[]; invalid: number }
 
 export type WorkbenchRequestMap = {
   'project.init': { sessionId: string; newProject: boolean }
   'project.prepareIndex': { sessionId: string }
+  'project.overview': { sessionId: string }
+  'chapter.statusSet': { sessionId: string; path: string; status: ChapterStatus; expectedStatusRevision: string | null }
   'structure.groupCreate': { sessionId: string; path: string }
   'context.compile': { sessionId: string; userRequest: string; activePath?: string; authorPreferences?: string }
   'project.importProbe': { targetSessionId: string; sourceSessionId?: string }
@@ -82,6 +117,8 @@ export type WorkbenchRequestMap = {
 export type WorkbenchResponseMap = {
   'project.init': ProjectInitResponse
   'project.prepareIndex': ProjectInitResponse
+  'project.overview': ProjectOverview
+  'chapter.statusSet': ProjectOverview
   'structure.groupCreate': WorkbenchPathResponse
   'context.compile': ProjectContextCompilation
   'project.importProbe': ImportProbeResponse

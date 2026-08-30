@@ -31,6 +31,8 @@ import {
   writeWorldbookFrontmatter,
   type WorkbenchRpcResult,
   type ArchiveListResponse,
+  type ChapterStatus,
+  type ProjectOverview,
   type ProjectContextReceiptBundle,
 } from 'dsh-editor-workbench/contracts'
 import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
@@ -65,7 +67,7 @@ import {
 import { registerRoot } from './root-registration.ts'
 import { ModelSetup } from './model-setup.ts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
-import { buildExport, type ChapterExport, type ExportFormat } from './export.ts'
+import { prepareExport, type ChapterExport, type ExportFormat, type PreparedExport } from './export.ts'
 import { archiveStateText, documentName, visibleArchives, type ArchiveView } from './file-lifecycle.ts'
 import { documentTemplate, manuscriptGroupPath, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from './project-files.ts'
 import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
@@ -83,6 +85,8 @@ import {
   type SnapshotFlow,
   type SnapshotView,
 } from './snapshot-flow.ts'
+import { referenceQuery, type ReferenceQuery } from './reference-navigation.ts'
+import { chapterStatusText, ExportPreviewDialog, ProjectCardsPanel, ProjectOverviewPanel } from './project-views.ts'
 
 export const name = 'dsh-editor-shell-client'
 export const inject = ['slots', 'sessions', 'workspaces', 'connection'] as const
@@ -91,6 +95,7 @@ type Entry = { name: string; type: 'file' | 'directory' | 'other' }
 type SearchHit = { path: string; line: number; column: number; start: number; end: number; excerpt: string; version: string }
 type SearchResponse = { results: SearchHit[]; scannedFiles: number; scannedBytes: number; skipped: number; truncated: boolean }
 type RevealRequest = SearchHit & { nonce: number }
+type ReferenceSearchRequest = ReferenceQuery & { nonce: number }
 type RpcResult<T = unknown> = WorkbenchRpcResult<T>
 type ShellContext = ClientContext & { connection: ConnectionHandle }
 
@@ -502,6 +507,7 @@ function SearchPanel(props: {
   sessionId: string
   revision: number
   navigationBlocked: boolean
+  referenceRequest: ReferenceSearchRequest | null
   onOpen(hit: SearchHit): void
 }) {
   const [query, setQuery] = useState('')
@@ -509,22 +515,22 @@ function SearchPanel(props: {
   const [result, setResult] = useState<SearchResponse | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const input = useRef<HTMLInputElement | null>(null)
   const requestGate = useRef(new LatestRequestGate()).current
   const requestScope = `${props.sessionId}\u0000${props.revision}`
   requestGate.setScope(requestScope)
 
   useEffect(() => { setQuery(''); setResult(null); setNote(''); setBusy(false) }, [props.sessionId, props.revision])
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    const value = query.trim()
+  const search = async (raw: string, nextScope: 'project' | 'manuscript') => {
+    const value = raw.trim()
     if (!value) { setNote('请输入要查找的文字。'); return }
     const ticket = requestGate.begin(requestScope)
     setBusy(true); setNote('')
     const searched = await safeRpcCall<SearchResponse>(() => props.ctx.connection.rpc.call('/manuscript', 'search.text', {
       sessionId: props.sessionId,
       query: value,
-      scope,
+      scope: nextScope,
     }))
     if (!requestGate.isCurrent(ticket)) return
     setBusy(false)
@@ -533,9 +539,26 @@ function SearchPanel(props: {
     setNote(searched.value.results.length ? '' : '没有找到匹配内容。')
   }
 
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    void search(query, scope)
+  }
+
+  useEffect(() => {
+    if (!props.referenceRequest) return
+    setScope('manuscript')
+    setResult(null)
+    const value = props.referenceRequest.query ?? ''
+    setQuery(value)
+    if (value) void search(value, 'manuscript')
+    else setNote('请输入具体人物或设定名称，再查找正文引用。')
+    globalThis.setTimeout(() => input.current?.focus(), 0)
+  }, [props.referenceRequest?.nonce])
+
   return e('section', { className: 'search-panel', 'aria-label': '全文搜索' },
     e('form', { role: 'search', onSubmit: (event: FormEvent) => void submit(event) },
       e('input', {
+        ref: input,
         value: query,
         maxLength: 120,
         placeholder: '查找人物、地点或句子',
@@ -869,6 +892,11 @@ function Editor(props: {
   reveal: RevealRequest | null
   completionPreference: CompletionPreference
   authorPreferences: string
+  chapterStatus?: ChapterStatus
+  statusBusy: boolean
+  onChapterStatus(path: string, status: ChapterStatus): void
+  onReferenceSearch(request: ReferenceQuery): void
+  onSaved(): void
 }) {
   const { ctx, session, path, files, onOpen, create, externalRevision, onDirtyChange, reveal, completionPreference, authorPreferences } = props
   const [doc, setDoc] = useState<EditorDocument | null>(null)
@@ -934,6 +962,7 @@ function Editor(props: {
     clearGhost()
     setConflict(false)
     setReloadConfirm(false)
+    setSelection({ start: 0, end: 0 })
     setUserEditRevision(0)
     lastAutomaticCompletion.current = 0
     if (!path) { setDoc(null); setTextState(''); setNote(''); return }
@@ -1027,6 +1056,7 @@ function Editor(props: {
     setConflict(false)
     setNote('已保存')
     saving.current = false
+    props.onSaved()
   }
 
   useEffect(() => {
@@ -1219,6 +1249,18 @@ function Editor(props: {
         e('span', null, index >= 0 ? `${index + 1} / ${files.length}` : `— / ${files.length}`),
         e('button', { type: 'button', onClick: () => index >= 0 && index < files.length - 1 && onOpen(files[index + 1]!), disabled: navigationBlocked || index < 0 || index >= files.length - 1, title: navigationBlocked ? '请先保存' : '下一章' }, '›'),
       ) : null,
+      isChapterDocumentPath(documentPath) && props.chapterStatus ? e('label', { className: 'chapter-status-control' },
+        e('span', { className: 'sr-only' }, '章节状态'),
+        e('select', {
+          value: props.chapterStatus,
+          disabled: props.statusBusy || navigationBlocked,
+          'aria-label': `设置 ${documentName(documentPath)} 状态`,
+          onChange: (event: ChangeEvent<HTMLSelectElement>) => props.onChapterStatus(documentPath, event.target.value as ChapterStatus),
+        },
+        e('option', { value: 'draft' }, '草稿'),
+        e('option', { value: 'revising' }, '修订中'),
+        e('option', { value: 'final' }, '已定稿')),
+      ) : null,
       e('span', null, `${paperText.replace(/\s/g, '').length} 字 · ${state === 'draft' ? '草稿未保存' : state === 'conflict' ? '版本冲突' : state === 'saved' ? '已保存' : '读取中'}`),
     ),
     editableWorldbook && doc ? e(WorldbookSettings, {
@@ -1305,6 +1347,10 @@ function Editor(props: {
       }, patching ? '停止改写' : '修改选段'),
       conflict ? e('button', { type: 'button', onClick: () => setReloadConfirm(true) }, '重新载入磁盘版本') : null,
       conflict ? e('button', { type: 'button', onClick: () => void saveConflictCopy() }, '另存冲突副本') : null,
+      /^(?:人物卡|世界书)\/.+\.md$/i.test(documentPath) ? e('button', {
+        type: 'button',
+        onClick: () => props.onReferenceSearch(referenceQuery(documentPath, text, selection.start, selection.end)),
+      }, '查找正文引用') : null,
       note ? e('span', { role: conflict ? 'alert' : 'status' }, note) : null,
     ),
     reloadConfirm ? e(ConfirmDialog, {
@@ -1469,35 +1515,81 @@ function PendingCard({ item }: { item: PendingInteraction }) {
 
 function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: ProposalMarker; onApplied(path: string): void }) {
   const [prepared, setPrepared] = useState<{ version?: string; before?: string; after?: string; text?: string } | null>(null)
-  const [state, setState] = useState<'checking' | 'ready' | 'applying' | 'applied' | 'ignored' | 'expired'>('checking')
+  const [appliedVersion, setAppliedVersion] = useState('')
+  const [undoText, setUndoText] = useState('')
+  const [state, setState] = useState<'checking' | 'ready' | 'applying' | 'applied' | 'deferred' | 'ignored' | 'undoing' | 'undone' | 'expired'>('checking')
   const [note, setNote] = useState('正在核对文件…')
+  const requestGeneration = useRef(0)
 
-  useEffect(() => {
-    let live = true
+  const check = async () => {
+    const generation = ++requestGeneration.current
+    setAppliedVersion('')
+    setUndoText('')
     setState('checking'); setNote('正在核对文件…')
-    void props.ctx.connection.rpc.call('/manuscript', 'proposal.prepare', {
+    const raw = await props.ctx.connection.rpc.call('/manuscript', 'proposal.prepare', {
       sessionId: props.sessionId,
       ...props.proposal,
-    }).then((raw: unknown) => {
-      if (!live) return
-      const result = raw as RpcResult<{ version?: string; before?: string; after?: string; text?: string }>
-      if (!result.ok) { setState('expired'); setNote('文件已经变化，没有写入任何内容；请重新询问写作助手生成建议。'); return }
-      setPrepared(result.value); setState('ready'); setNote('可以安全应用')
     })
-    return () => { live = false }
+    if (requestGeneration.current !== generation) return
+    const result = raw as RpcResult<{ version?: string; before?: string; after?: string; text?: string }>
+    if (!result.ok) { setState('expired'); setNote('文件已经变化，没有写入任何内容；请重新询问写作助手生成建议。'); return }
+    setPrepared(result.value); setState('ready'); setNote('可以安全应用')
+  }
+
+  useEffect(() => {
+    void check()
+    return () => { requestGeneration.current += 1 }
   }, [props.sessionId, props.proposal.path, props.proposal.summary, props.proposal.oldText, props.proposal.newText, props.proposal.text])
 
   const apply = async () => {
     if (!prepared) return
+    const generation = ++requestGeneration.current
     setState('applying'); setNote('正在应用…')
+    let beforeApplyText = ''
+    if (props.proposal.kind === 'edit') {
+      const read = await props.ctx.connection.rpc.call('/manuscript', 'file.read', {
+        sessionId: props.sessionId,
+        path: props.proposal.path,
+      }) as RpcResult<{ text: string; version: string }>
+      if (requestGeneration.current !== generation) return
+      if (!read.ok || !prepared.version || read.value.version !== prepared.version) {
+        setState('expired'); setNote('文件已经变化，没有写入任何内容；请重新询问写作助手生成建议。')
+        return
+      }
+      beforeApplyText = read.value.text
+    }
     const result = await props.ctx.connection.rpc.call('/manuscript', 'proposal.apply', {
       sessionId: props.sessionId,
       ...props.proposal,
       expectedVersion: prepared.version ?? '',
-    }) as RpcResult<{ path: string }>
+    }) as RpcResult<{ path: string; version: string }>
+    if (requestGeneration.current !== generation) return
     if (!result.ok) { setState('expired'); setNote('文件已经变化，没有写入任何内容；请重新询问写作助手生成建议。'); return }
+    setAppliedVersion(result.value.version)
+    setUndoText(beforeApplyText)
     setState('applied'); setNote('已应用到作品')
     props.onApplied(result.value.path)
+  }
+
+  const undo = async () => {
+    if (props.proposal.kind !== 'edit' || !appliedVersion || !undoText) return
+    const generation = ++requestGeneration.current
+    setState('undoing'); setNote('正在撤销…')
+    const result = await props.ctx.connection.rpc.call('/manuscript', 'file.write', {
+      sessionId: props.sessionId,
+      path: props.proposal.path,
+      text: undoText,
+      version: appliedVersion,
+    }) as RpcResult<{ version: string }>
+    if (requestGeneration.current !== generation) return
+    if (!result.ok) {
+      setState('expired')
+      setNote('文件随后又有变化，无法自动撤销；没有写入任何内容。')
+      return
+    }
+    setAppliedVersion(result.value.version)
+    setState('undone'); setNote('已撤销，作品已恢复到应用前内容')
+    props.onApplied(props.proposal.path)
   }
 
   return e('article', { className: `proposal-card ${state}`, 'aria-label': '文件修改建议' },
@@ -1509,9 +1601,13 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
     e('footer', null,
       e('span', { role: state === 'expired' ? 'alert' : 'status' }, note),
       state === 'ready' ? e('button', { type: 'button', onClick: () => void apply() }, '应用') : null,
-      state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote('已忽略') } }, '忽略') : null,
+      state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('deferred'); setNote('已留待稍后处理') } }, '稍后处理') : null,
+      state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote('已忽略，没有修改作品') } }, '忽略') : null,
+      state === 'deferred' ? e('button', { type: 'button', onClick: () => void check() }, '重新核对') : null,
+      state === 'applied' && props.proposal.kind === 'edit' ? e('button', { type: 'button', onClick: () => void undo() }, '撤销此次修改') : null,
     ),
-    state === 'ready' ? e('small', { className: 'proposal-help' }, '应用后才会写入作品；忽略不会修改文件。') : null,
+    state === 'ready' ? e('small', { className: 'proposal-help' }, '应用后才会写入作品；稍后处理或忽略都不会修改文件。') : null,
+    state === 'applied' && props.proposal.kind === 'edit' ? e('small', { className: 'proposal-help' }, '当前提案卡仍在且文件未再次变化时，可以撤销这一次应用。') : null,
   )
 }
 
@@ -1934,7 +2030,7 @@ async function collectChapters(ctx: ShellContext, sessionId: string): Promise<Ch
     for (const entry of listed.value.entries ?? []) {
       const child = `${directory}/${entry.name}`
       if (entry.type === 'directory') queue.push(child)
-      else if (entry.type === 'file' && /\.md$/i.test(entry.name)) files.push(child)
+      else if (entry.type === 'file' && /\.(?:md|txt)$/i.test(entry.name)) files.push(child)
     }
   }
   return await Promise.all(files.map(async (path) => {
@@ -2069,6 +2165,14 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const indexedWorkspaces = useRef(new Set<string>())
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState('')
+  const [exportPreview, setExportPreview] = useState<PreparedExport | null>(null)
+  const [workspaceView, setWorkspaceView] = useState<'paper' | 'overview' | 'cards'>('paper')
+  const [overview, setOverview] = useState<ProjectOverview | null>(null)
+  const [overviewBusy, setOverviewBusy] = useState(false)
+  const [overviewError, setOverviewError] = useState('')
+  const [overviewRevision, setOverviewRevision] = useState(0)
+  const [statusBusy, setStatusBusy] = useState(false)
+  const [referenceRequest, setReferenceRequest] = useState<ReferenceSearchRequest | null>(null)
   const [importFlow, setImportFlow] = useState<ImportFlow>(idleImportFlow)
   const [snapshotNote, setSnapshotNote] = useState('')
   const [snapshotBusy, setSnapshotBusy] = useState(false)
@@ -2086,6 +2190,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveNote, setArchiveNote] = useState('')
   const archiveRequestGate = useRef(new LatestRequestGate()).current
+  const overviewRequestGate = useRef(new LatestRequestGate()).current
   const manageDirectoryGate = useRef(new LatestRequestGate()).current
   const importReturnFocus = useRef<HTMLElement | null>(null)
   const snapshotReturnFocus = useRef<HTMLElement | null>(null)
@@ -2102,6 +2207,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [, refreshRestoreGate] = useState(0)
   const current = sessions.current
   archiveRequestGate.setScope(current ?? '')
+  overviewRequestGate.setScope(current ?? '')
   const registerFlowWorkspace = async (workspacePath: string) => {
     const registration = await createFlowWorkspace(ctx, workspacePath)
     if (registration.created) temporaryFlowWorkspaces.current.add(registration.workspace.workspaceId)
@@ -2206,6 +2312,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
   useEffect(() => {
     setPath(''); setFiles([]); setReveal(null); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
     setManagePath(null); setManageNote(''); setArchives([]); setArchiveInvalid(0); setArchiveNote('')
+    setWorkspaceView('paper'); setOverview(null); setOverviewError(''); setOverviewBusy(false); setStatusBusy(false)
+    setReferenceRequest(null); setExportPreview(null); setExporting(false); setExportNote('')
   }, [current])
   useEffect(() => {
     if (!session) { setFiles([]); return }
@@ -2217,12 +2325,58 @@ function Root({ ctx }: { ctx: ShellContext }) {
     })
     return () => { live = false }
   }, [ctx.connection.rpc, session?.sessionId, treeRevision])
+  const loadOverview = async () => {
+    if (!session) return
+    const ticket = overviewRequestGate.begin(session.sessionId)
+    setOverviewBusy(true); setOverviewError('')
+    const result = await safeRpcCall<ProjectOverview>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.overview', { sessionId: session.sessionId }))
+    if (!overviewRequestGate.isCurrent(ticket)) return
+    setOverviewBusy(false)
+    if (!result.ok) {
+      setOverview(null)
+      setOverviewError(/invalid|status|状态/i.test(rpcFailureText(result))
+        ? '章节状态文件已损坏，为避免覆盖数据，状态修改已停用。正文仍可正常编辑和导出。'
+        : errorMessage(result))
+      return
+    }
+    setOverview(result.value)
+  }
+  useEffect(() => {
+    if (!session) { setOverview(null); setOverviewBusy(false); return }
+    void loadOverview()
+  }, [ctx.connection.rpc, session?.sessionId, treeRevision, contentRevision, overviewRevision])
+  const updateChapterStatus = async (chapterPath: string, status: ChapterStatus) => {
+    if (!session || !overview || statusBusy) return
+    const requestSessionId = session.sessionId
+    const ticket = overviewRequestGate.begin(requestSessionId)
+    setStatusBusy(true); setOverviewError('')
+    const result = await safeRpcCall<ProjectOverview>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'chapter.statusSet', {
+      sessionId: session.sessionId,
+      path: chapterPath,
+      status,
+      expectedStatusRevision: overview.statusRevision,
+    }))
+    if (currentSession(ctx)?.sessionId !== requestSessionId) return
+    setStatusBusy(false)
+    if (!overviewRequestGate.isCurrent(ticket)) {
+      setOverviewRevision((value) => value + 1)
+      return
+    }
+    if (!result.ok) {
+      setOverviewError(isStaleFailure(result) ? '作品进度已在别处变化，已重新读取；请再次选择状态。' : errorMessage(result))
+      setOverviewRevision((value) => value + 1)
+      return
+    }
+    setOverview(result.value)
+    setWorkbenchNote(`已将 ${documentName(chapterPath)} 标记为${chapterStatusText(status)}`)
+  }
   const openDocument = (nextPath: string, hit?: SearchHit) => {
     if (editorDirty && (nextPath !== path || hit)) {
       setWorkbenchNote('请先保存当前文档。')
       return
     }
     setWorkbenchNote('')
+    setWorkspaceView('paper')
     setPath(nextPath)
     setReveal(hit ? { ...hit, nonce: Date.now() } : null)
   }
@@ -2311,7 +2465,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     setManageBusy(true); setManageNote('')
     const version = await observedVersion(managePath)
     if (!version) { setManageBusy(false); return }
-    const renamed = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.rename', {
+    const renamed = await safeRpcCall<{ path: string; metadataWarning?: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.rename', {
       sessionId: session.sessionId,
       path: managePath,
       newName: name,
@@ -2321,7 +2475,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (!renamed.ok) { setManageNote(errorMessage(renamed)); return }
     if (path === managePath) { setPath(renamed.value.path); setReveal(null) }
     setTreeRevision((value) => value + 1)
-    setWorkbenchNote(`已重命名为 ${renamed.value.path}`)
+    setWorkbenchNote(renamed.value.metadataWarning ? `已重命名为 ${renamed.value.path}；${renamed.value.metadataWarning}` : `已重命名为 ${renamed.value.path}`)
     manageDirectoryGate.setScope('')
     setManageDirectories(null)
     setManagePath(null)
@@ -2331,7 +2485,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     setManageBusy(true); setManageNote('')
     const version = await observedVersion(managePath)
     if (!version) { setManageBusy(false); return }
-    const moved = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.moveManuscript', {
+    const moved = await safeRpcCall<{ path: string; metadataWarning?: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.moveManuscript', {
       sessionId: session.sessionId,
       path: managePath,
       targetDirectory,
@@ -2343,7 +2497,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     manageDirectoryGate.setScope('')
     setManageDirectories(null)
     setTreeRevision((value) => value + 1)
-    setWorkbenchNote(`已移动到 ${moved.value.path}`)
+    setWorkbenchNote(moved.value.metadataWarning ? `已移动到 ${moved.value.path}；${moved.value.metadataWarning}` : `已移动到 ${moved.value.path}`)
     setManagePath(null)
   }
   const archiveManaged = async () => {
@@ -2364,7 +2518,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     setManageDirectories(null)
     setManagePath(null)
     setTreeRevision((value) => value + 1)
-    setWorkbenchNote(`已归档 ${archived.value.path}`)
+    setWorkbenchNote(archived.value.metadataWarning ? `已归档 ${archived.value.path}；${archived.value.metadataWarning}` : `已归档 ${archived.value.path}`)
     await loadArchives()
   }
   const continueArchive = async (item: ArchiveView) => {
@@ -2373,6 +2527,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', { sessionId: session.sessionId, archiveId: item.archiveId }))
     setArchiveBusy(false)
     if (!result.ok) { setArchiveNote(errorMessage(result)); return }
+    if (result.value.metadataWarning) setArchiveNote(result.value.metadataWarning)
     setTreeRevision((value) => value + 1)
     await loadArchives()
   }
@@ -2390,7 +2545,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (result.value.state !== 'restored') { setArchiveNote('原路径已有文件或归档已变化，未覆盖。'); await loadArchives(); return }
     setTreeRevision((value) => value + 1)
     openDocument(result.value.path)
-    setWorkbenchNote(`已恢复 ${result.value.path}`)
+    setWorkbenchNote(result.value.metadataWarning ? `已恢复 ${result.value.path}；${result.value.metadataWarning}` : `已恢复 ${result.value.path}`)
     await loadArchives()
   }
   useEffect(() => {
@@ -2465,19 +2620,29 @@ function Root({ ctx }: { ctx: ShellContext }) {
   }
   const exportNovel = async (format: ExportFormat) => {
     if (!session) return
+    if (editorDirty) { setExportNote('请先保存当前文档，再预览导出。'); return }
+    const requestSessionId = session.sessionId
     setExporting(true); setExportNote('正在整理正文…')
     try {
-      const chapters = await collectChapters(ctx, session.sessionId)
+      const chapters = await collectChapters(ctx, requestSessionId)
+      if (currentSession(ctx)?.sessionId !== requestSessionId) return
       const title = currentWorkspace?.title || (current ? sessions.byId[current]?.displayTitle : undefined) || '未命名作品'
-      const result = buildExport(chapters, title, format)
-      downloadExport(result.filename, result.content, format)
-      setExportNote(`已生成 ${result.filename}`)
+      const prepared = prepareExport(chapters, title, format)
+      setExportPreview(prepared)
+      setExportNote('导出内容已整理，请核对后确认。')
     } catch (error) {
+      if (currentSession(ctx)?.sessionId !== requestSessionId) return
       const message = error instanceof Error ? error.message : ''
       setExportNote(/没有可导出|正文为空/.test(message) ? message : '导出没有完成，请重试。')
     } finally {
-      setExporting(false)
+      if (currentSession(ctx)?.sessionId === requestSessionId) setExporting(false)
     }
+  }
+  const confirmExport = () => {
+    if (!exportPreview) return
+    downloadExport(exportPreview.filename, exportPreview.content, exportPreview.format)
+    setExportNote(`已生成 ${exportPreview.filename}`)
+    setExportPreview(null)
   }
   const currentCwd = current ? sessions.byId[current]?.cwd : undefined
   const currentWorkspace = workspaces.items.find((workspace) => workspace.path === currentCwd)
@@ -3087,6 +3252,17 @@ function Root({ ctx }: { ctx: ShellContext }) {
         },
       }, workspaces.items.map((workspace) => e('option', { key: workspace.workspaceId, value: workspace.workspaceId }, workspace.title || workspace.path)))),
       currentWorkspace ? e('button', { className: 'workspace-current-manage icon-button', type: 'button', 'aria-label': '管理当前作品', title: '修改作品显示名', onClick: () => openWorkspaceManage(currentWorkspace, false) }, '···') : null,
+      e('nav', { className: 'workspace-view-controls', 'aria-label': '作品视图' },
+        (['paper', 'overview', 'cards'] as const).map((target) => e('button', {
+          key: target,
+          type: 'button',
+          'aria-pressed': workspaceView === target,
+          onClick: () => {
+            if (target !== 'paper' && editorDirty) { setWorkbenchNote('请先保存当前文档，再切换作品视图。'); return }
+            setWorkspaceView(target)
+          },
+        }, target === 'paper' ? '稿纸' : target === 'overview' ? '概览' : '卡片')),
+      ),
       e('nav', { className: 'layout-controls', 'aria-label': '工作台布局' },
         e('button', {
           type: 'button',
@@ -3145,6 +3321,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         sessionId: session.sessionId,
         revision: treeRevision,
         navigationBlocked: editorDirty,
+        referenceRequest,
         onOpen: (hit: SearchHit) => openDocument(hit.path, hit),
       }),
       e('details', { className: 'archive-panel', onToggle: (event: ChangeEvent<HTMLDetailsElement>) => { if (event.currentTarget.open) void loadArchives() } },
@@ -3188,7 +3365,29 @@ function Root({ ctx }: { ctx: ShellContext }) {
       label: '调整文件栏宽度',
       onChange: setSidebarWidth,
     }) : null,
-    e(Editor, { ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'), externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal, completionPreference, authorPreferences: normalizeAuthorPreferences(authorPreferences) }),
+    workspaceView === 'overview' ? e(ProjectOverviewPanel, {
+      overview, busy: overviewBusy, error: overviewError, statusBusy,
+      onOpen: openDocument,
+      onStatus: (chapterPath: string, status: ChapterStatus) => void updateChapterStatus(chapterPath, status),
+      onRetry: () => void loadOverview(),
+    }) : workspaceView === 'cards' ? e(ProjectCardsPanel, {
+      overview, busy: overviewBusy, error: overviewError, statusBusy,
+      onOpen: openDocument,
+      onStatus: (chapterPath: string, status: ChapterStatus) => void updateChapterStatus(chapterPath, status),
+      onRetry: () => void loadOverview(),
+    }) : e(Editor, {
+      ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'),
+      externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal, completionPreference,
+      authorPreferences: normalizeAuthorPreferences(authorPreferences),
+      chapterStatus: overview?.chapters.find((chapter) => chapter.path === path)?.status,
+      statusBusy,
+      onChapterStatus: (chapterPath: string, status: ChapterStatus) => void updateChapterStatus(chapterPath, status),
+      onReferenceSearch: (request: ReferenceQuery) => {
+        setFocusMode(false); setSidebarOpen(true)
+        setReferenceRequest({ ...request, nonce: Date.now() })
+      },
+      onSaved: () => setOverviewRevision((value) => value + 1),
+    }),
     assistantVisible ? e(PanelResizer, {
       side: 'right',
       value: assistantWidth,
@@ -3229,6 +3428,12 @@ function Root({ ctx }: { ctx: ShellContext }) {
       onClick: () => setAssistantOpen(true),
     }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')) : null,
     shortcutsOpen ? e(ShortcutDialog, { onClose: closeShortcuts }) : null,
+    exportPreview ? e(ExportPreviewDialog, {
+      prepared: exportPreview,
+      busy: exporting,
+      onCancel: () => setExportPreview(null),
+      onConfirm: confirmExport,
+    }) : null,
     leaveConfirm ? e(ConfirmDialog, {
       id: 'leave-assistant-draft',
       title: '放弃未发送的消息？',
@@ -3305,7 +3510,8 @@ button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--e
 .project-context-receipt{margin-top:7px;color:#637269;font-size:11px}.project-context-receipt summary{cursor:pointer}.project-context-receipt ul{display:grid;gap:3px;margin:6px 0 0;padding-left:16px}.project-context-receipt code{font-size:10px;color:#466354}
 .editor:has(>.worldbook-settings){grid-template-rows:auto auto minmax(0,1fr) auto}.worldbook-settings{display:grid;grid-template-columns:minmax(160px,1fr) auto 88px auto;align-items:end;gap:8px 12px;padding:10px 14px;border-bottom:1px solid #ddd5c6;background:#f7f3e9;color:#53665a}.worldbook-settings>div{grid-column:1/-1;display:flex;align-items:baseline;gap:9px;min-width:0}.worldbook-settings>div small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.worldbook-settings>div .warning{margin-left:auto}.worldbook-settings label{display:grid;gap:3px;font-size:11px}.worldbook-settings textarea,.worldbook-settings input[type=number],.worldbook-settings label:not(.worldbook-enabled)>input{box-sizing:border-box;width:100%;min-width:0;padding:6px 7px;border:1px solid #cbc5b7;border-radius:4px;background:#fffdf7;color:#28382f}.worldbook-settings textarea{min-height:30px;max-height:78px;resize:vertical;font:inherit}.worldbook-settings .worldbook-enabled{display:flex;align-items:center;gap:5px;padding-bottom:6px;white-space:nowrap}.worldbook-settings button{margin-bottom:0;padding:6px 9px;border:1px solid #bfc5b8;border-radius:3px;background:#fffdf7;color:#2c5744;cursor:pointer}.worldbook-settings button:hover{background:#e1eadc}.worldbook-settings button:disabled,.worldbook-settings input:disabled,.worldbook-settings textarea:disabled{cursor:not-allowed;opacity:.55}@media(max-width:1180px){.worldbook-settings>div small{display:none}.worldbook-settings{grid-template-columns:minmax(130px,1fr) auto 78px auto;gap-inline:8px}}
 .import-overlay{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:24px;background:#1f2d2570}.import-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:14px;padding:24px;border:1px solid #d8cfbd;border-radius:16px 4px 16px 4px;background:#fffdf6;box-shadow:0 28px 80px #1c28221f}.import-dialog h2,.import-dialog p{margin:0}.import-dialog ul{max-height:170px;margin:0;overflow:auto;padding-left:20px;color:#5c6e62}.import-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.import-dialog button{padding:7px 11px;border:1px solid #b9c8ba;border-radius:4px;background:#f5f1e6;color:#2c5744;cursor:pointer}.snapshot-dialog{width:min(620px,100%)}.snapshot-list{display:grid;gap:8px;max-height:280px!important;padding:0!important;list-style:none}.snapshot-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #ded6c7;border-radius:8px;background:#faf6ec}.snapshot-list li div{display:grid;gap:3px;min-width:0}.snapshot-list li strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294938}.snapshot-list li small{color:#6b776e}
-.layout-shell{grid-template-rows:52px minmax(0,1fr);overflow:hidden}.layout-shell>.sidebar,.layout-shell>.editor,.layout-shell>.empty-paper,.layout-shell>.chat,.layout-shell>.panel-resizer{grid-column:auto;grid-row:2;min-width:0}.layout-shell>.chat{position:relative;z-index:1;inset:auto;width:auto;min-width:0;border:0;border-left:1px solid #d8d0bf;border-radius:0;box-shadow:none;overflow:hidden}.layout-shell>.chat[hidden]{display:none!important}.layout-shell>.editor{grid-column:auto}.layout-shell>.sidebar{grid-column:auto}.layout-controls{display:flex;align-items:center;gap:3px;padding:3px;border:1px solid #d8d0bf;border-radius:15px 5px 15px 15px;background:#f1ecdf}.layout-controls button{min-width:42px;padding:4px 8px;border:0;border-radius:11px 3px 11px 11px;background:transparent;color:#526b5d;cursor:pointer}.layout-controls button[aria-pressed=true]{background:#d8e6d8;color:#183f2f;font-weight:600}.layout-controls button:disabled{cursor:not-allowed;opacity:.45}.panel-resizer{position:relative;z-index:4;min-width:0;cursor:col-resize;touch-action:none;user-select:none;background:#e6dfd1;transition:background-color 140ms ease}.panel-resizer span{position:absolute;inset:0 2px;border-radius:4px;background:transparent}.panel-resizer:hover,.panel-resizer:focus-visible,.panel-resizer[aria-valuenow]{outline:0}.panel-resizer:hover span,.panel-resizer:focus-visible span{background:#6f927c}.layout-shell.focus-mode .paper-input{width:min(calc(100% - 64px),980px);padding-inline:clamp(52px,10vw,128px);box-shadow:0 14px 42px #4b674719}.layout-shell.focus-mode .editor-header{padding-inline:20px}.layout-shell.focus-mode .editor-tools{justify-content:center}.layout-shell.assistant-open .assistant-launcher{display:none}@media(max-width:1180px){.layout-controls button{min-width:36px;padding-inline:6px}.layout-shell .paper-input{width:calc(100% - 28px);padding-inline:34px}}@media(prefers-reduced-motion:reduce){.panel-resizer{transition:none!important}}
+.layout-shell{grid-template-rows:52px minmax(0,1fr);overflow:hidden}.layout-shell>.sidebar,.layout-shell>.editor,.layout-shell>.empty-paper,.layout-shell>.project-view,.layout-shell>.chat,.layout-shell>.panel-resizer{grid-column:auto;grid-row:2;min-width:0}.layout-shell>.chat{position:relative;z-index:1;inset:auto;width:auto;min-width:0;border:0;border-left:1px solid #d8d0bf;border-radius:0;box-shadow:none;overflow:hidden}.layout-shell>.chat[hidden]{display:none!important}.layout-shell>.editor,.layout-shell>.project-view{grid-column:auto}.layout-shell>.sidebar{grid-column:auto}.layout-controls,.workspace-view-controls{display:flex;align-items:center;gap:3px;padding:3px;border:1px solid #d8d0bf;border-radius:15px 5px 15px 15px;background:#f1ecdf}.layout-controls button,.workspace-view-controls button{min-width:42px;padding:4px 8px;border:0;border-radius:11px 3px 11px 11px;background:transparent;color:#526b5d;cursor:pointer}.layout-controls button[aria-pressed=true],.workspace-view-controls button[aria-pressed=true]{background:#d8e6d8;color:#183f2f;font-weight:600}.layout-controls button:disabled{cursor:not-allowed;opacity:.45}.panel-resizer{position:relative;z-index:4;min-width:0;cursor:col-resize;touch-action:none;user-select:none;background:#e6dfd1;transition:background-color 140ms ease}.panel-resizer span{position:absolute;inset:0 2px;border-radius:4px;background:transparent}.panel-resizer:hover,.panel-resizer:focus-visible,.panel-resizer[aria-valuenow]{outline:0}.panel-resizer:hover span,.panel-resizer:focus-visible span{background:#6f927c}.layout-shell.focus-mode .paper-input{width:min(calc(100% - 64px),980px);padding-inline:clamp(52px,10vw,128px);box-shadow:0 14px 42px #4b674719}.layout-shell.focus-mode .editor-header{padding-inline:20px}.layout-shell.focus-mode .editor-tools{justify-content:center}.layout-shell.assistant-open .assistant-launcher{display:none}@media(max-width:1180px){.layout-controls button,.workspace-view-controls button{min-width:36px;padding-inline:6px}.layout-shell .paper-input{width:calc(100% - 28px);padding-inline:34px}}@media(prefers-reduced-motion:reduce){.panel-resizer{transition:none!important}}
+.chapter-status-control select{padding:4px 7px;border:1px solid #c8c4b7;border-radius:10px 3px 10px 10px;background:#fffdf7;color:#315640}.project-view{box-sizing:border-box;min-height:0;overflow:auto;padding:clamp(24px,4vw,54px);background:#f8f3e8}.project-view>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:24px}.project-view h1,.project-view h2,.project-view p{margin:0}.project-view h1{color:#234b38;font:600 34px/1.2 "Noto Serif SC","Songti SC",serif}.project-view>header small{color:#708078;font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.18em}.project-view button,.project-view select{padding:7px 10px;border:1px solid #bec8bb;border-radius:11px 3px 11px 11px;background:#fffdf7;color:#285640;cursor:pointer}.overview-metrics{display:grid;grid-template-columns:repeat(5,minmax(88px,1fr));gap:10px;margin-bottom:20px}.overview-metrics article{display:grid;gap:3px;padding:16px;border:1px solid #ddd4c4;border-radius:16px 4px 16px 16px;background:#fffdf7}.overview-metrics strong{color:#28513e;font:600 28px/1 "Noto Serif SC","Songti SC",serif}.overview-metrics span{color:#708078;font-size:11px}.overview-recent{display:flex;align-items:center;gap:8px;margin-bottom:16px!important;color:#68776d}.overview-recent button{padding:2px 5px;border:0;background:transparent;font-weight:600}.overview-recent small{margin-left:auto}.overview-list{display:grid;gap:7px;margin:0;padding:0;list-style:none}.overview-list li{display:grid;grid-template-columns:minmax(0,1fr) 104px;align-items:center;gap:12px;padding:10px 12px;border:1px solid #ded6c7;border-radius:12px 4px 12px 12px;background:#fffaf0}.overview-open{display:grid!important;gap:3px!important;padding:0!important;border:0!important;background:transparent!important;text-align:left}.overview-open strong,.card-open strong{color:#294b3a}.overview-open small{color:#718078}.card-tabs{display:flex;gap:4px}.card-tabs button[aria-pressed=true]{background:#d8e6d8;font-weight:600}.chapter-board{display:grid;grid-template-columns:repeat(3,minmax(210px,1fr));gap:14px;align-items:start}.chapter-board>section{min-width:0;padding:10px;border:1px solid #ddd4c4;border-radius:18px 5px 18px 18px;background:#eee8da}.chapter-board h2{display:flex;justify-content:space-between;padding:4px 4px 12px;color:#345745;font-size:14px}.chapter-board h2 small{display:grid;width:22px;height:22px;place-items:center;border-radius:50%;background:#d7e5d6}.chapter-board>section>div,.outline-cards{display:grid;gap:9px}.chapter-board article,.outline-cards article{display:grid;gap:8px;padding:12px;border:1px solid #ddd5c6;border-radius:12px 4px 12px 12px;background:#fffdf7}.card-open{display:grid!important;gap:5px!important;padding:0!important;border:0!important;background:transparent!important;text-align:left}.card-open code{overflow:hidden;color:#718078;font-size:10px;text-overflow:ellipsis}.card-open p{min-height:2.8em;color:#53675b;line-height:1.45}.card-open small{color:#78837c}.outline-cards{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}.export-preview-dialog{width:min(680px,100%)}.export-summary{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin:0}.export-summary>div{padding:10px;border:1px solid #ded6c7;border-radius:8px;background:#faf6ec}.export-summary dt{color:#718078;font-size:11px}.export-summary dd{margin:3px 0 0;color:#294b3a;font-weight:600}.export-chapters{display:grid;gap:4px;max-height:280px;margin:0;padding:0;overflow:auto;list-style:none}.export-chapters li{display:flex;justify-content:space-between;gap:12px;padding:7px 9px;border-bottom:1px solid #e3dccf}.export-chapters small{flex:none}@media(max-width:1100px){.overview-metrics{grid-template-columns:repeat(3,1fr)}.chapter-board{grid-template-columns:1fr}.workspace-view-controls{display:none}}
 .tree{flex:1 1 auto}.tree-marker{display:inline-block;width:14px;color:#718078;text-align:center}
 .layout-shell:has(.export-menu[open]){overflow:visible}
 `

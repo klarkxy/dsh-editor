@@ -15,6 +15,7 @@ import {
   restoreArchive,
   type LifecycleAccess,
 } from './lifecycle.ts'
+import { readProjectOverview, setChapterStatus } from './overview.ts'
 
 let base = ''
 beforeEach(async () => { base = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-lifecycle-')) })
@@ -75,10 +76,12 @@ describe('safe document lifecycle', () => {
   it('renames a saved document in place without overwriting another file', async () => {
     const root = await project()
     await fs.writeFile(path.join(root, '正文', '001.md'), '# one')
+    await setChapterStatus({ access: access(root), path: '正文/001.md', status: 'revising', expectedStatusRevision: null })
     const source = await readTextFile(access(root).files, '正文/001.md')
     await expect(renameDocument({ access: access(root), path: '正文/001.md', newName: '序章', expectedVersion: source.version })).resolves.toMatchObject({ path: '正文/序章.md' })
     await expect(fs.readFile(path.join(root, '正文', '序章.md'), 'utf8')).resolves.toBe('# one')
     await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readProjectOverview(access(root))).resolves.toMatchObject({ chapters: [expect.objectContaining({ path: '正文/序章.md', status: 'revising' })] })
 
     await fs.writeFile(path.join(root, '正文', '002.md'), 'two')
     await fs.writeFile(path.join(root, '正文', '已存在.md'), 'keep')
@@ -92,11 +95,13 @@ describe('safe document lifecycle', () => {
     const root = await project()
     await fs.mkdir(path.join(root, '正文', '第一卷'))
     await fs.writeFile(path.join(root, '正文', '001.md'), '# one')
+    await setChapterStatus({ access: access(root), path: '正文/001.md', status: 'final', expectedStatusRevision: null })
     const observed = await readTextFile(access(root).files, '正文/001.md')
     await expect(moveManuscriptDocument({ access: access(root), path: '正文/001.md', targetDirectory: '正文/第一卷', expectedVersion: observed.version }))
       .resolves.toMatchObject({ path: '正文/第一卷/001.md' })
     await expect(fs.readFile(path.join(root, '正文', '第一卷', '001.md'), 'utf8')).resolves.toBe('# one')
     await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readProjectOverview(access(root))).resolves.toMatchObject({ chapters: [expect.objectContaining({ path: '正文/第一卷/001.md', status: 'final' })] })
 
     await fs.writeFile(path.join(root, '正文', '002.md'), 'source')
     await fs.writeFile(path.join(root, '正文', '第一卷', '002.md'), 'occupied')
@@ -163,15 +168,18 @@ describe('safe document lifecycle', () => {
   it('archives, lists, and restores without hard deletion or overwrite', async () => {
     const root = await project(); const lifecycle = access(root)
     await fs.writeFile(path.join(root, '正文', '001.md'), '# one')
+    await setChapterStatus({ access: lifecycle, path: '正文/001.md', status: 'final', expectedStatusRevision: null })
     const source = await readTextFile(lifecycle.files, '正文/001.md')
     const archived = await archiveDocument({ access: lifecycle, path: '正文/001.md', expectedVersion: source.version })
     expect(archived).toMatchObject({ path: '正文/001.md', state: 'archived' })
     await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readProjectOverview(lifecycle)).resolves.toMatchObject({ chapters: [], totals: { byStatus: { draft: 0, revising: 0, final: 0 } } })
     const listed = await listArchives(lifecycle)
     expect(listed).toMatchObject({ invalid: 0, items: [expect.objectContaining({ archiveId: archived.archiveId, state: 'archived' })] })
     const restored = await restoreArchive({ access: lifecycle, archiveId: archived.archiveId, expectedVersion: listed.items[0]!.version })
     expect(restored.state).toBe('restored')
     await expect(fs.readFile(path.join(root, '正文', '001.md'), 'utf8')).resolves.toBe('# one')
+    await expect(readProjectOverview(lifecycle)).resolves.toMatchObject({ chapters: [expect.objectContaining({ path: '正文/001.md', status: 'final' })] })
     expect(await listArchives(lifecycle)).toEqual({ invalid: 0, items: [expect.objectContaining({ state: 'restored' })] })
   })
 

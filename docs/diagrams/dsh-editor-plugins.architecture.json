@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "DSH Editor 插件拓扑",
+    "output": "dsh-editor-plugins.html",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": { "label": "Client" },
+        "backend": { "label": "Host 插件" },
+        "database": { "label": "作品数据" },
+        "cloud": { "label": "DSH 运行时" },
+        "external": { "label": "入口" }
+      }
+    },
+    "views": [
+      {
+        "id": "desktop-profile",
+        "label": "桌面 profile",
+        "focus": ["electron", "shell", "manuscript", "workbench", "kernel", "dsh-host"],
+        "note": "桌面一次性加载四个包；缺任一私有包时 Host 在发布 URL 前失败。"
+      },
+      {
+        "id": "public-web",
+        "label": "公开 Web 插件",
+        "focus": ["web-dsh", "manuscript", "grill", "workspace"],
+        "note": "普通 web profile 可独立安装 manuscript 与 grill，二者可共存。"
+      },
+      {
+        "id": "write-contracts",
+        "label": "写入契约",
+        "focus": ["shell", "manuscript", "workbench", "kernel", "workspace"],
+        "note": "真正写正文只经 /manuscript；kernel 只返回 proposal marker。"
+      }
+    ]
+  },
+  "components": [
+    { "id": "web-dsh", "type": "external", "label": "普通 web profile", "sublabel": "可独立安装", "pos": [48, 120], "size": [176, 64] },
+    { "id": "manuscript", "type": "backend", "label": "dsh-manuscript", "sublabel": "public dual-face", "pos": [380, 120], "size": [176, 64], "tag": "公开 tarball" },
+    { "id": "dsh-host", "type": "cloud", "label": "DSH 权威", "sublabel": "session / sandbox", "pos": [720, 120], "size": [176, 64] },
+    { "id": "workspace", "type": "database", "label": "作品目录", "sublabel": "live-session cwd", "pos": [1060, 120], "size": [176, 64] },
+    { "id": "grill", "type": "backend", "label": "dsh-grill", "sublabel": "tools + workflow", "pos": [48, 340], "size": [176, 64], "tag": "仅 Web" },
+    { "id": "electron", "type": "frontend", "label": "桌面 Electron", "sublabel": "不可插件化", "pos": [48, 560], "size": [176, 64] },
+    { "id": "shell", "type": "frontend", "label": "dsh-editor-shell", "sublabel": "fixed-version root", "pos": [380, 560], "size": [176, 64] },
+    { "id": "workbench", "type": "backend", "label": "workbench", "sublabel": "private host-only", "pos": [720, 560], "size": [176, 64] },
+    { "id": "kernel", "type": "backend", "label": "novel-kernel", "sublabel": "private host-only", "pos": [1060, 340], "size": [176, 64] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "公开 Web 交付", "wraps": ["web-dsh", "manuscript", "grill"] },
+    { "kind": "region", "label": "桌面 profiles/dsh-editor", "wraps": ["shell", "workbench", "kernel", "manuscript"] },
+    { "kind": "security-group", "label": "loopback RPC", "wraps": ["manuscript", "workbench"] }
+  ],
+  "connections": [
+    { "id": "web-to-manuscript", "from": "web-dsh", "to": "manuscript", "label": "shell.overlay", "variant": "emphasis" },
+    { "id": "web-to-grill", "from": "web-dsh", "to": "grill", "label": "scaffold_novel", "labelAt": [136, 198] },
+    { "id": "manuscript-to-host", "from": "manuscript", "to": "dsh-host", "label": "live session" },
+    { "id": "host-to-workspace", "from": "dsh-host", "to": "workspace", "label": "ctx.fs", "variant": "emphasis" },
+    { "id": "electron-to-shell", "from": "electron", "to": "shell", "label": "加载 root", "variant": "emphasis" },
+    { "id": "shell-to-manuscript", "from": "shell", "to": "manuscript", "label": "/manuscript" },
+    { "id": "shell-to-workbench", "from": "shell", "to": "workbench", "label": "私有 RPC" },
+    { "id": "workbench-to-host", "from": "workbench", "to": "dsh-host", "label": "host-api" },
+    { "id": "kernel-to-host", "from": "kernel", "to": "dsh-host", "label": "tools.guard" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "分级",
+      "items": [
+        "manuscript 与 grill 是公开 tarball",
+        "workbench、kernel、shell 只随桌面 profile 交付",
+        "Electron bootstrap 永远不可插件化"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "依赖方向",
+      "items": [
+        "Shell client 构建时内联 workbench/kernel contracts",
+        "workbench Host 只依赖 manuscript/host-api",
+        "禁止跨包导入另一个包的 src"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "替换规则",
+      "items": [
+        "同一能力只能注册一次 Cordis entry",
+        "root 只能有一个所有者",
+        "缺私有包时 Host 以退出码 1 fail-closed"
+      ]
+    }
+  ]
+}

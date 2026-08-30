@@ -89,9 +89,10 @@ describe('profile deployment', () => {
     const patch = await readFile(join(import.meta.dirname, '..', 'resources', 'profile', 'cordis.patch.yml'), 'utf8')
     expect(patch).not.toMatch(/- id: ui-conversation\s+disabled: true/)
   })
-  it('honors DSH_HOME before the conventional home directory', () => {
+  it('honors DSH_HOME and otherwise isolates desktop state from the default DSH home', () => {
     expect(resolveDshHome({ DSH_HOME: 'D:/custom' }, 'D:/Users/example')).toBe('D:/custom')
-    expect(resolveDshHome({}, 'D:/Users/example')).toBe(join('D:/Users/example', '.dsh'))
+    expect(resolveDshHome({ DSH_HOME: '   ' }, 'D:/Users/example')).toBe(join('D:/Users/example', '.dsh-editor'))
+    expect(resolveDshHome({}, 'D:/Users/example')).toBe(join('D:/Users/example', '.dsh-editor'))
   })
   it('fails closed on an unmarked collision', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))

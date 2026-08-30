@@ -4,6 +4,16 @@
 
 当前兼容基线固定为 DSH `0.1.1-rc.2`。私有 `root` 接口尤其不是上游公共承诺；升级 DSH 前必须重新验证本文列出的全部桌面能力。
 
+## 交互架构图
+
+| 图 | 说明 | 打开 |
+| --- | --- | --- |
+| 插件拓扑 | 公开 Web 与桌面私有包、loopback RPC、DSH 权威 | [dsh-editor-plugins.html](diagrams/dsh-editor-plugins.html) |
+| 确认写入 | 预览提案不写文件；作者确认后才 `proposal.apply` | [author-confirm-write.html](diagrams/author-confirm-write.html) |
+| 桌面运行时 | 进程、profile 与写作主路径 | [dsh-editor-runtime.html](diagrams/dsh-editor-runtime.html) |
+
+规范源文件在 [diagrams/](diagrams/) 下的同名 `.json`。
+
 ## 运行拓扑与所有权
 
 一个 Electron 进程只启动一个 loopback DSH Host。所有插件共享 DSH 的 session、workspace、model、tools、approval 和 connection 权威，不创建第二套状态。
@@ -54,6 +64,17 @@ dsh-editor-novel-kernel/host
 | `dsh-editor-novel-kernel` / `editor-novel-kernel` | 私有小说工具、guard、prompt、知识卡 | private host-only | 桌面 profile 必需 |
 | `dsh-editor-shell` / `editor-shell` | 唯一 `root` client | fixed-version private | 桌面 profile 必需 |
 
+各包 `cordis.patch.yml` 中的 entry id：
+
+| 包 | entry id | name |
+| --- | --- | --- |
+| `dsh-manuscript` | `manuscript` | `dsh-manuscript` |
+| `dsh-grill` | `grill-tools` | `dsh-grill/tools` |
+| `dsh-grill` | `grill-workflow` | `dsh-grill/workflow` |
+| `dsh-editor-workbench` | `editor-workbench` | `dsh-editor-workbench` |
+| `dsh-editor-novel-kernel` | `editor-novel-kernel` | `dsh-editor-novel-kernel` |
+| `dsh-editor-shell` | `editor-shell` | `dsh-editor-shell` |
+
 `dsh-editor-workbench/contracts` 与 `dsh-editor-novel-kernel/contracts` 是 browser-safe 内部兼容面：只能包含常量、类型、解析器和纯函数，不能导入 Node、Cordis Host 或文件系统。Shell 的 client 构建必须内联它们，浏览器产物不得在运行时解析私有 Host 包。
 
 `dsh-manuscript/host-api` 是公开但狭窄的 Host 子入口，只提供 live-session workspace authority、受约束文件/路径原语与标准 Host 错误映射。它不是任意文件系统 SDK，也不包含桌面 workbench endpoint。
@@ -66,6 +87,20 @@ dsh-editor-novel-kernel/host
 - Client 只能使用 DSH 注入的 runtime、connection 和 slots；Renderer 不得访问 Node、凭据、绝对路径或进程。
 - 普通附加界面使用 `shell.overlay` 等 additive slot。`root` 只能有一个所有者；替换 Shell 时必须先移除 `editor-shell`，不能并存两个 root。
 - DshChatPort 只投影官方 `SessionFace`、`ConversationSnapshot`、send/cancel、model/permission、approval/questions。插件不得复制 Chat、启动第二次 connection 或自行执行 Tool。
+
+当前 inject 清单（必须与源码保持一致）：
+
+| 包 | `name` | `inject` |
+| --- | --- | --- |
+| `dsh-manuscript` Host | `dsh-manuscript` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `llm`, `storageDomain` |
+| `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy` |
+| `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt` |
+| `dsh-editor-shell` Host | `dsh-editor-shell` | （空） |
+| `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection` |
+| `dsh-grill/tools` | `dsh-grill-tools` | `tools` |
+| `dsh-grill/workflow` | `dsh-grill-workflow` | `systemPrompt` |
+
+Shell 以 `root` slot id `dsh-editor-shell-root`、priority `-100`、label `DSH 编辑器` 注册。manuscript client 只注册 `shell.overlay`（id `manuscript`，order `100`，label `稿纸`），禁止占用 `root` 或 `conversation.view`。
 
 ## RPC 通用契约
 
@@ -91,7 +126,7 @@ Host 处理文件请求的固定顺序：
 
 ## `/manuscript`：公开稿件接口
 
-除特别注明外，请求都包含 `sessionId`，路径均为 workspace-relative。
+Channel：`/manuscript`。除特别注明外，请求都包含 `sessionId`，路径均为 workspace-relative。
 
 | Endpoint | 请求字段 | 成功值 / 写入语义 |
 | --- | --- | --- |
@@ -105,43 +140,63 @@ Host 处理文件请求的固定顺序：
 | `search.text` | `sessionId`, `query`, `scope: project\|manuscript` | 有界字面量搜索；不接受正则 |
 | `proposal.prepare` | `sessionId`, `kind`, `path`, `summary`；edit 加 `oldText`, `newText`；create 加 `text` | 只读预检和作者确认信息 |
 | `proposal.apply` | prepare 的全部字段；edit 另加 `expectedVersion` | 作者确认后按版本门禁创建或修改 |
-| `fim.complete` | `sessionId`, `prefix`, `suffix`, 可选 `authorPreferences` | `{ text, route: 'dsh-llm' }`，只返回候选 |
-| `patch.complete` | `sessionId`, `path`, `selectedText`, `before`, `after`, 可选 `authorPreferences` | `{ text, route: 'dsh-llm' }`，只返回候选 |
+| `fim.complete` | `sessionId`, `prefix`, `suffix`，可选 `authorPreferences` | `{ text, route: 'dsh-llm' }`，只返回候选 |
+| `patch.complete` | `sessionId`, `path`, `selectedText`, `before`, `after`，可选 `authorPreferences` | `{ text, route: 'dsh-llm' }`，只返回候选 |
 
 不得把导入、快照、归档或任意 Node FS 能力加入这个公开 channel。
 
 ## `/dsh-editor-workbench`：私有桌面接口
 
+Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型面在 `dsh-editor-workbench/contracts`。
+
 | Endpoint | 请求字段 | 成功值 / 语义 |
 | --- | --- | --- |
 | `project.init` | `sessionId`, `newProject` | `{ created, skipped }`，初始化固定作品结构 |
 | `project.prepareIndex` | `sessionId` | 索引准备回执 |
+| `project.overview` | `sessionId` | 状态版本、章节/大纲摘要、状态统计、最近编辑项和有界扫描警告 |
+| `chapter.statusSet` | `sessionId`, `path`, `status`, `expectedStatusRevision` | CAS 更新固定章节状态并返回完整概览 |
 | `structure.groupCreate` | `sessionId`, `path` | 只在 `正文` 下建立一级卷/部目录 |
-| `context.compile` | `sessionId`, `userRequest`, 可选 `activePath`, `authorPreferences` | `{ serialized, receipt }`，有界 V2 context 信封 |
-| `project.importProbe` | `targetSessionId`, 可选 `sourceSessionId` | token、统计、预览或恢复状态；不写入 |
+| `context.compile` | `sessionId`, `userRequest`，可选 `activePath`, `authorPreferences` | `{ serialized, receipt }`，有界 V2 context 信封 |
+| `project.importProbe` | `targetSessionId`，可选 `sourceSessionId` | token、统计、预览或恢复状态；不写入 |
 | `project.importApply` | `targetSessionId`, `sourceSessionId`, `probeToken` | 重新 probe 后执行 no-clobber 导入 |
 | `project.importCleanup` | `targetSessionId`, `receiptId` | 只清理 manifest/hash 证明归属的中断写入 |
 | `snapshot.list` | `sessionId` | 快照列表；不包含未保存 buffer |
-| `snapshot.create` | `sessionId`, 可选 `label` | 原子发布后的 snapshot view |
-| `snapshot.restoreProbe` | `targetSessionId`, 可选 `sourceSessionId`, `snapshotId` | 只恢复到新空 workspace 的 token/状态 |
+| `snapshot.create` | `sessionId`，可选 `label` | 原子发布后的 snapshot view |
+| `snapshot.restoreProbe` | `targetSessionId`，可选 `sourceSessionId`, `snapshotId` | 只恢复到新空 workspace 的 token/状态 |
 | `snapshot.restoreApply` | `targetSessionId`, `sourceSessionId`, `snapshotId`, `token` | no-clobber 恢复统计 |
 | `snapshot.restoreCleanup` | `targetSessionId`, `receiptId` | hash-protected 中断清理 |
 | `file.rename` | `sessionId`, `path`, `newName`, `expectedVersion` | 同目录、保留扩展名后的新路径 |
 | `file.moveManuscript` | `sessionId`, `path`, `targetDirectory`, `expectedVersion` | 仅在 `正文` 树内 no-replace 移动 |
 | `archive.list` | `sessionId` | 可恢复 archive view 与损坏项计数 |
 | `archive.apply` | `sessionId`, `path` + `expectedVersion`，或 `archiveId` | 新归档或继续中断归档 |
-| `archive.restore` | `sessionId`, `archiveId`, 可选 `expectedVersion` | no-replace 恢复后的 archive view |
+| `archive.restore` | `sessionId`, `archiveId`，可选 `expectedVersion` | no-replace 恢复后的 archive view |
 
-这些 endpoint、字段、V1/V2 envelope、token、receipt、manifest、hash 与重新验证语义是兼容接口。物理换包不构成协议升级。
+这些 endpoint、字段、V1/V2 envelope、token、receipt、manifest、hash 与重新验证语义是兼容接口。章节状态仅接受 `draft | revising | final`；`draft` 不写入状态映射。状态文件损坏或 CAS 过期时 Host fail closed，Renderer 必须刷新后重试。物理换包不构成协议升级。
+
+`.dsh-editor/chapter-status.json` 是整部作品快照隐藏路径规则的唯一精确白名单。它会随快照复制和恢复；`.dsh-editor` 下其他隐藏元数据仍被排除。重命名、正文跨卷移动、归档和恢复响应可以带 `metadataWarning`，表示正文操作已经成功但状态元数据未同步，调用方不得据此回滚正文。
+
+Context 信封常量：
+
+- `schema`: `dsh-editor.project-context`
+- 历史版本 `1`，当前版本 `2`
+- 固定来源：`项目总览.md`、`大纲/总纲.md`、`人物卡/人物索引.md`、`世界书/设定总汇.md`、`.dsh-editor/作品索引.md`
 
 ## Novel Kernel 契约
 
+- 工具名：`novel_knowledge`、`novel_propose`。
 - `novel_knowledge` 只接受唯一的 `topics` 数组，去重后 1–3 个固定主题；每张知识卡最多 6000 字符。它只返回建议，不提供项目事实或授权。
 - `novel_propose` 每次只形成一个 Markdown `edit` 或 `create` 提案，绝不写文件。
 - proposal marker 固定为 `{ marker: 'dsh-editor.proposal', version: 1, ... }`。Shell 只通过 `dsh-editor-novel-kernel/contracts` 的严格解析器渲染有效 marker。
 - `editorToolGuard` 只允许受限的 Markdown 搜索、读取、知识加载和预览提案；不替代 DSH 全局审批。
 - prompt section 固定为 `dsh-editor:novel-kernel`、order `90`。作品材料是不可信字符串，只有 context 信封中的 `user_request` 是当次请求。
 - 真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`。
+
+## `dsh-grill` 契约
+
+仅用于普通 `web` profile，不进入桌面 profile。
+
+- `scaffold_novel`：在 live session cwd 下创建小型小说工作区骨架（`正文`/`大纲`/`人物卡`/`世界书` 与 stub Markdown）。已存在路径跳过，绝不覆盖；不在 workspace 外创建文件。
+- prompt section：`grill:workflow`，order `140`。
 
 ## 如何修改或替换现有插件
 
@@ -150,9 +205,10 @@ Host 处理文件请求的固定顺序：
 | 三栏布局、稿纸、Chat 展示、设置、快捷键 | `dsh-editor-shell` |
 | 普通 Web 的稿纸抽屉 | `dsh-manuscript` client |
 | 稿件安全读写、草稿、搜索、FIM/patch、proposal apply | `dsh-manuscript` Host |
-| 项目结构、context、导入、快照、移动、归档 | `dsh-editor-workbench` |
+| 项目结构、章节概览/状态、context、导入、快照、移动、归档 | `dsh-editor-workbench` |
 | 小说知识、proposal Tool、guard、系统提示词 | `dsh-editor-novel-kernel` |
 | 窗口、内置 DSH、profile、portable | `apps/desktop` 与桌面物化脚本 |
+| `scaffold_novel` 与 grill 写作提示 | `dsh-grill`（仅 Web） |
 
 替换 workbench 或 kernel 时：
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildExport } from './export.ts'
+import { buildExport, prepareExport } from './export.ts'
 
 describe('novel export', () => {
   const chapters = [
@@ -23,5 +23,17 @@ describe('novel export', () => {
 
   it('refuses an empty manuscript', () => {
     expect(() => buildExport([], '空书', 'markdown')).toThrow('正文为空')
+  })
+
+  it('previews the same naturally ordered Markdown and TXT payload that will be downloaded', () => {
+    const prepared = prepareExport([
+      { path: '正文/第一卷/010.txt', text: '第十章\n\n结尾。' },
+      { path: '正文/第一卷/002.md', text: '# 第二章\n\n' },
+      { path: '人物卡/主角.md', text: '忽略' },
+    ], '混合稿', 'text')
+    expect(prepared.chapters.map((item) => item.path)).toEqual(['正文/第一卷/002.md', '正文/第一卷/010.txt'])
+    expect(prepared.chapters[0]).toMatchObject({ empty: true, chars: 4 })
+    expect(prepared.totalChars).toBe(prepared.chapters.reduce((sum, item) => sum + item.chars, 0))
+    expect(prepared.content.indexOf('第二章')).toBeLessThan(prepared.content.indexOf('第十章'))
   })
 })

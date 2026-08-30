@@ -1,6 +1,20 @@
 # DSH Editor 架构与边界
 
-插件分级、RPC/Tool/slot 接口目录以及修改、替换和新建插件流程见 [plugin-architecture.md](plugin-architecture.md)。
+本文描述桌面运行时、所有权边界和安全约束。插件分级、RPC/Tool/slot 接口以及修改、替换和新建插件流程见 [plugin-architecture.md](plugin-architecture.md)。开发和验收命令见 [development.md](development.md)。
+
+当前兼容基线固定为 DSH `0.1.1-rc.2`。
+
+## 交互架构图
+
+在浏览器中打开下列独立 HTML（含明暗主题、路径追踪和导出）：
+
+| 图 | 说明 | 打开 |
+| --- | --- | --- |
+| 桌面运行时 | Electron、唯一 DSH Host、桌面 profile 插件与作品目录 | [dsh-editor-runtime.html](diagrams/dsh-editor-runtime.html) |
+| 插件拓扑 | 公开 Web 插件与桌面私有包的分级、依赖和 loopback RPC | [dsh-editor-plugins.html](diagrams/dsh-editor-plugins.html) |
+| 确认写入 | 从 `context.compile` 到作者确认后 `proposal.apply` | [author-confirm-write.html](diagrams/author-confirm-write.html) |
+
+规范源文件在 [diagrams/](diagrams/) 下的同名 `.json`。图中的产品名、channel、tool 与代码标识保持原样。
 
 ## 产品结构
 
@@ -25,32 +39,49 @@ Electron（窗口、资源校验、子进程生命周期）
 
 ## 所有权边界
 
-- DSH：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry（含显示名与最近入口）、sandbox、文件 API 与持久化。
-- Electron：单窗口、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。
-- `dsh-editor-shell` Renderer：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；新建、重命名、放弃草稿和离开保护均使用应用内、锁定焦点的对话框，不依赖浏览器 `prompt/confirm`；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据、绝对路径或 Node 文件系统。
-- `dsh-editor-shell` Host：仅保留加载唯一 root client 所需的最小 Cordis 入口；Renderer 继续拥有界面、编辑 buffer 与作者确认流程。
-- `dsh-editor-workbench` Host：loopback-only 项目结构、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。
-- `dsh-editor-novel-kernel` Host：只读 `novel_knowledge`、预览式 `novel_propose`、工具 guard 与 system prompt；没有 RPC，也不直接写正文。
-- `dsh-manuscript` Host：公开 `/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、全文搜索、DSH_HOME 草稿、FIM 与 `patch.complete`；公开产物不含 Node 文件系统能力。
-- `dsh-grill`：保持为普通 DSH 可独立安装的公共插件，不进入桌面 profile 或桌面运行依赖。
+- **DSH**：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry（含显示名与最近入口）、sandbox、文件 API 与持久化。
+- **Electron**：单窗口、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。入口在 `apps/desktop/src/main.ts`，子进程监督在 `apps/desktop/src/supervisor.ts`。
+- **`dsh-editor-shell` Renderer**：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；新建、重命名、放弃草稿和离开保护均使用应用内、锁定焦点的对话框，不依赖浏览器 `prompt/confirm`；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据、绝对路径或 Node 文件系统。
+- **`dsh-editor-shell` Host**：仅保留加载唯一 root client 所需的最小 Cordis 入口；Renderer 继续拥有界面、编辑 buffer 与作者确认流程。
+- **`dsh-editor-workbench` Host**：loopback-only 项目结构、章节概览与状态、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。
+- **`dsh-editor-novel-kernel` Host**：只读 `novel_knowledge`、预览式 `novel_propose`、工具 guard 与 system prompt；没有 RPC，也不直接写正文。
+- **`dsh-manuscript` Host**：公开 `/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、全文搜索、DSH_HOME 草稿、FIM 与 `patch.complete`；公开产物不含 Node 文件系统能力。
+- **`dsh-grill`**：保持为普通 DSH 可独立安装的公共插件，不进入桌面 profile 或桌面运行依赖。
 
 没有 BFF、第二份 Chat 历史、provider registry、数据库、模式状态、工作流引擎、索引服务、云同步或后台守护进程。Chat Renderer 不执行工具或直接调用模型。打开已有作品时，产品只向当前 DSH 会话提交一次受限初始化任务：Agent 把工作区内容视为不可信数据，不改正文，唯一目标写入为 `.dsh-editor/作品索引.md`；实际工具权限、审批和沙箱仍由 DSH 权威控制。
 
 外部作品导入只经过私有 `/dsh-editor-workbench`：两端必须是已解析、已注册且附着 live session 的工作区，Renderer 不传递 cwd 或绝对文件路径。Probe 只读取源、检查空目标并产生绑定两端 canonical root key 与文件版本/哈希的 token；Apply 会完整重 probe 后才以 `.dsh-editor-import.json` 的 `copying` 清单开始 no-clobber 写入 `正文/`。TXT 保持文本内容而改为 `.md`，隐藏路径、链接和非文本均跳过；完整项目不支持撤销。中断仅能在重新选择同一源后续传，或在每个清单拥有文件的哈希仍匹配时显式清理。Node 目录操作仅在 Host 已解析的根内逐组件拒绝 symlink/junction 后使用，文件内容和清单仍经版本化稿件文件原语读写。
 
-整部作品文本快照保存在源工作区 `.dsh-editor/snapshots/<uuid>/`：先在同级 `.creating-<uuid>` 写入逐文件文本 payload 和校验 manifest，再同父目录 rename 发布。快照不包含未保存编辑 buffer。恢复只能经私有通道的 `snapshot.restore*` 到新的空目标；`.dsh-editor-restore.json` 绑定源根、目标根、快照、token 与清单，支持显式续传或在哈希未变时安全清理，绝不原地覆盖源作品。
+整部作品文本快照保存在源工作区 `.dsh-editor/snapshots/<uuid>/`：先在同级 `.creating-<uuid>` 写入逐文件文本 payload 和校验 manifest，再同父目录 rename 发布。快照不包含未保存编辑 buffer。隐藏路径仍默认排除，唯一白名单例外是精确路径 `.dsh-editor/chapter-status.json`；其他 `.dsh-editor/*` 不会进入 payload。恢复只能经私有通道的 `snapshot.restore*` 到新的空目标；`.dsh-editor-restore.json` 绑定源根、目标根、快照、token 与清单，支持显式续传或在哈希未变时安全清理，绝不原地覆盖源作品；不含状态文件的旧快照仍可恢复，章节按草稿显示。
 
 文件整理仍由 live session 建立工作区 authority，并只在私有通道开放。`structure.groupCreate` 只允许在 `正文` 下建立一个可见的一级卷/部目录，拒绝隐藏名、设备名、嵌套路径、链接、已占用目标和只读工作区；目录本身就是结构来源，不新增 `structure.json`。卷内章节继续通过公开 `file.create` 的既有父目录检查与 `createIfAbsent` 写入。`file.moveManuscript` 只允许已保存的可见 Markdown/TXT 在 `正文` 目录树内部跨目录移动，保留文件名和类型，并复用与归档相同的 expectedVersion、内容哈希、逐组件 no-follow、目标 absent 与 no-replace 原子移动检查。`file.rename` 仅允许同目录、保留扩展名的 Markdown/TXT 改名；`archive.*` 把文档移动到 `.dsh-editor/archive/<timestamp>-<uuid>/`，用 root-bound、hash-protected manifest 记录 `moving/archived/restoring/restored`。Windows 实际移动使用经过运行时验证的 `System.IO.File.Move(source,target)` no-replace 原语，经固定 PowerShell 脚本、最小环境和 15 秒超时调用；目标存在、源版本变化、链接路径或完整性异常均 fail closed，不回退到 copy-delete 或普通覆盖式 rename。损坏归档会计数并展示，但不会被宣传为可恢复项。
 
+章节进度只使用作品内的人类可读文件 `.dsh-editor/chapter-status.json`，格式固定为 `{ version: 1, statuses }`；未记录项就是草稿，记录值只允许 `revising` 或 `final`。私有 Host 按需扫描 `正文` 和 `大纲` 的可见 Markdown/TXT，在 2,000 文件、100 MB 总量与单文件 2 MB 上限内生成标题、摘要、去空白字数、空章、修改时间和状态统计。状态写入使用文件版本 CAS；损坏文件禁止静默覆盖。重命名、移动、归档和恢复在正文操作成功后同步迁移状态，迁移失败只返回 `metadataWarning`，不反向回滚作者已经成功完成的文件操作。外部手工改名形成的孤立状态不显示，并在下一次完整、无跳过的成功状态写入时清理。
+
 `search.text` 仅做有界、字面量、大小写不敏感的 Markdown/TXT 扫描，拒绝正则与控制字符，跳过隐藏、生成和链接路径，并限制文件数、总字节和结果数。Renderer 只接收路径、行列、片段、偏移和版本；定位前再次比较版本。章节导航由递归工作区列表中完整的 `正文/**/*.{md,txt}` 自然排序产生，不依赖用户是否展开文件树。
+
+概览和卡片视图消费同一份 `project.overview` 响应，不复制章节或大纲数据。导出预检一次读取 Markdown/TXT 章节后同时形成自然顺序、空章警告、字数和最终 Blob；确认阶段只下载已经展示的内容，不再次读取。人物卡和世界书的“查找正文引用”只预填现有 `search.text` 的查询、`manuscript` 范围和请求序号；不增加引用 RPC、关系索引或向量库。未保存稿仍可发起引用搜索，但结果跳转沿用现有保存门禁。
 
 ## Desktop profile 与数据
 
-开发模式使用 `.dev/desktop-home`。便携版遵循 `DSH_HOME`，未设置时使用 DSH 默认 home；应用只原子部署 `profiles/dsh-editor` 和带 owner marker 的 `runtime/dsh-editor-runtime`，遇到无应用标记的同名目录会拒绝覆盖。
+开发模式使用 `.dev/desktop-home`。便携版遵循显式 `DSH_HOME`，未设置时使用独立的 `~/.dsh-editor`；应用只原子部署 `profiles/dsh-editor` 和带 owner marker 的 `runtime/dsh-editor-runtime`，遇到无应用标记的同名目录会拒绝覆盖。
 
 profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记，启动会拒绝覆盖并在窗口显示诊断与重试。每次部署先写同级 stage，原子替换已标记 profile；home 级 credentials、settings、sessions、storages 和真实 workspace 不会被复制或删除。
 
 桌面资源固定包含 Node `24.16.0`、DSH `0.1.1-rc.2`、manuscript、workbench、novel-kernel、shell 及 profile。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
+
+`apps/desktop/resources/profile/package.json` 声明的 bundles 为：
+
+```text
+@deepseek-ai/dsh-base
+@deepseek-ai/dsh-web-app
+dsh-manuscript
+dsh-editor-workbench
+dsh-editor-novel-kernel
+dsh-editor-shell
+```
+
+`dsh-grill` 不在此列。
 
 ## DshChatPort
 
@@ -72,7 +103,7 @@ Renderer 另维护最多 1,200 字符的本机跨作品作者约定，并在 V2 
 
 普通世界书编辑器在同一正文 buffer 上提供 `triggers/enabled/priority` 可视化设置；应用时只规范化有界 frontmatter，文件正文逐字保留，随后复用现有草稿、自动保存、expectedVersion 与冲突处理。没有 frontmatter 的旧文件可升级为规范头；显式但损坏的 frontmatter 禁止表单写入，必须先由作者手工修复。该表单不建立第二份世界书状态或存储。
 
-未知节点或工具显示通用降级卡。Renderer 不持久化对话副本；刷新后仍以 DSH snapshot 为准。
+未知节点或工具显示通用降级卡。Renderer 不持久化对话副本；刷新后仍以 DSH snapshot 为准。`novel_knowledge` 的运行中调用对用户隐藏；`novel_propose` 的结果只在通过 `dsh-editor-novel-kernel/contracts` 严格解析后渲染为作者确认卡。
 
 ## Host RPC
 
@@ -94,6 +125,8 @@ Renderer 另维护最多 1,200 字符的本机跨作品作者约定，并在 V2 
 
 FIM 同样由 Host 选模型。候选只改 buffer，支持 loading、Tab 接受、Esc 放弃和最多三条候选切换；追加候选复用同一文档 revision 与插入点，新请求失败或返回重复内容时保留已有候选。空白章不会自动生成正文。
 
+完整 endpoint 目录见 [plugin-architecture.md](plugin-architecture.md)。
+
 ## Electron 安全与进程边界
 
 BrowserWindow 使用 `nodeIntegration: false`、`contextIsolation: true`、renderer sandbox、`webSecurity: true`，拒绝所有权限、新窗口和非本次 loopback origin 导航。CSP 限定 self、data/blob 图片、同源及 loopback WebSocket；DSH `0.1.1-rc.2` 的客户端模块加载器需要 `unsafe-eval`，这是已验证的固定版本例外，窗口仍不加载外部 origin。
@@ -109,6 +142,7 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 - 安装器、自动更新、代码签名、发布；
 - 句内卡片、`/`/`@` 面板、审阅 gutter、附件和完整官方高级管理界面；
 - 永久删除、`正文` 之外的跨目录移动、卷/部之外的任意建目录、watch、独立索引服务、Git UI；
+- 自定义章节状态、卡片拖放、手写卡片摘要、章节—大纲绑定、关系图、向量检索、DOCX/EPUB；
 - Android、远程多用户、云同步；
 - 未经授权的 commit、push、tag 或 release。
 

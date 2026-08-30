@@ -14,7 +14,7 @@ export class ProfileCollisionError extends Error {
 }
 
 export function resolveDshHome(env: NodeJS.ProcessEnv, homeDirectory: string): string {
-  return env.DSH_HOME?.trim() || join(homeDirectory, '.dsh')
+  return env.DSH_HOME?.trim() || join(homeDirectory, '.dsh-editor')
 }
 
 async function isOwnedProfile(profilePath: string): Promise<boolean> {

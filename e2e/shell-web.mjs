@@ -113,7 +113,7 @@ try {
     if (!forced || !interfaces || state.shell || state.officialHome || !state.editorName) throw new Error('first-run settings assertion failed')
   }))
   phases.push(await inspectPhase(browser, 'configured-home', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, (state) => {
-    const onboarding = state.body.includes('新建') && state.body.includes('打开作品') && state.body.includes('导入作品')
+    const onboarding = state.body.includes('新建') && state.body.includes('打开作品') && !state.body.includes('导入作品')
     if (!state.shell || state.settings || !state.editorName || state.officialHome || !onboarding || !state.settingsControl || state.permanentChat) throw new Error('configured home assertion failed')
   }))
   const report = { ok: true, source: 'private-dsh-profile-web', phases }

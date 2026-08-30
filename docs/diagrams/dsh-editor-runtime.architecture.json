@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "DSH Editor 桌面运行时",
+    "output": "dsh-editor-runtime.html",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": { "label": "界面" },
+        "backend": { "label": "Host 插件" },
+        "database": { "label": "本地数据" },
+        "cloud": { "label": "运行时" },
+        "external": { "label": "外部参与者" }
+      }
+    },
+    "views": [
+      {
+        "id": "write-path",
+        "label": "写作主路径",
+        "focus": ["author", "electron", "dsh-host", "shell", "manuscript", "workspace"],
+        "note": "作者在沙箱窗口写作，稿件只经公开 /manuscript 写入作品目录。"
+      },
+      {
+        "id": "private-plugins",
+        "label": "私有桌面包",
+        "focus": ["shell", "workbench", "kernel", "manuscript"],
+        "note": "Shell 是唯一 root；workbench 与 kernel 只随桌面 profile 交付。"
+      },
+      {
+        "id": "agent-loop",
+        "label": "助手与模型",
+        "focus": ["shell", "dsh-host", "kernel", "llm"],
+        "note": "DshChatPort 只投影 SessionFace；模型与工具仍由同一 DSH Host 执行。"
+      }
+    ]
+  },
+  "components": [
+    { "id": "author", "type": "external", "label": "作者", "sublabel": "本机单用户", "pos": [48, 340], "size": [168, 64] },
+    { "id": "electron", "type": "frontend", "label": "Electron", "sublabel": "窗口 + Supervisor", "pos": [360, 340], "size": [168, 64] },
+    { "id": "dsh-host", "type": "cloud", "label": "DSH Host", "sublabel": "0.1.1-rc.2 / DSH_HOME", "pos": [680, 340], "size": [176, 64], "tag": "唯一 Agent" },
+    { "id": "manuscript", "type": "backend", "label": "dsh-manuscript", "sublabel": "/manuscript", "pos": [1000, 340], "size": [176, 64] },
+    { "id": "workspace", "type": "database", "label": "作品目录", "sublabel": "Markdown / 快照", "pos": [1320, 340], "size": [168, 64] },
+    { "id": "llm", "type": "external", "label": "模型提供方", "sublabel": "live-session model", "pos": [360, 100], "size": [168, 64] },
+    { "id": "kernel", "type": "backend", "label": "novel-kernel", "sublabel": "tool + prompt", "pos": [1000, 100], "size": [176, 64] },
+    { "id": "shell", "type": "frontend", "label": "dsh-editor-shell", "sublabel": "唯一 root GUI", "pos": [680, 580], "size": [176, 64] },
+    { "id": "workbench", "type": "backend", "label": "workbench", "sublabel": "/dsh-editor-workbench", "pos": [1000, 580], "size": [176, 64] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Electron 进程", "wraps": ["electron"] },
+    { "kind": "region", "label": "profiles/dsh-editor", "wraps": ["dsh-host", "shell", "manuscript", "workbench", "kernel"] }
+  ],
+  "connections": [
+    { "id": "author-to-electron", "from": "author", "to": "electron", "label": "写作操作", "variant": "emphasis" },
+    { "id": "electron-to-host", "from": "electron", "to": "dsh-host", "label": "loopback URL", "variant": "emphasis" },
+    { "id": "host-to-llm", "from": "dsh-host", "to": "llm", "label": "session.prompt", "fromSide": "top", "toSide": "right" },
+    { "id": "host-to-kernel", "from": "dsh-host", "to": "kernel", "label": "tools" },
+    { "id": "host-to-shell", "from": "dsh-host", "to": "shell", "label": "加载 root", "variant": "emphasis", "labelAt": [768, 418] },
+    { "id": "shell-to-manuscript", "from": "shell", "to": "manuscript", "label": "/manuscript" },
+    { "id": "manuscript-to-workspace", "from": "manuscript", "to": "workspace", "label": "ctx.fs", "variant": "emphasis" },
+    { "id": "shell-to-workbench", "from": "shell", "to": "workbench", "label": "私有 RPC", "labelDy": 18 },
+    { "id": "workbench-to-workspace", "from": "workbench", "to": "workspace", "label": "host-api" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "所有权",
+      "items": [
+        "Electron 只管窗口、内置运行时和 DshSupervisor 子进程",
+        "DSH 拥有 session、模型、工具、审批和 DSH_HOME",
+        "正文写入只走公开 /manuscript"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "桌面专用包",
+      "items": [
+        "Shell 以较低 root priority 遮蔽官方 AppFrame",
+        "workbench 负责项目、导入、快照和归档",
+        "kernel 只预览提案，绝不直接写文件"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "明确不做",
+      "items": [
+        "没有第二套 Chat、BFF 或独立索引服务",
+        "Renderer 不读凭据、绝对路径或 Node 文件系统",
+        "dsh-grill 不进入桌面 profile"
+      ]
+    }
+  ]
+}

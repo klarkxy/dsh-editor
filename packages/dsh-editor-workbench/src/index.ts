@@ -6,6 +6,7 @@ import { archiveDocument, LifecycleError, listArchives, moveManuscriptDocument, 
 import { createManuscriptGroup, initializeProject, prepareNovelIndex, ProjectInitError } from './project.ts'
 import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './snapshot.ts'
 import { compileContext } from './context.ts'
+import { OverviewError, readProjectOverview, setChapterStatus, type OverviewAccess } from './overview.ts'
 
 export const name = 'dsh-editor-workbench'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
@@ -41,6 +42,11 @@ export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
     if (error.code === 'IO' || error.code === 'UNSUPPORTED') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
     return badRequest(error.message)
   }
+  if (error instanceof OverviewError) {
+    if (error.code === 'READ_ONLY') return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
+    if (error.code === 'STALE' || error.code === 'BLOCKED' || error.code === 'INVALID_PATH') return badRequest(error.message)
+    return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
+  }
   return mapHostError(error) ?? { ok: false, error: { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} } }
 }
 
@@ -71,9 +77,22 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
     mode: value.policy.mode,
     files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
   })
+  const overviewAccess = (value: typeof access): OverviewAccess => ({
+    path: value.workspace.path,
+    rootKey: value.root.targetKey,
+    mode: value.policy.mode,
+    files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
+  })
 
   if (endpoint === 'project.init') return await initializeProject({ root: access.workspace.path, mode: access.policy.mode, newProject: body.newProject === true, signal })
   if (endpoint === 'project.prepareIndex') return await prepareNovelIndex({ root: access.workspace.path, mode: access.policy.mode, signal })
+  if (endpoint === 'project.overview') return await readProjectOverview(overviewAccess(access))
+  if (endpoint === 'chapter.statusSet') return await setChapterStatus({
+    access: overviewAccess(access),
+    path: rel,
+    status: body.status as 'draft' | 'revising' | 'final',
+    expectedStatusRevision: typeof body.expectedStatusRevision === 'string' ? body.expectedStatusRevision : null,
+  })
   if (endpoint === 'structure.groupCreate') return await createManuscriptGroup({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
   if (endpoint === 'context.compile') return await compileContext(files, str(body, 'userRequest'), str(body, 'activePath') || undefined, str(body, 'authorPreferences'))
   if (endpoint === 'project.importProbe') {

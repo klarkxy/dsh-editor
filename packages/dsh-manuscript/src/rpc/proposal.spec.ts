@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyProposal, parseProposal, prepareProposal } from './proposal.ts'
+import { readTextFile, writeTextFile } from './files.ts'
 import { createMemoryContext } from './test-helpers.ts'
 
 describe('proposal workflow', () => {
@@ -21,6 +22,19 @@ describe('proposal workflow', () => {
     const prepared = await prepareProposal(context, exact)
     await context.fs.writeText(await context.fs.resolve('正文/001.md'), '外部修改', { kind: 'replaceIfVersion', version: String(prepared.version) })
     await expect(applyProposal(context, exact, String(prepared.version))).rejects.toMatchObject({ code: 'STALE' })
+  })
+
+  it('restores the exact pre-apply text even when the replacement is not unique', async () => {
+    const original = '甲句。\n乙句。\n'
+    const context = createMemoryContext({ '正文/001.md': original })
+    const proposal = parseProposal({ kind: 'edit', path: '正文/001.md', oldText: '甲句。', newText: '乙句。', summary: '合并措辞' })
+    const before = await readTextFile(context, '正文/001.md')
+    const prepared = await prepareProposal(context, proposal)
+    const applied = await applyProposal(context, proposal, String(prepared.version))
+    await expect(context.fs.readText(await context.fs.resolve('正文/001.md'))).resolves.toBe('乙句。\n乙句。\n')
+    const restored = await writeTextFile(context, '正文/001.md', before.text, applied.version)
+    expect(restored.version).not.toBe(applied.version)
+    await expect(context.fs.readText(await context.fs.resolve('正文/001.md'))).resolves.toBe(original)
   })
 
   it('creates a Markdown file only when absent', async () => {

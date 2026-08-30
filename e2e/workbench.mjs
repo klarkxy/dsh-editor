@@ -96,7 +96,8 @@ await mkdir(resolve(workspace, '世界书'), { recursive: true })
 await mkdir(resolve(home, 'electron-user-data'), { recursive: true })
 await mkdir(output, { recursive: true })
 await writeFile(resolve(workspace, '正文', '001.md'), '# 第一章\n\n开场。\n')
-await writeFile(resolve(workspace, '正文', '002.md'), '# 第二章\n\n月下银桥只出现一次。\n')
+await writeFile(resolve(workspace, '正文', '002.md'), '# 第二章\n\n主角走过月下银桥。\n')
+await writeFile(resolve(workspace, '正文', '003.txt'), '第三章\n\n纯文本章节。\n')
 await writeFile(resolve(workspace, '正文', '010.md'), '# 第十章\n\n收束。\n')
 await writeFile(resolve(workspace, '人物卡', '主角.md'), '# 主角\n\n无名。\n')
 
@@ -144,10 +145,55 @@ try {
   await pathBox.fill(workspace)
   await window.getByRole('button', { name: '打开此目录' }).click()
   await window.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+
+  await window.getByRole('button', { name: '概览', exact: true }).click()
+  const overviewPanel = window.getByRole('region', { name: '作品概览' })
+  await overviewPanel.getByRole('heading', { name: '作品进度' }).waitFor({ state: 'visible' })
+  if (!(await overviewPanel.textContent())?.includes('4章节')) failures.push('作品概览没有统计 Markdown/TXT 正文章节')
+  await overviewPanel.getByLabel('设置 第一章 状态').selectOption('revising')
+  await waitFor(async () => {
+    try {
+      const stored = JSON.parse(await readFile(resolve(workspace, '.dsh-editor', 'chapter-status.json'), 'utf8'))
+      return stored.version === 1 && stored.statuses?.['正文/001.md'] === 'revising'
+    } catch {
+      return false
+    }
+  }, 'chapter status sidecar')
+  await window.getByRole('button', { name: '卡片', exact: true }).click()
+  const cardsPanel = window.getByRole('region', { name: '结构卡片' })
+  await cardsPanel.waitFor({ state: 'visible' })
+  if (!(await cardsPanel.getByRole('region', { name: '修订中' }).textContent())?.includes('第一章')) failures.push('卡片视图与概览状态不一致')
+
   await window.locator('.export-menu > summary').click()
   if (!(await window.getByRole('button', { name: 'Markdown', exact: true }).isVisible())) failures.push('导出菜单没有显示 Markdown')
   if (!(await window.getByRole('button', { name: 'TXT', exact: true }).isVisible())) failures.push('导出菜单没有显示 TXT')
-  await window.keyboard.press('Escape')
+  await window.getByRole('button', { name: 'Markdown', exact: true }).click()
+  const exportPreview = window.getByRole('dialog', { name: '导出前检查' })
+  await exportPreview.waitFor({ state: 'visible' })
+  const previewText = await exportPreview.textContent()
+  if (!previewText?.includes('4') || !previewText.includes('正文/003.txt')) failures.push('导出预检没有展示混合章节、顺序或统计')
+  const downloadPromise = window.waitForEvent('download')
+  await exportPreview.getByRole('button', { name: '确认导出' }).click()
+  const download = await downloadPromise
+  const downloadedExport = resolve(output, 'preview-export.md')
+  await download.saveAs(downloadedExport)
+  const downloadedText = await readFile(downloadedExport, 'utf8')
+  if (!downloadedText.includes('纯文本章节') || !downloadedText.includes('月下银桥')) failures.push('导出下载与预检章节不一致')
+
+  await window.getByRole('button', { name: '稿纸', exact: true }).click()
+  await window.locator('.tree-row', { hasText: '人物卡' }).first().click()
+  await window.locator('.tree-row', { hasText: '主角.md' }).first().click()
+  await window.getByRole('button', { name: '查找正文引用' }).click()
+  const referenceSearch = window.getByRole('search')
+  await referenceSearch.getByLabel('搜索作品文字').waitFor({ state: 'visible' })
+  await window.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '搜索作品文字')
+  if (await referenceSearch.getByLabel('搜索作品文字').inputValue() !== '主角') failures.push('人物引用没有用标题预填查询')
+  if (await referenceSearch.getByLabel('搜索范围').inputValue() !== 'manuscript') failures.push('人物引用没有限制到正文')
+  const referenceHit = window.locator('.search-results button', { hasText: '正文/002.md' }).first()
+  await referenceHit.waitFor({ state: 'visible' })
+  await referenceHit.click()
+  await window.waitForFunction(() => document.querySelector('textarea[aria-label="正文"]')?.value.includes('月下银桥'))
+
   await window.locator('.project-actions > summary').click()
   await window.locator('.project-actions').getByRole('button', { name: '设定' }).click()
   const createWorldbook = window.getByRole('dialog', { name: '新建设定' })
@@ -202,7 +248,7 @@ try {
   if (!(await rootChapter.isVisible())) await window.locator('.tree-row', { hasText: '正文' }).first().click()
   await rootChapter.click()
   await window.getByRole('textbox', { name: '正文' }).waitFor({ state: 'visible' })
-  await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('1 / 4'))
+  await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('1 / 5'))
   const completeButton = window.getByRole('button', { name: '补全', exact: true })
   const patchButton = window.getByRole('button', { name: '修改选段', exact: true })
   await completeButton.waitFor({ state: 'visible' })
@@ -388,13 +434,13 @@ try {
   await window.getByRole('textbox', { name: '正文' }).waitFor({ state: 'visible' })
 
   await window.getByTitle('下一章').click()
-  await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('2 / 4'))
+  await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('2 / 5'))
   await window.waitForFunction(() => {
     const editor = document.querySelector('textarea[aria-label="正文"]')
     return editor instanceof HTMLTextAreaElement && editor.value.includes('月下银桥')
   })
   const openedSecond = await window.getByRole('textbox', { name: '正文' }).inputValue()
-  if (!openedSecond.includes('月下银桥')) failures.push('完整章节导航没有按 001/002/010 自然排序')
+  if (!openedSecond.includes('月下银桥')) failures.push('完整章节导航没有按 Markdown/TXT 混合路径自然排序')
 
   const search = window.getByRole('search')
   await search.getByLabel('搜索作品文字').fill('月下银桥')

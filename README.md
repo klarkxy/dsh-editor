@@ -54,6 +54,9 @@ pnpm test:e2e:portable
 - [开发者指南](docs/development.md)：运行时准备、调试、测试与打包
 - [架构与边界](docs/architecture.md)：DSH 权威边界、profile、RPC 与安全约束
 - [插件架构与接口](docs/plugin-architecture.md)：双私有 Host 拓扑、RPC/Tool/slot 契约以及修改、替换和新建插件流程
+- [桌面运行时图](docs/diagrams/dsh-editor-runtime.html)：Electron、DSH Host 与桌面 profile
+- [插件拓扑图](docs/diagrams/dsh-editor-plugins.html)：公开 Web 插件与桌面私有包
+- [确认写入时序图](docs/diagrams/author-confirm-write.html)：从 context 编译到作者确认写入
 - [CHANGELOG](CHANGELOG.md)：版本变化
 
 DSH Editor 的 loopback RPC 只适用于本地单用户信任模型，不应暴露成远程多用户文件接口。
