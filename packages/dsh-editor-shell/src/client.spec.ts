@@ -9,6 +9,15 @@ describe('shell manuscript RPC safety', () => {
     expect(source).not.toContain('globalThis.confirm')
   })
 
+  it('opens 打开作品 and 新建 through the host directory picker, and only shows a path form if the picker is unavailable', () => {
+    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    expect(source).toContain("onClick: () => void startWorkspaceFromPicker(false)")
+    expect(source).toContain("onClick: () => void startWorkspaceFromPicker(true)")
+    expect(source).toContain('ctx.workspaces.pickDirectory()')
+    expect(source).toContain("setManualWorkspaceMode(newProject ? 'new' : 'existing')")
+    expect(source).not.toContain('showWorkspacePath(')
+  })
+
   it('shows the actual create destination for every document kind', () => {
     expect(createDialogDirectory('chapter')).toBe('正文')
     expect(createDialogDirectory('chapter', '正文/第二卷')).toBe('正文/第二卷')
@@ -68,9 +77,21 @@ describe('shell manuscript RPC safety', () => {
     expect(isSuccessWorkbenchNote('请先保存当前文档。')).toBe(false)
     expect(searchSkippedText(1)).toBe('未搜索 1 个隐藏、生成、非文本或过大项目')
     const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
-    expect(source).toContain('.layout-shell:has(.export-menu[open]){overflow:visible}')
+    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8').replace(/\s+/g, '')
+    expect(styleSource).toContain('.layout-shell:has(.export-menu[open]){overflow:visible}')
+    expect(styleSource).toContain(".export-menusummary::after{content:'';")
     expect(source).toContain("e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('markdown') }, 'Markdown')")
     expect(source).toContain("e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('text') }, 'TXT')")
+    expect(source).toContain("exporting ? '导出中' : '导出全书'")
+    expect(source).toContain("title: '把正文按章节顺序合并成一份 Markdown 或 TXT'")
+    expect(source).toContain("title: '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品'")
+    expect(source).toContain('function SnapshotSettings(')
+    expect(source).toContain("setupGate === 'ready' ? renderSnapshotSettings()")
+    expect(source).not.toContain('openSnapshotPanel')
+    expect(source).not.toMatch(/export-actions[\s\S]{0,500}作品快照/)
+    expect(source).toContain('function GearIcon()')
+    expect(source).toContain("onClick: openSettings }, e(GearIcon)")
+    expect(source).not.toMatch(/settings-link icon-button[\s\S]{0,160}'⌁'/)
   })
 
   it('drops superseded or cross-session async responses', () => {

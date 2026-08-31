@@ -87,6 +87,7 @@ import {
 } from './snapshot-flow.ts'
 import { referenceQuery, type ReferenceQuery } from './reference-navigation.ts'
 import { chapterStatusText, ExportPreviewDialog, ProjectCardsPanel, ProjectOverviewPanel } from './project-views.ts'
+import { homePlayStyles, homeStyles, playfulStyles, redesignedStyles } from './styles.ts'
 
 export const name = 'dsh-editor-shell-client'
 export const inject = ['slots', 'sessions', 'workspaces', 'connection'] as const
@@ -106,6 +107,10 @@ const ASSISTANT_DEFAULT = 384
 const conversationRenameQueue = new ConversationRenameQueue()
 const ASSISTANT_MIN = 300
 const ASSISTANT_MAX = 560
+
+// 首页大标题轮转的结尾词与右侧稿纸上逐字浮现的示例文字
+const HOME_WORDS = ['故事。', '人物。', '世界。', '远方。']
+const SHEET_LINES = ['潮声漫过码头。', '她拆开第七封信。', '雪落在空站上。']
 
 export function createDialogDirectory(kind: DocumentKind | 'group', directory?: string): string {
   if (kind === 'outline') return '大纲'
@@ -369,6 +374,22 @@ function PanelResizer(props: {
   }, e('span', { 'aria-hidden': 'true' }))
 }
 
+function GearIcon() {
+  return e('svg', {
+    className: 'gear-icon',
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  },
+    e('path', { d: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 0 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0 0 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0 0-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 0-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z' }),
+    e('circle', { cx: 12, cy: 12, r: 3 }),
+  )
+}
+
 function ShortcutDialog({ onClose }: { onClose(): void }) {
   const dialog = useRef<HTMLElement | null>(null)
   const close = useRef<HTMLButtonElement | null>(null)
@@ -388,7 +409,7 @@ function ShortcutDialog({ onClose }: { onClose(): void }) {
         e('div', null, e('small', null, 'WORKBENCH'), e('h2', { id: 'shortcut-dialog-title' }, '键盘快捷键')),
         e('button', { ref: close, className: 'icon-button', type: 'button', onClick: onClose, 'aria-label': '关闭快捷键' }, '×'),
       ),
-      e('p', null, '也可以按 Ctrl+K，再按 Ctrl+S 打开本页。'),
+      e('p', null, '也可以依次按 Ctrl+K、Ctrl+S 打开本页。'),
       e('dl', null, WORKSPACE_SHORTCUTS.map(([keys, label]) => e('div', { key: keys }, e('dt', null, keys), e('dd', null, label)))),
     ),
   )
@@ -415,9 +436,9 @@ export function errorMessage(result: RpcResult): string {
   if (/directory-exists|already exists/i.test(blob)) return '同名文件或目录已经存在。'
   if (/workspace-invalid-path|invalid path/i.test(blob)) return '名称或路径不符合规则。'
   if (/read-only|permission|denied/i.test(blob)) return '当前文件无法写入，请检查目录权限。'
-  if (/directory-unreadable|unreadable/i.test(blob)) return '没有读取到作品目录，请重试。'
-  if (/not-found|missing/i.test(blob)) return '没有找到所需的文件。'
-  return '操作没有完成，请重试。'
+  if (/directory-unreadable|unreadable/i.test(blob)) return '未能读取作品目录，请重试。'
+  if (/not-found|missing/i.test(blob)) return '未找到所需的文件。'
+  return '操作未能完成，请重试。'
 }
 
 export function isStaleFailure(result: RpcResult): boolean {
@@ -536,7 +557,7 @@ function SearchPanel(props: {
     setBusy(false)
     if (!searched.ok) { setResult(null); setNote(errorMessage(searched)); return }
     setResult(searched.value)
-    setNote(searched.value.results.length ? '' : '没有找到匹配内容。')
+    setNote(searched.value.results.length ? '' : '未找到匹配内容。')
   }
 
   const submit = (event: FormEvent) => {
@@ -708,7 +729,7 @@ function CreateDocumentDialog(props: {
       e('header', null,
         e('div', null,
           e('h2', { id: 'create-dialog-title' }, heading),
-          e('small', null, request.kind === 'group' ? '建立真实目录；现有章节不会移动。' : `保存到 ${request.directory}`),
+          e('small', null, request.kind === 'group' ? '将在作品文件夹中创建目录；现有章节不会移动。' : `保存到 ${request.directory}`),
         ),
         e('button', { className: 'icon-button', type: 'button', disabled: props.busy, 'aria-label': '关闭', onClick: props.onClose }, '×'),
       ),
@@ -783,15 +804,15 @@ function FileManageDialog(props: {
     mode === 'menu' ? e('div', { className: 'file-dialog-actions' },
       props.path.startsWith('正文/') ? e('button', { type: 'button', disabled: props.busy || !props.moveDirectories?.length, onClick: () => setMode('move') },
         e('strong', null, '移动到卷/部'),
-        e('span', null, props.moveDirectories === null ? '正在读取可用位置…' : props.moveDirectories.length ? '保留文件名，把章节整理到其他正文目录。' : '没有其他可用位置；可以先新建卷/部。')) : null,
+        e('span', null, props.moveDirectories === null ? '正在读取可用位置…' : props.moveDirectories.length ? '保留文件名，移入其他卷/部。' : '没有其他可用位置；可以先新建卷/部。')) : null,
       e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('rename') },
-        e('strong', null, '重命名'), e('span', null, '保留文件类型，只修改当前文档名称。')),
+        e('strong', null, '重命名'), e('span', null, '只修改文档名称。')),
       e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('archive') },
         e('strong', null, '归档'), e('span', null, '从文件树移出，以后可以恢复，不会永久删除。')),
     ) : null,
     mode === 'rename' ? e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); props.onRename(name) } },
       e('label', null, e('span', null, '新名称'), e('input', { value: name, maxLength: 120, autoFocus: true, onChange: (event: ChangeEvent<HTMLInputElement>) => setName(event.target.value) })),
-      e('p', null, '文件夹和 .md/.txt 类型保持不变。'),
+      e('p', null, '所在目录与 .md/.txt 类型保持不变。'),
       e('footer', null,
         e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
         e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !name.trim() }, props.busy ? '处理中…' : '保存新名称'),
@@ -805,14 +826,14 @@ function FileManageDialog(props: {
         onChange: (event: ChangeEvent<HTMLSelectElement>) => setTargetDirectory(event.target.value),
       }, props.moveDirectories?.map((directory) => e('option', { key: directory, value: directory }, directory === '正文' ? '正文（根目录）' : directory.slice('正文/'.length))))),
       targetDirectory ? e('p', null, `移动后：${targetDirectory}/${props.path.split('/').at(-1)}`) : null,
-      e('p', null, '不会覆盖同名文件；移动前会再次核对当前磁盘版本。'),
+      e('p', null, '不会覆盖同名文件。'),
       e('footer', null,
         e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
         e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !targetDirectory }, props.busy ? '移动中…' : '确认移动'),
       ),
     ) : null,
     mode === 'archive' ? e('div', { className: 'archive-confirm' },
-      e('p', null, '归档后，文档会从当前文件树消失，但内容会保留在本地作品中。'),
+      e('p', null, '归档后，文档会从文件树中移除，内容仍保留在本地作品中。'),
       e('strong', null, '这不是永久删除。'),
       e('footer', null,
         e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
@@ -860,7 +881,7 @@ function WorkspaceManageDialog(props: {
         e('button', { ref: close, className: 'icon-button', type: 'button', disabled: props.busy, onClick: props.onClose, 'aria-label': '关闭作品管理' }, '×'),
       ),
       removing ? e('div', { className: 'archive-confirm' },
-        e('p', null, '这里只移除首页的作品入口。作品文件夹、正文、会话和日志都不会删除。'),
+        e('p', null, '这里只移除首页的作品入口。作品文件夹、正文、对话和日志都不会删除。'),
         e('strong', null, '以后仍可用“打开作品”重新加入。'),
         e('footer', null,
           e('button', { type: 'button', disabled: props.busy, onClick: () => setRemoving(false) }, '返回'),
@@ -942,7 +963,7 @@ function Editor(props: {
   }, [doc, text, conflict, onDirtyChange])
 
   const setText = (value: string) => {
-    if (loadingFim || patching) setNote('正文已变化，已停止旧建议。')
+    if (loadingFim || patching) setNote('正文已变化，已停止此前的建议。')
     fimAbort.current?.abort()
     patchAbort.current?.abort()
     setLoadingFim(false)
@@ -986,7 +1007,7 @@ function Editor(props: {
         setTextState(draft.text)
         const stale = draft.baseVersion !== disk.version
         setConflict(stale)
-        setNote(stale ? '磁盘版本已变化；本地草稿已保留，请另存或手动合并。' : '已恢复未保存草稿')
+        setNote(stale ? '磁盘版本已变化；本地草稿已保留，请另存或手动合并。' : '已恢复未保存的草稿')
       } else {
         setTextState(disk.text)
         setNote('')
@@ -998,7 +1019,7 @@ function Editor(props: {
   useEffect(() => {
     if (!doc || !reveal || reveal.path !== doc.path || !ta.current) return
     if (reveal.version !== doc.version) {
-      setNote('搜索后文件已变化，已打开文档但未强制定位。')
+      setNote('搜索后文件已变化，已打开文档但未定位到原位置。')
       return
     }
     const start = Math.max(0, Math.min(text.length, reveal.start))
@@ -1127,7 +1148,7 @@ function Editor(props: {
     if (docRef.current?.sessionId !== requestDoc.sessionId || docRef.current.path !== requestDoc.path || revisionRef.current !== requestRevision) return
     if (!result.ok) { setNote(errorMessage(result)); return }
     const suggestion = String(result.value.text ?? '')
-    if (!suggestion.trim()) { setNote('模型没有返回可用补全。'); return }
+    if (!suggestion.trim()) { setNote('模型未返回可用补全。'); return }
     const next = append
       ? addCompletionCandidate(ghostCandidates, suggestion)
       : { candidates: [suggestion], index: 0, added: true }
@@ -1135,7 +1156,7 @@ function Editor(props: {
     setGhostIndex(next.index)
     setGhostAt(pos)
     setNote(next.added
-      ? `补全候选 ${next.index + 1}/${next.candidates.length} 已就绪；确认后才会写入正文。`
+      ? `补全候选 ${next.index + 1}/${next.candidates.length} 已就绪。`
       : '新候选与已有建议相同，已保留原建议。')
   }
 
@@ -1199,9 +1220,9 @@ function Editor(props: {
     if (controller.signal.aborted || !isSelectionCurrent(ticket, docRef.current, textRef.current, revisionRef.current)) return
     if (!result.ok) { setNote(errorMessage(result)); return }
     const replacement = String(result.value.text ?? '').trim()
-    if (!replacement) { setNote('模型没有返回可用改写。'); return }
+    if (!replacement) { setNote('模型未返回可用改写。'); return }
     setProposal({ ticket, text: replacement })
-    setNote('修改建议已就绪；确认后才会写入正文。')
+    setNote('修改建议已就绪。')
   }
 
   const acceptGhost = () => {
@@ -1210,21 +1231,21 @@ function Editor(props: {
     setText(applyGhost(text, ghostAt, ghost))
     setSelection({ start: cursor, end: cursor })
     clearGhost()
-    setNote('补全已加入草稿，正在自动保存。')
+    setNote('补全已加入草稿。')
     globalThis.setTimeout(() => { ta.current?.focus(); ta.current?.setSelectionRange(Math.max(0, cursor - paperOffset), Math.max(0, cursor - paperOffset)) }, 0)
   }
 
   const acceptPatch = () => {
     if (!proposal || !isSelectionCurrent(proposal.ticket, doc, text, revision)) {
       setProposal(null)
-      setNote('选区已经变化，已丢弃过期建议。')
+      setNote('所选内容已变化，过期的建议已丢弃。')
       return
     }
     const cursor = proposal.ticket.start + proposal.text.length
     setText(applySelectionPatch(text, proposal.ticket, proposal.text))
     setSelection({ start: cursor, end: cursor })
     setProposal(null)
-    setNote('修改已加入草稿，正在自动保存。')
+    setNote('修改已加入草稿。')
     globalThis.setTimeout(() => { ta.current?.focus(); ta.current?.setSelectionRange(Math.max(0, cursor - paperOffset), Math.max(0, cursor - paperOffset)) }, 0)
   }
 
@@ -1378,14 +1399,14 @@ function ModelIndicator({ ctx, session, onConfigure }: { ctx: ShellContext; sess
     .find((item) => item.provider === models.current.provider && item.model.id === models.current.model)
   if (!models || models.groups.length === 0) {
     return e('div', { className: 'compact-control model-empty' },
-      e('span', null, note || (models ? '没有可用模型' : '读取中…')),
+      e('span', null, note || (models ? '暂无可用模型' : '读取中…')),
       e('button', { type: 'button', onClick: () => void refresh() }, '重试'),
       e('button', { type: 'button', onClick: onConfigure }, '设置接口'),
     )
   }
   return e('div', { className: 'compact-control' },
     e('span', { className: 'model-indicator', title: '本次对话使用的模型' }, current ? `${current.providerName} · ${current.model.name}` : models.current.model),
-    e('button', { className: 'icon-button', type: 'button', onClick: onConfigure, 'aria-label': '设置接口', title: '接口设置' }, '⌁'),
+    e('button', { className: 'icon-button', type: 'button', onClick: onConfigure, 'aria-label': '设置接口', title: '接口设置' }, e(GearIcon)),
   )
 }
 
@@ -1431,7 +1452,7 @@ function NewConversationPicker(props: {
       onOpen(sessionId)
       onClose()
     } catch {
-      setNote('新对话未建立')
+      setNote('新对话未能建立，请重试。')
     } finally {
       setBusy(false)
     }
@@ -1454,7 +1475,7 @@ function NewConversationPicker(props: {
     note && models ? e('small', { className: 'warning', role: 'alert' }, note) : null,
     e('footer', null,
       e('button', { type: 'button', onClick: onClose, disabled: busy }, '取消'),
-      e('button', { className: 'primary-action', type: 'submit', disabled: busy || !workspaceId || !value }, busy ? '创建中' : '开始'),
+      e('button', { className: 'primary-action', type: 'submit', disabled: busy || !workspaceId || !value }, busy ? '创建中…' : '开始'),
     ),
   )
 }
@@ -1468,11 +1489,11 @@ function PendingCard({ item }: { item: PendingInteraction }) {
       setBusy(true)
       void answerApproval(item, outcome).then((receipt) => {
         if (!receipt.accepted) setNote('这项操作状态已变化，请重新发起。')
-      }).catch(() => setNote('提交没有完成，请重试。')).finally(() => setBusy(false))
+      }).catch(() => setNote('提交未能完成，请重试。')).finally(() => setBusy(false))
     }
     return e('article', { className: 'pending-card', 'aria-label': '工具审批' },
       e('strong', null, '需要授权'),
-      e('p', null, '允许 Agent 执行这一步？'),
+      e('p', null, '允许搭档执行这一步操作？'),
       e('div', null,
         e('button', { type: 'button', disabled: busy, onClick: () => decide('allowed-once') }, '允许一次'),
         e('button', { type: 'button', disabled: busy, onClick: () => decide('rejected') }, '拒绝'),
@@ -1493,7 +1514,7 @@ function PendingCard({ item }: { item: PendingInteraction }) {
     setBusy(true)
     void answerQuestions(item, encoded).then((receipt) => {
       if (!receipt.accepted) setNote('这些问题的状态已变化，请重新回答。')
-    }).catch(() => setNote('提交没有完成，请重试。')).finally(() => setBusy(false))
+    }).catch(() => setNote('提交未能完成，请重试。')).finally(() => setBusy(false))
   }
   return e('form', { className: 'pending-card', 'aria-label': '回答问题', onSubmit: submit },
     item.payload.questions.map((question) => e('fieldset', { key: question.id },
@@ -1532,7 +1553,7 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
     })
     if (requestGeneration.current !== generation) return
     const result = raw as RpcResult<{ version?: string; before?: string; after?: string; text?: string }>
-    if (!result.ok) { setState('expired'); setNote('文件已经变化，没有写入任何内容；请重新询问写作助手生成建议。'); return }
+    if (!result.ok) { setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。'); return }
     setPrepared(result.value); setState('ready'); setNote('可以安全应用')
   }
 
@@ -1553,7 +1574,7 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
       }) as RpcResult<{ text: string; version: string }>
       if (requestGeneration.current !== generation) return
       if (!read.ok || !prepared.version || read.value.version !== prepared.version) {
-        setState('expired'); setNote('文件已经变化，没有写入任何内容；请重新询问写作助手生成建议。')
+        setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。')
         return
       }
       beforeApplyText = read.value.text
@@ -1564,7 +1585,7 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
       expectedVersion: prepared.version ?? '',
     }) as RpcResult<{ path: string; version: string }>
     if (requestGeneration.current !== generation) return
-    if (!result.ok) { setState('expired'); setNote('文件已经变化，没有写入任何内容；请重新询问写作助手生成建议。'); return }
+    if (!result.ok) { setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。'); return }
     setAppliedVersion(result.value.version)
     setUndoText(beforeApplyText)
     setState('applied'); setNote('已应用到作品')
@@ -1584,11 +1605,11 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
     if (requestGeneration.current !== generation) return
     if (!result.ok) {
       setState('expired')
-      setNote('文件随后又有变化，无法自动撤销；没有写入任何内容。')
+      setNote('文件此后又有变化，无法自动撤销；未写入任何内容。')
       return
     }
     setAppliedVersion(result.value.version)
-    setState('undone'); setNote('已撤销，作品已恢复到应用前内容')
+    setState('undone'); setNote('已撤销，作品已恢复到应用前的内容')
     props.onApplied(props.proposal.path)
   }
 
@@ -1602,12 +1623,11 @@ function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: P
       e('span', { role: state === 'expired' ? 'alert' : 'status' }, note),
       state === 'ready' ? e('button', { type: 'button', onClick: () => void apply() }, '应用') : null,
       state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('deferred'); setNote('已留待稍后处理') } }, '稍后处理') : null,
-      state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote('已忽略，没有修改作品') } }, '忽略') : null,
+      state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote('已忽略，未修改作品') } }, '忽略') : null,
       state === 'deferred' ? e('button', { type: 'button', onClick: () => void check() }, '重新核对') : null,
       state === 'applied' && props.proposal.kind === 'edit' ? e('button', { type: 'button', onClick: () => void undo() }, '撤销此次修改') : null,
     ),
-    state === 'ready' ? e('small', { className: 'proposal-help' }, '应用后才会写入作品；稍后处理或忽略都不会修改文件。') : null,
-    state === 'applied' && props.proposal.kind === 'edit' ? e('small', { className: 'proposal-help' }, '当前提案卡仍在且文件未再次变化时，可以撤销这一次应用。') : null,
+    state === 'ready' ? e('small', { className: 'proposal-help' }, '应用后才会写入作品。') : null,
   )
 }
 
@@ -1615,7 +1635,7 @@ function ProjectContextReceiptView({ receipt }: { receipt: ProjectContextReceipt
   const fixed = receipt.sources.filter((item) => item.kind !== 'worldbook')
   const includedFixed = fixed.filter((item) => item.status === 'included' && item.includedChars > 0).length
   const worldbook = receipt.sources.filter((item) => item.kind === 'worldbook')
-  const matchedByText = (value: string | undefined) => value === 'both' ? '请求与当前文稿' : value === 'saved-document' ? '当前文稿' : '本次请求'
+  const matchedByText = (value: string | undefined) => value === 'both' ? '请求与当前文档' : value === 'saved-document' ? '当前文档' : '本次请求'
   return e('details', { className: 'project-context-receipt' },
     e('summary', null, `项目上下文：固定 ${includedFixed}/${fixed.length}，触发世界书 ${worldbook.length}${receipt.authorPreferencesChars ? `，作者约定 ${receipt.authorPreferencesChars} 字` : ''}`),
     e('ul', null, receipt.sources.map((item) => e('li', { key: item.path },
@@ -1639,7 +1659,7 @@ function WorldbookSettings(props: { path: string; text: string; onChange(text: s
   const apply = () => {
     const values = parseWorldbookTriggerLines(triggers)
     const numericPriority = Number(priority)
-    if (!metadata.valid) { props.onNote('世界书文件头格式无效；为避免丢失未知内容，请先在正文中手工修复。'); return }
+    if (!metadata.valid) { props.onNote('世界书文件头格式无效；为避免丢失未知内容，请先在正文中手动修复。'); return }
     if (!values.length) { props.onNote('请至少填写一个世界书触发词。'); return }
     if (values.length > 16 || values.some((value) => value.length > 64 || /[\u0000-\u001f\u007f]/.test(value))) {
       props.onNote('世界书最多填写 16 个触发词，每个不超过 64 个字符。')
@@ -1651,7 +1671,7 @@ function WorldbookSettings(props: { path: string; text: string; onChange(text: s
     }
     try {
       props.onChange(writeWorldbookFrontmatter(props.text, { triggers: values, enabled, priority: numericPriority }))
-      props.onNote('世界书触发设置已加入草稿，正在自动保存。')
+      props.onNote('世界书触发设置已加入草稿。')
     } catch {
       props.onNote('世界书文件头没有正确闭合，请先在正文中修复后再应用。')
     }
@@ -1659,7 +1679,7 @@ function WorldbookSettings(props: { path: string; text: string; onChange(text: s
   return e('section', { className: 'worldbook-settings', 'aria-label': '世界书触发设置' },
     e('div', null,
       e('strong', null, '触发设置'),
-      e('small', null, '只决定何时把这篇设定带给搭档；规则正文仍写在下方。'),
+      e('small', null, '只决定何时把这篇设定带给搭档。'),
       !metadata.valid ? e('span', { className: 'warning', role: 'alert' }, '现有文件头格式无效，当前不会触发。') : null,
     ),
     e('label', null, e('span', null, '触发词（一行一个）'), e('textarea', {
@@ -1667,7 +1687,6 @@ function WorldbookSettings(props: { path: string; text: string; onChange(text: s
       disabled: !metadata.valid,
       rows: Math.min(3, Math.max(1, triggers.split(/\r?\n/).length)),
       onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setTriggers(event.target.value),
-      placeholder: '每行填写一个触发词',
       'aria-label': '世界书触发词',
     })),
     e('label', { className: 'worldbook-enabled' }, e('input', {
@@ -1709,9 +1728,9 @@ function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): vo
     e('section', { ref: dialog, className: 'import-dialog', role: 'dialog', tabIndex: -1, 'aria-modal': true, 'aria-labelledby': 'import-dialog-title' },
       e('h2', { id: 'import-dialog-title' }, working ? '正在导入作品' : cleanup ? '清理未完成导入？' : recover ? '发现未完成导入' : '确认导入作品'),
       working ? e('p', { role: 'status', 'aria-live': 'polite' }, props.flow.kind === 'working' ? props.flow.message : '')
-        : cleanup ? e('p', null, '只会删除清单拥有且内容未变化的导入文件；不会删除目标文件夹或其他文件。')
+        : cleanup ? e('p', null, '只会删除导入清单中记录且内容未变化的文件；不会删除目标文件夹或其他文件。')
           : recover ? e('div', null,
-              e('p', null, cleaning ? '上次清理尚未完成。只能继续安全清理。' : `上次导入未完成（${importSummary(probe!)}）。重新选择原源目录后可以继续，或安全清理。`),
+              e('p', null, cleaning ? '上次清理尚未完成。只能继续安全清理。' : `上次导入未完成（${importSummary(probe!)}）。重新选择原来源目录即可继续，也可以安全清理。`),
               probe?.message && !cleaning ? e('p', { className: 'warning', role: 'alert' }, probe.message) : null,
             )
             : e('div', null,
@@ -1731,12 +1750,64 @@ function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): vo
   )
 }
 
+function SnapshotSettings(props: {
+  available: boolean
+  workspaceTitle?: string
+  dirty: boolean
+  busy: boolean
+  snapshots: SnapshotView[] | null
+  note: string
+  onCreate(): void
+  onRestore(snapshot: SnapshotView): void
+  onRetry(): void
+}) {
+  return e('section', { className: 'model-panel snapshot-panel', role: 'region', 'aria-labelledby': 'snapshot-settings-title' },
+    e('header', null,
+      e('div', null,
+        e('p', { className: 'settings-brand' }, 'DSH / 备份'),
+        e('h2', { id: 'snapshot-settings-title' }, '作品快照'),
+        e('p', { title: '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品' },
+          props.available
+            ? '快照只保存已经写入磁盘的 Markdown/TXT 作品文件和章节状态；不包含未保存内容、对话、隐藏目录或构建文件。恢复始终生成新副本。'
+            : '打开作品后，可在此备份已保存文本，并恢复为新副本。',
+        ),
+      ),
+    ),
+    props.available && props.workspaceTitle ? e('p', { className: 'muted' }, `当前作品：${props.workspaceTitle}`) : null,
+    props.available && props.dirty ? e('p', { className: 'warning', role: 'alert' }, '当前有未保存内容，请先回到稿纸保存，再创建快照。') : null,
+    props.note ? e('p', {
+      className: /正在/.test(props.note) ? 'muted' : /没有|请先|失败|未|取消/.test(props.note) ? 'warning' : 'success',
+      role: /没有|请先|失败|未|取消/.test(props.note) ? 'alert' : 'status',
+    }, props.note) : null,
+    !props.available ? null
+      : props.snapshots === null && props.busy ? e('p', { className: 'muted', role: 'status' }, '正在读取作品快照…')
+      : props.snapshots === null ? e('p', { className: 'muted' }, '快照列表尚未读取。')
+      : props.snapshots.length
+        ? e('ul', { className: 'snapshot-list', 'aria-label': '可恢复快照' }, props.snapshots.map((snapshot) => e('li', { key: snapshot.snapshotId },
+            e('div', null,
+              e('strong', null, snapshot.label || new Date(snapshot.createdAt).toLocaleString()),
+              e('small', null, snapshotSummary(snapshot)),
+            ),
+            e('button', { type: 'button', disabled: props.busy, onClick: () => props.onRestore(snapshot) }, '恢复为新副本'),
+          )))
+        : e('p', { className: 'muted' }, '暂无作品快照。'),
+    props.available ? e('footer', null,
+      /未能读取/.test(props.note) ? e('button', { type: 'button', disabled: props.busy, onClick: props.onRetry }, '重试读取') : null,
+      e('button', {
+        className: 'primary-action',
+        type: 'button',
+        disabled: props.busy || props.dirty,
+        title: '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品',
+        'aria-label': props.busy ? '快照处理中' : '创建快照',
+        onClick: props.onCreate,
+      }, props.busy ? '快照处理中' : '创建快照'),
+    ) : null,
+  )
+}
+
 function SnapshotDialog(props: {
   flow: SnapshotFlow
-  dirty: boolean
   onCancel(): void
-  onCreate(): void
-  onSelect(snapshot: SnapshotView): void
   onApply(): void
   onContinue(): void
   onCleanup(): void
@@ -1746,7 +1817,6 @@ function SnapshotDialog(props: {
   useEffect(() => { if (focus.current) focus.current.focus(); else dialog.current?.focus() }, [props.flow.kind])
   if (props.flow.kind === 'idle') return null
   const working = props.flow.kind === 'working'
-  const list = props.flow.kind === 'list' ? props.flow : undefined
   const review = props.flow.kind === 'review' ? props.flow : undefined
   const recover = props.flow.kind === 'recover' ? props.flow : undefined
   const cleanup = props.flow.kind === 'cleanup-confirm'
@@ -1760,22 +1830,8 @@ function SnapshotDialog(props: {
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
   } },
     e('section', { ref: dialog, className: 'import-dialog snapshot-dialog', role: 'dialog', tabIndex: -1, 'aria-modal': true, 'aria-labelledby': 'snapshot-dialog-title' },
-      e('h2', { id: 'snapshot-dialog-title' }, working ? '作品快照' : cleanup ? '清理未完成恢复？' : recover ? '发现未完成恢复' : review ? '确认恢复为新副本' : '作品快照'),
+      e('h2', { id: 'snapshot-dialog-title' }, working ? '作品快照' : cleanup ? '清理未完成恢复？' : recover ? '发现未完成恢复' : '确认恢复为新副本'),
       working ? e('p', { role: 'status', 'aria-live': 'polite' }, props.flow.kind === 'working' ? props.flow.message : '') : null,
-      list ? e('div', null,
-        e('p', null, '快照只保存已经写入磁盘的 Markdown/TXT 作品文件；不包含未保存内容、对话、隐藏目录或构建文件。'),
-        list.note ? e('p', { className: 'success', role: 'status' }, list.note) : null,
-        props.dirty ? e('p', { className: 'warning', role: 'alert' }, '当前有未保存内容，请先保存再创建快照。') : null,
-        list.snapshots.length
-          ? e('ul', { className: 'snapshot-list', 'aria-label': '可恢复快照' }, list.snapshots.map((snapshot) => e('li', { key: snapshot.snapshotId },
-              e('div', null,
-                e('strong', null, snapshot.label || new Date(snapshot.createdAt).toLocaleString()),
-                e('small', null, snapshotSummary(snapshot)),
-              ),
-              e('button', { type: 'button', onClick: () => props.onSelect(snapshot) }, '恢复为新副本'),
-            )))
-          : e('p', { className: 'muted' }, '还没有作品快照。'),
-      ) : null,
       review ? e('div', null,
         e('p', null, '将在新的空文件夹中恢复，不覆盖或修改当前作品。'),
         review.snapshot ? e('p', null, `快照时间：${new Date(review.snapshot.createdAt).toLocaleString()}`) : null,
@@ -1789,10 +1845,9 @@ function SnapshotDialog(props: {
         e('p', null, '可以重新选择创建快照的原作品继续，或安全清理已复制且内容未变化的文件。'),
         recover.probe.message ? e('p', { className: 'warning', role: 'alert' }, recover.probe.message) : null,
       ) : null,
-      cleanup ? e('p', null, '只会删除恢复清单拥有且内容仍匹配的文件；检测到作者修改、链接或路径变化时会停止。') : null,
+      cleanup ? e('p', null, '只会删除恢复清单中记录且内容仍匹配的文件；检测到作者修改、链接或路径变化时会停止。') : null,
       !working ? e('footer', null,
         e('button', { ref: focus, type: 'button', onClick: props.onCancel }, '取消'),
-        list ? e('button', { type: 'button', disabled: props.dirty, onClick: props.onCreate }, '创建快照') : null,
         review ? e('button', { type: 'button', onClick: props.onApply }, '确认恢复为新副本') : null,
         recover && recover.probe.message !== 'cleaning' ? e('button', { type: 'button', onClick: props.onContinue }, '选择原作品并继续') : null,
         recover ? e('button', { type: 'button', onClick: props.onCleanup }, '清理未完成恢复') : null,
@@ -1847,7 +1902,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
     })
     if (!title) return
     titleAttempted.current.add(session.sessionId)
-    queueConversationRename(title, '对话名称没有自动保存，可以手动重命名。')
+    queueConversationRename(title, '对话名称未能自动保存，可手动重命名。')
   }, [rows, session.sessionId, sessionList.byId])
   useEffect(() => { onDraftDirtyChange(Boolean(draft.trim())) }, [draft, onDraftDirtyChange])
   useEffect(() => () => draftConfirm?.resolve(false), [draftConfirm])
@@ -1871,7 +1926,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
     setRenamingConversation(false)
     titleAttempted.current.add(session.sessionId)
     setNote('')
-    queueConversationRename(title, '对话名称没有保存，请重试。')
+    queueConversationRename(title, '对话名称未能保存，请重试。')
   }
   const outgoingIsCanonical = Boolean(outgoing && rows.slice(outgoing.afterRows)
     .some((row) => row.role === 'user' && row.text.trim() === outgoing.text))
@@ -1903,7 +1958,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
       if (outcome) setOutgoing((current) => current?.text === value ? { ...current, projectContextReceipt: outcome.receipt } : current)
       if (!result || !result.ok) {
         setOutgoing((current) => current?.text === value ? { ...current, state: 'failed' } : current)
-        setNote('消息没有发送成功，请重试。')
+        setNote('消息未发送成功，请重试。')
         return
       }
       setOutgoing((current) => current?.text === value ? { ...current, state: 'accepted' } : current)
@@ -1912,7 +1967,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
       if (contextCompileFailed) {
         setDraft((current) => current || value)
         setNote('项目资料暂时无法整理，消息未发送。内容已保留，请重试。')
-      } else setNote('消息没有发送成功，请重试。')
+      } else setNote('消息未发送成功，请重试。')
     })
   }
   return e('aside', { className: 'chat', 'aria-label': '写作助手', hidden },
@@ -1950,7 +2005,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
         e('strong', null, item.label),
         e('span', null, item.description),
         ))),
-        e('small', null, '点击示例只会填入输入框，发送前仍可修改。'),
+        e('small', null, '点击示例只会填入输入框。'),
       ) : null,
       snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? '加载中…' : '加载更早消息') : null,
       rows.map((row) => row.proposal
@@ -2176,6 +2231,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [importFlow, setImportFlow] = useState<ImportFlow>(idleImportFlow)
   const [snapshotNote, setSnapshotNote] = useState('')
   const [snapshotBusy, setSnapshotBusy] = useState(false)
+  const [snapshotList, setSnapshotList] = useState<SnapshotView[] | null>(null)
   const [snapshotFlow, setSnapshotFlow] = useState<SnapshotFlow>(idleSnapshotFlow)
   const [editorDirty, setEditorDirty] = useState(false)
   const [managePath, setManagePath] = useState<string | null>(null)
@@ -2321,7 +2377,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     void collectWorkspaceFiles(ctx, session.sessionId).then((paths) => {
       if (live) setFiles(sortChapterPaths(paths))
     }).catch(() => {
-      if (live) { setFiles([]); setWorkbenchNote('没有读取到完整章节顺序。') }
+      if (live) { setFiles([]); setWorkbenchNote('未能读取完整章节顺序。') }
     })
     return () => { live = false }
   }, [ctx.connection.rpc, session?.sessionId, treeRevision])
@@ -2405,7 +2461,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     }).catch(() => {
       if (!manageDirectoryGate.isCurrent(ticket)) return
       setManageDirectories([])
-      setManageNote('没有读取到可用卷/部；重命名和归档仍可使用。')
+      setManageNote('未能读取可用卷/部；重命名和归档仍可使用。')
     })
   }
   const closeManage = () => {
@@ -2438,7 +2494,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       else setHomeNote('作品显示名已更新。')
     } catch {
       setWorkspaceManageBusy(false)
-      setWorkspaceManageNote('作品名没有修改；请检查是否与其他作品重名。')
+      setWorkspaceManageNote('作品名未能修改；请检查是否与其他作品重名。')
     }
   }
   const removeWorkspace = async () => {
@@ -2448,10 +2504,10 @@ function Root({ ctx }: { ctx: ShellContext }) {
       await ctx.workspaces.delete(workspaceManage.workspaceId)
       setWorkspaceManageBusy(false)
       closeWorkspaceManage(true)
-      setHomeNote('已从最近移除；磁盘中的作品没有删除。')
+      setHomeNote('已从最近移除；磁盘中的作品未被删除。')
     } catch {
       setWorkspaceManageBusy(false)
-      setWorkspaceManageNote('最近入口没有移除，请重试。')
+      setWorkspaceManageNote('最近入口未能移除，请重试。')
     }
   }
   const observedVersion = async (selectedPath: string): Promise<string | undefined> => {
@@ -2601,7 +2657,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       workspaceFiles = await collectWorkspaceFiles(ctx, session.sessionId)
     } catch {
       setCreateBusy(false)
-      setCreateNote('没有读取到完整目录，请重试。')
+      setCreateNote('未能读取完整目录，请重试。')
       return
     }
     const file = kind === 'chapter'
@@ -2633,7 +2689,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     } catch (error) {
       if (currentSession(ctx)?.sessionId !== requestSessionId) return
       const message = error instanceof Error ? error.message : ''
-      setExportNote(/没有可导出|正文为空/.test(message) ? message : '导出没有完成，请重试。')
+      setExportNote(/没有可导出|正文为空/.test(message) ? message : '导出未能完成，请重试。')
     } finally {
       if (currentSession(ctx)?.sessionId === requestSessionId) setExporting(false)
     }
@@ -2714,7 +2770,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: sessionId }))
       if (!recovery.ok) {
         setHomeNote('作品中的导入状态无法验证，已停止打开。')
-        setExportNote('作品中的导入状态无法验证，未切换工作区。')
+        setExportNote('作品中的导入状态无法验证，未切换作品。')
         return
       }
       if (recovery.ok && recovery.value.state === 'recoverable') {
@@ -2725,7 +2781,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       const restore = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: sessionId }))
       if (!restore.ok) {
         setHomeNote('作品中的恢复状态无法验证，已停止打开。')
-        setExportNote('作品中的恢复状态无法验证，未切换工作区。')
+        setExportNote('作品中的恢复状态无法验证，未切换作品。')
         return
       }
       if (blocksWorkspaceOpen(restore.value)) {
@@ -2742,19 +2798,49 @@ function Root({ ctx }: { ctx: ShellContext }) {
     const workspace = await ctx.workspaces.create({ path })
     await connectAndInitialize(workspace.workspaceId, newProject)
   }
-  const showWorkspacePath = (newProject: boolean) => {
-    setManualWorkspaceMode(newProject ? 'new' : 'existing')
+  const openPickedWorkspace = async (path: string, newProject: boolean) => {
+    setOpeningWorkspace(true)
     setHomeNote('')
+    try {
+      await openWorkspacePath(path, newProject)
+      setManualWorkspaceMode(null)
+      setManualWorkspacePath('')
+    } catch {
+      setHomeNote('作品未能打开，请检查路径后重试。')
+      setManualWorkspaceMode(newProject ? 'new' : 'existing')
+      setManualWorkspacePath(path)
+    } finally {
+      setOpeningWorkspace(false)
+    }
+  }
+  const startWorkspaceFromPicker = async (newProject: boolean) => {
+    if (openingWorkspace) return
+    setHomeNote('')
+    setManualWorkspaceMode(null)
+    setOpeningWorkspace(true)
+    let picked: string | null
+    try {
+      picked = await ctx.workspaces.pickDirectory()
+    } catch {
+      setOpeningWorkspace(false)
+      setManualWorkspaceMode(newProject ? 'new' : 'existing')
+      setHomeNote('目录选择器暂时不可用，请直接输入作品路径。')
+      return
+    }
+    if (!picked) {
+      setOpeningWorkspace(false)
+      return
+    }
+    await openPickedWorkspace(picked, newProject)
   }
   const pickWorkspaceDirectory = async () => {
     try {
       const path = await ctx.workspaces.pickDirectory()
       if (!path) {
-        setHomeNote('没有选择文件夹，也可以直接输入路径。')
+        setHomeNote('未选择文件夹，可直接输入路径。')
         return
       }
-      setManualWorkspacePath(path)
-      setHomeNote('')
+      await openPickedWorkspace(path, manualWorkspaceMode === 'new')
     } catch {
       setHomeNote('目录选择器暂时不可用，请直接输入作品路径。')
     }
@@ -2763,17 +2849,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     event.preventDefault()
     const path = manualWorkspacePath.trim()
     if (!path) { setHomeNote('请输入作品文件夹路径。'); return }
-    setOpeningWorkspace(true)
-    setHomeNote('')
-    try {
-      await openWorkspacePath(path, manualWorkspaceMode === 'new')
-      setManualWorkspaceMode(null)
-      setManualWorkspacePath('')
-    } catch {
-      setHomeNote('工作区没有打开，请检查路径后重试。')
-    } finally {
-      setOpeningWorkspace(false)
-    }
+    await openPickedWorkspace(path, manualWorkspaceMode === 'new')
   }
   const closeImportFlow = (restoreFocus = true) => {
     const target = importReturnFocus.current
@@ -2798,7 +2874,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       if (!probe.ok || probe.value.state !== 'ready') {
         const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
         closeImportFlow()
-        const note = probe.ok ? probe.value.message ?? '目录不能导入。' : '导入检查没有完成。'
+        const note = probe.ok ? probe.value.message ?? '目录不能导入。' : '导入检查未能完成。'
         setHomeNote(sourceCleaned ? note : `${note} 临时工作区入口未能自动移除。`)
         return
       }
@@ -2809,7 +2885,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         : createdSourceWorkspaceId ? await cleanupFlowWorkspace(createdSourceWorkspaceId) : true
       if (error instanceof FlowWorkspaceCleanupError || !sourceCleaned) {
         closeImportFlow()
-        setHomeNote('导入没有开始；临时工作区入口未能自动移除。')
+        setHomeNote('导入未能开始；临时工作区入口未能自动移除。')
         return
       }
       throw error
@@ -2831,7 +2907,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       } else {
         const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
         closeImportFlow(false)
-        setHomeNote(sourceCleaned && targetCleaned ? '导入没有完成，请重试。' : '导入没有完成；临时工作区入口未能自动移除。')
+        setHomeNote(sourceCleaned && targetCleaned ? '导入未能完成，请重试。' : '导入未能完成；临时工作区入口未能自动移除。')
       }
       return
     }
@@ -2840,7 +2916,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     preserveFlowWorkspace(flow.targetWorkspaceId)
     if (!initialized.ok) {
       closeImportFlow(false)
-      setHomeNote(sourceCleaned ? '导入已完成，但项目初始化没有完成。' : '导入已完成，但项目初始化和临时入口清理没有完成。')
+      setHomeNote(sourceCleaned ? '导入已完成，但项目初始化未能完成。' : '导入已完成，但项目初始化和临时入口清理未能完成。')
       return
     }
     ctx.sessions.open(flow.targetSessionId as SessionId)
@@ -2863,12 +2939,12 @@ function Root({ ctx }: { ctx: ShellContext }) {
     }
     const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: flow.targetSessionId }))
     if (recovery.ok && recovery.value.state === 'recoverable') {
-      setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, { ...recovery.value, message: recovery.value.message ?? '清理没有完成；文件未被自动删除。' }))
+      setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, { ...recovery.value, message: recovery.value.message ?? '清理未能完成；文件未被自动删除。' }))
       return
     }
     if (current === flow.targetSessionId) ctx.sessions.clear()
     closeImportFlow()
-    setHomeNote('清理没有完成；文件未被自动删除。')
+    setHomeNote('清理未能完成；文件未被自动删除。')
   }
   const closeSnapshotFlow = (restoreFocus = true) => {
     const target = snapshotReturnFocus.current
@@ -2877,35 +2953,39 @@ function Root({ ctx }: { ctx: ShellContext }) {
     if (restoreFocus && target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const loadSnapshotList = async (note?: string) => {
-    if (!session) return
+    if (!session) {
+      setSnapshotList(null)
+      return
+    }
     setSnapshotBusy(true)
-    setSnapshotFlow({ kind: 'working', message: '正在读取作品快照…' })
     const listed = await safeRpcCall<SnapshotView[]>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.list', { sessionId: session.sessionId }))
     setSnapshotBusy(false)
-    if (!listed.ok) { closeSnapshotFlow(false); setSnapshotNote('快照列表没有读取完成，请重试。'); return }
-    setSnapshotFlow({ kind: 'list', snapshots: listed.value, note })
+    if (!listed.ok) { setSnapshotNote('快照列表未能读取，请重试。'); return }
+    setSnapshotList(listed.value)
+    setSnapshotNote(note ?? '')
   }
-  const openSnapshotPanel = () => {
-    snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  useEffect(() => {
+    if (view !== 'settings' || setupGate !== 'ready') return
+    setSnapshotList(null)
+    setSnapshotNote('')
     void loadSnapshotList()
-  }
+  }, [view, setupGate, session?.sessionId])
   const createSnapshot = async () => {
     if (!session) return
     if (editorDirty) { setSnapshotNote('请先保存当前未保存内容，再创建快照。'); return }
     setSnapshotBusy(true)
-    setSnapshotFlow({ kind: 'working', message: '正在创建整部作品文本快照…' })
+    setSnapshotNote('正在创建整部作品文本快照…')
     const result = await safeRpcCall<SnapshotView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.create', { sessionId: session.sessionId }))
-    setSnapshotBusy(false)
-    if (!result.ok) { closeSnapshotFlow(false); setSnapshotNote('快照没有创建，请重试。'); return }
-    setSnapshotNote(`已创建快照：${snapshotSummary(result.value)}`)
-    await loadSnapshotList('快照已创建。')
+    if (!result.ok) { setSnapshotBusy(false); setSnapshotNote('快照未能创建，请重试。'); return }
+    await loadSnapshotList(`已创建快照：${snapshotSummary(result.value)}`)
   }
   const restoreAsCopy = async (snapshot: SnapshotView) => {
     if (!session) return
+    snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setSnapshotBusy(true)
     setSnapshotFlow({ kind: 'working', message: '请选择一个新的空文件夹作为恢复目标…' })
     const targetPath = await ctx.workspaces.pickDirectory()
-    if (!targetPath) { setSnapshotBusy(false); await loadSnapshotList('已取消选择恢复目标。'); return }
+    if (!targetPath) { setSnapshotBusy(false); closeSnapshotFlow(); setSnapshotNote('已取消选择恢复目标。'); return }
     let createdTargetWorkspaceId: WorkspaceId | undefined
     try {
       const targetRegistration = await registerFlowWorkspace(targetPath)
@@ -2921,7 +3001,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       if (!probe.ok || probe.value.state !== 'ready' || !probe.value.token) {
         const targetCleaned = createdTargetWorkspaceId ? await cleanupFlowWorkspace(createdTargetWorkspaceId) : true
         closeSnapshotFlow(false)
-        const note = probe.ok ? probe.value.message ?? '目标目录不能用于恢复。' : '恢复检查没有完成。'
+        const note = probe.ok ? probe.value.message ?? '目标目录不能用于恢复。' : '恢复检查未能完成。'
         setSnapshotNote(targetCleaned ? note : `${note} 临时工作区入口未能自动移除。`)
         return
       }
@@ -2931,8 +3011,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
       setSnapshotBusy(false)
       closeSnapshotFlow(false)
       setSnapshotNote(error instanceof FlowWorkspaceCleanupError || !targetCleaned
-        ? '恢复没有开始；临时工作区入口未能自动移除。'
-        : '恢复目标没有打开，请重试。')
+        ? '恢复未能开始；临时工作区入口未能自动移除。'
+        : '恢复目标未能打开，请重试。')
     }
   }
   const finishRestoredCopy = async (targetSessionId: string, targetWorkspaceId: string, sourceSessionId: string) => {
@@ -2940,10 +3020,12 @@ function Root({ ctx }: { ctx: ShellContext }) {
     preserveFlowWorkspace(targetWorkspaceId)
     probedRestoreSessions.current.add(targetSessionId)
     verifiedRestoreSessions.current.add(targetSessionId)
+    setView('workspace')
     ctx.sessions.open(targetSessionId as SessionId)
     triggerExistingIndex(targetWorkspaceId as WorkspaceId, targetSessionId as SessionId)
     closeSnapshotFlow(false)
-    setSnapshotNote(sourceCleaned ? '已恢复为新的作品副本。' : '已恢复作品副本；临时来源入口未能自动移除。')
+    setSnapshotNote('')
+    setWorkbenchNote(sourceCleaned ? '已恢复为新的作品副本。' : '已恢复作品副本；临时来源入口未能自动移除。')
   }
   const applySnapshotRestore = async () => {
     if (snapshotFlow.kind !== 'review') return
@@ -2975,8 +3057,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
     const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
     closeSnapshotFlow(false)
     setSnapshotNote(sourceCleaned && targetCleaned
-      ? '恢复没有完成；目标文件未被当成完整作品打开。'
-      : '恢复没有完成；临时工作区入口未能自动移除。')
+      ? '恢复未能完成；目标文件未被当成完整作品打开。'
+      : '恢复未能完成；临时工作区入口未能自动移除。')
   }
   const continueSnapshotRestore = async () => {
     if (snapshotFlow.kind !== 'recover') return
@@ -3004,7 +3086,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         return
       }
       const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
-      setSnapshotFlow({ ...recover, probe: { ...recover.probe, message: probe.ok ? probe.value.message ?? '所选原作品不匹配。' : '原作品没有验证完成。' } })
+      setSnapshotFlow({ ...recover, probe: { ...recover.probe, message: probe.ok ? probe.value.message ?? '所选原作品不匹配。' : '原作品未能完成验证。' } })
       if (!sourceCleaned) setSnapshotNote('临时来源入口未能自动移除。')
     } catch (error) {
       const sourceCleaned = sourceSessionId
@@ -3013,7 +3095,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       setSnapshotBusy(false)
       setSnapshotFlow({ ...recover, probe: { ...recover.probe, message: error instanceof FlowWorkspaceCleanupError || !sourceCleaned
         ? '临时来源入口未能自动移除。'
-        : '原作品目录没有打开。' } })
+        : '原作品目录未能打开。' } })
     }
   }
   const cleanupSnapshotRestore = async () => {
@@ -3044,12 +3126,12 @@ function Root({ ctx }: { ctx: ShellContext }) {
     }
     const recovery = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: flow.targetSessionId }))
     if (recovery.ok && recovery.value.state === 'recoverable') {
-      setSnapshotFlow(recoverSnapshot(flow.targetSessionId, flow.targetWorkspaceId, { ...recovery.value, message: recovery.value.message ?? '清理没有完成；文件未被自动删除。' }))
+      setSnapshotFlow(recoverSnapshot(flow.targetSessionId, flow.targetWorkspaceId, { ...recovery.value, message: recovery.value.message ?? '清理未能完成；文件未被自动删除。' }))
       return
     }
     if (current === flow.targetSessionId) ctx.sessions.clear()
     closeSnapshotFlow()
-    setHomeNote('清理没有完成；文件未被自动删除。')
+    setHomeNote('清理未能完成；文件未被自动删除。')
   }
   const cancelImportFlow = async () => {
     const flow = importFlow
@@ -3084,13 +3166,21 @@ function Root({ ctx }: { ctx: ShellContext }) {
   })
   const renderSnapshotDialog = () => e(SnapshotDialog, {
     flow: snapshotFlow,
-    dirty: editorDirty,
     onCancel: () => void cancelSnapshotFlow(),
-    onCreate: () => void createSnapshot(),
-    onSelect: (snapshot: SnapshotView) => void restoreAsCopy(snapshot),
     onApply: () => void applySnapshotRestore(),
     onContinue: () => void continueSnapshotRestore(),
     onCleanup: () => void cleanupSnapshotRestore(),
+  })
+  const renderSnapshotSettings = () => e(SnapshotSettings, {
+    available: Boolean(session),
+    workspaceTitle: currentWorkspace?.title || currentWorkspace?.path || '',
+    dirty: editorDirty,
+    busy: snapshotBusy,
+    snapshots: snapshotList,
+    note: snapshotNote,
+    onCreate: () => void createSnapshot(),
+    onRestore: (snapshot: SnapshotView) => void restoreAsCopy(snapshot),
+    onRetry: () => void loadSnapshotList(),
   })
 
   if (view === 'settings' || setupGate !== 'ready') {
@@ -3106,7 +3196,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
         onCompletionPreferenceChange: setCompletionPreference,
         authorPreferences,
         onAuthorPreferencesChange: setAuthorPreferences,
-      }),
+      }, setupGate === 'ready' ? renderSnapshotSettings() : null),
+      renderSnapshotDialog(),
     )
   }
 
@@ -3116,7 +3207,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       e('style', null, playfulStyles),
       e('section', { className: 'empty-paper', 'aria-label': '正在验证作品恢复状态' },
         e('h1', null, '正在检查作品'),
-        e('p', { role: 'status', 'aria-live': 'polite' }, '确认没有未完成恢复后再打开编辑器…'),
+        e('p', { role: 'status', 'aria-live': 'polite' }, '确认没有未完成的恢复后再打开编辑器…'),
       ),
       renderImportDialog(),
       renderSnapshotDialog(),
@@ -3135,9 +3226,9 @@ function Root({ ctx }: { ctx: ShellContext }) {
           e('strong', null, 'DSH'),
         ),
         e('span', { className: 'local-state' }, e('i', { 'aria-hidden': 'true' }), '本地'),
-        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: openSettings }, '⌁'),
+        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: openSettings }, e(GearIcon)),
       ),
-      e('aside', { className: 'sidebar', 'aria-label': '工作区与稿件' },
+      e('aside', { className: 'sidebar', 'aria-label': '最近作品' },
         e('div', { className: 'side-title' }, e('span', null, '文件')),
         workspaces.items.length ? e('div', { className: 'workspace-caption' }, '最近') : e('div', { className: 'workspace-empty' },
           e('span', { className: 'folder-glyph', 'aria-hidden': 'true' }),
@@ -3147,7 +3238,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
           e('button', {
             className: 'tree-row',
             type: 'button',
-            onClick: () => void connectAndInitialize(workspace.workspaceId, false).catch(() => setHomeNote('工作区没有打开，请重试。')),
+            onClick: () => void connectAndInitialize(workspace.workspaceId, false).catch(() => setHomeNote('作品未能打开，请重试。')),
           }, workspace.title || workspace.path),
           e('button', { className: 'workspace-manage icon-button', type: 'button', 'aria-label': `管理作品 ${workspace.title || workspace.path}`, title: '管理作品', onClick: () => openWorkspaceManage(workspace, true) }, '···'),
         )),
@@ -3156,11 +3247,17 @@ function Root({ ctx }: { ctx: ShellContext }) {
         e('div', { className: 'home-ink', 'aria-hidden': 'true' }, '写'),
         e('div', { className: 'home-card' },
           e('p', { className: 'home-eyebrow' }, 'DSH EDITOR'),
-          e('h1', null, '开始写。'),
-          e('p', null, '从世界观、人物卡、总纲和章纲一路写到正文；搭档先提出修改建议，由你确认后再写入作品。'),
+          e('h1', { 'aria-label': '开始写。' },
+            e('span', { 'aria-hidden': 'true' }, '开始写',
+              e('span', { className: 'home-words' },
+                HOME_WORDS.map((word, index) => e('i', { key: index }, word)),
+              ),
+            ),
+            e('span', { className: 'sr-only' }, '开始写。'),
+          ),
           e('div', { className: 'home-actions' },
-            e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => showWorkspacePath(false) }, '打开作品', e('span', { 'aria-hidden': 'true' }, '↗')),
-            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => showWorkspacePath(true) }, '新建'),
+            e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void startWorkspaceFromPicker(false) }, '打开作品', e('span', { 'aria-hidden': 'true' }, '↗')),
+            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void startWorkspaceFromPicker(true) }, '新建'),
           ),
           manualWorkspaceMode ? e('form', { className: 'path-fallback', onSubmit: submitWorkspacePath },
             e('label', null,
@@ -3176,7 +3273,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
             e('div', null,
               e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspaceDirectory() }, '选择文件夹'),
               e('button', { className: 'primary-action', type: 'submit', disabled: openingWorkspace },
-                openingWorkspace ? '打开中' : manualWorkspaceMode === 'new' ? '在此新建' : '打开此目录',
+                openingWorkspace ? '打开中…' : manualWorkspaceMode === 'new' ? '在此新建' : '打开此目录',
               ),
               e('button', {
                 type: 'button',
@@ -3191,7 +3288,13 @@ function Root({ ctx }: { ctx: ShellContext }) {
           e('i', { className: 'paper-sheet sheet-back' }),
           e('i', { className: 'paper-sheet sheet-mid' }),
           e('div', { className: 'paper-sheet sheet-front' },
-            e('span'), e('span'), e('span'), e('b'),
+            SHEET_LINES.map((line, lineIndex) => e('div', { className: 'sheet-line', key: lineIndex },
+              Array.from(line).map((char, charIndex) => e('i', {
+                key: charIndex,
+                style: { animationDelay: `${(lineIndex * 8 + charIndex) * 120}ms` },
+              }, char)),
+            )),
+            e('b'),
           ),
         ),
       ),
@@ -3238,8 +3341,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
           ctx.sessions.clear()
         })(),
       }, '作品'),
-      e('label', { className: 'workspace-select' }, e('span', { className: 'sr-only' }, '工作区'), e('select', {
-        'aria-label': '选择工作区',
+      e('label', { className: 'workspace-select' }, e('span', { className: 'sr-only' }, '切换作品'), e('select', {
+        'aria-label': '切换作品',
         value: currentWorkspace?.workspaceId ?? '',
         onChange: (event: ChangeEvent<HTMLSelectElement>) => {
           const id = event.target.value as WorkspaceId
@@ -3247,7 +3350,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
           void (async () => {
             if (!(await canLeaveAssistantDraft())) return
             setAssistantDraftDirty(false)
-            await connectAndInitialize(id, false).catch(() => setExportNote('工作区没有打开，请重试。'))
+            await connectAndInitialize(id, false).catch(() => setExportNote('作品未能打开，请重试。'))
           })()
         },
       }, workspaces.items.map((workspace) => e('option', { key: workspace.workspaceId, value: workspace.workspaceId }, workspace.title || workspace.path)))),
@@ -3286,22 +3389,16 @@ function Root({ ctx }: { ctx: ShellContext }) {
         }, '搭档'),
       ),
       e('div', { className: 'export-actions' },
-        e('button', {
-          type: 'button',
-          disabled: snapshotBusy,
-          onClick: openSnapshotPanel,
-        }, snapshotBusy ? '快照处理中' : '作品快照'),
         e('details', { className: 'export-menu' },
-          e('summary', null, exporting ? '导出中' : '导出'),
+          e('summary', { title: '把正文按章节顺序合并成一份 Markdown 或 TXT' }, exporting ? '导出中' : '导出全书'),
           e('div', null,
             e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('markdown') }, 'Markdown'),
             e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('text') }, 'TXT'),
           ),
         ),
-        snapshotNote ? e('span', { role: /没有|请先|失败|未/.test(snapshotNote) ? 'alert' : 'status' }, snapshotNote) : null,
         exportNote ? e('span', { role: /无法|失败|为空/.test(exportNote) ? 'alert' : 'status' }, exportNote) : null,
         e('button', { className: 'settings-link icon-button', type: 'button', title: '键盘快捷键', 'aria-label': '键盘快捷键', onClick: openShortcuts }, '?'),
-        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: openSettings }, '⌁'),
+        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: openSettings }, e(GearIcon)),
       ),
     ),
     sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
@@ -3331,7 +3428,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         ),
         e('div', { className: 'archive-list' },
           archiveBusy && !archives.length ? e('p', { className: 'muted' }, '读取中…') : null,
-          !archiveBusy && !visibleArchives(archives).length ? e('p', { className: 'muted' }, '还没有归档文档。') : null,
+          !archiveBusy && !visibleArchives(archives).length ? e('p', { className: 'muted' }, '暂无归档文档。') : null,
           visibleArchives(archives).map((item) => e('article', { key: item.archiveId },
             e('div', null,
               e('strong', null, documentName(item.path)),
@@ -3413,7 +3510,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
         setTreeRevision((old) => old + 1)
         if (navigation.expandPath) setTreeExpansionPath(navigation.expandPath)
         if (!navigation.openPath) {
-          setWorkbenchNote('建议已应用；当前未保存文档已保留，请先保存后再打开应用的文件。')
+          setWorkbenchNote('建议已应用；当前文档有未保存内容，请先保存，再打开应用的文件。')
           return
         }
         openDocument(navigation.openPath)
@@ -3473,60 +3570,6 @@ function Root({ ctx }: { ctx: ShellContext }) {
     }) : null,
   )
 }
-
-const styles = `.shell{height:100vh;min-width:1280px;display:grid;grid-template-columns:220px minmax(0,1fr) 360px;grid-template-rows:40px minmax(0,1fr);background:#faf9f5;color:#171714;font:13px "Noto Sans SC","Microsoft YaHei",sans-serif}.chrome{grid-column:1/-1;display:flex;gap:18px;align-items:center;padding:0 14px;border-bottom:1px solid #e3e0d6}.chrome>span{color:#6b6a64;overflow:hidden;text-overflow:ellipsis}.workspace-select,.compact-control{display:flex;align-items:center;gap:6px;color:#6b6a64}.compact-control label{display:flex;align-items:center;gap:5px}.model-empty{align-items:flex-start;flex-wrap:wrap}.model-empty small{flex-basis:100%}.workspace-select select,.compact-control select{max-width:210px;border:0;background:transparent;color:#35342f}.sidebar{grid-column:1;border-right:1px solid #e3e0d6;min-height:0;display:flex;flex-direction:column;background:#f4f2ea}.side-title,.editor-header,.chat-header,.editor-tools{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #e3e0d6}.project-actions{display:flex;gap:3px;padding:6px;border-bottom:1px solid #e3e0d6}.project-actions button,.export-actions button{padding:4px 7px;border:1px solid #d2cec2;border-radius:3px;background:#fffef9;color:inherit;cursor:pointer}.export-actions{margin-left:auto;display:flex;align-items:center;gap:6px;color:#6b6a64}.export-actions span{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.session-list{padding:6px;border-bottom:1px solid #e3e0d6;display:flex;gap:3px;flex-direction:column;max-height:132px;overflow:auto}.session-list button,.tree-row{display:block;width:100%;padding:5px 7px;text-align:left;border:0;border-radius:3px;background:none;color:inherit;cursor:pointer}.session-list .selected,.tree-row[aria-current=page]{background:#e0e9f2;color:#1b365d}.tree{overflow:auto;min-height:0;padding:7px 0}.editor{grid-column:2;min-width:0;min-height:0;display:grid;position:relative;grid-template-rows:auto minmax(0,1fr) auto;background:#faf9f5}.editor-header{font-size:12px;color:#6b6a64}.paper-input{box-sizing:border-box;width:100%;height:100%;padding:42px max(48px,10%);border:0;resize:none;background:transparent;color:#171714;font:18px/1.9 "Noto Serif SC","Songti SC",serif;outline:0}.ghost{position:absolute;left:10%;bottom:52px;max-width:58%;padding:5px 8px;color:#77746c;background:#f2f0e8;border-radius:3px;font:16px/1.8 "Noto Serif SC",serif;pointer-events:none}.proposal{position:absolute;right:18px;bottom:54px;width:min(380px,48%);padding:12px;border:1px solid #d5d1c5;border-radius:5px;background:#fffef9;box-shadow:0 8px 28px #342f251a}.proposal p{margin:4px 0 10px;white-space:pre-wrap}.proposal div,.pending-card div{display:flex;gap:8px}.editor-tools{border-top:1px solid #e3e0d6;border-bottom:0;justify-content:flex-start;gap:9px;color:#6b6a64;overflow:auto}.chat{grid-column:3;min-width:0;min-height:0;border-left:1px solid #e3e0d6;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:#f4f2ea}.chat-header{align-items:flex-start;gap:8px}.chat-controls{display:grid;gap:4px;min-width:0}.chat-history{overflow:auto;padding:12px;display:flex;gap:9px;flex-direction:column}.chat-row,.pending-card{margin:0;padding:9px 10px;border:1px solid #dedbd1;border-radius:5px;background:#fffef9}.chat-row p,.pending-card p{margin:0;white-space:pre-wrap;line-height:1.6}.chat-row.user{margin-left:24px;background:#e0e9f2}.chat-row.tool,.chat-row.notice,.chat-row.unknown{font-size:12px;color:#504e49}.pending-card{display:grid;gap:8px;border-color:#c8a86a;background:#fffaf0}.pending-card fieldset{border:0;padding:0;margin:0;display:grid;gap:5px}.pending-card input{box-sizing:border-box;width:100%;padding:6px}.composer{border-top:1px solid #e3e0d6;padding:9px}.composer textarea{box-sizing:border-box;width:100%;min-height:66px;border:1px solid #d8d4c8;border-radius:4px;padding:7px;background:#fffef9;resize:vertical}.composer div{display:flex;justify-content:flex-end;gap:8px;padding-top:6px}.composer button,.editor-tools button,.proposal button,.pending-card button,.empty-paper button,.model-empty button,.home-actions button,.compact-control button,.model-panel button,.proposal-card button{padding:4px 9px;border:1px solid #d2cec2;border-radius:3px;background:#fffef9;color:inherit;cursor:pointer}.warning{color:#8a3a30}.success{color:#2f6b42}.muted{color:#77746c}.pad{padding:8px}.empty-paper{grid-column:2;display:grid;place-content:center;gap:12px;padding:48px;text-align:center;font:16px/1.8 "Noto Serif SC","Songti SC",serif}.empty-paper h1{font-size:28px;font-weight:500}.home-actions{display:flex;justify-content:center;gap:10px}.no-session{display:block;min-width:0}.no-session .empty-paper{height:100vh}.proposal-card{display:grid;gap:9px;padding:10px;border:1px solid #c8a86a;border-radius:6px;background:#fffaf0}.proposal-card header,.proposal-card footer{display:flex;align-items:center;justify-content:space-between;gap:7px}.proposal-card code{font-size:11px;color:#6b6a64}.proposal-diff{display:grid;gap:7px}.proposal-card pre{max-height:180px;margin:3px 0 0;padding:7px;overflow:auto;white-space:pre-wrap;border-radius:3px;background:#f4f2ea;font:12px/1.55 monospace}.proposal-card footer span{margin-right:auto;font-size:12px;color:#6b6a64}.proposal-card.expired{border-color:#b56a61}.proposal-card.applied{border-color:#6d9a78}.model-overlay{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:#25231f66}.model-panel{width:min(520px,calc(100vw - 48px));box-sizing:border-box;padding:22px;display:grid;gap:15px;border:1px solid #d4d0c4;border-radius:8px;background:#fffef9;box-shadow:0 24px 80px #17171433}.model-panel header,.model-panel footer{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.model-panel h2,.model-panel p{margin:0}.model-panel header p{margin-top:5px;color:#77746c}.model-panel>label{display:grid;gap:6px}.model-panel input[type=password],.model-panel input:not([type]){box-sizing:border-box;width:100%;padding:9px;border:1px solid #cbc7ba;border-radius:4px;background:white}.provider-tabs{display:flex;gap:16px;border:0;padding:0;margin:0}.provider-tabs legend{margin-bottom:7px}.provider-tabs label{display:flex;gap:5px}.model-panel footer{justify-content:flex-end}button:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #1b365d;outline-offset:2px}@media(max-width:1320px){.shell{grid-template-columns:210px minmax(0,1fr) 340px}.paper-input{padding-inline:42px}}`
-
-const redesignedStyles = `${styles}
-.shell{height:100dvh;min-width:1280px;grid-template-columns:248px minmax(520px,1fr) 384px;grid-template-rows:52px minmax(0,1fr);background:#f5f0e5;color:#253b32;font:14px/1.5 "Noto Sans SC","Microsoft YaHei",sans-serif}.chrome{gap:14px;padding:0 20px;background:#fbf8ef;border-color:#d8d0bf}.chrome strong{font-family:"Noto Serif SC","Songti SC",serif;font-size:17px;letter-spacing:.04em}.chrome>span{color:#6d7468}.sidebar{background:#eee8da;border-color:#d8d0bf}.side-title,.editor-header,.chat-header,.editor-tools{padding:10px 14px;border-color:#ddd5c6}.side-title{font-weight:600;letter-spacing:.04em}.project-actions{display:block;padding:8px 12px;border-color:#ddd5c6}.project-actions summary{cursor:pointer;color:#647268}.project-actions div{display:flex;gap:6px;padding-top:7px}.project-actions button,.export-actions button,.settings-link{border-color:#c9c5b4;background:#fbf8ef;color:#304f41}.tree{padding:8px}.tree-row{padding:7px 8px;border-radius:4px;transition:transform 160ms ease,background-color 160ms ease,color 160ms ease}.tree-row:hover{background:#e1eadc;transform:translateX(2px)}.session-list .selected,.tree-row[aria-current=page]{background:#dbe8d7;color:#214838;font-weight:600}.index-status{display:grid;gap:6px;margin:10px 12px;padding:9px 10px;border-left:2px solid #5d806b;background:#f8f4e9;color:#53665a;font-size:12px}.index-status button{justify-self:start;padding:3px 0;border:0;background:transparent;color:#285c45;text-decoration:underline;cursor:pointer}.editor{background:#f8f3e8}.editor-header{color:#697269;background:#f3ecdf;font-variant-numeric:tabular-nums}.paper-input{margin:22px auto;width:min(100% - 48px,880px);height:calc(100% - 44px);padding:58px clamp(34px,7vw,92px);border:1px solid #e2dac9;border-radius:2px;background:#fffdf6;box-shadow:0 8px 26px #5a4d3510;color:#28382f;font:19px/1.95 "Noto Serif SC","Songti SC",serif}.editor-tools{background:#f3ecdf}.chat{border-color:#d8d0bf;background:#f0ebdf}.chat-header{background:#f7f3e9}.chat-row,.pending-card{border-color:#ddd5c6;border-radius:4px;background:#fffdf7}.chat-row.user{background:#dce9dd}.composer{border-color:#d8d0bf;background:#f7f3e9}.composer textarea{border-color:#cbc5b7;border-radius:3px;background:#fffdf7}.composer button,.editor-tools button,.proposal button,.pending-card button,.empty-paper button,.model-empty button,.home-actions button,.compact-control button,.model-panel button,.proposal-card button{border-color:#bfc5b8;border-radius:3px;background:#fffdf7;color:#2c5744;transition:transform 160ms ease,background-color 160ms ease}.composer button:hover,.editor-tools button:hover,.proposal button:hover,.pending-card button:hover,.empty-paper button:hover,.model-empty button:hover,.home-actions button:hover,.compact-control button:hover,.model-panel button:hover,.proposal-card button:hover{background:#e1eadc;transform:translateY(-1px)}.empty-paper{background:#f8f3e8;color:#33483c}.no-session .empty-paper{height:100dvh}.settings-shell{min-height:100dvh;background:#f5f0e5}.settings-view{box-sizing:border-box;min-height:100dvh;display:grid;place-items:center;padding:32px}.model-panel{width:min(620px,100%);padding:34px 36px;border:1px solid #d9d0bd;border-left:4px solid #386a50;border-radius:4px;background:#fffdf6;box-shadow:0 18px 48px #56483314}.settings-brand{margin:0 0 8px!important;color:#557062!important;font-size:12px;letter-spacing:.1em}.model-panel h2{margin:0;font:600 28px/1.25 "Noto Serif SC","Songti SC",serif;color:#294938}.model-panel header p{max-width:36em;line-height:1.7}.provider-tabs{gap:10px}.provider-tabs label{min-width:128px;padding:10px 12px;border:1px solid #d6d2c4;border-radius:4px;background:#fbf8ef;color:#315640;cursor:pointer}.provider-tabs input{accent-color:#386a50}.completion-preference{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px;margin:0;padding:14px 0 0;border:0;border-top:1px solid #ded6c7}.completion-preference legend{padding:0;color:#294938;font-weight:600}.completion-preference p{grid-column:1/-1;color:#69766e;font-size:12px;line-height:1.65}.completion-preference label{display:flex;align-items:center;gap:7px;padding:9px 11px;border-radius:12px 4px 12px 4px;background:#f1ecdf;color:#315640;cursor:pointer}.completion-preference label:has(input:checked){background:#dce9dd;box-shadow:inset 0 0 0 1px #78917f}.completion-preference input{accent-color:#386a50}.model-panel>label input{transition:border-color 160ms ease,box-shadow 160ms ease}.model-panel>label input:focus{border-color:#6d8c79;box-shadow:0 0 0 3px #386a5014}.model-panel footer{padding-top:8px}.model-panel .primary-action{border-color:#315e48;background:#315e48;color:#fff}.model-panel .primary-action:hover{background:#284f3c}.settings-link{margin-left:auto;padding:5px 10px;cursor:pointer}.warning{color:#9a4b3b}.success{color:#356446}button:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #386a50;outline-offset:3px}@media(max-width:1320px){.shell{grid-template-columns:216px minmax(440px,1fr) 330px}.paper-input{width:calc(100% - 32px);padding-inline:42px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:0.01ms!important;animation-duration:0.01ms!important}}
-`
-
-const playfulStyles = `
-:root{--ink:#173f30;--leaf:#3d755a;--mint:#dcebdd;--paper:#fffdf6;--sand:#f2ecdf;--line:#d8cfbd;--ease:cubic-bezier(.22,1,.36,1)}
-.author-preferences{display:grid!important;gap:6px;padding-top:13px;border-top:1px solid #ded6c7}.author-preferences>span{color:#294938;font-weight:600}.author-preferences textarea{box-sizing:border-box;width:100%;min-height:82px;padding:9px 10px;border:1px solid #cbc5b7;border-radius:10px 4px 10px 4px;background:#fffdf7;color:#28382f;font:13px/1.65 inherit;resize:vertical}.author-preferences textarea:focus{border-color:#6d8c79;outline:2px solid #386a50;outline-offset:2px}.author-preferences small{color:#69766e;font-size:11px}
-.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
-.search-panel{display:grid;gap:7px;padding:9px 10px;border-bottom:1px solid var(--line);background:#f5efe2}.search-panel form{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:5px}.search-panel input,.search-panel select{box-sizing:border-box;min-width:0;border:1px solid #c9c3b5;background:#fffdf7;color:#294638}.search-panel input{padding:7px 9px;border-radius:12px 3px 3px 12px}.search-panel form>button{padding:0;border:1px solid #b9c5b8;border-radius:3px 10px 10px 3px;background:#dfeadd;color:#285c45}.search-panel select{grid-column:1/-1;padding:4px 7px;border:0;background:transparent;color:#657168;font-size:11px}.search-summary{display:flex;gap:6px;flex-wrap:wrap;color:#687168;font-size:11px}.search-summary strong{color:#9a4b3b}.search-results{max-height:210px;margin:0;padding:0;overflow:auto;list-style:none;display:grid;gap:4px}.search-results button{box-sizing:border-box;width:100%;display:grid;gap:2px;padding:7px 8px;border:0;border-radius:5px;background:#fffaf0;text-align:left;color:#304a3d}.search-results button:hover:not(:disabled){background:#dfeadd;transform:translateX(2px)}.search-results button:disabled{opacity:.55}.search-results strong,.search-results span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.search-results strong{font-size:11px}.search-results span{font-size:11px;color:#687168}.search-panel p{margin:0;font-size:11px}.chapter-navigation{display:flex;align-items:center;gap:5px;margin-left:auto}.chapter-navigation button{width:26px;height:26px;padding:0;border:1px solid #c7c4b7;border-radius:50%;background:#fffdf7;color:#315b47;font-size:18px;line-height:1}.chapter-navigation span{min-width:48px;text-align:center;color:#6a746b;font-variant-numeric:tabular-nums}.editor-header>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.editor-header>span:last-child{white-space:nowrap;margin-left:10px}
-.tree-file-row,.tree-directory-row{position:relative;display:flex;align-items:center}.tree-file-row .tree-main,.tree-directory-row .tree-row{min-width:0;padding-right:34px}.tree-file-row .tree-manage,.tree-directory-row .tree-directory-add{position:absolute;right:4px;width:28px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;color:#667269;opacity:0}.tree-file-row:hover .tree-manage,.tree-file-row:focus-within .tree-manage,.tree-directory-row:hover .tree-directory-add,.tree-directory-row:focus-within .tree-directory-add{opacity:1}.tree-manage:hover,.tree-directory-add:hover{background:#d5e3d3!important;transform:none!important}.archive-panel{border-bottom:1px solid var(--line);background:#eee8da}.archive-panel>summary{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;color:#596a60;list-style:none}.archive-panel>summary::-webkit-details-marker{display:none}.archive-panel>summary small{display:grid;place-items:center;min-width:19px;height:19px;border-radius:50%;background:#d5e3d3}.archive-list{display:grid;gap:6px;max-height:230px;padding:0 9px 9px;overflow:auto}.archive-list>p{margin:4px;font-size:11px}.archive-list article{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:8px;border:1px solid #d7d0c1;border-radius:7px;background:#fffaf0}.archive-list article>div{min-width:0;display:grid;gap:1px;margin-right:auto}.archive-list article strong,.archive-list article small,.archive-list article code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archive-list article small,.archive-list article code{color:#6c756d;font-size:10px}.archive-list article>button{flex:none;padding:4px 7px;border:1px solid #b9c5b8;border-radius:10px;background:#e3ecdf;color:#285c45}.archive-list article>p{flex-basis:100%;margin:0}.file-dialog-overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:#272a2666;backdrop-filter:blur(4px)}.file-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:18px;padding:24px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 28px 90px #2c2d2838}.file-dialog header,.file-dialog footer{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.file-dialog header>div{min-width:0;display:grid;gap:3px}.file-dialog h2{margin:0;color:#264b3a;font:600 26px/1.25 "Noto Serif SC","Songti SC",serif}.file-dialog small,.file-dialog code,.file-dialog p{color:#687168}.file-dialog code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-dialog-actions{display:grid;gap:8px}.file-dialog-actions>button{display:grid;gap:3px;padding:13px 14px;border:1px solid #d7d0c1;border-radius:12px 4px 12px 4px;background:#f8f3e8;text-align:left;color:#2f4e40}.file-dialog-actions>button span{color:#6c756d;font-size:12px}.file-dialog form,.archive-confirm{display:grid;gap:12px}.file-dialog label{display:grid;gap:6px}.file-dialog input,.file-dialog select{box-sizing:border-box;width:100%;padding:10px 11px;border:1px solid #c9c3b5;border-radius:8px;background:#fff}.file-dialog footer{justify-content:flex-end;align-items:center}.file-dialog footer button{padding:7px 12px;border:1px solid #bfc5b8;border-radius:12px 4px 12px 4px;background:#fff;color:#2c5744}.file-dialog footer .primary-action{background:#315e48;color:#fff}.file-dialog footer .danger-action{border-color:#a9695f;background:#8f4d43;color:#fff}.file-dialog>.warning{margin:0}.archive-confirm p{margin:0;line-height:1.7}
-button,summary,.tree-row,.provider-tabs label{transition:transform 220ms var(--ease),background-color 220ms ease,border-color 220ms ease,color 220ms ease,box-shadow 220ms ease}button:active,.tree-row:active,summary:active{transform:scale(.96)}
-.icon-button{display:grid!important;place-items:center;min-width:30px!important;width:30px;height:30px;padding:0!important;border-radius:50%!important;font-size:17px;line-height:1}.icon-button:hover{transform:rotate(8deg) scale(1.06)!important}
-.chrome{animation:bar-drop 520ms var(--ease) both}.shell>.sidebar{animation:panel-left 560ms 70ms var(--ease) both}.shell>.editor,.shell>.empty-paper{animation:panel-rise 560ms 120ms var(--ease) both}.shell>.chat{animation:panel-right 560ms 170ms var(--ease) both}
-.local-state{display:flex;align-items:center;gap:7px;border:0!important;padding:0!important;font-size:11px}.local-state i,.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#4c8a68;box-shadow:0 0 0 0 #4c8a6866;animation:signal 2.2s ease-out infinite}
-.tree-row:hover{transform:translateX(4px)!important}.tree-row[aria-current=page]{box-shadow:inset 3px 0 #3d755a}.tree-row[aria-expanded=true]{color:var(--ink);font-weight:600}
-.paper-input{transition:transform 360ms var(--ease),box-shadow 360ms ease,border-color 360ms ease}.paper-input:focus{transform:translateY(-2px);border-color:#b9c9ba;box-shadow:0 18px 44px #4b67471c,0 0 0 4px #5c8a6820}
-.composer{transition:background-color 240ms ease,box-shadow 240ms ease}.composer:focus-within{background:#fffaf0;box-shadow:0 -12px 34px #5a4d3210}.composer textarea:focus{border-color:#73917d;box-shadow:0 0 0 3px #4d7d5d17}
-.empty-paper>p{max-width:34em;margin:0;text-align:center;color:#68776d;line-height:1.75}.chat-guide{display:grid;gap:13px;padding:14px;border:1px solid #d5cebe;border-left:3px solid #5d806b;border-radius:5px 14px 5px 5px;background:#faf6ec;color:#53665a}.chat-guide>header{display:grid;gap:4px}.chat-guide>header strong{color:#264b3a;font:600 18px/1.3 "Noto Serif SC","Songti SC",serif}.chat-guide>header small,.chat-guide>small{line-height:1.55}.chat-guide-examples{display:grid;grid-template-columns:1fr 1fr;gap:7px}.chat-guide-examples button{display:grid;gap:3px;min-width:0;padding:9px 10px;border:1px solid #d5cebe;border-radius:10px 3px 10px 10px;background:#fffdf7;text-align:left;color:#315640;cursor:pointer}.chat-guide-examples button:hover{border-color:#92a995;background:#e5eee2;transform:translateY(-1px)}.chat-guide-examples button strong{font-size:12px}.chat-guide-examples button span{color:#6b776e;font-size:10px;line-height:1.45}.proposal-help{display:block;margin-top:7px;color:#6b776e;font-size:11px;line-height:1.5}
-.ghost-suggestion{box-sizing:border-box;max-height:42%;display:grid;gap:8px;overflow:auto;padding:12px 14px;border:1px solid #b9cbb9;border-radius:14px 4px 14px 14px;background:#f5faef;box-shadow:0 12px 32px #3f624719;pointer-events:auto}.ghost-suggestion header{display:flex;align-items:center;justify-content:space-between;gap:12px}.ghost-suggestion header small{color:#6b796f;font:11px/1.4 ui-monospace,Consolas,monospace}.ghost-suggestion strong,.proposal>strong{color:#28523f}.ghost-suggestion p{margin:0;overflow:auto;white-space:pre-wrap;line-height:1.7}.ghost-suggestion div,.ghost-suggestion nav,.proposal-actions{display:flex;gap:7px}.ghost-suggestion nav{justify-content:flex-end}.ghost-suggestion button,.proposal button{padding:5px 9px;border:1px solid #b8c5b7;border-radius:9px 3px 9px 9px;background:#fffdf7;color:#285640;cursor:pointer}.ghost-suggestion button:disabled{cursor:not-allowed;opacity:.45}.proposal{box-sizing:border-box;max-height:56%;overflow:auto}.selection-diff{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px!important;margin:9px 0}.selection-diff section{min-width:0;padding:8px;border:1px solid #ddd5c6;border-radius:7px;background:#f8f4e9}.selection-diff small{color:#68776d}.selection-diff p{max-height:150px;overflow:auto;white-space:pre-wrap;line-height:1.65}.proposal-actions{justify-content:flex-end}@media(max-width:1320px){.ghost-suggestion{max-width:72%}.proposal{width:min(430px,58%)}}
-.export-actions .settings-link{margin-left:0}.shortcut-overlay{position:fixed;z-index:60;inset:0;display:grid;place-items:center;padding:24px;background:#202a246b;backdrop-filter:blur(5px)}.shortcut-dialog{box-sizing:border-box;width:min(620px,100%);max-height:min(760px,calc(100dvh - 48px));display:grid;gap:14px;overflow:auto;padding:26px;border:1px solid #d8cfbd;border-radius:22px 6px 22px 6px;background:#fffdf6;box-shadow:0 30px 90px #222a2538}.shortcut-dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.shortcut-dialog header>div{display:grid;gap:4px}.shortcut-dialog h2,.shortcut-dialog p{margin:0}.shortcut-dialog h2{color:#244b39;font:600 28px/1.25 "Noto Serif SC","Songti SC",serif}.shortcut-dialog header small{color:#708078;font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.16em}.shortcut-dialog>p{color:#6c756d}.shortcut-dialog dl{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:0}.shortcut-dialog dl>div{display:flex;align-items:center;gap:12px;padding:10px 11px;border:1px solid #e0d8c9;border-radius:10px 3px 10px 10px;background:#f8f3e8}.shortcut-dialog dt{flex:none;min-width:112px;padding:3px 6px;border:1px solid #c7cebf;border-radius:5px;background:#fffdf7;color:#285640;font:11px/1.4 ui-monospace,Consolas,monospace}.shortcut-dialog dd{margin:0;color:#53645b;font-size:12px}@media(max-width:720px){.shortcut-dialog dl{grid-template-columns:1fr}}
-.workspace-row{position:relative;display:flex;align-items:center;margin:0 9px}.workspace-row>.tree-row{min-width:0;padding-right:38px}.workspace-manage{position:absolute;right:3px;opacity:0}.workspace-row:hover .workspace-manage,.workspace-row:focus-within .workspace-manage{opacity:1}.workspace-home-button{padding:4px 9px;border:1px solid #d0c8b8;border-radius:12px 3px 12px 12px;background:#f7f2e8;color:#456250;cursor:pointer}.workspace-current-manage{flex:none;padding:3px 6px!important;border:0!important;background:transparent!important;color:#65756b!important}.workspace-dialog form>footer .danger-link{margin-right:auto;border-color:transparent;background:transparent;color:#914b40}.workspace-dialog form>footer .danger-link:hover{background:#f4e5df}.workspace-dialog code{max-width:420px}
-.chat-row,.pending-card{animation:message-in 360ms var(--ease) both}.chat-row.user{transform-origin:right bottom}.chat-row.assistant{transform-origin:left bottom}.chat-row.tool strong::after{content:'···';display:inline-block;width:1.5em;overflow:hidden;vertical-align:bottom;animation:dots 1.2s steps(4,end) infinite}
-.index-status{animation:index-breathe 2.4s ease-in-out infinite}.index-status button:hover{transform:translateX(2px)}
-.export-actions{position:relative;z-index:12}.export-menu{position:relative}.export-menu summary{padding:5px 10px;border:1px solid #c9c5b4;border-radius:16px;background:#fbf8ef;color:#304f41;cursor:pointer;list-style:none}.export-menu summary::-webkit-details-marker{display:none}.export-menu[open] summary{background:#dce9dd}.export-menu>div{position:absolute;z-index:13;top:calc(100% + 8px);right:0;display:grid;min-width:130px;padding:6px;border:1px solid #d8cfbd;border-radius:10px 3px 10px 10px;background:#fffdf6;box-shadow:0 16px 40px #4e42261f;animation:menu-pop 180ms var(--ease)}.export-menu>div button{border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px}.export-menu>div button:hover{background:#e4eee1}
-.chat{position:relative}.conversation-setup{position:absolute;z-index:12;top:58px;right:12px;box-sizing:border-box;width:calc(100% - 24px);display:grid;gap:16px;padding:18px;border:1px solid #d8cfbd;border-radius:18px 5px 18px 18px;background:#fffdf6f5;box-shadow:0 22px 60px #4d41262b;backdrop-filter:blur(16px);animation:conversation-in 240ms var(--ease) both}.conversation-setup header,.conversation-setup footer{display:flex;align-items:center;justify-content:space-between;gap:10px}.conversation-setup header{padding-bottom:4px}.conversation-setup header strong{font:600 22px/1.2 "Noto Serif SC","Songti SC",serif;color:#173f30}.conversation-setup label{display:block}.conversation-setup select{box-sizing:border-box;width:100%;padding:10px 12px;border:0;border-bottom:1px solid #aeb9ad;background:transparent;color:#264838}.conversation-setup footer{justify-content:flex-end}.conversation-setup footer button{padding:7px 13px;border:0;border-radius:14px 4px 14px 14px;background:#ece6d9}.conversation-setup footer .primary-action{min-width:72px;background:#285c45;color:#fff;box-shadow:0 8px 20px #285c4526}.conversation-setup footer .primary-action:hover{transform:translateY(-2px)!important;box-shadow:0 12px 26px #285c4533}
-.settings-shell{position:relative;overflow:hidden;background:radial-gradient(circle at 18% 20%,#dfeadc 0 8%,transparent 28%),radial-gradient(circle at 84% 78%,#eadfc8 0 7%,transparent 25%),#f4efe3}.settings-view{position:relative;isolation:isolate}.settings-view::before,.settings-view::after{content:'';position:absolute;z-index:-1;border-radius:50%;pointer-events:none}.settings-view::before{width:280px;height:280px;left:8%;top:12%;border:1px solid #73917d55;box-shadow:inset 0 0 0 34px #dce8db55;animation:orbit-drift 9s ease-in-out infinite}.settings-view::after{width:160px;height:160px;right:10%;bottom:10%;background:#d7e5d6;filter:blur(1px);animation:blob-drift 7s ease-in-out infinite alternate}.model-panel{position:relative;width:min(660px,100%);padding:38px 42px 40px;border:0;border-radius:28px 7px 28px 7px;overflow:hidden;box-shadow:0 30px 80px #4e422621,0 0 0 1px #d8cfbd;background:#fffdf6eF;backdrop-filter:blur(18px);animation:settings-pop 560ms var(--ease) both}.model-panel::after{content:'⌁';position:absolute;right:-24px;top:-38px;color:#dce8da;font:160px/1 Georgia,serif;transform:rotate(18deg);pointer-events:none}.model-panel>*{position:relative;z-index:1}.model-panel>label,.provider-tabs{animation:field-in 420ms var(--ease) both}.model-panel>label:nth-of-type(1){animation-delay:90ms}.model-panel>label:nth-of-type(2){animation-delay:140ms}.model-panel>label:nth-of-type(3){animation-delay:190ms}.model-panel h2{font-size:42px!important;letter-spacing:-.06em!important}.model-panel header p{margin-top:3px!important}.provider-tabs label{border:0!important;border-radius:14px 4px 14px 4px!important;background:#f1ecdf!important}.provider-tabs label:has(input:checked){background:#dce9dd!important;color:#173f30!important;box-shadow:inset 0 0 0 1px #78917f;transform:translateY(-2px)}.model-panel input[type=password],.model-panel input:not([type]){border:0!important;border-bottom:1px solid #bfb8a9!important;border-radius:0!important;padding:11px 2px!important;background:transparent!important}.model-panel input:focus{box-shadow:none!important;border-color:#35684f!important}.model-panel .primary-action{min-width:104px;padding:10px 18px;border-radius:18px 5px 18px 18px!important;box-shadow:0 9px 22px #315e4826}.model-panel .primary-action:hover{transform:translateY(-3px) rotate(-1deg)!important;box-shadow:0 14px 28px #315e4833}
-.brand-mark{animation:mark-arrive 620ms 120ms var(--ease) both}.brand-mark:hover{transform:rotate(7deg) scale(1.08)!important}.empty-paper-mark{display:block;color:#72927e;font-size:34px;animation:mark-float 3s ease-in-out infinite}.empty-paper h1{margin:0}.empty-paper>button{margin-inline:auto}
-@keyframes bar-drop{from{opacity:0;transform:translateY(-100%)}to{opacity:1;transform:none}}@keyframes panel-left{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}@keyframes panel-right{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}@keyframes panel-rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}@keyframes message-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}@keyframes menu-pop{from{opacity:0;transform:translateY(-5px) scale(.96)}to{opacity:1;transform:none}}@keyframes conversation-in{from{opacity:0;transform:translateY(-8px) scale(.96);transform-origin:top right}to{opacity:1;transform:none}}@keyframes signal{60%,100%{box-shadow:0 0 0 10px #4c8a6800}}@keyframes dots{0%{width:0}100%{width:1.5em}}@keyframes index-breathe{50%{border-left-color:#9db7a2;background:#f5f2e6}}@keyframes orbit-drift{50%{transform:translate(28px,18px) rotate(35deg)}}@keyframes blob-drift{to{transform:translate(-36px,-22px) scale(1.18);border-radius:38% 62% 54% 46%}}@keyframes settings-pop{from{opacity:0;transform:translateY(24px) rotate(.8deg) scale(.97)}to{opacity:1;transform:none}}@keyframes field-in{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}@keyframes mark-arrive{from{opacity:0;transform:rotate(-18deg) scale(.6)}to{opacity:1;transform:rotate(-2deg) scale(1)}}@keyframes mark-float{50%{transform:translateY(-7px) rotate(5deg)}}
-@media(prefers-reduced-motion:reduce){.chrome,.shell>.sidebar,.shell>.editor,.shell>.empty-paper,.shell>.chat,.chat-row,.pending-card,.conversation-setup,.model-panel,.model-panel>label,.provider-tabs,.brand-mark,.empty-paper-mark,.settings-view::before,.settings-view::after,.local-state i,.live-dot,.index-status{animation:none!important}.paper-input:focus,.tree-row:hover,.icon-button:hover,.model-panel .primary-action:hover{transform:none!important}}
-.shell:not(.no-session){grid-template-columns:248px minmax(0,1fr)}.chat{position:fixed;z-index:10;inset:52px 0 0 auto;width:min(404px,calc(100vw - 280px));grid-column:auto;border:1px solid #d8d0bf;border-right:0;border-bottom:0;border-radius:22px 0 0 0;box-shadow:-24px 0 64px #4d41261f;overflow:hidden}.chat-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center}.conversation-select{grid-column:2;grid-row:1;min-width:0}.conversation-select select{box-sizing:border-box;width:100%;min-width:84px;max-width:none;padding:4px 22px 4px 7px;border:1px solid #d6d0c2;border-radius:4px;background:#fffdf7;color:#315640;text-overflow:ellipsis}.chat-controls{grid-column:1/-1;grid-row:2}.chat-controls .compact-control{min-width:0}.chat-controls .model-indicator{max-width:280px}.chat-header-actions{grid-column:3;grid-row:1;display:flex;gap:4px}.assistant-launcher{position:fixed;z-index:9;right:24px;bottom:24px;display:flex;align-items:center;gap:9px;padding:10px 15px 10px 10px;border:1px solid #95a89a;border-radius:22px 7px 22px 22px;background:#fffdf6ef;color:#244f3c;box-shadow:0 16px 42px #4d412626;backdrop-filter:blur(14px);cursor:pointer;animation:launcher-in 420ms var(--ease) both}.assistant-launcher span{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#dce9dd;font-size:17px;animation:mark-float 3s ease-in-out infinite}.assistant-launcher strong{font-size:13px}.assistant-launcher:hover{transform:translateY(-5px) rotate(-1deg);box-shadow:0 22px 50px #4d412633}.model-panel>label>span,.provider-tabs legend{color:#42594c!important;font-weight:500}.model-panel input[type=password],.model-panel input:not([type]){color:#2e4438!important}.model-panel input::placeholder{color:#7d857e!important;opacity:1}@keyframes launcher-in{from{opacity:0;transform:translateY(12px) scale(.9)}to{opacity:1;transform:none}}@media(max-width:1320px){.shell:not(.no-session){grid-template-columns:216px minmax(0,1fr)}}@media(prefers-reduced-motion:reduce){.assistant-launcher,.assistant-launcher span{animation:none!important}.assistant-launcher:hover{transform:none!important}}
-.model-indicator{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#647268}
-.project-context-receipt{margin-top:7px;color:#637269;font-size:11px}.project-context-receipt summary{cursor:pointer}.project-context-receipt ul{display:grid;gap:3px;margin:6px 0 0;padding-left:16px}.project-context-receipt code{font-size:10px;color:#466354}
-.editor:has(>.worldbook-settings){grid-template-rows:auto auto minmax(0,1fr) auto}.worldbook-settings{display:grid;grid-template-columns:minmax(160px,1fr) auto 88px auto;align-items:end;gap:8px 12px;padding:10px 14px;border-bottom:1px solid #ddd5c6;background:#f7f3e9;color:#53665a}.worldbook-settings>div{grid-column:1/-1;display:flex;align-items:baseline;gap:9px;min-width:0}.worldbook-settings>div small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.worldbook-settings>div .warning{margin-left:auto}.worldbook-settings label{display:grid;gap:3px;font-size:11px}.worldbook-settings textarea,.worldbook-settings input[type=number],.worldbook-settings label:not(.worldbook-enabled)>input{box-sizing:border-box;width:100%;min-width:0;padding:6px 7px;border:1px solid #cbc5b7;border-radius:4px;background:#fffdf7;color:#28382f}.worldbook-settings textarea{min-height:30px;max-height:78px;resize:vertical;font:inherit}.worldbook-settings .worldbook-enabled{display:flex;align-items:center;gap:5px;padding-bottom:6px;white-space:nowrap}.worldbook-settings button{margin-bottom:0;padding:6px 9px;border:1px solid #bfc5b8;border-radius:3px;background:#fffdf7;color:#2c5744;cursor:pointer}.worldbook-settings button:hover{background:#e1eadc}.worldbook-settings button:disabled,.worldbook-settings input:disabled,.worldbook-settings textarea:disabled{cursor:not-allowed;opacity:.55}@media(max-width:1180px){.worldbook-settings>div small{display:none}.worldbook-settings{grid-template-columns:minmax(130px,1fr) auto 78px auto;gap-inline:8px}}
-.import-overlay{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:24px;background:#1f2d2570}.import-dialog{box-sizing:border-box;width:min(520px,100%);display:grid;gap:14px;padding:24px;border:1px solid #d8cfbd;border-radius:16px 4px 16px 4px;background:#fffdf6;box-shadow:0 28px 80px #1c28221f}.import-dialog h2,.import-dialog p{margin:0}.import-dialog ul{max-height:170px;margin:0;overflow:auto;padding-left:20px;color:#5c6e62}.import-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}.import-dialog button{padding:7px 11px;border:1px solid #b9c8ba;border-radius:4px;background:#f5f1e6;color:#2c5744;cursor:pointer}.snapshot-dialog{width:min(620px,100%)}.snapshot-list{display:grid;gap:8px;max-height:280px!important;padding:0!important;list-style:none}.snapshot-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #ded6c7;border-radius:8px;background:#faf6ec}.snapshot-list li div{display:grid;gap:3px;min-width:0}.snapshot-list li strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#294938}.snapshot-list li small{color:#6b776e}
-.layout-shell{grid-template-rows:52px minmax(0,1fr);overflow:hidden}.layout-shell>.sidebar,.layout-shell>.editor,.layout-shell>.empty-paper,.layout-shell>.project-view,.layout-shell>.chat,.layout-shell>.panel-resizer{grid-column:auto;grid-row:2;min-width:0}.layout-shell>.chat{position:relative;z-index:1;inset:auto;width:auto;min-width:0;border:0;border-left:1px solid #d8d0bf;border-radius:0;box-shadow:none;overflow:hidden}.layout-shell>.chat[hidden]{display:none!important}.layout-shell>.editor,.layout-shell>.project-view{grid-column:auto}.layout-shell>.sidebar{grid-column:auto}.layout-controls,.workspace-view-controls{display:flex;align-items:center;gap:3px;padding:3px;border:1px solid #d8d0bf;border-radius:15px 5px 15px 15px;background:#f1ecdf}.layout-controls button,.workspace-view-controls button{min-width:42px;padding:4px 8px;border:0;border-radius:11px 3px 11px 11px;background:transparent;color:#526b5d;cursor:pointer}.layout-controls button[aria-pressed=true],.workspace-view-controls button[aria-pressed=true]{background:#d8e6d8;color:#183f2f;font-weight:600}.layout-controls button:disabled{cursor:not-allowed;opacity:.45}.panel-resizer{position:relative;z-index:4;min-width:0;cursor:col-resize;touch-action:none;user-select:none;background:#e6dfd1;transition:background-color 140ms ease}.panel-resizer span{position:absolute;inset:0 2px;border-radius:4px;background:transparent}.panel-resizer:hover,.panel-resizer:focus-visible,.panel-resizer[aria-valuenow]{outline:0}.panel-resizer:hover span,.panel-resizer:focus-visible span{background:#6f927c}.layout-shell.focus-mode .paper-input{width:min(calc(100% - 64px),980px);padding-inline:clamp(52px,10vw,128px);box-shadow:0 14px 42px #4b674719}.layout-shell.focus-mode .editor-header{padding-inline:20px}.layout-shell.focus-mode .editor-tools{justify-content:center}.layout-shell.assistant-open .assistant-launcher{display:none}@media(max-width:1180px){.layout-controls button,.workspace-view-controls button{min-width:36px;padding-inline:6px}.layout-shell .paper-input{width:calc(100% - 28px);padding-inline:34px}}@media(prefers-reduced-motion:reduce){.panel-resizer{transition:none!important}}
-.chapter-status-control select{padding:4px 7px;border:1px solid #c8c4b7;border-radius:10px 3px 10px 10px;background:#fffdf7;color:#315640}.project-view{box-sizing:border-box;min-height:0;overflow:auto;padding:clamp(24px,4vw,54px);background:#f8f3e8}.project-view>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:24px}.project-view h1,.project-view h2,.project-view p{margin:0}.project-view h1{color:#234b38;font:600 34px/1.2 "Noto Serif SC","Songti SC",serif}.project-view>header small{color:#708078;font:10px/1 ui-monospace,Consolas,monospace;letter-spacing:.18em}.project-view button,.project-view select{padding:7px 10px;border:1px solid #bec8bb;border-radius:11px 3px 11px 11px;background:#fffdf7;color:#285640;cursor:pointer}.overview-metrics{display:grid;grid-template-columns:repeat(5,minmax(88px,1fr));gap:10px;margin-bottom:20px}.overview-metrics article{display:grid;gap:3px;padding:16px;border:1px solid #ddd4c4;border-radius:16px 4px 16px 16px;background:#fffdf7}.overview-metrics strong{color:#28513e;font:600 28px/1 "Noto Serif SC","Songti SC",serif}.overview-metrics span{color:#708078;font-size:11px}.overview-recent{display:flex;align-items:center;gap:8px;margin-bottom:16px!important;color:#68776d}.overview-recent button{padding:2px 5px;border:0;background:transparent;font-weight:600}.overview-recent small{margin-left:auto}.overview-list{display:grid;gap:7px;margin:0;padding:0;list-style:none}.overview-list li{display:grid;grid-template-columns:minmax(0,1fr) 104px;align-items:center;gap:12px;padding:10px 12px;border:1px solid #ded6c7;border-radius:12px 4px 12px 12px;background:#fffaf0}.overview-open{display:grid!important;gap:3px!important;padding:0!important;border:0!important;background:transparent!important;text-align:left}.overview-open strong,.card-open strong{color:#294b3a}.overview-open small{color:#718078}.card-tabs{display:flex;gap:4px}.card-tabs button[aria-pressed=true]{background:#d8e6d8;font-weight:600}.chapter-board{display:grid;grid-template-columns:repeat(3,minmax(210px,1fr));gap:14px;align-items:start}.chapter-board>section{min-width:0;padding:10px;border:1px solid #ddd4c4;border-radius:18px 5px 18px 18px;background:#eee8da}.chapter-board h2{display:flex;justify-content:space-between;padding:4px 4px 12px;color:#345745;font-size:14px}.chapter-board h2 small{display:grid;width:22px;height:22px;place-items:center;border-radius:50%;background:#d7e5d6}.chapter-board>section>div,.outline-cards{display:grid;gap:9px}.chapter-board article,.outline-cards article{display:grid;gap:8px;padding:12px;border:1px solid #ddd5c6;border-radius:12px 4px 12px 12px;background:#fffdf7}.card-open{display:grid!important;gap:5px!important;padding:0!important;border:0!important;background:transparent!important;text-align:left}.card-open code{overflow:hidden;color:#718078;font-size:10px;text-overflow:ellipsis}.card-open p{min-height:2.8em;color:#53675b;line-height:1.45}.card-open small{color:#78837c}.outline-cards{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}.export-preview-dialog{width:min(680px,100%)}.export-summary{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin:0}.export-summary>div{padding:10px;border:1px solid #ded6c7;border-radius:8px;background:#faf6ec}.export-summary dt{color:#718078;font-size:11px}.export-summary dd{margin:3px 0 0;color:#294b3a;font-weight:600}.export-chapters{display:grid;gap:4px;max-height:280px;margin:0;padding:0;overflow:auto;list-style:none}.export-chapters li{display:flex;justify-content:space-between;gap:12px;padding:7px 9px;border-bottom:1px solid #e3dccf}.export-chapters small{flex:none}@media(max-width:1100px){.overview-metrics{grid-template-columns:repeat(3,1fr)}.chapter-board{grid-template-columns:1fr}.workspace-view-controls{display:none}}
-.tree{flex:1 1 auto}.tree-marker{display:inline-block;width:14px;color:#718078;text-align:center}
-.layout-shell:has(.export-menu[open]){overflow:visible}
-`
-
-const homeStyles = `
-.brand-lockup{display:flex;align-items:center;gap:10px}.brand-lockup>div{display:grid;line-height:1.05}.brand-lockup small{margin-top:4px;color:#728078;font-size:10px;letter-spacing:.12em}.brand-mark{display:grid;width:28px;height:28px;place-content:center;border:1px solid #6c8575;border-radius:8px 3px 8px 3px;background:#e4ecdf;color:#285640;font:600 15px/1 "Noto Serif SC","Songti SC",serif;transform:rotate(-2deg)}.local-state{padding-left:8px!important;border-left:1px solid #d7d0c1}.sidebar .side-title small{color:#889087;font-size:10px;font-weight:400}.workspace-caption{padding:14px 14px 4px;color:#7d857d;font-size:11px;letter-spacing:.08em}.workspace-empty{display:grid;justify-items:start;gap:5px;margin:18px 14px;padding:18px 14px;border:1px dashed #cfc8b8;border-radius:8px;background:#f5f0e4;color:#617066}.workspace-empty>span{color:#3f6a53;font-size:24px}.workspace-empty strong{font-size:13px}.workspace-empty small{line-height:1.6}.home-stage{display:grid;place-items:center;padding:54px;background:#f7f2e7;text-align:left}.home-card{box-sizing:border-box;width:min(650px,88%);padding:58px 62px 54px;border:1px solid #ddd3bf;border-left:4px solid #386a50;border-radius:5px 14px 5px 5px;background:#fffdf6;box-shadow:0 20px 55px #594b3214;animation:home-rise 320ms ease-out}.home-card h1{max-width:12em;margin:0 0 18px;color:#284b3a;font-size:34px;line-height:1.35;letter-spacing:-.03em}.home-card>p:not(.home-eyebrow){max-width:34em;margin:0;color:#657168;font:16px/1.9 "Noto Serif SC","Songti SC",serif}.home-eyebrow{margin:0 0 12px;color:#537263;font-size:12px;letter-spacing:.16em}.home-card>small{display:block;margin-top:22px;color:#7b827b;line-height:1.6}.home-actions{justify-content:flex-start;margin-top:28px;gap:12px}.home-actions button{min-width:116px;padding:9px 16px}.home-actions .primary-action{border-color:#315e48;background:#315e48;color:#fff}.home-actions .primary-action:hover{background:#284f3c}.empty-chat .chat-header>div{display:grid;gap:2px}.empty-chat .chat-header small{color:#7b847d;font-size:10px;letter-spacing:.08em}.chat-empty-body{display:grid;align-content:start;gap:22px;padding:28px 20px;color:#667168}.chat-empty-body p{margin:0;line-height:1.8}.chat-empty-body div{display:flex;flex-wrap:wrap;gap:8px}.chat-empty-body span{padding:5px 9px;border:1px solid #d5cebe;border-radius:3px;background:#faf6ec;color:#52705f;font-size:12px}@keyframes home-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:reduce){.home-card{animation:none}}
-`
-
-const homePlayStyles = `
-.no-session{grid-template-columns:230px minmax(560px,1fr) 300px;grid-template-rows:52px minmax(0,1fr);background:#f3eddf}.no-session .chrome{background:#fffaf0cc;backdrop-filter:blur(14px)}.no-session .empty-paper{height:auto}.brand-lockup{gap:9px}.brand-lockup>strong{font-size:18px;letter-spacing:-.04em}.brand-mark{width:30px;height:30px;border:0;border-radius:50% 50% 50% 12%;background:#234f3b;color:#fff;font:700 13px/1 Georgia,serif;box-shadow:0 7px 18px #234f3b33}.sidebar .side-title{padding:16px 18px 12px;border:0}.workspace-caption{padding:12px 18px 5px}.workspace-empty{justify-items:center;gap:10px;margin:30px 18px;padding:22px 8px;border:0;background:transparent;color:#7e877f}.folder-glyph{position:relative;width:42px;height:30px;border:1px solid #a9b4aa;border-radius:4px 10px 7px 7px;background:#f8f3e8;transform:rotate(-3deg);animation:folder-wiggle 5s ease-in-out infinite}.folder-glyph::before{content:'';position:absolute;left:4px;top:-7px;width:17px;height:8px;border:1px solid #a9b4aa;border-bottom:0;border-radius:5px 5px 0 0;background:#f8f3e8}.home-stage{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(260px,.85fr) minmax(260px,.72fr);align-items:center;justify-content:center;gap:clamp(32px,6vw,90px);overflow:hidden;padding:clamp(40px,7vw,96px);background:radial-gradient(circle at 65% 46%,#fffaf0 0 16%,transparent 42%),#f7f2e7;text-align:left}.home-ink{position:absolute;z-index:-1;left:4%;bottom:-18%;color:#1f503b;font:700 clamp(360px,40vw,640px)/.8 "Noto Serif SC","Songti SC",serif;opacity:.035;animation:ink-drift 12s ease-in-out infinite alternate}.home-card{width:auto;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;animation:copy-arrive 620ms 180ms var(--ease) both}.home-card h1{max-width:none;margin:2px 0 34px;color:#173f30;font-size:clamp(58px,6vw,86px);line-height:.98;letter-spacing:-.09em;text-wrap:balance}.home-eyebrow{margin:0 0 16px;color:#60806d;font:600 11px/1.2 ui-monospace,"SFMono-Regular",Consolas,monospace;letter-spacing:.24em}.home-actions{justify-content:flex-start;margin:0;gap:12px}.home-actions button{min-width:auto;padding:11px 18px;border:0;border-radius:18px 6px 18px 18px;background:#e5dfd2}.home-actions button:hover{transform:translateY(-4px) rotate(1deg)!important;box-shadow:0 12px 24px #4c3e2517}.home-actions .primary-action{display:flex;align-items:center;gap:18px;padding-left:20px;border:0;background:#244f3c;color:#fff;box-shadow:0 10px 28px #244f3c2b}.home-actions .primary-action span{transition:transform 220ms var(--ease)}.home-actions .primary-action:hover span{transform:translate(3px,-3px)}.paper-motion{position:relative;width:min(30vw,330px);aspect-ratio:.78;justify-self:center;perspective:900px;animation:paper-hover 5.8s ease-in-out infinite}.paper-sheet{position:absolute;inset:0;border:1px solid #ded4bf;background:#fffdf6;box-shadow:0 28px 56px #55472c1b}.sheet-back{transform:translate(25px,17px) rotate(8deg);border-radius:6px 18px 6px 6px;background:#e5eadc}.sheet-mid{transform:translate(10px,8px) rotate(3deg);border-radius:7px 16px 7px 7px;background:#f1e9d7}.sheet-front{display:grid;align-content:start;gap:18px;box-sizing:border-box;padding:27% 17%;border-radius:8px 24px 8px 8px;transform:rotate(-2deg);transition:transform 450ms var(--ease),box-shadow 450ms ease}.paper-motion:hover .sheet-front{transform:translateY(-9px) rotate(-4deg);box-shadow:0 38px 70px #55472c28}.sheet-front span{height:3px;border-radius:3px;background:#86a18f;transform:scaleX(0);transform-origin:left;animation:line-write 4.6s var(--ease) infinite}.sheet-front span:nth-child(2){width:82%;animation-delay:.22s}.sheet-front span:nth-child(3){width:58%;animation-delay:.44s}.sheet-front b{width:2px;height:22px;margin-top:4px;background:#315e48;animation:cursor-blink .9s steps(1) infinite}.home-stage>.warning{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);margin:0}.empty-chat .chat-header{align-items:center}.chat-empty-body{place-items:center;align-content:center;gap:20px;padding:28px}.chat-empty-body>small{color:#809087;font-size:11px;letter-spacing:.14em}.agent-orb{position:relative;display:grid;width:110px;height:110px;place-items:center;border:1px solid #8ca090;border-radius:45% 55% 52% 48%;color:#315e48;font-size:30px;animation:orb-morph 7s ease-in-out infinite}.agent-orb::before,.agent-orb::after{content:'';position:absolute;border-radius:50%}.agent-orb::before{inset:12px;border:1px dashed #9daf9f;animation:orb-spin 12s linear infinite}.agent-orb::after{width:9px;height:9px;right:5px;top:24px;background:#4e8867;box-shadow:0 0 0 6px #4e88671a}.agent-orb span{animation:mark-float 3s ease-in-out infinite}
-@keyframes copy-arrive{from{opacity:0;transform:translateX(-22px)}to{opacity:1;transform:none}}@keyframes ink-drift{to{transform:translate(5%,3%) rotate(-3deg)}}@keyframes paper-hover{50%{transform:translateY(-12px) rotate(.8deg)}}@keyframes line-write{0%,10%{transform:scaleX(0);opacity:.3}32%,76%{transform:scaleX(1);opacity:1}94%,100%{transform:scaleX(1);opacity:0}}@keyframes cursor-blink{50%{opacity:0}}@keyframes folder-wiggle{50%{transform:translateY(-4px) rotate(2deg)}}@keyframes orb-spin{to{transform:rotate(360deg)}}@keyframes orb-morph{0%,100%{border-radius:45% 55% 52% 48%;transform:rotate(-2deg)}50%{border-radius:56% 44% 42% 58%;transform:translateY(-8px) rotate(3deg)}}
-@media(max-width:1180px){.no-session{grid-template-columns:210px minmax(480px,1fr) 250px}.home-stage{gap:28px;padding:48px}.home-card h1{font-size:58px}.paper-motion{width:250px}}@media(prefers-reduced-motion:reduce){.folder-glyph,.home-ink,.home-card,.paper-motion,.sheet-front span,.sheet-front b,.agent-orb,.agent-orb::before,.agent-orb span{animation:none!important}.sheet-front span{transform:scaleX(1);opacity:1}}
-.no-session{grid-template-columns:230px minmax(560px,1fr)}@media(max-width:1180px){.no-session{grid-template-columns:210px minmax(480px,1fr)}}
-.path-fallback{display:grid;gap:10px;margin-top:18px}.path-fallback label{display:grid;gap:6px;color:#52695b;font-size:12px}.path-fallback input{box-sizing:border-box;width:min(520px,100%);padding:10px 12px;border:1px solid #b9c3b8;border-radius:4px;background:#fffdf7;color:#253b32}.path-fallback>div{display:flex;gap:8px}.path-fallback button{padding:8px 13px;border:0;border-radius:14px 4px 14px 14px;background:#e5dfd2;color:#2c5744}.path-fallback .primary-action{background:#244f3c;color:#fff}.home-card>.warning{max-width:36em;margin:12px 0 0;font-size:13px}
-`
 
 export function apply(ctx: Context): void {
   const client = ctx as ShellContext

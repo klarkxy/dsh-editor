@@ -337,12 +337,12 @@ try {
 
     await page.getByRole('button', { name: '打开作品' }).first().click()
     await page.getByLabel('作品文件夹路径').waitFor({ state: 'visible' })
-    await shot(page, 'home-open-path', '打开作品路径框：可输入路径或选择文件夹')
+    await shot(page, 'home-open-path', '系统目录选择器不可用时的打开作品路径框')
 
     await page.getByRole('button', { name: '取消' }).click()
     await page.getByRole('button', { name: '新建', exact: true }).click()
     await page.getByRole('button', { name: '在此新建' }).waitFor({ state: 'visible' })
-    await shot(page, 'home-new-path', '新建作品路径框：按钮文案应改为在此新建')
+    await shot(page, 'home-new-path', '系统目录选择器不可用时的新建路径框：按钮文案应改为在此新建')
     await page.getByRole('button', { name: '取消' }).click()
 
     await page.getByRole('button', { name: '打开作品' }).first().click()
@@ -497,13 +497,6 @@ try {
       await page.keyboard.press('Escape')
     })
 
-    await step('snapshot', async () => {
-      await page.getByRole('button', { name: '作品快照' }).click()
-      await page.getByRole('dialog', { name: '作品快照' }).waitFor({ state: 'visible', timeout: 20_000 })
-      await shot(page, 'snapshot', '作品快照：说明只含已保存文本，恢复到新空文件夹')
-      await page.getByRole('button', { name: '取消' }).click()
-    })
-
     await step('export-menu', async () => {
       await page.locator('.export-menu > summary').click()
       const markdownBtn = page.getByRole('button', { name: 'Markdown', exact: true })
@@ -584,11 +577,15 @@ try {
     await step('settings', async () => {
       await page.getByRole('button', { name: '设置' }).click()
       await page.getByRole('heading', { name: '接口' }).waitFor({ state: 'visible' })
-      await shot(page, 'settings-from-workbench', '写作区进入设置：应有返回写作区，以及补全方式和作者约定')
+      const snapshotSettings = page.getByRole('region', { name: '作品快照' })
+      await snapshotSettings.waitFor({ state: 'visible' })
+      await shot(page, 'settings-from-workbench', '写作区进入设置：应有返回写作区、补全方式、作者约定和作品快照')
       await page.getByLabel('停顿后提示').check()
       await page.getByLabel('跨作品作者约定').fill('第三人称限知；对白保持克制；少用感叹号。')
       await page.waitForTimeout(250)
       await shot(page, 'settings-preferences', '补全方式与跨作品作者约定填写后的设置页')
+      await snapshotSettings.scrollIntoViewIfNeeded()
+      await shot(page, 'snapshot', '设置中的作品快照：说明只含已保存文本，恢复到新空文件夹')
       await page.getByRole('button', { name: '返回写作区' }).click()
       await page.getByRole('textbox', { name: '正文' }).or(page.locator('.empty-paper')).first().waitFor({ state: 'visible' })
     })

@@ -109,7 +109,7 @@ try {
   const phases = []
   phases.push(await inspectPhase(browser, 'first-run-settings', {}, (state) => {
     const interfaces = state.body.includes('DeepSeek') && state.body.includes('自定义接口') && !state.body.includes('OpenAI')
-    const forced = state.settings && !state.settingsBack && state.body.includes('接口地址') && state.body.includes('API Key') && state.body.includes('连接') && !state.body.includes('模型名称')
+    const forced = state.settings && !state.settingsBack && state.body.includes('接口地址') && state.body.includes('API Key') && state.body.includes('连接') && !state.body.includes('模型名称') && !state.body.includes('作品快照')
     if (!forced || !interfaces || state.shell || state.officialHome || !state.editorName) throw new Error('first-run settings assertion failed')
   }))
   phases.push(await inspectPhase(browser, 'configured-home', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, (state) => {

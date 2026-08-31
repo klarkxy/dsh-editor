@@ -112,7 +112,7 @@ async function launchPhase(name, extraEnv, inspect) {
 const phases = []
 phases.push(await launchPhase('first-run-settings', {}, async (state) => {
   const hasOnlyApprovedInterfaces = state.body.includes('DeepSeek') && state.body.includes('自定义接口') && !state.body.includes('OpenAI')
-  const forcedSetup = state.settings && !state.settingsBack && state.body.includes('接口') && state.body.includes('连接')
+  const forcedSetup = state.settings && !state.settingsBack && state.body.includes('接口') && state.body.includes('连接') && !state.body.includes('作品快照')
   if (!forcedSetup || !hasOnlyApprovedInterfaces || state.shell || state.officialHome || !state.editorName) {
     throw new Error(`first-run settings assertion failed: ${JSON.stringify({ ...state, body: undefined, forcedSetup, hasOnlyApprovedInterfaces })}`)
   }

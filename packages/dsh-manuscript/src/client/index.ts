@@ -103,7 +103,7 @@ function Tree(props: {
   return e('div', { 'data-testid': 'manuscript-tree', style: { overflow: 'auto', fontSize: 13, height: '100%' } }, render('.', 0))
 }
 
-const EDITOR_FONT = 'Georgia, "Noto Serif SC", serif'
+const EDITOR_FONT = 'system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif'
 const EDITOR_PAD = 16
 const EDITOR_SIZE = 16
 const EDITOR_LINE = 1.7

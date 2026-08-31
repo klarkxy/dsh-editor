@@ -6,7 +6,6 @@ export type RestoreView = RestoreProbeResponse
 export type SnapshotFlow =
   | { kind: 'idle' }
   | { kind: 'working'; message: string }
-  | { kind: 'list'; snapshots: SnapshotView[]; note?: string }
   | { kind: 'review'; sourceSessionId: string; targetSessionId: string; targetWorkspaceId: string; snapshot?: SnapshotView; probe: RestoreView }
   | { kind: 'recover'; targetSessionId: string; targetWorkspaceId: string; probe: RestoreView }
   | { kind: 'cleanup-confirm'; targetSessionId: string; targetWorkspaceId: string; receiptId: string }

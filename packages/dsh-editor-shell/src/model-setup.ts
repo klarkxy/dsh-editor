@@ -1,5 +1,5 @@
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import { createElement as e, useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { createElement as e, useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { friendlyModelError, providerWrite, validateModelForm, type DiscoveredModel, type ModelForm, type ModelInterface } from './model-config.ts'
 import type { CompletionPreference } from './completion-preference.ts'
 import { AUTHOR_PREFERENCES_MAX_CHARS } from './author-preferences.ts'
@@ -15,6 +15,7 @@ type ModelSetupProps = {
   onCompletionPreferenceChange?(value: CompletionPreference): void
   authorPreferences?: string
   onAuthorPreferencesChange?(value: string): void
+  children?: ReactNode
 }
 
 export function ModelSetup(props: ModelSetupProps) {
@@ -114,7 +115,7 @@ export function ModelSetup(props: ModelSetupProps) {
         e('div', null,
           e('p', { className: 'settings-brand' }, 'DSH / 连接'),
           e('h2', { id: 'model-setup-title' }, '接口'),
-          e('p', null, 'Key 仅存本机'),
+          e('p', null, 'Key 仅保存在本机'),
         ),
         props.onBack ? e('button', { type: 'button', onClick: props.onBack, 'aria-label': '返回写作区' }, '← 写作') : null,
       ),
@@ -138,7 +139,7 @@ export function ModelSetup(props: ModelSetupProps) {
       })),
       props.onBack && props.completionPreference && props.onCompletionPreferenceChange ? e('fieldset', { className: 'completion-preference' },
         e('legend', null, '自动补全'),
-        e('p', null, '默认只在你点击“补全”时请求。停顿提示也只生成建议，必须由你确认后才写入正文。'),
+        e('p', null, '补全只生成建议，经你确认后才会写入正文。'),
         ([['manual', '仅手动'], ['pause', '停顿后提示']] as const).map(([value, label]) => e('label', { key: value },
           e('input', {
             type: 'radio',
@@ -159,7 +160,7 @@ export function ModelSetup(props: ModelSetupProps) {
           'aria-label': '跨作品作者约定',
           onChange: (event: ChangeEvent<HTMLTextAreaElement>) => props.onAuthorPreferencesChange?.(event.target.value),
         }),
-        e('small', null, `${props.authorPreferences.length} / ${AUTHOR_PREFERENCES_MAX_CHARS} 字；只存本机，所有作品的搭档、补全和选段修改都会参考。`),
+        e('small', null, `${props.authorPreferences.length} / ${AUTHOR_PREFERENCES_MAX_CHARS} 字；仅保存在本机，所有作品的搭档、补全和选段修改都会参考。`),
       ) : null,
       note ? e('p', { className: /成功/.test(note) ? 'success' : 'warning', role: /成功/.test(note) ? 'status' : 'alert' }, note) : null,
       e('footer', null,
@@ -167,5 +168,6 @@ export function ModelSetup(props: ModelSetupProps) {
         e('button', { className: 'primary-action', type: 'submit', disabled: busy }, busy ? '连接中' : '连接'),
       ),
     ),
+    props.children ?? null,
   )
 }

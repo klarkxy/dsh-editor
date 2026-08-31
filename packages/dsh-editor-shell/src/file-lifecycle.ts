@@ -9,8 +9,8 @@ export function documentName(path: string): string {
 
 export function archiveStateText(item: ArchiveView): string {
   if (item.state === 'archived') return '已归档'
-  if (item.state === 'pending-archive') return '待继续归档'
-  if (item.state === 'pending-restore') return '待继续恢复'
+  if (item.state === 'pending-archive') return '归档未完成'
+  if (item.state === 'pending-restore') return '恢复未完成'
   if (item.state === 'restored') return '已恢复'
   return '需要检查'
 }

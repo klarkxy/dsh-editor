@@ -9,7 +9,7 @@ export function chapterStatusText(status: ChapterStatus): string {
 }
 
 function modifiedText(value: string | null): string {
-  return value ? new Date(value).toLocaleString() : '修改时间不可用'
+  return value ? new Date(value).toLocaleString() : '修改时间未知'
 }
 
 function StatusSelect(props: { path: string; title: string; status: ChapterStatus; disabled?: boolean; onChange(path: string, status: ChapterStatus): void }) {
@@ -50,7 +50,7 @@ export function ProjectOverviewPanel(props: {
       e('article', null, e('strong', null, view.totals.byStatus.final), e('span', null, '已定稿')),
     ),
     view.recent ? e('p', { className: 'overview-recent' }, '最近编辑：', e('button', { type: 'button', onClick: () => props.onOpen(view.recent!.path) }, view.recent.title), e('small', null, modifiedText(view.recent.modifiedAt))) : null,
-    view.truncated || view.skipped ? e('p', { className: 'warning' }, `概览按安全上限生成${view.truncated ? '，部分文件未扫描' : ''}${view.skipped ? `；跳过 ${view.skipped} 项` : ''}。`) : null,
+    view.truncated || view.skipped ? e('p', { className: 'warning' }, `概览已按安全上限生成${view.truncated ? '，部分文件未扫描' : ''}${view.skipped ? `；已跳过 ${view.skipped} 项` : ''}。`) : null,
     e('ol', { className: 'overview-list' }, view.chapters.map((chapter) => e('li', { key: chapter.path },
       e('button', { className: 'overview-open', type: 'button', onClick: () => props.onOpen(chapter.path) },
         e('strong', null, chapter.title),
@@ -109,7 +109,7 @@ export function ExportPreviewDialog(props: { prepared: PreparedExport; busy: boo
         e('div', null, e('dt', null, '文件'), e('dd', null, props.prepared.filename)),
         e('div', null, e('dt', null, '章节'), e('dd', null, props.prepared.chapters.length)),
         e('div', null, e('dt', null, '总字数'), e('dd', null, props.prepared.totalChars))),
-      empty.length ? e('p', { className: 'warning', role: 'alert' }, `${empty.length} 个空章仍会保留在导出中。`) : null,
+      empty.length ? e('p', { className: 'warning', role: 'alert' }, `有 ${empty.length} 个空章，仍会包含在导出文件中。`) : null,
       e('ol', { className: 'export-chapters' }, props.prepared.chapters.map((chapter, index) => e('li', { key: chapter.path }, e('span', null, `${index + 1}. ${chapter.path}`), e('small', null, `${chapter.chars} 字${chapter.empty ? ' · 空章' : ''}`)))),
       e('footer', null,
         e('button', { type: 'button', disabled: props.busy, onClick: props.onCancel }, '取消'),

@@ -15,6 +15,6 @@ describe('author file lifecycle presentation', () => {
       { ...base, archiveId: 'c', state: 'restored' },
     ]
     expect(visibleArchives(items).map((item) => item.archiveId)).toEqual(['a', 'b'])
-    expect(archiveStateText(items[1]!)).toBe('待继续归档')
+    expect(archiveStateText(items[1]!)).toBe('归档未完成')
   })
 })

@@ -64,7 +64,7 @@ export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-resu
   const name = node.call?.name ?? `工具 ${node.callId}`
   const proposal = name === 'novel_propose' ? parseProposalMarker(body) : undefined
   if (proposal) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: '写作助手提出了一项文件修改', proposal }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: '写作助手提出了一项文件修改提案', proposal }
   }
   if (node.isError) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: '这项操作没有执行', detail: '写作助手无法完成这项操作。' }
@@ -117,7 +117,7 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
       if (row.proposal) rows.push(row)
     }
     else if (node.kind === 'turn-error') rows.push({ ...common, role: 'notice', text: '写作助手未能完成这次请求，请重试。' })
-    else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: '写作助手正在重新尝试…' })
+    else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: '写作助手正在重试…' })
   }
   return rows
 }
@@ -223,5 +223,5 @@ export function permissionProjection(session: SessionFace): PermissionProjection
 export async function selectPermission(session: SessionFace, preset: string): Promise<void> {
   const result = await session.command(`/permission ${preset}`)
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-  if (!result.value.matched) throw new Error('当前 DSH 未提供 /permission 命令')
+  if (!result.value.matched) throw new Error('当前环境不支持 /permission 命令')
 }

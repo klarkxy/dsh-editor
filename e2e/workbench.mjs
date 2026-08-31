@@ -145,6 +145,10 @@ try {
   await pathBox.fill(workspace)
   await window.getByRole('button', { name: '打开此目录' }).click()
   await window.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+  await window.locator('.chrome').screenshot({ path: resolve(output, 'chrome-actions.png') })
+  if (!(await window.getByRole('button', { name: '设置' }).locator('svg.gear-icon').count())) failures.push('设置按钮没有显示齿轮图标')
+  if (!(await window.locator('.export-menu > summary').textContent())?.includes('导出全书')) failures.push('导出入口没有写成导出全书')
+  if (await window.getByRole('button', { name: '作品快照' }).count()) failures.push('作品快照仍留在工作台顶部，应放入设置')
 
   await window.getByRole('button', { name: '概览', exact: true }).click()
   const overviewPanel = window.getByRole('region', { name: '作品概览' })
@@ -300,20 +304,20 @@ try {
   await window.locator('.tree-row', { hasText: '001.md' }).first().click()
   await window.waitForFunction(() => document.querySelector('textarea[aria-label="正文"]')?.value.includes('磁盘外部版本'))
 
-  const workspaceSelect = window.getByLabel('选择工作区')
+  const workspaceSelect = window.getByLabel('切换作品')
   const originalWorkspaceTitle = await workspaceSelect.locator('option:checked').textContent() || 'workbench-e2e-workspace'
   await window.getByRole('button', { name: '管理当前作品' }).click()
   let workspaceDialog = window.locator('.workspace-dialog')
   await workspaceDialog.getByLabel('作品显示名').fill('验收作品')
   await workspaceDialog.getByRole('button', { name: '保存显示名' }).click()
   await workspaceDialog.waitFor({ state: 'detached' })
-  await window.waitForFunction(() => document.querySelector('select[aria-label="选择工作区"] option:checked')?.textContent === '验收作品')
+  await window.waitForFunction(() => document.querySelector('select[aria-label="切换作品"] option:checked')?.textContent === '验收作品')
   await window.getByRole('button', { name: '管理当前作品' }).click()
   workspaceDialog = window.locator('.workspace-dialog')
   await workspaceDialog.getByLabel('作品显示名').fill(originalWorkspaceTitle)
   await workspaceDialog.getByRole('button', { name: '保存显示名' }).click()
   await workspaceDialog.waitFor({ state: 'detached' })
-  await window.waitForFunction((expected) => document.querySelector('select[aria-label="选择工作区"] option:checked')?.textContent === expected, originalWorkspaceTitle)
+  await window.waitForFunction((expected) => document.querySelector('select[aria-label="切换作品"] option:checked')?.textContent === expected, originalWorkspaceTitle)
 
   await window.keyboard.press('Control+b')
   await window.locator('.sidebar').waitFor({ state: 'detached' })
@@ -411,6 +415,11 @@ try {
   await window.screenshot({ path: resolve(output, 'editor-ai-controls.png'), fullPage: true })
 
   await window.getByRole('button', { name: '设置' }).click()
+  const snapshotSettings = window.getByRole('region', { name: '作品快照' })
+  await snapshotSettings.waitFor({ state: 'visible' })
+  if ((await snapshotSettings.getByRole('button', { name: '创建快照' }).getAttribute('title')) !== '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品') {
+    failures.push('作品快照没有说明备份用途')
+  }
   const completionSettings = window.getByRole('group', { name: '自动补全' })
   await completionSettings.waitFor({ state: 'visible' })
   await completionSettings.getByLabel('停顿后提示').check()
@@ -421,11 +430,14 @@ try {
   await window.waitForFunction(() => {
     const panel = document.querySelector('.model-panel')
     const preferences = document.querySelector('.author-preferences')
-    return panel && preferences
+    const snapshots = document.querySelector('.snapshot-panel')
+    return panel && preferences && snapshots
       && panel.getAnimations().every((animation) => animation.playState === 'finished')
       && preferences.getAnimations().every((animation) => animation.playState === 'finished')
+      && snapshots.getAnimations().every((animation) => animation.playState === 'finished')
       && Number.parseFloat(getComputedStyle(panel).opacity || '1') >= 0.99
       && Number.parseFloat(getComputedStyle(preferences).opacity || '1') >= 0.99
+      && Number.parseFloat(getComputedStyle(snapshots).opacity || '1') >= 0.99
   })
   await window.screenshot({ path: resolve(output, 'completion-settings.png'), fullPage: true })
   await completionSettings.getByLabel('仅手动').check()

@@ -32,7 +32,7 @@ export function prepareExport(chapters: readonly ChapterExport[], title: string,
     .filter((item) => /^正文\/.*\.(?:md|txt)$/i.test(item.path))
     .map((item) => [item.path, item] as const))
   const sorted = sortChapterPaths([...byPath.keys()]).map((path) => byPath.get(path)!)
-  if (!sorted.length) throw new Error('正文为空，暂时无法导出。')
+  if (!sorted.length) throw new Error('正文为空，无法导出。请先创建正文章节。')
   const name = projectTitle(title)
   const preview = sorted.map((item) => ({ path: item.path, chars: chapterExportChars(item.text), empty: chapterExportEmpty(item.text) }))
   const totalChars = preview.reduce((sum, item) => sum + item.chars, 0)
