@@ -61,13 +61,12 @@ async function readReceipt(target: ImportAccess): Promise<StoredReceipt | undefi
   try {
     const loaded = await readTextFile(target.files, IMPORT_RECEIPT_PATH)
     const value = JSON.parse(loaded.text) as Partial<ImportReceipt>
-    if (value.version !== 1 || typeof value.receiptId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.receiptId) || (value.state !== 'copying' && value.state !== 'cleaning' && value.state !== 'complete') || typeof value.probeToken !== 'string' || !/^[0-9a-f]{64}$/.test(value.probeToken) || typeof value.sourceRootKey !== 'string' || !value.sourceRootKey || typeof value.targetRootKey !== 'string' || value.targetRootKey !== target.rootKey || !Array.isArray(value.files)) throw new ImportError('import receipt is invalid for this workspace', 'BLOCKED')
+    if (value.version !== 1 || typeof value.receiptId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.receiptId) || (value.state !== 'copying' && value.state !== 'cleaning' && value.state !== 'complete') || typeof value.probeToken !== 'string' || !/^[0-9a-f]{64}$/.test(value.probeToken) || typeof value.sourceRootKey !== 'string' || !value.sourceRootKey || typeof value.targetRootKey !== 'string' || value.targetRootKey !== target.rootKey || !Array.isArray(value.files)) return undefined
     const seen = new Set<string>()
-    if (!value.files.every((file) => validReceiptFile(file, seen))) throw new ImportError('import receipt is invalid', 'BLOCKED')
+    if (!value.files.every((file) => validReceiptFile(file, seen))) return undefined
     return { receipt: value as ImportReceipt, version: loaded.version }
   } catch (error) {
-    if (error instanceof FileOpError && error.code === 'NOT_FOUND') return undefined
-    if (error instanceof SyntaxError) throw new ImportError('import receipt is invalid', 'BLOCKED')
+    if (error instanceof FileOpError || error instanceof SyntaxError) return undefined
     throw error
   }
 }

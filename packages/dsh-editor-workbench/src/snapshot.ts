@@ -404,44 +404,38 @@ function restoreToken(source: SnapshotAccess, target: SnapshotAccess, snapshot: 
 }
 
 async function readRestore(target: SnapshotAccess): Promise<{ receipt: RestoreReceipt; version: string } | undefined> {
-  let loaded
   try {
-    loaded = await readTextFile(target.files, RESTORE_RECEIPT_PATH)
+    const loaded = await readTextFile(target.files, RESTORE_RECEIPT_PATH)
+    const parsed: unknown = JSON.parse(loaded.text)
+    if (!parsed || typeof parsed !== 'object') return undefined
+    const value = parsed as Partial<RestoreReceipt>
+    if (value.version !== 1
+      || !UUID_V4.test(String(value.receiptId))
+      || (value.state !== 'copying' && value.state !== 'cleaning' && value.state !== 'complete')
+      || typeof value.sourceRootKey !== 'string'
+      || !value.sourceRootKey
+      || value.targetRootKey !== target.rootKey
+      || !UUID_V4.test(String(value.snapshotId))
+      || typeof value.probeToken !== 'string'
+      || !SHA256.test(value.probeToken)) {
+      return undefined
+    }
+    return {
+      receipt: {
+        version: 1,
+        receiptId: value.receiptId!,
+        state: value.state,
+        sourceRootKey: value.sourceRootKey,
+        targetRootKey: value.targetRootKey,
+        snapshotId: value.snapshotId!,
+        probeToken: value.probeToken,
+        files: validateFileList(value.files),
+      },
+      version: loaded.version,
+    }
   } catch (error) {
-    if (error instanceof FileOpError && error.code === 'NOT_FOUND') return undefined
+    if (error instanceof FileOpError || error instanceof SyntaxError || error instanceof SnapshotError) return undefined
     throw error
-  }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(loaded.text)
-  } catch {
-    throw new SnapshotError('restore receipt is invalid', 'BLOCKED')
-  }
-  if (!parsed || typeof parsed !== 'object') throw new SnapshotError('restore receipt is invalid', 'BLOCKED')
-  const value = parsed as Partial<RestoreReceipt>
-  if (value.version !== 1
-    || !UUID_V4.test(String(value.receiptId))
-    || (value.state !== 'copying' && value.state !== 'cleaning' && value.state !== 'complete')
-    || typeof value.sourceRootKey !== 'string'
-    || !value.sourceRootKey
-    || value.targetRootKey !== target.rootKey
-    || !UUID_V4.test(String(value.snapshotId))
-    || typeof value.probeToken !== 'string'
-    || !SHA256.test(value.probeToken)) {
-    throw new SnapshotError('restore receipt is invalid for this workspace', 'BLOCKED')
-  }
-  return {
-    receipt: {
-      version: 1,
-      receiptId: value.receiptId!,
-      state: value.state,
-      sourceRootKey: value.sourceRootKey,
-      targetRootKey: value.targetRootKey,
-      snapshotId: value.snapshotId!,
-      probeToken: value.probeToken,
-      files: validateFileList(value.files),
-    },
-    version: loaded.version,
   }
 }
 

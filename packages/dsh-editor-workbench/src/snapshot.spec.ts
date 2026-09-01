@@ -186,6 +186,25 @@ describe('whole-work text snapshots', () => {
     await expect(restoreProbe({ target: access(target) })).resolves.toMatchObject({ state: 'recoverable' })
   })
 
+  it('treats unverifiable restore receipts as absent so the folder can open as a normal work', async () => {
+    const target = await project('target')
+    await fs.writeFile(path.join(target, 'a.md'), 'keep')
+    await fs.writeFile(path.join(target, RESTORE_RECEIPT_PATH), '{not-json')
+    await expect(restoreProbe({ target: access(target) })).resolves.toMatchObject({ state: 'none', files: 0 })
+    const foreign = await project('foreign')
+    await fs.writeFile(path.join(foreign, RESTORE_RECEIPT_PATH), JSON.stringify({
+      version: 1,
+      receiptId: '11111111-1111-4111-8111-111111111111',
+      state: 'copying',
+      sourceRootKey: 'other',
+      targetRootKey: 'not-this-workspace',
+      snapshotId: '22222222-2222-4222-8222-222222222222',
+      probeToken: 'a'.repeat(64),
+      files: [],
+    }))
+    await expect(restoreProbe({ target: access(foreign) })).resolves.toMatchObject({ state: 'none', files: 0 })
+  })
+
   it('rejects a directory swapped to a junction during cleanup', async () => {
     const source = await project('source'); const target = await project('target'); const outside = await project('outside')
     await fs.mkdir(path.join(source, '正文')); await fs.writeFile(path.join(source, '正文', 'a.md'), 'a'); await fs.writeFile(path.join(source, '正文', 'b.md'), 'b')

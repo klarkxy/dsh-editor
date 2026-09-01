@@ -95,13 +95,15 @@ describe('safe external import', () => {
     expect(await fs.readFile(path.join(target, IMPORT_RECEIPT_PATH), 'utf8')).toContain('complete')
   })
 
-  it('binds recovery and cleanup to the target root and the probed receipt id', async () => {
+  it('treats unverifiable or foreign receipts as absent so the folder can open as a normal work', async () => {
     const source = path.join(base, 'source'); const firstTarget = path.join(base, 'first'); const secondTarget = path.join(base, 'second')
     await fs.mkdir(source); await fs.mkdir(firstTarget); await fs.mkdir(secondTarget); await fs.writeFile(path.join(source, 'a.md'), 'a')
     const ready = await probeImport({ source: access(source), target: access(firstTarget) }); await applyImport({ source: access(source), target: access(firstTarget), token: ready.token! })
     const receiptPath = path.join(firstTarget, IMPORT_RECEIPT_PATH); const receipt = JSON.parse(await fs.readFile(receiptPath, 'utf8')); receipt.state = 'copying'; await fs.writeFile(receiptPath, JSON.stringify(receipt))
     await fs.copyFile(receiptPath, path.join(secondTarget, IMPORT_RECEIPT_PATH))
-    await expect(probeImport({ target: access(secondTarget) })).rejects.toMatchObject({ code: 'BLOCKED' })
+    await expect(probeImport({ target: access(secondTarget) })).resolves.toMatchObject({ state: 'none', files: 0 })
+    await fs.writeFile(path.join(secondTarget, IMPORT_RECEIPT_PATH), '{not-json')
+    await expect(probeImport({ target: access(secondTarget) })).resolves.toMatchObject({ state: 'none', files: 0 })
     const recoverable = await probeImport({ target: access(firstTarget) })
     await expect(cleanupImport({ target: access(firstTarget), receiptId: '00000000-0000-4000-8000-000000000000' })).rejects.toMatchObject({ code: 'CLEANUP_BLOCKED' })
     await expect(cleanupImport({ target: access(firstTarget), receiptId: recoverable.receiptId! })).resolves.toEqual({ removed: 1 })
