@@ -11,9 +11,14 @@ export interface RestrictedWebContents {
   }
 }
 
-export function installNavigationPolicy(contents: RestrictedWebContents, expected: URL): void {
+export interface NavigationPolicy {
+  setExpected(expected: URL): void
+}
+
+export function installNavigationPolicy(contents: RestrictedWebContents, expected: URL): NavigationPolicy {
+  let allowed = expected
   contents.on('will-navigate', (event, candidate) => {
-    if (!isAllowedNavigation(candidate, expected)) event.preventDefault()
+    if (!isAllowedNavigation(candidate, allowed)) event.preventDefault()
   })
   contents.setWindowOpenHandler(() => ({ action: 'deny' }))
   contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
@@ -25,4 +30,5 @@ export function installNavigationPolicy(contents: RestrictedWebContents, expecte
       ],
     },
   }))
+  return { setExpected(expectedUrl) { allowed = expectedUrl } }
 }

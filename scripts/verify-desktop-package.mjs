@@ -5,7 +5,7 @@ import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const output = resolve(root, '.pack', 'desktop')
+const output = resolve(root, process.argv[2] ?? '.pack/desktop')
 const resources = resolve(output, 'win-unpacked', 'resources')
 const executable = resolve(output, 'DSH Editor-0.1.0-win-x64.exe')
 

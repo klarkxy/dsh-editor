@@ -68,6 +68,12 @@ async function owned(path: string, manifest: RuntimeManifest): Promise<boolean> 
     return marker.app === 'dsh-editor' && marker.schema === CACHE_SCHEMA && marker.manifest === manifestKey(manifest)
   } catch { return false }
 }
+async function appOwned(path: string): Promise<boolean> {
+  try {
+    const marker = JSON.parse(await readFile(join(path, CACHE_MARKER), 'utf8')) as CacheMarker
+    return marker.app === 'dsh-editor' && marker.schema === CACHE_SCHEMA
+  } catch { return false }
+}
 async function validate(root: string, manifest: RuntimeManifest): Promise<boolean> {
   try {
     const [node, dsh, profile] = await Promise.all([
@@ -83,6 +89,25 @@ function runtimePaths(root: string): CachedRuntime {
     nodePath: join(root, 'node', 'node.exe'),
     cliPath: join(root, 'dsh', 'lib', 'bin.js'),
     template: join(root, 'profile-template'),
+  }
+}
+
+async function cleanupRuntimeBackup(backup: string): Promise<void> {
+  if (!existsSync(backup)) return
+  try {
+    // Windows refuses to unlink a running executable. Probe it first so a live
+    // old runtime stays intact instead of being partially removed.
+    await rm(join(backup, 'node', 'node.exe'), { force: true })
+    await rm(backup, { recursive: true, force: true })
+  } catch { /* A live old runtime releases the backup on a later app start. */ }
+}
+
+async function cleanupStaleRuntimeBackups(cacheParent: string): Promise<void> {
+  let entries: import('node:fs').Dirent[]
+  try { entries = await readdir(cacheParent, { withFileTypes: true }) } catch { return }
+  for (const entry of entries) {
+    const backup = join(cacheParent, entry.name)
+    if (entry.isDirectory() && entry.name.startsWith(`.${CACHE_NAME}.backup-`) && await appOwned(backup)) await cleanupRuntimeBackup(backup)
   }
 }
 
@@ -102,7 +127,10 @@ export async function materializePackagedRuntime(home: string, resources: string
     const marker = JSON.parse(await readFile(join(target, CACHE_MARKER), 'utf8')) as CacheMarker
     if (marker.app !== 'dsh-editor' || marker.schema !== CACHE_SCHEMA) throw new Error(`Refusing to replace unowned desktop runtime cache: ${target}`)
   }
-  if (existsSync(target) && await owned(target, manifest) && await validate(target, manifest)) return runtimePaths(target)
+  if (existsSync(target) && await owned(target, manifest) && await validate(target, manifest)) {
+    await cleanupStaleRuntimeBackups(cacheParent)
+    return runtimePaths(target)
+  }
 
   const nonce = randomUUID()
   const stage = join(cacheParent, `.${CACHE_NAME}.stage-${nonce}`)
@@ -121,7 +149,7 @@ export async function materializePackagedRuntime(home: string, resources: string
       if (existsSync(backup) && !existsSync(target)) await rename(backup, target)
       throw error
     }
-    if (existsSync(backup)) await rm(backup, { recursive: true, force: true })
+    await cleanupRuntimeBackup(backup)
     return runtimePaths(target)
   } catch (error) {
     if (existsSync(stage)) await rm(stage, { recursive: true, force: true })

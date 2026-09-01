@@ -3,10 +3,10 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { deployProfile, resolveDshHome } from './profile.js'
-import { installNavigationPolicy } from './navigation.js'
+import { deployProfile } from './profile.js'
 import { materializePackagedRuntime } from './runtime-cache.js'
 import { DshSupervisor } from './supervisor.js'
+import { claimPrimaryInstance, createDesktopLifecycle, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
 
 const desktopRoot = fileURLToPath(new URL('../', import.meta.url))
 
@@ -41,11 +41,8 @@ function loadingHtml(): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent('<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>DSH Editor</title><style>body{font-family:system-ui;display:grid;place-content:center;height:100vh;margin:0;background:#faf9f5;color:#393832}main{text-align:center}p{color:#77746c}</style><main><h1>DSH Editor</h1><p>正在启动本地写作环境…</p></main>')}`
 }
 
-let supervisor: DshSupervisor | undefined
-let closing = false
-
-app.whenReady().then(async () => {
-  const window = new BrowserWindow({
+const lifecycle = createDesktopLifecycle({
+  createBrowserWindow: () => new BrowserWindow({
     title: 'DSH Editor', width: 1440, height: 900, minWidth: 1280, minHeight: 720,
     show: false, autoHideMenuBar: true, backgroundColor: '#faf9f5',
     icon: join(desktopRoot, 'build', 'icon.png'),
@@ -54,53 +51,29 @@ app.whenReady().then(async () => {
       nodeIntegration: false, contextIsolation: true, sandbox: true,
       webSecurity: true, allowRunningInsecureContent: false,
     },
-  })
-  window.webContents.session.on('will-download', (event, item) => {
-    const suggested = item.getFilename()
-    if (!/\.(?:md|txt)$/i.test(suggested)) {
-      event.preventDefault()
-      return
-    }
-    const target = dialog.showSaveDialogSync(window, {
+  }) as unknown as EditorWindow,
+  fromWebContents: (contents) => {
+    const ctor = BrowserWindow as unknown as { fromWebContents(contents: unknown): EditorWindow | null }
+    return ctor.fromWebContents(contents) ?? undefined
+  },
+  showSaveDialog: (window, suggested) => {
+    const options = {
       title: '导出作品',
       defaultPath: suggested,
       filters: [{ name: suggested.toLowerCase().endsWith('.md') ? 'Markdown' : '纯文本', extensions: [suggested.toLowerCase().endsWith('.md') ? 'md' : 'txt'] }],
-    })
-    if (!target) event.preventDefault()
-    else item.setSavePath(target)
-  })
-  const launch = async () => {
-    try {
-      await supervisor?.stop()
-      const home = resolveDshHome(process.env, app.getPath('home'))
-      const runtime = await resolveRuntime(home)
-      await deployProfile(home, runtime.template, join(dirname(dirname(runtime.cliPath)), 'node_modules'))
-      supervisor = new DshSupervisor({
-        onUnexpectedExit: async (reason) => { if (!closing) await window.loadURL(errorHtml(reason)) },
-      })
-      const url = await supervisor.start({ ...runtime, home, env: process.env, timeoutMs: app.isPackaged ? 120_000 : 20_000 })
-      installNavigationPolicy(window.webContents, url)
-      await window.loadURL(url.href)
-    } catch (error) {
-      await window.loadURL(errorHtml(error))
     }
-  }
-  window.webContents.on('will-navigate', (event, url) => {
-    if (url === 'dsh-editor://retry/' || url === 'dsh-editor://retry') {
-      event.preventDefault()
-      void launch()
-    }
-  })
-  window.show()
-  await window.loadURL(loadingHtml())
-  await launch()
-  window.on('closed', () => app.quit())
+    return window
+      ? dialog.showSaveDialogSync(window as unknown as BrowserWindow, options)
+      : dialog.showSaveDialogSync(options)
+  },
+  resolveRuntime,
+  deployProfile,
+  createSupervisor: (options) => new DshSupervisor(options),
+  errorHtml,
+  loadingHtml,
+  getHomePath: () => app.getPath('home'),
+  env: process.env,
+  timeoutMs: app.isPackaged ? 120_000 : 20_000,
 })
 
-app.on('before-quit', (event) => {
-  if (closing || !supervisor) return
-  closing = true
-  event.preventDefault()
-  supervisor.stop().finally(() => app.quit())
-})
-app.on('window-all-closed', () => app.quit())
+claimPrimaryInstance(app as unknown as PrimaryApp, lifecycle)
