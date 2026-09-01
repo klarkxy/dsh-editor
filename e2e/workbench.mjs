@@ -87,6 +87,16 @@ async function waitFor(check, label, timeout = 10_000) {
   throw new Error(`timed out: ${label}`)
 }
 
+async function dismissNativeOnboarding(page) {
+  const continueNotice = page.getByRole('button', { name: '继续', exact: true })
+  for (let step = 0; step < 5 && await continueNotice.isVisible({ timeout: 1_000 }).catch(() => false); step += 1) {
+    await continueNotice.click()
+    await page.waitForTimeout(250)
+  }
+  const configureLater = page.getByRole('button', { name: '稍后配置', exact: true })
+  if (await configureLater.isVisible({ timeout: 2_000 }).catch(() => false)) await configureLater.click()
+}
+
 await rm(workspace, { recursive: true, force: true })
 await rm(home, { recursive: true, force: true })
 await rm(output, { recursive: true, force: true })
@@ -132,6 +142,7 @@ try {
   })
   await window.goto(started.url.href)
   await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 45_000 })
+  await dismissNativeOnboarding(window)
   const bootEntries = await window.evaluate(() => globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [])
   if (bootEntries.filter((entry) => entry === 'dsh-editor-shell').length !== 1) failures.push('shell client entry must load exactly once')
   for (const id of ['dsh-editor-workbench', 'dsh-editor-novel-kernel']) {
@@ -146,9 +157,9 @@ try {
   await window.getByRole('button', { name: '打开此目录' }).click()
   await window.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
   await window.locator('.chrome').screenshot({ path: resolve(output, 'chrome-actions.png') })
-  if (!(await window.getByRole('button', { name: '设置' }).locator('svg.gear-icon').count())) failures.push('设置按钮没有显示齿轮图标')
+  if (!(await window.getByRole('button', { name: '设置', exact: true }).count())) failures.push('原生 DSH 设置入口不可用')
   if (!(await window.locator('.export-menu > summary').textContent())?.includes('导出全书')) failures.push('导出入口没有写成导出全书')
-  if (await window.getByRole('button', { name: '作品快照' }).count()) failures.push('作品快照仍留在工作台顶部，应放入设置')
+  if (!(await window.getByRole('button', { name: '作品快照' }).count())) failures.push('作品快照没有回到工作台操作区')
 
   await window.getByRole('button', { name: '概览', exact: true }).click()
   const overviewPanel = window.getByRole('region', { name: '作品概览' })
@@ -414,36 +425,40 @@ try {
   await window.locator('.chat').waitFor({ state: 'hidden' })
   await window.screenshot({ path: resolve(output, 'editor-ai-controls.png'), fullPage: true })
 
-  await window.getByRole('button', { name: '设置' }).click()
-  const snapshotSettings = window.getByRole('region', { name: '作品快照' })
-  await snapshotSettings.waitFor({ state: 'visible' })
-  if ((await snapshotSettings.getByRole('button', { name: '创建快照' }).getAttribute('title')) !== '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品') {
+  await window.getByRole('button', { name: '作品快照' }).click()
+  const snapshotLibrary = window.getByRole('dialog', { name: '作品快照' })
+  await snapshotLibrary.waitFor({ state: 'visible' })
+  if ((await snapshotLibrary.getByRole('button', { name: '创建快照' }).getAttribute('title')) !== '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品') {
     failures.push('作品快照没有说明备份用途')
   }
-  const completionSettings = window.getByRole('group', { name: '自动补全' })
+  await window.screenshot({ path: resolve(output, 'snapshot-library.png'), fullPage: true })
+  await snapshotLibrary.getByRole('button', { name: '关闭' }).click()
+
+  await window.getByRole('button', { name: '设置' }).click()
+  const nativeSettings = window.getByRole('dialog')
+  await nativeSettings.waitFor({ state: 'visible' })
+  await nativeSettings.getByRole('button', { name: '模型', exact: true }).click()
+  await nativeSettings.getByRole('button', { name: '写作', exact: true }).click()
+  const completionSettings = nativeSettings.getByRole('group', { name: '自动补全' })
   await completionSettings.waitFor({ state: 'visible' })
-  await completionSettings.getByLabel('停顿后提示').check()
-  await window.waitForFunction(() => localStorage.getItem('dsh-editor.writing.completion') === 'pause')
-  const authorPreferences = window.getByLabel('跨作品作者约定')
+  const pauseCompletion = completionSettings.getByLabel('停顿后提示')
+  await pauseCompletion.click()
+  await waitFor(() => pauseCompletion.isChecked(), '停顿后提示保存')
+  const authorPreferences = nativeSettings.getByLabel('跨作品作者约定')
   await authorPreferences.fill('第三人称限知；对白保持克制；少用感叹号。')
-  await window.waitForFunction(() => localStorage.getItem('dsh-editor.writing.author-preferences') === '第三人称限知；对白保持克制；少用感叹号。')
-  await window.waitForFunction(() => {
-    const panel = document.querySelector('.model-panel')
-    const preferences = document.querySelector('.author-preferences')
-    const snapshots = document.querySelector('.snapshot-panel')
-    return panel && preferences && snapshots
-      && panel.getAnimations().every((animation) => animation.playState === 'finished')
-      && preferences.getAnimations().every((animation) => animation.playState === 'finished')
-      && snapshots.getAnimations().every((animation) => animation.playState === 'finished')
-      && Number.parseFloat(getComputedStyle(panel).opacity || '1') >= 0.99
-      && Number.parseFloat(getComputedStyle(preferences).opacity || '1') >= 0.99
-      && Number.parseFloat(getComputedStyle(snapshots).opacity || '1') >= 0.99
-  })
+  await nativeSettings.getByRole('button', { name: '保存作者约定' }).click()
   await window.screenshot({ path: resolve(output, 'completion-settings.png'), fullPage: true })
-  await completionSettings.getByLabel('仅手动').check()
-  await window.waitForFunction(() => localStorage.getItem('dsh-editor.writing.completion') === 'manual')
-  await window.getByRole('button', { name: '返回写作区' }).click()
+  const manualCompletion = completionSettings.getByLabel('仅手动')
+  await manualCompletion.click()
+  await waitFor(() => manualCompletion.isChecked(), '仅手动保存')
+  await nativeSettings.getByRole('button', { name: /关闭/ }).click()
   await window.getByRole('textbox', { name: '正文' }).waitFor({ state: 'visible' })
+  await waitFor(async () => {
+    const settings = await readFile(resolve(home, 'settings.yaml'), 'utf8').catch(() => '')
+    return settings.includes('dsh-editor-writing')
+      && /completion:\s*manual/.test(settings)
+      && settings.includes('第三人称限知；对白保持克制；少用感叹号。')
+  }, '原生 DSH 写作设置持久化')
 
   await window.getByTitle('下一章').click()
   await window.waitForFunction(() => document.querySelector('.chapter-navigation')?.textContent?.includes('2 / 5'))

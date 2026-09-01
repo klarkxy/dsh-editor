@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
@@ -21,6 +21,22 @@ function run(script, args, env) {
   })
 }
 
+async function dismissNativeOnboarding(page) {
+  const continueNotice = page.getByRole('button', { name: '继续', exact: true })
+  let steps = 0
+  for (; steps < 5 && await continueNotice.isVisible({ timeout: 1_000 }).catch(() => false); steps += 1) {
+    await continueNotice.click()
+    await page.waitForTimeout(250)
+  }
+  const configureLater = page.getByRole('button', { name: '稍后配置', exact: true })
+  const setup = await configureLater.isVisible({ timeout: 2_000 }).catch(() => false)
+  if (setup) {
+    await configureLater.click()
+    await page.waitForTimeout(250)
+  }
+  return { notice: steps > 0, steps, setup }
+}
+
 const baseEnv = {
   ...process.env,
   DSH_TELEMETRY_DISABLED: '1',
@@ -32,6 +48,7 @@ delete baseEnv.DEEPSEEK_API_KEY
 delete baseEnv.DSH_EDITOR_CUSTOM_API_KEY
 
 await run(resolve(root, 'scripts', 'prepare-desktop-dev.mjs'), [], baseEnv)
+await rm(e2eHomeRoot, { recursive: true, force: true })
 await mkdir(output, { recursive: true })
 
 async function launchPhase(name, extraEnv, inspect) {
@@ -64,7 +81,7 @@ async function launchPhase(name, extraEnv, inspect) {
     })
     window.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`))
     try {
-      await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell, .settings-shell')), undefined, { timeout: 90_000 })
+      await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 90_000 })
     } catch (error) {
       const diagnostic = window.isClosed() ? { closed: true, processLogs } : await window.evaluate(() => ({
         title: document.title,
@@ -80,21 +97,21 @@ async function launchPhase(name, extraEnv, inspect) {
     if (url.hostname !== '127.0.0.1' || !url.port) throw new Error(`unexpected desktop URL ${url.href}`)
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await window.waitForTimeout(350)
+    const nativeOnboarding = await dismissNativeOnboarding(window)
     const bounds = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getBounds())
     const state = await window.evaluate(() => ({
       body: document.body.textContent ?? '',
       title: document.title,
       shell: Boolean(document.querySelector('.shell')),
-      settings: Boolean(document.querySelector('.settings-shell .settings-view')),
-      settingsBack: Boolean(document.querySelector('[aria-label="返回写作区"]')),
-      settingsControl: Boolean(document.querySelector('[aria-label="设置"]')),
+      settings: Boolean(document.querySelector('[role="dialog"]')),
+      settingsControl: [...document.querySelectorAll('.native-settings-control button')].some((button) => button.textContent?.includes('设置')),
       officialHome: document.body.textContent?.includes('DeepSeek Harness') ?? false,
-      editorName: Boolean(document.querySelector('.brand-lockup, .settings-brand')),
+      editorName: Boolean(document.querySelector('.brand-lockup')),
       bootEntries: globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [],
       width: window.innerWidth,
       height: window.innerHeight,
     }))
-    await inspect(state)
+    await inspect({ ...state, nativeOnboarding })
     if (browserErrors.length) throw new Error(`browser console errors in ${name}: ${JSON.stringify(browserErrors)}`)
     await window.screenshot({ path: resolve(output, `${name}.png`) })
     const origin = url.origin
@@ -110,11 +127,10 @@ async function launchPhase(name, extraEnv, inspect) {
 }
 
 const phases = []
-phases.push(await launchPhase('first-run-settings', {}, async (state) => {
-  const hasOnlyApprovedInterfaces = state.body.includes('DeepSeek') && state.body.includes('自定义接口') && !state.body.includes('OpenAI')
-  const forcedSetup = state.settings && !state.settingsBack && state.body.includes('接口') && state.body.includes('连接') && !state.body.includes('作品快照')
-  if (!forcedSetup || !hasOnlyApprovedInterfaces || state.shell || state.officialHome || !state.editorName) {
-    throw new Error(`first-run settings assertion failed: ${JSON.stringify({ ...state, body: undefined, forcedSetup, hasOnlyApprovedInterfaces })}`)
+phases.push(await launchPhase('first-run-home', {}, async (state) => {
+  const onboarding = state.body.includes('新建') && state.body.includes('打开作品')
+  if (!state.shell || state.officialHome || !state.editorName || !onboarding || !state.settingsControl || !state.nativeOnboarding.notice) {
+    throw new Error(`first-run home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding })}`)
   }
 }))
 
@@ -124,7 +140,7 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   const technicalChrome = ['DeepSeek Harness', 'DSH_HOME', 'permission preset', '权限模式', '会话列表'].some((label) => state.body.includes(label))
   const clientBoundaryReady = state.bootEntries.filter((entry) => entry === 'dsh-editor-shell').length === 1
     && state.bootEntries.every((entry) => entry !== 'dsh-editor-workbench' && entry !== 'dsh-editor-novel-kernel')
-  if (!state.shell || state.settings || !state.editorName || state.officialHome || !onboarding || !settingsEntry || technicalChrome || !clientBoundaryReady) {
+  if (!state.shell || !state.editorName || state.officialHome || !onboarding || !settingsEntry || technicalChrome || !clientBoundaryReady) {
     throw new Error(`configured home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding, settingsEntry, technicalChrome, clientBoundaryReady })}`)
   }
 }))

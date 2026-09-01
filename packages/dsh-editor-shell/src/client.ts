@@ -65,15 +65,14 @@ import {
   type SelectionTicket,
 } from './editor-state.ts'
 import { registerRoot } from './root-registration.ts'
-import { ModelSetup } from './model-setup.ts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 import { prepareExport, type ChapterExport, type ExportFormat, type PreparedExport } from './export.ts'
 import { archiveStateText, documentName, visibleArchives, type ArchiveView } from './file-lifecycle.ts'
 import { documentTemplate, manuscriptGroupPath, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from './project-files.ts'
 import { idleImportFlow, importReview, recoverImport, importSummary, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ConversationRenameQueue, conversationRows, nextAutomaticConversationTitle, shouldConfirmConversationSwitch } from './conversation-lifecycle.ts'
-import { automaticCompletionReady, COMPLETION_PREFERENCE_KEY, readCompletionPreference, type CompletionPreference } from './completion-preference.ts'
-import { AUTHOR_PREFERENCES_KEY, normalizeAuthorPreferences, readAuthorPreferences } from './author-preferences.ts'
+import { automaticCompletionReady, type CompletionPreference } from './completion-preference.ts'
+import { normalizeAuthorPreferences } from './author-preferences.ts'
 import {
   blocksWorkspaceOpen,
   idleSnapshotFlow,
@@ -88,9 +87,10 @@ import {
 import { referenceQuery, type ReferenceQuery } from './reference-navigation.ts'
 import { chapterStatusText, ExportPreviewDialog, ProjectCardsPanel, ProjectOverviewPanel } from './project-views.ts'
 import { homePlayStyles, homeStyles, playfulStyles, redesignedStyles } from './styles.ts'
+import { WRITING_SETTINGS_NAMESPACE, createWritingMigration, decodeWritingPreferences, registerWritingSettings, writingPreferences, type WritingPreferences, type WritingSettingsSlots } from './writing-settings.ts'
 
 export const name = 'dsh-editor-shell-client'
-export const inject = ['slots', 'sessions', 'workspaces', 'connection'] as const
+export const inject = ['slots', 'sessions', 'workspaces', 'connection', 'settingsScope'] as const
 
 type Entry = { name: string; type: 'file' | 'directory' | 'other' }
 type SearchHit = { path: string; line: number; column: number; start: number; end: number; excerpt: string; version: string }
@@ -98,7 +98,9 @@ type SearchResponse = { results: SearchHit[]; scannedFiles: number; scannedBytes
 type RevealRequest = SearchHit & { nonce: number }
 type ReferenceSearchRequest = ReferenceQuery & { nonce: number }
 type RpcResult<T = unknown> = WorkbenchRpcResult<T>
-type ShellContext = ClientContext & { connection: ConnectionHandle }
+type ShellContext = ClientContext & { connection: ConnectionHandle } & WritingSettingsSlots & {
+  settingsScope: { bind(spec: { namespace: string; decode(value: unknown): WritingPreferences | undefined }): import('@deepseek-ai/dsh-client-runtime/client').SettingsScope<WritingPreferences> }
+}
 
 const SIDEBAR_DEFAULT = 248
 const SIDEBAR_MIN = 196
@@ -372,22 +374,6 @@ function PanelResizer(props: {
       props.onChange(resizedPanelWidth(props.side, props.value, event.key === 'ArrowRight' ? 12 : -12, props.minimum, props.maximum))
     },
   }, e('span', { 'aria-hidden': 'true' }))
-}
-
-function GearIcon() {
-  return e('svg', {
-    className: 'gear-icon',
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.8,
-    strokeLinecap: 'round',
-    strokeLinejoin: 'round',
-    'aria-hidden': true,
-  },
-    e('path', { d: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 0 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0 0 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0 0-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 0-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z' }),
-    e('circle', { cx: 12, cy: 12, r: 3 }),
-  )
 }
 
 function ShortcutDialog({ onClose }: { onClose(): void }) {
@@ -1406,7 +1392,7 @@ function ModelIndicator({ ctx, session, onConfigure }: { ctx: ShellContext; sess
   }
   return e('div', { className: 'compact-control' },
     e('span', { className: 'model-indicator', title: '本次对话使用的模型' }, current ? `${current.providerName} · ${current.model.name}` : models.current.model),
-    e('button', { className: 'icon-button', type: 'button', onClick: onConfigure, 'aria-label': '设置接口', title: '接口设置' }, e(GearIcon)),
+    e('button', { type: 'button', onClick: onConfigure }, '模型设置'),
   )
 }
 
@@ -1750,7 +1736,8 @@ function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): vo
   )
 }
 
-function SnapshotSettings(props: {
+function SnapshotLibraryDialog(props: {
+  open: boolean
   available: boolean
   workspaceTitle?: string
   dirty: boolean
@@ -1760,48 +1747,62 @@ function SnapshotSettings(props: {
   onCreate(): void
   onRestore(snapshot: SnapshotView): void
   onRetry(): void
+  onClose(): void
 }) {
-  return e('section', { className: 'model-panel snapshot-panel', role: 'region', 'aria-labelledby': 'snapshot-settings-title' },
-    e('header', null,
-      e('div', null,
-        e('p', { className: 'settings-brand' }, 'DSH / 备份'),
-        e('h2', { id: 'snapshot-settings-title' }, '作品快照'),
+  const close = () => { if (!props.busy) props.onClose() }
+  const focus = useRef<HTMLButtonElement | null>(null)
+  const dialog = useRef<HTMLElement | null>(null)
+  useEffect(() => { if (props.open) focus.current?.focus() }, [props.open])
+  if (!props.open) return null
+  return e('div', { className: 'import-overlay', onKeyDown: (event: KeyboardEvent) => {
+    if (event.key === 'Escape') close()
+    if (event.key !== 'Tab' || !dialog.current) return
+    const buttons = [...dialog.current.querySelectorAll<HTMLButtonElement>('button:not([disabled])')]
+    if (!buttons.length) return
+    const first = buttons[0]; const last = buttons[buttons.length - 1]
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  } },
+    e('section', { ref: dialog, className: 'import-dialog snapshot-library', role: 'dialog', tabIndex: -1, 'aria-modal': true, 'aria-labelledby': 'snapshot-library-title' },
+      e('header', null,
+        e('h2', { id: 'snapshot-library-title' }, '作品快照'),
         e('p', { title: '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品' },
           props.available
             ? '快照只保存已经写入磁盘的 Markdown/TXT 作品文件和章节状态；不包含未保存内容、对话、隐藏目录或构建文件。恢复始终生成新副本。'
             : '打开作品后，可在此备份已保存文本，并恢复为新副本。',
         ),
       ),
+      props.available && props.workspaceTitle ? e('p', { className: 'muted' }, `当前作品：${props.workspaceTitle}`) : null,
+      props.available && props.dirty ? e('p', { className: 'warning', role: 'alert' }, '当前有未保存内容，请先回到稿纸保存，再创建快照。') : null,
+      props.note ? e('p', {
+        className: /正在/.test(props.note) ? 'muted' : /没有|请先|失败|未|取消/.test(props.note) ? 'warning' : 'success',
+        role: /没有|请先|失败|未|取消/.test(props.note) ? 'alert' : 'status',
+      }, props.note) : null,
+      !props.available ? null
+        : props.snapshots === null && props.busy ? e('p', { className: 'muted', role: 'status' }, '正在读取作品快照…')
+        : props.snapshots === null ? e('p', { className: 'muted' }, '快照列表尚未读取。')
+        : props.snapshots.length
+          ? e('ul', { className: 'snapshot-list', 'aria-label': '可恢复快照' }, props.snapshots.map((snapshot) => e('li', { key: snapshot.snapshotId },
+              e('div', null,
+                e('strong', null, snapshot.label || new Date(snapshot.createdAt).toLocaleString()),
+                e('small', null, snapshotSummary(snapshot)),
+              ),
+              e('button', { type: 'button', disabled: props.busy, onClick: () => props.onRestore(snapshot) }, '恢复为新副本'),
+            )))
+          : e('p', { className: 'muted' }, '暂无作品快照。'),
+      e('footer', null,
+        e('button', { ref: focus, type: 'button', disabled: props.busy, onClick: close }, '关闭'),
+        props.available && /未能读取/.test(props.note) ? e('button', { type: 'button', disabled: props.busy, onClick: props.onRetry }, '重试读取') : null,
+        props.available ? e('button', {
+          className: 'primary-action',
+          type: 'button',
+          disabled: props.busy || props.dirty,
+          title: '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品',
+          'aria-label': props.busy ? '快照处理中' : '创建快照',
+          onClick: props.onCreate,
+        }, props.busy ? '快照处理中' : '创建快照') : null,
+      ),
     ),
-    props.available && props.workspaceTitle ? e('p', { className: 'muted' }, `当前作品：${props.workspaceTitle}`) : null,
-    props.available && props.dirty ? e('p', { className: 'warning', role: 'alert' }, '当前有未保存内容，请先回到稿纸保存，再创建快照。') : null,
-    props.note ? e('p', {
-      className: /正在/.test(props.note) ? 'muted' : /没有|请先|失败|未|取消/.test(props.note) ? 'warning' : 'success',
-      role: /没有|请先|失败|未|取消/.test(props.note) ? 'alert' : 'status',
-    }, props.note) : null,
-    !props.available ? null
-      : props.snapshots === null && props.busy ? e('p', { className: 'muted', role: 'status' }, '正在读取作品快照…')
-      : props.snapshots === null ? e('p', { className: 'muted' }, '快照列表尚未读取。')
-      : props.snapshots.length
-        ? e('ul', { className: 'snapshot-list', 'aria-label': '可恢复快照' }, props.snapshots.map((snapshot) => e('li', { key: snapshot.snapshotId },
-            e('div', null,
-              e('strong', null, snapshot.label || new Date(snapshot.createdAt).toLocaleString()),
-              e('small', null, snapshotSummary(snapshot)),
-            ),
-            e('button', { type: 'button', disabled: props.busy, onClick: () => props.onRestore(snapshot) }, '恢复为新副本'),
-          )))
-        : e('p', { className: 'muted' }, '暂无作品快照。'),
-    props.available ? e('footer', null,
-      /未能读取/.test(props.note) ? e('button', { type: 'button', disabled: props.busy, onClick: props.onRetry }, '重试读取') : null,
-      e('button', {
-        className: 'primary-action',
-        type: 'button',
-        disabled: props.busy || props.dirty,
-        title: '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品',
-        'aria-label': props.busy ? '快照处理中' : '创建快照',
-        onClick: props.onCreate,
-      }, props.busy ? '快照处理中' : '创建快照'),
-    ) : null,
   )
 }
 
@@ -2171,10 +2172,20 @@ function downloadExport(filename: string, content: string, format: ExportFormat)
   globalThis.setTimeout(() => URL.revokeObjectURL(href), 0)
 }
 
-function Root({ ctx }: { ctx: ShellContext }) {
+function Root({ ctx, writingScope, settingsControl }: {
+  ctx: ShellContext
+  writingScope: import('@deepseek-ai/dsh-client-runtime/client').SettingsScope<WritingPreferences>
+  settingsControl: ReactNode
+}) {
   const sessions = useObservable(ctx.sessions.list)
   const workspaces = useObservable(ctx.workspaces.list)
   const session = currentSession(ctx)
+  const writingSnapshot = useSyncExternalStore(
+    writingScope.subscribe.bind(writingScope),
+    writingScope.getSnapshot.bind(writingScope),
+    writingScope.getSnapshot.bind(writingScope),
+  )
+  const writing = writingPreferences(writingSnapshot, globalThis.localStorage)
   const [path, setPath] = useState('')
   const [files, setFiles] = useState<string[]>([])
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
@@ -2189,13 +2200,10 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [openingWorkspace, setOpeningWorkspace] = useState(false)
   const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | 'new' | null>(null)
   const [manualWorkspacePath, setManualWorkspacePath] = useState('')
-  const [view, setView] = useState<'workspace' | 'settings'>('workspace')
   const [sidebarOpen, setSidebarOpen] = useState(() => storedPanelOpen('dsh-editor.layout.sidebar-open', true))
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
-  const [completionPreference, setCompletionPreference] = useState(() => readCompletionPreference(globalThis.localStorage))
-  const [authorPreferences, setAuthorPreferences] = useState(() => readAuthorPreferences(globalThis.localStorage))
   const [assistantDraftDirty, setAssistantDraftDirty] = useState(false)
   const [leaveConfirm, setLeaveConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   useEffect(() => () => leaveConfirm?.resolve(false), [leaveConfirm])
@@ -2207,15 +2215,16 @@ function Root({ ctx }: { ctx: ShellContext }) {
     leaveConfirm?.resolve(value)
     setLeaveConfirm(null)
   }
-  const openSettings = async () => {
-    if (!(await canLeaveAssistantDraft())) return
-    setAssistantDraftDirty(false)
-    setView('settings')
+  const settingsControlRef = useRef<HTMLSpanElement | null>(null)
+  const openSettings = () => {
+    const trigger = settingsControlRef.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')
+    if (trigger) { trigger.click(); return }
+    if (session) setWorkbenchNote('设置当前不可用，请稍后重试。')
+    else setHomeNote('设置当前不可用，请稍后重试。')
   }
   const [focusMode, setFocusMode] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [chatFocusNonce, setChatFocusNonce] = useState(0)
-  const [setupGate, setSetupGate] = useState<'checking' | 'required' | 'ready'>('checking')
   const [indexStatus, setIndexStatus] = useState<Record<string, 'initializing' | 'queued' | 'failed'>>({})
   const indexedWorkspaces = useRef(new Set<string>())
   const [exporting, setExporting] = useState(false)
@@ -2233,6 +2242,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
   const [snapshotBusy, setSnapshotBusy] = useState(false)
   const [snapshotList, setSnapshotList] = useState<SnapshotView[] | null>(null)
   const [snapshotFlow, setSnapshotFlow] = useState<SnapshotFlow>(idleSnapshotFlow)
+  const [snapshotLibraryOpen, setSnapshotLibraryOpen] = useState(false)
   const [editorDirty, setEditorDirty] = useState(false)
   const [managePath, setManagePath] = useState<string | null>(null)
   const [manageBusy, setManageBusy] = useState(false)
@@ -2312,12 +2322,6 @@ function Root({ ctx }: { ctx: ShellContext }) {
     try { globalThis.localStorage?.setItem('dsh-editor.layout.assistant-width', String(assistantWidth)) } catch { /* View preferences remain optional. */ }
   }, [assistantWidth])
   useEffect(() => {
-    try { globalThis.localStorage?.setItem(COMPLETION_PREFERENCE_KEY, completionPreference) } catch { /* Writing preferences remain optional. */ }
-  }, [completionPreference])
-  useEffect(() => {
-    try { globalThis.localStorage?.setItem(AUTHOR_PREFERENCES_KEY, normalizeAuthorPreferences(authorPreferences)) } catch { /* Writing preferences remain optional. */ }
-  }, [authorPreferences])
-  useEffect(() => {
     const hotkey = (event: globalThis.KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey
       const key = event.key.toLowerCase()
@@ -2335,7 +2339,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       if (!['Control', 'Meta', 'Alt', 'Shift'].includes(event.key)) shortcutChordAt.current = 0
       const action = workspaceShortcut(event)
       if (!action || event.repeat) return
-      if (action !== 'settings' && (!session || view !== 'workspace')) return
+      if (action !== 'settings' && !session) return
       event.preventDefault()
       if (action === 'settings') { void openSettings(); return }
       if (action === 'toggle-sidebar') {
@@ -2360,7 +2364,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [assistantDraftDirty, editorDirty, focusMode, session?.sessionId, shortcutsOpen, view])
+  }, [assistantDraftDirty, editorDirty, focusMode, session?.sessionId, shortcutsOpen])
   useEffect(() => {
     if (!chatFocusNonce || !assistantOpen || focusMode) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
@@ -2604,21 +2608,6 @@ function Root({ ctx }: { ctx: ShellContext }) {
     setWorkbenchNote(result.value.metadataWarning ? `已恢复 ${result.value.path}；${result.value.metadataWarning}` : `已恢复 ${result.value.path}`)
     await loadArchives()
   }
-  useEffect(() => {
-    let live = true
-    void ctx.connection.api.credentials.describe({ refs: ['DEEPSEEK_API_KEY', 'DSH_EDITOR_CUSTOM_API_KEY'] }).then((response) => {
-      if (!live) return
-      const credentials = response.result.ok ? response.result.value.credentials : undefined
-      const configured = Boolean(credentials?.DEEPSEEK_API_KEY?.configured || credentials?.DSH_EDITOR_CUSTOM_API_KEY?.configured)
-      setSetupGate(configured ? 'ready' : 'required')
-      if (!configured) setView('settings')
-    }).catch(() => {
-      if (!live) return
-      setSetupGate('required')
-      setView('settings')
-    })
-    return () => { live = false }
-  }, [ctx.connection])
   const openCreateDialog = (kind: DocumentKind | 'group', directory?: string) => {
     if (!session) return
     if (editorDirty) { setCreateNote('请先保存当前文档。'); return }
@@ -2952,6 +2941,19 @@ function Root({ ctx }: { ctx: ShellContext }) {
     setSnapshotFlow(idleSnapshotFlow)
     if (restoreFocus && target) globalThis.setTimeout(() => target.focus(), 0)
   }
+  const openSnapshotLibrary = () => {
+    if (!session) return
+    if (editorDirty) { setExportNote('请先保存当前文档，再查看作品快照。'); return }
+    snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setSnapshotLibraryOpen(true)
+  }
+  const closeSnapshotLibrary = () => {
+    if (snapshotBusy) return
+    const target = snapshotReturnFocus.current
+    snapshotReturnFocus.current = null
+    setSnapshotLibraryOpen(false)
+    if (target) globalThis.setTimeout(() => target.focus(), 0)
+  }
   const loadSnapshotList = async (note?: string) => {
     if (!session) {
       setSnapshotList(null)
@@ -2965,11 +2967,11 @@ function Root({ ctx }: { ctx: ShellContext }) {
     setSnapshotNote(note ?? '')
   }
   useEffect(() => {
-    if (view !== 'settings' || setupGate !== 'ready') return
+    if (!snapshotLibraryOpen) return
     setSnapshotList(null)
     setSnapshotNote('')
     void loadSnapshotList()
-  }, [view, setupGate, session?.sessionId])
+  }, [snapshotLibraryOpen, session?.sessionId])
   const createSnapshot = async () => {
     if (!session) return
     if (editorDirty) { setSnapshotNote('请先保存当前未保存内容，再创建快照。'); return }
@@ -2981,7 +2983,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
   }
   const restoreAsCopy = async (snapshot: SnapshotView) => {
     if (!session) return
-    snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    if (snapshotLibraryOpen) setSnapshotLibraryOpen(false)
+    else snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setSnapshotBusy(true)
     setSnapshotFlow({ kind: 'working', message: '请选择一个新的空文件夹作为恢复目标…' })
     const targetPath = await ctx.workspaces.pickDirectory()
@@ -3020,7 +3023,6 @@ function Root({ ctx }: { ctx: ShellContext }) {
     preserveFlowWorkspace(targetWorkspaceId)
     probedRestoreSessions.current.add(targetSessionId)
     verifiedRestoreSessions.current.add(targetSessionId)
-    setView('workspace')
     ctx.sessions.open(targetSessionId as SessionId)
     triggerExistingIndex(targetWorkspaceId as WorkspaceId, targetSessionId as SessionId)
     closeSnapshotFlow(false)
@@ -3171,7 +3173,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
     onContinue: () => void continueSnapshotRestore(),
     onCleanup: () => void cleanupSnapshotRestore(),
   })
-  const renderSnapshotSettings = () => e(SnapshotSettings, {
+  const renderSnapshotLibrary = () => e(SnapshotLibraryDialog, {
+    open: snapshotLibraryOpen,
     available: Boolean(session),
     workspaceTitle: currentWorkspace?.title || currentWorkspace?.path || '',
     dirty: editorDirty,
@@ -3181,25 +3184,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
     onCreate: () => void createSnapshot(),
     onRestore: (snapshot: SnapshotView) => void restoreAsCopy(snapshot),
     onRetry: () => void loadSnapshotList(),
+    onClose: closeSnapshotLibrary,
   })
-
-  if (view === 'settings' || setupGate !== 'ready') {
-    return e('div', { className: 'settings-shell' },
-      e('style', null, redesignedStyles),
-      e('style', null, playfulStyles),
-      e(ModelSetup, {
-        connection: ctx.connection,
-        onBack: setupGate === 'ready' ? () => setView('workspace') : undefined,
-        onConfigured: () => { setSetupGate('ready'); setView('workspace') },
-        onTestFailure: () => { setSetupGate('required'); setView('settings') },
-        completionPreference,
-        onCompletionPreferenceChange: setCompletionPreference,
-        authorPreferences,
-        onAuthorPreferencesChange: setAuthorPreferences,
-      }, setupGate === 'ready' ? renderSnapshotSettings() : null),
-      renderSnapshotDialog(),
-    )
-  }
 
   if (session && current && !verifiedRestoreSessions.current.has(current)) {
     return e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
@@ -3226,7 +3212,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
           e('strong', null, 'DSH'),
         ),
         e('span', { className: 'local-state' }, e('i', { 'aria-hidden': 'true' }), '本地'),
-        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: openSettings }, e(GearIcon)),
+        e('span', { ref: settingsControlRef, className: 'native-settings-control' }, settingsControl),
       ),
       e('aside', { className: 'sidebar', 'aria-label': '最近作品' },
         e('div', { className: 'side-title' }, e('span', null, '文件')),
@@ -3396,9 +3382,16 @@ function Root({ ctx }: { ctx: ShellContext }) {
             e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('text') }, 'TXT'),
           ),
         ),
+        e('button', {
+          type: 'button',
+          disabled: editorDirty,
+          title: '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品',
+          'aria-label': '作品快照',
+          onClick: openSnapshotLibrary,
+        }, '作品快照'),
         exportNote ? e('span', { role: /无法|失败|为空/.test(exportNote) ? 'alert' : 'status' }, exportNote) : null,
         e('button', { className: 'settings-link icon-button', type: 'button', title: '键盘快捷键', 'aria-label': '键盘快捷键', onClick: openShortcuts }, '?'),
-        e('button', { className: 'settings-link icon-button', type: 'button', title: '设置', 'aria-label': '设置', onClick: openSettings }, e(GearIcon)),
+        e('span', { ref: settingsControlRef, className: 'native-settings-control' }, settingsControl),
       ),
     ),
     sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
@@ -3474,8 +3467,8 @@ function Root({ ctx }: { ctx: ShellContext }) {
       onRetry: () => void loadOverview(),
     }) : e(Editor, {
       ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'),
-      externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal, completionPreference,
-      authorPreferences: normalizeAuthorPreferences(authorPreferences),
+      externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal, completionPreference: writing.completion,
+      authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
       chapterStatus: overview?.chapters.find((chapter) => chapter.path === path)?.status,
       statusBusy,
       onChapterStatus: (chapterPath: string, status: ChapterStatus) => void updateChapterStatus(chapterPath, status),
@@ -3500,7 +3493,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
       session,
       workspaceId: currentWorkspace?.workspaceId,
       activePath: path,
-      authorPreferences: normalizeAuthorPreferences(authorPreferences),
+      authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
       hidden: !assistantVisible,
       onClose: () => setAssistantOpen(false),
       onConfigure: openSettings,
@@ -3557,6 +3550,7 @@ function Root({ ctx }: { ctx: ShellContext }) {
     }) : null,
     renderImportDialog(),
     renderSnapshotDialog(),
+    renderSnapshotLibrary(),
     managePath ? e(FileManageDialog, {
       key: managePath,
       path: managePath,
@@ -3571,7 +3565,19 @@ function Root({ ctx }: { ctx: ShellContext }) {
   )
 }
 
+type NativeSettingsRootProps = {
+  renderSlot(key: 'sidebar.settings', owner: { wide: boolean }): ReactNode
+}
+
 export function apply(ctx: Context): void {
   const client = ctx as ShellContext
-  registerRoot(client, () => e(Root, { ctx: client }))
+  const writingScope = client.settingsScope.bind({ namespace: WRITING_SETTINGS_NAMESPACE, decode: decodeWritingPreferences })
+  const migrateWritingPreferences = createWritingMigration(writingScope, globalThis.localStorage)
+  void migrateWritingPreferences()
+  registerWritingSettings(client, writingScope, migrateWritingPreferences)
+  registerRoot(client, (props) => e(Root, {
+    ctx: client,
+    writingScope,
+    settingsControl: (props as typeof props & NativeSettingsRootProps).renderSlot('sidebar.settings', { wide: true }),
+  }))
 }

@@ -2,6 +2,7 @@
  * Live visual walkthrough of DSH Editor for screenshot review.
  * Uses a dedicated isolated DSH_HOME; never writes the daily web profile.
  * MiniMax credentials follow author-flow-live: env then ~/.mmx/config.json.
+ * The native DSH settings document owns the provider profile; the key stays in the environment.
  * The key is never printed.
  */
 import { spawn } from 'node:child_process'
@@ -148,7 +149,7 @@ async function shot(page, name, intent) {
   return file
 }
 
-async function waitShell(page, selector = '.shell, .settings-shell') {
+async function waitShell(page, selector = '.shell') {
   await page.waitForFunction((sel) => document.title === 'DSH Editor' && Boolean(document.querySelector(sel)), selector, { timeout: 45_000 })
   await page.waitForTimeout(700)
 }
@@ -195,6 +196,27 @@ async function seedWorkspace() {
 `)
 }
 
+async function seedNativeMiniMaxSettings() {
+  const settings = {
+    'llm-pi-ai': {
+      providers: {
+        'minimax-custom': {
+          displayName: 'MiniMax',
+          apiKeyEnv: 'DSH_EDITOR_CUSTOM_API_KEY',
+          api: 'openai-completions',
+          baseURL: apiBase,
+          models: [
+            { id: 'MiniMax-M2.7-highspeed', name: 'MiniMax M2.7 Highspeed' },
+            { id: 'MiniMax-M2.7', name: 'MiniMax M2.7' },
+            { id: 'MiniMax-M3', name: 'MiniMax M3' },
+          ],
+        },
+      },
+    },
+  }
+  await writeFile(resolve(home, 'settings.yaml'), `${JSON.stringify(settings, null, 2)}\n`)
+}
+
 const dshBaseEnv = { ...process.env }
 delete dshBaseEnv.DEEPSEEK_API_KEY
 delete dshBaseEnv.DSH_EDITOR_CUSTOM_API_KEY
@@ -205,6 +227,7 @@ await rm(output, { recursive: true, force: true })
 await mkdir(output, { recursive: true })
 await mkdir(resolve(home, 'electron-user-data'), { recursive: true })
 await seedWorkspace()
+await seedNativeMiniMaxSettings()
 
 const prepEnv = {
   ...dshBaseEnv,
@@ -215,17 +238,16 @@ const prepEnv = {
 }
 await run(resolve(root, 'scripts', 'prepare-desktop-dev.mjs'), [], prepEnv)
 
-async function configureMiniMax(page) {
-  await page.getByRole('heading', { name: '接口' }).waitFor({ state: 'visible', timeout: 45_000 })
-  await page.getByLabel('自定义接口').check()
-  await page.getByText('接口地址', { exact: true }).locator('..').locator('input').fill(apiBase)
-  await page.getByText('API Key', { exact: true }).locator('..').locator('input').fill(apiKey)
-  await page.getByRole('button', { name: '连接', exact: true }).click()
-  await page.waitForFunction(() => {
-    const text = document.body.innerText || ''
-    return text.includes('连接成功') || text.includes('开始写。')
-  }, undefined, { timeout: 90_000 })
-  note('接口连接成功', '自定义接口 MiniMax')
+async function inspectNativeSettings(page) {
+  await page.getByRole('button', { name: '设置' }).click()
+  const settings = page.getByRole('dialog')
+  await settings.waitFor({ state: 'visible', timeout: 45_000 })
+  await settings.getByRole('button', { name: '模型', exact: true }).click()
+  await shot(page, 'settings-models', '原生 DSH 模型分区')
+  await settings.getByRole('button', { name: '写作', exact: true }).click()
+  await page.getByRole('heading', { name: '写作', exact: true }).waitFor({ state: 'visible' })
+  await shot(page, 'settings-writing', '原生 DSH 设置壳中的写作分区')
+  await settings.getByRole('button', { name: /关闭/ }).click()
 }
 
 async function answerPending(page) {
@@ -307,6 +329,7 @@ try {
     ...dshBaseEnv,
     DSH_HOME: home,
     DSH_TELEMETRY_DISABLED: '1',
+    DSH_EDITOR_CUSTOM_API_KEY: apiKey,
     SSH_CONNECTION: process.env.SSH_CONNECTION || 'dsh-editor-visual-audit',
   })
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN' })
@@ -325,15 +348,23 @@ try {
   try {
     await page.goto(started.url.href, { waitUntil: 'domcontentloaded' })
     await page.waitForFunction(() => document.title === 'DSH Editor', undefined, { timeout: 45_000 })
-    await waitShell(page, '.settings-shell .settings-view, .shell')
-    await page.getByRole('heading', { name: '接口' }).waitFor({ state: 'visible' })
-    await shot(page, 'first-run-settings', '首次启动强制进入接口设置，尚无返回写作区')
-    await page.getByLabel('自定义接口').check()
-    await page.waitForTimeout(200)
-    await shot(page, 'first-run-custom', '首次启动选择自定义接口，应出现接口地址和 API Key')
-    await configureMiniMax(page)
+    await waitShell(page, '.shell')
+    const continueNotice = page.getByRole('button', { name: '继续', exact: true })
+    let onboardingStep = 0
+    for (; onboardingStep < 5 && await continueNotice.isVisible({ timeout: 1_000 }).catch(() => false); onboardingStep += 1) {
+      if (onboardingStep === 0) await shot(page, 'native-onboarding-notice', 'DSH 原生内测声明')
+      await continueNotice.click()
+      await page.waitForTimeout(250)
+    }
+    const configureLater = page.getByRole('button', { name: '稍后配置', exact: true })
+    if (await configureLater.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await shot(page, 'native-onboarding-model', 'DSH 原生模型引导')
+      await configureLater.click()
+    }
+    await shot(page, 'home', '原生引导后直接进入写作首页')
+    await inspectNativeSettings(page)
     await page.getByRole('button', { name: '打开作品' }).first().waitFor({ state: 'visible', timeout: 45_000 })
-    await shot(page, 'home', 'MiniMax 连接后的首页：开始写、打开作品、新建')
+    await shot(page, 'home-configured', '原生模型设置读取 DSH 配置后的写作首页')
 
     await page.getByRole('button', { name: '打开作品' }).first().click()
     await page.getByLabel('作品文件夹路径').waitFor({ state: 'visible' })
@@ -576,17 +607,19 @@ try {
 
     await step('settings', async () => {
       await page.getByRole('button', { name: '设置' }).click()
-      await page.getByRole('heading', { name: '接口' }).waitFor({ state: 'visible' })
-      const snapshotSettings = page.getByRole('region', { name: '作品快照' })
-      await snapshotSettings.waitFor({ state: 'visible' })
-      await shot(page, 'settings-from-workbench', '写作区进入设置：应有返回写作区、补全方式、作者约定和作品快照')
-      await page.getByLabel('停顿后提示').check()
+      const settings = page.getByRole('dialog')
+      await settings.getByRole('button', { name: '模型', exact: true }).click()
+      await settings.getByRole('button', { name: '写作', exact: true }).click()
+      const pauseCompletion = page.getByLabel('停顿后提示')
+      await pauseCompletion.click()
+      await waitFor(() => pauseCompletion.isChecked(), '停顿后提示保存')
       await page.getByLabel('跨作品作者约定').fill('第三人称限知；对白保持克制；少用感叹号。')
-      await page.waitForTimeout(250)
-      await shot(page, 'settings-preferences', '补全方式与跨作品作者约定填写后的设置页')
-      await snapshotSettings.scrollIntoViewIfNeeded()
-      await shot(page, 'snapshot', '设置中的作品快照：说明只含已保存文本，恢复到新空文件夹')
-      await page.getByRole('button', { name: '返回写作区' }).click()
+      await settings.getByRole('button', { name: '保存作者约定' }).click()
+      await shot(page, 'settings-preferences', '原生设置壳中的补全方式与作者约定')
+      await settings.getByRole('button', { name: /关闭/ }).click()
+      await page.getByRole('button', { name: '作品快照' }).click()
+      await shot(page, 'snapshot', '工作台中的作品快照：说明只含已保存文本，恢复到新空文件夹')
+      await page.getByRole('dialog', { name: '作品快照' }).getByRole('button', { name: '关闭' }).click()
       await page.getByRole('textbox', { name: '正文' }).or(page.locator('.empty-paper')).first().waitFor({ state: 'visible' })
     })
 

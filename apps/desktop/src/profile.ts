@@ -29,6 +29,21 @@ async function ensureDirectory(path: string): Promise<void> {
   if (!(await stat(path)).isDirectory()) throw new ProfileCollisionError(path)
 }
 
+async function renameDirectory(source: string, target: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rename(source, target)
+      return
+    } catch (error) {
+      const transientWindowsRename = process.platform === 'win32'
+        && (error as NodeJS.ErrnoException).code === 'EPERM'
+        && attempt < 4
+      if (!transientWindowsRename) throw error
+      await new Promise((resolve) => setTimeout(resolve, 40 * (attempt + 1)))
+    }
+  }
+}
+
 /** Deploy only the marked profile, staging beside it so DSH home data survives. */
 export async function deployProfile(home: string, template: string, runtimeNodeModules?: string): Promise<string> {
   const profiles = join(home, 'profiles')
@@ -49,9 +64,9 @@ export async function deployProfile(home: string, template: string, runtimeNodeM
       await symlink(toolsTarget, join(toolsParent, 'dsh-tools'), 'junction')
     }
     await writeFile(join(stage, PROFILE_MARKER), `${JSON.stringify({ app: 'dsh-editor', schema: 1 })}\n`, 'utf8')
-    if (existsSync(target)) await rename(target, backup)
-    try { await rename(stage, target) } catch (error) {
-      if (existsSync(backup) && !existsSync(target)) await rename(backup, target)
+    if (existsSync(target)) await renameDirectory(target, backup)
+    try { await renameDirectory(stage, target) } catch (error) {
+      if (existsSync(backup) && !existsSync(target)) await renameDirectory(backup, target)
       throw error
     }
     if (existsSync(backup)) await rm(backup, { recursive: true, force: true })

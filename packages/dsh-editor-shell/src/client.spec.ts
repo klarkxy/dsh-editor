@@ -72,7 +72,7 @@ describe('shell manuscript RPC safety', () => {
     expect(worldbookPaperProjection('世界书/损坏.md', invalid)).toEqual({ text: invalid, offset: 0 })
   })
 
-  it('keeps success notices green, explains skipped search items, and reveals the export actions when opened', () => {
+  it('keeps success notices green, exposes workbench snapshots, and delegates settings to DSH', () => {
     expect(isSuccessWorkbenchNote('已创建 正文/第二卷')).toBe(true)
     expect(isSuccessWorkbenchNote('请先保存当前文档。')).toBe(false)
     expect(searchSkippedText(1)).toBe('未搜索 1 个隐藏、生成、非文本或过大项目')
@@ -85,13 +85,13 @@ describe('shell manuscript RPC safety', () => {
     expect(source).toContain("exporting ? '导出中' : '导出全书'")
     expect(source).toContain("title: '把正文按章节顺序合并成一份 Markdown 或 TXT'")
     expect(source).toContain("title: '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品'")
-    expect(source).toContain('function SnapshotSettings(')
-    expect(source).toContain("setupGate === 'ready' ? renderSnapshotSettings()")
-    expect(source).not.toContain('openSnapshotPanel')
-    expect(source).not.toMatch(/export-actions[\s\S]{0,500}作品快照/)
-    expect(source).toContain('function GearIcon()')
-    expect(source).toContain("onClick: openSettings }, e(GearIcon)")
-    expect(source).not.toMatch(/settings-link icon-button[\s\S]{0,160}'⌁'/)
+    expect(source).toContain('function SnapshotLibraryDialog(')
+    expect(source).toContain('openSnapshotLibrary')
+    expect(source).toMatch(/export-actions[\s\S]{0,700}作品快照/)
+    expect(source).toContain("renderSlot('sidebar.settings', { wide: true })")
+    expect(source).not.toContain('ModelSetup')
+    expect(source).not.toContain("view === 'settings'")
+    expect(source).not.toContain('settings-shell')
   })
 
   it('drops superseded or cross-session async responses', () => {

@@ -1,9 +1,5 @@
 - id: ui-sidebar
   disabled: true
-- id: ui-settings-general
-  disabled: true
-- id: ui-settings-models
-  disabled: true
 - id: ui-settings-plugin-inventory
   disabled: true
 - id: ui-brand-official

@@ -106,12 +106,21 @@ try {
   }
   const url = new URL(window.url())
   if (url.hostname !== '127.0.0.1' || !url.port) throw new Error(`unexpected portable URL ${url.href}`)
+  const continueNotice = window.getByRole('button', { name: '继续', exact: true })
+  let onboardingSteps = 0
+  for (; onboardingSteps < 5 && await continueNotice.isVisible({ timeout: 1_000 }).catch(() => false); onboardingSteps += 1) {
+    await continueNotice.click()
+    await window.waitForTimeout(250)
+  }
+  const nativeOnboarding = { notice: onboardingSteps > 0, steps: onboardingSteps, setup: false }
+  nativeOnboarding.setup = await window.getByRole('button', { name: '稍后配置', exact: true }).isVisible({ timeout: 2_000 }).catch(() => false)
+  if (nativeOnboarding.setup) await window.getByRole('button', { name: '稍后配置', exact: true }).click()
   const state = await window.evaluate(() => ({
     onboarding: (document.body.textContent?.includes('打开作品') ?? false) && (document.body.textContent?.includes('新建') ?? false),
     title: document.title,
     shell: Boolean(document.querySelector('.shell')),
-    settings: Boolean(document.querySelector('.settings-shell')),
-    editorName: Boolean(document.querySelector('.brand-lockup, .settings-brand')),
+    settings: Boolean(document.querySelector('[role="dialog"]')),
+    editorName: Boolean(document.querySelector('.brand-lockup')),
     officialHome: document.body.textContent?.includes('DeepSeek Harness') ?? false,
     technicalChrome: ['DSH_HOME', 'permission preset', '权限模式', '会话列表'].some((label) => document.body.textContent?.includes(label) ?? false),
     columns: [
@@ -121,9 +130,10 @@ try {
     permanentChat: Boolean(document.querySelector('.no-session > .chat')),
     bootEntries: globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [],
   }))
+  state.nativeOnboarding = nativeOnboarding
   const clientBoundaryReady = state.bootEntries.filter((entry) => entry === 'dsh-editor-shell').length === 1
     && state.bootEntries.every((entry) => entry !== 'dsh-editor-workbench' && entry !== 'dsh-editor-novel-kernel')
-  if (!state.shell || state.settings || !state.editorName || state.officialHome || !state.onboarding || state.technicalChrome || state.permanentChat || state.columns.some((value) => !value) || !clientBoundaryReady) {
+  if (!state.shell || !state.editorName || state.officialHome || !state.onboarding || state.technicalChrome || state.permanentChat || state.columns.some((value) => !value) || !clientBoundaryReady) {
     throw new Error(`portable identity assertion failed: ${JSON.stringify(state)}`)
   }
   await window.screenshot({ path: resolve(output, 'window.png') })
