@@ -514,6 +514,7 @@ try {
     })
 
     await step('workspace-manage', async () => {
+      await page.getByRole('button', { name: '切换作品' }).click()
       await page.getByRole('button', { name: '管理当前作品' }).click()
       await page.locator('.workspace-dialog').waitFor({ state: 'visible' })
       await shot(page, 'workspace-manage', '作品管理：只改显示名，并说明不移动文件夹')
@@ -566,6 +567,7 @@ try {
       const composer = page.getByRole('textbox', { name: '输入消息' })
       if (await composer.isVisible().catch(() => false)) {
         await composer.fill('不要丢失的草稿')
+        await page.getByRole('button', { name: '切换作品' }).click()
         await page.getByRole('button', { name: '返回作品列表' }).click()
         const discard = page.getByRole('alertdialog', { name: '放弃未发送的消息？' })
         if (await discard.isVisible().catch(() => false)) {
@@ -624,6 +626,7 @@ try {
     })
 
     await step('home-recent', async () => {
+      await page.getByRole('button', { name: '切换作品' }).click()
       await page.getByRole('button', { name: '返回作品列表' }).click()
       await page.locator('.home-stage').waitFor({ state: 'visible' })
       await shot(page, 'home-recent', '返回首页后最近作品出现在左侧')

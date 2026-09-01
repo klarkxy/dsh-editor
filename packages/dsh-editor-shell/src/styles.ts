@@ -393,8 +393,11 @@ button:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-vis
   font:14px/1.5 var(--font-sans)
 }
 .chrome{
+  position:relative;
+  z-index:12;
   gap:14px;
   padding:0 20px;
+  overflow:visible;
   background:#fbf8ef;
   border-color:#d8d0bf
 }
@@ -1630,6 +1633,110 @@ button:active,.tree-row:active,summary:active{
 .export-menu>div button:hover{
   background:#e4eee1
 }
+.workspace-menu{
+  position:relative;
+  z-index:13
+}
+.workspace-menu summary{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  max-width:240px;
+  padding:5px 12px;
+  border:1px solid #c9c5b4;
+  border-radius:16px 5px 16px 16px;
+  background:#f7f2e8;
+  color:#304f41;
+  cursor:pointer;
+  list-style:none;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.workspace-menu summary::-webkit-details-marker{
+  display:none
+}
+.workspace-menu summary::after{
+  content:'';
+  flex:none;
+  width:5px;
+  height:5px;
+  margin-top:-2px;
+  border-right:1.5px solid currentColor;
+  border-bottom:1.5px solid currentColor;
+  transform:rotate(45deg)
+}
+.workspace-menu[open] summary{
+  background:#dce9dd
+}
+.workspace-menu[open] summary::after{
+  margin-top:2px;
+  transform:rotate(225deg)
+}
+.workspace-menu-panel{
+  position:absolute;
+  z-index:14;
+  top:calc(100% + 8px);
+  left:0;
+  display:grid;
+  min-width:min(280px,70vw);
+  padding:6px;
+  border:1px solid #d8cfbd;
+  border-radius:10px 3px 10px 10px;
+  background:#fffdf6;
+  box-shadow:0 16px 40px #4e42261f;
+  animation:menu-pop 180ms var(--ease)
+}
+.workspace-menu-list,.workspace-menu-actions{
+  display:grid
+}
+.workspace-menu-list button,.workspace-menu-actions button{
+  border:0;
+  background:transparent;
+  text-align:left;
+  padding:8px 10px;
+  border-radius:6px;
+  color:#304f41;
+  cursor:pointer
+}
+.workspace-menu-list button:hover,.workspace-menu-actions button:hover{
+  background:#e4eee1
+}
+.workspace-menu-list button[aria-current=page]{
+  background:#d8e6d8;
+  font-weight:600
+}
+.workspace-menu-actions{
+  margin-top:4px;
+  padding-top:4px;
+  border-top:1px solid #e4ddd0
+}
+.workspace-menu .path-fallback{
+  margin:8px 6px 6px
+}
+.workspace-menu .path-fallback input{
+  width:100%
+}
+.whale-mark{
+  display:block;
+  width:18px;
+  height:18px
+}
+.chat-brand{
+  display:flex;
+  align-items:center;
+  gap:8px
+}
+.chat-brand .whale-mark{
+  width:20px;
+  height:20px;
+  color:#244f3c
+}
+.assistant-launcher .whale-mark{
+  width:18px;
+  height:18px;
+  color:#244f3c
+}
 .chat{
   position:relative
 }
@@ -2144,7 +2251,7 @@ button:active,.tree-row:active,summary:active{
 .layout-shell>.sidebar{
   grid-column:auto
 }
-.layout-controls,.workspace-view-controls{
+.layout-controls{
   display:flex;
   align-items:center;
   gap:3px;
@@ -2153,7 +2260,7 @@ button:active,.tree-row:active,summary:active{
   border-radius:15px 5px 15px 15px;
   background:#f1ecdf
 }
-.layout-controls button,.workspace-view-controls button{
+.layout-controls button{
   min-width:42px;
   padding:4px 8px;
   border:0;
@@ -2162,7 +2269,7 @@ button:active,.tree-row:active,summary:active{
   color:#526b5d;
   cursor:pointer
 }
-.layout-controls button[aria-pressed=true],.workspace-view-controls button[aria-pressed=true]{
+.layout-controls button[aria-pressed=true]{
   background:#d8e6d8;
   color:#183f2f;
   font-weight:600
@@ -2208,7 +2315,7 @@ button:active,.tree-row:active,summary:active{
   display:none
 }
 @media(max-width:1180px){
-  .layout-controls button,.workspace-view-controls button{
+  .layout-controls button{
     min-width:36px;
     padding-inline:6px
   }
@@ -2456,9 +2563,6 @@ button:active,.tree-row:active,summary:active{
   .chapter-board{
     grid-template-columns:1fr
   }
-  .workspace-view-controls{
-    display:none
-  }
 }
 .tree{
   flex:1 1 auto
@@ -2469,7 +2573,7 @@ button:active,.tree-row:active,summary:active{
   color:#718078;
   text-align:center
 }
-.layout-shell:has(.export-menu[open]){
+.layout-shell:has(.export-menu[open]),.layout-shell:has(.workspace-menu[open]){
   overflow:visible
 }
 /* ————————————————————————————————————————
@@ -2527,14 +2631,14 @@ export const homePlayStyles = `
 .no-session .empty-paper{
   height:auto
 }
-.brand-lockup{
+.no-session .brand-lockup{
   gap:9px
 }
-.brand-lockup>strong{
+.no-session .brand-lockup>strong{
   font-size:18px;
   letter-spacing:-.04em
 }
-.brand-mark{
+.no-session .brand-mark{
   width:30px;
   height:30px;
   border:0;
@@ -2544,14 +2648,14 @@ export const homePlayStyles = `
   font:700 13px/1 Georgia,serif;
   box-shadow:0 7px 18px #234f3b33
 }
-.sidebar .side-title{
+.no-session .sidebar .side-title{
   padding:16px 18px 12px;
   border:0
 }
-.workspace-caption{
+.no-session .workspace-caption{
   padding:12px 18px 5px
 }
-.workspace-empty{
+.no-session .workspace-empty{
   justify-items:center;
   gap:10px;
   margin:30px 18px;
@@ -2628,6 +2732,24 @@ export const homePlayStyles = `
   color:#60806d;
   font:600 11px/1.2 ui-monospace,"SFMono-Regular",Consolas,monospace;
   letter-spacing:.24em
+}
+.home-hint{
+  max-width:22em;
+  margin:0 0 22px;
+  color:#5d7266;
+  font-size:15px;
+  line-height:1.7
+}
+.layout-shell>.empty-paper.home-stage{
+  height:auto;
+  min-height:0;
+  align-content:center
+}
+.layout-shell .home-card h1{
+  font-size:clamp(42px,4.8vw,72px)
+}
+.layout-shell .paper-motion{
+  width:min(24vw,280px)
 }
 .home-actions{
   justify-content:flex-start;

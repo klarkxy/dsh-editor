@@ -18,6 +18,12 @@ describe('shell manuscript RPC safety', () => {
     expect(source).not.toContain('showWorkspacePath(')
   })
 
+  it('opens an existing work even when import or restore status cannot be verified', () => {
+    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    expect(source).not.toContain('作品中的导入状态无法验证')
+    expect(source).not.toContain('作品中的恢复状态无法验证')
+  })
+
   it('shows the actual create destination for every document kind', () => {
     expect(createDialogDirectory('chapter')).toBe('正文')
     expect(createDialogDirectory('chapter', '正文/第二卷')).toBe('正文/第二卷')
@@ -78,7 +84,7 @@ describe('shell manuscript RPC safety', () => {
     expect(searchSkippedText(1)).toBe('未搜索 1 个隐藏、生成、非文本或过大项目')
     const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
     const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8').replace(/\s+/g, '')
-    expect(styleSource).toContain('.layout-shell:has(.export-menu[open]){overflow:visible}')
+    expect(styleSource).toContain('.layout-shell:has(.export-menu[open]),.layout-shell:has(.workspace-menu[open]){overflow:visible}')
     expect(styleSource).toContain(".export-menusummary::after{content:'';")
     expect(source).toContain("e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('markdown') }, 'Markdown')")
     expect(source).toContain("e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('text') }, 'TXT')")
@@ -92,6 +98,22 @@ describe('shell manuscript RPC safety', () => {
     expect(source).not.toContain('ModelSetup')
     expect(source).not.toContain("view === 'settings'")
     expect(source).not.toContain('settings-shell')
+  })
+
+  it('uses a workspace dropdown instead of overlapping 作品/切换 controls, and keeps the cover on the empty chapter', () => {
+    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    expect(source).toContain("className: 'workspace-menu'")
+    expect(source).toContain("aria-label': '切换作品'")
+    expect(source).toContain("onClick: () => void openAnotherWorkspace(false)")
+    expect(source).toContain("onClick: () => void openAnotherWorkspace(true)")
+    expect(source).toContain("aria-label': '返回作品列表'")
+    expect(source).not.toContain('workspace-home-button')
+    expect(source).not.toContain('workspace-view-controls')
+    expect(source).not.toContain("target === 'paper' ? '稿纸'")
+    expect(source).toContain("label: '空白章'")
+    expect(source).toContain("function PaperStage(")
+    expect(source).toContain('function DeepSeekWhaleMark(')
+    expect(source).toContain("e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark))")
   })
 
   it('drops superseded or cross-session async responses', () => {

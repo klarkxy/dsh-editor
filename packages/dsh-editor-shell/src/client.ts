@@ -85,7 +85,7 @@ import {
   type SnapshotView,
 } from './snapshot-flow.ts'
 import { referenceQuery, type ReferenceQuery } from './reference-navigation.ts'
-import { chapterStatusText, ExportPreviewDialog, ProjectCardsPanel, ProjectOverviewPanel } from './project-views.ts'
+import { chapterStatusText, ExportPreviewDialog } from './project-views.ts'
 import { homePlayStyles, homeStyles, playfulStyles, redesignedStyles } from './styles.ts'
 import { WRITING_SETTINGS_NAMESPACE, createWritingMigration, decodeWritingPreferences, registerWritingSettings, writingPreferences, type WritingPreferences, type WritingSettingsSlots } from './writing-settings.ts'
 
@@ -113,6 +113,56 @@ const ASSISTANT_MAX = 560
 // 首页大标题轮转的结尾词与右侧稿纸上逐字浮现的示例文字
 const HOME_WORDS = ['故事。', '人物。', '世界。', '远方。']
 const SHEET_LINES = ['潮声漫过码头。', '她拆开第七封信。', '雪落在空站上。']
+
+function DeepSeekWhaleMark() {
+  return e('svg', {
+    className: 'whale-mark',
+    viewBox: '0 0 32 32',
+    'aria-hidden': 'true',
+    focusable: 'false',
+  },
+    e('path', {
+      fill: 'currentColor',
+      d: 'M3.4 12.2c1.2-3.6 4.2-5.4 7.6-5.2.6-2.6 2.8-4.6 5.8-5 3.2-.4 6 1.2 7.2 4.2 2.8.4 5 2.6 5.4 5.4.4 3-1.2 5.8-4 7.2-2 .9-4.4 1.3-7 1.3-3.4 0-6.4-.8-8.8-2.4C6 16.2 4.2 14.2 3.8 12c1.2.6 2.4 1 3.6 1.2-.4-1.2-.6-2.4-.4-3.6-1.4.4-2.6 1.2-3.6 2.6Z',
+    }),
+    e('circle', { cx: '21.2', cy: '11.6', r: '1.55', fill: '#fffdf6' }),
+  )
+}
+
+function PaperMotion() {
+  return e('div', { className: 'paper-motion', 'aria-hidden': 'true' },
+    e('i', { className: 'paper-sheet sheet-back' }),
+    e('i', { className: 'paper-sheet sheet-mid' }),
+    e('div', { className: 'paper-sheet sheet-front' },
+      SHEET_LINES.map((line, lineIndex) => e('div', { className: 'sheet-line', key: lineIndex },
+        Array.from(line).map((char, charIndex) => e('i', {
+          key: charIndex,
+          style: { animationDelay: `${(lineIndex * 8 + charIndex) * 120}ms` },
+        }, char)),
+      )),
+      e('b'),
+    ),
+  )
+}
+
+function PaperStage(props: { label: string; children?: ReactNode }) {
+  return e('section', { className: 'empty-paper home-stage', 'aria-label': props.label },
+    e('div', { className: 'home-ink', 'aria-hidden': 'true' }, '写'),
+    e('div', { className: 'home-card' },
+      e('p', { className: 'home-eyebrow' }, 'DSH EDITOR'),
+      e('h1', { 'aria-label': '开始写。' },
+        e('span', { 'aria-hidden': 'true' }, '开始写',
+          e('span', { className: 'home-words' },
+            HOME_WORDS.map((word, index) => e('i', { key: index }, word)),
+          ),
+        ),
+        e('span', { className: 'sr-only' }, '开始写。'),
+      ),
+      props.children,
+    ),
+    e(PaperMotion),
+  )
+}
 
 export function createDialogDirectory(kind: DocumentKind | 'group', directory?: string): string {
   if (kind === 'outline') return '大纲'
@@ -1236,11 +1286,11 @@ function Editor(props: {
   }
 
   if (!path) {
-    return e('section', { className: 'empty-paper', 'aria-label': '空白章' },
-      e('span', { className: 'empty-paper-mark', 'aria-hidden': 'true' }, '〆'),
-      e('h1', null, '空白页'),
-      e('p', null, '从左侧打开资料或章节；也可以先让搭档规划世界观、人物卡与章纲。'),
-      e('button', { type: 'button', onClick: create }, '新建一章'),
+    return e(PaperStage, { label: '空白章' },
+      e('p', { className: 'home-hint' }, '从左侧打开资料或章节；也可以先让搭档规划世界观、人物卡与章纲。'),
+      e('div', { className: 'home-actions' },
+        e('button', { className: 'primary-action', type: 'button', onClick: create }, '新建一章'),
+      ),
     )
   }
 
@@ -1973,7 +2023,7 @@ function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden
   }
   return e('aside', { className: 'chat', 'aria-label': '写作助手', hidden },
     e('header', { className: 'chat-header' },
-      e('strong', null, connected ? '搭档' : '重连中'),
+      e('strong', { className: 'chat-brand' }, e(DeepSeekWhaleMark), connected ? '搭档' : '重连中'),
       e('label', { className: 'conversation-select' }, e('span', { className: 'sr-only' }, '切换对话'), e('select', { value: session.sessionId, 'aria-label': '切换对话', onChange: (event: ChangeEvent<HTMLSelectElement>) => void switchConversation(event.target.value) }, conversations.map((item) => e('option', { key: item.id, value: item.id }, item.title)))),
       e('div', { className: 'chat-controls' }, e(ModelIndicator, { key: `${session.sessionId}:${modelRevision}`, ctx, session, onConfigure })),
       e('div', { className: 'chat-header-actions' },
@@ -2198,6 +2248,7 @@ function Root({ ctx, writingScope, settingsControl }: {
   const [createRequest, setCreateRequest] = useState<CreateRequest | null>(null)
   const [createBusy, setCreateBusy] = useState(false)
   const [openingWorkspace, setOpeningWorkspace] = useState(false)
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | 'new' | null>(null)
   const [manualWorkspacePath, setManualWorkspacePath] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(() => storedPanelOpen('dsh-editor.layout.sidebar-open', true))
@@ -2230,7 +2281,6 @@ function Root({ ctx, writingScope, settingsControl }: {
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState('')
   const [exportPreview, setExportPreview] = useState<PreparedExport | null>(null)
-  const [workspaceView, setWorkspaceView] = useState<'paper' | 'overview' | 'cards'>('paper')
   const [overview, setOverview] = useState<ProjectOverview | null>(null)
   const [overviewBusy, setOverviewBusy] = useState(false)
   const [overviewError, setOverviewError] = useState('')
@@ -2372,7 +2422,7 @@ function Root({ ctx, writingScope, settingsControl }: {
   useEffect(() => {
     setPath(''); setFiles([]); setReveal(null); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
     setManagePath(null); setManageNote(''); setArchives([]); setArchiveInvalid(0); setArchiveNote('')
-    setWorkspaceView('paper'); setOverview(null); setOverviewError(''); setOverviewBusy(false); setStatusBusy(false)
+    setOverview(null); setOverviewError(''); setOverviewBusy(false); setStatusBusy(false); setWorkspaceMenuOpen(false)
     setReferenceRequest(null); setExportPreview(null); setExporting(false); setExportNote('')
   }, [current])
   useEffect(() => {
@@ -2436,7 +2486,6 @@ function Root({ ctx, writingScope, settingsControl }: {
       return
     }
     setWorkbenchNote('')
-    setWorkspaceView('paper')
     setPath(nextPath)
     setReveal(hit ? { ...hit, nonce: Date.now() } : null)
   }
@@ -2697,13 +2746,7 @@ function Root({ ctx, writingScope, settingsControl }: {
     let live = true
     void safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: current }))
       .then((recovery) => {
-        if (!live) return
-        if (!recovery.ok) {
-          ctx.sessions.clear()
-          setHomeNote('作品中的导入状态无法验证，已停止打开。')
-          return
-        }
-        if (recovery.value.state !== 'recoverable') return
+        if (!live || !recovery.ok || recovery.value.state !== 'recoverable') return
         importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
         ctx.sessions.clear()
         setImportFlow(recoverImport(current, currentWorkspace.workspaceId, recovery.value))
@@ -2717,12 +2760,7 @@ function Root({ ctx, writingScope, settingsControl }: {
     void safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: current }))
       .then((recovery) => {
         if (!live) return
-        if (!recovery.ok) {
-          ctx.sessions.clear()
-          setHomeNote('作品中的恢复状态无法验证，已停止打开。')
-          return
-        }
-        if (!blocksWorkspaceOpen(recovery.value)) {
+        if (!recovery.ok || !blocksWorkspaceOpen(recovery.value)) {
           verifiedRestoreSessions.current.add(current)
           refreshRestoreGate((value) => value + 1)
           return
@@ -2730,7 +2768,6 @@ function Root({ ctx, writingScope, settingsControl }: {
         snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
         ctx.sessions.clear()
         setSnapshotFlow(recoverSnapshot(current, currentWorkspace.workspaceId, recovery.value))
-        return
       })
     return () => { live = false }
   }, [ctx.connection.rpc, current, currentWorkspace?.workspaceId])
@@ -2757,23 +2794,13 @@ function Root({ ctx, writingScope, settingsControl }: {
     if (!newProject) {
       probedImportSessions.current.add(sessionId)
       const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: sessionId }))
-      if (!recovery.ok) {
-        setHomeNote('作品中的导入状态无法验证，已停止打开。')
-        setExportNote('作品中的导入状态无法验证，未切换作品。')
-        return
-      }
       if (recovery.ok && recovery.value.state === 'recoverable') {
         importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
         setImportFlow(recoverImport(sessionId, workspaceId, recovery.value)); return
       }
       probedRestoreSessions.current.add(sessionId)
       const restore = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: sessionId }))
-      if (!restore.ok) {
-        setHomeNote('作品中的恢复状态无法验证，已停止打开。')
-        setExportNote('作品中的恢复状态无法验证，未切换作品。')
-        return
-      }
-      if (blocksWorkspaceOpen(restore.value)) {
+      if (restore.ok && blocksWorkspaceOpen(restore.value)) {
         snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
         setSnapshotFlow(recoverSnapshot(sessionId, workspaceId, restore.value))
         return
@@ -2790,14 +2817,20 @@ function Root({ ctx, writingScope, settingsControl }: {
   const openPickedWorkspace = async (path: string, newProject: boolean) => {
     setOpeningWorkspace(true)
     setHomeNote('')
+    if (session) setWorkbenchNote('')
     try {
       await openWorkspacePath(path, newProject)
       setManualWorkspaceMode(null)
       setManualWorkspacePath('')
     } catch {
-      setHomeNote('作品未能打开，请检查路径后重试。')
+      const message = '作品未能打开，请检查路径后重试。'
+      setHomeNote(message)
       setManualWorkspaceMode(newProject ? 'new' : 'existing')
       setManualWorkspacePath(path)
+      if (session) {
+        setWorkbenchNote(message)
+        setWorkspaceMenuOpen(true)
+      }
     } finally {
       setOpeningWorkspace(false)
     }
@@ -2814,6 +2847,10 @@ function Root({ ctx, writingScope, settingsControl }: {
       setOpeningWorkspace(false)
       setManualWorkspaceMode(newProject ? 'new' : 'existing')
       setHomeNote('目录选择器暂时不可用，请直接输入作品路径。')
+      if (session) {
+        setWorkbenchNote('目录选择器暂时不可用，请直接输入作品路径。')
+        setWorkspaceMenuOpen(true)
+      }
       return
     }
     if (!picked) {
@@ -2826,19 +2863,82 @@ function Root({ ctx, writingScope, settingsControl }: {
     try {
       const path = await ctx.workspaces.pickDirectory()
       if (!path) {
-        setHomeNote('未选择文件夹，可直接输入路径。')
+        const message = '未选择文件夹，可直接输入路径。'
+        if (session) setWorkbenchNote(message)
+        else setHomeNote(message)
         return
       }
       await openPickedWorkspace(path, manualWorkspaceMode === 'new')
     } catch {
-      setHomeNote('目录选择器暂时不可用，请直接输入作品路径。')
+      const message = '目录选择器暂时不可用，请直接输入作品路径。'
+      if (session) setWorkbenchNote(message)
+      else setHomeNote(message)
     }
   }
   const submitWorkspacePath = async (event: FormEvent) => {
     event.preventDefault()
     const path = manualWorkspacePath.trim()
-    if (!path) { setHomeNote('请输入作品文件夹路径。'); return }
+    if (!path) {
+      const message = '请输入作品文件夹路径。'
+      if (session) setWorkbenchNote(message)
+      else setHomeNote(message)
+      return
+    }
     await openPickedWorkspace(path, manualWorkspaceMode === 'new')
+  }
+  const pathFallbackForm = manualWorkspaceMode ? e('form', { className: 'path-fallback', onSubmit: submitWorkspacePath },
+    e('label', null,
+      e('span', null, manualWorkspaceMode === 'new' ? '新作品文件夹路径' : '作品文件夹路径'),
+      e('input', {
+        value: manualWorkspacePath,
+        onChange: (event: ChangeEvent<HTMLInputElement>) => setManualWorkspacePath(event.target.value),
+        placeholder: '例如 D:/小说/作品',
+        'aria-label': '作品文件夹路径',
+        autoFocus: true,
+      }),
+    ),
+    e('div', null,
+      e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspaceDirectory() }, '选择文件夹'),
+      e('button', { className: 'primary-action', type: 'submit', disabled: openingWorkspace },
+        openingWorkspace ? '打开中…' : manualWorkspaceMode === 'new' ? '在此新建' : '打开此目录',
+      ),
+      e('button', {
+        type: 'button',
+        disabled: openingWorkspace,
+        onClick: () => {
+          setManualWorkspaceMode(null)
+          setHomeNote('')
+          if (session) setWorkbenchNote('')
+        },
+      }, '取消'),
+    ),
+  ) : null
+  const leaveToHome = async () => {
+    setWorkspaceMenuOpen(false)
+    if (editorDirty) { setWorkbenchNote('请先保存当前文档，再返回作品列表。'); return }
+    if (!(await canLeaveAssistantDraft())) return
+    setAssistantDraftDirty(false)
+    setAssistantOpen(false)
+    setFocusMode(false)
+    ctx.sessions.clear()
+  }
+  const switchToWorkspace = async (id: WorkspaceId) => {
+    setWorkspaceMenuOpen(false)
+    if (!id || id === currentWorkspace?.workspaceId) return
+    if (editorDirty) { setWorkbenchNote('请先保存当前文档，再切换作品。'); return }
+    if (!(await canLeaveAssistantDraft())) return
+    setAssistantDraftDirty(false)
+    await connectAndInitialize(id, false).catch(() => setExportNote('作品未能打开，请重试。'))
+  }
+  const openAnotherWorkspace = async (newProject: boolean) => {
+    setWorkspaceMenuOpen(false)
+    if (editorDirty) {
+      setWorkbenchNote(newProject ? '请先保存当前文档，再新建作品。' : '请先保存当前文档，再打开作品。')
+      return
+    }
+    if (!(await canLeaveAssistantDraft())) return
+    setAssistantDraftDirty(false)
+    await startWorkspaceFromPicker(newProject)
   }
   const closeImportFlow = (restoreFocus = true) => {
     const target = importReturnFocus.current
@@ -3229,60 +3329,13 @@ function Root({ ctx, writingScope, settingsControl }: {
           e('button', { className: 'workspace-manage icon-button', type: 'button', 'aria-label': `管理作品 ${workspace.title || workspace.path}`, title: '管理作品', onClick: () => openWorkspaceManage(workspace, true) }, '···'),
         )),
       ),
-      e('section', { className: 'empty-paper home-stage', 'aria-label': '空白稿纸' },
-        e('div', { className: 'home-ink', 'aria-hidden': 'true' }, '写'),
-        e('div', { className: 'home-card' },
-          e('p', { className: 'home-eyebrow' }, 'DSH EDITOR'),
-          e('h1', { 'aria-label': '开始写。' },
-            e('span', { 'aria-hidden': 'true' }, '开始写',
-              e('span', { className: 'home-words' },
-                HOME_WORDS.map((word, index) => e('i', { key: index }, word)),
-              ),
-            ),
-            e('span', { className: 'sr-only' }, '开始写。'),
-          ),
-          e('div', { className: 'home-actions' },
-            e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void startWorkspaceFromPicker(false) }, '打开作品', e('span', { 'aria-hidden': 'true' }, '↗')),
-            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void startWorkspaceFromPicker(true) }, '新建'),
-          ),
-          manualWorkspaceMode ? e('form', { className: 'path-fallback', onSubmit: submitWorkspacePath },
-            e('label', null,
-              e('span', null, manualWorkspaceMode === 'new' ? '新作品文件夹路径' : '作品文件夹路径'),
-              e('input', {
-                value: manualWorkspacePath,
-                onChange: (event: ChangeEvent<HTMLInputElement>) => setManualWorkspacePath(event.target.value),
-                placeholder: '例如 D:/小说/作品',
-                'aria-label': '作品文件夹路径',
-                autoFocus: true,
-              }),
-            ),
-            e('div', null,
-              e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspaceDirectory() }, '选择文件夹'),
-              e('button', { className: 'primary-action', type: 'submit', disabled: openingWorkspace },
-                openingWorkspace ? '打开中…' : manualWorkspaceMode === 'new' ? '在此新建' : '打开此目录',
-              ),
-              e('button', {
-                type: 'button',
-                disabled: openingWorkspace,
-                onClick: () => { setManualWorkspaceMode(null); setHomeNote('') },
-              }, '取消'),
-            ),
-          ) : null,
-          homeNote ? e('p', { className: 'warning', role: 'alert' }, homeNote) : null,
+      e(PaperStage, { label: '空白稿纸' },
+        e('div', { className: 'home-actions' },
+          e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void startWorkspaceFromPicker(false) }, '打开作品', e('span', { 'aria-hidden': 'true' }, '↗')),
+          e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void startWorkspaceFromPicker(true) }, '新建'),
         ),
-        e('div', { className: 'paper-motion', 'aria-hidden': 'true' },
-          e('i', { className: 'paper-sheet sheet-back' }),
-          e('i', { className: 'paper-sheet sheet-mid' }),
-          e('div', { className: 'paper-sheet sheet-front' },
-            SHEET_LINES.map((line, lineIndex) => e('div', { className: 'sheet-line', key: lineIndex },
-              Array.from(line).map((char, charIndex) => e('i', {
-                key: charIndex,
-                style: { animationDelay: `${(lineIndex * 8 + charIndex) * 120}ms` },
-              }, char)),
-            )),
-            e('b'),
-          ),
-        ),
+        pathFallbackForm,
+        homeNote ? e('p', { className: 'warning', role: 'alert' }, homeNote) : null,
       ),
       workspaceManage ? e(WorkspaceManageDialog, {
         workspace: workspaceManage,
@@ -3310,47 +3363,35 @@ function Root({ ctx, writingScope, settingsControl }: {
     style: { minWidth: 0, gridTemplateColumns: layoutColumns },
   },
     e('style', null, redesignedStyles),
+    e('style', null, homeStyles),
     e('style', null, playfulStyles),
+    e('style', null, homePlayStyles),
     e('header', { className: 'chrome' },
       e('strong', null, 'DSH'),
-      e('button', {
-        className: 'workspace-home-button',
-        type: 'button',
-        title: '返回作品列表',
-        'aria-label': '返回作品列表',
-        onClick: () => void (async () => {
-          if (editorDirty) { setWorkbenchNote('请先保存当前文档，再返回作品列表。'); return }
-          if (!(await canLeaveAssistantDraft())) return
-          setAssistantDraftDirty(false)
-          setAssistantOpen(false)
-          setFocusMode(false)
-          ctx.sessions.clear()
-        })(),
-      }, '作品'),
-      e('label', { className: 'workspace-select' }, e('span', { className: 'sr-only' }, '切换作品'), e('select', {
-        'aria-label': '切换作品',
-        value: currentWorkspace?.workspaceId ?? '',
-        onChange: (event: ChangeEvent<HTMLSelectElement>) => {
-          const id = event.target.value as WorkspaceId
-          if (!id || id === currentWorkspace?.workspaceId) return
-          void (async () => {
-            if (!(await canLeaveAssistantDraft())) return
-            setAssistantDraftDirty(false)
-            await connectAndInitialize(id, false).catch(() => setExportNote('作品未能打开，请重试。'))
-          })()
-        },
-      }, workspaces.items.map((workspace) => e('option', { key: workspace.workspaceId, value: workspace.workspaceId }, workspace.title || workspace.path)))),
-      currentWorkspace ? e('button', { className: 'workspace-current-manage icon-button', type: 'button', 'aria-label': '管理当前作品', title: '修改作品显示名', onClick: () => openWorkspaceManage(currentWorkspace, false) }, '···') : null,
-      e('nav', { className: 'workspace-view-controls', 'aria-label': '作品视图' },
-        (['paper', 'overview', 'cards'] as const).map((target) => e('button', {
-          key: target,
-          type: 'button',
-          'aria-pressed': workspaceView === target,
-          onClick: () => {
-            if (target !== 'paper' && editorDirty) { setWorkbenchNote('请先保存当前文档，再切换作品视图。'); return }
-            setWorkspaceView(target)
-          },
-        }, target === 'paper' ? '稿纸' : target === 'overview' ? '概览' : '卡片')),
+      e('details', {
+        className: 'workspace-menu',
+        open: workspaceMenuOpen,
+        onToggle: (event: ChangeEvent<HTMLDetailsElement>) => setWorkspaceMenuOpen(event.currentTarget.open),
+      },
+        e('summary', { title: '切换作品', 'aria-label': '切换作品' }, currentWorkspace?.title || currentWorkspace?.path || '作品'),
+        e('div', { className: 'workspace-menu-panel' },
+          workspaces.items.length ? e('div', { className: 'workspace-menu-list', role: 'list' },
+            workspaces.items.map((workspace) => e('button', {
+              key: workspace.workspaceId,
+              type: 'button',
+              role: 'listitem',
+              'aria-current': workspace.workspaceId === currentWorkspace?.workspaceId ? 'page' : undefined,
+              onClick: () => void switchToWorkspace(workspace.workspaceId),
+            }, workspace.title || workspace.path)),
+          ) : e('p', { className: 'muted' }, '还没有打开过作品'),
+          e('div', { className: 'workspace-menu-actions' },
+            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void openAnotherWorkspace(false) }, '打开作品'),
+            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void openAnotherWorkspace(true) }, '新建'),
+            currentWorkspace ? e('button', { type: 'button', 'aria-label': '管理当前作品', title: '修改作品显示名', onClick: () => { setWorkspaceMenuOpen(false); openWorkspaceManage(currentWorkspace, false) } }, '管理当前作品') : null,
+            e('button', { type: 'button', 'aria-label': '返回作品列表', onClick: () => void leaveToHome() }, '返回作品列表'),
+          ),
+          pathFallbackForm,
+        ),
       ),
       e('nav', { className: 'layout-controls', 'aria-label': '工作台布局' },
         e('button', {
@@ -3455,17 +3496,7 @@ function Root({ ctx, writingScope, settingsControl }: {
       label: '调整文件栏宽度',
       onChange: setSidebarWidth,
     }) : null,
-    workspaceView === 'overview' ? e(ProjectOverviewPanel, {
-      overview, busy: overviewBusy, error: overviewError, statusBusy,
-      onOpen: openDocument,
-      onStatus: (chapterPath: string, status: ChapterStatus) => void updateChapterStatus(chapterPath, status),
-      onRetry: () => void loadOverview(),
-    }) : workspaceView === 'cards' ? e(ProjectCardsPanel, {
-      overview, busy: overviewBusy, error: overviewError, statusBusy,
-      onOpen: openDocument,
-      onStatus: (chapterPath: string, status: ChapterStatus) => void updateChapterStatus(chapterPath, status),
-      onRetry: () => void loadOverview(),
-    }) : e(Editor, {
+    e(Editor, {
       ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'),
       externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal, completionPreference: writing.completion,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
@@ -3516,7 +3547,7 @@ function Root({ ctx, writingScope, settingsControl }: {
       'aria-label': '打开写作搭档',
       'aria-expanded': false,
       onClick: () => setAssistantOpen(true),
-    }, e('span', { 'aria-hidden': 'true' }, '⌁'), e('strong', null, '搭档')) : null,
+    }, e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark)), e('strong', null, '搭档')) : null,
     shortcutsOpen ? e(ShortcutDialog, { onClose: closeShortcuts }) : null,
     exportPreview ? e(ExportPreviewDialog, {
       prepared: exportPreview,

@@ -161,11 +161,9 @@ try {
   if (!(await window.locator('.export-menu > summary').textContent())?.includes('导出全书')) failures.push('导出入口没有写成导出全书')
   if (!(await window.getByRole('button', { name: '作品快照' }).count())) failures.push('作品快照没有回到工作台操作区')
 
-  await window.getByRole('button', { name: '概览', exact: true }).click()
-  const overviewPanel = window.getByRole('region', { name: '作品概览' })
-  await overviewPanel.getByRole('heading', { name: '作品进度' }).waitFor({ state: 'visible' })
-  if (!(await overviewPanel.textContent())?.includes('4章节')) failures.push('作品概览没有统计 Markdown/TXT 正文章节')
-  await overviewPanel.getByLabel('设置 第一章 状态').selectOption('revising')
+  await window.locator('.tree-row', { hasText: '正文' }).first().click()
+  await window.locator('.tree-row', { hasText: '001.md' }).first().click()
+  await window.getByLabel('设置 001 状态').selectOption('revising')
   await waitFor(async () => {
     try {
       const stored = JSON.parse(await readFile(resolve(workspace, '.dsh-editor', 'chapter-status.json'), 'utf8'))
@@ -174,10 +172,6 @@ try {
       return false
     }
   }, 'chapter status sidecar')
-  await window.getByRole('button', { name: '卡片', exact: true }).click()
-  const cardsPanel = window.getByRole('region', { name: '结构卡片' })
-  await cardsPanel.waitFor({ state: 'visible' })
-  if (!(await cardsPanel.getByRole('region', { name: '修订中' }).textContent())?.includes('第一章')) failures.push('卡片视图与概览状态不一致')
 
   await window.locator('.export-menu > summary').click()
   if (!(await window.getByRole('button', { name: 'Markdown', exact: true }).isVisible())) failures.push('导出菜单没有显示 Markdown')
@@ -195,7 +189,6 @@ try {
   const downloadedText = await readFile(downloadedExport, 'utf8')
   if (!downloadedText.includes('纯文本章节') || !downloadedText.includes('月下银桥')) failures.push('导出下载与预检章节不一致')
 
-  await window.getByRole('button', { name: '稿纸', exact: true }).click()
   await window.locator('.tree-row', { hasText: '人物卡' }).first().click()
   await window.locator('.tree-row', { hasText: '主角.md' }).first().click()
   await window.getByRole('button', { name: '查找正文引用' }).click()
@@ -315,20 +308,22 @@ try {
   await window.locator('.tree-row', { hasText: '001.md' }).first().click()
   await window.waitForFunction(() => document.querySelector('textarea[aria-label="正文"]')?.value.includes('磁盘外部版本'))
 
-  const workspaceSelect = window.getByLabel('切换作品')
-  const originalWorkspaceTitle = await workspaceSelect.locator('option:checked').textContent() || 'workbench-e2e-workspace'
+  const workspaceSwitcher = window.getByRole('button', { name: '切换作品' })
+  const originalWorkspaceTitle = (await workspaceSwitcher.textContent())?.trim() || 'workbench-e2e-workspace'
+  await workspaceSwitcher.click()
   await window.getByRole('button', { name: '管理当前作品' }).click()
   let workspaceDialog = window.locator('.workspace-dialog')
   await workspaceDialog.getByLabel('作品显示名').fill('验收作品')
   await workspaceDialog.getByRole('button', { name: '保存显示名' }).click()
   await workspaceDialog.waitFor({ state: 'detached' })
-  await window.waitForFunction(() => document.querySelector('select[aria-label="切换作品"] option:checked')?.textContent === '验收作品')
+  await window.waitForFunction(() => document.querySelector('.workspace-menu > summary')?.textContent?.trim() === '验收作品')
+  await window.getByRole('button', { name: '切换作品' }).click()
   await window.getByRole('button', { name: '管理当前作品' }).click()
   workspaceDialog = window.locator('.workspace-dialog')
   await workspaceDialog.getByLabel('作品显示名').fill(originalWorkspaceTitle)
   await workspaceDialog.getByRole('button', { name: '保存显示名' }).click()
   await workspaceDialog.waitFor({ state: 'detached' })
-  await window.waitForFunction((expected) => document.querySelector('select[aria-label="切换作品"] option:checked')?.textContent === expected, originalWorkspaceTitle)
+  await window.waitForFunction((expected) => document.querySelector('.workspace-menu > summary')?.textContent?.trim() === expected, originalWorkspaceTitle)
 
   await window.keyboard.press('Control+b')
   await window.locator('.sidebar').waitFor({ state: 'detached' })
@@ -378,6 +373,7 @@ try {
   const composer = window.getByRole('textbox', { name: '输入消息' })
   await composer.fill('不要丢失的草稿')
   const currentConversationId = await conversationSelect.inputValue()
+  await window.getByRole('button', { name: '切换作品' }).click()
   await window.getByRole('button', { name: '返回作品列表' }).click()
   let discardMessage = window.getByRole('alertdialog', { name: '放弃未发送的消息？' })
   await discardMessage.getByRole('button', { name: '取消' }).click()
@@ -528,6 +524,7 @@ try {
   if (centralPaneWidth < 700) failures.push(`中央写作区没有占满可用空间：${centralPaneWidth}px`)
   await window.screenshot({ path: resolve(output, 'workbench.png'), fullPage: true })
 
+  await window.getByRole('button', { name: '切换作品' }).click()
   await window.getByRole('button', { name: '返回作品列表' }).click()
   await window.locator('.home-stage').waitFor({ state: 'visible' })
   const recentManage = window.getByRole('button', { name: `管理作品 ${originalWorkspaceTitle}` })
