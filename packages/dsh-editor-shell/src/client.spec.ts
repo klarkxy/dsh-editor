@@ -1,21 +1,54 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { authorFlowExamples, canSubmitComposer, claimInitialWorkspaceResume, clampPanelWidth, createDialogDirectory, createFlowWorkspace, errorMessage, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isChapterDocumentPath, isSessionMissing, isStaleFailure, isSuccessWorkbenchNote, LatestRequestGate, orderTreeEntries, proposalAppliedNavigation, relocationFailureMessage, replaceWorldbookPaperText, resizedPanelWidth, safeRpcCall, searchSkippedText, shouldSubmitComposer, supportedWorkspaceTextPaths, treeExpansionPaths, treeRowPadding, worldbookPaperProjection, workspaceOpenFailureMessage, workspaceShortcut } from './client.ts'
+import {
+  authorFlowExamples,
+  canSubmitComposer,
+  chapterStatusText,
+  claimInitialWorkspaceResume,
+  clampPanelWidth,
+  createDialogDirectory,
+  createFlowWorkspace,
+  errorMessage,
+  hasRelocatableManuscriptFiles,
+  hasVisibleWorkspaceEntries,
+  isChapterDocumentPath,
+  isManagedGroupName,
+  isSessionMissing,
+  isStaleFailure,
+  isSuccessWorkbenchNote,
+  LatestRequestGate,
+  managedGroupDirectories,
+  orderTreeEntries,
+  proposalAppliedNavigation,
+  relocationFailureMessage,
+  replaceWorldbookPaperText,
+  resizedPanelWidth,
+  safeRpcCall,
+  searchSkippedText,
+  shouldSubmitComposer,
+  supportedWorkspaceTextPaths,
+  treeExpansionPaths,
+  treeRowPadding,
+  worldbookPaperProjection,
+  workspaceOpenFailureMessage,
+  workspaceShortcut,
+} from './client.ts'
+
+const rootSource = () => readFileSync(new URL('./client/root.ts', import.meta.url), 'utf8')
 
 describe('shell manuscript RPC safety', () => {
   it('keeps browser-native prompt and confirm out of the workbench UI', () => {
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    const source = rootSource()
     expect(source).not.toContain('globalThis.prompt')
     expect(source).not.toContain('globalThis.confirm')
   })
 
   it('creates 新建 in 文档/dsh-editor via an in-app name dialog, and only uses the directory picker for 打开作品', () => {
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    const source = rootSource()
     expect(source).toContain("onClick: () => void startWorkspaceFromPicker()")
     expect(source).toContain("onClick: () => void startNewProject()")
     expect(source).not.toContain("startWorkspaceFromPicker('create')")
     expect(source).toContain("'project.createHome'")
-    expect(source).toContain('将保存在「文档/dsh-editor」下。')
     expect(source).toContain('ctx.workspaces.pickDirectory()')
     expect(source).toContain("setManualWorkspaceMode('existing')")
     expect(source).not.toContain("setManualWorkspaceMode(intent === 'create' ? 'new' : 'existing')")
@@ -23,7 +56,7 @@ describe('shell manuscript RPC safety', () => {
   })
 
   it('opens an existing work even when import or restore status cannot be verified', () => {
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    const source = rootSource()
     expect(source).not.toContain('作品中的导入状态无法验证')
     expect(source).not.toContain('作品中的恢复状态无法验证')
   })
@@ -51,14 +84,15 @@ describe('shell manuscript RPC safety', () => {
     expect(relocationFailureMessage(true)).toContain('新位置入口未能自动移除')
   })
 
-  it('never starts model-backed indexing automatically after open, import, or restore', () => {
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
-    expect(source.match(/triggerExistingIndex\(/g)).toHaveLength(1)
-    expect(source).toContain("onClick: () => triggerExistingIndex(currentWorkspace.workspaceId, fileSession.sessionId, true)")
+  it('exposes triggerExistingIndex only as an internal helper with no UI entry point', () => {
+    const source = rootSource()
+    const declarations = source.match(/(?:function|const)\s+triggerExistingIndex\b/g) ?? []
+    expect(declarations).toHaveLength(1)
+    expect(source).not.toMatch(/onClick:\s*\(\)\s*=>\s*triggerExistingIndex\(/)
   })
 
   it('keeps open and create as explicit flows without requiring the browse-only directory API', () => {
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    const source = rootSource()
     const pickedStart = source.indexOf('const openPickedWorkspace = async')
     const pickedEnd = source.indexOf('useEffect(() => {', pickedStart)
     const pickedFlow = source.slice(pickedStart, pickedEnd)
@@ -67,17 +101,13 @@ describe('shell manuscript RPC safety', () => {
     expect(pickedFlow.indexOf('inspectRegisteredWorkspace(ctx, registration.workspace.path)'))
       .toBeLessThan(pickedFlow.indexOf('connectUsableWorkspaceSession(ctx, registration.workspace.workspaceId)'))
     expect(pickedFlow).toContain("if (intent === 'create') await prepareNewWorkspace(pending, sessionId)")
-    expect(pickedFlow).toContain('else await prepareExistingWorkspace(pending, sessionId)')
+    expect(pickedFlow).toContain("else await prepareExistingWorkspace(pending, sessionId)")
 
     const existingStart = source.indexOf('const prepareExistingWorkspace = async')
     const newStart = source.indexOf('const prepareNewWorkspace = async', existingStart)
     const openStart = source.indexOf('const openRegisteredWorkspace = async', newStart)
     const existingFlow = source.slice(existingStart, newStart)
     const newFlow = source.slice(newStart, openStart)
-    expect(existingFlow.indexOf("'project.importProbe'")).toBeLessThan(existingFlow.indexOf("'snapshot.restoreProbe'"))
-    expect(existingFlow).toContain("if (nextImportFlow.kind === 'recover')")
-    expect(existingFlow).toContain("if (nextSnapshotFlow.kind === 'recover')")
-    expect(existingFlow).toContain("intent: 'create'")
     expect(newFlow.indexOf("'tree.list'")).toBeLessThan(newFlow.indexOf("'project.init'"))
     expect(newFlow).toContain("intent: 'open'")
     expect(newFlow).toContain('new workspace folder contains unrelated files')
@@ -86,8 +116,7 @@ describe('shell manuscript RPC safety', () => {
     expect(source).toContain('if (!initialPath) return undefined')
     const finishFlow = source.slice(source.indexOf('const finishWorkspaceOpen = async'), existingStart)
     expect(finishFlow).toContain('ctx.sessions.open(sessionId)')
-    const registeredFlow = source.slice(openStart, source.indexOf('const finishPendingWorkspaceOpen = async', openStart))
-    expect(registeredFlow).toContain('pending.workspace = registered')
+    const registeredFlow = source.slice(openStart, source.indexOf('const continuePendingWorkspaceIntent = async', openStart))
     expect(registeredFlow).toContain('connectUsableWorkspaceSession(ctx, current.workspaceId, sessionId)')
   })
 
@@ -106,7 +135,7 @@ describe('shell manuscript RPC safety', () => {
     })).toBe('作品会话已失效，请重试。')
     expect(workspaceOpenFailureMessage(new Error('session is not live'))).toBe('作品会话未能建立，请重试。')
     expect(workspaceOpenFailureMessage(new Error('workspace has no supported text files'))).toContain('没有找到')
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    const source = rootSource()
     expect(source).toContain('await ctx.workspaces.archiveSession(first)')
     expect(source).toContain('const second = await ctx.workspaces.connectWorkspace(workspaceId)')
   })
@@ -136,6 +165,34 @@ describe('shell manuscript RPC safety', () => {
     expect(orderTreeEntries('正文', entries)).toEqual(entries)
     expect(treeRowPadding(0)).toBe(14)
     expect(treeRowPadding(1)).toBe(28)
+  })
+
+  it('hides the four managed group directories at the root and leaves nested children alone', () => {
+    expect(managedGroupDirectories).toEqual(['大纲', '人物卡', '世界书', '正文'])
+    expect(isManagedGroupName('大纲')).toBe(true)
+    expect(isManagedGroupName('人物卡')).toBe(true)
+    expect(isManagedGroupName('世界书')).toBe(true)
+    expect(isManagedGroupName('正文')).toBe(true)
+    expect(isManagedGroupName('第一卷')).toBe(false)
+    expect(isManagedGroupName('项目总览.md')).toBe(false)
+
+    const root = [
+      { name: '大纲', type: 'directory' as const },
+      { name: '人物卡', type: 'directory' as const },
+      { name: '世界书', type: 'directory' as const },
+      { name: '正文', type: 'directory' as const },
+      { name: '项目总览.md', type: 'file' as const },
+    ]
+    const filterRoot = (path: string, entries: typeof root) =>
+      entries.filter((item) => !item.name.startsWith('.') && (path !== '' || !isManagedGroupName(item.name)))
+    expect(filterRoot('', root).map((item) => item.name)).toEqual(['项目总览.md'])
+    expect(filterRoot('正文', [
+      { name: '第一卷', type: 'directory' as const },
+      { name: '总纲.md', type: 'file' as const },
+    ]).map((item) => item.name)).toEqual(['第一卷', '总纲.md'])
+
+    const sidebarSource = readFileSync(new URL('./client/sidebar.ts', import.meta.url), 'utf8')
+    expect(sidebarSource).toMatch(/\(path !== '' \|\| !isManagedGroupName\(item\.name\)\)/)
   })
 
   it('opens a clean applied file, expands its manuscript ancestors, and preserves dirty buffers', () => {
@@ -172,22 +229,39 @@ describe('shell manuscript RPC safety', () => {
     expect(worldbookPaperProjection('世界书/损坏.md', invalid)).toEqual({ text: invalid, offset: 0 })
   })
 
-  it('keeps success notices green, exposes workbench snapshots, and delegates settings to DSH', () => {
-    expect(isSuccessWorkbenchNote('已创建 正文/第二卷')).toBe(true)
-    expect(isSuccessWorkbenchNote('请先保存当前文档。')).toBe(false)
-    expect(searchSkippedText(1)).toBe('未搜索 1 个隐藏、生成、非文本或过大项目')
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
-    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8').replace(/\s+/g, '')
-    expect(styleSource).toContain('.workspace-chrome{display:flex')
-    expect(styleSource).toContain('.workspace-menu-panel{position:absolute')
-    expect(styleSource).toContain('--editor-paper-bg:var(--dsw-alias-bg-base,Canvas)')
-    expect(source).toContain("disabled: exporting, onClick: () => { closeWorkspaceChrome(); void exportNovel('markdown') }")
-    expect(source).toContain("}, exporting ? '导出中…' : '导出 Markdown')")
-    expect(source).toContain("disabled: exporting, onClick: () => { closeWorkspaceChrome(); void exportNovel('text') }")
-    expect(source).toContain("}, '导出 TXT')")
-    expect(source).toContain('function SnapshotLibraryDialog(')
-    expect(source).toContain('openSnapshotLibrary')
-    expect(source).toMatch(/workspace-menu-actions[\s\S]{0,1800}作品快照/)
+  it('drops snapshot, import, export, shortcut, worldbook, and search affordances from the workbench UI', () => {
+    const source = rootSource()
+    // Snapshots
+    expect(source).not.toContain('function SnapshotDialog(')
+    expect(source).not.toContain('function SnapshotLibraryDialog(')
+    expect(source).not.toContain('openSnapshotLibrary')
+    expect(source).not.toContain('作品快照')
+    expect(source).not.toMatch(/workspace-menu-actions[\s\S]{0,1800}作品快照/)
+    // Imports
+    expect(source).not.toContain('function ImportDialog(')
+    expect(source).not.toContain('renderImportDialog')
+    expect(source).not.toContain('applyImportFlow')
+    expect(source).not.toContain('selectImportSource')
+    // Exports
+    expect(source).not.toContain('function ExportPreviewDialog(')
+    expect(source).not.toContain('exportNovel')
+    expect(source).not.toContain('confirmExport')
+    expect(source).not.toContain('导出 Markdown')
+    expect(source).not.toContain('导出 TXT')
+    // Shortcuts dialog
+    expect(source).not.toContain('function ShortcutDialog(')
+    // Worldbook settings panel
+    expect(source).not.toContain('function WorldbookSettings(')
+    // Full-text search panel
+    expect(source).not.toContain('function SearchPanel(')
+    // Archive UI
+    expect(source).not.toContain('className: \'archive-panel\'')
+    expect(source).not.toContain('archiveManaged')
+    expect(source).not.toContain('className: \'index-status\'')
+  })
+
+  it('keeps settings delegated to DSH and drops the old inline settings shell', () => {
+    const source = rootSource()
     expect(source).toContain("renderSlot('sidebar.settings', { wide: true })")
     expect(source).not.toContain('ModelSetup')
     expect(source).not.toContain("view === 'settings'")
@@ -195,7 +269,9 @@ describe('shell manuscript RPC safety', () => {
   })
 
   it('uses a workspace dropdown instead of overlapping 作品/切换 controls, and keeps the cover on the empty chapter', () => {
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    const source = rootSource()
+    const sidebarSource = readFileSync(new URL('./client/sidebar.ts', import.meta.url), 'utf8')
+    const componentsSource = readFileSync(new URL('./client/components.ts', import.meta.url), 'utf8')
     const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
     expect(source).not.toContain("className: 'workbench-brand'")
     expect(source).toContain("className: 'workspace-chrome'")
@@ -207,30 +283,36 @@ describe('shell manuscript RPC safety', () => {
     expect(source).toContain("aria-label': '切换作品'")
     expect(source).toContain("aria-label': '作品菜单'")
     expect(source).toContain("'aria-controls': 'workspace-actions'")
-    expect(source).toContain("className: 'file-context-menu'")
-    expect(source).toContain('onContextMenu:')
-    expect(source).toContain("role: 'menuitem'")
-    expect(source).toContain("aria-label': '文档操作'")
-    expect(source).toContain('onArchive: () => void archiveManaged(fileMenu.path)')
+    // File context menu keeps rename, drops move/archive
+    expect(sidebarSource).toContain("className: 'file-context-menu'")
+    expect(sidebarSource).toContain("role: 'menuitem'")
+    expect(sidebarSource).toContain("aria-label': '文档操作'")
+    expect(sidebarSource).not.toContain('onArchive:')
+    expect(sidebarSource).not.toContain('onMove:')
+    expect(source).not.toContain('onArchive:')
+    expect(source).not.toContain('onMove:')
     expect(source).not.toContain('确认归档')
     expect(source).not.toContain("openManageAction(fileMenu.path, 'archive')")
+    expect(source).not.toContain("openManageAction(fileMenu.path, 'move')")
     expect(source).not.toContain("e('small', null, '文档管理')")
     expect(source).not.toContain("className: 'tree-manage'")
     expect(styleSource).not.toContain('tree-manage')
+    // Topbar
     expect(source).toContain("onClick: () => void openAnotherWorkspace()")
     expect(source).toContain("onClick: () => void startNewProject()")
     expect(source).toContain("aria-label': '返回作品列表'")
     expect(source).not.toContain('workspace-home-button')
     expect(source).not.toContain('workspace-view-controls')
     expect(source).not.toContain("target === 'paper' ? '稿纸'")
-    expect(source).toContain("label: '空白章'")
-    expect(source).toContain("function PaperStage(")
-    expect(source).toContain('function DeepSeekWhaleMark(')
+    expect(source).toContain("label: '空白稿纸'")
+    // Stage icons live in components.ts
+    expect(componentsSource).toContain("function PaperStage(")
+    expect(componentsSource).toContain("function DeepSeekWhaleMark(")
     expect(source).toContain("e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark))")
   })
 
   it('keeps manuscript state on a workspace-scoped file session while chat follows the current conversation', () => {
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    const source = rootSource()
     expect(source).toContain("const fileSessionId = workspaceOpen.kind === 'ready' ? workspaceOpen.sessionId : undefined")
     expect(source).toContain('}, [openWorkspaceId])')
     expect(source).toContain('ctx, session: fileSession, path, files')
@@ -314,6 +396,12 @@ describe('shell manuscript RPC safety', () => {
     expect(errorMessage({ ok: false, error: { code: 'directory-exists', message: 'manuscript group already exists' } })).toBe('同名文件或目录已经存在。')
     expect(errorMessage({ ok: false, error: { code: 'directory-unreadable', message: 'project folder is read-only' } })).toBe('当前文件无法写入，请检查目录权限。')
     expect(errorMessage({ ok: false, error: { code: 'workspace-invalid-path', message: 'manuscript group name is invalid' } })).toBe('名称或路径不符合规则。')
+  })
+
+  it('exposes chapter status text for the editor chip', () => {
+    expect(chapterStatusText('draft')).toBe('草稿')
+    expect(chapterStatusText('revising')).toBe('修订中')
+    expect(chapterStatusText('final')).toBe('已定稿')
   })
 
   it('uses the Host-created flag instead of a possibly stale workspace list', async () => {
