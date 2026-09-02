@@ -40,6 +40,13 @@
   disabled: true
 - id: ui-settings-plugins
   disabled: true
+# The settings dialog shell and the models section are replaced by the
+# editor's own paper/ink settings dialog (dsh-editor-shell). ui-settings itself
+# stays: it provides the settingsScope/settingsSchema services.
+- id: ui-settings-general
+  disabled: true
+- id: ui-settings-models
+  disabled: true
 - id: ui-plan
   disabled: true
 - id: ui-user-questions

@@ -129,7 +129,8 @@ async function readState(page) {
     const tree = Boolean(document.querySelector('.tree'))
     const sidebar = Boolean(document.querySelector('.sidebar'))
     const editorSection = Boolean(document.querySelector('[aria-label="正文编辑区"]'))
-    const editor = document.querySelector('textarea[data-testid="paper-editor"]')
+    const editorEl = document.querySelector('[data-testid="paper-editor"]')
+    const cmView = editorEl && /** @type {any} */ (editorEl).__cmView
     const ghost = Boolean(document.querySelector('[data-testid="paper-ghost"]'))
     const saveState = document.querySelector('[data-testid="paper-save-state"]')?.textContent || ''
     const wordCount = document.querySelector('[data-testid="paper-wordcount"]')?.textContent || ''
@@ -141,7 +142,7 @@ async function readState(page) {
     const themeToggleText = document.querySelector('.theme-toggle')?.textContent?.trim() || ''
     return {
       theme, stored, title, shell, homeStage, tree, sidebar, editorSection,
-      editorValue: editor instanceof HTMLTextAreaElement ? editor.value : '',
+      editorValue: cmView ? cmView.state.doc.toString() : '',
       ghost, saveState, wordCount, headerPath,
       composerVisible: Boolean(composer),
       composerPlaceholder: placeholder,

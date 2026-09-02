@@ -2,7 +2,7 @@ import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type
 import type { DocumentKind } from '../project-files.ts'
 
 /** Lock the focus inside a dialog and restore it on close. */
-function useDialogReturnFocus(dialogRef: { current: HTMLElement | null }, firstFocus: () => void) {
+export function useDialogReturnFocus(dialogRef: { current: HTMLElement | null }, firstFocus: () => void) {
   const returnFocus = useRef<HTMLElement | null>(null)
   useEffect(() => {
     returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null

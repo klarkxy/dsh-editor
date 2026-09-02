@@ -21,6 +21,7 @@
     "test:e2e:desktop": "node e2e/desktop.mjs",
     "test:e2e:core-loop": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/core-loop.mjs",
     "test:e2e:visual-audit": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/visual-audit.mjs",
+    "test:e2e:palette": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/palette.mjs",
     "test:e2e:author-flow": "pnpm build && node e2e/author-flow-live.mjs",
     "test:e2e:portable": "node e2e/portable.mjs",
     "test:e2e:missing-private": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/missing-private-plugin.mjs",

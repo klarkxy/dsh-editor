@@ -1,7 +1,8 @@
 /**
  * Boots a dsh-editor instance (like visual-audit) and reports the computed
- * font on the paper-editor textarea. Exits 0 iff the resolved font-family
- * contains a serif token, otherwise exits 1 with a JSON report.
+ * font on the paper editor's CodeMirror content element. Exits 0 iff the
+ * resolved font-family contains a serif token, otherwise exits 1 with a
+ * JSON report.
  */
 import { spawn } from 'node:child_process'
 import { mkdir, writeFile, rm } from 'node:fs/promises'
@@ -105,12 +106,12 @@ try {
   const manuscript = page.locator('.tree .tree-row', { has: page.getByText('正文', { exact: true }) }).first()
   if ((await manuscript.getAttribute('aria-expanded')) !== 'true') await manuscript.click()
   await page.locator('.tree .tree-row', { hasText: '001.md' }).first().click()
-  await page.locator('textarea[data-testid="paper-editor"]').waitFor({ state: 'visible' })
+  await page.locator('[data-testid="paper-editor"] .cm-content').waitFor({ state: 'visible' })
   report = await page.evaluate(() => {
-    const ta = document.querySelector('textarea[data-testid="paper-editor"]')
-    if (!ta) return { error: 'no-textarea' }
-    const cs = getComputedStyle(ta)
-    return { fontFamily: cs.fontFamily, fontSize: cs.fontSize, lineHeight: cs.lineHeight, color: cs.color, caretColor: cs.caretColor, className: ta.className }
+    const el = document.querySelector('[data-testid="paper-editor"] .cm-content')
+    if (!el) return { error: 'no-cm-content' }
+    const cs = getComputedStyle(el)
+    return { fontFamily: cs.fontFamily, fontSize: cs.fontSize, lineHeight: cs.lineHeight, color: cs.color, caretColor: cs.caretColor, className: el.className }
   })
 } finally {
   if (browser) await browser.close().catch(() => undefined)

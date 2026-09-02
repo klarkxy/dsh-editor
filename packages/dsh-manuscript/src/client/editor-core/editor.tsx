@@ -1,4 +1,8 @@
-import { createElement as e, useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { createElement as e, useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
+import { EditorState, Prec } from '@codemirror/state'
+import { EditorView, keymap, placeholder } from '@codemirror/view'
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { externalSync, ghostField, livePreview, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
 
 // EditorCore only needs to issue RPCs; hosts that also register handlers can
 // pass the full RpcBag and the structural type will still match.
@@ -183,13 +187,6 @@ export type EditorCoreSlot =
   | 'notice'
   | 'footer'
 
-const PAPER_SURFACE = {
-  fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif',
-  fontSize: 16,
-  lineHeight: 1.7,
-  padding: 16,
-}
-
 const SESSION_DRAFT_KEY = (cwd: string, path: string) =>
   `dsh-editor:draft:${encodeURIComponent(`${cwd}\u0000${path}`)}`
 
@@ -296,8 +293,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const [error, setError] = useState('')
   const [hasSelection, setHasSelection] = useState(false)
 
-  const ta = useRef<HTMLTextAreaElement | null>(null)
-  const mirror = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const viewRef = useRef<EditorView | null>(null)
+  // Cursor position (paper coordinates) to apply after the next external
+  // doc sync; set by acceptGhost / acceptPatch before they call setText.
+  const pendingCursorRef = useRef<number | null>(null)
   const fimAbort = useRef<AbortController | null>(null)
   const patchAbort = useRef<AbortController | null>(null)
   const saving = useRef(false)
@@ -511,7 +511,12 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       isDirty: () => isDirty(docRef.current, textRef.current),
       getText: () => textRef.current,
       getDocument: () => docRef.current,
-      getSelection: () => ({ start: 0, end: 0 }),
+      getSelection: () => {
+        const view = viewRef.current
+        if (!view) return { start: 0, end: 0 }
+        const main = view.state.selection.main
+        return { start: main.from + paperOffsetRef.current, end: main.to + paperOffsetRef.current }
+      },
       setGhost: (candidates, index, at) => { setGhostCandidates(candidates); setGhostIndex(index); setGhostAt(at) },
       clearGhost: () => { clearGhost(); setGhostAt(0) },
       setProposal: (next) => setProposal(next),
@@ -521,7 +526,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   }, [onHandle, save, discard, clearGhost])
 
   const complete = useCallback(async (append = false) => {
-    if (!doc || !ta.current) return
+    if (!doc) return
     lastAutomaticCompletion.current = Math.max(lastAutomaticCompletion.current, userEditRevision)
     fimAbort.current?.abort()
     patchAbort.current?.abort()
@@ -530,7 +535,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     const requestRevision = revision
     const candidates = ghostCandidatesRef.current
     const ghostAnchor = ghostAtRef.current
-    const pos = append && candidates.length > 0 ? ghostAnchor : ta.current.selectionStart + paperOffset
+    const pos = append && candidates.length > 0 ? ghostAnchor : selection.start
     const controller = new AbortController()
     fimAbort.current = controller
     setLoadingFim(true)
@@ -560,42 +565,35 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     report(next.added
       ? `补全候选 ${next.index + 1}/${next.candidates.length} 已就绪。`
       : '新候选与已有建议相同，已保留原建议。')
-  }, [doc, revision, text, paperOffset, rpc, buildFimPayload, authorPreferences, maxGhostCandidates, userEditRevision, extractFimText, report, reportError])
+  }, [doc, revision, text, selection.start, rpc, buildFimPayload, authorPreferences, maxGhostCandidates, userEditRevision, extractFimText, report, reportError])
 
   useEffect(() => {
-    if (!doc || !ta.current) return
-    const cursor = ta.current.selectionStart
+    const view = viewRef.current
+    if (!doc || !view) return
+    const cursor = selection.start
     const isManuscript = /^正文\/.+\.(?:md|txt)$/i.test(doc.path)
-    if (!automaticCompletionReady({
+    const ready = (at: number) => automaticCompletionReady({
       preference: completionPreference,
       manuscript: isManuscript,
       userEditRevision,
       requestedRevision: lastAutomaticCompletion.current,
-      focused: typeof document !== 'undefined' && document.activeElement === ta.current,
-      collapsedSelection: ta.current.selectionStart === ta.current.selectionEnd,
-      prefix: textRef.current.slice(0, cursor),
+      focused: view.hasFocus,
+      collapsedSelection: selection.start === selection.end,
+      prefix: textRef.current.slice(0, at),
       busy: loadingFim || patching,
       blocked: conflict || Boolean(ghost) || Boolean(proposal),
-    })) return
+    })
+    if (!ready(cursor)) return
     const timer = globalThis.setTimeout(() => {
-      if (!ta.current) return
-      const currentCursor = ta.current.selectionStart
-      if (!automaticCompletionReady({
-        preference: completionPreference,
-        manuscript: isManuscript,
-        userEditRevision,
-        requestedRevision: lastAutomaticCompletion.current,
-        focused: typeof document !== 'undefined' && document.activeElement === ta.current,
-        collapsedSelection: ta.current.selectionStart === ta.current.selectionEnd,
-        prefix: textRef.current.slice(0, currentCursor),
-        busy: loadingFim || patching,
-        blocked: conflict || Boolean(ghost) || Boolean(proposal),
-      })) return
+      // Never fire an automatic completion in the middle of IME composition.
+      if (view.composing) return
+      const currentCursor = view.state.selection.main.from + paperOffset
+      if (!ready(currentCursor)) return
       lastAutomaticCompletion.current = userEditRevision
       void complete()
     }, fimDelayMs)
     return () => globalThis.clearTimeout(timer)
-  }, [completionPreference, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, complete])
+  }, [completionPreference, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, paperOffset, complete])
 
   const requestPatch = useCallback(async () => {
     if (!doc) return
@@ -631,14 +629,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const acceptGhost = useCallback(() => {
     if (!canApplyGhost(state, ghost)) return
     const cursor = ghostAt + ghost.length
+    pendingCursorRef.current = Math.max(0, cursor - paperOffset)
     setText(applyGhost(text, ghostAt, ghost))
-    setSelection({ start: cursor, end: cursor })
     clearGhost()
     report('补全已加入草稿。')
-    globalThis.setTimeout(() => {
-      ta.current?.focus()
-      ta.current?.setSelectionRange(Math.max(0, cursor - paperOffset), Math.max(0, cursor - paperOffset))
-    }, 0)
+    globalThis.setTimeout(() => { viewRef.current?.focus() }, 0)
   }, [state, ghost, ghostAt, text, paperOffset, setText, clearGhost, report])
 
   const acceptPatch = useCallback(() => {
@@ -648,41 +643,157 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       return
     }
     const cursor = proposal.ticket.start + proposal.text.length
+    pendingCursorRef.current = Math.max(0, cursor - paperOffset)
     setText(applySelectionPatch(text, proposal.ticket, proposal.text))
-    setSelection({ start: cursor, end: cursor })
     setProposal(null)
     report('修改已加入草稿。')
-    globalThis.setTimeout(() => {
-      ta.current?.focus()
-      ta.current?.setSelectionRange(Math.max(0, cursor - paperOffset), Math.max(0, cursor - paperOffset))
-    }, 0)
+    globalThis.setTimeout(() => { viewRef.current?.focus() }, 0)
   }, [proposal, doc, text, revision, paperOffset, setText, report])
 
-  const onTextareaChange = (event: { target: { value: string } }) => {
-    setText(paperProjection.replace(path, text, event.target.value))
-    setUserEditRevision((old) => old + 1)
+  // Escape: cancel the in-flight suggestion/proposal. Returns whether the
+  // keypress was consumed so the CM keymap can fall through when idle.
+  const cancelSuggestions = useCallback((): boolean => {
+    if (!(loadingFim || patching || ghost || proposal)) return false
+    fimAbort.current?.abort()
+    patchAbort.current?.abort()
+    setLoadingFim(false)
+    setPatching(false)
+    clearGhost()
+    setProposal(null)
+    report('已放弃当前建议。')
+    return true
+  }, [loadingFim, patching, ghost, proposal, clearGhost, report])
+
+  /* ── CodeMirror view lifecycle ───────────────────────────────────── */
+
+  // paperOffset for the currently rendered text; read by the update listener.
+  const paperOffsetRef = useRef(0)
+  paperOffsetRef.current = paperOffset
+
+  // Stable dispatch table for CM keymaps / listeners; always points at the
+  // latest render's closures.
+  const callbacksRef = useRef({
+    setTextFromPaper: (_paper: string) => {},
+    onSelection: (_start: number, _end: number) => {},
+    acceptGhost: () => {},
+    acceptPatch: () => {},
+    cancelSuggestions: (): boolean => false,
+    save: () => {},
+    hasGhost: (): boolean => false,
+    hasProposal: (): boolean => false,
+  })
+  callbacksRef.current = {
+    setTextFromPaper: (paper: string) => {
+      setText(paperProjection.replace(path, textRef.current, paper))
+      setUserEditRevision((old) => old + 1)
+    },
+    onSelection: (start: number, end: number) => {
+      setSelection({ start, end })
+      setHasSelection(start !== end)
+    },
+    acceptGhost,
+    acceptPatch,
+    cancelSuggestions,
+    save: () => { void save() },
+    hasGhost: () => ghostCandidatesRef.current.length > 0,
+    hasProposal: () => proposal !== null,
   }
 
-  const onTextareaSelect = (event: { target: { selectionStart: number; selectionEnd: number } }) => {
-    setSelection({ start: event.target.selectionStart + paperOffset, end: event.target.selectionEnd + paperOffset })
-    setHasSelection(event.target.selectionStart !== event.target.selectionEnd)
-  }
-
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() }
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && proposal) { event.preventDefault(); acceptPatch() }
-    if (event.key === 'Tab' && ghost) { event.preventDefault(); acceptGhost() }
-    if (event.key === 'Escape' && (loadingFim || patching || ghost || proposal)) {
-      event.preventDefault()
-      fimAbort.current?.abort()
-      patchAbort.current?.abort()
-      setLoadingFim(false)
-      setPatching(false)
-      clearGhost()
-      setProposal(null)
-      report('已放弃当前建议。')
+  // Mount the EditorView once; content flows in through the sync effect.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const cb = callbacksRef
+    const view = new EditorView({
+      parent: container,
+      state: EditorState.create({
+        doc: '',
+        extensions: [
+          history(),
+          paperMarkdown,
+          paperHighlight,
+          paperTheme,
+          livePreview,
+          ghostField,
+          EditorView.lineWrapping,
+          placeholder('从这里开始写作，或按 ⌘K 唤起命令'),
+          Prec.high(keymap.of([
+            {
+              key: 'Tab',
+              run: (v) => {
+                // Let IME composition consume Tab before ghost acceptance.
+                if (v.composing || !cb.current.hasGhost()) return false
+                cb.current.acceptGhost()
+                return true
+              },
+            },
+            { key: 'Escape', run: () => cb.current.cancelSuggestions() },
+            { key: 'Mod-s', run: () => { cb.current.save(); return true } },
+            {
+              key: 'Mod-Enter',
+              run: () => {
+                if (!cb.current.hasProposal()) return false
+                cb.current.acceptPatch()
+                return true
+              },
+            },
+          ])),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          EditorView.updateListener.of((update) => {
+            const external = update.transactions.some((tr) => tr.annotation(externalSync))
+            if (update.docChanged && !external) {
+              cb.current.setTextFromPaper(update.state.doc.toString())
+            }
+            if (update.docChanged || update.selectionSet) {
+              const main = update.state.selection.main
+              const offset = paperOffsetRef.current
+              cb.current.onSelection(main.from + offset, main.to + offset)
+            }
+          }),
+        ],
+      }),
+    })
+    viewRef.current = view
+    // Test handle for e2e scripts: read/write the document via evaluate.
+    ;(container as unknown as { __cmView: EditorView }).__cmView = view
+    return () => {
+      view.destroy()
+      viewRef.current = null
+      delete (container as unknown as { __cmView?: EditorView }).__cmView
     }
-  }
+  }, [])
+
+  // React text → CM doc. Skips the echo from user edits (doc already equals
+  // paperText) and annotates genuine external replacements so the listener
+  // does not feed them back into setText.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    const current = view.state.doc.toString()
+    if (current === paperText) return
+    const pending = pendingCursorRef.current
+    pendingCursorRef.current = null
+    const anchor = pending == null ? undefined : Math.max(0, Math.min(paperText.length, pending))
+    view.dispatch({
+      changes: { from: 0, to: current.length, insert: paperText },
+      selection: anchor == null ? undefined : { anchor },
+      annotations: externalSync.of(true),
+    })
+  }, [paperText])
+
+  // React ghost state → CM ghost widget (paper coordinates).
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    const at = Math.max(0, Math.min(view.state.doc.length, ghostAt - paperOffset))
+    view.dispatch({
+      effects: setGhostEffect.of(
+        ghost
+          ? { at, text: ghost, testId: `${testIdPrefix}-ghost`, className: slotClassName.ghost }
+          : null,
+      ),
+    })
+  }, [ghost, ghostAt, paperOffset, testIdPrefix, slotClassName])
 
   const wordCount = paperText.replace(/\s/g, '').length
   if (!path) return null
@@ -760,56 +871,13 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       className: cls('textarea'),
       style: { position: 'relative', flex: 1, minHeight: 0, ...sty('textarea') },
     },
-      ghost ? e('div', {
-        ref: mirror,
-        className: cls('mirror'),
-        'aria-hidden': true,
-        style: {
-          position: 'absolute',
-          inset: 0,
-          padding: PAPER_SURFACE.padding,
-          fontSize: PAPER_SURFACE.fontSize,
-          lineHeight: PAPER_SURFACE.lineHeight,
-          fontFamily: PAPER_SURFACE.fontFamily,
-          whiteSpace: 'pre-wrap',
-          overflow: 'auto',
-          border: 0,
-          margin: 0,
-          pointerEvents: 'none',
-          color: 'inherit',
-          ...sty('mirror'),
-        },
-      },
-        text.slice(0, ghostAt),
-        e('span', { 'data-testid': `${testIdPrefix}-ghost`, style: { opacity: 0.45 } }, ghost),
-        text.slice(ghostAt),
-      ) : null,
-      e('textarea', {
-        ref: ta,
+      // CodeMirror mounts here. The container keeps the legacy testid and
+      // fills the wrapper; the EditorView lives on `__cmView` for e2e.
+      e('div', {
+        ref: containerRef,
         'data-testid': `${testIdPrefix}-editor`,
         'aria-label': '正文编辑器',
-        value: paperText,
-        onChange: onTextareaChange,
-        onSelect: onTextareaSelect,
-        onKeyDown,
-        style: {
-          position: 'absolute',
-          inset: 0,
-          padding: PAPER_SURFACE.padding,
-          fontSize: PAPER_SURFACE.fontSize,
-          lineHeight: PAPER_SURFACE.lineHeight,
-          fontFamily: PAPER_SURFACE.fontFamily,
-          whiteSpace: 'pre-wrap',
-          overflow: 'auto',
-          border: 0,
-          margin: 0,
-          resize: 'none',
-          background: 'transparent',
-          color: ghost ? 'transparent' : 'inherit',
-          caretColor: 'inherit',
-          zIndex: 1,
-          ...sty('textarea'),
-        },
+        style: { position: 'absolute', inset: 0 },
       }),
     ),
     showGhostTip && ghost ? e('div', {
@@ -828,7 +896,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       ) : e('p', null, proposal.text),
       e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
         e('button', { type: 'button', onClick: acceptPatch }, '应用修改'),
-        e('button', { type: 'button', onClick: () => { setProposal(null); report('已放弃修改建议。'); ta.current?.focus() } }, '放弃'),
+        e('button', { type: 'button', onClick: () => { setProposal(null); report('已放弃修改建议。'); viewRef.current?.focus() } }, '放弃'),
       ),
     ) : null,
     conflict ? e('div', {
@@ -869,7 +937,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         e('small', null, `候选 ${ghostIndex + 1} / ${ghostCandidates.length}`),
         e('button', { type: 'button', onClick: acceptGhost }, '接受补全'),
         ghostCandidates.length < maxGhostCandidates ? e('button', { type: 'button', disabled: loadingFim, onClick: () => void complete(true) }, '再来一个') : e('span', { style: { opacity: 0.55 } }, `已满 ${maxGhostCandidates} 条`),
-        e('button', { type: 'button', onClick: () => { clearGhost(); report('已放弃补全。'); ta.current?.focus() } }, '放弃'),
+        e('button', { type: 'button', onClick: () => { clearGhost(); report('已放弃补全。'); viewRef.current?.focus() } }, '放弃'),
         ghostCandidates.length > 1 ? e('nav', { 'aria-label': '切换补全候选', style: { display: 'flex', gap: 4 } },
           e('button', { type: 'button', disabled: ghostIndex <= 0, onClick: () => setGhostIndex((old) => Math.max(0, old - 1)) }, '上一条'),
           e('button', { type: 'button', disabled: ghostIndex >= ghostCandidates.length - 1, onClick: () => setGhostIndex((old) => Math.min(ghostCandidates.length - 1, old + 1)) }, '下一条'),

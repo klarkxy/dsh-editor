@@ -200,8 +200,20 @@ try {
   const manuscript = page.locator('.tree .tree-row', { has: page.getByText('正文', { exact: true }) }).first()
   if ((await manuscript.getAttribute('aria-expanded')) !== 'true') await manuscript.click()
   await page.locator('.tree .tree-row', { hasText: '001.md' }).first().click()
-  await page.locator('textarea[data-testid="paper-editor"]').waitFor({ state: 'visible' })
-  await page.waitForFunction(() => document.querySelector('textarea[data-testid="paper-editor"]')?.value?.includes('雾比灯先到'))
+  await page.locator('[data-testid="paper-editor"] .cm-content').waitFor({ state: 'visible' })
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-testid="paper-editor"]')
+    const view = el && /** @type {any} */ (el).__cmView
+    return Boolean(view && view.state.doc.toString().includes('雾比灯先到'))
+  })
+  // The cursor sits on the first line after load, and Typora-style live
+  // preview intentionally shows raw source on the active line — park the
+  // cursor on the body paragraph so the heading renders as a heading.
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="paper-editor"]')
+    const view = el && /** @type {any} */ (el).__cmView
+    if (view) view.dispatch({ selection: { anchor: view.state.doc.length } })
+  })
   await shot(page, 'workbench-paper', '工作台 · 纸主题：稿件目录、四组资料、稿纸、写入内容')
 
   // 03 — manual FIM attempt: editor stays usable while the FIM notice shows.

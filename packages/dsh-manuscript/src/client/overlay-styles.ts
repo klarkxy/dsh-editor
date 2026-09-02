@@ -2,7 +2,7 @@
  * Manuscript overlay chrome styles — the ManuscriptFrame root, its panel
  * (header, action row, tree, switch guard) and the collapsed toggle.
  *
- * The editor-core internals (paper textarea, header, footer, ghost, proposal)
+ * The editor-core internals (paper editor, header, footer, ghost, proposal)
  * are styled by `editorCoreStyles` re-exported from editor-core. This file
  * only covers the bits the manuscript plugin owns directly.
  *

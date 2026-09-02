@@ -27,14 +27,14 @@
 const editorCoreTokens = `
 :root,
 :root[data-theme="paper"] {
-  --bg: #f5f4ed;
-  --surface: #faf9f5;
+  --bg: #f3f1e8;
+  --surface: #fdfcf6;
   --surface-warm: #e8e6dc;
   --fg: #141413;
   --fg-2: #3d3d3a;
   --muted: #504e49;
   --meta: #6b6a64;
-  --border: #e8e6dc;
+  --border: #d8d5c7;
   --border-soft: #e5e3d8;
   --accent: #1b365d;
   --accent-on: #faf9f5;
@@ -43,25 +43,25 @@ const editorCoreTokens = `
   --selection: #e4e6dc;
   --danger: #8a3a30;
   --confirm: #4a6b3a;
-  --elev-raised: 0 4px 24px rgba(20, 20, 19, 0.05);
+  --elev-raised: 0 8px 24px rgba(20, 20, 19, 0.06);
   --studio: #141413;
   color-scheme: light;
 }
 :root[data-theme="ink"] {
-  --bg: #1a1815;
-  --surface: #24211c;
-  --surface-warm: #2f2b25;
-  --fg: #e8e4d6;
-  --fg-2: #c8c3b5;
-  --muted: #a39e90;
-  --meta: #8e8a7c;
-  --border: #3a362f;
-  --border-soft: #2c2924;
-  --accent: #8aa4c0;
-  --accent-on: #1a1815;
-  --accent-active: #6e8fb0;
-  --ghost: #938e80;
-  --selection: #2a3140;
+  --bg: #161310;
+  --surface: #221e18;
+  --surface-warm: #2c2820;
+  --fg: #ede7d7;
+  --fg-2: #cdc7b8;
+  --muted: #a8a294;
+  --meta: #8f897b;
+  --border: #3d382f;
+  --border-soft: #2a261f;
+  --accent: #9db4d0;
+  --accent-on: #161310;
+  --accent-active: #b6c9e0;
+  --ghost: #8f897b;
+  --selection: #2e3547;
   --danger: #c4786a;
   --confirm: #8aaa70;
   --elev-raised: 0 8px 28px rgba(8, 7, 6, 0.45);
@@ -192,8 +192,9 @@ ${editorCoreTokens}
 .manuscript-paper-chapter-nav > button:hover { background: var(--bg); color: var(--fg); }
 .manuscript-paper-chapter-nav > span { font-size: 11px; color: var(--meta); padding: 0 4px; }
 
-/* Paper surface — both the real textarea and the ghost mirror share the
-   same dimensions so the suggestion sits flush with the cursor. */
+/* Paper surface — CodeMirror mounts inside the wrapper div. Layout only;
+   typography lives in the CM theme (editor-core/codemirror.ts) so the same
+   rules apply whether the editor runs in the shell or standalone here. */
 .manuscript-paper-textarea {
   position: relative;
   flex: 1;
@@ -202,40 +203,22 @@ ${editorCoreTokens}
 .manuscript-paper-textarea [data-testid$="-editor"] {
   position: absolute;
   inset: 0;
-  padding: 36px 64px 32px !important;
-  background: transparent !important;
-  color: var(--fg) !important;
-  border: 0;
-  margin: 0;
-  font: 400 var(--text-body)/var(--leading-body) var(--font-serif) !important;
-  letter-spacing: .03em;
-  caret-color: var(--accent);
-  resize: none;
-  white-space: pre-wrap;
-  overflow: auto;
-  outline: 0;
 }
-.manuscript-paper-textarea [data-testid$="-editor"]::placeholder { color: var(--meta); font-style: italic; }
-.manuscript-paper-mirror {
-  position: absolute;
-  inset: 0;
-  padding: 36px 64px 32px !important;
-  background: transparent !important;
-  color: var(--fg-2) !important;
-  border: 0;
-  margin: 0;
-  font: 400 var(--text-body)/var(--leading-body) var(--font-serif) !important;
-  letter-spacing: .03em;
-  white-space: pre-wrap;
-  overflow: auto;
-  pointer-events: none;
+.manuscript-paper-textarea .cm-editor {
+  height: 100%;
+  background: transparent;
+  color: var(--fg);
 }
-.manuscript-paper-mirror [data-testid$="-ghost"] {
-  color: var(--ghost) !important;
-  opacity: 1 !important;
-  font: inherit;
-  letter-spacing: inherit;
-  line-height: inherit;
+.manuscript-paper-textarea .cm-editor .cm-scroller {
+  font-family: var(--font-serif);
+}
+.manuscript-paper-textarea .cm-editor .cm-placeholder {
+  color: var(--meta);
+  font-style: italic;
+}
+.manuscript-paper-ghost,
+.manuscript-paper-textarea [data-testid$="-ghost"] {
+  color: var(--ghost);
 }
 
 /* Ghost tip, proposal patch, conflict guard, status note. */

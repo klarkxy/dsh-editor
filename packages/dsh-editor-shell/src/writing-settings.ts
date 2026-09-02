@@ -1,4 +1,3 @@
-import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { createElement as e, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
 import { AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from './author-preferences.ts'
@@ -118,17 +117,12 @@ export type WritingSettingsSlots = {
   }
 }
 
-export function registerWritingSettings(ctx: Context & WritingSettingsSlots, scope: SettingsScope<WritingPreferences>, migrate: WritingMigration): void {
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'writing',
-    order: 20,
-    label: '写作',
-    inject: () => ({ scope, migrate }),
-  }, WritingSettings))
-}
-
-function WritingSettings({ scope, migrate }: { scope: SettingsScope<WritingPreferences>; migrate: WritingMigration }) {
+/*
+ * 写作设置页内容。渲染进 shell 自建的设置弹窗（settings.tsx）的"写作"
+ * 标签页;上游 DSH 设置弹窗（settings.section slot）在桌面 profile 中已被
+ * 禁用,不再注册进去。
+ */
+export function WritingSettings({ scope, migrate }: { scope: SettingsScope<WritingPreferences>; migrate: WritingMigration }) {
   const snapshot = useSyncExternalStore(
     scope.subscribe.bind(scope),
     scope.getSnapshot.bind(scope),

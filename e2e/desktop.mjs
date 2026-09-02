@@ -187,7 +187,7 @@ phases.push(await launchPhase('first-run-home', {}, async (state) => {
   }
 }))
 
-phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (state) => {
+phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (state, ctx) => {
   const onboarding = state.body.includes('新建') && state.body.includes('打开作品')
   const settingsEntry = state.settingsControl
   const technicalChrome = ['DeepSeek Harness', 'DSH_HOME', 'permission preset', '权限模式', '会话列表'].some((label) => state.body.includes(label))
@@ -196,6 +196,24 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   if (!state.shell || !state.editorName || state.officialHome || !onboarding || !settingsEntry || technicalChrome || !clientBoundaryReady) {
     throw new Error(`configured home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding, settingsEntry, technicalChrome, clientBoundaryReady })}`)
   }
+
+  // The editor owns the settings dialog now: open it from the topbar trigger,
+  // walk the three tabs, and close it again.
+  const window = ctx.window
+  await window.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
+  const dialog = window.locator('.shell .settings-dialog')
+  await dialog.waitFor({ state: 'visible', timeout: 10_000 })
+  await dialog.getByRole('button', { name: '通用设置', exact: true }).waitFor({ state: 'visible', timeout: 5_000 })
+  await dialog.getByRole('button', { name: '模型', exact: true }).click()
+  await window.waitForTimeout(600)
+  const modelsText = await dialog.textContent()
+  if (!modelsText?.includes('DeepSeek')) throw new Error('settings models tab did not list the DeepSeek provider')
+  await dialog.getByRole('button', { name: '写作', exact: true }).click()
+  await window.waitForTimeout(400)
+  const writingRadios = await dialog.getByRole('radio').count()
+  if (writingRadios < 2) throw new Error('settings writing tab lost the completion radios')
+  await window.keyboard.press('Escape')
+  await dialog.waitFor({ state: 'detached', timeout: 10_000 })
 }))
 
 phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (state, ctx) => {
@@ -210,7 +228,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await ctx.window.getByRole('button', { name: '创建', exact: true }).click()
   await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   await ctx.window.locator('.tree-row', { hasText: '001.md' }).first().click()
-  const firstEditor = ctx.window.locator('textarea[data-testid="paper-editor"]')
+  const firstEditor = ctx.window.locator('[data-testid="paper-editor"]')
   await firstEditor.waitFor({ state: 'visible', timeout: 30_000 })
   const secondWindow = ctx.app.waitForEvent('window')
   await ctx.window.keyboard.press('Control+Shift+N')
@@ -230,16 +248,28 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   }
   await second.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   await second.locator('.tree-row', { hasText: '001.md' }).first().click()
-  const secondEditor = second.locator('textarea[data-testid="paper-editor"]')
+  const secondEditor = second.locator('[data-testid="paper-editor"]')
   await secondEditor.waitFor({ state: 'visible', timeout: 30_000 })
 
   const firstText = '# 第一窗口版本\n\n由第一窗口保存。\n'
   const staleText = '# 第二窗口草稿\n\n发生冲突时必须保留。\n'
-  await firstEditor.fill(firstText)
+  // The paper is a CodeMirror view, not a textarea: write through the
+  // `__cmView` test handle so the change goes through the normal dispatch
+  // → updateListener → React autosave pipeline.
+  const setEditorText = (editor, text) => editor.evaluate((el, next) => {
+    const view = /** @type {any} */ (el).__cmView
+    if (!view) throw new Error('paper editor: __cmView missing')
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next } })
+  }, text)
+  const getEditorText = (editor) => editor.evaluate((el) => {
+    const view = /** @type {any} */ (el).__cmView
+    return view ? view.state.doc.toString() : ''
+  })
+  await setEditorText(firstEditor, firstText)
   await waitForFileText(resolve(multiWindowWorkspace, '正文', '001.md'), firstText)
-  await secondEditor.fill(staleText)
+  await setEditorText(secondEditor, staleText)
   await second.locator('[data-testid="paper-save-state"]', { hasText: '版本冲突' }).waitFor({ timeout: 30_000 })
-  if (await secondEditor.inputValue() !== staleText) throw new Error('stale second-window draft was not preserved')
+  if (await getEditorText(secondEditor) !== staleText) throw new Error('stale second-window draft was not preserved')
   if (await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8') !== firstText) {
     throw new Error('stale second-window save overwrote the first-window disk version')
   }

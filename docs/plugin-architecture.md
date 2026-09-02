@@ -97,7 +97,7 @@ dsh-editor-novel-kernel/host
 | `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy` |
 | `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt` |
 | `dsh-editor-shell` Host | `dsh-editor-shell` | （空） |
-| `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope` |
+| `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope`, `settingsSchema`, `remote` |
 | `dsh-grill/tools` | `dsh-grill-tools` | `tools` |
 | `dsh-grill/workflow` | `dsh-grill-workflow` | `systemPrompt` |
 

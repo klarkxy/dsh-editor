@@ -23,7 +23,7 @@ export default defineConfig([
     target: 'es2022',
     sourcemap: true,
     hash: false,
-    deps: { neverBundle: ['react'] },
+    deps: { neverBundle: ['react'], alwaysBundle: ['@codemirror/state', '@codemirror/view', '@codemirror/commands', '@codemirror/language', '@lezer/markdown', '@lezer/highlight'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },
   {
@@ -39,7 +39,7 @@ export default defineConfig([
     target: 'es2022',
     sourcemap: true,
     hash: false,
-    deps: { neverBundle: ['react'] },
+    deps: { neverBundle: ['react'], alwaysBundle: ['@codemirror/state', '@codemirror/view', '@codemirror/commands', '@codemirror/language', '@lezer/markdown', '@lezer/highlight'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },
 ])

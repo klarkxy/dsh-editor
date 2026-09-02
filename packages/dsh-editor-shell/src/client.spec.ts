@@ -260,9 +260,11 @@ describe('shell manuscript RPC safety', () => {
     expect(source).not.toContain('className: \'index-status\'')
   })
 
-  it('keeps settings delegated to DSH and drops the old inline settings shell', () => {
+  it('owns the settings dialog itself and drops the upstream DSH settings delegation', () => {
     const source = rootSource()
-    expect(source).toContain("renderSlot('sidebar.settings', { wide: true })")
+    expect(source).not.toContain("renderSlot('sidebar.settings'")
+    expect(source).toContain('SettingsDialog')
+    expect(source).toContain('SettingsTrigger')
     expect(source).not.toContain('ModelSetup')
     expect(source).not.toContain("view === 'settings'")
     expect(source).not.toContain('settings-shell')

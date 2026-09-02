@@ -20,15 +20,17 @@ import {
 import { normalizeAuthorPreferences } from '../author-preferences.ts'
 import { documentTemplate, manuscriptGroupPath, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from '../project-files.ts'
 import { registerRoot } from '../root-registration.ts'
-import { writingPreferences, createWritingMigration, decodeWritingPreferences, registerWritingSettings, WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from '../writing-settings.ts'
+import { writingPreferences, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
 import { redesignedStyles } from '../styles.ts'
 import { createDialogDirectory, errorMessage, isStaleFailure, safeRpcCall, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, PaperStage, PanelResizer, useObservable } from './components.ts'
 import { ConfirmDialog, CreateDocumentDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
-import { ThemeToggle, useTheme } from './theme.ts'
+import { SettingsDialog, SettingsTrigger } from './settings.tsx'
+import { ThemeToggle, useTheme, type HostThemeSync } from './theme.ts'
 import { Tree, FileContextMenu } from './sidebar.ts'
 import { Editor } from './editor.ts'
 import { Chat } from './chat.ts'
+import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { buildNovelIndexPrompt } from '../novel-index.ts'
 
 const SIDEBAR_DEFAULT = 248
@@ -37,6 +39,47 @@ const SIDEBAR_MAX = 420
 const ASSISTANT_DEFAULT = 384
 const ASSISTANT_MIN = 300
 const ASSISTANT_MAX = 560
+
+/* 首页入口卡的图标(线性几何,1.6px stroke,1.5 视口单位的内边距)。
+   故意做成 currentColor 的描边色,颜色由 CSS 控制,符合纸/墨双主题。 */
+function FolderIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 20, height: 20, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', 'aria-hidden': 'true' },
+    e('path', { d: 'M3.5 7.5a2 2 0 0 1 2-2h4.2a2 2 0 0 1 1.4.6l1.6 1.6a2 2 0 0 0 1.4.6h4.4a2 2 0 0 1 2 2v7.2a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z' }),
+    e('path', { d: 'M3.5 9.5h17' }),
+  )
+}
+function NewDocIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 20, height: 20, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', strokeLinecap: 'round', 'aria-hidden': 'true' },
+    e('path', { d: 'M7 3.5h6.5l4 4v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z' }),
+    e('path', { d: 'M13.5 3.5v4h4' }),
+    e('path', { d: 'M12 11v7M8.5 14.5h7' }),
+  )
+}
+
+/* 把 WorkspaceView.updatedAt(ISO-8601)格式化为首页最近作品区使用的简短时间标签:
+   60 秒内=刚刚,1 小时内=分钟前,今天=小时前,昨天,7 天内=天数前,
+   更早用 M月D日(同年)或 YYYY/MM/DD(跨年)。失败时退回到空串,DOM 仍能挂上小标签。 */
+function formatRecentTime(iso: string | undefined, now: Date = new Date()): string {
+  if (!iso) return ''
+  const stamp = Date.parse(iso)
+  if (!Number.isFinite(stamp)) return ''
+  const diff = Math.max(0, now.getTime() - stamp)
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diff < minute) return '刚刚'
+  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
+  if (diff < day && now.getDate() === new Date(stamp).getDate()) return `${Math.floor(diff / hour)} 小时前`
+  const stampDate = new Date(stamp)
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+  if (stampDate.getFullYear() === yesterday.getFullYear() && stampDate.getMonth() === yesterday.getMonth() && stampDate.getDate() === yesterday.getDate()) return '昨天'
+  if (diff < 7 * day) return `${Math.floor(diff / day)} 天前`
+  if (stampDate.getFullYear() === now.getFullYear()) return `${stampDate.getMonth() + 1}月${stampDate.getDate()}日`
+  const yyyy = stampDate.getFullYear()
+  const mm = String(stampDate.getMonth() + 1).padStart(2, '0')
+  const dd = String(stampDate.getDate()).padStart(2, '0')
+  return `${yyyy}/${mm}/${dd}`
+}
 
 type CreateRequest = { kind: DocumentKind | 'group'; directory: string }
 type FileSession = NonNullable<NonNullable<ReturnType<ShellContext['sessions']['binding']>>['session']> | undefined
@@ -127,10 +170,11 @@ async function verifyRelocatedWorkspaceSession(ctx: ShellContext, sessionId: Ses
   return initialPath
 }
 
-function Root({ ctx, writingScope, settingsControl }: {
+function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
-  settingsControl: ReactNode
+  migrateWriting: WritingMigration
+  hostThemeSync?: HostThemeSync
 }) {
   const sessions = useObservable(ctx.sessions.list)
   const workspaces = useObservable(ctx.workspaces.list)
@@ -184,7 +228,8 @@ function Root({ ctx, writingScope, settingsControl }: {
   const [managePath, setManagePath] = useState<string | null>(null)
   const [manageBusy, setManageBusy] = useState(false)
   const [manageNote, setManageNote] = useState('')
-  const [theme, setTheme] = useTheme()
+  const [theme, setTheme] = useTheme(undefined, hostThemeSync)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   useEffect(() => () => leaveConfirm?.resolve(false), [leaveConfirm])
   const canLeaveAssistantDraft = async (): Promise<boolean> => {
     if (!assistantDraftDirty) return true
@@ -194,13 +239,8 @@ function Root({ ctx, writingScope, settingsControl }: {
     leaveConfirm?.resolve(value)
     setLeaveConfirm(null)
   }
-  const settingsControlRef = useRef<HTMLSpanElement | null>(null)
-  const openSettings = () => {
-    const trigger = settingsControlRef.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')
-    if (trigger) { trigger.click(); return }
-    if (session) setWorkbenchNote('设置当前不可用，请稍后重试。')
-    else setHomeNote('设置当前不可用，请稍后重试。')
-  }
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const openSettings = () => setSettingsOpen(true)
   const overviewRequestGate = useRef(new LatestRequestGate()).current
   const workspaceOpenGate = useRef(new LatestRequestGate()).current
   const pendingWorkspaceOpen = useRef<PendingWorkspaceOpen | null>(null)
@@ -878,6 +918,25 @@ function Root({ ctx, writingScope, settingsControl }: {
     onClose: closeNewProject,
     onCreate: (title: string) => void submitNewProject(title),
   }) : null
+  /* 命令面板:复用 useTheme / openSettings / startWorkspaceFromPicker /
+     startNewProject / openDocument / setFocusMode 全部已有的回调,palette
+     本身只负责"按下执行"的分发。文件列表来自已加载好的 files 状态(已经
+     是排过序的 .md/.txt),不另外发 RPC。 */
+  const renderCommandPalette = () => e(CommandPalette, {
+    open: paletteOpen,
+    onOpenChange: setPaletteOpen,
+    theme,
+    onThemeChange: setTheme,
+    onOpenWorkspace: () => { if (fileSession) { void openAnotherWorkspace() } else { void startWorkspaceFromPicker() } },
+    onNewProject: () => { void startNewProject() },
+    onOpenSettings: () => openSettings(),
+    onToggleFocus: () => setFocusMode((value) => !value),
+    onOpenDocument: (target: string) => openDocument(target),
+    hasWorkspace: Boolean(fileSession),
+    focusMode,
+    files,
+    activePath: path,
+  })
   const openAnotherWorkspace = async () => {
     closeWorkspaceChrome()
     if (editorDirty) {
@@ -909,13 +968,34 @@ function Root({ ctx, writingScope, settingsControl }: {
           e('strong', null, 'DSH Editor'),
         ),
         e('span', { className: 'local-state' }, '本地作品'),
-        e('span', { ref: settingsControlRef, className: 'native-settings-control' }, settingsControl),
+        e('span', { className: 'topbar-actions' },
+          e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
+          e(SettingsTrigger, { onOpen: openSettings }),
+        ),
       ),
       e(PaperStage, { label: '空白稿纸' },
-        e('p', { className: 'home-hint' }, '打开已有作品，或填写名称后在「文档/dsh-editor」下新建。'),
+        e('p', { className: 'home-hint' }, '选择本地已有的作品目录继续，或在「文档/dsh-editor」下从空白稿纸新建。'),
         e('div', { className: 'home-actions' },
-          e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void startWorkspaceFromPicker() }, '打开作品'),
-          e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void startNewProject() }, '新建'),
+          e('button', {
+            className: 'home-entry-card', type: 'button',
+            'aria-label': '打开作品',
+            disabled: openingWorkspace || Boolean(newProject),
+            onClick: () => void startWorkspaceFromPicker(),
+          },
+            e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(FolderIcon, null)),
+            e('span', { className: 'home-entry-title' }, '打开作品'),
+            e('span', { className: 'home-entry-desc' }, '选择本地已有的作品目录，继续未完的故事。'),
+          ),
+          e('button', {
+            className: 'home-entry-card', type: 'button',
+            'aria-label': '新建',
+            disabled: openingWorkspace || Boolean(newProject),
+            onClick: () => void startNewProject(),
+          },
+            e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(NewDocIcon, null)),
+            e('span', { className: 'home-entry-title' }, '新建'),
+            e('span', { className: 'home-entry-desc' }, '从空白稿纸开始，搭起新作品的第一行字。'),
+          ),
         ),
         pathFallbackForm,
         workspaceOpen.kind === 'needs-intent' ? e('section', { className: 'workspace-intent-prompt', role: 'alert' },
@@ -930,14 +1010,22 @@ function Root({ ctx, writingScope, settingsControl }: {
         workspaceOpen.kind === 'error' ? e('code', null, workspaceOpen.path) : null,
         homeNote ? e('p', { className: 'warning', role: 'alert' }, homeNote) : null,
         e('section', { className: 'home-recent', 'aria-label': '最近作品' },
-          e('header', null, e('h2', null, '最近作品'), e('small', null, workspaces.items.length ? `${workspaces.items.length} 个入口` : '尚无作品入口')),
+          e('header', null,
+            e('h2', null, '最近作品'),
+            e('small', null, workspaces.items.length ? `${workspaces.items.length} 个入口` : '尚无作品入口'),
+          ),
           workspaces.items.length ? e('div', { className: 'workspace-list' }, workspaces.items.map((workspace) => {
             const needsRelocation = workspaceOpen.kind === 'needs-relocation' && workspaceOpen.workspaceId === workspace.workspaceId
+            const recentLabel = formatRecentTime(workspace.updatedAt)
             return e('article', { className: `workspace-row${needsRelocation ? ' needs-relocation' : ''}`, key: workspace.workspaceId },
               e('button', {
                 className: 'tree-row', type: 'button', disabled: openingWorkspace,
                 onClick: () => void openRegisteredWorkspace(workspace),
-              }, e('strong', null, workspace.title || workspace.path), e('small', null, workspace.path)),
+              },
+                e('strong', null, workspace.title || workspace.path),
+                e('small', null, workspace.path),
+                recentLabel ? e('span', { className: 'workspace-time', 'aria-label': `最近打开：${recentLabel}` }, recentLabel) : null,
+              ),
               needsRelocation ? e('div', { className: 'workspace-relocation', role: 'alert' },
                 e('p', null, workspaceOpen.message), e('code', null, workspaceOpen.path),
                 e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void relocateWorkspace(workspace) }, '重新定位'),
@@ -948,6 +1036,8 @@ function Root({ ctx, writingScope, settingsControl }: {
         ),
       ),
       renderNewProjectDialog(),
+      renderCommandPalette(),
+      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, onClose: () => setSettingsOpen(false) }) : null,
     )
   }
 
@@ -1039,7 +1129,8 @@ function Root({ ctx, writingScope, settingsControl }: {
       ),
       e('div', { className: 'topbar-actions' },
         e(ThemeToggle, { theme, onChange: setTheme }),
-        e('span', { ref: settingsControlRef, className: 'native-settings-control' }, settingsControl),
+        e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
+        e(SettingsTrigger, { onOpen: openSettings }),
       ),
     ),
     sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
@@ -1149,25 +1240,25 @@ function Root({ ctx, writingScope, settingsControl }: {
       onCancel: closeRenameDialog,
       onConfirm: renameManaged,
     }) : null,
+    renderCommandPalette(),
+    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, onClose: () => setSettingsOpen(false) }) : null,
   )
-}
-
-type NativeSettingsRootProps = {
-  renderSlot(key: 'sidebar.settings', owner: { wide: boolean }): ReactNode
 }
 
 type RegisterShellRootOptions = {
   writingScope: SettingsScope<WritingPreferences>
+  migrateWriting: WritingMigration
+  hostThemeSync?: HostThemeSync
   registerRoot: (ctx: ShellContext, render: (props: unknown) => ReactNode) => void
-  settingsControl: ReactNode
 }
 
 export function registerShellRoot(ctx: Context, options: RegisterShellRootOptions): void {
   const client = ctx as ShellContext
-  options.registerRoot(client, (props) => e(Root, {
+  options.registerRoot(client, () => e(Root, {
     ctx: client,
     writingScope: options.writingScope,
-    settingsControl: (props as typeof props & NativeSettingsRootProps).renderSlot('sidebar.settings', { wide: true }),
+    migrateWriting: options.migrateWriting,
+    hostThemeSync: options.hostThemeSync,
   }))
 }
 

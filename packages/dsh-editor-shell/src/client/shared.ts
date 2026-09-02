@@ -12,8 +12,49 @@ export type RpcResult<T = unknown> =
 
 export type SettingsScope = import('@deepseek-ai/dsh-client-runtime/client').SettingsScope<WritingPreferences>
 
+/* Locally projected subset of `SettingsDescribeFace` from
+   `@deepseek-ai/dsh-client-ui-settings/client`. The shell only ever needs the
+   face's four operations: the reactive get-snapshot, the subscription, the
+   first-use ensure, and the write-answer fold. Defining the shape here keeps
+   the page free of the upstream type while staying structurally compatible. */
+export interface SettingsDescribeView {
+  namespaces: readonly import('@deepseek-ai/dsh-client-connection/client').SettingsNamespaceView[]
+  writable: boolean
+  hasDocument: boolean
+}
+
+export interface SettingsMirrorSnapshot {
+  status: 'idle' | 'loading' | 'ready' | 'unavailable'
+  view: SettingsDescribeView | undefined
+  error: string | null
+}
+
+export interface SettingsDescribeFace {
+  getSnapshot(): SettingsMirrorSnapshot
+  subscribe(listener: () => void): () => void
+  ensure(): Promise<void>
+  acceptView(view: import('@deepseek-ai/dsh-client-connection/client').SettingsNamespaceView): void
+}
+
+export interface SettingsScopeBinder {
+  bind<T>(spec: { namespace: string; decode?(value: unknown): T | undefined }): import('@deepseek-ai/dsh-client-runtime/client').SettingsScope<T>
+  describe(): SettingsDescribeFace
+}
+
+/** 宿主事件转发面（dsh-api-remotes 的 API_REMOTE_FORWARDED_EVENTS 白名单）。 */
+export type RemoteEvents = { $on(event: string, listener: () => void): unknown }
+
+/** ctx.settingsSchema 服务（ui-settings 插件提供）的本地投影。 */
+export type SettingsSchemaService = import('./settings-models-store.ts').SettingsSchemaOps & {
+  setPath(root: unknown, path: string[], value: unknown): unknown
+  deletePath(root: unknown, path: string[]): unknown
+  validate(schema: unknown, draft: unknown): string | undefined
+}
+
 export type ShellContext = ClientContext & { connection: ConnectionHandle } & WritingSettingsSlots & {
-  settingsScope: { bind(spec: { namespace: string; decode(value: unknown): WritingPreferences | undefined }): SettingsScope }
+  settingsScope: SettingsScopeBinder
+  settingsSchema: SettingsSchemaService
+  remote: RemoteEvents
 }
 
 export type WorkspaceIntent = 'open' | 'create'
