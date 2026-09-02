@@ -12,3 +12,4 @@ dist
 .codex-plan-prompt.txt
 e2e/out
 .dev
+.playwright-mcp/
