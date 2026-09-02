@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSH Editor · Architecture Diagrams</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9; --card: #ffffff; --text: #1a1d21; --muted: #5b6470;
+    --border: #e3e6ea; --accent: #3b6fe0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1114; --card: #181c21; --text: #e8eaed; --muted: #9aa4b0;
+      --border: #2a313a; --accent: #6d9dff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 48px 24px; background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    line-height: 1.6;
+  }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 32px; font-size: 0.95rem; }
+  a.card {
+    display: block; background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px; margin-bottom: 16px;
+    text-decoration: none; color: inherit;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  a.card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  a.card h2 { font-size: 1.1rem; margin: 0 0 4px; color: var(--accent); }
+  a.card p { margin: 0; font-size: 0.9rem; color: var(--muted); }
+  footer { margin-top: 40px; font-size: 0.85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>DSH Editor · Architecture Diagrams</h1>
+  <p class="sub">Generated diagrams from <code>docs/diagrams/</code></p>
+
+  <a class="card" href="dsh-editor-runtime.html">
+    <h2>Runtime Architecture</h2>
+    <p>dsh-editor-runtime.html</p>
+  </a>
+
+  <a class="card" href="dsh-editor-plugins.html">
+    <h2>Plugin System</h2>
+    <p>dsh-editor-plugins.html</p>
+  </a>
+
+  <a class="card" href="author-confirm-write.html">
+    <h2>Author-Confirm Write Flow</h2>
+    <p>author-confirm-write.html</p>
+  </a>
+
+  <footer>Deployed from the repository via GitHub Actions.</footer>
+</main>
+</body>
+</html>
