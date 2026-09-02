@@ -1,6 +1,7 @@
 node_modules
 .pnpm-store
 *.log
+*.tsbuildinfo
 lib
 .pack
 *.tgz
