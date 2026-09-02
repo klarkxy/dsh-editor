@@ -6,13 +6,17 @@ import { WritingSettings } from '../writing-settings.ts'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.ts'
 import { SettingsGeneralSection } from './settings-general.tsx'
 import { SettingsModelsSection } from './settings-models.tsx'
+import { SettingsZhihuSection } from './settings-zhihu.tsx'
+import { SettingsUsageSection } from './settings-usage.tsx'
 
-export type SettingsTab = 'general' | 'models' | 'writing'
+export type SettingsTab = 'general' | 'models' | 'writing' | 'zhihu' | 'usage'
 
 const TAB_LABEL: Record<SettingsTab, string> = {
   general: '通用设置',
   models: '模型',
   writing: '写作',
+  zhihu: '知乎',
+  usage: '用量',
 }
 
 /** 顶栏设置入口。保留 .native-settings-control 包裹和 aria-haspopup 约定（e2e 依赖）。 */
@@ -65,6 +69,8 @@ export function SettingsDialog(props: {
     general: () => e(SettingsGeneralSection, { ctx: props.ctx }),
     models: () => e(SettingsModelsSection, { ctx: props.ctx }),
     writing: () => e(WritingSettings, { scope: props.writingScope, migrate: props.migrateWriting }),
+    zhihu: () => e(SettingsZhihuSection, { ctx: props.ctx }),
+    usage: () => e(SettingsUsageSection, { ctx: props.ctx }),
   }
 
   return e('div', { className: 'file-dialog-overlay settings-overlay', onMouseDown: onOverlayMouseDown },

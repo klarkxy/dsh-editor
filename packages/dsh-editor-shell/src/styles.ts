@@ -536,14 +536,14 @@ export const componentStyles = `
 .shell .settings-trigger:hover { background: var(--surface-warm); color: var(--fg); }
 .shell .settings-trigger-icon { display: grid; place-items: center; font-size: 13px; color: var(--meta); }
 .shell .settings-trigger:hover .settings-trigger-icon { color: var(--fg); }
-.shell .settings-dialog { width: min(760px, calc(100vw - 96px)); height: min(620px, calc(100dvh - 96px)); display: grid; grid-template-columns: 168px minmax(0, 1fr); padding: 0; overflow: hidden; }
-.shell .settings-nav { display: flex; flex-direction: column; gap: 2px; padding: var(--space-4) var(--space-3); border-right: 1px solid var(--hairline); background: var(--bg-sunken); }
+.shell .settings-dialog { width: min(760px, calc(100vw - 96px)); height: min(720px, calc(100dvh - 64px)); display: grid; grid-template-columns: 168px minmax(0, 1fr); padding: 0; overflow: hidden; }
+.shell .settings-nav { display: flex; flex-direction: column; gap: 8px; padding: var(--space-4) var(--space-3); border-right: 1px solid var(--hairline); background: var(--bg-sunken); }
 .shell .settings-nav h2 { margin: 0 0 var(--space-3); padding: 0 var(--space-2); font: 600 var(--text-md)/1.4 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
-/* .settings-tab 需要块级竖排;带 .settings-nav 提级以压过 .file-dialog button 的 inline-flex。 */
-.shell .settings-nav .settings-tab { display: flex; align-items: center; min-height: 30px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-sm)/1 var(--font-sans); letter-spacing: .04em; text-align: left; }
-.shell .settings-nav .settings-tab:hover { background: var(--surface-warm); color: var(--fg); }
-.shell .settings-nav .settings-tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.shell .settings-body { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; }
+/* 左侧导航走整卡可点:每条 tab 是一张带 hairline 的卡片,active 用 accent 描边 + soft 底色,hover 浮起。带 .settings-nav 提级以压过 .file-dialog button 的 inline-flex。 */
+.shell .settings-nav .settings-tab { display: flex; align-items: center; min-height: 0; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); color: var(--fg-2); cursor: pointer; font: 500 var(--text-sm)/1.2 var(--font-sans); letter-spacing: .04em; text-align: left; transition: background-color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform var(--motion-base) var(--ease), box-shadow var(--motion-base) var(--ease); }
+.shell .settings-nav .settings-tab:hover { border-color: var(--accent-soft); color: var(--fg); transform: translateY(-1px); box-shadow: var(--elev-raised); }
+.shell .settings-nav .settings-tab.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.shell .settings-body { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; }
 .shell .settings-header { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--hairline); }
 .shell .settings-header-title { font: 600 var(--text-md)/1.4 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
 .shell .settings-open-config { margin-left: auto; min-height: 26px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: var(--surface); color: var(--fg-2); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; box-shadow: var(--elev-ring); }
@@ -648,6 +648,64 @@ export const componentStyles = `
 .shell .models-candidate-name { color: var(--meta); font-size: var(--text-xs); }
 .shell .models-candidate-description { margin: 0; font-size: var(--text-xs); color: var(--meta); }
 .shell .models-candidate-actions { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 8px; }
+
+/* 知乎设置:单凭据编辑卡,沿用 .models-* 的输入/按钮节奏,只换前缀避免和 .models- 互踩。 */
+.shell .zhihu-page { max-width: 560px; display: flex; flex-direction: column; gap: var(--space-4); }
+.shell .zhihu-header { display: grid; gap: 4px; }
+.shell .zhihu-title { margin: 0; font: 600 var(--text-md)/1.3 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
+.shell .zhihu-intro { margin: 0; color: var(--meta); font-size: var(--text-sm); line-height: 1.7; }
+.shell .zhihu-status { margin: 0; font-size: var(--text-xs); color: var(--muted); }
+.shell .zhihu-error { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, transparent); color: var(--danger); font-size: var(--text-xs); }
+.shell .zhihu-notice { margin: 0; font-size: var(--text-xs); color: var(--meta); }
+.shell .zhihu-status-grid { display: flex; align-items: center; gap: var(--space-3); margin: 0; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); }
+.shell .zhihu-status-label { margin: 0; font: 500 var(--text-xs)/1.4 var(--font-sans); color: var(--fg-2); letter-spacing: .04em; }
+.shell .zhihu-status-value { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-sm); color: var(--fg); }
+.shell .zhihu-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; }
+.shell .zhihu-dot-configured { background: var(--confirm); }
+.shell .zhihu-dot-missing { background: var(--danger); }
+.shell .zhihu-dot-locked { background: var(--meta); }
+.shell .zhihu-field { display: grid; gap: 6px; }
+.shell .zhihu-field-label { font: 500 var(--text-xs)/1.4 var(--font-sans); color: var(--fg-2); letter-spacing: .04em; }
+.shell .zhihu-input { width: 100%; min-height: 32px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: 400 var(--text-sm)/1.4 var(--font-sans); }
+.shell .zhihu-input:hover:not(:disabled) { border-color: var(--hairline-strong); }
+.shell .zhihu-input:focus-visible { border-color: var(--accent-active); box-shadow: var(--focus-ring); }
+.shell .zhihu-input:disabled { opacity: .6; cursor: not-allowed; }
+.shell .zhihu-input::placeholder { color: var(--meta); }
+.shell .zhihu-hint { margin: 0; font-size: var(--text-xs); color: var(--meta); }
+.shell .zhihu-warning { margin: 0; font-size: var(--text-xs); color: var(--danger); }
+.shell .zhihu-saved { margin: 0; font-size: var(--text-xs); color: var(--confirm); }
+.shell .zhihu-actions { display: inline-flex; justify-content: flex-end; gap: var(--space-2); }
+.shell .zhihu-button { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease); }
+.shell .zhihu-button:hover:not(:disabled) { background: var(--surface-warm); color: var(--fg); border-color: var(--hairline-strong); }
+.shell .zhihu-button:disabled { opacity: .55; cursor: not-allowed; }
+.shell .zhihu-button:focus-visible { box-shadow: var(--focus-ring); }
+.shell .zhihu-button-primary { background: var(--accent); color: var(--accent-on); border-color: transparent; }
+.shell .zhihu-button-primary:hover:not(:disabled) { background: var(--accent-active); color: var(--accent-on); }
+.shell .zhihu-button-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
+.shell .zhihu-button-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+
+/* 用量设置:今日 4 卡 + 近 7 日表 + 底部说明。 */
+.shell .usage-page { max-width: 720px; display: flex; flex-direction: column; gap: var(--space-5); }
+.shell .usage-header { display: grid; gap: 4px; }
+.shell .usage-title { margin: 0; font: 600 var(--text-md)/1.3 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
+.shell .usage-intro { margin: 0; color: var(--meta); font-size: var(--text-sm); line-height: 1.7; }
+.shell .usage-status { margin: 0; font-size: var(--text-xs); color: var(--muted); }
+.shell .usage-error { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, transparent); color: var(--danger); font-size: var(--text-xs); }
+.shell .usage-section-title { margin: 0 0 var(--space-3); font: 500 var(--text-sm)/1.4 var(--font-sans); letter-spacing: .04em; color: var(--fg-2); }
+.shell .usage-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.shell .usage-card { display: grid; gap: 6px; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); }
+.shell .usage-card-label { font: 500 var(--text-xs)/1.4 var(--font-sans); color: var(--meta); letter-spacing: .04em; }
+.shell .usage-card-value { font: 600 var(--text-md)/1.2 var(--font-sans); color: var(--fg); font-variant-numeric: tabular-nums; }
+.shell .usage-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); color: var(--fg-2); }
+.shell .usage-table th, .shell .usage-table td { padding: 8px 10px; border-bottom: 1px solid var(--hairline); text-align: right; font-variant-numeric: tabular-nums; }
+.shell .usage-table thead th { font: 500 var(--text-xs)/1.4 var(--font-sans); color: var(--meta); letter-spacing: .04em; text-align: right; }
+.shell .usage-table tbody th { text-align: left; font: 500 var(--text-sm)/1.4 var(--font-sans); color: var(--fg); font-variant-numeric: tabular-nums; }
+.shell .usage-table tbody tr:hover { background: var(--surface); }
+.shell .usage-empty { margin: 0; padding: var(--space-4); text-align: center; color: var(--meta); font-size: var(--text-sm); border: 1px dashed var(--hairline-strong); border-radius: var(--radius-md); }
+.shell .usage-footnote { margin: 0; color: var(--meta); font-size: var(--text-xs); }
+.shell .usage-button { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }
+.shell .usage-button:hover { background: var(--surface-warm); border-color: var(--hairline-strong); }
+@media (max-width: 560px) { .shell .usage-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ── Responsive collapse ────────────────────────────────── */
 @media (max-width: 1040px) {
