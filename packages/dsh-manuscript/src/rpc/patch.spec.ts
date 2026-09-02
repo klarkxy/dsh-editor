@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { dispatch, mapError } from '../index.ts'
 import type { FileSystemLike, ManuscriptHost } from '../host.ts'
 import { completePatch, PATCH_LIMITS, parsePatchRequest } from './patch.ts'
+import type { StreamChunkLike } from './completion.ts'
 
 function fixture(config: { provider?: string; model?: string } = { provider: 'configured-provider', model: 'configured-model' }) {
   const canonical = '/canonical/workspace'
@@ -36,7 +37,7 @@ function fixture(config: { provider?: string; model?: string } = { provider: 'co
   return { host, stream }
 }
 
-async function* chunks(items: Array<{ type: string; text?: string }>) {
+async function* chunks(items: StreamChunkLike[]) {
   for (const item of items) yield item
 }
 

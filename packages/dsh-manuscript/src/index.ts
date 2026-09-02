@@ -8,6 +8,7 @@ import { createDraftStore, draftDomainSpec, DraftInputError, type DraftStore } f
 import { applyProposal, parseProposal, prepareProposal, ProposalError } from './rpc/proposal.ts'
 import { SearchError, searchWorkspaceText } from './rpc/search.ts'
 import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
+import { createUsageRecorder, resolveDays, UsageInputError, usageDomainSpec, type UsageRecorder } from './rpc/usage.ts'
 
 export const name = 'dsh-manuscript'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'llm', 'storageDomain'] as const
@@ -28,7 +29,7 @@ export function mapError(error: unknown): RpcErr {
     if (error.code === 'BAD_QUERY') return badRequest(error.message)
     return fail({ code: 'internal', message: error.message, details: {} })
   }
-  if (error instanceof ProposalError || error instanceof PatchInputError || error instanceof DraftInputError) return badRequest(error.message)
+  if (error instanceof ProposalError || error instanceof PatchInputError || error instanceof DraftInputError || error instanceof UsageInputError) return badRequest(error.message)
   return fail({ code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} })
 }
 
@@ -45,8 +46,16 @@ export async function dispatch(
   payload: unknown,
   signal: AbortSignal,
   drafts?: DraftStore,
+  usage?: UsageRecorder,
 ): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Payload) : {}
+  // `usage.summary` is global data and must not require a live session; short-circuit
+  // before `resolveWorkspaceAccess` so an empty payload still returns the recorder snapshot.
+  if (endpoint === 'usage.summary') {
+    if (!usage) throw new Error('manuscript usage storage is unavailable')
+    const days = resolveDays(body.days)
+    return { days: await usage.read(days) }
+  }
   const host = asHost(ctx)
   const targetSessionId = str(body, 'sessionId')
   const access = await resolveWorkspaceAccess(host, targetSessionId, signal)
@@ -112,12 +121,18 @@ export async function apply(ctx: Context): Promise<void> {
   const domain = await ctx.storageDomain.open(draftDomainSpec)
   const drafts = createDraftStore(domain.table('drafts'))
   ctx.effect(() => () => domain.close(), 'dsh-manuscript.draftDomainClose')
+
+  const usageDomain = await ctx.storageDomain.open(usageDomainSpec)
+  const usage = createUsageRecorder(usageDomain.table('daily'))
+  ctx.effect(() => () => usageDomain.close(), 'dsh-manuscript.usageDomainClose')
+  installUsageWaterfall(ctx, usage)
+
   ctx.effect(() =>
     host.connection.rpc.handle(
       '/manuscript',
       async (endpoint: string, payload: unknown, signal: AbortSignal) => {
         try {
-          const value = await dispatch(ctx, endpoint, payload, signal, drafts)
+          const value = await dispatch(ctx, endpoint, payload, signal, drafts, usage)
           return { ok: true, value } satisfies RpcResult<unknown>
         } catch (error) {
           return mapError(error)
@@ -128,4 +143,75 @@ export async function apply(ctx: Context): Promise<void> {
       { authority: 'loopback' },
     ),
   )
+}
+
+/** Minimal typing of the upstream `llm/stream` waterfall event so we don't add a peer just for one hook. */
+type LlmStreamOptions = { provider?: string; model?: string }
+type LlmStreamChunk = { type: string; usage?: Record<string, number> }
+type LlmStreamEvent = (
+  options: LlmStreamOptions,
+  next: () => AsyncIterable<LlmStreamChunk>,
+) => AsyncIterable<LlmStreamChunk>
+
+/** Wrap every `llm/stream` call: capture the provider-reported usage into the daily recorder, never block the stream. */
+function installUsageWaterfall(ctx: Context, recorder: UsageRecorder): void {
+  // The host merges in `@deepseek-ai/dsh-llm`'s `Events` declaration, so the literal
+  // event name is what carries the type — a peer import would only be cosmetic.
+  const on = ctx.on as unknown as (
+    name: 'llm/stream',
+    listener: LlmStreamEvent,
+    options?: { global?: boolean; prepend?: boolean },
+  ) => () => boolean
+  on(
+    'llm/stream',
+    (options, next) => trackUsage(ctx, options, next, recorder),
+    { global: true, prepend: true },
+  )
+}
+
+async function* trackUsage(
+  ctx: Context,
+  options: LlmStreamOptions,
+  next: () => AsyncIterable<LlmStreamChunk>,
+  recorder: UsageRecorder,
+): AsyncIterable<LlmStreamChunk> {
+  const provider = typeof options?.provider === 'string' ? options.provider : ''
+  const model = typeof options?.model === 'string' ? options.model : ''
+  const modelKey = provider && model ? `${provider}/${model}` : ''
+  const iterator = next()[Symbol.asyncIterator]()
+  let lastUsage: Record<string, number> | undefined
+  let observed = false
+  let completed = false
+  try {
+    while (true) {
+      const { value, done } = await iterator.next()
+      if (done) {
+        completed = true
+        break
+      }
+      if (value && value.type === 'usage' && value.usage) {
+        lastUsage = value.usage
+        observed = true
+      }
+      yield value
+    }
+  } finally {
+    if (observed && modelKey) {
+      try {
+        await recorder.record(modelKey, lastUsage ?? {}, { request: completed })
+      } catch (error) {
+        // Metering must never influence the LLM stream itself.
+        logWarning(ctx, error)
+      }
+    }
+  }
+}
+
+function logWarning(ctx: Context, error: unknown): void {
+  try {
+    const logger = (ctx as { logger?: { warn?: (message: string, cause?: unknown) => void } }).logger
+    if (logger?.warn) logger.warn('manuscript.usage: recorder failed', error)
+  } catch {
+    // Best-effort: the host may not expose a logger, and we must not surface metering errors.
+  }
 }

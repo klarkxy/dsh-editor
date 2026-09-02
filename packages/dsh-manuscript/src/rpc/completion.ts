@@ -1,6 +1,7 @@
 export type StreamChunkLike = {
   type: string
   text?: string
+  reason?: { kind?: string }
 }
 
 const DEFAULT_MAX_CHARS = 240
