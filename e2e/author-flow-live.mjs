@@ -7,6 +7,19 @@
  * button. The harness only reads project files afterwards for acceptance checks.
  *
  * Credentials default to ~/.mmx/config.json. They are never printed.
+ *
+ * NOTE — rewrite for the simplified shell (2025-09):
+ *   - editor header now exposes paper-* testids; word count and save state
+ *     live in separate spans, so the chapter-verification loop queries them
+ *     individually via [data-testid="paper-{path,wordcount,save-state}"].
+ *   - the "接口" / API settings panel is no longer inline in the sidebar;
+ *     the dsh-editor-shell delegates it to DSH's settings dialog, opened
+ *     from the chrome's .native-settings-control button (or Ctrl+,). The
+ *     configureMiniMax helper handles opening that dialog itself.
+ *   - this script is credentialed and can only be exercised in an
+ *     environment with a configured API key; locally without credentials the
+ *     chat-driven phases will skip or fail. Other shell-only phases (project
+ *     creation, tree navigation, save state) are still verifiable.
  */
 import { spawn } from 'node:child_process'
 import { homedir } from 'node:os'
@@ -324,7 +337,49 @@ async function sendMaybeApply(page, prompt, expectedPath, label) {
   throw new Error(`${label}: timed out without proposal or finished turn`)
 }
 
+/**
+ * 2025-09 rewrite: the dsh-editor-shell no longer renders the API settings
+ * panel inline in the sidebar. Settings are now hosted by DSH in a dialog
+ * opened from the chrome's .native-settings-control slot (or by Ctrl+,).
+ * The "接口" heading is only visible while that dialog is open, so the
+ * caller has to surface the dialog first before checking the heading.
+ */
+async function openShellSettings(page) {
+  // Prefer the explicit trigger button the host injects; fall back to the
+  // keyboard shortcut the shell handles (root.ts openSettings, Ctrl+,).
+  const trigger = page.locator('.native-settings-control button').first()
+  if (await trigger.isVisible().catch(() => false)) {
+    await trigger.click()
+  } else {
+    await page.keyboard.press('Control+,')
+  }
+  // The host dialog opens asynchronously; give it a generous budget.
+  await page.getByRole('heading', { name: '接口' })
+    .waitFor({ state: 'visible', timeout: 30_000 })
+    .catch(() => undefined)
+}
+
+async function closeShellSettings(page) {
+  await page.keyboard.press('Escape').catch(() => undefined)
+  await page.waitForTimeout(300)
+}
+
+async function dismissNativeOnboarding(page) {
+  const continueNotice = page.getByRole('button', { name: '继续', exact: true })
+  for (let step = 0; step < 5; step += 1) {
+    const visible = await continueNotice.isVisible({ timeout: 1_000 }).catch(() => false)
+    if (!visible) break
+    await continueNotice.click()
+    await page.waitForTimeout(250)
+  }
+  const configureLater = page.getByRole('button', { name: '稍后配置', exact: true })
+  if (await configureLater.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    await configureLater.click()
+  }
+}
+
 async function configureMiniMax(page) {
+  await openShellSettings(page)
   await page.getByRole('heading', { name: '接口' }).waitFor({ state: 'visible', timeout: 45_000 })
   await page.getByLabel('自定义接口').check()
   await page.getByText('接口地址', { exact: true }).locator('..').locator('input').fill(apiBase)
@@ -334,10 +389,12 @@ async function configureMiniMax(page) {
     const text = document.body.innerText || ''
     return text.includes('连接成功') || text.includes('开始写。')
   }, undefined, { timeout: 90_000 })
+  await closeShellSettings(page)
   recordPhase('接口连接成功', apiBase)
 }
 
 async function createProjectFromHome(page) {
+  await dismissNativeOnboarding(page)
   await page.getByRole('button', { name: '新建', exact: true }).click()
   const nameBox = page.getByLabel('作品名称')
   await nameBox.waitFor({ state: 'visible', timeout: 10_000 })
@@ -357,10 +414,15 @@ async function verifyChaptersInEditor(page) {
     const id = String(number).padStart(3, '0')
     await page.locator('.tree-row').filter({ hasText: `${id}.md` }).first().click()
     const header = page.locator('.editor-header')
-    await header.getByText(`正文/${id}.md`, { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
-    await header.getByText(/\d+ 字 · 已保存/).waitFor({ state: 'visible', timeout: 30_000 })
-    const status = await header.locator('span').last().innerText()
-    const chars = Number(/^(\d+) 字 · 已保存$/.exec(status)?.[1] || 0)
+    // 2025-09 rewrite: header now exposes dedicated testids per element.
+    // The path, word count, and save state each live in their own span, so
+    // we look them up independently instead of relying on a compound regex.
+    await header.locator('[data-testid="paper-path"]', { hasText: `正文/${id}.md` })
+      .waitFor({ state: 'visible', timeout: 30_000 })
+    await header.locator('[data-testid="paper-save-state"]', { hasText: '已保存' })
+      .waitFor({ state: 'visible', timeout: 30_000 })
+    const wordText = await header.locator('[data-testid="paper-wordcount"]').innerText()
+    const chars = Number(/^(\d+) 字$/.exec(wordText.trim())?.[1] || 0)
     if (chars < minChapterChars) throw new Error(`editor shows ${chars} characters for 正文/${id}.md`)
     const chapter = report.chapters.find((item) => item.path === `正文/${id}.md`)
     if (chapter) chapter.uiChars = chars
@@ -373,7 +435,7 @@ async function openAssistantWithMiniMax(page) {
   if (await launcher.isVisible().catch(() => false)) await launcher.click()
   const assistant = page.getByRole('complementary', { name: '写作助手' })
   await assistant.waitFor({ state: 'visible', timeout: 20_000 })
-  await assistant.getByRole('button', { name: '新对话' }).click()
+  await assistant.getByRole('button', { name: '新对话' }).dispatchEvent('click')
   const picker = page.getByRole('dialog', { name: '新对话' })
   const select = picker.getByLabel('选择模型')
   await select.waitFor({ state: 'visible', timeout: 30_000 })
@@ -472,10 +534,15 @@ try {
   page.on('console', (message) => { if (message.type() === 'error') fail(`console: ${sanitize(message.text())}`) })
   await page.goto(started.url.href, { waitUntil: 'domcontentloaded' })
   await page.waitForFunction(() => document.title === 'DSH Editor', undefined, { timeout: 45_000 })
+  await dismissNativeOnboarding(page)
 
   await page.waitForFunction(() => {
     const text = document.body.innerText || ''
-    return text.includes('接口') || text.includes('开始写。') || Boolean(document.querySelector('[aria-label="稿件目录"]'))
+    return text.includes('接口')
+      || text.includes('开始写。')
+      || text.includes('空白稿纸')
+      || text.includes('打开作品')
+      || Boolean(document.querySelector('[aria-label="稿件目录"]'))
   }, undefined, { timeout: 45_000 })
   await page.waitForTimeout(1_500)
   const needsSetup = await page.getByRole('heading', { name: '接口' }).isVisible().catch(() => false)
@@ -483,7 +550,10 @@ try {
   const projectNavigation = page.getByRole('navigation', { name: '稿件目录' })
   if (await projectNavigation.isVisible().catch(() => false)) recordPhase('恢复已打开的测试作品', workspace)
   else {
-    await page.getByRole('heading', { name: '开始写。' }).waitFor({ state: 'visible', timeout: 45_000 })
+    // 2025-09 rewrite: the new shell's home shows "空白稿纸" PaperStage and
+    // 打开作品 / 新建 buttons instead of the old "开始写。" heading.
+    await page.locator('[aria-label="空白稿纸"], [aria-label="新建作品"]')
+      .first().waitFor({ state: 'visible', timeout: 45_000 })
     await shot(page, 'home')
     const projectAlreadyExists = await exists(resolve(workspace, '项目总览.md'))
     if (!projectAlreadyExists) await createProjectFromHome(page)
@@ -492,6 +562,9 @@ try {
       if (await recent.isVisible().catch(() => false)) await recent.click()
       else {
         await page.getByRole('button', { name: '打开作品' }).click()
+        // 打开作品 first tries ctx.workspaces.pickDirectory() which fails in
+        // headless Playwright; the shell then renders a manual path form.
+        await page.getByLabel('作品文件夹路径').waitFor({ state: 'visible', timeout: 10_000 })
         await page.getByLabel('作品文件夹路径').fill(workspace)
         await page.getByRole('button', { name: '打开此目录' }).click()
       }
@@ -500,6 +573,7 @@ try {
     }
   }
   await shot(page, 'project-open')
+  await dismissNativeOnboarding(page)
   await openAssistantWithMiniMax(page)
   await shot(page, 'assistant-ready')
 

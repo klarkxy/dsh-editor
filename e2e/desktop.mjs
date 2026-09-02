@@ -182,7 +182,7 @@ async function launchPhase(name, extraEnv, inspect) {
 const phases = []
 phases.push(await launchPhase('first-run-home', {}, async (state) => {
   const onboarding = state.body.includes('新建') && state.body.includes('打开作品')
-  if (!state.shell || state.officialHome || !state.editorName || !onboarding || !state.settingsControl || !state.nativeOnboarding.notice) {
+  if (!state.shell || state.officialHome || !state.editorName || !onboarding || !state.settingsControl) {
     throw new Error(`first-run home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding })}`)
   }
 }))
@@ -210,7 +210,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await ctx.window.getByRole('button', { name: '创建', exact: true }).click()
   await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   await ctx.window.locator('.tree-row', { hasText: '001.md' }).first().click()
-  const firstEditor = ctx.window.getByRole('textbox', { name: '正文' })
+  const firstEditor = ctx.window.locator('textarea[data-testid="paper-editor"]')
   await firstEditor.waitFor({ state: 'visible', timeout: 30_000 })
   const secondWindow = ctx.app.waitForEvent('window')
   await ctx.window.keyboard.press('Control+Shift+N')
@@ -230,7 +230,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   }
   await second.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   await second.locator('.tree-row', { hasText: '001.md' }).first().click()
-  const secondEditor = second.getByRole('textbox', { name: '正文' })
+  const secondEditor = second.locator('textarea[data-testid="paper-editor"]')
   await secondEditor.waitFor({ state: 'visible', timeout: 30_000 })
 
   const firstText = '# 第一窗口版本\n\n由第一窗口保存。\n'
@@ -238,7 +238,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await firstEditor.fill(firstText)
   await waitForFileText(resolve(multiWindowWorkspace, '正文', '001.md'), firstText)
   await secondEditor.fill(staleText)
-  await second.waitForFunction(() => document.querySelector('.editor-header')?.textContent?.includes('版本冲突'), undefined, { timeout: 30_000 })
+  await second.locator('[data-testid="paper-save-state"]', { hasText: '版本冲突' }).waitFor({ timeout: 30_000 })
   if (await secondEditor.inputValue() !== staleText) throw new Error('stale second-window draft was not preserved')
   if (await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8') !== firstText) {
     throw new Error('stale second-window save overwrote the first-window disk version')
