@@ -39,6 +39,10 @@ const env = {
   DSH_DESKTOP_CLI_PATH: resolve(devDshRuntime, 'lib', 'bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: template,
 }
+// Some terminals (VS Code and other Electron-based tools) export
+// ELECTRON_RUN_AS_NODE=1; inherited, it turns the Electron binary into plain
+// Node and the desktop main fails to boot.
+delete env.ELECTRON_RUN_AS_NODE
 
 function spawnNode(script, args, cwd = root) {
   return spawn(process.execPath, [script, ...args], {
