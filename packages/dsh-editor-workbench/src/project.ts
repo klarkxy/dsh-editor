@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 
 export class ProjectInitError extends Error {
@@ -16,39 +17,8 @@ export const PROJECT_DIRECTORIES = ['正文', '大纲', '人物卡', '世界书'
 export const NOVEL_INDEX_DIRECTORY = '.dsh-editor'
 export const NOVEL_INDEX_PATH = `${NOVEL_INDEX_DIRECTORY}/作品索引.md`
 
-export const PROJECT_FILES: Readonly<Record<string, string>> = {
-  '项目总览.md': `# 项目总览
-
-## 项目名称
-
-## 核心构想
-
-## 当前进度
-`,
-  '大纲/总纲.md': `# 总纲
-
-## 故事主线
-
-## 分卷与章节
-
-## 待确认问题
-`,
-  '人物卡/人物索引.md': `# 人物索引
-
-| 名称 | 身份 | 欲望 | 关系 | 知情边界 |
-| --- | --- | --- | --- | --- |
-`,
-  '世界书/设定总汇.md': `# 设定总汇
-
-## 已确认设定
-
-## 暂定设定
-
-## 连续性提醒
-`,
-}
-
 export type ProjectInitResult = { created: string[]; skipped: string[] }
+export type ProjectInspection = { hasVisibleEntries: boolean; textFiles: string[] }
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new ProjectInitError('operation cancelled', 'CANCELLED')
@@ -97,6 +67,56 @@ async function ensureDirectory(root: string, relative: string, signal?: AbortSig
 }
 
 const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i
+
+/** Default `文档/dsh-editor`. `DSH_EDITOR_PROJECTS_ROOT` isolates e2e from the real Documents folder. */
+export function defaultProjectsRoot(): string {
+  const override = process.env.DSH_EDITOR_PROJECTS_ROOT?.trim()
+  if (override) return path.resolve(override)
+  return path.join(os.homedir(), 'Documents', 'dsh-editor')
+}
+
+function projectHomeName(title: string): string {
+  const name = title.trim()
+  if (
+    !name
+    || name.length > 80
+    || name.startsWith('.')
+    || /[<>:"/\\|?*\u0000-\u001f]/.test(name)
+    || /[. ]$/.test(name)
+    || WINDOWS_DEVICE_NAME.test(name)
+  ) throw new ProjectInitError('project name is invalid', 'INVALID_PATH')
+  return name
+}
+
+export async function createProjectHome(input: {
+  root: string
+  title: string
+  signal?: AbortSignal
+}): Promise<{ path: string }> {
+  throwIfAborted(input.signal)
+  const name = projectHomeName(input.title)
+  const parent = path.resolve(input.root)
+  const target = path.join(parent, name)
+  if (path.dirname(target) !== parent) throw new ProjectInitError('project name is invalid', 'INVALID_PATH')
+  try {
+    await fs.mkdir(parent, { recursive: true })
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'EACCES' || code === 'EPERM') throw new ProjectInitError('project folder is read-only', 'READ_ONLY', { cause: error })
+    throw new ProjectInitError('failed to create project folder', 'IO', { cause: error })
+  }
+  throwIfAborted(input.signal)
+  try {
+    await fs.mkdir(target)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'EEXIST') throw new ProjectInitError('project folder already exists', 'EXISTS', { cause: error })
+    if (code === 'EACCES' || code === 'EPERM') throw new ProjectInitError('project folder is read-only', 'READ_ONLY', { cause: error })
+    throw new ProjectInitError('failed to create project folder', 'IO', { cause: error })
+  }
+  await assertDirectory(target, 'project folder')
+  return { path: target }
+}
 
 function manuscriptGroupName(relative: string): string {
   const normalized = relative.replace(/\\/g, '/')
@@ -165,30 +185,39 @@ async function createFile(root: string, relative: string, text: string, signal?:
   }
 }
 
-async function containsMarkdown(directory: string, signal?: AbortSignal): Promise<boolean> {
-  const queue = [directory]
+export async function inspectProjectRoot(rootPath: string, signal?: AbortSignal): Promise<ProjectInspection> {
+  throwIfAborted(signal)
+  const root = path.resolve(rootPath)
+  await assertDirectory(root, 'project folder')
+  const queue = ['']
+  const textFiles: string[] = []
+  let hasVisibleEntries = false
   while (queue.length) {
     throwIfAborted(signal)
-    const current = queue.shift()!
+    const relativeDirectory = queue.shift()!
+    const directory = relativeDirectory ? path.join(root, ...relativeDirectory.split('/')) : root
     let entries: import('node:fs').Dirent[]
     try {
-      entries = await fs.readdir(current, { withFileTypes: true })
+      entries = await fs.readdir(directory, { withFileTypes: true })
     } catch (error) {
-      throw new ProjectInitError('failed to inspect chapter folder', 'IO', { cause: error })
+      throw new ProjectInitError('failed to inspect project folder', 'IO', { cause: error })
     }
     for (const entry of entries) {
-      if (entry.isSymbolicLink()) throw new ProjectInitError('chapter folder cannot contain symbolic links', 'SYMLINK')
-      if (entry.isDirectory()) queue.push(path.join(current, entry.name))
-      if (entry.isFile() && /\.md$/i.test(entry.name)) return true
+      if (!relativeDirectory && entry.name !== NOVEL_INDEX_DIRECTORY) hasVisibleEntries = true
+      if (entry.name.startsWith('.')) continue
+      const relative = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name
+      if (entry.isDirectory()) queue.push(relative)
+      else if (entry.isFile() && /\.(?:md|txt)$/i.test(entry.name)) textFiles.push(relative)
     }
   }
-  return false
+  textFiles.sort((left, right) => left.localeCompare(right, 'zh-CN', { numeric: true, sensitivity: 'base' }))
+  return { hasVisibleEntries, textFiles }
 }
 
 export async function initializeProject(input: {
   root: string
   mode: string
-  newProject: boolean
+  newProject?: boolean
   signal?: AbortSignal
 }): Promise<ProjectInitResult> {
   if (input.mode === 'read-only') throw new ProjectInitError('project folder is read-only', 'READ_ONLY')
@@ -201,14 +230,6 @@ export async function initializeProject(input: {
 
   for (const directory of PROJECT_DIRECTORIES) {
     record(directory, await ensureDirectory(root, directory, input.signal))
-  }
-  for (const [relative, text] of Object.entries(PROJECT_FILES)) {
-    record(relative, await createFile(root, relative, text, input.signal))
-  }
-  if (input.newProject) {
-    const chapterRoot = path.join(root, '正文')
-    if (await containsMarkdown(chapterRoot, input.signal)) skipped.push('正文/001.md')
-    else record('正文/001.md', await createFile(root, '正文/001.md', '# 第一章\n\n', input.signal))
   }
   created.sort()
   skipped.sort()

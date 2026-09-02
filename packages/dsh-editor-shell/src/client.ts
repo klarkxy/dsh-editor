@@ -10,6 +10,7 @@ import type {
   SessionId,
   SessionModels,
   WorkspaceId,
+  WorkspaceView,
 } from '@deepseek-ai/dsh-client-connection/client'
 import {
   createElement as e,
@@ -20,6 +21,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
@@ -33,6 +35,7 @@ import {
   type ArchiveListResponse,
   type ChapterStatus,
   type ProjectOverview,
+  type ProjectInspectionResponse,
   type ProjectContextReceiptBundle,
 } from 'dsh-editor-workbench/contracts'
 import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
@@ -74,7 +77,6 @@ import { ConversationRenameQueue, conversationRows, nextAutomaticConversationTit
 import { automaticCompletionReady, type CompletionPreference } from './completion-preference.ts'
 import { normalizeAuthorPreferences } from './author-preferences.ts'
 import {
-  blocksWorkspaceOpen,
   idleSnapshotFlow,
   recoverSnapshot,
   restoreSummary,
@@ -98,6 +100,15 @@ type SearchResponse = { results: SearchHit[]; scannedFiles: number; scannedBytes
 type RevealRequest = SearchHit & { nonce: number }
 type ReferenceSearchRequest = ReferenceQuery & { nonce: number }
 type RpcResult<T = unknown> = WorkbenchRpcResult<T>
+type WorkspaceIntent = 'open' | 'create'
+type WorkspaceOpenState =
+  | { kind: 'idle' }
+  | { kind: 'checking'; workspaceId?: WorkspaceId; path: string; title: string }
+  | { kind: 'ready'; workspaceId: WorkspaceId; sessionId: SessionId; path: string; warning?: string }
+  | { kind: 'needs-relocation'; workspaceId: WorkspaceId; path: string; title: string; message: string }
+  | { kind: 'needs-recovery'; workspaceId: WorkspaceId; sessionId: SessionId; path: string; title: string; recovery: 'import' | 'restore' }
+  | { kind: 'needs-intent'; workspaceId: WorkspaceId; path: string; title: string; intent: WorkspaceIntent; message: string }
+  | { kind: 'error'; workspaceId?: WorkspaceId; path: string; title: string; message: string }
 type ShellContext = ClientContext & { connection: ConnectionHandle } & WritingSettingsSlots & {
   settingsScope: { bind(spec: { namespace: string; decode(value: unknown): WritingPreferences | undefined }): import('@deepseek-ai/dsh-client-runtime/client').SettingsScope<WritingPreferences> }
 }
@@ -109,10 +120,6 @@ const ASSISTANT_DEFAULT = 384
 const conversationRenameQueue = new ConversationRenameQueue()
 const ASSISTANT_MIN = 300
 const ASSISTANT_MAX = 560
-
-// 首页大标题轮转的结尾词与右侧稿纸上逐字浮现的示例文字
-const HOME_WORDS = ['故事。', '人物。', '世界。', '远方。']
-const SHEET_LINES = ['潮声漫过码头。', '她拆开第七封信。', '雪落在空站上。']
 
 function DeepSeekWhaleMark() {
   return e('svg', {
@@ -129,38 +136,13 @@ function DeepSeekWhaleMark() {
   )
 }
 
-function PaperMotion() {
-  return e('div', { className: 'paper-motion', 'aria-hidden': 'true' },
-    e('i', { className: 'paper-sheet sheet-back' }),
-    e('i', { className: 'paper-sheet sheet-mid' }),
-    e('div', { className: 'paper-sheet sheet-front' },
-      SHEET_LINES.map((line, lineIndex) => e('div', { className: 'sheet-line', key: lineIndex },
-        Array.from(line).map((char, charIndex) => e('i', {
-          key: charIndex,
-          style: { animationDelay: `${(lineIndex * 8 + charIndex) * 120}ms` },
-        }, char)),
-      )),
-      e('b'),
-    ),
-  )
-}
-
 function PaperStage(props: { label: string; children?: ReactNode }) {
   return e('section', { className: 'empty-paper home-stage', 'aria-label': props.label },
-    e('div', { className: 'home-ink', 'aria-hidden': 'true' }, '写'),
     e('div', { className: 'home-card' },
       e('p', { className: 'home-eyebrow' }, 'DSH EDITOR'),
-      e('h1', { 'aria-label': '开始写。' },
-        e('span', { 'aria-hidden': 'true' }, '开始写',
-          e('span', { className: 'home-words' },
-            HOME_WORDS.map((word, index) => e('i', { key: index }, word)),
-          ),
-        ),
-        e('span', { className: 'sr-only' }, '开始写。'),
-      ),
+      e('h1', null, '开始写作'),
       props.children,
     ),
-    e(PaperMotion),
   )
 }
 
@@ -279,6 +261,15 @@ export async function safeRpcCall<T>(request: () => Promise<unknown>): Promise<R
 }
 
 type RequestTicket = Readonly<{ scope: string; sequence: number }>
+type PendingWorkspaceOpen = {
+  ticket: RequestTicket
+  workspace: WorkspaceView
+  intent: WorkspaceIntent
+  registrationCreated: boolean
+  sessionId?: SessionId
+  replaceWorkspaceId?: WorkspaceId
+  warning?: string
+}
 
 /** Keeps late async responses from crossing session/revision boundaries. */
 export class LatestRequestGate {
@@ -300,6 +291,30 @@ export class LatestRequestGate {
   isCurrent(ticket: RequestTicket): boolean {
     return ticket.scope === this.scope && ticket.sequence === this.sequence
   }
+}
+
+export function hasVisibleWorkspaceEntries(entries: readonly { name: string }[]): boolean {
+  return entries.some((entry) => entry.name !== '.dsh-editor')
+}
+
+export function hasRelocatableManuscriptFiles(files: readonly string[]): boolean {
+  return files.some((path) => /^正文\/.+\.(?:md|txt)$/i.test(path))
+}
+
+export function supportedWorkspaceTextPaths(files: readonly string[]): string[] {
+  return files.filter((path) => /\.(?:md|txt)$/i.test(path) && !path.split('/').some((part) => part.startsWith('.')))
+}
+
+export function relocationFailureMessage(cleanupFailed: boolean): string {
+  return cleanupFailed
+    ? '所选文件夹没有可验证的现有正文；原作品入口已保留。新位置入口未能自动移除，可从最近作品中手动移除。'
+    : '所选文件夹没有可验证的现有正文；原作品入口已保留。'
+}
+
+export function claimInitialWorkspaceResume(guard: { current: boolean }): boolean {
+  if (guard.current) return false
+  guard.current = true
+  return true
 }
 
 export type ResizablePanelSide = 'left' | 'right'
@@ -473,8 +488,21 @@ export function errorMessage(result: RpcResult): string {
   if (/workspace-invalid-path|invalid path/i.test(blob)) return '名称或路径不符合规则。'
   if (/read-only|permission|denied/i.test(blob)) return '当前文件无法写入，请检查目录权限。'
   if (/directory-unreadable|unreadable/i.test(blob)) return '未能读取作品目录，请重试。'
+  if (/session-not-found|session is not live/i.test(blob)) return '作品会话已失效，请重试。'
   if (/not-found|missing/i.test(blob)) return '未找到所需的文件。'
   return '操作未能完成，请重试。'
+}
+
+export function isSessionMissing(result: RpcResult): boolean {
+  return !result.ok && /session-not-found|session is not live/i.test(rpcFailureText(result))
+}
+
+export function workspaceOpenFailureMessage(error: unknown): string {
+  const detail = error instanceof Error ? error.message : ''
+  if (/no supported text files/i.test(detail)) return '没有找到可打开的 Markdown 或 TXT 作品文件。'
+  if (/session is not live|session-not-found|作品会话已失效/i.test(detail)) return '作品会话未能建立，请重试。'
+  if (detail && detail !== '操作未能完成，请重试。') return `作品未能打开：${detail}`
+  return '作品会话或正文检查未能完成，请重试。'
 }
 
 export function isStaleFailure(result: RpcResult): boolean {
@@ -488,10 +516,10 @@ function Tree(props: {
   expandPath: string
   revision: number
   onOpen(path: string): void
-  onManage(path: string): void
+  onFileMenu(path: string, position: { x: number; y: number }): void
   onCreateChapter(directory: string): void
 }) {
-  const { ctx, sessionId, active, expandPath, revision, onOpen, onManage, onCreateChapter } = props
+  const { ctx, sessionId, active, expandPath, revision, onOpen, onFileMenu, onCreateChapter } = props
   const [open, setOpen] = useState<Record<string, Entry[]>>({})
   const [note, setNote] = useState('')
 
@@ -545,14 +573,11 @@ function Tree(props: {
           style: { paddingLeft: treeRowPadding(level) },
           'data-tree-depth': level,
           onClick: () => onOpen(child),
+          onContextMenu: /\.(md|txt)$/i.test(child) ? (event: ReactMouseEvent<HTMLButtonElement>) => {
+            event.preventDefault()
+            onFileMenu(child, { x: event.clientX, y: event.clientY })
+          } : undefined,
         }, e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, '·'), e('span', null, item.name)),
-        /\.(md|txt)$/i.test(child) ? e('button', {
-          className: 'tree-manage',
-          type: 'button',
-          title: `管理 ${item.name}`,
-          'aria-label': `管理 ${item.name}`,
-          onClick: () => onManage(child),
-        }, '···') : null,
       )
     })
 
@@ -789,22 +814,117 @@ function CreateDocumentDialog(props: {
   )
 }
 
+function NewProjectDialog(props: {
+  busy: boolean
+  note: string
+  onClose(): void
+  onCreate(title: string): void
+}) {
+  const [title, setTitle] = useState('')
+  const dialog = useRef<HTMLDivElement | null>(null)
+  const input = useRef<HTMLInputElement | null>(null)
+  const returnFocus = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    globalThis.setTimeout(() => input.current?.focus(), 0)
+    return () => { const target = returnFocus.current; globalThis.setTimeout(() => { if (target?.isConnected) target.focus() }, 0) }
+  }, [])
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && !props.busy) { event.preventDefault(); props.onClose(); return }
+    if (event.key !== 'Tab' || !dialog.current) return
+    const focusable = [...dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled)')]
+    if (!focusable.length) return
+    const first = focusable[0]!
+    const last = focusable.at(-1)!
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  }
+  return e('div', { className: 'file-dialog-overlay' },
+    e('div', { ref: dialog, className: 'file-dialog create-dialog', role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'new-project-dialog-title', onKeyDown },
+      e('header', null,
+        e('div', null,
+          e('h2', { id: 'new-project-dialog-title' }, '新建作品'),
+          e('small', null, '将保存在「文档/dsh-editor」下。'),
+        ),
+        e('button', { className: 'icon-button', type: 'button', disabled: props.busy, 'aria-label': '关闭', onClick: props.onClose }, '×'),
+      ),
+      e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (title.trim()) props.onCreate(title.trim()) } },
+        e('label', null, '作品名称',
+          e('input', {
+            ref: input,
+            value: title,
+            maxLength: 80,
+            placeholder: '例如：未名之书',
+            onChange: (event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value),
+          }),
+        ),
+        props.note ? e('p', { className: 'warning', role: 'alert' }, props.note) : null,
+        e('footer', null,
+          e('button', { type: 'button', disabled: props.busy, onClick: props.onClose }, '取消'),
+          e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !title.trim() }, props.busy ? '创建中…' : '创建'),
+        ),
+      ),
+    ),
+  )
+}
+
+function FileContextMenu(props: {
+  path: string
+  x: number
+  y: number
+  onClose(): void
+  onRename(): void
+  onMove(): void
+  onArchive(): void
+}) {
+  const panel = useRef<HTMLDivElement | null>(null)
+  const first = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    globalThis.setTimeout(() => first.current?.focus(), 0)
+    const onPointer = (event: globalThis.MouseEvent) => {
+      if (!panel.current?.contains(event.target as Node)) props.onClose()
+    }
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') props.onClose()
+    }
+    globalThis.addEventListener('mousedown', onPointer)
+    globalThis.addEventListener('keydown', onKey)
+    return () => {
+      globalThis.removeEventListener('mousedown', onPointer)
+      globalThis.removeEventListener('keydown', onKey)
+    }
+  }, [props.path, props.x, props.y])
+  const left = Math.max(8, Math.min(props.x, globalThis.innerWidth - 188))
+  const top = Math.max(8, Math.min(props.y, globalThis.innerHeight - 148))
+  return e('div', {
+    ref: panel,
+    className: 'file-context-menu',
+    role: 'menu',
+    'aria-label': '文档操作',
+    style: { left, top },
+    onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => event.preventDefault(),
+  },
+    props.path.startsWith('正文/') ? e('button', { ref: first, type: 'button', role: 'menuitem', onClick: props.onMove }, '移动到卷/部') : null,
+    e('button', { ref: props.path.startsWith('正文/') ? undefined : first, type: 'button', role: 'menuitem', onClick: props.onRename }, '重命名'),
+    e('button', { type: 'button', role: 'menuitem', onClick: props.onArchive }, '归档'),
+  )
+}
+
 function FileManageDialog(props: {
   path: string
+  mode: 'rename' | 'move'
   busy: boolean
   note: string
   moveDirectories: string[] | null
   onClose(): void
   onRename(name: string): void
   onMove(directory: string): void
-  onArchive(): void
 }) {
-  const [mode, setMode] = useState<'menu' | 'rename' | 'move' | 'archive'>('menu')
   const [name, setName] = useState(() => documentName(props.path))
   const [targetDirectory, setTargetDirectory] = useState('')
   const dialog = useRef<HTMLDivElement | null>(null)
-  const first = useRef<HTMLButtonElement | null>(null)
-  useEffect(() => { setMode('menu'); setName(documentName(props.path)); globalThis.setTimeout(() => first.current?.focus(), 0) }, [props.path])
+  const close = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => { setName(documentName(props.path)); globalThis.setTimeout(() => close.current?.focus(), 0) }, [props.path, props.mode])
   useEffect(() => {
     setTargetDirectory((current) => props.moveDirectories?.includes(current) ? current : (props.moveDirectories?.[0] ?? ''))
   }, [props.moveDirectories])
@@ -812,7 +932,7 @@ function FileManageDialog(props: {
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape' && !props.busy) { event.preventDefault(); props.onClose(); return }
     if (event.key !== 'Tab' || !dialog.current) return
-    const focusable = [...dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled)')]
+    const focusable = [...dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled)')]
     if (!focusable.length) return
     const firstItem = focusable[0]!
     const lastItem = focusable.at(-1)!
@@ -831,30 +951,19 @@ function FileManageDialog(props: {
     },
     e('header', null,
       e('div', null,
-        e('small', null, '文档管理'),
-        e('h2', { id: 'file-dialog-title' }, documentName(props.path)),
+        e('h2', { id: 'file-dialog-title' }, props.mode === 'rename' ? '重命名' : '移动到卷/部'),
         e('code', null, props.path),
       ),
-      e('button', { ref: first, className: 'icon-button', type: 'button', disabled: props.busy, onClick: props.onClose, 'aria-label': '关闭' }, '×'),
+      e('button', { ref: close, className: 'icon-button', type: 'button', disabled: props.busy, onClick: props.onClose, 'aria-label': '关闭' }, '×'),
     ),
-    mode === 'menu' ? e('div', { className: 'file-dialog-actions' },
-      props.path.startsWith('正文/') ? e('button', { type: 'button', disabled: props.busy || !props.moveDirectories?.length, onClick: () => setMode('move') },
-        e('strong', null, '移动到卷/部'),
-        e('span', null, props.moveDirectories === null ? '正在读取可用位置…' : props.moveDirectories.length ? '保留文件名，移入其他卷/部。' : '没有其他可用位置；可以先新建卷/部。')) : null,
-      e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('rename') },
-        e('strong', null, '重命名'), e('span', null, '只修改文档名称。')),
-      e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('archive') },
-        e('strong', null, '归档'), e('span', null, '从文件树移出，以后可以恢复，不会永久删除。')),
-    ) : null,
-    mode === 'rename' ? e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); props.onRename(name) } },
+    props.mode === 'rename' ? e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); props.onRename(name) } },
       e('label', null, e('span', null, '新名称'), e('input', { value: name, maxLength: 120, autoFocus: true, onChange: (event: ChangeEvent<HTMLInputElement>) => setName(event.target.value) })),
       e('p', null, '所在目录与 .md/.txt 类型保持不变。'),
       e('footer', null,
-        e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
+        e('button', { type: 'button', disabled: props.busy, onClick: props.onClose }, '取消'),
         e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !name.trim() }, props.busy ? '处理中…' : '保存新名称'),
       ),
-    ) : null,
-    mode === 'move' ? e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (targetDirectory) props.onMove(targetDirectory) } },
+    ) : e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (targetDirectory) props.onMove(targetDirectory) } },
       e('label', null, e('span', null, '目标卷/部'), e('select', {
         value: targetDirectory,
         autoFocus: true,
@@ -862,20 +971,12 @@ function FileManageDialog(props: {
         onChange: (event: ChangeEvent<HTMLSelectElement>) => setTargetDirectory(event.target.value),
       }, props.moveDirectories?.map((directory) => e('option', { key: directory, value: directory }, directory === '正文' ? '正文（根目录）' : directory.slice('正文/'.length))))),
       targetDirectory ? e('p', null, `移动后：${targetDirectory}/${props.path.split('/').at(-1)}`) : null,
-      e('p', null, '不会覆盖同名文件。'),
+      e('p', null, props.moveDirectories === null ? '正在读取可用位置…' : props.moveDirectories.length ? '不会覆盖同名文件。' : '没有其他可用位置；可以先新建卷/部。'),
       e('footer', null,
-        e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
+        e('button', { type: 'button', disabled: props.busy, onClick: props.onClose }, '取消'),
         e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !targetDirectory }, props.busy ? '移动中…' : '确认移动'),
       ),
-    ) : null,
-    mode === 'archive' ? e('div', { className: 'archive-confirm' },
-      e('p', null, '归档后，文档会从文件树中移除，内容仍保留在本地作品中。'),
-      e('strong', null, '这不是永久删除。'),
-      e('footer', null,
-        e('button', { type: 'button', disabled: props.busy, onClick: () => setMode('menu') }, '返回'),
-        e('button', { className: 'danger-action', type: 'button', disabled: props.busy, onClick: props.onArchive }, props.busy ? '归档中…' : '确认归档'),
-      ),
-    ) : null,
+    ),
     props.note ? e('p', { className: 'warning', role: 'alert' }, props.note) : null,
     ),
   )
@@ -1287,7 +1388,7 @@ function Editor(props: {
 
   if (!path) {
     return e(PaperStage, { label: '空白章' },
-      e('p', { className: 'home-hint' }, '从左侧打开资料或章节；也可以先让搭档规划世界观、人物卡与章纲。'),
+      e('p', { className: 'home-hint' }, '从左侧新建章节或资料；也可以先让搭档按这部作品的需要创建总览、人物卡与章纲。'),
       e('div', { className: 'home-actions' },
         e('button', { className: 'primary-action', type: 'button', onClick: create }, '新建一章'),
       ),
@@ -2184,6 +2285,65 @@ async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string): Prom
   return files
 }
 
+async function verifyWorkspaceSession(ctx: ShellContext, sessionId: SessionId): Promise<string | undefined> {
+  const files = await collectWorkspaceFiles(ctx, sessionId)
+  const textFiles = supportedWorkspaceTextPaths(files)
+  const initialPath = sortChapterPaths(textFiles)[0] ?? textFiles[0]
+  if (!initialPath) return undefined
+  const read = await safeRpcCall<{ text: string; version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
+    sessionId,
+    path: initialPath,
+  }))
+  if (!read.ok) throw new Error(errorMessage(read))
+  return initialPath
+}
+
+async function inspectRegisteredWorkspace(ctx: ShellContext, workspacePath: string): Promise<ProjectInspectionResponse> {
+  const inspected = await safeRpcCall<ProjectInspectionResponse>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.inspect', { workspacePath }))
+  if (!inspected.ok) throw new Error(errorMessage(inspected))
+  return inspected.value
+}
+
+async function pingWorkspaceSession(ctx: ShellContext, sessionId: SessionId): Promise<RpcResult<{ entries?: Entry[] }>> {
+  return await safeRpcCall<{ entries?: Entry[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId, path: '.' }))
+}
+
+async function connectUsableWorkspaceSession(
+  ctx: ShellContext,
+  workspaceId: WorkspaceId,
+  preferred?: SessionId,
+): Promise<SessionId> {
+  if (preferred) {
+    const listed = await pingWorkspaceSession(ctx, preferred)
+    if (listed.ok) return preferred
+    if (!isSessionMissing(listed)) throw new Error(errorMessage(listed))
+  }
+  const first = await ctx.workspaces.connectWorkspace(workspaceId)
+  if (first !== preferred) {
+    const listed = await pingWorkspaceSession(ctx, first)
+    if (listed.ok) return first
+    if (!isSessionMissing(listed)) throw new Error(errorMessage(listed))
+  }
+  await ctx.workspaces.archiveSession(first)
+  const second = await ctx.workspaces.connectWorkspace(workspaceId)
+  if (second === first) throw new Error('session is not live')
+  const retry = await pingWorkspaceSession(ctx, second)
+  if (!retry.ok) throw new Error(isSessionMissing(retry) ? 'session is not live' : errorMessage(retry))
+  return second
+}
+
+async function verifyRelocatedWorkspaceSession(ctx: ShellContext, sessionId: SessionId): Promise<string> {
+  const files = await collectWorkspaceFiles(ctx, sessionId)
+  if (!hasRelocatableManuscriptFiles(files)) throw new Error('relocated workspace has no readable manuscript')
+  const initialPath = sortChapterPaths(files)[0]!
+  const read = await safeRpcCall<{ text: string; version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
+    sessionId,
+    path: initialPath,
+  }))
+  if (!read.ok) throw new Error(errorMessage(read))
+  return initialPath
+}
+
 export class FlowWorkspaceCleanupError extends Error {
   constructor(options?: ErrorOptions) {
     super('workspace projection failed and its registration could not be removed', options)
@@ -2230,6 +2390,18 @@ function Root({ ctx, writingScope, settingsControl }: {
   const sessions = useObservable(ctx.sessions.list)
   const workspaces = useObservable(ctx.workspaces.list)
   const session = currentSession(ctx)
+  const current = sessions.current
+  const selectedWorkspace = workspaces.items.find((workspace) => current && workspace.sessionIds.includes(current))
+    ?? workspaces.items.find((workspace) => workspace.path === (current ? sessions.byId[current]?.cwd : undefined))
+  const [workspaceOpen, setWorkspaceOpen] = useState<WorkspaceOpenState>({ kind: 'idle' })
+  const fileSessionId = workspaceOpen.kind === 'ready' ? workspaceOpen.sessionId : undefined
+  const fileSession = fileSessionId ? ctx.sessions.binding(fileSessionId)?.session : undefined
+  const fileSessionIdRef = useRef<SessionId | undefined>(fileSessionId)
+  fileSessionIdRef.current = fileSessionId
+  const openWorkspaceId = workspaceOpen.kind === 'ready' ? workspaceOpen.workspaceId : undefined
+  const currentWorkspace = workspaceOpen.kind === 'ready'
+    ? workspaces.items.find((workspace) => workspace.workspaceId === workspaceOpen.workspaceId) ?? selectedWorkspace
+    : selectedWorkspace
   const writingSnapshot = useSyncExternalStore(
     writingScope.subscribe.bind(writingScope),
     writingScope.getSnapshot.bind(writingScope),
@@ -2249,8 +2421,11 @@ function Root({ ctx, writingScope, settingsControl }: {
   const [createBusy, setCreateBusy] = useState(false)
   const [openingWorkspace, setOpeningWorkspace] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
-  const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | 'new' | null>(null)
+  const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false)
+  const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | null>(null)
   const [manualWorkspacePath, setManualWorkspacePath] = useState('')
+  const [newProject, setNewProject] = useState<{ busy: boolean; note: string } | null>(null)
+  const [relocatingWorkspaceId, setRelocatingWorkspaceId] = useState<WorkspaceId | undefined>()
   const [sidebarOpen, setSidebarOpen] = useState(() => storedPanelOpen('dsh-editor.layout.sidebar-open', true))
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(false)
@@ -2276,7 +2451,7 @@ function Root({ ctx, writingScope, settingsControl }: {
   const [focusMode, setFocusMode] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [chatFocusNonce, setChatFocusNonce] = useState(0)
-  const [indexStatus, setIndexStatus] = useState<Record<string, 'initializing' | 'queued' | 'failed'>>({})
+  const [indexStatus, setIndexStatus] = useState<Record<string, 'idle' | 'initializing' | 'queued' | 'failed'>>({})
   const indexedWorkspaces = useRef(new Set<string>())
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState('')
@@ -2294,7 +2469,9 @@ function Root({ ctx, writingScope, settingsControl }: {
   const [snapshotFlow, setSnapshotFlow] = useState<SnapshotFlow>(idleSnapshotFlow)
   const [snapshotLibraryOpen, setSnapshotLibraryOpen] = useState(false)
   const [editorDirty, setEditorDirty] = useState(false)
+  const [fileMenu, setFileMenu] = useState<{ path: string; x: number; y: number } | null>(null)
   const [managePath, setManagePath] = useState<string | null>(null)
+  const [manageMode, setManageMode] = useState<'rename' | 'move' | null>(null)
   const [manageBusy, setManageBusy] = useState(false)
   const [manageNote, setManageNote] = useState('')
   const [manageDirectories, setManageDirectories] = useState<string[] | null>(null)
@@ -2308,6 +2485,9 @@ function Root({ ctx, writingScope, settingsControl }: {
   const archiveRequestGate = useRef(new LatestRequestGate()).current
   const overviewRequestGate = useRef(new LatestRequestGate()).current
   const manageDirectoryGate = useRef(new LatestRequestGate()).current
+  const workspaceOpenGate = useRef(new LatestRequestGate()).current
+  const pendingWorkspaceOpen = useRef<PendingWorkspaceOpen | null>(null)
+  const initialWorkspaceResumeStarted = useRef(false)
   const importReturnFocus = useRef<HTMLElement | null>(null)
   const snapshotReturnFocus = useRef<HTMLElement | null>(null)
   const fileManageReturnFocus = useRef<HTMLElement | null>(null)
@@ -2317,13 +2497,8 @@ function Root({ ctx, writingScope, settingsControl }: {
   const shortcutChordAt = useRef(0)
   const temporaryFlowWorkspaces = useRef(new Set<string>())
   const temporarySourceWorkspaces = useRef(new Map<string, string>())
-  const probedImportSessions = useRef(new Set<string>())
-  const probedRestoreSessions = useRef(new Set<string>())
-  const verifiedRestoreSessions = useRef(new Set<string>())
-  const [, refreshRestoreGate] = useState(0)
-  const current = sessions.current
-  archiveRequestGate.setScope(current ?? '')
-  overviewRequestGate.setScope(current ?? '')
+  archiveRequestGate.setScope(fileSessionId ?? '')
+  overviewRequestGate.setScope(fileSessionId ?? '')
   const registerFlowWorkspace = async (workspacePath: string) => {
     const registration = await createFlowWorkspace(ctx, workspacePath)
     if (registration.created) temporaryFlowWorkspaces.current.add(registration.workspace.workspaceId)
@@ -2420,26 +2595,27 @@ function Root({ ctx, writingScope, settingsControl }: {
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
   }, [assistantOpen, chatFocusNonce, focusMode])
   useEffect(() => {
-    setPath(''); setFiles([]); setReveal(null); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
-    setManagePath(null); setManageNote(''); setArchives([]); setArchiveInvalid(0); setArchiveNote('')
-    setOverview(null); setOverviewError(''); setOverviewBusy(false); setStatusBusy(false); setWorkspaceMenuOpen(false)
+    if (!openWorkspaceId) setPath('')
+    setFiles([]); setReveal(null); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
+    setFileMenu(null); setManagePath(null); setManageMode(null); setManageNote(''); setArchives([]); setArchiveInvalid(0); setArchiveNote('')
+    setOverview(null); setOverviewError(''); setOverviewBusy(false); setStatusBusy(false); setWorkspaceMenuOpen(false); setWorkspaceSwitcherOpen(false)
     setReferenceRequest(null); setExportPreview(null); setExporting(false); setExportNote('')
-  }, [current])
+  }, [openWorkspaceId])
   useEffect(() => {
-    if (!session) { setFiles([]); return }
+    if (!fileSession) { setFiles([]); return }
     let live = true
-    void collectWorkspaceFiles(ctx, session.sessionId).then((paths) => {
+    void collectWorkspaceFiles(ctx, fileSession.sessionId).then((paths) => {
       if (live) setFiles(sortChapterPaths(paths))
     }).catch(() => {
       if (live) { setFiles([]); setWorkbenchNote('未能读取完整章节顺序。') }
     })
     return () => { live = false }
-  }, [ctx.connection.rpc, session?.sessionId, treeRevision])
+  }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision])
   const loadOverview = async () => {
-    if (!session) return
-    const ticket = overviewRequestGate.begin(session.sessionId)
+    if (!fileSession) return
+    const ticket = overviewRequestGate.begin(fileSession.sessionId)
     setOverviewBusy(true); setOverviewError('')
-    const result = await safeRpcCall<ProjectOverview>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.overview', { sessionId: session.sessionId }))
+    const result = await safeRpcCall<ProjectOverview>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.overview', { sessionId: fileSession.sessionId }))
     if (!overviewRequestGate.isCurrent(ticket)) return
     setOverviewBusy(false)
     if (!result.ok) {
@@ -2452,21 +2628,21 @@ function Root({ ctx, writingScope, settingsControl }: {
     setOverview(result.value)
   }
   useEffect(() => {
-    if (!session) { setOverview(null); setOverviewBusy(false); return }
+    if (!fileSession) { setOverview(null); setOverviewBusy(false); return }
     void loadOverview()
-  }, [ctx.connection.rpc, session?.sessionId, treeRevision, contentRevision, overviewRevision])
+  }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision, contentRevision, overviewRevision])
   const updateChapterStatus = async (chapterPath: string, status: ChapterStatus) => {
-    if (!session || !overview || statusBusy) return
-    const requestSessionId = session.sessionId
+    if (!fileSession || !overview || statusBusy) return
+    const requestSessionId = fileSession.sessionId
     const ticket = overviewRequestGate.begin(requestSessionId)
     setStatusBusy(true); setOverviewError('')
     const result = await safeRpcCall<ProjectOverview>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'chapter.statusSet', {
-      sessionId: session.sessionId,
+      sessionId: fileSession.sessionId,
       path: chapterPath,
       status,
       expectedStatusRevision: overview.statusRevision,
     }))
-    if (currentSession(ctx)?.sessionId !== requestSessionId) return
+    if (fileSessionIdRef.current !== requestSessionId) return
     setStatusBusy(false)
     if (!overviewRequestGate.isCurrent(ticket)) {
       setOverviewRevision((value) => value + 1)
@@ -2490,38 +2666,49 @@ function Root({ ctx, writingScope, settingsControl }: {
     setReveal(hit ? { ...hit, nonce: Date.now() } : null)
   }
   const loadArchives = async () => {
-    if (!session) return
-    const ticket = archiveRequestGate.begin(session.sessionId)
+    if (!fileSession) return
+    const ticket = archiveRequestGate.begin(fileSession.sessionId)
     setArchiveBusy(true); setArchiveNote('')
-    const result = await safeRpcCall<ArchiveListResponse>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.list', { sessionId: session.sessionId }))
+    const result = await safeRpcCall<ArchiveListResponse>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.list', { sessionId: fileSession.sessionId }))
     if (!archiveRequestGate.isCurrent(ticket)) return
     setArchiveBusy(false)
     if (!result.ok) { setArchiveNote(errorMessage(result)); return }
     setArchives(result.value.items)
     setArchiveInvalid(result.value.invalid)
   }
-  const openManage = (selectedPath: string) => {
+  const openFileMenu = (selectedPath: string, position: { x: number; y: number }) => {
+    if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
+    setWorkbenchNote('')
+    setFileMenu({ path: selectedPath, x: position.x, y: position.y })
+  }
+  const openManageAction = (selectedPath: string, mode: 'rename' | 'move') => {
     if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
     fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setManagePath(selectedPath); setManageNote('')
-    if (!session || !selectedPath.startsWith('正文/')) { setManageDirectories([]); return }
+    setFileMenu(null)
+    setManagePath(selectedPath)
+    setManageMode(mode)
+    setManageNote('')
+    if (mode !== 'move' || !fileSession || !selectedPath.startsWith('正文/')) {
+      setManageDirectories([])
+      return
+    }
     setManageDirectories(null)
-    const ticket = manageDirectoryGate.begin(`${session.sessionId}\0${selectedPath}`)
+    const ticket = manageDirectoryGate.begin(`${fileSession.sessionId}\0${selectedPath}`)
     const currentDirectory = selectedPath.slice(0, selectedPath.lastIndexOf('/'))
-    void collectManuscriptDirectories(ctx, session.sessionId).then((directories) => {
+    void collectManuscriptDirectories(ctx, fileSession.sessionId).then((directories) => {
       if (!manageDirectoryGate.isCurrent(ticket)) return
       setManageDirectories(directories.filter((directory) => directory.normalize('NFC').toLocaleLowerCase() !== currentDirectory.normalize('NFC').toLocaleLowerCase()))
     }).catch(() => {
       if (!manageDirectoryGate.isCurrent(ticket)) return
       setManageDirectories([])
-      setManageNote('未能读取可用卷/部；重命名和归档仍可使用。')
+      setManageNote('未能读取可用卷/部。')
     })
   }
   const closeManage = () => {
     if (manageBusy) return
     const target = fileManageReturnFocus.current
     manageDirectoryGate.setScope('')
-    setManagePath(null); setManageNote(''); setManageDirectories(null)
+    setManagePath(null); setManageMode(null); setManageNote(''); setManageDirectories(null)
     if (target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const openWorkspaceManage = (workspace: { workspaceId: WorkspaceId; title?: string; path: string }, removable: boolean) => {
@@ -2563,19 +2750,19 @@ function Root({ ctx, writingScope, settingsControl }: {
       setWorkspaceManageNote('最近入口未能移除，请重试。')
     }
   }
-  const observedVersion = async (selectedPath: string): Promise<string | undefined> => {
-    if (!session) return undefined
-    const read = await safeRpcCall<{ version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', { sessionId: session.sessionId, path: selectedPath }))
-    if (!read.ok) { setManageNote(errorMessage(read)); return undefined }
+  const observedVersion = async (selectedPath: string, onError: (message: string) => void): Promise<string | undefined> => {
+    if (!fileSession) return undefined
+    const read = await safeRpcCall<{ version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', { sessionId: fileSession.sessionId, path: selectedPath }))
+    if (!read.ok) { onError(errorMessage(read)); return undefined }
     return read.value.version
   }
   const renameManaged = async (name: string) => {
-    if (!session || !managePath || manageBusy) return
+    if (!fileSession || !managePath || manageBusy) return
     setManageBusy(true); setManageNote('')
-    const version = await observedVersion(managePath)
+    const version = await observedVersion(managePath, setManageNote)
     if (!version) { setManageBusy(false); return }
     const renamed = await safeRpcCall<{ path: string; metadataWarning?: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.rename', {
-      sessionId: session.sessionId,
+      sessionId: fileSession.sessionId,
       path: managePath,
       newName: name,
       expectedVersion: version,
@@ -2588,14 +2775,15 @@ function Root({ ctx, writingScope, settingsControl }: {
     manageDirectoryGate.setScope('')
     setManageDirectories(null)
     setManagePath(null)
+    setManageMode(null)
   }
   const moveManaged = async (targetDirectory: string) => {
-    if (!session || !managePath || manageBusy) return
+    if (!fileSession || !managePath || manageBusy) return
     setManageBusy(true); setManageNote('')
-    const version = await observedVersion(managePath)
+    const version = await observedVersion(managePath, setManageNote)
     if (!version) { setManageBusy(false); return }
     const moved = await safeRpcCall<{ path: string; metadataWarning?: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.moveManuscript', {
-      sessionId: session.sessionId,
+      sessionId: fileSession.sessionId,
       path: managePath,
       targetDirectory,
       expectedVersion: version,
@@ -2608,32 +2796,36 @@ function Root({ ctx, writingScope, settingsControl }: {
     setTreeRevision((value) => value + 1)
     setWorkbenchNote(moved.value.metadataWarning ? `已移动到 ${moved.value.path}；${moved.value.metadataWarning}` : `已移动到 ${moved.value.path}`)
     setManagePath(null)
+    setManageMode(null)
   }
-  const archiveManaged = async () => {
-    if (!session || !managePath || manageBusy) return
-    setManageBusy(true); setManageNote('')
-    const version = await observedVersion(managePath)
-    if (!version) { setManageBusy(false); return }
+  const archiveManaged = async (selectedPath: string) => {
+    setFileMenu(null)
+    if (!fileSession || archiveBusy) return
+    if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
+    setArchiveBusy(true)
+    setWorkbenchNote('')
+    const version = await observedVersion(selectedPath, setWorkbenchNote)
+    if (!version) {
+      setArchiveBusy(false)
+      return
+    }
     const archived = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', {
-      sessionId: session.sessionId,
-      path: managePath,
+      sessionId: fileSession.sessionId,
+      path: selectedPath,
       expectedVersion: version,
     }))
-    setManageBusy(false)
-    if (!archived.ok) { setManageNote(errorMessage(archived)); return }
-    if (archived.value.state !== 'archived') { setManageNote('归档未完成，请在已归档列表中检查。'); await loadArchives(); return }
-    if (path === managePath) { setPath(''); setReveal(null) }
-    manageDirectoryGate.setScope('')
-    setManageDirectories(null)
-    setManagePath(null)
+    setArchiveBusy(false)
+    if (!archived.ok) { setWorkbenchNote(errorMessage(archived)); return }
+    if (archived.value.state !== 'archived') { setWorkbenchNote('归档未完成，请在已归档列表中检查。'); await loadArchives(); return }
+    if (path === selectedPath) { setPath(''); setReveal(null) }
     setTreeRevision((value) => value + 1)
     setWorkbenchNote(archived.value.metadataWarning ? `已归档 ${archived.value.path}；${archived.value.metadataWarning}` : `已归档 ${archived.value.path}`)
     await loadArchives()
   }
   const continueArchive = async (item: ArchiveView) => {
-    if (!session || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote('请先保存当前文档。'); return }
+    if (!fileSession || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote('请先保存当前文档。'); return }
     setArchiveBusy(true); setArchiveNote('')
-    const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', { sessionId: session.sessionId, archiveId: item.archiveId }))
+    const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', { sessionId: fileSession.sessionId, archiveId: item.archiveId }))
     setArchiveBusy(false)
     if (!result.ok) { setArchiveNote(errorMessage(result)); return }
     if (result.value.metadataWarning) setArchiveNote(result.value.metadataWarning)
@@ -2641,11 +2833,11 @@ function Root({ ctx, writingScope, settingsControl }: {
     await loadArchives()
   }
   const restoreArchived = async (item: ArchiveView) => {
-    if (!session || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote('请先保存当前文档。'); return }
+    if (!fileSession || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote('请先保存当前文档。'); return }
     if (!item.version) { setArchiveNote('归档状态无法验证，未恢复。'); return }
     setArchiveBusy(true); setArchiveNote('')
     const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.restore', {
-      sessionId: session.sessionId,
+      sessionId: fileSession.sessionId,
       archiveId: item.archiveId,
       expectedVersion: item.version,
     }))
@@ -2658,7 +2850,7 @@ function Root({ ctx, writingScope, settingsControl }: {
     await loadArchives()
   }
   const openCreateDialog = (kind: DocumentKind | 'group', directory?: string) => {
-    if (!session) return
+    if (!fileSession) return
     if (editorDirty) { setCreateNote('请先保存当前文档。'); return }
     createReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setCreateNote('')
@@ -2672,14 +2864,14 @@ function Root({ ctx, writingScope, settingsControl }: {
     globalThis.setTimeout(() => target?.focus(), 0)
   }
   const create = async (title: string) => {
-    if (!session || !createRequest) return
+    if (!fileSession || !createRequest) return
     const request = createRequest
     setCreateBusy(true)
     setCreateNote('')
     if (request.kind === 'group') {
       const groupPath = manuscriptGroupPath(title)
       const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'structure.groupCreate', {
-        sessionId: session.sessionId,
+        sessionId: fileSession.sessionId,
         path: groupPath,
       }))
       setCreateBusy(false)
@@ -2692,7 +2884,7 @@ function Root({ ctx, writingScope, settingsControl }: {
     const kind: DocumentKind = request.kind
     let workspaceFiles: string[]
     try {
-      workspaceFiles = await collectWorkspaceFiles(ctx, session.sessionId)
+      workspaceFiles = await collectWorkspaceFiles(ctx, fileSession.sessionId)
     } catch {
       setCreateBusy(false)
       setCreateNote('未能读取完整目录，请重试。')
@@ -2702,7 +2894,7 @@ function Root({ ctx, writingScope, settingsControl }: {
       ? nextChapterPath(workspaceFiles, request.directory)
       : nextDocumentPath(kind, title, workspaceFiles)
     const result = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'file.create', {
-      sessionId: session.sessionId,
+      sessionId: fileSession.sessionId,
       path: file,
       text: documentTemplate(kind, title),
     }))
@@ -2713,23 +2905,23 @@ function Root({ ctx, writingScope, settingsControl }: {
     setTreeRevision((old) => old + 1)
   }
   const exportNovel = async (format: ExportFormat) => {
-    if (!session) return
+    if (!fileSession) return
     if (editorDirty) { setExportNote('请先保存当前文档，再预览导出。'); return }
-    const requestSessionId = session.sessionId
+    const requestSessionId = fileSession.sessionId
     setExporting(true); setExportNote('正在整理正文…')
     try {
       const chapters = await collectChapters(ctx, requestSessionId)
-      if (currentSession(ctx)?.sessionId !== requestSessionId) return
+      if (fileSessionIdRef.current !== requestSessionId) return
       const title = currentWorkspace?.title || (current ? sessions.byId[current]?.displayTitle : undefined) || '未命名作品'
       const prepared = prepareExport(chapters, title, format)
       setExportPreview(prepared)
       setExportNote('导出内容已整理，请核对后确认。')
     } catch (error) {
-      if (currentSession(ctx)?.sessionId !== requestSessionId) return
+      if (fileSessionIdRef.current !== requestSessionId) return
       const message = error instanceof Error ? error.message : ''
       setExportNote(/没有可导出|正文为空/.test(message) ? message : '导出未能完成，请重试。')
     } finally {
-      if (currentSession(ctx)?.sessionId === requestSessionId) setExporting(false)
+      if (fileSessionIdRef.current === requestSessionId) setExporting(false)
     }
   }
   const confirmExport = () => {
@@ -2738,39 +2930,6 @@ function Root({ ctx, writingScope, settingsControl }: {
     setExportNote(`已生成 ${exportPreview.filename}`)
     setExportPreview(null)
   }
-  const currentCwd = current ? sessions.byId[current]?.cwd : undefined
-  const currentWorkspace = workspaces.items.find((workspace) => workspace.path === currentCwd)
-  useEffect(() => {
-    if (!current || !currentWorkspace || probedImportSessions.current.has(current)) return
-    probedImportSessions.current.add(current)
-    let live = true
-    void safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: current }))
-      .then((recovery) => {
-        if (!live || !recovery.ok || recovery.value.state !== 'recoverable') return
-        importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-        ctx.sessions.clear()
-        setImportFlow(recoverImport(current, currentWorkspace.workspaceId, recovery.value))
-      })
-    return () => { live = false }
-  }, [ctx.connection.rpc, current, currentWorkspace?.workspaceId])
-  useEffect(() => {
-    if (!current || !currentWorkspace || probedRestoreSessions.current.has(current)) return
-    probedRestoreSessions.current.add(current)
-    let live = true
-    void safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: current }))
-      .then((recovery) => {
-        if (!live) return
-        if (!recovery.ok || !blocksWorkspaceOpen(recovery.value)) {
-          verifiedRestoreSessions.current.add(current)
-          refreshRestoreGate((value) => value + 1)
-          return
-        }
-        snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-        ctx.sessions.clear()
-        setSnapshotFlow(recoverSnapshot(current, currentWorkspace.workspaceId, recovery.value))
-      })
-    return () => { live = false }
-  }, [ctx.connection.rpc, current, currentWorkspace?.workspaceId])
   const triggerExistingIndex = (workspaceId: WorkspaceId, sessionId: SessionId, force = false) => {
     if (!force && indexedWorkspaces.current.has(workspaceId)) return
     indexedWorkspaces.current.add(workspaceId)
@@ -2785,57 +2944,361 @@ function Root({ ctx, writingScope, settingsControl }: {
       setIndexStatus((old) => ({ ...old, [workspaceId]: 'queued' }))
     }).catch(() => setIndexStatus((old) => ({ ...old, [workspaceId]: 'failed' })))
   }
-  const connectAndInitialize = async (workspaceId: WorkspaceId, newProject: boolean) => {
-    const sessionId = await ctx.workspaces.connectWorkspace(workspaceId)
-    if (newProject) {
-      const initialized = await ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.init', { sessionId, newProject: true }) as RpcResult
-      if (!initialized.ok) throw new Error(errorMessage(initialized))
-    }
-    if (!newProject) {
-      probedImportSessions.current.add(sessionId)
-      const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: sessionId }))
-      if (recovery.ok && recovery.value.state === 'recoverable') {
-        importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-        setImportFlow(recoverImport(sessionId, workspaceId, recovery.value)); return
+  const finishWorkspaceOpen = async (
+    pending: PendingWorkspaceOpen,
+    sessionId: SessionId,
+    initialPath: string | undefined,
+  ) => {
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    let warning = pending.warning
+    if (pending.replaceWorkspaceId && pending.replaceWorkspaceId !== pending.workspace.workspaceId) {
+      try {
+        await ctx.workspaces.delete(pending.replaceWorkspaceId)
+      } catch {
+        warning = warning ? `${warning} 旧的最近入口未能移除。` : '新位置已打开，但旧的最近入口未能移除。'
       }
-      probedRestoreSessions.current.add(sessionId)
-      const restore = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: sessionId }))
-      if (restore.ok && blocksWorkspaceOpen(restore.value)) {
-        snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-        setSnapshotFlow(recoverSnapshot(sessionId, workspaceId, restore.value))
+      if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    }
+    pendingWorkspaceOpen.current = null
+    setPath(initialPath ?? '')
+    setWorkspaceOpen({
+      kind: 'ready',
+      workspaceId: pending.workspace.workspaceId,
+      sessionId,
+      path: pending.workspace.path,
+      warning,
+    })
+    ctx.sessions.open(sessionId)
+    setIndexStatus((old) => ({ ...old, [pending.workspace.workspaceId]: 'idle' }))
+  }
+  const prepareExistingWorkspace = async (pending: PendingWorkspaceOpen, sessionId: SessionId) => {
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    const relocatedInitialPath = pending.replaceWorkspaceId
+      ? await verifyRelocatedWorkspaceSession(ctx, sessionId)
+      : undefined
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: sessionId }))
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    if (recovery.ok && recovery.value.state === 'recoverable') {
+      const nextImportFlow = recoverImport(sessionId, pending.workspace.workspaceId, recovery.value)
+      if (nextImportFlow.kind === 'recover') {
+        pendingWorkspaceOpen.current = pending
+        importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        setWorkspaceOpen({ kind: 'needs-recovery', workspaceId: pending.workspace.workspaceId, sessionId, path: pending.workspace.path, title: pending.workspace.title, recovery: 'import' })
+        setImportFlow(nextImportFlow)
         return
       }
-      verifiedRestoreSessions.current.add(sessionId)
-      triggerExistingIndex(workspaceId, sessionId)
+      pending.warning = '发现损坏的旧导入记录；已忽略，正文不会被阻断。'
     }
-    ctx.sessions.open(sessionId)
+    if (!recovery.ok) pending.warning = '发现无法验证的旧导入记录；已忽略，正文不会被阻断。'
+
+    const restore = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', { targetSessionId: sessionId }))
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    if (restore.ok && restore.value.state === 'recoverable') {
+      const nextSnapshotFlow = recoverSnapshot(sessionId, pending.workspace.workspaceId, restore.value)
+      if (nextSnapshotFlow.kind === 'recover') {
+        pendingWorkspaceOpen.current = pending
+        snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        setWorkspaceOpen({ kind: 'needs-recovery', workspaceId: pending.workspace.workspaceId, sessionId, path: pending.workspace.path, title: pending.workspace.title, recovery: 'restore' })
+        setSnapshotFlow(nextSnapshotFlow)
+        return
+      }
+      pending.warning = pending.warning
+        ? `${pending.warning} 另有损坏的旧恢复记录也已忽略。`
+        : '发现损坏的旧恢复记录；已忽略，正文不会被阻断。'
+    }
+    if (!restore.ok) pending.warning = pending.warning
+        ? `${pending.warning} 另有无法验证的旧恢复记录也已忽略。`
+        : '发现无法验证的旧恢复记录；已忽略，正文不会被阻断。'
+
+    const initialPath = relocatedInitialPath ?? await verifyWorkspaceSession(ctx, sessionId)
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    if (!initialPath) {
+      const root = await safeRpcCall<{ entries?: Entry[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId, path: '.' }))
+      if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+      if (!root.ok) throw new Error(errorMessage(root))
+      if (hasVisibleWorkspaceEntries(root.value.entries ?? [])) throw new Error('workspace has no supported text files')
+      pendingWorkspaceOpen.current = pending
+      setWorkspaceOpen({
+        kind: 'needs-intent', workspaceId: pending.workspace.workspaceId,
+        path: pending.workspace.path, title: pending.workspace.title, intent: 'create',
+        message: '这个文件夹还没有可打开的 Markdown 或 TXT 作品文件。',
+      })
+      setHomeNote('')
+      return
+    }
+    await finishWorkspaceOpen(pending, sessionId, initialPath)
   }
-  const openWorkspacePath = async (path: string, newProject: boolean) => {
-    const workspace = await ctx.workspaces.create({ path })
-    await connectAndInitialize(workspace.workspaceId, newProject)
+
+  const prepareNewWorkspace = async (pending: PendingWorkspaceOpen, sessionId: SessionId) => {
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    const root = await safeRpcCall<{ entries?: Entry[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId, path: '.' }))
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    if (!root.ok) throw new Error(errorMessage(root))
+    if (hasVisibleWorkspaceEntries(root.value.entries ?? [])) {
+      const files = supportedWorkspaceTextPaths(await collectWorkspaceFiles(ctx, sessionId))
+      if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+      if (!files.length) throw new Error('new workspace folder contains unrelated files')
+      pendingWorkspaceOpen.current = pending
+      setWorkspaceOpen({
+        kind: 'needs-intent', workspaceId: pending.workspace.workspaceId,
+        path: pending.workspace.path, title: pending.workspace.title, intent: 'open',
+        message: '这个文件夹已经包含 Markdown 或 TXT 作品文件，不会按新作品初始化。',
+      })
+      setHomeNote('')
+      return
+    }
+    const initialized = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.init', { sessionId, newProject: true }))
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    if (!initialized.ok) throw new Error(errorMessage(initialized))
+    const initialPath = await verifyWorkspaceSession(ctx, sessionId)
+    await finishWorkspaceOpen(pending, sessionId, initialPath)
   }
-  const openPickedWorkspace = async (path: string, newProject: boolean) => {
+  const openRegisteredWorkspace = async (workspace: WorkspaceView, sessionId?: SessionId, replaceWorkspaceId?: WorkspaceId) => {
+    const ticket = workspaceOpenGate.begin(`workspace:${workspace.workspaceId}:${workspace.path}`)
+    const pending: PendingWorkspaceOpen = { ticket, workspace, intent: 'open', registrationCreated: false, replaceWorkspaceId }
+    pendingWorkspaceOpen.current = null
     setOpeningWorkspace(true)
     setHomeNote('')
-    if (session) setWorkbenchNote('')
+    setWorkspaceOpen({ kind: 'checking', workspaceId: workspace.workspaceId, path: workspace.path, title: workspace.title })
     try {
-      await openWorkspacePath(path, newProject)
-      setManualWorkspaceMode(null)
-      setManualWorkspacePath('')
+      const registered = await ctx.workspaces.create({ path: workspace.path })
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      pending.workspace = registered
     } catch {
-      const message = '作品未能打开，请检查路径后重试。'
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      ctx.sessions.clear()
+      const message = '原作品文件夹已移动或无法读取。'
+      setWorkspaceOpen({ kind: 'needs-relocation', workspaceId: workspace.workspaceId, path: workspace.path, title: workspace.title, message })
       setHomeNote(message)
-      setManualWorkspaceMode(newProject ? 'new' : 'existing')
-      setManualWorkspacePath(path)
-      if (session) {
-        setWorkbenchNote(message)
-        setWorkspaceMenuOpen(true)
-      }
-    } finally {
       setOpeningWorkspace(false)
+      return
+    }
+    const current = pending.workspace
+    let inspection: ProjectInspectionResponse
+    try {
+      inspection = await inspectRegisteredWorkspace(ctx, current.path)
+    } catch {
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      const message = '作品目录检查未能完成，请重试。'
+      setWorkspaceOpen({ kind: 'error', workspaceId: current.workspaceId, path: current.path, title: current.title, message })
+      setHomeNote(message)
+      setOpeningWorkspace(false)
+      return
+    }
+    if (!workspaceOpenGate.isCurrent(ticket)) return
+    if (!inspection.textFiles.length) {
+      if (!inspection.hasVisibleEntries) {
+        pendingWorkspaceOpen.current = pending
+        setWorkspaceOpen({
+          kind: 'needs-intent', workspaceId: current.workspaceId, path: current.path, title: current.title,
+          intent: 'create', message: '这个文件夹还没有可打开的 Markdown 或 TXT 作品文件。',
+        })
+        setOpeningWorkspace(false)
+        return
+      }
+      const message = '没有找到可打开的 Markdown 或 TXT 作品文件。'
+      setWorkspaceOpen({ kind: 'error', workspaceId: current.workspaceId, path: current.path, title: current.title, message })
+      setHomeNote(message)
+      setOpeningWorkspace(false)
+      return
+    }
+    try {
+      const connectedSessionId = await connectUsableWorkspaceSession(ctx, current.workspaceId, sessionId)
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      pending.sessionId = connectedSessionId
+      await prepareExistingWorkspace(pending, connectedSessionId)
+    } catch (error) {
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      ctx.sessions.clear()
+      const message = workspaceOpenFailureMessage(error)
+      setWorkspaceOpen({ kind: 'error', workspaceId: current.workspaceId, path: current.path, title: current.title, message })
+      setHomeNote(message)
+    } finally {
+      if (workspaceOpenGate.isCurrent(ticket)) setOpeningWorkspace(false)
     }
   }
-  const startWorkspaceFromPicker = async (newProject: boolean) => {
+  const finishPendingWorkspaceOpen = async (targetSessionId: string): Promise<boolean> => {
+    const pending = pendingWorkspaceOpen.current
+    if (!pending || workspaceOpen.kind !== 'needs-recovery' || workspaceOpen.sessionId !== targetSessionId) return false
+    const initialPath = pending.replaceWorkspaceId
+      ? await verifyRelocatedWorkspaceSession(ctx, targetSessionId as SessionId)
+      : await verifyWorkspaceSession(ctx, targetSessionId as SessionId)
+    if (!initialPath) throw new Error('recovery created no supported text files')
+    await finishWorkspaceOpen(pending, targetSessionId as SessionId, initialPath)
+    return true
+  }
+  const openPickedWorkspace = async (path: string, intent: WorkspaceIntent, replaceWorkspaceId?: WorkspaceId) => {
+    const ticket = workspaceOpenGate.begin(`path:${path}`)
+    const replacedWorkspace = replaceWorkspaceId ? workspaces.items.find((item) => item.workspaceId === replaceWorkspaceId) : undefined
+    let pending: PendingWorkspaceOpen | undefined
+    let stage: 'registering' | 'inspecting' | 'connecting' | 'initializing' | 'verifying' = 'registering'
+    setOpeningWorkspace(true)
+    setHomeNote('')
+    setWorkspaceOpen({ kind: 'checking', path, title: path })
+    try {
+      const registration = await createFlowWorkspace(ctx, path)
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      pending = {
+        ticket,
+        workspace: registration.workspace,
+        intent,
+        registrationCreated: registration.created,
+        replaceWorkspaceId,
+      }
+      stage = 'inspecting'
+      const inspection = await inspectRegisteredWorkspace(ctx, registration.workspace.path)
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      if (replaceWorkspaceId && !hasRelocatableManuscriptFiles(inspection.textFiles)) throw new Error('relocated workspace has no readable manuscript')
+      if (intent === 'create' && inspection.hasVisibleEntries) {
+        if (!inspection.textFiles.length) throw new Error('new workspace folder contains unrelated files')
+        pendingWorkspaceOpen.current = pending
+        setWorkspaceOpen({
+          kind: 'needs-intent', workspaceId: registration.workspace.workspaceId,
+          path: registration.workspace.path, title: registration.workspace.title, intent: 'open',
+          message: '这个文件夹已经包含 Markdown 或 TXT 作品文件，不会按新作品初始化。',
+        })
+        setManualWorkspaceMode(null)
+        setManualWorkspacePath('')
+        return
+      }
+      if (intent === 'open' && !inspection.textFiles.length) {
+        if (inspection.hasVisibleEntries) throw new Error('workspace has no supported text files')
+        pendingWorkspaceOpen.current = pending
+        setWorkspaceOpen({
+          kind: 'needs-intent', workspaceId: registration.workspace.workspaceId,
+          path: registration.workspace.path, title: registration.workspace.title, intent: 'create',
+          message: '这个文件夹还没有可打开的 Markdown 或 TXT 作品文件。',
+        })
+        setManualWorkspaceMode(null)
+        setManualWorkspacePath('')
+        return
+      }
+      stage = 'connecting'
+      const sessionId = await connectUsableWorkspaceSession(ctx, registration.workspace.workspaceId)
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      pending.sessionId = sessionId
+      stage = intent === 'create' ? 'initializing' : 'verifying'
+      if (intent === 'create') await prepareNewWorkspace(pending, sessionId)
+      else await prepareExistingWorkspace(pending, sessionId)
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      setManualWorkspaceMode(null)
+      setManualWorkspacePath('')
+      setRelocatingWorkspaceId(undefined)
+    } catch (error) {
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      let cleanupFailed = false
+      if (pending?.registrationCreated && !pending.sessionId) {
+        try { await ctx.workspaces.delete(pending.workspace.workspaceId) } catch { cleanupFailed = true }
+      }
+      if (!workspaceOpenGate.isCurrent(ticket)) return
+      const detail = error instanceof Error ? error.message : ''
+      const message = replaceWorkspaceId
+        ? relocationFailureMessage(cleanupFailed)
+        : /unrelated files/i.test(detail)
+          ? '新作品必须使用空文件夹；当前文件夹已有其他内容。'
+          : /no supported text files/i.test(detail)
+            ? '没有找到可打开的 Markdown 或 TXT 作品文件。'
+            : stage === 'registering'
+              ? '作品文件夹不存在或无法读取，请重新选择。'
+              : stage === 'inspecting'
+                ? '作品目录检查未能完成，请重试。'
+              : stage === 'initializing'
+                ? '新作品初始化未能完成；已有文件不会被覆盖。'
+                : workspaceOpenFailureMessage(error)
+      setWorkspaceOpen(replacedWorkspace
+        ? { kind: 'needs-relocation', workspaceId: replacedWorkspace.workspaceId, path: replacedWorkspace.path, title: replacedWorkspace.title, message }
+        : { kind: 'error', path, title: path, message })
+      setHomeNote(message)
+      setManualWorkspaceMode((replaceWorkspaceId || intent === 'create') ? null : 'existing')
+      setManualWorkspacePath((replaceWorkspaceId || intent === 'create') ? '' : path)
+      if (replaceWorkspaceId) setRelocatingWorkspaceId(undefined)
+    } finally {
+      if (workspaceOpenGate.isCurrent(ticket)) setOpeningWorkspace(false)
+    }
+  }
+  const continuePendingWorkspaceIntent = async () => {
+    const pending = pendingWorkspaceOpen.current
+    if (!pending || workspaceOpen.kind !== 'needs-intent' || pending.workspace.workspaceId !== workspaceOpen.workspaceId) return
+    pending.intent = workspaceOpen.intent
+    setOpeningWorkspace(true)
+    setHomeNote('')
+    setWorkspaceOpen({ kind: 'checking', workspaceId: pending.workspace.workspaceId, path: pending.workspace.path, title: pending.workspace.title })
+    try {
+      const sessionId = await connectUsableWorkspaceSession(ctx, pending.workspace.workspaceId, pending.sessionId)
+      if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+      pending.sessionId = sessionId
+      if (pending.intent === 'create') await prepareNewWorkspace(pending, sessionId)
+      else await prepareExistingWorkspace(pending, sessionId)
+    } catch (error) {
+      if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+      let cleanupFailed = false
+      if (pending.registrationCreated && !pending.sessionId) {
+        try { await ctx.workspaces.delete(pending.workspace.workspaceId) } catch { cleanupFailed = true }
+      }
+      if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+      pendingWorkspaceOpen.current = null
+      const message = pending.intent === 'create'
+        ? `新作品初始化未能完成；已有文件不会被覆盖。${cleanupFailed ? ' 最近作品入口未能自动移除。' : ''}`
+        : `${workspaceOpenFailureMessage(error)}${cleanupFailed ? ' 最近作品入口未能自动移除。' : ''}`
+      setWorkspaceOpen({ kind: 'error', path: pending.workspace.path, title: pending.workspace.title, message })
+      setHomeNote(message)
+    } finally {
+      if (workspaceOpenGate.isCurrent(pending.ticket)) setOpeningWorkspace(false)
+    }
+  }
+  const cancelPendingWorkspaceIntent = async () => {
+    const pending = pendingWorkspaceOpen.current
+    if (!pending || workspaceOpen.kind !== 'needs-intent') return
+    workspaceOpenGate.begin('home')
+    pendingWorkspaceOpen.current = null
+    setOpeningWorkspace(true)
+    let cleanupFailed = false
+    if (pending.registrationCreated && !pending.sessionId) {
+      try { await ctx.workspaces.delete(pending.workspace.workspaceId) } catch { cleanupFailed = true }
+    }
+    setOpeningWorkspace(false)
+    setWorkspaceOpen({ kind: 'idle' })
+    setManualWorkspaceMode(null)
+    setManualWorkspacePath('')
+    setHomeNote(cleanupFailed
+      ? '已取消，但本次新增的最近作品入口未能自动移除。'
+      : pending.registrationCreated && pending.sessionId
+        ? '已取消；作品会话已经建立，因此最近作品入口已保留。'
+        : '')
+  }
+  useEffect(() => {
+    if (workspaceOpen.kind !== 'idle' || !selectedWorkspace || !session) return
+    if (!claimInitialWorkspaceResume(initialWorkspaceResumeStarted)) return
+    void openRegisteredWorkspace(selectedWorkspace, session.sessionId)
+  }, [selectedWorkspace?.workspaceId, session?.sessionId, workspaceOpen.kind])
+  const relocateWorkspace = async (workspace: WorkspaceView) => {
+    if (openingWorkspace) return
+    let path: string | null
+    try {
+      path = await ctx.workspaces.pickDirectory()
+    } catch {
+      setRelocatingWorkspaceId(workspace.workspaceId)
+      setManualWorkspaceMode('existing')
+      setManualWorkspacePath('')
+      setHomeNote('目录选择器暂时不可用，请直接输入作品的新位置。')
+      return
+    }
+    if (!path) return
+    await openPickedWorkspace(path, 'open', workspace.workspaceId)
+  }
+  const removeBrokenWorkspace = async (workspace: WorkspaceView) => {
+    if (openingWorkspace) return
+    try {
+      await ctx.workspaces.delete(workspace.workspaceId)
+      workspaceOpenGate.begin('home')
+      setWorkspaceOpen({ kind: 'idle' })
+      setHomeNote('已从最近移除；磁盘中的作品未被删除。')
+    } catch {
+      setHomeNote('最近入口未能移除，请重试。')
+    }
+  }
+  const startWorkspaceFromPicker = async () => {
     if (openingWorkspace) return
     setHomeNote('')
     setManualWorkspaceMode(null)
@@ -2845,10 +3308,11 @@ function Root({ ctx, writingScope, settingsControl }: {
       picked = await ctx.workspaces.pickDirectory()
     } catch {
       setOpeningWorkspace(false)
-      setManualWorkspaceMode(newProject ? 'new' : 'existing')
+      setManualWorkspaceMode('existing')
       setHomeNote('目录选择器暂时不可用，请直接输入作品路径。')
       if (session) {
         setWorkbenchNote('目录选择器暂时不可用，请直接输入作品路径。')
+        setWorkspaceSwitcherOpen(false)
         setWorkspaceMenuOpen(true)
       }
       return
@@ -2857,7 +3321,7 @@ function Root({ ctx, writingScope, settingsControl }: {
       setOpeningWorkspace(false)
       return
     }
-    await openPickedWorkspace(picked, newProject)
+    await openPickedWorkspace(picked, 'open')
   }
   const pickWorkspaceDirectory = async () => {
     try {
@@ -2868,7 +3332,7 @@ function Root({ ctx, writingScope, settingsControl }: {
         else setHomeNote(message)
         return
       }
-      await openPickedWorkspace(path, manualWorkspaceMode === 'new')
+      await openPickedWorkspace(path, 'open', relocatingWorkspaceId)
     } catch {
       const message = '目录选择器暂时不可用，请直接输入作品路径。'
       if (session) setWorkbenchNote(message)
@@ -2884,11 +3348,11 @@ function Root({ ctx, writingScope, settingsControl }: {
       else setHomeNote(message)
       return
     }
-    await openPickedWorkspace(path, manualWorkspaceMode === 'new')
+    await openPickedWorkspace(path, 'open', relocatingWorkspaceId)
   }
   const pathFallbackForm = manualWorkspaceMode ? e('form', { className: 'path-fallback', onSubmit: submitWorkspacePath },
     e('label', null,
-      e('span', null, manualWorkspaceMode === 'new' ? '新作品文件夹路径' : '作品文件夹路径'),
+      e('span', null, '作品文件夹路径'),
       e('input', {
         value: manualWorkspacePath,
         onChange: (event: ChangeEvent<HTMLInputElement>) => setManualWorkspacePath(event.target.value),
@@ -2900,45 +3364,90 @@ function Root({ ctx, writingScope, settingsControl }: {
     e('div', null,
       e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspaceDirectory() }, '选择文件夹'),
       e('button', { className: 'primary-action', type: 'submit', disabled: openingWorkspace },
-        openingWorkspace ? '打开中…' : manualWorkspaceMode === 'new' ? '在此新建' : '打开此目录',
+        openingWorkspace ? '打开中…' : '打开此目录',
       ),
       e('button', {
         type: 'button',
         disabled: openingWorkspace,
         onClick: () => {
           setManualWorkspaceMode(null)
+          setRelocatingWorkspaceId(undefined)
           setHomeNote('')
           if (session) setWorkbenchNote('')
         },
       }, '取消'),
     ),
   ) : null
-  const leaveToHome = async () => {
+  const closeWorkspaceChrome = () => {
     setWorkspaceMenuOpen(false)
+    setWorkspaceSwitcherOpen(false)
+  }
+  const leaveToHome = async () => {
+    closeWorkspaceChrome()
     if (editorDirty) { setWorkbenchNote('请先保存当前文档，再返回作品列表。'); return }
     if (!(await canLeaveAssistantDraft())) return
     setAssistantDraftDirty(false)
     setAssistantOpen(false)
     setFocusMode(false)
+    workspaceOpenGate.begin('home')
+    pendingWorkspaceOpen.current = null
+    setWorkspaceOpen({ kind: 'idle' })
     ctx.sessions.clear()
   }
   const switchToWorkspace = async (id: WorkspaceId) => {
-    setWorkspaceMenuOpen(false)
+    closeWorkspaceChrome()
     if (!id || id === currentWorkspace?.workspaceId) return
     if (editorDirty) { setWorkbenchNote('请先保存当前文档，再切换作品。'); return }
     if (!(await canLeaveAssistantDraft())) return
     setAssistantDraftDirty(false)
-    await connectAndInitialize(id, false).catch(() => setExportNote('作品未能打开，请重试。'))
+    const workspace = workspaces.items.find((item) => item.workspaceId === id)
+    if (!workspace) { setExportNote('作品入口已经变化，请重新选择。'); return }
+    await openRegisteredWorkspace(workspace)
   }
-  const openAnotherWorkspace = async (newProject: boolean) => {
-    setWorkspaceMenuOpen(false)
+  const startNewProject = async () => {
+    closeWorkspaceChrome()
+    if (openingWorkspace || newProject) return
+    if (fileSession) {
+      if (editorDirty) { setWorkbenchNote('请先保存当前文档，再新建作品。'); return }
+      if (!(await canLeaveAssistantDraft())) return
+      setAssistantDraftDirty(false)
+    }
+    setHomeNote('')
+    setManualWorkspaceMode(null)
+    setNewProject({ busy: false, note: '' })
+  }
+  const submitNewProject = async (title: string) => {
+    if (!newProject || newProject.busy || openingWorkspace) return
+    setNewProject({ busy: true, note: '' })
+    setOpeningWorkspace(true)
+    const created = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.createHome', { title }))
+    if (!created.ok) {
+      setOpeningWorkspace(false)
+      setNewProject({ busy: false, note: errorMessage(created) })
+      return
+    }
+    setNewProject(null)
+    await openPickedWorkspace(created.value.path, 'create')
+  }
+  const closeNewProject = () => {
+    if (newProject?.busy) return
+    setNewProject(null)
+  }
+  const renderNewProjectDialog = () => newProject ? e(NewProjectDialog, {
+    busy: newProject.busy,
+    note: newProject.note,
+    onClose: closeNewProject,
+    onCreate: (title: string) => void submitNewProject(title),
+  }) : null
+  const openAnotherWorkspace = async () => {
+    closeWorkspaceChrome()
     if (editorDirty) {
-      setWorkbenchNote(newProject ? '请先保存当前文档，再新建作品。' : '请先保存当前文档，再打开作品。')
+      setWorkbenchNote('请先保存当前文档，再打开作品。')
       return
     }
     if (!(await canLeaveAssistantDraft())) return
     setAssistantDraftDirty(false)
-    await startWorkspaceFromPicker(newProject)
+    await startWorkspaceFromPicker()
   }
   const closeImportFlow = (restoreFocus = true) => {
     const target = importReturnFocus.current
@@ -3008,10 +3517,21 @@ function Root({ ctx, writingScope, settingsControl }: {
       setHomeNote(sourceCleaned ? '导入已完成，但项目初始化未能完成。' : '导入已完成，但项目初始化和临时入口清理未能完成。')
       return
     }
-    ctx.sessions.open(flow.targetSessionId as SessionId)
-    triggerExistingIndex(flow.targetWorkspaceId as WorkspaceId, flow.targetSessionId as SessionId)
-    closeImportFlow(false)
-    if (!sourceCleaned) setHomeNote('作品已导入；临时来源入口未能自动移除。')
+    try {
+      const openedPending = await finishPendingWorkspaceOpen(flow.targetSessionId)
+      if (!openedPending) {
+        const initialPath = await verifyWorkspaceSession(ctx, flow.targetSessionId as SessionId)
+        setPath(initialPath ?? '')
+        setWorkspaceOpen({ kind: 'ready', workspaceId: flow.targetWorkspaceId as WorkspaceId, sessionId: flow.targetSessionId as SessionId, path: workspaces.items.find((item) => item.workspaceId === flow.targetWorkspaceId)?.path ?? '' })
+        ctx.sessions.open(flow.targetSessionId as SessionId)
+        setIndexStatus((old) => ({ ...old, [flow.targetWorkspaceId]: 'idle' }))
+      }
+      closeImportFlow(false)
+      if (!sourceCleaned) setHomeNote('作品已导入；临时来源入口未能自动移除。')
+    } catch {
+      closeImportFlow(false)
+      setHomeNote('导入已完成，但作品文件仍无法读取。')
+    }
   }
   const cleanupImportFlow = async () => {
     if (importFlow.kind === 'recover') { setImportFlow({ kind: 'cleanup-confirm', targetSessionId: importFlow.targetSessionId, targetWorkspaceId: importFlow.targetWorkspaceId, receiptId: importFlow.probe.receiptId! }); return }
@@ -3022,6 +3542,11 @@ function Root({ ctx, writingScope, settingsControl }: {
     if (cleaned.ok) {
       if (current === flow.targetSessionId) ctx.sessions.clear()
       const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
+      if (pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
+        workspaceOpenGate.begin('home')
+        pendingWorkspaceOpen.current = null
+        setWorkspaceOpen({ kind: 'idle' })
+      }
       closeImportFlow()
       setHomeNote(targetCleaned ? '已清理未完成导入。' : '已清理未完成导入，但临时工作区入口未能自动移除。')
       return
@@ -3032,6 +3557,11 @@ function Root({ ctx, writingScope, settingsControl }: {
       return
     }
     if (current === flow.targetSessionId) ctx.sessions.clear()
+    if (pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
+      workspaceOpenGate.begin('home')
+      pendingWorkspaceOpen.current = null
+      setWorkspaceOpen({ kind: 'idle' })
+    }
     closeImportFlow()
     setHomeNote('清理未能完成；文件未被自动删除。')
   }
@@ -3042,7 +3572,7 @@ function Root({ ctx, writingScope, settingsControl }: {
     if (restoreFocus && target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const openSnapshotLibrary = () => {
-    if (!session) return
+    if (!fileSession) return
     if (editorDirty) { setExportNote('请先保存当前文档，再查看作品快照。'); return }
     snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setSnapshotLibraryOpen(true)
@@ -3055,12 +3585,12 @@ function Root({ ctx, writingScope, settingsControl }: {
     if (target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const loadSnapshotList = async (note?: string) => {
-    if (!session) {
+    if (!fileSession) {
       setSnapshotList(null)
       return
     }
     setSnapshotBusy(true)
-    const listed = await safeRpcCall<SnapshotView[]>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.list', { sessionId: session.sessionId }))
+    const listed = await safeRpcCall<SnapshotView[]>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.list', { sessionId: fileSession.sessionId }))
     setSnapshotBusy(false)
     if (!listed.ok) { setSnapshotNote('快照列表未能读取，请重试。'); return }
     setSnapshotList(listed.value)
@@ -3071,18 +3601,18 @@ function Root({ ctx, writingScope, settingsControl }: {
     setSnapshotList(null)
     setSnapshotNote('')
     void loadSnapshotList()
-  }, [snapshotLibraryOpen, session?.sessionId])
+  }, [snapshotLibraryOpen, fileSession?.sessionId])
   const createSnapshot = async () => {
-    if (!session) return
+    if (!fileSession) return
     if (editorDirty) { setSnapshotNote('请先保存当前未保存内容，再创建快照。'); return }
     setSnapshotBusy(true)
     setSnapshotNote('正在创建整部作品文本快照…')
-    const result = await safeRpcCall<SnapshotView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.create', { sessionId: session.sessionId }))
+    const result = await safeRpcCall<SnapshotView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.create', { sessionId: fileSession.sessionId }))
     if (!result.ok) { setSnapshotBusy(false); setSnapshotNote('快照未能创建，请重试。'); return }
     await loadSnapshotList(`已创建快照：${snapshotSummary(result.value)}`)
   }
   const restoreAsCopy = async (snapshot: SnapshotView) => {
-    if (!session) return
+    if (!fileSession) return
     if (snapshotLibraryOpen) setSnapshotLibraryOpen(false)
     else snapshotReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setSnapshotBusy(true)
@@ -3096,7 +3626,7 @@ function Root({ ctx, writingScope, settingsControl }: {
       if (targetRegistration.created) createdTargetWorkspaceId = target.workspaceId
       const targetSessionId = await ctx.workspaces.connectWorkspace(target.workspaceId)
       const probe = await safeRpcCall<RestoreView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.restoreProbe', {
-        sourceSessionId: session.sessionId,
+        sourceSessionId: fileSession.sessionId,
         targetSessionId,
         snapshotId: snapshot.snapshotId,
       }))
@@ -3108,7 +3638,7 @@ function Root({ ctx, writingScope, settingsControl }: {
         setSnapshotNote(targetCleaned ? note : `${note} 临时工作区入口未能自动移除。`)
         return
       }
-      setSnapshotFlow(snapshotReview(session.sessionId, targetSessionId, target.workspaceId, probe.value, snapshot))
+      setSnapshotFlow(snapshotReview(fileSession.sessionId, targetSessionId, target.workspaceId, probe.value, snapshot))
     } catch (error) {
       const targetCleaned = createdTargetWorkspaceId ? await cleanupFlowWorkspace(createdTargetWorkspaceId) : true
       setSnapshotBusy(false)
@@ -3121,10 +3651,14 @@ function Root({ ctx, writingScope, settingsControl }: {
   const finishRestoredCopy = async (targetSessionId: string, targetWorkspaceId: string, sourceSessionId: string) => {
     const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
     preserveFlowWorkspace(targetWorkspaceId)
-    probedRestoreSessions.current.add(targetSessionId)
-    verifiedRestoreSessions.current.add(targetSessionId)
-    ctx.sessions.open(targetSessionId as SessionId)
-    triggerExistingIndex(targetWorkspaceId as WorkspaceId, targetSessionId as SessionId)
+    const openedPending = await finishPendingWorkspaceOpen(targetSessionId)
+    if (!openedPending) {
+      const initialPath = await verifyWorkspaceSession(ctx, targetSessionId as SessionId)
+      setPath(initialPath ?? '')
+      setWorkspaceOpen({ kind: 'ready', workspaceId: targetWorkspaceId as WorkspaceId, sessionId: targetSessionId as SessionId, path: workspaces.items.find((item) => item.workspaceId === targetWorkspaceId)?.path ?? '' })
+      ctx.sessions.open(targetSessionId as SessionId)
+      setIndexStatus((old) => ({ ...old, [targetWorkspaceId]: 'idle' }))
+    }
     closeSnapshotFlow(false)
     setSnapshotNote('')
     setWorkbenchNote(sourceCleaned ? '已恢复为新的作品副本。' : '已恢复作品副本；临时来源入口未能自动移除。')
@@ -3222,6 +3756,11 @@ function Root({ ctx, writingScope, settingsControl }: {
     if (cleaned.ok) {
       if (current === flow.targetSessionId) ctx.sessions.clear()
       const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
+      if (pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
+        workspaceOpenGate.begin('home')
+        pendingWorkspaceOpen.current = null
+        setWorkspaceOpen({ kind: 'idle' })
+      }
       closeSnapshotFlow()
       setHomeNote(targetCleaned ? '已清理未完成恢复。' : '已清理未完成恢复，但临时工作区入口未能自动移除。')
       return
@@ -3232,6 +3771,11 @@ function Root({ ctx, writingScope, settingsControl }: {
       return
     }
     if (current === flow.targetSessionId) ctx.sessions.clear()
+    if (pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
+      workspaceOpenGate.begin('home')
+      pendingWorkspaceOpen.current = null
+      setWorkspaceOpen({ kind: 'idle' })
+    }
     closeSnapshotFlow()
     setHomeNote('清理未能完成；文件未被自动删除。')
   }
@@ -3244,6 +3788,11 @@ function Root({ ctx, writingScope, settingsControl }: {
       cleaned = sourceCleaned && targetCleaned
     }
     if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
+    if (flow.kind !== 'idle' && flow.kind !== 'working' && pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
+      workspaceOpenGate.begin('home')
+      pendingWorkspaceOpen.current = null
+      setWorkspaceOpen({ kind: 'idle' })
+    }
     closeImportFlow()
     if (!cleaned) setHomeNote('已取消导入，但临时工作区入口未能自动移除。')
   }
@@ -3256,6 +3805,11 @@ function Root({ ctx, writingScope, settingsControl }: {
       cleaned = sourceCleaned && targetCleaned
     }
     if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
+    if (flow.kind !== 'idle' && flow.kind !== 'working' && pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
+      workspaceOpenGate.begin('home')
+      pendingWorkspaceOpen.current = null
+      setWorkspaceOpen({ kind: 'idle' })
+    }
     closeSnapshotFlow()
     if (!cleaned) setSnapshotNote('已取消恢复，但临时工作区入口未能自动移除。')
   }
@@ -3275,7 +3829,7 @@ function Root({ ctx, writingScope, settingsControl }: {
   })
   const renderSnapshotLibrary = () => e(SnapshotLibraryDialog, {
     open: snapshotLibraryOpen,
-    available: Boolean(session),
+    available: Boolean(fileSession),
     workspaceTitle: currentWorkspace?.title || currentWorkspace?.path || '',
     dirty: editorDirty,
     busy: snapshotBusy,
@@ -3287,55 +3841,67 @@ function Root({ ctx, writingScope, settingsControl }: {
     onClose: closeSnapshotLibrary,
   })
 
-  if (session && current && !verifiedRestoreSessions.current.has(current)) {
+  if (workspaceOpen.kind === 'checking') {
     return e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
       e('style', null, redesignedStyles),
       e('style', null, playfulStyles),
-      e('section', { className: 'empty-paper', 'aria-label': '正在验证作品恢复状态' },
+      e('section', { className: 'workspace-checking', 'aria-label': '正在验证作品' },
         e('h1', null, '正在检查作品'),
-        e('p', { role: 'status', 'aria-live': 'polite' }, '确认没有未完成的恢复后再打开编辑器…'),
+        e('p', { role: 'status', 'aria-live': 'polite' }, '正在确认目录、恢复状态和正文文件…'),
+        e('code', null, workspaceOpen.path),
       ),
       renderImportDialog(),
       renderSnapshotDialog(),
     )
   }
 
-  if (!session || !current) {
+  if (!fileSession || workspaceOpen.kind !== 'ready') {
     return e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
       e('style', null, redesignedStyles),
-      e('style', null, homeStyles),
-      e('style', null, playfulStyles),
-      e('style', null, homePlayStyles),
       e('header', { className: 'chrome' },
         e('div', { className: 'brand-lockup' },
           e('span', { className: 'brand-mark', 'aria-hidden': 'true' }, 'D'),
-          e('strong', null, 'DSH'),
+          e('strong', null, 'DSH Editor'),
         ),
-        e('span', { className: 'local-state' }, e('i', { 'aria-hidden': 'true' }), '本地'),
+        e('span', { className: 'local-state' }, '本地作品'),
         e('span', { ref: settingsControlRef, className: 'native-settings-control' }, settingsControl),
       ),
-      e('aside', { className: 'sidebar', 'aria-label': '最近作品' },
-        e('div', { className: 'side-title' }, e('span', null, '文件')),
-        workspaces.items.length ? e('div', { className: 'workspace-caption' }, '最近') : e('div', { className: 'workspace-empty' },
-          e('span', { className: 'folder-glyph', 'aria-hidden': 'true' }),
-          e('small', null, '未打开'),
-        ),
-        workspaces.items.map((workspace) => e('div', { className: 'workspace-row', key: workspace.workspaceId },
-          e('button', {
-            className: 'tree-row',
-            type: 'button',
-            onClick: () => void connectAndInitialize(workspace.workspaceId, false).catch(() => setHomeNote('作品未能打开，请重试。')),
-          }, workspace.title || workspace.path),
-          e('button', { className: 'workspace-manage icon-button', type: 'button', 'aria-label': `管理作品 ${workspace.title || workspace.path}`, title: '管理作品', onClick: () => openWorkspaceManage(workspace, true) }, '···'),
-        )),
-      ),
       e(PaperStage, { label: '空白稿纸' },
+        e('p', { className: 'home-hint' }, '打开已有作品，或填写名称后在「文档/dsh-editor」下新建。'),
         e('div', { className: 'home-actions' },
-          e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void startWorkspaceFromPicker(false) }, '打开作品', e('span', { 'aria-hidden': 'true' }, '↗')),
-          e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void startWorkspaceFromPicker(true) }, '新建'),
+          e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void startWorkspaceFromPicker() }, '打开作品'),
+          e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void startNewProject() }, '新建'),
         ),
         pathFallbackForm,
+        workspaceOpen.kind === 'needs-intent' ? e('section', { className: 'workspace-intent-prompt', role: 'alert' },
+          e('strong', null, workspaceOpen.intent === 'create' ? '这个目录还不是作品' : '这里已经有作品内容'),
+          e('p', null, workspaceOpen.message),
+          e('code', null, workspaceOpen.path),
+          e('div', null,
+            e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void continuePendingWorkspaceIntent() }, workspaceOpen.intent === 'create' ? '在这里新建' : '改为打开'),
+            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void cancelPendingWorkspaceIntent() }, '取消'),
+          ),
+        ) : null,
+        workspaceOpen.kind === 'error' ? e('code', null, workspaceOpen.path) : null,
         homeNote ? e('p', { className: 'warning', role: 'alert' }, homeNote) : null,
+        e('section', { className: 'home-recent', 'aria-label': '最近作品' },
+          e('header', null, e('h2', null, '最近作品'), e('small', null, workspaces.items.length ? `${workspaces.items.length} 个入口` : '尚无作品入口')),
+          workspaces.items.length ? e('div', { className: 'workspace-list' }, workspaces.items.map((workspace) => {
+            const needsRelocation = workspaceOpen.kind === 'needs-relocation' && workspaceOpen.workspaceId === workspace.workspaceId
+            return e('article', { className: `workspace-row${needsRelocation ? ' needs-relocation' : ''}`, key: workspace.workspaceId },
+              e('button', {
+                className: 'tree-row', type: 'button', disabled: openingWorkspace,
+                onClick: () => void openRegisteredWorkspace(workspace),
+              }, e('strong', null, workspace.title || workspace.path), e('small', null, workspace.path)),
+              e('button', { className: 'workspace-manage icon-button', type: 'button', 'aria-label': `管理作品 ${workspace.title || workspace.path}`, title: '管理作品', onClick: () => openWorkspaceManage(workspace, true) }, '···'),
+              needsRelocation ? e('div', { className: 'workspace-relocation', role: 'alert' },
+                e('p', null, workspaceOpen.message), e('code', null, workspaceOpen.path),
+                e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void relocateWorkspace(workspace) }, '重新定位'),
+                e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void removeBrokenWorkspace(workspace) }, '从最近移除'),
+              ) : null,
+            )
+          })) : e('p', { className: 'muted home-recent-empty' }, '打开过的作品会显示在这里。'),
+        ),
       ),
       workspaceManage ? e(WorkspaceManageDialog, {
         workspace: workspaceManage,
@@ -3345,11 +3911,13 @@ function Root({ ctx, writingScope, settingsControl }: {
         onRename: (title: string) => void renameWorkspace(title),
         onRemove: () => void removeWorkspace(),
       }) : null,
+      renderNewProjectDialog(),
       renderImportDialog(),
       renderSnapshotDialog(),
     )
   }
 
+  const chatSession = session ?? fileSession
   const sidebarVisible = sidebarOpen && !focusMode
   const assistantVisible = assistantOpen && !focusMode
   const layoutColumns = [
@@ -3363,34 +3931,58 @@ function Root({ ctx, writingScope, settingsControl }: {
     style: { minWidth: 0, gridTemplateColumns: layoutColumns },
   },
     e('style', null, redesignedStyles),
-    e('style', null, homeStyles),
-    e('style', null, playfulStyles),
-    e('style', null, homePlayStyles),
     e('header', { className: 'chrome' },
-      e('strong', null, 'DSH'),
-      e('details', {
-        className: 'workspace-menu',
-        open: workspaceMenuOpen,
-        onToggle: (event: ChangeEvent<HTMLDetailsElement>) => setWorkspaceMenuOpen(event.currentTarget.open),
-      },
-        e('summary', { title: '切换作品', 'aria-label': '切换作品' }, currentWorkspace?.title || currentWorkspace?.path || '作品'),
-        e('div', { className: 'workspace-menu-panel' },
-          workspaces.items.length ? e('div', { className: 'workspace-menu-list', role: 'list' },
-            workspaces.items.map((workspace) => e('button', {
-              key: workspace.workspaceId,
-              type: 'button',
-              role: 'listitem',
-              'aria-current': workspace.workspaceId === currentWorkspace?.workspaceId ? 'page' : undefined,
-              onClick: () => void switchToWorkspace(workspace.workspaceId),
-            }, workspace.title || workspace.path)),
-          ) : e('p', { className: 'muted' }, '还没有打开过作品'),
-          e('div', { className: 'workspace-menu-actions' },
-            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void openAnotherWorkspace(false) }, '打开作品'),
-            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void openAnotherWorkspace(true) }, '新建'),
-            currentWorkspace ? e('button', { type: 'button', 'aria-label': '管理当前作品', title: '修改作品显示名', onClick: () => { setWorkspaceMenuOpen(false); openWorkspaceManage(currentWorkspace, false) } }, '管理当前作品') : null,
-            e('button', { type: 'button', 'aria-label': '返回作品列表', onClick: () => void leaveToHome() }, '返回作品列表'),
+      e('div', { className: 'workspace-chrome', role: 'group', 'aria-label': '作品' },
+        e('details', {
+          className: 'project-switcher',
+          open: workspaceSwitcherOpen,
+          onToggle: (event: ChangeEvent<HTMLDetailsElement>) => {
+            const open = event.currentTarget.open
+            setWorkspaceSwitcherOpen(open)
+            if (open) setWorkspaceMenuOpen(false)
+          },
+        },
+          e('summary', {
+            role: 'button',
+            title: '切换作品',
+            'aria-label': '切换作品',
+            'aria-expanded': workspaceSwitcherOpen,
+            'aria-controls': 'workspace-switcher-list',
+          }, e('span', null, currentWorkspace?.title || currentWorkspace?.path || '作品')),
+          e('div', { id: 'workspace-switcher-list', className: 'workspace-menu-panel', 'aria-label': '最近作品' },
+            e('div', { className: 'workspace-menu-actions' },
+              workspaces.items.map((workspace) => e('button', {
+                key: workspace.workspaceId,
+                type: 'button',
+                'aria-current': workspace.workspaceId === currentWorkspace?.workspaceId ? 'true' : undefined,
+                disabled: openingWorkspace,
+                onClick: () => void switchToWorkspace(workspace.workspaceId),
+              }, workspace.title || workspace.path)),
+            ),
           ),
-          pathFallbackForm,
+        ),
+        e('details', {
+          className: 'workspace-menu',
+          open: workspaceMenuOpen,
+          onToggle: (event: ChangeEvent<HTMLDetailsElement>) => {
+            const open = event.currentTarget.open
+            setWorkspaceMenuOpen(open)
+            if (open) setWorkspaceSwitcherOpen(false)
+          },
+        },
+          e('summary', { role: 'button', title: '作品菜单', 'aria-label': '作品菜单', 'aria-expanded': workspaceMenuOpen, 'aria-controls': 'workspace-actions' }, '作品'),
+          e('div', { id: 'workspace-actions', className: 'workspace-menu-panel', 'aria-label': '作品操作' },
+            e('div', { className: 'workspace-menu-actions' },
+              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void openAnotherWorkspace() }, '打开作品'),
+              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void startNewProject() }, '新建'),
+              currentWorkspace ? e('button', { type: 'button', 'aria-label': '管理当前作品', title: '修改作品显示名', onClick: () => { closeWorkspaceChrome(); openWorkspaceManage(currentWorkspace, false) } }, '管理当前作品') : null,
+              e('button', { type: 'button', disabled: exporting, onClick: () => { closeWorkspaceChrome(); void exportNovel('markdown') } }, exporting ? '导出中…' : '导出 Markdown'),
+              e('button', { type: 'button', disabled: exporting, onClick: () => { closeWorkspaceChrome(); void exportNovel('text') } }, '导出 TXT'),
+              e('button', { type: 'button', disabled: editorDirty, onClick: () => { closeWorkspaceChrome(); openSnapshotLibrary() } }, '作品快照'),
+              e('button', { type: 'button', 'aria-label': '返回作品列表', onClick: () => void leaveToHome() }, '返回作品列表'),
+            ),
+            pathFallbackForm,
+          ),
         ),
       ),
       e('nav', { className: 'layout-controls', 'aria-label': '工作台布局' },
@@ -3415,21 +4007,7 @@ function Root({ ctx, writingScope, settingsControl }: {
           onClick: () => setAssistantOpen((value) => !value),
         }, '搭档'),
       ),
-      e('div', { className: 'export-actions' },
-        e('details', { className: 'export-menu' },
-          e('summary', { title: '把正文按章节顺序合并成一份 Markdown 或 TXT' }, exporting ? '导出中' : '导出全书'),
-          e('div', null,
-            e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('markdown') }, 'Markdown'),
-            e('button', { type: 'button', disabled: exporting, onClick: () => void exportNovel('text') }, 'TXT'),
-          ),
-        ),
-        e('button', {
-          type: 'button',
-          disabled: editorDirty,
-          title: '备份已保存的作品；恢复时生成新副本，不会覆盖当前作品',
-          'aria-label': '作品快照',
-          onClick: openSnapshotLibrary,
-        }, '作品快照'),
+      e('div', { className: 'topbar-actions' },
         exportNote ? e('span', { role: /无法|失败|为空/.test(exportNote) ? 'alert' : 'status' }, exportNote) : null,
         e('button', { className: 'settings-link icon-button', type: 'button', title: '键盘快捷键', 'aria-label': '键盘快捷键', onClick: openShortcuts }, '?'),
         e('span', { ref: settingsControlRef, className: 'native-settings-control' }, settingsControl),
@@ -3449,12 +4027,15 @@ function Root({ ctx, writingScope, settingsControl }: {
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
       e(SearchPanel, {
         ctx,
-        sessionId: session.sessionId,
+        sessionId: fileSession.sessionId,
         revision: treeRevision,
         navigationBlocked: editorDirty,
         referenceRequest,
         onOpen: (hit: SearchHit) => openDocument(hit.path, hit),
       }),
+      workspaceOpen.warning ? e('p', { className: 'warning pad', role: 'status' }, workspaceOpen.warning) : null,
+      workbenchNote ? e('p', { className: `${isSuccessWorkbenchNote(workbenchNote) ? 'success' : 'warning'} pad`, role: isSuccessWorkbenchNote(workbenchNote) ? 'status' : 'alert' }, workbenchNote) : null,
+      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onFileMenu: openFileMenu, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), revision: treeRevision }),
       e('details', { className: 'archive-panel', onToggle: (event: ChangeEvent<HTMLDetailsElement>) => { if (event.currentTarget.open) void loadArchives() } },
         e('summary', null,
           e('span', null, '已归档'),
@@ -3480,11 +4061,9 @@ function Root({ ctx, writingScope, settingsControl }: {
           archiveNote ? e('p', { className: 'warning', role: 'alert' }, archiveNote) : null,
         ),
       ),
-      workbenchNote ? e('p', { className: `${isSuccessWorkbenchNote(workbenchNote) ? 'success' : 'warning'} pad`, role: isSuccessWorkbenchNote(workbenchNote) ? 'status' : 'alert' }, workbenchNote) : null,
-      e(Tree, { ctx, sessionId: session.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onManage: openManage, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), revision: treeRevision }),
       currentWorkspace && indexStatus[currentWorkspace.workspaceId] ? e('div', { className: 'index-status', role: indexStatus[currentWorkspace.workspaceId] === 'failed' ? 'alert' : 'status' },
         e('span', null, indexStatus[currentWorkspace.workspaceId] === 'initializing' ? '正在整理作品资料…' : indexStatus[currentWorkspace.workspaceId] === 'queued' ? '作品资料正在后台整理' : indexStatus[currentWorkspace.workspaceId] === 'failed' ? '作品资料暂未整理好' : '作品资料尚未整理'),
-        e('button', { type: 'button', onClick: () => triggerExistingIndex(currentWorkspace.workspaceId, session.sessionId, true) }, indexStatus[currentWorkspace.workspaceId] === 'failed' ? '重试整理' : '重新整理'),
+        e('button', { type: 'button', onClick: () => triggerExistingIndex(currentWorkspace.workspaceId, fileSession.sessionId, true) }, indexStatus[currentWorkspace.workspaceId] === 'failed' ? '重试整理' : '重新整理'),
       ) : null,
     ) : null,
     sidebarVisible ? e(PanelResizer, {
@@ -3497,7 +4076,7 @@ function Root({ ctx, writingScope, settingsControl }: {
       onChange: setSidebarWidth,
     }) : null,
     e(Editor, {
-      ctx, session, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'),
+      ctx, session: fileSession, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'),
       externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal, completionPreference: writing.completion,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
       chapterStatus: overview?.chapters.find((chapter) => chapter.path === path)?.status,
@@ -3519,9 +4098,9 @@ function Root({ ctx, writingScope, settingsControl }: {
       onChange: setAssistantWidth,
     }) : null,
     e(Chat, {
-      key: session.sessionId,
+      key: chatSession.sessionId,
       ctx,
-      session,
+      session: chatSession,
       workspaceId: currentWorkspace?.workspaceId,
       activePath: path,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
@@ -3571,6 +4150,7 @@ function Root({ ctx, writingScope, settingsControl }: {
       onClose: closeCreateDialog,
       onCreate: (title: string) => void create(title),
     }) : null,
+    renderNewProjectDialog(),
     workspaceManage ? e(WorkspaceManageDialog, {
       workspace: workspaceManage,
       busy: workspaceManageBusy,
@@ -3582,16 +4162,25 @@ function Root({ ctx, writingScope, settingsControl }: {
     renderImportDialog(),
     renderSnapshotDialog(),
     renderSnapshotLibrary(),
-    managePath ? e(FileManageDialog, {
-      key: managePath,
+    fileMenu ? e(FileContextMenu, {
+      path: fileMenu.path,
+      x: fileMenu.x,
+      y: fileMenu.y,
+      onClose: () => setFileMenu(null),
+      onRename: () => openManageAction(fileMenu.path, 'rename'),
+      onMove: () => openManageAction(fileMenu.path, 'move'),
+      onArchive: () => void archiveManaged(fileMenu.path),
+    }) : null,
+    managePath && manageMode ? e(FileManageDialog, {
+      key: `${manageMode}:${managePath}`,
       path: managePath,
+      mode: manageMode,
       busy: manageBusy,
       note: manageNote,
       moveDirectories: manageDirectories,
       onClose: closeManage,
       onRename: (name: string) => void renameManaged(name),
       onMove: (directory: string) => void moveManaged(directory),
-      onArchive: () => void archiveManaged(),
     }) : null,
   )
 }

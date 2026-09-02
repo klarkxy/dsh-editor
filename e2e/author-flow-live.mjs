@@ -4,8 +4,7 @@
  *
  * Product files are created only through the visible DSH Editor UI:
  * homepage project creation, Chat proposals, and the proposal card's Apply
- * button. The harness creates an empty test directory and only reads project
- * files afterwards for acceptance checks.
+ * button. The harness only reads project files afterwards for acceptance checks.
  *
  * Credentials default to ~/.mmx/config.json. They are never printed.
  */
@@ -20,15 +19,16 @@ import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const devRoot = resolve(root, '.dev')
-const workspace = resolve(devRoot, 'author-flow-live-workspace')
+const projectsRoot = resolve(devRoot, 'author-flow-live-projects')
+const book = '雾港回声'
+const workspace = resolve(projectsRoot, book)
 const home = resolve(devRoot, 'author-flow-live-home')
 const output = resolve(root, 'e2e', 'out', 'author-flow-live')
 const reset = process.env.E2E_AUTHOR_FLOW_RESUME !== '1'
 const sendTimeout = Number(process.env.E2E_AUTHOR_FLOW_SEND_TIMEOUT_MS || 720_000)
-const book = '雾港回声'
 const minChapterChars = 4_000
 
-for (const target of [workspace, home]) {
+for (const target of [projectsRoot, workspace, home]) {
   if (!target.startsWith(`${devRoot}${sep}`)) throw new Error(`unsafe test path: ${target}`)
 }
 if (!output.startsWith(`${resolve(root, 'e2e', 'out')}${sep}`)) throw new Error(`unsafe output path: ${output}`)
@@ -339,15 +339,15 @@ async function configureMiniMax(page) {
 
 async function createProjectFromHome(page) {
   await page.getByRole('button', { name: '新建', exact: true }).click()
-  const pathBox = page.getByLabel('作品文件夹路径')
-  await pathBox.waitFor({ state: 'visible', timeout: 10_000 })
-  await pathBox.fill(workspace)
-  await page.getByRole('button', { name: '在此新建', exact: true }).click()
+  const nameBox = page.getByLabel('作品名称')
+  await nameBox.waitFor({ state: 'visible', timeout: 10_000 })
+  await nameBox.fill(book)
+  await page.getByRole('button', { name: '创建', exact: true }).click()
   await page.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   for (const name of ['正文', '大纲', '人物卡', '世界书']) {
     await page.locator('.tree-row', { hasText: name }).first().waitFor({ state: 'visible', timeout: 20_000 })
   }
-  recordPhase('从空目录新建作品', workspace)
+  recordPhase('新建作品', workspace)
 }
 
 async function verifyChaptersInEditor(page) {
@@ -394,22 +394,22 @@ const planPrompts = [
   {
     path: '项目总览.md',
     label: '项目总览规划',
-    prompt: `请为长篇小说《${book}》完成项目总览。类型是近未来都市悬疑，第三人称限知，主题是记忆、责任与城市共同体。核心设定：海平面上升后的浮岛城“雾港”把可验证记忆作为公共信用；维修师林简发现亡姐林澜留下的录音能绕过记忆税。请读取 项目总览.md，只调用一次 novel_propose，以 edit 方式完整替换该文件，写清作品定位、核心冲突、叙事视角、十章规模、文风和明确禁区。人物姓名以本提示为准，不另造同功能替代人物。不要只在聊天里贴正文，不要提问。`,
+    prompt: `请为长篇小说《${book}》完成项目总览。类型是近未来都市悬疑，第三人称限知，主题是记忆、责任与城市共同体。核心设定：海平面上升后的浮岛城“雾港”把可验证记忆作为公共信用；维修师林简发现亡姐林澜留下的录音能绕过记忆税。只调用一次 novel_propose：若 项目总览.md 不存在则 create 创建，若已存在则 edit 完整替换。写清作品定位、核心冲突、叙事视角、十章规模、文风和明确禁区。人物姓名以本提示为准，不另造同功能替代人物。不要只在聊天里贴正文，不要提问。`,
   },
   {
     path: '世界书/设定总汇.md',
     label: '世界观规划',
-    prompt: `请基于《${book}》完成世界观总设定。请读取 项目总览.md 和 世界书/设定总汇.md，只调用一次 novel_propose，以 edit 方式完整替换 世界书/设定总汇.md。至少覆盖：雾港地理与阶层、记忆税的技术和法律边界、回声库、雾潮、维修行业、公共广播、不能随意突破的规则、故事时间线。设定要能支撑十章，不要魔法化，不要提问，不要只在聊天回答。`,
+    prompt: `请基于《${book}》完成世界观总设定。请读取已有的 项目总览.md。只调用一次 novel_propose：若 世界书/设定总汇.md 不存在则 create 创建，若已存在则 edit 完整替换。至少覆盖：雾港地理与阶层、记忆税的技术和法律边界、回声库、雾潮、维修行业、公共广播、不能随意突破的规则、故事时间线。设定要能支撑十章，不要魔法化，不要提问，不要只在聊天回答。`,
   },
   {
     path: '人物卡/人物索引.md',
     label: '人物卡规划',
-    prompt: `请为《${book}》完成人物卡索引。读取 项目总览.md、世界书/设定总汇.md、人物卡/人物索引.md，只调用一次 novel_propose，以 edit 方式完整替换 人物卡/人物索引.md。至少写林简、档案员姚梨、广播工程师周野、调查官季衡、亡姐林澜五人；每人包含外在目标、内在需求、秘密、底线、说话方式、关系变化和十章弧线。不要提问，不要只在聊天回答。`,
+    prompt: `请为《${book}》完成人物卡索引。读取已有的 项目总览.md 和 世界书/设定总汇.md。只调用一次 novel_propose：若 人物卡/人物索引.md 不存在则 create 创建，若已存在则 edit 完整替换。至少写林简、档案员姚梨、广播工程师周野、调查官季衡、亡姐林澜五人；每人包含外在目标、内在需求、秘密、底线、说话方式、关系变化和十章弧线。不要提问，不要只在聊天回答。`,
   },
   {
     path: '大纲/总纲.md',
     label: '十章章纲规划',
-    prompt: `请为《${book}》编排完整十章章纲。读取 项目总览.md、世界书/设定总汇.md、人物卡/人物索引.md、大纲/总纲.md，只调用一次 novel_propose，以 edit 方式完整替换 大纲/总纲.md。必须恰好列出第001章到第010章；每章写本章目标、主要阻力、关键行动、人物变化、揭示信息、结尾钩子，并保证因果连续、最终收束核心冲突。不要提问，不要写正文，不要只在聊天回答。`,
+    prompt: `请为《${book}》编排完整十章章纲。读取已有的 项目总览.md、世界书/设定总汇.md、人物卡/人物索引.md。只调用一次 novel_propose：若 大纲/总纲.md 不存在则 create 创建，若已存在则 edit 完整替换。必须恰好列出第001章到第010章；每章写本章目标、主要阻力、关键行动、人物变化、揭示信息、结尾钩子，并保证因果连续、最终收束核心冲突。不要提问，不要写正文，不要只在聊天回答。`,
   },
 ]
 
@@ -435,11 +435,10 @@ function canonCheckPrompt() {
 }
 
 if (reset) {
-  await rm(workspace, { recursive: true, force: true })
+  await rm(projectsRoot, { recursive: true, force: true })
   await rm(home, { recursive: true, force: true })
   await rm(output, { recursive: true, force: true })
 }
-await mkdir(workspace, { recursive: true })
 await mkdir(resolve(home, 'electron-user-data'), { recursive: true })
 await mkdir(output, { recursive: true })
 
@@ -450,6 +449,7 @@ const env = {
   DSH_DESKTOP_CLI_PATH: cli,
   DSH_DESKTOP_PROFILE_TEMPLATE: template,
   DSH_HOME: home,
+  DSH_EDITOR_PROJECTS_ROOT: projectsRoot,
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   SSH_CONNECTION: process.env.SSH_CONNECTION || 'dsh-editor-author-flow-live',
 }
@@ -505,8 +505,9 @@ try {
 
   for (const item of planPrompts) {
     const absolute = resolve(workspace, ...item.path.split('/'))
-    const current = await readFile(absolute, 'utf8')
-    const stillTemplate = compactChars(current) < 220
+    const present = await exists(absolute)
+    const current = present ? await readFile(absolute, 'utf8') : ''
+    const stillTemplate = !present || compactChars(current) < 220
     if (stillTemplate) {
       await sendAndApply(page, item.prompt, item.path, item.label)
       await shot(page, item.label)

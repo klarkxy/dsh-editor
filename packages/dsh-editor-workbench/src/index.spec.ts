@@ -1,8 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import type { FileSystemLike, ManuscriptHost } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL } from './contracts.ts'
 import { dispatchEditorFiles, registerWorkbenchRpc } from './index.ts'
+import { defaultProjectsRoot } from './project.ts'
 
 function fixture() {
   const canonical = '/canonical/workspace'
@@ -59,6 +63,61 @@ describe('private editor workbench Host RPC', () => {
     expect(host.workspaceRegistry.resolveByPath).toHaveBeenCalledWith('/header/workspace')
     expect(resolveCalls.length).toBeGreaterThan(0)
     expect(resolveCalls.every((call) => call.cwd === canonical)).toBe(true)
+  })
+
+  it('inspects a registered workspace before creating or resolving a session', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-editor-inspect-'))
+    try {
+      await fs.mkdir(path.join(root, '正文'))
+      await fs.writeFile(path.join(root, '正文', '001.md'), '# 第一章\n', 'utf8')
+      const { host } = fixture()
+      host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: [] }))
+      host.sessions.get = vi.fn(() => { throw new Error('session lookup must not run') })
+      await expect(dispatchEditorFiles(
+        host as unknown as Context,
+        'project.inspect',
+        { workspacePath: root },
+        new AbortController().signal,
+      )).resolves.toEqual({ hasVisibleEntries: true, textFiles: ['正文/001.md'] })
+      expect(host.sessions.get).not.toHaveBeenCalled()
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('creates a home project from the title only and ignores a forged root', async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-editor-home-'))
+    const previous = process.env.DSH_EDITOR_PROJECTS_ROOT
+    process.env.DSH_EDITOR_PROJECTS_ROOT = parent
+    try {
+      const { host } = fixture()
+      host.sessions.get = vi.fn(() => { throw new Error('session lookup must not run') })
+      expect(defaultProjectsRoot()).toBe(parent)
+      await expect(dispatchEditorFiles(
+        host as unknown as Context,
+        'project.createHome',
+        { title: '未名之书', root: '/forged/outside' },
+        new AbortController().signal,
+      )).resolves.toEqual({ path: path.join(parent, '未名之书') })
+      expect(host.sessions.get).not.toHaveBeenCalled()
+      expect((await fs.stat(path.join(parent, '未名之书'))).isDirectory()).toBe(true)
+    } finally {
+      if (previous === undefined) delete process.env.DSH_EDITOR_PROJECTS_ROOT
+      else process.env.DSH_EDITOR_PROJECTS_ROOT = previous
+      await fs.rm(parent, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects an invalid home project name without looking up a session', async () => {
+    const { host } = fixture()
+    host.sessions.get = vi.fn(() => { throw new Error('session lookup must not run') })
+    await expect(dispatchEditorFiles(
+      host as unknown as Context,
+      'project.createHome',
+      { title: '../escape' },
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    expect(host.sessions.get).not.toHaveBeenCalled()
   })
 
   it('requires both restore sessions to be live', async () => {

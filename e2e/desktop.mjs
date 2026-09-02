@@ -89,6 +89,7 @@ const baseEnv = {
   DSH_DESKTOP_NODE_PATH: process.execPath,
   DSH_DESKTOP_CLI_PATH: resolve(root, '.dev', 'desktop-dsh-runtime', 'lib', 'bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: template,
+  DSH_EDITOR_PROJECTS_ROOT: resolve(e2eHomeRoot, 'projects'),
 }
 delete baseEnv.DEEPSEEK_API_KEY
 delete baseEnv.DSH_EDITOR_CUSTOM_API_KEY
@@ -96,8 +97,8 @@ delete baseEnv.DSH_EDITOR_CUSTOM_API_KEY
 await run(resolve(root, 'scripts', 'prepare-desktop-dev.mjs'), [], baseEnv)
 await rm(e2eHomeRoot, { recursive: true, force: true })
 await mkdir(output, { recursive: true })
-const multiWindowWorkspace = resolve(e2eHomeRoot, 'multi-window-workspace')
-await mkdir(multiWindowWorkspace, { recursive: true })
+const projectsRoot = resolve(e2eHomeRoot, 'projects')
+const multiWindowWorkspace = resolve(projectsRoot, 'multi-window-workspace')
 
 async function launchPhase(name, extraEnv, inspect) {
   const phaseHome = resolve(e2eHomeRoot, name)
@@ -203,10 +204,10 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     throw new Error(`multi-window home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding })}`)
   }
   await ctx.window.getByRole('button', { name: '新建', exact: true }).click()
-  const pathBox = ctx.window.getByLabel('作品文件夹路径')
-  await pathBox.waitFor({ state: 'visible', timeout: 10_000 })
-  await pathBox.fill(multiWindowWorkspace)
-  await ctx.window.getByRole('button', { name: '在此新建', exact: true }).click()
+  const nameBox = ctx.window.getByLabel('作品名称')
+  await nameBox.waitFor({ state: 'visible', timeout: 10_000 })
+  await nameBox.fill('multi-window-workspace')
+  await ctx.window.getByRole('button', { name: '创建', exact: true }).click()
   await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   await ctx.window.locator('.tree-row', { hasText: '001.md' }).first().click()
   const firstEditor = ctx.window.getByRole('textbox', { name: '正文' })

@@ -6,6 +6,8 @@ export { AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from './auth
 export const WORKBENCH_RPC_CHANNEL = '/dsh-editor-workbench'
 
 export type WorkbenchEndpoint =
+  | 'project.inspect'
+  | 'project.createHome'
   | 'project.init'
   | 'project.prepareIndex'
   | 'project.overview'
@@ -27,6 +29,7 @@ export type WorkbenchEndpoint =
   | 'archive.restore'
 
 export type ProjectInitResponse = { created: string[]; skipped: string[] }
+export type ProjectInspectionResponse = { hasVisibleEntries: boolean; textFiles: string[] }
 export type WorkbenchPathResponse = { path: string; version?: string; metadataWarning?: string }
 export type ChapterStatus = 'draft' | 'revising' | 'final'
 export type ChapterSummary = {
@@ -93,6 +96,8 @@ export type ArchiveResponse = {
 export type ArchiveListResponse = { items: ArchiveResponse[]; invalid: number }
 
 export type WorkbenchRequestMap = {
+  'project.inspect': { workspacePath: string }
+  'project.createHome': { title: string }
   'project.init': { sessionId: string; newProject: boolean }
   'project.prepareIndex': { sessionId: string }
   'project.overview': { sessionId: string }
@@ -115,6 +120,8 @@ export type WorkbenchRequestMap = {
 }
 
 export type WorkbenchResponseMap = {
+  'project.inspect': ProjectInspectionResponse
+  'project.createHome': WorkbenchPathResponse
   'project.init': ProjectInitResponse
   'project.prepareIndex': ProjectInitResponse
   'project.overview': ProjectOverview

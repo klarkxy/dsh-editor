@@ -48,6 +48,8 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).toContain('更深入或最新的作品事实')
     expect(EDITOR_PROMPT).toContain('可预览提案')
     expect(EDITOR_PROMPT).toContain('也可以完全不调用')
+    expect(EDITOR_PROMPT).toContain('不要假设模板文件已存在')
+    expect(EDITOR_PROMPT).toContain('novel_propose 的 create')
     expect(EDITOR_PROMPT).not.toMatch(/四种模式|进入.{0,8}模式|当前模式|Plan mode/i)
   })
 })

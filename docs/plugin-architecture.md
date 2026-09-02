@@ -151,7 +151,8 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 
 | Endpoint | 请求字段 | 成功值 / 语义 |
 | --- | --- | --- |
-| `project.init` | `sessionId`, `newProject` | `{ created, skipped }`，初始化固定作品结构 |
+| `project.createHome` | `title` | `{ path }`，在「文档/dsh-editor」下独占创建同名空文件夹；不接受调用方传入的父路径 |
+| `project.init` | `sessionId`, `newProject` | `{ created, skipped }`，只建立空的 `正文`、`大纲`、`人物卡`、`世界书` 目录，不写入 Markdown 模板 |
 | `project.prepareIndex` | `sessionId` | 索引准备回执 |
 | `project.overview` | `sessionId` | 状态版本、章节/大纲摘要、状态统计、最近编辑项和有界扫描警告 |
 | `chapter.statusSet` | `sessionId`, `path`, `status`, `expectedStatusRevision` | CAS 更新固定章节状态并返回完整概览 |

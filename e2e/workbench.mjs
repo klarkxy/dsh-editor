@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
@@ -8,9 +8,14 @@ import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 const root = resolve(import.meta.dirname, '..')
 const devRoot = resolve(root, '.dev')
 const workspace = resolve(devRoot, 'workbench-e2e-workspace')
+const projectsRoot = resolve(devRoot, 'workbench-e2e-projects')
+const newWorkspace = resolve(projectsRoot, 'workbench-e2e-new-workspace')
+const openEmptyWorkspace = resolve(devRoot, 'workbench-e2e-open-empty-workspace')
+const movedWorkspace = resolve(devRoot, 'workbench-e2e-workspace-moved')
+const invalidRelocationWorkspace = resolve(devRoot, 'workbench-e2e-invalid-relocation')
 const home = resolve(devRoot, 'workbench-e2e-home')
 const output = resolve(root, '.pack', 'workbench-e2e')
-if (!workspace.startsWith(`${devRoot}${sep}`) || !home.startsWith(`${devRoot}${sep}`)) throw new Error('unsafe e2e path')
+if (![workspace, projectsRoot, newWorkspace, openEmptyWorkspace, movedWorkspace, invalidRelocationWorkspace, home].every((target) => target.startsWith(`${devRoot}${sep}`))) throw new Error('unsafe e2e path')
 
 resolveDshInstallation('0.1.1-rc.2')
 const template = resolve(devRoot, 'desktop-profile-template')
@@ -87,6 +92,20 @@ async function waitFor(check, label, timeout = 10_000) {
   throw new Error(`timed out: ${label}`)
 }
 
+async function apiItemCount(page, method) {
+  return await page.evaluate(async (rpcMethod) => {
+    const rpcId = crypto.randomUUID()
+    const response = await fetch(`/api/${rpcMethod}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'client-request', rpcId, method: rpcMethod, payload: {} }),
+    })
+    const envelope = await response.json()
+    if (!envelope?.result?.ok || !Array.isArray(envelope.result.value?.items)) throw new Error(`${rpcMethod} failed`)
+    return envelope.result.value.items.length
+  }, method)
+}
+
 async function dismissNativeOnboarding(page) {
   const continueNotice = page.getByRole('button', { name: '继续', exact: true })
   for (let step = 0; step < 5 && await continueNotice.isVisible({ timeout: 1_000 }).catch(() => false); step += 1) {
@@ -98,12 +117,18 @@ async function dismissNativeOnboarding(page) {
 }
 
 await rm(workspace, { recursive: true, force: true })
+await rm(projectsRoot, { recursive: true, force: true })
+await rm(openEmptyWorkspace, { recursive: true, force: true })
+await rm(movedWorkspace, { recursive: true, force: true })
+await rm(invalidRelocationWorkspace, { recursive: true, force: true })
 await rm(home, { recursive: true, force: true })
 await rm(output, { recursive: true, force: true })
 await mkdir(resolve(workspace, '正文'), { recursive: true })
 await mkdir(resolve(workspace, '人物卡'), { recursive: true })
 await mkdir(resolve(workspace, '世界书'), { recursive: true })
 await mkdir(resolve(home, 'electron-user-data'), { recursive: true })
+await mkdir(openEmptyWorkspace, { recursive: true })
+await mkdir(invalidRelocationWorkspace, { recursive: true })
 await mkdir(output, { recursive: true })
 await writeFile(resolve(workspace, '正文', '001.md'), '# 第一章\n\n开场。\n')
 await writeFile(resolve(workspace, '正文', '002.md'), '# 第二章\n\n主角走过月下银桥。\n')
@@ -118,6 +143,7 @@ const env = {
   DSH_DESKTOP_CLI_PATH: cli,
   DSH_DESKTOP_PROFILE_TEMPLATE: template,
   DSH_HOME: home,
+  DSH_EDITOR_PROJECTS_ROOT: projectsRoot,
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   SSH_CONNECTION: process.env.SSH_CONNECTION || 'dsh-editor-workbench-e2e',
   DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key',
@@ -149,6 +175,62 @@ try {
     if (bootEntries.includes(id)) failures.push(`host-only plugin leaked into browser boot entries: ${id}`)
   }
 
+  await window.getByRole('button', { name: '新建', exact: true }).click()
+  const newNameBox = window.getByLabel('作品名称')
+  await newNameBox.waitFor({ state: 'visible' })
+  await newNameBox.fill('workbench-e2e-new-workspace')
+  await window.getByRole('button', { name: '创建', exact: true }).click()
+  await window.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+  await waitFor(async () => await exists(resolve(newWorkspace, '正文')), 'new workspace manuscript directory')
+  if (await exists(resolve(newWorkspace, '正文', '001.md'))) failures.push('新建作品不应预写首章')
+  if (await exists(resolve(newWorkspace, '项目总览.md'))) failures.push('新建作品不应预写项目总览')
+  await window.getByRole('button', { name: '新建一章' }).click()
+  const firstChapterDialog = window.getByRole('dialog', { name: '新建章节' })
+  await firstChapterDialog.getByLabel('章节标题').fill('第一章')
+  await firstChapterDialog.getByRole('button', { name: '创建', exact: true }).click()
+  await waitFor(async () => await exists(resolve(newWorkspace, '正文', '001.md')), 'author-created first chapter')
+  await window.locator('.tree-row', { hasText: '正文' }).first().click()
+  await window.locator('.tree-row', { hasText: '001.md' }).first().waitFor({ state: 'visible' })
+  if (!(await window.locator('.tree-row', { hasText: '001.md' }).count())) failures.push('手动新建章节后未显示首章')
+
+  await window.getByRole('button', { name: '作品菜单' }).click()
+  await window.getByRole('button', { name: '返回作品列表' }).click()
+  await window.locator('.home-stage').waitFor({ state: 'visible' })
+  const newRecent = window.locator('.workspace-row .tree-row', { hasText: 'workbench-e2e-new-workspace' })
+  await newRecent.click()
+  await window.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+  await window.locator('.tree-row', { hasText: '正文' }).first().click()
+  await window.locator('.tree-row', { hasText: '001.md' }).first().waitFor({ state: 'visible' })
+  if (!(await window.locator('.tree-row', { hasText: '001.md' }).count())) failures.push('最近作品重开后未显示首章')
+  await window.getByRole('button', { name: '作品菜单' }).click()
+  await window.getByRole('button', { name: '返回作品列表' }).click()
+  await window.locator('.home-stage').waitFor({ state: 'visible' })
+
+  const sessionsBeforeIntentChecks = await apiItemCount(window, 'session.list')
+  const workspacesBeforeIntentChecks = await apiItemCount(window, 'workspace.list')
+  await window.getByRole('button', { name: '打开作品' }).first().click()
+  const emptyPathBox = window.getByLabel('作品文件夹路径')
+  await emptyPathBox.waitFor({ state: 'visible' })
+  await emptyPathBox.fill(openEmptyWorkspace)
+  await window.getByRole('button', { name: '打开此目录' }).click()
+  await window.getByRole('button', { name: '在这里新建', exact: true }).waitFor({ state: 'visible' })
+  if (await exists(resolve(openEmptyWorkspace, '正文'))) failures.push('打开空目录时错误初始化了新作品')
+  await window.getByRole('button', { name: '取消', exact: true }).click()
+  await window.locator('.home-stage').waitFor({ state: 'visible' })
+  await waitFor(async () => await apiItemCount(window, 'workspace.list') === workspacesBeforeIntentChecks, '空目录打开取消后的作品登记清理')
+  if (await apiItemCount(window, 'session.list') !== sessionsBeforeIntentChecks) failures.push('打开空目录在用户确认前错误创建了会话')
+
+  await window.getByRole('button', { name: '新建', exact: true }).click()
+  const duplicateNameBox = window.getByLabel('作品名称')
+  await duplicateNameBox.waitFor({ state: 'visible' })
+  await duplicateNameBox.fill('workbench-e2e-new-workspace')
+  await window.getByRole('button', { name: '创建', exact: true }).click()
+  await window.getByText('同名文件或目录已经存在。').waitFor({ state: 'visible' })
+  await window.getByRole('dialog', { name: '新建作品' }).getByRole('button', { name: '取消', exact: true }).click()
+  await window.locator('.home-stage').waitFor({ state: 'visible' })
+  if (await apiItemCount(window, 'workspace.list') !== workspacesBeforeIntentChecks) failures.push('同名新建失败后错误新增了作品入口')
+  if (await apiItemCount(window, 'session.list') !== sessionsBeforeIntentChecks) failures.push('同名新建失败后错误创建了会话')
+
   await window.getByRole('button', { name: '打开作品' }).first().click()
   const pathBox = window.getByLabel('作品文件夹路径')
   await pathBox.waitFor({ state: 'visible' })
@@ -158,8 +240,9 @@ try {
   await window.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
   await window.locator('.chrome').screenshot({ path: resolve(output, 'chrome-actions.png') })
   if (!(await window.getByRole('button', { name: '设置', exact: true }).count())) failures.push('原生 DSH 设置入口不可用')
-  if (!(await window.locator('.export-menu > summary').textContent())?.includes('导出全书')) failures.push('导出入口没有写成导出全书')
-  if (!(await window.getByRole('button', { name: '作品快照' }).count())) failures.push('作品快照没有回到工作台操作区')
+  if (!(await window.getByRole('button', { name: '作品菜单' }).count())) failures.push('作品菜单入口不可用')
+  if (!(await window.locator('.workspace-chrome .project-switcher, .workspace-chrome .workspace-menu').count() === 2)) failures.push('作品名与作品菜单没有放在同一组控件里')
+  if (await window.locator('.project-switcher select').count()) failures.push('作品切换仍使用系统下拉')
 
   await window.locator('.tree-row', { hasText: '正文' }).first().click()
   await window.locator('.tree-row', { hasText: '001.md' }).first().click()
@@ -173,10 +256,10 @@ try {
     }
   }, 'chapter status sidecar')
 
-  await window.locator('.export-menu > summary').click()
-  if (!(await window.getByRole('button', { name: 'Markdown', exact: true }).isVisible())) failures.push('导出菜单没有显示 Markdown')
-  if (!(await window.getByRole('button', { name: 'TXT', exact: true }).isVisible())) failures.push('导出菜单没有显示 TXT')
-  await window.getByRole('button', { name: 'Markdown', exact: true }).click()
+  await window.getByRole('button', { name: '作品菜单' }).click()
+  if (!(await window.getByRole('button', { name: '导出 Markdown', exact: true }).isVisible())) failures.push('作品菜单没有显示 Markdown 导出')
+  if (!(await window.getByRole('button', { name: '导出 TXT', exact: true }).isVisible())) failures.push('作品菜单没有显示 TXT 导出')
+  await window.getByRole('button', { name: '导出 Markdown', exact: true }).click()
   const exportPreview = window.getByRole('dialog', { name: '导出前检查' })
   await exportPreview.waitFor({ state: 'visible' })
   const previewText = await exportPreview.textContent()
@@ -283,17 +366,11 @@ try {
   const tenthChapterRow = window.locator('.tree-row', { hasText: '010.md' }).first()
   await tenthChapterRow.click()
   await window.waitForFunction(() => document.querySelector('textarea[aria-label="正文"]')?.value.includes('收束'))
-  const tenthChapterManager = window.getByRole('button', { name: '管理 010.md' })
-  if (!(await tenthChapterManager.isVisible())) await window.locator('.tree-row', { hasText: '正文' }).first().click()
-  await tenthChapterManager.click()
+  if (!(await tenthChapterRow.isVisible())) await window.locator('.tree-row', { hasText: '正文' }).first().click()
+  await tenthChapterRow.click({ button: 'right' })
+  await window.getByRole('menuitem', { name: '移动到卷/部' }).click()
   const moveDialog = window.locator('.file-dialog')
-  const moveAction = moveDialog.locator('.file-dialog-actions > button').filter({ hasText: '移动到卷/部' })
-  await moveAction.waitFor({ state: 'visible' })
-  await window.waitForFunction(() => {
-    const button = [...document.querySelectorAll('.file-dialog-actions > button')].find((item) => item.textContent?.includes('移动到卷/部'))
-    return button instanceof HTMLButtonElement && !button.disabled
-  })
-  await moveAction.click()
+  await moveDialog.waitFor({ state: 'visible' })
   await moveDialog.getByLabel('目标卷或部').selectOption({ label: '第一卷' })
   if (!(await moveDialog.textContent())?.includes('正文/第一卷/010.md')) failures.push('移动确认没有显示目标路径')
   await window.screenshot({ path: resolve(output, 'move-chapter.png'), fullPage: true })
@@ -308,22 +385,23 @@ try {
   await window.locator('.tree-row', { hasText: '001.md' }).first().click()
   await window.waitForFunction(() => document.querySelector('textarea[aria-label="正文"]')?.value.includes('磁盘外部版本'))
 
-  const workspaceSwitcher = window.getByRole('button', { name: '切换作品' })
-  const originalWorkspaceTitle = (await workspaceSwitcher.textContent())?.trim() || 'workbench-e2e-workspace'
-  await workspaceSwitcher.click()
+  const workspaceSwitcher = window.getByLabel('切换作品')
+  const selectedWorkspaceTitle = async () => (await workspaceSwitcher.textContent())?.trim() || 'workbench-e2e-workspace'
+  const originalWorkspaceTitle = await selectedWorkspaceTitle()
+  await window.getByRole('button', { name: '作品菜单' }).click()
   await window.getByRole('button', { name: '管理当前作品' }).click()
   let workspaceDialog = window.locator('.workspace-dialog')
   await workspaceDialog.getByLabel('作品显示名').fill('验收作品')
   await workspaceDialog.getByRole('button', { name: '保存显示名' }).click()
   await workspaceDialog.waitFor({ state: 'detached' })
-  await window.waitForFunction(() => document.querySelector('.workspace-menu > summary')?.textContent?.trim() === '验收作品')
-  await window.getByRole('button', { name: '切换作品' }).click()
+  await waitFor(async () => await selectedWorkspaceTitle() === '验收作品', 'renamed workspace switcher label')
+  await window.getByRole('button', { name: '作品菜单' }).click()
   await window.getByRole('button', { name: '管理当前作品' }).click()
   workspaceDialog = window.locator('.workspace-dialog')
   await workspaceDialog.getByLabel('作品显示名').fill(originalWorkspaceTitle)
   await workspaceDialog.getByRole('button', { name: '保存显示名' }).click()
   await workspaceDialog.waitFor({ state: 'detached' })
-  await window.waitForFunction((expected) => document.querySelector('.workspace-menu > summary')?.textContent?.trim() === expected, originalWorkspaceTitle)
+  await waitFor(async () => await selectedWorkspaceTitle() === originalWorkspaceTitle, 'restored workspace switcher label')
 
   await window.keyboard.press('Control+b')
   await window.locator('.sidebar').waitFor({ state: 'detached' })
@@ -373,7 +451,7 @@ try {
   const composer = window.getByRole('textbox', { name: '输入消息' })
   await composer.fill('不要丢失的草稿')
   const currentConversationId = await conversationSelect.inputValue()
-  await window.getByRole('button', { name: '切换作品' }).click()
+  await window.getByRole('button', { name: '作品菜单' }).click()
   await window.getByRole('button', { name: '返回作品列表' }).click()
   let discardMessage = window.getByRole('alertdialog', { name: '放弃未发送的消息？' })
   await discardMessage.getByRole('button', { name: '取消' }).click()
@@ -421,6 +499,7 @@ try {
   await window.locator('.chat').waitFor({ state: 'hidden' })
   await window.screenshot({ path: resolve(output, 'editor-ai-controls.png'), fullPage: true })
 
+  await window.getByRole('button', { name: '作品菜单' }).click()
   await window.getByRole('button', { name: '作品快照' }).click()
   const snapshotLibrary = window.getByRole('dialog', { name: '作品快照' })
   await snapshotLibrary.waitFor({ state: 'visible' })
@@ -442,7 +521,9 @@ try {
   await waitFor(() => pauseCompletion.isChecked(), '停顿后提示保存')
   const authorPreferences = nativeSettings.getByLabel('跨作品作者约定')
   await authorPreferences.fill('第三人称限知；对白保持克制；少用感叹号。')
-  await nativeSettings.getByRole('button', { name: '保存作者约定' }).click()
+  const saveAuthorPreferences = nativeSettings.getByRole('button', { name: '保存作者约定' })
+  await saveAuthorPreferences.click()
+  await waitFor(async () => (await readFile(resolve(home, 'settings.yaml'), 'utf8').catch(() => '')).includes('第三人称限知；对白保持克制；少用感叹号。'), '作者约定保存完成')
   await window.screenshot({ path: resolve(output, 'completion-settings.png'), fullPage: true })
   const manualCompletion = completionSettings.getByLabel('仅手动')
   await manualCompletion.click()
@@ -485,29 +566,27 @@ try {
     return button instanceof HTMLButtonElement && !button.disabled
   })
 
-  const secondChapterManager = window.getByRole('button', { name: '管理 002.md' })
-  if (!(await secondChapterManager.isVisible())) {
+  const secondChapterRow = window.locator('.tree-row', { hasText: '002.md' }).first()
+  if (!(await secondChapterRow.isVisible())) {
     await window.locator('.tree-row', { hasText: '正文' }).first().click()
   }
-  await secondChapterManager.click()
+  await secondChapterRow.click({ button: 'right' })
+  await window.getByRole('menuitem', { name: '重命名' }).click()
   const dialog = window.locator('.file-dialog')
   await dialog.waitFor({ state: 'visible' })
-  await dialog.locator('.file-dialog-actions > button').filter({ hasText: '重命名' }).click()
   await dialog.getByLabel('新名称').fill('第二章.md')
   await dialog.getByRole('button', { name: '保存新名称' }).click()
   await waitFor(async () => await exists(resolve(workspace, '正文', '第二章.md')), 'renamed file')
   if (await exists(resolve(workspace, '正文', '002.md'))) failures.push('重命名后旧路径仍存在')
   await window.waitForFunction(() => !document.querySelector('.search-results'))
 
-  const renamedChapterManager = window.getByRole('button', { name: '管理 第二章.md' })
-  if (!(await renamedChapterManager.isVisible())) {
+  const renamedChapterRow = window.locator('.tree-row', { hasText: '第二章.md' }).first()
+  if (!(await renamedChapterRow.isVisible())) {
     await window.locator('.tree-row', { hasText: '正文' }).first().click()
   }
-  await renamedChapterManager.click()
-  const archiveDialog = window.locator('.file-dialog')
-  await archiveDialog.waitFor({ state: 'visible' })
-  await archiveDialog.locator('.file-dialog-actions > button').filter({ hasText: '归档' }).click()
-  await archiveDialog.getByRole('button', { name: '确认归档' }).click()
+  await renamedChapterRow.click({ button: 'right' })
+  await window.getByRole('menuitem', { name: '归档' }).click()
+  if (await window.locator('.file-dialog').isVisible().catch(() => false)) failures.push('归档不应弹出确认框')
   await waitFor(async () => !(await exists(resolve(workspace, '正文', '第二章.md'))), 'archived source removal')
 
   await window.locator('.archive-panel > summary').click()
@@ -517,23 +596,66 @@ try {
   await waitFor(async () => await exists(resolve(workspace, '正文', '第二章.md')), 'restored file')
   const restored = await readFile(resolve(workspace, '正文', '第二章.md'), 'utf8')
   if (!restored.includes('月下银桥')) failures.push('恢复后的文件内容不一致')
+  await window.waitForFunction(() => {
+    const header = document.querySelector('.editor-header')
+    const editor = document.querySelector('textarea[aria-label="正文"]')
+    return header?.textContent?.includes('正文/第二章.md')
+      && editor instanceof HTMLTextAreaElement
+      && editor.value.includes('月下银桥')
+  })
 
   const archiveRoots = await readdir(resolve(workspace, '.dsh-editor', 'archive'))
   if (!archiveRoots.length) failures.push('归档审计记录缺失')
-  const centralPaneWidth = await window.locator('.editor,.empty-paper').first().evaluate((node) => node.getBoundingClientRect().width)
+  const centralPaneWidth = await window.locator('.layout-shell > .editor, .layout-shell > .empty-paper').first().evaluate((node) => node.getBoundingClientRect().width)
   if (centralPaneWidth < 700) failures.push(`中央写作区没有占满可用空间：${centralPaneWidth}px`)
   await window.screenshot({ path: resolve(output, 'workbench.png'), fullPage: true })
 
-  await window.getByRole('button', { name: '切换作品' }).click()
+  await window.getByRole('button', { name: '作品菜单' }).click()
   await window.getByRole('button', { name: '返回作品列表' }).click()
   await window.locator('.home-stage').waitFor({ state: 'visible' })
-  const recentManage = window.getByRole('button', { name: `管理作品 ${originalWorkspaceTitle}` })
+  await rename(workspace, movedWorkspace)
+  const originalRecentRow = window.locator('.workspace-row').filter({ has: window.getByText(originalWorkspaceTitle, { exact: true }) })
+  await originalRecentRow.locator('.tree-row').click()
+  const relocateAction = window.getByRole('button', { name: '重新定位', exact: true })
+  await relocateAction.waitFor({ state: 'visible' })
+  if (await window.locator('.tree').isVisible().catch(() => false)) failures.push('失效最近路径错误进入了工作台')
+  await relocateAction.click()
+  const relocationPath = window.getByLabel('作品文件夹路径')
+  await relocationPath.waitFor({ state: 'visible' })
+  await relocationPath.fill(invalidRelocationWorkspace)
+  await window.getByRole('button', { name: '打开此目录' }).click()
+  await relocateAction.waitFor({ state: 'visible' })
+  if (await window.locator('.tree').isVisible().catch(() => false)) failures.push('空目录被错误接受为移动后的作品')
+  if (!(await originalRecentRow.count())) failures.push('重新定位失败后旧最近入口丢失')
+  if (await window.getByText('workbench-e2e-invalid-relocation', { exact: true }).count()) failures.push('重新定位失败后残留了无关目录入口')
+
+  await relocateAction.click()
+  await relocationPath.waitFor({ state: 'visible' })
+  await relocationPath.fill(movedWorkspace)
+  await window.getByRole('button', { name: '打开此目录' }).click()
+  await window.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+  const relocatedFirstChapter = window.locator('.tree-row', { hasText: '001.md' }).first()
+  if (!(await relocatedFirstChapter.isVisible())) await window.locator('.tree-row', { hasText: '正文' }).first().click()
+  await relocatedFirstChapter.click()
+  const relocatedEditor = window.getByRole('textbox', { name: '正文' })
+  await relocatedEditor.waitFor({ state: 'visible' })
+  await window.waitForFunction(() => document.querySelector('.editor-header')?.textContent?.includes('正文/001.md')
+    && Boolean(document.querySelector('textarea[aria-label="正文"]')?.value))
+  await relocatedEditor.fill('# 第一章\n\n重新定位后仍可编辑并保存。\n')
+  await waitFor(async () => (await readFile(resolve(movedWorkspace, '正文', '001.md'), 'utf8')).includes('重新定位后仍可编辑并保存'), 'relocated workspace save')
+  await window.getByRole('button', { name: '作品菜单' }).click()
+  await window.getByRole('button', { name: '返回作品列表' }).click()
+  await window.locator('.home-stage').waitFor({ state: 'visible' })
+  if (await originalRecentRow.count()) failures.push('重新定位成功后旧最近入口仍存在')
+
+  const movedTitle = 'workbench-e2e-workspace-moved'
+  const recentManage = window.getByRole('button', { name: `管理作品 ${movedTitle}` })
   await recentManage.click()
   const recentDialog = window.locator('.workspace-dialog')
   await recentDialog.getByRole('button', { name: '从最近移除' }).click()
   await recentDialog.getByRole('button', { name: '确认从最近移除' }).click()
   await recentManage.waitFor({ state: 'detached' })
-  if (!(await exists(workspace))) failures.push('从最近移除误删了磁盘作品目录')
+  if (!(await exists(movedWorkspace))) failures.push('从最近移除误删了磁盘作品目录')
   await window.screenshot({ path: resolve(output, 'home-after-remove.png'), fullPage: true })
   if (browserErrors.length) failures.push(...browserErrors)
 } catch (error) {

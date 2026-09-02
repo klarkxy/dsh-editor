@@ -123,17 +123,15 @@ try {
     editorName: Boolean(document.querySelector('.brand-lockup')),
     officialHome: document.body.textContent?.includes('DeepSeek Harness') ?? false,
     technicalChrome: ['DSH_HOME', 'permission preset', '权限模式', '会话列表'].some((label) => document.body.textContent?.includes(label) ?? false),
-    columns: [
-      Boolean(document.querySelector('.sidebar')),
-      Boolean(document.querySelector('.empty-paper, .editor')),
-    ],
+    homeSidebar: Boolean(document.querySelector('.no-session > .sidebar')),
+    homeStage: Boolean(document.querySelector('.no-session > .empty-paper')),
     permanentChat: Boolean(document.querySelector('.no-session > .chat')),
     bootEntries: globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [],
   }))
   state.nativeOnboarding = nativeOnboarding
   const clientBoundaryReady = state.bootEntries.filter((entry) => entry === 'dsh-editor-shell').length === 1
     && state.bootEntries.every((entry) => entry !== 'dsh-editor-workbench' && entry !== 'dsh-editor-novel-kernel')
-  if (!state.shell || !state.editorName || state.officialHome || !state.onboarding || state.technicalChrome || state.permanentChat || state.columns.some((value) => !value) || !clientBoundaryReady) {
+  if (!state.shell || !state.editorName || state.officialHome || !state.onboarding || state.technicalChrome || state.permanentChat || state.homeSidebar || !state.homeStage || !clientBoundaryReady) {
     throw new Error(`portable identity assertion failed: ${JSON.stringify(state)}`)
   }
   await window.screenshot({ path: resolve(output, 'window.png') })

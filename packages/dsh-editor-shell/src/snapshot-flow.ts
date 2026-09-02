@@ -39,5 +39,5 @@ export function recoverSnapshot(targetSessionId: string, targetWorkspaceId: stri
 }
 
 export function blocksWorkspaceOpen(view: RestoreView): boolean {
-  return view.state === 'recoverable'
+  return Boolean(view.state === 'recoverable' && view.receiptId && view.snapshotId)
 }

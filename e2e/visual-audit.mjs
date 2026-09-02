@@ -1,14 +1,11 @@
 /**
  * Live visual walkthrough of DSH Editor for screenshot review.
  * Uses a dedicated isolated DSH_HOME; never writes the daily web profile.
- * MiniMax credentials follow author-flow-live: env then ~/.mmx/config.json.
- * The native DSH settings document owns the provider profile; the key stays in the environment.
- * The key is never printed.
+ * This is a visual and local-workflow audit. It never sends a paid model turn.
  */
 import { spawn } from 'node:child_process'
-import { homedir } from 'node:os'
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { join, resolve, sep } from 'node:path'
+import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
+import { resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
@@ -18,19 +15,11 @@ const devRoot = resolve(root, '.dev')
 const workspace = resolve(devRoot, 'visual-audit-workspace')
 const home = resolve(devRoot, 'visual-audit-home')
 const output = resolve(root, 'e2e', 'out', 'visual-audit')
-const sendTimeout = Number(process.env.E2E_VISUAL_AUDIT_SEND_TIMEOUT_MS || 300_000)
 
 for (const target of [workspace, home]) {
   if (!target.startsWith(`${devRoot}${sep}`)) throw new Error(`unsafe test path: ${target}`)
 }
 if (!output.startsWith(`${resolve(root, 'e2e', 'out')}${sep}`)) throw new Error('unsafe output path')
-
-const mmxPath = process.env.MMX_CONFIG_PATH || join(homedir(), '.mmx', 'config.json')
-const mmx = JSON.parse(await readFile(mmxPath, 'utf8'))
-const apiKey = String(process.env.MINIMAX_API_KEY || mmx.api_key || '').trim()
-if (!apiKey) throw new Error('MiniMax API key is unavailable')
-const configuredBase = String(process.env.MINIMAX_BASE_URL || mmx.base_url || (mmx.region === 'cn' ? 'https://api.minimaxi.com' : 'https://api.minimax.io'))
-const apiBase = `${configuredBase.replace(/\/+$/, '')}/v1`
 
 resolveDshInstallation('0.1.1-rc.2')
 const template = resolve(devRoot, 'desktop-profile-template')
@@ -40,17 +29,15 @@ const cli = resolve(runtime, 'lib', 'bin.js')
 const report = {
   startedAt: new Date().toISOString(),
   workspace,
-  provider: 'minimax-custom',
+  provider: 'not-called',
   screenshots: [],
   failures: [],
   notes: [],
   surfaces: {},
-  minimaxTurn: { ok: false, model: '', ms: 0 },
+  assistantTurn: { skipped: true, reason: 'visual audit never calls an external model' },
 }
 
-function sanitize(value) {
-  return String(value).replaceAll(apiKey, '[redacted]').replace(/sk-[A-Za-z0-9_-]{8,}/g, '[redacted]')
-}
+function sanitize(value) { return String(value).replace(/sk-[A-Za-z0-9_-]{8,}/g, '[redacted]') }
 
 function surface(name, pass, detail) {
   report.surfaces[name] = { pass, detail: sanitize(detail), at: new Date().toISOString() }
@@ -196,27 +183,6 @@ async function seedWorkspace() {
 `)
 }
 
-async function seedNativeMiniMaxSettings() {
-  const settings = {
-    'llm-pi-ai': {
-      providers: {
-        'minimax-custom': {
-          displayName: 'MiniMax',
-          apiKeyEnv: 'DSH_EDITOR_CUSTOM_API_KEY',
-          api: 'openai-completions',
-          baseURL: apiBase,
-          models: [
-            { id: 'MiniMax-M2.7-highspeed', name: 'MiniMax M2.7 Highspeed' },
-            { id: 'MiniMax-M2.7', name: 'MiniMax M2.7' },
-            { id: 'MiniMax-M3', name: 'MiniMax M3' },
-          ],
-        },
-      },
-    },
-  }
-  await writeFile(resolve(home, 'settings.yaml'), `${JSON.stringify(settings, null, 2)}\n`)
-}
-
 const dshBaseEnv = { ...process.env }
 delete dshBaseEnv.DEEPSEEK_API_KEY
 delete dshBaseEnv.DSH_EDITOR_CUSTOM_API_KEY
@@ -227,7 +193,6 @@ await rm(output, { recursive: true, force: true })
 await mkdir(output, { recursive: true })
 await mkdir(resolve(home, 'electron-user-data'), { recursive: true })
 await seedWorkspace()
-await seedNativeMiniMaxSettings()
 
 const prepEnv = {
   ...dshBaseEnv,
@@ -242,6 +207,8 @@ async function inspectNativeSettings(page) {
   await page.getByRole('button', { name: '设置' }).click()
   const settings = page.getByRole('dialog')
   await settings.waitFor({ state: 'visible', timeout: 45_000 })
+  await settings.getByRole('button', { name: '通用设置', exact: true }).click()
+  await shot(page, 'settings-general', '原生 DSH 通用设置与主题入口')
   await settings.getByRole('button', { name: '模型', exact: true }).click()
   await shot(page, 'settings-models', '原生 DSH 模型分区')
   await settings.getByRole('button', { name: '写作', exact: true }).click()
@@ -250,75 +217,29 @@ async function inspectNativeSettings(page) {
   await settings.getByRole('button', { name: /关闭/ }).click()
 }
 
-async function answerPending(page) {
-  const approval = page.getByRole('article', { name: '工具审批' }).last()
-  if (await approval.isVisible().catch(() => false)) {
-    await approval.getByRole('button', { name: '允许一次' }).click()
-    return true
+async function openWorkMenu(page) {
+  const details = page.locator('.workspace-menu')
+  if (await details.getAttribute('open') === null) {
+    await page.getByRole('button', { name: '作品菜单' }).click()
   }
-  const question = page.getByRole('form', { name: '回答问题' }).last()
-  if (await question.isVisible().catch(() => false)) {
-    for (const input of await question.locator('input').all()) {
-      await input.fill('按已给出的设定继续，不要改文件。')
-    }
-    await question.getByRole('button', { name: '提交全部回答' }).click()
-    return true
-  }
-  return false
+  await page.locator('.workspace-menu-panel').waitFor({ state: 'visible' })
 }
 
-async function sendMiniMaxTurn(page) {
-  const assistant = page.getByRole('complementary', { name: '写作助手' }).or(page.locator('.chat'))
-  await assistant.waitFor({ state: 'visible', timeout: 20_000 })
-  const launcher = page.getByRole('button', { name: '打开写作搭档' })
-  if (await launcher.isVisible().catch(() => false)) await launcher.click()
-  await page.getByRole('button', { name: '新对话' }).click()
-  const picker = page.getByRole('dialog', { name: '新对话' })
-  const select = picker.getByLabel('选择模型')
-  await select.waitFor({ state: 'visible', timeout: 30_000 })
-  await shot(page, 'new-conversation', '新对话先选 MiniMax 模型再开始')
-  const options = await select.locator('option').evaluateAll((items) => items.map((item) => ({ value: item.value, text: item.textContent || '' })))
-  const chosen = options.find((item) => /MiniMax-M2\.7-highspeed/i.test(item.text))
-    || options.find((item) => /MiniMax-M2\.7(?!-)/i.test(item.text))
-    || options.find((item) => /MiniMax-M3/i.test(item.text))
-    || options.find((item) => /MiniMax/i.test(item.text))
-  if (!chosen) {
-    report.minimaxTurn = { ok: false, model: '', ms: 0, error: `MiniMax model not found: ${JSON.stringify(options)}` }
-    fail('MiniMax 模型未出现在新对话列表')
-    await picker.getByRole('button', { name: '关闭' }).click().catch(() => undefined)
-    return
+async function closeWorkMenu(page) {
+  const details = page.locator('.workspace-menu')
+  if (await details.getAttribute('open') !== null) {
+    await page.getByRole('button', { name: '作品菜单' }).click()
   }
-  await select.selectOption(chosen.value)
-  await picker.getByRole('button', { name: '开始', exact: true }).click()
-  await picker.waitFor({ state: 'detached', timeout: 30_000 })
-  report.minimaxTurn.model = chosen.text
-  const composer = page.getByRole('textbox', { name: '输入消息' })
-  await composer.waitFor({ state: 'visible', timeout: 20_000 })
-  await composer.fill('请用一句话说明林简是谁。不要调用工具，不要改任何文件，不要提问。')
-  const send = page.getByRole('button', { name: '发送', exact: true })
-  await waitFor(async () => await send.isEnabled().catch(() => false), 'send enabled', 20_000)
-  const startedAt = Date.now()
-  await send.click()
-  const deadline = Date.now() + sendTimeout
-  while (Date.now() < deadline) {
-    await answerPending(page)
-    const stopVisible = await page.getByRole('button', { name: /停止/ }).isVisible().catch(() => false)
-    const assistantRows = await page.locator('.chat-row.assistant, .chat-history .assistant').count()
-    if (!stopVisible && assistantRows > 0 && Date.now() - startedAt > 1_500) {
-      await page.waitForTimeout(800)
-      const stillStop = await page.getByRole('button', { name: /停止/ }).isVisible().catch(() => false)
-      if (!stillStop) {
-        report.minimaxTurn.ok = true
-        report.minimaxTurn.ms = Date.now() - startedAt
-        note('MiniMax 对话结束', `${report.minimaxTurn.ms}ms`)
-        return
-      }
-    }
-    await delay(400)
+  await page.locator('.workspace-menu-panel').waitFor({ state: 'hidden' })
+}
+
+async function dismissNativeModelSetup(page) {
+  const configureLater = page.getByRole('button', { name: '稍后配置', exact: true })
+  const appeared = await configureLater.waitFor({ state: 'visible', timeout: 2_500 }).then(() => true, () => false)
+  if (appeared) {
+    await configureLater.click()
+    await configureLater.waitFor({ state: 'hidden', timeout: 5_000 })
   }
-  report.minimaxTurn.ok = false
-  report.minimaxTurn.ms = Date.now() - startedAt
-  fail(`MiniMax 对话超时 ${report.minimaxTurn.ms}ms`)
 }
 
 let browser
@@ -329,7 +250,6 @@ try {
     ...dshBaseEnv,
     DSH_HOME: home,
     DSH_TELEMETRY_DISABLED: '1',
-    DSH_EDITOR_CUSTOM_API_KEY: apiKey,
     SSH_CONNECTION: process.env.SSH_CONNECTION || 'dsh-editor-visual-audit',
   })
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN' })
@@ -372,15 +292,20 @@ try {
 
     await page.getByRole('button', { name: '取消' }).click()
     await page.getByRole('button', { name: '新建', exact: true }).click()
-    await page.getByRole('button', { name: '在此新建' }).waitFor({ state: 'visible' })
-    await shot(page, 'home-new-path', '系统目录选择器不可用时的新建路径框：按钮文案应改为在此新建')
-    await page.getByRole('button', { name: '取消' }).click()
+    const newProjectDialog = page.getByRole('dialog', { name: '新建作品' })
+    await newProjectDialog.waitFor({ state: 'visible' })
+    await shot(page, 'home-new-project', '新建作品：填写名称后保存到文档/dsh-editor')
+    await newProjectDialog.getByRole('button', { name: '取消', exact: true }).click()
 
     await page.getByRole('button', { name: '打开作品' }).first().click()
     const pathBox = page.getByLabel('作品文件夹路径')
     await pathBox.fill(workspace)
     await page.getByRole('button', { name: '打开此目录' }).click()
     await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+    await dismissNativeModelSetup(page)
+    if (await page.locator('.workspace-checking').isVisible().catch(() => false)) throw new Error('作品仍在检查中，不能作为工作台打开成功')
+    await waitFor(async () => (await page.locator('.tree-row').count()) > 0
+      || await page.locator('.empty-paper[aria-label="空白章"]').isVisible().catch(() => false), '工作台文件行或空作品状态', 20_000)
     await shot(page, 'workbench-opened', '打开已有作品后的工作台：文件树 + 空白稿纸或正文')
 
     const emptyPaper = page.getByRole('region', { name: '空白章' }).or(page.locator('.empty-paper'))
@@ -420,6 +345,32 @@ try {
     await page.getByRole('textbox', { name: '正文' }).waitFor({ state: 'visible' })
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="正文"]')?.value.includes('潮声'))
     await shot(page, 'editor-chapter', '打开第一章：路径、字数、保存状态、补全/修改选段应清楚')
+
+    await step('themes', async () => {
+      const surfaceColors = () => page.evaluate(() => {
+        const shell = document.querySelector('.shell')
+        const paper = document.querySelector('.paper-input')
+        return {
+          shell: shell ? getComputedStyle(shell).backgroundColor : '',
+          paper: paper ? getComputedStyle(paper).backgroundColor : '',
+          ink: paper ? getComputedStyle(paper).color : '',
+        }
+      })
+      await page.emulateMedia({ colorScheme: 'light' })
+      const light = await surfaceColors()
+      await page.emulateMedia({ colorScheme: 'dark' })
+      await page.waitForTimeout(250)
+      const systemDark = await surfaceColors()
+      await shot(page, 'workbench-system-dark', '系统主题处于深色偏好时的工作台')
+      await page.evaluate(() => document.body.setAttribute('data-ds-dark-theme', 'true'))
+      await page.waitForTimeout(250)
+      const forcedDark = await surfaceColors()
+      await shot(page, 'workbench-dark', 'DSH 深色主题下的稿纸与三栏壳层')
+      await page.evaluate(() => document.body.removeAttribute('data-ds-dark-theme'))
+      await page.emulateMedia({ colorScheme: 'light' })
+      surface('themeModes', JSON.stringify(light) !== JSON.stringify(forcedDark)
+        && JSON.stringify(light) !== JSON.stringify(systemDark), JSON.stringify({ light, systemDark, forcedDark }))
+    })
 
     await page.locator('.project-actions > summary').click()
     await shot(page, 'new-materials', '新建资料展开：卷/部、大纲、人物、设定')
@@ -499,22 +450,21 @@ try {
       if (!(await tenth.isVisible())) {
         if ((await bodyRow.getAttribute('aria-expanded')) !== 'true') await bodyRow.click()
       }
-      await tenth.hover()
-      await page.getByRole('button', { name: '管理 010.md' }).click({ timeout: 5_000 })
-      await page.locator('.file-dialog').waitFor({ state: 'visible' })
-      await shot(page, 'file-manage', '文件管理菜单：重命名、移动、归档')
-      await page.locator('.file-dialog-actions > button').filter({ hasText: '重命名' }).click()
+      await tenth.click({ button: 'right' })
+      await page.getByRole('menu', { name: '文档操作' }).waitFor({ state: 'visible' })
+      await shot(page, 'file-manage', '文件右键菜单：重命名、移动、归档')
+      await page.getByRole('menuitem', { name: '重命名' }).click()
       await shot(page, 'rename-file', '重命名只改名称并保留扩展名')
       await page.keyboard.press('Escape')
-      await page.getByRole('button', { name: '管理 010.md' }).click()
-      const moveDialog = page.locator('.file-dialog')
-      await moveDialog.locator('.file-dialog-actions > button').filter({ hasText: '移动到卷/部' }).click()
+      await tenth.click({ button: 'right' })
+      await page.getByRole('menuitem', { name: '移动到卷/部' }).click()
+      await page.locator('.file-dialog').waitFor({ state: 'visible' })
       await shot(page, 'move-chapter', '移动章节：显示完整目标路径，不覆盖同名文件')
       await page.keyboard.press('Escape')
     })
 
     await step('workspace-manage', async () => {
-      await page.getByRole('button', { name: '切换作品' }).click()
+      await openWorkMenu(page)
       await page.getByRole('button', { name: '管理当前作品' }).click()
       await page.locator('.workspace-dialog').waitFor({ state: 'visible' })
       await shot(page, 'workspace-manage', '作品管理：只改显示名，并说明不移动文件夹')
@@ -530,17 +480,17 @@ try {
     })
 
     await step('export-menu', async () => {
-      await page.locator('.export-menu > summary').click()
-      const markdownBtn = page.getByRole('button', { name: 'Markdown', exact: true })
-      const txtBtn = page.getByRole('button', { name: 'TXT', exact: true })
+      await openWorkMenu(page)
+      const markdownBtn = page.getByRole('button', { name: '导出 Markdown', exact: true })
+      const txtBtn = page.getByRole('button', { name: '导出 TXT', exact: true })
       await markdownBtn.waitFor({ state: 'visible', timeout: 8_000 })
       await txtBtn.waitFor({ state: 'visible', timeout: 8_000 })
-      const menu = page.locator('.export-menu')
+      const menu = page.locator('.workspace-menu-panel')
       const menuShot = resolve(output, `${String(shotIndex + 1).padStart(2, '0')}-export-menu-panel.png`)
       await menu.screenshot({ path: menuShot })
-      surface('exportMenu', true, 'Markdown and TXT visible in export-menu')
-      await shot(page, 'export-menu', '导出菜单：Markdown 与 TXT')
-      await page.keyboard.press('Escape').catch(() => undefined)
+      surface('exportMenu', true, 'Markdown and TXT visible in work menu')
+      await shot(page, 'export-menu', '作品菜单中的 Markdown 与 TXT 导出')
+      await closeWorkMenu(page)
     })
 
     await step('files-hidden', async () => {
@@ -556,18 +506,17 @@ try {
       await page.locator('.chat').waitFor({ state: 'visible' })
       await page.waitForTimeout(600)
       await shot(page, 'assistant-open', '三栏布局：文件、稿纸、写作搭档')
-      await sendMiniMaxTurn(page)
-      await shot(page, 'assistant-after-send', 'MiniMax 实机回复后的搭档栏')
+      note('模型调用已跳过', '视觉走查只验证搭档界面，不发送外部请求。')
       const chatText = await page.locator('.chat').innerText()
       const leaked = ['novel_propose', '.dsh-editor/作品索引.md', '状态已更新。', '为当前工作区建立作品索引']
         .filter((item) => chatText.includes(item))
       const titles = await page.getByLabel('切换对话').locator('option').allTextContents().catch(() => [])
       const titleLeak = titles.some((title) => title.includes('为当前工作区建立作品索引'))
-      surface('chatLeak', leaked.length === 0 && !titleLeak && report.minimaxTurn.ok, `leaked=${leaked.join('|') || 'none'} titles=${titles.join('|')} turn=${report.minimaxTurn.ok}`)
+      surface('chatLeak', leaked.length === 0 && !titleLeak, `leaked=${leaked.join('|') || 'none'} titles=${titles.join('|')}`)
       const composer = page.getByRole('textbox', { name: '输入消息' })
       if (await composer.isVisible().catch(() => false)) {
         await composer.fill('不要丢失的草稿')
-        await page.getByRole('button', { name: '切换作品' }).click()
+        await openWorkMenu(page)
         await page.getByRole('button', { name: '返回作品列表' }).click()
         const discard = page.getByRole('alertdialog', { name: '放弃未发送的消息？' })
         if (await discard.isVisible().catch(() => false)) {
@@ -612,23 +561,22 @@ try {
       const settings = page.getByRole('dialog')
       await settings.getByRole('button', { name: '模型', exact: true }).click()
       await settings.getByRole('button', { name: '写作', exact: true }).click()
-      const pauseCompletion = page.getByLabel('停顿后提示')
-      await pauseCompletion.click()
-      await waitFor(() => pauseCompletion.isChecked(), '停顿后提示保存')
-      await page.getByLabel('跨作品作者约定').fill('第三人称限知；对白保持克制；少用感叹号。')
-      await settings.getByRole('button', { name: '保存作者约定' }).click()
+      await settings.getByRole('group', { name: '自动补全' }).waitFor({ state: 'visible' })
       await shot(page, 'settings-preferences', '原生设置壳中的补全方式与作者约定')
       await settings.getByRole('button', { name: /关闭/ }).click()
+      await dismissNativeModelSetup(page)
+      await openWorkMenu(page)
       await page.getByRole('button', { name: '作品快照' }).click()
       await shot(page, 'snapshot', '工作台中的作品快照：说明只含已保存文本，恢复到新空文件夹')
       await page.getByRole('dialog', { name: '作品快照' }).getByRole('button', { name: '关闭' }).click()
-      await page.getByRole('textbox', { name: '正文' }).or(page.locator('.empty-paper')).first().waitFor({ state: 'visible' })
+      await page.getByRole('textbox', { name: '正文' }).waitFor({ state: 'visible' })
     })
 
     await step('home-recent', async () => {
-      await page.getByRole('button', { name: '切换作品' }).click()
+      await openWorkMenu(page)
       await page.getByRole('button', { name: '返回作品列表' }).click()
       await page.locator('.home-stage').waitFor({ state: 'visible' })
+      await dismissNativeModelSetup(page)
       await shot(page, 'home-recent', '返回首页后最近作品出现在左侧')
       const recentManage = page.getByRole('button', { name: /管理作品/ }).first()
       await recentManage.click()
@@ -641,7 +589,10 @@ try {
       await page.waitForTimeout(350)
       await shot(page, 'home-1280', '最小桌面宽度 1280 下的首页')
       await page.locator('.workspace-row .tree-row').first().click()
-      await page.locator('.tree, .editor, .empty-paper').first().waitFor({ state: 'visible', timeout: 20_000 })
+      await page.locator('.tree').waitFor({ state: 'visible', timeout: 20_000 })
+      if (await page.locator('.workspace-checking').isVisible().catch(() => false)) throw new Error('最近作品仍在检查中，不能作为重新打开成功')
+      await waitFor(async () => (await page.locator('.tree-row').count()) > 0
+        || await page.locator('.empty-paper[aria-label="空白章"]').isVisible().catch(() => false), '最近作品文件行或空作品状态', 20_000)
       await shot(page, 'workbench-1280', '最小桌面宽度 1280 下的工作台')
     })
   } catch (error) {
@@ -655,13 +606,13 @@ try {
   if (browser) await browser.close().catch(() => undefined)
   report.finishedAt = new Date().toISOString()
   const surfaceFails = Object.entries(report.surfaces).filter(([, item]) => item && item.pass === false).map(([name]) => name)
-  report.ok = surfaceFails.length === 0 && report.minimaxTurn.ok
+  report.ok = surfaceFails.length === 0 && report.failures.length === 0
   await writeFile(resolve(output, 'report.json'), `${JSON.stringify(report, null, 2)}\n`)
   console.log(JSON.stringify({
     ok: report.ok,
     shots: shotIndex,
     surfaces: Object.fromEntries(Object.entries(report.surfaces).map(([name, item]) => [name, item.pass])),
-    minimaxTurn: { ok: report.minimaxTurn.ok, model: report.minimaxTurn.model, ms: report.minimaxTurn.ms },
+    assistantTurn: report.assistantTurn,
     failures: report.failures,
   }, null, 2))
   if (!report.ok) process.exitCode = 1

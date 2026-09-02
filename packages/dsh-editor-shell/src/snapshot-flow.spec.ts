@@ -19,6 +19,8 @@ describe('snapshot restore flow', () => {
     expect(recoverSnapshot('target', 'workspace', { ...ready, state: 'recoverable', receiptId: undefined })).toEqual(idleSnapshotFlow)
     expect(recoverSnapshot('target', 'workspace', ready)).toEqual(idleSnapshotFlow)
     expect(blocksWorkspaceOpen({ ...ready, state: 'recoverable', receiptId: 'r' })).toBe(true)
+    expect(blocksWorkspaceOpen({ ...ready, state: 'recoverable', receiptId: undefined })).toBe(false)
+    expect(blocksWorkspaceOpen({ ...ready, state: 'recoverable', receiptId: 'r', snapshotId: undefined })).toBe(false)
     expect(blocksWorkspaceOpen({ ...ready, state: 'complete' })).toBe(false)
   })
   it('renders compact author-facing metadata', () => {

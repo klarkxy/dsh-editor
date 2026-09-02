@@ -1,9 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { asHost, badRequest, mapHostError, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
+import { asHost, badRequest, mapHostError, resolveWorkspaceAccess, WorkspaceAuthorityError } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
 import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './import.ts'
 import { archiveDocument, LifecycleError, listArchives, moveManuscriptDocument, renameDocument, restoreArchive, type LifecycleAccess } from './lifecycle.ts'
-import { createManuscriptGroup, initializeProject, prepareNovelIndex, ProjectInitError } from './project.ts'
+import { createManuscriptGroup, createProjectHome, defaultProjectsRoot, initializeProject, inspectProjectRoot, prepareNovelIndex, ProjectInitError } from './project.ts'
 import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './snapshot.ts'
 import { compileContext } from './context.ts'
 import { OverviewError, readProjectOverview, setChapterStatus, type OverviewAccess } from './overview.ts'
@@ -53,6 +53,21 @@ export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
 export async function dispatchEditorFiles(ctx: Context, endpoint: string, payload: unknown, signal: AbortSignal): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Payload : {}
   const host = asHost(ctx)
+  if (endpoint === 'project.inspect') {
+    const workspacePath = str(body, 'workspacePath')
+    if (!workspacePath) throw new WorkspaceAuthorityError('workspace path is required', 'WORKSPACE_NOT_FOUND', { workspacePath })
+    let workspace
+    try {
+      workspace = await host.workspaceRegistry.resolveByPath(workspacePath)
+    } catch (error) {
+      throw new WorkspaceAuthorityError('workspace is unavailable', 'WORKSPACE_UNAVAILABLE', { workspacePath }, { cause: error })
+    }
+    if (!workspace) throw new WorkspaceAuthorityError('workspace is not registered', 'WORKSPACE_NOT_FOUND', { workspacePath })
+    return await inspectProjectRoot(workspace.path, signal)
+  }
+  if (endpoint === 'project.createHome') {
+    return await createProjectHome({ root: defaultProjectsRoot(), title: str(body, 'title'), signal })
+  }
   const targetSessionId = endpoint.startsWith('project.import') || endpoint.startsWith('snapshot.restore')
     ? str(body, 'targetSessionId')
     : str(body, 'sessionId')
