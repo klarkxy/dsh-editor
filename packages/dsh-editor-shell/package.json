@@ -40,7 +40,8 @@
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
     "dsh-editor-novel-kernel": "workspace:*",
-    "dsh-editor-workbench": "workspace:*"
+    "dsh-editor-workbench": "workspace:*",
+    "dsh-manuscript": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

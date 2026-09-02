@@ -25,7 +25,7 @@ export default defineConfig([
     hash: false,
     deps: {
       neverBundle: ['react'],
-      alwaysBundle: ['dsh-editor-workbench/contracts', 'dsh-editor-novel-kernel/contracts'],
+      alwaysBundle: ['dsh-editor-workbench/contracts', 'dsh-editor-novel-kernel/contracts', 'dsh-manuscript/client/editor-core'],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },

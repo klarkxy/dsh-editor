@@ -1,32 +1,4 @@
-export type CompletionPreference = 'manual' | 'pause'
-
-export const COMPLETION_PREFERENCE_KEY = 'dsh-editor.writing.completion'
-
-export function readCompletionPreference(storage: Pick<Storage, 'getItem'> | undefined): CompletionPreference {
-  try {
-    return storage?.getItem(COMPLETION_PREFERENCE_KEY) === 'pause' ? 'pause' : 'manual'
-  } catch {
-    return 'manual'
-  }
-}
-
-export function automaticCompletionReady(input: {
-  preference: CompletionPreference
-  manuscript: boolean
-  userEditRevision: number
-  requestedRevision: number
-  focused: boolean
-  collapsedSelection: boolean
-  prefix: string
-  busy: boolean
-  blocked: boolean
-}): boolean {
-  return input.preference === 'pause'
-    && input.manuscript
-    && input.userEditRevision > input.requestedRevision
-    && input.focused
-    && input.collapsedSelection
-    && input.prefix.trim().length >= 8
-    && !input.busy
-    && !input.blocked
-}
+// Thin re-export from the unified editor-core. The shell previously owned
+// its own copy of the completion-preference helpers; the canonical
+// implementation now lives in `dsh-manuscript/client/editor-core`.
+export * from 'dsh-manuscript/client/editor-core'

@@ -23,6 +23,9 @@
     "./client": {
       "default": "./lib/client.js"
     },
+    "./client/editor-core": {
+      "default": "./lib/client-editor-core.cjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -35,6 +38,7 @@
     "lib/host-error.js.map",
     "lib/host-error.d.ts",
     "lib/client.js",
+    "lib/client-editor-core.cjs",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addCompletionCandidate, applyGhost, applySelectionPatch, canApplyGhost, isDirty, isSelectionCurrent, saveState, selectionTicket } from './editor-state.ts'
+import { addCompletionCandidate, applyGhost, applySelectionPatch, canApplyGhost, isDirty, isSelectionCurrent, saveState, selectionTicket } from 'dsh-manuscript/client/editor-core'
 
 describe('writer editor states', () => {
   const document = { sessionId: 's', path: '正文/01.md', text: '原文', version: 'v1' }

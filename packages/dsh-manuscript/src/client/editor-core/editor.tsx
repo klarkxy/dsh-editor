@@ -1,0 +1,884 @@
+import { createElement as e, useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+
+// EditorCore only needs to issue RPCs; hosts that also register handlers can
+// pass the full RpcBag and the structural type will still match.
+export type EditorCoreRpc = {
+  call: (channel: string, endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>
+}
+
+type RpcResult<T = unknown> =
+  | { ok: true; value: T }
+  | { ok: false; error: { message: string } }
+import {
+  addCompletionCandidate,
+  applyGhost,
+  applySelectionPatch,
+  canApplyGhost,
+  isDirty,
+  isSelectionCurrent,
+  saveState,
+  selectionTicket,
+  type EditorDocument,
+  type SaveState,
+  type SelectionTicket,
+  type StoredDraft,
+} from './editor-state.ts'
+import { automaticCompletionReady, type CompletionPreference } from './completion-preference.ts'
+
+// Re-exports keep the public surface of editor-core in a single barrel.
+export {
+  addCompletionCandidate,
+  applyGhost,
+  applySelectionPatch,
+  canApplyGhost,
+  documentKey,
+  hasUnsavedChanges,
+  isDirty,
+  isSelectionCurrent,
+  isStaleWriteError,
+  parseStoredDraft,
+  saveState,
+  selectionTicket,
+  shouldApplyRead,
+  shouldRetainDraftAfterSave,
+  draftStorageKey,
+  type DocumentTarget,
+  type EditorDocument,
+  type EditorStatus,
+  type SaveState,
+  type SelectionTicket,
+  type StoredDraft,
+} from './editor-state.ts'
+
+export {
+  automaticCompletionReady,
+  COMPLETION_PREFERENCE_KEY,
+  readCompletionPreference,
+  type CompletionPreference,
+} from './completion-preference.ts'
+
+export type EditorCoreHandle = {
+  save(): Promise<boolean>
+  discard(): void
+  isDirty(): boolean
+  getText(): string
+  getDocument(): EditorDocument | null
+  getSelection(): { start: number; end: number }
+  setGhost(candidates: string[], index: number, at: number): void
+  clearGhost(): void
+  setProposal(proposal: { ticket: SelectionTicket; text: string } | null): void
+}
+
+export type EditorCoreDraft =
+  | {
+      kind: 'host'
+      call: (endpoint: 'draft.get' | 'draft.put' | 'draft.delete', payload: Record<string, unknown>) => Promise<unknown>
+      syncDelayMs?: number
+    }
+  | {
+      kind: 'session'
+      cwd: string
+      syncDelayMs?: number
+    }
+  | { kind: 'none' }
+
+export type EditorCorePaperProjection = {
+  project(path: string, text: string): { text: string; offset: number }
+  replace(path: string, text: string, paperText: string): string
+}
+
+export type ChapterStatusValue = 'draft' | 'revising' | 'final'
+
+export type EditorCoreProps = {
+  sessionId: string
+  cwd?: string
+  path: string
+
+  rpc: EditorCoreRpc
+  draft?: EditorCoreDraft
+
+  onDirtyChange?(dirty: boolean): void
+  onSaved?(): void
+  onError?(message: string): void
+  onNotice?(message: string): void
+  onStatusChange?(status: EditorCoreStatus): void
+
+  // Caller receives a handle once mounted; the handle exposes imperative
+  // save / discard so the host can coordinate switch-while-dirty flows
+  // (manuscript's "保存后切换" / "放弃修改并切换" pattern). A `null`
+  // argument is delivered on unmount so the host can release its cache.
+  onHandle?(handle: EditorCoreHandle | null): void
+
+  testIdPrefix?: string
+  paperClassName?: string
+  paperStyle?: CSSProperties
+  slotClassName?: Partial<Record<EditorCoreSlot, string>>
+  slotStyle?: Partial<Record<EditorCoreSlot, CSSProperties>>
+
+  completionPreference?: CompletionPreference
+  authorPreferences?: string
+  fimDelayMs?: number
+  maxGhostCandidates?: number
+  showGhostTip?: boolean
+  buildFimPayload?(input: { sessionId: string; path: string; prefix: string; suffix: string; authorPreferences?: string }): Record<string, unknown>
+  buildPatchPayload?(input: { sessionId: string; path: string; selectedText: string; before: string; after: string; authorPreferences?: string }): Record<string, unknown>
+  extractFimText?(value: unknown): string
+  extractPatchText?(value: unknown): string
+
+  enablePatch?: boolean
+  showProposalDiff?: boolean
+
+  enableRewriteSelection?: boolean
+  onRewriteSelection?(selection: string, path: string): void | Promise<void>
+
+  paperProjection?: EditorCorePaperProjection
+
+  chapterStatus?: ChapterStatusValue
+  onChapterStatus?(path: string, status: ChapterStatusValue): void
+  statusBusy?: boolean
+  chapterStatusBlocked?: boolean
+
+  autoSaveDelayMs?: number
+  externalRevision?: number
+
+  // Optional chapter navigation. The shell passes the file list; the
+  // manuscript client passes siblings for the same directory. Prev/next
+  // are hidden when the current path is not in the list.
+  siblings?: readonly string[]
+  onOpenSibling?(path: string): void
+  siblingsBlocked?: boolean
+
+  // Shell-specific conflict recovery actions. When provided, the matching
+  // button is rendered alongside EditorCore's built-in discard. The host
+  // owns the actual flow (e.g. confirm dialog, copy-as-conflict).
+  onReloadDisk?(): void
+  onSaveConflictCopy?(): void
+
+  // Install a beforeunload warning while the buffer is dirty. The shell
+  // wants the browser prompt; the manuscript overlay adds its own.
+  enableBeforeUnload?: boolean
+
+  // Custom header/footer nodes for hosts that need to inject extra UI
+  // (e.g. a row of chapter shortcuts in the shell's footer). Rendered
+  // after the built-in controls.
+  headerExtras?: ReactNode
+  footerExtras?: ReactNode
+}
+
+export type EditorCoreStatus = 'empty' | 'loading' | 'saved' | 'draft' | 'conflict' | 'error'
+
+export type EditorCoreSlot =
+  | 'outer'
+  | 'header'
+  | 'headerStatus'
+  | 'chapterNav'
+  | 'tools'
+  | 'textarea'
+  | 'mirror'
+  | 'ghost'
+  | 'ghostCard'
+  | 'ghostTip'
+  | 'proposal'
+  | 'conflict'
+  | 'notice'
+  | 'footer'
+
+const PAPER_SURFACE = {
+  fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif',
+  fontSize: 16,
+  lineHeight: 1.7,
+  padding: 16,
+}
+
+const SESSION_DRAFT_KEY = (cwd: string, path: string) =>
+  `dsh-editor:draft:${encodeURIComponent(`${cwd}\u0000${path}`)}`
+
+const IDENTITY_PROJECTION: EditorCorePaperProjection = {
+  project: (_path, text) => ({ text, offset: 0 }),
+  replace: (_path, _text, paperText) => paperText,
+}
+
+function extractText(value: unknown): string {
+  if (value && typeof value === 'object' && 'text' in value) {
+    const raw = (value as { text: unknown }).text
+    return typeof raw === 'string' ? raw : ''
+  }
+  return ''
+}
+
+function defaultFimPayload(input: { sessionId: string; path: string; prefix: string; suffix: string; authorPreferences?: string }): Record<string, unknown> {
+  return input.authorPreferences
+    ? { sessionId: input.sessionId, path: input.path, prefix: input.prefix, suffix: input.suffix, authorPreferences: input.authorPreferences }
+    : { sessionId: input.sessionId, path: input.path, prefix: input.prefix, suffix: input.suffix }
+}
+
+function defaultPatchPayload(input: { sessionId: string; path: string; selectedText: string; before: string; after: string; authorPreferences?: string }): Record<string, unknown> {
+  return input.authorPreferences
+    ? { sessionId: input.sessionId, path: input.path, selectedText: input.selectedText, before: input.before, after: input.after, authorPreferences: input.authorPreferences }
+    : { sessionId: input.sessionId, path: input.path, selectedText: input.selectedText, before: input.before, after: input.after }
+}
+
+function describeStatus(state: SaveState, conflict: boolean): string {
+  if (state === 'empty') return ''
+  if (state === 'loading') return '读取中'
+  if (state === 'saved') return '已保存'
+  if (state === 'draft') return '草稿未保存'
+  if (state === 'conflict') return conflict ? '版本冲突' : '需处理'
+  return '读取失败'
+}
+
+function isStaleMessage(message: string): boolean {
+  return /changed on disk|\bSTALE\b|version|版本/i.test(message)
+}
+
+export function EditorCore(props: EditorCoreProps): ReactNode {
+  const {
+    sessionId,
+    path,
+    rpc,
+    draft = { kind: 'none' },
+    onDirtyChange,
+    onSaved,
+    onError,
+    onNotice,
+    onStatusChange,
+    onHandle,
+    testIdPrefix = 'paper',
+    paperClassName = 'paper-stage',
+    paperStyle,
+    slotClassName = {},
+    slotStyle = {},
+    completionPreference = 'manual',
+    authorPreferences,
+    fimDelayMs = 1500,
+    maxGhostCandidates = 3,
+    showGhostTip = false,
+    buildFimPayload = defaultFimPayload,
+    buildPatchPayload = defaultPatchPayload,
+    extractFimText = extractText,
+    extractPatchText = extractText,
+    enablePatch = false,
+    showProposalDiff = true,
+    enableRewriteSelection = false,
+    onRewriteSelection,
+    paperProjection = IDENTITY_PROJECTION,
+    chapterStatus,
+    onChapterStatus,
+    statusBusy,
+    chapterStatusBlocked,
+    autoSaveDelayMs = 800,
+    externalRevision = 0,
+    siblings,
+    onOpenSibling,
+    siblingsBlocked = false,
+    onReloadDisk,
+    onSaveConflictCopy,
+    enableBeforeUnload = false,
+    headerExtras,
+    footerExtras,
+  } = props
+
+  const cwd = props.cwd ?? (draft.kind === 'session' ? draft.cwd : '')
+
+  const [doc, setDoc] = useState<EditorDocument | null>(null)
+  const [text, setTextState] = useState('')
+  const [ghostCandidates, setGhostCandidates] = useState<string[]>([])
+  const [ghostIndex, setGhostIndex] = useState(0)
+  const [ghostAt, setGhostAt] = useState(0)
+  const [loadingFim, setLoadingFim] = useState(false)
+  const [conflict, setConflict] = useState(false)
+  const [note, setNote] = useState('')
+  const [revision, setRevision] = useState(0)
+  const [selection, setSelection] = useState({ start: 0, end: 0 })
+  const [proposal, setProposal] = useState<{ ticket: SelectionTicket; text: string } | null>(null)
+  const [patching, setPatching] = useState(false)
+  const [userEditRevision, setUserEditRevision] = useState(0)
+  const [error, setError] = useState('')
+  const [hasSelection, setHasSelection] = useState(false)
+
+  const ta = useRef<HTMLTextAreaElement | null>(null)
+  const mirror = useRef<HTMLDivElement | null>(null)
+  const fimAbort = useRef<AbortController | null>(null)
+  const patchAbort = useRef<AbortController | null>(null)
+  const saving = useRef(false)
+  const lastAutomaticCompletion = useRef(0)
+
+  const docRef = useRef<EditorDocument | null>(null)
+  const textRef = useRef('')
+  const revisionRef = useRef(0)
+  const ghostCandidatesRef = useRef<string[]>([])
+  const ghostAtRef = useRef(0)
+  docRef.current = doc
+  textRef.current = text
+  revisionRef.current = revision
+  ghostCandidatesRef.current = ghostCandidates
+  ghostAtRef.current = ghostAt
+
+  const setStatus: (status: EditorCoreStatus) => void = (status) => onStatusChange?.(status)
+
+  const report = useCallback((next: string) => { setNote(next); onNotice?.(next) }, [onNotice])
+  const reportError = useCallback((next: string) => { setError(next); onError?.(next) }, [onError])
+  const clearGhost = useCallback(() => { setGhostCandidates([]); setGhostIndex(0) }, [])
+
+  const paperOffset = paperProjection.project(path, text).offset
+  const paperText = paperProjection.project(path, text).text
+  const state: SaveState = saveState(doc, text, conflict)
+  const ghost = ghostCandidates[ghostIndex] ?? ''
+
+  useEffect(() => { setStatus(state) }, [state, setStatus])
+
+  useEffect(() => {
+    onDirtyChange?.(Boolean(doc && isDirty(doc, text)) || conflict)
+  }, [doc, text, conflict, onDirtyChange])
+
+  const setText = useCallback((next: string) => {
+    if (loadingFim || patching) report('正文已变化，已停止此前的建议。')
+    fimAbort.current?.abort()
+    patchAbort.current?.abort()
+    setLoadingFim(false)
+    setPatching(false)
+    setTextState(next)
+    setRevision((old) => old + 1)
+    clearGhost()
+    setProposal(null)
+  }, [loadingFim, patching, report, clearGhost])
+
+  useEffect(() => {
+    fimAbort.current?.abort()
+    patchAbort.current?.abort()
+    setLoadingFim(false)
+    setPatching(false)
+    setProposal(null)
+    clearGhost()
+    setConflict(false)
+    setSelection({ start: 0, end: 0 })
+    setUserEditRevision(0)
+    lastAutomaticCompletion.current = 0
+    setError('')
+    if (!path) { setDoc(null); setTextState(''); setNote(''); return }
+    let live = true
+    void (async () => {
+      const readResult = await rpc.call('/manuscript', 'file.read', { sessionId, path }) as RpcResult<{ text: string; version: string }>
+      if (!live) return
+      if (!readResult.ok) {
+        setDoc(null)
+        reportError(readResult.error.message)
+        return
+      }
+      const disk: EditorDocument = { sessionId, path, text: readResult.value.text, version: readResult.value.version }
+      let restoredText: string | null = null
+      let conflictOnLoad = false
+      if (draft.kind === 'host') {
+        const draftResult = await draft.call('draft.get', { sessionId, path }) as RpcResult<{ draft: { text: string; baseVersion: string } | null }>
+        if (live && draftResult.ok && draftResult.value.draft) {
+          restoredText = draftResult.value.draft.text
+          conflictOnLoad = draftResult.value.draft.baseVersion !== disk.version
+        }
+      } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
+        try {
+          const raw = globalThis.sessionStorage.getItem(SESSION_DRAFT_KEY(cwd, path))
+          if (raw) {
+            const parsed = JSON.parse(raw) as Partial<StoredDraft>
+            if (parsed.cwd === cwd && parsed.path === path && typeof parsed.text === 'string' && typeof parsed.version === 'string') {
+              restoredText = parsed.text
+              conflictOnLoad = parsed.version !== disk.version
+            }
+          }
+        } catch { /* corrupted draft is best effort */ }
+      }
+      if (!live) return
+      setDoc(disk)
+      setRevision((old) => old + 1)
+      if (restoredText !== null) {
+        setTextState(restoredText)
+        setConflict(conflictOnLoad)
+        report(conflictOnLoad ? '磁盘版本已变化；本地草稿已保留，请另存或手动合并。' : '已恢复未保存的草稿')
+      } else {
+        setTextState(disk.text)
+        setConflict(false)
+        setNote('')
+      }
+    })()
+    return () => { live = false; fimAbort.current?.abort(); patchAbort.current?.abort() }
+  }, [path, sessionId, cwd, externalRevision, rpc, draft, report, reportError, clearGhost])
+
+  useEffect(() => {
+    if (draft.kind === 'none' || !doc) return
+    const delay = draft.syncDelayMs ?? 250
+    const timer = globalThis.setTimeout(() => {
+      if (draft.kind === 'host') {
+        const endpoint = text === doc.text ? 'draft.delete' : 'draft.put'
+        const payload = endpoint === 'draft.delete'
+          ? { sessionId: doc.sessionId, path: doc.path }
+          : { sessionId: doc.sessionId, path: doc.path, text, baseText: doc.text, baseVersion: doc.version }
+        void draft.call(endpoint, payload).then((raw: unknown) => {
+          const result = raw as RpcResult
+          if (!result.ok) report(`草稿同步失败：${result.error.message}`)
+        })
+      } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
+        try {
+          const key = SESSION_DRAFT_KEY(cwd, doc.path)
+          if (text === doc.text) globalThis.sessionStorage.removeItem(key)
+          else globalThis.sessionStorage.setItem(key, JSON.stringify({ ...doc, text }))
+        } catch { /* best effort */ }
+      }
+    }, delay)
+    return () => globalThis.clearTimeout(timer)
+  }, [draft, doc, text, cwd, report])
+
+  const save = useCallback(async (): Promise<boolean> => {
+    if (!doc || saving.current) return false
+    const savingDoc = doc
+    const savingText = text
+    saving.current = true
+    report('正在保存…')
+    const result = await rpc.call('/manuscript', 'file.write', {
+      sessionId: savingDoc.sessionId,
+      path: savingDoc.path,
+      text: savingText,
+      version: savingDoc.version,
+    }) as RpcResult<{ version?: string }>
+    if (!result.ok) {
+      const stale = isStaleMessage(result.error.message)
+      setConflict(stale)
+      reportError(stale ? '磁盘文件已变化；本地草稿未丢失。' : result.error.message)
+      saving.current = false
+      return false
+    }
+    const saved: EditorDocument = { ...savingDoc, text: savingText, version: result.value.version ?? savingDoc.version }
+    setDoc(saved)
+    if (draft.kind === 'host') {
+      const deleted = await draft.call('draft.delete', { sessionId: savingDoc.sessionId, path: savingDoc.path }) as RpcResult
+      if (!deleted.ok) {
+        report(`文件已保存，但草稿清理失败：${deleted.error.message}`)
+        saving.current = false
+        return false
+      }
+    } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
+      try {
+        globalThis.sessionStorage.removeItem(SESSION_DRAFT_KEY(cwd, savingDoc.path))
+      } catch { /* best effort */ }
+    }
+    setConflict(false)
+    report('已保存')
+    saving.current = false
+    onSaved?.()
+    return true
+  }, [doc, text, rpc, draft, cwd, report, reportError, onSaved])
+
+  useEffect(() => {
+    if (!doc || text === doc.text || conflict) return
+    const timer = globalThis.setTimeout(() => { void save() }, autoSaveDelayMs)
+    return () => globalThis.clearTimeout(timer)
+  }, [doc, text, conflict, autoSaveDelayMs, save])
+
+  const discard = useCallback(() => {
+    if (!doc) return
+    if (draft.kind === 'host') {
+      void draft.call('draft.delete', { sessionId: doc.sessionId, path: doc.path })
+    } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
+      try {
+        globalThis.sessionStorage.removeItem(SESSION_DRAFT_KEY(cwd, doc.path))
+      } catch { /* best effort */ }
+    }
+    setTextState(doc.text)
+    setRevision((old) => old + 1)
+    setConflict(false)
+    setHasSelection(false)
+    setProposal(null)
+    clearGhost()
+    setError('')
+    report('已放弃本地修改。')
+  }, [doc, draft, cwd, clearGhost, report])
+
+  const siblingIndex = siblings ? siblings.indexOf(path) : -1
+  const showSiblings = !!siblings && !!onOpenSibling && siblingIndex >= 0
+
+  useEffect(() => {
+    if (!enableBeforeUnload) return
+    if (!doc || (!isDirty(doc, text) && !conflict)) return
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    globalThis.addEventListener('beforeunload', warn)
+    return () => globalThis.removeEventListener('beforeunload', warn)
+  }, [enableBeforeUnload, doc, text, conflict])
+
+  // Imperative handle via callback ref.
+  useEffect(() => {
+    if (!onHandle) return
+    const handle: EditorCoreHandle = {
+      save,
+      discard,
+      isDirty: () => isDirty(docRef.current, textRef.current),
+      getText: () => textRef.current,
+      getDocument: () => docRef.current,
+      getSelection: () => ({ start: 0, end: 0 }),
+      setGhost: (candidates, index, at) => { setGhostCandidates(candidates); setGhostIndex(index); setGhostAt(at) },
+      clearGhost: () => { clearGhost(); setGhostAt(0) },
+      setProposal: (next) => setProposal(next),
+    }
+    onHandle(handle)
+    return () => onHandle(null)
+  }, [onHandle, save, discard, clearGhost])
+
+  const complete = useCallback(async (append = false) => {
+    if (!doc || !ta.current) return
+    lastAutomaticCompletion.current = Math.max(lastAutomaticCompletion.current, userEditRevision)
+    fimAbort.current?.abort()
+    patchAbort.current?.abort()
+    setProposal(null)
+    const requestDoc = doc
+    const requestRevision = revision
+    const candidates = ghostCandidatesRef.current
+    const ghostAnchor = ghostAtRef.current
+    const pos = append && candidates.length > 0 ? ghostAnchor : ta.current.selectionStart + paperOffset
+    const controller = new AbortController()
+    fimAbort.current = controller
+    setLoadingFim(true)
+    report('正在生成补全…')
+    const result = await rpc.call('/manuscript', 'fim.complete', buildFimPayload({
+      sessionId: doc.sessionId,
+      path: doc.path,
+      prefix: text.slice(0, pos),
+      suffix: text.slice(pos),
+      authorPreferences,
+    }), controller.signal) as RpcResult<{ text?: string }>
+    if (fimAbort.current === controller) {
+      fimAbort.current = null
+      setLoadingFim(false)
+    }
+    if (controller.signal.aborted) return
+    if (docRef.current?.sessionId !== requestDoc.sessionId || docRef.current.path !== requestDoc.path || revisionRef.current !== requestRevision) return
+    if (!result.ok) { reportError(result.error.message); return }
+    const suggestion = extractFimText(result.value)
+    if (!suggestion.trim()) { report('模型未返回可用补全。'); return }
+    const next = append
+      ? addCompletionCandidate(candidates, suggestion, maxGhostCandidates)
+      : { candidates: [suggestion], index: 0, added: true }
+    setGhostCandidates(next.candidates)
+    setGhostIndex(next.index)
+    setGhostAt(pos)
+    report(next.added
+      ? `补全候选 ${next.index + 1}/${next.candidates.length} 已就绪。`
+      : '新候选与已有建议相同，已保留原建议。')
+  }, [doc, revision, text, paperOffset, rpc, buildFimPayload, authorPreferences, maxGhostCandidates, userEditRevision, extractFimText, report, reportError])
+
+  useEffect(() => {
+    if (!doc || !ta.current) return
+    const cursor = ta.current.selectionStart
+    const isManuscript = /^正文\/.+\.(?:md|txt)$/i.test(doc.path)
+    if (!automaticCompletionReady({
+      preference: completionPreference,
+      manuscript: isManuscript,
+      userEditRevision,
+      requestedRevision: lastAutomaticCompletion.current,
+      focused: typeof document !== 'undefined' && document.activeElement === ta.current,
+      collapsedSelection: ta.current.selectionStart === ta.current.selectionEnd,
+      prefix: textRef.current.slice(0, cursor),
+      busy: loadingFim || patching,
+      blocked: conflict || Boolean(ghost) || Boolean(proposal),
+    })) return
+    const timer = globalThis.setTimeout(() => {
+      if (!ta.current) return
+      const currentCursor = ta.current.selectionStart
+      if (!automaticCompletionReady({
+        preference: completionPreference,
+        manuscript: isManuscript,
+        userEditRevision,
+        requestedRevision: lastAutomaticCompletion.current,
+        focused: typeof document !== 'undefined' && document.activeElement === ta.current,
+        collapsedSelection: ta.current.selectionStart === ta.current.selectionEnd,
+        prefix: textRef.current.slice(0, currentCursor),
+        busy: loadingFim || patching,
+        blocked: conflict || Boolean(ghost) || Boolean(proposal),
+      })) return
+      lastAutomaticCompletion.current = userEditRevision
+      void complete()
+    }, fimDelayMs)
+    return () => globalThis.clearTimeout(timer)
+  }, [completionPreference, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, complete])
+
+  const requestPatch = useCallback(async () => {
+    if (!doc) return
+    const ticket = selectionTicket(doc, text, revision, selection.start, selection.end)
+    if (!ticket) { report('请先选择需要改写的文字。'); return }
+    fimAbort.current?.abort()
+    clearGhost()
+    patchAbort.current?.abort()
+    const controller = new AbortController()
+    patchAbort.current = controller
+    setPatching(true)
+    report('正在生成选段修改…')
+    const result = await rpc.call('/manuscript', 'patch.complete', buildPatchPayload({
+      sessionId: ticket.sessionId,
+      path: ticket.path,
+      selectedText: ticket.selectedText,
+      before: text.slice(Math.max(0, ticket.start - 4000), ticket.start),
+      after: text.slice(ticket.end, ticket.end + 4000),
+      authorPreferences,
+    }), controller.signal) as RpcResult<{ text?: string }>
+    if (patchAbort.current === controller) {
+      patchAbort.current = null
+      setPatching(false)
+    }
+    if (controller.signal.aborted || !isSelectionCurrent(ticket, docRef.current, textRef.current, revisionRef.current)) return
+    if (!result.ok) { reportError(result.error.message); return }
+    const replacement = extractPatchText(result.value).trim()
+    if (!replacement) { report('模型未返回可用改写。'); return }
+    setProposal({ ticket, text: replacement })
+    report('修改建议已就绪。')
+  }, [doc, text, revision, selection, rpc, buildPatchPayload, authorPreferences, extractPatchText, report, reportError, clearGhost])
+
+  const acceptGhost = useCallback(() => {
+    if (!canApplyGhost(state, ghost)) return
+    const cursor = ghostAt + ghost.length
+    setText(applyGhost(text, ghostAt, ghost))
+    setSelection({ start: cursor, end: cursor })
+    clearGhost()
+    report('补全已加入草稿。')
+    globalThis.setTimeout(() => {
+      ta.current?.focus()
+      ta.current?.setSelectionRange(Math.max(0, cursor - paperOffset), Math.max(0, cursor - paperOffset))
+    }, 0)
+  }, [state, ghost, ghostAt, text, paperOffset, setText, clearGhost, report])
+
+  const acceptPatch = useCallback(() => {
+    if (!proposal || !isSelectionCurrent(proposal.ticket, doc, text, revision)) {
+      setProposal(null)
+      report('所选内容已变化，过期的建议已丢弃。')
+      return
+    }
+    const cursor = proposal.ticket.start + proposal.text.length
+    setText(applySelectionPatch(text, proposal.ticket, proposal.text))
+    setSelection({ start: cursor, end: cursor })
+    setProposal(null)
+    report('修改已加入草稿。')
+    globalThis.setTimeout(() => {
+      ta.current?.focus()
+      ta.current?.setSelectionRange(Math.max(0, cursor - paperOffset), Math.max(0, cursor - paperOffset))
+    }, 0)
+  }, [proposal, doc, text, revision, paperOffset, setText, report])
+
+  const onTextareaChange = (event: { target: { value: string } }) => {
+    setText(paperProjection.replace(path, text, event.target.value))
+    setUserEditRevision((old) => old + 1)
+  }
+
+  const onTextareaSelect = (event: { target: { selectionStart: number; selectionEnd: number } }) => {
+    setSelection({ start: event.target.selectionStart + paperOffset, end: event.target.selectionEnd + paperOffset })
+    setHasSelection(event.target.selectionStart !== event.target.selectionEnd)
+  }
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save() }
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && proposal) { event.preventDefault(); acceptPatch() }
+    if (event.key === 'Tab' && ghost) { event.preventDefault(); acceptGhost() }
+    if (event.key === 'Escape' && (loadingFim || patching || ghost || proposal)) {
+      event.preventDefault()
+      fimAbort.current?.abort()
+      patchAbort.current?.abort()
+      setLoadingFim(false)
+      setPatching(false)
+      clearGhost()
+      setProposal(null)
+      report('已放弃当前建议。')
+    }
+  }
+
+  const wordCount = paperText.replace(/\s/g, '').length
+  if (!path) return null
+
+  const cls = (slot: EditorCoreSlot) => slotClassName[slot]
+  const sty = (slot: EditorCoreSlot) => slotStyle[slot]
+  const showFooter = loadingFim || patching || ghost || proposal || conflict || note
+
+  return e('section', {
+    className: [paperClassName, cls('outer')].filter(Boolean).join(' '),
+    'aria-label': '正文编辑区',
+    style: { display: 'flex', flexDirection: 'column', height: '100%', ...paperStyle, ...sty('outer') },
+  },
+    e('header', {
+      className: cls('header'),
+      style: { padding: '4px 8px', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', ...sty('header') },
+    },
+      e('span', {
+        'data-testid': `${testIdPrefix}-path`,
+        style: { opacity: 0.7, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' },
+      }, doc?.path || path),
+      showSiblings ? e('nav', {
+        className: ['chapter-navigation', cls('chapterNav')].filter(Boolean).join(' '),
+        'aria-label': '章节导航',
+        style: { display: 'inline-flex', gap: 4, alignItems: 'center' },
+      },
+        e('button', {
+          type: 'button',
+          'data-testid': `${testIdPrefix}-prev`,
+          disabled: siblingsBlocked || siblingIndex <= 0,
+          title: siblingsBlocked ? '请先保存' : '上一章',
+          onClick: () => { if (siblingIndex > 0 && siblings) onOpenSibling(siblings[siblingIndex - 1]!) },
+        }, '‹'),
+        e('span', { style: { fontSize: 11, opacity: 0.6 } }, `${siblingIndex + 1} / ${siblings!.length}`),
+        e('button', {
+          type: 'button',
+          'data-testid': `${testIdPrefix}-next`,
+          disabled: siblingsBlocked || siblingIndex >= siblings!.length - 1,
+          title: siblingsBlocked ? '请先保存' : '下一章',
+          onClick: () => { if (siblingIndex < siblings!.length - 1 && siblings) onOpenSibling(siblings[siblingIndex + 1]!) },
+        }, '›'),
+      ) : null,
+      onChapterStatus && chapterStatus ? e('label', { className: cls('headerStatus'), style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
+        e('span', { className: 'sr-only' }, '章节状态'),
+        e('select', {
+          value: chapterStatus,
+          disabled: Boolean(statusBusy) || Boolean(chapterStatusBlocked),
+          'aria-label': '章节状态',
+          onChange: (event: ChangeEvent<HTMLSelectElement>) => onChapterStatus(doc?.path || path, event.target.value as ChapterStatusValue),
+        },
+        e('option', { value: 'draft' }, '草稿'),
+        e('option', { value: 'revising' }, '修订中'),
+        e('option', { value: 'final' }, '已定稿')),
+      ) : null,
+      enableRewriteSelection ? e('button', {
+        type: 'button',
+        'data-testid': `${testIdPrefix}-rewrite`,
+        disabled: !hasSelection,
+        onClick: () => {
+          const sel = text.slice(selection.start, selection.end)
+          if (!sel) return
+          void Promise.resolve(onRewriteSelection?.(sel, doc?.path || path))
+        },
+      }, '改这段') : null,
+      e('button', {
+        type: 'button',
+        'data-testid': `${testIdPrefix}-fim`,
+        onClick: () => { void complete(false) },
+      }, loadingFim ? '停止补全' : ghost ? '重新补全' : '补全'),
+      e('span', { 'data-testid': `${testIdPrefix}-wordcount`, style: { opacity: 0.55 } }, `${wordCount} 字`),
+      e('span', { 'data-testid': `${testIdPrefix}-save-state`, style: { opacity: 0.55 } }, describeStatus(state, conflict)),
+      headerExtras,
+    ),
+    e('div', {
+      className: cls('textarea'),
+      style: { position: 'relative', flex: 1, minHeight: 0, ...sty('textarea') },
+    },
+      ghost ? e('div', {
+        ref: mirror,
+        className: cls('mirror'),
+        'aria-hidden': true,
+        style: {
+          position: 'absolute',
+          inset: 0,
+          padding: PAPER_SURFACE.padding,
+          fontSize: PAPER_SURFACE.fontSize,
+          lineHeight: PAPER_SURFACE.lineHeight,
+          fontFamily: PAPER_SURFACE.fontFamily,
+          whiteSpace: 'pre-wrap',
+          overflow: 'auto',
+          border: 0,
+          margin: 0,
+          pointerEvents: 'none',
+          color: 'inherit',
+          ...sty('mirror'),
+        },
+      },
+        text.slice(0, ghostAt),
+        e('span', { 'data-testid': `${testIdPrefix}-ghost`, style: { opacity: 0.45 } }, ghost),
+        text.slice(ghostAt),
+      ) : null,
+      e('textarea', {
+        ref: ta,
+        'data-testid': `${testIdPrefix}-editor`,
+        'aria-label': '正文编辑器',
+        value: paperText,
+        onChange: onTextareaChange,
+        onSelect: onTextareaSelect,
+        onKeyDown,
+        style: {
+          position: 'absolute',
+          inset: 0,
+          padding: PAPER_SURFACE.padding,
+          fontSize: PAPER_SURFACE.fontSize,
+          lineHeight: PAPER_SURFACE.lineHeight,
+          fontFamily: PAPER_SURFACE.fontFamily,
+          whiteSpace: 'pre-wrap',
+          overflow: 'auto',
+          border: 0,
+          margin: 0,
+          resize: 'none',
+          background: 'transparent',
+          color: ghost ? 'transparent' : 'inherit',
+          caretColor: 'inherit',
+          zIndex: 1,
+          ...sty('textarea'),
+        },
+      }),
+    ),
+    showGhostTip && ghost ? e('div', {
+      className: cls('ghostTip'),
+      style: { padding: '4px 8px', fontSize: 12, opacity: 0.55, ...sty('ghostTip') },
+    }, '补全 · Tab 采纳 · Esc 关掉') : null,
+    proposal ? e('div', {
+      className: cls('proposal'),
+      'aria-label': '选段修改建议',
+      style: { padding: 12, border: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', borderRadius: 6, ...sty('proposal') },
+    },
+      e('strong', null, '选段修改建议'),
+      showProposalDiff ? e('div', { style: { display: 'grid', gap: 7 } },
+        e('section', null, e('small', null, '原文'), e('p', null, proposal.ticket.selectedText)),
+        e('section', null, e('small', null, '修改后'), e('p', null, proposal.text)),
+      ) : e('p', null, proposal.text),
+      e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+        e('button', { type: 'button', onClick: acceptPatch }, '应用修改'),
+        e('button', { type: 'button', onClick: () => { setProposal(null); report('已放弃修改建议。'); ta.current?.focus() } }, '放弃'),
+      ),
+    ) : null,
+    conflict ? e('div', {
+      'data-testid': `${testIdPrefix}-conflict-guard`,
+      className: cls('conflict'),
+      style: { padding: '6px 8px', borderTop: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', fontSize: 12, ...sty('conflict') },
+    },
+      e('span', null, '当前草稿与磁盘版本不一致，已保留本地内容。'),
+    ) : null,
+    note ? e('div', {
+      'data-testid': `${testIdPrefix}-notice`,
+      className: cls('notice'),
+      role: conflict ? 'alert' : 'status',
+      style: { padding: '4px 8px', fontSize: 12, opacity: 0.7, ...sty('notice') },
+    }, note) : null,
+    error ? e('div', {
+      className: cls('notice'),
+      style: { padding: 8, color: '#8a3a30', fontSize: 12, ...sty('notice') },
+    }, error) : null,
+    showFooter ? e('footer', {
+      className: cls('footer'),
+      style: { padding: '6px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', ...sty('footer') },
+    },
+      e('button', { type: 'button', disabled: !doc || text === doc.text || conflict, onClick: () => void save() }, '保存'),
+      loadingFim ? e('button', { type: 'button', onClick: () => { fimAbort.current?.abort(); setLoadingFim(false); report('已停止补全。') } }, '停止补全') : null,
+      enablePatch ? e('button', {
+        type: 'button',
+        disabled: !doc || conflict || loadingFim || (!patching && selection.start === selection.end),
+        onClick: () => {
+          if (!patching) { void requestPatch(); return }
+          patchAbort.current?.abort()
+          setPatching(false)
+          report('已停止改写。')
+        },
+      }, patching ? '停止改写' : '修改选段') : null,
+      ghost ? e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' } },
+        e('strong', null, '补全建议'),
+        e('small', null, `候选 ${ghostIndex + 1} / ${ghostCandidates.length}`),
+        e('button', { type: 'button', onClick: acceptGhost }, '接受补全'),
+        ghostCandidates.length < maxGhostCandidates ? e('button', { type: 'button', disabled: loadingFim, onClick: () => void complete(true) }, '再来一个') : e('span', { style: { opacity: 0.55 } }, `已满 ${maxGhostCandidates} 条`),
+        e('button', { type: 'button', onClick: () => { clearGhost(); report('已放弃补全。'); ta.current?.focus() } }, '放弃'),
+        ghostCandidates.length > 1 ? e('nav', { 'aria-label': '切换补全候选', style: { display: 'flex', gap: 4 } },
+          e('button', { type: 'button', disabled: ghostIndex <= 0, onClick: () => setGhostIndex((old) => Math.max(0, old - 1)) }, '上一条'),
+          e('button', { type: 'button', disabled: ghostIndex >= ghostCandidates.length - 1, onClick: () => setGhostIndex((old) => Math.min(ghostCandidates.length - 1, old + 1)) }, '下一条'),
+        ) : null,
+      ) : null,
+      conflict ? e('button', { type: 'button', onClick: discard }, '放弃草稿并重新读取') : null,
+      conflict && onReloadDisk ? e('button', { type: 'button', 'data-testid': `${testIdPrefix}-reload-disk`, onClick: onReloadDisk }, '重新载入磁盘版本') : null,
+      conflict && onSaveConflictCopy ? e('button', { type: 'button', 'data-testid': `${testIdPrefix}-save-conflict-copy`, onClick: onSaveConflictCopy }, '另存冲突副本') : null,
+      footerExtras,
+    ) : null,
+  )
+}

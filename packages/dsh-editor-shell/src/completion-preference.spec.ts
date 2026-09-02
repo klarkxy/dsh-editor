@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { automaticCompletionReady, COMPLETION_PREFERENCE_KEY, readCompletionPreference } from './completion-preference.ts'
+import { automaticCompletionReady, COMPLETION_PREFERENCE_KEY, readCompletionPreference } from 'dsh-manuscript/client/editor-core'
 
 describe('automatic completion preference', () => {
   it('defaults fail closed to manual and restores only the supported automatic value', () => {
