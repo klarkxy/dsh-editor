@@ -37,6 +37,19 @@ describe('editor proposal boundary', () => {
     expect(editorToolGuard({ name: 'novel_knowledge', arguments: { topics: ['unknown'] } })).toContain('bundled topics')
   })
 
+  it('rejects zhihu_search without a non-empty query', () => {
+    expect(editorToolGuard({ name: 'zhihu_search', arguments: { query: '伏笔写法' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'zhihu_search', arguments: { query: '   ' } })).toContain('zhihu_search requires a non-empty query')
+    expect(editorToolGuard({ name: 'zhihu_search', arguments: { count: 5 } })).toContain('zhihu_search requires a non-empty query')
+  })
+
+  it('limits project_knowledge to 1-3 project-relative .md/.txt paths', () => {
+    expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: ['大纲/总纲.md', 'notes.txt'] } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: [] } })).toContain('project_knowledge')
+    expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: ['../secret.md'] } })).toContain('project_knowledge')
+    expect(editorToolGuard({ name: 'project_knowledge', arguments: { file: 'x.md' } })).toContain('project_knowledge')
+  })
+
   it('keeps the permanent prompt freeform while preserving hard boundaries', () => {
     expect(EDITOR_PROMPT).toContain('自然对话入口')
     expect(EDITOR_PROMPT).toContain('只要求审查时，只指出问题，不擅自改写')
@@ -51,5 +64,13 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).toContain('不要假设模板文件已存在')
     expect(EDITOR_PROMPT).toContain('novel_propose 的 create')
     expect(EDITOR_PROMPT).not.toMatch(/四种模式|进入.{0,8}模式|当前模式|Plan mode/i)
+  })
+
+  it('binds zhihu_search and project_knowledge to non-canon, read-only roles', () => {
+    expect(EDITOR_PROMPT).toContain('zhihu_search 只用于拉取社区证据与读者反馈做参考')
+    expect(EDITOR_PROMPT).toContain('不构成 canon、不扩大作品设定、不写入项目文件')
+    expect(EDITOR_PROMPT).toContain('project_knowledge 用于按需读取 1-3 份项目 Markdown 或纯文本材料')
+    expect(EDITOR_PROMPT).toContain('优先级高于网络搜索，但仍非 canon')
+    expect(EDITOR_PROMPT).toContain('不能把读取的内容直接复制成正文或写进项目文件')
   })
 })

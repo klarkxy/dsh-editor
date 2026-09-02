@@ -1,9 +1,12 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { isNovelKnowledgeArguments } from './novel-knowledge.ts'
+import { isProjectKnowledgeArguments } from './project-knowledge.ts'
 import {
   NOVEL_KNOWLEDGE_TOOL_NAME,
   PROPOSAL_MARKER,
   PROPOSAL_TOOL_NAME,
+  PROJECT_KNOWLEDGE_TOOL_NAME,
+  ZHIHU_SEARCH_TOOL_NAME,
   proposalMarker,
   type ProposalMarker,
 } from './contracts.ts'
@@ -60,6 +63,14 @@ export function editorToolGuard(exec: { name: string; arguments: Readonly<Record
     return isNovelKnowledgeArguments(args) ? undefined : 'Novel knowledge is limited to one to three bundled topics.'
   }
   if (exec.name === PROPOSAL_TOOL_NAME) return safeRelative(args.path, true) ? undefined : 'Only project-relative Markdown proposals are allowed.'
+  if (exec.name === ZHIHU_SEARCH_TOOL_NAME) {
+    const query = typeof args.query === 'string' ? args.query.trim() : ''
+    if (!query) return 'zhihu_search requires a non-empty query.'
+    return undefined
+  }
+  if (exec.name === PROJECT_KNOWLEDGE_TOOL_NAME) {
+    return isProjectKnowledgeArguments(args) ? undefined : 'project_knowledge needs 1-3 project-relative .md/.txt paths.'
+  }
   if (exec.name === 'read') return safeRelative(args.file_path, true) ? undefined : 'Only project-relative Markdown files may be read.'
   if (exec.name === 'glob') {
     return safeRelative(args.path) && typeof args.pattern === 'string' && /\.md$/i.test(args.pattern) && safeRelative(args.pattern)
@@ -82,4 +93,8 @@ export const EDITOR_PROMPT = `你是 DSH Editor 内的小说写作助手。始�
 
 你可以按需调用 novel_knowledge，从 planning、characters、drafting、dialogue、interiority、style、review、chinese-flow、first-reader、canon 中自由选择一至三个主题，也可以完全不调用。它只是参考经验，不代表模式、项目事实或用户授权；不必机械执行清单或向用户声明调用过程。
 
-构思、分析、审稿和问答直接在对话中回答。作品开始时通常只有空的 正文、大纲、人物卡、世界书 目录，没有总览、总纲、人物索引、设定总汇或首章。需要落盘时，用 novel_propose 的 create 建立所需 Markdown，不要假设模板文件已存在，也不要为了填空而生成空洞标题稿。只要用户要求创建或修改项目文件，就必须调用 novel_propose，先形成可预览提案，等待用户确认后才由产品写入；每次调用只处理一个 Markdown 文件。编辑时 oldText 必须是文件里唯一、完整的原文片段。绝不能调用 shell、write、edit 或其他会直接改文件的工具。`
+构思、分析、审稿和问答直接在对话中回答。作品开始时通常只有空的 正文、大纲、人物卡、世界书 目录，没有总览、总纲、人物索引、设定总汇或首章。需要落盘时，用 novel_propose 的 create 建立所需 Markdown，不要假设模板文件已存在，也不要为了填空而生成空洞标题稿。只要用户要求创建或修改项目文件，就必须调用 novel_propose，先形成可预览提案，等待用户确认后才由产品写入；每次调用只处理一个 Markdown 文件。编辑时 oldText 必须是文件里唯一、完整的原文片段。绝不能调用 shell、write、edit 或其他会直接改文件的工具。
+
+zhihu_search 只用于拉取社区证据与读者反馈做参考，不构成 canon、不扩大作品设定、不写入项目文件。引用搜索结果时也要保持信息来自社区而非正文事实；不能因为搜索到某条观点就把它写进大纲、世界书或人物卡。
+
+project_knowledge 用于按需读取 1-3 份项目 Markdown 或纯文本材料，绕过 12000 字上下文信封的限制。它返回项目事实材料，优先级高于网络搜索，但仍非 canon；阅读后要依据这些材料推进分析、审查或对话，不能把读取的内容直接复制成正文或写进项目文件。`

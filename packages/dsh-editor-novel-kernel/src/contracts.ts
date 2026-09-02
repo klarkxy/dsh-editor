@@ -1,6 +1,8 @@
 /** Browser-safe protocol shared with the editor Shell. */
 export const NOVEL_KNOWLEDGE_TOOL_NAME = 'novel_knowledge'
 export const PROPOSAL_TOOL_NAME = 'novel_propose'
+export const ZHIHU_SEARCH_TOOL_NAME = 'zhihu_search'
+export const PROJECT_KNOWLEDGE_TOOL_NAME = 'project_knowledge'
 export const PROPOSAL_MARKER = 'dsh-editor.proposal'
 
 export type ProposalMarker = {
