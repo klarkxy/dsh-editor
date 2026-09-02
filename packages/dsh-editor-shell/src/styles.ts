@@ -537,12 +537,13 @@ export const componentStyles = `
 .shell .settings-trigger-icon { display: grid; place-items: center; font-size: 13px; color: var(--meta); }
 .shell .settings-trigger:hover .settings-trigger-icon { color: var(--fg); }
 .shell .settings-dialog { width: min(760px, calc(100vw - 96px)); height: min(720px, calc(100dvh - 64px)); display: grid; grid-template-columns: 168px minmax(0, 1fr); padding: 0; overflow: hidden; }
-.shell .settings-nav { display: flex; flex-direction: column; gap: 8px; padding: var(--space-4) var(--space-3); border-right: 1px solid var(--hairline); background: var(--bg-sunken); }
+.shell .settings-nav { display: flex; flex-direction: column; gap: 2px; padding: var(--space-4) var(--space-3); border-right: 1px solid var(--hairline); background: var(--bg-sunken); }
 .shell .settings-nav h2 { margin: 0 0 var(--space-3); padding: 0 var(--space-2); font: 600 var(--text-md)/1.4 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
-/* 左侧导航走整卡可点:每条 tab 是一张带 hairline 的卡片,active 用 accent 描边 + soft 底色,hover 浮起。带 .settings-nav 提级以压过 .file-dialog button 的 inline-flex。 */
-.shell .settings-nav .settings-tab { display: flex; align-items: center; min-height: 0; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); color: var(--fg-2); cursor: pointer; font: 500 var(--text-sm)/1.2 var(--font-sans); letter-spacing: .04em; text-align: left; transition: background-color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform var(--motion-base) var(--ease), box-shadow var(--motion-base) var(--ease); }
-.shell .settings-nav .settings-tab:hover { border-color: var(--accent-soft); color: var(--fg); transform: translateY(-1px); box-shadow: var(--elev-raised); }
-.shell .settings-nav .settings-tab.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+/* 左侧导航是纯净列表:无框无底,hover 淡底,active 用 accent 淡底 + 强调色。
+   width 100% 显式撑满(Chromium 的 button 默认收缩到内容宽度),并压过 .file-dialog button 的 inline-flex/justify-content。 */
+.shell .settings-nav .settings-tab { display: flex; align-items: center; justify-content: flex-start; width: 100%; min-height: 32px; padding: 0 var(--space-3); border: 0; box-shadow: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-sm)/1.2 var(--font-sans); letter-spacing: .04em; text-align: left; }
+.shell .settings-nav .settings-tab:hover { background: var(--surface-warm); color: var(--fg); }
+.shell .settings-nav .settings-tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .shell .settings-body { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; }
 .shell .settings-header { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--hairline); }
 .shell .settings-header-title { font: 600 var(--text-md)/1.4 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
@@ -642,8 +643,11 @@ export const componentStyles = `
 .shell .models-overlay { z-index: 50; }
 .shell .models-candidate-dialog { width: min(560px, 100%); max-height: min(640px, calc(100dvh - 48px)); }
 .shell .models-candidate-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-height: 360px; overflow: auto; }
-.shell .models-candidate-label { display: flex; align-items: center; gap: var(--space-2); padding: 6px var(--space-2); border-radius: var(--radius-sm); cursor: pointer; }
-.shell .models-candidate-label:hover { background: var(--surface); }
+/* 提级到 dialog 作用域:压过 .file-dialog label 的 grid 和 .file-dialog input 的文本框样式,
+   否则勾选框和模型名会被竖向堆叠、勾选框被撑成文本框。 */
+.shell .models-candidate-dialog .models-candidate-label { display: flex; align-items: center; gap: var(--space-2); padding: 6px var(--space-2); border-radius: var(--radius-sm); cursor: pointer; }
+.shell .models-candidate-dialog .models-candidate-label:hover { background: var(--surface); }
+.shell .models-candidate-dialog .models-candidate-label input[type="checkbox"] { width: 14px; height: 14px; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 3px; background: var(--surface); accent-color: var(--accent-active); cursor: pointer; }
 .shell .models-candidate-id { font: 500 var(--text-sm)/1.4 var(--font-sans); color: var(--fg); }
 .shell .models-candidate-name { color: var(--meta); font-size: var(--text-xs); }
 .shell .models-candidate-description { margin: 0; font-size: var(--text-xs); color: var(--meta); }
