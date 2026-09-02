@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -34,24 +34,30 @@ async function resolveRuntime(home: string): Promise<{ nodePath: string; cliPath
 function errorHtml(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   const escaped = message.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char]!))
-  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>DSH Editor</title><style>body{font-family:system-ui;margin:3rem;max-width:48rem;line-height:1.5}code{display:block;white-space:pre-wrap;margin:1rem 0;padding:1rem;background:#f4f2ea}a{display:inline-block;padding:.5rem .8rem;border:1px solid #777;color:#222;text-decoration:none}</style><h1>DSH Editor 启动失败</h1><p>本地 DSH 服务未能就绪，请根据下面的诊断信息排查后重试。</p><code>${escaped}</code><a href="dsh-editor://retry">重试</a>`)}`
+  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>DSH Editor</title><style>body{font-family:system-ui;margin:3rem;max-width:48rem;line-height:1.5;-webkit-app-region:drag}code{display:block;white-space:pre-wrap;margin:1rem 0;padding:1rem;background:#f4f2ea}a{display:inline-block;padding:.5rem .8rem;border:1px solid #777;color:#222;text-decoration:none;-webkit-app-region:no-drag}</style><h1>DSH Editor 启动失败</h1><p>本地 DSH 服务未能就绪，请根据下面的诊断信息排查后重试。</p><code>${escaped}</code><a href="dsh-editor://retry">重试</a>`)}`
 }
 
 function loadingHtml(): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent('<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>DSH Editor</title><style>body{font-family:system-ui;display:grid;place-content:center;height:100vh;margin:0;background:#faf9f5;color:#393832}main{text-align:center}p{color:#77746c}</style><main><h1>DSH Editor</h1><p>正在启动本地写作环境…</p></main>')}`
+  return `data:text/html;charset=utf-8,${encodeURIComponent('<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>DSH Editor</title><style>body{font-family:system-ui;display:grid;place-content:center;height:100vh;margin:0;background:#faf9f5;color:#393832;-webkit-app-region:drag}main{text-align:center}p{color:#77746c}</style><main><h1>DSH Editor</h1><p>正在启动本地写作环境…</p></main>')}`
 }
 
 const lifecycle = createDesktopLifecycle({
-  createBrowserWindow: () => new BrowserWindow({
-    title: 'DSH Editor', width: 1440, height: 900, minWidth: 1280, minHeight: 720,
-    show: false, autoHideMenuBar: true, backgroundColor: '#faf9f5',
-    icon: join(desktopRoot, 'build', 'icon.png'),
-    webPreferences: {
-      preload: join(desktopRoot, 'preload.cjs'),
-      nodeIntegration: false, contextIsolation: true, sandbox: true,
-      webSecurity: true, allowRunningInsecureContent: false,
-    },
-  }) as unknown as EditorWindow,
+  createBrowserWindow: () => {
+    const window = new BrowserWindow({
+      title: 'DSH Editor', width: 1440, height: 900, minWidth: 1280, minHeight: 720,
+      show: false, frame: false, backgroundColor: '#faf9f5',
+      icon: join(desktopRoot, 'build', 'icon.png'),
+      webPreferences: {
+        preload: join(desktopRoot, 'preload.cjs'),
+        nodeIntegration: false, contextIsolation: true, sandbox: true,
+        webSecurity: true, allowRunningInsecureContent: false,
+      },
+    })
+    // Frameless window: forward maximize state to the renderer's own title bar.
+    window.on('maximize', () => window.webContents.send('dsh-window:maximized', true))
+    window.on('unmaximize', () => window.webContents.send('dsh-window:maximized', false))
+    return window as unknown as EditorWindow
+  },
   fromWebContents: (contents) => {
     const ctor = BrowserWindow as unknown as { fromWebContents(contents: unknown): EditorWindow | null }
     return ctor.fromWebContents(contents) ?? undefined
@@ -77,3 +83,19 @@ const lifecycle = createDesktopLifecycle({
 })
 
 claimPrimaryInstance(app as unknown as PrimaryApp, lifecycle)
+
+// Frameless window controls: the renderer's own title bar drives these through
+// the preload bridge (preload.cjs exposes window.dshWindow). Route by sender so
+// multi-window stays correct.
+ipcMain.on('dsh-window:minimize', (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.minimize()
+})
+ipcMain.on('dsh-window:toggle-maximize', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender)
+  if (!window) return
+  if (window.isMaximized()) window.unmaximize()
+  else window.maximize()
+})
+ipcMain.on('dsh-window:close', (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.close()
+})
