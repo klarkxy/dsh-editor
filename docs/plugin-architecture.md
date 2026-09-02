@@ -44,7 +44,8 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
 ```text
 dsh-editor-shell/client
 ├─ dsh-editor-workbench/contracts（构建时内联）
-└─ dsh-editor-novel-kernel/contracts（构建时内联）
+├─ dsh-editor-novel-kernel/contracts（构建时内联）
+└─ dsh-manuscript/client/editor-core（共享稿纸核心：editor / state / completion-preference / styles）
 
 dsh-editor-workbench/host
 └─ dsh-manuscript/host-api
@@ -96,7 +97,7 @@ dsh-editor-novel-kernel/host
 | `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy` |
 | `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt` |
 | `dsh-editor-shell` Host | `dsh-editor-shell` | （空） |
-| `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection` |
+| `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope` |
 | `dsh-grill/tools` | `dsh-grill-tools` | `tools` |
 | `dsh-grill/workflow` | `dsh-grill-workflow` | `systemPrompt` |
 
@@ -203,9 +204,9 @@ Context 信封常量：
 
 | 想改变的行为 | 所有者 |
 | --- | --- |
-| 三栏布局、稿纸、Chat 展示、设置、快捷键 | `dsh-editor-shell` |
-| 普通 Web 的稿纸抽屉 | `dsh-manuscript` client |
-| 稿件安全读写、草稿、搜索、FIM/patch、proposal apply | `dsh-manuscript` Host |
+| 三栏布局、稿纸、Chat 展示、设置、保留下来的高频快捷键 | `dsh-editor-shell` |
+| 普通 Web 的稿纸抽屉与共享稿纸核心 | `dsh-manuscript` client + `dsh-manuscript/client/editor-core` |
+| 稿件安全读写、草稿、FIM/patch、proposal apply | `dsh-manuscript` Host |
 | 项目结构、章节概览/状态、context、导入、快照、移动、归档 | `dsh-editor-workbench` |
 | 小说知识、proposal Tool、guard、系统提示词 | `dsh-editor-novel-kernel` |
 | 窗口、内置 DSH、profile、portable | `apps/desktop` 与桌面物化脚本 |

@@ -1,12 +1,12 @@
 # DSH Editor
 
-DSH Editor 是 Windows x64 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示稿件树与中央稿纸；写作搭档按需作为可调宽的第三栏打开。
+DSH Editor 是 Windows x64 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是 `正文 / 大纲 / 人物卡 / 世界书` 四个分组的文件树，中是稿纸编辑器，右是 dsh 对话线程；两侧栏可以折叠或进入专注模式。
 
 仓库保留两个可独立安装到普通 DSH Web profile 的公开插件，以及三个只随桌面 profile 交付的私有插件：
 
 | 组件 | 用途 | 数据所有者 |
 | --- | --- | --- |
-| Windows 桌面应用 | 项目初始化、Markdown 写作、写作助手、修改确认与导出 | 本地作品目录与应用私有数据 |
+| Windows 桌面应用 | 项目初始化、Markdown 写作、写作助手、修改确认 | 本地作品目录与应用私有数据 |
 | `dsh-manuscript` | Web 中的可关闭稿纸抽屉、文件/FIM RPC | DSH workspace、sandbox 与版本化文件 API |
 | `dsh-grill` | `scaffold_novel` 与四种小说协作模式 | DSH 工具、审批与官方 Chat |
 | `dsh-editor-workbench` | 项目、上下文、导入、快照、移动与归档 | 同一 live-session workspace authority |
@@ -37,7 +37,9 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm test:e2e:desktop
-pnpm test:e2e:workbench
+pnpm test:e2e:core-loop
+pnpm test:e2e:visual-audit
+pnpm test:e2e:author-flow
 pnpm test:e2e:missing-private
 pnpm prepare:desktop-runtime
 pnpm pack:desktop
@@ -50,7 +52,7 @@ pnpm test:e2e:portable
 
 ## 文档
 
-- [使用者指南](docs/user-guide.md)：桌面启动、灵活工作台、AI 编辑、快捷键、回滚与公开插件使用
+- [使用者指南](docs/user-guide.md)：桌面启动、三栏工作台、核心写作闭环、设置、快捷键与公开插件使用
 - [开发者指南](docs/development.md)：运行时准备、调试、测试与打包
 - [架构与边界](docs/architecture.md)：DSH 权威边界、profile、RPC 与安全约束
 - [插件架构与接口](docs/plugin-architecture.md)：双私有 Host 拓扑、RPC/Tool/slot 契约以及修改、替换和新建插件流程

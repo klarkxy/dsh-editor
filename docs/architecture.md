@@ -26,13 +26,12 @@ Electron（窗口、资源校验、子进程生命周期）
    └─ 内置 DSH 0.1.1-rc.2，127.0.0.1:随机端口
       └─ 专用 profiles/dsh-editor
          ├─ DSH base / web runtime / connection / renderer
-         ├─ dsh-manuscript：公开稿件 Host RPC 与 overlay
-         ├─ dsh-editor-workbench：私有项目生命周期与 context Host
+         ├─ dsh-manuscript：公开稿件 Host RPC、稿纸 overlay 与共享 editor-core
+         ├─ dsh-editor-workbench：私有项目生命周期、context、导入、快照与归档
          ├─ dsh-editor-novel-kernel：私有小说 Tool、guard、prompt 与知识卡
          └─ dsh-editor-shell：私有根界面
-            ├─ 左：工作区、会话与稿件树
-            ├─ 中：Markdown 稿纸、草稿、冲突、FIM、选段改写
-            └─ 右：DshChatPort → 唯一 DSH SessionFace 快照
+            ├─ 三栏：左文件树（4 组 + 组内新建）、中稿纸编辑器（ghost FIM + 选段改写 + ‹ › 章节导航）、右 DshChatPort
+            └─ shell client 拆分为 src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}，并复用 dsh-manuscript/client/editor-core
 ```
 
 普通 DSH `web` profile 仍可独立安装 `dsh-manuscript` 和 `dsh-grill`。桌面 profile 另外加载 workbench、novel-kernel 与 shell；shell 以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.1-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
@@ -41,7 +40,7 @@ Electron（窗口、资源校验、子进程生命周期）
 
 - **DSH**：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry（含显示名与最近入口）、sandbox、文件 API 与持久化。
 - **Electron**：单窗口、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。入口在 `apps/desktop/src/main.ts`，子进程监督在 `apps/desktop/src/supervisor.ts`。
-- **`dsh-editor-shell` Renderer**：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；新建、重命名、放弃草稿和离开保护均使用应用内、锁定焦点的对话框，不依赖浏览器 `prompt/confirm`；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据、绝对路径或 Node 文件系统。
+- **`dsh-editor-shell` Renderer**：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；新建、重命名、放弃草稿和离开保护均使用应用内、锁定焦点的对话框，不依赖浏览器 `prompt/confirm`；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据、绝对路径或 Node 文件系统。`client.ts` 不再是单体：4 千多行单文件已拆为 `src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}`，并以 `Editor` 包装 `dsh-manuscript/client/editor-core`（`editor.tsx` + `editor-state.ts` + `completion-preference.ts` + `styles.ts`），稿纸逻辑与公开 manuscript overlay 共用。
 - **`dsh-editor-shell` Host**：仅保留加载唯一 root client 所需的最小 Cordis 入口；Renderer 继续拥有界面、编辑 buffer 与作者确认流程。
 - **`dsh-editor-workbench` Host**：loopback-only 项目结构、章节概览与状态、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。
 - **`dsh-editor-novel-kernel` Host**：只读 `novel_knowledge`、预览式 `novel_propose`、工具 guard 与 system prompt；没有 RPC，也不直接写正文。
@@ -60,7 +59,7 @@ Electron（窗口、资源校验、子进程生命周期）
 
 `search.text` 仅做有界、字面量、大小写不敏感的 Markdown/TXT 扫描，拒绝正则与控制字符，跳过隐藏、生成和链接路径，并限制文件数、总字节和结果数。Renderer 只接收路径、行列、片段、偏移和版本；定位前再次比较版本。章节导航由递归工作区列表中完整的 `正文/**/*.{md,txt}` 自然排序产生，不依赖用户是否展开文件树。
 
-概览和卡片视图消费同一份 `project.overview` 响应，不复制章节或大纲数据。导出预检一次读取 Markdown/TXT 章节后同时形成自然顺序、空章警告、字数和最终 Blob；确认阶段只下载已经展示的内容，不再次读取。人物卡和世界书的“查找正文引用”只预填现有 `search.text` 的查询、`manuscript` 范围和请求序号；不增加引用 RPC、关系索引或向量库。未保存稿仍可发起引用搜索，但结果跳转沿用现有保存门禁。
+概览和卡片视图消费同一份 `project.overview` 响应，不复制章节或大纲数据。导出预检一次读取 Markdown/TXT 章节后同时形成自然顺序、空章警告、字数和最终 Blob；本版本未挂导出 UI，Host 仍按相同语义保留这条只读路径以便未来重新挂回。`search.text` 与人物卡/世界书的引用导航在 Renderer 没有入口，Host 不增加新的引用 RPC、关系索引或向量库。
 
 ## Desktop profile 与数据
 
@@ -101,7 +100,7 @@ Renderer 另维护最多 1,200 字符的本机跨作品作者约定，并在 V2 
 
 固定与动态读取结果、扫描计数和原始请求以 V2 JSON 信封一次提交给同一 DSH session；解析器仍严格接受历史 V1。文件文本是不可信数据，单文件缺失、格式无效、超限或读取失败只进入有界回执；整个 Host 编译失败则不调用 `session.prompt`。Renderer 仅显示原请求和不含原文的回执，DSH 历史保留完整信封。`novel_knowledge` 不属于该回执，深层或最新事实仍由 Agent 通过 `glob`、`grep`、`read` 验证。
 
-普通世界书编辑器在同一正文 buffer 上提供 `triggers/enabled/priority` 可视化设置；应用时只规范化有界 frontmatter，文件正文逐字保留，随后复用现有草稿、自动保存、expectedVersion 与冲突处理。没有 frontmatter 的旧文件可升级为规范头；显式但损坏的 frontmatter 禁止表单写入，必须先由作者手工修复。该表单不建立第二份世界书状态或存储。
+普通世界书的触发词、`enabled` 与 `priority` 只写在 Markdown 文件开头的 frontmatter 中；本版本没有专门的可视化触发设置面板，编辑方式改为手工修改文件头。Host 仍按相同 frontmatter 解析，损坏 / 停用 / 超出扫描限制的文件不会进入提示，文件正文不会被界面覆盖，缺 frontmatter 的旧文件继续以文件名作为触发词。
 
 未知节点或工具显示通用降级卡。Renderer 不持久化对话副本；刷新后仍以 DSH snapshot 为准。`novel_knowledge` 的运行中调用对用户隐藏；`novel_propose` 的结果只在通过 `dsh-editor-novel-kernel/contracts` 严格解析后渲染为作者确认卡。
 
@@ -151,7 +150,7 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 - 全 workspace typecheck、unit 与 build；
 - Chat adapter、patch stale/abort/bounds、profile collision/atomic deploy、supervisor timeout/exit/cleanup；
 - 公开插件打包及 fresh-home 安装/卸载矩阵；
-- Playwright Electron 当前源码窗口：DSH Editor 标题、私有 `.shell`、双栏写作身份、1280×720 外窗和关闭端口释放；
+- Playwright Electron 当前源码窗口：DSH Editor 标题、私有 `.shell`、默认三栏写作身份、1280×720 外窗和关闭端口释放；
 - portable EXE：固定资源版本/哈希、启动、核心旅程、关闭与无遗留进程。
 
 历史报告不能替代当前源码证据。兼容版本只声明 `0.1.1-rc.2`；升级必须重新验证公开会话契约、root priority、CSP、profile patch、RPC 和真实 EXE。

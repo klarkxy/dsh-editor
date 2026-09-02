@@ -22,15 +22,21 @@ pnpm install --frozen-lockfile
 
 ```text
 apps/desktop/                  Electron main、profile 部署、进程监督与 portable 配置
-packages/dsh-editor-shell/     仅桌面 profile 加载的私有写作客户端
+packages/dsh-editor-shell/     仅桌面 profile 加载的私有写作客户端（src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}）
 packages/dsh-editor-workbench/ 私有项目生命周期与 context Host
 packages/dsh-editor-novel-kernel/ 私有小说 Tool、guard、prompt 与知识卡
-packages/dsh-manuscript/       Host RPC 与公开 Web 稿纸插件
+packages/dsh-manuscript/       Host RPC、公开 Web 稿纸插件与共享 editor-core（src/client/editor-core/）
 packages/dsh-grill/            Host 工具和写作 workflow
 scripts/dev.mjs                GUI-first 桌面开发入口
 scripts/dev-web.mjs            两个公开插件的 Web 调试入口
 scripts/prepare-desktop-*.mjs  开发/打包运行时物化与校验
+e2e/core-loop.mjs              Playwright Electron 核心闭环验收
+e2e/visual-audit.mjs           Playwright Electron 精简视觉走查
 e2e/desktop.mjs                Playwright Electron 当前源码验收
+e2e/author-flow-live.mjs       带凭据的端到端 AI 流程
+e2e/plugin-matrix.mjs          公开插件 fresh-home 安装/卸载矩阵
+e2e/portable.mjs               portable EXE 验收
+e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 .dev/                          本地桌面 DSH home/runtime（忽略）
 .pack/                         portable、报告、哈希和公开插件包（忽略）
 ```
@@ -48,14 +54,16 @@ e2e/desktop.mjs                Playwright Electron 当前源码验收
 | `pnpm test` | 全部 Vitest contract/behavior 测试 |
 | `pnpm build` | 构建桌面 main、三个私有插件与两个公开插件 |
 | `pnpm test:e2e:desktop` | 驱动真实 Electron 当前源码窗口 |
-| `pnpm test:e2e:workbench` | 驱动真实 DSH Host 与浏览器完成工作区生命周期 |
+| `pnpm test:e2e:core-loop` | 驱动 Home → 作品 → 稿纸 → 搭档 的核心闭环 |
+| `pnpm test:e2e:visual-audit` | 顶栏/三栏/双主题 的精简视觉走查 |
+| `pnpm test:e2e:author-flow` | 带凭据的端到端 AI 流程（可选） |
 | `pnpm test:e2e:missing-private` | 隔离移除每个必需私有 Host 包并确认 DSH 启动失败 |
 | `pnpm prepare:desktop-runtime` | 物化并哈希 Node、DSH、profile 与包闭包 |
-| `pnpm test:e2e:portable` | 真正启动 portable 外层 EXE，检查双栏 GUI、退出码与端口清理 |
+| `pnpm test:e2e:portable` | 真正启动 portable 外层 EXE，检查三栏 GUI、退出码与端口清理 |
 | `pnpm pack:desktop` | 生成未签名 Windows x64 portable EXE |
 | `pnpm pack:plugins` | 生成两个公开插件 tarball |
 | `pnpm test:e2e:matrix` | 公开插件 fresh-home 安装/卸载矩阵 |
-| `pnpm verify:desktop` | 桌面 typecheck、unit、build、E2E |
+| `pnpm verify:desktop` | 桌面 typecheck、unit、build、桌面 E2E 与核心闭环 |
 | `pnpm verify:delivery` | 桌面验证、公开插件矩阵、缺包负向 smoke、桌面打包和 portable E2E |
 
 ## `pnpm run dev`
@@ -81,7 +89,7 @@ e2e/desktop.mjs                Playwright Electron 当前源码验收
 - Host 入口只维持插件生命周期，让 DSH 发布 `./client`。
 - package 必须导出 `./package.json`；DSH 客户端发现依赖该公开解析契约。
 - 通过 root slot `priority: -100` 遮蔽官方 priority 0 AppFrame；最低 priority 渲染。该行为与 rc.2 root 类型声明中的普通插件指导相冲突，只允许在固定 `0.1.1-rc.2`、私有 `dsh-editor` profile 和完整 E2E 闸门下使用；它是明确的升级阻断点。
-- 客户端只注入 runtime、connection、sessions、workspaces 和 slots。
+- 客户端只注入 runtime、connection、sessions、workspaces、slots 和 settingsScope。
 - `DshChatPort` 只投影单一 `ConversationSnapshot`，不 `connection.start()`、不持久化 Chat。
 
 ### `dsh-editor-workbench`
@@ -132,7 +140,7 @@ pnpm test:e2e:desktop
 - loopback 随机端口；
 - `document.title === 'DSH Editor'`；
 - 私有 `.shell` 已挂载且没有官方首页身份；
-- 无会话时呈现文件树与欢迎稿纸；搭档在进入作品后按需从右侧打开；
+- 默认呈现三栏：左侧四组（`正文 / 大纲 / 人物卡 / 世界书`）、中央稿纸、右侧写作搭档；
 - 外窗可缩到 1280×720；
 - 关闭后原端口不可访问。
 
