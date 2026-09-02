@@ -23,7 +23,7 @@ import { registerRoot } from '../root-registration.ts'
 import { writingPreferences, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
 import { redesignedStyles } from '../styles.ts'
 import { createDialogDirectory, errorMessage, isStaleFailure, safeRpcCall, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
-import { currentSession, DeepSeekWhaleMark, PaperStage, PanelResizer, useObservable } from './components.ts'
+import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, useObservable } from './components.ts'
 import { ConfirmDialog, CreateDocumentDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger } from './settings.tsx'
 import { ThemeToggle, useTheme, type HostThemeSync } from './theme.ts'
@@ -31,6 +31,7 @@ import { Tree, FileContextMenu } from './sidebar.ts'
 import { Editor } from './editor.ts'
 import { Chat } from './chat.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
+import { WindowControls, titleBarDoubleClick } from './window-controls.tsx'
 import { buildNovelIndexPrompt } from '../novel-index.ts'
 
 const SIDEBAR_DEFAULT = 248
@@ -205,7 +206,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
   const [createBusy, setCreateBusy] = useState(false)
   const [openingWorkspace, setOpeningWorkspace] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
-  const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false)
   const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | null>(null)
   const [manualWorkspacePath, setManualWorkspacePath] = useState('')
   const [newProject, setNewProject] = useState<{ busy: boolean; note: string } | null>(null)
@@ -225,6 +225,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
   const [statusBusy, setStatusBusy] = useState(false)
   const [editorDirty, setEditorDirty] = useState(false)
   const [fileMenu, setFileMenu] = useState<{ path: string; x: number; y: number } | null>(null)
+  const [imagePreview, setImagePreview] = useState<{ path: string; url: string } | null>(null)
   const [managePath, setManagePath] = useState<string | null>(null)
   const [manageBusy, setManageBusy] = useState(false)
   const [manageNote, setManageNote] = useState('')
@@ -301,7 +302,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
     if (!openWorkspaceId) setPath('')
     setFiles([]); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
     setFileMenu(null); setManagePath(null); setManageNote('')
-    setOverview(null); setOverviewError(''); setOverviewBusy(false); setStatusBusy(false); setWorkspaceMenuOpen(false); setWorkspaceSwitcherOpen(false)
+    setOverview(null); setOverviewError(''); setOverviewBusy(false); setStatusBusy(false); setWorkspaceMenuOpen(false)
   }, [openWorkspaceId])
   useEffect(() => {
     if (!fileSession) { setFiles([]); return }
@@ -365,6 +366,27 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
     }
     setWorkbenchNote('')
     setPath(nextPath)
+  }
+  const openImagePreview = async (imagePath: string) => {
+    if (!fileSession) return
+    const read = await safeRpcCall<{ base64: string; mime: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.readBinary', {
+      sessionId: fileSession.sessionId,
+      path: imagePath,
+    }))
+    if (!read.ok) { setWorkbenchNote(errorMessage(read)); return }
+    setWorkbenchNote('')
+    const bytes = Uint8Array.from(globalThis.atob(read.value.base64), (char) => char.charCodeAt(0))
+    const url = URL.createObjectURL(new Blob([bytes], { type: read.value.mime }))
+    setImagePreview((old) => {
+      if (old) URL.revokeObjectURL(old.url)
+      return { path: imagePath, url }
+    })
+  }
+  const closeImagePreview = () => {
+    setImagePreview((old) => {
+      if (old) URL.revokeObjectURL(old.url)
+      return null
+    })
   }
   const openFileMenu = (selectedPath: string, position: { x: number; y: number }) => {
     if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
@@ -791,7 +813,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
       setHomeNote('目录选择器暂时不可用，请直接输入作品路径。')
       if (session) {
         setWorkbenchNote('目录选择器暂时不可用，请直接输入作品路径。')
-        setWorkspaceSwitcherOpen(false)
         setWorkspaceMenuOpen(true)
       }
       return
@@ -859,14 +880,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
   ) : null
   const closeWorkspaceChrome = () => {
     setWorkspaceMenuOpen(false)
-    setWorkspaceSwitcherOpen(false)
   }
   const leaveToHome = async () => {
     closeWorkspaceChrome()
     if (editorDirty) { setWorkbenchNote('请先保存当前文档，再返回作品列表。'); return }
     if (!(await canLeaveAssistantDraft())) return
     setAssistantDraftDirty(false)
-    setAssistantOpen(false)
     setFocusMode(false)
     workspaceOpenGate.begin('home')
     pendingWorkspaceOpen.current = null
@@ -962,7 +981,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
   if (!fileSession || workspaceOpen.kind !== 'ready') {
     return e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
       e('style', null, redesignedStyles),
-      e('header', { className: 'chrome' },
+      e('header', { className: 'chrome', onDoubleClick: titleBarDoubleClick },
         e('div', { className: 'brand-lockup' },
           e('span', { className: 'brand-mark', 'aria-hidden': 'true' }, 'D'),
           e('strong', null, 'DSH Editor'),
@@ -971,6 +990,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
         e('span', { className: 'topbar-actions' },
           e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
           e(SettingsTrigger, { onOpen: openSettings }),
+          e(WindowControls, null),
         ),
       ),
       e(PaperStage, { label: '空白稿纸' },
@@ -1055,26 +1075,22 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
     style: { minWidth: 0, gridTemplateColumns: layoutColumns },
   },
     e('style', null, redesignedStyles),
-    e('header', { className: 'chrome' },
+    e('header', { className: 'chrome', onDoubleClick: titleBarDoubleClick },
       e('div', { className: 'workspace-chrome', role: 'group', 'aria-label': '作品' },
         e('details', {
-          className: 'project-switcher',
-          open: workspaceSwitcherOpen,
-          onToggle: (event: ChangeEvent<HTMLDetailsElement>) => {
-            const open = event.currentTarget.open
-            setWorkspaceSwitcherOpen(open)
-            if (open) setWorkspaceMenuOpen(false)
-          },
+          className: 'workspace-menu',
+          open: workspaceMenuOpen,
+          onToggle: (event: ChangeEvent<HTMLDetailsElement>) => setWorkspaceMenuOpen(event.currentTarget.open),
         },
           e('summary', {
             role: 'button',
-            title: '切换作品',
-            'aria-label': '切换作品',
-            'aria-expanded': workspaceSwitcherOpen,
-            'aria-controls': 'workspace-switcher-list',
+            title: '作品菜单',
+            'aria-label': '作品菜单',
+            'aria-expanded': workspaceMenuOpen,
+            'aria-controls': 'workspace-actions',
           }, e('span', null, currentWorkspace?.title || currentWorkspace?.path || '作品')),
-          e('div', { id: 'workspace-switcher-list', className: 'workspace-menu-panel', 'aria-label': '最近作品' },
-            e('div', { className: 'workspace-menu-actions' },
+          e('div', { id: 'workspace-actions', className: 'workspace-menu-panel', 'aria-label': '作品操作' },
+            workspaces.items.length ? e('div', { className: 'workspace-menu-actions', 'aria-label': '切换作品' },
               workspaces.items.map((workspace) => e('button', {
                 key: workspace.workspaceId,
                 type: 'button',
@@ -1082,20 +1098,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
                 disabled: openingWorkspace,
                 onClick: () => void switchToWorkspace(workspace.workspaceId),
               }, workspace.title || workspace.path)),
-            ),
-          ),
-        ),
-        e('details', {
-          className: 'workspace-menu',
-          open: workspaceMenuOpen,
-          onToggle: (event: ChangeEvent<HTMLDetailsElement>) => {
-            const open = event.currentTarget.open
-            setWorkspaceMenuOpen(open)
-            if (open) setWorkspaceSwitcherOpen(false)
-          },
-        },
-          e('summary', { role: 'button', title: '作品菜单', 'aria-label': '作品菜单', 'aria-expanded': workspaceMenuOpen, 'aria-controls': 'workspace-actions' }, '作品'),
-          e('div', { id: 'workspace-actions', className: 'workspace-menu-panel', 'aria-label': '作品操作' },
+            ) : null,
+            workspaces.items.length ? e('hr', { className: 'workspace-menu-divider' }) : null,
             e('div', { className: 'workspace-menu-actions' },
               e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void openAnotherWorkspace() }, '打开作品'),
               e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void startNewProject() }, '新建'),
@@ -1131,6 +1135,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
         e(ThemeToggle, { theme, onChange: setTheme }),
         e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
         e(SettingsTrigger, { onOpen: openSettings }),
+        e(WindowControls, null),
       ),
     ),
     sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
@@ -1147,7 +1152,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
       workspaceOpen.warning ? e('p', { className: 'warning pad', role: 'status' }, workspaceOpen.warning) : null,
       workbenchNote ? e('p', { className: `pad`, role: 'status' }, workbenchNote) : null,
-      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onFileMenu: openFileMenu, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), onCreateInGroup: (kind) => openCreateDialog(kind), onCreateGroup: () => openCreateDialog('group'), revision: treeRevision }),
+      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), onCreateGroup: () => openCreateDialog('group'), revision: treeRevision }),
     ) : null,
     sidebarVisible ? e(PanelResizer, {
       side: 'left',
@@ -1241,6 +1246,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
       onConfirm: renameManaged,
     }) : null,
     renderCommandPalette(),
+    imagePreview ? e(ImagePreviewOverlay, { path: imagePreview.path, url: imagePreview.url, onClose: closeImagePreview }) : null,
     settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, onClose: () => setSettingsOpen(false) }) : null,
   )
 }

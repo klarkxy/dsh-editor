@@ -82,12 +82,6 @@ export type PendingWorkspaceOpen = {
 
 export type ManagedWorkspace = { workspaceId: WorkspaceId; title: string; path: string; removable: boolean }
 
-export type AuthorFlowExample = Readonly<{
-  label: string
-  description: string
-  prompt: string
-}>
-
 export type RevealRequest = {
   path: string
   line: number
@@ -116,26 +110,13 @@ export function orderTreeEntries<T extends { type: 'file' | 'directory' | 'other
 }
 
 export function treeRowPadding(level: number): number {
-  return 14 + Math.max(0, level) * 14
+  return 12 + Math.max(0, level) * 12
 }
 
 export function treeExpansionPaths(path: string): string[] {
   if (!path.startsWith('正文/')) return []
   const parts = path.split('/').filter(Boolean)
   return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('/'))
-}
-
-/**
- * Top-level workspace directories already represented by static sidebar groups
- * (大纲 / 人物卡 / 世界书) and the manuscript header (正文). The root tree row
- * must hide these to avoid rendering them twice — the static groups own the
- * affordance (expand, + create, label). Nested children of these directories
- * are *not* affected; only the root listing.
- */
-export const managedGroupDirectories: readonly string[] = ['大纲', '人物卡', '世界书', '正文']
-
-export function isManagedGroupName(name: string): boolean {
-  return managedGroupDirectories.includes(name)
 }
 
 export function isChapterDocumentPath(path: string): boolean {
@@ -225,6 +206,13 @@ export function supportedWorkspaceTextPaths(files: readonly string[]): string[] 
   return files.filter((path) => /\.(?:md|txt)$/i.test(path) && !path.split('/').some((part) => part.startsWith('.')))
 }
 
+const IMAGE_PATH_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|svg)$/i
+
+/** Tree rows with an image extension open the lightbox preview instead of the text editor. */
+export function isImagePath(path: string): boolean {
+  return IMAGE_PATH_PATTERN.test(path)
+}
+
 export function relocationFailureMessage(cleanupFailed: boolean): string {
   return cleanupFailed
     ? '所选文件夹没有可验证的现有正文；原作品入口已保留。新位置入口未能自动移除，可从最近作品中手动移除。'
@@ -245,34 +233,6 @@ export function proposalAppliedNavigation(appliedPath: string, currentPath: stri
     ...(appliedPath.startsWith('正文/') ? { expandPath: appliedPath } : {}),
     refreshContent: !editorDirty && appliedPath === currentPath,
   }
-}
-
-export function authorFlowExamples(activePath?: string): readonly AuthorFlowExample[] {
-  const chapterTarget = activePath?.startsWith('正文/')
-    ? `当前章节《${activePath.split('/').pop()?.replace(/\.(md|txt)$/i, '') ?? ''}》`
-    : '第一章'
-  return [
-    {
-      label: '从零规划',
-      description: '先确认题材、冲突与结局，再建立世界观。',
-      prompt: '我要从零规划一部长篇小说。请先用少量关键问题确认题材、主角、核心冲突和结局方向，再为项目总览与世界观提出可应用的文件建议。',
-    },
-    {
-      label: '建立人物卡',
-      description: '整理主角、配角、关系和人物弧光。',
-      prompt: '请阅读现有项目资料，建立主要人物卡和人物索引，写清目标、动机、秘密、关系、成长弧与说话习惯，并以可应用的文件建议给我。',
-    },
-    {
-      label: '编排十章',
-      description: '把总纲拆成连续、可执行的十章章纲。',
-      prompt: '请基于世界观和人物卡规划故事总纲，并编排前 10 章章纲。每章写清目标、冲突、转折、结果和下一章钩子，以可应用的文件建议给我。',
-    },
-    {
-      label: '生成正文',
-      description: `依据资料起草${chapterTarget}，先提案后写入。`,
-      prompt: `请阅读项目总览、世界观、人物卡、总纲和章纲，为${chapterTarget}生成至少 2000 字正文。保持设定一致、场景完整，并以可应用的文件建议给我。`,
-    },
-  ]
 }
 
 export type ResizablePanelSide = 'left' | 'right'

@@ -1,4 +1,4 @@
-import { createElement as e, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { createElement as e, useEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   resizedPanelWidth,
@@ -29,6 +29,29 @@ export function PaperStage(props: { label: string; children?: ReactNode }) {
       e('h1', null, '开始写作'),
       props.children,
     ),
+  )
+}
+
+/** 图像预览 lightbox:点遮罩或 Esc 关闭。 */
+export function ImagePreviewOverlay(props: { path: string; url: string; onClose(): void }) {
+  const closeRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    closeRef.current?.focus()
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); props.onClose() }
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => globalThis.removeEventListener('keydown', onKey)
+  }, [props.path])
+  return e('div', {
+    className: 'image-preview',
+    role: 'dialog',
+    'aria-modal': true,
+    'aria-label': `预览 ${props.path}`,
+    onClick: (event: ReactPointerEvent<HTMLDivElement>) => { if (event.target === event.currentTarget) props.onClose() },
+  },
+    e('img', { src: props.url, alt: props.path }),
+    e('button', { ref: closeRef, type: 'button', className: 'icon-button image-preview-close', 'aria-label': '关闭预览', onClick: props.onClose }, '×'),
   )
 }
 

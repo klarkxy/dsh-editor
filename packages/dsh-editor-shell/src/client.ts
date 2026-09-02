@@ -17,7 +17,6 @@ export const inject = ['slots', 'sessions', 'workspaces', 'connection', 'setting
 
 // Re-exports — keep the old monolith surface so existing callers and specs still work.
 export {
-  authorFlowExamples,
   canSubmitComposer,
   chapterStatusText,
   claimInitialWorkspaceResume,
@@ -28,12 +27,10 @@ export {
   hasRelocatableManuscriptFiles,
   hasVisibleWorkspaceEntries,
   isChapterDocumentPath,
-  isManagedGroupName,
   isSessionMissing,
   isStaleFailure,
   isSuccessWorkbenchNote,
   LatestRequestGate,
-  managedGroupDirectories,
   orderTreeEntries,
   proposalAppliedNavigation,
   relocationFailureMessage,
@@ -50,7 +47,6 @@ export {
   workspaceShortcut,
 } from './client/shared.ts'
 export type {
-  AuthorFlowExample,
   ManagedWorkspace,
   PendingWorkspaceOpen,
   ProjectContextReceiptBundle,

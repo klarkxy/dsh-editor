@@ -39,8 +39,8 @@ import {
 import { ConversationRenameQueue, conversationRows, nextAutomaticConversationTitle, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
 import { DeepSeekWhaleMark, useObservable } from './components.ts'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
+import { Select } from './select.tsx'
 import {
-  authorFlowExamples,
   canSubmitComposer,
   safeRpcCall,
   shouldSubmitComposer,
@@ -71,7 +71,6 @@ export function ModelIndicator({ ctx, session, onConfigure }: { ctx: ShellContex
   }
   return e('div', { className: 'compact-control' },
     e('span', { className: 'model-indicator', title: '本次对话使用的模型' }, current ? `${current.providerName} · ${current.model.name}` : models.current.model),
-    e('button', { type: 'button', onClick: onConfigure }, '模型设置'),
   )
 }
 
@@ -395,7 +394,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     removed: snapshot.removed,
     outgoingState: outgoing?.state,
   })
-  const examples = authorFlowExamples(activePath)
   const showGuide = rows.length === 0 && !outgoing && (!snapshot.running || internalIndexActive) && !partial && snapshot.pending.length === 0
   useEffect(() => {
     if (outgoingIsCanonical) setOutgoing(null)
@@ -432,7 +430,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   return e('aside', { className: 'chat', 'aria-label': '写作助手', hidden },
     e('header', { className: 'chat-header' },
       e('strong', { className: 'chat-brand' }, e(DeepSeekWhaleMark), connected ? '搭档' : '重连中'),
-      e('label', { className: 'conversation-select' }, e('span', { className: 'sr-only' }, '切换对话'), e('select', { value: session.sessionId, 'aria-label': '切换对话', onChange: (event: ChangeEvent<HTMLSelectElement>) => void switchConversation(event.target.value) }, conversations.map((item) => e('option', { key: item.id, value: item.id }, item.title)))),
+      e('label', { className: 'conversation-select' }, e('span', null, '会话'), e(Select, { value: session.sessionId, 'aria-label': '切换对话', options: conversations.map((item) => ({ value: item.id, label: item.title })), onChange: (next) => void switchConversation(next) })),
       e('div', { className: 'chat-controls' }, e(ModelIndicator, { key: `${session.sessionId}:${modelRevision}`, ctx, session, onConfigure })),
       e('div', { className: 'chat-header-actions' },
         e('button', { className: 'icon-button', type: 'button', title: '新对话', 'aria-label': '新对话', onClick: () => setCreatingConversation(true) }, '＋'),
@@ -450,21 +448,11 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       onConfigure,
     }) : null,
     e('div', { className: 'chat-history' },
-      showGuide ? e('section', { className: 'chat-guide', 'aria-label': '写作搭档功能与示例' },
+      showGuide ? e('section', { className: 'chat-guide', 'aria-label': '写作搭档功能说明' },
         e('header', null,
           e('strong', null, '从构思到正文'),
           e('small', null, '搭档会读取项目总览、总纲、人物卡与世界书；所有文件修改都会先成为提案。'),
         ),
-        e('div', { className: 'chat-guide-examples' }, examples.map((item) => e('button', {
-          key: item.label,
-          type: 'button',
-          onClick: () => setDraft(item.prompt),
-          title: `填入示例：${item.label}`,
-        },
-        e('strong', null, item.label),
-        e('span', null, item.description),
-        ))),
-        e('small', null, '点击示例只会填入输入框。'),
       ) : null,
       snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? '加载中…' : '加载更早消息') : null,
       rows.map((row) => row.proposal

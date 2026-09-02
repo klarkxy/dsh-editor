@@ -118,7 +118,7 @@ export const baseStyles = `
 .shell, .shell *, .shell *::before, .shell *::after { box-sizing: border-box; }
 .shell {
   width: 100%;
-  min-height: 100dvh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: var(--tree-w) minmax(0, 1fr) var(--chat-w);
   grid-template-rows: var(--topbar-h) minmax(0, 1fr);
@@ -155,24 +155,33 @@ export const baseStyles = `
 
 export const componentStyles = `
 /* ── Top bar ─────────────────────────────────────────────── */
+/* 无框窗口:顶栏即标题栏,整体可拖拽,交互控件排除。 */
 .shell > .chrome {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: var(--tree-w) minmax(0, 1fr) var(--chat-w);
+  grid-template-columns: var(--tree-w) minmax(0, 1fr) auto;
   align-items: center;
   height: var(--topbar-h);
   border-bottom: 1px solid var(--hairline);
   background: var(--bg);
   color: var(--fg-2);
   min-width: 0;
+  -webkit-app-region: drag;
 }
+.shell > .chrome button, .shell > .chrome summary, .shell > .chrome input, .shell > .chrome a, .shell > .chrome .select, .shell > .chrome .workspace-menu-panel { -webkit-app-region: no-drag; }
+.shell .window-controls { display: inline-flex; align-items: center; gap: 0; -webkit-app-region: no-drag; }
+.shell .window-controls button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: var(--topbar-h); border: 0; border-radius: 0; background: transparent; color: var(--fg-2); cursor: pointer; font: 400 13px/1 var(--font-sans); }
+.shell .window-controls button:hover { background: var(--surface-warm); color: var(--fg); }
+.shell .window-controls button.window-close:hover { background: var(--danger); color: #fff; }
 .shell > .chrome > * { min-width: 0; padding: 0 var(--space-4); }
+.shell > .chrome > .topbar-actions { flex: none; }
 .shell > .chrome > .workspace-chrome { border-left: 1px solid var(--hairline); border-right: 1px solid var(--hairline); padding: 0 var(--space-5); }
 .shell > .chrome > .topbar-actions { justify-content: flex-end; gap: var(--space-4); }
 .shell .brand-lockup { display: flex; align-items: center; gap: 8px; flex: none; font-size: var(--text-sm); letter-spacing: .08em; }
 .shell .brand-mark { display: grid; width: 22px; height: 22px; place-items: center; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-on); font-weight: 700; font-size: 12px; }
 .shell .workspace-chrome { display: flex; align-items: center; gap: 2px; }
-.shell .workspace-chrome .project-switcher, .shell .workspace-chrome .workspace-menu { position: relative; }
+.shell .workspace-chrome .workspace-menu { position: relative; }
+.shell .workspace-menu-divider { border: 0; border-top: 1px solid var(--hairline); margin: 4px 2px; }
 .shell .workspace-chrome details > summary { display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border: 0; background: transparent; cursor: pointer; list-style: none; font-weight: 500; letter-spacing: .04em; color: var(--fg); border-radius: var(--radius-sm); white-space: nowrap; flex-shrink: 0; }
 .shell .workspace-chrome details > summary::-webkit-details-marker { display: none; }
 .shell .workspace-chrome details > summary > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -228,37 +237,30 @@ export const componentStyles = `
 .shell > .sidebar { grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--hairline); background: var(--bg-sunken); }
 .shell .side-title { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 8px; font-size: var(--text-xs); font-weight: 500; letter-spacing: .16em; color: var(--meta); }
 .shell .side-title .icon-button { font-size: 14px; }
-.shell .tree { flex: 1 1 auto; min-height: 72px; overflow: auto; padding: 4px 6px 20px; display: flex; flex-direction: column; gap: 14px; }
-.shell .tree-static-groups, .shell .tree-manuscript { display: flex; flex-direction: column; gap: 14px; }
-.shell .tree-static-group { display: flex; flex-direction: column; gap: 2px; }
-.shell .tree-directory-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 4px 10px 6px; }
+.shell .tree { flex: 1 1 auto; min-height: 72px; overflow: auto; padding: 4px 6px 20px; display: flex; flex-direction: column; }
+.shell .tree-directory-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 2px 8px 2px 0; }
 .shell .tree-static-row { font-size: var(--text-xs); font-weight: 500; letter-spacing: .16em; color: var(--meta); }
 .shell .tree-marker { width: 12px; flex: none; color: var(--meta); text-align: center; font-size: 11px; }
 .shell .tree-static-row .tree-marker { font-size: 14px; }
-.shell .tree-manuscript-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px 6px; }
-.shell .tree-manuscript-header > span { font-size: var(--text-xs); font-weight: 500; letter-spacing: .16em; color: var(--meta); }
-/* Manuscript section header: same shape as the static group rows (大纲/人物卡/世界书)
-   so the user can collapse 正文 to focus on docs/notes, but styled like a section
-   divider — small caps, muted, no rounded background. The class is also picked
-   up by the visual-audit selector that matches a tree-row containing 正文. */
-.shell .tree-row.tree-manuscript-row {
-  padding: 4px 10px 6px;
-  border-radius: 0;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  letter-spacing: .16em;
-  color: var(--meta);
-}
-.shell .tree-row.tree-manuscript-row:hover { background: transparent; color: var(--fg); }
 .shell .tree-directory-add { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; opacity: .68; color: var(--meta); font-size: 14px; }
 .shell .tree-directory-add:hover, .shell .tree-directory-add:focus-visible { opacity: 1; background: var(--surface); color: var(--fg); }
-.shell .tree-row, .shell .tree-file-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 6px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-base); line-height: 1.35; letter-spacing: .04em; }
+.shell .tree-row, .shell .tree-file-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-base); line-height: 1.35; letter-spacing: .04em; }
 .shell .tree-row > span:last-child, .shell .tree-file-row > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .tree-row:hover, .shell .tree-file-row:hover { background: var(--surface); color: var(--fg); }
 /* 选中态用 accent-soft(墨蓝淡底)替代原本的灰底,让"我现在在写哪一章"更醒目。 */
 .shell .tree-row[aria-current="page"], .shell .tree-file-row[aria-current="page"] { background: var(--accent-soft); color: var(--fg); }
 .shell .tree-row[aria-current="page"]::before, .shell .tree-file-row[aria-current="page"]::before { content: ''; width: 2px; align-self: stretch; margin: -2px 2px -2px -2px; background: var(--accent); border-radius: 2px; }
 .shell .tree-row.danger, .shell .tree-file-row.danger { color: var(--danger); }
+
+/* 图像预览 lightbox */
+.shell .image-preview { position: fixed; z-index: 35; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--studio) 82%, transparent); cursor: zoom-out; }
+.shell .image-preview img { max-width: 90vw; max-height: 90dvh; object-fit: contain; box-shadow: var(--elev-card); border-radius: var(--radius-sm); background: var(--surface); }
+.shell .image-preview-close { position: fixed; top: 18px; right: 18px; width: 34px; height: 34px; font-size: 18px; color: var(--fg-2); background: var(--surface); border-radius: 50%; box-shadow: var(--elev-ring); }
+
+/* 搭档面板关闭后的右下角浮动入口 */
+.shell > .assistant-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 12; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border: 1px solid var(--hairline-strong); border-radius: 999px; background: var(--surface); color: var(--fg); box-shadow: var(--elev-card); cursor: pointer; font: 500 var(--text-sm)/1 var(--font-sans); letter-spacing: .06em; }
+.shell > .assistant-launcher:hover { background: var(--surface-warm); box-shadow: var(--elev-card), var(--elev-ring-accent); }
+.shell > .assistant-launcher .whale-mark { width: 18px; height: 18px; color: var(--accent); }
 
 /* ── Columns / paper / chat ─────────────────────────────── */
 .shell .panel-resizer { grid-row: 2; position: relative; z-index: 4; cursor: col-resize; background: var(--border); }

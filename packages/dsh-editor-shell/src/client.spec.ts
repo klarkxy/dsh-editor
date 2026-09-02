@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
-  authorFlowExamples,
   canSubmitComposer,
   chapterStatusText,
   claimInitialWorkspaceResume,
@@ -12,12 +11,10 @@ import {
   hasRelocatableManuscriptFiles,
   hasVisibleWorkspaceEntries,
   isChapterDocumentPath,
-  isManagedGroupName,
   isSessionMissing,
   isStaleFailure,
   isSuccessWorkbenchNote,
   LatestRequestGate,
-  managedGroupDirectories,
   orderTreeEntries,
   proposalAppliedNavigation,
   relocationFailureMessage,
@@ -163,36 +160,24 @@ describe('shell manuscript RPC safety', () => {
     ]
     expect(orderTreeEntries('', entries).map((entry) => entry.name)).toEqual(['项目总览.md', '正文', '世界书'])
     expect(orderTreeEntries('正文', entries)).toEqual(entries)
-    expect(treeRowPadding(0)).toBe(14)
-    expect(treeRowPadding(1)).toBe(28)
+    expect(treeRowPadding(0)).toBe(12)
+    expect(treeRowPadding(1)).toBe(24)
   })
 
-  it('hides the four managed group directories at the root and leaves nested children alone', () => {
-    expect(managedGroupDirectories).toEqual(['大纲', '人物卡', '世界书', '正文'])
-    expect(isManagedGroupName('大纲')).toBe(true)
-    expect(isManagedGroupName('人物卡')).toBe(true)
-    expect(isManagedGroupName('世界书')).toBe(true)
-    expect(isManagedGroupName('正文')).toBe(true)
-    expect(isManagedGroupName('第一卷')).toBe(false)
-    expect(isManagedGroupName('项目总览.md')).toBe(false)
-
+  it('renders every real directory in the tree and hides only dot-prefixed entries', () => {
+    // 预设分组(大纲/人物卡/世界书/正文)已移除:目录被实际创建后自然出现在树里。
     const root = [
       { name: '大纲', type: 'directory' as const },
-      { name: '人物卡', type: 'directory' as const },
-      { name: '世界书', type: 'directory' as const },
       { name: '正文', type: 'directory' as const },
+      { name: '.dsh-editor', type: 'directory' as const },
       { name: '项目总览.md', type: 'file' as const },
     ]
-    const filterRoot = (path: string, entries: typeof root) =>
-      entries.filter((item) => !item.name.startsWith('.') && (path !== '' || !isManagedGroupName(item.name)))
-    expect(filterRoot('', root).map((item) => item.name)).toEqual(['项目总览.md'])
-    expect(filterRoot('正文', [
-      { name: '第一卷', type: 'directory' as const },
-      { name: '总纲.md', type: 'file' as const },
-    ]).map((item) => item.name)).toEqual(['第一卷', '总纲.md'])
+    const filterRoot = (entries: typeof root) => entries.filter((item) => !item.name.startsWith('.'))
+    expect(filterRoot(root).map((item) => item.name)).toEqual(['大纲', '正文', '项目总览.md'])
 
     const sidebarSource = readFileSync(new URL('./client/sidebar.ts', import.meta.url), 'utf8')
-    expect(sidebarSource).toMatch(/\(path !== '' \|\| !isManagedGroupName\(item\.name\)\)/)
+    expect(sidebarSource).not.toContain('STATIC_GROUPS')
+    expect(sidebarSource).not.toContain('isManagedGroupName')
   })
 
   it('opens a clean applied file, expands its manuscript ancestors, and preserves dirty buffers', () => {
@@ -277,8 +262,7 @@ describe('shell manuscript RPC safety', () => {
     const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
     expect(source).not.toContain("className: 'workbench-brand'")
     expect(source).toContain("className: 'workspace-chrome'")
-    expect(source).toContain("className: 'project-switcher'")
-    expect(source).not.toContain("e('label', { className: 'project-switcher' }")
+    expect(source).not.toContain("className: 'project-switcher'")
     expect(styleSource).not.toContain('workbench-brand')
     expect(styleSource).not.toContain('.project-switcher select')
     expect(source).toContain("className: 'workspace-menu'")
@@ -364,14 +348,6 @@ describe('shell manuscript RPC safety', () => {
     expect(canSubmitComposer({ draft: '写下去', connected: true, removed: true })).toBe(false)
     expect(canSubmitComposer({ draft: '写下去', connected: true, removed: false, outgoingState: 'sending' })).toBe(false)
     expect(canSubmitComposer({ draft: '重试', connected: true, removed: false, outgoingState: 'failed' })).toBe(true)
-  })
-
-  it('offers the complete author flow as editable chat examples', () => {
-    const examples = authorFlowExamples('正文/003 潮汐.md')
-    expect(examples.map((item) => item.label)).toEqual(['从零规划', '建立人物卡', '编排十章', '生成正文'])
-    expect(examples[2]?.prompt).toContain('前 10 章章纲')
-    expect(examples[3]?.prompt).toContain('当前章节《003 潮汐》')
-    expect(examples[3]?.prompt).toContain('至少 2000 字')
   })
 
   it('keeps a successful result unchanged', async () => {

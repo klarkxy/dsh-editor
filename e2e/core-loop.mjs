@@ -262,12 +262,11 @@ try {
 
   // Top bar inventory: only the four chrome buttons that survived the refactor.
   await page.locator('.chrome').screenshot({ path: resolve(output, '01-chrome.png') })
-  // Project switcher and workspace menu are <summary role="button"> elements
-  // with aria-labels — match them by their accessible names. The theme toggle
-  // is matched by its stable .theme-toggle class because the Chinese glyph
-  // in its text content can fall back to a placeholder "?" in the headless
-  // font, which would defeat an accessible-name lookup.
-  for (const label of ['切换作品', '作品菜单']) {
+  // The merged workspace menu is a <summary role="button"> with an aria-label.
+  // The theme toggle is matched by its stable .theme-toggle class because the
+  // Chinese glyph in its text content can fall back to a placeholder "?" in
+  // the headless font, which would defeat an accessible-name lookup.
+  for (const label of ['作品菜单']) {
     const present = await page.getByRole('button', { name: label }).count()
     if (!present) failures.push(`topbar is missing ${label}`)
   }
@@ -283,13 +282,11 @@ try {
     }
   }
 
-  // Tree must show the four static groups plus the manuscript header.
-  // The tree rows carry a chevron marker span followed by the label text,
-  // so a strict ^label$ regex over textContent misses the row entirely;
-  // use getByText with exact match scoped to the tree.
+  // The tree no longer carries preset 大纲/人物卡/世界书 groups: they appear
+  // only after they exist on disk (created by the user or the agent).
   for (const label of ['大纲', '人物卡', '世界书']) {
-    if (!(await page.locator('.tree').getByText(label, { exact: true }).count())) {
-      failures.push(`tree group missing: ${label}`)
+    if (await page.locator('.tree').getByText(label, { exact: true }).count()) {
+      failures.push(`preset tree group should stay absent until created: ${label}`)
     }
   }
   if (!(await page.getByRole('button', { name: '新建章节' }).first().isVisible())) failures.push('sidebar 新建章节 button missing')

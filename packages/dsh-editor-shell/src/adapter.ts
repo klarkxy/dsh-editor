@@ -22,7 +22,7 @@ import { isNovelIndexJobPrompt } from './novel-index.ts'
 
 export { parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 
-const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge'])
+const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'project_knowledge'])
 const HIDDEN_REASONING_BLOCKS = new Set(['reasoning', 'thinking', 'thought', 'analysis'])
 
 export function visibleRunningCalls<T extends { name: string }>(calls: readonly T[]): T[] {
