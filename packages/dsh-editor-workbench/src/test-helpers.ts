@@ -8,8 +8,9 @@ import type {
   SandboxExecutionPolicyLike,
   WorkspaceFileContext,
 } from 'dsh-manuscript/host-api'
+import type { BinaryFileSystem } from './binary.ts'
 
-type Node = { type: 'file' | 'directory'; version: string; text?: string }
+type Node = { type: 'file' | 'directory'; version: string; text?: string; bytes?: Uint8Array }
 
 function normalized(value: string): string {
   const parts: string[] = []
@@ -21,8 +22,10 @@ function normalized(value: string): string {
   return `/${parts.join('/')}`
 }
 
-class MemoryFileSystem implements FileSystemLike {
+class MemoryFileSystem implements BinaryFileSystem {
   readonly nodes = new Map<string, Node>([['/workspace', { type: 'directory', version: 'root' }]])
+  /** Absolute target keys that should be reported as symlinks by `lstat`. */
+  readonly symlinks = new Set<string>()
   readonly readPaths: string[] = []
   private counter = 0
 
@@ -37,11 +40,18 @@ class MemoryFileSystem implements FileSystemLike {
 
   async stat(target: FsTargetLike): Promise<FsInfoLike | undefined> {
     const node = this.nodes.get(target.targetKey)
-    return node ? { type: node.type, version: node.version, size: node.text?.length } : undefined
+    if (!node) return undefined
+    if (node.type === 'directory') return { type: 'directory', version: node.version }
+    const size = node.bytes ? node.bytes.byteLength : node.text ? new TextEncoder().encode(node.text).byteLength : 0
+    return { type: 'file', version: node.version, size }
   }
 
   async lstat(value: string, opts?: { cwd?: string }): Promise<FsPathInfoLike | undefined> {
-    return this.stat(await this.resolve(value, opts))
+    const target = await this.resolve(value, opts)
+    if (this.symlinks.has(target.targetKey)) {
+      return { type: 'symlink', version: 'symlink' }
+    }
+    return this.stat(target)
   }
 
   async readText(target: FsTargetLike): Promise<string> {
@@ -49,7 +59,19 @@ class MemoryFileSystem implements FileSystemLike {
     const node = this.nodes.get(target.targetKey)
     if (!node) throw Object.assign(new Error('missing'), { code: 'FS_NOT_FOUND' })
     if (node.type !== 'file') throw Object.assign(new Error('not text'), { code: 'FS_NOT_TEXT' })
-    return node.text ?? ''
+    if (node.text !== undefined) return node.text
+    if (node.bytes !== undefined) return new TextDecoder('utf-8', { fatal: true }).decode(node.bytes)
+    return ''
+  }
+
+  async readBytes(target: FsTargetLike): Promise<Uint8Array> {
+    this.readPaths.push(target.targetKey)
+    const node = this.nodes.get(target.targetKey)
+    if (!node) throw Object.assign(new Error('missing'), { code: 'FS_NOT_FOUND' })
+    if (node.type !== 'file') throw Object.assign(new Error('not a regular file'), { code: 'FS_NOT_TEXT' })
+    if (node.bytes) return node.bytes
+    if (node.text !== undefined) return new TextEncoder().encode(node.text)
+    return new Uint8Array()
   }
 
   async listDir(target: FsTargetLike): Promise<FsDirEntryLike[]> {
@@ -80,14 +102,17 @@ class MemoryFileSystem implements FileSystemLike {
   }
 }
 
-export function createMemoryContext(files: Record<string, string>): WorkspaceFileContext {
+export function createMemoryContext(files: Record<string, string | Uint8Array>): WorkspaceFileContext {
   const fs = new MemoryFileSystem()
-  for (const [relative, text] of Object.entries(files)) {
+  for (const [relative, content] of Object.entries(files)) {
     const parts = relative.split('/')
     for (let index = 1; index < parts.length; index++) {
       fs.nodes.set(`/workspace/${parts.slice(0, index).join('/')}`, { type: 'directory', version: `dir-${index}` })
     }
-    fs.nodes.set(`/workspace/${relative}`, { type: 'file', version: `initial-${relative}`, text })
+    const node: Node = typeof content === 'string'
+      ? { type: 'file', version: `initial-${relative}`, text: content }
+      : { type: 'file', version: `initial-${relative}`, bytes: content }
+    fs.nodes.set(`/workspace/${relative}`, node)
   }
   return {
     fs,
@@ -96,3 +121,6 @@ export function createMemoryContext(files: Record<string, string>): WorkspaceFil
     policy: { mode: 'workspace-write', workspaceRoot: '/workspace', sessionId: 'session-1' },
   }
 }
+
+export type { MemoryFileSystem }
+export type BinaryFs = FileSystemLike & { readBytes: (target: FsTargetLike, signal?: AbortSignal) => Promise<Uint8Array> }

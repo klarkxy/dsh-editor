@@ -24,6 +24,7 @@ export type WorkbenchEndpoint =
   | 'snapshot.restoreCleanup'
   | 'file.rename'
   | 'file.moveManuscript'
+  | 'file.readBinary'
   | 'archive.list'
   | 'archive.apply'
   | 'archive.restore'
@@ -114,6 +115,7 @@ export type WorkbenchRequestMap = {
   'snapshot.restoreCleanup': { targetSessionId: string; receiptId: string }
   'file.rename': { sessionId: string; path: string; newName: string; expectedVersion: string }
   'file.moveManuscript': { sessionId: string; path: string; targetDirectory: string; expectedVersion: string }
+  'file.readBinary': { sessionId: string; path: string }
   'archive.list': { sessionId: string }
   'archive.apply': { sessionId: string; path?: string; expectedVersion?: string; archiveId?: string }
   'archive.restore': { sessionId: string; archiveId: string; expectedVersion?: string }
@@ -138,6 +140,7 @@ export type WorkbenchResponseMap = {
   'snapshot.restoreCleanup': { removed: number }
   'file.rename': Required<WorkbenchPathResponse>
   'file.moveManuscript': Required<WorkbenchPathResponse>
+  'file.readBinary': { base64: string; mime: string }
   'archive.list': ArchiveListResponse
   'archive.apply': ArchiveResponse
   'archive.restore': ArchiveResponse
@@ -155,6 +158,20 @@ export type WorkbenchRpcError =
   | { code: 'directory-exists'; message: string; details: { path: string } }
   | { code: 'internal'; message: string; details: Record<string, never> }
 export type WorkbenchRpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: WorkbenchRpcError }
+
+/** Maximum payload size for `file.readBinary`, in bytes. */
+export const FILE_READ_BINARY_MAX_BYTES = 20 * 1024 * 1024
+
+/** Extension → MIME type for `file.readBinary`. Keys are lowercase, leading dot included. */
+export const FILE_READ_BINARY_MIME: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.svg': 'image/svg+xml',
+}
 
 export const PROJECT_CONTEXT_SCHEMA = 'dsh-editor.project-context'
 export const PROJECT_CONTEXT_VERSION = 1

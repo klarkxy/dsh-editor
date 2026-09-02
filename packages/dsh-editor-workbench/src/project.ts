@@ -13,7 +13,8 @@ export class ProjectInitError extends Error {
   }
 }
 
-export const PROJECT_DIRECTORIES = ['正文', '大纲', '人物卡', '世界书'] as const
+/** 新建作品只预建正文目录;大纲/人物卡/世界书等由用户或搭档实际创建后再出现。 */
+export const PROJECT_DIRECTORIES = ['正文'] as const
 export const NOVEL_INDEX_DIRECTORY = '.dsh-editor'
 export const NOVEL_INDEX_PATH = `${NOVEL_INDEX_DIRECTORY}/作品索引.md`
 

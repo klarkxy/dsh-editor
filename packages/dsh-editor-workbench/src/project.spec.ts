@@ -72,7 +72,9 @@ describe('initializeProject', () => {
     await initializeProject({ root, mode: 'workspace-write', newProject: false })
     await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toThrow()
     await expect(fs.stat(path.join(root, '世界书', '设定总汇.md'))).rejects.toThrow()
-    expect((await fs.stat(path.join(root, '世界书'))).isDirectory()).toBe(true)
+    // 预设资料目录不再预建,由用户或搭档实际创建
+    await expect(fs.stat(path.join(root, '世界书'))).rejects.toThrow()
+    expect((await fs.stat(path.join(root, '正文'))).isDirectory()).toBe(true)
   })
 
   it('refuses read-only projects and wrong-type paths', async () => {

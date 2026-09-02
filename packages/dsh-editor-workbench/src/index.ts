@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { asHost, badRequest, mapHostError, resolveWorkspaceAccess, WorkspaceAuthorityError } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
+import { BinaryError, readImageFile, type BinaryAccess } from './binary.ts'
 import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './import.ts'
 import { archiveDocument, LifecycleError, listArchives, moveManuscriptDocument, renameDocument, restoreArchive, type LifecycleAccess } from './lifecycle.ts'
 import { createManuscriptGroup, createProjectHome, defaultProjectsRoot, initializeProject, inspectProjectRoot, prepareNovelIndex, ProjectInitError } from './project.ts'
@@ -45,6 +46,16 @@ export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
   if (error instanceof OverviewError) {
     if (error.code === 'READ_ONLY') return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
     if (error.code === 'STALE' || error.code === 'BLOCKED' || error.code === 'INVALID_PATH') return badRequest(error.message)
+    return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
+  }
+  if (error instanceof BinaryError) {
+    if (error.code === 'INVALID_PATH' || error.code === 'BLOCKED') {
+      return { ok: false, error: { code: 'workspace-invalid-path', message: error.message, details: { path: '' } } }
+    }
+    if (error.code === 'NOT_FOUND') {
+      return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
+    }
+    if (error.code === 'INVALID_EXTENSION' || error.code === 'TOO_LARGE') return badRequest(error.message)
     return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
   }
   return mapHostError(error) ?? { ok: false, error: { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} } }
@@ -134,6 +145,16 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
   if (endpoint === 'snapshot.restoreCleanup') return await restoreCleanup({ target: snapshotAccess(access), receiptId: str(body, 'receiptId') })
   if (endpoint === 'file.rename') return await renameDocument({ access: lifecycleAccess(access), path: rel, newName: str(body, 'newName'), expectedVersion: str(body, 'expectedVersion') })
   if (endpoint === 'file.moveManuscript') return await moveManuscriptDocument({ access: lifecycleAccess(access), path: rel, targetDirectory: str(body, 'targetDirectory'), expectedVersion: str(body, 'expectedVersion') })
+  if (endpoint === 'file.readBinary') {
+    const binaryAccess: BinaryAccess = {
+      fs: host.fs as BinaryAccess['fs'],
+      cwd: access.workspace.path,
+      root: access.root,
+      policy: access.policy,
+      signal,
+    }
+    return await readImageFile({ access: binaryAccess, path: rel })
+  }
   if (endpoint === 'archive.list') return await listArchives(lifecycleAccess(access))
   if (endpoint === 'archive.apply') return await archiveDocument({
     access: lifecycleAccess(access),
