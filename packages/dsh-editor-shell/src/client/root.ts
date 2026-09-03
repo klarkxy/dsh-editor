@@ -17,7 +17,7 @@ import {
   type ProjectInspectionResponse,
   type ProjectOverview,
 } from 'dsh-editor-workbench/contracts'
-import { normalizeAuthorPreferences } from '../author-preferences.ts'
+import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
 import { documentTemplate, manuscriptGroupPath, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from '../project-files.ts'
 import { registerRoot } from '../root-registration.ts'
 import { writingPreferences, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
@@ -202,6 +202,21 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     : selectedWorkspace
   const writingSnapshot = useObservable(writingScope)
   const writing = writingPreferences(writingSnapshot, globalThis.localStorage)
+  /* 助手提议 author_observe 时的写入回调：把 observation 作为新行追加到 authorMemory。
+     限 AUTHOR_MEMORY_MAX_CHARS 字(2000),追加后超限直接拒绝,提示作者去设置页整理。 */
+  const onAcceptMemory = async (observation: string): Promise<boolean> => {
+    const trimmed = observation.trim()
+    if (!trimmed) return false
+    const current = writing.authorMemory ?? ''
+    const next = current ? `${current}\n${trimmed}` : trimmed
+    if (next.length > AUTHOR_MEMORY_MAX_CHARS) return false
+    try {
+      await writingScope.set('authorMemory', next)
+      return true
+    } catch {
+      return false
+    }
+  }
   const progressSnapshot = useObservable(progressScope)
   const writingProgress: WritingProgress = writingProgressFor(progressSnapshot)
   const writableProgress = progressSnapshot.status === 'ready' && progressSnapshot.writable !== false
@@ -1184,6 +1199,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       externalRevision: contentRevision, onDirtyChange: setEditorDirty,
       completionPreference: writing.completion,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
+      authorMemory: normalizeAuthorMemory(writing.authorMemory),
       chapterStatus: overview?.chapters.find((chapter) => chapter.path === path)?.status,
       statusBusy,
       onChapterStatus: (chapterPath: string, status: ChapterStatus) => void updateChapterStatus(chapterPath, status),
@@ -1205,6 +1221,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       workspaceId: currentWorkspace?.workspaceId,
       activePath: path,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
+      authorMemory: normalizeAuthorMemory(writing.authorMemory),
+      onAcceptMemory,
       hidden: !assistantVisible,
       onClose: () => setAssistantOpen(false),
       onConfigure: openSettings,

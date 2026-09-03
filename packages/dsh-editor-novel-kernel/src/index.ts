@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { createNovelKnowledgeTool } from './novel-knowledge.ts'
+import { createAuthorObserveTool } from './observe-tool.ts'
 import { createProjectKnowledgeTool, type ProjectKnowledgeReader } from './project-knowledge.ts'
 import { createProposalTool, editorToolGuard, EDITOR_PROMPT } from './proposal-tool.ts'
 import { createZhihuSearchTool, type ZhihuSearchExecuted } from './zhihu-search.ts'
@@ -69,6 +70,7 @@ export function apply(ctx: Context): void {
     : undefined
   host.tools.register(createNovelKnowledgeTool())
   host.tools.register(createProposalTool())
+  host.tools.register(createAuthorObserveTool())
   const onExecuted = makeZhihuMeter(ctx)
   host.tools.register(createZhihuSearchTool({ resolveCredential, onExecuted }))
   host.tools.register(createZhihuGlobalSearchTool({ resolveCredential, onExecuted }))

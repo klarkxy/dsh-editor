@@ -1,6 +1,6 @@
-import { AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from './author-preferences.ts'
+import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 
-export { AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from './author-preferences.ts'
+export { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 
 /** Loopback-only Host RPC channel for desktop workspace lifecycle operations. */
 export const WORKBENCH_RPC_CHANNEL = '/dsh-editor-workbench'
@@ -106,7 +106,7 @@ export type WorkbenchRequestMap = {
   'project.overview': { sessionId: string }
   'chapter.statusSet': { sessionId: string; path: string; status: ChapterStatus; expectedStatusRevision: string | null }
   'structure.groupCreate': { sessionId: string; path: string }
-  'context.compile': { sessionId: string; userRequest: string; activePath?: string; authorPreferences?: string }
+  'context.compile': { sessionId: string; userRequest: string; activePath?: string; authorPreferences?: string; authorMemory?: string }
   'project.importProbe': { targetSessionId: string; sourceSessionId?: string }
   'project.importApply': { targetSessionId: string; sourceSessionId: string; probeToken: string }
   'project.importCleanup': { targetSessionId: string; receiptId: string }
@@ -225,7 +225,7 @@ export type ProjectContextReceipt = {
   matchedBy?: WorldbookMatchedBy
   matchedTriggers?: string[]
 }
-export type ProjectContextReceiptBundle = { sources: ProjectContextReceipt[]; scan?: WorldbookScanSummary; authorPreferencesChars?: number }
+export type ProjectContextReceiptBundle = { sources: ProjectContextReceipt[]; scan?: WorldbookScanSummary; authorPreferencesChars?: number; authorMemoryChars?: number }
 export type ProjectContextSource = ProjectContextReceipt & { text?: string }
 export type ProjectContextEnvelopeV1 = {
   schema: typeof PROJECT_CONTEXT_SCHEMA
@@ -238,6 +238,7 @@ export type ProjectContextEnvelopeV2 = {
   version: typeof PROJECT_CONTEXT_CURRENT_VERSION
   project_context: { sources: ProjectContextSource[]; scan: WorldbookScanSummary }
   author_preferences?: string
+  author_memory?: string
   user_request: string
 }
 export type ProjectContextEnvelope = ProjectContextEnvelopeV1 | ProjectContextEnvelopeV2
@@ -490,6 +491,7 @@ export async function compileProjectContextV2(
     savedDocumentText?: string
     scan?: Partial<WorldbookScanSummary>
     authorPreferences?: string
+    authorMemory?: string
   },
 ): Promise<ProjectContextCompilation> {
   const fixed = await compileFixedSources(read, true)
@@ -534,14 +536,25 @@ export async function compileProjectContextV2(
   }
   const sources = [...fixed, ...dynamic]
   const authorPreferences = normalizeAuthorPreferences(options.authorPreferences)
+  const authorMemory = normalizeAuthorMemory(options.authorMemory)
   const envelope: ProjectContextEnvelopeV2 = {
     schema: PROJECT_CONTEXT_SCHEMA,
     version: PROJECT_CONTEXT_CURRENT_VERSION,
     project_context: { sources, scan },
     ...(authorPreferences ? { author_preferences: authorPreferences } : {}),
+    ...(authorMemory ? { author_memory: authorMemory } : {}),
     user_request: userRequest,
   }
-  return { envelope, serialized: JSON.stringify(envelope), receipt: { sources: stripText(sources), scan, ...(authorPreferences ? { authorPreferencesChars: authorPreferences.length } : {}) } }
+  return {
+    envelope,
+    serialized: JSON.stringify(envelope),
+    receipt: {
+      sources: stripText(sources),
+      scan,
+      ...(authorPreferences ? { authorPreferencesChars: authorPreferences.length } : {}),
+      ...(authorMemory ? { authorMemoryChars: authorMemory.length } : {}),
+    },
+  }
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -590,6 +603,9 @@ function validateV2(envelope: ProjectContextEnvelopeV2): boolean {
   if (envelope.author_preferences !== undefined && (typeof envelope.author_preferences !== 'string'
     || !envelope.author_preferences || envelope.author_preferences.length > AUTHOR_PREFERENCES_MAX_CHARS
     || envelope.author_preferences !== normalizeAuthorPreferences(envelope.author_preferences))) return false
+  if (envelope.author_memory !== undefined && (typeof envelope.author_memory !== 'string'
+    || !envelope.author_memory || envelope.author_memory.length > AUTHOR_MEMORY_MAX_CHARS
+    || envelope.author_memory !== normalizeAuthorMemory(envelope.author_memory))) return false
   const sources = envelope.project_context.sources
   if (sources.length > PROJECT_CONTEXT_SOURCE_PATHS.length + 64 || !validateFixed(sources, true) || !isScan(envelope.project_context.scan)) return false
   const seen = new Set<string>()
@@ -628,6 +644,7 @@ export function parseProjectContextEnvelope(text: string): ProjectContextEnvelop
   if (!Array.isArray(sources)) return undefined
   if (envelope.version === PROJECT_CONTEXT_VERSION) {
     if ('author_preferences' in envelope) return undefined
+    if ('author_memory' in envelope) return undefined
     if (sources.length !== PROJECT_CONTEXT_SOURCE_PATHS.length || !validateFixed(sources as ProjectContextSource[], false, true)) return undefined
     return envelope as ProjectContextEnvelopeV1
   }
@@ -640,5 +657,6 @@ export function projectContextReceipt(envelope: ProjectContextEnvelope): Project
     sources: stripText(envelope.project_context.sources),
     ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION ? { scan: envelope.project_context.scan } : {}),
     ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION && envelope.author_preferences ? { authorPreferencesChars: envelope.author_preferences.length } : {}),
+    ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION && envelope.author_memory ? { authorMemoryChars: envelope.author_memory.length } : {}),
   }
 }

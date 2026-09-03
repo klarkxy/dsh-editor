@@ -15,12 +15,12 @@ import type {
   SessionId,
   SessionModels,
 } from '@deepseek-ai/dsh-client-connection/client'
-import { parseProposalMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+import { parseAuthorMemoryMarker, parseProposalMarker, type AuthorMemoryMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { stripReasoningText } from './conversation-lifecycle.ts'
 import { isNovelIndexJobPrompt } from './novel-index.ts'
 
-export { parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+export { parseAuthorMemoryMarker, parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 
 const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'project_knowledge'])
 const HIDDEN_REASONING_BLOCKS = new Set(['reasoning', 'thinking', 'thought', 'analysis'])
@@ -37,6 +37,7 @@ export type ChatRow = {
   /** Expandable verbatim body (tool result content); absent when there is nothing worth unfolding. */
   content?: string
   proposal?: ProposalMarker
+  memory?: AuthorMemoryMarker
   projectContextReceipt?: ProjectContextReceiptBundle
 }
 
@@ -120,6 +121,10 @@ export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-resu
   const proposal = name === 'novel_propose' ? parseProposalMarker(body) : undefined
   if (proposal) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: proposalDetailText(proposal), proposal }
+  }
+  const memory = name === 'author_observe' ? parseAuthorMemoryMarker(body) : undefined
+  if (memory) {
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: memory.observation, detail: '写作助手提议记住这条偏好', memory }
   }
   if (node.isError) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: '这项操作没有执行', detail: name, content: truncateToolContent(body) || undefined }

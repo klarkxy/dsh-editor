@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseProposalMarker, partialView, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
+import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseAuthorMemoryMarker, parseProposalMarker, partialView, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
 import { compileProjectContext, compileProjectContextV2 } from 'dsh-editor-workbench/contracts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
@@ -29,6 +29,13 @@ describe('DSH snapshot adapter', () => {
     /* renames 提案没有 path 字段,UI 描述也必须落到 kind 文案,而不是默认的"文件修改提案"。 */
     expect(renamesRow.detail).not.toBe('写作助手提出了一项文件修改提案')
     expect(renamesRow.proposal).not.toHaveProperty('path')
+  })
+  it('surfaces author_observe markers as memory rows for the confirmation card', () => {
+    const marker = JSON.stringify({ marker: 'dsh-editor.memory', version: 1, observation: '留白优先', reason: '多次出现' })
+    const row = toolResultRow({ kind: 'tool-result', seq: 9, callId: 'm', call: { name: 'author_observe', argsRaw: '{}' }, content: [{ type: 'text', text: marker }], isError: false } as never)
+    expect(row).toMatchObject({ role: 'tool', text: '留白优先', detail: '写作助手提议记住这条偏好', memory: { observation: '留白优先', reason: '多次出现' } })
+    expect(parseAuthorMemoryMarker(marker)).toEqual({ marker: 'dsh-editor.memory', version: 1, observation: '留白优先', reason: '多次出现' })
+    expect(parseAuthorMemoryMarker('not json')).toBeUndefined()
   })
   it('renders published prose while hiding unknown runtime details', () => {
     const snapshot = { nodes: [

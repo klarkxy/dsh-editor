@@ -23,7 +23,7 @@ import {
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
 } from 'dsh-editor-workbench/contracts'
-import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+import type { AuthorMemoryMarker, ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import {
   buildInterviewPrompt,
   decodeInitSettings,
@@ -561,6 +561,41 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   )
 }
 
+/** author_observe 的作者确认卡。确认后由 Shell 把 observation 作为新一行追加进 authorMemory。 */
+export function MemoryCard(props: { memory: AuthorMemoryMarker; onAccept(observation: string): Promise<boolean> | boolean }) {
+  const [state, setState] = useState<'ready' | 'saving' | 'saved' | 'rejected' | 'failed'>('ready')
+  const [note, setNote] = useState('')
+  const accept = async () => {
+    if (state !== 'ready') return
+    setState('saving'); setNote('正在写入作者侧写…')
+    let ok = false
+    try {
+      ok = Boolean(await props.onAccept(props.memory.observation))
+    } catch {
+      ok = false
+    }
+    if (ok) { setState('saved'); setNote('已记住这条偏好') }
+    else { setState('failed'); setNote('侧写已满，请到设置页整理。') }
+  }
+  return e('article', { className: `memory-card ${state}`, 'aria-label': '作者侧写建议' },
+    e('header', null, e('strong', null, '建议记住这条偏好')),
+    e('section', { className: 'memory-observation' },
+      e('small', null, '建议记录'),
+      e('p', null, props.memory.observation),
+    ),
+    e('section', { className: 'memory-reason' },
+      e('small', null, '为什么'),
+      e('p', null, props.memory.reason),
+    ),
+    e('footer', null,
+      e('span', { role: state === 'failed' ? 'alert' : 'status' }, note),
+      state === 'ready' ? e('button', { type: 'button', onClick: () => void accept() }, '记住') : null,
+      state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('rejected'); setNote('已忽略，未写入作者侧写') } }, '忽略') : null,
+    ),
+    state === 'ready' ? e('small', { className: 'memory-help' }, '仅在确认后才写入本机作者侧写；项目上下文会用其当前值，不会自动扩张。') : null,
+  )
+}
+
 export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boolean; running: boolean; done: boolean; note: string; onStart(): void; onDismiss(): void }) {
   const explore = props.state === 'explore'
   return e('article', { className: 'pending-card init-guide-card', 'aria-label': '项目初始化' },
@@ -585,7 +620,7 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
   const worldbook = receipt.sources.filter((item) => item.kind === 'worldbook')
   const matchedByText = (value: string | undefined) => value === 'both' ? '请求与当前文档' : value === 'saved-document' ? '当前文档' : '本次请求'
   return e('details', { className: 'project-context-receipt' },
-    e('summary', null, `项目上下文：固定 ${includedFixed}/${fixed.length}，触发世界书 ${worldbook.length}${receipt.authorPreferencesChars ? `，作者约定 ${receipt.authorPreferencesChars} 字` : ''}`),
+    e('summary', null, `项目上下文：固定 ${includedFixed}/${fixed.length}，触发世界书 ${worldbook.length}${receipt.authorPreferencesChars ? `，作者约定 ${receipt.authorPreferencesChars} 字` : ''}${receipt.authorMemoryChars ? `，作者侧写 ${receipt.authorMemoryChars} 字` : ''}`),
     e('ul', null, receipt.sources.map((item) => e('li', { key: item.path },
       e('code', null, item.path),
       ` · ${item.status === 'included'
@@ -599,7 +634,7 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
   )
 }
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, hidden, onClose, onConfigure, onApplied, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, onAcceptMemory, hidden, onClose, onConfigure, onApplied, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const snapshot = useObservable<ConversationSnapshot>(session)
   const sessionList = useObservable(ctx.sessions.list)
   const workspaceList = useObservable(ctx.workspaces.list)
@@ -802,7 +837,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setNote('')
     let contextCompileFailed = false
     void sendProjectContext(session, value, async () => {
-      const compiled = await safeRpcCall<{ serialized: string; receipt: ProjectContextReceiptBundle }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'context.compile', { sessionId: session.sessionId, userRequest: value, activePath, authorPreferences }))
+      const compiled = await safeRpcCall<{ serialized: string; receipt: ProjectContextReceiptBundle }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'context.compile', { sessionId: session.sessionId, userRequest: value, activePath, authorPreferences, authorMemory }))
       if (!compiled.ok) { contextCompileFailed = true; throw new Error('context unavailable') }
       return { serialized: compiled.value.serialized, receipt: compiled.value.receipt }
     }).then((outcome) => {
@@ -859,7 +894,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? '加载中…' : '加载更早消息') : null,
       rows.map((row) => row.proposal
         ? e(ProposalCard, { key: row.id, ctx, sessionId: session.sessionId, proposal: row.proposal, onApplied: handleApplied })
-        : row.role === 'thinking'
+        : row.memory
+          ? e(MemoryCard, { key: row.id, memory: row.memory, onAccept: (observation) => onAcceptMemory(observation) })
+          : row.role === 'thinking'
           ? e('details', { className: 'chat-row thinking', key: row.id },
             e('summary', null, '思考过程'),
             e('p', null, row.text),

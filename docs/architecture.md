@@ -98,6 +98,8 @@ dsh-editor-shell
 
 Renderer 另维护最多 1,200 字符的本机跨作品作者约定，并在 V2 JSON 信封的可选 `author_preferences` 字段中与 `user_request`、`project_context` 分离。Host 会重新规范化并限制长度；canonical parser 同样验证边界，V1 历史不接受伪造的新增字段。对话回执只暴露字符数，不回显原文。FIM 与选段修改经各自 RPC 的同名有界字段带入 system guidance，仍由 Host 选择 live-session provider/model；该字段不属于作品 canon、不扩大文件权限，也不改变 stale/abort 规则。
 
+Renderer 同时维护最多 2,000 字符的本机作者侧写 `author_memory`，与作者约定同源信任边界但语义独立：助手只能通过 `author_observe` 工具（marker `dsh-editor.memory`，单条 observation ≤ 200 字、含 reason）在对话里提议"记住一条偏好"，未经作者在 `MemoryCard` 显式确认前绝不能当作已记忆。`author_memory` 同样以 V2 JSON 信封的可选字段随 `context.compile` 自动注入；Host 重新规范化、限制 2,000 字、拒绝伪造字段、验证后与原文一致；V1 历史不接收该字段。对话回执只暴露字符数，不回显原文。FIM 与选段修改的 RPC 不带 `authorMemory`——作品内一次性偏好由用户输入或命令直接执行，留在请求上下文里而不进持久侧写；侧写本身不进入作品 canon、不扩大文件权限，也不改变 stale/abort 规则。
+
 固定与动态读取结果、扫描计数和原始请求以 V2 JSON 信封一次提交给同一 DSH session；解析器仍严格接受历史 V1。文件文本是不可信数据，单文件缺失、格式无效、超限或读取失败只进入有界回执；整个 Host 编译失败则不调用 `session.prompt`。Renderer 仅显示原请求和不含原文的回执，DSH 历史保留完整信封。`novel_knowledge` 不属于该回执，深层或最新事实仍由 Agent 通过 `glob`、`grep`、`read` 验证。
 
 普通世界书的触发词、`enabled` 与 `priority` 只写在 Markdown 文件开头的 frontmatter 中；本版本没有专门的可视化触发设置面板，编辑方式改为手工修改文件头。Host 仍按相同 frontmatter 解析，损坏 / 停用 / 超出扫描限制的文件不会进入提示，文件正文不会被界面覆盖，缺 frontmatter 的旧文件继续以文件名作为触发词。

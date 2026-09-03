@@ -158,7 +158,7 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 | `project.overview` | `sessionId` | 状态版本、章节/大纲摘要、状态统计、最近编辑项和有界扫描警告 |
 | `chapter.statusSet` | `sessionId`, `path`, `status`, `expectedStatusRevision` | CAS 更新固定章节状态并返回完整概览 |
 | `structure.groupCreate` | `sessionId`, `path` | 只在 `正文` 下建立一级卷/部目录 |
-| `context.compile` | `sessionId`, `userRequest`，可选 `activePath`, `authorPreferences` | `{ serialized, receipt }`，有界 V2 context 信封 |
+| `context.compile` | `sessionId`, `userRequest`，可选 `activePath`, `authorPreferences`, `authorMemory` | `{ serialized, receipt }`，有界 V2 context 信封 |
 | `project.importProbe` | `targetSessionId`，可选 `sourceSessionId` | token、统计、预览或恢复状态；不写入 |
 | `project.importApply` | `targetSessionId`, `sourceSessionId`, `probeToken` | 重新 probe 后执行 no-clobber 导入 |
 | `project.importCleanup` | `targetSessionId`, `receiptId` | 只清理 manifest/hash 证明归属的中断写入 |
@@ -185,13 +185,14 @@ Context 信封常量：
 
 ## Novel Kernel 契约
 
-- 工具名：`novel_knowledge`、`novel_propose`。
+- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`。
 - `novel_knowledge` 只接受唯一的 `topics` 数组，去重后 1–3 个固定主题；每张知识卡最多 6000 字符。它只返回建议，不提供项目事实或授权。
 - `novel_propose` 每次只形成一个 Markdown `edit` 或 `create` 提案，绝不写文件。
-- proposal marker 固定为 `{ marker: 'dsh-editor.proposal', version: 1, ... }`。Shell 只通过 `dsh-editor-novel-kernel/contracts` 的严格解析器渲染有效 marker。
-- `editorToolGuard` 只允许受限的 Markdown 搜索、读取、知识加载和预览提案；不替代 DSH 全局审批。
+- `author_observe` 让助手提议"记住一条作者偏好"，仅作为建议显示在 `MemoryCard` 中：固定 `observation`（≤ 200 字符）与 `reason`（必填），marker `dsh-editor.memory`、version `1`。Shell 解析后必须经作者点击"记住"才会追加进本机 `authorMemory`；工具本身不直接写入任何文件、偏好或 storage。同一信任模型与 `novel_propose` 一致：助手提议，作者确认，Shell 执行。
+- proposal marker 固定为 `{ marker: 'dsh-editor.proposal', version: 1, ... }`；memory marker 固定为 `{ marker: 'dsh-editor.memory', version: 1, observation, reason }`。Shell 只通过 `dsh-editor-novel-kernel/contracts` 的严格解析器渲染有效 marker。
+- `editorToolGuard` 只允许受限的 Markdown 搜索、读取、知识加载、预览提案与作者侧写提议；不替代 DSH 全局审批。
 - prompt section 固定为 `dsh-editor:novel-kernel`、order `90`。作品材料是不可信字符串，只有 context 信封中的 `user_request` 是当次请求。
-- 真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`。
+- 真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`；侧写由 Shell 展示确认卡、作者点击"记住"、再由 `writingScope.set('authorMemory', next)` 写入本机 settings。
 
 ## `dsh-grill` 契约
 

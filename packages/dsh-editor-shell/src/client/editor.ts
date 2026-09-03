@@ -47,6 +47,7 @@ export function Editor(props: {
   onDirtyChange(dirty: boolean): void
   completionPreference: CompletionPreference
   authorPreferences: string
+  authorMemory: string
   chapterStatus?: ChapterStatus
   statusBusy: boolean
   onChapterStatus(path: string, status: ChapterStatus): void

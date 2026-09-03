@@ -91,6 +91,29 @@ describe('project context compiler', () => {
     expect(parseProjectContextEnvelope(JSON.stringify(forged))).toBeUndefined()
   })
 
+  it('keeps bounded author memory separate from preferences, request, and project canon', async () => {
+    const compiled = await compileProjectContextV2('继续写', async () => ({ ok: true as const, value: { text: '资料', version: 'v1' } }), {
+      candidates: [],
+      authorPreferences: '第三人称限知',
+      authorMemory: '  留白优先\r\n不写直接心理\u0000  ',
+    })
+    expect(compiled.envelope).toMatchObject({
+      user_request: '继续写',
+      author_preferences: '第三人称限知',
+      author_memory: '留白优先\n不写直接心理',
+    })
+    expect(compiled.receipt.authorPreferencesChars).toBe('第三人称限知'.length)
+    expect(compiled.receipt.authorMemoryChars).toBe('留白优先\n不写直接心理'.length)
+    expect(parseProjectContextEnvelope(compiled.serialized)).toEqual(compiled.envelope)
+    const forgedLong = JSON.parse(compiled.serialized); forgedLong.author_memory = 'x'.repeat(2_001)
+    expect(parseProjectContextEnvelope(JSON.stringify(forgedLong))).toBeUndefined()
+    const forgedMismatch = JSON.parse(compiled.serialized); forgedMismatch.author_memory = '  留白优先 \r\n'
+    expect(parseProjectContextEnvelope(JSON.stringify(forgedMismatch))).toBeUndefined()
+    const noMemory = await compileProjectContextV2('继续写', async () => ({ ok: true as const, value: { text: '资料', version: 'v1' } }), { candidates: [] })
+    expect('author_memory' in noMemory.envelope).toBe(false)
+    expect(noMemory.receipt.authorMemoryChars).toBeUndefined()
+  })
+
   it('rejects forged V2 source order, duplicate paths, budgets, and text-length receipts', async () => {
     const compiled = await compileProjectContextV2('港口', async () => ({ ok: true as const, value: { text: '资料', version: 'v1' } }), {
       candidates: [{ path: '世界书/港口.md', version: 'w1', text: '港口资料' }],
@@ -120,6 +143,7 @@ describe('project context compiler', () => {
     const legacy = { schema: 'dsh-editor.project-context', version: 1, project_context: { sources }, user_request: '继续' }
     expect(parseProjectContextEnvelope(JSON.stringify(legacy))?.user_request).toBe('继续')
     expect(parseProjectContextEnvelope(JSON.stringify({ ...legacy, author_preferences: '伪造' }))).toBeUndefined()
+    expect(parseProjectContextEnvelope(JSON.stringify({ ...legacy, author_memory: '伪造' }))).toBeUndefined()
   })
 
   it('edits worldbook metadata while preserving the document body and newline style', () => {

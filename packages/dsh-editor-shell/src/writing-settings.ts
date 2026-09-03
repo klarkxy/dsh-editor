@@ -1,6 +1,6 @@
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { createElement as e, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
-import { AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from './author-preferences.ts'
+import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-settings-contract.ts'
 import { WritingProgressSettings } from './writing-progress-settings.tsx'
@@ -11,6 +11,7 @@ export { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-s
 export const DEFAULT_WRITING_PREFERENCES: WritingPreferences = {
   completion: 'manual',
   authorPreferences: '',
+  authorMemory: '',
 }
 
 type LegacyStorage = Pick<Storage, 'getItem' | 'removeItem'>
@@ -24,7 +25,9 @@ function hasOwn(value: unknown, field: keyof WritingPreferences): boolean {
   return record !== undefined && Object.prototype.hasOwnProperty.call(record, field)
 }
 
-function legacyValue(storage: LegacyStorage | undefined, field: keyof WritingPreferences): CompletionPreference | string | undefined {
+type LegacyValue = CompletionPreference | string | undefined
+
+function legacyValue(storage: LegacyStorage | undefined, field: keyof WritingPreferences): LegacyValue {
   try {
     const value = storage?.getItem(field === 'completion' ? COMPLETION_PREFERENCE_KEY : AUTHOR_PREFERENCES_KEY)
     if (value === null || value === undefined) return undefined
@@ -71,6 +74,7 @@ export async function migrateLegacyWritingPreferences(
   const snapshot = scope.getSnapshot()
   if (snapshot.status !== 'ready') return { failed: [] }
   const failed: (keyof WritingPreferences)[] = []
+  // authorMemory 没有历史 localStorage 键——只需保证 user 层有值即可,缺则保持默认空串。
   for (const field of ['completion', 'authorPreferences'] as const) {
     if (hasOwn(snapshot.user, field)) {
       try { removeLegacy(storage, field) } catch { failed.push(field) }
@@ -95,9 +99,11 @@ export function decodeWritingPreferences(value: unknown): WritingPreferences | u
   if (!record) return undefined
   if (record.completion !== 'manual' && record.completion !== 'pause') return undefined
   if (typeof record.authorPreferences !== 'string') return undefined
+  if (typeof record.authorMemory !== 'string') return undefined
   return {
     completion: record.completion,
     authorPreferences: normalizeAuthorPreferences(record.authorPreferences),
+    authorMemory: normalizeAuthorMemory(record.authorMemory),
   }
 }
 
@@ -109,6 +115,7 @@ export function writingPreferences(snapshot: SettingsScopeSnapshot<WritingPrefer
   return {
     completion: hasOwn(snapshot.user, 'completion') || (legacyCompletion !== 'manual' && legacyCompletion !== 'pause') ? resolved.completion : legacyCompletion,
     authorPreferences: hasOwn(snapshot.user, 'authorPreferences') || typeof legacyAuthorPreferences !== 'string' ? resolved.authorPreferences : legacyAuthorPreferences,
+    authorMemory: hasOwn(snapshot.user, 'authorMemory') ? resolved.authorMemory : DEFAULT_WRITING_PREFERENCES.authorMemory,
   }
 }
 
@@ -140,6 +147,7 @@ export function WritingSettings({ scope, migrate, progressScope }: {
   const [saving, setSaving] = useState<keyof WritingPreferences | null>(null)
   const [writeFailure, setWriteFailure] = useState('')
   const [authorDraft, setAuthorDraft] = useState(values.authorPreferences)
+  const [memoryDraft, setMemoryDraft] = useState(values.authorMemory)
 
   const runMigration = async () => {
     const result = await migrate()
@@ -156,14 +164,28 @@ export function WritingSettings({ scope, migrate, progressScope }: {
     setAuthorDraft(values.authorPreferences)
   }, [values.authorPreferences])
 
+  useEffect(() => {
+    setMemoryDraft(values.authorMemory)
+  }, [values.authorMemory])
+
   const update = async (field: keyof WritingPreferences, value: CompletionPreference | string) => {
     setSaving(field)
     setWriteFailure('')
     try {
-      await scope.set(field, field === 'authorPreferences' ? normalizeAuthorPreferences(value) : value)
+      const normalized = field === 'authorPreferences'
+        ? normalizeAuthorPreferences(value)
+        : field === 'authorMemory'
+          ? normalizeAuthorMemory(value)
+          : value
+      await scope.set(field, normalized)
       if (!hasOwn(scope.getSnapshot().user, field)) throw new Error('write did not commit')
     } catch {
-      setWriteFailure(field === 'completion' ? '自动补全偏好未能保存，请重试。' : '作者约定未能保存，请重试。')
+      const failure = field === 'completion'
+        ? '自动补全偏好未能保存，请重试。'
+        : field === 'authorPreferences'
+          ? '作者约定未能保存，请重试。'
+          : '作者侧写未能保存，请重试。'
+      setWriteFailure(failure)
     } finally {
       setSaving(null)
     }
@@ -209,6 +231,20 @@ export function WritingSettings({ scope, migrate, progressScope }: {
       e('small', null, `${authorDraft.length} / ${AUTHOR_PREFERENCES_MAX_CHARS} 字；会用于所有作品的搭档、补全和选段修改。`),
     ),
     e('button', { type: 'button', disabled: saving !== null || authorDraft === values.authorPreferences, onClick: () => void update('authorPreferences', authorDraft) }, saving === 'authorPreferences' ? '保存中…' : '保存作者约定'),
+    e('label', { className: 'author-memory' },
+      e('span', null, '作者侧写（记忆）'),
+      e('textarea', {
+        value: memoryDraft,
+        maxLength: AUTHOR_MEMORY_MAX_CHARS,
+        rows: 6,
+        placeholder: '例如：喜欢留白；不写直接心理描写；避免穿越式旁白。可由写作助手提出并经你确认后追加。',
+        'aria-label': '作者侧写（记忆）',
+        disabled: saving !== null,
+        onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setMemoryDraft(event.target.value),
+      }),
+      e('small', null, `${memoryDraft.length} / ${AUTHOR_MEMORY_MAX_CHARS} 字；助手在协作中观察到的稳定偏好与雷点可由你确认后追加，不会自动写入。`),
+    ),
+    e('button', { type: 'button', disabled: saving !== null || memoryDraft === values.authorMemory, onClick: () => void update('authorMemory', memoryDraft) }, saving === 'authorMemory' ? '保存中…' : '保存作者侧写'),
     writeFailure ? e('p', { role: 'alert' }, writeFailure) : null,
     migrationFailure.length ? e('p', { role: 'alert' },
       '旧版本机偏好尚未迁移；原值已保留。',

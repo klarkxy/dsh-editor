@@ -137,7 +137,7 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
     expectedStatusRevision: typeof body.expectedStatusRevision === 'string' ? body.expectedStatusRevision : null,
   })
   if (endpoint === 'structure.groupCreate') return await createManuscriptGroup({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
-  if (endpoint === 'context.compile') return await compileContext(files, str(body, 'userRequest'), str(body, 'activePath') || undefined, str(body, 'authorPreferences'))
+  if (endpoint === 'context.compile') return await compileContext(files, str(body, 'userRequest'), str(body, 'activePath') || undefined, str(body, 'authorPreferences'), str(body, 'authorMemory'))
   if (endpoint === 'project.importProbe') {
     const sourceSessionId = str(body, 'sourceSessionId')
     const source = sourceSessionId ? await resolveWorkspaceAccess(host, sourceSessionId, signal) : undefined

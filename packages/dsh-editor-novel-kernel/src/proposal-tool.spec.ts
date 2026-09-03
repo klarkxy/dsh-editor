@@ -122,4 +122,22 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).toContain('renames')
     expect(EDITOR_PROMPT).toContain('先形成可预览提案')
   })
+
+  it('exposes author_observe only for bounded, redundant-free author-memory entries', () => {
+    expect(editorToolGuard({ name: 'author_observe', arguments: { observation: '留白优先', reason: '多次出现' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'author_observe', arguments: { observation: '   ', reason: 'r' } })).toContain('non-empty')
+    expect(editorToolGuard({ name: 'author_observe', arguments: { observation: 'x', reason: '   ' } })).toContain('non-empty')
+    expect(editorToolGuard({ name: 'author_observe', arguments: { observation: 'x'.repeat(201), reason: 'r' } })).toContain('<= 200')
+    expect(editorToolGuard({ name: 'author_observe', arguments: { observation: 'x', reason: 'r', path: '正文/001.md' } })).toContain('only accepts')
+  })
+
+  it('promises the author_observe tool name and tightens the prompt to memory and observe rules', () => {
+    expect(EDITOR_PROMPT).toContain('author_observe')
+    expect(EDITOR_PROMPT).toContain('author_memory')
+    expect(EDITOR_PROMPT).toContain('一次一条，宁缺毋滥')
+    expect(EDITOR_PROMPT).toContain('不是本书 canon')
+    expect(EDITOR_PROMPT).toContain('未经确认不得当作已记住')
+    expect(EDITOR_PROMPT).toContain('单次要求直接执行不记录')
+    expect(EDITOR_PROMPT).toContain('作品级事实进大纲/世界书')
+  })
 })

@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  AUTHOR_OBSERVE_TOOL_NAME,
   NOVEL_KNOWLEDGE_TOOL_NAME,
   NOVEL_SEARCH_TOOL_NAME,
   PROPOSAL_TOOL_NAME,
@@ -44,6 +45,7 @@ describe('novel-kernel Host entry', () => {
     expect(tools.map((tool) => (tool as { name: string }).name)).toEqual([
       NOVEL_KNOWLEDGE_TOOL_NAME,
       PROPOSAL_TOOL_NAME,
+      AUTHOR_OBSERVE_TOOL_NAME,
       ZHIHU_SEARCH_TOOL_NAME,
       ZHIHU_GLOBAL_SEARCH_TOOL_NAME,
       ZHIHU_HOT_LIST_TOOL_NAME,
