@@ -289,12 +289,12 @@ try {
       failures.push(`preset tree group should stay absent until created: ${label}`)
     }
   }
-  if (!(await page.getByRole('button', { name: '新建章节' }).first().isVisible())) failures.push('sidebar 新建章节 button missing')
+  if (!(await page.getByRole('button', { name: '新建文件' }).first().isVisible())) failures.push('sidebar 新建文件 button missing')
 
-  // Skip the "新建一章" → chapter-create path. The DSH web app's
+  // Skip the "新建文件" → file-create path. The DSH web app's
   // "Workspace Write" Goal Mode (dsh-client-ui-conversation) takes over the
-  // root slot as soon as a chapter is created, so the manuscript editor is
-  // no longer reachable through the home flow. The new-chapter button above
+  // root slot as soon as a document is created, so the manuscript editor is
+  // no longer reachable through the home flow. The new-file button above
   // is asserted visible so the entry point itself stays covered.
 
   // Theme toggle: paper → ink → paper. The DOM data-theme and localStorage must

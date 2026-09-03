@@ -4,8 +4,8 @@ import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
 import { BinaryError, readImageFile, type BinaryAccess } from './binary.ts'
 import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './import.ts'
 import { archiveDocument, LifecycleError, listArchives, moveManuscriptDocument, renameDocument, restoreArchive, type LifecycleAccess } from './lifecycle.ts'
-import { createManuscriptGroup, createProjectHome, defaultProjectsRoot, initializeProject, inspectProjectRoot, prepareNovelIndex, ProjectInitError } from './project.ts'
-import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './snapshot.ts'
+import { createManuscriptGroup, createDirectory, createProjectHome, defaultProjectsRoot, initializeProject, inspectProjectRoot, prepareNovelIndex, ProjectInitError } from './project.ts'
+import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, rollbackSnapshot, SnapshotError, type SnapshotAccess } from './snapshot.ts'
 import { compileContext } from './context.ts'
 import { OverviewError, readProjectOverview, setChapterStatus, type OverviewAccess } from './overview.ts'
 import {
@@ -137,6 +137,7 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
     expectedStatusRevision: typeof body.expectedStatusRevision === 'string' ? body.expectedStatusRevision : null,
   })
   if (endpoint === 'structure.groupCreate') return await createManuscriptGroup({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
+  if (endpoint === 'directory.create') return await createDirectory({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
   if (endpoint === 'context.compile') return await compileContext(files, str(body, 'userRequest'), str(body, 'activePath') || undefined, str(body, 'authorPreferences'), str(body, 'authorMemory'))
   if (endpoint === 'project.importProbe') {
     const sourceSessionId = str(body, 'sourceSessionId')
@@ -150,6 +151,7 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
   if (endpoint === 'project.importCleanup') return await cleanupImport({ target: importAccess(access), receiptId: str(body, 'receiptId') })
   if (endpoint === 'snapshot.list') return await listSnapshots(snapshotAccess(access))
   if (endpoint === 'snapshot.create') return await createSnapshot(snapshotAccess(access), str(body, 'label'))
+  if (endpoint === 'snapshot.rollback') return await rollbackSnapshot(snapshotAccess(access), str(body, 'snapshotId'))
   if (endpoint === 'snapshot.restoreProbe') {
     const sourceId = str(body, 'sourceSessionId')
     const source = sourceId ? await resolveWorkspaceAccess(host, sourceId, signal) : undefined

@@ -13,12 +13,14 @@ export type WorkbenchEndpoint =
   | 'project.overview'
   | 'chapter.statusSet'
   | 'structure.groupCreate'
+  | 'directory.create'
   | 'context.compile'
   | 'project.importProbe'
   | 'project.importApply'
   | 'project.importCleanup'
   | 'snapshot.list'
   | 'snapshot.create'
+  | 'snapshot.rollback'
   | 'snapshot.restoreProbe'
   | 'snapshot.restoreApply'
   | 'snapshot.restoreCleanup'
@@ -106,12 +108,14 @@ export type WorkbenchRequestMap = {
   'project.overview': { sessionId: string }
   'chapter.statusSet': { sessionId: string; path: string; status: ChapterStatus; expectedStatusRevision: string | null }
   'structure.groupCreate': { sessionId: string; path: string }
+  'directory.create': { sessionId: string; path: string }
   'context.compile': { sessionId: string; userRequest: string; activePath?: string; authorPreferences?: string; authorMemory?: string }
   'project.importProbe': { targetSessionId: string; sourceSessionId?: string }
   'project.importApply': { targetSessionId: string; sourceSessionId: string; probeToken: string }
   'project.importCleanup': { targetSessionId: string; receiptId: string }
   'snapshot.list': { sessionId: string }
   'snapshot.create': { sessionId: string; label?: string }
+  'snapshot.rollback': { sessionId: string; snapshotId: string }
   'snapshot.restoreProbe': { targetSessionId: string; sourceSessionId?: string; snapshotId?: string }
   'snapshot.restoreApply': { targetSessionId: string; sourceSessionId: string; snapshotId: string; token: string }
   'snapshot.restoreCleanup': { targetSessionId: string; receiptId: string }
@@ -133,12 +137,14 @@ export type WorkbenchResponseMap = {
   'project.overview': ProjectOverview
   'chapter.statusSet': ProjectOverview
   'structure.groupCreate': WorkbenchPathResponse
+  'directory.create': WorkbenchPathResponse
   'context.compile': ProjectContextCompilation
   'project.importProbe': ImportProbeResponse
   'project.importApply': { imported: number; skipped: number }
   'project.importCleanup': { removed: number }
   'snapshot.list': SnapshotResponse[]
   'snapshot.create': SnapshotResponse
+  'snapshot.rollback': { restored: number; removed: number; safetySnapshotId?: string }
   'snapshot.restoreProbe': RestoreProbeResponse
   'snapshot.restoreApply': { restored: number; skipped: number; complete: true }
   'snapshot.restoreCleanup': { removed: number }

@@ -242,11 +242,27 @@ export const componentStyles = `
 .shell .writing-progress-chip.reached { color: var(--confirm); background: color-mix(in srgb, var(--confirm) 10%, var(--surface)); }
 .shell .tree { flex: 1 1 auto; min-height: 72px; overflow: auto; padding: 4px 6px 20px; display: flex; flex-direction: column; }
 .shell .tree-directory-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 2px 8px 2px 0; }
-.shell .tree-static-row { font-size: var(--text-xs); font-weight: 500; letter-spacing: .16em; color: var(--meta); }
 .shell .tree-marker { width: 12px; flex: none; color: var(--meta); text-align: center; font-size: 11px; }
-.shell .tree-static-row .tree-marker { font-size: 14px; }
 .shell .tree-directory-add { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; opacity: .68; color: var(--meta); font-size: 14px; }
 .shell .tree-directory-add:hover, .shell .tree-directory-add:focus-visible { opacity: 1; background: var(--surface); color: var(--fg); }
+/* VSCode 式行内操作:每个目录悬停/聚焦时才露出「新建文件/文件夹」。 */
+.shell .tree-row-actions { flex: none; display: inline-flex; align-items: center; gap: 2px; visibility: hidden; }
+.shell .tree-directory-row:hover .tree-row-actions, .shell .tree-directory-row:focus-within .tree-row-actions { visibility: visible; }
+/* 侧栏头部工具组:新建/提交/历史,文字小按钮。 */
+.shell .side-title-actions { display: inline-flex; align-items: center; gap: 2px; }
+.shell .side-action { border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; padding: 3px 6px; color: var(--meta); font: 500 var(--text-xs)/1.2 var(--font-sans); letter-spacing: .04em; }
+.shell .side-action:hover, .shell .side-action[aria-pressed="true"] { background: var(--surface); color: var(--fg); }
+.shell .side-action:disabled { opacity: .5; cursor: default; }
+/* 提交历史面板:侧栏内树上方的小列表。 */
+.shell .snapshot-panel { margin: 0 10px 8px; padding: 4px; max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 2px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-ring); }
+.shell .snapshot-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: var(--radius-xs); color: var(--fg-2); font-size: var(--text-xs); }
+.shell .snapshot-row:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.shell .snapshot-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell .snapshot-meta { flex: none; color: var(--muted); }
+.shell .snapshot-rollback { flex: none; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; padding: 2px 6px; color: var(--accent); font-size: var(--text-xs); }
+.shell .snapshot-rollback:hover { background: var(--accent-soft); }
+.shell .snapshot-rollback:disabled { opacity: .5; cursor: default; }
+.shell .snapshot-empty { padding: 6px 8px; color: var(--meta); font-size: var(--text-xs); }
 .shell .tree-row, .shell .tree-file-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-base); line-height: 1.35; letter-spacing: .04em; }
 /* 章节状态徽标:行末单字胶囊,草/修/定三色。margin-left:auto 把它推到行末,
    文件名 span 仍按既有省略规则截断(用 :not(.chapter-status) 让规则跨两种结构都生效)。 */

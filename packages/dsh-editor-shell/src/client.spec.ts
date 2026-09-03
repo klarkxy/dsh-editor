@@ -6,7 +6,6 @@ import {
   chapterStatusText,
   claimInitialWorkspaceResume,
   clampPanelWidth,
-  createDialogDirectory,
   createFlowWorkspace,
   errorMessage,
   hasRelocatableManuscriptFiles,
@@ -19,11 +18,13 @@ import {
   orderTreeEntries,
   proposalAppliedNavigation,
   relocationFailureMessage,
+  resumableConversationId,
   replaceWorldbookPaperText,
   resizedPanelWidth,
   safeRpcCall,
   searchSkippedText,
   shouldSubmitComposer,
+  snapshotTimeLabel,
   supportedWorkspaceTextPaths,
   treeExpansionPaths,
   treeRowPadding,
@@ -135,7 +136,7 @@ describe('shell manuscript RPC safety', () => {
     expect(newFlow).toContain('await finishWorkspaceOpen(pending, sessionId, initialPath)')
     expect(source).toContain('if (!initialPath) return undefined')
     const finishFlow = source.slice(source.indexOf('const finishWorkspaceOpen = async'), existingStart)
-    expect(finishFlow).toContain('ctx.sessions.open(sessionId)')
+    expect(finishFlow).toContain('ctx.sessions.open(resumableConversationId(')
     const registeredFlow = source.slice(openStart, source.indexOf('const continuePendingWorkspaceIntent = async', openStart))
     expect(registeredFlow).toContain('connectUsableWorkspaceSession(ctx, current.workspaceId, sessionId)')
   })
@@ -167,22 +168,67 @@ describe('shell manuscript RPC safety', () => {
     expect(claimInitialWorkspaceResume(guard)).toBe(false)
   })
 
-  it('shows the actual create destination for every document kind', () => {
-    expect(createDialogDirectory('chapter')).toBe('正文')
-    expect(createDialogDirectory('chapter', '正文/第二卷')).toBe('正文/第二卷')
-    expect(createDialogDirectory('outline')).toBe('大纲')
-    expect(createDialogDirectory('character')).toBe('人物卡')
-    expect(createDialogDirectory('world')).toBe('世界书')
+  it('resumes the most recently updated non-blank conversation when a workspace opens', () => {
+    const byId = {
+      's-old': { blank: false, updatedAt: 100 },
+      's-recent': { blank: false, updatedAt: 300 },
+      's-blank': { blank: true, updatedAt: 400 },
+      's-archived': { blank: false, updatedAt: 500 },
+    }
+    expect(resumableConversationId({
+      sessionIds: ['s-old', 's-recent', 's-blank', 's-archived', 's-new'],
+      byId,
+      archivedIds: ['s-archived'],
+      fallback: 's-new',
+    })).toBe('s-recent')
+    /* 没有可恢复的会话（全新作品 / 只有空白会话）时保持打开连接得到的会话 */
+    expect(resumableConversationId({ sessionIds: ['s-blank'], byId, archivedIds: [], fallback: 's-new' })).toBe('s-new')
+    expect(resumableConversationId({ sessionIds: [], byId: {}, archivedIds: [], fallback: 's-new' })).toBe('s-new')
+    const finish = rootSource().slice(rootSource().indexOf('const finishWorkspaceOpen = async'))
+    expect(finish).toContain('ctx.sessions.open(resumableConversationId(')
   })
 
-  it('keeps root files at root and aligns sibling file/directory depth', () => {
+  it('creates files and folders from any directory through the generic tree actions', () => {
+    const root = rootSource()
+    expect(root).toContain("openTreeCreate('file', '')")
+    expect(root).toContain("openTreeCreate('folder', '')")
+    expect(root).toContain("onCreateFile: (directory: string) => openTreeCreate('file', directory)")
+    expect(root).toContain("onCreateFolder: (directory: string) => openTreeCreate('folder', directory)")
+    expect(root).toContain("'directory.create'")
+    /* 文件名无扩展名时按 .md 创建 */
+    expect(root).toContain("`${name}.md`")
+    const sidebar = readFileSync(new URL('./client/sidebar.ts', import.meta.url), 'utf8')
+    /* 每个目录行都有新建文件/文件夹操作，不再有 正文 专用入口 */
+    expect(sidebar).toContain('中新建文件')
+    expect(sidebar).toContain('中新建文件夹')
+    expect(sidebar).not.toContain('中新建章节')
+    expect(sidebar).not.toContain('新建卷/部')
+    expect(root).not.toContain('新建资料')
+  })
+
+  it('commits with the current time as the message and rolls back in place with confirmation', () => {
+    expect(snapshotTimeLabel(new Date(2025, 0, 5, 9, 7).getTime())).toBe('2025-01-05 09:07')
+    const root = rootSource()
+    expect(root).toContain("'snapshot.create'")
+    expect(root).toContain("'snapshot.rollback'")
+    expect(root).toContain("'snapshot.list'")
+    expect(root).toContain('已回滚到')
+    /* 回滚前要求先保存当前文档，且有确认框 */
+    expect(root).toContain('请先保存当前文档，再回滚。')
+    expect(root.indexOf('requestRollback')).toBeGreaterThanOrEqual(0)
+  })
+
+  it('sorts every tree level as a plain directory tree: directories first, then by name', () => {
     const entries = [
-      { name: '正文', type: 'directory' as const },
       { name: '项目总览.md', type: 'file' as const },
       { name: '世界书', type: 'directory' as const },
+      { name: '封面.jpg', type: 'file' as const },
+      { name: '正文', type: 'directory' as const },
+      { name: '第10章.md', type: 'file' as const },
+      { name: '第2章.md', type: 'file' as const },
     ]
-    expect(orderTreeEntries('', entries).map((entry) => entry.name)).toEqual(['项目总览.md', '正文', '世界书'])
-    expect(orderTreeEntries('正文', entries)).toEqual(entries)
+    expect(orderTreeEntries(entries).map((entry) => entry.name))
+      .toEqual(['世界书', '正文', '第2章.md', '第10章.md', '封面.jpg', '项目总览.md'])
     expect(treeRowPadding(0)).toBe(12)
     expect(treeRowPadding(1)).toBe(24)
   })

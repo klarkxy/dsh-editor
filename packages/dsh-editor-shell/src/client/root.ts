@@ -16,9 +16,10 @@ import {
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
   type ProjectOverview,
+  type SnapshotResponse,
 } from 'dsh-editor-workbench/contracts'
 import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
-import { documentTemplate, manuscriptGroupPath, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from '../project-files.ts'
+import { sortChapterPaths } from '../project-files.ts'
 import { registerRoot } from '../root-registration.ts'
 import { writingPreferences, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
 import {
@@ -30,9 +31,9 @@ import {
   type WritingProgressScope,
 } from '../writing-progress.ts'
 import { redesignedStyles } from '../styles.ts'
-import { buildChapterStatusMap, createDialogDirectory, errorMessage, isStaleFailure, safeRpcCall, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
+import { buildChapterStatusMap, errorMessage, isStaleFailure, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, useObservable } from './components.ts'
-import { ConfirmDialog, CreateDocumentDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
+import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger } from './settings.tsx'
 import { ThemeToggle, useTheme, type HostThemeSync } from './theme.ts'
 import { Tree, FileContextMenu } from './sidebar.ts'
@@ -89,7 +90,7 @@ function formatRecentTime(iso: string | undefined, now: Date = new Date()): stri
   return `${yyyy}/${mm}/${dd}`
 }
 
-type CreateRequest = { kind: DocumentKind | 'group'; directory: string }
+type TreeCreateRequest = { kind: 'file' | 'folder'; directory: string }
 type FileSession = NonNullable<NonNullable<ReturnType<ShellContext['sessions']['binding']>>['session']> | undefined
 
 type SearchHit = { path: string; line: number; column: number; start: number; end: number; excerpt: string; version: string }
@@ -228,8 +229,13 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const [contentRevision, setContentRevision] = useState(0)
   const [homeNote, setHomeNote] = useState('')
   const [createNote, setCreateNote] = useState('')
-  const [createRequest, setCreateRequest] = useState<CreateRequest | null>(null)
+  const [treeCreateRequest, setTreeCreateRequest] = useState<TreeCreateRequest | null>(null)
   const [createBusy, setCreateBusy] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [snapshots, setSnapshots] = useState<SnapshotResponse[] | null>(null)
+  const [snapshotRevision, setSnapshotRevision] = useState(0)
+  const [snapshotBusy, setSnapshotBusy] = useState(false)
+  const [rollbackTarget, setRollbackTarget] = useState<SnapshotResponse | null>(null)
   const [openingWorkspace, setOpeningWorkspace] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | null>(null)
@@ -329,7 +335,19 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     setFiles([]); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
     setFileMenu(null); setManagePath(null); setManageNote('')
     setOverview(null); setOverviewError(''); setOverviewBusy(false); setStatusBusy(false); setWorkspaceMenuOpen(false)
+    setHistoryOpen(false); setSnapshots(null); setRollbackTarget(null)
   }, [openWorkspaceId])
+  useEffect(() => {
+    if (!historyOpen || !fileSession) { setSnapshots(null); return }
+    let live = true
+    void (async () => {
+      const result = await safeRpcCall<SnapshotResponse[]>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.list', { sessionId: fileSession.sessionId }))
+      if (!live) return
+      setSnapshots(result.ok ? result.value : [])
+      if (!result.ok) setWorkbenchNote(errorMessage(result))
+    })()
+    return () => { live = false }
+  }, [historyOpen, fileSession?.sessionId, snapshotRevision])
   useEffect(() => {
     if (!fileSession) { setFiles([]); return }
     let live = true
@@ -462,60 +480,83 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     setWorkbenchNote(renamed.value.metadataWarning ? `已重命名为 ${renamed.value.path}；${renamed.value.metadataWarning}` : `已重命名为 ${renamed.value.path}`)
     setManagePath(null)
   }
-  const openCreateDialog = (kind: DocumentKind | 'group', directory?: string) => {
+  const openTreeCreate = (kind: 'file' | 'folder', directory: string) => {
     if (!fileSession) return
     if (editorDirty) { setCreateNote('请先保存当前文档。'); return }
     createReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setCreateNote('')
-    setCreateRequest({ kind, directory: createDialogDirectory(kind, directory) })
+    setTreeCreateRequest({ kind, directory })
   }
-  const closeCreateDialog = () => {
+  const closeTreeCreate = () => {
     if (createBusy) return
     const target = createReturnFocus.current
-    setCreateRequest(null)
+    setTreeCreateRequest(null)
     setCreateNote('')
     globalThis.setTimeout(() => target?.focus(), 0)
   }
-  const create = async (title: string) => {
-    if (!fileSession || !createRequest) return
-    const request = createRequest
+  const submitTreeCreate = async (name: string) => {
+    if (!fileSession || !treeCreateRequest) return
+    const request = treeCreateRequest
     setCreateBusy(true)
     setCreateNote('')
-    if (request.kind === 'group') {
-      const groupPath = manuscriptGroupPath(title)
-      const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'structure.groupCreate', {
+    if (request.kind === 'folder') {
+      const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'directory.create', {
         sessionId: fileSession.sessionId,
-        path: groupPath,
+        path: request.directory ? `${request.directory}/${name}` : name,
       }))
       setCreateBusy(false)
       if (!result.ok) { setCreateNote(errorMessage(result)); return }
-      setCreateRequest(null)
+      setTreeCreateRequest(null)
       setTreeRevision((old) => old + 1)
       setWorkbenchNote(`已创建 ${result.value.path}`)
       return
     }
-    const kind: DocumentKind = request.kind
-    let workspaceFiles: string[]
-    try {
-      workspaceFiles = await collectWorkspaceFiles(ctx, fileSession.sessionId)
-    } catch {
-      setCreateBusy(false)
-      setCreateNote('未能读取完整目录，请重试。')
-      return
-    }
-    const file = kind === 'chapter'
-      ? nextChapterPath(workspaceFiles, request.directory)
-      : nextDocumentPath(kind, title, workspaceFiles)
+    const fileName = /\.[a-z0-9]{1,8}$/i.test(name) ? name : `${name}.md`
+    const target = request.directory ? `${request.directory}/${fileName}` : fileName
     const result = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'file.create', {
       sessionId: fileSession.sessionId,
-      path: file,
-      text: documentTemplate(kind, title),
+      path: target,
+      text: '',
     }))
     setCreateBusy(false)
     if (!result.ok) { setCreateNote(errorMessage(result)); return }
-    setCreateRequest(null)
-    openDocument(file)
+    setTreeCreateRequest(null)
+    openDocument(target)
     setTreeRevision((old) => old + 1)
+  }
+  const commitSnapshot = async () => {
+    if (!fileSession || snapshotBusy) return
+    setSnapshotBusy(true)
+    const label = snapshotTimeLabel(Date.now())
+    const result = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.create', { sessionId: fileSession.sessionId, label }))
+    setSnapshotBusy(false)
+    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
+    setWorkbenchNote(`已提交 ${label}`)
+    setHistoryOpen(true)
+    setSnapshotRevision((value) => value + 1)
+  }
+  const requestRollback = (snapshot: SnapshotResponse) => {
+    if (snapshotBusy) return
+    if (editorDirty) { setWorkbenchNote('请先保存当前文档，再回滚。'); return }
+    setRollbackTarget(snapshot)
+  }
+  const confirmRollback = async () => {
+    const target = rollbackTarget
+    if (!fileSession || !target || snapshotBusy) return
+    setSnapshotBusy(true)
+    const result = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.rollback', { sessionId: fileSession.sessionId, snapshotId: target.snapshotId }))
+    setSnapshotBusy(false)
+    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
+    setRollbackTarget(null)
+    setWorkbenchNote(`已回滚到 ${target.label ?? target.createdAt}；回滚前的状态已自动保存为新提交。`)
+    setSnapshotRevision((value) => value + 1)
+    setTreeRevision((value) => value + 1)
+    setContentRevision((value) => value + 1)
+    setOverviewRevision((value) => value + 1)
+    try {
+      const remaining = await collectWorkspaceFiles(ctx, fileSession.sessionId)
+      if (path && !remaining.includes(path)) setPath('')
+    } catch { /* 目录树刷新会带出最新状态 */ }
   }
   const finishWorkspaceOpen = async (
     pending: PendingWorkspaceOpen,
@@ -541,7 +582,16 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       path: pending.workspace.path,
       warning,
     })
-    ctx.sessions.open(sessionId)
+    /* 右侧对话回到这个作品上一次使用的会话；连接用的空白会话仍保留给文件 RPC。 */
+    const workspaceListState = ctx.workspaces.list.getSnapshot()
+    const sessionListState = ctx.sessions.list.getSnapshot()
+    const workspaceView = workspaceListState.items.find((item) => item.workspaceId === pending.workspace.workspaceId) ?? pending.workspace
+    ctx.sessions.open(resumableConversationId({
+      sessionIds: workspaceView.sessionIds,
+      byId: sessionListState.byId ?? {},
+      archivedIds: workspaceListState.archivedSessionIds ?? [],
+      fallback: sessionId,
+    }))
   }
   const prepareExistingWorkspace = async (pending: PendingWorkspaceOpen, sessionId: SessionId) => {
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
@@ -1164,25 +1214,35 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       ),
     ),
     sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
-      e('div', { className: 'side-title' }, e('span', null, '文件'), e('button', { className: 'icon-button', type: 'button', onClick: () => openCreateDialog('chapter'), title: '新建章节', 'aria-label': '新建章节' }, '＋')),
+      e('div', { className: 'side-title' },
+        e('span', null, '文件'),
+        e('span', { className: 'side-title-actions' },
+          e('button', { className: 'side-action', type: 'button', title: '新建文件', 'aria-label': '新建文件', onClick: () => openTreeCreate('file', '') }, '＋文件'),
+          e('button', { className: 'side-action', type: 'button', title: '新建文件夹', 'aria-label': '新建文件夹', onClick: () => openTreeCreate('folder', '') }, '＋文件夹'),
+          e('button', { className: 'side-action', type: 'button', disabled: snapshotBusy, title: '把当前状态存为一次提交（说明自动使用当前时间）', 'aria-label': '提交', onClick: () => void commitSnapshot() }, '提交'),
+          e('button', { className: 'side-action', type: 'button', 'aria-pressed': historyOpen, title: '提交历史', 'aria-label': '历史', onClick: () => setHistoryOpen((value) => !value) }, '历史'),
+        ),
+      ),
       (() => {
         const summary = progressChipProps({ overview, progress: writingProgress, workspaceId: openWorkspaceId })
         if (!summary) return null
         return e('div', { className: `writing-progress-chip${summary.reached ? ' reached' : ''}`, 'aria-label': summary.text }, summary.text)
       })(),
-      e('details', { className: 'project-actions' },
-        e('summary', null, '新建资料'),
-        e('div', null,
-          e('button', { type: 'button', onClick: () => openCreateDialog('group') }, '卷/部'),
-          e('button', { type: 'button', onClick: () => openCreateDialog('outline') }, '大纲'),
-          e('button', { type: 'button', onClick: () => openCreateDialog('character') }, '人物'),
-          e('button', { type: 'button', onClick: () => openCreateDialog('world') }, '设定'),
-        ),
-      ),
+      historyOpen ? e('section', { className: 'snapshot-panel', 'aria-label': '提交历史' },
+        snapshots === null
+          ? e('p', { className: 'snapshot-empty' }, '正在读取提交历史…')
+          : snapshots.length === 0
+            ? e('p', { className: 'snapshot-empty' }, '还没有提交记录。')
+            : snapshots.map((item) => e('div', { key: item.snapshotId, className: 'snapshot-row' },
+                e('span', { className: 'snapshot-label', title: item.createdAt }, item.label ?? item.createdAt),
+                e('span', { className: 'snapshot-meta' }, `${item.files} 文件`),
+                e('button', { className: 'snapshot-rollback', type: 'button', disabled: snapshotBusy, onClick: () => requestRollback(item) }, '回滚'),
+              )),
+      ) : null,
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
       workspaceOpen.warning ? e('p', { className: 'warning pad', role: 'status' }, workspaceOpen.warning) : null,
       workbenchNote ? e('p', { className: `pad`, role: 'status' }, workbenchNote) : null,
-      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), onCreateGroup: () => openCreateDialog('group'), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
+      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
     ) : null,
     sidebarVisible ? e(PanelResizer, {
       side: 'left',
@@ -1194,7 +1254,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       onChange: setSidebarWidth,
     }) : null,
     e(Editor, {
-      ctx, session: fileSession, path, files, onOpen: openDocument, create: () => openCreateDialog('chapter'),
+      ctx, session: fileSession, path, files, onOpen: openDocument, create: () => openTreeCreate('file', '正文'),
       externalRevision: contentRevision, onDirtyChange: setEditorDirty,
       completionPreference: writing.completion,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
@@ -1253,13 +1313,23 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       onCancel: () => resolveLeaveConfirm(false),
       onConfirm: () => resolveLeaveConfirm(true),
     }) : null,
-    createRequest ? e(CreateDocumentDialog, {
-      key: `${createRequest.kind}:${createRequest.directory}`,
-      request: createRequest,
-      busy: createBusy,
-      note: createNote,
-      onClose: closeCreateDialog,
-      onCreate: (title: string) => void create(title),
+    treeCreateRequest ? e(TextPromptDialog, {
+      id: 'tree-create',
+      key: `${treeCreateRequest.kind}:${treeCreateRequest.directory}`,
+      title: treeCreateRequest.kind === 'folder' ? '新建文件夹' : '新建文件',
+      label: treeCreateRequest.kind === 'folder' ? '文件夹名称' : '文件名称（无扩展名时按 .md 创建）',
+      initialValue: '',
+      confirmLabel: '创建',
+      onCancel: closeTreeCreate,
+      onConfirm: (name: string) => void submitTreeCreate(name),
+    }) : null,
+    rollbackTarget ? e(ConfirmDialog, {
+      id: 'snapshot-rollback',
+      title: '回滚到这次提交？',
+      message: `作品内容将回到「${rollbackTarget.label ?? rollbackTarget.createdAt}」的状态；当前状态会先自动保存为一次新提交，随时可以再回滚回来。`,
+      confirmLabel: '回滚',
+      onCancel: () => setRollbackTarget(null),
+      onConfirm: () => void confirmRollback(),
     }) : null,
     renderNewProjectDialog(),
     fileMenu ? e(FileContextMenu, {

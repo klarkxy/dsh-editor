@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createManuscriptGroup, createProjectHome, initializeProject, inspectProjectRoot, NOVEL_INDEX_PATH, prepareNovelIndex, PROJECT_DIRECTORIES } from './project.ts'
+import { createDirectory, createManuscriptGroup, createProjectHome, initializeProject, inspectProjectRoot, NOVEL_INDEX_PATH, prepareNovelIndex, PROJECT_DIRECTORIES } from './project.ts'
 
 let root = ''
 
@@ -109,5 +109,24 @@ describe('initializeProject', () => {
     expect(second.created).toEqual([])
     expect(await fs.readFile(path.join(root, ...NOVEL_INDEX_PATH.split('/')), 'utf8')).toBe('# 作者保留的索引\n')
     expect(await fs.readdir(root)).toEqual(['.dsh-editor'])
+  })
+})
+
+describe('createDirectory', () => {
+  it('creates one visible directory below any existing parent', async () => {
+    await expect(createDirectory({ root, mode: 'workspace-write', relative: '新建资料' })).resolves.toEqual({ path: '新建资料' })
+    await expect(createDirectory({ root, mode: 'workspace-write', relative: '新建资料/图片' })).resolves.toEqual({ path: '新建资料/图片' })
+    expect((await fs.stat(path.join(root, '新建资料', '图片'))).isDirectory()).toBe(true)
+  })
+
+  it('rejects invalid names, existing paths, missing parents and read-only projects', async () => {
+    for (const relative of ['', '.秘密', 'CON', '尾点.', 'a/b/c' + 'x'.repeat(81)]) {
+      await expect(createDirectory({ root, mode: 'workspace-write', relative })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    }
+    await createDirectory({ root, mode: 'workspace-write', relative: '资料' })
+    await expect(createDirectory({ root, mode: 'workspace-write', relative: '资料' })).rejects.toMatchObject({ code: 'EXISTS' })
+    await expect(createDirectory({ root, mode: 'workspace-write', relative: '缺失/子目录' })).rejects.toMatchObject({ code: 'IO' })
+    await expect(createDirectory({ root, mode: 'read-only', relative: '其它' })).rejects.toMatchObject({ code: 'READ_ONLY' })
+    expect(await fs.readdir(root)).toEqual(['资料'])
   })
 })

@@ -107,9 +107,9 @@ export function Editor(props: {
 
   if (!path) {
     return e(PaperStage, { label: '空白章' },
-      e('p', { className: 'home-hint' }, '从左侧新建章节或资料；也可以先让搭档按这部作品的需要创建总览、人物卡与章纲。'),
+      e('p', { className: 'home-hint' }, '从左侧目录树新建文件或文件夹；也可以先让搭档按这部作品的需要创建总览、人物卡与章纲。'),
       e('div', { className: 'home-actions' },
-        e('button', { className: 'primary-action', type: 'button', onClick: create }, '新建一章'),
+        e('button', { className: 'primary-action', type: 'button', onClick: create }, '新建文件'),
       ),
     )
   }

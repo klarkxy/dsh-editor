@@ -1,6 +1,5 @@
 import { createElement as e, Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { ChapterStatus } from 'dsh-editor-workbench/contracts'
-import type { DocumentKind } from '../project-files.ts'
 import { chapterStatusText, errorMessage, isChapterDocumentPath, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
 
 /* 章节状态徽标用单字胶囊,行末与文件名同列。draft=草 revising=修 final=定。 */
@@ -25,14 +24,15 @@ type RowProps = {
   onOpen(path: string): void
   onPreviewImage(path: string): void
   onFileMenu(path: string, position: { x: number; y: number }): void
-  onCreateChapter(directory: string): void
+  onCreateFile(directory: string): void
+  onCreateFolder(directory: string): void
   loadSubtree: LoadSubtree
   toggleDirectory(path: string): void
 }
 
 function TreeRows(props: RowProps): ReactNode {
-  const { path, level, loaded, active, openPaths, chapterStatuses, onOpen, onPreviewImage, onFileMenu, onCreateChapter, loadSubtree, toggleDirectory } = props
-  const entries = orderTreeEntries(path, loaded[path] ?? [])
+  const { path, level, loaded, active, openPaths, chapterStatuses, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory } = props
+  const entries = orderTreeEntries(loaded[path] ?? [])
   // 树只渲染磁盘上真实存在的条目:预设分组已移除,目录(包括 正文/大纲/人物卡/世界书)
   // 在实际创建后自然出现。隐藏 . 开头的系统项。
   const visible = entries.filter((item) => !item.name.startsWith('.'))
@@ -53,13 +53,22 @@ function TreeRows(props: RowProps): ReactNode {
           e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, isOpen ? '⌄' : '›'),
           e('span', null, item.name),
           ),
-          child === '正文' || child.startsWith('正文/') ? e('button', {
-            className: 'tree-directory-add',
-            type: 'button',
-            title: `在 ${item.name} 中新建章节`,
-            'aria-label': `在 ${item.name} 中新建章节`,
-            onClick: () => onCreateChapter(child),
-          }, '＋') : null,
+          e('span', { className: 'tree-row-actions' },
+            e('button', {
+              className: 'tree-directory-add',
+              type: 'button',
+              title: `在 ${item.name} 中新建文件`,
+              'aria-label': `在 ${item.name} 中新建文件`,
+              onClick: () => onCreateFile(child),
+            }, '＋'),
+            e('button', {
+              className: 'tree-directory-add',
+              type: 'button',
+              title: `在 ${item.name} 中新建文件夹`,
+              'aria-label': `在 ${item.name} 中新建文件夹`,
+              onClick: () => onCreateFolder(child),
+            }, '▣'),
+          ),
         ),
         isOpen ? e(TreeRows, { ...props, path: child, level: level + 1 }) : null,
       )
@@ -100,10 +109,10 @@ export function Tree(props: {
   onOpen(path: string): void
   onPreviewImage(path: string): void
   onFileMenu(path: string, position: { x: number; y: number }): void
-  onCreateChapter(directory: string): void
-  onCreateGroup(): void
+  onCreateFile(directory: string): void
+  onCreateFolder(directory: string): void
 }) {
-  const { ctx, sessionId, active, expandPath, revision, chapterStatuses, onOpen, onPreviewImage, onFileMenu, onCreateChapter, onCreateGroup } = props
+  const { ctx, sessionId, active, expandPath, revision, chapterStatuses, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder } = props
   const [loaded, setLoaded] = useState<Record<string, TreeEntry[]>>({})
   const [openPaths, setOpenPaths] = useState<Set<string>>(() => new Set())
   const [note, setNote] = useState('')
@@ -138,17 +147,6 @@ export function Tree(props: {
   }
 
   return e('nav', { className: 'tree', 'aria-label': '稿件目录' },
-    e('div', { className: 'tree-directory-row tree-static-row' },
-      e('button', {
-        className: 'tree-row tree-group',
-        type: 'button',
-        'aria-label': '新建卷/部',
-        onClick: () => onCreateGroup(),
-      },
-      e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, '＋'),
-      e('span', null, '新建卷/部'),
-      ),
-    ),
     e(TreeRows, {
       ctx,
       sessionId,
@@ -162,7 +160,8 @@ export function Tree(props: {
       onOpen,
       onPreviewImage,
       onFileMenu,
-      onCreateChapter,
+      onCreateFile,
+      onCreateFolder,
       loadSubtree,
       toggleDirectory,
     }),

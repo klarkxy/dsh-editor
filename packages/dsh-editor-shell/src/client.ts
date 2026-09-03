@@ -27,7 +27,6 @@ export {
   chapterStatusText,
   claimInitialWorkspaceResume,
   clampPanelWidth,
-  createDialogDirectory,
   createFlowWorkspace,
   errorMessage,
   hasRelocatableManuscriptFiles,
@@ -40,11 +39,13 @@ export {
   orderTreeEntries,
   proposalAppliedNavigation,
   relocationFailureMessage,
+  resumableConversationId,
   replaceWorldbookPaperText,
   resizedPanelWidth,
   safeRpcCall,
   searchSkippedText,
   shouldSubmitComposer,
+  snapshotTimeLabel,
   supportedWorkspaceTextPaths,
   treeExpansionPaths,
   treeRowPadding,
@@ -67,8 +68,7 @@ export type {
 } from './client/shared.ts'
 export { THEME_STORAGE_KEY, THEME_VALUES, ThemeToggle, useTheme } from './client/theme.ts'
 export type { HostThemeSync, ThemeValue } from './client/theme.ts'
-export { ConfirmDialog, CreateDocumentDialog, NewProjectDialog, TextPromptDialog } from './client/dialogs.ts'
-export type { CreateDocumentRequest } from './client/dialogs.ts'
+export { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './client/dialogs.ts'
 export { Chat, ModelPicker, NewConversationPicker, PendingCard, ProjectContextReceiptView, ProposalCard } from './client/chat.ts'
 export { Editor } from './client/editor.ts'
 export { FileContextMenu, Tree } from './client/sidebar.ts'

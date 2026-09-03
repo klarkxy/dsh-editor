@@ -536,6 +536,54 @@ export async function createSnapshot(
   }
 }
 
+/**
+ * In-place rollback to one of this workspace's own snapshots: overwrites
+ * eligible text files with the snapshot payload and deletes eligible text
+ * files the snapshot does not contain. A safety snapshot of the current state
+ * is created first (when there is anything worth saving), so the rollback
+ * itself can be undone. Non-text files are never touched.
+ */
+export async function rollbackSnapshot(
+  access: SnapshotAccess,
+  snapshotId: string,
+): Promise<{ restored: number; removed: number; safetySnapshotId?: string }> {
+  if (access.mode === 'read-only') throw new SnapshotError('workspace is read-only', 'READ_ONLY')
+  const snapshot = await loadSnapshot(access, snapshotId)
+  const current = await scan(access)
+  const safety = current.files.length
+    ? await createSnapshot(access, '回滚前自动保存')
+    : undefined
+  const wanted = new Map(snapshot.payload.map((file) => [file.path, file]))
+  let restored = 0
+  for (const file of snapshot.payload) {
+    let version: string | undefined
+    try {
+      const existing = await readTextFile(access.files, file.path)
+      if (existing.text === file.text) continue
+      version = existing.version
+    } catch (error) {
+      if (!(error instanceof FileOpError && error.code === 'NOT_FOUND')) throw error
+    }
+    if (version === undefined) {
+      await mkdirSafe(access.path, path.posix.dirname(file.path))
+      await createTextFile(access.files, file.path, file.text)
+    } else {
+      await writeTextFile(access.files, file.path, file.text, version)
+    }
+    restored++
+  }
+  const dropped = current.files.filter((file) => !wanted.has(file.path))
+  let removed = 0
+  for (const file of dropped) {
+    const absolute = await safeExistingFile(access.path, file.path)
+    if (!absolute) continue
+    await fs.unlink(absolute)
+    removed++
+  }
+  await removeEmptyParents(access.path, dropped)
+  return { restored, removed, ...(safety ? { safetySnapshotId: safety.snapshotId } : {}) }
+}
+
 export async function restoreProbe(input: {
   source?: SnapshotAccess
   target: SnapshotAccess

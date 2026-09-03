@@ -1,7 +1,6 @@
 import type { ConnectionHandle, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-client-connection/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { worldbookEditorMetadata, type ChapterStatus, type ProjectContextReceiptBundle, type ProjectOverview } from 'dsh-editor-workbench/contracts'
-import type { DocumentKind } from '../project-files.ts'
 import type { WritingPreferences, WritingSettingsSlots } from '../writing-settings.ts'
 
 export type TreeEntry = { name: string; type: 'file' | 'directory' | 'other' }
@@ -93,19 +92,13 @@ export type RevealRequest = {
   nonce: number
 }
 
-export function createDialogDirectory(kind: DocumentKind | 'group', directory?: string): string {
-  if (kind === 'outline') return '大纲'
-  if (kind === 'character') return '人物卡'
-  if (kind === 'world') return '世界书'
-  return directory || '正文'
-}
-
-export function orderTreeEntries<T extends { type: 'file' | 'directory' | 'other' }>(path: string, entries: readonly T[]): T[] {
-  if (path) return [...entries]
+/** 普通目录树排序：每一层都是文件夹在前，各自按文件名排序（中文环境、数字感知）。 */
+export function orderTreeEntries<T extends { name: string; type: 'file' | 'directory' | 'other' }>(entries: readonly T[]): T[] {
   return [...entries].sort((left, right) => {
-    const leftRootFile = left.type === 'file' ? 0 : 1
-    const rightRootFile = right.type === 'file' ? 0 : 1
-    return leftRootFile - rightRootFile
+    const leftDirectory = left.type === 'directory' ? 0 : 1
+    const rightDirectory = right.type === 'directory' ? 0 : 1
+    if (leftDirectory !== rightDirectory) return leftDirectory - rightDirectory
+    return left.name.localeCompare(right.name, 'zh-CN', { numeric: true, sensitivity: 'base' })
   })
 }
 
@@ -194,12 +187,45 @@ export function claimInitialWorkspaceResume(guard: { current: boolean }): boolea
   return true
 }
 
+/** 提交说明使用的本地时间标签（YYYY-MM-DD HH:mm），每次提交自动取当前时间。 */
+export function snapshotTimeLabel(time: number): string {
+  const date = new Date(time)
+  const pad = (value: number) => `${value}`.padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 export function hasVisibleWorkspaceEntries(entries: readonly { name: string }[]): boolean {
   return entries.some((entry) => entry.name !== '.dsh-editor')
 }
 
 export function hasRelocatableManuscriptFiles(files: readonly string[]): boolean {
   return files.some((path) => /^正文\/.+\.(md|txt)$/i.test(path))
+}
+
+/**
+ * 打开作品时要回到的对话：作品下最近更新、且已有内容（非空白、未归档）的会话。
+ * 没有可恢复的会话时返回 fallback（刚连上的空白会话），保持原有行为。
+ */
+export function resumableConversationId<T extends string>(input: {
+  sessionIds: readonly T[]
+  byId: Record<string, { blank?: boolean; updatedAt?: number } | undefined>
+  archivedIds: readonly T[]
+  fallback: T
+}): T {
+  const archived = new Set(input.archivedIds)
+  let best: T | undefined
+  let bestUpdatedAt = -1
+  for (const id of input.sessionIds) {
+    if (id === input.fallback || archived.has(id)) continue
+    const item = input.byId[id]
+    if (!item || item.blank) continue
+    const updatedAt = item.updatedAt ?? 0
+    if (updatedAt > bestUpdatedAt) {
+      best = id
+      bestUpdatedAt = updatedAt
+    }
+  }
+  return best ?? input.fallback
 }
 
 export function supportedWorkspaceTextPaths(files: readonly string[]): string[] {

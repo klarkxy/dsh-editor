@@ -169,6 +169,53 @@ export async function createManuscriptGroup(input: {
   return { path: `正文/${name}` }
 }
 
+/** Validate one visible directory name segment (no separators, hidden names, device names, …). */
+function directorySegmentName(name: string): string {
+  if (
+    !name
+    || name !== name.trim()
+    || name.length > 80
+    || name.startsWith('.')
+    || /[<>:"/\\|?*\u0000-\u001f]/.test(name)
+    || /[. ]$/.test(name)
+    || WINDOWS_DEVICE_NAME.test(name)
+  ) throw new ProjectInitError('directory name is invalid', 'INVALID_PATH')
+  return name
+}
+
+/** Create one visible directory below an existing parent, without the 正文-only group rules. */
+export async function createDirectory(input: {
+  root: string
+  mode: string
+  relative: string
+  signal?: AbortSignal
+}): Promise<{ path: string }> {
+  if (input.mode === 'read-only') throw new ProjectInitError('project folder is read-only', 'READ_ONLY')
+  throwIfAborted(input.signal)
+  const root = path.resolve(input.root)
+  const segments = input.relative.replace(/\\/g, '/').split('/').map(directorySegmentName)
+  const relative = segments.join('/')
+  await assertDirectory(root, 'project folder')
+  const parent = path.join(root, ...segments.slice(0, -1))
+  await assertDirectory(parent, 'parent directory')
+  const target = path.join(parent, segments[segments.length - 1]!)
+  const state = await lstatOptional(target)
+  if (state) {
+    if (state.isSymbolicLink()) throw new ProjectInitError('directory cannot be a symbolic link', 'SYMLINK')
+    throw new ProjectInitError('directory already exists', 'EXISTS')
+  }
+  try {
+    await fs.mkdir(target)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new ProjectInitError('directory already exists', 'EXISTS', { cause: error })
+    }
+    throw new ProjectInitError('failed to create directory', 'IO', { cause: error })
+  }
+  await assertDirectory(target, 'directory')
+  return { path: relative }
+}
+
 async function createFile(root: string, relative: string, text: string, signal?: AbortSignal): Promise<boolean> {
   throwIfAborted(signal)
   const target = path.join(root, ...relative.split('/'))

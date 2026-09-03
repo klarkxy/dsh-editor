@@ -1,5 +1,4 @@
 import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react'
-import type { DocumentKind } from '../project-files.ts'
 
 /** Lock the focus inside a dialog and restore it on close. */
 export function useDialogReturnFocus(dialogRef: { current: HTMLElement | null }, firstFocus: () => void) {
@@ -80,76 +79,6 @@ export function TextPromptDialog(props: {
         e('footer', null,
           e('button', { type: 'button', onClick: props.onCancel }, '取消'),
           e('button', { className: 'primary-action', type: 'submit', disabled: !value.trim() }, props.confirmLabel),
-        ),
-      ),
-    ),
-  )
-}
-
-export type CreateDocumentRequest = { kind: DocumentKind | 'group'; directory: string }
-
-const CREATE_LABEL: Record<DocumentKind | 'group', string> = {
-  group: '卷或部名称',
-  chapter: '章节标题',
-  outline: '大纲名称',
-  character: '人物名称',
-  world: '设定名称',
-}
-
-const CREATE_HEADING: Record<DocumentKind | 'group', string> = {
-  group: '新建卷/部',
-  chapter: '新建章节',
-  outline: '新建大纲',
-  character: '新建人物',
-  world: '新建设定',
-}
-
-export function CreateDocumentDialog(props: {
-  request: CreateDocumentRequest
-  busy: boolean
-  note: string
-  onClose(): void
-  onCreate(title: string): void
-}) {
-  const { request } = props
-  const [title, setTitle] = useState('')
-  const dialog = useRef<HTMLDivElement | null>(null)
-  const input = useRef<HTMLInputElement | null>(null)
-  useEffect(() => { setTitle(''); globalThis.setTimeout(() => input.current?.focus(), 0) }, [request.kind, request.directory])
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape' && !props.busy) { event.preventDefault(); props.onClose(); return }
-    focusableBoundary(dialog.current, event)
-  }
-  const label = CREATE_LABEL[request.kind]
-  const heading = CREATE_HEADING[request.kind]
-  const placeholder = request.kind === 'group'
-    ? '例如：第一卷'
-    : request.kind === 'chapter'
-      ? '例如：第一章 风起'
-      : ''
-  return e('div', { className: 'file-dialog-overlay' },
-    e('div', { ref: dialog, className: 'file-dialog create-dialog', role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'create-dialog-title', onKeyDown },
-      e('header', null,
-        e('div', null,
-          e('h2', { id: 'create-dialog-title' }, heading),
-          e('small', null, request.kind === 'group' ? '将在作品文件夹中创建目录；现有章节不会移动。' : `保存到 ${request.directory}`),
-        ),
-        e('button', { className: 'icon-button', type: 'button', disabled: props.busy, 'aria-label': '关闭', onClick: props.onClose }, '×'),
-      ),
-      e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (title.trim()) props.onCreate(title.trim()) } },
-        e('label', null, label,
-          e('input', {
-            ref: input,
-            value: title,
-            maxLength: 80,
-            placeholder,
-            onChange: (event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value),
-          }),
-        ),
-        props.note ? e('p', { className: 'warning', role: 'alert' }, props.note) : null,
-        e('footer', null,
-          e('button', { type: 'button', disabled: props.busy, onClick: props.onClose }, '取消'),
-          e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !title.trim() }, props.busy ? '创建中…' : '创建'),
         ),
       ),
     ),

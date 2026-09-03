@@ -10,6 +10,7 @@ import {
   restoreApply,
   restoreCleanup,
   restoreProbe,
+  rollbackSnapshot,
   SNAPSHOT_DIRECTORY,
   type SnapshotAccess,
 } from './snapshot.ts'
@@ -219,5 +220,57 @@ describe('whole-work text snapshots', () => {
     const receipt = JSON.parse(await fs.readFile(path.join(target, RESTORE_RECEIPT_PATH), 'utf8')) as { receiptId: string }
     await expect(restoreCleanup({ target: access(target), receiptId: receipt.receiptId })).rejects.toMatchObject({ code: 'CLEANUP_BLOCKED' })
     await expect(fs.readFile(path.join(outside, 'a.md'), 'utf8')).resolves.toBe('outside')
+  })
+})
+
+
+describe('in-place rollback', () => {
+  it('restores snapshot content, drops later files, keeps non-text files, and saves an undoable safety snapshot', async () => {
+    const root = await project('work')
+    await fs.mkdir(path.join(root, '正文'), { recursive: true })
+    await fs.writeFile(path.join(root, '正文', '001.md'), '# old')
+    await fs.writeFile(path.join(root, '封面.jpg'), 'jpeg')
+    const acc = access(root)
+    const snapshot = await createSnapshot(acc, '第一版')
+
+    await fs.writeFile(path.join(root, '正文', '001.md'), '# new')
+    await fs.writeFile(path.join(root, '正文', '002.md'), '# added')
+
+    const result = await rollbackSnapshot(acc, snapshot.snapshotId)
+    expect(result).toMatchObject({ restored: 1, removed: 1 })
+    expect(result.safetySnapshotId).toBeTruthy()
+    await expect(fs.readFile(path.join(root, '正文', '001.md'), 'utf8')).resolves.toBe('# old')
+    await expect(fs.stat(path.join(root, '正文', '002.md'))).rejects.toThrow()
+    await expect(fs.readFile(path.join(root, '封面.jpg'), 'utf8')).resolves.toBe('jpeg')
+    expect((await listSnapshots(acc)).map((item) => item.label)).toContain('回滚前自动保存')
+
+    // 回滚本身可撤销：回到安全快照即恢复回滚前的状态
+    await rollbackSnapshot(acc, result.safetySnapshotId!)
+    await expect(fs.readFile(path.join(root, '正文', '001.md'), 'utf8')).resolves.toBe('# new')
+    await expect(fs.readFile(path.join(root, '正文', '002.md'), 'utf8')).resolves.toBe('# added')
+  })
+
+  it('rolls back from an empty current state without a safety snapshot', async () => {
+    const root = await project('work')
+    await fs.mkdir(path.join(root, '正文'), { recursive: true })
+    await fs.writeFile(path.join(root, '正文', '001.md'), '# old')
+    const acc = access(root)
+    const snapshot = await createSnapshot(acc)
+    await fs.rm(path.join(root, '正文'), { recursive: true })
+
+    const result = await rollbackSnapshot(acc, snapshot.snapshotId)
+    expect(result).toMatchObject({ restored: 1, removed: 0 })
+    expect(result.safetySnapshotId).toBeUndefined()
+    await expect(fs.readFile(path.join(root, '正文', '001.md'), 'utf8')).resolves.toBe('# old')
+  })
+
+  it('refuses read-only workspaces and unknown snapshot ids', async () => {
+    const root = await project('work')
+    await fs.writeFile(path.join(root, '001.md'), '# old')
+    const snapshot = await createSnapshot(access(root))
+    await expect(rollbackSnapshot(access(root, 'read-only'), snapshot.snapshotId))
+      .rejects.toMatchObject({ code: 'READ_ONLY' })
+    await expect(rollbackSnapshot(access(root), '00000000-0000-4000-8000-000000000000'))
+      .rejects.toThrow()
   })
 })

@@ -158,13 +158,15 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 | `project.overview` | `sessionId` | 状态版本、章节/大纲摘要、状态统计、最近编辑项和有界扫描警告 |
 | `chapter.statusSet` | `sessionId`, `path`, `status`, `expectedStatusRevision` | CAS 更新固定章节状态并返回完整概览 |
 | `structure.groupCreate` | `sessionId`, `path` | 只在 `正文` 下建立一级卷/部目录 |
+| `directory.create` | `sessionId`, `path` | 在任意已存在的父目录下建一个可见目录（通用，无 正文 特化） |
 | `context.compile` | `sessionId`, `userRequest`，可选 `activePath`, `authorPreferences`, `authorMemory` | `{ serialized, receipt }`，有界 V2 context 信封 |
 | `project.importProbe` | `targetSessionId`，可选 `sourceSessionId` | token、统计、预览或恢复状态；不写入 |
 | `project.importApply` | `targetSessionId`, `sourceSessionId`, `probeToken` | 重新 probe 后执行 no-clobber 导入 |
 | `project.importCleanup` | `targetSessionId`, `receiptId` | 只清理 manifest/hash 证明归属的中断写入 |
 | `snapshot.list` | `sessionId` | 快照列表；不包含未保存 buffer |
-| `snapshot.create` | `sessionId`，可选 `label` | 原子发布后的 snapshot view |
-| `snapshot.restoreProbe` | `targetSessionId`，可选 `sourceSessionId`, `snapshotId` | 只恢复到新空 workspace 的 token/状态 |
+| `snapshot.create` | `sessionId`，可选 `label` | 原子发布后的 snapshot view；简易提交流程的 label 即当前时间 |
+| `snapshot.rollback` | `sessionId`, `snapshotId` | 原地回滚：覆盖/删除回到快照状态，先自动创建安全快照（可再回滚撤销）；非文本文件不动 |
+| `snapshot.restoreProbe` | `targetSessionId`，可选 `sourceSessionId`, `snapshotId` | 只恢复到新空 workspace 的 token/状态（跨作品恢复，与原地回滚不同） |
 | `snapshot.restoreApply` | `targetSessionId`, `sourceSessionId`, `snapshotId`, `token` | no-clobber 恢复统计 |
 | `snapshot.restoreCleanup` | `targetSessionId`, `receiptId` | hash-protected 中断清理 |
 | `file.rename` | `sessionId`, `path`, `newName`, `expectedVersion` | 同目录、保留扩展名后的新路径 |
