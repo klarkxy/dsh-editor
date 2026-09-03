@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { asHost, badRequest, mapHostError, resolveWorkspaceAccess, WorkspaceAuthorityError } from 'dsh-manuscript/host-api'
+import { asHost, badRequest, mapHostError, resolveWorkspaceAccess, WorkspaceAuthorityError, type ManuscriptHost } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
 import { BinaryError, readImageFile, type BinaryAccess } from './binary.ts'
 import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './import.ts'
@@ -8,9 +8,20 @@ import { createManuscriptGroup, createProjectHome, defaultProjectsRoot, initiali
 import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, SnapshotError, type SnapshotAccess } from './snapshot.ts'
 import { compileContext } from './context.ts'
 import { OverviewError, readProjectOverview, setChapterStatus, type OverviewAccess } from './overview.ts'
+import {
+  applyMerge,
+  applyRenames,
+  applySplit,
+  parseProposal,
+  prepareMerge,
+  prepareRenames,
+  prepareSplit,
+  ProposalOpsError,
+} from './proposal-ops.ts'
+import { createWorkbenchTools } from './workbench-tools.ts'
 
 export const name = 'dsh-editor-workbench'
-export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'tools'] as const
 
 type Payload = Record<string, unknown>
 
@@ -57,6 +68,12 @@ export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
     }
     if (error.code === 'INVALID_EXTENSION' || error.code === 'TOO_LARGE') return badRequest(error.message)
     return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
+  }
+  if (error instanceof ProposalOpsError) {
+    if (error.code === 'NOT_FOUND') return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
+    if (error.code === 'EXISTS') return { ok: false, error: { code: 'directory-exists', message: error.message, details: { path: '' } } }
+    if (error.code === 'IO') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
+    return badRequest(error.message)
   }
   return mapHostError(error) ?? { ok: false, error: { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} } }
 }
@@ -167,6 +184,9 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
     archiveId: str(body, 'archiveId'),
     expectedVersion: str(body, 'expectedVersion') || undefined,
   })
+  if (endpoint === 'proposal.prepare' || endpoint === 'proposal.apply') {
+    return await runProposalDispatch(endpoint, host, access, lifecycleAccess, body)
+  }
   throw new Error(`unknown workbench endpoint ${endpoint}`)
 }
 
@@ -181,6 +201,65 @@ export function registerWorkbenchRpc(ctx: Context): () => void {
   }, { authority: 'loopback' })
 }
 
+/**
+ * 新提案 kind（split / merge / renames）的 prepare / apply。
+ * edit / create 仍走 manuscript 通道；parseProposal 直接抛 INVALID。
+ */
+async function runProposalDispatch(
+  endpoint: 'proposal.prepare' | 'proposal.apply',
+  host: ReturnType<typeof asHost>,
+  access: Awaited<ReturnType<typeof resolveWorkspaceAccess>>,
+  lifecycleAccess: (value: typeof access) => LifecycleAccess,
+  body: Payload,
+): Promise<unknown> {
+  const proposal = parseProposal(body.proposal)
+  const files = { fs: host.fs, cwd: access.workspace.path, root: access.root, policy: access.policy }
+  if (endpoint === 'proposal.prepare') {
+    if (proposal.kind === 'split') return { split: await prepareSplit(files, proposal) }
+    if (proposal.kind === 'merge') return { merge: await prepareMerge(files, proposal) }
+    return { renames: await prepareRenames(files, proposal) }
+  }
+  const expectedVersions = body.expectedVersions && typeof body.expectedVersions === 'object' && !Array.isArray(body.expectedVersions)
+    ? body.expectedVersions as Record<string, string>
+    : undefined
+  if (proposal.kind === 'split') {
+    const version = expectedVersions?.[proposal.path] ?? ''
+    return await applySplit(files, proposal, version)
+  }
+  if (proposal.kind === 'merge') {
+    return await applyMerge(lifecycleAccess(access), proposal, {
+      path: expectedVersions?.[proposal.path],
+      sourcePath: expectedVersions?.[proposal.sourcePath],
+    })
+  }
+  return await applyRenames(lifecycleAccess(access), proposal, expectedVersions)
+}
+
 export function apply(ctx: Context): void {
+  const host = asHost(ctx) as ManuscriptHostWithTools
   ctx.effect(() => registerWorkbenchRpc(ctx), 'dsh-editor-workbench.rpc')
+  const tools = host.tools
+  if (tools && typeof tools.register === 'function') {
+    const resolveOverviewAccess = async (cwd: string): Promise<OverviewAccess> => {
+      const workspace = await host.workspaceRegistry.resolveByPath(cwd)
+      if (!workspace) throw new WorkspaceAuthorityError('workspace is not registered', 'WORKSPACE_NOT_FOUND', { workspacePath: cwd })
+      const session = host.sessions.get(workspace.sessionIds[0] ?? '')
+      if (!session) throw new WorkspaceAuthorityError('session is unavailable', 'SESSION_NOT_FOUND', { workspacePath: cwd })
+      const policy = host.sandboxPolicy.resolve({ session })
+      return {
+        path: workspace.path,
+        rootKey: workspace.path,
+        mode: policy.mode,
+        files: { fs: host.fs, cwd: workspace.path, root: { targetKey: workspace.path, displayPath: workspace.path }, policy, signal: undefined },
+      }
+    }
+    for (const tool of createWorkbenchTools({ resolveAccess: resolveOverviewAccess })) {
+      tools.register(tool)
+    }
+  }
+}
+
+/** apply 里 host.tools 在 cordis 默认注入之外显式依赖；用结构化类型避免无关字段。 */
+type ManuscriptHostWithTools = ManuscriptHost & {
+  tools?: { register: (tool: unknown) => unknown }
 }

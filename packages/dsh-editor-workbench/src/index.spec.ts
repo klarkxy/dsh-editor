@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { FileSystemLike, ManuscriptHost } from 'dsh-manuscript/host-api'
+import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, FsTargetLike, FsWriteIntentLike, ManuscriptHost } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL } from './contracts.ts'
 import { dispatchEditorFiles, registerWorkbenchRpc } from './index.ts'
 import { defaultProjectsRoot } from './project.ts'
@@ -78,7 +78,7 @@ describe('private editor workbench Host RPC', () => {
         'project.inspect',
         { workspacePath: root },
         new AbortController().signal,
-      )).resolves.toEqual({ hasVisibleEntries: true, textFiles: ['正文/001.md'] })
+      )).resolves.toEqual({ hasVisibleEntries: true, textFiles: ['正文/001.md'], indexReady: false })
       expect(host.sessions.get).not.toHaveBeenCalled()
     } finally {
       await fs.rm(root, { recursive: true, force: true })
@@ -132,5 +132,200 @@ describe('private editor workbench Host RPC', () => {
       { targetSessionId: 'target', sourceSessionId: 'forged-source' },
       new AbortController().signal,
     )).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' })
+  })
+})
+
+/**
+ * proposal 端点测试：用真 fs 验证 split / merge / renames 三种新 kind 能
+ * 正确路由到 proposal-ops；用 stub fs 验证 edit / create 仍走 manuscript 通道
+ * 被 parseProposal 拒为 INVALID 并经 mapEditorFilesError 转 bad-request。
+ */
+describe('proposal dispatch endpoints', () => {
+  class NodeFileSystem implements FileSystemLike {
+    constructor(private readonly root: string) {}
+    async resolve(value: string, opts?: { cwd?: string }): Promise<FsTargetLike> {
+      const base = opts?.cwd ?? this.root
+      return { targetKey: path.resolve(base, value), displayPath: path.resolve(base, value) }
+    }
+    contains(parent: FsTargetLike, child: FsTargetLike): boolean {
+      const relative = path.relative(parent.targetKey, child.targetKey)
+      return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+    }
+    async stat(target: FsTargetLike): Promise<FsInfoLike | undefined> {
+      try {
+        const value = await fs.stat(target.targetKey)
+        return { type: value.isDirectory() ? 'directory' : value.isFile() ? 'file' : 'other', version: `${value.mtimeMs}:${value.size}`, size: value.size }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+        throw error
+      }
+    }
+    async lstat(value: string, opts?: { cwd?: string }): Promise<FsPathInfoLike | undefined> {
+      try {
+        const target = path.resolve(opts?.cwd ?? this.root, value)
+        const state = await fs.lstat(target)
+        return { type: state.isSymbolicLink() ? 'symlink' : state.isDirectory() ? 'directory' : state.isFile() ? 'file' : 'other', version: `${state.mtimeMs}:${state.size}`, size: state.size }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+        throw error
+      }
+    }
+    async readText(target: FsTargetLike): Promise<string> { return await fs.readFile(target.targetKey, 'utf8') }
+    async listDir(target: FsTargetLike): Promise<FsDirEntryLike[]> {
+      const entries = await fs.readdir(target.targetKey, { withFileTypes: true })
+      return entries.map((entry) => ({
+        name: entry.name,
+        type: entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other',
+        target: { targetKey: path.join(target.targetKey, entry.name), displayPath: path.join(target.targetKey, entry.name) },
+      }))
+    }
+    async writeText(target: FsTargetLike, content: string, expected?: FsWriteIntentLike): Promise<{ operation: 'create' | 'update'; version: string; before: string | null; after: string }> {
+      const before = await this.readText(target).catch(() => null)
+      const current = await this.stat(target)
+      if (expected?.kind === 'createIfAbsent' && current) throw Object.assign(new Error('exists'), { code: 'FS_NOT_OBSERVED' })
+      if (expected?.kind === 'replaceIfVersion' && current?.version !== expected.version) throw Object.assign(new Error('stale'), { code: 'FS_STALE_VERSION' })
+      await fs.writeFile(target.targetKey, content, 'utf8')
+      return { operation: before === null ? 'create' : 'update', version: (await this.stat(target))!.version, before, after: content }
+    }
+  }
+
+  async function projectRoot(): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-editor-proposal-rpc-'))
+    await fs.mkdir(path.join(root, '正文'), { recursive: true })
+    return root
+  }
+
+  it('proposal.prepare with a split kind reaches proposal-ops and returns a split plan', async () => {
+    const root = await projectRoot()
+    try {
+      await fs.writeFile(path.join(root, '正文', '001.md'), '前文\n## 第二幕\n后文', 'utf8')
+      const { host } = fixture()
+      host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
+      host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
+      const result = await dispatchEditorFiles(
+        host as unknown as Context,
+        'proposal.prepare',
+        {
+          sessionId: 'session-1',
+          proposal: {
+            marker: 'dsh-editor.proposal',
+            version: 1,
+            kind: 'split',
+            summary: '切开',
+            path: '正文/001.md',
+            anchor: '## 第二幕',
+            newPath: '正文/001b.md',
+          },
+        },
+        new AbortController().signal,
+      ) as { split?: { kind: 'split'; before: string; after: string } }
+      expect(result.split?.kind).toBe('split')
+      expect(result.split?.before).toBe('前文\n')
+      expect(result.split?.after).toBe('## 第二幕\n后文')
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('proposal.apply with a renames kind reaches applyRenames and reports the moved paths', async () => {
+    const root = await projectRoot()
+    try {
+      await fs.writeFile(path.join(root, '正文', '001.md'), '一', 'utf8')
+      await fs.writeFile(path.join(root, '正文', '002.md'), '二', 'utf8')
+      const { host, handle } = fixture()
+      host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
+      host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
+      registerWorkbenchRpc(host as unknown as Context)
+      const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; value?: unknown; error?: { code: string } }>
+      // 先 prepare 拿到 expectedVersions
+      const prepared = (await dispatchEditorFiles(
+        host as unknown as Context,
+        'proposal.prepare',
+        {
+          sessionId: 'session-1',
+          proposal: {
+            marker: 'dsh-editor.proposal',
+            version: 1,
+            kind: 'renames',
+            summary: '改名',
+            renames: [
+              { from: '正文/001.md', to: '正文/001-改名.md' },
+              { from: '正文/002.md', to: '正文/002-改名.md' },
+            ],
+          },
+        },
+        new AbortController().signal,
+      )) as { renames?: { versions: Record<string, string>; entries: Array<{ from: string; to: string }> } }
+      const expectedVersions = prepared.renames!.versions
+      // 再通过 RPC 入口 apply
+      const applied = await handler('proposal.apply', {
+        sessionId: 'session-1',
+        proposal: {
+          marker: 'dsh-editor.proposal',
+          version: 1,
+          kind: 'renames',
+          summary: '改名',
+          renames: [
+            { from: '正文/001.md', to: '正文/001-改名.md' },
+            { from: '正文/002.md', to: '正文/002-改名.md' },
+          ],
+        },
+        expectedVersions,
+      }, new AbortController().signal) as { ok: true; value: { applied: string[] } }
+      expect(applied.ok).toBe(true)
+      expect(applied.value.applied).toEqual(['正文/001-改名.md', '正文/002-改名.md'])
+      expect(await fs.readFile(path.join(root, '正文', '001-改名.md'), 'utf8')).toBe('一')
+      await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects proposal.prepare with edit / create kinds as bad-request (manuscript channel owns them)', async () => {
+    const { host, handle } = fixture()
+    registerWorkbenchRpc(host as unknown as Context)
+    const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; error?: { code: string } }>
+    const edit = await handler('proposal.prepare', {
+      sessionId: 'session-1',
+      proposal: { marker: 'dsh-editor.proposal', version: 1, kind: 'edit', summary: 'x', path: '正文/001.md' },
+    }, new AbortController().signal)
+    expect(edit.ok).toBe(false)
+    expect(edit.error?.code).toBe('bad-request')
+    const create = await handler('proposal.apply', {
+      sessionId: 'session-1',
+      proposal: { marker: 'dsh-editor.proposal', version: 1, kind: 'create', summary: 'x', path: '正文/001.md' },
+    }, new AbortController().signal)
+    expect(create.ok).toBe(false)
+    expect(create.error?.code).toBe('bad-request')
+  })
+
+  it('rejects proposal.apply with a stale version as bad-request', async () => {
+    const root = await projectRoot()
+    try {
+      await fs.writeFile(path.join(root, '正文', '001.md'), '一', 'utf8')
+      const { host, handle } = fixture()
+      host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
+      host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
+      registerWorkbenchRpc(host as unknown as Context)
+      const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; error?: { code: string } }>
+      const result = await handler('proposal.apply', {
+        sessionId: 'session-1',
+        proposal: {
+          marker: 'dsh-editor.proposal',
+          version: 1,
+          kind: 'split',
+          summary: '切开',
+          path: '正文/001.md',
+          anchor: '## 找不到',
+          newPath: '正文/001b.md',
+        },
+        expectedVersions: { '正文/001.md': 'wrong-version' },
+      }, new AbortController().signal)
+      // STALE 走 mapEditorFilesError → badRequest
+      expect(result.ok).toBe(false)
+      expect(result.error?.code).toBe('bad-request')
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
   })
 })

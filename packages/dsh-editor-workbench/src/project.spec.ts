@@ -28,12 +28,22 @@ describe('initializeProject', () => {
   it('classifies a registered folder without creating files or following hidden content', async () => {
     await fs.mkdir(path.join(root, '.dsh-editor'))
     await fs.writeFile(path.join(root, '.dsh-editor', '作品索引.md'), '# 隐藏索引\n', 'utf8')
-    await expect(inspectProjectRoot(root)).resolves.toEqual({ hasVisibleEntries: false, textFiles: [] })
+    await expect(inspectProjectRoot(root)).resolves.toEqual({ hasVisibleEntries: false, textFiles: [], indexReady: true })
 
     await fs.mkdir(path.join(root, '正文'))
     await fs.writeFile(path.join(root, '正文', '001.md'), '# 第一章\n', 'utf8')
     await fs.writeFile(path.join(root, '封面.jpg'), 'not an image', 'utf8')
-    await expect(inspectProjectRoot(root)).resolves.toEqual({ hasVisibleEntries: true, textFiles: ['正文/001.md'] })
+    await expect(inspectProjectRoot(root)).resolves.toEqual({ hasVisibleEntries: true, textFiles: ['正文/001.md'], indexReady: true })
+  })
+
+  it('reports indexReady only when the index holds real content, not the init stub', async () => {
+    await expect(inspectProjectRoot(root)).resolves.toMatchObject({ indexReady: false })
+
+    await prepareNovelIndex({ root, mode: 'workspace-write' })
+    await expect(inspectProjectRoot(root)).resolves.toMatchObject({ indexReady: false })
+
+    await fs.writeFile(path.join(root, NOVEL_INDEX_PATH), '# 作品索引\n\n- 正文/001.md：第一章\n', 'utf8')
+    await expect(inspectProjectRoot(root)).resolves.toMatchObject({ indexReady: true })
   })
 
   it('creates filing directories once and never seeds markdown templates', async () => {

@@ -18,8 +18,10 @@ export const PROJECT_DIRECTORIES = ['正文'] as const
 export const NOVEL_INDEX_DIRECTORY = '.dsh-editor'
 export const NOVEL_INDEX_PATH = `${NOVEL_INDEX_DIRECTORY}/作品索引.md`
 
+export const NOVEL_INDEX_STUB = '# 作品索引\n\n> 正在由 DSH Agent 初始化。\n'
+
 export type ProjectInitResult = { created: string[]; skipped: string[] }
-export type ProjectInspection = { hasVisibleEntries: boolean; textFiles: string[] }
+export type ProjectInspection = { hasVisibleEntries: boolean; textFiles: string[]; indexReady: boolean }
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new ProjectInitError('operation cancelled', 'CANCELLED')
@@ -212,7 +214,20 @@ export async function inspectProjectRoot(rootPath: string, signal?: AbortSignal)
     }
   }
   textFiles.sort((left, right) => left.localeCompare(right, 'zh-CN', { numeric: true, sensitivity: 'base' }))
-  return { hasVisibleEntries, textFiles }
+  return { hasVisibleEntries, textFiles, indexReady: await novelIndexReady(root) }
+}
+
+/** 索引存在且不再是初始化占位 stub 才算完成——只建过 stub 的项目仍需初始化。 */
+async function novelIndexReady(root: string): Promise<boolean> {
+  let content: string
+  try {
+    content = await fs.readFile(path.join(root, ...NOVEL_INDEX_PATH.split('/')), 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw new ProjectInitError('failed to inspect novel index', 'IO', { cause: error })
+  }
+  const normalized = content.trim()
+  return normalized.length > 0 && normalized !== NOVEL_INDEX_STUB.trim()
 }
 
 export async function initializeProject(input: {
@@ -253,7 +268,7 @@ export async function prepareNovelIndex(input: {
   record(NOVEL_INDEX_PATH, await createFile(
     root,
     NOVEL_INDEX_PATH,
-    '# 作品索引\n\n> 正在由 DSH Agent 初始化。\n',
+    NOVEL_INDEX_STUB,
     input.signal,
   ))
   return { created, skipped }

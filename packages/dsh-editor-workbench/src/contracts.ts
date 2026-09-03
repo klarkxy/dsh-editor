@@ -28,9 +28,11 @@ export type WorkbenchEndpoint =
   | 'archive.list'
   | 'archive.apply'
   | 'archive.restore'
+  | 'proposal.prepare'
+  | 'proposal.apply'
 
 export type ProjectInitResponse = { created: string[]; skipped: string[] }
-export type ProjectInspectionResponse = { hasVisibleEntries: boolean; textFiles: string[] }
+export type ProjectInspectionResponse = { hasVisibleEntries: boolean; textFiles: string[]; indexReady: boolean }
 export type WorkbenchPathResponse = { path: string; version?: string; metadataWarning?: string }
 export type ChapterStatus = 'draft' | 'revising' | 'final'
 export type ChapterSummary = {
@@ -119,6 +121,8 @@ export type WorkbenchRequestMap = {
   'archive.list': { sessionId: string }
   'archive.apply': { sessionId: string; path?: string; expectedVersion?: string; archiveId?: string }
   'archive.restore': { sessionId: string; archiveId: string; expectedVersion?: string }
+  'proposal.prepare': { sessionId: string; proposal: ProposalPayload }
+  'proposal.apply': { sessionId: string; proposal: ProposalPayload; expectedVersions?: Record<string, string> }
 }
 
 export type WorkbenchResponseMap = {
@@ -144,7 +148,19 @@ export type WorkbenchResponseMap = {
   'archive.list': ArchiveListResponse
   'archive.apply': ArchiveResponse
   'archive.restore': ArchiveResponse
+  'proposal.prepare': { split?: ProposalSplitPlan; merge?: ProposalMergePlan; renames?: ProposalRenamesPlan }
+  'proposal.apply': ProposalApplyResult
 }
+
+export type ProposalRename = { from: string; to: string }
+export type ProposalPayload =
+  | { marker: 'dsh-editor.proposal'; version: 1; kind: 'split'; summary: string; path: string; anchor: string; newPath: string }
+  | { marker: 'dsh-editor.proposal'; version: 1; kind: 'merge'; summary: string; path: string; sourcePath: string }
+  | { marker: 'dsh-editor.proposal'; version: 1; kind: 'renames'; summary: string; renames: ProposalRename[] }
+export type ProposalSplitPlan = { kind: 'split'; version: string; before: string; after: string; headChars: number; tailChars: number }
+export type ProposalMergePlan = { kind: 'merge'; versions: { path: string; sourcePath: string }; pathChars: number; sourceChars: number }
+export type ProposalRenamesPlan = { kind: 'renames'; versions: Record<string, string>; entries: ProposalRename[] }
+export type ProposalApplyResult = { applied: string[]; failed?: { from: string; reason: string }; snapshotDir?: string }
 
 export type WorkbenchRpcIssue = { code: 'custom'; path: string[]; message: string }
 export type WorkbenchRpcError =
