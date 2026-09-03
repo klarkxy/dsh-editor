@@ -4,6 +4,7 @@ import type { ShellContext } from './shared.ts'
 import { useDialogReturnFocus } from './dialogs.ts'
 import { WritingSettings } from '../writing-settings.ts'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.ts'
+import type { WritingProgressScope } from '../writing-progress.ts'
 import { SettingsGeneralSection } from './settings-general.tsx'
 import { SettingsModelsSection } from './settings-models.tsx'
 import { SettingsZhihuSection } from './settings-zhihu.tsx'
@@ -38,6 +39,7 @@ export function SettingsDialog(props: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
+  progressScope: WritingProgressScope
   onClose(): void
 }) {
   const [tab, setTab] = useState<SettingsTab>('general')
@@ -68,7 +70,7 @@ export function SettingsDialog(props: {
   const content: Record<SettingsTab, () => ReactNode> = {
     general: () => e(SettingsGeneralSection, { ctx: props.ctx }),
     models: () => e(SettingsModelsSection, { ctx: props.ctx }),
-    writing: () => e(WritingSettings, { scope: props.writingScope, migrate: props.migrateWriting }),
+    writing: () => e(WritingSettings, { scope: props.writingScope, migrate: props.migrateWriting, progressScope: props.progressScope }),
     zhihu: () => e(SettingsZhihuSection, { ctx: props.ctx }),
     usage: () => e(SettingsUsageSection, { ctx: props.ctx }),
   }

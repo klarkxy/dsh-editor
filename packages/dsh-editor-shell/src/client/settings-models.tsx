@@ -44,10 +44,13 @@ import {
   pathOps,
   protocolChoices,
   providerUsable,
+  reasoningChoiceOf,
+  reasoningEffortsFor,
   refFor,
   routeFailure,
   validateModels,
   type ProviderRow,
+  type ReasoningChoice,
 } from './settings-models-store.ts'
 import { Select, type SelectOption } from './select.tsx'
 import { ConfirmDialog } from './dialogs.ts'
@@ -314,6 +317,10 @@ const TEXT = {
   modelName: '显示名称',
   modelContext: '上下文长度',
   modelMax: '最大输出',
+  modelReasoning: '思考强度',
+  modelReasoningOff: '不声明',
+  modelReasoningStandard: '关 / 低 / 中 / 高 / 超高 / 最大',
+  modelReasoningCustom: '自定义（在设置文档中）',
   modelAdvanced: '参数',
   removeModel: '删除模型',
   deleteProvider: '删除',
@@ -1181,6 +1188,24 @@ function ModelListEditor(props: {
                 const n = Number(raw)
                 patch(index, { maxTokens: Number.isFinite(n) ? n : raw })
               }
+            },
+          }),
+        ),
+        e('label', { className: 'models-field models-field-row' },
+          e('span', { className: 'models-field-label' }, t.modelReasoning),
+          e(Select, {
+            value: reasoningChoiceOf(model),
+            options: [
+              { value: 'off', label: t.modelReasoningOff },
+              { value: 'standard', label: t.modelReasoningStandard },
+              ...(reasoningChoiceOf(model) === 'custom' ? [{ value: 'custom', label: t.modelReasoningCustom }] : []),
+            ],
+            disabled,
+            'aria-label': `${t.modelReasoning} ${index + 1}`,
+            onChange: (choice) => {
+              // custom 只在读取手写配置时出现,不可由此写入;切回其它档位才会落盘。
+              if (choice === 'custom') return
+              patch(index, { reasoningEfforts: reasoningEffortsFor(choice as ReasoningChoice) })
             },
           }),
         ),

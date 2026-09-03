@@ -8,6 +8,11 @@ import {
   decodeWritingPreferences,
   type WritingPreferences,
 } from './writing-settings.ts'
+import {
+  PROGRESS_SETTINGS_NAMESPACE,
+  decodeWritingProgress,
+  type WritingProgress,
+} from './writing-progress.ts'
 import { decodeHostThemePreference, writeHostThemePreference, type HostThemeSync } from './client/theme.ts'
 import { type ShellContext } from './client/shared.ts'
 import { registerShellRoot } from './client/root.ts'
@@ -17,6 +22,7 @@ export const inject = ['slots', 'sessions', 'workspaces', 'connection', 'setting
 
 // Re-exports — keep the old monolith surface so existing callers and specs still work.
 export {
+  buildChapterStatusMap,
   canSubmitComposer,
   chapterStatusText,
   claimInitialWorkspaceResume,
@@ -63,7 +69,7 @@ export { THEME_STORAGE_KEY, THEME_VALUES, ThemeToggle, useTheme } from './client
 export type { HostThemeSync, ThemeValue } from './client/theme.ts'
 export { ConfirmDialog, CreateDocumentDialog, NewProjectDialog, TextPromptDialog } from './client/dialogs.ts'
 export type { CreateDocumentRequest } from './client/dialogs.ts'
-export { Chat, ModelIndicator, NewConversationPicker, PendingCard, ProjectContextReceiptView, ProposalCard } from './client/chat.ts'
+export { Chat, ModelPicker, NewConversationPicker, PendingCard, ProjectContextReceiptView, ProposalCard } from './client/chat.ts'
 export { Editor } from './client/editor.ts'
 export { FileContextMenu, Tree } from './client/sidebar.ts'
 export { DeepSeekWhaleMark, PaperStage, PanelResizer, currentSession, useObservable } from './client/components.ts'
@@ -84,9 +90,14 @@ export function apply(ctx: Context): void {
     write: (preference) => writeHostThemePreference(hostThemeScope, preference),
     subscribe: (listener) => hostThemeScope.subscribe(listener),
   }
+  const progressScope: SettingsScope<WritingProgress> = client.settingsScope.bind({
+    namespace: PROGRESS_SETTINGS_NAMESPACE,
+    decode: decodeWritingProgress,
+  })
   registerShellRoot(client, {
     writingScope,
     migrateWriting: migrateWritingPreferences,
+    progressScope,
     hostThemeSync,
     registerRoot: (target: ShellContext, render: (props: unknown) => ReactNode) => registerRoot(target, render),
   })

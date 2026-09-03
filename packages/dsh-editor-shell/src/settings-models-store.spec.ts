@@ -5,6 +5,7 @@ import {
   LEGAL_API_KEY,
   PROBE_ROUTE,
   ROUTE_PATTERN,
+  STANDARD_REASONING_EFFORTS,
   addableRows,
   apiKeyEnvOf,
   apiKeyFailure,
@@ -17,6 +18,8 @@ import {
   pathOps,
   protocolChoices,
   providerUsable,
+  reasoningChoiceOf,
+  reasoningEffortsFor,
   refFor,
   routeFailure,
   validateModels,
@@ -261,6 +264,37 @@ describe('modelDrafts', () => {
 
   it('substitutes a non-plain-object entry with {}', () => {
     expect(modelDrafts([null, 'x', [1, 2], { id: 'ok' }])).toEqual([{}, {}, {}, { id: 'ok' }])
+  })
+})
+
+describe('reasoningChoiceOf', () => {
+  it('treats absent and false reasoningEfforts as off', () => {
+    expect(reasoningChoiceOf({ id: 'a' })).toBe('off')
+    expect(reasoningChoiceOf({ id: 'a', reasoningEfforts: false })).toBe('off')
+  })
+
+  it('recognizes the standard six levels', () => {
+    expect(reasoningChoiceOf({ reasoningEfforts: { off: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' } })).toBe('standard')
+  })
+
+  it('marks hand-written spellings and non-objects as custom', () => {
+    expect(reasoningChoiceOf({ reasoningEfforts: { off: null, high: 'ultra' } })).toBe('custom')
+    expect(reasoningChoiceOf({ reasoningEfforts: { low: 'low' } })).toBe('custom')
+    expect(reasoningChoiceOf({ reasoningEfforts: 'high' })).toBe('custom')
+    expect(reasoningChoiceOf({ reasoningEfforts: ['low'] })).toBe('custom')
+  })
+})
+
+describe('reasoningEffortsFor', () => {
+  it('writes a copy of the standard levels for standard', () => {
+    const value = reasoningEffortsFor('standard')
+    expect(value).toEqual({ off: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' })
+    expect(value).not.toBe(STANDARD_REASONING_EFFORTS)
+  })
+
+  it('clears the field for off and custom', () => {
+    expect(reasoningEffortsFor('off')).toBeUndefined()
+    expect(reasoningEffortsFor('custom')).toBeUndefined()
   })
 })
 

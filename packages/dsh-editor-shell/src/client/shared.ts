@@ -1,6 +1,6 @@
 import type { ConnectionHandle, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-client-connection/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import { worldbookEditorMetadata, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
+import { worldbookEditorMetadata, type ChapterStatus, type ProjectContextReceiptBundle, type ProjectOverview } from 'dsh-editor-workbench/contracts'
 import type { DocumentKind } from '../project-files.ts'
 import type { WritingPreferences, WritingSettingsSlots } from '../writing-settings.ts'
 
@@ -341,6 +341,18 @@ export function chapterStatusText(status: 'draft' | 'revising' | 'final'): strin
   if (status === 'revising') return '修订中'
   if (status === 'final') return '已定稿'
   return '草稿'
+}
+
+/* 把 project.overview 拍扁成 path → status 映射,只保留正文/...的章节文件,
+   文件树徽标依赖这张表。overview 缺失时返回空对象,Tree 自然不渲染徽标。 */
+export function buildChapterStatusMap(overview: ProjectOverview | null | undefined): Record<string, ChapterStatus> {
+  const result: Record<string, ChapterStatus> = {}
+  if (!overview) return result
+  for (const chapter of overview.chapters) {
+    if (!isChapterDocumentPath(chapter.path)) continue
+    result[chapter.path] = chapter.status
+  }
+  return result
 }
 
 export function worldbookPaperProjection(path: string, text: string): { text: string; offset: number } {

@@ -1,6 +1,14 @@
 import { createElement as e, Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import type { ChapterStatus } from 'dsh-editor-workbench/contracts'
 import type { DocumentKind } from '../project-files.ts'
-import { errorMessage, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
+import { chapterStatusText, errorMessage, isChapterDocumentPath, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
+
+/* 章节状态徽标用单字胶囊,行末与文件名同列。draft=草 revising=修 final=定。 */
+function chapterStatusGlyph(status: ChapterStatus): string {
+  if (status === 'revising') return '修'
+  if (status === 'final') return '定'
+  return '草'
+}
 
 type LoadSubtree = (path: string) => Promise<TreeEntry[] | null> | null | void
 
@@ -13,6 +21,7 @@ type RowProps = {
   active: string
   revision: number
   openPaths: Set<string>
+  chapterStatuses: Record<string, ChapterStatus>
   onOpen(path: string): void
   onPreviewImage(path: string): void
   onFileMenu(path: string, position: { x: number; y: number }): void
@@ -22,7 +31,7 @@ type RowProps = {
 }
 
 function TreeRows(props: RowProps): ReactNode {
-  const { path, level, loaded, active, openPaths, onOpen, onPreviewImage, onFileMenu, onCreateChapter, loadSubtree, toggleDirectory } = props
+  const { path, level, loaded, active, openPaths, chapterStatuses, onOpen, onPreviewImage, onFileMenu, onCreateChapter, loadSubtree, toggleDirectory } = props
   const entries = orderTreeEntries(path, loaded[path] ?? [])
   // 树只渲染磁盘上真实存在的条目:预设分组已移除,目录(包括 正文/大纲/人物卡/世界书)
   // 在实际创建后自然出现。隐藏 . 开头的系统项。
@@ -55,6 +64,7 @@ function TreeRows(props: RowProps): ReactNode {
         isOpen ? e(TreeRows, { ...props, path: child, level: level + 1 }) : null,
       )
     }
+    const chapterStatus = isChapterDocumentPath(child) ? chapterStatuses[child] : undefined
     return e('div', { key: child, className: 'tree-file-row' },
       e('button', {
         className: 'tree-row tree-main',
@@ -70,6 +80,11 @@ function TreeRows(props: RowProps): ReactNode {
       },
       e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, '·'),
       e('span', null, item.name),
+      chapterStatus ? e('span', {
+        className: `chapter-status ${chapterStatus}`,
+        title: chapterStatusText(chapterStatus),
+        'aria-label': chapterStatusText(chapterStatus),
+      }, chapterStatusGlyph(chapterStatus)) : null,
       ),
     )
   }))
@@ -81,13 +96,14 @@ export function Tree(props: {
   active: string
   expandPath: string
   revision: number
+  chapterStatuses: Record<string, ChapterStatus>
   onOpen(path: string): void
   onPreviewImage(path: string): void
   onFileMenu(path: string, position: { x: number; y: number }): void
   onCreateChapter(directory: string): void
   onCreateGroup(): void
 }) {
-  const { ctx, sessionId, active, expandPath, revision, onOpen, onPreviewImage, onFileMenu, onCreateChapter, onCreateGroup } = props
+  const { ctx, sessionId, active, expandPath, revision, chapterStatuses, onOpen, onPreviewImage, onFileMenu, onCreateChapter, onCreateGroup } = props
   const [loaded, setLoaded] = useState<Record<string, TreeEntry[]>>({})
   const [openPaths, setOpenPaths] = useState<Set<string>>(() => new Set())
   const [note, setNote] = useState('')
@@ -142,6 +158,7 @@ export function Tree(props: {
       active,
       revision,
       openPaths,
+      chapterStatuses,
       onOpen,
       onPreviewImage,
       onFileMenu,

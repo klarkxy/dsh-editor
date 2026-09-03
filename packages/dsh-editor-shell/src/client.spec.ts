@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
+  buildChapterStatusMap,
   canSubmitComposer,
   chapterStatusText,
   claimInitialWorkspaceResume,
@@ -32,6 +33,7 @@ import {
 } from './client.ts'
 
 const rootSource = () => readFileSync(new URL('./client/root.ts', import.meta.url), 'utf8')
+const initGuideSource = () => readFileSync(new URL('./init-guide.ts', import.meta.url), 'utf8')
 
 describe('shell manuscript RPC safety', () => {
   it('keeps browser-native prompt and confirm out of the workbench UI', () => {
@@ -81,11 +83,31 @@ describe('shell manuscript RPC safety', () => {
     expect(relocationFailureMessage(true)).toContain('新位置入口未能自动移除')
   })
 
-  it('exposes triggerExistingIndex only as an internal helper with no UI entry point', () => {
-    const source = rootSource()
-    const declarations = source.match(/(?:function|const)\s+triggerExistingIndex\b/g) ?? []
-    expect(declarations).toHaveLength(1)
-    expect(source).not.toMatch(/onClick:\s*\(\)\s*=>\s*triggerExistingIndex\(/)
+  it('triggers the index run from the init guide card via the shared init-guide module', () => {
+    const root = rootSource()
+    expect(root).not.toMatch(/(?:function|const)\s+triggerExistingIndex\b/)
+    const guide = initGuideSource()
+    expect(guide).toMatch(/export async function startExploreInit\b/)
+    expect(guide).toContain('project.prepareIndex')
+    expect(guide).toContain('buildNovelIndexPrompt()')
+  })
+
+  it('auto-triggers the index after the interview when a proposal landed and the session goes idle', () => {
+    /* 纯函数 + chat.ts 端到端调用必须都到位:init-guide.ts 暴露判定,
+     * chat.ts 在 effect 里调用 startExploreInit。 */
+    const guide = initGuideSource()
+    expect(guide).toMatch(/export function shouldAutoIndexAfterInterview\b/)
+    expect(guide).toMatch(/export type AutoIndexInputs\b/)
+
+    const chatSource = readFileSync(new URL('./client/chat.ts', import.meta.url), 'utf8')
+    expect(chatSource).toContain('startExploreInit(ctx, session.sessionId)')
+    expect(chatSource).toContain('shouldAutoIndexAfterInterview')
+    expect(chatSource).toContain('autoIndexTriggeredRef')
+    expect(chatSource).toContain('appliedDuringInterviewRef')
+    expect(chatSource).toMatch(/onApplied:\s*handleApplied/)
+    /* 触发只看 running 刚停下,避免在用户继续聊时抢跑 */
+    expect(chatSource).toMatch(/runningJustStopped/)
+    expect(chatSource).toMatch(/prevRunningRef\.current === true && !snapshot\.running/)
   })
 
   it('keeps open and create as explicit flows without requiring the browse-only directory API', () => {
@@ -382,6 +404,66 @@ describe('shell manuscript RPC safety', () => {
     expect(chapterStatusText('final')).toBe('已定稿')
   })
 
+  it('builds a chapter status map that only keeps manuscript chapter paths', () => {
+    expect(buildChapterStatusMap(null)).toEqual({})
+    expect(buildChapterStatusMap(undefined)).toEqual({})
+    const overview = {
+      statusRevision: 'r1',
+      chapters: [
+        { path: '正文/001.md', title: '一', status: 'draft' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
+        { path: '正文/第二卷/003.txt', title: '三', status: 'final' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
+        { path: '正文/004.md', title: '四', status: 'revising' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
+        { path: '大纲/章纲.md', title: '章纲', status: 'draft' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
+        { path: '项目总览.md', title: '总览', status: 'final' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
+        { path: '世界书/港口.md', title: '港', status: 'revising' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
+      ],
+      outlines: [],
+      totals: { chapters: 3, chars: 0, byStatus: { draft: 1, revising: 1, final: 1 } },
+      recent: null,
+      truncated: false,
+      skipped: 0,
+    }
+    expect(buildChapterStatusMap(overview)).toEqual({
+      '正文/001.md': 'draft',
+      '正文/第二卷/003.txt': 'final',
+      '正文/004.md': 'revising',
+    })
+  })
+
+  it('lets the latest overview entry win when chapter paths repeat', () => {
+    const overview = {
+      statusRevision: 'r2',
+      chapters: [
+        { path: '正文/001.md', title: '一', status: 'draft' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
+        { path: '正文/001.md', title: '一', status: 'revising' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
+      ],
+      outlines: [],
+      totals: { chapters: 1, chars: 0, byStatus: { draft: 0, revising: 1, final: 0 } },
+      recent: null,
+      truncated: false,
+      skipped: 0,
+    }
+    expect(buildChapterStatusMap(overview)).toEqual({ '正文/001.md': 'revising' })
+  })
+
+  it('renders status badges in the file tree, threads the map from root, and styles the three states', () => {
+    const sidebarSource = readFileSync(new URL('./client/sidebar.ts', import.meta.url), 'utf8')
+    expect(sidebarSource).toContain('chapter-status')
+    expect(sidebarSource).toContain('chapterStatuses')
+    expect(sidebarSource).toContain('chapterStatusText(chapterStatus)')
+    expect(sidebarSource).toContain('chapterStatusGlyph(chapterStatus)')
+    expect(sidebarSource).toContain('isChapterDocumentPath(child)')
+
+    const rootSourceText = readFileSync(new URL('./client/root.ts', import.meta.url), 'utf8')
+    expect(rootSourceText).toMatch(/chapterStatuses:\s*buildChapterStatusMap\(overview\)/)
+
+    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
+    expect(styleSource).toMatch(/\.chapter-status\b/)
+    expect(styleSource).toMatch(/\.chapter-status\.draft\b/)
+    expect(styleSource).toMatch(/\.chapter-status\.revising\b/)
+    expect(styleSource).toMatch(/\.chapter-status\.final\b/)
+  })
+
   it('uses the Host-created flag instead of a possibly stale workspace list', async () => {
     const workspace = { workspaceId: 'workspace-1', path: 'D:\\novel', title: 'novel', sessionIds: [], createdAt: '', updatedAt: '' }
     const createHost = vi.fn(async () => ({ result: { ok: true as const, value: { workspace, created: true } } }))
@@ -419,5 +501,76 @@ describe('shell manuscript RPC safety', () => {
       } } },
       workspaces: { create: async () => { throw new Error('projection failed') } },
     } as never, 'D:\\blocked')).rejects.toThrow('registration could not be removed')
+  })
+
+  it('routes split/merge/renames proposals to the workbench channel and keeps edit/create on /manuscript', async () => {
+    const calls: Array<{ channel: string; endpoint: string; payload: unknown }> = []
+    const okPrepare = (value: unknown) => async () => ({ ok: true, value })
+    const okApply = (value: unknown) => async () => ({ ok: true, value })
+    const connection = {
+      rpc: {
+        call: (channel: string, endpoint: string, payload: unknown) => {
+          calls.push({ channel, endpoint, payload })
+          if (endpoint === 'proposal.prepare') {
+            if ((payload as { kind: string }).kind === 'split') {
+              return Promise.resolve({ ok: true, value: { kind: 'split', version: 'v1', before: '前面', after: '后面', headChars: 100, tailChars: 200 } })
+            }
+            if ((payload as { kind: string }).kind === 'merge') {
+              return Promise.resolve({ ok: true, value: { kind: 'merge', versions: { path: 'vA', sourcePath: 'vB' }, pathChars: 300, sourceChars: 150 } })
+            }
+            if ((payload as { kind: string }).kind === 'renames') {
+              return Promise.resolve({ ok: true, value: { kind: 'renames', versions: { '正文/001.md': 'v1' }, entries: [{ from: '正文/001.md', to: '正文/序章.md' }] } })
+            }
+          }
+          return Promise.resolve({ ok: true, value: { path: 'x', version: 'v' } })
+        },
+      },
+    } as never
+    const baseProps = (proposal: unknown) => ({
+      ctx: { connection } as never,
+      sessionId: 's1',
+      proposal: proposal as never,
+      onApplied: () => {},
+    })
+    const { buildExpectedVersions } = await import('./client/chat.ts')
+    /* split:workbench prepare,只校验 path 一项 version */
+    const splitProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'split', path: '正文/001.md', summary: '拆', anchor: '### 转折', newPath: '正文/002.md' } as never
+    const splitPrepared = { kind: 'split', version: 'v1', before: '', after: '', headChars: 0, tailChars: 0 } as never
+    expect(buildExpectedVersions(splitProposal, splitPrepared)).toEqual({ '正文/001.md': 'v1' })
+    /* merge:workbench prepare,目标+来源都按真实文件路径校验 */
+    const mergeProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'merge', path: '正文/001.md', summary: '合', sourcePath: '正文/002.md' } as never
+    const mergePrepared = { kind: 'merge', versions: { path: 'vA', sourcePath: 'vB' }, pathChars: 0, sourceChars: 0 } as never
+    expect(buildExpectedVersions(mergeProposal, mergePrepared)).toEqual({ '正文/001.md': 'vA', '正文/002.md': 'vB' })
+    /* renames:每条 from→to 都校验 */
+    const renamesProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'renames', summary: '改名', renames: [{ from: '正文/001.md', to: '正文/序章.md' }] } as never
+    const renamesPrepared = { kind: 'renames', versions: { '正文/001.md': 'v1' }, entries: [{ from: '正文/001.md', to: '正文/序章.md' }] } as never
+    expect(buildExpectedVersions(renamesProposal, renamesPrepared)).toEqual({ '正文/001.md': 'v1' })
+    /* edit/create 仍然走 /manuscript 通道 */
+    expect(buildExpectedVersions({ kind: 'edit', path: 'a.md', oldText: 'o', newText: 'n' } as never, { kind: 'edit', version: 'v1', before: 'o', after: 'n' } as never)).toBeUndefined()
+
+    /* 源码断言:workbench 新端点必须真的被 chat.ts 路由,避免被某次重构回退到 /manuscript。 */
+    const chatSource = readFileSync(new URL('./client/chat.ts', import.meta.url), 'utf8')
+    expect(chatSource).toMatch(/WORKBENCH_RPC_CHANNEL[\s\S]{0,400}proposal\.prepare/)
+    expect(chatSource).toMatch(/WORKBENCH_RPC_CHANNEL[\s\S]{0,400}proposal\.apply/)
+    expect(chatSource).toContain("expectedVersions")
+    expect(chatSource).toMatch(/proposal\.kind === 'split'/)
+    expect(chatSource).toMatch(/proposal\.kind === 'merge'/)
+    expect(chatSource).toMatch(/proposal\.kind === 'renames'/)
+  })
+
+  it('threads the writing-progress scope into the shell root and renders a chip in the sidebar', () => {
+    const source = rootSource()
+    /* root.ts 必须真正接住 progressScope,而不是定义后不用 */
+    expect(source).toContain('progressScope: WritingProgressScope')
+    expect(source).toMatch(/progressScope\s*[,:]\s*options\.progressScope/)
+    expect(source).toContain('writing-progress-chip')
+    expect(source).toMatch(/progressChipProps\(\{\s*overview,\s*progress:\s*writingProgress/)
+    /* 基线只在跨天/无值时写,今天已有就跳过 */
+    expect(source).toMatch(/nextBaselines\(/)
+    expect(source).toContain("localDateKey(new Date())")
+    /* CSS:侧栏 chip 在 paper/ink 主题都有,达成态换色 */
+    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
+    expect(styleSource).toMatch(/\.writing-progress-chip\b/)
+    expect(styleSource).toMatch(/\.writing-progress-chip\.reached\b/)
   })
 })

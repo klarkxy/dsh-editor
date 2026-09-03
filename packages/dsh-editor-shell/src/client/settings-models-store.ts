@@ -217,6 +217,41 @@ export type ModelDraft = {
   maxTokens?: unknown
 }
 
+/*
+ * 思考强度档位:host(pi-ai)允许手工声明的模型携带 reasoningEfforts
+ * —— 键是可选择的档位,值是发给端点的线协议拼写,只有 off 可以留空
+ * (不思考 = 不带参数)。编辑器与聊天面板的兜底共用这套约定俗成的
+ * 六档;不认识的参数由上游端点自行忽略。用户在设置文档里手写的其它
+ * 拼写标记为 custom,界面只读不覆盖。
+ */
+export const STANDARD_REASONING_EFFORTS: Readonly<Record<string, string | null>> = {
+  off: null,
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'xhigh',
+  max: 'max',
+}
+
+export type ReasoningChoice = 'off' | 'standard' | 'custom'
+
+/** Classify one model draft's reasoningEfforts for the editor select. */
+export function reasoningChoiceOf(model: Record<string, unknown>): ReasoningChoice {
+  const value = model['reasoningEfforts']
+  if (value === undefined || value === false) return 'off'
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'custom'
+  const entries = Object.entries(value)
+  const standard = Object.entries(STANDARD_REASONING_EFFORTS)
+  return entries.length === standard.length && standard.every(([key, wire]) => (value as Record<string, unknown>)[key] === wire)
+    ? 'standard'
+    : 'custom'
+}
+
+/** The reasoningEfforts value a choice writes; `undefined` clears the field (patch() deletes undefined keys). */
+export function reasoningEffortsFor(choice: ReasoningChoice): Record<string, string | null> | undefined {
+  return choice === 'standard' ? { ...STANDARD_REASONING_EFFORTS } : undefined
+}
+
 /** Convert a schema-validated catalog value into records without dropping hidden fields. */
 export function modelDrafts(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return []

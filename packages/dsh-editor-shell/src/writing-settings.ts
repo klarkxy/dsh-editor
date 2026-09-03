@@ -3,6 +3,8 @@ import { createElement as e, useEffect, useRef, useState, useSyncExternalStore, 
 import { AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-settings-contract.ts'
+import { WritingProgressSettings } from './writing-progress-settings.tsx'
+import type { WritingProgressScope } from './writing-progress.ts'
 
 export { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-settings-contract.ts'
 
@@ -122,7 +124,11 @@ export type WritingSettingsSlots = {
  * 标签页;上游 DSH 设置弹窗（settings.section slot）在桌面 profile 中已被
  * 禁用,不再注册进去。
  */
-export function WritingSettings({ scope, migrate }: { scope: SettingsScope<WritingPreferences>; migrate: WritingMigration }) {
+export function WritingSettings({ scope, migrate, progressScope }: {
+  scope: SettingsScope<WritingPreferences>
+  migrate: WritingMigration
+  progressScope: WritingProgressScope
+}) {
   const snapshot = useSyncExternalStore(
     scope.subscribe.bind(scope),
     scope.getSnapshot.bind(scope),
@@ -175,6 +181,7 @@ export function WritingSettings({ scope, migrate }: { scope: SettingsScope<Writi
 
   return e('section', { className: 'writing-settings', 'aria-labelledby': 'writing-settings-title' },
     e('h2', { id: 'writing-settings-title' }, '写作'),
+    e(WritingProgressSettings, { scope: progressScope }),
     e('fieldset', { disabled: saving !== null },
       e('legend', null, '自动补全'),
       e('p', null, '补全只生成建议，经你确认后才会写入正文。'),

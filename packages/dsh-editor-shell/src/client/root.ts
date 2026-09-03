@@ -21,8 +21,16 @@ import { normalizeAuthorPreferences } from '../author-preferences.ts'
 import { documentTemplate, manuscriptGroupPath, nextChapterPath, nextDocumentPath, sortChapterPaths, type DocumentKind } from '../project-files.ts'
 import { registerRoot } from '../root-registration.ts'
 import { writingPreferences, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
+import {
+  localDateKey,
+  nextBaselines,
+  progressChipProps,
+  writingProgressFor,
+  type WritingProgress,
+  type WritingProgressScope,
+} from '../writing-progress.ts'
 import { redesignedStyles } from '../styles.ts'
-import { createDialogDirectory, errorMessage, isStaleFailure, safeRpcCall, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
+import { buildChapterStatusMap, createDialogDirectory, errorMessage, isStaleFailure, safeRpcCall, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, useObservable } from './components.ts'
 import { ConfirmDialog, CreateDocumentDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger } from './settings.tsx'
@@ -32,7 +40,6 @@ import { Editor } from './editor.ts'
 import { Chat } from './chat.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { WindowControls, titleBarDoubleClick } from './window-controls.tsx'
-import { buildNovelIndexPrompt } from '../novel-index.ts'
 
 const SIDEBAR_DEFAULT = 248
 const SIDEBAR_MIN = 196
@@ -171,10 +178,11 @@ async function verifyRelocatedWorkspaceSession(ctx: ShellContext, sessionId: Ses
   return initialPath
 }
 
-function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
+function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync }: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
+  progressScope: WritingProgressScope
   hostThemeSync?: HostThemeSync
 }) {
   const sessions = useObservable(ctx.sessions.list)
@@ -194,6 +202,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
     : selectedWorkspace
   const writingSnapshot = useObservable(writingScope)
   const writing = writingPreferences(writingSnapshot, globalThis.localStorage)
+  const progressSnapshot = useObservable(progressScope)
+  const writingProgress: WritingProgress = writingProgressFor(progressSnapshot)
+  const writableProgress = progressSnapshot.status === 'ready' && progressSnapshot.writable !== false
   const [path, setPath] = useState('')
   const [files, setFiles] = useState<string[]>([])
   const [workbenchNote, setWorkbenchNote] = useState('')
@@ -334,6 +345,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
     if (!fileSession) { setOverview(null); setOverviewBusy(false); return }
     void loadOverview()
   }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision, contentRevision, overviewRevision])
+  /* 拿到 overview 后,如果当前作品今天还没有基线,就写下"早上总字数";
+     跨天 / 第一次打开作品时各写一次,后续静默。失败不打扰,下一次 overview 再试。 */
+  useEffect(() => {
+    if (!overview || !openWorkspaceId || !writableProgress) return
+    const today = localDateKey(new Date())
+    const existing = writingProgress.baselines[openWorkspaceId]
+    if (existing && existing.date === today) return
+    const next = nextBaselines(writingProgress, openWorkspaceId, today, overview.totals.chars)
+    if (next === writingProgress.baselines) return
+    void progressScope.set('baselines', next).catch(() => { /* 下次 overview 自然重试 */ })
+  }, [overview, openWorkspaceId, writableProgress, writingProgress, progressScope])
   const updateChapterStatus = async (chapterPath: string, status: ChapterStatus) => {
     if (!fileSession || !overview || statusBusy) return
     const requestSessionId = fileSession.sessionId
@@ -479,17 +501,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
     setCreateRequest(null)
     openDocument(file)
     setTreeRevision((old) => old + 1)
-  }
-  const triggerExistingIndex = (workspaceId: WorkspaceId, sessionId: SessionId) => {
-    void Promise.resolve().then(async () => {
-      const prepared = await ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.prepareIndex', { sessionId }) as RpcResult
-      if (!prepared.ok) throw new Error(errorMessage(prepared))
-      const indexedSession = ctx.sessions.binding(sessionId)?.session
-      if (!indexedSession) throw new Error('session unavailable')
-      const result = await indexedSession.prompt([{ type: 'text', text: buildNovelIndexPrompt() }], 'queue')
-      if (!result.ok) throw new Error('prompt rejected')
-      void workspaceId
-    }).catch(() => undefined)
   }
   const finishWorkspaceOpen = async (
     pending: PendingWorkspaceOpen,
@@ -1057,7 +1068,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
       ),
       renderNewProjectDialog(),
       renderCommandPalette(),
-      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, onClose: () => setSettingsOpen(false) }) : null,
+      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, onClose: () => setSettingsOpen(false) }) : null,
     )
   }
 
@@ -1140,6 +1151,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
     ),
     sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
       e('div', { className: 'side-title' }, e('span', null, '文件'), e('button', { className: 'icon-button', type: 'button', onClick: () => openCreateDialog('chapter'), title: '新建章节', 'aria-label': '新建章节' }, '＋')),
+      (() => {
+        const summary = progressChipProps({ overview, progress: writingProgress, workspaceId: openWorkspaceId })
+        if (!summary) return null
+        return e('div', { className: `writing-progress-chip${summary.reached ? ' reached' : ''}`, 'aria-label': summary.text }, summary.text)
+      })(),
       e('details', { className: 'project-actions' },
         e('summary', null, '新建资料'),
         e('div', null,
@@ -1152,7 +1168,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
       workspaceOpen.warning ? e('p', { className: 'warning pad', role: 'status' }, workspaceOpen.warning) : null,
       workbenchNote ? e('p', { className: `pad`, role: 'status' }, workbenchNote) : null,
-      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), onCreateGroup: () => openCreateDialog('group'), revision: treeRevision }),
+      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateChapter: (directory: string) => openCreateDialog('chapter', directory), onCreateGroup: () => openCreateDialog('group'), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
     ) : null,
     sidebarVisible ? e(PanelResizer, {
       side: 'left',
@@ -1247,13 +1263,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync }: {
     }) : null,
     renderCommandPalette(),
     imagePreview ? e(ImagePreviewOverlay, { path: imagePreview.path, url: imagePreview.url, onClose: closeImagePreview }) : null,
-    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, onClose: () => setSettingsOpen(false) }) : null,
+    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, onClose: () => setSettingsOpen(false) }) : null,
   )
 }
 
 type RegisterShellRootOptions = {
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
+  progressScope: WritingProgressScope
   hostThemeSync?: HostThemeSync
   registerRoot: (ctx: ShellContext, render: (props: unknown) => ReactNode) => void
 }
@@ -1264,6 +1281,7 @@ export function registerShellRoot(ctx: Context, options: RegisterShellRootOption
     ctx: client,
     writingScope: options.writingScope,
     migrateWriting: options.migrateWriting,
+    progressScope: options.progressScope,
     hostThemeSync: options.hostThemeSync,
   }))
 }
