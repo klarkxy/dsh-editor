@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, FsTargetLike, FsWriteIntentLike, SandboxExecutionPolicyLike, WorkspaceFileContext } from 'dsh-manuscript/host-api'
-import { CHAPTER_STATUS_PATH, OverviewError, readChapterStatus, readProjectOverview, removeChapterStatus, restoreChapterStatus, setChapterStatus, migrateChapterStatus, type OverviewAccess } from './overview.ts'
+import { OverviewError, readProjectOverview, type OverviewAccess } from './overview.ts'
 
 let root = ''
 
@@ -101,59 +101,12 @@ describe('project overview', () => {
       ['空章', '', true, 3],
     ])
     expect(overview.outlines).toMatchObject([{ path: '大纲/总纲.md', title: '总纲', excerpt: '主线' }])
-    expect(overview.totals).toEqual({ chapters: 3, chars: 17, byStatus: { draft: 3, revising: 0, final: 0 } })
+    expect(overview.totals).toEqual({ chapters: 3, chars: 17 })
     expect(overview.chapters.every((chapter) => typeof chapter.modifiedAt === 'string')).toBe(true)
   })
 
-  it('creates, validates and prunes the status record with CAS', async () => {
-    await write('正文/001.md', '# 第一章\n\n正文')
-    const first = await readProjectOverview(access())
-    const changed = await setChapterStatus({ access: access(), path: '正文/001.md', status: 'revising', expectedStatusRevision: first.statusRevision })
-    expect(changed.chapters[0]?.status).toBe('revising')
-    expect(changed.statusRevision).toBeTruthy()
-    await expect(setChapterStatus({ access: access(), path: '正文/001.md', status: 'final', expectedStatusRevision: first.statusRevision })).rejects.toMatchObject({ code: 'STALE' })
-    await write(CHAPTER_STATUS_PATH, JSON.stringify({ version: 1, statuses: { '正文/不存在.md': 'final' } }))
-    const repaired = await setChapterStatus({ access: access(), path: '正文/001.md', status: 'final', expectedStatusRevision: (await readProjectOverview(access())).statusRevision })
-    expect(repaired.chapters[0]?.status).toBe('final')
-    expect(JSON.parse(await fs.readFile(path.join(root, '.dsh-editor', 'chapter-status.json'), 'utf8')).statuses).toEqual({ '正文/001.md': 'final' })
-  })
-
-  it('does not create metadata for a missing draft and fails closed for malformed data', async () => {
-    await write('正文/001.md', '# 第一章\n\n正文')
-    await setChapterStatus({ access: access(), path: '正文/001.md', status: 'draft', expectedStatusRevision: null })
-    await expect(fs.stat(path.join(root, '.dsh-editor', 'chapter-status.json'))).rejects.toMatchObject({ code: 'ENOENT' })
-    await write(CHAPTER_STATUS_PATH, '{not json')
-    await expect(readProjectOverview(access())).rejects.toBeInstanceOf(OverviewError)
-    await expect(setChapterStatus({ access: access(), path: '正文/001.md', status: 'final', expectedStatusRevision: 'anything' })).rejects.toMatchObject({ code: 'BLOCKED' })
-    await expect(fs.readFile(path.join(root, '.dsh-editor', 'chapter-status.json'), 'utf8')).resolves.toBe('{not json')
-  })
-
-  it('rejects oversized metadata and never writes a 2001st status', async () => {
-    await write(CHAPTER_STATUS_PATH, 'x'.repeat(2_000_001))
-    await expect(readProjectOverview(access())).rejects.toMatchObject({ code: 'BLOCKED' })
-
-    const statuses = Object.fromEntries(Array.from({ length: 2_000 }, (_, index) => [`正文/${String(index).padStart(4, '0')}.md`, 'final']))
-    await write(CHAPTER_STATUS_PATH, `${JSON.stringify({ version: 1, statuses }, null, 2)}\n`)
-    const before = await fs.readFile(path.join(root, '.dsh-editor', 'chapter-status.json'), 'utf8')
-    await expect(restoreChapterStatus(access(), '正文/overflow.md', 'revising')).rejects.toMatchObject({ code: 'BLOCKED' })
-    await expect(fs.readFile(path.join(root, '.dsh-editor', 'chapter-status.json'), 'utf8')).resolves.toBe(before)
-  })
-
-  it('moves, removes and restores only stored non-draft statuses', async () => {
-    await write('正文/001.md', '# 第一章\n\n正文')
-    const initial = await readProjectOverview(access())
-    await setChapterStatus({ access: access(), path: '正文/001.md', status: 'final', expectedStatusRevision: initial.statusRevision })
-    await migrateChapterStatus(access(), '正文/001.md', '正文/第一卷/001.md')
-    await removeChapterStatus(access(), '正文/第一卷/001.md')
-    await restoreChapterStatus(access(), '正文/第一卷/001.md', 'revising')
-    const stored = JSON.parse(await fs.readFile(path.join(root, '.dsh-editor', 'chapter-status.json'), 'utf8'))
-    expect(stored.statuses).toEqual({ '正文/第一卷/001.md': 'revising' })
-    await expect(readChapterStatus(access(), '正文/第一卷/001.md')).resolves.toBe('revising')
-  })
-
-  it('allows overview reads but rejects status writes in a read-only workspace', async () => {
+  it('allows overview reads in a read-only workspace', async () => {
     await write('正文/001.md', '# 第一章\n\n正文')
     await expect(readProjectOverview(access('read-only'))).resolves.toMatchObject({ totals: { chapters: 1 } })
-    await expect(setChapterStatus({ access: access('read-only'), path: '正文/001.md', status: 'final', expectedStatusRevision: null })).rejects.toMatchObject({ code: 'READ_ONLY' })
   })
 })

@@ -51,11 +51,11 @@ Electron（窗口、资源校验、子进程生命周期）
 
 外部作品导入只经过私有 `/dsh-editor-workbench`：两端必须是已解析、已注册且附着 live session 的工作区，Renderer 不传递 cwd 或绝对文件路径。Probe 只读取源、检查空目标并产生绑定两端 canonical root key 与文件版本/哈希的 token；Apply 会完整重 probe 后才以 `.dsh-editor-import.json` 的 `copying` 清单开始 no-clobber 写入 `正文/`。TXT 保持文本内容而改为 `.md`，隐藏路径、链接和非文本均跳过；完整项目不支持撤销。中断仅能在重新选择同一源后续传，或在每个清单拥有文件的哈希仍匹配时显式清理。Node 目录操作仅在 Host 已解析的根内逐组件拒绝 symlink/junction 后使用，文件内容和清单仍经版本化稿件文件原语读写。
 
-整部作品文本快照保存在源工作区 `.dsh-editor/snapshots/<uuid>/`：先在同级 `.creating-<uuid>` 写入逐文件文本 payload 和校验 manifest，再同父目录 rename 发布。快照不包含未保存编辑 buffer。隐藏路径仍默认排除，唯一白名单例外是精确路径 `.dsh-editor/chapter-status.json`；其他 `.dsh-editor/*` 不会进入 payload。跨作品恢复只能经私有通道的 `snapshot.restore*` 到新的空目标；`.dsh-editor-restore.json` 绑定源根、目标根、快照、token 与清单，支持显式续传或在哈希未变时安全清理；不含状态文件的旧快照仍可恢复，章节按草稿显示。原地回滚走 `snapshot.rollback`：先把当前状态自动存为一次安全快照，再按目标快照覆盖文本文件并删除快照之外的文本文件，非文本文件不参与；因此回滚可以再次被回滚撤销。
+整部作品文本快照保存在源工作区 `.dsh-editor/snapshots/<uuid>/`：先在同级 `.creating-<uuid>` 写入逐文件文本 payload 和校验 manifest，再同父目录 rename 发布。快照不包含未保存编辑 buffer。隐藏路径一律排除，`.dsh-editor/*` 不进入 payload。跨作品恢复只能经私有通道的 `snapshot.restore*` 到新的空目标；`.dsh-editor-restore.json` 绑定源根、目标根、快照、token 与清单，支持显式续传或在哈希未变时安全清理。原地回滚走 `snapshot.rollback`：先把当前状态自动存为一次安全快照，再按目标快照覆盖文本文件并删除快照之外的文本文件，非文本文件不参与；因此回滚可以再次被回滚撤销。
 
 文件整理仍由 live session 建立工作区 authority，并只在私有通道开放。`structure.groupCreate` 只允许在 `正文` 下建立一个可见的一级卷/部目录，拒绝隐藏名、设备名、嵌套路径、链接、已占用目标和只读工作区；目录本身就是结构来源，不新增 `structure.json`。`directory.create` 是通用的单层建目录：任意已存在父目录下创建一个可见目录，复用同一套名称、链接、占用与只读校验，供目录树在任何位置新建文件夹。卷内章节继续通过公开 `file.create` 的既有父目录检查与 `createIfAbsent` 写入。`file.moveManuscript` 只允许已保存的可见 Markdown/TXT 在 `正文` 目录树内部跨目录移动，保留文件名和类型，并复用与归档相同的 expectedVersion、内容哈希、逐组件 no-follow、目标 absent 与 no-replace 原子移动检查。`file.rename` 仅允许同目录、保留扩展名的 Markdown/TXT 改名；`archive.*` 把文档移动到 `.dsh-editor/archive/<timestamp>-<uuid>/`，用 root-bound、hash-protected manifest 记录 `moving/archived/restoring/restored`。Windows 实际移动使用经过运行时验证的 `System.IO.File.Move(source,target)` no-replace 原语，经固定 PowerShell 脚本、最小环境和 15 秒超时调用；目标存在、源版本变化、链接路径或完整性异常均 fail closed，不回退到 copy-delete 或普通覆盖式 rename。损坏归档会计数并展示，但不会被宣传为可恢复项。
 
-章节进度只使用作品内的人类可读文件 `.dsh-editor/chapter-status.json`，格式固定为 `{ version: 1, statuses }`；未记录项就是草稿，记录值只允许 `revising` 或 `final`。私有 Host 按需扫描 `正文` 和 `大纲` 的可见 Markdown/TXT，在 2,000 文件、100 MB 总量与单文件 2 MB 上限内生成标题、摘要、去空白字数、空章、修改时间和状态统计。状态写入使用文件版本 CAS；损坏文件禁止静默覆盖。重命名、移动、归档和恢复在正文操作成功后同步迁移状态，迁移失败只返回 `metadataWarning`，不反向回滚作者已经成功完成的文件操作。外部手工改名形成的孤立状态不显示，并在下一次完整、无跳过的成功状态写入时清理。
+私有 Host 按需扫描 `正文` 和 `大纲` 的可见 Markdown/TXT，在 2,000 文件、100 MB 总量与单文件 2 MB 上限内生成标题、摘要、去空白字数、空章和修改时间。重命名、移动、归档和恢复在正文操作成功后同步迁移附带元数据，迁移失败只返回 `metadataWarning`，不反向回滚作者已经成功完成的文件操作。
 
 `search.text` 仅做有界、字面量、大小写不敏感的 Markdown/TXT 扫描，拒绝正则与控制字符，跳过隐藏、生成和链接路径，并限制文件数、总字节和结果数。Renderer 只接收路径、行列、片段、偏移和版本；定位前再次比较版本。章节导航由递归工作区列表中完整的 `正文/**/*.{md,txt}` 自然排序产生，不依赖用户是否展开文件树。
 
@@ -143,7 +143,7 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 - 安装器、自动更新、代码签名、发布；
 - 句内卡片、`/`/`@` 面板、审阅 gutter、附件和完整官方高级管理界面；
 - 永久删除、`正文` 之外的跨目录移动、卷/部之外的任意建目录、watch、独立索引服务、Git UI；
-- 自定义章节状态、卡片拖放、手写卡片摘要、章节—大纲绑定、关系图、向量检索、DOCX/EPUB；
+- 章节状态（草稿/修订中/已定稿曾落地后移除）、卡片拖放、手写卡片摘要、章节—大纲绑定、关系图、向量检索、DOCX/EPUB；
 - Android、远程多用户、云同步；
 - 未经授权的 commit、push、tag 或 release。
 

@@ -9,16 +9,12 @@ export const ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME = 'zhihu_knowledge_search'
 export const PROJECT_KNOWLEDGE_TOOL_NAME = 'project_knowledge'
 export const NOVEL_SEARCH_TOOL_NAME = 'novel_search'
 export const NOVEL_OVERVIEW_TOOL_NAME = 'novel_overview'
-export const NOVEL_CHAPTER_STATUS_TOOL_NAME = 'novel_set_chapter_status'
 export const PROPOSAL_MARKER = 'dsh-editor.proposal'
 export const AUTHOR_OBSERVE_TOOL_NAME = 'author_observe'
 export const AUTHOR_MEMORY_MARKER = 'dsh-editor.memory'
 
 /** 助手建议追加的作者侧写条目最大长度；与 V2 envelope 中 author_memory 的 2000 字预算协同。 */
 export const AUTHOR_OBSERVE_MAX_CHARS = 200
-
-export type ChapterStatusValue = 'draft' | 'revising' | 'final'
-export const CHAPTER_STATUS_VALUES: readonly ChapterStatusValue[] = ['draft', 'revising', 'final']
 
 export type ProposalRename = { from: string; to: string }
 

@@ -11,7 +11,6 @@ export type WorkbenchEndpoint =
   | 'project.init'
   | 'project.prepareIndex'
   | 'project.overview'
-  | 'chapter.statusSet'
   | 'structure.groupCreate'
   | 'directory.create'
   | 'context.compile'
@@ -36,11 +35,9 @@ export type WorkbenchEndpoint =
 export type ProjectInitResponse = { created: string[]; skipped: string[] }
 export type ProjectInspectionResponse = { hasVisibleEntries: boolean; textFiles: string[]; indexReady: boolean }
 export type WorkbenchPathResponse = { path: string; version?: string; metadataWarning?: string }
-export type ChapterStatus = 'draft' | 'revising' | 'final'
 export type ChapterSummary = {
   path: string
   title: string
-  status: ChapterStatus
   chars: number
   empty: boolean
   excerpt: string
@@ -54,13 +51,11 @@ export type OutlineSummary = {
   modifiedAt: string | null
 }
 export type ProjectOverview = {
-  statusRevision: string | null
   chapters: ChapterSummary[]
   outlines: OutlineSummary[]
   totals: {
     chapters: number
     chars: number
-    byStatus: Record<ChapterStatus, number>
   }
   recent: ChapterSummary | null
   truncated: boolean
@@ -106,7 +101,6 @@ export type WorkbenchRequestMap = {
   'project.init': { sessionId: string; newProject: boolean }
   'project.prepareIndex': { sessionId: string }
   'project.overview': { sessionId: string }
-  'chapter.statusSet': { sessionId: string; path: string; status: ChapterStatus; expectedStatusRevision: string | null }
   'structure.groupCreate': { sessionId: string; path: string }
   'directory.create': { sessionId: string; path: string }
   'context.compile': { sessionId: string; userRequest: string; activePath?: string; authorPreferences?: string; authorMemory?: string }
@@ -135,7 +129,6 @@ export type WorkbenchResponseMap = {
   'project.init': ProjectInitResponse
   'project.prepareIndex': ProjectInitResponse
   'project.overview': ProjectOverview
-  'chapter.statusSet': ProjectOverview
   'structure.groupCreate': WorkbenchPathResponse
   'directory.create': WorkbenchPathResponse
   'context.compile': ProjectContextCompilation

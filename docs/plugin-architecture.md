@@ -155,8 +155,7 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 | `project.createHome` | `title` | `{ path }`，在「文档/dsh-editor」下独占创建同名空文件夹；不接受调用方传入的父路径 |
 | `project.init` | `sessionId`, `newProject` | `{ created, skipped }`，只建立空的 `正文`、`大纲`、`人物卡`、`世界书` 目录，不写入 Markdown 模板 |
 | `project.prepareIndex` | `sessionId` | 索引准备回执 |
-| `project.overview` | `sessionId` | 状态版本、章节/大纲摘要、状态统计、最近编辑项和有界扫描警告 |
-| `chapter.statusSet` | `sessionId`, `path`, `status`, `expectedStatusRevision` | CAS 更新固定章节状态并返回完整概览 |
+| `project.overview` | `sessionId` | 章节/大纲摘要、字数统计、最近编辑项和有界扫描警告 |
 | `structure.groupCreate` | `sessionId`, `path` | 只在 `正文` 下建立一级卷/部目录 |
 | `directory.create` | `sessionId`, `path` | 在任意已存在的父目录下建一个可见目录（通用，无 正文 特化） |
 | `context.compile` | `sessionId`, `userRequest`，可选 `activePath`, `authorPreferences`, `authorMemory` | `{ serialized, receipt }`，有界 V2 context 信封 |
@@ -175,9 +174,9 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 | `archive.apply` | `sessionId`, `path` + `expectedVersion`，或 `archiveId` | 新归档或继续中断归档 |
 | `archive.restore` | `sessionId`, `archiveId`，可选 `expectedVersion` | no-replace 恢复后的 archive view |
 
-这些 endpoint、字段、V1/V2 envelope、token、receipt、manifest、hash 与重新验证语义是兼容接口。章节状态仅接受 `draft | revising | final`；`draft` 不写入状态映射。状态文件损坏或 CAS 过期时 Host fail closed，Renderer 必须刷新后重试。物理换包不构成协议升级。
+这些 endpoint、字段、V1/V2 envelope、token、receipt、manifest、hash 与重新验证语义是兼容接口。物理换包不构成协议升级。
 
-`.dsh-editor/chapter-status.json` 是整部作品快照隐藏路径规则的唯一精确白名单。它会随快照复制和恢复；`.dsh-editor` 下其他隐藏元数据仍被排除。重命名、正文跨卷移动、归档和恢复响应可以带 `metadataWarning`，表示正文操作已经成功但状态元数据未同步，调用方不得据此回滚正文。
+`.dsh-editor/*` 隐藏元数据一律不进入快照 payload。重命名、正文跨卷移动、归档和恢复响应可以带 `metadataWarning`，表示正文操作已经成功但附带的元数据未同步，调用方不得据此回滚正文。
 
 Context 信封常量：
 

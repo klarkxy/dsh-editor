@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
-import { CHAPTER_STATUS_PATH } from './overview.ts'
 
 export const SNAPSHOT_DIRECTORY = '.dsh-editor/snapshots'
 export const RESTORE_RECEIPT_PATH = '.dsh-editor-restore.json'
@@ -98,8 +97,7 @@ function generated(value: string): boolean {
 }
 
 function validPayloadPath(value: unknown): value is string {
-  if (typeof value !== 'string'
-    || (value !== CHAPTER_STATUS_PATH && (hidden(value) || generated(value) || !/\.(md|txt)$/i.test(value)))) return false
+  if (typeof value !== 'string' || hidden(value) || generated(value) || !/\.(md|txt)$/i.test(value)) return false
   try {
     return normalizeWorkspaceRelative(value) === value
   } catch {
@@ -284,22 +282,6 @@ async function scan(access: SnapshotAccess): Promise<{ files: ScannedFile[]; exc
     const entries = await listDirStrict(access.files, directory || '.')
     for (const entry of entries) {
       const relative = normal(path.join(directory, entry.name))
-      if (relative === '.dsh-editor' && entry.type === 'directory') {
-        try {
-          const loaded = await readTextFile(access.files, CHAPTER_STATUS_PATH)
-          const bytes = byteSize(loaded.text)
-          if (bytes > MAX_FILE_BYTES) throw new SnapshotError(`${CHAPTER_STATUS_PATH} exceeds 2 MB`, 'BLOCKED')
-          total += bytes
-          if (files.length + 1 > MAX_FILES || total > MAX_TOTAL_BYTES) {
-            throw new SnapshotError('snapshot exceeds its file or byte limit', 'BLOCKED')
-          }
-          files.push({ path: CHAPTER_STATUS_PATH, version: loaded.version, bytes, sha256: hash(loaded.text), text: loaded.text })
-        } catch (error) {
-          if (!(error instanceof FileOpError && error.code === 'NOT_FOUND')) throw error
-        }
-        excluded.push({ path: relative, reason: 'hidden' })
-        continue
-      }
       if (hidden(relative)) {
         excluded.push({ path: relative, reason: 'hidden' })
         continue

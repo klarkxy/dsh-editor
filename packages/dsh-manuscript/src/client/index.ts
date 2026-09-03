@@ -286,7 +286,6 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
           paperClassName: 'manuscript-paper',
           slotClassName: {
             header: 'manuscript-paper-header',
-            headerStatus: 'manuscript-paper-status',
             chapterNav: 'manuscript-paper-chapter-nav',
             textarea: 'manuscript-paper-textarea',
             mirror: 'manuscript-paper-mirror',

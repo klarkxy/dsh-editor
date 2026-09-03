@@ -82,9 +82,6 @@ describe('editor proposal boundary', () => {
     expect(editorToolGuard({ name: 'novel_search', arguments: { query: 'x', path: '../out' } })).toContain('project-relative')
     expect(editorToolGuard({ name: 'novel_overview', arguments: {} })).toBeUndefined()
     expect(editorToolGuard({ name: 'novel_overview', arguments: { path: '正文' } })).toContain('no arguments')
-    expect(editorToolGuard({ name: 'novel_set_chapter_status', arguments: { path: '正文/001.md', status: 'revising' } })).toBeUndefined()
-    expect(editorToolGuard({ name: 'novel_set_chapter_status', arguments: { path: '大纲/总纲.md', status: 'final' } })).toContain('正文/')
-    expect(editorToolGuard({ name: 'novel_set_chapter_status', arguments: { path: '正文/001.md', status: 'done' } })).toContain('draft, revising or final')
     expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'renames', summary: 'x', renames: [{ from: '正文/1.md', to: '正文/001.md' }] } })).toBeUndefined()
     expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'renames', summary: 'x', renames: [{ from: '../a.md', to: 'b.md' }] } })).toContain('Batch renames')
     expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'split', path: '正文/003.md', anchor: '## 转折', newPath: '../evil.md', summary: 'x' } })).toContain('Only project-relative')
@@ -117,7 +114,7 @@ describe('editor proposal boundary', () => {
   it('documents the overview, search and structural proposal tools with non-canon and preview rules', () => {
     expect(EDITOR_PROMPT).toContain('novel_overview')
     expect(EDITOR_PROMPT).toContain('novel_search')
-    expect(EDITOR_PROMPT).toContain('novel_set_chapter_status 直接设置')
+    expect(EDITOR_PROMPT).not.toContain('novel_set_chapter_status')
     expect(EDITOR_PROMPT).toContain('split')
     expect(EDITOR_PROMPT).toContain('renames')
     expect(EDITOR_PROMPT).toContain('先形成可预览提案')

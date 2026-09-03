@@ -10,9 +10,7 @@ import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, FsTarg
 import type { OverviewAccess } from './overview.ts'
 import {
   createNovelOverviewTool,
-  createNovelSetChapterStatusTool,
   createWorkbenchTools,
-  NOVEL_CHAPTER_STATUS_TOOL_NAME,
   NOVEL_OVERVIEW_TOOL_NAME,
   WorkbenchToolError,
 } from './workbench-tools.ts'
@@ -90,10 +88,10 @@ const execWith = (cwd?: string) => ({
 }) as unknown as Parameters<ReturnType<typeof createNovelOverviewTool>['execute']>[1]
 
 describe('workbench tools', () => {
-  it('createWorkbenchTools 返回两个本地注册名的工具', () => {
+  it('createWorkbenchTools 返回本地注册名的 overview 工具', () => {
     const tools = createWorkbenchTools({ resolveAccess: vi.fn(async () => access()) }) as Array<{ name: string; description: string; output: { schema: unknown; render: unknown } }>
-    expect(tools).toHaveLength(2)
-    expect(tools.map((tool) => tool.name)).toEqual([NOVEL_OVERVIEW_TOOL_NAME, NOVEL_CHAPTER_STATUS_TOOL_NAME])
+    expect(tools).toHaveLength(1)
+    expect(tools.map((tool) => tool.name)).toEqual([NOVEL_OVERVIEW_TOOL_NAME])
     expect(tools.every((tool) => tool.output.schema && typeof tool.output.render === 'function')).toBe(true)
   })
 
@@ -113,21 +111,5 @@ describe('workbench tools', () => {
     for (const chapter of value.chapters) {
       expect(chapter).not.toHaveProperty('modifiedAt', null)
     }
-  })
-
-  it('novel_set_chapter_status 校验 path / status 格式', async () => {
-    const tool = createNovelSetChapterStatusTool({ resolveAccess: vi.fn(async () => access()) })
-    await expect(tool.execute({ path: '元数据/001.md', status: 'draft' }, execWith(base))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
-    await expect(tool.execute({ path: '正文/001.md', status: 'archived' }, execWith(base))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
-  })
-
-  it('novel_set_chapter_status.execute 成功设置状态并返回 totals', async () => {
-    await fs.writeFile(path.join(base, '正文', '001.md'), '# 第一章\n\n正文', 'utf8')
-    const tool = createNovelSetChapterStatusTool({ resolveAccess: vi.fn(async () => access()) })
-    const value = (await tool.execute({ path: '正文/001.md', status: 'final' }, execWith(base))) as { version: number; path: string; status: string; totals: { chapters: number; byStatus: { draft: number; revising: number; final: number } } }
-    expect(value.version).toBe(1)
-    expect(value.path).toBe('正文/001.md')
-    expect(value.status).toBe('final')
-    expect(value.totals.byStatus.final).toBe(1)
   })
 })

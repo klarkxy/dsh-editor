@@ -22,16 +22,13 @@ export const inject = ['slots', 'sessions', 'workspaces', 'connection', 'setting
 
 // Re-exports — keep the old monolith surface so existing callers and specs still work.
 export {
-  buildChapterStatusMap,
   canSubmitComposer,
-  chapterStatusText,
   claimInitialWorkspaceResume,
   clampPanelWidth,
   createFlowWorkspace,
   errorMessage,
   hasRelocatableManuscriptFiles,
   hasVisibleWorkspaceEntries,
-  isChapterDocumentPath,
   isSessionMissing,
   isStaleFailure,
   isSuccessWorkbenchNote,

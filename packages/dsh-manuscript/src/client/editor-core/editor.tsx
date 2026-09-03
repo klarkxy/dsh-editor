@@ -1,4 +1,4 @@
-import { createElement as e, useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
+import { createElement as e, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
@@ -91,8 +91,6 @@ export type EditorCorePaperProjection = {
   replace(path: string, text: string, paperText: string): string
 }
 
-export type ChapterStatusValue = 'draft' | 'revising' | 'final'
-
 export type EditorCoreProps = {
   sessionId: string
   cwd?: string
@@ -137,11 +135,6 @@ export type EditorCoreProps = {
 
   paperProjection?: EditorCorePaperProjection
 
-  chapterStatus?: ChapterStatusValue
-  onChapterStatus?(path: string, status: ChapterStatusValue): void
-  statusBusy?: boolean
-  chapterStatusBlocked?: boolean
-
   autoSaveDelayMs?: number
   externalRevision?: number
 
@@ -174,7 +167,6 @@ export type EditorCoreStatus = 'empty' | 'loading' | 'saved' | 'draft' | 'confli
 export type EditorCoreSlot =
   | 'outer'
   | 'header'
-  | 'headerStatus'
   | 'chapterNav'
   | 'tools'
   | 'textarea'
@@ -259,10 +251,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     enableRewriteSelection = false,
     onRewriteSelection,
     paperProjection = IDENTITY_PROJECTION,
-    chapterStatus,
-    onChapterStatus,
-    statusBusy,
-    chapterStatusBlocked,
     autoSaveDelayMs = 800,
     externalRevision = 0,
     siblings,
@@ -835,18 +823,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           title: siblingsBlocked ? '请先保存' : '下一章',
           onClick: () => { if (siblingIndex < siblings!.length - 1 && siblings) onOpenSibling(siblings[siblingIndex + 1]!) },
         }, '›'),
-      ) : null,
-      onChapterStatus && chapterStatus ? e('label', { className: cls('headerStatus'), style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
-        e('span', { className: 'sr-only' }, '章节状态'),
-        e('select', {
-          value: chapterStatus,
-          disabled: Boolean(statusBusy) || Boolean(chapterStatusBlocked),
-          'aria-label': '章节状态',
-          onChange: (event: ChangeEvent<HTMLSelectElement>) => onChapterStatus(doc?.path || path, event.target.value as ChapterStatusValue),
-        },
-        e('option', { value: 'draft' }, '草稿'),
-        e('option', { value: 'revising' }, '修订中'),
-        e('option', { value: 'final' }, '已定稿')),
       ) : null,
       enableRewriteSelection ? e('button', {
         type: 'button',

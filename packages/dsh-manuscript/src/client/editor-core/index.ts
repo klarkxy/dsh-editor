@@ -12,5 +12,4 @@ export {
   type EditorCoreProps,
   type EditorCoreSlot,
   type EditorCoreStatus,
-  type ChapterStatusValue,
 } from './editor.tsx'

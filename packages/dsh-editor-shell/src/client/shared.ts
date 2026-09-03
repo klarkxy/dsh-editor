@@ -1,6 +1,6 @@
 import type { ConnectionHandle, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-client-connection/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import { worldbookEditorMetadata, type ChapterStatus, type ProjectContextReceiptBundle, type ProjectOverview } from 'dsh-editor-workbench/contracts'
+import { worldbookEditorMetadata, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import type { WritingPreferences, WritingSettingsSlots } from '../writing-settings.ts'
 
 export type TreeEntry = { name: string; type: 'file' | 'directory' | 'other' }
@@ -110,10 +110,6 @@ export function treeExpansionPaths(path: string): string[] {
   if (!path.startsWith('正文/')) return []
   const parts = path.split('/').filter(Boolean)
   return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('/'))
-}
-
-export function isChapterDocumentPath(path: string): boolean {
-  return /^正文\/.+\.(?:md|txt)$/i.test(path)
 }
 
 export function safeRpcCall<T>(request: () => Promise<unknown>): Promise<RpcResult<T>> {
@@ -361,24 +357,6 @@ export async function createFlowWorkspace(
 export function documentName(path: string): string {
   const filename = path.split('/').at(-1) ?? path
   return filename.replace(/\.(md|txt)$/i, '')
-}
-
-export function chapterStatusText(status: 'draft' | 'revising' | 'final'): string {
-  if (status === 'revising') return '修订中'
-  if (status === 'final') return '已定稿'
-  return '草稿'
-}
-
-/* 把 project.overview 拍扁成 path → status 映射,只保留正文/...的章节文件,
-   文件树徽标依赖这张表。overview 缺失时返回空对象,Tree 自然不渲染徽标。 */
-export function buildChapterStatusMap(overview: ProjectOverview | null | undefined): Record<string, ChapterStatus> {
-  const result: Record<string, ChapterStatus> = {}
-  if (!overview) return result
-  for (const chapter of overview.chapters) {
-    if (!isChapterDocumentPath(chapter.path)) continue
-    result[chapter.path] = chapter.status
-  }
-  return result
 }
 
 export function worldbookPaperProjection(path: string, text: string): { text: string; offset: number } {

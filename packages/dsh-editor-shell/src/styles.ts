@@ -264,13 +264,8 @@ export const componentStyles = `
 .shell .snapshot-rollback:disabled { opacity: .5; cursor: default; }
 .shell .snapshot-empty { padding: 6px 8px; color: var(--meta); font-size: var(--text-xs); }
 .shell .tree-row, .shell .tree-file-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-base); line-height: 1.35; letter-spacing: .04em; }
-/* 章节状态徽标:行末单字胶囊,草/修/定三色。margin-left:auto 把它推到行末,
-   文件名 span 仍按既有省略规则截断(用 :not(.chapter-status) 让规则跨两种结构都生效)。 */
-.shell .tree-row .chapter-status { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 6px; margin-left: auto; border-radius: 999px; box-shadow: var(--elev-ring); font-size: 10px; font-weight: 500; line-height: 1; letter-spacing: .04em; }
-.shell .tree-row .chapter-status.draft { color: var(--muted); background: var(--surface-warm); }
-.shell .tree-row .chapter-status.revising { color: var(--accent-on); background: var(--accent); }
-.shell .tree-row .chapter-status.final { color: var(--surface); background: var(--confirm); }
-.shell .tree-row > span:not(.chapter-status):last-child, .shell .tree-file-row > span:not(.chapter-status):last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 文件名 span 仍按既有省略规则截断:tree-row / tree-file-row 内最后一个 span 即文件名。 */
+.shell .tree-row > span:last-child, .shell .tree-file-row > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .tree-row:hover, .shell .tree-file-row:hover { background: var(--surface); color: var(--fg); }
 /* 选中态用 accent-soft(墨蓝淡底)替代原本的灰底,让"我现在在写哪一章"更醒目。 */
 .shell .tree-row[aria-current="page"], .shell .tree-file-row[aria-current="page"] { background: var(--accent-soft); color: var(--fg); }
@@ -303,9 +298,6 @@ export const componentStyles = `
 .shell .chapter-navigation > span { font-size: 11px; color: var(--meta); padding: 0 4px; }
 .shell .chapter-navigation button { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; color: var(--meta); font-size: 16px; line-height: 1; }
 .shell .chapter-navigation button:hover { background: var(--bg); color: var(--fg); }
-.shell .chapter-status-control { display: flex; align-items: center; gap: 6px; }
-.shell .chapter-status-control select { padding: 4px 8px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: transparent; color: var(--muted); font-size: var(--text-xs); letter-spacing: .12em; transition: color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease); }
-.shell .chapter-status-control select:hover, .shell .chapter-status-control select:focus-visible { color: var(--fg); border-color: var(--hairline-strong); }
 
 .shell .paper-input {
   width: 100%;

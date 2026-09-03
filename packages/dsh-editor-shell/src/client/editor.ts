@@ -9,7 +9,6 @@ import {
   type CSSProperties,
 } from 'react'
 import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ChapterStatus } from 'dsh-editor-workbench/contracts'
 import {
   EditorCore,
   type EditorCoreHandle,
@@ -48,9 +47,6 @@ export function Editor(props: {
   completionPreference: CompletionPreference
   authorPreferences: string
   authorMemory: string
-  chapterStatus?: ChapterStatus
-  statusBusy: boolean
-  onChapterStatus(path: string, status: ChapterStatus): void
   onSaved(): void
 }) {
   const {
@@ -115,8 +111,6 @@ export function Editor(props: {
   }
 
   const navigationBlocked = status === 'draft' || status === 'conflict'
-  const isChapter = /^正文\/.+\.(?:md|txt)$/i.test(path)
-  const showChapterStatus = isChapter && Boolean(props.chapterStatus)
 
   const reloadDisk = useCallback(async () => {
     setReloadConfirm(false)
@@ -174,10 +168,6 @@ export function Editor(props: {
       enablePatch: true,
       enableBeforeUnload: true,
       paperProjection: PAPER_PROJECTION,
-      chapterStatus: showChapterStatus ? props.chapterStatus : undefined,
-      onChapterStatus: showChapterStatus ? props.onChapterStatus : undefined,
-      statusBusy: props.statusBusy,
-      chapterStatusBlocked: navigationBlocked,
       siblings: files,
       onOpenSibling: onOpen,
       siblingsBlocked: navigationBlocked,

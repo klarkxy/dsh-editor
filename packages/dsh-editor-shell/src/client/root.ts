@@ -12,7 +12,6 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-client-connection/client'
 import {
   WORKBENCH_RPC_CHANNEL,
-  type ChapterStatus,
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
   type ProjectOverview,
@@ -25,13 +24,12 @@ import { writingPreferences, type WritingMigration, type WritingPreferences } fr
 import {
   localDateKey,
   nextBaselines,
-  progressChipProps,
   writingProgressFor,
   type WritingProgress,
   type WritingProgressScope,
 } from '../writing-progress.ts'
 import { redesignedStyles } from '../styles.ts'
-import { buildChapterStatusMap, errorMessage, isStaleFailure, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
+import { errorMessage, isStaleFailure, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, useObservable } from './components.ts'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger } from './settings.tsx'
@@ -94,11 +92,6 @@ type TreeCreateRequest = { kind: 'file' | 'folder'; directory: string }
 type FileSession = NonNullable<NonNullable<ReturnType<ShellContext['sessions']['binding']>>['session']> | undefined
 
 type SearchHit = { path: string; line: number; column: number; start: number; end: number; excerpt: string; version: string }
-
-function rpcFailureText(result: RpcResult): string {
-  if (result.ok) return ''
-  return `${result.error.code ?? ''} ${result.error.message ?? ''}`
-}
 
 async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string): Promise<string[]> {
   const queue = ['']
@@ -251,10 +244,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const [focusMode, setFocusMode] = useState(false)
   const [chatFocusNonce, setChatFocusNonce] = useState(0)
   const [overview, setOverview] = useState<ProjectOverview | null | undefined>(null)
-  const [overviewBusy, setOverviewBusy] = useState(false)
-  const [overviewError, setOverviewError] = useState('')
   const [overviewRevision, setOverviewRevision] = useState(0)
-  const [statusBusy, setStatusBusy] = useState(false)
   const [editorDirty, setEditorDirty] = useState(false)
   const [fileMenu, setFileMenu] = useState<{ path: string; x: number; y: number } | null>(null)
   const [imagePreview, setImagePreview] = useState<{ path: string; url: string } | null>(null)
@@ -334,7 +324,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     if (!openWorkspaceId) setPath('')
     setFiles([]); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
     setFileMenu(null); setManagePath(null); setManageNote('')
-    setOverview(null); setOverviewError(''); setOverviewBusy(false); setStatusBusy(false); setWorkspaceMenuOpen(false)
+    setOverview(null); setWorkspaceMenuOpen(false)
     setHistoryOpen(false); setSnapshots(null); setRollbackTarget(null)
   }, [openWorkspaceId])
   useEffect(() => {
@@ -361,21 +351,16 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const loadOverview = async () => {
     if (!fileSession) return
     const ticket = overviewRequestGate.begin(fileSession.sessionId)
-    setOverviewBusy(true); setOverviewError('')
     const result = await safeRpcCall<ProjectOverview>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.overview', { sessionId: fileSession.sessionId }))
     if (!overviewRequestGate.isCurrent(ticket)) return
-    setOverviewBusy(false)
     if (!result.ok) {
       setOverview(null)
-      setOverviewError(/invalid|status|状态/i.test(rpcFailureText(result))
-        ? '章节状态文件已损坏，为避免覆盖数据，状态修改已停用。正文仍可正常编辑和导出。'
-        : errorMessage(result))
       return
     }
     setOverview(result.value)
   }
   useEffect(() => {
-    if (!fileSession) { setOverview(null); setOverviewBusy(false); return }
+    if (!fileSession) { setOverview(null); return }
     void loadOverview()
   }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision, contentRevision, overviewRevision])
   /* 拿到 overview 后,如果当前作品今天还没有基线,就写下"早上总字数";
@@ -389,31 +374,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     if (next === writingProgress.baselines) return
     void progressScope.set('baselines', next).catch(() => { /* 下次 overview 自然重试 */ })
   }, [overview, openWorkspaceId, writableProgress, writingProgress, progressScope])
-  const updateChapterStatus = async (chapterPath: string, status: ChapterStatus) => {
-    if (!fileSession || !overview || statusBusy) return
-    const requestSessionId = fileSession.sessionId
-    const ticket = overviewRequestGate.begin(requestSessionId)
-    setStatusBusy(true); setOverviewError('')
-    const result = await safeRpcCall<ProjectOverview>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'chapter.statusSet', {
-      sessionId: fileSession.sessionId,
-      path: chapterPath,
-      status,
-      expectedStatusRevision: overview.statusRevision,
-    }))
-    if (fileSessionIdRef.current !== requestSessionId) return
-    setStatusBusy(false)
-    if (!overviewRequestGate.isCurrent(ticket)) {
-      setOverviewRevision((value) => value + 1)
-      return
-    }
-    if (!result.ok) {
-      setOverviewError(isStaleFailure(result) ? '作品进度已在别处变化，已重新读取；请再次选择状态。' : errorMessage(result))
-      setOverviewRevision((value) => value + 1)
-      return
-    }
-    setOverview(result.value)
-    setWorkbenchNote(`已更新章节状态`)
-  }
   const openDocument = (nextPath: string) => {
     if (editorDirty && nextPath !== path) {
       setWorkbenchNote('请先保存当前文档。')
@@ -1238,7 +1198,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
       workspaceOpen.warning ? e('p', { className: 'warning pad', role: 'status' }, workspaceOpen.warning) : null,
       workbenchNote ? e('p', { className: `pad`, role: 'status' }, workbenchNote) : null,
-      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
+      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision }),
     ) : null,
     sidebarVisible ? e(PanelResizer, {
       side: 'left',
@@ -1255,9 +1215,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       completionPreference: writing.completion,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
       authorMemory: normalizeAuthorMemory(writing.authorMemory),
-      chapterStatus: overview?.chapters.find((chapter) => chapter.path === path)?.status,
-      statusBusy,
-      onChapterStatus: (chapterPath: string, status: ChapterStatus) => void updateChapterStatus(chapterPath, status),
       onSaved: () => setOverviewRevision((value) => value + 1),
     }),
     assistantVisible ? e(PanelResizer, {
@@ -1370,4 +1327,4 @@ export function registerShellRoot(ctx: Context, options: RegisterShellRootOption
 }
 
 // re-exports so external spec files still see the surface area of the old monolith
-export { chapterStatusText as _chapterStatusText, isSuccessWorkbenchNote as _isSuccessWorkbenchNote, searchSkippedText as _searchSkippedText } from './shared.ts'
+export { isSuccessWorkbenchNote as _isSuccessWorkbenchNote, searchSkippedText as _searchSkippedText } from './shared.ts'

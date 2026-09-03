@@ -3,14 +3,13 @@
  *
  * 设计说明：
  *   - 复用了与 import / context 一致的 readTextFile / writeTextFile /
- *     createTextFile；archive / rename / removeChapterStatus 则需 LifecycleAccess，
+ *     createTextFile；archive / rename 则需 LifecycleAccess，
  *     统一在 dispatch 层（src/index.ts）解析好 access 传入。
  *   - split：anchor 必须在 path 文件中恰好出现一次；newPath 必须不存在；
  *     apply 时先重读校验 version + anchor 唯一性，再把 head 写回 path、
  *     tail 落到 newPath。before/after 是各 200 字预览。
  *   - merge：合并文本 = path.trimEnd() + '\n\n' + source.trim() + '\n'；
- *     写回 path 后用 archiveDocument 归档 sourcePath（archiveDocument 内部
- *     已经为 正文/ 章节移除 chapter-status）。
+ *     写回 path 后用 archiveDocument 归档 sourcePath。
  *   - renames：允许两种形态——
  *       * 同目录：basename(to) 直接喂给 renameDocument；
  *       * 跨目录：要求 basename(from) === basename(to)，且 from / to 都在

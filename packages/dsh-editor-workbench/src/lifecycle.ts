@@ -3,8 +3,6 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
-import type { ChapterStatus } from './contracts.ts'
-import { migrateChapterStatus, readChapterStatus, removeChapterStatus, restoreChapterStatus } from './overview.ts'
 
 export const ARCHIVE_DIRECTORY = '.dsh-editor/archive'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -33,7 +31,6 @@ type ArchiveManifest = {
   originalVersion: string
   bytes: number
   sha256: string
-  chapterStatus?: Exclude<ChapterStatus, 'draft'>
   restoredAt?: string
   recordHash: string
 }
@@ -369,13 +366,7 @@ export async function renameDocument(input: {
     throw new LifecycleError('case-only or unchanged rename is not supported', 'INVALID_PATH')
   }
   const moved = await moveChecked({ access: input.access, source, target, expectedVersion: input.expectedVersion })
-  if (!source.startsWith('正文/')) return { path: target, version: moved.version }
-  try {
-    await migrateChapterStatus(input.access, source, target)
-    return { path: target, version: moved.version }
-  } catch {
-    return { path: target, version: moved.version, metadataWarning: '章节已重命名，但作品进度没有同步；请重新设置章节状态。' }
-  }
+  return { path: target, version: moved.version }
 }
 
 export async function moveManuscriptDocument(input: {
@@ -392,12 +383,7 @@ export async function moveManuscriptDocument(input: {
   }
   const target = `${directory}/${path.posix.basename(source)}`
   const moved = await moveChecked({ access: input.access, source, target, expectedVersion: input.expectedVersion })
-  try {
-    await migrateChapterStatus(input.access, source, target)
-    return { path: target, version: moved.version }
-  } catch {
-    return { path: target, version: moved.version, metadataWarning: '章节已移动，但作品进度没有同步；请重新设置章节状态。' }
-  }
+  return { path: target, version: moved.version }
 }
 
 function manifestPath(recordDirectory: string): string {
@@ -443,12 +429,8 @@ function parseManifest(value: unknown, access: LifecycleAccess, recordDirectory:
     originalVersion: item.originalVersion,
     bytes: item.bytes,
     sha256: item.sha256,
-    ...(item.chapterStatus === 'revising' || item.chapterStatus === 'final' ? { chapterStatus: item.chapterStatus } : {}),
     ...(typeof item.restoredAt === 'string' ? { restoredAt: item.restoredAt } : {}),
     recordHash: item.recordHash,
-  }
-  if (item.chapterStatus !== undefined && item.chapterStatus !== 'revising' && item.chapterStatus !== 'final') {
-    throw new LifecycleError('archive chapter status is invalid', 'BLOCKED')
   }
   const { recordHash: actual, ...withoutHash } = manifest
   if (recordHash(withoutHash) !== actual) throw new LifecycleError('archive manifest integrity check failed', 'BLOCKED')
@@ -549,16 +531,14 @@ export async function archiveDocument(input: {
 }): Promise<ArchiveView> {
   assertWritable(input.access)
   let stored: StoredManifest
-  let metadataWarning = ''
   if (input.archiveId) {
     stored = await findArchive(input.access, input.archiveId)
     if (stored.manifest.state !== 'moving') {
       const current = await viewArchive(input.access, stored)
       if (current.state === 'archived' && stored.manifest.originalPath.startsWith('正文/')) {
-        try { await removeChapterStatus(input.access, stored.manifest.originalPath) }
-        catch { metadataWarning = '文档已归档，但作品进度没有同步；恢复后请重新设置章节状态。' }
+        return current
       }
-      return { ...current, ...(metadataWarning ? { metadataWarning } : {}) }
+      return current
     }
   } else {
     const originalPath = authorPath(input.path ?? '')
@@ -568,15 +548,6 @@ export async function archiveDocument(input: {
     const createdAt = new Date().toISOString()
     const directory = recordDirectory(createdAt, archiveId)
     const payloadPath = `${ARCHIVE_DIRECTORY}/${directory}/payload${path.posix.extname(originalPath)}`
-    let chapterStatus: Exclude<ChapterStatus, 'draft'> | undefined
-    if (originalPath.startsWith('正文/')) {
-      try {
-        const status = await readChapterStatus(input.access, originalPath)
-        if (status === 'revising' || status === 'final') chapterStatus = status
-      } catch {
-        metadataWarning = '文档将继续归档，但章节状态无法读取；恢复后将按草稿处理。'
-      }
-    }
     await mkdirSafe(input.access.path, `${ARCHIVE_DIRECTORY}/${directory}`)
     const manifest = withRecordHash({
       version: 1,
@@ -590,7 +561,6 @@ export async function archiveDocument(input: {
       originalVersion: source.version,
       bytes: source.bytes,
       sha256: source.sha256,
-      ...(chapterStatus ? { chapterStatus } : {}),
     })
     const created = await createTextFile(input.access.files, manifestPath(directory), JSON.stringify(manifest))
     stored = { manifest, version: created.version }
@@ -599,11 +569,7 @@ export async function archiveDocument(input: {
   const current = await viewArchive(input.access, stored)
   if (current.state === 'archived') {
     stored = await writeManifest(input.access, stored, 'archived')
-    if (stored.manifest.originalPath.startsWith('正文/')) {
-      try { await removeChapterStatus(input.access, stored.manifest.originalPath) }
-      catch { metadataWarning = '文档已归档，但作品进度没有同步；恢复后请重新设置章节状态。' }
-    }
-    return { ...await viewArchive(input.access, stored), ...(metadataWarning ? { metadataWarning } : {}) }
+    return await viewArchive(input.access, stored)
   }
   if (current.state !== 'pending-archive' || !current.version) return current
   await moveChecked({
@@ -614,11 +580,7 @@ export async function archiveDocument(input: {
     expectedHash: stored.manifest.sha256,
   })
   stored = await writeManifest(input.access, stored, 'archived')
-  if (stored.manifest.originalPath.startsWith('正文/')) {
-    try { await removeChapterStatus(input.access, stored.manifest.originalPath) }
-    catch { metadataWarning = '文档已归档，但作品进度没有同步；恢复后请重新设置章节状态。' }
-  }
-  return { ...await viewArchive(input.access, stored), ...(metadataWarning ? { metadataWarning } : {}) }
+  return await viewArchive(input.access, stored)
 }
 
 export async function restoreArchive(input: {
@@ -631,12 +593,7 @@ export async function restoreArchive(input: {
   let current = await viewArchive(input.access, stored)
   if (current.state === 'restored') {
     if (stored.manifest.state !== 'restored') stored = await writeManifest(input.access, stored, 'restored')
-    let metadataWarning = ''
-    if (stored.manifest.originalPath.startsWith('正文/')) {
-      try { await restoreChapterStatus(input.access, stored.manifest.originalPath, stored.manifest.chapterStatus ?? 'draft') }
-      catch { metadataWarning = '文档已恢复，但作品进度没有同步；请重新设置章节状态。' }
-    }
-    return { ...await viewArchive(input.access, stored), ...(metadataWarning ? { metadataWarning } : {}) }
+    return await viewArchive(input.access, stored)
   }
   if (current.state !== 'archived' && current.state !== 'pending-restore') return current
   if (!current.version || !input.expectedVersion || current.version !== input.expectedVersion) {
@@ -652,10 +609,5 @@ export async function restoreArchive(input: {
   })
   stored = await writeManifest(input.access, stored, 'restored')
   current = await viewArchive(input.access, stored)
-  let metadataWarning = ''
-  if (stored.manifest.originalPath.startsWith('正文/')) {
-    try { await restoreChapterStatus(input.access, stored.manifest.originalPath, stored.manifest.chapterStatus ?? 'draft') }
-    catch { metadataWarning = '文档已恢复，但作品进度没有同步；请重新设置章节状态。' }
-  }
-  return { ...current, ...(metadataWarning ? { metadataWarning } : {}) }
+  return current
 }

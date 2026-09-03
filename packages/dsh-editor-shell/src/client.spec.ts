@@ -1,16 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
-  buildChapterStatusMap,
   canSubmitComposer,
-  chapterStatusText,
   claimInitialWorkspaceResume,
   clampPanelWidth,
   createFlowWorkspace,
   errorMessage,
   hasRelocatableManuscriptFiles,
   hasVisibleWorkspaceEntries,
-  isChapterDocumentPath,
   isSessionMissing,
   isStaleFailure,
   isSuccessWorkbenchNote,
@@ -264,12 +261,7 @@ describe('shell manuscript RPC safety', () => {
     })
   })
 
-  it('uses chapter chrome only for manuscript documents and hides valid worldbook YAML from the paper', () => {
-    expect(isChapterDocumentPath('正文/001.md')).toBe(true)
-    expect(isChapterDocumentPath('正文/第二卷/003.txt')).toBe(true)
-    expect(isChapterDocumentPath('世界书/港口规则.md')).toBe(false)
-    expect(isChapterDocumentPath('项目总览.md')).toBe(false)
-
+  it('hides valid worldbook YAML from the paper and leaves invalid metadata untouched', () => {
     const source = '---\r\ntriggers: ["港口"]\r\nenabled: true\r\npriority: 8\r\n---\r\n# 港口规则\r\n\r\n正文'
     const projection = worldbookPaperProjection('世界书/港口规则.md', source)
     expect(projection.text).toBe('# 港口规则\r\n\r\n正文')
@@ -443,72 +435,6 @@ describe('shell manuscript RPC safety', () => {
     expect(errorMessage({ ok: false, error: { code: 'directory-exists', message: 'manuscript group already exists' } })).toBe('同名文件或目录已经存在。')
     expect(errorMessage({ ok: false, error: { code: 'directory-unreadable', message: 'project folder is read-only' } })).toBe('当前文件无法写入，请检查目录权限。')
     expect(errorMessage({ ok: false, error: { code: 'workspace-invalid-path', message: 'manuscript group name is invalid' } })).toBe('名称或路径不符合规则。')
-  })
-
-  it('exposes chapter status text for the editor chip', () => {
-    expect(chapterStatusText('draft')).toBe('草稿')
-    expect(chapterStatusText('revising')).toBe('修订中')
-    expect(chapterStatusText('final')).toBe('已定稿')
-  })
-
-  it('builds a chapter status map that only keeps manuscript chapter paths', () => {
-    expect(buildChapterStatusMap(null)).toEqual({})
-    expect(buildChapterStatusMap(undefined)).toEqual({})
-    const overview = {
-      statusRevision: 'r1',
-      chapters: [
-        { path: '正文/001.md', title: '一', status: 'draft' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
-        { path: '正文/第二卷/003.txt', title: '三', status: 'final' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
-        { path: '正文/004.md', title: '四', status: 'revising' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
-        { path: '大纲/章纲.md', title: '章纲', status: 'draft' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
-        { path: '项目总览.md', title: '总览', status: 'final' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
-        { path: '世界书/港口.md', title: '港', status: 'revising' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
-      ],
-      outlines: [],
-      totals: { chapters: 3, chars: 0, byStatus: { draft: 1, revising: 1, final: 1 } },
-      recent: null,
-      truncated: false,
-      skipped: 0,
-    }
-    expect(buildChapterStatusMap(overview)).toEqual({
-      '正文/001.md': 'draft',
-      '正文/第二卷/003.txt': 'final',
-      '正文/004.md': 'revising',
-    })
-  })
-
-  it('lets the latest overview entry win when chapter paths repeat', () => {
-    const overview = {
-      statusRevision: 'r2',
-      chapters: [
-        { path: '正文/001.md', title: '一', status: 'draft' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
-        { path: '正文/001.md', title: '一', status: 'revising' as const, chars: 0, empty: true, excerpt: '', modifiedAt: null },
-      ],
-      outlines: [],
-      totals: { chapters: 1, chars: 0, byStatus: { draft: 0, revising: 1, final: 0 } },
-      recent: null,
-      truncated: false,
-      skipped: 0,
-    }
-    expect(buildChapterStatusMap(overview)).toEqual({ '正文/001.md': 'revising' })
-  })
-
-  it('renders status badges in the file tree, threads the map from root, and styles the three states', () => {
-    const sidebarSource = readFileSync(new URL('./client/sidebar.ts', import.meta.url), 'utf8')
-    expect(sidebarSource).toContain('chapter-status')
-    expect(sidebarSource).toContain('chapterStatuses')
-    expect(sidebarSource).toContain('chapterStatusText(chapterStatus)')
-    expect(sidebarSource).toContain('chapterStatusGlyph(chapterStatus)')
-    expect(sidebarSource).toContain('isChapterDocumentPath(child)')
-
-    const rootSourceText = readFileSync(new URL('./client/root.ts', import.meta.url), 'utf8')
-    expect(rootSourceText).toMatch(/chapterStatuses:\s*buildChapterStatusMap\(overview\)/)
-
-    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
-    expect(styleSource).toMatch(/\.chapter-status\b/)
-    expect(styleSource).toMatch(/\.chapter-status\.draft\b/)
-    expect(styleSource).toMatch(/\.chapter-status\.revising\b/)
-    expect(styleSource).toMatch(/\.chapter-status\.final\b/)
   })
 
   it('uses the Host-created flag instead of a possibly stale workspace list', async () => {
