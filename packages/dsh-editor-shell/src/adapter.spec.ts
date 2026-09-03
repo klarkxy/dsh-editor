@@ -77,7 +77,7 @@ describe('DSH snapshot adapter', () => {
     ])
     expect(toolResultRow({ kind: 'tool-result', seq: 4, callId: 'x', call: { name: 'write', argsRaw: '{}' }, content: [{ type: 'text', text: 'a'.repeat(5000) }], isError: false } as never).content).toHaveLength(4001)
   })
-  it('suppresses the complete product-owned index turn and generic empty status rows', () => {
+  it('hides only the index prompt itself and keeps the indexing process visible', () => {
     const prompt = buildNovelIndexPrompt()
     const snapshot = { nodes: [
       { kind: 'user', seq: 1, content: [{ type: 'text', text: prompt }] },
@@ -87,9 +87,14 @@ describe('DSH snapshot adapter', () => {
       { kind: 'turn-finished', seq: 5 },
       { kind: 'turn-error', seq: 6 },
     ] }
-    expect(chatRows(snapshot as never)).toEqual([])
+    expect(chatRows(snapshot as never)).toEqual([
+      { id: 'tool-result:3', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'internal' },
+      { id: 'assistant:4', role: 'assistant', text: '已通过 novel_propose 更新 .dsh-editor/作品索引.md', detail: undefined },
+      { id: 'turn-error:6', role: 'notice', text: '写作助手未能完成这次请求，请重试。' },
+    ])
     expect(internalIndexTurnActive(snapshot as never)).toBe(true)
-    expect(JSON.stringify(chatRows(snapshot as never))).not.toMatch(/workspace|novel_propose|作品索引|状态已更新/)
+    /* 初始化指令原文（含"不可信数据"约束）不出现在 UI */
+    expect(JSON.stringify(chatRows(snapshot as never))).not.toContain('不可信数据')
 
     const authorSnapshot = { nodes: [
       ...snapshot.nodes,
@@ -99,6 +104,9 @@ describe('DSH snapshot adapter', () => {
       { kind: 'step-finished', seq: 10 },
     ] }
     expect(chatRows(authorSnapshot as never)).toEqual([
+      { id: 'tool-result:3', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'internal' },
+      { id: 'assistant:4', role: 'assistant', text: '已通过 novel_propose 更新 .dsh-editor/作品索引.md', detail: undefined },
+      { id: 'turn-error:6', role: 'notice', text: '写作助手未能完成这次请求，请重试。' },
       { id: 'user:7', role: 'user', text: '讨论下一章', projectContextReceipt: undefined },
       { id: 'tool-result:9', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'raw' },
     ])

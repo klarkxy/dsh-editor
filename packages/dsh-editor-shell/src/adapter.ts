@@ -147,16 +147,13 @@ function isHiddenToolResult(node: Extract<ConversationNode, { kind: 'tool-result
 
 export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
   const rows: ChatRow[] = []
-  let hidingIndexTurn = false
   for (const node of snapshot.nodes) {
     const common = { id: `${node.kind}:${node.seq}` }
     if (node.kind === 'user' || node.kind === 'steering') {
       const text = blocksText(node.content)
-      if (isNovelIndexJobPrompt(text)) {
-        hidingIndexTurn = true
-        continue
-      }
-      hidingIndexTurn = false
+      /* 初始化（建索引）指令本身不展示,但它之后的思考、查找与总结照常可见,
+         让作者能看到初始化正在进行的过程。 */
+      if (isNovelIndexJobPrompt(text)) continue
       const envelope = parseProjectContextEnvelope(text)
       rows.push({
         ...common,
@@ -166,7 +163,6 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
       })
       continue
     }
-    if (hidingIndexTurn) continue
     if (node.kind === 'assistant') {
       const { thinking, text: assistantText } = splitAssistantContent(node.blocks)
       if (isNovelIndexJobPrompt(assistantText)) continue

@@ -655,7 +655,8 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     if (el && bottomPinnedRef.current) el.scrollTop = el.scrollHeight
   }, [snapshot, outgoing])
   const internalIndexActive = internalIndexTurnActive(snapshot)
-  const partial = internalIndexActive ? { thinking: '', text: '' } : partialView(snapshot)
+  /* 初始化回合的思考/流式正文也照常显示,不再强制清空,避免"正在回复…"随流式块一闪一闪。 */
+  const partial = partialView(snapshot)
   const rows = chatRows(snapshot)
   const hasTurnError = rows.some((row) => row.id.startsWith('turn-error:'))
   const workspace = workspaceList.items.find((item) => item.workspaceId === workspaceId)
@@ -924,10 +925,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       outgoing?.state === 'accepted' && !outgoingIsCanonical
         ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, '正在回复…')
         : null,
-      (internalIndexActive ? [] : visibleRunningCalls(snapshot.runningCalls)).map((call) => e('article', { className: 'chat-row tool', key: `running:${call.callId}` }, e('strong', null,
+      visibleRunningCalls(snapshot.runningCalls).map((call) => e('article', { className: 'chat-row tool', key: `running:${call.callId}` }, e('strong', null,
         call.name === 'glob' || call.name === 'grep' ? '正在查找作品资料…' : call.name === 'read' ? '正在阅读作品资料…' : call.name === 'novel_propose' ? '正在准备修改建议…' : '正在处理…'
       ))),
-      (internalIndexActive ? [] : snapshot.queue).map((item) => e('article', { className: 'chat-row notice', key: `queue:${item.id}` }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? '已排队' : '正在转向'))),
+      snapshot.queue.map((item) => e('article', { className: 'chat-row notice', key: `queue:${item.id}` }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? '已排队' : '正在转向'))),
       partial.thinking ? e('details', { className: 'chat-row thinking', open: true, 'aria-live': 'polite' },
         e('summary', null, '正在思考…'),
         e('p', null, partial.thinking),
@@ -935,7 +936,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       partial.text ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, e('div', { className: 'md' }, e(Markdown, { text: partial.text }))) : snapshot.partial && !partial.thinking ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, '正在回复…') : null,
       snapshot.pending.map((item) => e(PendingCard, { key: item.key, item })),
       snapshot.openState === 'error' ? e('p', { className: 'warning' }, '连接暂时中断，正在恢复…') : null,
-      snapshot.promptError && !internalIndexActive && !hasTurnError ? e('p', { className: 'warning' }, '写作助手未能完成这次请求，请重试。') : null,
+      snapshot.promptError && !hasTurnError ? e('p', { className: 'warning' }, '写作助手未能完成这次请求，请重试。') : null,
     ),
     e('form', { className: 'composer', onSubmit: submit },
       e('textarea', {
