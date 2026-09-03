@@ -1,6 +1,7 @@
 import {
   createElement as e,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -20,24 +21,35 @@ import type {
 import {
   WORKBENCH_RPC_CHANNEL,
   type ProjectContextReceiptBundle,
+  type ProjectInspectionResponse,
 } from 'dsh-editor-workbench/contracts'
 import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+import {
+  buildInterviewPrompt,
+  decodeInitSettings,
+  INIT_SETTINGS_NAMESPACE,
+  initGuideState,
+  shouldAutoIndexAfterInterview,
+  startExploreInit,
+} from '../init-guide.ts'
 import {
   answerApproval,
   answerQuestions,
   chatRows,
   internalIndexTurnActive,
   loadOlder,
-  partialText,
+  partialView,
   readModels,
   selectModel,
+  send,
   sendProjectContext,
   stop,
   visibleRunningCalls,
   type QuestionAnswerItem,
 } from '../adapter.ts'
 import { ConversationRenameQueue, conversationRows, nextAutomaticConversationTitle, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
-import { DeepSeekWhaleMark, useObservable } from './components.ts'
+import { useObservable } from './components.ts'
+import { Markdown } from './markdown.tsx'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
 import { Select } from './select.tsx'
 import {
@@ -47,21 +59,108 @@ import {
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
+import { STANDARD_REASONING_EFFORTS } from './settings-models-store.ts'
 
 const conversationRenameQueue = new ConversationRenameQueue()
 
-export function ModelIndicator({ ctx, session, onConfigure }: { ctx: ShellContext; session: SessionFace; onConfigure(): void }) {
+/*
+ * 约定俗成的思考强度档位展示名。自定义提供方(llm-pi-ai 手工声明)的模型
+ * 在目录里不带推理元数据时,强度下拉先用这套档位渲染;首次选择时把同一套
+ * 档位补写进该模型的 settings 声明,之后目录自己提供档位。host 在派发前
+ * 校验档位,不声明直接传会被拒,所以必须先补声明。
+ */
+const FALLBACK_EFFORT_OPTIONS = Object.keys(STANDARD_REASONING_EFFORTS).map((id) => ({
+  value: id,
+  label: id === 'xhigh' ? 'Xhigh' : id[0].toUpperCase() + id.slice(1),
+}))
+
+/* 自定义模型未显式选过强度时的默认档:写真实的选择,而不是只显示一个值。 */
+const DEFAULT_FALLBACK_EFFORT = 'medium'
+
+/** Read the hand-declared pi-ai provider profile for `provider`, when the route is one. */
+function piAiCustomProfile(ctx: ShellContext, provider: string): { profile: Record<string, unknown>; revision: number } | undefined {
+  const ns = ctx.settingsScope.describe().getSnapshot().view?.namespaces.find((entry) => entry.ns === 'llm-pi-ai')
+  const user = ns?.user
+  const providers = typeof user === 'object' && user !== null && !Array.isArray(user)
+    ? (user as Record<string, unknown>)['providers'] : undefined
+  const profile = typeof providers === 'object' && providers !== null && !Array.isArray(providers)
+    ? (providers as Record<string, unknown>)[provider] : undefined
+  return typeof profile === 'object' && profile !== null && !Array.isArray(profile) && ns
+    ? { profile: profile as Record<string, unknown>, revision: ns.revision }
+    : undefined
+}
+
+export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; session: SessionFace; onConfigure(): void }) {
   const [models, setModels] = useState<SessionModels | null>(null)
   const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [customRoute, setCustomRoute] = useState(false)
   const refresh = async () => {
     const result = await readModels(ctx.connection, session.sessionId)
     if (!result.ok) { setNote('接口不可用'); return }
-    setModels(result.value); setNote('')
+    await ctx.settingsScope.describe().ensure()
+    setModels(result.value)
+    setCustomRoute(piAiCustomProfile(ctx, result.value.current.provider) !== undefined)
+    setNote('')
   }
   useEffect(() => { setModels(null); void refresh() }, [session.sessionId])
-  const current = models?.groups
-    .flatMap((group) => group.models.map((model) => ({ provider: group.id, providerName: group.name, model })))
-    .find((item) => item.provider === models.current.provider && item.model.id === models.current.model)
+  /* 首次给无元数据的自定义模型选强度:把约定六档写进它的模型声明。 */
+  const declareEfforts = async (): Promise<boolean> => {
+    if (!models) return false
+    const found = piAiCustomProfile(ctx, models.current.provider)
+    if (!found) return false
+    const list = found.profile['models']
+    if (!Array.isArray(list)) return false
+    const index = list.findIndex((entry) =>
+      typeof entry === 'object' && entry !== null && (entry as Record<string, unknown>)['id'] === models.current.model)
+    if (index < 0) return false
+    const entry = list[index] as Record<string, unknown>
+    if (typeof entry['reasoningEfforts'] === 'object' && entry['reasoningEfforts'] !== null) return true
+    const nextModels = list.map((item, at) => at === index ? { ...(item as Record<string, unknown>), reasoningEfforts: { ...STANDARD_REASONING_EFFORTS } } : item)
+    const response = await ctx.connection.api.settings.mutate({
+      ns: 'llm-pi-ai',
+      ops: [{ op: 'set', path: ['providers', models.current.provider, 'models'], value: nextModels }],
+      expectedRevision: found.revision,
+    })
+    return (response.result as RpcResult<unknown>).ok
+  }
+  const choose = async (provider: string, model: string, reasoningEffort?: string) => {
+    if (!models || busy) return
+    setBusy(true); setNote('')
+    if (reasoningEffort !== undefined) {
+      const declared = (models.groups.find((group) => group.id === provider)?.models
+        .find((item) => item.id === model)?.reasoning?.efforts.length ?? 0) > 0
+      if (!declared && !(await declareEfforts())) {
+        setNote('未能为该模型启用思考强度，请重试。')
+        setBusy(false)
+        return
+      }
+    }
+    const result = await selectModel(ctx.connection, session.sessionId, provider, model, reasoningEffort)
+    if (!result.ok) setNote('模型切换未能完成，请重试。')
+    await refresh()
+    setBusy(false)
+  }
+  /*
+   * 自定义模型还没选过强度时,自动落一个真实的中档默认:先补声明(幂等),
+   * 再选 medium。只显示占位符会让"当前强度"无答案,也不符合端点默认即
+   * medium 的常识。每个会话+模型只尝试一次,失败就只留提示不纠缠。
+   */
+  const autoDefaultAttempted = useRef('')
+  useEffect(() => {
+    if (!models || !customRoute || busy || models.current.reasoningEffort) return
+    const catalogModel = models.groups.find((group) => group.id === models.current.provider)?.models
+      .find((item) => item.id === models.current.model)
+    if ((catalogModel?.reasoning?.efforts.length ?? 0) > 0) return
+    const key = `${session.sessionId}:${models.current.provider}:${models.current.model}`
+    if (autoDefaultAttempted.current === key) return
+    autoDefaultAttempted.current = key
+    void (async () => {
+      if (!(await declareEfforts())) return
+      await selectModel(ctx.connection, session.sessionId, models.current.provider, models.current.model, DEFAULT_FALLBACK_EFFORT)
+      await refresh()
+    })()
+  }, [models, customRoute, busy])
   if (!models || models.groups.length === 0) {
     return e('div', { className: 'compact-control model-empty' },
       e('span', null, note || (models ? '暂无可用模型' : '读取中…')),
@@ -69,8 +168,40 @@ export function ModelIndicator({ ctx, session, onConfigure }: { ctx: ShellContex
       e('button', { type: 'button', onClick: onConfigure }, '设置接口'),
     )
   }
-  return e('div', { className: 'compact-control' },
-    e('span', { className: 'model-indicator', title: '本次对话使用的模型' }, current ? `${current.providerName} · ${current.model.name}` : models.current.model),
+  const options = models.groups.flatMap((group) => group.models.map((model) => ({
+    value: `${group.id} ${model.id}`,
+    label: `${group.name} · ${model.name}`,
+  })))
+  const currentValue = `${models.current.provider} ${models.current.model}`
+  const currentCatalogModel = models.groups
+    .find((group) => group.id === models.current.provider)?.models
+    .find((model) => model.id === models.current.model)
+  const efforts = currentCatalogModel?.reasoning?.efforts ?? []
+  const effortValue = models.current.reasoningEffort ?? currentCatalogModel?.reasoning?.defaultEffort ?? ''
+  const effortOptions = efforts.length > 0
+    ? efforts.map((effort) => ({ value: effort.id, label: effort.name }))
+    : FALLBACK_EFFORT_OPTIONS
+  return e('div', { className: 'compact-control model-picker' },
+    e(Select, {
+      value: options.some((option) => option.value === currentValue) ? currentValue : '',
+      placeholder: models.current.model,
+      'aria-label': '选择模型',
+      disabled: busy,
+      options,
+      onChange: (next) => {
+        const [provider, model] = next.split(' ')
+        if (provider && model) void choose(provider, model)
+      },
+    }),
+    efforts.length > 0 || customRoute ? e(Select, {
+      value: effortValue,
+      placeholder: '思考强度',
+      'aria-label': '思考强度',
+      disabled: busy,
+      options: effortOptions,
+      onChange: (effort) => void choose(models.current.provider, models.current.model, effort),
+    }) : null,
+    note ? e('small', { className: 'warning', role: 'alert' }, note) : null,
   )
 }
 
@@ -198,62 +329,150 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
   )
 }
 
+/**
+ * workbench /dsh-editor-workbench 通道的 proposal.prepare/apply 在不同 kind 下的响应体。
+ * 与内核 ProposalMarker 保持对齐:edit/create 走 /manuscript 通道,这里只描述 split/merge/renames。
+ */
+type WorkbenchProposalPrepared =
+  | { kind: 'split'; version: string; before: string; after: string; headChars: number; tailChars: number }
+  | { kind: 'merge'; versions: { path: string; sourcePath: string }; pathChars: number; sourceChars: number }
+  | { kind: 'renames'; versions: Record<string, string>; entries: Array<{ from: string; to: string }> }
+
+/** 提案 prepare 之后保存下来的所有状态,kind 一一对应。edit/create 保留 /manuscript 旧字段。 */
+type ProposalPrepared =
+  | { kind: 'edit'; version: string; before: string; after: string }
+  | { kind: 'create'; applicable: true }
+  | WorkbenchProposalPrepared
+
+type ProposalApplyResult =
+  | { kind: 'edit' | 'create'; path: string; version: string }
+  | { applied: string[]; failed?: { from: string; reason: string } }
+
+/** 从 prepare 响应里抽取 expectedVersions:apply 阶段原子地校验所有参与文件的版本。key 一律是真实文件路径（workbench 端按路径查找）。 */
+export function buildExpectedVersions(proposal: ProposalMarker, prepared: ProposalPrepared): Record<string, string> | undefined {
+  if (proposal.kind === 'split' && prepared.kind === 'split') return { [proposal.path]: prepared.version }
+  if (proposal.kind === 'merge' && prepared.kind === 'merge') return { [proposal.path]: prepared.versions.path, [proposal.sourcePath]: prepared.versions.sourcePath }
+  if (proposal.kind === 'renames' && prepared.kind === 'renames') return { ...prepared.versions }
+  return undefined
+}
+
 export function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: ProposalMarker; onApplied(path: string): void }) {
-  const [prepared, setPrepared] = useState<{ version?: string; before?: string; after?: string; text?: string } | null>(null)
+  const [prepared, setPrepared] = useState<ProposalPrepared | null>(null)
   const [appliedVersion, setAppliedVersion] = useState('')
   const [undoText, setUndoText] = useState('')
   const [state, setState] = useState<'checking' | 'ready' | 'applying' | 'applied' | 'deferred' | 'ignored' | 'undoing' | 'undone' | 'expired'>('checking')
   const [note, setNote] = useState('正在核对文件…')
   const requestGeneration = useRef(0)
 
+  const isWorkbenchProposal = props.proposal.kind === 'split' || props.proposal.kind === 'merge' || props.proposal.kind === 'renames'
+
   const check = async () => {
     const generation = ++requestGeneration.current
     setAppliedVersion('')
     setUndoText('')
     setState('checking'); setNote('正在核对文件…')
-    const raw = await props.ctx.connection.rpc.call('/manuscript', 'proposal.prepare', {
-      sessionId: props.sessionId,
-      ...props.proposal,
-    })
+    /* split/merge/renames 走 workbench 通道的 proposal.prepare（嵌套 proposal，响应按 kind 包裹）;edit/create 仍走 /manuscript（平铺字段）。 */
+    const channel = isWorkbenchProposal ? WORKBENCH_RPC_CHANNEL : '/manuscript'
+    const raw = isWorkbenchProposal
+      ? await props.ctx.connection.rpc.call(channel, 'proposal.prepare', {
+        sessionId: props.sessionId,
+        proposal: props.proposal,
+      })
+      : await props.ctx.connection.rpc.call(channel, 'proposal.prepare', {
+        sessionId: props.sessionId,
+        ...props.proposal,
+      })
     if (requestGeneration.current !== generation) return
-    const result = raw as RpcResult<{ version?: string; before?: string; after?: string; text?: string }>
+    const result = raw as RpcResult<ProposalPrepared | { split?: WorkbenchProposalPrepared; merge?: WorkbenchProposalPrepared; renames?: WorkbenchProposalPrepared }>
     if (!result.ok) { setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。'); return }
-    setPrepared(result.value); setState('ready'); setNote('可以安全应用')
+    let value: ProposalPrepared | undefined
+    if (isWorkbenchProposal) {
+      const wrapped = result.value as { split?: WorkbenchProposalPrepared; merge?: WorkbenchProposalPrepared; renames?: WorkbenchProposalPrepared }
+      value = wrapped.split ?? wrapped.merge ?? wrapped.renames
+    } else {
+      value = result.value as ProposalPrepared
+    }
+    if (!value) { setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。'); return }
+    setPrepared(value); setState('ready'); setNote('可以安全应用')
   }
+
+  /* 把提案压缩成字符串,作为 useEffect 依赖;按 kind narrow 后才访问独有字段,避免类型/越界错误。 */
+  const proposalFingerprint = useMemo(() => {
+    const p = props.proposal
+    const head = `${p.kind}|${p.summary}`
+    if (p.kind === 'edit') return `${head}|${p.path}|${p.oldText}|${p.newText}`
+    if (p.kind === 'create') return `${head}|${p.path}|${p.text}`
+    if (p.kind === 'split') return `${head}|${p.path}|${p.anchor}|${p.newPath}`
+    if (p.kind === 'merge') return `${head}|${p.path}|${p.sourcePath}`
+    return `${head}|${p.renames.map((rename) => `${rename.from}->${rename.to}`).join(',')}`
+  }, [props.proposal])
 
   useEffect(() => {
     void check()
     return () => { requestGeneration.current += 1 }
-  }, [props.sessionId, props.proposal.path, props.proposal.summary, props.proposal.oldText, props.proposal.newText, props.proposal.text])
+  }, [props.sessionId, proposalFingerprint])
 
   const apply = async () => {
     if (!prepared) return
     const generation = ++requestGeneration.current
     setState('applying'); setNote('正在应用…')
     let beforeApplyText = ''
-    if (props.proposal.kind === 'edit') {
+    /* edit 路径在应用前再读一次文件,把"撤回到原内容"所需的快照存起来;其它 kind 没有撤销按钮。 */
+    if (props.proposal.kind === 'edit' && prepared.kind === 'edit') {
       const read = await props.ctx.connection.rpc.call('/manuscript', 'file.read', {
         sessionId: props.sessionId,
         path: props.proposal.path,
       }) as RpcResult<{ text: string; version: string }>
       if (requestGeneration.current !== generation) return
-      if (!read.ok || !prepared.version || read.value.version !== prepared.version) {
+      if (!read.ok || read.value.version !== prepared.version) {
         setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。')
         return
       }
       beforeApplyText = read.value.text
     }
-    const result = await props.ctx.connection.rpc.call('/manuscript', 'proposal.apply', {
-      sessionId: props.sessionId,
-      ...props.proposal,
-      expectedVersion: prepared.version ?? '',
-    }) as RpcResult<{ path: string; version: string }>
+    /* edit/create 走 /manuscript 的 proposal.apply,带 expectedVersion;其它走 workbench,带 expectedVersions。 */
+    let result: RpcResult<ProposalApplyResult>
+    if (props.proposal.kind === 'edit' || props.proposal.kind === 'create') {
+      const expectedVersion = props.proposal.kind === 'edit' && prepared.kind === 'edit' ? prepared.version : ''
+      result = await props.ctx.connection.rpc.call('/manuscript', 'proposal.apply', {
+        sessionId: props.sessionId,
+        ...props.proposal,
+        expectedVersion,
+      }) as RpcResult<ProposalApplyResult>
+    } else {
+      const expectedVersions = buildExpectedVersions(props.proposal, prepared) ?? {}
+      result = await props.ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'proposal.apply', {
+        sessionId: props.sessionId,
+        proposal: props.proposal,
+        expectedVersions,
+      }) as RpcResult<ProposalApplyResult>
+    }
     if (requestGeneration.current !== generation) return
     if (!result.ok) { setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。'); return }
-    setAppliedVersion(result.value.version)
-    setUndoText(beforeApplyText)
-    setState('applied'); setNote('已应用到作品')
-    props.onApplied(result.value.path)
+    /* /manuscript 通道(edit/create)回 path+version;workbench 通道(split/merge/renames)回 applied+failed。 */
+    if (props.proposal.kind === 'edit' || props.proposal.kind === 'create') {
+      const applyValue = result.value as Extract<ProposalApplyResult, { kind: 'edit' | 'create' }>
+      setAppliedVersion(applyValue.version)
+      setUndoText(beforeApplyText)
+      setState('applied'); setNote('已应用到作品')
+      props.onApplied(applyValue.path)
+      return
+    }
+    const applyValue = result.value as Extract<ProposalApplyResult, { applied: string[] }>
+    const applied = applyValue.applied
+    if (props.proposal.kind === 'split') {
+      setState('applied'); setNote('已拆分并写入作品')
+    } else if (props.proposal.kind === 'merge') {
+      setState('applied'); setNote('已合并，来源章节已归档（可在归档中恢复）')
+    } else {
+      const failed = applyValue.failed
+      const ok = applied.length
+      const total = props.proposal.renames.length
+      const tail = failed ? `；失败:${failed.from}（${failed.reason}）` : ''
+      setState('applied'); setNote(ok === total ? `已重命名 ${ok} 个文件` : `已重命名 ${ok}/${total} 个文件${tail}`)
+    }
+    /* 通知树刷新:按 applied 顺序逐个回调,让 onApplied 自然处理导航与展开。 */
+    for (const path of applied) props.onApplied(path)
   }
 
   const undo = async () => {
@@ -277,12 +496,59 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     props.onApplied(props.proposal.path)
   }
 
+  /* 头部右侧的标识:renames 展示"N 个文件",其它仍展示 path(已经在 kind 上 narrow 过)。 */
+  const headerPathLabel = props.proposal.kind === 'renames'
+    ? `${props.proposal.renames.length} 个文件`
+    : props.proposal.path
+
+  /* 按 kind 决定主区域内容。edit 复用 proposal-diff 块;create 单 pre;split 同 edit 但 before/after 来自 prepared;
+     merge 展示两个文件的字符数与归档说明;renames 用 ul/li 列出 from→to。 */
+  const renderBody = () => {
+    if (props.proposal.kind === 'edit') {
+      const editPrepared = prepared?.kind === 'edit' ? prepared : null
+      return e('div', { className: 'proposal-diff' },
+        e('section', null, e('small', null, '原文'), e('pre', null, editPrepared?.before ?? props.proposal.oldText)),
+        e('section', null, e('small', null, '修改后'), e('pre', null, editPrepared?.after ?? props.proposal.newText)),
+      )
+    }
+    if (props.proposal.kind === 'create') {
+      return e('section', null, e('small', null, '新文件内容'), e('pre', null, props.proposal.text))
+    }
+    if (props.proposal.kind === 'split') {
+      const splitPrepared = prepared?.kind === 'split' ? prepared : null
+      return e('div', { className: 'proposal-diff' },
+        e('section', null, e('small', null, '拆分点前'), e('pre', null, splitPrepared?.before ?? '')),
+        e('section', null, e('small', null, '拆分点后'), e('pre', null, splitPrepared?.after ?? '')),
+        e('section', { className: 'proposal-split-summary' },
+          e('small', null, '走向新文件 '),
+          e('code', null, props.proposal.newPath),
+          splitPrepared
+            ? e('small', null, ` · 拆分点前 ${splitPrepared.headChars} 字 / 拆分点后 ${splitPrepared.tailChars} 字`)
+            : null,
+        ),
+      )
+    }
+    if (props.proposal.kind === 'merge') {
+      const mergePrepared = prepared?.kind === 'merge' ? prepared : null
+      return e('section', { className: 'proposal-merge-summary' },
+        e('p', null, e('code', null, props.proposal.sourcePath), ' → ', e('code', null, props.proposal.path)),
+        mergePrepared
+          ? e('p', null, `目标文件 ${mergePrepared.pathChars} 字 · 来源文件 ${mergePrepared.sourceChars} 字`)
+          : null,
+        e('small', null, '应用后来源章节会被归档,可在归档中恢复。'),
+      )
+    }
+    /* renames */
+    return e('section', { className: 'proposal-renames' },
+      e('ul', null, props.proposal.renames.map((rename) => e('li', { key: `${rename.from}->${rename.to}` },
+        e('code', null, rename.from), ' → ', e('code', null, rename.to),
+      ))),
+    )
+  }
+
   return e('article', { className: `proposal-card ${state}`, 'aria-label': '文件修改建议' },
-    e('header', null, e('strong', null, props.proposal.summary), e('code', null, props.proposal.path)),
-    props.proposal.kind === 'edit' ? e('div', { className: 'proposal-diff' },
-      e('section', null, e('small', null, '原文'), e('pre', null, prepared?.before ?? props.proposal.oldText)),
-      e('section', null, e('small', null, '修改后'), e('pre', null, prepared?.after ?? props.proposal.newText)),
-    ) : e('section', null, e('small', null, '新文件内容'), e('pre', null, props.proposal.text)),
+    e('header', null, e('strong', null, props.proposal.summary), e('code', null, headerPathLabel)),
+    renderBody(),
     e('footer', null,
       e('span', { role: state === 'expired' ? 'alert' : 'status' }, note),
       state === 'ready' ? e('button', { type: 'button', onClick: () => void apply() }, '应用') : null,
@@ -292,6 +558,24 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
       state === 'applied' && props.proposal.kind === 'edit' ? e('button', { type: 'button', onClick: () => void undo() }, '撤销此次修改') : null,
     ),
     state === 'ready' ? e('small', { className: 'proposal-help' }, '应用后才会写入作品。') : null,
+  )
+}
+
+export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boolean; running: boolean; done: boolean; note: string; onStart(): void; onDismiss(): void }) {
+  const explore = props.state === 'explore'
+  return e('article', { className: 'pending-card init-guide-card', 'aria-label': '项目初始化' },
+    e('strong', null, '项目初始化'),
+    e('p', null, explore
+      ? '这个项目还没有作品索引。让写作助手通读项目内容、建立一份索引？之后讨论剧情和设定会更准确。'
+      : '这个项目还是空的。通过问答采访，和写作助手一起把故事构想聊出来，并逐步建立项目文件？'),
+    props.done
+      ? e('p', { role: 'status' }, '初始化已完成。')
+      : e('div', null,
+        e('button', { type: 'button', className: 'primary-action', disabled: props.busy || props.running, onClick: props.onStart }, props.running ? '正在初始化…' : '开始初始化'),
+        e('button', { type: 'button', disabled: props.busy, onClick: props.onDismiss }, '忽略'),
+      ),
+    props.note ? e('small', { className: 'warning', role: 'alert' }, props.note) : null,
+    props.done ? null : e('small', { className: 'muted' }, '初始化不是必须的——也可以直接在下方开始对话。'),
   )
 }
 
@@ -328,18 +612,128 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   const [modelRevision, setModelRevision] = useState(0)
   const titleAttempted = useRef(new Set<string>())
+  const historyRef = useRef<HTMLDivElement | null>(null)
+  const bottomPinnedRef = useRef(true)
+  /* 流式更新跟随到底部；用户主动上翻阅读时松开，回到底部附近再重新跟随。 */
+  useEffect(() => {
+    const el = historyRef.current
+    if (el && bottomPinnedRef.current) el.scrollTop = el.scrollHeight
+  }, [snapshot, outgoing])
   const internalIndexActive = internalIndexTurnActive(snapshot)
-  const partial = internalIndexActive ? '' : partialText(snapshot)
+  const partial = internalIndexActive ? { thinking: '', text: '' } : partialView(snapshot)
   const rows = chatRows(snapshot)
   const hasTurnError = rows.some((row) => row.id.startsWith('turn-error:'))
   const workspace = workspaceList.items.find((item) => item.workspaceId === workspaceId)
+  const initScope = useMemo(() => ctx.settingsScope.bind({ namespace: INIT_SETTINGS_NAMESPACE, decode: decodeInitSettings }), [ctx])
+  const initSettings = useObservable(initScope)
+  const [inspection, setInspection] = useState<ProjectInspectionResponse | null>(null)
+  const [initBusy, setInitBusy] = useState(false)
+  const [initNote, setInitNote] = useState('')
+  const [initCompleted, setInitCompleted] = useState(false)
+  /* 采访期间是否已有提案被应用、是否已自动触发过索引回合、上一次 running 状态(用于检测 running 刚停下)。
+   * 切工作区时随 initCompleted 一起重置,避免把上一次的采访状态带到新项目。 */
+  const appliedDuringInterviewRef = useRef(false)
+  const autoIndexTriggeredRef = useRef(false)
+  const prevRunningRef = useRef(false)
+  const workspacePath = workspace?.path
+  /* 打开项目时检查初始化状态；检查失败就不显示卡片，不打扰正常对话。 */
+  useEffect(() => {
+    setInspection(null); setInitNote(''); setInitCompleted(false); setInitDismissedLocal(false)
+    appliedDuringInterviewRef.current = false
+    autoIndexTriggeredRef.current = false
+    prevRunningRef.current = false
+    if (!workspaceId || !workspacePath) return
+    let live = true
+    void safeRpcCall<ProjectInspectionResponse>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.inspect', { workspacePath })).then((result) => {
+      if (live && result.ok) setInspection(result.value)
+    })
+    return () => { live = false }
+  }, [ctx.connection, workspaceId, workspacePath])
+  const initState = inspection ? initGuideState(inspection) : 'done'
+  const [initDismissedLocal, setInitDismissedLocal] = useState(false)
+  const initDismissed = initDismissedLocal || Boolean(workspaceId && initSettings.value?.dismissedWorkspaceIds.includes(workspaceId))
+  /* 探索回合（索引）在 UI 中隐藏，跑完后把卡片标为完成态。 */
+  const exploreWasRunning = useRef(false)
+  useEffect(() => {
+    if (initState !== 'explore') return
+    if (internalIndexActive) exploreWasRunning.current = true
+    else if (exploreWasRunning.current) { exploreWasRunning.current = false; setInitCompleted(true) }
+  }, [internalIndexActive, initState])
+  /* 采访式初始化建完核心文件后,等会话从 running 变空闲,自动接上"建立作品索引"。
+   * 判定逻辑抽到 init-guide.ts 的 shouldAutoIndexAfterInterview 纯函数;这里只负责
+   * 检测 running 刚停下(用 ref 记前值)+ 满足条件时一次性触发。失败静默,避免循环。 */
+  useEffect(() => {
+    const runningJustStopped = prevRunningRef.current === true && !snapshot.running
+    prevRunningRef.current = snapshot.running
+    if (!runningJustStopped) return
+    if (!shouldAutoIndexAfterInterview({
+      initState,
+      initCompleted,
+      appliedDuringInterview: appliedDuringInterviewRef.current,
+      running: snapshot.running,
+      alreadyTriggered: autoIndexTriggeredRef.current,
+    })) return
+    autoIndexTriggeredRef.current = true
+    void startExploreInit(ctx, session.sessionId)
+  }, [snapshot.running, initState, initCompleted, ctx, session.sessionId])
+  const startInitGuide = () => {
+    if (initBusy || initState === 'done') return
+    setInitBusy(true); setInitNote('')
+    void (async () => {
+      const ok = initState === 'explore'
+        ? await startExploreInit(ctx, session.sessionId)
+        : Boolean((await send(session, buildInterviewPrompt()))?.ok)
+      if (!ok) setInitNote('初始化未能开始，请重试。')
+      else if (initState === 'interview') setInitCompleted(true)
+      setInitBusy(false)
+    })()
+  }
+  const dismissInitGuide = () => {
+    if (!workspaceId) return
+    setInitDismissedLocal(true)
+    const current = initScope.getSnapshot().value?.dismissedWorkspaceIds ?? []
+    if (current.includes(workspaceId)) return
+    void initScope.set('dismissedWorkspaceIds', [...current, workspaceId]).catch(() => setInitNote('忽略状态未能保存，下次打开可能会再次显示。'))
+  }
+  /* 采访式初始化已开始时,记录"采访期间有提案被应用",供上面的 effect 在
+   * 会话空闲时自动接上"建立作品索引"。非采访态或还没开始就只是透传。 */
+  const handleApplied = (path: string) => {
+    if (initState === 'interview' && initCompleted) {
+      appliedDuringInterviewRef.current = true
+      /* 典型场景是回合已结束、作者才点"应用"：此时 running 不会再有 true→false 跳变，
+       * 上面的 effect 等不到它，在这里空闲即触发，否则自动索引永远不会启动。 */
+      if (shouldAutoIndexAfterInterview({
+        initState,
+        initCompleted,
+        appliedDuringInterview: appliedDuringInterviewRef.current,
+        running: snapshot.running,
+        alreadyTriggered: autoIndexTriggeredRef.current,
+      })) {
+        autoIndexTriggeredRef.current = true
+        void startExploreInit(ctx, session.sessionId)
+      }
+    }
+    onApplied(path)
+  }
+  /* 项目里任何对话已有内容，就视为作者选择了直接聊天，不再展示引导；
+   * 除非初始化正在跑或刚跑完，保留进行/完成反馈。 */
+  const workspaceHasConversation = sessionList.ids.some((id) => {
+    const item = sessionList.byId?.[id]
+    return Boolean(item && workspace?.sessionIds.includes(id) && !item.blank)
+  })
+  const initEngaged = initBusy || initCompleted || (initState === 'explore' && internalIndexActive)
+  const showInitGuide = Boolean(
+    workspace && inspection && initState !== 'done' && !initDismissed
+    && !(initState === 'interview' && initCompleted)
+    && (initEngaged || !workspaceHasConversation),
+  )
   const sessionIds = sessionList.ids.filter((id) => workspace?.sessionIds.includes(id))
   const conversations = conversationRows({
     workspaceSessionIds: sessionIds.length ? sessionIds : [session.sessionId],
     archivedIds: workspaceList.archivedSessionIds,
     reusableBlankIds: Object.values(sessionList.byId ?? {}).filter((item) => item.blank).map((item) => item.id),
     currentId: session.sessionId,
-    titles: Object.fromEntries(Object.entries(sessionList.byId ?? {}).map(([id, value]) => [id, value.displayTitle])),
+    titles: Object.fromEntries(Object.entries(sessionList.byId ?? {}).map(([id, value]) => [id, value.title])),
   })
   const queueConversationRename = (title: string, failureNote: string) => {
     void conversationRenameQueue.enqueue(session.sessionId, async () => {
@@ -394,7 +788,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     removed: snapshot.removed,
     outgoingState: outgoing?.state,
   })
-  const showGuide = rows.length === 0 && !outgoing && (!snapshot.running || internalIndexActive) && !partial && snapshot.pending.length === 0
   useEffect(() => {
     if (outgoingIsCanonical) setOutgoing(null)
   }, [outgoingIsCanonical])
@@ -402,6 +795,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     event.preventDefault()
     if (!composerCanSubmit) return
     const value = draft.trim()
+    bottomPinnedRef.current = true
     setOutgoing({ text: value, state: 'sending', afterRows: rows.length })
     setDraft('')
     setNote('')
@@ -429,10 +823,11 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   }
   return e('aside', { className: 'chat', 'aria-label': '写作助手', hidden },
     e('header', { className: 'chat-header' },
-      e('strong', { className: 'chat-brand' }, e(DeepSeekWhaleMark), connected ? '搭档' : '重连中'),
-      e('label', { className: 'conversation-select' }, e('span', null, '会话'), e(Select, { value: session.sessionId, 'aria-label': '切换对话', options: conversations.map((item) => ({ value: item.id, label: item.title })), onChange: (next) => void switchConversation(next) })),
-      e('div', { className: 'chat-controls' }, e(ModelIndicator, { key: `${session.sessionId}:${modelRevision}`, ctx, session, onConfigure })),
+      e('div', { className: 'conversation-select' },
+        e(Select, { value: session.sessionId, 'aria-label': '切换对话', options: conversations.map((item) => ({ value: item.id, label: item.title })), onChange: (next) => void switchConversation(next) }),
+      ),
       e('div', { className: 'chat-header-actions' },
+        connected ? null : e('span', { className: 'chat-status', role: 'status' }, '重连中'),
         e('button', { className: 'icon-button', type: 'button', title: '新对话', 'aria-label': '新对话', onClick: () => setCreatingConversation(true) }, '＋'),
         e('button', { className: 'icon-button', type: 'button', title: '重命名对话', 'aria-label': '重命名对话', onClick: () => setRenamingConversation(true) }, '✎'),
         e('button', { className: 'icon-button', type: 'button', title: '收起搭档', 'aria-label': '收起搭档', onClick: onClose }, '×'),
@@ -447,21 +842,40 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       onClose: () => setCreatingConversation(false),
       onConfigure,
     }) : null,
-    e('div', { className: 'chat-history' },
-      showGuide ? e('section', { className: 'chat-guide', 'aria-label': '写作搭档功能说明' },
-        e('header', null,
-          e('strong', null, '从构思到正文'),
-          e('small', null, '搭档会读取项目总览、总纲、人物卡与世界书；所有文件修改都会先成为提案。'),
-        ),
-      ) : null,
+    e('div', { className: 'chat-history', ref: historyRef, onScroll: (event: { currentTarget: HTMLDivElement }) => {
+      const el = event.currentTarget
+      bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+    } },
+      showInitGuide ? e(InitGuideCard, {
+        state: initState as 'explore' | 'interview',
+        busy: initBusy,
+        running: initState === 'explore' ? internalIndexActive : snapshot.running,
+        done: initCompleted,
+        note: initNote,
+        onStart: startInitGuide,
+        onDismiss: dismissInitGuide,
+      }) : null,
       snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? '加载中…' : '加载更早消息') : null,
       rows.map((row) => row.proposal
-        ? e(ProposalCard, { key: row.id, ctx, sessionId: session.sessionId, proposal: row.proposal, onApplied })
-        : e('article', { className: `chat-row ${row.role}`, key: row.id },
-          e('p', null, row.text || '（无文字内容）'),
-          row.detail ? e('small', null, row.detail) : null,
-          row.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: row.projectContextReceipt }) : null,
-        )),
+        ? e(ProposalCard, { key: row.id, ctx, sessionId: session.sessionId, proposal: row.proposal, onApplied: handleApplied })
+        : row.role === 'thinking'
+          ? e('details', { className: 'chat-row thinking', key: row.id },
+            e('summary', null, '思考过程'),
+            e('p', null, row.text),
+          )
+          : row.role === 'tool' && row.content
+            ? e('details', { className: 'chat-row tool', key: row.id },
+              e('summary', null, row.text),
+              e('pre', null, row.content),
+              row.detail ? e('small', null, row.detail) : null,
+            )
+            : e('article', { className: `chat-row ${row.role}`, key: row.id },
+              row.role === 'assistant' && row.text
+                ? e('div', { className: 'md' }, e(Markdown, { text: row.text }))
+                : e('p', null, row.text || '（无文字内容）'),
+              row.detail ? e('small', null, row.detail) : null,
+              row.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: row.projectContextReceipt }) : null,
+            )),
       outgoing && !outgoingIsCanonical ? e('article', { className: 'chat-row user', key: 'local-outgoing' },
         e('p', null, outgoing.text),
         outgoing.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: outgoing.projectContextReceipt }) : null,
@@ -476,7 +890,11 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         call.name === 'glob' || call.name === 'grep' ? '正在查找作品资料…' : call.name === 'read' ? '正在阅读作品资料…' : call.name === 'novel_propose' ? '正在准备修改建议…' : '正在处理…'
       ))),
       (internalIndexActive ? [] : snapshot.queue).map((item) => e('article', { className: 'chat-row notice', key: `queue:${item.id}` }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? '已排队' : '正在转向'))),
-      partial ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, e('p', null, partial)) : snapshot.partial ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, '正在回复…') : null,
+      partial.thinking ? e('details', { className: 'chat-row thinking', open: true, 'aria-live': 'polite' },
+        e('summary', null, '正在思考…'),
+        e('p', null, partial.thinking),
+      ) : null,
+      partial.text ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, e('div', { className: 'md' }, e(Markdown, { text: partial.text }))) : snapshot.partial && !partial.thinking ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, '正在回复…') : null,
       snapshot.pending.map((item) => e(PendingCard, { key: item.key, item })),
       snapshot.openState === 'error' ? e('p', { className: 'warning' }, '连接暂时中断，正在恢复…') : null,
       snapshot.promptError && !internalIndexActive && !hasTurnError ? e('p', { className: 'warning' }, '写作助手未能完成这次请求，请重试。') : null,
@@ -494,12 +912,23 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         'aria-label': '输入消息',
       }),
       note ? e('small', { className: 'warning' }, note) : null,
-      e('div', null,
-        snapshot.running ? e('button', { type: 'button', onClick: () => void stop(session) }, '停止') : null,
-        e('button', {
-          type: 'submit',
-          disabled: !composerCanSubmit,
-        }, '发送'),
+      e('div', { className: 'composer-toolbar' },
+        e('div', { className: 'composer-model' },
+          e(ModelPicker, { key: `${session.sessionId}:${modelRevision}`, ctx, session, onConfigure }),
+        ),
+        e('div', { className: 'composer-actions' },
+          snapshot.running ? e('button', { type: 'button', onClick: () => void stop(session) }, '停止') : null,
+          e('button', {
+            className: 'send',
+            type: 'submit',
+            disabled: !composerCanSubmit,
+            title: '发送',
+            'aria-label': '发送',
+          }, e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false' },
+            e('path', { d: 'm22 2-7 20-4-9-9-4Z' }),
+            e('path', { d: 'M22 2 11 13' }),
+          )),
+        ),
       ),
     ),
     renamingConversation ? e(TextPromptDialog, {

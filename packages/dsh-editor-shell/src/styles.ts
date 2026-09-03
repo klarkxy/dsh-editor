@@ -237,6 +237,9 @@ export const componentStyles = `
 .shell > .sidebar { grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--hairline); background: var(--bg-sunken); }
 .shell .side-title { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 8px; font-size: var(--text-xs); font-weight: 500; letter-spacing: .16em; color: var(--meta); }
 .shell .side-title .icon-button { font-size: 14px; }
+/* 今日字数小标:侧栏顶部单行,目标达成换强调色。变量 --confirm 与章节定稿同色。 */
+.shell .writing-progress-chip { margin: 0 10px 6px; padding: 4px 10px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-ring); color: var(--meta); font: 500 var(--text-xs)/1.4 var(--font-sans); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.shell .writing-progress-chip.reached { color: var(--confirm); background: color-mix(in srgb, var(--confirm) 10%, var(--surface)); }
 .shell .tree { flex: 1 1 auto; min-height: 72px; overflow: auto; padding: 4px 6px 20px; display: flex; flex-direction: column; }
 .shell .tree-directory-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 2px 8px 2px 0; }
 .shell .tree-static-row { font-size: var(--text-xs); font-weight: 500; letter-spacing: .16em; color: var(--meta); }
@@ -245,7 +248,13 @@ export const componentStyles = `
 .shell .tree-directory-add { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; opacity: .68; color: var(--meta); font-size: 14px; }
 .shell .tree-directory-add:hover, .shell .tree-directory-add:focus-visible { opacity: 1; background: var(--surface); color: var(--fg); }
 .shell .tree-row, .shell .tree-file-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-base); line-height: 1.35; letter-spacing: .04em; }
-.shell .tree-row > span:last-child, .shell .tree-file-row > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 章节状态徽标:行末单字胶囊,草/修/定三色。margin-left:auto 把它推到行末,
+   文件名 span 仍按既有省略规则截断(用 :not(.chapter-status) 让规则跨两种结构都生效)。 */
+.shell .tree-row .chapter-status { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 6px; margin-left: auto; border-radius: 999px; box-shadow: var(--elev-ring); font-size: 10px; font-weight: 500; line-height: 1; letter-spacing: .04em; }
+.shell .tree-row .chapter-status.draft { color: var(--muted); background: var(--surface-warm); }
+.shell .tree-row .chapter-status.revising { color: var(--accent-on); background: var(--accent); }
+.shell .tree-row .chapter-status.final { color: var(--surface); background: var(--confirm); }
+.shell .tree-row > span:not(.chapter-status):last-child, .shell .tree-file-row > span:not(.chapter-status):last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .tree-row:hover, .shell .tree-file-row:hover { background: var(--surface); color: var(--fg); }
 /* 选中态用 accent-soft(墨蓝淡底)替代原本的灰底,让"我现在在写哪一章"更醒目。 */
 .shell .tree-row[aria-current="page"], .shell .tree-file-row[aria-current="page"] { background: var(--accent-soft); color: var(--fg); }
@@ -304,7 +313,7 @@ export const componentStyles = `
 @keyframes ghost-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -80% 0; } }
 
 .shell .editor-tools { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 28px 0 24px; border-top: 1px solid var(--hairline); background: var(--surface); color: var(--meta); flex-shrink: 0; }
-.shell .editor-tools button, .shell .primary-action, .shell .composer button, .shell .proposal button, .shell .pending-card button, .shell .file-dialog button { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 5px 12px; border-radius: var(--radius-md); font: 500 var(--text-sm)/1 var(--font-sans); letter-spacing: .08em; transition: box-shadow var(--motion-base) var(--ease), background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease); border: 0; cursor: pointer; }
+.shell .editor-tools button, .shell .primary-action, .shell .composer-actions button:not(.send), .shell .proposal button, .shell .pending-card button, .shell .file-dialog button { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 5px 12px; border-radius: var(--radius-md); font: 500 var(--text-sm)/1 var(--font-sans); letter-spacing: .08em; transition: box-shadow var(--motion-base) var(--ease), background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease); border: 0; cursor: pointer; }
 .shell .editor-tools button, .shell .pending-card button, .shell .file-dialog button { box-shadow: var(--elev-ring); background: transparent; color: var(--fg-2); }
 .shell .editor-tools button:hover, .shell .pending-card button:hover, .shell .file-dialog button:hover { background: var(--surface); color: var(--fg); }
 .shell .editor-tools button:active, .shell .pending-card button:active, .shell .file-dialog button:active { background: var(--surface-warm); }
@@ -335,20 +344,18 @@ export const componentStyles = `
 /* 聊天下沉:与侧栏同 --bg-sunken,让写作者的目光始终回到稿纸。 */
 .shell > .chat { grid-row: 2; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border-left: 1px solid var(--hairline); background: var(--bg-sunken); }
 .shell > .chat[hidden] { display: none !important; }
-/* Header holds four children (brand / conversation select / model controls /
-   actions). Two grid rows: row 1 = brand + select + actions, row 2 = the
-   model indicator line. A fixed topbar height here overflowed and overlapped
-   the history below. */
-.shell .chat-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 6px var(--space-4); border-bottom: 1px solid var(--hairline); background: var(--bg-sunken); }
-.shell .chat-brand { display: flex; align-items: center; gap: 6px; font: 500 var(--text-sm)/1 var(--font-sans); letter-spacing: .08em; color: var(--fg); }
+/* 头部参考 Kimi Code 侧栏:单行布局,左侧会话切换药丸,右侧动作图标;
+   不放品牌标志,避免占用写作空间。模型指示挪到输入区工具栏。 */
+.shell .chat-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 6px var(--space-4); border-bottom: 1px solid var(--hairline); background: var(--bg-sunken); }
 .shell .whale-mark { width: 18px; height: 18px; color: var(--accent); }
-.shell .chat-header-actions { display: flex; gap: 2px; }
-.shell .chat-controls { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+.shell .chat-status { color: var(--meta); font-size: var(--text-xs); }
+.shell .chat-header-actions { display: flex; align-items: center; gap: 2px; }
 .shell .compact-control { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .shell .compact-control button { padding: 0; border: 0; background: none; color: var(--meta); font-size: var(--text-xs); cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
 .shell .compact-control button:hover { color: var(--fg); }
-.shell .conversation-select { min-width: 0; display: flex; align-items: center; gap: 4px; }
-.shell .conversation-select select { min-width: 0; max-width: 180px; border: 0; background: transparent; color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; }
+.shell .conversation-select { min-width: 0; }
+.shell .conversation-select .select { display: block; }
+.shell .conversation-select .select-trigger { min-width: 0; max-width: 240px; min-height: 26px; padding: 0 var(--space-2); border-color: var(--hairline); color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; }
 .shell .model-indicator { display: block; overflow: hidden; color: var(--meta); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
 
 .shell .chat-history { display: flex; flex-direction: column; gap: var(--space-5); min-height: 0; overflow: auto; padding: var(--space-5) var(--space-4) var(--space-4); }
@@ -357,32 +364,59 @@ export const componentStyles = `
 .shell .chat-row p { margin: 0; white-space: pre-wrap; line-height: 1.7; }
 .shell .chat-row.user { margin-left: 20px; }
 .shell .chat-row.user p { color: var(--fg-2); font-size: var(--text-base); }
-.shell .chat-row.assistant p { font: 400 var(--text-md)/1.85 var(--font-serif); letter-spacing: .03em; color: var(--fg); padding-left: 12px; border-left: 2px solid var(--accent); }
+.shell .chat-row.assistant p { font: 400 var(--text-md)/1.85 var(--font-serif); letter-spacing: .03em; color: var(--fg); }
+.shell .chat-row.assistant .md { padding-left: 12px; border-left: 2px solid var(--accent); font: 400 var(--text-md)/1.85 var(--font-serif); letter-spacing: .03em; color: var(--fg); }
+.shell .md > :first-child { margin-top: 0; }
+.shell .md > :last-child { margin-bottom: 0; }
+.shell .md h1, .shell .md h2, .shell .md h3, .shell .md h4, .shell .md h5, .shell .md h6 { margin: 12px 0 6px; font-family: var(--font-serif); font-weight: 600; line-height: 1.5; }
+.shell .md h1 { font-size: 1.18em; }
+.shell .md h2 { font-size: 1.1em; }
+.shell .md h3, .shell .md h4, .shell .md h5, .shell .md h6 { font-size: 1em; }
+.shell .md p { margin: 0 0 8px; }
+.shell .chat-row.assistant .md p { line-height: 1.85; }
+.shell .md ul, .shell .md ol { margin: 0 0 8px; padding-left: 22px; }
+.shell .md li { margin: 2px 0; }
+.shell .md blockquote { margin: 0 0 8px; padding-left: 10px; border-left: 2px solid var(--hairline); color: var(--fg-2); }
+.shell .md hr { margin: 10px 0; border: 0; border-top: 1px solid var(--hairline); }
+.shell .md code { padding: 0 4px; border-radius: var(--radius-sm); background: var(--bg); font: 400 .92em/1.5 var(--font-mono); }
+.shell .md pre { max-height: 320px; overflow: auto; margin: 0 0 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--bg); white-space: pre-wrap; }
+.shell .md pre code { padding: 0; background: transparent; }
+.shell .md a { color: var(--accent); }
 .shell .chat-row.tool, .shell .chat-row.notice, .shell .chat-row.unknown { color: var(--muted); font-size: var(--text-xs); }
-.shell .chat-guide { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--surface); }
-.shell .chat-guide > header { display: grid; gap: 4px; }
-.shell .chat-guide > header strong { font: 500 var(--text-sm)/1.3 var(--font-sans); color: var(--fg); }
-.shell .chat-guide > header small { color: var(--muted); font-size: var(--text-xs); line-height: 1.6; }
-.shell .chat-guide-examples { display: grid; gap: 6px; }
-.shell .chat-guide-examples button { display: grid; gap: 2px; padding: 9px 12px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); text-align: left; cursor: pointer; transition: background-color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease); }
-.shell .chat-guide-examples button strong { font: 500 var(--text-sm)/1.35 var(--font-sans); color: var(--fg); }
-.shell .chat-guide-examples button span { color: var(--muted); font-size: var(--text-xs); line-height: 1.55; }
-.shell .chat-guide-examples button:hover { background: var(--accent-soft); border-color: var(--accent); }
-.shell .chat-guide > small { color: var(--meta); font-size: var(--text-xs); }
+.shell .chat-row.thinking { color: var(--muted); font-size: var(--text-xs); border-style: dashed; }
+.shell details.chat-row summary { cursor: pointer; font: 500 var(--text-xs)/1.6 var(--font-sans); letter-spacing: .08em; color: var(--meta); }
+.shell details.chat-row p { margin: 8px 0 0; white-space: pre-wrap; line-height: 1.7; }
+.shell details.chat-row pre { max-height: 200px; overflow: auto; margin: 8px 0 0; padding: 8px; background: var(--bg); white-space: pre-wrap; border-radius: var(--radius-sm); font-size: var(--text-xs); line-height: 1.55; }
+.shell details.chat-row small { display: block; margin-top: 6px; color: var(--meta); }
 
-.shell .composer { border-top: 1px solid var(--hairline); padding: 12px var(--space-4) 14px; background: var(--bg-sunken); display: flex; align-items: flex-end; gap: var(--space-2); }
-.shell .composer textarea { flex: 1; min-height: 64px; max-height: 120px; padding: 10px 12px; background: var(--surface); box-shadow: var(--elev-ring); border-radius: var(--radius-md); font-size: var(--text-base); line-height: 1.65; letter-spacing: .04em; color: var(--fg); resize: none; }
+.shell .composer { border-top: 1px solid var(--hairline); padding: 12px var(--space-4) 10px; background: var(--bg-sunken); display: grid; gap: var(--space-2); }
+.shell .composer textarea { width: 100%; min-height: 64px; max-height: 120px; padding: 10px 12px; background: var(--surface); box-shadow: var(--elev-ring); border-radius: var(--radius-md); font-size: var(--text-base); line-height: 1.65; letter-spacing: .04em; color: var(--fg); resize: none; box-sizing: border-box; }
 .shell .composer textarea::placeholder { color: var(--meta); }
-.shell .composer .send { flex: none; width: 36px; height: 36px; display: grid; place-items: center; color: var(--fg-2); border: 0; background: transparent; border-radius: var(--radius-md); cursor: pointer; }
-.shell .composer .send:hover { background: var(--surface-warm); color: var(--fg); }
+.shell .composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.shell .composer-model { min-width: 0; }
+/* 模型/思考强度选择器:输入区底部的紧凑药丸,弹层向上展开。 */
+.shell .composer-model .model-picker { gap: 6px; }
+.shell .composer-model .select-trigger { min-width: 0; max-width: 220px; min-height: 24px; padding: 0 var(--space-2); border-color: var(--hairline); background: transparent; color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; }
+.shell .composer-model .select-trigger:hover:not(:disabled) { color: var(--fg); }
+.shell .composer-model .select-list { top: auto; bottom: calc(100% + 4px); }
+.shell .composer-actions { display: flex; align-items: center; gap: 6px; }
+.shell .composer .send { flex: none; width: 32px; height: 32px; display: grid; place-items: center; color: var(--fg-2); border: 0; background: transparent; border-radius: var(--radius-md); cursor: pointer; }
+.shell .composer .send:hover:not(:disabled) { background: var(--surface-warm); color: var(--fg); }
+.shell .composer .send:disabled { opacity: .4; cursor: default; }
 .shell .composer .send svg { display: block; }
 
 .shell .pending-card { display: grid; gap: var(--space-3); padding: 10px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); }
+.shell .init-guide-card { border-color: var(--accent); }
+.shell .init-guide-card > div { display: flex; gap: 8px; }
 .shell .pending-card fieldset { display: grid; gap: 5px; margin: 0; padding: 0; border: 0; }
 .shell .pending-card input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); }
 .shell .proposal-card { display: grid; gap: var(--space-3); padding: 10px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); }
 .shell .proposal-card header, .shell .proposal-card footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .shell .proposal-card pre { max-height: 180px; overflow: auto; padding: 8px; background: var(--bg); white-space: pre-wrap; border-radius: var(--radius-sm); margin: 0; font: 400 var(--text-sm)/1.55 var(--font-serif); color: var(--fg-2); }
+/* 章节拆分/合并/批量改名:走同一张提案卡,只补少量结构;主外观继续走 .proposal-card 的 spacing。 */
+.shell .proposal-card .proposal-split-summary, .shell .proposal-card .proposal-merge-summary, .shell .proposal-card .proposal-renames { display: grid; gap: 6px; }
+.shell .proposal-card .proposal-renames ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.shell .proposal-card .proposal-renames code { font-size: var(--text-xs); }
 
 /* ── Empty / home ───────────────────────────────────────── */
 .shell .empty-paper { grid-row: 2; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 32px; background: var(--surface); }
@@ -523,6 +557,12 @@ export const componentStyles = `
 .shell .writing-settings .author-preferences textarea { width: 100%; box-sizing: border-box; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: 400 var(--text-sm)/1.7 var(--font-sans); resize: vertical; }
 .shell .writing-settings .author-preferences textarea:focus-visible { box-shadow: var(--focus-ring); }
 .shell .writing-settings .author-preferences small { color: var(--meta); }
+/* 每日目标:与作者约定一致的输入风格;宽度收窄给数字用。 */
+.shell .writing-settings .writing-progress-settings .goal-input { display: grid; gap: var(--space-2); }
+.shell .writing-settings .writing-progress-settings .goal-input > span { font-weight: 500; color: var(--fg-2); }
+.shell .writing-settings .writing-progress-settings .goal-input input { width: 9em; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: 400 var(--text-sm)/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
+.shell .writing-settings .writing-progress-settings .goal-input input:focus-visible { box-shadow: var(--focus-ring); }
+.shell .writing-settings .writing-progress-settings .goal-input small { color: var(--meta); }
 .shell .writing-settings > button { justify-self: start; min-height: 30px; padding: 5px 12px; border: 0; border-radius: var(--radius-md); background: var(--accent); color: var(--accent-on); font: 500 var(--text-sm)/1 var(--font-sans); letter-spacing: .08em; cursor: pointer; box-shadow: var(--elev-ring-accent); transition: box-shadow var(--motion-base) var(--ease), background var(--motion-fast) var(--ease); }
 .shell .writing-settings > button:hover:not(:disabled) { background: var(--accent-active); }
 .shell .writing-settings > button:disabled { opacity: .55; cursor: not-allowed; }
@@ -658,6 +698,12 @@ export const componentStyles = `
 .shell .zhihu-header { display: grid; gap: 4px; }
 .shell .zhihu-title { margin: 0; font: 600 var(--text-md)/1.3 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
 .shell .zhihu-intro { margin: 0; color: var(--meta); font-size: var(--text-sm); line-height: 1.7; }
+.shell .zhihu-guide { display: grid; gap: var(--space-2); margin: 0; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); }
+.shell .zhihu-guide-title { margin: 0; font: 500 var(--text-xs)/1.4 var(--font-sans); color: var(--fg-2); letter-spacing: .04em; }
+.shell .zhihu-guide-steps { display: grid; gap: 6px; margin: 0; padding-left: 18px; font-size: var(--text-xs); line-height: 1.7; color: var(--meta); }
+.shell .zhihu-link { color: var(--accent-active); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font-size: inherit; }
+.shell .zhihu-link:hover { color: var(--accent); }
+.shell .zhihu-link:focus-visible { box-shadow: var(--focus-ring); outline: none; }
 .shell .zhihu-status { margin: 0; font-size: var(--text-xs); color: var(--muted); }
 .shell .zhihu-error { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, transparent); color: var(--danger); font-size: var(--text-xs); }
 .shell .zhihu-notice { margin: 0; font-size: var(--text-xs); color: var(--meta); }
@@ -687,6 +733,23 @@ export const componentStyles = `
 .shell .zhihu-button-primary:hover:not(:disabled) { background: var(--accent-active); color: var(--accent-on); }
 .shell .zhihu-button-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
 .shell .zhihu-button-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+
+/* 知乎用量:近 30 天 SVG 柱状图(成功/失败堆叠)。 */
+.shell .zhihu-usage { display: grid; gap: var(--space-3); margin-top: var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--hairline); }
+.shell .zhihu-usage-title { margin: 0; font: 500 var(--text-sm)/1.4 var(--font-sans); letter-spacing: .04em; color: var(--fg-2); }
+.shell .zhihu-usage-intro { margin: 0; color: var(--meta); font-size: var(--text-xs); line-height: 1.7; }
+.shell .zhihu-chart { display: block; width: 100%; height: 120px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); }
+.shell .zhihu-chart-bar-ok { fill: var(--confirm); }
+.shell .zhihu-chart-bar-fail { fill: var(--danger); }
+.shell .zhihu-chart-tick { fill: var(--meta); font: 400 9px/1 var(--font-sans); }
+
+/* 知乎知识库:列库 + 手动上传。 */
+.shell .zhihu-kb { display: grid; gap: var(--space-3); margin-top: var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--hairline); }
+.shell .zhihu-kb-base-row { display: flex; gap: var(--space-2); align-items: center; }
+.shell .zhihu-kb-base-row .zhihu-input { flex: 1; }
+.shell .zhihu-kb-file { font-size: var(--text-xs); color: var(--meta); }
+.shell .zhihu-kb-file::file-selector-button { margin-right: var(--space-2); padding: 4px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: 500 var(--text-xs)/1 var(--font-sans); cursor: pointer; }
+.shell .zhihu-kb-file::file-selector-button:hover { background: var(--surface-warm); }
 
 /* 用量设置:今日 4 卡 + 近 7 日表 + 底部说明。 */
 .shell .usage-page { max-width: 720px; display: flex; flex-direction: column; gap: var(--space-5); }

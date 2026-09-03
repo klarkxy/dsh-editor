@@ -31,9 +31,11 @@ export function visibleRunningCalls<T extends { name: string }>(calls: readonly 
 
 export type ChatRow = {
   id: string
-  role: 'user' | 'assistant' | 'tool' | 'notice' | 'unknown'
+  role: 'user' | 'assistant' | 'tool' | 'thinking' | 'notice' | 'unknown'
   text: string
   detail?: string
+  /** Expandable verbatim body (tool result content); absent when there is nothing worth unfolding. */
+  content?: string
   proposal?: ProposalMarker
   projectContextReceipt?: ProjectContextReceiptBundle
 }
@@ -59,18 +61,78 @@ export function blocksText(blocks: readonly AssistantBlock[] | readonly unknown[
   return stripReasoningText(text)
 }
 
+/** Split one text chunk into think-island content and visible prose. */
+function splitThinkIslands(text: string): { thinking: string; text: string } {
+  const islands: string[] = []
+  const rest = text
+    .replace(/<think\b[^>]*>([\s\S]*?)<\/think\s*>/giu, (_match, inner: string) => { islands.push(inner); return '' })
+    .replace(/<think\b[^>]*>([\s\S]*)$/giu, (_match, inner: string) => { islands.push(inner); return '' })
+    .replace(/<\/?think\b[^>]*>/giu, '')
+  return { thinking: islands.map((island) => island.trim()).filter(Boolean).join('\n'), text: rest.trim() }
+}
+
+/**
+ * Split assistant blocks into collapsible reasoning and visible reply text.
+ * Reasoning-kind blocks and inline `<think>` islands go to `thinking`;
+ * tool-call blocks carry no prose and surface through their tool-result rows.
+ */
+export function splitAssistantContent(blocks: readonly AssistantBlock[] | readonly unknown[]): { thinking: string; text: string } {
+  const thinkingParts: string[] = []
+  const textParts: string[] = []
+  for (const block of blocks) {
+    if (!block || typeof block !== 'object') {
+      const fallback = String(block ?? '').trim()
+      if (fallback) textParts.push(fallback)
+      continue
+    }
+    const value = block as { kind?: string; type?: string; text?: string }
+    const blockKind = (value.kind ?? value.type ?? '').toLocaleLowerCase()
+    if (HIDDEN_REASONING_BLOCKS.has(blockKind)) {
+      const reasoning = value.text?.trim()
+      if (reasoning) thinkingParts.push(reasoning)
+      continue
+    }
+    if (value.kind === 'tool-call') continue
+    const raw = value.text ?? ''
+    if (!raw.trim()) continue
+    const split = splitThinkIslands(raw)
+    if (split.thinking) thinkingParts.push(split.thinking)
+    if (split.text) textParts.push(split.text)
+  }
+  return { thinking: thinkingParts.join('\n'), text: textParts.join('\n') }
+}
+
+/** 区分不同 kind 的提案,以便聊天行展示对应的"提案"标签文案。renames 不带 path 字段,需要在使用前 narrow。 */
+function proposalDetailText(proposal: ProposalMarker): string {
+  switch (proposal.kind) {
+    case 'split': return '写作助手提出了一项章节拆分提案'
+    case 'merge': return '章节合并提案'
+    case 'renames': return '批量重命名提案'
+    case 'edit':
+    case 'create':
+      return '写作助手提出了一项文件修改提案'
+  }
+}
+
 export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-result' }>): ChatRow {
   const body = blocksText(node.content)
   const name = node.call?.name ?? `工具 ${node.callId}`
   const proposal = name === 'novel_propose' ? parseProposalMarker(body) : undefined
   if (proposal) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: '写作助手提出了一项文件修改提案', proposal }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: proposalDetailText(proposal), proposal }
   }
   if (node.isError) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: '这项操作没有执行', detail: '写作助手无法完成这项操作。' }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: '这项操作没有执行', detail: name, content: truncateToolContent(body) || undefined }
   }
   const friendly = name === 'glob' || name === 'grep' ? '已查找作品资料' : name === 'read' ? '已阅读作品资料' : '操作已完成'
-  return { id: `tool-result:${node.seq}`, role: 'tool', text: friendly, detail: '已完成' }
+  return { id: `tool-result:${node.seq}`, role: 'tool', text: friendly, detail: name, content: truncateToolContent(body) || undefined }
+}
+
+const TOOL_CONTENT_LIMIT = 4000
+
+function truncateToolContent(text: string): string {
+  const trimmed = text.trim()
+  return trimmed.length > TOOL_CONTENT_LIMIT ? `${trimmed.slice(0, TOOL_CONTENT_LIMIT)}…` : trimmed
 }
 
 function isHiddenToolResult(node: Extract<ConversationNode, { kind: 'tool-result' }>): boolean {
@@ -101,8 +163,10 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
     }
     if (hidingIndexTurn) continue
     if (node.kind === 'assistant') {
-      const assistantText = blocksText(node.blocks)
-      if (!assistantText || isNovelIndexJobPrompt(assistantText)) continue
+      const { thinking, text: assistantText } = splitAssistantContent(node.blocks)
+      if (isNovelIndexJobPrompt(assistantText)) continue
+      if (thinking) rows.push({ id: `${node.kind}:${node.seq}:thinking`, role: 'thinking', text: thinking })
+      if (!assistantText) continue
       rows.push({
         ...common,
         role: 'assistant',
@@ -113,8 +177,7 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
     }
     if (node.kind === 'tool-result') {
       if (isHiddenToolResult(node)) continue
-      const row = toolResultRow(node)
-      if (row.proposal) rows.push(row)
+      rows.push(toolResultRow(node))
     }
     else if (node.kind === 'turn-error') rows.push({ ...common, role: 'notice', text: '写作助手未能完成这次请求，请重试。' })
     else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: '写作助手正在重试…' })
@@ -130,11 +193,13 @@ export function internalIndexTurnActive(snapshot: ConversationSnapshot): boolean
   return active
 }
 
-export function partialText(snapshot: ConversationSnapshot): string {
-  if (!snapshot.partial) return ''
-  return blocksText(snapshot.partial.blocks)
-    .replace(/<t(?:h(?:i(?:n(?:k(?:\s[^>]*)?)?)?)?)?$/iu, '')
-    .trim()
+export function partialView(snapshot: ConversationSnapshot): { thinking: string; text: string } {
+  if (!snapshot.partial) return { thinking: '', text: '' }
+  const { thinking, text } = splitAssistantContent(snapshot.partial.blocks)
+  return {
+    thinking,
+    text: text.replace(/<t(?:h(?:i(?:n(?:k(?:\s[^>]*)?)?)?)?)?$/iu, '').trim(),
+  }
 }
 
 export function pendingRows(pending: readonly PendingInteraction[]): ChatRow[] {
@@ -208,8 +273,9 @@ export async function selectModel(
   sessionId: SessionId,
   provider: string,
   model: string,
+  reasoningEffort?: string,
 ): Promise<RpcResult<{ selected: { provider: string; model: string; reasoningEffort?: string } }>> {
-  return (await connection.api.sessions.selectModel({ sessionId, provider, model })).result
+  return (await connection.api.sessions.selectModel({ sessionId, provider, model, reasoningEffort })).result
 }
 
 export function permissionProjection(session: SessionFace): PermissionProjection | undefined {

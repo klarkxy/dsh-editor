@@ -10,6 +10,7 @@ declare module 'electron' {
       nodeIntegration?: boolean
       contextIsolation?: boolean
       sandbox?: boolean
+      backgroundThrottling?: boolean
     }
   }
 

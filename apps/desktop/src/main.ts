@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -51,6 +51,9 @@ const lifecycle = createDesktopLifecycle({
         preload: join(desktopRoot, 'preload.cjs'),
         nodeIntegration: false, contextIsolation: true, sandbox: true,
         webSecurity: true, allowRunningInsecureContent: false,
+        /* 流式回复靠 requestAnimationFrame 合帧推送；默认的节流会在窗口被遮挡时
+         * 停掉 rAF，表现为"回复卡住、聚焦后才刷新"。写作场景常切换窗口，关掉它。 */
+        backgroundThrottling: false,
       },
     })
     // Frameless window: forward maximize state to the renderer's own title bar.
@@ -98,4 +101,19 @@ ipcMain.on('dsh-window:toggle-maximize', (event) => {
 })
 ipcMain.on('dsh-window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
+})
+
+// External links: the navigation policy denies in-app navigation and window.open,
+// so whitelisted https links go through the OS browser instead.
+const OPEN_EXTERNAL_HOSTS = new Set(['developer.zhihu.com', 'zhida.zhihu.com', 'www.zhihu.com', 'zhuanlan.zhihu.com'])
+ipcMain.on('dsh-window:open-external', (_event, url) => {
+  if (typeof url !== 'string') return
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return
+  }
+  if (parsed.protocol !== 'https:' || !OPEN_EXTERNAL_HOSTS.has(parsed.hostname)) return
+  void shell.openExternal(parsed.toString())
 })

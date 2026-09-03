@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseProposalMarker, partialText, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
+import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseProposalMarker, partialView, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
 import { compileProjectContext, compileProjectContextV2 } from 'dsh-editor-workbench/contracts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
@@ -16,6 +16,20 @@ describe('DSH snapshot adapter', () => {
     }] } as never)
     expect(row).toMatchObject({ role: 'tool', proposal: { path: '项目总览.md', oldText: '旧', newText: '新' } })
   })
+  it('labels split/merge/renames proposals with their own detail copy and never touches proposal.path on renames', () => {
+    const splitMarker = JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'split', path: '正文/001.md', summary: '把后半章拆出来', anchor: '### 转折', newPath: '正文/002.md' })
+    const mergeMarker = JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'merge', path: '正文/001.md', summary: '合并两章', sourcePath: '正文/002.md' })
+    const renamesMarker = JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'renames', summary: '批量改名', renames: [{ from: '正文/001.md', to: '正文/序章.md' }] })
+    const splitRow = toolResultRow({ kind: 'tool-result', seq: 10, callId: 'p', call: { name: 'novel_propose', argsRaw: '{}' }, content: [{ type: 'text', text: splitMarker }], isError: false } as never)
+    const mergeRow = toolResultRow({ kind: 'tool-result', seq: 11, callId: 'p', call: { name: 'novel_propose', argsRaw: '{}' }, content: [{ type: 'text', text: mergeMarker }], isError: false } as never)
+    const renamesRow = toolResultRow({ kind: 'tool-result', seq: 12, callId: 'p', call: { name: 'novel_propose', argsRaw: '{}' }, content: [{ type: 'text', text: renamesMarker }], isError: false } as never)
+    expect(splitRow).toMatchObject({ role: 'tool', detail: '写作助手提出了一项章节拆分提案', proposal: { kind: 'split', path: '正文/001.md', newPath: '正文/002.md' } })
+    expect(mergeRow).toMatchObject({ role: 'tool', detail: '章节合并提案', proposal: { kind: 'merge', sourcePath: '正文/002.md', path: '正文/001.md' } })
+    expect(renamesRow).toMatchObject({ role: 'tool', detail: '批量重命名提案', proposal: { kind: 'renames', renames: [{ from: '正文/001.md', to: '正文/序章.md' }] } })
+    /* renames 提案没有 path 字段,UI 描述也必须落到 kind 文案,而不是默认的"文件修改提案"。 */
+    expect(renamesRow.detail).not.toBe('写作助手提出了一项文件修改提案')
+    expect(renamesRow.proposal).not.toHaveProperty('path')
+  })
   it('renders published prose while hiding unknown runtime details', () => {
     const snapshot = { nodes: [
       { kind: 'user', seq: 1, content: [{ type: 'text', text: '审这一段' }] },
@@ -27,7 +41,7 @@ describe('DSH snapshot adapter', () => {
       { role: 'assistant', text: '先看动机。' },
     ].map((row, index) => ({ id: index ? 'assistant:2' : 'user:1', ...row, ...(index ? { detail: undefined } : { projectContextReceipt: undefined }) })))
   })
-  it('hides reasoning blocks and think islands from complete and streaming assistant text', () => {
+  it('renders reasoning blocks and think islands as thinking rows, not reply text', () => {
     const snapshot = { nodes: [
       { kind: 'assistant', seq: 1, blocks: [
         { kind: 'reasoning', text: 'hidden reasoning' },
@@ -36,12 +50,25 @@ describe('DSH snapshot adapter', () => {
       ] },
     ] }
     expect(chatRows(snapshot as never)).toEqual([
+      { id: 'assistant:1:thinking', role: 'thinking', text: 'hidden reasoning\nhidden thinking\nhidden island' },
       { id: 'assistant:1', role: 'assistant', text: '给作者看的回复。', detail: undefined },
     ])
     expect(blocksText([{ type: 'analysis', text: 'hidden analysis' }, { type: 'text', text: '可见' }] as never)).toBe('可见')
-    expect(partialText({ partial: { blocks: [{ kind: 'text', text: '<think>streaming secret' }] } } as never)).toBe('')
-    expect(partialText({ partial: { blocks: [{ kind: 'text', text: '可见回复<thi' }] } } as never)).toBe('可见回复')
-    expect(partialText({ partial: { blocks: [{ kind: 'text', text: '<think>done</think>流式正文' }] } } as never)).toBe('流式正文')
+    expect(partialView({ partial: { blocks: [{ kind: 'text', text: '<think>streaming secret' }] } } as never)).toEqual({ thinking: 'streaming secret', text: '' })
+    expect(partialView({ partial: { blocks: [{ kind: 'text', text: '可见回复<thi' }] } } as never)).toEqual({ thinking: '', text: '可见回复' })
+    expect(partialView({ partial: { blocks: [{ kind: 'text', text: '<think>done</think>流式正文' }] } } as never)).toEqual({ thinking: 'done', text: '流式正文' })
+  })
+  it('keeps tool steps visible with an expandable result body', () => {
+    const snapshot = { nodes: [
+      { kind: 'assistant', seq: 1, blocks: [{ kind: 'tool-call', name: 'read', callId: 'read-1', argsRaw: '{"path":"项目总览.md"}' }] },
+      { kind: 'tool-result', seq: 2, callId: 'read-1', call: { name: 'read', argsRaw: '{"path":"项目总览.md"}' }, content: [{ type: 'text', text: '文件正文' }], isError: false },
+      { kind: 'tool-result', seq: 3, callId: 'read-2', call: { name: 'read', argsRaw: '{}' }, content: [{ type: 'text', text: '读取失败原因' }], isError: true },
+    ] }
+    expect(chatRows(snapshot as never)).toEqual([
+      { id: 'tool-result:2', role: 'tool', text: '已阅读作品资料', detail: 'read', content: '文件正文' },
+      { id: 'tool-result:3', role: 'tool', text: '这项操作没有执行', detail: 'read', content: '读取失败原因' },
+    ])
+    expect(toolResultRow({ kind: 'tool-result', seq: 4, callId: 'x', call: { name: 'write', argsRaw: '{}' }, content: [{ type: 'text', text: 'a'.repeat(5000) }], isError: false } as never).content).toHaveLength(4001)
   })
   it('suppresses the complete product-owned index turn and generic empty status rows', () => {
     const prompt = buildNovelIndexPrompt()
@@ -66,6 +93,7 @@ describe('DSH snapshot adapter', () => {
     ] }
     expect(chatRows(authorSnapshot as never)).toEqual([
       { id: 'user:7', role: 'user', text: '讨论下一章', projectContextReceipt: undefined },
+      { id: 'tool-result:9', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'raw' },
     ])
     expect(internalIndexTurnActive(authorSnapshot as never)).toBe(false)
     expect(chatRows({ nodes: [
@@ -138,7 +166,7 @@ describe('DSH snapshot adapter', () => {
     ])
   })
   it('renders partial text and answers pending waits through their public response carrier', async () => {
-    expect(partialText({ partial: { blocks: [{ kind: 'text', text: '流式正文' }] } } as never)).toBe('流式正文')
+    expect(partialView({ partial: { blocks: [{ kind: 'text', text: '流式正文' }] } } as never)).toEqual({ thinking: '', text: '流式正文' })
     const approvalRespond = vi.fn().mockResolvedValue({ accepted: true })
     await answerApproval({
       kind: 'approval', sessionId: 's', payload: { approvalId: 'a', toolName: 'write' }, respond: approvalRespond,
@@ -150,19 +178,19 @@ describe('DSH snapshot adapter', () => {
     } as never, [{ id: 'q', selected: ['继续'] }])
     expect(questionRespond).toHaveBeenCalledWith({ ok: true, value: { sessionId: 's', answer: { answers: [{ id: 'q', selected: ['继续'] }] } } })
   })
-  it('never exposes raw tool output, error codes, names, or nested calls', () => {
+  it('never exposes error codes or nested calls, and truncates long tool output', () => {
     const row = toolResultRow({
       kind: 'tool-result', seq: 8, callId: 'root', call: { name: '写入', argsRaw: '{"path":"x"}' },
       content: [{ type: 'text', text: '写入被拒绝' }], isError: true, error: { name: 'Denied', code: 'sandbox-denied' },
       subCalls: [{ callId: 'child', name: '检查路径', argsRaw: '', turn: 1, step: 1, time: 1, callView: null, subCalls: [] }],
     } as never)
-    expect(row).toMatchObject({ role: 'tool', text: '这项操作没有执行', detail: '写作助手无法完成这项操作。' })
+    expect(row).toMatchObject({ role: 'tool', text: '这项操作没有执行', detail: '写入', content: '写入被拒绝' })
     expect(JSON.stringify(row)).not.toContain('Denied')
     expect(JSON.stringify(row)).not.toContain('检查路径')
     const long = toolResultRow({
       kind: 'tool-result', seq: 9, callId: 'long', call: null,
       content: [{ type: 'text', text: 'x'.repeat(1300) }], isError: false, subCalls: [],
     } as never)
-    expect(long).toMatchObject({ text: '操作已完成', detail: '已完成' })
+    expect(long).toMatchObject({ text: '操作已完成', detail: '工具 long' })
   })
 })
