@@ -767,7 +767,7 @@ export const componentStyles = `
 .shell .zhihu-kb-file::file-selector-button { margin-right: var(--space-2); padding: 4px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: 500 var(--text-xs)/1 var(--font-sans); cursor: pointer; }
 .shell .zhihu-kb-file::file-selector-button:hover { background: var(--surface-warm); }
 
-/* 用量设置:今日 4 卡 + 近 7 日表 + 底部说明。 */
+/* 用量设置:今日 4 卡 + 近 7 日分模型堆叠柱状图 + 底部说明。 */
 .shell .usage-page { max-width: 720px; display: flex; flex-direction: column; gap: var(--space-5); }
 .shell .usage-header { display: grid; gap: 4px; }
 .shell .usage-title { margin: 0; font: 600 var(--text-md)/1.3 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
@@ -779,11 +779,19 @@ export const componentStyles = `
 .shell .usage-card { display: grid; gap: 6px; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); }
 .shell .usage-card-label { font: 500 var(--text-xs)/1.4 var(--font-sans); color: var(--meta); letter-spacing: .04em; }
 .shell .usage-card-value { font: 600 var(--text-md)/1.2 var(--font-sans); color: var(--fg); font-variant-numeric: tabular-nums; }
-.shell .usage-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); color: var(--fg-2); }
-.shell .usage-table th, .shell .usage-table td { padding: 8px 10px; border-bottom: 1px solid var(--hairline); text-align: right; font-variant-numeric: tabular-nums; }
-.shell .usage-table thead th { font: 500 var(--text-xs)/1.4 var(--font-sans); color: var(--meta); letter-spacing: .04em; text-align: right; }
-.shell .usage-table tbody th { text-align: left; font: 500 var(--text-sm)/1.4 var(--font-sans); color: var(--fg); font-variant-numeric: tabular-nums; }
-.shell .usage-table tbody tr:hover { background: var(--surface); }
+/* 柱状图:七根等宽柱,柱内分段自下而上堆叠,颜色与图例一一对应。 */
+.shell .usage-chart { display: grid; gap: var(--space-3); }
+.shell .usage-chart-plot { display: flex; align-items: stretch; gap: var(--space-3); height: 180px; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); }
+.shell .usage-chart-day { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.shell .usage-chart-value { flex: none; min-height: 1em; font: 500 var(--text-xs)/1.2 var(--font-sans); color: var(--meta); font-variant-numeric: tabular-nums; }
+.shell .usage-chart-bar { flex: 1 1 auto; width: 70%; max-width: 44px; display: flex; flex-direction: column-reverse; overflow: hidden; border-radius: 4px 4px 2px 2px; background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.shell .usage-chart-segment { flex: none; width: 100%; }
+.shell .usage-chart-date { flex: none; font: 400 var(--text-xs)/1.2 var(--font-sans); color: var(--meta); font-variant-numeric: tabular-nums; }
+.shell .usage-chart-legend { display: flex; flex-wrap: wrap; gap: 6px var(--space-4); margin: 0; padding: 0; list-style: none; }
+.shell .usage-chart-legend li { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--fg-2); }
+.shell .usage-chart-chip { width: 10px; height: 10px; flex: none; border-radius: 3px; }
+.shell .usage-chart-model { font-weight: 500; }
+.shell .usage-chart-meta { color: var(--meta); font-variant-numeric: tabular-nums; }
 .shell .usage-empty { margin: 0; padding: var(--space-4); text-align: center; color: var(--meta); font-size: var(--text-sm); border: 1px dashed var(--hairline-strong); border-radius: var(--radius-md); }
 .shell .usage-footnote { margin: 0; color: var(--meta); font-size: var(--text-xs); }
 .shell .usage-button { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }

@@ -1,6 +1,6 @@
 /**
  * 用量设置页:通过 `/manuscript` 通道的 `usage.summary` RPC 拉取本地用量数据,
- * 渲染今日概览与近 7 日明细。后端契约见任务说明:
+ * 渲染今日概览与近 7 日分模型堆叠柱状图。后端契约见任务说明:
  *   value = { days: DailyUsage[] }, DailyUsage = { date, inputTokens, outputTokens,
  *   cacheReadTokens, cacheWriteTokens, reasoningTokens, requests, byModel }
  */
@@ -11,6 +11,9 @@ import type { ShellContext } from './shared.ts'
 const USAGE_DAYS = 30
 const RECENT_DAYS = 7
 const LOCALE = 'zh-CN'
+
+/* 模型配色:固定调色板,按近 7 日总量降序分配,柱子与图例同色同序。 */
+const MODEL_PALETTE = ['#7c9ecb', '#d9a05b', '#8fbf8f', '#c98a8a', '#a48fd0', '#6fb3b3', '#d08bb0', '#b5b56a']
 
 type ModelUsage = {
   inputTokens?: number
@@ -48,12 +51,7 @@ const TEXT = {
   loadFailed: '读取用量失败',
   retry: '重试',
   loadFailedPrefix: '加载失败:',
-  note: '仅统计本机用量;不含费用估算。',
-  colDate: '日期',
-  colInput: '输入',
-  colOutput: '输出',
-  colCache: '缓存命中',
-  colRequests: '请求',
+  note: '仅统计本机用量;不含费用估算。柱高为当日各模型 tokens 合计(输入+输出+缓存),悬停查看分项。',
 }
 
 function formatNumber(value: number): string {
@@ -78,6 +76,69 @@ function isUsageSummary(value: unknown): value is UsageSummary {
   if (typeof value !== 'object' || value === null) return false
   const days = (value as { days?: unknown }).days
   return Array.isArray(days)
+}
+
+/** 单个模型一天的总 tokens:输入+输出+缓存读写。 */
+function modelTokens(usage: ModelUsage | undefined): number {
+  if (!usage) return 0
+  return (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+}
+
+export type ModelSeries = { key: string; tokens: number; requests: number; color: string }
+
+/** 汇总近 7 日出现过的模型,按总量降序分配调色板颜色,保证柱子与图例同色同序。 */
+export function collectModelSeries(days: readonly DailyUsage[]): ModelSeries[] {
+  const totals = new Map<string, { tokens: number; requests: number }>()
+  for (const day of days) {
+    for (const [key, usage] of Object.entries(day.byModel ?? {})) {
+      const entry = totals.get(key) ?? { tokens: 0, requests: 0 }
+      entry.tokens += modelTokens(usage)
+      entry.requests += usage?.requests ?? 0
+      totals.set(key, entry)
+    }
+  }
+  return [...totals.entries()]
+    .sort((left, right) => right[1].tokens - left[1].tokens || left[0].localeCompare(right[0]))
+    .map(([key, value], index) => ({ key, ...value, color: MODEL_PALETTE[index % MODEL_PALETTE.length] }))
+}
+
+function dayTotal(day: DailyUsage, series: readonly ModelSeries[]): number {
+  return series.reduce((sum, item) => sum + modelTokens(day.byModel?.[item.key]), 0)
+}
+
+/** 近 7 日分模型堆叠柱状图,纯 div 实现,不引入图表库。 */
+function UsageChart(props: { days: readonly DailyUsage[]; series: readonly ModelSeries[] }): ReactNode {
+  const peak = Math.max(1, ...props.days.map((day) => dayTotal(day, props.series)))
+  return e('div', { className: 'usage-chart' },
+    e('div', { className: 'usage-chart-plot', role: 'img', 'aria-label': '近 7 日各模型 tokens 用量堆叠柱状图' },
+      props.days.map((day) => {
+        const total = dayTotal(day, props.series)
+        return e('div', { className: 'usage-chart-day', key: day.date },
+          e('span', { className: 'usage-chart-value' }, total ? formatNumber(total) : ''),
+          e('div', { className: 'usage-chart-bar', title: `${day.date} · 合计 ${formatNumber(total)} tokens` },
+            props.series.map((item) => {
+              const value = modelTokens(day.byModel?.[item.key])
+              if (!value) return null
+              return e('span', {
+                key: item.key,
+                className: 'usage-chart-segment',
+                style: { height: `${(value / peak) * 100}%`, background: item.color },
+                title: `${item.key}: ${formatNumber(value)} tokens`,
+              })
+            }),
+          ),
+          e('span', { className: 'usage-chart-date' }, day.date.slice(5).replace('-', '/')),
+        )
+      }),
+    ),
+    e('ul', { className: 'usage-chart-legend' },
+      props.series.map((item) => e('li', { key: item.key },
+        e('span', { className: 'usage-chart-chip', style: { background: item.color }, 'aria-hidden': 'true' }),
+        e('span', { className: 'usage-chart-model' }, item.key),
+        e('span', { className: 'usage-chart-meta' }, `${formatNumber(item.tokens)} tokens · ${formatNumber(item.requests)} 次`),
+      )),
+    ),
+  )
 }
 
 export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
@@ -140,8 +201,9 @@ function Header(): ReactNode {
 function Loaded(props: { summary: UsageSummary }): ReactNode {
   const { summary } = props
   const today = summary.days.find((day) => day.date === todayKey())
-  const recent = summary.days.slice(-RECENT_DAYS).reverse()
-  const hasAny = summary.days.some((day) => day.requests > 0)
+  const recent = summary.days.slice(-RECENT_DAYS)
+  const series = collectModelSeries(recent)
+  const hasAny = recent.some((day) => day.requests > 0)
 
   return e('section', { className: 'usage-page', 'aria-label': '用量' },
     e(Header, null),
@@ -156,28 +218,9 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
     ),
     e('section', { className: 'usage-recent', 'aria-label': TEXT.recentHeading },
       e('h3', { className: 'usage-section-title' }, TEXT.recentHeading),
-      !hasAny || recent.length === 0
+      !hasAny || series.length === 0
         ? e('p', { className: 'usage-empty' }, TEXT.empty)
-        : e('table', { className: 'usage-table' },
-            e('thead', null,
-              e('tr', null,
-                e('th', { scope: 'col' }, TEXT.colDate),
-                e('th', { scope: 'col' }, TEXT.colInput),
-                e('th', { scope: 'col' }, TEXT.colOutput),
-                e('th', { scope: 'col' }, TEXT.colCache),
-                e('th', { scope: 'col' }, TEXT.colRequests),
-              ),
-            ),
-            e('tbody', null,
-              recent.map((day) => e('tr', { key: day.date },
-                e('th', { scope: 'row' }, day.date),
-                e('td', null, formatNumber(day.inputTokens)),
-                e('td', null, formatNumber(day.outputTokens)),
-                e('td', null, formatNumber(day.cacheReadTokens)),
-                e('td', null, formatNumber(day.requests)),
-              )),
-            ),
-          ),
+        : e(UsageChart, { days: recent, series }),
     ),
     e('p', { className: 'usage-footnote' }, TEXT.note),
   )
