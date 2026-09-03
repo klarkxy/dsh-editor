@@ -1,9 +1,8 @@
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { createElement as e, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
-import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
+import { AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-settings-contract.ts'
-import { WritingProgressSettings } from './writing-progress-settings.tsx'
 import type { WritingProgressScope } from './writing-progress.ts'
 
 export { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-settings-contract.ts'
@@ -130,8 +129,11 @@ export type WritingSettingsSlots = {
  * 写作设置页内容。渲染进 shell 自建的设置弹窗（settings.tsx）的"写作"
  * 标签页;上游 DSH 设置弹窗（settings.section slot）在桌面 profile 中已被
  * 禁用,不再注册进去。
+ * 每日目标与作者侧写目前封存:每日目标整块不挂载（progressScope 保留在
+ * props 里,恢复时直接挂回 WritingProgressSettings）;作者侧写不对作者暴露
+ * 设置入口,记忆仍只通过对话里的确认卡写入。
  */
-export function WritingSettings({ scope, migrate, progressScope }: {
+export function WritingSettings({ scope, migrate }: {
   scope: SettingsScope<WritingPreferences>
   migrate: WritingMigration
   progressScope: WritingProgressScope
@@ -147,7 +149,6 @@ export function WritingSettings({ scope, migrate, progressScope }: {
   const [saving, setSaving] = useState<keyof WritingPreferences | null>(null)
   const [writeFailure, setWriteFailure] = useState('')
   const [authorDraft, setAuthorDraft] = useState(values.authorPreferences)
-  const [memoryDraft, setMemoryDraft] = useState(values.authorMemory)
 
   const runMigration = async () => {
     const result = await migrate()
@@ -164,27 +165,19 @@ export function WritingSettings({ scope, migrate, progressScope }: {
     setAuthorDraft(values.authorPreferences)
   }, [values.authorPreferences])
 
-  useEffect(() => {
-    setMemoryDraft(values.authorMemory)
-  }, [values.authorMemory])
-
   const update = async (field: keyof WritingPreferences, value: CompletionPreference | string) => {
     setSaving(field)
     setWriteFailure('')
     try {
       const normalized = field === 'authorPreferences'
         ? normalizeAuthorPreferences(value)
-        : field === 'authorMemory'
-          ? normalizeAuthorMemory(value)
-          : value
+        : value
       await scope.set(field, normalized)
       if (!hasOwn(scope.getSnapshot().user, field)) throw new Error('write did not commit')
     } catch {
       const failure = field === 'completion'
         ? '自动补全偏好未能保存，请重试。'
-        : field === 'authorPreferences'
-          ? '作者约定未能保存，请重试。'
-          : '作者侧写未能保存，请重试。'
+        : '作者约定未能保存，请重试。'
       setWriteFailure(failure)
     } finally {
       setSaving(null)
@@ -203,7 +196,6 @@ export function WritingSettings({ scope, migrate, progressScope }: {
 
   return e('section', { className: 'writing-settings', 'aria-labelledby': 'writing-settings-title' },
     e('h2', { id: 'writing-settings-title' }, '写作'),
-    e(WritingProgressSettings, { scope: progressScope }),
     e('fieldset', { disabled: saving !== null },
       e('legend', null, '自动补全'),
       e('p', null, '补全只生成建议，经你确认后才会写入正文。'),
@@ -231,20 +223,6 @@ export function WritingSettings({ scope, migrate, progressScope }: {
       e('small', null, `${authorDraft.length} / ${AUTHOR_PREFERENCES_MAX_CHARS} 字；会用于所有作品的搭档、补全和选段修改。`),
     ),
     e('button', { type: 'button', disabled: saving !== null || authorDraft === values.authorPreferences, onClick: () => void update('authorPreferences', authorDraft) }, saving === 'authorPreferences' ? '保存中…' : '保存作者约定'),
-    e('label', { className: 'author-memory' },
-      e('span', null, '作者侧写（记忆）'),
-      e('textarea', {
-        value: memoryDraft,
-        maxLength: AUTHOR_MEMORY_MAX_CHARS,
-        rows: 6,
-        placeholder: '例如：喜欢留白；不写直接心理描写；避免穿越式旁白。可由写作助手提出并经你确认后追加。',
-        'aria-label': '作者侧写（记忆）',
-        disabled: saving !== null,
-        onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setMemoryDraft(event.target.value),
-      }),
-      e('small', null, `${memoryDraft.length} / ${AUTHOR_MEMORY_MAX_CHARS} 字；助手在协作中观察到的稳定偏好与雷点可由你确认后追加，不会自动写入。`),
-    ),
-    e('button', { type: 'button', disabled: saving !== null || memoryDraft === values.authorMemory, onClick: () => void update('authorMemory', memoryDraft) }, saving === 'authorMemory' ? '保存中…' : '保存作者侧写'),
     writeFailure ? e('p', { role: 'alert' }, writeFailure) : null,
     migrationFailure.length ? e('p', { role: 'alert' },
       '旧版本机偏好尚未迁移；原值已保留。',

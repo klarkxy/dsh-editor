@@ -605,19 +605,21 @@ describe('shell manuscript RPC safety', () => {
     expect(chatSource).toMatch(/proposal\.kind === 'renames'/)
   })
 
-  it('threads the writing-progress scope into the shell root and renders a chip in the sidebar', () => {
+  it('threads the writing-progress scope into the shell root while the daily-goal UI stays shelved', () => {
     const source = rootSource()
     /* root.ts 必须真正接住 progressScope,而不是定义后不用 */
     expect(source).toContain('progressScope: WritingProgressScope')
     expect(source).toMatch(/progressScope\s*[,:]\s*options\.progressScope/)
-    expect(source).toContain('writing-progress-chip')
-    expect(source).toMatch(/progressChipProps\(\{\s*overview,\s*progress:\s*writingProgress/)
-    /* 基线只在跨天/无值时写,今天已有就跳过 */
+    /* 每日目标封存:侧栏 chip 与设置页 fieldset 都不渲染,静默基线记录保留 */
+    expect(source).not.toContain('writing-progress-chip')
+    expect(source).not.toContain('progressChipProps(')
     expect(source).toMatch(/nextBaselines\(/)
     expect(source).toContain("localDateKey(new Date())")
-    /* CSS:侧栏 chip 在 paper/ink 主题都有,达成态换色 */
-    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
-    expect(styleSource).toMatch(/\.writing-progress-chip\b/)
-    expect(styleSource).toMatch(/\.writing-progress-chip\.reached\b/)
+    const settingsSource = readFileSync(new URL('./writing-settings.ts', import.meta.url), 'utf8')
+    expect(settingsSource).not.toContain("from './writing-progress-settings.tsx'")
+    expect(settingsSource).not.toContain('e(WritingProgressSettings')
+    /* 作者侧写不对作者暴露设置入口 */
+    expect(settingsSource).not.toContain('作者侧写（记忆）')
+    expect(settingsSource).not.toContain('保存作者侧写')
   })
 })

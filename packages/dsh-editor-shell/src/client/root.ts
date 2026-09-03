@@ -1223,11 +1223,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
           e('button', { className: 'side-action', type: 'button', 'aria-pressed': historyOpen, title: '提交历史', 'aria-label': '历史', onClick: () => setHistoryOpen((value) => !value) }, '历史'),
         ),
       ),
-      (() => {
-        const summary = progressChipProps({ overview, progress: writingProgress, workspaceId: openWorkspaceId })
-        if (!summary) return null
-        return e('div', { className: `writing-progress-chip${summary.reached ? ' reached' : ''}`, 'aria-label': summary.text }, summary.text)
-      })(),
+      /* 每日目标已封存:侧栏进度小标不再展示;基线记录仍静默保留,恢复时直接挂回 progressChipProps。 */
       historyOpen ? e('section', { className: 'snapshot-panel', 'aria-label': '提交历史' },
         snapshots === null
           ? e('p', { className: 'snapshot-empty' }, '正在读取提交历史…')
