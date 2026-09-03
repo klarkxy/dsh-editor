@@ -40,13 +40,24 @@ export function conversationTitle(text: string, limit = 36): string {
   return normalized.length > limit ? `${normalized.slice(0, limit - 1)}…` : normalized
 }
 
-export function nextAutomaticConversationTitle(input: { durableTitle?: string; assistantReplies: readonly string[]; attempted: boolean }, limit = 36): string {
+/** 本地日期标签（YYYY-MM-DD），用于自动会话标题的「日期 | 内容」前缀。 */
+export function conversationDateLabel(time: number): string {
+  const date = new Date(time)
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+export function nextAutomaticConversationTitle(input: { durableTitle?: string; assistantReplies: readonly string[]; attempted: boolean; date?: number }, limit = 36): string {
   const durableTitle = input.durableTitle?.trim() ?? ''
   if (!isUnnamedConversationTitle(durableTitle) || input.attempted) return ''
   const reply = input.assistantReplies
     .map(stripReasoningText)
     .find((text) => text && !isNovelIndexJobTitle(text))
-  return reply ? conversationTitle(reply, limit) : ''
+  if (!reply) return ''
+  const prefix = `${conversationDateLabel(input.date ?? Date.now())} | `
+  const content = conversationTitle(reply, Math.max(8, limit - prefix.length))
+  return content ? `${prefix}${content}` : ''
 }
 
 export function shouldConfirmConversationSwitch(draft: string, nextId: string, currentId: string): boolean {

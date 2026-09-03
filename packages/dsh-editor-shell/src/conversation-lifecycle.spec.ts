@@ -13,10 +13,12 @@ describe('conversation lifecycle projection', () => {
     expect(shouldConfirmConversationSwitch(' ', 'b', 'a')).toBe(false)
   })
 
-  it('auto-titles only an untitled, unattempted conversation with a durable assistant reply', () => {
-    expect(nextAutomaticConversationTitle({ assistantReplies: ['', '第一条回复。继续说明'], attempted: false })).toBe('第一条回复')
-    expect(nextAutomaticConversationTitle({ durableTitle: '作者命名', assistantReplies: ['自动名称'], attempted: false })).toBe('')
-    expect(nextAutomaticConversationTitle({ assistantReplies: ['自动名称'], attempted: true })).toBe('')
+  it('auto-titles only an untitled, unattempted conversation with a durable assistant reply, prefixed with the local date', () => {
+    const date = new Date(2026, 4, 14, 12).getTime()
+    expect(nextAutomaticConversationTitle({ assistantReplies: ['', '第一条回复。继续说明'], attempted: false, date })).toBe('2026-05-14 | 第一条回复')
+    expect(nextAutomaticConversationTitle({ durableTitle: '作者命名', assistantReplies: ['自动名称'], attempted: false, date })).toBe('')
+    expect(nextAutomaticConversationTitle({ assistantReplies: ['自动名称'], attempted: true, date })).toBe('')
+    expect(nextAutomaticConversationTitle({ assistantReplies: ['内'.repeat(60)], attempted: false, date })).toHaveLength(36)
   })
 
   it('never exposes the background index prompt as a conversation title', () => {
@@ -33,12 +35,14 @@ describe('conversation lifecycle projection', () => {
     expect(nextAutomaticConversationTitle({
       assistantReplies: [buildNovelIndexPrompt(), '讨论港口冲突。继续'],
       attempted: false,
-    })).toBe('讨论港口冲突')
+      date: new Date(2026, 4, 14, 12).getTime(),
+    })).toBe('2026-05-14 | 讨论港口冲突')
     expect(nextAutomaticConversationTitle({
       durableTitle: '为当前工作区建立作品索引。',
       assistantReplies: ['讨论港口冲突。继续'],
       attempted: false,
-    })).toBe('讨论港口冲突')
+      date: new Date(2026, 4, 14, 12).getTime(),
+    })).toBe('2026-05-14 | 讨论港口冲突')
   })
 
   it('treats Host project-context envelopes as unnamed and titles from sanitized visible replies', () => {
@@ -61,7 +65,8 @@ describe('conversation lifecycle projection', () => {
       durableTitle: envelope,
       assistantReplies: ['<think>只给模型看的推理</think>', '<think>继续推理</think>港口冲突。继续说明'],
       attempted: false,
-    })).toBe('港口冲突')
+      date: new Date(2026, 4, 14, 12).getTime(),
+    })).toBe('2026-05-14 | 港口冲突')
   })
 
   it('keeps renames ordered by session across component remounts', async () => {

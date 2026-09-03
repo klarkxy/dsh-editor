@@ -746,11 +746,12 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     })
   }
   useEffect(() => {
-    const currentTitle = sessionList.byId?.[session.sessionId]?.title?.trim()
+    const summary = sessionList.byId?.[session.sessionId]
     const title = nextAutomaticConversationTitle({
-      durableTitle: currentTitle,
+      durableTitle: summary?.title?.trim(),
       assistantReplies: rows.filter((row) => row.role === 'assistant').map((row) => row.text),
       attempted: titleAttempted.current.has(session.sessionId),
+      date: typeof summary?.updatedAt === 'number' ? summary.updatedAt : Date.now(),
     })
     if (!title) return
     titleAttempted.current.add(session.sessionId)
