@@ -43,11 +43,51 @@ describe('editor proposal boundary', () => {
     expect(editorToolGuard({ name: 'zhihu_search', arguments: { count: 5 } })).toContain('zhihu_search requires a non-empty query')
   })
 
+  it('guards the extended zhihu tool family by the same query rule', () => {
+    for (const name of ['zhihu_global_search', 'zhihu_ask', 'zhihu_knowledge_search']) {
+      expect(editorToolGuard({ name, arguments: { query: '背景考据' } })).toBeUndefined()
+      expect(editorToolGuard({ name, arguments: { query: '  ' } })).toContain(`${name} requires a non-empty query`)
+    }
+    expect(editorToolGuard({ name: 'zhihu_hot_list', arguments: {} })).toBeUndefined()
+    expect(editorToolGuard({ name: 'zhihu_hot_list', arguments: { limit: 10 } })).toBeUndefined()
+  })
+
   it('limits project_knowledge to 1-3 project-relative .md/.txt paths', () => {
     expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: ['大纲/总纲.md', 'notes.txt'] } })).toBeUndefined()
     expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: [] } })).toContain('project_knowledge')
     expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: ['../secret.md'] } })).toContain('project_knowledge')
     expect(editorToolGuard({ name: 'project_knowledge', arguments: { file: 'x.md' } })).toContain('project_knowledge')
+  })
+
+  it('validates split, merge and renames proposals without writing anything', () => {
+    expect(proposalMarker({ kind: 'split', path: '正文/003.md', anchor: '## 转折', newPath: '正文/004.md', summary: '拆分长章' })).toEqual({
+      marker: 'dsh-editor.proposal', version: 1, kind: 'split', path: '正文/003.md', anchor: '## 转折', newPath: '正文/004.md', summary: '拆分长章',
+    })
+    expect(proposalMarker({ kind: 'merge', path: '正文/002.md', sourcePath: '正文/003.md', summary: '合并短章' })).toMatchObject({
+      kind: 'merge', path: '正文/002.md', sourcePath: '正文/003.md',
+    })
+    expect(proposalMarker({ kind: 'renames', summary: '统一编号', renames: [{ from: '正文/1.md', to: '正文/001.md' }] })).toMatchObject({
+      kind: 'renames', renames: [{ from: '正文/1.md', to: '正文/001.md' }],
+    })
+    expect(() => proposalMarker({ kind: 'split', path: '正文/003.md', anchor: '  ', newPath: '正文/004.md', summary: 'x' })).toThrow('anchor')
+    expect(() => proposalMarker({ kind: 'merge', path: '正文/002.md', sourcePath: '../secret.md', summary: 'x' })).toThrow('project-relative')
+    expect(() => proposalMarker({ kind: 'renames', summary: 'x', renames: [{ from: 'a.md', to: 'a.md' }] })).toThrow('change the path')
+    expect(() => proposalMarker({ kind: 'renames', summary: 'x', renames: [] })).toThrow('1-50')
+  })
+
+  it('guards the new read-only and metadata tools', () => {
+    expect(editorToolGuard({ name: 'novel_search', arguments: { query: '伏笔' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_search', arguments: { query: '伏笔', path: '正文' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_search', arguments: { query: ' ' } })).toContain('non-empty query')
+    expect(editorToolGuard({ name: 'novel_search', arguments: { query: 'x', path: '../out' } })).toContain('project-relative')
+    expect(editorToolGuard({ name: 'novel_overview', arguments: {} })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_overview', arguments: { path: '正文' } })).toContain('no arguments')
+    expect(editorToolGuard({ name: 'novel_set_chapter_status', arguments: { path: '正文/001.md', status: 'revising' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_set_chapter_status', arguments: { path: '大纲/总纲.md', status: 'final' } })).toContain('正文/')
+    expect(editorToolGuard({ name: 'novel_set_chapter_status', arguments: { path: '正文/001.md', status: 'done' } })).toContain('draft, revising or final')
+    expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'renames', summary: 'x', renames: [{ from: '正文/1.md', to: '正文/001.md' }] } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'renames', summary: 'x', renames: [{ from: '../a.md', to: 'b.md' }] } })).toContain('Batch renames')
+    expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'split', path: '正文/003.md', anchor: '## 转折', newPath: '../evil.md', summary: 'x' } })).toContain('Only project-relative')
   })
 
   it('keeps the permanent prompt freeform while preserving hard boundaries', () => {
@@ -72,5 +112,14 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).toContain('project_knowledge 用于按需读取 1-3 份项目 Markdown 或纯文本材料')
     expect(EDITOR_PROMPT).toContain('优先级高于网络搜索，但仍非 canon')
     expect(EDITOR_PROMPT).toContain('不能把读取的内容直接复制成正文或写进项目文件')
+  })
+
+  it('documents the overview, search and structural proposal tools with non-canon and preview rules', () => {
+    expect(EDITOR_PROMPT).toContain('novel_overview')
+    expect(EDITOR_PROMPT).toContain('novel_search')
+    expect(EDITOR_PROMPT).toContain('novel_set_chapter_status 直接设置')
+    expect(EDITOR_PROMPT).toContain('split')
+    expect(EDITOR_PROMPT).toContain('renames')
+    expect(EDITOR_PROMPT).toContain('先形成可预览提案')
   })
 })

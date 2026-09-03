@@ -274,5 +274,45 @@ describe('zhihu_search', () => {
       )
       expect(blocks).toEqual([{ type: 'text', text: expect.stringContaining('知乎站内搜索「q」共 1 条') }])
     })
+
+    const executeTool = (tool: unknown, args: { query: string; count?: number }) =>
+      (tool as { execute: (a: unknown, exec: { signal: AbortSignal }) => Promise<{ items: unknown[] }> })
+        .execute(args, { signal: new AbortController().signal })
+
+    it('reports success with the item count through onExecuted', async () => {
+      const events: Array<{ ok: boolean; results: number }> = []
+      const fetcher = makeFetcher(() => jsonResponse(ENVELOPE([{ Title: 't', ContentType: 'x', Url: 'u', ContentText: 's' }])))
+      const tool = createZhihuSearchTool({
+        fetcher,
+        env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' },
+        onExecuted: (event) => events.push(event),
+      })
+      const result = await executeTool(tool, { query: 'q', count: 1 })
+      expect(result.items).toHaveLength(1)
+      expect(events).toEqual([{ ok: true, results: 1 }])
+    })
+
+    it('reports failures through onExecuted and still rethrows', async () => {
+      const events: Array<{ ok: boolean; results: number }> = []
+      const fetcher = makeFetcher(() => jsonResponse(null, { ok: false, status: 401 }))
+      const tool = createZhihuSearchTool({
+        fetcher,
+        env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' },
+        onExecuted: (event) => events.push(event),
+      })
+      await expect(executeTool(tool, { query: 'q', count: 1 })).rejects.toMatchObject({ code: 'HTTP_ERROR' })
+      expect(events).toEqual([{ ok: false, results: 0 }])
+    })
+
+    it('never lets a throwing onExecuted hook break the tool result', async () => {
+      const fetcher = makeFetcher(() => jsonResponse(ENVELOPE([])))
+      const tool = createZhihuSearchTool({
+        fetcher,
+        env: { ZHIHU_ACCESS_TOKEN: 'primarytoken1' },
+        onExecuted: () => { throw new Error('metering boom') },
+      })
+      const result = await executeTool(tool, { query: 'q', count: 1 })
+      expect(result.items).toEqual([])
+    })
   })
 })

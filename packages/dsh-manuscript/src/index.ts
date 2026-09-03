@@ -9,6 +9,7 @@ import { applyProposal, parseProposal, prepareProposal, ProposalError } from './
 import { SearchError, searchWorkspaceText } from './rpc/search.ts'
 import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
 import { createUsageRecorder, resolveDays, UsageInputError, usageDomainSpec, type UsageRecorder } from './rpc/usage.ts'
+import { createZhihuUsageRecorder, zhihuUsageDomainSpec, type ZhihuSearchEvent, type ZhihuUsageRecorder } from './rpc/zhihu-usage.ts'
 
 export const name = 'dsh-manuscript'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'llm', 'storageDomain'] as const
@@ -47,6 +48,7 @@ export async function dispatch(
   signal: AbortSignal,
   drafts?: DraftStore,
   usage?: UsageRecorder,
+  zhihuUsage?: ZhihuUsageRecorder,
 ): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Payload) : {}
   // `usage.summary` is global data and must not require a live session; short-circuit
@@ -55,6 +57,12 @@ export async function dispatch(
     if (!usage) throw new Error('manuscript usage storage is unavailable')
     const days = resolveDays(body.days)
     return { days: await usage.read(days) }
+  }
+  // `zhihu.usage` is likewise global metering data.
+  if (endpoint === 'zhihu.usage') {
+    if (!zhihuUsage) throw new Error('manuscript zhihu usage storage is unavailable')
+    const days = resolveDays(body.days)
+    return { days: await zhihuUsage.read(days) }
   }
   const host = asHost(ctx)
   const targetSessionId = str(body, 'sessionId')
@@ -127,12 +135,17 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.effect(() => () => usageDomain.close(), 'dsh-manuscript.usageDomainClose')
   installUsageWaterfall(ctx, usage)
 
+  const zhihuUsageDomain = await ctx.storageDomain.open(zhihuUsageDomainSpec)
+  const zhihuUsage = createZhihuUsageRecorder(zhihuUsageDomain.table('daily'))
+  ctx.effect(() => () => zhihuUsageDomain.close(), 'dsh-manuscript.zhihuUsageDomainClose')
+  installZhihuUsageListener(ctx, zhihuUsage)
+
   ctx.effect(() =>
     host.connection.rpc.handle(
       '/manuscript',
       async (endpoint: string, payload: unknown, signal: AbortSignal) => {
         try {
-          const value = await dispatch(ctx, endpoint, payload, signal, drafts, usage)
+          const value = await dispatch(ctx, endpoint, payload, signal, drafts, usage, zhihuUsage)
           return { ok: true, value } satisfies RpcResult<unknown>
         } catch (error) {
           return mapError(error)
@@ -205,6 +218,22 @@ async function* trackUsage(
       }
     }
   }
+}
+
+/** Record every zhihu tool execution emitted by dsh-editor-novel-kernel. Metering must never throw. */
+function installZhihuUsageListener(ctx: Context, recorder: ZhihuUsageRecorder): void {
+  const on = ctx.on as unknown as (
+    name: 'dsh-editor/zhihu-search',
+    listener: (event: ZhihuSearchEvent) => void,
+    options?: { global?: boolean },
+  ) => () => boolean
+  on(
+    'dsh-editor/zhihu-search',
+    (event) => {
+      void recorder.record(event).catch((error) => logWarning(ctx, error))
+    },
+    { global: true },
+  )
 }
 
 function logWarning(ctx: Context, error: unknown): void {

@@ -6,6 +6,7 @@ import { dispatch, mapError } from './index.ts'
 import { createDraftStore, type DraftTableLike } from './rpc/draft.ts'
 import { FileOpError } from './rpc/files.ts'
 import { SearchError } from './rpc/search.ts'
+import { createZhihuUsageRecorder } from './rpc/zhihu-usage.ts'
 
 function draftStoreFixture() {
   const rows = new Map<string, ReturnType<DraftTableLike['get']>>()
@@ -187,5 +188,32 @@ describe('manuscript Host workspace authority', () => {
       new AbortController().signal,
     )).resolves.toMatchObject({ results: [], scannedFiles: 0 })
     expect(resolveCalls.every((call) => call.cwd === canonical)).toBe(true)
+  })
+
+  it('serves zhihu.usage without requiring a live session', async () => {
+    const { host } = fixture({ live: false })
+    const rows = new Map<string, { date: string; calls: number; failures: number; results: number }>()
+    const zhihuUsage = createZhihuUsageRecorder({
+      get: (key) => rows.get(key),
+      async put(key, value) { rows.set(key, value) },
+    })
+    await zhihuUsage.record({ ok: true, results: 3 })
+    const value = await dispatch(
+      host as unknown as Context,
+      'zhihu.usage',
+      { days: 2 },
+      new AbortController().signal,
+      undefined,
+      undefined,
+      zhihuUsage,
+    ) as { days: Array<{ calls: number; results: number }> }
+    expect(value.days).toHaveLength(2)
+    expect(value.days[1]).toMatchObject({ calls: 1, results: 3 })
+    await expect(dispatch(
+      host as unknown as Context,
+      'zhihu.usage',
+      { days: 2 },
+      new AbortController().signal,
+    )).rejects.toThrow('manuscript zhihu usage storage is unavailable')
   })
 })
