@@ -36,6 +36,14 @@ describe('initializeProject', () => {
     await expect(inspectProjectRoot(root)).resolves.toEqual({ hasVisibleEntries: true, textFiles: ['正文/001.md'], indexReady: true })
   })
 
+  it('treats a freshly initialized project with only empty directories as still empty', async () => {
+    await initializeProject({ root, mode: 'workspace-write', newProject: true })
+    await expect(inspectProjectRoot(root)).resolves.toMatchObject({ hasVisibleEntries: false, textFiles: [] })
+
+    await fs.writeFile(path.join(root, '正文', '001.md'), '# 第一章\n', 'utf8')
+    await expect(inspectProjectRoot(root)).resolves.toMatchObject({ hasVisibleEntries: true, textFiles: ['正文/001.md'] })
+  })
+
   it('reports indexReady only when the index holds real content, not the init stub', async () => {
     await expect(inspectProjectRoot(root)).resolves.toMatchObject({ indexReady: false })
 

@@ -569,12 +569,11 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   }
   const prepareNewWorkspace = async (pending: PendingWorkspaceOpen, sessionId: SessionId) => {
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
-    const root = await safeRpcCall<{ entries?: { name: string; type: 'file' | 'directory' | 'other' }[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId, path: '.' }))
+    // 只按可见文件判定：新建作品只预建了空目录，不能因此被认为“已有其他内容”
+    const allFiles = await collectWorkspaceFiles(ctx, sessionId)
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
-    if (!root.ok) throw new Error(errorMessage(root))
-    if (hasVisibleWorkspaceEntries(root.value.entries ?? [])) {
-      const files = supportedWorkspaceTextPaths(await collectWorkspaceFiles(ctx, sessionId))
-      if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    if (allFiles.length) {
+      const files = supportedWorkspaceTextPaths(allFiles)
       if (!files.length) throw new Error('new workspace folder contains unrelated files')
       pendingWorkspaceOpen.current = pending
       setWorkspaceOpen({

@@ -206,11 +206,18 @@ export async function inspectProjectRoot(rootPath: string, signal?: AbortSignal)
       throw new ProjectInitError('failed to inspect project folder', 'IO', { cause: error })
     }
     for (const entry of entries) {
-      if (!relativeDirectory && entry.name !== NOVEL_INDEX_DIRECTORY) hasVisibleEntries = true
-      if (entry.name.startsWith('.')) continue
+      if (entry.name.startsWith('.')) {
+        // 根目录下除应用自有的 .dsh-editor 外的隐藏项（如 .git/.env）仍视为已有内容
+        if (!relativeDirectory && entry.name !== NOVEL_INDEX_DIRECTORY) hasVisibleEntries = true
+        continue
+      }
       const relative = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name
       if (entry.isDirectory()) queue.push(relative)
-      else if (entry.isFile() && /\.(?:md|txt)$/i.test(entry.name)) textFiles.push(relative)
+      else if (entry.isFile()) {
+        // 只按文件判定内容：新建作品只预建空目录，不能因此被认为“已有内容”
+        hasVisibleEntries = true
+        if (/\.(?:md|txt)$/i.test(entry.name)) textFiles.push(relative)
+      }
     }
   }
   textFiles.sort((left, right) => left.localeCompare(right, 'zh-CN', { numeric: true, sensitivity: 'base' }))
