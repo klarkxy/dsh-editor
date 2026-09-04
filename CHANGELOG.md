@@ -2,6 +2,13 @@
 
 本文件只记录已经发生的版本变化；安装、升级和回滚步骤以 [使用者指南](docs/user-guide.md) 为准。
 
+## 0.1.1 - 2026-09-04
+
+### 仓库工具
+
+- 新增 `pnpm upgrade:dsh`（`scripts/upgrade-dsh.mjs`）：从 GitHub `deepseek-ai/deepseek-harness` releases 解析最新 DSH 版本，经 npm 完整性校验后统一改写全仓库 pin、重生成 lockfile 并更新全局安装的 DSH CLI；支持 `--to`、`--channel`、`--dry-run`、`--skip-install`、`--skip-global`。
+- 经该功能核查，DSH `0.1.2-rc.1` 删除了 `@deepseek-ai/dsh-client-runtime`，属于破坏性客户端架构重构；本次不迁移，DSH 维持 `0.1.1-rc.2`。
+
 ## 0.1.0 - 2026-08-24
 
 首个可交付候选，包含两个相互独立的 DSH 插件。
