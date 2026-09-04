@@ -17,6 +17,7 @@
     "pack:desktop": "pnpm prepare:desktop-runtime && pnpm --filter @dsh-editor/desktop exec electron-builder --config electron-builder.yml --win portable --x64 && node scripts/verify-desktop-package.mjs",
     "pack:plugins": "node scripts/prepare-pack.mjs && pnpm --filter dsh-manuscript pack --pack-destination .pack && pnpm --filter dsh-grill pack --pack-destination .pack && node scripts/verify-artifacts.mjs",
     "render:icon": "node scripts/render-app-icon.mjs",
+    "upgrade:dsh": "node scripts/upgrade-dsh.mjs",
     "test:e2e:live": "pnpm build && pnpm pack:plugins && node e2e/author-flow-live.mjs",
     "test:e2e:matrix": "pnpm build && pnpm pack:plugins && node e2e/plugin-matrix.mjs",
     "test:e2e:desktop": "node e2e/desktop.mjs",
