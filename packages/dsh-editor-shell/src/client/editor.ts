@@ -95,23 +95,6 @@ export function Editor(props: {
   const onStatusChange = useCallback((next: EditorCoreStatus) => { setStatus(next) }, [])
   const onHandle = useCallback((handle: EditorCoreHandle | null) => { handleRef.current = handle }, [])
 
-  // Clear stale notes when navigating to a new document.
-  useEffect(() => {
-    setNote('')
-    setReloadConfirm(false)
-  }, [path, session.sessionId])
-
-  if (!path) {
-    return e(PaperStage, { label: '空白章' },
-      e('p', { className: 'home-hint' }, '从左侧目录树新建文件或文件夹；也可以先让搭档按这部作品的需要创建总览、人物卡与章纲。'),
-      e('div', { className: 'home-actions' },
-        e('button', { className: 'primary-action', type: 'button', onClick: create }, '新建文件'),
-      ),
-    )
-  }
-
-  const navigationBlocked = status === 'draft' || status === 'conflict'
-
   const reloadDisk = useCallback(async () => {
     setReloadConfirm(false)
     const deleted = await draftQueue.current!.run('draft.delete', { sessionId: session.sessionId, path }) as RpcResult
@@ -141,6 +124,23 @@ export function Editor(props: {
     }
     setRevisionTick((tick) => tick + 1)
   }, [ctx.connection.rpc, session.sessionId, path])
+
+  // Clear stale notes when navigating to a new document.
+  useEffect(() => {
+    setNote('')
+    setReloadConfirm(false)
+  }, [path, session.sessionId])
+
+  if (!path) {
+    return e(PaperStage, { label: '空白章' },
+      e('p', { className: 'home-hint' }, '从左侧目录树新建文件或文件夹；也可以先让搭档按这部作品的需要创建总览、人物卡与章纲。'),
+      e('div', { className: 'home-actions' },
+        e('button', { className: 'primary-action', type: 'button', onClick: create }, '新建文件'),
+      ),
+    )
+  }
+
+  const navigationBlocked = status === 'draft' || status === 'conflict'
 
   return e(Fragment, null,
     e(EditorCore, {
