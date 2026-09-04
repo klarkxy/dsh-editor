@@ -131,8 +131,19 @@ describe('DSH snapshot adapter', () => {
     expect(JSON.stringify(chatRows(snapshot as never))).not.toContain('internal card')
     expect(visibleRunningCalls([
       { name: 'novel_knowledge', callId: 'hidden' },
+      { name: 'novel_index_write', callId: 'hidden-index' },
       { name: 'read', callId: 'visible' },
     ])).toEqual([{ name: 'read', callId: 'visible' }])
+  })
+  it('completely hides internal index writes', () => {
+    const snapshot = { nodes: [
+      { kind: 'assistant', seq: 1, blocks: [{ kind: 'tool-call', name: 'novel_index_write', argsRaw: '{"text":"# 作品索引"}' }] },
+      { kind: 'tool-result', seq: 2, callId: 'index', call: { name: 'novel_index_write', argsRaw: '{"text":"# 作品索引"}' }, content: [{ type: 'text', text: '作品索引已写入（5 字符）。' }], isError: false },
+      { kind: 'assistant', seq: 3, blocks: [{ kind: 'text', text: '索引已建好。' }] },
+    ] }
+    expect(chatRows(snapshot as never)).toEqual([
+      { id: 'assistant:3', role: 'assistant', text: '索引已建好。', detail: undefined },
+    ])
   })
   it('does not start another connection to send or cancel', async () => {
     const prompt = vi.fn().mockResolvedValue({ ok: true })

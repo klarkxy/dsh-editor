@@ -4,6 +4,8 @@ import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { createNovelKnowledgeTool } from './novel-knowledge.ts'
 import { createAuthorObserveTool } from './observe-tool.ts'
 import { createProjectKnowledgeTool, type ProjectKnowledgeReader } from './project-knowledge.ts'
+import { createIndexWriteTool, type IndexWriter } from './index-write-tool.ts'
+import { NOVEL_INDEX_PATH } from './contracts.ts'
 import { createProposalTool, editorToolGuard, EDITOR_PROMPT } from './proposal-tool.ts'
 import { createZhihuSearchTool, type ZhihuSearchExecuted } from './zhihu-search.ts'
 import {
@@ -19,7 +21,7 @@ import {
 } from './zhihu-knowledge.ts'
 
 export const name = 'dsh-editor-novel-kernel'
-export const inject = ['tools', 'systemPrompt', 'fs', 'credentials', 'connection'] as const
+export const inject = ['tools', 'systemPrompt', 'fs', 'credentials', 'connection', 'sandboxPolicy'] as const
 
 /** Cross-plugin metering event consumed by dsh-manuscript's zhihu usage recorder. */
 export const ZHIHU_SEARCH_EVENT = 'dsh-editor/zhihu-search'
@@ -36,6 +38,10 @@ type HostContext = Context & {
     resolve: (path: string, opts?: { cwd?: string; signal?: AbortSignal }) => Promise<{ targetKey: string; displayPath: string }>
     readText: (target: { targetKey: string; displayPath: string }, signal?: AbortSignal) => Promise<string>
     listDir: (target: { targetKey: string; displayPath: string }, signal?: AbortSignal) => Promise<Array<{ name: string; type: 'file' | 'directory' | 'other' }>>
+    writeText: (target: { targetKey: string; displayPath: string }, content: string, expected?: unknown, signal?: AbortSignal, sandboxPolicy?: unknown) => Promise<unknown>
+  }
+  sandboxPolicy: {
+    resolve: (request?: { session?: unknown }) => unknown
   }
   credentials?: {
     resolve: (ref: CredentialRef) => Promise<{ value: string; source: string } | undefined>
@@ -55,6 +61,14 @@ function makeFsReader(fs: HostContext['fs']): ProjectKnowledgeReader {
   return async ({ path, signal, cwd }) => {
     const target = await fs.resolve(path, { cwd, signal })
     return await fs.readText(target, signal)
+  }
+}
+
+/** 索引直写：解析固定路径后，按会话沙箱策略创建或覆盖；父目录由 fs 后端负责创建。 */
+function makeIndexWriter(fs: HostContext['fs'], sandboxPolicy: HostContext['sandboxPolicy']): IndexWriter {
+  return async ({ text, signal, cwd, session }) => {
+    const target = await fs.resolve(NOVEL_INDEX_PATH, { cwd, signal })
+    await fs.writeText(target, text, undefined, signal, sandboxPolicy.resolve({ session }))
   }
 }
 
@@ -79,6 +93,7 @@ export function apply(ctx: Context): void {
   host.tools.register(createZhihuKnowledgeSearchTool({ resolveCredential, onExecuted }))
   host.tools.register(createProjectKnowledgeTool({ reader: makeFsReader(host.fs) }))
   host.tools.register(createNovelSearchTool({ fs: host.fs }))
+  host.tools.register(createIndexWriteTool({ writer: makeIndexWriter(host.fs, host.sandboxPolicy) }))
   installZhihuKnowledgeRpc(host, resolveCredential, onExecuted)
   ctx.effect(() => host.tools.guard(editorToolGuard))
   host.systemPrompt.section({ name: 'dsh-editor:novel-kernel', order: 90, text: EDITOR_PROMPT })

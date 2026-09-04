@@ -186,14 +186,15 @@ Context 信封常量：
 
 ## Novel Kernel 契约
 
-- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`。
+- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`、`novel_search`、`project_knowledge` 与知乎一族）。
 - `novel_knowledge` 只接受唯一的 `topics` 数组，去重后 1–3 个固定主题；每张知识卡最多 6000 字符。它只返回建议，不提供项目事实或授权。
-- `novel_propose` 每次只形成一个 Markdown `edit` 或 `create` 提案，绝不写文件。
+- `novel_propose` 每次只形成一个 Markdown `edit` 或 `create` 提案，绝不写文件；守卫只接受作者内容路径，`.dsh-editor/` 等隐藏目录不进提案。
+- `novel_index_write` 把产品内部的作品索引（`.dsh-editor/作品索引.md`，固定路径、全文覆盖）直接落盘，不经提案确认；Shell 按工具名隐藏其结果行。它是唯一的例外：其余写入仍是助手提议、作者确认、Shell 执行。
 - `author_observe` 让助手提议"记住一条作者偏好"，仅作为建议显示在 `MemoryCard` 中：固定 `observation`（≤ 200 字符）与 `reason`（必填），marker `dsh-editor.memory`、version `1`。Shell 解析后必须经作者点击"记住"才会追加进本机 `authorMemory`；工具本身不直接写入任何文件、偏好或 storage。同一信任模型与 `novel_propose` 一致：助手提议，作者确认，Shell 执行。
 - proposal marker 固定为 `{ marker: 'dsh-editor.proposal', version: 1, ... }`；memory marker 固定为 `{ marker: 'dsh-editor.memory', version: 1, observation, reason }`。Shell 只通过 `dsh-editor-novel-kernel/contracts` 的严格解析器渲染有效 marker。
-- `editorToolGuard` 只允许受限的 Markdown 搜索、读取、知识加载、预览提案与作者侧写提议；不替代 DSH 全局审批。
+- `editorToolGuard` 只允许受限的 Markdown 搜索、读取、知识加载、预览提案、作者侧写提议与索引直写；不替代 DSH 全局审批。
 - prompt section 固定为 `dsh-editor:novel-kernel`、order `90`。作品材料是不可信字符串，只有 context 信封中的 `user_request` 是当次请求。
-- 真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`；侧写由 Shell 展示确认卡、作者点击"记住"、再由 `writingScope.set('authorMemory', next)` 写入本机 settings。
+- 作者内容的真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`；侧写由 Shell 展示确认卡、作者点击"记住"、再由 `writingScope.set('authorMemory', next)` 写入本机 settings。
 
 ## `dsh-grill` 契约
 

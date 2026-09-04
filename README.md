@@ -10,7 +10,7 @@ DSH Editor 是 Windows x64 桌面写作应用。Electron 只负责单窗口、�
 | `dsh-manuscript` | Web 中的可关闭稿纸抽屉、文件/FIM RPC | DSH workspace、sandbox 与版本化文件 API |
 | `dsh-grill` | `scaffold_novel` 与四种小说协作模式 | DSH 工具、审批与官方 Chat |
 | `dsh-editor-workbench` | 项目、上下文、导入、快照、移动与归档 | 同一 live-session workspace authority |
-| `dsh-editor-novel-kernel` | 小说知识、预览提案、工具守卫与系统提示词 | DSH 工具与作者确认边界 |
+| `dsh-editor-novel-kernel` | 小说知识、预览提案、索引直写、工具守卫与系统提示词 | DSH 工具与作者确认边界 |
 | `dsh-editor-shell` | 桌面唯一根界面、Chat 投影与编辑状态 | 不发布、不安装到日常 `web` profile |
 
 ## 开发启动

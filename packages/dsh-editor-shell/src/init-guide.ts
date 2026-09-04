@@ -1,5 +1,5 @@
 import type { SessionId } from '@deepseek-ai/dsh-client-connection/client'
-import { WORKBENCH_RPC_CHANNEL, type ProjectInspectionResponse } from 'dsh-editor-workbench/contracts'
+import type { ProjectInspectionResponse } from 'dsh-editor-workbench/contracts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 import type { ShellContext } from './client/shared.ts'
 
@@ -47,13 +47,11 @@ export function shouldAutoIndexAfterInterview(inputs: AutoIndexInputs): boolean 
 }
 
 /**
- * 触发"通读项目并建立索引"的后台回合：先确保索引 stub 存在，再把
- * 产品内置的索引 prompt 排队发送。该回合在聊天界面按既有设计隐藏。
+ * 触发"通读项目并建立索引"的后台回合：索引由 novel_index_write 工具直接落盘，
+ * 不再需要预建 stub，也不经提案确认。该回合在聊天界面按既有设计隐藏。
  */
 export async function startExploreInit(ctx: ShellContext, sessionId: SessionId): Promise<boolean> {
   try {
-    const prepared = await ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.prepareIndex', { sessionId }) as { ok: boolean }
-    if (!prepared.ok) return false
     const session = ctx.sessions.binding(sessionId)?.session
     if (!session) return false
     const result = await session.prompt([{ type: 'text', text: buildNovelIndexPrompt() }], 'queue')

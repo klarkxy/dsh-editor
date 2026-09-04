@@ -4,6 +4,7 @@ import { isProjectKnowledgeArguments } from './project-knowledge.ts'
 import {
   AUTHOR_OBSERVE_MAX_CHARS,
   AUTHOR_OBSERVE_TOOL_NAME,
+  NOVEL_INDEX_WRITE_TOOL_NAME,
   NOVEL_KNOWLEDGE_TOOL_NAME,
   NOVEL_OVERVIEW_TOOL_NAME,
   NOVEL_SEARCH_TOOL_NAME,
@@ -94,6 +95,11 @@ function safeRelative(value: unknown, markdown = false): boolean {
   return !markdown || /\.md$/i.test(path)
 }
 
+/** 提案只面向作者内容：.dsh-editor/ 等隐藏目录是内部状态，改它们不走提案。 */
+function hasHiddenPart(value: unknown): boolean {
+  return typeof value === 'string' && value.replace(/\\/g, '/').split('/').some((part) => part.startsWith('.'))
+}
+
 /** 知乎系工具里要求非空 query 的一族；热榜无参数。 */
 const ZHIHU_QUERY_TOOLS: ReadonlySet<string> = new Set([
   ZHIHU_SEARCH_TOOL_NAME,
@@ -111,13 +117,24 @@ export function editorToolGuard(exec: { name: string; arguments: Readonly<Record
       const list = args.renames
       return Array.isArray(list) && list.every((entry) => entry && typeof entry === 'object'
         && safeRelative((entry as Record<string, unknown>).from, true)
-        && safeRelative((entry as Record<string, unknown>).to, true))
+        && safeRelative((entry as Record<string, unknown>).to, true)
+        && !hasHiddenPart((entry as Record<string, unknown>).from)
+        && !hasHiddenPart((entry as Record<string, unknown>).to))
         ? undefined
         : 'Batch renames are limited to project-relative Markdown paths.'
     }
-    return safeRelative(args.path, true) && safeRelative(args.newPath, true) && safeRelative(args.sourcePath, true)
+    if (!safeRelative(args.path, true) || !safeRelative(args.newPath, true) || !safeRelative(args.sourcePath, true)) {
+      return 'Only project-relative Markdown proposals are allowed.'
+    }
+    return hasHiddenPart(args.path) || hasHiddenPart(args.newPath) || hasHiddenPart(args.sourcePath)
+      ? 'Proposals only cover author content; internal dot-paths like .dsh-editor/ are written via novel_index_write instead.'
+      : undefined
+  }
+  if (exec.name === NOVEL_INDEX_WRITE_TOOL_NAME) {
+    const keys = Object.keys(args)
+    return keys.length === 1 && typeof args.text === 'string' && args.text.trim().length > 0
       ? undefined
-      : 'Only project-relative Markdown proposals are allowed.'
+      : 'novel_index_write only accepts a non-empty text.'
   }
   if (exec.name === AUTHOR_OBSERVE_TOOL_NAME) {
     const observation = typeof args.observation === 'string' ? args.observation.trim() : ''
@@ -169,7 +186,9 @@ export const EDITOR_PROMPT = `你是 DSH Editor 内的小说写作助手。始�
 
 你可以按需调用 novel_knowledge，从 planning、characters、drafting、dialogue、interiority、style、review、chinese-flow、first-reader、canon 中自由选择一至三个主题，也可以完全不调用。它只是参考经验，不代表模式、项目事实或用户授权；不必机械执行清单或向用户声明调用过程。
 
-构思、分析、审稿和问答直接在对话中回答。作品开始时通常只有空的 正文、大纲、人物卡、世界书 目录，没有总览、总纲、人物索引、设定总汇或首章。需要落盘时，用 novel_propose 的 create 建立所需 Markdown，不要假设模板文件已存在，也不要为了填空而生成空洞标题稿。只要用户要求创建或修改项目文件，就必须调用 novel_propose，先形成可预览提案，等待用户确认后才由产品写入；每次调用只处理一个 Markdown 文件。编辑时 oldText 必须是文件里唯一、完整的原文片段。绝不能调用 shell、write、edit 或其他会直接改文件的工具。
+.dsh-editor/ 是产品内部目录，其中的作品索引只由你通过 novel_index_write 全文直写（创建或覆盖，不需要用户确认），不走 novel_propose；novel_propose 也只接受作者内容路径，不接受该目录。
+
+构思、分析、审稿和问答直接在对话中回答。作品开始时通常只有空的 正文、大纲、人物卡、世界书 目录，没有总览、总纲、人物索引、设定总汇或首章。需要落盘时，用 novel_propose 的 create 建立所需 Markdown，不要假设模板文件已存在，也不要为了填空而生成空洞标题稿。只要用户要求创建或修改项目文件（.dsh-editor/ 内部文件除外），就必须调用 novel_propose，先形成可预览提案，等待用户确认后才由产品写入；每次调用只处理一个 Markdown 文件。编辑时 oldText 必须是文件里唯一、完整的原文片段。绝不能调用 shell、write、edit 或其他会直接改文件的工具。
 
 zhihu_search 只用于拉取社区证据与读者反馈做参考，不构成 canon、不扩大作品设定、不写入项目文件。引用搜索结果时也要保持信息来自社区而非正文事实；不能因为搜索到某条观点就把它写进大纲、世界书或人物卡。同族的 zhihu_global_search（全网搜索公开网页）、zhihu_hot_list（知乎热榜）、zhihu_ask（知乎直答，基于社区内容的综合回答）、zhihu_knowledge_search（知乎公开知识库检索）同样只作背景与热点参考，适用同样的非 canon 约束；zhihu_ask 默认用 zhida-thinking-1p5，简单事实查询才用 zhida-fast-1p5，zhida-agent 最慢，仅在用户明确要求时使用。
 

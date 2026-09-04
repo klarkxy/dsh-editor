@@ -87,6 +87,16 @@ describe('editor proposal boundary', () => {
     expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'split', path: '正文/003.md', anchor: '## 转折', newPath: '../evil.md', summary: 'x' } })).toContain('Only project-relative')
   })
 
+  it('keeps proposals on author content and routes the internal index to novel_index_write', () => {
+    expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'edit', path: '.dsh-editor/作品索引.md', summary: 'x', oldText: 'a', newText: 'b' } })).toContain('novel_index_write')
+    expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'create', path: '.dsh-editor/作品索引.md', summary: 'x', text: 'a' } })).toContain('novel_index_write')
+    expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'renames', summary: 'x', renames: [{ from: '正文/1.md', to: '.dsh-editor/1.md' }] } })).toContain('Batch renames')
+    expect(editorToolGuard({ name: 'novel_index_write', arguments: { text: '# 作品索引' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_index_write', arguments: { text: '  ' } })).toContain('novel_index_write')
+    expect(editorToolGuard({ name: 'novel_index_write', arguments: {} })).toContain('novel_index_write')
+    expect(editorToolGuard({ name: 'novel_index_write', arguments: { text: 'a', path: 'b' } })).toContain('novel_index_write')
+  })
+
   it('keeps the permanent prompt freeform while preserving hard boundaries', () => {
     expect(EDITOR_PROMPT).toContain('自然对话入口')
     expect(EDITOR_PROMPT).toContain('只要求审查时，只指出问题，不擅自改写')
@@ -118,6 +128,14 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).toContain('split')
     expect(EDITOR_PROMPT).toContain('renames')
     expect(EDITOR_PROMPT).toContain('先形成可预览提案')
+  })
+
+  it('reserves the internal index for direct writes, outside the proposal flow', () => {
+    expect(EDITOR_PROMPT).toContain('novel_index_write')
+    expect(EDITOR_PROMPT).toContain('.dsh-editor/ 是产品内部目录')
+    expect(EDITOR_PROMPT).toContain('不走 novel_propose')
+    expect(EDITOR_PROMPT).toContain('.dsh-editor/ 内部文件除外')
+    expect(EDITOR_PROMPT).not.toContain('`')
   })
 
   it('exposes author_observe only for bounded, redundant-free author-memory entries', () => {

@@ -86,7 +86,8 @@ describe('shell manuscript RPC safety', () => {
     expect(root).not.toMatch(/(?:function|const)\s+triggerExistingIndex\b/)
     const guide = initGuideSource()
     expect(guide).toMatch(/export async function startExploreInit\b/)
-    expect(guide).toContain('project.prepareIndex')
+    /* 索引由 novel_index_write 直写落盘，不再预建 stub、不经提案确认。 */
+    expect(guide).not.toContain('project.prepareIndex')
     expect(guide).toContain('buildNovelIndexPrompt()')
   })
 
