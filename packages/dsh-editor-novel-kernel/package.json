@@ -2,7 +2,7 @@
   "name": "dsh-editor-novel-kernel",
   "version": "0.1.0",
   "description": "Private DSH Editor novel tools, guard, prompt, and bundled knowledge",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "type": "module",
   "main": "./lib/index.js",

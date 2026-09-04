@@ -2,7 +2,7 @@
   "name": "dsh-editor-workbench",
   "version": "0.1.0",
   "description": "Private DSH Editor project lifecycle and context Host",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "type": "module",
   "engines": {

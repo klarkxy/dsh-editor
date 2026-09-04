@@ -2,7 +2,7 @@
   "name": "dsh-grill",
   "version": "0.1.0",
   "description": "DSH novel-writing workflow: scaffold tool and four-mode system prompt",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
     "node": ">=22"

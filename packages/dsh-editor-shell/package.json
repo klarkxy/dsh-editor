@@ -2,7 +2,7 @@
   "name": "dsh-editor-shell",
   "version": "0.1.0",
   "description": "Private manuscript-first DSH client shell",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",

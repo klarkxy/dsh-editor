@@ -1,6 +1,7 @@
 {
   "name": "dsh-editor",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "packageManager": "pnpm@10.14.0",
   "engines": {

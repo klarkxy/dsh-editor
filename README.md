@@ -62,3 +62,7 @@ pnpm test:e2e:portable
 - [CHANGELOG](CHANGELOG.md)：版本变化
 
 DSH Editor 的 loopback RPC 只适用于本地单用户信任模型，不应暴露成远程多用户文件接口。
+
+## 许可
+
+本仓库采用 [SATA 2.1](https://github.com/klarkxy/sata-license)（Star And Thank Author License）。完整文本见 [LICENSE](LICENSE)。
