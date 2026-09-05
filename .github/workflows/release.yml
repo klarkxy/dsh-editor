@@ -42,6 +42,15 @@ jobs:
         run: |
           DSH_VERSION=$(node -p "require('node:fs').readFileSync('scripts/dsh-cli.mjs','utf8').match(/EXPECTED_DSH_VERSION = '([^']+)'/)[1]")
           npm install -g "@deepseek-ai/dsh@$DSH_VERSION"
+          # The npm global bin directory is not guaranteed to stay on PATH for
+          # later steps (observed on macos runners); pin the resolver instead.
+          PREFIX=$(npm prefix -g)
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            CLI="$PREFIX/node_modules/@deepseek-ai/dsh/lib/bin.js"
+          else
+            CLI="$PREFIX/lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
+          fi
+          echo "DSH_CLI_PATH=$CLI" >> "$GITHUB_ENV"
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Pack desktop artifacts
