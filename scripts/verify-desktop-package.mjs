@@ -6,12 +6,18 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, process.argv[2] ?? '.pack/desktop')
-const resources = resolve(output, 'win-unpacked', 'resources')
+const platformId = `${process.platform}-${process.arch}`
+const nodeExecutableName = process.platform === 'win32' ? 'node.exe' : 'node'
+const resources = process.platform === 'darwin'
+  ? resolve(output, `mac-${process.arch}`, 'DSH Editor.app', 'Contents', 'Resources')
+  : resolve(output, 'win-unpacked', 'resources')
 
 async function json(path) { return JSON.parse(await readFile(path, 'utf8')) }
 
 const desktopVersion = (await json(resolve(root, 'apps', 'desktop', 'package.json'))).version
-const executable = resolve(output, `DSH Editor-${desktopVersion}-win-x64.exe`)
+const artifactNames = process.platform === 'darwin'
+  ? [`DSH Editor-${desktopVersion}-mac-${process.arch}.dmg`, `DSH Editor-${desktopVersion}-mac-${process.arch}.zip`]
+  : [`DSH Editor-${desktopVersion}-win-x64.exe`, `DSH Editor-Setup-${desktopVersion}-win-x64.exe`]
 
 async function treeDigest(path) {
   const hash = createHash('sha256')
@@ -38,6 +44,7 @@ async function treeDigest(path) {
 }
 
 const manifest = await json(resolve(resources, 'runtime-manifest.json'))
+if (manifest.platform !== platformId) throw new Error(`runtime manifest platform mismatch: expected ${platformId}, found ${manifest.platform}`)
 const actual = {
   node: await treeDigest(resolve(resources, 'node')),
   dsh: await treeDigest(resolve(resources, 'dsh')),
@@ -67,10 +74,13 @@ try {
   if (error instanceof Error && error.message === 'desktop profile must not contain dsh-grill') throw error
   if (!error || typeof error !== 'object' || error.code !== 'ENOENT') throw error
 }
-const nodeProbe = spawnSync(resolve(resources, 'node', 'node.exe'), ['--version'], { encoding: 'utf8', windowsHide: true })
+const nodeProbe = spawnSync(resolve(resources, 'node', nodeExecutableName), ['--version'], { encoding: 'utf8', windowsHide: true })
 if (nodeProbe.status !== 0 || nodeProbe.stdout.trim() !== 'v24.16.0') throw new Error('packaged Node probe failed')
-const executableBytes = (await stat(executable)).size
-const executableSha256 = createHash('sha256').update(await readFile(executable)).digest('hex')
-const report = { ok: true, source: 'current', executable, executableBytes, executableSha256, manifest, actual }
+const artifacts = []
+for (const name of artifactNames) {
+  const file = resolve(output, name)
+  artifacts.push({ file, bytes: (await stat(file)).size, sha256: createHash('sha256').update(await readFile(file)).digest('hex') })
+}
+const report = { ok: true, source: 'current', platform: platformId, artifacts, manifest, actual }
 await writeFile(resolve(output, 'verification.json'), `${JSON.stringify(report, null, 2)}\n`)
 console.log(JSON.stringify(report, null, 2))

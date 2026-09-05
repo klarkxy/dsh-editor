@@ -31,8 +31,9 @@ async function runtimeFixture(version = 'one', executableNode = false): Promise<
   await mkdir(join(resources, 'node'), { recursive: true })
   await mkdir(join(resources, 'dsh', 'lib'), { recursive: true })
   await mkdir(join(resources, 'profile-template'), { recursive: true })
-  if (executableNode) await copyFile(process.execPath, join(resources, 'node', 'node.exe'))
-  else await writeFile(join(resources, 'node', 'node.exe'), `node-${version}`)
+  const nodeName = process.platform === 'win32' ? 'node.exe' : 'node'
+  if (executableNode) await copyFile(process.execPath, join(resources, 'node', nodeName))
+  else await writeFile(join(resources, 'node', nodeName), `node-${version}`)
   await writeFile(join(resources, 'dsh', 'lib', 'bin.js'), `dsh-${version}`)
   await writeFile(join(resources, 'profile-template', 'package.json'), `{"version":"${version}"}`)
   const [node, dsh, profile] = await Promise.all([
@@ -41,7 +42,7 @@ async function runtimeFixture(version = 'one', executableNode = false): Promise<
     treeDigest(join(resources, 'profile-template')),
   ])
   await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-    format: 1, platform: 'win32-x64',
+    format: 1, platform: `${process.platform}-${process.arch}`,
     node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
   }))
   return { root, resources }
@@ -136,6 +137,16 @@ describe('persistent packaged runtime cache', () => {
     expect(await readFile(runtime.cliPath, 'utf8')).toBe('dsh-one')
     expect(existsSync(join(root, 'home', 'runtime', 'dsh-editor-runtime', '.dsh-editor-runtime.json'))).toBe(true)
   })
+  it('rejects a bundled runtime manifest built for a different platform', async () => {
+    const { root, resources } = await runtimeFixture()
+    const [node, dsh, profile] = await Promise.all([
+      treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
+    ])
+    await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
+      format: 1, platform: 'unsupported-platform', node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
+    }))
+    await expect(materializePackagedRuntime(join(root, 'home'), resources)).rejects.toThrow('unsupported identity')
+  })
   it('atomically replaces an owned cache when the bundled manifest changes', async () => {
     const { root, resources } = await runtimeFixture('one')
     const home = join(root, 'home')
@@ -145,7 +156,7 @@ describe('persistent packaged runtime cache', () => {
       treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
     ])
     await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-      format: 1, platform: 'win32-x64', node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
+      format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
     }))
     const runtime = await materializePackagedRuntime(home, resources)
     expect(await readFile(runtime.cliPath, 'utf8')).toBe('dsh-two')
@@ -163,7 +174,7 @@ describe('persistent packaged runtime cache', () => {
         treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
       ])
       await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-        format: 1, platform: 'win32-x64', node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
+        format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
       }))
 
       const committed = await materializePackagedRuntime(home, resources)

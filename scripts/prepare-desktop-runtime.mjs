@@ -71,12 +71,15 @@ function dshCopyFilter(source) {
   return true
 }
 
-if (process.platform !== 'win32' || process.arch !== 'x64') {
-  throw new Error(`portable V1 requires Windows x64, found ${process.platform} ${process.arch}`)
+const SUPPORTED_PLATFORMS = ['win32-x64', 'darwin-x64', 'darwin-arm64']
+const platformId = `${process.platform}-${process.arch}`
+if (!SUPPORTED_PLATFORMS.includes(platformId)) {
+  throw new Error(`unsupported desktop runtime platform: ${platformId} (supported: ${SUPPORTED_PLATFORMS.join(', ')})`)
 }
 if (process.versions.node !== NODE_VERSION) {
   throw new Error(`portable V1 requires Node ${NODE_VERSION}, found ${process.versions.node}`)
 }
+const nodeExecutableName = process.platform === 'win32' ? 'node.exe' : 'node'
 
 const dsh = resolveDshInstallation(DSH_VERSION)
 for (const packageName of privateProfilePackages) {
@@ -92,7 +95,7 @@ await mkdir(nodeOutput, { recursive: true })
 await mkdir(dshOutput, { recursive: true })
 
 const nodeExecutable = process.execPath
-await cp(nodeExecutable, resolve(nodeOutput, 'node.exe'))
+await cp(nodeExecutable, resolve(nodeOutput, nodeExecutableName))
 await cp(dsh.packageRoot, dshOutput, {
   recursive: true,
   dereference: true,
@@ -110,7 +113,7 @@ const bundledDsh = await readJson(resolve(dshOutput, 'package.json'))
 if (bundledDsh.name !== '@deepseek-ai/dsh' || bundledDsh.version !== DSH_VERSION) {
   throw new Error(`bundled DSH identity mismatch: ${bundledDsh.name}@${bundledDsh.version}`)
 }
-const nodeProbe = spawnSync(resolve(nodeOutput, 'node.exe'), ['--version'], {
+const nodeProbe = spawnSync(resolve(nodeOutput, nodeExecutableName), ['--version'], {
   encoding: 'utf8',
   windowsHide: true,
 })
@@ -145,7 +148,7 @@ if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify(expectedBun
 
 const manifest = {
   format: 1,
-  platform: 'win32-x64',
+  platform: platformId,
   node: { version: NODE_VERSION, ...(await treeDigest(nodeOutput)) },
   dsh: { version: DSH_VERSION, ...dshDigest },
   profile: profileDigest,

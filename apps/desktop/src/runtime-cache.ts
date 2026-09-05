@@ -8,6 +8,8 @@ const CACHE_MARKER = '.dsh-editor-runtime.json'
 const CACHE_SCHEMA = 1
 const EXPECTED_NODE_VERSION = '24.16.0'
 const EXPECTED_DSH_VERSION = '0.1.1-rc.2'
+const PLATFORM_ID = `${process.platform}-${process.arch}`
+const NODE_EXECUTABLE = process.platform === 'win32' ? 'node.exe' : 'node'
 
 export interface TreeDigest { sha256: string; files: number; bytes: number }
 interface RuntimeManifest {
@@ -50,7 +52,7 @@ function sameDigest(actual: TreeDigest, expected: TreeDigest): boolean {
 function manifestKey(manifest: RuntimeManifest): string { return JSON.stringify(manifest) }
 function assertManifest(value: unknown): asserts value is RuntimeManifest {
   const manifest = value as Partial<RuntimeManifest>
-  if (manifest?.format !== 1 || manifest.platform !== 'win32-x64' || manifest.node?.version !== EXPECTED_NODE_VERSION || manifest.dsh?.version !== EXPECTED_DSH_VERSION) {
+  if (manifest?.format !== 1 || manifest.platform !== PLATFORM_ID || manifest.node?.version !== EXPECTED_NODE_VERSION || manifest.dsh?.version !== EXPECTED_DSH_VERSION) {
     throw new Error('Bundled desktop runtime manifest has an unsupported identity.')
   }
   for (const entry of [manifest.node, manifest.dsh, manifest.profile]) {
@@ -86,7 +88,7 @@ async function validate(root: string, manifest: RuntimeManifest): Promise<boolea
 }
 function runtimePaths(root: string): CachedRuntime {
   return {
-    nodePath: join(root, 'node', 'node.exe'),
+    nodePath: join(root, 'node', NODE_EXECUTABLE),
     cliPath: join(root, 'dsh', 'lib', 'bin.js'),
     template: join(root, 'profile-template'),
   }
@@ -97,7 +99,7 @@ async function cleanupRuntimeBackup(backup: string): Promise<void> {
   try {
     // Windows refuses to unlink a running executable. Probe it first so a live
     // old runtime stays intact instead of being partially removed.
-    await rm(join(backup, 'node', 'node.exe'), { force: true })
+    await rm(join(backup, 'node', NODE_EXECUTABLE), { force: true })
     await rm(backup, { recursive: true, force: true })
   } catch { /* A live old runtime releases the backup on a later app start. */ }
 }

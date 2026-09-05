@@ -1,0 +1,58 @@
+name: Release desktop artifacts
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and attach artifacts to (e.g. v0.1.2)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  pack:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Artifacts are unsigned; skip certificate discovery on the mac runner.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+      - name: Install the pinned DSH CLI
+        shell: bash
+        run: |
+          DSH_VERSION=$(node -p "require('node:fs').readFileSync('scripts/dsh-cli.mjs','utf8').match(/EXPECTED_DSH_VERSION = '([^']+)'/)[1]")
+          npm install -g "@deepseek-ai/dsh@$DSH_VERSION"
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Pack desktop artifacts
+        run: pnpm pack:desktop
+      - name: Upload artifacts to the GitHub release
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "DSH Editor ${TAG#v}"
+          cd .pack/desktop
+          for file in DSH\ Editor-*; do
+            case "$file" in *.blockmap) continue;; esac
+            [ -f "$file" ] && gh release upload "$TAG" "$file" --clobber
+          done

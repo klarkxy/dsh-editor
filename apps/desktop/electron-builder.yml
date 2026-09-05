@@ -3,6 +3,13 @@ productName: DSH Editor
 electronVersion: 37.2.6
 npmRebuild: false
 afterPack: ../../scripts/after-pack-desktop.cjs
+# Declaring the GitHub provider lets electron-builder generate update metadata
+# (latest.yml) without crashing on provider detection. Publishing itself never
+# happens here: nothing passes --publish, CI uploads artifacts with gh instead.
+publish:
+  provider: github
+  owner: klarkxy
+  repo: dsh-editor
 directories:
   output: ../../.pack/desktop
   buildResources: build
@@ -34,8 +41,30 @@ win:
     - target: portable
       arch:
         - x64
+    - target: nsis
+      arch:
+        - x64
 portable:
   artifactName: "${productName}-${version}-win-x64.${ext}"
   useZip: true
 nsis:
   installerIcon: build/icon.ico
+  artifactName: "DSH Editor-Setup-${version}-win-x64.${ext}"
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+# Unsigned mac build: no certificate or notarization is configured, so Gatekeeper
+# asks users to open via right-click -> Open. electron-builder derives the icns
+# from the 1024x1024 icon.png. arm64 only: the bundled runtime (node binary and
+# DSH native modules) is materialized per build host, and the CI mac runner is
+# Apple Silicon.
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.png
+  artifactName: "${productName}-${version}-mac-arm64.${ext}"
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
