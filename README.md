@@ -1,6 +1,6 @@
 # DSH Editor
 
-DSH Editor 是 Windows x64 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是 `正文 / 大纲 / 人物卡 / 世界书` 四个分组的文件树，中是稿纸编辑器，右是 dsh 对话线程；两侧栏可以折叠或进入专注模式。
+DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是 `正文 / 大纲 / 人物卡 / 世界书` 四个分组的文件树，中是稿纸编辑器，右是 dsh 对话线程；两侧栏可以折叠或进入专注模式。
 
 仓库保留两个可独立安装到普通 DSH Web profile 的公开插件，以及三个只随桌面 profile 交付的私有插件：
 
@@ -46,9 +46,9 @@ pnpm pack:desktop
 pnpm test:e2e:portable
 ```
 
-`pack:desktop` 使用 Electron Builder 的 `portable` target，在 `.pack/desktop` 生成未签名 Windows x64 EXE。它内置 Node、DSH、专用 profile 模板，以及 manuscript、workbench、novel-kernel、shell 四个桌面包；首次启动会把经过整树哈希校验的运行时原子部署到应用自有缓存，之后不调用系统 Node、pnpm 或全局 dsh。Windows SmartScreen 可能提示未知发布者。
+`pack:desktop` 使用 Electron Builder 在 `.pack/desktop` 生成未签名产物：Windows 下为 portable EXE 与 NSIS 安装器，macOS 下为 Apple Silicon 的 dmg 与 zip。产物内置 Node、DSH、专用 profile 模板，以及 manuscript、workbench、novel-kernel、shell 四个桌面包；首次启动会把经过整树哈希校验的运行时原子部署到应用自有缓存，之后不调用系统 Node、pnpm 或全局 dsh。Windows SmartScreen 与 macOS Gatekeeper 都可能提示未签名。
 
-公开插件的 tarball 与安装/卸载矩阵仍使用 `pnpm pack:plugins` 和 `pnpm test:e2e:matrix`。仓库脚本不会自动 commit、push、tag、publish 或 release。
+公开插件的 tarball 与安装/卸载矩阵仍使用 `pnpm pack:plugins` 和 `pnpm test:e2e:matrix`。仓库脚本不会自动 commit、push、tag 或 publish；推送 `v*` tag 会触发 CI 在 Windows 与 macOS 上构建并把产物上传到对应 GitHub Release（见 [开发者指南](docs/development.md)）。
 
 ## 文档
 

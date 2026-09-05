@@ -60,7 +60,7 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 | `pnpm test:e2e:missing-private` | 隔离移除每个必需私有 Host 包并确认 DSH 启动失败 |
 | `pnpm prepare:desktop-runtime` | 物化并哈希 Node、DSH、profile 与包闭包 |
 | `pnpm test:e2e:portable` | 真正启动 portable 外层 EXE，检查三栏 GUI、退出码与端口清理 |
-| `pnpm pack:desktop` | 生成未签名 Windows x64 portable EXE |
+| `pnpm pack:desktop` | 生成未签名产物：Windows 为 portable EXE + NSIS 安装器，macOS 为 Apple Silicon 的 dmg/zip |
 | `pnpm pack:plugins` | 生成两个公开插件 tarball |
 | `pnpm test:e2e:matrix` | 公开插件 fresh-home 安装/卸载矩阵 |
 | `pnpm verify:desktop` | 桌面 typecheck、unit、build、桌面 E2E 与核心闭环 |
@@ -148,7 +148,7 @@ pnpm test:e2e:desktop
 
 公开插件矩阵与可选凭据化 live E2E 的输出继续位于 `e2e/out`。历史报告不得用作新 DSH/Node/源码版本的证据。
 
-## Portable 构建
+## 桌面构建（Portable / 安装版 / macOS）
 
 ```powershell
 pnpm build
@@ -158,15 +158,19 @@ pnpm pack:desktop
 
 准备脚本会清理并重建 `.pack/desktop-runtime`，复制：
 
-- `node-24.16.0/node.exe`；
+- `node-24.16.0/`（Windows 为 `node.exe`，macOS 为 `node`）；
 - 完整、dereference 后的 DSH `0.1.1-rc.2` 依赖闭包；
 - manuscript、workbench、novel-kernel、shell 四个当前构建包；
 - 含私有依赖的 profile 模板；
-- `manifest.json` 中的文件数、字节数与 tree SHA-256。
+- `manifest.json` 中的平台、文件数、字节数与 tree SHA-256。
 
-Electron Builder 读取这些已校验资源，以 `portable` x64 target 输出 `.pack/desktop/DSH Editor-0.1.0-win-x64.exe`。应用未签名，不能把 SmartScreen 提示当作构建失败；但签名、安装器、更新器和发布都不在 V1 授权范围。
+运行时物化支持 `win32-x64`、`darwin-x64`、`darwin-arm64`，其他平台会直接报错。Electron Builder 读取这些已校验资源，按当前平台输出到 `.pack/desktop/`：Windows 产出 portable EXE（`DSH Editor-<版本>-win-x64.exe`）与 NSIS 安装器（`DSH Editor-Setup-<版本>-win-x64.exe`）；macOS 产出 Apple Silicon 的 dmg 与 zip。应用未签名：Windows 的 SmartScreen 提示与 macOS 的“无法验证开发者”都不是构建失败；签名与公证仍不在授权范围。
 
-桌面品牌图标的单一源文件是 `apps/desktop/build/icon.svg`。修改后运行 `pnpm render:icon`，同步生成并提交 `icon.png` 与包含 16–256 像素尺寸的 `icon.ico`；开发窗口使用 PNG，打包钩子用固定版本的 standalone `rcedit` 写入应用 EXE，NSIS 将同一 ICO 写入 portable 外壳。这样无需为了未签名构建解压 electron-builder 的跨平台签名工具包；生成命令仍需要仓库 Playwright 浏览器与 Python Pillow 环境。
+桌面品牌图标的单一源文件是 `apps/desktop/build/icon.svg`。修改后运行 `pnpm render:icon`，同步生成并提交 `icon.png` 与包含 16–256 像素尺寸的 `icon.ico`；开发窗口使用 PNG，打包钩子用固定版本的 standalone `rcedit` 写入应用 EXE，NSIS 将同一 ICO 写入 portable 外壳，mac 图标由 electron-builder 从 1024×1024 PNG 派生。这样无需为了未签名构建解压 electron-builder 的跨平台签名工具包；生成命令仍需要仓库 Playwright 浏览器与 Python Pillow 环境。
+
+## Release CI
+
+推送 `v*` tag 会触发 `.github/workflows/release.yml`：Windows 与 macOS runner 各自安装 pin 版本的 DSH CLI、`pnpm install --frozen-lockfile`、`pnpm pack:desktop`，然后把产物上传到该 tag 的 GitHub Release（不存在则创建）。也可以用 workflow_dispatch 输入 tag 给已发布版本补传产物。tag、release 标题与 notes 仍由人工维护；CI 只负责构建与上传。
 
 ## 安全审查清单
 
