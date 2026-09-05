@@ -63,5 +63,8 @@ jobs:
           cd .pack/desktop
           for file in DSH\ Editor-*; do
             case "$file" in *.blockmap) continue;; esac
-            [ -f "$file" ] && gh release upload "$TAG" "$file" --clobber
+            [ -f "$file" ] || continue
+            dashed="${file// /-}"
+            mv "$file" "$dashed"
+            gh release upload "$TAG" "$dashed" --clobber
           done
