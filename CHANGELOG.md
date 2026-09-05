@@ -2,6 +2,16 @@
 
 本文件只记录已经发生的版本变化；安装、升级和回滚步骤以 [使用者指南](docs/user-guide.md) 为准。
 
+## 0.1.3 - 2026-09-05
+
+### 打包与发布
+
+- 去除运行时物化的平台硬编码：`win32-x64` 之外支持 `darwin-x64` / `darwin-arm64`，node 可执行名与 manifest 平台字段按当前平台生成。
+- Windows 新增 NSIS 安装版（`DSH Editor-Setup-<版本>-win-x64.exe`，安装向导可选目录，含卸载器），便携版保留。
+- macOS（Apple Silicon）新增未签名 dmg 与 zip 产物；首次打开需在访达右键应用选择“打开”。
+- 新增 `.github/workflows/release.yml`：推送 `v*` tag 或手动 dispatch 时，Windows 与 macOS runner 各自构建并把产物上传到对应 GitHub Release。
+- `verify-desktop-package.mjs` 按平台校验并记录全部产物的 SHA-256（修复此前硬编码旧产物文件名导致哈希误报的问题）。
+
 ## 0.1.2 - 2026-09-04
 
 ### 桌面应用
