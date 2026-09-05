@@ -3,7 +3,7 @@ import { asHost, badRequest, mapHostError, resolveWorkspaceAccess, WorkspaceAuth
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
 import { BinaryError, readImageFile, type BinaryAccess } from './binary.ts'
 import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './import.ts'
-import { archiveDocument, LifecycleError, listArchives, moveManuscriptDocument, renameDocument, restoreArchive, type LifecycleAccess } from './lifecycle.ts'
+import { archiveDocument, copyEntry, deleteEntry, LifecycleError, listArchives, moveEntry, moveManuscriptDocument, renameDocument, renameEntry, restoreArchive, type LifecycleAccess } from './lifecycle.ts'
 import { createManuscriptGroup, createDirectory, createProjectHome, defaultProjectsRoot, initializeProject, inspectProjectRoot, prepareNovelIndex, ProjectInitError } from './project.ts'
 import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, rollbackSnapshot, SnapshotError, type SnapshotAccess } from './snapshot.ts'
 import { compileContext } from './context.ts'
@@ -183,6 +183,10 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
   if (endpoint === 'proposal.prepare' || endpoint === 'proposal.apply') {
     return await runProposalDispatch(endpoint, host, access, lifecycleAccess, body)
   }
+  if (endpoint === 'entry.copy') return await copyEntry({ access: lifecycleAccess(access), path: rel, targetDir: str(body, 'targetDir') })
+  if (endpoint === 'entry.move') return await moveEntry({ access: lifecycleAccess(access), path: rel, targetDir: str(body, 'targetDir') })
+  if (endpoint === 'entry.delete') return await deleteEntry({ access: lifecycleAccess(access), path: rel })
+  if (endpoint === 'entry.rename') return await renameEntry({ access: lifecycleAccess(access), path: rel, name: str(body, 'name') })
   throw new Error(`unknown workbench endpoint ${endpoint}`)
 }
 

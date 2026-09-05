@@ -31,6 +31,10 @@ export type WorkbenchEndpoint =
   | 'archive.restore'
   | 'proposal.prepare'
   | 'proposal.apply'
+  | 'entry.copy'
+  | 'entry.move'
+  | 'entry.delete'
+  | 'entry.rename'
 
 export type ProjectInitResponse = { created: string[]; skipped: string[] }
 export type ProjectInspectionResponse = { hasVisibleEntries: boolean; textFiles: string[]; indexReady: boolean }
@@ -121,6 +125,10 @@ export type WorkbenchRequestMap = {
   'archive.restore': { sessionId: string; archiveId: string; expectedVersion?: string }
   'proposal.prepare': { sessionId: string; proposal: ProposalPayload }
   'proposal.apply': { sessionId: string; proposal: ProposalPayload; expectedVersions?: Record<string, string> }
+  'entry.copy': { sessionId: string; path: string; targetDir: string }
+  'entry.move': { sessionId: string; path: string; targetDir: string }
+  'entry.delete': { sessionId: string; path: string }
+  'entry.rename': { sessionId: string; path: string; name: string }
 }
 
 export type WorkbenchResponseMap = {
@@ -149,6 +157,10 @@ export type WorkbenchResponseMap = {
   'archive.restore': ArchiveResponse
   'proposal.prepare': { split?: ProposalSplitPlan; merge?: ProposalMergePlan; renames?: ProposalRenamesPlan }
   'proposal.apply': ProposalApplyResult
+  'entry.copy': { path: string }
+  'entry.move': { path: string }
+  'entry.delete': { path: string }
+  'entry.rename': { path: string }
 }
 
 export type ProposalRename = { from: string; to: string }

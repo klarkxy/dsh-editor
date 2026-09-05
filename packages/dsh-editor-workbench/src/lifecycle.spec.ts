@@ -7,11 +7,15 @@ import { readTextFile, type FileSystemLike, type FsTargetLike, type SandboxExecu
 import {
   ARCHIVE_DIRECTORY,
   archiveDocument,
+  copyEntry,
+  deleteEntry,
   LifecycleError,
   listArchives,
+  moveEntry,
   moveManuscriptDocument,
   moveWindowsNoReplace,
   renameDocument,
+  renameEntry,
   restoreArchive,
   type LifecycleAccess,
 } from './lifecycle.ts'
@@ -226,6 +230,134 @@ describe('safe document lifecycle', () => {
     await fs.writeFile(path.join(root, ARCHIVE_DIRECTORY, record, 'manifest.json'), '{broken')
 
     await expect(listArchives(access(root))).resolves.toEqual({ items: [], invalid: 1 })
+  })
+})
+
+describe('entry file-tree operations', () => {
+  it('copies a file to another directory, auto-renames on collision, and refuses an occupied target when no slot remains', async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, '大纲'))
+    await fs.writeFile(path.join(root, '正文', '001.md'), 'one')
+    await expect(copyEntry({ access: access(root), path: '正文/001.md', targetDir: '大纲' })).resolves.toEqual({ path: '大纲/001.md' })
+    await expect(fs.readFile(path.join(root, '大纲', '001.md'), 'utf8')).resolves.toBe('one')
+    await expect(fs.readFile(path.join(root, '正文', '001.md'), 'utf8')).resolves.toBe('one')
+
+    await expect(copyEntry({ access: access(root), path: '正文/001.md', targetDir: '大纲' })).resolves.toEqual({ path: '大纲/001 2.md' })
+    await expect(copyEntry({ access: access(root), path: '正文/001.md', targetDir: '大纲' })).resolves.toEqual({ path: '大纲/001 3.md' })
+    await expect(fs.readdir(path.join(root, '大纲'))).resolves.toEqual(['001 2.md', '001 3.md', '001.md'])
+  })
+
+  it('recursively copies a directory tree, including nested subdirectories and files', async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, '大纲'))
+    await fs.mkdir(path.join(root, '正文', '卷一'))
+    await fs.mkdir(path.join(root, '正文', '卷一', '深层'))
+    await fs.writeFile(path.join(root, '正文', '卷一', '001.md'), 'one')
+    await fs.writeFile(path.join(root, '正文', '卷一', '深层', '笔记.md'), 'note')
+
+    await expect(copyEntry({ access: access(root), path: '正文/卷一', targetDir: '大纲' })).resolves.toEqual({ path: '大纲/卷一' })
+
+    await expect(fs.readFile(path.join(root, '大纲', '卷一', '001.md'), 'utf8')).resolves.toBe('one')
+    await expect(fs.readFile(path.join(root, '大纲', '卷一', '深层', '笔记.md'), 'utf8')).resolves.toBe('note')
+    await expect(fs.readFile(path.join(root, '正文', '卷一', '001.md'), 'utf8')).resolves.toBe('one')
+    await expect(copyEntry({ access: access(root), path: '正文/卷一', targetDir: '大纲' })).resolves.toEqual({ path: '大纲/卷一 2' })
+    await expect(fs.readdir(path.join(root, '大纲', '卷一 2'))).resolves.toEqual(['001.md', '深层'])
+  })
+
+  it('moves a file to another directory, refuses an occupied target, and rejects moving into the same directory', async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, '大纲'))
+    await fs.writeFile(path.join(root, '正文', '001.md'), 'one')
+    await expect(moveEntry({ access: access(root), path: '正文/001.md', targetDir: '大纲' })).resolves.toEqual({ path: '大纲/001.md' })
+    await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.readFile(path.join(root, '大纲', '001.md'), 'utf8')).resolves.toBe('one')
+
+    await fs.writeFile(path.join(root, '正文', '002.md'), 'two')
+    await fs.writeFile(path.join(root, '大纲', '002.md'), 'occupied')
+    await expect(moveEntry({ access: access(root), path: '正文/002.md', targetDir: '大纲' })).rejects.toMatchObject({ code: 'EXISTS' })
+    await expect(fs.readFile(path.join(root, '正文', '002.md'), 'utf8')).resolves.toBe('two')
+    await expect(fs.readFile(path.join(root, '大纲', '002.md'), 'utf8')).resolves.toBe('occupied')
+
+    await expect(moveEntry({ access: access(root), path: '大纲/001.md', targetDir: '大纲' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+  })
+
+  it('moves a directory recursively, rejects a missing target dir, and refuses moving a directory into itself', async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, '大纲'))
+    await fs.mkdir(path.join(root, '正文', '卷一'))
+    await fs.mkdir(path.join(root, '正文', '卷一', '深层'))
+    await fs.writeFile(path.join(root, '正文', '卷一', '001.md'), 'one')
+    await fs.writeFile(path.join(root, '正文', '卷一', '深层', '笔记.md'), 'note')
+
+    await expect(moveEntry({ access: access(root), path: '正文/卷一', targetDir: '大纲' })).resolves.toEqual({ path: '大纲/卷一' })
+    await expect(fs.stat(path.join(root, '正文', '卷一'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.readFile(path.join(root, '大纲', '卷一', '001.md'), 'utf8')).resolves.toBe('one')
+    await expect(fs.readFile(path.join(root, '大纲', '卷一', '深层', '笔记.md'), 'utf8')).resolves.toBe('note')
+
+    await fs.mkdir(path.join(root, '正文', 'self'))
+    await fs.mkdir(path.join(root, '正文', 'self', 'child'))
+    await expect(moveEntry({ access: access(root), path: '正文/self', targetDir: '正文/self/child' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(moveEntry({ access: access(root), path: '正文/self', targetDir: 'nonexistent' })).rejects.toMatchObject({ code: 'BLOCKED' })
+    await expect(fs.readdir(path.join(root, '正文', 'self'))).resolves.toEqual(['child'])
+  })
+
+  it('deletes a file or directory recursively, refuses the root, and rejects a missing source', async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, '大纲'))
+    await fs.writeFile(path.join(root, '正文', '001.md'), 'one')
+    await expect(deleteEntry({ access: access(root), path: '正文/001.md' })).resolves.toEqual({ path: '正文/001.md' })
+    await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await fs.mkdir(path.join(root, '正文', '卷一'))
+    await fs.writeFile(path.join(root, '正文', '卷一', '001.md'), 'one')
+    await fs.writeFile(path.join(root, '正文', '卷一', '002.md'), 'two')
+    await expect(deleteEntry({ access: access(root), path: '正文/卷一' })).resolves.toEqual({ path: '正文/卷一' })
+    await expect(fs.stat(path.join(root, '正文', '卷一'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await expect(deleteEntry({ access: access(root), path: '.' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(deleteEntry({ access: access(root), path: 'nope.md' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('renames a file or directory, refuses an occupied target, and rejects case-only or no-op renames', async () => {
+    const root = await project()
+    await fs.writeFile(path.join(root, '正文', '001.md'), 'one')
+    await expect(renameEntry({ access: access(root), path: '正文/001.md', name: '序章.md' })).resolves.toEqual({ path: '正文/序章.md' })
+    await expect(fs.readFile(path.join(root, '正文', '序章.md'), 'utf8')).resolves.toBe('one')
+    await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await fs.mkdir(path.join(root, '正文', '卷一'))
+    await expect(renameEntry({ access: access(root), path: '正文/卷一', name: '第一卷' })).resolves.toEqual({ path: '正文/第一卷' })
+    await expect(fs.stat(path.join(root, '正文', '卷一'))).rejects.toMatchObject({ code: 'ENOENT' })
+    const renamedStats = await fs.stat(path.join(root, '正文', '第一卷'))
+    expect(renamedStats.isDirectory()).toBe(true)
+
+    await fs.writeFile(path.join(root, '正文', 'a.md'), 'a')
+    await fs.writeFile(path.join(root, '正文', 'b.md'), 'b')
+    await expect(renameEntry({ access: access(root), path: '正文/a.md', name: 'b.md' })).rejects.toMatchObject({ code: 'EXISTS' })
+    await expect(renameEntry({ access: access(root), path: '正文/a.md', name: 'a.md' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await fs.writeFile(path.join(root, '正文', 'A.md'), 'upper')
+    await expect(renameEntry({ access: access(root), path: '正文/A.md', name: 'a.md' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(fs.readFile(path.join(root, '正文', 'A.md'), 'utf8')).resolves.toBe('upper')
+  })
+
+  it('rejects absolute paths, .. escapes, the .dsh-editor prefix, read-only access, and bad target directories', async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, '大纲'))
+    await fs.writeFile(path.join(root, '正文', '001.md'), 'one')
+    await expect(copyEntry({ access: access(root), path: '/abs/001.md', targetDir: '大纲' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(moveEntry({ access: access(root), path: '../escape.md', targetDir: '大纲' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(deleteEntry({ access: access(root), path: '.dsh-editor/snapshot.json' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(renameEntry({ access: access(root), path: '正文/001.md', name: 'a/b.md' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(copyEntry({ access: access(root), path: '正文/001.md', targetDir: '.dsh-editor' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(copyEntry({ access: access(root), path: '正文/001.md', targetDir: 'no-such-dir' })).rejects.toMatchObject({ code: 'BLOCKED' })
+    await expect(moveEntry({ access: access(root), path: 'nope.md', targetDir: '大纲' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    const readOnly = access(root, 'read-only')
+    await expect(copyEntry({ access: readOnly, path: '正文/001.md', targetDir: '大纲' })).rejects.toMatchObject({ code: 'READ_ONLY' })
+    await expect(moveEntry({ access: readOnly, path: '正文/001.md', targetDir: '大纲' })).rejects.toMatchObject({ code: 'READ_ONLY' })
+    await expect(deleteEntry({ access: readOnly, path: '正文/001.md' })).rejects.toMatchObject({ code: 'READ_ONLY' })
+    await expect(renameEntry({ access: readOnly, path: '正文/001.md', name: 'b.md' })).rejects.toMatchObject({ code: 'READ_ONLY' })
+    await expect(fs.readFile(path.join(root, '正文', '001.md'), 'utf8')).resolves.toBe('one')
   })
 })
 

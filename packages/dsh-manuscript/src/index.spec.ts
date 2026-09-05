@@ -148,6 +148,30 @@ describe('manuscript Host workspace authority', () => {
       { sessionId: 'session-1', path: '正文/001.md', targetDirectory: '正文/第一卷' },
       new AbortController().signal,
     )).rejects.toThrow('unknown endpoint file.moveManuscript')
+    await expect(dispatch(
+      host as unknown as Context,
+      'entry.copy',
+      { sessionId: 'session-1', path: '正文/001.md', targetDir: '大纲' },
+      new AbortController().signal,
+    )).rejects.toThrow('unknown endpoint entry.copy')
+    await expect(dispatch(
+      host as unknown as Context,
+      'entry.move',
+      { sessionId: 'session-1', path: '正文/001.md', targetDir: '大纲' },
+      new AbortController().signal,
+    )).rejects.toThrow('unknown endpoint entry.move')
+    await expect(dispatch(
+      host as unknown as Context,
+      'entry.delete',
+      { sessionId: 'session-1', path: '正文/001.md' },
+      new AbortController().signal,
+    )).rejects.toThrow('unknown endpoint entry.delete')
+    await expect(dispatch(
+      host as unknown as Context,
+      'entry.rename',
+      { sessionId: 'session-1', path: '正文/001.md', name: '002.md' },
+      new AbortController().signal,
+    )).rejects.toThrow('unknown endpoint entry.rename')
   })
 
   it('does not accept provider or model guesses from the RPC payload', async () => {

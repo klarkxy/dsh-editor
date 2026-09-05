@@ -386,6 +386,235 @@ export async function moveManuscriptDocument(input: {
   return { path: target, version: moved.version }
 }
 
+function entryPath(value: string): string {
+  if (typeof value !== 'string' || value.length === 0) throw new LifecycleError('entry path is required', 'INVALID_PATH')
+  let relative: string
+  try {
+    relative = normalizeWorkspaceRelative(value)
+  } catch (error) {
+    throw new LifecycleError('entry path is invalid', 'INVALID_PATH', { cause: error })
+  }
+  if (relative !== value.replace(/\\/g, '/')
+    || relative === '.'
+    || relative.split('/').some((part) => part.startsWith('.'))) {
+    throw new LifecycleError('entry path is invalid', 'INVALID_PATH')
+  }
+  return relative
+}
+
+function entryDirectory(value: string): string {
+  if (typeof value !== 'string' || value.length === 0) throw new LifecycleError('target directory is required', 'INVALID_PATH')
+  let relative: string
+  try {
+    relative = normalizeWorkspaceRelative(value)
+  } catch (error) {
+    throw new LifecycleError('target directory is invalid', 'INVALID_PATH', { cause: error })
+  }
+  if (relative !== value.replace(/\\/g, '/')
+    || relative.split('/').some((part) => part.startsWith('.'))) {
+    throw new LifecycleError('target directory is invalid', 'INVALID_PATH')
+  }
+  return relative
+}
+
+const ENTRY_NAME_FORBIDDEN = /[<>:"/\\|?*\u0000-\u001f]/
+
+function entryNewName(value: string): string {
+  if (typeof value !== 'string') throw new LifecycleError('entry name is required', 'INVALID_PATH')
+  const name = value.trim()
+  if (!name
+    || name === '.'
+    || name === '..'
+    || name.includes('/')
+    || name.includes('\\')
+    || ENTRY_NAME_FORBIDDEN.test(name)
+    || name.startsWith('.')
+    || name.length > 120
+    || /[. ]$/.test(name)
+    || RESERVED_NAME.test(name)) {
+    throw new LifecycleError('entry name is invalid', 'INVALID_PATH')
+  }
+  return name
+}
+
+function splitPosixName(name: string): { stem: string; ext: string } {
+  const ext = path.posix.extname(name)
+  return { stem: name.slice(0, name.length - ext.length), ext }
+}
+
+function joinPosix(parent: string, name: string): string {
+  return parent === '.' ? name : `${parent}/${name}`
+}
+
+async function resolveExistingEntry(
+  root: string,
+  relative: string,
+): Promise<{ absolute: string; type: 'file' | 'directory' }> {
+  const canonicalRoot = await safeRoot(root)
+  const normalized = normalizeWorkspaceRelative(relative)
+  let cursor = path.resolve(root)
+  const parts = normalized === '.' ? [] : normalized.split('/')
+  for (let index = 0; index < parts.length; index++) {
+    cursor = path.join(cursor, parts[index]!)
+    const state = await lstatOptional(cursor)
+    if (!state) throw new LifecycleError('entry was not found', 'NOT_FOUND')
+    if (state.isSymbolicLink()) throw new LifecycleError('symbolic links are not supported', 'BLOCKED')
+    if (index === parts.length - 1) {
+      if (state.isFile()) return { absolute: cursor, type: 'file' }
+      if (state.isDirectory()) return { absolute: cursor, type: 'directory' }
+      throw new LifecycleError('entry is not a regular file or directory', 'BLOCKED')
+    }
+    if (!state.isDirectory()) throw new LifecycleError('parent path is not a directory', 'BLOCKED')
+    const canonical = await fs.realpath(cursor)
+    if (canonical !== canonicalRoot && !canonical.startsWith(`${canonicalRoot}${path.sep}`)) {
+      throw new LifecycleError('path escapes workspace', 'BLOCKED')
+    }
+  }
+  throw new LifecycleError('entry was not found', 'NOT_FOUND')
+}
+
+async function copyDirectoryRecursive(src: string, dest: string, workspaceRoot: string): Promise<void> {
+  const canonicalWorkspace = await fs.realpath(workspaceRoot)
+  await fs.mkdir(dest, { recursive: false })
+  let entries
+  try {
+    entries = await fs.readdir(src, { withFileTypes: true })
+  } catch (error) {
+    throw new LifecycleError('directory read failed', 'IO', { cause: error })
+  }
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) throw new LifecycleError('symbolic links are not supported', 'BLOCKED')
+    const srcPath = path.join(src, entry.name)
+    const destPath = path.join(dest, entry.name)
+    if (entry.isDirectory()) {
+      const subCanonical = await fs.realpath(srcPath)
+      if (subCanonical !== canonicalWorkspace && !subCanonical.startsWith(`${canonicalWorkspace}${path.sep}`)) {
+        throw new LifecycleError('path escapes workspace', 'BLOCKED')
+      }
+      await copyDirectoryRecursive(srcPath, destPath, workspaceRoot)
+    } else if (entry.isFile()) {
+      await fs.copyFile(srcPath, destPath)
+    } else {
+      throw new LifecycleError('unsupported entry type', 'BLOCKED')
+    }
+  }
+}
+
+async function findAvailableCopyTarget(parentAbsolute: string, sourceName: string): Promise<{ absolute: string; name: string }> {
+  const { stem, ext } = splitPosixName(sourceName)
+  for (let n = 1; n < 10_000; n++) {
+    const name = n === 1 ? sourceName : `${stem} ${n}${ext}`
+    const target = path.join(parentAbsolute, name)
+    const state = await lstatOptional(target)
+    if (!state) return { absolute: target, name }
+  }
+  throw new LifecycleError('too many name conflicts', 'EXISTS')
+}
+
+async function noReplaceRename(source: string, target: string, access: LifecycleAccess): Promise<void> {
+  const move = access.moveNoReplace
+  if (move) {
+    try {
+      await move(source, target, access.files.signal)
+      return
+    } catch (error) {
+      if (error instanceof LifecycleError) throw error
+      throw new LifecycleError('move failed', 'IO', { cause: error })
+    }
+  }
+  const existing = await lstatOptional(target)
+  if (existing) throw new LifecycleError('destination already exists', 'EXISTS')
+  try {
+    await fs.rename(source, target)
+  } catch (error) {
+    const post = await lstatOptional(target)
+    if (post) throw new LifecycleError('destination already exists', 'EXISTS', { cause: error })
+    const srcState = await lstatOptional(source)
+    if (!srcState) throw new LifecycleError('source was not found', 'NOT_FOUND', { cause: error })
+    throw new LifecycleError('move failed', 'IO', { cause: error })
+  }
+}
+
+export async function copyEntry(input: {
+  access: LifecycleAccess
+  path: string
+  targetDir: string
+}): Promise<{ path: string }> {
+  assertWritable(input.access)
+  const source = entryPath(input.path)
+  const directory = entryDirectory(input.targetDir)
+  const sourceEntry = await resolveExistingEntry(input.access.path, source)
+  const targetDirAbsolute = await safeDirectory(input.access.path, directory)
+  const sourceName = path.posix.basename(source)
+  const { absolute: targetAbsolute, name: targetName } = await findAvailableCopyTarget(targetDirAbsolute, sourceName)
+  if (sourceEntry.type === 'file') {
+    await fs.copyFile(sourceEntry.absolute, targetAbsolute)
+  } else {
+    await copyDirectoryRecursive(sourceEntry.absolute, targetAbsolute, input.access.path)
+  }
+  return { path: joinPosix(directory, targetName) }
+}
+
+export async function moveEntry(input: {
+  access: LifecycleAccess
+  path: string
+  targetDir: string
+}): Promise<{ path: string }> {
+  assertWritable(input.access)
+  const source = entryPath(input.path)
+  const directory = entryDirectory(input.targetDir)
+  const sourceEntry = await resolveExistingEntry(input.access.path, source)
+  const targetDirAbsolute = await safeDirectory(input.access.path, directory)
+  const sourceDirectory = path.posix.dirname(source)
+  if (sourceDirectory.normalize('NFC').toLocaleLowerCase() === directory.normalize('NFC').toLocaleLowerCase()) {
+    throw new LifecycleError('entry is already in that directory', 'INVALID_PATH')
+  }
+  if (sourceEntry.type === 'directory') {
+    const sourceCanonical = await fs.realpath(sourceEntry.absolute)
+    const targetDirCanonical = await fs.realpath(targetDirAbsolute)
+    if (sourceCanonical === targetDirCanonical
+      || targetDirCanonical.startsWith(`${sourceCanonical}${path.sep}`)) {
+      throw new LifecycleError('cannot move a directory into itself', 'INVALID_PATH')
+    }
+  }
+  const targetAbsolute = path.join(targetDirAbsolute, path.posix.basename(source))
+  const existing = await lstatOptional(targetAbsolute)
+  if (existing) throw new LifecycleError('destination already exists', 'EXISTS')
+  await noReplaceRename(sourceEntry.absolute, targetAbsolute, input.access)
+  return { path: joinPosix(directory, path.posix.basename(source)) }
+}
+
+export async function deleteEntry(input: {
+  access: LifecycleAccess
+  path: string
+}): Promise<{ path: string }> {
+  assertWritable(input.access)
+  const source = entryPath(input.path)
+  const sourceEntry = await resolveExistingEntry(input.access.path, source)
+  await fs.rm(sourceEntry.absolute, { recursive: true, force: false })
+  return { path: source }
+}
+
+export async function renameEntry(input: {
+  access: LifecycleAccess
+  path: string
+  name: string
+}): Promise<{ path: string }> {
+  assertWritable(input.access)
+  const source = entryPath(input.path)
+  const newName = entryNewName(input.name)
+  const sourceEntry = await resolveExistingEntry(input.access.path, source)
+  const parentRelative = path.posix.dirname(source)
+  const targetRelative = joinPosix(parentRelative, newName)
+  if (source.normalize('NFC').toLocaleLowerCase() === targetRelative.normalize('NFC').toLocaleLowerCase()) {
+    throw new LifecycleError('case-only or unchanged rename is not supported', 'INVALID_PATH')
+  }
+  const parentAbsolute = await safeDirectory(input.access.path, parentRelative)
+  const targetAbsolute = path.join(parentAbsolute, newName)
+  await noReplaceRename(sourceEntry.absolute, targetAbsolute, input.access)
+  return { path: targetRelative }
+}
+
 function manifestPath(recordDirectory: string): string {
   return `${ARCHIVE_DIRECTORY}/${recordDirectory}/manifest.json`
 }
