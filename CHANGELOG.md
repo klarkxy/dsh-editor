@@ -20,6 +20,8 @@
 ### 打包与发布
 
 - release 工作流拆为 `pack` 与 `publish` 两个 job，两个平台 runner 不再抢着创建 Release；打包前执行 typecheck、单测与桌面 e2e 门禁。
+- 桌面 e2e 不再继承 `ELECTRON_RUN_AS_NODE`（VS Code 终端会注入该变量导致 Electron 秒退）；Electron dist 缺失时自动补跑 postinstall 下载；启动失败时输出可执行文件诊断。
+- 修复 macOS 上 proposal-ops 测试断言：`.dsh-editor` 被文件堵死时 POSIX 报 `ENOTDIR`，不再按 Windows 的 `ENOENT` 断言。
 - `e2e/desktop.mjs` 新增多窗口草稿隔离与整进程重启后的冲突恢复验证。
 
 ## 0.1.4 - 2026-09-05

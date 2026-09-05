@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,6 +23,14 @@ function run(script, args, env) {
     child.on('error', reject)
     child.on('exit', (code) => code === 0 ? resolvePromise() : reject(new Error(`desktop preparation exited ${code}`)))
   })
+}
+
+// pnpm 在全新环境(如 CI runner)可能跳过 electron 的 postinstall,dist 里
+// 没有可执行文件;缺的时候补跑一次 install.js 下载,避免 Playwright 只报
+// 一句 "Process failed to launch!"。
+if (!existsSync(electronExecutable)) {
+  console.log(`[desktop-e2e] Electron dist missing, running install.js: ${electronExecutable}`)
+  await run(resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'install.js'), [], process.env)
 }
 
 function delay(ms) {
@@ -96,6 +105,9 @@ const baseEnv = {
 }
 delete baseEnv.DEEPSEEK_API_KEY
 delete baseEnv.DSH_EDITOR_CUSTOM_API_KEY
+// VS Code 集成终端会给子进程注入 ELECTRON_RUN_AS_NODE=1,Electron 会把
+// main.js 当普通 Node 跑并秒退(Playwright 只报 "Process failed to launch!")。
+delete baseEnv.ELECTRON_RUN_AS_NODE
 
 await run(resolve(root, 'scripts', 'prepare-desktop-dev.mjs'), [], baseEnv)
 await rm(e2eHomeRoot, { recursive: true, force: true })
@@ -109,11 +121,26 @@ async function launchPhase(name, extraEnv, inspect) {
   await mkdir(electronUserData, { recursive: true })
   let app
   try {
-    app = await electron.launch({
-      executablePath: electronExecutable,
-      args: [main],
-      env: { ...baseEnv, DSH_HOME: phaseHome, DSH_DESKTOP_USER_DATA_DIR: electronUserData, ...extraEnv },
-    })
+    try {
+      app = await electron.launch({
+        executablePath: electronExecutable,
+        args: [main],
+        env: { ...baseEnv, DSH_HOME: phaseHome, DSH_DESKTOP_USER_DATA_DIR: electronUserData, ...extraEnv },
+      })
+    } catch (error) {
+      // CI 上只报一句 "Process failed to launch!",这里补可执行文件存在性和
+      // --version 直跑输出,便于区分"文件缺失"与"进程秒退"。
+      const probe = await new Promise((resolveProbe) => {
+        const child = spawn(electronExecutable, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+        let text = ''
+        child.stdout?.on('data', (chunk) => { text += chunk })
+        child.stderr?.on('data', (chunk) => { text += chunk })
+        child.on('error', (spawnError) => resolveProbe(`spawn error: ${spawnError.message}`))
+        child.on('exit', (code) => resolveProbe(`exit ${code}: ${text.trim().slice(0, 400)}`))
+        setTimeout(() => { child.kill(); resolveProbe(`timeout: ${text.trim().slice(0, 400)}`) }, 10_000)
+      })
+      throw new Error(`Electron launch failed (exists=${existsSync(electronExecutable)}, probe=${probe}): ${error instanceof Error ? error.message : String(error)}`)
+    }
     console.log(`[desktop-e2e] ${name}: Electron launched`)
     const processLogs = []
     app.process().stdout?.on('data', (chunk) => processLogs.push(`stdout: ${String(chunk)}`))

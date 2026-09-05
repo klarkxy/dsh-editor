@@ -108,7 +108,9 @@ async function listHistorySubdirs(): Promise<string[]> {
   try {
     return await fs.readdir(historyRoot)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    // .dsh-editor 被文件堵死时 POSIX 报 ENOTDIR,Windows 报 ENOENT
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT' || code === 'ENOTDIR') return []
     throw error
   }
 }
@@ -449,7 +451,8 @@ describe('apply aborts when snapshot cannot be created', () => {
     await expect(applyMerge(lifecycleAccess(), mergeProposal(), plan.versions)).rejects.toMatchObject({ code: 'IO' })
     expect(await readRelative('正文/010.md')).toBe('第十章主文')
     expect(await readRelative('正文/010-补.md')).toBe('附录内容')
-    await expect(fs.stat(path.join(base, '.dsh-editor', 'archive'))).rejects.toMatchObject({ code: 'ENOENT' })
+    // .dsh-editor 是文件时,POSIX stat 其内部报 ENOTDIR,Windows 报 ENOENT
+    await expect(fs.stat(path.join(base, '.dsh-editor', 'archive'))).rejects.toThrowError(/ENOENT|ENOTDIR/)
   })
 
   it('applyRenames throws IO and does not rename when the history directory cannot be created', async () => {
