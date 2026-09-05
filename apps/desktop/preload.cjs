@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('dshWindow', {
   close: () => ipcRenderer.send('dsh-window:close'),
   // Whitelisted https links only; the main process validates before opening.
   openExternal: (url) => ipcRenderer.send('dsh-window:open-external', url),
+  // About / update page: renderer is locked behind a strict CSP that blocks
+  // api.github.com, so the main process owns the network round-trip.
+  getAppInfo: () => ipcRenderer.invoke('dsh-window:get-app-info'),
+  checkForUpdate: () => ipcRenderer.invoke('dsh-window:check-update'),
   onMaximizedChange: (listener) => {
     const handler = (_event, maximized) => listener(Boolean(maximized))
     ipcRenderer.on('dsh-window:maximized', handler)

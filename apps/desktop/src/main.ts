@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { deployProfile } from './profile.js'
 import { materializePackagedRuntime } from './runtime-cache.js'
 import { DshSupervisor } from './supervisor.js'
+import { checkLatest } from './update-checker.js'
 import { claimPrimaryInstance, createDesktopLifecycle, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
 
 const desktopRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -103,9 +104,16 @@ ipcMain.on('dsh-window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
 })
 
+// "About / update" page: the renderer is locked behind a strict CSP that
+// blocks api.github.com, so these calls run through the main process instead.
+ipcMain.handle('dsh-window:get-app-info', () => ({ name: app.getName(), version: app.getVersion() }))
+ipcMain.handle('dsh-window:check-update', () => checkLatest(app.getVersion()))
+
 // External links: the navigation policy denies in-app navigation and window.open,
-// so whitelisted https links go through the OS browser instead.
-const OPEN_EXTERNAL_HOSTS = new Set(['developer.zhihu.com', 'zhida.zhihu.com', 'www.zhihu.com', 'zhuanlan.zhihu.com'])
+// so whitelisted https links go through the OS browser instead. GitHub links are
+// further constrained to this repository to keep the allowlist meaningful.
+const OPEN_EXTERNAL_HOSTS = new Set(['developer.zhihu.com', 'zhida.zhihu.com', 'www.zhihu.com', 'zhuanlan.zhihu.com', 'github.com'])
+const GITHUB_REPO_PATHNAME = '/klarkxy/dsh-editor/'
 ipcMain.on('dsh-window:open-external', (_event, url) => {
   if (typeof url !== 'string') return
   let parsed: URL
@@ -115,5 +123,6 @@ ipcMain.on('dsh-window:open-external', (_event, url) => {
     return
   }
   if (parsed.protocol !== 'https:' || !OPEN_EXTERNAL_HOSTS.has(parsed.hostname)) return
+  if (parsed.hostname === 'github.com' && !parsed.pathname.startsWith(GITHUB_REPO_PATHNAME)) return
   void shell.openExternal(parsed.toString())
 })

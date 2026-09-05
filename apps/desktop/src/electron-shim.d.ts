@@ -30,6 +30,10 @@ declare module 'electron' {
     on(event: 'closed', listener: () => void): this
   }
 
+  export interface IpcMainInvokeEvent {
+    sender: WebContents
+  }
+
   export const app: {
     whenReady(): Promise<void>
     on(event: 'window-all-closed', listener: () => void): void
@@ -37,7 +41,14 @@ declare module 'electron' {
     quit(): void
     getPath(name: 'home'): string
     getAppPath(): string
+    getName(): string
+    getVersion(): string
     isPackaged: boolean
+  }
+
+  export const ipcMain: {
+    on(channel: string, listener: (event: { sender: WebContents }, ...args: unknown[]) => void): void
+    handle(channel: string, listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown): void
   }
 }
 

@@ -85,6 +85,12 @@ describe('desktop branding assets', () => {
     expect(builder).toContain('installerIcon: build/icon.ico')
     expect(builder).toContain('signAndEditExecutable: false')
     expect(afterPack).toContain("electron-winstaller/vendor/rcedit.exe")
+    // About / update page wiring: the renderer is locked behind a strict CSP
+    // that blocks api.github.com, so the main process owns the round-trip and
+    // the preload bridge exposes invoke-style methods.
+    expect(main).toContain("'github.com'")
+    expect(main).toContain("'dsh-window:get-app-info'")
+    expect(main).toContain("'dsh-window:check-update'")
   })
 })
 
