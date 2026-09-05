@@ -7,7 +7,9 @@ const execFileAsync = promisify(execFile)
 
 /** Electron Builder ignores directories named node_modules in extraResources. */
 exports.default = async function afterPack(context) {
-  const resources = join(context.appOutDir, 'resources')
+  const resources = context.electronPlatformName === 'darwin'
+    ? join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources')
+    : join(context.appOutDir, 'resources')
   await rename(join(resources, 'dsh', 'vendor-dependencies'), join(resources, 'dsh', 'node_modules'))
   await rename(join(resources, 'profile-template', 'vendor-dependencies'), join(resources, 'profile-template', 'node_modules'))
   if (context.electronPlatformName === 'win32') {
