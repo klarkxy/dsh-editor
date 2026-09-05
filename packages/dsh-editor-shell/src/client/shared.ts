@@ -128,6 +128,14 @@ function rpcFailureText(result: RpcResult): string {
 
 export function errorMessage(result: RpcResult): string {
   if (result.ok) return ''
+  /* 部分写入优先：普通重命名/移动也可能触及多个路径，必须让用户看到恢复位置。 */
+  const partial = partialApplyDetails(result)
+  if (partial) {
+    const paths = partial.appliedPaths.length ? `；涉及 ${partial.appliedPaths.join('、')}，需核对` : ''
+    const recovery = partial.recoveryPath ? `；恢复文件在 ${partial.recoveryPath}` : ''
+    const snapshot = partial.safetySnapshotId ? `；安全快照 ${partial.safetySnapshotId}` : ''
+    return `操作未能全部完成${paths}${recovery}${snapshot}。`
+  }
   const blob = rpcFailureText(result)
   if (/stale|changed|version|版本/i.test(blob)) return '磁盘文件已经变化。'
   if (/directory-exists|already exists/i.test(blob)) return '同名文件或目录已经存在。'
@@ -153,6 +161,32 @@ export function workspaceOpenFailureMessage(error: unknown): string {
 
 export function isStaleFailure(result: RpcResult): boolean {
   return !result.ok && /stale|changed|version|版本/i.test(`${rpcFailureText(result)} ${errorMessage(result)}`)
+}
+
+/** Host 在多文件写入中途中断时返回的错误 details（code:'internal'）。 */
+export type PartialApplyDetails = {
+  partial: true
+  appliedPaths: string[]
+  recoveryPath?: string
+  safetySnapshotId?: string
+}
+
+/**
+ * 识别"部分写入"失败：此时不能声称零写入，也不能当作完整成功。
+ * 返回 null 表示普通失败（调用方按"未能完成"处理，不断言磁盘未动）。
+ */
+export function partialApplyDetails(result: RpcResult): PartialApplyDetails | null {
+  if (result.ok) return null
+  const details = result.error.details
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return null
+  const raw = details as Record<string, unknown>
+  if (raw.partial !== true) return null
+  return {
+    partial: true,
+    appliedPaths: Array.isArray(raw.appliedPaths) ? raw.appliedPaths.filter((path): path is string => typeof path === 'string') : [],
+    ...(typeof raw.recoveryPath === 'string' && raw.recoveryPath ? { recoveryPath: raw.recoveryPath } : {}),
+    ...(typeof raw.safetySnapshotId === 'string' && raw.safetySnapshotId ? { safetySnapshotId: raw.safetySnapshotId } : {}),
+  }
 }
 
 /** Keeps late async responses from crossing session/revision boundaries. */

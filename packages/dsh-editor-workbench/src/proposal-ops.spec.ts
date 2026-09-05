@@ -466,3 +466,41 @@ describe('apply aborts when snapshot cannot be created', () => {
     await expect(fs.stat(path.join(base, '正文/001-改名.md'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })
+
+it('rejects missing split parents before truncating any source', async () => {
+  await writeText('正文/002.md', '前\n## 第二幕\n后')
+  const proposal = splitProposal({ newPath: '正文/missing/b.md' })
+  await expect(prepareSplit(filesContext(), proposal)).rejects.toThrow()
+  const version = (await readTextFile(filesContext(), proposal.path)).version
+  await expect(applySplit(filesContext(), proposal, version)).rejects.toThrow()
+  expect(await readRelative(proposal.path)).toBe('前\n## 第二幕\n后')
+})
+it('preserves the complete source if creating the split tail fails', async () => {
+  await writeText('正文/002.md', '前\n## 第二幕\n后')
+  const files = filesContext(), proposal = splitProposal()
+  const prepared = await prepareSplit(files, proposal)
+  const write = files.fs.writeText.bind(files.fs)
+  files.fs.writeText = async (...args) => { if(args[0].targetKey.endsWith('002b.md')) throw new Error('disk full'); return write(...args) }
+  await expect(applySplit(files, proposal, prepared.version)).rejects.toThrow()
+  expect(await readRelative(proposal.path)).toBe('前\n## 第二幕\n后')
+})
+it('reports partial split and keeps the tail if the source write fails', async () => {
+  await writeText('正文/002.md', '前\n## 第二幕\n后')
+  const files = filesContext(), proposal = splitProposal()
+  const prepared = await prepareSplit(files, proposal)
+  const write = files.fs.writeText.bind(files.fs)
+  files.fs.writeText = async (...args) => { if(args[0].targetKey === path.join(base,proposal.path)) throw new Error('write denied'); return write(...args) }
+  await expect(applySplit(files, proposal, prepared.version)).rejects.toMatchObject({recovery:{partial:true,appliedPaths:[proposal.newPath]}})
+  expect(await readRelative(proposal.path)).toBe('前\n## 第二幕\n后')
+  expect(await readRelative(proposal.newPath)).toBe('## 第二幕\n后')
+})
+it('reports the committed target when source archiving fails during merge', async () => {
+  await writeText('正文/010.md', 'target')
+  await writeText('正文/010-补.md', 'source')
+  const files = filesContext(), proposal = mergeProposal()
+  const prepared = await prepareMerge(files,proposal)
+  const access: LifecycleAccess = {path:base,rootKey:base,mode:'workspace-write',files,moveNoReplace:async()=>{throw new Error('move denied')}}
+  await expect(applyMerge(access,proposal,prepared.versions)).rejects.toMatchObject({recovery:{partial:true,appliedPaths:[proposal.path]}})
+  expect(await readRelative(proposal.path)).toBe('target\n\nsource\n')
+  expect(await readRelative(proposal.sourcePath)).toBe('source')
+})

@@ -10,7 +10,7 @@ export type ZhihuDailyUsage = {
   results: number
 }
 
-/** Metering payload emitted by dsh-editor-novel-kernel after each zhihu_search execution. */
+/** Metering payload emitted by novel tool hosts after each zhihu_search execution. */
 export type ZhihuSearchEvent = { ok: boolean; results?: number }
 
 const dailyRowSchema = z.object({

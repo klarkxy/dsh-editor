@@ -29,6 +29,7 @@ import {
   workspaceOpenFailureMessage,
   workspaceShortcut,
 } from './client.ts'
+import { partialApplyDetails } from './client/shared.ts'
 
 const rootSource = () => readFileSync(new URL('./client/root.ts', import.meta.url), 'utf8')
 const initGuideSource = () => readFileSync(new URL('./init-guide.ts', import.meta.url), 'utf8')
@@ -486,6 +487,34 @@ describe('shell manuscript RPC safety', () => {
     const result = { ok: false as const, error: { code: 'bad-request', message: 'file changed on disk' } }
     expect(isStaleFailure(result)).toBe(true)
     expect(errorMessage(result)).toBe('磁盘文件已经变化。')
+  })
+
+  it('surfaces Host partial-write details with recovery locations', () => {
+    const result = {
+      ok: false as const,
+      error: {
+        code: 'internal',
+        message: 'apply interrupted',
+        details: { partial: true, appliedPaths: ['正文/01.md', '正文/02.md'], recoveryPath: 'D:\\novel\\.dsh-editor\\stage\\apply-1', safetySnapshotId: 'snap-9' },
+      },
+    }
+    expect(partialApplyDetails(result)).toEqual({
+      partial: true,
+      appliedPaths: ['正文/01.md', '正文/02.md'],
+      recoveryPath: 'D:\\novel\\.dsh-editor\\stage\\apply-1',
+      safetySnapshotId: 'snap-9',
+    })
+    const message = errorMessage(result)
+    expect(message).toContain('涉及 正文/01.md、正文/02.md')
+    expect(message).toContain('恢复文件在 D:\\novel\\.dsh-editor\\stage\\apply-1')
+    expect(message).toContain('安全快照 snap-9')
+    expect(message).not.toContain('未写入')
+  })
+
+  it('treats ordinary failures as non-partial', () => {
+    expect(partialApplyDetails({ ok: false, error: { code: 'internal', message: 'io', details: {} } })).toBeNull()
+    expect(partialApplyDetails({ ok: false, error: { code: 'internal', message: 'io', details: { partial: false } } })).toBeNull()
+    expect(partialApplyDetails({ ok: true, value: {} })).toBeNull()
   })
 
   it('explains structure creation failures without exposing Host details', () => {

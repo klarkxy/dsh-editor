@@ -54,6 +54,7 @@ import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
 import { Select } from './select.tsx'
 import {
   canSubmitComposer,
+  partialApplyDetails,
   safeRpcCall,
   shouldSubmitComposer,
   type RpcResult,
@@ -373,15 +374,22 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     setState('checking'); setNote('正在核对文件…')
     /* split/merge/renames 走 workbench 通道的 proposal.prepare（嵌套 proposal，响应按 kind 包裹）;edit/create 仍走 /manuscript（平铺字段）。 */
     const channel = isWorkbenchProposal ? WORKBENCH_RPC_CHANNEL : '/manuscript'
-    const raw = isWorkbenchProposal
-      ? await props.ctx.connection.rpc.call(channel, 'proposal.prepare', {
-        sessionId: props.sessionId,
-        proposal: props.proposal,
-      })
-      : await props.ctx.connection.rpc.call(channel, 'proposal.prepare', {
-        sessionId: props.sessionId,
-        ...props.proposal,
-      })
+    let raw: unknown
+    try {
+      raw = isWorkbenchProposal
+        ? await props.ctx.connection.rpc.call(channel, 'proposal.prepare', {
+          sessionId: props.sessionId,
+          proposal: props.proposal,
+        })
+        : await props.ctx.connection.rpc.call(channel, 'proposal.prepare', {
+          sessionId: props.sessionId,
+          ...props.proposal,
+        })
+    } catch {
+      if (requestGeneration.current !== generation) return
+      setState('expired'); setNote('未能完成核对，请检查作品状态后重试。')
+      return
+    }
     if (requestGeneration.current !== generation) return
     const result = raw as RpcResult<ProposalPrepared | { split?: WorkbenchProposalPrepared; merge?: WorkbenchProposalPrepared; renames?: WorkbenchProposalPrepared }>
     if (!result.ok) { setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。'); return }
@@ -416,84 +424,113 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     if (!prepared) return
     const generation = ++requestGeneration.current
     setState('applying'); setNote('正在应用…')
-    let beforeApplyText = ''
-    /* edit 路径在应用前再读一次文件,把"撤回到原内容"所需的快照存起来;其它 kind 没有撤销按钮。 */
-    if (props.proposal.kind === 'edit' && prepared.kind === 'edit') {
-      const read = await props.ctx.connection.rpc.call('/manuscript', 'file.read', {
-        sessionId: props.sessionId,
-        path: props.proposal.path,
-      }) as RpcResult<{ text: string; version: string }>
+    /* 运输层异常也必须落地到终态，否则会永远卡在 applying。 */
+    try {
+      let beforeApplyText = ''
+      /* edit 路径在应用前再读一次文件,把"撤回到原内容"所需的快照存起来;其它 kind 没有撤销按钮。 */
+      if (props.proposal.kind === 'edit' && prepared.kind === 'edit') {
+        const read = await props.ctx.connection.rpc.call('/manuscript', 'file.read', {
+          sessionId: props.sessionId,
+          path: props.proposal.path,
+        }) as RpcResult<{ text: string; version: string }>
+        if (requestGeneration.current !== generation) return
+        if (!read.ok || read.value.version !== prepared.version) {
+          setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。')
+          return
+        }
+        beforeApplyText = read.value.text
+      }
+      /* edit/create 走 /manuscript 的 proposal.apply,带 expectedVersion;其它走 workbench,带 expectedVersions。 */
+      let result: RpcResult<ProposalApplyResult>
+      if (props.proposal.kind === 'edit' || props.proposal.kind === 'create') {
+        const expectedVersion = props.proposal.kind === 'edit' && prepared.kind === 'edit' ? prepared.version : ''
+        result = await props.ctx.connection.rpc.call('/manuscript', 'proposal.apply', {
+          sessionId: props.sessionId,
+          ...props.proposal,
+          expectedVersion,
+        }) as RpcResult<ProposalApplyResult>
+      } else {
+        const expectedVersions = buildExpectedVersions(props.proposal, prepared) ?? {}
+        result = await props.ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'proposal.apply', {
+          sessionId: props.sessionId,
+          proposal: props.proposal,
+          expectedVersions,
+        }) as RpcResult<ProposalApplyResult>
+      }
       if (requestGeneration.current !== generation) return
-      if (!read.ok || read.value.version !== prepared.version) {
-        setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。')
+      if (!result.ok) {
+        /* Host 用 details.partial 报告"写了一半"：刷新已变路径、展示备份位置，
+           并停在 expired——既不伪装成功，也不允许立即重复应用。 */
+        const partial = partialApplyDetails(result)
+        if (partial) {
+          setState('expired')
+          const wrote = partial.appliedPaths.length ? `涉及 ${partial.appliedPaths.join('、')}，需核对` : '部分路径可能已被触及'
+          const backup = partial.recoveryPath ? `；备份在 ${partial.recoveryPath}` : ''
+          const snapshot = partial.safetySnapshotId ? `；安全快照 ${partial.safetySnapshotId}` : ''
+          setNote(`未能全部完成：${wrote}${backup}${snapshot}。请检查作品状态后再决定是否重试。`)
+          for (const appliedPath of partial.appliedPaths) props.onApplied(appliedPath)
+          return
+        }
+        /* 普通失败不断言零写入：Host 可能已落盘部分内容。 */
+        setState('expired'); setNote('未能完成，请检查作品状态；必要时请让写作助手重新生成建议。')
         return
       }
-      beforeApplyText = read.value.text
+      /* /manuscript 通道(edit/create)回 path+version;workbench 通道(split/merge/renames)回 applied+failed。 */
+      if (props.proposal.kind === 'edit' || props.proposal.kind === 'create') {
+        const applyValue = result.value as Extract<ProposalApplyResult, { kind: 'edit' | 'create' }>
+        setAppliedVersion(applyValue.version)
+        setUndoText(beforeApplyText)
+        setState('applied'); setNote('已应用到作品')
+        props.onApplied(applyValue.path)
+        return
+      }
+      const applyValue = result.value as Extract<ProposalApplyResult, { applied: string[] }>
+      const applied = applyValue.applied
+      if (props.proposal.kind === 'split') {
+        setState('applied'); setNote('已拆分并写入作品')
+      } else if (props.proposal.kind === 'merge') {
+        setState('applied'); setNote('已合并，来源章节已归档（可在归档中恢复）')
+      } else {
+        const failed = applyValue.failed
+        const ok = applied.length
+        const total = props.proposal.renames.length
+        const tail = failed ? `；失败:${failed.from}（${failed.reason}）` : ''
+        setState('applied'); setNote(ok === total ? `已重命名 ${ok} 个文件` : `已重命名 ${ok}/${total} 个文件${tail}`)
+      }
+      /* 通知树刷新:按 applied 顺序逐个回调,让 onApplied 自然处理导航与展开。 */
+      for (const path of applied) props.onApplied(path)
+    } catch {
+      if (requestGeneration.current !== generation) return
+      setState('expired')
+      setNote('未能完成，请检查作品状态；必要时请让写作助手重新生成建议。')
     }
-    /* edit/create 走 /manuscript 的 proposal.apply,带 expectedVersion;其它走 workbench,带 expectedVersions。 */
-    let result: RpcResult<ProposalApplyResult>
-    if (props.proposal.kind === 'edit' || props.proposal.kind === 'create') {
-      const expectedVersion = props.proposal.kind === 'edit' && prepared.kind === 'edit' ? prepared.version : ''
-      result = await props.ctx.connection.rpc.call('/manuscript', 'proposal.apply', {
-        sessionId: props.sessionId,
-        ...props.proposal,
-        expectedVersion,
-      }) as RpcResult<ProposalApplyResult>
-    } else {
-      const expectedVersions = buildExpectedVersions(props.proposal, prepared) ?? {}
-      result = await props.ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'proposal.apply', {
-        sessionId: props.sessionId,
-        proposal: props.proposal,
-        expectedVersions,
-      }) as RpcResult<ProposalApplyResult>
-    }
-    if (requestGeneration.current !== generation) return
-    if (!result.ok) { setState('expired'); setNote('文件已变化，未写入任何内容；请让写作助手重新生成建议。'); return }
-    /* /manuscript 通道(edit/create)回 path+version;workbench 通道(split/merge/renames)回 applied+failed。 */
-    if (props.proposal.kind === 'edit' || props.proposal.kind === 'create') {
-      const applyValue = result.value as Extract<ProposalApplyResult, { kind: 'edit' | 'create' }>
-      setAppliedVersion(applyValue.version)
-      setUndoText(beforeApplyText)
-      setState('applied'); setNote('已应用到作品')
-      props.onApplied(applyValue.path)
-      return
-    }
-    const applyValue = result.value as Extract<ProposalApplyResult, { applied: string[] }>
-    const applied = applyValue.applied
-    if (props.proposal.kind === 'split') {
-      setState('applied'); setNote('已拆分并写入作品')
-    } else if (props.proposal.kind === 'merge') {
-      setState('applied'); setNote('已合并，来源章节已归档（可在归档中恢复）')
-    } else {
-      const failed = applyValue.failed
-      const ok = applied.length
-      const total = props.proposal.renames.length
-      const tail = failed ? `；失败:${failed.from}（${failed.reason}）` : ''
-      setState('applied'); setNote(ok === total ? `已重命名 ${ok} 个文件` : `已重命名 ${ok}/${total} 个文件${tail}`)
-    }
-    /* 通知树刷新:按 applied 顺序逐个回调,让 onApplied 自然处理导航与展开。 */
-    for (const path of applied) props.onApplied(path)
   }
 
   const undo = async () => {
     if (props.proposal.kind !== 'edit' || !appliedVersion || !undoText) return
     const generation = ++requestGeneration.current
     setState('undoing'); setNote('正在撤销…')
-    const result = await props.ctx.connection.rpc.call('/manuscript', 'file.write', {
-      sessionId: props.sessionId,
-      path: props.proposal.path,
-      text: undoText,
-      version: appliedVersion,
-    }) as RpcResult<{ version: string }>
-    if (requestGeneration.current !== generation) return
-    if (!result.ok) {
+    try {
+      const result = await props.ctx.connection.rpc.call('/manuscript', 'file.write', {
+        sessionId: props.sessionId,
+        path: props.proposal.path,
+        text: undoText,
+        version: appliedVersion,
+      }) as RpcResult<{ version: string }>
+      if (requestGeneration.current !== generation) return
+      if (!result.ok) {
+        setState('expired')
+        setNote('文件此后又有变化，无法自动撤销；未写入任何内容。')
+        return
+      }
+      setAppliedVersion(result.value.version)
+      setState('undone'); setNote('已撤销，作品已恢复到应用前的内容')
+      props.onApplied(props.proposal.path)
+    } catch {
+      if (requestGeneration.current !== generation) return
       setState('expired')
-      setNote('文件此后又有变化，无法自动撤销；未写入任何内容。')
-      return
+      setNote('未能完成撤销，请检查作品状态。')
     }
-    setAppliedVersion(result.value.version)
-    setState('undone'); setNote('已撤销，作品已恢复到应用前的内容')
-    props.onApplied(props.proposal.path)
   }
 
   /* 头部右侧的标识:renames 展示"N 个文件",其它仍展示 path(已经在 kind 上 narrow 过)。 */

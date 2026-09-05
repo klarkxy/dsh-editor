@@ -22,6 +22,7 @@ import {
   isSelectionCurrent,
   saveState,
   selectionTicket,
+  shouldRetainDraftAfterSave,
   type EditorDocument,
   type SaveState,
   type SelectionTicket,
@@ -73,10 +74,20 @@ export type EditorCoreHandle = {
   setProposal(proposal: { ticket: SelectionTicket; text: string } | null): void
 }
 
+export type EditorCoreDraftBackup = {
+  path: string
+  text: string
+  baseText: string
+  baseVersion: string
+  ownerId?: string
+  revision?: string
+  updatedAt?: string
+}
+
 export type EditorCoreDraft =
   | {
       kind: 'host'
-      call: (endpoint: 'draft.get' | 'draft.put' | 'draft.delete', payload: Record<string, unknown>) => Promise<unknown>
+      call: (endpoint: 'draft.get' | 'draft.put' | 'draft.delete' | 'draft.list', payload: Record<string, unknown>) => Promise<unknown>
       syncDelayMs?: number
     }
   | {
@@ -220,6 +231,12 @@ function isStaleMessage(message: string): boolean {
   return /changed on disk|\bSTALE\b|version|版本/i.test(message)
 }
 
+/** 备份按钮的小标签：序号 + 可读的更新时间（没有 updatedAt 时只有序号）。 */
+function draftBackupLabel(backup: EditorCoreDraftBackup, index: number): string {
+  const stamp = backup.updatedAt ? backup.updatedAt.replace('T', ' ').slice(5, 16) : ''
+  return stamp ? `备份 ${index + 1} · ${stamp}` : `备份 ${index + 1}`
+}
+
 export function EditorCore(props: EditorCoreProps): ReactNode {
   const {
     sessionId,
@@ -280,6 +297,9 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const [userEditRevision, setUserEditRevision] = useState(0)
   const [error, setError] = useState('')
   const [hasSelection, setHasSelection] = useState(false)
+  // Other windows' unsaved drafts for this document (host draft.list, self
+  // excluded by the caller). Adopting one is always an explicit click.
+  const [backups, setBackups] = useState<EditorCoreDraftBackup[]>([])
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -290,6 +310,10 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const patchAbort = useRef<AbortController | null>(null)
   const saving = useRef(false)
   const lastAutomaticCompletion = useRef(0)
+  /* 恢复出来的草稿真正基于的磁盘版本（get 恢复或采纳备份时设置）。
+     冲突期间同步 put 必须沿用这个 base，否则重启后冲突会凭空消失、
+     autosave 可能拿旧备份覆盖新正文。保存/放弃/重新载入时清空。 */
+  const draftBaseRef = useRef<{ text: string; version: string } | null>(null)
 
   const docRef = useRef<EditorDocument | null>(null)
   const textRef = useRef('')
@@ -343,6 +367,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     setUserEditRevision(0)
     lastAutomaticCompletion.current = 0
     setError('')
+    setBackups([])
+    draftBaseRef.current = null
     if (!path) { setDoc(null); setTextState(''); setNote(''); return }
     let live = true
     void (async () => {
@@ -357,11 +383,21 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       let restoredText: string | null = null
       let conflictOnLoad = false
       if (draft.kind === 'host') {
-        const draftResult = await draft.call('draft.get', { sessionId, path }) as RpcResult<{ draft: { text: string; baseVersion: string } | null }>
-        if (live && draftResult.ok && draftResult.value.draft) {
-          restoredText = draftResult.value.draft.text
-          conflictOnLoad = draftResult.value.draft.baseVersion !== disk.version
-        }
+        /* 只取本窗口(ownerId)自己的草稿；其他窗口的备份经 draft.list 展示，不自动恢复。 */
+        try {
+          const draftResult = await draft.call('draft.get', { sessionId, path }) as RpcResult<{ draft: { text: string; baseText?: string; baseVersion: string } | null }>
+          if (live && draftResult.ok && draftResult.value.draft) {
+            const own = draftResult.value.draft
+            restoredText = own.text
+            conflictOnLoad = own.baseVersion !== disk.version
+            /* 保留草稿真正的 base：冲突期间要随 put 原样回传。 */
+            draftBaseRef.current = { text: typeof own.baseText === 'string' ? own.baseText : disk.text, version: own.baseVersion }
+          }
+        } catch { /* 草稿读取失败不阻塞磁盘正文 */ }
+        try {
+          const listResult = await draft.call('draft.list', { sessionId, path }) as RpcResult<{ drafts?: EditorCoreDraftBackup[] }>
+          if (live && listResult.ok) setBackups(Array.isArray(listResult.value.drafts) ? listResult.value.drafts : [])
+        } catch { /* 备份列表只是恢复入口,失败不影响正文载入 */ }
       } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
         try {
           const raw = globalThis.sessionStorage.getItem(SESSION_DRAFT_KEY(cwd, path))
@@ -396,13 +432,22 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     const timer = globalThis.setTimeout(() => {
       if (draft.kind === 'host') {
         const endpoint = text === doc.text ? 'draft.delete' : 'draft.put'
+        /* 冲突期间沿用恢复时的 baseText/baseVersion；base 与 disk 一致时退化为当前 doc。 */
+        const base = draftBaseRef.current
         const payload = endpoint === 'draft.delete'
           ? { sessionId: doc.sessionId, path: doc.path }
-          : { sessionId: doc.sessionId, path: doc.path, text, baseText: doc.text, baseVersion: doc.version }
+          : {
+            sessionId: doc.sessionId,
+            path: doc.path,
+            text,
+            baseText: base ? base.text : doc.text,
+            baseVersion: base ? base.version : doc.version,
+          }
+        if (endpoint === 'draft.delete') draftBaseRef.current = null
         void draft.call(endpoint, payload).then((raw: unknown) => {
           const result = raw as RpcResult
           if (!result.ok) report(`草稿同步失败：${result.error.message}`)
-        })
+        }).catch(() => { report('草稿同步失败：连接中断，内容仍保留在本地缓冲区。') })
       } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
         try {
           const key = SESSION_DRAFT_KEY(cwd, doc.path)
@@ -415,44 +460,58 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   }, [draft, doc, text, cwd, report])
 
   const save = useCallback(async (): Promise<boolean> => {
+    /* conflict 必须先经 放弃/重新载入/另存副本 解决，Ctrl+S 不得绕过。 */
     if (!doc || saving.current) return false
+    if (conflict) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
     const savingDoc = doc
     const savingText = text
+    const savingRevision = revisionRef.current
     saving.current = true
     report('正在保存…')
-    const result = await rpc.call('/manuscript', 'file.write', {
-      sessionId: savingDoc.sessionId,
-      path: savingDoc.path,
-      text: savingText,
-      version: savingDoc.version,
-    }) as RpcResult<{ version?: string }>
-    if (!result.ok) {
-      const stale = isStaleMessage(result.error.message)
-      setConflict(stale)
-      reportError(stale ? '磁盘文件已变化；本地草稿未丢失。' : result.error.message)
-      saving.current = false
-      return false
-    }
-    const saved: EditorDocument = { ...savingDoc, text: savingText, version: result.value.version ?? savingDoc.version }
-    setDoc(saved)
-    if (draft.kind === 'host') {
-      const deleted = await draft.call('draft.delete', { sessionId: savingDoc.sessionId, path: savingDoc.path }) as RpcResult
-      if (!deleted.ok) {
-        report(`文件已保存，但草稿清理失败：${deleted.error.message}`)
-        saving.current = false
+    /* finally 恢复 saving.current：运输层抛错不得让编辑器永远无法再保存。 */
+    try {
+      const result = await rpc.call('/manuscript', 'file.write', {
+        sessionId: savingDoc.sessionId,
+        path: savingDoc.path,
+        text: savingText,
+        version: savingDoc.version,
+      }) as RpcResult<{ version?: string }>
+      if (!result.ok) {
+        const stale = isStaleMessage(result.error.message)
+        setConflict(stale)
+        reportError(stale ? '磁盘文件已变化；本地草稿未丢失。' : result.error.message)
         return false
       }
-    } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
-      try {
-        globalThis.sessionStorage.removeItem(SESSION_DRAFT_KEY(cwd, savingDoc.path))
-      } catch { /* best effort */ }
+      const saved: EditorDocument = { ...savingDoc, text: savingText, version: result.value.version ?? savingDoc.version }
+      setDoc(saved)
+      /* 草稿 base 已随落盘更新；保留的更新键入将以新磁盘版本为 base 重新 put。 */
+      draftBaseRef.current = null
+      /* 保存飞行期间又键入了更新内容：那份更新的草稿不能删，留给下一轮同步。 */
+      const retainDraft = shouldRetainDraftAfterSave(savingText, textRef.current, savingRevision, revisionRef.current)
+      if (!retainDraft) {
+        if (draft.kind === 'host') {
+          const deleted = await draft.call('draft.delete', { sessionId: savingDoc.sessionId, path: savingDoc.path }) as RpcResult
+          if (!deleted.ok) {
+            report(`文件已保存，但草稿清理失败：${deleted.error.message}`)
+            return false
+          }
+        } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
+          try {
+            globalThis.sessionStorage.removeItem(SESSION_DRAFT_KEY(cwd, savingDoc.path))
+          } catch { /* best effort */ }
+        }
+      }
+      setConflict(false)
+      report(retainDraft ? '已保存；继续键入的内容仍保留为草稿。' : '已保存')
+      onSaved?.()
+      return true
+    } catch (cause) {
+      reportError(cause instanceof Error ? `保存未能完成：${cause.message}` : '保存未能完成，请重试。')
+      return false
+    } finally {
+      saving.current = false
     }
-    setConflict(false)
-    report('已保存')
-    saving.current = false
-    onSaved?.()
-    return true
-  }, [doc, text, rpc, draft, cwd, report, reportError, onSaved])
+  }, [doc, text, conflict, rpc, draft, cwd, report, reportError, onSaved])
 
   useEffect(() => {
     if (!doc || text === doc.text || conflict) return
@@ -472,12 +531,31 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     setTextState(doc.text)
     setRevision((old) => old + 1)
     setConflict(false)
+    draftBaseRef.current = null
     setHasSelection(false)
     setProposal(null)
     clearGhost()
     setError('')
     report('已放弃本地修改。')
   }, [doc, draft, cwd, clearGhost, report])
+
+  /* 显式点击某条其他窗口的备份：把其 text 放进当前 buffer，按 baseVersion 决定
+     是否标冲突；既有同步 effect 会通过 put 存成本窗口自己的副本，原备份保留。 */
+  const adoptBackup = useCallback((backup: EditorCoreDraftBackup) => {
+    const current = docRef.current
+    if (!current) return
+    if (isDirty(current, textRef.current) || conflict) {
+      report('当前有未保存内容，请先保存或放弃修改，再采纳备份。')
+      return
+    }
+    setText(backup.text)
+    setConflict(backup.baseVersion !== current.version)
+    /* 备份真正的 base：冲突时随 put 回传，重启后冲突依旧成立。 */
+    draftBaseRef.current = { text: backup.baseText, version: backup.baseVersion }
+    report(backup.baseVersion !== current.version
+      ? '已把备份内容放入当前草稿；备份基于的磁盘版本已变化，请确认后再保存。原备份仍保留给其他窗口。'
+      : '已把备份内容放入当前草稿；原备份仍保留给其他窗口，不会自动清理。')
+  }, [conflict, setText, report])
 
   const siblingIndex = siblings ? siblings.indexOf(path) : -1
   const showSiblings = !!siblings && !!onOpenSibling && siblingIndex >= 0
@@ -892,6 +970,22 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       className: cls('notice'),
       style: { padding: 8, color: '#8a3a30', fontSize: 12, ...sty('notice') },
     }, error) : null,
+    /* 恢复备份入口独立于 notice 槽：shell 会把 slotStyle.notice 设为 display:none
+       只隐藏普通提示，这里的按钮必须始终可见可点。 */
+    backups.length > 0 && doc ? e('div', {
+      'data-testid': `${testIdPrefix}-draft-backups`,
+      role: 'status',
+      style: { padding: '4px 8px', fontSize: 12, opacity: 0.8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
+    },
+      e('span', null, `发现 ${backups.length} 份其他窗口留下的未保存备份（采纳后原备份仍保留）：`),
+      backups.map((backup, index) => e('button', {
+        key: `${backup.ownerId ?? 'legacy'}-${backup.revision ?? index}`,
+        type: 'button',
+        disabled: isDirty(doc, text) || conflict,
+        title: isDirty(doc, text) || conflict ? '当前有未保存内容，请先保存或放弃修改，避免丢稿' : '把这份备份放入当前草稿',
+        onClick: () => adoptBackup(backup),
+      }, draftBackupLabel(backup, index))),
+    ) : null,
     showFooter ? e('footer', {
       className: cls('footer'),
       style: { padding: '6px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', ...sty('footer') },

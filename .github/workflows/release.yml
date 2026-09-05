@@ -53,18 +53,46 @@ jobs:
           echo "DSH_CLI_PATH=$CLI" >> "$GITHUB_ENV"
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
+      - name: Check types and tests
+        run: pnpm typecheck && pnpm test
+      - name: Build and prepare desktop
+        run: pnpm build && node scripts/prepare-desktop-dev.mjs
+      - name: Install the test browser
+        run: pnpm exec playwright install chromium
+      - name: Verify desktop and writing workflows
+        run: pnpm test:e2e:desktop && node e2e/core-loop.mjs
       - name: Pack desktop artifacts
         run: pnpm pack:desktop
-      - name: Upload artifacts to the GitHub release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            .pack/desktop/DSH Editor-*.exe
+            .pack/desktop/DSH Editor-*.dmg
+            .pack/desktop/DSH Editor-*.zip
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: artifacts
+      - name: Upload verified artifacts to the GitHub release
         shell: bash
         run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "DSH Editor ${TAG#v}"
-          cd .pack/desktop
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --title "DSH Editor ${RELEASE_TAG#v}"
+          cd artifacts
           for file in DSH\ Editor-*; do
-            case "$file" in *.blockmap) continue;; esac
             [ -f "$file" ] || continue
             dashed="${file// /-}"
             mv "$file" "$dashed"
-            gh release upload "$TAG" "$dashed" --clobber
+            gh release upload "$RELEASE_TAG" "$dashed" --clobber
           done

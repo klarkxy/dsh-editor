@@ -13,6 +13,7 @@ const expectedEntries = {
     'package/README.md',
     'package/cordis.patch.yml',
     'package/lib/client.js',
+    'package/lib/client-editor-core.cjs',
     'package/lib/host-api.d.ts',
     'package/lib/host-api.js',
     'package/lib/host-error.d.ts',
@@ -87,7 +88,7 @@ for (const name of packageNames) {
     throw new Error(`${name} does not declare its DSH bundle patch`)
   }
 
-  const codeEntries = entries.filter((entry) => /package\/lib\/.*\.js$/.test(entry))
+  const codeEntries = entries.filter((entry) => /package\/lib\/.*\.(?:js|cjs)$/.test(entry))
   const code = codeEntries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
   const runtimeForbidden = name === 'dsh-manuscript'
     ? [

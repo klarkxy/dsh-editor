@@ -45,3 +45,12 @@ describe('proposal workflow', () => {
     await expect(prepareProposal(context, proposal)).rejects.toMatchObject({ code: 'STALE' })
   })
 })
+
+it('writes replacement metacharacters literally', async () => {
+  const context = createMemoryContext({ 'a.md': 'before OLD after' })
+  const newText = '$& $$ $' + String.fromCharCode(96) + " $'"
+  const proposal = parseProposal({kind:'edit',path:'a.md',oldText:'OLD',newText,summary:'literal'})
+  const prepared = await prepareProposal(context, proposal)
+  await applyProposal(context, proposal, String(prepared.version))
+  expect((await readTextFile(context,'a.md')).text).toBe('before ' + newText + ' after')
+})

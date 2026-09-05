@@ -166,8 +166,9 @@ describe('persistent packaged runtime cache', () => {
     const { root, resources } = await runtimeFixture('one', true)
     const home = join(root, 'home')
     const first = await materializePackagedRuntime(home, resources)
-    const oldRuntime = spawn(first.nodePath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore', windowsHide: true })
-    await once(oldRuntime, 'spawn')
+    const oldRuntime = spawn(first.nodePath, ['-e', 'process.stdout.write("ready\\n"); setInterval(() => {}, 1000)'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
+    // 'spawn' precedes executable loading on Windows; wait until the old runtime is actually running.
+    await once(oldRuntime.stdout!, 'data')
     try {
       await writeFile(join(resources, 'dsh', 'lib', 'bin.js'), 'dsh-two')
       const [node, dsh, profile] = await Promise.all([

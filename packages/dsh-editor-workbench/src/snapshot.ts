@@ -1,3 +1,5 @@
+import { archiveDocument, LifecycleError } from './lifecycle.ts'
+import type { OperationRecovery } from './contracts.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -70,6 +72,7 @@ export class SnapshotError extends Error {
     message: string,
     readonly code: 'READ_ONLY' | 'BLOCKED' | 'STALE' | 'CLEANUP_BLOCKED' | 'IO',
     options?: ErrorOptions,
+    readonly recovery?: OperationRecovery,
   ) {
     super(message, options)
     this.name = 'SnapshotError'
@@ -476,8 +479,15 @@ export async function createSnapshot(
   if (scanIdentity(first.files) !== scanIdentity(second.files)) {
     throw new SnapshotError('workspace changed while snapshotting', 'STALE')
   }
-  if (!second.files.length) throw new SnapshotError('no eligible novel text to snapshot', 'BLOCKED')
+  return publishSnapshot(source, normalizedLabel, second)
+}
 
+async function publishSnapshot(
+  source: SnapshotAccess,
+  normalizedLabel: string | undefined,
+  second: Awaited<ReturnType<typeof scan>>,
+): Promise<SnapshotView> {
+  if (!second.files.length) throw new SnapshotError('no eligible novel text to snapshot', 'BLOCKED')
   const snapshotId = randomUUID()
   const createdAt = new Date().toISOString()
   const stage = `${SNAPSHOT_DIRECTORY}/.creating-${snapshotId}`
@@ -532,38 +542,60 @@ export async function rollbackSnapshot(
   if (access.mode === 'read-only') throw new SnapshotError('workspace is read-only', 'READ_ONLY')
   const snapshot = await loadSnapshot(access, snapshotId)
   const current = await scan(access)
-  const safety = current.files.length
-    ? await createSnapshot(access, '回滚前自动保存')
-    : undefined
-  const wanted = new Map(snapshot.payload.map((file) => [file.path, file]))
+  // The safety snapshot and every mutation use the same observed baseline.
+  const safety = current.files.length ? await publishSnapshot(access, '回滚前自动保存', current) : undefined
+  const baseline = new Map(current.files.map((file) => [file.path, file]))
+  const wanted = new Set(snapshot.payload.map((file) => file.path))
+  const appliedPaths: string[] = []
+  let attemptedPath: string | undefined
   let restored = 0
-  for (const file of snapshot.payload) {
-    let version: string | undefined
-    try {
-      const existing = await readTextFile(access.files, file.path)
-      if (existing.text === file.text) continue
-      version = existing.version
-    } catch (error) {
-      if (!(error instanceof FileOpError && error.code === 'NOT_FOUND')) throw error
-    }
-    if (version === undefined) {
-      await mkdirSafe(access.path, path.posix.dirname(file.path))
-      await createTextFile(access.files, file.path, file.text)
-    } else {
-      await writeTextFile(access.files, file.path, file.text, version)
-    }
-    restored++
-  }
-  const dropped = current.files.filter((file) => !wanted.has(file.path))
   let removed = 0
-  for (const file of dropped) {
-    const absolute = await safeExistingFile(access.path, file.path)
-    if (!absolute) continue
-    await fs.unlink(absolute)
-    removed++
+  try {
+    if (scanIdentity(current.files) !== scanIdentity((await scan(access)).files)) {
+      throw new SnapshotError('workspace changed after the safety snapshot', 'STALE')
+    }
+    for (const file of snapshot.payload) {
+      attemptedPath = file.path
+      const before = baseline.get(file.path)
+      if (before) {
+        const latest = await readTextFile(access.files, file.path)
+        if (latest.version !== before.version || hash(latest.text) !== before.sha256) {
+          throw new SnapshotError('document changed during rollback', 'STALE')
+        }
+        if (latest.text === file.text) continue
+        await writeTextFile(access.files, file.path, file.text, before.version)
+      } else {
+        await mkdirSafe(access.path, path.posix.dirname(file.path))
+        await createTextFile(access.files, file.path, file.text)
+      }
+      appliedPaths.push(file.path)
+      restored++
+    }
+    const dropped = current.files.filter((file) => !wanted.has(file.path))
+    for (const file of dropped) {
+      attemptedPath = file.path
+      const latest = await readTextFile(access.files, file.path)
+      if (latest.version !== file.version || hash(latest.text) !== file.sha256) {
+        throw new SnapshotError('document changed before rollback removal', 'STALE')
+      }
+      // Reuse version/hash-checked recoverable moves; never unlink author text.
+      // An external writer can race the Host queue, so even a moved mismatch
+      // must remain recoverable in the archive rather than be destroyed.
+      const archived = await archiveDocument({ access, path: file.path, expectedVersion: file.version })
+      if (archived.state !== 'archived') throw new SnapshotError('rollback archive did not complete', 'STALE')
+      appliedPaths.push(file.path)
+      removed++
+    }
+    await removeEmptyParents(access.path, dropped)
+    return { restored, removed, ...(safety ? { safetySnapshotId: safety.snapshotId } : {}) }
+  } catch (error) {
+    throw new SnapshotError('回滚未完成；请核对作品，回滚前内容保存在安全快照，移出文件保存在归档。', 'IO', { cause: error }, {
+      partial: true,
+      appliedPaths: [...new Set([...appliedPaths, ...(attemptedPath ? [attemptedPath] : [])])],
+      ...(safety ? { safetySnapshotId: safety.snapshotId } : {}),
+      recoveryPath: error instanceof LifecycleError && error.recoveryPath ? error.recoveryPath : '.dsh-editor/archive',
+    })
   }
-  await removeEmptyParents(access.path, dropped)
-  return { restored, removed, ...(safety ? { safetySnapshotId: safety.snapshotId } : {}) }
 }
 
 export async function restoreProbe(input: {

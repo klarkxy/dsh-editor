@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { asHost, resolveWorkspaceAccess } from './host.ts'
+import { asHost, resolveWorkspaceAccess, withWorkspaceWrite } from './host.ts'
 import { completeFim } from './rpc/fim.ts'
 import { createTextFile, listDir, readTextFile, writeTextFile } from './rpc/files.ts'
 import { completePatch, parsePatchRequest, PatchInputError } from './rpc/patch.ts'
@@ -74,54 +74,59 @@ export async function dispatch(
     policy: access.policy,
     signal,
   }
-  const rel = str(body, 'path')
-  if (endpoint.startsWith('draft.') && !drafts) throw new Error('manuscript draft storage is unavailable')
-  if (endpoint === 'draft.get') return { draft: drafts!.get(access.workspace.path, body) }
-  if (endpoint === 'draft.put') return await drafts!.put(access.workspace.path, body)
-  if (endpoint === 'draft.delete') return await drafts!.delete(access.workspace.path, body)
-  if (endpoint === 'tree.list') return { entries: await listDir(files, rel) }
-  if (endpoint === 'file.read') return await readTextFile(files, rel)
-  if (endpoint === 'file.create') return await createTextFile(files, rel, str(body, 'text'))
-  if (endpoint === 'file.write') return await writeTextFile(files, rel, str(body, 'text'), str(body, 'version'))
-  if (endpoint === 'search.text') return await searchWorkspaceText({
-    files,
-    query: str(body, 'query'),
-    scope: str(body, 'scope') === 'manuscript' ? 'manuscript' : 'project',
-  })
-  if (endpoint === 'proposal.prepare') return await prepareProposal(files, parseProposal(body))
-  if (endpoint === 'proposal.apply') {
-    return await applyProposal(files, parseProposal(body), str(body, 'expectedVersion'))
-  }
-  if (endpoint === 'fim.complete') {
-    const config = access.session.requestHeader?.()?.config
-    const provider = typeof config?.provider === 'string' ? config.provider : ''
-    const model = typeof config?.model === 'string' ? config.model : ''
-    if (!provider || !model) return { text: '', route: 'dsh-llm' }
-    return await completeFim({
-      ctx,
-      provider,
-      model,
-      prefix: str(body, 'prefix'),
-      suffix: str(body, 'suffix'),
-      authorPreferences: parseAuthorPreferences(body.authorPreferences),
-      signal,
+  const run = async (): Promise<unknown> => {
+    const rel = str(body, 'path')
+    if (endpoint.startsWith('draft.') && !drafts) throw new Error('manuscript draft storage is unavailable')
+    if (endpoint === 'draft.get') return { draft: drafts!.get(access.workspace.path, body) }
+    if (endpoint === 'draft.list') return { drafts: drafts!.list(access.workspace.path, body) }
+    if (endpoint === 'draft.put') return await drafts!.put(access.workspace.path, body)
+    if (endpoint === 'draft.delete') return await drafts!.delete(access.workspace.path, body)
+    if (endpoint === 'tree.list') return { entries: await listDir(files, rel) }
+    if (endpoint === 'file.read') return await readTextFile(files, rel)
+    if (endpoint === 'file.create') return await createTextFile(files, rel, str(body, 'text'))
+    if (endpoint === 'file.write') return await writeTextFile(files, rel, str(body, 'text'), str(body, 'version'))
+    if (endpoint === 'search.text') return await searchWorkspaceText({
+      files,
+      query: str(body, 'query'),
+      scope: str(body, 'scope') === 'manuscript' ? 'manuscript' : 'project',
     })
+    if (endpoint === 'proposal.prepare') return await prepareProposal(files, parseProposal(body))
+    if (endpoint === 'proposal.apply') {
+      return await applyProposal(files, parseProposal(body), str(body, 'expectedVersion'))
+    }
+    if (endpoint === 'fim.complete') {
+      const config = access.session.requestHeader?.()?.config
+      const provider = typeof config?.provider === 'string' ? config.provider : ''
+      const model = typeof config?.model === 'string' ? config.model : ''
+      if (!provider || !model) return { text: '', route: 'dsh-llm' }
+      return await completeFim({
+        ctx,
+        provider,
+        model,
+        prefix: str(body, 'prefix'),
+        suffix: str(body, 'suffix'),
+        authorPreferences: parseAuthorPreferences(body.authorPreferences),
+        signal,
+      })
+    }
+    if (endpoint === 'patch.complete') {
+      const request = parsePatchRequest(body)
+      const config = access.session.requestHeader?.()?.config
+      const provider = typeof config?.provider === 'string' ? config.provider : ''
+      const model = typeof config?.model === 'string' ? config.model : ''
+      if (!provider || !model) return { text: '', route: 'dsh-llm' }
+      return await completePatch({
+        ctx,
+        provider,
+        model,
+        request,
+        signal,
+      })
+    }
+    throw new Error(`unknown endpoint ${endpoint}`)
   }
-  if (endpoint === 'patch.complete') {
-    const request = parsePatchRequest(body)
-    const config = access.session.requestHeader?.()?.config
-    const provider = typeof config?.provider === 'string' ? config.provider : ''
-    const model = typeof config?.model === 'string' ? config.model : ''
-    if (!provider || !model) return { text: '', route: 'dsh-llm' }
-    return await completePatch({
-      ctx,
-      provider,
-      model,
-      request,
-      signal,
-    })
-  }
-  throw new Error(`unknown endpoint ${endpoint}`)
+  return ['file.create', 'file.write', 'proposal.apply'].includes(endpoint)
+    ? withWorkspaceWrite(access.root.targetKey, run) : run()
 }
 
 export async function apply(ctx: Context): Promise<void> {
@@ -220,7 +225,7 @@ async function* trackUsage(
   }
 }
 
-/** Record every zhihu tool execution emitted by dsh-editor-novel-kernel. Metering must never throw. */
+/** Record every zhihu tool execution emitted by novel tool hosts. Metering must never throw. */
 function installZhihuUsageListener(ctx: Context, recorder: ZhihuUsageRecorder): void {
   const on = ctx.on as unknown as (
     name: 'dsh-editor/zhihu-search',

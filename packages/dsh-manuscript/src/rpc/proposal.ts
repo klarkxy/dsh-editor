@@ -88,7 +88,7 @@ export async function applyProposal(
   const result = await writeTextFile(
     context,
     proposal.path,
-    current.text.replace(proposal.oldText, proposal.newText),
+    current.text.replace(proposal.oldText, () => proposal.newText),
     expectedVersion,
   )
   return { path: proposal.path, version: result.version, operation: 'edit' }

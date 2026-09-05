@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readTextFile, type FileSystemLike, type FsTargetLike, type SandboxExecutionPolicyLike, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
 import {
   ARCHIVE_DIRECTORY,
@@ -13,6 +13,8 @@ import {
   listArchives,
   moveEntry,
   moveManuscriptDocument,
+  moveNoReplace,
+  moveNonWindowsNoReplace,
   moveWindowsNoReplace,
   renameDocument,
   renameEntry,
@@ -23,7 +25,7 @@ import { readProjectOverview } from './overview.ts'
 
 let base = ''
 beforeEach(async () => { base = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-lifecycle-')) })
-afterEach(async () => { await fs.rm(base, { recursive: true, force: true }) })
+afterEach(async () => { vi.restoreAllMocks(); await fs.rm(base, { recursive: true, force: true }) })
 
 function nativeFs(): FileSystemLike {
   const target = (value: string): FsTargetLike => ({ targetKey: path.resolve(value), displayPath: path.resolve(value) })
@@ -68,6 +70,12 @@ function access(root: string, mode: SandboxExecutionPolicyLike['mode'] = 'worksp
     policy: { mode, workspaceRoot: root },
   }
   return { path: root, rootKey: path.resolve(root), mode, files, moveNoReplace: move }
+}
+
+function platformAccess(root: string): LifecycleAccess {
+  const result = access(root)
+  delete result.moveNoReplace
+  return result
 }
 
 async function project(): Promise<string> {
@@ -264,6 +272,19 @@ describe('entry file-tree operations', () => {
     await expect(fs.readdir(path.join(root, '大纲', '卷一 2'))).resolves.toEqual(['001.md', '深层'])
   })
 
+  it('accepts the workspace root as a copy target and rejects copying a directory into itself', async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, '正文', '卷一', '深层'), { recursive: true })
+    await fs.writeFile(path.join(root, '正文', '001.md'), 'one')
+    await fs.writeFile(path.join(root, '正文', '卷一', '深层', '笔记.md'), 'note')
+
+    await expect(copyEntry({ access: access(root), path: '正文/001.md', targetDir: '' })).resolves.toEqual({ path: '001.md' })
+    await expect(copyEntry({ access: access(root), path: '正文/001.md', targetDir: '.' })).resolves.toEqual({ path: '001 2.md' })
+    await expect(copyEntry({ access: access(root), path: '正文/卷一', targetDir: '正文/卷一' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(copyEntry({ access: access(root), path: '正文/卷一', targetDir: '正文/卷一/深层' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(fs.stat(path.join(root, '正文', '卷一', '卷一'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.stat(path.join(root, '正文', '卷一', '深层', '卷一'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
   it('moves a file to another directory, refuses an occupied target, and rejects moving into the same directory', async () => {
     const root = await project()
     await fs.mkdir(path.join(root, '大纲'))
@@ -369,4 +390,114 @@ describe.skipIf(process.platform !== 'win32')('Windows no-replace move primitive
     await expect(fs.readFile(source, 'utf8')).resolves.toBe('source')
     await expect(fs.readFile(target, 'utf8')).resolves.toBe('occupied')
   })
+})
+
+describe('portable no-replace move primitive', () => {
+  it('does not overwrite an occupied target and restores the source after failure', async () => {
+    const source = path.join(base, 'source.md'); const target = path.join(base, 'target.md')
+    await fs.writeFile(source, 'source'); await fs.writeFile(target, 'occupied')
+    await expect(moveNonWindowsNoReplace(source, target)).rejects.toMatchObject({ code: 'EXISTS' })
+    await expect(fs.readFile(source, 'utf8')).resolves.toBe('source')
+    await expect(fs.readFile(target, 'utf8')).resolves.toBe('occupied')
+  })
+
+  it('moves a file through a staged hard link without leaving the source', async () => {
+    const source = path.join(base, 'source.md'); const target = path.join(base, 'target.md')
+    await fs.writeFile(source, 'source')
+    await expect(moveNonWindowsNoReplace(source, target)).resolves.toBeUndefined()
+    await expect(fs.stat(source)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.readFile(target, 'utf8')).resolves.toBe('source')
+  })
+
+  it('checks cancellation before modifying either path', async () => {
+    const source = path.join(base, 'source.md'); const target = path.join(base, 'target.md')
+    const controller = new AbortController()
+    await fs.writeFile(source, 'source')
+    controller.abort()
+    await expect(moveNonWindowsNoReplace(source, target, controller.signal)).rejects.toMatchObject({ code: 'IO' })
+    await expect(fs.readFile(source, 'utf8')).resolves.toBe('source')
+    await expect(fs.stat(target)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('preserves an external replacement created before the target link', async () => {
+    const source = path.join(base, 'source.md'); const target = path.join(base, 'target.md')
+    const originalLink = fs.link.bind(fs)
+    await fs.writeFile(source, 'old')
+    vi.spyOn(fs, 'link').mockImplementationOnce(async (existing, destination) => {
+      const replacement = path.join(base, `${randomUUID()}.replacement`)
+      await fs.writeFile(replacement, 'new')
+      await fs.rename(replacement, source)
+      await originalLink(existing, destination)
+    })
+
+    await expect(moveNonWindowsNoReplace(source, target)).resolves.toBeUndefined()
+    await expect(fs.readFile(source, 'utf8')).resolves.toBe('new')
+    await expect(fs.readFile(target, 'utf8')).resolves.toBe('old')
+  })
+
+  it('preserves an external replacement created after the target link', async () => {
+    const source = path.join(base, 'source.md'); const target = path.join(base, 'target.md')
+    const originalLink = fs.link.bind(fs)
+    await fs.writeFile(source, 'old')
+    vi.spyOn(fs, 'link').mockImplementationOnce(async (existing, destination) => {
+      await originalLink(existing, destination)
+      const replacement = path.join(base, `${randomUUID()}.replacement`)
+      await fs.writeFile(replacement, 'new')
+      await fs.rename(replacement, source)
+    })
+
+    await expect(moveNonWindowsNoReplace(source, target)).resolves.toBeUndefined()
+    await expect(fs.readFile(source, 'utf8')).resolves.toBe('new')
+    await expect(fs.readFile(target, 'utf8')).resolves.toBe('old')
+  })
+
+  it('retains a recoverable staging file when a failed link finds a replacement source', async () => {
+    const source = path.join(base, 'source.md'); const target = path.join(base, 'target.md')
+    await fs.writeFile(source, 'old')
+    vi.spyOn(fs, 'link').mockImplementationOnce(async () => {
+      const replacement = path.join(base, `${randomUUID()}.replacement`)
+      await fs.writeFile(replacement, 'new')
+      await fs.rename(replacement, source)
+      throw Object.assign(new Error('injected link failure'), { code: 'EIO' })
+    })
+
+    const failure = await moveNonWindowsNoReplace(source, target).catch((error: unknown) => error)
+    expect(failure).toMatchObject({ code: 'STALE', recoveryPath: expect.any(String) })
+    const recoveryPath = (failure as LifecycleError).recoveryPath!
+    await expect(fs.readFile(source, 'utf8')).resolves.toBe('new')
+    await expect(fs.stat(target)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.readFile(recoveryPath, 'utf8')).resolves.toBe('old')
+  })
+
+  it('uses the selected platform primitive by default', async () => {
+    const root = await project()
+    const source = path.join(root, '正文', '001.md'); const target = path.join(root, '正文', '序章.md')
+    await fs.writeFile(source, 'one')
+    await expect(moveNoReplace(source, target)).resolves.toBeUndefined()
+    await expect(fs.stat(source)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.readFile(target, 'utf8')).resolves.toBe('one')
+
+    await fs.writeFile(source, 'two')
+    const observed = await readTextFile(platformAccess(root).files, '正文/001.md')
+    await expect(renameDocument({ access: platformAccess(root), path: '正文/001.md', newName: '第二章', expectedVersion: observed.version }))
+      .resolves.toMatchObject({ path: '正文/第二章.md' })
+  })
+})
+it('reports recovery when staged cleanup fails instead of hiding the partial move',async()=>{
+  const root=await project()
+  const source=path.join(root,'正文','001.md')
+  await fs.writeFile(source,'original')
+  const acc=access(root)
+  acc.moveNoReplace=moveNonWindowsNoReplace
+  const version=(await readTextFile(acc.files,'正文/001.md')).version
+  const unlink=fs.unlink.bind(fs)
+  vi.spyOn(fs,'unlink').mockImplementation(async target=>{
+    if(String(target).endsWith('.move')) throw Object.assign(new Error('locked stage'),{code:'EPERM'})
+    return unlink(target)
+  })
+  const error=await renameDocument({access:acc,path:'正文/001.md',newName:'renamed',expectedVersion:version}).catch(e=>e)
+  expect(error).toBeInstanceOf(LifecycleError)
+  expect(error.recoveryPath).toBeTruthy()
+  expect(await fs.readFile(error.recoveryPath,'utf8')).toBe('original')
+  expect(await fs.readFile(path.join(root,'正文','renamed.md'),'utf8')).toBe('original')
 })

@@ -1,4 +1,5 @@
 export {
+  withWorkspaceWrite,
   WorkspaceAuthorityError,
   asHost,
   resolveWorkspaceAccess,

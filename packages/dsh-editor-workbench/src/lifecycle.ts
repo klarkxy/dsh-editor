@@ -59,6 +59,7 @@ export class LifecycleError extends Error {
     message: string,
     readonly code: 'READ_ONLY' | 'INVALID_PATH' | 'NOT_FOUND' | 'EXISTS' | 'STALE' | 'BLOCKED' | 'UNSUPPORTED' | 'IO',
     options?: ErrorOptions,
+    readonly recoveryPath?: string,
   ) {
     super(message, options)
     this.name = 'LifecycleError'
@@ -244,6 +245,7 @@ try {
 
 export async function moveWindowsNoReplace(source: string, target: string, signal?: AbortSignal): Promise<void> {
   if (process.platform !== 'win32') throw new LifecycleError('safe file move is unavailable on this platform', 'UNSUPPORTED')
+  if (signal?.aborted) throw new LifecycleError('file move was cancelled', 'IO')
   const systemRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows'
   const executable = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
   await new Promise<void>((resolve, reject) => {
@@ -279,6 +281,55 @@ export async function moveWindowsNoReplace(source: string, target: string, signa
       else finish(new LifecycleError('safe file move failed', 'IO'))
     })
   })
+}
+
+export async function moveNonWindowsNoReplace(source: string, target: string, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throw new LifecycleError('file move was cancelled', 'IO')
+  const stage = path.join(path.dirname(source), `.${path.basename(source)}.${randomUUID()}.move`)
+  try {
+    await fs.rename(source, stage)
+  } catch (error) {
+    throw moveFailure(error)
+  }
+  try {
+    await fs.link(stage, target)
+  } catch (error) {
+    const failure = moveFailure(error)
+    await restoreStagedSource(stage, source)
+    throw failure
+  }
+  try {
+    // The staged inode is the old source; never unlink source because an editor may have recreated it.
+    await fs.unlink(stage)
+  } catch (error) {
+    throw new LifecycleError('safe file move left a recovery staging file', 'IO', { cause: error }, stage)
+  }
+}
+
+function moveFailure(error: unknown): LifecycleError {
+  const code = (error as NodeJS.ErrnoException).code
+  if (code === 'EEXIST') return new LifecycleError('source is missing or destination already exists', 'EXISTS', { cause: error })
+  if (code === 'EXDEV') return new LifecycleError('safe file move requires source and target on the same filesystem', 'UNSUPPORTED', { cause: error })
+  if (code === 'ENOENT') return new LifecycleError('source document was not found', 'NOT_FOUND', { cause: error })
+  if (code === 'EACCES' || code === 'EPERM') return new LifecycleError('file move was denied', 'READ_ONLY', { cause: error })
+  return new LifecycleError('safe file move failed', 'IO', { cause: error })
+}
+
+async function restoreStagedSource(stage: string, source: string): Promise<void> {
+  try {
+    await fs.link(stage, source)
+  } catch (error) {
+    throw new LifecycleError('safe file move could not restore the source; recover from staging path', 'STALE', { cause: error }, stage)
+  }
+  try {
+    await fs.unlink(stage)
+  } catch (error) {
+    throw new LifecycleError('safe file move restored the source but left a recovery staging file', 'IO', { cause: error }, stage)
+  }
+}
+export async function moveNoReplace(source: string, target: string, signal?: AbortSignal): Promise<void> {
+  if (process.platform === 'win32') return await moveWindowsNoReplace(source, target, signal)
+  return await moveNonWindowsNoReplace(source, target, signal)
 }
 
 async function loaded(access: LifecycleAccess, relative: string): Promise<LoadedText> {
@@ -326,17 +377,18 @@ async function moveChecked(input: {
   const targetAgain = await safeAbsentFile(input.access.path, input.target)
   if (sourceAgain !== source || targetAgain !== target) throw new LifecycleError('file path changed during move', 'STALE')
 
-  const move = input.access.moveNoReplace ?? moveWindowsNoReplace
+  const move = input.access.moveNoReplace ?? moveNoReplace
   try {
     await move(source, target, input.access.files.signal)
   } catch (error) {
+    if (error instanceof LifecycleError && error.recoveryPath) throw error
     const postSource = await safeExistingFile(input.access.path, input.source).catch(() => undefined)
     const postTarget = await safeExistingFile(input.access.path, input.target).catch(() => undefined)
     if (postSource || !postTarget) throw error
   }
   const afterSource = await safeExistingFile(input.access.path, input.source)
   const afterTarget = await safeExistingFile(input.access.path, input.target)
-  if (afterSource || !afterTarget) throw new LifecycleError('file move result is ambiguous', 'BLOCKED')
+  if (afterSource || !afterTarget) throw new LifecycleError('file move result is ambiguous', 'BLOCKED', undefined, afterTarget)
   const after = await loaded(input.access, input.target)
   if (after.sha256 !== before.sha256 || after.bytes !== before.bytes) {
     try {
@@ -403,7 +455,8 @@ function entryPath(value: string): string {
 }
 
 function entryDirectory(value: string): string {
-  if (typeof value !== 'string' || value.length === 0) throw new LifecycleError('target directory is required', 'INVALID_PATH')
+  if (typeof value !== 'string') throw new LifecycleError('target directory is required', 'INVALID_PATH')
+  if (value === '' || value === '.') return '.'
   let relative: string
   try {
     relative = normalizeWorkspaceRelative(value)
@@ -545,6 +598,14 @@ export async function copyEntry(input: {
   const directory = entryDirectory(input.targetDir)
   const sourceEntry = await resolveExistingEntry(input.access.path, source)
   const targetDirAbsolute = await safeDirectory(input.access.path, directory)
+  if (sourceEntry.type === 'directory') {
+    const sourceCanonical = await fs.realpath(sourceEntry.absolute)
+    const targetDirCanonical = await fs.realpath(targetDirAbsolute)
+    if (sourceCanonical === targetDirCanonical
+      || targetDirCanonical.startsWith(`${sourceCanonical}${path.sep}`)) {
+      throw new LifecycleError('cannot copy a directory into itself', 'INVALID_PATH')
+    }
+  }
   const sourceName = path.posix.basename(source)
   const { absolute: targetAbsolute, name: targetName } = await findAvailableCopyTarget(targetDirAbsolute, sourceName)
   if (sourceEntry.type === 'file') {

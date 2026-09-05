@@ -30,7 +30,7 @@ import {
   type WritingProgressScope,
 } from '../writing-progress.ts'
 import { redesignedStyles } from '../styles.ts'
-import { errorMessage, isStaleFailure, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
+import { errorMessage, isStaleFailure, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, useObservable } from './components.ts'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger } from './settings.tsx'
@@ -435,10 +435,10 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     setFileMenu({ kind, path: selectedPath, x: position.x, y: position.y })
   }
   const closeFileMenu = () => setFileMenu(null)
-  /* 把绝对路径转为父目录(用于"在文件行右键 → 粘贴"的目录来源)。 */
+  /* 把绝对路径转为父目录(用于"在文件行右键 → 粘贴"的目录来源)。根目录统一用 '.'(Host 同时接受 '' 与 '.')。 */
   const parentOf = (target: string): string => {
     const index = target.lastIndexOf('/')
-    return index < 0 ? '' : target.slice(0, index)
+    return index < 0 ? '.' : target.slice(0, index)
   }
   const openRenameDialog = (selectedPath: string) => {
     if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
@@ -487,6 +487,10 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     if (!result.ok) { setManageNote(errorMessage(result)); return }
     const renamed = result.value.path
     if (path === target.path) setPath(renamed)
+    else if (target.kind === 'directory' && path.startsWith(`${target.path}/`)) {
+      /* 改名的是当前文稿的父目录：同步改写当前子路径。 */
+      setPath(`${renamed}${path.slice(target.path.length)}`)
+    }
     setTreeRevision((value) => value + 1)
     setWorkbenchNote(`已重命名为 ${renamed}`)
     setRenameTarget(null)
@@ -521,10 +525,20 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
     setDeleteTarget(null)
     if (target.kind === 'file' && path === target.path) setPath('')
+    else if (target.kind === 'directory' && path.startsWith(`${target.path}/`)) {
+      /* 删除的是当前文稿的父目录：当前子路径一并清空。 */
+      setPath('')
+    }
     setTreeRevision((value) => value + 1)
     setWorkbenchNote(`已删除 ${target.path}`)
   }
   const setClipboardFromMenu = (op: 'copy' | 'cut', kind: FileMenuKind, targetPath: string) => {
+    /* cut 当前文稿或其父目录等于要搬走缓冲区：编辑器有未保存内容时先阻止，防 buffer 丢失。 */
+    if (op === 'cut' && editorDirty && (targetPath === path || (kind === 'directory' && path.startsWith(`${targetPath}/`)))) {
+      setWorkbenchNote('请先保存当前文档，再剪切它所在的文件或目录。')
+      setFileMenu(null)
+      return
+    }
     setClipboard({ op, kind, path: targetPath })
     setWorkbenchNote(op === 'copy' ? `已复制 ${targetPath}` : `已剪切 ${targetPath}`)
     setFileMenu(null)
@@ -532,8 +546,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const pasteFromMenu = async () => {
     if (!fileSession || !fileMenu || !clipboard) return
     if (fileMenu.kind === 'directory') {
-      const isRoot = fileMenu.path === ''
-      const targetDir = isRoot ? '' : fileMenu.path
+      /* 粘贴到树根时统一传 '.'（Host 同时接受 '' 与 '.'）。 */
+      const targetDir = fileMenu.path === '' ? '.' : fileMenu.path
       await runClipboardPaste(targetDir)
       return
     }
@@ -564,6 +578,10 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     }))
     if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
     if (entry.kind === 'file' && path === entry.path) setPath(result.value.path)
+    else if (entry.kind === 'directory' && path.startsWith(`${entry.path}/`)) {
+      /* 剪切的是当前文稿的父目录：同步改写当前子路径，防 buffer 丢失。 */
+      setPath(`${result.value.path}${path.slice(entry.path.length)}`)
+    }
     setClipboard(null)
     setTreeRevision((value) => value + 1)
     setWorkbenchNote(`已移动到 ${result.value.path}`)
@@ -635,7 +653,24 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     setSnapshotBusy(true)
     const result = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.rollback', { sessionId: fileSession.sessionId, snapshotId: target.snapshotId }))
     setSnapshotBusy(false)
-    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
+    if (!result.ok) {
+      /* 部分回滚：不声称零写入，展示安全快照并刷新各视图到真实的中间状态。 */
+      const partial = partialApplyDetails(result)
+      if (partial) {
+        setRollbackTarget(null)
+        const wrote = partial.appliedPaths.length ? `；涉及 ${partial.appliedPaths.length} 个路径，需逐一核对` : ''
+        const snapshot = partial.safetySnapshotId ? `；回滚前状态已存入安全快照 ${partial.safetySnapshotId}` : ''
+        const backup = partial.recoveryPath ? `；备份在 ${partial.recoveryPath}` : ''
+        setWorkbenchNote(`回滚未能全部完成${wrote}${snapshot}${backup}，请检查作品状态。`)
+        setSnapshotRevision((value) => value + 1)
+        setTreeRevision((value) => value + 1)
+        setContentRevision((value) => value + 1)
+        setOverviewRevision((value) => value + 1)
+        return
+      }
+      setWorkbenchNote(errorMessage(result))
+      return
+    }
     setRollbackTarget(null)
     setWorkbenchNote(`已回滚到 ${target.label ?? target.createdAt}；回滚前的状态已自动保存为新提交。`)
     setSnapshotRevision((value) => value + 1)

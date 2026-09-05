@@ -1,3 +1,4 @@
+import type { OperationRecovery } from './contracts.ts'
 /**
  * 新提案 kind（split / merge / renames）的 prepare / apply 实现。
  *
@@ -27,7 +28,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createTextFile, FileOpError, listDirStrict, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
-import { archiveDocument, moveManuscriptDocument, renameDocument, type LifecycleAccess } from './lifecycle.ts'
+import { LifecycleError, archiveDocument, moveManuscriptDocument, renameDocument, type LifecycleAccess } from './lifecycle.ts'
 
 const PROPOSAL_MARKER = 'dsh-editor.proposal'
 const PROPOSAL_VERSION = 1
@@ -96,6 +97,7 @@ export class ProposalOpsError extends Error {
     message: string,
     readonly code: 'INVALID' | 'STALE' | 'AMBIGUOUS' | 'EXISTS' | 'NOT_FOUND' | 'IO',
     options?: ErrorOptions,
+    readonly recovery?: OperationRecovery,
   ) {
     super(message, options)
     this.name = 'ProposalOpsError'
@@ -271,6 +273,7 @@ export async function prepareSplit(files: WorkspaceFileContext, proposal: SplitP
   const anchorAt = findAnchor(loaded.text, proposal.anchor)
   if (anchorAt === -1) throw new ProposalOpsError(`split.anchor 在 ${proposal.path} 中未出现`, 'AMBIGUOUS')
   if (anchorAt === -2) throw new ProposalOpsError(`split.anchor 在 ${proposal.path} 中出现多次`, 'AMBIGUOUS')
+  await listDirStrict(files, path.posix.dirname(proposal.newPath))
   await assertAbsent(files, proposal.newPath)
   const head = loaded.text.slice(0, anchorAt)
   const tail = loaded.text.slice(anchorAt)
@@ -300,8 +303,16 @@ export async function applySplit(
   await assertAbsent(files, proposal.newPath)
   const head = loaded.text.slice(0, anchorAt).trimEnd()
   const tail = loaded.text.slice(anchorAt)
-  await writeTextFile(files, proposal.path, head, expectedVersion)
+  // Preserve the complete source until the second document is durable.
+  await listDirStrict(files, path.posix.dirname(proposal.newPath))
   await createTextFile(files, proposal.newPath, tail)
+  try {
+    await writeTextFile(files, proposal.path, head, expectedVersion)
+  } catch (error) {
+    throw new ProposalOpsError('拆章未完成：后半稿已另存，原稿请核对后再处理。', 'IO', { cause: error }, {
+      partial: true, appliedPaths: [proposal.newPath], recoveryPath: snapshotDir,
+    })
+  }
   return { applied: [proposal.path, proposal.newPath], snapshotDir }
 }
 
@@ -334,9 +345,13 @@ export async function applyMerge(
   if (sourceLoaded.version !== expectedSourceVersion) throw new ProposalOpsError(`${proposal.sourcePath} 已被修改`, 'STALE')
   const merged = `${pathLoaded.text.trimEnd()}\n\n${sourceLoaded.text.trim()}\n`
   await writeTextFile(access.files, proposal.path, merged, expectedPathVersion)
-  const archive = await archiveDocument({ access, path: proposal.sourcePath, expectedVersion: expectedSourceVersion })
-  if (archive.state === 'blocked') {
-    throw new ProposalOpsError(`sourcePath ${proposal.sourcePath} 归档失败：${archive.message ?? archive.state}`, 'IO')
+  try {
+    const archive = await archiveDocument({ access, path: proposal.sourcePath, expectedVersion: expectedSourceVersion })
+    if (archive.state !== 'archived') throw new Error('source archive did not complete')
+  } catch (error) {
+    throw new ProposalOpsError('合章未完成：目标已写入，来源归档未完成，请先核对作品。', 'IO', { cause: error }, {
+      partial: true, appliedPaths: [proposal.path], recoveryPath: error instanceof LifecycleError && error.recoveryPath ? error.recoveryPath : snapshotDir,
+    })
   }
   return { applied: [proposal.path, proposal.sourcePath], snapshotDir }
 }

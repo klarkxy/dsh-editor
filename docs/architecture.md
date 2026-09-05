@@ -21,7 +21,7 @@
 DSH Editor V1 是 Windows x64 的 GUI-first 桌面应用，不是另一套 Agent runtime。
 
 ```text
-Electron（窗口、资源校验、子进程生命周期）
+Electron（受控多窗口、资源校验、子进程生命周期）
 └─ 内置 Node 24.16.0
    └─ 内置 DSH 0.1.1-rc.2，127.0.0.1:随机端口
       └─ 专用 profiles/dsh-editor
@@ -39,11 +39,11 @@ Electron（窗口、资源校验、子进程生命周期）
 ## 所有权边界
 
 - **DSH**：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry（含显示名与最近入口）、sandbox、文件 API 与持久化。
-- **Electron**：单窗口、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。入口在 `apps/desktop/src/main.ts`，子进程监督在 `apps/desktop/src/supervisor.ts`。
+- **Electron**：受控多窗口、共享后端、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。入口在 `apps/desktop/src/main.ts`，子进程监督在 `apps/desktop/src/supervisor.ts`。
 - **`dsh-editor-shell` Renderer**：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；新建、重命名、放弃草稿和离开保护均使用应用内、锁定焦点的对话框，不依赖浏览器 `prompt/confirm`；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据、绝对路径或 Node 文件系统。`client.ts` 不再是单体：4 千多行单文件已拆为 `src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}`，并以 `Editor` 包装 `dsh-manuscript/client/editor-core`（`editor.tsx` + `editor-state.ts` + `completion-preference.ts` + `styles.ts`），稿纸逻辑与公开 manuscript overlay 共用。
 - **`dsh-editor-shell` Host**：仅保留加载唯一 root client 所需的最小 Cordis 入口；Renderer 继续拥有界面、编辑 buffer 与作者确认流程。
 - **`dsh-editor-workbench` Host**：loopback-only 项目结构、章节概览与状态、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。
-- **`dsh-editor-novel-kernel` Host**：只读 `novel_knowledge`、预览式 `novel_propose`、工具 guard 与 system prompt；没有 RPC，也不直接写正文。
+- **`dsh-editor-novel-kernel` Host**：只读小说知识与检索、预览式 `novel_propose`、工具 guard 与 system prompt；固定路径索引直写及 loopback 知乎知识库管理 RPC 也由此包提供，正文仍只经作者确认后写入。
 - **`dsh-manuscript` Host**：公开 `/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、全文搜索、DSH_HOME 草稿、FIM 与 `patch.complete`；公开产物不含 Node 文件系统能力。
 - **`dsh-grill`**：保持为普通 DSH 可独立安装的公共插件，不进入桌面 profile 或桌面运行依赖。
 
@@ -51,9 +51,9 @@ Electron（窗口、资源校验、子进程生命周期）
 
 外部作品导入只经过私有 `/dsh-editor-workbench`：两端必须是已解析、已注册且附着 live session 的工作区，Renderer 不传递 cwd 或绝对文件路径。Probe 只读取源、检查空目标并产生绑定两端 canonical root key 与文件版本/哈希的 token；Apply 会完整重 probe 后才以 `.dsh-editor-import.json` 的 `copying` 清单开始 no-clobber 写入 `正文/`。TXT 保持文本内容而改为 `.md`，隐藏路径、链接和非文本均跳过；完整项目不支持撤销。中断仅能在重新选择同一源后续传，或在每个清单拥有文件的哈希仍匹配时显式清理。Node 目录操作仅在 Host 已解析的根内逐组件拒绝 symlink/junction 后使用，文件内容和清单仍经版本化稿件文件原语读写。
 
-整部作品文本快照保存在源工作区 `.dsh-editor/snapshots/<uuid>/`：先在同级 `.creating-<uuid>` 写入逐文件文本 payload 和校验 manifest，再同父目录 rename 发布。快照不包含未保存编辑 buffer。隐藏路径一律排除，`.dsh-editor/*` 不进入 payload。跨作品恢复只能经私有通道的 `snapshot.restore*` 到新的空目标；`.dsh-editor-restore.json` 绑定源根、目标根、快照、token 与清单，支持显式续传或在哈希未变时安全清理。原地回滚走 `snapshot.rollback`：先把当前状态自动存为一次安全快照，再按目标快照覆盖文本文件并删除快照之外的文本文件，非文本文件不参与；因此回滚可以再次被回滚撤销。
+整部作品文本快照保存在源工作区 `.dsh-editor/snapshots/<uuid>/`：先在同级 `.creating-<uuid>` 写入逐文件文本 payload 和校验 manifest，再同父目录 rename 发布。快照不包含未保存编辑 buffer。隐藏路径一律排除，`.dsh-editor/*` 不进入 payload。跨作品恢复只能经私有通道的 `snapshot.restore*` 到新的空目标；`.dsh-editor-restore.json` 绑定源根、目标根、快照、token 与清单，支持显式续传或在哈希未变时安全清理。原地回滚走 `snapshot.rollback`：先把当前状态自动存为一次安全快照，再按同一观察基线恢复文本文件，将快照之外的文本文件移入可恢复归档，非文本文件不参与。回滚前或期间发生并发修改会停止并返回安全快照标识及可能受影响的路径，不能把部分完成视为零写入。
 
-文件整理仍由 live session 建立工作区 authority，并只在私有通道开放。`structure.groupCreate` 只允许在 `正文` 下建立一个可见的一级卷/部目录，拒绝隐藏名、设备名、嵌套路径、链接、已占用目标和只读工作区；目录本身就是结构来源，不新增 `structure.json`。`directory.create` 是通用的单层建目录：任意已存在父目录下创建一个可见目录，复用同一套名称、链接、占用与只读校验，供目录树在任何位置新建文件夹。卷内章节继续通过公开 `file.create` 的既有父目录检查与 `createIfAbsent` 写入。`file.moveManuscript` 只允许已保存的可见 Markdown/TXT 在 `正文` 目录树内部跨目录移动，保留文件名和类型，并复用与归档相同的 expectedVersion、内容哈希、逐组件 no-follow、目标 absent 与 no-replace 原子移动检查。`file.rename` 仅允许同目录、保留扩展名的 Markdown/TXT 改名；`archive.*` 把文档移动到 `.dsh-editor/archive/<timestamp>-<uuid>/`，用 root-bound、hash-protected manifest 记录 `moving/archived/restoring/restored`。Windows 实际移动使用经过运行时验证的 `System.IO.File.Move(source,target)` no-replace 原语，经固定 PowerShell 脚本、最小环境和 15 秒超时调用；目标存在、源版本变化、链接路径或完整性异常均 fail closed，不回退到 copy-delete 或普通覆盖式 rename。损坏归档会计数并展示，但不会被宣传为可恢复项。
+文件整理仍由 live session 建立工作区 authority，并只在私有通道开放。`structure.groupCreate` 只允许在 `正文` 下建立一个可见的一级卷/部目录，拒绝隐藏名、设备名、嵌套路径、链接、已占用目标和只读工作区；目录本身就是结构来源，不新增 `structure.json`。`directory.create` 是通用的单层建目录：任意已存在父目录下创建一个可见目录，复用同一套名称、链接、占用与只读校验，供目录树在任何位置新建文件夹。卷内章节继续通过公开 `file.create` 的既有父目录检查与 `createIfAbsent` 写入。`file.moveManuscript` 只允许已保存的可见 Markdown/TXT 在 `正文` 目录树内部跨目录移动，保留文件名和类型，并复用与归档相同的 expectedVersion、内容哈希、逐组件 no-follow、目标 absent 与 no-replace 原子移动检查。`file.rename` 仅允许同目录、保留扩展名的 Markdown/TXT 改名；`archive.*` 把文档移动到 `.dsh-editor/archive/<timestamp>-<uuid>/`，用 root-bound、hash-protected manifest 记录 `moving/archived/restoring/restored`。Windows 文稿移动使用经过运行时验证的 `System.IO.File.Move(source,target)` no-replace 原语；非 Windows 普通文件先原子移动至同目录临时文件，再以 hard-link 排他创建目标并移除临时链接；不会删除外部编辑器在原路径新建的文件，失败时无覆盖恢复或保留临时文件并报告恢复路径。Windows 实现经固定 PowerShell 脚本、最小环境和 15 秒超时调用；目标存在、源版本变化、链接路径或完整性异常均 fail closed，不回退到 copy-delete 或普通覆盖式 rename。损坏归档会计数并展示，但不会被宣传为可恢复项。
 
 私有 Host 按需扫描 `正文` 和 `大纲` 的可见 Markdown/TXT，在 2,000 文件、100 MB 总量与单文件 2 MB 上限内生成标题、摘要、去空白字数、空章和修改时间。重命名、移动、归档和恢复在正文操作成功后同步迁移附带元数据，迁移失败只返回 `metadataWarning`，不反向回滚作者已经成功完成的文件操作。
 
@@ -142,7 +142,7 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 
 - 安装器、自动更新、代码签名、发布；
 - 句内卡片、`/`/`@` 面板、审阅 gutter、附件和完整官方高级管理界面；
-- 永久删除、`正文` 之外的跨目录移动、卷/部之外的任意建目录、watch、独立索引服务、Git UI；
+- watch、独立索引服务、Git UI；通用文件树现已支持可见目录整理和显式确认后的永久删除，删除与可恢复归档属于不同操作。
 - 章节状态（草稿/修订中/已定稿曾落地后移除）、卡片拖放、手写卡片摘要、章节—大纲绑定、关系图、向量检索、DOCX/EPUB；
 - Android、远程多用户、云同步；
 - 未经授权的 commit、push、tag 或 release。
@@ -156,3 +156,13 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 - portable EXE：固定资源版本/哈希、启动、核心旅程、关闭与无遗留进程。
 
 历史报告不能替代当前源码证据。兼容版本只声明 `0.1.1-rc.2`；升级必须重新验证公开会话契约、root priority、CSP、profile patch、RPC 和真实 EXE。
+
+## 多窗口写入与草稿恢复
+
+同一 Host 的稿件保存、提案应用和作品文件变更按 canonical workspace root 串行执行；不同作品可独立执行。队列只包围顶层 RPC，内部文件原语不重复入队，磁盘版本与哈希检查仍负责识别外部编辑器的修改。
+
+持久草稿以作品、文件和窗口 ownerId 区分，窗口标识保存在 sessionStorage。草稿 get/put 返回 revision，清理必须携带匹配的 revision；保存或放弃不能删除另一个窗口的记录。旧版草稿保持为可枚举的 legacy 备份。重启生成新窗口标识后，作者可显式选择旧备份恢复到当前编辑 buffer，原备份继续保留。
+
+拆章先验证目标父目录并保存后半稿，再按版本更新原稿。合章先写入目标再归档来源。后一阶段失败时返回 partial、appliedPaths 和 history 恢复路径，界面明确显示部分完成，不自动重试或声称未写入。文本提案按字面写入，不解释 JavaScript 替换元字符。
+
+发布矩阵须先通过类型、单元测试、构建和桌面/核心写作流程，再打包并上传 CI 中间产物。单一 publish job 等待两个平台完成后创建 Release 和上传产物，避免两个平台竞争创建同一个 Release。

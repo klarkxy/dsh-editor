@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
@@ -10,7 +10,10 @@ const output = resolve(root, '.pack', 'desktop-e2e')
 resolveDshInstallation('0.1.1-rc.2')
 const e2eHomeRoot = resolve(root, '.dev', 'desktop-e2e-home')
 const template = resolve(root, '.dev', 'desktop-profile-template')
-const electronExecutable = resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'dist', 'electron.exe')
+const electronDist = resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'dist')
+const electronExecutable = process.platform === 'darwin'
+  ? resolve(electronDist, 'Electron.app', 'Contents', 'MacOS', 'Electron')
+  : resolve(electronDist, 'electron.exe')
 const main = resolve(root, 'apps', 'desktop', 'dist', 'main.js')
 
 function run(script, args, env) {
@@ -288,6 +291,12 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   if (await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8') !== firstText) {
     throw new Error('stale second-window save overwrote the first-window disk version')
   }
+  const ownerIds = await Promise.all([ctx.window, second].map((page) => page.evaluate(() => sessionStorage.getItem('dsh-editor:draft-owner'))))
+  if (!ownerIds[0] || !ownerIds[1] || ownerIds[0] === ownerIds[1]) throw new Error('windows share a draft owner')
+  // A later save in A must not erase B's durable conflict draft.
+  const latestText = firstText + '第一窗口继续保存。\n'
+  await setEditorText(firstEditor, latestText)
+  await waitForFileText(resolve(multiWindowWorkspace, '正文', '001.md'), latestText)
   await second.close()
   if (ctx.window.isClosed()) throw new Error('remaining window closed after closing the second window')
   await ctx.window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 15_000 })
@@ -299,6 +308,62 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   if (!remaining.shell || remaining.title !== 'DSH Editor' || new URL(remaining.href).origin !== firstUrl.origin) {
     throw new Error(`remaining window was not responsive: ${JSON.stringify(remaining)}`)
   }
+}))
+
+// Restart the entire Electron/DSH process against the same home, not just a React remount.
+phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (_state, ctx) => {
+  await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  const editor = ctx.window.locator('[data-testid="paper-editor"]')
+  if (!await editor.isVisible()) {
+    const chapter = ctx.window.locator('.tree-row', { hasText: '001.md' }).first()
+    if (!await chapter.isVisible()) await ctx.window.locator('.tree-row', { hasText: '正文' }).first().click()
+    await chapter.click()
+  }
+  await editor.waitFor({ state: 'visible', timeout: 30_000 })
+  const backups = ctx.window.locator('[data-testid="paper-draft-backups"]')
+  await backups.waitFor({ state: 'visible', timeout: 15_000 })
+  const disk = await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8')
+  const before = await editor.evaluate(el => el.__cmView.state.doc.toString())
+  if (before !== disk) throw new Error('another window draft was silently applied on restart')
+  await backups.getByRole('button').first().click()
+  await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '版本冲突' }).waitFor({ timeout: 15_000 })
+  const recovered = await editor.evaluate(el => el.__cmView.state.doc.toString())
+  if (!recovered.includes('第二窗口草稿')) throw new Error('restart did not recover the second-window draft')
+  if (await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8') !== disk) throw new Error('draft recovery overwrote the newer disk version')
+  // Allow the normal 250 ms draft debounce to persist the adopted conflict.
+  await ctx.window.waitForTimeout(1_000)
+  // Electron may resolve beforeunload before CDP's handler runs. Handle that
+  // specific dialog race locally so Playwright's auto-handler cannot crash the runner.
+  ctx.window.on('dialog', dialog => {
+    void dialog.accept().catch(error => {
+      if (!String(error).includes('No dialog is showing')) throw error
+    })
+  })
+  // The test explicitly chooses to leave after the conflict draft is durable.
+  await ctx.app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.webContents.once('will-prevent-unload', event => event.preventDefault())
+  })
+  await ctx.window.reload()
+  await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  if (!await editor.isVisible()) {
+    const chapter = ctx.window.locator('.tree-row', { hasText: '001.md' }).first()
+    if (!await chapter.isVisible()) await ctx.window.locator('.tree-row', { hasText: '正文' }).first().click()
+    await chapter.click()
+  }
+  await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '版本冲突' }).waitFor({ timeout: 15_000 })
+  await ctx.window.keyboard.press(process.platform === 'darwin' ? 'Meta+s' : 'Control+s')
+  if (await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8') !== disk) throw new Error('reloaded conflict bypassed version protection')
+  if (!(await editor.evaluate(el => el.__cmView.state.doc.toString())).includes('第二窗口草稿')) throw new Error('reloaded conflict draft lost its text')
+  await ctx.window.screenshot({ path: resolve(output, 'draft-recovery.png'), fullPage: true })
+  // Complete the author workflow before closing: preserve the recovered draft
+  // as a conflict copy, then leave the original document in a clean state.
+  await ctx.window.locator('[data-testid="paper-save-conflict-copy"]').click()
+  await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '已保存' }).waitFor({ timeout: 15_000 })
+  const copies = (await readdir(resolve(multiWindowWorkspace, '正文'))).filter(name => /^001\.冲突-.*\.md$/.test(name))
+  if (copies.length !== 1) throw new Error('conflict copy was not created exactly once')
+  const copied = await readFile(resolve(multiWindowWorkspace, '正文', copies[0]), 'utf8')
+  if (!copied.includes('第二窗口草稿')) throw new Error('conflict copy lost recovered text')
+  if (await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8') !== disk) throw new Error('saving conflict copy modified the original')
 }))
 
 const report = { ok: true, source: 'current', phases }

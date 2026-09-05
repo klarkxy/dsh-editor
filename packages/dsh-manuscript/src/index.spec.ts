@@ -9,9 +9,10 @@ import { SearchError } from './rpc/search.ts'
 import { createZhihuUsageRecorder } from './rpc/zhihu-usage.ts'
 
 function draftStoreFixture() {
-  const rows = new Map<string, ReturnType<DraftTableLike['get']>>()
+  const rows = new Map<string, NonNullable<ReturnType<DraftTableLike['get']>>>()
   return createDraftStore({
     get: (key) => rows.get(key),
+    entries: () => rows.entries(),
     async put(key, value) { rows.set(key, value) },
     async delete(key) { return rows.delete(key) },
   })
@@ -193,14 +194,14 @@ describe('manuscript Host workspace authority', () => {
       { sessionId: 'session-1', cwd: '/forged/outside', path: 'notes/a.md', text: '草稿', baseText: '原文', baseVersion: 'v1' },
       new AbortController().signal,
       drafts,
-    )).resolves.toEqual({ stored: true })
+    )).resolves.toMatchObject({ stored: true, revision: expect.any(String) })
     await expect(dispatch(
       host as unknown as Context,
       'draft.get',
       { sessionId: 'session-1', path: 'notes/a.md' },
       new AbortController().signal,
       drafts,
-    )).resolves.toEqual({ draft: { path: 'notes/a.md', text: '草稿', baseText: '原文', baseVersion: 'v1' } })
+    )).resolves.toMatchObject({ draft: { path: 'notes/a.md', text: '草稿', baseText: '原文', baseVersion: 'v1', revision: expect.any(String) } })
   })
 
   it('keeps search behind the live-session workspace authority', async () => {

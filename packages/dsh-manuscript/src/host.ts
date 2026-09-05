@@ -204,3 +204,16 @@ export function asHost(ctx: Context): ManuscriptHost {
 export function asClient(ctx: Context): ManuscriptClient {
   return ctx as ManuscriptClient
 }
+
+// One live Host owns workspace mutations. Queue top-level RPCs only; the file
+// primitives remain unqueued so a multi-file operation can call them directly.
+const workspaceWrites = new Map<string, Promise<unknown>>()
+export function withWorkspaceWrite<T>(rootKey: string, operation: () => Promise<T>): Promise<T> {
+  const previous = workspaceWrites.get(rootKey) ?? Promise.resolve()
+  const result = previous.catch(() => undefined).then(operation)
+  workspaceWrites.set(rootKey, result)
+  void result.finally(() => {
+    if (workspaceWrites.get(rootKey) === result) workspaceWrites.delete(rootKey)
+  }).catch(() => undefined)
+  return result
+}

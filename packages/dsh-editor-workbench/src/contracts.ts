@@ -183,7 +183,7 @@ export type WorkbenchRpcError =
   | { code: 'workspace-invalid-path'; message: string; details: { path: string } }
   | { code: 'directory-unreadable'; message: string; details: { path: string } }
   | { code: 'directory-exists'; message: string; details: { path: string } }
-  | { code: 'internal'; message: string; details: Record<string, never> }
+  | { code: 'internal'; message: string; details: Partial<OperationRecovery> }
 export type WorkbenchRpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: WorkbenchRpcError }
 
 /** Maximum payload size for `file.readBinary`, in bytes. */
@@ -671,3 +671,6 @@ export function projectContextReceipt(envelope: ProjectContextEnvelope): Project
     ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION && envelope.author_memory ? { authorMemoryChars: envelope.author_memory.length } : {}),
   }
 }
+
+/** A multi-file operation stopped after committing part of its work. */
+export type OperationRecovery = { partial: true; appliedPaths: string[]; recoveryPath?: string; safetySnapshotId?: string }
