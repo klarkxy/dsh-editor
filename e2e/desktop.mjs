@@ -26,11 +26,16 @@ function run(script, args, env) {
 }
 
 // pnpm 在全新环境(如 CI runner)可能跳过 electron 的 postinstall,dist 里
-// 没有可执行文件;缺的时候补跑一次 install.js 下载,避免 Playwright 只报
-// 一句 "Process failed to launch!"。
+// 没有可执行文件;缺的时候补跑一次 install.js 下载(清掉 SKIP 标记),
+// 避免 Playwright 只报一句 "Process failed to launch!"。
 if (!existsSync(electronExecutable)) {
   console.log(`[desktop-e2e] Electron dist missing, running install.js: ${electronExecutable}`)
-  await run(resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'install.js'), [], process.env)
+  const installEnv = { ...process.env }
+  delete installEnv.ELECTRON_SKIP_BINARY_DOWNLOAD
+  await run(resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'install.js'), [], installEnv)
+  if (!existsSync(electronExecutable)) {
+    throw new Error(`Electron dist still missing after install.js: ${electronExecutable}`)
+  }
 }
 
 function delay(ms) {
@@ -121,26 +126,11 @@ async function launchPhase(name, extraEnv, inspect) {
   await mkdir(electronUserData, { recursive: true })
   let app
   try {
-    try {
-      app = await electron.launch({
-        executablePath: electronExecutable,
-        args: [main],
-        env: { ...baseEnv, DSH_HOME: phaseHome, DSH_DESKTOP_USER_DATA_DIR: electronUserData, ...extraEnv },
-      })
-    } catch (error) {
-      // CI 上只报一句 "Process failed to launch!",这里补可执行文件存在性和
-      // --version 直跑输出,便于区分"文件缺失"与"进程秒退"。
-      const probe = await new Promise((resolveProbe) => {
-        const child = spawn(electronExecutable, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
-        let text = ''
-        child.stdout?.on('data', (chunk) => { text += chunk })
-        child.stderr?.on('data', (chunk) => { text += chunk })
-        child.on('error', (spawnError) => resolveProbe(`spawn error: ${spawnError.message}`))
-        child.on('exit', (code) => resolveProbe(`exit ${code}: ${text.trim().slice(0, 400)}`))
-        setTimeout(() => { child.kill(); resolveProbe(`timeout: ${text.trim().slice(0, 400)}`) }, 10_000)
-      })
-      throw new Error(`Electron launch failed (exists=${existsSync(electronExecutable)}, probe=${probe}): ${error instanceof Error ? error.message : String(error)}`)
-    }
+    app = await electron.launch({
+      executablePath: electronExecutable,
+      args: [main],
+      env: { ...baseEnv, DSH_HOME: phaseHome, DSH_DESKTOP_USER_DATA_DIR: electronUserData, ...extraEnv },
+    })
     console.log(`[desktop-e2e] ${name}: Electron launched`)
     const processLogs = []
     app.process().stdout?.on('data', (chunk) => processLogs.push(`stdout: ${String(chunk)}`))

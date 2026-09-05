@@ -55,11 +55,15 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Check types and tests
         run: pnpm typecheck && pnpm test
-      - name: Build and prepare desktop
-        run: pnpm build && node scripts/prepare-desktop-dev.mjs
+      - name: Build
+        run: pnpm build
+      # 桌面 e2e 依赖 prepare-desktop-dev.mjs(Windows junction + win-x64
+      # 运行时),按设计只在 Windows 上跑;mac 的打包校验由 pack:desktop 自带。
       - name: Install the test browser
+        if: runner.os == 'Windows'
         run: pnpm exec playwright install chromium
       - name: Verify desktop and writing workflows
+        if: runner.os == 'Windows'
         run: pnpm test:e2e:desktop && node e2e/core-loop.mjs
       - name: Pack desktop artifacts
         run: pnpm pack:desktop
