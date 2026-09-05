@@ -7,9 +7,11 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, process.argv[2] ?? '.pack/desktop')
 const resources = resolve(output, 'win-unpacked', 'resources')
-const executable = resolve(output, 'DSH Editor-0.1.0-win-x64.exe')
 
 async function json(path) { return JSON.parse(await readFile(path, 'utf8')) }
+
+const desktopVersion = (await json(resolve(root, 'apps', 'desktop', 'package.json'))).version
+const executable = resolve(output, `DSH Editor-${desktopVersion}-win-x64.exe`)
 
 async function treeDigest(path) {
   const hash = createHash('sha256')
