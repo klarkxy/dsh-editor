@@ -161,7 +161,11 @@ async function launchPhase(name, extraEnv, inspect) {
       width: window.innerWidth,
       height: window.innerHeight,
     }))
-    await inspect({ ...state, nativeOnboarding }, { app, window })
+    try {
+      await inspect({ ...state, nativeOnboarding }, { app, window })
+    } catch (error) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)}; processLogs: ${JSON.stringify(processLogs.slice(-30))}`)
+    }
     console.log(`[desktop-e2e] ${name}: assertions passed`)
     if (browserErrors.length) throw new Error(`browser console errors in ${name}: ${JSON.stringify(browserErrors)}`)
     await window.screenshot({ path: resolve(output, `${name}.png`) })
@@ -227,11 +231,21 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await nameBox.fill('multi-window-workspace')
   await ctx.window.getByRole('button', { name: '创建', exact: true }).click()
   await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
-  await ctx.window.locator('.tree-row', { hasText: '001.md' }).first().click()
+  // New works start with an empty manuscript: create the first chapter through the cover affordance.
+  await ctx.window.getByRole('button', { name: '新建文件', exact: true }).first().click()
+  const chapterNameBox = ctx.window.getByLabel('文件名称（无扩展名时按 .md 创建）')
+  await chapterNameBox.waitFor({ state: 'visible', timeout: 10_000 })
+  await chapterNameBox.fill('001')
+  await ctx.window.getByRole('button', { name: '创建', exact: true }).click()
+  // The create flow opens the document directly; the tree starts collapsed.
   const firstEditor = ctx.window.locator('[data-testid="paper-editor"]')
   await firstEditor.waitFor({ state: 'visible', timeout: 30_000 })
   const secondWindow = ctx.app.waitForEvent('window')
-  await ctx.window.keyboard.press('Control+Shift+N')
+  // Drive the shortcut through Electron's own input pipeline: synthetic CDP key
+  // events do not reliably trigger before-input-event in this environment.
+  await ctx.app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'N', modifiers: ['control', 'shift'] })
+  })
   const second = await Promise.race([
     secondWindow,
     delay(30_000).then(() => { throw new Error('second window was not created within 30 seconds') }),
@@ -247,6 +261,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     throw new Error(`windows did not share DSH origin: ${firstUrl.href} vs ${secondUrl.href}`)
   }
   await second.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  await second.locator('.tree-row', { hasText: '正文' }).first().click()
   await second.locator('.tree-row', { hasText: '001.md' }).first().click()
   const secondEditor = second.locator('[data-testid="paper-editor"]')
   await secondEditor.waitFor({ state: 'visible', timeout: 30_000 })
