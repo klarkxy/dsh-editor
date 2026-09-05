@@ -354,7 +354,7 @@ export const componentStyles = `
 
 /* ── Chat ───────────────────────────────────────────────── */
 /* 聊天下沉:与侧栏同 --bg-sunken,让写作者的目光始终回到稿纸。 */
-.shell > .chat { grid-row: 2; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border-left: 1px solid var(--hairline); background: var(--bg-sunken); }
+.shell > .chat { grid-row: 2; position: relative; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border-left: 1px solid var(--hairline); background: var(--bg-sunken); }
 .shell > .chat[hidden] { display: none !important; }
 /* 头部参考 Kimi Code 侧栏:单行布局,左侧会话切换药丸,右侧动作图标;
    不放品牌标志,避免占用写作空间。模型指示挪到输入区工具栏。 */
@@ -368,6 +368,14 @@ export const componentStyles = `
 .shell .conversation-select { min-width: 0; }
 .shell .conversation-select .select { display: block; }
 .shell .conversation-select .select-trigger { min-width: 0; max-width: 240px; min-height: 26px; padding: 0 var(--space-2); border-color: var(--hairline); color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; }
+/* 新对话设置:绝对定位铺满搭档栏,不参与 grid 行分配——若作为普通
+   grid 项插入,会把对话历史顶出 minmax(0,1fr) 行,长消息溢出栏外。 */
+.shell .conversation-setup { position: absolute; inset: 0; z-index: 2; display: grid; align-content: start; gap: var(--space-4); padding: var(--space-5) var(--space-4); background: var(--bg-sunken); }
+.shell .conversation-setup header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.shell .conversation-setup header strong { font: 500 var(--text-base)/1.3 var(--font-sans); }
+.shell .conversation-setup select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
+.shell .conversation-setup > button { justify-self: start; }
+.shell .conversation-setup footer { display: flex; justify-content: flex-end; gap: 7px; }
 .shell .model-indicator { display: block; overflow: hidden; color: var(--meta); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
 
 .shell .chat-history { display: flex; flex-direction: column; gap: var(--space-5); min-height: 0; overflow: auto; padding: var(--space-5) var(--space-4) var(--space-4); }
