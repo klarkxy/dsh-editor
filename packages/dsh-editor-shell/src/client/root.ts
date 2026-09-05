@@ -1,5 +1,6 @@
 import {
   createElement as e,
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -39,6 +40,7 @@ import { Editor } from './editor.ts'
 import { Chat } from './chat.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { WindowControls, titleBarDoubleClick } from './window-controls.tsx'
+import { AboutUpdateDialog } from './about-dialog.tsx'
 
 const SIDEBAR_DEFAULT = 248
 const SIDEBAR_MIN = 196
@@ -90,6 +92,10 @@ function formatRecentTime(iso: string | undefined, now: Date = new Date()): stri
 
 type TreeCreateRequest = { kind: 'file' | 'folder'; directory: string }
 type FileSession = NonNullable<NonNullable<ReturnType<ShellContext['sessions']['binding']>>['session']> | undefined
+
+type FileMenuKind = 'file' | 'directory'
+type FileMenuState = { kind: FileMenuKind; path: string; x: number; y: number } | null
+type ClipboardEntry = { op: 'copy' | 'cut'; path: string; kind: FileMenuKind } | null
 
 type SearchHit = { path: string; line: number; column: number; start: number; end: number; excerpt: string; version: string }
 
@@ -172,6 +178,21 @@ async function verifyRelocatedWorkspaceSession(ctx: ShellContext, sessionId: Ses
   return initialPath
 }
 
+/** 关于/更新 入口:与 SettingsTrigger 同节奏的轻量顶栏按钮。 */
+function AboutTrigger(props: { onOpen(): void }): ReactNode {
+  return e('button', {
+    type: 'button',
+    className: 'about-trigger',
+    'aria-haspopup': 'dialog',
+    'aria-label': '关于与更新',
+    title: '关于与更新',
+    onClick: props.onOpen,
+  },
+    e('span', { className: 'about-trigger-icon', 'aria-hidden': true }, 'ⓘ'),
+    '关于',
+  )
+}
+
 function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync }: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
@@ -246,13 +267,17 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const [overview, setOverview] = useState<ProjectOverview | null | undefined>(null)
   const [overviewRevision, setOverviewRevision] = useState(0)
   const [editorDirty, setEditorDirty] = useState(false)
-  const [fileMenu, setFileMenu] = useState<{ path: string; x: number; y: number } | null>(null)
+  const [fileMenu, setFileMenu] = useState<FileMenuState>(null)
+  const [clipboard, setClipboard] = useState<ClipboardEntry>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
+  const [renameTarget, setRenameTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
   const [imagePreview, setImagePreview] = useState<{ path: string; url: string } | null>(null)
   const [managePath, setManagePath] = useState<string | null>(null)
   const [manageBusy, setManageBusy] = useState(false)
   const [manageNote, setManageNote] = useState('')
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   useEffect(() => () => leaveConfirm?.resolve(false), [leaveConfirm])
   const canLeaveAssistantDraft = async (): Promise<boolean> => {
     if (!assistantDraftDirty) return true
@@ -324,6 +349,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     if (!openWorkspaceId) setPath('')
     setFiles([]); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
     setFileMenu(null); setManagePath(null); setManageNote('')
+    setClipboard(null); setDeleteTarget(null); setRenameTarget(null)
     setOverview(null); setWorkspaceMenuOpen(false)
     setHistoryOpen(false); setSnapshots(null); setRollbackTarget(null)
   }, [openWorkspaceId])
@@ -403,10 +429,16 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       return null
     })
   }
-  const openFileMenu = (selectedPath: string, position: { x: number; y: number }) => {
+  const openFileMenu = (kind: FileMenuKind, selectedPath: string, position: { x: number; y: number }) => {
     if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
     setWorkbenchNote('')
-    setFileMenu({ path: selectedPath, x: position.x, y: position.y })
+    setFileMenu({ kind, path: selectedPath, x: position.x, y: position.y })
+  }
+  const closeFileMenu = () => setFileMenu(null)
+  /* 把绝对路径转为父目录(用于"在文件行右键 → 粘贴"的目录来源)。 */
+  const parentOf = (target: string): string => {
+    const index = target.lastIndexOf('/')
+    return index < 0 ? '' : target.slice(0, index)
   }
   const openRenameDialog = (selectedPath: string) => {
     if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
@@ -440,10 +472,107 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     setWorkbenchNote(renamed.value.metadataWarning ? `已重命名为 ${renamed.value.path}；${renamed.value.metadataWarning}` : `已重命名为 ${renamed.value.path}`)
     setManagePath(null)
   }
+  /* 目录行重命名:走 workbench entry.rename,不需要读 version；失败时把 note 放进
+     fileManageReturnFocus 触发的输入框状态。 */
+  const submitRenameEntry = async (name: string) => {
+    if (!fileSession || !renameTarget) return
+    const target = renameTarget
+    setManageBusy(true); setManageNote('')
+    const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'entry.rename', {
+      sessionId: fileSession.sessionId,
+      path: target.path,
+      name,
+    }))
+    setManageBusy(false)
+    if (!result.ok) { setManageNote(errorMessage(result)); return }
+    const renamed = result.value.path
+    if (path === target.path) setPath(renamed)
+    setTreeRevision((value) => value + 1)
+    setWorkbenchNote(`已重命名为 ${renamed}`)
+    setRenameTarget(null)
+  }
+  const closeRenameEntryDialog = () => {
+    if (manageBusy) return
+    const target = fileManageReturnFocus.current
+    setRenameTarget(null)
+    setManageNote('')
+    if (target) globalThis.setTimeout(() => target.focus(), 0)
+  }
+  const requestDeleteEntry = (kind: FileMenuKind, targetPath: string) => {
+    if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
+    fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setFileMenu(null)
+    setDeleteTarget({ kind, path: targetPath })
+  }
+  const closeDeleteConfirm = () => {
+    const target = fileManageReturnFocus.current
+    setDeleteTarget(null)
+    if (target) globalThis.setTimeout(() => target.focus(), 0)
+  }
+  const confirmDeleteEntry = async () => {
+    const target = deleteTarget
+    if (!fileSession || !target || manageBusy) return
+    setManageBusy(true)
+    const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'entry.delete', {
+      sessionId: fileSession.sessionId,
+      path: target.path,
+    }))
+    setManageBusy(false)
+    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
+    setDeleteTarget(null)
+    if (target.kind === 'file' && path === target.path) setPath('')
+    setTreeRevision((value) => value + 1)
+    setWorkbenchNote(`已删除 ${target.path}`)
+  }
+  const setClipboardFromMenu = (op: 'copy' | 'cut', kind: FileMenuKind, targetPath: string) => {
+    setClipboard({ op, kind, path: targetPath })
+    setWorkbenchNote(op === 'copy' ? `已复制 ${targetPath}` : `已剪切 ${targetPath}`)
+    setFileMenu(null)
+  }
+  const pasteFromMenu = async () => {
+    if (!fileSession || !fileMenu || !clipboard) return
+    if (fileMenu.kind === 'directory') {
+      const isRoot = fileMenu.path === ''
+      const targetDir = isRoot ? '' : fileMenu.path
+      await runClipboardPaste(targetDir)
+      return
+    }
+    /* 文件行粘贴:放进该文件所在目录。 */
+    await runClipboardPaste(parentOf(fileMenu.path))
+  }
+  const runClipboardPaste = async (targetDir: string) => {
+    if (!fileSession || !clipboard) return
+    const sessionId = fileSession.sessionId
+    const entry = clipboard
+    setFileMenu(null)
+    if (entry.op === 'copy') {
+      const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'entry.copy', {
+        sessionId,
+        path: entry.path,
+        targetDir,
+      }))
+      if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
+      setTreeRevision((value) => value + 1)
+      setWorkbenchNote(`已复制到 ${result.value.path}`)
+      return
+    }
+    /* cut:用 entry.move 走 workbench,内部其实是移动;成功后清空剪贴板。 */
+    const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'entry.move', {
+      sessionId,
+      path: entry.path,
+      targetDir,
+    }))
+    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
+    if (entry.kind === 'file' && path === entry.path) setPath(result.value.path)
+    setClipboard(null)
+    setTreeRevision((value) => value + 1)
+    setWorkbenchNote(`已移动到 ${result.value.path}`)
+  }
   const openTreeCreate = (kind: 'file' | 'folder', directory: string) => {
     if (!fileSession) return
     if (editorDirty) { setCreateNote('请先保存当前文档。'); return }
     createReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setFileMenu(null)
     setCreateNote('')
     setTreeCreateRequest({ kind, directory })
   }
@@ -1025,6 +1154,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         e('span', { className: 'topbar-actions' },
           e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
           e(SettingsTrigger, { onOpen: openSettings }),
+          e(AboutTrigger, { onOpen: () => setAboutOpen(true) }),
           e(WindowControls, null),
         ),
       ),
@@ -1170,6 +1300,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         e(ThemeToggle, { theme, onChange: setTheme }),
         e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
         e(SettingsTrigger, { onOpen: openSettings }),
+        e(AboutTrigger, { onOpen: () => setAboutOpen(true) }),
         e(WindowControls, null),
       ),
     ),
@@ -1177,8 +1308,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       e('div', { className: 'side-title' },
         e('span', null, '文件'),
         e('span', { className: 'side-title-actions' },
-          e('button', { className: 'side-action', type: 'button', title: '新建文件', 'aria-label': '新建文件', onClick: () => openTreeCreate('file', '') }, '＋文件'),
-          e('button', { className: 'side-action', type: 'button', title: '新建文件夹', 'aria-label': '新建文件夹', onClick: () => openTreeCreate('folder', '') }, '＋文件夹'),
           e('button', { className: 'side-action', type: 'button', disabled: snapshotBusy, title: '把当前状态存为一次提交（说明自动使用当前时间）', 'aria-label': '提交', onClick: () => void commitSnapshot() }, '提交'),
           e('button', { className: 'side-action', type: 'button', 'aria-pressed': historyOpen, title: '提交历史', 'aria-label': '历史', onClick: () => setHistoryOpen((value) => !value) }, '历史'),
         ),
@@ -1286,11 +1415,29 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     }) : null,
     renderNewProjectDialog(),
     fileMenu ? e(FileContextMenu, {
+      kind: fileMenu.kind,
       path: fileMenu.path,
       x: fileMenu.x,
       y: fileMenu.y,
-      onClose: () => setFileMenu(null),
-      onRename: () => openRenameDialog(fileMenu.path),
+      canPaste: Boolean(clipboard),
+      onClose: closeFileMenu,
+      onCreateFile: () => openTreeCreate('file', fileMenu.kind === 'directory' ? fileMenu.path : parentOf(fileMenu.path)),
+      onCreateFolder: () => openTreeCreate('folder', fileMenu.kind === 'directory' ? fileMenu.path : parentOf(fileMenu.path)),
+      onCopy: () => setClipboardFromMenu('copy', fileMenu.kind, fileMenu.path),
+      onCut: () => setClipboardFromMenu('cut', fileMenu.kind, fileMenu.path),
+      onPaste: () => void pasteFromMenu(),
+      onRename: () => {
+        /* 文件行保留原有 file.rename 流程（需要 expectedVersion）；
+           目录行走 workbench entry.rename（不需要 version）。 */
+        if (fileMenu.kind === 'file') openRenameDialog(fileMenu.path)
+        else {
+          fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+          setRenameTarget({ kind: 'directory', path: fileMenu.path })
+          setManageNote('')
+          setFileMenu(null)
+        }
+      },
+      onDelete: () => requestDeleteEntry(fileMenu.kind, fileMenu.path),
     }) : null,
     managePath ? e(TextPromptDialog, {
       id: 'rename-file',
@@ -1301,9 +1448,30 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       onCancel: closeRenameDialog,
       onConfirm: renameManaged,
     }) : null,
+    renameTarget ? e(TextPromptDialog, {
+      id: 'rename-entry',
+      key: `${renameTarget.kind}:${renameTarget.path}`,
+      title: renameTarget.kind === 'directory' ? '重命名文件夹' : '重命名',
+      label: '新名称',
+      initialValue: renameTarget.path.split('/').at(-1) ?? '',
+      confirmLabel: '保存新名称',
+      note: manageNote,
+      busy: manageBusy,
+      onCancel: closeRenameEntryDialog,
+      onConfirm: submitRenameEntry,
+    }) : null,
+    deleteTarget ? e(ConfirmDialog, {
+      id: 'delete-entry',
+      title: deleteTarget.kind === 'directory' ? '删除这个文件夹？' : '删除这个文档？',
+      message: `将删除 ${deleteTarget.path}。不可撤销（除非之前已提交到历史）。`,
+      confirmLabel: '删除',
+      onCancel: closeDeleteConfirm,
+      onConfirm: () => void confirmDeleteEntry(),
+    }) : null,
     renderCommandPalette(),
     imagePreview ? e(ImagePreviewOverlay, { path: imagePreview.path, url: imagePreview.url, onClose: closeImagePreview }) : null,
     settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, onClose: () => setSettingsOpen(false) }) : null,
+    aboutOpen ? e(AboutUpdateDialog, { onClose: () => setAboutOpen(false) }) : null,
   )
 }
 

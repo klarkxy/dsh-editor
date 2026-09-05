@@ -10,6 +10,10 @@ type WindowBridge = {
   close(): void
   /** 桌面端经主进程白名单校验后用系统浏览器打开;浏览器端无此方法,回退 window.open。 */
   openExternal?(url: string): void
+  /** 主进程返回当前应用名与版本;开发模式或浏览器端无此方法,UI 需走 "开发模式" 兜底。 */
+  getAppInfo?(): Promise<{ name: string; version: string }>
+  /** 主进程代理 GitHub Releases 探活,避开渲染端 CSP。返回 status/最新版本信息或错误。 */
+  checkForUpdate?(): Promise<{ status: 'latest' | 'update-available' | 'error'; currentVersion: string; latest?: { version: string; tag: string; name: string; publishedAt: string; url: string; body: string }; error?: string }>
   onMaximizedChange?(listener: (maximized: boolean) => void): () => void
 }
 

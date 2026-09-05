@@ -57,6 +57,8 @@ export function TextPromptDialog(props: {
   label: string
   initialValue: string
   confirmLabel: string
+  note?: string
+  busy?: boolean
   onCancel(): void
   onConfirm(value: string): void
 }) {
@@ -65,20 +67,21 @@ export function TextPromptDialog(props: {
   const input = useRef<HTMLInputElement | null>(null)
   useDialogReturnFocus(dialog, () => { input.current?.focus(); input.current?.select() })
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') { event.preventDefault(); props.onCancel(); return }
+    if (event.key === 'Escape' && !props.busy) { event.preventDefault(); props.onCancel(); return }
     focusableBoundary(dialog.current, event)
   }
   return e('div', { className: 'file-dialog-overlay' },
     e('div', { ref: dialog, className: 'file-dialog prompt-dialog', role: 'dialog', 'aria-modal': true, 'aria-labelledby': `${props.id}-title`, onKeyDown },
       e('header', null,
         e('h2', { id: `${props.id}-title` }, props.title),
-        e('button', { className: 'icon-button', type: 'button', 'aria-label': '关闭', onClick: props.onCancel }, '×'),
+        e('button', { className: 'icon-button', type: 'button', 'aria-label': '关闭', disabled: props.busy, onClick: props.onCancel }, '×'),
       ),
-      e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (value.trim()) props.onConfirm(value.trim()) } },
-        e('label', null, props.label, e('input', { ref: input, value, maxLength: 80, onChange: (event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value) })),
+      e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (value.trim() && !props.busy) props.onConfirm(value.trim()) } },
+        e('label', null, props.label, e('input', { ref: input, value, maxLength: 80, disabled: props.busy, onChange: (event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value) })),
+        props.note ? e('p', { className: 'warning', role: 'alert' }, props.note) : null,
         e('footer', null,
-          e('button', { type: 'button', onClick: props.onCancel }, '取消'),
-          e('button', { className: 'primary-action', type: 'submit', disabled: !value.trim() }, props.confirmLabel),
+          e('button', { type: 'button', disabled: props.busy, onClick: props.onCancel }, '取消'),
+          e('button', { className: 'primary-action', type: 'submit', disabled: props.busy || !value.trim() }, props.busy ? '保存中…' : props.confirmLabel),
         ),
       ),
     ),

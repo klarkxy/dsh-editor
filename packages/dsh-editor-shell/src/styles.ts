@@ -192,9 +192,13 @@ export const componentStyles = `
 .shell .workspace-menu-actions button { width: 100%; padding: 7px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-sm); }
 .shell .workspace-menu-actions button:hover { background: var(--surface); color: var(--fg); }
 .shell .workspace-menu-actions button[aria-current="true"] { color: var(--accent); font-weight: 600; }
-.shell .file-context-menu { position: fixed; z-index: 30; min-width: 168px; padding: 6px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-raised); }
-.shell .file-context-menu button { width: 100%; padding: 7px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-sm); }
-.shell .file-context-menu button:hover, .shell .file-context-menu button:focus-visible { background: var(--surface); color: var(--fg); }
+.shell .file-context-menu { position: fixed; z-index: 30; min-width: 168px; padding: 6px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-raised); display: flex; flex-direction: column; gap: 2px; }
+.shell .file-context-menu button { width: 100%; padding: 7px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-sm); color: var(--fg-2); }
+.shell .file-context-menu button:hover:not([disabled]), .shell .file-context-menu button:focus-visible:not([disabled]) { background: var(--surface); color: var(--fg); }
+.shell .file-context-menu button:disabled { opacity: .45; cursor: not-allowed; }
+.shell .file-context-menu button[data-danger="true"] { color: var(--danger); }
+.shell .file-context-menu button[data-danger="true"]:hover:not([disabled]), .shell .file-context-menu button[data-danger="true"]:focus-visible:not([disabled]) { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); }
+.shell .file-context-menu-separator { border: 0; border-top: 1px solid var(--hairline); margin: 4px 2px; }
 .shell .path-fallback { display: grid; gap: 7px; margin: 7px 2px 2px; padding: 8px 2px 0; border-top: 1px solid var(--hairline); }
 .shell .path-fallback label { display: grid; gap: 4px; font-size: var(--text-sm); color: var(--muted); }
 .shell .path-fallback input { min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
@@ -706,6 +710,37 @@ export const componentStyles = `
 .shell .zhihu-header { display: grid; gap: 4px; }
 .shell .zhihu-title { margin: 0; font: 600 var(--text-md)/1.3 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
 .shell .zhihu-intro { margin: 0; color: var(--meta); font-size: var(--text-sm); line-height: 1.7; }
+
+/* 关于与更新:复用 .file-dialog 弹层节奏,只加 about-* 自己的版块。 */
+.shell .about-page { max-width: 520px; display: flex; flex-direction: column; gap: var(--space-4); }
+.shell .about-header { display: grid; gap: 4px; }
+.shell .about-title { margin: 0; font: 600 var(--text-md)/1.3 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
+.shell .about-version { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.shell .about-version strong { color: var(--fg); font-weight: 500; }
+.shell .about-status { margin: 0; font-size: var(--text-sm); color: var(--fg-2); display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.shell .about-status-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font: 500 var(--text-xs)/1.4 var(--font-sans); letter-spacing: .04em; }
+.shell .about-status-tag.latest { background: color-mix(in srgb, var(--confirm) 12%, var(--surface)); color: var(--confirm); }
+.shell .about-status-tag.available { background: var(--accent-soft); color: var(--accent); }
+.shell .about-status-tag.error { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); }
+.shell .about-release { display: grid; gap: 6px; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg-sunken); }
+.shell .about-release-meta { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.shell .about-release-version { font: 500 var(--text-sm)/1.3 var(--font-sans); color: var(--fg); }
+.shell .about-release-date { color: var(--muted); font-size: var(--text-xs); }
+.shell .about-release-body { margin: 0; font: 400 var(--text-sm)/1.65 var(--font-sans); color: var(--fg-2); white-space: pre-wrap; max-height: 220px; overflow: auto; }
+.shell .about-note { margin: 0; color: var(--meta); font-size: var(--text-xs); line-height: 1.7; }
+.shell .about-actions { display: flex; justify-content: flex-end; gap: var(--space-2); flex-wrap: wrap; }
+.shell .about-button { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease); }
+.shell .about-button:hover:not(:disabled) { background: var(--surface-warm); color: var(--fg); border-color: var(--hairline-strong); }
+.shell .about-button:disabled { opacity: .55; cursor: not-allowed; }
+.shell .about-button:focus-visible { box-shadow: var(--focus-ring); }
+.shell .about-button-primary { background: var(--accent); color: var(--accent-on); border-color: transparent; }
+.shell .about-button-primary:hover:not(:disabled) { background: var(--accent-active); color: var(--accent-on); }
+.shell .about-error { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); font-size: var(--text-xs); }
+/* 关于/更新入口:沿用 .settings-trigger 的轻量按钮节奏,放在 SettingsTrigger 旁。 */
+.shell .about-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }
+.shell .about-trigger:hover { background: var(--surface-warm); color: var(--fg); }
+.shell .about-trigger-icon { display: grid; place-items: center; font-size: 13px; color: var(--meta); }
+.shell .about-trigger:hover .about-trigger-icon { color: var(--fg); }
 .shell .zhihu-guide { display: grid; gap: var(--space-2); margin: 0; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); }
 .shell .zhihu-guide-title { margin: 0; font: 500 var(--text-xs)/1.4 var(--font-sans); color: var(--fg-2); letter-spacing: .04em; }
 .shell .zhihu-guide-steps { display: grid; gap: 6px; margin: 0; padding-left: 18px; font-size: var(--text-xs); line-height: 1.7; color: var(--meta); }

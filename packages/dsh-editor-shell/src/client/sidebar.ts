@@ -3,6 +3,8 @@ import { errorMessage, isImagePath, orderTreeEntries, safeRpcCall, treeRowPaddin
 
 type LoadSubtree = (path: string) => Promise<TreeEntry[] | null> | null | void
 
+export type FileMenuKind = 'file' | 'directory'
+
 type RowProps = {
   ctx: ShellContext
   sessionId: string
@@ -14,7 +16,7 @@ type RowProps = {
   openPaths: Set<string>
   onOpen(path: string): void
   onPreviewImage(path: string): void
-  onFileMenu(path: string, position: { x: number; y: number }): void
+  onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }): void
   onCreateFile(directory: string): void
   onCreateFolder(directory: string): void
   loadSubtree: LoadSubtree
@@ -40,6 +42,10 @@ function TreeRows(props: RowProps): ReactNode {
             'data-tree-depth': level,
             'aria-expanded': isOpen,
             onClick: () => toggleDirectory(child),
+            onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => {
+              event.preventDefault()
+              onFileMenu('directory', child, { x: event.clientX, y: event.clientY })
+            },
           },
           e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, isOpen ? '⌄' : '›'),
           e('span', null, item.name),
@@ -72,10 +78,10 @@ function TreeRows(props: RowProps): ReactNode {
         style: { paddingLeft: treeRowPadding(level) },
         'data-tree-depth': level,
         onClick: () => (isImagePath(child) ? onPreviewImage(child) : onOpen(child)),
-        onContextMenu: /\.(md|txt)$/i.test(child) ? (event: ReactMouseEvent<HTMLButtonElement>) => {
+        onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => {
           event.preventDefault()
-          onFileMenu(child, { x: event.clientX, y: event.clientY })
-        } : undefined,
+          onFileMenu('file', child, { x: event.clientX, y: event.clientY })
+        },
       },
       e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, '·'),
       e('span', null, item.name),
@@ -92,7 +98,7 @@ export function Tree(props: {
   revision: number
   onOpen(path: string): void
   onPreviewImage(path: string): void
-  onFileMenu(path: string, position: { x: number; y: number }): void
+  onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }): void
   onCreateFile(directory: string): void
   onCreateFolder(directory: string): void
 }) {
@@ -130,7 +136,17 @@ export function Tree(props: {
     if (!openPaths.has(path)) void loadSubtree(path)
   }
 
-  return e('nav', { className: 'tree', 'aria-label': '稿件目录' },
+  return e('nav', {
+    className: 'tree',
+    'aria-label': '稿件目录',
+    onContextMenu: (event: ReactMouseEvent<HTMLElement>) => {
+      // 仅在空白区(非已有行)右键时弹出根目录菜单;行内已自行阻止冒泡。
+      if (event.target === event.currentTarget) {
+        event.preventDefault()
+        onFileMenu('directory', '', { x: event.clientX, y: event.clientY })
+      }
+    },
+  },
     e(TreeRows, {
       ctx,
       sessionId,
@@ -153,11 +169,19 @@ export function Tree(props: {
 }
 
 export function FileContextMenu(props: {
+  kind: FileMenuKind
   path: string
   x: number
   y: number
-  onClose(): void
+  canPaste: boolean
+  onCreateFile(): void
+  onCreateFolder(): void
+  onCopy(): void
+  onCut(): void
+  onPaste(): void
   onRename(): void
+  onDelete(): void
+  onClose(): void
 }) {
   const panel = useRef<HTMLDivElement | null>(null)
   const first = useRef<HTMLButtonElement | null>(null)
@@ -177,7 +201,7 @@ export function FileContextMenu(props: {
     }
   }, [props.path, props.x, props.y])
   const left = Math.max(8, Math.min(props.x, globalThis.innerWidth - 188))
-  const top = Math.max(8, Math.min(props.y, globalThis.innerHeight - 148))
+  const top = Math.max(8, Math.min(props.y, globalThis.innerHeight - 220))
   return e('div', {
     ref: panel,
     className: 'file-context-menu',
@@ -186,6 +210,19 @@ export function FileContextMenu(props: {
     style: { left, top },
     onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => event.preventDefault(),
   },
-    e('button', { ref: first, type: 'button', role: 'menuitem', onClick: props.onRename }, '重命名'),
+    e('button', { ref: first, type: 'button', role: 'menuitem', onClick: props.onCreateFile }, '新建文件'),
+    e('button', { type: 'button', role: 'menuitem', onClick: props.onCreateFolder }, '新建文件夹'),
+    e('hr', { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
+    e('button', { type: 'button', role: 'menuitem', onClick: props.onCopy }, '复制'),
+    e('button', { type: 'button', role: 'menuitem', onClick: props.onCut }, '剪切'),
+    e('button', {
+      type: 'button',
+      role: 'menuitem',
+      disabled: !props.canPaste,
+      onClick: props.onPaste,
+    }, '粘贴'),
+    e('hr', { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
+    e('button', { type: 'button', role: 'menuitem', onClick: props.onRename }, '重命名'),
+    e('button', { type: 'button', role: 'menuitem', 'data-danger': 'true', onClick: props.onDelete }, '删除'),
   )
 }

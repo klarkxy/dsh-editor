@@ -188,8 +188,11 @@ describe('shell manuscript RPC safety', () => {
 
   it('creates files and folders from any directory through the generic tree actions', () => {
     const root = rootSource()
-    expect(root).toContain("openTreeCreate('file', '')")
-    expect(root).toContain("openTreeCreate('folder', '')")
+    /* 顶栏的 ＋文件 / ＋文件夹 已撤掉,改由右键菜单统一入口。 */
+    expect(root).not.toContain("openTreeCreate('file', '')")
+    expect(root).not.toContain("openTreeCreate('folder', '')")
+    expect(root).not.toContain('＋文件')
+    expect(root).not.toContain('＋文件夹')
     expect(root).toContain("onCreateFile: (directory: string) => openTreeCreate('file', directory)")
     expect(root).toContain("onCreateFolder: (directory: string) => openTreeCreate('folder', directory)")
     expect(root).toContain("'directory.create'")
@@ -202,6 +205,59 @@ describe('shell manuscript RPC safety', () => {
     expect(sidebar).not.toContain('中新建章节')
     expect(sidebar).not.toContain('新建卷/部')
     expect(root).not.toContain('新建资料')
+  })
+
+  it('exposes copy/cut/paste/delete/rename through the tree right-click menu', () => {
+    const sidebar = readFileSync(new URL('./client/sidebar.ts', import.meta.url), 'utf8')
+    const root = rootSource()
+    /* FileContextMenu props 必须以独立 onXxx 形式提供 */
+    expect(sidebar).toMatch(/onCopy\(\)/)
+    expect(sidebar).toMatch(/onCut\(\)/)
+    expect(sidebar).toMatch(/onPaste\(\)/)
+    expect(sidebar).toMatch(/onDelete\(\)/)
+    expect(sidebar).toMatch(/onCreateFile\(\)/)
+    expect(sidebar).toMatch(/onCreateFolder\(\)/)
+    expect(sidebar).toMatch(/onRename\(\)/)
+    expect(sidebar).toMatch(/onClose\(\)/)
+    expect(sidebar).toContain('canPaste:')
+    expect(sidebar).toContain("'data-danger': 'true'")
+    /* 树行/容器/根菜单都走同一条 onFileMenu 回调 */
+    expect(sidebar).toMatch(/onContextMenu[\s\S]{0,200}onFileMenu\('directory', child/)
+    expect(sidebar).toMatch(/onContextMenu[\s\S]{0,200}onFileMenu\('file', child/)
+    /* root.ts 必须真的挂上剪贴板状态机和 workbench 端点 */
+    expect(root).toMatch(/const \[clipboard, setClipboard\]\s*=\s*useState/)
+    expect(root).toContain("'entry.copy'")
+    expect(root).toContain("'entry.move'")
+    expect(root).toContain("'entry.delete'")
+    expect(root).toContain("'entry.rename'")
+    /* 删除时关闭正在编辑的文档,避免悬空 path。 */
+    expect(root).toMatch(/setDeleteTarget[\s\S]{0,400}if \(target\.kind === 'file' && path === target\.path\) setPath\(''\)/)
+  })
+
+  it('shows an independent about/update dialog backed by the desktop bridge', () => {
+    const about = readFileSync(new URL('./client/about-dialog.tsx', import.meta.url), 'utf8')
+    const bridge = readFileSync(new URL('./client/window-controls.tsx', import.meta.url), 'utf8')
+    const root = rootSource()
+    /* 桌面端暴露的两个方法都按可选形式收口,shell 不依赖其存在 */
+    expect(bridge).toContain('getAppInfo?(): Promise<{ name: string; version: string }>')
+    expect(bridge).toMatch(/checkForUpdate\?[\s\S]{0,200}status:\s*'latest'\s*\|\s*'update-available'\s*\|\s*'error'/)
+    /* 弹窗自身按 status 分流,并依赖 getAppInfo / checkForUpdate */
+    expect(about).toContain('getAppInfo')
+    expect(about).toContain('checkForUpdate')
+    expect(about).toContain("'latest'")
+    expect(about).toContain("'update-available'")
+    expect(about).toContain("'error'")
+    expect(about).toMatch(/result\.status === 'latest'/)
+    expect(about).toMatch(/result\.status === 'update-available'/)
+    expect(about).toMatch(/result\.status === 'error'/)
+    expect(about).toContain('openExternal')
+    expect(about).toContain('useDialogReturnFocus')
+    /* root.ts 入口:两个 chrome 都挂 AboutTrigger,aboutOpen 渲染 AboutUpdateDialog */
+    expect(root).toContain('AboutUpdateDialog')
+    expect(root).toContain('AboutTrigger')
+    expect(root).toMatch(/const \[aboutOpen, setAboutOpen\]\s*=\s*useState\(false\)/)
+    expect(root).toContain('aria-haspopup')
+    expect(root).toContain('关于与更新')
   })
 
   it('commits with the current time as the message and rolls back in place with confirmation', () => {
