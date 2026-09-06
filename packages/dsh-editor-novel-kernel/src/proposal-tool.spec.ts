@@ -23,6 +23,13 @@ describe('editor proposal boundary', () => {
     })).toMatchObject({ oldText: '规范旧文', newText: '规范新文' })
   })
 
+  it('accepts an empty oldText to fill an empty file, but still rejects no-op edits', () => {
+    expect(proposalMarker({ kind: 'edit', path: '正文/001.md', summary: '填充空章节', oldText: '', newText: '# 第一章\n' })).toMatchObject({
+      kind: 'edit', oldText: '', newText: '# 第一章\n',
+    })
+    expect(() => proposalMarker({ kind: 'edit', path: '正文/001.md', summary: 'x', oldText: '', newText: '' })).toThrow('different oldText and newText')
+  })
+
   it('allows only Markdown search/read/propose tools', () => {
     expect(editorToolGuard({ name: 'read', arguments: { file_path: '世界书/设定总汇.md' } })).toBeUndefined()
     expect(editorToolGuard({ name: 'grep', arguments: { pattern: '名字', include: '*.md' } })).toBeUndefined()
@@ -138,8 +145,43 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).not.toContain('`')
   })
 
-  it('exposes author_observe only for bounded, redundant-free author-memory entries', () => {
-    expect(editorToolGuard({ name: 'author_observe', arguments: { observation: '留白优先', reason: '多次出现' } })).toBeUndefined()
+  it('scopes the scratch area to bounded, non-canon working drafts', () => {
+    expect(EDITOR_PROMPT).toContain('.dsh-editor/scratch/')
+    expect(EDITOR_PROMPT).toContain('novel_scratch_write')
+    expect(EDITOR_PROMPT).toContain('不是作品事实来源')
+    expect(EDITOR_PROMPT).toContain('临时工作区')
+  })
+
+  it('allows bounded ask_user_question rounds and rejects bloated or malformed ones', () => {
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [{ id: 'q1', question: '主角要先复仇还是先寻人？' }] } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [
+      { id: 'q1', question: '下一章先写哪条线？', header: '方向', options: [{ label: '复仇线' }, { label: '寻人缘', description: '节奏更慢' }] },
+      { id: 'q2', question: '要不要保留双视角？', multi_select: false },
+    ] } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: {} })).toContain('1-4 questions')
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [] } })).toContain('1-4 questions')
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [1, 2, 3, 4, 5].map((n) => ({ id: `q${n}`, question: 'x' })) } })).toContain('1-4 questions')
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [{ id: '', question: 'x' }] } })).toContain('id')
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [{ id: 'q1', question: '  ' }] } })).toContain('text')
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [{ id: 'q1', question: 'x'.repeat(501) }] } })).toContain('500')
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [{ id: 'q1', question: 'x', options: [] }] } })).toContain('1-4 options')
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [{ id: 'q1', question: 'x', options: [{ label: ' ' }] }] } })).toContain('label')
+    expect(editorToolGuard({ name: 'ask_user_question', arguments: { questions: [{ id: 'q1', question: 'x' }], note: 'y' } })).toContain('only accepts')
+  })
+
+  it('allows bounded scratch access and rejects escapes', () => {
+    expect(editorToolGuard({ name: 'novel_scratch_write', arguments: { path: '分析/线索.md', text: '草稿' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_scratch_write', arguments: { path: '笔记.txt', text: '' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_scratch_write', arguments: { path: '../正文/001.md', text: 'x' } })).toContain('scratch-relative')
+    expect(editorToolGuard({ name: 'novel_scratch_write', arguments: { path: 'x.md', text: 'a'.repeat(20001) } })).toContain('20000')
+    expect(editorToolGuard({ name: 'novel_scratch_write', arguments: { path: 'x.md' } })).toContain('scratch-relative')
+    expect(editorToolGuard({ name: 'novel_scratch_read', arguments: { path: '分析/线索.md' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_scratch_read', arguments: { path: '.gitignore' } })).toContain('scratch-relative')
+    expect(editorToolGuard({ name: 'novel_scratch_list', arguments: {} })).toBeUndefined()
+    expect(editorToolGuard({ name: 'novel_scratch_list', arguments: { path: 'x' } })).toContain('no arguments')
+  })
+
+  it('exposes author_observe only for bounded, redundant-free author-memory entries', () => {    expect(editorToolGuard({ name: 'author_observe', arguments: { observation: '留白优先', reason: '多次出现' } })).toBeUndefined()
     expect(editorToolGuard({ name: 'author_observe', arguments: { observation: '   ', reason: 'r' } })).toContain('non-empty')
     expect(editorToolGuard({ name: 'author_observe', arguments: { observation: 'x', reason: '   ' } })).toContain('non-empty')
     expect(editorToolGuard({ name: 'author_observe', arguments: { observation: 'x'.repeat(201), reason: 'r' } })).toContain('<= 200')

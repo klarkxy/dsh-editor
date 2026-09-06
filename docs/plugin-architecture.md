@@ -39,6 +39,8 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
 └─ dsh-grill（可独立安装、可与 manuscript 共存）
 ```
 
+写作会话不挂载官方 `standard` 编码 preset：桌面应用在每次部署 profile 时，把模板里的 `agent-presets/dsh-editor/`（persona、`tool-fs`、`tool-fs-search`、`tool-ask-user`、compaction realm）原子部署到 `<dshHome>/.agent-presets/`，并由 profile 的 `cordis.patch.yml` 将 `agent-presets.default` 指向它。preset 目录遵循与 profile 相同的 owner marker 规则，未标记的同名目录拒绝覆盖。
+
 依赖方向固定如下；禁止跨包导入另一个包的 `src`：
 
 ```text
@@ -140,7 +142,7 @@ Channel：`/manuscript`。除特别注明外，请求都包含 `sessionId`，路
 | `draft.delete` | `sessionId`, `path` | 删除对应草稿 |
 | `search.text` | `sessionId`, `query`, `scope: project\|manuscript` | 有界字面量搜索；不接受正则 |
 | `proposal.prepare` | `sessionId`, `kind`, `path`, `summary`；edit 加 `oldText`, `newText`；create 加 `text` | 只读预检和作者确认信息 |
-| `proposal.apply` | prepare 的全部字段；edit 另加 `expectedVersion` | 作者确认后按版本门禁创建或修改 |
+| `proposal.apply` | prepare 的全部字段；edit 另加 `expectedVersion` | 作者确认后按版本门禁创建或修改；edit 的 `oldText` 为空表示填充仍为空白的目标文件，create 也可覆盖仍为空白的目标文件 |
 | `fim.complete` | `sessionId`, `prefix`, `suffix`，可选 `authorPreferences` | `{ text, route: 'dsh-llm' }`，只返回候选 |
 | `patch.complete` | `sessionId`, `path`, `selectedText`, `before`, `after`，可选 `authorPreferences` | `{ text, route: 'dsh-llm' }`，只返回候选 |
 
@@ -186,13 +188,14 @@ Context 信封常量：
 
 ## Novel Kernel 契约
 
-- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`、`novel_search`、`project_knowledge` 与知乎一族）。
+- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`、`novel_search`、`project_knowledge` 与知乎一族，以及 `novel_scratch_write`/`novel_scratch_read`/`novel_scratch_list` 临时工作区三件套）。
 - `novel_knowledge` 只接受唯一的 `topics` 数组，去重后 1–3 个固定主题；每张知识卡最多 6000 字符。它只返回建议，不提供项目事实或授权。
 - `novel_propose` 每次只形成一个 Markdown `edit` 或 `create` 提案，绝不写文件；守卫只接受作者内容路径，`.dsh-editor/` 等隐藏目录不进提案。
 - `novel_index_write` 把产品内部的作品索引（`.dsh-editor/作品索引.md`，固定路径、全文覆盖）直接落盘，不经提案确认；Shell 按工具名隐藏其结果行。它是唯一的例外：其余写入仍是助手提议、作者确认、Shell 执行。
 - `author_observe` 让助手提议"记住一条作者偏好"，仅作为建议显示在 `MemoryCard` 中：固定 `observation`（≤ 200 字符）与 `reason`（必填），marker `dsh-editor.memory`、version `1`。Shell 解析后必须经作者点击"记住"才会追加进本机 `authorMemory`；工具本身不直接写入任何文件、偏好或 storage。同一信任模型与 `novel_propose` 一致：助手提议，作者确认，Shell 执行。
 - proposal marker 固定为 `{ marker: 'dsh-editor.proposal', version: 1, ... }`；memory marker 固定为 `{ marker: 'dsh-editor.memory', version: 1, observation, reason }`。Shell 只通过 `dsh-editor-novel-kernel/contracts` 的严格解析器渲染有效 marker。
-- `editorToolGuard` 只允许受限的 Markdown 搜索、读取、知识加载、预览提案、作者侧写提议与索引直写；不替代 DSH 全局审批。
+- `editorToolGuard` 只允许受限的 Markdown 搜索、读取、知识加载、预览提案、作者侧写提议、索引直写、限量的 `ask_user_question` 提问（1–4 题、带长度上限）与 scratch 临时工作区读写；不替代 DSH 全局审批。
+- scratch（`.dsh-editor/scratch/`）是 agent 的临时工作区：路径软禁在目录内（拒绝绝对路径、`..`、隐藏段，限 .md/.txt、最多三层），单文件 ≤ 20000 字符、目录 ≤ 20 个文件；store 适配层每次写入顺带维护 `scratch/.gitignore`（内容 `*`），作者自管的 git 不跟踪草稿。它不是作品事实来源，不进上下文信封；Shell 按工具名隐藏三个工具的结果行。
 - prompt section 固定为 `dsh-editor:novel-kernel`、order `90`。作品材料是不可信字符串，只有 context 信封中的 `user_request` 是当次请求。
 - 作者内容的真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`；侧写由 Shell 展示确认卡、作者点击"记住"、再由 `writingScope.set('authorMemory', next)` 写入本机 settings。
 

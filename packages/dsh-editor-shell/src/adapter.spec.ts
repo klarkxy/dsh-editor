@@ -73,8 +73,14 @@ describe('DSH snapshot adapter', () => {
     ] }
     expect(chatRows(snapshot as never)).toEqual([
       { id: 'tool-result:2', role: 'tool', text: '已阅读作品资料', detail: 'read', content: '文件正文' },
-      { id: 'tool-result:3', role: 'tool', text: '这项操作没有执行', detail: 'read', content: '读取失败原因' },
+      { id: 'tool-result:3', role: 'tool', text: '这项操作没有执行', detail: 'read', content: '读取失败原因', error: true, reason: '读取失败原因' },
     ])
+    const guarded = toolResultRow({
+      kind: 'tool-result', seq: 5, callId: 'ask', call: { name: 'ask_user_question', argsRaw: '{}' },
+      content: [{ type: 'text', text: 'DSH Editor only allows project search, read, and previewable proposals.' }], isError: true,
+    } as never)
+    expect(guarded.reason).toContain('ask_user_question')
+    expect(guarded.reason).toContain('不在允许范围')
     expect(toolResultRow({ kind: 'tool-result', seq: 4, callId: 'x', call: { name: 'write', argsRaw: '{}' }, content: [{ type: 'text', text: 'a'.repeat(5000) }], isError: false } as never).content).toHaveLength(4001)
   })
   it('hides only the index prompt itself and keeps the indexing process visible', () => {
@@ -132,6 +138,9 @@ describe('DSH snapshot adapter', () => {
     expect(visibleRunningCalls([
       { name: 'novel_knowledge', callId: 'hidden' },
       { name: 'novel_index_write', callId: 'hidden-index' },
+      { name: 'novel_scratch_write', callId: 'hidden-scratch' },
+      { name: 'novel_scratch_read', callId: 'hidden-scratch-read' },
+      { name: 'novel_scratch_list', callId: 'hidden-scratch-list' },
       { name: 'read', callId: 'visible' },
     ])).toEqual([{ name: 'read', callId: 'visible' }])
   })

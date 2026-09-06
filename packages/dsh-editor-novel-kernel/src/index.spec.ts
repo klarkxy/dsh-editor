@@ -4,6 +4,9 @@ import {
   AUTHOR_OBSERVE_TOOL_NAME,
   NOVEL_INDEX_WRITE_TOOL_NAME,
   NOVEL_KNOWLEDGE_TOOL_NAME,
+  NOVEL_SCRATCH_LIST_TOOL_NAME,
+  NOVEL_SCRATCH_READ_TOOL_NAME,
+  NOVEL_SCRATCH_WRITE_TOOL_NAME,
   NOVEL_SEARCH_TOOL_NAME,
   PROPOSAL_TOOL_NAME,
   PROJECT_KNOWLEDGE_TOOL_NAME,
@@ -16,7 +19,7 @@ import {
 import { apply, inject, name } from './index.ts'
 
 describe('novel-kernel Host entry', () => {
-  it('registers the eleven tools, guard and prompt section exactly once', () => {
+  it('registers the fourteen tools, guard and prompt section exactly once', () => {
     const tools: unknown[] = []
     const guards: unknown[] = []
     const sections: unknown[] = []
@@ -56,6 +59,9 @@ describe('novel-kernel Host entry', () => {
       PROJECT_KNOWLEDGE_TOOL_NAME,
       NOVEL_SEARCH_TOOL_NAME,
       NOVEL_INDEX_WRITE_TOOL_NAME,
+      NOVEL_SCRATCH_WRITE_TOOL_NAME,
+      NOVEL_SCRATCH_READ_TOOL_NAME,
+      NOVEL_SCRATCH_LIST_TOOL_NAME,
     ])
     expect(guards).toHaveLength(1)
     expect(sections).toEqual([{ name: 'dsh-editor:novel-kernel', order: 90, text: expect.stringContaining('novel_propose') }])

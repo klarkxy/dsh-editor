@@ -403,6 +403,11 @@ export const componentStyles = `
 .shell .md pre code { padding: 0; background: transparent; }
 .shell .md a { color: var(--accent); }
 .shell .chat-row.tool, .shell .chat-row.notice, .shell .chat-row.unknown { color: var(--muted); font-size: var(--text-xs); }
+.shell .chat-row.tool.error { border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); color: var(--danger); }
+.shell .chat-row.tool.error summary { color: var(--danger); font-weight: 600; }
+.shell .chat-row.tool.error pre { background: color-mix(in srgb, var(--danger) 6%, var(--bg)); color: var(--fg-2); }
+.shell .chat-row.tool.error small { color: var(--danger); }
+.shell .chat-row.tool.error .tool-error-reason { margin: 8px 0 0; font-size: var(--text-base); line-height: 1.7; color: var(--danger); }
 .shell .chat-row.thinking { color: var(--muted); font-size: var(--text-xs); border-style: dashed; }
 .shell details.chat-row summary { cursor: pointer; font: 500 var(--text-xs)/1.6 var(--font-sans); letter-spacing: .08em; color: var(--meta); }
 .shell details.chat-row p { margin: 8px 0 0; white-space: pre-wrap; line-height: 1.7; }
@@ -743,7 +748,11 @@ export const componentStyles = `
 .shell .about-button:focus-visible { box-shadow: var(--focus-ring); }
 .shell .about-button-primary { background: var(--accent); color: var(--accent-on); border-color: transparent; }
 .shell .about-button-primary:hover:not(:disabled) { background: var(--accent-active); color: var(--accent-on); }
-.shell .about-error { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); font-size: var(--text-xs); }
+.shell .about-error { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); font-size: var(--text-xs); white-space: pre-wrap; }
+.shell .about-download { display: grid; gap: 6px; }
+.shell .about-progress { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; }
+.shell .about-progress-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--motion-fast) var(--ease); }
+.shell .about-download-meta { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.6; }
 /* 关于/更新入口:沿用 .settings-trigger 的轻量按钮节奏,放在 SettingsTrigger 旁。 */
 .shell .about-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }
 .shell .about-trigger:hover { background: var(--surface-warm); color: var(--fg); }

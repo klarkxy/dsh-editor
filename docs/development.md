@@ -82,6 +82,8 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 
 `DSH_DESKTOP_PREPARE_ONLY=1` 只做构建和开发资源准备，供诊断使用。
 
+应用内更新下载默认按“内置 GitHub 镜像列表 → github.com 直连”的顺序尝试；`DSH_UPDATE_MIRRORS`（逗号分隔的前缀式镜像地址，如 `https://ghproxy.net/`）可在内置列表之前追加自有镜像。下载完成后按 release 里的 `sha256sums.txt` 校验完整性（发布工作流自动上传该文件）。
+
 ## 插件包职责
 
 ### `dsh-editor-shell`
@@ -180,7 +182,7 @@ pnpm pack:desktop
 - profile 同名无 marker 时必须拒绝覆盖；
 - 只能终止 Supervisor 记录的 DSH 进程树；
 - Renderer 不得接触 credential、absolute path 或 Node fs；
-- Chat Renderer 不执行工具；DSH Agent 只能在 guard 下调用受限检索、只读知识与非写入提案，不直接写正文，也不保存历史副本；
+- Chat Renderer 不执行工具；DSH Agent 只能在 guard 下调用受限检索、只读知识、非写入提案、限量提问与 `.dsh-editor/scratch/` 临时工作区，不直接写正文，也不保存历史副本；写作会话挂载桌面应用部署的 `dsh-editor` 专属 agent preset（只含 read/glob/grep、ask_user_question 与 compaction），不挂载官方 `standard` 编码工具目录；
 - 任何 commit、push、tag、publish、release 或签名必须另行授权。
 
 ## DSH 升级

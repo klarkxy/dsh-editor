@@ -22,7 +22,7 @@ import { isNovelIndexJobPrompt } from './novel-index.ts'
 
 export { parseAuthorMemoryMarker, parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 
-const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'project_knowledge', 'novel_index_write'])
+const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'project_knowledge', 'novel_index_write', 'novel_scratch_write', 'novel_scratch_read', 'novel_scratch_list'])
 const HIDDEN_REASONING_BLOCKS = new Set(['reasoning', 'thinking', 'thought', 'analysis'])
 
 export function visibleRunningCalls<T extends { name: string }>(calls: readonly T[]): T[] {
@@ -36,6 +36,10 @@ export type ChatRow = {
   detail?: string
   /** Expandable verbatim body (tool result content); absent when there is nothing worth unfolding. */
   content?: string
+  /** Tool call failed or was rejected; the row renders as an alert, expanded by default. */
+  error?: boolean
+  /** Author-readable cause of a failed tool call, shown above the verbatim body. */
+  reason?: string
   proposal?: ProposalMarker
   memory?: AuthorMemoryMarker
   projectContextReceipt?: ProjectContextReceiptBundle
@@ -127,13 +131,25 @@ export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-resu
     return { id: `tool-result:${node.seq}`, role: 'tool', text: memory.observation, detail: '写作助手提议记住这条偏好', memory }
   }
   if (node.isError) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: '这项操作没有执行', detail: name, content: truncateToolContent(body) || undefined }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: '这项操作没有执行', detail: name, content: truncateToolContent(body) || undefined, error: true, reason: toolErrorReason(name, body) }
   }
   const friendly = name === 'glob' || name === 'grep' ? '已查找作品资料' : name === 'read' ? '已阅读作品资料' : '操作已完成'
   return { id: `tool-result:${node.seq}`, role: 'tool', text: friendly, detail: name, content: truncateToolContent(body) || undefined }
 }
 
 const TOOL_CONTENT_LIMIT = 4000
+
+/** editorToolGuard 兜底分支的整体拒绝文案；翻成作者能看懂的原因，不照搬英文原文。 */
+const GUARD_REJECTION = 'only allows project search, read, and previewable proposals'
+
+function toolErrorReason(name: string, body: string): string {
+  const firstLine = body.split('\n').map((line) => line.trim()).find(Boolean) ?? ''
+  if (firstLine.includes(GUARD_REJECTION)) {
+    return `「${name}」不在允许范围：写作助手只能查找、阅读作品资料，或通过提案请你预览修改。这次调用被拦截，没有产生任何改动。`
+  }
+  if (firstLine) return firstLine.length > 160 ? `${firstLine.slice(0, 160)}…` : firstLine
+  return '操作被拒绝或执行失败，未产生改动。'
+}
 
 function truncateToolContent(text: string): string {
   const trimmed = text.trim()

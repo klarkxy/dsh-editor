@@ -939,6 +939,13 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
             e('summary', null, '思考过程'),
             e('p', null, row.text),
           )
+          : row.role === 'tool' && row.error
+            ? e('details', { className: 'chat-row tool error', key: row.id, open: true, role: 'alert' },
+              e('summary', null, `⚠ ${row.text}`),
+              row.reason ? e('p', { className: 'tool-error-reason' }, row.reason) : null,
+              row.content ? e('pre', null, row.content) : null,
+              row.detail ? e('small', null, row.detail) : null,
+            )
           : row.role === 'tool' && row.content
             ? e('details', { className: 'chat-row tool', key: row.id },
               e('summary', null, row.text),

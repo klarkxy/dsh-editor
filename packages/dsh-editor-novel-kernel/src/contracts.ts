@@ -10,6 +10,15 @@ export const PROJECT_KNOWLEDGE_TOOL_NAME = 'project_knowledge'
 export const NOVEL_SEARCH_TOOL_NAME = 'novel_search'
 export const NOVEL_OVERVIEW_TOOL_NAME = 'novel_overview'
 export const NOVEL_INDEX_WRITE_TOOL_NAME = 'novel_index_write'
+/** DSH 运行时自带的提问工具；写作助手在需要作者拍板时使用，经 editorToolGuard 校验后放行。 */
+export const USER_QUESTION_TOOL_NAME = 'ask_user_question'
+/** agent 临时工作区：.dsh-editor/scratch/ 内自由读写，路径软禁、有界、对作者视图隐藏。 */
+export const SCRATCH_DIRECTORY = '.dsh-editor/scratch'
+export const NOVEL_SCRATCH_WRITE_TOOL_NAME = 'novel_scratch_write'
+export const NOVEL_SCRATCH_READ_TOOL_NAME = 'novel_scratch_read'
+export const NOVEL_SCRATCH_LIST_TOOL_NAME = 'novel_scratch_list'
+export const SCRATCH_MAX_FILE_CHARS = 20_000
+export const SCRATCH_MAX_FILES = 20
 /** 作品索引是产品内部状态：固定路径，由 novel_index_write 直接写入，不走提案确认。 */
 export const NOVEL_INDEX_PATH = '.dsh-editor/作品索引.md'
 export const PROPOSAL_MARKER = 'dsh-editor.proposal'
@@ -118,7 +127,8 @@ export function proposalMarker(args: Record<string, unknown>): ProposalMarker {
   if (kind === 'edit') {
     const oldText = aliasedString(args, ['oldText', 'old_text', 'old_string'])
     const newText = aliasedString(args, ['newText', 'new_text', 'new_string'])
-    if (!oldText || oldText === newText) throw new Error('edit requires different oldText and newText')
+    /* oldText 允许为空：表示目标文件当前为空，用 newText 填充全文（由 Host 侧预检把关）。 */
+    if (oldText === newText) throw new Error('edit requires different oldText and newText')
     return { marker: PROPOSAL_MARKER, version: 1, kind, path, summary, oldText, newText }
   }
   const text = cleanString(args.text)

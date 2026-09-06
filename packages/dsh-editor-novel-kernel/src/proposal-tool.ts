@@ -1,16 +1,22 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { isNovelKnowledgeArguments } from './novel-knowledge.ts'
 import { isProjectKnowledgeArguments } from './project-knowledge.ts'
+import { isScratchRelativePath } from './scratch-tool.ts'
 import {
   AUTHOR_OBSERVE_MAX_CHARS,
   AUTHOR_OBSERVE_TOOL_NAME,
   NOVEL_INDEX_WRITE_TOOL_NAME,
   NOVEL_KNOWLEDGE_TOOL_NAME,
   NOVEL_OVERVIEW_TOOL_NAME,
+  NOVEL_SCRATCH_LIST_TOOL_NAME,
+  NOVEL_SCRATCH_READ_TOOL_NAME,
+  NOVEL_SCRATCH_WRITE_TOOL_NAME,
   NOVEL_SEARCH_TOOL_NAME,
   PROPOSAL_MARKER,
   PROPOSAL_TOOL_NAME,
   PROJECT_KNOWLEDGE_TOOL_NAME,
+  SCRATCH_MAX_FILE_CHARS,
+  USER_QUESTION_TOOL_NAME,
   ZHIHU_ASK_TOOL_NAME,
   ZHIHU_GLOBAL_SEARCH_TOOL_NAME,
   ZHIHU_HOT_LIST_TOOL_NAME,
@@ -30,9 +36,9 @@ export function createProposalTool() {
       kind: { type: 'string', required: true, description: 'One of edit, create, split, merge, renames.' },
       path: { type: 'string', description: 'Project-relative .md path. Not used by renames.' },
       summary: { type: 'string', required: true, description: 'Short author-facing reason for this change.' },
-      oldText: { type: 'string', description: 'For edit: exact unique text currently in the file.' },
+      oldText: { type: 'string', description: 'For edit: exact unique text currently in the file. Pass an empty string to fill a file that is currently empty.' },
       newText: { type: 'string', description: 'For edit: replacement text.' },
-      text: { type: 'string', description: 'For create: complete Markdown file content.' },
+      text: { type: 'string', description: 'For create: complete Markdown file content. May also fill an existing file that is still empty.' },
       anchor: { type: 'string', description: 'For split: exact unique text where the file splits; the anchor itself starts the new file.' },
       newPath: { type: 'string', description: 'For split: project-relative .md path of the new file.' },
       sourcePath: { type: 'string', description: 'For merge: project-relative .md path whose content is appended to path, then archived.' },
@@ -108,6 +114,30 @@ const ZHIHU_QUERY_TOOLS: ReadonlySet<string> = new Set([
   ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME,
 ])
 
+/** 提问工具的参数边界：少量、简短、面向作者拍板的问题，避免被当成长篇表单或指令通道。 */
+function userQuestionProblem(args: Readonly<Record<string, unknown>>): string | undefined {
+  if (Object.keys(args).some((key) => key !== 'questions')) return 'ask_user_question only accepts questions.'
+  const questions = args.questions
+  if (!Array.isArray(questions) || questions.length < 1 || questions.length > 4) return 'ask_user_question takes 1-4 questions.'
+  for (const entry of questions) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'Each question must be an object.'
+    const question = entry as Record<string, unknown>
+    if (typeof question.id !== 'string' || !question.id.trim() || question.id.length > 40) return 'Each question needs an id of at most 40 characters.'
+    if (typeof question.question !== 'string' || !question.question.trim() || question.question.length > 500) return 'Each question needs text of at most 500 characters.'
+    if (question.header !== undefined && (typeof question.header !== 'string' || question.header.length > 40)) return 'Question headers are limited to 40 characters.'
+    if (question.multi_select !== undefined && typeof question.multi_select !== 'boolean') return 'multi_select must be a boolean.'
+    if (question.options === undefined) continue
+    if (!Array.isArray(question.options) || question.options.length < 1 || question.options.length > 4) return 'Each question takes 1-4 options.'
+    for (const option of question.options) {
+      if (!option || typeof option !== 'object' || Array.isArray(option)) return 'Each option must be an object.'
+      const choice = option as Record<string, unknown>
+      if (typeof choice.label !== 'string' || !choice.label.trim() || choice.label.length > 80) return 'Each option needs a label of at most 80 characters.'
+      if (choice.description !== undefined && (typeof choice.description !== 'string' || choice.description.length > 200)) return 'Option descriptions are limited to 200 characters.'
+    }
+  }
+  return undefined
+}
+
 export function editorToolGuard(exec: { name: string; arguments: Readonly<Record<string, unknown>> }): string | undefined {  const args = exec.arguments
   if (exec.name === NOVEL_KNOWLEDGE_TOOL_NAME) {
     return isNovelKnowledgeArguments(args) ? undefined : 'Novel knowledge is limited to one to three bundled topics.'
@@ -162,6 +192,21 @@ export function editorToolGuard(exec: { name: string; arguments: Readonly<Record
   if (exec.name === PROJECT_KNOWLEDGE_TOOL_NAME) {
     return isProjectKnowledgeArguments(args) ? undefined : 'project_knowledge needs 1-3 project-relative .md/.txt paths.'
   }
+  if (exec.name === USER_QUESTION_TOOL_NAME) return userQuestionProblem(args)
+  if (exec.name === NOVEL_SCRATCH_WRITE_TOOL_NAME) {
+    if (Object.keys(args).length !== 2 || !isScratchRelativePath(args.path)) return 'novel_scratch_write needs a scratch-relative .md/.txt path and text.'
+    return typeof args.text === 'string' && args.text.length <= SCRATCH_MAX_FILE_CHARS
+      ? undefined
+      : `novel_scratch_write text must be a string of at most ${SCRATCH_MAX_FILE_CHARS} characters.`
+  }
+  if (exec.name === NOVEL_SCRATCH_READ_TOOL_NAME) {
+    return Object.keys(args).length === 1 && isScratchRelativePath(args.path)
+      ? undefined
+      : 'novel_scratch_read needs a scratch-relative .md/.txt path.'
+  }
+  if (exec.name === NOVEL_SCRATCH_LIST_TOOL_NAME) {
+    return Object.keys(args).length === 0 ? undefined : 'novel_scratch_list takes no arguments.'
+  }
   if (exec.name === 'read') return safeRelative(args.file_path, true) ? undefined : 'Only project-relative Markdown files may be read.'
   if (exec.name === 'glob') {
     return safeRelative(args.path) && typeof args.pattern === 'string' && /\.md$/i.test(args.pattern) && safeRelative(args.pattern)
@@ -188,7 +233,11 @@ export const EDITOR_PROMPT = `你是 DSH Editor 内的小说写作助手。始�
 
 .dsh-editor/ 是产品内部目录，其中的作品索引只由你通过 novel_index_write 全文直写（创建或覆盖，不需要用户确认），不走 novel_propose；novel_propose 也只接受作者内容路径，不接受该目录。
 
-构思、分析、审稿和问答直接在对话中回答。作品开始时通常只有空的 正文、大纲、人物卡、世界书 目录，没有总览、总纲、人物索引、设定总汇或首章。需要落盘时，用 novel_propose 的 create 建立所需 Markdown，不要假设模板文件已存在，也不要为了填空而生成空洞标题稿。只要用户要求创建或修改项目文件（.dsh-editor/ 内部文件除外），就必须调用 novel_propose，先形成可预览提案，等待用户确认后才由产品写入；每次调用只处理一个 Markdown 文件。编辑时 oldText 必须是文件里唯一、完整的原文片段。绝不能调用 shell、write、edit 或其他会直接改文件的工具。
+.dsh-editor/scratch/ 是你的临时工作区：用 novel_scratch_write、novel_scratch_read、novel_scratch_list 自由读写其中的 .md/.txt 文件（单文件最多 20000 字符，目录最多 20 个文件），存放分析草稿、中间笔记等不需要作者看到的工作内容。它不是作品事实来源，不是 canon，不进上下文信封，也不要在里面留存应长期保存的作品信息——那类信息仍走大纲/世界书提案或作品索引。
+
+构思、分析、审稿和问答直接在对话中回答。作品开始时通常只有空的 正文、大纲、人物卡、世界书 目录，没有总览、总纲、人物索引、设定总汇或首章。需要落盘时，用 novel_propose 的 create 建立所需 Markdown，不要假设模板文件已存在，也不要为了填空而生成空洞标题稿。只要用户要求创建或修改项目文件（.dsh-editor/ 内部文件除外），就必须调用 novel_propose，先形成可预览提案，等待用户确认后才由产品写入；每次调用只处理一个 Markdown 文件。编辑时 oldText 必须是文件里唯一、完整的原文片段；若目标文件已存在但内容为空（如提前建好标题的新章节），oldText 传空字符串即可用 newText 填充全文，也可以直接用 create 覆盖空文件。绝不能调用 shell、write、edit 或其他会直接改文件的工具。
+
+需要作者拍板的方向选择、或只有作者知道的关键信息（偏好、意图、背景）时，调用 ask_user_question 一次提出 1-4 个简明问题，可附选项；能用 glob、grep、read 从项目资料里自查的事实不要问，也不要为了确认小事打断写作节奏。
 
 zhihu_search 只用于拉取社区证据与读者反馈做参考，不构成 canon、不扩大作品设定、不写入项目文件。引用搜索结果时也要保持信息来自社区而非正文事实；不能因为搜索到某条观点就把它写进大纲、世界书或人物卡。同族的 zhihu_global_search（全网搜索公开网页）、zhihu_hot_list（知乎热榜）、zhihu_ask（知乎直答，基于社区内容的综合回答）、zhihu_knowledge_search（知乎公开知识库检索）同样只作背景与热点参考，适用同样的非 canon 约束；zhihu_ask 默认用 zhida-thinking-1p5，简单事实查询才用 zhida-fast-1p5，zhida-agent 最慢，仅在用户明确要求时使用。
 

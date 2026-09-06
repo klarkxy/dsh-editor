@@ -15,6 +15,8 @@ import {
   createZhihuKnowledgeSearchTool,
 } from './zhihu-tools.ts'
 import { createNovelSearchTool } from './search-tool.ts'
+import { collectScratchFiles, createScratchListTool, createScratchReadTool, createScratchWriteTool, type ScratchStore } from './scratch-tool.ts'
+import { SCRATCH_DIRECTORY } from './contracts.ts'
 import {
   listZhihuKnowledgeBases,
   uploadZhihuKnowledgeFile,
@@ -72,6 +74,34 @@ function makeIndexWriter(fs: HostContext['fs'], sandboxPolicy: HostContext['sand
   }
 }
 
+/**
+ * scratch store 适配：所有读写限定在 SCRATCH_DIRECTORY 下，写入带会话沙箱策略。
+ * 每次写入顺带重写 scratch/.gitignore（内容 `*`），让作者自管的 git 工作区
+ * 不跟踪草稿目录；产品自身快照按隐藏目录排除，无需额外处理。
+ */
+function makeScratchStore(fs: HostContext['fs'], sandboxPolicy: HostContext['sandboxPolicy']): ScratchStore {
+  const full = (relative: string) => relative ? `${SCRATCH_DIRECTORY}/${relative}` : SCRATCH_DIRECTORY
+  return {
+    async read({ path, signal, cwd }) {
+      const target = await fs.resolve(full(path), { cwd, signal })
+      return await fs.readText(target, signal)
+    },
+    async write({ path, text, signal, cwd, session }) {
+      const policy = sandboxPolicy.resolve({ session })
+      const ignore = await fs.resolve(`${SCRATCH_DIRECTORY}/.gitignore`, { cwd, signal })
+      await fs.writeText(ignore, '*\n', undefined, signal, policy)
+      const target = await fs.resolve(full(path), { cwd, signal })
+      await fs.writeText(target, text, undefined, signal, policy)
+    },
+    async list({ signal, cwd }) {
+      return await collectScratchFiles(async (relative) => {
+        const target = await fs.resolve(full(relative), { cwd, signal })
+        return await fs.listDir(target, signal)
+      })
+    },
+  }
+}
+
 /** Registers the private editor-only novel tools, guard, and prompt boundary. */
 export function apply(ctx: Context): void {
   const host = ctx as HostContext
@@ -94,6 +124,10 @@ export function apply(ctx: Context): void {
   host.tools.register(createProjectKnowledgeTool({ reader: makeFsReader(host.fs) }))
   host.tools.register(createNovelSearchTool({ fs: host.fs }))
   host.tools.register(createIndexWriteTool({ writer: makeIndexWriter(host.fs, host.sandboxPolicy) }))
+  const scratch = makeScratchStore(host.fs, host.sandboxPolicy)
+  host.tools.register(createScratchWriteTool({ store: scratch }))
+  host.tools.register(createScratchReadTool({ store: scratch }))
+  host.tools.register(createScratchListTool({ store: scratch }))
   installZhihuKnowledgeRpc(host, resolveCredential, onExecuted)
   ctx.effect(() => host.tools.guard(editorToolGuard))
   host.systemPrompt.section({ name: 'dsh-editor:novel-kernel', order: 90, text: EDITOR_PROMPT })

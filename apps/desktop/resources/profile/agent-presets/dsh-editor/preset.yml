@@ -1,0 +1,3 @@
+name: 写作助手
+description: DSH Editor 写作会话的默认 Agent：只挂载查找、阅读、提案与提问所需的工具。
+order: 1

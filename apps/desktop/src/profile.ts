@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -70,9 +70,47 @@ export async function deployProfile(home: string, template: string, runtimeNodeM
       throw error
     }
     if (existsSync(backup)) await rm(backup, { recursive: true, force: true })
-    return target
   } catch (error) {
     if (existsSync(stage)) await rm(stage, { recursive: true, force: true })
     throw error
+  }
+  await deployAgentPresets(home, template)
+  return target
+}
+
+/**
+ * Deploy the app-owned agent presets from the template into the harness-home
+ * user preset root. Same ownership and staging rules as the profile itself:
+ * only directories carrying the editor marker are ever replaced. The roster
+ * skips dot-directories, so in-flight stage/backup siblings are invisible.
+ * The template copy inside the deployed profile keeps an inert duplicate of
+ * this directory; the live copy is the one under `.agent-presets`.
+ */
+async function deployAgentPresets(home: string, template: string): Promise<void> {
+  let entries: import('node:fs').Dirent[]
+  try { entries = await readdir(join(template, 'agent-presets'), { withFileTypes: true }) } catch { return }
+  const presets = join(home, '.agent-presets')
+  await mkdir(presets, { recursive: true })
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const source = join(template, 'agent-presets', entry.name)
+    const target = join(presets, entry.name)
+    await ensureDirectory(target)
+    if (existsSync(target) && !(await isOwnedProfile(target))) throw new ProfileCollisionError(target)
+    const nonce = randomUUID()
+    const stage = join(presets, `.${entry.name}.stage-${nonce}`)
+    const backup = join(presets, `.${entry.name}.backup-${nonce}`)
+    try {
+      await cp(source, stage, { recursive: true, force: false, errorOnExist: true })
+      if (existsSync(target)) await renameDirectory(target, backup)
+      try { await renameDirectory(stage, target) } catch (error) {
+        if (existsSync(backup) && !existsSync(target)) await renameDirectory(backup, target)
+        throw error
+      }
+      if (existsSync(backup)) await rm(backup, { recursive: true, force: true })
+    } catch (error) {
+      if (existsSync(stage)) await rm(stage, { recursive: true, force: true })
+      throw error
+    }
   }
 }

@@ -53,3 +53,10 @@
   disabled: true
 - id: ui-trajectory
   disabled: true
+# Writing sessions mount the editor's own minimal preset (deployed into
+# <dshHome>/.agent-presets by the desktop app) instead of the shipped
+# `standard` coding agent; ui-user-questions stays disabled because the
+# editor Shell renders the question card itself.
+- id: agent-presets
+  config:
+    default: dsh-editor
