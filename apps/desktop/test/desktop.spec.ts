@@ -261,6 +261,20 @@ describe('child supervision', () => {
     expect(child.killedWith).toBe('SIGTERM')
     expect(forceKillTree).not.toHaveBeenCalled()
   })
+  it('relaunches when the random port is restricted by Chromium', async () => {
+    const blocked = new FakeChild()
+    blocked.kill = (signal?: NodeJS.Signals | number) => { blocked.killedWith = signal; queueMicrotask(() => blocked.exit()); return true }
+    const usable = new FakeChild()
+    const children = [blocked, usable]
+    const spawn = vi.fn(() => children.shift()!)
+    const supervisor = new DshSupervisor({ spawn, gracefulStopMs: 25 })
+    const ready = supervisor.start({ ...launch, timeoutMs: 5_000 })
+    blocked.stdout.write('dsh web: http://127.0.0.1:6665\n')
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2))
+    usable.stdout.write('dsh web: http://127.0.0.1:43112\n')
+    await expect(ready).resolves.toMatchObject({ port: '43112' })
+    expect(blocked.killedWith).toBe('SIGTERM')
+  })
 })
 
 describe('BrowserWindow policy', () => {

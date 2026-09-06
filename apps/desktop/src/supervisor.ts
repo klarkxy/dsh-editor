@@ -18,6 +18,16 @@ export interface DshSupervisorOptions {
 }
 const READY_TIMEOUT_MS = 20_000
 const GRACEFUL_STOP_MS = 5_000
+const MAX_PORT_RETRIES = 5
+// Chromium 的 unsafe 端口清单:随机端口撞上时窗口以 ERR_UNSAFE_PORT 拒绝加载,
+// 只能杀掉服务重新随机一个。
+const CHROMIUM_RESTRICTED_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79,
+  87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137,
+  139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 523, 540, 548, 554, 556,
+  563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045,
+  5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697, 10080,
+])
 
 function defaultSpawn(command: string, args: string[], options: Parameters<SpawnChild>[2]): ChildLike {
   return nodeSpawn(command, args, options) as ChildLike
@@ -57,6 +67,17 @@ export class DshSupervisor {
 
   async start(launch: DshLaunch): Promise<URL> {
     if (this.child) throw new Error('DSH is already running')
+    for (let attempt = 0; ; attempt += 1) {
+      const url = await this.launchOnce(launch)
+      if (!CHROMIUM_RESTRICTED_PORTS.has(Number(url.port))) return url
+      await this.stop()
+      if (attempt + 1 >= MAX_PORT_RETRIES) {
+        throw new Error(`DSH kept landing on Chromium-restricted ports (last: ${url.port})`)
+      }
+    }
+  }
+
+  private async launchOnce(launch: DshLaunch): Promise<URL> {
     this.stopping = false
     const child = this.spawn(launch.nodePath, [launch.cliPath, '--profile', 'dsh-editor', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
       env: { ...launch.env, DSH_HOME: launch.home }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
@@ -25,17 +26,34 @@ function run(script, args, env) {
   })
 }
 
-// pnpm 在全新环境(如 CI runner)可能跳过 electron 的 postinstall,dist 里
-// 没有可执行文件;缺的时候补跑一次 install.js 下载。清掉两个"跳过下载"
-// 环境变量,避免 install.js 秒退空跑;仍缺则带上诊断信息再抛错。
+// pnpm 在全新环境(如 CI runner)会跑 electron 的 postinstall,但其 install.js
+// 依赖的 extract-zip@2 解 Electron 这种大 zip 会静默挂死(promise 不 settle,
+// dist 里只留下部分文件)。这里改用 @electron/get 下载 + 系统解压器兜底。
 if (!existsSync(electronExecutable)) {
-  console.log(`[desktop-e2e] Electron dist missing, running install.js: ${electronExecutable}`)
-  const installEnv = { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '', ELECTRON_OVERRIDE_DIST_PATH: '' }
-  await run(resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'install.js'), [], installEnv)
+  console.log(`[desktop-e2e] Electron dist missing, downloading: ${electronExecutable}`)
+  const electronPackageDir = await realpath(resolve(root, 'apps', 'desktop', 'node_modules', 'electron'))
+  const electronRequire = createRequire(resolve(electronPackageDir, 'install.js'))
+  const { downloadArtifact } = electronRequire('@electron/get')
+  const { version } = electronRequire('./package.json')
+  const zipPath = await downloadArtifact({ version, artifactName: 'electron' })
+  await rm(electronDist, { recursive: true, force: true })
+  await mkdir(electronDist, { recursive: true })
+  if (process.platform === 'win32') {
+    const escaped = (value) => value.replaceAll("'", "''")
+    await new Promise((resolvePromise, reject) => {
+      const child = spawn('powershell.exe', ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${escaped(zipPath)}' -DestinationPath '${escaped(electronDist)}' -Force`], { stdio: 'inherit', windowsHide: true })
+      child.on('error', reject)
+      child.on('exit', (code) => code === 0 ? resolvePromise() : reject(new Error(`Expand-Archive exited ${code}`)))
+    })
+  } else {
+    await new Promise((resolvePromise, reject) => {
+      const child = spawn('unzip', ['-q', zipPath, '-d', electronDist], { stdio: 'inherit' })
+      child.on('error', reject)
+      child.on('exit', (code) => code === 0 ? resolvePromise() : reject(new Error(`unzip exited ${code}`)))
+    })
+  }
   if (!existsSync(electronExecutable)) {
-    const packageDir = resolve(root, 'apps', 'desktop', 'node_modules', 'electron')
-    const listing = await readdir(packageDir).then((entries) => entries.join(', '), () => '<unreadable>')
-    throw new Error(`Electron dist still missing after install.js: ${electronExecutable}; package entries: ${listing}; ELECTRON_SKIP_BINARY_DOWNLOAD=${process.env.ELECTRON_SKIP_BINARY_DOWNLOAD ?? '<unset>'} ELECTRON_OVERRIDE_DIST_PATH=${process.env.ELECTRON_OVERRIDE_DIST_PATH ?? '<unset>'}`)
+    throw new Error(`Electron dist still missing after manual download: ${electronExecutable}`)
   }
 }
 
