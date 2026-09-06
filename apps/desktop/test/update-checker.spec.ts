@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { checkLatest, compareVersions } from '../src/update-checker.js'
+import {
+  buildDownloadCandidates,
+  checkLatest,
+  compareVersions,
+  parseSha256Sums,
+  selectAsset,
+} from '../src/update-checker.js'
 
 interface CapturedCall {
   url: string
@@ -45,6 +51,15 @@ describe('checkLatest', () => {
         published_at: '2025-04-01T12:00:00Z',
         html_url: 'https://github.com/klarkxy/dsh-editor/releases/tag/v0.2.0',
         body: '## Highlights\n- feature A\n- feature B',
+        assets: [
+          {
+            name: 'DSH-Editor-Setup-0.2.0-win-x64.exe',
+            browser_download_url: 'https://github.com/klarkxy/dsh-editor/releases/download/v0.2.0/DSH-Editor-Setup-0.2.0-win-x64.exe',
+            size: 153447778,
+          },
+          { name: 'missing-url', size: 1 },
+          'not-a-record',
+        ],
       },
     }))
     const result = await checkLatest('0.1.1', fetchImpl)
@@ -58,6 +73,12 @@ describe('checkLatest', () => {
         publishedAt: '2025-04-01T12:00:00Z',
         url: 'https://github.com/klarkxy/dsh-editor/releases/tag/v0.2.0',
         body: '## Highlights\n- feature A\n- feature B',
+        assets: [{
+          name: 'DSH-Editor-Setup-0.2.0-win-x64.exe',
+          url: 'https://github.com/klarkxy/dsh-editor/releases/download/v0.2.0/DSH-Editor-Setup-0.2.0-win-x64.exe',
+          size: 153447778,
+        }],
+        asset: null,
       },
     })
     expect(fetchImpl).toHaveBeenCalledOnce()
@@ -131,5 +152,71 @@ describe('checkLatest', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('selectAsset', () => {
+  const assets = [
+    { name: 'DSH-Editor-Setup-0.2.0-win-x64.exe', url: 'u-setup', size: 1 },
+    { name: 'DSH-Editor-0.2.0-win-x64.zip', url: 'u-portable', size: 2 },
+    { name: 'DSH-Editor-0.2.0-mac-arm64.dmg', url: 'u-dmg', size: 3 },
+    { name: 'DSH-Editor-0.2.0-mac-arm64.zip', url: 'u-maczip', size: 4 },
+    { name: 'sha256sums.txt', url: 'u-sums', size: 5 },
+  ]
+  it('picks the NSIS setup exe for installed Windows', () => {
+    expect(selectAsset(assets, 'win32', false)?.url).toBe('u-setup')
+  })
+  it('picks the portable zip (not the setup exe) for portable Windows', () => {
+    expect(selectAsset(assets, 'win32', true)?.url).toBe('u-portable')
+  })
+  it('picks the dmg for macOS', () => {
+    expect(selectAsset(assets, 'darwin', false)?.url).toBe('u-dmg')
+  })
+  it('returns null when nothing matches', () => {
+    expect(selectAsset(assets, 'linux', false)).toBeNull()
+    expect(selectAsset([], 'win32', false)).toBeNull()
+    expect(selectAsset([{ name: 'DSH-Editor-0.2.0-win-x64.zip', url: 'u', size: 1 }], 'win32', false)).toBeNull()
+  })
+})
+
+describe('buildDownloadCandidates', () => {
+  const url = 'https://github.com/klarkxy/dsh-editor/releases/download/v0.2.0/DSH-Editor-Setup-0.2.0-win-x64.exe'
+  it('puts builtin mirrors first and the direct URL last', () => {
+    const candidates = buildDownloadCandidates(url)
+    expect(candidates.length).toBeGreaterThan(1)
+    expect(candidates.at(-1)).toEqual({ label: 'github.com(直连)', url })
+    for (const candidate of candidates.slice(0, -1)) {
+      expect(candidate.url.endsWith(url)).toBe(true)
+      expect(candidate.url).not.toBe(url)
+    }
+  })
+  it('prepends env-provided mirrors ahead of the builtin ones', () => {
+    const candidates = buildDownloadCandidates(url, 'https://my-mirror.example/, , https://second.example')
+    expect(candidates[0]).toEqual({ label: 'my-mirror.example', url: `https://my-mirror.example/${url}` })
+    expect(candidates[1]).toEqual({ label: 'second.example', url: `https://second.example/${url}` })
+    expect(candidates.at(-1)?.url).toBe(url)
+  })
+  it('does not wrap non-github URLs', () => {
+    expect(buildDownloadCandidates('https://example.com/file.zip')).toEqual([
+      { label: '直连', url: 'https://example.com/file.zip' },
+    ])
+  })
+})
+
+describe('parseSha256Sums', () => {
+  it('parses hash + filename lines, tolerating binary markers and blank lines', () => {
+    const text = [
+      'a'.repeat(64) + '  DSH-Editor-Setup-0.2.0-win-x64.exe',
+      'B'.repeat(64) + ' *DSH-Editor-0.2.0-win-x64.zip',
+      '',
+      'not-a-sum line',
+    ].join('\n')
+    const sums = parseSha256Sums(text)
+    expect(sums.get('DSH-Editor-Setup-0.2.0-win-x64.exe')).toBe('a'.repeat(64))
+    expect(sums.get('DSH-Editor-0.2.0-win-x64.zip')).toBe('b'.repeat(64))
+    expect(sums.size).toBe(2)
+  })
+  it('returns an empty map for unrelated content', () => {
+    expect(parseSha256Sums('<html>404</html>').size).toBe(0)
   })
 })

@@ -100,3 +100,6 @@ jobs:
             mv "$file" "$dashed"
             gh release upload "$RELEASE_TAG" "$dashed" --clobber
           done
+          # 应用内更新经第三方镜像下载,按这份校验和验证文件完整性。
+          sha256sum DSH-Editor-* > sha256sums.txt
+          gh release upload "$RELEASE_TAG" sha256sums.txt --clobber

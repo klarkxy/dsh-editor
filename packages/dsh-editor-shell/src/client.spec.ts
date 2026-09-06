@@ -240,9 +240,14 @@ describe('shell manuscript RPC safety', () => {
     const bridge = readFileSync(new URL('./client/window-controls.tsx', import.meta.url), 'utf8')
     const root = rootSource()
     /* 桌面端暴露的方法都按可选形式收口,shell 不依赖其存在 */
-    expect(bridge).toContain('getAppInfo?(): Promise<{ name: string; version: string }>')
+    expect(bridge).toContain('getAppInfo?(): Promise<{ name: string; version: string; platform: string; portable: boolean }>')
     expect(bridge).toContain('checkForUpdate?(): Promise<UpdateCheckResult>')
     expect(bridge).toContain('getStartupUpdate?(): Promise<UpdateCheckResult>')
+    /* 一键下载/安装同样按可选方法收口 */
+    expect(bridge).toContain('downloadUpdate?(asset: UpdateAsset): Promise<{ path: string }>')
+    expect(bridge).toContain('cancelUpdateDownload?(): Promise<void>')
+    expect(bridge).toContain("installUpdate?(path: string): Promise<'restarting' | 'revealed'>")
+    expect(bridge).toContain('onUpdateProgress?(listener: (progress: UpdateProgress) => void): () => void')
     expect(bridge).toMatch(/status:\s*'latest'\s*\|\s*'update-available'\s*\|\s*'error'/)
     /* 弹窗自身按 status 分流,并依赖 getAppInfo / checkForUpdate */
     expect(about).toContain('getAppInfo')

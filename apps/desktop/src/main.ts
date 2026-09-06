@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url'
 import { deployProfile } from './profile.js'
 import { materializePackagedRuntime } from './runtime-cache.js'
 import { DshSupervisor } from './supervisor.js'
-import { checkLatest, type UpdateCheckResult } from './update-checker.js'
+import { checkLatest, selectAsset, type UpdateCheckResult } from './update-checker.js'
+import { cancelUpdateDownload, downloadUpdate, installUpdate } from './update-download.js'
 import { claimPrimaryInstance, createDesktopLifecycle, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
 
 const desktopRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -88,13 +89,21 @@ const lifecycle = createDesktopLifecycle({
 
 const isPrimary = claimPrimaryInstance(app as unknown as PrimaryApp, lifecycle)
 
+/* 检查结果补上当前平台/安装形态对应的附件,渲染端才知道能不能一键下载。
+ * 便携单文件由 PORTABLE_EXECUTABLE_FILE 标识(进程本体跑在临时解压目录)。 */
+function withSelectedAsset(result: UpdateCheckResult): UpdateCheckResult {
+  if (!result.latest) return result
+  const portable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE)
+  return { ...result, latest: { ...result.latest, asset: selectAsset(result.latest.assets, process.platform, portable) } }
+}
+
 /* 启动时后台检查更新:与窗口创建并行,慢网络不阻塞启动。渲染端挂载后通过
  * dsh-window:startup-update 拉取缓存的 Promise——拉取模型没有推送竞态,
  * 晚挂载的窗口也能拿到同一份结果。 */
 let startupUpdate: Promise<UpdateCheckResult> | undefined
 if (isPrimary) {
   void app.whenReady().then(() => {
-    startupUpdate ??= checkLatest(app.getVersion())
+    startupUpdate ??= checkLatest(app.getVersion()).then(withSelectedAsset)
   })
 }
 
@@ -116,10 +125,19 @@ ipcMain.on('dsh-window:close', (event) => {
 
 // "About / update" page: the renderer is locked behind a strict CSP that
 // blocks api.github.com, so these calls run through the main process instead.
-ipcMain.handle('dsh-window:get-app-info', () => ({ name: app.getName(), version: app.getVersion() }))
-ipcMain.handle('dsh-window:check-update', () => checkLatest(app.getVersion()))
+ipcMain.handle('dsh-window:get-app-info', () => ({
+  name: app.getName(),
+  version: app.getVersion(),
+  platform: process.platform,
+  portable: Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
+}))
+ipcMain.handle('dsh-window:check-update', () => checkLatest(app.getVersion()).then(withSelectedAsset))
 // 启动检查走同一轮询;渲染端拉缓存结果,仅 update-available 时提示,其余静默。
-ipcMain.handle('dsh-window:startup-update', () => startupUpdate ?? checkLatest(app.getVersion()))
+ipcMain.handle('dsh-window:startup-update', () => startupUpdate ?? checkLatest(app.getVersion()).then(withSelectedAsset))
+// 一键下载/安装:镜像优先、直连兜底,进度经 dsh-window:update-progress 推给发起方。
+ipcMain.handle('dsh-window:download-update', (event, asset) => downloadUpdate(asset, event.sender))
+ipcMain.handle('dsh-window:cancel-update-download', () => cancelUpdateDownload())
+ipcMain.handle('dsh-window:install-update', (_event, payload: { path?: string }) => installUpdate(String(payload?.path ?? '')))
 
 // External links: the navigation policy denies in-app navigation and window.open,
 // so whitelisted https links go through the OS browser instead. GitHub links are

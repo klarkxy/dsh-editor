@@ -12,14 +12,22 @@ import { useDialogReturnFocus } from './dialogs.ts'
 import { windowBridge } from './window-controls.tsx'
 
 type UpdateStatus = 'latest' | 'update-available' | 'error'
-type AppInfo = { name: string; version: string }
-type ReleaseInfo = { version: string; tag: string; name: string; publishedAt: string; url: string; body: string }
+type AppInfo = { name: string; version: string; platform: string; portable: boolean }
+type Asset = { name: string; url: string; size: number }
+type ReleaseInfo = { version: string; tag: string; name: string; publishedAt: string; url: string; body: string; asset?: Asset | null }
 type CheckResult = { status: UpdateStatus; currentVersion: string; latest?: ReleaseInfo; error?: string }
 
 type CheckState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ready'; result: CheckResult; checkedAt: number }
+
+/** 一键下载状态机:idle → downloading → done(待安装)/error(保留浏览器兜底)。 */
+type DownloadState =
+  | { status: 'idle' }
+  | { status: 'downloading'; received: number; total: number; mirror: string; verifying: boolean }
+  | { status: 'done'; path: string; revealed: boolean }
+  | { status: 'error'; message: string }
 
 const BODY_PREVIEW_CHARS = 500
 const DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long', timeStyle: 'short' })
@@ -33,6 +41,16 @@ function formatPublishedAt(iso: string): string {
 function previewBody(body: string): string {
   if (body.length <= BODY_PREVIEW_CHARS) return body
   return `${body.slice(0, BODY_PREVIEW_CHARS)}…`
+}
+
+/** IPC 错误带着 "Error invoking remote method …" 包装,剥掉再显示。 */
+function cleanIpcError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '')
+}
+
+function formatMB(bytes: number): string {
+  return (bytes / 1024 / 1024).toFixed(1)
 }
 
 /**
@@ -49,6 +67,7 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
   const bridge = windowBridge()
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [state, setState] = useState<CheckState>({ status: 'idle' })
+  const [download, setDownload] = useState<DownloadState>({ status: 'idle' })
   const dialog = useRef<HTMLDivElement | null>(null)
   const liveToken = useRef(0)
   useDialogReturnFocus(dialog, () => dialog.current?.querySelector<HTMLButtonElement>('.about-close')?.focus())
@@ -92,6 +111,58 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
     void runCheck()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridge])
+
+  // 下载进度由主进程推送;只在下载进行中消费,晚到的 done 事件以 invoke 结果为准。
+  useEffect(() => {
+    const onProgress = bridge?.onUpdateProgress
+    if (!onProgress) return
+    return onProgress((progress) => {
+      setDownload((prev) => prev.status === 'downloading'
+        ? {
+            status: 'downloading',
+            received: progress.received,
+            total: progress.total,
+            mirror: progress.mirror,
+            verifying: progress.phase === 'verifying',
+          }
+        : prev)
+    })
+  }, [bridge])
+
+  const startDownload = async (asset: Asset) => {
+    const downloadUpdate = bridge?.downloadUpdate
+    if (!downloadUpdate) return
+    const token = ++liveToken.current
+    setDownload({ status: 'downloading', received: 0, total: asset.size, mirror: '', verifying: false })
+    try {
+      const result = await downloadUpdate(asset)
+      if (liveToken.current !== token) return
+      setDownload({ status: 'done', path: result.path, revealed: false })
+    } catch (error) {
+      if (liveToken.current !== token) return
+      const message = cleanIpcError(error)
+      if (message.includes('下载已取消')) { setDownload({ status: 'idle' }); return }
+      setDownload({ status: 'error', message })
+    }
+  }
+
+  const cancelDownload = () => {
+    void bridge?.cancelUpdateDownload?.()
+  }
+
+  const installDownloaded = async (path: string) => {
+    const install = bridge?.installUpdate
+    if (!install) return
+    try {
+      const result = await install(path)
+      // 'restarting' 时应用随即退出,无需更新状态;'revealed' 展示手动替换说明。
+      if (result === 'revealed') {
+        setDownload((prev) => (prev.status === 'done' ? { ...prev, revealed: true } : prev))
+      }
+    } catch (error) {
+      setDownload({ status: 'error', message: cleanIpcError(error) })
+    }
+  }
 
   const onOverlayMouseDown = (event: MouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) props.onClose()
@@ -138,10 +209,15 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
         e('div', { className: 'about-status' },
           renderStatus(state),
         ),
-        renderResultBody(state, onOpenDownload),
+        renderResultBody(state, download, appInfo, {
+          onOpen: onOpenDownload,
+          onDownload: (asset) => void startDownload(asset),
+          onCancel: cancelDownload,
+          onInstall: (path) => void installDownloaded(path),
+        }),
         e('p', { className: 'about-note' },
           state.status === 'ready' && state.result.status === 'update-available'
-            ? '便携版需下载新版 EXE 并手动替换当前可执行文件后重启。'
+            ? '应用内下载优先走 GitHub 镜像,失败自动回退直连;macOS 下载后需手动替换「应用程序」中的应用。'
             : '更新检查由主进程代理 GitHub Releases,渲染端不直接访问外网。',
         ),
         e('div', { className: 'about-actions' },
@@ -178,7 +254,25 @@ function renderStatus(state: CheckState): ReactNode {
   return e('span', { className: 'about-status-tag error' }, '检查更新失败')
 }
 
-function renderResultBody(state: CheckState, onOpen: (url: string) => void): ReactNode {
+interface ResultBodyHandlers {
+  onOpen(url: string): void
+  onDownload(asset: Asset): void
+  onCancel(): void
+  onInstall(path: string): void
+}
+
+function installButtonLabel(appInfo: AppInfo | null): string {
+  if (appInfo?.platform === 'darwin') return '打开所在文件夹'
+  if (appInfo?.portable) return '重启并替换'
+  return '退出并安装'
+}
+
+function renderResultBody(
+  state: CheckState,
+  download: DownloadState,
+  appInfo: AppInfo | null,
+  handlers: ResultBodyHandlers,
+): ReactNode {
   if (state.status !== 'ready') return null
   const result = state.result
   if (result.status === 'error') {
@@ -194,14 +288,74 @@ function renderResultBody(state: CheckState, onOpen: (url: string) => void): Rea
         e('span', { className: 'about-release-date' }, formatPublishedAt(release.publishedAt)),
       ),
       e('p', { className: 'about-release-body' }, previewBody(release.body)),
-      e('div', { className: 'about-actions' },
-        e('button', {
-          type: 'button',
-          className: 'about-button about-button-primary',
-          onClick: () => onOpen(release.url),
-        }, '前往下载'),
-      ),
+      renderDownloadArea(release, download, appInfo, handlers),
     )
   }
   return null
+}
+
+function renderDownloadArea(
+  release: ReleaseInfo,
+  download: DownloadState,
+  appInfo: AppInfo | null,
+  handlers: ResultBodyHandlers,
+): ReactNode {
+  const asset = release.asset
+  if (download.status === 'downloading') {
+    const percent = download.total > 0 ? Math.min(100, Math.round((download.received / download.total) * 100)) : 0
+    return e('div', { className: 'about-download' },
+      e('div', {
+        className: 'about-progress',
+        role: 'progressbar',
+        'aria-valuemin': 0,
+        'aria-valuemax': 100,
+        'aria-valuenow': percent,
+      },
+        e('div', { className: 'about-progress-fill', style: { width: `${percent}%` } }),
+      ),
+      e('p', { className: 'about-download-meta' },
+        download.verifying
+          ? '正在校验文件完整性…'
+          : `${percent}% · ${formatMB(download.received)} / ${formatMB(download.total)} MB${download.mirror ? ` · ${download.mirror}` : ''}`,
+      ),
+      e('div', { className: 'about-actions' },
+        e('button', { type: 'button', className: 'about-button', onClick: handlers.onCancel }, '取消下载'),
+      ),
+    )
+  }
+  if (download.status === 'done') {
+    return e('div', { className: 'about-download' },
+      e('p', { className: 'about-download-meta' },
+        download.revealed
+          ? '已打开下载文件所在位置:请退出当前应用,用新版本替换「应用程序」中的 DSH Editor。'
+          : '下载完成,校验通过。',
+      ),
+      !download.revealed ? e('div', { className: 'about-actions' },
+        e('button', {
+          type: 'button',
+          className: 'about-button about-button-primary',
+          onClick: () => handlers.onInstall(download.path),
+        }, installButtonLabel(appInfo)),
+      ) : null,
+    )
+  }
+  return e(Fragment, null,
+    download.status === 'error'
+      ? e('p', { className: 'about-error', role: 'alert' }, `应用内下载失败:\n${download.message}`)
+      : null,
+    e('div', { className: 'about-actions' },
+      asset
+        ? e('button', {
+            type: 'button',
+            className: 'about-button about-button-primary',
+            onClick: () => handlers.onDownload(asset),
+          }, `下载更新(${formatMB(asset.size)} MB)`)
+        : null,
+      e('button', {
+        type: 'button',
+        className: asset ? 'about-button' : 'about-button about-button-primary',
+        onClick: () => handlers.onOpen(release.url),
+      }, '前往下载'),
+    ),
+  )
 }
