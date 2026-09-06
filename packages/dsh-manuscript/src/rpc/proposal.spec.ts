@@ -44,6 +44,33 @@ describe('proposal workflow', () => {
     await expect(applyProposal(context, proposal, '')).resolves.toMatchObject({ operation: 'create' })
     await expect(prepareProposal(context, proposal)).rejects.toMatchObject({ code: 'STALE' })
   })
+
+  it('fills a pre-created empty chapter file via edit with empty oldText', async () => {
+    const context = createMemoryContext({ '正文/001.md': '' })
+    const proposal = parseProposal({ kind: 'edit', path: '正文/001.md', oldText: '', newText: '# 第一章\n正文。\n', summary: '填充空章节' })
+    const prepared = await prepareProposal(context, proposal)
+    expect(prepared).toMatchObject({ applicable: true, before: '', after: '# 第一章\n正文。\n' })
+    await applyProposal(context, proposal, String(prepared.version))
+    await expect(context.fs.readText(await context.fs.resolve('正文/001.md'))).resolves.toBe('# 第一章\n正文。\n')
+  })
+
+  it('rejects filling with empty oldText when the file already has content', async () => {
+    const context = createMemoryContext({ '正文/001.md': '# 第一章\n已有正文。\n' })
+    const proposal = parseProposal({ kind: 'edit', path: '正文/001.md', oldText: '', newText: '覆盖', summary: 'x' })
+    await expect(prepareProposal(context, proposal)).rejects.toMatchObject({ code: 'AMBIGUOUS' })
+    const current = await readTextFile(context, '正文/001.md')
+    await expect(applyProposal(context, proposal, current.version)).rejects.toMatchObject({ code: 'AMBIGUOUS' })
+    await expect(readTextFile(context, '正文/001.md')).resolves.toMatchObject({ text: '# 第一章\n已有正文。\n' })
+  })
+
+  it('lets create overwrite an existing file that is still blank', async () => {
+    const context = createMemoryContext({ '正文/001.md': '  \n' })
+    const proposal = parseProposal({ kind: 'create', path: '正文/001.md', text: '# 第一章\n', summary: '填充占位文件' })
+    await expect(prepareProposal(context, proposal)).resolves.toMatchObject({ applicable: true })
+    await expect(applyProposal(context, proposal, '')).resolves.toMatchObject({ operation: 'create' })
+    await expect(context.fs.readText(await context.fs.resolve('正文/001.md'))).resolves.toBe('# 第一章\n')
+    await expect(prepareProposal(context, proposal)).rejects.toMatchObject({ code: 'STALE' })
+  })
 })
 
 it('writes replacement metacharacters literally', async () => {

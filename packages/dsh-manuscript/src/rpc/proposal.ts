@@ -24,7 +24,7 @@ export function parseProposal(payload: Record<string, unknown>): Proposal {
   if (kind === 'edit') {
     const oldText = typeof payload.oldText === 'string' ? payload.oldText : ''
     const newText = typeof payload.newText === 'string' ? payload.newText : ''
-    if (!oldText || oldText === newText) throw new ProposalError('edit proposal must change non-empty text', 'INVALID')
+    if (oldText === newText) throw new ProposalError('edit proposal must change the text', 'INVALID')
     return { kind, path, oldText, newText, summary }
   }
   if (kind === 'create') {
@@ -45,11 +45,26 @@ function occurrences(text: string, needle: string): number {
   return count
 }
 
+/* oldText 为空表示“填充空文件”：仅当文件当前为空白时适用，避免覆盖已有正文。 */
+function assertEditable(currentText: string, oldText: string): void {
+  if (oldText === '') {
+    if (currentText.trim() !== '') {
+      throw new ProposalError('target file is not empty; edit with the current text as oldText', 'AMBIGUOUS')
+    }
+    return
+  }
+  if (occurrences(currentText, oldText) !== 1) {
+    throw new ProposalError('original text is missing or not unique', 'AMBIGUOUS')
+  }
+}
+
 export async function prepareProposal(context: WorkspaceFileContext, proposal: Proposal): Promise<Record<string, unknown>> {
   if (proposal.kind === 'create') {
     try {
-      await readTextFile(context, proposal.path)
-      throw new ProposalError('target file already exists', 'STALE')
+      const existing = await readTextFile(context, proposal.path)
+      /* 已存在但仍是空白（如提前建好标题的章节占位文件）时允许 create 覆盖。 */
+      if (existing.text.trim() !== '') throw new ProposalError('target file already exists', 'STALE')
+      return { ...proposal, applicable: true }
     } catch (error) {
       if (error instanceof FileOpError && error.code === 'NOT_FOUND') {
         return { ...proposal, applicable: true }
@@ -58,9 +73,7 @@ export async function prepareProposal(context: WorkspaceFileContext, proposal: P
     }
   }
   const current = await readTextFile(context, proposal.path)
-  if (occurrences(current.text, proposal.oldText) !== 1) {
-    throw new ProposalError('original text is missing or not unique', 'AMBIGUOUS')
-  }
+  assertEditable(current.text, proposal.oldText)
   return {
     ...proposal,
     applicable: true,
@@ -76,19 +89,25 @@ export async function applyProposal(
   expectedVersion: string,
 ): Promise<{ path: string; version: string; operation: 'create' | 'edit' }> {
   if (proposal.kind === 'create') {
+    try {
+      const existing = await readTextFile(context, proposal.path)
+      if (existing.text.trim() !== '') throw new ProposalError('target file already exists', 'STALE')
+      const result = await writeTextFile(context, proposal.path, proposal.text, existing.version)
+      return { path: proposal.path, version: result.version, operation: 'create' }
+    } catch (error) {
+      if (!(error instanceof FileOpError && error.code === 'NOT_FOUND')) throw error
+    }
     const result = await createTextFile(context, proposal.path, proposal.text)
     return { path: proposal.path, version: result.version, operation: 'create' }
   }
   if (!expectedVersion) throw new ProposalError('proposal version is required', 'STALE')
   const current = await readTextFile(context, proposal.path)
   if (current.version !== expectedVersion) throw new ProposalError('proposal is stale', 'STALE')
-  if (occurrences(current.text, proposal.oldText) !== 1) {
-    throw new ProposalError('original text is missing or not unique', 'AMBIGUOUS')
-  }
+  assertEditable(current.text, proposal.oldText)
   const result = await writeTextFile(
     context,
     proposal.path,
-    current.text.replace(proposal.oldText, () => proposal.newText),
+    proposal.oldText === '' ? proposal.newText : current.text.replace(proposal.oldText, () => proposal.newText),
     expectedVersion,
   )
   return { path: proposal.path, version: result.version, operation: 'edit' }
