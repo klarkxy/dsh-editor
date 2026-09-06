@@ -63,7 +63,7 @@ for (const packageName of ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor
 const knowledgeRoot = resolve(resources, 'profile-template', 'node_modules', 'dsh-editor-novel-kernel', 'resources', 'novel-knowledge')
 for (const fileName of [
   'planning.md', 'characters.md', 'drafting.md', 'dialogue.md', 'interiority.md',
-  'style.md', 'review.md', 'chinese-flow.md', 'first-reader.md', 'canon.md', 'SOURCES.md',
+  'style.md', 'review.md', 'deai.md', 'chinese-flow.md', 'first-reader.md', 'canon.md', 'SOURCES.md',
 ]) {
   await stat(resolve(knowledgeRoot, fileName))
 }

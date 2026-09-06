@@ -3,7 +3,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { NOVEL_KNOWLEDGE_TOOL_NAME } from './contracts.ts'
 
 export { NOVEL_KNOWLEDGE_TOOL_NAME } from './contracts.ts'
-export const NOVEL_KNOWLEDGE_VERSION = 1
+export const NOVEL_KNOWLEDGE_VERSION = 2
 export const NOVEL_KNOWLEDGE_MAX_TOPICS = 3
 export const NOVEL_KNOWLEDGE_MAX_CARD_CHARS = 6_000
 
@@ -15,6 +15,7 @@ const KNOWLEDGE_FILES = {
   interiority: 'interiority.md',
   style: 'style.md',
   review: 'review.md',
+  deai: 'deai.md',
   'chinese-flow': 'chinese-flow.md',
   'first-reader': 'first-reader.md',
   canon: 'canon.md',

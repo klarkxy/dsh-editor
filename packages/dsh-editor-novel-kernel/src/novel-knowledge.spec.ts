@@ -12,19 +12,20 @@ describe('bundled novel knowledge', () => {
     const topics = novelKnowledgeTopics()
     expect(topics).toEqual([
       'planning', 'characters', 'drafting', 'dialogue', 'interiority',
-      'style', 'review', 'chinese-flow', 'first-reader', 'canon',
+      'style', 'review', 'deai', 'chinese-flow', 'first-reader', 'canon',
     ])
     for (const topic of topics) {
       const result = await loadNovelKnowledge({ topics: [topic] })
-      expect(result.version).toBe(1)
+      expect(result.version).toBe(2)
       expect(result.topics[0]).toMatchObject({ id: topic })
       expect(result.topics[0].content.length).toBeGreaterThan(100)
       expect(result.topics[0].content.length).toBeLessThanOrEqual(NOVEL_KNOWLEDGE_MAX_CARD_CHARS)
     }
     const sources = await readFile(new URL('../resources/novel-knowledge/SOURCES.md', import.meta.url), 'utf8')
-    expect(sources).toContain('知识资产版本：1')
+    expect(sources).toContain('知识资产版本：2')
     expect(sources).toContain('dsh-grill')
     expect(sources).toContain('grill-your-novel')
+    expect(sources).toContain('sepia')
   })
 
   it('deduplicates topics while preserving first-use order', () => {
