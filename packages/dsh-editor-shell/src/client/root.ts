@@ -39,7 +39,7 @@ import { Tree, FileContextMenu } from './sidebar.ts'
 import { Editor } from './editor.ts'
 import { Chat } from './chat.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
-import { WindowControls, titleBarDoubleClick } from './window-controls.tsx'
+import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { AboutUpdateDialog } from './about-dialog.tsx'
 
 const SIDEBAR_DEFAULT = 248
@@ -278,6 +278,19 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [startupUpdate, setStartupUpdate] = useState<{ version: string } | null>(null)
+  /* 启动更新检查:主进程在后台跑,挂载后拉取缓存结果;仅发现新版本时弹轻提示,
+     已是最新/失败都静默。浏览器开发模式没有桥,直接不跑。 */
+  useEffect(() => {
+    const check = windowBridge()?.getStartupUpdate
+    if (!check) return
+    let live = true
+    void check().then((result) => {
+      if (!live || result.status !== 'update-available' || !result.latest) return
+      setStartupUpdate({ version: result.latest.version })
+    }).catch(() => undefined)
+    return () => { live = false }
+  }, [])
   useEffect(() => () => leaveConfirm?.resolve(false), [leaveConfirm])
   const canLeaveAssistantDraft = async (): Promise<boolean> => {
     if (!assistantDraftDirty) return true
@@ -1506,6 +1519,20 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     renderCommandPalette(),
     imagePreview ? e(ImagePreviewOverlay, { path: imagePreview.path, url: imagePreview.url, onClose: closeImagePreview }) : null,
     settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, onClose: () => setSettingsOpen(false) }) : null,
+    startupUpdate && !aboutOpen ? e('div', { className: 'update-toast', role: 'status' },
+      e('span', { className: 'update-toast-text' }, `发现新版本 ${startupUpdate.version}`),
+      e('button', {
+        type: 'button',
+        className: 'update-toast-action',
+        onClick: () => { setStartupUpdate(null); setAboutOpen(true) },
+      }, '查看详情'),
+      e('button', {
+        type: 'button',
+        className: 'icon-button update-toast-close',
+        'aria-label': '关闭更新提示',
+        onClick: () => setStartupUpdate(null),
+      }, '×'),
+    ) : null,
     aboutOpen ? e(AboutUpdateDialog, { onClose: () => setAboutOpen(false) }) : null,
   )
 }

@@ -4,6 +4,14 @@ import { createElement as e, useEffect, useState } from 'react'
  * 自绘窗口控制（无框窗口）。preload.cjs 在桌面端暴露 window.dshWindow;
  * 浏览器/dev:web 里不存在,返回 null 不渲染。
  */
+/** 主进程代理 GitHub Releases 的更新检查结果:status/当前版本/最新版本信息或错误。 */
+export type UpdateCheckResult = {
+  status: 'latest' | 'update-available' | 'error'
+  currentVersion: string
+  latest?: { version: string; tag: string; name: string; publishedAt: string; url: string; body: string }
+  error?: string
+}
+
 type WindowBridge = {
   minimize(): void
   toggleMaximize(): void
@@ -13,7 +21,9 @@ type WindowBridge = {
   /** 主进程返回当前应用名与版本;开发模式或浏览器端无此方法,UI 需走 "开发模式" 兜底。 */
   getAppInfo?(): Promise<{ name: string; version: string }>
   /** 主进程代理 GitHub Releases 探活,避开渲染端 CSP。返回 status/最新版本信息或错误。 */
-  checkForUpdate?(): Promise<{ status: 'latest' | 'update-available' | 'error'; currentVersion: string; latest?: { version: string; tag: string; name: string; publishedAt: string; url: string; body: string }; error?: string }>
+  checkForUpdate?(): Promise<UpdateCheckResult>
+  /** 启动时主进程在后台完成的更新检查;渲染端挂载后拉取,仅 update-available 时提示。 */
+  getStartupUpdate?(): Promise<UpdateCheckResult>
   onMaximizedChange?(listener: (maximized: boolean) => void): () => void
 }
 

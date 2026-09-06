@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('dshWindow', {
   // api.github.com, so the main process owns the network round-trip.
   getAppInfo: () => ipcRenderer.invoke('dsh-window:get-app-info'),
   checkForUpdate: () => ipcRenderer.invoke('dsh-window:check-update'),
+  // 启动时的后台更新检查:主进程缓存结果,渲染端挂载后拉取,仅在发现新版本时提示。
+  getStartupUpdate: () => ipcRenderer.invoke('dsh-window:startup-update'),
   onMaximizedChange: (listener) => {
     const handler = (_event, maximized) => listener(Boolean(maximized))
     ipcRenderer.on('dsh-window:maximized', handler)

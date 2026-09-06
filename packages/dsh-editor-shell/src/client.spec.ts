@@ -239,9 +239,11 @@ describe('shell manuscript RPC safety', () => {
     const about = readFileSync(new URL('./client/about-dialog.tsx', import.meta.url), 'utf8')
     const bridge = readFileSync(new URL('./client/window-controls.tsx', import.meta.url), 'utf8')
     const root = rootSource()
-    /* 桌面端暴露的两个方法都按可选形式收口,shell 不依赖其存在 */
+    /* 桌面端暴露的方法都按可选形式收口,shell 不依赖其存在 */
     expect(bridge).toContain('getAppInfo?(): Promise<{ name: string; version: string }>')
-    expect(bridge).toMatch(/checkForUpdate\?[\s\S]{0,200}status:\s*'latest'\s*\|\s*'update-available'\s*\|\s*'error'/)
+    expect(bridge).toContain('checkForUpdate?(): Promise<UpdateCheckResult>')
+    expect(bridge).toContain('getStartupUpdate?(): Promise<UpdateCheckResult>')
+    expect(bridge).toMatch(/status:\s*'latest'\s*\|\s*'update-available'\s*\|\s*'error'/)
     /* 弹窗自身按 status 分流,并依赖 getAppInfo / checkForUpdate */
     expect(about).toContain('getAppInfo')
     expect(about).toContain('checkForUpdate')
@@ -259,6 +261,19 @@ describe('shell manuscript RPC safety', () => {
     expect(root).toMatch(/const \[aboutOpen, setAboutOpen\]\s*=\s*useState\(false\)/)
     expect(root).toContain('aria-haspopup')
     expect(root).toContain('关于与更新')
+  })
+
+  it('surfaces the startup update check as a dismissible toast', () => {
+    const root = rootSource()
+    /* 挂载后经桥拉取主进程后台检查的缓存结果,仅 update-available 时提示 */
+    expect(root).toContain('getStartupUpdate')
+    expect(root).toMatch(/const \[startupUpdate, setStartupUpdate\]\s*=\s*useState/)
+    expect(root).toMatch(/result\.status !== 'update-available'/)
+    /* toast 可关闭,"查看详情" 关掉 toast 并打开关于/更新弹窗 */
+    expect(root).toContain('update-toast')
+    expect(root).toContain('发现新版本')
+    expect(root).toContain('关闭更新提示')
+    expect(root).toMatch(/setStartupUpdate\(null\); setAboutOpen\(true\)/)
   })
 
   it('commits with the current time as the message and rolls back in place with confirmation', () => {

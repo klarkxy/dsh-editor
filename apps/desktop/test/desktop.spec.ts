@@ -92,6 +92,10 @@ describe('desktop branding assets', () => {
     expect(main).toContain("'github.com'")
     expect(main).toContain("'dsh-window:get-app-info'")
     expect(main).toContain("'dsh-window:check-update'")
+    // Startup check: same round-trip kicked off in the background at launch,
+    // cached for the renderer to pull once its UI is up.
+    expect(main).toContain("'dsh-window:startup-update'")
+    expect(main).toContain('checkLatest(app.getVersion())')
   })
 })
 

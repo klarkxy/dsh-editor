@@ -747,6 +747,12 @@ export const componentStyles = `
 /* 关于/更新入口:沿用 .settings-trigger 的轻量按钮节奏,放在 SettingsTrigger 旁。 */
 .shell .about-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }
 .shell .about-trigger:hover { background: var(--surface-warm); color: var(--fg); }
+/* 启动更新提示:右下角轻量 toast,只在后台检查发现新版本时出现。 */
+.shell .update-toast { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 40; display: flex; align-items: center; gap: var(--space-3); padding: 6px 6px 6px var(--space-3); border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-raised); font-size: var(--text-sm); color: var(--fg); }
+.shell .update-toast-action { min-height: 26px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-on); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }
+.shell .update-toast-action:hover { background: var(--accent-active); }
+.shell .update-toast-action:focus-visible { box-shadow: var(--focus-ring); }
+.shell .update-toast-close { min-width: 24px; min-height: 24px; }
 .shell .about-trigger-icon { display: grid; place-items: center; font-size: 13px; color: var(--meta); }
 .shell .about-trigger:hover .about-trigger-icon { color: var(--fg); }
 .shell .zhihu-guide { display: grid; gap: var(--space-2); margin: 0; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); }

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { deployProfile } from './profile.js'
 import { materializePackagedRuntime } from './runtime-cache.js'
 import { DshSupervisor } from './supervisor.js'
-import { checkLatest } from './update-checker.js'
+import { checkLatest, type UpdateCheckResult } from './update-checker.js'
 import { claimPrimaryInstance, createDesktopLifecycle, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
 
 const desktopRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -86,7 +86,17 @@ const lifecycle = createDesktopLifecycle({
   timeoutMs: app.isPackaged ? 120_000 : 20_000,
 })
 
-claimPrimaryInstance(app as unknown as PrimaryApp, lifecycle)
+const isPrimary = claimPrimaryInstance(app as unknown as PrimaryApp, lifecycle)
+
+/* 启动时后台检查更新:与窗口创建并行,慢网络不阻塞启动。渲染端挂载后通过
+ * dsh-window:startup-update 拉取缓存的 Promise——拉取模型没有推送竞态,
+ * 晚挂载的窗口也能拿到同一份结果。 */
+let startupUpdate: Promise<UpdateCheckResult> | undefined
+if (isPrimary) {
+  void app.whenReady().then(() => {
+    startupUpdate ??= checkLatest(app.getVersion())
+  })
+}
 
 // Frameless window controls: the renderer's own title bar drives these through
 // the preload bridge (preload.cjs exposes window.dshWindow). Route by sender so
@@ -108,6 +118,8 @@ ipcMain.on('dsh-window:close', (event) => {
 // blocks api.github.com, so these calls run through the main process instead.
 ipcMain.handle('dsh-window:get-app-info', () => ({ name: app.getName(), version: app.getVersion() }))
 ipcMain.handle('dsh-window:check-update', () => checkLatest(app.getVersion()))
+// 启动检查走同一轮询;渲染端拉缓存结果,仅 update-available 时提示,其余静默。
+ipcMain.handle('dsh-window:startup-update', () => startupUpdate ?? checkLatest(app.getVersion()))
 
 // External links: the navigation policy denies in-app navigation and window.open,
 // so whitelisted https links go through the OS browser instead. GitHub links are
