@@ -109,6 +109,39 @@ describe('project overview', () => {
     expect(overview.chapters.every((chapter) => typeof chapter.modifiedAt === 'string')).toBe(true)
   })
 
+  it('excludes chapter frontmatter from prose stats and fills meta', async () => {
+    await write('正文/001.md', [
+      '---',
+      'beats:',
+      '  - 码头等船',
+      '  - 海关暗记',
+      'state:',
+      '  now: 第三日黄昏',
+      '---',
+      '# 第一章',
+      '',
+      '正文一',
+      '',
+    ].join('\n'))
+    await write('正文/002.txt', '# 第二章\n\n正文二')
+    const overview = await readProjectOverview(access())
+    expect(overview.chapters[0]).toMatchObject({
+      path: '正文/001.md',
+      title: '第一章',
+      excerpt: '正文一',
+      empty: false,
+      chars: 7,
+      meta: { beats: 2, hasState: true },
+    })
+    expect(overview.chapters[1]).toMatchObject({
+      path: '正文/002.txt',
+      title: '第二章',
+      chars: 7,
+      meta: { beats: 0, hasState: false },
+    })
+    expect(overview.totals.chars).toBe(14)
+  })
+
   it('attaches stored statuses, distribution counts, and the five most recently edited chapters', async () => {
     const stamp = Math.floor(Date.now() / 1000) - 40
     for (let index = 0; index < 6; index++) {

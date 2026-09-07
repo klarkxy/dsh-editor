@@ -9,12 +9,17 @@ import {
 import { FileOpError, listDirStrict, readTextFile, readTextFileLimited, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
 
 const WORLDBOOK_ROOT = '世界书'
+const MANUSCRIPT_ROOT = '正文'
 const FIXED_WORLDBOOK_PATH = '世界书/设定总汇.md'
 const MAX_FILES = 64
 const MAX_DIRECTORIES = 64
 const MAX_DEPTH = 8
 const MAX_FILE_BYTES = 64 * 1_024
 const MAX_SCAN_BYTES = 512 * 1_024
+const MANUSCRIPT_MAX_FILES = 2_000
+const MANUSCRIPT_MAX_DIRECTORIES = 2_000
+const MANUSCRIPT_MAX_DEPTH = 12
+const PREVIOUS_CHAPTER_MAX_BYTES = 64 * 1_024
 
 function hiddenPath(path: string): boolean {
   return path.split('/').some((part) => part.startsWith('.'))
@@ -88,6 +93,63 @@ async function savedDocument(files: WorkspaceFileContext, activePath: string | u
   }
 }
 
+function pathCompare(left: string, right: string): number {
+  return left.localeCompare(right, 'zh-CN', { numeric: true, sensitivity: 'base' })
+}
+
+function isManuscriptChapterPath(path: string): boolean {
+  if (!path || hiddenPath(path) || !/\.(md|txt)$/i.test(path)) return false
+  const parts = path.split('/')
+  return parts[0] === MANUSCRIPT_ROOT && parts.length >= 2 && parts.every((part) => Boolean(part) && part !== '.' && part !== '..')
+}
+
+async function listManuscriptChapterPaths(files: WorkspaceFileContext): Promise<string[]> {
+  const paths: string[] = []
+  const queue = [MANUSCRIPT_ROOT]
+  let directories = 0
+  while (queue.length && paths.length < MANUSCRIPT_MAX_FILES) {
+    const directory = queue.shift()!
+    if (++directories > MANUSCRIPT_MAX_DIRECTORIES) break
+    let entries
+    try {
+      entries = await listDirStrict(files, directory)
+    } catch (error) {
+      if (directory === MANUSCRIPT_ROOT && error instanceof FileOpError && error.code === 'NOT_FOUND') break
+      continue
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      const relative = `${directory}/${entry.name}`
+      if (entry.type === 'directory') {
+        if (relative.split('/').length > MANUSCRIPT_MAX_DEPTH) continue
+        queue.push(relative)
+        continue
+      }
+      if (entry.type !== 'file' || !/\.(md|txt)$/i.test(entry.name)) continue
+      paths.push(relative)
+      if (paths.length >= MANUSCRIPT_MAX_FILES) break
+    }
+  }
+  paths.sort(pathCompare)
+  return paths
+}
+
+async function readPreviousChapter(
+  files: WorkspaceFileContext,
+  activePath: string,
+): Promise<{ path: string; text: string } | undefined> {
+  const paths = await listManuscriptChapterPaths(files)
+  const index = paths.indexOf(activePath)
+  if (index <= 0) return undefined
+  const previousPath = paths[index - 1]!
+  if (!/\.md$/i.test(previousPath)) return undefined
+  try {
+    return { path: previousPath, text: (await readTextFileLimited(files, previousPath, PREVIOUS_CHAPTER_MAX_BYTES)).text }
+  } catch {
+    return undefined
+  }
+}
+
 export async function compileContext(
   files: WorkspaceFileContext,
   userRequest: string,
@@ -110,6 +172,8 @@ export async function compileContext(
       }
     }
   }
+  const chapterPath = activePath && isManuscriptChapterPath(activePath) ? activePath : undefined
+  const previousChapter = chapterPath ? await readPreviousChapter(files, chapterPath) : undefined
   return await compileProjectContextV2(userRequest, read, {
     candidates,
     activePath: activeDocument?.path,
@@ -117,5 +181,12 @@ export async function compileContext(
     scan,
     authorPreferences,
     authorMemory,
+    ...(chapterPath ? {
+      chapterContext: {
+        path: chapterPath,
+        text: activeDocument?.text,
+        ...(previousChapter ? { previous: previousChapter } : {}),
+      },
+    } : {}),
   })
 }

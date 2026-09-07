@@ -7,6 +7,7 @@ import {
   readTextFileLimited,
   type WorkspaceFileContext,
 } from 'dsh-manuscript/host-api'
+import { CHAPTER_STATE_KEYS, parseChapterMeta, stripChapterFrontmatter } from './chapter-meta.ts'
 import type { ChapterStatus, ChapterSummary, OutlineSummary, ProjectOverview } from './contracts.ts'
 import { loadChapterStatuses } from './chapter-status.ts'
 
@@ -83,6 +84,15 @@ function titleAndExcerpt(relative: string, text: string): { title: string; excer
     excerpt,
     empty: withoutLeadingH1.replace(/\s/g, '').length === 0,
     chars: text.replace(/\s/g, '').length,
+  }
+}
+
+function chapterMetaSummary(relative: string, text: string): { beats: number; hasState: boolean } {
+  if (!/\.md$/i.test(relative)) return { beats: 0, hasState: false }
+  const meta = parseChapterMeta(text)
+  return {
+    beats: meta?.beats?.length ?? 0,
+    hasState: Boolean(meta?.state && CHAPTER_STATE_KEYS.some((key) => meta.state?.[key]?.trim())),
   }
 }
 
@@ -174,8 +184,14 @@ async function scanArea(
         const bytes = byteSize(loaded.text)
         if (limit.bytes + bytes > MAX_TOTAL_BYTES) { truncated = true; skipped++; break }
         limit.bytes += bytes
-        const summary = titleAndExcerpt(relative, loaded.text)
-        items.push({ path: relative, ...summary, modifiedAt: await modifiedAt(relative) })
+        const prose = /\.md$/i.test(relative) ? stripChapterFrontmatter(loaded.text) : loaded.text
+        const summary = titleAndExcerpt(relative, prose)
+        items.push({
+          path: relative,
+          ...summary,
+          meta: chapterMetaSummary(relative, loaded.text),
+          modifiedAt: await modifiedAt(relative),
+        })
       } catch (error) {
         skipped++
         if (error instanceof FileOpError && error.code === 'TOO_LARGE' && MAX_TOTAL_BYTES - limit.bytes <= MAX_TEXT_BYTES) {

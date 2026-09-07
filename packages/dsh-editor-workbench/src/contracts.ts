@@ -1,5 +1,13 @@
 import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import {
+  CHAPTER_BEATS_MAX,
+  CHAPTER_BEAT_MAX_CHARS,
+  CHAPTER_STATE_KEYS,
+  CHAPTER_STATE_MAX_TOTAL_CHARS,
+  parseChapterMeta,
+  type ChapterStateFields,
+} from './chapter-meta.ts'
+import {
   applyFrontmatterFields,
   hasExplicitFrontmatter,
   parseBooleanField,
@@ -18,6 +26,19 @@ export type {
   CharacterCardFields,
   WorldbookCardFields,
 } from './frontmatter.ts'
+
+export type { ChapterMetaFields, ChapterStateFields } from './chapter-meta.ts'
+export {
+  CHAPTER_BEATS_MAX,
+  CHAPTER_BEAT_MAX_CHARS,
+  CHAPTER_STATE_KEYS,
+  CHAPTER_STATE_MAX_TOTAL_CHARS,
+  applyChapterMeta,
+  formatChapterContextText,
+  parseChapterMeta,
+  stripChapterFrontmatter,
+  validateChapterMeta,
+} from './chapter-meta.ts'
 
 export { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 
@@ -75,6 +96,7 @@ export type ChapterSummary = {
   excerpt: string
   status: ChapterStatus
   modifiedAt: string | null
+  meta?: { beats: number; hasState: boolean }
 }
 export type OutlineSummary = {
   path: string
@@ -103,7 +125,7 @@ export type ProgressWeek = { weekStart: string; chars: number; delta: number }
 export type ProgressRecordResult = ProgressDay
 export type ProgressHistory = { days: ProgressDay[]; weeks: ProgressWeek[] }
 
-export const PROOFREAD_KINDS = ['punctuation', 'sensitive', 'repeat', 'typo', 'habit'] as const
+export const PROOFREAD_KINDS = ['punctuation', 'sensitive', 'repeat', 'typo', 'habit', 'card'] as const
 export type ProofreadKind = typeof PROOFREAD_KINDS[number]
 export type ProofreadSeverity = 'error' | 'warning' | 'info'
 export type ProofreadFinding = {
@@ -117,6 +139,8 @@ export type ProofreadFinding = {
   message: string
   excerpt: string
   suggestion?: string
+  code?: string
+  term?: string
   version: string
 }
 export type ProofreadHabitStat = { term: string; count: number; perThousand: number }
@@ -354,8 +378,19 @@ export type ProjectContextReceipt = {
   matchedBy?: WorldbookMatchedBy
   matchedTriggers?: string[]
 }
-export type ProjectContextReceiptBundle = { sources: ProjectContextReceipt[]; scan?: WorldbookScanSummary; authorPreferencesChars?: number; authorMemoryChars?: number }
+export type ProjectContextReceiptBundle = {
+  sources: ProjectContextReceipt[]
+  scan?: WorldbookScanSummary
+  authorPreferencesChars?: number
+  authorMemoryChars?: number
+  chapterContext?: { path: string; beats: number; previousPath?: string }
+}
 export type ProjectContextSource = ProjectContextReceipt & { text?: string }
+export type ProjectChapterContext = {
+  path: string
+  beats?: string[]
+  previous?: { path: string; state: ChapterStateFields }
+}
 export type ProjectContextEnvelopeV1 = {
   schema: typeof PROJECT_CONTEXT_SCHEMA
   version: typeof PROJECT_CONTEXT_VERSION
@@ -368,6 +403,7 @@ export type ProjectContextEnvelopeV2 = {
   project_context: { sources: ProjectContextSource[]; scan: WorldbookScanSummary }
   author_preferences?: string
   author_memory?: string
+  chapter_context?: ProjectChapterContext
   user_request: string
 }
 export type ProjectContextEnvelope = ProjectContextEnvelopeV1 | ProjectContextEnvelopeV2
@@ -520,6 +556,74 @@ function bumpScan(scan: WorldbookScanSummary, key: keyof WorldbookScanSummary, m
   scan[key] = Math.min(maximum, scan[key] + 1)
 }
 
+function isManuscriptChapterPath(path: string): boolean {
+  if (!/^正文\/[^\u0000-\u001f\\]+\.(md|txt)$/i.test(path)) return false
+  return path.split('/').every((part) => part && part !== '.' && part !== '..' && !part.startsWith('.'))
+}
+
+function envelopeBeats(path: string, text: string | undefined): string[] | undefined {
+  if (!/\.md$/i.test(path) || !text) return undefined
+  const beats = parseChapterMeta(text)?.beats
+  if (!beats?.length) return undefined
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const raw of beats) {
+    const value = raw.trim()
+    if (!value || value.length > CHAPTER_BEAT_MAX_CHARS || /[\u0000-\u001f\u007f]/.test(value)) continue
+    const folded = value.toLowerCase()
+    if (seen.has(folded)) continue
+    seen.add(folded)
+    out.push(value)
+    if (out.length >= CHAPTER_BEATS_MAX) break
+  }
+  return out.length ? out : undefined
+}
+
+function envelopePreviousState(state: ChapterStateFields | undefined): ChapterStateFields | undefined {
+  if (!state) return undefined
+  const next: ChapterStateFields = {}
+  let total = 0
+  for (const key of CHAPTER_STATE_KEYS) {
+    const value = state[key]?.trim()
+    if (!value || value.length > CHAPTER_STATE_MAX_TOTAL_CHARS || /[\u0000-\u001f\u007f]/.test(value)) continue
+    if (total + value.length > CHAPTER_STATE_MAX_TOTAL_CHARS) return undefined
+    next[key] = value
+    total += value.length
+  }
+  if (total === 0 || total > CHAPTER_STATE_MAX_TOTAL_CHARS) return undefined
+  return next
+}
+
+function envelopePrevious(previous?: { path: string; text: string }): ProjectChapterContext['previous'] | undefined {
+  if (!previous || !/\.md$/i.test(previous.path) || !isManuscriptChapterPath(previous.path)) return undefined
+  const state = envelopePreviousState(parseChapterMeta(previous.text)?.state)
+  return state ? { path: previous.path, state } : undefined
+}
+
+function buildChapterContext(options: {
+  path?: string
+  text?: string
+  previous?: { path: string; text: string }
+}): ProjectChapterContext | undefined {
+  if (!options.path || !isManuscriptChapterPath(options.path)) return undefined
+  const beats = envelopeBeats(options.path, options.text)
+  const previous = envelopePrevious(options.previous)
+  if (!beats && !previous) return undefined
+  return {
+    path: options.path,
+    ...(beats ? { beats } : {}),
+    ...(previous ? { previous } : {}),
+  }
+}
+
+function receiptChapterContext(ctx: ProjectChapterContext): NonNullable<ProjectContextReceiptBundle['chapterContext']> {
+  return {
+    path: ctx.path,
+    beats: ctx.beats?.length ?? 0,
+    ...(ctx.previous ? { previousPath: ctx.previous.path } : {}),
+  }
+}
+
 export async function compileProjectContextV2(
   userRequest: string,
   read: (path: typeof PROJECT_CONTEXT_SOURCE_PATHS[number]) => Promise<ProjectContextReadResult>,
@@ -530,6 +634,7 @@ export async function compileProjectContextV2(
     scan?: Partial<WorldbookScanSummary>
     authorPreferences?: string
     authorMemory?: string
+    chapterContext?: { path: string; text?: string; previous?: { path: string; text: string } }
   },
 ): Promise<ProjectContextCompilation> {
   const fixed = await compileFixedSources(read, true)
@@ -575,12 +680,17 @@ export async function compileProjectContextV2(
   const sources = [...fixed, ...dynamic]
   const authorPreferences = normalizeAuthorPreferences(options.authorPreferences)
   const authorMemory = normalizeAuthorMemory(options.authorMemory)
+  const chapter_context = buildChapterContext(options.chapterContext ?? {
+    path: options.activePath,
+    text: options.savedDocumentText,
+  })
   const envelope: ProjectContextEnvelopeV2 = {
     schema: PROJECT_CONTEXT_SCHEMA,
     version: PROJECT_CONTEXT_CURRENT_VERSION,
     project_context: { sources, scan },
     ...(authorPreferences ? { author_preferences: authorPreferences } : {}),
     ...(authorMemory ? { author_memory: authorMemory } : {}),
+    ...(chapter_context ? { chapter_context } : {}),
     user_request: userRequest,
   }
   return {
@@ -591,6 +701,7 @@ export async function compileProjectContextV2(
       scan,
       ...(authorPreferences ? { authorPreferencesChars: authorPreferences.length } : {}),
       ...(authorMemory ? { authorMemoryChars: authorMemory.length } : {}),
+      ...(chapter_context ? { chapterContext: receiptChapterContext(chapter_context) } : {}),
     },
   }
 }
@@ -637,6 +748,52 @@ function validateFixed(sources: ProjectContextSource[], withKind: boolean, allow
   return total <= PROJECT_CONTEXT_MAX_TOTAL_CHARS
 }
 
+function isChapterBeats(value: unknown): value is string[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > CHAPTER_BEATS_MAX) return false
+  const seen = new Set<string>()
+  for (const item of value) {
+    if (typeof item !== 'string' || !item || item.length > CHAPTER_BEAT_MAX_CHARS
+      || /[\u0000-\u001f\u007f]/.test(item) || item !== item.trim()) return false
+    const folded = item.toLowerCase()
+    if (seen.has(folded)) return false
+    seen.add(folded)
+  }
+  return true
+}
+
+function isChapterState(value: unknown): value is ChapterStateFields {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const keys = Object.keys(value)
+  if (!keys.length) return false
+  let total = 0
+  for (const key of keys) {
+    if (!(CHAPTER_STATE_KEYS as readonly string[]).includes(key)) return false
+    const item = (value as Record<string, unknown>)[key]
+    if (typeof item !== 'string' || !item || item !== item.trim()
+      || item.length > CHAPTER_STATE_MAX_TOTAL_CHARS || /[\u0000-\u001f\u007f]/.test(item)) return false
+    total += item.length
+  }
+  return total <= CHAPTER_STATE_MAX_TOTAL_CHARS
+}
+
+function isChapterContext(value: unknown): value is ProjectChapterContext {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const ctx = value as Record<string, unknown>
+  if (Object.keys(ctx).some((key) => key !== 'path' && key !== 'beats' && key !== 'previous')) return false
+  if (typeof ctx.path !== 'string' || !isManuscriptChapterPath(ctx.path)) return false
+  if (ctx.beats !== undefined) {
+    if (!/\.md$/i.test(ctx.path) || !isChapterBeats(ctx.beats)) return false
+  }
+  if (ctx.previous !== undefined) {
+    if (!ctx.previous || typeof ctx.previous !== 'object' || Array.isArray(ctx.previous)) return false
+    const previous = ctx.previous as Record<string, unknown>
+    if (Object.keys(previous).some((key) => key !== 'path' && key !== 'state')) return false
+    if (typeof previous.path !== 'string' || !isManuscriptChapterPath(previous.path) || !/\.md$/i.test(previous.path)
+      || !isChapterState(previous.state)) return false
+  }
+  return ctx.beats !== undefined || ctx.previous !== undefined
+}
+
 function validateV2(envelope: ProjectContextEnvelopeV2): boolean {
   if (envelope.author_preferences !== undefined && (typeof envelope.author_preferences !== 'string'
     || !envelope.author_preferences || envelope.author_preferences.length > AUTHOR_PREFERENCES_MAX_CHARS
@@ -644,6 +801,7 @@ function validateV2(envelope: ProjectContextEnvelopeV2): boolean {
   if (envelope.author_memory !== undefined && (typeof envelope.author_memory !== 'string'
     || !envelope.author_memory || envelope.author_memory.length > AUTHOR_MEMORY_MAX_CHARS
     || envelope.author_memory !== normalizeAuthorMemory(envelope.author_memory))) return false
+  if (envelope.chapter_context !== undefined && !isChapterContext(envelope.chapter_context)) return false
   const sources = envelope.project_context.sources
   if (sources.length > PROJECT_CONTEXT_SOURCE_PATHS.length + 64 || !validateFixed(sources, true) || !isScan(envelope.project_context.scan)) return false
   const seen = new Set<string>()
@@ -683,6 +841,7 @@ export function parseProjectContextEnvelope(text: string): ProjectContextEnvelop
   if (envelope.version === PROJECT_CONTEXT_VERSION) {
     if ('author_preferences' in envelope) return undefined
     if ('author_memory' in envelope) return undefined
+    if ('chapter_context' in envelope) return undefined
     if (sources.length !== PROJECT_CONTEXT_SOURCE_PATHS.length || !validateFixed(sources as ProjectContextSource[], false, true)) return undefined
     return envelope as ProjectContextEnvelopeV1
   }
@@ -696,6 +855,9 @@ export function projectContextReceipt(envelope: ProjectContextEnvelope): Project
     ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION ? { scan: envelope.project_context.scan } : {}),
     ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION && envelope.author_preferences ? { authorPreferencesChars: envelope.author_preferences.length } : {}),
     ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION && envelope.author_memory ? { authorMemoryChars: envelope.author_memory.length } : {}),
+    ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION && envelope.chapter_context
+      ? { chapterContext: receiptChapterContext(envelope.chapter_context) }
+      : {}),
   }
 }
 

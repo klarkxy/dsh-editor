@@ -81,4 +81,55 @@ describe('authority-bound context compiler', () => {
     expect(compiled.receipt.scan?.limits).toBe(1_024)
     expect(parseProjectContextEnvelope(compiled.serialized)).toEqual(compiled.envelope)
   })
+
+  it('injects chapter_context from the current beats and the previous chapter state', async () => {
+    const context = createMemoryContext({
+      ...fixed,
+      '正文/1.md': '---\nstate:\n  now: 第一日\n  open: 铜牌\n---\n# 第一章\n前文\n',
+      '正文/2.md': '---\nbeats: [码头等船, 海关暗记]\n---\n# 第二章\n后文\n',
+    })
+    const compiled = await compileContext(context, '继续写', '正文/2.md')
+    expect(compiled.envelope).toMatchObject({
+      version: 2,
+      chapter_context: {
+        path: '正文/2.md',
+        beats: ['码头等船', '海关暗记'],
+        previous: { path: '正文/1.md', state: { now: '第一日', open: '铜牌' } },
+      },
+    })
+    expect(compiled.receipt.chapterContext).toEqual({ path: '正文/2.md', beats: 2, previousPath: '正文/1.md' })
+    expect(parseProjectContextEnvelope(compiled.serialized)).toEqual(compiled.envelope)
+  })
+
+  it('omits chapter_context for a non-chapter path or when nothing is available', async () => {
+    const withWorldbook = createMemoryContext({
+      ...fixed,
+      '正文/1.md': '---\nstate:\n  now: 第一日\n---\n# 一\n',
+      '世界书/港口.md': '---\ntriggers: [港口]\nenabled: true\npriority: 1\n---\n港口',
+    })
+    const nonChapter = await compileContext(withWorldbook, '港口', '世界书/港口.md')
+    expect(nonChapter.envelope).not.toHaveProperty('chapter_context')
+    expect(nonChapter.receipt.chapterContext).toBeUndefined()
+
+    const emptyChapter = await compileContext(createMemoryContext({
+      ...fixed,
+      '正文/001.md': '# 第一章\n\n正文',
+    }), '继续', '正文/001.md')
+    expect(emptyChapter.envelope).not.toHaveProperty('chapter_context')
+    expect(parseProjectContextEnvelope(emptyChapter.serialized)).toEqual(emptyChapter.envelope)
+  })
+
+  it('rejects oversized chapter_context through the V2 parser', async () => {
+    const compiled = await compileContext(createMemoryContext({
+      ...fixed,
+      '正文/2.md': '---\nbeats: [码头]\n---\n# 二\n',
+    }), '继续', '正文/2.md')
+    const forged = JSON.parse(compiled.serialized) as { chapter_context: { beats: string[] } }
+    forged.chapter_context.beats = ['x'.repeat(121)]
+    expect(parseProjectContextEnvelope(JSON.stringify(forged))).toBeUndefined()
+    const tooMany = JSON.parse(compiled.serialized) as { chapter_context: { beats: string[] } }
+    tooMany.chapter_context.beats = Array.from({ length: 13 }, (_, index) => `节拍${index}`)
+    expect(parseProjectContextEnvelope(JSON.stringify(tooMany))).toBeUndefined()
+    expect(parseProjectContextEnvelope(compiled.serialized)).toEqual(compiled.envelope)
+  })
 })
