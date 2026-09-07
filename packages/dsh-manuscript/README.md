@@ -7,7 +7,7 @@
 - 通过公共 `shell.overlay` 提供默认收起的 360px“稿纸”抽屉。
 - 用 `Ctrl+S` 保存；切换、关闭、冲突和晚到响应不会静默覆盖本地 buffer。
 - “改这段”只复制请求到剪贴板，不注入官方 Chat DOM。
-- FIM 使用 live session 已选择的 provider/model 和 DSH `llm.stream`；没有候选时安全返回空。
+- FIM / 选段改写使用 live session 已选择的 provider/model 和 DSH `llm.stream`；没有候选时安全返回空。可选 `chapterContext`（≤1 200）写入用户提示中的本章工作笔记；`patch.complete` 另可带 `instruction`（≤400）作为改写要求。
 
 ## 稿纸写作体验（editor-core）
 

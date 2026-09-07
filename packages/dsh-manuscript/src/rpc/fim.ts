@@ -1,5 +1,10 @@
 import { collectInsertText } from './completion.ts'
-import { withAuthorPreferences } from './author-preferences.ts'
+import {
+  chapterContextUserPrefix,
+  parseChapterContext,
+  withAuthorPreferences,
+  withChapterContextGuidance,
+} from './author-preferences.ts'
 
 export type FimRoute = 'dsh-llm'
 
@@ -23,6 +28,7 @@ async function streamCompletion(input: {
   prefix: string
   suffix: string
   authorPreferences: string
+  chapterContext: string
   signal: AbortSignal
 }): Promise<string> {
   if (!input.llm.stream) return ''
@@ -31,14 +37,17 @@ async function streamCompletion(input: {
     model: input.model,
     maxTokens: 96,
     signal: input.signal,
-    system: withAuthorPreferences(CHAT_SYSTEM, input.authorPreferences),
+    system: withAuthorPreferences(
+      withChapterContextGuidance(CHAT_SYSTEM, input.chapterContext),
+      input.authorPreferences,
+    ),
     messages: [
       {
         role: 'user',
         content: [
           {
             type: 'text',
-            text: `【光标前】\n${input.prefix.slice(-5000)}\n\n【光标后】\n${input.suffix.slice(0, 1500)}\n\n只输出插入内容：`,
+            text: `${chapterContextUserPrefix(input.chapterContext)}【光标前】\n${input.prefix.slice(-5000)}\n\n【光标后】\n${input.suffix.slice(0, 1500)}\n\n只输出插入内容：`,
           },
         ],
       },
@@ -54,6 +63,7 @@ export async function completeFim(input: {
   prefix: string
   suffix: string
   authorPreferences?: string
+  chapterContext?: string
   signal: AbortSignal
 }): Promise<{ text: string; route: FimRoute }> {
   const llm = (input.ctx.get?.('llm') ?? {}) as LlmBag
@@ -64,6 +74,7 @@ export async function completeFim(input: {
     prefix: input.prefix,
     suffix: input.suffix,
     authorPreferences: input.authorPreferences ?? '',
+    chapterContext: parseChapterContext(input.chapterContext),
     signal: input.signal,
   })
   return { text, route: 'dsh-llm' }

@@ -1,6 +1,13 @@
 import { collectInsertText } from './completion.ts'
 import { normalizeWorkspaceRelative, PathConfineError } from './paths.ts'
-import { parseAuthorPreferences, withAuthorPreferences } from './author-preferences.ts'
+import {
+  chapterContextUserPrefix,
+  parseAuthorPreferences,
+  parseChapterContext,
+  parseInstruction,
+  withAuthorPreferences,
+  withChapterContextGuidance,
+} from './author-preferences.ts'
 
 export type PatchRoute = 'dsh-llm'
 
@@ -26,6 +33,8 @@ export type PatchRequest = {
   before: string
   after: string
   authorPreferences: string
+  chapterContext: string
+  instruction: string
 }
 
 export type PatchStreamChunk = { type: string; text?: string; reason?: { kind?: string } }
@@ -72,6 +81,8 @@ export function parsePatchRequest(payload: Record<string, unknown>): PatchReques
     before: textField(payload, 'before').slice(-PATCH_LIMITS.context),
     after: textField(payload, 'after').slice(0, PATCH_LIMITS.context),
     authorPreferences: parseAuthorPreferences(payload.authorPreferences),
+    chapterContext: parseChapterContext(payload.chapterContext),
+    instruction: parseInstruction(payload.instruction),
   }
 }
 
@@ -89,14 +100,17 @@ async function streamPatch(input: {
       model: input.model,
       maxTokens: 512,
       signal: input.signal,
-      system: withAuthorPreferences(PATCH_SYSTEM, input.request.authorPreferences),
+      system: withAuthorPreferences(
+        withChapterContextGuidance(PATCH_SYSTEM, input.request.chapterContext),
+        input.request.authorPreferences,
+      ),
       messages: [
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: `【文件】${input.request.path}\n\n【前文】\n${input.request.before}\n\n【待改写】\n${input.request.selectedText}\n\n【后文】\n${input.request.after}\n\n只输出替换后的文本：`,
+              text: `${chapterContextUserPrefix(input.request.chapterContext)}【文件】${input.request.path}\n\n【前文】\n${input.request.before}\n\n${input.request.instruction ? `【改写要求】\n${input.request.instruction}\n\n` : ''}【待改写】\n${input.request.selectedText}\n\n【后文】\n${input.request.after}\n\n只输出替换后的文本：`,
             },
           ],
         },

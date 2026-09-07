@@ -2,7 +2,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { dispatch, mapError } from '../index.ts'
 import type { FileSystemLike, ManuscriptHost } from '../host.ts'
+import { CHAPTER_CONTEXT_GUIDANCE, CHAPTER_CONTEXT_LIMIT, INSTRUCTION_LIMIT } from './author-preferences.ts'
 import { completePatch, PATCH_LIMITS, parsePatchRequest } from './patch.ts'
+
+function captured(stream: ReturnType<typeof vi.fn>): { system: string; user: string; maxTokens: number } {
+  const options = stream.mock.calls[0]?.[0] as { system: string; maxTokens: number; messages: Array<{ content: Array<{ text: string }> }> }
+  return { system: options.system, user: options.messages[0].content[0].text, maxTokens: options.maxTokens }
+}
 import type { StreamChunkLike } from './completion.ts'
 
 function fixture(config: { provider?: string; model?: string } = { provider: 'configured-provider', model: 'configured-model' }) {
@@ -62,6 +68,32 @@ describe('patch.complete', () => {
     expect(request.after).toBe('b'.repeat(PATCH_LIMITS.context))
     expect(request.authorPreferences.startsWith('保持克制\n')).toBe(true)
     expect(request.authorPreferences.length).toBe(1_200)
+    expect(request.chapterContext).toBe('')
+    expect(request.instruction).toBe('')
+  })
+
+  it('bounds chapterContext and instruction, ignoring empty values', () => {
+    const empty = parsePatchRequest({
+      path: 'chapter.md',
+      selectedText: '旧句',
+      chapterContext: ' \n\t ',
+      instruction: '   ',
+    })
+    expect(empty.chapterContext).toBe('')
+    expect(empty.instruction).toBe('')
+
+    const bounded = parsePatchRequest({
+      path: 'chapter.md',
+      selectedText: '旧句',
+      chapterContext: `  节拍：雨夜\u0007\r\n上一章：已逃  ${'x'.repeat(1_300)}`,
+      instruction: `  缩短对白\u0001${'y'.repeat(500)}  `,
+    })
+    expect(bounded.chapterContext.startsWith('节拍：雨夜\n上一章：已逃')).toBe(true)
+    expect(bounded.chapterContext.length).toBe(CHAPTER_CONTEXT_LIMIT)
+    expect(bounded.chapterContext).not.toContain('\u0007')
+    expect(bounded.instruction.startsWith('缩短对白')).toBe(true)
+    expect(bounded.instruction.length).toBe(INSTRUCTION_LIMIT)
+    expect(bounded.instruction).not.toContain('\u0001')
   })
 
   it('derives provider and model from the live session, never from RPC input', async () => {
@@ -84,6 +116,48 @@ describe('patch.complete', () => {
       new AbortController().signal,
     )
     expect(stream).toHaveBeenCalledWith(expect.objectContaining({ system: expect.stringContaining('【作者跨作品约定】\n对白保持克制') }))
+    expect(captured(stream).system).not.toContain(CHAPTER_CONTEXT_GUIDANCE)
+    expect(captured(stream).user.startsWith('【文件】')).toBe(true)
+    expect(captured(stream).user).not.toContain('【本章工作笔记】')
+    expect(captured(stream).user).not.toContain('【改写要求】')
+    expect(captured(stream).maxTokens).toBe(512)
+  })
+
+  it('places chapterContext before the file block and instruction before the selection', async () => {
+    const { host, stream } = fixture()
+    await dispatch(
+      host as unknown as Context,
+      'patch.complete',
+      {
+        sessionId: 'session-1',
+        path: 'chapter.md',
+        selectedText: '旧句',
+        before: '前文',
+        after: '后文',
+        chapterContext: '节拍：雨夜对峙',
+        instruction: '补入感官细节',
+      },
+      new AbortController().signal,
+    )
+    const { system, user } = captured(stream)
+    expect(user.startsWith('【本章工作笔记】\n节拍：雨夜对峙\n\n【文件】chapter.md')).toBe(true)
+    expect(user).toContain('\n\n【改写要求】\n补入感官细节\n\n【待改写】\n旧句')
+    expect(user.indexOf('【本章工作笔记】')).toBeLessThan(user.indexOf('【文件】'))
+    expect(user.indexOf('【改写要求】')).toBeLessThan(user.indexOf('【待改写】'))
+    expect(system).toContain(CHAPTER_CONTEXT_GUIDANCE)
+  })
+
+  it('omits rewrite instruction from the user prompt when it is empty', async () => {
+    const { host, stream } = fixture()
+    await dispatch(
+      host as unknown as Context,
+      'patch.complete',
+      { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句', chapterContext: '节拍：收束' },
+      new AbortController().signal,
+    )
+    const { user } = captured(stream)
+    expect(user).toContain('【本章工作笔记】\n节拍：收束\n\n【文件】')
+    expect(user).not.toContain('【改写要求】')
   })
 
   it('returns an empty proposal without a configured live-session model', async () => {
