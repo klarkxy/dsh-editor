@@ -5,6 +5,25 @@ export * from './editor-state.ts'
 export * from './completion-preference.ts'
 export { editorCoreStyles } from './styles.ts'
 export {
+  DEFAULT_TYPOGRAPHY,
+  FONT_STACKS,
+  normalizeTypography,
+  typographyCssVariables,
+  type ResolvedTypography,
+  type TypographyInput,
+} from './typography.ts'
+export {
+  activeParagraphRange,
+  buildFocusParagraphDecorations,
+  focusParagraphEnabled,
+  focusParagraphExtension,
+  shouldRecenterTypewriter,
+  typewriterConfig,
+  typewriterExtension,
+  typewriterScrollTop,
+  type TypewriterOptions,
+} from './typewriter.ts'
+export {
   EditorCore,
   type EditorCoreDraft,
   type EditorCoreHandle,
@@ -12,4 +31,5 @@ export {
   type EditorCoreProps,
   type EditorCoreSlot,
   type EditorCoreStatus,
+  type EditorCoreTypography,
 } from './editor.tsx'

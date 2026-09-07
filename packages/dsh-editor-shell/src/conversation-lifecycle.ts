@@ -1,3 +1,4 @@
+import { getLocale, t } from './i18n/index.ts'
 import { isNovelIndexJobTitle } from './novel-index.ts'
 
 export type ConversationRow = { id: string; title: string; current: boolean }
@@ -23,15 +24,50 @@ export function isUnnamedConversationTitle(title: string | undefined): boolean {
   }
 }
 
-export function conversationRows(input: { workspaceSessionIds: readonly string[]; archivedIds?: readonly string[]; currentId?: string; titles?: Record<string, string | undefined>; reusableBlankIds?: readonly string[] }): ConversationRow[] {
+function conversationTitleFor(id: string, titles: Record<string, string | undefined> | undefined): string {
+  const title = titles?.[id]?.trim() ?? ''
+  return isUnnamedConversationTitle(title) ? t('chat.newConversation') : title
+}
+
+export function conversationRows(input: { workspaceSessionIds: readonly string[]; archivedIds?: readonly string[]; forgottenIds?: readonly string[]; currentId?: string; titles?: Record<string, string | undefined>; reusableBlankIds?: readonly string[] }): ConversationRow[] {
   const archived = new Set(input.archivedIds ?? [])
+  const forgotten = new Set(input.forgottenIds ?? [])
   const blank = new Set(input.reusableBlankIds ?? [])
   return input.workspaceSessionIds
-    .filter((id) => !archived.has(id) && (id === input.currentId || !blank.has(id)))
-    .map((id) => {
-      const title = input.titles?.[id]?.trim() ?? ''
-      return { id, title: isUnnamedConversationTitle(title) ? '新对话' : title, current: id === input.currentId }
-    })
+    .filter((id) => !forgotten.has(id) && !archived.has(id) && (id === input.currentId || !blank.has(id)))
+    .map((id) => ({ id, title: conversationTitleFor(id, input.titles), current: id === input.currentId }))
+}
+
+/** 已归档但仍可恢复的对话；墓碑 id 不会出现在这里。 */
+export function archivedConversationRows(input: { workspaceSessionIds: readonly string[]; archivedIds?: readonly string[]; forgottenIds?: readonly string[]; currentId?: string; titles?: Record<string, string | undefined> }): ConversationRow[] {
+  const archived = new Set(input.archivedIds ?? [])
+  const forgotten = new Set(input.forgottenIds ?? [])
+  return input.workspaceSessionIds
+    .filter((id) => archived.has(id) && !forgotten.has(id))
+    .map((id) => ({ id, title: conversationTitleFor(id, input.titles), current: id === input.currentId }))
+}
+
+export function canArchiveOrDeleteConversation(visibleCount: number): boolean {
+  return visibleCount > 1
+}
+
+export function nextVisibleConversationId(visibleIds: readonly string[], removingId: string): string | undefined {
+  return visibleIds.find((id) => id !== removingId)
+}
+
+export function archiveConversationIds(archivedIds: readonly string[], id: string): string[] {
+  return archivedIds.includes(id) ? [...archivedIds] : [...archivedIds, id]
+}
+
+export function restoreConversationIds(archivedIds: readonly string[], id: string): string[] {
+  return archivedIds.filter((item) => item !== id)
+}
+
+export function tombstoneConversationIds(input: { archivedIds: readonly string[]; tombstoneIds: readonly string[]; id: string }): { archivedIds: string[]; tombstoneIds: string[] } {
+  return {
+    archivedIds: input.archivedIds.filter((item) => item !== input.id),
+    tombstoneIds: input.tombstoneIds.includes(input.id) ? [...input.tombstoneIds] : [...input.tombstoneIds, input.id],
+  }
 }
 
 export function conversationTitle(text: string, limit = 36): string {
@@ -43,9 +79,12 @@ export function conversationTitle(text: string, limit = 36): string {
 /** 本地日期标签（YYYY-MM-DD），用于自动会话标题的「日期 | 内容」前缀。 */
 export function conversationDateLabel(time: number): string {
   const date = new Date(time)
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${date.getFullYear()}-${month}-${day}`
+  if (getLocale() === 'zh') {
+    const month = `${date.getMonth() + 1}`.padStart(2, '0')
+    const day = `${date.getDate()}`.padStart(2, '0')
+    return `${date.getFullYear()}-${month}-${day}`
+  }
+  return new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: 'numeric' }).format(date)
 }
 
 export function nextAutomaticConversationTitle(input: { durableTitle?: string; assistantReplies: readonly string[]; attempted: boolean; date?: number }, limit = 36): string {

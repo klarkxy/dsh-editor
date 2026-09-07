@@ -45,11 +45,14 @@ function readExecCwd(exec: { agent?: { session?: { header?: { cwd?: unknown } } 
  * 渲染项目总览：总数行 + 章节列表 + 大纲列表。
  * 紧凑不夹空白块，工具结果走 Markdown 卡片时直接展开。
  */
+const STATUS_LABEL: Record<string, string> = { draft: '草稿', revising: '修订中', final: '已定稿' }
+
 export function renderNovelOverview(overview: ProjectOverview): string {
   const lines: string[] = []
-  lines.push(`共 ${overview.totals.chapters} 章 / 总字数 ${overview.totals.chars}`)
+  const byStatus = overview.totals.byStatus
+  lines.push(`共 ${overview.totals.chapters} 章 / 总字数 ${overview.totals.chars} · 草稿 ${byStatus.draft} / 修订中 ${byStatus.revising} / 已定稿 ${byStatus.final}`)
   for (const chapter of overview.chapters) {
-    lines.push(`- ${chapter.path} · ${chapter.chars} 字`)
+    lines.push(`- ${chapter.path} · ${STATUS_LABEL[chapter.status] ?? chapter.status} · ${chapter.chars} 字`)
   }
   if (overview.outlines.length) {
     lines.push('')
@@ -71,7 +74,7 @@ export function createNovelOverviewTool(options: CreateOverviewToolOptions) {
   }
   return defineTool({
     name: NOVEL_OVERVIEW_TOOL_NAME,
-    description: '读取项目结构总览：章节列表（含字数）、大纲列表与字数总数。只读，不修改文件。',
+    description: '读取项目结构总览：章节列表（含字数与草稿/修订中/已定稿状态）、大纲列表与字数总数。只读，不修改文件。',
     parameters: {},
     output: {
       schema: {
@@ -86,6 +89,16 @@ export function createNovelOverviewTool(options: CreateOverviewToolOptions) {
             properties: {
               chapters: { type: 'integer', required: true },
               chars: { type: 'integer', required: true },
+              byStatus: {
+                type: 'object',
+                required: true,
+                additionalProperties: false,
+                properties: {
+                  draft: { type: 'integer', required: true },
+                  revising: { type: 'integer', required: true },
+                  final: { type: 'integer', required: true },
+                },
+              },
             },
           },
           chapters: {
@@ -100,6 +113,7 @@ export function createNovelOverviewTool(options: CreateOverviewToolOptions) {
                 chars: { type: 'integer', required: true },
                 empty: { type: 'boolean', required: true },
                 excerpt: { type: 'string', required: true },
+                status: { type: 'string', required: true },
                 modifiedAt: { type: 'string' },
               },
             },
@@ -153,6 +167,7 @@ function toOverviewResult(overview: ProjectOverview) {
       chars: chapter.chars,
       empty: chapter.empty,
       excerpt: chapter.excerpt,
+      status: chapter.status,
       modifiedAt: chapter.modifiedAt ?? undefined,
     })),
     outlines: overview.outlines.map((outline) => ({

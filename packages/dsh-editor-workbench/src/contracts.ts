@@ -1,4 +1,23 @@
 import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
+import {
+  applyFrontmatterFields,
+  hasExplicitFrontmatter,
+  parseBooleanField,
+  parseFrontmatterDocument,
+  parseIntegerField,
+  parseStringListField,
+  splitFrontmatter,
+  validWorldbookTriggers,
+  type CharacterCardFields,
+  type WorldbookCardFields,
+} from './frontmatter.ts'
+
+export type {
+  CardMetaFields,
+  CardRelation,
+  CharacterCardFields,
+  WorldbookCardFields,
+} from './frontmatter.ts'
 
 export { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 
@@ -11,6 +30,9 @@ export type WorkbenchEndpoint =
   | 'project.init'
   | 'project.prepareIndex'
   | 'project.overview'
+  | 'chapter.statusSet'
+  | 'progress.record'
+  | 'progress.history'
   | 'structure.groupCreate'
   | 'directory.create'
   | 'context.compile'
@@ -35,16 +57,23 @@ export type WorkbenchEndpoint =
   | 'entry.move'
   | 'entry.delete'
   | 'entry.rename'
+  | 'proofread.scan'
+  | 'cards.list'
+  | 'cards.metaSet'
+  | 'cards.references'
+  | 'cards.create'
 
 export type ProjectInitResponse = { created: string[]; skipped: string[] }
 export type ProjectInspectionResponse = { hasVisibleEntries: boolean; textFiles: string[]; indexReady: boolean }
 export type WorkbenchPathResponse = { path: string; version?: string; metadataWarning?: string }
+export type ChapterStatus = 'draft' | 'revising' | 'final'
 export type ChapterSummary = {
   path: string
   title: string
   chars: number
   empty: boolean
   excerpt: string
+  status: ChapterStatus
   modifiedAt: string | null
 }
 export type OutlineSummary = {
@@ -60,11 +89,84 @@ export type ProjectOverview = {
   totals: {
     chapters: number
     chars: number
+    byStatus: Record<ChapterStatus, number>
   }
   recent: ChapterSummary | null
+  recentChapters: ChapterSummary[]
   truncated: boolean
   skipped: number
 }
+export type ChapterStatusSetResponse = { path: string; status: ChapterStatus }
+export type WritingLogEntry = { date: string; chars: number; delta?: number }
+export type ProgressDay = { date: string; chars: number; delta: number }
+export type ProgressWeek = { weekStart: string; chars: number; delta: number }
+export type ProgressRecordResult = ProgressDay
+export type ProgressHistory = { days: ProgressDay[]; weeks: ProgressWeek[] }
+
+export const PROOFREAD_KINDS = ['punctuation', 'sensitive', 'repeat', 'typo', 'habit'] as const
+export type ProofreadKind = typeof PROOFREAD_KINDS[number]
+export type ProofreadSeverity = 'error' | 'warning' | 'info'
+export type ProofreadFinding = {
+  path: string
+  line: number
+  column: number
+  start: number
+  end: number
+  kind: ProofreadKind
+  severity: ProofreadSeverity
+  message: string
+  excerpt: string
+  suggestion?: string
+  version: string
+}
+export type ProofreadHabitStat = { term: string; count: number; perThousand: number }
+export type ProofreadScanRequest = {
+  sessionId: string
+  scope: 'document' | 'manuscript'
+  path?: string
+  kinds?: ProofreadKind[]
+}
+export type ProofreadScanResponse = {
+  findings: ProofreadFinding[]
+  scannedFiles: number
+  skipped: number
+  truncated: boolean
+  habitStats: ProofreadHabitStat[]
+}
+
+export type CardKind = 'character' | 'worldbook'
+export type CardsListKind = CardKind | 'all'
+export type CharacterCard = {
+  path: string
+  title: string
+  frontmatter: CharacterCardFields
+  summary: string
+  version: string
+  modifiedAt: string | null
+}
+export type WorldbookCard = {
+  path: string
+  title: string
+  frontmatter: WorldbookCardFields
+  summary: string
+  version: string
+  modifiedAt: string | null
+}
+export type CardsListRequest = { sessionId: string; kind: CardsListKind }
+export type CardsListResponse = {
+  characters: CharacterCard[]
+  worldbook: WorldbookCard[]
+  scannedFiles: number
+  skipped: number
+  truncated: boolean
+}
+export type CardsMetaSetRequest = { sessionId: string; path: string; version: string; fields: Partial<CharacterCardFields & WorldbookCardFields> }
+export type CardsMetaSetResponse = { path: string; version: string }
+export type CardReferenceHit = { path: string; line: number; column: number; start: number; end: number; excerpt: string }
+export type CardsReferencesRequest = { sessionId: string; path: string }
+export type CardsReferencesResponse = { terms: string[]; hits: CardReferenceHit[]; scannedFiles: number; truncated: boolean }
+export type CardsCreateRequest = { sessionId: string; kind: CardKind; title: string; fields?: Partial<CharacterCardFields & WorldbookCardFields> }
+export type CardsCreateResponse = { path: string; version: string }
 export type ImportProbeResponse = {
   state: 'none' | 'ready' | 'blocked' | 'recoverable' | 'complete'
   token?: string
@@ -105,6 +207,9 @@ export type WorkbenchRequestMap = {
   'project.init': { sessionId: string; newProject: boolean }
   'project.prepareIndex': { sessionId: string }
   'project.overview': { sessionId: string }
+  'chapter.statusSet': { sessionId: string; path: string; status: ChapterStatus }
+  'progress.record': { sessionId: string; totalChars: number }
+  'progress.history': { sessionId: string; days?: number }
   'structure.groupCreate': { sessionId: string; path: string }
   'directory.create': { sessionId: string; path: string }
   'context.compile': { sessionId: string; userRequest: string; activePath?: string; authorPreferences?: string; authorMemory?: string }
@@ -129,6 +234,11 @@ export type WorkbenchRequestMap = {
   'entry.move': { sessionId: string; path: string; targetDir: string }
   'entry.delete': { sessionId: string; path: string }
   'entry.rename': { sessionId: string; path: string; name: string }
+  'proofread.scan': ProofreadScanRequest
+  'cards.list': CardsListRequest
+  'cards.metaSet': CardsMetaSetRequest
+  'cards.references': CardsReferencesRequest
+  'cards.create': CardsCreateRequest
 }
 
 export type WorkbenchResponseMap = {
@@ -137,6 +247,9 @@ export type WorkbenchResponseMap = {
   'project.init': ProjectInitResponse
   'project.prepareIndex': ProjectInitResponse
   'project.overview': ProjectOverview
+  'chapter.statusSet': ChapterStatusSetResponse
+  'progress.record': ProgressRecordResult
+  'progress.history': ProgressHistory
   'structure.groupCreate': WorkbenchPathResponse
   'directory.create': WorkbenchPathResponse
   'context.compile': ProjectContextCompilation
@@ -161,6 +274,11 @@ export type WorkbenchResponseMap = {
   'entry.move': { path: string }
   'entry.delete': { path: string }
   'entry.rename': { path: string }
+  'proofread.scan': ProofreadScanResponse
+  'cards.list': CardsListResponse
+  'cards.metaSet': CardsMetaSetResponse
+  'cards.references': CardsReferencesResponse
+  'cards.create': CardsCreateResponse
 }
 
 export type ProposalRename = { from: string; to: string }
@@ -323,117 +441,43 @@ export function parseWorldbookTriggerLines(value: string): string[] {
   return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
 }
 
-function withoutBom(text: string): string {
-  return text.startsWith('\uFEFF') ? text.slice(1) : text
-}
-
-function hasExplicitFrontmatter(text: string): boolean {
-  const source = withoutBom(text)
-  return source.startsWith('---\n') || source.startsWith('---\r\n')
-}
-
-function parseTriggerValue(value: string): string | undefined {
-  const trimmed = value.trim()
-  if (!trimmed) return undefined
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-    const inner = trimmed.slice(1, -1)
-    if (trimmed.startsWith('"')) {
-      try {
-        const parsed = JSON.parse(trimmed)
-        return typeof parsed === 'string' ? parsed : undefined
-      } catch { return undefined }
-    }
-    return inner.replace(/''/g, "'")
-  }
-  return trimmed
-}
-
-function splitInlineTriggers(value: string): string[] | undefined {
-  const trimmed = value.trim()
-  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return undefined
-  const body = trimmed.slice(1, -1)
-  if (!body.trim()) return []
-  const parts: string[] = []
-  let quote = ''
-  let escaped = false
-  let start = 0
-  for (let index = 0; index < body.length; index++) {
-    const char = body[index]!
-    if (escaped) { escaped = false; continue }
-    if (quote === '"' && char === '\\') { escaped = true; continue }
-    if (quote) { if (char === quote) quote = ''; continue }
-    if (char === '"' || char === "'") { quote = char; continue }
-    if (char === ',') { parts.push(body.slice(start, index)); start = index + 1 }
-  }
-  if (quote) return undefined
-  parts.push(body.slice(start))
-  const parsed = parts.map(parseTriggerValue)
-  return parsed.every((item): item is string => item !== undefined) ? parsed : undefined
-}
-
-function validTriggers(values: string[]): string[] | undefined {
-  const unique: string[] = []
-  const seen = new Set<string>()
-  for (const raw of values) {
-    const value = raw.trim()
-    const folded = value.toLowerCase()
-    if (!value || value.length > 64 || /[\u0000-\u001f\u007f]/.test(value)) return undefined
-    if (!seen.has(folded)) { unique.push(value); seen.add(folded) }
-  }
-  return unique.length > 0 && unique.length <= 16 ? unique : undefined
-}
+const validTriggers = validWorldbookTriggers
 
 export function parseWorldbookFrontmatter(path: string, text: string): ParsedWorldbook | undefined {
-  const source = withoutBom(text)
-  if (!source.startsWith('---\n') && !source.startsWith('---\r\n')) {
+  if (!hasExplicitFrontmatter(text)) {
     const legacy = path.replace(/^世界书\//, '').replace(/\.md$/i, '')
     const triggers = validTriggers([legacy])
     return triggers ? { enabled: true, priority: 0, triggers } : undefined
   }
-  const close = /\r?\n---(?:\r?\n|$)/g
-  close.lastIndex = source.indexOf('\n') + 1
-  const match = close.exec(source)
-  if (!match || match.index > 4_096) return undefined
-  const body = source.slice(source.indexOf('\n') + 1, match.index)
-  const lines = body.split(/\r?\n/)
+  const document = parseFrontmatterDocument(text)
+  if (!document) return undefined
   let enabled = true
   let priority = 0
   let triggers: string[] | undefined
   let sawTriggers = false
   let sawEnabled = false
   let sawPriority = false
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index]!
-    if (!line.trim() || /^\s*#/.test(line)) continue
-    if (/^\s/.test(line)) return undefined
-    const field = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line)
-    if (!field) return undefined
-    const key = field[1]!
-    const value = field[2]!
-    if (key === 'triggers') {
+  for (const item of document.items) {
+    if (item.kind !== 'field') continue
+    if (item.key === 'triggers') {
       if (sawTriggers) return undefined
       sawTriggers = true
-      if (value.trim()) triggers = splitInlineTriggers(value)
-      else {
-        const values: string[] = []
-        while (index + 1 < lines.length && /^\s+-\s+/.test(lines[index + 1]!)) {
-          const parsed = parseTriggerValue(lines[++index]!.replace(/^\s+-\s+/, ''))
-          if (parsed === undefined) return undefined
-          values.push(parsed)
-        }
-        triggers = values
-      }
-      if (!triggers) return undefined
-    } else if (key === 'enabled') {
-      if (sawEnabled || (value !== 'true' && value !== 'false')) return undefined
+      const values = parseStringListField(item.raw)
+      if (!values) return undefined
+      triggers = values
+    } else if (item.key === 'enabled') {
+      if (sawEnabled) return undefined
+      const parsed = parseBooleanField(item.raw)
+      if (parsed === undefined) return undefined
       sawEnabled = true
-      enabled = value === 'true'
-    } else if (key === 'priority') {
-      if (sawPriority || !/^-?\d+$/.test(value)) return undefined
+      enabled = parsed
+    } else if (item.key === 'priority') {
+      if (sawPriority) return undefined
+      const parsed = parseIntegerField(item.raw)
+      if (parsed === undefined || parsed < -100 || parsed > 100) return undefined
       sawPriority = true
-      priority = Number(value)
-      if (!Number.isSafeInteger(priority) || priority < -100 || priority > 100) return undefined
-    } else return undefined
+      priority = parsed
+    }
   }
   const checked = sawTriggers && triggers ? validTriggers(triggers) : undefined
   return checked ? { enabled, priority, triggers: checked } : undefined
@@ -460,29 +504,12 @@ export function writeWorldbookFrontmatter(
   if (!Number.isSafeInteger(input.priority) || input.priority < -100 || input.priority > 100) {
     throw new Error('invalid worldbook priority')
   }
-  const bom = text.startsWith('\uFEFF') ? '\uFEFF' : ''
-  const source = withoutBom(text)
-  const newline = source.includes('\r\n') ? '\r\n' : '\n'
-  let body = source
-  let comments: string[] = []
   if (hasExplicitFrontmatter(text)) {
     if (!parseWorldbookFrontmatter('世界书/编辑中.md', text)) throw new Error('invalid worldbook frontmatter')
-    const close = /\r?\n---(?:\r?\n|$)/g
-    close.lastIndex = source.indexOf('\n') + 1
-    const match = close.exec(source)
-    if (!match || match.index > 4_096) throw new Error('invalid worldbook frontmatter')
-    comments = source.slice(source.indexOf('\n') + 1, match.index).split(/\r?\n/).filter((line) => /^\s*#/.test(line))
-    body = source.slice(match.index + match[0].length)
+    const split = splitFrontmatter(text)
+    if (!split.closed) throw new Error('invalid worldbook frontmatter')
   }
-  const header = [
-    '---',
-    ...comments,
-    `triggers: [${triggers.map((trigger) => JSON.stringify(trigger)).join(', ')}]`,
-    `enabled: ${input.enabled ? 'true' : 'false'}`,
-    `priority: ${input.priority}`,
-    '---',
-  ].join(newline)
-  return `${bom}${header}${newline}${body}`
+  return applyFrontmatterFields(text, { triggers, enabled: input.enabled, priority: input.priority })
 }
 
 function stripText(sources: ProjectContextSource[]): ProjectContextReceipt[] {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { ConversationRenameQueue, conversationRows, conversationTitle, nextAutomaticConversationTitle, shouldConfirmConversationSwitch } from './conversation-lifecycle.ts'
+import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, conversationTitle, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from './conversation-lifecycle.ts'
+import { conversationWorkRecord, decodeConversationSettings, putConversationWork } from './conversation-store.ts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
 describe('conversation lifecycle projection', () => {
@@ -86,5 +87,47 @@ describe('conversation lifecycle projection', () => {
     releaseAutomatic()
     await Promise.all([automatic, manual])
     expect(applied).toEqual(['自动名称', '手工名称'])
+  })
+
+  it('projects archived rows, restores them, and hides tombstones from both lists', () => {
+    const ids = ['a', 'b', 'c']
+    const titles = { a: '讨论', b: '旧稿', c: '备忘' }
+    expect(conversationRows({ workspaceSessionIds: ids, archivedIds: ['b'], forgottenIds: ['c'], currentId: 'a', titles })).toEqual([
+      { id: 'a', title: '讨论', current: true },
+    ])
+    expect(archivedConversationRows({ workspaceSessionIds: ids, archivedIds: ['b', 'c'], forgottenIds: ['c'], currentId: 'a', titles })).toEqual([
+      { id: 'b', title: '旧稿', current: false },
+    ])
+    expect(restoreConversationIds(archiveConversationIds(['b'], 'c'), 'b')).toEqual(['c'])
+    expect(tombstoneConversationIds({ archivedIds: ['b', 'c'], tombstoneIds: ['gone'], id: 'b' })).toEqual({
+      archivedIds: ['c'],
+      tombstoneIds: ['gone', 'b'],
+    })
+    expect(conversationRows({
+      workspaceSessionIds: ids,
+      archivedIds: restoreConversationIds(['b', 'c'], 'b'),
+      forgottenIds: tombstoneConversationIds({ archivedIds: ['b', 'c'], tombstoneIds: [], id: 'c' }).tombstoneIds,
+      currentId: 'a',
+      titles,
+    })).toEqual([
+      { id: 'a', title: '讨论', current: true },
+      { id: 'b', title: '旧稿', current: false },
+    ])
+  })
+
+  it('refuses to archive or delete the only visible conversation', () => {
+    expect(canArchiveOrDeleteConversation(1)).toBe(false)
+    expect(canArchiveOrDeleteConversation(2)).toBe(true)
+    expect(nextVisibleConversationId(['a', 'b'], 'a')).toBe('b')
+    expect(nextVisibleConversationId(['only'], 'only')).toBeUndefined()
+  })
+
+  it('persists archived and tombstone ids per work beside the conversation settings record', () => {
+    expect(decodeConversationSettings({ works: { w1: { archivedIds: ['a', 'a', 1], tombstoneIds: ['gone'] } } })).toEqual({
+      works: { w1: { archivedIds: ['a'], tombstoneIds: ['gone'] } },
+    })
+    const next = putConversationWork(decodeConversationSettings(undefined), 'w1', { archivedIds: ['a'], tombstoneIds: [] })
+    expect(conversationWorkRecord(next, 'w1')).toEqual({ archivedIds: ['a'], tombstoneIds: [] })
+    expect(conversationWorkRecord(next, 'missing')).toEqual({ archivedIds: [], tombstoneIds: [] })
   })
 })

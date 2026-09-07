@@ -97,6 +97,12 @@ const editorCoreTokens = `
   --topbar-h: 40px;
   --tree-w: 220px;
   --chat-w: 360px;
+  --paper-font-size: var(--text-body);
+  --paper-line-height: var(--leading-body);
+  --paper-font-family: var(--font-serif);
+  --paper-paragraph-spacing: 0em;
+  --paper-max-width: none;
+  --paper-dim-opacity: 0.35;
 }
 `
 
@@ -208,13 +214,42 @@ ${editorCoreTokens}
   height: 100%;
   background: transparent;
   color: var(--fg);
+  font-size: var(--paper-font-size, var(--text-body));
+  line-height: var(--paper-line-height, var(--leading-body));
+  font-family: var(--paper-font-family, var(--font-serif));
 }
 .manuscript-paper-textarea .cm-editor .cm-scroller {
-  font-family: var(--font-serif);
+  font-family: inherit;
+}
+.manuscript-paper-textarea .cm-content {
+  max-width: var(--paper-max-width, none);
+  margin-inline: auto;
+}
+.manuscript-paper-textarea .cm-line {
+  padding-bottom: var(--paper-paragraph-spacing, 0em);
+}
+.manuscript-paper-textarea .cm-paper-dim {
+  opacity: var(--paper-dim-opacity, 0.35);
 }
 .manuscript-paper-textarea .cm-editor .cm-placeholder {
   color: var(--meta);
   font-style: italic;
+}
+.manuscript-paper-textarea .cm-paper-search {
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+.manuscript-paper-textarea .cm-paper-search input {
+  background: var(--bg);
+  color: var(--fg);
+  border-color: var(--border);
+}
+.manuscript-paper-textarea .cm-searchMatch {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.manuscript-paper-textarea .cm-searchMatch-selected {
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .manuscript-paper-ghost,
 .manuscript-paper-textarea [data-testid$="-ghost"] {

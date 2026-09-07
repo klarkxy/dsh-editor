@@ -1,4 +1,6 @@
 import { createElement as e, useEffect, useRef, useState } from 'react'
+import { t, useLocale } from '../i18n/index.ts'
+
 
 export const THEME_STORAGE_KEY = 'dsh-editor.theme'
 export const THEME_VALUES = ['paper', 'ink'] as const
@@ -165,12 +167,15 @@ export function useTheme(
   return [theme, setTheme]
 }
 
-export function ThemeToggle({ theme, onChange, label = '主题' }: { theme: ThemeValue; onChange(next: ThemeValue): void; label?: string }) {
+export function ThemeToggle({ theme, onChange, label }: { theme: ThemeValue; onChange(next: ThemeValue): void; label?: string }) {
+  useLocale()
+  const resolvedLabel = label ?? t('theme.label')
+  const value = theme === 'paper' ? t('theme.paper') : t('theme.ink')
   return e('button', {
     type: 'button',
     className: 'theme-toggle',
-    title: theme === 'paper' ? '当前：纸；点击切到墨' : '当前：墨；点击切到纸',
-    'aria-label': `${label}（当前${theme === 'paper' ? '纸' : '墨'}）`,
+    title: theme === 'paper' ? t('theme.toInk') : t('theme.toPaper'),
+    'aria-label': t('theme.aria', { label: resolvedLabel, value }),
     onClick: () => onChange(theme === 'paper' ? 'ink' : 'paper'),
-  }, theme === 'paper' ? '纸' : '墨')
+  }, value)
 }

@@ -2,6 +2,7 @@ import {
   createElement as e,
   Fragment,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -13,6 +14,8 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-client-connection/client'
 import {
   WORKBENCH_RPC_CHANNEL,
+  type ArchiveListResponse,
+  type ChapterStatus,
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
   type ProjectOverview,
@@ -21,16 +24,20 @@ import {
 import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
 import { sortChapterPaths } from '../project-files.ts'
 import { registerRoot } from '../root-registration.ts'
-import { writingPreferences, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
+import { writingPreferences, writingTypography, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
+import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
 import {
   localDateKey,
   nextBaselines,
+  progressChipProps,
   writingProgressFor,
   type WritingProgress,
   type WritingProgressScope,
 } from '../writing-progress.ts'
+import { applyChapterStatus, buildChapterStatusMap } from '../overview-view.ts'
+import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
 import { redesignedStyles } from '../styles.ts'
-import { errorMessage, isStaleFailure, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace } from './shared.ts'
+import { errorMessage, isStaleFailure, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, useObservable } from './components.ts'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger } from './settings.tsx'
@@ -41,6 +48,19 @@ import { Chat } from './chat.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { AboutUpdateDialog } from './about-dialog.tsx'
+import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.ts'
+import { OverviewPanel } from './overview-panel.ts'
+import { ProofreadPanel, type ProofreadRequest } from './proofread-panel.ts'
+import { CardsDetail, CardsPanel, type CardsCatalog } from './cards-panel.ts'
+import { isCharacterCardPath, isWorldbookCardPath } from '../cards-view.ts'
+import type { ProofreadFinding } from '../proofread-view.ts'
+import { collectChapters, downloadExport, ExportPreviewDialog } from './export-dialog.ts'
+import { prepareExport, type ChapterExport, type ExportFormat } from '../export.ts'
+import { idleImportFlow, importReview, recoverImport, type ImportFlow, type ImportProbeView } from './import-flow.ts'
+import { ImportDialog } from './import-dialog.ts'
+import { ArchivePanel, canArchivePath, type ArchiveView } from './archive.ts'
+import { t, useLocale } from '../i18n/index.ts'
+
 
 const SIDEBAR_DEFAULT = 248
 const SIDEBAR_MIN = 196
@@ -76,14 +96,14 @@ function formatRecentTime(iso: string | undefined, now: Date = new Date()): stri
   const minute = 60_000
   const hour = 60 * minute
   const day = 24 * hour
-  if (diff < minute) return '刚刚'
-  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
-  if (diff < day && now.getDate() === new Date(stamp).getDate()) return `${Math.floor(diff / hour)} 小时前`
+  if (diff < minute) return t('time.justNow')
+  if (diff < hour) return t('time.minutesAgo', { count: Math.floor(diff / minute) })
+  if (diff < day && now.getDate() === new Date(stamp).getDate()) return t('time.hoursAgo', { count: Math.floor(diff / hour) })
   const stampDate = new Date(stamp)
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
-  if (stampDate.getFullYear() === yesterday.getFullYear() && stampDate.getMonth() === yesterday.getMonth() && stampDate.getDate() === yesterday.getDate()) return '昨天'
-  if (diff < 7 * day) return `${Math.floor(diff / day)} 天前`
-  if (stampDate.getFullYear() === now.getFullYear()) return `${stampDate.getMonth() + 1}月${stampDate.getDate()}日`
+  if (stampDate.getFullYear() === yesterday.getFullYear() && stampDate.getMonth() === yesterday.getMonth() && stampDate.getDate() === yesterday.getDate()) return t('time.yesterday')
+  if (diff < 7 * day) return t('time.daysAgo', { count: Math.floor(diff / day) })
+  if (stampDate.getFullYear() === now.getFullYear()) return t('time.monthDay', { month: stampDate.getMonth() + 1, day: stampDate.getDate() })
   const yyyy = stampDate.getFullYear()
   const mm = String(stampDate.getMonth() + 1).padStart(2, '0')
   const dd = String(stampDate.getDate()).padStart(2, '0')
@@ -96,8 +116,6 @@ type FileSession = NonNullable<NonNullable<ReturnType<ShellContext['sessions']['
 type FileMenuKind = 'file' | 'directory'
 type FileMenuState = { kind: FileMenuKind; path: string; x: number; y: number } | null
 type ClipboardEntry = { op: 'copy' | 'cut'; path: string; kind: FileMenuKind } | null
-
-type SearchHit = { path: string; line: number; column: number; start: number; end: number; excerpt: string; version: string }
 
 async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string): Promise<string[]> {
   const queue = ['']
@@ -184,12 +202,12 @@ function AboutTrigger(props: { onOpen(): void }): ReactNode {
     type: 'button',
     className: 'about-trigger',
     'aria-haspopup': 'dialog',
-    'aria-label': '关于与更新',
-    title: '关于与更新',
+    'aria-label': t('about.triggerAria'),
+    title: t('about.triggerAria'),
     onClick: props.onOpen,
   },
     e('span', { className: 'about-trigger-icon', 'aria-hidden': true }, 'ⓘ'),
-    '关于',
+    t('about.trigger'),
   )
 }
 
@@ -200,6 +218,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   progressScope: WritingProgressScope
   hostThemeSync?: HostThemeSync
 }) {
+  useLocale()
   const sessions = useObservable(ctx.sessions.list)
   const workspaces = useObservable(ctx.workspaces.list)
   const session = currentSession(ctx)
@@ -217,6 +236,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     : selectedWorkspace
   const writingSnapshot = useObservable(writingScope)
   const writing = writingPreferences(writingSnapshot, globalThis.localStorage)
+  const conversationScope = useMemo(() => ctx.settingsScope.bind({ namespace: CONVERSATION_SETTINGS_NAMESPACE, decode: decodeConversationSettings }), [ctx])
   /* 助手提议 author_observe 时的写入回调：把 observation 作为新行追加到 authorMemory。
      限 AUTHOR_MEMORY_MAX_CHARS 字(2000),追加后超限直接拒绝,提示作者去设置页整理。 */
   const onAcceptMemory = async (observation: string): Promise<boolean> => {
@@ -266,6 +286,9 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const [chatFocusNonce, setChatFocusNonce] = useState(0)
   const [overview, setOverview] = useState<ProjectOverview | null | undefined>(null)
   const [overviewRevision, setOverviewRevision] = useState(0)
+  const [overviewOpen, setOverviewOpen] = useState(false)
+  const [overviewNote, setOverviewNote] = useState('')
+  const [statusBusyPath, setStatusBusyPath] = useState<string | null>(null)
   const [editorDirty, setEditorDirty] = useState(false)
   const [fileMenu, setFileMenu] = useState<FileMenuState>(null)
   const [clipboard, setClipboard] = useState<ClipboardEntry>(null)
@@ -278,6 +301,28 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [proofreadOpen, setProofreadOpen] = useState(false)
+  const [proofreadRequest, setProofreadRequest] = useState<ProofreadRequest | null>(null)
+  const [cardsOpen, setCardsOpen] = useState(false)
+  const [cardsKind, setCardsKind] = useState<'character' | 'worldbook'>('character')
+  const [cardsSelectedPath, setCardsSelectedPath] = useState<string | null>(null)
+  const [cardsCatalog, setCardsCatalog] = useState<CardsCatalog>({ characters: [], worldbook: [] })
+  const [reveal, setReveal] = useState<RevealRequest | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportNote, setExportNote] = useState('')
+  const [exportChapters, setExportChapters] = useState<ChapterExport[] | null>(null)
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [archives, setArchives] = useState<ArchiveView[]>([])
+  const [archiveInvalid, setArchiveInvalid] = useState(0)
+  const [archiveBusy, setArchiveBusy] = useState(false)
+  const [archiveNote, setArchiveNote] = useState('')
+  const [importFlow, setImportFlow] = useState<ImportFlow>(idleImportFlow)
+  const [importTitle, setImportTitle] = useState<{ busy: boolean; note: string } | null>(null)
+  const importReturnFocus = useRef<HTMLElement | null>(null)
+  const temporaryFlowWorkspaces = useRef(new Set<string>())
+  const temporarySourceWorkspaces = useRef(new Map<string, string>())
+  const archiveRequestGate = useRef(new LatestRequestGate()).current
   const [startupUpdate, setStartupUpdate] = useState<{ version: string } | null>(null)
   /* 启动更新检查:主进程在后台跑,挂载后拉取缓存结果;仅发现新版本时弹轻提示,
      已是最新/失败都静默。浏览器开发模式没有桥,直接不跑。 */
@@ -303,6 +348,10 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const openSettings = () => setSettingsOpen(true)
   const overviewRequestGate = useRef(new LatestRequestGate()).current
+  const progressRecord = useRef(createDebouncedInvoker(PROGRESS_RECORD_DEBOUNCE_MS)).current
+  const fileSessionRef = useRef(fileSession)
+  fileSessionRef.current = fileSession
+  useEffect(() => () => progressRecord.cancel(), [progressRecord])
   const workspaceOpenGate = useRef(new LatestRequestGate()).current
   const pendingWorkspaceOpen = useRef<PendingWorkspaceOpen | null>(null)
   const initialWorkspaceResumeStarted = useRef(false)
@@ -346,14 +395,56 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         setChatFocusNonce((value) => value + 1)
         return
       }
+      if (action === 'search') {
+        if (workspaceOpen.kind !== 'ready') return
+        setFocusMode(false)
+        setSidebarOpen(true)
+        setSearchOpen(true)
+        return
+      }
+      if (action === 'overview') {
+        if (workspaceOpen.kind !== 'ready') return
+        setFocusMode(false)
+        setOverviewOpen(true)
+        return
+      }
+      if (action === 'toggle-typewriter') {
+        void writingScope.set('typewriter', !writing.typewriter)
+        return
+      }
+      if (action === 'toggle-focus-paragraph') {
+        void writingScope.set('focusParagraph', !writing.focusParagraph)
+        return
+      }
+      if (action === 'proofread') {
+        if (workspaceOpen.kind !== 'ready') return
+        setFocusMode(false)
+        setSidebarOpen(true)
+        setProofreadOpen(true)
+        setProofreadRequest({ scope: path ? 'document' : 'manuscript', nonce: Date.now() })
+        return
+      }
+      if (action === 'cards-character' || action === 'cards-worldbook') {
+        if (workspaceOpen.kind !== 'ready') return
+        const kind = action === 'cards-character' ? 'character' : 'worldbook'
+        setFocusMode(false)
+        setSidebarOpen(true)
+        setCardsOpen(true)
+        setCardsKind(kind)
+        setCardsSelectedPath((current) => {
+          if (!current) return current
+          return (kind === 'character' ? isCharacterCardPath(current) : isWorldbookCardPath(current)) ? current : null
+        })
+        return
+      }
       if (editorDirty) return
-      const buttons = document.querySelectorAll<HTMLButtonElement>('[aria-label="章节导航"] button')
+      const buttons = document.querySelectorAll<HTMLButtonElement>('.chapter-navigation button')
       const button = action === 'previous-chapter' ? buttons[0] : buttons[1]
       if (button && !button.disabled) button.click()
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [editorDirty, focusMode, session?.sessionId])
+  }, [editorDirty, focusMode, path, session?.sessionId, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
   useEffect(() => {
     if (!chatFocusNonce || !assistantOpen || focusMode) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
@@ -365,6 +456,9 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     setClipboard(null); setDeleteTarget(null); setRenameTarget(null)
     setOverview(null); setWorkspaceMenuOpen(false)
     setHistoryOpen(false); setSnapshots(null); setRollbackTarget(null)
+    setSearchOpen(false); setProofreadOpen(false); setProofreadRequest(null); setCardsOpen(false); setCardsSelectedPath(null); setCardsCatalog({ characters: [], worldbook: [] }); setReveal(null); setExportChapters(null); setExportNote('')
+    setOverviewOpen(false); setOverviewNote(''); setStatusBusyPath(null); progressRecord.cancel()
+    setArchiveOpen(false); setArchives([]); setArchiveNote('')
   }, [openWorkspaceId])
   useEffect(() => {
     if (!historyOpen || !fileSession) { setSnapshots(null); return }
@@ -383,7 +477,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     void collectWorkspaceFiles(ctx, fileSession.sessionId).then((paths) => {
       if (live) setFiles(sortChapterPaths(paths))
     }).catch(() => {
-      if (live) { setFiles([]); setWorkbenchNote('未能读取完整章节顺序。') }
+      if (live) { setFiles([]); setWorkbenchNote(t('error.chapterOrder')) }
     })
     return () => { live = false }
   }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision])
@@ -413,13 +507,48 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     if (next === writingProgress.baselines) return
     void progressScope.set('baselines', next).catch(() => { /* 下次 overview 自然重试 */ })
   }, [overview, openWorkspaceId, writableProgress, writingProgress, progressScope])
-  const openDocument = (nextPath: string) => {
-    if (editorDirty && nextPath !== path) {
-      setWorkbenchNote('请先保存当前文档。')
+  const openDocument = (nextPath: string, hit?: SearchHit) => {
+    if (editorDirty && (nextPath !== path || hit)) {
+      setWorkbenchNote(t('error.saveFirst'))
       return
     }
     setWorkbenchNote('')
+    setOverviewOpen(false)
+    setCardsSelectedPath(null)
     setPath(nextPath)
+    setReveal(hit ? toRevealRequest(hit) : null)
+  }
+  const changeChapterStatus = async (chapterPath: string, status: ChapterStatus) => {
+    if (!fileSession || !overview) return
+    const previous = overview
+    setOverview(applyChapterStatus(overview, chapterPath, status))
+    setStatusBusyPath(chapterPath)
+    setOverviewNote('')
+    const result = await safeRpcCall<{ path: string; status: ChapterStatus }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'chapter.statusSet', {
+      sessionId: fileSession.sessionId,
+      path: chapterPath,
+      status,
+    }))
+    setStatusBusyPath(null)
+    if (!result.ok) {
+      setOverview(previous)
+      setOverviewNote(errorMessage(result))
+      return
+    }
+    setOverviewRevision((value) => value + 1)
+  }
+  const recordSavedProgress = async () => {
+    const session = fileSessionRef.current
+    if (!session) return
+    const refreshed = await safeRpcCall<ProjectOverview>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.overview', { sessionId: session.sessionId }))
+    if (!refreshed.ok) return
+    setOverview(refreshed.value)
+    const chars = progressRecordChars(refreshed.value)
+    if (chars === null) return
+    await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'progress.record', {
+      sessionId: session.sessionId,
+      totalChars: chars,
+    }))
   }
   const openImagePreview = async (imagePath: string) => {
     if (!fileSession) return
@@ -443,7 +572,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     })
   }
   const openFileMenu = (kind: FileMenuKind, selectedPath: string, position: { x: number; y: number }) => {
-    if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
+    if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
     setWorkbenchNote('')
     setFileMenu({ kind, path: selectedPath, x: position.x, y: position.y })
   }
@@ -454,7 +583,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     return index < 0 ? '.' : target.slice(0, index)
   }
   const openRenameDialog = (selectedPath: string) => {
-    if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
+    if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
     fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setFileMenu(null)
     setManagePath(selectedPath)
@@ -482,7 +611,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     if (!renamed.ok) { setManageNote(errorMessage(renamed)); return }
     if (path === managePath) setPath(renamed.value.path)
     setTreeRevision((value) => value + 1)
-    setWorkbenchNote(renamed.value.metadataWarning ? `已重命名为 ${renamed.value.path}；${renamed.value.metadataWarning}` : `已重命名为 ${renamed.value.path}`)
+    setWorkbenchNote(renamed.value.metadataWarning ? t('note.renamedWithWarning', { path: renamed.value.path, warning: renamed.value.metadataWarning }) : t('note.renamed', { path: renamed.value.path }))
     setManagePath(null)
   }
   /* 目录行重命名:走 workbench entry.rename,不需要读 version；失败时把 note 放进
@@ -505,7 +634,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       setPath(`${renamed}${path.slice(target.path.length)}`)
     }
     setTreeRevision((value) => value + 1)
-    setWorkbenchNote(`已重命名为 ${renamed}`)
+    setWorkbenchNote(t('note.renamed', { path: renamed }))
     setRenameTarget(null)
   }
   const closeRenameEntryDialog = () => {
@@ -516,7 +645,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     if (target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const requestDeleteEntry = (kind: FileMenuKind, targetPath: string) => {
-    if (editorDirty) { setWorkbenchNote('请先保存当前文档。'); return }
+    if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
     fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setFileMenu(null)
     setDeleteTarget({ kind, path: targetPath })
@@ -543,17 +672,17 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       setPath('')
     }
     setTreeRevision((value) => value + 1)
-    setWorkbenchNote(`已删除 ${target.path}`)
+    setWorkbenchNote(t('note.deleted', { path: target.path }))
   }
   const setClipboardFromMenu = (op: 'copy' | 'cut', kind: FileMenuKind, targetPath: string) => {
     /* cut 当前文稿或其父目录等于要搬走缓冲区：编辑器有未保存内容时先阻止，防 buffer 丢失。 */
     if (op === 'cut' && editorDirty && (targetPath === path || (kind === 'directory' && path.startsWith(`${targetPath}/`)))) {
-      setWorkbenchNote('请先保存当前文档，再剪切它所在的文件或目录。')
+      setWorkbenchNote(t('note.saveBeforeCut'))
       setFileMenu(null)
       return
     }
     setClipboard({ op, kind, path: targetPath })
-    setWorkbenchNote(op === 'copy' ? `已复制 ${targetPath}` : `已剪切 ${targetPath}`)
+    setWorkbenchNote(op === 'copy' ? t('note.copied', { path: targetPath }) : t('note.cut', { path: targetPath }))
     setFileMenu(null)
   }
   const pasteFromMenu = async () => {
@@ -580,7 +709,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       }))
       if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
       setTreeRevision((value) => value + 1)
-      setWorkbenchNote(`已复制到 ${result.value.path}`)
+      setWorkbenchNote(t('note.copiedTo', { path: result.value.path }))
       return
     }
     /* cut:用 entry.move 走 workbench,内部其实是移动;成功后清空剪贴板。 */
@@ -597,11 +726,11 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     }
     setClipboard(null)
     setTreeRevision((value) => value + 1)
-    setWorkbenchNote(`已移动到 ${result.value.path}`)
+    setWorkbenchNote(t('note.movedTo', { path: result.value.path }))
   }
   const openTreeCreate = (kind: 'file' | 'folder', directory: string) => {
     if (!fileSession) return
-    if (editorDirty) { setCreateNote('请先保存当前文档。'); return }
+    if (editorDirty) { setCreateNote(t('error.saveFirst')); return }
     createReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setFileMenu(null)
     setCreateNote('')
@@ -628,7 +757,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       if (!result.ok) { setCreateNote(errorMessage(result)); return }
       setTreeCreateRequest(null)
       setTreeRevision((old) => old + 1)
-      setWorkbenchNote(`已创建 ${result.value.path}`)
+      setWorkbenchNote(t('note.created', { path: result.value.path }))
       return
     }
     const fileName = /\.[a-z0-9]{1,8}$/i.test(name) ? name : `${name}.md`
@@ -651,13 +780,13 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     const result = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.create', { sessionId: fileSession.sessionId, label }))
     setSnapshotBusy(false)
     if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
-    setWorkbenchNote(`已提交 ${label}`)
+    setWorkbenchNote(t('note.committed', { label }))
     setHistoryOpen(true)
     setSnapshotRevision((value) => value + 1)
   }
   const requestRollback = (snapshot: SnapshotResponse) => {
     if (snapshotBusy) return
-    if (editorDirty) { setWorkbenchNote('请先保存当前文档，再回滚。'); return }
+    if (editorDirty) { setWorkbenchNote(t('note.saveBeforeRollback')); return }
     setRollbackTarget(snapshot)
   }
   const confirmRollback = async () => {
@@ -671,10 +800,10 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       const partial = partialApplyDetails(result)
       if (partial) {
         setRollbackTarget(null)
-        const wrote = partial.appliedPaths.length ? `；涉及 ${partial.appliedPaths.length} 个路径，需逐一核对` : ''
-        const snapshot = partial.safetySnapshotId ? `；回滚前状态已存入安全快照 ${partial.safetySnapshotId}` : ''
-        const backup = partial.recoveryPath ? `；备份在 ${partial.recoveryPath}` : ''
-        setWorkbenchNote(`回滚未能全部完成${wrote}${snapshot}${backup}，请检查作品状态。`)
+        const wrote = partial.appliedPaths.length ? t('note.rollbackPartialPaths', { count: partial.appliedPaths.length }) : ''
+        const snapshot = partial.safetySnapshotId ? t('note.rollbackPartialSnapshot', { id: partial.safetySnapshotId }) : ''
+        const backup = partial.recoveryPath ? t('note.rollbackPartialBackup', { path: partial.recoveryPath }) : ''
+        setWorkbenchNote(t('note.rollbackPartial', { wrote, snapshot, backup }))
         setSnapshotRevision((value) => value + 1)
         setTreeRevision((value) => value + 1)
         setContentRevision((value) => value + 1)
@@ -685,7 +814,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       return
     }
     setRollbackTarget(null)
-    setWorkbenchNote(`已回滚到 ${target.label ?? target.createdAt}；回滚前的状态已自动保存为新提交。`)
+    setWorkbenchNote(t('note.rolledBack', { label: target.label ?? target.createdAt }))
     setSnapshotRevision((value) => value + 1)
     setTreeRevision((value) => value + 1)
     setContentRevision((value) => value + 1)
@@ -706,7 +835,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       try {
         await ctx.workspaces.delete(pending.replaceWorkspaceId)
       } catch {
-        warning = warning ? `${warning} 旧的最近入口未能移除。` : '新位置已打开，但旧的最近入口未能移除。'
+        warning = warning ? t('note.oldEntryNotRemoved', { warning }) : t('note.newOpenedOldRemains')
       }
       if (!workspaceOpenGate.isCurrent(pending.ticket)) return
     }
@@ -723,10 +852,15 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     const workspaceListState = ctx.workspaces.list.getSnapshot()
     const sessionListState = ctx.sessions.list.getSnapshot()
     const workspaceView = workspaceListState.items.find((item) => item.workspaceId === pending.workspace.workspaceId) ?? pending.workspace
+    const conversationWork = conversationWorkRecord(conversationScope.getSnapshot().value, pending.workspace.workspaceId)
     ctx.sessions.open(resumableConversationId({
       sessionIds: workspaceView.sessionIds,
       byId: sessionListState.byId ?? {},
-      archivedIds: workspaceListState.archivedSessionIds ?? [],
+      archivedIds: [
+        ...(workspaceListState.archivedSessionIds ?? []),
+        ...conversationWork.archivedIds as SessionId[],
+        ...conversationWork.tombstoneIds as SessionId[],
+      ],
       fallback: sessionId,
     }))
   }
@@ -736,6 +870,27 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       ? await verifyRelocatedWorkspaceSession(ctx, sessionId)
       : undefined
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: sessionId }))
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    if (recovery.ok && recovery.value.state === 'recoverable') {
+      const nextImportFlow = recoverImport(sessionId, pending.workspace.workspaceId, recovery.value)
+      if (nextImportFlow.kind === 'recover') {
+        pendingWorkspaceOpen.current = pending
+        importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        setWorkspaceOpen({
+          kind: 'needs-recovery',
+          workspaceId: pending.workspace.workspaceId,
+          sessionId,
+          path: pending.workspace.path,
+          title: pending.workspace.title,
+          recovery: 'import',
+        })
+        setImportFlow(nextImportFlow)
+        return
+      }
+      pending.warning = t('note.brokenImportIgnored')
+    }
+    if (!recovery.ok) pending.warning = t('note.unverifiedImportIgnored')
     const initialPath = relocatedInitialPath ?? await verifyWorkspaceSession(ctx, sessionId)
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
     if (!initialPath) {
@@ -747,7 +902,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       setWorkspaceOpen({
         kind: 'needs-intent', workspaceId: pending.workspace.workspaceId,
         path: pending.workspace.path, title: pending.workspace.title, intent: 'create',
-        message: '这个文件夹还没有可打开的 Markdown 或 TXT 作品文件。',
+        message: t('note.folderNotWork'),
       })
       setHomeNote('')
       return
@@ -766,7 +921,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       setWorkspaceOpen({
         kind: 'needs-intent', workspaceId: pending.workspace.workspaceId,
         path: pending.workspace.path, title: pending.workspace.title, intent: 'open',
-        message: '这个文件夹已经包含 Markdown 或 TXT 作品文件，不会按新作品初始化。',
+        message: t('note.folderAlreadyWork'),
       })
       setHomeNote('')
       return
@@ -791,7 +946,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     } catch {
       if (!workspaceOpenGate.isCurrent(ticket)) return
       ctx.sessions.clear()
-      const message = '原作品文件夹已移动或无法读取。'
+      const message = t('note.folderMoved')
       setWorkspaceOpen({ kind: 'needs-relocation', workspaceId: workspace.workspaceId, path: workspace.path, title: workspace.title, message })
       setHomeNote(message)
       setOpeningWorkspace(false)
@@ -803,7 +958,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       inspection = await inspectRegisteredWorkspace(ctx, current.path)
     } catch {
       if (!workspaceOpenGate.isCurrent(ticket)) return
-      const message = '作品目录检查未能完成，请重试。'
+      const message = t('note.folderCheckFailed')
       setWorkspaceOpen({ kind: 'error', workspaceId: current.workspaceId, path: current.path, title: current.title, message })
       setHomeNote(message)
       setOpeningWorkspace(false)
@@ -815,12 +970,12 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         pendingWorkspaceOpen.current = pending
         setWorkspaceOpen({
           kind: 'needs-intent', workspaceId: current.workspaceId, path: current.path, title: current.title,
-          intent: 'create', message: '这个文件夹还没有可打开的 Markdown 或 TXT 作品文件。',
+          intent: 'create', message: t('note.folderNotWork'),
         })
         setOpeningWorkspace(false)
         return
       }
-      const message = '没有找到可打开的 Markdown 或 TXT 作品文件。'
+      const message = t('error.noTextFiles')
       setWorkspaceOpen({ kind: 'error', workspaceId: current.workspaceId, path: current.path, title: current.title, message })
       setHomeNote(message)
       setOpeningWorkspace(false)
@@ -869,7 +1024,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         setWorkspaceOpen({
           kind: 'needs-intent', workspaceId: registration.workspace.workspaceId,
           path: registration.workspace.path, title: registration.workspace.title, intent: 'open',
-          message: '这个文件夹已经包含 Markdown 或 TXT 作品文件，不会按新作品初始化。',
+          message: t('note.folderAlreadyWork'),
         })
         setManualWorkspaceMode(null)
         setManualWorkspacePath('')
@@ -881,7 +1036,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         setWorkspaceOpen({
           kind: 'needs-intent', workspaceId: registration.workspace.workspaceId,
           path: registration.workspace.path, title: registration.workspace.title, intent: 'create',
-          message: '这个文件夹还没有可打开的 Markdown 或 TXT 作品文件。',
+          message: t('note.folderNotWork'),
         })
         setManualWorkspaceMode(null)
         setManualWorkspacePath('')
@@ -909,15 +1064,15 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       const message = replaceWorkspaceId
         ? relocationFailureMessage(cleanupFailed)
         : /unrelated files/i.test(detail)
-          ? '新作品必须使用空文件夹；当前文件夹已有其他内容。'
+          ? t('note.newNeedsEmpty')
           : /no supported text files/i.test(detail)
-            ? '没有找到可打开的 Markdown 或 TXT 作品文件。'
+            ? t('error.noTextFiles')
             : stage === 'registering'
-              ? '作品文件夹不存在或无法读取，请重新选择。'
+              ? t('note.folderMissing')
               : stage === 'inspecting'
-                ? '作品目录检查未能完成，请重试。'
+                ? t('note.folderCheckFailed')
               : stage === 'initializing'
-                ? '新作品初始化未能完成；已有文件不会被覆盖。'
+                ? t('note.initFailedKeep')
                 : workspaceOpenFailureMessage(error)
       setWorkspaceOpen(replacedWorkspace
         ? { kind: 'needs-relocation', workspaceId: replacedWorkspace.workspaceId, path: replacedWorkspace.path, title: replacedWorkspace.title, message }
@@ -952,8 +1107,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       if (!workspaceOpenGate.isCurrent(pending.ticket)) return
       pendingWorkspaceOpen.current = null
       const message = pending.intent === 'create'
-        ? `新作品初始化未能完成；已有文件不会被覆盖。${cleanupFailed ? ' 最近作品入口未能自动移除。' : ''}`
-        : `${workspaceOpenFailureMessage(error)}${cleanupFailed ? ' 最近作品入口未能自动移除。' : ''}`
+        ? t('note.initFailedCleanup', { cleanup: cleanupFailed ? t('note.cleanupRecentFailed') : '' })
+        : `${workspaceOpenFailureMessage(error)}${cleanupFailed ? t('note.cleanupRecentFailed') : ''}`
       setWorkspaceOpen({ kind: 'error', path: pending.workspace.path, title: pending.workspace.title, message })
       setHomeNote(message)
     } finally {
@@ -975,9 +1130,9 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     setManualWorkspaceMode(null)
     setManualWorkspacePath('')
     setHomeNote(cleanupFailed
-      ? '已取消，但本次新增的最近作品入口未能自动移除。'
+      ? t('note.cancelledCleanupFailed')
       : pending.registrationCreated && pending.sessionId
-        ? '已取消；作品会话已经建立，因此最近作品入口已保留。'
+        ? t('note.cancelledSessionKept')
         : '')
   }
   useEffect(() => {
@@ -994,7 +1149,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       setRelocatingWorkspaceId(workspace.workspaceId)
       setManualWorkspaceMode('existing')
       setManualWorkspacePath('')
-      setHomeNote('目录选择器暂时不可用，请直接输入作品的新位置。')
+      setHomeNote(t('note.pickerUnavailableRelocate'))
       return
     }
     if (!path) return
@@ -1006,9 +1161,9 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       await ctx.workspaces.delete(workspace.workspaceId)
       workspaceOpenGate.begin('home')
       setWorkspaceOpen({ kind: 'idle' })
-      setHomeNote('已从最近移除；磁盘中的作品未被删除。')
+      setHomeNote(t('note.removedFromRecent'))
     } catch {
-      setHomeNote('最近入口未能移除，请重试。')
+      setHomeNote(t('note.removeRecentFailed'))
     }
   }
   const startWorkspaceFromPicker = async () => {
@@ -1022,9 +1177,9 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     } catch {
       setOpeningWorkspace(false)
       setManualWorkspaceMode('existing')
-      setHomeNote('目录选择器暂时不可用，请直接输入作品路径。')
+      setHomeNote(t('note.pickerUnavailablePath'))
       if (session) {
-        setWorkbenchNote('目录选择器暂时不可用，请直接输入作品路径。')
+        setWorkbenchNote(t('note.pickerUnavailablePath'))
         setWorkspaceMenuOpen(true)
       }
       return
@@ -1039,14 +1194,14 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     try {
       const path = await ctx.workspaces.pickDirectory()
       if (!path) {
-        const message = '未选择文件夹，可直接输入路径。'
+        const message = t('note.noFolderPicked')
         if (session) setWorkbenchNote(message)
         else setHomeNote(message)
         return
       }
       await openPickedWorkspace(path, 'open', relocatingWorkspaceId)
     } catch {
-      const message = '目录选择器暂时不可用，请直接输入作品路径。'
+      const message = t('note.pickerUnavailablePath')
       if (session) setWorkbenchNote(message)
       else setHomeNote(message)
     }
@@ -1055,7 +1210,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     event.preventDefault()
     const path = manualWorkspacePath.trim()
     if (!path) {
-      const message = '请输入作品文件夹路径。'
+      const message = t('note.enterFolderPath')
       if (session) setWorkbenchNote(message)
       else setHomeNote(message)
       return
@@ -1064,19 +1219,19 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   }
   const pathFallbackForm = manualWorkspaceMode ? e('form', { className: 'path-fallback', onSubmit: submitWorkspacePath },
     e('label', null,
-      e('span', null, '作品文件夹路径'),
+      e('span', null, t('home.pathLabel')),
       e('input', {
         value: manualWorkspacePath,
         onChange: (event: ChangeEvent<HTMLInputElement>) => setManualWorkspacePath(event.target.value),
-        placeholder: '例如 D:/小说/作品',
-        'aria-label': '作品文件夹路径',
+        placeholder: t('home.pathPlaceholder'),
+        'aria-label': t('home.pathLabel'),
         autoFocus: true,
       }),
     ),
     e('div', null,
-      e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspaceDirectory() }, '选择文件夹'),
+      e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspaceDirectory() }, t('home.chooseFolder')),
       e('button', { className: 'primary-action', type: 'submit', disabled: openingWorkspace },
-        openingWorkspace ? '打开中…' : '打开此目录',
+        openingWorkspace ? t('home.opening') : t('home.openThisFolder'),
       ),
       e('button', {
         type: 'button',
@@ -1087,7 +1242,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
           setHomeNote('')
           if (session) setWorkbenchNote('')
         },
-      }, '取消'),
+      }, t('common.cancel')),
     ),
   ) : null
   const closeWorkspaceChrome = () => {
@@ -1095,7 +1250,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   }
   const leaveToHome = async () => {
     closeWorkspaceChrome()
-    if (editorDirty) { setWorkbenchNote('请先保存当前文档，再返回作品列表。'); return }
+    if (editorDirty) { setWorkbenchNote(t('note.saveBeforeHome')); return }
     if (!(await canLeaveAssistantDraft())) return
     setAssistantDraftDirty(false)
     setFocusMode(false)
@@ -1107,18 +1262,18 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const switchToWorkspace = async (id: WorkspaceId) => {
     closeWorkspaceChrome()
     if (!id || id === currentWorkspace?.workspaceId) return
-    if (editorDirty) { setWorkbenchNote('请先保存当前文档，再切换作品。'); return }
+    if (editorDirty) { setWorkbenchNote(t('note.saveBeforeSwitch')); return }
     if (!(await canLeaveAssistantDraft())) return
     setAssistantDraftDirty(false)
     const workspace = workspaces.items.find((item) => item.workspaceId === id)
-    if (!workspace) { setWorkbenchNote('作品入口已经变化，请重新选择。'); return }
+    if (!workspace) { setWorkbenchNote(t('note.entryChanged')); return }
     await openRegisteredWorkspace(workspace)
   }
   const startNewProject = async () => {
     closeWorkspaceChrome()
     if (openingWorkspace || newProject) return
     if (fileSession) {
-      if (editorDirty) { setWorkbenchNote('请先保存当前文档，再新建作品。'); return }
+      if (editorDirty) { setWorkbenchNote(t('note.saveBeforeNew')); return }
       if (!(await canLeaveAssistantDraft())) return
       setAssistantDraftDirty(false)
     }
@@ -1149,6 +1304,384 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     onClose: closeNewProject,
     onCreate: (title: string) => void submitNewProject(title),
   }) : null
+  const openSearchPanel = () => {
+    if (!fileSession) return
+    setFocusMode(false)
+    setSidebarOpen(true)
+    setSearchOpen(true)
+    setPaletteOpen(false)
+  }
+  const openOverviewPanel = () => {
+    if (!fileSession) return
+    setFocusMode(false)
+    setOverviewOpen(true)
+    setCardsSelectedPath(null)
+    setPaletteOpen(false)
+  }
+  const openProofreadPanel = (scope: 'document' | 'manuscript' = 'document') => {
+    if (!fileSession) return
+    if (scope === 'document' && !path) {
+      setWorkbenchNote(t('note.openDocBeforeProofread'))
+      return
+    }
+    setFocusMode(false)
+    setSidebarOpen(true)
+    setProofreadOpen(true)
+    setProofreadRequest({ scope, nonce: Date.now() })
+    setPaletteOpen(false)
+  }
+  const openCardsPanel = (kind: 'character' | 'worldbook') => {
+    if (!fileSession) return
+    setFocusMode(false)
+    setSidebarOpen(true)
+    setCardsOpen(true)
+    setCardsKind(kind)
+    setCardsSelectedPath((path) => {
+      if (!path) return path
+      return (kind === 'character' ? isCharacterCardPath(path) : isWorldbookCardPath(path)) ? path : null
+    })
+    setPaletteOpen(false)
+  }
+  const toggleCardsPanel = (kind: 'character' | 'worldbook') => {
+    if (cardsOpen && cardsKind === kind) {
+      setCardsOpen(false)
+      setCardsSelectedPath(null)
+      return
+    }
+    openCardsPanel(kind)
+  }
+  const selectCard = (nextPath: string | null) => {
+    setCardsSelectedPath(nextPath)
+    if (nextPath) setOverviewOpen(false)
+  }
+  const registerFlowWorkspace = async (workspacePath: string) => {
+    const registration = await createFlowWorkspace(ctx, workspacePath)
+    if (registration.created) temporaryFlowWorkspaces.current.add(registration.workspace.workspaceId)
+    return registration
+  }
+  const bindTemporarySource = (sessionId: string, workspaceId: string, created: boolean) => {
+    if (created) temporarySourceWorkspaces.current.set(sessionId, workspaceId)
+  }
+  const cleanupFlowWorkspace = async (workspaceId: string): Promise<boolean> => {
+    if (!temporaryFlowWorkspaces.current.has(workspaceId)) return true
+    try {
+      await ctx.workspaces.delete(workspaceId as WorkspaceId)
+      temporaryFlowWorkspaces.current.delete(workspaceId)
+      return true
+    } catch {
+      return false
+    }
+  }
+  const cleanupTemporarySource = async (sessionId: string): Promise<boolean> => {
+    const workspaceId = temporarySourceWorkspaces.current.get(sessionId)
+    if (!workspaceId) return true
+    const cleaned = await cleanupFlowWorkspace(workspaceId)
+    if (cleaned) temporarySourceWorkspaces.current.delete(sessionId)
+    return cleaned
+  }
+  const preserveFlowWorkspace = (workspaceId: string) => {
+    temporaryFlowWorkspaces.current.delete(workspaceId)
+  }
+  const closeImportFlow = (restoreFocus = true) => {
+    const target = importReturnFocus.current
+    importReturnFocus.current = null
+    setImportFlow(idleImportFlow)
+    if (restoreFocus && target) globalThis.setTimeout(() => target.focus(), 0)
+  }
+  const startImportProject = async () => {
+    closeWorkspaceChrome()
+    setPaletteOpen(false)
+    if (fileSession) {
+      if (editorDirty) { setWorkbenchNote(t('note.saveBeforeImport')); return }
+      if (!(await canLeaveAssistantDraft())) return
+      setAssistantDraftDirty(false)
+    }
+    importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setImportTitle({ busy: false, note: '' })
+  }
+  const submitImportTitle = async (title: string) => {
+    if (!importTitle || importTitle.busy || openingWorkspace) return
+    setImportTitle({ busy: true, note: '' })
+    const created = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.createHome', { title }))
+    if (!created.ok) {
+      setImportTitle({ busy: false, note: errorMessage(created) })
+      return
+    }
+    setImportTitle(null)
+    try {
+      const targetRegistration = await registerFlowWorkspace(created.value.path)
+      const targetSessionId = await connectUsableWorkspaceSession(ctx, targetRegistration.workspace.workspaceId)
+      pendingWorkspaceOpen.current = {
+        ticket: workspaceOpenGate.begin(`import:${targetRegistration.workspace.workspaceId}`),
+        workspace: targetRegistration.workspace,
+        intent: 'create',
+        registrationCreated: targetRegistration.created,
+        sessionId: targetSessionId,
+      }
+      await selectImportSource(targetSessionId, targetRegistration.workspace.workspaceId)
+    } catch (error) {
+      closeImportFlow()
+      setHomeNote(error instanceof Error ? error.message : t('note.importNotStarted'))
+    }
+  }
+  const selectImportSource = async (targetSessionId: SessionId, targetWorkspaceId: WorkspaceId) => {
+    const sourcePath = await ctx.workspaces.pickDirectory()
+    if (!sourcePath) { closeImportFlow(); return }
+    let sourceSessionId: SessionId | undefined
+    let createdSourceWorkspaceId: WorkspaceId | undefined
+    try {
+      const sourceRegistration = await registerFlowWorkspace(sourcePath)
+      if (sourceRegistration.created) createdSourceWorkspaceId = sourceRegistration.workspace.workspaceId
+      sourceSessionId = await ctx.workspaces.connectWorkspace(sourceRegistration.workspace.workspaceId)
+      bindTemporarySource(sourceSessionId, sourceRegistration.workspace.workspaceId, sourceRegistration.created)
+      setImportFlow({ kind: 'working', message: t('note.importChecking') })
+      const probe = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', {
+        sourceSessionId, targetSessionId,
+      }))
+      if (!probe.ok || probe.value.state !== 'ready') {
+        const sourceCleaned = await cleanupTemporarySource(sourceSessionId)
+        closeImportFlow()
+        const note = probe.ok ? probe.value.message ?? t('note.importDirectoryDenied') : t('note.importCheckFailed')
+        setHomeNote(sourceCleaned ? note : t('note.tempEntryNotRemoved', { note }))
+        return
+      }
+      setImportFlow(importReview(sourceSessionId, targetSessionId, targetWorkspaceId, probe.value))
+    } catch (error) {
+      const sourceCleaned = sourceSessionId
+        ? await cleanupTemporarySource(sourceSessionId)
+        : createdSourceWorkspaceId ? await cleanupFlowWorkspace(createdSourceWorkspaceId) : true
+      if (error instanceof FlowWorkspaceCleanupError || !sourceCleaned) {
+        closeImportFlow()
+        setHomeNote(t('note.importStartCleanupFailed'))
+        return
+      }
+      throw error
+    }
+  }
+  const applyImportFlow = async () => {
+    if (importFlow.kind !== 'review') return
+    const flow = importFlow
+    setImportFlow({ kind: 'working', message: t('note.importCopying') })
+    const applied = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importApply', {
+      sourceSessionId: flow.sourceSessionId, targetSessionId: flow.targetSessionId, probeToken: flow.probe.token,
+    }))
+    if (!applied.ok) {
+      const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: flow.targetSessionId }))
+      const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
+      if (recovery.ok && recovery.value.state === 'recoverable') {
+        setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, recovery.value))
+        if (!sourceCleaned) setHomeNote(t('note.importRecoverableCleanupFailed'))
+      } else {
+        const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
+        closeImportFlow(false)
+        setHomeNote(sourceCleaned && targetCleaned ? t('note.importFailedRetry') : t('note.importFailedCleanup'))
+      }
+      return
+    }
+    const initialized = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.init', { sessionId: flow.targetSessionId, newProject: false }))
+    const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
+    preserveFlowWorkspace(flow.targetWorkspaceId)
+    if (!initialized.ok) {
+      closeImportFlow(false)
+      setHomeNote(sourceCleaned ? t('note.importDoneInitFailed') : t('note.importDoneInitAndCleanupFailed'))
+      return
+    }
+    try {
+      const pending = pendingWorkspaceOpen.current
+      const initialPath = await verifyWorkspaceSession(ctx, flow.targetSessionId as SessionId)
+      if (pending && pending.workspace.workspaceId === flow.targetWorkspaceId) {
+        await finishWorkspaceOpen(pending, flow.targetSessionId as SessionId, initialPath)
+      } else {
+        const workspace = workspaces.items.find((item) => item.workspaceId === flow.targetWorkspaceId)
+        if (workspace) await openRegisteredWorkspace(workspace, flow.targetSessionId as SessionId)
+      }
+      closeImportFlow(false)
+      if (!sourceCleaned) setHomeNote(t('note.importDoneSourceRemains'))
+    } catch {
+      closeImportFlow(false)
+      setHomeNote(t('note.importDoneUnreadable'))
+    }
+  }
+  const cleanupImportFlow = async () => {
+    if (importFlow.kind === 'recover') {
+      setImportFlow({
+        kind: 'cleanup-confirm',
+        targetSessionId: importFlow.targetSessionId,
+        targetWorkspaceId: importFlow.targetWorkspaceId,
+        receiptId: importFlow.probe.receiptId!,
+      })
+      return
+    }
+    if (importFlow.kind !== 'cleanup-confirm') return
+    const flow = importFlow
+    setImportFlow({ kind: 'working', message: t('note.importCleaning') })
+    const cleaned = await safeRpcCall(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importCleanup', {
+      targetSessionId: flow.targetSessionId,
+      receiptId: flow.receiptId,
+    }))
+    if (cleaned.ok) {
+      if (current === flow.targetSessionId) ctx.sessions.clear()
+      const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
+      if (pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
+        workspaceOpenGate.begin('home')
+        pendingWorkspaceOpen.current = null
+        setWorkspaceOpen({ kind: 'idle' })
+      }
+      closeImportFlow()
+      setHomeNote(targetCleaned ? t('note.importCleaned') : t('note.importCleanedCleanupFailed'))
+      return
+    }
+    const recovery = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', { targetSessionId: flow.targetSessionId }))
+    if (recovery.ok && recovery.value.state === 'recoverable') {
+      setImportFlow(recoverImport(flow.targetSessionId, flow.targetWorkspaceId, {
+        ...recovery.value,
+        message: recovery.value.message ?? t('note.importCleanFailed'),
+      }))
+      return
+    }
+    if (current === flow.targetSessionId) ctx.sessions.clear()
+    closeImportFlow()
+    setHomeNote(t('note.importCleanFailed'))
+  }
+  const cancelImportFlow = async () => {
+    const flow = importFlow
+    let cleaned = true
+    if (flow.kind === 'review') {
+      const sourceCleaned = await cleanupTemporarySource(flow.sourceSessionId)
+      const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
+      cleaned = sourceCleaned && targetCleaned
+    }
+    if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
+    if (flow.kind !== 'idle' && flow.kind !== 'working' && pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
+      workspaceOpenGate.begin('home')
+      pendingWorkspaceOpen.current = null
+      setWorkspaceOpen({ kind: 'idle' })
+    }
+    closeImportFlow()
+    if (!cleaned) setHomeNote(t('note.importCancelledCleanupFailed'))
+  }
+  const renderImportDialog = () => e(ImportDialog, {
+    flow: importFlow,
+    onCancel: () => void cancelImportFlow(),
+    onApply: () => void applyImportFlow(),
+    onContinue: () => importFlow.kind === 'recover'
+      ? void selectImportSource(importFlow.targetSessionId as SessionId, importFlow.targetWorkspaceId as WorkspaceId).catch(() => closeImportFlow())
+      : undefined,
+    onCleanup: () => void cleanupImportFlow(),
+  })
+  const exportNovel = async () => {
+    closeWorkspaceChrome()
+    setPaletteOpen(false)
+    if (!fileSession) return
+    if (editorDirty) { setExportNote(t('note.saveBeforeExport')); setExportChapters([]); return }
+    const requestSessionId = fileSession.sessionId
+    setExporting(true)
+    setExportNote(t('note.exportPreparing'))
+    try {
+      const chapters = await collectChapters(ctx, requestSessionId)
+      if (fileSessionIdRef.current !== requestSessionId) return
+      setExportChapters(chapters)
+      setExportNote(chapters.length ? t('note.exportReady') : t('note.exportEmpty'))
+    } catch (error) {
+      if (fileSessionIdRef.current !== requestSessionId) return
+      const message = error instanceof Error ? error.message : ''
+      setExportChapters([])
+      setExportNote(/没有可导出|正文为空|empty|cannot export/i.test(message) ? message : t('note.exportFailed'))
+    } finally {
+      if (fileSessionIdRef.current === requestSessionId) setExporting(false)
+    }
+  }
+  const confirmExport = (format: ExportFormat) => {
+    if (!exportChapters?.length) return
+    const title = currentWorkspace?.title || t('workspace.untitled')
+    try {
+      const prepared = prepareExport(exportChapters, title, format)
+      downloadExport(prepared.filename, prepared.content, prepared.format)
+      setExportNote(t('note.exportGenerated', { filename: prepared.filename }))
+      setExportChapters(null)
+    } catch (error) {
+      setExportNote(error instanceof Error ? error.message : t('note.exportFailed'))
+    }
+  }
+  const loadArchives = async () => {
+    if (!fileSession) return
+    const ticket = archiveRequestGate.begin(fileSession.sessionId)
+    setArchiveBusy(true)
+    setArchiveNote('')
+    const result = await safeRpcCall<ArchiveListResponse>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.list', { sessionId: fileSession.sessionId }))
+    if (!archiveRequestGate.isCurrent(ticket)) return
+    setArchiveBusy(false)
+    if (!result.ok) { setArchiveNote(errorMessage(result)); return }
+    setArchives(result.value.items)
+    setArchiveInvalid(result.value.invalid)
+  }
+  const openArchivePanel = () => {
+    closeWorkspaceChrome()
+    setPaletteOpen(false)
+    if (!fileSession) return
+    setArchiveOpen(true)
+    void loadArchives()
+  }
+  const archiveManaged = async (selectedPath: string) => {
+    setFileMenu(null)
+    if (!fileSession || archiveBusy) return
+    if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
+    setArchiveBusy(true)
+    setWorkbenchNote('')
+    const read = await safeRpcCall<{ version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
+      sessionId: fileSession.sessionId,
+      path: selectedPath,
+    }))
+    if (!read.ok) {
+      setArchiveBusy(false)
+      setWorkbenchNote(errorMessage(read))
+      return
+    }
+    const archived = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', {
+      sessionId: fileSession.sessionId,
+      path: selectedPath,
+      expectedVersion: read.value.version,
+    }))
+    setArchiveBusy(false)
+    if (!archived.ok) { setWorkbenchNote(errorMessage(archived)); return }
+    if (archived.value.state !== 'archived') { setWorkbenchNote(t('note.archiveIncomplete')); await loadArchives(); return }
+    if (path === selectedPath) { setPath(''); setReveal(null) }
+    setTreeRevision((value) => value + 1)
+    setWorkbenchNote(archived.value.metadataWarning ? t('note.archivedWithWarning', { path: archived.value.path, warning: archived.value.metadataWarning }) : t('note.archived', { path: archived.value.path }))
+    await loadArchives()
+  }
+  const continueArchive = async (item: ArchiveView) => {
+    if (!fileSession || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote(t('error.saveFirst')); return }
+    setArchiveBusy(true)
+    setArchiveNote('')
+    const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', {
+      sessionId: fileSession.sessionId,
+      archiveId: item.archiveId,
+    }))
+    setArchiveBusy(false)
+    if (!result.ok) { setArchiveNote(errorMessage(result)); return }
+    if (result.value.metadataWarning) setArchiveNote(result.value.metadataWarning)
+    setTreeRevision((value) => value + 1)
+    await loadArchives()
+  }
+  const restoreArchived = async (item: ArchiveView) => {
+    if (!fileSession || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote(t('error.saveFirst')); return }
+    if (!item.version) { setArchiveNote(t('note.archiveUnverified')); return }
+    setArchiveBusy(true)
+    setArchiveNote('')
+    const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.restore', {
+      sessionId: fileSession.sessionId,
+      archiveId: item.archiveId,
+      expectedVersion: item.version,
+    }))
+    setArchiveBusy(false)
+    if (!result.ok) { setArchiveNote(errorMessage(result)); return }
+    if (result.value.state !== 'restored') { setArchiveNote(t('note.restoreBlocked')); await loadArchives(); return }
+    setTreeRevision((value) => value + 1)
+    openDocument(result.value.path)
+    setWorkbenchNote(result.value.metadataWarning ? t('note.restoredWithWarning', { path: result.value.path, warning: result.value.metadataWarning }) : t('note.restored', { path: result.value.path }))
+    await loadArchives()
+  }
   /* 命令面板:复用 useTheme / openSettings / startWorkspaceFromPicker /
      startNewProject / openDocument / setFocusMode 全部已有的回调,palette
      本身只负责"按下执行"的分发。文件列表来自已加载好的 files 状态(已经
@@ -1163,6 +1696,17 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     onOpenSettings: () => openSettings(),
     onToggleFocus: () => setFocusMode((value) => !value),
     onOpenDocument: (target: string) => openDocument(target),
+    onOpenSearch: () => openSearchPanel(),
+    onOpenOverview: () => openOverviewPanel(),
+    onOpenProofread: (scope: 'document' | 'manuscript') => openProofreadPanel(scope),
+    onOpenCards: (kind: 'character' | 'worldbook') => openCardsPanel(kind),
+    onExport: () => { void exportNovel() },
+    onImport: () => { void startImportProject() },
+    onOpenArchives: () => openArchivePanel(),
+    onToggleTypewriter: () => { void writingScope.set('typewriter', !writing.typewriter) },
+    onToggleFocusParagraph: () => { void writingScope.set('focusParagraph', !writing.focusParagraph) },
+    typewriter: writing.typewriter,
+    focusParagraph: writing.focusParagraph,
     hasWorkspace: Boolean(fileSession),
     focusMode,
     files,
@@ -1171,7 +1715,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const openAnotherWorkspace = async () => {
     closeWorkspaceChrome()
     if (editorDirty) {
-      setWorkbenchNote('请先保存当前文档，再打开作品。')
+      setWorkbenchNote(t('note.saveBeforeOpen'))
       return
     }
     if (!(await canLeaveAssistantDraft())) return
@@ -1182,9 +1726,9 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   if (workspaceOpen.kind === 'checking') {
     return e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
       e('style', null, redesignedStyles),
-      e('section', { className: 'workspace-checking', 'aria-label': '正在验证作品' },
-        e('h1', null, '正在检查作品'),
-        e('p', { role: 'status', 'aria-live': 'polite' }, '正在确认目录、恢复状态和正文文件…'),
+      e('section', { className: 'workspace-checking', 'aria-label': t('home.verifying') },
+        e('h1', null, t('home.checking')),
+        e('p', { role: 'status', 'aria-live': 'polite' }, t('home.checkingDetail')),
         e('code', null, workspaceOpen.path),
       ),
     )
@@ -1198,7 +1742,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
           e('span', { className: 'brand-mark', 'aria-hidden': 'true' }, 'D'),
           e('strong', null, 'DSH Editor'),
         ),
-        e('span', { className: 'local-state' }, '本地作品'),
+        e('span', { className: 'local-state' }, t('home.title')),
         e('span', { className: 'topbar-actions' },
           e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
           e(SettingsTrigger, { onOpen: openSettings }),
@@ -1206,46 +1750,52 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
           e(WindowControls, null),
         ),
       ),
-      e(PaperStage, { label: '空白稿纸' },
-        e('p', { className: 'home-hint' }, '选择本地已有的作品目录继续，或在「文档/dsh-editor」下从空白稿纸新建。'),
+      e(PaperStage, { label: t('home.blankPaper') },
+        e('p', { className: 'home-hint' }, t('home.intro')),
         e('div', { className: 'home-actions' },
           e('button', {
             className: 'home-entry-card', type: 'button',
-            'aria-label': '打开作品',
+            'aria-label': t('home.openWork'),
             disabled: openingWorkspace || Boolean(newProject),
             onClick: () => void startWorkspaceFromPicker(),
           },
             e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(FolderIcon, null)),
-            e('span', { className: 'home-entry-title' }, '打开作品'),
-            e('span', { className: 'home-entry-desc' }, '选择本地已有的作品目录，继续未完的故事。'),
+            e('span', { className: 'home-entry-title' }, t('home.openWork')),
+            e('span', { className: 'home-entry-desc' }, t('home.openWorkDesc')),
           ),
           e('button', {
             className: 'home-entry-card', type: 'button',
-            'aria-label': '新建',
+            'aria-label': t('home.new'),
             disabled: openingWorkspace || Boolean(newProject),
             onClick: () => void startNewProject(),
           },
             e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(NewDocIcon, null)),
-            e('span', { className: 'home-entry-title' }, '新建'),
-            e('span', { className: 'home-entry-desc' }, '从空白稿纸开始，搭起新作品的第一行字。'),
+            e('span', { className: 'home-entry-title' }, t('home.new')),
+            e('span', { className: 'home-entry-desc' }, t('home.newDesc')),
           ),
         ),
+        e('button', {
+          className: 'home-import-link',
+          type: 'button',
+          disabled: openingWorkspace || Boolean(newProject) || Boolean(importTitle),
+          onClick: () => void startImportProject(),
+        }, t('home.importExisting')),
         pathFallbackForm,
         workspaceOpen.kind === 'needs-intent' ? e('section', { className: 'workspace-intent-prompt', role: 'alert' },
-          e('strong', null, workspaceOpen.intent === 'create' ? '这个目录还不是作品' : '这里已经有作品内容'),
+          e('strong', null, workspaceOpen.intent === 'create' ? t('home.folderNotWork') : t('home.folderHasWork')),
           e('p', null, workspaceOpen.message),
           e('code', null, workspaceOpen.path),
           e('div', null,
-            e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void continuePendingWorkspaceIntent() }, workspaceOpen.intent === 'create' ? '在这里新建' : '改为打开'),
-            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void cancelPendingWorkspaceIntent() }, '取消'),
+            e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void continuePendingWorkspaceIntent() }, workspaceOpen.intent === 'create' ? t('home.createHere') : t('home.openInstead')),
+            e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void cancelPendingWorkspaceIntent() }, t('common.cancel')),
           ),
         ) : null,
         workspaceOpen.kind === 'error' ? e('code', null, workspaceOpen.path) : null,
         homeNote ? e('p', { className: 'warning', role: 'alert' }, homeNote) : null,
-        e('section', { className: 'home-recent', 'aria-label': '最近作品' },
+        e('section', { className: 'home-recent', 'aria-label': t('home.recent') },
           e('header', null,
-            e('h2', null, '最近作品'),
-            e('small', null, workspaces.items.length ? `${workspaces.items.length} 个入口` : '尚无作品入口'),
+            e('h2', null, t('home.recent')),
+            e('small', null, workspaces.items.length ? t('home.entryCount', { count: workspaces.items.length }) : t('home.noEntries')),
           ),
           workspaces.items.length ? e('div', { className: 'workspace-list' }, workspaces.items.map((workspace) => {
             const needsRelocation = workspaceOpen.kind === 'needs-relocation' && workspaceOpen.workspaceId === workspace.workspaceId
@@ -1257,19 +1807,31 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
               },
                 e('strong', null, workspace.title || workspace.path),
                 e('small', null, workspace.path),
-                recentLabel ? e('span', { className: 'workspace-time', 'aria-label': `最近打开：${recentLabel}` }, recentLabel) : null,
+                recentLabel ? e('span', { className: 'workspace-time', 'aria-label': t('home.recentOpened', { label: recentLabel }) }, recentLabel) : null,
               ),
               needsRelocation ? e('div', { className: 'workspace-relocation', role: 'alert' },
                 e('p', null, workspaceOpen.message), e('code', null, workspaceOpen.path),
-                e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void relocateWorkspace(workspace) }, '重新定位'),
-                e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void removeBrokenWorkspace(workspace) }, '从最近移除'),
+                e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void relocateWorkspace(workspace) }, t('home.relocate')),
+                e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void removeBrokenWorkspace(workspace) }, t('home.removeRecent')),
               ) : null,
             )
-          })) : e('p', { className: 'muted home-recent-empty' }, '打开过的作品会显示在这里。'),
+          })) : e('p', { className: 'muted home-recent-empty' }, t('home.recentEmpty')),
         ),
       ),
       renderNewProjectDialog(),
       renderCommandPalette(),
+      renderImportDialog(),
+      importTitle ? e(TextPromptDialog, {
+        id: 'import-title-home',
+        title: t('home.importAsNew'),
+        label: t('home.workName'),
+        initialValue: '',
+        confirmLabel: t('home.chooseSource'),
+        note: importTitle.note,
+        busy: importTitle.busy,
+        onCancel: () => { if (!importTitle.busy) setImportTitle(null) },
+        onConfirm: (title: string) => void submitImportTitle(title),
+      }) : null,
       settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, onClose: () => setSettingsOpen(false) }) : null,
     )
   }
@@ -1284,12 +1846,12 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   ].filter(Boolean).join(' ')
 
   return e('main', {
-    className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarVisible ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}`,
+    className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarVisible ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${overviewOpen ? ' overview-open' : ''}${cardsOpen && cardsSelectedPath ? ' cards-open' : ''}`,
     style: { minWidth: 0, gridTemplateColumns: layoutColumns },
   },
     e('style', null, redesignedStyles),
     e('header', { className: 'chrome', onDoubleClick: titleBarDoubleClick },
-      e('div', { className: 'workspace-chrome', role: 'group', 'aria-label': '作品' },
+      e('div', { className: 'workspace-chrome', role: 'group', 'aria-label': t('workspace.work') },
         e('details', {
           className: 'workspace-menu',
           open: workspaceMenuOpen,
@@ -1297,13 +1859,13 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         },
           e('summary', {
             role: 'button',
-            title: '作品菜单',
-            'aria-label': '作品菜单',
+            title: t('workspace.menu'),
+            'aria-label': t('workspace.menu'),
             'aria-expanded': workspaceMenuOpen,
             'aria-controls': 'workspace-actions',
-          }, e('span', null, currentWorkspace?.title || currentWorkspace?.path || '作品')),
-          e('div', { id: 'workspace-actions', className: 'workspace-menu-panel', 'aria-label': '作品操作' },
-            workspaces.items.length ? e('div', { className: 'workspace-menu-actions', 'aria-label': '切换作品' },
+          }, e('span', null, currentWorkspace?.title || currentWorkspace?.path || t('workspace.work'))),
+          e('div', { id: 'workspace-actions', className: 'workspace-menu-panel', 'aria-label': t('workspace.actions') },
+            workspaces.items.length ? e('div', { className: 'workspace-menu-actions', 'aria-label': t('workspace.switch') },
               workspaces.items.map((workspace) => e('button', {
                 key: workspace.workspaceId,
                 type: 'button',
@@ -1314,35 +1876,39 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
             ) : null,
             workspaces.items.length ? e('hr', { className: 'workspace-menu-divider' }) : null,
             e('div', { className: 'workspace-menu-actions' },
-              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void openAnotherWorkspace() }, '打开作品'),
-              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void startNewProject() }, '新建'),
-              e('button', { type: 'button', 'aria-label': '返回作品列表', onClick: () => void leaveToHome() }, '返回作品列表'),
+              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void openAnotherWorkspace() }, t('home.openWork')),
+              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void startNewProject() }, t('home.new')),
+              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject) || Boolean(importTitle), onClick: () => void startImportProject() }, t('workspace.import')),
+              e('button', { type: 'button', disabled: exporting, onClick: () => { void exportNovel() } }, exporting ? t('workspace.exporting') : t('workspace.exportMarkdown')),
+              e('button', { type: 'button', disabled: exporting, onClick: () => { void exportNovel() } }, t('workspace.exportTxt')),
+              e('button', { type: 'button', onClick: () => openArchivePanel() }, t('workspace.archived')),
+              e('button', { type: 'button', 'aria-label': t('workspace.backHome'), onClick: () => void leaveToHome() }, t('workspace.backHome')),
             ),
             pathFallbackForm,
           ),
         ),
       ),
-      e('nav', { className: 'layout-controls', 'aria-label': '工作台布局' },
+      e('nav', { className: 'layout-controls', 'aria-label': t('workspace.layout') },
         e('button', {
           type: 'button',
           disabled: focusMode,
           'aria-pressed': sidebarOpen,
-          title: sidebarOpen ? '隐藏文件栏' : '显示文件栏',
+          title: sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles'),
           onClick: () => setSidebarOpen((value) => !value),
-        }, '文件'),
+        }, t('workspace.files')),
         e('button', {
           type: 'button',
           'aria-pressed': focusMode,
-          title: focusMode ? '退出专注写作' : '进入专注写作',
+          title: focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus'),
           onClick: () => setFocusMode((value) => !value),
-        }, focusMode ? '退出专注' : '专注'),
+        }, focusMode ? t('workspace.exitFocusShort') : t('workspace.focus')),
         e('button', {
           type: 'button',
           disabled: focusMode,
           'aria-pressed': assistantOpen,
-          title: assistantOpen ? '隐藏写作搭档' : '显示写作搭档',
+          title: assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant'),
           onClick: () => setAssistantOpen((value) => !value),
-        }, '搭档'),
+        }, t('workspace.assistant')),
       ),
       e('div', { className: 'topbar-actions' },
         e(ThemeToggle, { theme, onChange: setTheme }),
@@ -1352,30 +1918,83 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         e(WindowControls, null),
       ),
     ),
-    sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': '文件与项目资料' },
+    sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': t('workspace.filesAndNotes') },
       e('div', { className: 'side-title' },
-        e('span', null, '文件'),
+        e('span', null, t('workspace.files')),
         e('span', { className: 'side-title-actions' },
-          e('button', { className: 'side-action', type: 'button', disabled: snapshotBusy, title: '把当前状态存为一次提交（说明自动使用当前时间）', 'aria-label': '提交', onClick: () => void commitSnapshot() }, '提交'),
-          e('button', { className: 'side-action', type: 'button', 'aria-pressed': historyOpen, title: '提交历史', 'aria-label': '历史', onClick: () => setHistoryOpen((value) => !value) }, '历史'),
+          e('button', { className: 'side-action', type: 'button', 'aria-pressed': searchOpen, title: t('workspace.searchTitle'), 'aria-label': t('sidebar.search'), onClick: () => setSearchOpen((value) => !value) }, t('sidebar.search')),
+          e('button', { className: 'side-action', type: 'button', 'aria-pressed': proofreadOpen, title: t('workspace.proofreadTitle'), 'aria-label': t('workspace.proofread'), onClick: () => setProofreadOpen((value) => !value) }, t('workspace.proofread')),
+          e('button', { className: 'side-action', type: 'button', 'aria-pressed': overviewOpen, title: t('workspace.overviewTitle'), 'aria-label': t('workspace.overview'), onClick: () => { setOverviewOpen((value) => !value); setCardsSelectedPath(null) } }, t('workspace.overview')),
+          e('button', { className: 'side-action', type: 'button', 'aria-pressed': cardsOpen && cardsKind === 'character', title: t('workspace.cardsTitle'), 'aria-label': t('workspace.people'), onClick: () => toggleCardsPanel('character') }, t('workspace.people')),
+          e('button', { className: 'side-action', type: 'button', 'aria-pressed': cardsOpen && cardsKind === 'worldbook', title: t('workspace.worldbookTitle'), 'aria-label': t('workspace.settings'), onClick: () => toggleCardsPanel('worldbook') }, t('workspace.settings')),
+          e('button', { className: 'side-action', type: 'button', disabled: snapshotBusy, title: t('workspace.commitTitle'), 'aria-label': t('workspace.commit'), onClick: () => void commitSnapshot() }, t('workspace.commit')),
+          e('button', { className: 'side-action', type: 'button', 'aria-pressed': historyOpen, title: t('workspace.commitHistory'), 'aria-label': t('common.history'), onClick: () => setHistoryOpen((value) => !value) }, t('common.history')),
         ),
       ),
-      /* 每日目标已封存:侧栏进度小标不再展示;基线记录仍静默保留,恢复时直接挂回 progressChipProps。 */
-      historyOpen ? e('section', { className: 'snapshot-panel', 'aria-label': '提交历史' },
+      (() => {
+        const summary = progressChipProps({ overview, progress: writingProgress, workspaceId: openWorkspaceId })
+        if (!summary) return null
+        return e('div', { className: `writing-progress-chip${summary.reached ? ' reached' : ''}`, 'aria-label': summary.text }, summary.text)
+      })(),
+      searchOpen ? e(SearchPanel, {
+        ctx,
+        sessionId: fileSession.sessionId,
+        revision: treeRevision,
+        navigationBlocked: editorDirty,
+        onOpen: (hit: SearchHit) => openDocument(hit.path, hit),
+      }) : null,
+      proofreadOpen ? e(ProofreadPanel, {
+        ctx,
+        sessionId: fileSession.sessionId,
+        revision: treeRevision,
+        navigationBlocked: editorDirty,
+        activePath: path,
+        request: proofreadRequest,
+        onOpen: (finding: ProofreadFinding) => openDocument(finding.path, finding),
+        onApplied: (appliedPath: string) => {
+          const navigation = proposalAppliedNavigation(appliedPath, path, editorDirty)
+          setTreeRevision((old) => old + 1)
+          if (navigation.expandPath) setTreeExpansionPath(navigation.expandPath)
+          if (!navigation.openPath) {
+            setWorkbenchNote(t('note.appliedDirty'))
+            return
+          }
+          openDocument(navigation.openPath)
+          if (navigation.refreshContent) setContentRevision((old) => old + 1)
+        },
+      }) : null,
+      cardsOpen ? e(CardsPanel, {
+        ctx,
+        sessionId: fileSession.sessionId,
+        revision: treeRevision,
+        kind: cardsKind,
+        selectedPath: cardsSelectedPath,
+        navigationBlocked: editorDirty,
+        onKindChange: (kind) => openCardsPanel(kind),
+        onSelect: selectCard,
+        onCatalog: setCardsCatalog,
+        onCreated: (createdPath: string) => {
+          setTreeRevision((value) => value + 1)
+          setTreeExpansionPath(createdPath)
+          openDocument(createdPath)
+        },
+        onOpenHit: (hit: SearchHit) => openDocument(hit.path, hit),
+      }) : null,
+      historyOpen ? e('section', { className: 'snapshot-panel', 'aria-label': t('workspace.commitHistory') },
         snapshots === null
-          ? e('p', { className: 'snapshot-empty' }, '正在读取提交历史…')
+          ? e('p', { className: 'snapshot-empty' }, t('workspace.historyLoading'))
           : snapshots.length === 0
-            ? e('p', { className: 'snapshot-empty' }, '还没有提交记录。')
+            ? e('p', { className: 'snapshot-empty' }, t('workspace.historyEmpty'))
             : snapshots.map((item) => e('div', { key: item.snapshotId, className: 'snapshot-row' },
                 e('span', { className: 'snapshot-label', title: item.createdAt }, item.label ?? item.createdAt),
-                e('span', { className: 'snapshot-meta' }, `${item.files} 文件`),
-                e('button', { className: 'snapshot-rollback', type: 'button', disabled: snapshotBusy, onClick: () => requestRollback(item) }, '回滚'),
+                e('span', { className: 'snapshot-meta' }, t('workspace.historyFiles', { count: item.files })),
+                e('button', { className: 'snapshot-rollback', type: 'button', disabled: snapshotBusy, onClick: () => requestRollback(item) }, t('workspace.rollback')),
               )),
       ) : null,
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
       workspaceOpen.warning ? e('p', { className: 'warning pad', role: 'status' }, workspaceOpen.warning) : null,
       workbenchNote ? e('p', { className: `pad`, role: 'status' }, workbenchNote) : null,
-      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision }),
+      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, highlightPath: cardsSelectedPath ?? undefined, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
     ) : null,
     sidebarVisible ? e(PanelResizer, {
       side: 'left',
@@ -1383,24 +2002,64 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       minimum: SIDEBAR_MIN,
       maximum: SIDEBAR_MAX,
       defaultValue: SIDEBAR_DEFAULT,
-      label: '调整文件栏宽度',
+      label: t('workspace.resizeFiles'),
       onChange: setSidebarWidth,
     }) : null,
     e(Editor, {
       ctx, session: fileSession, path, files, onOpen: openDocument, create: () => openTreeCreate('file', '正文'),
-      externalRevision: contentRevision, onDirtyChange: setEditorDirty,
+      externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal,
       completionPreference: writing.completion,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
       authorMemory: normalizeAuthorMemory(writing.authorMemory),
-      onSaved: () => setOverviewRevision((value) => value + 1),
+      typewriter: writing.typewriter,
+      focusParagraph: writing.focusParagraph,
+      typography: writingTypography(writing),
+      onToggleTypewriter: () => { void writingScope.set('typewriter', !writing.typewriter) },
+      onToggleFocusParagraph: () => { void writingScope.set('focusParagraph', !writing.focusParagraph) },
+      onSaved: () => {
+        setOverviewRevision((value) => value + 1)
+        progressRecord.schedule(() => { void recordSavedProgress() })
+      },
     }),
+    overviewOpen ? e(OverviewPanel, {
+      ctx,
+      sessionId: fileSession.sessionId,
+      overview,
+      revision: overviewRevision,
+      note: overviewNote,
+      statusBusyPath,
+      onClose: () => setOverviewOpen(false),
+      onOpenChapter: (chapterPath: string) => openDocument(chapterPath),
+      onStatusChange: (chapterPath: string, status: ChapterStatus) => { void changeChapterStatus(chapterPath, status) },
+    }) : null,
+    cardsOpen && cardsSelectedPath ? (() => {
+      const selectedCard = cardsKind === 'character'
+        ? cardsCatalog.characters.find((card) => card.path === cardsSelectedPath)
+        : cardsCatalog.worldbook.find((card) => card.path === cardsSelectedPath)
+      return selectedCard ? e(CardsDetail, {
+        ctx,
+        sessionId: fileSession.sessionId,
+        kind: cardsKind,
+        card: selectedCard,
+        characters: cardsCatalog.characters,
+        navigationBlocked: editorDirty,
+        onClose: () => setCardsSelectedPath(null),
+        onOpenDocument: (cardPath: string) => {
+          setTreeExpansionPath(cardPath)
+          openDocument(cardPath)
+        },
+        onSelectCard: selectCard,
+        onChanged: () => setTreeRevision((value) => value + 1),
+        onOpenHit: (hit: SearchHit) => openDocument(hit.path, hit),
+      }) : null
+    })() : null,
     assistantVisible ? e(PanelResizer, {
       side: 'right',
       value: assistantWidth,
       minimum: ASSISTANT_MIN,
       maximum: ASSISTANT_MAX,
       defaultValue: ASSISTANT_DEFAULT,
-      label: '调整写作搭档宽度',
+      label: t('workspace.resizeAssistant'),
       onChange: setAssistantWidth,
     }) : null,
     e(Chat, {
@@ -1421,7 +2080,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         setTreeRevision((old) => old + 1)
         if (navigation.expandPath) setTreeExpansionPath(navigation.expandPath)
         if (!navigation.openPath) {
-          setWorkbenchNote('建议已应用；当前文档有未保存内容，请先保存，再打开应用的文件。')
+          setWorkbenchNote(t('note.appliedDirty'))
           return
         }
         openDocument(navigation.openPath)
@@ -1431,33 +2090,33 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     !assistantVisible && !focusMode ? e('button', {
       className: 'assistant-launcher',
       type: 'button',
-      'aria-label': '打开写作搭档',
+      'aria-label': t('workspace.openAssistant'),
       'aria-expanded': false,
       onClick: () => setAssistantOpen(true),
-    }, e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark)), e('strong', null, '搭档')) : null,
+    }, e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark)), e('strong', null, t('workspace.assistant'))) : null,
     leaveConfirm ? e(ConfirmDialog, {
       id: 'leave-assistant-draft',
-      title: '放弃未发送的消息？',
-      message: '离开当前作品或打开设置后，这段文字不会自动保存。',
-      confirmLabel: '放弃并继续',
+      title: t('chat.discardDraftTitle'),
+      message: t('chat.leaveDraftBody'),
+      confirmLabel: t('chat.discardAndContinue'),
       onCancel: () => resolveLeaveConfirm(false),
       onConfirm: () => resolveLeaveConfirm(true),
     }) : null,
     treeCreateRequest ? e(TextPromptDialog, {
       id: 'tree-create',
       key: `${treeCreateRequest.kind}:${treeCreateRequest.directory}`,
-      title: treeCreateRequest.kind === 'folder' ? '新建文件夹' : '新建文件',
-      label: treeCreateRequest.kind === 'folder' ? '文件夹名称' : '文件名称（无扩展名时按 .md 创建）',
+      title: treeCreateRequest.kind === 'folder' ? t('workspace.newFolder') : t('workspace.newFile'),
+      label: treeCreateRequest.kind === 'folder' ? t('workspace.folderName') : t('workspace.fileName'),
       initialValue: '',
-      confirmLabel: '创建',
+      confirmLabel: t('common.create'),
       onCancel: closeTreeCreate,
       onConfirm: (name: string) => void submitTreeCreate(name),
     }) : null,
     rollbackTarget ? e(ConfirmDialog, {
       id: 'snapshot-rollback',
-      title: '回滚到这次提交？',
-      message: `作品内容将回到「${rollbackTarget.label ?? rollbackTarget.createdAt}」的状态；当前状态会先自动保存为一次新提交，随时可以再回滚回来。`,
-      confirmLabel: '回滚',
+      title: t('workspace.rollbackTitle'),
+      message: t('workspace.rollbackBody', { label: rollbackTarget.label ?? rollbackTarget.createdAt }),
+      confirmLabel: t('workspace.rollback'),
       onCancel: () => setRollbackTarget(null),
       onConfirm: () => void confirmRollback(),
     }) : null,
@@ -1485,24 +2144,26 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
           setFileMenu(null)
         }
       },
+      onArchive: () => void archiveManaged(fileMenu.path),
+      canArchive: canArchivePath(fileMenu.kind, fileMenu.path),
       onDelete: () => requestDeleteEntry(fileMenu.kind, fileMenu.path),
     }) : null,
     managePath ? e(TextPromptDialog, {
       id: 'rename-file',
-      title: '重命名文件',
-      label: '新名称',
+      title: t('workspace.renameFile'),
+      label: t('workspace.newName'),
       initialValue: managePath.split('/').at(-1) ?? '',
-      confirmLabel: '保存新名称',
+      confirmLabel: t('workspace.saveNewName'),
       onCancel: closeRenameDialog,
       onConfirm: renameManaged,
     }) : null,
     renameTarget ? e(TextPromptDialog, {
       id: 'rename-entry',
       key: `${renameTarget.kind}:${renameTarget.path}`,
-      title: renameTarget.kind === 'directory' ? '重命名文件夹' : '重命名',
-      label: '新名称',
+      title: renameTarget.kind === 'directory' ? t('workspace.renameFolder') : t('common.rename'),
+      label: t('workspace.newName'),
       initialValue: renameTarget.path.split('/').at(-1) ?? '',
-      confirmLabel: '保存新名称',
+      confirmLabel: t('workspace.saveNewName'),
       note: manageNote,
       busy: manageBusy,
       onCancel: closeRenameEntryDialog,
@@ -1510,26 +2171,56 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     }) : null,
     deleteTarget ? e(ConfirmDialog, {
       id: 'delete-entry',
-      title: deleteTarget.kind === 'directory' ? '删除这个文件夹？' : '删除这个文档？',
-      message: `将删除 ${deleteTarget.path}。不可撤销（除非之前已提交到历史）。`,
-      confirmLabel: '删除',
+      title: deleteTarget.kind === 'directory' ? t('workspace.deleteFolderTitle') : t('workspace.deleteFileTitle'),
+      message: t('workspace.deleteBody', { path: deleteTarget.path }),
+      confirmLabel: t('common.delete'),
       onCancel: closeDeleteConfirm,
       onConfirm: () => void confirmDeleteEntry(),
     }) : null,
     renderCommandPalette(),
+    renderImportDialog(),
+    importTitle ? e(TextPromptDialog, {
+      id: 'import-title',
+      title: t('home.importAsNew'),
+      label: t('home.workName'),
+      initialValue: '',
+      confirmLabel: t('home.chooseSource'),
+      note: importTitle.note,
+      busy: importTitle.busy,
+      onCancel: () => { if (!importTitle.busy) setImportTitle(null) },
+      onConfirm: (title: string) => void submitImportTitle(title),
+    }) : null,
+    exportChapters ? e(ExportPreviewDialog, {
+      chapters: exportChapters,
+      title: currentWorkspace?.title || t('workspace.untitled'),
+      busy: exporting,
+      note: exportNote,
+      onCancel: () => { setExportChapters(null); setExportNote('') },
+      onExport: confirmExport,
+    }) : null,
+    archiveOpen ? e(ArchivePanel, {
+      items: archives,
+      invalid: archiveInvalid,
+      busy: archiveBusy,
+      note: archiveNote,
+      editorDirty,
+      onRestore: (item: ArchiveView) => void restoreArchived(item),
+      onContinue: (item: ArchiveView) => void continueArchive(item),
+      onClose: () => { if (!archiveBusy) setArchiveOpen(false) },
+    }) : null,
     imagePreview ? e(ImagePreviewOverlay, { path: imagePreview.path, url: imagePreview.url, onClose: closeImagePreview }) : null,
     settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, onClose: () => setSettingsOpen(false) }) : null,
     startupUpdate && !aboutOpen ? e('div', { className: 'update-toast', role: 'status' },
-      e('span', { className: 'update-toast-text' }, `发现新版本 ${startupUpdate.version}`),
+      e('span', { className: 'update-toast-text' }, t('about.toast', { version: startupUpdate.version })),
       e('button', {
         type: 'button',
         className: 'update-toast-action',
         onClick: () => { setStartupUpdate(null); setAboutOpen(true) },
-      }, '查看详情'),
+      }, t('about.viewDetails')),
       e('button', {
         type: 'button',
         className: 'icon-button update-toast-close',
-        'aria-label': '关闭更新提示',
+        'aria-label': t('about.dismissToast'),
         onClick: () => setStartupUpdate(null),
       }, '×'),
     ) : null,

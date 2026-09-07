@@ -17,65 +17,68 @@ import type { CredentialView, RpcResponse, RpcResult } from '@deepseek-ai/dsh-cl
 import { apiKeyFailure } from './settings-models-store.ts'
 import type { ShellContext } from './shared.ts'
 import { windowBridge } from './window-controls.tsx'
+import { t, useLocale } from '../i18n/index.ts'
 
 const ZHIHU_REF = 'ZHIHU_ACCESS_TOKEN'
 const ZHIHU_CONSOLE_URL = 'https://developer.zhihu.com'
 
-const TEXT = {
-  intro: '在知乎开放平台获取 Access Secret 后粘贴到此处,搭档即可调用知乎站内搜索、全网搜索、热榜、直答与公开知识库检索工具。',
-  guideTitle: '如何获取 Access Secret',
+function text() {
+  return {
+  intro: t('zhihu.intro'),
+  guideTitle: t('zhihu.guideTitle'),
   guideSteps: [
-    '打开知乎开放平台控制台: ',
-    '登录后进入控制台,创建应用或打开已有应用,在应用详情中查看 Access Secret。',
-    '复制 Access Secret,粘贴到下方输入框并保存。',
+    t('zhihu.guideStep1'),
+    t('zhihu.guideStep2'),
+    t('zhihu.guideStep3'),
   ],
-  help: 'Access Secret 仅保存在本机,不参与任何云端同步。',
-  statusHeading: '当前状态',
-  statusUnconfigured: '未配置',
-  statusStored: '已保存密钥',
-  statusLocked: '由环境变量提供(无法在本页修改)',
+  help: t('zhihu.help'),
+  statusHeading: t('zhihu.status'),
+  statusUnconfigured: t('zhihu.unconfigured'),
+  statusStored: t('zhihu.stored'),
+  statusLocked: t('zhihu.envLocked'),
   label: 'Access Secret',
-  placeholderStored: '已保存密钥(输入以替换)',
-  placeholderLocked: '由环境变量锁定',
-  placeholder: '输入 Access Secret',
-  keyBlank: '密钥不能只包含空白字符',
-  keyIllegal: '密钥格式不合法:不要带引号或 NAME=value 前缀',
-  save: '保存',
-  saving: '保存中…',
-  clear: '清除',
-  clearing: '清除中…',
-  loadFailed: '读取知乎密钥状态失败',
-  retry: '重试',
-  loadFailedPrefix: '加载失败:',
-  savedNote: '已保存。',
-  clearedNote: '已清除。',
-  usageTitle: '调用用量',
-  usageIntro: '本机近 30 天的知乎能力调用统计(站内搜索、全网搜索、热榜、直答、知识库检索)。',
-  usageLoading: '正在读取用量…',
-  usageLoadFailed: '读取知乎用量失败',
-  usageEmpty: '还没有知乎能力调用记录。',
-  usageCalls: '调用',
-  usageFailure: '失败',
-  usageNote: '仅统计本机调用次数,不含平台配额信息。',
-  kbTitle: '知识库',
-  kbIntro: '上传参考资料到知乎知识库后,搭档执行知识库检索时可召回个人库内容。文件会保存到知乎云端,请勿上传未发表手稿。',
-  kbManageHint: '也可以在知乎直答网页端管理(含新建)知识库: ',
+  placeholderStored: t('zhihu.placeholderStored'),
+  placeholderLocked: t('zhihu.placeholderLocked'),
+  placeholder: t('zhihu.placeholder'),
+  keyBlank: t('zhihu.keyBlank'),
+  keyIllegal: t('zhihu.keyIllegal'),
+  save: t('common.save'),
+  saving: t('common.saving'),
+  clear: t('common.clear'),
+  clearing: t('zhihu.clearing'),
+  loadFailed: t('zhihu.loadFailed'),
+  retry: t('common.retry'),
+  loadFailedPrefix: t('zhihu.loadFailedPrefix'),
+  savedNote: t('common.saved'),
+  clearedNote: t('zhihu.cleared'),
+  usageTitle: t('zhihu.usageTitle'),
+  usageIntro: t('zhihu.usageIntro'),
+  usageLoading: t('zhihu.usageLoading'),
+  usageLoadFailed: t('zhihu.usageFailed'),
+  usageEmpty: t('zhihu.usageEmpty'),
+  usageCalls: t('zhihu.calls'),
+  usageFailure: t('zhihu.failure'),
+  usageNote: t('zhihu.usageNote'),
+  kbTitle: t('zhihu.kbTitle'),
+  kbIntro: t('zhihu.kbIntro'),
+  kbManageHint: t('zhihu.kbManage'),
   kbManageUrl: 'https://zhida.zhihu.com/repositories/square',
-  kbBaseLabel: '目标知识库',
-  kbDefaultBase: '默认知识库',
-  kbEmpty: '还没有知识库,请先在知乎直答网页端创建。',
-  kbLoading: '正在读取知识库…',
-  kbLoadFailed: '读取知识库列表失败',
-  kbRefresh: '刷新',
-  kbFileLabel: '文件',
-  kbNoFile: '未选择文件',
-  kbFileNote: '支持 pdf/md/txt/epub/docx 等,不超过 20MB。上传由你手动发起,搭档不会自动上传。',
-  kbTooLarge: '文件超过 20MB,请压缩或拆分后再上传。',
-  kbUpload: '上传',
-  kbUploading: '上传中…',
-  kbUploadFailed: '上传失败:',
-  kbUploaded: '已上传到知识库。',
-  kbNeedKey: '保存 Access Secret 后可管理知识库。',
+  kbBaseLabel: t('zhihu.kbBase'),
+  kbDefaultBase: t('zhihu.kbDefault'),
+  kbEmpty: t('zhihu.kbEmpty'),
+  kbLoading: t('zhihu.kbLoading'),
+  kbLoadFailed: t('zhihu.kbFailed'),
+  kbRefresh: t('common.refresh'),
+  kbFileLabel: t('zhihu.file'),
+  kbNoFile: t('zhihu.noFile'),
+  kbFileNote: t('zhihu.fileNote'),
+  kbTooLarge: t('zhihu.tooLarge'),
+  kbUpload: t('common.upload'),
+  kbUploading: t('common.uploading'),
+  kbUploadFailed: t('zhihu.uploadFailed'),
+  kbUploaded: t('zhihu.uploaded'),
+  kbNeedKey: t('zhihu.needKey'),
+  }
 }
 
 const USAGE_DAYS = 30
@@ -96,7 +99,7 @@ function isZhihuUsageSummary(value: unknown): value is ZhihuUsageSummary {
 
 function failureMessage(result: RpcResult<unknown>): string {
   const error = (result as { error?: { message?: string } }).error
-  return error?.message ?? '请求失败'
+  return error?.message ?? t('common.requestFailed')
 }
 
 function rpcResult<T>(response: RpcResponse<T>): RpcResult<T> {
@@ -112,6 +115,7 @@ type LoadState = {
 const INITIAL_LOAD: LoadState = { status: 'loading', error: null, credential: undefined }
 
 export function SettingsZhihuSection(props: { ctx: ShellContext }): ReactNode {
+  useLocale()
   const [state, setState] = useState<LoadState>(INITIAL_LOAD)
 
   const load = async (): Promise<void> => {
@@ -134,19 +138,19 @@ export function SettingsZhihuSection(props: { ctx: ShellContext }): ReactNode {
   }, [props.ctx])
 
   if (state.status === 'loading') {
-    return e('section', { className: 'zhihu-page', 'aria-label': '知乎' },
+    return e('section', { className: 'zhihu-page', 'aria-label': t('settings.zhihu') },
       e(Header, null),
-      e('p', { className: 'zhihu-status', role: 'status' }, '正在读取…'),
+      e('p', { className: 'zhihu-status', role: 'status' }, t('zhihu.reading')),
     )
   }
 
   if (state.status === 'error') {
-    const message = state.error ?? TEXT.loadFailed
-    return e('section', { className: 'zhihu-page', 'aria-label': '知乎' },
+    const message = state.error ?? text().loadFailed
+    return e('section', { className: 'zhihu-page', 'aria-label': t('settings.zhihu') },
       e(Header, null),
       e('p', { className: 'zhihu-error', role: 'alert' },
-        `${TEXT.loadFailedPrefix}${message}`,
-        e('button', { type: 'button', className: 'zhihu-button', onClick: () => void load() }, TEXT.retry),
+        `${text().loadFailedPrefix}${message}`,
+        e('button', { type: 'button', className: 'zhihu-button', onClick: () => void load() }, text().retry),
       ),
     )
   }
@@ -160,8 +164,8 @@ export function SettingsZhihuSection(props: { ctx: ShellContext }): ReactNode {
 
 function Header(props: { note?: string | null }): ReactNode {
   return e('header', { className: 'zhihu-header' },
-    e('h2', { className: 'zhihu-title' }, '知乎'),
-    e('p', { className: 'zhihu-intro' }, TEXT.intro),
+    e('h2', { className: 'zhihu-title' }, t('settings.zhihu')),
+    e('p', { className: 'zhihu-intro' }, text().intro),
     props.note ? e('p', { className: 'zhihu-saved', role: 'status' }, props.note) : null,
   )
 }
@@ -179,15 +183,15 @@ function ExternalLink(props: { url: string; label: string }): ReactNode {
 
 /** 获取 Access Secret 的引导:仅在未保存密钥时显示。 */
 function Guide(): ReactNode {
-  return e('section', { className: 'zhihu-guide', 'aria-label': TEXT.guideTitle },
-    e('h3', { className: 'zhihu-guide-title' }, TEXT.guideTitle),
+  return e('section', { className: 'zhihu-guide', 'aria-label': text().guideTitle },
+    e('h3', { className: 'zhihu-guide-title' }, text().guideTitle),
     e('ol', { className: 'zhihu-guide-steps' },
       e('li', null,
-        TEXT.guideSteps[0],
+        text().guideSteps[0],
         e(ExternalLink, { url: ZHIHU_CONSOLE_URL, label: 'developer.zhihu.com' }),
       ),
-      e('li', null, TEXT.guideSteps[1]),
-      e('li', null, TEXT.guideSteps[2]),
+      e('li', null, text().guideSteps[1]),
+      e('li', null, text().guideSteps[2]),
     ),
   )
 }
@@ -245,7 +249,7 @@ function KnowledgeBaseSection(props: { ctx: ShellContext; enabled: boolean }): R
       const raw = await ctx.connection.rpc.call('/novel-kernel', 'zhihu.knowledge.bases', {})
       const result = raw as RpcResult<unknown>
       if (!result.ok) { setList({ status: 'error', error: failureMessage(result) }); return }
-      if (!isKnowledgeBaseList(result.value)) { setList({ status: 'error', error: '返回数据格式不符合契约' }); return }
+      if (!isKnowledgeBaseList(result.value)) { setList({ status: 'error', error: t('zhihu.contract') }); return }
       setList({ status: 'ready', bases: result.value.bases })
     } catch (error) {
       setList({ status: 'error', error: error instanceof Error ? error.message : String(error) })
@@ -260,7 +264,7 @@ function KnowledgeBaseSection(props: { ctx: ShellContext; enabled: boolean }): R
     if (!file || busy) return
     setFailure(undefined)
     setNote(undefined)
-    if (file.size > KB_MAX_BYTES) { setFailure(TEXT.kbTooLarge); return }
+    if (file.size > KB_MAX_BYTES) { setFailure(text().kbTooLarge); return }
     setBusy(true)
     try {
       const contentBase64 = toBase64(await file.arrayBuffer())
@@ -270,33 +274,33 @@ function KnowledgeBaseSection(props: { ctx: ShellContext; enabled: boolean }): R
         ...(baseId ? { knowledgeBaseId: baseId } : {}),
       })
       const result = raw as RpcResult<unknown>
-      if (!result.ok) { setFailure(`${TEXT.kbUploadFailed}${failureMessage(result)}`); return }
-      setNote(TEXT.kbUploaded)
+      if (!result.ok) { setFailure(`${text().kbUploadFailed}${failureMessage(result)}`); return }
+      setNote(text().kbUploaded)
       setFile(undefined)
       setFileKey((key) => key + 1)
       await load()
     } catch (error) {
-      setFailure(`${TEXT.kbUploadFailed}${error instanceof Error ? error.message : String(error)}`)
+      setFailure(`${text().kbUploadFailed}${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setBusy(false)
     }
   }
 
-  return e('section', { className: 'zhihu-kb', 'aria-label': TEXT.kbTitle },
-    e('h3', { className: 'zhihu-usage-title' }, TEXT.kbTitle),
-    e('p', { className: 'zhihu-usage-intro' }, TEXT.kbIntro),
+  return e('section', { className: 'zhihu-kb', 'aria-label': text().kbTitle },
+    e('h3', { className: 'zhihu-usage-title' }, text().kbTitle),
+    e('p', { className: 'zhihu-usage-intro' }, text().kbIntro),
     e('p', { className: 'zhihu-usage-intro' },
-      TEXT.kbManageHint,
-      e(ExternalLink, { url: TEXT.kbManageUrl, label: 'zhida.zhihu.com/repositories/square' }),
+      text().kbManageHint,
+      e(ExternalLink, { url: text().kbManageUrl, label: 'zhida.zhihu.com/repositories/square' }),
     ),
-    !enabled ? e('p', { className: 'zhihu-hint' }, TEXT.kbNeedKey) : null,
-    enabled && list.status === 'loading' ? e('p', { className: 'zhihu-status', role: 'status' }, TEXT.kbLoading) : null,
+    !enabled ? e('p', { className: 'zhihu-hint' }, text().kbNeedKey) : null,
+    enabled && list.status === 'loading' ? e('p', { className: 'zhihu-status', role: 'status' }, text().kbLoading) : null,
     enabled && list.status === 'error' ? e('p', { className: 'zhihu-error', role: 'alert' },
-      `${TEXT.loadFailedPrefix}${list.error || TEXT.kbLoadFailed}`,
-      e('button', { type: 'button', className: 'zhihu-button', onClick: () => void load() }, TEXT.retry),
+      `${text().loadFailedPrefix}${list.error || text().kbLoadFailed}`,
+      e('button', { type: 'button', className: 'zhihu-button', onClick: () => void load() }, text().retry),
     ) : null,
     enabled && list.status === 'ready' ? e('div', { className: 'zhihu-field' },
-      e('label', { className: 'zhihu-field-label', htmlFor: 'zhihu-kb-base' }, TEXT.kbBaseLabel),
+      e('label', { className: 'zhihu-field-label', htmlFor: 'zhihu-kb-base' }, text().kbBaseLabel),
       e('div', { className: 'zhihu-kb-base-row' },
         e('select', {
           id: 'zhihu-kb-base',
@@ -305,17 +309,17 @@ function KnowledgeBaseSection(props: { ctx: ShellContext; enabled: boolean }): R
           disabled: busy,
           onChange: (event: ChangeEvent<HTMLSelectElement>) => setBaseId(event.target.value),
         },
-          e('option', { value: '' }, TEXT.kbDefaultBase),
+          e('option', { value: '' }, text().kbDefaultBase),
           ...list.bases.map((base) => e('option', { key: base.id, value: base.id },
-            `${base.name}${base.isDefault ? '(默认)' : ''} · ${base.contentCount} 条`,
+            t('zhihu.baseOption', { name: base.name, default: base.isDefault ? t('zhihu.defaultMark') : '', count: base.contentCount }),
           )),
         ),
-        e('button', { type: 'button', className: 'zhihu-button', disabled: busy, onClick: () => void load() }, TEXT.kbRefresh),
+        e('button', { type: 'button', className: 'zhihu-button', disabled: busy, onClick: () => void load() }, text().kbRefresh),
       ),
-      list.bases.length === 0 ? e('p', { className: 'zhihu-hint' }, TEXT.kbEmpty) : null,
+      list.bases.length === 0 ? e('p', { className: 'zhihu-hint' }, text().kbEmpty) : null,
     ) : null,
     enabled && list.status === 'ready' ? e('div', { className: 'zhihu-field' },
-      e('label', { className: 'zhihu-field-label', htmlFor: 'zhihu-kb-file' }, TEXT.kbFileLabel),
+      e('label', { className: 'zhihu-field-label', htmlFor: 'zhihu-kb-file' }, text().kbFileLabel),
       e('input', {
         key: fileKey,
         id: 'zhihu-kb-file',
@@ -325,7 +329,7 @@ function KnowledgeBaseSection(props: { ctx: ShellContext; enabled: boolean }): R
         disabled: busy,
         onChange: (event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0]),
       }),
-      e('p', { className: 'zhihu-hint' }, TEXT.kbFileNote),
+      e('p', { className: 'zhihu-hint' }, text().kbFileNote),
     ) : null,
     enabled && list.status === 'ready' ? e('div', { className: 'zhihu-actions' },
       e('button', {
@@ -333,7 +337,7 @@ function KnowledgeBaseSection(props: { ctx: ShellContext; enabled: boolean }): R
         className: 'zhihu-button zhihu-button-primary',
         disabled: busy || !file,
         onClick: () => void upload(),
-      }, busy ? TEXT.kbUploading : TEXT.kbUpload),
+      }, busy ? text().kbUploading : text().kbUpload),
     ) : null,
     note ? e('p', { className: 'zhihu-saved', role: 'status' }, note) : null,
     failure ? e('p', { className: 'zhihu-warning', role: 'alert' }, failure) : null,
@@ -357,7 +361,7 @@ function KnowledgeBaseSection(props: { ctx: ShellContext; enabled: boolean }): R
         return
       }
       if (!isZhihuUsageSummary(result.value)) {
-        setState({ status: 'error', error: '返回数据格式不符合契约' })
+        setState({ status: 'error', error: t('zhihu.contract') })
         return
       }
       setState({ status: 'ready', summary: result.value })
@@ -371,18 +375,18 @@ function KnowledgeBaseSection(props: { ctx: ShellContext; enabled: boolean }): R
   }, [props.ctx])
 
   if (state.status === 'loading') {
-    return e('section', { className: 'zhihu-usage', 'aria-label': TEXT.usageTitle },
-      e('h3', { className: 'zhihu-usage-title' }, TEXT.usageTitle),
-      e('p', { className: 'zhihu-status', role: 'status' }, TEXT.usageLoading),
+    return e('section', { className: 'zhihu-usage', 'aria-label': text().usageTitle },
+      e('h3', { className: 'zhihu-usage-title' }, text().usageTitle),
+      e('p', { className: 'zhihu-status', role: 'status' }, text().usageLoading),
     )
   }
 
   if (state.status === 'error') {
-    return e('section', { className: 'zhihu-usage', 'aria-label': TEXT.usageTitle },
-      e('h3', { className: 'zhihu-usage-title' }, TEXT.usageTitle),
+    return e('section', { className: 'zhihu-usage', 'aria-label': text().usageTitle },
+      e('h3', { className: 'zhihu-usage-title' }, text().usageTitle),
       e('p', { className: 'zhihu-error', role: 'alert' },
-        `${TEXT.loadFailedPrefix}${state.error || TEXT.usageLoadFailed}`,
-        e('button', { type: 'button', className: 'zhihu-button', onClick: () => void load() }, TEXT.retry),
+        `${text().loadFailedPrefix}${state.error || text().usageLoadFailed}`,
+        e('button', { type: 'button', className: 'zhihu-button', onClick: () => void load() }, text().retry),
       ),
     )
   }
@@ -390,13 +394,13 @@ function KnowledgeBaseSection(props: { ctx: ShellContext; enabled: boolean }): R
   const days = state.summary.days
   const hasAny = days.some((day) => day.calls > 0)
 
-  return e('section', { className: 'zhihu-usage', 'aria-label': TEXT.usageTitle },
-    e('h3', { className: 'zhihu-usage-title' }, TEXT.usageTitle),
-    e('p', { className: 'zhihu-usage-intro' }, TEXT.usageIntro),
+  return e('section', { className: 'zhihu-usage', 'aria-label': text().usageTitle },
+    e('h3', { className: 'zhihu-usage-title' }, text().usageTitle),
+    e('p', { className: 'zhihu-usage-intro' }, text().usageIntro),
     !hasAny
-      ? e('p', { className: 'zhihu-status' }, TEXT.usageEmpty)
+      ? e('p', { className: 'zhihu-status' }, text().usageEmpty)
       : e(UsageChart, { days }),
-    e('p', { className: 'zhihu-hint' }, TEXT.usageNote),
+    e('p', { className: 'zhihu-hint' }, text().usageNote),
   )
 }
 
@@ -416,7 +420,7 @@ function UsageChart(props: { days: ZhihuDailyUsage[] }): ReactNode {
     const x = index * slot + (slot - barWidth) / 2
     const failHeight = (day.failures / maxCalls) * plotHeight
     const okHeight = ((day.calls - day.failures) / maxCalls) * plotHeight
-    const label = `${day.date.slice(5)}:${TEXT.usageCalls} ${day.calls},${TEXT.usageFailure} ${day.failures}`
+    const label = `${day.date.slice(5)}:${text().usageCalls} ${day.calls},${text().usageFailure} ${day.failures}`
     const parts: ReactNode[] = []
     if (okHeight > 0) {
       parts.push(e('rect', {
@@ -451,7 +455,7 @@ function UsageChart(props: { days: ZhihuDailyUsage[] }): ReactNode {
     className: 'zhihu-chart',
     viewBox: `0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`,
     role: 'img',
-    'aria-label': `${TEXT.usageTitle}(${USAGE_DAYS} 天)`,
+    'aria-label': t('zhihu.usageTitleDays', { days: USAGE_DAYS }),
     preserveAspectRatio: 'none',
   }, ...bars, ...ticks)
 }
@@ -472,16 +476,16 @@ function ZhihuEditor(props: {
   const keyValue = keyDraft.trim()
   const configured = credential?.configured === true
   const placeholder = keyLocked
-    ? TEXT.placeholderLocked
+    ? text().placeholderLocked
     : configured
-      ? TEXT.placeholderStored
-      : TEXT.placeholder
+      ? text().placeholderStored
+      : text().placeholder
 
   const statusText = keyLocked
-    ? TEXT.statusLocked
+    ? text().statusLocked
     : configured
-      ? TEXT.statusStored
-      : TEXT.statusUnconfigured
+      ? text().statusStored
+      : text().statusUnconfigured
 
   const dotClass = keyLocked
     ? 'zhihu-dot zhihu-dot-locked'
@@ -500,7 +504,7 @@ function ZhihuEditor(props: {
       const result = rpcResult<Record<string, never>>(response)
       if (!result.ok) { setFailure(failureMessage(result)); return }
       setKeyDraft('')
-      setNote(TEXT.savedNote)
+      setNote(text().savedNote)
       await onSaved()
     } catch (error) {
       setFailure(error instanceof Error ? error.message : String(error))
@@ -519,7 +523,7 @@ function ZhihuEditor(props: {
       const result = rpcResult<Record<string, never>>(response)
       if (!result.ok) { setFailure(failureMessage(result)); return }
       setKeyDraft('')
-      setNote(TEXT.clearedNote)
+      setNote(text().clearedNote)
       await onSaved()
     } catch (error) {
       setFailure(error instanceof Error ? error.message : String(error))
@@ -528,19 +532,19 @@ function ZhihuEditor(props: {
     }
   }
 
-  return e('section', { className: 'zhihu-page', 'aria-label': '知乎' },
+  return e('section', { className: 'zhihu-page', 'aria-label': t('settings.zhihu') },
     e(Header, { note }),
     // 已保存(或环境变量锁定)密钥后不再需要获取引导。
     configured ? null : e(Guide, null),
     e('dl', { className: 'zhihu-status-grid' },
-      e('dt', { className: 'zhihu-status-label' }, TEXT.statusHeading),
+      e('dt', { className: 'zhihu-status-label' }, text().statusHeading),
       e('dd', { className: 'zhihu-status-value' },
         e('span', { className: dotClass, 'aria-hidden': true }),
         statusText,
       ),
     ),
     e('div', { className: 'zhihu-field' },
-      e('label', { className: 'zhihu-field-label', htmlFor: 'zhihu-access-secret' }, TEXT.label),
+      e('label', { className: 'zhihu-field-label', htmlFor: 'zhihu-access-secret' }, text().label),
       e('input', {
         id: 'zhihu-access-secret',
         type: 'password',
@@ -553,9 +557,9 @@ function ZhihuEditor(props: {
         onChange: (event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value),
       }),
       keyFailure === undefined
-        ? e('p', { className: 'zhihu-hint' }, TEXT.help)
+        ? e('p', { className: 'zhihu-hint' }, text().help)
         : e('p', { className: 'zhihu-warning', role: 'alert' },
-            keyFailure === 'keyBlank' ? TEXT.keyBlank : TEXT.keyIllegal,
+            keyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal,
           ),
     ),
     failure !== undefined ? e('p', { className: 'zhihu-warning', role: 'alert' }, failure) : null,
@@ -565,13 +569,13 @@ function ZhihuEditor(props: {
         className: 'zhihu-button zhihu-button-danger',
         disabled: busy || keyLocked === true || !configured,
         onClick: () => void clear(),
-      }, busy ? TEXT.clearing : TEXT.clear),
+      }, busy ? text().clearing : text().clear),
       e('button', {
         type: 'button',
         className: 'zhihu-button zhihu-button-primary',
         disabled: busy || keyLocked === true || keyValue.length === 0 || keyFailure !== undefined,
         onClick: () => void save(),
-      }, busy ? TEXT.saving : TEXT.save),
+      }, busy ? text().saving : text().save),
     ),
     e(KnowledgeBaseSection, { ctx, enabled: configured }),
     e(ZhihuUsageSection, { ctx }),

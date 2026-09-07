@@ -6,6 +6,7 @@ import {
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
+import { t } from '../i18n/index.ts'
 
 export function DeepSeekWhaleMark() {
   return e('svg', {
@@ -26,7 +27,7 @@ export function PaperStage(props: { label: string; children?: ReactNode }) {
   return e('section', { className: 'empty-paper home-stage', 'aria-label': props.label },
     e('div', { className: 'home-card' },
       e('p', { className: 'home-eyebrow' }, 'DSH EDITOR'),
-      e('h1', null, '开始写作'),
+      e('h1', null, t('home.startWriting')),
       props.children,
     ),
   )
@@ -47,11 +48,11 @@ export function ImagePreviewOverlay(props: { path: string; url: string; onClose(
     className: 'image-preview',
     role: 'dialog',
     'aria-modal': true,
-    'aria-label': `预览 ${props.path}`,
+    'aria-label': t('preview.aria', { path: props.path }),
     onClick: (event: ReactPointerEvent<HTMLDivElement>) => { if (event.target === event.currentTarget) props.onClose() },
   },
     e('img', { src: props.url, alt: props.path }),
-    e('button', { ref: closeRef, type: 'button', className: 'icon-button image-preview-close', 'aria-label': '关闭预览', onClick: props.onClose }, '×'),
+    e('button', { ref: closeRef, type: 'button', className: 'icon-button image-preview-close', 'aria-label': t('preview.close'), onClick: props.onClose }, '×'),
   )
 }
 
@@ -79,7 +80,7 @@ export function PanelResizer(props: {
     'aria-valuemin': props.minimum,
     'aria-valuemax': props.maximum,
     'aria-valuenow': props.value,
-    title: `${props.label}（可拖动或使用方向键）`,
+    title: t('resizer.aria', { label: props.label }),
     onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => {
       drag.current = { pointerId: event.pointerId, startX: event.clientX, startValue: props.value }
       event.currentTarget.setPointerCapture(event.pointerId)

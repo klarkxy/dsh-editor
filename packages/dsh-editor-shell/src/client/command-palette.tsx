@@ -6,7 +6,9 @@
  *
  * 设计要点:
  *   - 不与 root.ts 现有的工作区快捷键冲突:Cmd/Ctrl+K 是新增的,没有占用
- *     workspaceShortcut 任何分支(后者只处理 Ctrl+,/B/J/\\/L/Alt+[/])。
+ *     workspaceShortcut 的 Ctrl+,/B/J/\\/L/Alt+[/] 分支;全文搜索走
+ *     Ctrl+Shift+F,由 root.ts 打开侧栏搜索面板;作品概览走 Ctrl+Shift+O;
+ *     校对走 Ctrl+Shift+L；人物卡走 Ctrl+Shift+C；世界书走 Ctrl+Shift+W。
  *   - 关闭时不残留热键:本组件挂自己的 keydown 监听(只接受 K 切换 / Esc 关
  *     闭),卸载时移除;同时在 root.ts 的全局热键里也加入 Cmd+K 触发入口,
  *     让命令面板从外部唤起与自身切换走同一条路径。
@@ -26,6 +28,7 @@ import {
 } from '@radix-ui/react-dialog'
 import { createElement as e, useEffect, useState, type ReactNode } from 'react'
 import type { ThemeValue } from './theme.ts'
+import { t, useLocale } from '../i18n/index.ts'
 
 /* 命令面板接收的最小动作集。根组件传进来的就是这些闭包,palette 自己只
    做"显示哪一条 → 选了就调哪个"的分发,不知道选择作品/新建/切主题背后的
@@ -60,6 +63,17 @@ export type CommandPaletteProps = {
   onOpenSettings(): void
   onToggleFocus(): void
   onOpenDocument(path: string): void
+  onOpenSearch(): void
+  onOpenOverview(): void
+  onOpenProofread(scope: 'document' | 'manuscript'): void
+  onOpenCards(kind: 'character' | 'worldbook'): void
+  onExport(): void
+  onImport(): void
+  onOpenArchives(): void
+  onToggleTypewriter?(): void
+  onToggleFocusParagraph?(): void
+  typewriter?: boolean
+  focusParagraph?: boolean
   /* 当前状态:决定命令的置灰 / 显隐。files 来自 root.ts 的 useState,已经
      是排好序的 markdown/txt 路径。activePath 用于高亮当前打开的文档。 */
   hasWorkspace: boolean
@@ -104,6 +118,54 @@ function FileIcon() {
     e('path', { d: 'M13.5 3.5v4h4' }),
   )
 }
+function SearchIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
+    e('circle', { cx: '11', cy: '11', r: '6.5' }),
+    e('path', { d: 'm20 20-3.6-3.6' }),
+  )
+}
+function ExportIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
+    e('path', { d: 'M12 4v10M8 8l4-4 4 4' }),
+    e('path', { d: 'M5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18.5v-2' }),
+  )
+}
+function ImportIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
+    e('path', { d: 'M12 14V4M8 10l4 4 4-4' }),
+    e('path', { d: 'M5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18.5v-2' }),
+  )
+}
+function OverviewIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
+    e('path', { d: 'M4 18V6' }),
+    e('path', { d: 'M8 18v-6' }),
+    e('path', { d: 'M12 18V8' }),
+    e('path', { d: 'M16 18v-4' }),
+    e('path', { d: 'M20 18V7' }),
+  )
+}
+function ProofreadIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
+    e('path', { d: 'M5 6.5h14' }),
+    e('path', { d: 'M5 12h8' }),
+    e('path', { d: 'M5 17.5h6' }),
+    e('path', { d: 'm14.5 16 2 2 4-4.5' }),
+  )
+}
+function CardsIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
+    e('rect', { x: '5', y: '4.5', width: '11', height: '14', rx: '1.2' }),
+    e('path', { d: 'M16 7.5h2.5v12H8.5' }),
+  )
+}
+function ArchiveIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', 'aria-hidden': 'true' },
+    e('path', { d: 'M4 7.5h16v3H4z' }),
+    e('path', { d: 'M6 10.5v8h12v-8' }),
+    e('path', { d: 'M10 14h4' }),
+  )
+}
 
 /* 把路径转成"目录 / 文件名"两段,便于在命令项里分两行显示。
    正文/第一卷/003.md → (大纲, 总纲.md)? 实际是 (第一卷, 003.md)。
@@ -116,6 +178,7 @@ function splitPath(path: string): { directory: string; name: string } {
 }
 
 export function CommandPalette(props: CommandPaletteProps) {
+  useLocale()
   /* 全局 Cmd/Ctrl+K 监听:不管 palette 当前开没开,都能切换。
      用 useEffect 在打开/关闭时挂同一个 listener,这样 palette 不会因为
      onOpenChange 路径在 hotkey 阶段还是直接阶段而漏掉 ESC 关闭。 */
@@ -141,53 +204,158 @@ export function CommandPalette(props: CommandPaletteProps) {
   const themeNext: ThemeValue = props.theme === 'paper' ? 'ink' : 'paper'
   const workspaceGroup: CommandGroup = {
     id: 'workspace',
-    heading: '作品',
+    heading: t('command.workspace'),
     items: [
       {
         id: 'cmd.open-workspace',
-        label: '打开作品',
-        hint: '选择本地已有的作品目录',
+        label: t('command.openWork'),
+        hint: t('command.openWorkHint'),
         keywords: ['folder', 'open', 'open workspace', 'open project'],
         icon: e(OpenIcon, null),
         run: () => props.onOpenWorkspace(),
       },
       {
         id: 'cmd.new-project',
-        label: '新建作品',
-        hint: '在「文档/dsh-editor」下从空白稿纸开始',
+        label: t('command.newWork'),
+        hint: t('command.newWorkHint'),
         keywords: ['new', 'create', 'new project'],
         icon: e(PlusIcon, null),
         run: () => props.onNewProject(),
+      },
+      {
+        id: 'cmd.import',
+        label: t('command.importWork'),
+        hint: t('command.importWorkHint'),
+        keywords: ['import', t('command.import'), 'markdown', 'txt'],
+        icon: e(ImportIcon, null),
+        run: () => props.onImport(),
+      },
+    ],
+  }
+
+  const writingGroup: CommandGroup = {
+    id: 'writing',
+    heading: t('command.writing'),
+    items: [
+      {
+        id: 'cmd.search',
+        label: t('command.search'),
+        hint: t('command.searchHint'),
+        keywords: ['search', 'find', t('command.find'), t('common.search')],
+        icon: e(SearchIcon, null),
+        disabled: !props.hasWorkspace,
+        run: () => props.onOpenSearch(),
+      },
+      {
+        id: 'cmd.overview',
+        label: t('command.overview'),
+        hint: t('command.overviewHint'),
+        keywords: ['overview', t('command.kw.overview'), t('command.kw.chars'), t('command.kw.status'), t('command.kw.curve')],
+        icon: e(OverviewIcon, null),
+        disabled: !props.hasWorkspace,
+        run: () => props.onOpenOverview(),
+      },
+      {
+        id: 'cmd.proofread-document',
+        label: t('command.proofreadDoc'),
+        hint: t('command.proofreadDocHint'),
+        keywords: ['proofread', t('command.kw.proofread'), t('command.kw.punctuation'), t('command.kw.typo'), t('command.kw.sensitive')],
+        icon: e(ProofreadIcon, null),
+        disabled: !props.hasWorkspace || !props.activePath,
+        run: () => props.onOpenProofread('document'),
+      },
+      {
+        id: 'cmd.proofread-manuscript',
+        label: t('command.proofreadBook'),
+        hint: t('command.proofreadBookHint'),
+        keywords: ['proofread', t('command.kw.proofread'), t('command.book'), '正文'],
+        icon: e(ProofreadIcon, null),
+        disabled: !props.hasWorkspace,
+        run: () => props.onOpenProofread('manuscript'),
+      },
+      {
+        id: 'cmd.cards-character',
+        label: t('command.cards'),
+        hint: t('command.cardsHint'),
+        keywords: ['character', t('command.kw.people'), '人物卡', t('command.role')],
+        icon: e(CardsIcon, null),
+        disabled: !props.hasWorkspace,
+        run: () => props.onOpenCards('character'),
+      },
+      {
+        id: 'cmd.cards-worldbook',
+        label: t('command.worldbook'),
+        hint: t('command.worldbookHint'),
+        keywords: ['worldbook', '世界书', t('cards.setting'), t('command.trigger')],
+        icon: e(CardsIcon, null),
+        disabled: !props.hasWorkspace,
+        run: () => props.onOpenCards('worldbook'),
+      },
+      {
+        id: 'cmd.toggle-typewriter',
+        label: props.typewriter ? t('command.typewriterOff') : t('command.typewriterOn'),
+        hint: t('command.typewriterHint'),
+        keywords: ['typewriter', t('command.kw.typewriter'), t('command.kw.scroll')],
+        icon: e(FocusIcon, null),
+        disabled: !props.hasWorkspace || !props.onToggleTypewriter,
+        run: () => props.onToggleTypewriter?.(),
+      },
+      {
+        id: 'cmd.toggle-focus-paragraph',
+        label: props.focusParagraph ? t('command.focusParaOff') : t('command.focusParaOn'),
+        hint: t('command.focusParaHint'),
+        keywords: ['focus', t('command.kw.focus'), t('command.paragraph'), 'paragraph'],
+        icon: e(FocusIcon, null),
+        disabled: !props.hasWorkspace || !props.onToggleFocusParagraph,
+        run: () => props.onToggleFocusParagraph?.(),
+      },
+      {
+        id: 'cmd.export',
+        label: t('command.export'),
+        hint: t('command.exportHint'),
+        keywords: ['export', t('command.exportShort'), 'markdown', 'txt'],
+        icon: e(ExportIcon, null),
+        disabled: !props.hasWorkspace,
+        run: () => props.onExport(),
+      },
+      {
+        id: 'cmd.archives',
+        label: t('command.archived'),
+        hint: t('command.archivedHint'),
+        keywords: ['archive', t('common.archive'), t('common.restore')],
+        icon: e(ArchiveIcon, null),
+        disabled: !props.hasWorkspace,
+        run: () => props.onOpenArchives(),
       },
     ],
   }
 
   const viewGroup: CommandGroup = {
     id: 'view',
-    heading: '视图',
+    heading: t('command.view'),
     items: [
       {
         id: 'cmd.toggle-theme',
-        label: themeNext === 'ink' ? '切换到墨主题' : '切换到纸主题',
-        hint: props.theme === 'paper' ? '当前：纸' : '当前：墨',
-        keywords: ['theme', '主题', '切换', 'paper', 'ink', 'dark', 'light'],
+        label: themeNext === 'ink' ? t('command.themeInk') : t('command.themePaper'),
+        hint: props.theme === 'paper' ? t('command.themeNowPaper') : t('command.themeNowInk'),
+        keywords: ['theme', t('command.theme'), t('command.switch'), 'paper', 'ink', 'dark', 'light'],
         icon: e(ThemeIcon, null),
         run: () => props.onThemeChange(themeNext),
       },
       {
         id: 'cmd.toggle-focus',
-        label: props.focusMode ? '退出专注模式' : '进入专注模式',
-        hint: '隐藏侧栏与搭档,只保留稿纸',
-        keywords: ['focus', '专注', 'toggle', 'zen'],
+        label: props.focusMode ? t('command.exitFocus') : t('command.enterFocus'),
+        hint: t('command.focusHint'),
+        keywords: ['focus', t('workspace.focus'), 'toggle', 'zen'],
         icon: e(FocusIcon, null),
         disabled: !props.hasWorkspace,
         run: () => props.onToggleFocus(),
       },
       {
         id: 'cmd.open-settings',
-        label: '打开设置',
-        hint: '通过 DSH 宿主打开设置面板',
-        keywords: ['settings', 'preferences', '设置', '偏好'],
+        label: t('command.openSettings'),
+        hint: t('command.openSettingsHint'),
+        keywords: ['settings', 'preferences', t('command.kw.settings'), t('command.preferences')],
         icon: e(SettingsIcon, null),
         run: () => props.onOpenSettings(),
       },
@@ -200,13 +368,13 @@ export function CommandPalette(props: CommandPaletteProps) {
   const fileGroup: CommandGroup | null = props.hasWorkspace
     ? {
         id: 'files',
-        heading: '跳转到文档',
+        heading: t('command.jumpFile'),
         items: props.files.map((filePath) => {
           const { directory, name } = splitPath(filePath)
           return {
             id: `file.${filePath}`,
             label: name,
-            hint: directory || '根目录',
+            hint: directory || t('command.rootDir'),
             keywords: [directory, filePath],
             icon: e(FileIcon, null),
             disabled: props.activePath === filePath,
@@ -217,8 +385,8 @@ export function CommandPalette(props: CommandPaletteProps) {
     : null
 
   const groups: CommandGroup[] = fileGroup
-    ? [workspaceGroup, viewGroup, fileGroup]
-    : [workspaceGroup, viewGroup]
+    ? [workspaceGroup, writingGroup, viewGroup, fileGroup]
+    : [workspaceGroup, writingGroup, viewGroup]
 
   /* 关闭时彻底卸载,避免列表里残留旧文件路径。每次重新打开时 reset 到 ''。 */
   const [search, setSearch] = useState('')
@@ -232,7 +400,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         <RadixDialogOverlay className="palette-overlay" />
         <RadixDialogContent
           className="palette-content"
-          aria-label="搜索与命令"
+          aria-label={t('command.searchCommands')}
           onOpenAutoFocus={(event: Event) => {
             /* cmdk 的 Input 已经会自己 focus,我们只需要阻止 Radix 把焦点
                抢到它觉得合适的容器上,让 input 在挂载的同一帧拿到光标。 */
@@ -241,7 +409,7 @@ export function CommandPalette(props: CommandPaletteProps) {
             globalThis.requestAnimationFrame(() => input?.focus())
           }}
         >
-          <Command className="palette-command" label="搜索与命令" loop shouldFilter>
+          <Command className="palette-command" label={t('command.searchCommands')} loop shouldFilter>
             <div className="palette-search">
               <span className="palette-search-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
@@ -251,7 +419,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               </span>
               <Command.Input
                 className="palette-input"
-                placeholder="搜索与命令…"
+                placeholder={t('command.searchPlaceholder')}
                 value={search}
                 onValueChange={setSearch}
                 autoComplete="off"
@@ -260,7 +428,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               <kbd className="palette-kbd" aria-hidden="true">ESC</kbd>
             </div>
             <Command.List className="palette-list">
-              <Command.Empty className="palette-empty">没有匹配的命令</Command.Empty>
+              <Command.Empty className="palette-empty">{t('command.empty')}</Command.Empty>
               {groups.map((group) => (
                 <Command.Group key={group.id} heading={group.heading} className="palette-group">
                   {group.items.map((action) => (
@@ -287,9 +455,9 @@ export function CommandPalette(props: CommandPaletteProps) {
               ))}
             </Command.List>
             <div className="palette-footer" aria-hidden="true">
-              <span><kbd className="palette-kbd">↑</kbd><kbd className="palette-kbd">↓</kbd> 选择</span>
-              <span><kbd className="palette-kbd">↵</kbd> 执行</span>
-              <span><kbd className="palette-kbd">⌘K</kbd> 关闭</span>
+              <span><kbd className="palette-kbd">↑</kbd><kbd className="palette-kbd">↓</kbd> {t('command.footerSelect')}</span>
+              <span><kbd className="palette-kbd">↵</kbd> {t('command.footerRun')}</span>
+              <span><kbd className="palette-kbd">⌘K</kbd> {t('command.footerClose')}</span>
             </div>
           </Command>
         </RadixDialogContent>
@@ -301,13 +469,14 @@ export function CommandPalette(props: CommandPaletteProps) {
 /* 顶栏触发按钮:放在 chrome 右上角的"设置"按钮左侧,显示"搜索与命令 +
    ⌘K"小键名;class 名 palette-trigger 来自任务要求,样式写在 styles.ts。 */
 export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
+  useLocale()
   return (
     <button
       type="button"
       className="palette-trigger"
       onClick={onClick}
-      aria-label="搜索与命令"
-      title="搜索与命令 (⌘K / Ctrl+K)"
+      aria-label={t('command.searchCommands')}
+      title={t('command.searchTitle')}
     >
       <span className="palette-trigger-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
@@ -315,7 +484,7 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
           <path d="m20 20-3.6-3.6" />
         </svg>
       </span>
-      <span className="palette-trigger-label">搜索与命令</span>
+      <span className="palette-trigger-label">{t('command.searchCommands')}</span>
       <kbd className="palette-trigger-kbd" aria-hidden="true">⌘K</kbd>
     </button>
   )

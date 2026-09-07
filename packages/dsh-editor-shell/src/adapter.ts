@@ -17,6 +17,7 @@ import type {
 } from '@deepseek-ai/dsh-client-connection/client'
 import { parseAuthorMemoryMarker, parseProposalMarker, type AuthorMemoryMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
+import { t } from './i18n/index.ts'
 import { stripReasoningText } from './conversation-lifecycle.ts'
 import { isNovelIndexJobPrompt } from './novel-index.ts'
 
@@ -110,30 +111,30 @@ export function splitAssistantContent(blocks: readonly AssistantBlock[] | readon
 /** 区分不同 kind 的提案,以便聊天行展示对应的"提案"标签文案。renames 不带 path 字段,需要在使用前 narrow。 */
 function proposalDetailText(proposal: ProposalMarker): string {
   switch (proposal.kind) {
-    case 'split': return '写作助手提出了一项章节拆分提案'
-    case 'merge': return '章节合并提案'
-    case 'renames': return '批量重命名提案'
+    case 'split': return t('adapter.splitProposal')
+    case 'merge': return t('adapter.mergeProposal')
+    case 'renames': return t('adapter.renamesProposal')
     case 'edit':
     case 'create':
-      return '写作助手提出了一项文件修改提案'
+      return t('adapter.editProposal')
   }
 }
 
 export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-result' }>): ChatRow {
   const body = blocksText(node.content)
-  const name = node.call?.name ?? `工具 ${node.callId}`
+  const name = node.call?.name ?? t('adapter.toolFallback', { id: node.callId })
   const proposal = name === 'novel_propose' ? parseProposalMarker(body) : undefined
   if (proposal) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: proposalDetailText(proposal), proposal }
   }
   const memory = name === 'author_observe' ? parseAuthorMemoryMarker(body) : undefined
   if (memory) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: memory.observation, detail: '写作助手提议记住这条偏好', memory }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: memory.observation, detail: t('adapter.rememberProposal'), memory }
   }
   if (node.isError) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: '这项操作没有执行', detail: name, content: truncateToolContent(body) || undefined, error: true, reason: toolErrorReason(name, body) }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: t('adapter.notExecuted'), detail: name, content: truncateToolContent(body) || undefined, error: true, reason: toolErrorReason(name, body) }
   }
-  const friendly = name === 'glob' || name === 'grep' ? '已查找作品资料' : name === 'read' ? '已阅读作品资料' : '操作已完成'
+  const friendly = name === 'glob' || name === 'grep' ? t('adapter.searchedNotes') : name === 'read' ? t('adapter.readNotes') : t('adapter.done')
   return { id: `tool-result:${node.seq}`, role: 'tool', text: friendly, detail: name, content: truncateToolContent(body) || undefined }
 }
 
@@ -145,10 +146,10 @@ const GUARD_REJECTION = 'only allows project search, read, and previewable propo
 function toolErrorReason(name: string, body: string): string {
   const firstLine = body.split('\n').map((line) => line.trim()).find(Boolean) ?? ''
   if (firstLine.includes(GUARD_REJECTION)) {
-    return `「${name}」不在允许范围：写作助手只能查找、阅读作品资料，或通过提案请你预览修改。这次调用被拦截，没有产生任何改动。`
+    return t('adapter.guardRejected', { name })
   }
   if (firstLine) return firstLine.length > 160 ? `${firstLine.slice(0, 160)}…` : firstLine
-  return '操作被拒绝或执行失败，未产生改动。'
+  return t('adapter.rejected')
 }
 
 function truncateToolContent(text: string): string {
@@ -188,7 +189,7 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
         ...common,
         role: 'assistant',
         text: assistantText,
-        detail: node.interrupted ? '已停止' : undefined,
+        detail: node.interrupted ? t('adapter.stopped') : undefined,
       })
       continue
     }
@@ -196,8 +197,8 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
       if (isHiddenToolResult(node)) continue
       rows.push(toolResultRow(node))
     }
-    else if (node.kind === 'turn-error') rows.push({ ...common, role: 'notice', text: '写作助手未能完成这次请求，请重试。' })
-    else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: '写作助手正在重试…' })
+    else if (node.kind === 'turn-error') rows.push({ ...common, role: 'notice', text: t('chat.requestFailed') })
+    else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: t('chat.retrying') })
   }
   return rows
 }
@@ -223,7 +224,7 @@ export function pendingRows(pending: readonly PendingInteraction[]): ChatRow[] {
   return pending.map((item) => ({
     id: item.key,
     role: 'notice',
-    text: item.kind === 'approval' ? '等待确认一项操作' : '等待你的回答',
+    text: item.kind === 'approval' ? t('adapter.waitingApproval') : t('adapter.waitingAnswer'),
     detail: undefined,
   }))
 }
@@ -306,5 +307,5 @@ export function permissionProjection(session: SessionFace): PermissionProjection
 export async function selectPermission(session: SessionFace, preset: string): Promise<void> {
   const result = await session.command(`/permission ${preset}`)
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-  if (!result.value.matched) throw new Error('当前环境不支持 /permission 命令')
+  if (!result.value.matched) throw new Error(t('error.permissionUnsupported'))
 }

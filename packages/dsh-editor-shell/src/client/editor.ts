@@ -24,9 +24,12 @@ import {
   isStaleFailure,
   replaceWorldbookPaperText,
   worldbookPaperProjection,
+  type RevealRequest,
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
+import { isWorldbookPath, WorldbookSettings } from './worldbook-settings.ts'
+import { t } from '../i18n/index.ts'
 
 const PAPER_PROJECTION: EditorCorePaperProjection = {
   project: worldbookPaperProjection,
@@ -73,7 +76,19 @@ export function Editor(props: {
   completionPreference: CompletionPreference
   authorPreferences: string
   authorMemory: string
+  typewriter?: boolean
+  focusParagraph?: boolean
+  typography?: {
+    fontSize?: number
+    lineHeight?: number
+    fontFamily?: 'serif' | 'sans' | 'mono' | string
+    paragraphSpacing?: number
+    maxWidth?: number
+  }
+  onToggleTypewriter?(): void
+  onToggleFocusParagraph?(): void
   onSaved(): void
+  reveal: RevealRequest | null
 }) {
   const {
     ctx,
@@ -86,6 +101,12 @@ export function Editor(props: {
     onDirtyChange,
     completionPreference,
     authorPreferences,
+    typewriter = false,
+    focusParagraph = false,
+    typography,
+    onToggleTypewriter,
+    onToggleFocusParagraph,
+    reveal,
   } = props
 
   const [note, setNote] = useState('')
@@ -132,18 +153,25 @@ export function Editor(props: {
 
   const onNotice = useCallback((message: string) => { setNote(message) }, [])
   const onError = useCallback((message: string) => { setNote(message) }, [])
-  const onStatusChange = useCallback((next: EditorCoreStatus) => { setStatus(next) }, [])
   const onHandle = useCallback((handle: EditorCoreHandle | null) => { handleRef.current = handle }, [])
+  const [worldbookText, setWorldbookText] = useState('')
+
+  const onStatusChange = useCallback((next: EditorCoreStatus) => {
+    setStatus(next)
+    if (next === 'saved' || next === 'draft' || next === 'conflict') {
+      setWorldbookText(handleRef.current?.getText() ?? '')
+    }
+  }, [])
 
   const reloadDisk = useCallback(async () => {
     setReloadConfirm(false)
     const deleted = await draftQueue.current!.delete({ sessionId: session.sessionId, path }) as RpcResult
     if (!deleted.ok && !isStaleFailure(deleted)) {
-      setNote(`草稿清理失败：${errorMessage(deleted)}`)
+      setNote(t('editor.draftCleanupFailed', { error: errorMessage(deleted) }))
       return
     }
     setRevisionTick((tick) => tick + 1)
-    setNote('已重新载入磁盘版本')
+    setNote(t('editor.reloadedDisk'))
   }, [session.sessionId, path])
 
   const saveConflictCopy = useCallback(async () => {
@@ -152,18 +180,18 @@ export function Editor(props: {
     /* 冲突副本沿用原扩展名（.md/.txt），避免 TXT 文稿被改名成 Markdown。 */
     const extension = /\.(md|txt)$/i.exec(path)
     const copy = extension
-      ? `${path.slice(0, extension.index)}.冲突-${stamp}${extension[0]}`
-      : `${path}.冲突-${stamp}.md`
+      ? t('editor.conflictName', { stem: path.slice(0, extension.index), stamp, ext: extension[0] })
+      : t('editor.conflictNameFallback', { path, stamp })
     const created = await ctx.connection.rpc.call('/manuscript', 'file.create', {
       sessionId: session.sessionId,
       path: copy,
       text: currentText,
     }) as RpcResult
     if (!created.ok) { setNote(errorMessage(created)); return }
-    setNote(`草稿已另存为 ${copy}`)
+    setNote(t('editor.draftSavedAs', { path: copy }))
     const deleted = await draftQueue.current!.delete({ sessionId: session.sessionId, path }) as RpcResult
     if (!deleted.ok && !isStaleFailure(deleted)) {
-      setNote(`草稿清理失败：${errorMessage(deleted)}`)
+      setNote(t('editor.draftCleanupFailed', { error: errorMessage(deleted) }))
       return
     }
     setRevisionTick((tick) => tick + 1)
@@ -173,13 +201,48 @@ export function Editor(props: {
   useEffect(() => {
     setNote('')
     setReloadConfirm(false)
+    setWorldbookText('')
   }, [path, session.sessionId])
 
+  const applyWorldbookBuffer = useCallback(async (next: string) => {
+    const doc = handleRef.current?.getDocument()
+    if (!doc) { setNote(t('editor.worldbookNotLoaded')); return }
+    const put = await draftQueue.current!.run('draft.put', {
+      sessionId: session.sessionId,
+      path,
+      text: next,
+      baseText: doc.text,
+      baseVersion: doc.version,
+    }) as RpcResult
+    if (!put.ok) { setNote(errorMessage(put)); return }
+    setWorldbookText(next)
+    setRevisionTick((tick) => tick + 1)
+  }, [session.sessionId, path])
+
+  useEffect(() => {
+    if (!path || !reveal || reveal.path !== path) return
+    const apply = () => {
+      const handle = handleRef.current
+      const current = handle?.getText()
+      const doc = handle?.getDocument()
+      if (!handle || !current || !doc || doc.path !== reveal.path) return false
+      if (reveal.version !== doc.version) {
+        setNote(t('editor.searchStale'))
+        return true
+      }
+      handle.revealRange(reveal.start, reveal.end)
+      return true
+    }
+    if (apply()) return
+    const timer = globalThis.setTimeout(() => { apply() }, 80)
+    return () => globalThis.clearTimeout(timer)
+  }, [path, reveal?.nonce, reveal?.path, reveal?.version, externalRevision])
+
   if (!path) {
-    return e(PaperStage, { label: '空白章' },
-      e('p', { className: 'home-hint' }, '从左侧目录树新建文件或文件夹；也可以先让搭档按这部作品的需要创建总览、人物卡与章纲。'),
+    return e(PaperStage, { label: t('editor.emptyChapter') },
+      e('p', { className: 'home-hint' }, t('editor.emptyHint')),
       e('div', { className: 'home-actions' },
-        e('button', { className: 'primary-action', type: 'button', onClick: create }, '新建文件'),
+        e('button', { className: 'primary-action', type: 'button', onClick: create }, t('editor.newFile')),
       ),
     )
   }
@@ -208,6 +271,27 @@ export function Editor(props: {
       slotStyle: { notice: HIDE_NOTICE },
       completionPreference,
       authorPreferences,
+      typewriter,
+      focusParagraph,
+      typography,
+      headerExtras: onToggleTypewriter || onToggleFocusParagraph
+        ? e('div', { className: 'paper-experience-toggles' },
+          onToggleTypewriter ? e('button', {
+            type: 'button',
+            title: t('editor.typewriterTitle'),
+            'aria-label': t('editor.typewriterTitle'),
+            'aria-pressed': typewriter,
+            onClick: onToggleTypewriter,
+          }, t('editor.typewriter')) : null,
+          onToggleFocusParagraph ? e('button', {
+            type: 'button',
+            title: t('editor.focusTitle'),
+            'aria-label': t('editor.focusTitle'),
+            'aria-pressed': focusParagraph,
+            onClick: onToggleFocusParagraph,
+          }, t('editor.focus')) : null,
+        )
+        : null,
       maxGhostCandidates: 3,
       enablePatch: true,
       enableBeforeUnload: true,
@@ -217,6 +301,13 @@ export function Editor(props: {
       siblingsBlocked: navigationBlocked,
       onReloadDisk: () => setReloadConfirm(true),
       onSaveConflictCopy: saveConflictCopy,
+      footerExtras: isWorldbookPath(path) ? e(WorldbookSettings, {
+        key: `${path}:${externalRevision}`,
+        path,
+        text: worldbookText || handleRef.current?.getText() || '',
+        onChange: (next: string) => { void applyWorldbookBuffer(next) },
+        onNote: setNote,
+      }) : null,
     }),
     note ? e('div', {
       className: 'editor-notice',
@@ -225,9 +316,9 @@ export function Editor(props: {
     }, note) : null,
     reloadConfirm ? e(ConfirmDialog, {
       id: 'reload-disk-confirm',
-      title: '放弃本地草稿？',
-      message: '将重新载入磁盘版本；当前未保存内容不会被写入。',
-      confirmLabel: '放弃并重新载入',
+      title: t('editor.discardDraftTitle'),
+      message: t('editor.discardDraftBody'),
+      confirmLabel: t('editor.discardReload'),
       onCancel: () => setReloadConfirm(false),
       onConfirm: () => { void reloadDisk() },
     }) : null,

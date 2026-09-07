@@ -55,7 +55,11 @@ describe('project context compiler', () => {
     expect(parseWorldbookFrontmatter('世界书/旧设定.md', '# 旧设定')).toEqual({ enabled: true, priority: 0, triggers: ['旧设定'] })
     expect(parseWorldbookFrontmatter('世界书/坏.md', '---\npriority: 1\n---\n正文')).toBeUndefined()
     expect(parseWorldbookFrontmatter('世界书/坏.md', '---\ntriggers: [港口]\nenabled: maybe\n---\n正文')).toBeUndefined()
-    expect(parseWorldbookFrontmatter('世界书/坏.md', '---\ntriggers: [港口]\nenable: false\n---\n正文')).toBeUndefined()
+    expect(parseWorldbookFrontmatter('世界书/港口.md', '---\ntriggers: [港口]\nenable: false\ncategory: 地点\ntags: [水系]\nsummary: 港口\n---\n正文')).toEqual({
+      enabled: true,
+      priority: 0,
+      triggers: ['港口'],
+    })
   })
 
   it('matches task and saved text, sorts by priority, and preserves fixed budgets', async () => {
@@ -149,7 +153,7 @@ describe('project context compiler', () => {
   it('edits worldbook metadata while preserving the document body and newline style', () => {
     const original = '---\r\n# 作者注释保留\r\ntriggers: [港口]\r\nenabled: true\r\npriority: 1\r\n---\r\n\r\n# 港口\r\n\r\n正文不变'
     const next = writeWorldbookFrontmatter(original, { triggers: ['海关', '码头'], enabled: false, priority: 9 })
-    expect(next).toBe('---\r\n# 作者注释保留\r\ntriggers: ["海关", "码头"]\r\nenabled: false\r\npriority: 9\r\n---\r\n\r\n# 港口\r\n\r\n正文不变')
+    expect(next).toBe('---\r\n# 作者注释保留\r\ntriggers: [海关, 码头]\r\nenabled: false\r\npriority: 9\r\n---\r\n\r\n# 港口\r\n\r\n正文不变')
     expect(worldbookEditorMetadata('世界书/港口.md', next)).toEqual({ triggers: ['海关', '码头'], enabled: false, priority: 9, valid: true, explicit: true })
   })
 
@@ -157,18 +161,19 @@ describe('project context compiler', () => {
     const legacy = '# 港口\n\n正文'
     expect(worldbookEditorMetadata('世界书/港口.md', legacy)).toEqual({ triggers: ['港口'], enabled: true, priority: 0, valid: true, explicit: false })
     expect(worldbookEditorMetadata(`世界书/${'很长'.repeat(40)}.md`, legacy)).toMatchObject({ valid: true, explicit: false, enabled: true })
-    expect(writeWorldbookFrontmatter(legacy, { triggers: ['港口'], enabled: true, priority: 0 })).toBe('---\ntriggers: ["港口"]\nenabled: true\npriority: 0\n---\n# 港口\n\n正文')
+    expect(writeWorldbookFrontmatter(legacy, { triggers: ['港口'], enabled: true, priority: 0 })).toBe('---\ntriggers: [港口]\nenabled: true\npriority: 0\n---\n# 港口\n\n正文')
     expect(() => writeWorldbookFrontmatter(legacy, { triggers: [], enabled: true, priority: 0 })).toThrow('invalid worldbook triggers')
     expect(() => writeWorldbookFrontmatter('---\ntriggers: [港口]\n正文', { triggers: ['港口'], enabled: true, priority: 0 })).toThrow('invalid worldbook frontmatter')
-    expect(() => writeWorldbookFrontmatter('---\ntriggers: [港口]\nunknown: keep-me\n---\n正文', { triggers: ['港口'], enabled: true, priority: 0 })).toThrow('invalid worldbook frontmatter')
+    expect(writeWorldbookFrontmatter('---\ntriggers: [港口]\nunknown: keep-me\n---\n正文', { triggers: ['港口'], enabled: true, priority: 0 }))
+      .toBe('---\ntriggers: [港口]\nunknown: keep-me\nenabled: true\npriority: 0\n---\n正文')
   })
 
   it('recognizes explicit frontmatter after a UTF-8 BOM and preserves the BOM on edits', () => {
     const valid = '\uFEFF---\r\ntriggers: ["纽约，巴黎"]\r\nenabled: true\r\npriority: 1\r\n---\r\n正文'
     expect(worldbookEditorMetadata('世界书/城市.md', valid)).toMatchObject({ valid: true, explicit: true, triggers: ['纽约，巴黎'] })
     expect(writeWorldbookFrontmatter(valid, { triggers: ['纽约，巴黎'], enabled: false, priority: 2 }))
-      .toBe('\uFEFF---\r\ntriggers: ["纽约，巴黎"]\r\nenabled: false\r\npriority: 2\r\n---\r\n正文')
-    const invalid = '\uFEFF---\ntriggers: [港口]\nunknown: keep-me\n---\n正文'
+      .toBe('\uFEFF---\r\ntriggers: [纽约，巴黎]\r\nenabled: false\r\npriority: 2\r\n---\r\n正文')
+    const invalid = '\uFEFF---\ntriggers: [港口]\nenabled: maybe\n---\n正文'
     expect(worldbookEditorMetadata('世界书/坏.md', invalid)).toMatchObject({ valid: false, explicit: true })
     expect(() => writeWorldbookFrontmatter(invalid, { triggers: ['港口'], enabled: true, priority: 0 })).toThrow('invalid worldbook frontmatter')
   })

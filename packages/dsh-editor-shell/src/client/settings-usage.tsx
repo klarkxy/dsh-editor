@@ -7,10 +7,10 @@
 import { createElement as e, useEffect, useState, type ReactNode } from 'react'
 import type { RpcResult } from '@deepseek-ai/dsh-client-connection/client'
 import type { ShellContext } from './shared.ts'
+import { formatNumber as formatLocaleNumber, t, useLocale } from '../i18n/index.ts'
 
 const USAGE_DAYS = 30
 const RECENT_DAYS = 7
-const LOCALE = 'zh-CN'
 
 /* 模型配色:固定调色板,按近 7 日总量降序分配,柱子与图例同色同序。 */
 const MODEL_PALETTE = ['#7c9ecb', '#d9a05b', '#8fbf8f', '#c98a8a', '#a48fd0', '#6fb3b3', '#d08bb0', '#b5b56a']
@@ -38,30 +38,32 @@ type UsageSummary = {
   days: DailyUsage[]
 }
 
-const TEXT = {
-  intro: '本机过去 30 天的模型调用统计。',
-  todayHeading: '今日',
-  recentHeading: '近 7 日',
-  cacheHit: '缓存命中',
-  input: '输入',
-  output: '输出',
-  requests: '请求',
-  empty: '还没有模型调用记录。',
-  loading: '正在读取…',
-  loadFailed: '读取用量失败',
-  retry: '重试',
-  loadFailedPrefix: '加载失败:',
-  note: '仅统计本机用量;不含费用估算。柱高为当日各模型 tokens 合计(输入+输出+缓存),悬停查看分项。',
+function text() {
+  return {
+  intro: t('usage.intro'),
+  todayHeading: t('usage.today'),
+  recentHeading: t('usage.recent7'),
+  cacheHit: t('usage.cacheHit'),
+  input: t('usage.input'),
+  output: t('usage.output'),
+  requests: t('usage.requests'),
+  empty: t('usage.empty'),
+  loading: t('zhihu.reading'),
+  loadFailed: t('usage.loadFailed'),
+  retry: t('common.retry'),
+  loadFailedPrefix: t('usage.loadFailedPrefix'),
+  note: t('usage.note'),
+  }
 }
 
 function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return '0'
-  return Math.round(value).toLocaleString(LOCALE)
+  return formatLocaleNumber(Math.round(value))
 }
 
 function failureMessage(result: RpcResult<unknown>): string {
   const error = (result as { error?: { message?: string } }).error
-  return error?.message ?? '请求失败'
+  return error?.message ?? t('common.requestFailed')
 }
 
 function todayKey(): string {
@@ -110,12 +112,12 @@ function dayTotal(day: DailyUsage, series: readonly ModelSeries[]): number {
 function UsageChart(props: { days: readonly DailyUsage[]; series: readonly ModelSeries[] }): ReactNode {
   const peak = Math.max(1, ...props.days.map((day) => dayTotal(day, props.series)))
   return e('div', { className: 'usage-chart' },
-    e('div', { className: 'usage-chart-plot', role: 'img', 'aria-label': '近 7 日各模型 tokens 用量堆叠柱状图' },
+    e('div', { className: 'usage-chart-plot', role: 'img', 'aria-label': t('usage.chartAria') },
       props.days.map((day) => {
         const total = dayTotal(day, props.series)
         return e('div', { className: 'usage-chart-day', key: day.date },
           e('span', { className: 'usage-chart-value' }, total ? formatNumber(total) : ''),
-          e('div', { className: 'usage-chart-bar', title: `${day.date} · 合计 ${formatNumber(total)} tokens` },
+          e('div', { className: 'usage-chart-bar', title: t('usage.barTitle', { date: day.date, total: formatNumber(total) }) },
             props.series.map((item) => {
               const value = modelTokens(day.byModel?.[item.key])
               if (!value) return null
@@ -135,13 +137,14 @@ function UsageChart(props: { days: readonly DailyUsage[]; series: readonly Model
       props.series.map((item) => e('li', { key: item.key },
         e('span', { className: 'usage-chart-chip', style: { background: item.color }, 'aria-hidden': 'true' }),
         e('span', { className: 'usage-chart-model' }, item.key),
-        e('span', { className: 'usage-chart-meta' }, `${formatNumber(item.tokens)} tokens · ${formatNumber(item.requests)} 次`),
+        e('span', { className: 'usage-chart-meta' }, t('usage.legend', { tokens: formatNumber(item.tokens), requests: formatNumber(item.requests) })),
       )),
     ),
   )
 }
 
 export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
+  useLocale()
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'ready'; summary: UsageSummary }
@@ -158,7 +161,7 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
         return
       }
       if (!isUsageSummary(result.value)) {
-        setState({ status: 'error', error: '返回数据格式不符合契约' })
+        setState({ status: 'error', error: t('usage.contract') })
         return
       }
       setState({ status: 'ready', summary: result.value })
@@ -172,18 +175,18 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
   }, [props.ctx])
 
   if (state.status === 'loading') {
-    return e('section', { className: 'usage-page', 'aria-label': '用量' },
+    return e('section', { className: 'usage-page', 'aria-label': t('settings.usage') },
       e(Header, null),
-      e('p', { className: 'usage-status', role: 'status' }, TEXT.loading),
+      e('p', { className: 'usage-status', role: 'status' }, text().loading),
     )
   }
 
   if (state.status === 'error') {
-    return e('section', { className: 'usage-page', 'aria-label': '用量' },
+    return e('section', { className: 'usage-page', 'aria-label': t('settings.usage') },
       e(Header, null),
       e('p', { className: 'usage-error', role: 'alert' },
-        `${TEXT.loadFailedPrefix}${state.error}`,
-        e('button', { type: 'button', className: 'usage-button', onClick: () => void load() }, TEXT.retry),
+        `${text().loadFailedPrefix}${state.error}`,
+        e('button', { type: 'button', className: 'usage-button', onClick: () => void load() }, text().retry),
       ),
     )
   }
@@ -193,8 +196,8 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
 
 function Header(): ReactNode {
   return e('header', { className: 'usage-header' },
-    e('h2', { className: 'usage-title' }, '用量'),
-    e('p', { className: 'usage-intro' }, TEXT.intro),
+    e('h2', { className: 'usage-title' }, t('settings.usage')),
+    e('p', { className: 'usage-intro' }, text().intro),
   )
 }
 
@@ -205,24 +208,24 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
   const series = collectModelSeries(recent)
   const hasAny = recent.some((day) => day.requests > 0)
 
-  return e('section', { className: 'usage-page', 'aria-label': '用量' },
+  return e('section', { className: 'usage-page', 'aria-label': t('settings.usage') },
     e(Header, null),
-    e('section', { className: 'usage-today', 'aria-label': TEXT.todayHeading },
-      e('h3', { className: 'usage-section-title' }, TEXT.todayHeading),
+    e('section', { className: 'usage-today', 'aria-label': text().todayHeading },
+      e('h3', { className: 'usage-section-title' }, text().todayHeading),
       e('div', { className: 'usage-cards' },
-        e(Card, { label: TEXT.cacheHit, value: today?.cacheReadTokens ?? 0 }),
-        e(Card, { label: TEXT.input, value: today?.inputTokens ?? 0 }),
-        e(Card, { label: TEXT.output, value: today?.outputTokens ?? 0 }),
-        e(Card, { label: TEXT.requests, value: today?.requests ?? 0 }),
+        e(Card, { label: text().cacheHit, value: today?.cacheReadTokens ?? 0 }),
+        e(Card, { label: text().input, value: today?.inputTokens ?? 0 }),
+        e(Card, { label: text().output, value: today?.outputTokens ?? 0 }),
+        e(Card, { label: text().requests, value: today?.requests ?? 0 }),
       ),
     ),
-    e('section', { className: 'usage-recent', 'aria-label': TEXT.recentHeading },
-      e('h3', { className: 'usage-section-title' }, TEXT.recentHeading),
+    e('section', { className: 'usage-recent', 'aria-label': text().recentHeading },
+      e('h3', { className: 'usage-section-title' }, text().recentHeading),
       !hasAny || series.length === 0
-        ? e('p', { className: 'usage-empty' }, TEXT.empty)
+        ? e('p', { className: 'usage-empty' }, text().empty)
         : e(UsageChart, { days: recent, series }),
     ),
-    e('p', { className: 'usage-footnote' }, TEXT.note),
+    e('p', { className: 'usage-footnote' }, text().note),
   )
 }
 

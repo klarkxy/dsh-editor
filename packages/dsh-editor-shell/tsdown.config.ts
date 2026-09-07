@@ -43,6 +43,10 @@ export default defineConfig([
         '@codemirror/language',
         '@lezer/markdown',
         '@lezer/highlight',
+        // docx / jszip are production deps used by the renderer export dialog.
+        // tsdown would otherwise leave them as runtime require() calls.
+        'docx',
+        'jszip',
       ],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),

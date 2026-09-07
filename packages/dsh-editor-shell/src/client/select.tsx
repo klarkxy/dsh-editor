@@ -1,4 +1,5 @@
 import { createElement as e, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { t } from '../i18n/index.ts'
 
 export type SelectOption = { value: string; label: string }
 
@@ -125,7 +126,7 @@ export function Select(props: {
       onClick: () => (open ? close(true) : openList()),
       onKeyDown,
     },
-      e('span', { className: selected ? 'select-value' : 'select-value placeholder' }, selected?.label ?? props.placeholder ?? '未选择'),
+      e('span', { className: selected ? 'select-value' : 'select-value placeholder' }, selected?.label ?? props.placeholder ?? t('select.unselected')),
       e('span', { className: 'select-caret', 'aria-hidden': true }, '⌄'),
     ),
     open ? e('ul', { ref: listRef, className: 'select-list', role: 'listbox', 'aria-label': props['aria-label'] },

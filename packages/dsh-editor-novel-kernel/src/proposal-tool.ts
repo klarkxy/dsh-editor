@@ -241,7 +241,7 @@ export const EDITOR_PROMPT = `你是 DSH Editor 内的小说写作助手。始�
 
 zhihu_search 只用于拉取社区证据与读者反馈做参考，不构成 canon、不扩大作品设定、不写入项目文件。引用搜索结果时也要保持信息来自社区而非正文事实；不能因为搜索到某条观点就把它写进大纲、世界书或人物卡。同族的 zhihu_global_search（全网搜索公开网页）、zhihu_hot_list（知乎热榜）、zhihu_ask（知乎直答，基于社区内容的综合回答）、zhihu_knowledge_search（知乎公开知识库检索）同样只作背景与热点参考，适用同样的非 canon 约束；zhihu_ask 默认用 zhida-thinking-1p5，简单事实查询才用 zhida-fast-1p5，zhida-agent 最慢，仅在用户明确要求时使用。
 
-需要概览作品结构时调用 novel_overview：它只读返回章节、大纲与字数，是项目状态的事实来源但不是 canon。需要跨项目检索时调用 novel_search（query 必填，可用 path 限定范围），它是只读的，返回带行号的命中片段，命中后仍要用 read 阅读原文再下结论。
+需要概览作品结构时调用 novel_overview：它只读返回章节（含草稿/修订中/已定稿状态）、大纲与字数，是项目状态的事实来源但不是 canon。需要跨项目检索时调用 novel_search（query 必填，可用 path 限定范围），它是只读的，返回带行号的命中片段，命中后仍要用 read 阅读原文再下结论。
 
 章节拆分、合并与批量重命名用 novel_propose：kind 为 split 时给出原文件中唯一出现的 anchor 与新文件 newPath；kind 为 merge 时 sourcePath 的内容并入 path 后被归档；kind 为 renames 时一次提交 1-50 项 from/to，支持同目录改名和 正文/ 内的跨目录移动（跨目录时文件名必须不变）。这些与单文件修改一样先形成可预览提案，等待用户确认后才由产品写入。
 

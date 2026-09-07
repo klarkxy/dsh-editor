@@ -3,7 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, FsTargetLike, FsWriteIntentLike, SandboxExecutionPolicyLike, WorkspaceFileContext } from 'dsh-manuscript/host-api'
-import { OverviewError, readProjectOverview, type OverviewAccess } from './overview.ts'
+import { readProjectOverview, type OverviewAccess } from './overview.ts'
+import { CHAPTER_STATUS_PATH, setChapterStatus } from './chapter-status.ts'
 
 let root = ''
 
@@ -100,9 +101,46 @@ describe('project overview', () => {
       ['第十章', '正文十', false, 7],
       ['空章', '', true, 3],
     ])
+    expect(overview.chapters.map((chapter) => chapter.status)).toEqual(['draft', 'draft', 'draft'])
     expect(overview.outlines).toMatchObject([{ path: '大纲/总纲.md', title: '总纲', excerpt: '主线' }])
-    expect(overview.totals).toEqual({ chapters: 3, chars: 17 })
+    expect(overview.totals).toEqual({ chapters: 3, chars: 17, byStatus: { draft: 3, revising: 0, final: 0 } })
+    expect(overview.recentChapters).toHaveLength(3)
+    expect(overview.recent?.path).toBeTruthy()
     expect(overview.chapters.every((chapter) => typeof chapter.modifiedAt === 'string')).toBe(true)
+  })
+
+  it('attaches stored statuses, distribution counts, and the five most recently edited chapters', async () => {
+    const stamp = Math.floor(Date.now() / 1000) - 40
+    for (let index = 0; index < 6; index++) {
+      await write(`正文/${index}.md`, `# 第${index}章\n\n正文${index}`)
+      await fs.utimes(path.join(root, '正文', `${index}.md`), stamp + index * 2, stamp + index * 2)
+    }
+    await setChapterStatus({ access: access(), path: '正文/1.md', status: 'revising' })
+    await setChapterStatus({ access: access(), path: '正文/5.md', status: 'final' })
+    await write(CHAPTER_STATUS_PATH, JSON.stringify({
+      version: 1,
+      statuses: { '正文/1.md': 'revising', '正文/5.md': 'final', '正文/已删除.md': 'final' },
+    }, null, 2))
+    const overview = await readProjectOverview(access())
+    expect(overview.chapters.map((chapter) => [chapter.path, chapter.title, chapter.chars, chapter.status, chapter.modifiedAt])).toEqual([
+      ['正文/0.md', '第0章', 7, 'draft', expect.any(String)],
+      ['正文/1.md', '第1章', 7, 'revising', expect.any(String)],
+      ['正文/2.md', '第2章', 7, 'draft', expect.any(String)],
+      ['正文/3.md', '第3章', 7, 'draft', expect.any(String)],
+      ['正文/4.md', '第4章', 7, 'draft', expect.any(String)],
+      ['正文/5.md', '第5章', 7, 'final', expect.any(String)],
+    ])
+    expect(overview.totals).toEqual({ chapters: 6, chars: 42, byStatus: { draft: 4, revising: 1, final: 1 } })
+    expect(overview.recentChapters.map((chapter) => chapter.path)).toEqual(['正文/5.md', '正文/4.md', '正文/3.md', '正文/2.md', '正文/1.md'])
+    expect(overview.recent?.path).toBe('正文/5.md')
+  })
+
+  it('fail-opens corrupt status metadata and ignores stale keys', async () => {
+    await write('正文/001.md', '# 第一章\n\n正文')
+    await write(CHAPTER_STATUS_PATH, '{not json')
+    const overview = await readProjectOverview(access())
+    expect(overview.chapters).toMatchObject([{ path: '正文/001.md', status: 'draft' }])
+    expect(overview.totals.byStatus).toEqual({ draft: 1, revising: 0, final: 0 })
   })
 
   it('allows overview reads in a read-only workspace', async () => {

@@ -9,15 +9,17 @@ import { SettingsGeneralSection } from './settings-general.tsx'
 import { SettingsModelsSection } from './settings-models.tsx'
 import { SettingsZhihuSection } from './settings-zhihu.tsx'
 import { SettingsUsageSection } from './settings-usage.tsx'
+import { t, useLocale } from '../i18n/index.ts'
+
 
 export type SettingsTab = 'general' | 'models' | 'writing' | 'zhihu' | 'usage'
 
-const TAB_LABEL: Record<SettingsTab, string> = {
-  general: '通用设置',
-  models: '模型',
-  writing: '写作',
-  zhihu: '知乎',
-  usage: '用量',
+function tabLabel(tab: SettingsTab): string {
+  if (tab === 'general') return t('settings.general')
+  if (tab === 'models') return t('settings.models')
+  if (tab === 'writing') return t('settings.writing')
+  if (tab === 'zhihu') return t('settings.zhihu')
+  return t('settings.usage')
 }
 
 /** 顶栏设置入口。保留 .native-settings-control 包裹和 aria-haspopup 约定（e2e 依赖）。 */
@@ -30,7 +32,7 @@ export function SettingsTrigger(props: { onOpen(): void }) {
       onClick: props.onOpen,
     },
       e('span', { className: 'settings-trigger-icon', 'aria-hidden': true }, '⚙'),
-      '设置',
+      t('common.settings'),
     ),
   )
 }
@@ -42,6 +44,7 @@ export function SettingsDialog(props: {
   progressScope: WritingProgressScope
   onClose(): void
 }) {
+  useLocale()
   const [tab, setTab] = useState<SettingsTab>('general')
   const [note, setNote] = useState('')
   const dialog = useRef<HTMLDivElement | null>(null)
@@ -60,13 +63,13 @@ export function SettingsDialog(props: {
     setNote('')
     try {
       const response = await props.ctx.connection.api.settings.openDocument({})
-      if (!response.result.ok) setNote(`打开配置文件失败：${response.result.error.message}`)
+      if (!response.result.ok) setNote(t('settings.openConfigFailed', { error: response.result.error.message }))
     } catch (error) {
-      setNote(`打开配置文件失败：${error instanceof Error ? error.message : String(error)}`)
+      setNote(t('settings.openConfigFailed', { error: error instanceof Error ? error.message : String(error) }))
     }
   }
 
-  const tabs = (Object.keys(TAB_LABEL) as SettingsTab[])
+  const tabs: SettingsTab[] = ['general', 'models', 'writing', 'zhihu', 'usage']
   const content: Record<SettingsTab, () => ReactNode> = {
     general: () => e(SettingsGeneralSection, { ctx: props.ctx }),
     models: () => e(SettingsModelsSection, { ctx: props.ctx }),
@@ -85,22 +88,22 @@ export function SettingsDialog(props: {
       onKeyDown,
     },
       e('aside', { className: 'settings-nav' },
-        e('h2', { id: 'settings-dialog-title' }, '设置'),
-        e('nav', { 'aria-label': '设置分类' },
+        e('h2', { id: 'settings-dialog-title' }, t('common.settings')),
+        e('nav', { 'aria-label': t('settings.nav') },
           tabs.map((key) => e('button', {
             key,
             type: 'button',
             className: `settings-tab${tab === key ? ' active' : ''}`,
             'aria-current': tab === key,
             onClick: () => setTab(key),
-          }, TAB_LABEL[key])),
+          }, tabLabel(key))),
         ),
       ),
       e('div', { className: 'settings-body' },
         e('header', { className: 'settings-header' },
-          e('span', { className: 'settings-header-title' }, TAB_LABEL[tab]),
-          props.ctx.connection.isLoopback ? e('button', { type: 'button', className: 'settings-open-config', onClick: () => void openConfigFile() }, '打开配置文件') : null,
-          e('button', { type: 'button', className: 'icon-button settings-close', 'aria-label': '关闭设置', onClick: props.onClose }, '×'),
+          e('span', { className: 'settings-header-title' }, tabLabel(tab)),
+          props.ctx.connection.isLoopback ? e('button', { type: 'button', className: 'settings-open-config', onClick: () => void openConfigFile() }, t('settings.openConfig')) : null,
+          e('button', { type: 'button', className: 'icon-button settings-close', 'aria-label': t('settings.close'), onClick: props.onClose }, '×'),
         ),
         note ? e('p', { className: 'warning pad', role: 'alert' }, note) : null,
         e('div', { className: 'settings-content' }, content[tab]()),

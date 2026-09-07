@@ -31,7 +31,7 @@ describe('writing preference migration', () => {
     const removeItem = vi.fn()
     const set = vi.fn()
     const scope = scopeWith({
-      status: 'ready', value: { completion: 'manual', authorPreferences: '', authorMemory: '' }, user: { completion: 'manual' }, base: {}, revision: 1, writable: true, mode: 'host',
+      status: 'ready', value: { ...DEFAULT_WRITING_PREFERENCES, completion: 'manual', authorPreferences: '', authorMemory: '' }, user: { completion: 'manual' }, base: {}, revision: 1, writable: true, mode: 'host',
     }, async (...args) => { set(...args) })
     const result = await migrateLegacyWritingPreferences(scope, {
       getItem: (key) => key === COMPLETION_PREFERENCE_KEY ? 'pause' : null,
@@ -55,7 +55,11 @@ describe('writing preference migration', () => {
     expect(result).toEqual({ failed: [] })
     expect(removeItem).toHaveBeenCalledWith(COMPLETION_PREFERENCE_KEY)
     expect(removeItem).toHaveBeenCalledWith(AUTHOR_PREFERENCES_KEY)
-    expect(scope.getSnapshot().value).toEqual({ completion: 'pause', authorPreferences: '第三人称限知\n少用感叹号', authorMemory: '' })
+    expect(scope.getSnapshot().value).toEqual({
+      ...DEFAULT_WRITING_PREFERENCES,
+      completion: 'pause',
+      authorPreferences: '第三人称限知\n少用感叹号',
+    })
   })
 
   it('retains a legacy key and reports a retryable failure when the scope write does not commit', async () => {
@@ -81,7 +85,7 @@ describe('author memory normalization and decode', () => {
 
   it('falls back to the empty default for a legacy snapshot without the author memory field', () => {
     const snapshot: SettingsScopeSnapshot<WritingPreferences> = {
-      status: 'ready', value: { completion: 'manual', authorPreferences: '', authorMemory: '' }, user: { completion: 'manual' }, base: {}, revision: 1, writable: true, mode: 'host',
+      status: 'ready', value: { ...DEFAULT_WRITING_PREFERENCES, completion: 'manual', authorPreferences: '', authorMemory: '' }, user: { completion: 'manual' }, base: {}, revision: 1, writable: true, mode: 'host',
     }
     expect(writingPreferences(snapshot)).toMatchObject({ authorMemory: '' })
   })
@@ -89,8 +93,51 @@ describe('author memory normalization and decode', () => {
   it('decodeWritingPreferences round-trips an empty author memory field', () => {
     expect(decodeWritingPreferences({ completion: 'manual', authorPreferences: '', authorMemory: '' })).toEqual(DEFAULT_WRITING_PREFERENCES)
     expect(decodeWritingPreferences({ completion: 'manual', authorPreferences: '克制', authorMemory: '留白优先' })).toEqual({
-      completion: 'manual', authorPreferences: '克制', authorMemory: '留白优先',
+      ...DEFAULT_WRITING_PREFERENCES, authorPreferences: '克制', authorMemory: '留白优先',
     })
     expect(decodeWritingPreferences({ completion: 'manual', authorPreferences: '', authorMemory: 42 })).toBeUndefined()
+  })
+
+  it('fills paper typography defaults and clamps out-of-range values', () => {
+    expect(decodeWritingPreferences({
+      completion: 'pause',
+      authorPreferences: '',
+      authorMemory: '',
+      typewriter: true,
+      focusParagraph: true,
+      fontSize: 40,
+      lineHeight: 0.5,
+      fontFamily: 'mono',
+      paragraphSpacing: 9,
+      paperWidth: 'narrow',
+    })).toEqual({
+      ...DEFAULT_WRITING_PREFERENCES,
+      completion: 'pause',
+      typewriter: true,
+      focusParagraph: true,
+      fontSize: 28,
+      lineHeight: 1.4,
+      fontFamily: 'mono',
+      paragraphSpacing: 1.5,
+      paperWidth: 'narrow',
+    })
+    expect(decodeWritingPreferences({
+      completion: 'manual',
+      authorPreferences: '',
+      authorMemory: '',
+      fontFamily: 'comic',
+      paperWidth: 'huge',
+      typewriter: 'yes',
+      fontSize: Number.NaN,
+    })).toEqual(DEFAULT_WRITING_PREFERENCES)
+    expect(writingPreferences({
+      status: 'ready',
+      value: { ...DEFAULT_WRITING_PREFERENCES, fontSize: 12, lineHeight: 3, paperWidth: 'medium' },
+      user: { fontSize: 12 },
+      base: {},
+      revision: 1,
+      writable: true,
+      mode: 'host',
+    })).toMatchObject({ fontSize: 14, lineHeight: 2.4, paperWidth: 'medium', typewriter: false })
   })
 })

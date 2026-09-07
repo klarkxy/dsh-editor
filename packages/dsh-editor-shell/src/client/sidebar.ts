@@ -1,5 +1,8 @@
 import { createElement as e, Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import type { ChapterStatus } from 'dsh-editor-workbench/contracts'
+import { chapterStatusGlyph, chapterStatusLabel, isChapterDocumentPath } from '../overview-view.ts'
 import { errorMessage, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
+import { t } from '../i18n/index.ts'
 
 type LoadSubtree = (path: string) => Promise<TreeEntry[] | null> | null | void
 
@@ -14,6 +17,8 @@ type RowProps = {
   active: string
   revision: number
   openPaths: Set<string>
+  chapterStatuses: Record<string, ChapterStatus>
+  highlightPath?: string
   onOpen(path: string): void
   onPreviewImage(path: string): void
   onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }): void
@@ -24,7 +29,7 @@ type RowProps = {
 }
 
 function TreeRows(props: RowProps): ReactNode {
-  const { path, level, loaded, active, openPaths, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory } = props
+  const { path, level, loaded, active, openPaths, chapterStatuses, highlightPath, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory } = props
   const entries = orderTreeEntries(loaded[path] ?? [])
   // 树只渲染磁盘上真实存在的条目:预设分组已移除,目录(包括 正文/大纲/人物卡/世界书)
   // 在实际创建后自然出现。隐藏 . 开头的系统项。
@@ -54,15 +59,15 @@ function TreeRows(props: RowProps): ReactNode {
             e('button', {
               className: 'tree-directory-add',
               type: 'button',
-              title: `在 ${item.name} 中新建文件`,
-              'aria-label': `在 ${item.name} 中新建文件`,
+              title: t('sidebar.newFileIn', { name: item.name }),
+              'aria-label': t('sidebar.newFileIn', { name: item.name }),
               onClick: () => onCreateFile(child),
             }, '＋'),
             e('button', {
               className: 'tree-directory-add',
               type: 'button',
-              title: `在 ${item.name} 中新建文件夹`,
-              'aria-label': `在 ${item.name} 中新建文件夹`,
+              title: t('sidebar.newFolderIn', { name: item.name }),
+              'aria-label': t('sidebar.newFolderIn', { name: item.name }),
               onClick: () => onCreateFolder(child),
             }, '▣'),
           ),
@@ -70,11 +75,12 @@ function TreeRows(props: RowProps): ReactNode {
         isOpen ? e(TreeRows, { ...props, path: child, level: level + 1 }) : null,
       )
     }
+    const chapterStatus = isChapterDocumentPath(child) ? chapterStatuses[child] : undefined
     return e('div', { key: child, className: 'tree-file-row' },
       e('button', {
         className: 'tree-row tree-main',
         type: 'button',
-        'aria-current': active === child ? 'page' : undefined,
+        'aria-current': active === child || highlightPath === child ? 'page' : undefined,
         style: { paddingLeft: treeRowPadding(level) },
         'data-tree-depth': level,
         onClick: () => (isImagePath(child) ? onPreviewImage(child) : onOpen(child)),
@@ -85,6 +91,11 @@ function TreeRows(props: RowProps): ReactNode {
       },
       e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, '·'),
       e('span', null, item.name),
+      chapterStatus ? e('span', {
+        className: `chapter-status ${chapterStatus}`,
+        title: chapterStatusLabel(chapterStatus),
+        'aria-label': chapterStatusLabel(chapterStatus),
+      }, chapterStatusGlyph(chapterStatus)) : null,
       ),
     )
   }))
@@ -96,13 +107,15 @@ export function Tree(props: {
   active: string
   expandPath: string
   revision: number
+  chapterStatuses: Record<string, ChapterStatus>
+  highlightPath?: string
   onOpen(path: string): void
   onPreviewImage(path: string): void
   onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }): void
   onCreateFile(directory: string): void
   onCreateFolder(directory: string): void
 }) {
-  const { ctx, sessionId, active, expandPath, revision, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder } = props
+  const { ctx, sessionId, active, expandPath, revision, chapterStatuses, highlightPath, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder } = props
   const [loaded, setLoaded] = useState<Record<string, TreeEntry[]>>({})
   const [openPaths, setOpenPaths] = useState<Set<string>>(() => new Set())
   const [note, setNote] = useState('')
@@ -138,7 +151,7 @@ export function Tree(props: {
 
   return e('nav', {
     className: 'tree',
-    'aria-label': '稿件目录',
+    'aria-label': t('sidebar.manuscriptTree'),
     onContextMenu: (event: ReactMouseEvent<HTMLElement>) => {
       // 仅在空白区(非已有行)右键时弹出根目录菜单;行内已自行阻止冒泡。
       if (event.target === event.currentTarget) {
@@ -156,6 +169,8 @@ export function Tree(props: {
       active,
       revision,
       openPaths,
+      chapterStatuses,
+      highlightPath,
       onOpen,
       onPreviewImage,
       onFileMenu,
@@ -180,8 +195,10 @@ export function FileContextMenu(props: {
   onCut(): void
   onPaste(): void
   onRename(): void
+  onArchive(): void
   onDelete(): void
   onClose(): void
+  canArchive: boolean
 }) {
   const panel = useRef<HTMLDivElement | null>(null)
   const first = useRef<HTMLButtonElement | null>(null)
@@ -201,28 +218,35 @@ export function FileContextMenu(props: {
     }
   }, [props.path, props.x, props.y])
   const left = Math.max(8, Math.min(props.x, globalThis.innerWidth - 188))
-  const top = Math.max(8, Math.min(props.y, globalThis.innerHeight - 220))
+  const top = Math.max(8, Math.min(props.y, globalThis.innerHeight - 260))
   return e('div', {
     ref: panel,
     className: 'file-context-menu',
     role: 'menu',
-    'aria-label': '文档操作',
+    'aria-label': t('sidebar.fileActions'),
     style: { left, top },
     onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => event.preventDefault(),
   },
-    e('button', { ref: first, type: 'button', role: 'menuitem', onClick: props.onCreateFile }, '新建文件'),
-    e('button', { type: 'button', role: 'menuitem', onClick: props.onCreateFolder }, '新建文件夹'),
+    e('button', { ref: first, type: 'button', role: 'menuitem', onClick: props.onCreateFile }, t('sidebar.newFile')),
+    e('button', { type: 'button', role: 'menuitem', onClick: props.onCreateFolder }, t('sidebar.newFolder')),
     e('hr', { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
-    e('button', { type: 'button', role: 'menuitem', onClick: props.onCopy }, '复制'),
-    e('button', { type: 'button', role: 'menuitem', onClick: props.onCut }, '剪切'),
+    e('button', { type: 'button', role: 'menuitem', onClick: props.onCopy }, t('common.copy')),
+    e('button', { type: 'button', role: 'menuitem', onClick: props.onCut }, t('common.cut')),
     e('button', {
       type: 'button',
       role: 'menuitem',
       disabled: !props.canPaste,
       onClick: props.onPaste,
-    }, '粘贴'),
+    }, t('common.paste')),
     e('hr', { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
-    e('button', { type: 'button', role: 'menuitem', onClick: props.onRename }, '重命名'),
-    e('button', { type: 'button', role: 'menuitem', 'data-danger': 'true', onClick: props.onDelete }, '删除'),
+    e('button', { type: 'button', role: 'menuitem', onClick: props.onRename }, t('common.rename')),
+    e('button', {
+      type: 'button',
+      role: 'menuitem',
+      disabled: !props.canArchive,
+      title: props.canArchive ? t('sidebar.archiveTitle') : t('sidebar.archiveDisabled'),
+      onClick: props.onArchive,
+    }, t('common.archive')),
+    e('button', { type: 'button', role: 'menuitem', 'data-danger': 'true', onClick: props.onDelete }, t('common.delete')),
   )
 }

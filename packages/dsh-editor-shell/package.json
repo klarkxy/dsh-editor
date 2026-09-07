@@ -52,9 +52,11 @@
     "@deepseek-ai/schemastery": "^3.18.1",
     "@radix-ui/react-dialog": "^1.1.23",
     "cmdk": "^1.1.1",
+    "docx": "^9.7.1",
     "dsh-editor-novel-kernel": "workspace:*",
     "dsh-editor-workbench": "workspace:*",
-    "dsh-manuscript": "workspace:*"
+    "dsh-manuscript": "workspace:*",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

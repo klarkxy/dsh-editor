@@ -2,6 +2,35 @@
 
 本文件只记录已经发生的版本变化；安装、升级和回滚步骤以 [使用者指南](docs/user-guide.md) 为准。
 
+## Unreleased
+
+### dsh-editor-shell
+
+- 侧栏全文搜索面板（Ctrl+Shift+F，`search.text`），点击命中后用稿纸 `revealRange` 定位。
+- 导出预检对话框：一次读取正文后可下载 Markdown / TXT，或在本机打包 DOCX / EPUB（捆绑 `docx`、`jszip`）。
+- 导入对话框重新挂到作品菜单与命令面板（`project.import*`）。
+- 文件树右键归档与「已归档」列表（`archive.*`）；只接受单个可见 Markdown/TXT，不归档目录。
+- 打开世界书 Markdown 时，稿纸下方提供触发词 / 启用 / 优先级表单。
+- 设置中的每日写作目标与侧栏「今日 +N / 目标 M」小标；保存后 5 秒防抖调用 `progress.record`。
+- 作品概览（Ctrl+Shift+O）：章节状态、字数分布、近 30 日 / 12 周写作曲线；文件树显示状态标记。
+- 校对面板（Ctrl+Shift+L，`proofread.scan`）；自动应用走提案，仅 Markdown，`.txt` 需手工改；忽略名单写入 `.dsh-editor/敏感词-忽略.txt`。
+- 稿纸与排版设置（`dsh-editor-writing`）：打字机 Ctrl+Alt+T、段落聚焦 Ctrl+Alt+P、字号/行高/字体/段距/纸宽。
+- 对话 ⋯ 菜单：归档、恢复、删除；删除只在本机记墓碑，DSH 0.1.1-rc.2 没有会话删除。
+- 人物卡 / 世界书面板（Ctrl+Shift+C / Ctrl+Shift+W，`cards.*`）：结构化 frontmatter 与引用导航。
+- 通用设置的中文 / English 立即覆盖外壳文案（`src/i18n/`，约 930 条键）；DSH 对话区仍用自带文案。
+
+### dsh-manuscript
+
+- 稿内查找 / 替换（Ctrl+F / Ctrl+H，`@codemirror/search`）与 `EditorCoreHandle.revealRange`。
+- `EditorCore` 增加 `typewriter`、`focusParagraph`、`typography`（`--paper-*` CSS 变量）。
+
+### dsh-editor-workbench
+
+- `chapter.statusSet` 与 `.dsh-editor/chapter-status.json`；`project.overview` 带 `status`、`totals.byStatus`、`recentChapters`。
+- `progress.record` / `progress.history`（`.dsh-editor/writing-log.json`）。
+- `proofread.scan`（包内 `resources/proofread/*`，作品可追加 `.dsh-editor/敏感词.txt` / `敏感词-忽略.txt`）。
+- `cards.list` / `cards.metaSet` / `cards.references` / `cards.create`（`frontmatter.ts`）；卡片写入进入工作区写队列。
+
 ## 0.1.6 - 2026-09-07
 
 ### 写作搭档

@@ -2,6 +2,7 @@ import type { ConnectionHandle, WorkspaceId, WorkspaceView } from '@deepseek-ai/
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { worldbookEditorMetadata, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import type { WritingPreferences, WritingSettingsSlots } from '../writing-settings.ts'
+import { intlLocale, t } from '../i18n/index.ts'
 
 export type TreeEntry = { name: string; type: 'file' | 'directory' | 'other' }
 
@@ -98,7 +99,7 @@ export function orderTreeEntries<T extends { name: string; type: 'file' | 'direc
     const leftDirectory = left.type === 'directory' ? 0 : 1
     const rightDirectory = right.type === 'directory' ? 0 : 1
     if (leftDirectory !== rightDirectory) return leftDirectory - rightDirectory
-    return left.name.localeCompare(right.name, 'zh-CN', { numeric: true, sensitivity: 'base' })
+    return left.name.localeCompare(right.name, intlLocale(), { numeric: true, sensitivity: 'base' })
   })
 }
 
@@ -107,7 +108,7 @@ export function treeRowPadding(level: number): number {
 }
 
 export function treeExpansionPaths(path: string): string[] {
-  if (!path.startsWith('正文/')) return []
+  if (!/^(正文|人物卡|世界书)\//.test(path)) return []
   const parts = path.split('/').filter(Boolean)
   return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('/'))
 }
@@ -131,20 +132,20 @@ export function errorMessage(result: RpcResult): string {
   /* 部分写入优先：普通重命名/移动也可能触及多个路径，必须让用户看到恢复位置。 */
   const partial = partialApplyDetails(result)
   if (partial) {
-    const paths = partial.appliedPaths.length ? `；涉及 ${partial.appliedPaths.join('、')}，需核对` : ''
-    const recovery = partial.recoveryPath ? `；恢复文件在 ${partial.recoveryPath}` : ''
-    const snapshot = partial.safetySnapshotId ? `；安全快照 ${partial.safetySnapshotId}` : ''
-    return `操作未能全部完成${paths}${recovery}${snapshot}。`
+    const paths = partial.appliedPaths.length ? t('error.partialPaths', { paths: partial.appliedPaths.join('、') }) : ''
+    const recovery = partial.recoveryPath ? t('error.partialRecovery', { path: partial.recoveryPath }) : ''
+    const snapshot = partial.safetySnapshotId ? t('error.partialSnapshot', { id: partial.safetySnapshotId }) : ''
+    return `${t('error.partialPrefix')}${paths}${recovery}${snapshot}${t('error.partialSuffix')}`
   }
   const blob = rpcFailureText(result)
-  if (/stale|changed|version|版本/i.test(blob)) return '磁盘文件已经变化。'
-  if (/directory-exists|already exists/i.test(blob)) return '同名文件或目录已经存在。'
-  if (/workspace-invalid-path|invalid path/i.test(blob)) return '名称或路径不符合规则。'
-  if (/read-only|permission|denied/i.test(blob)) return '当前文件无法写入，请检查目录权限。'
-  if (/directory-unreadable|unreadable/i.test(blob)) return '未能读取作品目录，请重试。'
-  if (/session-not-found|session is not live/i.test(blob)) return '作品会话已失效，请重试。'
-  if (/not-found|missing/i.test(blob)) return '未找到所需的文件。'
-  return '操作未能完成，请重试。'
+  if (/stale|changed|version|版本/i.test(blob)) return t('error.diskChanged')
+  if (/directory-exists|already exists/i.test(blob)) return t('error.alreadyExists')
+  if (/workspace-invalid-path|invalid path/i.test(blob)) return t('error.invalidPath')
+  if (/read-only|permission|denied/i.test(blob)) return t('error.readOnly')
+  if (/directory-unreadable|unreadable/i.test(blob)) return t('error.directoryUnreadable')
+  if (/session-not-found|session is not live/i.test(blob)) return t('error.sessionMissing')
+  if (/not-found|missing/i.test(blob)) return t('error.notFound')
+  return t('error.generic')
 }
 
 export function isSessionMissing(result: RpcResult): boolean {
@@ -153,10 +154,10 @@ export function isSessionMissing(result: RpcResult): boolean {
 
 export function workspaceOpenFailureMessage(error: unknown): string {
   const detail = error instanceof Error ? error.message : ''
-  if (/no supported text files/i.test(detail)) return '没有找到可打开的 Markdown 或 TXT 作品文件。'
-  if (/session is not live|session-not-found|作品会话已失效/i.test(detail)) return '作品会话未能建立，请重试。'
-  if (detail && detail !== '操作未能完成，请重试。') return `作品未能打开：${detail}`
-  return '作品会话或正文检查未能完成，请重试。'
+  if (/no supported text files/i.test(detail)) return t('error.noTextFiles')
+  if (/session is not live|session-not-found|作品会话已失效/i.test(detail)) return t('error.sessionNotEstablished')
+  if (detail && detail !== t('error.generic')) return t('error.openFailed', { detail })
+  return t('error.openCheckFailed')
 }
 
 export function isStaleFailure(result: RpcResult): boolean {
@@ -270,13 +271,11 @@ export function isImagePath(path: string): boolean {
 }
 
 export function relocationFailureMessage(cleanupFailed: boolean): string {
-  return cleanupFailed
-    ? '所选文件夹没有可验证的现有正文；原作品入口已保留。新位置入口未能自动移除，可从最近作品中手动移除。'
-    : '所选文件夹没有可验证的现有正文；原作品入口已保留。'
+  return cleanupFailed ? t('error.relocationCleanupFailed') : t('error.relocationKept')
 }
 
 export function isSuccessWorkbenchNote(note: string): boolean {
-  return /^已(?:创建|重命名为|移动到|归档|恢复)(?:\s|$)/.test(note)
+  return /^(?:已(?:创建|重命名为|移动到|归档|恢复)|(?:Created|Renamed to|Moved to|Archived|Restored))(?:\s|$)/.test(note)
 }
 
 export function proposalAppliedNavigation(appliedPath: string, currentPath: string, editorDirty: boolean): {
@@ -321,7 +320,7 @@ export function storedPanelOpen(key: string, fallback: boolean): boolean {
   }
 }
 
-export type WorkspaceShortcutAction = 'settings' | 'toggle-sidebar' | 'toggle-assistant' | 'toggle-focus' | 'focus-assistant' | 'previous-chapter' | 'next-chapter'
+export type WorkspaceShortcutAction = 'settings' | 'toggle-sidebar' | 'toggle-assistant' | 'toggle-focus' | 'focus-assistant' | 'previous-chapter' | 'next-chapter' | 'search' | 'overview' | 'proofread' | 'cards-character' | 'cards-worldbook' | 'toggle-typewriter' | 'toggle-focus-paragraph'
 
 type ShortcutInput = {
   key: string
@@ -335,12 +334,21 @@ type ShortcutInput = {
 export function workspaceShortcut(input: ShortcutInput): WorkspaceShortcutAction | null {
   const mod = input.ctrlKey || input.metaKey
   const key = input.key.toLowerCase()
+  if (mod && input.shiftKey && !input.altKey && key === 'f') return 'search'
+  if (mod && input.shiftKey && !input.altKey && key === 'o') return 'overview'
+  if (mod && input.shiftKey && !input.altKey && key === 'l') return 'proofread'
+  if (mod && input.shiftKey && !input.altKey && key === 'c') return 'cards-character'
+  if (mod && input.shiftKey && !input.altKey && key === 'w') return 'cards-worldbook'
   if (mod && !input.altKey && !input.shiftKey) {
     if (key === ',') return 'settings'
     if (key === 'b') return 'toggle-sidebar'
     if (key === 'j') return 'toggle-assistant'
     if (key === '\\') return 'toggle-focus'
     if (key === 'l') return 'focus-assistant'
+  }
+  if (mod && input.altKey && !input.shiftKey) {
+    if (key === 't') return 'toggle-typewriter'
+    if (key === 'p') return 'toggle-focus-paragraph'
   }
   if (!mod && input.altKey && !input.shiftKey) {
     if (input.code === 'BracketLeft' || key === '[') return 'previous-chapter'
@@ -413,7 +421,7 @@ export function replaceWorldbookPaperText(path: string, text: string, paperText:
 }
 
 export function searchSkippedText(skipped: number): string {
-  return skipped > 0 ? `未搜索 ${skipped} 个隐藏、生成、非文本或过大项目` : ''
+  return skipped > 0 ? t('error.searchSkipped', { count: skipped }) : ''
 }
 
 export { type ProjectContextReceiptBundle }

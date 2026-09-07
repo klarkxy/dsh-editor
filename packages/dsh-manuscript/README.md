@@ -1,6 +1,6 @@
 # dsh-manuscript
 
-面向 DSH Web 的稿件 GUI 插件，提供工作区文本文件树、正文编辑、安全保存、浏览器会话草稿、字数、前后篇导航、全文搜索、剪贴板改写交接和可选补全。它不依赖 `dsh-grill`；官方 DSH 仍是唯一的 Chat 和 Agent 界面。
+面向 DSH Web 的稿件 GUI 插件，提供工作区文本文件树、正文编辑、安全保存、浏览器会话草稿、字数、前后篇导航、稿内查找替换、全文搜索、剪贴板改写交接和可选补全。它不依赖 `dsh-grill`；官方 DSH 仍是唯一的 Chat 和 Agent 界面。
 
 ## 使用行为
 
@@ -9,11 +9,31 @@
 - “改这段”只复制请求到剪贴板，不注入官方 Chat DOM。
 - FIM 使用 live session 已选择的 provider/model 和 DSH `llm.stream`；没有候选时安全返回空。
 
+## 稿纸写作体验（editor-core）
+
+`EditorCore` 增加三个可选 props，默认与当前行为一致（关、17px / 1.9 / 宋体栈、不分段弱化）：
+
+- `typewriter?: boolean` — 打字机滚动。键入或移动光标时，把当前行保持在视口垂直中线（比例 0.5）。只在 `docChanged` / `selectionSet` 时重定位，不监听 `scroll`，滚轮滚动不会被拽回去。运行时通过 CodeMirror `Compartment` 开关。
+- `typography?: { fontSize?: number; lineHeight?: number; fontFamily?: 'serif' | 'sans' | 'mono' | string; paragraphSpacing?: number; maxWidth?: number }` — 写到稿纸根节点的 CSS 变量：`--paper-font-size`、`--paper-line-height`、`--paper-font-family`、`--paper-paragraph-spacing`、`--paper-max-width`。纸/墨主题继续管颜色。`fontSize` 限制在 14–28px，`lineHeight` 1.4–2.4，`paragraphSpacing` 0–1.5em；`maxWidth` ≤120 视为 `ch`，更大视为 `px`。具名字体栈见 `FONT_STACKS`。
+- `focusParagraph?: boolean` — 弱化非光标段落（行装饰 class `cm-paper-dim`，透明度 `--paper-dim-opacity`，默认 0.35）。同样可 Compartment 运行时开关。
+
+这两个扩展不注册 Tab / Esc / Ctrl+Enter / Ctrl+F 键位，补全、选段建议和查找栏优先级不变。纯函数在 `src/client/editor-core/typography.ts` 与 `typewriter.ts`。
+
+## 稿内查找替换
+
+`EditorCore` 用 `@codemirror/search` 提供中文查找栏（不显示默认英文面板）：
+
+- `Ctrl+F` 打开查找，`Ctrl+H` 打开查找并替换；F3 / Shift+F3（或 Ctrl+G）跳到下一处 / 上一处；Esc 在查找栏聚焦时先关栏，再轮到放弃补全。
+- 替换是普通 CodeMirror 事务（`userEvent: input.replace*`），走与键入相同的 `setText` 路径，自动保存和版本冲突检查不变。
+- `EditorCoreHandle.revealRange(start, end)` 按**完整文件**偏移选中范围（含被投影隐藏的世界书 frontmatter），越界会钳到可见稿纸并滚入视口。
+
+跨文件全文搜索仍是 Host 的 `search.text`，不属于 editor-core。
+
 ## Host 契约
 
 Host 由 live `sessionId` 获取 immutable workspace，验证 registered membership 与 sandbox policy，再使用 DSH `ctx.fs`。创建采用 `createIfAbsent`，保存采用 `replaceIfVersion`。绝对路径、traversal、symlink、超过 2 MB 的文本、stale version、未知 session 和 read-only 写入都会 fail closed。
 
-全文搜索只扫描有界的 Markdown/TXT 字面文本并跳过隐藏、生成和链接路径。桌面产品的项目导入、作品快照、安全重命名与可恢复归档属于桌面私有 Host，不进入本公开插件的 RPC 或 tarball。
+全文搜索只扫描有界的 Markdown/TXT 字面文本并跳过隐藏、生成和链接路径。公开 channel 另有 `draft.list`、`usage.summary`、`zhihu.usage`。桌面产品的项目导入、作品快照、安全重命名与可恢复归档属于桌面私有 Host，不进入本公开插件的 RPC 或 tarball。
 
 `dsh-manuscript/host-api` 是给同进程 Host 插件复用的窄 authority/file 子入口；它不增加公开 RPC，也不允许绕过 live session、sandbox、路径与版本门禁。
 

@@ -7,7 +7,8 @@ import {
   readTextFileLimited,
   type WorkspaceFileContext,
 } from 'dsh-manuscript/host-api'
-import type { ChapterSummary, OutlineSummary, ProjectOverview } from './contracts.ts'
+import type { ChapterStatus, ChapterSummary, OutlineSummary, ProjectOverview } from './contracts.ts'
+import { loadChapterStatuses } from './chapter-status.ts'
 
 const MANUSCRIPT_ROOT = '正文'
 const OUTLINE_ROOT = '大纲'
@@ -26,8 +27,9 @@ export type OverviewAccess = {
   files: WorkspaceFileContext
 }
 
+type ScannedChapter = Omit<ChapterSummary, 'status'>
 type ScanResult = {
-  chapters: ChapterSummary[]
+  chapters: ScannedChapter[]
   outlines: OutlineSummary[]
   totalChars: number
   truncated: boolean
@@ -139,8 +141,8 @@ async function scanArea(
   root: typeof MANUSCRIPT_ROOT | typeof OUTLINE_ROOT,
   limit: { files: number; bytes: number; directories: number; entries: number },
   modifiedAt: (relative: string) => Promise<string | null>,
-): Promise<{ items: ChapterSummary[]; truncated: boolean; skipped: number }> {
-  const items: ChapterSummary[] = []
+): Promise<{ items: ScannedChapter[]; truncated: boolean; skipped: number }> {
+  const items: ScannedChapter[] = []
   const queue: string[] = [root]
   let truncated = false
   let skipped = 0
@@ -191,7 +193,7 @@ async function scanProject(access: OverviewAccess): Promise<ScanResult> {
   const modifiedAt = await mtimeReader(access.path)
   const limit = { files: 0, bytes: 0, directories: 0, entries: 0 }
   const chapters = await scanArea(access, MANUSCRIPT_ROOT, limit, modifiedAt)
-  const outlines = chapters.truncated ? { items: [] as ChapterSummary[], truncated: true, skipped: 0 } : await scanArea(access, OUTLINE_ROOT, limit, modifiedAt)
+  const outlines = chapters.truncated ? { items: [] as ScannedChapter[], truncated: true, skipped: 0 } : await scanArea(access, OUTLINE_ROOT, limit, modifiedAt)
   return {
     chapters: chapters.items,
     outlines: outlines.items.map((item) => ({
@@ -208,16 +210,23 @@ async function scanProject(access: OverviewAccess): Promise<ScanResult> {
 }
 
 export async function readProjectOverview(access: OverviewAccess): Promise<ProjectOverview> {
-  const scan = await scanProject(access)
-  const recent = [...scan.chapters].sort((left, right) => {
+  const [scan, stored] = await Promise.all([scanProject(access), loadChapterStatuses(access)])
+  const chapters: ChapterSummary[] = scan.chapters.map((chapter) => ({
+    ...chapter,
+    status: stored.get(chapter.path) ?? 'draft',
+  }))
+  const byStatus: Record<ChapterStatus, number> = { draft: 0, revising: 0, final: 0 }
+  for (const chapter of chapters) byStatus[chapter.status]++
+  const recentChapters = [...chapters].sort((left, right) => {
     const time = (right.modifiedAt ?? '').localeCompare(left.modifiedAt ?? '')
     return time || pathCompare(left.path, right.path)
-  })[0] ?? null
+  }).slice(0, 5)
   return {
-    chapters: scan.chapters,
+    chapters,
     outlines: scan.outlines,
-    totals: { chapters: scan.chapters.length, chars: scan.totalChars },
-    recent,
+    totals: { chapters: chapters.length, chars: scan.totalChars, byStatus },
+    recent: recentChapters[0] ?? null,
+    recentChapters,
     truncated: scan.truncated,
     skipped: scan.skipped,
   }

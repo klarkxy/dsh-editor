@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { useDialogReturnFocus } from './dialogs.ts'
 import { windowBridge } from './window-controls.tsx'
+import { intlLocale, t, useLocale } from '../i18n/index.ts'
 
 type UpdateStatus = 'latest' | 'update-available' | 'error'
 type AppInfo = { name: string; version: string; platform: string; portable: boolean }
@@ -30,12 +31,10 @@ type DownloadState =
   | { status: 'error'; message: string }
 
 const BODY_PREVIEW_CHARS = 500
-const DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long', timeStyle: 'short' })
-
 function formatPublishedAt(iso: string): string {
   const stamp = Date.parse(iso)
   if (!Number.isFinite(stamp)) return iso
-  return DATE_FORMATTER.format(new Date(stamp))
+  return new Intl.DateTimeFormat(intlLocale(), { dateStyle: 'long', timeStyle: 'short' }).format(new Date(stamp))
 }
 
 function previewBody(body: string): string {
@@ -54,16 +53,17 @@ function formatMB(bytes: number): string {
 }
 
 /**
- * "关于 DSH Editor" + 检查更新 弹窗。
+ * t('about.title') + 检查更新 弹窗。
  *
  * 依赖 `window.dshWindow.getAppInfo` / `window.dshWindow.checkForUpdate` 由桌面端
  * preload 暴露(并行 agent 在改 preload.cjs),浏览器开发模式不存在,自动回退为
- * "开发模式" 标记并禁用检查按钮。
+ * t('about.devMode') 标记并禁用检查按钮。
  *
  * useEffect 内的检查请求与对话框 onClose 抢跑:每次发起前记录 token,卸载/关闭
  * 时清理,然后在 setState 之前再核对一次,避免组件已卸载后晚到的结果污染状态。
  */
 export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
+  useLocale()
   const bridge = windowBridge()
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [state, setState] = useState<CheckState>({ status: 'idle' })
@@ -96,7 +96,7 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
       setState({ status: 'ready', result, checkedAt: Date.now() })
     } catch (error) {
       if (liveToken.current !== token) return
-      const message = error instanceof Error ? error.message : '检查更新失败'
+      const message = error instanceof Error ? error.message : t('about.checkFailed')
       setState({
         status: 'ready',
         result: { status: 'error', currentVersion: appInfo?.version ?? '', error: message },
@@ -141,7 +141,7 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
     } catch (error) {
       if (liveToken.current !== token) return
       const message = cleanIpcError(error)
-      if (message.includes('下载已取消')) { setDownload({ status: 'idle' }); return }
+      if (message.includes('下载已取消') || /cancelled|canceled/i.test(message)) { setDownload({ status: 'idle' }); return }
       setDownload({ status: 'error', message })
     }
   }
@@ -176,7 +176,7 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
   }
 
   const hasBridge = Boolean(bridge?.checkForUpdate)
-  const versionLabel = appInfo ? `${appInfo.name} ${appInfo.version}` : '开发模式'
+  const versionLabel = appInfo ? `${appInfo.name} ${appInfo.version}` : t('about.devMode')
   const canCheck = hasBridge
 
   return e('div', { className: 'file-dialog-overlay', onMouseDown: onOverlayMouseDown },
@@ -189,11 +189,11 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
       onKeyDown,
     },
       e('header', null,
-        e('h2', { id: 'about-dialog-title' }, '关于 DSH Editor'),
+        e('h2', { id: 'about-dialog-title' }, t('about.title')),
         e('button', {
           className: 'icon-button about-close',
           type: 'button',
-          'aria-label': '关闭',
+          'aria-label': t('common.close'),
           onClick: props.onClose,
         }, '×'),
       ),
@@ -203,7 +203,7 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
             e('strong', null, versionLabel),
           ),
           !hasBridge ? e('p', { className: 'about-note' },
-            '当前在浏览器开发模式,无法检查更新;请在桌面客户端中打开此窗口。',
+            t('about.browserHint'),
           ) : null,
         ),
         e('div', { className: 'about-status' },
@@ -217,8 +217,8 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
         }),
         e('p', { className: 'about-note' },
           state.status === 'ready' && state.result.status === 'update-available'
-            ? '应用内下载优先走 GitHub 镜像,失败自动回退直连;macOS 下载后需手动替换「应用程序」中的应用。'
-            : '更新检查由主进程代理 GitHub Releases,渲染端不直接访问外网。',
+            ? t('about.macHint')
+            : t('about.proxyHint'),
         ),
         e('div', { className: 'about-actions' },
           e('button', {
@@ -226,12 +226,12 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
             className: 'about-button',
             disabled: !canCheck || state.status === 'loading',
             onClick: () => void runCheck(),
-          }, state.status === 'loading' ? '检查中…' : '检查更新'),
+          }, state.status === 'loading' ? t('about.checking') : t('about.check')),
           e('button', {
             type: 'button',
             className: 'about-button',
             onClick: props.onClose,
-          }, '关闭'),
+          }, t('common.close')),
         ),
       ),
     ),
@@ -239,19 +239,19 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
 }
 
 function renderStatus(state: CheckState): ReactNode {
-  if (state.status === 'idle') return e('span', null, '尚未检查更新。')
-  if (state.status === 'loading') return e('span', null, '正在检查更新…')
+  if (state.status === 'idle') return e('span', null, t('about.notChecked'))
+  if (state.status === 'loading') return e('span', null, t('about.checkingStatus'))
   const result = state.result
   if (result.status === 'latest') {
-    return e('span', { className: 'about-status-tag latest' }, '已是最新版本')
+    return e('span', { className: 'about-status-tag latest' }, t('about.latest'))
   }
   if (result.status === 'update-available' && result.latest) {
     return e(Fragment, null,
-      e('span', { className: 'about-status-tag available' }, '发现新版本'),
-      e('span', null, `当前 ${result.currentVersion} → 最新 ${result.latest.version}`),
+      e('span', { className: 'about-status-tag available' }, t('about.updateAvailable')),
+      e('span', null, t('about.versionRange', { current: result.currentVersion, latest: result.latest.version })),
     )
   }
-  return e('span', { className: 'about-status-tag error' }, '检查更新失败')
+  return e('span', { className: 'about-status-tag error' }, t('about.checkFailed'))
 }
 
 interface ResultBodyHandlers {
@@ -262,9 +262,9 @@ interface ResultBodyHandlers {
 }
 
 function installButtonLabel(appInfo: AppInfo | null): string {
-  if (appInfo?.platform === 'darwin') return '打开所在文件夹'
-  if (appInfo?.portable) return '重启并替换'
-  return '退出并安装'
+  if (appInfo?.platform === 'darwin') return t('about.openFolder')
+  if (appInfo?.portable) return t('about.restartReplace')
+  return t('about.quitInstall')
 }
 
 function renderResultBody(
@@ -277,12 +277,12 @@ function renderResultBody(
   const result = state.result
   if (result.status === 'error') {
     return e('p', { className: 'about-error', role: 'alert' },
-      result.error ?? '检查更新失败,请稍后重试。',
+      result.error ?? t('about.checkFailedRetry'),
     )
   }
   if (result.status === 'update-available' && result.latest) {
     const release = result.latest
-    return e('div', { className: 'about-release', 'aria-label': '新版本信息' },
+    return e('div', { className: 'about-release', 'aria-label': t('about.releaseAria') },
       e('div', { className: 'about-release-meta' },
         e('span', { className: 'about-release-version' }, release.name || release.version),
         e('span', { className: 'about-release-date' }, formatPublishedAt(release.publishedAt)),
@@ -315,11 +315,11 @@ function renderDownloadArea(
       ),
       e('p', { className: 'about-download-meta' },
         download.verifying
-          ? '正在校验文件完整性…'
+          ? t('about.verifying')
           : `${percent}% · ${formatMB(download.received)} / ${formatMB(download.total)} MB${download.mirror ? ` · ${download.mirror}` : ''}`,
       ),
       e('div', { className: 'about-actions' },
-        e('button', { type: 'button', className: 'about-button', onClick: handlers.onCancel }, '取消下载'),
+        e('button', { type: 'button', className: 'about-button', onClick: handlers.onCancel }, t('about.cancelDownload')),
       ),
     )
   }
@@ -327,8 +327,8 @@ function renderDownloadArea(
     return e('div', { className: 'about-download' },
       e('p', { className: 'about-download-meta' },
         download.revealed
-          ? '已打开下载文件所在位置:请退出当前应用,用新版本替换「应用程序」中的 DSH Editor。'
-          : '下载完成,校验通过。',
+          ? t('about.macRevealed')
+          : t('about.downloadReady'),
       ),
       !download.revealed ? e('div', { className: 'about-actions' },
         e('button', {
@@ -341,7 +341,7 @@ function renderDownloadArea(
   }
   return e(Fragment, null,
     download.status === 'error'
-      ? e('p', { className: 'about-error', role: 'alert' }, `应用内下载失败:\n${download.message}`)
+      ? e('p', { className: 'about-error', role: 'alert' }, t('about.downloadFailed', { message: download.message }))
       : null,
     e('div', { className: 'about-actions' },
       asset
@@ -349,13 +349,13 @@ function renderDownloadArea(
             type: 'button',
             className: 'about-button about-button-primary',
             onClick: () => handlers.onDownload(asset),
-          }, `下载更新(${formatMB(asset.size)} MB)`)
+          }, t('about.downloadUpdate', { size: formatMB(asset.size) }))
         : null,
       e('button', {
         type: 'button',
         className: asset ? 'about-button' : 'about-button about-button-primary',
         onClick: () => handlers.onOpen(release.url),
-      }, '前往下载'),
+      }, t('about.goDownload')),
     ),
   )
 }

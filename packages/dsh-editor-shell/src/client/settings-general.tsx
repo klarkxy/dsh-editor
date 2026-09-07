@@ -2,6 +2,7 @@ import { createElement as e, useMemo, useSyncExternalStore, type ReactNode } fro
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
+import { setLocale, t, useLocale, type Locale } from '../i18n/index.ts'
 
 /*
  * 通用设置页:语言 / 外观 / 繁忙时 Enter 行为,与上游 dsh-client-ui-settings-general
@@ -9,7 +10,7 @@ import { Select } from './select.tsx'
  */
 
 type ThemePreference = 'light' | 'dark' | 'system'
-type LocalePreference = 'zh' | 'en'
+type LocalePreference = Locale
 type BusyEnterBehavior = 'queue' | 'steer'
 
 function decodePreference<T extends string>(values: readonly T[]) {
@@ -48,28 +49,27 @@ function Row(props: { title: string; description?: string; children: ReactNode }
 export function SettingsGeneralSection(props: { ctx: ShellContext }) {
   const scopes = useMemo(() => ({
     theme: props.ctx.settingsScope.bind({ namespace: 'ui-theme', decode: decodeThemePreference }),
-    locale: props.ctx.settingsScope.bind({ namespace: 'locale', decode: decodeLocalePreference }),
     conversation: props.ctx.settingsScope.bind({ namespace: 'ui-conversation', decode: decodeBusyEnter }),
   }), [props.ctx])
 
   const [theme, setTheme] = usePreference(scopes.theme, 'system')
-  const [locale, setLocale] = usePreference(scopes.locale, 'zh')
+  const locale = useLocale()
   const [busyEnter, setBusyEnter] = useBusyEnter(scopes.conversation)
 
   const appearanceOptions: { value: ThemePreference; label: string }[] = [
-    { value: 'light', label: '浅色' },
-    { value: 'dark', label: '深色' },
-    { value: 'system', label: '跟随系统' },
+    { value: 'light', label: t('settings.themeLight') },
+    { value: 'dark', label: t('settings.themeDark') },
+    { value: 'system', label: t('settings.themeSystem') },
   ]
 
-  return e('section', { className: 'settings-general', 'aria-label': '通用设置' },
-    e(Row, { title: '语言', children: e(Select, {
+  return e('section', { className: 'settings-general', 'aria-label': t('settings.general') },
+    e(Row, { title: t('settings.language'), children: e(Select, {
       value: locale,
-      options: [{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }],
-      onChange: (value) => setLocale(value as LocalePreference),
-      'aria-label': '语言',
+      options: [{ value: 'zh', label: t('settings.chinese') }, { value: 'en', label: t('settings.english') }],
+      onChange: (value) => setLocale(value as Locale),
+      'aria-label': t('settings.language'),
     }) }),
-    e(Row, { title: '外观', children: e('div', { className: 'settings-segmented', role: 'group', 'aria-label': '外观' },
+    e(Row, { title: t('settings.appearance'), children: e('div', { className: 'settings-segmented', role: 'group', 'aria-label': t('settings.appearance') },
       appearanceOptions.map((option) => e('button', {
         key: option.value,
         type: 'button',
@@ -78,11 +78,11 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
         onClick: () => setTheme(option.value),
       }, option.label)),
     ) }),
-    e(Row, { title: '繁忙时 Enter 键行为', description: '仅在智能体运行时生效；Cmd/Ctrl+Enter 使用另一行为', children: e(Select, {
+    e(Row, { title: t('settings.busyEnter'), description: t('settings.busyEnterHint'), children: e(Select, {
       value: busyEnter,
-      options: [{ value: 'queue', label: '排队发送' }, { value: 'steer', label: '插话发送' }],
+      options: [{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }],
       onChange: (value) => setBusyEnter(value as BusyEnterBehavior),
-      'aria-label': '繁忙时 Enter 键行为',
+      'aria-label': t('settings.busyEnter'),
     }) }),
   )
 }

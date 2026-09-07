@@ -88,7 +88,7 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 
 ### `dsh-editor-shell`
 
-- Host 入口只维持插件生命周期，让 DSH 发布 `./client`。
+- Host 入口注册 `dsh-editor-writing` 设置 schema，并让 DSH 发布 `./client`。
 - package 必须导出 `./package.json`；DSH 客户端发现依赖该公开解析契约。
 - 通过 root slot `priority: -100` 遮蔽官方 priority 0 AppFrame；最低 priority 渲染。该行为与 rc.2 root 类型声明中的普通插件指导相冲突，只允许在固定 `0.1.1-rc.2`、私有 `dsh-editor` profile 和完整 E2E 闸门下使用；它是明确的升级阻断点。
 - 客户端注入 runtime、connection、sessions、workspaces、slots、settingsScope、settingsSchema 和 remote。
@@ -99,14 +99,16 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 ### `dsh-editor-workbench`
 
 - Host-only 私有包，独占 `/dsh-editor-workbench`。
-- 负责项目结构、context、导入、快照、移动与归档；复用 `dsh-manuscript/host-api` 的同一 workspace authority。
+- 负责项目结构、章节概览/状态、校对、卡片、写作进度、context、导入、快照、移动与归档；复用 `dsh-manuscript/host-api` 的同一 workspace authority。
+- Host `inject` 为 `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `tools`；`tools` 只注册只读 `novel_overview`。
 - `./contracts` 只含 browser-safe channel、类型、解析器与纯函数，并由 Shell client 构建内联。
 
 ### `dsh-editor-novel-kernel`
 
-- Host-only 私有包，独占 `novel_knowledge`、`novel_propose`、guard 与 `dsh-editor:novel-kernel` prompt。
-- Tool 只返回知识或预览提案，正文写入仍由 Shell 展示并经 `/manuscript proposal.prepare/apply` 完成。
-- `./contracts` 只含工具名、proposal marker 类型和严格解析器。
+- Host-only 私有包，注册小说工具、guard、`dsh-editor:novel-kernel` prompt，以及 loopback `/novel-kernel`（知乎知识库列表/上传）。
+- Host `inject` 为 `tools`, `systemPrompt`, `fs`, `credentials`, `connection`, `sandboxPolicy`。
+- Tool 只返回知识或预览提案，正文写入仍由 Shell 展示并经 `/manuscript proposal.prepare/apply` 完成；拆章/合章/批量重命名走 workbench `proposal.*`。
+- `./contracts` 只含工具名、proposal / memory marker 类型和严格解析器。
 
 ### `dsh-manuscript`
 

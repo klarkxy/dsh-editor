@@ -27,12 +27,12 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
    │  ├─ Host: /manuscript、draft storage、稿件安全读写
    │  └─ Client: shell.overlay（公开 Web 插件）
    ├─ dsh-editor-workbench
-   │  └─ Host: /dsh-editor-workbench、项目/导入/快照/归档/context
+   │  └─ Host: /dsh-editor-workbench、项目/概览/状态/校对/卡片/进度/导入/快照/归档/context；只读工具 novel_overview
    ├─ dsh-editor-novel-kernel
-   │  └─ Host: novel_knowledge、novel_propose、guard、system prompt、知识卡
+   │  └─ Host: novel_* 工具、guard、system prompt、知识卡、`/novel-kernel` 知乎知识库 RPC
    └─ dsh-editor-shell
-      ├─ Host: 仅保留加载 client 的最小入口
-      └─ Client: 唯一 root GUI、DshChatPort、编辑状态、作者确认
+      ├─ Host: 注册 `dsh-editor-writing` 设置 schema
+      └─ Client: 唯一 root GUI、各写作面板、DshChatPort、编辑状态、作者确认
 
 普通 profiles/web
 ├─ dsh-manuscript（可独立安装）
@@ -63,9 +63,9 @@ dsh-editor-novel-kernel/host
 | `dsh-manuscript` / `manuscript` | `/manuscript`、`shell.overlay`、draft/FIM/patch/proposal | public | 公开 tarball；Web 与桌面 |
 | `dsh-grill/tools` / `grill-tools` | `scaffold_novel` Tool 与 guard | public | 公开 tarball；Web |
 | `dsh-grill/workflow` / `grill-workflow` | `grill:workflow` prompt | public | 公开 tarball；Web |
-| `dsh-editor-workbench` / `editor-workbench` | 私有工作区生命周期 RPC | private host-only | 桌面 profile 必需 |
-| `dsh-editor-novel-kernel` / `editor-novel-kernel` | 私有小说工具、guard、prompt、知识卡 | private host-only | 桌面 profile 必需 |
-| `dsh-editor-shell` / `editor-shell` | 唯一 `root` client | fixed-version private | 桌面 profile 必需 |
+| `dsh-editor-workbench` / `editor-workbench` | 私有工作区生命周期、概览/状态、校对、卡片、进度 RPC | private host-only | 桌面 profile 必需 |
+| `dsh-editor-novel-kernel` / `editor-novel-kernel` | 私有小说工具、guard、prompt、知识卡、`/novel-kernel` | private host-only | 桌面 profile 必需 |
+| `dsh-editor-shell` / `editor-shell` | 唯一 `root` client 与写作设置 schema | fixed-version private | 桌面 profile 必需 |
 
 各包 `cordis.patch.yml` 中的 entry id：
 
@@ -96,18 +96,20 @@ dsh-editor-novel-kernel/host
 | 包 | `name` | `inject` |
 | --- | --- | --- |
 | `dsh-manuscript` Host | `dsh-manuscript` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `llm`, `storageDomain` |
-| `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy` |
-| `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt` |
-| `dsh-editor-shell` Host | `dsh-editor-shell` | （空） |
+| `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `tools` |
+| `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt`, `fs`, `credentials`, `connection`, `sandboxPolicy` |
+| `dsh-editor-shell` Host | `dsh-editor-shell` | `settings` |
 | `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope`, `settingsSchema`, `remote` |
 | `dsh-grill/tools` | `dsh-grill-tools` | `tools` |
 | `dsh-grill/workflow` | `dsh-grill-workflow` | `systemPrompt` |
 
 Shell 以 `root` slot id `dsh-editor-shell-root`、priority `-100`、label `DSH 编辑器` 注册。manuscript client 只注册 `shell.overlay`（id `manuscript`，order `100`，label `稿纸`），禁止占用 `root` 或 `conversation.view`。
 
+Shell client 构建会捆绑 `docx` 与 `jszip`，仅供导出对话框在 Renderer 内生成 DOCX/EPUB。manuscript editor-core 构建会捆绑 `@codemirror/search`，仅供稿内查找替换。两者都不进入 Host RPC。
+
 ## RPC 通用契约
 
-两个 channel 都只以 `{ authority: 'loopback' }` 注册。loopback 限制网络暴露，但不是调用者身份；每个文件请求仍必须携带 live `sessionId` 并由 Host 重建 authority。
+`/manuscript`、`/dsh-editor-workbench` 与 `/novel-kernel` 都只以 `{ authority: 'loopback' }` 注册。loopback 限制网络暴露，但不是调用者身份；每个文件请求仍必须携带 live `sessionId` 并由 Host 重建 authority（`usage.summary` / `zhihu.usage` / `project.inspect` / `project.createHome` / 知乎知识库 RPC 例外，见下表）。
 
 ```ts
 type RpcResult<T> =
@@ -129,54 +131,75 @@ Host 处理文件请求的固定顺序：
 
 ## `/manuscript`：公开稿件接口
 
-Channel：`/manuscript`。除特别注明外，请求都包含 `sessionId`，路径均为 workspace-relative。
+Channel：`/manuscript`。除特别注明外，请求都包含 `sessionId`，路径均为 workspace-relative。第三列以「读」或「写」标明；`file.create` / `file.write` / `proposal.apply` 进入 `withWorkspaceWrite`。
 
-| Endpoint | 请求字段 | 成功值 / 写入语义 |
+| Endpoint | 请求字段 | 读/写 · 成功值 / 语义 |
 | --- | --- | --- |
-| `tree.list` | `sessionId`, `path` | `{ entries }`，有界目录项 |
-| `file.read` | `sessionId`, `path` | `{ text, version }`，文本上限 2 MB |
-| `file.create` | `sessionId`, `path`, `text` | create-if-absent |
-| `file.write` | `sessionId`, `path`, `text`, `version` | replace-if-version |
-| `draft.get` | `sessionId`, `path` | `{ draft }`，来自 DSH storage domain |
-| `draft.put` | `sessionId`, `path`, `text`, `baseText`, `baseVersion` | 只保存草稿，不改正文 |
-| `draft.delete` | `sessionId`, `path` | 删除对应草稿 |
-| `search.text` | `sessionId`, `query`, `scope: project\|manuscript` | 有界字面量搜索；不接受正则 |
-| `proposal.prepare` | `sessionId`, `kind`, `path`, `summary`；edit 加 `oldText`, `newText`；create 加 `text` | 只读预检和作者确认信息 |
-| `proposal.apply` | prepare 的全部字段；edit 另加 `expectedVersion` | 作者确认后按版本门禁创建或修改；edit 的 `oldText` 为空表示填充仍为空白的目标文件，create 也可覆盖仍为空白的目标文件 |
-| `fim.complete` | `sessionId`, `prefix`, `suffix`，可选 `authorPreferences` | `{ text, route: 'dsh-llm' }`，只返回候选 |
-| `patch.complete` | `sessionId`, `path`, `selectedText`, `before`, `after`，可选 `authorPreferences` | `{ text, route: 'dsh-llm' }`，只返回候选 |
+| `tree.list` | `sessionId`, `path` | 读 · `{ entries }`，有界目录项 |
+| `file.read` | `sessionId`, `path` | 读 · `{ text, version }`，文本上限 2 MB |
+| `file.create` | `sessionId`, `path`, `text` | 写 · create-if-absent |
+| `file.write` | `sessionId`, `path`, `text`, `version` | 写 · replace-if-version |
+| `draft.get` | `sessionId`, `path` | 读 · `{ draft }`，来自 DSH storage domain |
+| `draft.list` | `sessionId`，可选窗口过滤 | 读 · `{ drafts }`，含其他窗口的 legacy 备份 |
+| `draft.put` | `sessionId`, `path`, `text`, `baseText`, `baseVersion` | 写 · 只保存草稿（storage domain），不改正文 |
+| `draft.delete` | `sessionId`, `path` | 写 · 删除对应草稿（须带匹配 revision） |
+| `search.text` | `sessionId`, `query`, `scope: project\|manuscript` | 读 · 有界字面量搜索；不接受正则 |
+| `proposal.prepare` | `sessionId`, `kind`, `path`, `summary`；edit 加 `oldText`, `newText`；create 加 `text` | 读 · 只读预检和作者确认信息 |
+| `proposal.apply` | prepare 的全部字段；edit 另加 `expectedVersion` | 写 · 作者确认后按版本门禁创建或修改；edit 的 `oldText` 为空表示填充仍为空白的目标文件，create 也可覆盖仍为空白的目标文件 |
+| `fim.complete` | `sessionId`, `prefix`, `suffix`，可选 `authorPreferences` | 读 · `{ text, route: 'dsh-llm' }`，只返回候选 |
+| `patch.complete` | `sessionId`, `path`, `selectedText`, `before`, `after`，可选 `authorPreferences` | 读 · `{ text, route: 'dsh-llm' }`，只返回候选 |
+| `usage.summary` | 可选 `days` | 读 · 本机用量快照；不要求 `sessionId` |
+| `zhihu.usage` | 可选 `days` | 读 · 知乎检索计量；不要求 `sessionId` |
 
-不得把导入、快照、归档或任意 Node FS 能力加入这个公开 channel。
+不得把导入、快照、归档或任意 Node FS 能力加入这个公开 channel。稿纸 editor-core 另捆绑 `@codemirror/search`，只服务稿内查找替换，不增加 Host 端点。
 
 ## `/dsh-editor-workbench`：私有桌面接口
 
-Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型面在 `dsh-editor-workbench/contracts`。
+Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型面在 `dsh-editor-workbench/contracts`。第三列以「读」或「写」标明。进入 `withWorkspaceWrite` 的写入端点：`project.init`、`project.prepareIndex`、`project.importApply`、`project.importCleanup`、`snapshot.create`、`snapshot.rollback`、`snapshot.restoreApply`、`snapshot.restoreCleanup`、`structure.groupCreate`、`directory.create`、`file.rename`、`file.moveManuscript`、`archive.apply`、`archive.restore`、`proposal.apply`、`entry.copy`、`entry.move`、`entry.delete`、`entry.rename`、`chapter.statusSet`、`progress.record`、`cards.metaSet`、`cards.create`。`project.createHome` 在作品目录外建文件夹，不入该队列。
 
-| Endpoint | 请求字段 | 成功值 / 语义 |
+| Endpoint | 请求字段 | 读/写 · 成功值 / 语义 |
 | --- | --- | --- |
-| `project.createHome` | `title` | `{ path }`，在「文档/dsh-editor」下独占创建同名空文件夹；不接受调用方传入的父路径 |
-| `project.init` | `sessionId`, `newProject` | `{ created, skipped }`，只建立空的 `正文`、`大纲`、`人物卡`、`世界书` 目录，不写入 Markdown 模板 |
-| `project.prepareIndex` | `sessionId` | 索引准备回执 |
-| `project.overview` | `sessionId` | 章节/大纲摘要、字数统计、最近编辑项和有界扫描警告 |
-| `structure.groupCreate` | `sessionId`, `path` | 只在 `正文` 下建立一级卷/部目录 |
-| `directory.create` | `sessionId`, `path` | 在任意已存在的父目录下建一个可见目录（通用，无 正文 特化） |
-| `context.compile` | `sessionId`, `userRequest`，可选 `activePath`, `authorPreferences`, `authorMemory` | `{ serialized, receipt }`，有界 V2 context 信封 |
-| `project.importProbe` | `targetSessionId`，可选 `sourceSessionId` | token、统计、预览或恢复状态；不写入 |
-| `project.importApply` | `targetSessionId`, `sourceSessionId`, `probeToken` | 重新 probe 后执行 no-clobber 导入 |
-| `project.importCleanup` | `targetSessionId`, `receiptId` | 只清理 manifest/hash 证明归属的中断写入 |
-| `snapshot.list` | `sessionId` | 快照列表；不包含未保存 buffer |
-| `snapshot.create` | `sessionId`，可选 `label` | 原子发布后的 snapshot view；简易提交流程的 label 即当前时间 |
-| `snapshot.rollback` | `sessionId`, `snapshotId` | 原地回滚：覆盖/删除回到快照状态，先自动创建安全快照（可再回滚撤销）；非文本文件不动 |
-| `snapshot.restoreProbe` | `targetSessionId`，可选 `sourceSessionId`, `snapshotId` | 只恢复到新空 workspace 的 token/状态（跨作品恢复，与原地回滚不同） |
-| `snapshot.restoreApply` | `targetSessionId`, `sourceSessionId`, `snapshotId`, `token` | no-clobber 恢复统计 |
-| `snapshot.restoreCleanup` | `targetSessionId`, `receiptId` | hash-protected 中断清理 |
-| `file.rename` | `sessionId`, `path`, `newName`, `expectedVersion` | 同目录、保留扩展名后的新路径 |
-| `file.moveManuscript` | `sessionId`, `path`, `targetDirectory`, `expectedVersion` | 仅在 `正文` 树内 no-replace 移动 |
-| `archive.list` | `sessionId` | 可恢复 archive view 与损坏项计数 |
-| `archive.apply` | `sessionId`, `path` + `expectedVersion`，或 `archiveId` | 新归档或继续中断归档 |
-| `archive.restore` | `sessionId`, `archiveId`，可选 `expectedVersion` | no-replace 恢复后的 archive view |
+| `project.inspect` | `workspacePath` | 读 · `{ hasVisibleEntries, textFiles, indexReady }`；用已注册路径，不要求 `sessionId` |
+| `project.createHome` | `title` | 写 · `{ path }`，在「文档/dsh-editor」下独占创建同名空文件夹；不接受调用方传入的父路径 |
+| `project.init` | `sessionId`, `newProject` | 写 · `{ created, skipped }`，只建立空的 `正文` 目录，不写入 Markdown 模板；大纲/人物卡/世界书在实际创建后出现 |
+| `project.prepareIndex` | `sessionId` | 写 · 索引准备回执 |
+| `project.overview` | `sessionId` | 读 · 章节/大纲摘要（章节含 `status`）、总字数、`totals.byStatus` 分布、最近 1 项 `recent` 与最近 5 项 `recentChapters`、有界扫描警告 |
+| `proofread.scan` | `sessionId`, `scope`（`document` / `manuscript`），`document` 时必填 `path`，可选 `kinds` | 读 · 确定性校对：`punctuation` / `typo` / `sensitive` / `repeat` / `habit`。返回 `findings`（最多 500，`truncated`）、`scannedFiles`、`skipped`、`habitStats`（口癖千分比前 30）。`document` 只扫一篇作者内容 `.md`/`.txt`；`manuscript` 按自然序扫 `正文/`。默认词库在 `resources/proofread/`，作品可追加 `.dsh-editor/敏感词.txt`、忽略 `.dsh-editor/敏感词-忽略.txt` |
+| `cards.list` | `sessionId`, `kind`（`character` / `worldbook` / `all`） | 读 · 结构化卡片列表：`characters`、`worldbook`，每张含 `path`、`title`、`frontmatter`、`summary`（frontmatter.summary 或正文首段 ≤ 120 字）、`version`、`modifiedAt`。自然序，跳过隐藏/生成目录，最多 2000 文件，带 `scannedFiles` / `skipped` / `truncated` |
+| `cards.metaSet` | `sessionId`, `path`, `version`, `fields` | 写 · 只改 YAML frontmatter，正文按字节保留，未知键原样保留；版本冲突走 `bad-request`。成功 `{ path, version }` |
+| `cards.references` | `sessionId`, `path` | 读 · 引用导航：人物卡用 `name`+`aliases`，世界书用 `triggers`（否则文件名）。在 `正文/**/*.{md,txt}` 做字面量检索，最多 200 条 `hits`（`path`/`line`/`column`/`start`/`end`/`excerpt`），带 `terms`、`scannedFiles`、`truncated` |
+| `cards.create` | `sessionId`, `kind`, `title`，可选 `fields` | 写 · 在 `人物卡/<title>.md` 或 `世界书/<title>.md` 新建卡片（frontmatter + `# <title>`）。文件名规则与 `entry.*` 相同；重名或非法名拒绝 |
+| `chapter.statusSet` | `sessionId`, `path`, `status` | 写 · `{ path, status }`，把 `正文/` 下章节设为 `draft` / `revising` / `final`；默认草稿，损坏状态文件 fail-open |
+| `progress.record` | `sessionId`, `totalChars` | 写 · 按本地日期写入/覆盖当天 `.dsh-editor/writing-log.json` 条目（最多 400 天，原子写）；防抖由调用方负责（shell 保存后 5 秒） |
+| `progress.history` | `sessionId`，可选 `days`（默认 30） | 读 · 窗口内每日 `{ date, chars, delta }` 与按周汇总 `{ weekStart, chars, delta }` |
+| `structure.groupCreate` | `sessionId`, `path` | 写 · 只在 `正文` 下建立一级卷/部目录 |
+| `directory.create` | `sessionId`, `path` | 写 · 在任意已存在的父目录下建一个可见目录（通用，无 正文 特化） |
+| `context.compile` | `sessionId`, `userRequest`，可选 `activePath`, `authorPreferences`, `authorMemory` | 读 · `{ serialized, receipt }`，有界 V2 context 信封 |
+| `project.importProbe` | `targetSessionId`，可选 `sourceSessionId` | 读 · token、统计、预览或恢复状态；不写入 |
+| `project.importApply` | `targetSessionId`, `sourceSessionId`, `probeToken` | 写 · 重新 probe 后执行 no-clobber 导入 |
+| `project.importCleanup` | `targetSessionId`, `receiptId` | 写 · 只清理 manifest/hash 证明归属的中断写入 |
+| `snapshot.list` | `sessionId` | 读 · 快照列表；不包含未保存 buffer；`.dsh-editor/*` 不在 payload 内 |
+| `snapshot.create` | `sessionId`，可选 `label` | 写 · 原子发布后的 snapshot view；简易提交流程的 label 即当前时间 |
+| `snapshot.rollback` | `sessionId`, `snapshotId` | 写 · 原地回滚：覆盖/删除回到快照状态，先自动创建安全快照（可再回滚撤销）；非文本文件不动 |
+| `snapshot.restoreProbe` | `targetSessionId`，可选 `sourceSessionId`, `snapshotId` | 读 · 只恢复到新空 workspace 的 token/状态（跨作品恢复，与原地回滚不同） |
+| `snapshot.restoreApply` | `targetSessionId`, `sourceSessionId`, `snapshotId`, `token` | 写 · no-clobber 恢复统计 |
+| `snapshot.restoreCleanup` | `targetSessionId`, `receiptId` | 写 · hash-protected 中断清理 |
+| `file.rename` | `sessionId`, `path`, `newName`, `expectedVersion` | 写 · 同目录、保留扩展名后的新路径 |
+| `file.moveManuscript` | `sessionId`, `path`, `targetDirectory`, `expectedVersion` | 写 · 仅在 `正文` 树内 no-replace 移动 |
+| `file.readBinary` | `sessionId`, `path` | 读 · `{ base64, mime }`；仅 jpg/jpeg/png/gif/webp/avif/svg，上限 20 MB |
+| `archive.list` | `sessionId` | 读 · 可恢复 archive view 与损坏项计数 |
+| `archive.apply` | `sessionId`, `path` + `expectedVersion`，或 `archiveId` | 写 · 新归档或继续中断归档；界面只允许单个可见 Markdown/TXT |
+| `archive.restore` | `sessionId`, `archiveId`，可选 `expectedVersion` | 写 · no-replace 恢复后的 archive view |
+| `proposal.prepare` | `sessionId`, `proposal` | 读 · 仅 `split` / `merge` / `renames`；`edit` / `create` 走 `/manuscript` |
+| `proposal.apply` | `sessionId`, `proposal`, 可选 `expectedVersions` | 写 · 拆章、合章（来源进归档）或批量重命名 |
+| `entry.copy` | `sessionId`, `path`, `targetDir` | 写 · 文件或目录复制，同名自动改名 |
+| `entry.move` | `sessionId`, `path`, `targetDir` | 写 · 文件或目录移动，同名拒绝 |
+| `entry.delete` | `sessionId`, `path` | 写 · 永久删除文件或目录（与可恢复归档不同，确认后不可从归档恢复） |
+| `entry.rename` | `sessionId`, `path`, `name` | 写 · 文件或目录就地改名 |
 
 这些 endpoint、字段、V1/V2 envelope、token、receipt、manifest、hash 与重新验证语义是兼容接口。物理换包不构成协议升级。
+
+章节状态存在 `.dsh-editor/chapter-status.json`（`{ version: 1, statuses }`，键为规范化相对路径，缺省与 `draft` 不落盘）。写作字数日志存在 `.dsh-editor/writing-log.json`（`[{ date, chars, delta? }]`，本地日期、按日去重）。两份文件缺失或损坏时 Host fail-open 到默认值，孤立键不影响概览。`chapter.statusSet` 只接受 `正文/` 下已存在的 Markdown/TXT。`progress.record` 必须便宜且原子，防抖由调用方负责。`proofread.scan` 合并包内默认敏感词与 `.dsh-editor/敏感词.txt`，并用 `.dsh-editor/敏感词-忽略.txt` 做允许表；列表缺失或损坏时 fail-open 到默认词库。人物卡 / 世界书 frontmatter 是容错 YAML：人物卡可选 `name` / `aliases` / `role` / `gender` / `age` / `faction` / `tags` / `status` / `relations` / `summary`；世界书在原有 `triggers` / `enabled` / `priority` 之外还可有 `category` / `tags` / `summary`。未知键在 `cards.metaSet` 中按原文保留，损坏字段 fail-open 到缺省值，不阻断世界书匹配。
 
 `.dsh-editor/*` 隐藏元数据一律不进入快照 payload。重命名、正文跨卷移动、归档和恢复响应可以带 `metadataWarning`，表示正文操作已经成功但附带的元数据未同步，调用方不得据此回滚正文。
 
@@ -188,9 +211,10 @@ Context 信封常量：
 
 ## Novel Kernel 契约
 
-- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`、`novel_search`、`project_knowledge` 与知乎一族，以及 `novel_scratch_write`/`novel_scratch_read`/`novel_scratch_list` 临时工作区三件套）。
+- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`——由 workbench 注册、`novel_search`、`project_knowledge` 与知乎一族 `zhihu_search` / `zhihu_global_search` / `zhihu_hot_list` / `zhihu_ask` / `zhihu_knowledge_search`，以及 `novel_scratch_write`/`novel_scratch_read`/`novel_scratch_list` 临时工作区三件套）。
 - `novel_knowledge` 只接受唯一的 `topics` 数组，去重后 1–3 个固定主题；每张知识卡最多 6000 字符。它只返回建议，不提供项目事实或授权。
-- `novel_propose` 每次只形成一个 Markdown `edit` 或 `create` 提案，绝不写文件；守卫只接受作者内容路径，`.dsh-editor/` 等隐藏目录不进提案。
+- `novel_propose` 每次形成一个 Markdown `edit` / `create` / `split` / `merge` / `renames` 提案，绝不写文件；守卫只接受作者内容 `.md` 路径，`.dsh-editor/` 等隐藏目录不进提案。
+- Channel `/novel-kernel`（loopback）：`zhihu.knowledge.bases`（读，列出知识库）、`zhihu.knowledge.upload`（写，界面显式上传，内容经 base64 传入）。不要求 `sessionId`。
 - `novel_index_write` 把产品内部的作品索引（`.dsh-editor/作品索引.md`，固定路径、全文覆盖）直接落盘，不经提案确认；Shell 按工具名隐藏其结果行。它是唯一的例外：其余写入仍是助手提议、作者确认、Shell 执行。
 - `author_observe` 让助手提议"记住一条作者偏好"，仅作为建议显示在 `MemoryCard` 中：固定 `observation`（≤ 200 字符）与 `reason`（必填），marker `dsh-editor.memory`、version `1`。Shell 解析后必须经作者点击"记住"才会追加进本机 `authorMemory`；工具本身不直接写入任何文件、偏好或 storage。同一信任模型与 `novel_propose` 一致：助手提议，作者确认，Shell 执行。
 - proposal marker 固定为 `{ marker: 'dsh-editor.proposal', version: 1, ... }`；memory marker 固定为 `{ marker: 'dsh-editor.memory', version: 1, observation, reason }`。Shell 只通过 `dsh-editor-novel-kernel/contracts` 的严格解析器渲染有效 marker。
@@ -210,11 +234,11 @@ Context 信封常量：
 
 | 想改变的行为 | 所有者 |
 | --- | --- |
-| 三栏布局、稿纸、Chat 展示、设置、保留下来的高频快捷键 | `dsh-editor-shell` |
-| 普通 Web 的稿纸抽屉与共享稿纸核心 | `dsh-manuscript` client + `dsh-manuscript/client/editor-core` |
-| 稿件安全读写、草稿、FIM/patch、proposal apply | `dsh-manuscript` Host |
-| 项目结构、章节概览/状态、context、导入、快照、移动、归档 | `dsh-editor-workbench` |
-| 小说知识、proposal Tool、guard、系统提示词 | `dsh-editor-novel-kernel` |
+| 三栏布局、稿纸、搜索/概览/校对/卡片面板、导出导入归档、Chat 展示、设置、快捷键 | `dsh-editor-shell` |
+| 普通 Web 的稿纸抽屉与共享稿纸核心（含查找替换、打字机、排版） | `dsh-manuscript` client + `dsh-manuscript/client/editor-core` |
+| 稿件安全读写、草稿、FIM/patch、proposal apply、`search.text` | `dsh-manuscript` Host |
+| 项目结构、章节概览/状态、校对扫描、卡片、进度、context、导入、快照、移动、归档 | `dsh-editor-workbench` |
+| 小说知识、proposal Tool、guard、系统提示词、`/novel-kernel` | `dsh-editor-novel-kernel` |
 | 窗口、内置 DSH、profile、portable | `apps/desktop` 与桌面物化脚本 |
 | `scaffold_novel` 与 grill 写作提示 | `dsh-grill`（仅 Web） |
 

@@ -1,4 +1,5 @@
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import { formatNumber, t } from './i18n/index.ts'
 
 /**
  * 写作目标与今日进度:每日字数目标(goalChars) + 每个作品每天的总字数基线
@@ -91,8 +92,6 @@ export type ProgressSummary = {
   text: string
 }
 
-const NUM_FORMAT = new Intl.NumberFormat('zh-CN')
-
 export function progressSummary(args: {
   baseline: Baseline | undefined
   currentChars: number
@@ -101,8 +100,8 @@ export function progressSummary(args: {
 }): ProgressSummary {
   const todayChars = computeTodayChars(args.baseline, args.currentChars)
   const reached = goalReached(todayChars, args.goalChars)
-  const todayLabel = `今日 +${NUM_FORMAT.format(todayChars)}`
-  const text = args.goalChars > 0 ? `${todayLabel} / 目标 ${NUM_FORMAT.format(args.goalChars)}` : todayLabel
+  const todayLabel = t('progress.todayPlus', { count: formatNumber(todayChars) })
+  const text = args.goalChars > 0 ? t('progress.withGoal', { today: todayLabel, goal: formatNumber(args.goalChars) }) : todayLabel
   return { todayChars, goalChars: args.goalChars, reached, text }
 }
 

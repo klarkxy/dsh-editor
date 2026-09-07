@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { RootOwnerProps } from '@deepseek-ai/dsh-client-runtime/client'
+import { t } from './i18n/index.ts'
 
 export const ROOT_ID = 'dsh-editor-shell-root'
 
@@ -12,5 +13,5 @@ export type RootSlots = { register: (spec: {
 
 /** The package deliberately wins the public root slot; no layout/conversation internals are imported. */
 export function registerRoot(ctx: Context & { slots: RootSlots }, render: (props: RootOwnerProps) => unknown): unknown {
-  return ctx.slots.register({ name: 'root', id: ROOT_ID, priority: -100, label: 'DSH 编辑器' }, render)
+  return ctx.slots.register({ name: 'root', id: ROOT_ID, priority: -100, label: t('app.slotLabel') }, render)
 }

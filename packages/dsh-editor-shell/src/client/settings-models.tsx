@@ -55,6 +55,7 @@ import {
 import { Select, type SelectOption } from './select.tsx'
 import { ConfirmDialog } from './dialogs.ts'
 import type { SettingsDescribeFace, SettingsSchemaService, ShellContext } from './shared.ts'
+import { t, useLocale } from '../i18n/index.ts'
 
 /* Wire types aliased so the rest of the file can read them without a long
    import. The methods we use are all in `IApiClient`; the narrower shape
@@ -97,7 +98,7 @@ function shallowCopySnapshot(snapshot: Snapshot, patch: Partial<Snapshot>): Snap
    "response" panel. */
 function failureMessage(result: RpcResult<unknown>): string {
   const error = (result as { error?: { message?: string } }).error
-  return error?.message ?? '请求失败'
+  return error?.message ?? t('common.requestFailed')
 }
 
 function rpcResult<T>(response: RpcResponse<T>): RpcResult<T> {
@@ -150,7 +151,7 @@ class ModelsStore {
       const providersResult = rpcResult<{ providers: ConfigurableProviderView[] }>(providersResponse)
       if (!providersResult.ok) throw new Error(failureMessage(providersResult))
       const mirrored = this.describeFace.getSnapshot()
-      if (mirrored.view === undefined) throw new Error(mirrored.error ?? '设置当前不可用')
+      if (mirrored.view === undefined) throw new Error(mirrored.error ?? t('common.unavailable'))
       providers = providersResult.value.providers
       writable = mirrored.view.writable
       views = [...mirrored.view.namespaces]
@@ -278,81 +279,85 @@ function draftAt(
 
 /* Chinese text: copy keys are the only surface where we deviate from the
    upstream English wire text. Kept in one block so review stays focused. */
-const TEXT = {
-  intro: '填入各提供方的 API 密钥即可使用其模型。',
-  readOnly: '当前部署的设置文档为只读。',
-  credentialErrorPrefix: '密钥状态读取失败：',
-  loading: '正在读取…',
-  loadFailed: '加载提供方目录失败',
-  retry: '重试',
-  saved: '已保存。',
-  edit: '编辑',
-  delete: '删除',
-  add: '添加提供方',
-  addCustom: '添加自定义提供方',
-  custom: '自定义',
-  confirmDeleteTitle: '删除提供方？',
-  confirmDeleteManage: '将同时删除已保存的 API 密钥。',
-  confirmDeleteKeep: '只删除配置，已保存的密钥保留。',
-  cancel: '取消',
-  apiKey: 'API 密钥',
-  apiKeyPlaceholderStored: '已保存密钥（输入以替换）',
-  apiKeyPlaceholderLocked: '由环境变量锁定',
-  apiKeyPlaceholder: '输入 API 密钥',
-  keyBlank: '密钥不能只包含空白字符',
-  keyIllegal: '密钥格式不合法：不要带引号或 NAME=value 前缀',
-  customized: '自定义设置',
-  displayName: '显示名称',
-  baseUrl: 'API 地址',
+function text() {
+  return {
+  intro: t('models.intro'),
+  readOnly: t('models.readOnly'),
+  credentialErrorPrefix: t('models.credentialErrorPrefix'),
+  loading: t('zhihu.reading'),
+  loadFailed: t('models.loadFailed'),
+  retry: t('common.retry'),
+  saved: t('common.saved'),
+  edit: t('common.edit'),
+  delete: t('common.delete'),
+  add: t('models.add'),
+  addCustom: t('models.addCustom'),
+  custom: t('common.custom'),
+  confirmDeleteTitle: t('models.confirmDeleteTitle'),
+  confirmDeleteManage: t('models.confirmDeleteManage'),
+  confirmDeleteKeep: t('models.confirmDeleteKeep'),
+  cancel: t('common.cancel'),
+  apiKey: t('models.apiKey'),
+  apiKeyPlaceholderStored: t('models.apiKeyStored'),
+  apiKeyPlaceholderLocked: t('models.apiKeyLocked'),
+  apiKeyPlaceholder: t('models.apiKeyPlaceholder'),
+  keyBlank: t('models.keyBlank'),
+  keyIllegal: t('models.keyIllegal'),
+  customized: t('models.customized'),
+  displayName: t('models.displayName'),
+  baseUrl: t('models.baseUrl'),
   baseUrlDeepseekPlaceholder: 'https://api.deepseek.com',
-  baseUrlPlaceholder: '提供方默认值',
-  protocol: 'API 协议',
-  protocolUnset: '未选择',
-  models: '模型目录',
-  addModel: '添加模型',
-  fetchModels: '获取可用模型',
-  fetching: '正在询问提供方…',
-  fetchUnsupported: '该协议不支持自动发现，请手动填写。',
-  modelId: '模型 id',
-  modelName: '显示名称',
-  modelContext: '上下文长度',
-  modelMax: '最大输出',
-  modelReasoning: '思考强度',
-  modelReasoningOff: '不声明',
-  modelReasoningStandard: '关 / 低 / 中 / 高 / 超高 / 最大',
-  modelReasoningCustom: '自定义（在设置文档中）',
-  modelAdvanced: '参数',
-  removeModel: '删除模型',
-  deleteProvider: '删除',
+  baseUrlPlaceholder: t('models.baseUrlDefault'),
+  protocol: t('models.protocol'),
+  protocolUnset: t('select.unselected'),
+  models: t('models.catalog'),
+  addModel: t('models.addModel'),
+  fetchModels: t('models.fetchModels'),
+  fetching: t('models.fetching'),
+  fetchUnsupported: t('models.fetchUnsupported'),
+  noListed: t('models.noListed'),
+  noneAdded: t('models.noneAdded'),
+  modelId: t('models.modelId'),
+  modelName: t('models.displayName'),
+  modelContext: t('models.context'),
+  modelMax: t('models.maxOut'),
+  modelReasoning: t('chat.reasoning'),
+  modelReasoningOff: t('models.reasoningOff'),
+  modelReasoningStandard: t('models.reasoningStandard'),
+  modelReasoningCustom: t('models.reasoningCustom'),
+  modelAdvanced: t('models.params'),
+  removeModel: t('models.removeModel'),
+  deleteProvider: t('common.delete'),
   customRoute: 'Provider ID',
-  customRouteHint: '以小写字母开头，小写字母/数字/连字符',
-  customRouteInvalid: '以小写字母开头，小写字母/数字/连字符',
-  customRouteTaken: '该 ID 已被使用',
-  customNeedsBaseUrl: '请填写 API 地址。',
-  customNeedsModels: '请至少添加一个模型。',
-  createCustom: '创建提供方',
-  saving: '保存中…',
-  creating: '创建中…',
-  deleteTitle: '删除 {provider}？',
-  deleteProviderAria: '删除 {provider}',
-  editProviderAria: '编辑 {provider}',
-  candidateTitle: '选择要添加的模型',
-  candidateDescription: '勾选要加入目录的模型。',
-  candidateSelectAll: '全选',
-  candidateDeselectAll: '全不选',
-  candidateAdopt: '添加所选',
-  candidateClose: '关闭',
-  conflict: '设置已被其它窗口修改，请关闭编辑后重试。',
-  modelFailure: (index: number, text: string) => `模型 ${index + 1}：${text}`,
-  modelIdRequired: '模型 id 必填',
-  modelIdDuplicate: '模型 id 重复',
-  modelNameInvalid: '模型名称不合法',
-  modelContextInvalid: '上下文长度需为正整数',
-  modelMaxTokensInvalid: '最大输出需为正整数',
+  customRouteHint: t('models.routeHint'),
+  customRouteInvalid: t('models.routeHint'),
+  customRouteTaken: t('models.routeTaken'),
+  customNeedsBaseUrl: t('models.needsBaseUrl'),
+  customNeedsModels: t('models.needsModels'),
+  createCustom: t('models.createProvider'),
+  saving: t('common.saving'),
+  creating: t('common.creating'),
+  deleteTitle: t('models.deleteTitle'),
+  deleteProviderAria: t('models.deleteAria'),
+  editProviderAria: t('models.editAria'),
+  candidateTitle: t('models.candidateTitle'),
+  candidateDescription: t('models.candidateDesc'),
+  candidateSelectAll: t('models.selectAll'),
+  candidateDeselectAll: t('models.selectNone'),
+  candidateAdopt: t('models.addSelected'),
+  candidateClose: t('common.close'),
+  conflict: t('models.conflict'),
+  modelFailure: (index: number, message: string) => t('models.modelFailure', { n: index + 1, text: message }),
+  modelIdRequired: t('models.idRequired'),
+  modelIdDuplicate: t('models.idDuplicate'),
+  modelNameInvalid: t('models.nameInvalid'),
+  modelContextInvalid: t('models.contextInvalid'),
+  modelMaxTokensInvalid: t('models.maxInvalid'),
+  }
 }
 
 function modelFailureLabel(key: 'modelIdRequired' | 'modelIdDuplicate' | 'modelNameInvalid' | 'modelContextInvalid' | 'modelMaxTokensInvalid'): string {
-  return TEXT[key]
+  return text()[key]
 }
 
 function targetLabel(row: ProviderRow): string {
@@ -382,6 +387,7 @@ function emptySectionState(): SectionState {
    store, and registers the host's invalidation listeners. The component
    delegates all rendering to `Loaded` once the store is ready. */
 export function SettingsModelsSection(props: { ctx: ShellContext }): ReactNode {
+  useLocale()
   const store = useMemo(
     () => new ModelsStore(props.ctx.connection.api, props.ctx.settingsScope.describe(), props.ctx.settingsSchema),
     [props.ctx],
@@ -431,19 +437,19 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
   const [section, setSection] = useState<SectionState>(emptySectionState)
 
   if (state.status === 'idle' || state.status === 'loading') {
-    return e('section', { className: 'models-page', 'aria-label': '模型' },
+    return e('section', { className: 'models-page', 'aria-label': t('settings.models') },
       e(Header, {}),
-      e('p', { className: 'models-status', role: 'status' }, TEXT.loading),
+      e('p', { className: 'models-status', role: 'status' }, text().loading),
     )
   }
 
   if (state.status === 'error') {
-    const message = state.error ?? TEXT.loadFailed
-    return e('section', { className: 'models-page', 'aria-label': '模型' },
+    const message = state.error ?? text().loadFailed
+    return e('section', { className: 'models-page', 'aria-label': t('settings.models') },
       e(Header, {}),
       e('p', { className: 'models-error', role: 'alert' },
-        `${TEXT.loadFailed}：${message}`,
-        e('button', { type: 'button', className: 'models-button', onClick: () => void store.load() }, TEXT.retry),
+        `${text().loadFailed}：${message}`,
+        e('button', { type: 'button', className: 'models-button', onClick: () => void store.load() }, text().retry),
       ),
     )
   }
@@ -457,12 +463,12 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
   const addTarget = section.adding ? section.editing : undefined
   const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.entry.settingsNs)
 
-  return e('section', { className: 'models-page', 'aria-label': '模型' },
+  return e('section', { className: 'models-page', 'aria-label': t('settings.models') },
     e(Header, { note: section.savedNote }),
-    !writable ? e('p', { className: 'models-notice', role: 'status' }, TEXT.readOnly) : null,
+    !writable ? e('p', { className: 'models-notice', role: 'status' }, text().readOnly) : null,
     state.credentialError !== null
       ? e('p', { className: 'models-warning', role: 'status' },
-          `${TEXT.credentialErrorPrefix}${state.credentialError}`,
+          `${text().credentialErrorPrefix}${state.credentialError}`,
         )
       : null,
     e('ul', { className: 'models-rows' },
@@ -489,7 +495,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
                   return {
                     ...current,
                     dismissing,
-                    savedNote: changed ? TEXT.saved : current.savedNote,
+                    savedNote: changed ? text().saved : current.savedNote,
                   }
                 })
               },
@@ -528,7 +534,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
                 editing: undefined,
                 adding: false,
                 declaring: false,
-                savedNote: changed ? TEXT.saved : current.savedNote,
+                savedNote: changed ? text().saved : current.savedNote,
               }))
             },
           }) : null,
@@ -539,7 +545,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
       ? e('div', { className: 'models-add-card' },
           e('div', { className: 'models-add-picker' },
             e('label', { className: 'models-field' },
-              e('span', { className: 'models-field-label' }, '提供方'),
+              e('span', { className: 'models-field-label' }, t('models.provider')),
               e(Select, {
                 value: addTarget.entry.provider,
                 options: addable.map<SelectOption>((row) => ({ value: row.entry.provider, label: row.entry.displayName })),
@@ -549,7 +555,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
                   setSection((current) => ({ ...current, editing: next, adding: true }))
                 },
                 disabled: !writable,
-                'aria-label': '提供方',
+                'aria-label': t('models.provider'),
               }),
             ),
           ),
@@ -567,7 +573,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
                 editing: undefined,
                 adding: false,
                 declaring: false,
-                savedNote: changed ? TEXT.saved : current.savedNote,
+                savedNote: changed ? text().saved : current.savedNote,
               }))
             },
           }),
@@ -584,7 +590,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
                 setSection((current) => ({
                   ...current,
                   declaring: false,
-                  savedNote: changed ? TEXT.saved : current.savedNote,
+                  savedNote: changed ? text().saved : current.savedNote,
                 }))
               },
             }),
@@ -599,13 +605,13 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
                 if (first === undefined) return
                 setSection({ ...emptySectionState(), editing: first, adding: true })
               },
-            }, TEXT.add),
+            }, text().add),
             e('button', {
               type: 'button',
               className: 'models-button',
               disabled: !writable || protocols.length === 0,
               onClick: () => setSection({ ...emptySectionState(), declaring: true }),
-            }, TEXT.addCustom),
+            }, text().addCustom),
           ),
     section.deleteTarget !== undefined
       ? e(DeleteDialog, {
@@ -615,7 +621,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
             const target = section.deleteTarget
             if (target === undefined) return
             void removeProviderProfile(ctx, store, target)
-              .then(() => setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: TEXT.saved })))
+              .then(() => setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: text().saved })))
               .catch((error: unknown) => {
                 const message = error instanceof Error ? error.message : String(error)
                 setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: message }))
@@ -628,8 +634,8 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
 
 function Header(props: { note?: string | null }): ReactNode {
   return e('header', { className: 'models-header' },
-    e('h2', { className: 'models-title' }, '模型'),
-    e('p', { className: 'models-intro' }, TEXT.intro),
+    e('h2', { className: 'models-title' }, t('settings.models')),
+    e('p', { className: 'models-intro' }, text().intro),
     props.note ? e('p', { className: 'models-saved', role: 'status' }, props.note) : null,
   )
 }
@@ -647,28 +653,28 @@ function RowHead(props: {
   return e('div', { className: 'models-row-head' },
     e('div', { className: 'models-row-identity' },
       e('span', { className: 'models-row-name' }, label),
-      row.entry.declared === true ? e('span', { className: 'models-row-tag' }, TEXT.custom) : null,
+      row.entry.declared === true ? e('span', { className: 'models-row-tag' }, text().custom) : null,
       dot === 'configured'
-        ? e('span', { className: 'models-credential-dot models-credential-dot-configured', role: 'img', 'aria-label': 'API 密钥已配置', title: 'API 密钥已配置' })
+        ? e('span', { className: 'models-credential-dot models-credential-dot-configured', role: 'img', 'aria-label': t('models.keyConfigured'), title: t('models.keyConfigured') })
         : dot === 'missing'
-          ? e('span', { className: 'models-credential-dot models-credential-dot-missing', role: 'img', 'aria-label': 'API 密钥缺失', title: 'API 密钥缺失' })
+          ? e('span', { className: 'models-credential-dot models-credential-dot-missing', role: 'img', 'aria-label': t('models.keyMissing'), title: t('models.keyMissing') })
           : null,
     ),
     e('div', { className: 'models-row-actions' },
       e('button', {
         type: 'button',
         className: 'models-button',
-        'aria-label': formatTemplate(TEXT.editProviderAria, label),
+        'aria-label': formatTemplate(text().editProviderAria, label),
         onClick: onEdit,
-      }, TEXT.edit),
+      }, text().edit),
       row.removable
         ? e('button', {
             type: 'button',
             className: 'models-button models-button-danger',
-            'aria-label': formatTemplate(TEXT.deleteProviderAria, label),
+            'aria-label': formatTemplate(text().deleteProviderAria, label),
             disabled: !writable,
             onClick: onDelete,
-          }, TEXT.delete)
+          }, text().delete)
         : null,
       open ? null : e('span', { className: 'models-row-state', 'aria-hidden': open ? 'true' : 'false' }),
     ),
@@ -698,12 +704,12 @@ async function removeProviderProfile(ctx: ShellContext, store: Store, row: Provi
    this page also owns the stored credential or only the configuration. */
 function DeleteDialog(props: { row: ProviderRow; onCancel(): void; onConfirm(): void }): ReactNode {
   const managed = managedCredentialRef(props.row) !== undefined
-  const message = managed ? TEXT.confirmDeleteManage : TEXT.confirmDeleteKeep
+  const message = managed ? text().confirmDeleteManage : text().confirmDeleteKeep
   return e(ConfirmDialog, {
     id: 'models-delete',
-    title: formatTemplate(TEXT.deleteTitle, targetLabel(props.row)),
+    title: formatTemplate(text().deleteTitle, targetLabel(props.row)),
     message,
-    confirmLabel: TEXT.delete,
+    confirmLabel: text().delete,
     onCancel: props.onCancel,
     onConfirm: props.onConfirm,
   })
@@ -786,19 +792,19 @@ function ProviderEditor(props: {
   const modelsValue = schema.getPath(draft, ['models'])
   const models = modelDrafts(modelsValue)
   const modelFailure = validateModels(modelsValue)
-  const modelFailureText = modelFailure === undefined ? null : TEXT.modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key))
+  const modelFailureText = modelFailure === undefined ? null : text().modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key))
   const keyFailure = apiKeyFailure(keyDraft)
   const keyValue = keyDraft.trim()
   const isSetup = props.setup
   const showKeyFailure = keyFailure !== undefined ? keyFailure : undefined
   const keyLocked = keyState?.writable === false
   const keyPlaceholder = keyLocked
-    ? TEXT.apiKeyPlaceholderLocked
+    ? text().apiKeyPlaceholderLocked
     : keyState?.configured === true
-      ? TEXT.apiKeyPlaceholderStored
+      ? text().apiKeyPlaceholderStored
       : isPiAi
-        ? '输入 API 密钥（留空使用环境认证）'
-        : TEXT.apiKeyPlaceholder
+        ? t('models.keyEnv')
+        : text().apiKeyPlaceholder
 
   const setModelsRef = setModels
 
@@ -842,7 +848,7 @@ function ProviderEditor(props: {
         })
         const result = rpcResult<SettingsNamespaceView>(response)
         if (!result.ok) {
-          if (result.error?.code === 'settings-conflict') setFailure(TEXT.conflict)
+          if (result.error?.code === 'settings-conflict') setFailure(text().conflict)
           else setFailure(failureMessage(result))
           return
         }
@@ -869,7 +875,7 @@ function ProviderEditor(props: {
 
   if (node === undefined) {
     return e('div', { className: 'models-editor' },
-      e('p', { className: 'models-warning' }, `该提供方的设置路径在当前模式不可解析（${namespace.ns}）。`),
+      e('p', { className: 'models-warning' }, t('models.pathUnresolvable', { ns: namespace.ns })),
     )
   }
 
@@ -881,14 +887,14 @@ function ProviderEditor(props: {
         : null,
     ),
     e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, TEXT.apiKey),
+      e('span', { className: 'models-field-label' }, text().apiKey),
       e('input', {
         type: 'password',
         autoComplete: 'off',
         className: 'models-input',
         value: keyDraft,
         placeholder: keyPlaceholder,
-        'aria-label': TEXT.apiKey,
+        'aria-label': text().apiKey,
         'aria-invalid': showKeyFailure !== undefined,
         disabled: readOnly || busy || keyLocked,
         onChange: (event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value),
@@ -896,48 +902,48 @@ function ProviderEditor(props: {
       showKeyFailure === undefined
         ? null
         : e('p', { className: 'models-warning', role: 'alert' },
-            showKeyFailure === 'keyBlank' ? TEXT.keyBlank : TEXT.keyIllegal,
+            showKeyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal,
           ),
     ),
     e('details', { className: 'models-customized' },
-      e('summary', { className: 'models-customized-summary' }, TEXT.customized),
+      e('summary', { className: 'models-customized-summary' }, text().customized),
       e('div', { className: 'models-customized-body' },
         isDeclared ? e('div', { className: 'models-field' },
-          e('span', { className: 'models-field-label' }, TEXT.displayName),
+          e('span', { className: 'models-field-label' }, text().displayName),
           e('input', {
             type: 'text',
             className: 'models-input',
             value: stringAt(draft, 'displayName') ?? '',
             placeholder: stringAt(fallbackRecord, 'displayName') ?? row.entry.provider,
-            'aria-label': TEXT.displayName,
+            'aria-label': text().displayName,
             disabled: readOnly || busy,
             onChange: (event: ChangeEvent<HTMLInputElement>) => setField('displayName', event.target.value),
           }),
         ) : null,
         e('div', { className: 'models-field' },
-          e('span', { className: 'models-field-label' }, TEXT.baseUrl),
+          e('span', { className: 'models-field-label' }, text().baseUrl),
           e('input', {
             type: 'text',
             className: 'models-input',
             value: stringAt(draft, 'baseURL') ?? '',
-            placeholder: family === 'deepseek' ? TEXT.baseUrlDeepseekPlaceholder : TEXT.baseUrlPlaceholder,
-            'aria-label': TEXT.baseUrl,
+            placeholder: family === 'deepseek' ? text().baseUrlDeepseekPlaceholder : text().baseUrlPlaceholder,
+            'aria-label': text().baseUrl,
             disabled: readOnly || busy,
             onChange: (event: ChangeEvent<HTMLInputElement>) => setField('baseURL', event.target.value),
           }),
         ),
         isPiAi && isDeclared ? e('div', { className: 'models-field' },
-          e('span', { className: 'models-field-label' }, TEXT.protocol),
+          e('span', { className: 'models-field-label' }, text().protocol),
           e(Select, {
             value: stringAt(draft, 'api') ?? '',
             options: [
-              { value: '', label: TEXT.protocolUnset },
+              { value: '', label: text().protocolUnset },
               ...protocols.map<SelectOption>((value) => ({ value, label: value })),
             ],
             onChange: (value) => setField('api', value),
             disabled: readOnly || busy,
-            'aria-label': TEXT.protocol,
-            placeholder: TEXT.protocolUnset,
+            'aria-label': text().protocol,
+            placeholder: text().protocolUnset,
           }),
         ) : null,
         e(ModelListEditor, {
@@ -950,20 +956,20 @@ function ProviderEditor(props: {
           apiKey: keyValue.length > 0 ? keyValue : undefined,
           disabled: readOnly || busy,
           onChange: setModelsRef,
-          t: TEXT,
+          t: text(),
         }),
       ),
     ),
     failure !== undefined ? e('p', { className: 'models-warning', role: 'alert' }, failure) : null,
     isSetup || keyFailure === undefined && modelFailure === undefined
       ? e('div', { className: 'models-editor-actions' },
-          e('button', { type: 'button', className: 'models-button', disabled: busy, onClick: () => onClose(false) }, TEXT.cancel),
+          e('button', { type: 'button', className: 'models-button', disabled: busy, onClick: () => onClose(false) }, text().cancel),
           e('button', {
             type: 'button',
             className: 'models-button models-button-primary',
             disabled: readOnly || busy || keyFailure !== undefined || modelFailure !== undefined,
             onClick: () => void submit(),
-          }, busy ? TEXT.saving : '保存'),
+          }, busy ? text().saving : t('common.save')),
         )
       : null,
     modelFailureText !== null ? e('p', { className: 'models-warning', role: 'alert' }, modelFailureText) : null,
@@ -982,7 +988,7 @@ function ModelListEditor(props: {
   apiKey: string | undefined
   disabled?: boolean
   onChange(models: Record<string, unknown>[]): void
-  t: typeof TEXT
+  t: ReturnType<typeof text>
 }): ReactNode {
   const { ctx, models, onChange, settingsNs, provider, baseURL, api, apiKey, disabled = false, t } = props
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
@@ -1045,7 +1051,7 @@ function ModelListEditor(props: {
         return
       }
       if (result.value.models.length === 0) {
-        setFailure('该提供方没有列出模型。')
+        setFailure(t.noListed)
         return
       }
       const known = new Set(models.map((model) => (typeof model['id'] === 'string' ? (model['id'] as string) : '')))
@@ -1111,7 +1117,7 @@ function ModelListEditor(props: {
       }, busy ? t.fetching : t.fetchModels),
     ),
     models.length === 0
-      ? e('p', { className: 'models-empty' }, '尚未添加任何模型。')
+      ? e('p', { className: 'models-empty' }, t.noneAdded)
       : null,
     models.map((model, index) => e('div', { key: `${index}-${typeof model['id'] === 'string' ? model['id'] : ''}`, className: 'models-catalog-entry' },
       e('div', { className: 'models-catalog-row' },
@@ -1310,7 +1316,7 @@ function CustomProviderCard(props: {
         })
         const result = rpcResult<SettingsNamespaceView>(response)
         if (!result.ok) {
-          if (result.error?.code === 'settings-conflict') setFailure(TEXT.conflict)
+          if (result.error?.code === 'settings-conflict') setFailure(text().conflict)
           else setFailure(failureMessage(result))
           return
         }
@@ -1335,16 +1341,16 @@ function CustomProviderCard(props: {
 
   return e('div', { className: 'models-editor' },
     e('div', { className: 'models-editor-header' },
-      e('span', { className: 'models-editor-title' }, '自定义提供方'),
+      e('span', { className: 'models-editor-title' }, t('models.customProvider')),
     ),
     e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, TEXT.customRoute),
+      e('span', { className: 'models-field-label' }, text().customRoute),
       e('input', {
         type: 'text',
         className: 'models-input',
         value: route,
         placeholder: 'acme-gateway',
-        'aria-label': TEXT.customRoute,
+        'aria-label': text().customRoute,
         'aria-invalid': routeInvalid !== undefined,
         disabled: readOnly || busy || committed,
         onChange: (event: ChangeEvent<HTMLInputElement>) => setRoute(event.target.value),
@@ -1352,52 +1358,52 @@ function CustomProviderCard(props: {
     ),
     routeInvalid !== undefined
       ? e('p', { className: 'models-warning', role: 'alert' },
-          routeInvalid === 'routeInvalid' ? TEXT.customRouteInvalid : TEXT.customRouteTaken,
+          routeInvalid === 'routeInvalid' ? text().customRouteInvalid : text().customRouteTaken,
         )
-      : e('p', { className: 'models-hint' }, TEXT.customRouteHint),
+      : e('p', { className: 'models-hint' }, text().customRouteHint),
     e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, TEXT.displayName),
+      e('span', { className: 'models-field-label' }, text().displayName),
       e('input', {
         type: 'text',
         className: 'models-input',
         value: displayName,
-        placeholder: route.length > 0 ? route : TEXT.displayName,
-        'aria-label': TEXT.displayName,
+        placeholder: route.length > 0 ? route : text().displayName,
+        'aria-label': text().displayName,
         disabled: readOnly || busy || committed,
         onChange: (event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value),
       }),
     ),
     e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, TEXT.baseUrl),
+      e('span', { className: 'models-field-label' }, text().baseUrl),
       e('input', {
         type: 'text',
         className: 'models-input',
         value: baseURL,
         placeholder: 'https://gateway.example/v1',
-        'aria-label': TEXT.baseUrl,
+        'aria-label': text().baseUrl,
         disabled: readOnly || busy || committed,
         onChange: (event: ChangeEvent<HTMLInputElement>) => setBaseURL(event.target.value),
       }),
     ),
     e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, TEXT.protocol),
+      e('span', { className: 'models-field-label' }, text().protocol),
       e(Select, {
         value: protocol,
         options: protocols.map<SelectOption>((value) => ({ value, label: value })),
         onChange: setProtocol,
         disabled: readOnly || busy || committed,
-        'aria-label': TEXT.protocol,
+        'aria-label': text().protocol,
       }),
     ),
     e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, TEXT.apiKey),
+      e('span', { className: 'models-field-label' }, text().apiKey),
       e('input', {
         type: 'password',
         autoComplete: 'off',
         className: 'models-input',
         value: keyDraft,
-        placeholder: TEXT.apiKeyPlaceholder,
-        'aria-label': TEXT.apiKey,
+        placeholder: text().apiKeyPlaceholder,
+        'aria-label': text().apiKey,
         'aria-invalid': keyFailure !== undefined,
         disabled: readOnly || busy,
         onChange: (event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value),
@@ -1405,7 +1411,7 @@ function CustomProviderCard(props: {
       keyFailure === undefined
         ? null
         : e('p', { className: 'models-warning', role: 'alert' },
-            keyFailure === 'keyBlank' ? TEXT.keyBlank : TEXT.keyIllegal,
+            keyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal,
           ),
     ),
     e(ModelListEditor, {
@@ -1418,27 +1424,27 @@ function CustomProviderCard(props: {
       apiKey: keyValue.length > 0 ? keyValue : undefined,
       disabled: readOnly || busy || committed,
       onChange: setModels,
-      t: TEXT,
+      t: text(),
     }),
     e('div', { className: 'models-hint' },
-      baseURL.trim().length === 0 ? TEXT.customNeedsBaseUrl
-        : models.length === 0 ? TEXT.customNeedsModels
+      baseURL.trim().length === 0 ? text().customNeedsBaseUrl
+        : models.length === 0 ? text().customNeedsModels
           : null,
     ),
     modelFailure !== undefined
       ? e('p', { className: 'models-warning', role: 'alert' },
-          TEXT.modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key)),
+          text().modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key)),
         )
       : null,
     failure !== undefined ? e('p', { className: 'models-warning', role: 'alert' }, failure) : null,
     e('div', { className: 'models-editor-actions' },
-      e('button', { type: 'button', className: 'models-button', disabled: busy, onClick: () => onClose(false) }, TEXT.cancel),
+      e('button', { type: 'button', className: 'models-button', disabled: busy, onClick: () => onClose(false) }, text().cancel),
       e('button', {
         type: 'button',
         className: 'models-button models-button-primary',
         disabled: readOnly || busy || !ready,
         onClick: () => void submit(),
-      }, busy ? TEXT.creating : TEXT.createCustom),
+      }, busy ? text().creating : text().createCustom),
     ),
   )
 }

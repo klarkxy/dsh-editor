@@ -14,6 +14,8 @@ import {
   type WritingProgress,
 } from './writing-progress.ts'
 import { decodeHostThemePreference, writeHostThemePreference, type HostThemeSync } from './client/theme.ts'
+import { decodeLocalePreference } from './client/settings-general.tsx'
+import { bindLocalePreference } from './i18n/index.ts'
 import { type ShellContext } from './client/shared.ts'
 import { registerShellRoot } from './client/root.ts'
 
@@ -81,6 +83,8 @@ export function apply(ctx: Context): void {
   // Host chrome follows the host `ui-theme` preference; sync it so the
   // paper/ink toggle themes the host chrome too. Best-effort: when the scope
   // is read-only or the write fails, the local toggle still works.
+  const localeScope = client.settingsScope.bind({ namespace: 'locale', decode: decodeLocalePreference })
+  bindLocalePreference(localeScope)
   const hostThemeScope = client.settingsScope.bind({ namespace: 'ui-theme', decode: decodeHostThemePreference })
   const hostThemeSync: HostThemeSync = {
     read: () => hostThemeScope.getSnapshot().value?.preference,

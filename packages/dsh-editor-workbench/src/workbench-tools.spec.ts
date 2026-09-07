@@ -107,6 +107,8 @@ describe('workbench tools', () => {
     expect(value.version).toBe(1)
     expect(value.chapters.map((c) => c.path)).toEqual(['正文/001.md'])
     expect(value.totals.chapters).toBe(1)
+    expect(value.chapters).toMatchObject([{ path: '正文/001.md', status: 'draft' }])
+    expect(value.totals).toMatchObject({ byStatus: { draft: 1, revising: 0, final: 0 } })
     // schema 不允许 null 字段；此处确认 modifiedAt 是 string 或 undefined，没有 null
     for (const chapter of value.chapters) {
       expect(chapter).not.toHaveProperty('modifiedAt', null)

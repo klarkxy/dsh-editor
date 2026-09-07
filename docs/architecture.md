@@ -27,10 +27,10 @@ Electron（受控多窗口、资源校验、子进程生命周期）
       └─ 专用 profiles/dsh-editor
          ├─ DSH base / web runtime / connection / renderer
          ├─ dsh-manuscript：公开稿件 Host RPC、稿纸 overlay 与共享 editor-core
-         ├─ dsh-editor-workbench：私有项目生命周期、context、导入、快照与归档
-         ├─ dsh-editor-novel-kernel：私有小说 Tool、guard、prompt 与知识卡
+         ├─ dsh-editor-workbench：私有项目生命周期、概览/状态、校对、卡片、进度、context、导入、快照与归档
+         ├─ dsh-editor-novel-kernel：私有小说 Tool、guard、prompt、知识卡与 `/novel-kernel` 知乎知识库 RPC
          └─ dsh-editor-shell：私有根界面
-            ├─ 三栏：左文件树（4 组 + 组内新建）、中稿纸编辑器（ghost FIM + 选段改写 + ‹ › 章节导航）、右 DshChatPort
+            ├─ 三栏：左真实目录树（新建只预建 `正文/`；栏顶搜索/校对/概览/人物/设定/提交/历史），中稿纸（查找替换、打字机/段落聚焦、排版、ghost FIM、选段改写、‹ › 导航、世界书 frontmatter 表单），右 DshChatPort（对话 ⋯ 归档/恢复/删除）
             └─ shell client 拆分为 src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}，并复用 dsh-manuscript/client/editor-core
 ```
 
@@ -42,7 +42,7 @@ Electron（受控多窗口、资源校验、子进程生命周期）
 - **Electron**：受控多窗口、共享后端、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。入口在 `apps/desktop/src/main.ts`，子进程监督在 `apps/desktop/src/supervisor.ts`。
 - **`dsh-editor-shell` Renderer**：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；新建、重命名、放弃草稿和离开保护均使用应用内、锁定焦点的对话框，不依赖浏览器 `prompt/confirm`；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据、绝对路径或 Node 文件系统。`client.ts` 不再是单体：4 千多行单文件已拆为 `src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}`，并以 `Editor` 包装 `dsh-manuscript/client/editor-core`（`editor.tsx` + `editor-state.ts` + `completion-preference.ts` + `styles.ts`），稿纸逻辑与公开 manuscript overlay 共用。
 - **`dsh-editor-shell` Host**：仅保留加载唯一 root client 所需的最小 Cordis 入口；Renderer 继续拥有界面、编辑 buffer 与作者确认流程。
-- **`dsh-editor-workbench` Host**：loopback-only 项目结构、章节概览与状态、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。
+- **`dsh-editor-workbench` Host**：loopback-only 项目结构、章节概览与状态、校对扫描、人物卡/世界书卡片、写作进度、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。同时注册只读工具 `novel_overview`。
 - **`dsh-editor-novel-kernel` Host**：只读小说知识与检索、预览式 `novel_propose`、工具 guard 与 system prompt；固定路径索引直写及 loopback 知乎知识库管理 RPC 也由此包提供，正文仍只经作者确认后写入。
 - **`dsh-manuscript` Host**：公开 `/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、全文搜索、DSH_HOME 草稿、FIM 与 `patch.complete`；公开产物不含 Node 文件系统能力。
 - **`dsh-grill`**：保持为普通 DSH 可独立安装的公共插件，不进入桌面 profile 或桌面运行依赖。
@@ -59,7 +59,7 @@ Electron（受控多窗口、资源校验、子进程生命周期）
 
 `search.text` 仅做有界、字面量、大小写不敏感的 Markdown/TXT 扫描，拒绝正则与控制字符，跳过隐藏、生成和链接路径，并限制文件数、总字节和结果数。Renderer 只接收路径、行列、片段、偏移和版本；定位前再次比较版本。章节导航由递归工作区列表中完整的 `正文/**/*.{md,txt}` 自然排序产生，不依赖用户是否展开文件树。
 
-概览和卡片视图消费同一份 `project.overview` 响应，不复制章节或大纲数据。导出预检一次读取 Markdown/TXT 章节后同时形成自然顺序、空章警告、字数和最终 Blob；本版本未挂导出 UI，Host 仍按相同语义保留这条只读路径以便未来重新挂回。`search.text` 与人物卡/世界书的引用导航在 Renderer 没有入口，Host 不增加新的引用 RPC、关系索引或向量库。
+作品概览（Ctrl+Shift+O）消费 `project.overview` 与 `progress.history`：章节状态（草稿/修订中/已定稿）、按状态字数分布、近 30 日与 12 周写作曲线、最近编辑；状态经 `chapter.statusSet` 写回，文件树显示状态标记。导出预检一次读取 `正文/` Markdown/TXT 后同时形成自然顺序、空章警告和字数，再由 Renderer 下载 Markdown/TXT，或在本机打包 DOCX/EPUB（shell 捆绑 `docx` 与 `jszip`）。`search.text` 由侧栏搜索面板（Ctrl+Shift+F）消费；点击命中后经 `EditorCoreHandle.revealRange` 选中 `start..end`。人物卡/世界书引用导航走 `cards.references`（字面量检索，最多 200 条），不做关系索引或向量库。校对走 `proofread.scan`（Ctrl+Shift+L）；自动应用建议只走 Markdown 提案，`.txt` 命中需手工改。归档只接受单个可见 Markdown/TXT 文档，不归档目录。
 
 ## Desktop profile 与数据
 
@@ -82,6 +82,16 @@ dsh-editor-shell
 
 `dsh-grill` 不在此列。
 
+## 作品旁路文件（`.dsh-editor/`）
+
+作品目录下的 `.dsh-editor/` 是应用私有元数据。`snapshot.ts` 把路径中任一段以 `.` 开头的项标为 hidden，因此 `.dsh-editor/*`（含本章下列文件、`snapshots/`、`archive/`、`scratch/`）一律不进入快照 payload。除既有的 `作品索引.md`、快照、归档与 scratch 外，当前还使用：
+
+- `chapter-status.json`：`{ version: 1, statuses }`，键为规范化相对路径；缺省与 `draft` 不落盘。
+- `writing-log.json`：按本机日期记录每日字数（`[{ date, chars, delta? }]`），最多 400 天，原子写。
+- `敏感词.txt` / `敏感词-忽略.txt`：作品追加敏感词与忽略表（一行一词，`#` 后为注释）。
+
+这些文件缺失或损坏时 Host fail-open 到默认值，孤立键不影响概览。`cards.metaSet`、`cards.create`、`chapter.statusSet`、`progress.record` 与其它作品写入一样进入 `withWorkspaceWrite` 队列。
+
 ## DshChatPort
 
 `DshChatPort` 只消费 DSH 发布的 `SessionFace`、`ConversationSnapshot` 与 connection/runtime API，并保持一个事件消费者。它暴露：
@@ -102,7 +112,7 @@ Renderer 同时维护最多 2,000 字符的本机作者侧写 `author_memory`，
 
 固定与动态读取结果、扫描计数和原始请求以 V2 JSON 信封一次提交给同一 DSH session；解析器仍严格接受历史 V1。文件文本是不可信数据，单文件缺失、格式无效、超限或读取失败只进入有界回执；整个 Host 编译失败则不调用 `session.prompt`。Renderer 仅显示原请求和不含原文的回执，DSH 历史保留完整信封。`novel_knowledge` 不属于该回执，深层或最新事实仍由 Agent 通过 `glob`、`grep`、`read` 验证。
 
-普通世界书的触发词、`enabled` 与 `priority` 只写在 Markdown 文件开头的 frontmatter 中；本版本没有专门的可视化触发设置面板，编辑方式改为手工修改文件头。Host 仍按相同 frontmatter 解析，损坏 / 停用 / 超出扫描限制的文件不会进入提示，文件正文不会被界面覆盖，缺 frontmatter 的旧文件继续以文件名作为触发词。
+普通世界书的触发词、`enabled` 与 `priority` 写在 Markdown 文件开头的 frontmatter 中；打开 `世界书/` 文档时稿纸提供可视化触发设置，写入编辑 buffer 后再走普通保存。Host 仍按相同 frontmatter 解析，损坏 / 停用 / 超出扫描限制的文件不会进入提示，文件正文不会被界面覆盖，缺 frontmatter 的旧文件继续以文件名作为触发词。
 
 未知节点或工具显示通用降级卡。Renderer 不持久化对话副本；刷新后仍以 DSH snapshot 为准。`novel_knowledge` 的运行中调用对用户隐藏；`novel_propose` 的结果只在通过 `dsh-editor-novel-kernel/contracts` 严格解析后渲染为作者确认卡。
 
@@ -140,10 +150,10 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 
 ## 非目标与后置
 
-- 安装器、自动更新、代码签名、发布；
+- 代码签名与公证；安装器、应用内更新下载与 CI 发布上传已经落地。
 - 句内卡片、`/`/`@` 面板、审阅 gutter、附件和完整官方高级管理界面；
 - watch、独立索引服务、Git UI；通用文件树现已支持可见目录整理和显式确认后的永久删除，删除与可恢复归档属于不同操作。
-- 章节状态（草稿/修订中/已定稿曾落地后移除）、卡片拖放、手写卡片摘要、章节—大纲绑定、关系图、向量检索、DOCX/EPUB；
+- 卡片拖放、手写卡片摘要、章节—大纲绑定、关系图、向量检索；章节状态、卡片目录/引用导航、导出预检与 DOCX/EPUB 已经落地。
 - Android、远程多用户、云同步；
 - 未经授权的 commit、push、tag 或 release。
 
@@ -159,7 +169,7 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 
 ## 多窗口写入与草稿恢复
 
-同一 Host 的稿件保存、提案应用和作品文件变更按 canonical workspace root 串行执行；不同作品可独立执行。队列只包围顶层 RPC，内部文件原语不重复入队，磁盘版本与哈希检查仍负责识别外部编辑器的修改。
+同一 Host 的稿件保存、提案应用、作品文件变更以及 `cards.metaSet` / `cards.create` / `chapter.statusSet` / `progress.record` 按 canonical workspace root 串行执行；不同作品可独立执行。队列只包围顶层 RPC，内部文件原语不重复入队，磁盘版本与哈希检查仍负责识别外部编辑器的修改。
 
 持久草稿以作品、文件和窗口 ownerId 区分，窗口标识保存在 sessionStorage。草稿 get/put 返回 revision，清理必须携带匹配的 revision；保存或放弃不能删除另一个窗口的记录。旧版草稿保持为可枚举的 legacy 备份。重启生成新窗口标识后，作者可显式选择旧备份恢复到当前编辑 buffer，原备份继续保留。
 

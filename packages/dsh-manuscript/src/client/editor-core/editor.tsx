@@ -1,8 +1,11 @@
 import { createElement as e, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { EditorState, Prec } from '@codemirror/state'
+import { Compartment, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { externalSync, ghostField, livePreview, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
+import { closeSearchPanelIfFocused, isPaperSearchPanelFocused, paperEscapePriority, paperSearch, revealEditorRange } from './search.ts'
+import { normalizeTypography, typographyCssVariables, type TypographyInput } from './typography.ts'
+import { focusParagraphExtension, typewriterExtension } from './typewriter.ts'
 
 // EditorCore only needs to issue RPCs; hosts that also register handlers can
 // pass the full RpcBag and the structural type will still match.
@@ -72,6 +75,14 @@ export type EditorCoreHandle = {
   setGhost(candidates: string[], index: number, at: number): void
   clearGhost(): void
   setProposal(proposal: { ticket: SelectionTicket; text: string } | null): void
+  /**
+   * Reveal and select an absolute character range in the open document.
+   * `start` / `end` are offsets in the full file text (including any
+   * projected prefix such as worldbook frontmatter). Out-of-range ends
+   * are clamped to the visible paper; the selection is scrolled into
+   * view and the editor is focused.
+   */
+  revealRange(start: number, end: number): void
 }
 
 export type EditorCoreDraftBackup = {
@@ -101,6 +112,9 @@ export type EditorCorePaperProjection = {
   project(path: string, text: string): { text: string; offset: number }
   replace(path: string, text: string, paperText: string): string
 }
+
+/** Optional paper typography. Omitted fields keep today's 17px / 1.9 / serif defaults. */
+export type EditorCoreTypography = TypographyInput
 
 export type EditorCoreProps = {
   sessionId: string
@@ -145,6 +159,13 @@ export type EditorCoreProps = {
   onRewriteSelection?(selection: string, path: string): void | Promise<void>
 
   paperProjection?: EditorCorePaperProjection
+
+  /** Keep the caret line at a fixed viewport ratio (default 0.5) while typing or moving the cursor. */
+  typewriter?: boolean
+  /** Paper measure and type. Applied as `--paper-*` CSS variables on the editor root. */
+  typography?: EditorCoreTypography
+  /** Dim every paragraph except the one that contains the caret. */
+  focusParagraph?: boolean
 
   autoSaveDelayMs?: number
   externalRevision?: number
@@ -268,6 +289,9 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     enableRewriteSelection = false,
     onRewriteSelection,
     paperProjection = IDENTITY_PROJECTION,
+    typewriter = false,
+    typography,
+    focusParagraph = false,
     autoSaveDelayMs = 800,
     externalRevision = 0,
     siblings,
@@ -586,6 +610,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       setGhost: (candidates, index, at) => { setGhostCandidates(candidates); setGhostIndex(index); setGhostAt(at) },
       clearGhost: () => { clearGhost(); setGhostAt(0) },
       setProposal: (next) => setProposal(next),
+      revealRange: (start, end) => {
+        const view = viewRef.current
+        if (!view) return
+        revealEditorRange(view, paperOffsetRef.current, start, end)
+      },
     }
     onHandle(handle)
     return () => onHandle(null)
@@ -736,6 +765,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const paperOffsetRef = useRef(0)
   paperOffsetRef.current = paperOffset
 
+  const writingCompartments = useRef({
+    typewriter: new Compartment(),
+    focusParagraph: new Compartment(),
+  })
+
   // Stable dispatch table for CM keymaps / listeners; always points at the
   // latest render's closures.
   const callbacksRef = useRef({
@@ -747,6 +781,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     save: () => {},
     hasGhost: (): boolean => false,
     hasProposal: (): boolean => false,
+    hasCompletionActivity: (): boolean => false,
   })
   callbacksRef.current = {
     setTextFromPaper: (paper: string) => {
@@ -763,6 +798,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     save: () => { void save() },
     hasGhost: () => ghostCandidatesRef.current.length > 0,
     hasProposal: () => proposal !== null,
+    hasCompletionActivity: () => loadingFim || patching || ghostCandidatesRef.current.length > 0 || proposal !== null,
   }
 
   // Mount the EditorView once; content flows in through the sync effect.
@@ -781,24 +817,39 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           paperTheme,
           livePreview,
           ghostField,
+          paperSearch(),
+          writingCompartments.current.typewriter.of(typewriterExtension({ enabled: typewriter })),
+          writingCompartments.current.focusParagraph.of(focusParagraphExtension(focusParagraph)),
           EditorView.lineWrapping,
           placeholder('从这里开始写作，或按 ⌘K 唤起命令'),
           Prec.high(keymap.of([
             {
               key: 'Tab',
               run: (v) => {
-                // Let IME composition consume Tab before ghost acceptance.
-                if (v.composing || !cb.current.hasGhost()) return false
+                // Find-bar focus and IME composition both consume Tab
+                // before ghost acceptance.
+                if (isPaperSearchPanelFocused(v) || v.composing || !cb.current.hasGhost()) return false
                 cb.current.acceptGhost()
                 return true
               },
             },
-            { key: 'Escape', run: () => cb.current.cancelSuggestions() },
+            {
+              key: 'Escape',
+              run: (v) => {
+                const action = paperEscapePriority({
+                  searchPanelFocused: isPaperSearchPanelFocused(v),
+                  completionActive: cb.current.hasCompletionActivity(),
+                })
+                if (action === 'close-search') return closeSearchPanelIfFocused(v)
+                if (action === 'cancel-completion') return cb.current.cancelSuggestions()
+                return false
+              },
+            },
             { key: 'Mod-s', run: () => { cb.current.save(); return true } },
             {
               key: 'Mod-Enter',
-              run: () => {
-                if (!cb.current.hasProposal()) return false
+              run: (v) => {
+                if (isPaperSearchPanelFocused(v) || !cb.current.hasProposal()) return false
                 cb.current.acceptPatch()
                 return true
               },
@@ -828,6 +879,20 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       delete (container as unknown as { __cmView?: EditorView }).__cmView
     }
   }, [])
+
+  // Runtime toggle: typewriter / focus-paragraph are Compartment-backed so a
+  // prop change does not rebuild the EditorView (ghost, search, and proposal
+  // keymaps stay mounted).
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    view.dispatch({
+      effects: [
+        writingCompartments.current.typewriter.reconfigure(typewriterExtension({ enabled: typewriter })),
+        writingCompartments.current.focusParagraph.reconfigure(focusParagraphExtension(focusParagraph)),
+      ],
+    })
+  }, [typewriter, focusParagraph])
 
   // React text → CM doc. Skips the echo from user edits (doc already equals
   // paperText) and annotates genuine external replacements so the listener
@@ -867,11 +932,20 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const cls = (slot: EditorCoreSlot) => slotClassName[slot]
   const sty = (slot: EditorCoreSlot) => slotStyle[slot]
   const showFooter = loadingFim || patching || ghost || proposal || conflict || note
+  const paperVars = typographyCssVariables(normalizeTypography(typography)) as CSSProperties
 
   return e('section', {
     className: [paperClassName, cls('outer')].filter(Boolean).join(' '),
     'aria-label': '正文编辑区',
-    style: { display: 'flex', flexDirection: 'column', height: '100%', ...paperStyle, ...sty('outer') },
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      '--paper-dim-opacity': '0.35',
+      ...paperVars,
+      ...paperStyle,
+      ...sty('outer'),
+    } as CSSProperties,
   },
     e('header', {
       className: cls('header'),

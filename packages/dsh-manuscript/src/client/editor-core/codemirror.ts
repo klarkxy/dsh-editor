@@ -51,7 +51,10 @@ export const paperTheme: Extension = EditorView.theme({
     height: '100%',
     backgroundColor: 'transparent',
     color: 'var(--fg, inherit)',
-    font: '400 var(--text-body, 17px)/var(--leading-body, 1.9) var(--font-serif, Georgia, serif)',
+    fontWeight: '400',
+    fontSize: 'var(--paper-font-size, var(--text-body, 17px))',
+    lineHeight: 'var(--paper-line-height, var(--leading-body, 1.9))',
+    fontFamily: 'var(--paper-font-family, var(--font-serif, Georgia, serif))',
     letterSpacing: '.03em',
   },
   '.cm-scroller': {
@@ -62,6 +65,16 @@ export const paperTheme: Extension = EditorView.theme({
   '.cm-content': {
     padding: '36px 64px 32px',
     caretColor: 'var(--accent, inherit)',
+    boxSizing: 'border-box',
+    width: '100%',
+    maxWidth: 'var(--paper-max-width, none)',
+    marginInline: 'auto',
+  },
+  '.cm-line': {
+    paddingBottom: 'var(--paper-paragraph-spacing, 0em)',
+  },
+  '.cm-paper-dim': {
+    opacity: 'var(--paper-dim-opacity, 0.35)',
   },
   '&.cm-focused': { outline: 'none' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent, currentColor)' },

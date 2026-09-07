@@ -1,17 +1,17 @@
 # DSH Editor
 
-DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是 `正文 / 大纲 / 人物卡 / 世界书` 四个分组的文件树，中是稿纸编辑器，右是 dsh 对话线程；两侧栏可以折叠或进入专注模式。
+DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是真实目录树（新建作品只预建 `正文/`，大纲/人物卡/世界书等在实际创建后出现；栏顶有搜索、校对、概览、人物、设定、提交、历史），中是稿纸编辑器（稿内查找替换、打字机滚动、段落聚焦与排版、ghost FIM、选段改写、‹ › 章节导航），右是 dsh 对话线程（⋯ 菜单可归档、恢复或删除——删除只在本机记墓碑，DSH `0.1.1-rc.2` 没有会话删除）；两侧栏可以折叠或进入专注模式。
 
 仓库保留两个可独立安装到普通 DSH Web profile 的公开插件，以及三个只随桌面 profile 交付的私有插件：
 
 | 组件 | 用途 | 数据所有者 |
 | --- | --- | --- |
 | Windows 桌面应用 | 项目初始化、Markdown 写作、写作助手、修改确认 | 本地作品目录与应用私有数据 |
-| `dsh-manuscript` | Web 中的可关闭稿纸抽屉、文件/FIM RPC | DSH workspace、sandbox 与版本化文件 API |
+| `dsh-manuscript` | Web 中的可关闭稿纸抽屉、文件/FIM/查找替换与排版 | DSH workspace、sandbox 与版本化文件 API |
 | `dsh-grill` | `scaffold_novel` 与四种小说协作模式 | DSH 工具、审批与官方 Chat |
-| `dsh-editor-workbench` | 项目、上下文、导入、快照、移动与归档 | 同一 live-session workspace authority |
-| `dsh-editor-novel-kernel` | 小说知识、预览提案、索引直写、工具守卫与系统提示词 | DSH 工具与作者确认边界 |
-| `dsh-editor-shell` | 桌面唯一根界面、Chat 投影与编辑状态 | 不发布、不安装到日常 `web` profile |
+| `dsh-editor-workbench` | 项目、概览/章节状态、校对、卡片、进度、上下文、导入、快照、移动与归档 | 同一 live-session workspace authority |
+| `dsh-editor-novel-kernel` | 小说知识、预览提案、索引直写、工具守卫、系统提示词与知乎知识库 RPC | DSH 工具与作者确认边界 |
+| `dsh-editor-shell` | 桌面唯一根界面、各写作面板、Chat 投影与编辑状态 | 不发布、不安装到日常 `web` profile |
 
 ## 开发启动
 

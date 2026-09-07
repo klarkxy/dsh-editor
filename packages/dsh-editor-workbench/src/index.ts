@@ -8,6 +8,11 @@ import { createManuscriptGroup, createDirectory, createProjectHome, defaultProje
 import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, rollbackSnapshot, SnapshotError, type SnapshotAccess } from './snapshot.ts'
 import { compileContext } from './context.ts'
 import { OverviewError, readProjectOverview, type OverviewAccess } from './overview.ts'
+import { ChapterStatusError, setChapterStatus } from './chapter-status.ts'
+import { MetadataIoError } from './metadata-io.ts'
+import { WritingLogError, readWritingHistory, recordWritingProgress } from './writing-log.ts'
+import { ProofreadError, scanProofread } from './proofread.ts'
+import { CardsError, createCard, listCardReferences, listCards, setCardMeta } from './cards.ts'
 import {
   applyMerge,
   applyRenames,
@@ -62,9 +67,10 @@ export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
     if (error.code === 'IO' || error.code === 'UNSUPPORTED') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
     return badRequest(error.message)
   }
-  if (error instanceof OverviewError) {
+  if (error instanceof OverviewError || error instanceof ChapterStatusError || error instanceof WritingLogError || error instanceof MetadataIoError || error instanceof ProofreadError || error instanceof CardsError) {
     if (error.code === 'READ_ONLY') return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
-    if (error.code === 'BLOCKED' || error.code === 'INVALID_PATH') return badRequest(error.message)
+    if (error instanceof CardsError && error.code === 'EXISTS') return { ok: false, error: { code: 'directory-exists', message: error.message, details: { path: '' } } }
+    if (error.code === 'BLOCKED' || error.code === 'INVALID_PATH' || error.code === 'INVALID' || error.code === 'STALE') return badRequest(error.message)
     return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
   }
   if (error instanceof BinaryError) {
@@ -139,6 +145,14 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
     if (endpoint === 'project.init') return await initializeProject({ root: access.workspace.path, mode: access.policy.mode, newProject: body.newProject === true, signal })
     if (endpoint === 'project.prepareIndex') return await prepareNovelIndex({ root: access.workspace.path, mode: access.policy.mode, signal })
     if (endpoint === 'project.overview') return await readProjectOverview(overviewAccess(access))
+    if (endpoint === 'proofread.scan') return await scanProofread({ access: overviewAccess(access), scope: body.scope, path: rel || undefined, kinds: body.kinds })
+    if (endpoint === 'cards.list') return await listCards({ access: overviewAccess(access), kind: body.kind })
+    if (endpoint === 'cards.references') return await listCardReferences({ access: overviewAccess(access), path: rel })
+    if (endpoint === 'cards.metaSet') return await setCardMeta({ access: overviewAccess(access), path: rel, version: str(body, 'version'), fields: body.fields })
+    if (endpoint === 'cards.create') return await createCard({ access: overviewAccess(access), kind: body.kind, title: str(body, 'title'), fields: body.fields })
+    if (endpoint === 'chapter.statusSet') return await setChapterStatus({ access: overviewAccess(access), path: rel, status: body.status })
+    if (endpoint === 'progress.record') return await recordWritingProgress(overviewAccess(access), body.totalChars)
+    if (endpoint === 'progress.history') return await readWritingHistory(overviewAccess(access), body.days)
     if (endpoint === 'structure.groupCreate') return await createManuscriptGroup({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
     if (endpoint === 'directory.create') return await createDirectory({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
     if (endpoint === 'context.compile') return await compileContext(files, str(body, 'userRequest'), str(body, 'activePath') || undefined, str(body, 'authorPreferences'), str(body, 'authorMemory'))
@@ -201,7 +215,8 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
   const mutations = ['project.init', 'project.prepareIndex', 'project.importApply', 'project.importCleanup',
     'snapshot.create', 'snapshot.rollback', 'snapshot.restoreApply', 'snapshot.restoreCleanup',
     'structure.groupCreate', 'directory.create', 'file.rename', 'file.moveManuscript',
-    'archive.apply', 'archive.restore', 'proposal.apply', 'entry.copy', 'entry.move', 'entry.delete', 'entry.rename']
+    'archive.apply', 'archive.restore', 'proposal.apply', 'entry.copy', 'entry.move', 'entry.delete', 'entry.rename',
+    'chapter.statusSet', 'progress.record', 'cards.metaSet', 'cards.create']
   return mutations.includes(endpoint) ? withWorkspaceWrite(access.root.targetKey, run) : run()
 }
 

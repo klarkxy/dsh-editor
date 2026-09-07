@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
+import { syncChapterStatusPaths } from './chapter-status.ts'
 
 export const ARCHIVE_DIRECTORY = '.dsh-editor/archive'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -80,6 +81,23 @@ function normal(value: string): string {
 
 function assertWritable(access: LifecycleAccess): void {
   if (access.mode === 'read-only') throw new LifecycleError('workspace is read-only', 'READ_ONLY')
+}
+
+const STATUS_SYNC_WARNING = '章节已变更，但作品进度没有同步；请重新设置章节状态。'
+
+async function syncStatusAfterMove(access: LifecycleAccess, from: string, to: string | null): Promise<string | undefined> {
+  try {
+    await syncChapterStatusPaths(access, from, to)
+    return undefined
+  } catch {
+    return STATUS_SYNC_WARNING
+  }
+}
+
+async function archivedWithStatus(access: LifecycleAccess, stored: StoredManifest): Promise<ArchiveView> {
+  const view = await viewArchive(access, stored)
+  const metadataWarning = await syncStatusAfterMove(access, stored.manifest.originalPath, null)
+  return metadataWarning ? { ...view, metadataWarning } : view
 }
 
 function authorPath(value: string): string {
@@ -418,7 +436,8 @@ export async function renameDocument(input: {
     throw new LifecycleError('case-only or unchanged rename is not supported', 'INVALID_PATH')
   }
   const moved = await moveChecked({ access: input.access, source, target, expectedVersion: input.expectedVersion })
-  return { path: target, version: moved.version }
+  const metadataWarning = await syncStatusAfterMove(input.access, source, target)
+  return { path: target, version: moved.version, ...(metadataWarning ? { metadataWarning } : {}) }
 }
 
 export async function moveManuscriptDocument(input: {
@@ -435,7 +454,8 @@ export async function moveManuscriptDocument(input: {
   }
   const target = `${directory}/${path.posix.basename(source)}`
   const moved = await moveChecked({ access: input.access, source, target, expectedVersion: input.expectedVersion })
-  return { path: target, version: moved.version }
+  const metadataWarning = await syncStatusAfterMove(input.access, source, target)
+  return { path: target, version: moved.version, ...(metadataWarning ? { metadataWarning } : {}) }
 }
 
 function entryPath(value: string): string {
@@ -471,6 +491,11 @@ function entryDirectory(value: string): string {
 }
 
 const ENTRY_NAME_FORBIDDEN = /[<>:"/\\|?*\u0000-\u001f]/
+
+/** Visible single-segment entry name used by `entry.*` and `cards.create`. */
+export function validateEntryName(value: string): string {
+  return entryNewName(value)
+}
 
 function entryNewName(value: string): string {
   if (typeof value !== 'string') throw new LifecycleError('entry name is required', 'INVALID_PATH')
@@ -642,7 +667,9 @@ export async function moveEntry(input: {
   const existing = await lstatOptional(targetAbsolute)
   if (existing) throw new LifecycleError('destination already exists', 'EXISTS')
   await noReplaceRename(sourceEntry.absolute, targetAbsolute, input.access)
-  return { path: joinPosix(directory, path.posix.basename(source)) }
+  const target = joinPosix(directory, path.posix.basename(source))
+  const metadataWarning = await syncStatusAfterMove(input.access, source, target)
+  return { path: target, ...(metadataWarning ? { metadataWarning } : {}) }
 }
 
 export async function deleteEntry(input: {
@@ -653,7 +680,8 @@ export async function deleteEntry(input: {
   const source = entryPath(input.path)
   const sourceEntry = await resolveExistingEntry(input.access.path, source)
   await fs.rm(sourceEntry.absolute, { recursive: true, force: false })
-  return { path: source }
+  const metadataWarning = await syncStatusAfterMove(input.access, source, null)
+  return { path: source, ...(metadataWarning ? { metadataWarning } : {}) }
 }
 
 export async function renameEntry(input: {
@@ -673,7 +701,8 @@ export async function renameEntry(input: {
   const parentAbsolute = await safeDirectory(input.access.path, parentRelative)
   const targetAbsolute = path.join(parentAbsolute, newName)
   await noReplaceRename(sourceEntry.absolute, targetAbsolute, input.access)
-  return { path: targetRelative }
+  const metadataWarning = await syncStatusAfterMove(input.access, source, targetRelative)
+  return { path: targetRelative, ...(metadataWarning ? { metadataWarning } : {}) }
 }
 
 function manifestPath(recordDirectory: string): string {
@@ -859,7 +888,7 @@ export async function archiveDocument(input: {
   const current = await viewArchive(input.access, stored)
   if (current.state === 'archived') {
     stored = await writeManifest(input.access, stored, 'archived')
-    return await viewArchive(input.access, stored)
+    return await archivedWithStatus(input.access, stored)
   }
   if (current.state !== 'pending-archive' || !current.version) return current
   await moveChecked({
@@ -870,7 +899,7 @@ export async function archiveDocument(input: {
     expectedHash: stored.manifest.sha256,
   })
   stored = await writeManifest(input.access, stored, 'archived')
-  return await viewArchive(input.access, stored)
+  return await archivedWithStatus(input.access, stored)
 }
 
 export async function restoreArchive(input: {

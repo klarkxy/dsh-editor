@@ -1,4 +1,5 @@
 import { createElement as e, useEffect, useState } from 'react'
+import { t } from '../i18n/index.ts'
 
 /*
  * 自绘窗口控制（无框窗口）。preload.cjs 在桌面端暴露 window.dshWindow;
@@ -25,7 +26,7 @@ type WindowBridge = {
   close(): void
   /** 桌面端经主进程白名单校验后用系统浏览器打开;浏览器端无此方法,回退 window.open。 */
   openExternal?(url: string): void
-  /** 主进程返回当前应用名、版本与平台形态;开发模式或浏览器端无此方法,UI 需走 "开发模式" 兜底。 */
+  /** 主进程返回当前应用名、版本与平台形态;开发模式或浏览器端无此方法,UI 需走 t('about.devMode') 兜底。 */
   getAppInfo?(): Promise<{ name: string; version: string; platform: string; portable: boolean }>
   /** 主进程代理 GitHub Releases 探活,避开渲染端 CSP。返回 status/最新版本信息或错误。 */
   checkForUpdate?(): Promise<UpdateCheckResult>
@@ -57,8 +58,8 @@ export function WindowControls() {
   useEffect(() => bridge?.onMaximizedChange?.(setMaximized), [bridge])
   if (!bridge) return null
   return e('div', { className: 'window-controls' },
-    e('button', { type: 'button', 'aria-label': '最小化', onClick: () => bridge.minimize() }, '–'),
-    e('button', { type: 'button', 'aria-label': maximized ? '还原窗口' : '最大化窗口', onClick: () => bridge.toggleMaximize() }, maximized ? '❐' : '▢'),
-    e('button', { type: 'button', className: 'window-close', 'aria-label': '关闭窗口', onClick: () => bridge.close() }, '×'),
+    e('button', { type: 'button', 'aria-label': t('window.minimize'), onClick: () => bridge.minimize() }, '–'),
+    e('button', { type: 'button', 'aria-label': maximized ? t('window.restore') : t('window.maximize'), onClick: () => bridge.toggleMaximize() }, maximized ? '❐' : '▢'),
+    e('button', { type: 'button', className: 'window-close', 'aria-label': t('window.close'), onClick: () => bridge.close() }, '×'),
   )
 }

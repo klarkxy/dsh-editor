@@ -9,9 +9,10 @@
  *               background/color revert at the end of the block, a Chromium
  *               workaround for the host settings dialog's native popup.
  *   components: visual mapping of the Open Design draft onto the existing
- *               DOM class names. Removed features (snapshot/import/archive/
- *               export/search/shortcut/worldbook-panel) had no surviving
- *               class to map, so their CSS is gone too.
+ *               DOM class names. Restored workbench panels (search, export
+ *               preview, import, archive, worldbook settings) keep their
+ *               original class names and are styled here. Snapshot-library
+ *               and shortcut-dialog remain unmounted.
  *
  * Kept: prefers-reduced-motion, 1040px (chat collapse) and 760px
  * (sidebar collapse) responsive breakpoints, focus ring.
@@ -253,7 +254,7 @@ export const componentStyles = `
 .shell .tree-row-actions { flex: none; display: inline-flex; align-items: center; gap: 2px; visibility: hidden; }
 .shell .tree-directory-row:hover .tree-row-actions, .shell .tree-directory-row:focus-within .tree-row-actions { visibility: visible; }
 /* 侧栏头部工具组:新建/提交/历史,文字小按钮。 */
-.shell .side-title-actions { display: inline-flex; align-items: center; gap: 2px; }
+.shell .side-title-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; flex-wrap: wrap; }
 .shell .side-action { border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; padding: 3px 6px; color: var(--meta); font: 500 var(--text-xs)/1.2 var(--font-sans); letter-spacing: .04em; }
 .shell .side-action:hover, .shell .side-action[aria-pressed="true"] { background: var(--surface); color: var(--fg); }
 .shell .side-action:disabled { opacity: .5; cursor: default; }
@@ -267,9 +268,113 @@ export const componentStyles = `
 .shell .snapshot-rollback:hover { background: var(--accent-soft); }
 .shell .snapshot-rollback:disabled { opacity: .5; cursor: default; }
 .shell .snapshot-empty { padding: 6px 8px; color: var(--meta); font-size: var(--text-xs); }
+
+/* 全文搜索、归档、导出预检、导入、世界书触发设置 */
+.shell .search-panel { margin: 0 10px 8px; padding: 8px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-ring); display: flex; flex-direction: column; gap: 6px; }
+.shell .search-panel form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px; }
+.shell .search-panel input, .shell .search-panel select { min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font: 400 var(--text-sm)/1.3 var(--font-sans); }
+.shell .search-panel button { padding: 6px 8px; border: 0; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); cursor: pointer; }
+.shell .search-panel button:disabled { opacity: .45; cursor: default; }
+.shell .search-summary { display: flex; flex-wrap: wrap; gap: 6px; color: var(--meta); font-size: var(--text-xs); }
+.shell .search-results { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow: auto; }
+.shell .search-file { display: grid; gap: 4px; }
+.shell .search-file > strong { font-size: var(--text-xs); color: var(--fg-2); }
+.shell .search-file ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.shell .search-file button { width: 100%; text-align: left; padding: 5px 7px; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--fg-2); cursor: pointer; font-size: var(--text-xs); }
+.shell .search-file button:hover:not([disabled]) { background: var(--accent-soft); color: var(--fg); }
+.shell .proofread-panel { margin: 0 10px 8px; padding: 8px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-ring); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.shell .proofread-toolbar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.shell .proofread-scopes { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.shell .proofread-panel button { padding: 5px 7px; border: 0; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
+.shell .proofread-panel button:disabled { opacity: .45; cursor: default; }
+.shell .proofread-panel button[aria-pressed="true"], .shell .proofread-panel button.active { background: var(--accent); color: var(--accent-on); }
+.shell .proofread-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.shell .proofread-chip { background: var(--bg) !important; color: var(--fg-2) !important; box-shadow: var(--elev-ring); }
+.shell .proofread-chip[aria-pressed="true"] { background: var(--accent-soft) !important; color: var(--accent) !important; }
+.shell .proofread-summary { display: flex; flex-wrap: wrap; gap: 6px; color: var(--meta); font-size: var(--text-xs); }
+.shell .proofread-batch { align-self: start; }
+.shell .proofread-results { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow: auto; }
+.shell .proofread-file { display: grid; gap: 4px; min-width: 0; }
+.shell .proofread-file > strong { font-size: var(--text-xs); color: var(--fg-2); overflow-wrap: anywhere; }
+.shell .proofread-file ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.shell .proofread-row { display: grid; gap: 3px; min-width: 0; }
+.shell .proofread-hit { width: 100%; display: grid; gap: 2px; text-align: left; padding: 5px 7px; border: 0; border-radius: var(--radius-xs); background: transparent !important; color: var(--fg-2) !important; cursor: pointer; font-size: var(--text-xs); }
+.shell .proofread-hit:hover:not([disabled]) { background: var(--accent-soft) !important; color: var(--fg) !important; }
+.shell .proofread-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; min-width: 0; }
+.shell .proofread-hit .proofread-kind { color: var(--meta); }
+.shell .proofread-severity { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; vertical-align: middle; background: var(--muted); }
+.shell .proofread-severity.error { background: var(--danger); }
+.shell .proofread-severity.warning { background: var(--accent); }
+.shell .proofread-severity.info { background: var(--muted); }
+.shell .proofread-excerpt { display: block; color: var(--meta); overflow-wrap: anywhere; }
+.shell .proofread-excerpt mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--fg); padding: 0 1px; border-radius: 2px; }
+.shell .proofread-suggestion { display: block; color: var(--accent); }
+.shell .proofread-row-actions { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 2px; }
+.shell .proofread-row-actions button { background: var(--bg); color: var(--fg-2); box-shadow: var(--elev-ring); }
+.shell .proofread-habits { display: grid; gap: 4px; min-width: 0; }
+.shell .proofread-habits h3 { margin: 4px 0 0; font: 500 var(--text-xs)/1.3 var(--font-sans); color: var(--fg-2); }
+.shell .proofread-habits table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.shell .proofread-habits th, .shell .proofread-habits td { padding: 3px 4px; text-align: left; color: var(--fg-2); }
+.shell .proofread-habits th { color: var(--meta); font-weight: 500; }
+.shell .proofread-habits td:nth-child(2), .shell .proofread-habits td:nth-child(3) { text-align: right; font-variant-numeric: tabular-nums; }
+.shell .proofread-habits button { width: 100%; text-align: left; background: transparent; color: var(--fg-2); padding: 2px 4px; }
+.shell .proofread-fix { min-width: 0; }
+.shell .proofread-panel .proposal-card { font-size: var(--text-xs); }
+.shell .proofread-panel .proposal-card header, .shell .proofread-panel .proposal-card footer { flex-wrap: wrap; }
+.shell .proofread-panel .proposal-card pre { max-height: 120px; }
+.shell .cards-panel { margin: 0 10px 8px; padding: 8px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-ring); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.shell .cards-tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.shell .cards-tabs button, .shell .cards-toolbar button, .shell .cards-chip, .shell .cards-ref-toggle, .shell .cards-detail-actions button, .shell .cards-relations button { padding: 5px 7px; border: 0; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
+.shell .cards-panel button:disabled, .shell .cards-detail button:disabled { opacity: .45; cursor: default; }
+.shell .cards-tabs button[aria-selected="true"], .shell .cards-chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-on); }
+.shell .cards-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.shell .cards-toolbar input, .shell .cards-toolbar select, .shell .cards-fields input, .shell .cards-fields select, .shell .cards-fields textarea { min-width: 0; width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font: 400 var(--text-sm)/1.3 var(--font-sans); }
+.shell .cards-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.shell .cards-chip { background: var(--bg); color: var(--fg-2); box-shadow: var(--elev-ring); }
+.shell .cards-groups { display: grid; gap: 8px; max-height: 280px; overflow: auto; }
+.shell .cards-group h3 { margin: 0; font: 500 var(--text-xs)/1.3 var(--font-sans); color: var(--meta); letter-spacing: .06em; }
+.shell .cards-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.shell .cards-item { display: grid; gap: 4px; padding: 6px; border-radius: var(--radius-sm); }
+.shell .cards-item.selected { background: var(--accent-soft); }
+.shell .cards-item-main { display: grid; gap: 3px; width: 100%; text-align: left; border: 0; background: transparent; color: var(--fg); cursor: pointer; }
+.shell .cards-item-main strong { font: 500 var(--text-sm)/1.3 var(--font-sans); }
+.shell .cards-meta { display: flex; flex-wrap: wrap; gap: 6px; color: var(--meta); font-size: var(--text-xs); }
+.shell .cards-badge { padding: 1px 6px; border-radius: 999px; background: var(--surface-warm); color: var(--fg-2); font-style: normal; }
+.shell .cards-tags, .shell .cards-item-main small { color: var(--meta); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.shell .cards-refs { display: grid; gap: 4px; }
+.shell .cards-ref-groups ol, .shell .cards-ref-groups ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.shell .cards-ref-groups button { width: 100%; text-align: left; padding: 4px 6px; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--fg-2); cursor: pointer; font-size: var(--text-xs); }
+.shell .cards-ref-groups button:hover:not([disabled]) { background: var(--accent-soft); color: var(--fg); }
+.shell .archive-panel .archive-list { display: grid; gap: 8px; }
+.shell .archive-panel article { display: grid; gap: 6px; padding: 8px; border-radius: var(--radius-sm); background: var(--surface); }
+.shell .archive-panel article small, .shell .archive-panel article code { display: block; color: var(--meta); font-size: var(--text-xs); }
+.shell .export-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 12px; }
+.shell .export-summary div { display: grid; gap: 2px; }
+.shell .export-summary dt { color: var(--meta); font-size: var(--text-xs); }
+.shell .export-summary dd { margin: 0; }
+.shell .export-chapters { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; max-height: 280px; overflow: auto; }
+.shell .export-chapters li { display: flex; justify-content: space-between; gap: 8px; font-size: var(--text-sm); }
+.shell .import-overlay { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--studio) 36%, transparent); }
+.shell .import-dialog { width: min(520px, 100%); max-height: min(680px, calc(100dvh - 48px)); overflow: auto; padding: 18px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-card); }
+.shell .import-dialog h2 { margin: 0 0 12px; font: 500 20px/1.2 var(--font-serif); }
+.shell .import-dialog footer { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; margin-top: 16px; }
+.shell .worldbook-settings { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: end; padding: 8px 12px; border-top: 1px solid var(--hairline); background: var(--bg-sunken); }
+.shell .worldbook-settings > div { display: grid; gap: 2px; }
+.shell .worldbook-settings strong { font-size: var(--text-sm); }
+.shell .worldbook-settings small { color: var(--meta); font-size: var(--text-xs); }
+.shell .worldbook-settings label { display: grid; gap: 4px; font-size: var(--text-xs); color: var(--muted); }
+.shell .worldbook-settings textarea, .shell .worldbook-settings input[type="number"] { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
+.shell .worldbook-enabled { display: inline-flex; align-items: center; gap: 6px; }
+.shell .home-import-link { margin-top: 12px; border: 0; background: transparent; color: var(--accent); cursor: pointer; font: 500 var(--text-sm)/1.4 var(--font-sans); }
+.shell .home-import-link:hover { text-decoration: underline; }
+.shell .home-import-link:disabled { opacity: .45; cursor: default; text-decoration: none; }
 .shell .tree-row, .shell .tree-file-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-base); line-height: 1.35; letter-spacing: .04em; }
-/* 文件名 span 仍按既有省略规则截断:tree-row / tree-file-row 内最后一个 span 即文件名。 */
-.shell .tree-row > span:last-child, .shell .tree-file-row > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 章节状态徽标:行末单字胶囊,草/修/定三色。 */
+.shell .tree-row .chapter-status { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 6px; margin-left: auto; border-radius: 999px; box-shadow: var(--elev-ring); font-size: 10px; font-weight: 500; line-height: 1; letter-spacing: .04em; }
+.shell .tree-row .chapter-status.draft { color: var(--muted); background: var(--surface-warm); }
+.shell .tree-row .chapter-status.revising { color: var(--accent-on); background: var(--accent); }
+.shell .tree-row .chapter-status.final { color: var(--surface); background: var(--confirm); }
+.shell .tree-row > span:not(.chapter-status):last-child, .shell .tree-file-row > span:not(.chapter-status):last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .tree-row:hover, .shell .tree-file-row:hover { background: var(--surface); color: var(--fg); }
 /* 选中态用 accent-soft(墨蓝淡底)替代原本的灰底,让"我现在在写哪一章"更醒目。 */
 .shell .tree-row[aria-current="page"], .shell .tree-file-row[aria-current="page"] { background: var(--accent-soft); color: var(--fg); }
@@ -298,6 +403,9 @@ export const componentStyles = `
 .shell .editor-header > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-family: var(--font-serif); font-size: var(--text-md); font-weight: 500; letter-spacing: .12em; }
 .shell .editor-header > span:last-child { margin-left: auto; white-space: nowrap; }
 .shell .editor-header > .editor-notice { margin-left: auto; max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell .paper-experience-toggles { display: inline-flex; align-items: center; gap: 4px; }
+.shell .paper-experience-toggles button { min-height: 24px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--meta); cursor: pointer; font-size: var(--text-xs); letter-spacing: .06em; }
+.shell .paper-experience-toggles button[aria-pressed="true"] { background: var(--bg); color: var(--fg); }
 .shell .chapter-navigation { display: flex; align-items: center; gap: 2px; }
 .shell .chapter-navigation > span { font-size: 11px; color: var(--meta); padding: 0 4px; }
 .shell .chapter-navigation button { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; color: var(--meta); font-size: 16px; line-height: 1; }
@@ -314,7 +422,7 @@ export const componentStyles = `
    padding, caret color) lives in editor-core's CM theme; these rules only
    anchor layout and the design tokens the theme reads. */
 .shell .paper-input .cm-editor { height: 100%; background: transparent; }
-.shell .paper-input .cm-scroller { font-family: var(--font-serif); }
+.shell .paper-input .cm-scroller { font-family: var(--paper-font-family, var(--font-serif)); }
 .shell .paper-input .cm-placeholder { color: var(--meta); font-style: italic; }
 .shell .paper-scroll { max-width: 36em; margin: 0 auto; }
 
@@ -368,6 +476,17 @@ export const componentStyles = `
 .shell .conversation-select { min-width: 0; }
 .shell .conversation-select .select { display: block; }
 .shell .conversation-select .select-trigger { min-width: 0; max-width: 240px; min-height: 26px; padding: 0 var(--space-2); border-color: var(--hairline); color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; }
+.shell .conversation-menu { position: relative; }
+.shell .conversation-menu-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 6; display: grid; min-width: 8em; padding: 4px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-card); }
+.shell .conversation-menu-pop button { width: 100%; padding: 7px 9px; border: 0; border-radius: var(--radius-xs); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-sm); color: var(--fg-2); }
+.shell .conversation-menu-pop button:hover:not(:disabled) { background: var(--bg); color: var(--fg); }
+.shell .conversation-menu-pop button:disabled { opacity: .45; cursor: not-allowed; }
+.shell .conversation-menu-pop button.danger { color: var(--danger); }
+.shell .archived-conversations { margin: 0; padding: 6px var(--space-4); border-bottom: 1px solid var(--hairline); color: var(--meta); font-size: var(--text-xs); background: var(--bg-sunken); }
+.shell .archived-conversations summary { cursor: pointer; letter-spacing: .04em; }
+.shell .archived-conversations ul { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.shell .archived-conversations li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shell .archived-conversations button { border: 0; background: none; color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
 /* 新对话设置:绝对定位铺满搭档栏,不参与 grid 行分配——若作为普通
    grid 项插入,会把对话历史顶出 minmax(0,1fr) 行,长消息溢出栏外。 */
 .shell .conversation-setup { position: absolute; inset: 0; z-index: 2; display: grid; align-content: start; gap: var(--space-4); padding: var(--space-5) var(--space-4); background: var(--bg-sunken); }
@@ -503,7 +622,9 @@ export const componentStyles = `
 
 /* ── Focus mode / layout toggles ────────────────────────── */
 .shell.layout-shell { grid-template-rows: var(--topbar-h) minmax(0, 1fr); }
-.shell.layout-shell > .sidebar, .shell.layout-shell > .editor, .shell.layout-shell > .empty-paper, .shell.layout-shell > .chat, .shell.layout-shell > .panel-resizer { grid-row: 2; }
+.shell.layout-shell > .sidebar, .shell.layout-shell > .editor, .shell.layout-shell > .empty-paper, .shell.layout-shell > .chat, .shell.layout-shell > .panel-resizer, .shell.layout-shell > .overview-panel, .shell.layout-shell > .cards-detail { grid-row: 2; }
+.shell.layout-shell.overview-open > .editor, .shell.layout-shell.overview-open > .empty-paper, .shell.layout-shell.overview-open > .cards-detail { display: none; }
+.shell.layout-shell.cards-open > .editor, .shell.layout-shell.cards-open > .empty-paper { display: none; }
 .shell.layout-shell.focus-mode { grid-template-columns: minmax(0, 1fr) !important; }
 .shell.layout-shell.focus-mode .editor-header { justify-content: center; }
 .shell.layout-shell.focus-mode .editor-header > *:not(:first-child):not(:last-child) { display: none; }
@@ -576,7 +697,13 @@ export const componentStyles = `
 .shell .writing-settings fieldset { display: grid; gap: var(--space-2); margin: 0; padding: var(--space-3) var(--space-4) var(--space-4); border: 1px solid var(--border-soft); border-radius: var(--radius-md); }
 .shell .writing-settings legend { padding: 0 var(--space-1); font-weight: 500; color: var(--fg-2); }
 .shell .writing-settings fieldset label { display: flex; align-items: center; gap: var(--space-2); color: var(--fg-2); cursor: pointer; }
-.shell .writing-settings fieldset input[type="radio"] { margin: 0; accent-color: var(--accent-active); }
+.shell .writing-settings fieldset input[type="radio"], .shell .writing-settings fieldset input[type="checkbox"] { margin: 0; accent-color: var(--accent-active); }
+.shell .writing-settings .paper-typography .slider-row { display: grid; gap: 4px; }
+.shell .writing-settings .paper-typography .slider-row > span { font-variant-numeric: tabular-nums; }
+.shell .writing-settings .paper-typography input[type="range"] { width: 100%; accent-color: var(--accent-active); }
+.shell .writing-settings .paper-typography kbd { margin-left: auto; color: var(--meta); font: 400 var(--text-xs)/1 var(--font-mono); }
+.shell .writing-settings .paper-typography .choice-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.shell .writing-settings .paper-typography .choice-row > span { font-weight: 500; color: var(--fg-2); }
 .shell .writing-settings .author-preferences { display: grid; gap: var(--space-2); }
 .shell .writing-settings .author-preferences > span { font-weight: 500; color: var(--fg-2); }
 .shell .writing-settings .author-preferences textarea { width: 100%; box-sizing: border-box; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: 400 var(--text-sm)/1.7 var(--font-sans); resize: vertical; }
@@ -847,6 +974,68 @@ export const componentStyles = `
 .shell .usage-button { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }
 .shell .usage-button:hover { background: var(--surface-warm); border-color: var(--hairline-strong); }
 @media (max-width: 560px) { .shell .usage-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* 作品概览:占稿纸格,纸/墨变量与侧栏小标同一套。 */
+.shell .overview-panel { min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: var(--surface); box-shadow: var(--elev-raised); }
+.shell .overview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: 16px 24px 12px; border-bottom: 1px solid var(--hairline); }
+.shell .overview-header h2 { margin: 0; font: 500 20px/1.2 var(--font-serif); letter-spacing: -.02em; color: var(--fg); }
+.shell .overview-header p { margin: 6px 0 0; }
+.shell .overview-body { display: grid; gap: var(--space-5); padding: 16px 24px 32px; }
+.shell .overview-totals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: var(--space-3); }
+.shell .overview-totals > article { display: grid; gap: 6px; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); }
+.shell .overview-totals span { font: 500 var(--text-xs)/1.4 var(--font-sans); color: var(--meta); letter-spacing: .04em; }
+.shell .overview-totals strong { font: 600 var(--text-md)/1.2 var(--font-sans); color: var(--fg); font-variant-numeric: tabular-nums; }
+.shell .overview-status-bars { display: grid; gap: 6px; }
+.shell .overview-status-bar { display: grid; gap: 3px; }
+.shell .overview-status-bar small { color: var(--fg-2); font-size: var(--text-xs); }
+.shell .overview-status-bar i { display: block; height: 6px; border-radius: 999px; background: var(--surface-warm); }
+.shell .overview-status-bar.draft i { background: var(--muted); }
+.shell .overview-status-bar.revising i { background: var(--accent); }
+.shell .overview-status-bar.final i { background: var(--confirm); }
+.shell .overview-body h3 { margin: 0 0 var(--space-2); font: 500 var(--text-sm)/1.4 var(--font-sans); letter-spacing: .08em; color: var(--fg-2); }
+.shell .overview-chapter-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.shell .overview-chapter { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); }
+.shell .overview-chapter:hover { background: var(--bg); }
+.shell .overview-chapter.empty { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 22%, transparent); }
+.shell .overview-chapter-title { text-align: left; color: var(--fg); font: 500 var(--text-sm)/1.4 var(--font-sans); }
+.shell .overview-chapter-title:hover { color: var(--accent); }
+.shell .overview-chapter-chars, .shell .overview-chapter-time { color: var(--meta); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.shell .overview-empty-flag { padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); font-size: 10px; }
+.shell .overview-status-select { padding: 4px 8px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); font-size: var(--text-xs); }
+.shell .overview-status-select:hover, .shell .overview-status-select:focus-visible { color: var(--fg); border-color: var(--hairline-strong); }
+.shell .overview-char-bars, .shell .overview-curve { display: flex; align-items: flex-end; gap: 6px; min-height: 96px; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); overflow-x: auto; }
+.shell .overview-char-col, .shell .overview-curve-col { flex: 1 1 18px; min-width: 18px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
+.shell .overview-char-col i, .shell .overview-curve-col i { display: block; width: 70%; max-width: 28px; min-height: 0; border-radius: 3px 3px 1px 1px; background: var(--accent); }
+.shell .overview-char-col.empty i { background: color-mix(in srgb, var(--danger) 45%, var(--surface-warm)); }
+.shell .overview-curve-col.today i { background: var(--confirm); }
+.shell .overview-curve-col.negative i { background: var(--danger); }
+.shell .overview-char-value, .shell .overview-curve-col small { color: var(--meta); font-size: 10px; font-variant-numeric: tabular-nums; }
+.shell .overview-char-label { max-width: 4.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); font-size: 10px; }
+.shell .overview-recent ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.shell .overview-recent li { display: grid; gap: 2px; }
+.shell .overview-recent button { text-align: left; color: var(--fg); font-weight: 500; }
+.shell .overview-recent button:hover { color: var(--accent); }
+.shell .overview-recent small { color: var(--meta); }
+@media (max-width: 760px) {
+  .shell .overview-totals, .shell .overview-chapter { grid-template-columns: minmax(0, 1fr); }
+}
+
+.shell .cards-detail { min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: var(--surface); box-shadow: var(--elev-raised); }
+.shell .cards-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: 16px 24px 12px; border-bottom: 1px solid var(--hairline); }
+.shell .cards-detail-header h2 { margin: 0; font: 500 20px/1.2 var(--font-serif); letter-spacing: -.02em; color: var(--fg); }
+.shell .cards-detail-header p { margin: 6px 0 0; }
+.shell .cards-detail-body { display: grid; gap: var(--space-4); padding: 16px 24px 32px; }
+.shell .cards-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.shell .cards-field { display: grid; gap: 4px; min-width: 0; font-size: var(--text-xs); color: var(--muted); }
+.shell .cards-field-wide, .shell .cards-enabled { grid-column: 1 / -1; }
+.shell .cards-enabled { display: inline-flex; align-items: center; gap: 8px; }
+.shell .cards-relations { display: grid; gap: 6px; }
+.shell .cards-relation-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 4px; align-items: center; }
+.shell .cards-relation-link { background: transparent; color: var(--accent); }
+.shell .cards-detail-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 760px) {
+  .shell .cards-fields, .shell .cards-relation-row { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ── Responsive collapse ────────────────────────────────── */
 @media (max-width: 1040px) {
