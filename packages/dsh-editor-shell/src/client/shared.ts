@@ -1,7 +1,8 @@
 import type { ConnectionHandle, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-client-connection/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import { worldbookEditorMetadata, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
+import { stripChapterFrontmatter, worldbookEditorMetadata, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import type { WritingPreferences, WritingSettingsSlots } from '../writing-settings.ts'
+import { isChapterMetaPath } from '../chapter-meta-view.ts'
 import { intlLocale, t } from '../i18n/index.ts'
 
 export type TreeEntry = { name: string; type: 'file' | 'directory' | 'other' }
@@ -401,10 +402,7 @@ export function documentName(path: string): string {
   return filename.replace(/\.(md|txt)$/i, '')
 }
 
-export function worldbookPaperProjection(path: string, text: string): { text: string; offset: number } {
-  if (!/^世界书\/.+\.md$/i.test(path)) return { text, offset: 0 }
-  const metadata = worldbookEditorMetadata(path, text)
-  if (!metadata.valid || !metadata.explicit) return { text, offset: 0 }
+function closedFrontmatterProjection(text: string): { text: string; offset: number } {
   const bomLength = text.startsWith('\uFEFF') ? 1 : 0
   const source = text.slice(bomLength)
   const close = /\r?\n---(?:\r?\n|$)/g
@@ -413,6 +411,19 @@ export function worldbookPaperProjection(path: string, text: string): { text: st
   if (!match) return { text, offset: 0 }
   const offset = bomLength + match.index + match[0].length
   return { text: text.slice(offset), offset }
+}
+
+export function worldbookPaperProjection(path: string, text: string): { text: string; offset: number } {
+  if (/^世界书\/.+\.md$/i.test(path)) {
+    const metadata = worldbookEditorMetadata(path, text)
+    if (!metadata.valid || !metadata.explicit) return { text, offset: 0 }
+    return closedFrontmatterProjection(text)
+  }
+  if (isChapterMetaPath(path)) {
+    if (stripChapterFrontmatter(text) === text) return { text, offset: 0 }
+    return closedFrontmatterProjection(text)
+  }
+  return { text, offset: 0 }
 }
 
 export function replaceWorldbookPaperText(path: string, text: string, paperText: string): string {

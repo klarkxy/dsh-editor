@@ -23,12 +23,22 @@ import {
   errorMessage,
   isStaleFailure,
   replaceWorldbookPaperText,
+  safeRpcCall,
   worldbookPaperProjection,
   type RevealRequest,
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
 import { isWorldbookPath, WorldbookSettings } from './worldbook-settings.ts'
+import { isChapterMetaPath, ChapterMetaSettings } from './chapter-meta-settings.ts'
+import { RewritePresetsBar } from './rewrite-presets-bar.ts'
+import { canRewritePath } from '../rewrite-presets-view.ts'
+import {
+  chapterContextFor,
+  previousChapterPath,
+  previousChapterState,
+  type PreviousChapterState,
+} from '../chapter-meta-view.ts'
 import { t } from '../i18n/index.ts'
 
 const PAPER_PROJECTION: EditorCorePaperProjection = {
@@ -89,6 +99,7 @@ export function Editor(props: {
   onToggleFocusParagraph?(): void
   onSaved(): void
   reveal: RevealRequest | null
+  onHandle?(handle: EditorCoreHandle | null): void
 }) {
   const {
     ctx,
@@ -107,6 +118,7 @@ export function Editor(props: {
     onToggleTypewriter,
     onToggleFocusParagraph,
     reveal,
+    onHandle: onHandleOut,
   } = props
 
   const [note, setNote] = useState('')
@@ -153,13 +165,17 @@ export function Editor(props: {
 
   const onNotice = useCallback((message: string) => { setNote(message) }, [])
   const onError = useCallback((message: string) => { setNote(message) }, [])
-  const onHandle = useCallback((handle: EditorCoreHandle | null) => { handleRef.current = handle }, [])
-  const [worldbookText, setWorldbookText] = useState('')
+  const onHandle = useCallback((handle: EditorCoreHandle | null) => {
+    handleRef.current = handle
+    if (handle) setBufferText(handle.getText() ?? '')
+    onHandleOut?.(handle)
+  }, [onHandleOut])
+  const [bufferText, setBufferText] = useState('')
 
   const onStatusChange = useCallback((next: EditorCoreStatus) => {
     setStatus(next)
-    if (next === 'saved' || next === 'draft' || next === 'conflict') {
-      setWorldbookText(handleRef.current?.getText() ?? '')
+    if (next === 'saved' || next === 'draft' || next === 'conflict' || next === 'empty') {
+      setBufferText(handleRef.current?.getText() ?? '')
     }
   }, [])
 
@@ -201,12 +217,15 @@ export function Editor(props: {
   useEffect(() => {
     setNote('')
     setReloadConfirm(false)
-    setWorldbookText('')
+    setBufferText('')
   }, [path, session.sessionId])
 
-  const applyWorldbookBuffer = useCallback(async (next: string) => {
+  const applyFrontmatterBuffer = useCallback(async (next: string) => {
     const doc = handleRef.current?.getDocument()
-    if (!doc) { setNote(t('editor.worldbookNotLoaded')); return }
+    if (!doc) {
+      setNote(isWorldbookPath(path) ? t('editor.worldbookNotLoaded') : t('chapterMeta.notLoaded'))
+      return
+    }
     const put = await draftQueue.current!.run('draft.put', {
       sessionId: session.sessionId,
       path,
@@ -215,9 +234,36 @@ export function Editor(props: {
       baseVersion: doc.version,
     }) as RpcResult
     if (!put.ok) { setNote(errorMessage(put)); return }
-    setWorldbookText(next)
+    setBufferText(next)
     setRevisionTick((tick) => tick + 1)
   }, [session.sessionId, path])
+
+  const currentText = bufferText || handleRef.current?.getText() || ''
+
+  // 上一章的章末状态表：只在正文章节读取一次，随文件树 / 外部修订刷新；读取失败时静默不带。
+  const previousPath = useMemo(
+    () => (isChapterMetaPath(path) ? previousChapterPath(path, files) : undefined),
+    [path, files],
+  )
+  const [previousState, setPreviousState] = useState<PreviousChapterState | undefined>(undefined)
+  useEffect(() => {
+    if (!previousPath) { setPreviousState(undefined); return }
+    let cancelled = false
+    void (async () => {
+      const read = await safeRpcCall<{ text: string; version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
+        sessionId: session.sessionId,
+        path: previousPath,
+      }))
+      if (cancelled) return
+      setPreviousState(read.ok && typeof read.value?.text === 'string' ? previousChapterState(previousPath, read.value.text) : undefined)
+    })()
+    return () => { cancelled = true }
+  }, [ctx.connection.rpc, session.sessionId, previousPath, incomingRevision, revisionTick])
+
+  const chapterContext = useMemo(
+    () => isChapterMetaPath(path) ? chapterContextFor(currentText, previousState) : undefined,
+    [path, currentText, previousState],
+  )
 
   useEffect(() => {
     if (!path || !reveal || reveal.path !== path) return
@@ -296,18 +342,33 @@ export function Editor(props: {
       enablePatch: true,
       enableBeforeUnload: true,
       paperProjection: PAPER_PROJECTION,
+      chapterContext,
       siblings: files,
       onOpenSibling: onOpen,
       siblingsBlocked: navigationBlocked,
       onReloadDisk: () => setReloadConfirm(true),
       onSaveConflictCopy: saveConflictCopy,
-      footerExtras: isWorldbookPath(path) ? e(WorldbookSettings, {
-        key: `${path}:${externalRevision}`,
-        path,
-        text: worldbookText || handleRef.current?.getText() || '',
-        onChange: (next: string) => { void applyWorldbookBuffer(next) },
-        onNote: setNote,
-      }) : null,
+      footerExtras: isWorldbookPath(path) || canRewritePath(path)
+        ? e(Fragment, null,
+          isWorldbookPath(path) ? e(WorldbookSettings, {
+            key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
+            path,
+            text: currentText,
+            onChange: (next: string) => { void applyFrontmatterBuffer(next) },
+            onNote: setNote,
+          }) : null,
+          isChapterMetaPath(path) ? e(ChapterMetaSettings, {
+            key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
+            path,
+            text: currentText,
+            onChange: (next: string) => { void applyFrontmatterBuffer(next) },
+            onNote: setNote,
+          }) : null,
+          canRewritePath(path) ? e(RewritePresetsBar, {
+            onRewrite: (instruction: string) => { handleRef.current?.requestRewrite(instruction) },
+          }) : null,
+        )
+        : null,
     }),
     note ? e('div', {
       className: 'editor-notice',

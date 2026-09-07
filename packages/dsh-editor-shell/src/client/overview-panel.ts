@@ -13,6 +13,7 @@ import {
   chapterCharBars,
   chapterStatusLabel,
   dailyCurveSeries,
+  chapterMetaMarks,
   formatCount,
   formatModifiedAt,
   statusDistributionBars,
@@ -150,9 +151,14 @@ function ChapterRow(props: {
   onStatusChange(path: string, status: ChapterStatus): void
 }) {
   const { chapter } = props
+  const marks = chapterMetaMarks(chapter.meta)
   return e('li', { className: `overview-chapter${chapter.empty ? ' empty' : ''}` },
     e('button', { type: 'button', className: 'overview-chapter-title', onClick: () => props.onOpen(chapter.path) }, chapter.title),
     e('span', { className: 'overview-chapter-chars' }, t('overview.charsOnly', { chars: formatCount(chapter.chars) })),
+    e('span', { className: 'overview-chapter-meta', title: marks.firstBeat },
+      marks.hasBeats ? e('span', { className: 'overview-meta-pill' }, t('chapterMeta.hasBeats')) : null,
+      marks.hasState ? e('span', { className: 'overview-meta-pill' }, t('chapterMeta.hasState')) : null,
+    ),
     chapter.empty ? e('span', { className: 'overview-empty-flag' }, t('overview.bucketEmpty')) : null,
     e('select', {
       className: 'overview-status-select',

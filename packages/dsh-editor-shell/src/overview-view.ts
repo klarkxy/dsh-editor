@@ -169,3 +169,27 @@ export function formatModifiedAt(iso: string | null): string {
   if (!Number.isFinite(stamp)) return t('common.emDash')
   return new Date(stamp).toLocaleString(intlLocale(), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+
+export type ChapterMetaMarkSource = {
+  beats?: number | string[]
+  hasState?: boolean
+  state?: { now?: string; where?: string; knows?: string; ended?: string; open?: string }
+}
+
+export type ChapterMetaMarks = {
+  hasBeats: boolean
+  hasState: boolean
+  firstBeat?: string
+}
+
+/** Overview pills: host sends `{ beats: number; hasState }`; tests may pass parsed fields. */
+export function chapterMetaMarks(meta?: ChapterMetaMarkSource | null): ChapterMetaMarks {
+  if (!meta) return { hasBeats: false, hasState: false }
+  const beats = meta.beats
+  const firstBeat = Array.isArray(beats) ? beats.map((item) => item.trim()).find(Boolean) : undefined
+  const hasBeats = Array.isArray(beats) ? beats.length > 0 : typeof beats === 'number' && beats > 0
+  const hasState = Boolean(meta.hasState) || Boolean(
+    meta.state && Object.values(meta.state).some((value) => typeof value === 'string' && value.trim()),
+  )
+  return firstBeat ? { hasBeats, hasState, firstBeat } : { hasBeats, hasState }
+}

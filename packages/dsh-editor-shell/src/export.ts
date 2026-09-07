@@ -1,3 +1,4 @@
+import { stripChapterFrontmatter } from 'dsh-editor-workbench/contracts'
 import { t } from './i18n/index.ts'
 import { sortChapterPaths } from './project-files.ts'
 
@@ -37,8 +38,12 @@ export function chapterExportEmpty(text: string): boolean {
   return withoutLeadingHeading(text).trim().length === 0
 }
 
+function chapterExportText(path: string, text: string): string {
+  return /\.md$/i.test(path) ? stripChapterFrontmatter(text) : text
+}
+
 export function prepareExport(chapters: readonly ChapterExport[], title: string, format: ExportFormat): PreparedExport {
-  const sorted = orderedExportChapters(chapters)
+  const sorted = orderedExportChapters(chapters).map((item) => ({ ...item, text: chapterExportText(item.path, item.text) }))
   const name = sanitizeExportTitle(title)
   const preview = sorted.map((item) => ({ path: item.path, chars: chapterExportChars(item.text), empty: chapterExportEmpty(item.text) }))
   const totalChars = preview.reduce((sum, item) => sum + item.chars, 0)

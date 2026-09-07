@@ -12,9 +12,10 @@ export const PROOFREAD_KIND_LABELS: Record<ProofreadKind, string> = {
   get sensitive() { return t('proofread.kind.sensitive') },
   get repeat() { return t('proofread.kind.repeat') },
   get habit() { return t('proofread.kind.habit') },
+  get card() { return t('proofread.kind.card') },
 }
 
-export const PROOFREAD_KIND_CHIP_ORDER: readonly ProofreadKind[] = ['punctuation', 'typo', 'sensitive', 'repeat', 'habit']
+export const PROOFREAD_KIND_CHIP_ORDER: readonly ProofreadKind[] = ['punctuation', 'typo', 'sensitive', 'repeat', 'habit', 'card']
 
 const SEVERITY_RANK: Record<ProofreadSeverity, number> = { error: 0, warning: 1, info: 2 }
 
@@ -57,7 +58,7 @@ export function toggleProofreadKind(kinds: readonly ProofreadKind[], kind: Proof
 }
 
 export function kindCounts(findings: readonly ProofreadFinding[]): Record<ProofreadKind, number> {
-  const counts = { punctuation: 0, sensitive: 0, repeat: 0, typo: 0, habit: 0 }
+  const counts = { punctuation: 0, sensitive: 0, repeat: 0, typo: 0, habit: 0, card: 0 }
   for (const finding of findings) counts[finding.kind] += 1
   return counts
 }

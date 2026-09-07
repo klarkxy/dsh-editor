@@ -6,6 +6,7 @@ import {
   buildChapterStatusMap,
   chapterCharBars,
   chapterCharBuckets,
+  chapterMetaMarks,
   chapterStatusGlyph,
   chapterStatusLabel,
   dailyCurveSeries,
@@ -134,6 +135,22 @@ describe('overview view helpers', () => {
     expect(series[0]?.key).toBe(weeks[2]!.weekStart)
     expect(series.at(-1)?.ratio).toBe(1)
     expect(series[0]?.ratio).toBe(0.25)
+  })
+
+  it('marks chapters that carry beats or chapter-end state', () => {
+    expect(chapterMetaMarks(undefined)).toEqual({ hasBeats: false, hasState: false })
+    expect(chapterMetaMarks({ beats: 0, hasState: false })).toEqual({ hasBeats: false, hasState: false })
+    expect(chapterMetaMarks({ beats: 2, hasState: true })).toEqual({ hasBeats: true, hasState: true })
+    expect(chapterMetaMarks({ beats: ['阿秀在码头等船'], state: { now: '黄昏' } })).toEqual({
+      hasBeats: true,
+      hasState: true,
+      firstBeat: '阿秀在码头等船',
+    })
+    expect(chapterMetaMarks({ beats: ['  ', '海关'], hasState: false })).toEqual({
+      hasBeats: true,
+      hasState: false,
+      firstBeat: '海关',
+    })
   })
 
   it('formats counts and missing modification times', () => {

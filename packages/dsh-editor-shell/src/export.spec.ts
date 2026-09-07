@@ -36,4 +36,18 @@ describe('novel export', () => {
     expect(prepared.totalChars).toBe(prepared.chapters.reduce((sum, item) => sum + item.chars, 0))
     expect(prepared.content.indexOf('第二章')).toBeLessThan(prepared.content.indexOf('第十章'))
   })
+
+  it('strips chapter frontmatter before counting and exporting Markdown', () => {
+    const prepared = prepareExport([
+      {
+        path: '正文/003.md',
+        text: '---\nbeats: [码头]\nstate:\n  now: 黄昏\n---\n# 第三章\n\n正文。\n',
+      },
+    ], '有封面', 'markdown')
+    expect(prepared.chapters[0]).toMatchObject({ path: '正文/003.md', empty: false, chars: 7 })
+    expect(prepared.content).toContain('# 第三章')
+    expect(prepared.content).toContain('正文。')
+    expect(prepared.content).not.toContain('beats:')
+    expect(prepared.content).not.toContain('now: 黄昏')
+  })
 })

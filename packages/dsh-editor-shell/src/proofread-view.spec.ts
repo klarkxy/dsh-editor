@@ -65,7 +65,7 @@ describe('proofread view helpers', () => {
     ]
     expect(filterProofreadFindings(items, { kinds: ['habit'], habitTerm: null }).map((item) => quotedTerm(item.message))).toEqual(['忽然', '然后'])
     expect(filterProofreadFindings(items, { kinds: ['punctuation', 'typo'], habitTerm: '忽然' }).map((item) => quotedTerm(item.message))).toEqual(['忽然'])
-    expect(kindCounts(items)).toEqual({ punctuation: 1, sensitive: 1, repeat: 0, typo: 0, habit: 2 })
+    expect(kindCounts(items)).toEqual({ punctuation: 1, sensitive: 1, repeat: 0, typo: 0, habit: 2, card: 0 })
     expect(toggleProofreadKind(['punctuation', 'typo'], 'typo')).toEqual(['punctuation'])
   })
 
