@@ -83,6 +83,11 @@ export type EditorCoreHandle = {
    * view and the editor is focused.
    */
   revealRange(start: number, end: number): void
+  /**
+   * Request a selection rewrite. When `instruction` is omitted the Host uses
+   * the default patch prompt; the built-in footer button keeps that path.
+   */
+  requestRewrite(instruction?: string): void
 }
 
 export type EditorCoreDraftBackup = {
@@ -144,11 +149,12 @@ export type EditorCoreProps = {
 
   completionPreference?: CompletionPreference
   authorPreferences?: string
+  chapterContext?: string
   fimDelayMs?: number
   maxGhostCandidates?: number
   showGhostTip?: boolean
-  buildFimPayload?(input: { sessionId: string; path: string; prefix: string; suffix: string; authorPreferences?: string }): Record<string, unknown>
-  buildPatchPayload?(input: { sessionId: string; path: string; selectedText: string; before: string; after: string; authorPreferences?: string }): Record<string, unknown>
+  buildFimPayload?(input: FimPayloadInput): Record<string, unknown>
+  buildPatchPayload?(input: PatchPayloadInput): Record<string, unknown>
   extractFimText?(value: unknown): string
   extractPatchText?(value: unknown): string
 
@@ -227,16 +233,52 @@ function extractText(value: unknown): string {
   return ''
 }
 
-function defaultFimPayload(input: { sessionId: string; path: string; prefix: string; suffix: string; authorPreferences?: string }): Record<string, unknown> {
-  return input.authorPreferences
-    ? { sessionId: input.sessionId, path: input.path, prefix: input.prefix, suffix: input.suffix, authorPreferences: input.authorPreferences }
-    : { sessionId: input.sessionId, path: input.path, prefix: input.prefix, suffix: input.suffix }
+export type FimPayloadInput = {
+  sessionId: string
+  path: string
+  prefix: string
+  suffix: string
+  authorPreferences?: string
+  chapterContext?: string
 }
 
-function defaultPatchPayload(input: { sessionId: string; path: string; selectedText: string; before: string; after: string; authorPreferences?: string }): Record<string, unknown> {
-  return input.authorPreferences
-    ? { sessionId: input.sessionId, path: input.path, selectedText: input.selectedText, before: input.before, after: input.after, authorPreferences: input.authorPreferences }
-    : { sessionId: input.sessionId, path: input.path, selectedText: input.selectedText, before: input.before, after: input.after }
+export type PatchPayloadInput = {
+  sessionId: string
+  path: string
+  selectedText: string
+  before: string
+  after: string
+  authorPreferences?: string
+  chapterContext?: string
+  instruction?: string
+}
+
+function optionalPayloadField(value: string | undefined): string | undefined {
+  return value ? value : undefined
+}
+
+export function defaultFimPayload(input: FimPayloadInput): Record<string, unknown> {
+  return {
+    sessionId: input.sessionId,
+    path: input.path,
+    prefix: input.prefix,
+    suffix: input.suffix,
+    ...(optionalPayloadField(input.authorPreferences) ? { authorPreferences: input.authorPreferences } : {}),
+    ...(optionalPayloadField(input.chapterContext) ? { chapterContext: input.chapterContext } : {}),
+  }
+}
+
+export function defaultPatchPayload(input: PatchPayloadInput): Record<string, unknown> {
+  return {
+    sessionId: input.sessionId,
+    path: input.path,
+    selectedText: input.selectedText,
+    before: input.before,
+    after: input.after,
+    ...(optionalPayloadField(input.authorPreferences) ? { authorPreferences: input.authorPreferences } : {}),
+    ...(optionalPayloadField(input.chapterContext) ? { chapterContext: input.chapterContext } : {}),
+    ...(optionalPayloadField(input.instruction) ? { instruction: input.instruction } : {}),
+  }
 }
 
 function describeStatus(state: SaveState, conflict: boolean): string {
@@ -277,6 +319,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     slotStyle = {},
     completionPreference = 'manual',
     authorPreferences,
+    chapterContext,
     fimDelayMs = 1500,
     maxGhostCandidates = 3,
     showGhostTip = false,
@@ -592,34 +635,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     return () => globalThis.removeEventListener('beforeunload', warn)
   }, [enableBeforeUnload, doc, text, conflict])
 
-  // Imperative handle via callback ref.
-  useEffect(() => {
-    if (!onHandle) return
-    const handle: EditorCoreHandle = {
-      save,
-      discard,
-      isDirty: () => isDirty(docRef.current, textRef.current),
-      getText: () => textRef.current,
-      getDocument: () => docRef.current,
-      getSelection: () => {
-        const view = viewRef.current
-        if (!view) return { start: 0, end: 0 }
-        const main = view.state.selection.main
-        return { start: main.from + paperOffsetRef.current, end: main.to + paperOffsetRef.current }
-      },
-      setGhost: (candidates, index, at) => { setGhostCandidates(candidates); setGhostIndex(index); setGhostAt(at) },
-      clearGhost: () => { clearGhost(); setGhostAt(0) },
-      setProposal: (next) => setProposal(next),
-      revealRange: (start, end) => {
-        const view = viewRef.current
-        if (!view) return
-        revealEditorRange(view, paperOffsetRef.current, start, end)
-      },
-    }
-    onHandle(handle)
-    return () => onHandle(null)
-  }, [onHandle, save, discard, clearGhost])
-
   const complete = useCallback(async (append = false) => {
     if (!doc) return
     lastAutomaticCompletion.current = Math.max(lastAutomaticCompletion.current, userEditRevision)
@@ -641,6 +656,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       prefix: text.slice(0, pos),
       suffix: text.slice(pos),
       authorPreferences,
+      chapterContext,
     }), controller.signal) as RpcResult<{ text?: string }>
     if (fimAbort.current === controller) {
       fimAbort.current = null
@@ -660,7 +676,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     report(next.added
       ? `补全候选 ${next.index + 1}/${next.candidates.length} 已就绪。`
       : '新候选与已有建议相同，已保留原建议。')
-  }, [doc, revision, text, selection.start, rpc, buildFimPayload, authorPreferences, maxGhostCandidates, userEditRevision, extractFimText, report, reportError])
+  }, [doc, revision, text, selection.start, rpc, buildFimPayload, authorPreferences, chapterContext, maxGhostCandidates, userEditRevision, extractFimText, report, reportError])
 
   useEffect(() => {
     const view = viewRef.current
@@ -690,7 +706,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     return () => globalThis.clearTimeout(timer)
   }, [completionPreference, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, paperOffset, complete])
 
-  const requestPatch = useCallback(async () => {
+  const requestPatch = useCallback(async (instruction?: string) => {
     if (!doc) return
     const ticket = selectionTicket(doc, text, revision, selection.start, selection.end)
     if (!ticket) { report('请先选择需要改写的文字。'); return }
@@ -708,6 +724,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       before: text.slice(Math.max(0, ticket.start - 4000), ticket.start),
       after: text.slice(ticket.end, ticket.end + 4000),
       authorPreferences,
+      chapterContext,
+      instruction,
     }), controller.signal) as RpcResult<{ text?: string }>
     if (patchAbort.current === controller) {
       patchAbort.current = null
@@ -719,7 +737,36 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     if (!replacement) { report('模型未返回可用改写。'); return }
     setProposal({ ticket, text: replacement })
     report('修改建议已就绪。')
-  }, [doc, text, revision, selection, rpc, buildPatchPayload, authorPreferences, extractPatchText, report, reportError, clearGhost])
+  }, [doc, text, revision, selection, rpc, buildPatchPayload, authorPreferences, chapterContext, extractPatchText, report, reportError, clearGhost])
+
+  // Imperative handle via callback ref.
+  useEffect(() => {
+    if (!onHandle) return
+    const handle: EditorCoreHandle = {
+      save,
+      discard,
+      isDirty: () => isDirty(docRef.current, textRef.current),
+      getText: () => textRef.current,
+      getDocument: () => docRef.current,
+      getSelection: () => {
+        const view = viewRef.current
+        if (!view) return { start: 0, end: 0 }
+        const main = view.state.selection.main
+        return { start: main.from + paperOffsetRef.current, end: main.to + paperOffsetRef.current }
+      },
+      setGhost: (candidates, index, at) => { setGhostCandidates(candidates); setGhostIndex(index); setGhostAt(at) },
+      clearGhost: () => { clearGhost(); setGhostAt(0) },
+      setProposal: (next) => setProposal(next),
+      revealRange: (start, end) => {
+        const view = viewRef.current
+        if (!view) return
+        revealEditorRange(view, paperOffsetRef.current, start, end)
+      },
+      requestRewrite: (instruction) => { void requestPatch(instruction) },
+    }
+    onHandle(handle)
+    return () => onHandle(null)
+  }, [onHandle, save, discard, clearGhost, requestPatch])
 
   const acceptGhost = useCallback(() => {
     if (!canApplyGhost(state, ghost)) return
