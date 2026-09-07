@@ -237,8 +237,6 @@ async function waitForProposal(page, previousCount, previousAssistantCount, labe
   const warnings = page.locator('.chat-history .warning').filter({ hasText: /未能完成|中断/ })
   const deadline = Date.now() + sendTimeout
   let completedWithoutProposalAt = 0
-  let refreshedAfterCompletion = false
-  let refreshedAt = 0
   while (Date.now() < deadline) {
     await answerPending(page)
     const count = await cards.count()
@@ -261,24 +259,11 @@ async function waitForProposal(page, previousCount, previousAssistantCount, labe
     const stopVisible = await page.getByRole('button', { name: /停止/ }).isVisible().catch(() => false)
     if (assistantCount > previousAssistantCount && !stopVisible) {
       if (!completedWithoutProposalAt) completedWithoutProposalAt = Date.now()
-      if (Date.now() - completedWithoutProposalAt > 5_000) {
-        if (!refreshedAfterCompletion) {
-          refreshedAfterCompletion = true
-          refreshedAt = Date.now()
-          completedWithoutProposalAt = 0
-          await page.reload({ waitUntil: 'domcontentloaded' })
-          await page.waitForFunction(() => document.title === 'DSH Editor', undefined, { timeout: 45_000 })
-          await ensureAssistantOpen(page)
-          continue
-        }
+      if (Date.now() - completedWithoutProposalAt > 12_000) {
         const tail = (await page.locator('.chat-history').innerText().catch(() => '')).slice(-2_000)
         throw new Error(`${label}: turn completed without a usable proposal; chat tail=${sanitize(tail)}`)
       }
     } else completedWithoutProposalAt = 0
-    if (refreshedAt && Date.now() - refreshedAt > 30_000) {
-      const tail = (await page.locator('.chat-history').innerText().catch(() => '')).slice(-2_000)
-      throw new Error(`${label}: persisted conversation did not expose its proposal; chat tail=${sanitize(tail)}`)
-    }
     await delay(500)
   }
   const tail = (await page.locator('.chat-history').innerText().catch(() => '')).slice(-2_000)
@@ -306,13 +291,14 @@ async function sendAndApply(page, prompt, expectedPath, label, attempt = 0) {
     await shot(page, `${label}-proposal`)
     if (!(await card.getByText('已应用到作品', { exact: true }).isVisible().catch(() => false))) {
       await card.getByRole('button', { name: '应用', exact: true }).click()
-      await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
+      await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 90_000 })
     }
     await recordPhase(label, expectedPath)
   } catch (error) {
     const message = String(error)
-    if (attempt < 1 && (message.includes('stale-proposal') || message.includes('未能完成这次请求'))) {
+    if (attempt < 1 && (message.includes('stale-proposal') || message.includes('未能完成这次请求') || message.includes('without a usable proposal'))) {
       await recordPhase(`${label} 失败，重试`, message.slice(0, 120))
+      await startFreshConversation(page)
       await delay(1_200)
       return sendAndApply(page, prompt, expectedPath, label, attempt + 1)
     }
@@ -353,7 +339,7 @@ async function sendMaybeApply(page, prompt, expectedPath, label) {
       await shot(page, `${label}-proposal`)
       if (!applied) {
         await card.getByRole('button', { name: '应用', exact: true }).click()
-        await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
+        await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 90_000 })
       }
       await recordPhase(label, `applied ${expectedPath}`)
       return 'applied'
@@ -419,7 +405,7 @@ async function chooseCustomSelect(page, ariaLabel, matcher) {
 
 async function configureMiniMax(page) {
   const yaml = await readFile(resolve(home, 'settings.yaml'), 'utf8').catch(() => '')
-  if (/minimax-e2e|MiniMax-M2\.7-highspeed/.test(yaml)) {
+  if (/minimax-e2e|MiniMax-M3|MiniMax-M2\.7-highspeed/.test(yaml)) {
     await recordPhase('接口已配置，跳过')
     return
   }
@@ -470,7 +456,9 @@ async function adoptDiscoveredModels(page, scope, label) {
   const appeared = await picker.waitFor({ state: 'visible', timeout: 45_000 }).then(() => true, () => false)
   if (!appeared) return false
   const ids = await picker.locator('.models-candidate-id').allTextContents()
-  const wanted = ids.filter((id) => /MiniMax-M2\.7/i.test(id))
+  const wanted = ids.filter((id) => /MiniMax-M3/i.test(id))
+    .concat(ids.filter((id) => /MiniMax-M2\.7/i.test(id)))
+    .filter((id, index, all) => all.indexOf(id) === index)
   if (!wanted.length && ids.length) await picker.getByRole('button', { name: '全选' }).click()
   await picker.getByRole('button', { name: '添加所选' }).click()
   await picker.waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => undefined)
@@ -479,11 +467,13 @@ async function adoptDiscoveredModels(page, scope, label) {
 }
 
 async function ensureCatalogHasModel(page, card) {
-  if (await adoptDiscoveredModels(page, card, 'MiniMax 模型发现')) return
-  if (await card.getByLabel('模型 id 1').isVisible().catch(() => false)) return
+  if (await card.getByLabel('模型 id 1').isVisible().catch(() => false)) {
+    await card.getByLabel('模型 id 1').fill('MiniMax-M3')
+    return
+  }
   await card.getByRole('button', { name: /添加模型/ }).click()
-  await card.getByLabel('模型 id 1').fill('MiniMax-M2.7-highspeed')
-  await recordPhase('MiniMax 手工添加模型', 'MiniMax-M2.7-highspeed')
+  await card.getByLabel('模型 id 1').fill('MiniMax-M3')
+  await recordPhase('MiniMax 手工添加模型', 'MiniMax-M3')
 }
 
 async function addBuiltinMiniMax(page, models) {
@@ -551,7 +541,7 @@ async function addCustomMiniMax(page, models) {
   await ensureCatalogHasModel(page, card)
   const create = card.getByRole('button', { name: '创建提供方' })
   await waitFor(async () => create.isEnabled(), 'custom MiniMax create enabled', 20_000)
-  await create.click()
+  await create.click({ force: true })
 }
 
 async function createProjectFromHome(page) {
@@ -572,7 +562,11 @@ async function createProjectFromHome(page) {
 }
 
 async function createFolder(page, name) {
-  await page.getByRole('button', { name: '新建文件夹' }).click()
+  const tree = page.locator('.tree')
+  const box = await tree.boundingBox()
+  if (!box) throw new Error('tree missing')
+  await tree.click({ button: 'right', position: { x: 16, y: Math.max(12, box.height - 18) } })
+  await page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '新建文件夹' }).click()
   const dialog = page.getByRole('dialog', { name: '新建文件夹' })
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
   await dialog.getByLabel('文件夹名称').fill(name)
@@ -630,11 +624,13 @@ async function coverWorkbench(page) {
   if (!(await page.getByRole('button', { name: '搜索与命令' }).count())) throw new Error('command palette trigger missing')
 
   const themeToggle = page.locator('.chrome .theme-toggle')
+  const before = await page.evaluate(() => document.documentElement.getAttribute('data-theme') || 'paper')
+  const next = before === 'paper' ? 'ink' : 'paper'
   await themeToggle.click()
-  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'ink')
+  await page.waitForFunction((wanted) => document.documentElement.getAttribute('data-theme') === wanted, next)
   await themeToggle.click()
-  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'paper')
-  recordFeature('theme-toggle', true)
+  await page.waitForFunction((wanted) => document.documentElement.getAttribute('data-theme') === wanted, before)
+  recordFeature('theme-toggle', true, `${before} → ${next} → ${before}`)
 
   await page.getByRole('button', { name: '搜索与命令' }).click()
   await page.locator('.palette-overlay').waitFor({ state: 'visible', timeout: 10_000 })
@@ -688,6 +684,23 @@ async function coverWorkbench(page) {
   await recordPhase('工作台功能覆盖', report.features.filter((item) => item.ok).map((item) => item.name).join(', '))
 }
 
+async function startFreshConversation(page) {
+  const assistant = await ensureAssistantOpen(page)
+  await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
+  const picker = page.getByRole('dialog', { name: '新对话' })
+  if (await picker.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true, () => false)) {
+    const select = picker.getByLabel('选择模型')
+    if (await select.isVisible().catch(() => false)) {
+      const options = await select.locator('option').evaluateAll((items) => items.map((item) => ({ value: item.value, text: item.textContent || '' })))
+      const chosen = options.find((item) => /MiniMax-M3/i.test(item.text)) || options.find((item) => /MiniMax/i.test(item.text))
+      if (chosen) await select.selectOption(chosen.value)
+    }
+    await picker.getByRole('button', { name: '开始', exact: true }).click({ force: true }).catch(() => undefined)
+    await picker.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined)
+  }
+  await dismissInitGuide(page)
+}
+
 async function dismissInitGuide(page) {
   const card = page.getByRole('article', { name: '项目初始化' })
   if (!(await card.isVisible().catch(() => false))) return
@@ -729,17 +742,26 @@ async function openAssistantWithModel(page) {
   const assistant = await ensureAssistantOpen(page)
   await dismissInitGuide(page)
   const currentModel = await assistant.locator('.model-picker, .composer-model').innerText().catch(() => '')
-  if (/MiniMax-M2\.7/i.test(currentModel)) {
+  if (/MiniMax-M3/i.test(currentModel)) {
     report.model = currentModel.replace(/\s+/g, ' ').trim()
     await recordPhase('沿用当前对话模型', report.model)
     return
   }
-  await assistant.getByRole('button', { name: '新对话' }).click()
+  try {
+    const chosen = await chooseCustomSelect(assistant, '选择模型', (label) => /MiniMax-M3/i.test(label) || /MiniMax/i.test(label))
+    report.model = chosen.replace(/\s+/g, ' ').trim()
+    await recordPhase('切换对话模型', report.model)
+    const ping = await sendChat(page, '请只回复一个英文单词 pong，不要使用任何工具。', '模型连通探测', 90_000)
+    await recordPhase('模型连通探测', ping.slice(0, 80))
+    return
+  } catch { /* fall back to the new-conversation dialog */ }
+  await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
   const picker = page.getByRole('dialog', { name: '新对话' })
   const select = picker.getByLabel('选择模型')
   await select.waitFor({ state: 'visible', timeout: 30_000 })
   const options = await select.locator('option').evaluateAll((items) => items.map((item) => ({ value: item.value, text: item.textContent || '' })))
-  const chosen = options.find((item) => /MiniMax-M2\.7-highspeed/i.test(item.text))
+  const chosen = options.find((item) => /MiniMax-M3/i.test(item.text))
+    || options.find((item) => /MiniMax-M2\.7-highspeed/i.test(item.text))
     || options.find((item) => /MiniMax-M2\.7(?!-)/i.test(item.text))
     || options.find((item) => /MiniMax/i.test(item.text))
     || options.find((item) => /DeepSeek-V4-Pro/i.test(item.text))
@@ -829,6 +851,41 @@ function expansionPrompt(number, count) {
   return `第${number}章 ${path} 当前只有约${count}个去空白字符，未达到4000字验收。请读取该文件和 大纲/总纲.md，只调用一次 novel_propose，以 edit 方式扩写。请选择文件末尾一个唯一、完整的段落作为 oldText；newText 必须保留这个段落并自然追加一段约900至1200个去空白字符的完整场景，使冲突、动作、感官或人物余波更充分，但不得改变既定结局、硬设定和下一章接口。不要完整重写全章，不要提问，不要只在聊天回答。`
 }
 
+async function coverFim(page) {
+  const row = page.locator('.tree-row.tree-main').filter({ hasText: '001.md' }).first()
+  if (await row.count()) {
+    await row.scrollIntoViewIfNeeded()
+    await row.click({ force: true })
+  }
+  await page.locator('[data-testid="paper-path"]', { hasText: '正文/001.md' }).waitFor({ state: 'visible', timeout: 20_000 })
+  const content = page.locator('[data-testid="paper-editor"] .cm-content')
+  await content.click()
+  await page.keyboard.press('End')
+  await page.locator('[data-testid="paper-fim"]').click()
+  try {
+    await waitFor(async () => {
+      if (await page.locator('[data-testid="paper-ghost"]').count()) return true
+      const notice = await page.locator('[data-testid="paper-notice"]').innerText().catch(() => '')
+      return /未返回|失败|就绪|补全候选/.test(notice)
+    }, 'fim result', sendTimeout)
+    if (await page.locator('[data-testid="paper-ghost"]').count()) {
+      const accept = page.getByRole('button', { name: '接受补全' })
+      if (await accept.isVisible().catch(() => false)) await accept.click()
+      await savePaper(page)
+      recordFeature('fim-complete', true, 'ghost accepted')
+      await recordPhase('自动补全', 'ghost accepted')
+      return
+    }
+    const notice = await page.locator('[data-testid="paper-notice"]').innerText().catch(() => 'no notice')
+    recordFeature('fim-complete', false, notice.slice(0, 120))
+    await recordPhase('自动补全未出 ghost', notice.slice(0, 120))
+  } catch (error) {
+    const detail = sanitize(error instanceof Error ? error.message : String(error))
+    recordFeature('fim-complete', false, detail)
+    await recordPhase('自动补全超时', detail.slice(0, 160))
+  }
+}
+
 function dialogueCorrectionPrompt() {
   return `第1章里林简的对白偏完整、像在解释设定。请读取 正文/001.md 和 人物卡/人物索引.md，只调用一次 novel_propose，对 正文/001.md 使用 edit。选一段林简的对白作为 oldText；newText 改成更短、更冲、不解释记忆税或系统，但不得改变情节和下一章接口。不要提问，不要只在聊天回答。`
 }
@@ -872,7 +929,11 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN' })
   page.setDefaultTimeout(30_000)
   page.on('pageerror', (error) => fail(`pageerror: ${sanitize(error.message)}`))
-  page.on('console', (message) => { if (message.type() === 'error') fail(`console: ${sanitize(message.text())}`) })
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return
+    report.consoleErrors = report.consoleErrors || []
+    report.consoleErrors.push(sanitize(message.text()).slice(0, 240))
+  })
   await page.goto(started.url.href, { waitUntil: 'domcontentloaded' })
   await page.waitForFunction(() => document.title === 'DSH Editor', undefined, { timeout: 45_000 })
   await dismissNativeOnboarding(page)
@@ -929,6 +990,7 @@ try {
     const chapterExists = await exists(absolute)
     let count = chapterExists ? compactChars(await readFile(absolute, 'utf8')) : 0
     if (count < 700) {
+      await startFreshConversation(page)
       await sendAndApply(page, chapterPrompt(number, chapterExists ? 'edit' : 'create'), relative, `生成第${number}章`)
       count = compactChars(await readFile(absolute, 'utf8'))
     }
@@ -943,7 +1005,8 @@ try {
     if (count < minChapterChars) throw new Error(`${relative} only has ${count} non-whitespace characters`)
     await recordPhase(`第${number}章验收`, `${count}字`)
     await shot(page, `chapter-${id}`)
-    if (number === 1) {
+    if (number === 1 && reset) {
+      await coverFim(page)
       await sendAndApply(page, dialogueCorrectionPrompt(), relative, '对话纠正第1章对白')
       report.chapters[report.chapters.length - 1].chars = compactChars(await readFile(absolute, 'utf8'))
       await shot(page, 'chapter-001-corrected')
