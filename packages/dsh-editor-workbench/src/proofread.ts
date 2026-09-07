@@ -14,6 +14,7 @@ import {
   REDUPLICATION_WHITELIST,
   type TypoPattern,
 } from './proofread-defaults.ts'
+import { listCards } from './cards.ts'
 import {
   PROOFREAD_KINDS,
   type ProofreadFinding,
@@ -21,6 +22,15 @@ import {
   type ProofreadKind,
   type ProofreadScanResponse,
 } from './contracts.ts'
+import {
+  buildCardProofreadIndex,
+  collectCardNearmiss,
+  emitCardNearmiss,
+  scanCardGender,
+  type CardFindingDraft,
+  type CardNearmissHit,
+  type CardProofreadIndex,
+} from './proofread-cards.ts'
 
 export const SENSITIVE_LIST_PATH = `${METADATA_DIRECTORY}/敏感词.txt`
 export const SENSITIVE_ALLOW_PATH = `${METADATA_DIRECTORY}/敏感词-忽略.txt`
@@ -200,6 +210,7 @@ function finding(
   path: string,
   version: string,
   suggestion?: string,
+  extra?: { code?: string; term?: string },
 ): ProofreadFinding {
   const { line, column } = locate(raw, start)
   return {
@@ -213,8 +224,17 @@ function finding(
     message,
     excerpt: lineExcerpt(raw, start, end),
     ...(suggestion !== undefined ? { suggestion } : {}),
+    ...(extra?.code ? { code: extra.code } : {}),
+    ...(extra?.term !== undefined ? { term: extra.term } : {}),
     version,
   }
+}
+
+function cardFinding(raw: string, path: string, version: string, draft: CardFindingDraft): ProofreadFinding {
+  return finding(raw, draft.start, draft.end, 'card', draft.severity, draft.message, path, version, draft.suggestion, {
+    code: draft.code,
+    term: draft.term,
+  })
 }
 
 function analyzedChars(masked: string): number {
@@ -661,6 +681,13 @@ export async function scanProofread(input: {
   const counts = new Map<string, number>()
   const habitHits: HabitHit[] = []
   let habitChars = 0
+  let cardIndex: CardProofreadIndex | undefined
+  if (enabled(kinds, 'card')) {
+    cardIndex = buildCardProofreadIndex(await listCards({ access: input.access, kind: 'all' }))
+    if (cardIndex.nearmiss.skipped) skipped += 1
+  }
+  const cardFiles: Array<{ path: string; raw: string; version: string; masked: string }> = []
+  const nearmissHits: CardNearmissHit[] = []
   for (const file of files) {
     const result = proofreadText(file.text, {
       path: file.path,
@@ -670,14 +697,30 @@ export async function scanProofread(input: {
       maxFindings: Number.MAX_SAFE_INTEGER,
     })
     findings.push(...result.findings)
+    const needMask = enabled(kinds, 'habit') || Boolean(cardIndex)
+    const masked = needMask ? maskForAnalysis(file.text) : ''
     if (enabled(kinds, 'habit')) {
-      const masked = maskForAnalysis(file.text)
       habitChars += analyzedChars(masked)
       habitHits.push(...collectHabitHits(masked, file.text, file.path, file.version, HABIT_TERMS, counts))
+    }
+    if (cardIndex) {
+      cardFiles.push({ path: file.path, raw: file.text, version: file.version, masked })
+      for (const draft of scanCardGender(masked, cardIndex)) {
+        findings.push(cardFinding(file.text, file.path, file.version, draft))
+      }
+      if (!cardIndex.nearmiss.skipped) nearmissHits.push(...collectCardNearmiss(masked, file.path, cardIndex))
     }
   }
   if (enabled(kinds, 'habit')) {
     emitHabitFindings(habitHits, counts, habitChars, HABIT_PER_THOUSAND_THRESHOLD, HABIT_MAX_OCCURRENCES, findings)
+  }
+  if (cardIndex && !cardIndex.nearmiss.skipped) {
+    const byPath = new Map(cardFiles.map((file) => [file.path, file]))
+    for (const draft of emitCardNearmiss(nearmissHits, cardFiles)) {
+      const file = draft.path ? byPath.get(draft.path) : undefined
+      if (!file) continue
+      findings.push(cardFinding(file.raw, file.path, file.version, draft))
+    }
   }
   findings.sort((left, right) => pathCompare(left.path, right.path) || left.start - right.start || left.kind.localeCompare(right.kind))
   const capped = findings.length > PROOFREAD_MAX_FINDINGS
