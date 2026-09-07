@@ -1,5 +1,11 @@
 import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { errorMessage, LatestRequestGate, safeRpcCall, searchSkippedText, worldbookPaperProjection, type RevealRequest, type ShellContext } from './shared.ts'
+import { errorMessage, isStaleFailure, LatestRequestGate, safeRpcCall, searchSkippedText, worldbookPaperProjection, type RevealRequest, type ShellContext } from './shared.ts'
+import {
+  planReplace,
+  prepareReplaceWrite,
+  summarizeReplacePlan,
+  type ReplacePlan,
+} from '../search-replace.ts'
 import { t } from '../i18n/index.ts'
 
 export type SearchScope = 'project' | 'manuscript'
@@ -24,6 +30,14 @@ export type SearchResponse = {
 
 export type GroupedSearchHits = { path: string; hits: SearchHit[] }[]
 
+export type ReplaceOutcome = {
+  files: number
+  occurrences: number
+  stale: string[]
+  changed: string[]
+  failed: string[]
+}
+
 export function groupSearchHits(hits: readonly SearchHit[]): GroupedSearchHits {
   const groups = new Map<string, SearchHit[]>()
   for (const hit of hits) {
@@ -45,18 +59,32 @@ export function toRevealRequest(hit: SearchHit, nonce = Date.now()): RevealReque
   return { ...hit, nonce }
 }
 
+export function canReplaceAll(input: { query: string; replacement: string; hits: number }): boolean {
+  return input.hits > 0 && input.replacement !== input.query
+}
+
+export function replaceBlockedByDirty(input: { activePath: string; activeDirty: boolean; paths: readonly string[] }): boolean {
+  return input.activeDirty && Boolean(input.activePath) && input.paths.includes(input.activePath)
+}
+
 function SearchPanel(props: {
   ctx: ShellContext
   sessionId: string
   revision: number
   navigationBlocked: boolean
+  activePath: string
+  activeDirty: boolean
   onOpen(hit: SearchHit): void
+  onReplaced?(paths: string[]): void
 }) {
   const [query, setQuery] = useState('')
+  const [replacement, setReplacement] = useState('')
   const [scope, setScope] = useState<SearchScope>('project')
   const [result, setResult] = useState<SearchResponse | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [outcome, setOutcome] = useState<ReplaceOutcome | null>(null)
   const input = useRef<HTMLInputElement | null>(null)
   const requestGate = useRef(new LatestRequestGate()).current
   const requestScope = `${props.sessionId}\u0000${props.revision}`
@@ -64,18 +92,23 @@ function SearchPanel(props: {
 
   useEffect(() => {
     setQuery('')
+    setReplacement('')
     setResult(null)
     setNote('')
     setBusy(false)
+    setConfirming(false)
+    setOutcome(null)
   }, [props.sessionId, props.revision])
 
   useEffect(() => {
     globalThis.setTimeout(() => input.current?.focus(), 0)
   }, [props.sessionId])
 
-  const search = async (raw: string, nextScope: SearchScope) => {
+  const search = async (raw: string, nextScope: SearchScope, options?: { keepOutcome?: boolean }) => {
     const value = raw.trim()
     if (!value) { setNote(t('search.emptyQuery')); return }
+    if (!options?.keepOutcome) setOutcome(null)
+    setConfirming(false)
     const ticket = requestGate.begin(requestScope)
     setBusy(true)
     setNote('')
@@ -89,6 +122,75 @@ function SearchPanel(props: {
     if (!searched.ok) { setResult(null); setNote(errorMessage(searched)); return }
     setResult(searched.value)
     setNote(searched.value.results.length ? '' : t('search.noMatch'))
+  }
+
+  const replacePlan = result ? planReplace(result.results, replacement) : null
+  const replaceSummary = replacePlan ? summarizeReplacePlan(replacePlan) : null
+  const replaceEnabled = canReplaceAll({ query, replacement, hits: result?.results.length ?? 0 })
+
+  const openReplaceConfirm = () => {
+    if (!replacePlan || !replaceEnabled) return
+    if (replaceBlockedByDirty({ activePath: props.activePath, activeDirty: props.activeDirty, paths: replacePlan.files.map((file) => file.path) })) {
+      setNote(t('search.replaceSaveFirst'))
+      return
+    }
+    setOutcome(null)
+    setConfirming(true)
+  }
+
+  const runReplace = async (plan: ReplacePlan) => {
+    if (replaceBlockedByDirty({ activePath: props.activePath, activeDirty: props.activeDirty, paths: plan.files.map((file) => file.path) })) {
+      setNote(t('search.replaceSaveFirst'))
+      setConfirming(false)
+      return
+    }
+    const ticket = requestGate.begin(requestScope)
+    setBusy(true)
+    setNote('')
+    setConfirming(false)
+    const needle = query.trim()
+    const stale = [...plan.stale]
+    const changed: string[] = []
+    const failed: string[] = []
+    const written: string[] = []
+    let occurrences = 0
+
+    for (const file of plan.files) {
+      const read = await safeRpcCall<{ text: string; version: string }>(() => props.ctx.connection.rpc.call('/manuscript', 'file.read', {
+        sessionId: props.sessionId,
+        path: file.path,
+      }))
+      if (!requestGate.isCurrent(ticket)) return
+      if (!read.ok) {
+        failed.push(file.path)
+        continue
+      }
+      const prepared = prepareReplaceWrite(file, read.value, needle, plan.replacement)
+      if (!prepared.ok) {
+        if (prepared.reason === 'stale') stale.push(file.path)
+        else changed.push(file.path)
+        continue
+      }
+      const writtenFile = await safeRpcCall<{ version: string }>(() => props.ctx.connection.rpc.call('/manuscript', 'file.write', {
+        sessionId: props.sessionId,
+        path: file.path,
+        text: prepared.text,
+        version: read.value.version,
+      }))
+      if (!requestGate.isCurrent(ticket)) return
+      if (!writtenFile.ok) {
+        if (isStaleFailure(writtenFile)) stale.push(file.path)
+        else failed.push(file.path)
+        continue
+      }
+      written.push(file.path)
+      occurrences += file.spans.length
+    }
+
+    setOutcome({ files: written.length, occurrences, stale, changed, failed })
+    if (written.length) props.onReplaced?.(written)
+    if (!requestGate.isCurrent(ticket)) return
+    await search(query, scope, { keepOutcome: true })
   }
 
   const grouped = result ? groupSearchHits(result.results) : []
@@ -113,6 +215,37 @@ function SearchPanel(props: {
         e('option', { value: 'manuscript' }, t('search.manuscriptOnly')),
       ),
     ),
+    e('form', {
+      className: 'search-replace',
+      onSubmit: (event: FormEvent) => { event.preventDefault(); openReplaceConfirm() },
+    },
+      e('input', {
+        value: replacement,
+        placeholder: t('search.replacePlaceholder'),
+        'aria-label': t('search.replaceAria'),
+        onChange: (event: ChangeEvent<HTMLInputElement>) => setReplacement(event.target.value),
+      }),
+      e('button', { type: 'submit', disabled: busy || !replaceEnabled }, t('search.replaceAll')),
+    ),
+    confirming && replacePlan && replaceSummary ? e('div', { className: 'search-replace-confirm', role: 'region', 'aria-label': t('search.replaceConfirmTitle') },
+      e('p', { className: 'search-summary', role: 'status' }, t('search.replaceSummary', { files: replaceSummary.files, count: replaceSummary.occurrences })),
+      replaceSummary.skipped ? e('p', { className: 'muted' }, t('search.replaceOverlap', { count: replaceSummary.skipped })) : null,
+      replaceSummary.staleFiles ? e('p', { className: 'warning' }, t('search.replaceStale', { count: replaceSummary.staleFiles })) : null,
+      replaceSummary.perFile.length ? e('ul', { className: 'search-results' }, replaceSummary.perFile.map((file) => e('li', { key: file.path, className: 'search-file' },
+        t('search.replaceFileHits', { path: file.path, count: file.count }),
+      ))) : null,
+      e('div', { className: 'search-replace-actions' },
+        e('button', { type: 'button', disabled: busy || !replacePlan.files.length, onClick: () => void runReplace(replacePlan) }, t('search.replaceConfirm')),
+        e('button', { type: 'button', disabled: busy, onClick: () => setConfirming(false) }, t('common.cancel')),
+      ),
+    ) : null,
+    outcome ? e('div', { className: 'search-replace-result', role: 'status' },
+      e('p', null, t('search.replaceResult', { files: outcome.files, count: outcome.occurrences })),
+      outcome.stale.length ? e('p', { className: 'warning' }, t('search.replaceStale', { count: outcome.stale.length })) : null,
+      outcome.changed.length ? e('p', { className: 'warning' }, t('search.replaceChanged', { count: outcome.changed.length })) : null,
+      outcome.failed.length ? e('p', { className: 'warning' }, t('search.replaceFailed', { count: outcome.failed.length })) : null,
+      e('button', { type: 'button', disabled: busy, onClick: () => void search(query, scope, { keepOutcome: true }) }, t('search.replaceAgain')),
+    ) : null,
     result ? e('div', { className: 'search-summary', role: 'status' },
       t('search.summary', { hits: result.results.length, files: result.scannedFiles }),
       result.truncated ? e('strong', null, t('search.capped')) : null,
