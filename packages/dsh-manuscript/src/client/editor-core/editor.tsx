@@ -978,7 +978,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
 
   const cls = (slot: EditorCoreSlot) => slotClassName[slot]
   const sty = (slot: EditorCoreSlot) => slotStyle[slot]
-  const showFooter = loadingFim || patching || ghost || proposal || conflict || note
+  const showFooter = Boolean(footerExtras) || loadingFim || patching || ghost || proposal || conflict || note
   const paperVars = typographyCssVariables(normalizeTypography(typography)) as CSSProperties
 
   return e('section', {
