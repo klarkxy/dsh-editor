@@ -2,48 +2,37 @@
 
 本文件只记录已经发生的版本变化；安装、升级和回滚步骤以 [使用者指南](docs/user-guide.md) 为准。
 
-## Unreleased
+## 0.1.7 - 2026-09-07
 
-### dsh-editor-shell
+### 工作台
 
-- 侧栏全文搜索面板（Ctrl+Shift+F，`search.text`），点击命中后用稿纸 `revealRange` 定位。
-- 导出预检对话框：一次读取正文后可下载 Markdown / TXT，或在本机打包 DOCX / EPUB（捆绑 `docx`、`jszip`）。
-- 导入对话框重新挂到作品菜单与命令面板（`project.import*`）。
-- 文件树右键归档与「已归档」列表（`archive.*`）；只接受单个可见 Markdown/TXT，不归档目录。
+- 恢复作者工作台：作品概览、人物卡 / 世界书、校对、导出预检、导入、归档、全文搜索、每日写作目标、稿纸排版、对话归档，以及通用设置里的中文 / English 立即切换（DSH 对话区仍用自带文案）。
+- 作品概览（Ctrl+Shift+O）显示章节状态、字数分布和近 30 日 / 12 周写作曲线；文件树正文章节带草稿 / 修订中 / 已定稿小标。
+- 人物卡 / 世界书面板（Ctrl+Shift+C / Ctrl+Shift+W）用结构化 frontmatter 管理卡片，并支持引用导航。
+- 导出预检一次读取正文后可下载 Markdown / TXT，或在本机打包 DOCX / EPUB。
+- 侧栏全文搜索（Ctrl+Shift+F）点击命中后在稿纸里定位；稿纸内可用 Ctrl+F / Ctrl+H 查找替换。
+- 稿纸排版：打字机 Ctrl+Alt+T、段落聚焦 Ctrl+Alt+P，以及字号、行高、字体、段距、纸宽。
 - 打开世界书 Markdown 时，稿纸下方提供触发词 / 启用 / 优先级表单。
-- 设置中的每日写作目标与侧栏「今日 +N / 目标 M」小标；保存后 5 秒防抖调用 `progress.record`。
-- 作品概览（Ctrl+Shift+O）：章节状态、字数分布、近 30 日 / 12 周写作曲线；文件树显示状态标记。
-- 校对面板（Ctrl+Shift+L，`proofread.scan`）；自动应用走提案，仅 Markdown，`.txt` 需手工改；忽略名单写入 `.dsh-editor/敏感词-忽略.txt`。
-- 稿纸与排版设置（`dsh-editor-writing`）：打字机 Ctrl+Alt+T、段落聚焦 Ctrl+Alt+P、字号/行高/字体/段距/纸宽。
-- 对话 ⋯ 菜单：归档、恢复、删除；删除只在本机记墓碑，DSH 0.1.1-rc.2 没有会话删除。
-- 人物卡 / 世界书面板（Ctrl+Shift+C / Ctrl+Shift+W，`cards.*`）：结构化 frontmatter 与引用导航。
-- 通用设置的中文 / English 立即覆盖外壳文案（`src/i18n/`，约 930 条键）；DSH 对话区仍用自带文案。
-- 正文 Markdown 章节的稿纸下方增加「章纲 / 章末状态」表单（`chapter-meta-settings.ts`），写回文件头 frontmatter；稿纸投影隐藏章节文件头，字数只算正文；概览章节行显示「纲 / 态」小标。
-- 章节稿纸下方增加改写预设条（感官展开 / 缩短 / 去说明 / 对话节奏 / 自定义），走 `EditorCoreHandle.requestRewrite`；本章章纲 + 上一章章末状态（`file.read` 上一章一次，随修订刷新）作为 `chapterContext` 随补全与改写发送。
-- 校对面板新增「设定对照」类型芯片。
-- 全文搜索面板增加「替换为 / 全部替换…」（`search-replace.ts`）：面板内确认后按搜索返回的精确位置逐文件 `file.write`，核对版本与命中位置，过期文件跳过并可重新搜索。
-- 文件树右键与命令面板新增拆章 / 合并到上一章 / 与下一章合并（`chapter-ops.ts`，`cmd.split-at-cursor`）：本地构造 `split` / `merge` 提案标记，复用提案卡的预览、应用与部分失败恢复。
-- 钉住对照栏（`pinned-pane.ts`）：稿纸与搭档栏之间可钉一份只读的人物卡 / 世界书 / 章节，文件树右键、卡片详情和命令面板（`cmd.pin-current` / `cmd.unpin`）可钉住或取消；宽度与路径存于 `localStorage`，专注模式隐藏但保留。
+- 设置中的每日写作目标会在侧栏显示「今日 +N / 目标 M」。
+- 对话 ⋯ 菜单支持归档、恢复、删除；删除只在本机记墓碑（DSH 0.1.1-rc.2 没有会话删除）。
 
-### dsh-manuscript
+### 章纲与改写
 
-- 稿内查找 / 替换（Ctrl+F / Ctrl+H，`@codemirror/search`）与 `EditorCoreHandle.revealRange`。
-- `EditorCore` 增加 `typewriter`、`focusParagraph`、`typography`（`--paper-*` CSS 变量）。
-- `fim.complete` / `patch.complete` 接受可选 `chapterContext`（≤1,200 字，提示词中为「本章工作笔记」）；`patch.complete` 接受可选 `instruction`（≤400 字，「改写要求」）。
-- `EditorCore` 增加 `chapterContext` 属性与句柄方法 `requestRewrite(instruction?)`；导出 `REWRITE_PRESETS`（`rewrite-presets.ts`）。
+- 正文章节稿纸下方增加「章纲 / 章末状态」表单，写入章节文件头；稿纸不显示文件头，字数只算正文；概览章节行显示「纲 / 态」小标。
+- 四个改写预设（感官展开 / 缩短 / 去说明 / 对话节奏）和自定义要求，走选段改写；补全与改写会带上本章章纲和上一章章末状态。
+- 助手把这些工作笔记优先于推断摘要，但不当作 canon。
+- 稿纸有章纲或改写条时也会显示底栏，不再只在补全或冲突时才出现。
 
-### dsh-editor-workbench
+### 校对
 
-- `chapter.statusSet` 与 `.dsh-editor/chapter-status.json`；`project.overview` 带 `status`、`totals.byStatus`、`recentChapters`。
-- `progress.record` / `progress.history`（`.dsh-editor/writing-log.json`）。
-- `proofread.scan`（包内 `resources/proofread/*`，作品可追加 `.dsh-editor/敏感词.txt` / `敏感词-忽略.txt`）。
-- `cards.list` / `cards.metaSet` / `cards.references` / `cards.create`（`frontmatter.ts`）；卡片写入进入工作区写队列。
-- 章节 frontmatter `beats` / `state`（`chapter-meta.ts`：`parseChapterMeta` / `applyChapterMeta` / `stripChapterFrontmatter`）；`context.compile` 在 `activePath` 为正文章节时于 V2 信封中附加可选 `chapter_context`（本章章纲 + 上一章章末状态），版本号保持 2；概览字数与导出均去掉文件头。
-- `proofread.scan` 新增 `card` 类型（`proofread-cards.ts`）：对照人物卡 / 世界书的性别称谓错用（`card-gender`，warning，附替换）与专名近似写法（`card-nearmiss`，info）；`ProofreadFinding` 新增可选 `code` / `term`。
+- 校对面板（Ctrl+Shift+L）检查标点、错别字、敏感词、重复和口癖；自动应用走提案，仅 Markdown，`.txt` 请手工改；忽略名单写入 `.dsh-editor/敏感词-忽略.txt`。
+- 新增「设定对照」：对照人物卡 / 世界书抓性别称谓错用（他 / 她）和只差一字的专名近似写法。
 
-### dsh-editor-novel-kernel
+### 作品管理
 
-- 系统提示说明 `chapter_context` 为作者维护的工作笔记，优先于推断的摘要，但不是 canon。
+- 全文搜索支持「替换为 / 全部替换…」：确认后按搜索返回的精确位置写入，核对版本与命中位置，期间被改过的文件会跳过。
+- 文件树右键与命令面板可拆章、合并到上一章、与下一章合并；先出提案卡预览再应用，被并入的章节自动归档。
+- 稿纸与搭档栏之间可钉一份只读对照（人物卡 / 世界书 / 章节）；专注模式隐藏但保留，宽度与路径记在本机界面偏好里。
 
 ## 0.1.6 - 2026-09-07
 
