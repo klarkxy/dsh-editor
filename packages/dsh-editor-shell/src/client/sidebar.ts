@@ -1,6 +1,7 @@
 import { createElement as e, Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { ChapterStatus } from 'dsh-editor-workbench/contracts'
 import { chapterStatusGlyph, chapterStatusLabel, isChapterDocumentPath } from '../overview-view.ts'
+import { canPinPath } from '../pinned-pane-view.ts'
 import { errorMessage, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
 import { t } from '../i18n/index.ts'
 
@@ -199,6 +200,18 @@ export function FileContextMenu(props: {
   onDelete(): void
   onClose(): void
   canArchive: boolean
+  onSplit(): void
+  onMergePrevious(): void
+  onMergeNext(): void
+  canSplit: boolean
+  canMergePrevious: boolean
+  canMergeNext: boolean
+  splitDisabledTitle: string
+  mergePreviousDisabledTitle: string
+  mergeNextDisabledTitle: string
+  onPin(): void
+  onUnpin(): void
+  isPinned: boolean
 }) {
   const panel = useRef<HTMLDivElement | null>(null)
   const first = useRef<HTMLButtonElement | null>(null)
@@ -217,8 +230,8 @@ export function FileContextMenu(props: {
       globalThis.removeEventListener('keydown', onKey)
     }
   }, [props.path, props.x, props.y])
-  const left = Math.max(8, Math.min(props.x, globalThis.innerWidth - 188))
-  const top = Math.max(8, Math.min(props.y, globalThis.innerHeight - 260))
+  const left = Math.max(8, Math.min(props.x, globalThis.innerWidth - 220))
+  const top = Math.max(8, Math.min(props.y, globalThis.innerHeight - 400))
   return e('div', {
     ref: panel,
     className: 'file-context-menu',
@@ -240,6 +253,38 @@ export function FileContextMenu(props: {
     }, t('common.paste')),
     e('hr', { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
     e('button', { type: 'button', role: 'menuitem', onClick: props.onRename }, t('common.rename')),
+    props.kind === 'file' && isChapterDocumentPath(props.path) ? e('hr', { className: 'file-context-menu-separator', 'aria-hidden': 'true' }) : null,
+    props.kind === 'file' && isChapterDocumentPath(props.path) ? e('button', {
+      type: 'button',
+      role: 'menuitem',
+      disabled: !props.canSplit,
+      title: props.canSplit ? undefined : props.splitDisabledTitle,
+      onClick: props.onSplit,
+    }, t('chapterOps.split')) : null,
+    props.kind === 'file' && isChapterDocumentPath(props.path) ? e('button', {
+      type: 'button',
+      role: 'menuitem',
+      disabled: !props.canMergePrevious,
+      title: props.canMergePrevious ? undefined : props.mergePreviousDisabledTitle,
+      onClick: props.onMergePrevious,
+    }, t('chapterOps.mergePrevious')) : null,
+    props.kind === 'file' && isChapterDocumentPath(props.path) ? e('button', {
+      type: 'button',
+      role: 'menuitem',
+      disabled: !props.canMergeNext,
+      title: props.canMergeNext ? undefined : props.mergeNextDisabledTitle,
+      onClick: props.onMergeNext,
+    }, t('chapterOps.mergeNext')) : null,
+    props.kind === 'file' && canPinPath(props.path) && !props.isPinned ? e('button', {
+      type: 'button',
+      role: 'menuitem',
+      onClick: props.onPin,
+    }, t('pin.beside')) : null,
+    props.kind === 'file' && props.isPinned ? e('button', {
+      type: 'button',
+      role: 'menuitem',
+      onClick: props.onUnpin,
+    }, t('pin.unpin')) : null,
     e('button', {
       type: 'button',
       role: 'menuitem',

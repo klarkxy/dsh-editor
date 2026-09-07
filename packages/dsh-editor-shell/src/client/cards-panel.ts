@@ -401,6 +401,8 @@ function CardsDetail(props: {
   onSelectCard(path: string): void
   onChanged(): void
   onOpenHit(hit: SearchHit): void
+  pinnedPath: string | null
+  onTogglePin(path: string): void
 }) {
   const card = props.card
   const [note, setNote] = useState('')
@@ -534,7 +536,14 @@ function CardsDetail(props: {
         e('h2', null, card.title),
         e('p', { className: 'muted' }, card.path),
       ),
-      e('button', { className: 'icon-button', type: 'button', 'aria-label': t('cards.closeDetail'), onClick: props.onClose }, '×'),
+      e('div', { className: 'cards-detail-header-actions' },
+        e('button', {
+          type: 'button',
+          'aria-pressed': props.pinnedPath === card.path,
+          onClick: () => props.onTogglePin(card.path),
+        }, props.pinnedPath === card.path ? t('pin.unpin') : t('pin.beside')),
+        e('button', { className: 'icon-button', type: 'button', 'aria-label': t('cards.closeDetail'), onClick: props.onClose }, '×'),
+      ),
     ),
     e('div', { className: 'cards-detail-body' },
       isCharacter ? e('div', { className: 'cards-fields' },

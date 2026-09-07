@@ -70,10 +70,16 @@ export type CommandPaletteProps = {
   onExport(): void
   onImport(): void
   onOpenArchives(): void
+  onSplitAtCursor(): void
+  canSplitAtCursor: boolean
   onToggleTypewriter?(): void
   onToggleFocusParagraph?(): void
   typewriter?: boolean
   focusParagraph?: boolean
+  onPinCurrent(): void
+  canPinCurrent: boolean
+  onUnpin(): void
+  pinnedPath: string | null
   /* 当前状态:决定命令的置灰 / 显隐。files 来自 root.ts 的 useState,已经
      是排好序的 markdown/txt 路径。activePath 用于高亮当前打开的文档。 */
   hasWorkspace: boolean
@@ -164,6 +170,12 @@ function ArchiveIcon() {
     e('path', { d: 'M4 7.5h16v3H4z' }),
     e('path', { d: 'M6 10.5v8h12v-8' }),
     e('path', { d: 'M10 14h4' }),
+  )
+}
+function PinIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', strokeLinecap: 'round', 'aria-hidden': 'true' },
+    e('path', { d: 'M8.5 10.5 12 4.5l3.5 6v4.5l2.5 2.5H6l2.5-2.5z' }),
+    e('path', { d: 'M12 17.5V21' }),
   )
 }
 
@@ -327,6 +339,15 @@ export function CommandPalette(props: CommandPaletteProps) {
         disabled: !props.hasWorkspace,
         run: () => props.onOpenArchives(),
       },
+      {
+        id: 'cmd.split-at-cursor',
+        label: t('chapterOps.splitAtCursor'),
+        hint: t('chapterOps.splitAtCursorHint'),
+        keywords: ['split', 'chapter', 'cursor'],
+        icon: e(FileIcon, null),
+        disabled: !props.canSplitAtCursor,
+        run: () => props.onSplitAtCursor(),
+      },
     ],
   }
 
@@ -350,6 +371,24 @@ export function CommandPalette(props: CommandPaletteProps) {
         icon: e(FocusIcon, null),
         disabled: !props.hasWorkspace,
         run: () => props.onToggleFocus(),
+      },
+      {
+        id: 'cmd.pin-current',
+        label: t('pin.current'),
+        hint: t('pin.currentHint'),
+        keywords: ['pin', 'beside', 'split'],
+        icon: e(PinIcon, null),
+        disabled: !props.canPinCurrent,
+        run: () => props.onPinCurrent(),
+      },
+      {
+        id: 'cmd.unpin',
+        label: t('pin.unpin'),
+        hint: t('pin.unpinHint'),
+        keywords: ['unpin', 'pin'],
+        icon: e(PinIcon, null),
+        disabled: !props.pinnedPath,
+        run: () => props.onUnpin(),
       },
       {
         id: 'cmd.open-settings',

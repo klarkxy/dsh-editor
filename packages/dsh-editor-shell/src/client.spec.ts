@@ -224,12 +224,27 @@ describe('shell manuscript RPC safety', () => {
     expect(sidebar).toMatch(/onRename\(\)/)
     expect(sidebar).toMatch(/onArchive\(\)/)
     expect(sidebar).toMatch(/onClose\(\)/)
+    expect(sidebar).toMatch(/onSplit\(\)/)
+    expect(sidebar).toMatch(/onMergePrevious\(\)/)
+    expect(sidebar).toMatch(/onMergeNext\(\)/)
+    expect(sidebar).toMatch(/onPin\(\)/)
+    expect(sidebar).toMatch(/onUnpin\(\)/)
+    expect(sidebar).toContain("t('pin.beside')")
+    expect(sidebar).toContain("t('pin.unpin')")
+    expect(sidebar).toContain("t('chapterOps.split')")
+    expect(sidebar).toContain("t('chapterOps.mergePrevious')")
+    expect(sidebar).toContain("t('chapterOps.mergeNext')")
+    expect(zh['chapterOps.split']).toBe('拆章…')
+    expect(zh['chapterOps.mergePrevious']).toBe('合并到上一章')
+    expect(zh['chapterOps.mergeNext']).toBe('与下一章合并')
     expect(sidebar).toContain('canPaste:')
     expect(sidebar).toContain("'data-danger': 'true'")
     /* 树行/容器/根菜单都走同一条 onFileMenu 回调 */
     expect(sidebar).toMatch(/onContextMenu[\s\S]{0,200}onFileMenu\('directory', child/)
     expect(sidebar).toMatch(/onContextMenu[\s\S]{0,200}onFileMenu\('file', child/)
     /* root.ts 必须真的挂上剪贴板状态机和 workbench 端点 */
+    expect(root).toContain('ChapterOpsLayer')
+    expect(root).toContain('onSplitAtCursor')
     expect(root).toMatch(/const \[clipboard, setClipboard\]\s*=\s*useState/)
     expect(root).toContain("'entry.copy'")
     expect(root).toContain("'entry.move'")
@@ -364,6 +379,21 @@ describe('shell manuscript RPC safety', () => {
     expect(worldbookPaperProjection('世界书/损坏.md', invalid)).toEqual({ text: invalid, offset: 0 })
   })
 
+  it('hides closed chapter frontmatter from the paper and leaves TXT or unclosed headers visible', () => {
+    const source = '---\nbeats: [码头]\n---\n# 第三章\n正文'
+    const projection = worldbookPaperProjection('正文/001.md', source)
+    expect(projection.text).toBe('# 第三章\n正文')
+    expect(projection.text).not.toContain('beats:')
+    const updated = replaceWorldbookPaperText('正文/001.md', source, '# 第三章\n新正文')
+    expect(updated.slice(0, projection.offset)).toBe(source.slice(0, projection.offset))
+    expect(updated).toContain('beats:')
+    expect(updated.endsWith('# 第三章\n新正文')).toBe(true)
+
+    const unclosed = '---\nbeats: [码头]\n正文'
+    expect(worldbookPaperProjection('正文/001.md', unclosed)).toEqual({ text: unclosed, offset: 0 })
+    expect(worldbookPaperProjection('正文/001.txt', source)).toEqual({ text: source, offset: 0 })
+  })
+
   it('restores search, import, export, worldbook, and archive affordances without snapshot-library or shortcut dialogs', () => {
     const source = rootSource()
     const search = readFileSync(new URL('./client/search-panel.ts', import.meta.url), 'utf8')
@@ -404,6 +434,13 @@ describe('shell manuscript RPC safety', () => {
     expect(palette).toContain("t('command.export')")
     expect(palette).toContain("t('command.importWork')")
     expect(palette).toContain("t('command.archived')")
+    expect(palette).toContain('cmd.split-at-cursor')
+    expect(palette).toContain('cmd.pin-current')
+    expect(palette).toContain('cmd.unpin')
+    expect(palette).toContain("t('chapterOps.splitAtCursor')")
+    expect(palette).toContain("t('pin.current')")
+    expect(palette).toContain("t('pin.unpin')")
+    expect(zh['chapterOps.splitAtCursor']).toBe('在光标处拆章')
     expect(zh['command.search']).toBe('全文搜索')
     expect(zh['command.overview']).toBe('作品概览')
     expect(zh['command.export']).toBe('导出全文')
@@ -563,6 +600,21 @@ describe('shell manuscript RPC safety', () => {
     expect(gate.isCurrent(newer)).toBe(true)
     gate.setScope('session-b')
     expect(gate.isCurrent(newer)).toBe(false)
+  })
+
+  it('builds the workspace grid from pinnedLayoutColumns so a fourth pin track can sit beside the manuscript', () => {
+    const source = rootSource()
+    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
+    expect(source).toContain('pinnedLayoutColumns({')
+    expect(source).toContain('dsh-editor.layout.pinned-path')
+    expect(source).toContain('dsh-editor.layout.pinned-width')
+    expect(source).toContain('PinnedPane')
+    expect(source).not.toContain("assistantVisible ? `7px ${assistantWidth}px` : '',")
+    expect(styleSource).toContain('.pinned-pane')
+    expect(styleSource).toContain('.pinned-open')
+    expect(styleSource).toMatch(/overview-open > \.editor, \.shell\.layout-shell\.overview-open > \.empty-paper, \.shell\.layout-shell\.overview-open > \.cards-detail/)
+    expect(styleSource).not.toMatch(/overview-open > \.pinned-pane/)
+    expect(styleSource).not.toMatch(/cards-open > \.pinned-pane/)
   })
 
   it('clamps both panel resize directions to their accessible bounds', () => {

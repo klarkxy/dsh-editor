@@ -43,6 +43,8 @@ import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger } from './settings.tsx'
 import { ThemeToggle, useTheme, type HostThemeSync } from './theme.ts'
 import { Tree, FileContextMenu } from './sidebar.ts'
+import { ChapterOpsLayer, chapterMenuModel, requestMergeChapter, requestSplitChapter, shouldOpenAfterChapterApply, snapshotFromHandle, type ChapterOpsRequest, type EditorSnapshotHandle } from './chapter-ops.ts'
+import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
 import { Editor } from './editor.ts'
 import { Chat } from './chat.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
@@ -52,6 +54,8 @@ import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.ts'
 import { OverviewPanel } from './overview-panel.ts'
 import { ProofreadPanel, type ProofreadRequest } from './proofread-panel.ts'
 import { CardsDetail, CardsPanel, type CardsCatalog } from './cards-panel.ts'
+import { PinnedPane } from './pinned-pane.ts'
+import { canPinPath, pinnedLayoutColumns, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
 import { isCharacterCardPath, isWorldbookCardPath } from '../cards-view.ts'
 import type { ProofreadFinding } from '../proofread-view.ts'
 import { collectChapters, downloadExport, ExportPreviewDialog } from './export-dialog.ts'
@@ -68,6 +72,9 @@ const SIDEBAR_MAX = 420
 const ASSISTANT_DEFAULT = 384
 const ASSISTANT_MIN = 300
 const ASSISTANT_MAX = 560
+const PINNED_DEFAULT = 340
+const PINNED_MIN = 260
+const PINNED_MAX = 560
 
 /* 首页入口卡的图标(线性几何,1.6px stroke,1.5 视口单位的内边距)。
    故意做成 currentColor 的描边色,颜色由 CSS 控制,符合纸/墨双主题。 */
@@ -280,6 +287,11 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(() => storedPanelOpen('dsh-editor.layout.assistant-open', true))
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
+  const [pinnedPath, setPinnedPath] = useState<string | null>(() => {
+    const stored = storedPinnedPath('dsh-editor.layout.pinned-path')
+    return stored && canPinPath(stored) ? stored : null
+  })
+  const [pinnedWidth, setPinnedWidth] = useState(() => storedPanelWidth('dsh-editor.layout.pinned-width', PINNED_DEFAULT, PINNED_MIN, PINNED_MAX))
   const [assistantDraftDirty, setAssistantDraftDirty] = useState(false)
   const [leaveConfirm, setLeaveConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   const [focusMode, setFocusMode] = useState(false)
@@ -291,6 +303,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const [statusBusyPath, setStatusBusyPath] = useState<string | null>(null)
   const [editorDirty, setEditorDirty] = useState(false)
   const [fileMenu, setFileMenu] = useState<FileMenuState>(null)
+  const [chapterOps, setChapterOps] = useState<ChapterOpsRequest | null>(null)
+  const editorHandleRef = useRef<EditorSnapshotHandle | null>(null)
   const [clipboard, setClipboard] = useState<ClipboardEntry>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
   const [renameTarget, setRenameTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
@@ -357,6 +371,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const initialWorkspaceResumeStarted = useRef(false)
   const createReturnFocus = useRef<HTMLElement | null>(null)
   const fileManageReturnFocus = useRef<HTMLElement | null>(null)
+  const pinValidatedSession = useRef<string | undefined>()
   useEffect(() => { document.title = 'DSH Editor' }, [])
   useEffect(() => {
     try { globalThis.localStorage?.setItem('dsh-editor.layout.sidebar-open', String(sidebarOpen)) } catch { /* View preferences remain optional. */ }
@@ -370,6 +385,15 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   useEffect(() => {
     try { globalThis.localStorage?.setItem('dsh-editor.layout.assistant-width', String(assistantWidth)) } catch { /* View preferences remain optional. */ }
   }, [assistantWidth])
+  useEffect(() => {
+    try {
+      if (pinnedPath) globalThis.localStorage?.setItem('dsh-editor.layout.pinned-path', pinnedPath)
+      else globalThis.localStorage?.removeItem('dsh-editor.layout.pinned-path')
+    } catch { /* View preferences remain optional. */ }
+  }, [pinnedPath])
+  useEffect(() => {
+    try { globalThis.localStorage?.setItem('dsh-editor.layout.pinned-width', String(pinnedWidth)) } catch { /* View preferences remain optional. */ }
+  }, [pinnedWidth])
   useEffect(() => {
     const hotkey = (event: globalThis.KeyboardEvent) => {
       if (document.querySelector('[aria-modal="true"]')) return
@@ -452,7 +476,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   useEffect(() => {
     if (!openWorkspaceId) setPath('')
     setFiles([]); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
-    setFileMenu(null); setManagePath(null); setManageNote('')
+    setFileMenu(null); setChapterOps(null); setManagePath(null); setManageNote('')
     setClipboard(null); setDeleteTarget(null); setRenameTarget(null)
     setOverview(null); setWorkspaceMenuOpen(false)
     setHistoryOpen(false); setSnapshots(null); setRollbackTarget(null)
@@ -475,7 +499,13 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     if (!fileSession) { setFiles([]); return }
     let live = true
     void collectWorkspaceFiles(ctx, fileSession.sessionId).then((paths) => {
-      if (live) setFiles(sortChapterPaths(paths))
+      if (!live) return
+      const next = sortChapterPaths(paths)
+      setFiles(next)
+      if (pinValidatedSession.current !== fileSession.sessionId) {
+        pinValidatedSession.current = fileSession.sessionId
+        setPinnedPath((current) => validatePinnedPath(current, next))
+      }
     }).catch(() => {
       if (live) { setFiles([]); setWorkbenchNote(t('error.chapterOrder')) }
     })
@@ -577,6 +607,31 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     setFileMenu({ kind, path: selectedPath, x: position.x, y: position.y })
   }
   const closeFileMenu = () => setFileMenu(null)
+  const beginChapterSplit = (target: string, source: 'tree' | 'cursor') => {
+    setFileMenu(null)
+    const next = requestSplitChapter({ path: target, source, editorDirty, activePath: path })
+    if (!next.ok) { setWorkbenchNote(next.reason === 'unsaved' ? t('error.saveFirst') : t('chapterOps.splitTxtDisabled')); return }
+    setChapterOps(next.request)
+  }
+  const beginChapterMerge = (chapterPath: string, direction: 'previous' | 'next') => {
+    setFileMenu(null)
+    const next = requestMergeChapter({ chapterPath, direction, files, editorDirty, activePath: path })
+    if (!next.ok) {
+      setWorkbenchNote(next.reason === 'unsaved' ? t('error.saveFirst') : t('chapterOps.mergeMdOnly'))
+      return
+    }
+    setChapterOps(next.request)
+  }
+  const applyChapterOps = (appliedPath: string) => {
+    setTreeRevision((value) => value + 1)
+    if (appliedPath.startsWith('正文/')) setTreeExpansionPath(appliedPath)
+    if (!chapterOps || !shouldOpenAfterChapterApply(chapterOps, appliedPath)) {
+      if (appliedPath === path) setContentRevision((value) => value + 1)
+      return
+    }
+    openDocument(appliedPath)
+    setContentRevision((value) => value + 1)
+  }
   /* 把绝对路径转为父目录(用于"在文件行右键 → 粘贴"的目录来源)。根目录统一用 '.'(Host 同时接受 '' 与 '.')。 */
   const parentOf = (target: string): string => {
     const index = target.lastIndexOf('/')
@@ -1703,10 +1758,16 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     onExport: () => { void exportNovel() },
     onImport: () => { void startImportProject() },
     onOpenArchives: () => openArchivePanel(),
+    onSplitAtCursor: () => beginChapterSplit(path, 'cursor'),
+    canSplitAtCursor: Boolean(fileSession) && !editorDirty && isMarkdownChapterPath(path),
     onToggleTypewriter: () => { void writingScope.set('typewriter', !writing.typewriter) },
     onToggleFocusParagraph: () => { void writingScope.set('focusParagraph', !writing.focusParagraph) },
     typewriter: writing.typewriter,
     focusParagraph: writing.focusParagraph,
+    onPinCurrent: () => { if (canPinPath(path)) setPinnedPath(path) },
+    canPinCurrent: Boolean(fileSession) && canPinPath(path),
+    onUnpin: () => setPinnedPath(null),
+    pinnedPath,
     hasWorkspace: Boolean(fileSession),
     focusMode,
     files,
@@ -1839,14 +1900,18 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
   const chatSession = session ?? fileSession
   const sidebarVisible = sidebarOpen && !focusMode
   const assistantVisible = assistantOpen && !focusMode
-  const layoutColumns = [
-    sidebarVisible ? `${sidebarWidth}px 7px` : '',
-    'minmax(420px,1fr)',
-    assistantVisible ? `7px ${assistantWidth}px` : '',
-  ].filter(Boolean).join(' ')
+  const pinnedVisible = pinnedPath !== null && !focusMode
+  const layoutColumns = pinnedLayoutColumns({
+    sidebarVisible,
+    sidebarWidth,
+    pinnedVisible,
+    pinnedWidth,
+    assistantVisible,
+    assistantWidth,
+  })
 
   return e('main', {
-    className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarVisible ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${overviewOpen ? ' overview-open' : ''}${cardsOpen && cardsSelectedPath ? ' cards-open' : ''}`,
+    className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarVisible ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${pinnedVisible ? ' pinned-open' : ''}${overviewOpen ? ' overview-open' : ''}${cardsOpen && cardsSelectedPath ? ' cards-open' : ''}`,
     style: { minWidth: 0, gridTemplateColumns: layoutColumns },
   },
     e('style', null, redesignedStyles),
@@ -1941,7 +2006,14 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         sessionId: fileSession.sessionId,
         revision: treeRevision,
         navigationBlocked: editorDirty,
+        activePath: path,
+        activeDirty: editorDirty,
         onOpen: (hit: SearchHit) => openDocument(hit.path, hit),
+        onReplaced: (paths: string[]) => {
+          if (!paths.includes(path)) return
+          const navigation = proposalAppliedNavigation(path, path, editorDirty)
+          if (navigation.refreshContent) setContentRevision((old) => old + 1)
+        },
       }) : null,
       proofreadOpen ? e(ProofreadPanel, {
         ctx,
@@ -2007,6 +2079,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     }) : null,
     e(Editor, {
       ctx, session: fileSession, path, files, onOpen: openDocument, create: () => openTreeCreate('file', '正文'),
+      onHandle: (handle) => { editorHandleRef.current = handle },
       externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal,
       completionPreference: writing.completion,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
@@ -2018,6 +2091,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       onToggleFocusParagraph: () => { void writingScope.set('focusParagraph', !writing.focusParagraph) },
       onSaved: () => {
         setOverviewRevision((value) => value + 1)
+        if (path === pinnedPath) setContentRevision((value) => value + 1)
         progressRecord.schedule(() => { void recordSavedProgress() })
       },
     }),
@@ -2051,8 +2125,35 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         onSelectCard: selectCard,
         onChanged: () => setTreeRevision((value) => value + 1),
         onOpenHit: (hit: SearchHit) => openDocument(hit.path, hit),
+        pinnedPath,
+        onTogglePin: (cardPath: string) => setPinnedPath((current) => current === cardPath ? null : cardPath),
       }) : null
     })() : null,
+    pinnedVisible && pinnedPath ? e(PanelResizer, {
+      side: 'right',
+      value: pinnedWidth,
+      minimum: PINNED_MIN,
+      maximum: PINNED_MAX,
+      defaultValue: PINNED_DEFAULT,
+      label: t('pin.resize'),
+      onChange: setPinnedWidth,
+    }) : null,
+    pinnedVisible && pinnedPath ? e(PinnedPane, {
+      ctx,
+      sessionId: fileSession.sessionId,
+      path: pinnedPath,
+      treeRevision,
+      contentRevision,
+      onUnpin: () => setPinnedPath(null),
+      onOpenDocument: (cardPath: string) => {
+        setTreeExpansionPath(cardPath)
+        openDocument(cardPath)
+      },
+      onMissing: () => {
+        setWorkbenchNote(t('pin.missing'))
+        setPinnedPath(null)
+      },
+    }) : null,
     assistantVisible ? e(PanelResizer, {
       side: 'right',
       value: assistantWidth,
@@ -2147,6 +2248,27 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       onArchive: () => void archiveManaged(fileMenu.path),
       canArchive: canArchivePath(fileMenu.kind, fileMenu.path),
       onDelete: () => requestDeleteEntry(fileMenu.kind, fileMenu.path),
+      onSplit: () => beginChapterSplit(fileMenu.path, 'tree'),
+      onMergePrevious: () => beginChapterMerge(fileMenu.path, 'previous'),
+      onMergeNext: () => beginChapterMerge(fileMenu.path, 'next'),
+      canSplit: chapterMenuModel(fileMenu.path, files).canSplit,
+      canMergePrevious: chapterMenuModel(fileMenu.path, files).canMergePrevious,
+      canMergeNext: chapterMenuModel(fileMenu.path, files).canMergeNext,
+      splitDisabledTitle: chapterMenuModel(fileMenu.path, files).splitDisabledTitle,
+      mergePreviousDisabledTitle: chapterMenuModel(fileMenu.path, files).mergePreviousDisabledTitle,
+      mergeNextDisabledTitle: chapterMenuModel(fileMenu.path, files).mergeNextDisabledTitle,
+      onPin: () => { setPinnedPath(fileMenu.path); setFileMenu(null) },
+      onUnpin: () => { setPinnedPath(null); setFileMenu(null) },
+      isPinned: pinnedPath === fileMenu.path,
+    }) : null,
+    fileSession ? e(ChapterOpsLayer, {
+      ctx,
+      sessionId: fileSession.sessionId,
+      files,
+      request: chapterOps,
+      getEditorSnapshot: () => snapshotFromHandle(editorHandleRef.current),
+      onClose: () => setChapterOps(null),
+      onApplied: applyChapterOps,
     }) : null,
     managePath ? e(TextPromptDialog, {
       id: 'rename-file',
