@@ -18,11 +18,19 @@
 - 对话 ⋯ 菜单：归档、恢复、删除；删除只在本机记墓碑，DSH 0.1.1-rc.2 没有会话删除。
 - 人物卡 / 世界书面板（Ctrl+Shift+C / Ctrl+Shift+W，`cards.*`）：结构化 frontmatter 与引用导航。
 - 通用设置的中文 / English 立即覆盖外壳文案（`src/i18n/`，约 930 条键）；DSH 对话区仍用自带文案。
+- 正文 Markdown 章节的稿纸下方增加「章纲 / 章末状态」表单（`chapter-meta-settings.ts`），写回文件头 frontmatter；稿纸投影隐藏章节文件头，字数只算正文；概览章节行显示「纲 / 态」小标。
+- 章节稿纸下方增加改写预设条（感官展开 / 缩短 / 去说明 / 对话节奏 / 自定义），走 `EditorCoreHandle.requestRewrite`；本章章纲 + 上一章章末状态（`file.read` 上一章一次，随修订刷新）作为 `chapterContext` 随补全与改写发送。
+- 校对面板新增「设定对照」类型芯片。
+- 全文搜索面板增加「替换为 / 全部替换…」（`search-replace.ts`）：面板内确认后按搜索返回的精确位置逐文件 `file.write`，核对版本与命中位置，过期文件跳过并可重新搜索。
+- 文件树右键与命令面板新增拆章 / 合并到上一章 / 与下一章合并（`chapter-ops.ts`，`cmd.split-at-cursor`）：本地构造 `split` / `merge` 提案标记，复用提案卡的预览、应用与部分失败恢复。
+- 钉住对照栏（`pinned-pane.ts`）：稿纸与搭档栏之间可钉一份只读的人物卡 / 世界书 / 章节，文件树右键、卡片详情和命令面板（`cmd.pin-current` / `cmd.unpin`）可钉住或取消；宽度与路径存于 `localStorage`，专注模式隐藏但保留。
 
 ### dsh-manuscript
 
 - 稿内查找 / 替换（Ctrl+F / Ctrl+H，`@codemirror/search`）与 `EditorCoreHandle.revealRange`。
 - `EditorCore` 增加 `typewriter`、`focusParagraph`、`typography`（`--paper-*` CSS 变量）。
+- `fim.complete` / `patch.complete` 接受可选 `chapterContext`（≤1,200 字，提示词中为「本章工作笔记」）；`patch.complete` 接受可选 `instruction`（≤400 字，「改写要求」）。
+- `EditorCore` 增加 `chapterContext` 属性与句柄方法 `requestRewrite(instruction?)`；导出 `REWRITE_PRESETS`（`rewrite-presets.ts`）。
 
 ### dsh-editor-workbench
 
@@ -30,6 +38,12 @@
 - `progress.record` / `progress.history`（`.dsh-editor/writing-log.json`）。
 - `proofread.scan`（包内 `resources/proofread/*`，作品可追加 `.dsh-editor/敏感词.txt` / `敏感词-忽略.txt`）。
 - `cards.list` / `cards.metaSet` / `cards.references` / `cards.create`（`frontmatter.ts`）；卡片写入进入工作区写队列。
+- 章节 frontmatter `beats` / `state`（`chapter-meta.ts`：`parseChapterMeta` / `applyChapterMeta` / `stripChapterFrontmatter`）；`context.compile` 在 `activePath` 为正文章节时于 V2 信封中附加可选 `chapter_context`（本章章纲 + 上一章章末状态），版本号保持 2；概览字数与导出均去掉文件头。
+- `proofread.scan` 新增 `card` 类型（`proofread-cards.ts`）：对照人物卡 / 世界书的性别称谓错用（`card-gender`，warning，附替换）与专名近似写法（`card-nearmiss`，info）；`ProofreadFinding` 新增可选 `code` / `term`。
+
+### dsh-editor-novel-kernel
+
+- 系统提示说明 `chapter_context` 为作者维护的工作笔记，优先于推断的摘要，但不是 canon。
 
 ## 0.1.6 - 2026-09-07
 

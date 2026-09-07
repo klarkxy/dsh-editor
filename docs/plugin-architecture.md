@@ -146,8 +146,8 @@ Channel：`/manuscript`。除特别注明外，请求都包含 `sessionId`，路
 | `search.text` | `sessionId`, `query`, `scope: project\|manuscript` | 读 · 有界字面量搜索；不接受正则 |
 | `proposal.prepare` | `sessionId`, `kind`, `path`, `summary`；edit 加 `oldText`, `newText`；create 加 `text` | 读 · 只读预检和作者确认信息 |
 | `proposal.apply` | prepare 的全部字段；edit 另加 `expectedVersion` | 写 · 作者确认后按版本门禁创建或修改；edit 的 `oldText` 为空表示填充仍为空白的目标文件，create 也可覆盖仍为空白的目标文件 |
-| `fim.complete` | `sessionId`, `prefix`, `suffix`，可选 `authorPreferences` | 读 · `{ text, route: 'dsh-llm' }`，只返回候选 |
-| `patch.complete` | `sessionId`, `path`, `selectedText`, `before`, `after`，可选 `authorPreferences` | 读 · `{ text, route: 'dsh-llm' }`，只返回候选 |
+| `fim.complete` | `sessionId`, `prefix`, `suffix`，可选 `authorPreferences`，可选 `chapterContext`（≤1 200，去控制字符） | 读 · `{ text, route: 'dsh-llm' }`，只返回候选 |
+| `patch.complete` | `sessionId`, `path`, `selectedText`, `before`, `after`，可选 `authorPreferences`，可选 `chapterContext`（≤1 200），可选 `instruction`（≤400，改写要求） | 读 · `{ text, route: 'dsh-llm' }`，只返回候选 |
 | `usage.summary` | 可选 `days` | 读 · 本机用量快照；不要求 `sessionId` |
 | `zhihu.usage` | 可选 `days` | 读 · 知乎检索计量；不要求 `sessionId` |
 
@@ -163,8 +163,8 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 | `project.createHome` | `title` | 写 · `{ path }`，在「文档/dsh-editor」下独占创建同名空文件夹；不接受调用方传入的父路径 |
 | `project.init` | `sessionId`, `newProject` | 写 · `{ created, skipped }`，只建立空的 `正文` 目录，不写入 Markdown 模板；大纲/人物卡/世界书在实际创建后出现 |
 | `project.prepareIndex` | `sessionId` | 写 · 索引准备回执 |
-| `project.overview` | `sessionId` | 读 · 章节/大纲摘要（章节含 `status`）、总字数、`totals.byStatus` 分布、最近 1 项 `recent` 与最近 5 项 `recentChapters`、有界扫描警告 |
-| `proofread.scan` | `sessionId`, `scope`（`document` / `manuscript`），`document` 时必填 `path`，可选 `kinds` | 读 · 确定性校对：`punctuation` / `typo` / `sensitive` / `repeat` / `habit`。返回 `findings`（最多 500，`truncated`）、`scannedFiles`、`skipped`、`habitStats`（口癖千分比前 30）。`document` 只扫一篇作者内容 `.md`/`.txt`；`manuscript` 按自然序扫 `正文/`。默认词库在 `resources/proofread/`，作品可追加 `.dsh-editor/敏感词.txt`、忽略 `.dsh-editor/敏感词-忽略.txt` |
+| `project.overview` | `sessionId` | 读 · 章节/大纲摘要（章节含 `status`、可选 `meta: { beats, hasState }`）、总字数、`totals.byStatus` 分布、最近 1 项 `recent` 与最近 5 项 `recentChapters`、有界扫描警告 |
+| `proofread.scan` | `sessionId`, `scope`（`document` / `manuscript`），`document` 时必填 `path`，可选 `kinds` | 读 · 确定性校对：`punctuation` / `typo` / `sensitive` / `repeat` / `habit` / `card`（默认含 `card`）。返回 `findings`（最多 500，`truncated`）、`scannedFiles`、`skipped`、`habitStats`（口癖千分比前 30）。`document` 只扫一篇作者内容 `.md`/`.txt`；`manuscript` 按自然序扫 `正文/`。`card` 对照人物卡/世界书：代词性别不一致（`card-gender`）、专名近形误写（`card-nearmiss`，词表 >400 则跳过近形检查并计入 `skipped`）。默认词库在 `resources/proofread/`，作品可追加 `.dsh-editor/敏感词.txt`、忽略 `.dsh-editor/敏感词-忽略.txt` |
 | `cards.list` | `sessionId`, `kind`（`character` / `worldbook` / `all`） | 读 · 结构化卡片列表：`characters`、`worldbook`，每张含 `path`、`title`、`frontmatter`、`summary`（frontmatter.summary 或正文首段 ≤ 120 字）、`version`、`modifiedAt`。自然序，跳过隐藏/生成目录，最多 2000 文件，带 `scannedFiles` / `skipped` / `truncated` |
 | `cards.metaSet` | `sessionId`, `path`, `version`, `fields` | 写 · 只改 YAML frontmatter，正文按字节保留，未知键原样保留；版本冲突走 `bad-request`。成功 `{ path, version }` |
 | `cards.references` | `sessionId`, `path` | 读 · 引用导航：人物卡用 `name`+`aliases`，世界书用 `triggers`（否则文件名）。在 `正文/**/*.{md,txt}` 做字面量检索，最多 200 条 `hits`（`path`/`line`/`column`/`start`/`end`/`excerpt`），带 `terms`、`scannedFiles`、`truncated` |
@@ -201,6 +201,8 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 
 章节状态存在 `.dsh-editor/chapter-status.json`（`{ version: 1, statuses }`，键为规范化相对路径，缺省与 `draft` 不落盘）。写作字数日志存在 `.dsh-editor/writing-log.json`（`[{ date, chars, delta? }]`，本地日期、按日去重）。两份文件缺失或损坏时 Host fail-open 到默认值，孤立键不影响概览。`chapter.statusSet` 只接受 `正文/` 下已存在的 Markdown/TXT。`progress.record` 必须便宜且原子，防抖由调用方负责。`proofread.scan` 合并包内默认敏感词与 `.dsh-editor/敏感词.txt`，并用 `.dsh-editor/敏感词-忽略.txt` 做允许表；列表缺失或损坏时 fail-open 到默认词库。人物卡 / 世界书 frontmatter 是容错 YAML：人物卡可选 `name` / `aliases` / `role` / `gender` / `age` / `faction` / `tags` / `status` / `relations` / `summary`；世界书在原有 `triggers` / `enabled` / `priority` 之外还可有 `category` / `tags` / `summary`。未知键在 `cards.metaSet` 中按原文保留，损坏字段 fail-open 到缺省值，不阻断世界书匹配。
 
+章节 Markdown（`正文/**/*.md`）可选 YAML frontmatter：`beats`（字符串列表，最多 12 条、每条 ≤ 120 字）与 `state`（可选 `now` / `where` / `knows` / `ended` / `open`，各为标量，合计 ≤ 300 字）。未知键与注释按原文保留；TXT 章节不使用 frontmatter。无 frontmatter 解析为 `{}`，损坏或未闭合解析为缺省。`project.overview` 的字数 / 标题 / 摘要 / 空章按去掉 frontmatter 的正文计算，并带可选 `ChapterSummary.meta`。
+
 `.dsh-editor/*` 隐藏元数据一律不进入快照 payload。重命名、正文跨卷移动、归档和恢复响应可以带 `metadataWarning`，表示正文操作已经成功但附带的元数据未同步，调用方不得据此回滚正文。
 
 Context 信封常量：
@@ -208,6 +210,7 @@ Context 信封常量：
 - `schema`: `dsh-editor.project-context`
 - 历史版本 `1`，当前版本 `2`
 - 固定来源：`项目总览.md`、`大纲/总纲.md`、`人物卡/人物索引.md`、`世界书/设定总汇.md`、`.dsh-editor/作品索引.md`
+- V2 可选 `chapter_context: { path, beats?, previous?: { path, state } }`：当前章 `beats` 与上一章非空 `state`；皆无则省略。回执带 `chapterContext?: { path, beats, previousPath? }`。版本号仍为 `2`。
 
 ## Novel Kernel 契约
 
