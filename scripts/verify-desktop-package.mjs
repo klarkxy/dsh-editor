@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { desktopComposition } from './desktop-compositions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, process.argv[2] ?? '.pack/desktop')
@@ -57,9 +58,13 @@ for (const key of ['node', 'dsh', 'profile']) {
 }
 const dsh = await json(resolve(resources, 'dsh', 'package.json'))
 if (dsh.name !== '@deepseek-ai/dsh' || dsh.version !== '0.1.1-rc.2') throw new Error('packaged DSH identity mismatch')
-for (const packageName of ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-editor-shell']) {
+const composition = await json(resolve(resources, 'profile-template', 'composition.json'))
+const expectedComposition = await desktopComposition(composition.id)
+if (JSON.stringify(composition) !== JSON.stringify(expectedComposition)) throw new Error('packaged composition mismatch')
+for (const packageName of composition.packages) {
   await stat(resolve(resources, 'profile-template', 'node_modules', packageName, 'package.json'))
 }
+if (composition.packages.includes('dsh-editor-novel-kernel')) {
 const knowledgeRoot = resolve(resources, 'profile-template', 'node_modules', 'dsh-editor-novel-kernel', 'resources', 'novel-knowledge')
 for (const fileName of [
   'planning.md', 'characters.md', 'drafting.md', 'dialogue.md', 'interiority.md',
@@ -67,6 +72,9 @@ for (const fileName of [
 ]) {
   await stat(resolve(knowledgeRoot, fileName))
 }
+}
+const installed = (await readdir(resolve(resources, 'profile-template', 'node_modules'))).filter(name => name.startsWith('dsh-')).sort()
+if (JSON.stringify(installed) !== JSON.stringify([...composition.packages].sort())) throw new Error('unexpected packaged business dependencies')
 try {
   await stat(resolve(resources, 'profile-template', 'node_modules', 'dsh-grill'))
   throw new Error('desktop profile must not contain dsh-grill')

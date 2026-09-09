@@ -1,0 +1,1 @@
+{"id":"full","label":"智能写作与资料","packages":["dsh-manuscript","dsh-proofread","dsh-editor-workbench","dsh-editor-novel-kernel","dsh-zhihu","dsh-editor-shell"],"disabledEntries":[],"shell":{"assistant":true,"zhihu":true}}

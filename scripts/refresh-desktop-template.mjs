@@ -1,10 +1,10 @@
-import { cp, rm } from 'node:fs/promises'
+import { cp, rm, readFile } from 'node:fs/promises'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const template = resolve(root, '.dev', 'desktop-profile-template')
-const packages = ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-editor-shell']
+const { packages } = JSON.parse(await readFile(join(template, 'composition.json'), 'utf8'))
 
 const filter = (source) => {
   const normalized = source.replaceAll('\\', '/')

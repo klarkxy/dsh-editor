@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
+import { desktopComposition } from './desktop-compositions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pnpmCli = process.env.npm_execpath
@@ -89,18 +90,12 @@ if (process.env.DSH_DESKTOP_PREPARE_ONLY === '1') {
   process.exit(0)
 }
 
-const children = [
-  spawnNode(pnpmCli, [
-    '--filter', 'dsh-manuscript', 'exec', 'tsdown', '--watch', '--no-clean',
-    '--on-success', 'node ../../scripts/wrap-client.mjs dsh-manuscript',
-  ]),
-  spawnNode(pnpmCli, ['--filter', 'dsh-editor-workbench', 'exec', 'tsdown', '--watch', '--no-clean']),
-  spawnNode(pnpmCli, ['--filter', 'dsh-editor-novel-kernel', 'exec', 'tsdown', '--watch', '--no-clean']),
-  spawnNode(pnpmCli, [
-    '--filter', 'dsh-editor-shell', 'exec', 'tsdown', '--watch', '--no-clean',
-    '--on-success', 'node ../../scripts/wrap-client.mjs dsh-editor-shell',
-  ]),
-]
+const composition = await desktopComposition()
+const clientPackages = new Set(['dsh-manuscript', 'dsh-proofread', 'dsh-zhihu', 'dsh-editor-shell'])
+const children = composition.packages.map(name => spawnNode(pnpmCli, [
+  '--filter', name, 'exec', 'tsdown', '--watch', '--no-clean',
+  ...(clientPackages.has(name) ? ['--on-success', `node ../../scripts/wrap-client.mjs ${name}`] : []),
+]))
 const electron = spawnNode(electronCli, [resolve(root, 'apps', 'desktop', 'dist', 'main.js')])
 children.push(electron)
 

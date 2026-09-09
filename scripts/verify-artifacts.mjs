@@ -3,41 +3,16 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PUBLIC_PLUGIN_PACKAGES } from './desktop-compositions.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const packDir = path.join(root, '.pack')
-const packageNames = ['dsh-manuscript', 'dsh-grill']
-const expectedEntries = {
-  'dsh-manuscript': [
-    'package/LICENSE',
-    'package/README.md',
-    'package/cordis.patch.yml',
-    'package/lib/client.js',
-    'package/lib/client-editor-core.cjs',
-    'package/lib/host-api.d.ts',
-    'package/lib/host-api.js',
-    'package/lib/host-error.d.ts',
-    'package/lib/host-error.js',
-    'package/lib/host-error.js.map',
-    'package/lib/index.d.ts',
-    'package/lib/index.js',
-    'package/lib/index.js.map',
-    'package/package.json',
-  ],
-  'dsh-grill': [
-    'package/LICENSE',
-    'package/README.md',
-    'package/cordis.patch.yml',
-    'package/lib/host.js',
-    'package/lib/host.js.map',
-    'package/lib/tools.d.ts',
-    'package/lib/tools.js',
-    'package/lib/tools.js.map',
-    'package/lib/workflow.d.ts',
-    'package/lib/workflow.js',
-    'package/lib/workflow.js.map',
-    'package/package.json',
-  ],
+const packageNames = PUBLIC_PLUGIN_PACKAGES
+
+function expectedEntries(name) {
+  const output = fs.readdirSync(path.join(root, 'packages', name, 'lib')).filter(file => /\.(?:js|js\.map|d\.ts)$/.test(file))
+  if (name === 'dsh-manuscript') output.push('client-editor-core.cjs')
+  return ['package/LICENSE', 'package/README.md', 'package/cordis.patch.yml', 'package/package.json', ...output.map(file => 'package/lib/' + file)]
 }
 
 function readManifest(name) {
@@ -78,7 +53,7 @@ for (const name of packageNames) {
   const filename = `${name}-${manifests[name].version}.tgz`
   const absolute = path.join(packDir, filename)
   const entries = tar(['-tf', absolute]).trim().split(/\r?\n/).filter(Boolean)
-  assertExact(`${name} archive contents`, entries, expectedEntries[name])
+  assertExact(`${name} archive contents`, entries, expectedEntries(name))
 
   const packageJson = JSON.parse(tar(['-xOf', absolute, 'package/package.json']))
   if (packageJson.name !== name || packageJson.version !== manifests[name].version) {
@@ -88,16 +63,25 @@ for (const name of packageNames) {
     throw new Error(`${name} does not declare its DSH bundle patch`)
   }
 
+  for (const value of Object.values(packageJson.exports ?? {})) {
+    const targets = typeof value === 'string' ? [value] : Object.values(value)
+    for (const target of targets) {
+      if (typeof target === 'string' && target.startsWith('./') && !entries.includes('package/' + target.slice(2))) {
+        throw new Error(`${name} exports a missing file: ${target}`)
+      }
+    }
+  }
+  if (Object.values(packageJson.dependencies ?? {}).some(version => version.startsWith('workspace:'))) {
+    throw new Error(`${name} contains unresolved workspace runtime dependencies`)
+  }
   const codeEntries = entries.filter((entry) => /package\/lib\/.*\.(?:js|cjs)$/.test(entry))
   const code = codeEntries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
-  const runtimeForbidden = name === 'dsh-manuscript'
-    ? [
-        'dsh-grill',
-        'proposal.list',
-        'proposal.accept',
-        'proposal.reject',
-      ]
-    : ['dsh-manuscript', 'proposal.list', 'proposal.accept', 'proposal.reject']
+  const runtimeForbidden = {
+    'dsh-manuscript': ['dsh-grill', 'proposal.list', 'proposal.accept', 'proposal.reject'],
+    'dsh-grill': ['dsh-manuscript', 'proposal.list', 'proposal.accept', 'proposal.reject'],
+    'dsh-proofread': ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'node:fs', '@deepseek-ai/dsh-tools'],
+    'dsh-zhihu': ['dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-manuscript'],
+  }[name]
   for (const token of runtimeForbidden) {
     if (code.includes(token)) throw new Error(`${name} packed code contains forbidden coupling: ${token}`)
   }

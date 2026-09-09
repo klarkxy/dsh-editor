@@ -1,0 +1,1 @@
+{"id":"basic","label":"基础写作","packages":["dsh-manuscript","dsh-proofread","dsh-editor-workbench","dsh-editor-shell"],"disabledEntries":["manuscript-assist","editor-workbench-tools"],"shell":{"assistant":false,"zhihu":false}}

@@ -2,12 +2,14 @@ import { cp, mkdir, readFile, rm, symlink } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
+import { desktopComposition, configureProfile, DESKTOP_PACKAGE_NAMES } from './desktop-compositions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceTemplate = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 const template = resolve(root, '.dev', 'desktop-profile-template')
 const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime')
-const packages = ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-editor-shell']
+const composition = await desktopComposition()
+const packages = composition.packages
 
 if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.node !== '24.16.0') {
   throw new Error(`desktop development requires Windows x64 Node 24.16.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
@@ -26,6 +28,7 @@ function packageCopyFilter(source) {
 await rm(template, { recursive: true, force: true })
 await mkdir(dirname(template), { recursive: true })
 await cp(sourceTemplate, template, { recursive: true })
+await configureProfile(template, composition)
 for (const packageName of packages) {
   await cp(resolve(root, 'packages', packageName), resolve(template, 'node_modules', packageName), {
     recursive: true,
@@ -47,10 +50,13 @@ if (!runtimeReady) {
     filter: (source) => !source.replaceAll('\\', '/').includes('/node_modules/.bin/'),
   })
 }
-for (const packageName of packages) {
+for (const packageName of DESKTOP_PACKAGE_NAMES) {
   const destination = resolve(devDshRuntime, 'node_modules', packageName)
   await rm(destination, { recursive: true, force: true })
-  await symlink(resolve(root, 'packages', packageName), destination, 'junction')
+  if (packages.includes(packageName)) {
+    if (process.env.DSH_EDITOR_COPY_PACKAGES === '1') await cp(resolve(root, 'packages', packageName), destination, { recursive: true, filter: packageCopyFilter })
+    else await symlink(resolve(root, 'packages', packageName), destination, 'junction')
+  }
 }
 
 console.log(`desktop-dev: prepared ${template}`)

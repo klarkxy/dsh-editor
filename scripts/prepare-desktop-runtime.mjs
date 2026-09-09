@@ -4,6 +4,7 @@ import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:
 import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
+import { desktopComposition, configureProfile, BASE_BUNDLES } from './desktop-compositions.mjs'
 
 const NODE_VERSION = '24.16.0'
 const DSH_VERSION = '0.1.1-rc.2'
@@ -12,7 +13,8 @@ const outputRoot = resolve(root, '.pack', 'desktop-runtime')
 const nodeOutput = resolve(outputRoot, `node-${NODE_VERSION}`)
 const dshOutput = resolve(outputRoot, `dsh-${DSH_VERSION}`)
 const profileOutput = resolve(outputRoot, 'profile')
-const privateProfilePackages = ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-editor-shell']
+const composition = await desktopComposition()
+const privateProfilePackages = composition.packages
 
 function assertSafeOutput(path) {
   const packRoot = resolve(root, '.pack') + sep
@@ -125,6 +127,7 @@ await rename(resolve(dshOutput, 'node_modules'), resolve(dshOutput, 'vendor-depe
 
 const profileSource = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 await cp(profileSource, profileOutput, { recursive: true })
+await configureProfile(profileOutput, composition)
 for (const packageName of privateProfilePackages) {
   await cp(resolve(root, 'packages', packageName), resolve(profileOutput, 'node_modules', packageName), {
     recursive: true,
@@ -133,15 +136,8 @@ for (const packageName of privateProfilePackages) {
 }
 const profileDigest = await treeDigest(profileOutput)
 await rename(resolve(profileOutput, 'node_modules'), resolve(profileOutput, 'vendor-dependencies'))
-const profile = await readJson(resolve(profileSource, 'package.json'))
-const expectedBundles = [
-  '@deepseek-ai/dsh-base',
-  '@deepseek-ai/dsh-web-app',
-  'dsh-manuscript',
-  'dsh-editor-workbench',
-  'dsh-editor-novel-kernel',
-  'dsh-editor-shell',
-]
+const profile = await readJson(resolve(profileOutput, 'package.json'))
+const expectedBundles = [...BASE_BUNDLES, ...composition.packages]
 if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify(expectedBundles)) {
   throw new Error('desktop profile bundles are missing, reordered, or unexpected')
 }
