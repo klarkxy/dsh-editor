@@ -7,18 +7,17 @@ import type { WritingMigration, WritingPreferences } from '../writing-settings.t
 import type { WritingProgressScope } from '../writing-progress.ts'
 import { SettingsGeneralSection } from './settings-general.tsx'
 import { SettingsModelsSection } from './settings-models.tsx'
-import { SettingsZhihuSection } from './settings-zhihu.tsx'
 import { SettingsUsageSection } from './settings-usage.tsx'
 import { t, useLocale } from '../i18n/index.ts'
 
 
-export type SettingsTab = 'general' | 'models' | 'writing' | 'zhihu' | 'usage'
+/* 知乎设置已迁往独立插件（界面/凭据/知识库全部归其所有），此处不再挂载。 */
+export type SettingsTab = 'general' | 'models' | 'writing' | 'usage'
 
 function tabLabel(tab: SettingsTab): string {
   if (tab === 'general') return t('settings.general')
   if (tab === 'models') return t('settings.models')
   if (tab === 'writing') return t('settings.writing')
-  if (tab === 'zhihu') return t('settings.zhihu')
   return t('settings.usage')
 }
 
@@ -42,6 +41,8 @@ export function SettingsDialog(props: {
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
   progressScope: WritingProgressScope
+  /* 助手能力开关：false 时隐藏模型等助手专属设置；undefined 表示能力尚未加载，保持原样。 */
+  assistant?: boolean
   onClose(): void
 }) {
   useLocale()
@@ -69,14 +70,17 @@ export function SettingsDialog(props: {
     }
   }
 
-  const tabs: SettingsTab[] = ['general', 'models', 'writing', 'zhihu', 'usage']
+  const tabs: SettingsTab[] = props.assistant === false
+    ? ['general', 'writing', 'usage']
+    : ['general', 'models', 'writing', 'usage']
   const content: Record<SettingsTab, () => ReactNode> = {
     general: () => e(SettingsGeneralSection, { ctx: props.ctx }),
     models: () => e(SettingsModelsSection, { ctx: props.ctx }),
     writing: () => e(WritingSettings, { scope: props.writingScope, migrate: props.migrateWriting, progressScope: props.progressScope }),
-    zhihu: () => e(SettingsZhihuSection, { ctx: props.ctx }),
     usage: () => e(SettingsUsageSection, { ctx: props.ctx }),
   }
+  /* 能力在弹窗打开期间变为停用时，回落到仍可用的分类。 */
+  const activeTab = tabs.includes(tab) ? tab : 'general'
 
   return e('div', { className: 'file-dialog-overlay settings-overlay', onMouseDown: onOverlayMouseDown },
     e('div', {
@@ -93,20 +97,20 @@ export function SettingsDialog(props: {
           tabs.map((key) => e('button', {
             key,
             type: 'button',
-            className: `settings-tab${tab === key ? ' active' : ''}`,
-            'aria-current': tab === key,
+            className: `settings-tab${activeTab === key ? ' active' : ''}`,
+            'aria-current': activeTab === key,
             onClick: () => setTab(key),
           }, tabLabel(key))),
         ),
       ),
       e('div', { className: 'settings-body' },
         e('header', { className: 'settings-header' },
-          e('span', { className: 'settings-header-title' }, tabLabel(tab)),
+          e('span', { className: 'settings-header-title' }, tabLabel(activeTab)),
           props.ctx.connection.isLoopback ? e('button', { type: 'button', className: 'settings-open-config', onClick: () => void openConfigFile() }, t('settings.openConfig')) : null,
           e('button', { type: 'button', className: 'icon-button settings-close', 'aria-label': t('settings.close'), onClick: props.onClose }, '×'),
         ),
         note ? e('p', { className: 'warning pad', role: 'alert' }, note) : null,
-        e('div', { className: 'settings-content' }, content[tab]()),
+        e('div', { className: 'settings-content' }, content[activeTab]()),
       ),
     ),
   )

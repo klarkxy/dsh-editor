@@ -120,12 +120,18 @@ export function Tree(props: {
   const [loaded, setLoaded] = useState<Record<string, TreeEntry[]>>({})
   const [openPaths, setOpenPaths] = useState<Set<string>>(() => new Set())
   const [note, setNote] = useState('')
+  /* 加载代际：session/revision/expandPath 重置（含 effect 清理、卸载）时递增。
+     早于当前代际的 tree.list 响应一律丢弃——否则合章/归档前的慢响应会在刷新
+     完成后落地，把已归档的章节行写回目录树。成功与错误路径都受守护。 */
+  const loadGeneration = useRef(0)
 
   const loadSubtree: LoadSubtree = async (path) => {
+    const generation = loadGeneration.current
     const result = await safeRpcCall<{ entries?: TreeEntry[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', {
       sessionId,
       path: path || '.',
     }))
+    if (generation !== loadGeneration.current) return null
     if (!result.ok) { setNote(errorMessage(result)); return null }
     const entries = result.value.entries ?? []
     setLoaded((old) => ({ ...old, [path]: entries }))
@@ -133,11 +139,13 @@ export function Tree(props: {
   }
 
   useEffect(() => {
+    loadGeneration.current += 1
     setLoaded({})
     const expansion = treeExpansionPaths(expandPath)
     setOpenPaths(new Set(expansion))
     void loadSubtree('')
     for (const directory of expansion) void loadSubtree(directory)
+    return () => { loadGeneration.current += 1 }
   }, [sessionId, revision, expandPath])
 
   const toggleDirectory = (path: string) => {

@@ -53,9 +53,6 @@
     "@radix-ui/react-dialog": "^1.1.23",
     "cmdk": "^1.1.1",
     "docx": "^9.7.1",
-    "dsh-editor-novel-kernel": "workspace:*",
-    "dsh-editor-workbench": "workspace:*",
-    "dsh-manuscript": "workspace:*",
     "jszip": "^3.10.1"
   },
   "devDependencies": {
@@ -67,6 +64,10 @@
     "react": "^18.2.0",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
-  }
+    "vitest": "^3.2.4",
+    "dsh-manuscript": "workspace:*",
+    "dsh-editor-workbench": "workspace:*",
+    "dsh-editor-novel-kernel": "workspace:*"
+  },
+  "private": true
 }

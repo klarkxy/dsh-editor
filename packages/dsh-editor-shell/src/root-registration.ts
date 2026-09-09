@@ -3,15 +3,25 @@ import type { RootOwnerProps } from '@deepseek-ai/dsh-client-runtime/client'
 import { t } from './i18n/index.ts'
 
 export const ROOT_ID = 'dsh-editor-shell-root'
+export const EXTENSIONS_SLOT = 'dsh-editor.extensions'
 
 export type RootSlots = { register: (spec: {
   name: 'root'
   id: string
   priority: number
   label: string
+  children: Record<string, { kind: 'list'; scope: 'root' }>
 }, render: unknown) => unknown }
 
 /** The package deliberately wins the public root slot; no layout/conversation internals are imported. */
 export function registerRoot(ctx: Context & { slots: RootSlots }, render: (props: RootOwnerProps) => unknown): unknown {
-  return ctx.slots.register({ name: 'root', id: ROOT_ID, priority: -100, label: t('app.slotLabel') }, render)
+  return ctx.slots.register({
+    name: 'root',
+    id: ROOT_ID,
+    priority: -100,
+    label: t('app.slotLabel'),
+    // Only the generic additive seat: declaring shell.overlay here would
+    // awaken the manuscript overlay, which belongs to the shadowed AppFrame.
+    children: { [EXTENSIONS_SLOT]: { kind: 'list', scope: 'root' } },
+  }, render)
 }

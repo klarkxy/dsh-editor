@@ -84,6 +84,8 @@ export function Editor(props: {
   externalRevision: number
   onDirtyChange(dirty: boolean): void
   completionPreference: CompletionPreference
+  /* 可选补全能力开关：false 时停止 FIM 与选段改写 RPC(含快捷键);缺省 true 保持兼容。 */
+  completionEnabled?: boolean
   authorPreferences: string
   authorMemory: string
   typewriter?: boolean
@@ -111,6 +113,7 @@ export function Editor(props: {
     externalRevision: incomingRevision,
     onDirtyChange,
     completionPreference,
+    completionEnabled = true,
     authorPreferences,
     typewriter = false,
     focusParagraph = false,
@@ -316,6 +319,7 @@ export function Editor(props: {
       },
       slotStyle: { notice: HIDE_NOTICE },
       completionPreference,
+      completionEnabled,
       authorPreferences,
       typewriter,
       focusParagraph,
@@ -348,33 +352,34 @@ export function Editor(props: {
       siblingsBlocked: navigationBlocked,
       onReloadDisk: () => setReloadConfirm(true),
       onSaveConflictCopy: saveConflictCopy,
-      footerExtras: isWorldbookPath(path) || canRewritePath(path)
-        ? e(Fragment, null,
-          isWorldbookPath(path) ? e(WorldbookSettings, {
-            key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
-            path,
-            text: currentText,
-            onChange: (next: string) => { void applyFrontmatterBuffer(next) },
-            onNote: setNote,
-          }) : null,
-          isChapterMetaPath(path) ? e(ChapterMetaSettings, {
-            key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
-            path,
-            text: currentText,
-            onChange: (next: string) => { void applyFrontmatterBuffer(next) },
-            onNote: setNote,
-          }) : null,
-          canRewritePath(path) ? e(RewritePresetsBar, {
-            onRewrite: (instruction: string) => { handleRef.current?.requestRewrite(instruction) },
-          }) : null,
-        )
-        : null,
+      /* footerExtras 始终挂载：自定义 notice 必须留在 EditorCore 内部（页脚区）。
+         作为 Fragment 游离兄弟节点时，它会变成 Shell 网格的未定位子项，被自动
+         摆放到隐式行（侧栏下方），遮挡溢出侧栏的面板按钮。 */
+      footerExtras: e(Fragment, null,
+        isWorldbookPath(path) ? e(WorldbookSettings, {
+          key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
+          path,
+          text: currentText,
+          onChange: (next: string) => { void applyFrontmatterBuffer(next) },
+          onNote: setNote,
+        }) : null,
+        isChapterMetaPath(path) ? e(ChapterMetaSettings, {
+          key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
+          path,
+          text: currentText,
+          onChange: (next: string) => { void applyFrontmatterBuffer(next) },
+          onNote: setNote,
+        }) : null,
+        canRewritePath(path) && completionEnabled ? e(RewritePresetsBar, {
+          onRewrite: (instruction: string) => { handleRef.current?.requestRewrite(instruction) },
+        }) : null,
+        note ? e('div', {
+          className: 'editor-notice',
+          role: status === 'conflict' || status === 'error' ? 'alert' : 'status',
+          style: { padding: '4px 8px', fontSize: 12, opacity: 0.75 },
+        }, note) : null,
+      ),
     }),
-    note ? e('div', {
-      className: 'editor-notice',
-      role: status === 'conflict' || status === 'error' ? 'alert' : 'status',
-      style: { padding: '4px 8px', fontSize: 12, opacity: 0.75 },
-    }, note) : null,
     reloadConfirm ? e(ConfirmDialog, {
       id: 'reload-disk-confirm',
       title: t('editor.discardDraftTitle'),

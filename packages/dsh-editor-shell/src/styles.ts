@@ -158,7 +158,7 @@ export const componentStyles = `
 .shell > .chrome {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: var(--tree-w) minmax(0, 1fr) auto;
+  grid-template-columns: var(--tree-w) minmax(0, 1fr) auto auto;
   align-items: center;
   height: var(--topbar-h);
   border-bottom: 1px solid var(--hairline);
@@ -176,6 +176,33 @@ export const componentStyles = `
 .shell > .chrome > .topbar-actions { flex: none; }
 .shell > .chrome > .workspace-chrome { border-left: 1px solid var(--hairline); border-right: 1px solid var(--hairline); padding: 0 var(--space-5); }
 .shell > .chrome > .topbar-actions { justify-content: flex-end; gap: var(--space-4); }
+/* Extension launcher rail: a host-reserved strip, not an overlay. Inside the
+   top chrome it is a real grid child, so contributed launchers take layout
+   space and can never cover the composer or other app controls at any width;
+   on bare screens without chrome (e.g. workspace verification) it pins to the
+   free top-right corner instead. The rail itself stays click-through and each
+   contribution opts into pointer events. The --dsh-ext-* variables are the
+   placement contract with contributions: they pull a dock inline and make its
+   open panel drop below the launcher (open panels overlay intentionally). */
+.shell-extensions-dock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-self: end;
+  min-width: 0;
+  position: fixed;
+  top: 0;
+  right: var(--space-4);
+  height: var(--topbar-h);
+  z-index: 5;
+  pointer-events: none;
+  --dsh-ext-dock-position: relative;
+  --dsh-ext-dock-right: auto;
+  --dsh-ext-dock-bottom: auto;
+  --dsh-ext-panel-top: calc(100% + 6px);
+  --dsh-ext-panel-bottom: auto;
+}
+.shell > .chrome > .shell-extensions-dock { position: static; height: auto; padding: 0; }
 .shell .brand-lockup { display: flex; align-items: center; gap: 8px; flex: none; font-size: var(--text-sm); letter-spacing: .08em; }
 .shell .brand-mark { display: grid; width: 22px; height: 22px; place-items: center; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-on); font-weight: 700; font-size: 12px; }
 .shell .workspace-chrome { display: flex; align-items: center; gap: 2px; }
@@ -237,7 +264,7 @@ export const componentStyles = `
 /* ── Sidebar / tree ─────────────────────────────────────── */
 /* 侧栏整体下沉 1 度,与主区在纸/墨双主题下都形成温和的层级对比,
    同时把 1px 实色边框换为半透明 hairline,避免"上一代工具"的硬切感。 */
-.shell > .sidebar { grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--hairline); background: var(--bg-sunken); }
+.shell > .sidebar { grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--hairline); background: var(--bg-sunken); overflow-x: hidden; overflow-y: auto; }
 .shell .side-title { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 8px; font-size: var(--text-xs); font-weight: 500; letter-spacing: .16em; color: var(--meta); }
 .shell .side-title .icon-button { font-size: 14px; }
 /* 今日字数小标:侧栏顶部单行,目标达成换强调色。变量 --confirm 与章节定稿同色。 */

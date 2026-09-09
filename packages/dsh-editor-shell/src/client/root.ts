@@ -1,6 +1,5 @@
 import {
   createElement as e,
-  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -23,7 +22,7 @@ import {
 } from 'dsh-editor-workbench/contracts'
 import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
 import { sortChapterPaths } from '../project-files.ts'
-import { registerRoot } from '../root-registration.ts'
+import { EXTENSIONS_SLOT, registerRoot } from '../root-registration.ts'
 import { writingPreferences, writingTypography, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
 import {
@@ -47,6 +46,7 @@ import { ChapterOpsLayer, chapterMenuModel, requestMergeChapter, requestSplitCha
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
 import { Editor } from './editor.ts'
 import { Chat } from './chat.ts'
+import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { AboutUpdateDialog } from './about-dialog.tsx'
@@ -218,14 +218,20 @@ function AboutTrigger(props: { onOpen(): void }): ReactNode {
   )
 }
 
-function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync }: {
+function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync, extensionsDock }: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
   progressScope: WritingProgressScope
   hostThemeSync?: HostThemeSync
+  extensionsDock?: ReactNode
 }) {
   useLocale()
+  /* 可选 AI 能力：加载完成前不挂载 Chat / 自动索引;失败是显式错误态(可重试)。 */
+  const shellCapabilities = useShellCapabilities(ctx)
+  const capabilityState = shellCapabilities.state
+  const capabilityReady = capabilityState.kind === 'ready'
+  const assistantEnabled = capabilityState.kind === 'ready' && capabilityState.value.assistant
   const sessions = useObservable(ctx.sessions.list)
   const workspaces = useObservable(ctx.workspaces.list)
   const session = currentSession(ctx)
@@ -409,11 +415,13 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         return
       }
       if (action === 'toggle-assistant') {
+        if (!assistantEnabled) return
         if (focusMode) { setFocusMode(false); setAssistantOpen(true) } else setAssistantOpen((value) => !value)
         return
       }
       if (action === 'toggle-focus') { setFocusMode((value) => !value); return }
       if (action === 'focus-assistant') {
+        if (!assistantEnabled) return
         setFocusMode(false)
         setAssistantOpen(true)
         setChatFocusNonce((value) => value + 1)
@@ -468,11 +476,11 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [editorDirty, focusMode, path, session?.sessionId, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
+  }, [assistantEnabled, editorDirty, focusMode, path, session?.sessionId, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
   useEffect(() => {
-    if (!chatFocusNonce || !assistantOpen || focusMode) return
+    if (!chatFocusNonce || !assistantOpen || focusMode || !assistantEnabled) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
-  }, [assistantOpen, chatFocusNonce, focusMode])
+  }, [assistantEnabled, assistantOpen, chatFocusNonce, focusMode])
   useEffect(() => {
     if (!openWorkspaceId) setPath('')
     setFiles([]); setWorkbenchNote(''); setEditorDirty(false); setTreeExpansionPath('')
@@ -1792,6 +1800,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         e('p', { role: 'status', 'aria-live': 'polite' }, t('home.checkingDetail')),
         e('code', null, workspaceOpen.path),
       ),
+      extensionsDock,
     )
   }
 
@@ -1804,6 +1813,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
           e('strong', null, 'DSH Editor'),
         ),
         e('span', { className: 'local-state' }, t('home.title')),
+        extensionsDock,
         e('span', { className: 'topbar-actions' },
           e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
           e(SettingsTrigger, { onOpen: openSettings }),
@@ -1893,13 +1903,13 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         onCancel: () => { if (!importTitle.busy) setImportTitle(null) },
         onConfirm: (title: string) => void submitImportTitle(title),
       }) : null,
-      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, onClose: () => setSettingsOpen(false) }) : null,
+      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? capabilityState.value.assistant : undefined, onClose: () => setSettingsOpen(false) }) : null,
     )
   }
 
   const chatSession = session ?? fileSession
   const sidebarVisible = sidebarOpen && !focusMode
-  const assistantVisible = assistantOpen && !focusMode
+  const assistantVisible = assistantOpen && !focusMode && assistantEnabled
   const pinnedVisible = pinnedPath !== null && !focusMode
   const layoutColumns = pinnedLayoutColumns({
     sidebarVisible,
@@ -1975,6 +1985,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
           onClick: () => setAssistantOpen((value) => !value),
         }, t('workspace.assistant')),
       ),
+      extensionsDock,
       e('div', { className: 'topbar-actions' },
         e(ThemeToggle, { theme, onChange: setTheme }),
         e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
@@ -2082,6 +2093,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       onHandle: (handle) => { editorHandleRef.current = handle },
       externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal,
       completionPreference: writing.completion,
+      /* 能力未加载完成前不发起补全/改写 RPC;显式错误态由用户重试恢复。 */
+      completionEnabled: capabilityReady ? capabilityState.value.completion : false,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
       authorMemory: normalizeAuthorMemory(writing.authorMemory),
       typewriter: writing.typewriter,
@@ -2163,7 +2176,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       label: t('workspace.resizeAssistant'),
       onChange: setAssistantWidth,
     }) : null,
-    e(Chat, {
+    assistantEnabled && chatSession ? e(Chat, {
       key: chatSession.sessionId,
       ctx,
       session: chatSession,
@@ -2187,14 +2200,25 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
         openDocument(navigation.openPath)
         if (navigation.refreshContent) setContentRevision((old) => old + 1)
       },
-    }),
-    !assistantVisible && !focusMode ? e('button', {
-      className: 'assistant-launcher',
-      type: 'button',
-      'aria-label': t('workspace.openAssistant'),
-      'aria-expanded': false,
-      onClick: () => setAssistantOpen(true),
-    }, e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark)), e('strong', null, t('workspace.assistant'))) : null,
+    }) : null,
+    !assistantVisible && !focusMode ? (
+      capabilityState.kind === 'error'
+        ? e('div', { className: 'assistant-launcher capability-note', role: 'alert' },
+          e('span', null, t('capabilities.loadFailed', { error: capabilityState.message })),
+          e('button', { type: 'button', onClick: shellCapabilities.retry }, t('capabilities.retry')),
+        )
+        : !capabilityReady
+          ? e('div', { className: 'assistant-launcher capability-note', role: 'status' }, t('capabilities.loading'))
+          : assistantEnabled
+            ? e('button', {
+              className: 'assistant-launcher',
+              type: 'button',
+              'aria-label': t('workspace.openAssistant'),
+              'aria-expanded': false,
+              onClick: () => setAssistantOpen(true),
+            }, e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark)), e('strong', null, t('workspace.assistant')))
+            : null
+    ) : null,
     leaveConfirm ? e(ConfirmDialog, {
       id: 'leave-assistant-draft',
       title: t('chat.discardDraftTitle'),
@@ -2331,7 +2355,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync 
       onClose: () => { if (!archiveBusy) setArchiveOpen(false) },
     }) : null,
     imagePreview ? e(ImagePreviewOverlay, { path: imagePreview.path, url: imagePreview.url, onClose: closeImagePreview }) : null,
-    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, onClose: () => setSettingsOpen(false) }) : null,
+    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? capabilityState.value.assistant : undefined, onClose: () => setSettingsOpen(false) }) : null,
     startupUpdate && !aboutOpen ? e('div', { className: 'update-toast', role: 'status' },
       e('span', { className: 'update-toast-text' }, t('about.toast', { version: startupUpdate.version })),
       e('button', {
@@ -2358,14 +2382,31 @@ type RegisterShellRootOptions = {
   registerRoot: (ctx: ShellContext, render: (props: unknown) => ReactNode) => void
 }
 
+// The renderer injects renderSlot into the root entry's props. The dock is a
+// launcher rail hosted inside the top chrome (see .shell-extensions-dock in
+// styles.ts): a reserved layout strip rather than a full-screen overlay, so
+// collapsed launchers can never cover the composer. The rail stays
+// click-through and each contributed component opts into pointer events;
+// open panels position against their launcher via the --dsh-ext-* contract.
+type RootSlotProps = { renderSlot?: (key: string, owner: Record<string, never>) => ReactNode }
+
+function ExtensionsDock(props: { rootProps: unknown }) {
+  const renderSlot = (props.rootProps as RootSlotProps | null | undefined)?.renderSlot
+  return e('div', {
+    className: 'shell-extensions-dock',
+    'data-testid': 'shell-extensions-dock',
+  }, renderSlot ? renderSlot(EXTENSIONS_SLOT, {}) : null)
+}
+
 export function registerShellRoot(ctx: Context, options: RegisterShellRootOptions): void {
   const client = ctx as ShellContext
-  options.registerRoot(client, () => e(Root, {
+  options.registerRoot(client, (props) => e(Root, {
     ctx: client,
     writingScope: options.writingScope,
     migrateWriting: options.migrateWriting,
     progressScope: options.progressScope,
     hostThemeSync: options.hostThemeSync,
+    extensionsDock: e(ExtensionsDock, { rootProps: props }),
   }))
 }
 
