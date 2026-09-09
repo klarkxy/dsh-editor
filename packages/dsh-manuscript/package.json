@@ -26,18 +26,17 @@
     "./client/editor-core": {
       "default": "./lib/client-editor-core.cjs"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./assist": {
+      "types": "./lib/assist.d.ts",
+      "import": "./lib/assist.js",
+      "default": "./lib/assist.js"
+    }
   },
   "files": [
-    "lib/index.js",
-    "lib/index.js.map",
-    "lib/index.d.ts",
-    "lib/host-api.js",
-    "lib/host-api.d.ts",
-    "lib/host-error.js",
-    "lib/host-error.js.map",
-    "lib/host-error.d.ts",
-    "lib/client.js",
+    "lib/*.js",
+    "lib/*.js.map",
+    "lib/*.d.ts",
     "lib/client-editor-core.cjs",
     "cordis.patch.yml",
     "README.md",

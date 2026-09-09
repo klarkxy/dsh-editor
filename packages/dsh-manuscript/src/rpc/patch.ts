@@ -98,7 +98,7 @@ async function streamPatch(input: {
     const stream = input.llm.stream({
       provider: input.provider,
       model: input.model,
-      maxTokens: 512,
+      maxTokens: 2048,
       signal: input.signal,
       system: withAuthorPreferences(
         withChapterContextGuidance(PATCH_SYSTEM, input.request.chapterContext),

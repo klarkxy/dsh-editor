@@ -1,3 +1,5 @@
 - insert:
     - id: manuscript
       name: dsh-manuscript
+    - id: manuscript-assist
+      name: dsh-manuscript/assist

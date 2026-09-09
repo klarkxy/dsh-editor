@@ -1,29 +1,16 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { createNovelKnowledgeTool } from './novel-knowledge.ts'
 import { createAuthorObserveTool } from './observe-tool.ts'
 import { createProjectKnowledgeTool, type ProjectKnowledgeReader } from './project-knowledge.ts'
 import { createIndexWriteTool, type IndexWriter } from './index-write-tool.ts'
 import { NOVEL_INDEX_PATH } from './contracts.ts'
 import { createProposalTool, editorToolGuard, EDITOR_PROMPT } from './proposal-tool.ts'
-import { createZhihuSearchTool, type ZhihuSearchExecuted } from './zhihu-search.ts'
-import {
-  createZhihuAskTool,
-  createZhihuGlobalSearchTool,
-  createZhihuHotListTool,
-  createZhihuKnowledgeSearchTool,
-} from './zhihu-tools.ts'
 import { createNovelSearchTool } from './search-tool.ts'
 import { collectScratchFiles, createScratchListTool, createScratchReadTool, createScratchWriteTool, type ScratchStore } from './scratch-tool.ts'
 import { SCRATCH_DIRECTORY } from './contracts.ts'
-import {
-  listZhihuKnowledgeBases,
-  uploadZhihuKnowledgeFile,
-} from './zhihu-knowledge.ts'
 
 export const name = 'dsh-editor-novel-kernel'
-export const inject = ['tools', 'systemPrompt', 'fs', 'credentials', 'connection', 'sandboxPolicy'] as const
+export const inject = ['tools', 'systemPrompt', 'fs', 'connection', 'sandboxPolicy'] as const
 
 /** Cross-plugin metering event consumed by dsh-manuscript's zhihu usage recorder. */
 export const ZHIHU_SEARCH_EVENT = 'dsh-editor/zhihu-search'
@@ -44,9 +31,6 @@ type HostContext = Context & {
   }
   sandboxPolicy: {
     resolve: (request?: { session?: unknown }) => unknown
-  }
-  credentials?: {
-    resolve: (ref: CredentialRef) => Promise<{ value: string; source: string } | undefined>
   }
   connection?: {
     rpc: {
@@ -105,22 +89,9 @@ function makeScratchStore(fs: HostContext['fs'], sandboxPolicy: HostContext['san
 /** Registers the private editor-only novel tools, guard, and prompt boundary. */
 export function apply(ctx: Context): void {
   const host = ctx as HostContext
-  // The settings UI writes Access Secret into `ZHIHU_ACCESS_TOKEN`; surface it
-  // through the host-managed credential seam so it wins over env/file fallbacks.
-  // Tolerate a missing service so unit tests can apply without injecting it.
-  const credentials = host.credentials
-  const resolveCredential = credentials
-    ? async () => (await credentials.resolve(credentialRef('ZHIHU_ACCESS_TOKEN')))?.value
-    : undefined
   host.tools.register(createNovelKnowledgeTool())
   host.tools.register(createProposalTool())
   host.tools.register(createAuthorObserveTool())
-  const onExecuted = makeZhihuMeter(ctx)
-  host.tools.register(createZhihuSearchTool({ resolveCredential, onExecuted }))
-  host.tools.register(createZhihuGlobalSearchTool({ resolveCredential, onExecuted }))
-  host.tools.register(createZhihuHotListTool({ resolveCredential, onExecuted }))
-  host.tools.register(createZhihuAskTool({ resolveCredential, onExecuted }))
-  host.tools.register(createZhihuKnowledgeSearchTool({ resolveCredential, onExecuted }))
   host.tools.register(createProjectKnowledgeTool({ reader: makeFsReader(host.fs) }))
   host.tools.register(createNovelSearchTool({ fs: host.fs }))
   host.tools.register(createIndexWriteTool({ writer: makeIndexWriter(host.fs, host.sandboxPolicy) }))
@@ -128,61 +99,22 @@ export function apply(ctx: Context): void {
   host.tools.register(createScratchWriteTool({ store: scratch }))
   host.tools.register(createScratchReadTool({ store: scratch }))
   host.tools.register(createScratchListTool({ store: scratch }))
-  installZhihuKnowledgeRpc(host, resolveCredential, onExecuted)
+  installLegacyZhihuRpc(ctx)
+  ctx.provide('novelKernel', { ready: true })
   ctx.effect(() => host.tools.guard(editorToolGuard))
   host.systemPrompt.section({ name: 'dsh-editor:novel-kernel', order: 90, text: EDITOR_PROMPT })
 }
 
-/**
- * 知识库管理 RPC(列表/上传)。只对 loopback 暴露,且只接受界面显式发起的调用;
- * 上传内容经 base64 经 RPC 传入,大小在 uploadZhihuKnowledgeFile 里收口。
- * Tolerate a missing connection service so unit tests can apply without injecting it.
- */
-function installZhihuKnowledgeRpc(
-  host: HostContext,
-  resolveCredential: (() => Promise<string | undefined>) | undefined,
-  onExecuted: (event: ZhihuSearchExecuted) => void,
-): void {
-  const rpc = host.connection?.rpc
-  if (!rpc) return
-  rpc.handle('/novel-kernel', async (endpoint, payload) => {
-    const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
-    try {
-      if (endpoint === 'zhihu.knowledge.bases') {
-        const list = await listZhihuKnowledgeBases({ resolveCredential })
-        onExecuted({ ok: true, results: list.bases.length })
-        return { ok: true, value: list }
-      }
-      if (endpoint === 'zhihu.knowledge.upload') {
-        const fileName = typeof body.fileName === 'string' ? body.fileName : ''
-        const contentBase64 = typeof body.contentBase64 === 'string' ? body.contentBase64 : ''
-        const knowledgeBaseId = typeof body.knowledgeBaseId === 'string' && body.knowledgeBaseId.trim() ? body.knowledgeBaseId.trim() : undefined
-        if (!contentBase64) throw new Error('缺少文件内容。')
-        const upload = await uploadZhihuKnowledgeFile({
-          fileName,
-          data: new Uint8Array(Buffer.from(contentBase64, 'base64')),
-          knowledgeBaseId,
-        }, { resolveCredential })
-        onExecuted({ ok: true, results: 1 })
-        return { ok: true, value: { upload } }
-      }
-      throw new Error(`unknown endpoint ${endpoint}`)
-    } catch (error) {
-      onExecuted({ ok: false, results: 0 })
-      return { ok: false, error: { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} } }
+/** Compatibility only: the optional Zhihu service owns execution and metering. */
+function installLegacyZhihuRpc(ctx: Context): void {
+  const host = ctx as HostContext
+  if (!host.connection) return
+  ctx.effect(() => host.connection!.rpc.handle('/novel-kernel', async (endpoint, payload, signal) => {
+    if (endpoint !== 'zhihu.knowledge.bases' && endpoint !== 'zhihu.knowledge.upload') {
+      return { ok: false, error: { code: 'internal', message: `unknown endpoint ${endpoint}`, details: {} } }
     }
-  }, { authority: 'loopback' })
-}
-
-/** Emit the metering event; a missing/unwilling emitter must not affect search. */
-function makeZhihuMeter(ctx: Context): (event: ZhihuSearchExecuted) => void {
-  const emit = (ctx as { emit?: (name: string, ...args: unknown[]) => unknown }).emit
-  if (typeof emit !== 'function') return () => {}
-  return (event) => {
-    try {
-      emit.call(ctx, ZHIHU_SEARCH_EVENT, event)
-    } catch {
-      // Best-effort metering; never surface emit failures to the tool path.
-    }
-  }
+    const zhihu = ctx.get?.('zhihu') as { call: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult> } | undefined
+    if (!zhihu) return { ok: false, error: { code: 'bad-request', message: '知乎插件未启用', details: {} } }
+    return zhihu.call(endpoint, payload, signal)
+  }, { authority: 'loopback' }))
 }

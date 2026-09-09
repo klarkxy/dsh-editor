@@ -6,7 +6,7 @@ import { dispatch, mapError } from './index.ts'
 import { createDraftStore, type DraftTableLike } from './rpc/draft.ts'
 import { FileOpError } from './rpc/files.ts'
 import { SearchError } from './rpc/search.ts'
-import { createZhihuUsageRecorder } from './rpc/zhihu-usage.ts'
+import { createZhihuUsageRecorder } from 'dsh-zhihu/usage'
 
 function draftStoreFixture() {
   const rows = new Map<string, NonNullable<ReturnType<DraftTableLike['get']>>>()

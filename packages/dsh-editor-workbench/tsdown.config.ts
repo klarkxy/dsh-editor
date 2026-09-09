@@ -3,6 +3,7 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    tools: 'src/tools.ts',
     contracts: 'src/contracts.ts',
   },
   format: ['esm'],

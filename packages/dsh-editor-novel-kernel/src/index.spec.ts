@@ -19,7 +19,7 @@ import {
 import { apply, inject, name } from './index.ts'
 
 describe('novel-kernel Host entry', () => {
-  it('registers the fourteen tools, guard and prompt section exactly once', () => {
+  it('registers only the nine novel tools, guard and prompt without requiring Zhihu', () => {
     const tools: unknown[] = []
     const guards: unknown[] = []
     const sections: unknown[] = []
@@ -41,21 +41,17 @@ describe('novel-kernel Host entry', () => {
       credentials,
       sandboxPolicy: { resolve: vi.fn(() => ({ mode: 'workspace-write', workspaceRoot: '/tmp' })) },
       effect: (setup: () => unknown) => setup(),
+      provide: vi.fn(),
     } as unknown as Context
 
     apply(ctx)
 
     expect(name).toBe('dsh-editor-novel-kernel')
-    expect(inject).toEqual(['tools', 'systemPrompt', 'fs', 'credentials', 'connection', 'sandboxPolicy'])
+    expect(inject).toEqual(['tools', 'systemPrompt', 'fs', 'connection', 'sandboxPolicy'])
     expect(tools.map((tool) => (tool as { name: string }).name)).toEqual([
       NOVEL_KNOWLEDGE_TOOL_NAME,
       PROPOSAL_TOOL_NAME,
       AUTHOR_OBSERVE_TOOL_NAME,
-      ZHIHU_SEARCH_TOOL_NAME,
-      ZHIHU_GLOBAL_SEARCH_TOOL_NAME,
-      ZHIHU_HOT_LIST_TOOL_NAME,
-      ZHIHU_ASK_TOOL_NAME,
-      ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME,
       PROJECT_KNOWLEDGE_TOOL_NAME,
       NOVEL_SEARCH_TOOL_NAME,
       NOVEL_INDEX_WRITE_TOOL_NAME,
@@ -67,30 +63,28 @@ describe('novel-kernel Host entry', () => {
     expect(sections).toEqual([{ name: 'dsh-editor:novel-kernel', order: 90, text: expect.stringContaining('novel_propose') }])
   })
 
-  it('serves the zhihu knowledge RPC channel and rejects unknown endpoints', async () => {
+  it('keeps one legacy channel and forwards the unchanged payload and cancellation to the optional service', async () => {
     let handler: ((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>) | undefined
+    const call = vi.fn(async () => ({ ok: true, value: { bases: [] } }))
+    let available = true
     const ctx = {
       tools: { register: () => undefined, guard: () => () => undefined },
       systemPrompt: { section: () => undefined },
-      fs: {
-        resolve: vi.fn(async (path: string) => ({ targetKey: path, displayPath: path })),
-        readText: vi.fn(async () => ''),
-      },
-      credentials: { resolve: vi.fn(async () => undefined) },
-      connection: {
-        rpc: {
-          handle: (_channel: string, fn: typeof handler, _options: unknown) => { handler = fn; return () => undefined },
-        },
-      },
+      fs: { resolve: vi.fn(), readText: vi.fn() },
+      get: (name: string) => name === 'zhihu' && available ? { call } : undefined,
+      provide: vi.fn(),
+      connection: { rpc: { handle: vi.fn((_channel: string, fn: typeof handler) => { handler = fn; return () => undefined }) } },
       effect: (setup: () => unknown) => setup(),
     } as unknown as Context
-
     apply(ctx)
-    expect(handler).toBeDefined()
     const signal = new AbortController().signal
-    await expect(handler!('zhihu.knowledge.upload', { fileName: 'a.md' }, signal))
-      .resolves.toMatchObject({ ok: false, error: { message: expect.stringContaining('缺少文件内容') } })
-    await expect(handler!('nope', {}, signal))
-      .resolves.toMatchObject({ ok: false, error: { message: expect.stringContaining('unknown endpoint nope') } })
+    const payload = { days: 3 }
+    await expect(handler!('zhihu.knowledge.bases', payload, signal)).resolves.toEqual({ ok: true, value: { bases: [] } })
+    expect(call).toHaveBeenCalledExactlyOnceWith('zhihu.knowledge.bases', payload, signal)
+    await expect(handler!('nope', {}, signal)).resolves.toMatchObject({ ok: false, error: { message: 'unknown endpoint nope' } })
+    expect(call).toHaveBeenCalledTimes(1)
+    available = false
+    await expect(handler!('zhihu.knowledge.bases', {}, signal)).resolves.toMatchObject({ ok: false, error: { code: 'bad-request', message: '知乎插件未启用' } })
+    expect(ctx.connection.rpc.handle).toHaveBeenCalledTimes(1)
   })
 })

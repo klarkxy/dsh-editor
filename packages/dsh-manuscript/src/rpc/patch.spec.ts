@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { dispatch, mapError } from '../index.ts'
+import { apply as applyAssist } from '../assist.ts'
 import type { FileSystemLike, ManuscriptHost } from '../host.ts'
 import { CHAPTER_CONTEXT_GUIDANCE, CHAPTER_CONTEXT_LIMIT, INSTRUCTION_LIMIT } from './author-preferences.ts'
 import { completePatch, PATCH_LIMITS, parsePatchRequest } from './patch.ts'
@@ -11,7 +12,7 @@ function captured(stream: ReturnType<typeof vi.fn>): { system: string; user: str
 }
 import type { StreamChunkLike } from './completion.ts'
 
-function fixture(config: { provider?: string; model?: string } = { provider: 'configured-provider', model: 'configured-model' }) {
+async function fixture(config: { provider?: string; model?: string } = { provider: 'configured-provider', model: 'configured-model' }) {
   const canonical = '/canonical/workspace'
   const fs: FileSystemLike = {
     async resolve(path, opts) {
@@ -26,8 +27,14 @@ function fixture(config: { provider?: string; model?: string } = { provider: 'co
     async writeText() { throw new Error('patch.complete must not write files') },
   }
   const stream = vi.fn(() => chunks([{ type: 'text-delta', text: '雨落在窗台上。' }]))
+  const services = new Map<string, unknown>([['llm', { stream }]])
+  const rows = new Map<string, unknown>()
   const host = {
-    get(name: string) { return name === 'llm' ? { stream } : undefined },
+    get(name: string) { return services.get(name) },
+    provide(name: string, value: unknown) { services.set(name, value) },
+    on() { return () => {} },
+    effect(setup: () => unknown) { return setup() },
+    storageDomain: { async open() { return { table: () => ({ get: (key: string) => rows.get(key), async put(key: string, value: unknown) { rows.set(key, value) } }), close() {} } } },
     sessions: {
       get: () => ({
         id: 'session-1',
@@ -40,7 +47,8 @@ function fixture(config: { provider?: string; model?: string } = { provider: 'co
     fs,
     connection: { rpc: { call: vi.fn(), handle: vi.fn() } },
   } as unknown as ManuscriptHost
-  return { host, stream }
+  await applyAssist(host as unknown as Context)
+  return { host, stream, services }
 }
 
 async function* chunks(items: StreamChunkLike[]) {
@@ -97,7 +105,7 @@ describe('patch.complete', () => {
   })
 
   it('derives provider and model from the live session, never from RPC input', async () => {
-    const { host, stream } = fixture()
+    const { host, stream } = await fixture()
     await expect(dispatch(
       host as unknown as Context,
       'patch.complete',
@@ -108,7 +116,7 @@ describe('patch.complete', () => {
   })
 
   it('keeps author preferences in system guidance instead of replacement text', async () => {
-    const { host, stream } = fixture()
+    const { host, stream } = await fixture()
     await dispatch(
       host as unknown as Context,
       'patch.complete',
@@ -120,11 +128,11 @@ describe('patch.complete', () => {
     expect(captured(stream).user.startsWith('【文件】')).toBe(true)
     expect(captured(stream).user).not.toContain('【本章工作笔记】')
     expect(captured(stream).user).not.toContain('【改写要求】')
-    expect(captured(stream).maxTokens).toBe(512)
+    expect(captured(stream).maxTokens).toBe(2048)
   })
 
   it('places chapterContext before the file block and instruction before the selection', async () => {
-    const { host, stream } = fixture()
+    const { host, stream } = await fixture()
     await dispatch(
       host as unknown as Context,
       'patch.complete',
@@ -148,7 +156,7 @@ describe('patch.complete', () => {
   })
 
   it('omits rewrite instruction from the user prompt when it is empty', async () => {
-    const { host, stream } = fixture()
+    const { host, stream } = await fixture()
     await dispatch(
       host as unknown as Context,
       'patch.complete',
@@ -161,7 +169,7 @@ describe('patch.complete', () => {
   })
 
   it('returns an empty proposal without a configured live-session model', async () => {
-    const { host, stream } = fixture({})
+    const { host, stream } = await fixture({})
     await expect(dispatch(
       host as unknown as Context,
       'patch.complete',
@@ -237,3 +245,25 @@ describe('patch.complete', () => {
     }
   })
 })
+
+describe('current model selection for optional writing assist',()=>{
+ it('completes before any chat request and follows later model selection instead of historical headers',async()=>{
+   const {host,stream,services}=await fixture({});
+   let selected={provider:'minimax-live',model:'MiniMax-M3'};
+   const models=vi.fn(async()=>({result:{ok:true,value:{current:selected,routable:true}}}));
+   services.set('apiProxy',{sessions:{models}});
+   const payload={sessionId:'session-1',path:'chapter.md',prefix:'雨声',suffix:''};
+   expect(await dispatch(host as unknown as Context,'fim.complete',payload,new AbortController().signal)).toMatchObject({text:'雨落在窗台上。'});
+   expect(stream).toHaveBeenNthCalledWith(1,expect.objectContaining(selected));
+   selected={provider:'new-provider',model:'new-model'};
+   await dispatch(host as unknown as Context,'patch.complete',{sessionId:'session-1',path:'chapter.md',selectedText:'旧句',instruction:'缩短'},new AbortController().signal);
+   expect(stream).toHaveBeenNthCalledWith(2,expect.objectContaining(selected));
+   expect(models).toHaveBeenCalledTimes(2);
+ });
+ it('does not fall back to an old model when the authoritative selection fails',async()=>{
+   const {host,stream,services}=await fixture();
+   services.set('apiProxy',{sessions:{models:async()=>({result:{ok:false,error:{message:'selected model unavailable'}}})}});
+   await expect(dispatch(host as unknown as Context,'fim.complete',{sessionId:'session-1',prefix:'正文',suffix:''},new AbortController().signal)).rejects.toThrow('selected model unavailable');
+   expect(stream).not.toHaveBeenCalled();
+ });
+});

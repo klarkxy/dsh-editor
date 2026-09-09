@@ -148,6 +148,12 @@ export type EditorCoreProps = {
   slotStyle?: Partial<Record<EditorCoreSlot, CSSProperties>>
 
   completionPreference?: CompletionPreference
+  /**
+   * Optional completion capability gate (default true for compatibility).
+   * When false, no FIM or selection-rewrite RPC is ever issued — the manual
+   * 补全/修改选段 buttons and the automatic FIM trigger are all disabled.
+   */
+  completionEnabled?: boolean
   authorPreferences?: string
   chapterContext?: string
   fimDelayMs?: number
@@ -318,6 +324,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     slotClassName = {},
     slotStyle = {},
     completionPreference = 'manual',
+    completionEnabled = true,
     authorPreferences,
     chapterContext,
     fimDelayMs = 1500,
@@ -636,7 +643,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   }, [enableBeforeUnload, doc, text, conflict])
 
   const complete = useCallback(async (append = false) => {
-    if (!doc) return
+    if (!doc || !completionEnabled) return
     lastAutomaticCompletion.current = Math.max(lastAutomaticCompletion.current, userEditRevision)
     fimAbort.current?.abort()
     patchAbort.current?.abort()
@@ -676,11 +683,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     report(next.added
       ? `补全候选 ${next.index + 1}/${next.candidates.length} 已就绪。`
       : '新候选与已有建议相同，已保留原建议。')
-  }, [doc, revision, text, selection.start, rpc, buildFimPayload, authorPreferences, chapterContext, maxGhostCandidates, userEditRevision, extractFimText, report, reportError])
+  }, [doc, revision, text, selection.start, rpc, buildFimPayload, authorPreferences, chapterContext, maxGhostCandidates, userEditRevision, extractFimText, report, reportError, completionEnabled])
 
   useEffect(() => {
     const view = viewRef.current
-    if (!doc || !view) return
+    if (!doc || !view || !completionEnabled) return
     const cursor = selection.start
     const isManuscript = /^正文\/.+\.(?:md|txt)$/i.test(doc.path)
     const ready = (at: number) => automaticCompletionReady({
@@ -704,10 +711,10 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       void complete()
     }, fimDelayMs)
     return () => globalThis.clearTimeout(timer)
-  }, [completionPreference, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, paperOffset, complete])
+  }, [completionEnabled, completionPreference, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, paperOffset, complete])
 
   const requestPatch = useCallback(async (instruction?: string) => {
-    if (!doc) return
+    if (!doc || !completionEnabled) return
     const ticket = selectionTicket(doc, text, revision, selection.start, selection.end)
     if (!ticket) { report('请先选择需要改写的文字。'); return }
     fimAbort.current?.abort()
@@ -737,7 +744,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     if (!replacement) { report('模型未返回可用改写。'); return }
     setProposal({ ticket, text: replacement })
     report('修改建议已就绪。')
-  }, [doc, text, revision, selection, rpc, buildPatchPayload, authorPreferences, chapterContext, extractPatchText, report, reportError, clearGhost])
+  }, [doc, text, revision, selection, rpc, buildPatchPayload, authorPreferences, chapterContext, extractPatchText, report, reportError, clearGhost, completionEnabled])
 
   // Imperative handle via callback ref.
   useEffect(() => {
@@ -1023,7 +1030,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           onClick: () => { if (siblingIndex < siblings!.length - 1 && siblings) onOpenSibling(siblings[siblingIndex + 1]!) },
         }, '›'),
       ) : null,
-      enableRewriteSelection ? e('button', {
+      enableRewriteSelection && completionEnabled ? e('button', {
         type: 'button',
         'data-testid': `${testIdPrefix}-rewrite`,
         disabled: !hasSelection,
@@ -1033,11 +1040,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           void Promise.resolve(onRewriteSelection?.(sel, doc?.path || path))
         },
       }, '改这段') : null,
-      e('button', {
+      completionEnabled ? e('button', {
         type: 'button',
         'data-testid': `${testIdPrefix}-fim`,
         onClick: () => { void complete(false) },
-      }, loadingFim ? '停止补全' : ghost ? '重新补全' : '补全'),
+      }, loadingFim ? '停止补全' : ghost ? '重新补全' : '补全') : null,
       e('span', { 'data-testid': `${testIdPrefix}-wordcount`, style: { opacity: 0.55 } }, `${wordCount} 字`),
       e('span', { 'data-testid': `${testIdPrefix}-save-state`, style: { opacity: 0.55 } }, describeStatus(state, conflict)),
       headerExtras,
@@ -1113,7 +1120,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     },
       e('button', { type: 'button', disabled: !doc || text === doc.text || conflict, onClick: () => void save() }, '保存'),
       loadingFim ? e('button', { type: 'button', onClick: () => { fimAbort.current?.abort(); setLoadingFim(false); report('已停止补全。') } }, '停止补全') : null,
-      enablePatch ? e('button', {
+      enablePatch && completionEnabled ? e('button', {
         type: 'button',
         disabled: !doc || conflict || loadingFim || (!patching && selection.start === selection.end),
         onClick: () => {

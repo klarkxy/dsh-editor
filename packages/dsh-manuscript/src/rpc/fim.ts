@@ -35,7 +35,7 @@ async function streamCompletion(input: {
   const stream = input.llm.stream({
     provider: input.provider,
     model: input.model,
-    maxTokens: 96,
+    maxTokens: 1024,
     signal: input.signal,
     system: withAuthorPreferences(
       withChapterContextGuidance(CHAT_SYSTEM, input.chapterContext),

@@ -1,18 +1,17 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { asHost, resolveWorkspaceAccess, withWorkspaceWrite } from './host.ts'
-import { completeFim } from './rpc/fim.ts'
 import { createTextFile, listDir, readTextFile, writeTextFile } from './rpc/files.ts'
-import { completePatch, parsePatchRequest, PatchInputError } from './rpc/patch.ts'
-import { parseAuthorPreferences, parseChapterContext } from './rpc/author-preferences.ts'
+import { parsePatchRequest, PatchInputError } from './rpc/patch.ts'
+import type { ManuscriptAssist } from './assist-api.ts'
 import { createDraftStore, draftDomainSpec, DraftInputError, type DraftStore } from './rpc/draft.ts'
 import { applyProposal, parseProposal, prepareProposal, ProposalError } from './rpc/proposal.ts'
 import { SearchError, searchWorkspaceText } from './rpc/search.ts'
 import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
-import { createUsageRecorder, resolveDays, UsageInputError, usageDomainSpec, type UsageRecorder } from './rpc/usage.ts'
-import { createZhihuUsageRecorder, zhihuUsageDomainSpec, type ZhihuSearchEvent, type ZhihuUsageRecorder } from './rpc/zhihu-usage.ts'
+import { resolveDays, UsageInputError, type UsageRecorder } from './rpc/usage.ts'
+type ZhihuUsageRecorder = { read(days: number): Promise<unknown[]> }
 
 export const name = 'dsh-manuscript'
-export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'llm', 'storageDomain'] as const
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'storageDomain'] as const
 
 type RpcOk<T> = { ok: true; value: T }
 type RpcError = HostRpcError
@@ -30,9 +29,11 @@ export function mapError(error: unknown): RpcErr {
     if (error.code === 'BAD_QUERY') return badRequest(error.message)
     return fail({ code: 'internal', message: error.message, details: {} })
   }
-  if (error instanceof ProposalError || error instanceof PatchInputError || error instanceof DraftInputError || error instanceof UsageInputError) return badRequest(error.message)
+  if (error instanceof ProposalError || error instanceof PatchInputError || error instanceof DraftInputError || error instanceof UsageInputError || error instanceof AssistUnavailableError) return badRequest(error.message)
   return fail({ code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} })
 }
+
+class AssistUnavailableError extends Error {}
 
 type Payload = Record<string, unknown>
 
@@ -53,13 +54,18 @@ export async function dispatch(
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Payload) : {}
   // `usage.summary` is global data and must not require a live session; short-circuit
   // before `resolveWorkspaceAccess` so an empty payload still returns the recorder snapshot.
+  if (endpoint === 'capabilities.get') return { completion: Boolean(ctx.get?.('manuscriptAssist')) }
   if (endpoint === 'usage.summary') {
+    const assist = ctx.get?.('manuscriptAssist') as ManuscriptAssist | undefined
+    if (!usage && assist) return assist.summary(body.days)
     if (!usage) throw new Error('manuscript usage storage is unavailable')
     const days = resolveDays(body.days)
     return { days: await usage.read(days) }
   }
   // `zhihu.usage` is likewise global metering data.
   if (endpoint === 'zhihu.usage') {
+    const zhihu = ctx.get?.('zhihu') as { usageSummary(days: unknown): Promise<{ days: unknown[] }> } | undefined
+    if (!zhihuUsage && zhihu) return zhihu.usageSummary(body.days)
     if (!zhihuUsage) throw new Error('manuscript zhihu usage storage is unavailable')
     const days = resolveDays(body.days)
     return { days: await zhihuUsage.read(days) }
@@ -94,35 +100,18 @@ export async function dispatch(
     if (endpoint === 'proposal.apply') {
       return await applyProposal(files, parseProposal(body), str(body, 'expectedVersion'))
     }
-    if (endpoint === 'fim.complete') {
+    if (endpoint === 'fim.complete' || endpoint === 'patch.complete') {
+      // Validate the legacy patch request even when no model is configured.
+      if (endpoint === 'patch.complete') parsePatchRequest(body)
       const config = access.session.requestHeader?.()?.config
       const provider = typeof config?.provider === 'string' ? config.provider : ''
       const model = typeof config?.model === 'string' ? config.model : ''
-      if (!provider || !model) return { text: '', route: 'dsh-llm' }
-      return await completeFim({
-        ctx,
-        provider,
-        model,
-        prefix: str(body, 'prefix'),
-        suffix: str(body, 'suffix'),
-        authorPreferences: parseAuthorPreferences(body.authorPreferences),
-        chapterContext: parseChapterContext(body.chapterContext),
-        signal,
-      })
-    }
-    if (endpoint === 'patch.complete') {
-      const request = parsePatchRequest(body)
-      const config = access.session.requestHeader?.()?.config
-      const provider = typeof config?.provider === 'string' ? config.provider : ''
-      const model = typeof config?.model === 'string' ? config.model : ''
-      if (!provider || !model) return { text: '', route: 'dsh-llm' }
-      return await completePatch({
-        ctx,
-        provider,
-        model,
-        request,
-        signal,
-      })
+      const assist = ctx.get?.('manuscriptAssist') as ManuscriptAssist | undefined
+      if (!assist) {
+        if (!provider || !model) return { text: '', route: 'dsh-llm' }
+        throw new AssistUnavailableError('写作补全未启用')
+      }
+      return assist.complete(endpoint, body, { provider, model }, signal)
     }
     throw new Error(`unknown endpoint ${endpoint}`)
   }
@@ -136,22 +125,12 @@ export async function apply(ctx: Context): Promise<void> {
   const drafts = createDraftStore(domain.table('drafts'))
   ctx.effect(() => () => domain.close(), 'dsh-manuscript.draftDomainClose')
 
-  const usageDomain = await ctx.storageDomain.open(usageDomainSpec)
-  const usage = createUsageRecorder(usageDomain.table('daily'))
-  ctx.effect(() => () => usageDomain.close(), 'dsh-manuscript.usageDomainClose')
-  installUsageWaterfall(ctx, usage)
-
-  const zhihuUsageDomain = await ctx.storageDomain.open(zhihuUsageDomainSpec)
-  const zhihuUsage = createZhihuUsageRecorder(zhihuUsageDomain.table('daily'))
-  ctx.effect(() => () => zhihuUsageDomain.close(), 'dsh-manuscript.zhihuUsageDomainClose')
-  installZhihuUsageListener(ctx, zhihuUsage)
-
   ctx.effect(() =>
     host.connection.rpc.handle(
       '/manuscript',
       async (endpoint: string, payload: unknown, signal: AbortSignal) => {
         try {
-          const value = await dispatch(ctx, endpoint, payload, signal, drafts, usage, zhihuUsage)
+          const value = await dispatch(ctx, endpoint, payload, signal, drafts)
           return { ok: true, value } satisfies RpcResult<unknown>
         } catch (error) {
           return mapError(error)
@@ -162,91 +141,4 @@ export async function apply(ctx: Context): Promise<void> {
       { authority: 'loopback' },
     ),
   )
-}
-
-/** Minimal typing of the upstream `llm/stream` waterfall event so we don't add a peer just for one hook. */
-type LlmStreamOptions = { provider?: string; model?: string }
-type LlmStreamChunk = { type: string; usage?: Record<string, number> }
-type LlmStreamEvent = (
-  options: LlmStreamOptions,
-  next: () => AsyncIterable<LlmStreamChunk>,
-) => AsyncIterable<LlmStreamChunk>
-
-/** Wrap every `llm/stream` call: capture the provider-reported usage into the daily recorder, never block the stream. */
-function installUsageWaterfall(ctx: Context, recorder: UsageRecorder): void {
-  // The host merges in `@deepseek-ai/dsh-llm`'s `Events` declaration, so the literal
-  // event name is what carries the type — a peer import would only be cosmetic.
-  const on = ctx.on as unknown as (
-    name: 'llm/stream',
-    listener: LlmStreamEvent,
-    options?: { global?: boolean; prepend?: boolean },
-  ) => () => boolean
-  on(
-    'llm/stream',
-    (options, next) => trackUsage(ctx, options, next, recorder),
-    { global: true, prepend: true },
-  )
-}
-
-async function* trackUsage(
-  ctx: Context,
-  options: LlmStreamOptions,
-  next: () => AsyncIterable<LlmStreamChunk>,
-  recorder: UsageRecorder,
-): AsyncIterable<LlmStreamChunk> {
-  const provider = typeof options?.provider === 'string' ? options.provider : ''
-  const model = typeof options?.model === 'string' ? options.model : ''
-  const modelKey = provider && model ? `${provider}/${model}` : ''
-  const iterator = next()[Symbol.asyncIterator]()
-  let lastUsage: Record<string, number> | undefined
-  let observed = false
-  let completed = false
-  try {
-    while (true) {
-      const { value, done } = await iterator.next()
-      if (done) {
-        completed = true
-        break
-      }
-      if (value && value.type === 'usage' && value.usage) {
-        lastUsage = value.usage
-        observed = true
-      }
-      yield value
-    }
-  } finally {
-    if (observed && modelKey) {
-      try {
-        await recorder.record(modelKey, lastUsage ?? {}, { request: completed })
-      } catch (error) {
-        // Metering must never influence the LLM stream itself.
-        logWarning(ctx, error)
-      }
-    }
-  }
-}
-
-/** Record every zhihu tool execution emitted by novel tool hosts. Metering must never throw. */
-function installZhihuUsageListener(ctx: Context, recorder: ZhihuUsageRecorder): void {
-  const on = ctx.on as unknown as (
-    name: 'dsh-editor/zhihu-search',
-    listener: (event: ZhihuSearchEvent) => void,
-    options?: { global?: boolean },
-  ) => () => boolean
-  on(
-    'dsh-editor/zhihu-search',
-    (event) => {
-      void recorder.record(event).catch((error) => logWarning(ctx, error))
-    },
-    { global: true },
-  )
-}
-
-function logWarning(ctx: Context, error: unknown): void {
-  try {
-    const logger = (ctx as { logger?: { warn?: (message: string, cause?: unknown) => void } }).logger
-    if (logger?.warn) logger.warn('manuscript.usage: recorder failed', error)
-  } catch {
-    // Best-effort: the host may not expose a logger, and we must not surface metering errors.
-  }
 }

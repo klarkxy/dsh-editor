@@ -1,3 +1,5 @@
 - insert:
     - id: editor-workbench
       name: dsh-editor-workbench
+    - id: editor-workbench-tools
+      name: dsh-editor-workbench/tools

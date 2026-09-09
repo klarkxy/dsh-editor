@@ -66,7 +66,7 @@ describe('completeFim', () => {
       signal: new AbortController().signal,
     })
     const { system, user, maxTokens } = captured(request)
-    expect(maxTokens).toBe(96)
+    expect(maxTokens).toBe(1024)
     expect(user.startsWith('【本章工作笔记】\n节拍：雨夜对峙\n上一章：她已离开')).toBe(true)
     expect(user).toContain('\n\n【光标前】\n前文')
     expect(user.indexOf('【本章工作笔记】')).toBeLessThan(user.indexOf('【光标前】'))

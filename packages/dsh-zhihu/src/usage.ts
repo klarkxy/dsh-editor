@@ -1,6 +1,25 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
-import { dayKey, recentDayKeys, resolveDays } from './usage.ts'
+export class UsageInputError extends Error {
+  constructor(message: string, readonly code: string) { super(message); this.name = 'UsageInputError' }
+}
+export function dayKey(now: Date = new Date()): string {
+  return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
+}
+export function resolveDays(value: unknown): number {
+  const days = typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : 30
+  if (days < 1) throw new UsageInputError('days must be at least 1', 'DAYS_OUT_OF_RANGE')
+  if (days > 90) throw new UsageInputError('days must be no more than 90', 'DAYS_OUT_OF_RANGE')
+  return days
+}
+export function recentDayKeys(count: number, now: Date = new Date()): string[] {
+  const days: string[] = []
+  const base = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const cursor = new Date(base); cursor.setDate(base.getDate() - offset); days.push(dayKey(cursor))
+  }
+  return days
+}
 
 /** Daily counters for zhihu tool executions (search/global search/hot list/ask/knowledge). `results` accumulates returned items on successful calls. */
 export type ZhihuDailyUsage = {

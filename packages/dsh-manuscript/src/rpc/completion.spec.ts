@@ -41,3 +41,20 @@ describe('sanitizeInsert', () => {
     expect(sanitizeInsert('插入内容：下一句')).toBe('下一句')
   })
 })
+
+describe('embedded reasoning in provider text',()=>{
+ it('skips reasoning split across chunks before applying the visible-text cap',async()=>{
+   const text=await collectInsertText(chunks([{type:'text-delta',text:'<thi'},{type:'text-delta',text:'nk>'+ 'hidden '.repeat(1000)},{type:'text-delta',text:'</th'},{type:'text-delta',text:'ink>雨落在窗台上。'}]),{maxChars:4});
+   expect(text).toBe('雨落在窗');
+ });
+ it('never returns an unterminated reasoning block as an insert',async()=>{
+   expect(await collectInsertText(chunks([{type:'text-delta',text:'<think>unfinished reasoning'}]))).toBe('');
+ });
+ it('keeps ordinary text and removes multiple reasoning blocks',async()=>{
+   expect(await collectInsertText(chunks([{type:'text-delta',text:'前文<think>one</think>后文<think>two</think>。'}]))).toBe('前文后文。');
+ });
+});
+
+it('preserves visible leading paragraph whitespace when filtering provider text',async()=>{
+ expect(await collectInsertText(chunks([{type:'text-delta',text:'\n  下一句'}]))).toBe('\n  下一句');
+});

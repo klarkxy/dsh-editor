@@ -140,6 +140,43 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
   const [siblings, setSiblings] = useState<string[]>([])
   const [dirty, setDirty] = useState(false)
   const [open, setOpen] = useState(false)
+  /* 可选补全能力：查询成功前补全保持关闭；不可用/格式不符是显式错误态
+     (带重试),绝不静默当成"已关闭"。卸载/重置/重试都会取消在途请求。 */
+  type CapabilityState = { kind: 'loading' } | { kind: 'ready'; completion: boolean } | { kind: 'error' }
+  const [capability, setCapability] = useState<CapabilityState>({ kind: 'loading' })
+  const capabilityGeneration = useRef(0)
+  const capabilityInFlight = useRef<AbortController | null>(null)
+  const loadCapability = useCallback(async () => {
+    const ticket = ++capabilityGeneration.current
+    capabilityInFlight.current?.abort()
+    const controller = new AbortController()
+    capabilityInFlight.current = controller
+    setCapability({ kind: 'loading' })
+    const result = await rpc.call('/manuscript', 'capabilities.get', {}, controller.signal).catch(() => null)
+    if (capabilityInFlight.current === controller) capabilityInFlight.current = null
+    if (ticket !== capabilityGeneration.current) return
+    const value = result && result.ok ? result.value as { completion?: unknown } : undefined
+    if (!value || typeof value.completion !== 'boolean') {
+      setCapability({ kind: 'error' })
+      return
+    }
+    setCapability({ kind: 'ready', completion: value.completion })
+  }, [rpc])
+  useEffect(() => {
+    void loadCapability()
+    return () => {
+      capabilityGeneration.current += 1
+      capabilityInFlight.current?.abort()
+      capabilityInFlight.current = null
+    }
+  }, [loadCapability])
+  /* 连接代际重建后能力可能变化；事件 API 可用时重新查询。 */
+  useEffect(() => {
+    const events = props.ctx as Context & { on?: (event: string, listener: () => void) => unknown }
+    if (typeof events.on !== 'function') return
+    const dispose = events.on('connection/reset', () => { void loadCapability() })
+    return typeof dispose === 'function' ? () => { (dispose as () => void)() } : undefined
+  }, [props.ctx, loadCapability])
   const [pendingTarget, setPendingTarget] = useState<{ sessionId: string; cwd: string; path: string } | null>(null)
   const handleRef = useRef<EditorCoreHandle | null>(null)
   const mutate = () => setRevision((n) => n + 1)
@@ -298,6 +335,7 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
           },
           draft: { kind: 'session', cwd },
           completionPreference: 'pause',
+          completionEnabled: capability.kind === 'ready' && capability.completion,
           showGhostTip: true,
           maxGhostCandidates: 1,
           enableRewriteSelection: true,
@@ -308,6 +346,14 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
           paperProjection: IDENTITY_PAPER_PROJECTION,
         })
         : e('div', { className: 'manuscript-panel-empty' }, '从上方打开文本文件'),
+        capability.kind === 'error' ? e('div', {
+          'data-testid': 'manuscript-capability-error',
+          role: 'alert',
+          style: { padding: '6px 8px', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' },
+        },
+          e('span', null, 'AI 补全能力不可用，补全与选段改写已暂停。'),
+          e('button', { type: 'button', onClick: () => { void loadCapability() } }, '重试'),
+        ) : null,
         pendingTarget ? e('div', { 'data-testid': 'manuscript-switch-guard', className: 'manuscript-switch-guard' },
           e('span', null, '目标已变更，当前草稿尚未处理。'),
           e('button', { type: 'button', onClick: () => { void acceptPendingSave() } }, '保存后切换'),

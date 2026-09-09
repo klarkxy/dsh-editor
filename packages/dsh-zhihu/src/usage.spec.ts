@@ -4,7 +4,7 @@ import {
   createZhihuUsageRecorder,
   mergeZhihuUsage,
   type ZhihuUsageTableLike,
-} from './zhihu-usage.ts'
+} from './usage.ts'
 
 function tableFixture(): ZhihuUsageTableLike & { rows: Map<string, ReturnType<ZhihuUsageTableLike['get']>> } {
   const rows = new Map<string, ReturnType<ZhihuUsageTableLike['get']>>()
