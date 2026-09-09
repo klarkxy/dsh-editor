@@ -283,6 +283,7 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [tab, setTab] = useState(0)
   if (item.kind === 'approval') {
     const decide = (outcome: 'allowed-once' | 'rejected') => {
       setBusy(true)
@@ -315,19 +316,58 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
       if (!receipt.accepted) setNote(t('chat.questionsStale'))
     }).catch(() => setNote(t('note.submitFailed'))).finally(() => setBusy(false))
   }
+  const questions = item.payload.questions
+  const current = questions.length ? questions[Math.min(tab, questions.length - 1)] : undefined
+  const isAnswered = (id: string, source: Record<string, string> = answers) => Boolean(source[id]?.trim())
+  const choose = (questionId: string, label: string) => {
+    const next = { ...answers, [questionId]: label }
+    setAnswers(next)
+    setNote('')
+    for (let step = 1; step < questions.length; step += 1) {
+      const index = (tab + step) % questions.length
+      if (!isAnswered(questions[index].id, next)) { setTab(index); return }
+    }
+  }
   return e('form', { className: 'pending-card', 'aria-label': t('chat.answerQuestions'), onSubmit: submit },
-    item.payload.questions.map((question) => e('fieldset', { key: question.id },
-      e('legend', null, question.header ?? t('chat.needsAnswers')),
-      e('p', null, question.question),
-      question.detail ? e('small', null, question.detail) : null,
+    questions.length > 1 ? e('div', { className: 'question-tabs', role: 'tablist' },
+      questions.map((question, index) => e('button', {
+        key: question.id,
+        type: 'button',
+        role: 'tab',
+        'aria-selected': index === tab,
+        'aria-label': t('chat.questionTab', { index: index + 1 }),
+        className: `question-tab${index === tab ? ' is-active' : ''}${isAnswered(question.id) ? ' is-done' : ''}`,
+        onClick: () => setTab(index),
+      }, isAnswered(question.id) ? '✓' : String(index + 1))),
+    ) : null,
+    current ? e('section', { className: 'question-panel', role: 'tabpanel' },
+      e('strong', null, current.header ?? t('chat.needsAnswers')),
+      e('p', null, current.question),
+      current.detail ? e('small', null, current.detail) : null,
+      current.options?.length ? e('div', { className: 'question-options' },
+        current.options.map((option) => e('button', {
+          key: option.label,
+          type: 'button',
+          className: `question-option${answers[current.id] === option.label ? ' is-selected' : ''}`,
+          'aria-pressed': answers[current.id] === option.label,
+          onClick: () => choose(current.id, option.label),
+        },
+          e('strong', null, option.label),
+          option.description ? e('small', null, option.description) : null,
+        )),
+      ) : null,
       e('input', {
-        value: answers[question.id] ?? '',
-        list: `question-${item.key}-${question.id}`,
-        'aria-label': question.question,
-        onChange: (event: ChangeEvent<HTMLInputElement>) => setAnswers((old) => ({ ...old, [question.id]: event.target.value })),
+        className: 'question-custom',
+        placeholder: t('chat.customAnswer'),
+        'aria-label': t('chat.customAnswerFor', { question: current.question }),
+        value: current.options?.some((option) => option.label === answers[current.id]) ? '' : answers[current.id] ?? '',
+        onChange: (event: ChangeEvent<HTMLInputElement>) => {
+          const value = event.target.value
+          setAnswers((old) => ({ ...old, [current.id]: value }))
+          setNote('')
+        },
       }),
-      question.options ? e('datalist', { id: `question-${item.key}-${question.id}` }, question.options.map((option) => e('option', { key: option.label, value: option.label }, option.description))) : null,
-    )),
+    ) : null,
     e('button', { type: 'submit', disabled: busy }, busy ? t('chat.submitting') : t('chat.submitAllAnswers')),
     note ? e('small', { className: 'warning' }, note) : null,
   )

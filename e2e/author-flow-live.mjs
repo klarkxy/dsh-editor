@@ -191,8 +191,16 @@ async function answerPending(page) {
   }
   const question = page.getByRole('form', { name: '回答问题' }).last()
   if (await question.isVisible().catch(() => false)) {
-    for (const input of await question.locator('input').all()) {
-      await input.fill('按已给出的设定和推荐方案继续，不增加新分支。')
+    const tabs = question.locator('.question-tab')
+    const tabCount = await tabs.count()
+    for (let index = 0; index < Math.max(tabCount, 1); index += 1) {
+      if (tabCount) await tabs.nth(index).click()
+      const options = question.locator('.question-option')
+      if (await options.count()) {
+        await options.first().click()
+      } else {
+        await question.locator('.question-custom').fill('按已给出的设定和推荐方案继续，不增加新分支。')
+      }
     }
     await question.getByRole('button', { name: '提交全部回答' }).click()
     return true

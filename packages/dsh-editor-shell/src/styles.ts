@@ -594,8 +594,24 @@ export const componentStyles = `
 .shell .pending-card { display: grid; gap: var(--space-3); padding: 10px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); }
 .shell .init-guide-card { border-color: var(--accent); }
 .shell .init-guide-card > div { display: flex; gap: 8px; }
-.shell .pending-card fieldset { display: grid; gap: 5px; margin: 0; padding: 0; border: 0; }
 .shell .pending-card input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); }
+.shell .pending-card input::placeholder { color: var(--meta); }
+/* 提问卡片:编号页签切换问题,页签透出作答状态(当前高亮/已答对勾)。 */
+.shell .pending-card .question-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.shell .pending-card .question-tab { min-width: 28px; min-height: 26px; padding: 3px 9px; border-radius: var(--radius-sm); font-size: var(--text-xs); letter-spacing: .04em; }
+.shell .pending-card .question-tab.is-active { background: var(--surface-warm); color: var(--fg); box-shadow: var(--elev-ring); }
+.shell .pending-card .question-tab.is-done { color: var(--accent); }
+.shell .pending-card .question-panel { display: grid; gap: 6px; }
+.shell .pending-card .question-panel > strong { font: 500 var(--text-xs)/1.4 var(--font-sans); letter-spacing: .12em; color: var(--meta); }
+.shell .pending-card .question-panel > p { margin: 0; white-space: pre-wrap; line-height: 1.7; color: var(--fg); }
+.shell .pending-card .question-panel > small { color: var(--meta); line-height: 1.6; }
+/* 预设选项:整行宽大按钮,label 为主、description 为辅,选中态用强调色描边。 */
+.shell .pending-card .question-options { display: grid; gap: 6px; }
+.shell .pending-card .question-option { display: grid; gap: 3px; justify-items: start; justify-content: start; width: 100%; min-height: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--bg); text-align: left; letter-spacing: .03em; line-height: 1.5; }
+.shell .pending-card .question-option:hover { background: var(--surface-warm); color: var(--fg); }
+.shell .pending-card .question-option.is-selected { background: var(--surface-warm); color: var(--fg); box-shadow: 0 0 0 1px var(--accent); }
+.shell .pending-card .question-option > small { font-size: var(--text-xs); font-weight: 400; letter-spacing: .02em; color: var(--meta); }
+.shell .pending-card .question-option.is-selected > small { color: var(--fg-2); }
 .shell .proposal-card { display: grid; gap: var(--space-3); padding: 10px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); }
 .shell .proposal-card header, .shell .proposal-card footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .shell .proposal-card pre { max-height: 180px; overflow: auto; padding: 8px; background: var(--bg); white-space: pre-wrap; border-radius: var(--radius-sm); margin: 0; font: 400 var(--text-sm)/1.55 var(--font-serif); color: var(--fg-2); }
