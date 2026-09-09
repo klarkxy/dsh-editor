@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, rm, stat, writeFile, readFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,7 +8,8 @@ import { chromium } from 'playwright'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack', 'portable-e2e')
-const portable = resolve(root, '.pack', 'desktop', 'DSH Editor-0.1.0-win-x64.exe')
+const desktopVersion = JSON.parse(await readFile(resolve(root, 'apps/desktop/package.json'), 'utf8')).version
+const portable = resolve(root, '.pack', 'desktop', `DSH Editor-${desktopVersion}-win-x64.exe`)
 const home = resolve(root, '.dev', 'portable-home')
 const portableStat = await stat(portable)
 await rm(home, { recursive: true, force: true })
@@ -68,6 +69,7 @@ const debuggingPort = await freePort()
 const portableEnv = {
   ...process.env,
   DSH_HOME: home,
+  DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
   DSH_TELEMETRY_DISABLED: '1',
   DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key',
 }
@@ -134,6 +136,30 @@ try {
   if (!state.shell || !state.editorName || state.officialHome || !state.onboarding || state.technicalChrome || state.permanentChat || state.homeSidebar || !state.homeStage || !clientBoundaryReady) {
     throw new Error(`portable identity assertion failed: ${JSON.stringify(state)}`)
   }
+  await window.getByTestId('proofread-open').click()
+  await window.getByTestId('proofread-input').fill('我们以经做好准备。')
+  await window.getByTestId('proofread-input').press('Control+Enter')
+  await window.getByTestId('proofread-result').getByText('建议：已经',{exact:true}).waitFor()
+  await window.getByTestId('proofread-input').press('Escape')
+  await window.getByTestId('zhihu-open').click()
+  await window.getByTestId('zhihu-panel').waitFor()
+  await window.getByTestId('zhihu-panel').press('Escape')
+  await window.getByRole('button',{name:'新建',exact:true}).first().click()
+  const project = window.getByRole('dialog',{name:'新建作品'})
+  await project.getByLabel('作品名称').fill('便携组合验证')
+  await project.getByRole('button',{name:'创建',exact:true}).click()
+  await window.locator('.tree').waitFor({timeout:30000})
+  await window.locator('.tree-row').filter({hasText:'正文'}).first().hover()
+  await window.getByRole('button',{name:'在 正文 中新建文件',exact:true}).click()
+  const file=window.getByRole('dialog',{name:'新建文件'})
+  await file.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001')
+  await file.getByRole('button',{name:'创建',exact:true}).click()
+  await window.locator('[data-testid="paper-editor"] .cm-content').click()
+  await window.keyboard.insertText('最终便携产物保存验证。')
+  await window.keyboard.press('Control+s')
+  await window.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor()
+  if(!(await readFile(resolve(home,'projects','便携组合验证','正文','001.md'),'utf8')).includes('最终便携产物保存验证'))throw new Error('portable save missing on disk')
+  state.operations=['proofread same text','Zhihu contribution','create project/document and save to disk']
   await window.screenshot({ path: resolve(output, 'window.png') })
   const origin = url.origin
   await window.close()

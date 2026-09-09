@@ -1,5 +1,5 @@
 /**
- * Delivery matrix for the two independent plugins.
+ * Delivery matrix for the four public business plugins.
  *
  * Uses the real DSH `web` template under a fresh DSH_HOME, installs only the
  * current tarballs, exercises both removal directions, boots every material
@@ -114,13 +114,17 @@ function inspectState(name, expectedPlugins) {
   const manifest = readProfileManifest()
   const dependencies = Object.keys(manifest.dependencies || {}).filter((item) => item.startsWith('dsh-'))
   const bundles = manifest.dsh?.profile?.bundles || []
-  const pluginBundles = bundles.filter((item) => item === 'dsh-manuscript' || item === 'dsh-grill')
+  const pluginBundles = bundles.filter((item) => ['dsh-manuscript','dsh-grill','dsh-proofread','dsh-zhihu'].includes(item))
   assertEqualSet(dependencies, expectedPlugins, `${name} dependencies`)
   assertEqualSet(pluginBundles, expectedPlugins, `${name} bundles`)
 
   const config = runDsh(['--profile', profile, '--dump-config']).stdout
   const expectedEntries = {
     manuscript: expectedPlugins.includes('dsh-manuscript'),
+    'manuscript-assist': expectedPlugins.includes('dsh-manuscript'),
+    proofread: expectedPlugins.includes('dsh-proofread'),
+    zhihu: expectedPlugins.includes('dsh-zhihu'),
+    'zhihu-tools': false,
     'grill-tools': expectedPlugins.includes('dsh-grill'),
     'grill-workflow': expectedPlugins.includes('dsh-grill'),
   }
@@ -231,11 +235,45 @@ async function probeWeb(browser, name, expectedPlugins, index) {
       await page.waitForTimeout(3_000)
       if (await overlay.count()) throw new Error(`${name}: manuscript UI remained after removal`)
     }
+    if (expectsManuscript) await page.getByTestId('manuscript-close').click();
+    const expectsProofread = expectedPlugins.includes('dsh-proofread');
+    if (expectsProofread) {
+      await page.getByTestId('proofread-open').click();
+      await page.getByTestId('proofread-input').fill('我们以经做好准备。');
+      await page.getByTestId('proofread-input').press('Control+Enter');
+      await page.getByTestId('proofread-result').getByText('建议：已经',{exact:true}).waitFor();
+      await page.getByTestId('proofread-input').fill('今天晴天。');
+      await page.getByTestId('proofread-check').click();
+      await page.getByTestId('proofread-result').waitFor();
+      await page.getByTestId('proofread-input').press('Escape');
+      await page.getByTestId('proofread-open').waitFor();
+      if (await page.getByTestId('proofread-open').count() !== 1) throw new Error('duplicate proofread contribution');
+    } else if (await page.getByTestId('proofread-open').count()) throw new Error('proofread entry survived removal');
+    const expectsZhihu = expectedPlugins.includes('dsh-zhihu');
+    if (expectsZhihu) {
+      const callZhihu=async(method,payload)=>{const response=await fetch(base+'/zhihu/'+method,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:name,method,payload})});return (await response.json()).result};
+      if(!report.zhihuUsageSeeded){
+        // Filename validation fails before credentials/network access, but records the attempted operation.
+        const rejected=await callZhihu('knowledge.upload',{fileName:'',contentBase64:'YQ=='});
+        if(rejected.ok)throw new Error('invalid upload unexpectedly accepted');
+        report.zhihuUsageSeeded=true;
+      }
+      const usage=await callZhihu('usage.summary',{days:1});
+      if(!usage.ok||usage.value.days[0]?.calls!==1||usage.value.days[0]?.failures!==1)throw new Error('Zhihu usage lost or double-counted after restart/reinstall: '+JSON.stringify(usage));
+      report.states.find(item=>item.name===name).zhihuUsageRetained=true;
+
+      await page.getByTestId('zhihu-open').click();
+      await page.getByTestId('zhihu-panel').waitFor();
+      await page.getByTestId('zhihu-panel').press('Escape');
+      await page.getByTestId('zhihu-open').waitFor();
+      if (await page.getByTestId('zhihu-open').count() !== 1) throw new Error('duplicate zhihu contribution');
+    } else if (await page.getByTestId('zhihu-open').count()) throw new Error('zhihu entry survived removal');
     if (pageErrors.length) throw new Error(`${name}: browser errors: ${pageErrors.join(' | ')}`)
     await page.screenshot({ path: path.join(out, `${name}.png`) })
     report.states.find((item) => item.name === name).web = {
       ready: true,
       manuscriptOverlay: expectsManuscript,
+      proofread: expectsProofread, zhihu: expectsZhihu,
       pageErrors,
     }
   } catch (error) {
@@ -264,6 +302,8 @@ function safeCleanup() {
 resetOutput()
 const manuscriptTarball = stageTarball('dsh-manuscript')
 const grillTarball = stageTarball('dsh-grill')
+const proofreadTarball = stageTarball('dsh-proofread')
+const zhihuTarball = stageTarball('dsh-zhihu')
 const browser = await chromium.launch({ headless: true })
 
 try {
@@ -285,6 +325,30 @@ try {
   transition('remove', 'dsh-grill')
   inspectState('05-manuscript-only-after-remove-grill', ['dsh-manuscript'])
   await probeWeb(browser, '05-manuscript-only-after-remove-grill', ['dsh-manuscript'], 3)
+  transition('remove','dsh-manuscript');
+  const states = [
+    ['add','dsh-proofread',proofreadTarball,'06-proofread-only',['dsh-proofread']],
+    ['add','dsh-zhihu',zhihuTarball,'07-proofread-then-zhihu',['dsh-proofread','dsh-zhihu']],
+    ['remove','dsh-proofread',null,'08-zhihu-after-remove-proofread',['dsh-zhihu']],
+    ['add','dsh-proofread',proofreadTarball,'09-zhihu-then-proofread',['dsh-proofread','dsh-zhihu']],
+    ['remove','dsh-zhihu',null,'10-proofread-after-remove-zhihu',['dsh-proofread']],
+    ['remove','dsh-proofread',null,'11-empty',[]],
+    ['add','dsh-zhihu',zhihuTarball,'12-zhihu-only',['dsh-zhihu']],
+  ];
+  // Data outside package installation must survive both removal directions and restarts.
+  const retained=path.join(dshHome,'storages','plugin-matrix-retained.txt');
+  fs.mkdirSync(path.dirname(retained),{recursive:true});fs.writeFileSync(retained,'retained across package changes');
+  for(const [kind,pkg,archive,name,expected] of states){
+    transition(kind,pkg,archive ? 'file:'+archive : undefined);
+    inspectState(name,expected);await probeWeb(browser,name,expected,report.states.length);
+    if(fs.readFileSync(retained,'utf8')!=='retained across package changes')throw new Error('persistent data lost');
+  }
+  transition('add','dsh-proofread','file:'+proofreadTarball);
+  transition('add','dsh-manuscript','file:'+manuscriptTarball);
+  transition('add','dsh-grill','file:'+grillTarball);
+  const all=['dsh-proofread','dsh-zhihu','dsh-manuscript','dsh-grill'];
+  inspectState('13-all-public',all);await probeWeb(browser,'13-all-public',all,13);
+
 } catch (error) {
   report.issues.push(error instanceof Error ? error.stack || error.message : String(error))
 } finally {

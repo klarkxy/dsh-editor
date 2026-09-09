@@ -27,6 +27,9 @@ const home = resolve(devRoot, 'feature-coverage-home')
 const output = resolve(root, 'e2e', 'out', 'feature-coverage')
 const sendTimeout = Number(process.env.E2E_FEATURE_SEND_TIMEOUT_MS || 180_000)
 const modelId = 'MiniMax-M3'
+const aiOnly = process.env.E2E_FEATURE_AI_ONLY === '1'
+const workbenchOnly = process.env.E2E_FEATURE_WORKBENCH_ONLY === '1'
+if (aiOnly && workbenchOnly) throw new Error('Select only one feature coverage scope')
 
 for (const target of [projectsRoot, workspace, importSource, home]) {
   if (!target.startsWith(`${devRoot}${sep}`)) throw new Error(`unsafe test path: ${target}`)
@@ -34,9 +37,9 @@ for (const target of [projectsRoot, workspace, importSource, home]) {
 if (!output.startsWith(`${resolve(root, 'e2e', 'out')}${sep}`)) throw new Error(`unsafe output path: ${output}`)
 
 const mmxPath = process.env.MMX_CONFIG_PATH || join(homedir(), '.mmx', 'config.json')
-const mmx = JSON.parse(await readFile(mmxPath, 'utf8'))
+const mmx = workbenchOnly ? {} : JSON.parse(await readFile(mmxPath, 'utf8'))
 const apiKey = String(process.env.MINIMAX_API_KEY || mmx.api_key || '').trim()
-if (!apiKey) throw new Error('MiniMax API key is unavailable')
+if (!workbenchOnly && !apiKey) throw new Error('MiniMax API key is unavailable')
 const configuredBase = String(process.env.MINIMAX_BASE_URL || mmx.base_url || (mmx.region === 'cn' ? 'https://api.minimaxi.com' : 'https://api.minimax.io'))
 const apiBase = `${configuredBase.replace(/\/+$/, '')}/v1`
 
@@ -49,7 +52,8 @@ const report = {
   book,
   workspace,
   dsh: dsh.version ?? '0.1.1-rc.2',
-  model: modelId,
+  model: workbenchOnly ? null : modelId,
+  scope: workbenchOnly ? 'workbench UI without model calls' : aiOnly ? 'model UI workflows with fresh documents' : 'full feature coverage',
   phases: [],
   features: [],
   failures: [],
@@ -73,7 +77,7 @@ function fail(message) {
 }
 
 function sanitize(value) {
-  return String(value).replaceAll(apiKey, '[redacted]').replace(/sk-[A-Za-z0-9_-]{8,}/g, '[redacted]')
+  return (apiKey ? String(value).replaceAll(apiKey, '[redacted]') : String(value)).replace(/sk-[A-Za-z0-9_-]{8,}/g, '[redacted]')
 }
 
 function delay(ms) {
@@ -188,6 +192,10 @@ async function cover(name, action) {
     const detail = sanitize(error instanceof Error ? error.message : String(error))
     recordFeature(name, false, detail)
     fail(`${name}: ${detail}`)
+    if (activePage) {
+      await shot(activePage, `failed-${name}`).catch(() => undefined)
+      await writeFile(resolve(output, `failed-${name}.html`), sanitize(await activePage.content())).catch(() => undefined)
+    }
     await dismissOverlays().catch(() => undefined)
     return false
   }
@@ -302,6 +310,7 @@ async function forceProtocol(scope) {
 async function configureMiniMax(page) {
   await openShellSettings(page)
   const dialog = page.locator('.settings-dialog')
+  if (!aiOnly) {
   await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '通用设置' }).click()
   await dialog.getByRole('region', { name: '通用设置' }).waitFor({ state: 'visible', timeout: 15_000 })
   await chooseCustomSelect(dialog, '语言', (label) => /English/i.test(label))
@@ -342,13 +351,18 @@ async function configureMiniMax(page) {
     recordFeature('writing-paper', false, sanitize(error instanceof Error ? error.message : String(error)))
   }
 
-  await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '知乎' }).click()
-  await dialog.getByText('Access Secret', { exact: false }).first().waitFor({ state: 'visible', timeout: 15_000 })
+  await closeShellSettings(page)
+  await page.getByTestId('zhihu-open').click()
+  await page.getByTestId('zhihu-panel').getByRole('tab', { name: '设置', exact: true }).click()
+  await page.getByTestId('zhihu-panel').getByText('Access Secret', { exact: false }).first().waitFor({ state: 'visible', timeout: 15_000 })
+  await page.getByTestId('zhihu-panel').getByRole('button', { name: '关闭', exact: true }).click()
+  await openShellSettings(page)
   recordFeature('settings-zhihu', true)
   await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '用量' }).click()
   await dialog.getByRole('region', { name: '用量' }).waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined)
   recordFeature('settings-usage', true)
 
+  }
   await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '模型' }).click()
   const models = dialog.getByRole('region', { name: '模型' })
   await models.waitFor({ state: 'visible', timeout: 15_000 })
@@ -641,7 +655,7 @@ async function openAssistantWithModel(page) {
     return
   }
   try {
-    const chosen = await chooseCustomSelect(assistant, '选择模型', (label) => /MiniMax-M3/i.test(label) || /MiniMax/i.test(label))
+    const chosen = await chooseCustomSelect(assistant, '选择模型', (label) => /MiniMax-M3/i.test(label))
     report.model = chosen.replace(/\s+/g, ' ').trim()
     await recordPhase('切换对话模型', report.model)
     return
@@ -652,8 +666,7 @@ async function openAssistantWithModel(page) {
   await select.waitFor({ state: 'visible', timeout: 30_000 })
   const options = await select.locator('option').evaluateAll((items) => items.map((item) => ({ value: item.value, text: item.textContent || '' })))
   const chosen = options.find((item) => /MiniMax-M3/i.test(item.text))
-    || options.find((item) => /MiniMax/i.test(item.text))
-    || options[0]
+
   if (!chosen) throw new Error(`no chat model available: ${JSON.stringify(options)}`)
   await select.selectOption(chosen.value)
   await picker.getByRole('button', { name: '开始', exact: true }).click({ force: true })
@@ -891,11 +904,13 @@ async function coverWorkbench(page) {
     const panel = page.getByRole('region', { name: '人物卡' })
     await panel.waitFor({ state: 'visible', timeout: 10_000 })
     await panel.getByRole('button', { name: '新建人物卡' }).click()
+    await shot(page, 'cards-create-dialog')
     const dialog = page.getByRole('dialog', { name: '新建人物卡' })
     await dialog.getByLabel('卡片标题').fill('姚梨')
     await dialog.getByRole('button', { name: '创建' }).click()
     await dialog.waitFor({ state: 'detached', timeout: 15_000 })
     await page.locator('.tree-row').filter({ hasText: /姚梨/ }).first().waitFor({ state: 'visible', timeout: 15_000 })
+    await waitFor(() => exists(resolve(workspace, '人物卡', '姚梨.md')), 'created character saved', 10_000)
     await page.keyboard.press('Control+Shift+W')
     await page.getByRole('region', { name: '世界书' }).waitFor({ state: 'visible', timeout: 10_000 })
   })
@@ -988,15 +1003,57 @@ async function coverWorkbench(page) {
   })
 
   await cover('chapter-merge', async () => {
+    const targetBefore = await readFile(resolve(workspace, '正文', '002.md'), 'utf8')
+    const sourceBefore = await readFile(resolve(workspace, '正文', '003.md'), 'utf8')
     await openTreeFile(page, '002.md', '正文')
-    await (await treeFileRow(page, '002.md')).click({ button: 'right' })
-    await page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '与下一章合并' }).click()
-    const review = page.getByRole('dialog', { name: '合章' })
-    await review.waitFor({ state: 'visible', timeout: 10_000 })
-    await review.getByRole('button', { name: '应用' }).click()
-    await waitFor(async () => !(await page.locator('.tree-row.tree-main').filter({ hasText: '003.md' }).count()), 'merged chapter archived', 20_000)
-    await review.getByRole('button', { name: '关闭' }).click().catch(() => undefined)
-    await dismissOverlays(page)
+    // Delay a real pre-merge tree response until after the post-merge refresh.
+    // No response data is mocked: only arrival order is controlled.
+    let held = false
+    let captured = false
+    let delivered = false
+    let release
+    const gate = new Promise((resolvePromise) => { release = resolvePromise })
+    const delayedTree = async (route) => {
+      const payload = route.request().postDataJSON()?.payload
+      if (held || payload?.path !== '正文') return route.continue()
+      held = true
+      const response = await route.fetch()
+      const body = await response.json()
+      if (!(body.result?.value?.entries || []).some((entry) => entry.name === '003.md')) throw new Error('Old tree response did not contain merge source')
+      captured = true
+      await gate
+      await route.fulfill({ response })
+      delivered = true
+    }
+    await page.route('**/manuscript/tree.list', delayedTree)
+    try {
+      const directory = await directoryRow(page, '正文')
+      await directory.click()
+      await directory.click()
+      await waitFor(() => captured, 'capture pre-merge directory response', 10_000)
+      await (await treeFileRow(page, '002.md')).click({ button: 'right' })
+      await page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '与下一章合并' }).click()
+      const review = page.getByRole('dialog', { name: '合章' })
+      await review.waitFor({ state: 'visible', timeout: 10_000 })
+      await review.getByRole('button', { name: '应用' }).click()
+      await waitFor(async () => !(await page.locator('.tree-row.tree-main').filter({ hasText: '003.md' }).count()), 'merged chapter archived', 20_000)
+      await page.locator('.tree-row.tree-main').filter({ hasText: '002.md' }).waitFor({ state: 'visible' })
+      release()
+      await waitFor(() => delivered, 'release old directory response', 10_000)
+      await page.evaluate(() => new Promise((resolvePromise) => requestAnimationFrame(() => requestAnimationFrame(resolvePromise))))
+      if (await page.locator('.tree-row.tree-main').filter({ hasText: '003.md' }).count()) throw new Error('Late pre-merge response restored archived chapter in tree')
+      report.treeRace = { realResponseDelayed: true, archivedRowRemainsAbsent: true }
+      await shot(page, 'merge-refreshed')
+      if (await exists(resolve(workspace, '正文', '003.md'))) throw new Error('Merged source remains on disk')
+      const merged = await readFile(resolve(workspace, '正文', '002.md'), 'utf8')
+      if (merged !== `${targetBefore.trimEnd()}\n\n${sourceBefore.trim()}\n`) throw new Error('Merged text does not preserve both source chapters')
+      await page.locator('[data-testid="paper-path"]', { hasText: /正文\/002\.md/ }).waitFor({ state: 'visible', timeout: 10_000 })
+      await review.getByRole('button', { name: '关闭' }).click().catch(() => undefined)
+      await dismissOverlays(page)
+    } finally {
+      release()
+      await page.unroute('**/manuscript/tree.list', delayedTree)
+    }
   })
 
   await cover('chapter-navigation', async () => {
@@ -1036,8 +1093,14 @@ async function coverAi(page) {
     const end = text.indexOf('\n', start)
     await selectPaperRange(page, start, end > start ? end : start + needle.length + 12)
     await page.getByRole('group', { name: '选段改写预设' }).getByRole('button', { name: '缩短' }).click()
-    const proposal = page.getByRole('region', { name: '选段修改建议' })
-    await proposal.waitFor({ state: 'visible', timeout: sendTimeout })
+    const proposal = page.locator('[aria-label="选段修改建议"]')
+    await waitFor(async()=>{
+      if(await proposal.isVisible().catch(()=>false))return true
+      const notice=await page.locator('[data-testid="paper-notice"]').innerText().catch(()=> '')
+      if(!/^正在/.test(notice)&&/未返回|失败|未启用/.test(notice))throw new Error(notice)
+      return false
+    },'usable rewrite suggestion',sendTimeout)
+    if(/<\/?think>/.test(await proposal.innerText()))throw new Error('reasoning leaked into rewrite proposal');
     await proposal.getByRole('button', { name: '应用修改' }).click()
     await savePaper(page)
     await shot(page, 'rewrite')
@@ -1052,15 +1115,16 @@ async function coverAi(page) {
     await waitFor(async () => {
       if (await page.locator('[data-testid="paper-ghost"]').count()) return true
       const notice = await page.locator('[data-testid="paper-notice"]').innerText().catch(() => '')
-      return /补全|建议|未返回|失败/.test(notice)
+      return !/^正在/.test(notice) && /未返回|失败|已停止|未启用/.test(notice)
     }, 'fim result', sendTimeout)
     if (await page.locator('[data-testid="paper-ghost"]').count()) {
       const accept = page.getByRole('button', { name: '接受补全' })
       if (await accept.isVisible().catch(() => false)) await accept.click()
       await savePaper(page)
-      return 'ghost accepted'
+      const saved=await readFile(resolve(workspace,'正文','002.md'),'utf8');if(/<\/?think>/.test(saved))throw new Error('reasoning leaked into saved document');
+      return 'ghost accepted; saved text excludes reasoning'
     }
-    return 'fim responded without ghost'
+    throw new Error('MiniMax-M3 returned no usable ghost: ' + await page.locator('[data-testid="paper-notice"]').innerText().catch(() => 'no notice'))
   })
 
   await cover('chat-proposal', async () => {
@@ -1073,8 +1137,12 @@ async function coverAi(page) {
     await assistant.getByRole('button', { name: '新对话' }).click()
     const picker = page.getByRole('dialog', { name: '新对话' })
     if (await picker.isVisible().catch(() => false)) {
-      await picker.getByRole('button', { name: '开始', exact: true }).click({ force: true }).catch(() => undefined)
-      await picker.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined)
+      const selection=picker.getByLabel('选择模型');await selection.waitFor();
+      const options=await selection.locator('option').evaluateAll(items=>items.map(x=>({value:x.value,text:x.textContent||''})));
+      const model=options.find(x=>/MiniMax-M3/i.test(x.text));if(!model)throw new Error('MiniMax-M3 unavailable in new conversation');
+      await selection.selectOption(model.value);
+      await picker.getByRole('button', { name: '开始', exact: true }).click()
+      await picker.waitFor({ state: 'hidden', timeout: 15000 })
     }
     await assistant.getByRole('button', { name: '对话操作' }).click()
     const menu = page.getByRole('menu')
@@ -1122,6 +1190,11 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN', acceptDownloads: true })
   activePage = page
   page.setDefaultTimeout(30_000)
+  report.rpc=[]
+  page.on('response',async response=>{
+    if(!/\/manuscript\/(fim|patch)\.complete/.test(response.url()))return;
+    try{const body=(await response.json()).result;report.rpc.push({endpoint:response.url().split('/').at(-1),status:response.status(),ok:body?.ok,route:body?.value?.route,textChars:body?.value?.text?.length??0,error:body?.error?.message});}catch{report.rpc.push({endpoint:response.url().split('/').at(-1),status:response.status(),read:'unavailable'})}
+  })
   page.on('pageerror', (error) => fail(`pageerror: ${sanitize(error.message)}`))
   page.on('console', (message) => {
     if (message.type() !== 'error') return
@@ -1137,11 +1210,16 @@ try {
   }, undefined, { timeout: 45_000 })
   await shot(page, 'home')
 
-  await configureMiniMax(page)
-  await createProjectFromHome(page)
-  await shot(page, 'project-open')
-  await coverWorkbench(page)
-  await coverAi(page)
+  if (!workbenchOnly) await configureMiniMax(page)
+  {
+    await createProjectFromHome(page);await shot(page, 'project-open');
+    if(aiOnly){
+      await createFolder(page,'大纲');
+      await createFileIn(page,'正文','001');await typeIntoPaper(page,'# 第一章 雾港\n\n林简站在港口，望着雾里的灯。她听见广播重复同一句话，脚步缓缓地停在空荡荡的栈桥上。\n');
+      await createFileIn(page,'正文','002');await typeIntoPaper(page,'# 第二章 回声\n\n姚梨把档案盒推过桌面。林简推开门，');
+    }else await coverWorkbench(page)
+  }
+  if (!workbenchOnly) await coverAi(page)
   await shot(page, 'complete')
   await recordPhase('功能覆盖完成', `${report.features.filter((item) => item.ok).length}/${report.features.length} ok`)
 } catch (error) {
