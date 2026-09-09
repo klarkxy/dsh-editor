@@ -1,6 +1,6 @@
 # DSH Editor 插件架构与接口
 
-本文是修改、替换或新建 DSH Editor 插件的权威手册。通用产品边界见 [architecture.md](architecture.md)，开发和验收命令见 [development.md](development.md)。
+本文是修改、替换或新建 DSH Editor 插件的权威手册。通用产品边界见 [architecture.md](architecture.md)，产品原则见 [product-principles.md](product-principles.md)，开发和验收命令见 [development.md](development.md)。
 
 当前兼容基线固定为 DSH `0.1.1-rc.2`。私有 `root` 接口尤其不是上游公共承诺；升级 DSH 前必须重新验证本文列出的全部桌面能力。
 

@@ -54,6 +54,8 @@ pnpm test:e2e:portable
 
 - [使用者指南](docs/user-guide.md)：桌面启动、三栏工作台、核心写作闭环、设置、快捷键与公开插件使用
 - [开发者指南](docs/development.md)：运行时准备、调试、测试与打包
+- [产品原则](docs/product-principles.md)：作者写稿、提案确认、明确不做
+- [界面与设计系统](docs/ui.md)：纸 / 墨 token、三栏布局与稿纸交互
 - [架构与边界](docs/architecture.md)：DSH 权威边界、profile、RPC 与安全约束
 - [插件架构与接口](docs/plugin-architecture.md)：双私有 Host 拓扑、RPC/Tool/slot 契约以及修改、替换和新建插件流程
 - [桌面运行时图](docs/diagrams/dsh-editor-runtime.html)：Electron、DSH Host 与桌面 profile

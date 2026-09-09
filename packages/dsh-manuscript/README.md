@@ -67,4 +67,4 @@ dsh plugin --profile web remove dsh-manuscript
 
 看不到稿纸时先完整重启并检查 config；显示“没有工作区”时，在官方 DSH 中选择工作区并进入普通会话；补全为空是允许的降级，不影响编辑和保存。
 
-源码仓库中的完整使用、开发和架构说明分别位于 `docs/user-guide.md`、`docs/development.md` 和 `docs/architecture.md`；这些仓库文件不包含在独立 tarball 中。
+源码仓库中的完整使用、开发、产品原则、界面和架构说明分别位于 `docs/user-guide.md`、`docs/development.md`、`docs/product-principles.md`、`docs/ui.md` 和 `docs/architecture.md`；这些仓库文件不包含在独立 tarball 中。

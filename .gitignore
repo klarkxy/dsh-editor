@@ -8,6 +8,7 @@ lib
 dist
 .env
 .env.*
+# Local OpenDesign CLI state if the tool is run again; not product docs.
 .opendesign-project-id.txt
 .opendesign-run.json
 .codex-plan-prompt.txt

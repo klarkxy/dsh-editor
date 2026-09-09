@@ -1,6 +1,6 @@
 # DSH Editor 架构与边界
 
-本文描述桌面运行时、所有权边界和安全约束。插件分级、RPC/Tool/slot 接口以及修改、替换和新建插件流程见 [plugin-architecture.md](plugin-architecture.md)。开发和验收命令见 [development.md](development.md)。
+本文描述桌面运行时、所有权边界和安全约束。产品原则见 [product-principles.md](product-principles.md)，界面与 token 见 [ui.md](ui.md)。插件分级、RPC/Tool/slot 接口以及修改、替换和新建插件流程见 [plugin-architecture.md](plugin-architecture.md)。开发和验收命令见 [development.md](development.md)。
 
 当前兼容基线固定为 DSH `0.1.1-rc.2`。
 
@@ -18,7 +18,7 @@
 
 ## 产品结构
 
-DSH Editor V1 是 Windows x64 的 GUI-first 桌面应用，不是另一套 Agent runtime。
+DSH Editor 是 Windows / macOS 的 GUI-first 桌面应用，不是另一套 Agent runtime。
 
 ```text
 Electron（受控多窗口、资源校验、子进程生命周期）
@@ -130,7 +130,7 @@ Renderer 同时维护最多 2,000 字符的本机作者侧写 `author_memory`，
 
 文本上限 2 MB。创建使用 `createIfAbsent`，保存使用 `replaceIfVersion`。binary、非普通文件、父目录不存在、stale version、read-only、未知 session 和 workspace mismatch 都 fail closed。
 
-`patch.complete` 输入 session、文件、选区和有界前后文；Host 从 live session request header 选择 provider/model，再使用 DSH `llm.stream`。返回只是一条短建议。Renderer 以文档 revision、选区起止与选区文本组成 ticket；请求过期、abort 或选区改变时丢弃响应。“用这句”只改 buffer，仍需显式保存。
+`patch.complete` 输入 session、文件、选区和有界前后文；Host 从 live session request header 选择 provider/model，再使用 DSH `llm.stream`。返回只是一条短建议。Renderer 以文档 revision、选区起止与选区文本组成 ticket；请求过期、abort 或选区改变时丢弃响应。「应用修改」只改 buffer，仍需显式保存。
 
 补全偏好只保存在 Renderer 的本机界面存储中，默认 `manual`。`pause` 模式以每次真实键入 revision 为一次性触发票据，只对 `正文` Markdown/TXT 生效；稿纸失焦、非折叠选区、短前文、冲突、已有建议或正在执行其他建议时不发请求。停顿 1.5 秒后仍满足条件才复用同一 `fim.complete`，失败不会在无新键入时自行重试，响应仍走既有 revision/path/abort 校验并需要作者确认。
 
@@ -148,13 +148,12 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 
 `dsh-manuscript` 在普通 `web` profile 中继续使用 `shell.overlay` 抽屉，不占官方 root；其公开 tarball 只含 provider-confined 稿件能力，不含 Node 文件系统或桌面生命周期端点。`dsh-grill` 继续只注册工具和提示。两者仍可单独安装、共存和任意顺序卸载；桌面 shell 与 `/dsh-editor-workbench` 不进入公开 tarball。
 
-## 非目标与后置
+## 非目标
 
-- 代码签名与公证；安装器、应用内更新下载与 CI 发布上传已经落地。
-- 句内卡片、`/`/`@` 面板、审阅 gutter、附件和完整官方高级管理界面；
-- watch、独立索引服务、Git UI；通用文件树现已支持可见目录整理和显式确认后的永久删除，删除与可恢复归档属于不同操作。
-- 卡片拖放、手写卡片摘要、章节—大纲绑定、关系图、向量检索；章节状态、卡片目录/引用导航、导出预检与 DOCX/EPUB 已经落地。
-- Android、远程多用户、云同步；
+产品级约束见 [product-principles.md](product-principles.md)。架构层仍明确排除：
+
+- 代码签名与公证（安装器、应用内更新下载与 CI 发布上传已经落地，签名不在范围内）；
+- 第二套 Agent runtime、BFF、数据库、索引服务、云同步；
 - 未经授权的 commit、push、tag 或 release。
 
 ## 验证闸门

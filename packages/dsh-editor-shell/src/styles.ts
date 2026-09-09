@@ -1,5 +1,6 @@
 /*
  * DSH Editor shell — three-layer visual system.
+ * Canonical token table and constraints: docs/ui.md.
  *
  *   tokens    : paper/ink colour, type, space, radius, elev. Driven by
  *               :root[data-theme="paper"|"ink"]. Default is paper.
@@ -8,17 +9,14 @@
  *               with one deliberate exception: the ink-mode select
  *               background/color revert at the end of the block, a Chromium
  *               workaround for the host settings dialog's native popup.
- *   components: visual mapping of the Open Design draft onto the existing
- *               DOM class names. Restored workbench panels (search, export
- *               preview, import, archive, worldbook settings) keep their
- *               original class names and are styled here. Snapshot-library
- *               and shortcut-dialog remain unmounted.
+ *   components: paper/ink mapping onto existing DOM class names. Workbench
+ *               panels (search, export preview, import, archive, worldbook
+ *               settings) keep their original class names and are styled here.
  *
  * Kept: prefers-reduced-motion, 1040px (chat collapse) and 760px
  * (sidebar collapse) responsive breakpoints, focus ring.
  *
- * Dropped: body[data-ds-dark-theme] — the new data-theme is the only
- * theme switch.
+ * Theme switch is :root[data-theme] only.
  */
 
 export const tokenStyles = `

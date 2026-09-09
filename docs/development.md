@@ -1,6 +1,6 @@
 # DSH Editor 开发者指南
 
-需要修改、替换或建立插件时，先阅读 [插件架构与接口](plugin-architecture.md)。
+需要修改、替换或建立插件时，先阅读 [插件架构与接口](plugin-architecture.md)。改界面或主题时先读 [界面与设计系统](ui.md)；改产品边界时先读 [产品原则](product-principles.md)。
 
 ## 环境与固定版本
 

@@ -7,12 +7,12 @@
  * injects this stylesheet on first apply to bridge the design tokens
  * (`:root[data-theme=paper|ink]`) onto the editor-core internals.
  *
- * The token block at the top is intentional duplication. The shell also
- * ships the same tokens via `redesignedStyles`, so when both run together
- * the last writer wins (same values, harmless). When manuscript runs alone
- * — e.g. inside the default DSH harness without the dsh-editor profile —
- * the shell's stylesheet is not present and this block keeps the overlay
- * readable instead of falling back to browser defaults.
+ * The token block at the top is intentional duplication. Canonical table:
+ * docs/ui.md. The shell also ships the same colors via `redesignedStyles`,
+ * so when both run together the last writer wins (same values, harmless).
+ * When manuscript runs alone — e.g. inside the default DSH harness without
+ * the dsh-editor profile — the shell's stylesheet is not present and this
+ * block keeps the overlay readable instead of falling back to browser defaults.
  *
  * Selectors below the token block are anchored on the manuscript-prefixed
  * class names that the plugin passes via `slotClassName`, and on the

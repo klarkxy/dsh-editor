@@ -38,4 +38,4 @@ dsh plugin --profile web remove dsh-grill
 
 模式提示未生效时先完整重启并检查 `grill-workflow`；工具被拒绝时检查 session 是否有工作区、sandbox 是否可写，并在官方审批界面授权。
 
-源码仓库中的完整使用、开发和架构说明分别位于 `docs/user-guide.md`、`docs/development.md` 和 `docs/architecture.md`；这些仓库文件不包含在独立 tarball 中。
+源码仓库中的完整使用、开发、产品原则、界面和架构说明分别位于 `docs/user-guide.md`、`docs/development.md`、`docs/product-principles.md`、`docs/ui.md` 和 `docs/architecture.md`；这些仓库文件不包含在独立 tarball 中。
