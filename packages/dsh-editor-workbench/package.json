@@ -21,11 +21,23 @@
       "import": "./lib/contracts.js",
       "default": "./lib/contracts.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./tools": {
+      "types": "./lib/tools.d.ts",
+      "import": "./lib/tools.js",
+      "default": "./lib/tools.js"
+    }
   },
-  "files": ["lib", "resources", "cordis.patch.yml", "README.md"],
+  "files": [
+    "lib",
+    "resources",
+    "cordis.patch.yml",
+    "README.md"
+  ],
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" }
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   },
   "scripts": {
     "build": "tsdown",
@@ -37,10 +49,16 @@
     "@deepseek-ai/dsh-tools": ">=0.1.1-rc.2 <0.2.0"
   },
   "dependencies": {
-    "dsh-manuscript": "workspace:*"
+    "dsh-manuscript": "workspace:*",
+    "dsh-proofread": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-tools": "0.1.1-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
   }
 }

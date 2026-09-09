@@ -1,0 +1,71 @@
+{
+  "name": "dsh-proofread",
+  "version": "0.1.0",
+  "description": "Standalone deterministic Chinese text proofreading for DSH",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./engine": {
+      "types": "./lib/engine.d.ts",
+      "import": "./lib/engine.js",
+      "default": "./lib/engine.js"
+    },
+    "./contracts": {
+      "types": "./lib/contracts.d.ts",
+      "import": "./lib/contracts.js",
+      "default": "./lib/contracts.js"
+    },
+    "./defaults": {
+      "types": "./lib/defaults.d.ts",
+      "import": "./lib/defaults.js",
+      "default": "./lib/defaults.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/*.js",
+    "lib/*.js.map",
+    "lib/*.d.ts",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-connection"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsdown && node ../../scripts/wrap-client.mjs dsh-proofread",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. packages/dsh-proofread/src"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@types/react": "18.3.31",
+    "react": "^18.2.0"
+  }
+}

@@ -125,25 +125,8 @@ export type ProgressWeek = { weekStart: string; chars: number; delta: number }
 export type ProgressRecordResult = ProgressDay
 export type ProgressHistory = { days: ProgressDay[]; weeks: ProgressWeek[] }
 
-export const PROOFREAD_KINDS = ['punctuation', 'sensitive', 'repeat', 'typo', 'habit', 'card'] as const
-export type ProofreadKind = typeof PROOFREAD_KINDS[number]
-export type ProofreadSeverity = 'error' | 'warning' | 'info'
-export type ProofreadFinding = {
-  path: string
-  line: number
-  column: number
-  start: number
-  end: number
-  kind: ProofreadKind
-  severity: ProofreadSeverity
-  message: string
-  excerpt: string
-  suggestion?: string
-  code?: string
-  term?: string
-  version: string
-}
-export type ProofreadHabitStat = { term: string; count: number; perThousand: number }
+import { PROOFREAD_KINDS, type ProofreadKind, type ProofreadSeverity, type ProofreadFinding, type ProofreadHabitStat } from 'dsh-proofread/contracts'
+export { PROOFREAD_KINDS, type ProofreadKind, type ProofreadSeverity, type ProofreadFinding, type ProofreadHabitStat }
 export type ProofreadScanRequest = {
   sessionId: string
   scope: 'document' | 'manuscript'

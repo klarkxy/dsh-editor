@@ -9,16 +9,41 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "dsh-manuscript/host-api": ["packages/dsh-manuscript/src/host-api.ts"],
-      "dsh-manuscript/client/editor-core": ["packages/dsh-manuscript/src/client/editor-core/index.ts"],
-      "dsh-editor-workbench/contracts": ["packages/dsh-editor-workbench/src/contracts.ts"],
-      "dsh-editor-novel-kernel/contracts": ["packages/dsh-editor-novel-kernel/src/contracts.ts"]
+      "dsh-manuscript/host-api": [
+        "packages/dsh-manuscript/src/host-api.ts"
+      ],
+      "dsh-manuscript/client/editor-core": [
+        "packages/dsh-manuscript/src/client/editor-core/index.ts"
+      ],
+      "dsh-editor-workbench/contracts": [
+        "packages/dsh-editor-workbench/src/contracts.ts"
+      ],
+      "dsh-editor-novel-kernel/contracts": [
+        "packages/dsh-editor-novel-kernel/src/contracts.ts"
+      ],
+      "dsh-proofread/engine": [
+        "packages/dsh-proofread/src/engine.ts"
+      ],
+      "dsh-proofread/contracts": [
+        "packages/dsh-proofread/src/contracts.ts"
+      ],
+      "dsh-proofread/defaults": [
+        "packages/dsh-proofread/src/defaults.ts"
+      ],
+      "dsh-zhihu/usage": [
+        "packages/dsh-zhihu/src/usage.ts"
+      ],
+      "dsh-zhihu/contracts": [
+        "packages/dsh-zhihu/src/contracts.ts"
+      ]
     }
   }
 }

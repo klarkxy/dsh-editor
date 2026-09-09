@@ -282,6 +282,21 @@ describe('scanProofread', () => {
     const result = await scanProofread({ access: access('read-only'), scope: 'manuscript', kinds: ['sensitive'] })
     expect(result.findings).toMatchObject([{ message: '敏感词「自定义词」' }])
   })
+
+  it('aggregates manuscript habit across files instead of summing per-file findings', async () => {
+    await write('正文/dense.md', `${'然后。'.repeat(8)}${'甲'.repeat(50)}`)
+    await write('正文/padding.md', `${'乙'.repeat(10_000)}`)
+    const alone = await scanProofread({ access: access(), scope: 'document', path: '正文/dense.md', kinds: ['habit'] })
+    expect(alone.findings).toHaveLength(8)
+    expect(alone.habitStats[0]).toMatchObject({ term: '然后', count: 8 })
+    expect(alone.habitStats[0]!.perThousand).toBeGreaterThan(3)
+
+    const manuscript = await scanProofread({ access: access(), scope: 'manuscript', kinds: ['habit'] })
+    expect(manuscript.scannedFiles).toBe(2)
+    expect(manuscript.habitStats[0]).toMatchObject({ term: '然后', count: 8 })
+    expect(manuscript.habitStats[0]!.perThousand).toBeLessThanOrEqual(3)
+    expect(manuscript.findings.filter((item) => item.kind === 'habit')).toEqual([])
+  })
 })
 
 describe('card', () => {
