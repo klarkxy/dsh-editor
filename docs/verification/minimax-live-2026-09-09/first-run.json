@@ -1,0 +1,255 @@
+{
+  "startedAt": "2026-09-09T10:23:04.095Z",
+  "book": "功能验收",
+  "workspace": "D:\\0 code\\dsh-editor\\.dev\\feature-coverage-projects\\功能验收",
+  "dsh": "0.1.1-rc.2",
+  "model": "MiniMax · MiniMax-M3",
+  "phases": [
+    {
+      "name": "接口连接成功",
+      "detail": "MiniMax custom provider minimax-e2e / MiniMax-M3",
+      "at": "2026-09-09T10:23:10.779Z"
+    },
+    {
+      "name": "新建作品",
+      "detail": "D:\\0 code\\dsh-editor\\.dev\\feature-coverage-projects\\功能验收",
+      "at": "2026-09-09T10:23:12.680Z"
+    },
+    {
+      "name": "工作台功能覆盖",
+      "detail": "i18n-english, i18n-chinese, author-preferences, writing-paper, settings-zhihu, settings-usage, settings-minimax, theme-toggle, command-palette, create-folders, create-worldbook-file, worldbook-settings, create-character-file, create-chapters, rename-file, copy-paste, chapter-meta, typewriter-focus, layout-toggles, in-editor-find, in-editor-replace, search-replace, overview, cards-panel, pin-pane, export, archive-restore, snapshot-commit, about-dialog, import-entry, chapter-split, chapter-merge, chapter-navigation",
+      "at": "2026-09-09T10:24:39.647Z"
+    },
+    {
+      "name": "切换对话模型",
+      "detail": "MiniMax · MiniMax-M3",
+      "at": "2026-09-09T10:24:39.844Z"
+    },
+    {
+      "name": "规划总纲",
+      "detail": "大纲/总纲.md",
+      "at": "2026-09-09T10:28:25.625Z"
+    },
+    {
+      "name": "功能覆盖完成",
+      "detail": "34/39 ok",
+      "at": "2026-09-09T10:29:10.769Z"
+    }
+  ],
+  "features": [
+    {
+      "name": "i18n-english",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "i18n-chinese",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "author-preferences",
+      "ok": true,
+      "detail": "saved"
+    },
+    {
+      "name": "writing-paper",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "settings-zhihu",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "settings-usage",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "settings-minimax",
+      "ok": true,
+      "detail": "custom MiniMax MiniMax-M3 (created)"
+    },
+    {
+      "name": "theme-toggle",
+      "ok": true,
+      "detail": "paper → ink → paper"
+    },
+    {
+      "name": "command-palette",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "create-folders",
+      "ok": true,
+      "detail": "大纲 / 人物卡 / 世界书"
+    },
+    {
+      "name": "create-worldbook-file",
+      "ok": true,
+      "detail": "世界书/港口.md"
+    },
+    {
+      "name": "worldbook-settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "create-character-file",
+      "ok": true,
+      "detail": "人物卡/林简.md"
+    },
+    {
+      "name": "create-chapters",
+      "ok": true,
+      "detail": "001 / 002 / 备忘"
+    },
+    {
+      "name": "rename-file",
+      "ok": true,
+      "detail": "正文/备忘.md → 正文/归档候选.md"
+    },
+    {
+      "name": "copy-paste",
+      "ok": true,
+      "detail": "正文/归档候选 2.md"
+    },
+    {
+      "name": "chapter-meta",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "typewriter-focus",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "layout-toggles",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "in-editor-find",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "in-editor-replace",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "search-replace",
+      "ok": true,
+      "detail": "disk"
+    },
+    {
+      "name": "overview",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "proofread",
+      "ok": false,
+      "detail": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('region', { name: '校对' }).getByRole('button', { name: /重新检查|检查/ })\u001b[22m\n\u001b[2m    - locator resolved to <button type=\"button\">重新检查</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div class=\"chat-history\">…</div> from <aside class=\"chat\" aria-label=\"写作助手\">…</aside> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div class=\"chat-history\">…</div> from <aside class=\"chat\" aria-label=\"写作助手\">…</aside> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    57 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <div class=\"chat-history\">…</div> from <aside class=\"chat\" aria-label=\"写作助手\">…</aside> subtree intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n"
+    },
+    {
+      "name": "cards-panel",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "pin-pane",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "export",
+      "ok": true,
+      "detail": "功能验收-全文.md"
+    },
+    {
+      "name": "archive-restore",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "snapshot-commit",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "about-dialog",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "import-entry",
+      "ok": true,
+      "detail": "review dialog"
+    },
+    {
+      "name": "chapter-split",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "chapter-merge",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "chapter-navigation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "chat-ping",
+      "ok": false,
+      "detail": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '发送', exact: true })\u001b[22m\n\u001b[2m    - locator resolved to <button title=\"发送\" class=\"send\" type=\"submit\" aria-label=\"发送\">…</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <button type=\"button\" class=\"proofread-toggle\" data-testid=\"proofread-open\">校对</button> from <div class=\"shell-extensions-dock\" data-testid=\"shell-extensions-dock\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <button type=\"button\" class=\"proofread-toggle\" data-testid=\"proofread-open\">校对</button> from <div class=\"shell-extensions-dock\" data-testid=\"shell-extensions-dock\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    57 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <button type=\"button\" class=\"proofread-toggle\" data-testid=\"proofread-open\">校对</button> from <div class=\"shell-extensions-dock\" data-testid=\"shell-extensions-dock\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n"
+    },
+    {
+      "name": "rewrite-preset",
+      "ok": false,
+      "detail": "locator.waitFor: Timeout 180000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('region', { name: '选段修改建议' }) to be visible\u001b[22m\n"
+    },
+    {
+      "name": "fim-complete",
+      "ok": false,
+      "detail": "MiniMax-M3 returned no usable ghost: 正在生成补全…"
+    },
+    {
+      "name": "chat-proposal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "conversation-menu",
+      "ok": false,
+      "detail": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('complementary', { name: '写作助手' }).getByRole('button', { name: '对话操作' })\u001b[22m\n\u001b[2m    - locator resolved to <button title=\"对话操作\" type=\"button\" aria-label=\"对话操作\" class=\"icon-button\" aria-haspopup=\"menu\" aria-expanded=\"false\">⋯</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <header>…</header> from <form role=\"dialog\" aria-modal=\"false\" class=\"conversation-setup\" aria-labelledby=\"new-conversation-title\">…</form> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <header>…</header> from <form role=\"dialog\" aria-modal=\"false\" class=\"conversation-setup\" aria-labelledby=\"new-conversation-title\">…</form> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    57 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <header>…</header> from <form role=\"dialog\" aria-modal=\"false\" class=\"conversation-setup\" aria-labelledby=\"new-conversation-title\">…</form> subtree intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n"
+    }
+  ],
+  "failures": [
+    "proofread: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('region', { name: '校对' }).getByRole('button', { name: /重新检查|检查/ })\u001b[22m\n\u001b[2m    - locator resolved to <button type=\"button\">重新检查</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div class=\"chat-history\">…</div> from <aside class=\"chat\" aria-label=\"写作助手\">…</aside> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div class=\"chat-history\">…</div> from <aside class=\"chat\" aria-label=\"写作助手\">…</aside> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    57 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <div class=\"chat-history\">…</div> from <aside class=\"chat\" aria-label=\"写作助手\">…</aside> subtree intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n",
+    "chat-ping: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '发送', exact: true })\u001b[22m\n\u001b[2m    - locator resolved to <button title=\"发送\" class=\"send\" type=\"submit\" aria-label=\"发送\">…</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <button type=\"button\" class=\"proofread-toggle\" data-testid=\"proofread-open\">校对</button> from <div class=\"shell-extensions-dock\" data-testid=\"shell-extensions-dock\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <button type=\"button\" class=\"proofread-toggle\" data-testid=\"proofread-open\">校对</button> from <div class=\"shell-extensions-dock\" data-testid=\"shell-extensions-dock\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    57 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <button type=\"button\" class=\"proofread-toggle\" data-testid=\"proofread-open\">校对</button> from <div class=\"shell-extensions-dock\" data-testid=\"shell-extensions-dock\">…</div> subtree intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n",
+    "rewrite-preset: locator.waitFor: Timeout 180000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('region', { name: '选段修改建议' }) to be visible\u001b[22m\n",
+    "fim-complete: MiniMax-M3 returned no usable ghost: 正在生成补全…",
+    "conversation-menu: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('complementary', { name: '写作助手' }).getByRole('button', { name: '对话操作' })\u001b[22m\n\u001b[2m    - locator resolved to <button title=\"对话操作\" type=\"button\" aria-label=\"对话操作\" class=\"icon-button\" aria-haspopup=\"menu\" aria-expanded=\"false\">⋯</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <header>…</header> from <form role=\"dialog\" aria-modal=\"false\" class=\"conversation-setup\" aria-labelledby=\"new-conversation-title\">…</form> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <header>…</header> from <form role=\"dialog\" aria-modal=\"false\" class=\"conversation-setup\" aria-labelledby=\"new-conversation-title\">…</form> subtree intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    57 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <header>…</header> from <form role=\"dialog\" aria-modal=\"false\" class=\"conversation-setup\" aria-labelledby=\"new-conversation-title\">…</form> subtree intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n"
+  ],
+  "screenshots": [
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\01-home.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\02-settings-minimax-m3.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\03-project-open.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\04-focus-mode.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\05-overview.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\06-pinned-pane.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\07-assistant-ready.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\08-complete.png"
+  ],
+  "ok": false,
+  "finishedAt": "2026-09-09T10:29:10.847Z"
+}

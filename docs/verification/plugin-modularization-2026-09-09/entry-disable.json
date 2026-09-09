@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "checks": [
+    "disabled proofread contributes neither Host route nor Client; Zhihu still works",
+    "workbench retains required engine and scans real workspace while optional entry is disabled"
+  ],
+  "absentRouteStatus": 405
+}

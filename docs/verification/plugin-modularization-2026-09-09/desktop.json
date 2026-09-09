@@ -1,0 +1,178 @@
+{
+  "ok": true,
+  "source": "current",
+  "phases": [
+    {
+      "name": "first-run-home",
+      "origin": "http://127.0.0.1:13887",
+      "portReleased": true,
+      "state": {
+        "title": "DSH Editor",
+        "shell": true,
+        "settings": false,
+        "settingsControl": true,
+        "officialHome": false,
+        "editorName": true,
+        "bootEntries": [
+          "@deepseek-ai/dsh-typert-registry",
+          "@deepseek-ai/dsh-api-gateway",
+          "@deepseek-ai/dsh-session-log-export",
+          "@deepseek-ai/dsh-client-hmr",
+          "@deepseek-ai/dsh-client-modules",
+          "@deepseek-ai/dsh-client-connection",
+          "@deepseek-ai/dsh-api-remotes",
+          "@deepseek-ai/dsh-client-runtime",
+          "@deepseek-ai/dsh-cordis-client-runner",
+          "@deepseek-ai/dsh-client-ui-theme",
+          "@deepseek-ai/dsh-client-locale",
+          "@deepseek-ai/dsh-client-ui-layout",
+          "@deepseek-ai/dsh-client-ui-renderer",
+          "@deepseek-ai/dsh-client-ui-settings",
+          "@deepseek-ai/dsh-client-ui-conversation",
+          "dsh-manuscript",
+          "dsh-proofread",
+          "dsh-zhihu",
+          "dsh-editor-shell",
+          "@deepseek-ai/dsh-client-ui-directory-picker-native"
+        ],
+        "width": 1440,
+        "height": 900,
+        "bounds": {
+          "x": 560,
+          "y": 66,
+          "width": 1440,
+          "height": 900
+        }
+      }
+    },
+    {
+      "name": "configured-home",
+      "origin": "http://127.0.0.1:9306",
+      "portReleased": true,
+      "state": {
+        "title": "DSH Editor",
+        "shell": true,
+        "settings": false,
+        "settingsControl": true,
+        "officialHome": false,
+        "editorName": true,
+        "bootEntries": [
+          "@deepseek-ai/dsh-typert-registry",
+          "@deepseek-ai/dsh-api-gateway",
+          "@deepseek-ai/dsh-session-log-export",
+          "@deepseek-ai/dsh-client-hmr",
+          "@deepseek-ai/dsh-client-modules",
+          "@deepseek-ai/dsh-client-connection",
+          "@deepseek-ai/dsh-api-remotes",
+          "@deepseek-ai/dsh-client-runtime",
+          "@deepseek-ai/dsh-cordis-client-runner",
+          "@deepseek-ai/dsh-client-ui-theme",
+          "@deepseek-ai/dsh-client-locale",
+          "@deepseek-ai/dsh-client-ui-layout",
+          "@deepseek-ai/dsh-client-ui-renderer",
+          "@deepseek-ai/dsh-client-ui-settings",
+          "@deepseek-ai/dsh-client-ui-conversation",
+          "dsh-manuscript",
+          "dsh-proofread",
+          "dsh-zhihu",
+          "dsh-editor-shell",
+          "@deepseek-ai/dsh-client-ui-directory-picker-native"
+        ],
+        "width": 1440,
+        "height": 900,
+        "bounds": {
+          "x": 560,
+          "y": 66,
+          "width": 1440,
+          "height": 900
+        }
+      }
+    },
+    {
+      "name": "multi-window",
+      "origin": "http://127.0.0.1:9964",
+      "portReleased": true,
+      "state": {
+        "title": "DSH Editor",
+        "shell": true,
+        "settings": false,
+        "settingsControl": true,
+        "officialHome": false,
+        "editorName": true,
+        "bootEntries": [
+          "@deepseek-ai/dsh-typert-registry",
+          "@deepseek-ai/dsh-api-gateway",
+          "@deepseek-ai/dsh-session-log-export",
+          "@deepseek-ai/dsh-client-hmr",
+          "@deepseek-ai/dsh-client-modules",
+          "@deepseek-ai/dsh-client-connection",
+          "@deepseek-ai/dsh-api-remotes",
+          "@deepseek-ai/dsh-client-runtime",
+          "@deepseek-ai/dsh-cordis-client-runner",
+          "@deepseek-ai/dsh-client-ui-theme",
+          "@deepseek-ai/dsh-client-locale",
+          "@deepseek-ai/dsh-client-ui-layout",
+          "@deepseek-ai/dsh-client-ui-renderer",
+          "@deepseek-ai/dsh-client-ui-settings",
+          "@deepseek-ai/dsh-client-ui-conversation",
+          "dsh-manuscript",
+          "dsh-proofread",
+          "dsh-zhihu",
+          "dsh-editor-shell",
+          "@deepseek-ai/dsh-client-ui-directory-picker-native"
+        ],
+        "width": 1440,
+        "height": 900,
+        "bounds": {
+          "x": 560,
+          "y": 66,
+          "width": 1440,
+          "height": 900
+        }
+      }
+    },
+    {
+      "name": "multi-window",
+      "origin": "http://127.0.0.1:8946",
+      "portReleased": true,
+      "state": {
+        "title": "DSH Editor",
+        "shell": true,
+        "settings": false,
+        "settingsControl": true,
+        "officialHome": false,
+        "editorName": false,
+        "bootEntries": [
+          "@deepseek-ai/dsh-typert-registry",
+          "@deepseek-ai/dsh-api-gateway",
+          "@deepseek-ai/dsh-session-log-export",
+          "@deepseek-ai/dsh-client-hmr",
+          "@deepseek-ai/dsh-client-modules",
+          "@deepseek-ai/dsh-client-connection",
+          "@deepseek-ai/dsh-api-remotes",
+          "@deepseek-ai/dsh-client-runtime",
+          "@deepseek-ai/dsh-cordis-client-runner",
+          "@deepseek-ai/dsh-client-ui-theme",
+          "@deepseek-ai/dsh-client-locale",
+          "@deepseek-ai/dsh-client-ui-layout",
+          "@deepseek-ai/dsh-client-ui-renderer",
+          "@deepseek-ai/dsh-client-ui-settings",
+          "@deepseek-ai/dsh-client-ui-conversation",
+          "dsh-manuscript",
+          "dsh-proofread",
+          "dsh-zhihu",
+          "dsh-editor-shell",
+          "@deepseek-ai/dsh-client-ui-directory-picker-native"
+        ],
+        "width": 1440,
+        "height": 900,
+        "bounds": {
+          "x": 560,
+          "y": 66,
+          "width": 1440,
+          "height": 900
+        }
+      }
+    }
+  ]
+}

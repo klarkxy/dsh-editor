@@ -1,0 +1,55 @@
+{
+  "ok": true,
+  "source": "current",
+  "platform": "win32-x64",
+  "artifacts": [
+    {
+      "file": "D:\\0 code\\dsh-editor\\.pack\\desktop\\DSH Editor-0.1.7-win-x64.exe",
+      "bytes": 204585035,
+      "sha256": "3dd89db7b1d3115b495f29ca154734f56611db9ccdd4a7f3c62a35a526b4a77d"
+    },
+    {
+      "file": "D:\\0 code\\dsh-editor\\.pack\\desktop\\DSH Editor-Setup-0.1.7-win-x64.exe",
+      "bytes": 156013980,
+      "sha256": "c59b9c9b7e86ba9c3994b00fc85aab0ef2b8229ae827ab4b16d85f44b74d9b1c"
+    }
+  ],
+  "manifest": {
+    "format": 1,
+    "platform": "win32-x64",
+    "node": {
+      "version": "24.16.0",
+      "sha256": "248ae99cd83ba84ed9ce2ea7533415b3c2fdadb683e3fac72a1a8093d5fc9cb6",
+      "files": 1,
+      "bytes": 92279112
+    },
+    "dsh": {
+      "version": "0.1.1-rc.2",
+      "sha256": "a933bdad26728e2abe1bb943bf455e93fe58b96fc33fa4539c81a273d85d7662",
+      "files": 14383,
+      "bytes": 167506779
+    },
+    "profile": {
+      "sha256": "27cefe2163253239fe480584e607ea124f3d38d49f37044cc6759097901c0d28",
+      "files": 123,
+      "bytes": 18502687
+    }
+  },
+  "actual": {
+    "node": {
+      "sha256": "248ae99cd83ba84ed9ce2ea7533415b3c2fdadb683e3fac72a1a8093d5fc9cb6",
+      "files": 1,
+      "bytes": 92279112
+    },
+    "dsh": {
+      "sha256": "a933bdad26728e2abe1bb943bf455e93fe58b96fc33fa4539c81a273d85d7662",
+      "files": 14383,
+      "bytes": 167506779
+    },
+    "profile": {
+      "sha256": "27cefe2163253239fe480584e607ea124f3d38d49f37044cc6759097901c0d28",
+      "files": 123,
+      "bytes": 18502687
+    }
+  }
+}

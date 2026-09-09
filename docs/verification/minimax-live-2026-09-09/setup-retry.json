@@ -1,0 +1,32 @@
+{
+  "startedAt": "2026-09-09T11:00:01.705Z",
+  "book": "功能验收",
+  "workspace": "D:\\0 code\\dsh-editor\\.dev\\feature-coverage-projects\\功能验收",
+  "dsh": "0.1.1-rc.2",
+  "model": "MiniMax-M3",
+  "scope": "model UI workflows with fresh documents",
+  "phases": [],
+  "features": [
+    {
+      "name": "i18n-english",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "i18n-chinese",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "failures": [
+    "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.settings-dialog').getByRole('textbox', { name: '跨作品作者约定' }) to be visible\u001b[22m\n\n    at configureMiniMax (D:\\0 code\\dsh-editor\\e2e\\feature-coverage.mjs:319:19)\n    at async file:///D:/0%20code/dsh-editor/e2e/feature-coverage.mjs:1162:3"
+  ],
+  "screenshots": [
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\01-home.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\02-failure.png"
+  ],
+  "ok": false,
+  "rpc": [],
+  "dshLogTail": "dsh web: http://127.0.0.1:8280\n",
+  "finishedAt": "2026-09-09T11:00:23.672Z"
+}

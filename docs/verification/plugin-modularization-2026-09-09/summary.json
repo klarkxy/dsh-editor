@@ -1,0 +1,120 @@
+{
+  "date": "2026-09-09",
+  "baseline": "a6efa1a88749a0136e4d7289cf0ca69145bda0b4",
+  "delivery": "local uncommitted changes and artifacts; no publication",
+  "dsh": "0.1.1-rc.2",
+  "platform": "Windows x64",
+  "tests": {
+    "files": 96,
+    "passed": 832,
+    "typecheck": "passed"
+  },
+  "matrix": {
+    "states": 13,
+    "transitions": 16,
+    "browserStates": 12,
+    "usagePersistenceStates": 5,
+    "issues": []
+  },
+  "review": {
+    "initialFindings": 3,
+    "resolved": 3,
+    "followupFindings": 0,
+    "boundary": "Zhihu Tool/RPC lifetime, default service-only patch, optional tools peer; primary integration checks separate"
+  },
+  "limits": [
+    "macOS artifacts not built or run in this Windows verification",
+    "No paid model or Zhihu API calls; deterministic service tests cover their migration contracts",
+    "Whole browser profile without Agent services requires upstream workspace/apiProxy/host-runner separation; pure RPC without them passes",
+    "No hot unload guarantee for active model tasks; switch application recipes after saving and stopping host"
+  ],
+  "evidence": [
+    {
+      "name": "proofread-host",
+      "source": "e2e/out/proofread-host/report.json",
+      "sha256": "a09c928637aeea8ca3c9c264fdfa227ace1bd4043abf92e12e1422ad466c0ad5"
+    },
+    {
+      "name": "plugin-matrix",
+      "source": "e2e/out/plugin-matrix/report.json",
+      "sha256": "880d0ef1041502e5c8c609f2262f03cf3e183f68c5a0d60bd36462d99782d0eb"
+    },
+    {
+      "name": "composition-basic",
+      "source": "e2e/out/composition-basic/report.json",
+      "sha256": "005b96a90686a7e37bffcb5ac45a181fded95560db0530787e9eb7ee4817552a"
+    },
+    {
+      "name": "composition-smart",
+      "source": "e2e/out/composition-smart/report.json",
+      "sha256": "1689e2c1c5258a157b876d25bb3a72a2a0b96520828f80e0144443dd7b154ad5"
+    },
+    {
+      "name": "composition-full",
+      "source": "e2e/out/composition-full/report.json",
+      "sha256": "76a59991dd9961255249640f7d9c150dec076d102bda7b60da65439edb089ac7"
+    },
+    {
+      "name": "entry-disable",
+      "source": "e2e/out/entry-disable/report.json",
+      "sha256": "b5b63b52b698d7d44fa0338cb5a28530e6bdd8930f4f79b0f951f0a8afaed79a"
+    },
+    {
+      "name": "host-minimization",
+      "source": "e2e/out/host-minimization/report.json",
+      "sha256": "ca614b44dee4a4b6d624c7d3fe4df07bd61fc7350131788be038442d2d503317"
+    },
+    {
+      "name": "desktop",
+      "source": ".pack/desktop-e2e/report.json",
+      "sha256": "3ee5946523200d6a8a1107ff58521146bdeae768b5a1bde56484df34f1e371ef"
+    },
+    {
+      "name": "portable",
+      "source": ".pack/portable-e2e/report.json",
+      "sha256": "aa6298255ecc5dd88dd805ac5ef3507090114f8bb2ab393258729ceda58289de"
+    },
+    {
+      "name": "missing-private",
+      "source": ".pack/missing-private-plugin-smoke.json",
+      "sha256": "ff20c76e86fd0a3c63e067571c79a1e9bce5b606b1795f9d0d132aa820b4e3de"
+    },
+    {
+      "name": "core-loop",
+      "source": "e2e/out/core-loop/report.json",
+      "sha256": "da593e2fa9bda03c7ee4dc337bef8d06893c6fb72db14bc2840067031244c1e0"
+    },
+    {
+      "name": "desktop-package",
+      "source": ".dev/modular-desktop-verify.log",
+      "sha256": "a35e6ffa227b1588705dfbaa9e36c508f71ff4321e2e0808d04ff8ffccdf2307"
+    },
+    {
+      "name": "engine-extraction",
+      "source": ".dev/proofread-extraction-receipt.json",
+      "sha256": "127d8a5a20f1c0b838949caaac939794275d6ac8ecf7a854b8920fbf4eff4297"
+    }
+  ],
+  "publicArtifacts": [
+    {
+      "file": ".pack/dsh-manuscript-0.1.0.tgz",
+      "bytes": 453169,
+      "sha256": "e244da2d607996ff2382c69fbebf4d683f9af2ad5cd0c2cccd9bb35237f76883"
+    },
+    {
+      "file": ".pack/dsh-grill-0.1.0.tgz",
+      "bytes": 16304,
+      "sha256": "0b107df2d25769c3c19602f1e0ff3c648c163789466a16ae10765351bf4116e9"
+    },
+    {
+      "file": ".pack/dsh-proofread-0.1.0.tgz",
+      "bytes": 31851,
+      "sha256": "308db2e40b92dcffcffa1004f119db990585ee3eac9098d2e3163f3e8f4eba1a"
+    },
+    {
+      "file": ".pack/dsh-zhihu-0.1.0.tgz",
+      "bytes": 47165,
+      "sha256": "15e8e3dcb6dd8f179168e2965504e14e46c8f93f112eb30151ff86f21b1e0648"
+    }
+  ]
+}

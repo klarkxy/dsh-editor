@@ -1,0 +1,26 @@
+{
+  "composition": "smart",
+  "checks": [
+    "same proofreading text in custom Shell",
+    "create project/document and save through UI",
+    "live-session search/workspace proofread/card/snapshot",
+    "paper/ink panels and focus restoration",
+    "optional Chat mounts",
+    "reload has one contribution and no browser errors"
+  ],
+  "failures": [],
+  "capabilities": {
+    "assistant": true,
+    "completion": true,
+    "zhihu": false
+  },
+  "installed": [
+    "dsh-editor-novel-kernel",
+    "dsh-editor-shell",
+    "dsh-editor-workbench",
+    "dsh-manuscript",
+    "dsh-proofread"
+  ],
+  "delivery": "copied package artifacts; no workspace package links",
+  "ok": true
+}

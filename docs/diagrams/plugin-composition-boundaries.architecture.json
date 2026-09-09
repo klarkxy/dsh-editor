@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "DSH：界面、能力与宿主的组合边界",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "normal",
+        "label": "普通业务",
+        "focus": [
+          "shell",
+          "proofread",
+          "workbench",
+          "zhihu"
+        ],
+        "note": "校对和资料直接通过普通 RPC 使用；不经过 Agent。"
+      },
+      {
+        "id": "agent",
+        "label": "可选智能增强",
+        "focus": [
+          "kernel",
+          "authority",
+          "manuscript"
+        ],
+        "note": "Chat、补全、小说工具按 smart/full 组合启用；文件权限仍由原 Host 控制。"
+      },
+      {
+        "id": "public",
+        "label": "独立公开插件",
+        "focus": [
+          "proofread",
+          "zhihu",
+          "manuscript",
+          "grill"
+        ],
+        "note": "四个 tarball 已有独立装卸矩阵；知乎 Tool entry 单独选择。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "shell",
+      "type": "frontend",
+      "label": "界面消费层",
+      "sublabel": "官方 Web / 自有 Shell · 单一 root",
+      "pos": [
+        40,
+        280
+      ],
+      "size": [
+        280,
+        90
+      ]
+    },
+    {
+      "id": "proofread",
+      "type": "backend",
+      "label": "dsh-proofread",
+      "sublabel": "纯文本校对 · /proofread · 无 AI",
+      "pos": [
+        470,
+        40
+      ],
+      "size": [
+        280,
+        90
+      ]
+    },
+    {
+      "id": "workbench",
+      "type": "backend",
+      "label": "dsh-editor-workbench",
+      "sublabel": "作品、卡片、快照与完整校对",
+      "pos": [
+        470,
+        280
+      ],
+      "size": [
+        280,
+        90
+      ]
+    },
+    {
+      "id": "zhihu",
+      "type": "backend",
+      "label": "dsh-zhihu",
+      "sublabel": "普通资料 RPC · 自有 UI · 可选 Tool",
+      "pos": [
+        470,
+        520
+      ],
+      "size": [
+        280,
+        90
+      ]
+    },
+    {
+      "id": "manuscript",
+      "type": "backend",
+      "label": "dsh-manuscript",
+      "sublabel": "稿件与草稿 · 可选 assist 服务",
+      "pos": [
+        980,
+        40
+      ],
+      "size": [
+        280,
+        90
+      ]
+    },
+    {
+      "id": "authority",
+      "type": "security",
+      "label": "DSH 宿主服务",
+      "sublabel": "会话、文件权限 · 按需工具与模型",
+      "pos": [
+        980,
+        280
+      ],
+      "size": [
+        280,
+        90
+      ]
+    },
+    {
+      "id": "kernel",
+      "type": "backend",
+      "label": "dsh-editor-novel-kernel",
+      "sublabel": "9 个小说工具 · guard / prompt",
+      "pos": [
+        980,
+        520
+      ],
+      "size": [
+        280,
+        90
+      ]
+    },
+    {
+      "id": "grill",
+      "type": "backend",
+      "label": "dsh-grill",
+      "sublabel": "保留公开脚手架与协作提示词",
+      "pos": [
+        40,
+        520
+      ],
+      "size": [
+        280,
+        90
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "shell",
+      "to": "proofread",
+      "label": "普通文本 RPC"
+    },
+    {
+      "from": "shell",
+      "to": "workbench",
+      "label": "作品 RPC",
+      "variant": "emphasis",
+      "labelDy": 40,
+      "labelDx": -38
+    },
+    {
+      "from": "shell",
+      "to": "zhihu",
+      "label": "资料 RPC"
+    },
+    {
+      "from": "workbench",
+      "to": "authority",
+      "label": "live session / 文件权限",
+      "variant": "emphasis",
+      "labelDy": 40
+    },
+    {
+      "from": "workbench",
+      "to": "manuscript",
+      "label": "host-api"
+    },
+    {
+      "from": "kernel",
+      "to": "authority",
+      "label": "Tool / Prompt"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "已落实的组合边界",
+      "items": [
+        "四个公开包分别安装与移除",
+        "basic / smart / full 三份写作组合",
+        "两个插件复用同一个扩展 slot"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "宿主精简的实证",
+      "items": [
+        "无 Agent 的纯校对 RPC 已运行",
+        "无 Web bundle 的界面已运行",
+        "全无 Agent 浏览器仍需上游解耦"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "读图与权限",
+      "items": [
+        "仅显示主要关系，完整接口见指南",
+        "文件业务继续使用 live session 权限",
+        "同进程插件不是不可信代码沙箱"
+      ]
+    }
+  ]
+}

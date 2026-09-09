@@ -1,0 +1,570 @@
+{
+  "dsh": "0.1.1-rc.2",
+  "experiments": [
+    {
+      "mode": "without-web-bundle",
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "dsh-proofread"
+      ],
+      "businessPackage": "dsh-proofread",
+      "ready": true,
+      "rpc": true,
+      "ui": true,
+      "failure": null,
+      "runtime": {
+        "services": {
+          "agent": false,
+          "agents": true,
+          "sessions": true,
+          "llm": true,
+          "tools": true,
+          "systemPrompt": true,
+          "workspaceRegistry": true,
+          "connection": true
+        },
+        "plugins": [
+          {
+            "name": "Loader",
+            "state": 2
+          },
+          {
+            "name": "isolate",
+            "state": 2
+          },
+          {
+            "name": "Include",
+            "state": 1
+          },
+          {
+            "state": 2
+          },
+          {
+            "state": 2
+          },
+          {
+            "state": 2
+          },
+          {
+            "state": 2
+          },
+          {
+            "state": 2
+          },
+          {
+            "state": 2
+          },
+          {
+            "name": "timeout-policy",
+            "state": 2
+          },
+          {
+            "name": "TimerService",
+            "state": 2
+          },
+          {
+            "name": "LlmRuntime",
+            "state": 2
+          },
+          {
+            "name": "SessionStore",
+            "state": 2
+          },
+          {
+            "name": "typert-loader",
+            "state": 2
+          },
+          {
+            "name": "TypertGatewayService",
+            "state": 2
+          },
+          {
+            "name": "UserQuestionService",
+            "state": 2
+          },
+          {
+            "name": "AgentRegistry",
+            "state": 2
+          },
+          {
+            "name": "AgentDefaultModelConfig",
+            "state": 2
+          },
+          {
+            "name": "LocalJobRegistry",
+            "state": 2
+          },
+          {
+            "name": "llm-retry",
+            "state": 2
+          },
+          {
+            "name": "SessionProjectionRegistry",
+            "state": 2
+          },
+          {
+            "name": "ApprovalService",
+            "state": 2
+          },
+          {
+            "name": "shell-env",
+            "state": 2
+          },
+          {
+            "name": "SkillRegistry",
+            "state": 2
+          },
+          {
+            "name": "BasicCompactionEngine",
+            "state": 2
+          },
+          {
+            "name": "LocalSpillStore",
+            "state": 2
+          },
+          {
+            "name": "spill-policy",
+            "state": 2
+          },
+          {
+            "name": "ToolResultPruner",
+            "state": 2
+          },
+          {
+            "name": "repeat-tool-reminder",
+            "state": 2
+          },
+          {
+            "name": "WebRuntime",
+            "state": 2
+          },
+          {
+            "name": "ToolRuntime",
+            "state": 2
+          },
+          {
+            "name": "SystemPrompt",
+            "state": 2
+          },
+          {
+            "name": "AgentLoop",
+            "state": 2
+          },
+          {
+            "name": "dsh-proofread",
+            "state": 2
+          },
+          {
+            "name": "WebServer",
+            "state": 2
+          },
+          {
+            "name": "frontend-static",
+            "state": 2
+          },
+          {
+            "name": "Storage",
+            "state": 2
+          },
+          {
+            "name": "storage-json",
+            "state": 2
+          },
+          {
+            "name": "storage-domain",
+            "state": 2
+          },
+          {
+            "name": "BrowseDirectoryPicker",
+            "state": 2
+          },
+          {
+            "name": "ClientModuleRegistry",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "FileSettingsProvider",
+            "state": 2
+          },
+          {
+            "name": "LocalCredentialProvider",
+            "state": 2
+          },
+          {
+            "name": "LocalSubprocessRuntime",
+            "state": 2
+          },
+          {
+            "name": "SandboxPolicyService",
+            "state": 2
+          },
+          {
+            "name": "SandboxPwshExecutor",
+            "state": 2
+          },
+          {
+            "name": "tool-pwsh",
+            "state": 2
+          },
+          {
+            "name": "tool-jobs",
+            "state": 2
+          },
+          {
+            "name": "fs-observation-policy",
+            "state": 2
+          },
+          {
+            "name": "tool-fs",
+            "state": 2
+          },
+          {
+            "name": "tool-fs-search",
+            "state": 2
+          },
+          {
+            "name": "agent-instructions",
+            "state": 2
+          },
+          {
+            "name": "skill-filesystem",
+            "state": 2
+          },
+          {
+            "name": "tool-skill",
+            "state": 2
+          },
+          {
+            "name": "CommandRuntime",
+            "state": 2
+          },
+          {
+            "name": "command-feedback",
+            "state": 2
+          },
+          {
+            "name": "goal-round-driver",
+            "state": 2
+          },
+          {
+            "name": "command-compact",
+            "state": 2
+          },
+          {
+            "name": "tool-subagent-control",
+            "state": 2
+          },
+          {
+            "name": "tool-subagent-list-agents",
+            "state": 2
+          },
+          {
+            "name": "tool-subagent-report",
+            "state": 2
+          },
+          {
+            "name": "WorkerThreadWorkflowEngine",
+            "state": 2
+          },
+          {
+            "name": "tool-workflow",
+            "state": 2
+          },
+          {
+            "name": "session-checkpoint-policy",
+            "state": 2
+          },
+          {
+            "name": "tool-ralph",
+            "state": 2
+          },
+          {
+            "name": "tool-str-replace-editor",
+            "state": 2
+          },
+          {
+            "name": "web-search-deepseek",
+            "state": 2
+          },
+          {
+            "name": "tool-web",
+            "state": 2
+          },
+          {
+            "name": "llm-deepseek",
+            "state": 2
+          },
+          {
+            "name": "DynamicCordisRunnerService",
+            "state": 2
+          },
+          {
+            "state": 2
+          },
+          {
+            "state": 2
+          },
+          {
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "JsonlSessionPersistence",
+            "state": 2
+          },
+          {
+            "name": "SandboxedFileSystem",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "LocalAttachmentStore",
+            "state": 2
+          },
+          {
+            "name": "LocalSandboxProvider",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "TypertRegistry",
+            "state": 2
+          },
+          {
+            "name": "SessionTitleService",
+            "state": 2
+          },
+          {
+            "name": "PermissionPresetService",
+            "state": 2
+          },
+          {
+            "name": "GoalService",
+            "state": 2
+          },
+          {
+            "name": "PlanModeController",
+            "state": 2
+          },
+          {
+            "name": "TokenMeter",
+            "state": 2
+          },
+          {
+            "name": "SubagentRuntime",
+            "state": 2
+          },
+          {
+            "name": "tool-todo",
+            "state": 2
+          },
+          {
+            "name": "WorkspaceRegistry",
+            "state": 2
+          },
+          {
+            "name": "ApiProxyService",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "command-goal",
+            "state": 2
+          },
+          {
+            "name": "activationOwner",
+            "state": 2
+          },
+          {
+            "name": "tool-subagent",
+            "state": 2
+          },
+          {
+            "name": "tool-subagent",
+            "state": 2
+          },
+          {
+            "name": "tool-goal",
+            "state": 2
+          },
+          {
+            "name": "client-connection",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "session-title-first-prompt-llm",
+            "state": 2
+          },
+          {
+            "name": "SqliteSessionQueryEngine",
+            "state": 2
+          },
+          {
+            "name": "subagent-spawn-in-process",
+            "state": 2
+          },
+          {
+            "name": "subagent-fork-in-process",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "llm-pi-ai",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 0
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          },
+          {
+            "name": "",
+            "state": 2
+          }
+        ]
+      },
+      "reconnect": true,
+      "pageErrors": [],
+      "exitCode": null,
+      "diagnostics": ""
+    },
+    {
+      "mode": "without-agent-services",
+      "bundles": [
+        "dsh-proofread"
+      ],
+      "businessPackage": "dsh-proofread",
+      "ready": false,
+      "rpc": false,
+      "ui": false,
+      "failure": "Error: profile not ready; exit=1",
+      "runtime": null,
+      "pageErrors": [],
+      "bootText": "",
+      "exitCode": 1,
+      "diagnostics": "file:///C:/Users/27837/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1187\r\n\t\tthrow new Error(`${binName}: ${stage}: ${detail}${stack}`, { cause });\r\n\t\t      ^\r\n\r\nError: dsh: plugin tree failed to load: dsh: 3 entries did not activate\r\n@deepseek-ai/dsh-workspace: pending (waiting for service: sessionPersistence)\r\n@deepseek-ai/dsh-host-apiproxy: pending (waiting for services: agentDefaultModel, agents, attachments, llm, sessions, subagents, sessionQuery, tools, userQuestions, workspaceRegistry)\r\n@deepseek-ai/dsh-cordis-host-runner: pending (waiting for service: tools)\r\n    at boot (file:///C:/Users/27837/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1187:9)\r\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\r\n    at async runProfile (file:///C:/Users/27837/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/lib/profile-boot-DG5t9aNs.js:247:14)\r\n    at async file:///C:/Users/27837/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/lib/bin.js:133:3 {\r\n  [cause]: Error: dsh: 3 entries did not activate\r\n  @deepseek-ai/dsh-workspace: pending (waiting for service: sessionPersistence)\r\n  @deepseek-ai/dsh-host-apiproxy: pending (waiting for services: agentDefaultModel, agents, attachments, llm, sessions, subagents, sessionQuery, tools, userQuestions, workspaceRegistry)\r\n  @deepseek-ai/dsh-cordis-host-runner: pending (waiting for service: tools)\r\n      at assertEntriesActivated (file:///C:/Users/27837/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1134:9)\r\n      at boot (file:///C:/Users/27837/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1179:9)\r\n      at async runProfile (file:///C:/Users/27837/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/lib/profile-boot-DG5t9aNs.js:247:14)\r\n      at async file:///C:/Users/27837/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/lib/bin.js:133:3\r\n}\r\n\r\nNode.js v24.16.0\r\n"
+    }
+  ]
+}

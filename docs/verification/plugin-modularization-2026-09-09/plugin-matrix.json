@@ -1,0 +1,502 @@
+{
+  "dshHome": "<temporary>",
+  "profile": "web",
+  "dsh": {
+    "version": "0.1.1-rc.2",
+    "source": "PATH"
+  },
+  "states": [
+    {
+      "name": "01-manuscript-only",
+      "dependencies": [
+        "dsh-manuscript"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-manuscript"
+      ],
+      "entries": {
+        "manuscript": true,
+        "manuscript-assist": true,
+        "proofread": false,
+        "zhihu": false,
+        "zhihu-tools": false,
+        "grill-tools": false,
+        "grill-workflow": false
+      },
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": true,
+        "proofread": false,
+        "zhihu": false,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "02-both",
+      "dependencies": [
+        "dsh-grill",
+        "dsh-manuscript"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-manuscript",
+        "dsh-grill"
+      ],
+      "entries": {
+        "manuscript": true,
+        "manuscript-assist": true,
+        "proofread": false,
+        "zhihu": false,
+        "zhihu-tools": false,
+        "grill-tools": true,
+        "grill-workflow": true
+      },
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": true,
+        "proofread": false,
+        "zhihu": false,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "03-grill-only-after-remove-manuscript",
+      "dependencies": [
+        "dsh-grill"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-grill"
+      ],
+      "entries": {
+        "manuscript": false,
+        "manuscript-assist": false,
+        "proofread": false,
+        "zhihu": false,
+        "zhihu-tools": false,
+        "grill-tools": true,
+        "grill-workflow": true
+      },
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": false,
+        "proofread": false,
+        "zhihu": false,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "04-both-restored",
+      "dependencies": [
+        "dsh-grill",
+        "dsh-manuscript"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-grill",
+        "dsh-manuscript"
+      ],
+      "entries": {
+        "manuscript": true,
+        "manuscript-assist": true,
+        "proofread": false,
+        "zhihu": false,
+        "zhihu-tools": false,
+        "grill-tools": true,
+        "grill-workflow": true
+      }
+    },
+    {
+      "name": "05-manuscript-only-after-remove-grill",
+      "dependencies": [
+        "dsh-manuscript"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-manuscript"
+      ],
+      "entries": {
+        "manuscript": true,
+        "manuscript-assist": true,
+        "proofread": false,
+        "zhihu": false,
+        "zhihu-tools": false,
+        "grill-tools": false,
+        "grill-workflow": false
+      },
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": true,
+        "proofread": false,
+        "zhihu": false,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "06-proofread-only",
+      "dependencies": [
+        "dsh-proofread"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-proofread"
+      ],
+      "entries": {
+        "manuscript": false,
+        "manuscript-assist": false,
+        "proofread": true,
+        "zhihu": false,
+        "zhihu-tools": false,
+        "grill-tools": false,
+        "grill-workflow": false
+      },
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": false,
+        "proofread": true,
+        "zhihu": false,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "07-proofread-then-zhihu",
+      "dependencies": [
+        "dsh-proofread",
+        "dsh-zhihu"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-proofread",
+        "dsh-zhihu"
+      ],
+      "entries": {
+        "manuscript": false,
+        "manuscript-assist": false,
+        "proofread": true,
+        "zhihu": true,
+        "zhihu-tools": false,
+        "grill-tools": false,
+        "grill-workflow": false
+      },
+      "zhihuUsageRetained": true,
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": false,
+        "proofread": true,
+        "zhihu": true,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "08-zhihu-after-remove-proofread",
+      "dependencies": [
+        "dsh-zhihu"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-zhihu"
+      ],
+      "entries": {
+        "manuscript": false,
+        "manuscript-assist": false,
+        "proofread": false,
+        "zhihu": true,
+        "zhihu-tools": false,
+        "grill-tools": false,
+        "grill-workflow": false
+      },
+      "zhihuUsageRetained": true,
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": false,
+        "proofread": false,
+        "zhihu": true,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "09-zhihu-then-proofread",
+      "dependencies": [
+        "dsh-proofread",
+        "dsh-zhihu"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-zhihu",
+        "dsh-proofread"
+      ],
+      "entries": {
+        "manuscript": false,
+        "manuscript-assist": false,
+        "proofread": true,
+        "zhihu": true,
+        "zhihu-tools": false,
+        "grill-tools": false,
+        "grill-workflow": false
+      },
+      "zhihuUsageRetained": true,
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": false,
+        "proofread": true,
+        "zhihu": true,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "10-proofread-after-remove-zhihu",
+      "dependencies": [
+        "dsh-proofread"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-proofread"
+      ],
+      "entries": {
+        "manuscript": false,
+        "manuscript-assist": false,
+        "proofread": true,
+        "zhihu": false,
+        "zhihu-tools": false,
+        "grill-tools": false,
+        "grill-workflow": false
+      },
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": false,
+        "proofread": true,
+        "zhihu": false,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "11-empty",
+      "dependencies": [],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app"
+      ],
+      "entries": {
+        "manuscript": false,
+        "manuscript-assist": false,
+        "proofread": false,
+        "zhihu": false,
+        "zhihu-tools": false,
+        "grill-tools": false,
+        "grill-workflow": false
+      },
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": false,
+        "proofread": false,
+        "zhihu": false,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "12-zhihu-only",
+      "dependencies": [
+        "dsh-zhihu"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-zhihu"
+      ],
+      "entries": {
+        "manuscript": false,
+        "manuscript-assist": false,
+        "proofread": false,
+        "zhihu": true,
+        "zhihu-tools": false,
+        "grill-tools": false,
+        "grill-workflow": false
+      },
+      "zhihuUsageRetained": true,
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": false,
+        "proofread": false,
+        "zhihu": true,
+        "pageErrors": []
+      }
+    },
+    {
+      "name": "13-all-public",
+      "dependencies": [
+        "dsh-grill",
+        "dsh-manuscript",
+        "dsh-proofread",
+        "dsh-zhihu"
+      ],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-zhihu",
+        "dsh-proofread",
+        "dsh-manuscript",
+        "dsh-grill"
+      ],
+      "entries": {
+        "manuscript": true,
+        "manuscript-assist": true,
+        "proofread": true,
+        "zhihu": true,
+        "zhihu-tools": false,
+        "grill-tools": true,
+        "grill-workflow": true
+      },
+      "zhihuUsageRetained": true,
+      "web": {
+        "ready": true,
+        "manuscriptOverlay": true,
+        "proofread": true,
+        "zhihu": true,
+        "pageErrors": []
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "kind": "add",
+      "name": "dsh-manuscript",
+      "ok": true,
+      "stderr": [
+        "dsh: initialized profile web at C:\\Users\\27837\\AppData\\Local\\Temp\\dsh-editor-matrix-zYww3a\\home\\profiles\\web"
+      ]
+    },
+    {
+      "kind": "add",
+      "name": "dsh-grill",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "remove",
+      "name": "dsh-manuscript",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "add",
+      "name": "dsh-manuscript",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "remove",
+      "name": "dsh-grill",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "remove",
+      "name": "dsh-manuscript",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "add",
+      "name": "dsh-proofread",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "add",
+      "name": "dsh-zhihu",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "remove",
+      "name": "dsh-proofread",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "add",
+      "name": "dsh-proofread",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "remove",
+      "name": "dsh-zhihu",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "remove",
+      "name": "dsh-proofread",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "add",
+      "name": "dsh-zhihu",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "add",
+      "name": "dsh-proofread",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "add",
+      "name": "dsh-manuscript",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    },
+    {
+      "kind": "add",
+      "name": "dsh-grill",
+      "ok": true,
+      "stderr": [
+        ""
+      ]
+    }
+  ],
+  "issues": [],
+  "zhihuUsageSeeded": true
+}

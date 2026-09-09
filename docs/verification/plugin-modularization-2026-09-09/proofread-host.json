@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "runtime": "0.1.1-rc.2",
+  "provided": [
+    "webServer",
+    "connection"
+  ],
+  "missing": [
+    "sessions",
+    "workspaceRegistry",
+    "fs",
+    "sandboxPolicy",
+    "llm",
+    "tools",
+    "systemPrompt",
+    "credentials",
+    "agent",
+    "agents"
+  ],
+  "checks": [
+    "text RPC over real HTTP without AI/workspace services",
+    "inherited browser trust fence",
+    "plugin unload removes route",
+    "reload registers once and still works",
+    "host stop releases port"
+  ],
+  "plugins": [
+    "WebServer",
+    "client-connection",
+    "",
+    "dsh-proofread"
+  ]
+}

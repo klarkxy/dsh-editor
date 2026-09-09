@@ -16,6 +16,8 @@
 
 ## 运行拓扑与所有权
 
+当前支持 basic/smart/full 三份桌面组合及四个独立公开包。安装、最小插件范本和无 Web/Agent 实验见[组合指南](plugin-composition-guide.md)。下图展示默认 full；kernel、assist 和知乎按组合选择。
+
 一个 Electron 进程只启动一个 loopback DSH Host。所有插件共享 DSH 的 session、workspace、model、tools、approval 和 connection 权威，不创建第二套状态。
 
 ```text
@@ -24,19 +26,23 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
    ├─ @deepseek-ai/dsh-base
    ├─ @deepseek-ai/dsh-web-app
    ├─ dsh-manuscript
-   │  ├─ Host: /manuscript、draft storage、稿件安全读写
+   │  ├─ Host: /manuscript、draft storage、稿件安全读写；FIM/计量由可选 assist 服务承接
    │  └─ Client: shell.overlay（公开 Web 插件）
    ├─ dsh-editor-workbench
-   │  └─ Host: /dsh-editor-workbench、项目/概览/状态/校对/卡片/进度/导入/快照/归档/context；只读工具 novel_overview
+   │  └─ Host: /dsh-editor-workbench、项目/概览/状态/校对/卡片/进度/导入/快照/归档/context；可选 tools entry 提供 novel_overview
    ├─ dsh-editor-novel-kernel
-   │  └─ Host: novel_* 工具、guard、system prompt、知识卡、`/novel-kernel` 知乎知识库 RPC
+   │  └─ Host: novel_* 工具、guard、system prompt、知识卡、`/novel-kernel` 旧知乎入口转发
+   ├─ dsh-proofread：纯引擎、/proofread、插件自有 UI
+   ├─ dsh-zhihu：/zhihu、凭据/计量、插件自有 UI；Tool entry 可选
    └─ dsh-editor-shell
       ├─ Host: 注册 `dsh-editor-writing` 设置 schema
       └─ Client: 唯一 root GUI、各写作面板、DshChatPort、编辑状态、作者确认
 
-普通 profiles/web
-├─ dsh-manuscript（可独立安装）
-└─ dsh-grill（可独立安装、可与 manuscript 共存）
+普通 profiles/web（按需分别安装）
+├─ dsh-manuscript
+├─ dsh-grill
+├─ dsh-proofread
+└─ dsh-zhihu
 ```
 
 写作会话不挂载官方 `standard` 编码 preset：桌面应用在每次部署 profile 时，把模板里的 `agent-presets/dsh-editor/`（persona、`tool-fs`、`tool-fs-search`、`tool-ask-user`、compaction realm）原子部署到 `<dshHome>/.agent-presets/`，并由 profile 的 `cordis.patch.yml` 将 `agent-presets.default` 指向它。preset 目录遵循与 profile 相同的 owner marker 规则，未标记的同名目录拒绝覆盖。
@@ -50,7 +56,8 @@ dsh-editor-shell/client
 └─ dsh-manuscript/client/editor-core（共享稿纸核心：editor / state / completion-preference / styles）
 
 dsh-editor-workbench/host
-└─ dsh-manuscript/host-api
+├─ dsh-manuscript/host-api
+└─ dsh-proofread/engine、defaults、contracts（纯库）
 
 dsh-editor-novel-kernel/host
 └─ Cordis + DSH tools
@@ -61,10 +68,14 @@ dsh-editor-novel-kernel/host
 | 包 / Cordis entry | 接口与职责 | 稳定级别 | 交付范围 |
 | --- | --- | --- | --- |
 | `dsh-manuscript` / `manuscript` | `/manuscript`、`shell.overlay`、draft/FIM/patch/proposal | public | 公开 tarball；Web 与桌面 |
+| `dsh-proofread` / `proofread` | `/proofread`、纯引擎与双 slot UI | public | 独立 tarball；写作组合的引擎依赖 |
+| `dsh-zhihu` / `zhihu` | `/zhihu`、独立 UI/凭据/用量 | public | 独立 tarball；full 启用 Tool |
+| `dsh-manuscript/assist` / `manuscript-assist` | 可选 FIM/patch/LLM 计量服务 | public optional entry | smart/full；旧 Web 默认保留 |
+| `dsh-editor-workbench/tools` / `editor-workbench-tools` | 可选 novel_overview | private optional entry | smart/full |
 | `dsh-grill/tools` / `grill-tools` | `scaffold_novel` Tool 与 guard | public | 公开 tarball；Web |
 | `dsh-grill/workflow` / `grill-workflow` | `grill:workflow` prompt | public | 公开 tarball；Web |
 | `dsh-editor-workbench` / `editor-workbench` | 私有工作区生命周期、概览/状态、校对、卡片、进度 RPC | private host-only | 桌面 profile 必需 |
-| `dsh-editor-novel-kernel` / `editor-novel-kernel` | 私有小说工具、guard、prompt、知识卡、`/novel-kernel` | private host-only | 桌面 profile 必需 |
+| `dsh-editor-novel-kernel` / `editor-novel-kernel` | 私有小说工具、guard、prompt、知识卡、`/novel-kernel` | private host-only | smart/full 必需；basic 不装 |
 | `dsh-editor-shell` / `editor-shell` | 唯一 `root` client 与写作设置 schema | fixed-version private | 桌面 profile 必需 |
 
 各包 `cordis.patch.yml` 中的 entry id：
@@ -72,6 +83,11 @@ dsh-editor-novel-kernel/host
 | 包 | entry id | name |
 | --- | --- | --- |
 | `dsh-manuscript` | `manuscript` | `dsh-manuscript` |
+| `dsh-manuscript` | `manuscript-assist` | `dsh-manuscript/assist` |
+| `dsh-proofread` | `proofread` | `dsh-proofread` |
+| `dsh-zhihu` | `zhihu` | `dsh-zhihu` |
+| full 组合显式加入 | `zhihu-tools` | `dsh-zhihu/tools` |
+| `dsh-editor-workbench` | `editor-workbench-tools` | `dsh-editor-workbench/tools` |
 | `dsh-grill` | `grill-tools` | `dsh-grill/tools` |
 | `dsh-grill` | `grill-workflow` | `dsh-grill/workflow` |
 | `dsh-editor-workbench` | `editor-workbench` | `dsh-editor-workbench` |
@@ -95,21 +111,29 @@ dsh-editor-novel-kernel/host
 
 | 包 | `name` | `inject` |
 | --- | --- | --- |
-| `dsh-manuscript` Host | `dsh-manuscript` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `llm`, `storageDomain` |
-| `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `tools` |
-| `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt`, `fs`, `credentials`, `connection`, `sandboxPolicy` |
-| `dsh-editor-shell` Host | `dsh-editor-shell` | `settings` |
+| `dsh-manuscript` Host | `dsh-manuscript` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `storageDomain` |
+| `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy` |
+| `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt`, `fs`, `connection`, `sandboxPolicy` |
+| `dsh-editor-shell` Host | `dsh-editor-shell` | `settings`, `connection` |
 | `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope`, `settingsSchema`, `remote` |
+| `dsh-proofread` Host | `dsh-proofread` | `connection` |
+| `dsh-proofread` Client | `dsh-proofread-client` | `slots`, `connection` |
+| `dsh-zhihu` Host | `dsh-zhihu` | `connection`, `credentials`, `storageDomain` |
+| `dsh-zhihu/tools` | `dsh-zhihu-tools` | `zhihu`, `tools` |
+| `dsh-manuscript/assist` | `dsh-manuscript-assist` | `llm`, `storageDomain` |
+| `dsh-editor-workbench/tools` | `dsh-editor-workbench-tools` | `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `tools` |
 | `dsh-grill/tools` | `dsh-grill-tools` | `tools` |
 | `dsh-grill/workflow` | `dsh-grill-workflow` | `systemPrompt` |
 
 Shell 以 `root` slot id `dsh-editor-shell-root`、priority `-100`、label `DSH 编辑器` 注册。manuscript client 只注册 `shell.overlay`（id `manuscript`，order `100`，label `稿纸`），禁止占用 `root` 或 `conversation.view`。
 
+Shell 另声明 `dsh-editor.extensions`（list/root）并渲染贡献；proofread 与 zhihu 在此及官方 `shell.overlay` 贡献同一个自有 Client。它们不接收 ShellContext，只使用自己的输入和 Connection；输入修订、取消、焦点和样式由插件生命周期维护。详见[挂载合同](plugin-composition-guide.md#最小插件开发范本)。
+
 Shell client 构建会捆绑 `docx` 与 `jszip`，仅供导出对话框在 Renderer 内生成 DOCX/EPUB。manuscript editor-core 构建会捆绑 `@codemirror/search`，仅供稿内查找替换。两者都不进入 Host RPC。
 
 ## RPC 通用契约
 
-`/manuscript`、`/dsh-editor-workbench` 与 `/novel-kernel` 都只以 `{ authority: 'loopback' }` 注册。loopback 限制网络暴露，但不是调用者身份；每个文件请求仍必须携带 live `sessionId` 并由 Host 重建 authority（`usage.summary` / `zhihu.usage` / `project.inspect` / `project.createHome` / 知乎知识库 RPC 例外，见下表）。
+`/manuscript`、`/dsh-editor-workbench`、`/novel-kernel`、`/proofread`、`/zhihu` 与 `/dsh-editor-shell` 都只以 `{ authority: 'loopback' }` 注册。loopback 限制网络暴露，但不是调用者身份；每个文件请求仍必须携带 live `sessionId` 并由 Host 重建 authority（`usage.summary` / `zhihu.usage` / `project.inspect` / `project.createHome` / 知乎知识库 RPC 例外，见下表）。
 
 ```ts
 type RpcResult<T> =
@@ -214,10 +238,10 @@ Context 信封常量：
 
 ## Novel Kernel 契约
 
-- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`——由 workbench 注册、`novel_search`、`project_knowledge` 与知乎一族 `zhihu_search` / `zhihu_global_search` / `zhihu_hot_list` / `zhihu_ask` / `zhihu_knowledge_search`，以及 `novel_scratch_write`/`novel_scratch_read`/`novel_scratch_list` 临时工作区三件套）。
+- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`——由 workbench-tools 注册、`novel_search`、`project_knowledge`，以及 `novel_scratch_write`/`novel_scratch_read`/`novel_scratch_list` 临时工作区三件套）。
 - `novel_knowledge` 只接受唯一的 `topics` 数组，去重后 1–3 个固定主题；每张知识卡最多 6000 字符。它只返回建议，不提供项目事实或授权。
 - `novel_propose` 每次形成一个 Markdown `edit` / `create` / `split` / `merge` / `renames` 提案，绝不写文件；守卫只接受作者内容 `.md` 路径，`.dsh-editor/` 等隐藏目录不进提案。
-- Channel `/novel-kernel`（loopback）：`zhihu.knowledge.bases`（读，列出知识库）、`zhihu.knowledge.upload`（写，界面显式上传，内容经 base64 传入）。不要求 `sessionId`。
+- Channel `/novel-kernel`（loopback）：`zhihu.knowledge.bases`（读，列出知识库）、`zhihu.knowledge.upload`（写，界面显式上传，内容经 base64 传入）。不要求 `sessionId`。这两个旧 endpoint 仅转发到可选 `zhihu` 服务，新 UI 直接使用 `/zhihu`；知乎工具由 `dsh-zhihu/tools` 唯一注册。
 - `novel_index_write` 把产品内部的作品索引（`.dsh-editor/作品索引.md`，固定路径、全文覆盖）直接落盘，不经提案确认；Shell 按工具名隐藏其结果行。它是唯一的例外：其余写入仍是助手提议、作者确认、Shell 执行。
 - `author_observe` 让助手提议"记住一条作者偏好"，仅作为建议显示在 `MemoryCard` 中：固定 `observation`（≤ 200 字符）与 `reason`（必填），marker `dsh-editor.memory`、version `1`。Shell 解析后必须经作者点击"记住"才会追加进本机 `authorMemory`；工具本身不直接写入任何文件、偏好或 storage。同一信任模型与 `novel_propose` 一致：助手提议，作者确认，Shell 执行。
 - proposal marker 固定为 `{ marker: 'dsh-editor.proposal', version: 1, ... }`；memory marker 固定为 `{ marker: 'dsh-editor.memory', version: 1, observation, reason }`。Shell 只通过 `dsh-editor-novel-kernel/contracts` 的严格解析器渲染有效 marker。

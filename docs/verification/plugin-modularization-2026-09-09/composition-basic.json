@@ -1,0 +1,25 @@
+{
+  "composition": "basic",
+  "checks": [
+    "same proofreading text in custom Shell",
+    "create project/document and save through UI",
+    "live-session search/workspace proofread/card/snapshot",
+    "paper/ink panels and focus restoration",
+    "no Chat/FIM/patch/auto-index/turn requests while writing",
+    "reload has one contribution and no browser errors"
+  ],
+  "failures": [],
+  "capabilities": {
+    "assistant": false,
+    "completion": false,
+    "zhihu": false
+  },
+  "installed": [
+    "dsh-editor-shell",
+    "dsh-editor-workbench",
+    "dsh-manuscript",
+    "dsh-proofread"
+  ],
+  "delivery": "copied package artifacts; no workspace package links",
+  "ok": true
+}

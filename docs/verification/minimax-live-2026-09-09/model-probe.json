@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "model": "MiniMax-M3",
+  "finishReason": "stop",
+  "textChars": 292,
+  "reasoningChars": 0,
+  "usage": {
+    "total_tokens": 280,
+    "total_characters": 0,
+    "prompt_tokens": 208,
+    "completion_tokens": 72,
+    "completion_tokens_details": {
+      "reasoning_tokens": 52
+    },
+    "prompt_tokens_details": {
+      "cached_tokens": 128
+    }
+  }
+}

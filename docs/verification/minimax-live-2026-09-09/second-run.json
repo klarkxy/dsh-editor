@@ -1,0 +1,270 @@
+{
+  "startedAt": "2026-09-09T10:50:00.050Z",
+  "book": "功能验收",
+  "workspace": "D:\\0 code\\dsh-editor\\.dev\\feature-coverage-projects\\功能验收",
+  "dsh": "0.1.1-rc.2",
+  "model": "MiniMax · MiniMax-M3",
+  "phases": [
+    {
+      "name": "接口连接成功",
+      "detail": "MiniMax custom provider minimax-e2e / MiniMax-M3",
+      "at": "2026-09-09T10:50:11.249Z"
+    },
+    {
+      "name": "新建作品",
+      "detail": "D:\\0 code\\dsh-editor\\.dev\\feature-coverage-projects\\功能验收",
+      "at": "2026-09-09T10:50:11.665Z"
+    },
+    {
+      "name": "工作台功能覆盖",
+      "detail": "i18n-english, i18n-chinese, author-preferences, writing-paper, settings-zhihu, settings-usage, settings-minimax, theme-toggle, command-palette, create-folders, create-worldbook-file, worldbook-settings, create-character-file, create-chapters, rename-file, copy-paste, chapter-meta, typewriter-focus, layout-toggles, in-editor-find, in-editor-replace, search-replace, overview, proofread, pin-pane, export, archive-restore, snapshot-commit, about-dialog, import-entry, chapter-split, chapter-navigation",
+      "at": "2026-09-09T10:51:58.330Z"
+    },
+    {
+      "name": "切换对话模型",
+      "detail": "MiniMax · MiniMax-M3",
+      "at": "2026-09-09T10:51:58.458Z"
+    },
+    {
+      "name": "规划总纲",
+      "detail": "大纲/总纲.md",
+      "at": "2026-09-09T10:55:27.959Z"
+    },
+    {
+      "name": "功能覆盖完成",
+      "detail": "36/39 ok",
+      "at": "2026-09-09T10:55:29.193Z"
+    }
+  ],
+  "features": [
+    {
+      "name": "i18n-english",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "i18n-chinese",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "author-preferences",
+      "ok": true,
+      "detail": "saved"
+    },
+    {
+      "name": "writing-paper",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "settings-zhihu",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "settings-usage",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "settings-minimax",
+      "ok": true,
+      "detail": "custom MiniMax MiniMax-M3 (created)"
+    },
+    {
+      "name": "theme-toggle",
+      "ok": true,
+      "detail": "paper → ink → paper"
+    },
+    {
+      "name": "command-palette",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "create-folders",
+      "ok": true,
+      "detail": "大纲 / 人物卡 / 世界书"
+    },
+    {
+      "name": "create-worldbook-file",
+      "ok": true,
+      "detail": "世界书/港口.md"
+    },
+    {
+      "name": "worldbook-settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "create-character-file",
+      "ok": true,
+      "detail": "人物卡/林简.md"
+    },
+    {
+      "name": "create-chapters",
+      "ok": true,
+      "detail": "001 / 002 / 备忘"
+    },
+    {
+      "name": "rename-file",
+      "ok": true,
+      "detail": "正文/备忘.md → 正文/归档候选.md"
+    },
+    {
+      "name": "copy-paste",
+      "ok": true,
+      "detail": "正文/归档候选 2.md"
+    },
+    {
+      "name": "chapter-meta",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "typewriter-focus",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "layout-toggles",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "in-editor-find",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "in-editor-replace",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "search-replace",
+      "ok": true,
+      "detail": "disk"
+    },
+    {
+      "name": "overview",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "proofread",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "cards-panel",
+      "ok": false,
+      "detail": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('region', { name: '人物卡' }).getByRole('button', { name: '新建人物卡' })\u001b[22m\n\u001b[2m    - locator resolved to <button type=\"button\">新建人物卡</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div role=\"status\" class=\"editor-notice\">已保存</div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div role=\"status\" class=\"editor-notice\">已保存</div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    57 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <div role=\"status\" class=\"editor-notice\">已保存</div> intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n"
+    },
+    {
+      "name": "pin-pane",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "export",
+      "ok": true,
+      "detail": "功能验收-全文.md"
+    },
+    {
+      "name": "archive-restore",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "snapshot-commit",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "about-dialog",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "import-entry",
+      "ok": true,
+      "detail": "review dialog"
+    },
+    {
+      "name": "chapter-split",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "chapter-merge",
+      "ok": false,
+      "detail": "timed out: merged chapter archived"
+    },
+    {
+      "name": "chapter-navigation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "chat-ping",
+      "ok": true,
+      "detail": "pong"
+    },
+    {
+      "name": "rewrite-preset",
+      "ok": false,
+      "detail": "timed out: usable rewrite suggestion"
+    },
+    {
+      "name": "fim-complete",
+      "ok": true,
+      "detail": "ghost accepted"
+    },
+    {
+      "name": "chat-proposal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "conversation-menu",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "failures": [
+    "cards-panel: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('region', { name: '人物卡' }).getByRole('button', { name: '新建人物卡' })\u001b[22m\n\u001b[2m    - locator resolved to <button type=\"button\">新建人物卡</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div role=\"status\" class=\"editor-notice\">已保存</div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div role=\"status\" class=\"editor-notice\">已保存</div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    57 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <div role=\"status\" class=\"editor-notice\">已保存</div> intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n",
+    "chapter-merge: timed out: merged chapter archived",
+    "rewrite-preset: timed out: usable rewrite suggestion"
+  ],
+  "screenshots": [
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\01-home.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\02-settings-minimax-m3.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\03-project-open.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\04-focus-mode.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\05-overview.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\06-proofread.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\07-pinned-pane.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\08-assistant-ready.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\09-complete.png"
+  ],
+  "ok": false,
+  "rpc": [
+    {
+      "endpoint": "patch.complete",
+      "status": 200,
+      "ok": true,
+      "route": "dsh-llm",
+      "textChars": 1200
+    },
+    {
+      "endpoint": "fim.complete",
+      "status": 200,
+      "ok": true,
+      "route": "dsh-llm",
+      "textChars": 240
+    }
+  ],
+  "finishedAt": "2026-09-09T10:55:29.267Z"
+}

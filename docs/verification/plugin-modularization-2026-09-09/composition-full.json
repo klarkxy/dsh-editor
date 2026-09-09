@@ -1,0 +1,19 @@
+{
+  "composition": "full",
+  "checks": [
+    "same proofreading text in custom Shell",
+    "proofreading loading/error/retry/stale suppression/keyboard focus",
+    "create project/document and save through UI",
+    "live-session search/workspace proofread/card/snapshot",
+    "paper/ink panels and focus restoration",
+    "optional Chat mounts",
+    "reload has one contribution and no browser errors"
+  ],
+  "failures": [],
+  "capabilities": {
+    "assistant": true,
+    "completion": true,
+    "zhihu": true
+  },
+  "ok": true
+}

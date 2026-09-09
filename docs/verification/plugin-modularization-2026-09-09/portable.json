@@ -1,0 +1,56 @@
+{
+  "ok": true,
+  "source": "current-portable-wrapper",
+  "portable": {
+    "path": "D:\\0 code\\dsh-editor\\.pack\\desktop\\DSH Editor-0.1.7-win-x64.exe",
+    "bytes": 204585035
+  },
+  "origin": "http://127.0.0.1:14093",
+  "portReleased": true,
+  "debuggerReleased": true,
+  "exitCode": 0,
+  "state": {
+    "onboarding": true,
+    "title": "DSH Editor",
+    "shell": true,
+    "settings": false,
+    "editorName": true,
+    "officialHome": false,
+    "technicalChrome": false,
+    "homeSidebar": false,
+    "homeStage": true,
+    "permanentChat": false,
+    "bootEntries": [
+      "@deepseek-ai/dsh-typert-registry",
+      "@deepseek-ai/dsh-api-gateway",
+      "@deepseek-ai/dsh-session-log-export",
+      "@deepseek-ai/dsh-client-hmr",
+      "@deepseek-ai/dsh-client-modules",
+      "@deepseek-ai/dsh-client-connection",
+      "@deepseek-ai/dsh-api-remotes",
+      "@deepseek-ai/dsh-client-runtime",
+      "@deepseek-ai/dsh-cordis-client-runner",
+      "@deepseek-ai/dsh-client-ui-theme",
+      "@deepseek-ai/dsh-client-locale",
+      "@deepseek-ai/dsh-client-ui-layout",
+      "@deepseek-ai/dsh-client-ui-renderer",
+      "@deepseek-ai/dsh-client-ui-settings",
+      "@deepseek-ai/dsh-client-ui-conversation",
+      "dsh-manuscript",
+      "dsh-proofread",
+      "dsh-zhihu",
+      "dsh-editor-shell",
+      "@deepseek-ai/dsh-client-ui-directory-picker-native"
+    ],
+    "nativeOnboarding": {
+      "notice": false,
+      "steps": 0,
+      "setup": false
+    },
+    "operations": [
+      "proofread same text",
+      "Zhihu contribution",
+      "create project/document and save to disk"
+    ]
+  }
+}

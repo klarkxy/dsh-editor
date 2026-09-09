@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-09-09T15:14:47.8887271+08:00",
+  "sourceRevision": "a6efa1a88749a0136e4d7289cf0ca69145bda0b4",
+  "initialWorkingTreeClean": true,
+  "scope": "Local plugin composition verification; documentation-only tracked changes",
+  "dsh": "0.1.1-rc.2",
+  "matrix": {
+    "issues": [],
+    "exitCode": 0,
+    "transitions": [
+      {
+        "name": "dsh-manuscript",
+        "kind": "add",
+        "ok": true
+      },
+      {
+        "name": "dsh-grill",
+        "kind": "add",
+        "ok": true
+      },
+      {
+        "name": "dsh-manuscript",
+        "kind": "remove",
+        "ok": true
+      },
+      {
+        "name": "dsh-manuscript",
+        "kind": "add",
+        "ok": true
+      },
+      {
+        "name": "dsh-grill",
+        "kind": "remove",
+        "ok": true
+      }
+    ],
+    "states": [
+      {
+        "name": "01-manuscript-only",
+        "web": {
+          "ready": true,
+          "manuscriptOverlay": true,
+          "pageErrors": []
+        },
+        "dependencies": [
+          "dsh-manuscript"
+        ]
+      },
+      {
+        "name": "02-both",
+        "web": {
+          "ready": true,
+          "manuscriptOverlay": true,
+          "pageErrors": []
+        },
+        "dependencies": [
+          "dsh-grill",
+          "dsh-manuscript"
+        ]
+      },
+      {
+        "name": "03-grill-only-after-remove-manuscript",
+        "web": {
+          "ready": true,
+          "manuscriptOverlay": false,
+          "pageErrors": []
+        },
+        "dependencies": [
+          "dsh-grill"
+        ]
+      },
+      {
+        "name": "04-both-restored",
+        "web": null,
+        "dependencies": [
+          "dsh-grill",
+          "dsh-manuscript"
+        ]
+      },
+      {
+        "name": "05-manuscript-only-after-remove-grill",
+        "web": {
+          "ready": true,
+          "manuscriptOverlay": true,
+          "pageErrors": []
+        },
+        "dependencies": [
+          "dsh-manuscript"
+        ]
+      }
+    ],
+    "browserProbeCount": 4
+  },
+  "artifacts": [
+    {
+      "name": "dsh-manuscript",
+      "version": "0.1.0",
+      "filename": "dsh-manuscript-0.1.0.tgz",
+      "bytes": 452031,
+      "sha256": "244f3f97784c9e2527588af18ba70e8f6c369b3335ecbb9983f063e497b66d1c"
+    },
+    {
+      "name": "dsh-grill",
+      "version": "0.1.0",
+      "filename": "dsh-grill-0.1.0.tgz",
+      "bytes": 16304,
+      "sha256": "0b107df2d25769c3c19602f1e0ff3c648c163789466a16ae10765351bf4116e9"
+    }
+  ],
+  "unitTests": {
+    "passedTests": 807,
+    "exitCode": 0,
+    "passedFiles": 91
+  },
+  "missingPrivate": {
+    "results": [
+      {
+        "exitCode": 1,
+        "packageName": "dsh-editor-workbench"
+      },
+      {
+        "exitCode": 1,
+        "packageName": "dsh-editor-novel-kernel"
+      }
+    ],
+    "exitCode": 0,
+    "ok": true
+  },
+  "desktop": {
+    "scope": [
+      "first run",
+      "configured home",
+      "multi-window shared host",
+      "save version conflict",
+      "durable draft recovery",
+      "conflict copy",
+      "port release"
+    ],
+    "exitCode": 0,
+    "phases": [
+      {
+        "name": "first-run-home",
+        "shell": true,
+        "officialHome": false,
+        "portReleased": true
+      },
+      {
+        "name": "configured-home",
+        "shell": true,
+        "officialHome": false,
+        "portReleased": true
+      },
+      {
+        "name": "multi-window",
+        "shell": true,
+        "officialHome": false,
+        "portReleased": true
+      },
+      {
+        "name": "multi-window",
+        "shell": true,
+        "officialHome": false,
+        "portReleased": true
+      }
+    ],
+    "ok": true
+  },
+  "diagram": {
+    "specificationSha256": "9cfc3a57f329969e945a4600713e1521e672f4e1e62444138ee469082973214b",
+    "containment": {
+      "status": "pass",
+      "viewports": [
+        {
+          "width": 1440,
+          "height": 900,
+          "theme": "light",
+          "innerWidth": 1440,
+          "innerHeight": 900,
+          "scrollWidth": 1440,
+          "scrollHeight": 900,
+          "overflowX": false,
+          "overflowY": false,
+          "ok": true,
+          "resolvedTheme": "light"
+        },
+        {
+          "width": 1600,
+          "height": 1000,
+          "theme": "light",
+          "innerWidth": 1600,
+          "innerHeight": 1000,
+          "scrollWidth": 1600,
+          "scrollHeight": 1000,
+          "overflowX": false,
+          "overflowY": false,
+          "ok": true,
+          "resolvedTheme": "light"
+        },
+        {
+          "width": 1920,
+          "height": 1080,
+          "theme": "light",
+          "innerWidth": 1920,
+          "innerHeight": 1080,
+          "scrollWidth": 1920,
+          "scrollHeight": 1080,
+          "overflowX": false,
+          "overflowY": false,
+          "ok": true,
+          "resolvedTheme": "light"
+        },
+        {
+          "width": 2048,
+          "height": 1320,
+          "theme": "light",
+          "innerWidth": 2048,
+          "innerHeight": 1320,
+          "scrollWidth": 2048,
+          "scrollHeight": 1320,
+          "overflowX": false,
+          "overflowY": false,
+          "ok": true,
+          "resolvedTheme": "light"
+        }
+      ]
+    },
+    "errors": 0,
+    "checksPassed": 9,
+    "artifact": {
+      "path": "D:\\0 code\\dsh-editor\\docs\\diagrams\\plugin-composition-boundaries.html",
+      "sha256": "1ab599ae49675d766eb1881d030ec24bb2e4c2784fb17aa3155b1f1196493402",
+      "bytes": 632242
+    },
+    "warnings": 0,
+    "type": "architecture",
+    "manualVisualReview": "Inspected all four light/dark screenshots at 1440x900 and 2048x1320; no overlap or clipping observed. Automated sidecar remains pending by tool design.",
+    "specificationBytes": 2813
+  },
+  "notVerified": [
+    "paid model execution",
+    "fresh grill-only initial install",
+    "profile without dsh-web-app",
+    "host without Harness services",
+    "independent desktop plugin tarball installation",
+    "cross-version compatibility"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "date": "2026-09-09",
+  "model": "MiniMax-M3",
+  "liveAI": {
+    "passed": 5,
+    "total": 5,
+    "receipt": "final-ai-run.json"
+  },
+  "unit": {
+    "passed": 838,
+    "files": 96,
+    "typecheck": true
+  },
+  "savedFiles": "saved-text-check.json",
+  "remaining": [
+    "cards-panel pointer interception after stacked panels",
+    "merged chapter tree refresh timeout; disk archive succeeded"
+  ],
+  "exeRebuilt": false,
+  "publicArtifacts": [
+    {
+      "file": ".pack/dsh-manuscript-0.1.0.tgz",
+      "sha256": "f27205604984d47845e81e1f31a2d5c97404280fbc998a88181b1c6c7684edcb"
+    },
+    {
+      "file": ".pack/dsh-grill-0.1.0.tgz",
+      "sha256": "0b107df2d25769c3c19602f1e0ff3c648c163789466a16ae10765351bf4116e9"
+    },
+    {
+      "file": ".pack/dsh-proofread-0.1.0.tgz",
+      "sha256": "0272719973ca3ffb846107b22dac365085b087d25e50350ecb20ddbb1dee3a4c"
+    },
+    {
+      "file": ".pack/dsh-zhihu-0.1.0.tgz",
+      "sha256": "8227d24a39e9570c96620db0dba02bf0eba2d529774a94ab6ca2fb18b718dab5"
+    }
+  ]
+}
