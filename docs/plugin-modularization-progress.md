@@ -1,5 +1,7 @@
 # 插件拆分实施与验收记录
 
+> 本文是 2026-09-09 的当时快照。其后的声明式拼装、Shell 座位与垂直插件迁出见[声明式拼装记录](plugin-assembly-progress.md)；下文提到的 `/novel-kernel`、`zhihu.usage` 转发与 workbench 的 `cards.*` 已在该轮移除或迁出。
+
 > 后续更新：已授权的 MiniMax-M3 在线实测及修复见[在线验证记录](minimax-live-validation.md)。本文件的原始回执保留为当时快照；当前仍有两项非 AI 交互待定位。
 
 2026-09-09。已完成 [P0—P5 拆分计划](plugin-modularization-plan.md)在本仓库的实施、Windows 交付验证及宿主精简研究。P5 的“整个浏览器进程不加载 Agent”结论是需要上游解耦，符合原计划允许的研究退出条件；没有将它写成已实现。

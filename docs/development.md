@@ -26,6 +26,12 @@ packages/dsh-editor-shell/     仅桌面 profile 加载的私有写作客户端�
 packages/dsh-editor-plugins/   私有插件管理：开关、GitHub 市场搜索与安装
 packages/dsh-editor-workbench/ 私有项目生命周期与 context Host
 packages/dsh-editor-novel-kernel/ 私有小说 Tool、guard、prompt 与知识卡
+packages/dsh-editor-cards/     私有垂直插件：/dsh-editor-cards Host RPC + contracts + 卡片面板/详情 Client
+packages/dsh-editor-proofread-panel/ 私有 client-only：作品校对面板（侧栏座位 + 两条命令）
+packages/dsh-editor-overview-panel/  私有 client-only：作品概览（中栏 overlay 座位）
+packages/dsh-editor-memory-panel/    私有 client-only：记忆维护面板 + Chat 记忆更新卡
+packages/dsh-editor-workspace-kit/   私有进程内库：access bag、sidecar IO、条目/目录校验、no-replace move、frontmatter
+packages/dsh-editor-seats/     私有浏览器安全库：Shell 座位合同、命令与消息卡注册表
 packages/dsh-manuscript/       Host RPC、公开 Web 稿纸插件与共享 editor-core（src/client/editor-core/）
 packages/dsh-proofread/        公开校对引擎与 /proofread
 packages/dsh-zhihu/            公开资料 RPC、自有 UI 与可选 Tool
@@ -74,7 +80,7 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 
 1. 验证 Windows x64、Node 和 DSH 精确版本；
 2. 将 DSH 依赖闭包物化到 `.dev/desktop-dsh-runtime`；
-3. 将当前组合的业务包物化到 `.dev/desktop-profile-template/node_modules`（默认 full：manuscript、proofread、workbench、novel-kernel、zhihu、shell）；
+3. 按 `scripts/plugin-manifest.mjs` 解析当前 recipe，把选中的包与被依赖的库（`libraries`，如 workspace-kit）物化到 `.dev/desktop-profile-template/node_modules`；
 4. 使用 `.dev/desktop-home`；
 5. 启动该组合的插件 watcher 和 Electron；
 6. Electron 部署带 owner marker 的 `profiles/dsh-editor`；
@@ -107,7 +113,7 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 
 ### `dsh-editor-novel-kernel`
 
-- Host-only 私有包，注册小说工具、guard、`dsh-editor:novel-kernel` prompt，以及 loopback `/novel-kernel`（知乎知识库列表/上传）。
+- Host-only 私有包，注册七个小说工具、guard 与 `dsh-editor:novel-kernel` prompt；不再提供 `/novel-kernel` 通道，知乎知识库走 `/zhihu`。
 - Host `inject` 为 `tools`, `systemPrompt`, `fs`, `connection`, `sandboxPolicy`。
 - Tool 只返回知识或预览提案，正文写入仍由 Shell 展示并经 `/manuscript proposal.prepare/apply` 完成；拆章/合章/批量重命名走 workbench `proposal.*`。
 - `./contracts` 只含工具名、proposal / memory marker 类型和严格解析器。
@@ -177,7 +183,7 @@ pnpm pack:desktop
 
 - `node-24.16.0/`（Windows 为 `node.exe`，macOS 为 `node`）；
 - 完整、dereference 后的 DSH `0.1.1-rc.2` 依赖闭包；
-- manuscript、workbench、novel-kernel、shell 四个当前构建包；
+- 当前 recipe 解析出的全部业务包与库（`composition.json` 里的 `packages` + `libraries`）；
 - 含私有依赖的 profile 模板；
 - `manifest.json` 中的平台、文件数、字节数与 tree SHA-256。
 

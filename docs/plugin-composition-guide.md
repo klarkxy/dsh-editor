@@ -10,13 +10,46 @@
 | --- | --- | --- |
 | 独立文本校对 | `dsh-proofread` | 文本 RPC 无 Agent、会话、文件、模型依赖 |
 | 独立资料查询 | `dsh-zhihu` | 普通 RPC/UI 默认启用；Tool 入口另行加入 |
-| `basic` 基础写作 | manuscript、proofread、workbench、shell、plugins | 不启用补全、Chat、自动索引、小说工具或知乎 |
+| `basic` 基础写作 | manuscript、proofread、workbench、cards、shell、plugins、proofread-panel、overview-panel、memory-panel | 不启用补全、Chat、自动索引、小说工具或知乎 |
 | `smart` 智能写作 | basic + novel-kernel | 启用 manuscript-assist、workbench-tools 与 Chat |
 | `full` 完整写作（默认） | smart + zhihu | 启用知乎普通服务与 Tool 入口 |
 
+桌面 recipe 的 feature：
+
+| Feature | 作用 | basic | smart | full |
+| --- | --- | --- | --- | --- |
+| `cards` | 人物卡与世界书（`dsh-editor-cards`） | 是 | 是 | 是 |
+| `proofread-panel` | 侧栏作品校对（`dsh-editor-proofread-panel`） | 是 | 是 | 是 |
+| `overview-panel` | 中栏作品概览（`dsh-editor-overview-panel`） | 是 | 是 | 是 |
+| `memory-panel` | 侧栏记忆维护（`dsh-editor-memory-panel`） | 是 | 是 | 是 |
+| `assistant` | Chat / novel-kernel | 否 | 是 | 是 |
+| `completion` | manuscript-assist | 否 | 是 | 是 |
+| `zhihu` | 知乎普通服务 | 否 | 否 | 是 |
+| `zhihu-tools` | 知乎 Tool 入口 | 否 | 否 | 是 |
+
 基础写作仍使用 DSH session/workspace 权限，并安装上游基础服务。它证明业务 AI 可选，不代表整个编辑器没有 Harness。workbench 将校对引擎作为必需库使用：可以停用校对插件入口，但保留 workbench 时不能删掉引擎包。
 
-组合文件在 `apps/desktop/resources/compositions/{basic,smart,full}.json`。开发、模板准备、运行时物化和最终包校验均从 `scripts/desktop-compositions.mjs` 读取它们。Shell 的业务 contracts 和编辑核心是构建时依赖，已内联，不会因 Shell 的运行依赖把移除的 kernel 或知乎装回来。
+组合文件在 `apps/desktop/resources/compositions/{basic,smart,full}.json`，现在只声明 `id` / `label` / `features`。开发、模板准备、运行时物化和最终包校验经 `scripts/desktop-compositions.mjs` 调用 `scripts/plugin-manifest.mjs` 解析出包集合、停用入口、额外 insert 与 Shell feature 服务名。Shell 的业务 contracts 和编辑核心是构建时依赖，已内联，不会因 Shell 的运行依赖把移除的 kernel 或知乎装回来。
+
+## 声明式拼装：dshEditor 与 feature 组合
+
+每个业务包在 `package.json` 里声明 `dshEditor`：
+
+- `role`: `core` 进入每份桌面组合并在插件界面锁定；`feature` 仅在被选中或被 workspace 依赖闭包拉入时装配。
+- `visibility`: `public` 打 tarball；`desktop` 只进桌面 profile。
+- `entries`: 与该包 `cordis.patch.yml` 的 insert 一一对应。带 `feature` 的入口在未选中该 feature 时写入 `disabledEntries`；`locked: true` 的入口在插件管理里不可关闭。带 `service` 的 feature 会写入 Shell `config.features`。
+- `inserts`: 不在包 patch 里、只由组合脚本插入的入口（如 `zhihu-tools`），且仅在其 `feature` 被选中、`requires` 也已选中时加入。
+- `wrapClient`: 开发监听是否在 tsdown 成功后跑 `wrap-client.mjs`；未写时也可由 `dsh.client` 推导。
+
+食谱只列 feature。解析器选出全部 core 包、声明了所选 feature 的包，再并上 `dependencies` 里其他 `dsh-*` 工作区包。`proofread` 没有 feature，但 workbench 依赖它，因此每份桌面组合都会带上校对引擎。
+
+没有 `dshEditor` 的纯库包（如 `dsh-editor-workspace-kit`）不成为 bundle：解析结果把它们放进 `libraries`，prepare/verify/e2e 按 `packages + libraries` 复制并断言，但 profile `dsh.profile.bundles` 只列 `packages`。只被 `devDependencies` 引用、构建时内联的库（如 `dsh-editor-seats`）既不进 `packages` 也不进 `libraries`。
+
+运行时插件分级不再读死表：`dsh-editor-plugins` 从 profile `node_modules/<pkg>/package.json` 的 `dshEditor` 建目录。`@deepseek-ai/*` 隐藏；`locked` 入口归核心；其余带 `dshEditor` 的入口可开关；没有该块的包视为社区插件。受保护、不可卸载的包 = 当前 profile `dsh.profile.bundles` 加上 `@deepseek-ai/*`。
+
+新增插件：给包装上 `dshEditor`（并保证 `entries` 与包 patch 一致），若它是可选能力，再把对应 feature 写进需要它的组合食谱。不要再改脚本里的包名列表。
+
+侧栏工具走 Shell 座位与命令注册表，不要再改 `root.ts`。座位合同从 `dsh-editor-seats` 导入（构建时内联）。在 `dsh-editor.sidebar.tools` 或 `dsh-editor.center.overlays` 注册贡献，并从 `dshEditorCommands` 注册命令（含可选快捷键）。座位 props 是 Shell 传入的上下文（当前路径、脏标记、`openDocument`、`onApplied`、`refresh`、locale）；作者确认卡必须用座位上的 `ProposalCard`，插件不得自己写作者正文。中栏 overlay 打开时给根元素加 `CENTER_OVERLAY_ATTRIBUTE`（`data-dsh-center-overlay`），Shell 负责把它放进稿纸格并隐藏稿纸，插件不写 grid 规则。`cards`、`proofread-panel`、`overview-panel` 与 `memory-panel` 就是这条路径：加一个带 `dshEditor` 的包，再在三份 recipe 里声明 feature。
 
 ```powershell
 $env:DSH_EDITOR_COMPOSITION = 'basic' # smart / full
@@ -54,7 +87,7 @@ dsh plugin --profile web remove dsh-zhihu
 # 重新执行 add 即可恢复；不删除 HOME/storages 或作品文件。
 ```
 
-`dsh-manuscript`、`dsh-proofread` 与 `dsh-zhihu` 可单独安装。公开产物列表为三包，不能把三个桌面私有包当成公开 npm 包。私有 Shell 应与受支持写作组合一起部署。
+`dsh-manuscript`、`dsh-proofread` 与 `dsh-zhihu` 可单独安装。公开产物列表为三包，不能把桌面私有包当成公开 npm 包。私有 Shell 应与受支持写作组合一起部署。
 
 需要 Agent 调用知乎时，在该 profile 的 `cordis.patch.yml` 加入：
 
@@ -64,7 +97,7 @@ dsh plugin --profile web remove dsh-zhihu
       name: dsh-zhihu/tools
 ```
 
-该配置要求 `tools` 服务及其 peer；不加入时普通知乎服务没有 `tools` 强注入。默认 full 桌面组合已显式加入，勿重复添加。
+该配置要求 `tools` 服务及其 peer；不加入时普通知乎服务没有 `tools` 强注入。桌面组合不用手写这段：`dsh-zhihu` 的 `dshEditor.inserts` 已声明 `zhihu-tools`，recipe 选中 feature `zhihu-tools` 时由 resolver 自动加入（默认 full 已选）。
 
 ## 复现验收
 
@@ -99,18 +132,19 @@ node e2e/missing-private-plugin.mjs
 | proofread | `/proofread` → `text.check` | `{text, kinds?}` → `{findings, habitStats, truncated}` | 仅 connection；UTF-8 文本最多 2,000,000 字节、最多 500 条；不接受路径/session/自定义预算 |
 | manuscript | `/manuscript` → 现有文件、草稿、search、proposal | 旧输入和版本门禁保持 | live session 重建文件权限；只有它注册此 channel |
 | manuscript-assist | `manuscriptAssist` 服务 | 原 channel 转发 FIM/patch 与 usage | 同包可选 entry，依赖 llm/storageDomain；尚未另成 writing-assist 包 |
-| workbench | `/dsh-editor-workbench` | 作品、卡片、扫描、快照、导入、归档 | 仍用同一 workspace authority；scan 保留 card 和跨文件 habit 聚合 |
+| workbench | `/dsh-editor-workbench` | 作品、扫描、快照、导入、归档 | 仍用同一 workspace authority；scan 经 `dsh-editor-cards/host-api` 读卡片并做跨文件 habit 聚合 |
+| cards | `/dsh-editor-cards` | `cards.list` / `references` / `metaSet` / `create` | 同一 workspace authority；写入共享 `withWorkspaceWrite` |
 | workbench-tools | `novel_overview` | 现有只读工具合同 | 可选 entry，依赖 tools 和工作区权限 |
 | zhihu | `/zhihu` → `search`、`global.search`、`hot.list`、`ask`、`knowledge.search` | 查询、条数、搜索源/模型/召回范围 → 原结构结果 | connection/credentials/storageDomain；无小说和会话依赖 |
 | zhihu | `knowledge.bases`、`knowledge.upload`、`usage.summary` | 上传显式确认，base64 ≤20 MB；用量默认30天、最大90天 | `ZHIHU_ACCESS_TOKEN` 引用保持；计量唯一所有者 |
 | zhihu-tools | `zhihu_search`、`zhihu_global_search`、`zhihu_hot_list`、`zhihu_ask`、`zhihu_knowledge_search` | 现有工具输入输出 | 通过同一 zhihu 服务的生命周期与计量；无重复 channel |
-| novel-kernel | 9个小说工具、guard、prompt、`/novel-kernel` | 小说协作及旧知乎知识库 endpoint 转发 | 不再依赖知乎凭据；缺知乎只影响兼容知乎调用 |
-| shell | `/dsh-editor-shell` → `capabilities.get` | `{assistant, completion, zhihu}` | 已选依赖缺失返回明确错误；正常未启用返回 false |
+| novel-kernel | 7个小说工具、guard、prompt | 小说协作 | 不依赖知乎凭据或 `/zhihu` |
+| shell | `/dsh-editor-shell` → `capabilities.get` | `{features: { [feature]: boolean }}` | 配置里的 feature 映射到服务名；已选服务缺失返回明确错误；未选 feature 不出现（视为 false） |
 | plugins | `/dsh-editor-plugins` | 已装清单、开关、GitHub `dsh-plugin` 搜索、静态检查与安装 | 核心插件锁定；`blocked` 拒绝安装；安装/卸载后重启 |
 
 proofread finding 位置沿用 UTF-16 下标；结果只读，不直接修改当前文稿。支持 `punctuation/sensitive/repeat/typo/habit`，人物卡检查只在 workbench 作品扫描中提供。
 
-`/novel-kernel` 的 `zhihu.knowledge.bases/upload` 和 `/manuscript` 的 `zhihu.usage` 由原 channel 所有者转发至新服务。旧、新 UI 和 Tool 共用一个计量写入者，继续写 `dsh_editor_zhihu_usage` version 1。稿件、草稿、快照、设置 namespace 和凭据引用不迁移；换回旧代码不需要数据逆迁移，但仍应保留作品与应用数据备份。
+知乎 UI 和 Tool 共用一个计量写入者，继续写 `dsh_editor_zhihu_usage` version 1。稿件、草稿、快照、设置 namespace 和凭据引用不迁移；换回旧代码不需要数据逆迁移，但仍应保留作品与应用数据备份。
 
 ## 最小插件开发范本
 

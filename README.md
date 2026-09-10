@@ -10,10 +10,16 @@ DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口�
 | `dsh-manuscript` | Web 中的可关闭稿纸抽屉、文件/FIM/查找替换与排版 | DSH workspace、sandbox 与版本化文件 API |
 | `dsh-proofread` | 独立中文文本校对，无模型或文件依赖 | 有界只读文本 RPC |
 | `dsh-zhihu` | 独立资料查询、知识库与用量；Tool 入口可选 | DSH 凭据与原计量 domain |
-| `dsh-editor-workbench` | 项目、概览/章节状态、校对、卡片、进度、上下文、导入、快照、移动与归档 | 同一 live-session workspace authority |
+| `dsh-editor-workbench` | 项目、概览/章节状态、校对、进度、上下文、导入、快照、移动与归档 | 同一 live-session workspace authority |
+| `dsh-editor-cards` | 人物卡与世界书（列表、frontmatter、引用导航、新建），Host RPC + Client 座位 | 不发布；卡片文件仍在作品目录 |
 | `dsh-editor-novel-kernel` | 小说知识、预览提案、索引直写、工具守卫、系统提示词与旧知乎接口转发 | DSH 工具与作者确认边界 |
-| `dsh-editor-shell` | 桌面唯一根界面、各写作面板、Chat 投影与编辑状态 | 不发布、不安装到日常 `web` profile |
-| `dsh-editor-plugins` | 设置里开关非核心插件，并从 GitHub `dsh-plugin` 市场搜索安装 | 不发布；核心插件锁定 |
+| `dsh-editor-shell` | 桌面唯一根界面、布局与编辑状态、Chat 投影；向插件开放侧栏座位与命令注册表 | 不发布、不安装到日常 `web` profile |
+| `dsh-editor-proofread-panel` | 作品校对面板（当前章/全稿扫描、人物卡对照、应用建议），通过 Shell 座位接入 | 不发布；只消费 workbench RPC |
+| `dsh-editor-overview-panel` | 作品概览（章节状态、字数分布、写作曲线），通过中栏 overlay 座位接入 | 不发布；只消费 workbench RPC |
+| `dsh-editor-memory-panel` | 记忆维护（查看、应用与撤销 AGENTS.md / 人物卡 / 世界书记录），通过侧栏座位接入 | 不发布；只消费 workbench RPC |
+| `dsh-editor-plugins` | 设置里开关非核心插件，并从 GitHub `dsh-plugin` 市场搜索安装 | 不发布；锁定与分类读各包 `dshEditor` 声明 |
+| `dsh-editor-workspace-kit` | 私有进程内库：access bag、`.dsh-editor/` sidecar IO、目录/条目校验、no-replace move、frontmatter | 无 Cordis 入口；随依赖它的包复制进运行时 |
+| `dsh-editor-seats` | 私有浏览器安全库：Shell 座位名、`ShellToolSeatContext`、命令注册表与快捷键匹配 | 无 Cordis 入口；插件与 Shell 构建时内联 |
 
 ## 开发启动
 
@@ -48,7 +54,7 @@ pnpm pack:desktop
 pnpm test:e2e:portable
 ```
 
-`pack:desktop` 使用 Electron Builder 在 `.pack/desktop` 生成未签名产物：Windows 下为 portable EXE 与 NSIS 安装器，macOS 下为 Apple Silicon 的 dmg 与 zip。产物内置 Node、DSH、专用 profile 模板，以及选定组合的业务包（默认 full 为六包）；首次启动会把经过整树哈希校验的运行时原子部署到应用自有缓存，之后不调用系统 Node、pnpm 或全局 dsh。Windows SmartScreen 与 macOS Gatekeeper 都可能提示未签名。
+`pack:desktop` 使用 Electron Builder 在 `.pack/desktop` 生成未签名产物：Windows 下为 portable EXE 与 NSIS 安装器，macOS 下为 Apple Silicon 的 dmg 与 zip。产物内置 Node、DSH、专用 profile 模板，以及选定组合的业务包（由 `scripts/plugin-manifest.mjs` 按 recipe 的 feature 集合与各包 `dshEditor` 声明解析，含 `dsh-editor-workspace-kit` 这类被依赖的进程内库）；首次启动会把经过整树哈希校验的运行时原子部署到应用自有缓存，之后不调用系统 Node、pnpm 或全局 dsh。Windows SmartScreen 与 macOS Gatekeeper 都可能提示未签名。
 
 公开插件的 tarball 与安装/卸载矩阵仍使用 `pnpm pack:plugins` 和 `pnpm test:e2e:matrix`。仓库脚本不会自动 commit、push、tag 或 publish；推送 `v*` tag 会触发 CI 在 Windows 与 macOS 上构建并把产物上传到对应 GitHub Release（见 [开发者指南](docs/development.md)）。
 
@@ -56,6 +62,7 @@ pnpm test:e2e:portable
 
 - [可组合插件指南](docs/plugin-composition-guide.md)：独立安装、三份桌面配置、接口与真实插件开发范本
 - [拆分实施记录](docs/plugin-modularization-progress.md)：逐阶段验收与宿主限制
+- [声明式拼装与 Shell 座位记录](docs/plugin-assembly-progress.md)：`dshEditor` 拼装、座位/注册表、垂直插件迁出与验收
 
 - [插件拆分与组合演进计划](docs/plugin-modularization-plan.md)：首批独立校对插件、可选 AI/资料能力、分阶段交付与验收
 
@@ -66,7 +73,7 @@ pnpm test:e2e:portable
 - [产品原则](docs/product-principles.md)：作者写稿、提案确认、明确不做
 - [界面与设计系统](docs/ui.md)：纸 / 墨 token、三栏布局与稿纸交互
 - [架构与边界](docs/architecture.md)：DSH 权威边界、profile、RPC 与安全约束
-- [插件架构与接口](docs/plugin-architecture.md)：双私有 Host 拓扑、RPC/Tool/slot 契约以及修改、替换和新建插件流程
+- [插件架构与接口](docs/plugin-architecture.md)：声明式拼装（`dshEditor` + feature recipe）、Shell 座位与命令注册表、RPC/Tool/slot 契约以及修改、替换和新建插件流程
 - [交互架构图站](https://klarkxy.github.io/dsh-editor/)：GitHub Pages 发布的全部交互图
 - [桌面运行时图](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html)：Electron 启动 DSH 子进程；插件住在 Host 内
 - [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)：三个公开 tarball 与桌面私有包
