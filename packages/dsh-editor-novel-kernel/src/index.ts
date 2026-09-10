@@ -8,12 +8,10 @@ import { collectScratchFiles, createScratchListTool, createScratchReadTool, crea
 import { SCRATCH_DIRECTORY } from './contracts.ts'
 
 export const name = 'dsh-editor-novel-kernel'
-export const inject = ['tools', 'systemPrompt', 'fs', 'connection', 'sandboxPolicy'] as const
+export const inject = ['tools', 'systemPrompt', 'fs', 'sandboxPolicy'] as const
 
 /** Cross-plugin metering event consumed by dsh-manuscript's zhihu usage recorder. */
 export const ZHIHU_SEARCH_EVENT = 'dsh-editor/zhihu-search'
-
-type RpcResult = { ok: true; value: unknown } | { ok: false; error: { code: string; message: string; details: Record<string, unknown> } }
 
 type HostContext = Context & {
   tools: {
@@ -29,15 +27,6 @@ type HostContext = Context & {
   }
   sandboxPolicy: {
     resolve: (request?: { session?: unknown }) => unknown
-  }
-  connection?: {
-    rpc: {
-      handle: (
-        channel: string,
-        handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult>,
-        options: { authority: string },
-      ) => () => void
-    }
   }
 }
 
@@ -88,22 +77,7 @@ export function apply(ctx: Context): void {
   host.tools.register(createScratchWriteTool({ store: scratch }))
   host.tools.register(createScratchReadTool({ store: scratch }))
   host.tools.register(createScratchListTool({ store: scratch }))
-  installLegacyZhihuRpc(ctx)
   ctx.provide('novelKernel', { ready: true })
   ctx.effect(() => host.tools.guard(editorToolGuard))
   host.systemPrompt.section({ name: 'dsh-editor:novel-kernel', order: 90, text: EDITOR_PROMPT + MEMORY_MAINTENANCE_PROMPT })
-}
-
-/** Compatibility only: the optional Zhihu service owns execution and metering. */
-function installLegacyZhihuRpc(ctx: Context): void {
-  const host = ctx as HostContext
-  if (!host.connection) return
-  ctx.effect(() => host.connection!.rpc.handle('/novel-kernel', async (endpoint, payload, signal) => {
-    if (endpoint !== 'zhihu.knowledge.bases' && endpoint !== 'zhihu.knowledge.upload') {
-      return { ok: false, error: { code: 'internal', message: `unknown endpoint ${endpoint}`, details: {} } }
-    }
-    const zhihu = ctx.get?.('zhihu') as { call: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult> } | undefined
-    if (!zhihu) return { ok: false, error: { code: 'bad-request', message: '知乎插件未启用', details: {} } }
-    return zhihu.call(endpoint, payload, signal)
-  }, { authority: 'loopback' }))
 }

@@ -59,11 +59,9 @@ describe('editor proposal boundary', () => {
     expect(editorToolGuard({ name: 'zhihu_hot_list', arguments: { limit: 10 } })).toBeUndefined()
   })
 
-  it('limits project_knowledge to 1-3 project-relative .md/.txt paths', () => {
-    expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: ['大纲/总纲.md', 'notes.txt'] } })).toBeUndefined()
-    expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: [] } })).toContain('project_knowledge')
-    expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: ['../secret.md'] } })).toContain('project_knowledge')
-    expect(editorToolGuard({ name: 'project_knowledge', arguments: { file: 'x.md' } })).toContain('project_knowledge')
+  it('rejects unregistered novel_search and project_knowledge tools', () => {
+    expect(editorToolGuard({ name: 'novel_search', arguments: { query: '伏笔' } })).toContain('only allows')
+    expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: ['大纲/总纲.md'] } })).toContain('only allows')
   })
 
   it('validates split, merge and renames proposals without writing anything', () => {
@@ -83,10 +81,6 @@ describe('editor proposal boundary', () => {
   })
 
   it('guards the new read-only and metadata tools', () => {
-    expect(editorToolGuard({ name: 'novel_search', arguments: { query: '伏笔' } })).toBeUndefined()
-    expect(editorToolGuard({ name: 'novel_search', arguments: { query: '伏笔', path: '正文' } })).toBeUndefined()
-    expect(editorToolGuard({ name: 'novel_search', arguments: { query: ' ' } })).toContain('non-empty query')
-    expect(editorToolGuard({ name: 'novel_search', arguments: { query: 'x', path: '../out' } })).toContain('project-relative')
     expect(editorToolGuard({ name: 'novel_overview', arguments: {} })).toBeUndefined()
     expect(editorToolGuard({ name: 'novel_overview', arguments: { path: '正文' } })).toContain('no arguments')
     expect(editorToolGuard({ name: 'novel_propose', arguments: { kind: 'renames', summary: 'x', renames: [{ from: '正文/1.md', to: '正文/001.md' }] } })).toBeUndefined()

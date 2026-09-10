@@ -8,7 +8,6 @@ import { applyProposal, parseProposal, prepareProposal, ProposalError } from './
 import { SearchError, searchWorkspaceText } from './rpc/search.ts'
 import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
 import { resolveDays, UsageInputError, type UsageRecorder } from './rpc/usage.ts'
-type ZhihuUsageRecorder = { read(days: number): Promise<unknown[]> }
 
 export const name = 'dsh-manuscript'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'storageDomain'] as const
@@ -49,7 +48,6 @@ export async function dispatch(
   signal: AbortSignal,
   drafts?: DraftStore,
   usage?: UsageRecorder,
-  zhihuUsage?: ZhihuUsageRecorder,
 ): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Payload) : {}
   // `usage.summary` is global data and must not require a live session; short-circuit
@@ -61,14 +59,6 @@ export async function dispatch(
     if (!usage) throw new Error('manuscript usage storage is unavailable')
     const days = resolveDays(body.days)
     return { days: await usage.read(days) }
-  }
-  // `zhihu.usage` is likewise global metering data.
-  if (endpoint === 'zhihu.usage') {
-    const zhihu = ctx.get?.('zhihu') as { usageSummary(days: unknown): Promise<{ days: unknown[] }> } | undefined
-    if (!zhihuUsage && zhihu) return zhihu.usageSummary(body.days)
-    if (!zhihuUsage) throw new Error('manuscript zhihu usage storage is unavailable')
-    const days = resolveDays(body.days)
-    return { days: await zhihuUsage.read(days) }
   }
   const host = asHost(ctx)
   const targetSessionId = str(body, 'sessionId')

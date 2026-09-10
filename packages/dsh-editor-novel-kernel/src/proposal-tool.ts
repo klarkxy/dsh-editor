@@ -1,6 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { isNovelKnowledgeArguments } from './novel-knowledge.ts'
-import { isProjectKnowledgeArguments } from './project-knowledge.ts'
 import { isScratchRelativePath } from './scratch-tool.ts'
 import {
   AUTHOR_OBSERVE_MAX_CHARS,
@@ -11,10 +10,8 @@ import {
   NOVEL_SCRATCH_LIST_TOOL_NAME,
   NOVEL_SCRATCH_READ_TOOL_NAME,
   NOVEL_SCRATCH_WRITE_TOOL_NAME,
-  NOVEL_SEARCH_TOOL_NAME,
   PROPOSAL_MARKER,
   PROPOSAL_TOOL_NAME,
-  PROJECT_KNOWLEDGE_TOOL_NAME,
   SCRATCH_MAX_FILE_CHARS,
   USER_QUESTION_TOOL_NAME,
   ZHIHU_ASK_TOOL_NAME,
@@ -176,11 +173,6 @@ export function editorToolGuard(exec: { name: string; arguments: Readonly<Record
     for (const key of Object.keys(args)) if (!expected.has(key)) return 'author_observe only accepts observation and reason.'
     return undefined
   }
-  if (exec.name === NOVEL_SEARCH_TOOL_NAME) {
-    const query = typeof args.query === 'string' ? args.query.trim() : ''
-    if (!query) return 'novel_search requires a non-empty query.'
-    return safeRelative(args.path) ? undefined : 'novel_search path must be project-relative.'
-  }
   if (exec.name === NOVEL_OVERVIEW_TOOL_NAME) {
     return Object.keys(args).length === 0 ? undefined : 'novel_overview takes no arguments.'
   }
@@ -190,9 +182,6 @@ export function editorToolGuard(exec: { name: string; arguments: Readonly<Record
     return undefined
   }
   if (exec.name === ZHIHU_HOT_LIST_TOOL_NAME) return undefined
-  if (exec.name === PROJECT_KNOWLEDGE_TOOL_NAME) {
-    return isProjectKnowledgeArguments(args) ? undefined : 'project_knowledge needs 1-3 project-relative .md/.txt paths.'
-  }
   if (exec.name === USER_QUESTION_TOOL_NAME) return userQuestionProblem(args)
   if (exec.name === NOVEL_SCRATCH_WRITE_TOOL_NAME) {
     if (Object.keys(args).length !== 2 || !isScratchRelativePath(args.path)) return 'novel_scratch_write needs a scratch-relative .md/.txt path and text.'
