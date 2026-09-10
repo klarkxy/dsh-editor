@@ -1,6 +1,6 @@
 import type { RewritePresetId } from 'dsh-manuscript/client/editor-core'
 import type { MessageKey } from './i18n/index.ts'
-import { isChapterDocumentPath } from './overview-view.ts'
+import { isChapterDocumentPath } from './chapter-status-view.ts'
 
 export const CUSTOM_INSTRUCTION_MAX = 400
 

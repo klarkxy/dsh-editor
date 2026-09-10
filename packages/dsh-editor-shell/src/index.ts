@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { SHELL_RPC_CHANNEL, type ShellFeatureConfig, type ShellCapabilityResult } from './capabilities.ts'
+import { SHELL_RPC_CHANNEL, resolveShellCapabilities, type ShellFeatureConfig, type ShellCapabilityResult } from './capabilities.ts'
 import Schema from '@deepseek-ai/schemastery'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
@@ -7,7 +7,9 @@ import { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-s
 
 export const name = 'dsh-editor-shell'
 export const inject = ['settings', 'connection'] as const
-export const Config = Schema.object({ assistant: Schema.boolean().default(true), zhihu: Schema.boolean().default(true) })
+export const Config: Schema<ShellFeatureConfig> = Schema.object({
+  features: Schema.dict(Schema.string()).default({}),
+})
 
 const WritingPreferencesSchema = Schema.object({
   completion: Schema.union(['manual', 'pause']).default('manual'),
@@ -28,12 +30,7 @@ export function apply(ctx: Context, config: ShellFeatureConfig = {}): void {
   const connection = (ctx as Context & { connection?: { rpc: { handle: (channel: string, handler: (endpoint: string) => Promise<ShellCapabilityResult>, options: { authority: 'loopback' }) => () => unknown } } }).connection
   if (connection) ctx.effect(() => connection.rpc.handle(SHELL_RPC_CHANNEL, async endpoint => {
     if (endpoint !== 'capabilities.get') return { ok: false, error: { code: 'bad-request', message: '不支持的界面操作', details: {} } }
-    const assistant = config.assistant !== false
-    const zhihu = config.zhihu !== false
-    const completion = Boolean(ctx.get('manuscriptAssist'))
-    const missing = [assistant && !completion ? 'manuscript-assist' : '', assistant && !ctx.get('novelKernel') ? 'editor-novel-kernel' : '', zhihu && !ctx.get('zhihu') ? 'zhihu' : ''].filter(Boolean)
-    if (missing.length) return { ok: false, error: { code: 'internal', message: '所选组合缺少已启用的插件', details: { missing } } }
-    return { ok: true, value: { assistant, completion: assistant && completion, zhihu } }
+    return resolveShellCapabilities(config, (name) => ctx.get(name))
   }, { authority: 'loopback' }) as () => void)
 
 }

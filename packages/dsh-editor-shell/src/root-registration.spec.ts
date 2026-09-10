@@ -13,6 +13,8 @@ describe('root registration', () => {
       children: {
         'dsh-editor.extensions': { kind: 'list', scope: 'root' },
         'dsh-editor.settings.plugins': { kind: 'list', scope: 'root' },
+        'dsh-editor.sidebar.tools': { kind: 'list', scope: 'root' },
+        'dsh-editor.center.overlays': { kind: 'list', scope: 'root' },
       },
     })
   })

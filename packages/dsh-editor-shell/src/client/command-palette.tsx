@@ -7,8 +7,8 @@
  * 设计要点:
  *   - 不与 root.ts 现有的工作区快捷键冲突:Cmd/Ctrl+K 是新增的,没有占用
  *     workspaceShortcut 的 Ctrl+,/B/J/\\/L/Alt+[/] 分支;全文搜索走
- *     Ctrl+Shift+F,由 root.ts 打开侧栏搜索面板;作品概览走 Ctrl+Shift+O;
- *     校对走 Ctrl+Shift+L；人物卡走 Ctrl+Shift+C；世界书走 Ctrl+Shift+W。
+ *     Ctrl+Shift+F,由 root.ts 打开侧栏搜索面板;作品概览走注册表命令 Ctrl+Shift+O;
+ *     校对走注册表命令 Ctrl+Shift+L；人物卡/世界书走注册表命令 Ctrl+Shift+C/W。
  *   - 关闭时不残留热键:本组件挂自己的 keydown 监听(只接受 K 切换 / Esc 关
  *     闭),卸载时移除;同时在 root.ts 的全局热键里也加入 Cmd+K 触发入口,
  *     让命令面板从外部唤起与自身切换走同一条路径。
@@ -49,6 +49,34 @@ type CommandGroup = {
   items: CommandAction[]
 }
 
+export type RegistryCommandItem = {
+  id: string
+  group: 'workspace' | 'writing' | 'view'
+  label: string
+  hint?: string
+  keywords?: string[]
+  disabled?: boolean
+  run(): void
+}
+
+export function appendRegistryCommands(groups: CommandGroup[], extras: readonly RegistryCommandItem[]): CommandGroup[] {
+  if (!extras.length) return groups
+  return groups.map((group) => {
+    const added = extras
+      .filter((item) => item.group === group.id)
+      .map((item) => ({
+        id: item.id,
+        label: item.label,
+        hint: item.hint,
+        keywords: item.keywords,
+        icon: e(RegistryCommandIcon, null),
+        disabled: item.disabled,
+        run: () => item.run(),
+      }))
+    return added.length ? { ...group, items: [...group.items, ...added] } : group
+  })
+}
+
 export type CommandPaletteProps = {
   open: boolean
   onOpenChange(next: boolean): void
@@ -64,9 +92,7 @@ export type CommandPaletteProps = {
   onToggleFocus(): void
   onOpenDocument(path: string): void
   onOpenSearch(): void
-  onOpenOverview(): void
-  onOpenProofread(scope: 'document' | 'manuscript'): void
-  onOpenCards(kind: 'character' | 'worldbook'): void
+  registryCommands?: readonly RegistryCommandItem[]
   onExport(): void
   onImport(): void
   onOpenArchives(): void
@@ -142,27 +168,12 @@ function ImportIcon() {
     e('path', { d: 'M5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18.5v-2' }),
   )
 }
-function OverviewIcon() {
+/* 插件通过 dshEditorCommands 注册的命令统一用"扩展"图标，不预设它是哪种业务。 */
+function RegistryCommandIcon() {
   return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M4 18V6' }),
-    e('path', { d: 'M8 18v-6' }),
-    e('path', { d: 'M12 18V8' }),
-    e('path', { d: 'M16 18v-4' }),
-    e('path', { d: 'M20 18V7' }),
-  )
-}
-function ProofreadIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M5 6.5h14' }),
-    e('path', { d: 'M5 12h8' }),
-    e('path', { d: 'M5 17.5h6' }),
-    e('path', { d: 'm14.5 16 2 2 4-4.5' }),
-  )
-}
-function CardsIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('rect', { x: '5', y: '4.5', width: '11', height: '14', rx: '1.2' }),
-    e('path', { d: 'M16 7.5h2.5v12H8.5' }),
+    e('rect', { x: '4.5', y: '4.5', width: '15', height: '15', rx: '2' }),
+    e('path', { d: 'M12 8.5v7' }),
+    e('path', { d: 'M8.5 12h7' }),
   )
 }
 function ArchiveIcon() {
@@ -257,51 +268,6 @@ export function CommandPalette(props: CommandPaletteProps) {
         icon: e(SearchIcon, null),
         disabled: !props.hasWorkspace,
         run: () => props.onOpenSearch(),
-      },
-      {
-        id: 'cmd.overview',
-        label: t('command.overview'),
-        hint: t('command.overviewHint'),
-        keywords: ['overview', t('command.kw.overview'), t('command.kw.chars'), t('command.kw.status'), t('command.kw.curve')],
-        icon: e(OverviewIcon, null),
-        disabled: !props.hasWorkspace,
-        run: () => props.onOpenOverview(),
-      },
-      {
-        id: 'cmd.proofread-document',
-        label: t('command.proofreadDoc'),
-        hint: t('command.proofreadDocHint'),
-        keywords: ['proofread', t('command.kw.proofread'), t('command.kw.punctuation'), t('command.kw.typo'), t('command.kw.sensitive')],
-        icon: e(ProofreadIcon, null),
-        disabled: !props.hasWorkspace || !props.activePath,
-        run: () => props.onOpenProofread('document'),
-      },
-      {
-        id: 'cmd.proofread-manuscript',
-        label: t('command.proofreadBook'),
-        hint: t('command.proofreadBookHint'),
-        keywords: ['proofread', t('command.kw.proofread'), t('command.book'), '正文'],
-        icon: e(ProofreadIcon, null),
-        disabled: !props.hasWorkspace,
-        run: () => props.onOpenProofread('manuscript'),
-      },
-      {
-        id: 'cmd.cards-character',
-        label: t('command.cards'),
-        hint: t('command.cardsHint'),
-        keywords: ['character', t('command.kw.people'), '人物卡', t('command.role')],
-        icon: e(CardsIcon, null),
-        disabled: !props.hasWorkspace,
-        run: () => props.onOpenCards('character'),
-      },
-      {
-        id: 'cmd.cards-worldbook',
-        label: t('command.worldbook'),
-        hint: t('command.worldbookHint'),
-        keywords: ['worldbook', '世界书', t('cards.setting'), t('command.trigger')],
-        icon: e(CardsIcon, null),
-        disabled: !props.hasWorkspace,
-        run: () => props.onOpenCards('worldbook'),
       },
       {
         id: 'cmd.toggle-typewriter',
@@ -423,9 +389,12 @@ export function CommandPalette(props: CommandPaletteProps) {
       }
     : null
 
-  const groups: CommandGroup[] = fileGroup
-    ? [workspaceGroup, writingGroup, viewGroup, fileGroup]
-    : [workspaceGroup, writingGroup, viewGroup]
+  const groups: CommandGroup[] = appendRegistryCommands(
+    fileGroup
+      ? [workspaceGroup, writingGroup, viewGroup, fileGroup]
+      : [workspaceGroup, writingGroup, viewGroup],
+    props.registryCommands ?? [],
+  )
 
   /* 关闭时彻底卸载,避免列表里残留旧文件路径。每次重新打开时 reset 到 ''。 */
   const [search, setSearch] = useState('')

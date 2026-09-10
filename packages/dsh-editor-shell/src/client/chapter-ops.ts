@@ -1,6 +1,6 @@
 import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
-import { isChapterDocumentPath } from '../overview-view.ts'
+import { isChapterDocumentPath } from '../chapter-status-view.ts'
 import {
   anchorOccurrences,
   basenameOf,

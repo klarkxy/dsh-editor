@@ -321,7 +321,7 @@ export function storedPanelOpen(key: string, fallback: boolean): boolean {
   }
 }
 
-export type WorkspaceShortcutAction = 'settings' | 'toggle-sidebar' | 'toggle-assistant' | 'toggle-focus' | 'focus-assistant' | 'previous-chapter' | 'next-chapter' | 'search' | 'overview' | 'proofread' | 'cards-character' | 'cards-worldbook' | 'toggle-typewriter' | 'toggle-focus-paragraph'
+export type WorkspaceShortcutAction = 'settings' | 'toggle-sidebar' | 'toggle-assistant' | 'toggle-focus' | 'focus-assistant' | 'previous-chapter' | 'next-chapter' | 'search' | 'toggle-typewriter' | 'toggle-focus-paragraph'
 
 type ShortcutInput = {
   key: string
@@ -336,10 +336,6 @@ export function workspaceShortcut(input: ShortcutInput): WorkspaceShortcutAction
   const mod = input.ctrlKey || input.metaKey
   const key = input.key.toLowerCase()
   if (mod && input.shiftKey && !input.altKey && key === 'f') return 'search'
-  if (mod && input.shiftKey && !input.altKey && key === 'o') return 'overview'
-  if (mod && input.shiftKey && !input.altKey && key === 'l') return 'proofread'
-  if (mod && input.shiftKey && !input.altKey && key === 'c') return 'cards-character'
-  if (mod && input.shiftKey && !input.altKey && key === 'w') return 'cards-worldbook'
   if (mod && !input.altKey && !input.shiftKey) {
     if (key === ',') return 'settings'
     if (key === 'b') return 'toggle-sidebar'

@@ -2,7 +2,7 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig([
   {
-    entry: { index: 'src/index.ts' },
+    entry: { index: 'src/index.ts', seats: 'src/seats.ts' },
     format: ['esm'],
     dts: true,
     clean: true,
@@ -11,6 +11,7 @@ export default defineConfig([
     target: 'node22',
     sourcemap: true,
     hash: false,
+    deps: { alwaysBundle: ['dsh-editor-seats'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
   },
   {
@@ -26,8 +27,10 @@ export default defineConfig([
     deps: {
       neverBundle: ['react', 'react-dom', 'react/jsx-runtime'],
       alwaysBundle: [
+        'dsh-editor-seats',
         'dsh-editor-workbench/contracts',
         'dsh-editor-novel-kernel/contracts',
+        'dsh-editor-cards/contracts',
         'dsh-manuscript/client/editor-core',
         // cmdk + @radix-ui/react-dialog 没有自己的 CSS,tsdown 默认会把
         // package.json 里的 production dep 当 external,所以必须显式列进

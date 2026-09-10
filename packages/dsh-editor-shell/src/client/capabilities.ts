@@ -19,10 +19,16 @@ export function capabilityStateFromResult(result: RpcResult<unknown>): ShellCapa
   const value = result.value
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { kind: 'error', message: t('capabilities.invalid') }
   const caps = value as Record<string, unknown>
-  if (typeof caps.assistant !== 'boolean' || typeof caps.completion !== 'boolean' || typeof caps.zhihu !== 'boolean') {
+  const features = caps.features
+  if (!features || typeof features !== 'object' || Array.isArray(features)) {
     return { kind: 'error', message: t('capabilities.invalid') }
   }
-  return { kind: 'ready', value: { assistant: caps.assistant, completion: caps.completion, zhihu: caps.zhihu } }
+  const normalized: Record<string, boolean> = {}
+  for (const [key, flag] of Object.entries(features)) {
+    if (typeof flag !== 'boolean') return { kind: 'error', message: t('capabilities.invalid') }
+    normalized[key] = flag
+  }
+  return { kind: 'ready', value: { features: normalized } }
 }
 
 /* cordis Context 的事件面：连接代际重建时运行时会广播 'connection/reset'。

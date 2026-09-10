@@ -18,6 +18,7 @@ import { decodeLocalePreference } from './client/settings-general.tsx'
 import { bindLocalePreference } from './i18n/index.ts'
 import { type ShellContext } from './client/shared.ts'
 import { registerShellRoot } from './client/root.ts'
+import { COMMANDS_SERVICE, MESSAGE_CARDS_SERVICE, createCommandRegistry, createMessageCardRegistry } from './seats.ts'
 
 export const name = 'dsh-editor-shell-client'
 export const inject = ['slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote'] as const
@@ -96,11 +97,16 @@ export function apply(ctx: Context): void {
     namespace: PROGRESS_SETTINGS_NAMESPACE,
     decode: decodeWritingProgress,
   })
+  const commands = createCommandRegistry()
+  const messageCards = createMessageCardRegistry()
+  ctx.provide(COMMANDS_SERVICE, commands)
+  ctx.provide(MESSAGE_CARDS_SERVICE, messageCards)
   registerShellRoot(client, {
     writingScope,
     migrateWriting: migrateWritingPreferences,
     progressScope,
     hostThemeSync,
+    commands,
     registerRoot: (target: ShellContext, render: (props: unknown) => ReactNode) => registerRoot(target, render),
   })
 }

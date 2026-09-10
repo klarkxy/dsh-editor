@@ -1,10 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { RootOwnerProps } from '@deepseek-ai/dsh-client-runtime/client'
 import { t } from './i18n/index.ts'
+import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from './seats.ts'
 
 export const ROOT_ID = 'dsh-editor-shell-root'
 export const EXTENSIONS_SLOT = 'dsh-editor.extensions'
 export const PLUGINS_SETTINGS_SLOT = 'dsh-editor.settings.plugins'
+export { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT }
 
 export type RootSlots = { register: (spec: {
   name: 'root'
@@ -27,6 +29,8 @@ export function registerRoot(ctx: Context & { slots: RootSlots }, render: (props
     children: {
       [EXTENSIONS_SLOT]: { kind: 'list', scope: 'root' },
       [PLUGINS_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
+      [SIDEBAR_TOOLS_SLOT]: { kind: 'list', scope: 'root' },
+      [CENTER_OVERLAYS_SLOT]: { kind: 'list', scope: 'root' },
     },
   }, render)
 }

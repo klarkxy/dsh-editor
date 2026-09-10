@@ -40,9 +40,10 @@ describe('DSH snapshot adapter', () => {
   it('surfaces novel_memory_update markers as memory-update rows for the review card', () => {
     const marker = JSON.stringify({ marker: 'dsh-editor.memory-update', version: 1, id: 'mu-1', path: '项目规则.md', summary: '记录结局走向', status: 'pending', createdAt: '2026-09-09T08:00:00.000Z' })
     const row = toolResultRow({ kind: 'tool-result', seq: 13, callId: 'mu', call: { name: 'novel_memory_update', argsRaw: '{}' }, content: [{ type: 'text', text: marker }], isError: false } as never)
-    expect(row).toMatchObject({ role: 'tool', text: '记录结局走向', detail: '项目记忆更新', memoryUpdate: { id: 'mu-1', path: '项目规则.md', status: 'pending' } })
+    expect(row).toMatchObject({ role: 'tool', text: '记录结局走向', detail: '项目记忆更新', toolName: 'novel_memory_update', result: { id: 'mu-1', path: '项目规则.md', status: 'pending' } })
     const otherTool = toolResultRow({ kind: 'tool-result', seq: 14, callId: 'w', call: { name: 'write', argsRaw: '{}' }, content: [{ type: 'text', text: marker }], isError: false } as never)
-    expect(otherTool.memoryUpdate).toBeUndefined()
+    expect(otherTool.toolName).toBe('write')
+    expect(otherTool.result).toBeUndefined()
   })
   it('renders published prose while hiding unknown runtime details', () => {
     const snapshot = { nodes: [
@@ -79,8 +80,8 @@ describe('DSH snapshot adapter', () => {
       { kind: 'tool-result', seq: 3, callId: 'read-2', call: { name: 'read', argsRaw: '{}' }, content: [{ type: 'text', text: '读取失败原因' }], isError: true },
     ] }
     expect(chatRows(snapshot as never)).toEqual([
-      { id: 'tool-result:2', role: 'tool', text: '已阅读作品资料', detail: 'read', content: '文件正文' },
-      { id: 'tool-result:3', role: 'tool', text: '这项操作没有执行', detail: 'read', content: '读取失败原因', error: true, reason: '读取失败原因' },
+      { id: 'tool-result:2', role: 'tool', text: '已阅读作品资料', detail: 'read', content: '文件正文', toolName: 'read' },
+      { id: 'tool-result:3', role: 'tool', text: '这项操作没有执行', detail: 'read', content: '读取失败原因', error: true, reason: '读取失败原因', toolName: 'read' },
     ])
     const guarded = toolResultRow({
       kind: 'tool-result', seq: 5, callId: 'ask', call: { name: 'ask_user_question', argsRaw: '{}' },
@@ -101,7 +102,7 @@ describe('DSH snapshot adapter', () => {
       { kind: 'turn-error', seq: 6 },
     ] }
     expect(chatRows(snapshot as never)).toEqual([
-      { id: 'tool-result:3', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'internal' },
+      { id: 'tool-result:3', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'internal', toolName: 'read' },
       { id: 'assistant:4', role: 'assistant', text: '已通过 novel_propose 更新 .dsh-editor/作品索引.md', detail: undefined },
       { id: 'turn-error:6', role: 'notice', text: '写作助手未能完成这次请求，请重试。' },
     ])
@@ -117,11 +118,11 @@ describe('DSH snapshot adapter', () => {
       { kind: 'step-finished', seq: 10 },
     ] }
     expect(chatRows(authorSnapshot as never)).toEqual([
-      { id: 'tool-result:3', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'internal' },
+      { id: 'tool-result:3', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'internal', toolName: 'read' },
       { id: 'assistant:4', role: 'assistant', text: '已通过 novel_propose 更新 .dsh-editor/作品索引.md', detail: undefined },
       { id: 'turn-error:6', role: 'notice', text: '写作助手未能完成这次请求，请重试。' },
       { id: 'user:7', role: 'user', text: '讨论下一章', projectContextReceipt: undefined },
-      { id: 'tool-result:9', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'raw' },
+      { id: 'tool-result:9', role: 'tool', text: '已阅读作品资料', detail: 'read', content: 'raw', toolName: 'read' },
     ])
     expect(internalIndexTurnActive(authorSnapshot as never)).toBe(false)
     expect(chatRows({ nodes: [

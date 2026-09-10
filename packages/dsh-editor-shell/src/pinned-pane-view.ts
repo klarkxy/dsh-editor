@@ -1,6 +1,30 @@
 import type { CharacterCardFields, WorldbookCardFields } from 'dsh-editor-workbench/contracts'
-import { formatListInput, isCharacterCardPath, isWorldbookCardPath, worldbookCategoryLabel } from './cards-view.ts'
-import type { MessageKey } from './i18n/index.ts'
+import { t, type MessageKey } from './i18n/index.ts'
+
+const CATEGORY_LABELS: Record<string, MessageKey> = {
+  地点: 'cards.category.place',
+  势力: 'cards.category.faction',
+  物品: 'cards.category.item',
+  规则: 'cards.category.rule',
+  历史: 'cards.category.history',
+  其他: 'cards.category.other',
+}
+
+export function isCharacterCardPath(path: string): boolean {
+  return /^人物卡\/.+\.md$/i.test(path)
+}
+
+export function isWorldbookCardPath(path: string): boolean {
+  return /^世界书\/.+\.md$/i.test(path)
+}
+
+export function formatListInput(values: readonly string[] | undefined): string {
+  return (values ?? []).join('，')
+}
+
+export function worldbookCategoryLabel(category: string): string {
+  return category in CATEGORY_LABELS ? t(CATEGORY_LABELS[category]!) : category
+}
 
 export type PinnedPaneKind = 'card' | 'worldbook' | 'chapter' | 'text'
 

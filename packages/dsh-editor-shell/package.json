@@ -15,6 +15,11 @@
     "./client": {
       "default": "./lib/client.js"
     },
+    "./seats": {
+      "types": "./lib/seats.d.ts",
+      "import": "./lib/seats.js",
+      "default": "./lib/seats.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -35,6 +40,19 @@
         "@deepseek-ai/dsh-client-ui-settings"
       ]
     }
+  },
+  "dshEditor": {
+    "role": "core",
+    "visibility": "desktop",
+    "wrapClient": true,
+    "entries": [
+      {
+        "id": "editor-shell",
+        "title": "写作界面",
+        "description": "三栏稿纸与设置",
+        "locked": true
+      }
+    ]
   },
   "scripts": {
     "build": "tsdown && node ../../scripts/wrap-client.mjs dsh-editor-shell",
@@ -66,8 +84,10 @@
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
     "dsh-manuscript": "workspace:*",
+    "dsh-editor-seats": "workspace:*",
     "dsh-editor-workbench": "workspace:*",
-    "dsh-editor-novel-kernel": "workspace:*"
+    "dsh-editor-novel-kernel": "workspace:*",
+    "dsh-editor-cards": "workspace:*"
   },
   "private": true
 }

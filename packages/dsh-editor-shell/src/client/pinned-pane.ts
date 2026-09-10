@@ -1,11 +1,11 @@
 import { createElement as e, useEffect, useRef, useState } from 'react'
 import {
-  WORKBENCH_RPC_CHANNEL,
   stripChapterFrontmatter,
   type CardsListResponse,
   type CharacterCard,
   type WorldbookCard,
 } from 'dsh-editor-workbench/contracts'
+import { CARDS_RPC_CHANNEL } from 'dsh-editor-cards/contracts'
 import {
   characterPinnedFields,
   pinnedPaneKind,
@@ -65,7 +65,7 @@ export function PinnedPane(props: {
       }
       setText(read.value.text)
       if (kind === 'card' || kind === 'worldbook') {
-        const listed = await safeRpcCall<CardsListResponse>(() => props.ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'cards.list', {
+        const listed = await safeRpcCall<CardsListResponse>(() => props.ctx.connection.rpc.call(CARDS_RPC_CHANNEL, 'cards.list', {
           sessionId: props.sessionId,
           kind: kind === 'card' ? 'character' : 'worldbook',
         }))

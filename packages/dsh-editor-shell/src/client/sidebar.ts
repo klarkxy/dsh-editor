@@ -1,6 +1,6 @@
 import { createElement as e, Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { ChapterStatus } from 'dsh-editor-workbench/contracts'
-import { chapterStatusGlyph, chapterStatusLabel, isChapterDocumentPath } from '../overview-view.ts'
+import { chapterStatusGlyph, chapterStatusLabel, isChapterDocumentPath } from '../chapter-status-view.ts'
 import { canPinPath } from '../pinned-pane-view.ts'
 import { errorMessage, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
 import { t } from '../i18n/index.ts'

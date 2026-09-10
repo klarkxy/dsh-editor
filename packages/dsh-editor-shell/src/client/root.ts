@@ -15,7 +15,6 @@ import type { SessionId, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-cli
 import {
   WORKBENCH_RPC_CHANNEL,
   type ArchiveListResponse,
-  type ChapterStatus,
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
   type ProjectOverview,
@@ -23,7 +22,8 @@ import {
 } from 'dsh-editor-workbench/contracts'
 import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
 import { sortChapterPaths } from '../project-files.ts'
-import { EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, registerRoot } from '../root-registration.ts'
+import { CENTER_OVERLAYS_SLOT, EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, registerRoot } from '../root-registration.ts'
+import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry, type ShellProposalCardProps, type ShellRange, type ShellToolSeatContext } from '../seats.ts'
 import { writingPreferences, writingTypography, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
 import {
@@ -33,7 +33,7 @@ import {
   type WritingProgress,
   type WritingProgressScope,
 } from '../writing-progress.ts'
-import { applyChapterStatus, buildChapterStatusMap } from '../overview-view.ts'
+import { buildChapterStatusMap } from '../chapter-status-view.ts'
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
 import { redesignedStyles } from '../styles.ts'
 import { errorMessage, isStaleFailure, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
@@ -45,20 +45,15 @@ import { Tree, FileContextMenu } from './sidebar.ts'
 import { ChapterOpsLayer, chapterMenuModel, requestMergeChapter, requestSplitChapter, shouldOpenAfterChapterApply, snapshotFromHandle, type ChapterOpsRequest, type EditorSnapshotHandle } from './chapter-ops.ts'
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
 import { Editor } from './editor.ts'
-import { Chat } from './chat.ts'
+import { Chat, ProposalCard } from './chat.ts'
+import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { AboutUpdateDialog } from './about-dialog.tsx'
 import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.ts'
-import { OverviewPanel } from './overview-panel.ts'
-import { ProofreadPanel, type ProofreadRequest } from './proofread-panel.ts'
-import { CardsDetail, CardsPanel, type CardsCatalog } from './cards-panel.ts'
-import { MemoryPanel } from './memory-panel.ts'
 import { PinnedPane } from './pinned-pane.ts'
 import { canPinPath, pinnedLayoutColumns, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
-import { isCharacterCardPath, isWorldbookCardPath } from '../cards-view.ts'
-import type { ProofreadFinding } from '../proofread-view.ts'
 import { collectChapters, downloadExport, ExportPreviewDialog } from './export-dialog.ts'
 import { prepareExport, type ChapterExport, type ExportFormat } from '../export.ts'
 import { idleImportFlow, importReview, recoverImport, type ImportFlow, type ImportProbeView } from './import-flow.ts'
@@ -220,7 +215,16 @@ function AboutTrigger(props: { onOpen(): void }): ReactNode {
   )
 }
 
-function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync, extensionsDock, pluginsSettings }: {
+function BoundProposalCard(props: ShellProposalCardProps & { ctx: ShellContext }) {
+  return e(ProposalCard, {
+    ctx: props.ctx,
+    sessionId: props.sessionId,
+    proposal: props.proposal,
+    onApplied: props.onApplied,
+  })
+}
+
+function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync, extensionsDock, pluginsSettings, commands, renderSlot }: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
@@ -228,13 +232,15 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   hostThemeSync?: HostThemeSync
   extensionsDock?: ReactNode
   pluginsSettings?: ReactNode
+  commands: ShellCommandRegistry
+  renderSlot?: (key: string, owner?: object) => ReactNode
 }) {
-  useLocale()
+  const locale = useLocale()
   /* 可选 AI 能力：加载完成前不挂载 Chat / 自动索引;失败是显式错误态(可重试)。 */
   const shellCapabilities = useShellCapabilities(ctx)
   const capabilityState = shellCapabilities.state
   const capabilityReady = capabilityState.kind === 'ready'
-  const assistantEnabled = capabilityState.kind === 'ready' && capabilityState.value.assistant
+  const assistantEnabled = capabilityState.kind === 'ready' && featureEnabled(capabilityState.value, 'assistant')
   const sessions = useObservable(ctx.sessions.list)
   const workspaces = useObservable(ctx.workspaces.list)
   const session = currentSession(ctx)
@@ -307,9 +313,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const [chatFocusNonce, setChatFocusNonce] = useState(0)
   const [overview, setOverview] = useState<ProjectOverview | null | undefined>(null)
   const [overviewRevision, setOverviewRevision] = useState(0)
-  const [overviewOpen, setOverviewOpen] = useState(false)
-  const [overviewNote, setOverviewNote] = useState('')
-  const [statusBusyPath, setStatusBusyPath] = useState<string | null>(null)
   const [editorDirty, setEditorDirty] = useState(false)
   const [fileMenu, setFileMenu] = useState<FileMenuState>(null)
   const [chapterOps, setChapterOps] = useState<ChapterOpsRequest | null>(null)
@@ -327,13 +330,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchSubmitTick, setSearchSubmitTick] = useState(0)
-  const [proofreadOpen, setProofreadOpen] = useState(false)
-  const [proofreadRequest, setProofreadRequest] = useState<ProofreadRequest | null>(null)
-  const [cardsOpen, setCardsOpen] = useState(false)
-  const [cardsKind, setCardsKind] = useState<'character' | 'worldbook'>('character')
-  const [cardsSelectedPath, setCardsSelectedPath] = useState<string | null>(null)
-  const [cardsCatalog, setCardsCatalog] = useState<CardsCatalog>({ characters: [], worldbook: [] })
-  const [memoryOpen, setMemoryOpen] = useState(false)
+  const [highlightPath, setHighlightPath] = useState<string | null>(null)
   const [rulesBusy, setRulesBusy] = useState(false)
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -378,6 +375,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const progressRecord = useRef(createDebouncedInvoker(PROGRESS_RECORD_DEBOUNCE_MS)).current
   const fileSessionRef = useRef(fileSession)
   fileSessionRef.current = fileSession
+  const seatContextRef = useRef<ShellToolSeatContext | null>(null)
   useEffect(() => () => progressRecord.cancel(), [progressRecord])
   const workspaceOpenGate = useRef(new LatestRequestGate()).current
   const pendingWorkspaceOpen = useRef<PendingWorkspaceOpen | null>(null)
@@ -410,10 +408,9 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   useEffect(() => {
     const hotkey = (event: globalThis.KeyboardEvent) => {
       if (document.querySelector('[aria-modal="true"]')) return
-      const mod = event.ctrlKey || event.metaKey
-      const key = event.key.toLowerCase()
       const action = workspaceShortcut(event)
-      if (!action || event.repeat) return
+      if (action) {
+      if (event.repeat) return
       if (action !== 'settings' && !session) return
       event.preventDefault()
       if (action === 'settings') { void openSettings(); return }
@@ -441,12 +438,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         setSearchOpen(true)
         return
       }
-      if (action === 'overview') {
-        if (workspaceOpen.kind !== 'ready') return
-        setFocusMode(false)
-        setOverviewOpen(true)
-        return
-      }
       if (action === 'toggle-typewriter') {
         void writingScope.set('typewriter', !writing.typewriter)
         return
@@ -455,35 +446,27 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         void writingScope.set('focusParagraph', !writing.focusParagraph)
         return
       }
-      if (action === 'proofread') {
-        if (workspaceOpen.kind !== 'ready') return
-        setFocusMode(false)
-        setSidebarOpen(true)
-        setProofreadOpen(true)
-        setProofreadRequest({ scope: path ? 'document' : 'manuscript', nonce: Date.now() })
-        return
-      }
-      if (action === 'cards-character' || action === 'cards-worldbook') {
-        if (workspaceOpen.kind !== 'ready') return
-        const kind = action === 'cards-character' ? 'character' : 'worldbook'
-        setFocusMode(false)
-        setSidebarOpen(true)
-        setCardsOpen(true)
-        setCardsKind(kind)
-        setCardsSelectedPath((current) => {
-          if (!current) return current
-          return (kind === 'character' ? isCharacterCardPath(current) : isWorldbookCardPath(current)) ? current : null
-        })
-        return
-      }
       if (editorDirty) return
       const buttons = document.querySelectorAll<HTMLButtonElement>('.chapter-navigation button')
       const button = action === 'previous-chapter' ? buttons[0] : buttons[1]
       if (button && !button.disabled) button.click()
+        return
+      }
+      if (event.repeat) return
+      const command = matchRegistryShortcut(commands.list(), event)
+      if (!command) return
+      if (command.when === 'workspace' && (!session || workspaceOpen.kind !== 'ready')) return
+      event.preventDefault()
+      setFocusMode(false)
+      setPaletteOpen(false)
+      const seat = seatContextRef.current
+      if (!seat) return
+      if (command.when === 'workspace') seat.revealSidebar()
+      command.run(seat)
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [assistantEnabled, editorDirty, focusMode, path, session?.sessionId, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
+  }, [assistantEnabled, commands, editorDirty, focusMode, path, session?.sessionId, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
   useEffect(() => {
     if (!chatFocusNonce || !assistantOpen || focusMode || !assistantEnabled) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
@@ -495,8 +478,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     setClipboard(null); setDeleteTarget(null); setRenameTarget(null)
     setOverview(null); setWorkspaceMenuOpen(false)
     setHistoryOpen(false); setSnapshots(null); setRollbackTarget(null)
-    setSearchOpen(false); setProofreadOpen(false); setProofreadRequest(null); setCardsOpen(false); setCardsSelectedPath(null); setCardsCatalog({ characters: [], worldbook: [] }); setReveal(null); setExportChapters(null); setExportNote('')
-    setOverviewOpen(false); setOverviewNote(''); setStatusBusyPath(null); progressRecord.cancel()
+    setSearchOpen(false); setHighlightPath(null); setReveal(null); setExportChapters(null); setExportNote('')
+    progressRecord.cancel()
     setArchiveOpen(false); setArchives([]); setArchiveNote('')
   }, [openWorkspaceId])
   useEffect(() => {
@@ -558,29 +541,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       return
     }
     setWorkbenchNote('')
-    setOverviewOpen(false)
-    setCardsSelectedPath(null)
     setPath(nextPath)
     setReveal(hit ? toRevealRequest(hit) : null)
-  }
-  const changeChapterStatus = async (chapterPath: string, status: ChapterStatus) => {
-    if (!fileSession || !overview) return
-    const previous = overview
-    setOverview(applyChapterStatus(overview, chapterPath, status))
-    setStatusBusyPath(chapterPath)
-    setOverviewNote('')
-    const result = await safeRpcCall<{ path: string; status: ChapterStatus }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'chapter.statusSet', {
-      sessionId: fileSession.sessionId,
-      path: chapterPath,
-      status,
-    }))
-    setStatusBusyPath(null)
-    if (!result.ok) {
-      setOverview(previous)
-      setOverviewNote(errorMessage(result))
-      return
-    }
-    setOverviewRevision((value) => value + 1)
   }
   const recordSavedProgress = async () => {
     const session = fileSessionRef.current
@@ -1381,49 +1343,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     setSearchOpen(true)
     setPaletteOpen(false)
   }
-  const openOverviewPanel = () => {
-    if (!fileSession) return
-    setFocusMode(false)
-    setOverviewOpen(true)
-    setCardsSelectedPath(null)
-    setPaletteOpen(false)
-  }
-  const openProofreadPanel = (scope: 'document' | 'manuscript' = 'document') => {
-    if (!fileSession) return
-    if (scope === 'document' && !path) {
-      setWorkbenchNote(t('note.openDocBeforeProofread'))
-      return
-    }
-    setFocusMode(false)
-    setSidebarOpen(true)
-    setProofreadOpen(true)
-    setProofreadRequest({ scope, nonce: Date.now() })
-    setPaletteOpen(false)
-  }
-  const openCardsPanel = (kind: 'character' | 'worldbook') => {
-    if (!fileSession) return
-    setFocusMode(false)
-    setSidebarOpen(true)
-    setCardsOpen(true)
-    setCardsKind(kind)
-    setCardsSelectedPath((path) => {
-      if (!path) return path
-      return (kind === 'character' ? isCharacterCardPath(path) : isWorldbookCardPath(path)) ? path : null
-    })
-    setPaletteOpen(false)
-  }
-  const toggleCardsPanel = (kind: 'character' | 'worldbook') => {
-    if (cardsOpen && cardsKind === kind) {
-      setCardsOpen(false)
-      setCardsSelectedPath(null)
-      return
-    }
-    openCardsPanel(kind)
-  }
-  const selectCard = (nextPath: string | null) => {
-    setCardsSelectedPath(nextPath)
-    if (nextPath) setOverviewOpen(false)
-  }
   /* 项目规则入口：只在作者点击时调用 rules.open（缺失时由 Host 创建模板），
      打开返回的真实路径；脏编辑器守卫沿用 openDocument 的 saveFirst 提示。 */
   const openRules = async () => {
@@ -1448,6 +1367,61 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     openDocument(navigation.openPath)
     if (navigation.refreshContent) setContentRevision((old) => old + 1)
   }
+  const openSeatDocument = (target: string, range?: ShellRange) => {
+    openDocument(target, range ? {
+      path: target,
+      line: range.line ?? 1,
+      column: range.column ?? 1,
+      start: range.start,
+      end: range.end,
+      excerpt: range.excerpt ?? '',
+      version: range.version ?? '',
+    } : undefined)
+  }
+  const BoundSeatProposalCard = useMemo(() => {
+    function Card(props: ShellProposalCardProps) {
+      return e(BoundProposalCard, { ...props, ctx })
+    }
+    return Card
+  }, [ctx])
+  const [commandTick, setCommandTick] = useState(0)
+  useEffect(() => commands.subscribe(() => setCommandTick((value) => value + 1)), [commands])
+  const seatContext: ShellToolSeatContext = {
+    sessionId: fileSession?.sessionId ?? '',
+    activePath: path,
+    editorDirty,
+    treeRevision,
+    contentRevision,
+    locale,
+    openDocument: openSeatDocument,
+    onApplied: refreshAppliedPath,
+    note: setWorkbenchNote,
+    revealSidebar: () => {
+      setFocusMode(false)
+      setSidebarOpen(true)
+    },
+    refresh: (scope) => {
+      if (scope === 'tree') setTreeRevision((value) => value + 1)
+      else if (scope === 'content') setContentRevision((value) => value + 1)
+      else setOverviewRevision((value) => value + 1)
+    },
+    expandTreePath: (target) => setTreeExpansionPath(target),
+    highlightTreePath: setHighlightPath,
+    pinnedPath,
+    togglePin: (target) => setPinnedPath((current) => current === target ? null : target),
+    ProposalCard: BoundSeatProposalCard,
+  }
+  seatContextRef.current = seatContext
+  const registryCommands = useMemo(
+    () => registryPaletteItems(commands.list(), locale, seatContext, Boolean(fileSession)).map((item) => ({
+      ...item,
+      run: () => {
+        setFocusMode(false)
+        item.run()
+      },
+    })),
+    [commandTick, commands, fileSession, locale, seatContext],
+  )
   /* 自动写入落盘后的轻量刷新：只刷新树与当前内容，不做编辑器导航。 */
   const refreshWrittenPath = (writtenPath: string) => {
     setTreeRevision((old) => old + 1)
@@ -1796,9 +1770,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     onToggleFocus: () => setFocusMode((value) => !value),
     onOpenDocument: (target: string) => openDocument(target),
     onOpenSearch: () => openSearchPanel(),
-    onOpenOverview: () => openOverviewPanel(),
-    onOpenProofread: (scope: 'document' | 'manuscript') => openProofreadPanel(scope),
-    onOpenCards: (kind: 'character' | 'worldbook') => openCardsPanel(kind),
+    registryCommands,
     onExport: () => { void exportNovel() },
     onImport: () => { void startImportProject() },
     onOpenArchives: () => openArchivePanel(),
@@ -1939,7 +1911,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         onCancel: () => { if (!importTitle.busy) setImportTitle(null) },
         onConfirm: (title: string) => void submitImportTitle(title),
       }) : null,
-      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? capabilityState.value.assistant : undefined, pluginsTab: pluginsSettings, onClose: () => setSettingsOpen(false) }) : null,
+      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, onClose: () => setSettingsOpen(false) }) : null,
     )
   }
 
@@ -1957,7 +1929,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   })
 
   return e('main', {
-    className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarVisible ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${pinnedVisible ? ' pinned-open' : ''}${overviewOpen ? ' overview-open' : ''}${cardsOpen && cardsSelectedPath ? ' cards-open' : ''}`,
+    className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarVisible ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${pinnedVisible ? ' pinned-open' : ''}`,
     style: { minWidth: 0, gridTemplateColumns: layoutColumns },
   },
     e('style', null, redesignedStyles),
@@ -2074,50 +2046,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
           if (navigation.refreshContent) setContentRevision((old) => old + 1)
         },
       }) : null,
-      proofreadOpen ? e(ProofreadPanel, {
-        ctx,
-        sessionId: fileSession.sessionId,
-        revision: treeRevision,
-        navigationBlocked: editorDirty,
-        activePath: path,
-        request: proofreadRequest,
-        onOpen: (finding: ProofreadFinding) => openDocument(finding.path, finding),
-        onApplied: (appliedPath: string) => {
-          const navigation = proposalAppliedNavigation(appliedPath, path, editorDirty)
-          setTreeRevision((old) => old + 1)
-          if (navigation.expandPath) setTreeExpansionPath(navigation.expandPath)
-          if (!navigation.openPath) {
-            setWorkbenchNote(t('note.appliedDirty'))
-            return
-          }
-          openDocument(navigation.openPath)
-          if (navigation.refreshContent) setContentRevision((old) => old + 1)
-        },
-      }) : null,
-      cardsOpen ? e(CardsPanel, {
-        ctx,
-        sessionId: fileSession.sessionId,
-        revision: treeRevision,
-        kind: cardsKind,
-        selectedPath: cardsSelectedPath,
-        navigationBlocked: editorDirty,
-        onKindChange: (kind) => openCardsPanel(kind),
-        onSelect: selectCard,
-        onCatalog: setCardsCatalog,
-        onCreated: (createdPath: string) => {
-          setTreeRevision((value) => value + 1)
-          setTreeExpansionPath(createdPath)
-          openDocument(createdPath)
-        },
-        onOpenHit: (hit: SearchHit) => openDocument(hit.path, hit),
-      }) : null,
-      memoryOpen ? e(MemoryPanel, {
-        ctx,
-        sessionId: fileSession.sessionId,
-        revision: treeRevision,
-        onApplied: refreshAppliedPath,
-        onRefresh: refreshWrittenPath,
-      }) : null,
+      fileSession ? renderSlot?.(SIDEBAR_TOOLS_SLOT, seatContext) ?? null : null,
       historyOpen ? e('section', { className: 'snapshot-panel', 'aria-label': t('workspace.commitHistory') },
         snapshots === null
           ? e('p', { className: 'snapshot-empty' }, t('workspace.historyLoading'))
@@ -2132,7 +2061,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
       workspaceOpen.warning ? e('p', { className: 'warning pad', role: 'status' }, workspaceOpen.warning) : null,
       workbenchNote ? e('p', { className: `pad`, role: 'status' }, workbenchNote) : null,
-      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, highlightPath: cardsSelectedPath ?? undefined, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
+      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, highlightPath: highlightPath ?? undefined, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
     ) : null,
     sidebarVisible ? e(PanelResizer, {
       side: 'left',
@@ -2149,7 +2078,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal,
       completionPreference: writing.completion,
       /* 能力未加载完成前不发起补全/改写 RPC;显式错误态由用户重试恢复。 */
-      completionEnabled: capabilityReady ? capabilityState.value.completion : false,
+      completionEnabled: capabilityReady ? featureEnabled(capabilityState.value, 'completion') : false,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
       authorMemory: normalizeAuthorMemory(writing.authorMemory),
       typewriter: writing.typewriter,
@@ -2163,40 +2092,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         progressRecord.schedule(() => { void recordSavedProgress() })
       },
     }),
-    overviewOpen ? e(OverviewPanel, {
-      ctx,
-      sessionId: fileSession.sessionId,
-      overview,
-      revision: overviewRevision,
-      note: overviewNote,
-      statusBusyPath,
-      onClose: () => setOverviewOpen(false),
-      onOpenChapter: (chapterPath: string) => openDocument(chapterPath),
-      onStatusChange: (chapterPath: string, status: ChapterStatus) => { void changeChapterStatus(chapterPath, status) },
-    }) : null,
-    cardsOpen && cardsSelectedPath ? (() => {
-      const selectedCard = cardsKind === 'character'
-        ? cardsCatalog.characters.find((card) => card.path === cardsSelectedPath)
-        : cardsCatalog.worldbook.find((card) => card.path === cardsSelectedPath)
-      return selectedCard ? e(CardsDetail, {
-        ctx,
-        sessionId: fileSession.sessionId,
-        kind: cardsKind,
-        card: selectedCard,
-        characters: cardsCatalog.characters,
-        navigationBlocked: editorDirty,
-        onClose: () => setCardsSelectedPath(null),
-        onOpenDocument: (cardPath: string) => {
-          setTreeExpansionPath(cardPath)
-          openDocument(cardPath)
-        },
-        onSelectCard: selectCard,
-        onChanged: () => setTreeRevision((value) => value + 1),
-        onOpenHit: (hit: SearchHit) => openDocument(hit.path, hit),
-        pinnedPath,
-        onTogglePin: (cardPath: string) => setPinnedPath((current) => current === cardPath ? null : cardPath),
-      }) : null
-    })() : null,
+    fileSession ? e('div', { className: 'center-overlays' }, renderSlot?.(CENTER_OVERLAYS_SLOT, seatContext) ?? null) : null,
     pinnedVisible && pinnedPath ? e(PanelResizer, {
       side: 'right',
       value: pinnedWidth,
@@ -2411,7 +2307,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       onClose: () => { if (!archiveBusy) setArchiveOpen(false) },
     }) : null,
     imagePreview ? e(ImagePreviewOverlay, { path: imagePreview.path, url: imagePreview.url, onClose: closeImagePreview }) : null,
-    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? capabilityState.value.assistant : undefined, pluginsTab: pluginsSettings, onClose: () => setSettingsOpen(false) }) : null,
+    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, onClose: () => setSettingsOpen(false) }) : null,
     startupUpdate && !aboutOpen ? e('div', { className: 'update-toast', role: 'status' },
       e('span', { className: 'update-toast-text' }, t('about.toast', { version: startupUpdate.version })),
       e('button', {
@@ -2435,6 +2331,7 @@ type RegisterShellRootOptions = {
   migrateWriting: WritingMigration
   progressScope: WritingProgressScope
   hostThemeSync?: HostThemeSync
+  commands: ShellCommandRegistry
   registerRoot: (ctx: ShellContext, render: (props: unknown) => ReactNode) => void
 }
 
@@ -2444,7 +2341,7 @@ type RegisterShellRootOptions = {
 // collapsed launchers can never cover the composer. The rail stays
 // click-through and each contributed component opts into pointer events;
 // open panels position against their launcher via the --dsh-ext-* contract.
-type RootSlotProps = { renderSlot?: (key: string, owner: Record<string, never>) => ReactNode }
+type RootSlotProps = { renderSlot?: (key: string, owner?: object) => ReactNode }
 
 function ExtensionsDock(props: { rootProps: unknown }) {
   const renderSlot = (props.rootProps as RootSlotProps | null | undefined)?.renderSlot
@@ -2462,6 +2359,8 @@ export function registerShellRoot(ctx: Context, options: RegisterShellRootOption
     migrateWriting: options.migrateWriting,
     progressScope: options.progressScope,
     hostThemeSync: options.hostThemeSync,
+    commands: options.commands,
+    renderSlot: (props as RootSlotProps).renderSlot,
     extensionsDock: e(ExtensionsDock, { rootProps: props }),
     pluginsSettings: (props as RootSlotProps).renderSlot?.(PLUGINS_SETTINGS_SLOT, {}) ?? null,
   }))

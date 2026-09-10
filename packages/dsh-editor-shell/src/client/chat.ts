@@ -1,5 +1,6 @@
 import {
   createElement as e,
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -48,8 +49,8 @@ import {
   type QuestionAnswerItem,
 } from '../adapter.ts'
 import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from '../conversation-lifecycle.ts'
-import { MemoryUpdateCard } from './memory-panel.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
+import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
 import { useObservable } from './components.ts'
 import { Markdown } from './markdown.tsx'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
@@ -718,7 +719,10 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
 }
 
 export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, onAcceptMemory, hidden, onClose, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
-  useLocale()
+  const locale = useLocale()
+  const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
+  const [, setMessageCardTick] = useState(0)
+  useEffect(() => messageCards?.subscribe(() => setMessageCardTick((value) => value + 1)), [messageCards])
   const snapshot = useObservable<ConversationSnapshot>(session)
   const sessionList = useObservable(ctx.sessions.list)
   const workspaceList = useObservable(ctx.workspaces.list)
@@ -839,6 +843,16 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       }
     }
     onApplied(path)
+  }
+  const messageCardContext: ShellMessageCardContext = {
+    sessionId: session.sessionId,
+    locale,
+    onApplied: handleApplied,
+    refresh: (scope) => {
+      if (scope === 'overview') return
+      onWritten?.(activePath ?? '')
+    },
+    note: setNote,
   }
   /* 项目里任何对话已有内容，就视为作者选择了直接聊天，不再展示引导；
    * 除非初始化正在跑或刚跑完，保留进行/完成反馈。 */
@@ -1119,37 +1133,41 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         onDismiss: dismissInitGuide,
       }) : null,
       snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? t('chat.loadingMore') : t('chat.loadOlder')) : null,
-      rows.map((row) => row.proposal
-        ? e(ProposalCard, { key: row.id, ctx, sessionId: session.sessionId, proposal: row.proposal, onApplied: handleApplied })
-        : row.memoryUpdate
-          ? e(MemoryUpdateCard, { key: row.id, ctx, sessionId: session.sessionId, receipt: row.memoryUpdate, onApplied: handleApplied, onRefresh: onWritten })
-          : row.memory
-          ? e(MemoryCard, { key: row.id, memory: row.memory, onAccept: (observation) => onAcceptMemory(observation) })
-          : row.role === 'thinking'
-          ? e('details', { className: 'chat-row thinking', key: row.id },
+      rows.map((row) => {
+        if (row.proposal) return e(ProposalCard, { key: row.id, ctx, sessionId: session.sessionId, proposal: row.proposal, onApplied: handleApplied })
+        if (row.memory) return e(MemoryCard, { key: row.id, memory: row.memory, onAccept: (observation) => onAcceptMemory(observation) })
+        const registered = row.toolName ? messageCards?.get(row.toolName) : undefined
+        const pluginCard = registered?.render({ result: row.result ?? row.content ?? row.text, context: messageCardContext })
+        if (pluginCard != null) return e(Fragment, { key: row.id }, pluginCard)
+        if (row.role === 'thinking') {
+          return e('details', { className: 'chat-row thinking', key: row.id },
             e('summary', null, t('chat.thinkingProcess')),
             e('p', null, row.text),
           )
-          : row.role === 'tool' && row.error
-            ? e('details', { className: 'chat-row tool error', key: row.id, open: true, role: 'alert' },
-              e('summary', null, `⚠ ${row.text}`),
-              row.reason ? e('p', { className: 'tool-error-reason' }, row.reason) : null,
-              row.content ? e('pre', null, row.content) : null,
-              row.detail ? e('small', null, row.detail) : null,
-            )
-          : row.role === 'tool' && row.content
-            ? e('details', { className: 'chat-row tool', key: row.id },
-              e('summary', null, row.text),
-              e('pre', null, row.content),
-              row.detail ? e('small', null, row.detail) : null,
-            )
-            : e('article', { className: `chat-row ${row.role}`, key: row.id },
-              row.role === 'assistant' && row.text
-                ? e('div', { className: 'md' }, e(Markdown, { text: row.text }))
-                : e('p', null, row.text || t('chat.noText')),
-              row.detail ? e('small', null, row.detail) : null,
-              row.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: row.projectContextReceipt }) : null,
-            )),
+        }
+        if (row.role === 'tool' && row.error) {
+          return e('details', { className: 'chat-row tool error', key: row.id, open: true, role: 'alert' },
+            e('summary', null, `⚠ ${row.text}`),
+            row.reason ? e('p', { className: 'tool-error-reason' }, row.reason) : null,
+            row.content ? e('pre', null, row.content) : null,
+            row.detail ? e('small', null, row.detail) : null,
+          )
+        }
+        if (row.role === 'tool' && row.content) {
+          return e('details', { className: 'chat-row tool', key: row.id },
+            e('summary', null, row.text),
+            e('pre', null, row.content),
+            row.detail ? e('small', null, row.detail) : null,
+          )
+        }
+        return e('article', { className: `chat-row ${row.role}`, key: row.id },
+          row.role === 'assistant' && row.text
+            ? e('div', { className: 'md' }, e(Markdown, { text: row.text }))
+            : e('p', null, row.text || t('chat.noText')),
+          row.detail ? e('small', null, row.detail) : null,
+          row.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: row.projectContextReceipt }) : null,
+        )
+      }),
       outgoing && !outgoingIsCanonical ? e('article', { className: 'chat-row user', key: 'local-outgoing' },
         e('p', null, outgoing.text),
         outgoing.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: outgoing.projectContextReceipt }) : null,

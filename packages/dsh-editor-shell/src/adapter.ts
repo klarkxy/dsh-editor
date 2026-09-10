@@ -17,14 +17,14 @@ import type {
 } from '@deepseek-ai/dsh-client-connection/client'
 import { parseAuthorMemoryMarker, parseProposalMarker, type AuthorMemoryMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
-import { parseMemoryUpdateReceipt, type MemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
+import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
 import { t } from './i18n/index.ts'
 import { stripReasoningText } from './conversation-lifecycle.ts'
 import { isNovelIndexJobPrompt } from './novel-index.ts'
 
 export { parseAuthorMemoryMarker, parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 
-const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'project_knowledge', 'novel_index_write', 'novel_scratch_write', 'novel_scratch_read', 'novel_scratch_list'])
+const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'novel_index_write', 'novel_scratch_write', 'novel_scratch_read', 'novel_scratch_list'])
 const HIDDEN_REASONING_BLOCKS = new Set(['reasoning', 'thinking', 'thought', 'analysis'])
 
 export function visibleRunningCalls<T extends { name: string }>(calls: readonly T[]): T[] {
@@ -44,8 +44,10 @@ export type ChatRow = {
   reason?: string
   proposal?: ProposalMarker
   memory?: AuthorMemoryMarker
-  /** novel_memory_update 的 JSON 回执标记；命中时聊天行渲染成记忆更新确认卡。 */
-  memoryUpdate?: MemoryUpdateReceipt
+  /** `node.call.name` when present; Chat looks up plugin message cards by this key. */
+  toolName?: string
+  /** Payload for a registered message card. Today: the parsed `novel_memory_update` receipt. */
+  result?: unknown
   projectContextReceipt?: ProjectContextReceiptBundle
 }
 
@@ -126,23 +128,24 @@ function proposalDetailText(proposal: ProposalMarker): string {
 export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-result' }>): ChatRow {
   const body = blocksText(node.content)
   const name = node.call?.name ?? t('adapter.toolFallback', { id: node.callId })
+  const toolName = node.call?.name
   const proposal = name === 'novel_propose' ? parseProposalMarker(body) : undefined
   if (proposal) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: proposalDetailText(proposal), proposal }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: proposalDetailText(proposal), proposal, toolName }
   }
   const memory = name === 'author_observe' ? parseAuthorMemoryMarker(body) : undefined
   if (memory) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: memory.observation, detail: t('adapter.rememberProposal'), memory }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: memory.observation, detail: t('adapter.rememberProposal'), memory, toolName }
   }
   const memoryUpdate = name === 'novel_memory_update' ? parseMemoryUpdateReceipt(body) : undefined
   if (memoryUpdate) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: memoryUpdate.summary, detail: t('adapter.memoryUpdate'), memoryUpdate }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: memoryUpdate.summary, detail: t('adapter.memoryUpdate'), toolName, result: memoryUpdate }
   }
   if (node.isError) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: t('adapter.notExecuted'), detail: name, content: truncateToolContent(body) || undefined, error: true, reason: toolErrorReason(name, body) }
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: t('adapter.notExecuted'), detail: name, content: truncateToolContent(body) || undefined, error: true, reason: toolErrorReason(name, body), toolName }
   }
   const friendly = name === 'glob' || name === 'grep' ? t('adapter.searchedNotes') : name === 'read' ? t('adapter.readNotes') : t('adapter.done')
-  return { id: `tool-result:${node.seq}`, role: 'tool', text: friendly, detail: name, content: truncateToolContent(body) || undefined }
+  return { id: `tool-result:${node.seq}`, role: 'tool', text: friendly, detail: name, content: truncateToolContent(body) || undefined, toolName }
 }
 
 const TOOL_CONTENT_LIMIT = 4000

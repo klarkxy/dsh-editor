@@ -32,6 +32,8 @@ import {
   workspaceShortcut,
 } from './client.ts'
 import { partialApplyDetails } from './client/shared.ts'
+import { appendRegistryCommands } from './client/command-palette.tsx'
+import { createCommandRegistry, matchRegistryShortcut, registryPaletteItems, type ShellToolSeatContext } from './seats.ts'
 
 const rootSource = () => readFileSync(new URL('./client/root.ts', import.meta.url), 'utf8')
 const initGuideSource = () => readFileSync(new URL('./init-guide.ts', import.meta.url), 'utf8')
@@ -433,7 +435,6 @@ describe('shell manuscript RPC safety', () => {
     expect(archive).toContain("className: 'file-dialog archive-panel'")
     expect(source).toContain('archiveManaged')
     expect(palette).toContain("t('command.search')")
-    expect(palette).toContain("t('command.overview')")
     expect(palette).toContain("t('command.export')")
     expect(palette).toContain("t('command.importWork')")
     expect(palette).toContain("t('command.archived')")
@@ -445,78 +446,123 @@ describe('shell manuscript RPC safety', () => {
     expect(palette).toContain("t('pin.unpin')")
     expect(zh['chapterOps.splitAtCursor']).toBe('在光标处拆章')
     expect(zh['command.search']).toBe('全文搜索')
-    expect(zh['command.overview']).toBe('作品概览')
     expect(zh['command.export']).toBe('导出全文')
     expect(zh['command.importWork']).toBe('导入作品')
     expect(zh['command.archived']).toBe('已归档')
   })
 
-  it('opens the work overview from the sidebar, palette, and Ctrl+Shift+O', () => {
+  it('keeps tree chapter-status glyphs from cached overview and yields Ctrl+Shift+O to the overlay plugin', () => {
     const source = rootSource()
-    const overview = readFileSync(new URL('./client/overview-panel.ts', import.meta.url), 'utf8')
     const palette = readFileSync(new URL('./client/command-palette.tsx', import.meta.url), 'utf8')
-    expect(source).toContain('OverviewPanel')
-    expect(source).toContain('openOverviewPanel')
-    expect(source).toContain("'overview'")
-    expect(source).toContain('chapter.statusSet')
-    expect(source).toContain('progress.record')
+    const statusView = readFileSync(new URL('./chapter-status-view.ts', import.meta.url), 'utf8')
+    expect(source).toContain('CENTER_OVERLAYS_SLOT')
     expect(source).toContain('chapterStatuses: buildChapterStatusMap(overview)')
-    expect(overview).toContain('progress.history')
-    expect(overview).toContain("t('overview.title')")
-    expect(overview).toContain('overview-status-select')
-    expect(overview).toContain("t('overview.charDist')")
-    expect(overview).toContain("t('overview.curve')")
-    expect(overview).toContain("t('overview.recentEdits')")
-    const overviewView = readFileSync(new URL('./overview-view.ts', import.meta.url), 'utf8')
-    expect(overviewView).toContain("t('status.draft')")
-    expect(overviewView).toContain("t('status.revising')")
-    expect(overviewView).toContain("t('status.final')")
-    expect(zh['overview.title']).toBe('作品概览')
+    expect(source).toContain('progress.record')
+    expect(source).not.toContain('OverviewPanel')
+    expect(source).not.toContain('openOverviewPanel')
+    expect(source).not.toContain('chapter.statusSet')
+    expect(statusView).toContain("t('status.draft')")
+    expect(statusView).toContain("t('status.revising')")
+    expect(statusView).toContain("t('status.final')")
     expect(zh['status.draft']).toBe('草稿')
     expect(zh['status.revising']).toBe('修订中')
     expect(zh['status.final']).toBe('已定稿')
-    expect(palette).toContain('Ctrl+Shift+O')
-    expect(workspaceShortcut({ key: 'o', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBe('overview')
+    expect(palette).not.toContain("t('command.overview')")
+    expect(workspaceShortcut({ key: 'o', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBeNull()
   })
 
-  it('opens proofread from the sidebar, palette, and Ctrl+Shift+L', () => {
+  it('opens a registered command from the palette and Ctrl+Shift+L', () => {
     const source = rootSource()
-    const proofread = readFileSync(new URL('./client/proofread-panel.ts', import.meta.url), 'utf8')
     const palette = readFileSync(new URL('./client/command-palette.tsx', import.meta.url), 'utf8')
-    expect(proofread).toContain('function ProofreadPanel(')
-    expect(source).toContain('ProofreadPanel')
-    expect(source).toContain('openProofreadPanel')
-    expect(source).toContain("'proofread'")
-    expect(proofread).toContain('proofread.scan')
-    expect(palette).toContain("t('command.proofreadDoc')")
-    expect(palette).toContain("t('command.proofreadBook')")
-    expect(zh['command.proofreadDoc']).toBe('校对当前文档')
-    expect(zh['command.proofreadBook']).toBe('校对全书')
-    expect(palette).toContain('Ctrl+Shift+L')
-    expect(workspaceShortcut({ key: 'l', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBe('proofread')
+    expect(source).toContain('matchRegistryShortcut')
+    expect(source).toContain('registryPaletteItems')
+    expect(source).toContain('SIDEBAR_TOOLS_SLOT')
+    expect(readFileSync(new URL('./seats.ts', import.meta.url), 'utf8')).toContain("from 'dsh-editor-seats'")
+    expect(readFileSync(new URL('../../dsh-editor-seats/src/index.ts', import.meta.url), 'utf8')).toContain("'dsh-editor.sidebar.tools'")
+    expect(readFileSync(new URL('../../dsh-editor-seats/src/index.ts', import.meta.url), 'utf8')).toContain("'dsh-editor.center.overlays'")
+    expect(source).not.toContain('ProofreadPanel')
+    expect(source).not.toContain('openProofreadPanel')
+    expect(palette).toContain('appendRegistryCommands')
+    expect(palette).not.toContain("t('command.proofreadDoc')")
+    expect(workspaceShortcut({ key: 'l', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBeNull()
+
+    const run = vi.fn()
+    const registry = createCommandRegistry()
+    registry.register({
+      id: 'proofread-document',
+      group: 'writing',
+      label: { zh: '校对当前文档', en: 'Proofread current document' },
+      hint: { zh: 'Ctrl+Shift+L · 标点、错别字、敏感词、重复与口癖', en: 'Ctrl+Shift+L' },
+      shortcut: { key: 'l', ctrl: true, shift: true },
+      when: 'workspace',
+      run,
+    })
+    const event = { key: 'l', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true }
+    const matched = matchRegistryShortcut(registry.list(), event)
+    expect(matched?.id).toBe('proofread-document')
+    const context = {
+      sessionId: 's1',
+      activePath: '正文/001.md',
+      editorDirty: false,
+      treeRevision: 0,
+      contentRevision: 0,
+      locale: 'zh',
+      openDocument: vi.fn(),
+      onApplied: vi.fn(),
+      note: vi.fn(),
+      revealSidebar: vi.fn(),
+      refresh: vi.fn(),
+      expandTreePath: vi.fn(),
+      highlightTreePath: vi.fn(),
+      pinnedPath: null,
+      togglePin: vi.fn(),
+      ProposalCard: () => null,
+    } satisfies ShellToolSeatContext
+    const items = registryPaletteItems(registry.list(), 'zh', context, true)
+    const groups = appendRegistryCommands([
+      { id: 'workspace', heading: '作品', items: [] },
+      { id: 'writing', heading: '写作', items: [{ id: 'cmd.search', label: '全文搜索', icon: null, run: () => {} }] },
+      { id: 'view', heading: '视图', items: [] },
+    ], items)
+    expect(groups.find((group) => group.id === 'writing')?.items.map((item) => item.id)).toEqual(['cmd.search', 'proofread-document'])
+    expect(groups.find((group) => group.id === 'writing')?.items.at(-1)?.label).toBe('校对当前文档')
+    groups.find((group) => group.id === 'writing')?.items.at(-1)?.run()
+    expect(run).toHaveBeenCalledWith(context)
+    expect(context.revealSidebar).toHaveBeenCalled()
   })
 
-  it('opens character and worldbook cards from the sidebar, palette, and shortcuts', () => {
+  it('leaves character and worldbook cards to the cards plugin seats and registry commands', () => {
     const source = rootSource()
-    const cards = readFileSync(new URL('./client/cards-panel.ts', import.meta.url), 'utf8')
+    const seats = readFileSync(new URL('../../dsh-editor-seats/src/index.ts', import.meta.url), 'utf8')
     const palette = readFileSync(new URL('./client/command-palette.tsx', import.meta.url), 'utf8')
-    expect(cards).toContain('function CardsPanel(')
-    expect(source).toContain('CardsPanel')
-    expect(source).toContain('openCardsPanel')
-    expect(source).toContain("'cards-character'")
-    expect(source).toContain("'cards-worldbook'")
-    expect(cards).toContain('cards.list')
-    expect(cards).toContain('cards.metaSet')
-    expect(cards).toContain('cards.references')
-    expect(cards).toContain('cards.create')
-    expect(palette).toContain("t('command.cards')")
-    expect(palette).toContain("t('command.worldbook')")
-    expect(zh['command.cards']).toBe('人物卡')
-    expect(zh['command.worldbook']).toBe('世界书')
-    expect(palette).toContain('Ctrl+Shift+C')
-    expect(palette).toContain('Ctrl+Shift+W')
-    expect(workspaceShortcut({ key: 'c', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBe('cards-character')
-    expect(workspaceShortcut({ key: 'w', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBe('cards-worldbook')
+    const pinned = readFileSync(new URL('./client/pinned-pane.ts', import.meta.url), 'utf8')
+    expect(source).not.toContain('CardsPanel')
+    expect(source).not.toContain('openCardsPanel')
+    expect(source).toContain('highlightTreePath')
+    expect(seats).toContain('highlightTreePath')
+    expect(seats).toContain('togglePin')
+    expect(pinned).toContain('CARDS_RPC_CHANNEL')
+    expect(pinned).toContain('cards.list')
+    expect(palette).not.toContain('cmd.cards')
+    expect(palette).not.toContain('cmd.worldbook')
+    expect(palette).toContain('keywords: item.keywords')
+    expect(workspaceShortcut({ key: 'c', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBeNull()
+    expect(workspaceShortcut({ key: 'w', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBeNull()
+  })
+
+  it('leaves novel_memory_update rows to the message-card registry', () => {
+    const chatSource = readFileSync(new URL('./client/chat.ts', import.meta.url), 'utf8')
+    const clientSource = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
+    const seats = readFileSync(new URL('../../dsh-editor-seats/src/index.ts', import.meta.url), 'utf8')
+    expect(chatSource).not.toContain('MemoryUpdateCard')
+    expect(chatSource).not.toContain('./memory-card.ts')
+    expect(chatSource).toContain('MESSAGE_CARDS_SERVICE')
+    expect(chatSource).toContain('messageCards?.subscribe')
+    expect(chatSource).toContain('messageCards?.get(row.toolName)')
+    expect(clientSource).toContain('createMessageCardRegistry')
+    expect(clientSource).toContain('MESSAGE_CARDS_SERVICE')
+    expect(seats).toContain("export const MESSAGE_CARDS_SERVICE = 'dshEditorMessageCards'")
+    expect(seats).toContain('createMessageCardRegistry')
   })
 
   it('reveals search hits through EditorCoreHandle.revealRange and drops the __cmView escape hatch', () => {
@@ -615,9 +661,12 @@ describe('shell manuscript RPC safety', () => {
     expect(source).not.toContain("assistantVisible ? `7px ${assistantWidth}px` : '',")
     expect(styleSource).toContain('.pinned-pane')
     expect(styleSource).toContain('.pinned-open')
-    expect(styleSource).toMatch(/overview-open > \.editor, \.shell\.layout-shell\.overview-open > \.empty-paper, \.shell\.layout-shell\.overview-open > \.cards-detail/)
-    expect(styleSource).not.toMatch(/overview-open > \.pinned-pane/)
-    expect(styleSource).not.toMatch(/cards-open > \.pinned-pane/)
+    // 中栏 overlay 只靠座位合同的 data 属性布局：插件根元素落到稿纸格并把稿纸藏起来（稿纸根带内联 display，须 !important），
+    // Shell 样式里不得再出现具体插件的 class 名；钉住的侧栏永远不受 overlay 影响。
+    expect(styleSource).toMatch(/\.center-overlays \[data-dsh-center-overlay\] \{ grid-row: 2;/)
+    expect(styleSource).toMatch(/:has\(> \.center-overlays \[data-dsh-center-overlay\]\) > \.editor,\s*\.shell\.layout-shell:has\(> \.center-overlays \[data-dsh-center-overlay\]\) > \.empty-paper \{ display: none !important; \}/)
+    expect(styleSource).not.toMatch(/overview-panel|cards-detail/)
+    expect(styleSource).not.toMatch(/data-dsh-center-overlay\]\) > \.pinned-pane/)
   })
 
   it('clamps both panel resize directions to their accessible bounds', () => {
@@ -640,10 +689,10 @@ describe('shell manuscript RPC safety', () => {
     expect(workspaceShortcut(key('[', { ctrlKey: false, altKey: true, code: 'BracketLeft' }))).toBe('previous-chapter')
     expect(workspaceShortcut(key('b', { shiftKey: true }))).toBeNull()
     expect(workspaceShortcut(key('f', { shiftKey: true }))).toBe('search')
-    expect(workspaceShortcut(key('o', { shiftKey: true }))).toBe('overview')
-    expect(workspaceShortcut(key('l', { shiftKey: true }))).toBe('proofread')
-    expect(workspaceShortcut(key('c', { shiftKey: true }))).toBe('cards-character')
-    expect(workspaceShortcut(key('w', { shiftKey: true }))).toBe('cards-worldbook')
+    expect(workspaceShortcut(key('o', { shiftKey: true }))).toBeNull()
+    expect(workspaceShortcut(key('l', { shiftKey: true }))).toBeNull()
+    expect(workspaceShortcut(key('c', { shiftKey: true }))).toBeNull()
+    expect(workspaceShortcut(key('w', { shiftKey: true }))).toBeNull()
     expect(workspaceShortcut(key('t', { altKey: true }))).toBe('toggle-typewriter')
     expect(workspaceShortcut(key('p', { altKey: true }))).toBe('toggle-focus-paragraph')
   })
