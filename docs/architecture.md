@@ -10,12 +10,14 @@
 
 | 图 | 说明 | 打开 |
 | --- | --- | --- |
-| 桌面运行时 | Electron、唯一 DSH Host、桌面 profile 插件与作品目录 | [dsh-editor-runtime.html](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html) |
-| 插件拓扑 | 公开 Web 插件与桌面私有包的分级、依赖和 loopback RPC | [dsh-editor-plugins.html](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html) |
-| 确认写入 | 从 `context.compile` 到作者确认后 `proposal.apply` | [author-confirm-write.html](https://klarkxy.github.io/dsh-editor/author-confirm-write.html) |
-| 组合边界 | 普通业务、小说助手、公开插件三个视角的界面、能力与宿主边界 | [plugin-composition-boundaries.html](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) |
+| 桌面运行时 | 两道进程：Electron 启动 DSH 子进程并打开 loopback URL；插件住在 Host 内 | [dsh-editor-runtime.html](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html) |
+| 插件分级 | 公开 tarball 与桌面 profile 的交付范围；重叠的三个包同时出现在两种交付里 | [dsh-editor-plugins.html](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html) |
+| 确认写入 | 从 `context.compile` 到作者确认后 `proposal.apply`；泳道是同进程插件 | [author-confirm-write.html](https://klarkxy.github.io/dsh-editor/author-confirm-write.html) |
+| 组合边界 | 普通业务、可选智能增强、公开插件三个视角 | [plugin-composition-boundaries.html](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) |
 
 规范源文件在 [diagrams/](diagrams/) 下的同名 `.json`，渲染产物由 `.github/workflows/pages.yml` 发布，仓库不存截图。图中的产品名、channel、tool 与代码标识保持原样。
+
+读图时把 Host 插件看成 DSH 进程里的 Cordis 入口，不要看成 DSH 旁边的独立服务。`host-api` 是进程内库导入；`注册 tools` 是向同一 Host 挂守卫，不是访问作品目录的通道。Electron 不直接加载 shell：它只拉起 DSH，由 DSH web runtime 装上 root。
 
 ## 产品结构
 
@@ -25,17 +27,19 @@ DSH Editor 是 Windows / macOS 的 GUI-first 桌面应用，不是另一套 Agen
 Electron（受控多窗口、资源校验、子进程生命周期）
 └─ 内置 Node 24.16.0
    └─ 内置 DSH 0.1.1-rc.2，127.0.0.1:随机端口
-      └─ 专用 profiles/dsh-editor
+      └─ 专用 profiles/dsh-editor（默认 full 组合）
          ├─ DSH base / web runtime / connection / renderer
          ├─ dsh-manuscript：公开稿件 Host RPC、稿纸 overlay 与共享 editor-core
+         ├─ dsh-proofread：纯文本校对引擎与 /proofread（basic/smart/full 均装）
+         ├─ dsh-zhihu：资料 RPC、自有 UI 与可选 Tool（默认 full）
          ├─ dsh-editor-workbench：私有项目生命周期、概览/状态、校对、卡片、进度、context、导入、快照与归档
-         ├─ dsh-editor-novel-kernel：私有小说 Tool、guard、prompt、知识卡与 `/novel-kernel` 知乎知识库 RPC
+         ├─ dsh-editor-novel-kernel：私有小说 Tool、guard、prompt、知识卡与 `/novel-kernel`（smart/full）
          └─ dsh-editor-shell：私有根界面
             ├─ 三栏：左真实目录树（新建只预建 `正文/`；栏顶搜索/校对/概览/人物/设定/提交/历史），中稿纸（查找替换、打字机/段落聚焦、排版、ghost FIM、选段改写、‹ › 导航、世界书 frontmatter 表单），右 DshChatPort（对话 ⋯ 归档/恢复/删除）
             └─ shell client 拆分为 src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}，并复用 dsh-manuscript/client/editor-core
 ```
 
-普通 DSH `web` profile 仍可独立安装 `dsh-manuscript` 和 `dsh-grill`。桌面 profile 另外加载 workbench、novel-kernel 与 shell；shell 以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.1-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
+普通 DSH `web` profile 可独立安装 `dsh-manuscript`、`dsh-grill`、`dsh-proofread` 和 `dsh-zhihu`。桌面 profile 另外加载 workbench、novel-kernel 与 shell；`dsh-grill` 不进桌面。shell 以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.1-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
 
 ## 所有权边界
 
@@ -45,7 +49,9 @@ Electron（受控多窗口、资源校验、子进程生命周期）
 - **`dsh-editor-shell` Host**：仅保留加载唯一 root client 所需的最小 Cordis 入口；Renderer 继续拥有界面、编辑 buffer 与作者确认流程。
 - **`dsh-editor-workbench` Host**：loopback-only 项目结构、章节概览与状态、校对扫描、人物卡/世界书卡片、写作进度、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。同时注册只读工具 `novel_overview`。
 - **`dsh-editor-novel-kernel` Host**：只读小说知识与检索、预览式 `novel_propose`、工具 guard 与 system prompt；固定路径索引直写及 loopback 知乎知识库管理 RPC 也由此包提供，正文仍只经作者确认后写入。
-- **`dsh-manuscript` Host**：公开 `/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、全文搜索、DSH_HOME 草稿、FIM 与 `patch.complete`；公开产物不含 Node 文件系统能力。
+- **`dsh-manuscript` Host**：公开 `/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、全文搜索、DSH_HOME 草稿、FIM 与 `patch.complete`；公开产物不含 Node 文件系统能力。`dsh-manuscript/host-api` 是给 workbench 用的进程内库，不是第二条 RPC。
+- **`dsh-proofread`**：纯文本校对引擎与 `/proofread`；桌面 workbench 把引擎当库用，公开 Web 走独立 UI。
+- **`dsh-zhihu`**：资料查询、知识库与用量；普通 RPC/UI 默认可独立安装，Tool 入口按组合选择。
 - **`dsh-grill`**：保持为普通 DSH 可独立安装的公共插件，不进入桌面 profile 或桌面运行依赖。
 
 没有 BFF、第二份 Chat 历史、provider registry、数据库、模式状态、工作流引擎、索引服务、云同步或后台守护进程。Chat Renderer 不执行工具或直接调用模型。打开已有作品时，产品只向当前 DSH 会话提交一次受限初始化任务：Agent 把工作区内容视为不可信数据，不改正文，唯一目标写入为 `.dsh-editor/作品索引.md`；实际工具权限、审批和沙箱仍由 DSH 权威控制。
@@ -68,20 +74,22 @@ Electron（受控多窗口、资源校验、子进程生命周期）
 
 profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记，启动会拒绝覆盖并在窗口显示诊断与重试。每次部署先写同级 stage，原子替换已标记 profile；home 级 credentials、settings、sessions、storages 和真实 workspace 不会被复制或删除。
 
-桌面资源固定包含 Node `24.16.0`、DSH `0.1.1-rc.2`、manuscript、workbench、novel-kernel、shell 及 profile。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
+桌面资源固定包含 Node `24.16.0`、DSH `0.1.1-rc.2`、选定组合的业务包及 profile。默认 full 含 manuscript、proofread、workbench、novel-kernel、zhihu 与 shell。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
 
-`apps/desktop/resources/profile/package.json` 声明的 bundles 为：
+`apps/desktop/resources/profile/package.json` 声明的默认 full bundles 为：
 
 ```text
 @deepseek-ai/dsh-base
 @deepseek-ai/dsh-web-app
 dsh-manuscript
+dsh-proofread
 dsh-editor-workbench
 dsh-editor-novel-kernel
+dsh-zhihu
 dsh-editor-shell
 ```
 
-`dsh-grill` 不在此列。
+`dsh-grill` 不在此列。basic / smart 由 `scripts/desktop-compositions.mjs` 在物化时改写 bundles，见 [组合指南](plugin-composition-guide.md)。
 
 ## 作品旁路文件（`.dsh-editor/`）
 
@@ -147,7 +155,7 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 
 ## 公开 Web 插件边界
 
-`dsh-manuscript` 在普通 `web` profile 中继续使用 `shell.overlay` 抽屉，不占官方 root；其公开 tarball 只含 provider-confined 稿件能力，不含 Node 文件系统或桌面生命周期端点。`dsh-grill` 继续只注册工具和提示。两者仍可单独安装、共存和任意顺序卸载；桌面 shell 与 `/dsh-editor-workbench` 不进入公开 tarball。
+`dsh-manuscript` 在普通 `web` profile 中继续使用 `shell.overlay` 抽屉，不占官方 root；其公开 tarball 只含 provider-confined 稿件能力，不含 Node 文件系统或桌面生命周期端点。`dsh-grill` 继续只注册工具和提示。`dsh-proofread` 与 `dsh-zhihu` 同样可单独安装，并在官方 overlay 与桌面 `dsh-editor.extensions` 贡献同一份自有 UI。四个公开包仍可单独安装、共存和任意顺序卸载；桌面 shell 与 `/dsh-editor-workbench` 不进入公开 tarball。
 
 ## 非目标
 

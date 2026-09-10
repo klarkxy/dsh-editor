@@ -26,9 +26,11 @@ packages/dsh-editor-shell/     仅桌面 profile 加载的私有写作客户端�
 packages/dsh-editor-workbench/ 私有项目生命周期与 context Host
 packages/dsh-editor-novel-kernel/ 私有小说 Tool、guard、prompt 与知识卡
 packages/dsh-manuscript/       Host RPC、公开 Web 稿纸插件与共享 editor-core（src/client/editor-core/）
-packages/dsh-grill/            Host 工具和写作 workflow
+packages/dsh-proofread/        公开校对引擎与 /proofread
+packages/dsh-zhihu/            公开资料 RPC、自有 UI 与可选 Tool
+packages/dsh-grill/            仅 Web：Host 工具和写作 workflow
 scripts/dev.mjs                GUI-first 桌面开发入口
-scripts/dev-web.mjs            两个公开插件的 Web 调试入口
+scripts/dev-web.mjs            公开插件的 Web 调试入口
 scripts/prepare-desktop-*.mjs  开发/打包运行时物化与校验
 e2e/core-loop.mjs              Playwright Electron 核心闭环验收
 e2e/visual-audit.mjs           Playwright Electron 精简视觉走查
@@ -47,12 +49,12 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 
 | 命令 | 作用 |
 | --- | --- |
-| `pnpm run dev` | 构建 workspace、监听四个桌面插件并启动 Electron DSH Editor |
-| `pnpm run dev:web` | 仅调试两个公开插件的 DSH Web 行为 |
+| `pnpm run dev` | 构建 workspace、监听当前组合的桌面包并启动 Electron DSH Editor |
+| `pnpm run dev:web` | 调试公开插件在普通 DSH Web profile 中的行为 |
 | `pnpm render:icon` | 从受版本控制的 SVG 源重新生成桌面 PNG 与 Windows ICO |
 | `pnpm typecheck` | 全 workspace 类型检查 |
 | `pnpm test` | 全部 Vitest contract/behavior 测试 |
-| `pnpm build` | 构建桌面 main、三个私有插件与两个公开插件 |
+| `pnpm build` | 构建桌面 main 与全部 workspace 插件 |
 | `pnpm test:e2e:desktop` | 驱动真实 Electron 当前源码窗口 |
 | `pnpm test:e2e:core-loop` | 驱动 Home → 作品 → 稿纸 → 搭档 的核心闭环 |
 | `pnpm test:e2e:visual-audit` | 顶栏/三栏/双主题 的精简视觉走查 |
@@ -61,7 +63,7 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 | `pnpm prepare:desktop-runtime` | 物化并哈希 Node、DSH、profile 与包闭包 |
 | `pnpm test:e2e:portable` | 真正启动 portable 外层 EXE，检查三栏 GUI、退出码与端口清理 |
 | `pnpm pack:desktop` | 生成未签名产物：Windows 为 portable EXE + NSIS 安装器，macOS 为 Apple Silicon 的 dmg/zip |
-| `pnpm pack:plugins` | 生成两个公开插件 tarball |
+| `pnpm pack:plugins` | 生成四个公开插件 tarball（manuscript、grill、proofread、zhihu） |
 | `pnpm test:e2e:matrix` | 公开插件 fresh-home 安装/卸载矩阵 |
 | `pnpm verify:desktop` | 桌面 typecheck、unit、build、桌面 E2E 与核心闭环 |
 | `pnpm verify:delivery` | 桌面验证、公开插件矩阵、缺包负向 smoke、桌面打包和 portable E2E |
@@ -72,9 +74,9 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 
 1. 验证 Windows x64、Node 和 DSH 精确版本；
 2. 将 DSH 依赖闭包物化到 `.dev/desktop-dsh-runtime`；
-3. 将 manuscript、workbench、novel-kernel、shell 物化到 `.dev/desktop-profile-template/node_modules`；
+3. 将当前组合的业务包物化到 `.dev/desktop-profile-template/node_modules`（默认 full：manuscript、proofread、workbench、novel-kernel、zhihu、shell）；
 4. 使用 `.dev/desktop-home`；
-5. 启动四个桌面插件 watcher 和 Electron；
+5. 启动该组合的插件 watcher 和 Electron；
 6. Electron 部署带 owner marker 的 `profiles/dsh-editor`；
 7. 以 `127.0.0.1:0 --no-open` 启动 DSH 并加载返回的同源 URL。
 
@@ -100,13 +102,13 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 
 - Host-only 私有包，独占 `/dsh-editor-workbench`。
 - 负责项目结构、章节概览/状态、校对、卡片、写作进度、context、导入、快照、移动与归档；复用 `dsh-manuscript/host-api` 的同一 workspace authority。
-- Host `inject` 为 `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `tools`；`tools` 只注册只读 `novel_overview`。
+- 主入口 `inject` 为 `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`。可选 `dsh-editor-workbench/tools` 入口另注入 `tools`，只注册只读 `novel_overview`。
 - `./contracts` 只含 browser-safe channel、类型、解析器与纯函数，并由 Shell client 构建内联。
 
 ### `dsh-editor-novel-kernel`
 
 - Host-only 私有包，注册小说工具、guard、`dsh-editor:novel-kernel` prompt，以及 loopback `/novel-kernel`（知乎知识库列表/上传）。
-- Host `inject` 为 `tools`, `systemPrompt`, `fs`, `credentials`, `connection`, `sandboxPolicy`。
+- Host `inject` 为 `tools`, `systemPrompt`, `fs`, `connection`, `sandboxPolicy`。
 - Tool 只返回知识或预览提案，正文写入仍由 Shell 展示并经 `/manuscript proposal.prepare/apply` 完成；拆章/合章/批量重命名走 workbench `proposal.*`。
 - `./contracts` 只含工具名、proposal / memory marker 类型和严格解析器。
 
@@ -118,10 +120,21 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 - `patch.complete` 和 FIM 从 live request header 选择模型，支持 abort 与有界输入。
 - 公开 Web 客户端继续注册 `shell.overlay`，不得占 root。
 
+### `dsh-proofread`
+
+- 公开包：`/proofread` 文本校对，只注入 `connection`，不依赖 session、文件或模型。
+- 引擎、词库与 contracts 是纯库；桌面 workbench 把它们当依赖，不经过这条 RPC。
+
+### `dsh-zhihu`
+
+- 公开包：`/zhihu` 资料、知识库与用量；自有 UI 同时挂官方 overlay 和桌面 `dsh-editor.extensions`。
+- Tool 入口 `dsh-zhihu/tools` 按组合选择，默认 full 才加入。
+
 ### `dsh-grill`
 
 - `scaffold_novel` 必须通过当前 session workspace、sandbox 和官方 pre-execute 审批。
 - workflow 只给官方 Agent 添加 planning/drafting/review/first-reader 提示，不写稿。
+- 不进入桌面 profile。
 
 ## 测试
 

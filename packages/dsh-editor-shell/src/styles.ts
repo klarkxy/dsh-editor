@@ -267,9 +267,9 @@ export const componentStyles = `
 .shell > .sidebar { grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--hairline); background: var(--bg-sunken); overflow-x: hidden; overflow-y: auto; }
 .shell .side-title { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 8px; font-size: var(--text-xs); font-weight: 500; letter-spacing: .16em; color: var(--meta); }
 .shell .side-title .icon-button { font-size: 14px; }
-/* 今日字数小标:侧栏顶部单行,目标达成换强调色。变量 --confirm 与章节定稿同色。 */
-.shell .writing-progress-chip { margin: 0 10px 6px; padding: 4px 10px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-ring); color: var(--meta); font: 500 var(--text-xs)/1.4 var(--font-sans); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
-.shell .writing-progress-chip.reached { color: var(--confirm); background: color-mix(in srgb, var(--confirm) 10%, var(--surface)); }
+.shell .side-search { margin: 0 10px 6px; padding: 4px 10px; width: auto; border: 1px solid transparent; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-ring); color: var(--fg); font: 400 var(--text-xs)/1.4 var(--font-sans); appearance: none; -webkit-appearance: none; }
+.shell .side-search::-webkit-search-cancel-button { -webkit-appearance: none; }
+.shell .side-search:focus-visible { border-color: var(--accent-active); box-shadow: var(--focus-ring); }
 .shell .tree { flex: 1 1 auto; min-height: 72px; overflow: auto; padding: 4px 6px 20px; display: flex; flex-direction: column; }
 .shell .tree-directory-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 2px 8px 2px 0; }
 .shell .tree-marker { width: 12px; flex: none; color: var(--meta); text-align: center; font-size: 11px; }

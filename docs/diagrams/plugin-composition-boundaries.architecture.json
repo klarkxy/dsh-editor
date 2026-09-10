@@ -4,37 +4,31 @@
   "meta": {
     "title": "DSH：界面、能力与宿主的组合边界",
     "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": { "label": "界面" },
+        "backend": { "label": "Host 插件" },
+        "cloud": { "label": "DSH 运行时" }
+      }
+    },
     "views": [
       {
         "id": "normal",
         "label": "普通业务",
-        "focus": [
-          "shell",
-          "proofread",
-          "workbench",
-          "zhihu"
-        ],
-        "note": "校对和资料直接通过普通 RPC 使用；不经过 Agent。"
+        "focus": ["shell", "proofread", "workbench", "zhihu"],
+        "note": "校对和资料走普通 RPC；不经过 Agent 工具循环。"
       },
       {
         "id": "agent",
         "label": "可选智能增强",
-        "focus": [
-          "kernel",
-          "authority",
-          "manuscript"
-        ],
-        "note": "Chat、补全、小说工具按 smart/full 组合启用；文件权限仍由原 Host 控制。"
+        "focus": ["kernel", "dsh-host", "manuscript"],
+        "note": "Chat、补全、小说工具按 smart/full 启用；文件权限仍由原 Host 控制。"
       },
       {
         "id": "public",
         "label": "独立公开插件",
-        "focus": [
-          "proofread",
-          "zhihu",
-          "manuscript",
-          "grill"
-        ],
+        "focus": ["proofread", "zhihu", "manuscript", "grill"],
         "note": "四个 tarball 已有独立装卸矩阵；知乎 Tool entry 单独选择。"
       }
     ]
@@ -43,114 +37,73 @@
     {
       "id": "shell",
       "type": "frontend",
-      "label": "界面消费层",
-      "sublabel": "官方 Web / 自有 Shell · 单一 root",
-      "pos": [
-        40,
-        280
-      ],
-      "size": [
-        280,
-        90
-      ]
+      "label": "写作界面",
+      "sublabel": "桌面 root · 官方 overlay",
+      "pos": [40, 280],
+      "size": [280, 90]
     },
     {
       "id": "proofread",
       "type": "backend",
       "label": "dsh-proofread",
       "sublabel": "纯文本校对 · /proofread · 无 AI",
-      "pos": [
-        470,
-        40
-      ],
-      "size": [
-        280,
-        90
-      ]
+      "pos": [470, 40],
+      "size": [280, 90]
     },
     {
       "id": "workbench",
       "type": "backend",
       "label": "dsh-editor-workbench",
       "sublabel": "作品、卡片、快照与完整校对",
-      "pos": [
-        470,
-        280
-      ],
-      "size": [
-        280,
-        90
-      ]
+      "pos": [470, 280],
+      "size": [280, 90]
     },
     {
       "id": "zhihu",
       "type": "backend",
       "label": "dsh-zhihu",
       "sublabel": "普通资料 RPC · 自有 UI · 可选 Tool",
-      "pos": [
-        470,
-        520
-      ],
-      "size": [
-        280,
-        90
-      ]
+      "pos": [470, 520],
+      "size": [280, 90]
     },
     {
       "id": "manuscript",
       "type": "backend",
       "label": "dsh-manuscript",
       "sublabel": "稿件与草稿 · 可选 assist 服务",
-      "pos": [
-        980,
-        40
-      ],
-      "size": [
-        280,
-        90
-      ]
+      "pos": [980, 40],
+      "size": [280, 90]
     },
     {
-      "id": "authority",
-      "type": "security",
-      "label": "DSH 宿主服务",
-      "sublabel": "会话、文件权限 · 按需工具与模型",
-      "pos": [
-        980,
-        280
-      ],
-      "size": [
-        280,
-        90
-      ]
+      "id": "dsh-host",
+      "type": "cloud",
+      "label": "DSH Host",
+      "sublabel": "session · fs · tools · 模型",
+      "pos": [980, 280],
+      "size": [280, 90]
     },
     {
       "id": "kernel",
       "type": "backend",
       "label": "dsh-editor-novel-kernel",
-      "sublabel": "9 个小说工具 · guard / prompt",
-      "pos": [
-        980,
-        520
-      ],
-      "size": [
-        280,
-        90
-      ]
+      "sublabel": "小说工具 · guard / prompt",
+      "pos": [980, 520],
+      "size": [280, 90]
     },
     {
       "id": "grill",
       "type": "backend",
       "label": "dsh-grill",
-      "sublabel": "保留公开脚手架与协作提示词",
-      "pos": [
-        40,
-        520
-      ],
-      "size": [
-        280,
-        90
-      ]
+      "sublabel": "仅公开 Web 的脚手架与提示词",
+      "pos": [40, 520],
+      "size": [280, 90]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "同一 DSH 进程内的插件",
+      "wraps": ["proofread", "workbench", "zhihu", "manuscript", "dsh-host", "kernel"]
     }
   ],
   "connections": [
@@ -174,20 +127,20 @@
     },
     {
       "from": "workbench",
-      "to": "authority",
-      "label": "live session / 文件权限",
+      "to": "dsh-host",
+      "label": "注入 fs",
       "variant": "emphasis",
       "labelDy": 40
     },
     {
       "from": "workbench",
       "to": "manuscript",
-      "label": "host-api"
+      "label": "host-api 库"
     },
     {
       "from": "kernel",
-      "to": "authority",
-      "label": "Tool / Prompt"
+      "to": "dsh-host",
+      "label": "注册 tools"
     }
   ],
   "cards": [
@@ -197,7 +150,7 @@
       "items": [
         "四个公开包分别安装与移除",
         "basic / smart / full 三份写作组合",
-        "两个插件复用同一个扩展 slot"
+        "校对和知乎复用同一个扩展 slot"
       ]
     },
     {
@@ -213,9 +166,9 @@
       "dot": "slate",
       "title": "读图与权限",
       "items": [
-        "仅显示主要关系，完整接口见指南",
-        "文件业务继续使用 live session 权限",
-        "同进程插件不是不可信代码沙箱"
+        "框内节点同进程，箭头是注入或 loopback RPC",
+        "host-api 是库导入，不是跨进程调用",
+        "grill 不进桌面；文件业务仍用 live session 权限"
       ]
     }
   ]

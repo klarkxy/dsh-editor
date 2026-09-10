@@ -6,6 +6,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
@@ -28,7 +29,6 @@ import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversa
 import {
   localDateKey,
   nextBaselines,
-  progressChipProps,
   writingProgressFor,
   type WritingProgress,
   type WritingProgressScope,
@@ -324,6 +324,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchSubmitTick, setSearchSubmitTick] = useState(0)
   const [proofreadOpen, setProofreadOpen] = useState(false)
   const [proofreadRequest, setProofreadRequest] = useState<ProofreadRequest | null>(null)
   const [cardsOpen, setCardsOpen] = useState(false)
@@ -2031,26 +2033,36 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       e('div', { className: 'side-title' },
         e('span', null, t('workspace.files')),
         e('span', { className: 'side-title-actions' },
-          e('button', { className: 'side-action', type: 'button', 'aria-pressed': searchOpen, title: t('workspace.searchTitle'), 'aria-label': t('sidebar.search'), onClick: () => setSearchOpen((value) => !value) }, t('sidebar.search')),
-          e('button', { className: 'side-action', type: 'button', 'aria-pressed': proofreadOpen, title: t('workspace.proofreadTitle'), 'aria-label': t('workspace.proofread'), onClick: () => setProofreadOpen((value) => !value) }, t('workspace.proofread')),
-          e('button', { className: 'side-action', type: 'button', 'aria-pressed': overviewOpen, title: t('workspace.overviewTitle'), 'aria-label': t('workspace.overview'), onClick: () => { setOverviewOpen((value) => !value); setCardsSelectedPath(null) } }, t('workspace.overview')),
-          e('button', { className: 'side-action', type: 'button', 'aria-pressed': cardsOpen && cardsKind === 'character', title: t('workspace.cardsTitle'), 'aria-label': t('workspace.people'), onClick: () => toggleCardsPanel('character') }, t('workspace.people')),
-          e('button', { className: 'side-action', type: 'button', 'aria-pressed': cardsOpen && cardsKind === 'worldbook', title: t('workspace.worldbookTitle'), 'aria-label': t('workspace.settings'), onClick: () => toggleCardsPanel('worldbook') }, t('workspace.settings')),
-          e('button', { className: 'side-action', type: 'button', disabled: rulesBusy, title: t('workspace.rulesTitle'), 'aria-label': t('workspace.rules'), onClick: () => void openRules() }, t('workspace.rules')),
-          e('button', { className: 'side-action', type: 'button', 'aria-pressed': memoryOpen, title: t('workspace.memoryTitle'), 'aria-label': t('workspace.memory'), onClick: () => setMemoryOpen((value) => !value) }, t('workspace.memory')),
           e('button', { className: 'side-action', type: 'button', disabled: snapshotBusy, title: t('workspace.commitTitle'), 'aria-label': t('workspace.commit'), onClick: () => void commitSnapshot() }, t('workspace.commit')),
           e('button', { className: 'side-action', type: 'button', 'aria-pressed': historyOpen, title: t('workspace.commitHistory'), 'aria-label': t('common.history'), onClick: () => setHistoryOpen((value) => !value) }, t('common.history')),
         ),
       ),
-      (() => {
-        const summary = progressChipProps({ overview, progress: writingProgress, workspaceId: openWorkspaceId })
-        if (!summary) return null
-        return e('div', { className: `writing-progress-chip${summary.reached ? ' reached' : ''}`, 'aria-label': summary.text }, summary.text)
-      })(),
+      e('input', {
+        className: 'side-search',
+        type: 'search',
+        value: searchQuery,
+        maxLength: 120,
+        placeholder: t('search.placeholder'),
+        'aria-label': t('search.aria'),
+        title: t('workspace.searchTitle'),
+        onChange: (event: ChangeEvent<HTMLInputElement>) => {
+          setSearchQuery(event.target.value)
+          if (!searchOpen) setSearchOpen(true)
+        },
+        onFocus: () => setSearchOpen(true),
+        onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => {
+          if (event.key !== 'Enter') return
+          setSearchOpen(true)
+          setSearchSubmitTick((tick) => tick + 1)
+        },
+      }),
       searchOpen ? e(SearchPanel, {
         ctx,
         sessionId: fileSession.sessionId,
         revision: treeRevision,
+        query: searchQuery,
+        onQueryChange: setSearchQuery,
+        submitTick: searchSubmitTick,
         navigationBlocked: editorDirty,
         activePath: path,
         activeDirty: editorDirty,

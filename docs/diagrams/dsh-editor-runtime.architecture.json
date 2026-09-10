@@ -10,9 +10,9 @@
       "entries": {
         "frontend": { "label": "界面" },
         "backend": { "label": "Host 插件" },
-        "database": { "label": "本地数据" },
-        "cloud": { "label": "运行时" },
-        "external": { "label": "外部参与者" }
+        "database": { "label": "本地作品" },
+        "cloud": { "label": "DSH 运行时" },
+        "external": { "label": "外部" }
       }
     },
     "views": [
@@ -20,65 +20,65 @@
         "id": "write-path",
         "label": "写作主路径",
         "focus": ["author", "electron", "dsh-host", "shell", "manuscript", "workspace"],
-        "note": "作者在沙箱窗口写作，稿件只经公开 /manuscript 写入作品目录。"
+        "note": "Electron 只打开 DSH 的 loopback URL；稿件经同一进程内的 /manuscript 写入作品目录。"
       },
       {
-        "id": "private-plugins",
-        "label": "私有桌面包",
-        "focus": ["shell", "workbench", "kernel", "manuscript"],
-        "note": "Shell 是唯一 root；workbench 与 kernel 只随桌面 profile 交付。"
+        "id": "in-process",
+        "label": "插件住在 DSH 里",
+        "focus": ["dsh-host", "shell", "manuscript", "workbench", "kernel"],
+        "note": "shell / manuscript / workbench / kernel 是 Cordis 插件，不是 DSH 旁边的独立服务。"
       },
       {
         "id": "agent-loop",
         "label": "助手与模型",
         "focus": ["shell", "dsh-host", "kernel", "llm"],
-        "note": "DshChatPort 只投影 SessionFace；模型与工具仍由同一 DSH Host 执行。"
+        "note": "DshChatPort 只投影 SessionFace；模型与工具仍由这一份 DSH Host 执行。"
       }
     ]
   },
   "components": [
-    { "id": "author", "type": "external", "label": "作者", "sublabel": "本机单用户", "pos": [48, 340], "size": [168, 64] },
-    { "id": "electron", "type": "frontend", "label": "Electron", "sublabel": "窗口 + Supervisor", "pos": [360, 340], "size": [168, 64] },
-    { "id": "dsh-host", "type": "cloud", "label": "DSH Host", "sublabel": "0.1.1-rc.2 / DSH_HOME", "pos": [680, 340], "size": [176, 64], "tag": "唯一 Agent" },
-    { "id": "manuscript", "type": "backend", "label": "dsh-manuscript", "sublabel": "/manuscript", "pos": [1000, 340], "size": [176, 64] },
-    { "id": "workspace", "type": "database", "label": "作品目录", "sublabel": "Markdown / 快照", "pos": [1320, 340], "size": [168, 64] },
-    { "id": "llm", "type": "external", "label": "模型提供方", "sublabel": "live-session model", "pos": [360, 100], "size": [168, 64] },
-    { "id": "kernel", "type": "backend", "label": "novel-kernel", "sublabel": "tool + prompt", "pos": [1000, 100], "size": [176, 64] },
-    { "id": "shell", "type": "frontend", "label": "dsh-editor-shell", "sublabel": "唯一 root GUI", "pos": [680, 580], "size": [176, 64] },
-    { "id": "workbench", "type": "backend", "label": "workbench", "sublabel": "/dsh-editor-workbench", "pos": [1000, 580], "size": [176, 64] }
+    { "id": "author", "type": "external", "label": "作者", "sublabel": "本机单用户", "pos": [40, 328], "size": [168, 64] },
+    { "id": "electron", "type": "frontend", "label": "Electron", "sublabel": "窗口 + Supervisor", "pos": [320, 328], "size": [168, 64] },
+    { "id": "dsh-host", "type": "cloud", "label": "DSH Host", "sublabel": "0.1.1-rc.2 · 唯一 Agent", "pos": [608, 328], "size": [168, 64], "tag": "子进程" },
+    { "id": "shell", "type": "frontend", "label": "dsh-editor-shell", "sublabel": "唯一 root GUI", "pos": [896, 328], "size": [168, 64] },
+    { "id": "manuscript", "type": "backend", "label": "dsh-manuscript", "sublabel": "/manuscript", "pos": [1184, 328], "size": [168, 64] },
+    { "id": "workspace", "type": "database", "label": "作品目录", "sublabel": "live-session cwd", "pos": [1480, 328], "size": [168, 64] },
+    { "id": "llm", "type": "external", "label": "模型提供方", "sublabel": "live-session model", "pos": [320, 100], "size": [168, 64] },
+    { "id": "kernel", "type": "backend", "label": "novel-kernel", "sublabel": "tools + prompt", "pos": [896, 100], "size": [168, 64] },
+    { "id": "workbench", "type": "backend", "label": "workbench", "sublabel": "私有 Host", "pos": [1184, 540], "size": [168, 64] }
   ],
   "boundaries": [
-    { "kind": "region", "label": "Electron 进程", "wraps": ["electron"] },
-    { "kind": "region", "label": "profiles/dsh-editor", "wraps": ["dsh-host", "shell", "manuscript", "workbench", "kernel"] }
+    { "kind": "region", "label": "Electron 主进程", "wraps": ["electron"] },
+    { "kind": "region", "label": "DSH 子进程 · profiles/dsh-editor", "wraps": ["dsh-host", "shell", "manuscript", "workbench", "kernel"] }
   ],
   "connections": [
     { "id": "author-to-electron", "from": "author", "to": "electron", "label": "写作操作", "variant": "emphasis" },
     { "id": "electron-to-host", "from": "electron", "to": "dsh-host", "label": "loopback URL", "variant": "emphasis" },
-    { "id": "host-to-llm", "from": "dsh-host", "to": "llm", "label": "session.prompt", "fromSide": "top", "toSide": "right" },
-    { "id": "host-to-kernel", "from": "dsh-host", "to": "kernel", "label": "tools" },
-    { "id": "host-to-shell", "from": "dsh-host", "to": "shell", "label": "加载 root", "variant": "emphasis", "labelAt": [768, 418] },
+    { "id": "host-to-shell", "from": "dsh-host", "to": "shell", "label": "加载 root", "variant": "emphasis" },
     { "id": "shell-to-manuscript", "from": "shell", "to": "manuscript", "label": "/manuscript" },
     { "id": "manuscript-to-workspace", "from": "manuscript", "to": "workspace", "label": "ctx.fs", "variant": "emphasis" },
-    { "id": "shell-to-workbench", "from": "shell", "to": "workbench", "label": "私有 RPC", "labelDy": 18 },
-    { "id": "workbench-to-workspace", "from": "workbench", "to": "workspace", "label": "host-api" }
+    { "id": "shell-to-workbench", "from": "shell", "to": "workbench", "label": "私有 RPC" },
+    { "id": "workbench-to-manuscript", "from": "workbench", "to": "manuscript", "label": "host-api 库" },
+    { "id": "host-to-kernel", "from": "dsh-host", "to": "kernel", "label": "注册 tools", "fromSide": "top", "toSide": "bottom" },
+    { "id": "host-to-llm", "from": "dsh-host", "to": "llm", "label": "session.prompt", "fromSide": "top", "toSide": "right" }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "所有权",
+      "title": "两道进程",
       "items": [
-        "Electron 只管窗口、内置运行时和 DshSupervisor 子进程",
-        "DSH 拥有 session、模型、工具、审批和 DSH_HOME",
-        "正文写入只走公开 /manuscript"
+        "Electron 只管窗口、内置运行时和 DshSupervisor",
+        "DSH 子进程拥有 session、模型、工具、审批和 DSH_HOME",
+        "窗口打开的是 DSH 的 loopback URL，不是直接加载 shell"
       ]
     },
     {
       "dot": "emerald",
-      "title": "桌面专用包",
+      "title": "插件在 Host 内",
       "items": [
-        "Shell 以较低 root priority 遮蔽官方 AppFrame",
-        "workbench 负责项目、导入、快照和归档",
-        "kernel 只预览提案，绝不直接写文件"
+        "虚线框里的包都是同一 Cordis 进程的插件",
+        "host-api 是 workbench 对 manuscript 的进程内导入",
+        "默认 full 另载 dsh-proofread 与 dsh-zhihu，见组合边界图"
       ]
     },
     {

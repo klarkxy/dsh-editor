@@ -68,8 +68,9 @@ pnpm test:e2e:portable
 - [架构与边界](docs/architecture.md)：DSH 权威边界、profile、RPC 与安全约束
 - [插件架构与接口](docs/plugin-architecture.md)：双私有 Host 拓扑、RPC/Tool/slot 契约以及修改、替换和新建插件流程
 - [交互架构图站](https://klarkxy.github.io/dsh-editor/)：GitHub Pages 发布的全部交互图
-- [桌面运行时图](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html)：Electron、DSH Host 与桌面 profile
-- [插件拓扑图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)：公开 Web 插件与桌面私有包
+- [桌面运行时图](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html)：Electron 启动 DSH 子进程；插件住在 Host 内
+- [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)：四个公开 tarball 与桌面私有包
+- [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html)：普通业务、可选智能增强、公开插件
 - [确认写入时序图](https://klarkxy.github.io/dsh-editor/author-confirm-write.html)：从 context 编译到作者确认写入
 - [CHANGELOG](CHANGELOG.md)：版本变化
 

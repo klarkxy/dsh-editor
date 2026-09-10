@@ -808,13 +808,14 @@ describe('shell manuscript RPC safety', () => {
     expect(chatSource).toMatch(/proposal\.kind === 'renames'/)
   })
 
-  it('threads the writing-progress scope into the shell root and renders the daily-goal chip', () => {
+  it('threads the writing-progress scope into the shell root and renders the sidebar search box', () => {
     const source = rootSource()
     /* root.ts 必须真正接住 progressScope,而不是定义后不用 */
     expect(source).toContain('progressScope: WritingProgressScope')
     expect(source).toMatch(/progressScope\s*[,:]\s*options\.progressScope/)
-    expect(source).toContain('writing-progress-chip')
-    expect(source).toMatch(/progressChipProps\(\{\s*overview,\s*progress:\s*writingProgress/)
+    expect(source).toContain('side-search')
+    expect(source).toContain('setSearchSubmitTick')
+    expect(source).not.toContain('writing-progress-chip')
     expect(source).toMatch(/nextBaselines\(/)
     expect(source).toContain("localDateKey(new Date())")
     expect(source).toContain('progress.record')
@@ -823,8 +824,7 @@ describe('shell manuscript RPC safety', () => {
     expect(settingsSource).toContain("from './writing-progress-settings.tsx'")
     expect(settingsSource).toContain('e(WritingProgressSettings')
     const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
-    expect(styleSource).toMatch(/\.writing-progress-chip\b/)
-    expect(styleSource).toMatch(/\.writing-progress-chip\.reached\b/)
+    expect(styleSource).toMatch(/\.side-search\b/)
     /* 作者侧写不对作者暴露设置入口 */
     expect(settingsSource).not.toContain('作者侧写（记忆）')
     expect(settingsSource).not.toContain('保存作者侧写')
@@ -870,7 +870,7 @@ describe('shell manuscript RPC safety', () => {
     expect(zh['chat.deleteTitle']).toBe('删除这段对话？')
     expect(zh['sidebar.search']).toBe('搜索')
     const sidebarSearch = readFileSync(new URL('./client/root.ts', import.meta.url), 'utf8')
-    expect(sidebarSearch).toContain("t('sidebar.search')")
+    expect(sidebarSearch).toContain("t('search.placeholder')")
     expect(palette).toContain("t('command.typewriterHint')")
     expect(palette).toContain("t('command.focusParaHint')")
     expect(zh['command.typewriterHint']).toContain('Ctrl+Alt+T')

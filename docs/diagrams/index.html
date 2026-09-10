@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DSH Editor · Architecture Diagrams</title>
+<title>DSH Editor · 架构图</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -24,7 +24,8 @@
   }
   main { max-width: 760px; margin: 0 auto; }
   h1 { font-size: 1.6rem; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 32px; font-size: 0.95rem; }
+  .sub { color: var(--muted); margin: 0 0 12px; font-size: 0.95rem; }
+  .note { color: var(--muted); margin: 0 0 32px; font-size: 0.88rem; }
   a.card {
     display: block; background: var(--card); border: 1px solid var(--border);
     border-radius: 12px; padding: 20px 24px; margin-bottom: 16px;
@@ -39,30 +40,31 @@
 </head>
 <body>
 <main>
-  <h1>DSH Editor · Architecture Diagrams</h1>
-  <p class="sub">Generated diagrams from <code>docs/diagrams/</code></p>
+  <h1>DSH Editor · 架构图</h1>
+  <p class="sub">规范源文件在仓库 <code>docs/diagrams/</code>；推送 <code>main</code> 后由 GitHub Pages 发布。</p>
+  <p class="note">四张图是同一套系统的不同切面。Host 插件住在 DSH 进程里，不是旁边的独立服务；<code>host-api</code> 是进程内库导入。Electron 只启动 DSH 并打开 loopback URL，不直接加载 shell。</p>
 
   <a class="card" href="dsh-editor-runtime.html">
-    <h2>Runtime Architecture</h2>
-    <p>dsh-editor-runtime.html</p>
+    <h2>桌面运行时</h2>
+    <p>两道进程：Electron 启动唯一 DSH 子进程；shell / manuscript / workbench / kernel 都在 Host 内。</p>
   </a>
 
   <a class="card" href="dsh-editor-plugins.html">
-    <h2>Plugin System</h2>
-    <p>dsh-editor-plugins.html</p>
-  </a>
-
-  <a class="card" href="author-confirm-write.html">
-    <h2>Author-Confirm Write Flow</h2>
-    <p>author-confirm-write.html</p>
+    <h2>插件分级与依赖</h2>
+    <p>四个公开 tarball 与桌面 profile。两框重叠的 manuscript、proofread、zhihu 同时出现在两种交付里；grill 只走 Web。</p>
   </a>
 
   <a class="card" href="plugin-composition-boundaries.html">
-    <h2>Plugin Composition Boundaries</h2>
-    <p>plugin-composition-boundaries.html</p>
+    <h2>组合边界</h2>
+    <p>普通业务、可选智能增强、独立公开插件三个视角。校对和资料可以不经过 Agent。</p>
   </a>
 
-  <footer>Deployed from the repository via GitHub Actions.</footer>
+  <a class="card" href="author-confirm-write.html">
+    <h2>作者确认后写入</h2>
+    <p>从 context.compile 到 proposal.apply。泳道分开只为读顺序；Workbench / Kernel / Manuscript 仍是同一 DSH 进程。</p>
+  </a>
+
+  <footer>由仓库 GitHub Actions 发布。产品名、channel 与代码标识保持原样。</footer>
 </main>
 </body>
 </html>

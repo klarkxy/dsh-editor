@@ -3,6 +3,7 @@
   "diagram_type": "sequence",
   "meta": {
     "title": "作者确认后写入正文",
+    "output": "author-confirm-write.html",
     "quality_profile": "showcase",
     "column_fit": "spread",
     "viewBox": [1280, 580],
@@ -21,29 +22,29 @@
         "id": "compose-prompt",
         "label": "编译上下文",
         "focus": ["author", "shell", "workbench", "dsh"],
-        "note": "发送前由 workbench 编译 V2 信封；文件文本视为不可信数据。"
+        "note": "Workbench 是同一 DSH 进程内的插件；文件文本视为不可信数据。"
       },
       {
         "id": "preview-proposal",
         "label": "预览提案",
         "focus": ["dsh", "kernel", "shell"],
-        "note": "novel_propose 只返回 marker，不写文件。"
+        "note": "novel_propose 只返回 marker，不写文件。Kernel 在进程内注册，不是外调服务。"
       },
       {
         "id": "author-write",
         "label": "确认写入",
         "focus": ["author", "shell", "manuscript", "workspace"],
-        "note": "作者确认后才走 /manuscript proposal.apply。"
+        "note": "作者确认后才走 /manuscript proposal.apply。拆合章改走 workbench。"
       }
     ]
   },
   "participants": [
     { "id": "author", "type": "external", "label": "作者", "sublabel": "确认写入" },
     { "id": "shell", "type": "frontend", "label": "Shell", "sublabel": "root GUI" },
-    { "id": "workbench", "type": "backend", "label": "Workbench", "sublabel": "context.compile" },
+    { "id": "workbench", "type": "backend", "label": "Workbench", "sublabel": "同进程插件" },
     { "id": "dsh", "type": "cloud", "label": "DSH Session", "sublabel": "唯一 Agent" },
-    { "id": "kernel", "type": "backend", "label": "Kernel", "sublabel": "novel_propose" },
-    { "id": "manuscript", "type": "backend", "label": "Manuscript", "sublabel": "/manuscript" },
+    { "id": "kernel", "type": "backend", "label": "Kernel", "sublabel": "同进程插件" },
+    { "id": "manuscript", "type": "backend", "label": "Manuscript", "sublabel": "同进程 /manuscript" },
     { "id": "workspace", "type": "database", "label": "作品目录", "sublabel": "replaceIfVersion" }
   ],
   "segments": [
@@ -70,5 +71,34 @@
     { "participant": "kernel", "from": 281, "to": 325, "type": "backend" },
     { "participant": "manuscript", "from": 431, "to": 475, "type": "backend" },
     { "participant": "workspace", "from": 463, "to": 480, "type": "database" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "同进程协作",
+      "items": [
+        "Workbench、Kernel、Manuscript 都是这份 DSH Host 里的插件",
+        "泳道分开只为读调用顺序，不表示独立服务",
+        "DshChatPort 只投影 SessionFace，不自己跑工具"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "预览不写盘",
+      "items": [
+        "novel_propose 只返回 marker",
+        "作者确认前正文不变",
+        "拆章 / 合章 / 批量重命名改走 workbench proposal"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "写入门禁",
+      "items": [
+        "正文创建或覆盖走 /manuscript proposal.apply",
+        "replaceIfVersion，冲突时保留编辑 buffer",
+        "Host 忽略 Renderer 提供的 cwd 与模型"
+      ]
+    }
   ]
 }

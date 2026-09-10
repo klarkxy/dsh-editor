@@ -21,10 +21,10 @@ DSH Editor 已经证明，可以把业务 Host、工具、提示词和自有界�
 
 ## 2. 先看图
 
-- [交互图：界面、能力与宿主边界](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html)：可切换普通业务、小说助手、公开插件三个视角，支持缩放和关系追踪。
-- [已有完整插件拓扑](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)。
-- [已有确认写入时序](https://klarkxy.github.io/dsh-editor/author-confirm-write.html)。
-- [已有桌面进程图](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html)。
+- [交互图：界面、能力与宿主边界](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html)：可切换普通业务、可选智能增强、公开插件三个视角；框内节点同进程。
+- [插件分级](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)：公开 tarball 与桌面 profile，host-api 为进程内库。
+- [确认写入时序](https://klarkxy.github.io/dsh-editor/author-confirm-write.html)：预览不写盘，确认后才 `proposal.apply`。
+- [桌面运行时](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html)：Electron 启动 DSH 子进程，插件住在 Host 内。
 
 新增交互图只展示主要依赖，manuscript 是兼有 Host 和 Client 的包，并非纯后端。完整接口和调用路径在下文展开。
 

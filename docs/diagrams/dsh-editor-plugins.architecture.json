@@ -2,83 +2,81 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "DSH Editor 插件拓扑",
+    "title": "DSH Editor 插件分级与依赖",
     "output": "dsh-editor-plugins.html",
     "quality_profile": "showcase",
     "legend": {
       "mode": "auto",
       "entries": {
-        "frontend": { "label": "Client" },
+        "frontend": { "label": "界面 / 入口" },
         "backend": { "label": "Host 插件" },
-        "database": { "label": "作品数据" },
         "cloud": { "label": "DSH 运行时" },
-        "external": { "label": "入口" }
+        "external": { "label": "Web profile" }
       }
     },
     "views": [
       {
         "id": "desktop-profile",
         "label": "桌面 profile",
-        "focus": ["electron", "shell", "manuscript", "workbench", "kernel", "dsh-host"],
-        "note": "桌面一次性加载四个包；缺任一私有包时 Host 在发布 URL 前失败。"
+        "focus": ["electron", "dsh-host", "shell", "manuscript", "workbench", "kernel"],
+        "note": "Electron 启动唯一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"
       },
       {
         "id": "public-web",
         "label": "公开 Web 插件",
-        "focus": ["web-dsh", "manuscript", "grill", "workspace"],
-        "note": "普通 web profile 可独立安装 manuscript 与 grill，二者可共存。"
+        "focus": ["web-dsh", "manuscript", "grill", "proofread", "zhihu"],
+        "note": "四个 tarball 可按任意顺序安装到普通 web profile；grill 只走这条交付。"
       },
       {
-        "id": "write-contracts",
-        "label": "写入契约",
-        "focus": ["shell", "manuscript", "workbench", "kernel", "workspace"],
-        "note": "真正写正文只经 /manuscript；kernel 只返回 proposal marker。"
+        "id": "in-process-deps",
+        "label": "进程内依赖",
+        "focus": ["shell", "manuscript", "workbench", "kernel", "dsh-host"],
+        "note": "host-api 是库导入；kernel 向同一 Host 注册 tools，不对外提供文件 RPC。"
       }
     ]
   },
   "components": [
-    { "id": "web-dsh", "type": "external", "label": "普通 web profile", "sublabel": "可独立安装", "pos": [48, 120], "size": [176, 64] },
-    { "id": "manuscript", "type": "backend", "label": "dsh-manuscript", "sublabel": "public dual-face", "pos": [380, 120], "size": [176, 64], "tag": "公开 tarball" },
-    { "id": "dsh-host", "type": "cloud", "label": "DSH 权威", "sublabel": "session / sandbox", "pos": [720, 120], "size": [176, 64] },
-    { "id": "workspace", "type": "database", "label": "作品目录", "sublabel": "live-session cwd", "pos": [1060, 120], "size": [176, 64] },
-    { "id": "grill", "type": "backend", "label": "dsh-grill", "sublabel": "tools + workflow", "pos": [48, 340], "size": [176, 64], "tag": "仅 Web" },
-    { "id": "electron", "type": "frontend", "label": "桌面 Electron", "sublabel": "不可插件化", "pos": [48, 560], "size": [176, 64] },
-    { "id": "shell", "type": "frontend", "label": "dsh-editor-shell", "sublabel": "fixed-version root", "pos": [380, 560], "size": [176, 64] },
-    { "id": "workbench", "type": "backend", "label": "workbench", "sublabel": "private host-only", "pos": [720, 560], "size": [176, 64] },
-    { "id": "kernel", "type": "backend", "label": "novel-kernel", "sublabel": "private host-only", "pos": [1060, 340], "size": [176, 64] }
+    { "id": "electron", "type": "frontend", "label": "桌面 Electron", "sublabel": "不可插件化", "pos": [48, 88], "size": [184, 66] },
+    { "id": "web-dsh", "type": "external", "label": "普通 web profile", "sublabel": "可独立安装", "pos": [1216, 88], "size": [184, 66] },
+    { "id": "dsh-host", "type": "cloud", "label": "DSH Host", "sublabel": "桌面子进程", "pos": [48, 304], "size": [184, 66] },
+    { "id": "shell", "type": "frontend", "label": "dsh-editor-shell", "sublabel": "fixed-version root", "pos": [340, 304], "size": [184, 66] },
+    { "id": "proofread", "type": "backend", "label": "dsh-proofread", "sublabel": "公开 · 纯校对", "pos": [632, 304], "size": [184, 66], "tag": "公开 tarball" },
+    { "id": "zhihu", "type": "backend", "label": "dsh-zhihu", "sublabel": "公开 · 资料", "pos": [924, 304], "size": [184, 66], "tag": "公开 tarball" },
+    { "id": "grill", "type": "backend", "label": "dsh-grill", "sublabel": "仅 Web 脚手架", "pos": [1216, 304], "size": [184, 66], "tag": "仅 Web" },
+    { "id": "kernel", "type": "backend", "label": "novel-kernel", "sublabel": "private host-only", "pos": [48, 520], "size": [184, 66] },
+    { "id": "workbench", "type": "backend", "label": "workbench", "sublabel": "private host-only", "pos": [340, 520], "size": [184, 66] },
+    { "id": "manuscript", "type": "backend", "label": "dsh-manuscript", "sublabel": "public dual-face", "pos": [632, 520], "size": [184, 66], "tag": "公开 tarball" }
   ],
   "boundaries": [
-    { "kind": "region", "label": "公开 Web 交付", "wraps": ["web-dsh", "manuscript", "grill"] },
-    { "kind": "region", "label": "桌面 profiles/dsh-editor", "wraps": ["shell", "workbench", "kernel", "manuscript"] },
-    { "kind": "security-group", "label": "loopback RPC", "wraps": ["manuscript", "workbench"] }
+    { "kind": "region", "label": "桌面 profiles/dsh-editor（默认 full）", "wraps": ["dsh-host", "shell", "kernel", "workbench", "manuscript", "proofread", "zhihu"] },
+    { "kind": "region", "label": "公开 Web 交付", "wraps": ["web-dsh", "grill", "manuscript", "proofread", "zhihu"] }
   ],
   "connections": [
-    { "id": "web-to-manuscript", "from": "web-dsh", "to": "manuscript", "label": "shell.overlay", "variant": "emphasis" },
-    { "id": "web-to-grill", "from": "web-dsh", "to": "grill", "label": "scaffold_novel", "labelAt": [136, 198] },
-    { "id": "manuscript-to-host", "from": "manuscript", "to": "dsh-host", "label": "live session" },
-    { "id": "host-to-workspace", "from": "dsh-host", "to": "workspace", "label": "ctx.fs", "variant": "emphasis" },
-    { "id": "electron-to-shell", "from": "electron", "to": "shell", "label": "加载 root", "variant": "emphasis" },
-    { "id": "shell-to-manuscript", "from": "shell", "to": "manuscript", "label": "/manuscript" },
-    { "id": "shell-to-workbench", "from": "shell", "to": "workbench", "label": "私有 RPC" },
-    { "id": "workbench-to-host", "from": "workbench", "to": "dsh-host", "label": "host-api" },
-    { "id": "kernel-to-host", "from": "kernel", "to": "dsh-host", "label": "tools.guard" }
+    { "id": "electron-to-host", "from": "electron", "to": "dsh-host", "label": "启动子进程", "variant": "emphasis", "labelDy": 24 },
+    { "id": "host-to-shell", "from": "dsh-host", "to": "shell", "label": "加载 root", "variant": "emphasis" },
+    { "id": "host-to-kernel", "from": "dsh-host", "to": "kernel", "label": "注册 tools", "labelDy": 24 },
+    { "id": "shell-to-workbench", "from": "shell", "to": "workbench", "label": "私有 RPC", "labelDy": 24 },
+    { "id": "shell-to-manuscript", "from": "shell", "to": "manuscript", "label": "/manuscript", "variant": "emphasis", "fromSide": "right", "toSide": "top" },
+    { "id": "workbench-to-manuscript", "from": "workbench", "to": "manuscript", "label": "host-api 库" },
+    { "id": "web-to-grill", "from": "web-dsh", "to": "grill", "label": "scaffold_novel", "labelDy": 24 },
+    { "id": "web-to-zhihu", "from": "web-dsh", "to": "zhihu", "label": "可独立安装", "variant": "dashed" }
   ],
   "cards": [
     {
       "dot": "cyan",
       "title": "分级",
       "items": [
-        "manuscript 与 grill 是公开 tarball",
-        "workbench、kernel、shell 只随桌面 profile 交付",
-        "Electron bootstrap 永远不可插件化"
+        "manuscript、proofread、zhihu、grill 是公开 tarball",
+        "shell、workbench、kernel 只随桌面 profile 交付",
+        "两框重叠的三个包同时出现在两种交付里"
       ]
     },
     {
       "dot": "violet",
       "title": "依赖方向",
       "items": [
-        "Shell client 构建时内联 workbench/kernel contracts",
-        "workbench Host 只依赖 manuscript/host-api",
+        "host-api 与校对引擎都是进程内库，不是对 DSH 的 RPC",
+        "kernel 向同一 Host 注册 tools / guard，不直连作品目录",
         "禁止跨包导入另一个包的 src"
       ]
     },

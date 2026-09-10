@@ -74,10 +74,18 @@ function SearchPanel(props: {
   navigationBlocked: boolean
   activePath: string
   activeDirty: boolean
+  query?: string
+  onQueryChange?(value: string): void
+  submitTick?: number
   onOpen(hit: SearchHit): void
   onReplaced?(paths: string[]): void
 }) {
-  const [query, setQuery] = useState('')
+  const [internalQuery, setInternalQuery] = useState('')
+  const query = props.onQueryChange ? props.query ?? '' : internalQuery
+  const setQuery = (value: string) => {
+    if (props.onQueryChange) props.onQueryChange(value)
+    else setInternalQuery(value)
+  }
   const [replacement, setReplacement] = useState('')
   const [scope, setScope] = useState<SearchScope>('project')
   const [result, setResult] = useState<SearchResponse | null>(null)
@@ -91,7 +99,7 @@ function SearchPanel(props: {
   requestGate.setScope(requestScope)
 
   useEffect(() => {
-    setQuery('')
+    if (!props.onQueryChange) setInternalQuery('')
     setReplacement('')
     setResult(null)
     setNote('')
@@ -123,6 +131,10 @@ function SearchPanel(props: {
     setResult(searched.value)
     setNote(searched.value.results.length ? '' : t('search.noMatch'))
   }
+
+  useEffect(() => {
+    if (props.submitTick) void search(query, scope)
+  }, [props.submitTick])
 
   const replacePlan = result ? planReplace(result.results, replacement) : null
   const replaceSummary = replacePlan ? summarizeReplacePlan(replacePlan) : null
@@ -197,7 +209,7 @@ function SearchPanel(props: {
 
   return e('section', { className: 'search-panel', 'aria-label': t('search.title') },
     e('form', { role: 'search', onSubmit: (event: FormEvent) => { event.preventDefault(); void search(query, scope) } },
-      e('input', {
+      props.onQueryChange ? null : e('input', {
         ref: input,
         value: query,
         maxLength: 120,

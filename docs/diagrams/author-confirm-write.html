@@ -4866,7 +4866,7 @@
       </div>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[{"id":"compose-prompt","label":"编译上下文","focus":["author","shell","workbench","dsh"],"note":"发送前由 workbench 编译 V2 信封；文件文本视为不可信数据。"},{"id":"preview-proposal","label":"预览提案","focus":["dsh","kernel","shell"],"note":"novel_propose 只返回 marker，不写文件。"},{"id":"author-write","label":"确认写入","focus":["author","shell","manuscript","workspace"],"note":"作者确认后才走 /manuscript proposal.apply。"}]</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"compose-prompt","label":"编译上下文","focus":["author","shell","workbench","dsh"],"note":"Workbench 是同一 DSH 进程内的插件；文件文本视为不可信数据。"},{"id":"preview-proposal","label":"预览提案","focus":["dsh","kernel","shell"],"note":"novel_propose 只返回 marker，不写文件。Kernel 在进程内注册，不是外调服务。"},{"id":"author-write","label":"确认写入","focus":["author","shell","manuscript","workspace"],"note":"作者确认后才走 /manuscript proposal.apply。拆合章改走 workbench。"}]</script>
 
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
       <button id="guided-view-prev" type="button" aria-label="Previous guided view" title="Previous guided view ([)">&#8592;</button>
@@ -5086,15 +5086,15 @@
           <text data-detail="context" x="305.33333333333337" y="111" class="t-muted" font-size="7" text-anchor="middle">root GUI</text>
         </g>
 
-        <g id="node-workbench" data-node-id="workbench" data-node-label="Workbench" tabindex="0" role="button" aria-label="Focus Workbench, context.compile, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="context.compile" data-node-context="Sequence participant">
-          <title>Workbench · context.compile · Sequence participant</title>
+        <g id="node-workbench" data-node-id="workbench" data-node-label="Workbench" tabindex="0" role="button" aria-label="Focus Workbench, 同进程插件, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="同进程插件" data-node-context="Sequence participant">
+          <title>Workbench · 同进程插件 · Sequence participant</title>
           <rect x="407.6666666666667" y="72" width="141" height="54" rx="6" class="c-mask"/>
           <rect x="407.6666666666667" y="72" width="141" height="54" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(413.6666666666667 78) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor x="478.1666666666667" y="94" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Workbench</text>
-          <text data-detail="context" x="478.1666666666667" y="111" class="t-muted" font-size="7" text-anchor="middle">context.compile</text>
+          <text data-detail="context" x="478.1666666666667" y="111" class="t-muted" font-size="7" text-anchor="middle">同进程插件</text>
         </g>
 
         <g id="node-dsh" data-node-id="dsh" data-node-label="DSH Session" tabindex="0" role="button" aria-label="Focus DSH Session, 唯一 Agent, Sequence participant" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="唯一 Agent" data-node-context="Sequence participant">
@@ -5108,26 +5108,26 @@
           <text data-detail="context" x="651" y="111" class="t-muted" font-size="7" text-anchor="middle">唯一 Agent</text>
         </g>
 
-        <g id="node-kernel" data-node-id="kernel" data-node-label="Kernel" tabindex="0" role="button" aria-label="Focus Kernel, novel_propose, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="novel_propose" data-node-context="Sequence participant">
-          <title>Kernel · novel_propose · Sequence participant</title>
+        <g id="node-kernel" data-node-id="kernel" data-node-label="Kernel" tabindex="0" role="button" aria-label="Focus Kernel, 同进程插件, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="同进程插件" data-node-context="Sequence participant">
+          <title>Kernel · 同进程插件 · Sequence participant</title>
           <rect x="753.3333333333334" y="72" width="141" height="54" rx="6" class="c-mask"/>
           <rect x="753.3333333333334" y="72" width="141" height="54" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(759.3333333333334 78) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor x="823.8333333333334" y="94" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Kernel</text>
-          <text data-detail="context" x="823.8333333333334" y="111" class="t-muted" font-size="7" text-anchor="middle">novel_propose</text>
+          <text data-detail="context" x="823.8333333333334" y="111" class="t-muted" font-size="7" text-anchor="middle">同进程插件</text>
         </g>
 
-        <g id="node-manuscript" data-node-id="manuscript" data-node-label="Manuscript" tabindex="0" role="button" aria-label="Focus Manuscript, /manuscript, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="/manuscript" data-node-context="Sequence participant">
-          <title>Manuscript · /manuscript · Sequence participant</title>
+        <g id="node-manuscript" data-node-id="manuscript" data-node-label="Manuscript" tabindex="0" role="button" aria-label="Focus Manuscript, 同进程 /manuscript, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="同进程 /manuscript" data-node-context="Sequence participant">
+          <title>Manuscript · 同进程 /manuscript · Sequence participant</title>
           <rect x="926.1666666666667" y="72" width="141" height="54" rx="6" class="c-mask"/>
           <rect x="926.1666666666667" y="72" width="141" height="54" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(932.1666666666667 78) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor x="996.6666666666667" y="94" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Manuscript</text>
-          <text data-detail="context" x="996.6666666666667" y="111" class="t-muted" font-size="7" text-anchor="middle">/manuscript</text>
+          <text data-detail="context" x="996.6666666666667" y="111" class="t-muted" font-size="7" text-anchor="middle">同进程 /manuscript</text>
         </g>
 
         <g id="node-workspace" data-node-id="workspace" data-node-label="作品目录" tabindex="0" role="button" aria-label="Focus 作品目录, replaceIfVersion, Sequence participant" aria-pressed="false" data-node-kind="database" data-node-sublabel="replaceIfVersion" data-node-context="Sequence participant">
@@ -5350,7 +5350,41 @@
 
     <!-- Info Cards -->
     <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>同进程协作</h3>
+        </div>
+        <ul>
+          <li>&bull; Workbench、Kernel、Manuscript 都是这份 DSH Host 里的插件</li>
+          <li>&bull; 泳道分开只为读调用顺序，不表示独立服务</li>
+          <li>&bull; DshChatPort 只投影 SessionFace，不自己跑工具</li>
+        </ul>
+      </div>
 
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>预览不写盘</h3>
+        </div>
+        <ul>
+          <li>&bull; novel_propose 只返回 marker</li>
+          <li>&bull; 作者确认前正文不变</li>
+          <li>&bull; 拆章 / 合章 / 批量重命名改走 workbench proposal</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>写入门禁</h3>
+        </div>
+        <ul>
+          <li>&bull; 正文创建或覆盖走 /manuscript proposal.apply</li>
+          <li>&bull; replaceIfVersion，冲突时保留编辑 buffer</li>
+          <li>&bull; Host 忽略 Renderer 提供的 cwd 与模型</li>
+        </ul>
+      </div>
     </div>
 
   </div>

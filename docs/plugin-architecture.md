@@ -8,10 +8,10 @@
 
 | 图 | 说明 | 打开 |
 | --- | --- | --- |
-| 插件拓扑 | 公开 Web 与桌面私有包、loopback RPC、DSH 权威 | [dsh-editor-plugins.html](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html) |
+| 插件分级 | 公开 tarball 与桌面 profile；host-api 是进程内库 | [dsh-editor-plugins.html](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html) |
 | 确认写入 | 预览提案不写文件；作者确认后才 `proposal.apply` | [author-confirm-write.html](https://klarkxy.github.io/dsh-editor/author-confirm-write.html) |
-| 桌面运行时 | 进程、profile 与写作主路径 | [dsh-editor-runtime.html](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html) |
-| 组合边界 | 普通业务、小说助手、公开插件三个视角 | [plugin-composition-boundaries.html](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) |
+| 桌面运行时 | Electron 启动 DSH 子进程；插件住在 Host 内 | [dsh-editor-runtime.html](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html) |
+| 组合边界 | 普通业务、可选智能增强、公开插件三个视角 | [plugin-composition-boundaries.html](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) |
 
 规范源文件在 [diagrams/](diagrams/) 下的同名 `.json`；交互图由 `.github/workflows/pages.yml` 发布到 GitHub Pages。
 
@@ -19,7 +19,7 @@
 
 当前支持 basic/smart/full 三份桌面组合及四个独立公开包。安装、最小插件范本和无 Web/Agent 实验见[组合指南](plugin-composition-guide.md)。下图展示默认 full；kernel、assist 和知乎按组合选择。
 
-一个 Electron 进程只启动一个 loopback DSH Host。所有插件共享 DSH 的 session、workspace、model、tools、approval 和 connection 权威，不创建第二套状态。
+一个 Electron 进程只启动一个 loopback DSH Host。所有插件共享 DSH 的 session、workspace、model、tools、approval 和 connection 权威，不创建第二套状态。交互图里的 Host 插件都画在 DSH 进程框内；箭头表示 Cordis 注入或 loopback RPC，不是跨进程服务调用。
 
 ```text
 Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署、子进程监督）
@@ -97,7 +97,7 @@ dsh-editor-novel-kernel/host
 
 `dsh-editor-workbench/contracts` 与 `dsh-editor-novel-kernel/contracts` 是 browser-safe 内部兼容面：只能包含常量、类型、解析器和纯函数，不能导入 Node、Cordis Host 或文件系统。Shell 的 client 构建必须内联它们，浏览器产物不得在运行时解析私有 Host 包。
 
-`dsh-manuscript/host-api` 是公开但狭窄的 Host 子入口，只提供 live-session workspace authority、受约束文件/路径原语与标准 Host 错误映射。它不是任意文件系统 SDK，也不包含桌面 workbench endpoint。
+`dsh-manuscript/host-api` 是公开但狭窄的 Host 子入口，只提供 live-session workspace authority、受约束文件/路径原语与标准 Host 错误映射。它是 workbench 的进程内库导入，不是对 DSH 的 RPC，也不是任意文件系统 SDK，更不包含桌面 workbench endpoint。
 
 ## Host、Client、inject 与生命周期
 
