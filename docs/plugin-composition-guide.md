@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 独立文本校对 | `dsh-proofread` | 文本 RPC 无 Agent、会话、文件、模型依赖 |
 | 独立资料查询 | `dsh-zhihu` | 普通 RPC/UI 默认启用；Tool 入口另行加入 |
-| `basic` 基础写作 | manuscript、proofread、workbench、shell | 不启用补全、Chat、自动索引、小说工具或知乎 |
+| `basic` 基础写作 | manuscript、proofread、workbench、shell、plugins | 不启用补全、Chat、自动索引、小说工具或知乎 |
 | `smart` 智能写作 | basic + novel-kernel | 启用 manuscript-assist、workbench-tools 与 Chat |
 | `full` 完整写作（默认） | smart + zhihu | 启用知乎普通服务与 Tool 入口 |
 
@@ -106,6 +106,7 @@ node e2e/missing-private-plugin.mjs
 | zhihu-tools | `zhihu_search`、`zhihu_global_search`、`zhihu_hot_list`、`zhihu_ask`、`zhihu_knowledge_search` | 现有工具输入输出 | 通过同一 zhihu 服务的生命周期与计量；无重复 channel |
 | novel-kernel | 9个小说工具、guard、prompt、`/novel-kernel` | 小说协作及旧知乎知识库 endpoint 转发 | 不再依赖知乎凭据；缺知乎只影响兼容知乎调用 |
 | shell | `/dsh-editor-shell` → `capabilities.get` | `{assistant, completion, zhihu}` | 已选依赖缺失返回明确错误；正常未启用返回 false |
+| plugins | `/dsh-editor-plugins` | 已装清单、开关、GitHub `dsh-plugin` 搜索、静态检查与安装 | 核心插件锁定；`blocked` 拒绝安装；安装/卸载后重启 |
 
 proofread finding 位置沿用 UTF-16 下标；结果只读，不直接修改当前文稿。支持 `punctuation/sensitive/repeat/typo/habit`，人物卡检查只在 workbench 作品扫描中提供。
 

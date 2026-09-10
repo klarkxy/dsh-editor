@@ -118,7 +118,7 @@ try {
  const capabilities=await rpc('/dsh-editor-shell','capabilities.get',{});
  if(capabilities.assistant!==(composition!=='basic')||capabilities.completion!==(composition!=='basic')||capabilities.zhihu!==(composition==='full'))throw new Error('capability mismatch '+JSON.stringify(capabilities));
  evidence.capabilities=capabilities;
- const known=['dsh-manuscript','dsh-proofread','dsh-editor-workbench','dsh-editor-novel-kernel','dsh-zhihu','dsh-editor-shell'];
+ const known=['dsh-manuscript','dsh-proofread','dsh-editor-workbench','dsh-editor-novel-kernel','dsh-zhihu','dsh-editor-shell','dsh-editor-plugins'];
  const installed=(await readdir(resolve(runtime,'node_modules'))).filter(name=>known.includes(name)).sort();
  const expected=known.filter(name=>!(composition==='basic'&&name==='dsh-editor-novel-kernel')&&!(composition!=='full'&&name==='dsh-zhihu')).sort();
  if(JSON.stringify(installed)!==JSON.stringify(expected))throw new Error('installed package set mismatch '+installed.join(','));evidence.installed=installed;

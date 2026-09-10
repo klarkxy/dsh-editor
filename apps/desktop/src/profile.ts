@@ -1,4 +1,5 @@
 import { cp, mkdir, readdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { restoreUserPlugins } from './user-plugins.js'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -77,6 +78,7 @@ export async function deployProfile(home: string, template: string, runtimeNodeM
     throw error
   }
   await deployAgentPresets(home, template)
+  await restoreUserPlugins(home, target)
   return target
 }
 

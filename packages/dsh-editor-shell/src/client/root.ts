@@ -23,7 +23,7 @@ import {
 } from 'dsh-editor-workbench/contracts'
 import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
 import { sortChapterPaths } from '../project-files.ts'
-import { EXTENSIONS_SLOT, registerRoot } from '../root-registration.ts'
+import { EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, registerRoot } from '../root-registration.ts'
 import { writingPreferences, writingTypography, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
 import {
@@ -220,13 +220,14 @@ function AboutTrigger(props: { onOpen(): void }): ReactNode {
   )
 }
 
-function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync, extensionsDock }: {
+function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync, extensionsDock, pluginsSettings }: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
   progressScope: WritingProgressScope
   hostThemeSync?: HostThemeSync
   extensionsDock?: ReactNode
+  pluginsSettings?: ReactNode
 }) {
   useLocale()
   /* 可选 AI 能力：加载完成前不挂载 Chat / 自动索引;失败是显式错误态(可重试)。 */
@@ -1938,7 +1939,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         onCancel: () => { if (!importTitle.busy) setImportTitle(null) },
         onConfirm: (title: string) => void submitImportTitle(title),
       }) : null,
-      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? capabilityState.value.assistant : undefined, onClose: () => setSettingsOpen(false) }) : null,
+      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? capabilityState.value.assistant : undefined, pluginsTab: pluginsSettings, onClose: () => setSettingsOpen(false) }) : null,
     )
   }
 
@@ -2410,7 +2411,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       onClose: () => { if (!archiveBusy) setArchiveOpen(false) },
     }) : null,
     imagePreview ? e(ImagePreviewOverlay, { path: imagePreview.path, url: imagePreview.url, onClose: closeImagePreview }) : null,
-    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? capabilityState.value.assistant : undefined, onClose: () => setSettingsOpen(false) }) : null,
+    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? capabilityState.value.assistant : undefined, pluginsTab: pluginsSettings, onClose: () => setSettingsOpen(false) }) : null,
     startupUpdate && !aboutOpen ? e('div', { className: 'update-toast', role: 'status' },
       e('span', { className: 'update-toast-text' }, t('about.toast', { version: startupUpdate.version })),
       e('button', {
@@ -2462,6 +2463,7 @@ export function registerShellRoot(ctx: Context, options: RegisterShellRootOption
     progressScope: options.progressScope,
     hostThemeSync: options.hostThemeSync,
     extensionsDock: e(ExtensionsDock, { rootProps: props }),
+    pluginsSettings: (props as RootSlotProps).renderSlot?.(PLUGINS_SETTINGS_SLOT, {}) ?? null,
   }))
 }
 

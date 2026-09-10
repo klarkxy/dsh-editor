@@ -805,6 +805,7 @@ export const componentStyles = `
 .shell .settings-header .settings-close { margin-left: auto; }
 .shell .settings-header .settings-open-config + .settings-close { margin-left: 0; }
 .shell .settings-content { min-height: 0; overflow: auto; padding: var(--space-4) var(--space-5); }
+.shell .settings-content:has(.dsh-plugins) { padding-right: var(--space-4); }
 
 /* 通用设置行 */
 .shell .settings-general { display: grid; gap: var(--space-4); max-width: 560px; align-content: start; }

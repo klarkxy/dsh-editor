@@ -1,1 +1,1 @@
-{"id":"smart","label":"智能写作","packages":["dsh-manuscript","dsh-proofread","dsh-editor-workbench","dsh-editor-novel-kernel","dsh-editor-shell"],"disabledEntries":[],"shell":{"assistant":true,"zhihu":false}}
+{"id":"smart","label":"智能写作","packages":["dsh-manuscript","dsh-proofread","dsh-editor-workbench","dsh-editor-novel-kernel","dsh-editor-shell","dsh-editor-plugins"],"disabledEntries":[],"shell":{"assistant":true,"zhihu":false}}

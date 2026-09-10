@@ -23,6 +23,7 @@ pnpm install --frozen-lockfile
 ```text
 apps/desktop/                  Electron main、profile 部署、进程监督与 portable 配置
 packages/dsh-editor-shell/     仅桌面 profile 加载的私有写作客户端（src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}）
+packages/dsh-editor-plugins/   私有插件管理：开关、GitHub 市场搜索与安装
 packages/dsh-editor-workbench/ 私有项目生命周期与 context Host
 packages/dsh-editor-novel-kernel/ 私有小说 Tool、guard、prompt 与知识卡
 packages/dsh-manuscript/       Host RPC、公开 Web 稿纸插件与共享 editor-core（src/client/editor-core/）
@@ -128,6 +129,13 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 
 - 公开包：`/zhihu` 资料、知识库与用量；自有 UI 同时挂官方 overlay 和桌面 `dsh-editor.extensions`。
 - Tool 入口 `dsh-zhihu/tools` 按组合选择，默认 full 才加入。
+
+### `dsh-editor-plugins`
+
+- 私有包：`/dsh-editor-plugins` 列出/开关已装插件，并从 GitHub `topic:dsh-plugin` 搜索安装。
+- 核心入口（稿纸、工作台、写作界面、插件管理）与 `@deepseek-ai/*` 不能关闭或卸载。
+- 市场安装写入 `$DSH_HOME/user-plugins/`，桌面每次部署 profile 后重新挂回；安装与卸载后需要重启。
+- 安装前 `marketplace.inspect` / 安装时同一套静态检查：构建产物、patch insert、root 冲突、DSH/cordis 主版本、客户端 lazy-CJS。`blocked` 拒绝安装。这不能证明运行时一定成功。
 
 ## 测试
 

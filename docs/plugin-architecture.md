@@ -35,9 +35,12 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
    │  └─ Host: novel_* 工具、guard、system prompt、知识卡、`/novel-kernel` 旧知乎入口转发
    ├─ dsh-proofread：纯引擎、/proofread、插件自有 UI
    ├─ dsh-zhihu：/zhihu、凭据/计量、插件自有 UI；Tool entry 可选
-   └─ dsh-editor-shell
-      ├─ Host: 注册 `dsh-editor-writing` 设置 schema
-      └─ Client: 唯一 root GUI、各写作面板、DshChatPort、编辑状态、作者确认
+   ├─ dsh-editor-shell
+   │  ├─ Host: 注册 `dsh-editor-writing` 设置 schema
+   │  └─ Client: 唯一 root GUI、各写作面板、DshChatPort、编辑状态、作者确认
+   └─ dsh-editor-plugins
+      ├─ Host: `/dsh-editor-plugins`，开关、GitHub 市场搜索与安装
+      └─ Client: 设置「插件」分类
 
 普通 profiles/web（按需分别安装）
 ├─ dsh-manuscript
@@ -75,6 +78,7 @@ dsh-editor-novel-kernel/host
 | `dsh-editor-workbench` / `editor-workbench` | 私有工作区生命周期、概览/状态、校对、卡片、进度 RPC | private host-only | 桌面 profile 必需 |
 | `dsh-editor-novel-kernel` / `editor-novel-kernel` | 私有小说工具、guard、prompt、知识卡、`/novel-kernel` | private host-only | smart/full 必需；basic 不装 |
 | `dsh-editor-shell` / `editor-shell` | 唯一 `root` client 与写作设置 schema | fixed-version private | 桌面 profile 必需 |
+| `dsh-editor-plugins` / `editor-plugins` | `/dsh-editor-plugins`、设置里的插件开关与 GitHub 市场 | private dual-face | 桌面 profile 必需；核心插件锁定 |
 
 各包 `cordis.patch.yml` 中的 entry id：
 
@@ -89,6 +93,7 @@ dsh-editor-novel-kernel/host
 | `dsh-editor-workbench` | `editor-workbench` | `dsh-editor-workbench` |
 | `dsh-editor-novel-kernel` | `editor-novel-kernel` | `dsh-editor-novel-kernel` |
 | `dsh-editor-shell` | `editor-shell` | `dsh-editor-shell` |
+| `dsh-editor-plugins` | `editor-plugins` | `dsh-editor-plugins` |
 
 `dsh-editor-workbench/contracts` 与 `dsh-editor-novel-kernel/contracts` 是 browser-safe 内部兼容面：只能包含常量、类型、解析器和纯函数，不能导入 Node、Cordis Host 或文件系统。Shell 的 client 构建必须内联它们，浏览器产物不得在运行时解析私有 Host 包。
 
@@ -112,6 +117,8 @@ dsh-editor-novel-kernel/host
 | `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt`, `fs`, `connection`, `sandboxPolicy` |
 | `dsh-editor-shell` Host | `dsh-editor-shell` | `settings`, `connection` |
 | `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope`, `settingsSchema`, `remote` |
+| `dsh-editor-plugins` Host | `dsh-editor-plugins` | `connection`, `loader` |
+| `dsh-editor-plugins` Client | `dsh-editor-plugins-client` | `slots`, `connection` |
 | `dsh-proofread` Host | `dsh-proofread` | `connection` |
 | `dsh-proofread` Client | `dsh-proofread-client` | `slots`, `connection` |
 | `dsh-zhihu` Host | `dsh-zhihu` | `connection`, `credentials`, `storageDomain` |
@@ -121,13 +128,13 @@ dsh-editor-novel-kernel/host
 
 Shell 以 `root` slot id `dsh-editor-shell-root`、priority `-100`、label `DSH 编辑器` 注册。manuscript client 只注册 `shell.overlay`（id `manuscript`，order `100`，label `稿纸`），禁止占用 `root` 或 `conversation.view`。
 
-Shell 另声明 `dsh-editor.extensions`（list/root）并渲染贡献；proofread 与 zhihu 在此及官方 `shell.overlay` 贡献同一个自有 Client。它们不接收 ShellContext，只使用自己的输入和 Connection；输入修订、取消、焦点和样式由插件生命周期维护。详见[挂载合同](plugin-composition-guide.md#最小插件开发范本)。
+Shell 另声明 `dsh-editor.extensions`（list/root）并渲染贡献；proofread 与 zhihu 在此及官方 `shell.overlay` 贡献同一个自有 Client。它们不接收 ShellContext，只使用自己的输入和 Connection；输入修订、取消、焦点和样式由插件生命周期维护。详见[挂载合同](plugin-composition-guide.md#最小插件开发范本)。Shell 还声明 `dsh-editor.settings.plugins`，由 `dsh-editor-plugins` 填入设置里的「插件」分类：稿纸 / 工作台 / 写作界面 / 插件管理本身锁定；校对、补全、小说工具、知乎等可开关；社区插件从 GitHub `topic:dsh-plugin` 搜索安装，安装与卸载后需要重启。
 
 Shell client 构建会捆绑 `docx` 与 `jszip`，仅供导出对话框在 Renderer 内生成 DOCX/EPUB。manuscript editor-core 构建会捆绑 `@codemirror/search`，仅供稿内查找替换。两者都不进入 Host RPC。
 
 ## RPC 通用契约
 
-`/manuscript`、`/dsh-editor-workbench`、`/novel-kernel`、`/proofread`、`/zhihu` 与 `/dsh-editor-shell` 都只以 `{ authority: 'loopback' }` 注册。loopback 限制网络暴露，但不是调用者身份；每个文件请求仍必须携带 live `sessionId` 并由 Host 重建 authority（`usage.summary` / `zhihu.usage` / `project.inspect` / `project.createHome` / 知乎知识库 RPC 例外，见下表）。
+`/manuscript`、`/dsh-editor-workbench`、`/novel-kernel`、`/proofread`、`/zhihu`、`/dsh-editor-shell` 与 `/dsh-editor-plugins` 都只以 `{ authority: 'loopback' }` 注册。loopback 限制网络暴露，但不是调用者身份；每个文件请求仍必须携带 live `sessionId` 并由 Host 重建 authority（`usage.summary` / `zhihu.usage` / `project.inspect` / `project.createHome` / 知乎知识库 RPC 例外，见下表）。
 
 ```ts
 type RpcResult<T> =
@@ -245,11 +252,25 @@ Context 信封常量：
 - prompt section 固定为 `dsh-editor:novel-kernel`、order `90`。作品材料是不可信字符串，只有 context 信封中的 `user_request` 是当次请求。
 - 作者内容的真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`；侧写由 Shell 展示确认卡、作者点击"记住"、再由 `writingScope.set('authorMemory', next)` 写入本机 settings。
 
+## `/dsh-editor-plugins`：插件管理
+
+Channel：`/dsh-editor-plugins`。不要求 `sessionId`。开关写入 `$DSH_HOME/dsh-plugins.json` 与可替换的 home `cordis.patch.yml`（仅当该文件为空或带 `managed-by: dsh-editor-plugins` 标记时）；从市场安装的包放在 `$DSH_HOME/user-plugins/`，桌面每次部署 profile 后会重新挂回。安装与卸载后需要重启。
+
+| Endpoint | 请求字段 | 语义 |
+| --- | --- | --- |
+| `inventory.list` | 无 | 读 · 核心 / 写作扩展 / 社区三组卡片；`@deepseek-ai/*` 内部项隐藏；核心 `locked` |
+| `entry.setEnabled` | `entryId`, `enabled` | 写 · 拒绝核心与 Harness 内部项；即时 `loader.update` 并持久化覆盖 |
+| `marketplace.search` | `query` | 读 · GitHub `topic:dsh-plugin` 搜索；`owner/repo` 可直接进入结果 |
+| `marketplace.inspect` | `spec` | 读 · 下载后静态检查，不写入 profile：构建产物、patch 入口、root 冲突、DSH/cordis 版本、客户端 lazy-CJS |
+| `marketplace.install` | `spec` | 写 · 仅 `github:owner/repo`；先跑同一套静态检查，`blocked` 拒绝；不运行 prepare 脚本 |
+| `marketplace.uninstall` | `name` | 写 · 只卸载市场安装的包，不删作品文件 |
+
 ## 如何修改或替换现有插件
 
 | 想改变的行为 | 所有者 |
 | --- | --- |
 | 三栏布局、稿纸、搜索/概览/校对/卡片面板、导出导入归档、Chat 展示、设置、快捷键 | `dsh-editor-shell` |
+| 插件开关、GitHub 市场搜索与安装 | `dsh-editor-plugins` |
 | 普通 Web 的稿纸抽屉与共享稿纸核心（含查找替换、打字机、排版） | `dsh-manuscript` client + `dsh-manuscript/client/editor-core` |
 | 稿件安全读写、草稿、FIM/patch、proposal apply、`search.text` | `dsh-manuscript` Host |
 | 项目结构、章节概览/状态、校对扫描、卡片、进度、context、导入、快照、移动、归档 | `dsh-editor-workbench` |
@@ -294,7 +315,7 @@ Client 只能注册 additive slot，例如 `shell.overlay`；不得使用 `root`
 
 ## 兼容、卸载、失败与数据保留
 
-- 两个私有 Host 插件是桌面 profile 必需组件，不提供运行时安装/禁用 UI。缺包属于无效交付，由物化和包内容验证阻止。隔离负向 smoke 已确认：在 DSH `0.1.1-rc.2` 中移除任一包时，Host 在发布 loopback URL 前以退出码 `1` 失败，并在错误中指出缺失包；`pnpm test:e2e:missing-private` 固化该行为。
+- workbench、kernel、shell 与 plugins 是桌面 profile 必需组件。前两者不提供运行时安装/禁用 UI；plugins 可开关非核心入口并从 GitHub 安装社区插件，但不能关闭或卸载核心包。缺必需包属于无效交付，由物化和包内容验证阻止。隔离负向 smoke 已确认：在 DSH `0.1.1-rc.2` 中移除 workbench 或 kernel 时，Host 在发布 loopback URL 前以退出码 `1` 失败，并在错误中指出缺失包；`pnpm test:e2e:missing-private` 固化该行为。
 - workbench/kernel 运行失败沿用现有 RPC/tool fail-closed 路径；不增加备用执行面、重试守护或健康检查 RPC。
 - 卸载插件不删除 workspace 文件、home credentials、settings、sessions 或 storages。
 - `dsh-manuscript` 卸载前应保存正文并处理需保留草稿；插件不会主动清除 DSH storage domain。

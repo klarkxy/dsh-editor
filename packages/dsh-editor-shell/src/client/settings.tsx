@@ -12,12 +12,13 @@ import { t, useLocale } from '../i18n/index.ts'
 
 
 /* 知乎设置已迁往独立插件（界面/凭据/知识库全部归其所有），此处不再挂载。 */
-export type SettingsTab = 'general' | 'models' | 'writing' | 'usage'
+export type SettingsTab = 'general' | 'models' | 'writing' | 'usage' | 'plugins'
 
 function tabLabel(tab: SettingsTab): string {
   if (tab === 'general') return t('settings.general')
   if (tab === 'models') return t('settings.models')
   if (tab === 'writing') return t('settings.writing')
+  if (tab === 'plugins') return t('settings.plugins')
   return t('settings.usage')
 }
 
@@ -43,6 +44,7 @@ export function SettingsDialog(props: {
   progressScope: WritingProgressScope
   /* 助手能力开关：false 时隐藏模型等助手专属设置；undefined 表示能力尚未加载，保持原样。 */
   assistant?: boolean
+  pluginsTab?: ReactNode
   onClose(): void
 }) {
   useLocale()
@@ -71,13 +73,14 @@ export function SettingsDialog(props: {
   }
 
   const tabs: SettingsTab[] = props.assistant === false
-    ? ['general', 'writing', 'usage']
-    : ['general', 'models', 'writing', 'usage']
+    ? ['general', 'writing', 'usage', 'plugins']
+    : ['general', 'models', 'writing', 'usage', 'plugins']
   const content: Record<SettingsTab, () => ReactNode> = {
     general: () => e(SettingsGeneralSection, { ctx: props.ctx }),
     models: () => e(SettingsModelsSection, { ctx: props.ctx }),
     writing: () => e(WritingSettings, { scope: props.writingScope, migrate: props.migrateWriting, progressScope: props.progressScope }),
     usage: () => e(SettingsUsageSection, { ctx: props.ctx }),
+    plugins: () => props.pluginsTab ?? e('p', { className: 'muted' }, t('settings.pluginsUnavailable')),
   }
   /* 能力在弹窗打开期间变为停用时，回落到仍可用的分类。 */
   const activeTab = tabs.includes(tab) ? tab : 'general'

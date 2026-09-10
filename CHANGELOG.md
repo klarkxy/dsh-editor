@@ -7,6 +7,8 @@
 ### 插件
 
 - 移除 `dsh-grill`。它只服务普通 DSH Web 的官方 Chat，桌面从未加载；公开 tarball 现为 manuscript、proofread、zhihu 三包。
+- 新增桌面私有包 `dsh-editor-plugins`：设置 → 插件可开关非核心插件，并从 GitHub `topic:dsh-plugin` 市场搜索、安装；稿纸 / 工作台 / 写作界面 / 插件管理本身锁定。
+- 市场安装前提供静态检查：缺少构建产物、抢 `root`、入口无法解析或 DSH 主版本不兼容时拒绝安装。
 
 ### 文档
 

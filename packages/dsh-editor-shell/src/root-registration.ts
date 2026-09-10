@@ -4,6 +4,7 @@ import { t } from './i18n/index.ts'
 
 export const ROOT_ID = 'dsh-editor-shell-root'
 export const EXTENSIONS_SLOT = 'dsh-editor.extensions'
+export const PLUGINS_SETTINGS_SLOT = 'dsh-editor.settings.plugins'
 
 export type RootSlots = { register: (spec: {
   name: 'root'
@@ -20,8 +21,12 @@ export function registerRoot(ctx: Context & { slots: RootSlots }, render: (props
     id: ROOT_ID,
     priority: -100,
     label: t('app.slotLabel'),
-    // Only the generic additive seat: declaring shell.overlay here would
-    // awaken the manuscript overlay, which belongs to the shadowed AppFrame.
-    children: { [EXTENSIONS_SLOT]: { kind: 'list', scope: 'root' } },
+    // Additive seats only: declaring shell.overlay here would awaken the
+    // manuscript overlay, which belongs to the shadowed AppFrame. The plugins
+    // settings seat is consumed by the settings dialog, not the chrome dock.
+    children: {
+      [EXTENSIONS_SLOT]: { kind: 'list', scope: 'root' },
+      [PLUGINS_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
+    },
   }, render)
 }

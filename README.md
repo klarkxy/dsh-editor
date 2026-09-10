@@ -2,7 +2,7 @@
 
 DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是真实目录树（新建作品只预建 `正文/`，大纲/人物卡/世界书等在实际创建后出现；栏顶有搜索、校对、概览、人物、设定、提交、历史），中是稿纸编辑器（稿内查找替换、打字机滚动、段落聚焦与排版、ghost FIM、选段改写、‹ › 章节导航），右是 dsh 对话线程（⋯ 菜单可归档、恢复或删除——删除只在本机记墓碑，DSH `0.1.1-rc.2` 没有会话删除）；两侧栏可以折叠或进入专注模式。
 
-仓库提供三个可独立安装到普通 DSH Web profile 的公开插件，以及三个随桌面组合交付的私有插件。基础、智能和完整写作组合的安装与接口见[组合指南](docs/plugin-composition-guide.md)：
+仓库提供三个可独立安装到普通 DSH Web profile 的公开插件，以及随桌面组合交付的私有插件。基础、智能和完整写作组合的安装与接口见[组合指南](docs/plugin-composition-guide.md)：
 
 | 组件 | 用途 | 数据所有者 |
 | --- | --- | --- |
@@ -13,6 +13,7 @@ DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口�
 | `dsh-editor-workbench` | 项目、概览/章节状态、校对、卡片、进度、上下文、导入、快照、移动与归档 | 同一 live-session workspace authority |
 | `dsh-editor-novel-kernel` | 小说知识、预览提案、索引直写、工具守卫、系统提示词与旧知乎接口转发 | DSH 工具与作者确认边界 |
 | `dsh-editor-shell` | 桌面唯一根界面、各写作面板、Chat 投影与编辑状态 | 不发布、不安装到日常 `web` profile |
+| `dsh-editor-plugins` | 设置里开关非核心插件，并从 GitHub `dsh-plugin` 市场搜索安装 | 不发布；核心插件锁定 |
 
 ## 开发启动
 

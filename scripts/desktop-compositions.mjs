@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const COMPOSITION_IDS = ['basic', 'smart', 'full']
-export const DESKTOP_PACKAGE_NAMES = ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-zhihu', 'dsh-editor-shell']
+export const DESKTOP_PACKAGE_NAMES = ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-zhihu', 'dsh-editor-shell', 'dsh-editor-plugins']
 export const PUBLIC_PLUGIN_PACKAGES = ['dsh-manuscript', 'dsh-proofread', 'dsh-zhihu']
 export const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 export async function desktopComposition(id = process.env.DSH_EDITOR_COMPOSITION || 'full') {
@@ -12,7 +12,7 @@ export async function desktopComposition(id = process.env.DSH_EDITOR_COMPOSITION
   const value = JSON.parse(await readFile(resolve(root, 'apps/desktop/resources/compositions', `${id}.json`), 'utf8'))
   if (value.id !== id || !Array.isArray(value.packages) || new Set(value.packages).size !== value.packages.length ||
     value.packages.some(name => !DESKTOP_PACKAGE_NAMES.includes(name))) throw new Error(`invalid composition: ${id}`)
-  for (const required of ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench', 'dsh-editor-shell']) {
+  for (const required of ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench', 'dsh-editor-shell', 'dsh-editor-plugins']) {
     if (!value.packages.includes(required)) throw new Error(`${id}: missing required ${required}`)
   }
   if (value.shell.assistant !== value.packages.includes('dsh-editor-novel-kernel') ||

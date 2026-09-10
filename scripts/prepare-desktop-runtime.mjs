@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -98,6 +99,16 @@ await mkdir(dshOutput, { recursive: true })
 
 const nodeExecutable = process.execPath
 await cp(nodeExecutable, resolve(nodeOutput, nodeExecutableName))
+const nodeDir = dirname(nodeExecutable)
+for (const name of process.platform === 'win32' ? ['npm.cmd', 'npm.exe', 'npx.cmd', 'npx.exe'] : ['npm', 'npx']) {
+  const source = resolve(nodeDir, name)
+  if (existsSync(source)) await cp(source, resolve(nodeOutput, name))
+}
+const npmPackage = resolve(nodeDir, 'node_modules', 'npm')
+if (existsSync(npmPackage)) {
+  await mkdir(resolve(nodeOutput, 'node_modules'), { recursive: true })
+  await cp(npmPackage, resolve(nodeOutput, 'node_modules', 'npm'), { recursive: true })
+}
 await cp(dsh.packageRoot, dshOutput, {
   recursive: true,
   dereference: true,

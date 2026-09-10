@@ -11,7 +11,8 @@
         "dsh-editor-workbench",
         "dsh-editor-novel-kernel",
         "dsh-zhihu",
-        "dsh-editor-shell"
+        "dsh-editor-shell",
+        "dsh-editor-plugins"
       ]
     }
   }

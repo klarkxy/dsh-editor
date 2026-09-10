@@ -255,6 +255,16 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   await window.waitForTimeout(400)
   const writingRadios = await dialog.getByRole('radio').count()
   if (writingRadios < 2) throw new Error('settings writing tab lost the completion radios')
+  await dialog.getByRole('button', { name: '插件', exact: true }).click()
+  await window.waitForTimeout(600)
+  const pluginsRoot = dialog.getByTestId('plugins-settings')
+  await pluginsRoot.waitFor({ state: 'visible', timeout: 10_000 })
+  if (!(await pluginsRoot.getByText('系统核心').count()) || !(await pluginsRoot.getByText('稿纸').count())) {
+    throw new Error('settings plugins tab did not list locked core plugins')
+  }
+  if (await pluginsRoot.getByTestId('plugins-toggle-editor-shell').isEnabled()) {
+    throw new Error('core plugin toggle was enabled')
+  }
   await window.keyboard.press('Escape')
   await dialog.waitFor({ state: 'detached', timeout: 10_000 })
 }))

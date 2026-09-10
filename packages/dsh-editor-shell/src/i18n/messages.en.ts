@@ -790,6 +790,8 @@ export const en: { [K in keyof typeof zh]: string } = {
   'settings.writing': 'Writing',
   'settings.zhihu': 'Zhihu',
   'settings.usage': 'Usage',
+  'settings.plugins': 'Plugins',
+  'settings.pluginsUnavailable': 'Plugin management is currently unavailable.',
   'settings.nav': 'Settings sections',
   'settings.openConfig': 'Open config file',
   'settings.close': 'Close settings',

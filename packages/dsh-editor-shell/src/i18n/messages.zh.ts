@@ -788,6 +788,8 @@ export const zh = {
   'settings.writing': '写作',
   'settings.zhihu': '知乎',
   'settings.usage': '用量',
+  'settings.plugins': '插件',
+  'settings.pluginsUnavailable': '插件管理当前不可用。',
   'settings.nav': '设置分类',
   'settings.openConfig': '打开配置文件',
   'settings.close': '关闭设置',

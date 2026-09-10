@@ -130,6 +130,26 @@ describe('profile deployment', () => {
     expect(existsSync(join(installed, PROFILE_MARKER))).toBe(true)
     expect((await (await import('node:fs/promises')).readdir(join(root, 'profiles'))).some((name) => name.includes('.stage-') || name.includes('.backup-'))).toBe(false)
   })
+  it('relinks user-installed plugins after replacing the owned profile', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    const template = join(root, 'template')
+    await mkdir(join(template, 'node_modules'), { recursive: true })
+    await writeFile(join(template, 'package.json'), JSON.stringify({
+      name: 'dsh-editor-profile',
+      dsh: { profile: { bundles: ['dsh-editor-shell'] } },
+    }))
+    const plugin = join(root, 'user-plugins', 'community-theme')
+    await mkdir(plugin, { recursive: true })
+    await writeFile(join(plugin, 'package.json'), '{"name":"community-theme","version":"1.0.0"}')
+    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({
+      schema: 1,
+      overrides: {},
+      installed: [{ name: 'community-theme', spec: 'github:acme/community-theme', version: '1.0.0' }],
+    }))
+    const installed = await deployProfile(root, template)
+    expect(JSON.parse(await readFile(join(installed, 'package.json'), 'utf8')).dsh.profile.bundles).toContain('community-theme')
+    expect(existsSync(join(installed, 'node_modules', 'community-theme', 'package.json'))).toBe(true)
+  })
   it('points the agent preset default at the editor preset and keeps that preset minimal', async () => {
     const profileResources = join(import.meta.dirname, '..', 'resources', 'profile')
     const patch = await readFile(join(profileResources, 'cordis.patch.yml'), 'utf8')
