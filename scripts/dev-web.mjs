@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
+import { loadPluginManifests, publicPackages } from './plugin-manifest.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const profile = process.env.DSH_PROFILE || 'web'
@@ -72,7 +73,7 @@ function killTree(child) {
   }
 }
 
-const publicPlugins = ['dsh-manuscript', 'dsh-proofread', 'dsh-zhihu']
+const publicPlugins = publicPackages(loadPluginManifests(root))
 for (const name of publicPlugins) {
   if (!existsSync(resolve(root, 'packages', name, 'package.json'))) {
     console.error(`dev: expected packages/${name}`)

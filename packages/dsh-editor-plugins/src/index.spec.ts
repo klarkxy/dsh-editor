@@ -2,10 +2,26 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { catalogFromEditorBlocks } from './core.ts'
 import { handlePluginsRpc, inventoryFromLoader } from './index.ts'
 import { MANAGED_PATCH_MARK } from './overlay.ts'
 import type { PluginPaths } from './paths.ts'
 import { resolvePluginPaths } from './paths.ts'
+
+const catalog = catalogFromEditorBlocks([
+  {
+    name: 'dsh-editor-shell',
+    dshEditor: {
+      entries: [{ id: 'editor-shell', title: '写作界面', description: '三栏稿纸与设置', locked: true }],
+    },
+  },
+  {
+    name: 'dsh-zhihu',
+    dshEditor: {
+      entries: [{ id: 'zhihu', title: '知乎资料', description: '知乎搜索、知识库与用量' }],
+    },
+  },
+], ['dsh-editor-shell', 'dsh-zhihu'])
 
 const signal = () => new AbortController().signal
 
@@ -47,7 +63,7 @@ describe('plugin manager RPC', () => {
       { id: 'zhihu', name: 'dsh-zhihu' },
       { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
       { id: 'group-a', name: 'ignored', group: true },
-    ]), { schema: 1, overrides: {}, installed: [] })
+    ]), { schema: 1, overrides: {}, installed: [] }, catalog)
     expect(inventory.core.map((card) => card.entryId)).toEqual(['editor-shell'])
     expect(inventory.optional.map((card) => card.entryId)).toEqual(['zhihu'])
     expect(inventory.community).toEqual([])
@@ -61,9 +77,9 @@ describe('plugin manager RPC', () => {
       { id: 'editor-shell', name: 'dsh-editor-shell' },
       { id: 'zhihu', name: 'dsh-zhihu' },
     ])
-    const blocked = await handlePluginsRpc('entry.setEnabled', { entryId: 'editor-shell', enabled: false }, signal(), { loader: host, paths })
+    const blocked = await handlePluginsRpc('entry.setEnabled', { entryId: 'editor-shell', enabled: false }, signal(), { loader: host, paths, catalog })
     expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-    const toggled = await handlePluginsRpc('entry.setEnabled', { entryId: 'zhihu', enabled: false }, signal(), { loader: host, paths })
+    const toggled = await handlePluginsRpc('entry.setEnabled', { entryId: 'zhihu', enabled: false }, signal(), { loader: host, paths, catalog })
     expect(toggled).toMatchObject({ ok: true, value: { restartRequired: false } })
     const patch = await readFile(paths.patchFile, 'utf8')
     expect(patch).toContain(MANAGED_PATCH_MARK)
@@ -93,7 +109,7 @@ describe('plugin manager RPC', () => {
 
   it('does not uninstall bundled packages', async () => {
     const paths = await fixture()
-    const blocked = await handlePluginsRpc('marketplace.uninstall', { name: 'dsh-editor-shell' }, signal(), { loader: loader([]), paths })
+    const blocked = await handlePluginsRpc('marketplace.uninstall', { name: 'dsh-editor-shell' }, signal(), { loader: loader([]), paths, catalog })
     expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
   })
 })

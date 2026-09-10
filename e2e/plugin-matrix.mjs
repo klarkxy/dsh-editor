@@ -13,8 +13,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
+import { loadPluginManifests, publicPackages } from '../scripts/plugin-manifest.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const pluginManifests = loadPluginManifests(root)
+const publicPluginPackages = publicPackages(pluginManifests)
 const out = path.join(root, 'e2e', 'out', 'plugin-matrix')
 const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-matrix-'))
 const dshHome = path.join(runRoot, 'home')
@@ -114,17 +117,16 @@ function inspectState(name, expectedPlugins) {
   const manifest = readProfileManifest()
   const dependencies = Object.keys(manifest.dependencies || {}).filter((item) => item.startsWith('dsh-'))
   const bundles = manifest.dsh?.profile?.bundles || []
-  const pluginBundles = bundles.filter((item) => ['dsh-manuscript','dsh-proofread','dsh-zhihu'].includes(item))
+  const pluginBundles = bundles.filter((item) => publicPluginPackages.includes(item))
   assertEqualSet(dependencies, expectedPlugins, `${name} dependencies`)
   assertEqualSet(pluginBundles, expectedPlugins, `${name} bundles`)
 
   const config = runDsh(['--profile', profile, '--dump-config']).stdout
-  const expectedEntries = {
-    manuscript: expectedPlugins.includes('dsh-manuscript'),
-    'manuscript-assist': expectedPlugins.includes('dsh-manuscript'),
-    proofread: expectedPlugins.includes('dsh-proofread'),
-    zhihu: expectedPlugins.includes('dsh-zhihu'),
-    'zhihu-tools': false,
+  const expectedEntries = {}
+  for (const manifest of pluginManifests.filter((item) => publicPluginPackages.includes(item.name))) {
+    const included = expectedPlugins.includes(manifest.name)
+    for (const entry of manifest.entries) expectedEntries[entry.id] = included
+    for (const insert of manifest.inserts) expectedEntries[insert.id] = false
   }
   for (const [id, expected] of Object.entries(expectedEntries)) {
     const actual = hasEntry(config, id)

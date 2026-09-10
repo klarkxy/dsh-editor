@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
 import { desktopComposition } from './desktop-compositions.mjs'
+import { clientPackages, compositionInstallNames, loadPluginManifests } from './plugin-manifest.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pnpmCli = process.env.npm_execpath
@@ -91,10 +92,10 @@ if (process.env.DSH_DESKTOP_PREPARE_ONLY === '1') {
 }
 
 const composition = await desktopComposition()
-const clientPackages = new Set(['dsh-manuscript', 'dsh-proofread', 'dsh-zhihu', 'dsh-editor-shell'])
-const children = composition.packages.map(name => spawnNode(pnpmCli, [
+const wrapClients = new Set(clientPackages(loadPluginManifests(root)))
+const children = compositionInstallNames(composition).map(name => spawnNode(pnpmCli, [
   '--filter', name, 'exec', 'tsdown', '--watch', '--no-clean',
-  ...(clientPackages.has(name) ? ['--on-success', `node ../../scripts/wrap-client.mjs ${name}`] : []),
+  ...(wrapClients.has(name) ? ['--on-success', `node ../../scripts/wrap-client.mjs ${name}`] : []),
 ]))
 const electron = spawnNode(electronCli, [resolve(root, 'apps', 'desktop', 'dist', 'main.js')])
 children.push(electron)

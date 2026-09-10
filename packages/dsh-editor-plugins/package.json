@@ -43,6 +43,19 @@
       ]
     }
   },
+  "dshEditor": {
+    "role": "core",
+    "visibility": "desktop",
+    "wrapClient": true,
+    "entries": [
+      {
+        "id": "editor-plugins",
+        "title": "插件管理",
+        "description": "开关、搜索与安装插件",
+        "locked": true
+      }
+    ]
+  },
   "scripts": {
     "build": "tsdown && node ../../scripts/wrap-client.mjs dsh-editor-plugins",
     "typecheck": "tsc --noEmit -p tsconfig.json",

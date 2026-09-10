@@ -60,6 +60,26 @@
       ]
     }
   },
+  "dshEditor": {
+    "role": "core",
+    "visibility": "public",
+    "wrapClient": true,
+    "entries": [
+      {
+        "id": "manuscript",
+        "title": "稿纸",
+        "description": "正文读写、草稿与补全",
+        "locked": true
+      },
+      {
+        "id": "manuscript-assist",
+        "title": "补全服务",
+        "description": "行内补全与选段改写",
+        "feature": "completion",
+        "service": "manuscriptAssist"
+      }
+    ]
+  },
   "scripts": {
     "build": "tsdown && node ../../scripts/wrap-client.mjs dsh-manuscript",
     "typecheck": "tsc --noEmit -p tsconfig.json",

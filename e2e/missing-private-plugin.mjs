@@ -4,6 +4,7 @@ import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
+import { loadPluginManifests } from '../scripts/plugin-manifest.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const devRoot = resolve(root, '.dev')
@@ -69,7 +70,10 @@ async function probeMissing(packageName) {
 
 await mkdir(packRoot, { recursive: true })
 const results = []
-for (const packageName of ['dsh-editor-workbench', 'dsh-editor-novel-kernel']) results.push(await probeMissing(packageName))
+const privateHosts = loadPluginManifests(root)
+  .filter((item) => item.visibility === 'desktop' && !item.wrapClient)
+  .map((item) => item.name)
+for (const packageName of privateHosts) results.push(await probeMissing(packageName))
 const report = { ok: true, dsh: '0.1.1-rc.2', results }
 await writeFile(resolve(packRoot, 'missing-private-plugin-smoke.json'), `${JSON.stringify(report, null, 2)}\n`)
 console.log(JSON.stringify({ ok: true, dsh: report.dsh, results: results.map(({ packageName, exitCode }) => ({ packageName, exitCode })) }, null, 2))

@@ -2,7 +2,24 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { catalogFromEditorBlocks } from './core.ts'
 import { blockedReason, inspectPluginPackage, parseBundlePatch, peerAllows, resolveEntryFile, resolveInside } from './inspect.ts'
+
+const productCatalog = catalogFromEditorBlocks([
+  {
+    name: 'dsh-editor-shell',
+    dshEditor: {
+      entries: [{ id: 'editor-shell', title: '写作界面', description: '三栏稿纸与设置', locked: true }],
+    },
+  },
+  {
+    name: 'dsh-zhihu',
+    dshEditor: {
+      entries: [{ id: 'zhihu', title: '知乎资料', description: '知乎搜索、知识库与用量' }],
+      inserts: [{ id: 'zhihu-tools', name: 'dsh-zhihu/tools', title: '知乎工具', description: '供写作搭档调用的知乎检索', feature: 'zhihu-tools' }],
+    },
+  },
+], ['dsh-editor-shell', 'dsh-zhihu'])
 
 async function fixture(files: Record<string, string>): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'dsh-inspect-'))
@@ -123,8 +140,22 @@ describe('inspectPluginPackage', () => {
       }),
       'cordis.patch.yml': '- insert:\n    - id: editor-shell\n      name: fake-shell\n',
       'lib/index.js': 'export const name = "fake-shell"\n',
-    }))
+    }), productCatalog)
     expect(collide.findings.some((item) => item.code === 'entry-collision-core')).toBe(true)
+
+    const optionalId = Object.entries(productCatalog.entries).find(([, row]) => !row.locked)?.[0]
+    expect(optionalId).toBeTruthy()
+    const shadow = await inspectPluginPackage(await fixture({
+      'package.json': JSON.stringify({
+        name: 'shadow-optional',
+        exports: { '.': './lib/index.js' },
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+      }),
+      'cordis.patch.yml': `- insert:\n    - id: ${optionalId}\n      name: shadow-optional\n`,
+      'lib/index.js': 'export const name = "shadow-optional"\n',
+    }), productCatalog)
+    expect(shadow.findings.some((item) => item.code === 'entry-collision-optional' && item.severity === 'warning')).toBe(true)
+    expect(shadow.verdict).not.toBe('blocked')
   })
 
   it('warns when a client will load but has no editor seat', async () => {
@@ -141,5 +172,22 @@ describe('inspectPluginPackage', () => {
     const report = await inspectPluginPackage(dir)
     expect(report.verdict).toBe('warn')
     expect(report.findings.some((item) => item.code === 'client-slot')).toBe(true)
+  })
+
+  it('accepts every Shell seat as a valid client mount, including the center overlay seat', async () => {
+    for (const seat of ['dsh-editor.center.overlays', 'dsh-editor.sidebar.tools', 'dsh-editor.extensions']) {
+      const dir = await fixture({
+        'package.json': JSON.stringify({
+          name: 'seat-only',
+          exports: { '.': './lib/index.js', './client': './lib/client.js' },
+          dsh: { bundle: { patch: './cordis.patch.yml' }, client: { platform: 'web' } },
+        }),
+        'cordis.patch.yml': '- insert:\n    - id: seat-only\n      name: seat-only\n',
+        'lib/index.js': 'export const name = "seat-only"\n',
+        'lib/client.js': `window.__ModuleLoader__.load({ id: "seat-only", factory: () => ({ apply(ctx) { ctx.slots.inject('${seat}', () => 1) } }) });\n`,
+      })
+      const report = await inspectPluginPackage(dir)
+      expect(report.findings.some((item) => item.code === 'client-slot')).toBe(false)
+    }
   })
 })

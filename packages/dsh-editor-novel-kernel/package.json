@@ -31,6 +31,19 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "dshEditor": {
+    "role": "feature",
+    "visibility": "desktop",
+    "entries": [
+      {
+        "id": "editor-novel-kernel",
+        "title": "小说工具",
+        "description": "提案、知识卡与写作搭档工具",
+        "feature": "assistant",
+        "service": "novelKernel"
+      }
+    ]
+  },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json",

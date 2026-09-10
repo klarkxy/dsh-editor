@@ -8,7 +8,7 @@ import {
   type InspectVerdict,
   type PluginInspectReport,
 } from './contracts.ts'
-import { CORE_ENTRY_IDS, OPTIONAL_ENTRY_IDS, isProtectedPackage, isSafeEntryId, isSafePackageName } from './core.ts'
+import { isProtectedPackage, isSafeEntryId, isSafePackageName, type RuntimeCatalog } from './core.ts'
 
 export const PINNED_DSH = '0.1.1-rc.2'
 export const PINNED_CORDIS = '4.0.1'
@@ -28,8 +28,6 @@ type Manifest = {
 }
 
 const NATIVE_PACKAGES = new Set(['node-gyp', 'node-addon-api', 'bindings', 'prebuild-install', 'node-gyp-build'])
-const CORE_IDS = new Set<string>(CORE_ENTRY_IDS)
-const OPTIONAL_IDS = new Set<string>(OPTIONAL_ENTRY_IDS)
 
 function finding(code: string, severity: InspectSeverity, message: string): InspectFinding {
   return { code, severity, message }
@@ -155,8 +153,17 @@ function claimsRootSlot(source: string): boolean {
   return /name\s*:\s*['"]root['"]/.test(source) || /name\s*:\s*`root`/.test(source)
 }
 
+/** Seats a client bundle may register into: official Web overlay plus every Shell seat (see dsh-editor-seats). */
+export const EDITOR_SEATS = [
+  'shell.overlay',
+  'dsh-editor.extensions',
+  'dsh-editor.settings.plugins',
+  'dsh-editor.sidebar.tools',
+  'dsh-editor.center.overlays',
+] as const
+
 function claimsEditorSeat(source: string): boolean {
-  return source.includes('dsh-editor.extensions') || source.includes('shell.overlay') || source.includes('dsh-editor.settings.plugins')
+  return EDITOR_SEATS.some((seat) => source.includes(seat))
 }
 
 async function fileExists(path: string | undefined): Promise<boolean> {
@@ -176,7 +183,7 @@ function collectDeps(manifest: Manifest): string[] {
   ]
 }
 
-export async function inspectPluginPackage(pkgDir: string): Promise<PluginInspectReport> {
+export async function inspectPluginPackage(pkgDir: string, catalog?: RuntimeCatalog): Promise<PluginInspectReport> {
   const findings: InspectFinding[] = []
   const report: PluginInspectReport = { verdict: 'blocked', entries: [], hasClient: false, findings }
   let manifest: Manifest
@@ -194,7 +201,7 @@ export async function inspectPluginPackage(pkgDir: string): Promise<PluginInspec
   }
   report.name = manifest.name
   report.version = typeof manifest.version === 'string' ? manifest.version : undefined
-  if (isProtectedPackage(manifest.name)) {
+  if (isProtectedPackage(manifest.name, catalog?.bundles ?? [])) {
     findings.push(finding('protected-package', 'error', '不能覆盖系统核心插件'))
   }
   const patchRel = typeof manifest.dsh?.bundle?.patch === 'string' ? manifest.dsh.bundle.patch.trim() : ''
@@ -229,9 +236,10 @@ export async function inspectPluginPackage(pkgDir: string): Promise<PluginInspec
     }
     if (seenIds.has(entry.id)) findings.push(finding('entry-id', 'error', `入口 id 重复：${entry.id}`))
     seenIds.add(entry.id)
-    if (CORE_IDS.has(entry.id) || entry.name === 'dsh-editor-shell' || entry.id === 'root') {
+    const catalogRow = catalog?.entries[entry.id]
+    if (catalogRow?.locked || entry.name === 'dsh-editor-shell' || entry.id === 'root') {
       findings.push(finding('entry-collision-core', 'error', `入口 ${entry.id} 会与写作核心冲突，装上会抢占或打坏现有界面`))
-    } else if (OPTIONAL_IDS.has(entry.id)) {
+    } else if (catalogRow) {
       findings.push(finding('entry-collision-optional', 'warning', `入口 ${entry.id} 已有同名写作扩展，可能互相覆盖`))
     }
     const fileRel = resolveEntryFile(manifest, entry.name)
@@ -301,7 +309,7 @@ export async function inspectPluginPackage(pkgDir: string): Promise<PluginInspec
       if (claimsRootSlot(source)) {
         findings.push(finding('client-root', 'error', '客户端试图注册 root，会与写作界面冲突，不能安装'))
       } else if (!claimsEditorSeat(source)) {
-        findings.push(finding('client-slot', 'warning', '客户端没有挂到 shell.overlay 或 dsh-editor.extensions，装上后工作台里可能看不到界面'))
+        findings.push(finding('client-slot', 'warning', `客户端没有挂到任何座位（${EDITOR_SEATS.join(' / ')}），装上后工作台里可能看不到界面`))
       }
     }
   } else if (report.entries.length > 0) {

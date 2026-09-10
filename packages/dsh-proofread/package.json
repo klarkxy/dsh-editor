@@ -55,6 +55,18 @@
       ]
     }
   },
+  "dshEditor": {
+    "role": "feature",
+    "visibility": "public",
+    "wrapClient": true,
+    "entries": [
+      {
+        "id": "proofread",
+        "title": "校对",
+        "description": "独立文本校对面板"
+      }
+    ]
+  },
   "scripts": {
     "build": "tsdown && node ../../scripts/wrap-client.mjs dsh-proofread",
     "typecheck": "tsc --noEmit -p tsconfig.json",

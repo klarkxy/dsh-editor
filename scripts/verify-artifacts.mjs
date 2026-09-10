@@ -4,10 +4,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PUBLIC_PLUGIN_PACKAGES } from './desktop-compositions.mjs'
+import { loadPluginManifests } from './plugin-manifest.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const packDir = path.join(root, '.pack')
+const pluginManifests = loadPluginManifests(root)
 const packageNames = PUBLIC_PLUGIN_PACKAGES
+const desktopOnlyNames = pluginManifests.filter((item) => item.visibility === 'desktop').map((item) => item.name)
 
 function expectedEntries(name) {
   const output = fs.readdirSync(path.join(root, 'packages', name, 'lib')).filter(file => /\.(?:js|js\.map|d\.ts)$/.test(file))
@@ -76,19 +79,20 @@ for (const name of packageNames) {
   }
   const codeEntries = entries.filter((entry) => /package\/lib\/.*\.(?:js|cjs)$/.test(entry))
   const code = codeEntries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
-  const runtimeForbidden = {
-    'dsh-manuscript': ['proposal.list', 'proposal.accept', 'proposal.reject'],
-    'dsh-proofread': ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'node:fs', '@deepseek-ai/dsh-tools'],
-    'dsh-zhihu': ['dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-manuscript'],
-  }[name]
+  const runtimeForbidden = name === 'dsh-manuscript'
+    ? ['proposal.list', 'proposal.accept', 'proposal.reject']
+    : [
+      ...desktopOnlyNames.filter((item) => item !== name),
+      ...(name === 'dsh-proofread' ? ['dsh-manuscript', 'node:fs', '@deepseek-ai/dsh-tools'] : []),
+      ...(name === 'dsh-zhihu' ? ['dsh-manuscript'] : []),
+    ]
   for (const token of runtimeForbidden) {
     if (code.includes(token)) throw new Error(`${name} packed code contains forbidden coupling: ${token}`)
   }
   if (name === 'dsh-manuscript') {
     const archiveText = entries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
     const archiveForbidden = [
-      'dsh-editor-workbench',
-      'dsh-editor-novel-kernel',
+      ...desktopOnlyNames.filter((item) => item === 'dsh-editor-workbench' || item === 'dsh-editor-novel-kernel'),
       '/dsh-editor-workbench',
       'novel_knowledge',
       'novel_propose',

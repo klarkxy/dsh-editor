@@ -5,7 +5,8 @@ import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:
 import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
-import { desktopComposition, configureProfile, BASE_BUNDLES } from './desktop-compositions.mjs'
+import { compositionInstallNames } from './plugin-manifest.mjs'
+import { desktopComposition, configureProfile } from './desktop-compositions.mjs'
 
 const NODE_VERSION = '24.16.0'
 const DSH_VERSION = '0.1.1-rc.2'
@@ -15,7 +16,7 @@ const nodeOutput = resolve(outputRoot, `node-${NODE_VERSION}`)
 const dshOutput = resolve(outputRoot, `dsh-${DSH_VERSION}`)
 const profileOutput = resolve(outputRoot, 'profile')
 const composition = await desktopComposition()
-const privateProfilePackages = composition.packages
+const privateProfilePackages = compositionInstallNames(composition)
 
 function assertSafeOutput(path) {
   const packRoot = resolve(root, '.pack') + sep
@@ -148,8 +149,7 @@ for (const packageName of privateProfilePackages) {
 const profileDigest = await treeDigest(profileOutput)
 await rename(resolve(profileOutput, 'node_modules'), resolve(profileOutput, 'vendor-dependencies'))
 const profile = await readJson(resolve(profileOutput, 'package.json'))
-const expectedBundles = [...BASE_BUNDLES, ...composition.packages]
-if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify(expectedBundles)) {
+if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify(composition.bundles)) {
   throw new Error('desktop profile bundles are missing, reordered, or unexpected')
 }
 

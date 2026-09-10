@@ -3,9 +3,12 @@ import { mkdir, rm, stat, writeFile, readFile, readdir, realpath } from 'node:fs
 import { resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
+import { compositionInstallNames } from '../scripts/plugin-manifest.mjs'
+import { DESKTOP_PACKAGE_NAMES, desktopComposition } from '../scripts/desktop-compositions.mjs'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 
 const composition = process.env.DSH_EDITOR_COMPOSITION || 'full'
+const resolved = await desktopComposition(composition)
 const root = resolve(import.meta.dirname, '..')
 const devRoot = resolve(root, '.dev')
 const projectsRoot = resolve(devRoot, `composition-${composition}-projects`)
@@ -116,11 +119,14 @@ try {
  await page.goto(started.url.href);await page.locator('.shell').waitFor({timeout:45000});await dismissNativeOnboarding(page);
  const rpc=async(channel,method,payload)=>{const response=await fetch(new URL(channel+'/'+method,started.url),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:Math.random().toString(36),method,payload})});const result=(await response.json()).result;if(!result?.ok)throw new Error(method+': '+JSON.stringify(result));return result.value};
  const capabilities=await rpc('/dsh-editor-shell','capabilities.get',{});
- if(capabilities.assistant!==(composition!=='basic')||capabilities.completion!==(composition!=='basic')||capabilities.zhihu!==(composition==='full'))throw new Error('capability mismatch '+JSON.stringify(capabilities));
+ const expectedFeatures=Object.fromEntries(Object.entries(resolved.shellFeatures).map(([feature])=>[feature,true]));
+ const actualFeatures=capabilities.features&&typeof capabilities.features==='object'?capabilities.features:{};
+ for(const feature of new Set([...Object.keys(expectedFeatures),...Object.keys(actualFeatures)])){
+  if(actualFeatures[feature]!==expectedFeatures[feature])throw new Error('capability mismatch '+JSON.stringify(capabilities));
+ }
  evidence.capabilities=capabilities;
- const known=['dsh-manuscript','dsh-proofread','dsh-editor-workbench','dsh-editor-novel-kernel','dsh-zhihu','dsh-editor-shell','dsh-editor-plugins'];
- const installed=(await readdir(resolve(runtime,'node_modules'))).filter(name=>known.includes(name)).sort();
- const expected=known.filter(name=>!(composition==='basic'&&name==='dsh-editor-novel-kernel')&&!(composition!=='full'&&name==='dsh-zhihu')).sort();
+ const installed=(await readdir(resolve(runtime,'node_modules'))).filter(name=>DESKTOP_PACKAGE_NAMES.includes(name)).sort();
+ const expected=[...compositionInstallNames(resolved)].sort();
  if(JSON.stringify(installed)!==JSON.stringify(expected))throw new Error('installed package set mismatch '+installed.join(','));evidence.installed=installed;
  if(process.env.DSH_EDITOR_COPY_PACKAGES==='1'){
    for(const name of installed)if((await realpath(resolve(runtime,'node_modules',name))).startsWith(resolve(root,'packages')))throw new Error('repository link in copied composition '+name);
@@ -139,7 +145,7 @@ try {
    await page.getByTestId('proofread-check').click();await page.getByTestId('proofread-result').waitFor();await page.getByTestId('proofread-input').press('Escape');await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='proofread-open');
    evidence.checks.push('proofreading loading/error/retry/stale suppression/keyboard focus');
  }
- if(composition==='full'){await page.getByTestId('zhihu-open').click();await page.getByTestId('zhihu-panel').waitFor();await page.getByTestId('zhihu-panel').press('Escape')}else if(await page.getByTestId('zhihu-open').count())throw new Error('unexpected Zhihu entry');
+ if(resolved.shellFeatures.zhihu){await page.getByTestId('zhihu-open').click();await page.getByTestId('zhihu-panel').waitFor();await page.getByTestId('zhihu-panel').press('Escape')}else if(await page.getByTestId('zhihu-open').count())throw new Error('unexpected Zhihu entry');
  await page.getByRole('button',{name:'新建',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator('.tree').waitFor({timeout:30000});
  // Create the document via the actual product command; the ordinary flow must work without AI.
  await page.locator('.tree-row').filter({hasText:'正文'}).first().hover();await page.getByRole('button',{name:'在 正文 中新建文件',exact:true}).click();const create=page.getByRole('dialog',{name:'新建文件'});await create.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001');await create.getByRole('button',{name:'创建',exact:true}).click();
@@ -148,19 +154,19 @@ try {
  const sessionId=calls.map(x=>x.body?.payload?.sessionId).filter(Boolean).at(-1);if(!sessionId)throw new Error('no real session captured');
  const found=await rpc('/manuscript','search.text',{sessionId,query:'组合保存验证'});if(!JSON.stringify(found).includes('组合保存验证'))throw new Error('search did not find saved text');
  const scan=await rpc('/dsh-editor-workbench','proofread.scan',{sessionId,scope:'document',path:'正文/001.md'});if(!JSON.stringify(scan).includes('已经'))throw new Error('workspace proofread missing finding');
- await rpc('/dsh-editor-workbench','cards.create',{sessionId,kind:'character',title:'组合角色',fields:{}});
+ await rpc('/dsh-editor-cards','cards.create',{sessionId,kind:'character',title:'组合角色',fields:{}});
  await rpc('/dsh-editor-workbench','snapshot.create',{sessionId,label:'组合验收'});evidence.checks.push('live-session search/workspace proofread/card/snapshot');
 
  const panelColors=[];
  for(const theme of ['paper','ink']){
    if(theme==='ink')await page.locator('.chrome .theme-toggle').click();
    await page.getByTestId('proofread-open').click();panelColors.push(await page.getByTestId('proofread-panel').evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'proofread-'+theme+'.png')});await page.getByTestId('proofread-input').press('Escape');
-   if(composition==='full'){await page.getByTestId('zhihu-open').click();await page.screenshot({path:resolve(output,'zhihu-'+theme+'.png')});await page.getByTestId('zhihu-panel').press('Escape');await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='zhihu-open')}
+   if(resolved.shellFeatures.zhihu){await page.getByTestId('zhihu-open').click();await page.screenshot({path:resolve(output,'zhihu-'+theme+'.png')});await page.getByTestId('zhihu-panel').press('Escape');await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='zhihu-open')}
  }
  if(panelColors[0]===panelColors[1])throw new Error('proofread theme did not adapt');
  await page.locator('.chrome .theme-toggle').click();evidence.checks.push('paper/ink panels and focus restoration');
 
- if(composition==='basic'){
+ if(!resolved.shellFeatures.assistant){
    await editor.click();await page.keyboard.insertText(' 无模型自动任务。');await page.waitForTimeout(2500);await page.keyboard.press('Control+s');
    if(await page.locator('aside.chat').count())throw new Error('Chat mounted in basic');
    const unexpected=calls.filter(x=>/fim.complete|patch.complete|project.prepareIndex/.test(x.url)||/session.send/.test(JSON.stringify(x.body)));if(unexpected.length)throw new Error('basic initiated AI '+JSON.stringify(unexpected));

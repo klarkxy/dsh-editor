@@ -1,1 +1,5 @@
-{"id":"full","label":"智能写作与资料","packages":["dsh-manuscript","dsh-proofread","dsh-editor-workbench","dsh-editor-novel-kernel","dsh-zhihu","dsh-editor-shell","dsh-editor-plugins"],"disabledEntries":[],"shell":{"assistant":true,"zhihu":true}}
+{
+  "id": "full",
+  "label": "智能写作与资料",
+  "features": ["assistant", "completion", "zhihu", "zhihu-tools", "proofread-panel", "overview-panel", "memory-panel", "cards"]
+}

@@ -4,7 +4,7 @@ import { mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/p
 import { dirname, join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { INSTALL_TARBALL_MAX_BYTES } from './contracts.ts'
-import { isProtectedPackage, isSafePackageName } from './core.ts'
+import { isProtectedPackage, isSafePackageName, readProfileBundles, type RuntimeCatalog } from './core.ts'
 import { githubHeaders, githubTarballUrl, tarEntryIsSafe, type GitHubSpec } from './github.ts'
 import { blockedReason, inspectPluginPackage, type PluginInspectReport } from './inspect.ts'
 import type { PluginPaths } from './paths.ts'
@@ -22,8 +22,8 @@ function fail(message: string): never {
   throw new Error(message)
 }
 
-export async function inspectBundleManifest(directory: string): Promise<{ name: string; version: string; inspect: PluginInspectReport }> {
-  const inspect = await inspectPluginPackage(directory)
+export async function inspectBundleManifest(directory: string, catalog?: RuntimeCatalog): Promise<{ name: string; version: string; inspect: PluginInspectReport }> {
+  const inspect = await inspectPluginPackage(directory, catalog)
   if (inspect.verdict === 'blocked' || !inspect.name) fail(blockedReason(inspect))
   return { name: inspect.name, version: inspect.version ?? '', inspect }
 }
@@ -180,10 +180,11 @@ export async function installGitHubPlugin(
   paths: PluginPaths,
   signal: AbortSignal,
   io: InstallIo = { fetch, extract: defaultExtract, npmInstall: defaultNpmInstall, link: defaultLink },
+  catalog?: RuntimeCatalog,
 ): Promise<InstalledBundle> {
   const staged = await stageGitHubPlugin(spec, paths, signal, io)
   try {
-    const manifest = await inspectBundleManifest(staged.unpacked)
+    const manifest = await inspectBundleManifest(staged.unpacked, catalog)
     const destination = join(paths.userPluginsDir, manifest.name)
     await mkdir(paths.userPluginsDir, { recursive: true })
     await rm(destination, { recursive: true, force: true })
@@ -198,7 +199,8 @@ export async function installGitHubPlugin(
 }
 
 export async function uninstallUserPlugin(packageName: string, paths: PluginPaths): Promise<void> {
-  if (isProtectedPackage(packageName) || !isSafePackageName(packageName)) fail('不能卸载系统核心插件')
+  const bundles = await readProfileBundles(paths.profileDir)
+  if (isProtectedPackage(packageName, bundles) || !isSafePackageName(packageName)) fail('不能卸载系统核心插件')
   await removeBundleFromProfile(paths.profileDir, packageName)
   await rm(join(paths.profileDir, 'node_modules', packageName), { recursive: true, force: true })
   await rm(join(paths.userPluginsDir, packageName), { recursive: true, force: true })

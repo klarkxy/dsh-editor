@@ -2,23 +2,14 @@ import { cp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-/** Keep in sync with packages/dsh-editor-plugins/src/core.ts. */
-const PROTECTED_PACKAGES = new Set([
-  '@deepseek-ai/dsh-base',
-  '@deepseek-ai/dsh-web-app',
-  'dsh-manuscript',
-  'dsh-proofread',
-  'dsh-editor-workbench',
-  'dsh-editor-novel-kernel',
-  'dsh-zhihu',
-  'dsh-editor-shell',
-  'dsh-editor-plugins',
-])
-
 const PACKAGE_NAME = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/
 
-function isSafePackageName(name: string): boolean {
-  return PACKAGE_NAME.test(name) && !name.includes('..') && !PROTECTED_PACKAGES.has(name) && !name.startsWith('@deepseek-ai/')
+function isProtectedName(name: string, bundles: readonly string[]): boolean {
+  return bundles.includes(name) || name.startsWith('@deepseek-ai/')
+}
+
+function isSafePackageName(name: string, bundles: readonly string[]): boolean {
+  return PACKAGE_NAME.test(name) && !name.includes('..') && !isProtectedName(name, bundles)
 }
 
 export async function restoreUserPlugins(home: string, profilePath: string): Promise<void> {
@@ -41,7 +32,7 @@ export async function restoreUserPlugins(home: string, profilePath: string): Pro
   for (const item of state.installed) {
     if (!item || typeof item !== 'object') continue
     const name = (item as { name?: unknown }).name
-    if (typeof name !== 'string' || !isSafePackageName(name)) continue
+    if (typeof name !== 'string' || !isSafePackageName(name, bundles)) continue
     const source = join(home, 'user-plugins', name)
     if (!existsSync(join(source, 'package.json'))) continue
     const destination = join(profilePath, 'node_modules', name)

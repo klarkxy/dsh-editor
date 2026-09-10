@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, rm, symlink } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
+import { compositionInstallNames } from './plugin-manifest.mjs'
 import { desktopComposition, configureProfile, DESKTOP_PACKAGE_NAMES } from './desktop-compositions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -9,7 +10,7 @@ const sourceTemplate = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 const template = resolve(root, '.dev', 'desktop-profile-template')
 const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime')
 const composition = await desktopComposition()
-const packages = composition.packages
+const packages = compositionInstallNames(composition)
 
 if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.node !== '24.16.0') {
   throw new Error(`desktop development requires Windows x64 Node 24.16.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)

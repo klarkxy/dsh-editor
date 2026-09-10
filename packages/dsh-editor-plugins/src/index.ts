@@ -8,7 +8,10 @@ import {
   type PluginActionReceipt,
   type PluginsRpcResult,
 } from './contracts.ts'
-import { catalogFor, classifyEntry, isProtectedEntry, isProtectedPackage, isSafeEntryId, isSafePackageName, packageNameOf } from './core.ts'
+import {
+  catalogFor, classifyEntry, isProtectedEntry, isProtectedPackage, isSafeEntryId, isSafePackageName,
+  loadRuntimeCatalog, packageNameOf, type RuntimeCatalog,
+} from './core.ts'
 import { githubHeaders, marketplaceSearchUrl, parseGitHubSpec, parseMarketplaceSearch, sanitizeMarketplaceQuery } from './github.ts'
 import { inspectPluginPackage } from './inspect.ts'
 import { defaultExtract, defaultLink, defaultNpmInstall, installGitHubPlugin, stageGitHubPlugin, uninstallUserPlugin } from './install.ts'
@@ -87,26 +90,26 @@ function fiberPhaseOf(entry: LoaderEntry): PluginFiberPhase {
   return FIBER_PHASE[entry.fiber.state] ?? null
 }
 
-export function inventoryFromLoader(loader: LoaderFace, state: PluginState): PluginInventory {
+export function inventoryFromLoader(loader: LoaderFace, state: PluginState, catalog: RuntimeCatalog): PluginInventory {
   const installed = new Map(state.installed.map((item) => [item.name, item]))
   const inventory: PluginInventory = { core: [], optional: [], community: [] }
   for (const entry of loader.entries()) {
     if (entry.options.group) continue
     const moduleName = entry.options.name
-    const group = classifyEntry(entry.id, moduleName)
+    const group = classifyEntry(entry.id, moduleName, catalog)
     if (group === 'hidden') continue
-    const catalog = catalogFor(entry.id, moduleName)
+    const info = catalogFor(entry.id, moduleName, catalog)
     const packageName = packageNameOf(moduleName)
     const extra = installed.get(packageName)
     const card: PluginCard = {
       entryId: entry.id,
       moduleName,
       packageName,
-      title: catalog.title,
-      description: catalog.description,
+      title: info.title,
+      description: info.description,
       group,
       enabled: !entry.disabled,
-      locked: isProtectedEntry(entry.id, moduleName),
+      locked: isProtectedEntry(entry.id, moduleName, catalog),
       fiberPhase: fiberPhaseOf(entry),
       origin: extra ? 'installed' : 'bundled',
       spec: extra?.spec,
@@ -121,21 +124,26 @@ export async function handlePluginsRpc(
   endpoint: string,
   payload: unknown,
   signal: AbortSignal,
-  options: { loader: LoaderFace; paths: PluginPaths; fetch?: typeof fetch },
+  options: { loader: LoaderFace; paths: PluginPaths; fetch?: typeof fetch; catalog?: RuntimeCatalog },
 ): Promise<PluginsRpcResult> {
   if (signal.aborted) return cancelled()
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
+  const catalogForCall = async (): Promise<RuntimeCatalog> => {
+    if (options.catalog) return options.catalog
+    const names = [...options.loader.entries()].map((entry) => packageNameOf(entry.options.name))
+    return loadRuntimeCatalog(options.paths.profileDir, names)
+  }
   try {
     if (endpoint === 'inventory.list') {
       const state = await readPluginState(options.paths)
-      return { ok: true, value: inventoryFromLoader(options.loader, state) }
+      return { ok: true, value: inventoryFromLoader(options.loader, state, await catalogForCall()) }
     }
     if (endpoint === 'entry.setEnabled') {
       const entryId = typeof body.entryId === 'string' ? body.entryId : ''
       if (!isSafeEntryId(entryId) || typeof body.enabled !== 'boolean') return bad('请指定要开关的插件')
       const match = [...options.loader.entries()].find((entry) => entry.id === entryId)
       if (!match) return fail('not-found', '未找到该插件')
-      if (isProtectedEntry(entryId, match.options.name)) return forbidden('系统核心插件不能关闭')
+      if (isProtectedEntry(entryId, match.options.name, await catalogForCall())) return forbidden('系统核心插件不能关闭')
       const state = await readPluginState(options.paths)
       state.overrides = { ...state.overrides, [entryId]: body.enabled }
       const persisted = await persistPluginState(options.paths, state)
@@ -167,7 +175,7 @@ export async function handlePluginsRpc(
         extract: defaultExtract,
       })
       try {
-        const inspect = await inspectPluginPackage(staged.unpacked)
+        const inspect = await inspectPluginPackage(staged.unpacked, await catalogForCall())
         return { ok: true, value: inspect }
       } finally {
         await rm(staged.staging, { recursive: true, force: true })
@@ -181,7 +189,7 @@ export async function handlePluginsRpc(
         extract: defaultExtract,
         npmInstall: defaultNpmInstall,
         link: defaultLink,
-      })
+      }, await catalogForCall())
       const state = await readPluginState(options.paths)
       state.installed = [...state.installed.filter((item) => item.name !== installed.name), installed]
       await persistPluginState(options.paths, state)
@@ -190,7 +198,7 @@ export async function handlePluginsRpc(
     if (endpoint === 'marketplace.uninstall') {
       const packageName = typeof body.name === 'string' ? body.name : ''
       if (!isSafePackageName(packageName)) return bad('请指定要卸载的插件')
-      if (isProtectedPackage(packageName)) return forbidden('系统核心插件不能卸载')
+      if (isProtectedPackage(packageName, (await catalogForCall()).bundles)) return forbidden('系统核心插件不能卸载')
       const state = await readPluginState(options.paths)
       if (!state.installed.some((item) => item.name === packageName)) return fail('not-found', '该插件不是从市场安装的，不能从这里卸载')
       const running = [...options.loader.entries()].filter((entry) => packageNameOf(entry.options.name) === packageName)

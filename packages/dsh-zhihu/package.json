@@ -55,6 +55,30 @@
       ]
     }
   },
+  "dshEditor": {
+    "role": "feature",
+    "visibility": "public",
+    "wrapClient": true,
+    "entries": [
+      {
+        "id": "zhihu",
+        "title": "知乎资料",
+        "description": "知乎搜索、知识库与用量",
+        "feature": "zhihu",
+        "service": "zhihu"
+      }
+    ],
+    "inserts": [
+      {
+        "id": "zhihu-tools",
+        "name": "dsh-zhihu/tools",
+        "title": "知乎工具",
+        "description": "供写作搭档调用的知乎检索",
+        "feature": "zhihu-tools",
+        "requires": ["zhihu"]
+      }
+    ]
+  },
   "scripts": {
     "build": "tsdown && node ../../scripts/wrap-client.mjs dsh-zhihu",
     "typecheck": "tsc --noEmit -p tsconfig.json",
