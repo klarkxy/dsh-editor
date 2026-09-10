@@ -8,11 +8,12 @@
 
 | 图 | 说明 | 打开 |
 | --- | --- | --- |
-| 插件拓扑 | 公开 Web 与桌面私有包、loopback RPC、DSH 权威 | [dsh-editor-plugins.html](diagrams/dsh-editor-plugins.html) |
-| 确认写入 | 预览提案不写文件；作者确认后才 `proposal.apply` | [author-confirm-write.html](diagrams/author-confirm-write.html) |
-| 桌面运行时 | 进程、profile 与写作主路径 | [dsh-editor-runtime.html](diagrams/dsh-editor-runtime.html) |
+| 插件拓扑 | 公开 Web 与桌面私有包、loopback RPC、DSH 权威 | [dsh-editor-plugins.html](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html) |
+| 确认写入 | 预览提案不写文件；作者确认后才 `proposal.apply` | [author-confirm-write.html](https://klarkxy.github.io/dsh-editor/author-confirm-write.html) |
+| 桌面运行时 | 进程、profile 与写作主路径 | [dsh-editor-runtime.html](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html) |
+| 组合边界 | 普通业务、小说助手、公开插件三个视角 | [plugin-composition-boundaries.html](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) |
 
-规范源文件在 [diagrams/](diagrams/) 下的同名 `.json`。
+规范源文件在 [diagrams/](diagrams/) 下的同名 `.json`；交互图由 `.github/workflows/pages.yml` 发布到 GitHub Pages。
 
 ## 运行拓扑与所有权
 

@@ -15,3 +15,5 @@ dist
 e2e/out
 .dev
 .playwright-mcp/
+# Diagram visual-check screenshots: published via GitHub Pages, not stored in the repo.
+docs/diagrams/*.visual-check.*.png

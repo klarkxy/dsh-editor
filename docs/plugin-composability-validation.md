@@ -21,10 +21,10 @@ DSH Editor 已经证明，可以把业务 Host、工具、提示词和自有界�
 
 ## 2. 先看图
 
-- [交互图：界面、能力与宿主边界](diagrams/plugin-composition-boundaries.html)：可切换普通业务、小说助手、公开插件三个视角，支持缩放和关系追踪。
-- [已有完整插件拓扑](diagrams/dsh-editor-plugins.html)。
-- [已有确认写入时序](diagrams/author-confirm-write.html)。
-- [已有桌面进程图](diagrams/dsh-editor-runtime.html)。
+- [交互图：界面、能力与宿主边界](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html)：可切换普通业务、小说助手、公开插件三个视角，支持缩放和关系追踪。
+- [已有完整插件拓扑](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)。
+- [已有确认写入时序](https://klarkxy.github.io/dsh-editor/author-confirm-write.html)。
+- [已有桌面进程图](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html)。
 
 新增交互图只展示主要依赖，manuscript 是兼有 Host 和 Client 的包，并非纯后端。完整接口和调用路径在下文展开。
 

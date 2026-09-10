@@ -4,7 +4,7 @@
 
 2026-09-09。已完成 [P0—P5 拆分计划](plugin-modularization-plan.md)在本仓库的实施、Windows 交付验证及宿主精简研究。P5 的“整个浏览器进程不加载 Agent”结论是需要上游解耦，符合原计划允许的研究退出条件；没有将它写成已实现。
 
-使用方式见[组合指南](plugin-composition-guide.md)，接口细节见[架构手册](plugin-architecture.md)，直观边界见[交互图](diagrams/plugin-composition-boundaries.html)。[本轮汇总回执](verification/plugin-modularization-2026-09-09/summary.json)与之前 807 项测试的历史基线分开保存。全部改动及产物在本地，未提交、推送或发布。
+使用方式见[组合指南](plugin-composition-guide.md)，接口细节见[架构手册](plugin-architecture.md)，直观边界见[交互图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html)。[本轮汇总回执](verification/plugin-modularization-2026-09-09/summary.json)与之前 807 项测试的历史基线分开保存。全部改动及产物在本地，未提交、推送或发布。
 
 ## 按原计划逐项结算
 

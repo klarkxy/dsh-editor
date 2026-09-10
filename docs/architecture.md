@@ -6,15 +6,16 @@
 
 ## 交互架构图
 
-在浏览器中打开下列独立 HTML（含明暗主题、路径追踪和导出）：
+以下交互图发布在 GitHub Pages（含明暗主题、路径追踪和导出），直接在浏览器打开：
 
 | 图 | 说明 | 打开 |
 | --- | --- | --- |
-| 桌面运行时 | Electron、唯一 DSH Host、桌面 profile 插件与作品目录 | [dsh-editor-runtime.html](diagrams/dsh-editor-runtime.html) |
-| 插件拓扑 | 公开 Web 插件与桌面私有包的分级、依赖和 loopback RPC | [dsh-editor-plugins.html](diagrams/dsh-editor-plugins.html) |
-| 确认写入 | 从 `context.compile` 到作者确认后 `proposal.apply` | [author-confirm-write.html](diagrams/author-confirm-write.html) |
+| 桌面运行时 | Electron、唯一 DSH Host、桌面 profile 插件与作品目录 | [dsh-editor-runtime.html](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html) |
+| 插件拓扑 | 公开 Web 插件与桌面私有包的分级、依赖和 loopback RPC | [dsh-editor-plugins.html](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html) |
+| 确认写入 | 从 `context.compile` 到作者确认后 `proposal.apply` | [author-confirm-write.html](https://klarkxy.github.io/dsh-editor/author-confirm-write.html) |
+| 组合边界 | 普通业务、小说助手、公开插件三个视角的界面、能力与宿主边界 | [plugin-composition-boundaries.html](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) |
 
-规范源文件在 [diagrams/](diagrams/) 下的同名 `.json`。图中的产品名、channel、tool 与代码标识保持原样。
+规范源文件在 [diagrams/](diagrams/) 下的同名 `.json`，渲染产物由 `.github/workflows/pages.yml` 发布，仓库不存截图。图中的产品名、channel、tool 与代码标识保持原样。
 
 ## 产品结构
 
