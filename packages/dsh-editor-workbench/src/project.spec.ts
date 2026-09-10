@@ -36,12 +36,12 @@ describe('initializeProject', () => {
     await expect(inspectProjectRoot(root)).resolves.toEqual({ hasVisibleEntries: true, textFiles: ['正文/001.md'], indexReady: true })
   })
 
-  it('treats a freshly initialized project with only empty directories as still empty', async () => {
+  it('includes project rules in a new project without inventing prose', async () => {
     await initializeProject({ root, mode: 'workspace-write', newProject: true })
-    await expect(inspectProjectRoot(root)).resolves.toMatchObject({ hasVisibleEntries: false, textFiles: [] })
+    await expect(inspectProjectRoot(root)).resolves.toMatchObject({ hasVisibleEntries: true, textFiles: ['AGENTS.md'] })
 
     await fs.writeFile(path.join(root, '正文', '001.md'), '# 第一章\n', 'utf8')
-    await expect(inspectProjectRoot(root)).resolves.toMatchObject({ hasVisibleEntries: true, textFiles: ['正文/001.md'] })
+    await expect(inspectProjectRoot(root)).resolves.toMatchObject({ hasVisibleEntries: true, textFiles: ['正文/001.md', 'AGENTS.md'] })
   })
 
   it('reports indexReady only when the index holds real content, not the init stub', async () => {
@@ -54,16 +54,16 @@ describe('initializeProject', () => {
     await expect(inspectProjectRoot(root)).resolves.toMatchObject({ indexReady: true })
   })
 
-  it('creates filing directories once and never seeds markdown templates', async () => {
+  it('creates rules and filing directories once without seeding story templates', async () => {
     const first = await initializeProject({ root, mode: 'workspace-write', newProject: true })
-    expect(first.created.sort()).toEqual([...PROJECT_DIRECTORIES].sort())
+    expect(first.created.sort()).toEqual(['AGENTS.md', ...PROJECT_DIRECTORIES].sort())
     expect(first.created).not.toContain('正文/001.md')
     expect(first.created).not.toContain('大纲/总纲.md')
     await expect(fs.stat(path.join(root, '项目总览.md'))).rejects.toThrow()
     await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toThrow()
     const second = await initializeProject({ root, mode: 'workspace-write', newProject: true })
     expect(second.created).toEqual([])
-    expect(second.skipped.sort()).toEqual([...PROJECT_DIRECTORIES].sort())
+    expect(second.skipped.sort()).toEqual(['AGENTS.md', ...PROJECT_DIRECTORIES].sort())
     for (const relative of PROJECT_DIRECTORIES) {
       expect((await fs.stat(path.join(root, relative))).isDirectory()).toBe(true)
     }

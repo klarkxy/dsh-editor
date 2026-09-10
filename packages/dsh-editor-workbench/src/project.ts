@@ -1,3 +1,4 @@
+import { PROJECT_RULES_TEMPLATE } from 'dsh-manuscript/host-api'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -300,6 +301,12 @@ export async function initializeProject(input: {
 
   for (const directory of PROJECT_DIRECTORIES) {
     record(directory, await ensureDirectory(root, directory, input.signal))
+  }
+  if (input.newProject) {
+    const names = (await fs.readdir(root)).filter(name => name.toLowerCase() === 'agents.md')
+    if (names.length > 1) throw new ProjectInitError('multiple root AGENTS.md files', 'INVALID_PATH')
+    const rulesPath = names[0] ?? 'AGENTS.md'
+    record(rulesPath, await createFile(root, rulesPath, PROJECT_RULES_TEMPLATE, input.signal))
   }
   created.sort()
   skipped.sort()

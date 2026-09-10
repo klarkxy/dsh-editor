@@ -842,28 +842,21 @@ function recordDirectory(createdAt: string, archiveId: string): string {
   return `${stamp}-${archiveId}`
 }
 
-export async function archiveDocument(input: {
-  access: LifecycleAccess
-  path?: string
-  expectedVersion?: string
-  archiveId?: string
-}): Promise<ArchiveView> {
+/** Persist an identified archive intent before moving any content; retries reuse the same manifest. */
+export async function prepareArchiveDocument(input: { access: LifecycleAccess; path: string; expectedVersion: string; archiveId?: string }): Promise<ArchiveView> {
   assertWritable(input.access)
-  let stored: StoredManifest
   if (input.archiveId) {
-    stored = await findArchive(input.access, input.archiveId)
-    if (stored.manifest.state !== 'moving') {
-      const current = await viewArchive(input.access, stored)
-      if (current.state === 'archived' && stored.manifest.originalPath.startsWith('正文/')) {
-        return current
-      }
-      return current
+    if (!UUID_V4.test(input.archiveId)) throw new LifecycleError('archive id is invalid', 'INVALID_PATH')
+    const existing = (await archiveRecords(input.access)).records.find(record => record.manifest.archiveId === input.archiveId)
+    if (existing) {
+      if (existing.manifest.originalPath !== authorPath(input.path) || existing.manifest.originalVersion !== input.expectedVersion) throw new LifecycleError('archive intent does not match source', 'STALE')
+      return await viewArchive(input.access, existing)
     }
-  } else {
+  }
     const originalPath = authorPath(input.path ?? '')
     const source = await loaded(input.access, originalPath)
     if (!input.expectedVersion || source.version !== input.expectedVersion) throw new LifecycleError('source document changed', 'STALE')
-    const archiveId = randomUUID()
+    const archiveId = input.archiveId ?? randomUUID()
     const createdAt = new Date().toISOString()
     const directory = recordDirectory(createdAt, archiveId)
     const payloadPath = `${ARCHIVE_DIRECTORY}/${directory}/payload${path.posix.extname(originalPath)}`
@@ -882,7 +875,29 @@ export async function archiveDocument(input: {
       sha256: source.sha256,
     })
     const created = await createTextFile(input.access.files, manifestPath(directory), JSON.stringify(manifest))
-    stored = { manifest, version: created.version }
+    return await viewArchive(input.access, { manifest, version: created.version })
+}
+
+export async function archiveDocument(input: {
+  access: LifecycleAccess
+  path?: string
+  expectedVersion?: string
+  archiveId?: string
+}): Promise<ArchiveView> {
+  assertWritable(input.access)
+  let stored: StoredManifest
+  if (input.archiveId) {
+    stored = await findArchive(input.access, input.archiveId)
+    if (stored.manifest.state !== 'moving') {
+      const current = await viewArchive(input.access, stored)
+      if (current.state === 'archived' && stored.manifest.originalPath.startsWith('正文/')) {
+        return current
+      }
+      return current
+    }
+  } else {
+    const prepared = await prepareArchiveDocument({ access: input.access, path: input.path ?? '', expectedVersion: input.expectedVersion ?? '' })
+    stored = await findArchive(input.access, prepared.archiveId)
   }
 
   const current = await viewArchive(input.access, stored)

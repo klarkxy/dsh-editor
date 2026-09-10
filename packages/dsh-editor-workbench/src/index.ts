@@ -1,3 +1,6 @@
+import { readProjectRules, ensureProjectRules } from 'dsh-manuscript/host-api'
+import { resolveMemoryAccess } from './memory-access.ts'
+import { getMemoryChange, listMemoryChanges, applyMemoryChange, undoMemoryChange } from './memory.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { withWorkspaceWrite, asHost, badRequest, mapHostError, resolveWorkspaceAccess, WorkspaceAuthorityError, type ManuscriptHost } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
@@ -154,6 +157,15 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
     if (endpoint === 'progress.history') return await readWritingHistory(overviewAccess(access), body.days)
     if (endpoint === 'structure.groupCreate') return await createManuscriptGroup({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
     if (endpoint === 'directory.create') return await createDirectory({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
+    if (endpoint === 'rules.get') return await readProjectRules(files)
+    if (endpoint === 'rules.open') return await ensureProjectRules(files)
+    if (endpoint.startsWith('memory.')) {
+      const memory = await resolveMemoryAccess(ctx, String(access.session.id), signal)
+      if (endpoint === 'memory.list') return await listMemoryChanges(memory)
+      if (endpoint === 'memory.get') return { record: await getMemoryChange(memory, str(body, 'id')) }
+      if (endpoint === 'memory.apply') return await applyMemoryChange(memory, str(body, 'id'))
+      if (endpoint === 'memory.undo') return await undoMemoryChange(memory, str(body, 'id'))
+    }
     if (endpoint === 'context.compile') return await compileContext(files, str(body, 'userRequest'), str(body, 'activePath') || undefined, str(body, 'authorPreferences'), str(body, 'authorMemory'))
     if (endpoint === 'project.importProbe') {
       const sourceSessionId = str(body, 'sourceSessionId')
@@ -211,7 +223,7 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
     if (endpoint === 'entry.rename') return await renameEntry({ access: lifecycleAccess(access), path: rel, name: str(body, 'name') })
     throw new Error(`unknown workbench endpoint ${endpoint}`)
   }
-  const mutations = ['project.init', 'project.prepareIndex', 'project.importApply', 'project.importCleanup',
+  const mutations = ['rules.open', 'memory.apply', 'memory.undo', 'project.init', 'project.prepareIndex', 'project.importApply', 'project.importCleanup',
     'snapshot.create', 'snapshot.rollback', 'snapshot.restoreApply', 'snapshot.restoreCleanup',
     'structure.groupCreate', 'directory.create', 'file.rename', 'file.moveManuscript',
     'archive.apply', 'archive.restore', 'proposal.apply', 'entry.copy', 'entry.move', 'entry.delete', 'entry.rename',

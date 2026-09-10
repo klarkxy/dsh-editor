@@ -1,3 +1,5 @@
+import type { MemoryChange, MemoryChangeSummary, MemoryUpdateReceipt } from './memory-contracts.ts'
+export { parseMemoryUpdateReceipt, type MemoryChange, type MemoryChangeSummary, type MemoryUpdateReceipt, type MemoryUpdate, type MemoryEvidence } from './memory-contracts.ts'
 import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import {
   CHAPTER_BEATS_MAX,
@@ -57,6 +59,12 @@ export type WorkbenchEndpoint =
   | 'structure.groupCreate'
   | 'directory.create'
   | 'context.compile'
+  | 'rules.get'
+  | 'rules.open'
+  | 'memory.list'
+  | 'memory.get'
+  | 'memory.apply'
+  | 'memory.undo'
   | 'project.importProbe'
   | 'project.importApply'
   | 'project.importCleanup'
@@ -220,6 +228,12 @@ export type WorkbenchRequestMap = {
   'structure.groupCreate': { sessionId: string; path: string }
   'directory.create': { sessionId: string; path: string }
   'context.compile': { sessionId: string; userRequest: string; activePath?: string; authorPreferences?: string; authorMemory?: string }
+  'rules.get': { sessionId: string }
+  'rules.open': { sessionId: string }
+  'memory.list': { sessionId: string }
+  'memory.get': { sessionId: string; id: string }
+  'memory.apply': { sessionId: string; id: string }
+  'memory.undo': { sessionId: string; id: string }
   'project.importProbe': { targetSessionId: string; sourceSessionId?: string }
   'project.importApply': { targetSessionId: string; sourceSessionId: string; probeToken: string }
   'project.importCleanup': { targetSessionId: string; receiptId: string }
@@ -259,7 +273,13 @@ export type WorkbenchResponseMap = {
   'progress.history': ProgressHistory
   'structure.groupCreate': WorkbenchPathResponse
   'directory.create': WorkbenchPathResponse
-  'context.compile': ProjectContextCompilation
+  'context.compile': ProjectContextCompilation | TaskContextCompilation
+  'rules.get': { path: string; text: string; version: string | null; exists: boolean }
+  'rules.open': { path: string; text: string; version: string | null; exists: boolean }
+  'memory.list': { items: MemoryChangeSummary[] }
+  'memory.get': { record: MemoryChange }
+  'memory.apply': MemoryUpdateReceipt
+  'memory.undo': MemoryUpdateReceipt
   'project.importProbe': ImportProbeResponse
   'project.importApply': { imported: number; skipped: number }
   'project.importCleanup': { removed: number }
@@ -389,6 +409,8 @@ export type ProjectContextEnvelopeV2 = {
   chapter_context?: ProjectChapterContext
   user_request: string
 }
+export type EditorTaskEnvelope = { schema: typeof PROJECT_CONTEXT_SCHEMA; version: 3; user_request: string; active_path?: string }
+export type TaskContextCompilation = { envelope: EditorTaskEnvelope; serialized: string; receipt: ProjectContextReceiptBundle }
 export type ProjectContextEnvelope = ProjectContextEnvelopeV1 | ProjectContextEnvelopeV2
 export type ProjectContextReadResult =
   | { ok: true; value: { text: string; version: string } }
@@ -812,10 +834,16 @@ function validateV2(envelope: ProjectContextEnvelopeV2): boolean {
   return dynamicTotal <= WORLDBOOK_MAX_TOTAL_CHARS
 }
 
-export function parseProjectContextEnvelope(text: string): ProjectContextEnvelope | undefined {
+export function parseProjectContextEnvelope(text: string): ProjectContextEnvelope | EditorTaskEnvelope | undefined {
   let value: unknown
   try { value = JSON.parse(text) } catch { return undefined }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const task = value as Partial<EditorTaskEnvelope>
+  if (task.schema === PROJECT_CONTEXT_SCHEMA && task.version === 3) {
+    if (typeof task.user_request !== 'string' || Object.keys(task).some(key => !['schema', 'version', 'user_request', 'active_path'].includes(key))) return undefined
+    if (task.active_path !== undefined && (typeof task.active_path !== 'string' || !task.active_path || !/\.(md|txt)$/i.test(task.active_path) || /^[\\/]|^[a-z]:/i.test(task.active_path) || /[\\\u0000-\u001f]/.test(task.active_path) || task.active_path.split('/').some(part => !part || part.startsWith('.')))) return undefined
+    return task as EditorTaskEnvelope
+  }
   const envelope = value as Partial<ProjectContextEnvelope>
   if (envelope.schema !== PROJECT_CONTEXT_SCHEMA || typeof envelope.user_request !== 'string') return undefined
   if (!envelope.project_context || typeof envelope.project_context !== 'object' || Array.isArray(envelope.project_context)) return undefined
@@ -832,7 +860,8 @@ export function parseProjectContextEnvelope(text: string): ProjectContextEnvelop
   return undefined
 }
 
-export function projectContextReceipt(envelope: ProjectContextEnvelope): ProjectContextReceiptBundle {
+export function projectContextReceipt(envelope: ProjectContextEnvelope | EditorTaskEnvelope): ProjectContextReceiptBundle {
+  if (envelope.version === 3) return { sources: [] }
   return {
     sources: stripText(envelope.project_context.sources),
     ...(envelope.version === PROJECT_CONTEXT_CURRENT_VERSION ? { scan: envelope.project_context.scan } : {}),

@@ -237,7 +237,7 @@ export async function snapshotProposalTargets(
 }
 
 /** 逐级 mkdir，且拒绝 symlink / 越界——参照 snapshot.ts 的 mkdirSafe。 */
-async function mkdirSafe(root: string, relative: string): Promise<void> {
+export async function mkdirSafe(root: string, relative: string): Promise<void> {
   const canonicalRoot = await safeRoot(root)
   let cursor = path.resolve(root)
   for (const part of relative.split('/').filter((item) => item && item !== '.')) {

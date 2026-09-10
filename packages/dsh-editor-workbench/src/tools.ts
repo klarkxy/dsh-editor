@@ -1,3 +1,6 @@
+import { createMemoryUpdateTool } from './memory-tool.ts'
+import { resolveMemoryAccess } from './memory-access.ts'
+import { installProjectContextHooks } from './project-context-hooks.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { asHost, WorkspaceAuthorityError, type ManuscriptHost } from 'dsh-manuscript/host-api'
 import type { OverviewAccess } from './overview.ts'
@@ -8,8 +11,10 @@ export const inject = ['sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', '
 export function apply(ctx: Context): void {
   const host = asHost(ctx) as ManuscriptHostWithTools
 
+  installProjectContextHooks(ctx)
   const tools = host.tools
   if (tools && typeof tools.register === 'function') {
+    tools.register(createMemoryUpdateTool((sessionId, signal) => resolveMemoryAccess(ctx, sessionId, signal)))
     const resolveOverviewAccess = async (cwd: string): Promise<OverviewAccess> => {
       const workspace = await host.workspaceRegistry.resolveByPath(cwd)
       if (!workspace) throw new WorkspaceAuthorityError('workspace is not registered', 'WORKSPACE_NOT_FOUND', { workspacePath: cwd })
