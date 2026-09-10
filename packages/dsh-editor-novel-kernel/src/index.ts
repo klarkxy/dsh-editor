@@ -1,11 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createNovelKnowledgeTool } from './novel-knowledge.ts'
 import { createAuthorObserveTool } from './observe-tool.ts'
-import { createProjectKnowledgeTool, type ProjectKnowledgeReader } from './project-knowledge.ts'
 import { createIndexWriteTool, type IndexWriter } from './index-write-tool.ts'
 import { NOVEL_INDEX_PATH } from './contracts.ts'
-import { createProposalTool, editorToolGuard, EDITOR_PROMPT } from './proposal-tool.ts'
-import { createNovelSearchTool } from './search-tool.ts'
+import { createProposalTool, editorToolGuard, EDITOR_PROMPT, MEMORY_MAINTENANCE_PROMPT } from './proposal-tool.ts'
 import { collectScratchFiles, createScratchListTool, createScratchReadTool, createScratchWriteTool, type ScratchStore } from './scratch-tool.ts'
 import { SCRATCH_DIRECTORY } from './contracts.ts'
 
@@ -40,13 +38,6 @@ type HostContext = Context & {
         options: { authority: string },
       ) => () => void
     }
-  }
-}
-
-function makeFsReader(fs: HostContext['fs']): ProjectKnowledgeReader {
-  return async ({ path, signal, cwd }) => {
-    const target = await fs.resolve(path, { cwd, signal })
-    return await fs.readText(target, signal)
   }
 }
 
@@ -92,8 +83,6 @@ export function apply(ctx: Context): void {
   host.tools.register(createNovelKnowledgeTool())
   host.tools.register(createProposalTool())
   host.tools.register(createAuthorObserveTool())
-  host.tools.register(createProjectKnowledgeTool({ reader: makeFsReader(host.fs) }))
-  host.tools.register(createNovelSearchTool({ fs: host.fs }))
   host.tools.register(createIndexWriteTool({ writer: makeIndexWriter(host.fs, host.sandboxPolicy) }))
   const scratch = makeScratchStore(host.fs, host.sandboxPolicy)
   host.tools.register(createScratchWriteTool({ store: scratch }))
@@ -102,7 +91,7 @@ export function apply(ctx: Context): void {
   installLegacyZhihuRpc(ctx)
   ctx.provide('novelKernel', { ready: true })
   ctx.effect(() => host.tools.guard(editorToolGuard))
-  host.systemPrompt.section({ name: 'dsh-editor:novel-kernel', order: 90, text: EDITOR_PROMPT })
+  host.systemPrompt.section({ name: 'dsh-editor:novel-kernel', order: 90, text: EDITOR_PROMPT + MEMORY_MAINTENANCE_PROMPT })
 }
 
 /** Compatibility only: the optional Zhihu service owns execution and metering. */
