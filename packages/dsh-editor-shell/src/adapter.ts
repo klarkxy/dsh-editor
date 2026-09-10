@@ -17,6 +17,7 @@ import type {
 } from '@deepseek-ai/dsh-client-connection/client'
 import { parseAuthorMemoryMarker, parseProposalMarker, type AuthorMemoryMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
+import { parseMemoryUpdateReceipt, type MemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
 import { t } from './i18n/index.ts'
 import { stripReasoningText } from './conversation-lifecycle.ts'
 import { isNovelIndexJobPrompt } from './novel-index.ts'
@@ -43,6 +44,8 @@ export type ChatRow = {
   reason?: string
   proposal?: ProposalMarker
   memory?: AuthorMemoryMarker
+  /** novel_memory_update 的 JSON 回执标记；命中时聊天行渲染成记忆更新确认卡。 */
+  memoryUpdate?: MemoryUpdateReceipt
   projectContextReceipt?: ProjectContextReceiptBundle
 }
 
@@ -131,6 +134,10 @@ export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-resu
   if (memory) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: memory.observation, detail: t('adapter.rememberProposal'), memory }
   }
+  const memoryUpdate = name === 'novel_memory_update' ? parseMemoryUpdateReceipt(body) : undefined
+  if (memoryUpdate) {
+    return { id: `tool-result:${node.seq}`, role: 'tool', text: memoryUpdate.summary, detail: t('adapter.memoryUpdate'), memoryUpdate }
+  }
   if (node.isError) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: t('adapter.notExecuted'), detail: name, content: truncateToolContent(body) || undefined, error: true, reason: toolErrorReason(name, body) }
   }
@@ -176,7 +183,8 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
         ...common,
         role: 'user',
         text: envelope?.user_request ?? text,
-        projectContextReceipt: envelope ? projectContextReceipt(envelope) : undefined,
+        /* V3 轻量请求没有注入清单，不挂空回执；V1/V2 历史消息仍展示旧回执。 */
+        projectContextReceipt: envelope && envelope.version !== 3 ? projectContextReceipt(envelope) : undefined,
       })
       continue
     }

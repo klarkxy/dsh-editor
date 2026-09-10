@@ -1,8 +1,6 @@
 import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import {
   WORKBENCH_RPC_CHANNEL,
-  formatWorldbookTriggerLines,
-  parseWorldbookTriggerLines,
   type CardKind,
   type CardReferenceHit,
   type CardsCreateResponse,
@@ -330,8 +328,6 @@ function WorldbookCardRow(props: {
       e('strong', null, card.title),
       e('span', { className: 'cards-meta' },
         fields.category ? e('em', { className: 'cards-badge' }, worldbookCategoryLabel(fields.category)) : null,
-        e('span', null, fields.enabled === false ? t('common.disable') : t('common.enable')),
-        typeof fields.priority === 'number' ? e('span', null, t('cards.priority', { value: fields.priority })) : null,
       ),
       fields.tags?.length ? e('span', { className: 'cards-tags' }, fields.tags.join(' · ')) : null,
       card.summary ? e('small', null, card.summary) : null,
@@ -421,9 +417,6 @@ function CardsDetail(props: {
   const [tags, setTags] = useState(formatListInput(card.frontmatter.tags))
   const [summary, setSummary] = useState(card.frontmatter.summary ?? card.summary)
   const [relations, setRelations] = useState<{ to: string; kind: string }[]>(character?.frontmatter.relations?.length ? character.frontmatter.relations.map((row) => ({ ...row })) : [])
-  const [triggers, setTriggers] = useState(formatWorldbookTriggerLines(worldbook?.frontmatter.triggers ?? []))
-  const [enabled, setEnabled] = useState(worldbook?.frontmatter.enabled !== false)
-  const [priority, setPriority] = useState(String(worldbook?.frontmatter.priority ?? 0))
   const categoryCurrent = worldbook?.frontmatter.category ?? ''
   const categoryPreset = WORLDBOOK_CATEGORIES.includes(categoryCurrent as typeof WORLDBOOK_CATEGORIES[number]) || !categoryCurrent
   const [category, setCategory] = useState(categoryPreset ? categoryCurrent : '__custom__')
@@ -443,9 +436,6 @@ function CardsDetail(props: {
     setTags(formatListInput(props.card.frontmatter.tags))
     setSummary(props.card.frontmatter.summary ?? props.card.summary)
     setRelations(nextCharacter?.frontmatter.relations?.map((row) => ({ ...row })) ?? [])
-    setTriggers(formatWorldbookTriggerLines(nextWorldbook?.frontmatter.triggers ?? []))
-    setEnabled(nextWorldbook?.frontmatter.enabled !== false)
-    setPriority(String(nextWorldbook?.frontmatter.priority ?? 0))
     const nextCategory = nextWorldbook?.frontmatter.category ?? ''
     const preset = WORLDBOOK_CATEGORIES.includes(nextCategory as typeof WORLDBOOK_CATEGORIES[number]) || !nextCategory
     setCategory(preset ? nextCategory : '__custom__')
@@ -492,21 +482,9 @@ function CardsDetail(props: {
         summary,
       }
     } else {
-      const values = parseWorldbookTriggerLines(triggers)
-      const numericPriority = Number(priority)
-      if (!values.length) { setNote(t('cards.needTrigger')); return }
-      if (values.length > 16 || values.some((value) => value.length > 64 || /[\u0000-\u001f\u007f]/.test(value))) {
-        setNote(t('cards.triggerLimit'))
-        return
-      }
-      if (!/^-?\d+$/.test(priority.trim()) || !Number.isSafeInteger(numericPriority) || numericPriority < -100 || numericPriority > 100) {
-        setNote(t('cards.priorityRange'))
-        return
-      }
+      /* 世界书只提交普通元数据；triggers/enabled/priority 等旧 frontmatter 键不进 patch，
+         Host 端 applyFrontmatterFields 对未列出的键原样保留。 */
       fields = {
-        triggers: values,
-        enabled,
-        priority: numericPriority,
         category: worldbookCategoryValue(category, categoryCustom),
         tags: parseListInput(tags),
         summary,
@@ -581,25 +559,6 @@ function CardsDetail(props: {
         ),
         field(t('cards.summary'), e('textarea', { value: summary, rows: 3, onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setSummary(event.target.value), 'aria-label': t('cards.summary') }), true),
       ) : e('div', { className: 'cards-fields' },
-        field(t('cards.triggers'), e('textarea', {
-          value: triggers,
-          rows: Math.min(4, Math.max(2, triggers.split(/\r?\n/).length)),
-          onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setTriggers(event.target.value),
-          'aria-label': t('cards.triggersAria'),
-        }), true),
-        e('label', { className: 'cards-field cards-enabled' },
-          e('input', { type: 'checkbox', checked: enabled, onChange: (event: ChangeEvent<HTMLInputElement>) => setEnabled(event.target.checked) }),
-          e('span', null, t('common.enable')),
-        ),
-        field(t('cards.priorityField'), e('input', {
-          type: 'number',
-          min: -100,
-          max: 100,
-          step: 1,
-          value: priority,
-          onChange: (event: ChangeEvent<HTMLInputElement>) => setPriority(event.target.value),
-          'aria-label': t('cards.priorityAria'),
-        })),
         field(t('cards.category'), e('select', {
           value: category,
           'aria-label': t('cards.categoryAria'),

@@ -12,6 +12,7 @@ import {
   isSessionMissing,
   isStaleFailure,
   isSuccessWorkbenchNote,
+  isWorldbookPath,
   LatestRequestGate,
   orderTreeEntries,
   proposalAppliedNavigation,
@@ -366,6 +367,10 @@ describe('shell manuscript RPC safety', () => {
   })
 
   it('hides valid worldbook YAML from the paper and leaves invalid metadata untouched', () => {
+    expect(isWorldbookPath('世界书/港口规则.md')).toBe(true)
+    expect(isWorldbookPath('世界书/子目录/海关.md')).toBe(true)
+    expect(isWorldbookPath('正文/001.md')).toBe(false)
+    expect(isWorldbookPath('世界书/港口.txt')).toBe(false)
     const source = '---\r\ntriggers: ["港口"]\r\nenabled: true\r\npriority: 8\r\n---\r\n# 港口规则\r\n\r\n正文'
     const projection = worldbookPaperProjection('世界书/港口规则.md', source)
     expect(projection.text).toBe('# 港口规则\r\n\r\n正文')
@@ -394,12 +399,11 @@ describe('shell manuscript RPC safety', () => {
     expect(worldbookPaperProjection('正文/001.txt', source)).toEqual({ text: source, offset: 0 })
   })
 
-  it('restores search, import, export, worldbook, and archive affordances without snapshot-library or shortcut dialogs', () => {
+  it('restores search, import, export, and archive affordances without snapshot-library or shortcut dialogs', () => {
     const source = rootSource()
     const search = readFileSync(new URL('./client/search-panel.ts', import.meta.url), 'utf8')
     const exportDialog = readFileSync(new URL('./client/export-dialog.ts', import.meta.url), 'utf8')
     const importDialog = readFileSync(new URL('./client/import-dialog.ts', import.meta.url), 'utf8')
-    const worldbook = readFileSync(new URL('./client/worldbook-settings.ts', import.meta.url), 'utf8')
     const archive = readFileSync(new URL('./client/archive.ts', import.meta.url), 'utf8')
     const palette = readFileSync(new URL('./client/command-palette.tsx', import.meta.url), 'utf8')
     // Snapshots library remains out of scope
@@ -426,7 +430,6 @@ describe('shell manuscript RPC safety', () => {
     expect(source).toContain("t('workspace.exportTxt')")
     expect(zh['workspace.exportMarkdown']).toBe('导出 Markdown')
     expect(zh['workspace.exportTxt']).toBe('导出 TXT')
-    expect(worldbook).toContain('function WorldbookSettings(')
     expect(archive).toContain("className: 'file-dialog archive-panel'")
     expect(source).toContain('archiveManaged')
     expect(palette).toContain("t('command.search')")

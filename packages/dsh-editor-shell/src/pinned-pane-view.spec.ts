@@ -110,9 +110,7 @@ describe('pinned-pane-view', () => {
       summary: '都城',
     }
     expect(worldbookPinnedFields(worldbook).map((row) => row.label)).toEqual([
-      'cards.triggers',
       'cards.category',
-      'cards.priorityField',
       'cards.tags',
       'cards.summary',
     ])

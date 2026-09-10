@@ -48,6 +48,7 @@ import {
   type QuestionAnswerItem,
 } from '../adapter.ts'
 import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from '../conversation-lifecycle.ts'
+import { MemoryUpdateCard } from './memory-panel.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
 import { useObservable } from './components.ts'
 import { Markdown } from './markdown.tsx'
@@ -695,6 +696,8 @@ export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boo
 }
 
 export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContextReceiptBundle }) {
+  /* V3 轻量请求的回执是 {sources:[]}：不展示空注入回执；V1/V2 历史消息照常渲染。 */
+  if (!receipt.sources.length) return null
   const fixed = receipt.sources.filter((item) => item.kind !== 'worldbook')
   const includedFixed = fixed.filter((item) => item.status === 'included' && item.includedChars > 0).length
   const worldbook = receipt.sources.filter((item) => item.kind === 'worldbook')
@@ -714,7 +717,7 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
   )
 }
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, onAcceptMemory, hidden, onClose, onConfigure, onApplied, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, onAcceptMemory, hidden, onClose, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   useLocale()
   const snapshot = useObservable<ConversationSnapshot>(session)
   const sessionList = useObservable(ctx.sessions.list)
@@ -1018,7 +1021,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       return { serialized: compiled.value.serialized, receipt: compiled.value.receipt }
     }).then((outcome) => {
       const result = outcome?.result
-      if (outcome) setOutgoing((current) => current?.text === value ? { ...current, projectContextReceipt: outcome.receipt } : current)
+      /* V3 回执 sources 为空时不挂回执，避免渲染空注入清单。 */
+      const receipt = outcome && outcome.receipt.sources.length ? outcome.receipt : undefined
+      if (receipt) setOutgoing((current) => current?.text === value ? { ...current, projectContextReceipt: receipt } : current)
       if (!result || !result.ok) {
         setOutgoing((current) => current?.text === value ? { ...current, state: 'failed' } : current)
         setNote(t('chat.sendFailedRetry'))
@@ -1116,7 +1121,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? t('chat.loadingMore') : t('chat.loadOlder')) : null,
       rows.map((row) => row.proposal
         ? e(ProposalCard, { key: row.id, ctx, sessionId: session.sessionId, proposal: row.proposal, onApplied: handleApplied })
-        : row.memory
+        : row.memoryUpdate
+          ? e(MemoryUpdateCard, { key: row.id, ctx, sessionId: session.sessionId, receipt: row.memoryUpdate, onApplied: handleApplied, onRefresh: onWritten })
+          : row.memory
           ? e(MemoryCard, { key: row.id, memory: row.memory, onAccept: (observation) => onAcceptMemory(observation) })
           : row.role === 'thinking'
           ? e('details', { className: 'chat-row thinking', key: row.id },

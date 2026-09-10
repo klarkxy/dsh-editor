@@ -34,6 +34,7 @@ export {
   isSessionMissing,
   isStaleFailure,
   isSuccessWorkbenchNote,
+  isWorldbookPath,
   LatestRequestGate,
   orderTreeEntries,
   proposalAppliedNavigation,

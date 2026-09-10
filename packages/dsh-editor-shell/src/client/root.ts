@@ -54,6 +54,7 @@ import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.ts'
 import { OverviewPanel } from './overview-panel.ts'
 import { ProofreadPanel, type ProofreadRequest } from './proofread-panel.ts'
 import { CardsDetail, CardsPanel, type CardsCatalog } from './cards-panel.ts'
+import { MemoryPanel } from './memory-panel.ts'
 import { PinnedPane } from './pinned-pane.ts'
 import { canPinPath, pinnedLayoutColumns, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
 import { isCharacterCardPath, isWorldbookCardPath } from '../cards-view.ts'
@@ -147,7 +148,8 @@ async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string): Prom
 async function verifyWorkspaceSession(ctx: ShellContext, sessionId: SessionId): Promise<string | undefined> {
   const files = await collectWorkspaceFiles(ctx, sessionId)
   const textFiles = supportedWorkspaceTextPaths(files)
-  const initialPath = sortChapterPaths(textFiles)[0] ?? textFiles[0]
+  /* 根目录的项目规则文件是协作约定而非正文：新作只有它时仍落在新建文件封面。 */
+  const initialPath = sortChapterPaths(textFiles)[0] ?? textFiles.find((path) => !/^agents\.md$/i.test(path))
   if (!initialPath) return undefined
   const read = await safeRpcCall<{ text: string; version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
     sessionId,
@@ -328,6 +330,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const [cardsKind, setCardsKind] = useState<'character' | 'worldbook'>('character')
   const [cardsSelectedPath, setCardsSelectedPath] = useState<string | null>(null)
   const [cardsCatalog, setCardsCatalog] = useState<CardsCatalog>({ characters: [], worldbook: [] })
+  const [memoryOpen, setMemoryOpen] = useState(false)
+  const [rulesBusy, setRulesBusy] = useState(false)
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState('')
@@ -1417,6 +1421,35 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     setCardsSelectedPath(nextPath)
     if (nextPath) setOverviewOpen(false)
   }
+  /* 项目规则入口：只在作者点击时调用 rules.open（缺失时由 Host 创建模板），
+     打开返回的真实路径；脏编辑器守卫沿用 openDocument 的 saveFirst 提示。 */
+  const openRules = async () => {
+    if (!fileSession || rulesBusy) return
+    setRulesBusy(true)
+    setWorkbenchNote('')
+    const result = await safeRpcCall<{ path: string; exists: boolean }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'rules.open', { sessionId: fileSession.sessionId }))
+    setRulesBusy(false)
+    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
+    if (!result.value.exists) setTreeRevision((value) => value + 1)
+    openDocument(result.value.path)
+  }
+  /* 记忆更新确认/撤销成功后的刷新：与提案 onApplied 同一套导航与刷新规则。 */
+  const refreshAppliedPath = (appliedPath: string) => {
+    const navigation = proposalAppliedNavigation(appliedPath, path, editorDirty)
+    setTreeRevision((old) => old + 1)
+    if (navigation.expandPath) setTreeExpansionPath(navigation.expandPath)
+    if (!navigation.openPath) {
+      setWorkbenchNote(t('note.appliedDirty'))
+      return
+    }
+    openDocument(navigation.openPath)
+    if (navigation.refreshContent) setContentRevision((old) => old + 1)
+  }
+  /* 自动写入落盘后的轻量刷新：只刷新树与当前内容，不做编辑器导航。 */
+  const refreshWrittenPath = (writtenPath: string) => {
+    setTreeRevision((old) => old + 1)
+    if (!editorDirty && writtenPath === path) setContentRevision((old) => old + 1)
+  }
   const registerFlowWorkspace = async (workspacePath: string) => {
     const registration = await createFlowWorkspace(ctx, workspacePath)
     if (registration.created) temporaryFlowWorkspaces.current.add(registration.workspace.workspaceId)
@@ -2003,6 +2036,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
           e('button', { className: 'side-action', type: 'button', 'aria-pressed': overviewOpen, title: t('workspace.overviewTitle'), 'aria-label': t('workspace.overview'), onClick: () => { setOverviewOpen((value) => !value); setCardsSelectedPath(null) } }, t('workspace.overview')),
           e('button', { className: 'side-action', type: 'button', 'aria-pressed': cardsOpen && cardsKind === 'character', title: t('workspace.cardsTitle'), 'aria-label': t('workspace.people'), onClick: () => toggleCardsPanel('character') }, t('workspace.people')),
           e('button', { className: 'side-action', type: 'button', 'aria-pressed': cardsOpen && cardsKind === 'worldbook', title: t('workspace.worldbookTitle'), 'aria-label': t('workspace.settings'), onClick: () => toggleCardsPanel('worldbook') }, t('workspace.settings')),
+          e('button', { className: 'side-action', type: 'button', disabled: rulesBusy, title: t('workspace.rulesTitle'), 'aria-label': t('workspace.rules'), onClick: () => void openRules() }, t('workspace.rules')),
+          e('button', { className: 'side-action', type: 'button', 'aria-pressed': memoryOpen, title: t('workspace.memoryTitle'), 'aria-label': t('workspace.memory'), onClick: () => setMemoryOpen((value) => !value) }, t('workspace.memory')),
           e('button', { className: 'side-action', type: 'button', disabled: snapshotBusy, title: t('workspace.commitTitle'), 'aria-label': t('workspace.commit'), onClick: () => void commitSnapshot() }, t('workspace.commit')),
           e('button', { className: 'side-action', type: 'button', 'aria-pressed': historyOpen, title: t('workspace.commitHistory'), 'aria-label': t('common.history'), onClick: () => setHistoryOpen((value) => !value) }, t('common.history')),
         ),
@@ -2062,6 +2097,13 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
           openDocument(createdPath)
         },
         onOpenHit: (hit: SearchHit) => openDocument(hit.path, hit),
+      }) : null,
+      memoryOpen ? e(MemoryPanel, {
+        ctx,
+        sessionId: fileSession.sessionId,
+        revision: treeRevision,
+        onApplied: refreshAppliedPath,
+        onRefresh: refreshWrittenPath,
       }) : null,
       historyOpen ? e('section', { className: 'snapshot-panel', 'aria-label': t('workspace.commitHistory') },
         snapshots === null
@@ -2189,6 +2231,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       onClose: () => setAssistantOpen(false),
       onConfigure: openSettings,
       onDraftDirtyChange: setAssistantDraftDirty,
+      onWritten: refreshWrittenPath,
       onApplied: (appliedPath: string) => {
         const navigation = proposalAppliedNavigation(appliedPath, path, editorDirty)
         setTreeRevision((old) => old + 1)

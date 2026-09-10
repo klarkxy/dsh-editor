@@ -22,6 +22,7 @@ import { ConfirmDialog } from './dialogs.ts'
 import {
   errorMessage,
   isStaleFailure,
+  isWorldbookPath,
   replaceWorldbookPaperText,
   safeRpcCall,
   worldbookPaperProjection,
@@ -29,7 +30,6 @@ import {
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
-import { isWorldbookPath, WorldbookSettings } from './worldbook-settings.ts'
 import { isChapterMetaPath, ChapterMetaSettings } from './chapter-meta-settings.ts'
 import { RewritePresetsBar } from './rewrite-presets-bar.ts'
 import { canRewritePath } from '../rewrite-presets-view.ts'
@@ -356,13 +356,6 @@ export function Editor(props: {
          作为 Fragment 游离兄弟节点时，它会变成 Shell 网格的未定位子项，被自动
          摆放到隐式行（侧栏下方），遮挡溢出侧栏的面板按钮。 */
       footerExtras: e(Fragment, null,
-        isWorldbookPath(path) ? e(WorldbookSettings, {
-          key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
-          path,
-          text: currentText,
-          onChange: (next: string) => { void applyFrontmatterBuffer(next) },
-          onNote: setNote,
-        }) : null,
         isChapterMetaPath(path) ? e(ChapterMetaSettings, {
           key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
           path,

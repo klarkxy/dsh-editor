@@ -413,8 +413,12 @@ function closedFrontmatterProjection(text: string): { text: string; offset: numb
   return { text: text.slice(offset), offset }
 }
 
+export function isWorldbookPath(path: string): boolean {
+  return /^世界书\/.+\.md$/i.test(path)
+}
+
 export function worldbookPaperProjection(path: string, text: string): { text: string; offset: number } {
-  if (/^世界书\/.+\.md$/i.test(path)) {
+  if (isWorldbookPath(path)) {
     const metadata = worldbookEditorMetadata(path, text)
     if (!metadata.valid || !metadata.explicit) return { text, offset: 0 }
     return closedFrontmatterProjection(text)

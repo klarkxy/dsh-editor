@@ -289,6 +289,12 @@ export const componentStyles = `
 .shell .snapshot-row:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
 .shell .snapshot-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .snapshot-meta { flex: none; color: var(--muted); }
+/* 记忆更新历史复用 snapshot-panel/row 的外观，只补列表重置与整行按钮。 */
+.shell .memory-panel .memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.shell .memory-panel .memory-row-main { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.shell .memory-panel .proposal-card { font-size: var(--text-xs); }
+.shell .memory-panel .proposal-card pre { max-height: 120px; }
+.shell .memory-change-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .shell .snapshot-rollback { flex: none; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; padding: 2px 6px; color: var(--accent); font-size: var(--text-xs); }
 .shell .snapshot-rollback:hover { background: var(--accent-soft); }
 .shell .snapshot-rollback:disabled { opacity: .5; cursor: default; }
@@ -384,13 +390,6 @@ export const componentStyles = `
 .shell .import-dialog { width: min(520px, 100%); max-height: min(680px, calc(100dvh - 48px)); overflow: auto; padding: 18px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-card); }
 .shell .import-dialog h2 { margin: 0 0 12px; font: 500 20px/1.2 var(--font-serif); }
 .shell .import-dialog footer { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; margin-top: 16px; }
-.shell .worldbook-settings { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: end; padding: 8px 12px; border-top: 1px solid var(--hairline); background: var(--bg-sunken); }
-.shell .worldbook-settings > div { display: grid; gap: 2px; }
-.shell .worldbook-settings strong { font-size: var(--text-sm); }
-.shell .worldbook-settings small { color: var(--meta); font-size: var(--text-xs); }
-.shell .worldbook-settings label { display: grid; gap: 4px; font-size: var(--text-xs); color: var(--muted); }
-.shell .worldbook-settings textarea, .shell .worldbook-settings input[type="number"] { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
-.shell .worldbook-enabled { display: inline-flex; align-items: center; gap: 6px; }
 .shell .rewrite-presets { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .shell .rewrite-presets button { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 4px 10px; border: 0; border-radius: 999px; background: transparent; box-shadow: var(--elev-ring); color: var(--fg-2); font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .06em; cursor: pointer; }
 .shell .rewrite-presets button:hover { background: var(--bg); color: var(--fg); }
@@ -1092,8 +1091,7 @@ export const componentStyles = `
 .shell .cards-detail-body { display: grid; gap: var(--space-4); padding: 16px 24px 32px; }
 .shell .cards-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
 .shell .cards-field { display: grid; gap: 4px; min-width: 0; font-size: var(--text-xs); color: var(--muted); }
-.shell .cards-field-wide, .shell .cards-enabled { grid-column: 1 / -1; }
-.shell .cards-enabled { display: inline-flex; align-items: center; gap: 8px; }
+.shell .cards-field-wide { grid-column: 1 / -1; }
 .shell .cards-relations { display: grid; gap: 6px; }
 .shell .cards-relation-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 4px; align-items: center; }
 .shell .cards-relation-link { background: transparent; color: var(--accent); }

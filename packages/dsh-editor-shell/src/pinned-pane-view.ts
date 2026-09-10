@@ -69,9 +69,7 @@ export function characterPinnedFields(fields: CharacterCardFields): PinnedFieldR
 
 export function worldbookPinnedFields(fields: WorldbookCardFields): PinnedFieldRow[] {
   const rows: PinnedFieldRow[] = []
-  if (fields.triggers?.length) rows.push({ label: 'cards.triggers', value: formatListInput(fields.triggers) })
   if (fields.category) rows.push({ label: 'cards.category', value: worldbookCategoryLabel(fields.category) })
-  if (typeof fields.priority === 'number') rows.push({ label: 'cards.priorityField', value: String(fields.priority) })
   if (fields.tags?.length) rows.push({ label: 'cards.tags', value: formatListInput(fields.tags) })
   if (fields.summary) rows.push({ label: 'cards.summary', value: fields.summary })
   return rows
