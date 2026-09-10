@@ -223,7 +223,7 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 
 这些 endpoint、字段、V1/V2 envelope、token、receipt、manifest、hash 与重新验证语义是兼容接口。物理换包不构成协议升级。
 
-章节状态存在 `.dsh-editor/chapter-status.json`（`{ version: 1, statuses }`，键为规范化相对路径，缺省与 `draft` 不落盘）。写作字数日志存在 `.dsh-editor/writing-log.json`（`[{ date, chars, delta? }]`，本地日期、按日去重）。两份文件缺失或损坏时 Host fail-open 到默认值，孤立键不影响概览。`chapter.statusSet` 只接受 `正文/` 下已存在的 Markdown/TXT。`progress.record` 必须便宜且原子，防抖由调用方负责。`proofread.scan` 合并包内默认敏感词与 `.dsh-editor/敏感词.txt`，并用 `.dsh-editor/敏感词-忽略.txt` 做允许表；列表缺失或损坏时 fail-open 到默认词库。人物卡 / 世界书 frontmatter 是容错 YAML：人物卡可选 `name` / `aliases` / `role` / `gender` / `age` / `faction` / `tags` / `status` / `relations` / `summary`；世界书在原有 `triggers` / `enabled` / `priority` 之外还可有 `category` / `tags` / `summary`。未知键在 `cards.metaSet` 中按原文保留，损坏字段 fail-open 到缺省值，不阻断世界书匹配。
+章节状态存在 `.dsh-editor/chapter-status.json`（`{ version: 1, statuses }`，键为规范化相对路径，缺省与 `draft` 不落盘）。写作字数日志存在 `.dsh-editor/writing-log.json`（`[{ date, chars, delta? }]`，本地日期、按日去重）。两份文件缺失或损坏时 Host fail-open 到默认值，孤立键不影响概览。`chapter.statusSet` 只接受 `正文/` 下已存在的 Markdown/TXT。`progress.record` 必须便宜且原子，防抖由调用方负责。`proofread.scan` 合并包内默认敏感词与 `.dsh-editor/敏感词.txt`，并用 `.dsh-editor/敏感词-忽略.txt` 做允许表；列表缺失或损坏时 fail-open 到默认词库。人物卡 / 世界书 frontmatter 是容错 YAML：人物卡可选 `name` / `aliases` / `role` / `gender` / `age` / `faction` / `tags` / `status` / `relations` / `summary`；世界书可有 `category` / `tags` / `summary`，旧文件的 `triggers` / `enabled` / `priority` 按键原样保留但不再驱动自动注入。未知键在 `cards.metaSet` 中按原文保留，损坏字段 fail-open 到缺省值。
 
 章节 Markdown（`正文/**/*.md`）可选 YAML frontmatter：`beats`（字符串列表，最多 12 条、每条 ≤ 120 字）与 `state`（可选 `now` / `where` / `knows` / `ended` / `open`，各为标量，合计 ≤ 300 字）。未知键与注释按原文保留；TXT 章节不使用 frontmatter。无 frontmatter 解析为 `{}`，损坏或未闭合解析为缺省。`project.overview` 的字数 / 标题 / 摘要 / 空章按去掉 frontmatter 的正文计算，并带可选 `ChapterSummary.meta`。
 
@@ -232,13 +232,14 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 Context 信封常量：
 
 - `schema`: `dsh-editor.project-context`
-- 历史版本 `1`，当前版本 `2`
-- 固定来源：`项目总览.md`、`大纲/总纲.md`、`人物卡/人物索引.md`、`世界书/设定总汇.md`、`.dsh-editor/作品索引.md`
-- V2 可选 `chapter_context: { path, beats?, previous?: { path, state } }`：当前章 `beats` 与上一章非空 `state`；皆无则省略。回执带 `chapterContext?: { path, beats, previousPath? }`。版本号仍为 `2`。
+- 历史版本 `1` / `2`（每轮注入固定来源与世界书全文），当前版本 `3`
+- V3 只含 `user_request` 与可选 `active_path`：固定资料与世界书不再自动注入，作品背景由项目根 `AGENTS.md`（system 区常驻）与按需 `glob`/`grep`/`read` 提供。旧会话恢复时，仍在模型上下文里的 V1/V2 信封会被有日志地替换回原用户请求。
+- V2 可选 `chapter_context: { path, beats?, previous?: { path, state } }`：当前章 `beats` 与上一章非空 `state`；皆无则省略。回执带 `chapterContext?: { path, beats, previousPath? }`。
 
 ## Novel Kernel 契约
 
-- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`——由 workbench-tools 注册、`novel_search`、`project_knowledge`，以及 `novel_scratch_write`/`novel_scratch_read`/`novel_scratch_list` 临时工作区三件套）。
+- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`——由 workbench-tools 注册，以及 `novel_scratch_write`/`novel_scratch_read`/`novel_scratch_list` 临时工作区三件套）。项目内查找改用原生 `glob`/`grep`/`read`；旧的 `novel_search`/`project_knowledge` 不再向新会话注册。
+- `novel_memory_update`（workbench 注册）在协作中维护根 `AGENTS.md`、`世界书/**/*.md`、`人物卡/**/*.md`：来源逐字引用与文件版本由 Host 校验；明确的创建/追加自动落盘，修订、推断与冲突形成待确认记录，全部写入 `.dsh-editor/history/memory/`，重启后可查看与撤销（新建文件的撤销走归档）。
 - `novel_knowledge` 只接受唯一的 `topics` 数组，去重后 1–3 个固定主题；每张知识卡最多 6000 字符。它只返回建议，不提供项目事实或授权。
 - `novel_propose` 每次形成一个 Markdown `edit` / `create` / `split` / `merge` / `renames` 提案，绝不写文件；守卫只接受作者内容 `.md` 路径，`.dsh-editor/` 等隐藏目录不进提案。
 - Channel `/novel-kernel`（loopback）：`zhihu.knowledge.bases`（读，列出知识库）、`zhihu.knowledge.upload`（写，界面显式上传，内容经 base64 传入）。不要求 `sessionId`。这两个旧 endpoint 仅转发到可选 `zhihu` 服务，新 UI 直接使用 `/zhihu`；知乎工具由 `dsh-zhihu/tools` 唯一注册。
