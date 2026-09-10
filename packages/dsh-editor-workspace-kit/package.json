@@ -1,0 +1,42 @@
+{
+  "name": "dsh-editor-workspace-kit",
+  "version": "0.1.0",
+  "description": "Private in-process workspace primitives for DSH Editor Host packages",
+  "license": "SEE LICENSE IN LICENSE",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./frontmatter": {
+      "types": "./lib/frontmatter.d.ts",
+      "import": "./lib/frontmatter.js",
+      "default": "./lib/frontmatter.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. packages/dsh-editor-workspace-kit/src"
+  },
+  "dependencies": {
+    "dsh-manuscript": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
