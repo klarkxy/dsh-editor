@@ -7,7 +7,8 @@ import {
 } from 'dsh-manuscript/host-api'
 import type { OverviewAccess } from './overview.ts'
 import { METADATA_DIRECTORY, readMetadataText } from './metadata-io.ts'
-import { listCards } from './cards.ts'
+import { isGeneratedPath, isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
+import { listCards } from 'dsh-editor-cards/host-api'
 import {
   PROOFREAD_KINDS,
   type ProofreadFinding,
@@ -50,13 +51,11 @@ export const SENSITIVE_LIST_PATH = `${METADATA_DIRECTORY}/敏感词.txt`
 export const SENSITIVE_ALLOW_PATH = `${METADATA_DIRECTORY}/敏感词-忽略.txt`
 
 const MANUSCRIPT_ROOT = '正文'
-const MAX_FILES = 2_000
 const MAX_TOTAL_BYTES = 100_000_000
 const MAX_TEXT_BYTES = 2_000_000
 const MAX_DIRECTORIES = 2_000
 const MAX_DIRECTORY_ENTRIES = 10_000
 const MAX_DEPTH = 12
-const GENERATED_DIRECTORIES = new Set(['build', 'coverage', 'dist', 'node_modules', 'out', 'target'])
 
 export class ProofreadError extends Error {
   constructor(
@@ -81,7 +80,7 @@ function cardFinding(raw: string, path: string, version: string, draft: CardFind
 }
 
 function generated(relative: string): boolean {
-  return relative.split('/').some((part) => GENERATED_DIRECTORIES.has(part.toLocaleLowerCase()))
+  return isGeneratedPath(relative)
 }
 
 export function authorDocumentPath(relative: string): string {
@@ -94,8 +93,7 @@ export function authorDocumentPath(relative: string): string {
   if (normalized !== relative.replace(/\\/g, '/') || normalized === '.' || !/\.(md|txt)$/i.test(normalized)) {
     throw new ProofreadError('document path is invalid', 'INVALID_PATH')
   }
-  const parts = normalized.split('/')
-  if (parts.some((part) => part.startsWith('.') || GENERATED_DIRECTORIES.has(part.toLocaleLowerCase()))) {
+  if (isHiddenPath(normalized) || isGeneratedPath(normalized)) {
     throw new ProofreadError('document path is not author content', 'INVALID_PATH')
   }
   return normalized

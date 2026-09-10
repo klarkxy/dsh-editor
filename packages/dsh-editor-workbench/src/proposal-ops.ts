@@ -25,10 +25,10 @@ import type { OperationRecovery } from './contracts.ts'
  *   - edit / create 仍走内核 manuscript 通道，parseProposal 收到这两种
  *     kind 直接抛 INVALID（INVALID 不是 INVALID_PATH 命名冲突）。
  */
-import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createTextFile, FileOpError, listDirStrict, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
 import { LifecycleError, archiveDocument, moveManuscriptDocument, renameDocument, type LifecycleAccess } from './lifecycle.ts'
+import { mkdirSafe as mkdirSafeWalk } from './kit/entries.ts'
 
 const PROPOSAL_MARKER = 'dsh-editor.proposal'
 const PROPOSAL_VERSION = 1
@@ -238,33 +238,11 @@ export async function snapshotProposalTargets(
 
 /** 逐级 mkdir，且拒绝 symlink / 越界——参照 snapshot.ts 的 mkdirSafe。 */
 export async function mkdirSafe(root: string, relative: string): Promise<void> {
-  const canonicalRoot = await safeRoot(root)
-  let cursor = path.resolve(root)
-  for (const part of relative.split('/').filter((item) => item && item !== '.')) {
-    cursor = path.join(cursor, part)
-    try {
-      await fs.mkdir(cursor)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-    }
-    const state = await fs.lstat(cursor)
-    if (state.isSymbolicLink() || !state.isDirectory()) {
-      throw new ProposalOpsError('快照目录不安全', 'IO')
-    }
-    const canonical = await fs.realpath(cursor)
-    if (canonical !== canonicalRoot && !canonical.startsWith(`${canonicalRoot}${path.sep}`)) {
-      throw new ProposalOpsError('快照目录越界', 'IO')
-    }
-  }
-}
-
-async function safeRoot(root: string): Promise<string> {
-  const absolute = path.resolve(root)
-  const state = await fs.lstat(absolute)
-  if (state.isSymbolicLink() || !state.isDirectory()) {
-    throw new ProposalOpsError('工作目录不安全', 'IO')
-  }
-  return await fs.realpath(absolute)
+  await mkdirSafeWalk(root, relative, (kind) => {
+    if (kind === 'unsafe-root') return new ProposalOpsError('工作目录不安全', 'IO')
+    if (kind === 'unsafe-dir') return new ProposalOpsError('快照目录不安全', 'IO')
+    return new ProposalOpsError('快照目录越界', 'IO')
+  })
 }
 
 /** split：读 path，校验 anchor 唯一、newPath 不存在，返回 200 字预览。 */

@@ -1,12 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
+import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile } from 'dsh-manuscript/host-api'
+
+import type { ImportAccess } from './kit/access.ts'
+import { isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
+
+export type { ImportAccess } from './kit/access.ts'
 
 export const IMPORT_RECEIPT_PATH = '.dsh-editor-import.json'
-const MAX_FILES = 2_000
 const MAX_TOTAL_BYTES = 100_000_000
-export type ImportAccess = { path: string; rootKey: string; mode: string; files: WorkspaceFileContext }
 export type ImportFile = { source: string; target: string; version: string; bytes: number; sha256: string }
 type ImportReceipt = { version: 1; receiptId: string; state: 'copying' | 'cleaning' | 'complete'; probeToken: string; sourceRootKey: string; targetRootKey: string; files: ImportFile[] }
 type StoredReceipt = { receipt: ImportReceipt; version: string }
@@ -18,7 +21,7 @@ export class ImportError extends Error {
 function hash(text: string): string { return createHash('sha256').update(text, 'utf8').digest('hex') }
 function bytes(text: string): number { return new TextEncoder().encode(text).byteLength }
 function token(source: ImportAccess, target: ImportAccess, files: readonly ImportFile[]): string { return hash(JSON.stringify({ version: 1, source: source.rootKey, target: target.rootKey, files })) }
-function hidden(relative: string): boolean { return relative.split('/').some((part) => part.startsWith('.')) }
+function hidden(relative: string): boolean { return isHiddenPath(relative) }
 function nested(a: string, b: string): boolean { const rel = path.relative(a, b); return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel)) }
 function targetPath(relative: string): string { return `正文/${relative.replace(/\.txt$/i, '.md')}` }
 function normal(value: string): string { return value.split(path.sep).join('/') }

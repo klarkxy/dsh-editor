@@ -5,28 +5,23 @@ import {
   listDirStrict,
   normalizeWorkspaceRelative,
   readTextFileLimited,
-  type WorkspaceFileContext,
 } from 'dsh-manuscript/host-api'
 import { CHAPTER_STATE_KEYS, parseChapterMeta, stripChapterFrontmatter } from './chapter-meta.ts'
 import type { ChapterStatus, ChapterSummary, OutlineSummary, ProjectOverview } from './contracts.ts'
 import { loadChapterStatuses } from './chapter-status.ts'
+import type { OverviewAccess } from './kit/access.ts'
+import { isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
+
+export type { OverviewAccess } from './kit/access.ts'
 
 const MANUSCRIPT_ROOT = '正文'
 const OUTLINE_ROOT = '大纲'
-const MAX_FILES = 2_000
 const MAX_TOTAL_BYTES = 100_000_000
 const MAX_TEXT_BYTES = 2_000_000
 const MAX_DIRECTORIES = 2_000
 const MAX_DIRECTORY_ENTRIES = 10_000
 const MAX_DEPTH = 12
 const EXCERPT_MAX_CHARS = 160
-
-export type OverviewAccess = {
-  path: string
-  rootKey: string
-  mode: string
-  files: WorkspaceFileContext
-}
 
 type ScannedChapter = Omit<ChapterSummary, 'status'>
 type ScanResult = {
@@ -67,7 +62,7 @@ function visibleTextPath(relative: string, root?: typeof MANUSCRIPT_ROOT | typeo
     throw new OverviewError('chapter path is invalid', 'INVALID_PATH')
   }
   const parts = normalized.split('/')
-  if (parts.some((part) => part.startsWith('.'))) throw new OverviewError('chapter path is invalid', 'INVALID_PATH')
+  if (isHiddenPath(normalized)) throw new OverviewError('chapter path is invalid', 'INVALID_PATH')
   if (root && (parts[0] !== root || parts.length < 2)) throw new OverviewError('chapter path is outside its project area', 'INVALID_PATH')
   return normalized
 }

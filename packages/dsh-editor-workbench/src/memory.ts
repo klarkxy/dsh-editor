@@ -2,9 +2,18 @@ import { createHash, randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { createTextFile, FileOpError, listDirStrict, MAX_TEXT_BYTES, readProjectRules, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
 import { archiveDocument, prepareArchiveDocument, type LifecycleAccess } from './lifecycle.ts'
-import { mkdirSafe } from './proposal-ops.ts'
+import { ProposalOpsError } from './proposal-ops.ts'
+import { mkdirSafe as mkdirSafeWalk } from './kit/entries.ts'
 import { parseProjectContextEnvelope } from './contracts.ts'
 import type { MemoryChange, MemoryChangeSummary, MemoryEvidence, MemoryUpdate, MemoryUpdateReceipt } from './memory-contracts.ts'
+
+function mkdirSafe(root: string, relative: string): Promise<void> {
+  return mkdirSafeWalk(root, relative, (kind) => {
+    if (kind === 'unsafe-root') return new ProposalOpsError('工作目录不安全', 'IO')
+    if (kind === 'unsafe-dir') return new ProposalOpsError('快照目录不安全', 'IO')
+    return new ProposalOpsError('快照目录越界', 'IO')
+  })
+}
 
 const HISTORY = '.dsh-editor/history/memory'
 const ID = /^[a-f0-9]{64}$/

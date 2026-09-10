@@ -1,23 +1,31 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
+import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile } from 'dsh-manuscript/host-api'
 import { syncChapterStatusPaths } from './chapter-status.ts'
+import { mkdirSafe as mkdirSafeWalk, RESERVED_NAME, validateEntryName } from './kit/entries.ts'
+import { moveChecked } from './kit/move.ts'
+import type { LifecycleAccess } from './kit/access.ts'
+import {
+  LifecycleError,
+  loadedDocument,
+  lstatOptional,
+  safeAbsentFile,
+  safeDirectory,
+  safeExistingFile,
+  safeRoot,
+  type LoadedText,
+} from 'dsh-editor-workspace-kit'
+
+export type { LifecycleAccess } from './kit/access.ts'
+export { validateEntryName } from './kit/entries.ts'
+export { moveNoReplace, moveNonWindowsNoReplace, moveWindowsNoReplace } from './kit/move.ts'
+export { LifecycleError, loadedDocument, safeAbsentFile, safeExistingFile }
 
 export const ARCHIVE_DIRECTORY = '.dsh-editor/archive'
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SHA256 = /^[0-9a-f]{64}$/
 const RECORD_DIRECTORY = /^\d{8}T\d{6}-[0-9a-f-]{36}$/i
-const RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i
-
-export type LifecycleAccess = {
-  path: string
-  rootKey: string
-  mode: string
-  files: WorkspaceFileContext
-  moveNoReplace?: (source: string, target: string, signal?: AbortSignal) => Promise<void>
-}
 
 type ArchiveState = 'moving' | 'archived' | 'restoring' | 'restored'
 type ArchiveManifest = {
@@ -37,7 +45,6 @@ type ArchiveManifest = {
 }
 
 type StoredManifest = { manifest: ArchiveManifest; version: string }
-type LoadedText = { text: string; version: string; bytes: number; sha256: string }
 
 export type ArchiveView = {
   archiveId: string
@@ -53,18 +60,6 @@ export type ArchiveView = {
 export type ArchiveListView = {
   items: ArchiveView[]
   invalid: number
-}
-
-export class LifecycleError extends Error {
-  constructor(
-    message: string,
-    readonly code: 'READ_ONLY' | 'INVALID_PATH' | 'NOT_FOUND' | 'EXISTS' | 'STALE' | 'BLOCKED' | 'UNSUPPORTED' | 'IO',
-    options?: ErrorOptions,
-    readonly recoveryPath?: string,
-  ) {
-    super(message, options)
-    this.name = 'LifecycleError'
-  }
 }
 
 function hash(value: string): string {
@@ -160,209 +155,18 @@ function withRecordHash(value: Omit<ArchiveManifest, 'recordHash'>): ArchiveMani
   return { ...value, recordHash: recordHash(value) }
 }
 
-async function lstatOptional(target: string): Promise<import('node:fs').Stats | undefined> {
-  try {
-    return await fs.lstat(target)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
-    throw error
-  }
-}
-
-async function safeRoot(root: string): Promise<string> {
-  const absolute = path.resolve(root)
-  const state = await fs.lstat(absolute)
-  if (state.isSymbolicLink() || !state.isDirectory()) throw new LifecycleError('workspace root is unsafe', 'BLOCKED')
-  return await fs.realpath(absolute)
-}
-
-async function safeDirectory(root: string, relative: string): Promise<string> {
-  const canonicalRoot = await safeRoot(root)
-  const normalized = normalizeWorkspaceRelative(relative)
-  let cursor = path.resolve(root)
-  if (normalized === '.') return cursor
-  for (const part of normalized.split('/')) {
-    cursor = path.join(cursor, part)
-    const state = await lstatOptional(cursor)
-    if (!state || state.isSymbolicLink() || !state.isDirectory()) {
-      throw new LifecycleError('directory path is missing or unsafe', 'BLOCKED')
-    }
-    const canonical = await fs.realpath(cursor)
-    if (canonical !== canonicalRoot && !canonical.startsWith(`${canonicalRoot}${path.sep}`)) {
-      throw new LifecycleError('directory path escapes workspace', 'BLOCKED')
-    }
-  }
-  return cursor
-}
-
-async function safeExistingFile(root: string, relative: string): Promise<string | undefined> {
-  const normalized = normalizeWorkspaceRelative(relative)
-  const parent = await safeDirectory(root, path.posix.dirname(normalized))
-  const target = path.join(parent, path.posix.basename(normalized))
-  const state = await lstatOptional(target)
-  if (!state) return undefined
-  if (state.isSymbolicLink() || !state.isFile()) throw new LifecycleError('document path is not a safe regular file', 'BLOCKED')
-  return target
-}
-
-async function safeAbsentFile(root: string, relative: string): Promise<string> {
-  const normalized = normalizeWorkspaceRelative(relative)
-  const parent = await safeDirectory(root, path.posix.dirname(normalized))
-  const target = path.join(parent, path.posix.basename(normalized))
-  const state = await lstatOptional(target)
-  if (state) throw new LifecycleError('destination already exists', 'EXISTS')
-  return target
-}
-
 async function mkdirSafe(root: string, relative: string): Promise<void> {
-  const canonicalRoot = await safeRoot(root)
-  let cursor = path.resolve(root)
-  for (const part of normalizeWorkspaceRelative(relative).split('/').filter((item) => item !== '.')) {
-    cursor = path.join(cursor, part)
-    try {
-      await fs.mkdir(cursor)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-    }
-    const state = await fs.lstat(cursor)
-    if (state.isSymbolicLink() || !state.isDirectory()) throw new LifecycleError('archive directory is unsafe', 'BLOCKED')
-    const canonical = await fs.realpath(cursor)
-    if (canonical !== canonicalRoot && !canonical.startsWith(`${canonicalRoot}${path.sep}`)) {
-      throw new LifecycleError('archive directory escapes workspace', 'BLOCKED')
-    }
-  }
+  await mkdirSafeWalk(root, relative, (kind) => {
+    if (kind === 'unsafe-root') return new LifecycleError('workspace root is unsafe', 'BLOCKED')
+    if (kind === 'unsafe-dir') return new LifecycleError('archive directory is unsafe', 'BLOCKED')
+    return new LifecycleError('archive directory escapes workspace', 'BLOCKED')
+  }, { normalize: true })
 }
 
-function minimalWindowsEnvironment(source: string, target: string): NodeJS.ProcessEnv {
-  const systemRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows'
-  const powershell = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0')
-  return {
-    SystemRoot: systemRoot,
-    WINDIR: systemRoot,
-    PATH: `${powershell};${path.join(systemRoot, 'System32')}`,
-    TEMP: process.env.TEMP,
-    TMP: process.env.TMP,
-    DSH_MOVE_SOURCE: source,
-    DSH_MOVE_TARGET: target,
-  }
-}
-
-const MOVE_SCRIPT = `
-try {
-  [IO.File]::Move(
-    [Environment]::GetEnvironmentVariable('DSH_MOVE_SOURCE'),
-    [Environment]::GetEnvironmentVariable('DSH_MOVE_TARGET')
-  )
-  exit 0
-} catch {
-  $inner = $_.Exception.InnerException
-  if ($inner -is [System.IO.IOException]) { exit 17 }
-  if ($inner -is [System.UnauthorizedAccessException]) { exit 18 }
-  exit 19
-}`
-
-export async function moveWindowsNoReplace(source: string, target: string, signal?: AbortSignal): Promise<void> {
-  if (process.platform !== 'win32') throw new LifecycleError('safe file move is unavailable on this platform', 'UNSUPPORTED')
-  if (signal?.aborted) throw new LifecycleError('file move was cancelled', 'IO')
-  const systemRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows'
-  const executable = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(executable, ['-NoProfile', '-NonInteractive', '-Command', MOVE_SCRIPT], {
-      env: minimalWindowsEnvironment(source, target),
-      windowsHide: true,
-      stdio: 'ignore',
-    })
-    let settled = false
-    const timeout = globalThis.setTimeout(() => {
-      child.kill()
-      finish(new LifecycleError('safe file move timed out', 'IO'))
-    }, 15_000)
-    const finish = (error?: Error) => {
-      if (settled) return
-      settled = true
-      globalThis.clearTimeout(timeout)
-      signal?.removeEventListener('abort', abort)
-      if (error) reject(error)
-      else resolve()
-    }
-    const abort = () => {
-      child.kill()
-      finish(new LifecycleError('file move was cancelled', 'IO'))
-    }
-    signal?.addEventListener('abort', abort, { once: true })
-    if (signal?.aborted) abort()
-    child.once('error', (error) => finish(new LifecycleError('safe file move could not start', 'UNSUPPORTED', { cause: error })))
-    child.once('exit', (code) => {
-      if (code === 0) finish()
-      else if (code === 17) finish(new LifecycleError('source is missing or destination already exists', 'EXISTS'))
-      else if (code === 18) finish(new LifecycleError('file move was denied', 'READ_ONLY'))
-      else finish(new LifecycleError('safe file move failed', 'IO'))
-    })
-  })
-}
-
-export async function moveNonWindowsNoReplace(source: string, target: string, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) throw new LifecycleError('file move was cancelled', 'IO')
-  const stage = path.join(path.dirname(source), `.${path.basename(source)}.${randomUUID()}.move`)
-  try {
-    await fs.rename(source, stage)
-  } catch (error) {
-    throw moveFailure(error)
-  }
-  try {
-    await fs.link(stage, target)
-  } catch (error) {
-    const failure = moveFailure(error)
-    await restoreStagedSource(stage, source)
-    throw failure
-  }
-  try {
-    // The staged inode is the old source; never unlink source because an editor may have recreated it.
-    await fs.unlink(stage)
-  } catch (error) {
-    throw new LifecycleError('safe file move left a recovery staging file', 'IO', { cause: error }, stage)
-  }
-}
-
-function moveFailure(error: unknown): LifecycleError {
-  const code = (error as NodeJS.ErrnoException).code
-  if (code === 'EEXIST') return new LifecycleError('source is missing or destination already exists', 'EXISTS', { cause: error })
-  if (code === 'EXDEV') return new LifecycleError('safe file move requires source and target on the same filesystem', 'UNSUPPORTED', { cause: error })
-  if (code === 'ENOENT') return new LifecycleError('source document was not found', 'NOT_FOUND', { cause: error })
-  if (code === 'EACCES' || code === 'EPERM') return new LifecycleError('file move was denied', 'READ_ONLY', { cause: error })
-  return new LifecycleError('safe file move failed', 'IO', { cause: error })
-}
-
-async function restoreStagedSource(stage: string, source: string): Promise<void> {
-  try {
-    await fs.link(stage, source)
-  } catch (error) {
-    throw new LifecycleError('safe file move could not restore the source; recover from staging path', 'STALE', { cause: error }, stage)
-  }
-  try {
-    await fs.unlink(stage)
-  } catch (error) {
-    throw new LifecycleError('safe file move restored the source but left a recovery staging file', 'IO', { cause: error }, stage)
-  }
-}
-export async function moveNoReplace(source: string, target: string, signal?: AbortSignal): Promise<void> {
-  if (process.platform === 'win32') return await moveWindowsNoReplace(source, target, signal)
-  return await moveNonWindowsNoReplace(source, target, signal)
-}
-
-async function loaded(access: LifecycleAccess, relative: string): Promise<LoadedText> {
-  try {
-    const value = await readTextFile(access.files, relative)
-    return { ...value, bytes: byteSize(value.text), sha256: hash(value.text) }
-  } catch (error) {
-    if (error instanceof FileOpError && error.code === 'NOT_FOUND') throw new LifecycleError('document was not found', 'NOT_FOUND', { cause: error })
-    throw error
-  }
-}
 
 async function optionalLoaded(access: LifecycleAccess, relative: string): Promise<LoadedText | undefined> {
   try {
-    return await loaded(access, relative)
+    return await loadedDocument(access, relative)
   } catch (error) {
     if (error instanceof LifecycleError && error.code === 'NOT_FOUND') return undefined
     return undefinedIfFileMissing(error)
@@ -372,53 +176,6 @@ async function optionalLoaded(access: LifecycleAccess, relative: string): Promis
 function undefinedIfFileMissing(error: unknown): undefined {
   if (error instanceof FileOpError && error.code === 'NOT_FOUND') return undefined
   throw error
-}
-
-async function moveChecked(input: {
-  access: LifecycleAccess
-  source: string
-  target: string
-  expectedVersion: string
-  expectedHash?: string
-}): Promise<LoadedText> {
-  assertWritable(input.access)
-  const before = await loaded(input.access, input.source)
-  if (!input.expectedVersion || before.version !== input.expectedVersion || (input.expectedHash && before.sha256 !== input.expectedHash)) {
-    throw new LifecycleError('source document changed', 'STALE')
-  }
-  let source = await safeExistingFile(input.access.path, input.source)
-  if (!source) throw new LifecycleError('source document was not found', 'NOT_FOUND')
-  let target = await safeAbsentFile(input.access.path, input.target)
-  const checked = await loaded(input.access, input.source)
-  if (checked.version !== before.version || checked.sha256 !== before.sha256) throw new LifecycleError('source document changed', 'STALE')
-  const sourceAgain = await safeExistingFile(input.access.path, input.source)
-  const targetAgain = await safeAbsentFile(input.access.path, input.target)
-  if (sourceAgain !== source || targetAgain !== target) throw new LifecycleError('file path changed during move', 'STALE')
-
-  const move = input.access.moveNoReplace ?? moveNoReplace
-  try {
-    await move(source, target, input.access.files.signal)
-  } catch (error) {
-    if (error instanceof LifecycleError && error.recoveryPath) throw error
-    const postSource = await safeExistingFile(input.access.path, input.source).catch(() => undefined)
-    const postTarget = await safeExistingFile(input.access.path, input.target).catch(() => undefined)
-    if (postSource || !postTarget) throw error
-  }
-  const afterSource = await safeExistingFile(input.access.path, input.source)
-  const afterTarget = await safeExistingFile(input.access.path, input.target)
-  if (afterSource || !afterTarget) throw new LifecycleError('file move result is ambiguous', 'BLOCKED', undefined, afterTarget)
-  const after = await loaded(input.access, input.target)
-  if (after.sha256 !== before.sha256 || after.bytes !== before.bytes) {
-    try {
-      if (!await safeExistingFile(input.access.path, input.source)) {
-        await move(afterTarget, await safeAbsentFile(input.access.path, input.source), input.access.files.signal)
-      }
-    } catch {
-      // Preserve both observed paths; never use a destructive fallback.
-    }
-    throw new LifecycleError('moved document identity changed', 'STALE')
-  }
-  return after
 }
 
 export async function renameDocument(input: {
@@ -488,31 +245,6 @@ function entryDirectory(value: string): string {
     throw new LifecycleError('target directory is invalid', 'INVALID_PATH')
   }
   return relative
-}
-
-const ENTRY_NAME_FORBIDDEN = /[<>:"/\\|?*\u0000-\u001f]/
-
-/** Visible single-segment entry name used by `entry.*` and `cards.create`. */
-export function validateEntryName(value: string): string {
-  return entryNewName(value)
-}
-
-function entryNewName(value: string): string {
-  if (typeof value !== 'string') throw new LifecycleError('entry name is required', 'INVALID_PATH')
-  const name = value.trim()
-  if (!name
-    || name === '.'
-    || name === '..'
-    || name.includes('/')
-    || name.includes('\\')
-    || ENTRY_NAME_FORBIDDEN.test(name)
-    || name.startsWith('.')
-    || name.length > 120
-    || /[. ]$/.test(name)
-    || RESERVED_NAME.test(name)) {
-    throw new LifecycleError('entry name is invalid', 'INVALID_PATH')
-  }
-  return name
 }
 
 function splitPosixName(name: string): { stem: string; ext: string } {
@@ -691,7 +423,7 @@ export async function renameEntry(input: {
 }): Promise<{ path: string }> {
   assertWritable(input.access)
   const source = entryPath(input.path)
-  const newName = entryNewName(input.name)
+  const newName = validateEntryName(input.name)
   const sourceEntry = await resolveExistingEntry(input.access.path, source)
   const parentRelative = path.posix.dirname(source)
   const targetRelative = joinPosix(parentRelative, newName)
@@ -854,7 +586,7 @@ export async function prepareArchiveDocument(input: { access: LifecycleAccess; p
     }
   }
     const originalPath = authorPath(input.path ?? '')
-    const source = await loaded(input.access, originalPath)
+    const source = await loadedDocument(input.access, originalPath)
     if (!input.expectedVersion || source.version !== input.expectedVersion) throw new LifecycleError('source document changed', 'STALE')
     const archiveId = input.archiveId ?? randomUUID()
     const createdAt = new Date().toISOString()

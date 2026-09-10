@@ -3,23 +3,19 @@ import type { OperationRecovery } from './contracts.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
+import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile } from 'dsh-manuscript/host-api'
+
+import type { SnapshotAccess } from './kit/access.ts'
+import { isGeneratedPath, isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
+
+export type { SnapshotAccess } from './kit/access.ts'
 
 export const SNAPSHOT_DIRECTORY = '.dsh-editor/snapshots'
 export const RESTORE_RECEIPT_PATH = '.dsh-editor-restore.json'
 const MAX_FILE_BYTES = 2_000_000
-const MAX_FILES = 2_000
 const MAX_TOTAL_BYTES = 100_000_000
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SHA256 = /^[0-9a-f]{64}$/
-const GENERATED_DIRECTORIES = new Set(['build', 'coverage', 'dist', 'node_modules', 'out', 'target'])
-
-export type SnapshotAccess = {
-  path: string
-  rootKey: string
-  mode: string
-  files: WorkspaceFileContext
-}
 
 type SnapshotFile = { path: string; bytes: number; sha256: string }
 type ScannedFile = SnapshotFile & { version: string; text: string }
@@ -92,11 +88,11 @@ function normal(value: string): string {
 }
 
 function hidden(value: string): boolean {
-  return value.split('/').some((part) => part.startsWith('.'))
+  return isHiddenPath(value)
 }
 
 function generated(value: string): boolean {
-  return value.split('/').some((part) => GENERATED_DIRECTORIES.has(part.toLocaleLowerCase()))
+  return isGeneratedPath(value)
 }
 
 function validPayloadPath(value: unknown): value is string {

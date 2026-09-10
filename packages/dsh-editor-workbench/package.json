@@ -39,6 +39,24 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "dshEditor": {
+    "role": "core",
+    "visibility": "desktop",
+    "entries": [
+      {
+        "id": "editor-workbench",
+        "title": "工作台",
+        "description": "作品目录、概览、校对与快照",
+        "locked": true
+      },
+      {
+        "id": "editor-workbench-tools",
+        "title": "作品概览工具",
+        "description": "供写作搭档读取作品概览",
+        "feature": "assistant"
+      }
+    ]
+  },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -52,6 +70,8 @@
     "@deepseek-ai/dsh-system-prompt": ">=0.1.1-rc.2 <0.2.0"
   },
   "dependencies": {
+    "dsh-editor-cards": "workspace:*",
+    "dsh-editor-workspace-kit": "workspace:*",
     "dsh-manuscript": "workspace:*",
     "dsh-proofread": "workspace:*"
   },

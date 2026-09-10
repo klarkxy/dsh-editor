@@ -6,4 +6,4 @@ export {
   readMetadataText,
   writeMetadataTextAtomic,
   type MetadataAccess,
-} from './kit/metadata-io.ts'
+} from 'dsh-editor-workspace-kit'

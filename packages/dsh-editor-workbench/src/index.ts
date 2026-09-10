@@ -1,41 +1,24 @@
-import { readProjectRules, ensureProjectRules } from 'dsh-manuscript/host-api'
-import { resolveMemoryAccess } from './memory-access.ts'
-import { getMemoryChange, listMemoryChanges, applyMemoryChange, undoMemoryChange } from './memory.ts'
 import type { Context } from '@deepseek-ai/cordis'
-import { withWorkspaceWrite, asHost, badRequest, mapHostError, resolveWorkspaceAccess, WorkspaceAuthorityError, type ManuscriptHost } from 'dsh-manuscript/host-api'
+import { withWorkspaceWrite, asHost, badRequest, mapHostError, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
-import { BinaryError, readImageFile, type BinaryAccess } from './binary.ts'
-import { applyImport, cleanupImport, ImportError, probeImport, type ImportAccess } from './import.ts'
-import { archiveDocument, copyEntry, deleteEntry, LifecycleError, listArchives, moveEntry, moveManuscriptDocument, renameDocument, renameEntry, restoreArchive, type LifecycleAccess } from './lifecycle.ts'
-import { createManuscriptGroup, createDirectory, createProjectHome, defaultProjectsRoot, initializeProject, inspectProjectRoot, prepareNovelIndex, ProjectInitError } from './project.ts'
-import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, rollbackSnapshot, SnapshotError, type SnapshotAccess } from './snapshot.ts'
-import { compileContext } from './context.ts'
-import { OverviewError, readProjectOverview, type OverviewAccess } from './overview.ts'
-import { ChapterStatusError, setChapterStatus } from './chapter-status.ts'
+import { BinaryError } from './binary.ts'
+import { ImportError } from './import.ts'
+import { LifecycleError } from './lifecycle.ts'
+import { workspaceOpAccess } from './kit/access.ts'
+import { ProjectInitError } from './project.ts'
+import { SnapshotError } from './snapshot.ts'
+import { OverviewError } from './overview.ts'
+import { ChapterStatusError } from './chapter-status.ts'
 import { MetadataIoError } from './metadata-io.ts'
-import { WritingLogError, readWritingHistory, recordWritingProgress } from './writing-log.ts'
-import { ProofreadError, scanProofread } from './proofread.ts'
-import { CardsError, createCard, listCardReferences, listCards, setCardMeta } from './cards.ts'
-import {
-  applyMerge,
-  applyRenames,
-  applySplit,
-  parseProposal,
-  prepareMerge,
-  prepareRenames,
-  prepareSplit,
-  ProposalOpsError,
-} from './proposal-ops.ts'
+import { WritingLogError } from './writing-log.ts'
+import { ProofreadError } from './proofread.ts'
+import { ProposalOpsError } from './proposal-ops.ts'
+import { getWorkbenchHandler, str, type WorkbenchRequestContext } from './rpc/index.ts'
 
 export const name = 'dsh-editor-workbench'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
 
 type Payload = Record<string, unknown>
-
-function str(payload: Payload, key: string): string {
-  const value = payload[key]
-  return typeof value === 'string' ? value : ''
-}
 
 export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
   if (error instanceof ProjectInitError) {
@@ -69,10 +52,9 @@ export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
     if (error.code === 'IO' || error.code === 'UNSUPPORTED') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
     return badRequest(error.message)
   }
-  if (error instanceof OverviewError || error instanceof ChapterStatusError || error instanceof WritingLogError || error instanceof MetadataIoError || error instanceof ProofreadError || error instanceof CardsError) {
+  if (error instanceof OverviewError || error instanceof ChapterStatusError || error instanceof WritingLogError || error instanceof MetadataIoError || error instanceof ProofreadError) {
     if (error.code === 'READ_ONLY') return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
-    if (error instanceof CardsError && error.code === 'EXISTS') return { ok: false, error: { code: 'directory-exists', message: error.message, details: { path: '' } } }
-    if (error.code === 'BLOCKED' || error.code === 'INVALID_PATH' || error.code === 'INVALID' || error.code === 'STALE') return badRequest(error.message)
+    if (error.code === 'BLOCKED' || error.code === 'INVALID_PATH' || error.code === 'INVALID') return badRequest(error.message)
     return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
   }
   if (error instanceof BinaryError) {
@@ -97,138 +79,24 @@ export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
 export async function dispatchEditorFiles(ctx: Context, endpoint: string, payload: unknown, signal: AbortSignal): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Payload : {}
   const host = asHost(ctx)
-  if (endpoint === 'project.inspect') {
-    const workspacePath = str(body, 'workspacePath')
-    if (!workspacePath) throw new WorkspaceAuthorityError('workspace path is required', 'WORKSPACE_NOT_FOUND', { workspacePath })
-    let workspace
-    try {
-      workspace = await host.workspaceRegistry.resolveByPath(workspacePath)
-    } catch (error) {
-      throw new WorkspaceAuthorityError('workspace is unavailable', 'WORKSPACE_UNAVAILABLE', { workspacePath }, { cause: error })
-    }
-    if (!workspace) throw new WorkspaceAuthorityError('workspace is not registered', 'WORKSPACE_NOT_FOUND', { workspacePath })
-    return await inspectProjectRoot(workspace.path, signal)
-  }
-  if (endpoint === 'project.createHome') {
-    return await createProjectHome({ root: defaultProjectsRoot(), title: str(body, 'title'), signal })
-  }
-  const targetSessionId = endpoint.startsWith('project.import') || endpoint.startsWith('snapshot.restore')
-    ? str(body, 'targetSessionId')
-    : str(body, 'sessionId')
-  const access = await resolveWorkspaceAccess(host, targetSessionId, signal)
-  const files = { fs: host.fs, cwd: access.workspace.path, root: access.root, policy: access.policy, signal }
-  const run = async (): Promise<unknown> => {
-    const rel = str(body, 'path')
-    const importAccess = (value: typeof access): ImportAccess => ({
-      path: value.workspace.path,
-      rootKey: value.root.targetKey,
-      mode: value.policy.mode,
-      files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
-    })
-    const snapshotAccess = (value: typeof access): SnapshotAccess => ({
-      path: value.workspace.path,
-      rootKey: value.root.targetKey,
-      mode: value.policy.mode,
-      files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
-    })
-    const lifecycleAccess = (value: typeof access): LifecycleAccess => ({
-      path: value.workspace.path,
-      rootKey: value.root.targetKey,
-      mode: value.policy.mode,
-      files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
-    })
-    const overviewAccess = (value: typeof access): OverviewAccess => ({
-      path: value.workspace.path,
-      rootKey: value.root.targetKey,
-      mode: value.policy.mode,
-      files: { fs: host.fs, cwd: value.workspace.path, root: value.root, policy: value.policy, signal },
-    })
+  const handler = getWorkbenchHandler(endpoint)
+  if (!handler) throw new Error(`unknown workbench endpoint ${endpoint}`)
 
-    if (endpoint === 'project.init') return await initializeProject({ root: access.workspace.path, mode: access.policy.mode, newProject: body.newProject === true, signal })
-    if (endpoint === 'project.prepareIndex') return await prepareNovelIndex({ root: access.workspace.path, mode: access.policy.mode, signal })
-    if (endpoint === 'project.overview') return await readProjectOverview(overviewAccess(access))
-    if (endpoint === 'proofread.scan') return await scanProofread({ access: overviewAccess(access), scope: body.scope, path: rel || undefined, kinds: body.kinds })
-    if (endpoint === 'cards.list') return await listCards({ access: overviewAccess(access), kind: body.kind })
-    if (endpoint === 'cards.references') return await listCardReferences({ access: overviewAccess(access), path: rel })
-    if (endpoint === 'cards.metaSet') return await setCardMeta({ access: overviewAccess(access), path: rel, version: str(body, 'version'), fields: body.fields })
-    if (endpoint === 'cards.create') return await createCard({ access: overviewAccess(access), kind: body.kind, title: str(body, 'title'), fields: body.fields })
-    if (endpoint === 'chapter.statusSet') return await setChapterStatus({ access: overviewAccess(access), path: rel, status: body.status })
-    if (endpoint === 'progress.record') return await recordWritingProgress(overviewAccess(access), body.totalChars)
-    if (endpoint === 'progress.history') return await readWritingHistory(overviewAccess(access), body.days)
-    if (endpoint === 'structure.groupCreate') return await createManuscriptGroup({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
-    if (endpoint === 'directory.create') return await createDirectory({ root: access.workspace.path, mode: access.policy.mode, relative: rel, signal })
-    if (endpoint === 'rules.get') return await readProjectRules(files)
-    if (endpoint === 'rules.open') return await ensureProjectRules(files)
-    if (endpoint.startsWith('memory.')) {
-      const memory = await resolveMemoryAccess(ctx, String(access.session.id), signal)
-      if (endpoint === 'memory.list') return await listMemoryChanges(memory)
-      if (endpoint === 'memory.get') return { record: await getMemoryChange(memory, str(body, 'id')) }
-      if (endpoint === 'memory.apply') return await applyMemoryChange(memory, str(body, 'id'))
-      if (endpoint === 'memory.undo') return await undoMemoryChange(memory, str(body, 'id'))
-    }
-    if (endpoint === 'context.compile') return await compileContext(files, str(body, 'userRequest'), str(body, 'activePath') || undefined, str(body, 'authorPreferences'), str(body, 'authorMemory'))
-    if (endpoint === 'project.importProbe') {
-      const sourceSessionId = str(body, 'sourceSessionId')
-      const source = sourceSessionId ? await resolveWorkspaceAccess(host, sourceSessionId, signal) : undefined
-      return await probeImport({ target: importAccess(access), source: source ? importAccess(source) : undefined })
-    }
-    if (endpoint === 'project.importApply') {
-      const source = await resolveWorkspaceAccess(host, str(body, 'sourceSessionId'), signal)
-      return await applyImport({ source: importAccess(source), target: importAccess(access), token: str(body, 'probeToken') })
-    }
-    if (endpoint === 'project.importCleanup') return await cleanupImport({ target: importAccess(access), receiptId: str(body, 'receiptId') })
-    if (endpoint === 'snapshot.list') return await listSnapshots(snapshotAccess(access))
-    if (endpoint === 'snapshot.create') return await createSnapshot(snapshotAccess(access), str(body, 'label'))
-    if (endpoint === 'snapshot.rollback') return await rollbackSnapshot(snapshotAccess(access), str(body, 'snapshotId'))
-    if (endpoint === 'snapshot.restoreProbe') {
-      const sourceId = str(body, 'sourceSessionId')
-      const source = sourceId ? await resolveWorkspaceAccess(host, sourceId, signal) : undefined
-      return await restoreProbe({ source: source ? snapshotAccess(source) : undefined, target: snapshotAccess(access), snapshotId: str(body, 'snapshotId') || undefined })
-    }
-    if (endpoint === 'snapshot.restoreApply') {
-      const source = await resolveWorkspaceAccess(host, str(body, 'sourceSessionId'), signal)
-      return await restoreApply({ source: snapshotAccess(source), target: snapshotAccess(access), snapshotId: str(body, 'snapshotId'), token: str(body, 'token') })
-    }
-    if (endpoint === 'snapshot.restoreCleanup') return await restoreCleanup({ target: snapshotAccess(access), receiptId: str(body, 'receiptId') })
-    if (endpoint === 'file.rename') return await renameDocument({ access: lifecycleAccess(access), path: rel, newName: str(body, 'newName'), expectedVersion: str(body, 'expectedVersion') })
-    if (endpoint === 'file.moveManuscript') return await moveManuscriptDocument({ access: lifecycleAccess(access), path: rel, targetDirectory: str(body, 'targetDirectory'), expectedVersion: str(body, 'expectedVersion') })
-    if (endpoint === 'file.readBinary') {
-      const binaryAccess: BinaryAccess = {
-        fs: host.fs as BinaryAccess['fs'],
-        cwd: access.workspace.path,
-        root: access.root,
-        policy: access.policy,
-        signal,
-      }
-      return await readImageFile({ access: binaryAccess, path: rel })
-    }
-    if (endpoint === 'archive.list') return await listArchives(lifecycleAccess(access))
-    if (endpoint === 'archive.apply') return await archiveDocument({
-      access: lifecycleAccess(access),
-      path: rel || undefined,
-      expectedVersion: str(body, 'expectedVersion') || undefined,
-      archiveId: str(body, 'archiveId') || undefined,
-    })
-    if (endpoint === 'archive.restore') return await restoreArchive({
-      access: lifecycleAccess(access),
-      archiveId: str(body, 'archiveId'),
-      expectedVersion: str(body, 'expectedVersion') || undefined,
-    })
-    if (endpoint === 'proposal.prepare' || endpoint === 'proposal.apply') {
-      return await runProposalDispatch(endpoint, host, access, lifecycleAccess, body)
-    }
-    if (endpoint === 'entry.copy') return await copyEntry({ access: lifecycleAccess(access), path: rel, targetDir: str(body, 'targetDir') })
-    if (endpoint === 'entry.move') return await moveEntry({ access: lifecycleAccess(access), path: rel, targetDir: str(body, 'targetDir') })
-    if (endpoint === 'entry.delete') return await deleteEntry({ access: lifecycleAccess(access), path: rel })
-    if (endpoint === 'entry.rename') return await renameEntry({ access: lifecycleAccess(access), path: rel, name: str(body, 'name') })
-    throw new Error(`unknown workbench endpoint ${endpoint}`)
+  const resolvePeer = async (sessionId: string) => {
+    const peer = await resolveWorkspaceAccess(host, sessionId, signal)
+    return workspaceOpAccess(host, peer, signal)
   }
-  const mutations = ['rules.open', 'memory.apply', 'memory.undo', 'project.init', 'project.prepareIndex', 'project.importApply', 'project.importCleanup',
-    'snapshot.create', 'snapshot.rollback', 'snapshot.restoreApply', 'snapshot.restoreCleanup',
-    'structure.groupCreate', 'directory.create', 'file.rename', 'file.moveManuscript',
-    'archive.apply', 'archive.restore', 'proposal.apply', 'entry.copy', 'entry.move', 'entry.delete', 'entry.rename',
-    'chapter.statusSet', 'progress.record', 'cards.metaSet', 'cards.create']
-  return mutations.includes(endpoint) ? withWorkspaceWrite(access.root.targetKey, run) : run()
+
+  if (handler.sessionless) {
+    return handler.run({ ctx, host, body, signal, resolvePeer } as WorkbenchRequestContext)
+  }
+
+  const sessionKey = handler.sessionKey ?? 'sessionId'
+  const access = await resolveWorkspaceAccess(host, str(body, sessionKey), signal)
+  const files = { fs: host.fs, cwd: access.workspace.path, root: access.root, policy: access.policy, signal }
+  const op = workspaceOpAccess(host, access, signal)
+  const run = (): Promise<unknown> => handler.run({ ctx, host, access, files, op, body, signal, resolvePeer })
+  return handler.mutation ? withWorkspaceWrite(access.root.targetKey, run) : run()
 }
 
 export function registerWorkbenchRpc(ctx: Context): () => void {
@@ -240,40 +108,6 @@ export function registerWorkbenchRpc(ctx: Context): () => void {
       return mapEditorFilesError(error)
     }
   }, { authority: 'loopback' })
-}
-
-/**
- * 新提案 kind（split / merge / renames）的 prepare / apply。
- * edit / create 仍走 manuscript 通道；parseProposal 直接抛 INVALID。
- */
-async function runProposalDispatch(
-  endpoint: 'proposal.prepare' | 'proposal.apply',
-  host: ReturnType<typeof asHost>,
-  access: Awaited<ReturnType<typeof resolveWorkspaceAccess>>,
-  lifecycleAccess: (value: typeof access) => LifecycleAccess,
-  body: Payload,
-): Promise<unknown> {
-  const proposal = parseProposal(body.proposal)
-  const files = { fs: host.fs, cwd: access.workspace.path, root: access.root, policy: access.policy }
-  if (endpoint === 'proposal.prepare') {
-    if (proposal.kind === 'split') return { split: await prepareSplit(files, proposal) }
-    if (proposal.kind === 'merge') return { merge: await prepareMerge(files, proposal) }
-    return { renames: await prepareRenames(files, proposal) }
-  }
-  const expectedVersions = body.expectedVersions && typeof body.expectedVersions === 'object' && !Array.isArray(body.expectedVersions)
-    ? body.expectedVersions as Record<string, string>
-    : undefined
-  if (proposal.kind === 'split') {
-    const version = expectedVersions?.[proposal.path] ?? ''
-    return await applySplit(files, proposal, version)
-  }
-  if (proposal.kind === 'merge') {
-    return await applyMerge(lifecycleAccess(access), proposal, {
-      path: expectedVersions?.[proposal.path],
-      sourcePath: expectedVersions?.[proposal.sourcePath],
-    })
-  }
-  return await applyRenames(lifecycleAccess(access), proposal, expectedVersions)
 }
 
 export function apply(ctx: Context): void {
