@@ -57,11 +57,13 @@ export async function deployProfile(home: string, template: string, runtimeNodeM
   try {
     await cp(template, stage, { recursive: true, force: false, errorOnExist: true })
     if (runtimeNodeModules) {
-      const toolsTarget = join(runtimeNodeModules, '@deepseek-ai', 'dsh-tools')
-      if (!existsSync(toolsTarget)) throw new Error(`Bundled DSH tools dependency is missing: ${toolsTarget}`)
-      const toolsParent = join(stage, 'node_modules', '@deepseek-ai')
-      await mkdir(toolsParent, { recursive: true })
-      await symlink(toolsTarget, join(toolsParent, 'dsh-tools'), 'junction')
+      const peerParent = join(stage, 'node_modules', '@deepseek-ai')
+      await mkdir(peerParent, { recursive: true })
+      for (const peer of ['dsh-tools', 'dsh-llm']) {
+        const target = join(runtimeNodeModules, '@deepseek-ai', peer)
+        if (!existsSync(target)) throw new Error(`Bundled DSH dependency is missing: ${target}`)
+        await symlink(target, join(peerParent, peer), 'junction')
+      }
     }
     await writeFile(join(stage, PROFILE_MARKER), `${JSON.stringify({ app: 'dsh-editor', schema: 1 })}\n`, 'utf8')
     if (existsSync(target)) await renameDirectory(target, backup)
