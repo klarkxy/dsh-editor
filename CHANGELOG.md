@@ -9,6 +9,7 @@
 - 移除 `dsh-grill`。它只服务普通 DSH Web 的官方 Chat，桌面从未加载；公开 tarball 现为 manuscript、proofread、zhihu 三包。
 - 新增桌面私有包 `dsh-editor-plugins`：设置 → 插件可开关非核心插件，并从 GitHub `topic:dsh-plugin` 市场搜索、安装；稿纸 / 工作台 / 写作界面 / 插件管理本身锁定。
 - 市场安装前提供静态检查：缺少构建产物、抢 `root`、入口无法解析或 DSH 主版本不兼容时拒绝安装。
+- 插件管理器认 Cordis 的 `include:<id>` 入口，并从物化后的 `dsh-editor-catalog.json` 分类核心 / 扩展，避免设置页空成「未找到核心插件」。
 - 声明式拼装：每个包在 `package.json` 声明 `dshEditor`（role / visibility / entries / inserts），组合文件只列 feature；`scripts/plugin-manifest.mjs` 一个 resolver 驱动物化、校验、打包、e2e、插件管理器分类与 Shell capabilities（`{ features }`）。加插件只需加包和 recipe 里的 feature，不再改脚本清单。
 - Shell 开放座位与注册表：`dsh-editor.sidebar.tools`、`dsh-editor.center.overlays`（带上下文）、`dshEditorCommands`（命令与快捷键）、`dshEditorMessageCards`（Chat 工具结果卡）。合同在 `dsh-editor-seats`。
 - 新增垂直插件 `dsh-editor-cards`（`/dsh-editor-cards` Host + contracts + 卡片面板/详情）与三个 client-only 面板包 `dsh-editor-proofread-panel` / `dsh-editor-overview-panel` / `dsh-editor-memory-panel`；对应界面从 Shell 迁出，记忆维护面板重新可达（命令面板）。workbench 不再提供 `cards.*`。

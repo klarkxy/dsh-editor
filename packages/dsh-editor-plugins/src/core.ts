@@ -89,22 +89,34 @@ export function isProtectedPackage(name: string, bundles: readonly string[] = []
   return name.startsWith('@deepseek-ai/') || bundles.includes(name)
 }
 
+export const RUNTIME_CATALOG_FILE = 'dsh-editor-catalog.json'
+
+/** Cordis insert fibers are `include:<id>`; catalog keys stay the patch id. */
+export function catalogLookupId(entryId: string): string {
+  const colon = entryId.indexOf(':')
+  return colon === -1 ? entryId : entryId.slice(colon + 1)
+}
+
+export function catalogRow(entryId: string, catalog: RuntimeCatalog): RuntimeCatalogEntry | undefined {
+  return catalog.entries[entryId] ?? catalog.entries[catalogLookupId(entryId)]
+}
+
 export function isProtectedEntry(entryId: string, moduleName: string, catalog: RuntimeCatalog): boolean {
-  const row = catalog.entries[entryId]
+  const row = catalogRow(entryId, catalog)
   if (row) return row.locked
   return isProtectedPackage(packageNameOf(moduleName), catalog.bundles)
 }
 
 export function classifyEntry(entryId: string, moduleName: string, catalog: RuntimeCatalog): PluginGroup | 'hidden' {
-  if (moduleName.startsWith('@deepseek-ai/')) return 'hidden'
-  const row = catalog.entries[entryId]
+  if (moduleName.startsWith('@deepseek-ai/') || moduleName.includes(':')) return 'hidden'
+  const row = catalogRow(entryId, catalog)
   if (row) return row.locked ? 'core' : 'optional'
   if (isProtectedPackage(packageNameOf(moduleName), catalog.bundles)) return 'hidden'
   return 'community'
 }
 
 export function catalogFor(entryId: string, moduleName: string, catalog: RuntimeCatalog): CatalogEntry {
-  const row = catalog.entries[entryId]
+  const row = catalogRow(entryId, catalog)
   if (row) return { title: row.title, description: row.description, group: row.locked ? 'core' : 'optional' }
   const short = packageNameOf(moduleName)
   const group = classifyEntry(entryId, moduleName, catalog)
@@ -141,14 +153,49 @@ async function readPackageJson(profileDir: string, packageName: string): Promise
   }
 }
 
+function asRuntimeCatalog(value: unknown): RuntimeCatalog | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as { bundles?: unknown; entries?: unknown }
+  if (!record.entries || typeof record.entries !== 'object' || Array.isArray(record.entries)) return undefined
+  const entries: Record<string, RuntimeCatalogEntry> = {}
+  for (const [id, row] of Object.entries(record.entries as Record<string, unknown>)) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue
+    const item = row as Record<string, unknown>
+    if (typeof item.title !== 'string' || typeof item.description !== 'string' || typeof item.packageName !== 'string') continue
+    entries[id] = {
+      title: item.title,
+      description: item.description,
+      locked: item.locked === true,
+      packageName: item.packageName,
+      ...(typeof item.feature === 'string' ? { feature: item.feature } : {}),
+    }
+  }
+  return {
+    entries,
+    bundles: Array.isArray(record.bundles) ? record.bundles.filter((name): name is string => typeof name === 'string') : [],
+  }
+}
+
+export async function readPreparedCatalog(profileDir: string): Promise<RuntimeCatalog | undefined> {
+  try {
+    return asRuntimeCatalog(JSON.parse(await readFile(join(profileDir, RUNTIME_CATALOG_FILE), 'utf8')))
+  } catch {
+    return undefined
+  }
+}
+
 export async function loadRuntimeCatalog(profileDir: string, packageNames: Iterable<string>): Promise<RuntimeCatalog> {
-  const bundles = await readProfileBundles(profileDir)
+  const prepared = await readPreparedCatalog(profileDir)
+  const bundles = prepared?.bundles.length ? prepared.bundles : await readProfileBundles(profileDir)
+  const known = new Set(Object.values(prepared?.entries ?? {}).map((row) => row.packageName))
   const names = new Set<string>([...bundles, ...packageNames])
   const packages: Array<{ name: string; dshEditor: DshEditorBlock }> = []
   for (const name of names) {
-    if (name.startsWith('@deepseek-ai/')) continue
+    if (name.startsWith('@deepseek-ai/') || known.has(name)) continue
     const manifest = await readPackageJson(profileDir, name)
     if (manifest?.dshEditor) packages.push({ name: manifest.name ?? name, dshEditor: manifest.dshEditor })
   }
-  return catalogFromEditorBlocks(packages, bundles)
+  const scanned = catalogFromEditorBlocks(packages, bundles)
+  if (!prepared) return scanned
+  return { bundles, entries: { ...prepared.entries, ...scanned.entries } }
 }

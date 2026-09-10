@@ -49,7 +49,7 @@ function Toggle(props: { card: PluginCard; busy: boolean; onToggle(card: PluginC
   return e('button', {
     type: 'button',
     className: 'dsh-plugins-toggle',
-    'data-testid': `plugins-toggle-${card.entryId}`,
+    'data-testid': `plugins-toggle-${card.entryId.includes(':') ? card.entryId.slice(card.entryId.indexOf(':') + 1) : card.entryId}`,
     'aria-pressed': card.enabled,
     disabled: card.locked || busy,
     title: card.locked ? '系统核心插件不能关闭' : card.enabled ? '停用' : '启用',

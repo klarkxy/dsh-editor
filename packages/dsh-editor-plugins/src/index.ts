@@ -223,7 +223,7 @@ export async function handlePluginsRpc(
 
 export function apply(ctx: Context): void {
   const host = ctx as RpcHost
-  const paths = resolvePluginPaths()
+  const paths = resolvePluginPaths(process.env, process.argv, undefined, import.meta.url)
   let queue = Promise.resolve()
   const serialize = <T>(work: () => Promise<T>) => {
     const run = queue.then(work, work)

@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   BASE_BUNDLES,
+  catalogFromManifests,
   desktopCopiedPackageNames,
   loadPluginManifests,
   publicPackages,
@@ -52,4 +53,9 @@ export async function configureProfile(destination, composition) {
   const selectionPatch = `${extraInsertPatch}${disabledPatch}- id: editor-shell\n  config:\n${featuresPatch}`
   await writeFile(resolve(destination, 'cordis.patch.yml'), `${basePatch.trimEnd()}\n${selectionPatch}`)
   await writeFile(resolve(destination, 'composition.json'), `${JSON.stringify(composition, null, 2)}\n`)
+  const selected = manifests.filter((item) => composition.packages.includes(item.name))
+  await writeFile(resolve(destination, 'dsh-editor-catalog.json'), `${JSON.stringify({
+    bundles: composition.bundles,
+    entries: catalogFromManifests(selected),
+  }, null, 2)}\n`)
 }

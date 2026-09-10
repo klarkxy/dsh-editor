@@ -6,7 +6,7 @@ import { catalogFromEditorBlocks } from './core.ts'
 import { handlePluginsRpc, inventoryFromLoader } from './index.ts'
 import { MANAGED_PATCH_MARK } from './overlay.ts'
 import type { PluginPaths } from './paths.ts'
-import { resolvePluginPaths } from './paths.ts'
+import { profileDirFromPluginModule, resolvePluginPaths } from './paths.ts'
 
 const catalog = catalogFromEditorBlocks([
   {
@@ -59,13 +59,13 @@ async function fixture(): Promise<PluginPaths> {
 describe('plugin manager RPC', () => {
   it('lists core and optional plugins and hides harness internals', () => {
     const inventory = inventoryFromLoader(loader([
-      { id: 'editor-shell', name: 'dsh-editor-shell' },
-      { id: 'zhihu', name: 'dsh-zhihu' },
+      { id: 'include:editor-shell', name: 'dsh-editor-shell' },
+      { id: 'include:zhihu', name: 'dsh-zhihu' },
       { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
       { id: 'group-a', name: 'ignored', group: true },
     ]), { schema: 1, overrides: {}, installed: [] }, catalog)
-    expect(inventory.core.map((card) => card.entryId)).toEqual(['editor-shell'])
-    expect(inventory.optional.map((card) => card.entryId)).toEqual(['zhihu'])
+    expect(inventory.core.map((card) => card.entryId)).toEqual(['include:editor-shell'])
+    expect(inventory.optional.map((card) => card.entryId)).toEqual(['include:zhihu'])
     expect(inventory.community).toEqual([])
     expect(inventory.core[0]?.locked).toBe(true)
     expect(inventory.optional[0]?.locked).toBe(false)
@@ -120,5 +120,13 @@ describe('plugin paths', () => {
     expect(paths.home).toBe('D:/editor-home')
     expect(paths.profile).toBe('dsh-editor')
     expect(paths.patchFile.replaceAll('\\', '/')).toBe('D:/editor-home/cordis.patch.yml')
+  })
+
+  it('prefers the profile that actually loaded this package', () => {
+    const moduleUrl = 'file:///D:/isolated-home/profiles/dsh-editor/node_modules/dsh-editor-plugins/lib/index.js'
+    expect(profileDirFromPluginModule(moduleUrl)?.replaceAll('\\', '/')).toBe('D:/isolated-home/profiles/dsh-editor')
+    const paths = resolvePluginPaths({}, ['node', 'dsh'], 'D:/Users/x', moduleUrl)
+    expect(paths.profileDir.replaceAll('\\', '/')).toBe('D:/isolated-home/profiles/dsh-editor')
+    expect(paths.home.replaceAll('\\', '/')).toBe('D:/isolated-home')
   })
 })
