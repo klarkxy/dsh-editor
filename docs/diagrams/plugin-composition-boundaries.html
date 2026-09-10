@@ -4866,7 +4866,7 @@
       </div>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[{"id":"normal","label":"普通业务","focus":["shell","proofread","workbench","zhihu"],"note":"校对和资料走普通 RPC；不经过 Agent 工具循环。"},{"id":"agent","label":"可选智能增强","focus":["kernel","dsh-host","manuscript"],"note":"Chat、补全、小说工具按 smart/full 启用；文件权限仍由原 Host 控制。"},{"id":"public","label":"独立公开插件","focus":["proofread","zhihu","manuscript","grill"],"note":"四个 tarball 已有独立装卸矩阵；知乎 Tool entry 单独选择。"}]</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"normal","label":"普通业务","focus":["shell","proofread","workbench","zhihu"],"note":"校对和资料走普通 RPC；不经过 Agent 工具循环。"},{"id":"agent","label":"可选智能增强","focus":["kernel","dsh-host","manuscript"],"note":"Chat、补全、小说工具按 smart/full 启用；文件权限仍由原 Host 控制。"},{"id":"public","label":"独立公开插件","focus":["proofread","zhihu","manuscript"],"note":"三个 tarball 已有独立装卸矩阵；知乎 Tool entry 单独选择。"}]</script>
 
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
       <button id="guided-view-prev" type="button" aria-label="Previous guided view" title="Previous guided view ([)">&#8592;</button>
@@ -5025,17 +5025,6 @@
           </g>
           <text data-detail-anchor x="1120" y="563" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-editor-novel-kernel</text>
         <text data-detail="context" x="1120" y="579" class="t-muted" font-size="9" text-anchor="middle">小说工具 · guard / prompt</text>
-        </g>
-
-        <g id="node-grill" data-node-id="grill" data-node-label="dsh-grill" tabindex="0" role="button" aria-label="Focus dsh-grill, 仅公开 Web 的脚手架与提示词, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="仅公开 Web 的脚手架与提示词" data-node-context="Architecture component">
-          <title>dsh-grill · 仅公开 Web 的脚手架与提示词 · Architecture component</title>
-          <rect x="40" y="520" width="280" height="90" rx="6" class="c-mask"/>
-          <rect x="40" y="520" width="280" height="90" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 526) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-detail-anchor x="180" y="563" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-grill</text>
-        <text data-detail="context" x="180" y="579" class="t-muted" font-size="9" text-anchor="middle">仅公开 Web 的脚手架与提示词</text>
         </g>
 
         <!-- Connection labels -->
@@ -5270,7 +5259,7 @@
           <h3>已落实的组合边界</h3>
         </div>
         <ul>
-          <li>&bull; 四个公开包分别安装与移除</li>
+          <li>&bull; 三个公开包分别安装与移除</li>
           <li>&bull; basic / smart / full 三份写作组合</li>
           <li>&bull; 校对和知乎复用同一个扩展 slot</li>
         </ul>
@@ -5296,7 +5285,7 @@
         <ul>
           <li>&bull; 框内节点同进程，箭头是注入或 loopback RPC</li>
           <li>&bull; host-api 是库导入，不是跨进程调用</li>
-          <li>&bull; grill 不进桌面；文件业务仍用 live session 权限</li>
+          <li>&bull; 文件业务仍用 live session 权限</li>
         </ul>
       </div>
     </div>

@@ -28,7 +28,6 @@ packages/dsh-editor-novel-kernel/ 私有小说 Tool、guard、prompt 与知识�
 packages/dsh-manuscript/       Host RPC、公开 Web 稿纸插件与共享 editor-core（src/client/editor-core/）
 packages/dsh-proofread/        公开校对引擎与 /proofread
 packages/dsh-zhihu/            公开资料 RPC、自有 UI 与可选 Tool
-packages/dsh-grill/            仅 Web：Host 工具和写作 workflow
 scripts/dev.mjs                GUI-first 桌面开发入口
 scripts/dev-web.mjs            公开插件的 Web 调试入口
 scripts/prepare-desktop-*.mjs  开发/打包运行时物化与校验
@@ -63,7 +62,7 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 | `pnpm prepare:desktop-runtime` | 物化并哈希 Node、DSH、profile 与包闭包 |
 | `pnpm test:e2e:portable` | 真正启动 portable 外层 EXE，检查三栏 GUI、退出码与端口清理 |
 | `pnpm pack:desktop` | 生成未签名产物：Windows 为 portable EXE + NSIS 安装器，macOS 为 Apple Silicon 的 dmg/zip |
-| `pnpm pack:plugins` | 生成四个公开插件 tarball（manuscript、grill、proofread、zhihu） |
+| `pnpm pack:plugins` | 生成三个公开插件 tarball（manuscript、proofread、zhihu） |
 | `pnpm test:e2e:matrix` | 公开插件 fresh-home 安装/卸载矩阵 |
 | `pnpm verify:desktop` | 桌面 typecheck、unit、build、桌面 E2E 与核心闭环 |
 | `pnpm verify:delivery` | 桌面验证、公开插件矩阵、缺包负向 smoke、桌面打包和 portable E2E |
@@ -130,12 +129,6 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 - 公开包：`/zhihu` 资料、知识库与用量；自有 UI 同时挂官方 overlay 和桌面 `dsh-editor.extensions`。
 - Tool 入口 `dsh-zhihu/tools` 按组合选择，默认 full 才加入。
 
-### `dsh-grill`
-
-- `scaffold_novel` 必须通过当前 session workspace、sandbox 和官方 pre-execute 审批。
-- workflow 只给官方 Agent 添加 planning/drafting/review/first-reader 提示，不写稿。
-- 不进入桌面 profile。
-
 ## 测试
 
 单元测试重点覆盖：
@@ -144,8 +137,7 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 - draft/conflict/FIM、选区 ticket、stale/abort/bounds；
 - Chat rows、partial stream、send/cancel/history、approval/questions、model/permission；
 - profile owner collision、原子部署；
-- DSH readiness parsing、timeout、unexpected exit、优雅关闭与 exact tree fallback；
-- Grill approval/idempotence 与四模式 prompt。
+- DSH readiness parsing、timeout、unexpected exit、优雅关闭与 exact tree fallback。
 
 桌面 E2E 必须在允许 GUI 的会话中执行：
 

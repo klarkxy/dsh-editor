@@ -1,5 +1,0 @@
-- insert:
-    - id: grill-tools
-      name: dsh-grill/tools
-    - id: grill-workflow
-      name: dsh-grill/workflow

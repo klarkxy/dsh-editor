@@ -28,8 +28,8 @@
       {
         "id": "public",
         "label": "独立公开插件",
-        "focus": ["proofread", "zhihu", "manuscript", "grill"],
-        "note": "四个 tarball 已有独立装卸矩阵；知乎 Tool entry 单独选择。"
+        "focus": ["proofread", "zhihu", "manuscript"],
+        "note": "三个 tarball 已有独立装卸矩阵；知乎 Tool entry 单独选择。"
       }
     ]
   },
@@ -89,14 +89,6 @@
       "sublabel": "小说工具 · guard / prompt",
       "pos": [980, 520],
       "size": [280, 90]
-    },
-    {
-      "id": "grill",
-      "type": "backend",
-      "label": "dsh-grill",
-      "sublabel": "仅公开 Web 的脚手架与提示词",
-      "pos": [40, 520],
-      "size": [280, 90]
     }
   ],
   "boundaries": [
@@ -148,7 +140,7 @@
       "dot": "cyan",
       "title": "已落实的组合边界",
       "items": [
-        "四个公开包分别安装与移除",
+        "三个公开包分别安装与移除",
         "basic / smart / full 三份写作组合",
         "校对和知乎复用同一个扩展 slot"
       ]
@@ -168,7 +160,7 @@
       "items": [
         "框内节点同进程，箭头是注入或 loopback RPC",
         "host-api 是库导入，不是跨进程调用",
-        "grill 不进桌面；文件业务仍用 live session 权限"
+        "文件业务仍用 live session 权限"
       ]
     }
   ]

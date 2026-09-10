@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const COMPOSITION_IDS = ['basic', 'smart', 'full']
 export const DESKTOP_PACKAGE_NAMES = ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-zhihu', 'dsh-editor-shell']
-export const PUBLIC_PLUGIN_PACKAGES = ['dsh-manuscript', 'dsh-grill', 'dsh-proofread', 'dsh-zhihu']
+export const PUBLIC_PLUGIN_PACKAGES = ['dsh-manuscript', 'dsh-proofread', 'dsh-zhihu']
 export const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 export async function desktopComposition(id = process.env.DSH_EDITOR_COMPOSITION || 'full') {
   if (!COMPOSITION_IDS.includes(id)) throw new Error(`unsupported desktop composition: ${id}`)

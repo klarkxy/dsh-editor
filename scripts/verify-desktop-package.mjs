@@ -75,13 +75,6 @@ for (const fileName of [
 }
 const installed = (await readdir(resolve(resources, 'profile-template', 'node_modules'))).filter(name => name.startsWith('dsh-')).sort()
 if (JSON.stringify(installed) !== JSON.stringify([...composition.packages].sort())) throw new Error('unexpected packaged business dependencies')
-try {
-  await stat(resolve(resources, 'profile-template', 'node_modules', 'dsh-grill'))
-  throw new Error('desktop profile must not contain dsh-grill')
-} catch (error) {
-  if (error instanceof Error && error.message === 'desktop profile must not contain dsh-grill') throw error
-  if (!error || typeof error !== 'object' || error.code !== 'ENOENT') throw error
-}
 const nodeProbe = spawnSync(resolve(resources, 'node', nodeExecutableName), ['--version'], { encoding: 'utf8', windowsHide: true })
 if (nodeProbe.status !== 0 || nodeProbe.stdout.trim() !== 'v24.16.0') throw new Error('packaged Node probe failed')
 const artifacts = []

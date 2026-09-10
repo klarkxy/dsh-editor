@@ -4866,7 +4866,7 @@
       </div>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[{"id":"desktop-profile","label":"桌面 profile","focus":["electron","dsh-host","shell","manuscript","workbench","kernel"],"note":"Electron 启动唯一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"},{"id":"public-web","label":"公开 Web 插件","focus":["web-dsh","manuscript","grill","proofread","zhihu"],"note":"四个 tarball 可按任意顺序安装到普通 web profile；grill 只走这条交付。"},{"id":"in-process-deps","label":"进程内依赖","focus":["shell","manuscript","workbench","kernel","dsh-host"],"note":"host-api 是库导入；kernel 向同一 Host 注册 tools，不对外提供文件 RPC。"}]</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"desktop-profile","label":"桌面 profile","focus":["electron","dsh-host","shell","manuscript","workbench","kernel"],"note":"Electron 启动唯一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"},{"id":"public-web","label":"公开 Web 插件","focus":["web-dsh","manuscript","proofread","zhihu"],"note":"三个 tarball 可按任意顺序安装到普通 web profile。"},{"id":"in-process-deps","label":"进程内依赖","focus":["shell","manuscript","workbench","kernel","dsh-host"],"note":"host-api 是库导入；kernel 向同一 Host 注册 tools，不对外提供文件 RPC。"}]</script>
 
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
       <button id="guided-view-prev" type="button" aria-label="Previous guided view" title="Previous guided view ([)">&#8592;</button>
@@ -4948,8 +4948,7 @@
         <path data-edge-from="shell" data-edge-to="workbench" data-edge-label="私有 RPC" data-edge-key="3" data-edge-id="shell-to-workbench" data-composition-points="432,370;432,520" d="M 432 370 L 432 520" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="shell" data-edge-to="manuscript" data-edge-label="/manuscript" data-edge-key="4" data-edge-id="shell-to-manuscript" data-composition-points="524,337;548,337;548,496;724,496;724,520" d="M 524 337 L 540 337 Q 548 337 548 345 L 548 488 Q 548 496 556 496 L 716 496 Q 724 496 724 504 L 724 520" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="workbench" data-edge-to="manuscript" data-edge-label="host-api 库" data-edge-key="5" data-edge-id="workbench-to-manuscript" data-composition-points="524,553;632,553" d="M 524 553 L 632 553" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="web-dsh" data-edge-to="grill" data-edge-label="scaffold_novel" data-edge-key="6" data-edge-id="web-to-grill" data-composition-points="1308,154;1308,304" d="M 1308 154 L 1308 304" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="web-dsh" data-edge-to="zhihu" data-edge-label="可独立安装" data-edge-key="7" data-edge-id="web-to-zhihu" data-composition-points="1216,121;1162,121;1162,337;1108,337" d="M 1216 121 L 1170 121 Q 1162 121 1162 129 L 1162 329 Q 1162 337 1154 337 L 1108 337" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="web-dsh" data-edge-to="zhihu" data-edge-label="可独立安装" data-edge-key="6" data-edge-id="web-to-zhihu" data-composition-points="1216,121;1162,121;1162,337;1108,337" d="M 1216 121 L 1170 121 Q 1162 121 1162 129 L 1162 329 Q 1162 337 1154 337 L 1108 337" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
 
         <!-- Components -->
         <g id="node-electron" data-node-id="electron" data-node-label="桌面 Electron" tabindex="0" role="button" aria-label="Focus 桌面 Electron, 不可插件化, Architecture component" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="不可插件化" data-node-context="Architecture component">
@@ -5027,18 +5026,6 @@
         <text data-detail="fine" x="1016" y="362" class="t-backend" font-size="7" text-anchor="middle">公开 tarball</text>
         </g>
 
-        <g id="node-grill" data-node-id="grill" data-node-label="dsh-grill" tabindex="0" role="button" aria-label="Focus dsh-grill, 仅 Web 脚手架, 公开 Web 交付" aria-pressed="false" data-node-kind="backend" data-node-sublabel="仅 Web 脚手架" data-node-tag="仅 Web" data-node-context="公开 Web 交付">
-          <title>dsh-grill · 仅 Web 脚手架 · 公开 Web 交付 · 仅 Web</title>
-          <rect x="1216" y="304" width="184" height="66" rx="6" class="c-mask"/>
-          <rect x="1216" y="304" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1222 310) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-detail-anchor x="1308" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-grill</text>
-        <text data-detail="context" x="1308" y="351" class="t-muted" font-size="9" text-anchor="middle">仅 Web 脚手架</text>
-        <text data-detail="fine" x="1308" y="362" class="t-backend" font-size="7" text-anchor="middle">仅 Web</text>
-        </g>
-
         <g id="node-kernel" data-node-id="kernel" data-node-label="novel-kernel" tabindex="0" role="button" aria-label="Focus novel-kernel, private host-only, 桌面 profiles/dsh-editor（默认 full）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="private host-only" data-node-context="桌面 profiles/dsh-editor（默认 full）">
           <title>novel-kernel · private host-only · 桌面 profiles/dsh-editor（默认 full）</title>
           <rect x="48" y="520" width="184" height="66" rx="6" class="c-mask"/>
@@ -5098,11 +5085,7 @@
           <rect x="546.6" y="533" width="62.8" height="14" rx="3" class="c-mask"/>
           <text x="578" y="543" class="t-muted" font-size="8" text-anchor="middle">host-api 库</text>
         </g>
-        <g data-detail="context" data-edge-from="web-dsh" data-edge-to="grill" data-edge-label="scaffold_novel" data-edge-key="6" data-edge-id="web-to-grill">
-          <rect x="1269.4" y="158" width="77.2" height="14" rx="3" class="c-mask"/>
-          <text x="1308" y="168" class="t-muted" font-size="8" text-anchor="middle">scaffold_novel</text>
-        </g>
-        <g data-detail="context" data-edge-from="web-dsh" data-edge-to="zhihu" data-edge-label="可独立安装" data-edge-key="7" data-edge-id="web-to-zhihu">
+        <g data-detail="context" data-edge-from="web-dsh" data-edge-to="zhihu" data-edge-label="可独立安装" data-edge-key="6" data-edge-id="web-to-zhihu">
           <rect x="1133" y="209" width="58" height="14" rx="3" class="c-mask"/>
           <text x="1162" y="219" class="t-messagebus" font-size="8" text-anchor="middle">可独立安装</text>
         </g>
@@ -5317,7 +5300,7 @@
           <h3>分级</h3>
         </div>
         <ul>
-          <li>&bull; manuscript、proofread、zhihu、grill 是公开 tarball</li>
+          <li>&bull; manuscript、proofread、zhihu 是公开 tarball</li>
           <li>&bull; shell、workbench、kernel 只随桌面 profile 交付</li>
           <li>&bull; 两框重叠的三个包同时出现在两种交付里</li>
         </ul>

@@ -4,8 +4,7 @@
  * 设计说明：
  *   - 不直接耦合 host fs：在工厂参数里接收 `reader({ path, signal, cwd })`，
  *     由 `index.ts` 负责把 ctx.fs 适配成这个签名，单元测试传内存 stub。
- *   - cwd 来自 `exec.agent?.session?.header?.cwd`（与 dsh-grill 的
- *     scaffold_novel 一致），缺则抛 ProjectKnowledgeError；不静默回退到
+ *   - cwd 来自 `exec.agent?.session?.header?.cwd`，缺则抛 ProjectKnowledgeError；不静默回退到
  *     process.cwd，避免越权读取工作区外的文件。
  *   - 路径必须是工作区相对，禁止绝对路径、`..`、隐藏目录；只接受
  *     .md / .txt。`safeRelativeProjectPath` 与 proposal-tool 里的检查保持一致。

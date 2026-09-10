@@ -1,5 +1,5 @@
 /**
- * Delivery matrix for the four public business plugins.
+ * Delivery matrix for the three public business plugins.
  *
  * Uses the real DSH `web` template under a fresh DSH_HOME, installs only the
  * current tarballs, exercises both removal directions, boots every material
@@ -114,7 +114,7 @@ function inspectState(name, expectedPlugins) {
   const manifest = readProfileManifest()
   const dependencies = Object.keys(manifest.dependencies || {}).filter((item) => item.startsWith('dsh-'))
   const bundles = manifest.dsh?.profile?.bundles || []
-  const pluginBundles = bundles.filter((item) => ['dsh-manuscript','dsh-grill','dsh-proofread','dsh-zhihu'].includes(item))
+  const pluginBundles = bundles.filter((item) => ['dsh-manuscript','dsh-proofread','dsh-zhihu'].includes(item))
   assertEqualSet(dependencies, expectedPlugins, `${name} dependencies`)
   assertEqualSet(pluginBundles, expectedPlugins, `${name} bundles`)
 
@@ -125,8 +125,6 @@ function inspectState(name, expectedPlugins) {
     proofread: expectedPlugins.includes('dsh-proofread'),
     zhihu: expectedPlugins.includes('dsh-zhihu'),
     'zhihu-tools': false,
-    'grill-tools': expectedPlugins.includes('dsh-grill'),
-    'grill-workflow': expectedPlugins.includes('dsh-grill'),
   }
   for (const [id, expected] of Object.entries(expectedEntries)) {
     const actual = hasEntry(config, id)
@@ -301,7 +299,6 @@ function safeCleanup() {
 
 resetOutput()
 const manuscriptTarball = stageTarball('dsh-manuscript')
-const grillTarball = stageTarball('dsh-grill')
 const proofreadTarball = stageTarball('dsh-proofread')
 const zhihuTarball = stageTarball('dsh-zhihu')
 const browser = await chromium.launch({ headless: true })
@@ -310,21 +307,6 @@ try {
   transition('add', 'dsh-manuscript', `file:${manuscriptTarball}`)
   inspectState('01-manuscript-only', ['dsh-manuscript'])
   await probeWeb(browser, '01-manuscript-only', ['dsh-manuscript'], 0)
-
-  transition('add', 'dsh-grill', `file:${grillTarball}`)
-  inspectState('02-both', ['dsh-manuscript', 'dsh-grill'])
-  await probeWeb(browser, '02-both', ['dsh-manuscript', 'dsh-grill'], 1)
-
-  transition('remove', 'dsh-manuscript')
-  inspectState('03-grill-only-after-remove-manuscript', ['dsh-grill'])
-  await probeWeb(browser, '03-grill-only-after-remove-manuscript', ['dsh-grill'], 2)
-
-  transition('add', 'dsh-manuscript', `file:${manuscriptTarball}`)
-  inspectState('04-both-restored', ['dsh-manuscript', 'dsh-grill'])
-
-  transition('remove', 'dsh-grill')
-  inspectState('05-manuscript-only-after-remove-grill', ['dsh-manuscript'])
-  await probeWeb(browser, '05-manuscript-only-after-remove-grill', ['dsh-manuscript'], 3)
   transition('remove','dsh-manuscript');
   const states = [
     ['add','dsh-proofread',proofreadTarball,'06-proofread-only',['dsh-proofread']],
@@ -345,8 +327,7 @@ try {
   }
   transition('add','dsh-proofread','file:'+proofreadTarball);
   transition('add','dsh-manuscript','file:'+manuscriptTarball);
-  transition('add','dsh-grill','file:'+grillTarball);
-  const all=['dsh-proofread','dsh-zhihu','dsh-manuscript','dsh-grill'];
+  const all=['dsh-proofread','dsh-zhihu','dsh-manuscript'];
   inspectState('13-all-public',all);await probeWeb(browser,'13-all-public',all,13);
 
 } catch (error) {

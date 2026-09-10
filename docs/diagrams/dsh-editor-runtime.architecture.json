@@ -87,7 +87,7 @@
       "items": [
         "没有第二套 Chat、BFF 或独立索引服务",
         "Renderer 不读凭据、绝对路径或 Node 文件系统",
-        "dsh-grill 不进入桌面 profile"
+        "没有官方 Chat 脚手架插件"
       ]
     }
   ]

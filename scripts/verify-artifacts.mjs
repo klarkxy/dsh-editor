@@ -77,8 +77,7 @@ for (const name of packageNames) {
   const codeEntries = entries.filter((entry) => /package\/lib\/.*\.(?:js|cjs)$/.test(entry))
   const code = codeEntries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
   const runtimeForbidden = {
-    'dsh-manuscript': ['dsh-grill', 'proposal.list', 'proposal.accept', 'proposal.reject'],
-    'dsh-grill': ['dsh-manuscript', 'proposal.list', 'proposal.accept', 'proposal.reject'],
+    'dsh-manuscript': ['proposal.list', 'proposal.accept', 'proposal.reject'],
     'dsh-proofread': ['dsh-manuscript', 'dsh-editor-workbench', 'dsh-editor-novel-kernel', 'node:fs', '@deepseek-ai/dsh-tools'],
     'dsh-zhihu': ['dsh-editor-workbench', 'dsh-editor-novel-kernel', 'dsh-manuscript'],
   }[name]

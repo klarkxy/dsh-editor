@@ -37,7 +37,7 @@ DSH 拥有 Agent、会话、模型、工具、审批、权限和对话历史。D
 - Android、远程多用户、云同步
 - 未经授权的 commit、push、tag、release 或代码签名
 
-四个公开插件 `dsh-manuscript`、`dsh-grill`、`dsh-proofread`、`dsh-zhihu` 仍可独立安装到普通 DSH Web profile。`dsh-grill` 的 planning / drafting / review / first-reader 提示和 `scaffold_novel` 只走这条交付，桌面 profile 不加载它。桌面写作会话走专属 `dsh-editor` agent preset，不挂载官方编码工具目录。
+三个公开插件 `dsh-manuscript`、`dsh-proofread`、`dsh-zhihu` 仍可独立安装到普通 DSH Web profile。桌面写作会话走专属 `dsh-editor` agent preset，不挂载官方编码工具目录。
 
 ## 参考过、但不复制的开源产品
 

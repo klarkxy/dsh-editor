@@ -17,7 +17,7 @@
 
 ## 运行拓扑与所有权
 
-当前支持 basic/smart/full 三份桌面组合及四个独立公开包。安装、最小插件范本和无 Web/Agent 实验见[组合指南](plugin-composition-guide.md)。下图展示默认 full；kernel、assist 和知乎按组合选择。
+当前支持 basic/smart/full 三份桌面组合及三个独立公开包。安装、最小插件范本和无 Web/Agent 实验见[组合指南](plugin-composition-guide.md)。下图展示默认 full；kernel、assist 和知乎按组合选择。
 
 一个 Electron 进程只启动一个 loopback DSH Host。所有插件共享 DSH 的 session、workspace、model、tools、approval 和 connection 权威，不创建第二套状态。交互图里的 Host 插件都画在 DSH 进程框内；箭头表示 Cordis 注入或 loopback RPC，不是跨进程服务调用。
 
@@ -41,7 +41,6 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
 
 普通 profiles/web（按需分别安装）
 ├─ dsh-manuscript
-├─ dsh-grill
 ├─ dsh-proofread
 └─ dsh-zhihu
 ```
@@ -73,8 +72,6 @@ dsh-editor-novel-kernel/host
 | `dsh-zhihu` / `zhihu` | `/zhihu`、独立 UI/凭据/用量 | public | 独立 tarball；full 启用 Tool |
 | `dsh-manuscript/assist` / `manuscript-assist` | 可选 FIM/patch/LLM 计量服务 | public optional entry | smart/full；旧 Web 默认保留 |
 | `dsh-editor-workbench/tools` / `editor-workbench-tools` | 可选 novel_overview | private optional entry | smart/full |
-| `dsh-grill/tools` / `grill-tools` | `scaffold_novel` Tool 与 guard | public | 公开 tarball；Web |
-| `dsh-grill/workflow` / `grill-workflow` | `grill:workflow` prompt | public | 公开 tarball；Web |
 | `dsh-editor-workbench` / `editor-workbench` | 私有工作区生命周期、概览/状态、校对、卡片、进度 RPC | private host-only | 桌面 profile 必需 |
 | `dsh-editor-novel-kernel` / `editor-novel-kernel` | 私有小说工具、guard、prompt、知识卡、`/novel-kernel` | private host-only | smart/full 必需；basic 不装 |
 | `dsh-editor-shell` / `editor-shell` | 唯一 `root` client 与写作设置 schema | fixed-version private | 桌面 profile 必需 |
@@ -89,8 +86,6 @@ dsh-editor-novel-kernel/host
 | `dsh-zhihu` | `zhihu` | `dsh-zhihu` |
 | full 组合显式加入 | `zhihu-tools` | `dsh-zhihu/tools` |
 | `dsh-editor-workbench` | `editor-workbench-tools` | `dsh-editor-workbench/tools` |
-| `dsh-grill` | `grill-tools` | `dsh-grill/tools` |
-| `dsh-grill` | `grill-workflow` | `dsh-grill/workflow` |
 | `dsh-editor-workbench` | `editor-workbench` | `dsh-editor-workbench` |
 | `dsh-editor-novel-kernel` | `editor-novel-kernel` | `dsh-editor-novel-kernel` |
 | `dsh-editor-shell` | `editor-shell` | `dsh-editor-shell` |
@@ -123,8 +118,6 @@ dsh-editor-novel-kernel/host
 | `dsh-zhihu/tools` | `dsh-zhihu-tools` | `zhihu`, `tools` |
 | `dsh-manuscript/assist` | `dsh-manuscript-assist` | `llm`, `storageDomain` |
 | `dsh-editor-workbench/tools` | `dsh-editor-workbench-tools` | `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `tools` |
-| `dsh-grill/tools` | `dsh-grill-tools` | `tools` |
-| `dsh-grill/workflow` | `dsh-grill-workflow` | `systemPrompt` |
 
 Shell 以 `root` slot id `dsh-editor-shell-root`、priority `-100`、label `DSH 编辑器` 注册。manuscript client 只注册 `shell.overlay`（id `manuscript`，order `100`，label `稿纸`），禁止占用 `root` 或 `conversation.view`。
 
@@ -252,13 +245,6 @@ Context 信封常量：
 - prompt section 固定为 `dsh-editor:novel-kernel`、order `90`。作品材料是不可信字符串，只有 context 信封中的 `user_request` 是当次请求。
 - 作者内容的真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`；侧写由 Shell 展示确认卡、作者点击"记住"、再由 `writingScope.set('authorMemory', next)` 写入本机 settings。
 
-## `dsh-grill` 契约
-
-仅用于普通 `web` profile，不进入桌面 profile。
-
-- `scaffold_novel`：在 live session cwd 下创建小型小说工作区骨架（`正文`/`大纲`/`人物卡`/`世界书` 与 stub Markdown）。已存在路径跳过，绝不覆盖；不在 workspace 外创建文件。
-- prompt section：`grill:workflow`，order `140`。
-
 ## 如何修改或替换现有插件
 
 | 想改变的行为 | 所有者 |
@@ -269,7 +255,6 @@ Context 信封常量：
 | 项目结构、章节概览/状态、校对扫描、卡片、进度、context、导入、快照、移动、归档 | `dsh-editor-workbench` |
 | 小说知识、proposal Tool、guard、系统提示词、`/novel-kernel` | `dsh-editor-novel-kernel` |
 | 窗口、内置 DSH、profile、portable | `apps/desktop` 与桌面物化脚本 |
-| `scaffold_novel` 与 grill 写作提示 | `dsh-grill`（仅 Web） |
 
 替换 workbench 或 kernel 时：
 
@@ -295,7 +280,7 @@ export function apply(ctx: Context): void {
 建立步骤：
 
 1. 说明独立用户价值，选择 public 或 desktop-private；没有独立启停价值的代码留在原包内。
-2. 参考 `dsh-grill` 或 novel-kernel 复制最小包形态，不复制 Chat、session 或 workspace 权威。
+2. 参考 `dsh-proofread` 或 novel-kernel 复制最小包形态，不复制 Chat、session 或 workspace 权威。
 3. 建立唯一 Cordis entry id/name，只声明实际 inject。
 4. 文件能力依赖 live session 和 `dsh-manuscript/host-api`；不接收 Renderer 提供的 cwd/provider/model。
 5. 增加 package-local unit/contract tests，再接入对应 profile、复制、校验和 E2E。

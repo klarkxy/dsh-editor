@@ -24,8 +24,8 @@
       {
         "id": "public-web",
         "label": "公开 Web 插件",
-        "focus": ["web-dsh", "manuscript", "grill", "proofread", "zhihu"],
-        "note": "四个 tarball 可按任意顺序安装到普通 web profile；grill 只走这条交付。"
+        "focus": ["web-dsh", "manuscript", "proofread", "zhihu"],
+        "note": "三个 tarball 可按任意顺序安装到普通 web profile。"
       },
       {
         "id": "in-process-deps",
@@ -42,14 +42,13 @@
     { "id": "shell", "type": "frontend", "label": "dsh-editor-shell", "sublabel": "fixed-version root", "pos": [340, 304], "size": [184, 66] },
     { "id": "proofread", "type": "backend", "label": "dsh-proofread", "sublabel": "公开 · 纯校对", "pos": [632, 304], "size": [184, 66], "tag": "公开 tarball" },
     { "id": "zhihu", "type": "backend", "label": "dsh-zhihu", "sublabel": "公开 · 资料", "pos": [924, 304], "size": [184, 66], "tag": "公开 tarball" },
-    { "id": "grill", "type": "backend", "label": "dsh-grill", "sublabel": "仅 Web 脚手架", "pos": [1216, 304], "size": [184, 66], "tag": "仅 Web" },
     { "id": "kernel", "type": "backend", "label": "novel-kernel", "sublabel": "private host-only", "pos": [48, 520], "size": [184, 66] },
     { "id": "workbench", "type": "backend", "label": "workbench", "sublabel": "private host-only", "pos": [340, 520], "size": [184, 66] },
     { "id": "manuscript", "type": "backend", "label": "dsh-manuscript", "sublabel": "public dual-face", "pos": [632, 520], "size": [184, 66], "tag": "公开 tarball" }
   ],
   "boundaries": [
     { "kind": "region", "label": "桌面 profiles/dsh-editor（默认 full）", "wraps": ["dsh-host", "shell", "kernel", "workbench", "manuscript", "proofread", "zhihu"] },
-    { "kind": "region", "label": "公开 Web 交付", "wraps": ["web-dsh", "grill", "manuscript", "proofread", "zhihu"] }
+    { "kind": "region", "label": "公开 Web 交付", "wraps": ["web-dsh", "manuscript", "proofread", "zhihu"] }
   ],
   "connections": [
     { "id": "electron-to-host", "from": "electron", "to": "dsh-host", "label": "启动子进程", "variant": "emphasis", "labelDy": 24 },
@@ -58,7 +57,6 @@
     { "id": "shell-to-workbench", "from": "shell", "to": "workbench", "label": "私有 RPC", "labelDy": 24 },
     { "id": "shell-to-manuscript", "from": "shell", "to": "manuscript", "label": "/manuscript", "variant": "emphasis", "fromSide": "right", "toSide": "top" },
     { "id": "workbench-to-manuscript", "from": "workbench", "to": "manuscript", "label": "host-api 库" },
-    { "id": "web-to-grill", "from": "web-dsh", "to": "grill", "label": "scaffold_novel", "labelDy": 24 },
     { "id": "web-to-zhihu", "from": "web-dsh", "to": "zhihu", "label": "可独立安装", "variant": "dashed" }
   ],
   "cards": [
@@ -66,7 +64,7 @@
       "dot": "cyan",
       "title": "分级",
       "items": [
-        "manuscript、proofread、zhihu、grill 是公开 tarball",
+        "manuscript、proofread、zhihu 是公开 tarball",
         "shell、workbench、kernel 只随桌面 profile 交付",
         "两框重叠的三个包同时出现在两种交付里"
       ]

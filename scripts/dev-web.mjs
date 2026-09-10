@@ -72,11 +72,12 @@ function killTree(child) {
   }
 }
 
-const manuscript = resolve(root, 'packages/dsh-manuscript')
-const grill = resolve(root, 'packages/dsh-grill')
-if (!existsSync(resolve(manuscript, 'package.json')) || !existsSync(resolve(grill, 'package.json'))) {
-  console.error('dev: expected packages/dsh-manuscript and packages/dsh-grill')
-  process.exit(1)
+const publicPlugins = ['dsh-manuscript', 'dsh-proofread', 'dsh-zhihu']
+for (const name of publicPlugins) {
+  if (!existsSync(resolve(root, 'packages', name, 'package.json'))) {
+    console.error(`dev: expected packages/${name}`)
+    process.exit(1)
+  }
 }
 
 const appArgs = []
@@ -94,27 +95,18 @@ const profileDir = resolve(devHome, 'profiles', profile)
 // add space-bearing Windows paths without a .cmd/shell quoting round-trip.
 // The final manager pass reconciles the installed packages into profile bundles.
 await runNode(dshInstallation.cliPath, ['plugin', '--profile', profile, 'install'])
-await runNode(pnpmCli, ['add', `link:${manuscript}`, `link:${grill}`], profileDir)
+await runNode(pnpmCli, ['add', ...publicPlugins.map((name) => `link:${resolve(root, 'packages', name)}`)], profileDir)
 await runNode(dshInstallation.cliPath, ['plugin', '--profile', profile, 'install'])
 
 console.log('dev: watching. Refresh the browser after editor/client rebuilds; restart this command after host/tool changes if HMR misses them.')
 
 const kids = []
-kids.push(
-  spawnNode(pnpmCli, ['--filter', 'dsh-grill', 'exec', 'tsdown', '--watch', '--no-clean']),
-)
-kids.push(
-  spawnNode(pnpmCli, [
-    '--filter',
-    'dsh-manuscript',
-    'exec',
-    'tsdown',
-    '--watch',
-    '--no-clean',
-    '--on-success',
-    'node ../../scripts/wrap-client.mjs dsh-manuscript',
-  ]),
-)
+for (const name of publicPlugins) {
+  kids.push(spawnNode(pnpmCli, [
+    '--filter', name, 'exec', 'tsdown', '--watch', '--no-clean',
+    '--on-success', `node ../../scripts/wrap-client.mjs ${name}`,
+  ]))
+}
 const dsh = spawnNode(dshInstallation.cliPath, ['--profile', profile, ...appArgs])
 kids.push(dsh)
 

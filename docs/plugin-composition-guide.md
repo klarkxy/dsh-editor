@@ -54,7 +54,7 @@ dsh plugin --profile web remove dsh-zhihu
 # 重新执行 add 即可恢复；不删除 HOME/storages 或作品文件。
 ```
 
-`dsh-manuscript` 与 `dsh-grill` 原来的单独安装方式继续支持。公开产物列表为四包，不能把三个桌面私有包当成公开 npm 包。私有 Shell 应与受支持写作组合一起部署。
+`dsh-manuscript`、`dsh-proofread` 与 `dsh-zhihu` 可单独安装。公开产物列表为三包，不能把三个桌面私有包当成公开 npm 包。私有 Shell 应与受支持写作组合一起部署。
 
 需要 Agent 调用知乎时，在该 profile 的 `cordis.patch.yml` 加入：
 

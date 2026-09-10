@@ -4,11 +4,15 @@
 
 ## Unreleased
 
+### 插件
+
+- 移除 `dsh-grill`。它只服务普通 DSH Web 的官方 Chat，桌面从未加载；公开 tarball 现为 manuscript、proofread、zhihu 三包。
+
 ### 文档
 
 - 重画四张交互图，使 DSH 显示为插件所在的宿主进程，而不是平级服务：桌面运行时、插件分级、组合边界、确认写入。
 - `host-api` 在图和文档中标明为进程内库导入；Electron 只启动 DSH 子进程，由 Host 加载 root。
-- 架构文档补上默认 full 组合里的 `dsh-proofread` / `dsh-zhihu`，以及四个公开 tarball。
+- 架构文档补上默认 full 组合里的 `dsh-proofread` / `dsh-zhihu`，以及三个公开 tarball。
 - 开发者指南不再写「两个公开插件 / 四个桌面插件」。
 
 ## 0.1.7 - 2026-09-07

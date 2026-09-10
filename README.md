@@ -2,7 +2,7 @@
 
 DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.1-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是真实目录树（新建作品只预建 `正文/`，大纲/人物卡/世界书等在实际创建后出现；栏顶有搜索、校对、概览、人物、设定、提交、历史），中是稿纸编辑器（稿内查找替换、打字机滚动、段落聚焦与排版、ghost FIM、选段改写、‹ › 章节导航），右是 dsh 对话线程（⋯ 菜单可归档、恢复或删除——删除只在本机记墓碑，DSH `0.1.1-rc.2` 没有会话删除）；两侧栏可以折叠或进入专注模式。
 
-仓库提供四个可独立安装到普通 DSH Web profile 的公开插件，以及三个随桌面组合交付的私有插件。基础、智能和完整写作组合的安装与接口见[组合指南](docs/plugin-composition-guide.md)：
+仓库提供三个可独立安装到普通 DSH Web profile 的公开插件，以及三个随桌面组合交付的私有插件。基础、智能和完整写作组合的安装与接口见[组合指南](docs/plugin-composition-guide.md)：
 
 | 组件 | 用途 | 数据所有者 |
 | --- | --- | --- |
@@ -10,7 +10,6 @@ DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口�
 | `dsh-manuscript` | Web 中的可关闭稿纸抽屉、文件/FIM/查找替换与排版 | DSH workspace、sandbox 与版本化文件 API |
 | `dsh-proofread` | 独立中文文本校对，无模型或文件依赖 | 有界只读文本 RPC |
 | `dsh-zhihu` | 独立资料查询、知识库与用量；Tool 入口可选 | DSH 凭据与原计量 domain |
-| `dsh-grill` | `scaffold_novel` 与四种小说协作模式 | DSH 工具、审批与官方 Chat |
 | `dsh-editor-workbench` | 项目、概览/章节状态、校对、卡片、进度、上下文、导入、快照、移动与归档 | 同一 live-session workspace authority |
 | `dsh-editor-novel-kernel` | 小说知识、预览提案、索引直写、工具守卫、系统提示词与旧知乎接口转发 | DSH 工具与作者确认边界 |
 | `dsh-editor-shell` | 桌面唯一根界面、各写作面板、Chat 投影与编辑状态 | 不发布、不安装到日常 `web` profile |
@@ -69,7 +68,7 @@ pnpm test:e2e:portable
 - [插件架构与接口](docs/plugin-architecture.md)：双私有 Host 拓扑、RPC/Tool/slot 契约以及修改、替换和新建插件流程
 - [交互架构图站](https://klarkxy.github.io/dsh-editor/)：GitHub Pages 发布的全部交互图
 - [桌面运行时图](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html)：Electron 启动 DSH 子进程；插件住在 Host 内
-- [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)：四个公开 tarball 与桌面私有包
+- [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)：三个公开 tarball 与桌面私有包
 - [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html)：普通业务、可选智能增强、公开插件
 - [确认写入时序图](https://klarkxy.github.io/dsh-editor/author-confirm-write.html)：从 context 编译到作者确认写入
 - [CHANGELOG](CHANGELOG.md)：版本变化
