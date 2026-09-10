@@ -8,6 +8,7 @@ import {
   withAuthorPreferences,
   withChapterContextGuidance,
 } from './author-preferences.ts'
+import { composeProjectRules } from './project-rules.ts'
 
 export type PatchRoute = 'dsh-llm'
 
@@ -86,11 +87,20 @@ export function parsePatchRequest(payload: Record<string, unknown>): PatchReques
   }
 }
 
+function patchSystem(request: PatchRequest, projectRules?: string): string {
+  const system = withAuthorPreferences(
+    withChapterContextGuidance(PATCH_SYSTEM, request.chapterContext),
+    request.authorPreferences,
+  )
+  return projectRules != null ? composeProjectRules(system, projectRules) : system
+}
+
 async function streamPatch(input: {
   llm: LlmBag
   provider: string
   model: string
   request: PatchRequest
+  projectRules?: string
   signal: AbortSignal
 }): Promise<string> {
   if (!input.llm.stream || input.signal.aborted) return ''
@@ -100,10 +110,7 @@ async function streamPatch(input: {
       model: input.model,
       maxTokens: 2048,
       signal: input.signal,
-      system: withAuthorPreferences(
-        withChapterContextGuidance(PATCH_SYSTEM, input.request.chapterContext),
-        input.request.authorPreferences,
-      ),
+      system: patchSystem(input.request, input.projectRules),
       messages: [
         {
           role: 'user',
@@ -146,6 +153,7 @@ export async function completePatch(input: {
   provider: string
   model: string
   request: PatchRequest
+  projectRules?: string
   signal: AbortSignal
 }): Promise<{ text: string; route: PatchRoute }> {
   const llm = (input.ctx.get?.('llm') ?? {}) as LlmBag
@@ -154,6 +162,7 @@ export async function completePatch(input: {
     provider: input.provider,
     model: input.model,
     request: input.request,
+    projectRules: input.projectRules,
     signal: input.signal,
   })
   return { text, route: 'dsh-llm' }

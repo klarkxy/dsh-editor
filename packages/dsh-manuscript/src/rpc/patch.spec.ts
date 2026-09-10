@@ -2,9 +2,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { dispatch, mapError } from '../index.ts'
 import { apply as applyAssist } from '../assist.ts'
-import type { FileSystemLike, ManuscriptHost } from '../host.ts'
+import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, ManuscriptHost } from '../host.ts'
 import { CHAPTER_CONTEXT_GUIDANCE, CHAPTER_CONTEXT_LIMIT, INSTRUCTION_LIMIT } from './author-preferences.ts'
 import { completePatch, PATCH_LIMITS, parsePatchRequest } from './patch.ts'
+import { PROJECT_RULES_TEMPLATE } from './project-rules.ts'
 
 function captured(stream: ReturnType<typeof vi.fn>): { system: string; user: string; maxTokens: number } {
   const options = stream.mock.calls[0]?.[0] as { system: string; maxTokens: number; messages: Array<{ content: Array<{ text: string }> }> }
@@ -12,18 +13,50 @@ function captured(stream: ReturnType<typeof vi.fn>): { system: string; user: str
 }
 import type { StreamChunkLike } from './completion.ts'
 
-async function fixture(config: { provider?: string; model?: string } = { provider: 'configured-provider', model: 'configured-model' }) {
+type Node = { type: 'file' | 'directory'; version: string; text?: string }
+
+async function fixture(
+  config: { provider?: string; model?: string } = { provider: 'configured-provider', model: 'configured-model' },
+  seedFiles: Record<string, string> = {},
+) {
   const canonical = '/canonical/workspace'
+  const nodes = new Map<string, Node>([[canonical, { type: 'directory', version: 'root' }]])
+  for (const [relative, text] of Object.entries(seedFiles)) {
+    const parts = relative.split('/')
+    for (let index = 1; index < parts.length; index++) {
+      nodes.set(`${canonical}/${parts.slice(0, index).join('/')}`, { type: 'directory', version: `dir-${index}` })
+    }
+    nodes.set(`${canonical}/${relative}`, { type: 'file', version: `initial-${relative}`, text })
+  }
   const fs: FileSystemLike = {
     async resolve(path, opts) {
-      const targetKey = path === '.' ? canonical : `${opts?.cwd}/${path}`.replace('/./', '/')
+      const targetKey = path === '.' ? canonical : `${opts?.cwd ?? canonical}/${path}`.replace('/./', '/')
       return { targetKey, displayPath: targetKey }
     },
     contains(parent, child) { return child.targetKey === parent.targetKey || child.targetKey.startsWith(`${parent.targetKey}/`) },
-    async stat() { return { type: 'directory', version: 'root' } },
-    async lstat() { return { type: 'directory', version: 'root' } },
-    async readText() { return '' },
-    async listDir() { return [] },
+    async stat(target): Promise<FsInfoLike | undefined> {
+      const node = nodes.get(target.targetKey)
+      return node ? { type: node.type, version: node.version, size: node.text?.length } : undefined
+    },
+    async lstat(path, opts): Promise<FsPathInfoLike | undefined> {
+      return this.stat(await this.resolve(path, opts))
+    },
+    async readText(target) {
+      const node = nodes.get(target.targetKey)
+      if (!node || node.type !== 'file') throw Object.assign(new Error('missing'), { code: 'FS_NOT_FOUND' })
+      return node.text ?? ''
+    },
+    async listDir(target): Promise<FsDirEntryLike[]> {
+      const prefix = `${target.targetKey}/`
+      const entries: FsDirEntryLike[] = []
+      for (const [path, node] of nodes) {
+        if (!path.startsWith(prefix)) continue
+        const name = path.slice(prefix.length)
+        if (!name || name.includes('/')) continue
+        entries.push({ name, type: node.type, target: { targetKey: path, displayPath: path }, version: node.version })
+      }
+      return entries
+    },
     async writeText() { throw new Error('patch.complete must not write files') },
   }
   const stream = vi.fn(() => chunks([{ type: 'text-delta', text: '雨落在窗台上。' }]))
@@ -48,7 +81,7 @@ async function fixture(config: { provider?: string; model?: string } = { provide
     connection: { rpc: { call: vi.fn(), handle: vi.fn() } },
   } as unknown as ManuscriptHost
   await applyAssist(host as unknown as Context)
-  return { host, stream, services }
+  return { host, stream, services, nodes, canonical }
 }
 
 async function* chunks(items: StreamChunkLike[]) {
@@ -267,3 +300,103 @@ describe('current model selection for optional writing assist',()=>{
    expect(stream).not.toHaveBeenCalled();
  });
 });
+
+describe('session-bound project rules for FIM and patch', () => {
+  it('injects current root rules and global prefs once, ignoring a spoofed client path', async () => {
+    const { host, stream } = await fixture(
+      { provider: 'configured-provider', model: 'configured-model' },
+      { 'AGENTS.md': 'root-rules {{model}}', 'nested/AGENTS.md': 'nested-rules', 'chapter.md': '正文' },
+    )
+    const spoof = {
+      sessionId: 'session-1',
+      path: 'nested/AGENTS.md',
+      prefix: '雨声',
+      suffix: '',
+      selectedText: '旧句',
+      authorPreferences: '对白保持克制',
+      projectRules: 'spoofed-rules',
+    }
+    await dispatch(host as unknown as Context, 'fim.complete', spoof, new AbortController().signal)
+    await dispatch(host as unknown as Context, 'patch.complete', spoof, new AbortController().signal)
+    expect(stream).toHaveBeenCalledTimes(2)
+    for (const call of stream.mock.calls) {
+      const options = call[0] as { system: string; messages: Array<{ content: Array<{ text: string }> }> }
+      const system = options.system
+      const user = options.messages[0]!.content[0]!.text
+      expect(system.indexOf('【作者跨作品约定】')).toBeLessThan(system.indexOf('【本项目协作规则】'))
+      expect(system).toContain('【作者跨作品约定】\n对白保持克制')
+      expect(system).toContain('【本项目协作规则】\nroot-rules {{model}}')
+      expect(system).toContain('当前请求 > 本项目协作规则 > 作者跨作品约定')
+      expect(system.split('【本项目协作规则】')).toHaveLength(2)
+      expect(system).not.toContain('nested-rules')
+      expect(system).not.toContain('spoofed-rules')
+      expect(user).not.toContain('【本项目协作规则】')
+      expect(user).not.toContain('root-rules')
+    }
+  })
+
+  it('rereads a changed rules file on the next completion', async () => {
+    const { host, stream, nodes, canonical } = await fixture(
+      { provider: 'configured-provider', model: 'configured-model' },
+      { 'AGENTS.md': 'rules-v1' },
+    )
+    await dispatch(
+      host as unknown as Context,
+      'fim.complete',
+      { sessionId: 'session-1', prefix: '雨声', suffix: '' },
+      new AbortController().signal,
+    )
+    nodes.set(`${canonical}/AGENTS.md`, { type: 'file', version: 'changed', text: 'rules-v2 {{model}}' })
+    await dispatch(
+      host as unknown as Context,
+      'patch.complete',
+      { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句' },
+      new AbortController().signal,
+    )
+    const first = (stream.mock.calls[0]![0] as { system: string }).system
+    const second = (stream.mock.calls[1]![0] as { system: string }).system
+    expect(first).toContain('【本项目协作规则】\nrules-v1')
+    expect(second).toContain('【本项目协作规则】\nrules-v2 {{model}}')
+    expect(second).not.toContain('rules-v1')
+  })
+
+  it('uses the template when the root rules file is missing', async () => {
+    const { host, stream } = await fixture()
+    await dispatch(
+      host as unknown as Context,
+      'fim.complete',
+      { sessionId: 'session-1', prefix: '雨声', suffix: '' },
+      new AbortController().signal,
+    )
+    expect((stream.mock.calls[0]![0] as { system: string }).system).toContain(`【本项目协作规则】\n${PROJECT_RULES_TEMPLATE}`)
+  })
+
+  it('propagates a readable rule load error instead of an empty completion', async () => {
+    const { host, stream } = await fixture(
+      { provider: 'configured-provider', model: 'configured-model' },
+      { 'AGENTS.md': 'ok' },
+    )
+    host.fs.readText = async () => {
+      throw Object.assign(new Error('disk exploded'), { code: 'EIO' })
+    }
+    await expect(dispatch(
+      host as unknown as Context,
+      'fim.complete',
+      { sessionId: 'session-1', prefix: '雨声', suffix: '' },
+      new AbortController().signal,
+    )).rejects.toMatchObject({
+      name: 'ProjectRulesError',
+      message: expect.stringContaining('无法加载项目协作规则'),
+    })
+    await expect(dispatch(
+      host as unknown as Context,
+      'patch.complete',
+      { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句' },
+      new AbortController().signal,
+    )).rejects.toMatchObject({
+      name: 'ProjectRulesError',
+      message: expect.stringContaining('无法加载项目协作规则'),
+    })
+    expect(stream).not.toHaveBeenCalled()
+  })
+})

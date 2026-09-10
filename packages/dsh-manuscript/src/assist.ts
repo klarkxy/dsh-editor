@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ManuscriptAssist } from './assist-api.ts'
+import { asHost, resolveWorkspaceAccess } from './host.ts'
 import { completeFim } from './rpc/fim.ts'
 import { completePatch, parsePatchRequest } from './rpc/patch.ts'
 import { parseAuthorPreferences, parseChapterContext } from './rpc/author-preferences.ts'
+import { readProjectRules } from './rpc/project-rules.ts'
 import { createUsageRecorder, usageDomainSpec, resolveDays, type UsageRecorder } from './rpc/usage.ts'
 
 export const name = 'dsh-manuscript-assist'
-export const inject = ['llm', 'storageDomain'] as const
+export const inject = ['llm', 'storageDomain', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
 
 export async function apply(ctx: Context): Promise<void> {
   const domain = await ctx.storageDomain.open(usageDomainSpec)
@@ -32,14 +34,26 @@ export async function apply(ctx: Context): Promise<void> {
       }
       if (!route.provider || !route.model) return { text: '', route: 'dsh-llm' }
 
+      const host = asHost(ctx)
+      const access = await resolveWorkspaceAccess(host, String(body.sessionId), signal)
+      const rules = await readProjectRules({
+        fs: host.fs,
+        cwd: access.workspace.path,
+        root: access.root,
+        policy: access.policy,
+        signal,
+      })
+
       if (endpoint === 'fim.complete') return completeFim({
         ctx, ...route,
         prefix: typeof body.prefix === 'string' ? body.prefix : '',
         suffix: typeof body.suffix === 'string' ? body.suffix : '',
         authorPreferences: parseAuthorPreferences(body.authorPreferences),
-        chapterContext: parseChapterContext(body.chapterContext), signal,
+        chapterContext: parseChapterContext(body.chapterContext),
+        projectRules: rules.text,
+        signal,
       })
-      return completePatch({ ctx, ...route, request: parsePatchRequest(body), signal })
+      return completePatch({ ctx, ...route, request: parsePatchRequest(body), projectRules: rules.text, signal })
     },
   }
   ctx.provide('manuscriptAssist', service)

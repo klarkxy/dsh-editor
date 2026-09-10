@@ -5,6 +5,7 @@ import {
   withAuthorPreferences,
   withChapterContextGuidance,
 } from './author-preferences.ts'
+import { composeProjectRules } from './project-rules.ts'
 
 export type FimRoute = 'dsh-llm'
 
@@ -21,6 +22,14 @@ type LlmBag = {
 const CHAT_SYSTEM =
   '你是小说行内补全引擎。只输出应插入光标位置的短正文，不解释、不复述前后文，并自然衔接后文。不要用Markdown围栏。'
 
+function fimSystem(input: { chapterContext: string; authorPreferences: string; projectRules?: string }): string {
+  const system = withAuthorPreferences(
+    withChapterContextGuidance(CHAT_SYSTEM, input.chapterContext),
+    input.authorPreferences,
+  )
+  return input.projectRules != null ? composeProjectRules(system, input.projectRules) : system
+}
+
 async function streamCompletion(input: {
   llm: LlmBag
   provider: string
@@ -29,6 +38,7 @@ async function streamCompletion(input: {
   suffix: string
   authorPreferences: string
   chapterContext: string
+  projectRules?: string
   signal: AbortSignal
 }): Promise<string> {
   if (!input.llm.stream) return ''
@@ -37,10 +47,7 @@ async function streamCompletion(input: {
     model: input.model,
     maxTokens: 1024,
     signal: input.signal,
-    system: withAuthorPreferences(
-      withChapterContextGuidance(CHAT_SYSTEM, input.chapterContext),
-      input.authorPreferences,
-    ),
+    system: fimSystem(input),
     messages: [
       {
         role: 'user',
@@ -64,6 +71,7 @@ export async function completeFim(input: {
   suffix: string
   authorPreferences?: string
   chapterContext?: string
+  projectRules?: string
   signal: AbortSignal
 }): Promise<{ text: string; route: FimRoute }> {
   const llm = (input.ctx.get?.('llm') ?? {}) as LlmBag
@@ -75,6 +83,7 @@ export async function completeFim(input: {
     suffix: input.suffix,
     authorPreferences: input.authorPreferences ?? '',
     chapterContext: parseChapterContext(input.chapterContext),
+    projectRules: input.projectRules,
     signal: input.signal,
   })
   return { text, route: 'dsh-llm' }

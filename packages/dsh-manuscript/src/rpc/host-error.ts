@@ -1,6 +1,7 @@
 import { WorkspaceAuthorityError } from '../host.ts'
 import { FileOpError } from './files.ts'
 import { PathConfineError } from './paths.ts'
+import { ProjectRulesError } from './project-rules.ts'
 
 export type HostRpcIssue = { code: 'custom'; path: string[]; message: string }
 export type HostRpcError =
@@ -43,10 +44,12 @@ export function mapHostError(error: unknown): HostRpcErr | undefined {
   if (error instanceof PathConfineError) {
     return { ok: false, error: { code: 'workspace-invalid-path', message: error.message, details: { path: '' } } }
   }
-  if (error instanceof FileOpError) {
+  if (error instanceof FileOpError || error instanceof ProjectRulesError) {
     if (error.code === 'CANCELLED') return { ok: false, error: { code: 'cancelled', message: error.message, details: {} } }
     if (error.code === 'IO') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
-    if (error.code === 'SYMLINK') return { ok: false, error: { code: 'workspace-invalid-path', message: error.message, details: { path: '' } } }
+    if (error.code === 'SYMLINK' || error.code === 'PATH_ESCAPE') {
+      return { ok: false, error: { code: 'workspace-invalid-path', message: error.message, details: { path: '' } } }
+    }
     if (error.code === 'EXISTS') return { ok: false, error: { code: 'directory-exists', message: error.message, details: { path: '' } } }
     if (error.code === 'NOT_FOUND' || error.code === 'NOT_DIRECTORY' || error.code === 'PARENT_MISSING' || error.code === 'DENIED') {
       return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }

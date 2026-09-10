@@ -39,6 +39,14 @@ export {
 } from './rpc/paths.ts'
 
 export {
+  PROJECT_RULES_TEMPLATE,
+  ProjectRulesError,
+  ensureProjectRules,
+  readProjectRules,
+  type ProjectRulesRead,
+} from './rpc/project-rules.ts'
+
+export {
   badRequest,
   mapHostError,
   type HostRpcErr,

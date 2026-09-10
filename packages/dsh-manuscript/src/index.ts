@@ -115,7 +115,7 @@ export async function dispatch(
     }
     throw new Error(`unknown endpoint ${endpoint}`)
   }
-  return ['file.create', 'file.write', 'proposal.apply'].includes(endpoint)
+  return ['file.create', 'file.write', 'proposal.apply', 'draft.put', 'draft.delete'].includes(endpoint)
     ? withWorkspaceWrite(access.root.targetKey, run) : run()
 }
 
@@ -123,6 +123,11 @@ export async function apply(ctx: Context): Promise<void> {
   const host = asHost(ctx)
   const domain = await ctx.storageDomain.open(draftDomainSpec)
   const drafts = createDraftStore(domain.table('drafts'))
+  // Read-only facade of the existing draft store; maintenance never owns a second draft store.
+  ctx.provide('manuscriptDrafts', {
+    hasUnsaved: (workspacePath: string, relative: string) => [...domain.table('drafts').entries()].some(([, row]) =>
+      row.workspacePath === workspacePath && row.path.toLocaleLowerCase() === relative.toLocaleLowerCase() && row.text !== row.baseText),
+  })
   ctx.effect(() => () => domain.close(), 'dsh-manuscript.draftDomainClose')
 
   ctx.effect(() =>

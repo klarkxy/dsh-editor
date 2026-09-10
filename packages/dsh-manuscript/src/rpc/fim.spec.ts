@@ -93,4 +93,26 @@ describe('completeFim', () => {
     expect(user).not.toContain('【本章工作笔记】')
     expect(system).not.toContain(CHAPTER_CONTEXT_GUIDANCE)
   })
+
+  it('places optional project rules once after global author preferences', async () => {
+    async function* stream() { yield { type: 'text-delta', text: '续句' } }
+    const request = vi.fn(() => stream())
+    await completeFim({
+      ctx: { get: () => ({ stream: request }) },
+      provider: 'provider',
+      model: 'model',
+      prefix: '前文',
+      suffix: '后文',
+      authorPreferences: '少用感叹号',
+      projectRules: '本项目只用短句 {{model}}',
+      signal: new AbortController().signal,
+    })
+    const { system, user } = captured(request)
+    expect(system.indexOf('你是小说行内补全引擎')).toBeLessThan(system.indexOf('【作者跨作品约定】'))
+    expect(system.indexOf('【作者跨作品约定】')).toBeLessThan(system.indexOf('【本项目协作规则】'))
+    expect(system).toContain('【本项目协作规则】\n本项目只用短句 {{model}}')
+    expect(system).toContain('当前请求 > 本项目协作规则 > 作者跨作品约定')
+    expect(system.split('【本项目协作规则】')).toHaveLength(2)
+    expect(user).not.toContain('【本项目协作规则】')
+  })
 })
