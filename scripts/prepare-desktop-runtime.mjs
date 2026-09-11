@@ -153,10 +153,16 @@ if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify(composition
   throw new Error('desktop profile bundles are missing, reordered, or unexpected')
 }
 
+const nodeDigest = await treeDigest(nodeOutput)
+const nodeVendor = resolve(nodeOutput, 'node_modules')
+if (existsSync(nodeVendor)) {
+  await rename(nodeVendor, resolve(nodeOutput, 'vendor-dependencies'))
+}
+
 const manifest = {
   format: 1,
   platform: platformId,
-  node: { version: NODE_VERSION, ...(await treeDigest(nodeOutput)) },
+  node: { version: NODE_VERSION, ...nodeDigest },
   dsh: { version: DSH_VERSION, ...dshDigest },
   profile: profileDigest,
 }

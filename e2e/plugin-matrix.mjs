@@ -140,16 +140,27 @@ function inspectState(name, expectedPlugins) {
   return snapshot
 }
 
-async function waitReady(port, child) {
+function parseReadyUrl(buffer, port) {
+  const match = /https?:\/\/127\.0\.0\.1:\d+\/?(?:\?token=[A-Za-z0-9._~-]+)?/.exec(buffer)
+  if (!match) return undefined
+  const url = new URL(match[0])
+  return Number(url.port) === port ? url : undefined
+}
+
+async function waitReady(port, child, stdout) {
   const base = `http://127.0.0.1:${port}`
   const deadline = Date.now() + 90_000
   while (Date.now() < deadline) {
     if (child.exitCode != null) throw new Error(`DSH exited ${child.exitCode} before ${base} became ready`)
-    try {
-      const response = await fetch(base, { signal: AbortSignal.timeout(2_000) })
-      if (response.ok) return base
-    } catch {
-      // Keep polling until the bounded deadline.
+    const ready = parseReadyUrl(stdout.join(''), port)
+    if (ready) {
+      try {
+        const response = await fetch(ready, { redirect: 'manual', signal: AbortSignal.timeout(2_000) })
+        // 0.1.5 exchanges ?token= for a cookie via 303; older hosts served `/` as 200.
+        if (response.status === 303 || response.ok) return ready
+      } catch {
+        // Keep polling until the bounded deadline.
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 300))
   }
@@ -208,8 +219,9 @@ async function probeWeb(browser, name, expectedPlugins, index) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, locale: 'zh-CN' })
   page.on('pageerror', (error) => pageErrors.push(error.message))
   try {
-    const base = await waitReady(port, child)
-    await page.goto(base, { waitUntil: 'domcontentloaded' })
+    const ready = await waitReady(port, child, stdout)
+    const origin = ready.origin
+    await page.goto(ready.href, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(2_000)
     await page.waitForFunction(() => document.body !== null && document.body.children.length > 0)
     const onboardingContinue = page.getByRole('button', { name: '继续', exact: true })
@@ -251,7 +263,7 @@ async function probeWeb(browser, name, expectedPlugins, index) {
     } else if (await page.getByTestId('proofread-open').count()) throw new Error('proofread entry survived removal');
     const expectsZhihu = expectedPlugins.includes('dsh-zhihu');
     if (expectsZhihu) {
-      const callZhihu=async(method,payload)=>{const response=await fetch(base+'/zhihu/'+method,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:name,method,payload})});return (await response.json()).result};
+      const callZhihu=async(method,payload)=>{const response=await page.request.post(`${origin}/zhihu/${method}`,{headers:{'content-type':'application/json'},data:{type:'client-request',rpcId:name,method,payload}});return (await response.json()).result};
       if(!report.zhihuUsageSeeded){
         // Filename validation fails before credentials/network access, but records the attempted operation.
         const rejected=await callZhihu('knowledge.upload',{fileName:'',contentBase64:'YQ=='});

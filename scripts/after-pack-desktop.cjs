@@ -1,4 +1,5 @@
 const { execFile } = require('node:child_process')
+const { existsSync } = require('node:fs')
 const { rename } = require('node:fs/promises')
 const { join } = require('node:path')
 const { promisify } = require('node:util')
@@ -12,6 +13,10 @@ exports.default = async function afterPack(context) {
     : join(context.appOutDir, 'resources')
   await rename(join(resources, 'dsh', 'vendor-dependencies'), join(resources, 'dsh', 'node_modules'))
   await rename(join(resources, 'profile-template', 'vendor-dependencies'), join(resources, 'profile-template', 'node_modules'))
+  const nodeVendor = join(resources, 'node', 'vendor-dependencies')
+  if (existsSync(nodeVendor)) {
+    await rename(nodeVendor, join(resources, 'node', 'node_modules'))
+  }
   if (context.electronPlatformName === 'win32') {
     const executable = join(context.appOutDir, `${context.packager.appInfo.productFilename}.exe`)
     const icon = join(context.packager.buildResourcesDir, 'icon.ico')
