@@ -9,6 +9,7 @@ import {
   errorMessage,
   hasRelocatableManuscriptFiles,
   hasVisibleWorkspaceEntries,
+  inject,
   isSessionMissing,
   isStaleFailure,
   isSuccessWorkbenchNote,
@@ -24,19 +25,32 @@ import {
   searchSkippedText,
   shouldSubmitComposer,
   snapshotTimeLabel,
+  startupResumeWorkspace,
   supportedWorkspaceTextPaths,
   treeExpansionPaths,
   treeRowPadding,
   worldbookPaperProjection,
   workspaceOpenFailureMessage,
   workspaceShortcut,
+  conversationChatSource,
 } from './client.ts'
+import { isObservableSource } from './client/components.ts'
 import { partialApplyDetails } from './client/shared.ts'
 import { appendRegistryCommands } from './client/command-palette.tsx'
 import { createCommandRegistry, matchRegistryShortcut, registryPaletteItems, type ShellToolSeatContext } from './seats.ts'
 
 const rootSource = () => readFileSync(new URL('./client/root.ts', import.meta.url), 'utf8')
 const initGuideSource = () => readFileSync(new URL('./init-guide.ts', import.meta.url), 'utf8')
+
+describe('shell client inject', () => {
+  it('declares every Remote face the renderer reads through ctx.remote', () => {
+    expect(inject).toEqual([
+      'slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote',
+      'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker',
+      'uiSession',
+    ])
+  })
+})
 
 describe('shell manuscript RPC safety', () => {
   it('keeps browser-native prompt and confirm out of the workbench UI', () => {
@@ -51,7 +65,7 @@ describe('shell manuscript RPC safety', () => {
     expect(source).toContain("onClick: () => void startNewProject()")
     expect(source).not.toContain("startWorkspaceFromPicker('create')")
     expect(source).toContain("'project.createHome'")
-    expect(source).toContain('ctx.workspaces.pickDirectory()')
+    expect(source).toContain('ctx.uiWorkspace.pickDirectory()')
     expect(source).toContain("setManualWorkspaceMode('existing')")
     expect(source).not.toContain("setManualWorkspaceMode(intent === 'create' ? 'new' : 'existing')")
     expect(source).not.toContain('showWorkspacePath(')
@@ -161,7 +175,7 @@ describe('shell manuscript RPC safety', () => {
     expect(workspaceOpenFailureMessage(new Error('workspace has no supported text files'))).toContain('没有找到')
     const source = rootSource()
     expect(source).toContain('await ctx.workspaces.archiveSession(first)')
-    expect(source).toContain('const second = await ctx.workspaces.connectWorkspace(workspaceId)')
+    expect(source).toContain('const second = await ctx.uiWorkspace.connectWorkspace(workspaceId)')
   })
 
   it('claims automatic startup resume once so returning home stays on the project list', () => {
@@ -169,6 +183,14 @@ describe('shell manuscript RPC safety', () => {
     expect(claimInitialWorkspaceResume(guard)).toBe(true)
     expect(guard.current).toBe(true)
     expect(claimInitialWorkspaceResume(guard)).toBe(false)
+  })
+
+  it('resumes the selected workspace or the most recently updated one', () => {
+    const older = { workspaceId: 'a', path: '/a', title: 'A', sessionIds: [], createdAt: '', updatedAt: '2026-01-01T00:00:00.000Z' }
+    const newer = { workspaceId: 'b', path: '/b', title: 'B', sessionIds: [], createdAt: '', updatedAt: '2026-06-01T00:00:00.000Z' }
+    expect(startupResumeWorkspace([])).toBeUndefined()
+    expect(startupResumeWorkspace([older, newer])).toEqual(newer)
+    expect(startupResumeWorkspace([older, newer], older)).toEqual(older)
   })
 
   it('resumes the most recently updated non-blank conversation when a workspace opens', () => {
@@ -763,43 +785,24 @@ describe('shell manuscript RPC safety', () => {
     expect(errorMessage({ ok: false, error: { code: 'workspace-invalid-path', message: 'manuscript group name is invalid' } })).toBe('名称或路径不符合规则。')
   })
 
-  it('uses the Host-created flag instead of a possibly stale workspace list', async () => {
+  it('registers a workspace through the controller and does not call Host remotes', async () => {
     const workspace = { workspaceId: 'workspace-1', path: 'D:\\novel', title: 'novel', sessionIds: [], createdAt: '', updatedAt: '' }
-    const createHost = vi.fn(async () => ({ result: { ok: true as const, value: { workspace, created: true } } }))
     const createProjection = vi.fn(async () => workspace)
     const result = await createFlowWorkspace({
-      connection: { api: { workspace: { create: createHost } } },
-      workspaces: { create: createProjection },
+      workspaces: { create: createProjection, delete: vi.fn() },
     } as never, 'D:\\novel')
 
     expect(result).toEqual({ workspace, created: true })
-    expect(createHost).toHaveBeenCalledWith({ path: 'D:\\novel' })
     expect(createProjection).toHaveBeenCalledWith({ path: 'D:\\novel' })
   })
 
-  it('removes a newly registered workspace if the local projection cannot adopt it', async () => {
-    const workspace = { workspaceId: 'workspace-2', path: 'D:\\target', title: 'target', sessionIds: [], createdAt: '', updatedAt: '' }
-    const removeHost = vi.fn(async () => ({ result: { ok: true as const, value: { deleted: true as const } } }))
+  it('does not delete when workspace create itself fails', async () => {
+    const remove = vi.fn()
     await expect(createFlowWorkspace({
-      connection: { api: { workspace: {
-        create: async () => ({ result: { ok: true as const, value: { workspace, created: true } } }),
-        delete: removeHost,
-      } } },
-      workspaces: { create: async () => { throw new Error('projection failed') } },
+      workspaces: { create: async () => { throw new Error('projection failed') }, delete: remove },
     } as never, 'D:\\target')).rejects.toThrow('projection failed')
 
-    expect(removeHost).toHaveBeenCalledWith({ workspaceId: 'workspace-2' })
-  })
-
-  it('reports when projection rollback cannot remove the new Host registration', async () => {
-    const workspace = { workspaceId: 'workspace-3', path: 'D:\\blocked', title: 'blocked', sessionIds: [], createdAt: '', updatedAt: '' }
-    await expect(createFlowWorkspace({
-      connection: { api: { workspace: {
-        create: async () => ({ result: { ok: true as const, value: { workspace, created: true } } }),
-        delete: async () => ({ result: { ok: false as const, error: { code: 'internal', message: 'delete failed', details: {} } } }),
-      } } },
-      workspaces: { create: async () => { throw new Error('projection failed') } },
-    } as never, 'D:\\blocked')).rejects.toThrow('registration could not be removed')
+    expect(remove).not.toHaveBeenCalled()
   })
 
   it('routes split/merge/renames proposals to the workbench channel and keeps edit/create on /manuscript', async () => {
@@ -926,5 +929,23 @@ describe('shell manuscript RPC safety', () => {
     expect(zh['command.focusParaHint']).toContain('Ctrl+Alt+P')
     expect(styleSource).toContain('var(--paper-font-family, var(--font-serif))')
     expect(styleSource).toMatch(/\.archived-conversations\b/)
+  })
+
+  it('reads chat rows from official conversation when present and stays empty without it', () => {
+    const empty = conversationChatSource({}, 'sess-1')
+    expect(empty.getSnapshot().legacy?.nodes).toEqual([])
+    expect(empty.getSnapshot()).toBe(empty.getSnapshot())
+    const target = { getSnapshot: () => ({ legacy: { nodes: [{ kind: 'user', seq: 1, content: [] }], partial: null, runningCalls: [] } }), subscribe: () => () => {} }
+    const present = conversationChatSource({
+      uiConversation: { binding: () => ({ target: () => target }) },
+    }, 'sess-1')
+    expect(present.getSnapshot().legacy?.nodes).toHaveLength(1)
+    const broken = conversationChatSource({
+      uiConversation: { binding: () => { throw new Error('uiConversation.binding: unknown session') } },
+    }, 'sess-1')
+    expect(broken.getSnapshot().legacy?.nodes).toEqual([])
+    expect(isObservableSource({ getSnapshot: () => 1, subscribe: () => () => {} })).toBe(true)
+    expect(isObservableSource({ sessionId: 's1' })).toBe(false)
+    expect(rootSource()).toContain('e(ShellErrorBoundary, { key: chatSession.sessionId }, e(Chat,')
   })
 })

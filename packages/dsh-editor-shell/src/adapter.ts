@@ -1,20 +1,16 @@
 import type {
-  AssistantBlock,
-  ConversationNode,
-  ConversationSnapshot,
-  PendingInteraction,
-  SessionFace,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import type {
   ApprovalResponsePayload,
-  ConnectionHandle,
-  PromptContentPart,
+  AssistantBlock,
+  ChatTranscript,
+  ConversationNode,
+  EditorRemote,
   QuestionResponsePayload,
-  RpcReceipt,
   RpcResult,
+  SessionFace,
   SessionId,
   SessionModels,
-} from '@deepseek-ai/dsh-client-connection/client'
+} from './dsh-compat.ts'
+import { catalogToSessionModels, modelSelectionOf } from './dsh-compat.ts'
 import { parseAuthorMemoryMarker, parseProposalMarker, type AuthorMemoryMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
@@ -57,6 +53,39 @@ export type PermissionProjection = {
   currentValue: string
   options: Array<{ value: string; name: string; description?: string }>
 }
+
+export type { ChatTranscript }
+
+type PromptContentPart = { type: 'text'; text: string }
+type RpcReceipt = { accepted?: boolean }
+
+export type PendingApproval = {
+  kind: 'approval'
+  key: string
+  sessionId: SessionId
+  payload: { approvalId: string }
+  respond: (value: { ok: true; value: ApprovalResponsePayload }) => Promise<RpcReceipt>
+}
+
+export type PendingQuestion = {
+  kind: 'question'
+  key: string
+  sessionId: SessionId
+  payload: {
+    questions: Array<{
+      id: string
+      header?: string
+      question: string
+      detail?: string
+      options?: Array<{ label: string; description?: string }>
+    }>
+  }
+  respond: (value: { ok: true; value: QuestionResponsePayload }) => Promise<RpcReceipt>
+}
+
+export type PendingInteraction = PendingApproval | PendingQuestion
+
+export type SessionRemote = EditorRemote['session']
 
 export function blocksText(blocks: readonly AssistantBlock[] | readonly unknown[], depth = 0): string {
   const text = blocks.map((block) => {
@@ -172,12 +201,25 @@ function isHiddenToolResult(node: Extract<ConversationNode, { kind: 'tool-result
   return blocksText(node.content).includes('<novel_knowledge ')
 }
 
-export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
+function nodeContent(node: ConversationNode): readonly unknown[] {
+  return 'content' in node && Array.isArray(node.content) ? node.content : []
+}
+
+function nodeBlocks(node: ConversationNode): readonly unknown[] {
+  return 'blocks' in node && Array.isArray(node.blocks) ? node.blocks : []
+}
+
+function asToolResult(node: ConversationNode): Extract<ConversationNode, { kind: 'tool-result' }> | undefined {
+  if (node.kind !== 'tool-result' || !('callId' in node) || !('content' in node)) return undefined
+  return node as Extract<ConversationNode, { kind: 'tool-result' }>
+}
+
+export function chatRows(snapshot: ChatTranscript): ChatRow[] {
   const rows: ChatRow[] = []
   for (const node of snapshot.nodes) {
     const common = { id: `${node.kind}:${node.seq}` }
     if (node.kind === 'user' || node.kind === 'steering') {
-      const text = blocksText(node.content)
+      const text = blocksText(nodeContent(node))
       /* 初始化（建索引）指令本身不展示,但它之后的思考、查找与总结照常可见,
          让作者能看到初始化正在进行的过程。 */
       if (isNovelIndexJobPrompt(text)) continue
@@ -192,7 +234,7 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
       continue
     }
     if (node.kind === 'assistant') {
-      const { thinking, text: assistantText } = splitAssistantContent(node.blocks)
+      const { thinking, text: assistantText } = splitAssistantContent(nodeBlocks(node))
       if (isNovelIndexJobPrompt(assistantText)) continue
       if (thinking) rows.push({ id: `${node.kind}:${node.seq}:thinking`, role: 'thinking', text: thinking })
       if (!assistantText) continue
@@ -200,13 +242,14 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
         ...common,
         role: 'assistant',
         text: assistantText,
-        detail: node.interrupted ? t('adapter.stopped') : undefined,
+        detail: 'interrupted' in node && node.interrupted ? t('adapter.stopped') : undefined,
       })
       continue
     }
     if (node.kind === 'tool-result') {
-      if (isHiddenToolResult(node)) continue
-      rows.push(toolResultRow(node))
+      const tool = asToolResult(node)
+      if (!tool || isHiddenToolResult(tool)) continue
+      rows.push(toolResultRow(tool))
     }
     else if (node.kind === 'turn-error') rows.push({ ...common, role: 'notice', text: t('chat.requestFailed') })
     else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: t('chat.retrying') })
@@ -214,15 +257,15 @@ export function chatRows(snapshot: ConversationSnapshot): ChatRow[] {
   return rows
 }
 
-export function internalIndexTurnActive(snapshot: ConversationSnapshot): boolean {
+export function internalIndexTurnActive(snapshot: ChatTranscript): boolean {
   let active = false
   for (const node of snapshot.nodes) {
-    if (node.kind === 'user' || node.kind === 'steering') active = isNovelIndexJobPrompt(blocksText(node.content))
+    if (node.kind === 'user' || node.kind === 'steering') active = isNovelIndexJobPrompt(blocksText(nodeContent(node)))
   }
   return active
 }
 
-export function partialView(snapshot: ConversationSnapshot): { thinking: string; text: string } {
+export function partialView(snapshot: ChatTranscript): { thinking: string; text: string } {
   if (!snapshot.partial) return { thinking: '', text: '' }
   const { thinking, text } = splitAssistantContent(snapshot.partial.blocks)
   return {
@@ -293,18 +336,21 @@ export async function answerQuestions(
   return wait.respond({ ok: true, value })
 }
 
-export async function readModels(connection: ConnectionHandle, sessionId: SessionId): Promise<RpcResult<SessionModels>> {
-  return (await connection.api.sessions.models({ sessionId })).result
+export async function readModels(remote: SessionRemote, session: SessionFace): Promise<RpcResult<SessionModels>> {
+  const catalog = await remote.modelCatalog()
+  if (!catalog.ok) return catalog
+  const current = modelSelectionOf(session.projections.faceOf('modelSelection').getSnapshot())
+  return { ok: true, value: catalogToSessionModels(catalog.value, current) }
 }
 
 export async function selectModel(
-  connection: ConnectionHandle,
+  remote: SessionRemote,
   sessionId: SessionId,
   provider: string,
   model: string,
   reasoningEffort?: string,
 ): Promise<RpcResult<{ selected: { provider: string; model: string; reasoningEffort?: string } }>> {
-  return (await connection.api.sessions.selectModel({ sessionId, provider, model, reasoningEffort })).result
+  return remote.selectModel({ sessionId, provider, model, reasoningEffort })
 }
 
 export function permissionProjection(session: SessionFace): PermissionProjection | undefined {

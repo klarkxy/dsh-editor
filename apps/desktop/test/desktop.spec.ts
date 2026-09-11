@@ -43,7 +43,7 @@ async function runtimeFixture(version = 'one', executableNode = false): Promise<
   ])
   await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
     format: 1, platform: `${process.platform}-${process.arch}`,
-    node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
+    node: { version: '24.16.0', ...node }, dsh: { version: '0.1.5-rc.2', ...dsh }, profile,
   }))
   return { root, resources }
 }
@@ -51,8 +51,20 @@ async function runtimeFixture(version = 'one', executableNode = false): Promise<
 describe('DSH URL trust root', () => {
   it('accepts only the exact DSH loopback readiness line', () => {
     expect(parseDshWebUrl('dsh web: http://127.0.0.1:41823')?.href).toBe('http://127.0.0.1:41823/')
+    expect(parseDshWebUrl('dsh web: http://127.0.0.1:41823/?token=gHI0qXC8OK_Dj3IxxA-WS8vyyI1QwewJrWOKJWJHEmE')?.href)
+      .toBe('http://127.0.0.1:41823/?token=gHI0qXC8OK_Dj3IxxA-WS8vyyI1QwewJrWOKJWJHEmE')
     expect(parseDshWebUrl('dsh web: http://127.0.0.1:41823 (LAN: http://10.0.0.1:41823)')?.port).toBe('41823')
-    for (const line of ['http://127.0.0.1:8080', 'dsh web: http://localhost:8080', 'dsh web: https://127.0.0.1:8080', 'dsh web: http://127.0.0.1:8080/path', 'dsh web: http://127.0.0.1:0']) expect(parseDshWebUrl(line)).toBeUndefined()
+    for (const line of [
+      'http://127.0.0.1:8080',
+      'dsh web: http://localhost:8080',
+      'dsh web: https://127.0.0.1:8080',
+      'dsh web: http://127.0.0.1:8080/path',
+      'dsh web: http://127.0.0.1:0',
+      'dsh web: http://127.0.0.1:41823/?token=',
+      'dsh web: http://127.0.0.1:41823/?token=bad/value',
+      'dsh web: http://127.0.0.1:41823/?token=abc&extra=1',
+      'dsh web: http://127.0.0.1:41823/?other=abc',
+    ]) expect(parseDshWebUrl(line)).toBeUndefined()
   })
   it('does not allow origin spoofing or port changes', () => {
     const expected = new URL('http://127.0.0.1:41823/')
@@ -201,7 +213,7 @@ describe('persistent packaged runtime cache', () => {
       treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
     ])
     await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-      format: 1, platform: 'unsupported-platform', node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
+      format: 1, platform: 'unsupported-platform', node: { version: '24.16.0', ...node }, dsh: { version: '0.1.5-rc.2', ...dsh }, profile,
     }))
     await expect(materializePackagedRuntime(join(root, 'home'), resources)).rejects.toThrow('unsupported identity')
   })
@@ -214,7 +226,7 @@ describe('persistent packaged runtime cache', () => {
       treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
     ])
     await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-      format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
+      format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '24.16.0', ...node }, dsh: { version: '0.1.5-rc.2', ...dsh }, profile,
     }))
     const runtime = await materializePackagedRuntime(home, resources)
     expect(await readFile(runtime.cliPath, 'utf8')).toBe('dsh-two')
@@ -233,7 +245,7 @@ describe('persistent packaged runtime cache', () => {
         treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
       ])
       await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-        format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '24.16.0', ...node }, dsh: { version: '0.1.1-rc.2', ...dsh }, profile,
+        format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '24.16.0', ...node }, dsh: { version: '0.1.5-rc.2', ...dsh }, profile,
       }))
 
       const committed = await materializePackagedRuntime(home, resources)

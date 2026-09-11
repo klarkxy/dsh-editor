@@ -8,12 +8,23 @@ const DSH_PACKAGE = '@deepseek-ai/dsh'
 const PINNED_PACKAGES = [
   DSH_PACKAGE,
   '@deepseek-ai/dsh-client-connection',
-  '@deepseek-ai/dsh-client-runtime',
   '@deepseek-ai/dsh-settings',
   '@deepseek-ai/dsh-storage-domain',
   '@deepseek-ai/dsh-tools',
   '@deepseek-ai/dsh-credentials',
+  '@deepseek-ai/dsh-api-remotes',
+  '@deepseek-ai/dsh-api-session-controller',
+  '@deepseek-ai/dsh-api-workspace-controller',
+  '@deepseek-ai/dsh-client-ui-settings',
+  '@deepseek-ai/dsh-client-ui-renderer',
+  '@deepseek-ai/dsh-client-ui-conversation',
+  '@deepseek-ai/dsh-client-ui-chat',
+  '@deepseek-ai/dsh-client-ui-session',
+  '@deepseek-ai/dsh-llm',
+  '@deepseek-ai/dsh-session',
+  '@deepseek-ai/dsh-system-prompt',
 ]
+const SKIP_REWRITE_PREFIXES = ['docs/verification/', 'docs/live-validation-']
 const LOCKFILE = 'pnpm-lock.yaml'
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.pack', '.pnpm-store', '.dev', '.playwright-mcp', 'dist', 'lib', 'out'])
 
@@ -152,7 +163,9 @@ async function resolveTarget(options, current) {
 async function listFilesContaining(oldVersion) {
   const result = spawnSync('git', ['grep', '-l', '-F', oldVersion], { cwd: root, encoding: 'utf8', windowsHide: true })
   if (!result.error && (result.status === 0 || result.status === 1)) {
-    return result.stdout.split('\n').map((line) => line.trim()).filter((line) => line && line !== LOCKFILE)
+    return result.stdout.split('\n').map((line) => line.trim()).filter((line) => (
+      line && line !== LOCKFILE && !SKIP_REWRITE_PREFIXES.some((prefix) => line.replaceAll('\\', '/').startsWith(prefix))
+    ))
   }
 
   const files = []
@@ -165,7 +178,10 @@ async function listFilesContaining(oldVersion) {
       if (!entry.isFile() || entry.name === LOCKFILE) continue
       const absolute = resolve(dir, entry.name)
       const content = await readFile(absolute, 'utf8').catch(() => null)
-      if (content !== null && content.includes(oldVersion)) files.push(relative(root, absolute))
+      if (content !== null && content.includes(oldVersion)) {
+        const rel = relative(root, absolute)
+        if (!SKIP_REWRITE_PREFIXES.some((prefix) => rel.replaceAll('\\', '/').startsWith(prefix))) files.push(rel)
+      }
     }
   }
   await visit(root)

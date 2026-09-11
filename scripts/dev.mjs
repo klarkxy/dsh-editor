@@ -27,7 +27,7 @@ if (process.versions.node !== '24.16.0' || process.arch !== 'x64' || !win) {
 
 let dsh
 try {
-  dsh = resolveDshInstallation('0.1.1-rc.2')
+  dsh = resolveDshInstallation('0.1.5-rc.2')
 } catch (error) {
   console.error(`dev: ${error instanceof Error ? error.message : String(error)}`)
   process.exit(1)

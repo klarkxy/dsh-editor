@@ -1,25 +1,35 @@
-import type { ConnectionHandle, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-client-connection/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {
+  ConnectionHandle,
+  EditorRemote,
+  EditorSessions,
+  EditorUiConversation,
+  EditorUiSession,
+  EditorUiWorkspace,
+  EditorWorkspaces,
+  RpcResult,
+  SettingsNamespaceView,
+  SettingsScope as CompatSettingsScope,
+  SessionId,
+  WorkspaceId,
+  WorkspaceView,
+} from '../dsh-compat.ts'
 import { stripChapterFrontmatter, worldbookEditorMetadata, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
-import type { WritingPreferences, WritingSettingsSlots } from '../writing-settings.ts'
+import type { WritingSettingsSlots } from '../writing-settings.ts'
 import { isChapterMetaPath } from '../chapter-meta-view.ts'
 import { intlLocale, t } from '../i18n/index.ts'
 
 export type TreeEntry = { name: string; type: 'file' | 'directory' | 'other' }
 
-export type RpcResult<T = unknown> =
-  | { ok: true; value: T }
-  | { ok: false; error: { code?: string; message?: string; details?: unknown } }
+export type { RpcResult }
 
-export type SettingsScope = import('@deepseek-ai/dsh-client-runtime/client').SettingsScope<WritingPreferences>
+export type SettingsScope<T = unknown> = CompatSettingsScope<T>
 
-/* Locally projected subset of `SettingsDescribeFace` from
-   `@deepseek-ai/dsh-client-ui-settings/client`. The shell only ever needs the
-   face's four operations: the reactive get-snapshot, the subscription, the
-   first-use ensure, and the write-answer fold. Defining the shape here keeps
-   the page free of the upstream type while staying structurally compatible. */
+/* Locally projected subset of the settings describe face. The shell only
+   ever needs the face's four operations: the reactive get-snapshot, the
+   subscription, the first-use ensure, and the write-answer fold. */
 export interface SettingsDescribeView {
-  namespaces: readonly import('@deepseek-ai/dsh-client-connection/client').SettingsNamespaceView[]
+  namespaces: readonly SettingsNamespaceView[]
   writable: boolean
   hasDocument: boolean
 }
@@ -34,11 +44,11 @@ export interface SettingsDescribeFace {
   getSnapshot(): SettingsMirrorSnapshot
   subscribe(listener: () => void): () => void
   ensure(): Promise<void>
-  acceptView(view: import('@deepseek-ai/dsh-client-connection/client').SettingsNamespaceView): void
+  acceptView(view: SettingsNamespaceView): void
 }
 
 export interface SettingsScopeBinder {
-  bind<T>(spec: { namespace: string; decode?(value: unknown): T | undefined }): import('@deepseek-ai/dsh-client-runtime/client').SettingsScope<T>
+  bind<T>(spec: { namespace: string; decode?(value: unknown): T | undefined }): CompatSettingsScope<T>
   describe(): SettingsDescribeFace
 }
 
@@ -52,10 +62,16 @@ export type SettingsSchemaService = import('./settings-models-store.ts').Setting
   validate(schema: unknown, draft: unknown): string | undefined
 }
 
-export type ShellContext = ClientContext & { connection: ConnectionHandle } & WritingSettingsSlots & {
+export type ShellContext = ClientContext & WritingSettingsSlots & {
+  connection: ConnectionHandle
+  remote: EditorRemote
+  sessions: EditorSessions
+  workspaces: EditorWorkspaces
+  uiWorkspace: EditorUiWorkspace
+  uiConversation?: EditorUiConversation
+  uiSession?: EditorUiSession
   settingsScope: SettingsScopeBinder
   settingsSchema: SettingsSchemaService
-  remote: RemoteEvents
 }
 
 export type WorkspaceIntent = 'open' | 'create'
@@ -63,9 +79,9 @@ export type WorkspaceIntent = 'open' | 'create'
 export type WorkspaceOpenState =
   | { kind: 'idle' }
   | { kind: 'checking'; workspaceId?: WorkspaceId; path: string; title: string }
-  | { kind: 'ready'; workspaceId: WorkspaceId; sessionId: import('@deepseek-ai/dsh-client-connection/client').SessionId; path: string; warning?: string }
+  | { kind: 'ready'; workspaceId: WorkspaceId; sessionId: SessionId; path: string; warning?: string }
   | { kind: 'needs-relocation'; workspaceId: WorkspaceId; path: string; title: string; message: string }
-  | { kind: 'needs-recovery'; workspaceId: WorkspaceId; sessionId: import('@deepseek-ai/dsh-client-connection/client').SessionId; path: string; title: string; recovery: 'import' | 'restore' }
+  | { kind: 'needs-recovery'; workspaceId: WorkspaceId; sessionId: SessionId; path: string; title: string; recovery: 'import' | 'restore' }
   | { kind: 'needs-intent'; workspaceId: WorkspaceId; path: string; title: string; intent: WorkspaceIntent; message: string }
   | { kind: 'error'; workspaceId?: WorkspaceId; path: string; title: string; message: string }
 
@@ -76,7 +92,7 @@ export type PendingWorkspaceOpen = {
   workspace: WorkspaceView
   intent: WorkspaceIntent
   registrationCreated: boolean
-  sessionId?: import('@deepseek-ai/dsh-client-connection/client').SessionId
+  sessionId?: SessionId
   replaceWorkspaceId?: WorkspaceId
   warning?: string
 }
@@ -217,6 +233,20 @@ export function claimInitialWorkspaceResume(guard: { current: boolean }): boolea
   if (guard.current) return false
   guard.current = true
   return true
+}
+
+/** Startup resume target: the session-bound row, else the most recently updated workspace. */
+export function startupResumeWorkspace(
+  items: readonly WorkspaceView[],
+  selected?: WorkspaceView,
+): WorkspaceView | undefined {
+  if (selected) return selected
+  if (!items.length) return undefined
+  return items.reduce((latest, item) => {
+    const left = Date.parse(latest.updatedAt) || 0
+    const right = Date.parse(item.updatedAt) || 0
+    return right > left ? item : latest
+  })
 }
 
 /** 提交说明使用的本地时间标签（YYYY-MM-DD HH:mm），每次提交自动取当前时间。 */
@@ -370,20 +400,23 @@ export class FlowWorkspaceCleanupError extends Error {
 }
 
 export async function createFlowWorkspace(
-  ctx: { connection: ConnectionHandle; workspaces: { create(args: { path: string }): Promise<WorkspaceView> } },
+  ctx: {
+    workspaces: {
+      create(input: { path: string }): Promise<WorkspaceView>
+      delete(workspaceId: WorkspaceId): Promise<void>
+    }
+  },
   workspacePath: string,
 ) {
-  const created = await ctx.connection.api.workspace.create({ path: workspacePath })
-  if (!created.result.ok) throw new Error(created.result.error.message)
+  let workspace: WorkspaceView | undefined
   try {
-    const workspace = await ctx.workspaces.create({ path: created.result.value.workspace.path })
-    return { workspace, created: created.result.value.created }
+    workspace = await ctx.workspaces.create({ path: workspacePath })
+    return { workspace, created: true }
   } catch (error) {
-    if (created.result.value.created) {
+    if (workspace) {
       let cleanupFailed = false
       try {
-        const cleanup = await ctx.connection.api.workspace.delete({ workspaceId: created.result.value.workspace.workspaceId })
-        cleanupFailed = !cleanup.result.ok
+        await ctx.workspaces.delete(workspace.workspaceId)
       } catch {
         cleanupFailed = true
       }

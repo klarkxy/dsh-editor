@@ -42,7 +42,7 @@ if (!apiKey) throw new Error('MiniMax API key is unavailable')
 const configuredBase = String(process.env.MINIMAX_BASE_URL || mmx.base_url || (mmx.region === 'cn' ? 'https://api.minimaxi.com' : 'https://api.minimax.io'))
 const apiBase = `${configuredBase.replace(/\/+$/, '')}/v1`
 
-const dsh = resolveDshInstallation('0.1.1-rc.2')
+const dsh = resolveDshInstallation('0.1.5-rc.2')
 const template = resolve(devRoot, 'desktop-profile-template')
 const runtime = resolve(devRoot, 'desktop-dsh-runtime')
 const cli = resolve(runtime, 'lib', 'bin.js')
@@ -51,7 +51,7 @@ const report = {
   book,
   workspace,
   reset,
-  dsh: dsh.version ?? '0.1.1-rc.2',
+  dsh: dsh.version ?? '0.1.5-rc.2',
   phases: [],
   chapters: [],
   features: [],
@@ -144,7 +144,7 @@ async function startDsh(env) {
       logs.push(text)
       void writeFile(logFile, text, { flag: 'a' }).catch(() => undefined)
       buffer += text
-      const match = /https?:\/\/127\.0\.0\.1:\d+\/?/.exec(buffer)
+      const match = /https?:\/\/127\.0\.0\.1:\d+\/?(?:\?token=[A-Za-z0-9._~-]+)?/.exec(buffer)
       if (match) resolvePromise(new URL(match[0]))
     }
     child.stdout.on('data', inspect)

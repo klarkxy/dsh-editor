@@ -1,5 +1,5 @@
-import { createElement as e, useEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
+import { Component, createElement as e, useEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import type { SessionFace } from '../dsh-compat.ts'
 import {
   resizedPanelWidth,
   type ResizablePanelSide,
@@ -102,8 +102,29 @@ export function PanelResizer(props: {
   }, e('span', { 'aria-hidden': 'true' }))
 }
 
+export function isObservableSource(value: unknown): value is { getSnapshot(): unknown; subscribe(listener: () => void): () => void } {
+  return Boolean(value && typeof value === 'object'
+    && typeof (value as { getSnapshot?: unknown }).getSnapshot === 'function'
+    && typeof (value as { subscribe?: unknown }).subscribe === 'function')
+}
+
 export function useObservable<T>(source: { getSnapshot(): T; subscribe(listener: () => void): () => void }): T {
   return useSyncExternalStore(source.subscribe.bind(source), source.getSnapshot.bind(source), source.getSnapshot.bind(source))
+}
+
+export class ShellErrorBoundary extends Component<{ children?: ReactNode; fallback?: ReactNode }, { error: string | null }> {
+  state = { error: null as string | null }
+  static getDerivedStateFromError(error: unknown) {
+    return { error: error instanceof Error ? error.message : String(error) }
+  }
+  render() {
+    if (!this.state.error) return this.props.children ?? null
+    return this.props.fallback ?? e('div', {
+      role: 'alert',
+      'data-testid': 'shell-error',
+      className: 'warning pad',
+    }, this.state.error)
+  }
 }
 
 export function currentSession(ctx: ShellContext): SessionFace | undefined {

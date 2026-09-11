@@ -1,4 +1,4 @@
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
 import { formatNumber, t } from './i18n/index.ts'
 
 /**

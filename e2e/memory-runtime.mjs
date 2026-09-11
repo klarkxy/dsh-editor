@@ -26,7 +26,7 @@ async function boot() {
   child = spawn(process.execPath, [join(runtime, 'lib/bin.js'), '--profile', 'dsh-editor', '--host', '127.0.0.1', '--port', '0', '--no-open'], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   let buffer = ''
   const ready = new Promise((resolvePromise, reject) => {
-    const inspect = chunk => { const text = String(chunk); log.push(text); buffer += text; const found = /https?:\/\/127\.0\.0\.1:\d+\/?/.exec(buffer); if (found) resolvePromise(found[0].replace(/\/$/, '')) }
+    const inspect = chunk => { const text = String(chunk); log.push(text); buffer += text; const found = /https?:\/\/127\.0\.0\.1:\d+\/?(?:\?token=[A-Za-z0-9._~-]+)?/.exec(buffer); if (found) resolvePromise(found[0].replace(/\/$/, '')) }
     child.stdout.on('data', inspect); child.stderr.on('data', inspect)
     child.once('error', reject); child.once('exit', code => reject(new Error(`Host exit ${code}: ${buffer.slice(-3000)}`)))
   })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ConfigurableProviderView, CredentialView, SettingsNamespaceView, SettingsPathOpView } from '@deepseek-ai/dsh-client-connection/client'
+import type { ConfigurableProviderView, CredentialView, SettingsNamespaceView, SettingsPathOpView } from './dsh-compat.ts'
 import {
   ENV_LINE,
   LEGAL_API_KEY,
@@ -63,13 +63,15 @@ function walkPath(value: unknown, path: string[]): unknown {
 }
 
 function entry(overrides: Partial<ConfigurableProviderView> = {}): ConfigurableProviderView {
+  const provider = typeof overrides.provider === 'string' ? overrides.provider : 'minimax-cn'
   return {
-    provider: 'minimax-cn',
+    provider,
     displayName: 'Minimax CN',
     settingsNs: 'llm-pi-ai',
     settingsPath: ['providers', 'minimax-cn'],
     active: true,
     ...overrides,
+    id: typeof overrides.id === 'string' ? overrides.id : provider,
   }
 }
 

@@ -9,17 +9,17 @@ type EditorAgent = { session: Session }
 function isEditor(agent: EditorAgent | undefined): agent is EditorAgent { return agent?.session.header.agentPreset === 'dsh-editor' }
 
 /** Only the model-visible projection changes; append-origin transcript events remain intact. */
-export function retireLegacyContext(session: Pick<Session, 'surface' | 'events' | 'append'>): number {
+export function retireLegacyContext(session: Pick<Session, 'surface' | 'eventAt' | 'append'>): number {
   let replaced = 0
   for (const seq of [...session.surface.nodes]) {
-    const event = session.events.find(item => item.seq === seq)
+    const event = session.eventAt(seq)
     if (event?.type !== 'user/message' || event.data.source.kind !== 'user' || event.data.content.length !== 1) continue
     const block = event.data.content[0]
     if (block?.type !== 'text') continue
     const envelope = parseProjectContextEnvelope(block.text)
     if (!envelope || envelope.version === 3) continue
     session.append('user/message', createUserMessage({ source: event.data.source, content: [{ type: 'text', text: envelope.user_request }] }), {
-      surfaceOp: { op: 'replace', start: seq, end: seq }, sourceEventSeqs: [seq],
+      surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq }, sourceEventSeqs: [seq],
     })
     replaced++
   }

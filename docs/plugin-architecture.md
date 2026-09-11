@@ -2,7 +2,7 @@
 
 本文是修改、替换或新建 DSH Editor 插件的权威手册。通用产品边界见 [architecture.md](architecture.md)，产品原则见 [product-principles.md](product-principles.md)，开发和验收命令见 [development.md](development.md)。
 
-当前兼容基线固定为 DSH `0.1.1-rc.2`。私有 `root` 接口尤其不是上游公共承诺；升级 DSH 前必须重新验证本文列出的全部桌面能力。
+当前兼容基线固定为 DSH `0.1.5-rc.2`。私有 `root` 接口尤其不是上游公共承诺；升级 DSH 前必须重新验证本文列出的全部桌面能力。
 
 ## 交互架构图
 
@@ -412,13 +412,13 @@ Client 只能注册 additive slot，例如 `shell.overlay`；不得使用 `root`
 
 ## 兼容、卸载、失败与数据保留
 
-- workbench、kernel、shell 与 plugins 是桌面 profile 必需组件。前两者不提供运行时安装/禁用 UI；plugins 可开关非核心入口并从 GitHub 安装社区插件，但不能关闭或卸载核心包。缺必需包属于无效交付，由物化和包内容验证阻止。隔离负向 smoke 已确认：在 DSH `0.1.1-rc.2` 中移除 workbench 或 kernel 时，Host 在发布 loopback URL 前以退出码 `1` 失败，并在错误中指出缺失包；`pnpm test:e2e:missing-private` 固化该行为。
+- workbench、kernel、shell 与 plugins 是桌面 profile 必需组件。前两者不提供运行时安装/禁用 UI；plugins 可开关非核心入口并从 GitHub 安装社区插件，但不能关闭或卸载核心包。缺必需包属于无效交付，由物化和包内容验证阻止。隔离负向 smoke 已确认：在 DSH `0.1.5-rc.2` 中移除 workbench 或 kernel 时，Host 在发布 loopback URL 前以退出码 `1` 失败，并在错误中指出缺失包；`pnpm test:e2e:missing-private` 固化该行为。
 - workbench/kernel 运行失败沿用现有 RPC/tool fail-closed 路径；不增加备用执行面、重试守护或健康检查 RPC。
 - 卸载插件不删除 workspace 文件、home credentials、settings、sessions 或 storages。
 - `dsh-manuscript` 卸载前应保存正文并处理需保留草稿；插件不会主动清除 DSH storage domain。
 - Kernel 卸载不删除知识卡之外的任何数据；proposal 从未直接写正文。
 - 私有 profile 按整套精确版本原子替换。回滚也替换整套 profile，不混用不同版本的 contracts 与 Host。
-- `root` seam 只兼容精确 DSH `0.1.1-rc.2`。
+- `root` seam 只兼容精确 DSH `0.1.5-rc.2`。
 
 ## 限额、取消与幂等性
 

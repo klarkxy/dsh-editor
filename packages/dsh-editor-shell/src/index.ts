@@ -1,12 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { SHELL_RPC_CHANNEL, resolveShellCapabilities, type ShellFeatureConfig, type ShellCapabilityResult } from './capabilities.ts'
+import { registerHostRpc, type HostRpcContext } from 'dsh-manuscript/host-api'
+import { SHELL_RPC_CHANNEL, resolveShellCapabilities, type ShellFeatureConfig } from './capabilities.ts'
 import Schema from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-settings-contract.ts'
 
 export const name = 'dsh-editor-shell'
-export const inject = ['settings', 'connection'] as const
+export const inject = ['settings', 'connection', 'webServer'] as const
 export const Config: Schema<ShellFeatureConfig> = Schema.object({
   features: Schema.dict(Schema.string()).default({}),
 })
@@ -24,13 +24,13 @@ const WritingPreferencesSchema = Schema.object({
   paperWidth: Schema.union(['narrow', 'medium', 'wide']).default('wide'),
 })
 
+type HostSettings = { register<T>(namespace: string, schema: unknown): unknown }
+
 /** Host owns the editor's one durable writing-preference namespace. */
 export function apply(ctx: Context, config: ShellFeatureConfig = {}): void {
-  ctx.settings.register<WritingPreferences>(settingsNamespace(WRITING_SETTINGS_NAMESPACE), WritingPreferencesSchema)
-  const connection = (ctx as Context & { connection?: { rpc: { handle: (channel: string, handler: (endpoint: string) => Promise<ShellCapabilityResult>, options: { authority: 'loopback' }) => () => unknown } } }).connection
-  if (connection) ctx.effect(() => connection.rpc.handle(SHELL_RPC_CHANNEL, async endpoint => {
+  ;(ctx as Context & { settings: HostSettings }).settings.register<WritingPreferences>(WRITING_SETTINGS_NAMESPACE, WritingPreferencesSchema)
+  ctx.effect(() => registerHostRpc(ctx as Context & HostRpcContext, SHELL_RPC_CHANNEL, async (endpoint) => {
     if (endpoint !== 'capabilities.get') return { ok: false, error: { code: 'bad-request', message: '不支持的界面操作', details: {} } }
     return resolveShellCapabilities(config, (name) => ctx.get(name))
-  }, { authority: 'loopback' }) as () => void)
-
+  }))
 }

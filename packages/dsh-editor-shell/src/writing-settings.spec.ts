@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
 import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_KEY, normalizeAuthorMemory } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY } from './completion-preference.ts'
 import { DEFAULT_WRITING_PREFERENCES, decodeWritingPreferences, migrateLegacyWritingPreferences, writingPreferences, type WritingPreferences } from './writing-settings.ts'
@@ -17,6 +17,7 @@ function scopeWith(snapshot: SettingsScopeSnapshot<WritingPreferences>, write?: 
       }
     },
     unset: async () => {},
+    mutate: async () => {},
   }
 }
 

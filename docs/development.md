@@ -7,7 +7,7 @@
 - Windows x64
 - Node.js `24.16.0`
 - pnpm `10.14.0`
-- `@deepseek-ai/dsh` `0.1.1-rc.2`
+- `@deepseek-ai/dsh` `0.1.5-rc.2`
 
 ```powershell
 node --version
@@ -98,8 +98,8 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 
 - Host 入口注册 `dsh-editor-writing` 设置 schema，并让 DSH 发布 `./client`。
 - package 必须导出 `./package.json`；DSH 客户端发现依赖该公开解析契约。
-- 通过 root slot `priority: -100` 遮蔽官方 priority 0 AppFrame；最低 priority 渲染。该行为与 rc.2 root 类型声明中的普通插件指导相冲突，只允许在固定 `0.1.1-rc.2`、私有 `dsh-editor` profile 和完整 E2E 闸门下使用；它是明确的升级阻断点。
-- 客户端注入 runtime、connection、sessions、workspaces、slots、settingsScope、settingsSchema 和 remote。
+- 通过 root slot `priority: -100` 遮蔽官方 priority 0 AppFrame；最低 priority 渲染。该行为与 rc.2 root 类型声明中的普通插件指导相冲突，只允许在固定 `0.1.5-rc.2`、私有 `dsh-editor` profile 和完整 E2E 闸门下使用；它是明确的升级阻断点。
+- 客户端注入 `slots`、`sessions`、`workspaces`、`connection`、`settingsScope`、`settingsSchema`、`remote`、`remote.session` / `settings` / `credentials` / `llm` / `directoryPicker` 和 `uiSession`。`dsh.client.inject` 必须先拉 `@deepseek-ai/dsh-typert-registry` 和 `@deepseek-ai/dsh-api-gateway`，再挂 connection / ui-settings / session-controller / workspace-controller / remotes / ui-session；缺 gateway 时 remotes `$mount` 不完成，写作壳不会出现。
 - 设置弹窗由 shell 自建（`src/client/settings*.tsx` + `select.tsx` 自制下拉）：profile patch（`apps/desktop/resources/profile/cordis.patch.yml`）禁用上游 `ui-settings-general`/`ui-settings-models`，但保留 `ui-settings`（提供 settingsScope/settingsSchema 服务）。通用设置写 `ui-theme`/`locale`/`ui-conversation` namespace，模型页走 `llm.providers`/`settings.mutate`/`credentials.*`/`llm.discoverModels` 与上游同协议。上游升级（DSH_VERSION）时需复查这些 API 与禁用条目——与 root slot 遮蔽同为升级阻断点。
 - 弹窗内不使用原生 `<select>`（Windows Chromium 下其弹层不跟随 color-scheme）；残留原生下拉的 ink 兜底规则在 styles.ts 的 baseStyles 尾部。
 - `DshChatPort` 只投影单一 `ConversationSnapshot`，不 `connection.start()`、不持久化 Chat。
@@ -182,7 +182,7 @@ pnpm pack:desktop
 准备脚本会清理并重建 `.pack/desktop-runtime`，复制：
 
 - `node-24.16.0/`（Windows 为 `node.exe`，macOS 为 `node`）；
-- 完整、dereference 后的 DSH `0.1.1-rc.2` 依赖闭包；
+- 完整、dereference 后的 DSH `0.1.5-rc.2` 依赖闭包；
 - 当前 recipe 解析出的全部业务包与库（`composition.json` 里的 `packages` + `libraries`）；
 - 含私有依赖的 profile 模板；
 - `manifest.json` 中的平台、文件数、字节数与 tree SHA-256。

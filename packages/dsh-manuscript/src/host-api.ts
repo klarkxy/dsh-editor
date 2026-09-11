@@ -53,3 +53,10 @@ export {
   type HostRpcError,
   type HostRpcIssue,
 } from './rpc/host-error.ts'
+
+export {
+  registerHostRpc,
+  endpointFromRpcPath,
+  type HostRpcContext,
+  type HostRpcHandler,
+} from './rpc/channel.ts'

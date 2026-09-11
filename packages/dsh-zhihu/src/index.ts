@@ -9,9 +9,10 @@ import { listZhihuKnowledgeBases, uploadZhihuKnowledgeFile, ZHIHU_KNOWLEDGE_UPLO
 import { type ZhihuClientOptions, type ZhihuSearchExecuted, ZhihuSearchError } from './zhihu-client.ts'
 import { createZhihuUsageRecorder, resolveDays, zhihuUsageDomainSpec, type ZhihuUsageRecorder } from './usage.ts'
 import { ZHIHU_RPC_CHANNEL, ZHIHU_CREDENTIAL_REF, ZHIHU_SEARCH_EVENT, type ZhihuRpcResult } from './contracts.ts'
+import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
 
 export const name = 'dsh-zhihu'
-export const inject = ['connection', 'credentials', 'storageDomain'] as const
+export const inject = ['connection', 'credentials', 'storageDomain', 'webServer'] as const
 export type ZhihuService = {
   call(endpoint: string, payload: unknown, signal: AbortSignal): Promise<ZhihuRpcResult>
   run<T>(execute: (signal: AbortSignal) => Promise<T>, signal: AbortSignal): Promise<T>
@@ -20,9 +21,8 @@ export type ZhihuService = {
   toolOptions: ZhihuClientOptions & { onExecuted: (event: ZhihuSearchExecuted) => void }
 }
 
-type Host = Context & {
+type Host = Context & HostRpcContext & {
   credentials: { resolve: (ref: ReturnType<typeof credentialRef>) => Promise<{ value: string } | undefined> }
-  connection: { rpc: { handle: (channel: string, handler: ZhihuService['call'], policy: { authority: 'loopback' }) => () => void | Promise<void> } }
 }
 const fail = (code: string, message: string): ZhihuRpcResult => ({ ok: false, error: { code, message, details: {} } })
 
@@ -133,5 +133,5 @@ export async function apply(ctx: Context): Promise<void> {
   })
   ctx.effect(() => async () => { await service.dispose(); await domain.close() }, 'zhihu.usageDomainClose')
   ctx.provide('zhihu', service)
-  ctx.effect(() => host.connection.rpc.handle(ZHIHU_RPC_CHANNEL, service.call, { authority: 'loopback' }))
+  ctx.effect(() => registerHostRpc(host, ZHIHU_RPC_CHANNEL, service.call))
 }

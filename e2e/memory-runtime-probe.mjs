@@ -12,7 +12,7 @@ const { setSandboxMode } = await load('@deepseek-ai/dsh-sandbox-policy')
 const fsTools = await load('@deepseek-ai/dsh-tool-fs')
 const searchTools = await load('@deepseek-ai/dsh-tool-fs-search')
 
-export const inject = ['connection', 'agents', 'workspaceRegistry', 'llm', 'sessions', 'sandboxPolicy']
+export const inject = ['connection', 'agents', 'workspaceRegistry', 'llm', 'sessions', 'sandboxPolicy', 'webServer']
 export function apply(ctx) {
   const requests = []
   let steps = []
@@ -57,7 +57,20 @@ export function apply(ctx) {
   }
   ctx.llm.registerAdapter(['memory-probe'], new ProbeAdapter())
   const setup = async agentCtx => { await agentCtx.plugin(fsTools); await agentCtx.plugin(searchTools, { sampleOverCapGlobResults: false }) }
-  ctx.effect(() => ctx.connection.rpc.handle('/memory-probe', async (endpoint, body) => {
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: '/memory-probe',
+    handler: async (req, res) => {
+      const chunks = []
+      for await (const chunk of req) chunks.push(chunk)
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
+      const endpoint = new URL(req.url ?? '/', 'http://dsh.internal').pathname.slice('/memory-probe/'.length)
+      const result = await dispatch(endpoint, body.payload)
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ type: 'server-response', rpcId: body.rpcId ?? 'memory-probe', result }))
+    },
+  }))
+  const dispatch = async (endpoint, body) => {
     try {
       if (endpoint === 'start') {
         workspace = body.workspace; id = body.sessionId
@@ -96,5 +109,5 @@ export function apply(ctx) {
       if (endpoint === 'stop') { await handle?.dispose(); handle = undefined; return { ok: true, value: {} } }
       throw new Error('unknown probe endpoint')
     } catch (error) { return { ok: false, error: { message: error.stack ?? String(error) } } }
-  }, { authority: 'loopback' }))
+  }
 }

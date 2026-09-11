@@ -1,3 +1,4 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 
 export type RpcResult = { ok: true; value: unknown } | { ok: false; error: { message: string } }
@@ -81,7 +82,17 @@ export type WorkspaceLike = {
 }
 
 export type ManuscriptHost = Context & {
-  connection: { rpc: RpcBag }
+  connection: {
+    rpc: RpcBag
+    requestRejection?: (request: IncomingMessage) => number | undefined
+  }
+  webServer: {
+    register: (route: {
+      kind: 'prefix'
+      path: string
+      handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+    }) => () => void
+  }
   sessions: { get: (id: string) => SessionLike | undefined }
   workspaceRegistry: { resolveByPath: (path: string) => Promise<WorkspaceLike | undefined> }
   sandboxPolicy: { resolve: (request: { session: SessionLike }) => SandboxExecutionPolicyLike }

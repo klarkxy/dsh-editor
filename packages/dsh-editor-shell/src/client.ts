@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope } from './dsh-compat.ts'
 import type { ReactNode } from 'react'
 import { registerRoot } from './root-registration.ts'
 import {
@@ -18,10 +18,15 @@ import { decodeLocalePreference } from './client/settings-general.tsx'
 import { bindLocalePreference } from './i18n/index.ts'
 import { type ShellContext } from './client/shared.ts'
 import { registerShellRoot } from './client/root.ts'
+import { provideEditorUiWorkspace } from './client/ui-workspace.ts'
 import { COMMANDS_SERVICE, MESSAGE_CARDS_SERVICE, createCommandRegistry, createMessageCardRegistry } from './seats.ts'
 
 export const name = 'dsh-editor-shell-client'
-export const inject = ['slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote'] as const
+export const inject = [
+  'slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote',
+  'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker',
+  'uiSession',
+] as const
 
 // Re-exports — keep the old monolith surface so existing callers and specs still work.
 export {
@@ -47,6 +52,7 @@ export {
   searchSkippedText,
   shouldSubmitComposer,
   snapshotTimeLabel,
+  startupResumeWorkspace,
   supportedWorkspaceTextPaths,
   treeExpansionPaths,
   treeRowPadding,
@@ -70,7 +76,7 @@ export type {
 export { THEME_STORAGE_KEY, THEME_VALUES, ThemeToggle, useTheme } from './client/theme.ts'
 export type { HostThemeSync, ThemeValue } from './client/theme.ts'
 export { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './client/dialogs.ts'
-export { Chat, ModelPicker, NewConversationPicker, PendingCard, ProjectContextReceiptView, ProposalCard } from './client/chat.ts'
+export { Chat, ModelPicker, NewConversationPicker, PendingCard, ProjectContextReceiptView, ProposalCard, conversationChatSource } from './client/chat.ts'
 export { Editor } from './client/editor.ts'
 export { FileContextMenu, Tree } from './client/sidebar.ts'
 export { DeepSeekWhaleMark, PaperStage, PanelResizer, currentSession, useObservable } from './client/components.ts'
@@ -79,6 +85,7 @@ type SettingsSlot = { bind<T>(spec: { namespace: string; decode?(value: unknown)
 
 export function apply(ctx: Context): void {
   const client = ctx as ShellContext & { settingsScope: SettingsSlot }
+  provideEditorUiWorkspace(client)
   const writingScope = client.settingsScope.bind({ namespace: WRITING_SETTINGS_NAMESPACE, decode: decodeWritingPreferences })
   const migrateWritingPreferences = createWritingMigration(writingScope, globalThis.localStorage)
   void migrateWritingPreferences()

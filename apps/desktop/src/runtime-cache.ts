@@ -7,7 +7,7 @@ const CACHE_NAME = 'dsh-editor-runtime'
 const CACHE_MARKER = '.dsh-editor-runtime.json'
 const CACHE_SCHEMA = 1
 const EXPECTED_NODE_VERSION = '24.16.0'
-const EXPECTED_DSH_VERSION = '0.1.1-rc.2'
+const EXPECTED_DSH_VERSION = '0.1.5-rc.2'
 const PLATFORM_ID = `${process.platform}-${process.arch}`
 const NODE_EXECUTABLE = process.platform === 'win32' ? 'node.exe' : 'node'
 

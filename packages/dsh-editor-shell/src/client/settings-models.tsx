@@ -27,12 +27,11 @@ import type {
   ConfigurableProviderView,
   CredentialView,
   DiscoveredModelView,
-  IApiClient,
-  RpcResponse,
+  EditorRemote,
   RpcResult,
   SettingsNamespaceView,
   SettingsPathOpView,
-} from '@deepseek-ai/dsh-client-connection/client'
+} from '../dsh-compat.ts'
 import {
   addableRows,
   apiKeyFailure,
@@ -43,6 +42,7 @@ import {
   modelDrafts,
   pathOps,
   protocolChoices,
+  providerIdOf,
   providerUsable,
   reasoningChoiceOf,
   reasoningEffortsFor,
@@ -57,10 +57,7 @@ import { ConfirmDialog } from './dialogs.ts'
 import type { SettingsDescribeFace, SettingsSchemaService, ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 
-/* Wire types aliased so the rest of the file can read them without a long
-   import. The methods we use are all in `IApiClient`; the narrower shape
-   keeps the call sites readable and makes any future test injection easier. */
-type Api = IApiClient
+type ModelsRemote = EditorRemote
 
 /* Settings snapshot the page renders from. Mirrors the upstream store's
    observable: status drives the top of the page, rows drive the list,
@@ -101,8 +98,8 @@ function failureMessage(result: RpcResult<unknown>): string {
   return error?.message ?? t('common.requestFailed')
 }
 
-function rpcResult<T>(response: RpcResponse<T>): RpcResult<T> {
-  return response.result
+function rpcResult<T>(result: RpcResult<T>): RpcResult<T> {
+  return result
 }
 
 /**
@@ -117,7 +114,7 @@ class ModelsStore {
   generation = 0
 
   constructor(
-    private readonly api: Api,
+    private readonly api: ModelsRemote,
     private readonly describeFace: SettingsDescribeFace,
     private readonly schema: SettingsSchemaService,
   ) {}
@@ -146,13 +143,13 @@ class ModelsStore {
     let writable: boolean
     let views: SettingsNamespaceView[]
     try {
-      const [providersResponse] = await Promise.all([this.api.llm.providers({}), this.describeFace.ensure()])
+      const [providersResponse] = await Promise.all([this.api.llm.listConfigurableProviders(), this.describeFace.ensure()])
       if (generation !== this.generation) return
-      const providersResult = rpcResult<{ providers: ConfigurableProviderView[] }>(providersResponse)
+      const providersResult = rpcResult<ConfigurableProviderView[]>(providersResponse)
       if (!providersResult.ok) throw new Error(failureMessage(providersResult))
       const mirrored = this.describeFace.getSnapshot()
       if (mirrored.view === undefined) throw new Error(mirrored.error ?? t('common.unavailable'))
-      providers = providersResult.value.providers
+      providers = providersResult.value
       writable = mirrored.view.writable
       views = [...mirrored.view.namespaces]
     } catch (error) {
@@ -189,9 +186,9 @@ class ModelsStore {
     let credentialError: string | null = null
     if (refs.length > 0) {
       try {
-        const response = await this.api.credentials.describe({ refs })
-        const result = rpcResult<{ credentials: Record<string, CredentialView> }>(response)
-        if (result.ok) credentials = result.value.credentials
+        const response = await this.api.credentials.describe(refs)
+        const result = rpcResult<Record<string, CredentialView>>(response)
+        if (result.ok) credentials = result.value
         else credentialError = failureMessage(result)
       } catch (error) {
         credentialError = error instanceof Error ? error.message : String(error)
@@ -253,7 +250,7 @@ function needsSetup(row: ProviderRow, anyUsable: boolean): boolean {
 
 /* The credential reference whose removal would also wipe a stored key. */
 function managedCredentialRef(row: ProviderRow): string | undefined {
-  const managedRef = deriveKeyRef(row.entry.provider)
+  const managedRef = deriveKeyRef(providerIdOf(row.entry))
   if (row.apiKeyEnv !== managedRef) return undefined
   if (row.credential?.configured !== true) return undefined
   if (row.credential.writable !== true) return undefined
@@ -361,7 +358,9 @@ function modelFailureLabel(key: 'modelIdRequired' | 'modelIdDuplicate' | 'modelN
 }
 
 function targetLabel(row: ProviderRow): string {
-  return row.entry.displayName
+  const displayName = row.entry.displayName
+  if (typeof displayName === 'string' && displayName) return displayName
+  return row.entry.name ?? providerIdOf(row.entry)
 }
 
 function formatTemplate(template: string, target: string): string {
@@ -389,7 +388,7 @@ function emptySectionState(): SectionState {
 export function SettingsModelsSection(props: { ctx: ShellContext }): ReactNode {
   useLocale()
   const store = useMemo(
-    () => new ModelsStore(props.ctx.connection.api, props.ctx.settingsScope.describe(), props.ctx.settingsSchema),
+    () => new ModelsStore(props.ctx.remote, props.ctx.settingsScope.describe(), props.ctx.settingsSchema),
     [props.ctx],
   )
 
@@ -476,10 +475,10 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
         const target = row
         const namespace = state.namespaces.get(target.entry.settingsNs)
         if (namespace === undefined) return null
-        const editing = !section.adding && section.editing?.entry.provider === target.entry.provider
-        const wantsSetup = needsSetup(target, anyUsable) && !section.dismissing.has(target.entry.provider)
+        const editing = !section.adding && section.editing !== undefined && providerIdOf(section.editing.entry) === providerIdOf(target.entry)
+        const wantsSetup = needsSetup(target, anyUsable) && !section.dismissing.has(providerIdOf(target.entry))
         if (wantsSetup) {
-          return e('li', { key: target.entry.provider, className: 'models-row-card' },
+          return e('li', { key: providerIdOf(target.entry), className: 'models-row-card' },
             e(ProviderEditor, {
               ctx,
               store,
@@ -491,7 +490,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
               onClose: (changed) => {
                 setSection((current) => {
                   const dismissing = new Set(current.dismissing)
-                  dismissing.add(target.entry.provider)
+                  dismissing.add(providerIdOf(target.entry))
                   return {
                     ...current,
                     dismissing,
@@ -502,7 +501,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
             }),
           )
         }
-        return e('li', { key: target.entry.provider, className: 'models-row-card' },
+        return e('li', { key: providerIdOf(target.entry), className: 'models-row-card' },
           e(RowHead, {
             row: target,
             writable,
@@ -547,10 +546,10 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
             e('label', { className: 'models-field' },
               e('span', { className: 'models-field-label' }, t('models.provider')),
               e(Select, {
-                value: addTarget.entry.provider,
-                options: addable.map<SelectOption>((row) => ({ value: row.entry.provider, label: row.entry.displayName })),
+                value: providerIdOf(addTarget.entry),
+                options: addable.map<SelectOption>((row) => ({ value: providerIdOf(row.entry), label: targetLabel(row) })),
                 onChange: (provider) => {
-                  const next = addable.find((row) => row.entry.provider === provider)
+                  const next = addable.find((row) => providerIdOf(row.entry) === provider)
                   if (next === undefined) return
                   setSection((current) => ({ ...current, editing: next, adding: true }))
                 },
@@ -584,7 +583,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
               ctx,
               store,
               protocols,
-              taken: state.rows.map((row) => row.entry.provider),
+              taken: state.rows.map((row) => providerIdOf(row.entry)),
               readOnly: !writable,
               onClose: (changed) => {
                 setSection((current) => ({
@@ -687,14 +686,14 @@ function RowHead(props: {
 async function removeProviderProfile(ctx: ShellContext, store: Store, row: ProviderRow): Promise<void> {
   const managedRef = managedCredentialRef(row)
   if (managedRef !== undefined) {
-    const response = await ctx.connection.api.credentials.unset({ ref: managedRef })
-    const result = rpcResult<Record<string, never>>(response)
+    const response = await ctx.remote.credentials.unset(managedRef)
+    const result = rpcResult<void>(response)
     if (!result.ok) throw new Error(failureMessage(result))
   }
-  const response = await ctx.connection.api.settings.mutate({
-    ns: row.entry.settingsNs,
-    ops: [{ op: 'unset', path: [...row.entry.settingsPath] }],
-  })
+  const response = await ctx.remote.settings.mutate(
+    row.entry.settingsNs,
+    [{ op: 'unset', path: [...row.entry.settingsPath] }],
+  )
   const result = rpcResult<SettingsNamespaceView>(response)
   if (!result.ok) throw new Error(failureMessage(result))
   await store.load()
@@ -743,16 +742,16 @@ function ProviderEditor(props: {
   const [failure, setFailure] = useState<string | undefined>(undefined)
 
   const keyRef = useMemo(
-    () => refFor(namespace, row.entry.settingsPath, row.entry.provider, schema),
+    () => refFor(namespace, row.entry.settingsPath, providerIdOf(row.entry), schema),
     [namespace, row, schema],
   )
 
   useEffect(() => {
     let stale = false
-    void ctx.connection.api.credentials.describe({ refs: [keyRef] }).then((response) => {
+    void ctx.remote.credentials.describe([keyRef]).then((response) => {
       if (stale) return
-      const result = rpcResult<{ credentials: Record<string, CredentialView> }>(response)
-      if (result.ok) setKeyState(result.value.credentials[keyRef])
+      const result = rpcResult<Record<string, CredentialView>>(response)
+      if (result.ok) setKeyState(result.value[keyRef])
     })
     return () => {
       stale = true
@@ -841,11 +840,7 @@ function ProviderEditor(props: {
         ops = pathOps(row.entry.settingsPath, previous, next)
       }
       if (ops.length > 0) {
-        const response = await ctx.connection.api.settings.mutate({
-          ns: namespace.ns,
-          ops,
-          expectedRevision,
-        })
+        const response = await ctx.remote.settings.mutate(namespace.ns, ops, expectedRevision)
         const result = rpcResult<SettingsNamespaceView>(response)
         if (!result.ok) {
           if (result.error?.code === 'settings-conflict') setFailure(text().conflict)
@@ -857,8 +852,8 @@ function ProviderEditor(props: {
         setExpectedRevision(result.value.revision)
       }
       if (keyValue.length > 0) {
-        const response = await ctx.connection.api.credentials.set({ ref: keyRef, value: keyValue })
-        const result = rpcResult<Record<string, never>>(response)
+        const response = await ctx.remote.credentials.set(keyRef, keyValue)
+        const result = rpcResult<void>(response)
         if (!result.ok) {
           setFailure(failureMessage(result))
           return
@@ -881,9 +876,9 @@ function ProviderEditor(props: {
 
   return e('div', { className: 'models-editor' },
     hideTitle ? null : e('div', { className: 'models-editor-header' },
-      e('span', { className: 'models-editor-title' }, row.entry.displayName),
-      row.entry.displayName !== row.entry.provider
-        ? e('span', { className: 'models-editor-route' }, row.entry.provider)
+      e('span', { className: 'models-editor-title' }, targetLabel(row)),
+      targetLabel(row) !== providerIdOf(row.entry)
+        ? e('span', { className: 'models-editor-route' }, providerIdOf(row.entry))
         : null,
     ),
     e('div', { className: 'models-field' },
@@ -914,7 +909,7 @@ function ProviderEditor(props: {
             type: 'text',
             className: 'models-input',
             value: stringAt(draft, 'displayName') ?? '',
-            placeholder: stringAt(fallbackRecord, 'displayName') ?? row.entry.provider,
+            placeholder: stringAt(fallbackRecord, 'displayName') ?? providerIdOf(row.entry),
             'aria-label': text().displayName,
             disabled: readOnly || busy,
             onChange: (event: ChangeEvent<HTMLInputElement>) => setField('displayName', event.target.value),
@@ -950,7 +945,7 @@ function ProviderEditor(props: {
           ctx,
           models,
           settingsNs: namespace.ns,
-          provider: row.entry.provider,
+          provider: providerIdOf(row.entry),
           baseURL: stringAt(draft, 'baseURL') ?? stringAt(fallbackRecord, 'baseURL'),
           api: isPiAi ? stringAt(draft, 'api') ?? stringAt(fallbackRecord, 'api') : undefined,
           apiKey: keyValue.length > 0 ? keyValue : undefined,
@@ -1038,25 +1033,24 @@ function ModelListEditor(props: {
     setBusy(true)
     setFailure(undefined)
     try {
-      const response = await ctx.connection.api.llm.discoverModels({
-        settingsNs,
+      const response = await ctx.remote.llm.discoverModels(settingsNs, {
         ...(provider !== '' ? { provider } : {}),
         ...(baseURL !== undefined && baseURL.length > 0 ? { baseURL } : {}),
         ...(api !== undefined ? { api } : {}),
         ...(apiKey !== undefined ? { apiKey } : {}),
       })
-      const result = rpcResult<{ models: DiscoveredModelView[] }>(response)
+      const result = rpcResult<DiscoveredModelView[]>(response)
       if (!result.ok) {
         setFailure(failureMessage(result))
         return
       }
-      if (result.value.models.length === 0) {
+      if (result.value.length === 0) {
         setFailure(t.noListed)
         return
       }
       const known = new Set(models.map((model) => (typeof model['id'] === 'string' ? (model['id'] as string) : '')))
-      setCandidates(result.value.models)
-      setPicked(new Set(result.value.models.filter((model) => !known.has(model.id)).map((model) => model.id)))
+      setCandidates(result.value)
+      setPicked(new Set(result.value.filter((model) => !known.has(model.id)).map((model) => model.id)))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       // 协议不支持自动发现时,host 返回 model-discovery-failed,message 已经可读;
@@ -1309,11 +1303,11 @@ function CustomProviderCard(props: {
         }
         if (displayName.trim().length > 0) profile['displayName'] = displayName.trim()
         if (storesKey) profile['apiKeyEnv'] = keyRef
-        const response = await ctx.connection.api.settings.mutate({
-          ns: 'llm-pi-ai',
-          ops: [{ op: 'set', path: ['providers', route], value: profile }],
-          expectedRevision: revision,
-        })
+        const response = await ctx.remote.settings.mutate(
+          'llm-pi-ai',
+          [{ op: 'set', path: ['providers', route], value: profile }],
+          revision,
+        )
         const result = rpcResult<SettingsNamespaceView>(response)
         if (!result.ok) {
           if (result.error?.code === 'settings-conflict') setFailure(text().conflict)
@@ -1324,8 +1318,8 @@ function CustomProviderCard(props: {
         setCommitted(true)
       }
       if (storesKey) {
-        const response = await ctx.connection.api.credentials.set({ ref: deriveKeyRef(route), value: keyValue })
-        const result = rpcResult<Record<string, never>>(response)
+        const response = await ctx.remote.credentials.set(deriveKeyRef(route), keyValue)
+        const result = rpcResult<void>(response)
         if (!result.ok) {
           setFailure(failureMessage(result))
           return

@@ -1,4 +1,4 @@
-import type { SessionId } from '@deepseek-ai/dsh-client-connection/client'
+import type { SessionId } from './dsh-compat.ts'
 import type { ProjectInspectionResponse } from 'dsh-editor-workbench/contracts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 import type { ShellContext } from './client/shared.ts'

@@ -20,14 +20,14 @@
 
 文件树右键「归档」只对单个可见 Markdown/TXT 生效，记录进 `.dsh-editor/archive/`，可从「已归档」恢复；目录不能归档。右键删除是永久删除，与归档不同。
 
-对话标题栏 ⋯ 菜单提供归档、恢复、删除。删除只在本机写入墓碑 id，从切换列表和已归档列表隐藏；DSH `0.1.1-rc.2` 没有会话删除 API，会话本体仍留在 Host。
+对话标题栏 ⋯ 菜单提供归档、恢复、删除。删除只在本机写入墓碑 id，从切换列表和已归档列表隐藏；DSH `0.1.5-rc.2` 没有会话删除 API，会话本体仍留在 Host。
 
 ## 其它
 
 栏宽与文件栏开合只作为本机 Renderer 界面偏好保存。编辑器把 FIM 与选段 patch 显式呈现为可放弃建议。作品显示名和最近列表复用 DSH workspace registry。
 
 Private client shell for the dedicated `dsh-editor` profile. It owns the root
-surface only in that profile and consumes DSH `0.1.1-rc.2` public runtime and
+surface only in that profile and consumes DSH `0.1.5-rc.2` public runtime and
 connection contracts. The Host entry registers the `dsh-editor-writing`
 settings schema. Project lifecycle and novel tools belong to the two private
 Host plugins. It is not a public installable plugin.

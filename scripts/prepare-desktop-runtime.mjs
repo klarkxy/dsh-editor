@@ -9,7 +9,7 @@ import { compositionInstallNames } from './plugin-manifest.mjs'
 import { desktopComposition, configureProfile } from './desktop-compositions.mjs'
 
 const NODE_VERSION = '24.16.0'
-const DSH_VERSION = '0.1.1-rc.2'
+const DSH_VERSION = '0.1.5-rc.2'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputRoot = resolve(root, '.pack', 'desktop-runtime')
 const nodeOutput = resolve(outputRoot, `node-${NODE_VERSION}`)

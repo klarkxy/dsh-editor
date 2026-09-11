@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { renderPrompt, type PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import { describe, expect, it } from 'vitest'
 import { writeTextFile } from 'dsh-manuscript/host-api'
@@ -8,7 +8,16 @@ import { createMemoryContext } from './test-helpers.ts'
 import { compileProjectContext, compileProjectContextV2 } from './contracts.ts'
 import { assembleProjectRules, installProjectContextHooks, retireLegacyContext } from './project-context-hooks.ts'
 
-function session() { return Session.create(SessionId('rules-test'), [], { id: SessionId('rules-test'), version: 0, createdAt: 1, cwd: '/workspace', agentPreset: 'dsh-editor' }) }
+function session() {
+  return Session.create(SessionId('rules-test'), [], {
+    id: SessionId('rules-test'),
+    version: SESSION_FORMAT_VERSION,
+    createdAt: 1,
+    cwd: '/workspace',
+    agentPreset: 'dsh-editor',
+    isSeeded: false,
+  })
+}
 const emptyAssembly = (): PromptAssembly => ({ sections: [{ name: 'mode', text: 'generic mode' }], contexts: [], tools: [], variables: {} })
 
 describe('rules and history on the actual host contracts', () => {
@@ -20,10 +29,10 @@ describe('rules and history on the actual host contracts', () => {
     for (const text of [old.serialized, '普通对话', newer.serialized]) s.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] }), { surfaceOp: 'append' })
     expect(retireLegacyContext(s)).toBe(2)
     expect(s.deriveMessages().map(m => m.content[0])).toEqual(['原用户请求', '普通对话', '后续请求'].map(text => ({ type: 'text', text })))
-    expect(s.events.filter(e => e.type === 'user/message' && e.surfaceOp === 'append')).toHaveLength(3)
-    expect(JSON.stringify(s.events)).toContain('STALE_SECRET')
+    expect(s.snapshotEvents().filter(e => e.type === 'user/message' && e.surfaceOp === 'append')).toHaveLength(3)
+    expect(JSON.stringify(s.snapshotEvents())).toContain('STALE_SECRET')
     expect(JSON.stringify(s.deriveMessages())).not.toContain('STALE_SECRET')
-    const resumed = Session.create(s.id, s.events, s.header)
+    const resumed = Session.create(s.id, s.snapshotEvents(), s.header)
     expect(retireLegacyContext(resumed)).toBe(0)
     expect(resumed.deriveMessages()).toEqual(s.deriveMessages())
   })

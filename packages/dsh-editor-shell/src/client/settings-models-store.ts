@@ -12,7 +12,14 @@ import type {
   CredentialView,
   SettingsNamespaceView,
   SettingsPathOpView,
-} from '@deepseek-ai/dsh-client-connection/client'
+} from '../dsh-compat.ts'
+
+export function providerIdOf(entry: ConfigurableProviderView): string {
+  const provider = entry['provider']
+  if (typeof provider === 'string' && provider.length > 0) return provider
+  const id = entry['id']
+  return typeof id === 'string' && id.length > 0 ? id : 'provider'
+}
 
 /** Printable ASCII minus space: the same charset the host's key normalizer uses. */
 export const LEGAL_API_KEY = /^[\x21-\x7E]+$/
@@ -125,7 +132,7 @@ export function joinProviderRows(
   return providers.map((entry) => {
     const namespace = namespaces.get(entry.settingsNs)
     const apiKeyEnv = apiKeyEnvOf(namespace, entry.settingsPath, schema)
-    const ref = apiKeyEnv ?? deriveKeyRef(entry.provider)
+    const ref = apiKeyEnv ?? deriveKeyRef(providerIdOf(entry))
     return {
       entry,
       configured:
@@ -144,7 +151,7 @@ export function joinProviderRows(
 
 /** Whether a row can serve model requests as it stands. */
 export function providerUsable(row: ProviderRow): boolean {
-  if (!row.entry.active) return false
+  if (row.entry.active === false) return false
   if (row.apiKeyEnv === undefined) return true
   return row.credential?.configured === true
 }

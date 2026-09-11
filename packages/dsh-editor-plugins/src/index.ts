@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { registerHostRpc, type HostRpcContext } from 'dsh-manuscript/host-api'
 import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import {
   PLUGINS_RPC_CHANNEL,
@@ -19,7 +20,7 @@ import { canReplaceHomePatch, emptyPluginState, parsePluginState, renderOverride
 import { resolvePluginPaths, type PluginPaths } from './paths.ts'
 
 export const name = 'dsh-editor-plugins'
-export const inject = ['connection', 'loader'] as const
+export const inject = ['connection', 'loader', 'webServer'] as const
 
 const FIBER_PHASE: Record<number, PluginFiberPhase> = {
   0: 'pending',
@@ -42,13 +43,8 @@ type LoaderFace = {
   remove?(id: string): Promise<unknown> | unknown
 }
 
-type RpcHost = Context & {
+type RpcHost = Context & HostRpcContext & {
   loader: LoaderFace
-  connection: { rpc: { handle: (
-    channel: string,
-    handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<PluginsRpcResult>,
-    options: { authority: 'loopback' },
-  ) => (() => void | Promise<void>) } }
 }
 
 function fail(code: 'bad-request' | 'cancelled' | 'forbidden' | 'not-found' | 'network' | 'internal', message: string, details: Record<string, unknown> = {}): PluginsRpcResult {
@@ -230,9 +226,7 @@ export function apply(ctx: Context): void {
     queue = run.then(() => undefined, () => undefined)
     return run
   }
-  ctx.effect(() => host.connection.rpc.handle(
-    PLUGINS_RPC_CHANNEL,
-    (endpoint, payload, signal) => serialize(() => handlePluginsRpc(endpoint, payload, signal, { loader: host.loader, paths })),
-    { authority: 'loopback' },
-  ))
+  ctx.effect(() => registerHostRpc(host, PLUGINS_RPC_CHANNEL, (endpoint, payload, signal) => (
+    serialize(() => handlePluginsRpc(endpoint, payload, signal, { loader: host.loader, paths }))
+  )))
 }

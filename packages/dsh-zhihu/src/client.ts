@@ -14,7 +14,7 @@ import { createZhihuClientState, type ZhihuClientState } from './client-state.ts
 import { zhihuClientStyles } from './client-styles.ts'
 
 export const name = 'dsh-zhihu-client'
-export const inject = ['slots', 'connection'] as const
+export const inject = ['slots', 'connection', 'remote', 'remote.credentials'] as const
 
 const SLOT_ID = 'zhihu'
 const SLOT_ORDER = 120
@@ -28,9 +28,9 @@ type RpcCaller = {
 type CredentialView = { configured: boolean; source?: string; writable: boolean }
 
 type CredentialsApi = {
-  describe: (request: { refs: string[] }) => Promise<{ result: ZhihuRpcResult<{ credentials: Record<string, CredentialView> }> }>
-  set: (request: { ref: string; value: string }) => Promise<{ result: ZhihuRpcResult<Record<string, never>> }>
-  unset: (request: { ref: string }) => Promise<{ result: ZhihuRpcResult<Record<string, never>> }>
+  describe: (request: { refs: string[] }) => Promise<ZhihuRpcResult<{ credentials: Record<string, CredentialView> }>>
+  set: (request: { ref: string; value: string }) => Promise<ZhihuRpcResult<Record<string, never>>>
+  unset: (request: { ref: string }) => Promise<ZhihuRpcResult<Record<string, never>>>
 }
 
 type SlotHandle = {
@@ -38,9 +38,28 @@ type SlotHandle = {
   register: (spec: { name: string; id?: string; order?: number; label?: string }, render: unknown) => unknown
 }
 
+type RemoteCredentials = {
+  describe(refs: string[]): Promise<ZhihuRpcResult<Record<string, CredentialView>>>
+  set(ref: string, value: string): Promise<ZhihuRpcResult<void | Record<string, never>>>
+  unset(ref: string): Promise<ZhihuRpcResult<void | Record<string, never>>>
+}
+
 type ZhihuClientContext = Context & {
   slots: SlotHandle
-  connection: { rpc: RpcCaller; api: { credentials: CredentialsApi } }
+  connection: { rpc: RpcCaller }
+  remote: { credentials: RemoteCredentials }
+}
+
+function wrapCredentials(remote: RemoteCredentials): CredentialsApi {
+  return {
+    async describe({ refs }) {
+      const result = await remote.describe(refs)
+      if (!result.ok) return result
+      return { ok: true, value: { credentials: result.value } }
+    },
+    set: ({ ref, value }) => remote.set(ref, value) as Promise<ZhihuRpcResult<Record<string, never>>>,
+    unset: ({ ref }) => remote.unset(ref) as Promise<ZhihuRpcResult<Record<string, never>>>,
+  }
 }
 
 const ZHIHU_CONSOLE_URL = 'https://developer.zhihu.com'
@@ -309,9 +328,8 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
   const load = useCallback(async (): Promise<void> => {
     setState((current) => (current.status === 'ready' ? current : { status: 'loading' }))
     try {
-      const response = await credentials.describe({ refs: [ZHIHU_CREDENTIAL_REF] })
+      const result = await credentials.describe({ refs: [ZHIHU_CREDENTIAL_REF] })
       if (!alive.current) return
-      const result = response.result
       if (!result.ok) { setState({ status: 'error', error: result.error.message }); return }
       setState({ status: 'ready', credential: result.value.credentials[ZHIHU_CREDENTIAL_REF] })
     } catch (cause) {
@@ -364,9 +382,8 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
     setBusy(true)
     setFailure(undefined)
     try {
-      const response = await credentials.set({ ref: ZHIHU_CREDENTIAL_REF, value: keyValue })
+      const result = await credentials.set({ ref: ZHIHU_CREDENTIAL_REF, value: keyValue })
       if (!alive.current) return
-      const result = response.result
       if (!result.ok) { setFailure(result.error.message); return }
       setKeyDraft('')
       setNote('已保存。')
@@ -384,9 +401,8 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
     setBusy(true)
     setFailure(undefined)
     try {
-      const response = await credentials.unset({ ref: ZHIHU_CREDENTIAL_REF })
+      const result = await credentials.unset({ ref: ZHIHU_CREDENTIAL_REF })
       if (!alive.current) return
-      const result = response.result
       if (!result.ok) { setFailure(result.error.message); return }
       setKeyDraft('')
       setNote('已清除。')
@@ -1000,7 +1016,7 @@ export function apply(ctx: Context): void {
   // Styles live and die with the plugin fiber: unload/reload removes the node.
   if (style) ctx.effect(() => () => style.remove(), 'zhihu.styles')
   const client = ctx as ZhihuClientContext
-  const render = () => e(ZhihuDock, { rpc: client.connection.rpc, credentials: client.connection.api.credentials })
+  const render = () => e(ZhihuDock, { rpc: client.connection.rpc, credentials: wrapCredentials(client.remote.credentials) })
   // Official Web declares shell.overlay; the DSH Editor root declares
   // dsh-editor.extensions. inject() waits for the declaration, so each entry
   // goes live only in the host that actually provides the seat, and the

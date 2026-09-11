@@ -55,7 +55,6 @@ for (const mode of ['without-web-bundle', 'without-agent-services']) {
     entry('probe-modules','@deepseek-ai/dsh-client-modules'),
     entry('probe-connection','@deepseek-ai/dsh-client-connection'),
     entry('probe-remotes','@deepseek-ai/dsh-api-remotes'),
-    entry('probe-client-runtime','@deepseek-ai/dsh-client-runtime'),
     entry('probe-client-runner','@deepseek-ai/dsh-cordis-client-runner'),
     entry('probe-settings','@deepseek-ai/dsh-client-ui-settings'),
     entry('probe-theme','@deepseek-ai/dsh-client-ui-theme'),
@@ -64,7 +63,7 @@ for (const mode of ['without-web-bundle', 'without-agent-services']) {
     entry('probe-renderer','@deepseek-ai/dsh-client-ui-renderer'),
   ]
   const diagnostic = join(caseRoot, 'diagnostic.mjs')
-  await fs.writeFile(diagnostic, `export const inject=['connection'];export function apply(ctx){ctx.effect(()=>ctx.connection.rpc.handle('/probe',async()=>({ok:true,value:{services:Object.fromEntries(['agent','agents','sessions','llm','tools','systemPrompt','workspaceRegistry','connection'].map(name=>[name,ctx.get(name)!==undefined])),plugins:[...ctx.registry.values()].flatMap(runtime=>[...runtime.fibers].map(fiber=>({name:runtime.name,state:fiber.state})))}}),{authority:'loopback'}))}`)
+  await fs.writeFile(diagnostic, `export const inject=['connection','webServer'];export function apply(ctx){ctx.effect(()=>ctx.webServer.register({kind:'prefix',path:'/probe',handler:async(req,res)=>{const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString('utf8')||'{}');const value={services:Object.fromEntries(['agent','agents','sessions','llm','tools','systemPrompt','workspaceRegistry','connection'].map(name=>[name,ctx.get(name)!==undefined])),plugins:[...ctx.registry.values()].flatMap(runtime=>[...runtime.fibers].map(fiber=>({name:runtime.name,state:fiber.state})))};res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({type:'server-response',rpcId:body.rpcId??'probe-call',result:{ok:true,value}}))}}))}`)
   rows.push(entry('probe-diagnostic',pathToFileURL(diagnostic).href))
   const patches = [{ insert: rows }]
   if (mode === 'without-web-bundle') patches.unshift({ id: 'hmr', disabled: true })

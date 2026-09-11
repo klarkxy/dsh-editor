@@ -4,17 +4,11 @@ import {
   TEXT_PROOFREAD_KINDS, type TextCheckRequest, type ProofreadRpcResult,
 } from './contracts.ts'
 import { proofreadText } from './engine.ts'
+import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
 
 export const name = 'dsh-proofread'
-export const inject = ['connection'] as const
+export const inject = ['connection', 'webServer'] as const
 
-type RpcHost = Context & {
-  connection: { rpc: { handle: (
-    channel: string,
-    handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<ProofreadRpcResult>,
-    options: { authority: 'loopback' },
-  ) => (() => void | Promise<void>) } }
-}
 function invalid(message: string): ProofreadRpcResult {
   return { ok: false, error: { code: 'bad-request', message, details: {} } }
 }
@@ -43,6 +37,5 @@ export async function checkText(endpoint: string, payload: unknown, signal: Abor
   }
 }
 export function apply(ctx: Context): void {
-  const host = ctx as RpcHost
-  ctx.effect(() => host.connection.rpc.handle(PROOFREAD_RPC_CHANNEL, checkText, { authority: 'loopback' }))
+  ctx.effect(() => registerHostRpc(ctx as Context & HostRpcContext, PROOFREAD_RPC_CHANNEL, checkText))
 }

@@ -1,5 +1,5 @@
 import { createElement as e, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { useDialogReturnFocus } from './dialogs.ts'
 import { WritingSettings } from '../writing-settings.ts'
@@ -65,8 +65,8 @@ export function SettingsDialog(props: {
   const openConfigFile = async () => {
     setNote('')
     try {
-      const response = await props.ctx.connection.api.settings.openDocument({})
-      if (!response.result.ok) setNote(t('settings.openConfigFailed', { error: response.result.error.message }))
+      const response = await props.ctx.remote.settings.openSettingsDocument()
+      if (!response.ok) setNote(t('settings.openConfigFailed', { error: response.error.message ?? '' }))
     } catch (error) {
       setNote(t('settings.openConfigFailed', { error: error instanceof Error ? error.message : String(error) }))
     }

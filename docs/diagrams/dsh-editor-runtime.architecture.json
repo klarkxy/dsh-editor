@@ -39,7 +39,7 @@
   "components": [
     { "id": "author", "type": "external", "label": "作者", "sublabel": "本机单用户", "pos": [40, 328], "size": [168, 64] },
     { "id": "electron", "type": "frontend", "label": "Electron", "sublabel": "窗口 + Supervisor", "pos": [320, 328], "size": [168, 64] },
-    { "id": "dsh-host", "type": "cloud", "label": "DSH Host", "sublabel": "0.1.1-rc.2 · 唯一 Agent", "pos": [608, 328], "size": [168, 64], "tag": "子进程" },
+    { "id": "dsh-host", "type": "cloud", "label": "DSH Host", "sublabel": "0.1.5-rc.2 · 唯一 Agent", "pos": [608, 328], "size": [168, 64], "tag": "子进程" },
     { "id": "shell", "type": "frontend", "label": "dsh-editor-shell", "sublabel": "唯一 root GUI", "pos": [896, 328], "size": [168, 64] },
     { "id": "manuscript", "type": "backend", "label": "dsh-manuscript", "sublabel": "/manuscript", "pos": [1184, 328], "size": [168, 64] },
     { "id": "workspace", "type": "database", "label": "作品目录", "sublabel": "live-session cwd", "pos": [1480, 328], "size": [168, 64] },

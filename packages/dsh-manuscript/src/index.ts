@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { asHost, resolveWorkspaceAccess, withWorkspaceWrite } from './host.ts'
+import { registerHostRpc } from './rpc/channel.ts'
 import { createTextFile, listDir, readTextFile, writeTextFile } from './rpc/files.ts'
 import { parsePatchRequest, PatchInputError } from './rpc/patch.ts'
 import type { ManuscriptAssist } from './assist-api.ts'
@@ -10,7 +11,7 @@ import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts
 import { resolveDays, UsageInputError, type UsageRecorder } from './rpc/usage.ts'
 
 export const name = 'dsh-manuscript'
-export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'storageDomain'] as const
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'storageDomain', 'webServer'] as const
 
 type RpcOk<T> = { ok: true; value: T }
 type RpcError = HostRpcError
@@ -120,20 +121,12 @@ export async function apply(ctx: Context): Promise<void> {
   })
   ctx.effect(() => () => domain.close(), 'dsh-manuscript.draftDomainClose')
 
-  ctx.effect(() =>
-    host.connection.rpc.handle(
-      '/manuscript',
-      async (endpoint: string, payload: unknown, signal: AbortSignal) => {
-        try {
-          const value = await dispatch(ctx, endpoint, payload, signal, drafts)
-          return { ok: true, value } satisfies RpcResult<unknown>
-        } catch (error) {
-          return mapError(error)
-        }
-      },
-      // This fence limits exposure to the local DSH process. The selected
-      // session is still explicit RPC input; generic RPC has no caller identity.
-      { authority: 'loopback' },
-    ),
-  )
+  ctx.effect(() => registerHostRpc(host, '/manuscript', async (endpoint, payload, signal) => {
+    try {
+      const value = await dispatch(ctx, endpoint, payload, signal, drafts)
+      return { ok: true, value } satisfies RpcResult<unknown>
+    } catch (error) {
+      return mapError(error)
+    }
+  }))
 }

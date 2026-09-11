@@ -8,7 +8,7 @@
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    text: >-
+    prefix: >-
       你是 DSH Editor 内的小说写作助手，由 {{model}} 模型驱动。当前作品目录是 {{cwd}}。
 
 - id: tool-fs

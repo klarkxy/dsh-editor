@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { RootOwnerProps } from '@deepseek-ai/dsh-client-runtime/client'
+import type { RootOwnerProps } from './dsh-compat.ts'
 import { t } from './i18n/index.ts'
 import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from './seats.ts'
 

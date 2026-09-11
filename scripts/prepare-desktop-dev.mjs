@@ -15,7 +15,7 @@ const packages = compositionInstallNames(composition)
 if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.node !== '24.16.0') {
   throw new Error(`desktop development requires Windows x64 Node 24.16.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
 }
-const dsh = resolveDshInstallation('0.1.1-rc.2')
+const dsh = resolveDshInstallation('0.1.5-rc.2')
 
 function packageCopyFilter(source) {
   const normalized = source.replaceAll('\\', '/')
@@ -40,7 +40,7 @@ for (const packageName of packages) {
 let runtimeReady = false
 try {
   const manifest = JSON.parse(await readFile(resolve(devDshRuntime, 'package.json'), 'utf8'))
-  runtimeReady = manifest.name === '@deepseek-ai/dsh' && manifest.version === '0.1.1-rc.2'
+  runtimeReady = manifest.name === '@deepseek-ai/dsh' && manifest.version === '0.1.5-rc.2'
 } catch {}
 if (!runtimeReady) {
   console.log('desktop-dev: materializing the pinned app-owned DSH runtime (first run only)')

@@ -33,7 +33,6 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-connection"
       ]
     }
@@ -57,10 +56,10 @@
     "test": "vitest run --root ../.. packages/dsh-editor-overview-panel/src"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1"
+    "@deepseek-ai/cordis": "^4.0.2"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/cordis": "^4.0.2",
     "@types/react": "18.3.31",
     "dsh-editor-seats": "workspace:*",
     "dsh-editor-workbench": "workspace:*",

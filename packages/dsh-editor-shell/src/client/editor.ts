@@ -8,7 +8,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react'
-import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionFace } from '../dsh-compat.ts'
 import {
   EditorCore,
   type EditorCoreHandle,

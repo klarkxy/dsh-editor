@@ -594,7 +594,7 @@ export const componentStyles = `
 .shell .workspace-intent-prompt code { color: var(--muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .workspace-intent-prompt > div { display: flex; gap: 7px; flex-wrap: wrap; }
 .shell .workspace-intent-prompt button { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; color: var(--fg); }
-.shell .workspace-checking { grid-column: 1 / -1; display: grid; place-content: center; gap: 8px; padding: 40px; text-align: center; }
+.shell .workspace-checking { grid-column: 1 / -1; grid-row: 1 / -1; display: grid; place-content: center; gap: 8px; padding: 40px; text-align: center; }
 .shell .workspace-checking h1, .shell .workspace-checking p { margin: 0; }
 .shell .workspace-checking code { max-width: min(680px, 80vw); color: var(--muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

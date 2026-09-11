@@ -26,6 +26,7 @@
     "test:e2e:palette": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/palette.mjs",
     "test:e2e:author-flow": "pnpm build && node e2e/author-flow-live.mjs",
     "test:e2e:features": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/feature-coverage.mjs",
+    "test:e2e:zhihu-live": "node scripts/prepare-desktop-dev.mjs && node e2e/zhihu-live.mjs",
     "test:e2e:portable": "node e2e/portable.mjs",
     "test:e2e:missing-private": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/missing-private-plugin.mjs",
     "verify:desktop": "pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e:desktop && pnpm test:e2e:core-loop",
@@ -39,7 +40,13 @@
     "onlyBuiltDependencies": [
       "electron",
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "@deepseek-ai/dsh-sandbox": "0.1.5-rc.2",
+      "@deepseek-ai/dsh-invariants": "0.1.5-rc.2",
+      "@deepseek-ai/dsh-scope": "0.1.5-rc.2",
+      "@deepseek-ai/dsh-storage": "0.1.5-rc.2"
+    }
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

@@ -9,16 +9,15 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
+import type { PendingInteraction } from '../adapter.ts'
 import type {
-  ConversationSnapshot,
-  PendingInteraction,
   SessionFace,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import type {
   SessionId,
+  SessionLifecycle,
   SessionModels,
   WorkspaceId,
-} from '@deepseek-ai/dsh-client-connection/client'
+} from '../dsh-compat.ts'
+import { emptyTranscript, type ChatTranscript } from '../dsh-compat.ts'
 import {
   WORKBENCH_RPC_CHANNEL,
   type ProjectContextReceiptBundle,
@@ -51,7 +50,7 @@ import {
 import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from '../conversation-lifecycle.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
-import { useObservable } from './components.ts'
+import { isObservableSource, useObservable } from './components.ts'
 import { Markdown } from './markdown.tsx'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
 import { Select } from './select.tsx'
@@ -68,6 +67,44 @@ import { t, useLocale } from '../i18n/index.ts'
 
 
 const conversationRenameQueue = new ConversationRenameQueue()
+
+const EMPTY_PENDING_LIST: PendingInteraction[] = []
+const EMPTY_PENDING = {
+  getSnapshot: (): PendingInteraction[] => EMPTY_PENDING_LIST,
+  subscribe: () => () => {},
+}
+
+const EMPTY_TRANSCRIPT = emptyTranscript()
+const EMPTY_CHAT_SNAPSHOT: { legacy?: ChatTranscript } = { legacy: EMPTY_TRANSCRIPT }
+const EMPTY_CHAT = {
+  getSnapshot: (): { legacy?: ChatTranscript } => EMPTY_CHAT_SNAPSHOT,
+  subscribe: () => () => {},
+}
+const DISCONNECTED = {
+  getSnapshot: () => 'disconnected' as const,
+  subscribe: () => () => {},
+}
+
+/** Official ui-conversation injects ui-workspace and never starts in this profile. */
+export function conversationChatSource(ctx: Pick<ShellContext, 'uiConversation'>, sessionId: SessionId) {
+  try {
+    return ctx.uiConversation?.binding(sessionId).target('chat') ?? EMPTY_CHAT
+  } catch {
+    return EMPTY_CHAT
+  }
+}
+
+function pendingForSession(
+  raw: ReadonlyMap<SessionId, PendingInteraction> | PendingInteraction[] | undefined,
+  sessionId: SessionId,
+): PendingInteraction[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw.filter((item) => item.sessionId === sessionId)
+  const item = raw.get(sessionId)
+  return item ? [item] : []
+}
+
+type ChatLifecycle = SessionLifecycle & { hasMore?: boolean; loadingOlder?: boolean }
 
 /*
  * 约定俗成的思考强度档位展示名。自定义提供方(llm-pi-ai 手工声明)的模型
@@ -102,7 +139,7 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
   const [busy, setBusy] = useState(false)
   const [customRoute, setCustomRoute] = useState(false)
   const refresh = async () => {
-    const result = await readModels(ctx.connection, session.sessionId)
+    const result = await readModels(ctx.remote.session, session)
     if (!result.ok) { setNote(t('chat.apiUnavailable')); return }
     await ctx.settingsScope.describe().ensure()
     setModels(result.value)
@@ -123,12 +160,12 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
     const entry = list[index] as Record<string, unknown>
     if (typeof entry['reasoningEfforts'] === 'object' && entry['reasoningEfforts'] !== null) return true
     const nextModels = list.map((item, at) => at === index ? { ...(item as Record<string, unknown>), reasoningEfforts: { ...STANDARD_REASONING_EFFORTS } } : item)
-    const response = await ctx.connection.api.settings.mutate({
-      ns: 'llm-pi-ai',
-      ops: [{ op: 'set', path: ['providers', models.current.provider, 'models'], value: nextModels }],
-      expectedRevision: found.revision,
-    })
-    return (response.result as RpcResult<unknown>).ok
+    const response = await ctx.remote.settings.mutate(
+      'llm-pi-ai',
+      [{ op: 'set', path: ['providers', models.current.provider, 'models'], value: nextModels }],
+      found.revision,
+    )
+    return response.ok
   }
   const choose = async (provider: string, model: string, reasoningEffort?: string) => {
     if (!models || busy) return
@@ -142,7 +179,7 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
         return
       }
     }
-    const result = await selectModel(ctx.connection, session.sessionId, provider, model, reasoningEffort)
+    const result = await selectModel(ctx.remote.session, session.sessionId, provider, model, reasoningEffort)
     if (!result.ok) setNote(t('chat.modelSwitchFailed'))
     await refresh()
     setBusy(false)
@@ -163,7 +200,7 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
     autoDefaultAttempted.current = key
     void (async () => {
       if (!(await declareEfforts())) return
-      await selectModel(ctx.connection, session.sessionId, models.current.provider, models.current.model, DEFAULT_FALLBACK_EFFORT)
+      await selectModel(ctx.remote.session, session.sessionId, models.current.provider, models.current.model, DEFAULT_FALLBACK_EFFORT)
       await refresh()
     })()
   }, [models, customRoute, busy])
@@ -228,7 +265,7 @@ export function NewConversationPicker(props: {
 
   useEffect(() => {
     let live = true
-    void readModels(ctx.connection, session.sessionId).then((result) => {
+    void readModels(ctx.remote.session, session).then((result) => {
       if (!live) return
       if (!result.ok) { setNote(t('chat.modelUnavailable')); return }
       const options = result.value.groups.flatMap((group) => group.models.map((model) => `${group.id}\0${model.id}`))
@@ -238,7 +275,7 @@ export function NewConversationPicker(props: {
       setNote('')
     }).catch(() => { if (live) setNote(t('chat.modelUnavailable')) })
     return () => { live = false }
-  }, [ctx.connection, session.sessionId])
+  }, [ctx.remote, session.sessionId])
 
   const start = async (event: FormEvent) => {
     event.preventDefault()
@@ -247,8 +284,8 @@ export function NewConversationPicker(props: {
     setBusy(true); setNote('')
     if (!(await canStart())) { setBusy(false); return }
     try {
-      const sessionId = await ctx.workspaces.connectWorkspace(workspaceId)
-      const selected = await selectModel(ctx.connection, sessionId, provider, model)
+      const sessionId = await ctx.uiWorkspace.connectWorkspace(workspaceId)
+      const selected = await selectModel(ctx.remote.session, sessionId, provider, model)
       if (!selected.ok) throw new Error(selected.error.message)
       onOpen(sessionId)
       onClose()
@@ -723,10 +760,33 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [, setMessageCardTick] = useState(0)
   useEffect(() => messageCards?.subscribe(() => setMessageCardTick((value) => value + 1)), [messageCards])
-  const snapshot = useObservable<ConversationSnapshot>(session)
+  const sessionSource = useMemo(() => {
+    const sessionId = session.sessionId
+    if (isObservableSource(session)) return session
+    const fallback: ChatLifecycle = {
+      sessionId,
+      queue: [],
+      running: false,
+      openState: 'open',
+      promptError: null,
+    }
+    return {
+      getSnapshot: (): ChatLifecycle => fallback,
+      subscribe: () => () => {},
+    }
+  }, [session])
+  const lifecycle = useObservable(sessionSource) as ChatLifecycle
+  const snapshot = lifecycle
+  const chatSource = useMemo(() => conversationChatSource(ctx, session.sessionId), [ctx, session.sessionId])
+  const chat = useObservable(chatSource)
+  const transcript = chat?.legacy ?? emptyTranscript()
+  const chatLegacy = transcript
+  const pendingRaw = useObservable(ctx.uiSession?.pendingInteractions ?? EMPTY_PENDING)
+  const pendingItems = pendingForSession(pendingRaw as ReadonlyMap<SessionId, PendingInteraction> | PendingInteraction[], session.sessionId)
   const sessionList = useObservable(ctx.sessions.list)
   const workspaceList = useObservable(ctx.workspaces.list)
-  const connected = useObservable(ctx.connection.hostDescription)
+  const connectionState = useObservable(isObservableSource(ctx.connection.state) ? ctx.connection.state : DISCONNECTED)
+  const connected = connectionState === 'connected'
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
   const [outgoing, setOutgoing] = useState<{ text: string; state: 'sending' | 'accepted' | 'failed'; afterRows: number; projectContextReceipt?: ProjectContextReceiptBundle } | null>(null)
@@ -744,11 +804,11 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   useEffect(() => {
     const el = historyRef.current
     if (el && bottomPinnedRef.current) el.scrollTop = el.scrollHeight
-  }, [snapshot, outgoing])
-  const internalIndexActive = internalIndexTurnActive(snapshot)
+  }, [lifecycle, outgoing])
+  const internalIndexActive = internalIndexTurnActive(transcript)
   /* 初始化回合的思考/流式正文也照常显示,不再强制清空,避免t('chat.replying')随流式块一闪一闪。 */
-  const partial = partialView(snapshot)
-  const rows = chatRows(snapshot)
+  const partial = partialView(transcript)
+  const rows = chatRows(transcript)
   const hasTurnError = rows.some((row) => row.id.startsWith('turn-error:'))
   const workspace = workspaceList.items.find((item) => item.workspaceId === workspaceId)
   const initScope = useMemo(() => ctx.settingsScope.bind({ namespace: INIT_SETTINGS_NAMESPACE, decode: decodeInitSettings }), [ctx])
@@ -900,11 +960,12 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   }
   useEffect(() => {
     const summary = sessionList.byId?.[session.sessionId]
+    const updatedAt = (summary as unknown as { updatedAt?: unknown } | undefined)?.updatedAt
     const title = nextAutomaticConversationTitle({
       durableTitle: summary?.title?.trim(),
       assistantReplies: rows.filter((row) => row.role === 'assistant').map((row) => row.text),
       attempted: titleAttempted.current.has(session.sessionId),
-      date: typeof summary?.updatedAt === 'number' ? summary.updatedAt : Date.now(),
+      date: typeof updatedAt === 'number' ? updatedAt : Date.now(),
     })
     if (!title) return
     titleAttempted.current.add(session.sessionId)
@@ -1014,7 +1075,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const composerCanSubmit = canSubmitComposer({
     draft,
     connected: Boolean(connected),
-    removed: snapshot.removed,
+    removed: snapshot.removed === true,
     outgoingState: outgoing?.state,
   })
   useEffect(() => {
@@ -1178,7 +1239,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       outgoing?.state === 'accepted' && !outgoingIsCanonical
         ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, t('chat.replying'))
         : null,
-      visibleRunningCalls(snapshot.runningCalls).map((call) => e('article', { className: 'chat-row tool', key: `running:${call.callId}` }, e('strong', null,
+      visibleRunningCalls(transcript.runningCalls ?? []).map((call) => e('article', { className: 'chat-row tool', key: `running:${call.callId}` }, e('strong', null,
         call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' ? t('chat.preparingProposal') : t('chat.processing')
       ))),
       snapshot.queue.map((item) => e('article', { className: 'chat-row notice', key: `queue:${item.id}` }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? t('chat.queued') : t('chat.steering')))),
@@ -1186,8 +1247,8 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         e('summary', null, t('chat.thinking')),
         e('p', null, partial.thinking),
       ) : null,
-      partial.text ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, e('div', { className: 'md' }, e(Markdown, { text: partial.text }))) : snapshot.partial && !partial.thinking ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, t('chat.replying')) : null,
-      snapshot.pending.map((item) => e(PendingCard, { key: item.key, item })),
+      partial.text ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, e('div', { className: 'md' }, e(Markdown, { text: partial.text }))) : chatLegacy.partial && !partial.thinking ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, t('chat.replying')) : null,
+      pendingItems.map((item) => e(PendingCard, { key: item.key, item })),
       snapshot.openState === 'error' ? e('p', { className: 'warning' }, t('chat.connectionInterrupted')) : null,
       snapshot.promptError && !hasTurnError ? e('p', { className: 'warning' }, t('chat.requestFailed')) : null,
     ),

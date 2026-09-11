@@ -2,7 +2,7 @@
 
 > 后续更新：已授权的 MiniMax-M3 在线实测及修复见[在线验证记录](minimax-live-validation.md)。本文件的原始回执保留为当时快照；当前仍有两项非 AI 交互待定位。
 
-本地实现基线：2026-09-09，DSH `0.1.1-rc.2`。这份指南对应当前工作区的拆分实现；包尚未发布到 npm。历史验证与本轮结果分开保存在 [实施记录](plugin-modularization-progress.md)。直观边界见 [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) 与 [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)；读图时 Host 插件在 DSH 进程内，`host-api` 是库导入。
+本地实现基线：2026-09-09，DSH `0.1.1-rc.2`。这份指南对应当时工作区的拆分实现；包尚未发布到 npm。当前运行时基线见 [architecture.md](architecture.md)。历史验证与本轮结果分开保存在 [实施记录](plugin-modularization-progress.md)。直观边界见 [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) 与 [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)；读图时 Host 插件在 DSH 进程内，`host-api` 是库导入。
 
 ## 选择组合
 
@@ -65,7 +65,7 @@ pnpm pack:desktop
 ```powershell
 pnpm build
 pnpm pack:plugins
-# DSH 0.1.1-rc.2 的本地安装参数不能可靠处理带空格的 file: 路径。
+# DSH 0.1.5-rc.2 的本地安装参数不能可靠处理带空格的 file: 路径。
 # 将压缩包复制到不含空格的目录；下面在本机使用临时目录。
 $stage = Join-Path $env:TEMP 'dsh-plugin-demo'
 New-Item -ItemType Directory -Force $stage | Out-Null

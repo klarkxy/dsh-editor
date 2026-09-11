@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, FsTargetLike, FsWriteIntentLike, ManuscriptHost } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL } from './contracts.ts'
-import { dispatchEditorFiles, registerWorkbenchRpc } from './index.ts'
+import { dispatchEditorFiles, mapEditorFilesError, registerWorkbenchRpc } from './index.ts'
 import { defaultProjectsRoot } from './project.ts'
 
 function fixture() {
@@ -30,26 +30,39 @@ function fixture() {
     async listDir() { return [] },
     async writeText() { throw new Error('not used') },
   }
-  const handle = vi.fn(() => vi.fn())
+  const register = vi.fn(() => vi.fn())
   const host = {
     sessions: { get: vi.fn(() => ({ id: 'session-1', header: { cwd: '/header/workspace' }, requestHeader: () => undefined })) },
     workspaceRegistry: { resolveByPath: vi.fn(async () => ({ path: canonical, sessionIds: ['session-1'] })) },
     sandboxPolicy: { resolve: vi.fn(() => ({ mode: 'workspace-write', workspaceRoot: canonical, sessionId: 'session-1' })) },
     fs,
-    connection: { rpc: { call: vi.fn(), handle } },
+    connection: { rpc: { call: vi.fn(), handle: vi.fn() }, requestRejection: () => undefined },
+    webServer: { register },
   } as unknown as ManuscriptHost
-  return { host, handle, canonical, resolveCalls }
+  return { host, register, canonical, resolveCalls }
+}
+
+type RpcEnvelope = { ok: boolean; value?: unknown; error?: { code: string; message?: string } }
+
+function rpcHandler(host: ManuscriptHost) {
+  return async (endpoint: string, payload: unknown, signal: AbortSignal): Promise<RpcEnvelope> => {
+    try {
+      return { ok: true, value: await dispatchEditorFiles(host as unknown as Context, endpoint, payload, signal) }
+    } catch (error) {
+      return mapEditorFilesError(error)
+    }
+  }
 }
 
 describe('private editor workbench Host RPC', () => {
-  it('registers only on the loopback workbench channel', () => {
-    const { host, handle } = fixture()
+  it('registers the workbench channel on the Host web server', () => {
+    const { host, register } = fixture()
     registerWorkbenchRpc(host as unknown as Context)
-    expect(handle).toHaveBeenCalledWith(
-      WORKBENCH_RPC_CHANNEL,
-      expect.any(Function),
-      { authority: 'loopback' },
-    )
+    expect(register).toHaveBeenCalledWith({
+      kind: 'prefix',
+      path: WORKBENCH_RPC_CHANNEL,
+      handler: expect.any(Function),
+    })
   })
 
   it('derives private lifecycle access from the live session and ignores a forged cwd', async () => {
@@ -233,11 +246,10 @@ describe('proposal dispatch endpoints', () => {
     try {
       await fs.writeFile(path.join(root, '正文', '001.md'), '一', 'utf8')
       await fs.writeFile(path.join(root, '正文', '002.md'), '二', 'utf8')
-      const { host, handle } = fixture()
+      const { host } = fixture()
       host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
       host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
-      registerWorkbenchRpc(host as unknown as Context)
-      const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; value?: unknown; error?: { code: string } }>
+      const handler = rpcHandler(host)
       // 先 prepare 拿到 expectedVersions
       const prepared = (await dispatchEditorFiles(
         host as unknown as Context,
@@ -283,9 +295,8 @@ describe('proposal dispatch endpoints', () => {
   })
 
   it('rejects proposal.prepare with edit / create kinds as bad-request (manuscript channel owns them)', async () => {
-    const { host, handle } = fixture()
-    registerWorkbenchRpc(host as unknown as Context)
-    const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; error?: { code: string } }>
+    const { host } = fixture()
+    const handler = rpcHandler(host)
     const edit = await handler('proposal.prepare', {
       sessionId: 'session-1',
       proposal: { marker: 'dsh-editor.proposal', version: 1, kind: 'edit', summary: 'x', path: '正文/001.md' },
@@ -304,11 +315,10 @@ describe('proposal dispatch endpoints', () => {
     const root = await projectRoot()
     try {
       await fs.writeFile(path.join(root, '正文', '001.md'), '一', 'utf8')
-      const { host, handle } = fixture()
+      const { host } = fixture()
       host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
       host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
-      registerWorkbenchRpc(host as unknown as Context)
-      const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; error?: { code: string } }>
+      const handler = rpcHandler(host)
       const result = await handler('proposal.apply', {
         sessionId: 'session-1',
         proposal: {
@@ -343,11 +353,10 @@ describe('entry file-tree endpoints', () => {
       await fs.mkdir(path.join(root, '正文'))
       await fs.mkdir(path.join(root, '大纲'))
       await fs.writeFile(path.join(root, '正文', '001.md'), '# 源', 'utf8')
-      const { host, handle } = fixture()
+      const { host } = fixture()
       host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
       host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
-      registerWorkbenchRpc(host as unknown as Context)
-      const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; value?: unknown; error?: { code: string; message?: string } }>
+      const handler = rpcHandler(host)
       const first = await handler('entry.copy', { sessionId: 'session-1', path: '正文/001.md', targetDir: '大纲' }, new AbortController().signal)
       expect(first.ok).toBe(true)
       expect(first.value).toEqual({ path: '大纲/001.md' })
@@ -365,11 +374,10 @@ describe('entry file-tree endpoints', () => {
     try {
       await fs.mkdir(path.join(root, '正文'))
       await fs.writeFile(path.join(root, '正文', '001.md'), '# 源', 'utf8')
-      const { host, handle } = fixture()
+      const { host } = fixture()
       host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
       host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
-      registerWorkbenchRpc(host as unknown as Context)
-      const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; error?: { code: string; message?: string } }>
+      const handler = rpcHandler(host)
       const result = await handler('entry.copy', { sessionId: 'session-1', path: '正文/001.md', targetDir: '没有这个目录' }, new AbortController().signal)
       expect(result.ok).toBe(false)
       expect(result.error?.code).toBe('bad-request')
@@ -384,11 +392,10 @@ describe('entry file-tree endpoints', () => {
       await fs.mkdir(path.join(root, '正文'))
       await fs.mkdir(path.join(root, '大纲'))
       await fs.writeFile(path.join(root, '正文', '001.md'), '# 一', 'utf8')
-      const { host, handle } = fixture()
+      const { host } = fixture()
       host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
       host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
-      registerWorkbenchRpc(host as unknown as Context)
-      const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; value?: unknown; error?: { code: string; message?: string } }>
+      const handler = rpcHandler(host)
       const moved = await handler('entry.move', { sessionId: 'session-1', path: '正文/001.md', targetDir: '大纲' }, new AbortController().signal)
       expect(moved.ok).toBe(true)
       expect(moved.value).toEqual({ path: '大纲/001.md' })
@@ -409,11 +416,10 @@ describe('entry file-tree endpoints', () => {
     try {
       await fs.mkdir(path.join(root, '正文', '卷一'), { recursive: true })
       await fs.writeFile(path.join(root, '正文', '卷一', '001.md'), '# 一', 'utf8')
-      const { host, handle } = fixture()
+      const { host } = fixture()
       host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
       host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
-      registerWorkbenchRpc(host as unknown as Context)
-      const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; value?: unknown; error?: { code: string } }>
+      const handler = rpcHandler(host)
       const removed = await handler('entry.delete', { sessionId: 'session-1', path: '正文/卷一' }, new AbortController().signal)
       expect(removed.ok).toBe(true)
       expect(removed.value).toEqual({ path: '正文/卷一' })
@@ -433,11 +439,10 @@ describe('entry file-tree endpoints', () => {
       await fs.mkdir(path.join(root, '正文'))
       await fs.writeFile(path.join(root, '正文', '001.md'), '# 一', 'utf8')
       await fs.writeFile(path.join(root, '正文', '已存在.md'), '# 占位', 'utf8')
-      const { host, handle } = fixture()
+      const { host } = fixture()
       host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
       host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
-      registerWorkbenchRpc(host as unknown as Context)
-      const handler = handle.mock.calls[0]?.[1] as (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<{ ok: boolean; value?: unknown; error?: { code: string } }>
+      const handler = rpcHandler(host)
       const renamed = await handler('entry.rename', { sessionId: 'session-1', path: '正文/001.md', name: '序章.md' }, new AbortController().signal)
       expect(renamed.ok).toBe(true)
       expect(renamed.value).toEqual({ path: '正文/序章.md' })

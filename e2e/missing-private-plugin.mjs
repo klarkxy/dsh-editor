@@ -12,7 +12,7 @@ const packRoot = resolve(root, '.pack')
 const template = resolve(devRoot, 'desktop-profile-template')
 const runtime = resolve(devRoot, 'desktop-dsh-runtime')
 const cli = resolve(runtime, 'lib', 'bin.js')
-resolveDshInstallation('0.1.1-rc.2')
+resolveDshInstallation('0.1.5-rc.2')
 
 function waitForExit(child, timeoutMs) {
   return Promise.race([
@@ -74,6 +74,6 @@ const privateHosts = loadPluginManifests(root)
   .filter((item) => item.visibility === 'desktop' && !item.wrapClient)
   .map((item) => item.name)
 for (const packageName of privateHosts) results.push(await probeMissing(packageName))
-const report = { ok: true, dsh: '0.1.1-rc.2', results }
+const report = { ok: true, dsh: '0.1.5-rc.2', results }
 await writeFile(resolve(packRoot, 'missing-private-plugin-smoke.json'), `${JSON.stringify(report, null, 2)}\n`)
 console.log(JSON.stringify({ ok: true, dsh: report.dsh, results: results.map(({ packageName, exitCode }) => ({ packageName, exitCode })) }, null, 2))

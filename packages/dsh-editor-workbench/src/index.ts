@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { withWorkspaceWrite, asHost, badRequest, mapHostError, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
+import { withWorkspaceWrite, asHost, badRequest, mapHostError, registerHostRpc, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
 import { BinaryError } from './binary.ts'
 import { ImportError } from './import.ts'
@@ -16,7 +16,7 @@ import { ProposalOpsError } from './proposal-ops.ts'
 import { getWorkbenchHandler, str, type WorkbenchRequestContext } from './rpc/index.ts'
 
 export const name = 'dsh-editor-workbench'
-export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer'] as const
 
 type Payload = Record<string, unknown>
 
@@ -101,13 +101,13 @@ export async function dispatchEditorFiles(ctx: Context, endpoint: string, payloa
 
 export function registerWorkbenchRpc(ctx: Context): () => void {
   const host = asHost(ctx)
-  return host.connection.rpc.handle(WORKBENCH_RPC_CHANNEL, async (endpoint: string, payload: unknown, signal: AbortSignal) => {
+  return registerHostRpc(host, WORKBENCH_RPC_CHANNEL, async (endpoint: string, payload: unknown, signal: AbortSignal) => {
     try {
       return { ok: true, value: await dispatchEditorFiles(ctx, endpoint, payload, signal) }
     } catch (error) {
       return mapEditorFilesError(error)
     }
-  }, { authority: 'loopback' })
+  })
 }
 
 export function apply(ctx: Context): void {

@@ -22,7 +22,7 @@ for (const target of [home, workspace]) {
   }
 }
 
-resolveDshInstallation('0.1.1-rc.2')
+resolveDshInstallation('0.1.5-rc.2')
 const template = resolve(devRoot, 'desktop-profile-template')
 const runtime = resolve(devRoot, 'desktop-dsh-runtime')
 const cli = resolve(runtime, 'lib', 'bin.js')
@@ -72,7 +72,7 @@ const child = spawn(process.execPath, [cli, '--profile', 'dsh-editor', '--host',
 })
 const ready = new Promise((resolveReady, reject) => {
   let buffer = ''
-  const inspect = (chunk) => { buffer += String(chunk); const m = /https?:\/\/127\.0\.0\.1:\d+\/?/.exec(buffer); if (m) resolveReady(new URL(m[0])) }
+  const inspect = (chunk) => { buffer += String(chunk); const m = /https?:\/\/127\.0\.0\.1:\d+\/?(?:\?token=[A-Za-z0-9._~-]+)?/.exec(buffer); if (m) resolveReady(new URL(m[0])) }
   child.stdout.on('data', inspect); child.stderr.on('data', inspect)
   child.once('error', reject); child.once('exit', (code) => reject(new Error(`DSH exited (${code}): ${buffer.slice(-4_000)}`)))
 })

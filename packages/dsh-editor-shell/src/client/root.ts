@@ -10,8 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionId, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-client-connection/client'
+import type { SettingsScope, SessionId, WorkspaceId, WorkspaceView } from '../dsh-compat.ts'
 import {
   WORKBENCH_RPC_CHANNEL,
   type ArchiveListResponse,
@@ -36,8 +35,8 @@ import {
 import { buildChapterStatusMap } from '../chapter-status-view.ts'
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
 import { redesignedStyles } from '../styles.ts'
-import { errorMessage, isStaleFailure, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
-import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, useObservable } from './components.ts'
+import { errorMessage, isStaleFailure, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
+import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, ShellErrorBoundary, useObservable } from './components.ts'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger } from './settings.tsx'
 import { ThemeToggle, useTheme, type HostThemeSync } from './theme.ts'
@@ -174,14 +173,14 @@ async function connectUsableWorkspaceSession(
     if (listed.ok) return preferred
     if (!isSessionMissing(listed)) throw new Error(errorMessage(listed))
   }
-  const first = await ctx.workspaces.connectWorkspace(workspaceId)
+  const first = await ctx.uiWorkspace.connectWorkspace(workspaceId)
   if (first !== preferred) {
     const listed = await pingWorkspaceSession(ctx, first)
     if (listed.ok) return first
     if (!isSessionMissing(listed)) throw new Error(errorMessage(listed))
   }
   await ctx.workspaces.archiveSession(first)
-  const second = await ctx.workspaces.connectWorkspace(workspaceId)
+  const second = await ctx.uiWorkspace.connectWorkspace(workspaceId)
   if (second === first) throw new Error('session is not live')
   const retry = await pingWorkspaceSession(ctx, second)
   if (!retry.ok) throw new Error(isSessionMissing(retry) ? 'session is not live' : errorMessage(retry))
@@ -1168,15 +1167,17 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         : '')
   }
   useEffect(() => {
-    if (workspaceOpen.kind !== 'idle' || !selectedWorkspace || !session) return
+    if (workspaceOpen.kind !== 'idle') return
+    const workspace = startupResumeWorkspace(workspaces.items, selectedWorkspace)
+    if (!workspace) return
     if (!claimInitialWorkspaceResume(initialWorkspaceResumeStarted)) return
-    void openRegisteredWorkspace(selectedWorkspace, session.sessionId)
-  }, [selectedWorkspace?.workspaceId, session?.sessionId, workspaceOpen.kind])
+    void openRegisteredWorkspace(workspace, session?.sessionId)
+  }, [selectedWorkspace?.workspaceId, session?.sessionId, workspaceOpen.kind, workspaces.items])
   const relocateWorkspace = async (workspace: WorkspaceView) => {
     if (openingWorkspace) return
     let path: string | null
     try {
-      path = await ctx.workspaces.pickDirectory()
+      path = await ctx.uiWorkspace.pickDirectory()
     } catch {
       setRelocatingWorkspaceId(workspace.workspaceId)
       setManualWorkspaceMode('existing')
@@ -1205,7 +1206,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     setOpeningWorkspace(true)
     let picked: string | null
     try {
-      picked = await ctx.workspaces.pickDirectory()
+      picked = await ctx.uiWorkspace.pickDirectory()
     } catch {
       setOpeningWorkspace(false)
       setManualWorkspaceMode('existing')
@@ -1224,7 +1225,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   }
   const pickWorkspaceDirectory = async () => {
     try {
-      const path = await ctx.workspaces.pickDirectory()
+      const path = await ctx.uiWorkspace.pickDirectory()
       if (!path) {
         const message = t('note.noFolderPicked')
         if (session) setWorkbenchNote(message)
@@ -1498,14 +1499,14 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     }
   }
   const selectImportSource = async (targetSessionId: SessionId, targetWorkspaceId: WorkspaceId) => {
-    const sourcePath = await ctx.workspaces.pickDirectory()
+    const sourcePath = await ctx.uiWorkspace.pickDirectory()
     if (!sourcePath) { closeImportFlow(); return }
     let sourceSessionId: SessionId | undefined
     let createdSourceWorkspaceId: WorkspaceId | undefined
     try {
       const sourceRegistration = await registerFlowWorkspace(sourcePath)
       if (sourceRegistration.created) createdSourceWorkspaceId = sourceRegistration.workspace.workspaceId
-      sourceSessionId = await ctx.workspaces.connectWorkspace(sourceRegistration.workspace.workspaceId)
+      sourceSessionId = await ctx.uiWorkspace.connectWorkspace(sourceRegistration.workspace.workspaceId)
       bindTemporarySource(sourceSessionId, sourceRegistration.workspace.workspaceId, sourceRegistration.created)
       setImportFlow({ kind: 'working', message: t('note.importChecking') })
       const probe = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', {
@@ -2072,7 +2073,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       label: t('workspace.resizeFiles'),
       onChange: setSidebarWidth,
     }) : null,
-    e(Editor, {
+    e(ShellErrorBoundary, null, e(Editor, {
       ctx, session: fileSession, path, files, onOpen: openDocument, create: () => openTreeCreate('file', '正文'),
       onHandle: (handle) => { editorHandleRef.current = handle },
       externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal,
@@ -2091,7 +2092,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         if (path === pinnedPath) setContentRevision((value) => value + 1)
         progressRecord.schedule(() => { void recordSavedProgress() })
       },
-    }),
+    })),
     fileSession ? e('div', { className: 'center-overlays' }, renderSlot?.(CENTER_OVERLAYS_SLOT, seatContext) ?? null) : null,
     pinnedVisible && pinnedPath ? e(PanelResizer, {
       side: 'right',
@@ -2127,8 +2128,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       label: t('workspace.resizeAssistant'),
       onChange: setAssistantWidth,
     }) : null,
-    assistantEnabled && chatSession ? e(Chat, {
-      key: chatSession.sessionId,
+    assistantEnabled && chatSession ? e(ShellErrorBoundary, { key: chatSession.sessionId }, e(Chat, {
       ctx,
       session: chatSession,
       workspaceId: currentWorkspace?.workspaceId,
@@ -2152,7 +2152,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         openDocument(navigation.openPath)
         if (navigation.refreshContent) setContentRevision((old) => old + 1)
       },
-    }) : null,
+    })) : null,
     !assistantVisible && !focusMode ? (
       capabilityState.kind === 'error'
         ? e('div', { className: 'assistant-launcher capability-note', role: 'alert' },
@@ -2353,7 +2353,7 @@ function ExtensionsDock(props: { rootProps: unknown }) {
 
 export function registerShellRoot(ctx: Context, options: RegisterShellRootOptions): void {
   const client = ctx as ShellContext
-  options.registerRoot(client, (props) => e(Root, {
+  options.registerRoot(client, (props) => e(ShellErrorBoundary, null, e(Root, {
     ctx: client,
     writingScope: options.writingScope,
     migrateWriting: options.migrateWriting,
@@ -2363,7 +2363,7 @@ export function registerShellRoot(ctx: Context, options: RegisterShellRootOption
     renderSlot: (props as RootSlotProps).renderSlot,
     extensionsDock: e(ExtensionsDock, { rootProps: props }),
     pluginsSettings: (props as RootSlotProps).renderSlot?.(PLUGINS_SETTINGS_SLOT, {}) ?? null,
-  }))
+  })))
 }
 
 // re-exports so external spec files still see the surface area of the old monolith

@@ -3,9 +3,9 @@
  *
  * How a sidebar contribution receives context
  * ------------------------------------------
- * `ctx.slots.renderSlot` on the client runtime only accepts `'root'`
- * (`packages/dsh-editor-shell/node_modules/@deepseek-ai/dsh-client-runtime/lib/types/client/slots.d.ts`:
- * `renderSlot(key, owner)` throws unless `key === 'root'`). Child list seats
+ * `ctx.slots.renderSlot` on the client renderer only accepts `'root'`
+ * (renderer SlotRegistry: `renderSlot(key, owner)` is the root entry;
+ * official `dsh-client-runtime` types are gone). Child list seats
  * render through the `renderSlot` function the slot renderer injects into the
  * root entry's props (`RootOwnerProps` plus that face).
  *

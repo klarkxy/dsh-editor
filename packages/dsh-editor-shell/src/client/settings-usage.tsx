@@ -5,7 +5,7 @@
  *   cacheReadTokens, cacheWriteTokens, reasoningTokens, requests, byModel }
  */
 import { createElement as e, useEffect, useState, type ReactNode } from 'react'
-import type { RpcResult } from '@deepseek-ai/dsh-client-connection/client'
+import type { RpcResult } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { formatNumber as formatLocaleNumber, t, useLocale } from '../i18n/index.ts'
 

@@ -15,7 +15,7 @@ const connection = await load('@deepseek-ai/dsh-client-connection')
 const proofread = await import(pathToFileURL(resolve(root, 'packages/dsh-proofread/lib/index.js')).href)
 const ctx = new Context()
 const missing = ['sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'llm', 'tools', 'systemPrompt', 'credentials', 'agent', 'agents']
-const report = { ok: false, runtime: '0.1.1-rc.2', provided: ['webServer', 'connection'], missing: [], checks: [] }
+const report = { ok: false, runtime: '0.1.5-rc.2', provided: ['webServer', 'connection'], missing: [], checks: [] }
 let port
 try {
   await ctx.plugin(WebServer, { host: '127.0.0.1', port: 0 })

@@ -1,11 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { asHost, badRequest, mapHostError, resolveWorkspaceAccess, withWorkspaceWrite, WorkspaceAuthorityError } from 'dsh-manuscript/host-api'
+import { asHost, badRequest, mapHostError, registerHostRpc, resolveWorkspaceAccess, withWorkspaceWrite, WorkspaceAuthorityError } from 'dsh-manuscript/host-api'
 import { workspaceOpAccess } from 'dsh-editor-workspace-kit'
 import { CARDS_RPC_CHANNEL, type CardsRpcResult } from 'dsh-editor-cards/contracts'
 import { CardsError, createCard, listCardReferences, listCards, setCardMeta } from './host/cards.ts'
 
 export const name = 'dsh-editor-cards'
-export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer'] as const
 
 type Payload = Record<string, unknown>
 
@@ -43,14 +43,14 @@ export async function dispatchCards(ctx: Context, endpoint: string, payload: unk
 
 export function registerCardsRpc(ctx: Context): () => void {
   const host = asHost(ctx)
-  return host.connection.rpc.handle(CARDS_RPC_CHANNEL, async (endpoint: string, payload: unknown, signal: AbortSignal) => {
+  return registerHostRpc(host, CARDS_RPC_CHANNEL, async (endpoint: string, payload: unknown, signal: AbortSignal) => {
     try {
       return { ok: true, value: await dispatchCards(ctx, endpoint, payload, signal) }
     } catch (error) {
       if (error instanceof WorkspaceAuthorityError) return mapHostError(error) ?? mapCardsError(error)
       return mapCardsError(error)
     }
-  }, { authority: 'loopback' })
+  })
 }
 
 export function apply(ctx: Context): void {

@@ -22,7 +22,7 @@ for (const target of [projectsRoot, home, output, targetWorkspace]) {
   }
 }
 
-resolveDshInstallation('0.1.1-rc.2')
+resolveDshInstallation('0.1.5-rc.2')
 const template = resolve(devRoot, 'desktop-profile-template')
 const runtime = resolve(devRoot, 'desktop-dsh-runtime')
 const cli = resolve(runtime, 'lib', 'bin.js')
@@ -77,7 +77,7 @@ async function startDsh(env) {
       const text = String(chunk)
       logs.push(text)
       buffer += text
-      const match = /https?:\/\/127\.0\.0\.1:\d+\/?/.exec(buffer)
+      const match = /https?:\/\/127\.0\.0\.1:\d+\/?(?:\?token=[A-Za-z0-9._~-]+)?/.exec(buffer)
       if (match) resolve(new URL(match[0]))
     }
     child.stdout.on('data', inspect)

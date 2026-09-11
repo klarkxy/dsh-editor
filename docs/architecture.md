@@ -2,7 +2,7 @@
 
 本文描述桌面运行时、所有权边界和安全约束。产品原则见 [product-principles.md](product-principles.md)，界面与 token 见 [ui.md](ui.md)。插件分级、RPC/Tool/slot 接口以及修改、替换和新建插件流程见 [plugin-architecture.md](plugin-architecture.md)。开发和验收命令见 [development.md](development.md)。
 
-当前兼容基线固定为 DSH `0.1.1-rc.2`。
+当前兼容基线固定为 DSH `0.1.5-rc.2`。
 
 ## 交互架构图
 
@@ -26,7 +26,7 @@ DSH Editor 是 Windows / macOS 的 GUI-first 桌面应用，不是另一套 Agen
 ```text
 Electron（受控多窗口、资源校验、子进程生命周期）
 └─ 内置 Node 24.16.0
-   └─ 内置 DSH 0.1.1-rc.2，127.0.0.1:随机端口
+   └─ 内置 DSH 0.1.5-rc.2，127.0.0.1:随机端口
       └─ 专用 profiles/dsh-editor（默认 full 组合）
          ├─ DSH base / web runtime / connection / renderer
          ├─ dsh-manuscript：公开稿件 Host RPC、稿纸 overlay 与共享 editor-core
@@ -45,7 +45,7 @@ Electron（受控多窗口、资源校验、子进程生命周期）
          └─ dsh-editor-plugins：设置里的插件开关与 GitHub 市场（分类与锁定读各包 `dshEditor` 声明）
 ```
 
-普通 DSH `web` profile 可独立安装 `dsh-manuscript`、`dsh-proofread` 和 `dsh-zhihu`。桌面 profile 另外加载 workbench、novel-kernel、shell、plugins 以及按 feature 选中的垂直插件（cards、proofread/overview/memory 面板）；`dsh-editor-workspace-kit` 是随 workbench/cards 一起复制的进程内库（不是 bundle），`dsh-editor-seats` 是插件与 Shell 构建时内联的座位合同（不进入运行时 `node_modules`）。shell 以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.1-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
+普通 DSH `web` profile 可独立安装 `dsh-manuscript`、`dsh-proofread` 和 `dsh-zhihu`。桌面 profile 另外加载 workbench、novel-kernel、shell、plugins 以及按 feature 选中的垂直插件（cards、proofread/overview/memory 面板）；`dsh-editor-workspace-kit` 是随 workbench/cards 一起复制的进程内库（不是 bundle），`dsh-editor-seats` 是插件与 Shell 构建时内联的座位合同（不进入运行时 `node_modules`）。shell 以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.5-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
 
 ## 所有权边界
 
@@ -81,7 +81,7 @@ Electron（受控多窗口、资源校验、子进程生命周期）
 
 profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记，启动会拒绝覆盖并在窗口显示诊断与重试。每次部署先写同级 stage，原子替换已标记 profile；home 级 credentials、settings、sessions、storages 和真实 workspace 不会被复制或删除。
 
-桌面资源固定包含 Node `24.16.0`、DSH `0.1.1-rc.2`、选定组合的业务包及 profile。默认 full 含 manuscript、proofread、cards、proofread-panel、overview-panel、memory-panel、workbench、novel-kernel、zhihu、shell 与 plugins。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
+桌面资源固定包含 Node `24.16.0`、DSH `0.1.5-rc.2`、选定组合的业务包及 profile。默认 full 含 manuscript、proofread、cards、proofread-panel、overview-panel、memory-panel、workbench、novel-kernel、zhihu、shell 与 plugins。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
 
 `apps/desktop/resources/profile/package.json` 里的 bundles 只是模板；物化时由 `scripts/plugin-manifest.mjs` 按 recipe（`apps/desktop/resources/compositions/*.json` 的 feature 集合）与各包 `dshEditor` 声明求解，`configureProfile` 覆写 bundles、`disabled` 入口、附加 insert 与 `editor-shell` 的 `features` 配置。默认 full 解析为：
 
@@ -161,7 +161,7 @@ FIM 同样由 Host 选模型。候选只改 buffer，支持 loading、Tab 接受
 
 ## Electron 安全与进程边界
 
-BrowserWindow 使用 `nodeIntegration: false`、`contextIsolation: true`、renderer sandbox、`webSecurity: true`，拒绝所有权限、新窗口和非本次 loopback origin 导航。CSP 限定 self、data/blob 图片、同源及 loopback WebSocket；DSH `0.1.1-rc.2` 的客户端模块加载器需要 `unsafe-eval`，这是已验证的固定版本例外，窗口仍不加载外部 origin。
+BrowserWindow 使用 `nodeIntegration: false`、`contextIsolation: true`、renderer sandbox、`webSecurity: true`，拒绝所有权限、新窗口和非本次 loopback origin 导航。CSP 限定 self、data/blob 图片、同源及 loopback WebSocket；DSH `0.1.5-rc.2` 的客户端模块加载器需要 `unsafe-eval`，这是已验证的固定版本例外，窗口仍不加载外部 origin。
 
 Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正常关闭先发优雅终止，超时后仅对记录的子进程 PID 使用 Windows process-tree fallback。启动超时、版本错误和意外退出都进入应用内诊断页；关闭验收必须证明端口已释放。
 
@@ -185,7 +185,7 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 - Playwright Electron 当前源码窗口：DSH Editor 标题、私有 `.shell`、默认三栏写作身份、1280×720 外窗和关闭端口释放；
 - portable EXE：固定资源版本/哈希、启动、核心旅程、关闭与无遗留进程。
 
-历史报告不能替代当前源码证据。兼容版本只声明 `0.1.1-rc.2`；升级必须重新验证公开会话契约、root priority、CSP、profile patch、RPC 和真实 EXE。
+历史报告不能替代当前源码证据。兼容版本只声明 `0.1.5-rc.2`；升级必须重新验证公开会话契约、root priority、CSP、profile patch、RPC 和真实 EXE。
 
 ## 多窗口写入与草稿恢复
 

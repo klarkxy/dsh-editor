@@ -9,7 +9,7 @@ import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack', 'desktop-e2e')
-resolveDshInstallation('0.1.1-rc.2')
+resolveDshInstallation('0.1.5-rc.2')
 const e2eHomeRoot = resolve(root, '.dev', 'desktop-e2e-home')
 const template = resolve(root, '.dev', 'desktop-profile-template')
 const electronDist = resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'dist')
@@ -203,7 +203,7 @@ async function launchPhase(name, extraEnv, inspect) {
     try {
       await inspect({ ...state, nativeOnboarding }, { app, window })
     } catch (error) {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}; processLogs: ${JSON.stringify(processLogs.slice(-30))}`)
+      throw new Error(`${error instanceof Error ? error.message : String(error)}; browserErrors: ${JSON.stringify(browserErrors.slice(-20))}; processLogs: ${JSON.stringify(processLogs.slice(-30))}`)
     }
     console.log(`[desktop-e2e] ${name}: assertions passed`)
     if (browserErrors.length) throw new Error(`browser console errors in ${name}: ${JSON.stringify(browserErrors)}`)
@@ -248,11 +248,17 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
   await dialog.getByRole('button', { name: '通用设置', exact: true }).waitFor({ state: 'visible', timeout: 5_000 })
   await dialog.getByRole('button', { name: '模型', exact: true }).click()
-  await window.waitForTimeout(600)
-  const modelsText = await dialog.textContent()
-  if (!modelsText?.includes('DeepSeek')) throw new Error('settings models tab did not list the DeepSeek provider')
+  try {
+    await window.waitForFunction(
+      () => (document.querySelector('[role="dialog"]')?.textContent ?? '').includes('DeepSeek'),
+      undefined,
+      { timeout: 15_000 },
+    )
+  } catch {
+    throw new Error(`settings models tab did not list the DeepSeek provider: ${(await dialog.textContent())?.slice(0, 400)}`)
+  }
   await dialog.getByRole('button', { name: '写作', exact: true }).click()
-  await window.waitForTimeout(400)
+  await dialog.getByRole('radio').first().waitFor({ state: 'visible', timeout: 10_000 })
   const writingRadios = await dialog.getByRole('radio').count()
   if (writingRadios < 2) throw new Error('settings writing tab lost the completion radios')
   await dialog.getByRole('button', { name: '插件', exact: true }).click()
@@ -279,7 +285,21 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await nameBox.waitFor({ state: 'visible', timeout: 10_000 })
   await nameBox.fill('multi-window-workspace')
   await ctx.window.getByRole('button', { name: '创建', exact: true }).click()
-  await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  try {
+    await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  } catch (error) {
+    const body = await ctx.window.evaluate(() => ({
+      text: document.body.innerText.slice(0, 1200),
+      shellClass: document.querySelector('.shell')?.className ?? null,
+      checking: Boolean(document.querySelector('.workspace-checking')),
+      home: Boolean(document.querySelector('.home-stage')),
+      tree: Boolean(document.querySelector('.tree')),
+      errors: [...document.querySelectorAll('[role="alert"]')].map((node) => node.textContent?.slice(0, 200)),
+      shellError: document.querySelector('[data-testid="shell-error"]')?.textContent?.slice(0, 400) ?? null,
+    })).catch((error) => ({ evaluateError: error instanceof Error ? error.message : String(error) }))
+    await ctx.window.screenshot({ path: resolve(output, 'multi-window-create-failure.png') }).catch(() => undefined)
+    throw new Error(`manuscript tree did not appear after 新建: ${JSON.stringify(body)}; ${error instanceof Error ? error.message : String(error)}`)
+  }
   // New works start with an empty manuscript: create the first chapter through the cover affordance.
   await ctx.window.getByRole('button', { name: '新建文件', exact: true }).first().click()
   const chapterNameBox = ctx.window.getByLabel('文件名称（无扩展名时按 .md 创建）')
@@ -358,7 +378,20 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
 
 // Restart the entire Electron/DSH process against the same home, not just a React remount.
 phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (_state, ctx) => {
-  await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  try {
+    await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  } catch (error) {
+    const body = await ctx.window.evaluate(() => ({
+      text: document.body.innerText.slice(0, 1200),
+      shellClass: document.querySelector('.shell')?.className ?? null,
+      checking: Boolean(document.querySelector('.workspace-checking')),
+      home: Boolean(document.querySelector('.home-stage')),
+      tree: Boolean(document.querySelector('.tree')),
+      shellError: document.querySelector('[data-testid="shell-error"]')?.textContent?.slice(0, 400) ?? null,
+    })).catch((evaluateError) => ({ evaluateError: evaluateError instanceof Error ? evaluateError.message : String(evaluateError) }))
+    await ctx.window.screenshot({ path: resolve(output, 'multi-window-resume-failure.png') }).catch(() => undefined)
+    throw new Error(`manuscript tree did not appear after restart: ${JSON.stringify(body)}; ${error instanceof Error ? error.message : String(error)}`)
+  }
   const editor = ctx.window.locator('[data-testid="paper-editor"]')
   if (!await editor.isVisible()) {
     const chapter = ctx.window.locator('.tree-row', { hasText: '001.md' }).first()
