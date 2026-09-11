@@ -357,7 +357,7 @@ async function configureMiniMax(page) {
   await page.getByTestId('zhihu-panel').getByText('Access Secret', { exact: false }).first().waitFor({ state: 'visible', timeout: 15_000 })
   await page.getByTestId('zhihu-panel').getByRole('button', { name: '关闭', exact: true }).click()
   await openShellSettings(page)
-  recordFeature('settings-zhihu', true)
+  recordFeature('zhihu-panel-settings', true)
   await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '用量' }).click()
   await dialog.getByRole('region', { name: '用量' }).waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined)
   recordFeature('settings-usage', true)
@@ -591,8 +591,10 @@ async function sendChat(page, prompt, label, timeout = 90_000) {
     }
     const count = await page.locator('.chat-row.assistant').count()
     const stopVisible = await page.getByRole('button', { name: /停止/ }).isVisible().catch(() => false)
-    if (count > assistantBefore && !stopVisible) {
-      return page.locator('.chat-row.assistant').last().innerText()
+    const thinking = await page.locator('.chat-row.thinking').count()
+    if (count > assistantBefore && !stopVisible && thinking === 0) {
+      const text = (await page.locator('.chat-row.assistant').last().innerText()).trim()
+      if (text && !/^正在回复/.test(text)) return text
     }
     await delay(400)
   }
@@ -1150,6 +1152,8 @@ async function coverAi(page) {
       const model=options.find(x=>/MiniMax-M3/i.test(x.text));if(!model)throw new Error('MiniMax-M3 unavailable in new conversation');
       await selection.selectOption(model.value);
       await picker.getByRole('button', { name: '开始', exact: true }).click()
+      const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+      if (await discard.isVisible({ timeout: 2_000 }).catch(() => false)) await discard.click()
       await picker.waitFor({ state: 'hidden', timeout: 15000 })
     }
     await assistant.getByRole('button', { name: '对话操作' }).click()

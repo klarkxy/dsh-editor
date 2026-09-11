@@ -12,7 +12,7 @@ DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口�
 | `dsh-zhihu` | 独立资料查询、知识库与用量；Tool 入口可选 | DSH 凭据与原计量 domain |
 | `dsh-editor-workbench` | 项目、概览/章节状态、校对、进度、上下文、导入、快照、移动与归档 | 同一 live-session workspace authority |
 | `dsh-editor-cards` | 人物卡与世界书（列表、frontmatter、引用导航、新建），Host RPC + Client 座位 | 不发布；卡片文件仍在作品目录 |
-| `dsh-editor-novel-kernel` | 小说知识、预览提案、索引直写、工具守卫、系统提示词与旧知乎接口转发 | DSH 工具与作者确认边界 |
+| `dsh-editor-novel-kernel` | 小说知识、预览提案、索引直写、工具守卫与系统提示词 | DSH 工具与作者确认边界 |
 | `dsh-editor-shell` | 桌面唯一根界面、布局与编辑状态、Chat 投影；向插件开放侧栏座位与命令注册表 | 不发布、不安装到日常 `web` profile |
 | `dsh-editor-proofread-panel` | 作品校对面板（当前章/全稿扫描、人物卡对照、应用建议），通过 Shell 座位接入 | 不发布；只消费 workbench RPC |
 | `dsh-editor-overview-panel` | 作品概览（章节状态、字数分布、写作曲线），通过中栏 overlay 座位接入 | 不发布；只消费 workbench RPC |

@@ -75,9 +75,9 @@ export function createZhihuService(options: ZhihuClientOptions, usage: ZhihuUsag
         } else if (endpoint === 'knowledge.search') {
           const result = await executeZhihuKnowledgeSearch(query, typeof body.limit === 'number' ? body.limit : 5, normalizeRecallScopes(body.recallScopes), client)
           value = result; results = result.items.length
-        } else if (endpoint === 'knowledge.bases' || endpoint === 'zhihu.knowledge.bases') {
+        } else if (endpoint === 'knowledge.bases') {
           const result = await listZhihuKnowledgeBases(client); value = result; results = result.bases.length
-        } else if (endpoint === 'knowledge.upload' || endpoint === 'zhihu.knowledge.upload') {
+        } else if (endpoint === 'knowledge.upload') {
           const contentBase64 = typeof body.contentBase64 === 'string' ? body.contentBase64 : ''
           if (!contentBase64) throw new Error('缺少文件内容。')
           if (contentBase64.length > Math.ceil(ZHIHU_KNOWLEDGE_UPLOAD_MAX_BYTES / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(contentBase64)) {

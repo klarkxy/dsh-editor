@@ -9,6 +9,7 @@
 - 当前基线升到 DSH `0.1.5-rc.2`（不是稳定 `0.1.5`）。官方已删除 `@deepseek-ai/dsh-client-runtime`；客户端改走 `ctx.remote`、会话/对话分面和 Cordis `^4.0.2`。历史核查记录仍写当时的 `0.1.1-rc.2`。
 - 公开插件矩阵跟随 0.1.5 的 loopback token：先换 cookie 再探测页面和 `/zhihu`。
 - 桌面打包把内置 Node 的 `node_modules` 改走 `vendor-dependencies`，避免 electron-builder 丢掉 npm。
+- 客户端 wrap 为 docx/jszip 补上 `buffer` / `stream` / `util` / `events`，导出不再撞上 DSH 模块表。
 
 ### 插件
 
@@ -22,6 +23,14 @@
 - 新增私有库 `dsh-editor-workspace-kit`（access bag、sidecar IO、条目校验、no-replace move、frontmatter）。
 - workbench 分发器改为按簇 handler 表，端点与写入门禁不变。
 - 移除旧转发 `/manuscript zhihu.usage` 与 `/novel-kernel zhihu.knowledge.*`；manuscript 与 novel-kernel 不再探测知乎服务；删除 kernel 未注册的 `novel_search` / `project_knowledge`；删除 Shell 孤儿知乎设置页。
+
+### 清理
+
+- 去掉 novel-kernel 上已不再注册的 `novel_search` / `project_knowledge` 常量，以及误留的 `ZHIHU_SEARCH_EVENT` 再导出；校对面板不再错误依赖 novel-kernel。
+- 删除从未挂上界面的项目规则按钮回调及其文案；`rules.open` Host 端点保留。
+- 删除 Shell 中无引用的 i18n 键（含旧知乎设置残留的 upload/refresh/clear）。
+- 删除已被 `prepare-desktop-dev.mjs` 取代的 `refresh-desktop-template.mjs`。
+- `/zhihu` 只保留 `knowledge.bases` / `knowledge.upload`；去掉迁出后残留的 `zhihu.knowledge.*` 旧通道名。
 
 ### 文档
 

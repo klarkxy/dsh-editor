@@ -12,7 +12,6 @@ export default defineConfig([
     deps: {
       alwaysBundle: [
         'dsh-editor-workbench/contracts',
-        'dsh-editor-novel-kernel/contracts',
         'dsh-editor-seats',
       ],
       neverBundle: ['react', 'react-dom', 'react/jsx-runtime'],

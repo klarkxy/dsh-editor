@@ -61,7 +61,6 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
     "@types/react": "18.3.31",
-    "dsh-editor-novel-kernel": "workspace:*",
     "dsh-editor-seats": "workspace:*",
     "dsh-editor-workbench": "workspace:*",
     "react": "^18.2.0",

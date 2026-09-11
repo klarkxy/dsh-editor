@@ -330,7 +330,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const [searchQuery, setSearchQuery] = useState('')
   const [searchSubmitTick, setSearchSubmitTick] = useState(0)
   const [highlightPath, setHighlightPath] = useState<string | null>(null)
-  const [rulesBusy, setRulesBusy] = useState(false)
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState('')
@@ -1343,18 +1342,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     setSidebarOpen(true)
     setSearchOpen(true)
     setPaletteOpen(false)
-  }
-  /* 项目规则入口：只在作者点击时调用 rules.open（缺失时由 Host 创建模板），
-     打开返回的真实路径；脏编辑器守卫沿用 openDocument 的 saveFirst 提示。 */
-  const openRules = async () => {
-    if (!fileSession || rulesBusy) return
-    setRulesBusy(true)
-    setWorkbenchNote('')
-    const result = await safeRpcCall<{ path: string; exists: boolean }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'rules.open', { sessionId: fileSession.sessionId }))
-    setRulesBusy(false)
-    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
-    if (!result.value.exists) setTreeRevision((value) => value + 1)
-    openDocument(result.value.path)
   }
   /* 记忆更新确认/撤销成功后的刷新：与提案 onApplied 同一套导航与刷新规则。 */
   const refreshAppliedPath = (appliedPath: string) => {

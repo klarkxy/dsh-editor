@@ -190,9 +190,6 @@ importers:
       '@types/react':
         specifier: 18.3.31
         version: 18.3.31
-      dsh-editor-novel-kernel:
-        specifier: workspace:*
-        version: link:../dsh-editor-novel-kernel
       dsh-editor-seats:
         specifier: workspace:*
         version: link:../dsh-editor-seats

@@ -10,9 +10,6 @@ import { SCRATCH_DIRECTORY } from './contracts.ts'
 export const name = 'dsh-editor-novel-kernel'
 export const inject = ['tools', 'systemPrompt', 'fs', 'sandboxPolicy'] as const
 
-/** Cross-plugin metering event consumed by dsh-manuscript's zhihu usage recorder. */
-export const ZHIHU_SEARCH_EVENT = 'dsh-editor/zhihu-search'
-
 type HostContext = Context & {
   tools: {
     register: (tool: unknown) => unknown

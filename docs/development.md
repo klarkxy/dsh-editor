@@ -107,14 +107,14 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 ### `dsh-editor-workbench`
 
 - Host-only 私有包，独占 `/dsh-editor-workbench`。
-- 负责项目结构、章节概览/状态、校对、卡片、写作进度、context、导入、快照、移动与归档；复用 `dsh-manuscript/host-api` 的同一 workspace authority。
+- 负责项目结构、章节概览/状态、校对扫描、写作进度、context、导入、快照、移动与归档；复用 `dsh-manuscript/host-api` 的同一 workspace authority。卡片 RPC 在 `dsh-editor-cards`；workbench 只通过 `host-api` 读卡做校对对照。
 - 主入口 `inject` 为 `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`。可选 `dsh-editor-workbench/tools` 入口另注入 `tools`，只注册只读 `novel_overview`。
 - `./contracts` 只含 browser-safe channel、类型、解析器与纯函数，并由 Shell client 构建内联。
 
 ### `dsh-editor-novel-kernel`
 
 - Host-only 私有包，注册七个小说工具、guard 与 `dsh-editor:novel-kernel` prompt；不再提供 `/novel-kernel` 通道，知乎知识库走 `/zhihu`。
-- Host `inject` 为 `tools`, `systemPrompt`, `fs`, `connection`, `sandboxPolicy`。
+- Host `inject` 为 `tools`, `systemPrompt`, `fs`, `sandboxPolicy`。
 - Tool 只返回知识或预览提案，正文写入仍由 Shell 展示并经 `/manuscript proposal.prepare/apply` 完成；拆章/合章/批量重命名走 workbench `proposal.*`。
 - `./contracts` 只含工具名、proposal / memory marker 类型和严格解析器。
 

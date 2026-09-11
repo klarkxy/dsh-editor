@@ -21,9 +21,6 @@ describe('novel-kernel Host entry', () => {
       resolve: vi.fn(async (path: string) => ({ targetKey: path, displayPath: path })),
       readText: vi.fn(async () => ''),
     }
-    const credentials = {
-      resolve: vi.fn(async () => undefined),
-    }
     const ctx = {
       tools: {
         register: (tool: unknown) => tools.push(tool),
@@ -31,7 +28,6 @@ describe('novel-kernel Host entry', () => {
       },
       systemPrompt: { section: (section: unknown) => sections.push(section) },
       fs,
-      credentials,
       sandboxPolicy: { resolve: vi.fn(() => ({ mode: 'workspace-write', workspaceRoot: '/tmp' })) },
       effect: (setup: () => unknown) => setup(),
       provide: vi.fn(),

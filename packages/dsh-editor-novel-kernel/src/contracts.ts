@@ -6,8 +6,6 @@ export const ZHIHU_GLOBAL_SEARCH_TOOL_NAME = 'zhihu_global_search'
 export const ZHIHU_HOT_LIST_TOOL_NAME = 'zhihu_hot_list'
 export const ZHIHU_ASK_TOOL_NAME = 'zhihu_ask'
 export const ZHIHU_KNOWLEDGE_SEARCH_TOOL_NAME = 'zhihu_knowledge_search'
-export const PROJECT_KNOWLEDGE_TOOL_NAME = 'project_knowledge'
-export const NOVEL_SEARCH_TOOL_NAME = 'novel_search'
 export const NOVEL_OVERVIEW_TOOL_NAME = 'novel_overview'
 export const NOVEL_INDEX_WRITE_TOOL_NAME = 'novel_index_write'
 /** DSH 运行时自带的提问工具；写作助手在需要作者拍板时使用，经 editorToolGuard 校验后放行。 */
