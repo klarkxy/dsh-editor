@@ -10,6 +10,8 @@
 - 公开插件矩阵跟随 0.1.5 的 loopback token：先换 cookie 再探测页面和 `/zhihu`。
 - 桌面打包把内置 Node 的 `node_modules` 改走 `vendor-dependencies`，避免 electron-builder 丢掉 npm。
 - 客户端 wrap 为 docx/jszip 补上 `buffer` / `stream` / `util` / `events`，导出不再撞上 DSH 模块表。
+- Shell 在提供本地 `uiWorkspace` 之后用子 fiber 绑定官方 `uiConversation`，聊天不再停在「正在回复…」。
+- 知乎真调用脚本跟随 0.1.5：先用 loopback token 换 cookie，再打 `/zhihu`。
 
 ### 插件
 
@@ -34,6 +36,7 @@
 
 ### 文档
 
+- 记下 2026-09-11 在 DSH `0.1.5-rc.2` 上的 MiniMax 与知乎真调用回执。
 - 重画四张交互图，使 DSH 显示为插件所在的宿主进程，而不是平级服务：桌面运行时、插件分级、组合边界、确认写入。
 - `host-api` 在图和文档中标明为进程内库导入；Electron 只启动 DSH 子进程，由 Host 加载 root。
 - 架构文档补上默认 full 组合里的 `dsh-proofread` / `dsh-zhihu`，以及三个公开 tarball。

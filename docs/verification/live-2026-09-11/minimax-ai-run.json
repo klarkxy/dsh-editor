@@ -1,0 +1,49 @@
+{
+  "startedAt": "2026-09-11T03:18:50.863Z",
+  "book": "功能验收",
+  "dsh": "0.1.5-rc.2",
+  "model": "MiniMax · MiniMax-M3",
+  "scope": "model UI workflows with fresh documents",
+  "phases": [
+    {
+      "name": "接口连接成功",
+      "detail": "MiniMax custom provider minimax-e2e / MiniMax-M3",
+      "at": "2026-09-11T03:19:08.409Z"
+    },
+    {
+      "name": "新建作品",
+      "detail": "功能验收",
+      "at": "2026-09-11T03:19:09.299Z"
+    },
+    {
+      "name": "切换对话模型",
+      "detail": "MiniMax · MiniMax-M3",
+      "at": "2026-09-11T03:19:11.110Z"
+    },
+    {
+      "name": "规划总纲",
+      "detail": "大纲/总纲.md",
+      "at": "2026-09-11T03:19:44.174Z"
+    },
+    {
+      "name": "功能覆盖完成",
+      "detail": "6/6 ok",
+      "at": "2026-09-11T03:19:45.516Z"
+    }
+  ],
+  "features": [
+    { "name": "settings-minimax", "ok": true, "detail": "custom MiniMax MiniMax-M3 (created)" },
+    { "name": "chat-ping", "ok": true, "detail": "pong" },
+    { "name": "rewrite-preset", "ok": true, "detail": "" },
+    { "name": "fim-complete", "ok": true, "detail": "ghost accepted; saved text excludes reasoning" },
+    { "name": "chat-proposal", "ok": true, "detail": "" },
+    { "name": "conversation-menu", "ok": true, "detail": "" }
+  ],
+  "failures": [],
+  "ok": true,
+  "rpc": [
+    { "endpoint": "patch.complete", "status": 200, "ok": true, "route": "dsh-llm", "textChars": 20 },
+    { "endpoint": "fim.complete", "status": 200, "ok": true, "route": "dsh-llm", "textChars": 225 }
+  ],
+  "finishedAt": "2026-09-11T03:19:45.602Z"
+}

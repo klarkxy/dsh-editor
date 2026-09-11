@@ -591,14 +591,18 @@ async function sendChat(page, prompt, label, timeout = 90_000) {
     }
     const count = await page.locator('.chat-row.assistant').count()
     const stopVisible = await page.getByRole('button', { name: /停止/ }).isVisible().catch(() => false)
-    const thinking = await page.locator('.chat-row.thinking').count()
-    if (count > assistantBefore && !stopVisible && thinking === 0) {
+    if (count > assistantBefore && !stopVisible) {
       const text = (await page.locator('.chat-row.assistant').last().innerText()).trim()
       if (text && !/^正在回复/.test(text)) return text
     }
     await delay(400)
   }
-  throw new Error(`${label}: timed out without assistant reply`)
+  const diag = await page.locator('aside.chat').evaluate((el) => ({
+    face: el.getAttribute('data-chat-face'),
+    nodes: el.getAttribute('data-chat-nodes'),
+    text: el.innerText.replace(/\s+/g, ' ').slice(0, 240),
+  })).catch(() => ({}))
+  throw new Error(`${label}: timed out without assistant reply (${JSON.stringify(diag)})`)
 }
 
 async function waitForProposal(page, previousCount, previousAssistantCount, label, expectedPath) {

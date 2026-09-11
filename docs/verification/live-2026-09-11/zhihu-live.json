@@ -1,0 +1,28 @@
+{
+  "startedAt": "2026-09-11T03:22:03.325Z",
+  "dsh": "0.1.5-rc.2",
+  "tokenSource": "file",
+  "tokenPresent": true,
+  "phases": [
+    { "name": "DSH 就绪", "detail": "loopback", "at": "2026-09-11T03:22:23.600Z" },
+    { "name": "知乎真调用完成", "detail": "7/7 ok", "at": "2026-09-11T03:22:29.096Z" }
+  ],
+  "features": [
+    { "name": "rpc-search", "ok": true, "detail": "5 items; 小白怎么分析小说的节奏和结构?什么是节奏和结构? - 知乎" },
+    { "name": "rpc-hot-list", "ok": true, "detail": "5 items" },
+    { "name": "rpc-ask-fast", "ok": true, "detail": "伏笔是文学创作中的一种手法，指作者在前文中预先埋下的暗示或线索，为后文情节的展开或结局作铺垫，使故事发展合理自然、前后呼应。" },
+    { "name": "rpc-usage", "ok": true, "detail": "calls=3 failures=0" },
+    { "name": "ui-search", "ok": true, "detail": "站内搜索共 5 条" },
+    { "name": "ui-hot-list", "ok": true, "detail": "知乎热榜共 10 条" },
+    { "name": "ui-usage", "ok": true, "detail": "用量页已打开" }
+  ],
+  "failures": [],
+  "ok": true,
+  "rpc": {
+    "search": { "status": 200, "count": 5 },
+    "hot": { "status": 200, "count": 5 },
+    "ask": { "status": 200, "model": "zhida-fast-1p5", "chars": 62 },
+    "usage": { "calls": 3, "failures": 0, "results": 11 }
+  },
+  "finishedAt": "2026-09-11T03:22:29.207Z"
+}

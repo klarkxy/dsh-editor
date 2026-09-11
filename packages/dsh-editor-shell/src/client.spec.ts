@@ -33,6 +33,7 @@ import {
   workspaceOpenFailureMessage,
   workspaceShortcut,
   conversationChatSource,
+  bindOfficialConversation,
 } from './client.ts'
 import { isObservableSource } from './client/components.ts'
 import { partialApplyDetails } from './client/shared.ts'
@@ -940,12 +941,49 @@ describe('shell manuscript RPC safety', () => {
       uiConversation: { binding: () => ({ target: () => target }) },
     }, 'sess-1')
     expect(present.getSnapshot().legacy?.nodes).toHaveLength(1)
+    const viaGet = conversationChatSource({
+      get: (name: string) => name === 'uiConversation' ? { binding: () => ({ target: () => target }) } : undefined,
+    }, 'sess-1')
+    expect(viaGet.getSnapshot().legacy?.nodes).toHaveLength(1)
+    const rawTopLevel = { nodes: [{ kind: 'assistant', seq: 2, blocks: [] }], partial: null, runningCalls: [] }
+    const topLevel = conversationChatSource({
+      uiConversation: { binding: () => ({ target: () => ({ getSnapshot: () => rawTopLevel, subscribe: () => () => {} }) }) },
+    }, 'sess-1')
+    expect(topLevel.getSnapshot().legacy?.nodes).toEqual([{ kind: 'assistant', seq: 2, blocks: [] }])
+    expect(topLevel.getSnapshot()).toBe(topLevel.getSnapshot())
     const broken = conversationChatSource({
       uiConversation: { binding: () => { throw new Error('uiConversation.binding: unknown session') } },
     }, 'sess-1')
     expect(broken.getSnapshot().legacy?.nodes).toEqual([])
+    vi.useFakeTimers()
+    const delayed: { uiConversation?: { binding(): { target(): typeof target } } } = {}
+    const late = conversationChatSource(delayed, 'sess-1')
+    let ticks = 0
+    const stop = late.subscribe(() => { ticks += 1 })
+    expect(late.getSnapshot().legacy?.nodes).toEqual([])
+    delayed.uiConversation = { binding: () => ({ target: () => target }) }
+    vi.advanceTimersByTime(50)
+    expect(ticks).toBeGreaterThan(0)
+    expect(late.getSnapshot().legacy?.nodes).toHaveLength(1)
+    stop()
+    vi.useRealTimers()
     expect(isObservableSource({ getSnapshot: () => 1, subscribe: () => () => {} })).toBe(true)
     expect(isObservableSource({ sessionId: 's1' })).toBe(false)
     expect(rootSource()).toContain('e(ShellErrorBoundary, { key: chatSession.sessionId }, e(Chat,')
+  })
+
+  it('binds official conversation from a child fiber and exposes it to later chat sources', () => {
+    const target = { getSnapshot: () => ({ legacy: { nodes: [{ kind: 'user', seq: 4, content: [] }], partial: null, runningCalls: [] } }), subscribe: () => () => {} }
+    const inner = { uiConversation: { binding: () => ({ target: () => target }) } }
+    let dispose = () => {}
+    bindOfficialConversation({
+      inject(_deps, apply) {
+        dispose = apply(inner) ?? (() => {})
+      },
+    })
+    const bound = conversationChatSource({}, 'sess-1')
+    expect(bound.getSnapshot().legacy?.nodes).toHaveLength(1)
+    dispose()
+    expect(conversationChatSource({}, 'sess-1').getSnapshot().legacy?.nodes).toEqual([])
   })
 })

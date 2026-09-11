@@ -165,13 +165,31 @@ function summarizeItems(value) {
   }
 }
 
-async function callZhihu(base, method, payload) {
+async function hostSession(readyUrl) {
+  const response = await fetch(readyUrl, { redirect: 'manual', signal: AbortSignal.timeout(5_000) })
+  if (response.status !== 303 && !response.ok) throw new Error(`host session ${response.status}`)
+  const cookies = typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie()
+    : [response.headers.get('set-cookie')].filter(Boolean)
+  return cookies.map((item) => String(item).split(';', 1)[0]).filter(Boolean).join('; ')
+}
+
+async function callZhihu(base, cookie, method, payload) {
   const response = await fetch(`${base}/zhihu/${method}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...(cookie ? { cookie } : {}),
+    },
     body: JSON.stringify({ type: 'client-request', rpcId: `zhihu-live-${method}`, method, payload }),
   })
-  const body = await response.json()
+  const text = await response.text()
+  let body
+  try {
+    body = JSON.parse(text)
+  } catch {
+    throw new Error(`zhihu ${method} ${response.status}: ${text.slice(0, 80)}`)
+  }
   return { status: response.status, result: body.result }
 }
 
@@ -220,16 +238,17 @@ try {
   const started = await startDsh(env)
   child = started.child
   const base = started.url.origin
+  const cookie = await hostSession(started.url)
   await recordPhase('DSH 就绪', base)
 
-  const search = await callZhihu(base, 'search', { query: searchQuery, count: 5 })
+  const search = await callZhihu(base, cookie, 'search', { query: searchQuery, count: 5 })
   if (!search.result?.ok) throw new Error(`search RPC failed: ${sanitize(JSON.stringify(search.result))}`)
   const searchSummary = summarizeItems(search.result.value)
   if (searchSummary.count < 1) throw new Error('search returned no items')
   recordFeature('rpc-search', true, `${searchSummary.count} items; ${searchSummary.titles[0] || '(untitled)'}`)
   report.rpc = { search: { status: search.status, ...searchSummary } }
 
-  const hot = await callZhihu(base, 'hot.list', { limit: 5 })
+  const hot = await callZhihu(base, cookie, 'hot.list', { limit: 5 })
   if (!hot.result?.ok) throw new Error(`hot.list RPC failed: ${sanitize(JSON.stringify(hot.result))}`)
   const hotSummary = summarizeItems(hot.result.value)
   if (hotSummary.count < 1) throw new Error('hot.list returned no items')
@@ -237,7 +256,7 @@ try {
   report.rpc.hot = { status: hot.status, ...hotSummary }
 
   if (includeAsk) {
-    const ask = await callZhihu(base, 'ask', { query: '一句话说明什么是伏笔。', model: 'zhida-fast-1p5' })
+    const ask = await callZhihu(base, cookie, 'ask', { query: '一句话说明什么是伏笔。', model: 'zhida-fast-1p5' })
     if (!ask.result?.ok) throw new Error(`ask RPC failed: ${sanitize(JSON.stringify(ask.result))}`)
     const content = String(ask.result.value?.content || ask.result.value?.answer?.content || '').trim()
     if (content.length < 4) throw new Error('ask returned empty content')
@@ -245,7 +264,7 @@ try {
     report.rpc.ask = { status: ask.status, model: 'zhida-fast-1p5', chars: content.length }
   }
 
-  const usage = await callZhihu(base, 'usage.summary', { days: 1 })
+  const usage = await callZhihu(base, cookie, 'usage.summary', { days: 1 })
   if (!usage.result?.ok) throw new Error(`usage.summary failed: ${sanitize(JSON.stringify(usage.result))}`)
   const today = usage.result.value?.days?.[0] || {}
   recordFeature('rpc-usage', true, `calls=${today.calls ?? 0} failures=${today.failures ?? 0}`)
