@@ -1,0 +1,94 @@
+{
+  "startedAt": "2026-09-10T15:17:19.426Z",
+  "book": "功能验收",
+  "workspace": "D:\\0 code\\dsh-editor\\.dev\\feature-coverage-projects\\功能验收",
+  "dsh": "0.1.1-rc.2",
+  "model": "MiniMax · MiniMax-M3",
+  "scope": "model UI workflows with fresh documents",
+  "phases": [
+    {
+      "name": "接口连接成功",
+      "detail": "MiniMax custom provider minimax-e2e / MiniMax-M3",
+      "at": "2026-09-10T15:17:29.131Z"
+    },
+    {
+      "name": "新建作品",
+      "detail": "D:\\0 code\\dsh-editor\\.dev\\feature-coverage-projects\\功能验收",
+      "at": "2026-09-10T15:17:29.642Z"
+    },
+    {
+      "name": "切换对话模型",
+      "detail": "MiniMax · MiniMax-M3",
+      "at": "2026-09-10T15:17:30.829Z"
+    },
+    {
+      "name": "规划总纲",
+      "detail": "大纲/总纲.md",
+      "at": "2026-09-10T15:18:16.505Z"
+    },
+    {
+      "name": "功能覆盖完成",
+      "detail": "6/6 ok",
+      "at": "2026-09-10T15:18:17.757Z"
+    }
+  ],
+  "features": [
+    {
+      "name": "settings-minimax",
+      "ok": true,
+      "detail": "custom MiniMax MiniMax-M3 (created)"
+    },
+    {
+      "name": "chat-ping",
+      "ok": true,
+      "detail": "pong"
+    },
+    {
+      "name": "rewrite-preset",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "fim-complete",
+      "ok": true,
+      "detail": "ghost accepted; saved text excludes reasoning"
+    },
+    {
+      "name": "chat-proposal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "conversation-menu",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "failures": [],
+  "screenshots": [
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\01-home.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\02-settings-minimax-m3.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\03-project-open.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\04-assistant-ready.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\05-rewrite.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\feature-coverage\\06-complete.png"
+  ],
+  "ok": true,
+  "rpc": [
+    {
+      "endpoint": "patch.complete",
+      "status": 200,
+      "ok": true,
+      "route": "dsh-llm",
+      "textChars": 23
+    },
+    {
+      "endpoint": "fim.complete",
+      "status": 200,
+      "ok": true,
+      "route": "dsh-llm",
+      "textChars": 87
+    }
+  ],
+  "finishedAt": "2026-09-10T15:18:17.855Z"
+}

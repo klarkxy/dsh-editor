@@ -1,0 +1,97 @@
+{
+  "startedAt": "2026-09-10T15:11:12.855Z",
+  "dsh": "0.1.1-rc.2",
+  "tokenSource": "file",
+  "tokenPresent": true,
+  "phases": [
+    {
+      "name": "DSH 就绪",
+      "detail": "http://127.0.0.1:6486",
+      "at": "2026-09-10T15:11:17.308Z"
+    },
+    {
+      "name": "知乎真调用完成",
+      "detail": "7/7 ok",
+      "at": "2026-09-10T15:11:23.138Z"
+    }
+  ],
+  "features": [
+    {
+      "name": "rpc-search",
+      "ok": true,
+      "detail": "5 items; 小白怎么分析小说的节奏和结构?什么是节奏和结构? - 知乎"
+    },
+    {
+      "name": "rpc-hot-list",
+      "ok": true,
+      "detail": "5 items; 如何评价霍奇猜想（七大千禧难题之一）疑似被 OpenAI 解决？"
+    },
+    {
+      "name": "rpc-ask-fast",
+      "ok": true,
+      "detail": "伏笔是文学创作中的一种手法，指作者在故事前段预先埋下的暗示或线索，为后文的情节发展或结局做铺垫，使读者读来既觉意外又在情理之中。"
+    },
+    {
+      "name": "rpc-usage",
+      "ok": true,
+      "detail": "calls=3 failures=0"
+    },
+    {
+      "name": "ui-search",
+      "ok": true,
+      "detail": "站内搜索共 5 条"
+    },
+    {
+      "name": "ui-hot-list",
+      "ok": true,
+      "detail": "知乎热榜共 10 条"
+    },
+    {
+      "name": "ui-usage",
+      "ok": true,
+      "detail": "正在读取用量…"
+    }
+  ],
+  "failures": [],
+  "screenshots": [
+    "D:\\0 code\\dsh-editor\\e2e\\out\\zhihu-live\\01-zhihu-search.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\zhihu-live\\02-zhihu-hot.png",
+    "D:\\0 code\\dsh-editor\\e2e\\out\\zhihu-live\\03-zhihu-usage.png"
+  ],
+  "ok": true,
+  "rpc": {
+    "search": {
+      "status": 200,
+      "count": 5,
+      "titles": [
+        "小白怎么分析小说的节奏和结构?什么是节奏和结构? - 知乎",
+        "写小说怎么能强情绪,节奏快? - 知乎",
+        "新人写网文把控不住节奏怎么办? - 知乎",
+        "写小说如何让自己的剧情节奏变快? - 知乎",
+        "写小说总是被人称赞文笔很好,但是又被诟病节奏太慢,如何取得画面感描写和节奏之间的平衡? - 知乎"
+      ]
+    },
+    "hot": {
+      "status": 200,
+      "count": 5,
+      "titles": [
+        "如何评价霍奇猜想（七大千禧难题之一）疑似被 OpenAI 解决？",
+        "如何看待大二学生因用名牌手机被取消资助后威胁要曝光，现愿意更换手机、到资助者亲戚家的店里打工挣钱？",
+        "酒店为什么会有三小时钟点房？",
+        "如何看待Anthropic 研究员Jacob 离职，称 AI 公司正「拿全人类的命运下注」？",
+        "女子旧手机号二次放号后支付宝被哈啰盗刷 6551 元，平台仅补 200 元，这合理吗？暴露了哪些问题？"
+      ]
+    },
+    "ask": {
+      "status": 200,
+      "model": "zhida-fast-1p5",
+      "chars": 64
+    },
+    "usage": {
+      "calls": 3,
+      "failures": 0,
+      "results": 11
+    }
+  },
+  "finishedAt": "2026-09-10T15:11:23.283Z"
+}
