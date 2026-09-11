@@ -81,7 +81,8 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Check types and tests
-        run: pnpm typecheck && pnpm test
+        # Windows file-operation tests spawn PowerShell; keep runner contention bounded.
+        run: pnpm typecheck && pnpm test --maxWorkers=2
       # 桌面 e2e 依赖 prepare-desktop-dev.mjs(Windows junction + win-x64
       # 运行时),按设计只在 Windows 上跑;mac 的打包校验由 pack:desktop 自带。
       - name: Install the test browser
