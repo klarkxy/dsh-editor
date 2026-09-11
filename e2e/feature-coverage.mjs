@@ -9,6 +9,7 @@
  * Credentials default to ~/.mmx/config.json. They are never printed.
  */
 import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +19,7 @@ import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const JSZip = createRequire(resolve(root, 'packages/dsh-editor-shell/package.json'))('jszip')
 const devRoot = resolve(root, '.dev')
 const projectsRoot = resolve(devRoot, 'feature-coverage-projects')
 const book = '功能验收'
@@ -173,6 +175,12 @@ let activePage
 async function dismissOverlays(page = activePage) {
   if (!page) return
   for (let step = 0; step < 6; step += 1) {
+    const closeCardDetail = page.getByRole('button', { name: '关闭卡片详情' })
+    if (await closeCardDetail.isVisible().catch(() => false)) {
+      await closeCardDetail.click()
+      await delay(200)
+      continue
+    }
     const overlay = page.locator('.file-dialog-overlay, .palette-overlay, .import-overlay, .settings-overlay').first()
     if (!(await overlay.isVisible().catch(() => false))) return
     const close = overlay.getByRole('button', { name: /^(关闭|取消)$/ }).first()
@@ -426,6 +434,7 @@ async function savePaper(page) {
   const save = page.getByRole('button', { name: '保存', exact: true })
   if (await save.isVisible().catch(() => false) && await save.isEnabled().catch(() => false)) await save.click()
   else await page.keyboard.press('Control+s')
+  await page.locator('[data-testid="paper-save-state"]', { hasText: '已保存' }).waitFor({ state: 'visible', timeout: 15_000 })
 }
 
 async function typeIntoPaper(page, text) {
@@ -705,6 +714,79 @@ async function seedImportSource() {
   await writeFile(resolve(importSource, '导入样章.md'), '# 导入样章\n\n这是给导入对话框用的源目录。\n', 'utf8')
 }
 
+async function openExportPreview(page) {
+  await runPaletteCommand(page, '导出', '导出全文')
+  const dialog = page.getByRole('dialog', { name: '导出全文' })
+  await dialog.waitFor({ state: 'visible', timeout: 20_000 })
+  await waitFor(async () => {
+    const markdown = await dialog.getByRole('button', { name: '导出 Markdown' }).isEnabled().catch(() => false)
+    const docx = await dialog.getByRole('button', { name: '导出 DOCX' }).isEnabled().catch(() => false)
+    const epub = await dialog.getByRole('button', { name: '导出 EPUB' }).isEnabled().catch(() => false)
+    return markdown && docx && epub
+  }, 'export preview ready', 20_000)
+  return dialog
+}
+
+async function closeExportPreview(page, dialog) {
+  if (await dialog.isVisible().catch(() => false)) {
+    const cancel = dialog.getByRole('button', { name: '取消' })
+    if (await cancel.isVisible().catch(() => false)) await cancel.click()
+  }
+  await page.getByRole('dialog', { name: '导出全文' }).waitFor({ state: 'hidden', timeout: 10_000 })
+}
+
+async function saveExportDownload(page, dialog, buttonName) {
+  const downloadWait = page.waitForEvent('download', { timeout: 30_000 })
+  try {
+    const [download] = await Promise.all([
+      downloadWait,
+      dialog.getByRole('button', { name: buttonName }).click(),
+    ])
+    const filename = download.suggestedFilename() || 'export.bin'
+    const target = resolve(output, filename)
+    await download.saveAs(target)
+    return { filename, target }
+  } catch (error) {
+    downloadWait.catch(() => undefined)
+    throw error
+  }
+}
+
+function assertPkZip(bytes, label) {
+  if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+    throw new Error(`${label} is not a zip archive`)
+  }
+}
+
+async function assertDocxExport(target) {
+  const bytes = await readFile(target)
+  assertPkZip(bytes, target)
+  const zip = await JSZip.loadAsync(bytes)
+  const xml = await zip.file('word/document.xml')?.async('string')
+  if (!xml) throw new Error(`${target} is missing word/document.xml`)
+  for (const needle of ['功能验收', '林简', '雾闸', '把证件给我']) {
+    if (!xml.includes(needle)) throw new Error(`${target} is missing ${needle}`)
+  }
+}
+
+async function assertEpubExport(target) {
+  const bytes = await readFile(target)
+  assertPkZip(bytes, target)
+  const zip = await JSZip.loadAsync(bytes)
+  const mime = await zip.file('mimetype')?.async('string')
+  if (mime !== 'application/epub+zip') throw new Error(`${target} mimetype is ${mime ?? 'missing'}`)
+  const names = Object.keys(zip.files)
+  if (!names.includes('META-INF/container.xml') || !names.includes('OEBPS/content.opf') || !names.includes('OEBPS/chapter-001.xhtml')) {
+    throw new Error(`${target} is missing EPUB entries: ${names.join(', ')}`)
+  }
+  const chapter = await zip.file('OEBPS/chapter-001.xhtml')?.async('string')
+  if (!chapter?.includes('林简') || !chapter.includes('把证件给我')) {
+    throw new Error(`${target} chapter is missing Chinese content`)
+  }
+  const opf = await zip.file('OEBPS/content.opf')?.async('string')
+  if (!opf?.includes('功能验收')) throw new Error(`${target} package document is missing the book title`)
+}
+
 async function coverWorkbench(page) {
   await cover('theme-toggle', async () => {
     const themeToggle = page.locator('.chrome .theme-toggle')
@@ -738,14 +820,36 @@ async function coverWorkbench(page) {
   })
 
   await cover('worldbook-settings', async () => {
-    const details = page.locator('.worldbook-settings, details').filter({ hasText: '世界书触发设置' }).first()
-    if (await details.count()) {
-      const summary = details.locator('summary').first()
-      if (await summary.isVisible().catch(() => false)) await summary.click()
-    }
-    const triggers = page.getByLabel('世界书触发词')
-    await triggers.waitFor({ state: 'visible', timeout: 10_000 })
-    await page.getByRole('button', { name: '应用设置' }).click()
+    await page.keyboard.press('Control+Shift+W')
+    const panel = page.getByRole('region', { name: '世界书' })
+    await panel.waitFor({ state: 'visible', timeout: 10_000 })
+    const settingTab = panel.getByRole('tab', { name: '设定' })
+    if (await settingTab.isVisible().catch(() => false)) await settingTab.click()
+    const card = panel.locator('.cards-item-main').filter({ hasText: '港口' }).first()
+    await card.waitFor({ state: 'visible', timeout: 15_000 })
+    await card.click()
+    const detail = page.getByRole('region', { name: '世界书详情' })
+    await detail.waitFor({ state: 'visible', timeout: 10_000 })
+    await detail.getByLabel('世界书分类').selectOption('地点')
+    await detail.getByLabel('标签').fill('雾港，闸口')
+    await detail.getByLabel('摘要').fill('海关记忆税闸口控制的雾港港口。')
+    await detail.getByRole('button', { name: '保存', exact: true }).click()
+    const diskPath = resolve(workspace, '世界书', '港口.md')
+    await waitFor(async () => {
+      const text = await readFile(diskPath, 'utf8').catch(() => '')
+      if (!text.includes('category: 地点') || !text.includes('tags: [雾港, 闸口]') || !text.includes('海关记忆税闸口控制的雾港港口。')) return false
+      if (!(await detail.getByRole('button', { name: '保存', exact: true }).isEnabled().catch(() => false))) return false
+      const category = await detail.getByLabel('世界书分类').inputValue().catch(() => '')
+      const tags = await detail.getByLabel('标签').inputValue().catch(() => '')
+      const summary = await detail.getByLabel('摘要').inputValue().catch(() => '')
+      return category === '地点' && tags === '雾港，闸口' && summary.includes('海关记忆税闸口控制的雾港港口。')
+    }, 'worldbook card fields persisted', 10_000)
+    const disk = await readFile(diskPath, 'utf8')
+    if (!disk.includes('triggers: [港口, 海关]')) throw new Error('worldbook triggers were not preserved')
+    if (!disk.includes('enabled: true') || !disk.includes('priority: 8')) throw new Error('worldbook trigger flags were not preserved')
+    if (!disk.includes('雾港的港口由海关记忆税闸口控制。')) throw new Error('worldbook body was not preserved')
+    await detail.getByRole('button', { name: '关闭卡片详情' }).click()
+    return '世界书/港口.md category/tags/summary'
   })
 
   await cover('create-character-file', async () => {
@@ -864,28 +968,58 @@ async function coverWorkbench(page) {
     const replace = page.locator('[data-testid="paper-search-replace"]')
     await replace.waitFor({ state: 'visible', timeout: 8_000 })
     await replace.fill('记忆税关口')
+    // CodeMirror replaces the selected match; first locate the newly entered query.
+    await page.locator('[data-testid="paper-search-next"]').click()
+    await page.waitForFunction(() => {
+      const view = document.querySelector('[data-testid="paper-editor"]')?.__cmView
+      if (!view) return false
+      const selection = view.state.selection.main
+      return view.state.sliceDoc(selection.from, selection.to) === '记忆税闸口'
+    })
     await page.locator('[data-testid="paper-search-replace-one"]').click()
+    await page.locator('[data-testid="paper-save-state"]', { hasText: '草稿未保存' }).waitFor({ state: 'visible', timeout: 8_000 })
     await page.locator('[data-testid="paper-search-close"]').click()
     await savePaper(page)
+    await waitFor(async () => {
+      const disk = await readFile(resolve(workspace, '正文', '001.md'), 'utf8').catch(() => '')
+      return disk.includes('记忆税关口') && disk.includes('锚点词ALPHA')
+    }, 'in-editor replace saved to disk', 10_000)
   })
 
   await cover('search-replace', async () => {
+    await openTreeFile(page, '001.md', '正文')
+    await page.locator('[data-testid="paper-save-state"]', { hasText: '已保存' }).waitFor({ state: 'visible', timeout: 15_000 })
+    await waitFor(async () => {
+      const disk = await readFile(resolve(workspace, '正文', '001.md'), 'utf8').catch(() => '')
+      return disk.includes('记忆税关口') && disk.includes('锚点词ALPHA') && !disk.includes('锚点词BETA')
+    }, 'chapter version stable before project search', 10_000)
     await page.keyboard.press('Control+Shift+F')
     const panel = page.getByRole('region', { name: '全文搜索' })
     await panel.waitFor({ state: 'visible', timeout: 10_000 })
-    await panel.getByLabel('搜索作品文字').fill('锚点词ALPHA')
+    const searchBox = page.locator('.sidebar input.side-search')
+    await searchBox.waitFor({ state: 'visible', timeout: 10_000 })
+    await searchBox.fill('锚点词ALPHA')
     await panel.getByRole('button', { name: '开始搜索' }).click()
     await panel.getByText(/处 · 已查/).waitFor({ state: 'visible', timeout: 20_000 })
     await panel.getByLabel('替换为').fill('锚点词BETA')
     await panel.getByRole('button', { name: '全部替换…' }).click()
     await page.getByRole('region', { name: '确认跨文件替换' }).waitFor({ state: 'visible', timeout: 10_000 })
     await page.getByRole('button', { name: '确认替换' }).click()
-    await page.getByText(/已替换/).waitFor({ state: 'visible', timeout: 20_000 })
+    const outcome = panel.locator('.search-replace-result')
+    await outcome.waitFor({ state: 'visible', timeout: 20_000 })
+    const outcomeText = (await outcome.innerText()).replace(/\s+/g, ' ')
+    if (/已跳过|未能写入/.test(outcomeText)) throw new Error(`replace skipped or failed: ${outcomeText}`)
+    if (!/已替换 [1-9]\d* 个文件、[1-9]\d* 处/.test(outcomeText)) throw new Error(`replace did not apply: ${outcomeText}`)
+    await waitFor(async () => {
+      const disk = await readFile(resolve(workspace, '正文', '001.md'), 'utf8').catch(() => '')
+      return disk.includes('锚点词BETA') && !disk.includes('锚点词ALPHA')
+    }, 'project replace landed on disk', 10_000)
     await openTreeFile(page, '001.md', '正文')
-    const disk = await readFile(resolve(workspace, '正文', '001.md'), 'utf8').catch(() => '')
+    const disk = await readFile(resolve(workspace, '正文', '001.md'), 'utf8')
     const text = await page.locator('[data-testid="paper-editor"]').innerText()
-    if (!disk.includes('锚点词BETA') && !text.includes('锚点词BETA')) throw new Error('replace did not land')
-    return disk.includes('锚点词BETA') ? 'disk' : 'editor'
+    if (!disk.includes('锚点词BETA') || disk.includes('锚点词ALPHA')) throw new Error('replace did not land on disk')
+    if (!text.includes('锚点词BETA')) throw new Error('replace did not land in editor')
+    return 'disk'
   })
 
   await cover('overview', async () => {
@@ -940,15 +1074,24 @@ async function coverWorkbench(page) {
   })
 
   await cover('export', async () => {
-    await runPaletteCommand(page, '导出', '导出全文')
-    const dialog = page.getByRole('dialog', { name: '导出全文' })
-    await dialog.waitFor({ state: 'visible', timeout: 20_000 })
-    const downloadPromise = page.waitForEvent('download', { timeout: 20_000 })
-    await dialog.getByRole('button', { name: '导出 Markdown' }).click()
-    const download = await downloadPromise
-    await download.saveAs(resolve(output, download.suggestedFilename() || 'export.md'))
-    await dialog.getByRole('button', { name: '取消' }).click().catch(() => undefined)
-    return download.suggestedFilename() || 'export.md'
+    const markdownDialog = await openExportPreview(page)
+    const markdown = await saveExportDownload(page, markdownDialog, '导出 Markdown')
+    const markdownText = await readFile(markdown.target, 'utf8')
+    if (!markdownText.includes('功能验收') || !markdownText.includes('林简') || !markdownText.includes('把证件给我')) {
+      throw new Error('markdown export missing Chinese content')
+    }
+    await closeExportPreview(page, markdownDialog)
+
+    const docxDialog = await openExportPreview(page)
+    const docx = await saveExportDownload(page, docxDialog, '导出 DOCX')
+    await assertDocxExport(docx.target)
+    await closeExportPreview(page, docxDialog)
+
+    const epubDialog = await openExportPreview(page)
+    const epub = await saveExportDownload(page, epubDialog, '导出 EPUB')
+    await assertEpubExport(epub.target)
+    await closeExportPreview(page, epubDialog)
+    return `${markdown.filename}, ${docx.filename}, ${epub.filename}`
   })
 
   await cover('archive-restore', async () => {
@@ -1124,7 +1267,14 @@ async function coverAi(page) {
     await openTreeFile(page, '002.md', '正文')
     const content = page.locator('[data-testid="paper-editor"] .cm-content')
     await content.click()
-    await page.keyboard.press('End')
+    await page.keyboard.press('Control+End')
+    // Give completion a reproducible unfinished sentence at the document end.
+    await page.keyboard.insertText('\n\n林简推开门，发现窗边的人正握着录音带，她')
+    await savePaper(page)
+    await page.waitForFunction(() => {
+      const view = document.querySelector('[data-testid="paper-editor"]')?.__cmView
+      return view && view.state.selection.main.head === view.state.doc.length
+    })
     await page.locator('[data-testid="paper-fim"]').click()
     await waitFor(async () => {
       if (await page.locator('[data-testid="paper-ghost"]').count()) return true

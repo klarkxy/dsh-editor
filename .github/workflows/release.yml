@@ -37,6 +37,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.16.0
+      - name: Verify the release tag matches the desktop version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: node scripts/verify-release-version.mjs "$RELEASE_TAG"
       - name: Resolve the npm global package root
         id: npm-root
         shell: bash

@@ -193,7 +193,7 @@ pnpm pack:desktop
 
 ## Release CI
 
-推送 `v*` tag 会触发 `.github/workflows/release.yml`：Windows 与 macOS runner 各自安装 pin 版本的 DSH CLI、`pnpm install --frozen-lockfile`、`pnpm pack:desktop`，然后把产物上传到该 tag 的 GitHub Release（不存在则创建）。也可以用 workflow_dispatch 输入 tag 给已发布版本补传产物。tag、release 标题与 notes 仍由人工维护；CI 只负责构建与上传。
+推送 `v*` tag 会触发 `.github/workflows/release.yml`，先要求标签严格等于 `v` 加桌面应用版本号；不一致会在构建前失败。之后 Windows 与 macOS runner 各自安装 pin 版本的 DSH CLI、`pnpm install --frozen-lockfile`、`pnpm pack:desktop`，然后把产物上传到该 tag 的 GitHub Release（不存在则创建）。也可以用 workflow_dispatch 输入 tag 给已发布版本补传产物。tag、release 标题与 notes 仍由人工维护；CI 只负责构建与上传。
 
 ## 安全审查清单
 

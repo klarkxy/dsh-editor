@@ -125,15 +125,11 @@ basic / smart 只是更小的 feature 集合，包集合与入口开关全部由
 - 批量用户问题回答；
 - connection 状态与重连提示。
 
-每次非空发送先按固定顺序读取最多五份 Markdown：`项目总览.md`、`大纲/总纲.md`、`人物卡/人物索引.md`、`世界书/设定总汇.md`、可选的 `.dsh-editor/作品索引.md`。每份最多纳入 4,000 字符，总计最多 12,000 字符。Host 随后在 live session 绑定的 canonical workspace authority 内，以 no-follow/provider-confined 文件 API 扫描可见的 `世界书/**/*.md`（排除固定 `设定总汇.md`）：最多 64 个候选、64 个目录、8 层、单文件 64 KiB、总扫描 512 KiB。严格 frontmatter 提供 `triggers`、`enabled`、`priority`；无 frontmatter 的旧文件以相对文件名触发。匹配仅使用原始请求、当前已保存文档的相对路径和最多 8,000 字符已保存内容，不读取 Renderer 未保存草稿。动态项按优先级和稳定路径排序，单份最多 3,000 字符、合计最多 6,000 字符，绝不挤占固定五份的 12,000 字符预算。
+当前请求使用 V3 任务信封，仅含原始请求与可选 `active_path`。`compileContext` 先校验根目录项目规则，再交给同一 DSH session；人物卡、世界书、总纲与作品索引不自动拼入信封，由 Agent 按需通过 `glob`、`grep`、`read` 获取。
 
-Renderer 另维护最多 1,200 字符的本机跨作品作者约定，并在 V2 JSON 信封的可选 `author_preferences` 字段中与 `user_request`、`project_context` 分离。Host 会重新规范化并限制长度；canonical parser 同样验证边界，V1 历史不接受伪造的新增字段。对话回执只暴露字符数，不回显原文。FIM 与选段修改经各自 RPC 的同名有界字段带入 system guidance，仍由 Host 选择 live-session provider/model；该字段不属于作品 canon、不扩大文件权限，也不改变 stale/abort 规则。
+`system-prompt/assemble` 钩子只为 `dsh-editor` preset 读取工作区根目录 `AGENTS.md`，并带入有界的跨作品作者偏好与已确认侧写。根目录存在多份大小写冲突文件时失败，不发现全局或子目录规则。优先级为当轮明确要求、项目规则、跨作品默认偏好；这些文本不扩大文件和工具权限。FIM 与选段修改也读取同一项目规则，并保持现有取消、版本与写入边界。
 
-Renderer 同时维护最多 2,000 字符的本机作者侧写 `author_memory`，与作者约定同源信任边界但语义独立：助手只能通过 `author_observe` 工具（marker `dsh-editor.memory`，单条 observation ≤ 200 字、含 reason）在对话里提议"记住一条偏好"，未经作者在 `MemoryCard` 显式确认前绝不能当作已记忆。`author_memory` 同样以 V2 JSON 信封的可选字段随 `context.compile` 自动注入；Host 重新规范化、限制 2,000 字、拒绝伪造字段、验证后与原文一致；V1 历史不接收该字段。对话回执只暴露字符数，不回显原文。FIM 与选段修改的 RPC 不带 `authorMemory`——作品内一次性偏好由用户输入或命令直接执行，留在请求上下文里而不进持久侧写；侧写本身不进入作品 canon、不扩大文件权限，也不改变 stale/abort 规则。
-
-固定与动态读取结果、扫描计数和原始请求以 V2 JSON 信封一次提交给同一 DSH session；解析器仍严格接受历史 V1。文件文本是不可信数据，单文件缺失、格式无效、超限或读取失败只进入有界回执；整个 Host 编译失败则不调用 `session.prompt`。Renderer 仅显示原请求和不含原文的回执，DSH 历史保留完整信封。`novel_knowledge` 不属于该回执，深层或最新事实仍由 Agent 通过 `glob`、`grep`、`read` 验证。
-
-普通世界书的触发词、`enabled` 与 `priority` 写在 Markdown 文件开头的 frontmatter 中；打开 `世界书/` 文档时稿纸提供可视化触发设置，写入编辑 buffer 后再走普通保存。Host 仍按相同 frontmatter 解析，损坏 / 停用 / 超出扫描限制的文件不会进入提示，文件正文不会被界面覆盖，缺 frontmatter 的旧文件继续以文件名作为触发词。
+解析器兼容历史 V1/V2；旧信封在下一轮进入模型前只替换模型可见的投影为原始用户请求，来源事件保留。世界书旧 frontmatter 仍可作为文件内容保存，但不再驱动自动注入，稿纸触发设置表单已移除。卡片详情通过 `dsh-editor-cards` 修改分类、标签、摘要等当前字段，原文件和版本保护保持在 Host 内。
 
 未知节点或工具显示通用降级卡。Renderer 不持久化对话副本；刷新后仍以 DSH snapshot 为准。`novel_knowledge` 的运行中调用对用户隐藏；`novel_propose` 的结果只在通过 `dsh-editor-novel-kernel/contracts` 严格解析后渲染为作者确认卡。
 
