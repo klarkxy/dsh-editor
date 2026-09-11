@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { catalogFromEditorBlocks } from './core.ts'
 import { handlePluginsRpc, inventoryFromLoader } from './index.ts'
@@ -123,10 +124,12 @@ describe('plugin paths', () => {
   })
 
   it('prefers the profile that actually loaded this package', () => {
-    const moduleUrl = 'file:///D:/isolated-home/profiles/dsh-editor/node_modules/dsh-editor-plugins/lib/index.js'
-    expect(profileDirFromPluginModule(moduleUrl)?.replaceAll('\\', '/')).toBe('D:/isolated-home/profiles/dsh-editor')
-    const paths = resolvePluginPaths({}, ['node', 'dsh'], 'D:/Users/x', moduleUrl)
-    expect(paths.profileDir.replaceAll('\\', '/')).toBe('D:/isolated-home/profiles/dsh-editor')
-    expect(paths.home.replaceAll('\\', '/')).toBe('D:/isolated-home')
+    const home = join(tmpdir(), 'isolated-home')
+    const profileDir = join(home, 'profiles', 'dsh-editor')
+    const moduleUrl = pathToFileURL(join(profileDir, 'node_modules', 'dsh-editor-plugins', 'lib', 'index.js')).href
+    expect(profileDirFromPluginModule(moduleUrl)).toBe(profileDir)
+    const paths = resolvePluginPaths({}, ['node', 'dsh'], join(tmpdir(), 'other-user'), moduleUrl)
+    expect(paths.profileDir).toBe(profileDir)
+    expect(paths.home).toBe(home)
   })
 })
