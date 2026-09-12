@@ -157,7 +157,7 @@ try {
   await window.keyboard.press('Control+s')
   await window.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor()
   if(!(await readFile(resolve(home,'projects','便携组合验证','正文','001.md'),'utf8')).includes('最终便携产物保存验证'))throw new Error('portable save missing on disk')
-  state.operations=['proofread same text','Zhihu contribution','create project/document and save to disk']
+  state.operations=['proofreading and Zhihu desktop launchers absent','Zhihu configuration opens inside settings','create project/document and save to disk']
   await window.screenshot({ path: resolve(output, 'window.png') })
   const origin = url.origin
   await window.close()
