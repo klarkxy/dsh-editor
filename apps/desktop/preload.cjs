@@ -31,4 +31,8 @@ contextBridge.exposeInMainWorld('dshWindow', {
     ipcRenderer.on('dsh-window:maximized', handler)
     return () => ipcRenderer.removeListener('dsh-window:maximized', handler)
   },
+  clipboard: {
+    readText: () => ipcRenderer.invoke('dsh-window:clipboard-read-text'),
+    writeText: (text) => ipcRenderer.invoke('dsh-window:clipboard-write-text', text),
+  },
 })

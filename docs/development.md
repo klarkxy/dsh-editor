@@ -22,7 +22,7 @@ pnpm install --frozen-lockfile
 
 ```text
 apps/desktop/                  Electron main、profile 部署、进程监督与 portable 配置
-packages/dsh-editor-shell/     仅桌面 profile 加载的私有写作客户端（src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}）
+packages/dsh-editor-shell/     仅桌面 profile 加载的私有写作客户端（src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared,ui}：Dialog/Menu/Select 与 Motion 入口卡）
 packages/dsh-editor-plugins/   私有插件管理：开关、GitHub 市场搜索与安装
 packages/dsh-editor-workbench/ 私有项目生命周期与 context Host
 packages/dsh-editor-novel-kernel/ 私有小说 Tool、guard、prompt 与知识卡
@@ -73,6 +73,12 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 | `pnpm test:e2e:matrix` | 公开插件 fresh-home 安装/卸载矩阵 |
 | `pnpm verify:desktop` | 桌面 typecheck、unit、build、桌面 E2E 与核心闭环 |
 | `pnpm verify:delivery` | 桌面验证、公开插件矩阵、缺包负向 smoke、桌面打包和 portable E2E |
+
+## 正文菜单验收
+
+完成 `pnpm build` 与 `node scripts/prepare-desktop-dev.mjs` 后运行 `node e2e/editor-context-menu.mjs`。脚本启动隔离作品的 Electron 窗口，默认先验证原生系统剪贴板；环境拒绝访问时输出 blocked 报告并退出 2，不把这一项算通过。
+
+可显式使用 `node e2e/editor-context-menu.mjs --clipboard=memory` 验证菜单到 preload / IPC / 编辑事务的行为。此模式使用主进程纯文本测试替身；延迟读取用专门的 IPC 驱动，AI 使用确定性的 fetch 响应，均不代表真实剪贴板或在线模型验收。中文输入覆盖模拟组字键事件，仍需人工真实输入法走查。报告与截图保存在 `e2e/out/editor-context-menu/<时间>/`。桌面交互测试串行运行，避免窗口抢焦点。
 
 ## `pnpm run dev`
 

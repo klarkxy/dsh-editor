@@ -6,13 +6,8 @@ import {
   WRITING_SETTINGS_NAMESPACE,
   createWritingMigration,
   decodeWritingPreferences,
-  type WritingPreferences,
+  writingPreferences,
 } from './writing-settings.ts'
-import {
-  PROGRESS_SETTINGS_NAMESPACE,
-  decodeWritingProgress,
-  type WritingProgress,
-} from './writing-progress.ts'
 import { decodeHostThemePreference, writeHostThemePreference, type HostThemeSync } from './client/theme.ts'
 import { decodeLocalePreference } from './client/settings-general.tsx'
 import { bindLocalePreference } from './i18n/index.ts'
@@ -33,6 +28,7 @@ export const inject = [
 export {
   canSubmitComposer,
   claimInitialWorkspaceResume,
+  consumeInitialWorkspaceResume,
   clampPanelWidth,
   createFlowWorkspace,
   errorMessage,
@@ -86,9 +82,11 @@ type SettingsSlot = { bind<T>(spec: { namespace: string; decode?(value: unknown)
 
 export function apply(ctx: Context): void {
   const client = ctx as ShellContext & { settingsScope: SettingsSlot }
-  provideEditorUiWorkspace(client)
-  bindOfficialConversation(client)
   const writingScope = client.settingsScope.bind({ namespace: WRITING_SETTINGS_NAMESPACE, decode: decodeWritingPreferences })
+  provideEditorUiWorkspace(client, {
+    defaultChatModel: () => writingPreferences(writingScope.getSnapshot()).chatModel,
+  })
+  bindOfficialConversation(client)
   const migrateWritingPreferences = createWritingMigration(writingScope, globalThis.localStorage)
   void migrateWritingPreferences()
   // Host chrome follows the host `ui-theme` preference; sync it so the
@@ -102,10 +100,6 @@ export function apply(ctx: Context): void {
     write: (preference) => writeHostThemePreference(hostThemeScope, preference),
     subscribe: (listener) => hostThemeScope.subscribe(listener),
   }
-  const progressScope: SettingsScope<WritingProgress> = client.settingsScope.bind({
-    namespace: PROGRESS_SETTINGS_NAMESPACE,
-    decode: decodeWritingProgress,
-  })
   const commands = createCommandRegistry()
   const messageCards = createMessageCardRegistry()
   ctx.provide(COMMANDS_SERVICE, commands)
@@ -113,7 +107,6 @@ export function apply(ctx: Context): void {
   registerShellRoot(client, {
     writingScope,
     migrateWriting: migrateWritingPreferences,
-    progressScope,
     hostThemeSync,
     commands,
     registerRoot: (target: ShellContext, render: (props: unknown) => ReactNode) => registerRoot(target, render),

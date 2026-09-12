@@ -275,8 +275,7 @@ try {
   }
   for (const removed of ['作品快照', '导入作品', '导出 Markdown', '导出 TXT', '管理当前作品', '返回作品列表']) {
     if (await page.getByRole('button', { name: removed }).count()) {
-      // "返回作品列表" is a button rendered in the workspace menu, so it appears inside a closed <details>.
-      // Only count visible buttons to keep the assertion honest.
+      // Secondary workspace actions live in the host Menu and should not show as chrome buttons.
       const visible = await page.getByRole('button', { name: removed }).first().isVisible().catch(() => false)
       if (visible) failures.push(`removed button leaked into chrome: ${removed}`)
     }
@@ -374,7 +373,7 @@ try {
   // the round-trip still works. (No chapter was created, so the tree shows
   // the static groups but the editor area remains empty.)
   await page.getByRole('button', { name: '作品菜单' }).click()
-  await page.getByRole('button', { name: '返回作品列表' }).click()
+  await page.getByRole('menuitem', { name: '返回作品列表' }).click()
   await page.locator('.home-stage').waitFor({ state: 'visible' })
   await page.locator('.home-recent').getByRole('button', { name: /core-loop-workspace/ }).first().click()
   await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })

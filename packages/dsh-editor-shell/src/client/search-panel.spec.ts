@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { canReplaceAll, groupSearchHits, paperRevealRange, replaceBlockedByDirty, type SearchHit } from './search-panel.ts'
+import { planReplace } from '../search-replace.ts'
+import { acceptSearchResults, canReplaceAll, groupSearchHits, paperRevealRange, replaceBlockedByDirty, type SearchHit } from './search-panel.ts'
 
 function hit(path: string, start: number, excerpt: string): SearchHit {
   return { path, line: 1, column: 1, start, end: start + excerpt.length, excerpt, version: 'v1' }
@@ -33,6 +34,29 @@ describe('search result grouping', () => {
     const range = paperRevealRange('正文/002.md', text, { start: text.indexOf('港口规则'), end: text.indexOf('港口规则') + 4 })
     expect(range.from).toBe(0)
     expect(range.to).toBe(4)
+  })
+})
+
+describe('auxiliary search filtering', () => {
+  it('drops AGENTS.md from accepted hits so replace never plans it', () => {
+    const accepted = acceptSearchResults({
+      results: [
+        hit('AGENTS.md', 0, '隔离测试'),
+        hit('正文/001.md', 4, '隔离测试'),
+        hit('CLAUDE.md', 0, '隔离测试'),
+      ],
+      scannedFiles: 8,
+      scannedBytes: 1200,
+      skipped: 1,
+      truncated: true,
+    })
+    expect(accepted.results.map((item) => item.path)).toEqual(['正文/001.md'])
+    expect(accepted.scannedFiles).toBe(8)
+    expect(accepted.skipped).toBe(1)
+    expect(accepted.truncated).toBe(true)
+    const plan = planReplace(accepted.results, '替换')
+    expect(plan.files.map((file) => file.path)).toEqual(['正文/001.md'])
+    expect(plan.files).toHaveLength(1)
   })
 })
 

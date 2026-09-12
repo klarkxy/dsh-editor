@@ -11,9 +11,13 @@ import {
 import type { SessionFace } from '../dsh-compat.ts'
 import {
   EditorCore,
+  editorCommandState,
+  type EditorCommandState,
+  type EditorContextMenuEvent,
   type EditorCoreHandle,
   type EditorCorePaperProjection,
   type EditorCoreStatus,
+  type EditorTargetSnapshot,
   type CompletionPreference,
 } from 'dsh-manuscript/client/editor-core'
 import { DraftSyncQueue } from '../drafts.ts'
@@ -31,8 +35,7 @@ import {
   type ShellContext,
 } from './shared.ts'
 import { isChapterMetaPath, ChapterMetaSettings } from './chapter-meta-settings.ts'
-import { RewritePresetsBar } from './rewrite-presets-bar.ts'
-import { canRewritePath } from '../rewrite-presets-view.ts'
+import { canRewritePath, CUSTOM_INSTRUCTION_MAX, normalizeCustomInstruction } from '../rewrite-presets-view.ts'
 import {
   chapterContextFor,
   previousChapterPath,
@@ -40,10 +43,58 @@ import {
   type PreviousChapterState,
 } from '../chapter-meta-view.ts'
 import { t } from '../i18n/index.ts'
+import { Button, Dialog, Input } from './ui/index.ts'
+import {
+  clipboardResultMessage,
+  copyEditorSelection,
+  cutEditorSelection,
+  editorClipboardBridge,
+  pasteEditorSelection,
+} from './editor-clipboard.ts'
+import {
+  EditorContextMenu,
+  EditorOverflowMenu,
+  type EditorMenuAction,
+  type EditorMenuModel,
+} from './editor-menu.tsx'
 
 const PAPER_PROJECTION: EditorCorePaperProjection = {
   project: worldbookPaperProjection,
   replace: replaceWorldbookPaperText,
+}
+
+/** Opens the existing dsh-proofread dialog with captured visible paper text. */
+const PROOFREAD_TEXT_EVENT = 'dsh-proofread:open-text'
+
+export type ProofreadOpenDetail = {
+  text: string
+  sourceLabel?: string
+  onLocate?(start: number, end: number): boolean
+}
+
+function requestProofreadText(detail: ProofreadOpenDetail): boolean {
+  const event = new CustomEvent(PROOFREAD_TEXT_EVENT, { detail, cancelable: true })
+  globalThis.dispatchEvent(event)
+  return event.defaultPrevented
+}
+
+export function locateProofreadOffsets(input: {
+  handle: EditorCoreHandle
+  snapshot: EditorTargetSnapshot
+  sentText: string
+  originStart: number
+  start: number
+  end: number
+}): boolean {
+  if (!input.handle.isTargetCurrent(input.snapshot)) return false
+  const selected = input.snapshot.start < input.snapshot.end
+  // isTargetCurrent already validates the captured span against the live document.
+  // A prior locate may move the cursor without changing that source span.
+  const liveText = selected ? input.snapshot.selectedText : input.handle.getVisiblePaperText()
+  if (liveText !== input.sentText) return false
+  if (input.start < 0 || input.end < input.start || input.end > input.sentText.length) return false
+  input.handle.revealRange(input.originStart + input.start, input.originStart + input.end)
+  return true
 }
 
 const HIDE_NOTICE: CSSProperties = { display: 'none' }
@@ -97,8 +148,6 @@ export function Editor(props: {
     paragraphSpacing?: number
     maxWidth?: number
   }
-  onToggleTypewriter?(): void
-  onToggleFocusParagraph?(): void
   onSaved(): void
   reveal: RevealRequest | null
   onHandle?(handle: EditorCoreHandle | null): void
@@ -118,8 +167,6 @@ export function Editor(props: {
     typewriter = false,
     focusParagraph = false,
     typography,
-    onToggleTypewriter,
-    onToggleFocusParagraph,
     reveal,
     onHandle: onHandleOut,
   } = props
@@ -133,6 +180,19 @@ export function Editor(props: {
   const [revisionTick, setRevisionTick] = useState(0)
   const externalRevision = incomingRevision + revisionTick
   const handleRef = useRef<EditorCoreHandle | null>(null)
+  const pendingMenuAction = useRef<(() => void) | null>(null)
+  const editorFocusTarget = useRef<HTMLElement | null>(null)
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [menuState, setMenuState] = useState<EditorCommandState>(() => editorCommandState({
+    loaded: false, conflict: false, busy: false, completionEnabled: false, enablePatch: false,
+    hasVisibleSelection: false, collapsed: true, dirty: false, canUndo: false, canRedo: false, paperLength: 0,
+  }))
+  const [menuTarget, setMenuTarget] = useState<EditorTargetSnapshot | null>(null)
+  const [chapterMetaOpen, setChapterMetaOpen] = useState(false)
+  const [customRewriteOpen, setCustomRewriteOpen] = useState(false)
+  const [customText, setCustomText] = useState('')
+  const [customTarget, setCustomTarget] = useState<EditorTargetSnapshot | null>(null)
 
   // Serialize draft RPCs so a delayed put cannot land after save's delete.
   // Every call carries this window's ownerId; the queue tracks per-file
@@ -170,9 +230,163 @@ export function Editor(props: {
   const onError = useCallback((message: string) => { setNote(message) }, [])
   const onHandle = useCallback((handle: EditorCoreHandle | null) => {
     handleRef.current = handle
-    if (handle) setBufferText(handle.getText() ?? '')
+    if (handle) {
+      setBufferText(handle.getText() ?? '')
+      editorFocusTarget.current = handle.getFocusTarget()
+    }
     onHandleOut?.(handle)
   }, [onHandleOut])
+
+  const snapshotMenu = useCallback(() => {
+    const handle = handleRef.current
+    if (!handle || handle.isComposing()) return false
+    setMenuState(handle.getCommandState())
+    setMenuTarget(handle.captureTarget())
+    return true
+  }, [])
+
+  const closeMenus = useCallback(() => {
+    setOverflowOpen(false)
+    setContextMenu(null)
+  }, [])
+
+  const focusEditorIfNeeded = useCallback((event?: Event) => {
+    event?.preventDefault()
+    const action = pendingMenuAction.current
+    pendingMenuAction.current = null
+    globalThis.setTimeout(() => {
+      if (action) action()
+      else handleRef.current?.focus()
+    }, 0)
+  }, [])
+
+  const runMenuAction = useCallback((action: EditorMenuAction) => {
+    const handle = handleRef.current
+    if (!handle) return
+    const live = handle.getCommandState()
+    const target = menuTarget ?? handle.captureTarget()
+    if (target && !handle.isTargetCurrent(target)) {
+      closeMenus()
+      setNote(t('editor.clipboardExpired'))
+      return
+    }
+    const canRewriteTarget = live.loaded && live.completionEnabled && live.enablePatch && !live.conflict && !live.busy
+      && Boolean(target && target.start < target.end)
+    const canCompleteTarget = live.loaded && live.completionEnabled && !live.conflict && !live.busy
+      && Boolean(target && target.start === target.end)
+    const afterMenu = (run: () => void) => {
+      pendingMenuAction.current = () => {
+        if (target && handleRef.current?.isTargetCurrent(target)) run()
+      }
+    }
+
+    if (action === 'undo') { if (live.canUndo) handle.undo(); return }
+    if (action === 'redo') { if (live.canRedo) handle.redo(); return }
+    if (action === 'selectAll') { if (live.canSelectAll) handle.selectAll(); return }
+    if (action === 'save') { if (live.canSave) void handle.save(); return }
+    if (action === 'find') { if (live.canFind) afterMenu(() => handleRef.current?.openFind()); return }
+    if (action === 'replace') { if (live.canReplace) afterMenu(() => handleRef.current?.openReplace()); return }
+    if (action === 'complete') { if (canCompleteTarget && target && handle.restoreTarget(target)) handle.requestCompletion(); return }
+    if (action === 'rewrite') {
+      if (!canRewriteTarget) return
+      afterMenu(() => {
+        setCustomTarget(target)
+        setCustomText('')
+        setCustomRewriteOpen(true)
+      })
+      return
+    }
+    if (action === 'proofread') {
+      afterMenu(() => {
+        const liveHandle = handleRef.current
+        if (!liveHandle || (target && !liveHandle.isTargetCurrent(target))) {
+          setNote(t('editor.clipboardExpired'))
+          return
+        }
+        const selected = liveHandle.getVisibleSelectionText()
+        const paper = liveHandle.getVisiblePaperText()
+        const text = selected || paper
+        if (!text.trim()) {
+          setNote(t('editor.proofreadEmpty'))
+          return
+        }
+        const snapshot = liveHandle.captureTarget()
+        if (!snapshot) {
+          setNote(t('editor.clipboardExpired'))
+          return
+        }
+        const usingSelection = selected.length > 0
+        const originStart = usingSelection ? snapshot.start : liveHandle.getPaperOffset()
+        const sourceLabel = usingSelection ? t('editor.proofreadSelection') : t('editor.proofreadChapter')
+        const opened = requestProofreadText({
+          text,
+          sourceLabel,
+          onLocate: (start, end) => {
+            const current = handleRef.current
+            if (!current) return false
+            const ok = locateProofreadOffsets({ handle: current, snapshot, sentText: text, originStart, start, end })
+            if (!ok) setNote(t('editor.proofreadLocateFailed'))
+            return ok
+          },
+        })
+        if (!opened) setNote(t('editor.proofreadUnavailable'))
+      })
+      return
+    }
+    if (action === 'chapterMeta') { if (live.loaded && !live.conflict && isChapterMetaPath(path)) afterMenu(() => setChapterMetaOpen(true)); return }
+
+    const bridge = editorClipboardBridge()
+    if (!bridge) {
+      setNote(t('editor.clipboardUnavailable'))
+      return
+    }
+    if (action === 'copy') {
+      void copyEditorSelection({ handle, state: live, target, writeText: (text) => bridge.writeText(text) }).then((result) => {
+        const message = clipboardResultMessage(result)
+        if (message) setNote(message)
+      })
+      return
+    }
+    if (action === 'cut') {
+      void cutEditorSelection({ handle, state: live, target, writeText: (text) => bridge.writeText(text) }).then((result) => {
+        const message = clipboardResultMessage(result)
+        if (message) setNote(message)
+      })
+      return
+    }
+    if (action === 'paste') {
+      void pasteEditorSelection({ handle, state: live, target, readText: () => bridge.readText() }).then((result) => {
+        const message = clipboardResultMessage(result)
+        if (message) setNote(message)
+      })
+    }
+  }, [menuTarget, path, closeMenus])
+
+  const onEditorContextMenu = useCallback((event: EditorContextMenuEvent) => {
+    if (!snapshotMenu()) return
+    setOverflowOpen(false)
+    setContextMenu({ x: event.x, y: event.y })
+  }, [snapshotMenu])
+
+  const menuModel: EditorMenuModel = {
+    state: menuState,
+    canChapterMeta: isChapterMetaPath(path) && menuState.loaded && !menuState.conflict,
+    canRewritePath: canRewritePath(path) && completionEnabled,
+  }
+
+  const runCustomRewrite = () => {
+    const instruction = normalizeCustomInstruction(customText)
+    if (!instruction) return
+    const handle = handleRef.current
+    const target = customTarget
+    setCustomRewriteOpen(false)
+    if (!handle || !target || !handle.isTargetCurrent(target)) {
+      setNote(t('editor.rewriteLocked'))
+      return
+    }
+    handle.restoreTarget(target)
+    handle.requestRewrite(instruction, target)
+  }
   const [bufferText, setBufferText] = useState('')
 
   const onStatusChange = useCallback((next: EditorCoreStatus) => {
@@ -221,7 +435,12 @@ export function Editor(props: {
     setNote('')
     setReloadConfirm(false)
     setBufferText('')
-  }, [path, session.sessionId])
+    setOverflowOpen(false)
+    setContextMenu(null)
+    setChapterMetaOpen(false)
+    setCustomRewriteOpen(false)
+    setCustomTarget(null)
+  }, [path, session.sessionId, externalRevision])
 
   const applyFrontmatterBuffer = useCallback(async (next: string) => {
     const doc = handleRef.current?.getDocument()
@@ -288,10 +507,11 @@ export function Editor(props: {
   }, [path, reveal?.nonce, reveal?.path, reveal?.version, externalRevision])
 
   if (!path) {
+    const hasChapter = files.some((item) => /^正文\/.+\.(md|txt)$/i.test(item))
     return e(PaperStage, { label: t('editor.emptyChapter') },
       e('p', { className: 'home-hint' }, t('editor.emptyHint')),
       e('div', { className: 'home-actions' },
-        e('button', { className: 'primary-action', type: 'button', onClick: create }, t('editor.newFile')),
+        e('button', { className: 'primary-action', type: 'button', onClick: create }, hasChapter ? t('editor.newChapter') : t('editor.writeFirstChapter')),
       ),
     )
   }
@@ -316,6 +536,7 @@ export function Editor(props: {
       slotClassName: {
         header: 'editor-header',
         textarea: 'paper-input',
+        proposal: 'proposal',
       },
       slotStyle: { notice: HIDE_NOTICE },
       completionPreference,
@@ -324,24 +545,19 @@ export function Editor(props: {
       typewriter,
       focusParagraph,
       typography,
-      headerExtras: onToggleTypewriter || onToggleFocusParagraph
-        ? e('div', { className: 'paper-experience-toggles' },
-          onToggleTypewriter ? e('button', {
-            type: 'button',
-            title: t('editor.typewriterTitle'),
-            'aria-label': t('editor.typewriterTitle'),
-            'aria-pressed': typewriter,
-            onClick: onToggleTypewriter,
-          }, t('editor.typewriter')) : null,
-          onToggleFocusParagraph ? e('button', {
-            type: 'button',
-            title: t('editor.focusTitle'),
-            'aria-label': t('editor.focusTitle'),
-            'aria-pressed': focusParagraph,
-            onClick: onToggleFocusParagraph,
-          }, t('editor.focus')) : null,
-        )
-        : null,
+      compactControls: true,
+      onEditorContextMenu,
+      headerExtras: e(EditorOverflowMenu, {
+        open: overflowOpen,
+        onOpenChange: (open: boolean) => {
+          if (open && !snapshotMenu()) return
+          setOverflowOpen(open)
+          if (open) setContextMenu(null)
+        },
+        model: menuModel,
+        onAction: runMenuAction,
+        onCloseAutoFocus: focusEditorIfNeeded,
+      }),
       maxGhostCandidates: 3,
       enablePatch: true,
       enableBeforeUnload: true,
@@ -352,34 +568,67 @@ export function Editor(props: {
       siblingsBlocked: navigationBlocked,
       onReloadDisk: () => setReloadConfirm(true),
       onSaveConflictCopy: saveConflictCopy,
-      /* footerExtras 始终挂载：自定义 notice 必须留在 EditorCore 内部（页脚区）。
-         作为 Fragment 游离兄弟节点时，它会变成 Shell 网格的未定位子项，被自动
-         摆放到隐式行（侧栏下方），遮挡溢出侧栏的面板按钮。 */
-      footerExtras: e(Fragment, null,
-        isChapterMetaPath(path) ? e(ChapterMetaSettings, {
-          key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
-          path,
-          text: currentText,
-          onChange: (next: string) => { void applyFrontmatterBuffer(next) },
-          onNote: setNote,
-        }) : null,
-        canRewritePath(path) && completionEnabled ? e(RewritePresetsBar, {
-          onRewrite: (instruction: string) => { handleRef.current?.requestRewrite(instruction) },
-        }) : null,
-        note ? e('div', {
-          className: 'editor-notice',
-          role: status === 'conflict' || status === 'error' ? 'alert' : 'status',
-          style: { padding: '4px 8px', fontSize: 12, opacity: 0.75 },
-        }, note) : null,
-      ),
+      footerExtras: note ? e('div', {
+        className: 'editor-notice',
+        'data-testid': 'paper-notice',
+        role: status === 'conflict' || status === 'error' ? 'alert' : 'status',
+        style: { padding: '4px 8px', fontSize: 12, opacity: 0.75 },
+      }, note) : null,
     }),
-    reloadConfirm ? e(ConfirmDialog, {
+    contextMenu ? e(EditorContextMenu, {
+      x: contextMenu.x,
+      y: contextMenu.y,
+      model: menuModel,
+      onAction: (action: EditorMenuAction) => {
+        runMenuAction(action)
+        closeMenus()
+      },
+      onClose: closeMenus,
+      onCloseAutoFocus: focusEditorIfNeeded,
+    }) : null,
+    isChapterMetaPath(path) ? e(ChapterMetaSettings, {
+      key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
+      path,
+      text: currentText,
+      open: chapterMetaOpen,
+      returnFocusRef: editorFocusTarget,
+      onOpenChange: setChapterMetaOpen,
+      onChange: (next: string) => { void applyFrontmatterBuffer(next) },
+      onNote: setNote,
+    }) : null,
+    e(Dialog, {
+      open: customRewriteOpen,
+      onOpenChange: setCustomRewriteOpen,
+      title: t('editor.rewriteCustomTitle'),
+      className: 'file-dialog editor-action-dialog',
+      returnFocusRef: editorFocusTarget,
+    },
+      e('header', null, e('h2', null, t('editor.rewriteCustomTitle'))),
+      e(Input, {
+        value: customText,
+        maxLength: CUSTOM_INSTRUCTION_MAX,
+        placeholder: t('rewrite.customPlaceholder'),
+        'aria-label': t('rewrite.customPlaceholder'),
+        autoFocus: true,
+        onChange: setCustomText,
+        onKeyDown: (event) => {
+          if (event.key === 'Enter') { event.preventDefault(); runCustomRewrite() }
+          if (event.key === 'Escape') { event.preventDefault(); setCustomRewriteOpen(false) }
+        },
+      }),
+      e('footer', null,
+        e(Button, { onClick: () => setCustomRewriteOpen(false) }, t('common.cancel')),
+        e(Button, { variant: 'primary', disabled: !normalizeCustomInstruction(customText), onClick: runCustomRewrite }, t('rewrite.customRun')),
+      ),
+    ),
+    e(ConfirmDialog, {
+      open: Boolean(reloadConfirm),
       id: 'reload-disk-confirm',
       title: t('editor.discardDraftTitle'),
       message: t('editor.discardDraftBody'),
       confirmLabel: t('editor.discardReload'),
       onCancel: () => setReloadConfirm(false),
       onConfirm: () => { void reloadDisk() },
-    }) : null,
+    }),
   )
 }

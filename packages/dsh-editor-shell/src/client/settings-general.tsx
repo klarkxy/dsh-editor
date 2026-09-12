@@ -63,27 +63,33 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
   ]
 
   return e('section', { className: 'settings-general', 'aria-label': t('settings.general') },
-    e(Row, { title: t('settings.language'), children: e(Select, {
-      value: locale,
-      options: [{ value: 'zh', label: t('settings.chinese') }, { value: 'en', label: t('settings.english') }],
-      onChange: (value) => setLocale(value as Locale),
-      'aria-label': t('settings.language'),
-    }) }),
-    e(Row, { title: t('settings.appearance'), children: e('div', { className: 'settings-segmented', role: 'group', 'aria-label': t('settings.appearance') },
-      appearanceOptions.map((option) => e('button', {
-        key: option.value,
-        type: 'button',
-        className: theme === option.value ? 'active' : '',
-        'aria-pressed': theme === option.value,
-        onClick: () => setTheme(option.value),
-      }, option.label)),
-    ) }),
-    e(Row, { title: t('settings.busyEnter'), description: t('settings.busyEnterHint'), children: e(Select, {
-      value: busyEnter,
-      options: [{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }],
-      onChange: (value) => setBusyEnter(value as BusyEnterBehavior),
-      'aria-label': t('settings.busyEnter'),
-    }) }),
+    e('section', { className: 'settings-block' },
+      e('header', { className: 'settings-block-head' },
+        e('h3', { className: 'settings-block-title' }, t('settings.interface')),
+        e('p', { className: 'settings-block-help' }, t('settings.interfaceHelp')),
+      ),
+      e(Row, { title: t('settings.language'), children: e(Select, {
+        value: locale,
+        options: [{ value: 'zh', label: t('settings.chinese') }, { value: 'en', label: t('settings.english') }],
+        onChange: (value) => setLocale(value as Locale),
+        'aria-label': t('settings.language'),
+      }) }),
+      e(Row, { title: t('settings.appearance'), children: e('div', { className: 'settings-segmented', role: 'group', 'aria-label': t('settings.appearance') },
+        appearanceOptions.map((option) => e('button', {
+          key: option.value,
+          type: 'button',
+          className: theme === option.value ? 'active' : '',
+          'aria-pressed': theme === option.value,
+          onClick: () => setTheme(option.value),
+        }, option.label)),
+      ) }),
+      e(Row, { title: t('settings.busyEnter'), description: t('settings.busyEnterHint'), children: e(Select, {
+        value: busyEnter,
+        options: [{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }],
+        onChange: (value) => setBusyEnter(value as BusyEnterBehavior),
+        'aria-label': t('settings.busyEnter'),
+      }) }),
+    ),
   )
 }
 

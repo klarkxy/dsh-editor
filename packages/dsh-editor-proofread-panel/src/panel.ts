@@ -48,7 +48,7 @@ function toProposalMarker(draft: ProofreadEditDraft): ShellProposalCardProps['pr
   }
 }
 
-function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest | null }) {
+function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest | null; onClose(): void }) {
   setProofreadLocale(props.locale)
   const [scope, setScope] = useState<ProofreadScope>('document')
   const [kinds, setKinds] = useState<ProofreadKind[]>(() => allProofreadKinds())
@@ -233,8 +233,15 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
     void scan(scope)
   }
 
-  return e('section', { className: 'proofread-panel', 'aria-label': t('proofread.title') },
-    e('header', { className: 'proofread-toolbar' },
+  return e('section', { className: 'proofread-panel', 'data-testid': 'editor-proofread-panel', 'aria-label': t('proofread.title') },
+    e('header', { className: 'proofread-panel-header' },
+      e('div', null,
+        e('h2', null, t('proofread.title')),
+        e('p', { className: 'muted' }, t('proofread.intro')),
+      ),
+      e('button', { className: 'icon-button', type: 'button', 'aria-label': t('proofread.close'), onClick: props.onClose }, '×'),
+    ),
+    e('div', { className: 'proofread-toolbar' },
       e('div', { className: 'proofread-scopes', role: 'group', 'aria-label': t('proofread.scope') },
         e('button', {
           type: 'button',
@@ -283,6 +290,7 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
         onApplied: handleApplied,
       }),
     ) : null,
+    busy && !result ? e('p', { className: 'muted', role: 'status' }, t('proofread.checking')) : null,
     grouped.length ? e('ol', { className: 'proofread-results' }, grouped.map((group) => e('li', { key: group.path, className: 'proofread-file' },
       e('strong', null, group.path),
       e('ul', null, group.findings.map((item, index) => e('li', { key: `${item.path}:${item.start}:${item.kind}:${index}`, className: 'proofread-row' },
@@ -358,5 +366,5 @@ export function ProofreadSeat(props: ProofreadSeatProps) {
     setRequest(null)
   }, [props.sessionId])
   if (!open) return null
-  return e(ProofreadPanel, { ...props, request })
+  return e(ProofreadPanel, { ...props, request, onClose: () => setOpen(false) })
 }

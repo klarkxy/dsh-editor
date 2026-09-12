@@ -26,12 +26,14 @@ import {
   type CardSortKey,
 } from '../cards-view.ts'
 import { TextPromptDialog } from './dialog.ts'
+import { renderSelect } from './host-ui.ts'
 import { errorMessage, LatestRequestGate, safeRpcCall } from './rpc.ts'
 import { setCardsLocale, t } from './messages.ts'
 import { consumeCardsRequest, pendingCardsRequest, subscribeCardsRequest } from './requests.ts'
 import {
   bindCardsSession,
   closeCardsDetail,
+  closeCardsPanel,
   getCardsState,
   openCardsPanel,
   selectCard,
@@ -153,6 +155,7 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
       path: hit.path,
     }))
     if (!read.ok) { setNote(errorMessage(read, props.locale)); return }
+    closeCardsDetail()
     props.openDocument(hit.path, { ...hit, version: read.value.version } satisfies ShellRange)
   }
 
@@ -195,7 +198,19 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
   const roleOptions = collectCharacterRoles(catalog.characters)
   const categoryOptions = collectWorldbookCategories(catalog.worldbook)
   const tagOptions = collectTags(props.kind === 'character' ? catalog.characters : catalog.worldbook)
-  return e('section', { className: 'cards-panel', 'aria-label': props.kind === 'character' ? t('cards.characters') : t('cards.worldbook') },
+  const title = props.kind === 'character' ? t('cards.characters') : t('cards.worldbook')
+  const emptyLabel = props.kind === 'character' ? t('cards.noPeople') : t('cards.noWorld')
+  const list = props.kind === 'character' ? characterGroups : worldbookGroups
+  const sortOptions = [
+    { value: 'title', label: t('cards.sortName') },
+    { value: 'modified', label: t('cards.sortModified') },
+    props.kind === 'character' ? { value: 'role', label: t('cards.sortRole') } : { value: 'category', label: t('cards.sortCategory') },
+  ]
+  return e('section', { className: 'cards-panel', 'data-testid': 'cards-panel', 'aria-label': title },
+    e('header', { className: 'cards-panel-header' },
+      e('h2', null, title),
+      e('button', { className: 'icon-button', type: 'button', 'aria-label': t('cards.closePanel'), onClick: () => closeCardsPanel() }, '×'),
+    ),
     e('div', { className: 'cards-tabs', role: 'tablist', 'aria-label': t('cards.kind') },
       e('button', {
         type: 'button',
@@ -218,18 +233,14 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
         'aria-label': t('cards.filter'),
         onChange: (event: ChangeEvent<HTMLInputElement>) => setText(event.target.value),
       }),
-      e('select', {
+      renderSelect(props.Select, {
         value: sort,
         'aria-label': t('cards.sort'),
-        onChange: (event: ChangeEvent<HTMLSelectElement>) => {
-          const next = event.target.value
+        options: sortOptions,
+        onChange: (next) => {
           if (next === 'title' || next === 'modified' || next === 'role' || next === 'category') setSort(next)
         },
-      },
-        e('option', { value: 'title' }, t('cards.sortName')),
-        e('option', { value: 'modified' }, t('cards.sortModified')),
-        props.kind === 'character' ? e('option', { value: 'role' }, t('cards.sortRole')) : e('option', { value: 'category' }, t('cards.sortCategory')),
-      ),
+      }),
       e('button', { type: 'button', onClick: () => { setCreateNote(''); setCreateOpen(true) } }, props.kind === 'character' ? t('cards.newPerson') : t('cards.newSetting')),
     ),
     roleOptions.length && props.kind === 'character' ? e(ChipRow, {
@@ -252,41 +263,46 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
       selected: tagChips,
       onToggle: (value) => setTagChips((old) => toggleFilterValue(old, value)),
     }) : null,
-    busy ? e('p', { className: 'muted', role: 'status' }, t('cards.loading')) : null,
-    note ? e('p', { className: truncated ? 'warning' : 'muted', role: 'status' }, note) : null,
-    props.kind === 'character'
-      ? characterGroups.length
-        ? e('div', { className: 'cards-groups' }, characterGroups.map((group) => e('section', { key: group.key, className: 'cards-group' },
-          e('h3', null, group.key === UNGROUPED_ROLE ? ungroupedRoleLabel() : group.label),
-          e('ul', { className: 'cards-list' }, group.cards.map((card) => e(CharacterCardRow, {
-            key: card.path,
-            card,
-            selected: props.selectedPath === card.path,
-            refs: refs[card.path] ?? { status: 'idle' },
-            navigationBlocked: props.editorDirty,
-            onSelect: () => selectCard(card.path),
-            onReferences: () => void loadReferences(card.path),
-            onOpenHit: (item) => void openHit(item),
-          }))),
-        )))
-        : e('p', { className: 'muted' }, busy ? null : t('cards.noPeople'))
-      : worldbookGroups.length
-        ? e('div', { className: 'cards-groups' }, worldbookGroups.map((group) => e('section', { key: group.key, className: 'cards-group' },
-          e('h3', null, worldbookCategoryLabel(group.key)),
-          e('ul', { className: 'cards-list' }, group.cards.map((card) => e(WorldbookCardRow, {
-            key: card.path,
-            card,
-            selected: props.selectedPath === card.path,
-            refs: refs[card.path] ?? { status: 'idle' },
-            navigationBlocked: props.editorDirty,
-            onSelect: () => selectCard(card.path),
-            onReferences: () => void loadReferences(card.path),
-            onOpenHit: (item) => void openHit(item),
-          }))),
-        )))
-        : e('p', { className: 'muted' }, busy ? null : t('cards.noWorld')),
-    createOpen ? e(TextPromptDialog, {
+    busy ? e('p', { className: 'cards-status muted', role: 'status' }, t('cards.loading')) : null,
+    note ? e('p', { className: `cards-status ${truncated ? 'warning' : 'muted'}`, role: note && !truncated && !busy ? 'alert' : 'status' },
+      note,
+      !busy && !truncated && note && !list.length ? e('button', { type: 'button', onClick: () => void load() }, t('cards.retry')) : null,
+    ) : null,
+    !busy && !list.length && !(note && !truncated) ? e('p', { className: 'cards-status muted' }, emptyLabel) : null,
+    props.kind === 'character' && characterGroups.length
+      ? e('div', { className: 'cards-groups' }, characterGroups.map((group) => e('section', { key: group.key, className: 'cards-group' },
+        e('h3', null, group.key === UNGROUPED_ROLE ? ungroupedRoleLabel() : group.label),
+        e('ul', { className: 'cards-list' }, group.cards.map((card) => e(CharacterCardRow, {
+          key: card.path,
+          card,
+          selected: props.selectedPath === card.path,
+          refs: refs[card.path] ?? { status: 'idle' },
+          navigationBlocked: props.editorDirty,
+          onSelect: () => selectCard(card.path),
+          onReferences: () => void loadReferences(card.path),
+          onOpenHit: (item) => void openHit(item),
+        }))),
+      )))
+      : null,
+    props.kind === 'worldbook' && worldbookGroups.length
+      ? e('div', { className: 'cards-groups' }, worldbookGroups.map((group) => e('section', { key: group.key, className: 'cards-group' },
+        e('h3', null, worldbookCategoryLabel(group.key)),
+        e('ul', { className: 'cards-list' }, group.cards.map((card) => e(WorldbookCardRow, {
+          key: card.path,
+          card,
+          selected: props.selectedPath === card.path,
+          refs: refs[card.path] ?? { status: 'idle' },
+          navigationBlocked: props.editorDirty,
+          onSelect: () => selectCard(card.path),
+          onReferences: () => void loadReferences(card.path),
+          onOpenHit: (item) => void openHit(item),
+        }))),
+      )))
+      : null,
+    e(TextPromptDialog, {
+      Dialog: props.Dialog,
       id: 'cards-create',
+      open: createOpen,
       title: props.kind === 'character' ? t('cards.newPerson') : t('cards.newSetting'),
       label: t('cards.title'),
       initialValue: '',
@@ -294,8 +310,8 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
       busy: createBusy,
       note: createNote,
       onCancel: () => { if (!createBusy) setCreateOpen(false) },
-      onConfirm: (title: string) => void createCard(title),
-    }) : null,
+      onConfirm: (nextTitle: string) => void createCard(nextTitle),
+    }),
   )
 }
 

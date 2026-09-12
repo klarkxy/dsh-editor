@@ -21,21 +21,14 @@ import {
 } from 'dsh-editor-workbench/contracts'
 import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
 import { sortChapterPaths } from '../project-files.ts'
-import { CENTER_OVERLAYS_SLOT, EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, registerRoot } from '../root-registration.ts'
+import { CENTER_OVERLAYS_SLOT, EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, ZHIHU_SETTINGS_SLOT, registerRoot } from '../root-registration.ts'
 import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry, type ShellProposalCardProps, type ShellRange, type ShellToolSeatContext } from '../seats.ts'
 import { writingPreferences, writingTypography, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
-import {
-  localDateKey,
-  nextBaselines,
-  writingProgressFor,
-  type WritingProgress,
-  type WritingProgressScope,
-} from '../writing-progress.ts'
-import { buildChapterStatusMap } from '../chapter-status-view.ts'
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
+import { buildChapterStatusMap } from '../chapter-status-view.ts'
 import { redesignedStyles } from '../styles.ts'
-import { errorMessage, isStaleFailure, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
+import { errorMessage, isStaleFailure, isSuccessWorkbenchNote, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, ShellErrorBoundary, useObservable } from './components.ts'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger } from './settings.tsx'
@@ -48,11 +41,14 @@ import { Chat, ProposalCard } from './chat.ts'
 import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
+import { Select as HostSelect } from './select.tsx'
+import { Dialog as HostDialog, Input, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, useChromeMotion } from './ui/index.ts'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { AboutUpdateDialog } from './about-dialog.tsx'
 import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.ts'
 import { PinnedPane } from './pinned-pane.ts'
 import { canPinPath, pinnedLayoutColumns, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
+
 import { collectChapters, downloadExport, ExportPreviewDialog } from './export-dialog.ts'
 import { prepareExport, type ChapterExport, type ExportFormat } from '../export.ts'
 import { idleImportFlow, importReview, recoverImport, type ImportFlow, type ImportProbeView } from './import-flow.ts'
@@ -61,12 +57,15 @@ import { ArchivePanel, canArchivePath, type ArchiveView } from './archive.ts'
 import { t, useLocale } from '../i18n/index.ts'
 
 
+const HOST_UI_OWNER = { Select: HostSelect, Dialog: HostDialog }
+
 const SIDEBAR_DEFAULT = 248
 const SIDEBAR_MIN = 196
 const SIDEBAR_MAX = 420
 const ASSISTANT_DEFAULT = 384
 const ASSISTANT_MIN = 300
-const ASSISTANT_MAX = 560
+const ASSISTANT_MAX = 720
+const ASSISTANT_READING = 640
 const PINNED_DEFAULT = 340
 const PINNED_MIN = 260
 const PINNED_MAX = 560
@@ -84,6 +83,13 @@ function NewDocIcon() {
     e('path', { d: 'M7 3.5h6.5l4 4v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z' }),
     e('path', { d: 'M13.5 3.5v4h4' }),
     e('path', { d: 'M12 11v7M8.5 14.5h7' }),
+  )
+}
+function ImportIcon() {
+  return e('svg', { viewBox: '0 0 24 24', width: 20, height: 20, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', strokeLinecap: 'round', 'aria-hidden': 'true' },
+    e('path', { d: 'M12 3.5v10' }),
+    e('path', { d: 'm8.5 10 3.5 3.5L15.5 10' }),
+    e('path', { d: 'M5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18.5v-2' }),
   )
 }
 
@@ -223,14 +229,14 @@ function BoundProposalCard(props: ShellProposalCardProps & { ctx: ShellContext }
   })
 }
 
-function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync, extensionsDock, pluginsSettings, commands, renderSlot }: {
+function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock, pluginsSettings, zhihuSettings, commands, renderSlot }: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
-  progressScope: WritingProgressScope
   hostThemeSync?: HostThemeSync
   extensionsDock?: ReactNode
   pluginsSettings?: ReactNode
+  zhihuSettings?: ReactNode
   commands: ShellCommandRegistry
   renderSlot?: (key: string, owner?: object) => ReactNode
 }) {
@@ -273,9 +279,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       return false
     }
   }
-  const progressSnapshot = useObservable(progressScope)
-  const writingProgress: WritingProgress = writingProgressFor(progressSnapshot)
-  const writableProgress = progressSnapshot.status === 'ready' && progressSnapshot.writable !== false
   const [path, setPath] = useState('')
   const [files, setFiles] = useState<string[]>([])
   const [workbenchNote, setWorkbenchNote] = useState('')
@@ -301,6 +304,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(() => storedPanelOpen('dsh-editor.layout.assistant-open', true))
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
+  const [chatReading, setChatReading] = useState(false)
+  const assistantWidthBeforeReading = useRef(ASSISTANT_DEFAULT)
   const [pinnedPath, setPinnedPath] = useState<string | null>(() => {
     const stored = storedPinnedPath('dsh-editor.layout.pinned-path')
     return stored && canPinPath(stored) ? stored : null
@@ -320,6 +325,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const [deleteTarget, setDeleteTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
   const [renameTarget, setRenameTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
   const [imagePreview, setImagePreview] = useState<{ path: string; url: string } | null>(null)
+  const lastImagePreview = useRef<{ path: string; url: string } | null>(null)
+  if (imagePreview) lastImagePreview.current = imagePreview
   const [managePath, setManagePath] = useState<string | null>(null)
   const [manageBusy, setManageBusy] = useState(false)
   const [manageNote, setManageNote] = useState('')
@@ -341,7 +348,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const [archiveNote, setArchiveNote] = useState('')
   const [importFlow, setImportFlow] = useState<ImportFlow>(idleImportFlow)
   const [importTitle, setImportTitle] = useState<{ busy: boolean; note: string } | null>(null)
-  const importReturnFocus = useRef<HTMLElement | null>(null)
+
   const temporaryFlowWorkspaces = useRef(new Set<string>())
   const temporarySourceWorkspaces = useRef(new Map<string, string>())
   const archiveRequestGate = useRef(new LatestRequestGate()).current
@@ -378,8 +385,15 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const workspaceOpenGate = useRef(new LatestRequestGate()).current
   const pendingWorkspaceOpen = useRef<PendingWorkspaceOpen | null>(null)
   const initialWorkspaceResumeStarted = useRef(false)
-  const createReturnFocus = useRef<HTMLElement | null>(null)
   const fileManageReturnFocus = useRef<HTMLElement | null>(null)
+  const menuYieldsToDialog = useRef(false)
+  const workspaceMenuTrigger = useRef<HTMLButtonElement | null>(null)
+  const workspaceMenuYields = useRef(false)
+  const pathFallbackInput = useRef<HTMLInputElement | null>(null)
+  const homeCardOpen = useChromeMotion('card', 0)
+  const homeCardNew = useChromeMotion('card', 0.05)
+  const homeCardImport = useChromeMotion('card', 0.1)
+  const sidebarPanelMotion = useChromeMotion('panel')
   const pinValidatedSession = useRef<string | undefined>()
   useEffect(() => { document.title = 'DSH Editor' }, [])
   useEffect(() => {
@@ -522,17 +536,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     if (!fileSession) { setOverview(null); return }
     void loadOverview()
   }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision, contentRevision, overviewRevision])
-  /* 拿到 overview 后,如果当前作品今天还没有基线,就写下"早上总字数";
-     跨天 / 第一次打开作品时各写一次,后续静默。失败不打扰,下一次 overview 再试。 */
-  useEffect(() => {
-    if (!overview || !openWorkspaceId || !writableProgress) return
-    const today = localDateKey(new Date())
-    const existing = writingProgress.baselines[openWorkspaceId]
-    if (existing && existing.date === today) return
-    const next = nextBaselines(writingProgress, openWorkspaceId, today, overview.totals.chars)
-    if (next === writingProgress.baselines) return
-    void progressScope.set('baselines', next).catch(() => { /* 下次 overview 自然重试 */ })
-  }, [overview, openWorkspaceId, writableProgress, writingProgress, progressScope])
   const openDocument = (nextPath: string, hit?: SearchHit) => {
     if (editorDirty && (nextPath !== path || hit)) {
       setWorkbenchNote(t('error.saveFirst'))
@@ -566,30 +569,53 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     const bytes = Uint8Array.from(globalThis.atob(read.value.base64), (char) => char.charCodeAt(0))
     const url = URL.createObjectURL(new Blob([bytes], { type: read.value.mime }))
     setImagePreview((old) => {
-      if (old) URL.revokeObjectURL(old.url)
+      const stale = old ?? lastImagePreview.current
+      if (stale?.url && stale.url !== url) URL.revokeObjectURL(stale.url)
       return { path: imagePath, url }
     })
   }
-  const closeImagePreview = () => {
-    setImagePreview((old) => {
-      if (old) URL.revokeObjectURL(old.url)
-      return null
-    })
-  }
-  const openFileMenu = (kind: FileMenuKind, selectedPath: string, position: { x: number; y: number }) => {
+  const closeImagePreview = () => setImagePreview(null)
+  useEffect(() => {
+    if (imagePreview) return undefined
+    const last = lastImagePreview.current
+    if (!last) return undefined
+    const timer = globalThis.setTimeout(() => {
+      if (lastImagePreview.current?.url === last.url) {
+        URL.revokeObjectURL(last.url)
+        lastImagePreview.current = null
+      }
+    }, 400)
+    return () => globalThis.clearTimeout(timer)
+  }, [imagePreview])
+  const openFileMenu = (kind: FileMenuKind, selectedPath: string, position: { x: number; y: number }, trigger?: HTMLElement | null) => {
     if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
     setWorkbenchNote('')
+    menuYieldsToDialog.current = false
+    fileManageReturnFocus.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null)
     setFileMenu({ kind, path: selectedPath, x: position.x, y: position.y })
+  }
+  const yieldMenuToDialog = () => {
+    menuYieldsToDialog.current = true
+    setFileMenu(null)
+  }
+  const restoreTreeTriggerIfMenuDismissed = () => {
+    if (menuYieldsToDialog.current) return
+    const target = fileManageReturnFocus.current
+    if (target?.isConnected) target.focus()
   }
   const closeFileMenu = () => setFileMenu(null)
   const beginChapterSplit = (target: string, source: 'tree' | 'cursor') => {
-    setFileMenu(null)
+    if (source === 'tree') yieldMenuToDialog()
+    else {
+      fileManageReturnFocus.current = null
+      setFileMenu(null)
+    }
     const next = requestSplitChapter({ path: target, source, editorDirty, activePath: path })
     if (!next.ok) { setWorkbenchNote(next.reason === 'unsaved' ? t('error.saveFirst') : t('chapterOps.splitTxtDisabled')); return }
     setChapterOps(next.request)
   }
   const beginChapterMerge = (chapterPath: string, direction: 'previous' | 'next') => {
-    setFileMenu(null)
+    yieldMenuToDialog()
     const next = requestMergeChapter({ chapterPath, direction, files, editorDirty, activePath: path })
     if (!next.ok) {
       setWorkbenchNote(next.reason === 'unsaved' ? t('error.saveFirst') : t('chapterOps.mergeMdOnly'))
@@ -614,17 +640,14 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   }
   const openRenameDialog = (selectedPath: string) => {
     if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
-    fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setFileMenu(null)
+    yieldMenuToDialog()
     setManagePath(selectedPath)
     setManageNote('')
   }
   const closeRenameDialog = () => {
     if (manageBusy) return
-    const target = fileManageReturnFocus.current
     setManagePath(null)
     setManageNote('')
-    if (target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const renameManaged = async (name: string) => {
     if (!fileSession || !managePath || manageBusy) return
@@ -669,21 +692,16 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   }
   const closeRenameEntryDialog = () => {
     if (manageBusy) return
-    const target = fileManageReturnFocus.current
     setRenameTarget(null)
     setManageNote('')
-    if (target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const requestDeleteEntry = (kind: FileMenuKind, targetPath: string) => {
     if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
-    fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setFileMenu(null)
+    yieldMenuToDialog()
     setDeleteTarget({ kind, path: targetPath })
   }
   const closeDeleteConfirm = () => {
-    const target = fileManageReturnFocus.current
     setDeleteTarget(null)
-    if (target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const confirmDeleteEntry = async () => {
     const target = deleteTarget
@@ -761,17 +779,15 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const openTreeCreate = (kind: 'file' | 'folder', directory: string) => {
     if (!fileSession) return
     if (editorDirty) { setCreateNote(t('error.saveFirst')); return }
-    createReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setFileMenu(null)
+    if (fileMenu) yieldMenuToDialog()
+    else fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : fileManageReturnFocus.current
     setCreateNote('')
     setTreeCreateRequest({ kind, directory })
   }
   const closeTreeCreate = () => {
     if (createBusy) return
-    const target = createReturnFocus.current
     setTreeCreateRequest(null)
     setCreateNote('')
-    globalThis.setTimeout(() => target?.focus(), 0)
   }
   const submitTreeCreate = async (name: string) => {
     if (!fileSession || !treeCreateRequest) return
@@ -811,7 +827,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     setSnapshotBusy(false)
     if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
     setWorkbenchNote(t('note.committed', { label }))
-    setHistoryOpen(true)
     setSnapshotRevision((value) => value + 1)
   }
   const requestRollback = (snapshot: SnapshotResponse) => {
@@ -906,7 +921,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       const nextImportFlow = recoverImport(sessionId, pending.workspace.workspaceId, recovery.value)
       if (nextImportFlow.kind === 'recover') {
         pendingWorkspaceOpen.current = pending
-        importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
         setWorkspaceOpen({
           kind: 'needs-recovery',
           workspaceId: pending.workspace.workspaceId,
@@ -1249,15 +1263,23 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     }
     await openPickedWorkspace(path, 'open', relocatingWorkspaceId)
   }
+  const closePathFallback = () => {
+    if (openingWorkspace) return
+    setManualWorkspaceMode(null)
+    setRelocatingWorkspaceId(undefined)
+    setHomeNote('')
+    if (session) setWorkbenchNote('')
+  }
   const pathFallbackForm = manualWorkspaceMode ? e('form', { className: 'path-fallback', onSubmit: submitWorkspacePath },
     e('label', null,
       e('span', null, t('home.pathLabel')),
-      e('input', {
+      e(Input, {
+        ref: pathFallbackInput,
         value: manualWorkspacePath,
-        onChange: (event: ChangeEvent<HTMLInputElement>) => setManualWorkspacePath(event.target.value),
+        onChange: setManualWorkspacePath,
         placeholder: t('home.pathPlaceholder'),
         'aria-label': t('home.pathLabel'),
-        autoFocus: true,
+        disabled: openingWorkspace,
       }),
     ),
     e('div', null,
@@ -1268,12 +1290,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       e('button', {
         type: 'button',
         disabled: openingWorkspace,
-        onClick: () => {
-          setManualWorkspaceMode(null)
-          setRelocatingWorkspaceId(undefined)
-          setHomeNote('')
-          if (session) setWorkbenchNote('')
-        },
+        onClick: closePathFallback,
       }, t('common.cancel')),
     ),
   ) : null
@@ -1284,6 +1301,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     closeWorkspaceChrome()
     if (editorDirty) { setWorkbenchNote(t('note.saveBeforeHome')); return }
     if (!(await canLeaveAssistantDraft())) return
+    consumeInitialWorkspaceResume(initialWorkspaceResumeStarted)
     setAssistantDraftDirty(false)
     setFocusMode(false)
     workspaceOpenGate.begin('home')
@@ -1330,12 +1348,14 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     if (newProject?.busy) return
     setNewProject(null)
   }
-  const renderNewProjectDialog = () => newProject ? e(NewProjectDialog, {
-    busy: newProject.busy,
-    note: newProject.note,
+  const renderNewProjectDialog = () => e(NewProjectDialog, {
+    open: Boolean(newProject),
+    busy: newProject?.busy ?? false,
+    note: newProject?.note ?? '',
+    returnFocusRef: workspaceMenuTrigger,
     onClose: closeNewProject,
     onCreate: (title: string) => void submitNewProject(title),
-  }) : null
+  })
   const openSearchPanel = () => {
     if (!fileSession) return
     setFocusMode(false)
@@ -1398,6 +1418,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     pinnedPath,
     togglePin: (target) => setPinnedPath((current) => current === target ? null : target),
     ProposalCard: BoundSeatProposalCard,
+    Select: HostSelect,
+    Dialog: HostDialog,
   }
   seatContextRef.current = seatContext
   const registryCommands = useMemo(
@@ -1443,11 +1465,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   const preserveFlowWorkspace = (workspaceId: string) => {
     temporaryFlowWorkspaces.current.delete(workspaceId)
   }
-  const closeImportFlow = (restoreFocus = true) => {
-    const target = importReturnFocus.current
-    importReturnFocus.current = null
+  const closeImportFlow = (_restoreFocus = true) => {
     setImportFlow(idleImportFlow)
-    if (restoreFocus && target) globalThis.setTimeout(() => target.focus(), 0)
   }
   const startImportProject = async () => {
     closeWorkspaceChrome()
@@ -1457,7 +1476,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       if (!(await canLeaveAssistantDraft())) return
       setAssistantDraftDirty(false)
     }
-    importReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setImportTitle({ busy: false, note: '' })
   }
   const submitImportTitle = async (title: string) => {
@@ -1789,7 +1807,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
   }
 
   if (workspaceOpen.kind === 'checking') {
-    return e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
+    return e(ShellUiProvider, null, e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
       e('style', null, redesignedStyles),
       e('section', { className: 'workspace-checking', 'aria-label': t('home.verifying') },
         e('h1', null, t('home.checking')),
@@ -1797,11 +1815,11 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         e('code', null, workspaceOpen.path),
       ),
       extensionsDock,
-    )
+    ))
   }
 
   if (!fileSession || workspaceOpen.kind !== 'ready') {
-    return e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
+    return e(ShellUiProvider, null, e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
       e('style', null, redesignedStyles),
       e('header', { className: 'chrome', onDoubleClick: titleBarDoubleClick },
         e('div', { className: 'brand-lockup' },
@@ -1819,34 +1837,41 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       ),
       e(PaperStage, { label: t('home.blankPaper') },
         e('p', { className: 'home-hint' }, t('home.intro')),
-        e('div', { className: 'home-actions' },
-          e('button', {
+        e('div', { className: 'home-actions home-command-bar', role: 'group', 'aria-label': t('home.commands') },
+          e(m.button, {
             className: 'home-entry-card', type: 'button',
             'aria-label': t('home.openWork'),
             disabled: openingWorkspace || Boolean(newProject),
             onClick: () => void startWorkspaceFromPicker(),
+            ...homeCardOpen,
           },
             e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(FolderIcon, null)),
             e('span', { className: 'home-entry-title' }, t('home.openWork')),
             e('span', { className: 'home-entry-desc' }, t('home.openWorkDesc')),
           ),
-          e('button', {
+          e(m.button, {
             className: 'home-entry-card', type: 'button',
             'aria-label': t('home.new'),
             disabled: openingWorkspace || Boolean(newProject),
             onClick: () => void startNewProject(),
+            ...homeCardNew,
           },
             e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(NewDocIcon, null)),
             e('span', { className: 'home-entry-title' }, t('home.new')),
             e('span', { className: 'home-entry-desc' }, t('home.newDesc')),
           ),
+          e(m.button, {
+            className: 'home-entry-card home-import-link', type: 'button',
+            'aria-label': t('home.importExisting'),
+            disabled: openingWorkspace || Boolean(newProject) || Boolean(importTitle),
+            onClick: () => void startImportProject(),
+            ...homeCardImport,
+          },
+            e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(ImportIcon, null)),
+            e('span', { className: 'home-entry-title' }, t('home.importExisting')),
+            e('span', { className: 'home-entry-desc' }, t('home.importDesc')),
+          ),
         ),
-        e('button', {
-          className: 'home-import-link',
-          type: 'button',
-          disabled: openingWorkspace || Boolean(newProject) || Boolean(importTitle),
-          onClick: () => void startImportProject(),
-        }, t('home.importExisting')),
         pathFallbackForm,
         workspaceOpen.kind === 'needs-intent' ? e('section', { className: 'workspace-intent-prompt', role: 'alert' },
           e('strong', null, workspaceOpen.intent === 'create' ? t('home.folderNotWork') : t('home.folderHasWork')),
@@ -1888,19 +1913,21 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       renderNewProjectDialog(),
       renderCommandPalette(),
       renderImportDialog(),
-      importTitle ? e(TextPromptDialog, {
+      e(TextPromptDialog, {
+        open: Boolean(importTitle),
         id: 'import-title-home',
         title: t('home.importAsNew'),
         label: t('home.workName'),
         initialValue: '',
         confirmLabel: t('home.chooseSource'),
-        note: importTitle.note,
-        busy: importTitle.busy,
-        onCancel: () => { if (!importTitle.busy) setImportTitle(null) },
+        note: importTitle?.note,
+        busy: importTitle?.busy,
+        onCancel: () => { if (!importTitle?.busy) setImportTitle(null) },
         onConfirm: (title: string) => void submitImportTitle(title),
-      }) : null,
-      settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, onClose: () => setSettingsOpen(false) }) : null,
-    )
+      }),
+      e(SettingsDialog, { open: settingsOpen, ctx, writingScope, migrateWriting, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, zhihuTab: zhihuSettings, onClose: () => setSettingsOpen(false) }),
+      e(AboutUpdateDialog, { open: aboutOpen, onClose: () => setAboutOpen(false) }),
+    ))
   }
 
   const chatSession = session ?? fileSession
@@ -1915,71 +1942,85 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     assistantVisible,
     assistantWidth,
   })
+  const gridTemplateColumns = assistantVisible
+    ? layoutColumns.replace(new RegExp(`${assistantWidth}px$`), `minmax(0, ${assistantWidth}px)`)
+    : layoutColumns
 
-  return e('main', {
+  return e(ShellUiProvider, null, e('main', {
     className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarVisible ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${pinnedVisible ? ' pinned-open' : ''}`,
-    style: { minWidth: 0, gridTemplateColumns: layoutColumns },
+    style: { minWidth: 0, gridTemplateColumns },
   },
     e('style', null, redesignedStyles),
     e('header', { className: 'chrome', onDoubleClick: titleBarDoubleClick },
       e('div', { className: 'workspace-chrome', role: 'group', 'aria-label': t('workspace.work') },
-        e('details', {
-          className: 'workspace-menu',
-          open: workspaceMenuOpen,
-          onToggle: (event: ChangeEvent<HTMLDetailsElement>) => setWorkspaceMenuOpen(event.currentTarget.open),
-        },
-          e('summary', {
-            role: 'button',
-            title: t('workspace.menu'),
-            'aria-label': t('workspace.menu'),
-            'aria-expanded': workspaceMenuOpen,
-            'aria-controls': 'workspace-actions',
-          }, e('span', null, currentWorkspace?.title || currentWorkspace?.path || t('workspace.work'))),
-          e('div', { id: 'workspace-actions', className: 'workspace-menu-panel', 'aria-label': t('workspace.actions') },
-            workspaces.items.length ? e('div', { className: 'workspace-menu-actions', 'aria-label': t('workspace.switch') },
-              workspaces.items.map((workspace) => e('button', {
+        e('div', { className: 'workspace-menu' },
+          e(Menu, { open: workspaceMenuOpen, onOpenChange: (open: boolean) => { if (open) workspaceMenuYields.current = false; setWorkspaceMenuOpen(open) } },
+            e(MenuTrigger, {
+              ref: workspaceMenuTrigger,
+              className: 'workspace-menu-trigger',
+              title: currentWorkspace?.title || currentWorkspace?.path || t('workspace.work'),
+              'aria-label': t('workspace.menu'),
+              'aria-controls': 'workspace-actions',
+            }, e('span', null, currentWorkspace?.title || currentWorkspace?.path || t('workspace.work'))),
+            e(MenuContent, {
+              id: 'workspace-actions',
+              className: 'workspace-menu-panel',
+              'aria-label': t('workspace.actions'),
+              align: 'start',
+              onCloseAutoFocus: (event: Event) => {
+                if (workspaceMenuYields.current) event.preventDefault()
+              },
+            },
+              workspaces.items.length ? e('span', { className: 'sr-only' }, t('workspace.switch')) : null,
+              workspaces.items.length ? workspaces.items.map((workspace) => e(MenuItem, {
                 key: workspace.workspaceId,
-                type: 'button',
+                className: 'workspace-menu-item',
                 'aria-current': workspace.workspaceId === currentWorkspace?.workspaceId ? 'true' : undefined,
                 disabled: openingWorkspace,
-                onClick: () => void switchToWorkspace(workspace.workspaceId),
-              }, workspace.title || workspace.path)),
-            ) : null,
-            workspaces.items.length ? e('hr', { className: 'workspace-menu-divider' }) : null,
-            e('div', { className: 'workspace-menu-actions' },
-              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void openAnotherWorkspace() }, t('home.openWork')),
-              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject), onClick: () => void startNewProject() }, t('home.new')),
-              e('button', { type: 'button', disabled: openingWorkspace || Boolean(newProject) || Boolean(importTitle), onClick: () => void startImportProject() }, t('workspace.import')),
-              e('button', { type: 'button', disabled: exporting, onClick: () => { void exportNovel() } }, exporting ? t('workspace.exporting') : t('workspace.exportMarkdown')),
-              e('button', { type: 'button', disabled: exporting, onClick: () => { void exportNovel() } }, t('workspace.exportTxt')),
-              e('button', { type: 'button', onClick: () => openArchivePanel() }, t('workspace.archived')),
-              e('button', { type: 'button', 'aria-label': t('workspace.backHome'), onClick: () => void leaveToHome() }, t('workspace.backHome')),
+                onSelect: () => { void switchToWorkspace(workspace.workspaceId) },
+              }, workspace.title || workspace.path)) : null,
+              workspaces.items.length ? e(MenuSeparator, { className: 'workspace-menu-divider', 'aria-hidden': 'true' }) : null,
+              e(MenuItem, { className: 'workspace-menu-item', disabled: openingWorkspace || Boolean(newProject), onSelect: () => { workspaceMenuYields.current = true; void openAnotherWorkspace() } }, t('home.openWork')),
+              e(MenuItem, { className: 'workspace-menu-item', disabled: openingWorkspace || Boolean(newProject), onSelect: () => { workspaceMenuYields.current = true; void startNewProject() } }, t('home.new')),
+              e(MenuItem, { className: 'workspace-menu-item', disabled: openingWorkspace || Boolean(newProject) || Boolean(importTitle), onSelect: () => { workspaceMenuYields.current = true; void startImportProject() } }, t('workspace.import')),
+              e(MenuItem, { className: 'workspace-menu-item', disabled: exporting, onSelect: () => { workspaceMenuYields.current = true; void exportNovel() } }, exporting ? t('workspace.exporting') : t('workspace.exportMarkdown')),
+              e(MenuItem, { className: 'workspace-menu-item', disabled: exporting, onSelect: () => { workspaceMenuYields.current = true; void exportNovel() } }, t('workspace.exportTxt')),
+              e(MenuItem, { className: 'workspace-menu-item', onSelect: () => { workspaceMenuYields.current = true; openArchivePanel() } }, t('workspace.archived')),
+              e(MenuItem, { className: 'workspace-menu-item', 'aria-label': t('workspace.backHome'), onSelect: () => { void leaveToHome() } }, t('workspace.backHome')),
             ),
-            pathFallbackForm,
           ),
         ),
       ),
       e('nav', { className: 'layout-controls', 'aria-label': t('workspace.layout') },
-        e('button', {
-          type: 'button',
-          disabled: focusMode,
-          'aria-pressed': sidebarOpen,
-          title: sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles'),
-          onClick: () => setSidebarOpen((value) => !value),
-        }, t('workspace.files')),
-        e('button', {
-          type: 'button',
-          'aria-pressed': focusMode,
-          title: focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus'),
-          onClick: () => setFocusMode((value) => !value),
-        }, focusMode ? t('workspace.exitFocusShort') : t('workspace.focus')),
-        e('button', {
-          type: 'button',
-          disabled: focusMode,
-          'aria-pressed': assistantOpen,
-          title: assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant'),
-          onClick: () => setAssistantOpen((value) => !value),
-        }, t('workspace.assistant')),
+        e(Tooltip, {
+          content: sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles'),
+          children: e('button', {
+            type: 'button',
+            disabled: focusMode,
+            'aria-pressed': sidebarOpen,
+            title: sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles'),
+            onClick: () => setSidebarOpen((value) => !value),
+          }, t('workspace.files')),
+        }),
+        e(Tooltip, {
+          content: focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus'),
+          children: e('button', {
+            type: 'button',
+            'aria-pressed': focusMode,
+            title: focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus'),
+            onClick: () => setFocusMode((value) => !value),
+          }, focusMode ? t('workspace.exitFocusShort') : t('workspace.focus')),
+        }),
+        e(Tooltip, {
+          content: assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant'),
+          children: e('button', {
+            type: 'button',
+            disabled: focusMode,
+            'aria-pressed': assistantOpen,
+            title: assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant'),
+            onClick: () => setAssistantOpen((value) => !value),
+          }, t('workspace.assistant')),
+        }),
       ),
       extensionsDock,
       e('div', { className: 'topbar-actions' },
@@ -1993,9 +2034,24 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
     sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': t('workspace.filesAndNotes') },
       e('div', { className: 'side-title' },
         e('span', null, t('workspace.files')),
-        e('span', { className: 'side-title-actions' },
-          e('button', { className: 'side-action', type: 'button', disabled: snapshotBusy, title: t('workspace.commitTitle'), 'aria-label': t('workspace.commit'), onClick: () => void commitSnapshot() }, t('workspace.commit')),
-          e('button', { className: 'side-action', type: 'button', 'aria-pressed': historyOpen, title: t('workspace.commitHistory'), 'aria-label': t('common.history'), onClick: () => setHistoryOpen((value) => !value) }, t('common.history')),
+        e(Menu, null,
+          e(MenuTrigger, {
+            className: 'side-version-trigger',
+            title: t('sidebar.versionMenu'),
+            'aria-label': t('sidebar.versionMenu'),
+          }, '⋯'),
+          e(MenuContent, { className: 'file-context-menu', align: 'end', side: 'bottom', 'aria-label': t('sidebar.versionMenu') },
+            e(MenuItem, {
+              disabled: snapshotBusy,
+              title: t('workspace.commitTitle'),
+              onSelect: () => { void commitSnapshot() },
+            }, t('workspace.commit')),
+            e(MenuItem, {
+              'aria-current': historyOpen ? 'true' : undefined,
+              title: t('workspace.commitHistory'),
+              onSelect: () => setHistoryOpen((value) => !value),
+            }, t('common.history')),
+          ),
         ),
       ),
       e('input', {
@@ -2034,8 +2090,8 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
           if (navigation.refreshContent) setContentRevision((old) => old + 1)
         },
       }) : null,
-      fileSession ? renderSlot?.(SIDEBAR_TOOLS_SLOT, seatContext) ?? null : null,
-      historyOpen ? e('section', { className: 'snapshot-panel', 'aria-label': t('workspace.commitHistory') },
+      fileSession ? e(m.div, { className: 'sidebar-tools', ...sidebarPanelMotion }, renderSlot?.(SIDEBAR_TOOLS_SLOT, seatContext) ?? null) : null,
+      historyOpen ? e(m.section, { className: 'snapshot-panel', 'aria-label': t('workspace.commitHistory'), ...sidebarPanelMotion },
         snapshots === null
           ? e('p', { className: 'snapshot-empty' }, t('workspace.historyLoading'))
           : snapshots.length === 0
@@ -2048,7 +2104,10 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       ) : null,
       createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
       workspaceOpen.warning ? e('p', { className: 'warning pad', role: 'status' }, workspaceOpen.warning) : null,
-      workbenchNote ? e('p', { className: `pad`, role: 'status' }, workbenchNote) : null,
+      workbenchNote ? e('p', {
+        className: isSuccessWorkbenchNote(workbenchNote) ? 'side-status' : 'warning pad',
+        role: isSuccessWorkbenchNote(workbenchNote) ? 'status' : 'alert',
+      }, workbenchNote) : null,
       e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, highlightPath: highlightPath ?? undefined, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
     ) : null,
     sidebarVisible ? e(PanelResizer, {
@@ -2072,8 +2131,6 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       typewriter: writing.typewriter,
       focusParagraph: writing.focusParagraph,
       typography: writingTypography(writing),
-      onToggleTypewriter: () => { void writingScope.set('typewriter', !writing.typewriter) },
-      onToggleFocusParagraph: () => { void writingScope.set('focusParagraph', !writing.focusParagraph) },
       onSaved: () => {
         setOverviewRevision((value) => value + 1)
         if (path === pinnedPath) setContentRevision((value) => value + 1)
@@ -2122,8 +2179,21 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       activePath: path,
       authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
       authorMemory: normalizeAuthorMemory(writing.authorMemory),
+      chatModel: writing.chatModel,
       onAcceptMemory,
       hidden: !assistantVisible,
+      readingExpanded: chatReading,
+      onToggleReading: () => {
+        setChatReading((open) => {
+          if (open) {
+            setAssistantWidth(assistantWidthBeforeReading.current)
+            return false
+          }
+          assistantWidthBeforeReading.current = assistantWidth
+          setAssistantWidth(Math.max(assistantWidth, ASSISTANT_READING))
+          return true
+        })
+      },
       onClose: () => setAssistantOpen(false),
       onConfigure: openSettings,
       onDraftDirtyChange: setAssistantDraftDirty,
@@ -2158,32 +2228,36 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
             }, e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark)), e('strong', null, t('workspace.assistant')))
             : null
     ) : null,
-    leaveConfirm ? e(ConfirmDialog, {
+    e(ConfirmDialog, {
+      open: Boolean(leaveConfirm),
       id: 'leave-assistant-draft',
       title: t('chat.discardDraftTitle'),
       message: t('chat.leaveDraftBody'),
       confirmLabel: t('chat.discardAndContinue'),
       onCancel: () => resolveLeaveConfirm(false),
       onConfirm: () => resolveLeaveConfirm(true),
-    }) : null,
-    treeCreateRequest ? e(TextPromptDialog, {
+    }),
+    e(TextPromptDialog, {
+      open: Boolean(treeCreateRequest),
       id: 'tree-create',
-      key: `${treeCreateRequest.kind}:${treeCreateRequest.directory}`,
-      title: treeCreateRequest.kind === 'folder' ? t('workspace.newFolder') : t('workspace.newFile'),
-      label: treeCreateRequest.kind === 'folder' ? t('workspace.folderName') : t('workspace.fileName'),
+      title: treeCreateRequest?.kind === 'folder' ? t('workspace.newFolder') : t('workspace.newFile'),
+      label: treeCreateRequest?.kind === 'folder' ? t('workspace.folderName') : t('workspace.fileName'),
       initialValue: '',
       confirmLabel: t('common.create'),
+      busy: createBusy,
+      returnFocusRef: fileManageReturnFocus,
       onCancel: closeTreeCreate,
       onConfirm: (name: string) => void submitTreeCreate(name),
-    }) : null,
-    rollbackTarget ? e(ConfirmDialog, {
+    }),
+    e(ConfirmDialog, {
+      open: Boolean(rollbackTarget),
       id: 'snapshot-rollback',
       title: t('workspace.rollbackTitle'),
-      message: t('workspace.rollbackBody', { label: rollbackTarget.label ?? rollbackTarget.createdAt }),
+      message: t('workspace.rollbackBody', { label: rollbackTarget?.label ?? rollbackTarget?.createdAt ?? '' }),
       confirmLabel: t('workspace.rollback'),
       onCancel: () => setRollbackTarget(null),
       onConfirm: () => void confirmRollback(),
-    }) : null,
+    }),
     renderNewProjectDialog(),
     fileMenu ? e(FileContextMenu, {
       kind: fileMenu.kind,
@@ -2192,6 +2266,7 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       y: fileMenu.y,
       canPaste: Boolean(clipboard),
       onClose: closeFileMenu,
+      onDismissFocus: restoreTreeTriggerIfMenuDismissed,
       onCreateFile: () => openTreeCreate('file', fileMenu.kind === 'directory' ? fileMenu.path : parentOf(fileMenu.path)),
       onCreateFolder: () => openTreeCreate('folder', fileMenu.kind === 'directory' ? fileMenu.path : parentOf(fileMenu.path)),
       onCopy: () => setClipboardFromMenu('copy', fileMenu.kind, fileMenu.path),
@@ -2202,10 +2277,9 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
            目录行走 workbench entry.rename（不需要 version）。 */
         if (fileMenu.kind === 'file') openRenameDialog(fileMenu.path)
         else {
-          fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+          yieldMenuToDialog()
           setRenameTarget({ kind: 'directory', path: fileMenu.path })
           setManageNote('')
-          setFileMenu(null)
         }
       },
       onArchive: () => void archiveManaged(fileMenu.path),
@@ -2232,69 +2306,96 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
       getEditorSnapshot: () => snapshotFromHandle(editorHandleRef.current),
       onClose: () => setChapterOps(null),
       onApplied: applyChapterOps,
+      returnFocusRef: fileManageReturnFocus,
     }) : null,
-    managePath ? e(TextPromptDialog, {
+    e(TextPromptDialog, {
+      open: Boolean(managePath),
       id: 'rename-file',
       title: t('workspace.renameFile'),
       label: t('workspace.newName'),
-      initialValue: managePath.split('/').at(-1) ?? '',
+      initialValue: managePath?.split('/').at(-1) ?? '',
       confirmLabel: t('workspace.saveNewName'),
+      returnFocusRef: fileManageReturnFocus,
       onCancel: closeRenameDialog,
       onConfirm: renameManaged,
-    }) : null,
-    renameTarget ? e(TextPromptDialog, {
+    }),
+    e(TextPromptDialog, {
+      open: Boolean(renameTarget),
       id: 'rename-entry',
-      key: `${renameTarget.kind}:${renameTarget.path}`,
-      title: renameTarget.kind === 'directory' ? t('workspace.renameFolder') : t('common.rename'),
+      title: renameTarget?.kind === 'directory' ? t('workspace.renameFolder') : t('common.rename'),
       label: t('workspace.newName'),
-      initialValue: renameTarget.path.split('/').at(-1) ?? '',
+      initialValue: renameTarget?.path.split('/').at(-1) ?? '',
       confirmLabel: t('workspace.saveNewName'),
       note: manageNote,
       busy: manageBusy,
+      returnFocusRef: fileManageReturnFocus,
       onCancel: closeRenameEntryDialog,
       onConfirm: submitRenameEntry,
-    }) : null,
-    deleteTarget ? e(ConfirmDialog, {
+    }),
+    e(ConfirmDialog, {
+      open: Boolean(deleteTarget),
       id: 'delete-entry',
-      title: deleteTarget.kind === 'directory' ? t('workspace.deleteFolderTitle') : t('workspace.deleteFileTitle'),
-      message: t('workspace.deleteBody', { path: deleteTarget.path }),
+      title: deleteTarget?.kind === 'directory' ? t('workspace.deleteFolderTitle') : t('workspace.deleteFileTitle'),
+      message: t('workspace.deleteBody', { path: deleteTarget?.path ?? '' }),
       confirmLabel: t('common.delete'),
+      returnFocusRef: fileManageReturnFocus,
       onCancel: closeDeleteConfirm,
       onConfirm: () => void confirmDeleteEntry(),
-    }) : null,
+    }),
     renderCommandPalette(),
     renderImportDialog(),
-    importTitle ? e(TextPromptDialog, {
+    e(TextPromptDialog, {
+      open: Boolean(importTitle),
       id: 'import-title',
       title: t('home.importAsNew'),
       label: t('home.workName'),
       initialValue: '',
       confirmLabel: t('home.chooseSource'),
-      note: importTitle.note,
-      busy: importTitle.busy,
-      onCancel: () => { if (!importTitle.busy) setImportTitle(null) },
+      note: importTitle?.note,
+      busy: importTitle?.busy,
+      returnFocusRef: workspaceMenuTrigger,
+      onCancel: () => { if (!importTitle?.busy) setImportTitle(null) },
       onConfirm: (title: string) => void submitImportTitle(title),
-    }) : null,
-    exportChapters ? e(ExportPreviewDialog, {
-      chapters: exportChapters,
+    }),
+    e(ExportPreviewDialog, {
+      open: exportChapters !== null,
+      chapters: exportChapters ?? [],
       title: currentWorkspace?.title || t('workspace.untitled'),
       busy: exporting,
       note: exportNote,
+      returnFocusRef: workspaceMenuTrigger,
       onCancel: () => { setExportChapters(null); setExportNote('') },
       onExport: confirmExport,
-    }) : null,
-    archiveOpen ? e(ArchivePanel, {
+    }),
+    e(ArchivePanel, {
+      open: archiveOpen,
       items: archives,
       invalid: archiveInvalid,
       busy: archiveBusy,
       note: archiveNote,
       editorDirty,
+      returnFocusRef: workspaceMenuTrigger,
       onRestore: (item: ArchiveView) => void restoreArchived(item),
       onContinue: (item: ArchiveView) => void continueArchive(item),
       onClose: () => { if (!archiveBusy) setArchiveOpen(false) },
-    }) : null,
-    imagePreview ? e(ImagePreviewOverlay, { path: imagePreview.path, url: imagePreview.url, onClose: closeImagePreview }) : null,
-    settingsOpen ? e(SettingsDialog, { ctx, writingScope, migrateWriting, progressScope, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, onClose: () => setSettingsOpen(false) }) : null,
+    }),
+    e(HostDialog, {
+      open: Boolean(manualWorkspaceMode),
+      onOpenChange: (next: boolean) => { if (!next) closePathFallback() },
+      title: t('home.pathLabel'),
+      className: 'file-dialog path-fallback-dialog',
+      overlayClassName: 'file-dialog-overlay',
+      dismissible: !openingWorkspace,
+      initialFocusRef: pathFallbackInput,
+      returnFocusRef: workspaceMenuTrigger,
+    }, pathFallbackForm),
+    e(ImagePreviewOverlay, {
+      open: Boolean(imagePreview),
+      path: (imagePreview ?? lastImagePreview.current)?.path ?? '',
+      url: (imagePreview ?? lastImagePreview.current)?.url ?? '',
+      onClose: closeImagePreview,
+    }),
+    e(SettingsDialog, { open: settingsOpen, ctx, writingScope, migrateWriting, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, zhihuTab: zhihuSettings, onClose: () => setSettingsOpen(false) }),
     startupUpdate && !aboutOpen ? e('div', { className: 'update-toast', role: 'status' },
       e('span', { className: 'update-toast-text' }, t('about.toast', { version: startupUpdate.version })),
       e('button', {
@@ -2309,14 +2410,13 @@ function Root({ ctx, writingScope, migrateWriting, progressScope, hostThemeSync,
         onClick: () => setStartupUpdate(null),
       }, '×'),
     ) : null,
-    aboutOpen ? e(AboutUpdateDialog, { onClose: () => setAboutOpen(false) }) : null,
-  )
+    e(AboutUpdateDialog, { open: aboutOpen, onClose: () => setAboutOpen(false) }),
+  ))
 }
 
 type RegisterShellRootOptions = {
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
-  progressScope: WritingProgressScope
   hostThemeSync?: HostThemeSync
   commands: ShellCommandRegistry
   registerRoot: (ctx: ShellContext, render: (props: unknown) => ReactNode) => void
@@ -2335,7 +2435,7 @@ function ExtensionsDock(props: { rootProps: unknown }) {
   return e('div', {
     className: 'shell-extensions-dock',
     'data-testid': 'shell-extensions-dock',
-  }, renderSlot ? renderSlot(EXTENSIONS_SLOT, {}) : null)
+  }, renderSlot ? renderSlot(EXTENSIONS_SLOT, HOST_UI_OWNER) : null)
 }
 
 export function registerShellRoot(ctx: Context, options: RegisterShellRootOptions): void {
@@ -2344,12 +2444,12 @@ export function registerShellRoot(ctx: Context, options: RegisterShellRootOption
     ctx: client,
     writingScope: options.writingScope,
     migrateWriting: options.migrateWriting,
-    progressScope: options.progressScope,
     hostThemeSync: options.hostThemeSync,
     commands: options.commands,
     renderSlot: (props as RootSlotProps).renderSlot,
     extensionsDock: e(ExtensionsDock, { rootProps: props }),
-    pluginsSettings: (props as RootSlotProps).renderSlot?.(PLUGINS_SETTINGS_SLOT, {}) ?? null,
+    pluginsSettings: (props as RootSlotProps).renderSlot?.(PLUGINS_SETTINGS_SLOT, HOST_UI_OWNER) ?? null,
+    zhihuSettings: (props as RootSlotProps).renderSlot?.(ZHIHU_SETTINGS_SLOT, HOST_UI_OWNER) ?? null,
   })))
 }
 

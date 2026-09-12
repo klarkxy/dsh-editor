@@ -12,6 +12,7 @@ import {
 import { ZHIHU_CREDENTIAL_REF, ZHIHU_RPC_CHANNEL, type ZhihuRpcResult } from './contracts.ts'
 import { createZhihuClientState, type ZhihuClientState } from './client-state.ts'
 import { zhihuClientStyles } from './client-styles.ts'
+import { dockEscapeKeyDown, hostComponentsFromRenderProps, renderSelect, zhihuQueryKeyDown, type HostDialog, type HostSelect } from './client-host-ui.ts'
 
 export const name = 'dsh-zhihu-client'
 export const inject = ['slots', 'connection', 'remote', 'remote.credentials'] as const
@@ -626,7 +627,7 @@ function formatSize(size: number): string {
   return `${size} B`
 }
 
-function KnowledgeSection(props: { rpc: RpcCaller }): ReactNode {
+function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): ReactNode {
   const { rpc } = props
   const gateRef = useRef<ZhihuClientState | null>(null)
   if (!gateRef.current) gateRef.current = createZhihuClientState()
@@ -712,18 +713,19 @@ function KnowledgeSection(props: { rpc: RpcCaller }): ReactNode {
     list.status === 'ready' ? e('div', { className: 'zhihu-field' },
       e('label', { className: 'zhihu-field-label', htmlFor: 'zhihu-kb-base' }, '目标知识库'),
       e('div', { className: 'zhihu-row' },
-        e('select', {
-          id: 'zhihu-kb-base',
-          className: 'zhihu-select',
+        renderSelect(props.Select, {
           value: baseId,
           disabled: busy,
-          onChange: (event: ChangeEvent<HTMLSelectElement>) => setBaseId(event.target.value),
-        },
-          e('option', { value: '' }, '默认知识库'),
-          ...list.bases.map((base) => e('option', { key: base.id, value: base.id },
-            `${base.name}${base.isDefault ? '（默认）' : ''} · ${base.contentCount} 篇`,
-          )),
-        ),
+          'aria-label': '目标知识库',
+          onChange: setBaseId,
+          options: [
+            { value: '', label: '默认知识库' },
+            ...list.bases.map((base) => ({
+              value: base.id,
+              label: `${base.name}${base.isDefault ? '（默认）' : ''} · ${base.contentCount} 篇`,
+            })),
+          ],
+        }, 'zhihu-select'),
         e('button', { type: 'button', className: 'zhihu-button', disabled: busy, onClick: () => void load() }, '刷新'),
       ),
       list.bases.length === 0 ? e('p', { className: 'zhihu-hint' }, '暂无可用知识库。') : null,
@@ -762,6 +764,7 @@ function KnowledgeSection(props: { rpc: RpcCaller }): ReactNode {
 // ---------------------------------------------------------------------------
 
 type Tab = 'search' | 'settings' | 'usage' | 'knowledge'
+type ZhihuSurface = 'overlay' | 'settings'
 
 const TAB_LABEL: Record<Tab, string> = {
   search: '搜索',
@@ -770,13 +773,23 @@ const TAB_LABEL: Record<Tab, string> = {
   knowledge: '知识库',
 }
 
-function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
-  const { rpc, credentials } = props
+const OVERLAY_TABS: Tab[] = ['search', 'settings', 'usage', 'knowledge']
+const SETTINGS_TABS: Tab[] = ['settings', 'usage', 'knowledge', 'search']
+
+function tabLabel(tab: Tab, surface: ZhihuSurface): string {
+  if (tab === 'search' && surface === 'settings') return '连接测试'
+  return TAB_LABEL[tab]
+}
+
+function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?: HostSelect; Dialog?: HostDialog; surface?: ZhihuSurface }) {
+  const { rpc, credentials, Select, Dialog } = props
+  const surface: ZhihuSurface = props.surface === 'settings' ? 'settings' : 'overlay'
+  const tabs = surface === 'settings' ? SETTINGS_TABS : OVERLAY_TABS
   const gateRef = useRef<ZhihuClientState | null>(null)
   if (!gateRef.current) gateRef.current = createZhihuClientState()
   const gate = gateRef.current
-  const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<Tab>('search')
+  const [open, setOpen] = useState(surface === 'settings')
+  const [tab, setTab] = useState<Tab>(surface === 'settings' ? 'settings' : 'search')
   const [query, setQuery] = useState('')
   const [mode, setMode] = useState<Mode>('search')
   const [askModel, setAskModel] = useState<AskModel>('zhida-thinking-1p5')
@@ -790,9 +803,10 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
   const queryRef = useRef<HTMLInputElement | null>(null)
   const wasOpen = useRef(false)
 
-  // Focus management: opening lands in the query input; closing (button or
-  // Escape) returns focus to the launcher.
+  // Standalone dock owns focus return. Host Dialog restores the invoker itself.
+  // Settings embed is already inside the host settings dialog.
   useEffect(() => {
+    if (Dialog || surface === 'settings') return
     if (open) {
       wasOpen.current = true
       queryRef.current?.focus()
@@ -800,7 +814,7 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
       wasOpen.current = false
       toggleRef.current?.focus()
     }
-  }, [open])
+  }, [open, Dialog, surface])
 
   // Unmount (slot collapse, plugin unload): cancel the in-flight request.
   useEffect(() => () => gate.cancel(), [gate])
@@ -897,17 +911,11 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
   }, [gate])
 
   const onPanelKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      event.stopPropagation()
-      closePanel()
-    }
+    dockEscapeKeyDown(event, { loading: phase === 'loading', close: closePanel })
   }
 
   const onQueryKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' && !isSearchDisabled()) {
-      event.preventDefault()
-      void runSearch()
-    }
+    zhihuQueryKeyDown(event, { disabled: isSearchDisabled(), search: () => { void runSearch() } })
   }
 
   const isSearchDisabled = () => phase === 'loading' || (mode !== 'hot' && !query.trim())
@@ -915,56 +923,31 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
   const stale = outcome !== null && resultRevision !== revision
   const searchDisabled = isSearchDisabled()
 
-  // The toggle stays mounted as the launcher anchor whether the panel is open
-  // or not: a host launcher rail lays out the dock wrapper inline, and the
-  // open panel positions itself against that wrapper.
-  return e('div', { className: 'zhihu-dock' },
-    e('button', {
+  const tablist = e('div', { key: 'tabs', className: 'zhihu-tabs', role: 'tablist', 'aria-label': '知乎资料分区' },
+    tabs.map((key) => e('button', {
+      key,
       type: 'button',
-      ref: toggleRef,
-      className: 'zhihu-toggle',
-      'data-testid': 'zhihu-open',
-      onClick: () => setOpen(true),
-    }, SLOT_LABEL),
-    open ? e('section', {
-    className: 'zhihu-panel',
-    'data-testid': 'zhihu-panel',
-    'aria-label': '知乎资料',
-    onKeyDown: onPanelKeyDown,
-  },
-    e('header', { className: 'zhihu-panel-header' },
-      e('h2', { className: 'zhihu-panel-title' }, '知乎资料'),
-      e('button', { type: 'button', className: 'zhihu-panel-close', onClick: closePanel }, '关闭'),
-    ),
-    e('div', { className: 'zhihu-tabs', role: 'tablist', 'aria-label': '知乎资料分区' },
-      (Object.keys(TAB_LABEL) as Tab[]).map((key) => e('button', {
-        key,
-        type: 'button',
-        role: 'tab',
-        'aria-selected': tab === key,
-        className: 'zhihu-tab',
-        onClick: () => onTabChange(key),
-      }, TAB_LABEL[key])),
-    ),
-    e('div', { className: 'zhihu-panel-body' },
+      role: 'tab',
+      'aria-selected': tab === key,
+      className: 'zhihu-tab',
+      onClick: () => onTabChange(key),
+    }, tabLabel(key, surface))),
+  )
+  const body = e('div', { key: 'body', className: 'zhihu-panel-body' },
       tab === 'search' ? e('div', { role: 'tabpanel', className: 'zhihu-field' },
         e('div', { className: 'zhihu-row' },
-          e('select', {
-            className: 'zhihu-select',
+          renderSelect(Select, {
             'aria-label': '搜索方式',
             value: mode,
-            onChange: (event: ChangeEvent<HTMLSelectElement>) => onModeChange(event.target.value as Mode),
-          },
-            (Object.keys(MODE_LABEL) as Mode[]).map((key) => e('option', { key, value: key }, MODE_LABEL[key])),
-          ),
-          mode === 'ask' ? e('select', {
-            className: 'zhihu-select',
+            onChange: (next) => onModeChange(next as Mode),
+            options: (Object.keys(MODE_LABEL) as Mode[]).map((key) => ({ value: key, label: MODE_LABEL[key] })),
+          }, 'zhihu-select'),
+          mode === 'ask' ? renderSelect(Select, {
             'aria-label': '直答模型',
             value: askModel,
-            onChange: (event: ChangeEvent<HTMLSelectElement>) => onAskModelChange(event.target.value as AskModel),
-          },
-            ASK_MODELS.map((model) => e('option', { key: model.value, value: model.value }, model.label)),
-          ) : null,
+            onChange: (next) => onAskModelChange(next as AskModel),
+            options: ASK_MODELS.map((model) => ({ value: model.value, label: model.label })),
+          }, 'zhihu-select') : null,
         ),
         mode === 'knowledge' ? e('div', { className: 'zhihu-scopes' },
           SCOPE_OPTIONS.map((scope) => e('label', { key: scope.value, className: 'zhihu-scope' },
@@ -999,15 +982,60 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi }) {
             ? e('button', { type: 'button', className: 'zhihu-button', onClick: () => { gate.cancel(); setPhase('idle') } }, '取消')
             : null,
         ),
+        phase === 'idle' && mode !== 'hot' && !query.trim() ? e('div', { className: 'zhihu-status', role: 'status' }, '输入关键词后搜索。') : null,
         phase === 'loading' ? e('div', { className: 'zhihu-status', role: 'status' }, '正在请求知乎…') : null,
         phase === 'error' && failure ? e('div', { className: 'zhihu-error', role: 'alert' }, failure.text) : null,
         phase === 'done' && outcome ? e(OutcomeView, { outcome, stale }) : null,
       ) : null,
       tab === 'settings' ? e(SettingsSection, { credentials }) : null,
       tab === 'usage' ? e(UsageSection, { rpc }) : null,
-      tab === 'knowledge' ? e(KnowledgeSection, { rpc }) : null,
+      tab === 'knowledge' ? e(KnowledgeSection, { rpc, Select }) : null,
+  )
+  const inner = [
+    e('header', { key: 'header', className: 'zhihu-panel-header' },
+      e('h2', { className: 'zhihu-panel-title' }, '知乎资料'),
+      e('button', { type: 'button', className: 'zhihu-panel-close', disabled: phase === 'loading', onClick: closePanel }, '关闭'),
     ),
-  ) : null,
+    tablist,
+    body,
+  ]
+
+  if (surface === 'settings') {
+    return e('div', {
+      className: 'zhihu-settings-embed',
+      'data-testid': 'zhihu-settings-embed',
+      'aria-label': SLOT_LABEL,
+    }, tablist, body)
+  }
+
+  // The toggle stays mounted as the launcher anchor. Host Dialog stays mounted
+  // while closed so CSS exit can run; standalone unmounts the dock panel.
+  return e('div', { className: 'zhihu-dock' },
+    e('button', {
+      type: 'button',
+      ref: toggleRef,
+      className: 'zhihu-toggle',
+      'data-testid': 'zhihu-open',
+      onClick: () => setOpen(true),
+    }, SLOT_LABEL),
+    Dialog
+      ? e(Dialog, {
+        open,
+        onOpenChange: (next: boolean) => { if (!next) closePanel(); else setOpen(true) },
+        title: '知乎资料',
+        className: 'file-dialog zhihu-panel',
+        overlayClassName: 'file-dialog-overlay',
+        dismissible: phase !== 'loading',
+        initialFocusRef: queryRef,
+      }, e('div', { 'data-testid': 'zhihu-panel', className: 'zhihu-panel-inner' }, inner))
+      : open
+        ? e('section', {
+          className: 'zhihu-panel',
+          'data-testid': 'zhihu-panel',
+          'aria-label': '知乎资料',
+          onKeyDown: onPanelKeyDown,
+        }, inner)
+        : null,
   )
 }
 
@@ -1016,13 +1044,27 @@ export function apply(ctx: Context): void {
   // Styles live and die with the plugin fiber: unload/reload removes the node.
   if (style) ctx.effect(() => () => style.remove(), 'zhihu.styles')
   const client = ctx as ZhihuClientContext
-  const render = () => e(ZhihuDock, { rpc: client.connection.rpc, credentials: wrapCredentials(client.remote.credentials) })
-  // Official Web declares shell.overlay; the DSH Editor root declares
-  // dsh-editor.extensions. inject() waits for the declaration, so each entry
-  // goes live only in the host that actually provides the seat, and the
-  // caller fiber's unload retracts both the wait and the contribution.
+  const overlayRender = (props: unknown) => e(ZhihuDock, {
+    rpc: client.connection.rpc,
+    credentials: wrapCredentials(client.remote.credentials),
+    surface: 'overlay',
+    ...hostComponentsFromRenderProps(props),
+  })
+  const settingsRender = (props: unknown) => {
+    const { Select } = hostComponentsFromRenderProps(props)
+    return e(ZhihuDock, {
+      rpc: client.connection.rpc,
+      credentials: wrapCredentials(client.remote.credentials),
+      surface: 'settings',
+      Select,
+    })
+  }
+  // Official Web declares shell.overlay. Desktop settings consume the
+  // structural seat dsh-editor.settings.zhihu (literal, no shell import).
+  // inject() waits for the declaration, so each entry goes live only in the
+  // host that actually provides the seat, and unload retracts both.
   client.slots.inject('shell.overlay', () =>
-    client.slots.register({ name: 'shell.overlay', id: SLOT_ID, order: SLOT_ORDER, label: SLOT_LABEL }, render))
-  client.slots.inject('dsh-editor.extensions', () =>
-    client.slots.register({ name: 'dsh-editor.extensions', id: SLOT_ID, order: SLOT_ORDER, label: SLOT_LABEL }, render))
+    client.slots.register({ name: 'shell.overlay', id: SLOT_ID, order: SLOT_ORDER, label: SLOT_LABEL }, overlayRender))
+  client.slots.inject('dsh-editor.settings.zhihu', () =>
+    client.slots.register({ name: 'dsh-editor.settings.zhihu', id: SLOT_ID, order: SLOT_ORDER, label: SLOT_LABEL }, settingsRender))
 }

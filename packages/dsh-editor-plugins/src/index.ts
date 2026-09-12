@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { registerHostRpc, type HostRpcContext } from 'dsh-manuscript/host-api'
-import { readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import {
   PLUGINS_RPC_CHANNEL,
   type PluginCard,
@@ -10,14 +10,24 @@ import {
   type PluginsRpcResult,
 } from './contracts.ts'
 import {
-  catalogFor, classifyEntry, isProtectedEntry, isProtectedPackage, isSafeEntryId, isSafePackageName,
+  catalogFor, catalogLookupId, classifyEntry, isProtectedEntry, isProtectedPackage, isSafeEntryId, isSafePackageName,
   loadRuntimeCatalog, packageNameOf, type RuntimeCatalog,
 } from './core.ts'
 import { githubHeaders, marketplaceSearchUrl, parseGitHubSpec, parseMarketplaceSearch, sanitizeMarketplaceQuery } from './github.ts'
 import { inspectPluginPackage } from './inspect.ts'
 import { defaultExtract, defaultLink, defaultNpmInstall, installGitHubPlugin, stageGitHubPlugin, uninstallUserPlugin } from './install.ts'
-import { canReplaceHomePatch, emptyPluginState, parsePluginState, renderOverridePatch, type PluginState } from './overlay.ts'
+import { emptyPluginState, isOwnedManagedPatch, parsePluginState, renderOverridePatch, type PluginState } from './overlay.ts'
 import { resolvePluginPaths, type PluginPaths } from './paths.ts'
+import {
+  defaultPersistIo,
+  isEnoent,
+  PluginPersistBlockedError,
+  PluginPersistError,
+  replaceFileAtomic,
+  runQueuedSorted,
+  writeJsonAtomic,
+  type PersistIo,
+} from './persist.ts'
 
 export const name = 'dsh-editor-plugins'
 export const inject = ['connection', 'loader', 'webServer'] as const
@@ -64,21 +74,55 @@ export async function readPluginState(paths: PluginPaths): Promise<PluginState> 
   }
 }
 
-async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
-  const stage = `${path}.${process.pid}.tmp`
-  await writeFile(stage, `${JSON.stringify(value, null, 2)}\n`)
-  await rename(stage, path)
+async function readOptionalText(path: string, io: PersistIo): Promise<string | undefined> {
+  try {
+    return await io.readFile(path, 'utf8')
+  } catch (error) {
+    if (isEnoent(error)) return undefined
+    throw error
+  }
 }
 
-export async function persistPluginState(paths: PluginPaths, state: PluginState): Promise<boolean> {
-  await writeJsonAtomic(paths.stateFile, state)
-  let existing: string | undefined
-  try { existing = await readFile(paths.patchFile, 'utf8') } catch { existing = undefined }
-  if (!canReplaceHomePatch(existing)) return false
-  const stage = `${paths.patchFile}.${process.pid}.tmp`
-  await writeFile(stage, renderOverridePatch(state.overrides))
-  await rename(stage, paths.patchFile)
-  return true
+async function restoreText(path: string, previous: string | undefined, io: PersistIo): Promise<void> {
+  if (previous === undefined) {
+    await io.rm(path, { force: true })
+    return
+  }
+  await replaceFileAtomic(path, previous, io)
+}
+
+async function validatePluginPersistence(paths: PluginPaths, io: PersistIo): Promise<void> {
+  let previousPatch: string | undefined
+  try {
+    previousPatch = await readOptionalText(paths.patchFile, io)
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error)
+    throw new PluginPersistBlockedError('unreadable-patch', cause)
+  }
+  if (!isOwnedManagedPatch(previousPatch)) throw new PluginPersistBlockedError('unmanaged-patch')
+}
+
+export async function persistPluginState(paths: PluginPaths, state: PluginState, io: PersistIo = defaultPersistIo): Promise<void> {
+  await runQueuedSorted([paths.home, paths.stateFile, paths.patchFile], async () => {
+    await validatePluginPersistence(paths, io)
+    const previousState = await readOptionalText(paths.stateFile, io)
+    await writeJsonAtomic(paths.stateFile, state, io)
+    try {
+      await replaceFileAtomic(paths.patchFile, renderOverridePatch(state.overrides), io)
+    } catch (error) {
+      const cause = error instanceof Error ? error.message : String(error)
+      try {
+        await restoreText(paths.stateFile, previousState, io)
+      } catch (recovery) {
+        throw new PluginPersistError('未能保存插件开关，请重试。', {
+          cause,
+          recovery: 'failed',
+          recoveryCause: recovery instanceof Error ? recovery.message : String(recovery),
+        })
+      }
+      throw new PluginPersistError('未能保存插件开关，请重试。', { cause, recovery: 'restored' })
+    }
+  })
 }
 
 function fiberPhaseOf(entry: LoaderEntry): PluginFiberPhase {
@@ -116,11 +160,61 @@ export function inventoryFromLoader(loader: LoaderFace, state: PluginState, cata
   return inventory
 }
 
+function persistFailed(error: unknown): PluginsRpcResult {
+  if (error instanceof PluginPersistBlockedError) {
+    return fail('forbidden', error.message, { reason: error.reason, ...(error.detail ? { cause: error.detail } : {}) })
+  }
+  if (error instanceof PluginPersistError) {
+    return fail('internal', error.message, error.details)
+  }
+  const cause = error instanceof Error ? error.message : String(error)
+  return fail('internal', '未能保存插件开关，请重试。', { cause })
+}
+
+async function setEntriesEnabled(
+  entryIds: string[],
+  enabled: boolean,
+  options: { loader: LoaderFace; paths: PluginPaths; catalog?: RuntimeCatalog; io?: PersistIo },
+  catalogForCall: () => Promise<RuntimeCatalog>,
+): Promise<PluginsRpcResult> {
+  if (entryIds.length === 0 || typeof enabled !== 'boolean') return bad('请指定要开关的插件')
+  if (new Set(entryIds).size !== entryIds.length) return bad('请指定要开关的插件')
+  const running = [...options.loader.entries()]
+  const catalog = await catalogForCall()
+  const matches: Array<{ entryId: string; patchId: string }> = []
+  for (const entryId of entryIds) {
+    const patchId = entryId.startsWith('include:') ? catalogLookupId(entryId) : entryId
+    if (!isSafeEntryId(patchId)) return bad('请指定要开关的插件')
+    const match = running.find((entry) => entry.id === entryId)
+    if (!match) return fail('not-found', '未找到该插件')
+    if (isProtectedEntry(entryId, match.options.name, catalog)) return forbidden('系统核心插件不能关闭')
+    matches.push({ entryId, patchId })
+  }
+  const state = await readPluginState(options.paths)
+  const overrides = { ...state.overrides }
+  for (const match of matches) overrides[match.patchId] = enabled
+  state.overrides = overrides
+  try {
+    await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
+  } catch (error) {
+    return persistFailed(error)
+  }
+  let appliedCount = 0
+  for (const match of matches) {
+    try {
+      await options.loader.update(match.entryId, { disabled: !enabled })
+      const updated = [...options.loader.entries()].find((entry) => entry.id === match.entryId)
+      if (updated && updated.disabled === !enabled) appliedCount++
+    } catch { /* The saved override will apply on restart. */ }
+  }
+  return { ok: true, value: { restartRequired: appliedCount !== matches.length } satisfies PluginActionReceipt }
+}
+
 export async function handlePluginsRpc(
   endpoint: string,
   payload: unknown,
   signal: AbortSignal,
-  options: { loader: LoaderFace; paths: PluginPaths; fetch?: typeof fetch; catalog?: RuntimeCatalog },
+  options: { loader: LoaderFace; paths: PluginPaths; fetch?: typeof fetch; catalog?: RuntimeCatalog; io?: PersistIo },
 ): Promise<PluginsRpcResult> {
   if (signal.aborted) return cancelled()
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
@@ -136,15 +230,15 @@ export async function handlePluginsRpc(
     }
     if (endpoint === 'entry.setEnabled') {
       const entryId = typeof body.entryId === 'string' ? body.entryId : ''
-      if (!isSafeEntryId(entryId) || typeof body.enabled !== 'boolean') return bad('请指定要开关的插件')
-      const match = [...options.loader.entries()].find((entry) => entry.id === entryId)
-      if (!match) return fail('not-found', '未找到该插件')
-      if (isProtectedEntry(entryId, match.options.name, await catalogForCall())) return forbidden('系统核心插件不能关闭')
-      const state = await readPluginState(options.paths)
-      state.overrides = { ...state.overrides, [entryId]: body.enabled }
-      const persisted = await persistPluginState(options.paths, state)
-      try { await options.loader.update(entryId, { disabled: !body.enabled }) } catch { /* persist still applies on restart */ }
-      return { ok: true, value: { restartRequired: !persisted } satisfies PluginActionReceipt }
+      if (!entryId || typeof body.enabled !== 'boolean') return bad('请指定要开关的插件')
+      return setEntriesEnabled([entryId], body.enabled, options, catalogForCall)
+    }
+    if (endpoint === 'entries.setEnabled') {
+      const entryIds = Array.isArray(body.entryIds) && body.entryIds.every((id) => typeof id === 'string')
+        ? body.entryIds as string[]
+        : null
+      if (!entryIds || typeof body.enabled !== 'boolean') return bad('请指定要开关的插件')
+      return setEntriesEnabled(entryIds, body.enabled, options, catalogForCall)
     }
     if (endpoint === 'marketplace.search') {
       const query = typeof body.query === 'string' ? body.query : ''
@@ -180,6 +274,7 @@ export async function handlePluginsRpc(
     if (endpoint === 'marketplace.install') {
       const spec = typeof body.spec === 'string' ? parseGitHubSpec(body.spec) : undefined
       if (!spec) return bad('请输入 GitHub 仓库，例如 owner/repo')
+      await validatePluginPersistence(options.paths, options.io ?? defaultPersistIo)
       const installed = await installGitHubPlugin(spec, options.paths, signal, {
         fetch: options.fetch ?? fetch,
         extract: defaultExtract,
@@ -188,7 +283,7 @@ export async function handlePluginsRpc(
       }, await catalogForCall())
       const state = await readPluginState(options.paths)
       state.installed = [...state.installed.filter((item) => item.name !== installed.name), installed]
-      await persistPluginState(options.paths, state)
+      await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
       return { ok: true, value: { ...installed, restartRequired: true } }
     }
     if (endpoint === 'marketplace.uninstall') {
@@ -197,23 +292,25 @@ export async function handlePluginsRpc(
       if (isProtectedPackage(packageName, (await catalogForCall()).bundles)) return forbidden('系统核心插件不能卸载')
       const state = await readPluginState(options.paths)
       if (!state.installed.some((item) => item.name === packageName)) return fail('not-found', '该插件不是从市场安装的，不能从这里卸载')
+      await validatePluginPersistence(options.paths, options.io ?? defaultPersistIo)
       const running = [...options.loader.entries()].filter((entry) => packageNameOf(entry.options.name) === packageName)
       await uninstallUserPlugin(packageName, options.paths)
       for (const entry of running) {
         try { await options.loader.remove?.(entry.id) } catch { /* 卸下文件后仍需重启才能卸掉 Client */ }
       }
       state.installed = state.installed.filter((item) => item.name !== packageName)
-      await persistPluginState(options.paths, state)
+      await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
       return { ok: true, value: { restartRequired: true } satisfies PluginActionReceipt }
     }
     return bad('不支持的插件操作')
   } catch (error) {
     if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return cancelled()
+    if (error instanceof PluginPersistBlockedError || error instanceof PluginPersistError) return persistFailed(error)
     const message = error instanceof Error ? error.message : String(error)
     if (message.includes('GitHub') || message.includes('fetch') || message.includes('network')) {
-      return fail('network', message)
+      return fail('network', '网络请求失败，请稍后重试。', { cause: message })
     }
-    return fail('internal', message || '插件操作失败，请重试')
+    return fail('internal', '未能完成插件操作，请重试。', { cause: message })
   }
 }
 

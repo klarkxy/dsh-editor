@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
+import { readTrustedClipboardText, writeTrustedClipboardText } from './clipboard.js'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -121,6 +122,29 @@ ipcMain.on('dsh-window:toggle-maximize', (event) => {
 })
 ipcMain.on('dsh-window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
+})
+
+function clipboardTrust(event: {
+  sender: { isDestroyed?: () => boolean; getURL?: () => string }
+  senderFrame?: { url?: string; parent?: unknown } | null
+}) {
+  const window = BrowserWindow.fromWebContents(event.sender as never)
+  const frame = event.senderFrame
+  const isMainFrame = frame != null && frame.parent == null
+  return {
+    owned: lifecycle.isOwnedWindow(window as unknown as EditorWindow | undefined),
+    destroyed: Boolean(window == null || event.sender.isDestroyed?.()),
+    isMainFrame,
+    url: typeof frame?.url === 'string' ? frame.url : '',
+    expected: lifecycle.expectedUrl(),
+  }
+}
+
+ipcMain.handle('dsh-window:clipboard-read-text', (event) => {
+  return readTrustedClipboardText(clipboard, clipboardTrust(event))
+})
+ipcMain.handle('dsh-window:clipboard-write-text', (event, text) => {
+  writeTrustedClipboardText(clipboard, clipboardTrust(event), text)
 })
 
 // "About / update" page: the renderer is locked behind a strict CSP that

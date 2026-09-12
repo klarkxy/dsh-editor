@@ -1,6 +1,6 @@
 # DSH Editor
 
-DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.5-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是真实目录树（新建作品只预建 `正文/`，大纲/人物卡/世界书等在实际创建后出现；栏顶有搜索、校对、概览、人物、设定、提交、历史），中是稿纸编辑器（稿内查找替换、打字机滚动、段落聚焦与排版、ghost FIM、选段改写、‹ › 章节导航），右是 dsh 对话线程（⋯ 菜单可归档、恢复或删除——删除只在本机记墓碑，DSH `0.1.5-rc.2` 没有会话删除）；两侧栏可以折叠或进入专注模式。
+DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.5-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是真实目录树（新建作品只预建 `正文/`，大纲/人物卡/世界书等在实际创建后出现；栏顶提供搜索和版本操作，辅助文件隐藏；概览、人物与设定从命令面板打开，桌面校对暂时停用，知乎配置收在设置中），中是稿纸编辑器（稿内查找替换、打字机滚动、段落聚焦与排版、ghost FIM、选段改写、‹ › 章节导航），右是 dsh 对话线程（⋯ 菜单可归档、恢复或删除——删除只在本机记墓碑，DSH `0.1.5-rc.2` 没有会话删除）；两侧栏可以折叠或进入专注模式。
 
 仓库提供三个可独立安装到普通 DSH Web profile 的公开插件，以及随桌面组合交付的私有插件。基础、智能和完整写作组合的安装与接口见[组合指南](docs/plugin-composition-guide.md)：
 
@@ -14,7 +14,7 @@ DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口�
 | `dsh-editor-cards` | 人物卡与世界书（列表、frontmatter、引用导航、新建），Host RPC + Client 座位 | 不发布；卡片文件仍在作品目录 |
 | `dsh-editor-novel-kernel` | 小说知识、预览提案、索引直写、工具守卫与系统提示词 | DSH 工具与作者确认边界 |
 | `dsh-editor-shell` | 桌面唯一根界面、布局与编辑状态、Chat 投影；向插件开放侧栏座位与命令注册表 | 不发布、不安装到日常 `web` profile |
-| `dsh-editor-proofread-panel` | 作品校对面板（当前章/全稿扫描、人物卡对照、应用建议），通过 Shell 座位接入 | 不发布；只消费 workbench RPC |
+| `dsh-editor-proofread-panel` | 作品校对面板，桌面目前暂停装载；保留代码和已有数据 | 不发布；只消费 workbench RPC |
 | `dsh-editor-overview-panel` | 作品概览（章节状态、字数分布、写作曲线），通过中栏 overlay 座位接入 | 不发布；只消费 workbench RPC |
 | `dsh-editor-memory-panel` | 记忆维护（查看、应用与撤销 AGENTS.md / 人物卡 / 世界书记录），通过侧栏座位接入 | 不发布；只消费 workbench RPC |
 | `dsh-editor-plugins` | 设置里开关非核心插件，并从 GitHub `dsh-plugin` 市场搜索安装 | 不发布；锁定与分类读各包 `dshEditor` 声明 |

@@ -244,7 +244,7 @@ try {
 
   // 07 — return to home and capture the ink variant.
   await page.getByRole('button', { name: '作品菜单' }).click()
-  await page.getByRole('button', { name: '返回作品列表' }).click()
+  await page.getByRole('menuitem', { name: '返回作品列表' }).click()
   await page.locator('.home-stage').waitFor({ state: 'visible' })
   // The home chrome has no theme toggle (the workbench toggle is the only
   // in-app control). Set the theme through the localStorage channel that

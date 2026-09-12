@@ -198,7 +198,7 @@ try {
   // them by the attribute-with-empty-value form and read the text content of
   // each one so the assertion stays stable if cmdk ever reorders groups.
   const headingTexts = await content.locator('[cmdk-group-heading=""]').allTextContents()
-  if (headingTexts.join('|') !== '作品|视图|跳转到文档') {
+  if (headingTexts.join('|') !== '作品|写作|视图|跳转到文档') {
     fail(`paper palette group headings drifted: ${JSON.stringify(headingTexts)}`)
   }
   // The "跳转到文档" group should list the seeded 001.md chapter; the cmdk
@@ -246,6 +246,82 @@ try {
   }
   await shot(page, 'palette-ink', '命令面板打开，墨主题，确认 token 反转正确')
 
+  // Exercise the shared Radix Select in a real settings dialog. Escape must
+  // dismiss only the nested list and restore focus, in both shell themes.
+  await page.keyboard.press('Escape')
+  await overlay.waitFor({ state: 'detached' })
+  for (const theme of ['paper', 'ink']) {
+    if (await page.locator('html').getAttribute('data-theme') !== theme) {
+      await page.locator('.chrome .theme-toggle').click()
+      await page.waitForFunction((value) => document.documentElement.dataset.theme === value, theme)
+    }
+    await page.locator('.native-settings-control button').first().click()
+    const settings = page.locator('.settings-dialog')
+    await settings.waitFor({ state: 'visible' })
+    const language = settings.locator('.select-trigger').first()
+    await language.focus()
+    await page.keyboard.press('ArrowDown')
+    const list = page.getByRole('listbox')
+    await list.waitFor({ state: 'visible' })
+    const box = await list.boundingBox()
+    const viewport = page.viewportSize()
+    if (!box || box.x < 0 || box.y < 0 || box.x + box.width > viewport.width + 1 || box.y + box.height > viewport.height + 1) {
+      fail(`select escaped viewport in ${theme}`)
+    }
+    const themeColours = await list.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, fg: getComputedStyle(el).color }))
+    if (themeColours.bg === 'rgba(0, 0, 0, 0)' || themeColours.bg === themeColours.fg) fail(`select has unreadable theme colours in ${theme}`)
+    await shot(page, `select-${theme}`, '设置下拉：浮层位置、选中状态与主题')
+    await page.keyboard.press('Escape')
+    await list.waitFor({ state: 'detached' })
+    if (!(await settings.isVisible())) fail('Escape from select closed parent settings')
+    if (!(await language.evaluate((el) => document.activeElement === el))) fail('Escape did not restore select trigger focus')
+
+    // Exercise the existing persisted preference through keyboard selection.
+    const preference = settings.locator('.select-trigger').nth(1)
+    const before = await preference.textContent()
+    await preference.focus()
+    await page.keyboard.press('ArrowDown')
+    await list.waitFor({ state: 'visible' })
+    await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'option')
+    await page.keyboard.press('End')
+    await page.waitForFunction(() => document.activeElement?.textContent?.includes('插话发送'))
+    await page.keyboard.press('Enter')
+    await list.waitFor({ state: 'detached' })
+    await page.waitForFunction(() => document.querySelectorAll('.settings-dialog .select-trigger')[1]?.textContent?.includes('插话发送'), undefined, { timeout: 5000 })
+    if (before === await preference.textContent()) fail('keyboard selection did not change preference')
+    await preference.click()
+    await list.waitFor({ state: 'visible' })
+    await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'option')
+    await page.keyboard.press('Home')
+    await page.waitForFunction(() => document.activeElement?.textContent?.includes('排队发送'))
+    await page.keyboard.press('Enter')
+    await list.waitFor({ state: 'detached' })
+    await page.getByRole('button', { name: '关闭设置' }).click()
+    await settings.waitFor({ state: 'detached' })
+  }
+
+  // Portaled overlays are outside .shell; reduced motion must cover them too.
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await workbenchTrigger.click()
+  await content.waitFor({ state: 'visible' })
+  const still = await content.evaluate((el) => ({ animation: getComputedStyle(el).animationName, transition: getComputedStyle(el).transitionDuration }))
+  if (still.animation !== 'none' || still.transition.split(',').some((value) => parseFloat(value) !== 0)) fail(`palette ignores reduced motion: ${JSON.stringify(still)}`)
+  await page.keyboard.press('Escape')
+  await overlay.waitFor({ state: 'detached' })
+  await page.locator('.native-settings-control button').first().click()
+  await page.locator('.settings-dialog .select-trigger').first().click()
+  const reducedList = page.getByRole('listbox')
+  await reducedList.waitFor({ state: 'visible' })
+  if (await reducedList.evaluate((el) => getComputedStyle(el).animationName) !== 'none') fail('select ignores reduced motion')
+  const narrowBox = await reducedList.boundingBox()
+  if (!narrowBox || narrowBox.x < 0 || narrowBox.y < 0 || narrowBox.x + narrowBox.width > 1281 || narrowBox.y + narrowBox.height > 721) fail('select escaped narrow viewport')
+  await shot(page, 'select-narrow', '最小桌面窗口与减少动态效果')
+  await page.keyboard.press('Escape')
+  await reducedList.waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: '关闭设置' }).click()
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  note('交互验收', '纸墨主题、键盘选择、嵌套 Escape、焦点返回、减少动态效果')
   if (browserErrors.length) failures.push(...browserErrors)
 } catch (error) {
   if (browser) {

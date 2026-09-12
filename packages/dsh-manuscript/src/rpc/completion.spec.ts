@@ -27,7 +27,7 @@ describe('collectInsertText', () => {
       yield { type: 'text-delta', text: 'partial' }
       throw new Error('provider')
     }
-    await expect(collectInsertText(boom())).resolves.toBe('')
+    await expect(collectInsertText(boom())).rejects.toThrow('provider')
   })
 
   it('caps insert length', async () => {
@@ -58,3 +58,13 @@ describe('embedded reasoning in provider text',()=>{
 it('preserves visible leading paragraph whitespace when filtering provider text',async()=>{
  expect(await collectInsertText(chunks([{type:'text-delta',text:'\n  下一句'}]))).toBe('\n  下一句');
 });
+
+it('surfaces the real runtime terminal failure and never accepts partial output', async () => {
+  await expect(collectInsertText(chunks([
+    { type: 'text-delta', text: 'partial' },
+    { type: 'finish', reason: { kind: 'error', failure: { message: 'model not available' } } },
+  ]))).rejects.toThrow('model not available')
+  expect(await collectInsertText(chunks([
+    { type: 'text-delta', text: 'partial' }, { type: 'finish', reason: { kind: 'aborted' } },
+  ]))).toBe('')
+})

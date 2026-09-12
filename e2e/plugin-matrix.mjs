@@ -196,6 +196,122 @@ async function stopTree(child) {
   child.stderr?.destroy()
 }
 
+function contrastRatio(fg, bg) {
+  const channel = (value) => {
+    const scaled = value / 255
+    return scaled <= 0.03928 ? scaled / 12.92 : ((scaled + 0.055) / 1.055) ** 2.4
+  }
+  const lum = (rgb) => 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+  const a = lum(fg)
+  const b = lum(bg)
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+}
+
+async function sampleColors(locator) {
+  return locator.evaluate((el) => {
+    const parse = (value) => {
+      const match = String(value).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null
+    }
+    let node = el
+    let background = getComputedStyle(node).backgroundColor
+    while (node && background === 'rgba(0, 0, 0, 0)') {
+      node = node.parentElement
+      if (!node) break
+      background = getComputedStyle(node).backgroundColor
+    }
+    const color = getComputedStyle(el).color
+    return { color, background, fg: parse(color), bg: parse(background) }
+  })
+}
+
+function assertThemeSample(sample, label, expectDark) {
+  if (!sample?.fg || !sample?.bg) throw new Error(`${label}: missing computed colors ${JSON.stringify(sample)}`)
+  const ratio = contrastRatio(sample.fg, sample.bg)
+  if (ratio < 3) throw new Error(`${label}: contrast ${ratio.toFixed(2)} < 3 (${sample.color} on ${sample.background})`)
+  const textIsLight = sample.fg[0] + sample.fg[1] + sample.fg[2] > 360
+  if (expectDark && !textIsLight) throw new Error(`${label}: expected light text on ordinary DSH dark, got ${sample.color}`)
+  if (!expectDark && textIsLight) throw new Error(`${label}: expected dark text on ordinary DSH light, got ${sample.color}`)
+}
+
+async function waitHostDarkAttr(page, expectDark, label) {
+  // Installed ui-theme default is `system`; ThemePresenter writes body[data-ds-dark-theme].
+  try {
+    await page.waitForFunction(
+      (dark) => document.body.hasAttribute('data-ds-dark-theme') === dark,
+      expectDark,
+      { timeout: 8_000 },
+    )
+  } catch {
+    const actual = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
+    throw new Error(`${label}: expected body[data-ds-dark-theme]=${expectDark}, got ${actual}`)
+  }
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
+}
+
+function assertServerResponseEnvelope(value) {
+  // Installed dsh-client-connection parseConnectionResponse: type/rpcId/result only.
+  const isRecord = (item) => typeof item === 'object' && item !== null && !Array.isArray(item)
+  if (!isRecord(value) || value.type !== 'server-response' || typeof value.rpcId !== 'string') {
+    throw new TypeError('connection: invalid server-response envelope')
+  }
+  const result = value.result
+  if (!isRecord(result)) throw new TypeError('connection: invalid server-response result')
+  if (result.ok === true) return
+  if (result.ok !== false || !isRecord(result.error)) throw new TypeError('connection: invalid server-response result')
+  const error = result.error
+  if (typeof error.code !== 'string' || typeof error.message !== 'string' || !isRecord(error.details)) {
+    throw new TypeError('connection: invalid server-response failure')
+  }
+}
+
+async function fulfillRpc(route, result) {
+  let rpcId = 'matrix'
+  try {
+    const posted = route.request().postDataJSON()
+    if (posted && typeof posted.rpcId === 'string') rpcId = posted.rpcId
+  } catch {
+    // Synthetic browser stub; do not fetch the live plugin route.
+  }
+  const body = { type: 'server-response', rpcId, result }
+  assertServerResponseEnvelope(body)
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  })
+}
+
+async function assertStandaloneThemes(page, name, samples) {
+  const check = async (theme, expectDark) => {
+    const darkAttr = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
+    if (darkAttr !== expectDark) throw new Error(`${name} ${theme}: body[data-ds-dark-theme]=${darkAttr}`)
+    for (const item of samples) {
+      assertThemeSample(await sampleColors(item.locator), `${name} ${theme} ${item.label}`, expectDark)
+    }
+  }
+  // emulateMedia is the OS scheme. Default preference is system, not an explicit user light write.
+  await page.emulateMedia({ colorScheme: 'light' })
+  await waitHostDarkAttr(page, false, `${name} system+prefers-light`)
+  await check('system+prefers-light', false)
+  await page.screenshot({ path: path.join(out, `${name}-light.png`) })
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await waitHostDarkAttr(page, true, `${name} system+prefers-dark`)
+  await check('system+prefers-dark', true)
+  await page.screenshot({ path: path.join(out, `${name}-dark.png`) })
+  await page.emulateMedia({ colorScheme: null })
+  const state = report.states.find((item) => item.name === name)
+  if (state) {
+    state.ordinaryTheme = {
+      method: 'host ui-theme default system; ThemePresenter body[data-ds-dark-theme] after prefers-color-scheme settle',
+      defaultPreference: 'system',
+      explicitUserLight: false,
+      light: true,
+      dark: true,
+    }
+  }
+}
+
 async function probeWeb(browser, name, expectedPlugins, index) {
   const workspace = path.join(out, 'workspaces', name)
   fs.mkdirSync(workspace, { recursive: true })
@@ -254,6 +370,14 @@ async function probeWeb(browser, name, expectedPlugins, index) {
       await page.getByTestId('proofread-input').fill('我们以经做好准备。');
       await page.getByTestId('proofread-input').press('Control+Enter');
       await page.getByTestId('proofread-result').getByText('建议：已经',{exact:true}).waitFor();
+      if (name === '06-proofread-only') {
+        const panel = page.getByTestId('proofread-panel')
+        await assertStandaloneThemes(page, name, [
+          { label: 'finding-message', locator: panel.locator('.dsh-proofread-finding-message').first() },
+          { label: 'result-summary', locator: panel.locator('.dsh-proofread-result-summary').first() },
+          { label: 'input', locator: page.getByTestId('proofread-input') },
+        ])
+      }
       await page.getByTestId('proofread-input').fill('今天晴天。');
       await page.getByTestId('proofread-check').click();
       await page.getByTestId('proofread-result').waitFor();
@@ -276,6 +400,25 @@ async function probeWeb(browser, name, expectedPlugins, index) {
 
       await page.getByTestId('zhihu-open').click();
       await page.getByTestId('zhihu-panel').waitFor();
+      if (name === '12-zhihu-only') {
+        await page.route('**/zhihu/search', (route) => fulfillRpc(route, {
+          ok: true,
+          value: { items: [{ title: '合成资料', type: '回答', url: 'https://www.zhihu.com/x', summary: '合成摘要', votes: 0, comments: 0, author: '测试', editTime: '' }] },
+        }))
+        try {
+          const panel = page.getByTestId('zhihu-panel')
+          await panel.getByTestId('zhihu-query').fill('合成查询')
+          await panel.getByTestId('zhihu-search').click()
+          await panel.getByTestId('zhihu-results').waitFor()
+          await assertStandaloneThemes(page, name, [
+            { label: 'result-title', locator: panel.locator('.zhihu-result-title').first() },
+            { label: 'input', locator: panel.getByTestId('zhihu-query') },
+            { label: 'results-summary', locator: panel.locator('.zhihu-results-summary').first() },
+          ])
+        } finally {
+          await page.unroute('**/zhihu/search')
+        }
+      }
       await page.getByTestId('zhihu-panel').press('Escape');
       await page.getByTestId('zhihu-open').waitFor();
       if (await page.getByTestId('zhihu-open').count() !== 1) throw new Error('duplicate zhihu contribution');

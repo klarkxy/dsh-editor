@@ -395,19 +395,30 @@ async function dismissNativeOnboarding(page) {
   }
 }
 
-async function chooseCustomSelect(page, ariaLabel, matcher) {
-  const trigger = page.getByRole('button', { name: ariaLabel }).first()
+function hostPage(scope) {
+  return typeof scope.page === 'function' ? scope.page() : scope
+}
+
+async function chooseCustomSelect(scope, ariaLabel, matcher) {
+  const page = hostPage(scope)
+  const trigger = scope.getByRole('combobox', { name: ariaLabel }).first()
+  await trigger.waitFor({ state: 'visible', timeout: 15_000 })
   await trigger.click()
-  const list = page.getByRole('listbox', { name: ariaLabel })
+  let list = page.getByRole('listbox', { name: ariaLabel })
+  if (!(await list.isVisible({ timeout: 2_000 }).catch(() => false))) {
+    list = page.getByRole('listbox').last()
+  }
   await list.waitFor({ state: 'visible', timeout: 10_000 })
   const options = list.getByRole('option')
   const labels = await options.allTextContents()
-  const index = labels.findIndex((label) => matcher(label))
+  const trimmed = labels.map((label) => label.replace(/\s+/g, ' ').trim())
+  const index = trimmed.findIndex((label) => matcher(label, trimmed))
   if (index < 0) {
     await page.keyboard.press('Escape')
     throw new Error(`${ariaLabel} option not found in ${JSON.stringify(labels)}`)
   }
   await options.nth(index).click()
+  await list.waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
   return labels[index]
 }
 
@@ -419,9 +430,9 @@ async function configureMiniMax(page) {
   }
   await openShellSettings(page)
   const dialog = page.getByRole('dialog', { name: '设置' })
-  await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '通用设置' }).click()
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '通用设置', exact: true }).click()
   await dialog.getByRole('region', { name: '通用设置' }).waitFor({ state: 'visible', timeout: 15_000 })
-  await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '写作' }).click()
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '写作', exact: true }).click()
   const authorBox = dialog.getByRole('textbox', { name: '跨作品作者约定' })
   await authorBox.waitFor({ state: 'visible', timeout: 15_000 })
   await authorBox.fill('第三人称限知；少用感叹号；对白保持克制，不解释系统。')
@@ -430,14 +441,14 @@ async function configureMiniMax(page) {
   const prefsFailed = await dialog.getByRole('alert').filter({ hasText: /未能保存/ }).isVisible().catch(() => false)
   recordFeature('author-preferences', !prefsFailed, prefsFailed ? 'settings scope did not commit user-layer write' : 'saved')
   await closeShellSettings(page)
-  await page.getByTestId('zhihu-open').click()
-  await page.getByTestId('zhihu-panel').getByRole('tab', { name: '设置', exact: true }).click()
-  await page.getByTestId('zhihu-panel').getByText('Access Secret', { exact: false }).first().waitFor({ state: 'visible', timeout: 15_000 })
-  await page.getByTestId('zhihu-panel').getByRole('button', { name: '关闭', exact: true }).click()
   await openShellSettings(page)
-  await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '用量' }).click()
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '知乎资料', exact: true }).click()
+  await page.getByTestId('zhihu-settings-embed').getByText('Access Secret', { exact: false }).first().waitFor({ state: 'visible', timeout: 15_000 })
+  await closeShellSettings(page)
+  await openShellSettings(page)
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '用量', exact: true }).click()
   await dialog.getByRole('region', { name: '用量' }).waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined)
-  await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '模型' }).click()
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '模型', exact: true }).click()
   const models = dialog.getByRole('region', { name: '模型' })
   await models.waitFor({ state: 'visible', timeout: 15_000 })
   await waitFor(async () => {
@@ -508,7 +519,7 @@ async function addBuiltinMiniMax(page, models) {
   }
   const base = card.getByLabel('API 地址')
   if (await base.isVisible().catch(() => false) && !(await base.inputValue()).trim()) await base.fill(apiBase)
-  const protocolTrigger = card.getByRole('button', { name: 'API 协议' })
+  const protocolTrigger = card.getByRole('combobox', { name: 'API 协议' })
   if (await protocolTrigger.isVisible().catch(() => false)) {
     const current = await protocolTrigger.innerText()
     if (!/openai-completions/i.test(current)) {
@@ -529,7 +540,7 @@ async function forceProtocol(scope) {
     const expanded = await customized.evaluate((el) => el.closest('details')?.open === true).catch(() => false)
     if (!expanded) await customized.click()
   }
-  const protocolTrigger = scope.getByRole('button', { name: 'API 协议' })
+  const protocolTrigger = scope.getByRole('combobox', { name: 'API 协议' })
   await protocolTrigger.waitFor({ state: 'visible', timeout: 10_000 })
   const current = await protocolTrigger.innerText()
   if (/openai-completions/i.test(current)) return
@@ -543,7 +554,7 @@ async function addCustomMiniMax(page, models) {
   await card.getByLabel('Provider ID').fill('minimax-e2e')
   await card.getByLabel('显示名称').fill('MiniMax')
   await card.getByLabel('API 地址').fill(apiBase)
-  const protocolTrigger = card.getByRole('button', { name: 'API 协议' })
+  const protocolTrigger = card.getByRole('combobox', { name: 'API 协议' })
   await protocolTrigger.waitFor({ state: 'visible', timeout: 10_000 })
   const current = await protocolTrigger.innerText()
   if (!/openai-completions/i.test(current)) {
@@ -701,11 +712,12 @@ async function startFreshConversation(page) {
   await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
   const picker = page.getByRole('dialog', { name: '新对话' })
   if (await picker.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true, () => false)) {
-    const select = picker.getByLabel('选择模型')
-    if (await select.isVisible().catch(() => false)) {
-      const options = await select.locator('option').evaluateAll((items) => items.map((item) => ({ value: item.value, text: item.textContent || '' })))
-      const chosen = options.find((item) => /MiniMax-M3/i.test(item.text)) || options.find((item) => /MiniMax/i.test(item.text))
-      if (chosen) await select.selectOption(chosen.value)
+    const model = picker.getByRole('combobox', { name: '选择模型' })
+    if (await model.isVisible().catch(() => false)) {
+      await chooseCustomSelect(picker, '选择模型', (label, labels) => {
+        const pick = labels.find((item) => /MiniMax-M3/i.test(item)) || labels.find((item) => /MiniMax/i.test(item)) || labels[0]
+        return label === pick
+      }).catch(() => undefined)
     }
     await picker.getByRole('button', { name: '开始', exact: true }).click({ force: true }).catch(() => undefined)
     await picker.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined)
@@ -769,21 +781,21 @@ async function openAssistantWithModel(page) {
   } catch { /* fall back to the new-conversation dialog */ }
   await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
   const picker = page.getByRole('dialog', { name: '新对话' })
-  const select = picker.getByLabel('选择模型')
-  await select.waitFor({ state: 'visible', timeout: 30_000 })
-  const options = await select.locator('option').evaluateAll((items) => items.map((item) => ({ value: item.value, text: item.textContent || '' })))
-  const chosen = options.find((item) => /MiniMax-M3/i.test(item.text))
-    || options.find((item) => /MiniMax-M2\.7-highspeed/i.test(item.text))
-    || options.find((item) => /MiniMax-M2\.7(?!-)/i.test(item.text))
-    || options.find((item) => /MiniMax/i.test(item.text))
-    || options.find((item) => /DeepSeek-V4-Pro/i.test(item.text))
-    || options[0]
-  if (!chosen) throw new Error(`no chat model available: ${JSON.stringify(options)}`)
-  await select.selectOption(chosen.value)
+  await picker.waitFor({ state: 'visible', timeout: 30_000 })
+  const chosen = await chooseCustomSelect(picker, '选择模型', (label, labels) => {
+    const pick = labels.find((item) => /MiniMax-M3/i.test(item))
+      || labels.find((item) => /MiniMax-M2\.7-highspeed/i.test(item))
+      || labels.find((item) => /MiniMax-M2\.7(?!-)/i.test(item))
+      || labels.find((item) => /MiniMax/i.test(item))
+      || labels.find((item) => /DeepSeek-V4-Pro/i.test(item))
+      || labels[0]
+    return label === pick
+  })
+  if (!chosen) throw new Error('no chat model available')
   await picker.getByRole('button', { name: '开始', exact: true }).click({ force: true })
   await picker.waitFor({ state: 'hidden', timeout: 30_000 })
-  await assistant.getByText(chosen.text, { exact: true }).waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined)
-  const effort = assistant.getByRole('button', { name: '思考强度' })
+  await assistant.getByText(chosen, { exact: true }).waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined)
+  const effort = assistant.getByRole('combobox', { name: '思考强度' })
   if (await effort.isVisible().catch(() => false)) {
     const current = await effort.innerText()
     if (!/low|Low|低|medium|Medium|中/.test(current)) {
@@ -796,8 +808,8 @@ async function openAssistantWithModel(page) {
   }
   await page.waitForTimeout(800)
   await dismissInitGuide(page)
-  report.model = chosen.text
-  await recordPhase('新对话模型', chosen.text)
+  report.model = chosen
+  await recordPhase('新对话模型', chosen)
   const ping = await sendChat(page, '请只回复一个英文单词 pong，不要使用任何工具。', '模型连通探测', 90_000)
   await recordPhase('模型连通探测', ping.slice(0, 80))
 }
@@ -873,7 +885,8 @@ async function coverFim(page) {
   const content = page.locator('[data-testid="paper-editor"] .cm-content')
   await content.click()
   await page.keyboard.press('End')
-  await page.locator('[data-testid="paper-fim"]').click()
+  await page.getByTestId('paper-editor-menu-trigger').click()
+  await page.getByTestId('editor-menu-complete').click()
   try {
     await waitFor(async () => {
       if (await page.locator('[data-testid="paper-ghost"]').count()) return true

@@ -17,7 +17,7 @@
  * `(props: ShellToolSeatContext) => …` therefore receives `sessionId`,
  * `openDocument`, `ProposalCard`, and the rest as its own props.
  */
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType, ReactNode, RefObject } from 'react'
 
 export const SIDEBAR_TOOLS_SLOT = 'dsh-editor.sidebar.tools'
 export const CENTER_OVERLAYS_SLOT = 'dsh-editor.center.overlays'
@@ -59,6 +59,33 @@ export type ShellProposalCardProps = {
   onDismiss?(): void
 }
 
+/** Host Select contract. Empty option values stay injective via a `v:` encoding in the shell implementation. */
+export type ShellSelectProps = {
+  value: string
+  options: readonly { value: string; label: string }[]
+  onChange(value: string): void
+  disabled?: boolean
+  'aria-label': string
+  placeholder?: string
+}
+
+/**
+ * Host Dialog contract. The shell owns the Radix title/description, a single
+ * modal focus/scroll stack, and restoration to the invoking element when no
+ * Trigger is used. Children own the visible header/footer.
+ */
+export type ShellDialogProps = {
+  open: boolean
+  onOpenChange(open: boolean): void
+  title: string
+  description?: string
+  children?: ReactNode
+  className?: string
+  overlayClassName?: string
+  dismissible?: boolean
+  initialFocusRef?: RefObject<HTMLElement | null>
+}
+
 export type ShellToolSeatContext = {
   /** Live workbench session, or empty when no workspace is open. */
   sessionId: string
@@ -92,6 +119,10 @@ export type ShellToolSeatContext = {
   togglePin(path: string): void
   /** Shell-owned author-confirmation card. Plugins never write author content themselves. */
   ProposalCard: ComponentType<ShellProposalCardProps>
+  /** Optional host Select. Standalone plugins keep their own fallback. */
+  Select?: ComponentType<ShellSelectProps>
+  /** Optional host Dialog. Standalone plugins keep their own fallback. */
+  Dialog?: ComponentType<ShellDialogProps>
 }
 
 export type ShellCommandShortcut = {

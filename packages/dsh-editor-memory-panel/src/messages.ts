@@ -5,6 +5,12 @@ export type MessageParams = Record<string, string | number>
 
 export const zh = {
   'memory.title': '记忆更新',
+  'memory.close': '关闭记忆面板',
+  'memory.back': '返回列表',
+  'memory.filter': '按状态筛选',
+  'memory.retryList': '重试',
+  'memory.noMatch': '没有符合筛选的记录。',
+  'memory.intro': '确认或撤销写作搭档提出的维护记录。',
   'memory.loading': '正在读取记忆更新…',
   'memory.empty': '还没有记忆更新记录。',
   'memory.retry': '重试',
@@ -39,6 +45,12 @@ export const zh = {
 
 export const en: Record<MessageKey, string> = {
   'memory.title': 'Memory updates',
+  'memory.close': 'Close memory panel',
+  'memory.back': 'Back to list',
+  'memory.filter': 'Filter by status',
+  'memory.retryList': 'Retry',
+  'memory.noMatch': 'No records match the filter.',
+  'memory.intro': 'Confirm or undo partner memory updates.',
   'memory.loading': 'Loading memory updates…',
   'memory.empty': 'No memory updates yet.',
   'memory.retry': 'Retry',

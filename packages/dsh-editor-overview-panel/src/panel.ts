@@ -15,12 +15,14 @@ import {
   chapterMetaMarks,
   chapterStatusLabel,
   dailyCurveSeries,
+  filterChapters,
   formatCount,
   formatModifiedAt,
   localDateKey,
   statusDistributionBars,
   weeklyCurveSeries,
 } from './overview-view.ts'
+import { renderSelect } from './host-ui.ts'
 import { errorMessage, LatestRequestGate, safeRpcCall } from './rpc.ts'
 import { setOverviewLocale, t } from './messages.ts'
 import { consumeOverviewRequest, pendingOverviewRequest, subscribeOverviewRequest, type OverviewRequest } from './requests.ts'
@@ -42,6 +44,7 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
   const [statusBusyPath, setStatusBusyPath] = useState<string | null>(null)
   const [history, setHistory] = useState<ProgressHistory | null>(null)
   const [historyNote, setHistoryNote] = useState('')
+  const [filter, setFilter] = useState('')
   const overviewGate = useRef(new LatestRequestGate()).current
   const historyGate = useRef(new LatestRequestGate()).current
   const requestScope = `${props.sessionId}\u0000${props.treeRevision}\u0000${props.contentRevision}`
@@ -88,6 +91,7 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
     setStatusBusyPath(null)
     setHistory(null)
     setHistoryNote('')
+    setFilter('')
     void loadOverview()
     void loadHistory()
   }, [props.sessionId, props.treeRevision, props.contentRevision])
@@ -124,11 +128,14 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
   }
 
   const statusBars = overview ? statusDistributionBars(overview.totals.byStatus) : []
+  const visibleChapters = overview ? filterChapters(overview.chapters, filter) : []
   const charBars = overview ? chapterCharBars(overview.chapters) : []
   const daily = history ? dailyCurveSeries(history.days, today, 30) : []
   const weekly = history ? weeklyCurveSeries(history.weeks, 12) : []
+  const loading = overview === undefined
+  const failed = overview === null
 
-  return e('section', { className: 'overview-panel', [CENTER_OVERLAY_ATTRIBUTE]: '', 'aria-label': t('overview.title') },
+  return e('section', { className: 'overview-panel', [CENTER_OVERLAY_ATTRIBUTE]: '', 'data-testid': 'overview-panel', 'aria-label': t('overview.title') },
     e('header', { className: 'overview-header' },
       e('div', null,
         e('h2', { id: 'overview-panel-title' }, t('overview.title')),
@@ -136,7 +143,12 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
       ),
       e('button', { className: 'icon-button', type: 'button', 'aria-label': t('overview.close'), onClick: props.onClose }, '×'),
     ),
-    !overview ? e('p', { className: 'muted', role: 'status' }, t('overview.loading')) : e('div', { className: 'overview-body' },
+    loading ? e('p', { className: 'muted', role: 'status' }, t('overview.loading')) : null,
+    failed ? e('p', { className: 'warning', role: 'alert' },
+      note || t('overview.loadError'),
+      e('button', { type: 'button', onClick: () => { void loadOverview(); void loadHistory() } }, t('overview.retry')),
+    ) : null,
+    overview ? e('div', { className: 'overview-body' },
       e('section', { className: 'overview-totals', 'aria-label': t('overview.totals') },
         e('article', null, e('span', null, t('overview.chapterCount')), e('strong', null, formatCount(overview.totals.chapters))),
         e('article', null, e('span', null, t('overview.totalChars')), e('strong', null, formatCount(overview.totals.chars))),
@@ -152,15 +164,26 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
       note ? e('p', { className: 'warning', role: 'alert' }, note) : null,
       e('section', { className: 'overview-chapters', 'aria-label': t('overview.chapterList') },
         e('h3', null, t('overview.chapter')),
+        e('input', {
+          className: 'overview-filter',
+          value: filter,
+          maxLength: 80,
+          placeholder: t('overview.filterPlaceholder'),
+          'aria-label': t('overview.filter'),
+          onChange: (event: ChangeEvent<HTMLInputElement>) => setFilter(event.target.value),
+        }),
         overview.chapters.length === 0
           ? e('p', { className: 'muted' }, t('overview.noChapters'))
-          : e('ol', { className: 'overview-chapter-list' }, overview.chapters.map((chapter) => e(ChapterRow, {
-            key: chapter.path,
-            chapter,
-            busy: statusBusyPath === chapter.path,
-            onOpen: openChapter,
-            onStatusChange: (path, status) => { void changeStatus(path, status) },
-          }))),
+          : visibleChapters.length === 0
+            ? e('p', { className: 'muted' }, t('overview.noMatch'))
+            : e('ol', { className: 'overview-chapter-list' }, visibleChapters.map((chapter) => e(ChapterRow, {
+              key: chapter.path,
+              chapter,
+              busy: statusBusyPath === chapter.path,
+              Select: props.Select,
+              onOpen: openChapter,
+              onStatusChange: (path, status) => { void changeStatus(path, status) },
+            }))),
       ),
       e('section', { className: 'overview-chart', 'aria-label': t('overview.charDist') },
         e('h3', null, t('overview.charDist')),
@@ -202,13 +225,14 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
             e('small', null, t('overview.chapterMeta', { chars: formatCount(chapter.chars), status: chapterStatusLabel(chapter.status), modified: formatModifiedAt(chapter.modifiedAt) })),
           ))),
       ),
-    ),
+    ) : null,
   )
 }
 
 function ChapterRow(props: {
   chapter: ChapterSummary
   busy: boolean
+  Select: OverviewSeatProps['Select']
   onOpen(path: string): void
   onStatusChange(path: string, status: ChapterStatus): void
 }) {
@@ -222,16 +246,15 @@ function ChapterRow(props: {
       marks.hasState ? e('span', { className: 'overview-meta-pill' }, t('chapterMeta.hasState')) : null,
     ),
     chapter.empty ? e('span', { className: 'overview-empty-flag' }, t('overview.bucketEmpty')) : null,
-    e('select', {
-      className: 'overview-status-select',
+    renderSelect(props.Select, {
       'aria-label': t('overview.chapterStatusAria', { title: chapter.title }),
       value: chapter.status,
       disabled: props.busy,
-      onChange: (event: ChangeEvent<HTMLSelectElement>) => {
-        const next = event.target.value
+      options: CHAPTER_STATUSES.map((status) => ({ value: status, label: chapterStatusLabel(status) })),
+      onChange: (next) => {
         if (next === 'draft' || next === 'revising' || next === 'final') props.onStatusChange(chapter.path, next)
       },
-    }, CHAPTER_STATUSES.map((status) => e('option', { key: status, value: status }, chapterStatusLabel(status)))),
+    }),
     e('time', { className: 'overview-chapter-time', dateTime: chapter.modifiedAt ?? undefined }, formatModifiedAt(chapter.modifiedAt)),
   )
 }

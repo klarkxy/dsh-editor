@@ -1,5 +1,6 @@
 import { createElement as e, useEffect, useRef, useState } from 'react'
 import { t, useLocale } from '../i18n/index.ts'
+import { Tooltip } from './ui/index.ts'
 
 
 export const THEME_STORAGE_KEY = 'dsh-editor.theme'
@@ -171,11 +172,15 @@ export function ThemeToggle({ theme, onChange, label }: { theme: ThemeValue; onC
   useLocale()
   const resolvedLabel = label ?? t('theme.label')
   const value = theme === 'paper' ? t('theme.paper') : t('theme.ink')
-  return e('button', {
-    type: 'button',
-    className: 'theme-toggle',
-    title: theme === 'paper' ? t('theme.toInk') : t('theme.toPaper'),
-    'aria-label': t('theme.aria', { label: resolvedLabel, value }),
-    onClick: () => onChange(theme === 'paper' ? 'ink' : 'paper'),
-  }, value)
+  const hint = theme === 'paper' ? t('theme.toInk') : t('theme.toPaper')
+  return e(Tooltip, {
+    content: hint,
+    children: e('button', {
+      type: 'button',
+      className: 'theme-toggle',
+      title: hint,
+      'aria-label': t('theme.aria', { label: resolvedLabel, value }),
+      onClick: () => onChange(theme === 'paper' ? 'ink' : 'paper'),
+    }, value),
+  })
 }

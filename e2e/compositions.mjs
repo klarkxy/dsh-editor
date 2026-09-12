@@ -117,7 +117,7 @@ try {
  const calls=[];const errors=[];page.on('pageerror',e=>errors.push(e.message));
  page.on('request',request=>{if(request.method()==='POST'){try{calls.push({url:request.url(),body:request.postDataJSON()})}catch{}}});
  await page.goto(started.url.href);await page.locator('.shell').waitFor({timeout:45000});await dismissNativeOnboarding(page);
- const rpc=async(channel,method,payload)=>{const response=await fetch(new URL(channel+'/'+method,started.url),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:Math.random().toString(36),method,payload})});const result=(await response.json()).result;if(!result?.ok)throw new Error(method+': '+JSON.stringify(result));return result.value};
+ const rpc=async(channel,method,payload)=>{const response=await page.request.post(new URL(channel+'/'+method,started.url).href,{data:{type:'client-request',rpcId:Math.random().toString(36),method,payload}});if(!response.ok())throw new Error(method+': HTTP '+response.status());const result=(await response.json()).result;if(!result?.ok)throw new Error(method+': '+JSON.stringify(result));return result.value};
  const capabilities=await rpc('/dsh-editor-shell','capabilities.get',{});
  const expectedFeatures=Object.fromEntries(Object.entries(resolved.shellFeatures).map(([feature])=>[feature,true]));
  const actualFeatures=capabilities.features&&typeof capabilities.features==='object'?capabilities.features:{};
@@ -133,19 +133,12 @@ try {
    evidence.delivery='copied package artifacts; no workspace package links';
  }
 
- await page.getByTestId('proofread-open').click();await page.getByTestId('proofread-input').fill('我们以经做好准备。');await page.getByTestId('proofread-input').press('Control+Enter');await page.getByTestId('proofread-result').getByText('建议：已经',{exact:true}).waitFor();await page.getByTestId('proofread-input').press('Escape');evidence.checks.push('same proofreading text in custom Shell');
-
- if(composition==='full'){
-   await page.getByTestId('proofread-open').click();
-   await page.route('**/proofread/text.check',async route=>{const response=await route.fetch();const body=await response.json();body.result={ok:false,error:{code:'internal',message:'校对测试错误',details:{}}};await route.fulfill({response,json:body})});
-   await page.getByTestId('proofread-input').fill('错误状态');await page.getByTestId('proofread-check').click();await page.getByRole('alert').filter({hasText:'校对测试错误'}).waitFor();await page.unroute('**/proofread/text.check');
-   await page.route('**/proofread/text.check',async route=>{const response=await route.fetch();await delay(450);await route.fulfill({response}).catch(()=>{})});
-   await page.getByTestId('proofread-input').fill('按装');await page.getByTestId('proofread-check').click();await page.getByRole('status').filter({hasText:'正在校对'}).waitFor();await page.getByTestId('proofread-input').fill('这是一段新文本。');await delay(650);
-   if(await page.getByTestId('proofread-result').count())throw new Error('old result survived input edit');if(!(await page.getByTestId('proofread-check').isEnabled()))throw new Error('input edit left loading stuck');await page.unroute('**/proofread/text.check');
-   await page.getByTestId('proofread-check').click();await page.getByTestId('proofread-result').waitFor();await page.getByTestId('proofread-input').press('Escape');await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='proofread-open');
-   evidence.checks.push('proofreading loading/error/retry/stale suppression/keyboard focus');
- }
- if(resolved.shellFeatures.zhihu){await page.getByTestId('zhihu-open').click();await page.getByTestId('zhihu-panel').waitFor();await page.getByTestId('zhihu-panel').press('Escape')}else if(await page.getByTestId('zhihu-open').count())throw new Error('unexpected Zhihu entry');
+ if(await page.getByTestId('proofread-open').count())throw new Error('paused proofreading launcher is visible');
+ if(await page.getByTestId('zhihu-open').count())throw new Error('Zhihu must not contribute a desktop launcher');
+ const openSettings=async(tab)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('.settings-nav').getByRole('tab',{name:tab,exact:true}).click();await page.waitForTimeout(250)};
+ const closeSettings=async()=>{await page.getByRole('button',{name:'关闭设置',exact:true}).click();await page.locator('.settings-dialog').waitFor({state:'hidden'})};
+ if(resolved.shellFeatures.zhihu){await openSettings('知乎资料');await page.locator('.settings-content.is-active').getByText('Access Secret',{exact:false}).first().waitFor();await closeSettings()}
+ evidence.checks.push('proofreading paused; Zhihu configuration is inside settings');
  await page.getByRole('button',{name:'新建',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator('.tree').waitFor({timeout:30000});
  // Create the document via the actual product command; the ordinary flow must work without AI.
  await page.locator('.tree-row').filter({hasText:'正文'}).first().hover();await page.getByRole('button',{name:'在 正文 中新建文件',exact:true}).click();const create=page.getByRole('dialog',{name:'新建文件'});await create.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001');await create.getByRole('button',{name:'创建',exact:true}).click();
@@ -153,18 +146,17 @@ try {
  const saved=await readFile(resolve(targetWorkspace,'正文','001.md'),'utf8');if(!saved.includes('组合保存验证'))throw new Error('disk save missing');evidence.checks.push('create project/document and save through UI');
  const sessionId=calls.map(x=>x.body?.payload?.sessionId).filter(Boolean).at(-1);if(!sessionId)throw new Error('no real session captured');
  const found=await rpc('/manuscript','search.text',{sessionId,query:'组合保存验证'});if(!JSON.stringify(found).includes('组合保存验证'))throw new Error('search did not find saved text');
- const scan=await rpc('/dsh-editor-workbench','proofread.scan',{sessionId,scope:'document',path:'正文/001.md'});if(!JSON.stringify(scan).includes('已经'))throw new Error('workspace proofread missing finding');
  await rpc('/dsh-editor-cards','cards.create',{sessionId,kind:'character',title:'组合角色',fields:{}});
- await rpc('/dsh-editor-workbench','snapshot.create',{sessionId,label:'组合验收'});evidence.checks.push('live-session search/workspace proofread/card/snapshot');
+ await rpc('/dsh-editor-workbench','snapshot.create',{sessionId,label:'组合验收'});evidence.checks.push('live-session search/card/snapshot');
 
  const panelColors=[];
  for(const theme of ['paper','ink']){
    if(theme==='ink')await page.locator('.chrome .theme-toggle').click();
-   await page.getByTestId('proofread-open').click();panelColors.push(await page.getByTestId('proofread-panel').evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'proofread-'+theme+'.png')});await page.getByTestId('proofread-input').press('Escape');
-   if(resolved.shellFeatures.zhihu){await page.getByTestId('zhihu-open').click();await page.screenshot({path:resolve(output,'zhihu-'+theme+'.png')});await page.getByTestId('zhihu-panel').press('Escape');await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='zhihu-open')}
+   await openSettings('通用设置');panelColors.push(await page.locator('.settings-dialog').evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
+   if(resolved.shellFeatures.zhihu){await openSettings('知乎资料');await page.screenshot({path:resolve(output,'zhihu-settings-'+theme+'.png')});await closeSettings()}
  }
- if(panelColors[0]===panelColors[1])throw new Error('proofread theme did not adapt');
- await page.locator('.chrome .theme-toggle').click();evidence.checks.push('paper/ink panels and focus restoration');
+ if(panelColors[0]===panelColors[1])throw new Error('settings theme did not adapt');
+ await page.locator('.chrome .theme-toggle').click();evidence.checks.push('paper/ink settings and embedded Zhihu configuration');
 
  if(!resolved.shellFeatures.assistant){
    await editor.click();await page.keyboard.insertText(' 无模型自动任务。');await page.waitForTimeout(2500);await page.keyboard.press('Control+s');
@@ -172,8 +164,8 @@ try {
    const unexpected=calls.filter(x=>/fim.complete|patch.complete|project.prepareIndex/.test(x.url)||/session.send/.test(JSON.stringify(x.body)));if(unexpected.length)throw new Error('basic initiated AI '+JSON.stringify(unexpected));
    evidence.checks.push('no Chat/FIM/patch/auto-index/turn requests while writing');
  } else { const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();await page.locator('aside.chat').waitFor();evidence.checks.push('optional Chat mounts'); }
- await page.reload();await page.locator('.shell').waitFor();await dismissNativeOnboarding(page);if(await page.getByTestId('proofread-open').count()!==1)throw new Error('duplicate proofread contribution after reload');
- if(errors.length)throw new Error('browser errors '+errors.join('|'));await page.screenshot({path:resolve(output,'final.png')});evidence.checks.push('reload has one contribution and no browser errors');
+ await page.reload();await page.locator('.shell').waitFor();await dismissNativeOnboarding(page);if(await page.getByTestId('proofread-open').count()||await page.getByTestId('zhihu-open').count())throw new Error('removed desktop launcher returned after reload');
+ if(errors.length)throw new Error('browser errors '+errors.join('|'));await page.screenshot({path:resolve(output,'final.png')});evidence.checks.push('reload keeps desktop launchers absent and has no browser errors');
 } catch(error){evidence.failures.push(String(error));await page?.screenshot({path:resolve(output,'failure.png')}).catch(()=>{});await writeFile(resolve(output,'failure.html'),await page?.content().catch(()=> '')||'');}
 finally{await browser?.close();await stop(dshChild)}
 evidence.ok=evidence.failures.length===0;await writeFile(resolve(output,'report.json'),JSON.stringify(evidence,null,2));console.log(JSON.stringify(evidence,null,2));if(!evidence.ok)process.exitCode=1;

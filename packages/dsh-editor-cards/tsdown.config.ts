@@ -5,6 +5,7 @@ export default defineConfig([
     entry: {
       index: 'src/index.ts',
       'host-api': 'src/host-api.ts',
+      contracts: 'src/contracts.ts',
     },
     format: ['esm'],
     dts: true,
@@ -15,21 +16,6 @@ export default defineConfig([
     sourcemap: true,
     hash: false,
     deps: { neverBundle: ['@deepseek-ai/cordis', 'dsh-manuscript', 'dsh-editor-workspace-kit', 'dsh-editor-cards'] },
-    outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
-  },
-  {
-    entry: { contracts: 'src/contracts.ts' },
-    format: ['esm'],
-    dts: true,
-    clean: false,
-    outDir: 'lib',
-    platform: 'neutral',
-    target: 'es2022',
-    sourcemap: true,
-    hash: false,
-    deps: {
-      alwaysBundle: ['dsh-editor-workspace-kit/frontmatter'],
-    },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
   },
   {

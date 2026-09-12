@@ -1,11 +1,22 @@
-import { createElement as e, Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { ChapterStatus } from 'dsh-editor-workbench/contracts'
 import { chapterStatusGlyph, chapterStatusLabel, isChapterDocumentPath } from '../chapter-status-view.ts'
 import { canPinPath } from '../pinned-pane-view.ts'
 import { errorMessage, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
+import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
 import { t } from '../i18n/index.ts'
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './ui/index.ts'
 
 type LoadSubtree = (path: string) => Promise<TreeEntry[] | null> | null | void
+
+function treeMenuPosition(target: HTMLElement): { x: number; y: number } {
+  const box = target.getBoundingClientRect()
+  return { x: box.left + 12, y: box.bottom }
+}
+
+function isTreeMenuKey(event: ReactKeyboardEvent<HTMLElement>): boolean {
+  return event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')
+}
 
 export type FileMenuKind = 'file' | 'directory'
 
@@ -22,7 +33,7 @@ type RowProps = {
   highlightPath?: string
   onOpen(path: string): void
   onPreviewImage(path: string): void
-  onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }): void
+  onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }, trigger?: HTMLElement | null): void
   onCreateFile(directory: string): void
   onCreateFolder(directory: string): void
   loadSubtree: LoadSubtree
@@ -34,7 +45,10 @@ function TreeRows(props: RowProps): ReactNode {
   const entries = orderTreeEntries(loaded[path] ?? [])
   // 树只渲染磁盘上真实存在的条目:预设分组已移除,目录(包括 正文/大纲/人物卡/世界书)
   // 在实际创建后自然出现。隐藏 . 开头的系统项。
-  const visible = entries.filter((item) => !item.name.startsWith('.'))
+  const visible = entries.filter((item) => {
+    if (item.name.startsWith('.')) return false
+    return !isAuxiliaryAuthorFile(item.name)
+  })
   return e(Fragment, null, ...visible.map((item) => {
     const child = path ? `${path}/${item.name}` : item.name
     if (item.type === 'directory') {
@@ -50,7 +64,12 @@ function TreeRows(props: RowProps): ReactNode {
             onClick: () => toggleDirectory(child),
             onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => {
               event.preventDefault()
-              onFileMenu('directory', child, { x: event.clientX, y: event.clientY })
+              onFileMenu('directory', child, { x: event.clientX, y: event.clientY }, event.currentTarget)
+            },
+            onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+              if (!isTreeMenuKey(event)) return
+              event.preventDefault()
+              onFileMenu('directory', child, treeMenuPosition(event.currentTarget), event.currentTarget)
             },
           },
           e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, isOpen ? '⌄' : '›'),
@@ -87,7 +106,12 @@ function TreeRows(props: RowProps): ReactNode {
         onClick: () => (isImagePath(child) ? onPreviewImage(child) : onOpen(child)),
         onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => {
           event.preventDefault()
-          onFileMenu('file', child, { x: event.clientX, y: event.clientY })
+          onFileMenu('file', child, { x: event.clientX, y: event.clientY }, event.currentTarget)
+        },
+        onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+          if (!isTreeMenuKey(event)) return
+          event.preventDefault()
+          onFileMenu('file', child, treeMenuPosition(event.currentTarget), event.currentTarget)
         },
       },
       e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, '·'),
@@ -112,7 +136,7 @@ export function Tree(props: {
   highlightPath?: string
   onOpen(path: string): void
   onPreviewImage(path: string): void
-  onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }): void
+  onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }, trigger?: HTMLElement | null): void
   onCreateFile(directory: string): void
   onCreateFolder(directory: string): void
 }) {
@@ -165,7 +189,7 @@ export function Tree(props: {
       // 仅在空白区(非已有行)右键时弹出根目录菜单;行内已自行阻止冒泡。
       if (event.target === event.currentTarget) {
         event.preventDefault()
-        onFileMenu('directory', '', { x: event.clientX, y: event.clientY })
+        onFileMenu('directory', '', { x: event.clientX, y: event.clientY }, event.currentTarget)
       }
     },
   },
@@ -220,86 +244,70 @@ export function FileContextMenu(props: {
   onPin(): void
   onUnpin(): void
   isPinned: boolean
+  onDismissFocus?(): void
 }) {
-  const panel = useRef<HTMLDivElement | null>(null)
-  const first = useRef<HTMLButtonElement | null>(null)
-  useEffect(() => {
-    globalThis.setTimeout(() => first.current?.focus(), 0)
-    const onPointer = (event: globalThis.MouseEvent) => {
-      if (!panel.current?.contains(event.target as Node)) props.onClose()
-    }
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') props.onClose()
-    }
-    globalThis.addEventListener('mousedown', onPointer)
-    globalThis.addEventListener('keydown', onKey)
-    return () => {
-      globalThis.removeEventListener('mousedown', onPointer)
-      globalThis.removeEventListener('keydown', onKey)
-    }
-  }, [props.path, props.x, props.y])
   const left = Math.max(8, Math.min(props.x, globalThis.innerWidth - 220))
   const top = Math.max(8, Math.min(props.y, globalThis.innerHeight - 400))
   return e('div', {
-    ref: panel,
-    className: 'file-context-menu',
-    role: 'menu',
-    'aria-label': t('sidebar.fileActions'),
-    style: { left, top },
+    style: { position: 'fixed', left, top, width: 0, height: 0 },
     onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => event.preventDefault(),
   },
-    e('button', { ref: first, type: 'button', role: 'menuitem', onClick: props.onCreateFile }, t('sidebar.newFile')),
-    e('button', { type: 'button', role: 'menuitem', onClick: props.onCreateFolder }, t('sidebar.newFolder')),
-    e('hr', { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
-    e('button', { type: 'button', role: 'menuitem', onClick: props.onCopy }, t('common.copy')),
-    e('button', { type: 'button', role: 'menuitem', onClick: props.onCut }, t('common.cut')),
-    e('button', {
-      type: 'button',
-      role: 'menuitem',
-      disabled: !props.canPaste,
-      onClick: props.onPaste,
-    }, t('common.paste')),
-    e('hr', { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
-    e('button', { type: 'button', role: 'menuitem', onClick: props.onRename }, t('common.rename')),
-    props.kind === 'file' && isChapterDocumentPath(props.path) ? e('hr', { className: 'file-context-menu-separator', 'aria-hidden': 'true' }) : null,
-    props.kind === 'file' && isChapterDocumentPath(props.path) ? e('button', {
-      type: 'button',
-      role: 'menuitem',
-      disabled: !props.canSplit,
-      title: props.canSplit ? undefined : props.splitDisabledTitle,
-      onClick: props.onSplit,
-    }, t('chapterOps.split')) : null,
-    props.kind === 'file' && isChapterDocumentPath(props.path) ? e('button', {
-      type: 'button',
-      role: 'menuitem',
-      disabled: !props.canMergePrevious,
-      title: props.canMergePrevious ? undefined : props.mergePreviousDisabledTitle,
-      onClick: props.onMergePrevious,
-    }, t('chapterOps.mergePrevious')) : null,
-    props.kind === 'file' && isChapterDocumentPath(props.path) ? e('button', {
-      type: 'button',
-      role: 'menuitem',
-      disabled: !props.canMergeNext,
-      title: props.canMergeNext ? undefined : props.mergeNextDisabledTitle,
-      onClick: props.onMergeNext,
-    }, t('chapterOps.mergeNext')) : null,
-    props.kind === 'file' && canPinPath(props.path) && !props.isPinned ? e('button', {
-      type: 'button',
-      role: 'menuitem',
-      onClick: props.onPin,
-    }, t('pin.beside')) : null,
-    props.kind === 'file' && props.isPinned ? e('button', {
-      type: 'button',
-      role: 'menuitem',
-      onClick: props.onUnpin,
-    }, t('pin.unpin')) : null,
-    e('button', {
-      type: 'button',
-      role: 'menuitem',
-      disabled: !props.canArchive,
-      title: props.canArchive ? t('sidebar.archiveTitle') : t('sidebar.archiveDisabled'),
-      onClick: props.onArchive,
-    }, t('common.archive')),
-    e('button', { type: 'button', role: 'menuitem', 'data-danger': 'true', onClick: props.onDelete }, t('common.delete')),
+    e(Menu, { open: true, onOpenChange: (open: boolean) => { if (!open) { props.onClose(); props.onDismissFocus?.() } } },
+      e(MenuTrigger, { className: 'sr-only', tabIndex: -1 }, t('sidebar.fileActions')),
+      e(MenuContent, {
+        className: 'file-context-menu',
+        align: 'start',
+        side: 'bottom',
+        sideOffset: 0,
+        'aria-label': t('sidebar.fileActions'),
+        onCloseAutoFocus: (event: Event) => {
+          event.preventDefault()
+          props.onDismissFocus?.()
+        },
+      },
+        e(MenuItem, { role: 'menuitem', onSelect: () => props.onCreateFile() }, t('sidebar.newFile')),
+        e(MenuItem, { role: 'menuitem', onSelect: () => props.onCreateFolder() }, t('sidebar.newFolder')),
+        e(MenuSeparator, { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
+        e(MenuItem, { role: 'menuitem', onSelect: () => props.onCopy() }, t('common.copy')),
+        e(MenuItem, { role: 'menuitem', onSelect: () => props.onCut() }, t('common.cut')),
+        e(MenuItem, { role: 'menuitem', disabled: !props.canPaste, onSelect: () => props.onPaste() }, t('common.paste')),
+        e(MenuSeparator, { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
+        e(MenuItem, { role: 'menuitem', onSelect: () => props.onRename() }, t('common.rename')),
+        props.kind === 'file' && isChapterDocumentPath(props.path) ? e(MenuSeparator, { className: 'file-context-menu-separator', 'aria-hidden': 'true' }) : null,
+        props.kind === 'file' && isChapterDocumentPath(props.path) ? e(MenuItem, {
+          role: 'menuitem',
+          disabled: !props.canSplit,
+          title: props.canSplit ? undefined : props.splitDisabledTitle,
+          onSelect: () => props.onSplit(),
+        }, t('chapterOps.split')) : null,
+        props.kind === 'file' && isChapterDocumentPath(props.path) ? e(MenuItem, {
+          role: 'menuitem',
+          disabled: !props.canMergePrevious,
+          title: props.canMergePrevious ? undefined : props.mergePreviousDisabledTitle,
+          onSelect: () => props.onMergePrevious(),
+        }, t('chapterOps.mergePrevious')) : null,
+        props.kind === 'file' && isChapterDocumentPath(props.path) ? e(MenuItem, {
+          role: 'menuitem',
+          disabled: !props.canMergeNext,
+          title: props.canMergeNext ? undefined : props.mergeNextDisabledTitle,
+          onSelect: () => props.onMergeNext(),
+        }, t('chapterOps.mergeNext')) : null,
+        props.kind === 'file' && canPinPath(props.path) && !props.isPinned ? e(MenuItem, {
+          role: 'menuitem',
+          onSelect: () => props.onPin(),
+        }, t('pin.beside')) : null,
+        props.kind === 'file' && props.isPinned ? e(MenuItem, {
+          role: 'menuitem',
+          onSelect: () => props.onUnpin(),
+        }, t('pin.unpin')) : null,
+        e(MenuItem, {
+          role: 'menuitem',
+          disabled: !props.canArchive,
+          title: props.canArchive ? t('sidebar.archiveTitle') : t('sidebar.archiveDisabled'),
+          onSelect: () => props.onArchive(),
+        }, t('common.archive')),
+        e(MenuItem, { role: 'menuitem', 'data-danger': 'true', onSelect: () => props.onDelete() }, t('common.delete')),
+      ),
+    ),
   )
 }

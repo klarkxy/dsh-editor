@@ -1,5 +1,9 @@
 {
   "id": "basic",
   "label": "基础写作",
-  "features": ["proofread-panel", "overview-panel", "memory-panel", "cards"]
+  "features": [
+    "overview-panel",
+    "memory-panel",
+    "cards"
+  ]
 }

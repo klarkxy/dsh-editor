@@ -161,7 +161,7 @@ describe('patch.complete', () => {
     expect(captured(stream).user.startsWith('【文件】')).toBe(true)
     expect(captured(stream).user).not.toContain('【本章工作笔记】')
     expect(captured(stream).user).not.toContain('【改写要求】')
-    expect(captured(stream).maxTokens).toBe(2048)
+    expect(captured(stream).maxTokens).toBeUndefined()
   })
 
   it('places chapterContext before the file block and instruction before the selection', async () => {
@@ -201,14 +201,14 @@ describe('patch.complete', () => {
     expect(user).not.toContain('【改写要求】')
   })
 
-  it('returns an empty proposal without a configured live-session model', async () => {
+  it('reports missing live-session model configuration', async () => {
     const { host, stream } = await fixture({})
     await expect(dispatch(
       host as unknown as Context,
       'patch.complete',
       { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句', before: '', after: '' },
       new AbortController().signal,
-    )).resolves.toEqual({ text: '', route: 'dsh-llm' })
+    )).rejects.toThrow('尚未配置写作模型')
     expect(stream).not.toHaveBeenCalled()
   })
 
@@ -226,14 +226,14 @@ describe('patch.complete', () => {
     expect(stream).not.toHaveBeenCalled()
   })
 
-  it('safely returns an empty proposal for unavailable or failed streams', async () => {
+  it('reports unavailable and failed streams without offering partial edits', async () => {
     await expect(completePatch({
       ctx: {},
       provider: 'provider',
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
       signal: new AbortController().signal,
-    })).resolves.toEqual({ text: '', route: 'dsh-llm' })
+    })).rejects.toThrow('写作模型服务未启用')
 
     await expect(completePatch({
       ctx: { get: () => ({ stream: () => chunks([{ type: 'text-delta', text: 'partial' }, { type: 'finish', reason: { kind: 'error' } }]) }) },
@@ -241,7 +241,7 @@ describe('patch.complete', () => {
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
       signal: new AbortController().signal,
-    })).resolves.toEqual({ text: '', route: 'dsh-llm' })
+    })).rejects.toThrow('模型请求失败')
 
     async function* failed() {
       yield { type: 'text-delta', text: 'partial' }
@@ -253,7 +253,7 @@ describe('patch.complete', () => {
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
       signal: new AbortController().signal,
-    })).resolves.toEqual({ text: '', route: 'dsh-llm' })
+    })).rejects.toThrow('provider failed')
   })
 
   it('caps a successful proposal to the short replacement bound', async () => {
@@ -397,6 +397,31 @@ describe('session-bound project rules for FIM and patch', () => {
       name: 'ProjectRulesError',
       message: expect.stringContaining('无法加载项目协作规则'),
     })
+    expect(stream).not.toHaveBeenCalled()
+  })
+})
+
+describe('independent writing model preferences', () => {
+  it('uses each configured route without querying or mutating conversation selection, and rereads changes', async () => {
+    const {host, stream, services} = await fixture()
+    let preferences = {completionModel: {provider: 'fast', model: 'small'}, rewriteModel: {provider: 'edit', model: 'large'}}
+    services.set('settings', {get: (ns: string) => ns === 'dsh-editor-writing' ? preferences : undefined})
+    const models = vi.fn(() => {throw new Error('chat is unavailable')})
+    services.set('apiProxy', {sessions: {models}})
+    const payload = {sessionId: 'session-1', path: 'chapter.md', prefix: '雨声', suffix: '', selectedText: '旧句'}
+    await dispatch(host as unknown as Context, 'fim.complete', payload, new AbortController().signal)
+    await dispatch(host as unknown as Context, 'patch.complete', payload, new AbortController().signal)
+    expect(stream).toHaveBeenNthCalledWith(1, expect.objectContaining(preferences.completionModel))
+    expect(stream).toHaveBeenNthCalledWith(2, expect.objectContaining(preferences.rewriteModel))
+    preferences = {...preferences, completionModel: {provider: 'other', model: 'next'}}
+    await dispatch(host as unknown as Context, 'fim.complete', payload, new AbortController().signal)
+    expect(stream).toHaveBeenNthCalledWith(3, expect.objectContaining(preferences.completionModel))
+    expect(models).not.toHaveBeenCalled()
+  })
+  it('rejects a partially configured route instead of silently using chat', async () => {
+    const {host, stream, services} = await fixture()
+    services.set('settings', {get: () => ({completionModel: {provider: 'fast', model: ''}})})
+    await expect(dispatch(host as unknown as Context, 'fim.complete', {sessionId: 'session-1', prefix: '雨声'}, new AbortController().signal)).rejects.toThrow('配置不完整')
     expect(stream).not.toHaveBeenCalled()
   })
 })

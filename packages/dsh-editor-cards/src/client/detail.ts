@@ -11,6 +11,7 @@ import {
   type WorldbookCardFields,
 } from '../contracts.ts'
 import { CENTER_OVERLAY_ATTRIBUTE, type ShellRange } from 'dsh-editor-seats'
+import { renderSelect } from './host-ui.ts'
 import {
   WORLDBOOK_CATEGORIES,
   formatListInput,
@@ -95,6 +96,7 @@ function CardsDetail(props: CardsSeatProps & {
       path: hit.path,
     }))
     if (!read.ok) { setNote(errorMessage(read, props.locale)); return }
+    closeCardsDetail()
     props.openDocument(hit.path, { ...hit, version: read.value.version } satisfies ShellRange)
   }
 
@@ -151,13 +153,14 @@ function CardsDetail(props: CardsSeatProps & {
     props.refresh('tree')
   }
 
-  return e('section', { className: 'cards-detail', [CENTER_OVERLAY_ATTRIBUTE]: '', 'aria-label': isCharacter ? t('cards.personDetail') : t('cards.worldDetail') },
+  return e('section', { className: 'cards-detail', [CENTER_OVERLAY_ATTRIBUTE]: '', 'data-testid': 'cards-detail', 'aria-label': isCharacter ? t('cards.personDetail') : t('cards.worldDetail') },
     e('header', { className: 'cards-detail-header' },
       e('div', null,
         e('h2', null, card.title),
         e('p', { className: 'muted' }, card.path),
       ),
       e('div', { className: 'cards-detail-header-actions' },
+        e('button', { type: 'button', onClick: () => closeCardsDetail() }, t('cards.back')),
         e('button', {
           type: 'button',
           'aria-pressed': props.pinnedPath === card.path,
@@ -202,15 +205,16 @@ function CardsDetail(props: CardsSeatProps & {
         ),
         field(t('cards.summary'), e('textarea', { value: summary, rows: 3, onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setSummary(event.target.value), 'aria-label': t('cards.summary') }), true),
       ) : e('div', { className: 'cards-fields' },
-        field(t('cards.category'), e('select', {
+        field(t('cards.category'), renderSelect(props.Select, {
           value: category,
           'aria-label': t('cards.categoryAria'),
-          onChange: (event: ChangeEvent<HTMLSelectElement>) => setCategory(event.target.value),
-        },
-          e('option', { value: '' }, t('cards.uncategorized')),
-          WORLDBOOK_CATEGORIES.map((item) => e('option', { key: item, value: item }, worldbookCategoryLabel(item))),
-          e('option', { value: '__custom__' }, t('common.custom')),
-        )),
+          onChange: (next) => setCategory(next),
+          options: [
+            { value: '', label: t('cards.uncategorized') },
+            ...WORLDBOOK_CATEGORIES.map((item) => ({ value: item, label: worldbookCategoryLabel(item) })),
+            { value: '__custom__', label: t('common.custom') },
+          ],
+        })),
         category === '__custom__' ? field(t('cards.customCategory'), e('input', {
           value: categoryCustom,
           onChange: (event: ChangeEvent<HTMLInputElement>) => setCategoryCustom(event.target.value),

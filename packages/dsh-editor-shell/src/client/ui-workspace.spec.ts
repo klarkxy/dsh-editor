@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { provideEditorUiWorkspace } from './ui-workspace.ts'
 import type { ShellContext } from './shared.ts'
 
-function fixture() {
+function fixture(defaultChatModel?: () => { provider: string; model: string } | undefined) {
   const create = vi.fn(async () => 'session-new')
   const open = vi.fn()
   const archiveSession = vi.fn(async () => undefined)
   const pick = vi.fn(async () => ({ ok: true as const, value: '/picked' }))
   const provide = vi.fn()
+  const selectModel = vi.fn(async (route: { sessionId: string; provider: string; model: string }) => ({ ok: true as const, value: { selected: { provider: route.provider, model: route.model } } }))
   const ctx = {
     provide,
     sessions: {
@@ -29,15 +30,15 @@ function fixture() {
         }),
       },
     },
-    remote: { directoryPicker: { pick } },
+    remote: { directoryPicker: { pick }, session: { selectModel } },
   } as unknown as ShellContext
-  provideEditorUiWorkspace(ctx)
+  provideEditorUiWorkspace(ctx, { defaultChatModel })
   const uiWorkspace = provide.mock.calls[0]?.[1] as {
     connectWorkspace(id: string): Promise<string>
     openWorkspace(id: string, beforeOpen?: (id: string) => void): Promise<void>
     pickDirectory(): Promise<string | null>
   }
-  return { create, open, pick, uiWorkspace }
+  return { create, open, pick, uiWorkspace, selectModel }
 }
 
 describe('provideEditorUiWorkspace', () => {
@@ -66,4 +67,26 @@ describe('provideEditorUiWorkspace', () => {
     await expect(uiWorkspace.pickDirectory()).resolves.toBe('/picked')
     expect(pick).toHaveBeenCalled()
   })
+})
+
+it('waits for the configured default selection before returning a newly created session', async () => {
+  const {uiWorkspace, selectModel} = fixture(() => ({provider: 'configured', model: 'default-chat'}))
+  let release!: () => void
+  const selected = new Promise<void>(resolve => {release = resolve})
+  selectModel.mockImplementationOnce(async route => {
+    await selected
+    return {ok: true, value: {selected: {provider: route.provider, model: route.model}}}
+  })
+  let finished = false
+  const creating = uiWorkspace.connectWorkspace('new-work').then(id => {finished = true; return id})
+  await vi.waitFor(() => expect(selectModel).toHaveBeenCalledWith({sessionId: 'session-new', provider: 'configured', model: 'default-chat'}))
+  expect(finished).toBe(false)
+  release()
+  await expect(creating).resolves.toBe('session-new')
+})
+
+it('never changes the model of a reused blank session when the default changes', async () => {
+  const {uiWorkspace, selectModel} = fixture(() => ({provider: 'configured', model: 'new-default'}))
+  await expect(uiWorkspace.connectWorkspace('ws-1')).resolves.toBe('blank-1')
+  expect(selectModel).not.toHaveBeenCalled()
 })

@@ -18,6 +18,7 @@ import { stripChapterFrontmatter, worldbookEditorMetadata, type ProjectContextRe
 import type { WritingSettingsSlots } from '../writing-settings.ts'
 import { isChapterMetaPath } from '../chapter-meta-view.ts'
 import { intlLocale, t } from '../i18n/index.ts'
+import { isImeEvent } from './ui/ime.ts'
 
 export type TreeEntry = { name: string; type: 'file' | 'directory' | 'other' }
 
@@ -235,6 +236,11 @@ export function claimInitialWorkspaceResume(guard: { current: boolean }): boolea
   return true
 }
 
+/** Consume startup auto-resume so returning home does not reopen the last work. */
+export function consumeInitialWorkspaceResume(guard: { current: boolean }): void {
+  guard.current = true
+}
+
 /** Startup resume target: the session-bound row, else the most recently updated workspace. */
 export function startupResumeWorkspace(
   items: readonly WorkspaceView[],
@@ -306,7 +312,7 @@ export function relocationFailureMessage(cleanupFailed: boolean): string {
 }
 
 export function isSuccessWorkbenchNote(note: string): boolean {
-  return /^(?:已(?:创建|重命名为|移动到|归档|恢复)|(?:Created|Renamed to|Moved to|Archived|Restored))(?:\s|$)/.test(note)
+  return /^(?:已(?:创建|重命名为|移动到|归档|恢复|保存版本)|(?:Created|Renamed to|Moved to|Archived|Restored|Saved version))(?:\s|$)/.test(note)
 }
 
 export function proposalAppliedNavigation(appliedPath: string, currentPath: string, editorDirty: boolean): {
@@ -384,8 +390,8 @@ export function workspaceShortcut(input: ShortcutInput): WorkspaceShortcutAction
   return null
 }
 
-export function shouldSubmitComposer(input: { key: string; shiftKey: boolean; isComposing?: boolean }): boolean {
-  return input.key === 'Enter' && !input.shiftKey && !input.isComposing
+export function shouldSubmitComposer(input: { key: string; shiftKey: boolean; isComposing?: boolean; keyCode?: number }): boolean {
+  return input.key === 'Enter' && !input.shiftKey && !isImeEvent(input)
 }
 
 export function canSubmitComposer(input: { draft: string; connected: boolean; removed: boolean; outgoingState?: 'sending' | 'accepted' | 'failed' }): boolean {

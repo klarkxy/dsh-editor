@@ -20,7 +20,6 @@ import {
   useState,
   useSyncExternalStore,
   type ChangeEvent,
-  type KeyboardEvent,
   type ReactNode,
 } from 'react'
 import type {
@@ -54,8 +53,12 @@ import {
 } from './settings-models-store.ts'
 import { Select, type SelectOption } from './select.tsx'
 import { ConfirmDialog } from './dialogs.ts'
+import { Button, Dialog } from './ui/index.ts'
 import type { SettingsDescribeFace, SettingsSchemaService, ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
+import type { SettingsScope } from '../dsh-compat.ts'
+import type { WritingPreferences } from '../writing-settings.ts'
+import { catalogFromSessionGroups, mergeCatalogOptions, WritingModelRoutes, type CatalogModelOption } from './writing-model-routes.tsx'
 
 type ModelsRemote = EditorRemote
 
@@ -385,7 +388,7 @@ function emptySectionState(): SectionState {
 /* The exported entry point. Builds the store once, subscribes to the
    store, and registers the host's invalidation listeners. The component
    delegates all rendering to `Loaded` once the store is ready. */
-export function SettingsModelsSection(props: { ctx: ShellContext }): ReactNode {
+export function SettingsModelsSection(props: { ctx: ShellContext; writingScope: SettingsScope<WritingPreferences> }): ReactNode {
   useLocale()
   const store = useMemo(
     () => new ModelsStore(props.ctx.remote, props.ctx.settingsScope.describe(), props.ctx.settingsSchema),
@@ -426,14 +429,47 @@ export function SettingsModelsSection(props: { ctx: ShellContext }): ReactNode {
     void store.load()
   }, [store])
 
-  return e(Loaded, { ctx: props.ctx, store, state })
+  return e(Loaded, { ctx: props.ctx, store, state, writingScope: props.writingScope })
+}
+
+function catalogOptions(rows: ProviderRow[], namespaces: Map<string, SettingsNamespaceView>, schema: SettingsSchemaService): CatalogModelOption[] {
+  const options: CatalogModelOption[] = []
+  const seen = new Set<string>()
+  for (const row of rows) {
+    if (!row.configured) continue
+    const namespace = namespaces.get(row.entry.settingsNs)
+    if (namespace === undefined) continue
+    const profile = schema.getPath(namespace.value, row.entry.settingsPath)
+    const models = modelDrafts(typeof profile === 'object' && profile !== null ? (profile as Record<string, unknown>)['models'] : undefined)
+    const provider = providerIdOf(row.entry)
+    const providerLabel = targetLabel(row)
+    for (const model of models) {
+      const id = typeof model['id'] === 'string' ? model['id'].trim() : ''
+      if (!id) continue
+      const key = `${provider}\0${id}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const name = typeof model['name'] === 'string' && model['name'].trim() ? model['name'].trim() : id
+      options.push({ provider, model: id, label: `${providerLabel} · ${name}` })
+    }
+  }
+  return options
 }
 
 /* Inner component: renders the page after the store is wired up. Owns the
    open-card bookkeeping and the delete confirmation target. */
-function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): ReactNode {
+function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writingScope: SettingsScope<WritingPreferences> }): ReactNode {
   const { ctx, store, state } = props
   const [section, setSection] = useState<SectionState>(emptySectionState)
+  const [runtimeCatalog, setRuntimeCatalog] = useState<CatalogModelOption[]>([])
+  useEffect(() => {
+    let live = true
+    void ctx.remote.session.modelCatalog().then((result) => {
+      if (!live || !result.ok) return
+      setRuntimeCatalog(catalogFromSessionGroups(result.value.groups))
+    }).catch(() => { /* keep profile catalog */ })
+    return () => { live = false }
+  }, [ctx, state.rows])
 
   if (state.status === 'idle' || state.status === 'loading') {
     return e('section', { className: 'models-page', 'aria-label': t('settings.models') },
@@ -464,6 +500,11 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
 
   return e('section', { className: 'models-page', 'aria-label': t('settings.models') },
     e(Header, { note: section.savedNote }),
+    e(WritingModelRoutes, {
+      scope: props.writingScope,
+      catalog: mergeCatalogOptions(runtimeCatalog, catalogOptions(state.rows, state.namespaces, ctx.settingsSchema)),
+      writable,
+    }),
     !writable ? e('p', { className: 'models-notice', role: 'status' }, text().readOnly) : null,
     state.credentialError !== null
       ? e('p', { className: 'models-warning', role: 'status' },
@@ -612,29 +653,27 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot }): Re
               onClick: () => setSection({ ...emptySectionState(), declaring: true }),
             }, text().addCustom),
           ),
-    section.deleteTarget !== undefined
-      ? e(DeleteDialog, {
-          row: section.deleteTarget,
-          onCancel: () => setSection((current) => ({ ...current, deleteTarget: undefined })),
-          onConfirm: () => {
-            const target = section.deleteTarget
-            if (target === undefined) return
-            void removeProviderProfile(ctx, store, target)
-              .then(() => setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: text().saved })))
-              .catch((error: unknown) => {
-                const message = error instanceof Error ? error.message : String(error)
-                setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: message }))
-              })
-          },
-        })
-      : null,
+    e(DeleteDialog, {
+      open: section.deleteTarget !== undefined,
+      row: section.deleteTarget,
+      onCancel: () => setSection((current) => ({ ...current, deleteTarget: undefined })),
+      onConfirm: () => {
+        const target = section.deleteTarget
+        if (target === undefined) return
+        void removeProviderProfile(ctx, store, target)
+          .then(() => setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: text().saved })))
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error)
+            setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: message }))
+          })
+      },
+    }),
   )
 }
 
 function Header(props: { note?: string | null }): ReactNode {
-  return e('header', { className: 'models-header' },
-    e('h2', { className: 'models-title' }, t('settings.models')),
-    e('p', { className: 'models-intro' }, text().intro),
+  return e('header', { className: 'models-header settings-block-head' },
+    e('p', { className: 'models-intro settings-block-help' }, text().intro),
     props.note ? e('p', { className: 'models-saved', role: 'status' }, props.note) : null,
   )
 }
@@ -701,12 +740,14 @@ async function removeProviderProfile(ctx: ShellContext, store: Store, row: Provi
 
 /* The delete-confirmation dialog. The message changes depending on whether
    this page also owns the stored credential or only the configuration. */
-function DeleteDialog(props: { row: ProviderRow; onCancel(): void; onConfirm(): void }): ReactNode {
-  const managed = managedCredentialRef(props.row) !== undefined
+function DeleteDialog(props: { open: boolean; row?: ProviderRow; onCancel(): void; onConfirm(): void }): ReactNode {
+  const row = props.row
+  const managed = row !== undefined && managedCredentialRef(row) !== undefined
   const message = managed ? text().confirmDeleteManage : text().confirmDeleteKeep
   return e(ConfirmDialog, {
+    open: props.open,
     id: 'models-delete',
-    title: formatTemplate(text().deleteTitle, targetLabel(props.row)),
+    title: row ? formatTemplate(text().deleteTitle, targetLabel(row)) : text().delete,
     message,
     confirmLabel: text().delete,
     onCancel: props.onCancel,
@@ -1218,37 +1259,40 @@ function ModelListEditor(props: {
       onClick: add,
     }, `+ ${t.addModel}`),
     failure !== undefined ? e('p', { className: 'models-warning', role: 'alert' }, failure) : null,
-    candidates !== undefined ? e('div', { className: 'file-dialog-overlay models-overlay', role: 'dialog', 'aria-modal': true, 'aria-label': t.candidateTitle, onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePicker() }
-    } },
-      e('div', { className: 'file-dialog models-candidate-dialog' },
-        e('header', null,
-          e('h2', null, t.candidateTitle),
-          e('p', { className: 'models-candidate-description' }, t.candidateDescription),
-          e('button', { type: 'button', className: 'models-button', onClick: closePicker }, t.candidateClose),
-        ),
-        e('div', { className: 'models-candidate-actions' },
-          e('button', { type: 'button', className: 'models-button', onClick: toggleAll }, allPicked ? t.candidateDeselectAll : t.candidateSelectAll),
-        ),
-        e('ul', { className: 'models-candidate-list' },
-          candidates.map((candidate) => e('li', { key: candidate.id, className: 'models-candidate' },
-            e('label', { className: 'models-candidate-label' },
-              e('input', {
-                type: 'checkbox',
-                checked: picked.has(candidate.id),
-                onChange: () => togglePick(candidate.id),
-              }),
-              e('span', { className: 'models-candidate-id' }, candidate.id),
-              candidate.name !== undefined ? e('span', { className: 'models-candidate-name' }, candidate.name) : null,
-            ),
-          )),
-        ),
-        e('footer', null,
-          e('button', { type: 'button', className: 'models-button', onClick: closePicker }, t.cancel),
-          e('button', { type: 'button', className: 'models-button models-button-primary', onClick: adoptPicked }, t.candidateAdopt),
-        ),
+    e(Dialog, {
+      open: candidates !== undefined,
+      onOpenChange: (next: boolean) => { if (!next) closePicker() },
+      title: t.candidateTitle,
+      description: t.candidateDescription,
+      className: 'file-dialog models-candidate-dialog',
+      overlayClassName: 'file-dialog-overlay models-overlay',
+    },
+      e('header', null,
+        e('h2', null, t.candidateTitle),
+        e('p', { className: 'models-candidate-description' }, t.candidateDescription),
+        e(Button, { className: 'models-button', onClick: closePicker }, t.candidateClose),
       ),
-    ) : null,
+      e('div', { className: 'models-candidate-actions' },
+        e(Button, { className: 'models-button', onClick: toggleAll }, allPicked ? t.candidateDeselectAll : t.candidateSelectAll),
+      ),
+      e('ul', { className: 'models-candidate-list' },
+        (candidates ?? []).map((candidate) => e('li', { key: candidate.id, className: 'models-candidate' },
+          e('label', { className: 'models-candidate-label' },
+            e('input', {
+              type: 'checkbox',
+              checked: picked.has(candidate.id),
+              onChange: () => togglePick(candidate.id),
+            }),
+            e('span', { className: 'models-candidate-id' }, candidate.id),
+            candidate.name !== undefined ? e('span', { className: 'models-candidate-name' }, candidate.name) : null,
+          ),
+        )),
+      ),
+      e('footer', null,
+        e(Button, { className: 'models-button', onClick: closePicker }, t.cancel),
+        e(Button, { className: 'models-button models-button-primary', onClick: adoptPicked }, t.candidateAdopt),
+      ),
+    ),
   )
 }
 

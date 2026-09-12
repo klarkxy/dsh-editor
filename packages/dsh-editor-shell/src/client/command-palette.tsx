@@ -25,10 +25,22 @@ import {
   Portal as RadixDialogPortal,
   Overlay as RadixDialogOverlay,
   Content as RadixDialogContent,
+  Description as RadixDialogDescription,
 } from '@radix-ui/react-dialog'
-import { createElement as e, useEffect, useState, type ReactNode } from 'react'
+import { createElement as e, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type { ThemeValue } from './theme.ts'
 import { t, useLocale } from '../i18n/index.ts'
+
+/* 视觉隐藏(.shell .sr-only 在 Portal 内容上不生效,这里内联自带)。 */
+const visuallyHidden: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  margin: -1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+}
 
 /* 命令面板接收的最小动作集。根组件传进来的就是这些闭包,palette 自己只
    做"显示哪一条 → 选了就调哪个"的分发,不知道选择作品/新建/切主题背后的
@@ -405,9 +417,9 @@ export function CommandPalette(props: CommandPaletteProps) {
   return (
     <RadixDialogRoot open={props.open} onOpenChange={props.onOpenChange}>
       <RadixDialogPortal>
-        <RadixDialogOverlay className="palette-overlay" />
+        <RadixDialogOverlay className="dsh-ui palette-overlay" />
         <RadixDialogContent
-          className="palette-content"
+          className="dsh-ui palette-content"
           aria-label={t('command.searchCommands')}
           onOpenAutoFocus={(event: Event) => {
             /* cmdk 的 Input 已经会自己 focus,我们只需要阻止 Radix 把焦点
@@ -417,6 +429,9 @@ export function CommandPalette(props: CommandPaletteProps) {
             globalThis.requestAnimationFrame(() => input?.focus())
           }}
         >
+          {/* Radix Dialog 要求 Title/Description;标题由 aria-label 承担,这里补
+              一条视觉隐藏的描述(复用现有本地化串),消除 a11y 警告。 */}
+          <RadixDialogDescription style={visuallyHidden}>{t('command.searchTitle')}</RadixDialogDescription>
           <Command className="palette-command" label={t('command.searchCommands')} loop shouldFilter>
             <div className="palette-search">
               <span className="palette-search-icon" aria-hidden="true">

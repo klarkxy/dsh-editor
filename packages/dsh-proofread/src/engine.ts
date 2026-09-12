@@ -21,6 +21,10 @@ export { HABIT_MAX_OCCURRENCES, HABIT_PER_THOUSAND_THRESHOLD, HABIT_STATS_LIMIT 
 export type { TypoPattern }
 
 const MAX_REPEAT_PHRASE = 8
+/** 一X一X measure stacking (一段一段) is ordinary Chinese, not a stutter. */
+function isNaturalMeasureStack(phrase: string): boolean {
+  return phrase.length === 2 && phrase[0] === '一'
+}
 const REPEAT_WINDOW = 12
 const HALF_TO_FULL: Record<string, string> = {
   ',': '，',
@@ -356,7 +360,17 @@ function scanRepeat(masked: string, raw: string, path: string, version: string, 
       if (REDUPLICATION_WHITELIST.has(phrase)) continue
       const end = index + len * 2
       if (!mark(index, end)) continue
-      sink.push(finding(raw, index, end, 'repeat', 'warning', `词语重复「${phrase}」`, path, version))
+      const naturalStack = isNaturalMeasureStack(phrase)
+      sink.push(finding(
+        raw,
+        index,
+        end,
+        'repeat',
+        naturalStack ? 'info' : 'warning',
+        naturalStack ? `建议核对叠词「${phrase}${phrase}」` : `词语重复「${phrase}」`,
+        path,
+        version,
+      ))
       index = end - 1
       reported = true
       break

@@ -181,6 +181,12 @@ async function dismissOverlays(page = activePage) {
       await delay(200)
       continue
     }
+    const workspaceMenu = page.locator('#workspace-actions')
+    if (await workspaceMenu.isVisible().catch(() => false)) {
+      await page.keyboard.press('Escape')
+      await workspaceMenu.waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => undefined)
+      continue
+    }
     const overlay = page.locator('.file-dialog-overlay, .palette-overlay, .import-overlay, .settings-overlay').first()
     if (!(await overlay.isVisible().catch(() => false))) return
     const close = overlay.getByRole('button', { name: /^(关闭|取消)$/ }).first()
@@ -223,10 +229,15 @@ async function dismissNativeOnboarding(page) {
   }
 }
 
-async function chooseCustomSelect(page, ariaLabel, matcher) {
-  const trigger = page.getByRole('button', { name: ariaLabel }).first()
+async function chooseCustomSelect(scope, ariaLabel, matcher) {
+  const page = typeof scope.page === 'function' ? scope.page() : scope
+  const trigger = scope.getByRole('combobox', { name: ariaLabel }).first()
+  await trigger.waitFor({ state: 'visible', timeout: 10_000 })
   await trigger.click()
-  const list = page.getByRole('listbox', { name: ariaLabel })
+  let list = page.getByRole('listbox', { name: ariaLabel })
+  if (!(await list.isVisible({ timeout: 2_000 }).catch(() => false))) {
+    list = page.getByRole('listbox').last()
+  }
   await list.waitFor({ state: 'visible', timeout: 10_000 })
   const options = list.getByRole('option')
   const labels = await options.allTextContents()
@@ -236,6 +247,7 @@ async function chooseCustomSelect(page, ariaLabel, matcher) {
     throw new Error(`${ariaLabel} option not found in ${JSON.stringify(labels)}`)
   }
   await options.nth(index).click()
+  await list.waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
   return labels[index]
 }
 
@@ -308,7 +320,7 @@ async function forceProtocol(scope) {
     const expanded = await customized.evaluate((el) => el.closest('details')?.open === true).catch(() => false)
     if (!expanded) await customized.click()
   }
-  const protocolTrigger = scope.getByRole('button', { name: 'API 协议' })
+  const protocolTrigger = scope.getByRole('combobox', { name: 'API 协议' })
   await protocolTrigger.waitFor({ state: 'visible', timeout: 10_000 })
   const current = await protocolTrigger.innerText()
   if (/openai-completions/i.test(current)) return
@@ -360,10 +372,10 @@ async function configureMiniMax(page) {
   }
 
   await closeShellSettings(page)
-  await page.getByTestId('zhihu-open').click()
-  await page.getByTestId('zhihu-panel').getByRole('tab', { name: '设置', exact: true }).click()
-  await page.getByTestId('zhihu-panel').getByText('Access Secret', { exact: false }).first().waitFor({ state: 'visible', timeout: 15_000 })
-  await page.getByTestId('zhihu-panel').getByRole('button', { name: '关闭', exact: true }).click()
+  await openShellSettings(page)
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '知乎资料', exact: true }).click()
+  await page.getByTestId('zhihu-settings-embed').getByText('Access Secret', { exact: false }).first().waitFor({ state: 'visible', timeout: 15_000 })
+  await closeShellSettings(page)
   await openShellSettings(page)
   recordFeature('zhihu-panel-settings', true)
   await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '用量' }).click()
@@ -683,18 +695,13 @@ async function openAssistantWithModel(page) {
     await recordPhase('切换对话模型', report.model)
     return
   } catch { /* fall back to the new-conversation dialog */ }
-  await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
+  await assistant.getByRole('button', { name: '新对话' }).click()
   const picker = page.getByRole('dialog', { name: '新对话' })
-  const select = picker.getByLabel('选择模型')
-  await select.waitFor({ state: 'visible', timeout: 30_000 })
-  const options = await select.locator('option').evaluateAll((items) => items.map((item) => ({ value: item.value, text: item.textContent || '' })))
-  const chosen = options.find((item) => /MiniMax-M3/i.test(item.text))
-
-  if (!chosen) throw new Error(`no chat model available: ${JSON.stringify(options)}`)
-  await select.selectOption(chosen.value)
-  await picker.getByRole('button', { name: '开始', exact: true }).click({ force: true })
+  await picker.waitFor({ state: 'visible', timeout: 30_000 })
+  const chosen = await chooseCustomSelect(picker, '选择模型', (label) => /MiniMax-M3/i.test(label))
+  await picker.getByRole('button', { name: '开始', exact: true }).click()
   await picker.waitFor({ state: 'hidden', timeout: 30_000 })
-  const effort = assistant.getByRole('button', { name: '思考强度' })
+  const effort = assistant.getByRole('combobox', { name: '思考强度' })
   if (await effort.isVisible().catch(() => false)) {
     const current = await effort.innerText()
     if (!/low|Low|低|medium|Medium|中/.test(current)) {
@@ -705,8 +712,8 @@ async function openAssistantWithModel(page) {
       }
     }
   }
-  report.model = chosen.text
-  await recordPhase('新对话模型', chosen.text)
+  report.model = chosen
+  await recordPhase('新对话模型', chosen)
 }
 
 async function seedImportSource() {
@@ -830,7 +837,7 @@ async function coverWorkbench(page) {
     await card.click()
     const detail = page.getByRole('region', { name: '世界书详情' })
     await detail.waitFor({ state: 'visible', timeout: 10_000 })
-    await detail.getByLabel('世界书分类').selectOption('地点')
+    await chooseCustomSelect(detail, '世界书分类', (label) => label.trim() === '地点' || label.includes('地点'))
     await detail.getByLabel('标签').fill('雾港，闸口')
     await detail.getByLabel('摘要').fill('海关记忆税闸口控制的雾港港口。')
     await detail.getByRole('button', { name: '保存', exact: true }).click()
@@ -839,10 +846,10 @@ async function coverWorkbench(page) {
       const text = await readFile(diskPath, 'utf8').catch(() => '')
       if (!text.includes('category: 地点') || !text.includes('tags: [雾港, 闸口]') || !text.includes('海关记忆税闸口控制的雾港港口。')) return false
       if (!(await detail.getByRole('button', { name: '保存', exact: true }).isEnabled().catch(() => false))) return false
-      const category = await detail.getByLabel('世界书分类').inputValue().catch(() => '')
+      const category = (await detail.getByRole('combobox', { name: '世界书分类' }).innerText().catch(() => '')).replace('⌄', '').trim()
       const tags = await detail.getByLabel('标签').inputValue().catch(() => '')
       const summary = await detail.getByLabel('摘要').inputValue().catch(() => '')
-      return category === '地点' && tags === '雾港，闸口' && summary.includes('海关记忆税闸口控制的雾港港口。')
+      return category.includes('地点') && tags === '雾港，闸口' && summary.includes('海关记忆税闸口控制的雾港港口。')
     }, 'worldbook card fields persisted', 10_000)
     const disk = await readFile(diskPath, 'utf8')
     if (!disk.includes('triggers: [港口, 海关]')) throw new Error('worldbook triggers were not preserved')
@@ -913,11 +920,12 @@ async function coverWorkbench(page) {
 
   await cover('chapter-meta', async () => {
     await openTreeFile(page, '001.md', '正文')
-    const toggle = page.locator('.chapter-meta-settings summary')
-    await toggle.waitFor({ state: 'attached', timeout: 15_000 })
-    await toggle.scrollIntoViewIfNeeded()
-    const expanded = await page.locator('.chapter-meta-settings').evaluate((el) => el instanceof HTMLDetailsElement && el.open).catch(() => false)
-    if (!expanded) await toggle.click()
+    await page.getByTestId('paper-editor-menu-trigger').click()
+    await page.getByTestId('editor-menu-chapter-meta').click()
+    const dialog = page.getByRole('dialog', { name: '本章工作笔记' })
+    await dialog.waitFor({ state: 'visible', timeout: 10_000 })
+    const settings = dialog.locator('.chapter-meta-settings')
+    await settings.waitFor({ state: 'attached', timeout: 10_000 })
     const beats = page.getByLabel('章纲节拍')
     await beats.waitFor({ state: 'visible', timeout: 10_000 })
     await beats.fill('林简过闸\n录音带被点名')
@@ -929,10 +937,18 @@ async function coverWorkbench(page) {
   })
 
   await cover('typewriter-focus', async () => {
-    await page.keyboard.press('Control+Alt+T')
-    await page.getByRole('button', { name: '打字机滚动' }).waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined)
-    await page.keyboard.press('Control+Alt+P')
-    await page.getByRole('button', { name: '聚焦当前段落' }).waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined)
+    await openShellSettings(page)
+    const dialog = page.getByRole('dialog', { name: '设置' })
+    await dialog.getByRole('tab', { name: '写作', exact: true }).click()
+    const typewriter = dialog.getByRole('checkbox', { name: /^打字机滚动/ })
+    const focus = dialog.getByRole('checkbox', { name: /^聚焦当前段落/ })
+    await typewriter.waitFor({ state: 'visible', timeout: 5_000 })
+    await focus.waitFor({ state: 'visible', timeout: 5_000 })
+    if (await dialog.getByText(/每日目标/).count()) throw new Error('daily goal still mounted')
+    await closeShellSettings(page)
+    await page.getByTestId('paper-editor-menu-trigger').click()
+    if (await page.getByTestId('editor-menu-typewriter').count() || await page.getByTestId('editor-menu-focus').count()) throw new Error('view settings still in editor menu')
+    await page.keyboard.press('Escape')
   })
 
   await cover('layout-toggles', async () => {
@@ -1127,20 +1143,26 @@ async function coverWorkbench(page) {
 
   await cover('import-entry', async () => {
     await page.getByRole('button', { name: '作品菜单' }).click()
-    await page.getByRole('button', { name: '导入作品' }).click()
+    const workspaceMenu = page.locator('#workspace-actions')
+    await workspaceMenu.getByRole('menuitem', { name: '导入作品' }).click()
     const pathBox = page.getByLabel('作品文件夹路径')
     const review = page.getByRole('dialog', { name: /导入/ })
-    if (await pathBox.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    await Promise.race([
+      pathBox.waitFor({ state: 'visible', timeout: 8_000 }),
+      review.waitFor({ state: 'visible', timeout: 8_000 }),
+    ]).catch(() => undefined)
+    if (await pathBox.isVisible().catch(() => false)) {
       await pathBox.fill(importSource)
       const confirm = page.getByRole('button', { name: /打开此目录|开始导入|继续/ }).first()
       if (await confirm.isVisible().catch(() => false)) await confirm.click()
       return 'path fallback shown'
     }
-    if (await review.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await review.getByRole('button', { name: '取消' }).click().catch(() => undefined)
+    if (await review.isVisible().catch(() => false)) {
+      await review.getByRole('button', { name: '取消' }).click()
+      await review.waitFor({ state: 'hidden', timeout: 8_000 })
       return 'review dialog'
     }
-    return 'picker unavailable in chromium'
+    throw new Error('import web path dialog did not open after 导入作品')
   })
 
   await cover('chapter-split', async () => {
@@ -1237,7 +1259,7 @@ async function coverAi(page) {
     return reply.slice(0, 80)
   })
 
-  await cover('rewrite-preset', async () => {
+  await cover('rewrite-custom', async () => {
     await openTreeFile(page, '001.md', '正文')
     const text = await page.evaluate(() => {
       const el = document.querySelector('[data-testid="paper-editor"]')
@@ -1249,7 +1271,11 @@ async function coverAi(page) {
     if (start < 0) throw new Error('rewrite needle missing')
     const end = text.indexOf('\n', start)
     await selectPaperRange(page, start, end > start ? end : start + needle.length + 12)
-    await page.getByRole('group', { name: '选段改写预设' }).getByRole('button', { name: '缩短' }).click()
+    await page.getByTestId('paper-editor-menu-trigger').click()
+    await page.getByTestId('editor-menu-rewrite').click()
+    const custom = page.getByRole('dialog', { name: '自定义改写' })
+    await custom.getByLabel('输入改写要求').fill('缩短并保留信息')
+    await custom.getByRole('button', { name: '改写', exact: true }).click()
     const proposal = page.locator('[aria-label="选段修改建议"]')
     await waitFor(async()=>{
       if(await proposal.isVisible().catch(()=>false))return true
@@ -1275,7 +1301,8 @@ async function coverAi(page) {
       const view = document.querySelector('[data-testid="paper-editor"]')?.__cmView
       return view && view.state.selection.main.head === view.state.doc.length
     })
-    await page.locator('[data-testid="paper-fim"]').click()
+    await page.getByTestId('paper-editor-menu-trigger').click()
+    await page.getByTestId('editor-menu-complete').click()
     await waitFor(async () => {
       if (await page.locator('[data-testid="paper-ghost"]').count()) return true
       const notice = await page.locator('[data-testid="paper-notice"]').innerText().catch(() => '')
@@ -1301,17 +1328,14 @@ async function coverAi(page) {
     await assistant.getByRole('button', { name: '新对话' }).click()
     const picker = page.getByRole('dialog', { name: '新对话' })
     if (await picker.isVisible().catch(() => false)) {
-      const selection=picker.getByLabel('选择模型');await selection.waitFor();
-      const options=await selection.locator('option').evaluateAll(items=>items.map(x=>({value:x.value,text:x.textContent||''})));
-      const model=options.find(x=>/MiniMax-M3/i.test(x.text));if(!model)throw new Error('MiniMax-M3 unavailable in new conversation');
-      await selection.selectOption(model.value);
+      await chooseCustomSelect(picker, '选择模型', (label) => /MiniMax-M3/i.test(label))
       await picker.getByRole('button', { name: '开始', exact: true }).click()
       const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
       if (await discard.isVisible({ timeout: 2_000 }).catch(() => false)) await discard.click()
       await picker.waitFor({ state: 'hidden', timeout: 15000 })
     }
     await assistant.getByRole('button', { name: '对话操作' }).click()
-    const menu = page.getByRole('menu')
+    const menu = page.getByRole('menu', { name: '对话操作' })
     await menu.getByRole('menuitem', { name: '归档' }).click()
     await delay(800)
     await assistant.getByRole('button', { name: '对话操作' }).click()

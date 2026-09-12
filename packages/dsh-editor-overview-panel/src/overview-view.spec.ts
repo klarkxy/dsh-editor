@@ -7,6 +7,7 @@ import {
   chapterCharBuckets,
   chapterMetaMarks,
   chapterStatusLabel,
+  filterChapters,
   dailyCurveSeries,
   formatCount,
   formatModifiedAt,
@@ -38,6 +39,17 @@ describe('overview view helpers', () => {
     expect(chapterStatusLabel('draft')).toBe('草稿')
     expect(chapterStatusLabel('revising')).toBe('修订中')
     expect(chapterStatusLabel('final')).toBe('已定稿')
+  })
+
+  it('filters chapters by title or path without dropping status fields', () => {
+    const chapters = [
+      chapter('正文/001.md', { title: '雾闸', status: 'draft' }),
+      chapter('正文/002.md', { title: '回声', status: 'revising' }),
+    ]
+    expect(filterChapters(chapters, '').map((item) => item.title)).toEqual(['雾闸', '回声'])
+    expect(filterChapters(chapters, '回声').map((item) => item.status)).toEqual(['revising'])
+    expect(filterChapters(chapters, '001').map((item) => item.path)).toEqual(['正文/001.md'])
+    expect(filterChapters(chapters, '没有')).toEqual([])
   })
 
   it('applies an optimistic status change and rebuilds the status totals', () => {

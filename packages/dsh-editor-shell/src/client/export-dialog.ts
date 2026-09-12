@@ -1,4 +1,5 @@
-import { createElement as e, useState } from 'react'
+import { createElement as e, useRef, useState, type RefObject } from 'react'
+import { Button, Dialog } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type RpcResult, type ShellContext } from './shared.ts'
 import { prepareExport, sanitizeExportTitle, type ChapterExport, type ExportFormat, type PreparedExport } from '../export.ts'
 import { buildBook } from '../export-book.ts'
@@ -48,16 +49,22 @@ export function previewExport(chapters: readonly ChapterExport[], title: string)
 }
 
 function ExportPreviewDialog(props: {
+  open?: boolean
   chapters: readonly ChapterExport[]
   title: string
   busy: boolean
   note?: string
   onCancel(): void
   onExport(format: ExportFormat): void
+  returnFocusRef?: RefObject<HTMLElement | null>
 }) {
+  const open = props.open ?? true
+  const cancel = useRef<HTMLButtonElement | null>(null)
+  const shown = useRef({ chapters: props.chapters, title: props.title })
+  if (open) shown.current = { chapters: props.chapters, title: props.title }
   const [packing, setPacking] = useState<'docx' | 'epub' | null>(null)
   const [packNote, setPackNote] = useState<string>()
-  const preview = props.chapters.length ? previewExport(props.chapters, props.title) : { chapters: [], totalChars: 0 }
+  const preview = shown.current.chapters.length ? previewExport(shown.current.chapters, shown.current.title) : { chapters: [], totalChars: 0 }
   const empty = preview.chapters.filter((item) => item.empty)
   const busy = props.busy || packing !== null
   const note = packNote ?? props.note
@@ -77,26 +84,33 @@ function ExportPreviewDialog(props: {
       setPacking(null)
     }
   }
-  return e('div', { className: 'file-dialog-overlay', role: 'presentation' },
-    e('section', { className: 'file-dialog export-preview-dialog', role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'export-preview-title' },
-      e('header', null, e('div', null, e('small', null, t('export.title')), e('h2', { id: 'export-preview-title' }, t('export.fullText')))),
-      e('dl', { className: 'export-summary' },
-        e('div', null, e('dt', null, t('export.chapters')), e('dd', null, preview.chapters.length)),
-        e('div', null, e('dt', null, t('export.totalChars')), e('dd', null, preview.totalChars)),
-      ),
-      empty.length ? e('p', { className: 'warning', role: 'alert' }, t('export.emptyWarning', { count: empty.length })) : null,
-      note ? e('p', { className: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'warning' : 'muted', role: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'alert' : 'status' }, note) : null,
-      e('ol', { className: 'export-chapters' }, preview.chapters.map((chapter, index) => e('li', { key: chapter.path },
-        e('span', null, `${index + 1}. ${chapter.path}`),
-        e('small', null, `${t('export.chapterMeta', { chars: chapter.chars })}${chapter.empty ? t('export.chapterEmpty') : ''}`),
-      ))),
-      e('footer', null,
-        e('button', { type: 'button', disabled: busy, onClick: props.onCancel }, t('common.cancel')),
-        e('button', { className: 'primary-action', type: 'button', disabled: busy || !preview.chapters.length, onClick: () => props.onExport('markdown') }, props.busy ? t('workspace.exporting') : t('export.markdown')),
-        e('button', { type: 'button', disabled: busy || !preview.chapters.length, onClick: () => props.onExport('text') }, t('export.txt')),
-        e('button', { type: 'button', disabled: busy || !preview.chapters.length, onClick: () => { void exportPacked('docx') } }, packing === 'docx' ? t('workspace.exporting') : t('export.docx')),
-        e('button', { type: 'button', disabled: busy || !preview.chapters.length, onClick: () => { void exportPacked('epub') } }, packing === 'epub' ? t('workspace.exporting') : t('export.epub')),
-      ),
+  return e(Dialog, {
+    open,
+    onOpenChange: (next: boolean) => { if (!next && !busy) props.onCancel() },
+    title: t('export.fullText'),
+    className: 'file-dialog export-preview-dialog',
+    overlayClassName: 'file-dialog-overlay',
+    dismissible: !busy,
+    initialFocusRef: cancel,
+    returnFocusRef: props.returnFocusRef,
+  },
+    e('header', null, e('div', null, e('small', null, t('export.title')), e('h2', { id: 'export-preview-title' }, t('export.fullText')))),
+    e('dl', { className: 'export-summary' },
+      e('div', null, e('dt', null, t('export.chapters')), e('dd', null, preview.chapters.length)),
+      e('div', null, e('dt', null, t('export.totalChars')), e('dd', null, preview.totalChars)),
+    ),
+    empty.length ? e('p', { className: 'warning', role: 'alert' }, t('export.emptyWarning', { count: empty.length })) : null,
+    note ? e('p', { className: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'warning' : 'muted', role: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'alert' : 'status' }, note) : null,
+    e('ol', { className: 'export-chapters' }, preview.chapters.map((chapter, index) => e('li', { key: chapter.path },
+      e('span', null, `${index + 1}. ${chapter.path}`),
+      e('small', null, `${t('export.chapterMeta', { chars: chapter.chars })}${chapter.empty ? t('export.chapterEmpty') : ''}`),
+    ))),
+    e('footer', null,
+      e(Button, { ref: cancel, disabled: busy, onClick: props.onCancel }, t('common.cancel')),
+      e(Button, { variant: 'primary', className: 'primary-action', disabled: busy || !preview.chapters.length, onClick: () => props.onExport('markdown') }, props.busy ? t('workspace.exporting') : t('export.markdown')),
+      e(Button, { disabled: busy || !preview.chapters.length, onClick: () => props.onExport('text') }, t('export.txt')),
+      e(Button, { disabled: busy || !preview.chapters.length, onClick: () => { void exportPacked('docx') } }, packing === 'docx' ? t('workspace.exporting') : t('export.docx')),
+      e(Button, { disabled: busy || !preview.chapters.length, onClick: () => { void exportPacked('epub') } }, packing === 'epub' ? t('workspace.exporting') : t('export.epub')),
     ),
   )
 }

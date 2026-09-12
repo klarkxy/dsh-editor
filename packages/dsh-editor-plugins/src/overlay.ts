@@ -53,8 +53,12 @@ export function renderOverridePatch(overrides: Record<string, boolean>): string 
   return `${lines.join('\n')}\n`
 }
 
+export function normalizePatchText(text: string): string {
+  return text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
+}
+
 export function parseManagedPatch(text: string): Record<string, boolean> | undefined {
-  const trimmed = text.replace(/^\uFEFF/, '').trim()
+  const trimmed = normalizePatchText(text).trim()
   if (!trimmed || trimmed === '[]') return {}
   if (!trimmed.includes(MANAGED_PATCH_MARK)) return undefined
   const overrides: Record<string, boolean> = {}
@@ -65,8 +69,19 @@ export function parseManagedPatch(text: string): Record<string, boolean> | undef
   return overrides
 }
 
+/** True only for empty/`[]` or a file that is exactly our generated override YAML. */
+export function isOwnedManagedPatch(text: string | undefined): boolean {
+  if (text === undefined) return true
+  const normalized = normalizePatchText(text)
+  const trimmed = normalized.trim()
+  if (!trimmed || trimmed === '[]') return true
+  const parsed = parseManagedPatch(normalized)
+  if (parsed === undefined) return false
+  const rendered = renderOverridePatch(parsed)
+  const comparable = normalized.endsWith('\n') ? normalized : `${normalized}\n`
+  return comparable === rendered
+}
+
 export function canReplaceHomePatch(existing: string | undefined): boolean {
-  if (existing === undefined) return true
-  const trimmed = existing.replace(/^\uFEFF/, '').trim()
-  return !trimmed || trimmed === '[]' || trimmed.includes(MANAGED_PATCH_MARK)
+  return isOwnedManagedPatch(existing)
 }

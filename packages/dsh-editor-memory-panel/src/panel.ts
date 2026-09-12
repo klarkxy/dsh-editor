@@ -26,6 +26,8 @@ const STATUS_LABEL: Record<MemoryStatus, MessageKey> = {
   undone: 'memory.status.undone',
 }
 
+const STATUS_FILTERS: MemoryStatus[] = ['pending', 'applied', 'stale', 'failed', 'undone']
+
 function createdLabel(createdAt: string): string {
   const time = Date.parse(createdAt)
   return Number.isFinite(time) ? snapshotTimeLabel(time) : createdAt
@@ -39,6 +41,7 @@ export function MemoryChangeDetail(props: {
   onApplied(path: string): void
   onRefresh?(path: string): void
   onChanged?(): void
+  onBack?(): void
 }) {
   const [record, setRecord] = useState<MemoryChange | null>(null)
   const [note, setNote] = useState('')
@@ -168,15 +171,17 @@ export function MemoryChangeDetail(props: {
       e('span', { role: 'status' }, note),
       record.status === 'pending' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void apply() }, busy === 'apply' ? t('memory.applying') : t('memory.confirm')) : null,
       record.status === 'applied' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void undo() }, busy === 'undo' ? t('memory.undoing') : t('memory.undo')) : null,
+      props.onBack ? e('button', { type: 'button', disabled: Boolean(busy), onClick: props.onBack }, t('memory.back')) : null,
     ),
   )
 }
 
-function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null }) {
+function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; onClose(): void }) {
   setMemoryLocale(props.locale)
   const [items, setItems] = useState<MemoryChangeSummary[] | null>(null)
   const [note, setNote] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<MemoryStatus | null>(null)
   const requestGate = useRef(new LatestRequestGate()).current
   const requestScope = `${props.sessionId}\u0000${props.treeRevision}`
   requestGate.setScope(requestScope)
@@ -188,12 +193,18 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null }
     }))
     if (!requestGate.isCurrent(ticket)) return
     if (!result.ok) { setItems(null); setNote(errorMessage(result, props.locale)); return }
+    const listed = result.value.items
     setNote('')
-    setItems(result.value.items)
+    setItems(listed)
+    setOpenId((current) => current != null && listed.some((item) => item.id === current) ? current : null)
   }
 
   useEffect(() => {
     setOpenId(null)
+    setStatusFilter(null)
+  }, [props.sessionId])
+
+  useEffect(() => {
     void load()
   }, [props.sessionId, props.treeRevision])
 
@@ -208,21 +219,40 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null }
     void path
   }
 
-  return e('section', { className: 'snapshot-panel memory-panel', 'aria-label': t('memory.title') },
-    note ? e('p', { className: 'warning', role: 'alert' }, note) : null,
-    items === null && !note ? e('p', { className: 'snapshot-empty' }, t('memory.loading')) : null,
-    items !== null && items.length === 0 ? e('p', { className: 'snapshot-empty' }, t('memory.empty')) : null,
-    items?.length ? e('ul', { className: 'memory-list' }, items.map((item) => e('li', { key: item.id },
-      e('div', { className: 'snapshot-row' },
-        e('button', {
-          type: 'button',
-          className: 'memory-row-main',
-          'aria-expanded': openId === item.id,
-          onClick: () => setOpenId((current) => current === item.id ? null : item.id),
-        },
-          e('span', { className: 'snapshot-label' }, item.summary),
-          e('span', { className: 'snapshot-meta' }, `${t(STATUS_LABEL[item.status])} · ${createdLabel(item.createdAt)}`),
-        ),
+  const visible = items?.filter((item) => !statusFilter || item.status === statusFilter) ?? []
+
+  return e('section', { className: 'memory-panel', 'data-testid': 'memory-panel', 'aria-label': t('memory.title') },
+    e('header', { className: 'memory-panel-header' },
+      e('div', null,
+        e('h2', null, t('memory.title')),
+        e('p', null, t('memory.intro')),
+      ),
+      e('button', { className: 'icon-button', type: 'button', 'aria-label': t('memory.close'), onClick: props.onClose }, '×'),
+    ),
+    e('div', { className: 'memory-filters', role: 'group', 'aria-label': t('memory.filter') },
+      STATUS_FILTERS.map((status) => e('button', {
+        key: status,
+        type: 'button',
+        'aria-pressed': statusFilter === status,
+        onClick: () => setStatusFilter((current) => current === status ? null : status),
+      }, t(STATUS_LABEL[status]))),
+    ),
+    note ? e('p', { className: 'memory-status warning', role: 'alert' },
+      note,
+      items === null ? e('button', { type: 'button', onClick: () => void load() }, t('memory.retryList')) : null,
+    ) : null,
+    items === null && !note ? e('p', { className: 'memory-status', role: 'status' }, t('memory.loading')) : null,
+    items !== null && items.length === 0 ? e('p', { className: 'memory-status' }, t('memory.empty')) : null,
+    items !== null && items.length > 0 && visible.length === 0 ? e('p', { className: 'memory-status' }, t('memory.noMatch')) : null,
+    visible.length ? e('ul', { className: 'memory-list' }, visible.map((item) => e('li', { key: item.id },
+      e('button', {
+        type: 'button',
+        className: 'memory-row-main',
+        'aria-expanded': openId === item.id,
+        onClick: () => setOpenId((current) => current === item.id ? null : item.id),
+      },
+        e('span', { className: 'memory-label' }, item.summary),
+        e('span', { className: 'memory-meta' }, `${t(STATUS_LABEL[item.status])} · ${createdLabel(item.createdAt)}`),
       ),
       openId === item.id ? e(MemoryChangeDetail, {
         rpc: props.rpc,
@@ -231,6 +261,7 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null }
         onApplied: (path) => props.onApplied(path),
         onRefresh: refreshWritten,
         onChanged: () => void load(),
+        onBack: () => setOpenId(null),
       }) : null,
     ))) : null,
   )
@@ -252,5 +283,5 @@ export function MemorySeat(props: MemorySeatProps) {
     setRequest(null)
   }, [props.sessionId])
   if (!open) return null
-  return e(MemoryPanel, { ...props, request })
+  return e(MemoryPanel, { ...props, request, onClose: () => setOpen(false) })
 }

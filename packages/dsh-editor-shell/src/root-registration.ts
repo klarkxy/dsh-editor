@@ -6,6 +6,7 @@ import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from './seats.ts'
 export const ROOT_ID = 'dsh-editor-shell-root'
 export const EXTENSIONS_SLOT = 'dsh-editor.extensions'
 export const PLUGINS_SETTINGS_SLOT = 'dsh-editor.settings.plugins'
+export const ZHIHU_SETTINGS_SLOT = 'dsh-editor.settings.zhihu'
 export { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT }
 
 export type RootSlots = { register: (spec: {
@@ -29,6 +30,7 @@ export function registerRoot(ctx: Context & { slots: RootSlots }, render: (props
     children: {
       [EXTENSIONS_SLOT]: { kind: 'list', scope: 'root' },
       [PLUGINS_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
+      [ZHIHU_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
       [SIDEBAR_TOOLS_SLOT]: { kind: 'list', scope: 'root' },
       [CENTER_OVERLAYS_SLOT]: { kind: 'list', scope: 'root' },
     },

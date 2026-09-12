@@ -41,11 +41,11 @@ async function streamCompletion(input: {
   projectRules?: string
   signal: AbortSignal
 }): Promise<string> {
-  if (!input.llm.stream) return ''
+  if (input.signal.aborted) return ''
+  if (!input.llm.stream) throw new Error('写作模型服务未启用')
   const stream = input.llm.stream({
     provider: input.provider,
     model: input.model,
-    maxTokens: 1024,
     signal: input.signal,
     system: fimSystem(input),
     messages: [

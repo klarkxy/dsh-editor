@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { isAllowedNavigation, parseDshWebUrl } from '../src/dsh-url.js'
+import { clipboardWritePayload, isTrustedClipboardSender, readTrustedClipboardText, writeTrustedClipboardText } from '../src/clipboard.js'
 import { PROFILE_MARKER, ProfileCollisionError, deployProfile, resolveDshHome } from '../src/profile.js'
 import { installNavigationPolicy } from '../src/navigation.js'
 import { DshSupervisor } from '../src/supervisor.js'
@@ -71,6 +72,60 @@ describe('DSH URL trust root', () => {
     expect(isAllowedNavigation('http://127.0.0.1:41823/settings', expected)).toBe(true)
     expect(isAllowedNavigation('http://127.0.0.1.evil.example:41823/', expected)).toBe(false)
     expect(isAllowedNavigation('http://127.0.0.1:41824/', expected)).toBe(false)
+  })
+})
+
+describe('desktop clipboard IPC trust', () => {
+  const expected = new URL('http://127.0.0.1:41823/')
+  const trusted = {
+    owned: true,
+    destroyed: false,
+    isMainFrame: true,
+    url: 'http://127.0.0.1:41823/',
+    expected,
+  }
+
+  it('accepts only an owned main frame on the expected DSH URL', () => {
+    expect(isTrustedClipboardSender(trusted)).toBe(true)
+    expect(isTrustedClipboardSender({ ...trusted, owned: false })).toBe(false)
+    expect(isTrustedClipboardSender({ ...trusted, destroyed: true })).toBe(false)
+    expect(isTrustedClipboardSender({ ...trusted, isMainFrame: false })).toBe(false)
+    expect(isTrustedClipboardSender({ ...trusted, expected: undefined })).toBe(false)
+    expect(isTrustedClipboardSender({ ...trusted, url: 'http://127.0.0.1:41824/' })).toBe(false)
+    expect(isTrustedClipboardSender({ ...trusted, url: 'https://evil.example/' })).toBe(false)
+    expect(clipboardWritePayload('plain')).toBe('plain')
+    expect(clipboardWritePayload({ html: '<b>' })).toBeUndefined()
+  })
+
+  it('reads and writes only after trust checks', () => {
+    const store = { text: 'existing' }
+    const api = {
+      readText: () => store.text,
+      writeText: (text: string) => { store.text = text },
+    }
+    expect(readTrustedClipboardText(api, trusted)).toBe('existing')
+    writeTrustedClipboardText(api, trusted, 'next')
+    expect(store.text).toBe('next')
+    expect(() => writeTrustedClipboardText(api, { ...trusted, owned: false }, 'nope')).toThrow(/denied/)
+    expect(store.text).toBe('next')
+    expect(() => writeTrustedClipboardText(api, trusted, { html: 'x' })).toThrow(/string/)
+  })
+
+  it('rejects a silent clipboard write failure so cut cannot delete the manuscript', () => {
+    const api = { readText: () => 'old', writeText: (_text: string) => {} }
+    expect(() => writeTrustedClipboardText(api, trusted, 'new')).toThrow('clipboard write failed')
+  })
+
+  it('keeps navigation permission denial and exposes a narrow preload clipboard', async () => {
+    const navigation = await readFile(join(import.meta.dirname, '..', 'src', 'navigation.ts'), 'utf8')
+    const preload = await readFile(join(import.meta.dirname, '..', 'preload.cjs'), 'utf8')
+    const main = await readFile(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8')
+    expect(navigation).toContain('callback(false)')
+    expect(navigation).not.toContain('clipboard')
+    expect(preload).toContain("invoke('dsh-window:clipboard-read-text')")
+    expect(preload).toContain("invoke('dsh-window:clipboard-write-text'")
+    expect(main).toContain("'dsh-window:clipboard-read-text'")
+    expect(main).toContain("'dsh-window:clipboard-write-text'")
   })
 })
 

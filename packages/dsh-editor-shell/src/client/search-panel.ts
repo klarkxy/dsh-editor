@@ -1,4 +1,6 @@
 import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { Select } from './select.tsx'
+import { m, useChromeMotion } from './ui/motion.ts'
 import { errorMessage, isStaleFailure, LatestRequestGate, safeRpcCall, searchSkippedText, worldbookPaperProjection, type RevealRequest, type ShellContext } from './shared.ts'
 import {
   planReplace,
@@ -6,6 +8,7 @@ import {
   summarizeReplacePlan,
   type ReplacePlan,
 } from '../search-replace.ts'
+import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
 import { t } from '../i18n/index.ts'
 
 export type SearchScope = 'project' | 'manuscript'
@@ -36,6 +39,14 @@ export type ReplaceOutcome = {
   stale: string[]
   changed: string[]
   failed: string[]
+}
+
+/** Drop assistant/config files before grouping, counting, or planning replace. */
+export function acceptSearchResults(response: SearchResponse): SearchResponse {
+  return {
+    ...response,
+    results: response.results.filter((hit) => !isAuxiliaryAuthorFile(hit.path)),
+  }
 }
 
 export function groupSearchHits(hits: readonly SearchHit[]): GroupedSearchHits {
@@ -128,8 +139,9 @@ function SearchPanel(props: {
     if (!requestGate.isCurrent(ticket)) return
     setBusy(false)
     if (!searched.ok) { setResult(null); setNote(errorMessage(searched)); return }
-    setResult(searched.value)
-    setNote(searched.value.results.length ? '' : t('search.noMatch'))
+    const accepted = acceptSearchResults(searched.value)
+    setResult(accepted)
+    setNote(accepted.results.length ? '' : t('search.noMatch'))
   }
 
   useEffect(() => {
@@ -207,7 +219,8 @@ function SearchPanel(props: {
 
   const grouped = result ? groupSearchHits(result.results) : []
 
-  return e('section', { className: 'search-panel', 'aria-label': t('search.title') },
+  const panelMotion = useChromeMotion('panel')
+  return e(m.section, { className: 'search-panel', 'aria-label': t('search.title'), ...panelMotion },
     e('form', { role: 'search', onSubmit: (event: FormEvent) => { event.preventDefault(); void search(query, scope) } },
       props.onQueryChange ? null : e('input', {
         ref: input,
@@ -218,14 +231,15 @@ function SearchPanel(props: {
         onChange: (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value),
       }),
       e('button', { type: 'submit', disabled: busy || !query.trim(), 'aria-label': t('search.start') }, busy ? '…' : t('search.go')),
-      e('select', {
+      e(Select, {
         value: scope,
         'aria-label': t('search.scope'),
-        onChange: (event: ChangeEvent<HTMLSelectElement>) => setScope(event.target.value === 'manuscript' ? 'manuscript' : 'project'),
-      },
-        e('option', { value: 'project' }, t('search.wholeWork')),
-        e('option', { value: 'manuscript' }, t('search.manuscriptOnly')),
-      ),
+        options: [
+          { value: 'project', label: t('search.wholeWork') },
+          { value: 'manuscript', label: t('search.manuscriptOnly') },
+        ],
+        onChange: (value: string) => setScope(value === 'manuscript' ? 'manuscript' : 'project'),
+      }),
     ),
     e('form', {
       className: 'search-replace',

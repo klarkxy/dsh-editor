@@ -4,16 +4,24 @@
  *   value = { days: DailyUsage[] }, DailyUsage = { date, inputTokens, outputTokens,
  *   cacheReadTokens, cacheWriteTokens, reasoningTokens, requests, byModel }
  */
-import { createElement as e, useEffect, useState, type ReactNode } from 'react'
+import { createElement as e, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { format, init, use } from 'echarts/core'
+import { BarChart } from 'echarts/charts'
+import { AriaComponent, GridComponent, TooltipComponent } from 'echarts/components'
+import { SVGRenderer } from 'echarts/renderers'
+import type { EChartsCoreOption, EChartsType } from 'echarts/core'
+import { useReducedMotion } from 'motion/react'
 import type { RpcResult } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { formatNumber as formatLocaleNumber, t, useLocale } from '../i18n/index.ts'
 
+use([BarChart, GridComponent, TooltipComponent, AriaComponent, SVGRenderer])
+
 const USAGE_DAYS = 30
 const RECENT_DAYS = 7
 
-/* 模型配色:固定调色板,按近 7 日总量降序分配,柱子与图例同色同序。 */
-const MODEL_PALETTE = ['#7c9ecb', '#d9a05b', '#8fbf8f', '#c98a8a', '#a48fd0', '#6fb3b3', '#d08bb0', '#b5b56a']
+/* 模型配色:纸/墨可用的闷蓝、赭、绿,按近 7 日总量降序分配,柱子与图例同色同序。 */
+const MODEL_PALETTE = ['#7c9ecb', '#d9a05b', '#8fbf8f', '#6b9e8a', '#c4a574', '#5f8aa8', '#9bb07a', '#b8956a']
 
 type ModelUsage = {
   inputTokens?: number
@@ -36,6 +44,13 @@ type DailyUsage = {
 
 type UsageSummary = {
   days: DailyUsage[]
+}
+
+export type ChartTheme = {
+  axis: string
+  split: string
+  tooltipBg: string
+  tooltipFg: string
 }
 
 function text() {
@@ -81,7 +96,7 @@ function isUsageSummary(value: unknown): value is UsageSummary {
 }
 
 /** 单个模型一天的总 tokens:输入+输出+缓存读写。 */
-function modelTokens(usage: ModelUsage | undefined): number {
+export function modelTokens(usage: ModelUsage | undefined): number {
   if (!usage) return 0
   return (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
 }
@@ -104,41 +119,196 @@ export function collectModelSeries(days: readonly DailyUsage[]): ModelSeries[] {
     .map(([key, value], index) => ({ key, ...value, color: MODEL_PALETTE[index % MODEL_PALETTE.length] }))
 }
 
-function dayTotal(day: DailyUsage, series: readonly ModelSeries[]): number {
+export function dayTotal(day: DailyUsage, series: readonly ModelSeries[]): number {
   return series.reduce((sum, item) => sum + modelTokens(day.byModel?.[item.key]), 0)
 }
 
-/** 近 7 日分模型堆叠柱状图,纯 div 实现,不引入图表库。 */
+export function modelDisplayName(key: string): string {
+  const parts = key.split('/')
+  return parts[parts.length - 1] || key
+}
+
+export function formatUsageTooltip(input: {
+  date: string
+  rows: readonly { key: string; tokens: number }[]
+  total: number
+  formatNumber(value: number): string
+}): string {
+  const header = `${format.encodeHTML(input.date)} · ${format.encodeHTML(input.formatNumber(input.total))} ${format.encodeHTML(t('usage.tokens'))}`
+  const lines = [header]
+  for (const row of input.rows) {
+    if (!row.tokens) continue
+    lines.push(`${format.encodeHTML(row.key)}: ${format.encodeHTML(input.formatNumber(row.tokens))}`)
+  }
+  return lines.join('<br/>')
+}
+
+export function buildUsageChartOption(input: {
+  days: readonly DailyUsage[]
+  series: readonly ModelSeries[]
+  theme: ChartTheme
+  reduceMotion: boolean
+  formatNumber(value: number): string
+}): EChartsCoreOption {
+  const { days, series, theme, reduceMotion } = input
+  const totals = days.map((day) => dayTotal(day, series))
+  const peak = Math.max(0, ...totals)
+  return {
+    aria: { enabled: true },
+    animation: !reduceMotion,
+    color: series.map((item) => item.color),
+    grid: { left: 4, right: 8, top: 28, bottom: 4, containLabel: true },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      confine: true,
+      className: 'usage-chart-tooltip',
+      extraCssText: 'max-width:min(280px,calc(100% - 16px));white-space:normal;overflow-wrap:anywhere;word-break:break-word;',
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.split,
+      textStyle: { color: theme.tooltipFg },
+      formatter: (raw: unknown) => {
+        const params = Array.isArray(raw) ? raw : [raw]
+        const first = params[0] as { dataIndex?: number; axisValue?: string } | undefined
+        const index = typeof first?.dataIndex === 'number' ? first.dataIndex : 0
+        const day = days[index]
+        if (!day) return ''
+        return formatUsageTooltip({
+          date: day.date,
+          rows: series.map((item) => ({ key: item.key, tokens: modelTokens(day.byModel?.[item.key]) })),
+          total: totals[index] ?? 0,
+          formatNumber: input.formatNumber,
+        })
+      },
+    },
+    xAxis: {
+      type: 'category',
+      data: days.map((day) => day.date.slice(5).replace('-', '/')),
+      axisLabel: { color: theme.axis },
+      axisLine: { lineStyle: { color: theme.split } },
+      axisTick: { show: false },
+    },
+    yAxis: {
+      type: 'value',
+      name: t('usage.tokens'),
+      min: 0,
+      max: peak === 0 ? 1 : undefined,
+      splitNumber: 4,
+      axisLabel: { color: theme.axis, formatter: (value: number) => input.formatNumber(value) },
+      splitLine: { lineStyle: { color: theme.split } },
+      nameTextStyle: { color: theme.axis },
+    },
+    series: series.map((item) => ({
+      name: item.key,
+      type: 'bar' as const,
+      stack: 'tokens',
+      data: days.map((day) => modelTokens(day.byModel?.[item.key])),
+      itemStyle: { color: item.color },
+      barMaxWidth: 36,
+      barMinHeight: 0,
+    })),
+  }
+}
+
+function readChartTheme(node: HTMLElement): ChartTheme {
+  const styles = getComputedStyle(node)
+  return {
+    axis: styles.getPropertyValue('--meta').trim() || '#6b6a64',
+    split: styles.getPropertyValue('--hairline').trim() || 'rgba(20, 20, 19, 0.08)',
+    tooltipBg: styles.getPropertyValue('--surface').trim() || '#fdfcf6',
+    tooltipFg: styles.getPropertyValue('--fg').trim() || '#141413',
+  }
+}
+
 function UsageChart(props: { days: readonly DailyUsage[]; series: readonly ModelSeries[] }): ReactNode {
-  const peak = Math.max(1, ...props.days.map((day) => dayTotal(day, props.series)))
+  const locale = useLocale()
+  const reduceMotion = Boolean(useReducedMotion())
+  const hostRef = useRef<HTMLDivElement | null>(null)
+  const chartRef = useRef<EChartsType | null>(null)
+
+  const option = useMemo(() => buildUsageChartOption({
+    days: props.days,
+    series: props.series,
+    theme: {
+      axis: '#6b6a64',
+      split: 'rgba(20, 20, 19, 0.08)',
+      tooltipBg: '#fdfcf6',
+      tooltipFg: '#141413',
+    },
+    reduceMotion,
+    formatNumber,
+  }), [props.days, props.series, reduceMotion, locale])
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    let disposed = false
+    const sync = () => {
+      if (disposed) return
+      const box = host.getBoundingClientRect()
+      if (box.width < 8 || box.height < 8) return
+      const themed = buildUsageChartOption({
+        days: props.days,
+        series: props.series,
+        theme: readChartTheme(host),
+        reduceMotion,
+        formatNumber,
+      })
+      if (!chartRef.current) {
+        chartRef.current = init(host, undefined, { renderer: 'svg' })
+      } else {
+        chartRef.current.resize()
+      }
+      chartRef.current.setOption(themed, { notMerge: true })
+    }
+    const resize = new ResizeObserver(() => sync())
+    resize.observe(host)
+    const theme = new MutationObserver(() => sync())
+    const root = globalThis.document?.documentElement
+    if (root) theme.observe(root, { attributes: true, attributeFilter: ['data-theme'] })
+    sync()
+    return () => {
+      disposed = true
+      resize.disconnect()
+      theme.disconnect()
+      chartRef.current?.dispose()
+      chartRef.current = null
+    }
+  }, [option, props.days, props.series, reduceMotion])
+
   return e('div', { className: 'usage-chart' },
-    e('div', { className: 'usage-chart-plot', role: 'img', 'aria-label': t('usage.chartAria') },
-      props.days.map((day) => {
-        const total = dayTotal(day, props.series)
-        return e('div', { className: 'usage-chart-day', key: day.date },
-          e('span', { className: 'usage-chart-value' }, total ? formatNumber(total) : ''),
-          e('div', { className: 'usage-chart-bar', title: t('usage.barTitle', { date: day.date, total: formatNumber(total) }) },
-            props.series.map((item) => {
-              const value = modelTokens(day.byModel?.[item.key])
-              if (!value) return null
-              return e('span', {
-                key: item.key,
-                className: 'usage-chart-segment',
-                style: { height: `${(value / peak) * 100}%`, background: item.color },
-                title: `${item.key}: ${formatNumber(value)} tokens`,
-              })
-            }),
-          ),
-          e('span', { className: 'usage-chart-date' }, day.date.slice(5).replace('-', '/')),
-        )
-      }),
-    ),
+    e('div', {
+      ref: hostRef,
+      className: 'usage-chart-plot',
+      role: 'img',
+      'aria-label': t('usage.chartAria'),
+    }),
     e('ul', { className: 'usage-chart-legend' },
-      props.series.map((item) => e('li', { key: item.key },
+      props.series.map((item) => e('li', { key: item.key, title: item.key },
         e('span', { className: 'usage-chart-chip', style: { background: item.color }, 'aria-hidden': 'true' }),
-        e('span', { className: 'usage-chart-model' }, item.key),
+        e('span', { className: 'usage-chart-model' }, modelDisplayName(item.key)),
         e('span', { className: 'usage-chart-meta' }, t('usage.legend', { tokens: formatNumber(item.tokens), requests: formatNumber(item.requests) })),
       )),
+    ),
+    e('details', { className: 'usage-chart-table' },
+      e('summary', null, t('usage.exactData')),
+      e('table', null,
+        e('caption', { className: 'sr-only' }, t('usage.chartAria')),
+        e('thead', null,
+          e('tr', null,
+            e('th', { scope: 'col' }, t('usage.recent7')),
+            ...props.series.map((item) => e('th', { key: item.key, scope: 'col', title: item.key }, modelDisplayName(item.key))),
+            e('th', { scope: 'col' }, t('usage.dayTotal')),
+          ),
+        ),
+        e('tbody', null,
+          props.days.map((day) => e('tr', { key: day.date },
+            e('th', { scope: 'row' }, day.date),
+            ...props.series.map((item) => e('td', { key: item.key }, formatNumber(modelTokens(day.byModel?.[item.key])))),
+            e('td', null, formatNumber(dayTotal(day, props.series))),
+          )),
+        ),
+      ),
     ),
   )
 }
@@ -196,7 +366,6 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
 
 function Header(): ReactNode {
   return e('header', { className: 'usage-header' },
-    e('h2', { className: 'usage-title' }, t('settings.usage')),
     e('p', { className: 'usage-intro' }, text().intro),
   )
 }
@@ -210,8 +379,8 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
 
   return e('section', { className: 'usage-page', 'aria-label': t('settings.usage') },
     e(Header, null),
-    e('section', { className: 'usage-today', 'aria-label': text().todayHeading },
-      e('h3', { className: 'usage-section-title' }, text().todayHeading),
+    e('section', { className: 'usage-today settings-block', 'aria-label': text().todayHeading },
+      e('h3', { className: 'usage-section-title settings-block-title' }, text().todayHeading),
       e('div', { className: 'usage-cards' },
         e(Card, { label: text().cacheHit, value: today?.cacheReadTokens ?? 0 }),
         e(Card, { label: text().input, value: today?.inputTokens ?? 0 }),
@@ -219,8 +388,8 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
         e(Card, { label: text().requests, value: today?.requests ?? 0 }),
       ),
     ),
-    e('section', { className: 'usage-recent', 'aria-label': text().recentHeading },
-      e('h3', { className: 'usage-section-title' }, text().recentHeading),
+    e('section', { className: 'usage-recent settings-block', 'aria-label': text().recentHeading },
+      e('h3', { className: 'usage-section-title settings-block-title' }, text().recentHeading),
       !hasAny || series.length === 0
         ? e('p', { className: 'usage-empty' }, text().empty)
         : e(UsageChart, { days: recent, series }),

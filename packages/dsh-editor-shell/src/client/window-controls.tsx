@@ -40,6 +40,10 @@ type WindowBridge = {
   /** 订阅下载进度;返回退订函数。 */
   onUpdateProgress?(listener: (progress: UpdateProgress) => void): () => void
   onMaximizedChange?(listener: (maximized: boolean) => void): () => void
+  clipboard?: {
+    readText(): Promise<string>
+    writeText(text: string): Promise<void>
+  }
 }
 
 export function windowBridge(): WindowBridge | undefined {

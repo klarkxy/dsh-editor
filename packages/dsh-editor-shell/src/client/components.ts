@@ -1,4 +1,4 @@
-import { Component, createElement as e, useEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { Component, createElement as e, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { SessionFace } from '../dsh-compat.ts'
 import {
   resizedPanelWidth,
@@ -6,6 +6,7 @@ import {
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
+import { Button, Dialog } from './ui/index.ts'
 import { t } from '../i18n/index.ts'
 
 export function DeepSeekWhaleMark() {
@@ -33,26 +34,32 @@ export function PaperStage(props: { label: string; children?: ReactNode }) {
   )
 }
 
-/** 图像预览 lightbox:点遮罩或 Esc 关闭。 */
-export function ImagePreviewOverlay(props: { path: string; url: string; onClose(): void }) {
+/** Image preview on host Dialog. `open` is internal wiring. */
+export function ImagePreviewOverlay(props: { path: string; url: string; onClose(): void; open?: boolean }) {
   const closeRef = useRef<HTMLButtonElement | null>(null)
-  useEffect(() => {
-    closeRef.current?.focus()
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); props.onClose() }
-    }
-    globalThis.addEventListener('keydown', onKey)
-    return () => globalThis.removeEventListener('keydown', onKey)
-  }, [props.path])
-  return e('div', {
-    className: 'image-preview',
-    role: 'dialog',
-    'aria-modal': true,
-    'aria-label': t('preview.aria', { path: props.path }),
-    onClick: (event: ReactPointerEvent<HTMLDivElement>) => { if (event.target === event.currentTarget) props.onClose() },
+  const last = useRef({ path: props.path, url: props.url })
+  if (props.path && props.url) last.current = { path: props.path, url: props.url }
+  const path = props.path || last.current.path
+  const url = props.url || last.current.url
+  const open = props.open ?? true
+  const fileName = path.split(/[/\\]/).pop() || path
+  return e(Dialog, {
+    open,
+    onOpenChange: (next: boolean) => { if (!next) props.onClose() },
+    title: path ? t('preview.aria', { path: fileName }) : t('preview.close'),
+    className: 'file-dialog image-preview-dialog',
+    overlayClassName: 'file-dialog-overlay',
+    initialFocusRef: closeRef,
   },
-    e('img', { src: props.url, alt: props.path }),
-    e('button', { ref: closeRef, type: 'button', className: 'icon-button image-preview-close', 'aria-label': t('preview.close'), onClick: props.onClose }, '×'),
+    url ? e('img', { src: url, alt: path }) : null,
+    e(Button, {
+      ref: closeRef,
+      type: 'button',
+      variant: 'icon',
+      className: 'image-preview-close',
+      'aria-label': t('preview.close'),
+      onClick: props.onClose,
+    }, '×'),
   )
 }
 

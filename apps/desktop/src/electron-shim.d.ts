@@ -32,6 +32,7 @@ declare module 'electron' {
 
   export interface IpcMainInvokeEvent {
     sender: WebContents
+    senderFrame?: { url?: string; parent?: unknown } | null
   }
 
   export const app: {
@@ -49,6 +50,11 @@ declare module 'electron' {
   export const ipcMain: {
     on(channel: string, listener: (event: { sender: WebContents }, ...args: unknown[]) => void): void
     handle(channel: string, listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown): void
+  }
+
+  export const clipboard: {
+    readText(): string
+    writeText(text: string): void
   }
 }
 

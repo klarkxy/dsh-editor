@@ -38,3 +38,21 @@ export {
   type PatchPayloadInput,
 } from './editor.tsx'
 export { REWRITE_PRESETS, type RewritePresetId } from './rewrite-presets.ts'
+export {
+  captureEditorTarget,
+  editorCommandState,
+  isEditorTargetCurrent,
+  isolateReplaceSpec,
+  paperSelectionText,
+  runClipboardCopy,
+  runClipboardCut,
+  runClipboardPaste,
+  shouldPreserveSelectionOnContextMouseDown,
+  visiblePaperRange,
+  type ClipboardCommandResult,
+  type EditorCommandState,
+  type EditorContextMenuEvent,
+  type EditorTargetLive,
+  type EditorTargetSnapshot,
+} from './editor-clipboard.ts'
+export { openFindPanel, openReplacePanel } from './search.ts'

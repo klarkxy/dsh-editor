@@ -2,13 +2,11 @@ import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
 import { createElement as e, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
 import { AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
-import { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingPreferences } from './writing-settings-contract.ts'
-import { WritingProgressSettings } from './writing-progress-settings.tsx'
-import type { WritingProgressScope } from './writing-progress.ts'
+import { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
 import { t, useLocale } from './i18n/index.ts'
 
 
-export { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingPreferences } from './writing-settings-contract.ts'
+export { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
 
 export const PAPER_FONT_SIZE = { min: 14, max: 28, default: 17 } as const
 export const PAPER_LINE_HEIGHT = { min: 1.4, max: 2.4, default: 1.9 } as const
@@ -64,6 +62,29 @@ function normalizePaperPreferences(record: Record<string, unknown>): Pick<Writin
     fontFamily: normalizePaperFontFamily(record.fontFamily),
     paragraphSpacing: clampNumber(record.paragraphSpacing, PAPER_PARAGRAPH_SPACING.min, PAPER_PARAGRAPH_SPACING.max, PAPER_PARAGRAPH_SPACING.default),
     paperWidth: normalizePaperWidth(record.paperWidth),
+  }
+}
+
+/** Empty provider+model means the documented fallback (current chat / runtime default). */
+export function normalizeWritingModelRoute(value: unknown): WritingModelRoute | undefined {
+  const record = object(value)
+  if (!record) return undefined
+  if (typeof record.provider !== 'string' || typeof record.model !== 'string') return undefined
+  const provider = record.provider.trim()
+  const model = record.model.trim()
+  if (!provider && !model) return undefined
+  return { provider, model }
+}
+
+export function writingModelRouteValue(route: WritingModelRoute | undefined): WritingModelRoute {
+  return route ?? { provider: '', model: '' }
+}
+
+function normalizeModelPreferences(record: Record<string, unknown>): Pick<WritingPreferences, 'completionModel' | 'rewriteModel' | 'chatModel'> {
+  return {
+    completionModel: normalizeWritingModelRoute(record.completionModel),
+    rewriteModel: normalizeWritingModelRoute(record.rewriteModel),
+    chatModel: normalizeWritingModelRoute(record.chatModel),
   }
 }
 
@@ -158,12 +179,18 @@ export function decodeWritingPreferences(value: unknown): WritingPreferences | u
     authorPreferences: normalizeAuthorPreferences(record.authorPreferences),
     authorMemory: normalizeAuthorMemory(record.authorMemory),
     ...normalizePaperPreferences(record),
+    ...normalizeModelPreferences(record),
   }
 }
 
 export function writingPreferences(snapshot: SettingsScopeSnapshot<WritingPreferences>, storage?: LegacyStorage): WritingPreferences {
   const resolved = snapshot.status === 'ready' && snapshot.value
-    ? { ...DEFAULT_WRITING_PREFERENCES, ...snapshot.value, ...normalizePaperPreferences(snapshot.value as unknown as Record<string, unknown>) }
+    ? {
+      ...DEFAULT_WRITING_PREFERENCES,
+      ...snapshot.value,
+      ...normalizePaperPreferences(snapshot.value as unknown as Record<string, unknown>),
+      ...normalizeModelPreferences(snapshot.value as unknown as Record<string, unknown>),
+    }
     : DEFAULT_WRITING_PREFERENCES
   if (snapshot.status !== 'ready') return resolved
   const legacyCompletion = legacyValue(storage, 'completion')
@@ -189,10 +216,9 @@ export type WritingSettingsSlots = {
  * 禁用,不再注册进去。
  * 作者侧写不对作者暴露设置入口,记忆仍只通过对话里的确认卡写入。
  */
-export function WritingSettings({ scope, migrate, progressScope }: {
+export function WritingSettings({ scope, migrate }: {
   scope: SettingsScope<WritingPreferences>
   migrate: WritingMigration
-  progressScope: WritingProgressScope
 }) {
   useLocale()
   const snapshot = useSyncExternalStore(
@@ -266,10 +292,9 @@ export function WritingSettings({ scope, migrate, progressScope }: {
 
   return e('section', { className: 'writing-settings', 'aria-labelledby': 'writing-settings-title' },
     e('h2', { id: 'writing-settings-title' }, t('settings.writing')),
-    e(WritingProgressSettings, { scope: progressScope }),
-    e('fieldset', { disabled: saving !== null },
-      e('legend', null, t('writing.completion')),
-      e('p', null, t('writing.completionHint')),
+    e('fieldset', { className: 'settings-block', disabled: saving !== null },
+      e('legend', { className: 'settings-block-title' }, t('writing.completion')),
+      e('p', { className: 'settings-block-help' }, t('writing.completionHint')),
       ([['manual', t('writing.manualOnly')], ['pause', t('writing.pauseHint')]] as const).map(([value, label]) => e('label', { key: value },
         e('input', {
           type: 'radio',
@@ -280,9 +305,9 @@ export function WritingSettings({ scope, migrate, progressScope }: {
         label,
       )),
     ),
-    e('fieldset', { className: 'paper-typography' },
-      e('legend', null, t('writing.paper')),
-      e('p', null, t('writing.paperHint')),
+    e('fieldset', { className: 'paper-typography settings-block' },
+      e('legend', { className: 'settings-block-title' }, t('writing.paper')),
+      e('p', { className: 'settings-block-help' }, t('writing.paperHint')),
       e('label', null,
         e('input', {
           type: 'checkbox',
@@ -362,20 +387,25 @@ export function WritingSettings({ scope, migrate, progressScope }: {
         )),
       ),
     ),
-    e('label', { className: 'author-preferences' },
-      e('span', null, t('writing.authorPref')),
-      e('textarea', {
-        value: authorDraft,
-        maxLength: AUTHOR_PREFERENCES_MAX_CHARS,
-        rows: 5,
-        placeholder: t('writing.authorPlaceholder'),
-        'aria-label': t('writing.authorPref'),
-        disabled: saving !== null,
-        onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setAuthorDraft(event.target.value),
-      }),
-      e('small', null, t('writing.authorCount', { count: authorDraft.length, max: AUTHOR_PREFERENCES_MAX_CHARS })),
+    e('section', { className: 'settings-block' },
+      e('header', { className: 'settings-block-head' },
+        e('h3', { id: 'writing-author-pref', className: 'settings-block-title' }, t('writing.authorPref')),
+        e('p', { className: 'settings-block-help' }, t('writing.authorPlaceholder')),
+      ),
+      e('label', { className: 'author-preferences' },
+        e('textarea', {
+          value: authorDraft,
+          maxLength: AUTHOR_PREFERENCES_MAX_CHARS,
+          rows: 5,
+          placeholder: t('writing.authorPlaceholder'),
+          'aria-labelledby': 'writing-author-pref',
+          disabled: saving !== null,
+          onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setAuthorDraft(event.target.value),
+        }),
+        e('small', null, t('writing.authorCount', { count: authorDraft.length, max: AUTHOR_PREFERENCES_MAX_CHARS })),
+      ),
+      e('button', { type: 'button', disabled: saving !== null || authorDraft === values.authorPreferences, onClick: () => void update('authorPreferences', authorDraft) }, saving === 'authorPreferences' ? t('common.saving') : t('writing.saveAuthor')),
     ),
-    e('button', { type: 'button', disabled: saving !== null || authorDraft === values.authorPreferences, onClick: () => void update('authorPreferences', authorDraft) }, saving === 'authorPreferences' ? t('common.saving') : t('writing.saveAuthor')),
     writeFailure ? e('p', { role: 'alert' }, writeFailure) : null,
     migrationFailure.length ? e('p', { role: 'alert' },
       t('writing.migrationPending'),

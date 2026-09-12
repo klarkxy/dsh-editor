@@ -73,25 +73,32 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
+    "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-dialog": "^1.1.23",
+    "@radix-ui/react-dropdown-menu": "^2.1.24",
+    "@radix-ui/react-select": "^2.3.7",
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@radix-ui/react-tooltip": "^1.2.16",
     "cmdk": "^1.1.1",
     "docx": "^9.7.1",
-    "jszip": "^3.10.1"
+    "echarts": "^6.1.0",
+    "jszip": "^3.10.1",
+    "motion": "^13.2.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
     "@deepseek-ai/dsh-client-connection": "0.1.5-rc.2",
     "@deepseek-ai/dsh-settings": "0.1.5-rc.2",
     "@types/react": "18.3.31",
+    "dsh-editor-cards": "workspace:*",
+    "dsh-editor-novel-kernel": "workspace:*",
+    "dsh-editor-seats": "workspace:*",
+    "dsh-editor-workbench": "workspace:*",
+    "dsh-manuscript": "workspace:*",
     "react": "^18.2.0",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4",
-    "dsh-manuscript": "workspace:*",
-    "dsh-editor-seats": "workspace:*",
-    "dsh-editor-workbench": "workspace:*",
-    "dsh-editor-novel-kernel": "workspace:*",
-    "dsh-editor-cards": "workspace:*"
+    "vitest": "^3.2.4"
   },
   "private": true
 }

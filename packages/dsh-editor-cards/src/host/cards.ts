@@ -19,7 +19,7 @@ import type {
   CardsReferencesResponse,
   CharacterCard,
   WorldbookCard,
-} from 'dsh-editor-cards/contracts'
+} from '../contracts.ts'
 import {
   applyFrontmatterFields,
   extractCardSummary,

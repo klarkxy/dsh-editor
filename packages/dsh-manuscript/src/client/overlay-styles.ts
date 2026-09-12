@@ -35,7 +35,7 @@ export const manuscriptOverlayStyles = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
+  min-height: 34px;
   padding: 5px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -70,9 +70,10 @@ export const manuscriptOverlayStyles = `
 .manuscript-panel-header {
   display: grid;
   gap: 6px;
-  padding: 10px 14px 12px;
-  border-bottom: 1px solid var(--border-soft);
-  background: var(--bg);
+  min-height: 52px;
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid var(--hairline, var(--border-soft));
+  background: var(--chrome-bg, var(--bg));
 }
 .manuscript-panel-title {
   font: 500 var(--text-md)/1.2 var(--font-serif);

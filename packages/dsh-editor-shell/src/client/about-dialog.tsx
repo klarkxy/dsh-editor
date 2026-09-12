@@ -4,11 +4,9 @@ import {
   useEffect,
   useRef,
   useState,
-  type KeyboardEvent,
-  type MouseEvent,
   type ReactNode,
 } from 'react'
-import { useDialogReturnFocus } from './dialogs.ts'
+import { Button, Dialog } from './ui/index.ts'
 import { windowBridge } from './window-controls.tsx'
 import { intlLocale, t, useLocale } from '../i18n/index.ts'
 
@@ -62,17 +60,18 @@ function formatMB(bytes: number): string {
  * useEffect 内的检查请求与对话框 onClose 抢跑:每次发起前记录 token,卸载/关闭
  * 时清理,然后在 setState 之前再核对一次,避免组件已卸载后晚到的结果污染状态。
  */
-export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
+export function AboutUpdateDialog(props: { open?: boolean; onClose(): void }): ReactNode {
   useLocale()
+  const open = props.open ?? true
   const bridge = windowBridge()
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [state, setState] = useState<CheckState>({ status: 'idle' })
   const [download, setDownload] = useState<DownloadState>({ status: 'idle' })
-  const dialog = useRef<HTMLDivElement | null>(null)
+  const closeRef = useRef<HTMLButtonElement | null>(null)
   const liveToken = useRef(0)
-  useDialogReturnFocus(dialog, () => dialog.current?.querySelector<HTMLButtonElement>('.about-close')?.focus())
 
   useEffect(() => {
+    if (!open) return
     const token = ++liveToken.current
     const info = bridge?.getAppInfo
     if (!info) { setAppInfo(null); return }
@@ -83,7 +82,7 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
       if (liveToken.current !== token) return
       setAppInfo(null)
     })
-  }, [bridge])
+  }, [bridge, open])
 
   const runCheck = async () => {
     const check = bridge?.checkForUpdate
@@ -107,10 +106,10 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
 
   // 打开时自动跑一次;没有桥就不跑(开发模式)。
   useEffect(() => {
-    if (!bridge?.checkForUpdate) return
+    if (!open || !bridge?.checkForUpdate) return
     void runCheck()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bridge])
+  }, [bridge, open])
 
   // 下载进度由主进程推送;只在下载进行中消费,晚到的 done 事件以 invoke 结果为准。
   useEffect(() => {
@@ -164,12 +163,6 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
     }
   }
 
-  const onOverlayMouseDown = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) props.onClose()
-  }
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); props.onClose() }
-  }
   const onOpenDownload = (url: string) => {
     if (bridge?.openExternal) { bridge.openExternal(url); return }
     globalThis.open(url, '_blank', 'noopener,noreferrer')
@@ -179,21 +172,24 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
   const versionLabel = appInfo ? `${appInfo.name} ${appInfo.version}` : t('about.devMode')
   const canCheck = hasBridge
 
-  return e('div', { className: 'file-dialog-overlay', onMouseDown: onOverlayMouseDown },
-    e('div', {
-      ref: dialog,
-      className: 'file-dialog about-dialog',
-      role: 'dialog',
-      'aria-modal': true,
-      'aria-labelledby': 'about-dialog-title',
-      onKeyDown,
-    },
+  const downloading = download.status === 'downloading'
+  return e(Dialog, {
+    open,
+    onOpenChange: (next: boolean) => { if (!next && !downloading) props.onClose() },
+    title: t('about.title'),
+    className: 'file-dialog about-dialog',
+    overlayClassName: 'file-dialog-overlay',
+    dismissible: !downloading,
+    initialFocusRef: closeRef,
+  },
       e('header', null,
         e('h2', { id: 'about-dialog-title' }, t('about.title')),
-        e('button', {
+        e(Button, {
+          ref: closeRef,
+          variant: 'icon',
           className: 'icon-button about-close',
-          type: 'button',
           'aria-label': t('common.close'),
+          disabled: downloading,
           onClick: props.onClose,
         }, '×'),
       ),
@@ -234,7 +230,6 @@ export function AboutUpdateDialog(props: { onClose(): void }): ReactNode {
           }, t('common.close')),
         ),
       ),
-    ),
   )
 }
 

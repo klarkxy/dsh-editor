@@ -58,4 +58,30 @@ describe('memory panel client', () => {
     expect(commands.list()).toEqual([])
     expect(messageCards.get('novel_memory_update')).toBeUndefined()
   })
+
+  it('forwards the seat owner into the memory panel', () => {
+    const Select = () => null
+    const Dialog = () => null
+    let render: ((props: unknown) => { props: Record<string, unknown> }) | undefined
+    const ctx = {
+      effect(fn: () => (() => void) | void) { fn() },
+      slots: {
+        inject(_key: string, callback: () => unknown) {
+          callback()
+          return () => {}
+        },
+        register(_spec: unknown, next: unknown) {
+          render = next as typeof render
+          return () => {}
+        },
+      },
+      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
+      [COMMANDS_SERVICE]: createCommandRegistry(),
+      [MESSAGE_CARDS_SERVICE]: createMessageCardRegistry(),
+    }
+    apply(ctx as never)
+    const tree = render?.({ sessionId: 's1', openDocument() {}, Select, Dialog })
+    expect(tree?.props.Select).toBe(Select)
+    expect(tree?.props.Dialog).toBe(Dialog)
+  })
 })

@@ -66,7 +66,7 @@ describe('plugin manifests and composition resolver', () => {
 
   it('resolves the checked-in basic/smart/full recipes to the expected package, disable, insert and shell-feature sets', () => {
     const recipe = (id) => JSON.parse(readFileSync(resolve(root, 'apps/desktop/resources/compositions', `${id}.json`), 'utf8'))
-    const panels = ['dsh-editor-cards', 'dsh-editor-memory-panel', 'dsh-editor-overview-panel', 'dsh-editor-proofread-panel']
+    const panels = ['dsh-editor-cards', 'dsh-editor-memory-panel', 'dsh-editor-overview-panel']
     const core = ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench']
     const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels]
 
@@ -74,7 +74,7 @@ describe('plugin manifests and composition resolver', () => {
     expect(basic).toEqual({
       id: 'basic',
       label: '基础写作',
-      features: ['proofread-panel', 'overview-panel', 'memory-panel', 'cards'],
+      features: ['overview-panel', 'memory-panel', 'cards'],
       packages: [...core, ...tail],
       libraries: ['dsh-editor-workspace-kit'],
       disabledEntries: ['manuscript-assist', 'editor-workbench-tools'],
@@ -87,7 +87,7 @@ describe('plugin manifests and composition resolver', () => {
     expect(smart).toEqual({
       id: 'smart',
       label: '智能写作',
-      features: ['assistant', 'completion', 'proofread-panel', 'overview-panel', 'memory-panel', 'cards'],
+      features: ['assistant', 'completion', 'overview-panel', 'memory-panel', 'cards'],
       packages: [...core, 'dsh-editor-novel-kernel', ...tail],
       libraries: ['dsh-editor-workspace-kit'],
       disabledEntries: [],
@@ -100,7 +100,7 @@ describe('plugin manifests and composition resolver', () => {
     expect(full).toEqual({
       id: 'full',
       label: '智能写作与资料',
-      features: ['assistant', 'completion', 'zhihu', 'zhihu-tools', 'proofread-panel', 'overview-panel', 'memory-panel', 'cards'],
+      features: ['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'memory-panel', 'cards'],
       packages: [...core, 'dsh-editor-novel-kernel', 'dsh-zhihu', ...tail],
       libraries: ['dsh-editor-workspace-kit'],
       disabledEntries: [],

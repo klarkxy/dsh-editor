@@ -1,5 +1,11 @@
 {
   "id": "smart",
   "label": "智能写作",
-  "features": ["assistant", "completion", "proofread-panel", "overview-panel", "memory-panel", "cards"]
+  "features": [
+    "assistant",
+    "completion",
+    "overview-panel",
+    "memory-panel",
+    "cards"
+  ]
 }

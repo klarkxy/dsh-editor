@@ -66,6 +66,10 @@ export function closeCardsDetail(): void {
   setState({ ...state, selectedPath: null })
 }
 
+export function closeCardsPanel(): void {
+  setState({ ...state, open: false, selectedPath: null })
+}
+
 export function resetCardsStore(): void {
   setState({
     open: false,

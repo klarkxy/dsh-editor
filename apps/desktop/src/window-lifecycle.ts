@@ -58,6 +58,8 @@ export interface DesktopLifecycle {
   handleSecondInstance(): void
   shutdown(): Promise<void>
   needsGracefulShutdown(): boolean
+  isOwnedWindow(window: EditorWindow | undefined): boolean
+  expectedUrl(): URL | undefined
 }
 
 export interface PrimaryApp {
@@ -196,6 +198,12 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
     },
     needsGracefulShutdown() {
       return !closing && Boolean(supervisor || inflight)
+    },
+    isOwnedWindow(window) {
+      return Boolean(window && windows.has(window))
+    },
+    expectedUrl() {
+      return currentUrl
     },
   }
 }

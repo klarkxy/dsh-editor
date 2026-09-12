@@ -1,12 +1,32 @@
 import type { SessionId, WorkspaceId } from '../dsh-compat.ts'
+import { t } from '../i18n/index.ts'
 import type { ShellContext } from './shared.ts'
 
 /**
  * Official ui-conversation waits for `uiWorkspace`. The profile keeps
  * `@deepseek-ai/dsh-client-ui-workspace` disabled so its sidebar/hero chrome
  * does not mount. Provide the public navigation face here instead.
+ *
+ * Default chat model is applied here, at session creation, so a later picker
+ * selectModel is the only writer for an explicit new-conversation choice.
  */
-export function provideEditorUiWorkspace(ctx: ShellContext): void {
+type CreatedChatModelError = { sessionId: SessionId; message: string }
+let createdChatModelError: CreatedChatModelError | undefined
+
+export function takeCreatedChatModelError(sessionId: SessionId): string | undefined {
+  if (createdChatModelError?.sessionId !== sessionId) return undefined
+  const message = createdChatModelError.message
+  createdChatModelError = undefined
+  return message
+}
+
+export function discardCreatedChatModelError(sessionId: SessionId): void {
+  if (createdChatModelError?.sessionId === sessionId) createdChatModelError = undefined
+}
+
+export function provideEditorUiWorkspace(ctx: ShellContext, options?: {
+  defaultChatModel?(): { provider?: string; model?: string } | undefined
+}): void {
   const connecting = new Map<WorkspaceId, Promise<SessionId>>()
 
   const uiWorkspace = {
@@ -25,7 +45,21 @@ export function provideEditorUiWorkspace(ctx: ShellContext): void {
           }
         }
       }
-      const attempt = ctx.sessions.create({ workspaceId }).finally(() => {
+      const attempt = ctx.sessions.create({ workspaceId }).then(async (sessionId) => {
+        const route = options?.defaultChatModel?.()
+        const provider = route?.provider?.trim() ?? ''
+        const model = route?.model?.trim() ?? ''
+        if (!provider || !model) return sessionId
+        try {
+          const selected = await ctx.remote.session.selectModel({ sessionId, provider, model })
+          if (!selected.ok) {
+            createdChatModelError = { sessionId, message: t('chat.defaultModelFailed') }
+          }
+        } catch {
+          createdChatModelError = { sessionId, message: t('chat.defaultModelFailed') }
+        }
+        return sessionId
+      }).finally(() => {
         connecting.delete(workspaceId)
       })
       connecting.set(workspaceId, attempt)

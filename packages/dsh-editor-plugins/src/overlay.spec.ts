@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canReplaceHomePatch, emptyPluginState, parseManagedPatch, parsePluginState, renderOverridePatch } from './overlay.ts'
+import { canReplaceHomePatch, emptyPluginState, isOwnedManagedPatch, parseManagedPatch, parsePluginState, renderOverridePatch } from './overlay.ts'
 
 describe('plugin overlay persistence', () => {
   it('round-trips enable/disable overrides into a managed patch', () => {
@@ -10,11 +10,15 @@ describe('plugin overlay persistence', () => {
     expect(parseManagedPatch('- id: ui-sidebar\n  disabled: true\n')).toBeUndefined()
   })
 
-  it('only replaces empty or self-managed home patches', () => {
+  it('only replaces empty or strictly generated managed patches', () => {
     expect(canReplaceHomePatch(undefined)).toBe(true)
     expect(canReplaceHomePatch('[]\n')).toBe(true)
     expect(canReplaceHomePatch(renderOverridePatch({ zhihu: false }))).toBe(true)
     expect(canReplaceHomePatch('- id: custom\n  config: {}\n')).toBe(false)
+    const mixed = `${renderOverridePatch({ zhihu: true })}\n- id: custom-author-rule\n  config:\n    preserve: true\n`
+    expect(isOwnedManagedPatch(mixed)).toBe(false)
+    expect(canReplaceHomePatch(mixed)).toBe(false)
+    expect(isOwnedManagedPatch(`# managed-by: dsh-editor-plugins\n- id: custom\n  config: {}\n`)).toBe(false)
   })
 
   it('ignores malformed state and unsafe identifiers', () => {

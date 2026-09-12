@@ -34,6 +34,8 @@ DSH 拥有 Agent、会话、模型、工具、审批、权限和对话历史。D
 - Git UI、minimap、LSP、终端、activity bar
 - 紫色渐变、玻璃拟态、霓虹 AI 装饰、英文-only 界面
 - 把稿纸缩成聊天旁边的窄条
+- 把 chrome 与稿纸做成同一套冷灰 IDE 表面；稿纸必须保持暖色纸面，chrome 可以更中性，但强调色仍是墨蓝
+- 把常用 chrome 做成小于 13px 的字或小于 32px 的主控件；顶栏应接近 52px，而不是工具条细条
 - Android、远程多用户、云同步
 - 未经授权的 commit、push、tag、release 或代码签名
 

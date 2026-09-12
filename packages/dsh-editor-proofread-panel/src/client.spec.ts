@@ -33,4 +33,29 @@ describe('proofread panel client', () => {
     for (const dispose of disposers) dispose()
     expect(commands.list()).toEqual([])
   })
+
+  it('forwards optional host Select and Dialog from the seat owner', () => {
+    const Select = () => null
+    const Dialog = () => null
+    let render: ((props: unknown) => { props: Record<string, unknown> }) | undefined
+    const ctx = {
+      effect(fn: () => (() => void) | void) { fn() },
+      slots: {
+        inject(_key: string, callback: () => unknown) {
+          callback()
+          return () => {}
+        },
+        register(_spec: unknown, next: unknown) {
+          render = next as typeof render
+          return () => {}
+        },
+      },
+      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
+      [COMMANDS_SERVICE]: createCommandRegistry(),
+    }
+    apply(ctx as never)
+    const tree = render?.({ sessionId: 's1', openDocument() {}, Select, Dialog })
+    expect(tree?.props.Select).toBe(Select)
+    expect(tree?.props.Dialog).toBe(Dialog)
+  })
 })

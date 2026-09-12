@@ -41,4 +41,34 @@ describe('cards client', () => {
     for (const dispose of disposers) dispose()
     expect(commands.list()).toEqual([])
   })
+
+  it('forwards optional host Select and Dialog from the seat owner into the panel', () => {
+    const Select = () => null
+    const Dialog = () => null
+    let renderPanel: ((props: unknown) => { type: unknown; props: Record<string, unknown> }) | undefined
+    const ctx = {
+      effect(fn: () => (() => void) | void) { fn() },
+      slots: {
+        inject(_key: string, callback: () => unknown) {
+          callback()
+          return () => {}
+        },
+        register(spec: { name: string; id?: string }, render: unknown) {
+          if (spec.id === 'cards') renderPanel = render as typeof renderPanel
+          return () => {}
+        },
+      },
+      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
+      [COMMANDS_SERVICE]: createCommandRegistry(),
+    }
+    apply(ctx as never)
+    const tree = renderPanel?.({
+      sessionId: 's1',
+      openDocument() {},
+      Select,
+      Dialog,
+    })
+    expect(tree?.props.Select).toBe(Select)
+    expect(tree?.props.Dialog).toBe(Dialog)
+  })
 })

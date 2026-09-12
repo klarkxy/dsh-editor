@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { asHost, badRequest, mapHostError, registerHostRpc, resolveWorkspaceAccess, withWorkspaceWrite, WorkspaceAuthorityError } from 'dsh-manuscript/host-api'
 import { workspaceOpAccess } from 'dsh-editor-workspace-kit'
-import { CARDS_RPC_CHANNEL, type CardsRpcResult } from 'dsh-editor-cards/contracts'
+import { CARDS_RPC_CHANNEL, type CardsRpcResult } from './contracts.ts'
 import { CardsError, createCard, listCardReferences, listCards, setCardMeta } from './host/cards.ts'
 
 export const name = 'dsh-editor-cards'

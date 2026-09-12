@@ -244,10 +244,10 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   // walk the three tabs, and close it again.
   const window = ctx.window
   await window.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
-  const dialog = window.locator('.shell .settings-dialog')
+  const dialog = window.getByRole('dialog', { name: '设置' })
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
-  await dialog.getByRole('button', { name: '通用设置', exact: true }).waitFor({ state: 'visible', timeout: 5_000 })
-  await dialog.getByRole('button', { name: '模型', exact: true }).click()
+  await dialog.getByRole('tab', { name: '通用设置', exact: true }).waitFor({ state: 'visible', timeout: 5_000 })
+  await dialog.getByRole('tab', { name: '模型', exact: true }).click()
   try {
     await window.waitForFunction(
       () => (document.querySelector('[role="dialog"]')?.textContent ?? '').includes('DeepSeek'),
@@ -257,11 +257,11 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   } catch {
     throw new Error(`settings models tab did not list the DeepSeek provider: ${(await dialog.textContent())?.slice(0, 400)}`)
   }
-  await dialog.getByRole('button', { name: '写作', exact: true }).click()
+  await dialog.getByRole('tab', { name: '写作', exact: true }).click()
   await dialog.getByRole('radio').first().waitFor({ state: 'visible', timeout: 10_000 })
   const writingRadios = await dialog.getByRole('radio').count()
   if (writingRadios < 2) throw new Error('settings writing tab lost the completion radios')
-  await dialog.getByRole('button', { name: '插件', exact: true }).click()
+  await dialog.getByRole('tab', { name: '插件', exact: true }).click()
   await window.waitForTimeout(600)
   const pluginsRoot = dialog.getByTestId('plugins-settings')
   await pluginsRoot.waitFor({ state: 'visible', timeout: 10_000 })

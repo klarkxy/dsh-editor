@@ -37,6 +37,13 @@ export default defineConfig([
         // alwaysBundle,让它们进 bundle 而不是运行时 require。
         'cmdk',
         '@radix-ui/react-dialog',
+        '@radix-ui/react-select',
+        '@radix-ui/react-dropdown-menu',
+        '@radix-ui/react-tooltip',
+        '@radix-ui/react-tabs',
+        '@radix-ui/react-alert-dialog',
+        'motion',
+        'motion/react',
         // CodeMirror 6 是 dsh-manuscript 的 production dep,tsdown 默认会把它
         // 当 external;宿主运行时只认登记的模块,运行到 require 就 throw,
         // 所以必须显式打进 bundle(与上面 cmdk 同理)。
@@ -50,6 +57,8 @@ export default defineConfig([
         // tsdown would otherwise leave them as runtime require() calls.
         'docx',
         'jszip',
+        /^echarts(?:\/|$)/,
+        /^zrender(?:\/|$)/,
       ],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),

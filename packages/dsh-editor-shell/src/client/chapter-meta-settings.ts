@@ -1,4 +1,4 @@
-import { createElement as e, useState, type ChangeEvent } from 'react'
+import { createElement as e, useRef, useState, type RefObject, type ChangeEvent } from 'react'
 import {
   CHAPTER_STATE_KEYS,
   CHAPTER_STATE_MAX_TOTAL_CHARS,
@@ -15,8 +15,7 @@ import {
   isChapterMetaPath,
   stateTotalChars,
 } from '../chapter-meta-view.ts'
-
-const CHAPTER_META_OPEN_KEY = 'dsh-editor.chapter-meta.open'
+import { Button, Dialog } from './ui/index.ts'
 
 const STATE_LABELS: Record<(typeof CHAPTER_STATE_KEYS)[number], MessageKey> = {
   now: 'chapterMeta.stateNow',
@@ -36,20 +35,6 @@ export type ChapterMetaSettingsInput = {
 export type ChapterMetaApplyResult =
   | { ok: true; text: string; note: string }
   | { ok: false; note: string }
-
-function readChapterMetaOpen(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(CHAPTER_META_OPEN_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
-function writeChapterMetaOpen(open: boolean): void {
-  try {
-    globalThis.localStorage?.setItem(CHAPTER_META_OPEN_KEY, String(open))
-  } catch { /* View preference is optional. */ }
-}
 
 function formFields(input: ChapterMetaSettingsInput) {
   const beats = beatsFromTextarea(input.beats)
@@ -88,11 +73,14 @@ function ChapterMetaSettings(props: {
   text: string
   onChange(text: string): void
   onNote(note: string): void
+  returnFocusRef?: RefObject<HTMLElement | null>
+  open: boolean
+  onOpenChange(open: boolean): void
 }) {
   const parsed = parseChapterMeta(props.text)
   const valid = parsed !== undefined
   const current = parsed ?? {}
-  const [open, setOpen] = useState(readChapterMetaOpen)
+  const beatsFocus = useRef<HTMLElement | null>(null)
   const [beats, setBeats] = useState(beatsToTextarea(current.beats))
   const [state, setState] = useState<ChapterStateFields>({
     now: current.state?.now ?? '',
@@ -108,27 +96,28 @@ function ChapterMetaSettings(props: {
     const result = applyChapterMetaSettings(props.text, { beats, state })
     props.onNote(result.note)
     if (result.ok && result.text !== props.text) props.onChange(result.text)
+    if (result.ok) props.onOpenChange(false)
   }
   const setField = (key: (typeof CHAPTER_STATE_KEYS)[number], value: string) => {
     setState((prev) => ({ ...prev, [key]: value }))
   }
-  return e('details', {
-    className: 'chapter-meta-settings',
-    open,
-    onToggle: (event: ChangeEvent<HTMLDetailsElement>) => {
-      const next = event.currentTarget.open
-      if (next === open) return
-      setOpen(next)
-      writeChapterMetaOpen(next)
-    },
+  return e(Dialog, {
+    open: props.open,
+    onOpenChange: props.onOpenChange,
+    title: t('chapterMeta.title'),
+    description: t('chapterMeta.hint'),
+    className: 'file-dialog editor-action-dialog chapter-meta-settings',
+    initialFocusRef: beatsFocus,
+    returnFocusRef: props.returnFocusRef,
   },
-    e('summary', { 'aria-label': t('chapterMeta.toggle') }, t('chapterMeta.title')),
+    e('header', null, e('h2', null, t('chapterMeta.title'))),
     e('div', { className: 'chapter-meta-body' },
       e('p', { className: 'muted' }, t('chapterMeta.hint')),
       e('label', null,
         e('span', null, t('chapterMeta.beats')),
         e('small', null, t('chapterMeta.beatsHint')),
         e('textarea', {
+          ref: beatsFocus,
           value: beats,
           disabled: !valid,
           rows: Math.min(8, Math.max(3, beats.split(/\r?\n/).length)),
@@ -152,7 +141,10 @@ function ChapterMetaSettings(props: {
         className: used > CHAPTER_STATE_MAX_TOTAL_CHARS ? 'chapter-meta-count over' : 'chapter-meta-count',
       }, t('chapterMeta.stateCount', { used, max: CHAPTER_STATE_MAX_TOTAL_CHARS })),
       issues.length ? e('span', { className: 'warning', role: 'alert' }, issues.join('；')) : null,
-      e('button', { type: 'button', onClick: apply, disabled: !valid || issues.length > 0 }, t('chapterMeta.apply')),
+    ),
+    e('footer', null,
+      e(Button, { onClick: () => props.onOpenChange(false) }, t('common.cancel')),
+      e(Button, { variant: 'primary', onClick: apply, disabled: !valid || issues.length > 0 }, t('chapterMeta.apply')),
     ),
   )
 }

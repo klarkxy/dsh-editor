@@ -1,7 +1,7 @@
 export type StreamChunkLike = {
   type: string
   text?: string
-  reason?: { kind?: string }
+  reason?: { kind?: string; failure?: { message?: string } }
 }
 
 const DEFAULT_MAX_CHARS = 240
@@ -45,7 +45,10 @@ export async function collectInsertText(
   try {
     for await (const chunk of stream) {
       if (options.signal?.aborted) return ''
-      if (chunk.type === 'error' || chunk.type === 'aborted') return ''
+      if (chunk.type === 'aborted' || (chunk.type === 'finish' && chunk.reason?.kind === 'aborted')) return ''
+      if (chunk.type === 'error' || (chunk.type === 'finish' && chunk.reason?.kind === 'error')) {
+        throw new Error(chunk.reason?.failure?.message || '模型请求失败，请检查模型设置后重试')
+      }
       if (chunk.type !== 'text-delta' || typeof chunk.text !== 'string') continue
       appendVisible(chunk.text)
       if (out.length >= maxChars) {
@@ -53,8 +56,9 @@ export async function collectInsertText(
         break
       }
     }
-  } catch {
-    return ''
+  } catch (error) {
+    if (options.signal?.aborted) return ''
+    throw error
   }
   if (options.signal?.aborted) return ''
   if (!thinking) out += pending

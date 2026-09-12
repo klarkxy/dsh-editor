@@ -37,6 +37,14 @@ export function chapterStatusLabel(status: ChapterStatus): string {
   return CHAPTER_STATUS_LABELS[status] ?? CHAPTER_STATUS_LABELS.draft
 }
 
+export function filterChapters<T extends { title: string; path: string }>(chapters: readonly T[], text: string): T[] {
+  const query = text.trim().toLocaleLowerCase()
+  if (!query) return [...chapters]
+  return chapters.filter((chapter) => (
+    chapter.title.toLocaleLowerCase().includes(query) || chapter.path.toLocaleLowerCase().includes(query)
+  ))
+}
+
 export function applyChapterStatus(overview: ProjectOverview, path: string, status: ChapterStatus): ProjectOverview {
   const chapters = overview.chapters.map((chapter) => chapter.path === path ? { ...chapter, status } : chapter)
   const byStatus: Record<ChapterStatus, number> = { draft: 0, revising: 0, final: 0 }

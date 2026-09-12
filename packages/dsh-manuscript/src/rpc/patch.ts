@@ -38,7 +38,7 @@ export type PatchRequest = {
   instruction: string
 }
 
-export type PatchStreamChunk = { type: string; text?: string; reason?: { kind?: string } }
+export type PatchStreamChunk = { type: string; text?: string; reason?: { kind?: string; failure?: { message?: string } } }
 
 export type PatchContext = {
   get?: (name: string) => unknown
@@ -103,12 +103,12 @@ async function streamPatch(input: {
   projectRules?: string
   signal: AbortSignal
 }): Promise<string> {
-  if (!input.llm.stream || input.signal.aborted) return ''
+  if (input.signal.aborted) return ''
+  if (!input.llm.stream) throw new Error('写作模型服务未启用')
   try {
     const stream = input.llm.stream({
       provider: input.provider,
       model: input.model,
-      maxTokens: 2048,
       signal: input.signal,
       system: patchSystem(input.request, input.projectRules),
       messages: [
@@ -124,23 +124,14 @@ async function streamPatch(input: {
       ],
     })
     return collectPatchText(stream, input.signal)
-  } catch {
-    return ''
-  }
-}
-
-async function* successfulChunks(stream: AsyncIterable<PatchStreamChunk>): AsyncIterable<PatchStreamChunk> {
-  for await (const chunk of stream) {
-    if (chunk.type === 'finish' && (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted')) {
-      yield { type: 'error' }
-      return
-    }
-    yield chunk
+  } catch (error) {
+    if (input.signal.aborted) return ''
+    throw error
   }
 }
 
 function collectPatchText(stream: AsyncIterable<PatchStreamChunk>, signal: AbortSignal): Promise<string> {
-  return collectInsertText(successfulChunks(stream), { signal, maxChars: PATCH_LIMITS.proposal })
+  return collectInsertText(stream, { signal, maxChars: PATCH_LIMITS.proposal })
 }
 
 /**

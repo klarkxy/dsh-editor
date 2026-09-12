@@ -1,4 +1,4 @@
-import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type RefObject } from 'react'
 import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import { isChapterDocumentPath } from '../chapter-status-view.ts'
 import {
@@ -15,7 +15,7 @@ import {
   suggestSplitName,
 } from '../chapter-ops-view.ts'
 import { ProposalCard } from './chat.ts'
-import { useDialogReturnFocus } from './dialogs.ts'
+import { Button, Dialog } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 
@@ -115,17 +115,8 @@ export function chapterMenuModel(path: string, files: readonly string[]): {
   }
 }
 
-function focusableBoundary(dialog: HTMLElement | null, event: KeyboardEvent<HTMLElement>) {
-  if (event.key !== 'Tab' || !dialog) return
-  const controls = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')]
-  if (!controls.length) return
-  const first = controls[0]!
-  const last = controls.at(-1)!
-  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
-  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
-}
-
 function SplitFormDialog(props: {
+  open?: boolean
   path: string
   initialAnchor: string
   initialName: string
@@ -134,18 +125,14 @@ function SplitFormDialog(props: {
   ctx: ShellContext
   onCancel(): void
   onReady(proposal: ProposalMarker): void
+  returnFocusRef?: RefObject<HTMLElement | null>
 }) {
+  const open = props.open ?? true
   const [anchor, setAnchor] = useState(props.initialAnchor)
   const [newName, setNewName] = useState(props.initialName)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
-  const dialog = useRef<HTMLDivElement | null>(null)
   const textarea = useRef<HTMLTextAreaElement | null>(null)
-  useDialogReturnFocus(dialog, () => textarea.current?.focus())
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape' && !busy) { event.preventDefault(); props.onCancel(); return }
-    focusableBoundary(dialog.current, event)
-  }
   const submit = async () => {
     const fileName = normalizeChapterFileName(newName)
     if (!isValidChapterFileName(fileName)) { setNote(t('chapterOps.nameInvalid')); return }
@@ -180,18 +167,19 @@ function SplitFormDialog(props: {
       summary: t('chapterOps.splitSummary', { path: props.path, newPath }),
     }))
   }
-  return e('div', { className: 'file-dialog-overlay' },
-    e('div', {
-      ref: dialog,
-      className: 'file-dialog prompt-dialog chapter-ops-dialog',
-      role: 'dialog',
-      'aria-modal': true,
-      'aria-labelledby': 'chapter-ops-split-title',
-      onKeyDown,
-    },
+  return e(Dialog, {
+    open,
+    onOpenChange: (next: boolean) => { if (!next && !busy) props.onCancel() },
+    title: t('chapterOps.splitTitle'),
+    className: 'file-dialog prompt-dialog chapter-ops-dialog',
+    overlayClassName: 'file-dialog-overlay',
+    dismissible: !busy,
+    initialFocusRef: textarea,
+    returnFocusRef: props.returnFocusRef,
+  },
       e('header', null,
         e('h2', { id: 'chapter-ops-split-title' }, t('chapterOps.splitTitle')),
-        e('button', { className: 'icon-button', type: 'button', 'aria-label': t('common.close'), disabled: busy, onClick: props.onCancel }, '×'),
+        e(Button, { variant: 'icon', className: 'icon-button', 'aria-label': t('common.close'), disabled: busy, onClick: props.onCancel }, '×'),
       ),
       e('form', { onSubmit: (event: FormEvent) => { event.preventDefault(); if (!busy) void submit() } },
         e('p', { className: 'muted' }, t('chapterOps.splitFile'), ' ', e('code', null, props.path)),
@@ -215,41 +203,37 @@ function SplitFormDialog(props: {
         ),
         note ? e('p', { className: 'warning', role: 'alert' }, note) : null,
         e('footer', null,
-          e('button', { type: 'button', disabled: busy, onClick: props.onCancel }, t('common.cancel')),
-          e('button', { className: 'primary-action', type: 'submit', disabled: busy || !anchor.trim() || !newName.trim() }, busy ? t('common.loading') : t('chapterOps.preview')),
+          e(Button, { disabled: busy, onClick: props.onCancel }, t('common.cancel')),
+          e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: busy || !anchor.trim() || !newName.trim() }, busy ? t('common.loading') : t('chapterOps.preview')),
         ),
       ),
-    ),
   )
 }
 
 function ProposalReviewDialog(props: {
+  open?: boolean
   ctx: ShellContext
   sessionId: string
   proposal: ProposalMarker
   onApplied(path: string): void
   onClose(): void
+  returnFocusRef?: RefObject<HTMLElement | null>
 }) {
-  const dialog = useRef<HTMLDivElement | null>(null)
+  const open = props.open ?? true
   const close = useRef<HTMLButtonElement | null>(null)
-  useDialogReturnFocus(dialog, () => close.current?.focus())
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') { event.preventDefault(); props.onClose(); return }
-    focusableBoundary(dialog.current, event)
-  }
   const title = props.proposal.kind === 'merge' ? t('chapterOps.mergeTitle') : t('chapterOps.reviewTitle')
-  return e('div', { className: 'file-dialog-overlay' },
-    e('div', {
-      ref: dialog,
-      className: 'file-dialog chapter-ops-dialog',
-      role: 'dialog',
-      'aria-modal': true,
-      'aria-labelledby': 'chapter-ops-review-title',
-      onKeyDown,
-    },
+  return e(Dialog, {
+    open,
+    onOpenChange: (next: boolean) => { if (!next) props.onClose() },
+    title,
+    className: 'file-dialog chapter-ops-dialog',
+    overlayClassName: 'file-dialog-overlay',
+    initialFocusRef: close,
+    returnFocusRef: props.returnFocusRef,
+  },
       e('header', null,
         e('h2', { id: 'chapter-ops-review-title' }, title),
-        e('button', { ref: close, className: 'icon-button', type: 'button', 'aria-label': t('common.close'), onClick: props.onClose }, '×'),
+        e(Button, { ref: close, variant: 'icon', className: 'icon-button', 'aria-label': t('common.close'), onClick: props.onClose }, '×'),
       ),
       props.proposal.kind === 'merge' ? e('p', { className: 'muted' }, t('chapterOps.mergeArchiveHint')) : null,
       e('div', { className: 'chapter-ops-card' },
@@ -261,9 +245,8 @@ function ProposalReviewDialog(props: {
         }),
       ),
       e('footer', null,
-        e('button', { type: 'button', onClick: props.onClose }, t('chapterOps.closeReview')),
+        e(Button, { onClick: props.onClose }, t('chapterOps.closeReview')),
       ),
-    ),
   )
 }
 
@@ -275,45 +258,57 @@ export function ChapterOpsLayer(props: {
   getEditorSnapshot(): EditorSnapshot | null
   onClose(): void
   onApplied(path: string): void
+  returnFocusRef?: RefObject<HTMLElement | null>
 }): ReactNode {
   useLocale()
   const [review, setReview] = useState<{ proposal: ProposalMarker } | null>(null)
   useEffect(() => {
     setReview(null)
   }, [props.request])
-  if (!props.request) return null
-  if (review) {
+  const open = Boolean(props.request)
+  const snapshot = useRef<{ request: ChapterOpsRequest; review: { proposal: ProposalMarker } | null } | null>(null)
+  if (props.request) snapshot.current = { request: props.request, review }
+  const display = snapshot.current
+  if (!display) return null
+  const request = display.request
+  if (display.review) {
     return e(ProposalReviewDialog, {
+      open,
       ctx: props.ctx,
       sessionId: props.sessionId,
-      proposal: review.proposal,
+      proposal: display.review.proposal,
       onApplied: props.onApplied,
       onClose: props.onClose,
+      returnFocusRef: props.returnFocusRef,
     })
   }
-  if (props.request.kind === 'merge') {
+  if (request.kind === 'merge') {
     return e(ProposalReviewDialog, {
+      open,
       ctx: props.ctx,
       sessionId: props.sessionId,
       proposal: buildMergeProposal({
-        path: props.request.path,
-        sourcePath: props.request.sourcePath,
-        summary: t('chapterOps.mergeSummary', { path: props.request.path, sourcePath: props.request.sourcePath }),
+        path: request.path,
+        sourcePath: request.sourcePath,
+        summary: t('chapterOps.mergeSummary', { path: request.path, sourcePath: request.sourcePath }),
       }),
       onApplied: props.onApplied,
       onClose: props.onClose,
+      returnFocusRef: props.returnFocusRef,
     })
   }
-  const suggested = suggestSplitName(props.request.path, props.files)
+  const suggested = suggestSplitName(request.path, props.files)
   return e(SplitFormDialog, {
-    key: `${props.request.path}:${props.request.source}`,
-    path: props.request.path,
-    initialAnchor: initialSplitAnchor(props.request.source, props.getEditorSnapshot()),
+    key: `${request.path}:${request.source}`,
+    open,
+    path: request.path,
+    initialAnchor: initialSplitAnchor(request.source, props.getEditorSnapshot()),
     initialName: basenameOf(suggested),
     files: props.files,
     sessionId: props.sessionId,
     ctx: props.ctx,
     onCancel: props.onClose,
     onReady: (proposal) => setReview({ proposal }),
+    returnFocusRef: props.returnFocusRef,
   })
 }

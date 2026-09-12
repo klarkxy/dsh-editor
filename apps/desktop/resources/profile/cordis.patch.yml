@@ -60,3 +60,7 @@
 - id: agent-presets
   config:
     default: dsh-editor
+
+# Temporarily suspend desktop proofreading while its results are reviewed.
+- id: proofread
+  disabled: true

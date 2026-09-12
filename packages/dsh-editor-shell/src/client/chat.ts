@@ -2,12 +2,14 @@ import {
   createElement as e,
   Fragment,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react'
 import type { PendingInteraction } from '../adapter.ts'
 import type {
@@ -55,6 +57,10 @@ import { isObservableSource, useObservable } from './components.ts'
 import { Markdown } from './markdown.tsx'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
 import { Select } from './select.tsx'
+import { Button, Dialog, Menu, MenuContent, MenuItem, MenuTrigger, m, useChromeMotion } from './ui/index.ts'
+import type { WritingModelRoute } from '../writing-settings.ts'
+import { discardCreatedChatModelError, takeCreatedChatModelError } from './ui-workspace.ts'
+import { t, useLocale } from '../i18n/index.ts'
 import {
   canSubmitComposer,
   partialApplyDetails,
@@ -64,7 +70,6 @@ import {
   type ShellContext,
 } from './shared.ts'
 import { STANDARD_REASONING_EFFORTS } from './settings-models-store.ts'
-import { t, useLocale } from '../i18n/index.ts'
 
 
 const conversationRenameQueue = new ConversationRenameQueue()
@@ -202,10 +207,19 @@ type ChatLifecycle = SessionLifecycle & { hasMore?: boolean; loadingOlder?: bool
  * 档位补写进该模型的 settings 声明,之后目录自己提供档位。host 在派发前
  * 校验档位,不声明直接传会被拒,所以必须先补声明。
  */
-const FALLBACK_EFFORT_OPTIONS = Object.keys(STANDARD_REASONING_EFFORTS).map((id) => ({
-  value: id,
-  label: id === 'xhigh' ? 'Xhigh' : id[0].toUpperCase() + id.slice(1),
-}))
+function reasoningLabel(id: string): string {
+  if (id === 'off') return t('chat.reasoningOff')
+  if (id === 'low') return t('chat.reasoningLow')
+  if (id === 'medium') return t('chat.reasoningMedium')
+  if (id === 'high') return t('chat.reasoningHigh')
+  if (id === 'xhigh') return t('chat.reasoningVeryHigh')
+  if (id === 'max') return t('chat.reasoningMax')
+  return id
+}
+
+function fallbackEffortOptions(): { value: string; label: string }[] {
+  return Object.keys(STANDARD_REASONING_EFFORTS).map((id) => ({ value: id, label: reasoningLabel(id) }))
+}
 
 /* 自定义模型未显式选过强度时的默认档:写真实的选择,而不是只显示一个值。 */
 const DEFAULT_FALLBACK_EFFORT = 'medium'
@@ -237,6 +251,20 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
     setNote('')
   }
   useEffect(() => { setModels(null); void refresh() }, [session.sessionId])
+  useEffect(() => {
+    const onCatalog = () => { void refresh() }
+    const disposers: Array<unknown> = []
+    try { disposers.push(ctx.remote.$on('settings/document-updated', onCatalog)) } catch { /* host may not forward */ }
+    try { disposers.push(ctx.remote.$on('credentials/reference-updated', onCatalog)) } catch { /* ignore */ }
+    try { disposers.push(ctx.remote.$on('llm/adapters-updated', onCatalog)) } catch { /* ignore */ }
+    return () => {
+      for (const handle of disposers) {
+        if (typeof handle === 'function') {
+          try { (handle as () => void)() } catch { /* ignore */ }
+        }
+      }
+    }
+  }, [ctx, session.sessionId])
   /* 首次给无元数据的自定义模型选强度:把约定六档写进它的模型声明。 */
   const declareEfforts = async (): Promise<boolean> => {
     if (!models) return false
@@ -303,22 +331,28 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
   }
   const options = models.groups.flatMap((group) => group.models.map((model) => ({
     value: `${group.id} ${model.id}`,
-    label: `${group.name} · ${model.name}`,
+    label: `${group.name} · ${model.name || model.id}`,
   })))
   const currentValue = `${models.current.provider} ${models.current.model}`
   const currentCatalogModel = models.groups
     .find((group) => group.id === models.current.provider)?.models
     .find((model) => model.id === models.current.model)
+  const currentFull = currentCatalogModel
+    ? `${models.groups.find((group) => group.id === models.current.provider)?.name ?? models.current.provider} · ${currentCatalogModel.name || currentCatalogModel.id}`
+    : models.current.model
   const efforts = currentCatalogModel?.reasoning?.efforts ?? []
   const effortValue = models.current.reasoningEffort ?? currentCatalogModel?.reasoning?.defaultEffort ?? ''
   const effortOptions = efforts.length > 0
-    ? efforts.map((effort) => ({ value: effort.id, label: effort.name }))
-    : FALLBACK_EFFORT_OPTIONS
+    ? efforts.map((effort) => ({ value: effort.id, label: reasoningLabel(effort.id) !== effort.id ? reasoningLabel(effort.id) : effort.name }))
+    : fallbackEffortOptions()
+  const showReasoning = efforts.length > 0 || customRoute
   return e('div', { className: 'compact-control model-picker' },
     e(Select, {
       value: options.some((option) => option.value === currentValue) ? currentValue : '',
-      placeholder: models.current.model,
+      placeholder: currentCatalogModel?.name || models.current.model,
+      selectedLabel: currentCatalogModel?.name || models.current.model,
       'aria-label': t('chat.chooseModel'),
+      title: currentFull,
       disabled: busy,
       options,
       onChange: (next) => {
@@ -326,50 +360,100 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
         if (provider && model) void choose(provider, model)
       },
     }),
-    efforts.length > 0 || customRoute ? e(Select, {
-      value: effortValue,
-      placeholder: t('chat.reasoning'),
-      'aria-label': t('chat.reasoning'),
-      disabled: busy,
-      options: effortOptions,
-      onChange: (effort) => void choose(models.current.provider, models.current.model, effort),
-    }) : null,
+    showReasoning ? e(Menu, null,
+      e(MenuTrigger, {
+        className: 'icon-button',
+        title: t('chat.reasoningMenu'),
+        'aria-label': t('chat.reasoningMenu'),
+        disabled: busy,
+      }, '⋯'),
+      e(MenuContent, { className: 'conversation-menu-pop', align: 'end', 'aria-label': t('chat.reasoningMenu') },
+        effortOptions.map((effort) => e(MenuItem, {
+          key: effort.value,
+          disabled: busy,
+          onSelect: () => { void choose(models.current.provider, models.current.model, effort.value) },
+        }, effort.value === effortValue ? `✓ ${effort.label}` : effort.label)),
+      ),
+    ) : null,
     note ? e('small', { className: 'warning', role: 'alert' }, note) : null,
   )
 }
 
+function ChatEntry(props: {
+  as?: 'article' | 'details'
+  className: string
+  children?: ReactNode
+  open?: boolean
+  role?: string
+  enter?: boolean
+  'aria-live'?: 'polite' | 'off'
+}) {
+  const animate = useRef(props.enter !== false)
+  const motion = useChromeMotion('message')
+  const Tag = props.as === 'details' ? m.details : m.article
+  const motionProps = animate.current
+    ? motion
+    : { initial: false as const, animate: { opacity: 1, y: 0 }, transition: { duration: 0 }, whileHover: undefined, whileTap: undefined }
+  return e(Tag, {
+    className: props.className,
+    ...(props.as === 'details' ? { open: props.open } : {}),
+    role: props.role,
+    'aria-live': props['aria-live'],
+    ...motionProps,
+  }, props.children)
+}
+
 export function NewConversationPicker(props: {
+  open?: boolean
   ctx: ShellContext
   session: SessionFace
   workspaceId?: WorkspaceId
+  chatModel?: WritingModelRoute
   canStart(): Promise<boolean>
   onOpen(sessionId: SessionId): void
   onClose(): void
   onConfigure(): void
+  returnFocusRef?: { current: HTMLElement | null }
 }) {
-  const { ctx, session, workspaceId, canStart, onOpen, onClose, onConfigure } = props
+  const { ctx, session, workspaceId, canStart, onOpen, onClose, onConfigure, chatModel } = props
+  const open = props.open ?? true
   const [models, setModels] = useState<SessionModels | null>(null)
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const cancel = useRef<HTMLButtonElement | null>(null)
+  const primed = useRef(false)
 
   useEffect(() => {
+    if (!open) {
+      primed.current = false
+      setModels(null)
+      setValue('')
+      setNote('')
+      return
+    }
     let live = true
     void readModels(ctx.remote.session, session).then((result) => {
       if (!live) return
       if (!result.ok) { setNote(t('chat.modelUnavailable')); return }
-      const options = result.value.groups.flatMap((group) => group.models.map((model) => `${group.id}\0${model.id}`))
-      const currentValue = `${result.value.current.provider}\0${result.value.current.model}`
+      const options = result.value.groups.flatMap((group) => group.models.map((model) => `${group.id} ${model.id}`))
+      const currentValue = `${result.value.current.provider} ${result.value.current.model}`
+      const preferred = chatModel && (chatModel.provider || chatModel.model)
+        ? `${chatModel.provider} ${chatModel.model}`
+        : ''
       setModels(result.value)
-      setValue(options.includes(currentValue) ? currentValue : (options[0] ?? ''))
+      if (!primed.current) {
+        setValue(preferred || (options.includes(currentValue) ? currentValue : (options[0] ?? '')))
+        primed.current = true
+      }
       setNote('')
     }).catch(() => { if (live) setNote(t('chat.modelUnavailable')) })
     return () => { live = false }
-  }, [ctx.remote, session.sessionId])
+  }, [open, session.sessionId, chatModel?.provider, chatModel?.model])
 
   const start = async (event: FormEvent) => {
     event.preventDefault()
-    const [provider, model] = value.split('\0')
+    const [provider, model] = value.split(/ (.+)/)
     if (!workspaceId || !provider || !model) return
     setBusy(true); setNote('')
     if (!(await canStart())) { setBusy(false); return }
@@ -377,6 +461,7 @@ export function NewConversationPicker(props: {
       const sessionId = await ctx.uiWorkspace.connectWorkspace(workspaceId)
       const selected = await selectModel(ctx.remote.session, sessionId, provider, model)
       if (!selected.ok) throw new Error(selected.error.message)
+      discardCreatedChatModelError(sessionId)
       onOpen(sessionId)
       onClose()
     } catch {
@@ -386,24 +471,46 @@ export function NewConversationPicker(props: {
     }
   }
 
-  return e('form', { className: 'conversation-setup', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'new-conversation-title', onKeyDown: (event: KeyboardEvent<HTMLFormElement>) => { if (event.key === 'Escape') onClose() }, onSubmit: (event: FormEvent) => void start(event) },
+  const options = models?.groups.flatMap((group) => group.models.map((model) => ({
+    value: `${group.id} ${model.id}`,
+    label: `${group.name} · ${model.name}`,
+  }))) ?? []
+  if (value && !options.some((option) => option.value === value)) {
+    const [provider, model] = value.split(/ (.+)/)
+    const label = provider && model ? `${provider} · ${model}` : value
+    options.push({ value, label: t('models.missingModel', { label }) })
+  }
+  const selected = options.some((option) => option.value === value) ? value : ''
+
+  return e(Dialog, {
+    open,
+    onOpenChange: (next: boolean) => { if (!next && !busy) onClose() },
+    title: t('chat.newConversation'),
+    className: 'file-dialog conversation-setup-dialog',
+    overlayClassName: 'file-dialog-overlay',
+    dismissible: !busy,
+    initialFocusRef: cancel,
+    returnFocusRef: props.returnFocusRef,
+  },
     e('header', null,
-      e('strong', { id: 'new-conversation-title' }, t('chat.newConversation')),
-      e('button', { className: 'icon-button', type: 'button', onClick: onClose, 'aria-label': t('common.close') }, '×'),
+      e('h2', { id: 'new-conversation-title' }, t('chat.newConversation')),
+      e(Button, { variant: 'icon', className: 'icon-button', disabled: busy, onClick: onClose, 'aria-label': t('common.close') }, '×'),
     ),
-    models && value ? e('label', null,
-      e('span', { className: 'sr-only' }, t('chat.chooseModel')),
-      e('select', { value, autoFocus: true, 'aria-label': t('chat.chooseModel'), onChange: (event: ChangeEvent<HTMLSelectElement>) => setValue(event.target.value) },
-        models.groups.flatMap((group) => group.models.map((model) => e('option', {
-          key: `${group.id}/${model.id}`,
-          value: `${group.id}\0${model.id}`,
-        }, `${group.name} · ${model.name}`))),
+    e('form', { className: 'conversation-setup', onSubmit: (event: FormEvent) => void start(event) },
+      models && options.length
+        ? e(Select, {
+          value: selected,
+          options,
+          onChange: setValue,
+          'aria-label': t('chat.chooseModel'),
+          disabled: busy,
+        })
+        : e(Button, { disabled: !note || busy, onClick: onConfigure }, note || t('common.loadingShort')),
+      note && models ? e('small', { className: 'warning', role: 'alert' }, note) : null,
+      e('footer', null,
+        e(Button, { ref: cancel, disabled: busy, onClick: onClose }, t('common.cancel')),
+        e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: busy || !workspaceId || !selected }, busy ? t('common.creating') : t('chat.start')),
       ),
-    ) : e('button', { type: 'button', disabled: !note, onClick: onConfigure }, note || t('common.loadingShort')),
-    note && models ? e('small', { className: 'warning', role: 'alert' }, note) : null,
-    e('footer', null,
-      e('button', { type: 'button', onClick: onClose, disabled: busy }, t('common.cancel')),
-      e('button', { className: 'primary-action', type: 'submit', disabled: busy || !workspaceId || !value }, busy ? t('common.creating') : t('chat.start')),
     ),
   )
 }
@@ -807,15 +914,13 @@ export function MemoryCard(props: { memory: AuthorMemoryMarker; onAccept(observa
 
 export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boolean; running: boolean; done: boolean; note: string; onStart(): void; onDismiss(): void }) {
   const explore = props.state === 'explore'
-  return e('article', { className: 'pending-card init-guide-card', 'aria-label': t('chat.initTitle') },
-    e('strong', null, t('chat.initTitle')),
-    e('p', null, explore
-      ? t('chat.initExplore')
-      : t('chat.initInterview')),
+  return e('details', { className: 'init-guide-quiet', 'aria-label': t('chat.initQuietTitle') },
+    e('summary', null, t('chat.initQuietTitle')),
+    e('p', null, explore ? t('chat.initExplore') : t('chat.initInterview')),
     props.done
       ? e('p', { role: 'status' }, t('chat.initDone'))
-      : e('div', null,
-        e('button', { type: 'button', className: 'primary-action', disabled: props.busy || props.running, onClick: props.onStart }, props.running ? t('chat.initRunning') : t('chat.initStart')),
+      : e('div', { className: 'init-guide-actions' },
+        e('button', { type: 'button', disabled: props.busy || props.running, onClick: props.onStart }, props.running ? t('chat.initRunning') : t('chat.initStart')),
         e('button', { type: 'button', disabled: props.busy, onClick: props.onDismiss }, t('common.ignore')),
       ),
     props.note ? e('small', { className: 'warning', role: 'alert' }, props.note) : null,
@@ -845,7 +950,7 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
   )
 }
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, onAcceptMemory, hidden, onClose, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, onAcceptMemory, hidden, onClose, onConfigure, onApplied, onWritten, onDraftDirtyChange, readingExpanded, onToggleReading }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; readingExpanded?: boolean; onToggleReading?(): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [, setMessageCardTick] = useState(0)
@@ -883,6 +988,8 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [renamingConversation, setRenamingConversation] = useState(false)
   const [conversationMenuOpen, setConversationMenuOpen] = useState(false)
+  const conversationMenuTrigger = useRef<HTMLButtonElement | null>(null)
+  const conversationMenuYields = useRef(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [conversationBusy, setConversationBusy] = useState(false)
   const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
@@ -895,10 +1002,32 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     const el = historyRef.current
     if (el && bottomPinnedRef.current) el.scrollTop = el.scrollHeight
   }, [lifecycle, outgoing])
+  useEffect(() => {
+    const error = takeCreatedChatModelError(session.sessionId)
+    if (error) setNote(error)
+  }, [session.sessionId])
   const internalIndexActive = internalIndexTurnActive(transcript)
   /* 初始化回合的思考/流式正文也照常显示,不再强制清空,避免t('chat.replying')随流式块一闪一闪。 */
   const partial = partialView(transcript)
   const rows = chatRows(transcript)
+  const historyPrimed = useRef(false)
+  const primedEmpty = useRef(false)
+  const initialMessageIds = useRef(new Set<string>())
+  const chatAttached = Boolean(conversationFace(ctx) && resolveConversationChatTarget(ctx, session.sessionId))
+  useLayoutEffect(() => {
+    if (!historyPrimed.current) {
+      if (!chatAttached && rows.length === 0) return
+      for (const row of rows) initialMessageIds.current.add(row.id)
+      historyPrimed.current = true
+      primedEmpty.current = rows.length === 0
+      return
+    }
+    if (primedEmpty.current && rows.length > 0 && !outgoing) {
+      for (const row of rows) initialMessageIds.current.add(row.id)
+      primedEmpty.current = false
+    }
+  }, [chatAttached, rows, outgoing])
+  const isNewMessage = (id: string): boolean => historyPrimed.current && !initialMessageIds.current.has(id)
   const hasTurnError = rows.some((row) => row.id.startsWith('turn-error:'))
   const workspace = workspaceList.items.find((item) => item.workspaceId === workspaceId)
   const initScope = useMemo(() => ctx.settingsScope.bind({ namespace: INIT_SETTINGS_NAMESPACE, decode: decodeInitSettings }), [ctx])
@@ -1219,40 +1348,51 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         e('button', { className: 'icon-button', type: 'button', title: t('chat.newConversation'), 'aria-label': t('chat.newConversation'), onClick: () => setCreatingConversation(true) }, '＋'),
         e('button', { className: 'icon-button', type: 'button', title: t('chat.renameConversation'), 'aria-label': t('chat.renameConversation'), onClick: () => setRenamingConversation(true) }, '✎'),
         e('div', { className: 'conversation-menu' },
-          e('button', {
+          e(Menu, { open: conversationMenuOpen, onOpenChange: (open: boolean) => { if (open) conversationMenuYields.current = false; setConversationMenuOpen(open) } },
+            e(MenuTrigger, {
+              ref: conversationMenuTrigger,
+              className: 'icon-button',
+              title: t('chat.conversationActions'),
+              'aria-label': t('chat.conversationActions'),
+              disabled: conversationBusy,
+            }, '⋯'),
+            e(MenuContent, {
+              className: 'conversation-menu-pop',
+              align: 'end',
+              'aria-label': t('chat.conversationActions'),
+              onCloseAutoFocus: (event: Event) => {
+                if (conversationMenuYields.current) event.preventDefault()
+              },
+            },
+              e(MenuItem, {
+                disabled: conversationBusy || currentIsArchived || !canMutateConversation,
+                title: !canMutateConversation ? t('chat.archiveNeedAnother') : undefined,
+                onSelect: () => { void archiveConversation(session.sessionId) },
+              }, t('common.archive')),
+              e(MenuItem, {
+                disabled: conversationBusy || !currentIsArchived,
+                onSelect: () => { void restoreConversation(session.sessionId) },
+              }, t('common.restore')),
+              e(MenuItem, {
+                className: 'danger',
+                'data-danger': 'true',
+                disabled: conversationBusy || !canMutateConversation,
+                title: !canMutateConversation ? t('chat.deleteNeedAnother') : undefined,
+                onSelect: () => { conversationMenuYields.current = true; setDeleteConfirm(true) },
+              }, t('common.delete')),
+            ),
+          ),
+        ),
+        onToggleReading
+          ? e('button', {
             className: 'icon-button',
             type: 'button',
-            title: t('chat.conversationActions'),
-            'aria-label': t('chat.conversationActions'),
-            'aria-haspopup': 'menu',
-            'aria-expanded': conversationMenuOpen,
-            disabled: conversationBusy,
-            onClick: () => setConversationMenuOpen((open) => !open),
-          }, '⋯'),
-          conversationMenuOpen ? e('div', { className: 'conversation-menu-pop', role: 'menu' },
-            e('button', {
-              type: 'button',
-              role: 'menuitem',
-              disabled: conversationBusy || currentIsArchived || !canMutateConversation,
-              title: !canMutateConversation ? t('chat.archiveNeedAnother') : undefined,
-              onClick: () => void archiveConversation(session.sessionId),
-            }, t('common.archive')),
-            e('button', {
-              type: 'button',
-              role: 'menuitem',
-              disabled: conversationBusy || !currentIsArchived,
-              onClick: () => void restoreConversation(session.sessionId),
-            }, t('common.restore')),
-            e('button', {
-              className: 'danger',
-              type: 'button',
-              role: 'menuitem',
-              disabled: conversationBusy || !canMutateConversation,
-              title: !canMutateConversation ? t('chat.deleteNeedAnother') : undefined,
-              onClick: () => { setConversationMenuOpen(false); setDeleteConfirm(true) },
-            }, t('common.delete')),
-          ) : null,
-        ),
+            title: readingExpanded ? t('chat.restoreWidth') : t('chat.expandReading'),
+            'aria-label': readingExpanded ? t('chat.restoreWidth') : t('chat.expandReading'),
+            'aria-pressed': Boolean(readingExpanded),
+            onClick: onToggleReading,
+          }, readingExpanded ? '▭' : '↔')
+          : null,
         e('button', { className: 'icon-button', type: 'button', title: t('chat.collapseAssistant'), 'aria-label': t('chat.collapseAssistant'), onClick: onClose }, '×'),
       ),
     ),
@@ -1267,15 +1407,17 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         }, t('common.restore')),
       ))),
     ) : null,
-    creatingConversation ? e(NewConversationPicker, {
+    e(NewConversationPicker, {
+      open: creatingConversation,
       ctx,
       session,
       workspaceId,
+      chatModel,
       canStart: () => canDiscardDraft('__new-conversation__'),
       onOpen: openConversation,
       onClose: () => setCreatingConversation(false),
       onConfigure,
-    }) : null,
+    }),
     e('div', { className: 'chat-history', ref: historyRef, onScroll: (event: { currentTarget: HTMLDivElement }) => {
       const el = event.currentTarget
       bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
@@ -1297,13 +1439,13 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         const pluginCard = registered?.render({ result: row.result ?? row.content ?? row.text, context: messageCardContext })
         if (pluginCard != null) return e(Fragment, { key: row.id }, pluginCard)
         if (row.role === 'thinking') {
-          return e('details', { className: 'chat-row thinking', key: row.id },
+          return e(ChatEntry, { as: 'details', className: 'chat-row thinking', key: row.id, enter: isNewMessage(row.id) },
             e('summary', null, t('chat.thinkingProcess')),
             e('p', null, row.text),
           )
         }
         if (row.role === 'tool' && row.error) {
-          return e('details', { className: 'chat-row tool error', key: row.id, open: true, role: 'alert' },
+          return e(ChatEntry, { as: 'details', className: 'chat-row tool error', key: row.id, open: true, role: 'alert', enter: isNewMessage(row.id) },
             e('summary', null, `⚠ ${row.text}`),
             row.reason ? e('p', { className: 'tool-error-reason' }, row.reason) : null,
             row.content ? e('pre', null, row.content) : null,
@@ -1311,13 +1453,13 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
           )
         }
         if (row.role === 'tool' && row.content) {
-          return e('details', { className: 'chat-row tool', key: row.id },
+          return e(ChatEntry, { as: 'details', className: 'chat-row tool', key: row.id, enter: isNewMessage(row.id) },
             e('summary', null, row.text),
             e('pre', null, row.content),
             row.detail ? e('small', null, row.detail) : null,
           )
         }
-        return e('article', { className: `chat-row ${row.role}`, key: row.id },
+        return e(ChatEntry, { className: `chat-row ${row.role}`, key: row.id, enter: isNewMessage(row.id) },
           row.role === 'assistant' && row.text
             ? e('div', { className: 'md' }, e(Markdown, { text: row.text }))
             : e('p', null, row.text || t('chat.noText')),
@@ -1325,7 +1467,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
           row.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: row.projectContextReceipt }) : null,
         )
       }),
-      outgoing && !outgoingIsCanonical ? e('article', { className: 'chat-row user', key: 'local-outgoing' },
+      outgoing && !outgoingIsCanonical ? e(ChatEntry, { className: 'chat-row user', key: 'local-outgoing', enter: isNewMessage('local-outgoing') },
         e('p', null, outgoing.text),
         outgoing.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: outgoing.projectContextReceipt }) : null,
         e('small', { role: outgoing.state === 'failed' ? 'alert' : 'status' },
@@ -1333,17 +1475,17 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         ),
       ) : null,
       outgoing?.state === 'accepted' && !outgoingIsCanonical
-        ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, t('chat.replying'))
+        ? e(ChatEntry, { className: 'chat-row assistant', key: 'local-replying', 'aria-live': 'polite', enter: isNewMessage('local-replying') }, t('chat.replying'))
         : null,
-      visibleRunningCalls(transcript.runningCalls ?? []).map((call) => e('article', { className: 'chat-row tool', key: `running:${call.callId}` }, e('strong', null,
+      visibleRunningCalls(transcript.runningCalls ?? []).map((call) => e(ChatEntry, { className: 'chat-row tool', key: `running:${call.callId}`, enter: isNewMessage(`running:${call.callId}`) }, e('strong', null,
         call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' ? t('chat.preparingProposal') : t('chat.processing')
       ))),
-      snapshot.queue.map((item) => e('article', { className: 'chat-row notice', key: `queue:${item.id}` }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? t('chat.queued') : t('chat.steering')))),
-      partial.thinking ? e('details', { className: 'chat-row thinking', open: true, 'aria-live': 'polite' },
+      snapshot.queue.map((item) => e(ChatEntry, { className: 'chat-row notice', key: `queue:${item.id}`, enter: isNewMessage(`queue:${item.id}`) }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? t('chat.queued') : t('chat.steering')))),
+      partial.thinking ? e(ChatEntry, { as: 'details', className: 'chat-row thinking', key: 'partial-thinking', open: true, 'aria-live': 'polite', enter: isNewMessage('partial-thinking') },
         e('summary', null, t('chat.thinking')),
         e('p', null, partial.thinking),
       ) : null,
-      partial.text ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, e('div', { className: 'md' }, e(Markdown, { text: partial.text }))) : chatLegacy.partial && !partial.thinking ? e('article', { className: 'chat-row assistant', 'aria-live': 'polite' }, t('chat.replying')) : null,
+      partial.text ? e(ChatEntry, { className: 'chat-row assistant', key: 'partial-text', 'aria-live': 'polite', enter: isNewMessage('partial-text') }, e('div', { className: 'md' }, e(Markdown, { text: partial.text }))) : chatLegacy.partial && !partial.thinking ? e(ChatEntry, { className: 'chat-row assistant', key: 'partial-replying', 'aria-live': 'polite', enter: isNewMessage('partial-replying') }, t('chat.replying')) : null,
       pendingItems.map((item) => e(PendingCard, { key: item.key, item })),
       snapshot.openState === 'error' ? e('p', { className: 'warning' }, t('chat.connectionInterrupted')) : null,
       snapshot.promptError && !hasTurnError ? e('p', { className: 'warning' }, t('chat.requestFailed')) : null,
@@ -1353,7 +1495,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         value: draft,
         onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setDraft(event.target.value),
         onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
-          if (!shouldSubmitComposer({ key: event.key, shiftKey: event.shiftKey, isComposing: event.nativeEvent.isComposing })) return
+          if (!shouldSubmitComposer({ key: event.key, shiftKey: event.shiftKey, isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) return
           event.preventDefault()
           event.currentTarget.form?.requestSubmit()
         },
@@ -1380,7 +1522,8 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         ),
       ),
     ),
-    renamingConversation ? e(TextPromptDialog, {
+    e(TextPromptDialog, {
+      open: Boolean(renamingConversation),
       id: 'rename-conversation',
       title: t('chat.renameConversation'),
       label: t('chat.conversationName'),
@@ -1388,22 +1531,25 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       confirmLabel: t('chat.saveName'),
       onCancel: () => setRenamingConversation(false),
       onConfirm: renameConversation,
-    }) : null,
-    draftConfirm ? e(ConfirmDialog, {
+    }),
+    e(ConfirmDialog, {
+      open: Boolean(draftConfirm),
       id: 'discard-message-draft',
       title: t('chat.discardDraftTitle'),
       message: t('chat.discardDraftBody'),
       confirmLabel: t('chat.discardAndContinue'),
       onCancel: () => resolveDraftConfirm(false),
       onConfirm: () => resolveDraftConfirm(true),
-    }) : null,
-    deleteConfirm ? e(ConfirmDialog, {
+    }),
+    e(ConfirmDialog, {
+      open: Boolean(deleteConfirm),
       id: 'delete-conversation',
       title: t('chat.deleteTitle'),
       message: t('chat.deleteBody'),
       confirmLabel: t('common.delete'),
+      returnFocusRef: conversationMenuTrigger,
       onCancel: () => setDeleteConfirm(false),
       onConfirm: () => { void deleteConversation(session.sessionId) },
-    }) : null,
+    }),
   )
 }

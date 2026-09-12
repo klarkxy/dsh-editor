@@ -29,17 +29,8 @@ describe('completeFim', () => {
     expect(result.text).toBe('便利店的灯')
   })
 
-  it('returns an empty completion when the DSH LLM service is unavailable', async () => {
-    const result = await completeFim({
-      ctx: {},
-      provider: 'new-api',
-      model: 'deepseek-v4-flash',
-      prefix: '前',
-      suffix: '后',
-      signal: new AbortController().signal,
-    })
-    expect(result.route).toBe('dsh-llm')
-    expect(result.text).toBe('')
+  it('reports an unavailable model service', async () => {
+    await expect(completeFim({ctx: {}, provider: 'new-api', model: 'model', prefix: '前', suffix: '后', signal: new AbortController().signal})).rejects.toThrow('写作模型服务未启用')
   })
 
   it('adds bounded author preferences to the system guidance', async () => {
@@ -66,7 +57,7 @@ describe('completeFim', () => {
       signal: new AbortController().signal,
     })
     const { system, user, maxTokens } = captured(request)
-    expect(maxTokens).toBe(1024)
+    expect(maxTokens).toBeUndefined() // Keep the configured model output budget, including reasoning.
     expect(user.startsWith('【本章工作笔记】\n节拍：雨夜对峙\n上一章：她已离开')).toBe(true)
     expect(user).toContain('\n\n【光标前】\n前文')
     expect(user.indexOf('【本章工作笔记】')).toBeLessThan(user.indexOf('【光标前】'))

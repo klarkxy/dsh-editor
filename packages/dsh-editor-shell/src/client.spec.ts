@@ -4,6 +4,7 @@ import { zh } from './i18n/index.ts'
 import {
   canSubmitComposer,
   claimInitialWorkspaceResume,
+  consumeInitialWorkspaceResume,
   clampPanelWidth,
   createFlowWorkspace,
   errorMessage,
@@ -186,6 +187,13 @@ describe('shell manuscript RPC safety', () => {
     expect(claimInitialWorkspaceResume(guard)).toBe(false)
   })
 
+  it('consumes startup resume after a successful home leave so the first return stays on home', () => {
+    const openedFromPicker = { current: false }
+    consumeInitialWorkspaceResume(openedFromPicker)
+    expect(openedFromPicker.current).toBe(true)
+    expect(claimInitialWorkspaceResume(openedFromPicker)).toBe(false)
+  })
+
   it('resumes the selected workspace or the most recently updated one', () => {
     const older = { workspaceId: 'a', path: '/a', title: 'A', sessionIds: [], createdAt: '', updatedAt: '2026-01-01T00:00:00.000Z' }
     const newer = { workspaceId: 'b', path: '/b', title: 'B', sessionIds: [], createdAt: '', updatedAt: '2026-06-01T00:00:00.000Z' }
@@ -266,8 +274,8 @@ describe('shell manuscript RPC safety', () => {
     expect(sidebar).toContain('canPaste:')
     expect(sidebar).toContain("'data-danger': 'true'")
     /* 树行/容器/根菜单都走同一条 onFileMenu 回调 */
-    expect(sidebar).toMatch(/onContextMenu[\s\S]{0,200}onFileMenu\('directory', child/)
-    expect(sidebar).toMatch(/onContextMenu[\s\S]{0,200}onFileMenu\('file', child/)
+    expect(sidebar).toMatch(/onContextMenu[\s\S]{0,280}onFileMenu\('directory', child/)
+    expect(sidebar).toMatch(/onContextMenu[\s\S]{0,280}onFileMenu\('file', child/)
     /* root.ts 必须真的挂上剪贴板状态机和 workbench 端点 */
     expect(root).toContain('ChapterOpsLayer')
     expect(root).toContain('onSplitAtCursor')
@@ -304,7 +312,6 @@ describe('shell manuscript RPC safety', () => {
     expect(about).toMatch(/result\.status === 'update-available'/)
     expect(about).toMatch(/result\.status === 'error'/)
     expect(about).toContain('openExternal')
-    expect(about).toContain('useDialogReturnFocus')
     /* root.ts 入口:两个 chrome 都挂 AboutTrigger,aboutOpen 渲染 AboutUpdateDialog */
     expect(root).toContain('AboutUpdateDialog')
     expect(root).toContain('AboutTrigger')
@@ -336,7 +343,7 @@ describe('shell manuscript RPC safety', () => {
     expect(root).toContain("'snapshot.rollback'")
     expect(root).toContain("'snapshot.list'")
     expect(root).toContain("t('note.rolledBack'")
-    expect(zh['note.rolledBack']).toBe('已回滚到 {label}；回滚前的状态已自动保存为新提交。')
+    expect(zh['note.rolledBack']).toBe('已回滚到 {label}；回滚前的状态已自动保存为新版本。')
     /* 回滚前要求先保存当前文档，且有确认框 */
     expect(root).toContain("t('note.saveBeforeRollback')")
     expect(zh['note.saveBeforeRollback']).toBe('请先保存当前文档，再回滚。')
@@ -595,6 +602,25 @@ describe('shell manuscript RPC safety', () => {
     expect(editor).not.toContain('paperRevealRange')
   })
 
+  it('sends proofread source and locate callbacks and styles rewrite proposals', () => {
+    const editor = readFileSync(new URL('./client/editor.ts', import.meta.url), 'utf8')
+    expect(editor).toContain('sourceLabel')
+    expect(editor).toContain('onLocate')
+    expect(editor).toContain('locateProofreadOffsets')
+    expect(editor).toContain("proposal: 'proposal'")
+    expect(editor).toContain('getPaperOffset')
+    const general = readFileSync(new URL('./client/settings-general.tsx', import.meta.url), 'utf8')
+    expect(general.match(/t\('settings.busyEnter'\)/g)?.length).toBe(2)
+    const chat = readFileSync(new URL('./client/chat.ts', import.meta.url), 'utf8')
+    expect(chat).toContain('init-guide-quiet')
+    expect(chat).toContain('chat.expandReading')
+    expect(chat).toContain('selectedLabel')
+    expect(chat).toContain('`${group.name} · ${model.name || model.id}`')
+    expect(chat).toContain("llm/adapters-updated")
+    const select = readFileSync(new URL('./client/select.tsx', import.meta.url), 'utf8')
+    expect(select).toContain('selectedLabel')
+  })
+
   it('owns the settings dialog itself and drops the upstream DSH settings delegation', () => {
     const source = rootSource()
     expect(source).not.toContain("renderSlot('sidebar.settings'")
@@ -603,6 +629,34 @@ describe('shell manuscript RPC safety', () => {
     expect(source).not.toContain('ModelSetup')
     expect(source).not.toContain("view === 'settings'")
     expect(source).not.toContain('settings-shell')
+  })
+
+  it('keeps Zhihu in settings, drops desktop proofread chrome, and hides auxiliary files', () => {
+    const source = rootSource()
+    const settings = readFileSync(new URL('./client/settings.tsx', import.meta.url), 'utf8')
+    const menu = readFileSync(new URL('./client/editor-menu.tsx', import.meta.url), 'utf8')
+    const sidebar = readFileSync(new URL('./client/sidebar.ts', import.meta.url), 'utf8')
+    expect(source).toContain('ZHIHU_SETTINGS_SLOT')
+    expect(source).toContain('zhihuTab: zhihuSettings')
+    expect(source).not.toContain('showAuxiliaryFiles')
+    expect(source).toContain('sidebar.versionMenu')
+    expect(settings).toContain("'zhihu'")
+    expect(settings).toContain('settings.zhihuUnavailable')
+    expect(menu).not.toContain('editor-menu-proofread')
+    expect(menu).not.toContain('canProofread')
+    expect(sidebar).not.toContain('showAuxiliaryFiles')
+    expect(zh['settings.zhihu']).toBe('知乎资料')
+    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
+    expect(styleSource).toContain('--chrome-bg: #1c1b18')
+    expect(styleSource).toContain('--chrome-raised: #25231f')
+    expect(styleSource).toContain('--chrome-sunken: #171612')
+    expect(styleSource).toContain('--chrome-fg: #e9e4d9')
+    expect(styleSource).toContain('--chrome-muted: #aaa397')
+    expect(styleSource).toContain('--chrome-bg: #e6e5e0')
+    expect(styleSource).not.toContain('--chrome-bg: #141210')
+    expect(styleSource).toContain('input:not([type="range"])')
+    expect(styleSource).toMatch(/workspace-menu-trigger[\s\S]{0,400}max-width: 100%/)
+    expect(styleSource).not.toMatch(/workspace-menu-trigger[\s\S]{0,280}flex-shrink: 0/)
   })
 
   it('uses a workspace dropdown instead of overlapping 作品/切换 controls, and keeps the cover on the empty chapter', () => {
@@ -639,8 +693,8 @@ describe('shell manuscript RPC safety', () => {
     expect(source).not.toContain("className: 'tree-manage'")
     expect(styleSource).not.toContain('tree-manage')
     // Topbar
-    expect(source).toContain("onClick: () => void openAnotherWorkspace()")
-    expect(source).toContain("onClick: () => void startNewProject()")
+    expect(source).toContain('void openAnotherWorkspace()')
+    expect(source).toContain('void startNewProject()')
     expect(source).toContain("t('workspace.backHome')")
     expect(zh['workspace.backHome']).toBe('返回作品列表')
     expect(source).not.toContain('workspace-home-button')
@@ -724,6 +778,7 @@ describe('shell manuscript RPC safety', () => {
     expect(shouldSubmitComposer({ key: 'Enter', shiftKey: false })).toBe(true)
     expect(shouldSubmitComposer({ key: 'Enter', shiftKey: true })).toBe(false)
     expect(shouldSubmitComposer({ key: 'Enter', shiftKey: false, isComposing: true })).toBe(false)
+    expect(shouldSubmitComposer({ key: 'Enter', shiftKey: false, keyCode: 229 })).toBe(false)
     expect(shouldSubmitComposer({ key: 'a', shiftKey: false })).toBe(false)
     expect(canSubmitComposer({ draft: '写下去', connected: true, removed: false })).toBe(true)
     expect(canSubmitComposer({ draft: '写下去', connected: false, removed: false })).toBe(false)
@@ -861,21 +916,17 @@ describe('shell manuscript RPC safety', () => {
     expect(chatSource).toMatch(/proposal\.kind === 'renames'/)
   })
 
-  it('threads the writing-progress scope into the shell root and renders the sidebar search box', () => {
+  it('removes daily goal settings while preserving writing statistics and sidebar search', () => {
     const source = rootSource()
-    /* root.ts 必须真正接住 progressScope,而不是定义后不用 */
-    expect(source).toContain('progressScope: WritingProgressScope')
-    expect(source).toMatch(/progressScope\s*[,:]\s*options\.progressScope/)
+    expect(source).not.toContain('progressScope')
     expect(source).toContain('side-search')
     expect(source).toContain('setSearchSubmitTick')
     expect(source).not.toContain('writing-progress-chip')
-    expect(source).toMatch(/nextBaselines\(/)
-    expect(source).toContain("localDateKey(new Date())")
+    expect(source).not.toContain('nextBaselines')
     expect(source).toContain('progress.record')
     expect(source).toContain('PROGRESS_RECORD_DEBOUNCE_MS')
     const settingsSource = readFileSync(new URL('./writing-settings.ts', import.meta.url), 'utf8')
-    expect(settingsSource).toContain("from './writing-progress-settings.tsx'")
-    expect(settingsSource).toContain('e(WritingProgressSettings')
+    expect(settingsSource).not.toContain('WritingProgressSettings')
     const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
     expect(styleSource).toMatch(/\.side-search\b/)
     /* 作者侧写不对作者暴露设置入口 */
@@ -914,7 +965,11 @@ describe('shell manuscript RPC safety', () => {
     expect(editorSource).toContain('typewriter')
     expect(editorSource).toContain('focusParagraph')
     expect(editorSource).toContain('typography')
-    expect(editorSource).toContain('paper-experience-toggles')
+    expect(editorSource).toContain('EditorOverflowMenu')
+    expect(editorSource).toContain('EditorContextMenu')
+    expect(editorSource).toContain('compactControls: true')
+    expect(editorSource).not.toContain('paper-experience-toggles')
+    expect(editorSource).not.toContain('RewritePresetsBar')
     expect(chatSource).toContain("t('chat.archivedConversations')")
     expect(chatSource).toContain("t('chat.conversationActions')")
     expect(chatSource).toContain("t('chat.deleteTitle')")
