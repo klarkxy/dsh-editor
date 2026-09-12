@@ -1,6 +1,6 @@
 # DSH Editor 界面与设计系统
 
-本文是桌面写作界面的维护说明。产品原则见 [product-principles.md](product-principles.md)，使用者操作见 [user-guide.md](user-guide.md)。Token 与代码不一致时，以桌面 shell 的 CSS 变量为准。
+本文是桌面 0.2.0 写作界面的维护说明。产品原则见 [product-principles.md](product-principles.md)，使用者操作见 [user-guide.md](user-guide.md)。Token 与代码不一致时，以桌面 shell 的 CSS 变量为准。
 
 ## 视觉身份
 
@@ -25,7 +25,7 @@
 | overlay 抽屉（不占 root） | `packages/dsh-manuscript/src/client/overlay-styles.ts` |
 | 稿纸交互（FIM、选段、查找） | `packages/dsh-manuscript/src/client/editor-core/editor.tsx` |
 
-改颜色时两份 token 一起改：shell 是桌面权威，editor-core 的副本让公开 `dsh-manuscript` overlay 在没有 shell 时仍可读。overlay 的圆角更紧，不必强行与 shell 对齐。
+调整共享稿纸 token 时同步两份定义；桌面 `--chrome-*` 与纸面分开维护。shell 是桌面权威，editor-core 的副本让公开 `dsh-manuscript` overlay 在没有 shell 时仍可读。overlay 的圆角更紧，不必强行与 shell 对齐。
 
 选择写入 `localStorage["dsh-editor.theme"]`，并映射到宿主 `ui-theme`：纸 → `light`，墨 → `dark`。跟随系统没有对应稿纸主题，读取时按 `prefers-color-scheme` 落成纸或墨。
 
@@ -36,7 +36,7 @@
 | 变量 | 纸 | 墨 | 用途 |
 | --- | --- | --- | --- |
 | `--bg` | `#f3f1e8` | `#161310` | 页面底 |
-| `--bg-sunken` | `#ebe9df` | `#100e0b` | 侧栏 / 聊天下沉 |
+| `--bg-sunken` | `#ebe9df` | `#100e0b` | 稿纸体系下沉色；桌面 chrome 使用独立变量 |
 | `--surface` | `#fdfcf6` | `#221e18` | 稿纸、抬起的容器 |
 | `--surface-warm` | `#e8e6dc` | `#2c2820` | 悬停、次级填充 |
 | `--fg` | `#141413` | `#ede7d7` | 主文字 |
@@ -55,6 +55,11 @@
 | `--selection` | `#e4e6dc` | `#2e3547` | 选区底 |
 | `--danger` | `#8a3a30` | `#c4786a` | 破坏性操作 |
 | `--confirm` | `#4a6b3a` | `#8aaa70` | 已保存 / 肯定 |
+| `--chrome-bg` | `#e6e5e0` | `#1c1b18` | 顶栏、设置导航 |
+| `--chrome-raised` | `#f2f1ec` | `#25231f` | 设置主体、抬起控件 |
+| `--chrome-sunken` | `#dddbd4` | `#171612` | 文件栏、搭档底色 |
+| `--chrome-fg` | `#1c1c1b` | `#e9e4d9` | chrome 文字 |
+| `--chrome-muted` | `#5c5b57` | `#aaa397` | chrome 次级说明 |
 
 主题切换不要再写 `body[data-ds-dark-theme]`。组件里不要临时写 hex；新颜色先加进上表再引用变量。
 
@@ -105,10 +110,12 @@
 ## 改界面时
 
 1. 先核对本文件和 [product-principles.md](product-principles.md) 的禁止项。
-2. 颜色只改 token 表对应的 CSS 变量，并同步 editor-core 副本。
+2. 颜色只改 token 表对应的 CSS 变量；共享稿纸变量同步 editor-core 副本，桌面 chrome 变量留在 shell。
 3. 不要为新面板引入第二套色板或英文-only chrome。
 4. 桌面视觉以 `pnpm test:e2e:visual-audit` 为准；命令面板用 `pnpm test:e2e:palette`。截图写到 `e2e/out/`，不提交。
 
 仓库不再保留 OpenDesign brief 或静态 HTML 原型。需要对照历史稿时查 Git 历史，不要把原型截图当验收标准。
 
-设置主体必须有受约束的高度，内容区独立滚动，导航和标题固定。用量图采用 Apache ECharts 按需打包的 SVG 柱状图，显示坐标刻度、悬浮明细与可访问数据表；隐藏标签页、主题切换、窗口缩放和卸载都要验证。辅助文件不显示在文件栏，也不提供显示开关。
+设置主体必须有受约束的高度，内容区独立滚动，导航和标题固定。用量图采用 Apache ECharts 按需打包的 SVG 柱状图，显示坐标刻度、悬浮明细与可访问数据表；隐藏标签页、主题切换、窗口缩放和卸载都要验证。辅助文件不显示在文件栏和作者全文搜索中，也不进入批量替换范围，不提供显示开关。
+
+设置以 `.settings-pages` 为唯一内容滚动区，导航和标题固定。页签默认横排；纵向导航必须声明 `data-orientation="vertical"` 或 `aria-orientation="vertical"`。通用输入框规则排除 `input[type="range"]`。图表随可见尺寸初始化，响应 ResizeObserver 与主题切换，并在卸载时 dispose；HTML tooltip 的动态值必须编码。搭档回复正文至少 14px，展开阅读复用原对话和滚动状态。

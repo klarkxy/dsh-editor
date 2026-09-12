@@ -2,7 +2,7 @@
 
 本文是修改、替换或新建 DSH Editor 插件的权威手册。通用产品边界见 [architecture.md](architecture.md)，产品原则见 [product-principles.md](product-principles.md)，开发和验收命令见 [development.md](development.md)。
 
-当前兼容基线固定为 DSH `0.1.5-rc.2`。私有 `root` 接口尤其不是上游公共承诺；升级 DSH 前必须重新验证本文列出的全部桌面能力。
+本文适用于桌面 **0.2.0**，兼容基线固定为 DSH `0.1.5-rc.2`。私有 `root` 接口尤其不是上游公共承诺；升级 DSH 前必须重新验证本文列出的全部桌面能力。
 
 ## 交互架构图
 
@@ -30,19 +30,17 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
    │  ├─ Host: /manuscript、draft storage、稿件安全读写；FIM/计量由可选 assist 服务承接
    │  └─ Client: shell.overlay（公开 Web 插件）
    ├─ dsh-editor-workbench
-   │  └─ Host: /dsh-editor-workbench、项目/概览/状态/校对/进度/导入/快照/归档/context；可选 tools entry 提供 novel_overview
+   │  └─ Host: /dsh-editor-workbench、项目/概览/状态/校对/进度/导入/快照/归档/context；可选 tools entry 提供 novel_overview / novel_memory_update
    ├─ dsh-editor-cards
    │  ├─ Host: /dsh-editor-cards、人物卡/世界书 list/references/metaSet/create；`./host-api` 供 workbench 校对扫描
    │  └─ Client: `dsh-editor.sidebar.tools` 卡片列表 + `dsh-editor.center.overlays` 详情 + `cards-character` / `cards-worldbook`
    ├─ dsh-editor-novel-kernel
    │  └─ Host: novel_* 工具、guard、system prompt、知识卡
-   ├─ dsh-proofread：纯引擎、/proofread、插件自有 UI
-   ├─ dsh-zhihu：/zhihu、凭据/计量、插件自有 UI；Tool entry 可选
+   ├─ dsh-proofread：保留纯引擎；桌面 proofread entry 默认禁用
+   ├─ dsh-zhihu：/zhihu、凭据/计量、桌面设置 UI；Tool entry 可选
    ├─ dsh-editor-shell
    │  ├─ Host: 注册 `dsh-editor-writing` 设置 schema
    │  └─ Client: 唯一 root GUI、座位与命令注册表、DshChatPort、编辑状态、作者确认
-   ├─ dsh-editor-proofread-panel
-   │  └─ Client-only: `dsh-editor.sidebar.tools` 作品校对面板 + `proofread-document` / `proofread-manuscript`
    ├─ dsh-editor-overview-panel
    │  └─ Client-only: `dsh-editor.center.overlays` 作品概览 + `overview`（Ctrl+Shift+O）
    ├─ dsh-editor-memory-panel
@@ -77,7 +75,7 @@ dsh-editor-cards/host
 ├─ dsh-editor-workspace-kit（进程内库）
 └─ dsh-manuscript/host-api（含共享 `withWorkspaceWrite`）
 
-dsh-editor-proofread-panel/client
+dsh-editor-proofread-panel/client（保留代码；0.2.0 桌面不装载）
 ├─ dsh-editor-seats（构建时内联）
 ├─ dsh-editor-workbench/contracts（构建时内联）
 └─ dsh-editor-novel-kernel/contracts（构建时内联）
@@ -105,15 +103,15 @@ dsh-editor-novel-kernel/host
 | 包 / Cordis entry | 接口与职责 | 稳定级别 | 交付范围 |
 | --- | --- | --- | --- |
 | `dsh-manuscript` / `manuscript` | `/manuscript`、`shell.overlay`、draft/FIM/patch/proposal | public | 公开 tarball；Web 与桌面 |
-| `dsh-proofread` / `proofread` | `/proofread`、纯引擎与双 slot UI | public | 独立 tarball；写作组合的引擎依赖 |
+| `dsh-proofread` / `proofread` | `/proofread`、纯引擎与官方 `shell.overlay` UI | public | 独立 tarball；桌面保留引擎包、默认停用入口 |
 | `dsh-zhihu` / `zhihu` | `/zhihu`、独立 UI/凭据/用量 | public | 独立 tarball；full 启用 Tool |
 | `dsh-manuscript/assist` / `manuscript-assist` | 可选 FIM/patch/LLM 计量服务 | public optional entry | smart/full；旧 Web 默认保留 |
-| `dsh-editor-workbench/tools` / `editor-workbench-tools` | 可选 novel_overview | private optional entry | smart/full |
+| `dsh-editor-workbench/tools` / `editor-workbench-tools` | 可选 novel_overview / novel_memory_update | private optional entry | smart/full |
 | `dsh-editor-workbench` / `editor-workbench` | 私有工作区生命周期、概览/状态、校对、进度 RPC | private host-only | 桌面 profile 必需 |
 | `dsh-editor-cards` / `editor-cards` | 人物卡/世界书 Host RPC、contracts 与 Client UI | private dual-face | 桌面组合 feature `cards`（也被 workbench 依赖闭包拉入） |
 | `dsh-editor-novel-kernel` / `editor-novel-kernel` | 私有小说工具、guard、prompt、知识卡 | private host-only | smart/full 必需；basic 不装 |
 | `dsh-editor-shell` / `editor-shell` | 唯一 `root` client 与写作设置 schema | fixed-version private | 桌面 profile 必需 |
-| `dsh-editor-proofread-panel` / `editor-proofread-panel` | 私有、仅 Client；贡献 `dsh-editor.sidebar.tools` 与两条校对命令 | private dual-face | 桌面组合 feature `proofread-panel` |
+| `dsh-editor-proofread-panel` / `editor-proofread-panel` | 私有、仅 Client；贡献 `dsh-editor.sidebar.tools` 与两条校对命令 | private dual-face | 保留可选 feature 定义；0.2.0 三份 recipe 均移除 |
 | `dsh-editor-overview-panel` / `editor-overview-panel` | 私有、仅 Client；贡献 `dsh-editor.center.overlays` 与 `overview` 命令 | private dual-face | 桌面组合 feature `overview-panel` |
 | `dsh-editor-memory-panel` / `editor-memory-panel` | 私有、仅 Client；贡献 `dsh-editor.sidebar.tools` 与 `memory-open` 命令 | private dual-face | 桌面组合 feature `memory-panel` |
 | `dsh-editor-plugins` / `editor-plugins` | `/dsh-editor-plugins`、设置里的插件开关与 GitHub 市场 | private dual-face | 桌面 profile 必需；核心插件锁定 |
@@ -127,8 +125,8 @@ dsh-editor-novel-kernel/host
 | `dsh-proofread` | `proofread` | `dsh-proofread` |
 | `dsh-zhihu` | `zhihu` | `dsh-zhihu` |
 | 由 `dsh-zhihu` 的 `dshEditor.inserts` 按 feature `zhihu-tools` 加入 | `zhihu-tools` | `dsh-zhihu/tools` |
-| `dsh-editor-workbench` | `editor-workbench-tools` | `dsh-editor-workbench/tools` |
-| `dsh-editor-workbench` | `editor-workbench` | `dsh-editor-workbench` |
+| `dsh-editor-workbench` | `editor-workbench-tools` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer` |
+| `dsh-editor-workbench` | `editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer` |
 | `dsh-editor-cards` | `editor-cards` | `dsh-editor-cards` |
 | `dsh-editor-novel-kernel` | `editor-novel-kernel` | `dsh-editor-novel-kernel` |
 | `dsh-editor-shell` | `editor-shell` | `dsh-editor-shell` |
@@ -143,10 +141,10 @@ dsh-editor-novel-kernel/host
 
 ## Host、Client、inject 与生命周期
 
-- Host 入口导出 `name`、`inject`、`apply(ctx)`；只声明实际使用的 service。
+- Host 入口导出 `name`、`inject`、`apply(ctx)`；只声明实际使用的 service。当前固定 DSH 版本的 HTTP RPC 通过注入 `webServer` 挂载，不能只写 `connection`。
 - Cordis entry 由包内 `cordis.patch.yml` 插入，entry id 和 prompt section name 必须全局唯一。
 - 所有 `handle`、`guard`、事件订阅或资源必须通过 `ctx.effect` 或等价 disposer 清理。
-- Client 只能使用 DSH 注入的 runtime、connection 和 slots；Renderer 不得访问 Node、凭据、绝对路径或进程。
+- Client 只能使用 DSH 注入的 runtime、connection 和 slots；Renderer 不得读取凭据明文、直接调用 Node 文件系统或管理进程；文件权限由 Host 重建。
 - 普通附加界面使用 `shell.overlay` 等 additive slot。`root` 只能有一个所有者；替换 Shell 时必须先移除 `editor-shell`，不能并存两个 root。
 - DshChatPort 只投影官方 `SessionFace`、`ConversationSnapshot`、send/cancel、model/permission、approval/questions。插件不得复制 Chat、启动第二次 connection 或自行执行 Tool。
 
@@ -154,14 +152,14 @@ dsh-editor-novel-kernel/host
 
 | 包 | `name` | `inject` |
 | --- | --- | --- |
-| `dsh-manuscript` Host | `dsh-manuscript` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `storageDomain` |
-| `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy` |
-| `dsh-editor-cards` Host | `dsh-editor-cards` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy` |
+| `dsh-manuscript` Host | `dsh-manuscript` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `storageDomain`, `webServer` |
+| `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer` |
+| `dsh-editor-cards` Host | `dsh-editor-cards` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer` |
 | `dsh-editor-cards` Client | `dsh-editor-cards-client` | `slots`, `connection`, `dshEditorCommands` |
 | `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt`, `fs`, `sandboxPolicy` |
-| `dsh-editor-shell` Host | `dsh-editor-shell` | `settings`, `connection` |
-| `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope`, `settingsSchema`, `remote` |
-| `dsh-editor-plugins` Host | `dsh-editor-plugins` | `connection`, `loader` |
+| `dsh-editor-shell` Host | `dsh-editor-shell` | `settings`, `connection`, `webServer` |
+| `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope`, `settingsSchema`, `remote`, `remote.session`, `remote.settings`, `remote.credentials`, `remote.llm`, `remote.directoryPicker`, `uiSession` |
+| `dsh-editor-plugins` Host | `dsh-editor-plugins` | `connection`, `loader`, `webServer` |
 | `dsh-editor-plugins` Client | `dsh-editor-plugins-client` | `slots`, `connection` |
 | `dsh-editor-proofread-panel` Host | `dsh-editor-proofread-panel` | （无） |
 | `dsh-editor-proofread-panel` Client | `dsh-editor-proofread-panel-client` | `slots`, `connection`, `dshEditorCommands` |
@@ -169,16 +167,16 @@ dsh-editor-novel-kernel/host
 | `dsh-editor-overview-panel` Client | `dsh-editor-overview-panel-client` | `slots`, `connection`, `dshEditorCommands` |
 | `dsh-editor-memory-panel` Host | `dsh-editor-memory-panel` | （无） |
 | `dsh-editor-memory-panel` Client | `dsh-editor-memory-panel-client` | `slots`, `connection`, `dshEditorCommands`, `dshEditorMessageCards` |
-| `dsh-proofread` Host | `dsh-proofread` | `connection` |
+| `dsh-proofread` Host | `dsh-proofread` | `connection`, `webServer` |
 | `dsh-proofread` Client | `dsh-proofread-client` | `slots`, `connection` |
-| `dsh-zhihu` Host | `dsh-zhihu` | `connection`, `credentials`, `storageDomain` |
+| `dsh-zhihu` Host | `dsh-zhihu` | `connection`, `credentials`, `storageDomain`, `webServer` |
 | `dsh-zhihu/tools` | `dsh-zhihu-tools` | `zhihu`, `tools` |
 | `dsh-manuscript/assist` | `dsh-manuscript-assist` | `llm`, `storageDomain`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy` |
 | `dsh-editor-workbench/tools` | `dsh-editor-workbench-tools` | `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `tools` |
 
 Shell 以 `root` slot id `dsh-editor-shell-root`、priority `-100`、label `DSH 编辑器` 注册。manuscript client 只注册 `shell.overlay`（id `manuscript`，order `100`，label `稿纸`），禁止占用 `root` 或 `conversation.view`。
 
-Shell 另声明 `dsh-editor.extensions`（list/root）并渲染贡献；公开 proofread 与 zhihu 在此及官方 `shell.overlay` 贡献同一个自有 Client。它们不接收 ShellContext，只使用自己的输入和 Connection；输入修订、取消、焦点和样式由插件生命周期维护。详见[挂载合同](plugin-composition-guide.md#最小插件开发范本)。Shell 还声明 `dsh-editor.settings.plugins`，由 `dsh-editor-plugins` 填入设置里的「插件」分类：由 `dshEditor.entries[].locked` 决定哪些入口不可关闭；其余带 feature 的入口可开关；社区插件从 GitHub `topic:dsh-plugin` 搜索安装，安装与卸载后需要重启。
+Shell 声明 `dsh-editor.extensions`、`dsh-editor.settings.plugins`、`dsh-editor.settings.zhihu`、`dsh-editor.sidebar.tools` 与 `dsh-editor.center.overlays` 五个 list/root 座位。通用 extensions 合同保留，但当前 proofread 和 zhihu 都不向它贡献顶栏入口：proofread 只保留官方 Web 的 `shell.overlay`，知乎分别使用官方 overlay 和桌面 `.settings.zhihu`。知乎桌面组件默认展示配置，并提供用量、知识库与连接测试。详见[挂载合同](plugin-composition-guide.md#最小插件开发范本)。插件设置座位由 `dsh-editor-plugins` 渲染：核心锁定读 `dshEditor.entries[].locked`，扩展按作者用途分组；社区插件从 GitHub 市场检查和安装。
 
 ### Shell 座位与命令注册表
 
@@ -199,6 +197,7 @@ Shell 另声明 `dsh-editor.extensions`（list/root）并渲染贡献；公开 p
 - `pinnedPath`：当前钉住的文档路径，未钉住时为 `null`
 - `togglePin(path)`：钉住该路径，或在已钉住时取消。钉住栏仍是 Shell 布局能力
 - `ProposalCard`：Shell 持有的作者确认卡。插件不得自己写作者正文。
+- `Select?` / `Dialog?`：可选的宿主共享控件；合同在 `dsh-editor-seats`，插件独立运行时保留自己的退路。
 
 概览与记忆插件各自拉取 workbench RPC，不把 `project.overview` 塞进座位上下文。
 
@@ -350,12 +349,15 @@ Channel：`/dsh-editor-plugins`。不要求 `sessionId`。开关写入 `$DSH_HOM
 
 | Endpoint | 请求字段 | 语义 |
 | --- | --- | --- |
-| `inventory.list` | 无 | 读 · 核心 / 写作扩展 / 社区三组卡片；`@deepseek-ai/*` 内部项隐藏；核心 `locked` |
-| `entry.setEnabled` | `entryId`, `enabled` | 写 · 拒绝核心与 Harness 内部项；即时 `loader.update` 并持久化覆盖 |
+| `inventory.list` | 无 | 读 · 入口清单及锁定 / 状态信息；Client 将内置入口按作者用途分组，社区包单列；内部项隐藏 |
+| `entry.setEnabled` | `entryId`, `enabled` | 写 · 单项兼容入口；拒绝核心与内部项；先持久化，再尝试更新 loader |
+| `entries.setEnabled` | `entryIds: string[]`, `enabled` | 写 · 同组入口一次变更；返回 `{ restartRequired }`。写入前检查 patch 所有权 / 可读性，持久化失败补偿原状态，不继续更新 loader |
 | `marketplace.search` | `query` | 读 · GitHub `topic:dsh-plugin` 搜索；`owner/repo` 可直接进入结果 |
 | `marketplace.inspect` | `spec` | 读 · 下载后静态检查，不写入 profile：构建产物、patch 入口、root 冲突、DSH/cordis 版本、客户端 lazy-CJS |
 | `marketplace.install` | `spec` | 写 · 仅 `github:owner/repo`；先跑同一套静态检查，`blocked` 拒绝；不运行 prepare 脚本 |
 | `marketplace.uninstall` | `name` | 写 · 只卸载市场安装的包，不删作品文件 |
+
+开关保存涉及插件状态文件与受管覆盖 patch；无法读取 patch、发现自定义内容或落盘失败时，应返回错误并保留原配置，不能显示“已保存”。安装 / 卸载也先做 patch 检查；`restartRequired` 表示配置已保存但运行时尚未全部应用，不代表失败写入成功。
 
 ## 如何修改或替换现有插件
 
@@ -363,7 +365,7 @@ Channel：`/dsh-editor-plugins`。不要求 `sessionId`。开关写入 `$DSH_HOM
 | --- | --- |
 | 三栏布局、稿纸、搜索面板、导出导入归档、钉住栏、Chat 展示（含记忆回执卡）、设置、内置快捷键 | `dsh-editor-shell` |
 | 侧栏人物卡/世界书、详情 overlay、`cards-character` / `cards-worldbook` | `dsh-editor-cards` |
-| 侧栏作品校对面板、`proofread-document` / `proofread-manuscript` 命令 | `dsh-editor-proofread-panel` |
+| 保留的侧栏作品校对面板、校对命令（0.2.0 桌面暂停） | `dsh-editor-proofread-panel` |
 | 中栏作品概览、`overview` 命令（Ctrl+Shift+O） | `dsh-editor-overview-panel` |
 | 侧栏记忆维护、`memory-open` 命令 | `dsh-editor-memory-panel` |
 | 插件开关、GitHub 市场搜索与安装 | `dsh-editor-plugins` |

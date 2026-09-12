@@ -1,0 +1,75 @@
+{
+  "desktopVersion": "0.2.0",
+  "runtimeVersion": "0.1.5-rc.2",
+  "date": "2026-09-12",
+  "sourceCommit": "3e874cf1551f1a5511d924f28e24421a98668a42",
+  "scope": "Local pre-publication validation; not a claim about a later tag or downloaded release assets",
+  "build": true,
+  "typecheck": true,
+  "unitTests": {
+    "passed": 994,
+    "failed": 0
+  },
+  "suites": [
+    {
+      "name": "desktop-polish",
+      "checks": 11,
+      "ok": true,
+      "reportSha256": "b19082bef172359472a9932a82a037ea77fb688aadd9b8f7efd111c6133d9922",
+      "clipboardMode": null
+    },
+    {
+      "name": "editor-context-menu",
+      "checks": 23,
+      "ok": true,
+      "reportSha256": "a7eda22eaf852e07943428bd275662cf906aace0f259dcfcf01b67471b2ed059",
+      "clipboardMode": "native OS"
+    },
+    {
+      "name": "ui-assistant",
+      "checks": 23,
+      "ok": true,
+      "reportSha256": "96aa8dbeae37e91e6100d7781d843bf0f985c24dc0749151a8f4fc5a976261c8",
+      "clipboardMode": null
+    },
+    {
+      "name": "author-panels",
+      "checks": 14,
+      "ok": true,
+      "reportSha256": "30e03dd105cd675951d85a4512deae18ca484c2430f5c49ca5f0c9cef10e8fa5",
+      "clipboardMode": null
+    },
+    {
+      "name": "composition-full",
+      "checks": 6,
+      "ok": true,
+      "reportSha256": "3f8a33ae569022b8dd91f28bb1472996dd145bacb75470fe460679d9327c13c5",
+      "clipboardMode": null
+    },
+    {
+      "name": "entry-disable",
+      "checks": 2,
+      "ok": true,
+      "reportSha256": "edeea079cba9998e9ac9984f48130b6b29654d7047cb08261dc5d10f38b8bc89",
+      "clipboardMode": null
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "DSH Editor-0.2.0-win-x64.exe",
+      "bytes": 213050809,
+      "sha256": "6f25ed7ec82ccaf912c4b260b2471e178ae33478bffd945ceb9c8e4de66da0b6"
+    },
+    {
+      "name": "DSH Editor-Setup-0.2.0-win-x64.exe",
+      "bytes": 165106511,
+      "sha256": "68af0f7660c7df6e6e3e99840bb19dc61da67c0fdd28c0ce3fed3ca6b4beee0d"
+    }
+  ],
+  "portable": {
+    "ok": true,
+    "exitCode": 0,
+    "portReleased": true,
+    "debuggerReleased": true
+  }
+}

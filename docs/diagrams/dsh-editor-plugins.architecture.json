@@ -2,62 +2,273 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "DSH Editor 插件分级与依赖",
+    "title": "DSH Editor 0.2.0 插件分级",
     "output": "dsh-editor-plugins.html",
     "quality_profile": "showcase",
     "legend": {
       "mode": "auto",
       "entries": {
-        "frontend": { "label": "界面 / 入口" },
-        "backend": { "label": "Host 插件" },
-        "cloud": { "label": "DSH 运行时" },
-        "external": { "label": "Web profile" }
+        "frontend": {
+          "label": "界面 / 入口"
+        },
+        "backend": {
+          "label": "Host 插件"
+        },
+        "cloud": {
+          "label": "DSH 运行时"
+        },
+        "external": {
+          "label": "Web profile"
+        }
       }
     },
     "views": [
       {
         "id": "desktop-profile",
         "label": "桌面 profile",
-        "focus": ["electron", "dsh-host", "shell", "manuscript", "workbench", "kernel"],
+        "focus": [
+          "electron",
+          "dsh-host",
+          "shell",
+          "manuscript",
+          "workbench",
+          "kernel"
+        ],
         "note": "Electron 启动唯一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"
       },
       {
         "id": "public-web",
         "label": "公开 Web 插件",
-        "focus": ["web-dsh", "manuscript", "proofread", "zhihu"],
+        "focus": [
+          "web-dsh",
+          "manuscript",
+          "proofread",
+          "zhihu"
+        ],
         "note": "三个 tarball 可按任意顺序安装到普通 web profile。"
       },
       {
         "id": "in-process-deps",
         "label": "进程内依赖",
-        "focus": ["shell", "manuscript", "workbench", "kernel", "dsh-host"],
+        "focus": [
+          "shell",
+          "manuscript",
+          "workbench",
+          "kernel",
+          "dsh-host"
+        ],
         "note": "host-api 是库导入；kernel 向同一 Host 注册 tools，不对外提供文件 RPC。"
       }
     ]
   },
   "components": [
-    { "id": "electron", "type": "frontend", "label": "桌面 Electron", "sublabel": "不可插件化", "pos": [48, 88], "size": [184, 66] },
-    { "id": "web-dsh", "type": "external", "label": "普通 web profile", "sublabel": "可独立安装", "pos": [1216, 88], "size": [184, 66] },
-    { "id": "dsh-host", "type": "cloud", "label": "DSH Host", "sublabel": "桌面子进程", "pos": [48, 304], "size": [184, 66] },
-    { "id": "shell", "type": "frontend", "label": "dsh-editor-shell", "sublabel": "fixed-version root", "pos": [340, 304], "size": [184, 66] },
-    { "id": "proofread", "type": "backend", "label": "dsh-proofread", "sublabel": "公开 · 纯校对", "pos": [632, 304], "size": [184, 66], "tag": "公开 tarball" },
-    { "id": "zhihu", "type": "backend", "label": "dsh-zhihu", "sublabel": "公开 · 资料", "pos": [924, 304], "size": [184, 66], "tag": "公开 tarball" },
-    { "id": "kernel", "type": "backend", "label": "novel-kernel", "sublabel": "private host-only", "pos": [48, 520], "size": [184, 66] },
-    { "id": "workbench", "type": "backend", "label": "workbench", "sublabel": "private host-only", "pos": [340, 520], "size": [184, 66] },
-    { "id": "manuscript", "type": "backend", "label": "dsh-manuscript", "sublabel": "public dual-face", "pos": [632, 520], "size": [184, 66], "tag": "公开 tarball" }
+    {
+      "id": "electron",
+      "type": "frontend",
+      "label": "桌面 Electron",
+      "sublabel": "不可插件化",
+      "pos": [
+        48,
+        88
+      ],
+      "size": [
+        184,
+        66
+      ]
+    },
+    {
+      "id": "web-dsh",
+      "type": "external",
+      "label": "普通 web profile",
+      "sublabel": "可独立安装",
+      "pos": [
+        1216,
+        88
+      ],
+      "size": [
+        184,
+        66
+      ]
+    },
+    {
+      "id": "dsh-host",
+      "type": "cloud",
+      "label": "DSH Host",
+      "sublabel": "桌面子进程",
+      "pos": [
+        48,
+        304
+      ],
+      "size": [
+        184,
+        66
+      ]
+    },
+    {
+      "id": "shell",
+      "type": "frontend",
+      "label": "dsh-editor-shell",
+      "sublabel": "fixed-version root",
+      "pos": [
+        340,
+        304
+      ],
+      "size": [
+        184,
+        66
+      ]
+    },
+    {
+      "id": "proofread",
+      "type": "backend",
+      "label": "dsh-proofread",
+      "sublabel": "公开 · 纯校对",
+      "pos": [
+        632,
+        304
+      ],
+      "size": [
+        184,
+        66
+      ],
+      "tag": "公开 tarball"
+    },
+    {
+      "id": "zhihu",
+      "type": "backend",
+      "label": "dsh-zhihu",
+      "sublabel": "公开 · 资料",
+      "pos": [
+        924,
+        304
+      ],
+      "size": [
+        184,
+        66
+      ],
+      "tag": "公开 tarball"
+    },
+    {
+      "id": "kernel",
+      "type": "backend",
+      "label": "novel-kernel",
+      "sublabel": "private host-only",
+      "pos": [
+        48,
+        520
+      ],
+      "size": [
+        184,
+        66
+      ]
+    },
+    {
+      "id": "workbench",
+      "type": "backend",
+      "label": "workbench",
+      "sublabel": "private host-only",
+      "pos": [
+        340,
+        520
+      ],
+      "size": [
+        184,
+        66
+      ]
+    },
+    {
+      "id": "manuscript",
+      "type": "backend",
+      "label": "dsh-manuscript",
+      "sublabel": "public dual-face",
+      "pos": [
+        632,
+        520
+      ],
+      "size": [
+        184,
+        66
+      ],
+      "tag": "公开 tarball"
+    }
   ],
   "boundaries": [
-    { "kind": "region", "label": "桌面 profiles/dsh-editor（默认 full）", "wraps": ["dsh-host", "shell", "kernel", "workbench", "manuscript", "proofread", "zhihu"] },
-    { "kind": "region", "label": "公开 Web 交付", "wraps": ["web-dsh", "manuscript", "proofread", "zhihu"] }
+    {
+      "kind": "region",
+      "label": "桌面 profiles/dsh-editor（默认 full）",
+      "wraps": [
+        "dsh-host",
+        "shell",
+        "kernel",
+        "workbench",
+        "manuscript",
+        "proofread",
+        "zhihu"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "公开 Web 交付",
+      "wraps": [
+        "web-dsh",
+        "manuscript",
+        "proofread",
+        "zhihu"
+      ]
+    }
   ],
   "connections": [
-    { "id": "electron-to-host", "from": "electron", "to": "dsh-host", "label": "启动子进程", "variant": "emphasis", "labelDy": 24 },
-    { "id": "host-to-shell", "from": "dsh-host", "to": "shell", "label": "加载 root", "variant": "emphasis" },
-    { "id": "host-to-kernel", "from": "dsh-host", "to": "kernel", "label": "注册 tools", "labelDy": 24 },
-    { "id": "shell-to-workbench", "from": "shell", "to": "workbench", "label": "私有 RPC", "labelDy": 24 },
-    { "id": "shell-to-manuscript", "from": "shell", "to": "manuscript", "label": "/manuscript", "variant": "emphasis", "fromSide": "right", "toSide": "top" },
-    { "id": "workbench-to-manuscript", "from": "workbench", "to": "manuscript", "label": "host-api 库" },
-    { "id": "web-to-zhihu", "from": "web-dsh", "to": "zhihu", "label": "可独立安装", "variant": "dashed" }
+    {
+      "id": "electron-to-host",
+      "from": "electron",
+      "to": "dsh-host",
+      "label": "启动子进程",
+      "variant": "emphasis",
+      "labelDy": 24
+    },
+    {
+      "id": "host-to-shell",
+      "from": "dsh-host",
+      "to": "shell",
+      "label": "加载 root",
+      "variant": "emphasis"
+    },
+    {
+      "id": "host-to-kernel",
+      "from": "dsh-host",
+      "to": "kernel",
+      "label": "注册 tools",
+      "labelDy": 24
+    },
+    {
+      "id": "shell-to-workbench",
+      "from": "shell",
+      "to": "workbench",
+      "label": "私有 RPC",
+      "labelDy": 24
+    },
+    {
+      "id": "shell-to-manuscript",
+      "from": "shell",
+      "to": "manuscript",
+      "label": "/manuscript",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "workbench-to-manuscript",
+      "from": "workbench",
+      "to": "manuscript",
+      "label": "host-api 库"
+    },
+    {
+      "id": "web-to-zhihu",
+      "from": "web-dsh",
+      "to": "zhihu",
+      "label": "可独立安装",
+      "variant": "dashed"
+    }
   ],
   "cards": [
     {
@@ -66,7 +277,7 @@
       "items": [
         "manuscript、proofread、zhihu 是公开 tarball",
         "shell、workbench、kernel 只随桌面 profile 交付",
-        "两框重叠的三个包同时出现在两种交付里"
+        "桌面保留校对引擎；知乎配置移入设置"
       ]
     },
     {

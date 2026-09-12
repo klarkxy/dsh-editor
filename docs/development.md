@@ -2,6 +2,8 @@
 
 需要修改、替换或建立插件时，先阅读 [插件架构与接口](plugin-architecture.md)。改界面或主题时先读 [界面与设计系统](ui.md)；改产品边界时先读 [产品原则](product-principles.md)。
 
+本文适用于桌面 **0.2.0**；[文档索引](README.md) 和 [本轮验收记录](release-0.2.0.md) 汇总当前入口与证据。
+
 ## 环境与固定版本
 
 - Windows x64
@@ -14,6 +16,7 @@ node --version
 pnpm --version
 dsh --version
 pnpm install --frozen-lockfile
+pnpm build
 ```
 
 脚本会从实际 DSH package root 校验版本。需要覆盖定位时可设置绝对 `DSH_CLI_PATH`；无效路径会直接失败，不会静默换用其他版本。
@@ -27,7 +30,7 @@ packages/dsh-editor-plugins/   私有插件管理：开关、GitHub 市场搜索
 packages/dsh-editor-workbench/ 私有项目生命周期与 context Host
 packages/dsh-editor-novel-kernel/ 私有小说 Tool、guard、prompt 与知识卡
 packages/dsh-editor-cards/     私有垂直插件：/dsh-editor-cards Host RPC + contracts + 卡片面板/详情 Client
-packages/dsh-editor-proofread-panel/ 私有 client-only：作品校对面板（侧栏座位 + 两条命令）
+packages/dsh-editor-proofread-panel/ 私有 client-only：保留的作品校对面板代码；0.2.0 三份桌面组合均不装载
 packages/dsh-editor-overview-panel/  私有 client-only：作品概览（中栏 overlay 座位）
 packages/dsh-editor-memory-panel/    私有 client-only：记忆维护面板 + Chat 记忆更新卡
 packages/dsh-editor-workspace-kit/   私有进程内库：access bag、sidecar IO、条目/目录校验、no-replace move、frontmatter
@@ -106,15 +109,24 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 - package 必须导出 `./package.json`；DSH 客户端发现依赖该公开解析契约。
 - 通过 root slot `priority: -100` 遮蔽官方 priority 0 AppFrame；最低 priority 渲染。该行为与 rc.2 root 类型声明中的普通插件指导相冲突，只允许在固定 `0.1.5-rc.2`、私有 `dsh-editor` profile 和完整 E2E 闸门下使用；它是明确的升级阻断点。
 - 客户端注入 `slots`、`sessions`、`workspaces`、`connection`、`settingsScope`、`settingsSchema`、`remote`、`remote.session` / `settings` / `credentials` / `llm` / `directoryPicker` 和 `uiSession`。`dsh.client.inject` 必须先拉 `@deepseek-ai/dsh-typert-registry` 和 `@deepseek-ai/dsh-api-gateway`，再挂 connection / ui-settings / session-controller / workspace-controller / remotes / ui-session；缺 gateway 时 remotes `$mount` 不完成，写作壳不会出现。
-- 设置弹窗由 shell 自建（`src/client/settings*.tsx` + `select.tsx` 自制下拉）：profile patch（`apps/desktop/resources/profile/cordis.patch.yml`）禁用上游 `ui-settings-general`/`ui-settings-models`，但保留 `ui-settings`（提供 settingsScope/settingsSchema 服务）。通用设置写 `ui-theme`/`locale`/`ui-conversation` namespace，模型页走 `llm.providers`/`settings.mutate`/`credentials.*`/`llm.discoverModels` 与上游同协议。上游升级（DSH_VERSION）时需复查这些 API 与禁用条目——与 root slot 遮蔽同为升级阻断点。
+- 设置弹窗由 shell 自建（`src/client/settings*.tsx` + `src/client/ui/`，`select.tsx` 包装 Radix Select）：profile patch（`apps/desktop/resources/profile/cordis.patch.yml`）禁用上游 `ui-settings-general`/`ui-settings-models`，但保留 `ui-settings`（提供 settingsScope/settingsSchema 服务）。通用设置写 `ui-theme`/`locale`/`ui-conversation` namespace，模型页走 `llm.providers`/`settings.mutate`/`credentials.*`/`llm.discoverModels` 与上游同协议。上游升级（DSH_VERSION）时需复查这些 API 与禁用条目——与 root slot 遮蔽同为升级阻断点。
 - 弹窗内不使用原生 `<select>`（Windows Chromium 下其弹层不跟随 color-scheme）；残留原生下拉的 ink 兜底规则在 styles.ts 的 baseStyles 尾部。
 - `DshChatPort` 只投影单一 `ConversationSnapshot`，不 `connection.start()`、不持久化 Chat。
+
+### 桌面客户端维护点
+
+- Root 声明 `dsh-editor.extensions`、`dsh-editor.settings.plugins`、`dsh-editor.settings.zhihu`、`dsh-editor.sidebar.tools`、`dsh-editor.center.overlays`。知乎在专用设置座位渲染；当前没有桌面校对贡献。
+- 用量图在 `client/settings-usage.tsx` 按需引入 ECharts 的 Bar / Grid / Tooltip / Aria / SVG，`tsdown.config.ts` 将 ECharts 与 zrender 内联；不要新增运行时 CDN。
+- `auxiliary-files.ts` 同时用于文件树和 SearchPanel 接受结果的边界，批量替换只使用已接受的作者文件结果。隐藏文件不会因此被删除或禁止搭档读取。
+- 正文剪贴板通过 `apps/desktop/preload.cjs` 和 `src/clipboard.ts` 的受限 IPC 调用 Electron 主进程，写入正文前再次校验文档代次、版本与选区；公开 Web 使用自己的安全退路。
+- 模型页分配补全、改写和新对话默认模型；更改提供方后刷新目录，显示 provider 来源，已有对话保留原选择。
+- 插件开关先持久化再更新 loader；状态文件与受管 patch 的写入失败须补偿恢复。自定义或不可读 patch 在修改配置、安装或卸载前拒绝，失败回执不得显示成功。
 
 ### `dsh-editor-workbench`
 
 - Host-only 私有包，独占 `/dsh-editor-workbench`。
 - 负责项目结构、章节概览/状态、校对扫描、写作进度、context、导入、快照、移动与归档；复用 `dsh-manuscript/host-api` 的同一 workspace authority。卡片 RPC 在 `dsh-editor-cards`；workbench 只通过 `host-api` 读卡做校对对照。
-- 主入口 `inject` 为 `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`。可选 `dsh-editor-workbench/tools` 入口另注入 `tools`，只注册只读 `novel_overview`。
+- 主入口 `inject` 为 `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer`。可选 tools 入口注册只读 `novel_overview` 和需要作者确认的 `novel_memory_update`。
 - `./contracts` 只含 browser-safe channel、类型、解析器与纯函数，并由 Shell client 构建内联。
 
 ### `dsh-editor-novel-kernel`
@@ -129,23 +141,23 @@ e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
 - Host：`packages/dsh-manuscript/src/index.ts`
 - RPC：`/manuscript`
 - 文件 authority 来自 live session 的 `header.cwd`；浏览器 cwd/provider/model 一律不可信。
-- `patch.complete` 和 FIM 从 live request header 选择模型，支持 abort 与有界输入。
+- `patch.complete` 和 FIM 由 Host 按可信 live session 与写作模型设置选择有效 provider/model；未分配角色模型时跟随当前对话，支持 abort 与有界输入。
 - 公开 Web 客户端继续注册 `shell.overlay`，不得占 root。
 
 ### `dsh-proofread`
 
-- 公开包：`/proofread` 文本校对，只注入 `connection`，不依赖 session、文件或模型。
-- 引擎、词库与 contracts 是纯库；桌面 workbench 把它们当依赖，不经过这条 RPC。
+- 公开包：`/proofread` 文本校对，只注入 `connection` 与 `webServer`，不依赖 session、文件或模型。
+- 引擎、词库与 contracts 是纯库；桌面 workbench 把它们当依赖，不经过这条 RPC。0.2.0 的桌面 profile 默认禁用 `proofread` entry，并从三份 recipe 移除 `proofread-panel`；独立 Web 安装仍保留校对 UI。
 
 ### `dsh-zhihu`
 
-- 公开包：`/zhihu` 资料、知识库与用量；自有 UI 同时挂官方 overlay 和桌面 `dsh-editor.extensions`。
+- 公开包：`/zhihu` 资料、知识库与用量；普通 Web 使用 `shell.overlay`，桌面使用 `dsh-editor.settings.zhihu` 内嵌设置入口。
 - Tool 入口 `dsh-zhihu/tools` 按组合选择，默认 full 才加入。
 
 ### `dsh-editor-plugins`
 
 - 私有包：`/dsh-editor-plugins` 列出/开关已装插件，并从 GitHub `topic:dsh-plugin` 搜索安装。
-- 核心入口（稿纸、工作台、写作界面、插件管理）与 `@deepseek-ai/*` 不能关闭或卸载。
+- 核心入口（稿纸、工作台、写作界面、插件管理）与 `@deepseek-ai/*` 不能关闭或卸载。内置扩展按作者用途分组，用 `entries.setEnabled` 一次保存同组开关；单项 `entry.setEnabled` 保持兼容。
 - 市场安装写入 `$DSH_HOME/user-plugins/`，桌面每次部署 profile 后重新挂回；安装与卸载后需要重启。
 - 安装前 `marketplace.inspect` / 安装时同一套静态检查：构建产物、patch insert、root 冲突、DSH/cordis 主版本、客户端 lazy-CJS。`blocked` 拒绝安装。这不能证明运行时一定成功。
 
@@ -175,6 +187,8 @@ pnpm test:e2e:desktop
 - 外窗可缩到 1280×720；
 - 关闭后原端口不可访问。
 
+本轮界面回归还包括 `node e2e/desktop-polish.mjs`、`node e2e/editor-context-menu.mjs`、`node e2e/ui-assistant.mjs` 与 `node e2e/author-panels.mjs`；它们分别覆盖设置 / 文件栏 / 图表、正文菜单、搭档写作和扩展面板。`desktop-polish` 的用量数据和部分外部响应使用固定样例，不能据此声称在线模型质量或供应商计量正确。
+
 公开插件矩阵与可选凭据化 live E2E 的输出继续位于 `e2e/out`。历史报告不得用作新 DSH/Node/源码版本的证据。
 
 ## 桌面构建（Portable / 安装版 / macOS）
@@ -199,7 +213,7 @@ pnpm pack:desktop
 
 ## Release CI
 
-推送 `v*` tag 会触发 `.github/workflows/release.yml`，先要求标签严格等于 `v` 加桌面应用版本号；不一致会在构建前失败。之后 Windows 与 macOS runner 各自安装 pin 版本的 DSH CLI、`pnpm install --frozen-lockfile`、`pnpm pack:desktop`，然后把产物上传到该 tag 的 GitHub Release（不存在则创建）。也可以用 workflow_dispatch 输入 tag 给已发布版本补传产物。tag、release 标题与 notes 仍由人工维护；CI 只负责构建与上传。
+推送 `v*` tag 会触发 `.github/workflows/release.yml`，先要求标签严格等于 `v` 加桌面应用版本号；不一致会在构建前失败。之后 Windows 与 macOS runner 各自安装固定版本的 DSH CLI 和 workspace 依赖，先 `pnpm build`，再做类型检查与单元测试；Windows 还运行桌面和核心写作 E2E，随后两平台分别打包。统一上传任务等待两个平台成功后，把产物与 `sha256sums.txt` 上传到该 tag 的 GitHub Release（不存在则创建）。也可以用 workflow_dispatch 输入 tag 给已发布版本补传产物。tag、release 标题与 notes 由发布者维护；CI 负责构建与上传。正式发布前先创建 draft Release，再推送标签；保持 draft，直到两平台任务成功、下载文件与 SHA-256 一致且下载后的 Windows 便携包实际启动、保存与退出验证通过，最后再公开。不要把先前本地包的验收当成该标签下载包的证据。
 
 ## 安全审查清单
 
@@ -208,7 +222,7 @@ pnpm pack:desktop
 - CSP 的 `unsafe-eval` 仅因为固定 DSH 客户端模块系统需要，不能扩大外部 origin；
 - profile 同名无 marker 时必须拒绝覆盖；
 - 只能终止 Supervisor 记录的 DSH 进程树；
-- Renderer 不得接触 credential、absolute path 或 Node fs；
+- Renderer 不得读取凭据明文或直接调用 Node fs；文件权限由 Host 重建；
 - Chat Renderer 不执行工具；DSH Agent 只能在 guard 下调用受限检索、只读知识、非写入提案、限量提问与 `.dsh-editor/scratch/` 临时工作区，不直接写正文，也不保存历史副本；写作会话挂载桌面应用部署的 `dsh-editor` 专属 agent preset（只含 read/glob/grep、ask_user_question 与 compaction），不挂载官方 `standard` 编码工具目录；
 - 任何 commit、push、tag、publish、release 或签名必须另行授权。
 

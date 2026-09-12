@@ -1,5 +1,7 @@
 # 插件拆分实施与验收记录
 
+> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](README.md)，本轮验证见 [0.2.0 验收记录](release-0.2.0.md)。
+
 > 本文是 2026-09-09 的当时快照。其后的声明式拼装、Shell 座位与垂直插件迁出见[声明式拼装记录](plugin-assembly-progress.md)；下文提到的 `/novel-kernel`、`zhihu.usage` 转发与 workbench 的 `cards.*` 已在该轮移除或迁出。
 
 > 后续更新：已授权的 MiniMax-M3 在线实测及修复见[在线验证记录](minimax-live-validation.md)。本文件的原始回执保留为当时快照；当前仍有两项非 AI 交互待定位。

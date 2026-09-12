@@ -1,33 +1,34 @@
 # dsh-editor-shell
 
-桌面写作 shell 调用 `dsh-editor-workbench` 拥有的 loopback-only `/dsh-editor-workbench` RPC 管理作品生命周期，普通稿件读写、搜索与 AI 建议仍走公开 `/manuscript`；界面不会直接访问 Node 文件系统。
+桌面唯一根界面。不发布、不装到日常 `web` profile。包版本 `0.1.0`，不是桌面应用 `0.2.0`。只占 `root`（id `dsh-editor-shell-root`，`src/root-registration.ts`），不声明 `shell.overlay`。兼容 DSH `0.1.5-rc.2`。
 
-## 三栏与面板
+作品生命周期走 `/dsh-editor-workbench`；普通稿件读写、搜索与 AI 建议走公开 `/manuscript`。Renderer 不直接访问 Node 文件系统。
 
-工作区是可折叠、可键盘调整宽度的文件 / 稿纸 / 搭档三栏；专注模式临时只保留稿纸。左侧文件树只渲染磁盘上真实存在的条目（隐藏 `.` 开头项）；新建作品只预建 `正文/`。栏顶入口：
+## 座位
 
-- 搜索（Ctrl+Shift+F）：整部作品或仅正文的字面量全文搜索（`search.text`）
-- 校对（Ctrl+Shift+L）：标点 / 错别字 / 敏感词 / 重复 / 口癖（`proofread.scan`）；自动应用只接受 Markdown，`.txt` 需手工改
-- 概览（Ctrl+Shift+O）：章节状态、字数分布、近 30 日 / 12 周写作曲线
-- 人物（Ctrl+Shift+C）/ 设定（Ctrl+Shift+W）：人物卡与世界书面板（`cards.*`，页签也可互切）；选中一张后稿纸区旁打开字段表单与引用列表
-- 提交 / 历史：简易快照，不是独立的快捷键表或快照库对话框
+Root 子座位（`src/root-registration.ts`）：
 
-作品菜单与命令面板提供导入、导出预检（Markdown / TXT / DOCX / EPUB）和「已归档」。没有单独的快捷键对照表对话框；命令面板（Ctrl+K）列出可用命令。
+- `dsh-editor.sidebar.tools` / `dsh-editor.center.overlays`（带 `ShellToolSeatContext`）
+- `dsh-editor.settings.plugins` / `dsh-editor.settings.zhihu`
+- `dsh-editor.extensions`（公开插件 dock；当前校对 / 知乎不再往这里挂）
+- 服务：`dshEditorCommands`、`dshEditorMessageCards`
 
-稿纸内查找 / 替换是 Ctrl+F / Ctrl+H（`@codemirror/search`）。打字机滚动 Ctrl+Alt+T，段落聚焦 Ctrl+Alt+P；字号、行高、字体、段距、纸宽写在 `dsh-editor-writing`。打开世界书 Markdown 时，稿纸下方提供触发词 / 启用 / 优先级表单。保存成功后 5 秒防抖调用 `progress.record`。侧栏可显示每日目标字数小标。
+合同在 `dsh-editor-seats`（构建时内联；`./seats` 再导出）。座位 owner 附带共享 `Select` / `Dialog`（Radix，`src/client/ui/`、`src/client/select.tsx`）。
 
-## 归档与对话
+## 工作台
 
-文件树右键「归档」只对单个可见 Markdown/TXT 生效，记录进 `.dsh-editor/archive/`，可从「已归档」恢复；目录不能归档。右键删除是永久删除，与归档不同。
+可折叠三栏；专注模式只留稿纸。左栏真实目录树：隐藏 `.` 开头项，以及 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `COPILOT.md`（`src/auxiliary-files.ts`）。新建作品只预建 `正文/`。栏顶：全文搜索（Ctrl+Shift+F）。概览 / 人物 / 设定由对应插件经座位与命令面板打开。**桌面校对入口已停用**（无 Ctrl+Shift+L、无顶栏校对）。提交 / 历史在文件栏菜单。
 
-对话标题栏 ⋯ 菜单提供归档、恢复、删除。删除只在本机写入墓碑 id，从切换列表和已归档列表隐藏；DSH `0.1.5-rc.2` 没有会话删除 API，会话本体仍留在 Host。
+跨文件搜索结果经 `acceptSearchResults` 再分组或替换（`src/client/search-panel.ts`）；辅助文件不进入命中与替换计划，磁盘文件保留。稿内查找替换仍是 Ctrl+F / Ctrl+H（`@codemirror/search`）。世界书触发词表单已移除。
 
-## 其它
+稿纸剪切 / 复制 / 粘贴走原生纯文本：优先 `window.dshWindow.clipboard`（Electron preload IPC），否则 `navigator.clipboard`（`src/client/editor-clipboard.ts`）。写失败不删正文。
 
-栏宽与文件栏开合只作为本机 Renderer 界面偏好保存。编辑器把 FIM 与选段 patch 显式呈现为可放弃建议。作品显示名和最近列表复用 DSH workspace registry。
+## 设置与其它
 
-Private client shell for the dedicated `dsh-editor` profile. It owns the root
-surface only in that profile and consumes DSH `0.1.5-rc.2` public runtime and
-connection contracts. The Host entry registers the `dsh-editor-writing`
-settings schema. Project lifecycle and novel tools belong to the two private
-Host plugins. It is not a public installable plugin.
+Host 注册 `dsh-editor-writing`。设置分类：通用 / 模型 / 写作 / 用量 / 知乎资料 / 插件（`src/client/settings.tsx`）。模型页管理 provider，并分配补全 / 改写 / 默认对话模型（`src/client/writing-model-routes.tsx`、`src/writing-settings-contract.ts`）。用量页用打包的 ECharts SVG 柱状图（`src/client/settings-usage.tsx`）。知乎无桌面启动器，嵌入设置座位。对话 ⋯：归档 / 恢复 / 删除（删除只写本机墓碑；DSH `0.1.5-rc.2` 无会话删除 API）。
+
+`/dsh-editor-shell` 仅 `capabilities.get`。项目与小说工具分属 workbench / novel-kernel。
+
+## 文档
+
+[使用者指南](../../docs/user-guide.md) · [界面](../../docs/ui.md) · [架构](../../docs/architecture.md) · [插件架构](../../docs/plugin-architecture.md)

@@ -1,12 +1,14 @@
 # DSH Editor
 
-DSH Editor 是 Windows / macOS 桌面写作应用。Electron 只负责单窗口、内置运行时与进程生命周期；固定版本的 DSH `0.1.5-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是真实目录树（新建作品只预建 `正文/`，大纲/人物卡/世界书等在实际创建后出现；栏顶提供搜索和版本操作，辅助文件隐藏；概览、人物与设定从命令面板打开，桌面校对暂时停用，知乎配置收在设置中），中是稿纸编辑器（稿内查找替换、打字机滚动、段落聚焦与排版、ghost FIM、选段改写、‹ › 章节导航），右是 dsh 对话线程（⋯ 菜单可归档、恢复或删除——删除只在本机记墓碑，DSH `0.1.5-rc.2` 没有会话删除）；两侧栏可以折叠或进入专注模式。
+当前桌面版本 **0.2.0**，内置 DSH `0.1.5-rc.2`。下载见 [GitHub Releases](https://github.com/klarkxy/dsh-editor/releases)，升级变化见 [CHANGELOG](CHANGELOG.md)。
+
+DSH Editor 是 Windows / macOS 桌面写作应用。Electron 负责窗口、受限剪贴板、内置运行时与进程生命周期；固定版本的 DSH `0.1.5-rc.2` 继续负责 Agent、会话、模型、工具、审批、用户提问和文件权限。应用默认显示三栏工作台：左是真实目录树（新建作品只预建 `正文/`，大纲/人物卡/世界书等在实际创建后出现；栏顶提供搜索和版本操作，辅助文件隐藏；概览、人物与设定从命令面板打开，桌面校对暂时停用，知乎配置收在设置中），中是稿纸编辑器（稿内查找替换、打字机滚动、段落聚焦与排版、ghost FIM、选段改写、‹ › 章节导航），右是 dsh 对话线程（⋯ 菜单可归档、恢复或删除——删除只在本机记墓碑，DSH `0.1.5-rc.2` 没有会话删除）；两侧栏可以折叠或进入专注模式。
 
 仓库提供三个可独立安装到普通 DSH Web profile 的公开插件，以及随桌面组合交付的私有插件。基础、智能和完整写作组合的安装与接口见[组合指南](docs/plugin-composition-guide.md)：
 
 | 组件 | 用途 | 数据所有者 |
 | --- | --- | --- |
-| Windows 桌面应用 | 项目初始化、Markdown 写作、写作助手、修改确认 | 本地作品目录与应用私有数据 |
+| Windows / macOS 桌面应用 | 项目初始化、Markdown 写作、写作助手、修改确认 | 本地作品目录与应用私有数据 |
 | `dsh-manuscript` | Web 中的可关闭稿纸抽屉、文件/FIM/查找替换与排版 | DSH workspace、sandbox 与版本化文件 API |
 | `dsh-proofread` | 独立中文文本校对，无模型或文件依赖 | 有界只读文本 RPC |
 | `dsh-zhihu` | 独立资料查询、知识库与用量；Tool 入口可选 | DSH 凭据与原计量 domain |
@@ -41,24 +43,30 @@ pnpm run dev:web
 ## 验证与便携 EXE
 
 ```powershell
-pnpm typecheck
-pnpm test
 pnpm build
+pnpm typecheck
+pnpm test --maxWorkers=2 --testTimeout=20000
 pnpm test:e2e:desktop
 pnpm test:e2e:core-loop
 pnpm test:e2e:visual-audit
-pnpm test:e2e:author-flow
+node e2e/desktop-polish.mjs
+node e2e/editor-context-menu.mjs
+node e2e/ui-assistant.mjs
 pnpm test:e2e:missing-private
 pnpm prepare:desktop-runtime
 pnpm pack:desktop
 pnpm test:e2e:portable
 ```
 
+全新检出先构建，生成跨包类型声明后再做类型检查。上面的测试参数适用于 Windows；真实模型与知乎调用另见 `pnpm test:e2e:author-flow` 和在线验证记录，需要可用凭据。
+
 `pack:desktop` 使用 Electron Builder 在 `.pack/desktop` 生成未签名产物：Windows 下为 portable EXE 与 NSIS 安装器，macOS 下为 Apple Silicon 的 dmg 与 zip。产物内置 Node、DSH、专用 profile 模板，以及选定组合的业务包（由 `scripts/plugin-manifest.mjs` 按 recipe 的 feature 集合与各包 `dshEditor` 声明解析，含 `dsh-editor-workspace-kit` 这类被依赖的进程内库）；首次启动会把经过整树哈希校验的运行时原子部署到应用自有缓存，之后不调用系统 Node、pnpm 或全局 dsh。Windows SmartScreen 与 macOS Gatekeeper 都可能提示未签名。
 
 公开插件的 tarball 与安装/卸载矩阵仍使用 `pnpm pack:plugins` 和 `pnpm test:e2e:matrix`。仓库脚本不会自动 commit、push、tag 或 publish；推送 `v*` tag 会触发 CI 在 Windows 与 macOS 上构建并把产物上传到对应 GitHub Release（见 [开发者指南](docs/development.md)）。
 
 ## 文档
+
+[文档索引](docs/README.md) 区分当前操作手册、包级合同与历史验证。[0.2.0 本地验收记录](docs/release-0.2.0.md) 列出本轮测试范围；最终发布产物以对应标签的 CI 与 Release 附件为准。
 
 - [可组合插件指南](docs/plugin-composition-guide.md)：独立安装、三份桌面配置、接口与真实插件开发范本
 - [拆分实施记录](docs/plugin-modularization-progress.md)：逐阶段验收与宿主限制

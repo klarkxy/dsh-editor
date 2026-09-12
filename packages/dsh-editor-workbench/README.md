@@ -1,34 +1,20 @@
 # dsh-editor-workbench
 
-Private Host-only plugin for DSH Editor project lifecycle, bounded
-project-context compilation, chapter overview/status, proofread, and
-writing-progress logs.
+桌面私有、仅 Host 的作品生命周期：有界上下文、章节概览/状态、校对扫描、进度、导入、快照、移动与归档。包版本 `0.1.0`，不是桌面应用 `0.2.0`。`dshEditor.role: core`。
 
-It is bundled only in the desktop-owned `dsh-editor` profile. Its browser-safe
-wire contract is exported from `dsh-editor-workbench/contracts`; the Host
-implementation is not a public plugin API. Card list/create/meta/reference
-RPCs live on `dsh-editor-cards`; this package imports `listCards` from
-`dsh-editor-cards/host-api` for proofread card-vs-manuscript checks.
+浏览器安全契约：`dsh-editor-workbench/contracts`。卡片 RPC 在 `dsh-editor-cards`；本包经 `dsh-editor-cards/host-api` 的 `listCards` 做校对对照。依赖 `dsh-proofread` 引擎（`./engine` / `./defaults` / `./contracts`）；三份桌面 recipe 都保留该依赖。桌面校对 UI 已停用，但 `proofread.scan` 仍在本 channel。
 
-The Host injects `connection`, `sessions`, `workspaceRegistry`, `fs`, and
-`sandboxPolicy`. It derives every root from a live session and reuses
-`dsh-manuscript/host-api`; callers cannot supply a trusted cwd. The optional
-`dsh-editor-workbench/tools` entry injects `tools` and registers read-only
-`novel_overview`.
+## 入口
 
-Host RPC dispatch is a per-cluster handler table in `src/rpc/`, still one
-Cordis entry and one channel (`/dsh-editor-workbench`). To add an endpoint:
-declare it on the `WorkbenchEndpoint` union and request/response maps, then
-add a `WorkbenchHandler` to the matching cluster module (`mutation`,
-`sessionless`, and `sessionKey` as needed). The merged table is checked at
-load/typecheck for duplicates and missing/extra keys; `withWorkspaceWrite`
-gating is derived from `mutation: true`.
+- `editor-workbench`：`/dsh-editor-workbench`（锁定）
+- `editor-workbench-tools`（feature `assistant`，smart / full）：`novel_overview`、`novel_memory_update`（`src/tools.ts`）
 
-Sidecar files under `.dsh-editor/` (`chapter-status.json`, `writing-log.json`,
-`敏感词.txt`, `敏感词-忽略.txt`) are excluded from snapshot payloads. Writes
-including `chapter.statusSet` / `progress.record` go through
-`withWorkspaceWrite`.
+注入：`connection`、`sessions`、`workspaceRegistry`、`fs`、`sandboxPolicy`、`webServer`。根目录只从 live session 推导，复用 `dsh-manuscript/host-api`。
 
-To replace this implementation, preserve `/dsh-editor-workbench` and its
-endpoint payloads, remove `editor-workbench` from the profile, then add
-exactly one replacement entry. Never load two handlers for the same channel.
+## 契约
+
+端点表在 `src/contracts/channel.ts`；分发在 `src/rpc/`（`mutation` / `sessionless` / `sessionKey`）。写入（含 `chapter.statusSet` / `progress.record`）走 `withWorkspaceWrite`。`.dsh-editor/` 侧车（`chapter-status.json`、`writing-log.json`、`敏感词.txt`、`敏感词-忽略.txt`）不进快照。替换时保留 channel 与载荷，且只保留一个 `editor-workbench`。
+
+## 文档
+
+[插件架构](../../docs/plugin-architecture.md) · [架构](../../docs/architecture.md) · [组合指南](../../docs/plugin-composition-guide.md)

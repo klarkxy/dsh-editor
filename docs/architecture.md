@@ -2,7 +2,7 @@
 
 本文描述桌面运行时、所有权边界和安全约束。产品原则见 [product-principles.md](product-principles.md)，界面与 token 见 [ui.md](ui.md)。插件分级、RPC/Tool/slot 接口以及修改、替换和新建插件流程见 [plugin-architecture.md](plugin-architecture.md)。开发和验收命令见 [development.md](development.md)。
 
-当前兼容基线固定为 DSH `0.1.5-rc.2`。
+本文适用于桌面 **0.2.0**，兼容基线固定为 DSH `0.1.5-rc.2`。
 
 ## 交互架构图
 
@@ -30,33 +30,32 @@ Electron（受控多窗口、资源校验、子进程生命周期）
       └─ 专用 profiles/dsh-editor（默认 full 组合）
          ├─ DSH base / web runtime / connection / renderer
          ├─ dsh-manuscript：公开稿件 Host RPC、稿纸 overlay 与共享 editor-core
-         ├─ dsh-proofread：纯文本校对引擎与 /proofread（basic/smart/full 均装）
-         ├─ dsh-zhihu：资料 RPC、自有 UI 与可选 Tool（默认 full）
+         ├─ dsh-proofread：纯文本引擎依赖（basic/smart/full 均保留；桌面 entry 默认禁用）
+         ├─ dsh-zhihu：资料 RPC、设置内嵌 UI 与可选 Tool（默认 full）
          ├─ dsh-editor-workbench：私有项目生命周期、概览/状态、校对、进度、context、导入、快照与归档
          ├─ dsh-editor-cards：人物卡/世界书 Host RPC 与 Client UI（侧栏列表、中栏详情、Ctrl+Shift+C/W）
          ├─ dsh-editor-novel-kernel：私有小说 Tool、guard、prompt 与知识卡（smart/full）
          ├─ dsh-editor-shell：私有根界面
-         │  ├─ 三栏：左真实目录树（新建只预建 `正文/`；栏顶搜索/校对/概览/人物/设定/提交/历史），中稿纸（查找替换、打字机/段落聚焦、排版、ghost FIM、选段改写、‹ › 导航），右 DshChatPort（对话 ⋯ 归档/恢复/删除）
+         │  ├─ 三栏：左真实目录树（新建只预建 `正文/`；栏顶搜索与版本菜单；辅助文件隐藏，资料工具从命令面板打开），中稿纸（查找替换、打字机/段落聚焦、排版、ghost FIM、选段改写、‹ › 导航），右 DshChatPort（对话 ⋯ 归档/恢复/删除）
          │  ├─ shell client 拆分为 src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}，并复用 dsh-manuscript/client/editor-core
-         │  └─ 对插件开放的座位：`dsh-editor.sidebar.tools`（带上下文）、`dsh-editor.center.overlays`（带上下文）、`dsh-editor.extensions`、`dsh-editor.settings.plugins`，以及 `dshEditorCommands` 命令/快捷键注册表
-         ├─ dsh-editor-proofread-panel：私有、仅 Client；作品校对面板与两条校对命令通过侧栏座位接入（不再内置于 shell）
+         │  └─ 对插件开放的座位：`dsh-editor.sidebar.tools`（带上下文）、`dsh-editor.center.overlays`（带上下文）、`dsh-editor.extensions`、`dsh-editor.settings.plugins`、`dsh-editor.settings.zhihu`，以及 `dshEditorCommands` 命令/快捷键注册表
          ├─ dsh-editor-overview-panel：私有、仅 Client；作品概览通过中栏 overlay 座位接入（不再内置于 shell）
          ├─ dsh-editor-memory-panel：私有、仅 Client；记忆维护通过侧栏座位接入（Chat 回执卡仍在 shell）
          └─ dsh-editor-plugins：设置里的插件开关与 GitHub 市场（分类与锁定读各包 `dshEditor` 声明）
 ```
 
-普通 DSH `web` profile 可独立安装 `dsh-manuscript`、`dsh-proofread` 和 `dsh-zhihu`。桌面 profile 另外加载 workbench、novel-kernel、shell、plugins 以及按 feature 选中的垂直插件（cards、proofread/overview/memory 面板）；`dsh-editor-workspace-kit` 是随 workbench/cards 一起复制的进程内库（不是 bundle），`dsh-editor-seats` 是插件与 Shell 构建时内联的座位合同（不进入运行时 `node_modules`）。shell 以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.5-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
+普通 DSH `web` profile 可独立安装 `dsh-manuscript`、`dsh-proofread` 和 `dsh-zhihu`。桌面 profile 另外加载 workbench、novel-kernel、shell、plugins 以及按 feature 选中的垂直插件（cards、overview/memory 面板；proofread-panel 代码保留，三份 recipe 均不装载）；`dsh-editor-workspace-kit` 是随 workbench/cards 一起复制的进程内库（不是 bundle），`dsh-editor-seats` 是插件与 Shell 构建时内联的座位合同（不进入运行时 `node_modules`）。shell 以较低 root priority 遮蔽官方 AppFrame，但不修改 DSH 包内部实现。DSH `0.1.5-rc.2` 的公开 root 声明明确告诫普通插件不要注册这里；本项目把它作为仅限固定版本、专用 profile 的兼容接缝，而不是稳定的上游扩展 API。升级 DSH 前必须取得受支持的 shell replacement seam 或重新完成全部桌面验收。
 
 ## 所有权边界
 
 - **DSH**：Agent 循环、sessions/history、stream、tools、approvals、questions、models/providers、permissions、workspace registry（含显示名与最近入口）、sandbox、文件 API 与持久化。
 - **Electron**：受控多窗口、共享后端、安全策略、内置资源版本/存在性检查、DSH 子进程启动和只针对该进程树的关闭清理。入口在 `apps/desktop/src/main.ts`，子进程监督在 `apps/desktop/src/supervisor.ts`。
-- **`dsh-editor-shell` Renderer**：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；新建、重命名、放弃草稿和离开保护均使用应用内、锁定焦点的对话框，不依赖浏览器 `prompt/confirm`；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据、绝对路径或 Node 文件系统。`client.ts` 不再是单体：4 千多行单文件已拆为 `src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}`，并以 `Editor` 包装 `dsh-manuscript/client/editor-core`（`editor.tsx` + `editor-state.ts` + `completion-preference.ts` + `styles.ts`），稿纸逻辑与公开 manuscript overlay 共用。
+- **`dsh-editor-shell` Renderer**：编辑 buffer、选区、可折叠/调宽三栏和专注视图状态；新建、重命名、放弃草稿和离开保护均使用应用内、锁定焦点的对话框，不依赖浏览器 `prompt/confirm`；普通稿件能力走公开 `/manuscript`，桌面项目生命周期走私有 `/dsh-editor-workbench`；栏宽只存本机界面偏好，不进入作品或 Host；不读取凭据明文或直接调用 Node 文件系统；文件请求的权限仍由 Host 重建。`client.ts` 不再是单体：4 千多行单文件已拆为 `src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared}`，并以 `Editor` 包装 `dsh-manuscript/client/editor-core`（`editor.tsx` + `editor-state.ts` + `completion-preference.ts` + `styles.ts`），稿纸逻辑与公开 manuscript overlay 共用。
 - **`dsh-editor-shell` Host**：仅保留加载唯一 root client 所需的最小 Cordis 入口；Renderer 继续拥有界面、编辑 buffer 与作者确认流程。
 - **`dsh-editor-plugins`**：设置「插件」分类；核心入口锁定，其余可开关；GitHub `topic:dsh-plugin` 搜索与安装。社区包装在 `$DSH_HOME/user-plugins/`，profile 每次原子部署后重新挂回。
-- **`dsh-editor-workbench` Host**：loopback-only 项目结构、章节概览与状态、校对扫描、写作进度、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。同时注册只读工具 `novel_overview`。校对扫描经 `dsh-editor-cards/host-api` 读取卡片索引。
+- **`dsh-editor-workbench` Host**：loopback-only 项目结构、章节概览与状态、校对扫描、写作进度、context、导入、快照、安全重命名、移动和可恢复归档；通过 `dsh-manuscript/host-api` 复用同一 live-session workspace authority。可选 tools 入口注册只读 `novel_overview` 与待确认的 `novel_memory_update`。校对扫描经 `dsh-editor-cards/host-api` 读取卡片索引。
 - **`dsh-editor-cards`**：loopback `/dsh-editor-cards` 人物卡/世界书列表、frontmatter 编辑、引用导航与新建；Client 通过侧栏与中栏座位接入。写入与 workbench 共享同一 `withWorkspaceWrite`。
-- **`dsh-editor-novel-kernel` Host**：只读小说知识与检索、预览式 `novel_propose`、工具 guard 与 system prompt；固定路径索引直写及 loopback 知乎知识库管理 RPC 也由此包提供，正文仍只经作者确认后写入。
+- **`dsh-editor-novel-kernel` Host**：只读小说知识与检索、预览式 `novel_propose`、工具 guard 与 system prompt；固定路径索引直写也由此包提供；知乎知识库 RPC 由 `dsh-zhihu` 独占。正文仍只经作者确认后写入。
 - **`dsh-manuscript` Host**：公开 `/manuscript` loopback RPC、live-session workspace authority、路径约束、版本化保存、全文搜索、DSH_HOME 草稿、FIM 与 `patch.complete`；公开产物不含 Node 文件系统能力。`dsh-manuscript/host-api` 是给 workbench 用的进程内库，不是第二条 RPC。
 - **`dsh-proofread`**：纯文本校对引擎与 `/proofread`；桌面 workbench 把引擎当库用，公开 Web 走独立 UI。
 - **`dsh-zhihu`**：资料查询、知识库与用量；普通 RPC/UI 默认可独立安装，Tool 入口按组合选择。
@@ -73,7 +72,7 @@ Electron（受控多窗口、资源校验、子进程生命周期）
 
 `search.text` 仅做有界、字面量、大小写不敏感的 Markdown/TXT 扫描，拒绝正则与控制字符，跳过隐藏、生成和链接路径，并限制文件数、总字节和结果数。Renderer 只接收路径、行列、片段、偏移和版本；定位前再次比较版本。章节导航由递归工作区列表中完整的 `正文/**/*.{md,txt}` 自然排序产生，不依赖用户是否展开文件树。
 
-作品概览（Ctrl+Shift+O）消费 `project.overview` 与 `progress.history`：章节状态（草稿/修订中/已定稿）、按状态字数分布、近 30 日与 12 周写作曲线、最近编辑；状态经 `chapter.statusSet` 写回，文件树显示状态标记。导出预检一次读取 `正文/` Markdown/TXT 后同时形成自然顺序、空章警告和字数，再由 Renderer 下载 Markdown/TXT，或在本机打包 DOCX/EPUB（shell 捆绑 `docx` 与 `jszip`）。`search.text` 由侧栏搜索面板（Ctrl+Shift+F）消费；点击命中后经 `EditorCoreHandle.revealRange` 选中 `start..end`。人物卡/世界书引用导航走 `/dsh-editor-cards` `cards.references`（字面量检索，最多 200 条），不做关系索引或向量库。校对走 `proofread.scan`（Ctrl+Shift+L）；自动应用建议只走 Markdown 提案，`.txt` 命中需手工改。归档只接受单个可见 Markdown/TXT 文档，不归档目录。
+作品概览（Ctrl+Shift+O）消费 `project.overview` 与 `progress.history`：章节状态（草稿/修订中/已定稿）、按状态字数分布、近 30 日与 12 周写作曲线、最近编辑；状态经 `chapter.statusSet` 写回，文件树显示状态标记。导出预检一次读取 `正文/` Markdown/TXT 后同时形成自然顺序、空章警告和字数，再由 Renderer 下载 Markdown/TXT，或在本机打包 DOCX/EPUB（shell 捆绑 `docx` 与 `jszip`）。`search.text` 由侧栏搜索面板（Ctrl+Shift+F）消费；点击命中后经 `EditorCoreHandle.revealRange` 选中 `start..end`。人物卡/世界书引用导航走 `/dsh-editor-cards` `cards.references`（字面量检索，最多 200 条），不做关系索引或向量库。workbench 保留 `proofread.scan` 底层接口与引擎依赖；0.2.0 暂停桌面校对面板、正文入口与快捷键。归档只接受单个可见 Markdown/TXT 文档，不归档目录。
 
 ## Desktop profile 与数据
 
@@ -81,7 +80,7 @@ Electron（受控多窗口、资源校验、子进程生命周期）
 
 profile 模板带 `.dsh-editor-owner.json`。若同名目录没有应用标记，启动会拒绝覆盖并在窗口显示诊断与重试。每次部署先写同级 stage，原子替换已标记 profile；home 级 credentials、settings、sessions、storages 和真实 workspace 不会被复制或删除。
 
-桌面资源固定包含 Node `24.16.0`、DSH `0.1.5-rc.2`、选定组合的业务包及 profile。默认 full 含 manuscript、proofread、cards、proofread-panel、overview-panel、memory-panel、workbench、novel-kernel、zhihu、shell 与 plugins。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
+桌面资源固定包含 Node `24.16.0`、DSH `0.1.5-rc.2`、选定组合的业务包及 profile。默认 full 含 manuscript、proofread、cards、overview-panel、memory-panel、workbench、novel-kernel、zhihu、shell 与 plugins。准备脚本核对版本、依赖闭包和整棵资源 SHA-256；便携版首次启动从 NSIS TEMP 原子物化并复核持久运行时缓存，再从该缓存启动 DSH。应用不依赖系统 Node、pnpm 或全局 dsh。
 
 `apps/desktop/resources/profile/package.json` 里的 bundles 只是模板；物化时由 `scripts/plugin-manifest.mjs` 按 recipe（`apps/desktop/resources/compositions/*.json` 的 feature 集合）与各包 `dshEditor` 声明求解，`configureProfile` 覆写 bundles、`disabled` 入口、附加 insert 与 `editor-shell` 的 `features` 配置。默认 full 解析为：
 
@@ -98,10 +97,17 @@ dsh-editor-plugins
 dsh-editor-cards
 dsh-editor-memory-panel
 dsh-editor-overview-panel
-dsh-editor-proofread-panel
 ```
 
 basic / smart 只是更小的 feature 集合，包集合与入口开关全部由同一 resolver 推导，见 [组合指南](plugin-composition-guide.md)。
+
+## 桌面 0.2.0 的客户端边界
+
+- 文件树与作者全文搜索隐藏辅助配置文件；SearchPanel 在保存结果、分组计数和生成替换计划前过滤它们。隐藏不删除文件，也不扩大或撤销 Agent 文件权限。
+- 顶栏不再挂载校对或知乎查询按钮。知乎在专用设置座位渲染，工具仍走原 `/zhihu` 服务与计量；独立 Web 插件的 overlay 不受桌面入口调整影响。
+- 正文右键与「⋯」共享编辑命令。桌面纯文本剪贴板经过受校验的 preload / IPC，不给 Renderer 暴露 Node；异步应用前校验 session、路径、文档代次、版本与选区。
+- Settings 以单一内容区滚动，导航固定；Dialog / Select / Menu 复用 Radix 与 Shell 提供的宿主控件。用量页的 ECharts / zrender 编入客户端，SVG 图表负责尺寸、主题和卸载清理，提示中的动态文本编码后再进入 HTML。
+- 补全、改写和新对话默认模型分别配置；Host 解析有效 provider / model，空角色配置跟随当前对话。不会因为界面传入 provider 字符串就信任其权限。
 
 ## 作品旁路文件（`.dsh-editor/`）
 
@@ -163,7 +169,7 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 
 ## 公开 Web 插件边界
 
-`dsh-manuscript` 在普通 `web` profile 中继续使用 `shell.overlay` 抽屉，不占官方 root；其公开 tarball 只含 provider-confined 稿件能力，不含 Node 文件系统或桌面生命周期端点。`dsh-proofread` 与 `dsh-zhihu` 同样可单独安装，并在官方 overlay 与桌面 `dsh-editor.extensions` 贡献同一份自有 UI。三个公开包仍可单独安装、共存和任意顺序卸载；桌面 shell 与 `/dsh-editor-workbench` 不进入公开 tarball。
+`dsh-manuscript` 在普通 `web` profile 中继续使用 `shell.overlay` 抽屉，不占官方 root；其公开 tarball 只含 provider-confined 稿件能力，不含 Node 文件系统或桌面生命周期端点。`dsh-proofread` 与 `dsh-zhihu` 同样可单独安装，普通 Web 都使用官方 `shell.overlay`。桌面中 proofread 不再贡献 UI，知乎改用 `dsh-editor.settings.zhihu`，在设置中渲染配置、用量、知识库和连接测试。三个公开包仍可单独安装、共存和任意顺序卸载；桌面 shell 与 `/dsh-editor-workbench` 不进入公开 tarball。
 
 ## 非目标
 
@@ -191,4 +197,4 @@ Supervisor 只接受 `dsh web: http://127.0.0.1:<port>` 形式的就绪行。正
 
 拆章先验证目标父目录并保存后半稿，再按版本更新原稿。合章先写入目标再归档来源。后一阶段失败时返回 partial、appliedPaths 和 history 恢复路径，界面明确显示部分完成，不自动重试或声称未写入。文本提案按字面写入，不解释 JavaScript 替换元字符。
 
-发布矩阵须先通过类型、单元测试、构建和桌面/核心写作流程，再打包并上传 CI 中间产物。单一 publish job 等待两个平台完成后创建 Release 和上传产物，避免两个平台竞争创建同一个 Release。
+发布矩阵先构建跨包声明，再做类型检查、单元测试与 Windows 桌面 / 核心写作流程，最后打包并上传 CI 中间产物。单一 publish job 等待两个平台完成后上传到对应 Release；发布者先建 draft，核对标签构建、下载校验和及实际包验收后再公开。

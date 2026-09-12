@@ -1,5 +1,7 @@
 # 声明式拼装与 Shell 座位：实施与验收记录
 
+> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](README.md)，本轮验证见 [0.2.0 验收记录](release-0.2.0.md)。
+
 2026-09-10。本轮在[上一轮拆分](plugin-modularization-progress.md)之后完成，目标是把“拼装”从硬编码清单变成声明式，把 Shell 从胖宿主变成布局宿主，并用垂直插件验证这条路径。使用方式见[组合指南](plugin-composition-guide.md)，接口见[插件架构](plugin-architecture.md)。
 
 ## 诊断结论
