@@ -268,8 +268,11 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   if (!(await pluginsRoot.getByText('系统核心').count()) || !(await pluginsRoot.getByText('稿纸').count())) {
     throw new Error('settings plugins tab did not list locked core plugins')
   }
-  if (await pluginsRoot.getByTestId('plugins-toggle-editor-shell').isEnabled()) {
-    throw new Error('core plugin toggle was enabled')
+  const core = pluginsRoot.locator('.dsh-plugins-core')
+  await core.locator('summary').click()
+  await core.getByText('写作必需的部分，不能关闭。', { exact: true }).waitFor()
+  if (await core.locator('button, [role="switch"], input').count()) {
+    throw new Error('core plugin group exposes a mutation control')
   }
   await window.keyboard.press('Escape')
   await dialog.waitFor({ state: 'detached', timeout: 10_000 })
@@ -300,8 +303,9 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     await ctx.window.screenshot({ path: resolve(output, 'multi-window-create-failure.png') }).catch(() => undefined)
     throw new Error(`manuscript tree did not appear after 新建: ${JSON.stringify(body)}; ${error instanceof Error ? error.message : String(error)}`)
   }
-  // New works start with an empty manuscript: create the first chapter through the cover affordance.
-  await ctx.window.getByRole('button', { name: '新建文件', exact: true }).first().click()
+  // New works start with an empty manuscript: create inside the real manuscript folder.
+  await ctx.window.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
+  await ctx.window.getByRole('button', { name: '在 正文 中新建文件', exact: true }).click()
   const chapterNameBox = ctx.window.getByLabel('文件名称（无扩展名时按 .md 创建）')
   await chapterNameBox.waitFor({ state: 'visible', timeout: 10_000 })
   await chapterNameBox.fill('001')

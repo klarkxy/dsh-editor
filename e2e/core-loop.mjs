@@ -15,7 +15,7 @@
  * the new home assertions below).
  */
 import { spawn } from 'node:child_process'
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, rm, stat, writeFile, readFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
@@ -288,13 +288,22 @@ try {
       failures.push(`preset tree group should stay absent until created: ${label}`)
     }
   }
-  if (!(await page.getByRole('button', { name: '新建文件' }).first().isVisible())) failures.push('sidebar 新建文件 button missing')
+  await page.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
+  if (!(await page.getByRole('button', { name: '在 正文 中新建文件', exact: true }).isVisible())) failures.push('manuscript folder create action missing')
 
-  // Skip the "新建文件" → file-create path. The DSH web app's
-  // "Workspace Write" Goal Mode (dsh-client-ui-conversation) takes over the
-  // root slot as soon as a document is created, so the manuscript editor is
-  // no longer reachable through the home flow. The new-file button above
-  // is asserted visible so the entry point itself stays covered.
+  // Create and save through the real author workflow before theme/navigation checks.
+  await page.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
+  await page.getByRole('button', { name: '在 正文 中新建文件', exact: true }).click()
+  const createFile = page.getByRole('dialog', { name: '新建文件', exact: true })
+  await createFile.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001')
+  await createFile.getByRole('button', { name: '创建', exact: true }).click()
+  const editor = page.getByTestId('paper-editor').locator('.cm-content')
+  await editor.click()
+  await page.keyboard.insertText('核心闭环保存验证。')
+  await page.keyboard.press('Control+s')
+  await page.getByTestId('paper-save-state').filter({ hasText: '已保存' }).waitFor()
+  const savedChapter = await readFile(resolve(targetWorkspace, '正文', '001.md'), 'utf8')
+  if (!savedChapter.includes('核心闭环保存验证。')) throw new Error('core-loop chapter save missing on disk')
 
   // Theme toggle: paper → ink → paper. The DOM data-theme and localStorage must
   // both update and survive a reload.
@@ -370,8 +379,8 @@ try {
   }
 
   // Return to home via the workspace menu, then reopen the project to prove
-  // the round-trip still works. (No chapter was created, so the tree shows
-  // the static groups but the editor area remains empty.)
+  // the round-trip still works. The tree shows
+  // the existing files and the editor can restore its current chapter.)
   await page.getByRole('button', { name: '作品菜单' }).click()
   await page.getByRole('menuitem', { name: '返回作品列表' }).click()
   await page.locator('.home-stage').waitFor({ state: 'visible' })
