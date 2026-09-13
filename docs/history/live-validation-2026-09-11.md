@@ -1,12 +1,12 @@
 # MiniMax-M3 与知乎真调用实测（0.1.5-rc.2）
 
-> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](README.md)，本轮验证见 [0.2.0 验收记录](release-0.2.0.md)。
+> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](../README.md)，本轮验证见 [0.2.0 验收记录](../release-0.2.0.md)。
 
 日期：2026-09-11。用户明确授权使用 MiniMax-M3 与本机知乎 Access Secret。隔离 HOME，经真实 DSH Host 与浏览器界面调用；未使用响应 mock。密钥未写入回执、日志或截图。未改写 2026-09-10 的历史回执。
 
 ## MiniMax-M3
 
-[最终在线回执](verification/live-2026-09-11/minimax-ai-run.json) 6/6 通过。模型为界面选择的 MiniMax · MiniMax-M3。DSH 为 `0.1.5-rc.2`。
+[最终在线回执](../verification/live-2026-09-11/minimax-ai-run.json) 6/6 通过。模型为界面选择的 MiniMax · MiniMax-M3。DSH 为 `0.1.5-rc.2`。
 
 | 功能 | 实际证据 |
 | --- | --- |
@@ -16,7 +16,7 @@
 | 文件提案 | 应用后生成 `大纲/总纲.md`（176 字，含雾港/林简） |
 | 会话操作 | 新会话可选 MiniMax-M3；归档与恢复通过 |
 
-[磁盘复核](verification/live-2026-09-11/saved-text-check.json) 确认改写生效、补全文本已落盘、正文没有推理标签。
+[磁盘复核](../verification/live-2026-09-11/saved-text-check.json) 确认改写生效、补全文本已落盘、正文没有推理标签。
 
 首次在 0.1.5 上跑时，Host 已经完成回合（投影缓存有 token 与 pong 思考），界面却停在「已发送 / 正在回复…」。原因是 Shell 不能在 `apply()` 时 inject `uiConversation`（它要等本地 `uiWorkspace`），第一次挂上 Chat 时官方对话分面还没就绪。子 fiber 绑定后 6/6 通过。
 
@@ -29,7 +29,7 @@ node e2e/feature-coverage.mjs
 
 ## 知乎 Access Secret
 
-[知乎回执](verification/live-2026-09-11/zhihu-live.json) 7/7 通过。凭据来自本机 `~/.config/zhihu-search/credentials.json`（未打印）。隔离 HOME 不携带 DSH 凭证库，插件按文件回退解析。0.1.5 的 `/zhihu` 需先用 loopback token 换 cookie。
+[知乎回执](../verification/live-2026-09-11/zhihu-live.json) 7/7 通过。凭据来自本机 `~/.config/zhihu-search/credentials.json`（未打印）。隔离 HOME 不携带 DSH 凭证库，插件按文件回退解析。0.1.5 的 `/zhihu` 需先用 loopback token 换 cookie。
 
 | 功能 | 实际证据 |
 | --- | --- |

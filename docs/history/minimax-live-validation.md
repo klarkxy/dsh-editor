@@ -1,12 +1,12 @@
 # MiniMax-M3 在线实测
 
-> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](README.md)，本轮验证见 [0.2.0 验收记录](release-0.2.0.md)。
+> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](../README.md)，本轮验证见 [0.2.0 验收记录](../release-0.2.0.md)。
 
 日期：2026-09-09。用户明确授权使用 MiniMax-M3 后执行。使用隔离 HOME 和临时测试作品，通过真实 DSH Host 与浏览器界面调用模型；未使用响应 mock。当时没有执行知乎付费请求。2026-09-10 的 MiniMax 复测与知乎真调用见 [live-validation-2026-09-10.md](live-validation-2026-09-10.md)。
 
 ## 最终已通过的范围
 
-[最终在线回执](verification/minimax-live-2026-09-09/final-ai-run.json)包含模型配置和以下五项 AI 工作流，全部通过：
+[最终在线回执](../verification/minimax-live-2026-09-09/final-ai-run.json)包含模型配置和以下五项 AI 工作流，全部通过：
 
 | 功能 | 实际证据 |
 | --- | --- |
@@ -16,7 +16,7 @@
 | 文件提案 | 模型调用 novel_propose，界面确认应用后生成大纲/总纲.md |
 | 会话操作 | 新会话明确选择 MiniMax-M3，归档与恢复通过 |
 
-[磁盘复核](verification/minimax-live-2026-09-09/saved-text-check.json)确认改写生效、补全文本已落盘、正文没有 `<think>` 标签。模型标识通过实际界面选择和[直接在线响应](verification/minimax-live-2026-09-09/model-probe.json)交叉核对。这里不把配置表单保存成功单独当作模型调用成功。
+[磁盘复核](../verification/minimax-live-2026-09-09/saved-text-check.json)确认改写生效、补全文本已落盘、正文没有 `<think>` 标签。模型标识通过实际界面选择和[直接在线响应](../verification/minimax-live-2026-09-09/model-probe.json)交叉核对。这里不把配置表单保存成功单独当作模型调用成功。
 
 ## 实测发现与已修复的问题
 
@@ -30,14 +30,14 @@
 
 ## 未通过的广泛界面场景
 
-这次不能宣称整个应用全绿。最初[39项运行](verification/minimax-live-2026-09-09/first-run.json)通过34项；[第二轮](verification/minimax-live-2026-09-09/second-run.json)脚本记录36/39，但随后磁盘检查发现其中补全夹带推理，故当时的补全不算有效通过。上述最终针对性复测已解决AI链路问题。
+这次不能宣称整个应用全绿。最初[39项运行](../verification/minimax-live-2026-09-09/first-run.json)通过34项；[第二轮](../verification/minimax-live-2026-09-09/second-run.json)脚本记录36/39，但随后磁盘检查发现其中补全夹带推理，故当时的补全不算有效通过。上述最终针对性复测已解决AI链路问题。
 
 仍待单独定位的非AI场景：
 
 - 连续打开作品校对和人物卡后，“新建人物卡”按钮被“已保存”状态区域挡住。
 - 合章已经落盘，003.md 已从正文目录移除，但目录树归档刷新断言超时。
 
-另有一次针对性运行在语言切换后的设置页等待失败，记录在[设置阶段回执](verification/minimax-live-2026-09-09/setup-retry.json)；最终AI复测只保留模型配置，未将该次失败隐藏或计为成功。
+另有一次针对性运行在语言切换后的设置页等待失败，记录在[设置阶段回执](../verification/minimax-live-2026-09-09/setup-retry.json)；最终AI复测只保留模型配置，未将该次失败隐藏或计为成功。
 
 ## 复现与产物
 

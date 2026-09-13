@@ -1,6 +1,10 @@
-# DSH Editor 文档索引
+# DSH Editor 文档
 
 当前操作手册对应桌面 **0.2.0** 与内置 DSH `0.1.5-rc.2`。桌面应用版本与公开插件包版本分别维护；公开插件当前包版本为 `0.1.0`。
+
+先读 [使用者指南](user-guide.md) 或 [开发者指南](development.md)。改产品边界先读 [产品原则](product-principles.md)，改界面先读 [界面与设计系统](ui.md)，改插件先读 [插件架构](plugin-architecture.md)。
+
+0.2.0 暂停桌面校对；知乎入口在「设置 → 知乎资料」。辅助文件不显示在文件树和作者全文搜索中，原文件仍保留。不要按旧版截图寻找这些入口。
 
 ## 使用与维护
 
@@ -15,8 +19,6 @@
 | [组合指南](plugin-composition-guide.md) | basic / smart / full、独立 Web 插件与复现命令 |
 | [0.2.0 本地验收](release-0.2.0.md) | 本轮证据范围、产物与最终标签验证的区别 |
 | [变更记录](../CHANGELOG.md) | 各版本已经发生的变化 |
-
-0.2.0 暂停桌面校对；知乎入口在“设置 → 知乎资料”。辅助文件不显示在文件树和作者全文搜索中，原文件仍保留。不要按旧版截图寻找这些入口。
 
 ## 包级合同
 
@@ -40,11 +42,4 @@
 
 ## 历史记录
 
-下列文档与 `verification/` 中的原始回执是日期快照，保留当时版本、失败和后续修复，不代表 0.2.0 已验证了同一件事。
-
-- [拆分计划](plugin-modularization-plan.md)、[拆分实施](plugin-modularization-progress.md)、[声明式拼装记录](plugin-assembly-progress.md)
-- [组合能力验证](plugin-composability-validation.md)
-- [最初 MiniMax 在线验证](minimax-live-validation.md)
-- [2026-09-10 在线验证](live-validation-2026-09-10.md)、[2026-09-11 在线验证](live-validation-2026-09-11.md)
-
-发布状态以对应标签的 GitHub Actions 和 Release 附件为准。历史 PASS、源代码检查、本地构建、真实交互和持续运行是不同证据。
+日期快照与原始回执在 [history/](history/README.md) 与 [verification/](verification/)。它们保留当时版本、失败和后续修复，不代表 0.2.0 已验证了同一件事。发布状态以对应标签的 GitHub Actions 和 Release 附件为准。

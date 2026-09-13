@@ -24,7 +24,7 @@ const PINNED_PACKAGES = [
   '@deepseek-ai/dsh-session',
   '@deepseek-ai/dsh-system-prompt',
 ]
-const SKIP_REWRITE_PREFIXES = ['docs/verification/', 'docs/live-validation-']
+const SKIP_REWRITE_PREFIXES = ['docs/verification/', 'docs/history/']
 const LOCKFILE = 'pnpm-lock.yaml'
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.pack', '.pnpm-store', '.dev', '.playwright-mcp', 'dist', 'lib', 'out'])
 

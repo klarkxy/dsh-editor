@@ -2,7 +2,7 @@
 
 本文是桌面 **0.2.0** / DSH `0.1.5-rc.2` 的当前组合指南。历史验证保存在各自的日期记录；本轮结果见 [0.2.0 验收记录](release-0.2.0.md)。
 
-桌面包版本与公开插件包版本分别维护；三个公开插件通过本地 tarball 安装。运行时边界见 [architecture.md](architecture.md)，拆分经过见 [实施记录](plugin-modularization-progress.md)。直观边界见 [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) 与 [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)；读图时 Host 插件在 DSH 进程内，`host-api` 是库导入。
+桌面包版本与公开插件包版本分别维护；三个公开插件通过本地 tarball 安装。运行时边界见 [architecture.md](architecture.md)，拆分经过见 [实施记录](history/plugin-modularization-progress.md)。直观边界见 [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) 与 [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)；读图时 Host 插件在 DSH 进程内，`host-api` 是库导入。
 
 ## 选择组合
 

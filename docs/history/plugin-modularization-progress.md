@@ -1,6 +1,6 @@
 # 插件拆分实施与验收记录
 
-> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](README.md)，本轮验证见 [0.2.0 验收记录](release-0.2.0.md)。
+> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](../README.md)，本轮验证见 [0.2.0 验收记录](../release-0.2.0.md)。
 
 > 本文是 2026-09-09 的当时快照。其后的声明式拼装、Shell 座位与垂直插件迁出见[声明式拼装记录](plugin-assembly-progress.md)；下文提到的 `/novel-kernel`、`zhihu.usage` 转发与 workbench 的 `cards.*` 已在该轮移除或迁出。
 
@@ -8,7 +8,7 @@
 
 2026-09-09。已完成 [P0—P5 拆分计划](plugin-modularization-plan.md)在本仓库的实施、Windows 交付验证及宿主精简研究。P5 的“整个浏览器进程不加载 Agent”结论是需要上游解耦，符合原计划允许的研究退出条件；没有将它写成已实现。
 
-使用方式见[组合指南](plugin-composition-guide.md)，接口细节见[架构手册](plugin-architecture.md)，直观边界见[交互图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html)。[本轮汇总回执](verification/plugin-modularization-2026-09-09/summary.json)与之前 807 项测试的历史基线分开保存。全部改动及产物在本地，未提交、推送或发布。
+使用方式见[组合指南](../plugin-composition-guide.md)，接口细节见[架构手册](../plugin-architecture.md)，直观边界见[交互图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html)。[本轮汇总回执](../verification/plugin-modularization-2026-09-09/summary.json)与之前 807 项测试的历史基线分开保存。全部改动及产物在本地，未提交、推送或发布。
 
 ## 按原计划逐项结算
 
@@ -46,14 +46,14 @@ Shell 对业务 contracts 和 editor-core 使用构建时内联；它们不再�
 | 全 workspace 类型检查 | 通过 |
 | 全回归 | 96个测试文件，832项通过；移除只匹配源码字符串的新测试，保留能检测行为回归的测试 |
 | 全构建与公开打包检查 | 通过；4个 tarball 的 exports、文件、资源及不应出现的依赖检查通过 |
-| [公开安装矩阵](verification/plugin-modularization-2026-09-09/plugin-matrix.json) | 13态/16转换/12次浏览器验证，零问题；含双向移除、重装、空组合、四包组合和真实计量持久化 |
-| [无 AI 校对 Host](verification/plugin-modularization-2026-09-09/proofread-host.json) | 不提供 agents/sessions/fs/llm/tools/systemPrompt；实际 HTTP、恶意 Origin 拒绝、卸载/重装与端口释放通过 |
-| [basic](verification/plugin-modularization-2026-09-09/composition-basic.json) / [smart](verification/plugin-modularization-2026-09-09/composition-smart.json) / [full](verification/plugin-modularization-2026-09-09/composition-full.json) | 创建与保存、搜索、作品校对、人物卡、快照、可选入口、主题、重载通过；basic/smart 确认安装集合与复制交付 |
-| [停用入口](verification/plugin-modularization-2026-09-09/entry-disable.json) | proofread Host/Client 消失；静态兜底与不存在路由同为405；知乎继续运行，workbench 扫描保留引擎 |
-| [缺必需包](verification/plugin-modularization-2026-09-09/missing-private.json) | 完整组合缺 workbench 或 kernel 均退出1并标识缺包，未把坏组合当正常关闭 |
-| [桌面原场景](verification/plugin-modularization-2026-09-09/desktop.json) / [核心写作](verification/plugin-modularization-2026-09-09/core-loop.json) | 首次/已有作品、双窗口冲突、草稿重启恢复、另存副本、导航/主题/聊天草稿与退出清理通过 |
-| [最终包校验](verification/plugin-modularization-2026-09-09/desktop-package.json) / [便携实际运行](verification/plugin-modularization-2026-09-09/portable.json) | Windows 0.1.7 EXE与安装器已生成；整树哈希相符；便携 EXE 校对、知乎入口、新建与保存通过，应用端口/调试端口均释放 |
-| [宿主精简](verification/plugin-modularization-2026-09-09/host-minimization.json) | 无 Web bundle 的 UI/RPC/重连通过；无 Agent 的完整浏览器组合未通过，准确缺依赖见回执 |
+| [公开安装矩阵](../verification/plugin-modularization-2026-09-09/plugin-matrix.json) | 13态/16转换/12次浏览器验证，零问题；含双向移除、重装、空组合、四包组合和真实计量持久化 |
+| [无 AI 校对 Host](../verification/plugin-modularization-2026-09-09/proofread-host.json) | 不提供 agents/sessions/fs/llm/tools/systemPrompt；实际 HTTP、恶意 Origin 拒绝、卸载/重装与端口释放通过 |
+| [basic](../verification/plugin-modularization-2026-09-09/composition-basic.json) / [smart](../verification/plugin-modularization-2026-09-09/composition-smart.json) / [full](../verification/plugin-modularization-2026-09-09/composition-full.json) | 创建与保存、搜索、作品校对、人物卡、快照、可选入口、主题、重载通过；basic/smart 确认安装集合与复制交付 |
+| [停用入口](../verification/plugin-modularization-2026-09-09/entry-disable.json) | proofread Host/Client 消失；静态兜底与不存在路由同为405；知乎继续运行，workbench 扫描保留引擎 |
+| [缺必需包](../verification/plugin-modularization-2026-09-09/missing-private.json) | 完整组合缺 workbench 或 kernel 均退出1并标识缺包，未把坏组合当正常关闭 |
+| [桌面原场景](../verification/plugin-modularization-2026-09-09/desktop.json) / [核心写作](../verification/plugin-modularization-2026-09-09/core-loop.json) | 首次/已有作品、双窗口冲突、草稿重启恢复、另存副本、导航/主题/聊天草稿与退出清理通过 |
+| [最终包校验](../verification/plugin-modularization-2026-09-09/desktop-package.json) / [便携实际运行](../verification/plugin-modularization-2026-09-09/portable.json) | Windows 0.1.7 EXE与安装器已生成；整树哈希相符；便携 EXE 校对、知乎入口、新建与保存通过，应用端口/调试端口均释放 |
+| [宿主精简](../verification/plugin-modularization-2026-09-09/host-minimization.json) | 无 Web bundle 的 UI/RPC/重连通过；无 Agent 的完整浏览器组合未通过，准确缺依赖见回执 |
 | 图示检查 | schema/layout 与多尺寸明暗 containment 通过；已目视检查1440×900浅色图及真实墨色插件面板；自动回执的 visualReview 字段按工具约定保持 pending，不把它等同人工检查 |
 
 独立只读评审提出的三项问题已修复：知乎工具请求生命周期、知乎默认 patch 的 tools 依赖、workbench tools peer。后续限定范围复核无新增发现；完整集成由上述主代理实测验收。
@@ -63,7 +63,7 @@ Shell 对业务 contracts 和 editor-core 使用构建时内联；它们不再�
 - 公开包：仓库 `.pack/dsh-{manuscript,grill,proofread,zhihu}-0.1.0.tgz`。
 - Windows 便携版：`.pack/desktop/DSH Editor-0.1.7-win-x64.exe`。
 - Windows 安装器：`.pack/desktop/DSH Editor-Setup-0.1.7-win-x64.exe`。
-- 组合、安装说明、Host/Client/manifest/patch 范本与复现命令：[组合指南](plugin-composition-guide.md)。
+- 组合、安装说明、Host/Client/manifest/patch 范本与复现命令：[组合指南](../plugin-composition-guide.md)。
 
 拆分初次验收没有执行在线模型或知乎付费调用（后续 MiniMax-M3 实测见上方更新）；这些合同用受控服务/响应验证，不能据此宣称线上账单、配额或长期服务可靠性通过。Windows 便携运行已实测；macOS 构建和运行仍是平台证据缺口，安装器完成构建/校验但没有执行安装向导。整个编辑器完全无 Harness 仍需上游工作，未绕过 live session、sandboxPolicy 或作者确认。
 

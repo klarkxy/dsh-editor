@@ -1,8 +1,8 @@
 # DSH 插件拆分与组合演进计划
 
-> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](README.md)，本轮验证见 [0.2.0 验收记录](release-0.2.0.md)。
+> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](../README.md)，本轮验证见 [0.2.0 验收记录](../release-0.2.0.md)。
 
-状态：已按用户授权进入实施与验收。原计划日期：2026-09-09；源码基线：`a6efa1a88749a0136e4d7289cf0ca69145bda0b4` / DSH `0.1.1-rc.2`。下文保留原设计与退出条件，当前结果以[实施记录](plugin-modularization-progress.md)和[组合指南](plugin-composition-guide.md)为准；未发布。
+状态：已按用户授权进入实施与验收。原计划日期：2026-09-09；源码基线：`a6efa1a88749a0136e4d7289cf0ca69145bda0b4` / DSH `0.1.1-rc.2`。下文保留原设计与退出条件，当前结果以[实施记录](plugin-modularization-progress.md)和[组合指南](../plugin-composition-guide.md)为准；未发布。
 
 ## 1. 建议与目标
 
@@ -241,8 +241,8 @@ flowchart LR
 
 ## 8. 依据与本轮审查
 
-- [上一轮验证文档](plugin-composability-validation.md)与[验证回执](verification/plugin-composability-2026-09-09.json)：当时 807 测试、公开安装矩阵及桌面验证通过；本轮没有重新运行产品测试。
-- [现有接口手册](plugin-architecture.md)与[产品边界](product-principles.md)：保留写作产品身份、同一权限/会话所有者和作者确认。
+- [上一轮验证文档](plugin-composability-validation.md)与[验证回执](../verification/plugin-composability-2026-09-09.json)：当时 807 测试、公开安装矩阵及桌面验证通过；本轮没有重新运行产品测试。
+- [现有接口手册](../plugin-architecture.md)与[产品边界](../product-principles.md)：保留写作产品身份、同一权限/会话所有者和作者确认。
 - 本轮重新读取了 manuscript/workbench/kernel 的服务注册、校对函数依赖、Shell 根界面导入、桌面打包清单，以及本机固定版本的 client runtime slot/Workspace/Session 说明。
 - 已完成一位只读 `overdesign_guard` 审查，结论为“纯文本校对先行，缩小首次边界”。已采纳：首批只新增一个包、取消全量 AI 拆分前置、复用 slots、缩小 RPC 选项、保留跨文件统计、验证结果过期与卸载清理。
 - 保留审查中的条件性建议：AI 拆分由基础写作组合驱动，知乎拆分由独立资料查询/移除用例驱动；暂不把卡片与快照单独打包。新增包、入口与组合均为建议，未实现。

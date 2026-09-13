@@ -66,28 +66,17 @@ pnpm test:e2e:portable
 
 ## 文档
 
-[文档索引](docs/README.md) 区分当前操作手册、包级合同与历史验证。[0.2.0 本地验收记录](docs/release-0.2.0.md) 列出本轮测试范围；最终发布产物以对应标签的 CI 与 Release 附件为准。
+当前手册、包合同与历史快照见 [文档索引](docs/README.md)。[0.2.0 本地验收](docs/release-0.2.0.md) 列出本轮测试范围；最终发布产物以对应标签的 CI 与 Release 附件为准。
 
-- [可组合插件指南](docs/plugin-composition-guide.md)：独立安装、三份桌面配置、接口与真实插件开发范本
-- [拆分实施记录](docs/plugin-modularization-progress.md)：逐阶段验收与宿主限制
-- [声明式拼装与 Shell 座位记录](docs/plugin-assembly-progress.md)：`dshEditor` 拼装、座位/注册表、垂直插件迁出与验收
-
-- [插件拆分与组合演进计划](docs/plugin-modularization-plan.md)：首批独立校对插件、可选 AI/资料能力、分阶段交付与验收
-
-- [插件组合能力验证](docs/plugin-composability-validation.md)：独立安装实测、官方界面与 Harness 边界、插件职责、接口和工作流程图
-
-- [使用者指南](docs/user-guide.md)：桌面启动、三栏工作台、核心写作闭环、设置、快捷键与公开插件使用
-- [开发者指南](docs/development.md)：运行时准备、调试、测试与打包
-- [产品原则](docs/product-principles.md)：作者写稿、提案确认、明确不做
-- [界面与设计系统](docs/ui.md)：纸 / 墨 token、三栏布局与稿纸交互
-- [架构与边界](docs/architecture.md)：DSH 权威边界、profile、RPC 与安全约束
-- [插件架构与接口](docs/plugin-architecture.md)：声明式拼装（`dshEditor` + feature recipe）、Shell 座位与命令注册表、RPC/Tool/slot 契约以及修改、替换和新建插件流程
-- [交互架构图站](https://klarkxy.github.io/dsh-editor/)：GitHub Pages 发布的全部交互图
-- [桌面运行时图](https://klarkxy.github.io/dsh-editor/dsh-editor-runtime.html)：Electron 启动 DSH 子进程；插件住在 Host 内
-- [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)：三个公开 tarball 与桌面私有包
-- [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html)：普通业务、可选智能增强、公开插件
-- [确认写入时序图](https://klarkxy.github.io/dsh-editor/author-confirm-write.html)：从 context 编译到作者确认写入
-- [CHANGELOG](CHANGELOG.md)：版本变化
+- [使用者指南](docs/user-guide.md)
+- [开发者指南](docs/development.md)
+- [产品原则](docs/product-principles.md)
+- [界面与设计系统](docs/ui.md)
+- [架构与边界](docs/architecture.md)
+- [插件架构与接口](docs/plugin-architecture.md)
+- [可组合插件指南](docs/plugin-composition-guide.md)
+- [交互架构图站](https://klarkxy.github.io/dsh-editor/)
+- [CHANGELOG](CHANGELOG.md)
 
 DSH Editor 的 loopback RPC 只适用于本地单用户信任模型，不应暴露成远程多用户文件接口。
 

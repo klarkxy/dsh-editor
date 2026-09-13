@@ -1,6 +1,6 @@
 # DSH 插件组合能力验证
 
-> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](README.md)，本轮验证见 [0.2.0 验收记录](release-0.2.0.md)。
+> 历史记录：本文保留文中日期、版本和当时验证结果，不代表桌面 0.2.0 的当前入口或发布状态。当前说明见 [文档索引](../README.md)，本轮验证见 [0.2.0 验收记录](../release-0.2.0.md)。
 
 验证日期：2026-09-09。源码基线：`a6efa1a88749a0136e4d7289cf0ca69145bda0b4`，工作区开始时干净。运行时基线：DSH `0.1.1-rc.2`。本文验证当时实现，不把后续设想当作已具备能力；其后的拼装与座位改动（含 `cards.*` 迁至 `/dsh-editor-cards`、旧知乎转发移除）见[声明式拼装记录](plugin-assembly-progress.md)。
 
@@ -106,7 +106,7 @@ contracts 是类型、常量、解析器和纯函数，不是另一个服务。R
 | 对话适配 | shell → SessionFace / connection | send、cancel、snapshot、model、permission、approval、questions | 同一真实会话；不复制另一套聊天和工具状态 |
 | 计量事件 | kernel → manuscript 监听器 | `dsh-editor/zhihu-search` | 辅助用量统计；不是业务执行成功的唯一依据 |
 
-三个业务 channel 都以 loopback authority 注册。一般文件请求携带 `sessionId`，Host 根据 live session 的不可变 cwd、workspaceRegistry 和 sandboxPolicy 重建访问权。部分项目入口、用量与知乎 RPC 是例外，详见[完整接口手册](plugin-architecture.md)。loopback 本身不是多用户身份认证。
+三个业务 channel 都以 loopback authority 注册。一般文件请求携带 `sessionId`，Host 根据 live session 的不可变 cwd、workspaceRegistry 和 sandboxPolicy 重建访问权。部分项目入口、用量与知乎 RPC 是例外，详见[完整接口手册](../plugin-architecture.md)。loopback 本身不是多用户身份认证。
 
 RPC 基本结果形状为：
 
@@ -179,7 +179,7 @@ sequenceDiagram
 
 矩阵顺序为：仅 manuscript → 两者共存 → 卸载 manuscript 仅剩 grill → 恢复两者 → 卸载 grill 仅剩 manuscript。恢复两者的中间状态只验配置，没有额外启动浏览器。grill-only 是卸载后的状态，不是另一个全新 HOME 的首次安装；本轮也未调用付费模型验证 scaffold 的在线生成流程。
 
-原始本地结果位于 `e2e/out/plugin-matrix/report.json`、`.pack/release-manifest.json`、`.pack/missing-private-plugin-smoke.json` 和 `.dev/plugin-composability-*.log`。这些输出可能被下次验证覆盖；[本轮摘要](verification/plugin-composability-2026-09-09.json)保存了基线、产物哈希及结果。
+原始本地结果位于 `e2e/out/plugin-matrix/report.json`、`.pack/release-manifest.json`、`.pack/missing-private-plugin-smoke.json` 和 `.dev/plugin-composability-*.log`。这些输出可能被下次验证覆盖；[本轮摘要](../verification/plugin-composability-2026-09-09.json)保存了基线、产物哈希及结果。
 
 本轮没有执行发布、远程部署、全新无 Web profile 测试、无 Harness 进程测试、桌面三个包的独立 tarball 安装、卸载后的业务数据兼容测试或跨版本升级矩阵。图示与这份文档也不改变现有产品的固定装配策略。
 
@@ -215,13 +215,13 @@ dsh plugin --profile web remove dsh-grill
 
 | 需要核对的事实 | 入口 |
 | --- | --- |
-| 公开交付只有两个包 | [根 package.json](../package.json)、[产物校验](../scripts/verify-artifacts.mjs) |
-| 安装/卸载矩阵的真实范围 | [plugin-matrix.mjs](../e2e/plugin-matrix.mjs) |
-| 桌面仍含 Web bundle | [profile/package.json](../apps/desktop/resources/profile/package.json)、[禁用与配置项](../apps/desktop/resources/profile/cordis.patch.yml) |
-| 桌面固定四包 | [prepare-desktop-dev.mjs](../scripts/prepare-desktop-dev.mjs) |
-| 缺包启动边界 | [missing-private-plugin.mjs](../e2e/missing-private-plugin.mjs) |
-| 主界面注册与对话投影 | [root-registration.ts](../packages/dsh-editor-shell/src/root-registration.ts)、[adapter.ts](../packages/dsh-editor-shell/src/adapter.ts) |
-| manuscript 服务注入 | [index.ts](../packages/dsh-manuscript/src/index.ts) |
-| workbench 服务与 host-api 耦合 | [index.ts](../packages/dsh-editor-workbench/src/index.ts) |
-| kernel 工具、prompt、RPC、事件 | [index.ts](../packages/dsh-editor-novel-kernel/src/index.ts) |
-| 逐项 RPC 字段 | [plugin-architecture.md](plugin-architecture.md)，修改实现时仍需重新核对 |
+| 公开交付只有两个包 | [根 package.json](../../package.json)、[产物校验](../../scripts/verify-artifacts.mjs) |
+| 安装/卸载矩阵的真实范围 | [plugin-matrix.mjs](../../e2e/plugin-matrix.mjs) |
+| 桌面仍含 Web bundle | [profile/package.json](../../apps/desktop/resources/profile/package.json)、[禁用与配置项](../../apps/desktop/resources/profile/cordis.patch.yml) |
+| 桌面固定四包 | [prepare-desktop-dev.mjs](../../scripts/prepare-desktop-dev.mjs) |
+| 缺包启动边界 | [missing-private-plugin.mjs](../../e2e/missing-private-plugin.mjs) |
+| 主界面注册与对话投影 | [root-registration.ts](../../packages/dsh-editor-shell/src/root-registration.ts)、[adapter.ts](../../packages/dsh-editor-shell/src/adapter.ts) |
+| manuscript 服务注入 | [index.ts](../../packages/dsh-manuscript/src/index.ts) |
+| workbench 服务与 host-api 耦合 | [index.ts](../../packages/dsh-editor-workbench/src/index.ts) |
+| kernel 工具、prompt、RPC、事件 | [index.ts](../../packages/dsh-editor-novel-kernel/src/index.ts) |
+| 逐项 RPC 字段 | [plugin-architecture.md](../plugin-architecture.md)，修改实现时仍需重新核对 |
