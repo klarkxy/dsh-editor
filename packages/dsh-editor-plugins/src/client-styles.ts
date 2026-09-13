@@ -49,12 +49,14 @@ export const pluginsClientStyles = `
   color: var(--fg, #141413);
   box-shadow: var(--elev-ring, inset 0 0 0 1px var(--hairline, rgba(20,20,19,.08)));
 }
-.dsh-plugins-search, .dsh-plugins-spec {
+.dsh-plugins-search,
+.dsh-ui .dsh-plugins-search,
+.dsh-ui.file-dialog .dsh-plugins-search {
   display: flex;
   gap: var(--space-2, 8px);
   min-width: 0;
 }
-.dsh-plugins-search input, .dsh-plugins-spec input {
+.dsh-plugins-search input {
   flex: 1;
   min-width: 0;
   min-height: 32px;
@@ -65,9 +67,16 @@ export const pluginsClientStyles = `
   color: inherit;
   font: inherit;
 }
-.dsh-plugins-search input:focus-visible, .dsh-plugins-spec input:focus-visible, .dsh-plugins button:focus-visible {
+.dsh-plugins-search input:focus-visible, .dsh-plugins button:focus-visible {
   outline: 2px solid var(--accent, #1b365d);
   outline-offset: 1px;
+}
+.dsh-plugins-search button,
+.dsh-ui .dsh-plugins-search button,
+.dsh-ui.file-dialog .dsh-plugins-search button {
+  width: auto;
+  white-space: nowrap;
+  flex: none;
 }
 .dsh-plugins-primary, .dsh-plugins-ghost,
 .dsh-ui.file-dialog .dsh-plugins-primary, .dsh-ui.file-dialog .dsh-plugins-ghost,
@@ -228,6 +237,39 @@ export const pluginsClientStyles = `
 }
 .dsh-plugins-stars { color: var(--meta, #6b6a64); }
 .dsh-plugins a { color: var(--accent, #1b365d); }
+.dsh-plugins a:focus-visible {
+  outline: 2px solid var(--accent, #1b365d);
+  outline-offset: 1px;
+}
+.dsh-plugins-install-body {
+  display: grid;
+  gap: var(--space-3, 12px);
+}
+.dsh-plugins-install-body header,
+.dsh-plugins-install-body footer { margin: 0; }
+.dsh-plugins-install-body p { margin: 0; color: var(--muted, #504e49); line-height: 1.55; }
+.dsh-plugins-install-fallback {
+  display: grid;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px);
+  border: 1px solid var(--border, #d8d5c7);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface, #fdfcf6);
+  color: var(--fg, #141413);
+}
+.dsh-plugins-install-fallback h2 {
+  margin: 0;
+  font: 500 20px/1.2 var(--font-serif, Georgia, 'Noto Serif', serif);
+  letter-spacing: -.02em;
+  color: var(--fg, #141413);
+}
+.dsh-plugins-install-fallback footer,
+.dsh-plugins-install-body footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
 .dsh-plugins-inspect {
   display: grid;
   gap: var(--space-2, 8px);
@@ -237,6 +279,9 @@ export const pluginsClientStyles = `
   background: var(--surface, #fdfcf6);
 }
 .dsh-plugins-inspect-blocked { border-color: var(--danger, #8a3a30); }
+.dsh-plugins-inspect-warn {
+  border-color: color-mix(in srgb, var(--accent, #1b365d) 40%, var(--border, #d8d5c7));
+}
 .dsh-plugins-inspect-verdict { margin: 0; font: 600 var(--text-sm, 12px)/1.5 var(--font-sans, system-ui, sans-serif); }
 .dsh-plugins-findings { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 .dsh-plugins-finding { font-size: var(--text-xs, 11px); line-height: 1.5; }

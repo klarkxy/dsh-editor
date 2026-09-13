@@ -153,6 +153,11 @@ async function readPackageJson(profileDir: string, packageName: string): Promise
   }
 }
 
+/** A loaded module can outlive its files until the desktop is restarted. */
+export async function hasPluginPackage(profileDir: string, packageName: string): Promise<boolean> {
+  return Boolean(await readPackageJson(profileDir, packageName))
+}
+
 function asRuntimeCatalog(value: unknown): RuntimeCatalog | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
   const record = value as { bundles?: unknown; entries?: unknown }
@@ -184,9 +189,12 @@ export async function readPreparedCatalog(profileDir: string): Promise<RuntimeCa
   }
 }
 
-export async function loadRuntimeCatalog(profileDir: string, packageNames: Iterable<string>): Promise<RuntimeCatalog> {
+export async function loadRuntimeCatalog(profileDir: string, packageNames: Iterable<string>, installedNames: readonly string[] = []): Promise<RuntimeCatalog> {
   const prepared = await readPreparedCatalog(profileDir)
-  const bundles = prepared?.bundles.length ? prepared.bundles : await readProfileBundles(profileDir)
+  // A profile's bundles also include marketplace installs. Only shipped bundles
+  // belong to the protected catalog; retain the prepared catalog even if empty.
+  const installed = new Set(installedNames)
+  const bundles = prepared ? prepared.bundles : (await readProfileBundles(profileDir)).filter(name => !installed.has(name))
   const known = new Set(Object.values(prepared?.entries ?? {}).map((row) => row.packageName))
   const names = new Set<string>([...bundles, ...packageNames])
   const packages: Array<{ name: string; dshEditor: DshEditorBlock }> = []

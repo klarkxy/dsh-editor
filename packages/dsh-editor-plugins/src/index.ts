@@ -11,7 +11,7 @@ import {
 } from './contracts.ts'
 import {
   catalogFor, catalogLookupId, classifyEntry, isProtectedEntry, isProtectedPackage, isSafeEntryId, isSafePackageName,
-  loadRuntimeCatalog, packageNameOf, type RuntimeCatalog,
+  hasPluginPackage, loadRuntimeCatalog, packageNameOf, type RuntimeCatalog,
 } from './core.ts'
 import { githubHeaders, marketplaceSearchUrl, parseGitHubSpec, parseMarketplaceSearch, sanitizeMarketplaceQuery } from './github.ts'
 import { inspectPluginPackage } from './inspect.ts'
@@ -43,7 +43,8 @@ const FIBER_PHASE: Record<number, PluginFiberPhase> = {
 type LoaderEntry = {
   id: string
   disabled: boolean
-  options: { name: string; group?: boolean | null }
+  options: { id?: string; name: string; group?: boolean | null }
+  parent?: { remove(id: string): Promise<unknown> | unknown }
   fiber?: { state: number }
 }
 
@@ -157,6 +158,25 @@ export function inventoryFromLoader(loader: LoaderFace, state: PluginState, cata
     }
     inventory[group].push(card)
   }
+  const listed = new Set([...inventory.core, ...inventory.optional, ...inventory.community].map(card => card.packageName))
+  for (const item of installed.values()) {
+    if (listed.has(item.name) || isProtectedPackage(item.name, catalog.bundles)) continue
+    inventory.community.push({
+      entryId: `installed:${item.name}`,
+      moduleName: item.name,
+      packageName: item.name,
+      title: item.name,
+      description: item.spec,
+      group: 'community',
+      enabled: false,
+      locked: false,
+      fiberPhase: null,
+      origin: 'installed',
+      pendingRestart: true,
+      spec: item.spec,
+      version: item.version,
+    })
+  }
   return inventory
 }
 
@@ -221,12 +241,20 @@ export async function handlePluginsRpc(
   const catalogForCall = async (): Promise<RuntimeCatalog> => {
     if (options.catalog) return options.catalog
     const names = [...options.loader.entries()].map((entry) => packageNameOf(entry.options.name))
-    return loadRuntimeCatalog(options.paths.profileDir, names)
+    const state = await readPluginState(options.paths)
+    return loadRuntimeCatalog(options.paths.profileDir, names, state.installed.map(item => item.name))
   }
   try {
     if (endpoint === 'inventory.list') {
       const state = await readPluginState(options.paths)
-      return { ok: true, value: inventoryFromLoader(options.loader, state, await catalogForCall()) }
+      const inventory = inventoryFromLoader(options.loader, state, await catalogForCall())
+      // Live patch reload retains the boot-time bundle layers. An uninstalled
+      // module may linger in that loader, but is no longer an installed package.
+      const present = await Promise.all(inventory.community.map(card => card.origin === 'installed'
+        ? true
+        : hasPluginPackage(options.paths.profileDir, card.packageName)))
+      inventory.community = inventory.community.filter((_card, index) => present[index])
+      return { ok: true, value: inventory }
     }
     if (endpoint === 'entry.setEnabled') {
       const entryId = typeof body.entryId === 'string' ? body.entryId : ''
@@ -266,6 +294,7 @@ export async function handlePluginsRpc(
       })
       try {
         const inspect = await inspectPluginPackage(staged.unpacked, await catalogForCall())
+        if (staged.sourceNote) inspect.findings.push({ code: 'published-artifact', severity: 'info', message: staged.sourceNote })
         return { ok: true, value: inspect }
       } finally {
         await rm(staged.staging, { recursive: true, force: true })
@@ -289,16 +318,21 @@ export async function handlePluginsRpc(
     if (endpoint === 'marketplace.uninstall') {
       const packageName = typeof body.name === 'string' ? body.name : ''
       if (!isSafePackageName(packageName)) return bad('请指定要卸载的插件')
-      if (isProtectedPackage(packageName, (await catalogForCall()).bundles)) return forbidden('系统核心插件不能卸载')
+      const catalog = await catalogForCall()
+      if (isProtectedPackage(packageName, catalog.bundles)) return forbidden('系统核心插件不能卸载')
       const state = await readPluginState(options.paths)
       if (!state.installed.some((item) => item.name === packageName)) return fail('not-found', '该插件不是从市场安装的，不能从这里卸载')
       await validatePluginPersistence(options.paths, options.io ?? defaultPersistIo)
       const running = [...options.loader.entries()].filter((entry) => packageNameOf(entry.options.name) === packageName)
-      await uninstallUserPlugin(packageName, options.paths)
       for (const entry of running) {
-        try { await options.loader.remove?.(entry.id) } catch { /* 卸下文件后仍需重启才能卸掉 Client */ }
+        // Nested entries expose qualified IDs (include:<id>); their owning
+        // group's remove API takes the local options.id, not the qualified ID.
+        if (entry.parent && entry.options.id) await entry.parent.remove(entry.options.id)
+        else await options.loader.remove?.(entry.id)
       }
+      await uninstallUserPlugin(packageName, options.paths, catalog)
       state.installed = state.installed.filter((item) => item.name !== packageName)
+      for (const entry of running) delete state.overrides[catalogLookupId(entry.id)]
       await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
       return { ok: true, value: { restartRequired: true } satisfies PluginActionReceipt }
     }

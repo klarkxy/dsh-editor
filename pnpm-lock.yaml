@@ -162,6 +162,9 @@ importers:
       dsh-manuscript:
         specifier: workspace:*
         version: link:../dsh-manuscript
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.2
@@ -169,6 +172,9 @@ importers:
       '@types/react':
         specifier: 18.3.31
         version: 18.3.31
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1594,6 +1600,9 @@ packages:
 
   '@types/responselike@1.0.3':
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
+
+  '@types/semver@7.8.0':
+    resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
 
   '@types/verror@1.10.11':
     resolution: {integrity: sha512-RlDm9K7+o5stv0Co8i8ZRGxDbrTxhJtgjqjFyVh/tXQyl/rYtTKlnTvZ88oSTeYREWurwx20Js4kTuKCsFkUtg==}
@@ -4678,6 +4687,8 @@ snapshots:
   '@types/responselike@1.0.3':
     dependencies:
       '@types/node': 24.13.3
+
+  '@types/semver@7.8.0': {}
 
   '@types/verror@1.10.11':
     optional: true

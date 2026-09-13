@@ -14,6 +14,10 @@
 
 持久化失败时补偿恢复原状态（`src/index.ts` 的 `persistPluginState`；`src/persist.ts` 提供原子替换与错误类型）。覆盖用户自定义 `cordis` patch 前先做所有权预检：读不到或不是本管理器生成的 patch 则拒绝变更，保留配置与已装文件（`src/overlay.ts` `isOwnedManagedPatch`）。市场安装前 `marketplace.inspect` 静态检查（缺产物、抢 `root`、入口无法解析、DSH 主版本不兼容则 `blocked`）。分类与锁定读各包 `dshEditor` 与物化 `dsh-editor-catalog.json`。
 
+安装从 GitHub 获取仓库内容；如果缺少入口或客户端编译产物，会尝试同名、同版本且 repository 匹配的 npm 发布包，下载后验证 SHA-512 和包内身份，再执行同一套静态检查。检查结果注明实际使用的发布包。显式分支或提交引用不会被自动换成 npm 版本。
+
+依赖安装通过 Node 启动 npm，兼容 Windows 路径中的空格；只解析运行依赖，禁用生命周期脚本，并在完成后还原原始 package.json。依赖安装在暂存目录完成，失败时保留已安装版本。下载遇到连接重置只重试一次，HTTP 拒绝不重试。
+
 ## 文档
 
 [插件架构](../../docs/plugin-architecture.md) · [组合指南](../../docs/plugin-composition-guide.md) · [使用者指南](../../docs/user-guide.md)

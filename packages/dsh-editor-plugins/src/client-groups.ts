@@ -76,7 +76,7 @@ export function enabledState(cards: PluginCard[]): boolean | 'mixed' {
 }
 
 export function toggleableCards(cards: PluginCard[]): PluginCard[] {
-  return cards.filter((card) => !card.locked)
+  return cards.filter((card) => !card.locked && !card.pendingRestart)
 }
 
 export function groupByPackage(cards: PluginCard[]): PluginCard[][] {

@@ -1,10 +1,12 @@
+import { randomUUID } from 'node:crypto'
+import { publishedArtifact, verifyPublishedArchive, matchesRepository } from './published.ts'
 import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync } from 'node:fs'
 import { mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { INSTALL_TARBALL_MAX_BYTES } from './contracts.ts'
-import { isProtectedPackage, isSafePackageName, readProfileBundles, type RuntimeCatalog } from './core.ts'
+import { isProtectedPackage, isSafePackageName, type RuntimeCatalog } from './core.ts'
 import { githubHeaders, githubTarballUrl, tarEntryIsSafe, type GitHubSpec } from './github.ts'
 import { blockedReason, inspectPluginPackage, type PluginInspectReport } from './inspect.ts'
 import type { PluginPaths } from './paths.ts'
@@ -33,14 +35,29 @@ export async function stageGitHubPlugin(
   paths: PluginPaths,
   signal: AbortSignal,
   io: Pick<InstallIo, 'fetch' | 'extract'>,
-): Promise<{ staging: string; unpacked: string }> {
-  const staging = join(paths.home, 'user-plugins', `.staging-${process.pid}-${Date.now()}`)
+): Promise<{ staging: string; unpacked: string; sourceNote?: string }> {
+  const staging = join(paths.home, 'user-plugins', `.staging-${process.pid}-${randomUUID()}`)
   const archive = join(staging, 'plugin.tgz')
   const unpacked = join(staging, 'unpacked')
   await mkdir(unpacked, { recursive: true })
   try {
     await downloadTarball(githubTarballUrl(spec), archive, signal, io.fetch)
     await io.extract(archive, unpacked, signal)
+    const initial = await inspectPluginPackage(unpacked)
+    const missingBuild = initial.findings.some((item) => item.code === 'entry-file' || item.code === 'client-file')
+    if (missingBuild) {
+      const artifact = await publishedArtifact(unpacked, spec, signal, io.fetch)
+      if (artifact) {
+        const publishedArchive = join(staging, 'published.tgz')
+        const publishedDir = join(staging, 'published')
+        await downloadTarball(artifact.url, publishedArchive, signal, io.fetch)
+        await verifyPublishedArchive(publishedArchive, artifact.integrity)
+        await io.extract(publishedArchive, publishedDir, signal)
+        const manifest = JSON.parse(await readFile(join(publishedDir, 'package.json'), 'utf8'))
+        if (manifest.name !== artifact.name || manifest.version !== artifact.version || !matchesRepository(manifest, spec)) fail('npm 发布包与仓库身份不匹配')
+        return { staging, unpacked: publishedDir, sourceNote: '仓库未包含编译产物，将使用同仓库的 npm 发布包 ' + artifact.name + '@' + artifact.version + '（已校验完整性）' }
+      }
+    }
     return { staging, unpacked }
   } catch (error) {
     await rm(staging, { recursive: true, force: true })
@@ -49,7 +66,21 @@ export async function stageGitHubPlugin(
 }
 
 export async function downloadTarball(url: string, destination: string, signal: AbortSignal, ioFetch: typeof fetch = fetch): Promise<void> {
-  const response = await ioFetch(url, { headers: githubHeaders(), redirect: 'follow', signal })
+  try {
+    await downloadTarballOnce(url, destination, signal, ioFetch)
+  } catch (error) {
+    signal.throwIfAborted()
+    const code = (error as { cause?: { code?: string }; code?: string }).cause?.code ?? (error as { code?: string }).code
+    if (code !== 'UND_ERR_SOCKET' && code !== 'ECONNRESET') throw error
+    // Retry this read-only download once when a reused connection was closed.
+    await rm(destination, { force: true })
+    await downloadTarballOnce(url, destination, signal, ioFetch)
+  }
+}
+
+async function downloadTarballOnce(url: string, destination: string, signal: AbortSignal, ioFetch: typeof fetch): Promise<void> {
+  const headers = new URL(url).hostname === 'api.github.com' ? githubHeaders() : { 'User-Agent': 'dsh-editor' }
+  const response = await ioFetch(url, { headers, redirect: 'follow', signal })
   if (!response.ok) fail(response.status === 404 ? '未找到该 GitHub 仓库' : `下载插件失败（HTTP ${response.status}）`)
   const length = Number(response.headers.get('content-length') || '0')
   if (length > INSTALL_TARBALL_MAX_BYTES) fail('插件压缩包超过 40 MB')
@@ -117,9 +148,7 @@ export async function defaultExtract(archive: string, destination: string, signa
 
 export function resolveNpmCli(nodePath: string): string | undefined {
   const dir = dirname(nodePath)
-  const names = process.platform === 'win32' ? ['npm.cmd', 'npm.exe'] : ['npm']
-  for (const name of names) {
-    const candidate = join(dir, name)
+  for (const candidate of [join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js'), join(dir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')]) {
     if (existsSync(candidate)) return candidate
   }
   return undefined
@@ -128,7 +157,18 @@ export function resolveNpmCli(nodePath: string): string | undefined {
 export async function defaultNpmInstall(directory: string, signal: AbortSignal): Promise<void> {
   const npm = resolveNpmCli(process.execPath)
   if (!npm) fail('当前环境无法安装插件依赖（需要 npm）')
-  await run(npm, ['install', '--omit=dev', '--ignore-scripts', '--no-fund', '--no-audit', '--no-progress'], directory, signal)
+  // npm resolves dev dependencies even with --omit=dev. Published plugins can
+  // retain an old development host graph; only their runtime graph is relevant.
+  const manifestPath = join(directory, 'package.json')
+  const original = await readFile(manifestPath, 'utf8')
+  const manifest = JSON.parse(original)
+  delete manifest.devDependencies
+  await writeFile(manifestPath, JSON.stringify(manifest))
+  try {
+    await run(process.execPath, [npm, 'install', '--omit=dev', '--ignore-scripts', '--no-fund', '--no-audit', '--no-progress', '--package-lock=false'], directory, signal)
+  } finally {
+    await writeFile(manifestPath, original)
+  }
 }
 
 export async function defaultLink(source: string, destination: string): Promise<void> {
@@ -185,11 +225,13 @@ export async function installGitHubPlugin(
   const staged = await stageGitHubPlugin(spec, paths, signal, io)
   try {
     const manifest = await inspectBundleManifest(staged.unpacked, catalog)
+    if (staged.sourceNote) manifest.inspect.findings.push({ code: 'published-artifact', severity: 'info', message: staged.sourceNote })
+    await io.npmInstall(staged.unpacked, signal)
+    signal.throwIfAborted()
     const destination = join(paths.userPluginsDir, manifest.name)
     await mkdir(paths.userPluginsDir, { recursive: true })
     await rm(destination, { recursive: true, force: true })
     await rename(staged.unpacked, destination)
-    await io.npmInstall(destination, signal)
     await io.link(destination, join(paths.profileDir, 'node_modules', manifest.name))
     await addBundleToProfile(paths.profileDir, manifest.name)
     return { name: manifest.name, version: manifest.version, spec: spec.spec, inspect: manifest.inspect }
@@ -198,9 +240,8 @@ export async function installGitHubPlugin(
   }
 }
 
-export async function uninstallUserPlugin(packageName: string, paths: PluginPaths): Promise<void> {
-  const bundles = await readProfileBundles(paths.profileDir)
-  if (isProtectedPackage(packageName, bundles) || !isSafePackageName(packageName)) fail('不能卸载系统核心插件')
+export async function uninstallUserPlugin(packageName: string, paths: PluginPaths, catalog: RuntimeCatalog): Promise<void> {
+  if (isProtectedPackage(packageName, catalog.bundles) || !isSafePackageName(packageName)) fail('不能卸载系统核心插件')
   await removeBundleFromProfile(paths.profileDir, packageName)
   await rm(join(paths.profileDir, 'node_modules', packageName), { recursive: true, force: true })
   await rm(join(paths.userPluginsDir, packageName), { recursive: true, force: true })

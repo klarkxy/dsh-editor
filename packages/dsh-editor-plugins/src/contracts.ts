@@ -21,6 +21,10 @@ export type PluginCard = {
   locked: boolean
   fiberPhase: PluginFiberPhase
   origin: PluginOrigin
+  /** Installed on disk but not yet present in the running loader. */
+  pendingRestart?: boolean
+  /** Startup failure from the loader, distinct from installation success. */
+  failureReason?: string
   spec?: string
   version?: string
 }
