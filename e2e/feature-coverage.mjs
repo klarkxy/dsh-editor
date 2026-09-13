@@ -694,13 +694,11 @@ async function openAssistantWithModel(page) {
     report.model = chosen.replace(/\s+/g, ' ').trim()
     await recordPhase('切换对话模型', report.model)
     return
-  } catch { /* fall back to the new-conversation dialog */ }
+  } catch { /* fall back to a new conversation, then pick in the composer */ }
   await assistant.getByRole('button', { name: '新对话' }).click()
-  const picker = page.getByRole('dialog', { name: '新对话' })
-  await picker.waitFor({ state: 'visible', timeout: 30_000 })
-  const chosen = await chooseCustomSelect(picker, '选择模型', (label) => /MiniMax-M3/i.test(label))
-  await picker.getByRole('button', { name: '开始', exact: true }).click()
-  await picker.waitFor({ state: 'hidden', timeout: 30_000 })
+  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+  if (await discard.isVisible({ timeout: 1_500 }).catch(() => false)) await discard.click()
+  const chosen = await chooseCustomSelect(assistant, '选择模型', (label) => /MiniMax-M3/i.test(label))
   const effort = assistant.getByRole('combobox', { name: '思考强度' })
   if (await effort.isVisible().catch(() => false)) {
     const current = await effort.innerText()
@@ -922,18 +920,23 @@ async function coverWorkbench(page) {
     await openTreeFile(page, '001.md', '正文')
     await page.getByTestId('paper-editor-menu-trigger').click()
     await page.getByTestId('editor-menu-chapter-meta').click()
-    const dialog = page.getByRole('dialog', { name: '本章工作笔记' })
+    const dialog = page.getByRole('dialog', { name: '章纲', exact: true })
     await dialog.waitFor({ state: 'visible', timeout: 10_000 })
-    const settings = dialog.locator('.chapter-meta-settings')
-    await settings.waitFor({ state: 'attached', timeout: 10_000 })
     const beats = page.getByLabel('章纲节拍')
     await beats.waitFor({ state: 'visible', timeout: 10_000 })
     await beats.fill('林简过闸\n录音带被点名')
+    await dialog.getByRole('button', { name: '写入', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    await page.getByTestId('paper-editor-menu-trigger').click()
+    await page.getByTestId('editor-menu-chapter-summary').click()
+    await page.getByRole('dialog', { name: '章末小结', exact: true }).waitFor()
     await page.getByLabel('此刻').fill('闸口外')
     await page.getByLabel('地点').fill('雾港海关')
     await page.getByRole('button', { name: '写入' }).click()
-    await page.getByText(/章纲已加入草稿|已保存/).first().waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined)
-    await savePaper(page)
+    await page.getByRole('dialog', { name: '章末小结', exact: true }).waitFor({ state: 'hidden' })
+    await page.getByTestId('paper-save-state').filter({ hasText: '已保存' }).waitFor()
+    const saved = await readFile(resolve(workspace, '正文', '001.md'), 'utf8')
+    if (!saved.includes('林简过闸') || !saved.includes('录音带被点名') || !saved.includes('闸口外') || !saved.includes('雾港海关')) throw new Error('chapter metadata did not persist')
   })
 
   await cover('typewriter-focus', async () => {
@@ -1133,12 +1136,12 @@ async function coverWorkbench(page) {
   })
 
   await cover('about-dialog', async () => {
-    await page.getByRole('button', { name: '关于' }).click()
-    const dialog = page.getByRole('dialog', { name: '关于 DSH Editor' })
-    await dialog.waitFor({ state: 'visible', timeout: 10_000 })
-    await dialog.getByRole('button', { name: '关闭' }).or(dialog.locator('button[aria-label="关闭"]')).first().click().catch(async () => {
-      await page.keyboard.press('Escape')
-    })
+    await openShellSettings(page)
+    const dialog = page.locator('.settings-dialog')
+    await dialog.locator('.settings-nav').getByRole('tab', { name: '关于', exact: true }).click()
+    await dialog.getByRole('region', { name: '关于' }).waitFor({ state: 'visible', timeout: 10_000 })
+    await dialog.getByRole('button', { name: '检查更新' }).waitFor({ state: 'visible', timeout: 10_000 })
+    await closeShellSettings(page)
   })
 
   await cover('import-entry', async () => {
@@ -1326,14 +1329,9 @@ async function coverAi(page) {
   await cover('conversation-menu', async () => {
     const assistant = await ensureAssistantOpen(page)
     await assistant.getByRole('button', { name: '新对话' }).click()
-    const picker = page.getByRole('dialog', { name: '新对话' })
-    if (await picker.isVisible().catch(() => false)) {
-      await chooseCustomSelect(picker, '选择模型', (label) => /MiniMax-M3/i.test(label))
-      await picker.getByRole('button', { name: '开始', exact: true }).click()
-      const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
-      if (await discard.isVisible({ timeout: 2_000 }).catch(() => false)) await discard.click()
-      await picker.waitFor({ state: 'hidden', timeout: 15000 })
-    }
+    const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+    if (await discard.isVisible({ timeout: 2_000 }).catch(() => false)) await discard.click()
+    await delay(800)
     await assistant.getByRole('button', { name: '对话操作' }).click()
     const menu = page.getByRole('menu', { name: '对话操作' })
     await menu.getByRole('menuitem', { name: '归档' }).click()

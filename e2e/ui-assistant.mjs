@@ -14,12 +14,13 @@ import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 
+const planningOnly = process.argv.includes('--planning-only')
 const root = resolve(import.meta.dirname, '..')
 const devRoot = resolve(root, '.dev')
-const output = resolve(root, 'e2e', 'out', 'ui-assistant')
-const home = resolve(devRoot, 'ui-assistant-home')
-const projectsRoot = resolve(devRoot, 'ui-assistant-projects')
-const workspace = resolve(devRoot, 'ui-assistant-workspace')
+const output = resolve(root, 'e2e', 'out', planningOnly ? 'planning-flow' : 'ui-assistant')
+const home = resolve(devRoot, planningOnly ? 'planning-flow-home' : 'ui-assistant-home')
+const projectsRoot = resolve(devRoot, planningOnly ? 'planning-flow-projects' : 'ui-assistant-projects')
+const workspace = resolve(devRoot, planningOnly ? 'planning-flow-workspace' : 'ui-assistant-workspace')
 const template = resolve(devRoot, 'desktop-profile-template')
 const runtime = resolve(devRoot, 'desktop-dsh-runtime')
 const cli = resolve(runtime, 'lib', 'bin.js')
@@ -114,7 +115,7 @@ function skipDependents(reason) {
   }
 }
 
-const MANDATORY = [
+const MANDATORY = planningOnly ? ['configure-test-model', 'open-synthetic-work', 'planning-assistant', 'planning-create-directories', 'planning-field-proposals', 'planning-dialog-save', 'planning-stale-proposal', 'planning-glob', 'no-external-model-calls'] : [
   'configure-test-model',
   'open-synthetic-work',
   'open-assistant',
@@ -297,6 +298,21 @@ function classify(body) {
   const tools = JSON.stringify(body?.tools ?? [])
   const last = lastNonAssistant(body)
   const userRequest = lastRealUserRequest(body)
+  if (planningOnly && userRequest.startsWith('PLANNING_')) {
+    const messages = body.messages ?? []
+    let start = 0
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user' && extractTaskUserRequest(messageText(messages[i])) === userRequest) { start = i; break }
+    }
+    const calls = messages.slice(start + 1).flatMap(message => message.tool_calls ?? []).map(call => call.function?.name)
+    if (calls.includes('novel_propose') || calls.includes('glob')) return 'planning_done'
+    if (userRequest === 'PLANNING_GLOB') return 'planning_glob'
+    if (userRequest === 'PLANNING_OUTLINE') return 'planning_outline'
+    if (userRequest === 'PLANNING_CARD') return 'planning_card'
+    if (userRequest === 'PLANNING_WORLD') return 'planning_world'
+    if (!calls.includes('read')) return 'planning_read'
+    return userRequest === 'PLANNING_SUMMARY' ? 'planning_summary' : 'planning_plan'
+  }
   if (blob.includes('【待改写】')) return 'rewrite'
   if (blob.includes('【光标前】')) return 'fim'
   const isTool = last.role === 'tool' || last.role === 'toolResult' || /tool_call_id/.test(last.content)
@@ -532,6 +548,21 @@ function startStub() {
           record.kind = kind
           record.model = model
           record.wire = wireMeta(body, kind)
+          if (kind.startsWith('planning_')) {
+            const action = kind === 'planning_read' ? ['read', { file_path: CHAPTER_REL }]
+              : kind === 'planning_glob' ? ['glob', { pattern: '**/*.{md,txt}' }]
+              : kind === 'planning_outline' ? ['novel_propose', { kind: 'create', path: '大纲/第一卷/卷纲.md', summary: '采用第一卷大纲', text: '# 第一卷\n\n少年下山，在城市寻找师叔。\n' }]
+              : kind === 'planning_card' ? ['novel_propose', { kind: 'create', path: '人物卡/少年.md', summary: '整理少年人物卡', text: '# 少年\n\n修为真实，初到城市。\n' }]
+              : kind === 'planning_world' ? ['novel_propose', { kind: 'create', path: '世界书/山门.md', summary: '整理已确认山门设定', text: '# 山门\n\n山门外是现代都市。\n' }]
+              : kind === 'planning_plan' ? ['novel_propose', { kind: 'chapter_plan', path: CHAPTER_REL, summary: '采用本章章纲', beats: ['少年出山', '铜钱换不了面钱', '读信寻找师叔'] }]
+              : kind === 'planning_summary' ? ['novel_propose', { kind: 'chapter_summary', path: CHAPTER_REL, summary: '记录实际章末小结', state: { now: '面馆读信', where: '城市面馆', open: '师叔下落' } }]
+              : null
+            if (kind === 'planning_done') {
+              record.toolReplies = (body.messages ?? []).filter(message => message.role === 'tool').slice(-2).map(messageText)
+            }
+            await respondSse(req, res, flags, record, model, action ? toolChunks(model, action[0], action[1], `call_${randomUUID().replaceAll('-', '')}`) : textChunks(model, '规划操作完成，请作者核对采用。'))
+            return
+          }
           if (kind === 'hold') {
             const deadline = Date.now() + 12_000
             while (Date.now() < deadline) {
@@ -660,7 +691,7 @@ async function startDsh(env) {
 
 async function seedWorkspace() {
   await mkdir(resolve(workspace, '正文'), { recursive: true })
-  await mkdir(resolve(workspace, '大纲'), { recursive: true })
+  if (!planningOnly) await mkdir(resolve(workspace, '大纲'), { recursive: true })
   await writeFile(resolve(workspace, '正文', '001.md'), CHAPTER_TEXT, 'utf8')
 }
 
@@ -1020,51 +1051,12 @@ async function chooseStubModel(scope, label) {
   }
 }
 
-async function startConversationWithStub(page, assistant) {
-  const picker = page.getByRole('dialog', { name: '新对话' })
-  if (!(await picker.isVisible().catch(() => false))) {
-    await assistant.getByRole('button', { name: '新对话' }).click()
-    await picker.waitFor({ state: 'visible', timeout: 10_000 })
-  }
-  await chooseStubModel(picker, 'new conversation')
-  const chosen = await readModelFrom(picker)
-  if (!isExactStubModel(chosen) && !isStubModelLabel(`${chosen.trigger} ${chosen.label}`)) {
-    throw new Error(`new conversation did not keep stub: ${JSON.stringify(chosen)}`)
-  }
-  const start = picker.getByRole('button', { name: '开始', exact: true })
-  await waitFor(async () => start.isEnabled(), 'new conversation start enabled', 10_000)
-  await start.click()
-  const failed = picker.locator('.warning')
-  if (await failed.isVisible({ timeout: 2_000 }).catch(() => false)) {
-    throw new Error(`new conversation failed: ${(await failed.innerText()).trim()}`)
-  }
-  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
-  if (await discard.isVisible({ timeout: 1_500 }).catch(() => false)) await discard.click()
-  await picker.waitFor({ state: 'hidden', timeout: 20_000 })
-}
-
 async function selectAssistantModel(page) {
   const assistant = await ensureAssistantOpen(page)
-  const dialog = page.getByRole('dialog', { name: '新对话' })
   const composer = modelScope(page)
-  await waitFor(async () => (
-    (await dialog.isVisible().catch(() => false))
-    || (await composer.getByRole('combobox', { name: '选择模型' }).count()) > 0
-  ), 'assistant model combobox attached', 25_000)
-  // Prefer the composer Select: Chat is bound to currentSession ?? fileSession,
-  // which is the same sessionId manuscript assist reads for FIM/rewrite.
-  if (await composer.getByRole('combobox', { name: '选择模型' }).count()) {
-    if (await dialog.isVisible().catch(() => false)) {
-      const cancel = dialog.getByRole('button', { name: '取消' })
-      if (await cancel.isVisible().catch(() => false)) await cancel.click()
-      else await page.keyboard.press('Escape')
-      await dialog.waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined)
-    }
-    if (!isExactStubModel(await readActiveModel(page))) {
-      await chooseStubModel(composer, 'composer')
-    }
-  } else {
-    await startConversationWithStub(page, assistant)
+  await waitFor(async () => (await composer.getByRole('combobox', { name: '选择模型' }).count()) > 0, 'assistant model combobox attached', 25_000)
+  if (!isExactStubModel(await readActiveModel(page))) {
+    await chooseStubModel(composer, 'composer')
   }
   await waitForStubRoute(page, 'open-assistant')
   const effort = assistant.getByRole('combobox', { name: '思考强度' })
@@ -1241,6 +1233,151 @@ async function savePaper(page) {
   await page.locator('[data-testid="paper-save-state"]', { hasText: '已保存' }).waitFor({ state: 'visible', timeout: 15_000 })
 }
 
+async function runPlanningFlow(page) {
+  const chapter = () => readFile(resolve(workspace, CHAPTER_REL), 'utf8')
+  const body = text => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '')
+  const proposal = async (request, path) => {
+    await assertStubSelected(page, request)
+    const before = await page.locator('.proposal-card').count()
+    await page.getByRole('textbox', { name: '输入消息' }).fill(request)
+    await page.getByRole('button', { name: '发送', exact: true }).click()
+    await waitFor(async () => (await page.locator('.proposal-card').count()) > before, request + ' proposal', 35000)
+    const card = page.locator('.proposal-card').last()
+    await card.getByRole('button', { name: /^(应用|采用)$/ }).waitFor({ state: 'visible' })
+    if (!(await card.innerText()).includes(path)) throw new Error('proposal target missing: ' + path)
+    return card
+  }
+  const apply = async card => {
+    await card.getByRole('button', { name: /^(应用|采用)$/ }).click()
+    await waitFor(async () => /已应用|已采用/.test(await card.innerText()), 'applied card')
+  }
+  const openMeta = async name => {
+    await page.getByRole('button', { name: '正文操作', exact: true }).click()
+    await page.getByRole('menuitem', { name, exact: true }).click()
+    const dialog = page.getByRole('dialog', { name, exact: true })
+    await dialog.waitFor()
+    return dialog
+  }
+  if (!(await cover('planning-assistant', async () => {
+    await ensureAssistantOpen(page)
+    await chooseStubModel(modelScope(page), 'planning')
+    await assertStubSelected(page, 'planning')
+    return 'isolated stub selected'
+  }))) return
+  await cover('planning-create-directories', async () => {
+    for (const [request, path, expectedDirectory] of [['PLANNING_OUTLINE', '大纲/第一卷/卷纲.md', '大纲/第一卷'], ['PLANNING_CARD', '人物卡/少年.md', '人物卡'], ['PLANNING_WORLD', '世界书/山门.md', '世界书']]) {
+      const card = await proposal(request, path)
+      if (await exists(resolve(workspace, path))) throw new Error('preview wrote file')
+      if (!(await card.innerText()).includes(expectedDirectory)) throw new Error('missing parent preview')
+      if (request === 'PLANNING_OUTLINE' && !(await card.innerText()).includes('大纲')) throw new Error('missing outline label')
+      // A transport failure must retain this proposal and permit explicit recheck.
+      if (request === 'PLANNING_CARD') {
+        await page.route(/\/dsh-editor-workbench\/proposal\.apply$/, route => route.abort('failed'), { times: 1 })
+        await card.getByRole('button', { name: /^(应用|采用)$/ }).click()
+        const retry = card.getByRole('button', { name: /重新核对|重试/ })
+        await retry.waitFor()
+        await retry.click()
+        await card.getByRole('button', { name: /^(应用|采用)$/ }).waitFor()
+      }
+      await apply(card)
+      await waitFor(() => exists(resolve(workspace, path)), path + ' on disk')
+    }
+    await openChapter(page)
+    await shot(page, 'planning-directories', '一次采用创建大纲、人物卡和世界书目录')
+    return 'three first-use directories; retained failed proposal retry'
+  })
+  await cover('planning-field-proposals', async () => {
+    const initial = body(await chapter())
+    const plan = await proposal('PLANNING_PLAN', CHAPTER_REL)
+    if (!/章纲/.test(await plan.innerText())) throw new Error('plan card lacks chapter purpose')
+    await apply(plan)
+    await waitFor(async () => (await chapter()).includes('beats:'), 'plan persisted')
+    const summary = await proposal('PLANNING_SUMMARY', CHAPTER_REL)
+    if (!/章末小结/.test(await summary.innerText())) throw new Error('summary card lacks purpose')
+    await apply(summary)
+    await waitFor(async () => (await chapter()).includes('面馆读信'), 'summary persisted')
+    const text = await chapter()
+    if (!text.includes('beats:') || body(text) !== initial) throw new Error('proposal lost plan or changed body')
+    await shot(page, 'planning-proposals', '真实 read 观察版本绑定与章纲、小结分别采用')
+    return 'actual runtime read -> proposal marker -> preview -> disk, body preserved'
+  })
+  await cover('planning-dialog-save', async () => {
+    await openChapter(page)
+    const original = await chapter()
+    const writeRoute = /\/manuscript\/file\.write$/
+    const failSave = route => route.abort('failed')
+    await page.route(writeRoute, failSave)
+    await page.locator('[data-testid="paper-editor"] .cm-content').click()
+    await page.keyboard.press('Control+End')
+    await page.keyboard.insertText('\n这句正文尚未保存，编辑章纲时必须保留。\n')
+    const expectedBody = await page.getByTestId('paper-editor').evaluate(el => el.__cmView.state.doc.toString())
+    let dialog = await openMeta('章纲')
+    const beats = dialog.getByRole('textbox').first()
+    const previous = await beats.inputValue()
+    if (!previous.includes('少年出山')) throw new Error('adopted plan not loaded')
+    await beats.fill(previous + '\n作者补充：雨停后离开')
+    await dialog.getByRole('button', { name: /写入|保存/ }).click()
+    await delay(900)
+    if (!(await dialog.isVisible())) throw new Error('failed save closed dialog')
+    if ((await chapter()) !== original) throw new Error('failed save mutated file')
+    await page.unroute(writeRoute, failSave)
+    await dialog.getByRole('button', { name: /写入|保存/ }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    await waitFor(async () => (await chapter()).includes('作者补充：雨停后离开'), 'manual plan saved')
+    dialog = await openMeta('章末小结')
+    const now = dialog.getByRole('textbox', { name: '此刻', exact: true })
+    if ((await now.inputValue()) !== '面馆读信') throw new Error('summary not hydrated')
+    await now.fill('作者整理：准备离开面馆')
+    await dialog.getByRole('button', { name: /写入|保存/ }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    await waitFor(async () => (await chapter()).includes('作者整理：准备离开面馆'), 'manual summary saved')
+    const final = await chapter()
+    if (!final.includes('作者补充：雨停后离开') || body(final) !== expectedBody) throw new Error('manual summary clobbered plan/body')
+    dialog = await openMeta('章纲')
+    await dialog.getByRole('textbox').first().fill('取消的修改')
+    await dialog.getByRole('button', { name: '取消', exact: true }).click()
+    dialog = await openMeta('章纲')
+    if ((await dialog.getByRole('textbox').first().inputValue()).includes('取消的修改')) throw new Error('cancelled form leaked on reopen')
+    await dialog.getByRole('button', { name: '取消', exact: true }).click()
+    await page.reload()
+    await page.locator('.shell').waitFor()
+    await openChapter(page)
+    dialog = await openMeta('章末小结')
+    if ((await dialog.getByRole('textbox', { name: '此刻', exact: true }).inputValue()) !== '作者整理：准备离开面馆') throw new Error('reload lost summary')
+    await shot(page, 'chapter-summary', '独立章末小结与持久化回读')
+    await dialog.getByRole('button', { name: '取消', exact: true }).click()
+    return 'dirty body retained across metadata edit/outage, explicit retry, separate fields, cancel/reopen, full reload'
+  })
+  await cover('planning-stale-proposal', async () => {
+    await ensureAssistantOpen(page)
+    await chooseStubModel(modelScope(page), 'stale planning')
+    const card = await proposal('PLANNING_STALE', CHAPTER_REL)
+    await page.locator('[data-testid="paper-editor"] .cm-content').click()
+    await page.keyboard.press('Control+End')
+    await page.keyboard.insertText('\n作者改变了本章结局。\n')
+    await waitFor(async () => (await chapter()).includes('作者改变了本章结局。'), 'author changes persisted')
+    const before = await chapter()
+    await card.getByRole('button', { name: /^(应用|采用)$/ }).click()
+    await waitFor(async () => /变化|变更|失效|重新生成/.test(await card.innerText()), 'stale proposal feedback')
+    if ((await chapter()) !== before) throw new Error('stale proposal altered current manuscript')
+    return 'old observed version refused after author editing'
+  })
+  await cover('planning-glob', async () => {
+    await assertStubSelected(page, 'glob')
+    const before = stub.requests.length
+    await page.getByRole('textbox', { name: '输入消息' }).fill('PLANNING_GLOB')
+    await page.getByRole('button', { name: '发送', exact: true }).click()
+    await waitFor(async () => stub.requests.slice(before).some(row => row.kind === 'planning_done' && row.completed), 'glob tool done')
+    const row = stub.requests.slice(before).find(row => row.kind === 'planning_done')
+    if (!row?.toolReplies?.some(text => text.includes('001.md')) || row.toolReplies.some(text => /Glob is limited|isError":true/.test(text))) throw new Error('real glob did not find manuscript: ' + JSON.stringify(row?.toolReplies))
+    return 'real glob accepts Markdown/TXT brace pattern'
+  })
+  await cover('no-external-model-calls', async () => {
+    if (!stub.requests.length || stub.requests.some(row => !/^127\.0\.0\.1:\d+$/.test(row.host))) throw new Error('invalid local stub request audit')
+    return `${stub.requests.length} local requests; no paid vendor calls`
+  })
+}
+
 async function main() {
   verifyResponseIds()
   for (const target of owned) {
@@ -1275,6 +1412,13 @@ async function main() {
   activePage = page
   page.setDefaultTimeout(20_000)
   page.on('pageerror', (error) => fail(`pageerror: ${error.message}`))
+  if (planningOnly) page.on('console', message => {
+    if (message.type() !== 'error') return
+    void Promise.all(message.args().map(arg => arg.evaluate(value => value instanceof Error ? value.stack : String(value)).catch(() => 'unreadable'))).then(lines => {
+      report.consoleErrors ??= []
+      report.consoleErrors.push(lines.join(' ').slice(0, 5000))
+    })
+  })
   report.modelSelections = []
   page.on('request', request => {
     try {
@@ -1285,7 +1429,8 @@ async function main() {
 
 
   await page.goto(started.url.href, { waitUntil: 'domcontentloaded' })
-  await page.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 45_000 })
+  await page.waitForFunction(() => Boolean(document.querySelector('[data-testid="shell-error"]')) || (document.title === 'DSH Editor' && Boolean(document.querySelector('.shell'))), undefined, { timeout: 45_000 })
+  if (await page.getByTestId('shell-error').count()) throw new Error('shell boot: ' + await page.getByTestId('shell-error').first().innerText())
   await dismissNativeOnboarding(page)
   await shot(page, 'home', '首页')
 
@@ -1302,6 +1447,12 @@ async function main() {
     return CHAPTER_REL
   }))) {
     skipDependents('open-synthetic-work failed')
+    return
+  }
+  if (planningOnly) {
+    await runPlanningFlow(page)
+    await shot(page, 'planning-complete', '章纲与小结协作闭环')
+    await context.close()
     return
   }
   if (!(await cover('independent-model-settings', async () => {
@@ -1728,27 +1879,17 @@ async function main() {
     await assertStubSelected(page, 'existing chat retains selected model')
     const assistant = await ensureAssistantOpen(page)
     await assistant.getByRole('button', {name: '新对话', exact: true}).click()
-    const picker = page.getByRole('dialog', {name: '新对话', exact: true})
-    await picker.waitFor()
-    await picker.getByRole('combobox', {name: '选择模型', exact: true}).filter({hasText: REWRITE_MODEL_ID}).waitFor()
-    await chooseCustomSelect(picker, '选择模型', text => text.includes(FIM_MODEL_ID))
-    await picker.getByRole('combobox', {name: '选择模型', exact: true}).filter({hasText: FIM_MODEL_ID}).waitFor({timeout: 5000})
-    await delay(250)
-    if (!(await picker.getByRole('combobox', {name: '选择模型', exact: true}).innerText()).includes(FIM_MODEL_ID)) throw new Error('new-conversation picker reset manual selection before submit')
-    await picker.getByRole('button', {name: '开始', exact: true}).click()
-    await picker.waitFor({state: 'hidden'})
+    const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+    if (await discard.isVisible({ timeout: 1_500 }).catch(() => false)) await discard.click()
+    await waitFor(async () => (await readActiveModel(page)).trigger.includes(REWRITE_MODEL_ID), 'new conversation uses default model', 20000)
     const priorPings = stub.requests.filter(item => item.kind === 'ping').length
     await waitUntilIdle(page)
     await page.getByRole('textbox', {name: '输入消息', exact: true}).fill(MARK.ping)
     await page.getByRole('textbox', {name: '输入消息', exact: true}).press('Enter')
     await waitFor(async () => stub.requests.filter(item => item.kind === 'ping').length > priorPings, 'first request from new conversation', 20000)
     const firstRequest = stub.requests.filter(item => item.kind === 'ping')[priorPings]
-    if (firstRequest.model !== FIM_MODEL_ID) throw new Error(`explicit new-conversation choice lost on first actual request: ${firstRequest.model}`)
-    await waitUntilIdle(page)
-    await waitFor(async () => (await readActiveModel(page)).trigger.includes(FIM_MODEL_ID), 'new conversation honors explicit choice over default', 20000)
-    await delay(500)
-    if (!(await readActiveModel(page)).trigger.includes(FIM_MODEL_ID)) throw new Error('default model overwrote explicit new-conversation choice')
-    return 'default preselection, existing chat untouched, explicit new-conversation choice retained'
+    if (firstRequest.model !== REWRITE_MODEL_ID) throw new Error(`new conversation did not use default model: ${firstRequest.model}`)
+    return 'default applied to new conversation, existing chat untouched'
   })
 
   await cover('no-external-model-calls', async () => {

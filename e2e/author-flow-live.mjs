@@ -710,18 +710,8 @@ async function coverWorkbench(page) {
 async function startFreshConversation(page) {
   const assistant = await ensureAssistantOpen(page)
   await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
-  const picker = page.getByRole('dialog', { name: '新对话' })
-  if (await picker.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true, () => false)) {
-    const model = picker.getByRole('combobox', { name: '选择模型' })
-    if (await model.isVisible().catch(() => false)) {
-      await chooseCustomSelect(picker, '选择模型', (label, labels) => {
-        const pick = labels.find((item) => /MiniMax-M3/i.test(item)) || labels.find((item) => /MiniMax/i.test(item)) || labels[0]
-        return label === pick
-      }).catch(() => undefined)
-    }
-    await picker.getByRole('button', { name: '开始', exact: true }).click({ force: true }).catch(() => undefined)
-    await picker.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined)
-  }
+  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+  if (await discard.isVisible({ timeout: 1_500 }).catch(() => false)) await discard.click()
   await dismissInitGuide(page)
 }
 
@@ -778,11 +768,11 @@ async function openAssistantWithModel(page) {
     const ping = await sendChat(page, '请只回复一个英文单词 pong，不要使用任何工具。', '模型连通探测', 90_000)
     await recordPhase('模型连通探测', ping.slice(0, 80))
     return
-  } catch { /* fall back to the new-conversation dialog */ }
+  } catch { /* fall back to a new conversation, then pick in the composer */ }
   await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
-  const picker = page.getByRole('dialog', { name: '新对话' })
-  await picker.waitFor({ state: 'visible', timeout: 30_000 })
-  const chosen = await chooseCustomSelect(picker, '选择模型', (label, labels) => {
+  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+  if (await discard.isVisible({ timeout: 1_500 }).catch(() => false)) await discard.click()
+  const chosen = await chooseCustomSelect(assistant, '选择模型', (label, labels) => {
     const pick = labels.find((item) => /MiniMax-M3/i.test(item))
       || labels.find((item) => /MiniMax-M2\.7-highspeed/i.test(item))
       || labels.find((item) => /MiniMax-M2\.7(?!-)/i.test(item))
@@ -792,8 +782,6 @@ async function openAssistantWithModel(page) {
     return label === pick
   })
   if (!chosen) throw new Error('no chat model available')
-  await picker.getByRole('button', { name: '开始', exact: true }).click({ force: true })
-  await picker.waitFor({ state: 'hidden', timeout: 30_000 })
   await assistant.getByText(chosen, { exact: true }).waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined)
   const effort = assistant.getByRole('combobox', { name: '思考强度' })
   if (await effort.isVisible().catch(() => false)) {
