@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createProposalTool, EDITOR_PROMPT, editorToolGuard, proposalMarker } from './proposal-tool.ts'
+import { createProposalTool, EDITOR_PROMPT, editorToolGuard, MEMORY_MAINTENANCE_PROMPT, proposalMarker } from './proposal-tool.ts'
 
 describe('editor proposal boundary', () => {
   it('creates a versioned, non-writing proposal marker', () => {
@@ -111,7 +111,13 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).toContain('也可以完全不调用')
     expect(EDITOR_PROMPT).toContain('不要假设模板文件已存在')
     expect(EDITOR_PROMPT).toContain('novel_propose 的 create')
+    expect(EDITOR_PROMPT).toContain('一人一文件')
+    expect(EDITOR_PROMPT).toContain('一词条一文件')
+    expect(EDITOR_PROMPT).toContain('不要写人物索引或设定总汇')
+    expect(EDITOR_PROMPT).not.toContain('人物卡/人物索引.md')
     expect(EDITOR_PROMPT).not.toMatch(/四种模式|进入.{0,8}模式|当前模式|Plan mode/i)
+    expect(MEMORY_MAINTENANCE_PROMPT).toContain('一人一文件、一词条一文件')
+    expect(MEMORY_MAINTENANCE_PROMPT).toContain('也不要追加进人物索引或设定总汇')
   })
 
   it('keeps external evidence non-canon and routes project reads through native tools', () => {
