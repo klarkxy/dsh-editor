@@ -26,7 +26,6 @@ import { ConfirmDialog } from './dialogs.ts'
 import {
   errorMessage,
   isStaleFailure,
-  isWorldbookPath,
   replaceWorldbookPaperText,
   safeRpcCall,
   worldbookPaperProjection,
@@ -34,7 +33,7 @@ import {
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
-import { isChapterMetaPath, ChapterMetaSettings } from './chapter-meta-settings.ts'
+import { isChapterMetaPath, ChapterMetaDialog, ChapterPlanStrip } from './chapter-meta-settings.ts'
 import { canRewritePath, CUSTOM_INSTRUCTION_MAX, normalizeCustomInstruction } from '../rewrite-presets-view.ts'
 import {
   chapterContextFor,
@@ -189,7 +188,8 @@ export function Editor(props: {
     hasVisibleSelection: false, collapsed: true, dirty: false, canUndo: false, canRedo: false, paperLength: 0,
   }))
   const [menuTarget, setMenuTarget] = useState<EditorTargetSnapshot | null>(null)
-  const [chapterMetaOpen, setChapterMetaOpen] = useState(false)
+  const [chapterPlanOpen, setChapterPlanOpen] = useState(false)
+  const [chapterSummaryOpen, setChapterSummaryOpen] = useState(false)
   const [customRewriteOpen, setCustomRewriteOpen] = useState(false)
   const [customText, setCustomText] = useState('')
   const [customTarget, setCustomTarget] = useState<EditorTargetSnapshot | null>(null)
@@ -333,7 +333,8 @@ export function Editor(props: {
       })
       return
     }
-    if (action === 'chapterMeta') { if (live.loaded && !live.conflict && isChapterMetaPath(path)) afterMenu(() => setChapterMetaOpen(true)); return }
+    if (action === 'chapterPlan') { if (live.loaded && !live.conflict && isChapterMetaPath(path)) afterMenu(() => setChapterPlanOpen(true)); return }
+    if (action === 'chapterSummary') { if (live.loaded && !live.conflict && isChapterMetaPath(path)) afterMenu(() => setChapterSummaryOpen(true)); return }
 
     const bridge = editorClipboardBridge()
     if (!bridge) {
@@ -437,28 +438,35 @@ export function Editor(props: {
     setBufferText('')
     setOverflowOpen(false)
     setContextMenu(null)
-    setChapterMetaOpen(false)
+    setChapterPlanOpen(false)
+    setChapterSummaryOpen(false)
     setCustomRewriteOpen(false)
     setCustomTarget(null)
   }, [path, session.sessionId, externalRevision])
 
-  const applyFrontmatterBuffer = useCallback(async (next: string) => {
-    const doc = handleRef.current?.getDocument()
-    if (!doc) {
-      setNote(isWorldbookPath(path) ? t('editor.worldbookNotLoaded') : t('chapterMeta.notLoaded'))
-      return
+  /* 章纲/章末小结对话框的读取通道：返回最新未保存缓冲区（不是磁盘基准），
+   * 正文未保存的改动随元数据一起保留；path/sessionId 用于会话/路径/文档身份校验。 */
+  const readChapterBuffer = useCallback(() => {
+    const handle = handleRef.current
+    const doc = handle?.getDocument()
+    if (!handle || !doc || doc.path !== path || doc.sessionId !== session.sessionId) return null
+    return { path, text: handle.getText() }
+  }, [path, session.sessionId])
+
+  /* 统一元数据写入通道：EditorCore.saveMetadataText 校验目标快照（会话/路径/代次/修订）、
+   * 只允许改动隐藏文件头，并复用与正文相同的 setText + file.write 保存机制。
+   * 真实落盘回执返回给对话框；失败原因（冲突/保存飞行中/目标过期）由编辑器脚注提示。 */
+  const saveChapterMetadata = useCallback(async (next: string): Promise<{ ok: boolean; note: string }> => {
+    const handle = handleRef.current
+    const doc = handle?.getDocument()
+    if (!handle || !doc || doc.path !== path || doc.sessionId !== session.sessionId) {
+      return { ok: false, note: t('chapterMeta.moved') }
     }
-    const put = await draftQueue.current!.run('draft.put', {
-      sessionId: session.sessionId,
-      path,
-      text: next,
-      baseText: doc.text,
-      baseVersion: doc.version,
-    }) as RpcResult
-    if (!put.ok) { setNote(errorMessage(put)); return }
-    setBufferText(next)
-    setRevisionTick((tick) => tick + 1)
-  }, [session.sessionId, path])
+    const target = handle.captureTarget()
+    if (!target) return { ok: false, note: t('chapterMeta.notLoaded') }
+    const saved = await handle.saveMetadataText(next, target)
+    return saved ? { ok: true, note: t('chapterMeta.addedDraft') } : { ok: false, note: t('chapterMeta.applyFailed') }
+  }, [path, session.sessionId])
 
   const currentText = bufferText || handleRef.current?.getText() || ''
 
@@ -519,12 +527,16 @@ export function Editor(props: {
   const navigationBlocked = status === 'draft' || status === 'conflict'
 
   return e(Fragment, null,
-    e(EditorCore, {
-      sessionId: session.sessionId,
-      path,
-      rpc: ctx.connection.rpc,
-      draft,
-      externalRevision,
+    /* .editor-stack 接管原 .editor 的直接子级网格座位（grid-row: 2，见 styles.ts），
+       内联布局样式与原稿纸根一致：flex 列 + 100% 高，子级 .editor-pane/.editor 尺寸行为不变。 */
+    e('div', { className: 'editor-stack', style: { display: 'flex', flexDirection: 'column', height: '100%' } },
+      e('div', { className: 'editor-pane' },
+        e(EditorCore, {
+          sessionId: session.sessionId,
+          path,
+          rpc: ctx.connection.rpc,
+          draft,
+          externalRevision,
       onDirtyChange,
       onSaved: props.onSaved,
       onNotice,
@@ -574,7 +586,9 @@ export function Editor(props: {
         role: status === 'conflict' || status === 'error' ? 'alert' : 'status',
         style: { padding: '4px 8px', fontSize: 12, opacity: 0.75 },
       }, note) : null,
-    }),
+        })),
+      isChapterMetaPath(path) ? e(ChapterPlanStrip, { key: `strip:${path}`, text: currentText }) : null,
+    ),
     contextMenu ? e(EditorContextMenu, {
       x: contextMenu.x,
       y: contextMenu.y,
@@ -586,14 +600,26 @@ export function Editor(props: {
       onClose: closeMenus,
       onCloseAutoFocus: focusEditorIfNeeded,
     }) : null,
-    isChapterMetaPath(path) ? e(ChapterMetaSettings, {
-      key: `${path}:${externalRevision}:${currentText ? 'ready' : 'empty'}`,
+    isChapterMetaPath(path) ? e(ChapterMetaDialog, {
+      key: `plan:${session.sessionId}:${path}`,
+      field: 'beats',
       path,
-      text: currentText,
-      open: chapterMetaOpen,
+      open: chapterPlanOpen,
       returnFocusRef: editorFocusTarget,
-      onOpenChange: setChapterMetaOpen,
-      onChange: (next: string) => { void applyFrontmatterBuffer(next) },
+      onOpenChange: setChapterPlanOpen,
+      readBuffer: readChapterBuffer,
+      saveMetadata: saveChapterMetadata,
+      onNote: setNote,
+    }) : null,
+    isChapterMetaPath(path) ? e(ChapterMetaDialog, {
+      key: `summary:${session.sessionId}:${path}`,
+      field: 'state',
+      path,
+      open: chapterSummaryOpen,
+      returnFocusRef: editorFocusTarget,
+      onOpenChange: setChapterSummaryOpen,
+      readBuffer: readChapterBuffer,
+      saveMetadata: saveChapterMetadata,
       onNote: setNote,
     }) : null,
     e(Dialog, {
