@@ -32,8 +32,8 @@ docs/diagrams/                 交互图规范与发布 HTML
 docs/history/                  日期快照（拆分计划、在线验证）
 docs/verification/             原始回执 JSON
 e2e/                           Playwright 验收脚本
-e2e/demo/                      演示片旁白、稿件与提示词
 e2e/demo-*.mjs                 演示录制、旁白合成与剪辑
+e2e/demo/                      本地稿件与旁白（忽略，不入库）
 .dev/                          本地忽略。只保留 desktop-home、desktop-profile-template、desktop-dsh-runtime、dsh-home
 .pack/                         打包产物（忽略，可删除后重打）
 ```
@@ -177,7 +177,7 @@ pnpm test:e2e:desktop
 
 公开插件矩阵与可选凭据化 live E2E 的输出继续位于 `e2e/out`。历史报告不得用作新 DSH/Node/源码版本的证据。
 
-演示片源文件在 `e2e/demo/`（旁白、稿件、提示词），脚本为 `e2e/demo-record.mjs`、`e2e/demo-voices.mjs`、`e2e/demo-assemble.mjs`。产物写到 `e2e/out/demo/`，不入库。录制需要 MiniMax 凭据；旁白默认读 `~/.mmx/config.json`。
+演示录制脚本为 `e2e/demo-record.mjs`、`e2e/demo-voices.mjs`、`e2e/demo-assemble.mjs`。旁白、稿件和提示词放在本地 `e2e/demo/`，不入库。产物写到 `e2e/out/demo/`。录制需要 MiniMax 凭据；旁白默认读 `~/.mmx/config.json`。
 
 ## 桌面构建（Portable / 安装版 / macOS）
 

@@ -16,8 +16,9 @@ dist
 .dev
 # Pack outputs. Delete and regenerate with pack:desktop / pack:plugins.
 .pack
-# E2E and demo outputs. Sources live in e2e/*.mjs and e2e/demo/.
+# E2E outputs and local demo copy. Scripts stay in e2e/*.mjs.
 e2e/out
+e2e/demo/
 .playwright-mcp/
 # Diagram visual-check screenshots: published via GitHub Pages, not stored in the repo.
 docs/diagrams/*.visual-check.*.png
