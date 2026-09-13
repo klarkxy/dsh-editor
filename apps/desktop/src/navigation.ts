@@ -1,5 +1,18 @@
 import { isAllowedNavigation } from './dsh-url.js'
 
+const EXTERNAL_HOSTS = new Set(['developer.zhihu.com', 'zhida.zhihu.com', 'www.zhihu.com', 'zhuanlan.zhihu.com', 'github.com'])
+
+export function isAllowedExternalUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || !EXTERNAL_HOSTS.has(url.hostname)) return false
+    return url.hostname !== 'github.com' || /^\/[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+(?:\/|$)/.test(url.pathname)
+  } catch {
+    return false
+  }
+}
+
 export interface RestrictedWebContents {
   on(event: 'will-navigate', listener: (event: { preventDefault(): void }, url: string) => void): unknown
   setWindowOpenHandler(handler: () => { action: 'deny' }): unknown

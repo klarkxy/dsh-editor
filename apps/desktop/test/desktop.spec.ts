@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { isAllowedNavigation, parseDshWebUrl } from '../src/dsh-url.js'
 import { clipboardWritePayload, isTrustedClipboardSender, readTrustedClipboardText, writeTrustedClipboardText } from '../src/clipboard.js'
 import { PROFILE_MARKER, ProfileCollisionError, deployProfile, resolveDshHome } from '../src/profile.js'
-import { installNavigationPolicy } from '../src/navigation.js'
+import { installNavigationPolicy, isAllowedExternalUrl } from '../src/navigation.js'
 import { DshSupervisor } from '../src/supervisor.js'
 import { materializePackagedRuntime, treeDigest } from '../src/runtime-cache.js'
 import { claimPrimaryInstance, createDesktopLifecycle, type DesktopLifecycleDeps, type EditorInput, type EditorWindow } from '../src/window-lifecycle.js'
@@ -156,7 +156,7 @@ describe('desktop branding assets', () => {
     // About / update page wiring: the renderer is locked behind a strict CSP
     // that blocks api.github.com, so the main process owns the round-trip and
     // the preload bridge exposes invoke-style methods.
-    expect(main).toContain("'github.com'")
+    expect(main).toContain('if (!isAllowedExternalUrl(url)) return')
     expect(main).toContain("'dsh-window:get-app-info'")
     expect(main).toContain("'dsh-window:check-update'")
     // Startup check: same round-trip kicked off in the background at launch,
@@ -676,5 +676,17 @@ describe('controlled multi-window', () => {
     expect(event.preventDefault).toHaveBeenCalledOnce()
     await vi.waitFor(() => expect(harness.counts().stops).toBe(1))
     await vi.waitFor(() => expect(app.quit).toHaveBeenCalledOnce())
+  })
+})
+
+
+describe('external repository links', () => {
+  it('allows marketplace repos and existing help URLs but rejects other destinations', () => {
+    expect(isAllowedExternalUrl('https://github.com/V1ki/dsh-plugin-subscriptions')).toBe(true)
+    expect(isAllowedExternalUrl('https://github.com/klarkxy/dsh-editor/releases')).toBe(true)
+    expect(isAllowedExternalUrl('https://developer.zhihu.com')).toBe(true)
+    for (const url of ['http://github.com/a/b', 'https://github.com.evil.test/a/b', 'https://user@github.com/a/b', 'https://github.com:8443/a/b', 'https://github.com/login', 'file:///tmp/x', 'javascript:alert(1)', null]) {
+      expect(isAllowedExternalUrl(url)).toBe(false)
+    }
   })
 })

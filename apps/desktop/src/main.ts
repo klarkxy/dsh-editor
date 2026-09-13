@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import { readTrustedClipboardText, writeTrustedClipboardText } from './clipboard.js'
+import { isAllowedExternalUrl } from './navigation.js'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -163,20 +164,8 @@ ipcMain.handle('dsh-window:download-update', (event, asset) => downloadUpdate(as
 ipcMain.handle('dsh-window:cancel-update-download', () => cancelUpdateDownload())
 ipcMain.handle('dsh-window:install-update', (_event, payload: { path?: string }) => installUpdate(String(payload?.path ?? '')))
 
-// External links: the navigation policy denies in-app navigation and window.open,
-// so whitelisted https links go through the OS browser instead. GitHub links are
-// further constrained to this repository to keep the allowlist meaningful.
-const OPEN_EXTERNAL_HOSTS = new Set(['developer.zhihu.com', 'zhida.zhihu.com', 'www.zhihu.com', 'zhuanlan.zhihu.com', 'github.com'])
-const GITHUB_REPO_PATHNAME = '/klarkxy/dsh-editor/'
+// Open marketplace and help links in the OS browser; in-app popups stay blocked.
 ipcMain.on('dsh-window:open-external', (_event, url) => {
-  if (typeof url !== 'string') return
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return
-  }
-  if (parsed.protocol !== 'https:' || !OPEN_EXTERNAL_HOSTS.has(parsed.hostname)) return
-  if (parsed.hostname === 'github.com' && !parsed.pathname.startsWith(GITHUB_REPO_PATHNAME)) return
-  void shell.openExternal(parsed.toString())
+  if (!isAllowedExternalUrl(url)) return
+  void shell.openExternal(new URL(url).toString())
 })
