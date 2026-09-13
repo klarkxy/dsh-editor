@@ -6,7 +6,7 @@
 
 ## MiniMax-M3
 
-[最终在线回执](../verification/live-2026-09-11/minimax-ai-run.json) 6/6 通过。模型为界面选择的 MiniMax · MiniMax-M3。DSH 为 `0.1.5-rc.2`。
+最终在线回执 6/6 通过。模型为界面选择的 MiniMax · MiniMax-M3。DSH 为 `0.1.5-rc.2`。
 
 | 功能 | 实际证据 |
 | --- | --- |
@@ -16,7 +16,7 @@
 | 文件提案 | 应用后生成 `大纲/总纲.md`（176 字，含雾港/林简） |
 | 会话操作 | 新会话可选 MiniMax-M3；归档与恢复通过 |
 
-[磁盘复核](../verification/live-2026-09-11/saved-text-check.json) 确认改写生效、补全文本已落盘、正文没有推理标签。
+磁盘复核 确认改写生效、补全文本已落盘、正文没有推理标签。
 
 首次在 0.1.5 上跑时，Host 已经完成回合（投影缓存有 token 与 pong 思考），界面却停在「已发送 / 正在回复…」。原因是 Shell 不能在 `apply()` 时 inject `uiConversation`（它要等本地 `uiWorkspace`），第一次挂上 Chat 时官方对话分面还没就绪。子 fiber 绑定后 6/6 通过。
 
@@ -29,7 +29,7 @@ node e2e/feature-coverage.mjs
 
 ## 知乎 Access Secret
 
-[知乎回执](../verification/live-2026-09-11/zhihu-live.json) 7/7 通过。凭据来自本机 `~/.config/zhihu-search/credentials.json`（未打印）。隔离 HOME 不携带 DSH 凭证库，插件按文件回退解析。0.1.5 的 `/zhihu` 需先用 loopback token 换 cookie。
+知乎回执 7/7 通过。凭据来自本机 `~/.config/zhihu-search/credentials.json`（未打印）。隔离 HOME 不携带 DSH 凭证库，插件按文件回退解析。0.1.5 的 `/zhihu` 需先用 loopback token 换 cookie。
 
 | 功能 | 实际证据 |
 | --- | --- |

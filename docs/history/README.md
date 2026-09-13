@@ -19,4 +19,4 @@
 | [MiniMax 与知乎](live-validation-2026-09-10.md) | 2026-09-10 | 复测与知乎真调用 |
 | [0.1.5-rc.2 复测](live-validation-2026-09-11.md) | 2026-09-11 | 升级后复测 |
 
-原始 JSON 回执在 [verification/](../verification/)。发布状态以对应标签的 GitHub Actions 和 Release 附件为准。
+发布状态以对应标签的 GitHub Actions 和 Release 附件为准。

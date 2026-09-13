@@ -42,4 +42,4 @@
 
 ## 历史记录
 
-日期快照与原始回执在 [history/](history/README.md) 与 [verification/](verification/)。它们保留当时版本、失败和后续修复，不代表 0.2.0 已验证了同一件事。发布状态以对应标签的 GitHub Actions 和 Release 附件为准。
+日期快照在 [history/](history/README.md)。它们保留当时版本、失败和后续修复，不代表 0.2.0 已验证了同一件事。发布状态以对应标签的 GitHub Actions 和 Release 附件为准。

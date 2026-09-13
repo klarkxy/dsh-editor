@@ -6,7 +6,7 @@
 
 ## MiniMax-M3
 
-[最终在线回执](../verification/live-2026-09-10/minimax-ai-run.json) 6/6 通过。模型为界面选择的 MiniMax · MiniMax-M3。
+最终在线回执 6/6 通过。模型为界面选择的 MiniMax · MiniMax-M3。
 
 | 功能 | 实际证据 |
 | --- | --- |
@@ -16,7 +16,7 @@
 | 文件提案 | 模型调用 `novel_propose`，应用后生成 `大纲/总纲.md`（409 字，含雾港/林简） |
 | 会话操作 | 新会话可选 MiniMax-M3；归档与恢复通过 |
 
-[磁盘复核](../verification/live-2026-09-10/saved-text-check.json) 确认改写生效、补全文本已落盘、正文没有推理标签。
+磁盘复核 确认改写生效、补全文本已落盘、正文没有推理标签。
 
 首次 AI 覆盖里，聊天探测在 90 秒内只看到「思考过程」、未等到助手正文。改写/补全/提案当时已经成功。探测超时已与其它模型步骤对齐为 180 秒；重跑后聊天返回 pong，6/6 通过。
 
@@ -29,7 +29,7 @@ node e2e/feature-coverage.mjs
 
 ## 知乎 Access Secret
 
-[知乎回执](../verification/live-2026-09-10/zhihu-live.json) 7/7 通过。凭据来自本机 `~/.config/zhihu-search/credentials.json`（未打印）。隔离 HOME 不携带 DSH 凭证库，插件按文件回退解析。
+知乎回执 7/7 通过。凭据来自本机 `~/.config/zhihu-search/credentials.json`（未打印）。隔离 HOME 不携带 DSH 凭证库，插件按文件回退解析。
 
 | 功能 | 实际证据 |
 | --- | --- |

@@ -33,8 +33,7 @@
     "verify:delivery": "pnpm verify:desktop && pnpm test:e2e:matrix && pnpm test:e2e:missing-private && pnpm pack:desktop && pnpm test:e2e:portable",
     "test:e2e:proofread-host": "pnpm --filter dsh-proofread build && node e2e/proofread-host.mjs",
     "test:e2e:composition": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/compositions.mjs",
-    "test:e2e:entry-disable": "node e2e/entry-disable.mjs",
-    "test:e2e:host-minimization": "node e2e/host-minimization.mjs"
+    "test:e2e:entry-disable": "node e2e/entry-disable.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

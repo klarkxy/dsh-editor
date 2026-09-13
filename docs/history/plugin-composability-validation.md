@@ -179,7 +179,7 @@ sequenceDiagram
 
 矩阵顺序为：仅 manuscript → 两者共存 → 卸载 manuscript 仅剩 grill → 恢复两者 → 卸载 grill 仅剩 manuscript。恢复两者的中间状态只验配置，没有额外启动浏览器。grill-only 是卸载后的状态，不是另一个全新 HOME 的首次安装；本轮也未调用付费模型验证 scaffold 的在线生成流程。
 
-原始本地结果位于 `e2e/out/plugin-matrix/report.json`、`.pack/release-manifest.json`、`.pack/missing-private-plugin-smoke.json` 和 `.dev/plugin-composability-*.log`。这些输出可能被下次验证覆盖；[本轮摘要](../verification/plugin-composability-2026-09-09.json)保存了基线、产物哈希及结果。
+原始本地结果位于 `e2e/out/plugin-matrix/report.json`、`.pack/release-manifest.json`、`.pack/missing-private-plugin-smoke.json` 和 `.dev/plugin-composability-*.log`。这些输出可能被下次验证覆盖；本轮摘要保存了基线、产物哈希及结果。
 
 本轮没有执行发布、远程部署、全新无 Web profile 测试、无 Harness 进程测试、桌面三个包的独立 tarball 安装、卸载后的业务数据兼容测试或跨版本升级矩阵。图示与这份文档也不改变现有产品的固定装配策略。
 

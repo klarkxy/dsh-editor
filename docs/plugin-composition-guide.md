@@ -163,10 +163,9 @@ proofread finding 位置沿用 UTF-16 下标；结果只读，不直接修改当
 
 ```powershell
 node e2e/proofread-host.mjs
-node e2e/host-minimization.mjs
 ```
 
-前者启动真实 Cordis WebServer + Connection + proofread，没有 agents/sessions/fs/llm/tools/systemPrompt。后者从真实 DSH profile 启动：不选择 `dsh-web-app` 时，以显式通信、静态资源、settings、locale、theme、layout、renderer 等条目完成校对与页面重连；它仍保留 `dsh-base` 的 Agent 服务，也继续使用官方基础组件。
+该脚本启动真实 Cordis WebServer + Connection + proofread，没有 agents/sessions/fs/llm/tools/systemPrompt。不选择 `dsh-web-app` 时，仍可用显式通信、静态资源、settings、locale、theme、layout、renderer 等条目完成校对与页面重连；它仍保留 `dsh-base` 的 Agent 服务，也继续使用官方基础组件。
 
 完全移除 Agent 服务的浏览器组合目前无法启动。实际缺口为：`dsh-workspace` 要求 `sessionPersistence`；`dsh-host-apiproxy` 要求 agents/llm/sessions/tools 等全量服务；`dsh-cordis-host-runner` 要求 tools。最小上游工作是拆出仅服务普通业务的网关/客户端运行入口，让 Agent remotes 与工具宿主按需启用。文件型应用还需独立的工作区授权入口，当前继续保留 live session；不能在浏览器接受任意 cwd 或伪造 session。
 

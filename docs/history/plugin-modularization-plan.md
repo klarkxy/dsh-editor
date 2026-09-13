@@ -241,7 +241,7 @@ flowchart LR
 
 ## 8. 依据与本轮审查
 
-- [上一轮验证文档](plugin-composability-validation.md)与[验证回执](../verification/plugin-composability-2026-09-09.json)：当时 807 测试、公开安装矩阵及桌面验证通过；本轮没有重新运行产品测试。
+- [上一轮验证文档](plugin-composability-validation.md)与验证回执：当时 807 测试、公开安装矩阵及桌面验证通过；本轮没有重新运行产品测试。
 - [现有接口手册](../plugin-architecture.md)与[产品边界](../product-principles.md)：保留写作产品身份、同一权限/会话所有者和作者确认。
 - 本轮重新读取了 manuscript/workbench/kernel 的服务注册、校对函数依赖、Shell 根界面导入、桌面打包清单，以及本机固定版本的 client runtime slot/Workspace/Session 说明。
 - 已完成一位只读 `overdesign_guard` 审查，结论为“纯文本校对先行，缩小首次边界”。已采纳：首批只新增一个包、取消全量 AI 拆分前置、复用 slots、缩小 RPC 选项、保留跨文件统计、验证结果过期与卸载清理。
