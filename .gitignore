@@ -3,17 +3,21 @@ node_modules
 *.log
 *.tsbuildinfo
 lib
-.pack
 *.tgz
 dist
 .env
 .env.*
-# Local OpenDesign CLI state if the tool is run again; not product docs.
+# Local OpenDesign / Codex scratch files.
 .opendesign-project-id.txt
 .opendesign-run.json
 .codex-plan-prompt.txt
-e2e/out
+# Local DSH homes and generated runtimes. Keep only desktop-home,
+# desktop-profile-template, desktop-dsh-runtime, and dsh-home.
 .dev
+# Pack outputs. Delete and regenerate with pack:desktop / pack:plugins.
+.pack
+# E2E and demo outputs. Sources live in e2e/*.mjs and e2e/demo/.
+e2e/out
 .playwright-mcp/
 # Diagram visual-check screenshots: published via GitHub Pages, not stored in the repo.
 docs/diagrams/*.visual-check.*.png

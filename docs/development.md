@@ -25,34 +25,20 @@ pnpm build
 
 ```text
 apps/desktop/                  Electron main、profile 部署、进程监督与 portable 配置
-packages/dsh-editor-shell/     仅桌面 profile 加载的私有写作客户端（src/client/{root,sidebar,editor,chat,dialogs,theme,components,shared,ui}：Dialog/Menu/Select 与 Motion 入口卡）
-packages/dsh-editor-plugins/   私有插件管理：开关、GitHub 市场搜索与安装
-packages/dsh-editor-workbench/ 私有项目生命周期与 context Host
-packages/dsh-editor-novel-kernel/ 私有小说 Tool、guard、prompt 与知识卡
-packages/dsh-editor-cards/     私有垂直插件：/dsh-editor-cards Host RPC + contracts + 卡片面板/详情 Client
-packages/dsh-editor-proofread-panel/ 私有 client-only：保留的作品校对面板代码；0.2.0 三份桌面组合均不装载
-packages/dsh-editor-overview-panel/  私有 client-only：作品概览（中栏 overlay 座位）
-packages/dsh-editor-memory-panel/    私有 client-only：记忆维护面板 + Chat 记忆更新卡
-packages/dsh-editor-workspace-kit/   私有进程内库：access bag、sidecar IO、条目/目录校验、no-replace move、frontmatter
-packages/dsh-editor-seats/     私有浏览器安全库：Shell 座位合同、命令与消息卡注册表
-packages/dsh-manuscript/       Host RPC、公开 Web 稿纸插件与共享 editor-core（src/client/editor-core/）
-packages/dsh-proofread/        公开校对引擎与 /proofread
-packages/dsh-zhihu/            公开资料 RPC、自有 UI 与可选 Tool
-scripts/dev.mjs                GUI-first 桌面开发入口
-scripts/dev-web.mjs            公开插件的 Web 调试入口
-scripts/prepare-desktop-*.mjs  开发/打包运行时物化与校验
-e2e/core-loop.mjs              Playwright Electron 核心闭环验收
-e2e/visual-audit.mjs           Playwright Electron 精简视觉走查
-e2e/desktop.mjs                Playwright Electron 当前源码验收
-e2e/author-flow-live.mjs       带凭据的端到端 AI 流程
-e2e/plugin-matrix.mjs          公开插件 fresh-home 安装/卸载矩阵
-e2e/portable.mjs               portable EXE 验收
-e2e/missing-private-plugin.mjs 缺私有 Host 包的负向 smoke
-.dev/                          本地桌面 DSH home/runtime（忽略）
-.pack/                         portable、报告、哈希和公开插件包（忽略）
+packages/                      公开与私有插件、座位库、workspace-kit
+scripts/                       开发、物化、打包与校验
+docs/                          当前手册与文档索引
+docs/diagrams/                 交互图规范与发布 HTML
+docs/history/                  日期快照（拆分计划、在线验证）
+docs/verification/             原始回执 JSON
+e2e/                           Playwright 验收脚本
+e2e/demo/                      演示片旁白、稿件与提示词
+e2e/demo-*.mjs                 演示录制、旁白合成与剪辑
+.dev/                          本地忽略。只保留 desktop-home、desktop-profile-template、desktop-dsh-runtime、dsh-home
+.pack/                         打包产物（忽略，可删除后重打）
 ```
 
-共享 manifest、lockfile、profile、Electron 生命周期和 Git 状态由集成者统一维护。Renderer 不得新增 Node 文件访问或第二个 DSH connection。
+各包职责见下文「插件包职责」。共享 manifest、lockfile、profile、Electron 生命周期和 Git 状态由集成者统一维护。Renderer 不得新增 Node 文件访问或第二个 DSH connection。`.dev` 里除上述四个目录外的探测脚本、测试 home 和日志均可删除；`e2e/out` 与 `.pack` 也可随时清掉后重跑生成。
 
 ## 常用命令
 
@@ -190,6 +176,8 @@ pnpm test:e2e:desktop
 本轮界面回归还包括 `node e2e/desktop-polish.mjs`、`node e2e/editor-context-menu.mjs`、`node e2e/ui-assistant.mjs` 与 `node e2e/author-panels.mjs`；它们分别覆盖设置 / 文件栏 / 图表、正文菜单、搭档写作和扩展面板。`desktop-polish` 的用量数据和部分外部响应使用固定样例，不能据此声称在线模型质量或供应商计量正确。
 
 公开插件矩阵与可选凭据化 live E2E 的输出继续位于 `e2e/out`。历史报告不得用作新 DSH/Node/源码版本的证据。
+
+演示片源文件在 `e2e/demo/`（旁白、稿件、提示词），脚本为 `e2e/demo-record.mjs`、`e2e/demo-voices.mjs`、`e2e/demo-assemble.mjs`。产物写到 `e2e/out/demo/`，不入库。录制需要 MiniMax 凭据；旁白默认读 `~/.mmx/config.json`。
 
 ## 桌面构建（Portable / 安装版 / macOS）
 
