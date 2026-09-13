@@ -91,7 +91,7 @@
 
 `prefers-reduced-motion: reduce` 时关掉过渡和动画（含 `.dsh-ui` / palette / select 等 Portal 浮层）；Motion 入场去掉位移/缩放/弹簧并 `duration: 0`。幽灵补全的 loading 不再闪，只保留 `--ghost` 色。焦点与状态变化仍在。
 
-共享弹层由 shell `src/client/ui` 提供：`Dialog` / `Confirm` / `Menu` / `Tooltip` / `Tabs` / `Button` / `Input`，外加已有 `Select`。作品菜单、文件右键、正文右键 /「⋯」、对话「⋯」都走同一套 `Menu`。正文菜单直接打开自定义改写；打字机与段落聚焦收在写作设置中，本章工作笔记用独立 Dialog。正文常驻仅保留文档名、章节导航、字数、保存状态和「⋯」，停止生成、预览采纳 / 放弃、冲突和备份恢复按需显示。菜单卸载后再交接焦点给搜索面板或弹窗。路径回退与新对话走受控 `Dialog`，不把输入框放进菜单 typeahead。Motion `m.*` 只用于首页三张入口卡和搜索面板 chrome；Radix 菜单/对话框继续 CSS Presence。稿纸、作曲区、FIM、长列表不用 Motion。IME 组字期间 Enter（含 `keyCode === 229`）由输入 `keydown` 自己 `preventDefault`，不得提交。
+共享弹层由 shell `src/client/ui` 提供：`Dialog` / `Confirm` / `Menu` / `Tooltip` / `Tabs` / `Button` / `Input`，外加已有 `Select`。作品菜单、文件右键、正文右键 /「⋯」、对话「⋯」都走同一套 `Menu`。正文菜单直接打开自定义改写；打字机与段落聚焦收在写作设置中，章纲与章末小结分别使用独立 Dialog，章纲可在稿纸附近展开对照。正文常驻仅保留文档名、章节导航、字数、保存状态和「⋯」，停止生成、预览采纳 / 放弃、冲突和备份恢复按需显示。菜单卸载后再交接焦点给搜索面板或弹窗。路径回退走受控 `Dialog`，不把输入框放进菜单 typeahead。Motion `m.*` 只用于首页三张入口卡和搜索面板 chrome；Radix 菜单/对话框继续 CSS Presence。稿纸、作曲区、FIM、长列表不用 Motion。IME 组字期间 Enter（含 `keyCode === 229`）由输入 `keydown` 自己 `preventDefault`，不得提交。
 
 ## 已落地的写作交互
 
@@ -105,7 +105,7 @@
 | 空白章 | 安静稿纸，不自动生成 | — |
 | 对话输入 | placeholder「问剧情、审一段、对质人物……」 | 不把生成章节倒进文件 |
 
-概览、卡片、搜索使用已有面板；桌面校对暂时停用，顶栏和正文菜单不显示其入口。知乎作为搭档工具保留，配置、调用用量和知识库管理在设置内嵌显示。插件开关和页签必须在真实设置弹窗中检查外观，避免被通用按钮规则覆盖。写作搭档支持展开阅读并恢复原宽度，不复制对话状态。不另做 IDE 式 Problems / minimap / Git blame。
+概览、卡片、搜索使用已有面板；桌面校对暂时停用，顶栏和正文菜单不显示其入口。知乎作为搭档工具保留，配置、调用用量和知识库管理在设置内嵌显示。插件开关和页签必须在真实设置弹窗中检查外观，避免被通用按钮规则覆盖。写作搭档栏宽用分隔线调整，不另做展开阅读或关闭按钮。不另做 IDE 式 Problems / minimap / Git blame。
 
 ## 改界面时
 
@@ -118,4 +118,4 @@
 
 设置主体必须有受约束的高度，内容区独立滚动，导航和标题固定。用量图采用 Apache ECharts 按需打包的 SVG 柱状图，显示坐标刻度、悬浮明细与可访问数据表；隐藏标签页、主题切换、窗口缩放和卸载都要验证。辅助文件不显示在文件栏和作者全文搜索中，也不进入批量替换范围，不提供显示开关。
 
-设置以 `.settings-pages` 为唯一内容滚动区，导航和标题固定。页签默认横排；纵向导航必须声明 `data-orientation="vertical"` 或 `aria-orientation="vertical"`。通用输入框规则排除 `input[type="range"]`。图表随可见尺寸初始化，响应 ResizeObserver 与主题切换，并在卸载时 dispose；HTML tooltip 的动态值必须编码。搭档回复正文至少 14px，展开阅读复用原对话和滚动状态。
+设置以 `.settings-pages` 为唯一内容滚动区，导航和标题固定。页签默认横排；纵向导航必须声明 `data-orientation="vertical"` 或 `aria-orientation="vertical"`。通用输入框规则排除 `input[type="range"]`。图表随可见尺寸初始化，响应 ResizeObserver 与主题切换，并在卸载时 dispose；HTML tooltip 的动态值必须编码。搭档回复正文至少 14px。
