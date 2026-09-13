@@ -517,7 +517,6 @@ export function Editor(props: {
   if (!path) {
     const hasChapter = files.some((item) => /^正文\/.+\.(md|txt)$/i.test(item))
     return e(PaperStage, { label: t('editor.emptyChapter') },
-      e('p', { className: 'home-hint' }, t('editor.emptyHint')),
       e('div', { className: 'home-actions' },
         e('button', { className: 'primary-action', type: 'button', onClick: create }, hasChapter ? t('editor.newChapter') : t('editor.writeFirstChapter')),
       ),

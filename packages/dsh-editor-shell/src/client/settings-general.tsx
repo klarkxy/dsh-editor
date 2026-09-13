@@ -66,7 +66,6 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
     e('section', { className: 'settings-block' },
       e('header', { className: 'settings-block-head' },
         e('h3', { className: 'settings-block-title' }, t('settings.interface')),
-        e('p', { className: 'settings-block-help' }, t('settings.interfaceHelp')),
       ),
       e(Row, { title: t('settings.language'), children: e(Select, {
         value: locale,
@@ -83,7 +82,7 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
           onClick: () => setTheme(option.value),
         }, option.label)),
       ) }),
-      e(Row, { title: t('settings.busyEnter'), description: t('settings.busyEnterHint'), children: e(Select, {
+      e(Row, { title: t('settings.busyEnter'), children: e(Select, {
         value: busyEnter,
         options: [{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }],
         onChange: (value) => setBusyEnter(value as BusyEnterBehavior),

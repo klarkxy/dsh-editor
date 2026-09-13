@@ -1,6 +1,6 @@
 import { createElement as e, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
-import { EditorView, keymap, placeholder } from '@codemirror/view'
+import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, redo, redoDepth, undo, undoDepth } from '@codemirror/commands'
 import { externalSync, ghostField, livePreview, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
 import { closeSearchPanelIfFocused, isPaperSearchPanelFocused, openFindPanel, openReplacePanel, paperEscapePriority, paperSearch, revealEditorRange } from './search.ts'
@@ -1208,7 +1208,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           writingCompartments.current.typewriter.of(typewriterExtension({ enabled: typewriter })),
           writingCompartments.current.focusParagraph.of(focusParagraphExtension(focusParagraph)),
           EditorView.lineWrapping,
-          placeholder('从这里开始写作，或按 ⌘K 唤起命令'),
           Prec.highest(EditorView.domEventHandlers({
             mousedown(event, view) {
               if (event.button !== 2 || !cb.current.hasContextMenu() || view.composing) return false
@@ -1444,7 +1443,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     showGhostTip && ghost ? e('div', {
       className: cls('ghostTip'),
       style: { padding: '4px 8px', fontSize: 12, opacity: 0.55, ...sty('ghostTip') },
-    }, '补全 · Tab 采纳 · Esc 关掉') : null,
+    }, 'Tab · Esc') : null,
     proposal ? e('div', {
       ref: proposalRef,
       className: [cls('proposal') || 'proposal', 'manuscript-paper-proposal'].filter(Boolean).join(' '),

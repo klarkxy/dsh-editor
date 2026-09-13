@@ -30,6 +30,19 @@ import {
 import { createElement as e, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type { ThemeValue } from './theme.ts'
 import { t, useLocale } from '../i18n/index.ts'
+import {
+  ArchiveIcon,
+  ExportIcon,
+  FileIcon,
+  FocusIcon,
+  FolderIcon,
+  PinIcon,
+  PlusIcon,
+  RegistryCommandIcon,
+  SearchIcon,
+  SettingsIcon,
+  ThemeInkIcon,
+} from './icons.tsx'
 
 /* 视觉隐藏(.shell .sr-only 在 Portal 内容上不生效,这里内联自带)。 */
 const visuallyHidden: CSSProperties = {
@@ -106,7 +119,6 @@ export type CommandPaletteProps = {
   onOpenSearch(): void
   registryCommands?: readonly RegistryCommandItem[]
   onExport(): void
-  onImport(): void
   onOpenArchives(): void
   onSplitAtCursor(): void
   canSplitAtCursor: boolean
@@ -124,82 +136,6 @@ export type CommandPaletteProps = {
   focusMode: boolean
   files: readonly string[]
   activePath: string
-}
-
-/* 命令面板左侧的线性几何图标(和首页 FolderIcon/NewDocIcon 同款 1.6px
-   stroke + currentColor),保证视觉系统只有一套原子。 */
-function OpenIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M3.5 7.5a2 2 0 0 1 2-2h4.2a2 2 0 0 1 1.4.6l1.6 1.6a2 2 0 0 0 1.4.6h4.4a2 2 0 0 1 2 2v7.2a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z' }),
-    e('path', { d: 'M3.5 9.5h17' }),
-  )
-}
-function PlusIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M12 5v14M5 12h14' }),
-  )
-}
-function ThemeIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M5 14a7 7 0 0 1 12-4.9 6 6 0 0 1-1 11.4 7 7 0 0 1-11-6.5z' }),
-    e('path', { d: 'M9 19l-1 2.5M12.5 19.5l.5 2M16 18.7l1.2 1.8' }),
-  )
-}
-function FocusIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4' }),
-  )
-}
-function SettingsIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('circle', { cx: '12', cy: '12', r: '3' }),
-    e('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' }),
-  )
-}
-function FileIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M7 3.5h6.5l4 4v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z' }),
-    e('path', { d: 'M13.5 3.5v4h4' }),
-  )
-}
-function SearchIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('circle', { cx: '11', cy: '11', r: '6.5' }),
-    e('path', { d: 'm20 20-3.6-3.6' }),
-  )
-}
-function ExportIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M12 4v10M8 8l4-4 4 4' }),
-    e('path', { d: 'M5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18.5v-2' }),
-  )
-}
-function ImportIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M12 14V4M8 10l4 4 4-4' }),
-    e('path', { d: 'M5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18.5v-2' }),
-  )
-}
-/* 插件通过 dshEditorCommands 注册的命令统一用"扩展"图标，不预设它是哪种业务。 */
-function RegistryCommandIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('rect', { x: '4.5', y: '4.5', width: '15', height: '15', rx: '2' }),
-    e('path', { d: 'M12 8.5v7' }),
-    e('path', { d: 'M8.5 12h7' }),
-  )
-}
-function ArchiveIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M4 7.5h16v3H4z' }),
-    e('path', { d: 'M6 10.5v8h12v-8' }),
-    e('path', { d: 'M10 14h4' }),
-  )
-}
-function PinIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', strokeLinecap: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M8.5 10.5 12 4.5l3.5 6v4.5l2.5 2.5H6l2.5-2.5z' }),
-    e('path', { d: 'M12 17.5V21' }),
-  )
 }
 
 /* 把路径转成"目录 / 文件名"两段,便于在命令项里分两行显示。
@@ -246,7 +182,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('command.openWork'),
         hint: t('command.openWorkHint'),
         keywords: ['folder', 'open', 'open workspace', 'open project'],
-        icon: e(OpenIcon, null),
+        icon: e(FolderIcon, null),
         run: () => props.onOpenWorkspace(),
       },
       {
@@ -256,14 +192,6 @@ export function CommandPalette(props: CommandPaletteProps) {
         keywords: ['new', 'create', 'new project'],
         icon: e(PlusIcon, null),
         run: () => props.onNewProject(),
-      },
-      {
-        id: 'cmd.import',
-        label: t('command.importWork'),
-        hint: t('command.importWorkHint'),
-        keywords: ['import', t('command.import'), 'markdown', 'txt'],
-        icon: e(ImportIcon, null),
-        run: () => props.onImport(),
       },
     ],
   }
@@ -338,7 +266,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: themeNext === 'ink' ? t('command.themeInk') : t('command.themePaper'),
         hint: props.theme === 'paper' ? t('command.themeNowPaper') : t('command.themeNowInk'),
         keywords: ['theme', t('command.theme'), t('command.switch'), 'paper', 'ink', 'dark', 'light'],
-        icon: e(ThemeIcon, null),
+        icon: e(ThemeInkIcon, null),
         run: () => props.onThemeChange(themeNext),
       },
       {
@@ -470,7 +398,6 @@ export function CommandPalette(props: CommandPaletteProps) {
                       <span className="palette-item-icon" aria-hidden="true">{action.icon}</span>
                       <span className="palette-item-text">
                         <span className="palette-item-label">{action.label}</span>
-                        {action.hint ? <span className="palette-item-hint">{action.hint}</span> : null}
                       </span>
                     </Command.Item>
                   ))}
@@ -478,9 +405,9 @@ export function CommandPalette(props: CommandPaletteProps) {
               ))}
             </Command.List>
             <div className="palette-footer" aria-hidden="true">
-              <span><kbd className="palette-kbd">↑</kbd><kbd className="palette-kbd">↓</kbd> {t('command.footerSelect')}</span>
-              <span><kbd className="palette-kbd">↵</kbd> {t('command.footerRun')}</span>
-              <span><kbd className="palette-kbd">⌘K</kbd> {t('command.footerClose')}</span>
+              <span><kbd className="palette-kbd">↑</kbd><kbd className="palette-kbd">↓</kbd></span>
+              <span><kbd className="palette-kbd">↵</kbd></span>
+              <span><kbd className="palette-kbd">ESC</kbd></span>
             </div>
           </Command>
         </RadixDialogContent>
@@ -489,8 +416,7 @@ export function CommandPalette(props: CommandPaletteProps) {
   )
 }
 
-/* 顶栏触发按钮:放在 chrome 右上角的"设置"按钮左侧,显示"搜索与命令 +
-   ⌘K"小键名;class 名 palette-trigger 来自任务要求,样式写在 styles.ts。 */
+/* 顶栏触发按钮:放大镜 + ⌘K。可访问名称仍是「搜索与命令」。 */
 export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
   useLocale()
   return (
@@ -502,12 +428,8 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
       title={t('command.searchTitle')}
     >
       <span className="palette-trigger-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="6.5" />
-          <path d="m20 20-3.6-3.6" />
-        </svg>
+        <SearchIcon size={14} />
       </span>
-      <span className="palette-trigger-label">{t('command.searchCommands')}</span>
       <kbd className="palette-trigger-kbd" aria-hidden="true">⌘K</kbd>
     </button>
   )

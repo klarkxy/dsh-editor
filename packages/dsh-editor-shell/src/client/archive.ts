@@ -53,7 +53,6 @@ export function ArchivePanel(props: {
     e('header', null,
       e('div', null,
         e('h2', { id: 'archive-panel-title' }, t('archive.title')),
-        e('small', null, t('archive.hint')),
       ),
       e(Button, { variant: 'icon', className: 'icon-button', 'aria-label': t('common.close'), disabled: props.busy, onClick: props.onClose }, '×'),
     ),

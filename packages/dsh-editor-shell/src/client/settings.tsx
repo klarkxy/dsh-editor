@@ -16,6 +16,7 @@ import {
 } from './settings-plugins.tsx'
 import { SettingsUsageSection } from './settings-usage.tsx'
 import { t, useLocale } from '../i18n/index.ts'
+import { SettingsIcon } from './icons.tsx'
 import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger, m } from './ui/index.ts'
 import { useReducedMotion } from 'motion/react'
 
@@ -75,15 +76,17 @@ function navLabel(tab: string, sections: readonly OfficialSettingsSection[]): st
 
 /** 顶栏设置入口。保留 .native-settings-control 包裹和 aria-haspopup 约定（e2e 依赖）。 */
 export function SettingsTrigger(props: { onOpen(): void }) {
+  useLocale()
   return e('span', { className: 'native-settings-control' },
     e('button', {
       type: 'button',
       className: 'settings-trigger',
       'aria-haspopup': 'dialog',
+      'aria-label': t('common.settings'),
+      title: t('common.settings'),
       onClick: props.onOpen,
     },
-      e('span', { className: 'settings-trigger-icon', 'aria-hidden': true }, '⚙'),
-      t('common.settings'),
+      e('span', { className: 'settings-trigger-icon', 'aria-hidden': true }, e(SettingsIcon, { size: 16 })),
     ),
   )
 }

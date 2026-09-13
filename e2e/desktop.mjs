@@ -193,7 +193,7 @@ async function launchPhase(name, extraEnv, inspect) {
       title: document.title,
       shell: Boolean(document.querySelector('.shell')),
       settings: Boolean(document.querySelector('[role="dialog"]')),
-      settingsControl: [...document.querySelectorAll('.native-settings-control button')].some((button) => button.textContent?.includes('设置')),
+      settingsControl: [...document.querySelectorAll('.native-settings-control button')].some((button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').includes('设置')),
       officialHome: document.body.textContent?.includes('DeepSeek Harness') ?? false,
       editorName: Boolean(document.querySelector('.brand-lockup')),
       bootEntries: globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [],

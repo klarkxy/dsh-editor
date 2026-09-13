@@ -33,6 +33,7 @@ import {
   INIT_SETTINGS_NAMESPACE,
   initGuideState,
   shouldAutoIndexAfterInterview,
+  shouldShowInitGuide,
   startExploreInit,
 } from '../init-guide.ts'
 import {
@@ -72,6 +73,7 @@ import {
   type ShellContext,
 } from './shared.ts'
 import { STANDARD_REASONING_EFFORTS } from './settings-models-store.ts'
+import { StopIcon } from './icons.tsx'
 
 
 const conversationRenameQueue = new ConversationRenameQueue()
@@ -761,6 +763,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   }
 
   /* 头部右侧的标识:renames 展示"N 个文件",其它仍展示 path(已经在 kind 上 narrow 过)。 */
+  const settled = state === 'applied' || state === 'ignored' || state === 'deferred' || state === 'undone'
   const headerPathLabel = props.proposal.kind === 'renames'
     ? t('chat.fileCount', { count: props.proposal.renames.length })
     : props.proposal.path
@@ -837,6 +840,29 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     )
   }
 
+  const footer = e('footer', null,
+    e('span', { role: state === 'expired' ? 'alert' : 'status' }, note),
+    state === 'ready' ? e('button', { type: 'button', onClick: () => void apply() }, t('common.apply')) : null,
+    state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('deferred'); setNote(t('chat.deferred')) } }, t('chat.defer')) : null,
+    state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote(t('chat.ignoredNoChange')) } }, t('common.ignore')) : null,
+    (state === 'deferred' || (state === 'expired' && canRecheck))
+      ? e('button', { type: 'button', onClick: () => void check() }, t('chat.recheck'))
+      : null,
+    state === 'applied' && props.proposal.kind === 'edit' ? e('button', { type: 'button', onClick: () => void undo() }, t('chat.undoThis')) : null,
+  )
+  if (settled) {
+    return e('details', { className: `proposal-card ${state} proposal-card-settled`, 'aria-label': t('chat.fileProposal') },
+      e('summary', null,
+        e('span', { className: 'proposal-title' },
+          e('strong', null, props.proposal.summary),
+          kindBadge ? e('small', { className: 'proposal-kind' }, kindBadge) : null),
+        e('code', null, headerPathLabel),
+        e('span', { role: 'status' }, note),
+      ),
+      renderBody(),
+      footer,
+    )
+  }
   return e('article', { className: `proposal-card ${state}`, 'aria-label': t('chat.fileProposal') },
     e('header', null,
       e('div', { className: 'proposal-title' },
@@ -844,17 +870,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
         kindBadge ? e('small', { className: 'proposal-kind' }, kindBadge) : null),
       e('code', null, headerPathLabel)),
     renderBody(),
-    e('footer', null,
-      e('span', { role: state === 'expired' ? 'alert' : 'status' }, note),
-      state === 'ready' ? e('button', { type: 'button', onClick: () => void apply() }, t('common.apply')) : null,
-      state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('deferred'); setNote(t('chat.deferred')) } }, t('chat.defer')) : null,
-      state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote(t('chat.ignoredNoChange')) } }, t('common.ignore')) : null,
-      (state === 'deferred' || (state === 'expired' && canRecheck))
-        ? e('button', { type: 'button', onClick: () => void check() }, t('chat.recheck'))
-        : null,
-      state === 'applied' && props.proposal.kind === 'edit' ? e('button', { type: 'button', onClick: () => void undo() }, t('chat.undoThis')) : null,
-    ),
-    state === 'ready' ? e('small', { className: 'proposal-help' }, t('chat.applyWrites')) : null,
+    footer,
   )
 }
 
@@ -875,9 +891,7 @@ export function MemoryCard(props: { memory: AuthorMemoryMarker; onAccept(observa
     else { setState('failed'); setNote(t('chat.memoryFull')) }
   }
   return e('article', { className: `memory-card ${state}`, 'aria-label': t('chat.memoryTitle') },
-    e('header', null, e('strong', null, t('chat.rememberHint'))),
     e('section', { className: 'memory-observation' },
-      e('small', null, t('chat.suggestedRecord')),
       e('p', null, props.memory.observation),
     ),
     e('section', { className: 'memory-reason' },
@@ -889,7 +903,6 @@ export function MemoryCard(props: { memory: AuthorMemoryMarker; onAccept(observa
       state === 'ready' ? e('button', { type: 'button', onClick: () => void accept() }, t('chat.remember')) : null,
       state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('rejected'); setNote(t('chat.ignoredMemory')) } }, t('common.ignore')) : null,
     ),
-    state === 'ready' ? e('small', { className: 'memory-help' }, t('chat.memoryFootnote')) : null,
   )
 }
 
@@ -905,7 +918,6 @@ export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boo
         e('button', { type: 'button', disabled: props.busy, onClick: props.onDismiss }, t('common.ignore')),
       ),
     props.note ? e('small', { className: 'warning', role: 'alert' }, props.note) : null,
-    props.done ? null : e('small', { className: 'muted' }, t('chat.initOptional')),
   )
 }
 
@@ -931,7 +943,7 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
   )
 }
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, onAcceptMemory, hidden, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, onAcceptMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [, setMessageCardTick] = useState(0)
@@ -1120,11 +1132,15 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     return Boolean(item && workspace?.sessionIds.includes(id) && !item.blank)
   })
   const initEngaged = initBusy || initCompleted || (initState === 'explore' && internalIndexActive)
-  const showInitGuide = Boolean(
-    workspace && inspection && initState !== 'done' && !initDismissed
-    && !(initState === 'interview' && initCompleted)
-    && (initEngaged || !workspaceHasConversation),
-  )
+  const showInitGuide = shouldShowInitGuide({
+    hasWorkspace: Boolean(workspace),
+    inspected: Boolean(inspection),
+    initState,
+    dismissed: initDismissed,
+    interviewCompleted: initState === 'interview' && initCompleted,
+    engaged: initEngaged,
+    workspaceHasConversation,
+  })
   const sessionIds = sessionList.ids.filter((id) => workspace?.sessionIds.includes(id))
   const workspaceSessionIds = sessionIds.length ? sessionIds : [session.sessionId]
   const hostArchivedIds = workspaceList.archivedSessionIds ?? []
@@ -1332,9 +1348,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     })
   }
   return e('aside', {
-    className: 'chat',
+    className: overlay ? 'chat chat-overlay' : 'chat',
     'aria-label': t('chat.assistant'),
     hidden,
+    ...(hidden ? { inert: '' } : {}),
     'data-chat-face': conversationFace(ctx) ? 'official' : 'missing',
     'data-chat-nodes': String(transcript.nodes.length),
   },
@@ -1432,8 +1449,14 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
           )
         }
         if (row.role === 'tool' && row.error) {
-          return e(ChatEntry, { as: 'details', className: 'chat-row tool error', key: row.id, open: true, role: 'alert', enter: isNewMessage(row.id) },
-            e('summary', null, `⚠ ${row.text}`),
+          return e(ChatEntry, {
+            as: 'details',
+            className: row.recovered ? 'chat-row tool recovered' : 'chat-row tool error',
+            key: row.id,
+            role: row.recovered ? undefined : 'status',
+            enter: isNewMessage(row.id),
+          },
+            e('summary', null, row.recovered ? row.text : `⚠ ${row.text}`),
             row.reason ? e('p', { className: 'tool-error-reason' }, row.reason) : null,
             row.content ? e('pre', null, row.content) : null,
             row.detail ? e('small', null, row.detail) : null,
@@ -1468,8 +1491,8 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' ? t('chat.preparingProposal') : t('chat.processing')
       ))),
       snapshot.queue.map((item) => e(ChatEntry, { className: 'chat-row notice', key: `queue:${item.id}`, enter: isNewMessage(`queue:${item.id}`) }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? t('chat.queued') : t('chat.steering')))),
-      partial.thinking ? e(ChatEntry, { as: 'details', className: 'chat-row thinking', key: 'partial-thinking', open: true, 'aria-live': 'polite', enter: isNewMessage('partial-thinking') },
-        e('summary', null, t('chat.thinking')),
+      partial.thinking ? e(ChatEntry, { as: 'details', className: 'chat-row thinking', key: 'partial-thinking', enter: isNewMessage('partial-thinking') },
+        e('summary', { 'aria-live': 'polite' }, t('chat.thinking')),
         e('p', null, partial.thinking),
       ) : null,
       partial.text ? e(ChatEntry, { className: 'chat-row assistant', key: 'partial-text', 'aria-live': 'polite', enter: isNewMessage('partial-text') }, e('div', { className: 'md' }, e(Markdown, { text: partial.text }))) : chatLegacy.partial && !partial.thinking ? e(ChatEntry, { className: 'chat-row assistant', key: 'partial-replying', 'aria-live': 'polite', enter: isNewMessage('partial-replying') }, t('chat.replying')) : null,
@@ -1495,7 +1518,13 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
           e(ModelPicker, { key: `${session.sessionId}:${modelRevision}`, ctx, session, onConfigure }),
         ),
         e('div', { className: 'composer-actions' },
-          snapshot.running ? e('button', { type: 'button', onClick: () => void stop(session) }, t('chat.stop')) : null,
+          snapshot.running ? e('button', {
+            type: 'button',
+            className: 'icon-button',
+            title: t('chat.stop'),
+            'aria-label': t('chat.stop'),
+            onClick: () => void stop(session),
+          }, e(StopIcon, { size: 14 })) : null,
           e('button', {
             className: 'send',
             type: 'submit',

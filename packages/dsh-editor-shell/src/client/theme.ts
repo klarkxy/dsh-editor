@@ -1,5 +1,6 @@
 import { createElement as e, useEffect, useRef, useState } from 'react'
 import { t, useLocale } from '../i18n/index.ts'
+import { ThemeInkIcon, ThemePaperIcon } from './icons.tsx'
 import { Tooltip } from './ui/index.ts'
 
 
@@ -181,6 +182,6 @@ export function ThemeToggle({ theme, onChange, label }: { theme: ThemeValue; onC
       title: hint,
       'aria-label': t('theme.aria', { label: resolvedLabel, value }),
       onClick: () => onChange(theme === 'paper' ? 'ink' : 'paper'),
-    }, value),
+    }, theme === 'paper' ? e(ThemePaperIcon, { size: 16 }) : e(ThemeInkIcon, { size: 16 })),
   })
 }

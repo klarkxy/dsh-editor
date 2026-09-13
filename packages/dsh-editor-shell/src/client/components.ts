@@ -24,11 +24,10 @@ export function DeepSeekWhaleMark() {
   )
 }
 
-export function PaperStage(props: { label: string; children?: ReactNode }) {
+export function PaperStage(props: { label: string; heading?: string; children?: ReactNode }) {
   return e('section', { className: 'empty-paper home-stage', 'aria-label': props.label },
     e('div', { className: 'home-card' },
-      e('p', { className: 'home-eyebrow' }, 'DSH EDITOR'),
-      e('h1', null, t('home.startWriting')),
+      props.heading ? e('h1', null, props.heading) : null,
       props.children,
     ),
   )
@@ -117,6 +116,20 @@ export function isObservableSource(value: unknown): value is { getSnapshot(): un
 
 export function useObservable<T>(source: { getSnapshot(): T; subscribe(listener: () => void): () => void }): T {
   return useSyncExternalStore(source.subscribe.bind(source), source.getSnapshot.bind(source), source.getSnapshot.bind(source))
+}
+
+/** Viewport queries for the shell breakpoints. Server / test snapshot is false. */
+export function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const mq = globalThis.matchMedia?.(query)
+      if (!mq) return () => {}
+      mq.addEventListener('change', onStoreChange)
+      return () => mq.removeEventListener('change', onStoreChange)
+    },
+    () => Boolean(globalThis.matchMedia?.(query)?.matches),
+    () => false,
+  )
 }
 
 export class ShellErrorBoundary extends Component<{ children?: ReactNode; fallback?: ReactNode }, { error: string | null }> {

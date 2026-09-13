@@ -34,8 +34,10 @@ export type ChatRow = {
   detail?: string
   /** Expandable verbatim body (tool result content); absent when there is nothing worth unfolding. */
   content?: string
-  /** Tool call failed or was rejected; the row renders as an alert, expanded by default. */
+  /** Tool call failed or was rejected; the row stays collapsed unless the author opens it. */
   error?: boolean
+  /** Same-turn retry of this tool later succeeded; keep the failure folded and quiet. */
+  recovered?: boolean
   /** Author-readable cause of a failed tool call, shown above the verbatim body. */
   reason?: string
   proposal?: ProposalMarker
@@ -191,6 +193,9 @@ function toolErrorReason(name: string, body: string): string {
   if (firstLine.includes(GUARD_REJECTION)) {
     return t('adapter.guardRejected', { name })
   }
+  if (/project-relative/i.test(firstLine) || /absolute and device paths/i.test(firstLine)) {
+    return t('adapter.pathRejected')
+  }
   if (firstLine) return firstLine.length > 160 ? `${firstLine.slice(0, 160)}…` : firstLine
   return t('adapter.rejected')
 }
@@ -258,7 +263,33 @@ export function chatRows(snapshot: ChatTranscript): ChatRow[] {
     else if (node.kind === 'turn-error') rows.push({ ...common, role: 'notice', text: t('chat.requestFailed') })
     else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: t('chat.retrying') })
   }
-  return rows
+  return markRecoveredToolErrors(rows)
+}
+
+/** 同一轮里同名工具后来成功了，就不要把先前的失败条一直当警报摊开。 */
+export function markRecoveredToolErrors(rows: ChatRow[]): ChatRow[] {
+  const recoveredIds = new Set<string>()
+  let turnStart = 0
+  const scanTurn = (end: number) => {
+    const succeeded = new Set<string>()
+    for (let index = end - 1; index >= turnStart; index--) {
+      const row = rows[index]
+      if (row.role !== 'tool' || !row.toolName) continue
+      if (!row.error) succeeded.add(row.toolName)
+      else if (succeeded.has(row.toolName)) recoveredIds.add(row.id)
+    }
+  }
+  rows.forEach((row, index) => {
+    if (row.role === 'user') {
+      scanTurn(index)
+      turnStart = index
+    }
+  })
+  scanTurn(rows.length)
+  if (!recoveredIds.size) return rows
+  return rows.map((row) => recoveredIds.has(row.id)
+    ? { ...row, recovered: true, text: t('adapter.retried') }
+    : row)
 }
 
 export function internalIndexTurnActive(snapshot: ChatTranscript): boolean {

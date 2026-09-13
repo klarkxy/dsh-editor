@@ -450,7 +450,7 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
         onChange: (event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value),
       }),
       draftFailure === undefined
-        ? e('p', { className: 'zhihu-hint' }, '密钥仅保存在本机凭证层，界面不会回显或记录明文。')
+        ? null
         : e('p', { className: 'zhihu-warning', role: 'alert' },
           draftFailure === 'blank' ? '密钥不能只包含空白字符。' : '密钥含有非法字符（应为可打印 ASCII，且不是 ENV 赋值行）。',
         ),
@@ -586,7 +586,6 @@ function UsageSection(props: { rpc: RpcCaller }): ReactNode {
 
   const hasAny = state.days.some((day) => day.calls > 0)
   return e('section', { 'data-testid': 'zhihu-usage', 'aria-label': '知乎调用用量' },
-    e('p', { className: 'zhihu-hint' }, `近 ${USAGE_DAYS} 天知乎能力调用（成功段在下，失败段在上）。`),
     hasAny ? e(UsageChart, { days: state.days }) : e('p', { className: 'zhihu-status' }, '近 30 天暂无调用记录。'),
   )
 }
@@ -698,10 +697,8 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): React
   }
 
   return e('section', { 'data-testid': 'zhihu-knowledge', 'aria-label': '知乎知识库' },
-    e('p', { className: 'zhihu-hint' },
-      '文件将上传到知乎云端知识库；也可在 ',
-      e('a', { className: 'zhihu-link', href: KB_MANAGE_URL, target: '_blank', rel: 'noreferrer' }, 'zhida.zhihu.com/repositories/square'),
-      ' 管理。',
+    e('p', null,
+      e('a', { className: 'zhihu-link', href: KB_MANAGE_URL, target: '_blank', rel: 'noreferrer' }, '管理知识库'),
     ),
     list.status === 'loading' ? e('p', { className: 'zhihu-status', role: 'status' }, '正在读取知识库列表…') : null,
     list.status === 'error' ? e('p', { className: 'zhihu-error', role: 'alert' },
@@ -741,7 +738,6 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): React
         disabled: busy,
         onChange: (event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0]),
       }),
-      e('p', { className: 'zhihu-hint' }, '支持 PDF / Markdown / Office / 电子书等格式，单文件不超过 20 MB。'),
     ) : null,
     list.status === 'ready' && file ? e('div', { className: 'zhihu-upload-confirm' },
       `确认将「${file.name}」（${formatSize(file.size)}）上传到${baseId ? '所选知识库' : '默认知识库'}？文件会进入知乎云端。`,

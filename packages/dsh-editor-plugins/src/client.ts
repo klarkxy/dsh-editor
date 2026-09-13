@@ -601,7 +601,6 @@ function PluginPanel(props: PluginPanelProps) {
   const installBusy = props.installing || dialogOpen
   const submitBusy = props.searching || installBusy
   return e('section', { className: 'dsh-plugins', 'data-testid': 'plugins-settings', 'aria-label': '插件' },
-    e('p', { className: 'dsh-plugins-intro' }, '写作界面本身不能关闭。可选功能可以按套开关；从市场安装时会先检查能不能用，确认后再写入。'),
     e('div', { className: 'dsh-plugins-tabs', role: 'tablist', 'aria-label': '插件分类' },
       e('button', { type: 'button', role: 'tab', 'aria-selected': props.tab === 'installed', 'data-testid': 'plugins-tab-installed', onClick: () => props.onTab('installed') }, '已安装'),
       e('button', { type: 'button', role: 'tab', 'aria-selected': props.tab === 'market', 'data-testid': 'plugins-tab-market', onClick: () => props.onTab('market') }, '市场'),

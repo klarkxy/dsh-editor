@@ -139,7 +139,6 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
     e('header', { className: 'overview-header' },
       e('div', null,
         e('h2', { id: 'overview-panel-title' }, t('overview.title')),
-        e('p', { className: 'muted' }, t('overview.intro')),
       ),
       e('button', { className: 'icon-button', type: 'button', 'aria-label': t('overview.close'), onClick: props.onClose }, '×'),
     ),
@@ -198,7 +197,6 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
       e('section', { className: 'overview-chart', 'aria-label': t('overview.curve') },
         e('h3', null, t('overview.curve')),
         historyNote ? e('p', { className: 'warning', role: 'status' }, historyNote) : null,
-        e('p', { className: 'muted' }, t('overview.curveHint')),
         daily.length ? e('div', { className: 'overview-curve', 'aria-label': t('overview.last30') }, daily.map((bar) => e('div', {
           key: bar.key,
           className: `overview-curve-col${bar.today ? ' today' : ''}${bar.delta < 0 ? ' negative' : ''}`,

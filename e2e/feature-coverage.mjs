@@ -3,8 +3,7 @@
  *
  * Boots an isolated DSH home, drives the visible UI through the current
  * workbench surface, then uses MiniMax-M3 for chat, rewrite, FIM, and one
- * proposal. Product files are created through the UI except for a small
- * import-source folder the harness seeds on disk.
+ * proposal. Product files are created through the UI.
  *
  * Credentials default to ~/.mmx/config.json. They are never printed.
  */
@@ -24,7 +23,6 @@ const devRoot = resolve(root, '.dev')
 const projectsRoot = resolve(devRoot, 'feature-coverage-projects')
 const book = '功能验收'
 const workspace = resolve(projectsRoot, book)
-const importSource = resolve(devRoot, 'feature-coverage-import-source')
 const home = resolve(devRoot, 'feature-coverage-home')
 const output = resolve(root, 'e2e', 'out', 'feature-coverage')
 const sendTimeout = Number(process.env.E2E_FEATURE_SEND_TIMEOUT_MS || 180_000)
@@ -33,7 +31,7 @@ const aiOnly = process.env.E2E_FEATURE_AI_ONLY === '1'
 const workbenchOnly = process.env.E2E_FEATURE_WORKBENCH_ONLY === '1'
 if (aiOnly && workbenchOnly) throw new Error('Select only one feature coverage scope')
 
-for (const target of [projectsRoot, workspace, importSource, home]) {
+for (const target of [projectsRoot, workspace, home]) {
   if (!target.startsWith(`${devRoot}${sep}`)) throw new Error(`unsafe test path: ${target}`)
 }
 if (!output.startsWith(`${resolve(root, 'e2e', 'out')}${sep}`)) throw new Error(`unsafe output path: ${output}`)
@@ -714,11 +712,6 @@ async function openAssistantWithModel(page) {
   await recordPhase('新对话模型', chosen)
 }
 
-async function seedImportSource() {
-  await mkdir(importSource, { recursive: true })
-  await writeFile(resolve(importSource, '导入样章.md'), '# 导入样章\n\n这是给导入对话框用的源目录。\n', 'utf8')
-}
-
 async function openExportPreview(page) {
   await runPaletteCommand(page, '导出', '导出全文')
   const dialog = page.getByRole('dialog', { name: '导出全文' })
@@ -1147,25 +1140,12 @@ async function coverWorkbench(page) {
   await cover('import-entry', async () => {
     await page.getByRole('button', { name: '作品菜单' }).click()
     const workspaceMenu = page.locator('#workspace-actions')
-    await workspaceMenu.getByRole('menuitem', { name: '导入作品' }).click()
-    const pathBox = page.getByLabel('作品文件夹路径')
-    const review = page.getByRole('dialog', { name: /导入/ })
-    await Promise.race([
-      pathBox.waitFor({ state: 'visible', timeout: 8_000 }),
-      review.waitFor({ state: 'visible', timeout: 8_000 }),
-    ]).catch(() => undefined)
-    if (await pathBox.isVisible().catch(() => false)) {
-      await pathBox.fill(importSource)
-      const confirm = page.getByRole('button', { name: /打开此目录|开始导入|继续/ }).first()
-      if (await confirm.isVisible().catch(() => false)) await confirm.click()
-      return 'path fallback shown'
+    await workspaceMenu.waitFor({ state: 'visible', timeout: 10_000 })
+    if (await workspaceMenu.getByRole('menuitem', { name: '导入作品' }).count()) {
+      throw new Error('导入作品 should no longer appear in the workspace menu')
     }
-    if (await review.isVisible().catch(() => false)) {
-      await review.getByRole('button', { name: '取消' }).click()
-      await review.waitFor({ state: 'hidden', timeout: 8_000 })
-      return 'review dialog'
-    }
-    throw new Error('import web path dialog did not open after 导入作品')
+    await page.keyboard.press('Escape')
+    return 'import entry removed'
   })
 
   await cover('chapter-split', async () => {
@@ -1345,11 +1325,9 @@ async function coverAi(page) {
 
 await rm(projectsRoot, { recursive: true, force: true })
 await rm(home, { recursive: true, force: true })
-await rm(importSource, { recursive: true, force: true })
 await rm(output, { recursive: true, force: true })
 await mkdir(resolve(home, 'electron-user-data'), { recursive: true })
 await mkdir(output, { recursive: true })
-await seedImportSource()
 await flushReport()
 
 const env = {

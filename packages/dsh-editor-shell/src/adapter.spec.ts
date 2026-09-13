@@ -89,7 +89,23 @@ describe('DSH snapshot adapter', () => {
     } as never)
     expect(guarded.reason).toContain('ask_user_question')
     expect(guarded.reason).toContain('不在允许范围')
+    expect(toolResultRow({
+      kind: 'tool-result', seq: 6, callId: 'read-abs', call: { name: 'read', argsRaw: '{}' },
+      content: [{ type: 'text', text: 'Only project-relative Markdown files may be read.' }], isError: true,
+    } as never).reason).toBe('没读到这份文件：请用作品里的相对路径，例如 正文/001.md。')
     expect(toolResultRow({ kind: 'tool-result', seq: 4, callId: 'x', call: { name: 'write', argsRaw: '{}' }, content: [{ type: 'text', text: 'a'.repeat(5000) }], isError: false } as never).content).toHaveLength(4001)
+  })
+  it('folds a failed tool step after the same tool succeeds later in the turn', () => {
+    const snapshot = { nodes: [
+      { kind: 'user', seq: 1, content: [{ type: 'text', text: '核对场面' }] },
+      { kind: 'tool-result', seq: 2, callId: 'read-1', call: { name: 'read', argsRaw: '{}' }, content: [{ type: 'text', text: 'Only project-relative Markdown files may be read.' }], isError: true },
+      { kind: 'tool-result', seq: 3, callId: 'read-2', call: { name: 'read', argsRaw: '{}' }, content: [{ type: 'text', text: '正文' }], isError: false },
+    ] }
+    expect(chatRows(snapshot as never)).toEqual([
+      { id: 'user:1', role: 'user', text: '核对场面', projectContextReceipt: undefined },
+      { id: 'tool-result:2', role: 'tool', text: '已改用其他方式继续', detail: 'read', content: 'Only project-relative Markdown files may be read.', error: true, recovered: true, reason: '没读到这份文件：请用作品里的相对路径，例如 正文/001.md。', toolName: 'read' },
+      { id: 'tool-result:3', role: 'tool', text: '已阅读作品资料', detail: 'read', content: '正文', toolName: 'read' },
+    ])
   })
   it('hides only the index prompt itself and keeps the indexing process visible', () => {
     const prompt = buildNovelIndexPrompt()

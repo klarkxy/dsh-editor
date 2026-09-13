@@ -116,7 +116,6 @@ export function WritingModelRoutes(props: {
   return e('section', { className: 'models-writing-routes', 'aria-label': t('models.writingRoutes') },
     e('header', { className: 'settings-block-head' },
       e('h3', { className: 'settings-block-title' }, t('models.writingRoutes')),
-      e('p', { className: 'settings-block-help' }, t('models.writingRoutesHint')),
     ),
     rows.map((row) => {
       const selected = values[row.field]

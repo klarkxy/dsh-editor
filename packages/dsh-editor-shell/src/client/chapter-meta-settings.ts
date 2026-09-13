@@ -241,7 +241,6 @@ function ChapterMetaDialog(props: {
       field === 'beats'
         ? e('label', null,
             e('span', null, t('chapterMeta.beats')),
-            e('small', null, t('chapterMeta.beatsHint')),
             e('textarea', {
               ref: focusRef,
               value: beats,

@@ -672,9 +672,9 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
 }
 
 function Header(props: { note?: string | null }): ReactNode {
+  if (!props.note) return null
   return e('header', { className: 'models-header settings-block-head' },
-    e('p', { className: 'models-intro settings-block-help' }, text().intro),
-    props.note ? e('p', { className: 'models-saved', role: 'status' }, props.note) : null,
+    e('p', { className: 'models-saved', role: 'status' }, props.note),
   )
 }
 

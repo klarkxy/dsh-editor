@@ -237,7 +237,6 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
     e('header', { className: 'proofread-panel-header' },
       e('div', null,
         e('h2', null, t('proofread.title')),
-        e('p', { className: 'muted' }, t('proofread.intro')),
       ),
       e('button', { className: 'icon-button', type: 'button', 'aria-label': t('proofread.close'), onClick: props.onClose }, '×'),
     ),

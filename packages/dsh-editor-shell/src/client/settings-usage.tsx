@@ -365,9 +365,7 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
 }
 
 function Header(): ReactNode {
-  return e('header', { className: 'usage-header' },
-    e('p', { className: 'usage-intro' }, text().intro),
-  )
+  return null
 }
 
 function Loaded(props: { summary: UsageSummary }): ReactNode {
@@ -394,7 +392,6 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
         ? e('p', { className: 'usage-empty' }, text().empty)
         : e(UsageChart, { days: recent, series }),
     ),
-    e('p', { className: 'usage-footnote' }, text().note),
   )
 }
 

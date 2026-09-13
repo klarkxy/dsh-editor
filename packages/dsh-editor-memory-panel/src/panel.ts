@@ -225,7 +225,6 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
     e('header', { className: 'memory-panel-header' },
       e('div', null,
         e('h2', null, t('memory.title')),
-        e('p', null, t('memory.intro')),
       ),
       e('button', { className: 'icon-button', type: 'button', 'aria-label': t('memory.close'), onClick: props.onClose }, '×'),
     ),

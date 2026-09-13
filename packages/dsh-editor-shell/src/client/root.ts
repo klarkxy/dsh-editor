@@ -29,7 +29,8 @@ import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChar
 import { buildChapterStatusMap } from '../chapter-status-view.ts'
 import { redesignedStyles } from '../styles.ts'
 import { errorMessage, isStaleFailure, isSuccessWorkbenchNote, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
-import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, ShellErrorBoundary, useObservable } from './components.ts'
+import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, ShellErrorBoundary, useMediaQuery, useObservable } from './components.ts'
+import { FolderIcon, FocusIcon, NewDocIcon } from './icons.tsx'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger, type SettingsRenderSlot, type SettingsTab } from './settings.tsx'
 import { ThemeToggle, useTheme, type HostThemeSync } from './theme.ts'
@@ -67,29 +68,6 @@ const ASSISTANT_MAX = 720
 const PINNED_DEFAULT = 340
 const PINNED_MIN = 260
 const PINNED_MAX = 560
-
-/* 首页入口卡的图标(线性几何,1.6px stroke,1.5 视口单位的内边距)。
-   故意做成 currentColor 的描边色,颜色由 CSS 控制,符合纸/墨双主题。 */
-function FolderIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 20, height: 20, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M3.5 7.5a2 2 0 0 1 2-2h4.2a2 2 0 0 1 1.4.6l1.6 1.6a2 2 0 0 0 1.4.6h4.4a2 2 0 0 1 2 2v7.2a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z' }),
-    e('path', { d: 'M3.5 9.5h17' }),
-  )
-}
-function NewDocIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 20, height: 20, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', strokeLinecap: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M7 3.5h6.5l4 4v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z' }),
-    e('path', { d: 'M13.5 3.5v4h4' }),
-    e('path', { d: 'M12 11v7M8.5 14.5h7' }),
-  )
-}
-function ImportIcon() {
-  return e('svg', { viewBox: '0 0 24 24', width: 20, height: 20, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round', strokeLinecap: 'round', 'aria-hidden': 'true' },
-    e('path', { d: 'M12 3.5v10' }),
-    e('path', { d: 'm8.5 10 3.5 3.5L15.5 10' }),
-    e('path', { d: 'M5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18.5v-2' }),
-  )
-}
 
 /* 把 WorkspaceView.updatedAt(ISO-8601)格式化为首页最近作品区使用的简短时间标签:
    60 秒内=刚刚,1 小时内=分钟前,今天=小时前,昨天,7 天内=天数前,
@@ -287,6 +265,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(() => storedPanelOpen('dsh-editor.layout.assistant-open', true))
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
+  const overlayAssistant = useMediaQuery('(max-width: 1040px)')
+  const compactChrome = useMediaQuery('(max-width: 760px)')
   const [pinnedPath, setPinnedPath] = useState<string | null>(() => {
     const stored = storedPinnedPath('dsh-editor.layout.pinned-path')
     return stored && canPinPath(stored) ? stored : null
@@ -327,7 +307,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [archiveNote, setArchiveNote] = useState('')
   const [importFlow, setImportFlow] = useState<ImportFlow>(idleImportFlow)
-  const [importTitle, setImportTitle] = useState<{ busy: boolean; note: string } | null>(null)
+  const [removeRecentTarget, setRemoveRecentTarget] = useState<WorkspaceView | null>(null)
 
   const temporaryFlowWorkspaces = useRef(new Set<string>())
   const temporarySourceWorkspaces = useRef(new Map<string, string>())
@@ -376,7 +356,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const pathFallbackInput = useRef<HTMLInputElement | null>(null)
   const homeCardOpen = useChromeMotion('card', 0)
   const homeCardNew = useChromeMotion('card', 0.05)
-  const homeCardImport = useChromeMotion('card', 0.1)
   const sidebarPanelMotion = useChromeMotion('panel')
   const pinValidatedSession = useRef<string | undefined>()
   useEffect(() => { document.title = 'DSH Editor' }, [])
@@ -1185,7 +1164,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     if (!path) return
     await openPickedWorkspace(path, 'open', workspace.workspaceId)
   }
-  const removeBrokenWorkspace = async (workspace: WorkspaceView) => {
+  const requestRemoveRecent = (workspace: WorkspaceView) => {
+    if (openingWorkspace) return
+    setRemoveRecentTarget(workspace)
+  }
+  const confirmRemoveRecent = async () => {
+    const workspace = removeRecentTarget
+    if (!workspace || openingWorkspace) return
+    setRemoveRecentTarget(null)
+    await removeRecentWorkspace(workspace)
+  }
+  const removeRecentWorkspace = async (workspace: WorkspaceView) => {
     if (openingWorkspace) return
     try {
       await ctx.workspaces.delete(workspace.workspaceId)
@@ -1451,41 +1440,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
   const closeImportFlow = (_restoreFocus = true) => {
     setImportFlow(idleImportFlow)
-  }
-  const startImportProject = async () => {
-    closeWorkspaceChrome()
-    setPaletteOpen(false)
-    if (fileSession) {
-      if (editorDirty) { setWorkbenchNote(t('note.saveBeforeImport')); return }
-      if (!(await canLeaveAssistantDraft())) return
-      setAssistantDraftDirty(false)
-    }
-    setImportTitle({ busy: false, note: '' })
-  }
-  const submitImportTitle = async (title: string) => {
-    if (!importTitle || importTitle.busy || openingWorkspace) return
-    setImportTitle({ busy: true, note: '' })
-    const created = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.createHome', { title }))
-    if (!created.ok) {
-      setImportTitle({ busy: false, note: errorMessage(created) })
-      return
-    }
-    setImportTitle(null)
-    try {
-      const targetRegistration = await registerFlowWorkspace(created.value.path)
-      const targetSessionId = await connectUsableWorkspaceSession(ctx, targetRegistration.workspace.workspaceId)
-      pendingWorkspaceOpen.current = {
-        ticket: workspaceOpenGate.begin(`import:${targetRegistration.workspace.workspaceId}`),
-        workspace: targetRegistration.workspace,
-        intent: 'create',
-        registrationCreated: targetRegistration.created,
-        sessionId: targetSessionId,
-      }
-      await selectImportSource(targetSessionId, targetRegistration.workspace.workspaceId)
-    } catch (error) {
-      closeImportFlow()
-      setHomeNote(error instanceof Error ? error.message : t('note.importNotStarted'))
-    }
   }
   const selectImportSource = async (targetSessionId: SessionId, targetWorkspaceId: WorkspaceId) => {
     const sourcePath = await ctx.uiWorkspace.pickDirectory()
@@ -1762,7 +1716,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     onOpenSearch: () => openSearchPanel(),
     registryCommands,
     onExport: () => { void exportNovel() },
-    onImport: () => { void startImportProject() },
     onOpenArchives: () => openArchivePanel(),
     onSplitAtCursor: () => beginChapterSplit(path, 'cursor'),
     canSplitAtCursor: Boolean(fileSession) && !editorDirty && isMarkdownChapterPath(path),
@@ -1810,7 +1763,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           e('span', { className: 'brand-mark', 'aria-hidden': 'true' }, 'D'),
           e('strong', null, 'DSH Editor'),
         ),
-        e('span', { className: 'local-state' }, t('home.title')),
         extensionsDock,
         e('span', { className: 'topbar-actions' },
           e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
@@ -1819,7 +1771,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         ),
       ),
       e(PaperStage, { label: t('home.blankPaper') },
-        e('p', { className: 'home-hint' }, t('home.intro')),
         e('div', { className: 'home-actions home-command-bar', role: 'group', 'aria-label': t('home.commands') },
           e(m.button, {
             className: 'home-entry-card', type: 'button',
@@ -1828,9 +1779,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             onClick: () => void startWorkspaceFromPicker(),
             ...homeCardOpen,
           },
-            e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(FolderIcon, null)),
+            e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(FolderIcon, { size: 20 })),
             e('span', { className: 'home-entry-title' }, t('home.openWork')),
-            e('span', { className: 'home-entry-desc' }, t('home.openWorkDesc')),
           ),
           e(m.button, {
             className: 'home-entry-card', type: 'button',
@@ -1839,20 +1789,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             onClick: () => void startNewProject(),
             ...homeCardNew,
           },
-            e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(NewDocIcon, null)),
+            e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(NewDocIcon, { size: 20 })),
             e('span', { className: 'home-entry-title' }, t('home.new')),
-            e('span', { className: 'home-entry-desc' }, t('home.newDesc')),
-          ),
-          e(m.button, {
-            className: 'home-entry-card home-import-link', type: 'button',
-            'aria-label': t('home.importExisting'),
-            disabled: openingWorkspace || Boolean(newProject) || Boolean(importTitle),
-            onClick: () => void startImportProject(),
-            ...homeCardImport,
-          },
-            e('span', { className: 'home-entry-icon', 'aria-hidden': 'true' }, e(ImportIcon, null)),
-            e('span', { className: 'home-entry-title' }, t('home.importExisting')),
-            e('span', { className: 'home-entry-desc' }, t('home.importDesc')),
           ),
         ),
         pathFallbackForm,
@@ -1870,7 +1808,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         e('section', { className: 'home-recent', 'aria-label': t('home.recent') },
           e('header', null,
             e('h2', null, t('home.recent')),
-            e('small', null, workspaces.items.length ? t('home.entryCount', { count: workspaces.items.length }) : t('home.noEntries')),
           ),
           workspaces.items.length ? e('div', { className: 'workspace-list' }, workspaces.items.map((workspace) => {
             const needsRelocation = workspaceOpen.kind === 'needs-relocation' && workspaceOpen.workspaceId === workspace.workspaceId
@@ -1884,10 +1821,16 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
                 e('small', null, workspace.path),
                 recentLabel ? e('span', { className: 'workspace-time', 'aria-label': t('home.recentOpened', { label: recentLabel }) }, recentLabel) : null,
               ),
+              e('button', {
+                className: 'workspace-manage icon-button', type: 'button', disabled: openingWorkspace,
+                title: t('home.removeRecent'),
+                'aria-label': t('home.removeRecent'),
+                onClick: () => requestRemoveRecent(workspace),
+              }, '×'),
               needsRelocation ? e('div', { className: 'workspace-relocation', role: 'alert' },
                 e('p', null, workspaceOpen.message), e('code', null, workspaceOpen.path),
                 e('button', { className: 'primary-action', type: 'button', disabled: openingWorkspace, onClick: () => void relocateWorkspace(workspace) }, t('home.relocate')),
-                e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void removeBrokenWorkspace(workspace) }, t('home.removeRecent')),
+                e('button', { type: 'button', disabled: openingWorkspace, onClick: () => requestRemoveRecent(workspace) }, t('home.removeRecent')),
               ) : null,
             )
           })) : e('p', { className: 'muted home-recent-empty' }, t('home.recentEmpty')),
@@ -1896,17 +1839,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       renderNewProjectDialog(),
       renderCommandPalette(),
       renderImportDialog(),
-      e(TextPromptDialog, {
-        open: Boolean(importTitle),
-        id: 'import-title-home',
-        title: t('home.importAsNew'),
-        label: t('home.workName'),
-        initialValue: '',
-        confirmLabel: t('home.chooseSource'),
-        note: importTitle?.note,
-        busy: importTitle?.busy,
-        onCancel: () => { if (!importTitle?.busy) setImportTitle(null) },
-        onConfirm: (title: string) => void submitImportTitle(title),
+      e(ConfirmDialog, {
+        open: Boolean(removeRecentTarget),
+        id: 'remove-recent',
+        title: t('home.removeRecent'),
+        message: t('home.removeRecentBody', { title: removeRecentTarget?.title || removeRecentTarget?.path || '' }),
+        confirmLabel: t('home.removeRecent'),
+        onCancel: () => setRemoveRecentTarget(null),
+        onConfirm: () => void confirmRemoveRecent(),
       }),
       e(SettingsDialog, { open: settingsOpen, ctx, writingScope, migrateWriting, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, zhihuTab: zhihuSettings, focusTab: settingsFocusTab, renderSlot, onClose: () => setSettingsOpen(false) }),
     ))
@@ -1914,22 +1854,24 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
 
   const chatSession = session ?? fileSession
   const sidebarVisible = sidebarOpen && !focusMode
+  const sidebarInGrid = sidebarVisible && !compactChrome
   const assistantVisible = assistantOpen && !focusMode && assistantEnabled
+  const assistantInGrid = assistantVisible && !overlayAssistant
   const pinnedVisible = pinnedPath !== null && !focusMode
   const layoutColumns = pinnedLayoutColumns({
-    sidebarVisible,
+    sidebarVisible: sidebarInGrid,
     sidebarWidth,
     pinnedVisible,
     pinnedWidth,
-    assistantVisible,
+    assistantVisible: assistantInGrid,
     assistantWidth,
   })
-  const gridTemplateColumns = assistantVisible
+  const gridTemplateColumns = assistantInGrid
     ? layoutColumns.replace(new RegExp(`${assistantWidth}px$`), `minmax(0, ${assistantWidth}px)`)
     : layoutColumns
 
   return e(ShellUiProvider, null, e('main', {
-    className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarVisible ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${pinnedVisible ? ' pinned-open' : ''}`,
+    className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`,
     style: { minWidth: 0, gridTemplateColumns },
   },
     e('style', null, redesignedStyles),
@@ -1964,7 +1906,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               workspaces.items.length ? e(MenuSeparator, { className: 'workspace-menu-divider', 'aria-hidden': 'true' }) : null,
               e(MenuItem, { className: 'workspace-menu-item', disabled: openingWorkspace || Boolean(newProject), onSelect: () => { workspaceMenuYields.current = true; void openAnotherWorkspace() } }, t('home.openWork')),
               e(MenuItem, { className: 'workspace-menu-item', disabled: openingWorkspace || Boolean(newProject), onSelect: () => { workspaceMenuYields.current = true; void startNewProject() } }, t('home.new')),
-              e(MenuItem, { className: 'workspace-menu-item', disabled: openingWorkspace || Boolean(newProject) || Boolean(importTitle), onSelect: () => { workspaceMenuYields.current = true; void startImportProject() } }, t('workspace.import')),
               e(MenuItem, { className: 'workspace-menu-item', disabled: exporting, onSelect: () => { workspaceMenuYields.current = true; void exportNovel() } }, exporting ? t('workspace.exporting') : t('workspace.exportMarkdown')),
               e(MenuItem, { className: 'workspace-menu-item', disabled: exporting, onSelect: () => { workspaceMenuYields.current = true; void exportNovel() } }, t('workspace.exportTxt')),
               e(MenuItem, { className: 'workspace-menu-item', onSelect: () => { workspaceMenuYields.current = true; openArchivePanel() } }, t('workspace.archived')),
@@ -1980,18 +1921,20 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             type: 'button',
             disabled: focusMode,
             'aria-pressed': sidebarOpen,
+            'aria-label': t('workspace.files'),
             title: sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles'),
             onClick: () => setSidebarOpen((value) => !value),
-          }, t('workspace.files')),
+          }, e(FolderIcon, { size: 16 })),
         }),
         e(Tooltip, {
           content: focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus'),
           children: e('button', {
             type: 'button',
             'aria-pressed': focusMode,
+            'aria-label': focusMode ? t('workspace.exitFocusShort') : t('workspace.focus'),
             title: focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus'),
             onClick: () => setFocusMode((value) => !value),
-          }, focusMode ? t('workspace.exitFocusShort') : t('workspace.focus')),
+          }, e(FocusIcon, { size: 16 })),
         }),
         e(Tooltip, {
           content: assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant'),
@@ -1999,9 +1942,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             type: 'button',
             disabled: focusMode,
             'aria-pressed': assistantOpen,
+            'aria-label': t('workspace.assistant'),
             title: assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant'),
             onClick: () => setAssistantOpen((value) => !value),
-          }, t('workspace.assistant')),
+          }, e(DeepSeekWhaleMark)),
         }),
       ),
       extensionsDock,
@@ -2012,9 +1956,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         e(WindowControls, null),
       ),
     ),
-    sidebarVisible ? e('aside', { className: 'sidebar', 'aria-label': t('workspace.filesAndNotes') },
+    sidebarInGrid ? e('aside', { className: 'sidebar', 'aria-label': t('workspace.filesAndNotes') },
       e('div', { className: 'side-title' },
-        e('span', null, t('workspace.files')),
         e(Menu, null,
           e(MenuTrigger, {
             className: 'side-version-trigger',
@@ -2091,7 +2034,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       }, workbenchNote) : null,
       e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, highlightPath: highlightPath ?? undefined, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
     ) : null,
-    sidebarVisible ? e(PanelResizer, {
+    sidebarInGrid ? e(PanelResizer, {
       side: 'left',
       value: sidebarWidth,
       minimum: SIDEBAR_MIN,
@@ -2144,7 +2087,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         setPinnedPath(null)
       },
     }) : null,
-    assistantVisible ? e(PanelResizer, {
+    assistantInGrid ? e(PanelResizer, {
       side: 'right',
       value: assistantWidth,
       minimum: ASSISTANT_MIN,
@@ -2152,6 +2095,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       defaultValue: ASSISTANT_DEFAULT,
       label: t('workspace.resizeAssistant'),
       onChange: setAssistantWidth,
+    }) : null,
+    assistantVisible && overlayAssistant ? e('button', {
+      type: 'button',
+      className: 'chat-overlay-dismiss',
+      'aria-label': t('workspace.hideAssistant'),
+      onClick: () => setAssistantOpen(false),
     }) : null,
     assistantEnabled && chatSession ? e(ShellErrorBoundary, { key: chatSession.sessionId }, e(Chat, {
       ctx,
@@ -2163,6 +2112,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       chatModel: writing.chatModel,
       onAcceptMemory,
       hidden: !assistantVisible,
+      overlay: assistantVisible && overlayAssistant,
       onConfigure: openSettings,
       onDraftDirtyChange: setAssistantDraftDirty,
       onWritten: refreshWrittenPath,
@@ -2193,7 +2143,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               'aria-label': t('workspace.openAssistant'),
               'aria-expanded': false,
               onClick: () => setAssistantOpen(true),
-            }, e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark)), e('strong', null, t('workspace.assistant')))
+            }, e('span', { 'aria-hidden': 'true' }, e(DeepSeekWhaleMark)))
             : null
     ) : null,
     e(ConfirmDialog, {
@@ -2312,19 +2262,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     }),
     renderCommandPalette(),
     renderImportDialog(),
-    e(TextPromptDialog, {
-      open: Boolean(importTitle),
-      id: 'import-title',
-      title: t('home.importAsNew'),
-      label: t('home.workName'),
-      initialValue: '',
-      confirmLabel: t('home.chooseSource'),
-      note: importTitle?.note,
-      busy: importTitle?.busy,
-      returnFocusRef: workspaceMenuTrigger,
-      onCancel: () => { if (!importTitle?.busy) setImportTitle(null) },
-      onConfirm: (title: string) => void submitImportTitle(title),
-    }),
     e(ExportPreviewDialog, {
       open: exportChapters !== null,
       chapters: exportChapters ?? [],

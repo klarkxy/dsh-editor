@@ -280,21 +280,17 @@ export function WritingSettings({ scope, migrate }: {
     }
   }
 
-  if (snapshot.status === 'loading') return e('section', { className: 'writing-settings', 'aria-labelledby': 'writing-settings-title' },
-    e('h2', { id: 'writing-settings-title' }, t('settings.writing')),
+  if (snapshot.status === 'loading') return e('section', { className: 'writing-settings', 'aria-label': t('settings.writing') },
     e('p', { role: 'status' }, t('writing.loading')),
   )
 
-  if (snapshot.status === 'unavailable') return e('section', { className: 'writing-settings', 'aria-labelledby': 'writing-settings-title' },
-    e('h2', { id: 'writing-settings-title' }, t('settings.writing')),
+  if (snapshot.status === 'unavailable') return e('section', { className: 'writing-settings', 'aria-label': t('settings.writing') },
     e('p', { role: 'alert' }, t('writing.unavailable')),
   )
 
-  return e('section', { className: 'writing-settings', 'aria-labelledby': 'writing-settings-title' },
-    e('h2', { id: 'writing-settings-title' }, t('settings.writing')),
+  return e('section', { className: 'writing-settings', 'aria-label': t('settings.writing') },
     e('fieldset', { className: 'settings-block', disabled: saving !== null },
       e('legend', { className: 'settings-block-title' }, t('writing.completion')),
-      e('p', { className: 'settings-block-help' }, t('writing.completionHint')),
       ([['manual', t('writing.manualOnly')], ['pause', t('writing.pauseHint')]] as const).map(([value, label]) => e('label', { key: value },
         e('input', {
           type: 'radio',
@@ -307,7 +303,6 @@ export function WritingSettings({ scope, migrate }: {
     ),
     e('fieldset', { className: 'paper-typography settings-block' },
       e('legend', { className: 'settings-block-title' }, t('writing.paper')),
-      e('p', { className: 'settings-block-help' }, t('writing.paperHint')),
       e('label', null,
         e('input', {
           type: 'checkbox',
@@ -390,7 +385,6 @@ export function WritingSettings({ scope, migrate }: {
     e('section', { className: 'settings-block' },
       e('header', { className: 'settings-block-head' },
         e('h3', { id: 'writing-author-pref', className: 'settings-block-title' }, t('writing.authorPref')),
-        e('p', { className: 'settings-block-help' }, t('writing.authorPlaceholder')),
       ),
       e('label', { className: 'author-preferences' },
         e('textarea', {
