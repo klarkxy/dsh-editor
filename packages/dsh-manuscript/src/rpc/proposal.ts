@@ -1,5 +1,5 @@
-import { createTextFile, FileOpError, readTextFile, type WorkspaceFileContext, writeTextFile } from './files.ts'
-import { normalizeWorkspaceRelative } from './paths.ts'
+import { createTextFile, FileOpError, listDirStrict, readTextFile, type WorkspaceFileContext, writeTextFile } from './files.ts'
+import { normalizeWorkspaceRelative, parentRelative } from './paths.ts'
 
 export class ProposalError extends Error {
   constructor(
@@ -67,6 +67,14 @@ export async function prepareProposal(context: WorkspaceFileContext, proposal: P
       return { ...proposal, applicable: true }
     } catch (error) {
       if (error instanceof FileOpError && error.code === 'NOT_FOUND') {
+        // This low-level channel never creates directories. Workbench owns that workflow.
+        try { await listDirStrict(context, parentRelative(proposal.path)) }
+        catch (parentError) {
+          if (parentError instanceof FileOpError && parentError.code === 'NOT_FOUND') {
+            throw new FileOpError('parent directory does not exist', 'PARENT_MISSING')
+          }
+          throw parentError
+        }
         return { ...proposal, applicable: true }
       }
       throw error

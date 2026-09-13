@@ -27,6 +27,7 @@ export const AUTHOR_MEMORY_MARKER = 'dsh-editor.memory'
 export const AUTHOR_OBSERVE_MAX_CHARS = 200
 
 export type ProposalRename = { from: string; to: string }
+export type ProposalChapterState = { now?: string; where?: string; knows?: string; ended?: string; open?: string }
 
 export type ProposalMarker = {
   marker: typeof PROPOSAL_MARKER
@@ -35,6 +36,8 @@ export type ProposalMarker = {
 } & (
   | { kind: 'edit'; path: string; oldText: string; newText: string }
   | { kind: 'create'; path: string; text: string }
+  | { kind: 'chapter_plan'; path: string; sourceVersion: string; beats: string[] }
+  | { kind: 'chapter_summary'; path: string; sourceVersion: string; state: ProposalChapterState }
   /** anchor 在原文件中唯一；anchor 起（含 anchor 本身）的内容进入 newPath。 */
   | { kind: 'split'; path: string; anchor: string; newPath: string }
   /** sourcePath 的内容追加到 path 末尾，随后 sourcePath 被归档（可从归档恢复）。 */
@@ -50,7 +53,7 @@ export type AuthorMemoryMarker = {
   reason: string
 }
 
-const PROPOSAL_KINDS = ['edit', 'create', 'split', 'merge', 'renames'] as const
+const PROPOSAL_KINDS = ['edit', 'create', 'chapter_plan', 'chapter_summary', 'split', 'merge', 'renames'] as const
 
 function cleanString(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -108,6 +111,34 @@ export function proposalMarker(args: Record<string, unknown>): ProposalMarker {
   }
   const path = cleanPath(args.path)
   if (!safeMarkdownPath(path)) throw new Error('path must be a project-relative Markdown file')
+  if (kind === 'chapter_plan' || kind === 'chapter_summary') {
+    if (!/^正文\/.+\.md$/i.test(path) || path.split('/').some((part) => !part || part.startsWith('.'))) {
+      throw new Error('chapter proposal must target an existing chapter under 正文/')
+    }
+    const sourceVersion = cleanString(args.sourceVersion).trim()
+    if (!sourceVersion || sourceVersion.length > 512) throw new Error('sourceVersion from the chapter read receipt is required')
+    if (kind === 'chapter_plan') {
+      if ('state' in args || !Array.isArray(args.beats) || args.beats.length > 12
+        || args.beats.some((beat) => typeof beat !== 'string' || !beat.trim() || beat.trim().length > 120 || /[\r\n\u0000]/.test(beat))) {
+        throw new Error('chapter_plan requires up to 12 non-empty beats of at most 120 characters, without state')
+      }
+      return { marker: PROPOSAL_MARKER, version: 1, kind, path, summary, sourceVersion, beats: args.beats.map((beat: string) => beat.trim()) }
+    }
+    if ('beats' in args || !args.state || typeof args.state !== 'object' || Array.isArray(args.state)) {
+      throw new Error('chapter_summary requires a state object, without beats')
+    }
+    const state: ProposalChapterState = {}
+    let total = 0
+    for (const [key, value] of Object.entries(args.state)) {
+      if (!['now', 'where', 'knows', 'ended', 'open'].includes(key) || typeof value !== 'string' || /[\r\n\u0000]/.test(value)) {
+        throw new Error('chapter_summary state only accepts now, where, knows, ended, open single-line text')
+      }
+      total += value.trim().length
+      state[key as keyof ProposalChapterState] = value.trim()
+    }
+    if (total > 300) throw new Error('chapter_summary state must be at most 300 characters')
+    return { marker: PROPOSAL_MARKER, version: 1, kind, path, summary, sourceVersion, state }
+  }
   if (kind === 'split') {
     const anchor = cleanString(args.anchor)
     const newPath = cleanPath(args.newPath)
@@ -137,6 +168,8 @@ export function proposalMarker(args: Record<string, unknown>): ProposalMarker {
 const ALLOWED_KEYS: Record<string, readonly string[]> = {
   edit: ['marker', 'version', 'kind', 'path', 'summary', 'oldText', 'newText'],
   create: ['marker', 'version', 'kind', 'path', 'summary', 'text'],
+  chapter_plan: ['marker', 'version', 'kind', 'path', 'summary', 'sourceVersion', 'beats'],
+  chapter_summary: ['marker', 'version', 'kind', 'path', 'summary', 'sourceVersion', 'state'],
   split: ['marker', 'version', 'kind', 'path', 'summary', 'anchor', 'newPath'],
   merge: ['marker', 'version', 'kind', 'path', 'summary', 'sourcePath'],
   renames: ['marker', 'version', 'kind', 'summary', 'renames'],

@@ -1,3 +1,4 @@
+import type { ChapterStateFields } from '../chapter-meta.ts'
 import type { MemoryChange, MemoryChangeSummary, MemoryUpdateReceipt } from './memory.ts'
 import type {
   ChapterStatus,
@@ -62,9 +63,15 @@ export type WorkbenchEndpoint =
 
 export type ProposalRename = { from: string; to: string }
 export type ProposalPayload =
+  | { marker: 'dsh-editor.proposal'; version: 1; kind: 'create'; summary: string; path: string; text: string }
+  | { marker: 'dsh-editor.proposal'; version: 1; kind: 'chapter_plan'; summary: string; path: string; sourceVersion: string; beats: string[] }
+  | { marker: 'dsh-editor.proposal'; version: 1; kind: 'chapter_summary'; summary: string; path: string; sourceVersion: string; state: ChapterStateFields }
   | { marker: 'dsh-editor.proposal'; version: 1; kind: 'split'; summary: string; path: string; anchor: string; newPath: string }
   | { marker: 'dsh-editor.proposal'; version: 1; kind: 'merge'; summary: string; path: string; sourcePath: string }
   | { marker: 'dsh-editor.proposal'; version: 1; kind: 'renames'; summary: string; renames: ProposalRename[] }
+export type ProposalCreatePlan = { kind: 'create'; applicable: true; version: string; missingDirectories: string[] }
+export type ProposalChapterMetaPlan = { kind: 'chapter_plan' | 'chapter_summary'; version: string; before: string; after: string }
+export type ProposalFileApplied = { path: string; version: string; operation: 'create' | 'edit' }
 export type ProposalSplitPlan = { kind: 'split'; version: string; before: string; after: string; headChars: number; tailChars: number }
 export type ProposalMergePlan = { kind: 'merge'; versions: { path: string; sourcePath: string }; pathChars: number; sourceChars: number }
 export type ProposalRenamesPlan = { kind: 'renames'; versions: Record<string, string>; entries: ProposalRename[] }
@@ -145,8 +152,8 @@ export type WorkbenchResponseMap = {
   'archive.list': ArchiveListResponse
   'archive.apply': ArchiveResponse
   'archive.restore': ArchiveResponse
-  'proposal.prepare': { split?: ProposalSplitPlan; merge?: ProposalMergePlan; renames?: ProposalRenamesPlan }
-  'proposal.apply': ProposalApplyResult
+  'proposal.prepare': { create?: ProposalCreatePlan; chapterMeta?: ProposalChapterMetaPlan; split?: ProposalSplitPlan; merge?: ProposalMergePlan; renames?: ProposalRenamesPlan }
+  'proposal.apply': ProposalApplyResult | ProposalFileApplied
   'entry.copy': { path: string }
   'entry.move': { path: string }
   'entry.delete': { path: string }
@@ -155,7 +162,7 @@ export type WorkbenchResponseMap = {
 }
 
 export type WorkbenchRpcIssue = { code: 'custom'; path: string[]; message: string }
-export type WorkbenchRpcError =
+export type WorkbenchRpcError = (
   | { code: 'bad-request'; message: string; details: { issues: WorkbenchRpcIssue[] } }
   | { code: 'cancelled'; message: string; details: Record<string, never> }
   | { code: 'session-not-found'; message: string; details: { sessionId: string } }
@@ -165,4 +172,5 @@ export type WorkbenchRpcError =
   | { code: 'directory-unreadable'; message: string; details: { path: string } }
   | { code: 'directory-exists'; message: string; details: { path: string } }
   | { code: 'internal'; message: string; details: Partial<OperationRecovery> }
+) & { details: { reason?: string } }
 export type WorkbenchRpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: WorkbenchRpcError }

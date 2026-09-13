@@ -75,3 +75,15 @@ describe('novel-kernel browser contracts', () => {
     expect(parseAuthorMemoryMarker('not json')).toBeUndefined()
   })
 })
+
+
+it('round-trips field-scoped chapter proposals with a required source version', () => {
+  const plan = proposalMarker({ kind: 'chapter_plan', path: '正文/001.md', summary: '安排本章', sourceVersion: 'v1', beats: ['出山', '吃面'] })
+  expect(parseProposalMarker(JSON.stringify(plan))).toEqual(plan)
+  const summary = proposalMarker({ kind: 'chapter_summary', path: '正文/001.md', summary: '记录结尾', sourceVersion: 'v2', state: { now: '面馆读信', open: '师叔下落' } })
+  expect(parseProposalMarker(JSON.stringify(summary))).toEqual(summary)
+  expect(() => proposalMarker({ ...plan, sourceVersion: '' })).toThrow('sourceVersion')
+  expect(parseProposalMarker(JSON.stringify({ ...plan, state: {} }))).toBeUndefined()
+  expect(() => proposalMarker({ ...summary, state: { custom: 'unknown' } })).toThrow()
+  expect(() => proposalMarker({ ...plan, path: '大纲/001.md' })).toThrow()
+})

@@ -294,7 +294,7 @@ describe('proposal dispatch endpoints', () => {
     }
   })
 
-  it('rejects proposal.prepare with edit / create kinds as bad-request (manuscript channel owns them)', async () => {
+  it('rejects misplaced edit and malformed create proposals as bad-request', async () => {
     const { host } = fixture()
     const handler = rpcHandler(host)
     const edit = await handler('proposal.prepare', {
@@ -309,6 +309,33 @@ describe('proposal dispatch endpoints', () => {
     }, new AbortController().signal)
     expect(create.ok).toBe(false)
     expect(create.error?.code).toBe('bad-request')
+  })
+
+  it('creates first-use directories and applies versioned chapter fields through the workbench RPC', async () => {
+    const root = await projectRoot()
+    try {
+      const { host } = fixture()
+      host.workspaceRegistry.resolveByPath = vi.fn(async () => ({ path: root, sessionIds: ['session-1'] }))
+      host.fs = new NodeFileSystem(root) as unknown as FileSystemLike
+      const handler = rpcHandler(host)
+      const signal = new AbortController().signal
+      const create = { marker: 'dsh-editor.proposal', version: 1, kind: 'create', summary: '大纲', path: '大纲/第一卷/卷纲.md', text: '# 卷纲\n出山' }
+      const preview = await handler('proposal.prepare', { sessionId: 'session-1', proposal: create }, signal)
+      expect(preview).toMatchObject({ ok: true, value: { create: { version: '', missingDirectories: ['大纲', '大纲/第一卷'] } } })
+      expect(await handler('proposal.apply', { sessionId: 'session-1', proposal: create, expectedVersions: { [create.path]: '' } }, signal)).toMatchObject({ ok: true, value: { path: create.path, operation: 'create' } })
+      const chapterPath = '正文/001.md'
+      await fs.writeFile(path.join(root, chapterPath), '# 第一章\n正文', 'utf8')
+      const target = await host.fs.resolve(chapterPath, { cwd: root })
+      const version = String((await host.fs.stat(target))!.version)
+      const plan = { marker: 'dsh-editor.proposal', version: 1, kind: 'chapter_plan', summary: '章纲', path: chapterPath, sourceVersion: version, beats: ['出山'] }
+      expect(await handler('proposal.prepare', { sessionId: 'session-1', proposal: plan }, signal)).toMatchObject({ ok: true, value: { chapterMeta: { kind: 'chapter_plan', version, after: '1. 出山' } } })
+      expect(await handler('proposal.apply', { sessionId: 'session-1', proposal: plan, expectedVersions: { [chapterPath]: version } }, signal)).toMatchObject({ ok: true, value: { path: chapterPath, operation: 'edit' } })
+      expect(await fs.readFile(path.join(root, chapterPath), 'utf8')).toContain('beats:')
+      const stale = await handler('proposal.prepare', { sessionId: 'session-1', proposal: plan }, signal)
+      expect(stale).toMatchObject({ ok: false, error: { details: { reason: 'STALE' } } })
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
   })
 
   it('rejects proposal.apply with a stale version as bad-request', async () => {

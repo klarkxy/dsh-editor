@@ -67,7 +67,18 @@ function makeScratchStore(fs: HostContext['fs'], sandboxPolicy: HostContext['san
 export function apply(ctx: Context): void {
   const host = ctx as HostContext
   host.tools.register(createNovelKnowledgeTool())
-  host.tools.register(createProposalTool())
+  host.tools.register(createProposalTool({
+    async readVersion(path, actor) {
+      const exec = actor as { agent?: { session?: { header?: { cwd?: string } } }; signal?: AbortSignal }
+      const cwd = exec.agent?.session?.header?.cwd
+      if (!cwd) throw new Error('章纲或小结提案需要当前作品会话')
+      const target = await host.fs.resolve(path, { cwd, signal: exec.signal })
+      const observations = ctx as unknown as { waterfall(event: string, target: unknown, actor: unknown, next: () => undefined): Promise<{ version?: unknown } | undefined> }
+      const intent = await observations.waterfall('fs/edit-intent', target, actor, () => undefined)
+      if (!intent || typeof intent.version !== 'string' || !intent.version) throw new Error('请先读取目标章节，再提出章纲或章末小结')
+      return intent.version
+    },
+  }))
   host.tools.register(createAuthorObserveTool())
   host.tools.register(createIndexWriteTool({ writer: makeIndexWriter(host.fs, host.sandboxPolicy) }))
   const scratch = makeScratchStore(host.fs, host.sandboxPolicy)

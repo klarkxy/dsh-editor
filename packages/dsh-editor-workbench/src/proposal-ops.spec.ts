@@ -1,3 +1,5 @@
+import { applyChapterProposal, applyCreate, parsePlanningProposal, prepareChapterMeta, prepareCreate } from './planning-proposals.ts'
+import { parseChapterMeta, stripChapterFrontmatter } from './chapter-meta.ts'
 /**
  * 新提案 kind（split / merge / renames）的 prepare / apply 单元测试。
  * 走真实 fs（mkdtemp），不依赖 cordis host——只测 proposal-ops 自身的语义。
@@ -506,4 +508,137 @@ it('reports the committed target when source archiving fails during merge', asyn
   await expect(applyMerge(access,proposal,prepared.versions)).rejects.toMatchObject({recovery:{partial:true,appliedPaths:[proposal.path]}})
   expect(await readRelative(proposal.path)).toBe('target\n\nsource\n')
   expect(await readRelative(proposal.sourcePath)).toBe('source')
+})
+
+
+describe('author planning proposals', () => {
+  const create = (pathValue: string, text = '# 内容\n') => ({ marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, summary: '创建资料', path: pathValue, text })
+
+  it('previews missing ancestors without writing, then creates a nested file in one apply', async () => {
+    const files = filesContext()
+    const proposal = create('人物卡/主角/沈砚.md')
+    expect(await prepareCreate(files, proposal)).toEqual({ kind: 'create', applicable: true, version: '', missingDirectories: ['人物卡', '人物卡/主角'] })
+    await expect(fs.stat(path.join(base, '人物卡'))).rejects.toMatchObject({ code: 'ENOENT' })
+    const receipt = await applyCreate(files, proposal, '')
+    expect(receipt).toMatchObject({ path: proposal.path, operation: 'create' })
+    expect(await readRelative(proposal.path)).toBe(proposal.text)
+    await expect(applyCreate(files, proposal, '')).rejects.toMatchObject({ code: 'EXISTS' })
+  })
+
+  it('refuses a blocked parent and permits retry of the same proposal after the parent is repaired', async () => {
+    const files = filesContext()
+    const proposal = create('世界书/城市.md')
+    await fs.writeFile(path.join(base, '世界书'), 'blocking file')
+    await expect(prepareCreate(files, proposal)).rejects.toMatchObject({ code: 'NOT_DIRECTORY' })
+    await fs.unlink(path.join(base, '世界书'))
+    await applyCreate(files, proposal, (await prepareCreate(files, proposal)).version)
+    expect(await readRelative(proposal.path)).toBe(proposal.text)
+  })
+
+  it('pins empty-file versions and refuses files created or edited after preview', async () => {
+    const files = filesContext()
+    const proposal = create('正文/占位.md')
+    const absent = await prepareCreate(files, proposal)
+    await writeText(proposal.path, ' ')
+    await expect(applyCreate(files, proposal, absent.version)).rejects.toMatchObject({ code: 'STALE' })
+    const blank = await prepareCreate(files, proposal)
+    await writeText(proposal.path, '作者刚写的正文')
+    await expect(applyCreate(files, proposal, blank.version)).rejects.toMatchObject({ code: 'EXISTS' })
+    expect(await readRelative(proposal.path)).toBe('作者刚写的正文')
+  })
+
+  it('does not create directories in read-only workspaces or follow a replaced symlink parent', async () => {
+    const files = filesContext()
+    const proposal = create('人物卡/沈砚.md')
+    await expect(applyCreate({ ...files, policy: { ...files.policy, mode: 'read-only' } }, proposal, '')).rejects.toMatchObject({ code: 'DENIED' })
+    await expect(fs.stat(path.join(base, '人物卡'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await prepareCreate(files, proposal)
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-proposal-outside-'))
+    try {
+      await fs.symlink(outside, path.join(base, '人物卡'), process.platform === 'win32' ? 'junction' : 'dir')
+      await expect(applyCreate(files, proposal, '')).rejects.toMatchObject({ code: 'SYMLINK' })
+      await expect(fs.stat(path.join(outside, '沈砚.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await fs.unlink(path.join(base, '人物卡'))
+      await fs.rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('applies plan and summary independently while preserving body and unrelated frontmatter', async () => {
+    const files = filesContext()
+    const target = '正文/001.md'
+    const body = '# 第一章\n\n作者正文：铜钱。\n'
+    await writeText(target, '---\ncustom: keep-me\nstate:\n  now: 旧状态\n---\n' + body)
+    const source = await readTextFile(files, target)
+    const proposal = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'chapter_plan' as const, summary: '采用章纲', path: target, sourceVersion: source.version, beats: ['下山', '吃面'] }
+    const preview = await prepareChapterMeta(files, proposal)
+    expect(preview).toMatchObject({ before: '', after: '1. 下山\n2. 吃面' })
+    expect(await readRelative(target)).toBe(source.text)
+    await applyChapterProposal(files, proposal, preview.version)
+    const planned = await readTextFile(files, target)
+    expect(parseChapterMeta(planned.text)).toMatchObject({ beats: ['下山', '吃面'], state: { now: '旧状态' } })
+    expect(stripChapterFrontmatter(planned.text)).toBe(body)
+    expect(planned.text).toContain('custom: keep-me')
+    const summary = { marker: proposal.marker, version: proposal.version, kind: 'chapter_summary' as const, summary: '记录实际结尾', path: target, sourceVersion: planned.version, state: { now: '读信', open: '师叔下落' } }
+    const prepared = await prepareChapterMeta(files, summary)
+    expect(prepared.after).toContain('未了结：师叔下落')
+    await applyChapterProposal(files, summary, prepared.version)
+    const final = await readRelative(target)
+    expect(parseChapterMeta(final)).toEqual({ beats: ['下山', '吃面'], state: summary.state })
+    expect(final).toContain('custom: keep-me')
+    expect(stripChapterFrontmatter(final)).toBe(body)
+  })
+
+  it('rejects a summary generated from old text before preview and after preview', async () => {
+    const files = filesContext()
+    const target = '正文/001.md'
+    await writeText(target, '# 第一章\n旧正文')
+    const source = await readTextFile(files, target)
+    const proposal = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'chapter_summary' as const, summary: '小结', path: target, sourceVersion: source.version, state: { now: '旧结尾' } }
+    const prepared = await prepareChapterMeta(files, proposal)
+    const updated = '# 第一章\n作者已改变本章结局，不能采用旧总结。'
+    await writeText(target, updated)
+    await expect(prepareChapterMeta(files, proposal)).rejects.toMatchObject({ code: 'STALE' })
+    await expect(applyChapterProposal(files, proposal, prepared.version)).rejects.toMatchObject({ code: 'STALE' })
+    expect(await readRelative(target)).toBe(updated)
+  })
+
+  it('validates chapter target, source version, field boundaries and limits before IO', () => {
+    const baseProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'chapter_plan', path: '正文/001.md', summary: '章纲', sourceVersion: 'v1', beats: ['出山'] }
+    expect(parsePlanningProposal(baseProposal)).toMatchObject({ kind: 'chapter_plan', beats: ['出山'] })
+    for (const patch of [{ path: '../正文/001.md' }, { path: '大纲/001.md' }, { sourceVersion: '' }, { beats: ['x'.repeat(121)] }, { state: {} }]) {
+      expect(() => parsePlanningProposal({ ...baseProposal, ...patch })).toThrow()
+    }
+    expect(() => parsePlanningProposal({ ...create('.dsh-editor/secret.md') })).toThrow()
+    expect(() => parsePlanningProposal({ marker: 'dsh-editor.proposal', version: 1, kind: 'chapter_summary', path: '正文/001.md', summary: '小结', sourceVersion: 'v1', state: { extra: '不能改任意字段' } })).toThrow()
+  })
+})
+
+
+it('recovers the same create proposal after directory creation but before a failed file write', async () => {
+  const files = filesContext()
+  const proposal = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, path: '资料/第一卷/大纲.md', text: '# 大纲', summary: '创建大纲' }
+  const write = files.fs.writeText.bind(files.fs)
+  files.fs.writeText = async () => { throw Object.assign(new Error('injected failure'), { code: 'FS_PERMISSION_DENIED' }) }
+  await expect(applyCreate(files, proposal, '')).rejects.toMatchObject({ code: 'DENIED', message: expect.stringContaining('部分目录可能已建立') })
+  expect((await fs.stat(path.join(base, '资料/第一卷'))).isDirectory()).toBe(true)
+  await expect(fs.stat(path.join(base, proposal.path))).rejects.toMatchObject({ code: 'ENOENT' })
+  files.fs.writeText = write
+  const retried = await prepareCreate(files, proposal)
+  expect(retried.missingDirectories).toEqual([])
+  await applyCreate(files, proposal, retried.version)
+  expect(await readRelative(proposal.path)).toBe(proposal.text)
+})
+
+it('does not replay a create after a reply is lost following the actual file write', async () => {
+  const files = filesContext()
+  const proposal = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, path: '世界书/城市.md', text: '# 城市', summary: '创建城市设定' }
+  const write = files.fs.writeText.bind(files.fs)
+  let writes = 0
+  files.fs.writeText = async (...args) => { writes++; await write(...args); throw new Error('reply lost') }
+  await expect(applyCreate(files, proposal, '')).rejects.toMatchObject({ code: 'IO' })
+  await expect(prepareCreate(files, proposal)).rejects.toMatchObject({ code: 'EXISTS' })
+  await expect(applyCreate(files, proposal, '')).rejects.toMatchObject({ code: 'EXISTS' })
+  expect(writes).toBe(1)
+  expect(await readRelative(proposal.path)).toBe(proposal.text)
 })

@@ -1,3 +1,4 @@
+import { applyChapterProposal, applyCreate, isPlanningKind, parsePlanningProposal, prepareChapterMeta, prepareCreate } from '../planning-proposals.ts'
 import {
   applyMerge,
   applyRenames,
@@ -10,16 +11,30 @@ import {
 import type { WorkbenchHandlers, WorkbenchRequestContext } from './types.ts'
 
 /**
- * 新提案 kind（split / merge / renames）的 prepare / apply。
- * edit / create 仍走 manuscript 通道；parseProposal 直接抛 INVALID。
+ * 作者提案的 prepare / apply，包括目录创建与章纲、小结字段更新。
+ * 普通 edit 继续由 manuscript 通道处理。
  */
 async function runProposalDispatch(
   endpoint: 'proposal.prepare' | 'proposal.apply',
   request: WorkbenchRequestContext,
 ): Promise<unknown> {
-  const { host, access, op, body } = request
+  const { files, op, body } = request
+  const input = body.proposal
+  if (input && typeof input === 'object' && isPlanningKind((input as Record<string, unknown>).kind)) {
+    const proposal = parsePlanningProposal(input)
+    if (endpoint === 'proposal.prepare') {
+      return proposal.kind === 'create'
+        ? { create: await prepareCreate(files, proposal) }
+        : { chapterMeta: await prepareChapterMeta(files, proposal) }
+    }
+    const versions = body.expectedVersions
+    const expected = versions && typeof versions === 'object' && !Array.isArray(versions)
+      ? (versions as Record<string, string>)[proposal.path] : undefined
+    return proposal.kind === 'create'
+      ? await applyCreate(files, proposal, expected)
+      : await applyChapterProposal(files, proposal, expected)
+  }
   const proposal = parseProposal(body.proposal)
-  const files = { fs: host.fs, cwd: access.workspace.path, root: access.root, policy: access.policy }
   if (endpoint === 'proposal.prepare') {
     if (proposal.kind === 'split') return { split: await prepareSplit(files, proposal) }
     if (proposal.kind === 'merge') return { merge: await prepareMerge(files, proposal) }

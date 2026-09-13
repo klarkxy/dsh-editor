@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { withWorkspaceWrite, asHost, badRequest, mapHostError, registerHostRpc, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
+import { withWorkspaceWrite, FileOpError, asHost, badRequest, mapHostError, registerHostRpc, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
 import { BinaryError } from './binary.ts'
 import { ImportError } from './import.ts'
@@ -20,7 +20,7 @@ export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'san
 
 type Payload = Record<string, unknown>
 
-export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
+function mapEditorFilesErrorBase(error: unknown): WorkbenchRpcResult {
   if (error instanceof ProjectInitError) {
     if (error.code === 'CANCELLED') return { ok: false, error: { code: 'cancelled', message: error.message, details: {} } }
     if (error.code === 'IO') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
@@ -74,6 +74,15 @@ export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
     return badRequest(error.message)
   }
   return mapHostError(error) ?? { ok: false, error: { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} } }
+}
+
+/** Preserve the actionable cause while keeping the established RPC error codes. */
+export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
+  const result = mapEditorFilesErrorBase(error)
+  if (!result.ok && (error instanceof ProposalOpsError || error instanceof FileOpError)) {
+    result.error.details.reason = error.code
+  }
+  return result
 }
 
 export async function dispatchEditorFiles(ctx: Context, endpoint: string, payload: unknown, signal: AbortSignal): Promise<unknown> {

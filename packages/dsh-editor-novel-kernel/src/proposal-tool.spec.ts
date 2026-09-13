@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EDITOR_PROMPT, editorToolGuard, proposalMarker } from './proposal-tool.ts'
+import { createProposalTool, EDITOR_PROMPT, editorToolGuard, proposalMarker } from './proposal-tool.ts'
 
 describe('editor proposal boundary', () => {
   it('creates a versioned, non-writing proposal marker', () => {
@@ -191,4 +191,29 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).toContain('单次要求直接执行不记录')
     expect(EDITOR_PROMPT).toContain('作品级事实进大纲/世界书')
   })
+})
+
+
+it('allows Markdown/TXT globs and gives a recoverable example for unrestricted searches', () => {
+  for (const pattern of ['**/*.md', '**/*.txt', '**/*.{md,txt}', '世界书/*.{txt,md}']) {
+    expect(editorToolGuard({ name: 'glob', arguments: { pattern } })).toBeUndefined()
+  }
+  for (const pattern of ['**/*', '../**/*.md', '**/*.json', 'C:/secret/*.md']) {
+    expect(editorToolGuard({ name: 'glob', arguments: { pattern } })).toContain('Use pattern **/*.{md,txt}')
+  }
+  expect(editorToolGuard({ name: 'glob', arguments: { pattern: '**/*.md', path: '../outside' } })).toBeDefined()
+})
+
+
+it('binds chapter proposals to the host-observed version, never a model-supplied version', async () => {
+  const actor = { agent: { session: { header: { cwd: '/project' } } }, signal: new AbortController().signal }
+  const seen: unknown[] = []
+  const tool = createProposalTool({ readVersion: async (path, exec) => { seen.push([path, exec]); return 'observed-v1' } })
+  const execute = tool.execute as unknown as (args: unknown, exec: unknown) => Promise<unknown>
+  const input = { kind: 'chapter_plan', path: '正文/001.md', summary: '章纲', beats: ['下山'], sourceVersion: 'forged' }
+  expect(editorToolGuard({ name: 'novel_propose', arguments: { ...input, sourceVersion: undefined } })).toBeUndefined()
+  expect(await execute(input, actor)).toMatchObject({ kind: 'chapter_plan', sourceVersion: 'observed-v1', beats: ['下山'] })
+  expect(seen).toEqual([['正文/001.md', actor]])
+  const noRead = createProposalTool({ readVersion: async () => { throw new Error('read first') } }).execute as unknown as typeof execute
+  await expect(noRead(input, actor)).rejects.toThrow('read first')
 })

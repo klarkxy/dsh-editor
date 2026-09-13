@@ -81,3 +81,11 @@ it('writes replacement metacharacters literally', async () => {
   await applyProposal(context, proposal, String(prepared.version))
   expect((await readTextFile(context,'a.md')).text).toBe('before ' + newText + ' after')
 })
+
+
+it('does not advertise nested creation as applicable when the low-level parent is missing', async () => {
+  const context = createMemoryContext({ '正文/001.md': '正文' })
+  const proposal = parseProposal({ kind: 'create', path: '人物卡/主角.md', text: '# 主角', summary: '创建人物卡' })
+  await expect(prepareProposal(context, proposal)).rejects.toMatchObject({ code: 'PARENT_MISSING' })
+  await expect(applyProposal(context, proposal, '')).rejects.toMatchObject({ code: 'PARENT_MISSING' })
+})

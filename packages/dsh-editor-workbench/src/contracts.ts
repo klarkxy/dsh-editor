@@ -32,6 +32,9 @@ export { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorM
 export {
   WORKBENCH_RPC_CHANNEL,
   type ProposalApplyResult,
+  type ProposalCreatePlan,
+  type ProposalChapterMetaPlan,
+  type ProposalFileApplied,
   type ProposalMergePlan,
   type ProposalPayload,
   type ProposalRename,
