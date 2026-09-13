@@ -40,6 +40,7 @@ import {
   isSelectionCurrent,
   saveState,
   selectionTicket,
+  projectedPaperUnchanged,
   shouldRetainDraftAfterSave,
   type EditorDocument,
   type SaveState,
@@ -64,6 +65,7 @@ export {
   selectionTicket,
   shouldApplyRead,
   shouldRetainDraftAfterSave,
+  projectedPaperUnchanged,
   draftStorageKey,
   type DocumentTarget,
   type EditorDocument,
@@ -82,6 +84,16 @@ export {
 
 export type EditorCoreHandle = {
   save(): Promise<boolean>
+  /**
+   * Writes a new full document text that must differ only in the hidden header
+   * (e.g. chapter beats / chapter-end state). Rechecks the caller's target
+   * snapshot (session/path/generation/revision), applies the text via the
+   * existing setText path, and persists through the same save mechanism as
+   * the body — awaiting the real file.write acknowledgement. Returns false
+   * (without writing) when a save is already in flight, the buffer conflicts,
+   * the target is stale, or the visible paper text would change.
+   */
+  saveMetadataText(next: string, target: EditorTargetSnapshot): Promise<boolean>
   discard(): void
   isDirty(): boolean
   getText(): string
@@ -636,21 +648,28 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
 
   const save = useCallback(async (): Promise<boolean> => {
     /* conflict 必须先经 放弃/重新载入/另存副本 解决，Ctrl+S 不得绕过。 */
-    if (!doc || !isDocumentReady() || docRef.current !== doc || saving.current) return false
-    if (conflict) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
-    const savingDoc = doc
-    const savingText = text
-    const savingRevision = revisionRef.current
+    const savingDoc = docRef.current
+    if (!savingDoc || !isDocumentReady() || saving.current) return false
+    if (conflictRef.current) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
+    const startGeneration = documentGenerationRef.current
     saving.current = true
     report('正在保存…')
-    /* finally 恢复 saving.current：运输层抛错不得让编辑器永远无法再保存。 */
+    /* 统一的目标守卫：捕获的 generation/session/path 任一变化都视为已切换。
+       每个 await 之后、任何状态/提示/回调之前先过它，迟到回执对新文档零 UI 影响。 */
+    const stillSavingTarget = () => documentGenerationRef.current === startGeneration
+      && docRef.current?.sessionId === savingDoc.sessionId
+      && docRef.current?.path === savingDoc.path
     try {
+      /* 以调用瞬间的最新缓冲区为准：保存前同步 setText（章纲/章末小结写入）不得被旧渲染快照覆盖。 */
+      const savingText = textRef.current
+      const savingRevision = revisionRef.current
       const result = await rpc.call('/manuscript', 'file.write', {
         sessionId: savingDoc.sessionId,
         path: savingDoc.path,
         text: savingText,
         version: savingDoc.version,
       }) as RpcResult<{ version?: string }>
+      if (!stillSavingTarget()) return false
       if (!result.ok) {
         const stale = isStaleMessage(result.error.message)
         setConflict(stale)
@@ -666,6 +685,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       if (!retainDraft) {
         if (draft.kind === 'host') {
           const deleted = await draft.call('draft.delete', { sessionId: savingDoc.sessionId, path: savingDoc.path }) as RpcResult
+          if (!stillSavingTarget()) return false
           if (!deleted.ok) {
             report(`文件已保存，但草稿清理失败：${deleted.error.message}`)
             return false
@@ -681,12 +701,13 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       onSaved?.()
       return true
     } catch (cause) {
+      if (!stillSavingTarget()) return false
       reportError(cause instanceof Error ? `保存未能完成：${cause.message}` : '保存未能完成，请重试。')
       return false
     } finally {
       saving.current = false
     }
-  }, [doc, text, conflict, rpc, draft, cwd, report, reportError, onSaved])
+  }, [rpc, draft, cwd, report, reportError, onSaved])
 
   useEffect(() => {
     if (!doc || !isDocumentReady() || text === doc.text || conflict) return
@@ -849,6 +870,27 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     return captureEditorTarget({ ...live, start, end })
   }, [liveTarget, selection.start, selection.end])
 
+  /* 章纲/章末小结等隐藏文件头的统一写入通道：只许改稿纸之外的内容，复用与正文完全相同的
+   * 保存机制（setText → 最新缓冲区 → file.write 回执）。目标快照复用既有 captureTarget /
+   * isTargetCurrent（会话/路径/代次/修订）；飞行中的保存与冲突态一律安全拒绝，绝不覆盖更新的文本。 */
+  const saveMetadataText = useCallback(async (next: string, target: EditorTargetSnapshot): Promise<boolean> => {
+    const current = docRef.current
+    if (!current || !isDocumentReady() || saving.current) return false
+    if (conflictRef.current) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
+    const live = liveTarget()
+    if (!live || !isEditorTargetCurrent(target, live)) {
+      report('章节内容已变化，请关闭本窗口后重新打开再写入。')
+      return false
+    }
+    /* 只允许改动隐藏的文件头：可见稿纸文本必须逐字不变，否则说明调用方改到了正文，拒绝。 */
+    if (!projectedPaperUnchanged(paperProjection, current.path, next, textRef.current)) {
+      report('只能写入章节文件头，正文改动请直接在稿纸上进行。')
+      return false
+    }
+    setText(next)
+    return save()
+  }, [liveTarget, paperProjection, setText, save, report])
+
   const requestPatch = useCallback(async (instruction?: string, target?: EditorTargetSnapshot) => {
     if (!doc || !isDocumentReady() || docRef.current !== doc || isGenerating() || viewRef.current?.composing) return
     if (!completionEnabled) { report('写作补全未启用。'); return }
@@ -969,6 +1011,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     if (!onHandle) return
     const handle: EditorCoreHandle = {
       save,
+      saveMetadataText,
       discard,
       isDirty: () => isDirty(docRef.current, textRef.current),
       getText: () => textRef.current,
@@ -1052,7 +1095,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     }
     onHandle(handle)
     return () => onHandle(null)
-  }, [onHandle, save, discard, clearGhost, requestPatch, captureTarget, liveTarget, restoreTarget, replaceSelection, readCommandState, complete])
+  }, [onHandle, save, saveMetadataText, discard, clearGhost, requestPatch, captureTarget, liveTarget, restoreTarget, replaceSelection, readCommandState, complete])
 
   const acceptGhost = useCallback(() => {
     const source = ghostSourceRef.current

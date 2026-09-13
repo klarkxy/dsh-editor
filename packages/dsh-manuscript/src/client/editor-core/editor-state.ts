@@ -138,6 +138,19 @@ export function shouldRetainDraftAfterSave(
   return submittedGeneration !== currentGeneration && hasUnsavedChanges(currentText, submittedText)
 }
 
+/**
+ * 隐藏文件头写入的可见稿纸守卫：next 相对 current 只能改投影之外的部分
+ * （章纲/章末小结 frontmatter），可见稿纸文本必须逐字一致。
+ */
+export function projectedPaperUnchanged(
+  projection: { project(path: string, text: string): { text: string; offset: number } },
+  path: string,
+  next: string,
+  current: string,
+): boolean {
+  return projection.project(path, next).text === projection.project(path, current).text
+}
+
 // Session IDs can change when DSH reloads; a draft belongs to the workspace
 // document, while RPC authority always comes from the live session ID.
 export function draftStorageKey(target: DocumentTarget): string {
