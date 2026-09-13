@@ -151,6 +151,10 @@ function proposalDetailText(proposal: ProposalMarker): string {
     case 'edit':
     case 'create':
       return t('adapter.editProposal')
+    case 'chapter_plan':
+      return t('adapter.chapterPlanProposal')
+    case 'chapter_summary':
+      return t('adapter.chapterSummaryProposal')
   }
 }
 

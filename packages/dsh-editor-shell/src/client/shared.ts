@@ -145,6 +145,27 @@ function rpcFailureText(result: RpcResult): string {
   return `${result.error.code ?? ''} ${result.error.message ?? ''}`
 }
 
+/** Host/工作台在 details.reason 上给出的可操作原因码（如 STALE、PARENT_MISSING、DENIED）。 */
+export function errorReason(result: RpcResult): string {
+  if (result.ok) return ''
+  const details = result.error.details
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return ''
+  const reason = (details as Record<string, unknown>).reason
+  return typeof reason === 'string' ? reason : ''
+}
+
+/** details.reason 的本地化可操作说明；无法识别时返回 '' 交给通用消息。 */
+function reasonMessage(reason: string): string {
+  switch (reason) {
+    case 'STALE': return t('error.diskChanged')
+    case 'PARENT_MISSING': return t('error.reasonParentMissing')
+    case 'NOT_DIRECTORY': return t('error.reasonNotDirectory')
+    case 'DENIED': return t('error.readOnly')
+    case 'EXISTS': return t('error.alreadyExists')
+    default: return ''
+  }
+}
+
 export function errorMessage(result: RpcResult): string {
   if (result.ok) return ''
   /* 部分写入优先：普通重命名/移动也可能触及多个路径，必须让用户看到恢复位置。 */
@@ -155,6 +176,9 @@ export function errorMessage(result: RpcResult): string {
     const snapshot = partial.safetySnapshotId ? t('error.partialSnapshot', { id: partial.safetySnapshotId }) : ''
     return `${t('error.partialPrefix')}${paths}${recovery}${snapshot}${t('error.partialSuffix')}`
   }
+  /* 明确的 reason 码优先于对 code/message 的猜测。 */
+  const reasonText = reasonMessage(errorReason(result))
+  if (reasonText) return reasonText
   const blob = rpcFailureText(result)
   if (/stale|changed|version|版本/i.test(blob)) return t('error.diskChanged')
   if (/directory-exists|already exists/i.test(blob)) return t('error.alreadyExists')
@@ -179,7 +203,10 @@ export function workspaceOpenFailureMessage(error: unknown): string {
 }
 
 export function isStaleFailure(result: RpcResult): boolean {
-  return !result.ok && /stale|changed|version|版本/i.test(`${rpcFailureText(result)} ${errorMessage(result)}`)
+  if (result.ok) return false
+  /* 新一代错误带 details.reason；旧的靠 code/message 兜底。 */
+  if (errorReason(result) === 'STALE') return true
+  return /stale|changed|version|版本/i.test(`${rpcFailureText(result)} ${errorMessage(result)}`)
 }
 
 /** Host 在多文件写入中途中断时返回的错误 details（code:'internal'）。 */

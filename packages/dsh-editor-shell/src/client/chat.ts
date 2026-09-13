@@ -50,19 +50,21 @@ import {
   visibleRunningCalls,
   type QuestionAnswerItem,
 } from '../adapter.ts'
-import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from '../conversation-lifecycle.ts'
+import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
 import { isObservableSource, useObservable } from './components.ts'
 import { Markdown } from './markdown.tsx'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
 import { Select } from './select.tsx'
-import { Button, Dialog, Menu, MenuContent, MenuItem, MenuTrigger, m, useChromeMotion } from './ui/index.ts'
+import { Menu, MenuContent, MenuItem, MenuTrigger, m, useChromeMotion } from './ui/index.ts'
 import type { WritingModelRoute } from '../writing-settings.ts'
-import { discardCreatedChatModelError, takeCreatedChatModelError } from './ui-workspace.ts'
-import { t, useLocale } from '../i18n/index.ts'
+import { discardCreatedChatModelError, rememberCreatedChatModelError, takeCreatedChatModelError } from './ui-workspace.ts'
+import { t, useLocale, type MessageKey } from '../i18n/index.ts'
 import {
   canSubmitComposer,
+  errorMessage,
+  isStaleFailure,
   partialApplyDetails,
   safeRpcCall,
   shouldSubmitComposer,
@@ -403,118 +405,6 @@ function ChatEntry(props: {
   }, props.children)
 }
 
-export function NewConversationPicker(props: {
-  open?: boolean
-  ctx: ShellContext
-  session: SessionFace
-  workspaceId?: WorkspaceId
-  chatModel?: WritingModelRoute
-  canStart(): Promise<boolean>
-  onOpen(sessionId: SessionId): void
-  onClose(): void
-  onConfigure(): void
-  returnFocusRef?: { current: HTMLElement | null }
-}) {
-  const { ctx, session, workspaceId, canStart, onOpen, onClose, onConfigure, chatModel } = props
-  const open = props.open ?? true
-  const [models, setModels] = useState<SessionModels | null>(null)
-  const [value, setValue] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState('')
-  const cancel = useRef<HTMLButtonElement | null>(null)
-  const primed = useRef(false)
-
-  useEffect(() => {
-    if (!open) {
-      primed.current = false
-      setModels(null)
-      setValue('')
-      setNote('')
-      return
-    }
-    let live = true
-    void readModels(ctx.remote.session, session).then((result) => {
-      if (!live) return
-      if (!result.ok) { setNote(t('chat.modelUnavailable')); return }
-      const options = result.value.groups.flatMap((group) => group.models.map((model) => `${group.id} ${model.id}`))
-      const currentValue = `${result.value.current.provider} ${result.value.current.model}`
-      const preferred = chatModel && (chatModel.provider || chatModel.model)
-        ? `${chatModel.provider} ${chatModel.model}`
-        : ''
-      setModels(result.value)
-      if (!primed.current) {
-        setValue(preferred || (options.includes(currentValue) ? currentValue : (options[0] ?? '')))
-        primed.current = true
-      }
-      setNote('')
-    }).catch(() => { if (live) setNote(t('chat.modelUnavailable')) })
-    return () => { live = false }
-  }, [open, session.sessionId, chatModel?.provider, chatModel?.model])
-
-  const start = async (event: FormEvent) => {
-    event.preventDefault()
-    const [provider, model] = value.split(/ (.+)/)
-    if (!workspaceId || !provider || !model) return
-    setBusy(true); setNote('')
-    if (!(await canStart())) { setBusy(false); return }
-    try {
-      const sessionId = await ctx.uiWorkspace.connectWorkspace(workspaceId)
-      const selected = await selectModel(ctx.remote.session, sessionId, provider, model)
-      if (!selected.ok) throw new Error(selected.error.message)
-      discardCreatedChatModelError(sessionId)
-      onOpen(sessionId)
-      onClose()
-    } catch {
-      setNote(t('chat.newFailed'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const options = models?.groups.flatMap((group) => group.models.map((model) => ({
-    value: `${group.id} ${model.id}`,
-    label: `${group.name} · ${model.name}`,
-  }))) ?? []
-  if (value && !options.some((option) => option.value === value)) {
-    const [provider, model] = value.split(/ (.+)/)
-    const label = provider && model ? `${provider} · ${model}` : value
-    options.push({ value, label: t('models.missingModel', { label }) })
-  }
-  const selected = options.some((option) => option.value === value) ? value : ''
-
-  return e(Dialog, {
-    open,
-    onOpenChange: (next: boolean) => { if (!next && !busy) onClose() },
-    title: t('chat.newConversation'),
-    className: 'file-dialog conversation-setup-dialog',
-    overlayClassName: 'file-dialog-overlay',
-    dismissible: !busy,
-    initialFocusRef: cancel,
-    returnFocusRef: props.returnFocusRef,
-  },
-    e('header', null,
-      e('h2', { id: 'new-conversation-title' }, t('chat.newConversation')),
-      e(Button, { variant: 'icon', className: 'icon-button', disabled: busy, onClick: onClose, 'aria-label': t('common.close') }, '×'),
-    ),
-    e('form', { className: 'conversation-setup', onSubmit: (event: FormEvent) => void start(event) },
-      models && options.length
-        ? e(Select, {
-          value: selected,
-          options,
-          onChange: setValue,
-          'aria-label': t('chat.chooseModel'),
-          disabled: busy,
-        })
-        : e(Button, { disabled: !note || busy, onClick: onConfigure }, note || t('common.loadingShort')),
-      note && models ? e('small', { className: 'warning', role: 'alert' }, note) : null,
-      e('footer', null,
-        e(Button, { ref: cancel, disabled: busy, onClick: onClose }, t('common.cancel')),
-        e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: busy || !workspaceId || !selected }, busy ? t('common.creating') : t('chat.start')),
-      ),
-    ),
-  )
-}
-
 export function PendingCard({ item }: { item: PendingInteraction }) {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
@@ -611,28 +501,69 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
 
 /**
  * workbench /dsh-editor-workbench 通道的 proposal.prepare/apply 在不同 kind 下的响应体。
- * 与内核 ProposalMarker 保持对齐:edit/create 走 /manuscript 通道,这里只描述 split/merge/renames。
+ * 与内核 ProposalMarker 保持对齐：edit 走 /manuscript 通道；create、章纲/章末小结与
+ * split/merge/renames 走 workbench，prepare 响应按 kind 包裹。
  */
 type WorkbenchProposalPrepared =
+  | { kind: 'create'; applicable: true; version: string; missingDirectories: string[] }
+  | { kind: 'chapter_plan'; version: string; before: string; after: string }
+  | { kind: 'chapter_summary'; version: string; before: string; after: string }
   | { kind: 'split'; version: string; before: string; after: string; headChars: number; tailChars: number }
   | { kind: 'merge'; versions: { path: string; sourcePath: string }; pathChars: number; sourceChars: number }
   | { kind: 'renames'; versions: Record<string, string>; entries: Array<{ from: string; to: string }> }
 
-/** 提案 prepare 之后保存下来的所有状态,kind 一一对应。edit/create 保留 /manuscript 旧字段。 */
+export type WorkbenchPrepareResponse = {
+  create?: Extract<WorkbenchProposalPrepared, { kind: 'create' }>
+  chapterMeta?: Extract<WorkbenchProposalPrepared, { kind: 'chapter_plan' | 'chapter_summary' }>
+  split?: Extract<WorkbenchProposalPrepared, { kind: 'split' }>
+  merge?: Extract<WorkbenchProposalPrepared, { kind: 'merge' }>
+  renames?: Extract<WorkbenchProposalPrepared, { kind: 'renames' }>
+}
+
+/** 按 kind 拆 workbench prepare 的外层包裹；kind 不匹配时返回 undefined（调用方按核对失败处理）。 */
+export function unwrapWorkbenchPrepared(proposal: ProposalMarker, value: unknown): WorkbenchProposalPrepared | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const wrapped = value as WorkbenchPrepareResponse
+  if (proposal.kind === 'create') return wrapped.create
+  if (proposal.kind === 'chapter_plan' || proposal.kind === 'chapter_summary') {
+    const plan = wrapped.chapterMeta
+    return plan && plan.kind === proposal.kind ? plan : undefined
+  }
+  if (proposal.kind === 'split') return wrapped.split
+  if (proposal.kind === 'merge') return wrapped.merge
+  if (proposal.kind === 'renames') return wrapped.renames
+  return undefined
+}
+
+/** 提案 prepare 之后保存下来的所有状态，kind 一一对应。edit 保留 /manuscript 旧字段。 */
 type ProposalPrepared =
   | { kind: 'edit'; version: string; before: string; after: string }
-  | { kind: 'create'; applicable: true }
   | WorkbenchProposalPrepared
 
+/** create / 章纲 / 章末小结 / edit 的单文件回执。 */
+export type ProposalFileApplyResult = { path: string; version: string; operation?: 'create' | 'edit' }
 type ProposalApplyResult =
-  | { kind: 'edit' | 'create'; path: string; version: string }
+  | ProposalFileApplyResult
   | { applied: string[]; failed?: { from: string; reason: string } }
+
+/* 章末小结可读预览的字段顺序与标签（与 workbench 的字段预览一致）。 */
+const CHAPTER_STATE_LABEL_ORDER = ['now', 'where', 'knows', 'ended', 'open'] as const
+const CHAPTER_STATE_LABEL_KEYS: Record<(typeof CHAPTER_STATE_LABEL_ORDER)[number], MessageKey> = {
+  now: 'chapterMeta.stateNow',
+  where: 'chapterMeta.stateWhere',
+  knows: 'chapterMeta.stateKnows',
+  ended: 'chapterMeta.stateEnded',
+  open: 'chapterMeta.stateOpen',
+}
 
 /** 从 prepare 响应里抽取 expectedVersions:apply 阶段原子地校验所有参与文件的版本。key 一律是真实文件路径（workbench 端按路径查找）。 */
 export function buildExpectedVersions(proposal: ProposalMarker, prepared: ProposalPrepared): Record<string, string> | undefined {
   if (proposal.kind === 'split' && prepared.kind === 'split') return { [proposal.path]: prepared.version }
   if (proposal.kind === 'merge' && prepared.kind === 'merge') return { [proposal.path]: prepared.versions.path, [proposal.sourcePath]: prepared.versions.sourcePath }
   if (proposal.kind === 'renames' && prepared.kind === 'renames') return { ...prepared.versions }
+  /* create 与章纲/章末小结按 prepare 观察到的版本校验目标文件；create 的 '' 表示目标尚不存在，照原样传递。 */
+  if (proposal.kind === 'create' && prepared.kind === 'create') return { [proposal.path]: prepared.version }
+  if ((proposal.kind === 'chapter_plan' || proposal.kind === 'chapter_summary') && prepared.kind === proposal.kind) return { [proposal.path]: prepared.version }
   return undefined
 }
 
@@ -641,17 +572,23 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   const [appliedVersion, setAppliedVersion] = useState('')
   const [undoText, setUndoText] = useState('')
   const [state, setState] = useState<'checking' | 'ready' | 'applying' | 'applied' | 'deferred' | 'ignored' | 'undoing' | 'undone' | 'expired'>('checking')
+  /* 可恢复失败（传输中断、一般核对/应用失败、部分写入后的谨慎回读）允许重新核对，不需要新的模型请求；
+     stale（含章纲/章末小结 sourceVersion 过期）必须重新生成提案，不提供重新核对。 */
+  const [canRecheck, setCanRecheck] = useState(false)
   const [note, setNote] = useState(t('chat.checkingFiles'))
   const requestGeneration = useRef(0)
 
-  const isWorkbenchProposal = props.proposal.kind === 'split' || props.proposal.kind === 'merge' || props.proposal.kind === 'renames'
+  /* edit 留在 /manuscript；create、章纲/章末小结与 split/merge/renames 一起走 workbench 通道。 */
+  const isWorkbenchProposal = props.proposal.kind !== 'edit'
 
   const check = async () => {
     const generation = ++requestGeneration.current
     setAppliedVersion('')
     setUndoText('')
+    setPrepared(null)
+    setCanRecheck(false)
     setState('checking'); setNote(t('chat.checkingFiles'))
-    /* split/merge/renames 走 workbench 通道的 proposal.prepare（嵌套 proposal，响应按 kind 包裹）;edit/create 仍走 /manuscript（平铺字段）。 */
+    /* workbench 通道的 prepare 传嵌套 proposal，响应按 kind 包裹；edit 仍走 /manuscript 平铺字段。 */
     const channel = isWorkbenchProposal ? WORKBENCH_RPC_CHANNEL : '/manuscript'
     let raw: unknown
     try {
@@ -666,20 +603,23 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
         })
     } catch {
       if (requestGeneration.current !== generation) return
-      setState('expired'); setNote(t('chat.checkFailed'))
+      setState('expired'); setCanRecheck(true); setNote(t('chat.checkFailed'))
       return
     }
     if (requestGeneration.current !== generation) return
-    const result = raw as RpcResult<ProposalPrepared | { split?: WorkbenchProposalPrepared; merge?: WorkbenchProposalPrepared; renames?: WorkbenchProposalPrepared }>
-    if (!result.ok) { setState('expired'); setNote(t('chat.filesChangedNoWrite')); return }
-    let value: ProposalPrepared | undefined
-    if (isWorkbenchProposal) {
-      const wrapped = result.value as { split?: WorkbenchProposalPrepared; merge?: WorkbenchProposalPrepared; renames?: WorkbenchProposalPrepared }
-      value = wrapped.split ?? wrapped.merge ?? wrapped.renames
-    } else {
-      value = result.value as ProposalPrepared
+    const result = raw as RpcResult<ProposalPrepared | WorkbenchPrepareResponse>
+    if (!result.ok) {
+      /* stale：文件/版本已变化（章纲与章末小结即 sourceVersion 过期），要求重新生成而不是反复核对。 */
+      const stale = isStaleFailure(result)
+      setState('expired'); setCanRecheck(!stale)
+      /* 非 stale 的失败给出可操作原因（details.reason：目录缺失/权限/重名等）。 */
+      setNote(stale ? t('chat.filesChangedNoWrite') : errorMessage(result))
+      return
     }
-    if (!value) { setState('expired'); setNote(t('chat.filesChangedNoWrite')); return }
+    const value = isWorkbenchProposal
+      ? unwrapWorkbenchPrepared(props.proposal, result.value)
+      : result.value as ProposalPrepared
+    if (!value) { setState('expired'); setCanRecheck(true); setNote(t('chat.checkFailed')); return }
     setPrepared(value); setState('ready'); setNote(t('chat.safeToApply'))
   }
 
@@ -689,6 +629,9 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     const head = `${p.kind}|${p.summary}`
     if (p.kind === 'edit') return `${head}|${p.path}|${p.oldText}|${p.newText}`
     if (p.kind === 'create') return `${head}|${p.path}|${p.text}`
+    /* 章纲/章末小结带 sourceVersion：指纹不变才能让重新核对复用旧提案；内容或版本一变即重新核对。 */
+    if (p.kind === 'chapter_plan') return `${head}|${p.path}|${p.sourceVersion}|${p.beats.join('\n')}`
+    if (p.kind === 'chapter_summary') return `${head}|${p.path}|${p.sourceVersion}|${JSON.stringify(p.state)}`
     if (p.kind === 'split') return `${head}|${p.path}|${p.anchor}|${p.newPath}`
     if (p.kind === 'merge') return `${head}|${p.path}|${p.sourcePath}`
     return `${head}|${p.renames.map((rename) => `${rename.from}->${rename.to}`).join(',')}`
@@ -714,15 +657,15 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
         }) as RpcResult<{ text: string; version: string }>
         if (requestGeneration.current !== generation) return
         if (!read.ok || read.value.version !== prepared.version) {
-          setState('expired'); setNote(t('chat.filesChangedNoWrite'))
+          setState('expired'); setCanRecheck(false); setNote(t('chat.filesChangedNoWrite'))
           return
         }
         beforeApplyText = read.value.text
       }
-      /* edit/create 走 /manuscript 的 proposal.apply,带 expectedVersion;其它走 workbench,带 expectedVersions。 */
+      /* edit 走 /manuscript 的 proposal.apply,带 expectedVersion;create/章纲/章末小结与 split/merge/renames 走 workbench,带 expectedVersions。 */
       let result: RpcResult<ProposalApplyResult>
-      if (props.proposal.kind === 'edit' || props.proposal.kind === 'create') {
-        const expectedVersion = props.proposal.kind === 'edit' && prepared.kind === 'edit' ? prepared.version : ''
+      if (props.proposal.kind === 'edit') {
+        const expectedVersion = prepared.kind === 'edit' ? prepared.version : ''
         result = await props.ctx.connection.rpc.call('/manuscript', 'proposal.apply', {
           sessionId: props.sessionId,
           ...props.proposal,
@@ -739,10 +682,10 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
       if (requestGeneration.current !== generation) return
       if (!result.ok) {
         /* Host 用 details.partial 报告"写了一半"：刷新已变路径、展示备份位置，
-           并停在 expired——既不伪装成功，也不允许立即重复应用。 */
+           并停在 expired——既不伪装成功，也不自动重试；只允许用户手动重新核对（谨慎回读）。 */
         const partial = partialApplyDetails(result)
         if (partial) {
-          setState('expired')
+          setState('expired'); setCanRecheck(true)
           const wrote = partial.appliedPaths.length ? t('chat.partialPaths', { paths: partial.appliedPaths.join('、') }) : t('chat.partialTouched')
           const backup = partial.recoveryPath ? t('chat.partialBackup', { path: partial.recoveryPath }) : ''
           const snapshot = partial.safetySnapshotId ? t('chat.partialSnapshot', { id: partial.safetySnapshotId }) : ''
@@ -750,15 +693,20 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
           for (const appliedPath of partial.appliedPaths) props.onApplied(appliedPath)
           return
         }
-        /* 普通失败不断言零写入：Host 可能已落盘部分内容。 */
-        setState('expired'); setNote(t('chat.applyFailed'))
+        /* stale（含章纲/章末小结 sourceVersion 过期）：提案必须重新生成，前端绝不改写 sourceVersion 蒙混重试。
+           其它失败用 details.reason 的可操作消息（目录缺失/权限/重名等）；普通 edit/create 失败后仍可重新核对现状。 */
+        const stale = isStaleFailure(result)
+        setState('expired'); setCanRecheck(!stale)
+        setNote(stale ? t('chat.filesChangedNoWrite') : errorMessage(result))
         return
       }
-      /* /manuscript 通道(edit/create)回 path+version;workbench 通道(split/merge/renames)回 applied+failed。 */
-      if (props.proposal.kind === 'edit' || props.proposal.kind === 'create') {
-        const applyValue = result.value as Extract<ProposalApplyResult, { kind: 'edit' | 'create' }>
-        setAppliedVersion(applyValue.version)
-        setUndoText(beforeApplyText)
+      /* /manuscript 的 edit 与 workbench 的 create/章纲/章末小结都回单文件回执 {path, version, operation}。 */
+      if (props.proposal.kind === 'edit' || props.proposal.kind === 'create' || props.proposal.kind === 'chapter_plan' || props.proposal.kind === 'chapter_summary') {
+        const applyValue = result.value as ProposalFileApplyResult
+        if (props.proposal.kind === 'edit') {
+          setAppliedVersion(applyValue.version)
+          setUndoText(beforeApplyText)
+        }
         setState('applied'); setNote(t('chat.applied'))
         props.onApplied(applyValue.path)
         return
@@ -780,7 +728,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
       for (const path of applied) props.onApplied(path)
     } catch {
       if (requestGeneration.current !== generation) return
-      setState('expired')
+      setState('expired'); setCanRecheck(true)
       setNote(t('chat.applyFailed'))
     }
   }
@@ -817,7 +765,15 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     ? t('chat.fileCount', { count: props.proposal.renames.length })
     : props.proposal.path
 
-  /* 按 kind 决定主区域内容。edit 复用 proposal-diff 块;create 单 pre;split 同 edit 但 before/after 来自 prepared;
+  /* 类型徽标:大纲/下的 create/edit 是作品大纲提案;章纲与章末小结按类型标明,并随 header 的 path 指明目标章节。 */
+  const kindBadge = props.proposal.kind === 'chapter_plan' ? t('chat.chapterPlanBadge')
+    : props.proposal.kind === 'chapter_summary' ? t('chat.chapterSummaryBadge')
+      : (props.proposal.kind === 'create' || props.proposal.kind === 'edit') && props.proposal.path.startsWith('大纲/')
+        ? t('chat.outlineProposal')
+        : ''
+
+  /* 按 kind 决定主区域内容。edit 复用 proposal-diff 块;create 单 pre 并在可应用时列出将自动创建的目录;
+     章纲/章末小结展示可读的字段前后对照;split 同 edit 但 before/after 来自 prepared;
      merge 展示两个文件的字符数与归档说明;renames 用 ul/li 列出 from→to。 */
   const renderBody = () => {
     if (props.proposal.kind === 'edit') {
@@ -828,7 +784,26 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
       )
     }
     if (props.proposal.kind === 'create') {
-      return e('section', null, e('small', null, t('chat.newFileContent')), e('pre', null, props.proposal.text))
+      const createPrepared = prepared?.kind === 'create' ? prepared : null
+      return e(Fragment, null,
+        createPrepared && createPrepared.missingDirectories.length
+          ? e('p', { className: 'proposal-missing-dirs' }, t('chat.missingDirs', { paths: createPrepared.missingDirectories.join('、') }))
+          : null,
+        e('section', null, e('small', null, t('chat.newFileContent')), e('pre', null, props.proposal.text)),
+      )
+    }
+    if (props.proposal.kind === 'chapter_plan' || props.proposal.kind === 'chapter_summary') {
+      /* 后端 prepare 返回的是可读的字段前后对照（不是 YAML/全文）；核对前先用提案自身内容兜底展示。 */
+      const proposal = props.proposal
+      const metaPrepared = prepared && (prepared.kind === 'chapter_plan' || prepared.kind === 'chapter_summary') ? prepared : null
+      const fallback = proposal.kind === 'chapter_plan'
+        ? proposal.beats.map((beat, index) => `${index + 1}. ${beat}`).join('\n')
+        : CHAPTER_STATE_LABEL_ORDER.filter((key) => proposal.state[key]?.trim())
+            .map((key) => `${t(CHAPTER_STATE_LABEL_KEYS[key])}：${proposal.state[key]}`).join('\n')
+      return e('div', { className: 'proposal-diff' },
+        e('section', null, e('small', null, t('chat.metaBefore')), e('pre', null, metaPrepared?.before ?? '')),
+        e('section', null, e('small', null, t('chat.metaAfter')), e('pre', null, metaPrepared?.after ?? fallback)),
+      )
     }
     if (props.proposal.kind === 'split') {
       const splitPrepared = prepared?.kind === 'split' ? prepared : null
@@ -863,14 +838,20 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   }
 
   return e('article', { className: `proposal-card ${state}`, 'aria-label': t('chat.fileProposal') },
-    e('header', null, e('strong', null, props.proposal.summary), e('code', null, headerPathLabel)),
+    e('header', null,
+      e('div', { className: 'proposal-title' },
+        e('strong', null, props.proposal.summary),
+        kindBadge ? e('small', { className: 'proposal-kind' }, kindBadge) : null),
+      e('code', null, headerPathLabel)),
     renderBody(),
     e('footer', null,
       e('span', { role: state === 'expired' ? 'alert' : 'status' }, note),
       state === 'ready' ? e('button', { type: 'button', onClick: () => void apply() }, t('common.apply')) : null,
       state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('deferred'); setNote(t('chat.deferred')) } }, t('chat.defer')) : null,
       state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote(t('chat.ignoredNoChange')) } }, t('common.ignore')) : null,
-      state === 'deferred' ? e('button', { type: 'button', onClick: () => void check() }, t('chat.recheck')) : null,
+      (state === 'deferred' || (state === 'expired' && canRecheck))
+        ? e('button', { type: 'button', onClick: () => void check() }, t('chat.recheck'))
+        : null,
       state === 'applied' && props.proposal.kind === 'edit' ? e('button', { type: 'button', onClick: () => void undo() }, t('chat.undoThis')) : null,
     ),
     state === 'ready' ? e('small', { className: 'proposal-help' }, t('chat.applyWrites')) : null,
@@ -950,7 +931,7 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
   )
 }
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, onAcceptMemory, hidden, onClose, onConfigure, onApplied, onWritten, onDraftDirtyChange, readingExpanded, onToggleReading }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; onClose(): void; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; readingExpanded?: boolean; onToggleReading?(): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, onAcceptMemory, hidden, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [, setMessageCardTick] = useState(0)
@@ -985,13 +966,12 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
   const [outgoing, setOutgoing] = useState<{ text: string; state: 'sending' | 'accepted' | 'failed'; afterRows: number; projectContextReceipt?: ProjectContextReceiptBundle } | null>(null)
-  const [creatingConversation, setCreatingConversation] = useState(false)
   const [renamingConversation, setRenamingConversation] = useState(false)
   const [conversationMenuOpen, setConversationMenuOpen] = useState(false)
   const conversationMenuTrigger = useRef<HTMLButtonElement | null>(null)
   const conversationMenuYields = useRef(false)
-  const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [conversationBusy, setConversationBusy] = useState(false)
+  const [titleOverrides, setTitleOverrides] = useState<Record<string, string>>({})
   const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   const [modelRevision, setModelRevision] = useState(0)
   const titleAttempted = useRef(new Set<string>())
@@ -1149,7 +1129,11 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const workspaceSessionIds = sessionIds.length ? sessionIds : [session.sessionId]
   const hostArchivedIds = workspaceList.archivedSessionIds ?? []
   const workRecord = conversationWorkRecord(conversationSettings.value ?? DEFAULT_CONVERSATION_SETTINGS, workspaceId)
-  const conversationTitles = Object.fromEntries(Object.entries(sessionList.byId ?? {}).map(([id, value]) => [id, value.title]))
+  const conversationTitles = {
+    ...Object.fromEntries(Object.entries(sessionList.byId ?? {}).map(([id, value]) => [id, value.title])),
+    ...workRecord.titles,
+    ...titleOverrides,
+  }
   const conversations = conversationRows({
     workspaceSessionIds,
     archivedIds: [...workRecord.archivedIds, ...hostArchivedIds],
@@ -1181,7 +1165,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     const summary = sessionList.byId?.[session.sessionId]
     const updatedAt = (summary as unknown as { updatedAt?: unknown } | undefined)?.updatedAt
     const title = nextAutomaticConversationTitle({
-      durableTitle: summary?.title?.trim(),
+      durableTitle: workRecord.titles[session.sessionId] ?? titleOverrides[session.sessionId] ?? summary?.title?.trim(),
       assistantReplies: rows.filter((row) => row.role === 'assistant').map((row) => row.text),
       attempted: titleAttempted.current.has(session.sessionId),
       date: typeof updatedAt === 'number' ? updatedAt : Date.now(),
@@ -1212,17 +1196,48 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setRenamingConversation(false)
     titleAttempted.current.add(session.sessionId)
     setNote('')
+    setTitleOverrides((current) => ({ ...current, [session.sessionId]: title }))
     queueConversationRename(title, t('chat.renameFailed'))
+    void persistConversationWork({
+      ...workRecord,
+      titles: { ...workRecord.titles, [session.sessionId]: title },
+    }).catch(() => setNote(t('chat.renameFailed')))
+  }
+
+  const createConversation = async () => {
+    if (!workspaceId || conversationBusy) return
+    if (!(await canDiscardDraft('__new-conversation__'))) return
+    setConversationBusy(true)
+    setNote('')
+    try {
+      const sessionId = await ctx.uiWorkspace.connectWorkspace(workspaceId)
+      let groups: SessionModels['groups'] = []
+      const preferred = resolveNewConversationModel({ preferred: chatModel })
+      if (!preferred) {
+        const catalog = await readModels(ctx.remote.session, session)
+        if (catalog.ok) groups = catalog.value.groups
+      }
+      const route = preferred ?? resolveNewConversationModel({ groups })
+      if (route) {
+        const selected = await selectModel(ctx.remote.session, sessionId, route.provider, route.model)
+        if (!selected.ok) rememberCreatedChatModelError(sessionId, t('chat.defaultModelFailed'))
+        else discardCreatedChatModelError(sessionId)
+      }
+      openConversation(sessionId)
+      if (sessionId === session.sessionId) {
+        const error = takeCreatedChatModelError(sessionId)
+        if (error) setNote(error)
+      }
+    } catch {
+      setNote(t('chat.newFailed'))
+    } finally {
+      setConversationBusy(false)
+    }
   }
   const persistConversationWork = async (record: typeof workRecord) => {
     if (!workspaceId) throw new Error('workspace unavailable')
     const current = conversationScope.getSnapshot().value ?? DEFAULT_CONVERSATION_SETTINGS
     await conversationScope.set('works', putConversationWork(current, workspaceId, record).works)
-  }
-  const forgetConversationTitle = async (id: string) => {
-    const target = id === session.sessionId ? session : ctx.sessions.binding(id as SessionId)?.session
-    if (!target) return
-    try { await target.rename('') } catch { /* 标题遗忘是尽力而为 */ }
   }
   const leaveIfCurrent = async (id: string) => {
     if (id !== session.sessionId) return true
@@ -1240,8 +1255,8 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setNote('')
     try {
       await persistConversationWork({
+        ...workRecord,
         archivedIds: archiveConversationIds(workRecord.archivedIds, id),
-        tombstoneIds: workRecord.tombstoneIds,
       })
     } catch {
       setNote(t('chat.archiveFailed'))
@@ -1257,34 +1272,12 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setNote('')
     try {
       await persistConversationWork({
+        ...workRecord,
         archivedIds: restoreConversationIds(workRecord.archivedIds, id),
-        tombstoneIds: workRecord.tombstoneIds,
       })
       openConversation(id as SessionId)
     } catch {
       setNote(t('chat.restoreFailed'))
-    } finally {
-      setConversationBusy(false)
-    }
-  }
-  const deleteConversation = async (id: string) => {
-    if (!workspaceId || conversationBusy || !canMutateConversation) return
-    setDeleteConfirm(false)
-    setConversationMenuOpen(false)
-    if (!(await leaveIfCurrent(id))) return
-    setConversationBusy(true)
-    setNote('')
-    try {
-      await forgetConversationTitle(id)
-      await persistConversationWork({
-        ...tombstoneConversationIds({
-          archivedIds: workRecord.archivedIds,
-          tombstoneIds: workRecord.tombstoneIds,
-          id,
-        }),
-      })
-    } catch {
-      setNote(t('chat.deleteFailed'))
     } finally {
       setConversationBusy(false)
     }
@@ -1300,6 +1293,12 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   useEffect(() => {
     if (outgoingIsCanonical) setOutgoing(null)
   }, [outgoingIsCanonical])
+  const currentConversationTitle = conversations.find((item) => item.id === session.sessionId)?.title
+    ?? archivedConversations.find((item) => item.id === session.sessionId)?.title
+    ?? t('chat.newConversation')
+  const renameInitialValue = workRecord.titles[session.sessionId]
+    ?? titleOverrides[session.sessionId]
+    ?? (currentConversationTitle === t('chat.newConversation') ? '' : currentConversationTitle)
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!composerCanSubmit) return
@@ -1341,12 +1340,25 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   },
     e('header', { className: 'chat-header' },
       e('div', { className: 'conversation-select' },
-        e(Select, { value: session.sessionId, 'aria-label': t('chat.switchConversation'), options: conversations.map((item) => ({ value: item.id, label: item.title })), onChange: (next) => void switchConversation(next) }),
+        e(Select, {
+          value: session.sessionId,
+          'aria-label': t('chat.switchConversation'),
+          title: currentConversationTitle,
+          selectedLabel: currentConversationTitle,
+          options: conversations.map((item) => ({ value: item.id, label: item.title })),
+          onChange: (next) => void switchConversation(next),
+        }),
       ),
       e('div', { className: 'chat-header-actions' },
         connected ? null : e('span', { className: 'chat-status', role: 'status' }, t('chat.reconnecting')),
-        e('button', { className: 'icon-button', type: 'button', title: t('chat.newConversation'), 'aria-label': t('chat.newConversation'), onClick: () => setCreatingConversation(true) }, '＋'),
-        e('button', { className: 'icon-button', type: 'button', title: t('chat.renameConversation'), 'aria-label': t('chat.renameConversation'), onClick: () => setRenamingConversation(true) }, '✎'),
+        e('button', {
+          className: 'icon-button',
+          type: 'button',
+          title: t('chat.newConversation'),
+          'aria-label': t('chat.newConversation'),
+          disabled: conversationBusy || !workspaceId,
+          onClick: () => { void createConversation() },
+        }, '＋'),
         e('div', { className: 'conversation-menu' },
           e(Menu, { open: conversationMenuOpen, onOpenChange: (open: boolean) => { if (open) conversationMenuYields.current = false; setConversationMenuOpen(open) } },
             e(MenuTrigger, {
@@ -1365,6 +1377,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
               },
             },
               e(MenuItem, {
+                disabled: conversationBusy,
+                onSelect: () => { conversationMenuYields.current = true; setRenamingConversation(true) },
+              }, t('chat.renameConversation')),
+              e(MenuItem, {
                 disabled: conversationBusy || currentIsArchived || !canMutateConversation,
                 title: !canMutateConversation ? t('chat.archiveNeedAnother') : undefined,
                 onSelect: () => { void archiveConversation(session.sessionId) },
@@ -1373,27 +1389,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                 disabled: conversationBusy || !currentIsArchived,
                 onSelect: () => { void restoreConversation(session.sessionId) },
               }, t('common.restore')),
-              e(MenuItem, {
-                className: 'danger',
-                'data-danger': 'true',
-                disabled: conversationBusy || !canMutateConversation,
-                title: !canMutateConversation ? t('chat.deleteNeedAnother') : undefined,
-                onSelect: () => { conversationMenuYields.current = true; setDeleteConfirm(true) },
-              }, t('common.delete')),
             ),
           ),
         ),
-        onToggleReading
-          ? e('button', {
-            className: 'icon-button',
-            type: 'button',
-            title: readingExpanded ? t('chat.restoreWidth') : t('chat.expandReading'),
-            'aria-label': readingExpanded ? t('chat.restoreWidth') : t('chat.expandReading'),
-            'aria-pressed': Boolean(readingExpanded),
-            onClick: onToggleReading,
-          }, readingExpanded ? '▭' : '↔')
-          : null,
-        e('button', { className: 'icon-button', type: 'button', title: t('chat.collapseAssistant'), 'aria-label': t('chat.collapseAssistant'), onClick: onClose }, '×'),
       ),
     ),
     archivedConversations.length ? e('details', { className: 'archived-conversations' },
@@ -1407,17 +1405,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         }, t('common.restore')),
       ))),
     ) : null,
-    e(NewConversationPicker, {
-      open: creatingConversation,
-      ctx,
-      session,
-      workspaceId,
-      chatModel,
-      canStart: () => canDiscardDraft('__new-conversation__'),
-      onOpen: openConversation,
-      onClose: () => setCreatingConversation(false),
-      onConfigure,
-    }),
     e('div', { className: 'chat-history', ref: historyRef, onScroll: (event: { currentTarget: HTMLDivElement }) => {
       const el = event.currentTarget
       bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
@@ -1527,8 +1514,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       id: 'rename-conversation',
       title: t('chat.renameConversation'),
       label: t('chat.conversationName'),
-      initialValue: sessionList.byId?.[session.sessionId]?.title ?? '',
+      initialValue: renameInitialValue,
       confirmLabel: t('chat.saveName'),
+      returnFocusRef: conversationMenuTrigger,
       onCancel: () => setRenamingConversation(false),
       onConfirm: renameConversation,
     }),
@@ -1540,16 +1528,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       confirmLabel: t('chat.discardAndContinue'),
       onCancel: () => resolveDraftConfirm(false),
       onConfirm: () => resolveDraftConfirm(true),
-    }),
-    e(ConfirmDialog, {
-      open: Boolean(deleteConfirm),
-      id: 'delete-conversation',
-      title: t('chat.deleteTitle'),
-      message: t('chat.deleteBody'),
-      confirmLabel: t('common.delete'),
-      returnFocusRef: conversationMenuTrigger,
-      onCancel: () => setDeleteConfirm(false),
-      onConfirm: () => { void deleteConversation(session.sessionId) },
     }),
   )
 }

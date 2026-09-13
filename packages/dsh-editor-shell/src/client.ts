@@ -21,7 +21,7 @@ export const name = 'dsh-editor-shell-client'
 export const inject = [
   'slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote',
   'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker',
-  'uiSession',
+  'uiSession', 'locale',
 ] as const
 
 // Re-exports — keep the old monolith surface so existing callers and specs still work.
@@ -73,7 +73,7 @@ export type {
 export { THEME_STORAGE_KEY, THEME_VALUES, ThemeToggle, useTheme } from './client/theme.ts'
 export type { HostThemeSync, ThemeValue } from './client/theme.ts'
 export { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './client/dialogs.ts'
-export { Chat, ModelPicker, NewConversationPicker, PendingCard, ProjectContextReceiptView, ProposalCard, bindOfficialConversation, conversationChatSource } from './client/chat.ts'
+export { Chat, ModelPicker, PendingCard, ProjectContextReceiptView, ProposalCard, bindOfficialConversation, conversationChatSource } from './client/chat.ts'
 export { Editor } from './client/editor.ts'
 export { FileContextMenu, Tree } from './client/sidebar.ts'
 export { DeepSeekWhaleMark, PaperStage, PanelResizer, currentSession, useObservable } from './client/components.ts'

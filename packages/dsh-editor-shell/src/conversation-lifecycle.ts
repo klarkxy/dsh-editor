@@ -103,6 +103,21 @@ export function shouldConfirmConversationSwitch(draft: string, nextId: string, c
   return Boolean(draft.trim()) && nextId !== currentId
 }
 
+/** Settings default if both fields are set; otherwise the first catalog model. */
+export function resolveNewConversationModel(input: {
+  preferred?: { provider?: string; model?: string }
+  groups?: readonly { id: string; models: readonly { id: string }[] }[]
+}): { provider: string; model: string } | undefined {
+  const provider = input.preferred?.provider?.trim() ?? ''
+  const model = input.preferred?.model?.trim() ?? ''
+  if (provider && model) return { provider, model }
+  for (const group of input.groups ?? []) {
+    const first = group.models[0]
+    if (group.id && first?.id) return { provider: group.id, model: first.id }
+  }
+  return undefined
+}
+
 export class ConversationRenameQueue {
   private readonly pending = new Map<string, Promise<void>>()
 

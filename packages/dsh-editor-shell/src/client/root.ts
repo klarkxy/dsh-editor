@@ -31,7 +31,7 @@ import { redesignedStyles } from '../styles.ts'
 import { errorMessage, isStaleFailure, isSuccessWorkbenchNote, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, ShellErrorBoundary, useObservable } from './components.ts'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
-import { SettingsDialog, SettingsTrigger } from './settings.tsx'
+import { SettingsDialog, SettingsTrigger, type SettingsRenderSlot, type SettingsTab } from './settings.tsx'
 import { ThemeToggle, useTheme, type HostThemeSync } from './theme.ts'
 import { Tree, FileContextMenu } from './sidebar.ts'
 import { ChapterOpsLayer, chapterMenuModel, requestMergeChapter, requestSplitChapter, shouldOpenAfterChapterApply, snapshotFromHandle, type ChapterOpsRequest, type EditorSnapshotHandle } from './chapter-ops.ts'
@@ -44,7 +44,6 @@ import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { Select as HostSelect } from './select.tsx'
 import { Dialog as HostDialog, Input, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, useChromeMotion } from './ui/index.ts'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
-import { AboutUpdateDialog } from './about-dialog.tsx'
 import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.ts'
 import { PinnedPane } from './pinned-pane.ts'
 import { canPinPath, pinnedLayoutColumns, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
@@ -65,7 +64,6 @@ const SIDEBAR_MAX = 420
 const ASSISTANT_DEFAULT = 384
 const ASSISTANT_MIN = 300
 const ASSISTANT_MAX = 720
-const ASSISTANT_READING = 640
 const PINNED_DEFAULT = 340
 const PINNED_MIN = 260
 const PINNED_MAX = 560
@@ -205,21 +203,6 @@ async function verifyRelocatedWorkspaceSession(ctx: ShellContext, sessionId: Ses
   return initialPath
 }
 
-/** 关于/更新 入口:与 SettingsTrigger 同节奏的轻量顶栏按钮。 */
-function AboutTrigger(props: { onOpen(): void }): ReactNode {
-  return e('button', {
-    type: 'button',
-    className: 'about-trigger',
-    'aria-haspopup': 'dialog',
-    'aria-label': t('about.triggerAria'),
-    title: t('about.triggerAria'),
-    onClick: props.onOpen,
-  },
-    e('span', { className: 'about-trigger-icon', 'aria-hidden': true }, 'ⓘ'),
-    t('about.trigger'),
-  )
-}
-
 function BoundProposalCard(props: ShellProposalCardProps & { ctx: ShellContext }) {
   return e(ProposalCard, {
     ctx: props.ctx,
@@ -238,7 +221,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   pluginsSettings?: ReactNode
   zhihuSettings?: ReactNode
   commands: ShellCommandRegistry
-  renderSlot?: (key: string, owner?: object) => ReactNode
+  renderSlot?: SettingsRenderSlot
 }) {
   const locale = useLocale()
   /* 可选 AI 能力：加载完成前不挂载 Chat / 自动索引;失败是显式错误态(可重试)。 */
@@ -304,8 +287,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(() => storedPanelOpen('dsh-editor.layout.assistant-open', true))
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
-  const [chatReading, setChatReading] = useState(false)
-  const assistantWidthBeforeReading = useRef(ASSISTANT_DEFAULT)
   const [pinnedPath, setPinnedPath] = useState<string | null>(() => {
     const stored = storedPinnedPath('dsh-editor.layout.pinned-path')
     return stored && canPinPath(stored) ? stored : null
@@ -332,7 +313,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [manageNote, setManageNote] = useState('')
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const [aboutOpen, setAboutOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchSubmitTick, setSearchSubmitTick] = useState(0)
@@ -375,7 +355,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     setLeaveConfirm(null)
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const openSettings = () => setSettingsOpen(true)
+  const [settingsFocusTab, setSettingsFocusTab] = useState<SettingsTab | undefined>()
+  const openSettings = (tab?: SettingsTab) => {
+    setSettingsFocusTab(tab)
+    setSettingsOpen(true)
+  }
   const overviewRequestGate = useRef(new LatestRequestGate()).current
   const progressRecord = useRef(createDebouncedInvoker(PROGRESS_RECORD_DEBOUNCE_MS)).current
   const fileSessionRef = useRef(fileSession)
@@ -1831,7 +1815,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         e('span', { className: 'topbar-actions' },
           e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
           e(SettingsTrigger, { onOpen: openSettings }),
-          e(AboutTrigger, { onOpen: () => setAboutOpen(true) }),
           e(WindowControls, null),
         ),
       ),
@@ -1925,8 +1908,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         onCancel: () => { if (!importTitle?.busy) setImportTitle(null) },
         onConfirm: (title: string) => void submitImportTitle(title),
       }),
-      e(SettingsDialog, { open: settingsOpen, ctx, writingScope, migrateWriting, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, zhihuTab: zhihuSettings, onClose: () => setSettingsOpen(false) }),
-      e(AboutUpdateDialog, { open: aboutOpen, onClose: () => setAboutOpen(false) }),
+      e(SettingsDialog, { open: settingsOpen, ctx, writingScope, migrateWriting, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, zhihuTab: zhihuSettings, focusTab: settingsFocusTab, renderSlot, onClose: () => setSettingsOpen(false) }),
     ))
   }
 
@@ -2027,7 +2009,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         e(ThemeToggle, { theme, onChange: setTheme }),
         e(CommandPaletteTrigger, { onClick: () => setPaletteOpen(true) }),
         e(SettingsTrigger, { onOpen: openSettings }),
-        e(AboutTrigger, { onOpen: () => setAboutOpen(true) }),
         e(WindowControls, null),
       ),
     ),
@@ -2182,19 +2163,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       chatModel: writing.chatModel,
       onAcceptMemory,
       hidden: !assistantVisible,
-      readingExpanded: chatReading,
-      onToggleReading: () => {
-        setChatReading((open) => {
-          if (open) {
-            setAssistantWidth(assistantWidthBeforeReading.current)
-            return false
-          }
-          assistantWidthBeforeReading.current = assistantWidth
-          setAssistantWidth(Math.max(assistantWidth, ASSISTANT_READING))
-          return true
-        })
-      },
-      onClose: () => setAssistantOpen(false),
       onConfigure: openSettings,
       onDraftDirtyChange: setAssistantDraftDirty,
       onWritten: refreshWrittenPath,
@@ -2395,13 +2363,13 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       url: (imagePreview ?? lastImagePreview.current)?.url ?? '',
       onClose: closeImagePreview,
     }),
-    e(SettingsDialog, { open: settingsOpen, ctx, writingScope, migrateWriting, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, zhihuTab: zhihuSettings, onClose: () => setSettingsOpen(false) }),
-    startupUpdate && !aboutOpen ? e('div', { className: 'update-toast', role: 'status' },
+    e(SettingsDialog, { open: settingsOpen, ctx, writingScope, migrateWriting, assistant: capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined, pluginsTab: pluginsSettings, zhihuTab: zhihuSettings, focusTab: settingsFocusTab, renderSlot, onClose: () => setSettingsOpen(false) }),
+    startupUpdate && !settingsOpen ? e('div', { className: 'update-toast', role: 'status' },
       e('span', { className: 'update-toast-text' }, t('about.toast', { version: startupUpdate.version })),
       e('button', {
         type: 'button',
         className: 'update-toast-action',
-        onClick: () => { setStartupUpdate(null); setAboutOpen(true) },
+        onClick: () => { setStartupUpdate(null); openSettings('about') },
       }, t('about.viewDetails')),
       e('button', {
         type: 'button',
@@ -2410,7 +2378,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         onClick: () => setStartupUpdate(null),
       }, '×'),
     ) : null,
-    e(AboutUpdateDialog, { open: aboutOpen, onClose: () => setAboutOpen(false) }),
   ))
 }
 
@@ -2428,7 +2395,7 @@ type RegisterShellRootOptions = {
 // collapsed launchers can never cover the composer. The rail stays
 // click-through and each contributed component opts into pointer events;
 // open panels position against their launcher via the --dsh-ext-* contract.
-type RootSlotProps = { renderSlot?: (key: string, owner?: object) => ReactNode }
+type RootSlotProps = { renderSlot?: SettingsRenderSlot }
 
 function ExtensionsDock(props: { rootProps: unknown }) {
   const renderSlot = (props.rootProps as RootSlotProps | null | undefined)?.renderSlot

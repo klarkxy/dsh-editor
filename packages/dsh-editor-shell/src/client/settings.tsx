@@ -3,32 +3,43 @@ import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { WritingSettings } from '../writing-settings.ts'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.ts'
+import { AboutSettingsSection } from './settings-about.tsx'
 import { SettingsGeneralSection } from './settings-general.tsx'
 import { SettingsModelsSection } from './settings-models.tsx'
+import {
+  OfficialSettingsSectionPage,
+  PLUGIN_SETTINGS_TAB_PREFIX,
+  isPluginSettingsTab,
+  useOfficialSettingsSections,
+  type OfficialSettingsSection,
+  type SettingsRenderSlot,
+} from './settings-plugins.tsx'
 import { SettingsUsageSection } from './settings-usage.tsx'
 import { t, useLocale } from '../i18n/index.ts'
 import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger, m } from './ui/index.ts'
 import { useReducedMotion } from 'motion/react'
 
+export type { SettingsRenderSlot }
 
-export type SettingsTab = 'general' | 'models' | 'writing' | 'usage' | 'zhihu' | 'plugins'
+export type SettingsTab = 'general' | 'models' | 'writing' | 'usage' | 'zhihu' | 'plugins' | 'about'
 
 const SETTINGS_TAB_KEY = 'dsh-editor.settings.tab'
-const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'writing', 'usage', 'zhihu', 'plugins']
+const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'writing', 'usage', 'zhihu', 'plugins', 'about']
 
-function readStoredTab(): SettingsTab {
+function readStoredTab(): string {
   try {
     const value = globalThis.localStorage?.getItem(SETTINGS_TAB_KEY)
-    if (value && (SETTINGS_TABS as string[]).includes(value)) return value as SettingsTab
+    if (value && (SETTINGS_TABS as string[]).includes(value)) return value
+    if (value && isPluginSettingsTab(value)) return value
   } catch { /* optional preference */ }
   return 'general'
 }
 
-function persistTab(tab: SettingsTab): void {
+function persistTab(tab: string): void {
   try { globalThis.localStorage?.setItem(SETTINGS_TAB_KEY, tab) } catch { /* optional preference */ }
 }
 
-function SettingsTabPage(props: { tab: SettingsTab; active: boolean; children?: ReactNode }) {
+function SettingsTabPage(props: { tab: string; active: boolean; children?: ReactNode }) {
   const reduce = useReducedMotion()
   return e(TabsContent, {
     value: props.tab,
@@ -53,7 +64,13 @@ function tabLabel(tab: SettingsTab): string {
   if (tab === 'writing') return t('settings.writing')
   if (tab === 'plugins') return t('settings.plugins')
   if (tab === 'zhihu') return t('settings.zhihu')
+  if (tab === 'about') return t('settings.about')
   return t('settings.usage')
+}
+
+function navLabel(tab: string, sections: readonly OfficialSettingsSection[]): string {
+  if ((SETTINGS_TABS as string[]).includes(tab)) return tabLabel(tab as SettingsTab)
+  return sections.find((section) => section.navId === tab)?.label ?? tab.slice(PLUGIN_SETTINGS_TAB_PREFIX.length)
 }
 
 /** 顶栏设置入口。保留 .native-settings-control 包裹和 aria-haspopup 约定（e2e 依赖）。 */
@@ -79,21 +96,35 @@ export function SettingsDialog(props: {
   assistant?: boolean
   pluginsTab?: ReactNode
   zhihuTab?: ReactNode
+  renderSlot?: SettingsRenderSlot
   open?: boolean
+  focusTab?: SettingsTab
   onClose(): void
 }) {
   useLocale()
   const open = props.open ?? true
-  const [tab, setTab] = useState<SettingsTab>(readStoredTab)
+  const [tab, setTab] = useState(readStoredTab)
   const [note, setNote] = useState('')
+  const [aboutBusy, setAboutBusy] = useState(false)
   const closeRef = useRef<HTMLButtonElement | null>(null)
+  const official = useOfficialSettingsSections(props.ctx)
+  const officialSections = props.renderSlot ? official.sections : []
   useEffect(() => {
-    if (!open) setNote('')
+    if (!open) {
+      setNote('')
+      setAboutBusy(false)
+    }
   }, [open])
-  const selectTab = (next: SettingsTab) => {
+  const selectTab = (next: string) => {
     setTab(next)
     persistTab(next)
   }
+  useEffect(() => {
+    if (!open || !props.focusTab) return
+    if (!(SETTINGS_TABS as string[]).includes(props.focusTab)) return
+    setTab(props.focusTab)
+    persistTab(props.focusTab)
+  }, [open, props.focusTab])
 
   const openConfigFile = async () => {
     setNote('')
@@ -105,9 +136,14 @@ export function SettingsDialog(props: {
     }
   }
 
-  const tabs: SettingsTab[] = props.assistant === false
+  const featureTabs: SettingsTab[] = props.assistant === false
     ? ['general', 'writing', 'usage', 'zhihu', 'plugins']
     : ['general', 'models', 'writing', 'usage', 'zhihu', 'plugins']
+  const navTabs: string[] = [...featureTabs, ...officialSections.map((section) => section.navId), 'about']
+  /* 能力在弹窗打开期间变为停用时，或动态插件页消失时，回落到仍可用的分类。 */
+  const activeTab = navTabs.includes(tab) ? tab : 'general'
+  const activeOfficial = officialSections.find((section) => section.navId === activeTab)
+  const builtinPages: SettingsTab[] = [...featureTabs, 'about']
   const content: Record<SettingsTab, () => ReactNode> = {
     general: () => e(SettingsGeneralSection, { ctx: props.ctx }),
     models: () => e(SettingsModelsSection, { ctx: props.ctx, writingScope: props.writingScope }),
@@ -115,39 +151,48 @@ export function SettingsDialog(props: {
     usage: () => e(SettingsUsageSection, { ctx: props.ctx }),
     zhihu: () => props.zhihuTab ?? e('p', { className: 'muted' }, t('settings.zhihuUnavailable')),
     plugins: () => props.pluginsTab ?? e('p', { className: 'muted' }, t('settings.pluginsUnavailable')),
+    about: () => e(AboutSettingsSection, { active: activeTab === 'about', onBusyChange: setAboutBusy }),
   }
-  /* 能力在弹窗打开期间变为停用时，回落到仍可用的分类。 */
-  const activeTab = tabs.includes(tab) ? tab : 'general'
 
   return e(Dialog, {
     open,
-    onOpenChange: (next: boolean) => { if (!next) props.onClose() },
+    onOpenChange: (next: boolean) => { if (!next && !aboutBusy) props.onClose() },
     title: t('common.settings'),
     className: 'file-dialog settings-dialog',
     overlayClassName: 'file-dialog-overlay settings-overlay',
+    dismissible: !aboutBusy,
     initialFocusRef: closeRef,
   },
-    e(Tabs, { value: activeTab, onValueChange: (value) => selectTab(value as SettingsTab), orientation: 'vertical', className: 'settings-tabs' },
+    e(Tabs, { value: activeTab, onValueChange: selectTab, orientation: 'vertical', className: 'settings-tabs' },
       e('aside', { className: 'settings-nav' },
         e('h2', { id: 'settings-dialog-title' }, t('common.settings')),
         e(TabsList, { 'aria-label': t('settings.nav') },
-          tabs.map((key) => e(TabsTrigger, {
+          navTabs.map((key) => e(TabsTrigger, {
             key,
             value: key,
             className: `settings-tab${activeTab === key ? ' active' : ''}`,
             'aria-current': activeTab === key,
-          }, tabLabel(key))),
+          }, navLabel(key, officialSections))),
         ),
       ),
       e('div', { className: 'settings-body' },
         e('header', { className: 'settings-header' },
-          e('span', { className: 'settings-header-title' }, tabLabel(activeTab)),
+          e('span', { className: 'settings-header-title' }, navLabel(activeTab, officialSections)),
           props.ctx.connection.isLoopback ? e('button', { type: 'button', className: 'settings-open-config', onClick: () => void openConfigFile() }, t('settings.openConfig')) : null,
-          e(Button, { ref: closeRef, variant: 'icon', className: 'icon-button settings-close', 'aria-label': t('settings.close'), onClick: props.onClose }, '×'),
+          e(Button, { ref: closeRef, variant: 'icon', className: 'icon-button settings-close', 'aria-label': t('settings.close'), disabled: aboutBusy, onClick: props.onClose }, '×'),
         ),
         note ? e('p', { className: 'warning pad', role: 'alert' }, note) : null,
         e('div', { className: 'settings-pages', tabIndex: 0 },
-          tabs.map((key) => e(SettingsTabPage, { key, tab: key, active: key === activeTab }, content[key]())),
+          builtinPages.map((key) => e(SettingsTabPage, { key, tab: key, active: key === activeTab }, content[key]())),
+          open && activeOfficial && props.renderSlot
+            ? e(SettingsTabPage, { key: activeOfficial.navId, tab: activeOfficial.navId, active: true },
+              e(OfficialSettingsSectionPage, {
+                renderSlot: props.renderSlot,
+                sectionId: activeOfficial.id,
+                version: official.version,
+                onClose: props.onClose,
+              }))
+            : null,
         ),
       ),
     ),

@@ -376,6 +376,15 @@ export const componentStyles = `
 .shell .chapter-meta-settings textarea, .shell .chapter-meta-settings input[type="text"], .dsh-ui .chapter-meta-settings textarea, .dsh-ui .chapter-meta-settings input[type="text"] { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
 .shell .chapter-meta-count, .dsh-ui .chapter-meta-count { color: var(--meta); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .shell .chapter-meta-count.over, .dsh-ui .chapter-meta-count.over { color: var(--danger); }
+/* 稿纸旁的紧凑章纲条：summary 只显示一行计数，展开后是带序号的节拍列表。 */
+.shell .editor-stack, .dsh-ui .editor-stack { display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; }
+.shell .editor-stack .editor-pane, .dsh-ui .editor-stack .editor-pane { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.shell .chapter-plan-strip, .dsh-ui .chapter-plan-strip { flex: none; }
+.shell .chapter-plan-strip summary, .dsh-ui .chapter-plan-strip summary { display: flex; align-items: center; gap: 6px; }
+.shell .chapter-plan-strip summary::before, .dsh-ui .chapter-plan-strip summary::before { content: '▸'; font-size: 10px; color: var(--meta); }
+.shell .chapter-plan-strip[open] summary::before, .dsh-ui .chapter-plan-strip[open] summary::before { content: '▾'; }
+.shell .chapter-plan-strip-label, .dsh-ui .chapter-plan-strip-label { font-size: var(--text-xs); color: var(--fg-2); letter-spacing: .02em; }
+.shell .chapter-plan-beats, .dsh-ui .chapter-plan-beats { margin: 6px 0 2px; padding-left: 22px; display: grid; gap: 3px; font-size: var(--text-xs); color: var(--fg-2); }
 .shell button.home-import-link.home-entry-card, .dsh-ui button.home-import-link.home-entry-card { margin-top: 0; color: var(--fg); text-decoration: none; font: inherit; }
 .shell .tree-row, .shell .tree-file-row, .dsh-ui .tree-row, .dsh-ui .tree-file-row { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 32px; width: 100%; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-chrome); line-height: 1.35; letter-spacing: .02em; }
 /* 章节状态徽标:行末单字胶囊,草/修/定三色。 */
@@ -549,17 +558,6 @@ export const componentStyles = `
 .shell .archived-conversations ul, .dsh-ui .archived-conversations ul { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .shell .archived-conversations li, .dsh-ui .archived-conversations li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .shell .archived-conversations button, .dsh-ui .archived-conversations button { border: 0; background: none; color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
-/* 新对话设置:绝对定位铺满搭档栏,不参与 grid 行分配——若作为普通
-   grid 项插入,会把对话历史顶出 minmax(0,1fr) 行,长消息溢出栏外。 */
-.dsh-ui.conversation-setup-dialog { width: min(420px, 100%); }
-.dsh-ui.conversation-setup-dialog .conversation-setup { position: static; inset: auto; display: grid; align-content: start; gap: var(--space-4); padding: 0; background: transparent; }
-.dsh-ui.conversation-setup-dialog .select, .dsh-ui.conversation-setup-dialog .select-trigger { width: 100%; min-width: 0; }
-.shell .conversation-setup, .dsh-ui .conversation-setup { display: grid; align-content: start; gap: var(--space-4); }
-.shell .conversation-setup header, .dsh-ui .conversation-setup header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.shell .conversation-setup header strong, .dsh-ui .conversation-setup header strong { font: 500 var(--text-base)/1.3 var(--font-sans); }
-.shell .conversation-setup select, .dsh-ui .conversation-setup select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
-.shell .conversation-setup > button, .dsh-ui .conversation-setup > button { justify-self: start; }
-.shell .conversation-setup footer, .dsh-ui .conversation-setup footer { display: flex; justify-content: flex-end; gap: 7px; }
 .shell .model-indicator, .dsh-ui .model-indicator { display: block; overflow: hidden; color: var(--meta); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
 
 .shell .chat-history, .dsh-ui .chat-history { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; min-width: 0; max-width: 100%; min-height: 0; overflow: auto; overflow-x: hidden; padding: var(--space-3); box-sizing: border-box; }
@@ -651,6 +649,14 @@ export const componentStyles = `
 .shell .proposal-card .proposal-split-summary, .shell .proposal-card .proposal-merge-summary, .shell .proposal-card .proposal-renames, .dsh-ui .proposal-card .proposal-split-summary, .dsh-ui .proposal-card .proposal-merge-summary, .dsh-ui .proposal-card .proposal-renames { display: grid; gap: 6px; }
 .shell .proposal-card .proposal-renames ul, .dsh-ui .proposal-card .proposal-renames ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 .shell .proposal-card .proposal-renames code, .dsh-ui .proposal-card .proposal-renames code { font-size: var(--text-xs); }
+/* 提案标题与类型徽标：大纲提案、章纲/章末小结提案在摘要旁标明类型。 */
+.shell .proposal-card .proposal-title, .dsh-ui .proposal-card .proposal-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.shell .proposal-card .proposal-kind, .dsh-ui .proposal-card .proposal-kind { flex: none; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 10px; letter-spacing: .04em; }
+/* 字段前后对照（edit / 章纲 / 章末小结共用 proposal-diff 结构）。 */
+.shell .proposal-card .proposal-diff, .dsh-ui .proposal-card .proposal-diff { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(12em, 1fr)); }
+.shell .proposal-card .proposal-diff small, .dsh-ui .proposal-card .proposal-diff small { display: block; color: var(--meta); font-size: var(--text-xs); margin-bottom: 4px; }
+/* create 提案：应用前列出将自动创建的目录。 */
+.shell .proposal-card .proposal-missing-dirs, .dsh-ui .proposal-card .proposal-missing-dirs { margin: 0; padding: 6px 8px; border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--fg-2); font-size: var(--text-xs); }
 
 /* ── Empty / home ───────────────────────────────────────── */
 .shell .empty-paper, .dsh-ui .empty-paper { grid-row: 2; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 32px; background: var(--surface); }
@@ -720,11 +726,12 @@ export const componentStyles = `
 
 /* ── Focus mode / layout toggles ────────────────────────── */
 .shell.layout-shell { grid-template-rows: var(--topbar-h) minmax(0, 1fr); }
-.shell.layout-shell > .sidebar, .shell.layout-shell > .editor, .shell.layout-shell > .empty-paper, .shell.layout-shell > .chat, .shell.layout-shell > .panel-resizer, .shell.layout-shell.pinned-open > .pinned-pane, .shell.layout-shell > .pinned-pane { grid-row: 2; }
+.shell.layout-shell > .sidebar, .shell.layout-shell > .editor-stack, .shell.layout-shell > .editor, .shell.layout-shell > .empty-paper, .shell.layout-shell > .chat, .shell.layout-shell > .panel-resizer, .shell.layout-shell.pinned-open > .pinned-pane, .shell.layout-shell > .pinned-pane { grid-row: 2; }
 /* 中栏 overlay 座位：座位容器和渲染器包裹层都不占格；插件标记 data-dsh-center-overlay 的根元素
    直接成为网格项，落在稿纸所在的列。稿纸根元素带内联 display，因此隐藏必须 !important。 */
 .shell.layout-shell > .center-overlays, .shell.layout-shell > .center-overlays > * { display: contents; }
 .shell.layout-shell > .center-overlays [data-dsh-center-overlay] { grid-row: 2; min-width: 0; min-height: 0; overflow: auto; }
+.shell.layout-shell:has(> .center-overlays [data-dsh-center-overlay]) > .editor-stack,
 .shell.layout-shell:has(> .center-overlays [data-dsh-center-overlay]) > .editor,
 .shell.layout-shell:has(> .center-overlays [data-dsh-center-overlay]) > .empty-paper { display: none !important; }
 .shell.layout-shell.focus-mode { grid-template-columns: minmax(0, 1fr) !important; }
@@ -1010,7 +1017,7 @@ export const componentStyles = `
 .shell .models-candidate-description, .dsh-ui .models-candidate-description { margin: 0; font-size: var(--text-xs); color: var(--meta); }
 .shell .models-candidate-actions, .dsh-ui .models-candidate-actions { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 8px; }
 
-/* 关于与更新:复用 .file-dialog 弹层节奏,只加 about-* 自己的版块。 */
+/* 关于与更新:设置分类内的版本与检查更新。 */
 .shell .about-page, .dsh-ui .about-page { max-width: 520px; display: flex; flex-direction: column; gap: var(--space-4); }
 .shell .about-header, .dsh-ui .about-header { display: grid; gap: 4px; }
 .shell .about-title, .dsh-ui .about-title { margin: 0; font: 600 var(--text-md)/1.3 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
@@ -1027,7 +1034,7 @@ export const componentStyles = `
 .shell .about-release-date, .dsh-ui .about-release-date { color: var(--muted); font-size: var(--text-xs); }
 .shell .about-release-body, .dsh-ui .about-release-body { margin: 0; font: 400 var(--text-sm)/1.65 var(--font-sans); color: var(--fg-2); white-space: pre-wrap; max-height: 220px; overflow: auto; }
 .shell .about-note, .dsh-ui .about-note { margin: 0; color: var(--meta); font-size: var(--text-xs); line-height: 1.7; }
-.shell .about-actions, .dsh-ui .about-actions { display: flex; justify-content: flex-end; gap: var(--space-2); flex-wrap: wrap; }
+.shell .about-actions, .dsh-ui .about-actions { display: flex; justify-content: flex-start; gap: var(--space-2); flex-wrap: wrap; }
 .shell .about-button, .dsh-ui .about-button { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease); }
 .shell .about-button:hover:not(:disabled), .dsh-ui .about-button:hover:not(:disabled) { background: var(--surface-warm); color: var(--fg); border-color: var(--hairline-strong); }
 .shell .about-button:disabled, .dsh-ui .about-button:disabled { opacity: .55; cursor: not-allowed; }
@@ -1039,17 +1046,12 @@ export const componentStyles = `
 .shell .about-progress, .dsh-ui .about-progress { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; }
 .shell .about-progress-fill, .dsh-ui .about-progress-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--motion-fast) var(--ease); }
 .shell .about-download-meta, .dsh-ui .about-download-meta { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.6; }
-/* 关于/更新入口:沿用 .settings-trigger 的轻量按钮节奏,放在 SettingsTrigger 旁。 */
-.shell .about-trigger, .dsh-ui .about-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }
-.shell .about-trigger:hover, .dsh-ui .about-trigger:hover { background: var(--surface-warm); color: var(--fg); }
 /* 启动更新提示:右下角轻量 toast,只在后台检查发现新版本时出现。 */
 .shell .update-toast, .dsh-ui .update-toast { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 40; display: flex; align-items: center; gap: var(--space-3); padding: 6px 6px 6px var(--space-3); border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-raised); font-size: var(--text-sm); color: var(--fg); animation: shell-rise-in var(--motion-base) var(--ease-spring); }
 .shell .update-toast-action, .dsh-ui .update-toast-action { min-height: 26px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-on); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }
 .shell .update-toast-action:hover, .dsh-ui .update-toast-action:hover { background: var(--accent-active); }
 .shell .update-toast-action:focus-visible, .dsh-ui .update-toast-action:focus-visible { box-shadow: var(--focus-ring); }
 .shell .update-toast-close, .dsh-ui .update-toast-close { min-width: 24px; min-height: 24px; }
-.shell .about-trigger-icon, .dsh-ui .about-trigger-icon { display: grid; place-items: center; font-size: 13px; color: var(--meta); }
-.shell .about-trigger:hover .about-trigger-icon, .dsh-ui .about-trigger:hover .about-trigger-icon { color: var(--fg); }
 
 /* 用量设置:今日 4 卡 + 近 7 日分模型堆叠柱状图 + 底部说明。 */
 .shell .usage-page, .dsh-ui .usage-page { max-width: 720px; display: flex; flex-direction: column; gap: var(--space-5); }

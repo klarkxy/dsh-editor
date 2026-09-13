@@ -49,7 +49,7 @@ describe('shell client inject', () => {
     expect(inject).toEqual([
       'slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote',
       'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker',
-      'uiSession',
+      'uiSession', 'locale',
     ])
   })
 })
@@ -288,8 +288,9 @@ describe('shell manuscript RPC safety', () => {
     expect(root).toMatch(/setDeleteTarget[\s\S]{0,400}if \(target\.kind === 'file' && path === target\.path\) setPath\(''\)/)
   })
 
-  it('shows an independent about/update dialog backed by the desktop bridge', () => {
-    const about = readFileSync(new URL('./client/about-dialog.tsx', import.meta.url), 'utf8')
+  it('shows about/update as a settings tab backed by the desktop bridge', () => {
+    const about = readFileSync(new URL('./client/settings-about.tsx', import.meta.url), 'utf8')
+    const settings = readFileSync(new URL('./client/settings.tsx', import.meta.url), 'utf8')
     const bridge = readFileSync(new URL('./client/window-controls.tsx', import.meta.url), 'utf8')
     const root = rootSource()
     /* 桌面端暴露的方法都按可选形式收口,shell 不依赖其存在 */
@@ -302,7 +303,7 @@ describe('shell manuscript RPC safety', () => {
     expect(bridge).toContain("installUpdate?(path: string): Promise<'restarting' | 'revealed'>")
     expect(bridge).toContain('onUpdateProgress?(listener: (progress: UpdateProgress) => void): () => void')
     expect(bridge).toMatch(/status:\s*'latest'\s*\|\s*'update-available'\s*\|\s*'error'/)
-    /* 弹窗自身按 status 分流,并依赖 getAppInfo / checkForUpdate */
+    /* 关于页按 status 分流,并依赖 getAppInfo / checkForUpdate */
     expect(about).toContain('getAppInfo')
     expect(about).toContain('checkForUpdate')
     expect(about).toContain("'latest'")
@@ -312,13 +313,15 @@ describe('shell manuscript RPC safety', () => {
     expect(about).toMatch(/result\.status === 'update-available'/)
     expect(about).toMatch(/result\.status === 'error'/)
     expect(about).toContain('openExternal')
-    /* root.ts 入口:两个 chrome 都挂 AboutTrigger,aboutOpen 渲染 AboutUpdateDialog */
-    expect(root).toContain('AboutUpdateDialog')
-    expect(root).toContain('AboutTrigger')
-    expect(root).toMatch(/const \[aboutOpen, setAboutOpen\]\s*=\s*useState\(false\)/)
-    expect(root).toContain('aria-haspopup')
-    expect(root).toContain("t('about.triggerAria')")
-    expect(zh['about.triggerAria']).toBe('关于与更新')
+    /* 关于是设置分类,不单独占顶栏入口 */
+    expect(settings).toContain("'about'")
+    expect(settings).toContain('AboutSettingsSection')
+    expect(settings).toContain('focusTab')
+    expect(root).toContain('focusTab: settingsFocusTab')
+    expect(root).toContain("openSettings('about')")
+    expect(root).not.toContain('AboutTrigger')
+    expect(root).not.toContain('AboutUpdateDialog')
+    expect(zh['settings.about']).toBe('关于')
   })
 
   it('surfaces the startup update check as a dismissible toast', () => {
@@ -327,13 +330,13 @@ describe('shell manuscript RPC safety', () => {
     expect(root).toContain('getStartupUpdate')
     expect(root).toMatch(/const \[startupUpdate, setStartupUpdate\]\s*=\s*useState/)
     expect(root).toMatch(/result\.status !== 'update-available'/)
-    /* toast 可关闭,"查看详情" 关掉 toast 并打开关于/更新弹窗 */
+    /* toast 可关闭,"查看详情" 关掉 toast 并打开设置的关于分类 */
     expect(root).toContain('update-toast')
     expect(root).toContain("t('about.toast'")
     expect(root).toContain("t('about.dismissToast')")
     expect(zh['about.toast']).toBe('发现新版本 {version}')
     expect(zh['about.dismissToast']).toBe('关闭更新提示')
-    expect(root).toMatch(/setStartupUpdate\(null\); setAboutOpen\(true\)/)
+    expect(root).toMatch(/setStartupUpdate\(null\); openSettings\('about'\)/)
   })
 
   it('commits with the current time as the message and rolls back in place with confirmation', () => {
@@ -613,7 +616,9 @@ describe('shell manuscript RPC safety', () => {
     expect(general.match(/t\('settings.busyEnter'\)/g)?.length).toBe(2)
     const chat = readFileSync(new URL('./client/chat.ts', import.meta.url), 'utf8')
     expect(chat).toContain('init-guide-quiet')
-    expect(chat).toContain('chat.expandReading')
+    expect(chat).not.toContain('chat.expandReading')
+    expect(chat).not.toContain('NewConversationPicker')
+    expect(chat).toContain('currentConversationTitle')
     expect(chat).toContain('selectedLabel')
     expect(chat).toContain('`${group.name} · ${model.name || model.id}`')
     expect(chat).toContain("llm/adapters-updated")
@@ -861,7 +866,7 @@ describe('shell manuscript RPC safety', () => {
     expect(remove).not.toHaveBeenCalled()
   })
 
-  it('routes split/merge/renames proposals to the workbench channel and keeps edit/create on /manuscript', async () => {
+  it('routes create and chapter metadata proposals to the workbench channel and keeps edit on /manuscript', async () => {
     const calls: Array<{ channel: string; endpoint: string; payload: unknown }> = []
     const okPrepare = (value: unknown) => async () => ({ ok: true, value })
     const okApply = (value: unknown) => async () => ({ ok: true, value })
@@ -903,7 +908,17 @@ describe('shell manuscript RPC safety', () => {
     const renamesProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'renames', summary: '改名', renames: [{ from: '正文/001.md', to: '正文/序章.md' }] } as never
     const renamesPrepared = { kind: 'renames', versions: { '正文/001.md': 'v1' }, entries: [{ from: '正文/001.md', to: '正文/序章.md' }] } as never
     expect(buildExpectedVersions(renamesProposal, renamesPrepared)).toEqual({ '正文/001.md': 'v1' })
-    /* edit/create 仍然走 /manuscript 通道 */
+    /* create 与章纲/章末小结走 workbench prepare,按 prepare 观察到的版本校验目标文件 */
+    const createProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'create', path: '大纲/总纲.md', summary: '新建大纲', text: '# 总纲' } as never
+    expect(buildExpectedVersions(createProposal, { kind: 'create', applicable: true, version: '', missingDirectories: ['大纲'] } as never))
+      .toEqual({ '大纲/总纲.md': '' })
+    const planProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'chapter_plan', path: '正文/001.md', summary: '章纲', sourceVersion: 'v9', beats: ['码头'] } as never
+    expect(buildExpectedVersions(planProposal, { kind: 'chapter_plan', version: 'v9', before: '', after: '1. 码头' } as never))
+      .toEqual({ '正文/001.md': 'v9' })
+    const summaryProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'chapter_summary', path: '正文/001.md', summary: '小结', sourceVersion: 'v9', state: { now: '黄昏' } } as never
+    expect(buildExpectedVersions(summaryProposal, { kind: 'chapter_summary', version: 'v9', before: '', after: '此刻：黄昏' } as never))
+      .toEqual({ '正文/001.md': 'v9' })
+    /* edit 仍然走 /manuscript 通道 */
     expect(buildExpectedVersions({ kind: 'edit', path: 'a.md', oldText: 'o', newText: 'n' } as never, { kind: 'edit', version: 'v1', before: 'o', after: 'n' } as never)).toBeUndefined()
 
     /* 源码断言:workbench 新端点必须真的被 chat.ts 路由,避免被某次重构回退到 /manuscript。 */
@@ -972,10 +987,12 @@ describe('shell manuscript RPC safety', () => {
     expect(editorSource).not.toContain('RewritePresetsBar')
     expect(chatSource).toContain("t('chat.archivedConversations')")
     expect(chatSource).toContain("t('chat.conversationActions')")
-    expect(chatSource).toContain("t('chat.deleteTitle')")
+    expect(chatSource).toContain("t('chat.renameConversation')")
+    expect(chatSource).not.toContain("t('chat.deleteTitle')")
+    expect(chatSource).not.toContain("t('common.delete')")
     expect(zh['chat.archivedConversations']).toBe('已归档对话')
     expect(zh['chat.conversationActions']).toBe('对话操作')
-    expect(zh['chat.deleteTitle']).toBe('删除这段对话？')
+    expect(zh['chat.renameConversation']).toBe('重命名对话')
     expect(zh['sidebar.search']).toBe('搜索')
     const sidebarSearch = readFileSync(new URL('./client/root.ts', import.meta.url), 'utf8')
     expect(sidebarSearch).toContain("t('search.placeholder')")

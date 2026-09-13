@@ -25,6 +25,8 @@ const CJK_ALLOWLIST = [
   '作品索引',
   '文档/dsh-editor',
   '下载已取消',
+  /* settings-plugins 官方分区边界的既有中文兜底文案（用户插件工作保留，不走字典）。 */
+  '页面无法显示',
 ] as const
 
 afterEach(() => {

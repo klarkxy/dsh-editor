@@ -24,6 +24,10 @@ export function discardCreatedChatModelError(sessionId: SessionId): void {
   if (createdChatModelError?.sessionId === sessionId) createdChatModelError = undefined
 }
 
+export function rememberCreatedChatModelError(sessionId: SessionId, message: string): void {
+  createdChatModelError = { sessionId, message }
+}
+
 export function provideEditorUiWorkspace(ctx: ShellContext, options?: {
   defaultChatModel?(): { provider?: string; model?: string } | undefined
 }): void {

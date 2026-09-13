@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { provideEditorUiWorkspace } from './ui-workspace.ts'
+import { provideEditorUiWorkspace, rememberCreatedChatModelError, takeCreatedChatModelError } from './ui-workspace.ts'
 import type { ShellContext } from './shared.ts'
 
 function fixture(defaultChatModel?: () => { provider: string; model: string } | undefined) {
@@ -89,4 +89,10 @@ it('never changes the model of a reused blank session when the default changes',
   const {uiWorkspace, selectModel} = fixture(() => ({provider: 'configured', model: 'new-default'}))
   await expect(uiWorkspace.connectWorkspace('ws-1')).resolves.toBe('blank-1')
   expect(selectModel).not.toHaveBeenCalled()
+})
+
+it('remembers a created-chat model error for the next Chat mount', () => {
+  rememberCreatedChatModelError('s1', 'failed')
+  expect(takeCreatedChatModelError('s1')).toBe('failed')
+  expect(takeCreatedChatModelError('s1')).toBeUndefined()
 })

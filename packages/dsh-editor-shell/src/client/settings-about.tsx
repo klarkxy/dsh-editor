@@ -6,7 +6,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { Button, Dialog } from './ui/index.ts'
 import { windowBridge } from './window-controls.tsx'
 import { intlLocale, t, useLocale } from '../i18n/index.ts'
 
@@ -51,38 +50,39 @@ function formatMB(bytes: number): string {
 }
 
 /**
- * t('about.title') + 检查更新 弹窗。
+ * 设置里的关于 / 检查更新页。
  *
  * 依赖 `window.dshWindow.getAppInfo` / `window.dshWindow.checkForUpdate` 由桌面端
- * preload 暴露(并行 agent 在改 preload.cjs),浏览器开发模式不存在,自动回退为
- * t('about.devMode') 标记并禁用检查按钮。
+ * preload 暴露,浏览器开发模式不存在,自动回退为 t('about.devMode') 并禁用检查按钮。
  *
- * useEffect 内的检查请求与对话框 onClose 抢跑:每次发起前记录 token,卸载/关闭
- * 时清理,然后在 setState 之前再核对一次,避免组件已卸载后晚到的结果污染状态。
+ * useEffect 内的检查请求与切走分类抢跑:每次发起前记录 token,卸载或停用
+ * 时清理,然后在 setState 之前再核对一次,避免晚到的结果污染状态。
  */
-export function AboutUpdateDialog(props: { open?: boolean; onClose(): void }): ReactNode {
+export function AboutSettingsSection(props: {
+  active?: boolean
+  onBusyChange?(busy: boolean): void
+}): ReactNode {
   useLocale()
-  const open = props.open ?? true
+  const active = props.active ?? true
   const bridge = windowBridge()
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [state, setState] = useState<CheckState>({ status: 'idle' })
   const [download, setDownload] = useState<DownloadState>({ status: 'idle' })
-  const closeRef = useRef<HTMLButtonElement | null>(null)
   const liveToken = useRef(0)
+  const onBusyChange = props.onBusyChange
 
   useEffect(() => {
-    if (!open) return
-    const token = ++liveToken.current
+    if (!active) return
+    let cancelled = false
     const info = bridge?.getAppInfo
     if (!info) { setAppInfo(null); return }
     void info().then((value) => {
-      if (liveToken.current !== token) return
-      setAppInfo(value)
+      if (!cancelled) setAppInfo(value)
     }).catch(() => {
-      if (liveToken.current !== token) return
-      setAppInfo(null)
+      if (!cancelled) setAppInfo(null)
     })
-  }, [bridge, open])
+    return () => { cancelled = true }
+  }, [bridge, active])
 
   const runCheck = async () => {
     const check = bridge?.checkForUpdate
@@ -104,12 +104,12 @@ export function AboutUpdateDialog(props: { open?: boolean; onClose(): void }): R
     }
   }
 
-  // 打开时自动跑一次;没有桥就不跑(开发模式)。
+  // 打开本分类时自动跑一次;没有桥就不跑(开发模式)。
   useEffect(() => {
-    if (!open || !bridge?.checkForUpdate) return
+    if (!active || !bridge?.checkForUpdate) return
     void runCheck()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bridge, open])
+  }, [bridge, active])
 
   // 下载进度由主进程推送;只在下载进行中消费,晚到的 done 事件以 invoke 结果为准。
   useEffect(() => {
@@ -127,6 +127,11 @@ export function AboutUpdateDialog(props: { open?: boolean; onClose(): void }): R
         : prev)
     })
   }, [bridge])
+
+  useEffect(() => {
+    onBusyChange?.(download.status === 'downloading')
+  }, [download.status, onBusyChange])
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange])
 
   const startDownload = async (asset: Asset) => {
     const downloadUpdate = bridge?.downloadUpdate
@@ -172,64 +177,38 @@ export function AboutUpdateDialog(props: { open?: boolean; onClose(): void }): R
   const versionLabel = appInfo ? `${appInfo.name} ${appInfo.version}` : t('about.devMode')
   const canCheck = hasBridge
 
-  const downloading = download.status === 'downloading'
-  return e(Dialog, {
-    open,
-    onOpenChange: (next: boolean) => { if (!next && !downloading) props.onClose() },
-    title: t('about.title'),
-    className: 'file-dialog about-dialog',
-    overlayClassName: 'file-dialog-overlay',
-    dismissible: !downloading,
-    initialFocusRef: closeRef,
-  },
-      e('header', null,
-        e('h2', { id: 'about-dialog-title' }, t('about.title')),
-        e(Button, {
-          ref: closeRef,
-          variant: 'icon',
-          className: 'icon-button about-close',
-          'aria-label': t('common.close'),
-          disabled: downloading,
-          onClick: props.onClose,
-        }, '×'),
+  return e('section', { className: 'about-page', 'aria-label': t('settings.about') },
+    e('div', { className: 'about-header' },
+      e('h3', { className: 'about-title' }, t('about.title')),
+      e('p', { className: 'about-version' },
+        e('strong', null, versionLabel),
       ),
-      e('section', { className: 'about-page' },
-        e('div', { className: 'about-header' },
-          e('p', { className: 'about-version' },
-            e('strong', null, versionLabel),
-          ),
-          !hasBridge ? e('p', { className: 'about-note' },
-            t('about.browserHint'),
-          ) : null,
-        ),
-        e('div', { className: 'about-status' },
-          renderStatus(state),
-        ),
-        renderResultBody(state, download, appInfo, {
-          onOpen: onOpenDownload,
-          onDownload: (asset) => void startDownload(asset),
-          onCancel: cancelDownload,
-          onInstall: (path) => void installDownloaded(path),
-        }),
-        e('p', { className: 'about-note' },
-          state.status === 'ready' && state.result.status === 'update-available'
-            ? t('about.macHint')
-            : t('about.proxyHint'),
-        ),
-        e('div', { className: 'about-actions' },
-          e('button', {
-            type: 'button',
-            className: 'about-button',
-            disabled: !canCheck || state.status === 'loading',
-            onClick: () => void runCheck(),
-          }, state.status === 'loading' ? t('about.checking') : t('about.check')),
-          e('button', {
-            type: 'button',
-            className: 'about-button',
-            onClick: props.onClose,
-          }, t('common.close')),
-        ),
-      ),
+      !hasBridge ? e('p', { className: 'about-note' },
+        t('about.browserHint'),
+      ) : null,
+    ),
+    e('div', { className: 'about-status' },
+      renderStatus(state),
+    ),
+    renderResultBody(state, download, appInfo, {
+      onOpen: onOpenDownload,
+      onDownload: (asset) => void startDownload(asset),
+      onCancel: cancelDownload,
+      onInstall: (path) => void installDownloaded(path),
+    }),
+    e('p', { className: 'about-note' },
+      state.status === 'ready' && state.result.status === 'update-available'
+        ? t('about.macHint')
+        : t('about.proxyHint'),
+    ),
+    e('div', { className: 'about-actions' },
+      e('button', {
+        type: 'button',
+        className: 'about-button',
+        disabled: !canCheck || state.status === 'loading',
+        onClick: () => void runCheck(),
+      }, state.status === 'loading' ? t('about.checking') : t('about.check')),
+    ),
   )
 }
 

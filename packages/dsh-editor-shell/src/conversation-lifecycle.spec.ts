@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, conversationTitle, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from './conversation-lifecycle.ts'
+import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, conversationTitle, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from './conversation-lifecycle.ts'
 import { conversationWorkRecord, decodeConversationSettings, putConversationWork } from './conversation-store.ts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
@@ -124,10 +124,45 @@ describe('conversation lifecycle projection', () => {
 
   it('persists archived and tombstone ids per work beside the conversation settings record', () => {
     expect(decodeConversationSettings({ works: { w1: { archivedIds: ['a', 'a', 1], tombstoneIds: ['gone'] } } })).toEqual({
-      works: { w1: { archivedIds: ['a'], tombstoneIds: ['gone'] } },
+      works: { w1: { archivedIds: ['a'], tombstoneIds: ['gone'], titles: {} } },
     })
-    const next = putConversationWork(decodeConversationSettings(undefined), 'w1', { archivedIds: ['a'], tombstoneIds: [] })
-    expect(conversationWorkRecord(next, 'w1')).toEqual({ archivedIds: ['a'], tombstoneIds: [] })
-    expect(conversationWorkRecord(next, 'missing')).toEqual({ archivedIds: [], tombstoneIds: [] })
+    const next = putConversationWork(decodeConversationSettings(undefined), 'w1', { archivedIds: ['a'], tombstoneIds: [], titles: {} })
+    expect(conversationWorkRecord(next, 'w1')).toEqual({ archivedIds: ['a'], tombstoneIds: [], titles: {} })
+    expect(conversationWorkRecord(next, 'missing')).toEqual({ archivedIds: [], tombstoneIds: [], titles: {} })
+  })
+
+  it('keeps trimmed custom titles per work and prefers them over host titles', () => {
+    expect(decodeConversationSettings({
+      works: { w1: { titles: { a: '  进度  ', b: 1, '': 'x' } } },
+    })).toEqual({
+      works: { w1: { archivedIds: [], tombstoneIds: [], titles: { a: '进度' } } },
+    })
+    const next = putConversationWork(decodeConversationSettings(undefined), 'w1', {
+      archivedIds: [],
+      tombstoneIds: [],
+      titles: { a: '自定义进度' },
+    })
+    expect(conversationWorkRecord(next, 'w1').titles).toEqual({ a: '自定义进度' })
+    expect(conversationRows({
+      workspaceSessionIds: ['a'],
+      currentId: 'a',
+      titles: { a: conversationWorkRecord(next, 'w1').titles.a ?? '2026-09-12 | 自动名称' },
+    })).toEqual([{ id: 'a', title: '自定义进度', current: true }])
+  })
+
+  it('uses the settings default model when set, otherwise the first catalog model', () => {
+    const groups = [
+      { id: 'custom', models: [{ id: 'MiniMax-M3' }, { id: 'other' }] },
+      { id: 'second', models: [{ id: 'later' }] },
+    ]
+    expect(resolveNewConversationModel({
+      preferred: { provider: 'configured', model: 'default-chat' },
+      groups,
+    })).toEqual({ provider: 'configured', model: 'default-chat' })
+    expect(resolveNewConversationModel({ preferred: { provider: '', model: '' }, groups })).toEqual({
+      provider: 'custom',
+      model: 'MiniMax-M3',
+    })
+    expect(resolveNewConversationModel({ groups: [] })).toBeUndefined()
   })
 })
