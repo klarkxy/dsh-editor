@@ -190,10 +190,32 @@ export const zhihuClientStyles = `
 .zhihu-guide-steps, .dsh-ui .zhihu-guide-steps { margin: 0; padding-left: 18px; color: var(--fg-2, #3d3d3a); }
 .zhihu-scopes, .dsh-ui .zhihu-scopes { display: flex; gap: var(--space-3, 12px); flex-wrap: wrap; }
 .zhihu-scope, .dsh-ui .zhihu-scope { display: flex; align-items: center; gap: 4px; color: var(--fg-2, #3d3d3a); }
-.zhihu-chart, .dsh-ui .zhihu-chart { width: 100%; height: auto; display: block; }
+.zhihu-usage, .dsh-ui .zhihu-usage { display: flex; flex-direction: column; gap: var(--space-3, 12px); }
+.zhihu-usage-intro, .dsh-ui .zhihu-usage-intro { margin: 0; color: var(--meta, #6b6a64); line-height: 1.6; }
+.zhihu-usage-cards, .dsh-ui .zhihu-usage-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-2, 8px); }
+.zhihu-usage-card, .dsh-ui .zhihu-usage-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: var(--space-2, 8px); border: 1px solid var(--border-soft, #e5e3d8); border-radius: var(--radius-sm, 6px); background: var(--bg, #f3f1e8); }
+.zhihu-usage-card-label, .dsh-ui .zhihu-usage-card-label { color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); }
+.zhihu-usage-card-value, .dsh-ui .zhihu-usage-card-value { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg, #141413); }
+.zhihu-usage-card-unit, .dsh-ui .zhihu-usage-card-unit { margin-left: 4px; color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); font-weight: 400; }
+.zhihu-usage-heading, .dsh-ui .zhihu-usage-heading { margin: 0; font-size: var(--text-chrome, 13px); font-weight: 600; color: var(--fg-2, #3d3d3a); }
+.zhihu-usage-legend, .dsh-ui .zhihu-usage-legend { display: flex; flex-wrap: wrap; gap: 6px var(--space-3, 12px); margin: 0; padding: 0; list-style: none; color: var(--fg-2, #3d3d3a); font-size: var(--text-chrome, 13px); }
+.zhihu-usage-legend li, .dsh-ui .zhihu-usage-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.zhihu-chart-chip, .dsh-ui .zhihu-chart-chip { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.zhihu-chart-chip-ok, .dsh-ui .zhihu-chart-chip-ok { background: var(--accent, #1b365d); }
+.zhihu-chart-chip-fail, .dsh-ui .zhihu-chart-chip-fail { background: var(--danger, #8a3a30); }
+.zhihu-chart, .dsh-ui .zhihu-chart { width: 100%; height: auto; aspect-ratio: 600 / 176; display: block; }
 .zhihu-chart-bar-ok, .dsh-ui .zhihu-chart-bar-ok { fill: var(--accent, #1b365d); }
 .zhihu-chart-bar-fail, .dsh-ui .zhihu-chart-bar-fail { fill: var(--danger, #8a3a30); }
-.zhihu-chart-tick, .dsh-ui .zhihu-chart-tick { fill: var(--meta, #6b6a64); font-size: 13px; font-family: var(--font-mono, monospace); }
+.zhihu-chart-hit, .dsh-ui .zhihu-chart-hit { fill: transparent; }
+.zhihu-chart-grid, .dsh-ui .zhihu-chart-grid { stroke: var(--border-soft, #e5e3d8); stroke-width: 1; }
+.zhihu-chart-axis, .dsh-ui .zhihu-chart-axis { fill: var(--meta, #6b6a64); font-size: 11px; font-family: var(--font-mono, monospace); }
+.zhihu-chart-tick, .dsh-ui .zhihu-chart-tick { fill: var(--meta, #6b6a64); font-size: 11px; font-family: var(--font-mono, monospace); }
+.zhihu-chart-value, .dsh-ui .zhihu-chart-value { fill: var(--fg-2, #3d3d3a); font-size: 10px; font-family: var(--font-mono, monospace); }
+.zhihu-usage-table-wrap, .dsh-ui .zhihu-usage-table-wrap { overflow-x: auto; }
+.zhihu-usage-table, .dsh-ui .zhihu-usage-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.zhihu-usage-table th, .zhihu-usage-table td, .dsh-ui .zhihu-usage-table th, .dsh-ui .zhihu-usage-table td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--border-soft, #e5e3d8); color: var(--fg-2, #3d3d3a); }
+.zhihu-usage-table th:first-child, .zhihu-usage-table td:first-child, .dsh-ui .zhihu-usage-table th:first-child, .dsh-ui .zhihu-usage-table td:first-child { text-align: left; }
+.zhihu-usage-table th, .dsh-ui .zhihu-usage-table th { color: var(--meta, #6b6a64); font-weight: 600; }
 .zhihu-file, .dsh-ui .zhihu-file {
   font: inherit;
   font-size: var(--text-chrome, 13px);

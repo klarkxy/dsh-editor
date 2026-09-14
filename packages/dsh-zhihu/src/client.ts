@@ -492,51 +492,170 @@ function isUsageSummary(value: unknown): value is { days: DailyUsage[] } {
   return Array.isArray((value as { days?: unknown }).days)
 }
 
-const CHART_WIDTH = 600
-const CHART_HEIGHT = 120
-const CHART_PAD_BOTTOM = 16
+/** Local calendar day, kept in the client bundle so it does not pull the node usage domain. */
+function localDayKey(now: Date = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
 
-function UsageChart(props: { days: DailyUsage[] }): ReactNode {
+/** `2026-09-15` → `9/15`, so axis labels stay short and do not clip. */
+export function formatUsageDate(date: string): string {
+  const parts = date.split('-')
+  if (parts.length !== 3) return date
+  const month = Number(parts[1])
+  const day = Number(parts[2])
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || day < 1) return date
+  return `${month}/${day}`
+}
+
+export type UsageTotals = {
+  todayCalls: number
+  calls: number
+  failures: number
+  results: number
+  active: DailyUsage[]
+}
+
+export function summarizeUsage(days: readonly DailyUsage[], today: string): UsageTotals {
+  let todayCalls = 0
+  let calls = 0
+  let failures = 0
+  let results = 0
+  const active: DailyUsage[] = []
+  for (const day of days) {
+    calls += day.calls
+    failures += day.failures
+    results += day.results
+    if (day.date === today) todayCalls = day.calls
+    if (day.calls > 0) active.push(day)
+  }
+  return { todayCalls, calls, failures, results, active: active.slice().reverse() }
+}
+
+const TICK_MIN_GAP = 3
+
+/** Sparse windows label active days; nearby ticks collapse so labels do not overlap. */
+export function usageChartTicks(days: readonly { calls: number }[]): number[] {
+  const last = days.length - 1
+  if (last < 0) return []
+  if (last === 0) return [0]
+  const chosen: number[] = []
+  const accept = (index: number): void => {
+    if (chosen.some((item) => Math.abs(item - index) < TICK_MIN_GAP)) return
+    chosen.push(index)
+  }
+  const lastHasCalls = (days[last]?.calls ?? 0) > 0
+  if (lastHasCalls) accept(last)
+  accept(0)
+  const active = days
+    .map((day, index) => ({ index, calls: day.calls }))
+    .filter((row) => row.calls > 0)
+    .sort((left, right) => right.calls - left.calls || left.index - right.index)
+  if (active.length > 0 && active.length <= 6) {
+    for (const row of active) accept(row.index)
+  } else {
+    accept(Math.round(last / 3))
+    accept(Math.round((2 * last) / 3))
+  }
+  if (!lastHasCalls) accept(last)
+  return chosen.sort((left, right) => left - right)
+}
+
+function usageYTicks(maxCalls: number): number[] {
+  if (maxCalls <= 1) return [0, 1]
+  if (maxCalls === 2) return [0, 1, 2]
+  const mid = Math.round(maxCalls / 2)
+  return mid === 0 || mid === maxCalls ? [0, maxCalls] : [0, mid, maxCalls]
+}
+
+const CHART_WIDTH = 600
+const CHART_HEIGHT = 176
+const CHART_PAD = { top: 20, right: 12, bottom: 24, left: 36 }
+
+function UsageChart(props: { days: DailyUsage[]; totals: UsageTotals }): ReactNode {
   const days = props.days
   const maxCalls = Math.max(1, ...days.map((day) => day.calls))
-  const slot = CHART_WIDTH / days.length
-  const barWidth = Math.max(2, slot - 4)
-  const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM
+  const plotLeft = CHART_PAD.left
+  const plotRight = CHART_WIDTH - CHART_PAD.right
+  const plotTop = CHART_PAD.top
+  const plotBottom = CHART_HEIGHT - CHART_PAD.bottom
+  const plotWidth = plotRight - plotLeft
+  const plotHeight = plotBottom - plotTop
+  const slot = plotWidth / days.length
+  const barWidth = Math.max(2, Math.min(14, slot - 2))
+
+  const grid = usageYTicks(maxCalls).map((value) => {
+    const y = plotBottom - (value / maxCalls) * plotHeight
+    return e('g', { key: `y-${value}` },
+      e('line', { className: 'zhihu-chart-grid', x1: plotLeft, x2: plotRight, y1: y, y2: y }),
+      e('text', {
+        className: 'zhihu-chart-axis',
+        x: plotLeft - 6,
+        y,
+        textAnchor: 'end',
+        dominantBaseline: 'middle',
+      }, String(value)),
+    )
+  })
 
   const bars = days.map((day, index) => {
-    const x = index * slot + (slot - barWidth) / 2
+    const x = plotLeft + index * slot + (slot - barWidth) / 2
+    const okCalls = Math.max(0, day.calls - day.failures)
     const failHeight = (day.failures / maxCalls) * plotHeight
-    const okHeight = ((day.calls - day.failures) / maxCalls) * plotHeight
-    const label = `${day.date.slice(5)}：调用 ${day.calls}，失败 ${day.failures}`
-    const parts: ReactNode[] = []
+    const okHeight = (okCalls / maxCalls) * plotHeight
+    const label = `${day.date}：调用 ${day.calls} 次，成功 ${okCalls} 次，失败 ${day.failures} 次，结果 ${day.results} 条`
+    const parts: ReactNode[] = [
+      e('rect', {
+        key: 'hit',
+        className: 'zhihu-chart-hit',
+        x: plotLeft + index * slot,
+        y: plotTop,
+        width: slot,
+        height: plotHeight,
+      }),
+    ]
     if (okHeight > 0) {
-      parts.push(e('rect', { key: 'ok', className: 'zhihu-chart-bar-ok', x, y: plotHeight - okHeight, width: barWidth, height: okHeight }))
+      parts.push(e('rect', { key: 'ok', className: 'zhihu-chart-bar-ok', x, y: plotBottom - okHeight, width: barWidth, height: okHeight }))
     }
     if (failHeight > 0) {
-      parts.push(e('rect', { key: 'fail', className: 'zhihu-chart-bar-fail', x, y: plotHeight - okHeight - failHeight, width: barWidth, height: failHeight }))
+      parts.push(e('rect', { key: 'fail', className: 'zhihu-chart-bar-fail', x, y: plotBottom - okHeight - failHeight, width: barWidth, height: failHeight }))
+    }
+    if (day.calls > 0) {
+      parts.push(e('text', {
+        key: 'n',
+        className: 'zhihu-chart-value',
+        x: x + barWidth / 2,
+        y: plotBottom - okHeight - failHeight - 4,
+        textAnchor: 'middle',
+      }, String(day.calls)))
     }
     return e('g', { key: day.date }, e('title', null, label), ...parts)
   })
 
-  const ticks = [0, Math.floor(days.length / 2), days.length - 1].map((index) => {
+  const last = days.length - 1
+  const ticks = usageChartTicks(days).map((index) => {
     const day = days[index]
     if (!day) return null
+    const anchor = index === 0 ? 'start' : index === last ? 'end' : 'middle'
+    const tickX = index === 0 ? plotLeft : index === last ? plotRight : plotLeft + index * slot + slot / 2
     return e('text', {
-      key: day.date,
+      key: `x-${day.date}-${index}`,
       className: 'zhihu-chart-tick',
-      x: index * slot + slot / 2,
-      y: CHART_HEIGHT - 2,
-      textAnchor: 'middle',
-    }, day.date.slice(5))
+      x: tickX,
+      y: CHART_HEIGHT - 6,
+      textAnchor: anchor,
+    }, formatUsageDate(day.date))
   })
 
   return e('svg', {
     className: 'zhihu-chart',
     viewBox: `0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`,
     role: 'img',
-    'aria-label': `近 ${USAGE_DAYS} 天知乎调用用量`,
-    preserveAspectRatio: 'none',
-  }, ...bars, ...ticks)
+    'aria-label': `近 ${USAGE_DAYS} 天知乎工具调用 ${props.totals.calls} 次，失败 ${props.totals.failures} 次，结果 ${props.totals.results} 条`,
+  },
+    ...grid,
+    ...bars,
+    ...ticks,
+  )
 }
 
 type UsageLoad =
@@ -589,9 +708,53 @@ function UsageSection(props: { rpc: RpcCaller }): ReactNode {
     )
   }
 
-  const hasAny = state.days.some((day) => day.calls > 0)
-  return e('section', { 'data-testid': 'zhihu-usage', 'aria-label': '知乎调用用量' },
-    hasAny ? e(UsageChart, { days: state.days }) : e('p', { className: 'zhihu-status' }, '近 30 天暂无调用记录。'),
+  const totals = summarizeUsage(state.days, localDayKey())
+  const hasAny = totals.calls > 0
+  return e('section', { className: 'zhihu-usage', 'data-testid': 'zhihu-usage', 'aria-label': '知乎调用用量' },
+    e('p', { className: 'zhihu-usage-intro' }, '本机搜索、问答、热榜和知识库的调用次数，不是知乎官方配额或费用。'),
+    e('div', { className: 'zhihu-usage-cards' },
+      e(UsageCard, { label: '今日调用', value: totals.todayCalls, unit: '次' }),
+      e(UsageCard, { label: `近 ${USAGE_DAYS} 天`, value: totals.calls, unit: '次' }),
+      e(UsageCard, { label: '失败', value: totals.failures, unit: '次' }),
+      e(UsageCard, { label: '结果条数', value: totals.results, unit: '条' }),
+    ),
+    hasAny ? e(Fragment, null,
+      e('h3', { className: 'zhihu-usage-heading' }, '每日调用次数'),
+      e(UsageChart, { days: state.days, totals }),
+      e('ul', { className: 'zhihu-usage-legend' },
+        e('li', null, e('span', { className: 'zhihu-chart-chip zhihu-chart-chip-ok', 'aria-hidden': 'true' }), '成功'),
+        e('li', null, e('span', { className: 'zhihu-chart-chip zhihu-chart-chip-fail', 'aria-hidden': 'true' }), '失败'),
+      ),
+      e('h3', { className: 'zhihu-usage-heading' }, '有记录的日期'),
+      e('div', { className: 'zhihu-usage-table-wrap' },
+        e('table', { className: 'zhihu-usage-table' },
+          e('thead', null, e('tr', null,
+            e('th', { scope: 'col' }, '日期'),
+            e('th', { scope: 'col' }, '调用'),
+            e('th', { scope: 'col' }, '成功'),
+            e('th', { scope: 'col' }, '失败'),
+            e('th', { scope: 'col' }, '结果条数'),
+          )),
+          e('tbody', null, totals.active.map((day) => e('tr', { key: day.date },
+            e('th', { scope: 'row' }, day.date),
+            e('td', null, String(day.calls)),
+            e('td', null, String(Math.max(0, day.calls - day.failures))),
+            e('td', null, String(day.failures)),
+            e('td', null, String(day.results)),
+          ))),
+        ),
+      ),
+    ) : e('p', { className: 'zhihu-status' }, '近 30 天暂无调用记录。'),
+  )
+}
+
+function UsageCard(props: { label: string; value: number; unit: string }): ReactNode {
+  return e('div', { className: 'zhihu-usage-card' },
+    e('span', { className: 'zhihu-usage-card-label' }, props.label),
+    e('span', { className: 'zhihu-usage-card-value' },
+      String(props.value),
+      e('span', { className: 'zhihu-usage-card-unit' }, props.unit),
+    ),
   )
 }
 
