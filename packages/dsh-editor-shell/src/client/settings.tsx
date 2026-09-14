@@ -64,7 +64,11 @@ function SettingsTabPage(props: { tab: string; active: boolean; fromX?: number; 
       className: 'settings-page',
       initial: false,
       animate: pose,
-      transition: reduce ? { duration: 0 } : { type: 'spring' as const, stiffness: 340, damping: 26, mass: 0.85 },
+      transition: reduce ? { duration: 0 } : {
+        type: 'spring' as const, stiffness: 340, damping: 26, mass: 0.85,
+        /* blur 不走弹簧：keyframes + 欠阻尼 spring 过冲会把 filter 插成负数。 */
+        filter: { type: 'tween' as const, duration: 0.45, ease: 'easeOut' },
+      },
       style: { pointerEvents: props.active ? 'auto' : 'none' },
     }, props.children),
   )

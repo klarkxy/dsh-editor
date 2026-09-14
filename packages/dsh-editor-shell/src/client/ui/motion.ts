@@ -29,7 +29,12 @@ export function useChromeMotion(kind: ChromeMotionKind, delay = 0, direction: Pa
       animate: { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' },
       whileHover: { y: -3, scale: 1.015 },
       whileTap: { scale: 0.97, y: -1 },
-      transition: { type: 'spring' as const, stiffness: 340, damping: 21, mass: 0.85, delay },
+      /* blur 不走弹簧：欠阻尼回弹会把 filter 插值成负数，Chromium 会报
+         invalid keyframe console error;blur 用单调 tween,观感不变。 */
+      transition: {
+        type: 'spring' as const, stiffness: 340, damping: 21, mass: 0.85, delay,
+        filter: { type: 'tween' as const, duration: 0.45, ease: 'easeOut', delay },
+      },
     }
   }
   if (kind === 'panel') {
@@ -42,7 +47,11 @@ export function useChromeMotion(kind: ChromeMotionKind, delay = 0, direction: Pa
       animate: { opacity: 1, x: 0, y: 0, filter: 'blur(0px)' },
       whileHover: undefined,
       whileTap: undefined,
-      transition: { type: 'spring' as const, stiffness: 320, damping: 24, mass: 0.9, delay },
+      /* 同 card:blur 走 tween,避免弹簧过冲出负值。 */
+      transition: {
+        type: 'spring' as const, stiffness: 320, damping: 24, mass: 0.9, delay,
+        filter: { type: 'tween' as const, duration: 0.4, ease: 'easeOut', delay },
+      },
     }
   }
   if (kind === 'page') {
@@ -52,7 +61,11 @@ export function useChromeMotion(kind: ChromeMotionKind, delay = 0, direction: Pa
       animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
       whileHover: undefined,
       whileTap: undefined,
-      transition: { type: 'spring' as const, stiffness: 360, damping: 26, mass: 0.85, delay },
+      /* 同 card:blur 走 tween,避免弹簧过冲出负值。 */
+      transition: {
+        type: 'spring' as const, stiffness: 360, damping: 26, mass: 0.85, delay,
+        filter: { type: 'tween' as const, duration: 0.4, ease: 'easeOut', delay },
+      },
     }
   }
   return {
