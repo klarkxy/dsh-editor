@@ -596,7 +596,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       if (restoredText !== null) {
         setTextState(restoredText)
         setConflict(conflictOnLoad)
-        report(conflictOnLoad ? '磁盘版本已变化；本地草稿已保留，请另存或手动合并。' : '已恢复未保存的草稿')
+        report(conflictOnLoad ? '磁盘版本已变化；本地草稿已保留，请另存或手动合并。' : '已恢复未保存的草稿。')
       } else {
         setTextState(disk.text)
         setConflict(false)
@@ -699,7 +699,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         }
       }
       setConflict(false)
-      report(retainDraft ? '已保存；继续键入的内容仍保留为草稿。' : '已保存')
+      report(retainDraft ? '已保存；继续键入的内容仍保留为草稿。' : '已保存。')
       onSaved?.()
       return true
     } catch (cause) {
@@ -1516,7 +1516,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       }, '修改选段') : null,
       ghost ? e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' } },
         e('strong', null, '补全建议'),
-        e('small', null, `候选 ${ghostIndex + 1} / ${ghostCandidates.length}`),
+        e('small', null, `候选 ${ghostIndex + 1}/${ghostCandidates.length}`),
         e('button', { type: 'button', onClick: acceptGhost }, '接受补全'),
         ghostCandidates.length < maxGhostCandidates ? e('button', { type: 'button', disabled: loadingFim, onClick: () => void complete(true) }, '再来一个') : e('span', { style: { opacity: 0.55 } }, `已满 ${maxGhostCandidates} 条`),
         e('button', { type: 'button', onClick: () => { clearGhost(); report('已放弃补全。'); viewRef.current?.focus() } }, '放弃'),

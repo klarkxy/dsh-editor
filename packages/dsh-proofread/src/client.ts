@@ -141,7 +141,7 @@ function ProofreadResult(props: {
     e('div', { className: 'dsh-proofread-result-summary', 'aria-live': 'polite' },
       visible.length === 0
         ? (result.findings.length === 0 ? '未发现问题。' : '本轮提示已全部忽略。')
-        : `发现 ${visible.length} 项${result.truncated ? '（已达上限，结果有截断）' : ''}`,
+        : `发现 ${visible.length} 项${result.truncated ? '（已达上限，结果有截断）' : ''}。`,
     ),
     habits.length > 0 && !stale
       ? e('div', { className: 'dsh-proofread-habits', 'aria-label': '口癖统计' },

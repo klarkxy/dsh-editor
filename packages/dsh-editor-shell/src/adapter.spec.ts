@@ -40,7 +40,7 @@ describe('DSH snapshot adapter', () => {
   it('surfaces novel_memory_update markers as memory-update rows for the review card', () => {
     const marker = JSON.stringify({ marker: 'dsh-editor.memory-update', version: 1, id: 'mu-1', path: '项目规则.md', summary: '记录结局走向', status: 'pending', createdAt: '2026-09-09T08:00:00.000Z' })
     const row = toolResultRow({ kind: 'tool-result', seq: 13, callId: 'mu', call: { name: 'novel_memory_update', argsRaw: '{}' }, content: [{ type: 'text', text: marker }], isError: false } as never)
-    expect(row).toMatchObject({ role: 'tool', text: '记录结局走向', detail: '项目记忆更新', toolName: 'novel_memory_update', result: { id: 'mu-1', path: '项目规则.md', status: 'pending' } })
+    expect(row).toMatchObject({ role: 'tool', text: '记录结局走向', detail: '作品记忆更新', toolName: 'novel_memory_update', result: { id: 'mu-1', path: '项目规则.md', status: 'pending' } })
     const otherTool = toolResultRow({ kind: 'tool-result', seq: 14, callId: 'w', call: { name: 'write', argsRaw: '{}' }, content: [{ type: 'text', text: marker }], isError: false } as never)
     expect(otherTool.toolName).toBe('write')
     expect(otherTool.result).toBeUndefined()

@@ -19,7 +19,7 @@ export async function publishedArtifact(directory: string, spec: GitHubSpec, sig
   if (spec.ref && spec.ref !== source.version && spec.ref !== 'v' + source.version) return
   const response = await ioFetch('https://registry.npmjs.org/' + encodeURIComponent(source.name) + '/' + encodeURIComponent(source.version), { signal, redirect: 'error' })
   if (response.status === 404) return
-  if (!response.ok) throw new Error('获取 npm 已编译发布包失败（HTTP ' + response.status + '）')
+  if (!response.ok) throw new Error('获取 npm 已编译发布包失败（HTTP ' + response.status + '）。')
   const published = await response.json() as PublishedManifest
   if (published.name !== source.name || published.version !== source.version || !matchesRepository(published, spec)) return
   if (!published.dist?.tarball || !published.dist.integrity || !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(published.dist.integrity)) return
@@ -30,5 +30,5 @@ export async function publishedArtifact(directory: string, spec: GitHubSpec, sig
 
 export async function verifyPublishedArchive(path: string, integrity: string): Promise<void> {
   const actual = 'sha512-' + createHash('sha512').update(await readFile(path)).digest('base64')
-  if (actual !== integrity) throw new Error('npm 发布包完整性校验失败，请重试')
+  if (actual !== integrity) throw new Error('npm 发布包完整性校验失败，请重试。')
 }

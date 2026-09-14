@@ -170,7 +170,7 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
           ))),
         ),
       ),
-      overview.truncated ? e('p', { className: 'warning', role: 'status' }, `${t('overview.truncated')}${overview.skipped ? ` (${t('overview.skipped', { count: overview.skipped })})` : ''}.`) : null,
+      overview.truncated ? e('p', { className: 'warning', role: 'status' }, `${t('overview.truncated')}${overview.skipped ? `（${t('overview.skipped', { count: overview.skipped })}）` : ''}`) : null,
       note ? e('p', { className: 'warning', role: 'alert' }, note) : null,
       e('section', { className: 'overview-chapters', 'aria-label': t('overview.chapterList') },
         e('h3', null, t('overview.chapter')),

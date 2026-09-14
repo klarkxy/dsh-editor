@@ -120,7 +120,7 @@ function communityRuntimeLabel(card: PluginCard): string {
   }
   if (card.fiberPhase === 'pending' || card.fiberPhase === 'loading') return '正在加载'
   if (card.fiberPhase === 'unloading') return '正在停用'
-  if (card.fiberPhase === 'active') return '宿主已加载'
+  if (card.fiberPhase === 'active') return '已加载'
   if (!card.enabled && !card.pendingRestart) return '已停用'
   return ''
 }
@@ -425,14 +425,14 @@ function UninstallConfirm(props: {
       open: Boolean(props.card),
       onOpenChange: (next: boolean) => { if (!next && !busy) props.onCancel() },
       title: '卸载插件',
-      description: props.card ? `卸载 ${props.card.title}？作品文件不会被删除，但需要重启后才会卸下。` : '',
+      description: props.card ? `卸载 ${props.card.title}？作品文件不会被删除，重启后才会完全卸载。` : '',
       className: 'file-dialog confirm-dialog',
       overlayClassName: 'file-dialog-overlay confirm-overlay',
       dismissible: !busy,
       initialFocusRef: cancel,
     },
       e('header', null, e('h2', null, '卸载插件')),
-      e('p', null, props.card ? `卸载 ${props.card.title}？作品文件不会被删除，但需要重启后才会卸下。` : ''),
+      e('p', null, props.card ? `卸载 ${props.card.title}？作品文件不会被删除，重启后才会完全卸载。` : ''),
       errorNode,
       e('footer', null,
         e('button', { ref: cancel, type: 'button', disabled: busy, onClick: props.onCancel }, '取消'),
@@ -456,7 +456,7 @@ function UninstallConfirm(props: {
       props.onCancel()
     },
   },
-    e('p', null, `卸载 ${props.card.title}？作品文件不会被删除，但需要重启后才会卸下。`),
+    e('p', null, `卸载 ${props.card.title}？作品文件不会被删除，重启后才会完全卸载。`),
     errorNode,
     e('p', null,
       e('button', {
@@ -788,7 +788,7 @@ function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDial
       else if (listed) {
         const current = [...listed.optional, ...listed.community].filter((card) => targets.some((item) => item.entryId === card.entryId))
         const allMatch = current.length > 0 && current.every((card) => card.enabled === enabled)
-        if (restart && !allMatch) setNote('已保存。需要重启后才会完全生效。')
+        if (restart && !allMatch) setNote('已保存。请重启应用后完全生效。')
         else if (allMatch) setNote(enabled ? `已启用 ${title}。` : `已停用 ${title}。`)
         else showError('插件状态未完全同步，请重试或重启后再确认。')
       }
@@ -823,7 +823,7 @@ function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDial
         setUninstallErrorDetail(view.detail ?? '')
         return
       }
-      setNote(`已卸载 ${card.title}。请重启应用。`)
+      setNote(`已卸载 ${card.title}。请重启应用后生效。`)
       setPendingUninstall(null)
       setUninstallError('')
       setUninstallErrorDetail('')

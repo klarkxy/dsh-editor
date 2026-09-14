@@ -90,7 +90,7 @@ type Failure = { kind: 'credential' | 'network' | 'request'; text: string }
 /** Credential absence and transport failure read differently from a plain bad request. */
 function failureOf(code: string, message: string): Failure {
   if (code === 'token-missing') {
-    return { kind: 'credential', text: '未配置知乎 Access Token 或凭证不可用，请到「设置」页完成配置。' }
+    return { kind: 'credential', text: '未配置知乎 Access Secret 或凭证不可用，请到「设置」页完成配置。' }
   }
   return { kind: 'request', text: `请求失败：${message}` }
 }

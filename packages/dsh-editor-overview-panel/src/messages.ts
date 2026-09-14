@@ -18,7 +18,7 @@ export const zh = {
   'overview.chapterCount': '章节数',
   'overview.totalChars': '总字数',
   'overview.statusDist': '状态分布',
-  'overview.truncated': '目录较大，概览已截断',
+  'overview.truncated': '目录较大，概览已截断。',
   'overview.chapterList': '章节列表',
   'overview.chapter': '章节',
   'overview.noChapters': '还没有正文章节。',

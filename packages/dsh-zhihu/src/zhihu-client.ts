@@ -84,7 +84,7 @@ export async function resolveZhihuToken(
   const fromFile = await readCredentialsFile(ZHIHU_CREDENTIALS_FILE)
   if (fromFile) return { token: fromFile, source: 'file' }
   throw new ZhihuSearchError('TOKEN_MISSING', [
-    '未找到知乎 Access Secret。请在 设置 → 知乎 中填写；',
+    '未找到知乎 Access Secret。请在「设置 → 知乎」中填写；',
     `也可设置环境变量 ${ZHIHU_CREDENTIALS_PRIMARY} 或写入 ~/.config/zhihu-search/credentials.json。`,
   ].join(''))
 }
@@ -170,7 +170,7 @@ export async function zhihuFetchJson(
     })
   } catch (error) {
     if (isAbortError(error) || controller.signal.aborted) {
-      throw new ZhihuSearchError('TIMEOUT', `${label}超时（${timeout}ms），请稍后再试。`)
+      throw new ZhihuSearchError('TIMEOUT', `${label}超时（${Math.round(timeout / 1000)} 秒），请稍后再试。`)
     }
     throw new ZhihuSearchError('BAD_RESPONSE', `${label}失败：${error instanceof Error ? error.message : String(error)}`)
   } finally {
