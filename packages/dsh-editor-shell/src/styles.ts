@@ -555,9 +555,10 @@ export const componentStyles = `
 .shell .proposal > strong, .dsh-ui .proposal > strong { font: 500 var(--text-sm)/1.4 var(--font-sans); letter-spacing: .08em; color: var(--fg); }
 .shell .proposal p, .dsh-ui .proposal p { margin: 0; white-space: pre-wrap; font: 400 16px/1.85 var(--font-serif); letter-spacing: .03em; color: var(--fg-2); }
 .shell .proposal p:last-child, .dsh-ui .proposal p:last-child { color: var(--fg); }
-.shell .proposal-actions, .dsh-ui .proposal-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.shell .proposal-actions, .dsh-ui .proposal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .shell .proposal-actions .primary-action, .dsh-ui .proposal-actions .primary-action { background: var(--accent); color: var(--accent-on); box-shadow: var(--elev-ring-accent); }
-.shell .proposal-actions .proposal-dismiss, .dsh-ui .proposal-actions .proposal-dismiss { background: transparent; color: var(--fg-2); box-shadow: var(--elev-ring); }
+.shell .proposal-actions button:not(.primary-action), .dsh-ui .proposal-actions button:not(.primary-action) { background: transparent; color: var(--fg-2); box-shadow: var(--elev-ring); }
+.shell .proposal-actions button:not(.primary-action):hover, .dsh-ui .proposal-actions button:not(.primary-action):hover { background: var(--surface-warm); color: var(--fg); }
 .shell .selection-diff, .dsh-ui .selection-diff { display: grid; gap: 6px; }
 .shell .selection-diff section, .dsh-ui .selection-diff section { display: grid; gap: 4px; }
 .shell .selection-diff section small, .dsh-ui .selection-diff section small { font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .12em; color: var(--meta); }
@@ -708,23 +709,39 @@ export const componentStyles = `
 .shell .pending-card .question-option.is-selected, .dsh-ui .pending-card .question-option.is-selected { background: var(--surface-warm); color: var(--fg); box-shadow: 0 0 0 1px var(--accent); }
 .shell .pending-card .question-option > small, .dsh-ui .pending-card .question-option > small { font-size: var(--text-xs); font-weight: 400; letter-spacing: .02em; color: var(--meta); }
 .shell .pending-card .question-option.is-selected > small, .dsh-ui .pending-card .question-option.is-selected > small { color: var(--fg-2); }
-.shell .proposal-card, .dsh-ui .proposal-card { display: grid; gap: var(--space-3); padding: 10px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); }
-.shell .proposal-card-settled, .dsh-ui .proposal-card-settled { gap: 8px; padding: 8px 10px; }
-.shell .proposal-card-settled > summary, .dsh-ui .proposal-card-settled > summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; list-style: none; }
+.shell .proposal-card, .dsh-ui .proposal-card { display: grid; gap: var(--space-3); padding: 12px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface); min-width: 0; }
+.shell .proposal-card-settled, .dsh-ui .proposal-card-settled { gap: 8px; padding: 10px 12px; }
+.shell .proposal-card-settled > summary, .dsh-ui .proposal-card-settled > summary { cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 10px; list-style: none; min-width: 0; }
 .shell .proposal-card-settled > summary::-webkit-details-marker, .dsh-ui .proposal-card-settled > summary::-webkit-details-marker { display: none; }
-.shell .proposal-card-settled > summary > span[role="status"], .dsh-ui .proposal-card-settled > summary > span[role="status"] { margin-left: auto; color: var(--meta); font-size: var(--text-xs); }
-.shell .proposal-card header, .shell .proposal-card footer, .dsh-ui .proposal-card header, .dsh-ui .proposal-card footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.shell .proposal-card pre, .dsh-ui .proposal-card pre { max-height: 180px; overflow: auto; padding: 8px; background: var(--bg); white-space: pre-wrap; border-radius: var(--radius-sm); margin: 0; font: 400 var(--text-sm)/1.55 var(--font-serif); color: var(--fg-2); }
+.shell .proposal-card-settled > summary .proposal-heading, .dsh-ui .proposal-card-settled > summary .proposal-heading { grid-column: 1 / -1; }
+.shell .proposal-card-settled > summary .proposal-meta, .dsh-ui .proposal-card-settled > summary .proposal-meta { min-width: 0; }
+.shell .proposal-card-settled > summary .proposal-status, .dsh-ui .proposal-card-settled > summary .proposal-status { justify-self: end; color: var(--meta); font-size: var(--text-xs); }
+.shell .proposal-card header, .dsh-ui .proposal-card header { display: grid; gap: 6px; min-width: 0; }
+.shell .proposal-card footer, .dsh-ui .proposal-card footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; padding-top: 8px; border-top: 1px solid var(--hairline); }
+.shell .proposal-card footer > [role="status"], .shell .proposal-card footer > [role="alert"], .shell .proposal-card footer .proposal-status,
+.dsh-ui .proposal-card footer > [role="status"], .dsh-ui .proposal-card footer > [role="alert"], .dsh-ui .proposal-card footer .proposal-status { flex: 1 1 100%; }
+.shell .proposal-card .proposal-status, .dsh-ui .proposal-card .proposal-status { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--meta); font-size: var(--text-xs); line-height: 1.5; }
+.shell .proposal-card.ready .proposal-status, .dsh-ui .proposal-card.ready .proposal-status { color: var(--confirm); }
+.shell .proposal-card.applied .proposal-status, .shell .proposal-card.undone .proposal-status, .dsh-ui .proposal-card.applied .proposal-status, .dsh-ui .proposal-card.undone .proposal-status { color: var(--confirm); }
+.shell .proposal-card.expired .proposal-status, .dsh-ui .proposal-card.expired .proposal-status { color: var(--danger); }
+.shell .proposal-card.expired, .dsh-ui .proposal-card.expired { border-color: color-mix(in srgb, var(--danger) 40%, var(--hairline)); }
+.shell .proposal-card .proposal-actions, .dsh-ui .proposal-card .proposal-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 6px; }
+.shell .proposal-card .proposal-actions .primary-action, .shell .proposal-card .proposal-actions > :only-child, .dsh-ui .proposal-card .proposal-actions .primary-action, .dsh-ui .proposal-card .proposal-actions > :only-child { grid-column: 1 / -1; }
+.shell .proposal-card .proposal-actions button, .dsh-ui .proposal-card .proposal-actions button { min-height: 32px; width: 100%; padding: 0 10px; letter-spacing: .04em; }
+.shell .proposal-card pre, .dsh-ui .proposal-card pre { max-height: 180px; overflow: auto; padding: 10px 12px; background: var(--bg); white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--radius-sm); margin: 0; font: 400 var(--text-sm)/1.6 var(--font-serif); color: var(--fg-2); box-shadow: var(--elev-ring); }
 /* 章节拆分/合并/批量改名:走同一张提案卡,只补少量结构;主外观继续走 .proposal-card 的 spacing。 */
 .shell .proposal-card .proposal-split-summary, .shell .proposal-card .proposal-merge-summary, .shell .proposal-card .proposal-renames, .dsh-ui .proposal-card .proposal-split-summary, .dsh-ui .proposal-card .proposal-merge-summary, .dsh-ui .proposal-card .proposal-renames { display: grid; gap: 6px; }
 .shell .proposal-card .proposal-renames ul, .dsh-ui .proposal-card .proposal-renames ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 .shell .proposal-card .proposal-renames code, .dsh-ui .proposal-card .proposal-renames code { font-size: var(--text-xs); }
-/* 提案标题与类型徽标：大纲提案、章纲/章末小结提案在摘要旁标明类型。 */
-.shell .proposal-card .proposal-title, .dsh-ui .proposal-card .proposal-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.shell .proposal-card .proposal-kind, .dsh-ui .proposal-card .proposal-kind { flex: none; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 10px; letter-spacing: .04em; }
+/* 提案标题独占一行；类型徽标与路径放在下一行，避免长摘要把文件名挤断。 */
+.shell .proposal-card .proposal-heading, .shell .proposal-card header > strong, .dsh-ui .proposal-card .proposal-heading, .dsh-ui .proposal-card header > strong { min-width: 0; overflow-wrap: anywhere; font: 500 var(--text-sm)/1.45 var(--font-sans); color: var(--fg); }
+.shell .proposal-card .proposal-meta, .dsh-ui .proposal-card .proposal-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.shell .proposal-card .proposal-kind, .dsh-ui .proposal-card .proposal-kind { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 10px; letter-spacing: .04em; line-height: 1.6; }
+.shell .proposal-card .proposal-path, .shell .proposal-card header > code, .shell .proposal-card-settled > summary > code, .dsh-ui .proposal-card .proposal-path, .dsh-ui .proposal-card header > code, .dsh-ui .proposal-card-settled > summary > code { min-width: 0; overflow-wrap: anywhere; color: var(--meta); font: 400 var(--text-xs)/1.45 var(--font-mono); }
 /* 字段前后对照（edit / 章纲 / 章末小结共用 proposal-diff 结构）。 */
 .shell .proposal-card .proposal-diff, .dsh-ui .proposal-card .proposal-diff { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(12em, 1fr)); }
-.shell .proposal-card .proposal-diff small, .dsh-ui .proposal-card .proposal-diff small { display: block; color: var(--meta); font-size: var(--text-xs); margin-bottom: 4px; }
+.shell .proposal-card section > small, .shell .proposal-card .proposal-diff small, .dsh-ui .proposal-card section > small, .dsh-ui .proposal-card .proposal-diff small { display: block; color: var(--meta); font-size: var(--text-xs); letter-spacing: .04em; margin-bottom: 4px; }
+.shell .proposal-card .proposal-preview, .dsh-ui .proposal-card .proposal-preview { display: grid; min-width: 0; }
 /* create 提案：应用前列出将自动创建的目录。 */
 .shell .proposal-card .proposal-missing-dirs, .dsh-ui .proposal-card .proposal-missing-dirs { margin: 0; padding: 6px 8px; border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--fg-2); font-size: var(--text-xs); }
 
@@ -797,6 +814,8 @@ export const componentStyles = `
 .shell .file-dialog.chapter-ops-dialog, .dsh-ui.file-dialog.chapter-ops-dialog { width: min(680px, 100%); }
 .shell .chapter-ops-card, .dsh-ui .chapter-ops-card { min-width: 0; }
 .shell .chapter-ops-dialog .proposal-card, .dsh-ui .chapter-ops-dialog .proposal-card { font-size: var(--text-xs); }
+.shell .chapter-ops-dialog .proposal-card .proposal-actions, .dsh-ui .chapter-ops-dialog .proposal-card .proposal-actions { display: flex; width: auto; justify-content: flex-end; }
+.shell .chapter-ops-dialog .proposal-card .proposal-actions button, .dsh-ui .chapter-ops-dialog .proposal-card .proposal-actions button { width: auto; }
 .shell .file-dialog footer, .dsh-ui.file-dialog footer { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; margin-top: 16px; }
 .shell .file-dialog-actions, .dsh-ui .file-dialog-actions { display: grid; gap: 6px; }
 .shell .file-dialog-actions button, .dsh-ui .file-dialog-actions button { text-align: left; }

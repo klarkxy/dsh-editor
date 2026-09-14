@@ -417,6 +417,7 @@ export const zh = {
   'chat.mergeArchiveHint': '应用后来源章节会被归档,可在归档中恢复。',
   'chat.fileProposal': '文件修改建议',
   'chat.outlineProposal': '作品大纲提案',
+  'chat.createBadge': '新文件',
   'chat.chapterPlanBadge': '章纲提案',
   'chat.chapterSummaryBadge': '章末小结提案',
   'chat.missingDirs': '将自动创建目录：{paths}',

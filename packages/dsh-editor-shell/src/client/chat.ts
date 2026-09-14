@@ -768,12 +768,13 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     ? t('chat.fileCount', { count: props.proposal.renames.length })
     : props.proposal.path
 
-  /* 类型徽标:大纲/下的 create/edit 是作品大纲提案;章纲与章末小结按类型标明,并随 header 的 path 指明目标章节。 */
+  /* 类型徽标:大纲/下的 create/edit 是作品大纲提案;其它 create 标明新文件;章纲与章末小结按类型标明。 */
   const kindBadge = props.proposal.kind === 'chapter_plan' ? t('chat.chapterPlanBadge')
     : props.proposal.kind === 'chapter_summary' ? t('chat.chapterSummaryBadge')
       : (props.proposal.kind === 'create' || props.proposal.kind === 'edit') && props.proposal.path.startsWith('大纲/')
         ? t('chat.outlineProposal')
-        : ''
+        : props.proposal.kind === 'create' ? t('chat.createBadge')
+          : ''
 
   /* 按 kind 决定主区域内容。edit 复用 proposal-diff 块;create 单 pre 并在可应用时列出将自动创建的目录;
      章纲/章末小结展示可读的字段前后对照;split 同 edit 但 before/after 来自 prepared;
@@ -792,7 +793,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
         createPrepared && createPrepared.missingDirectories.length
           ? e('p', { className: 'proposal-missing-dirs' }, t('chat.missingDirs', { paths: createPrepared.missingDirectories.join('、') }))
           : null,
-        e('section', null, e('small', null, t('chat.newFileContent')), e('pre', null, props.proposal.text)),
+        e('section', { className: 'proposal-preview' }, e('small', null, t('chat.newFileContent')), e('pre', null, props.proposal.text)),
       )
     }
     if (props.proposal.kind === 'chapter_plan' || props.proposal.kind === 'chapter_summary') {
@@ -840,8 +841,11 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     )
   }
 
+  const canRecheckNow = state === 'deferred' || (state === 'expired' && canRecheck)
+  const canUndo = state === 'applied' && props.proposal.kind === 'edit'
+  const hasActions = state === 'ready' || canRecheckNow || canUndo
   const footer = e('footer', null,
-    e('span', { role: state === 'expired' ? 'alert' : 'status' },
+    e('span', { className: 'proposal-status', role: state === 'expired' ? 'alert' : 'status' },
       state === 'checking' || state === 'applying' || state === 'undoing'
         ? e(ActivityDots, null)
         : state === 'applied' || state === 'undone'
@@ -849,33 +853,32 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
           : null,
       note,
     ),
-    state === 'ready' ? e('button', { type: 'button', onClick: () => void apply() }, t('common.apply')) : null,
-    state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('deferred'); setNote(t('chat.deferred')) } }, t('chat.defer')) : null,
-    state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote(t('chat.ignoredNoChange')) } }, t('common.ignore')) : null,
-    (state === 'deferred' || (state === 'expired' && canRecheck))
-      ? e('button', { type: 'button', onClick: () => void check() }, t('chat.recheck'))
-      : null,
-    state === 'applied' && props.proposal.kind === 'edit' ? e('button', { type: 'button', onClick: () => void undo() }, t('chat.undoThis')) : null,
+    hasActions ? e('div', { className: 'proposal-actions' },
+      state === 'ready' ? e('button', { type: 'button', className: 'primary-action', onClick: () => void apply() }, t('common.apply')) : null,
+      state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('deferred'); setNote(t('chat.deferred')) } }, t('chat.defer')) : null,
+      state === 'ready' ? e('button', { type: 'button', className: 'proposal-dismiss', onClick: () => { setState('ignored'); setNote(t('chat.ignoredNoChange')) } }, t('common.ignore')) : null,
+      canRecheckNow ? e('button', { type: 'button', className: 'primary-action', onClick: () => void check() }, t('chat.recheck')) : null,
+      canUndo ? e('button', { type: 'button', onClick: () => void undo() }, t('chat.undoThis')) : null,
+    ) : null,
+  )
+  const titleBlock = e('strong', { className: 'proposal-heading' }, props.proposal.summary)
+  const metaBlock = e('div', { className: 'proposal-meta' },
+    kindBadge ? e('small', { className: 'proposal-kind' }, kindBadge) : null,
+    e('code', { className: 'proposal-path' }, headerPathLabel),
   )
   if (settled) {
     return e('details', { className: `proposal-card ${state} proposal-card-settled`, 'aria-label': t('chat.fileProposal') },
       e('summary', null,
-        e('span', { className: 'proposal-title' },
-          e('strong', null, props.proposal.summary),
-          kindBadge ? e('small', { className: 'proposal-kind' }, kindBadge) : null),
-        e('code', null, headerPathLabel),
-        e('span', { role: 'status' }, state === 'applied' || state === 'undone' ? e(SuccessMark, null) : null, note),
+        titleBlock,
+        metaBlock,
+        e('span', { className: 'proposal-status', role: 'status' }, state === 'applied' || state === 'undone' ? e(SuccessMark, null) : null, note),
       ),
       renderBody(),
       footer,
     )
   }
   return e('article', { className: `proposal-card ${state}`, 'aria-label': t('chat.fileProposal') },
-    e('header', null,
-      e('div', { className: 'proposal-title' },
-        e('strong', null, props.proposal.summary),
-        kindBadge ? e('small', { className: 'proposal-kind' }, kindBadge) : null),
-      e('code', null, headerPathLabel)),
+    e('header', null, titleBlock, metaBlock),
     renderBody(),
     footer,
   )

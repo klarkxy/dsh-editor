@@ -419,6 +419,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'chat.mergeArchiveHint': 'After apply, the source chapter is archived and can be restored.',
   'chat.fileProposal': 'File change suggestion',
   'chat.outlineProposal': 'Work outline proposal',
+  'chat.createBadge': 'New file',
   'chat.chapterPlanBadge': 'Chapter outline proposal',
   'chat.chapterSummaryBadge': 'Chapter-end summary proposal',
   'chat.missingDirs': 'Will create directories: {paths}',
