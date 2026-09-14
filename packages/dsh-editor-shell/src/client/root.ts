@@ -133,8 +133,8 @@ async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string): Prom
   return files
 }
 
-async function verifyWorkspaceSession(ctx: ShellContext, sessionId: SessionId): Promise<string | undefined> {
-  const files = await collectWorkspaceFiles(ctx, sessionId)
+async function verifyWorkspaceSession(ctx: ShellContext, sessionId: SessionId, knownFiles?: string[]): Promise<string | undefined> {
+  const files = knownFiles ?? await collectWorkspaceFiles(ctx, sessionId)
   const textFiles = supportedWorkspaceTextPaths(files)
   /* 根目录的项目规则文件是协作约定而非正文：新作只有它时仍落在新建文件封面。 */
   const initialPath = sortChapterPaths(textFiles)[0] ?? textFiles.find((path) => !/^agents\.md$/i.test(path))
@@ -174,7 +174,9 @@ async function connectUsableWorkspaceSession(
     if (!isSessionMissing(listed)) throw new Error(errorMessage(listed))
   }
   await ctx.workspaces.archiveSession(first)
-  const second = await ctx.uiWorkspace.connectWorkspace(workspaceId)
+  let second = await ctx.uiWorkspace.connectWorkspace(workspaceId)
+  /* archive 后快照可能还挂着同一条空白会话；再拿到同一个 id 就强制新建，避免死循环。 */
+  if (second === first) second = await ctx.sessions.create({ workspaceId })
   if (second === first) throw new Error('session is not live')
   const retry = await pingWorkspaceSession(ctx, second)
   if (!retry.ok) throw new Error(isSessionMissing(retry) ? 'session is not live' : errorMessage(retry))
@@ -935,7 +937,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       fallback: sessionId,
     }))
   }
-  const prepareExistingWorkspace = async (pending: PendingWorkspaceOpen, sessionId: SessionId) => {
+  const prepareExistingWorkspace = async (pending: PendingWorkspaceOpen, sessionId: SessionId, knownTextFiles?: string[]) => {
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
     const relocatedInitialPath = pending.replaceWorkspaceId
       ? await verifyRelocatedWorkspaceSession(ctx, sessionId)
@@ -961,7 +963,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       pending.warning = t('note.brokenImportIgnored')
     }
     if (!recovery.ok) pending.warning = t('note.unverifiedImportIgnored')
-    const initialPath = relocatedInitialPath ?? await verifyWorkspaceSession(ctx, sessionId)
+    const initialPath = relocatedInitialPath ?? await verifyWorkspaceSession(ctx, sessionId, knownTextFiles)
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
     if (!initialPath) {
       const root = await safeRpcCall<{ entries?: { name: string; type: 'file' | 'directory' | 'other' }[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId, path: '.' }))
@@ -1055,7 +1057,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       const connectedSessionId = await connectUsableWorkspaceSession(ctx, current.workspaceId, sessionId)
       if (!workspaceOpenGate.isCurrent(ticket)) return
       pending.sessionId = connectedSessionId
-      await prepareExistingWorkspace(pending, connectedSessionId)
+      await prepareExistingWorkspace(pending, connectedSessionId, inspection.textFiles)
     } catch (error) {
       if (!workspaceOpenGate.isCurrent(ticket)) return
       ctx.sessions.clear()
@@ -1118,7 +1120,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       pending.sessionId = sessionId
       stage = intent === 'create' ? 'initializing' : 'verifying'
       if (intent === 'create') await prepareNewWorkspace(pending, sessionId)
-      else await prepareExistingWorkspace(pending, sessionId)
+      else await prepareExistingWorkspace(pending, sessionId, inspection.textFiles)
       if (!workspaceOpenGate.isCurrent(ticket)) return
       setManualWorkspaceMode(null)
       setManualWorkspacePath('')

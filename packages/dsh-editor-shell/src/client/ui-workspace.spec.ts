@@ -91,6 +91,43 @@ it('never changes the model of a reused blank session when the default changes',
   expect(selectModel).not.toHaveBeenCalled()
 })
 
+it('creates a new session when the bound blank session is no longer live', async () => {
+  const create = vi.fn(async () => 'session-new')
+  const provide = vi.fn()
+  const ctx = {
+    provide,
+    connection: {
+      rpc: {
+        call: vi.fn(async () => ({ ok: false, error: { code: 'session-not-found', message: 'session is not live' } })),
+      },
+    },
+    sessions: {
+      create,
+      open: vi.fn(),
+      list: {
+        getSnapshot: () => ({
+          ids: ['blank-1'],
+          byId: { 'blank-1': { id: 'blank-1', blank: true, cwd: '/work' } },
+        }),
+      },
+    },
+    workspaces: {
+      archiveSession: vi.fn(async () => undefined),
+      list: {
+        getSnapshot: () => ({
+          items: [{ workspaceId: 'ws-1', path: '/work', title: '作品', sessionIds: ['blank-1'], createdAt: '', updatedAt: '' }],
+          archivedSessionIds: [],
+        }),
+      },
+    },
+    remote: { directoryPicker: { pick: vi.fn() }, session: { selectModel: vi.fn() } },
+  } as unknown as ShellContext
+  provideEditorUiWorkspace(ctx)
+  const uiWorkspace = provide.mock.calls[0]?.[1] as { connectWorkspace(id: string): Promise<string> }
+  await expect(uiWorkspace.connectWorkspace('ws-1')).resolves.toBe('session-new')
+  expect(create).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
+})
+
 it('remembers a created-chat model error for the next Chat mount', () => {
   rememberCreatedChatModelError('s1', 'failed')
   expect(takeCreatedChatModelError('s1')).toBe('failed')

@@ -163,6 +163,8 @@ describe('shell manuscript RPC safety', () => {
     expect(finishFlow).toContain('ctx.sessions.open(resumableConversationId(')
     const registeredFlow = source.slice(openStart, source.indexOf('const continuePendingWorkspaceIntent = async', openStart))
     expect(registeredFlow).toContain('connectUsableWorkspaceSession(ctx, current.workspaceId, sessionId)')
+    expect(registeredFlow).toContain('prepareExistingWorkspace(pending, connectedSessionId, inspection.textFiles)')
+    expect(source).toContain('verifyWorkspaceSession(ctx, sessionId, knownTextFiles)')
   })
 
   it('does not treat a dead session as a missing manuscript file, and reconnects before giving up', () => {
@@ -182,7 +184,8 @@ describe('shell manuscript RPC safety', () => {
     expect(workspaceOpenFailureMessage(new Error('workspace has no supported text files'))).toContain('没有找到')
     const source = rootSource()
     expect(source).toContain('await ctx.workspaces.archiveSession(first)')
-    expect(source).toContain('const second = await ctx.uiWorkspace.connectWorkspace(workspaceId)')
+    expect(source).toContain('let second = await ctx.uiWorkspace.connectWorkspace(workspaceId)')
+    expect(source).toContain('if (second === first) second = await ctx.sessions.create({ workspaceId })')
   })
 
   it('claims automatic startup resume once so returning home stays on the project list', () => {

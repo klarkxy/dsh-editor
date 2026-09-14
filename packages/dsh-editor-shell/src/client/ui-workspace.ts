@@ -1,6 +1,6 @@
 import type { SessionId, WorkspaceId } from '../dsh-compat.ts'
 import { t } from '../i18n/index.ts'
-import type { ShellContext } from './shared.ts'
+import { safeRpcCall, type ShellContext } from './shared.ts'
 
 /**
  * Official ui-conversation waits for `uiWorkspace`. The profile keeps
@@ -45,7 +45,9 @@ export function provideEditorUiWorkspace(ctx: ShellContext, options?: {
         for (const id of sessions.ids) {
           const summary = sessions.byId[id]
           if (summary?.blank && summary.cwd === workspace.path && workspace.sessionIds.includes(summary.id) && !archived.includes(summary.id)) {
-            return summary.id
+            if (!ctx.connection?.rpc) return summary.id
+            const ping = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId: summary.id, path: '.' }))
+            if (ping.ok) return summary.id
           }
         }
       }
