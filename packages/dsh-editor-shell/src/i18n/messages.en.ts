@@ -259,6 +259,8 @@ export const en: { [K in keyof typeof zh]: string } = {
   'sidebar.versionMenu': 'Versions',
   'sidebar.archiveTitle': 'Move the document into a recoverable archive',
   'sidebar.archiveDisabled': 'Only a single visible Markdown or TXT document can be archived',
+  'sidebar.treeLoading': 'Loading the file tree…',
+  'sidebar.treeEmpty': 'This folder is empty — create your first chapter to start writing.',
 
   'editor.emptyChapter': 'Start writing',
   'editor.emptyHint': 'Write the first chapter here, or create a chapter from the file tree.',
@@ -321,6 +323,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'chat.loadOlder': 'Load earlier messages',
   'chat.thinkingProcess': 'Thinking',
   'chat.noText': '(No text)',
+  'chat.emptyHistory': 'No conversation yet — ask about the plot, a character, or have a passage reviewed.',
   'chat.sending': 'Sending…',
   'chat.sent': 'Sent',
   'chat.sendFailed': 'Send failed',

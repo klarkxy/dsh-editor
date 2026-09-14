@@ -18,6 +18,32 @@ function isTreeMenuKey(event: ReactKeyboardEvent<HTMLElement>): boolean {
   return event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')
 }
 
+/* 排序与隐藏规则在写入 loaded 时一次性完成,树渲染不再每层递归 sort/filter。
+   只保留磁盘上真实存在的条目;隐藏 . 开头的系统项与辅助作者文件。 */
+function visibleTreeEntries(entries: TreeEntry[]): TreeEntry[] {
+  return orderTreeEntries(entries).filter((item) => {
+    if (item.name.startsWith('.')) return false
+    return !isAuxiliaryAuthorFile(item.name)
+  })
+}
+
+/* 可见行的扁平路径序列(与 DOM 顺序一致),用于推导唯一的 tab 停靠行。 */
+function visibleTreePaths(loaded: Record<string, TreeEntry[]>, openPaths: Set<string>, path: string): string[] {
+  const rows: string[] = []
+  for (const item of loaded[path] ?? []) {
+    const child = path ? `${path}/${item.name}` : item.name
+    rows.push(child)
+    if (item.type === 'directory' && openPaths.has(child)) rows.push(...visibleTreePaths(loaded, openPaths, child))
+  }
+  return rows
+}
+
+/* 首屏 tree.list 仍在途时的骨架行;条为装饰,状态文本交给 aria-label。 */
+function treeSkeleton(): ReactNode {
+  return e('div', { className: 'panel-skeleton tree-skeleton', role: 'status', 'aria-label': t('sidebar.treeLoading') },
+    ['62%', '84%', '48%'].map((width, index) => e('i', { key: index, style: { width } })))
+}
+
 export type FileMenuKind = 'file' | 'directory'
 
 type RowProps = {
@@ -31,6 +57,7 @@ type RowProps = {
   openPaths: Set<string>
   chapterStatuses: Record<string, ChapterStatus>
   highlightPath?: string
+  tabbablePath: string
   onOpen(path: string): void
   onPreviewImage(path: string): void
   onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }, trigger?: HTMLElement | null): void
@@ -41,14 +68,9 @@ type RowProps = {
 }
 
 function TreeRows(props: RowProps): ReactNode {
-  const { path, level, loaded, active, openPaths, chapterStatuses, highlightPath, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory } = props
-  const entries = orderTreeEntries(loaded[path] ?? [])
-  // 树只渲染磁盘上真实存在的条目:预设分组已移除,目录(包括 正文/大纲/人物卡/世界书)
-  // 在实际创建后自然出现。隐藏 . 开头的系统项。
-  const visible = entries.filter((item) => {
-    if (item.name.startsWith('.')) return false
-    return !isAuxiliaryAuthorFile(item.name)
-  })
+  const { path, level, loaded, active, openPaths, chapterStatuses, highlightPath, tabbablePath, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory } = props
+  /* loaded 在写入时已按 visibleTreeEntries 排序并过滤,这里直接渲染。 */
+  const visible = loaded[path] ?? []
   return e(Fragment, null, ...visible.map((item) => {
     const child = path ? `${path}/${item.name}` : item.name
     if (item.type === 'directory') {
@@ -58,6 +80,10 @@ function TreeRows(props: RowProps): ReactNode {
           e('button', {
             className: 'tree-row',
             type: 'button',
+            role: 'treeitem',
+            'aria-level': level + 1,
+            tabIndex: child === tabbablePath ? 0 : -1,
+            'data-tree-path': child,
             style: { paddingLeft: treeRowPadding(level) },
             'data-tree-depth': level,
             'aria-expanded': isOpen,
@@ -101,6 +127,10 @@ function TreeRows(props: RowProps): ReactNode {
       e('button', {
         className: 'tree-row tree-main',
         type: 'button',
+        role: 'treeitem',
+        'aria-level': level + 1,
+        tabIndex: child === tabbablePath ? 0 : -1,
+        'data-tree-path': child,
         'aria-current': active === child || highlightPath === child ? 'page' : undefined,
         style: { paddingLeft: treeRowPadding(level) },
         'data-tree-depth': level,
@@ -119,6 +149,7 @@ function TreeRows(props: RowProps): ReactNode {
       e('span', null, item.name),
       chapterStatus ? e('span', {
         className: `chapter-status ${chapterStatus}`,
+        role: 'img',
         title: chapterStatusLabel(chapterStatus),
         'aria-label': chapterStatusLabel(chapterStatus),
       }, chapterStatusGlyph(chapterStatus)) : null,
@@ -145,33 +176,63 @@ export function Tree(props: {
   const [loaded, setLoaded] = useState<Record<string, TreeEntry[]>>({})
   const [openPaths, setOpenPaths] = useState<Set<string>>(() => new Set())
   const [note, setNote] = useState('')
-  /* 加载代际：session/revision/expandPath 重置（含 effect 清理、卸载）时递增。
+  /* 加载代际：session/revision 重置（含 effect 清理、卸载）时递增。
      早于当前代际的 tree.list 响应一律丢弃——否则合章/归档前的慢响应会在刷新
-     完成后落地，把已归档的章节行写回目录树。成功与错误路径都受守护。 */
+     完成后落地，把已归档的章节行写回目录树。成功与错误路径都受守护。
+     expandPath 不参与代际：它只合并进展开状态并补齐未加载的祖先目录。 */
   const loadGeneration = useRef(0)
+  /* loaded 的 ref 镜像：effect 内判断"某目录是否已加载"时读取（不触发渲染）。 */
+  const loadedRef = useRef<Record<string, TreeEntry[]>>({})
+  /* 去重在途请求：reload 与 expandPath 合并可能在同一拍重复请求同一目录。 */
+  const loadingPaths = useRef<Set<string>>(new Set())
+  const treeNavRef = useRef<HTMLElement | null>(null)
 
   const loadSubtree: LoadSubtree = async (path) => {
-    const generation = loadGeneration.current
-    const result = await safeRpcCall<{ entries?: TreeEntry[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', {
-      sessionId,
-      path: path || '.',
-    }))
-    if (generation !== loadGeneration.current) return null
-    if (!result.ok) { setNote(errorMessage(result)); return null }
-    const entries = result.value.entries ?? []
-    setLoaded((old) => ({ ...old, [path]: entries }))
-    return entries
+    if (loadingPaths.current.has(path)) return null
+    loadingPaths.current.add(path)
+    try {
+      const generation = loadGeneration.current
+      const result = await safeRpcCall<{ entries?: TreeEntry[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', {
+        sessionId,
+        path: path || '.',
+      }))
+      if (generation !== loadGeneration.current) return null
+      if (!result.ok) { setNote(errorMessage(result)); return null }
+      const entries = visibleTreeEntries(result.value.entries ?? [])
+      loadedRef.current = { ...loadedRef.current, [path]: entries }
+      setLoaded((old) => ({ ...old, [path]: entries }))
+      return entries
+    } finally {
+      loadingPaths.current.delete(path)
+    }
   }
 
+  /* session/revision 变化才是真正的整树刷新；expandPath 变化不得清空已加载目录。 */
   useEffect(() => {
     loadGeneration.current += 1
+    loadedRef.current = {}
     setLoaded({})
     const expansion = treeExpansionPaths(expandPath)
     setOpenPaths(new Set(expansion))
     void loadSubtree('')
     for (const directory of expansion) void loadSubtree(directory)
     return () => { loadGeneration.current += 1 }
-  }, [sessionId, revision, expandPath])
+  }, [sessionId, revision])
+
+  /* expandPath 只要求"保证这些祖先目录展开且已加载"：并入 openPaths，
+     并仅为尚未加载的目录补发 tree.list，不重载整棵树。 */
+  useEffect(() => {
+    const expansion = treeExpansionPaths(expandPath)
+    if (!expansion.length) return
+    setOpenPaths((old) => {
+      const next = new Set(old)
+      for (const directory of expansion) next.add(directory)
+      return next.size === old.size ? old : next
+    })
+    for (const directory of expansion) {
+      if (loadedRef.current[directory] === undefined) void loadSubtree(directory)
+    }
+  }, [expandPath])
 
   const toggleDirectory = (path: string) => {
     setOpenPaths((old) => {
@@ -183,9 +244,62 @@ export function Tree(props: {
     if (!openPaths.has(path)) void loadSubtree(path)
   }
 
+  /* 键盘导航（WAI-ARIA treeview）：全树只有 tabbablePath 一行可 Tab 到达，
+     方向键在可见行间移动焦点；行内原有的 ContextMenu/Shift+F10 不受影响。 */
+  const onTreeKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const row = target.closest<HTMLElement>('button.tree-row')
+    const nav = treeNavRef.current
+    if (!row || !nav || !nav.contains(row)) return
+    const rows = Array.from(nav.querySelectorAll<HTMLElement>('button.tree-row'))
+    const index = rows.indexOf(row)
+    if (index < 0) return
+    const depthOf = (element: HTMLElement) => Number(element.dataset.treeDepth ?? 0)
+    const focusAt = (nextIndex: number) => {
+      const clamped = Math.max(0, Math.min(rows.length - 1, nextIndex))
+      rows[clamped]?.focus()
+    }
+    if (event.key === 'ArrowDown') { event.preventDefault(); focusAt(index + 1); return }
+    if (event.key === 'ArrowUp') { event.preventDefault(); focusAt(index - 1); return }
+    if (event.key === 'Home') { event.preventDefault(); focusAt(0); return }
+    if (event.key === 'End') { event.preventDefault(); focusAt(rows.length - 1); return }
+    if (event.key === 'ArrowRight') {
+      // 折叠目录：展开（加载沿用 toggleDirectory）；已展开：落到第一个子行。
+      if (row.getAttribute('aria-expanded') === 'false') {
+        event.preventDefault()
+        toggleDirectory(row.dataset.treePath ?? '')
+        return
+      }
+      const next = rows[index + 1]
+      if (next && depthOf(next) > depthOf(row)) { event.preventDefault(); next.focus() }
+      return
+    }
+    if (event.key === 'ArrowLeft') {
+      // 展开目录：折叠；文件/已折叠目录：焦点回到父行。
+      if (row.getAttribute('aria-expanded') === 'true') {
+        event.preventDefault()
+        toggleDirectory(row.dataset.treePath ?? '')
+        return
+      }
+      for (let walk = index - 1; walk >= 0; walk -= 1) {
+        if (depthOf(rows[walk]) < depthOf(row)) { event.preventDefault(); rows[walk].focus(); return }
+      }
+    }
+  }
+
+  /* 唯一 tab 停靠行：当前文件优先，其次高亮行，最后回退第一可见行；
+     数据变化（如活动文件被删除）后随渲染重新推导，停靠自然回退。 */
+  const rootEntries = loaded['']
+  const rowPaths = visibleTreePaths(loaded, openPaths, '')
+  const tabbablePath = rowPaths.includes(active) ? active : highlightPath && rowPaths.includes(highlightPath) ? highlightPath : rowPaths[0] ?? ''
+
   return e('nav', {
     className: 'tree',
+    role: 'tree',
     'aria-label': t('sidebar.manuscriptTree'),
+    ref: treeNavRef,
+    onKeyDown: onTreeKeyDown,
     onContextMenu: (event: ReactMouseEvent<HTMLElement>) => {
       // 仅在空白区(非已有行)右键时弹出根目录菜单;行内已自行阻止冒泡。
       if (event.target === event.currentTarget) {
@@ -194,7 +308,11 @@ export function Tree(props: {
       }
     },
   },
-    e(TreeRows, {
+    rootEntries === undefined
+      ? (note ? null : treeSkeleton())
+      : rootEntries.length === 0
+        ? e('p', { className: 'muted tree-empty' }, t('sidebar.treeEmpty'))
+        : e(TreeRows, {
       ctx,
       sessionId,
       path: '',
@@ -205,6 +323,7 @@ export function Tree(props: {
       openPaths,
       chapterStatuses,
       highlightPath,
+      tabbablePath,
       onOpen,
       onPreviewImage,
       onFileMenu,

@@ -257,6 +257,8 @@ export const zh = {
   'sidebar.versionMenu': '版本',
   'sidebar.archiveTitle': '把文档移入可恢复归档',
   'sidebar.archiveDisabled': '只能归档单个可见的 Markdown 或 TXT 文档',
+  'sidebar.treeLoading': '正在读取目录…',
+  'sidebar.treeEmpty': '目录是空的，新建第一章开始写作。',
 
   'editor.emptyChapter': '开始写作',
   'editor.emptyHint': '从这里写下第一章，或在左侧新建章节。',
@@ -319,6 +321,7 @@ export const zh = {
   'chat.loadOlder': '加载更早消息',
   'chat.thinkingProcess': '思考过程',
   'chat.noText': '（无文字内容）',
+  'chat.emptyHistory': '还没有对话，问问剧情、人物或审一段文字。',
   'chat.sending': '正在发送…',
   'chat.sent': '已发送',
   'chat.sendFailed': '发送失败',

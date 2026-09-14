@@ -1,4 +1,4 @@
-import { createElement as e, Fragment, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent, type KeyboardEvent } from 'react'
 import {
   CARDS_RPC_CHANNEL,
   type CardKind,
@@ -213,21 +213,39 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
     { value: 'modified', label: t('cards.sortModified') },
     props.kind === 'character' ? { value: 'role', label: t('cards.sortRole') } : { value: 'category', label: t('cards.sortCategory') },
   ]
+  const tablistRef = useRef<HTMLDivElement | null>(null)
+  /* 页签键盘导航:漫游 tabindex(仅选中页签可 Tab 聚焦),方向键左右循环移动,Home/End 跳首尾,移动即激活。 */
+  const onCardsTabsKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return
+    const tabs = Array.from(tablistRef.current?.querySelectorAll<HTMLButtonElement>('button[role="tab"]') ?? [])
+    if (!tabs.length) return
+    event.preventDefault()
+    const current = tabs.findIndex((tab) => tab.getAttribute('aria-selected') === 'true')
+    const last = tabs.length - 1
+    let next = 0
+    if (event.key === 'ArrowRight') next = (current + 1) % tabs.length
+    else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length
+    else if (event.key === 'End') next = last
+    tabs[next]?.focus()
+    tabs[next]?.click()
+  }
   return e('section', { className: 'cards-panel', 'data-testid': 'cards-panel', 'aria-label': title },
     e('header', { className: 'cards-panel-header' },
       e('h2', null, title),
       e('button', { className: 'icon-button', type: 'button', 'aria-label': t('cards.closePanel'), onClick: () => closeCardsPanel() }, '×'),
     ),
-    e('div', { className: 'cards-tabs', role: 'tablist', 'aria-label': t('cards.kind') },
+    e('div', { className: 'cards-tabs', role: 'tablist', 'aria-label': t('cards.kind'), ref: tablistRef, onKeyDown: onCardsTabsKeyDown },
       e('button', {
         type: 'button',
         role: 'tab',
+        tabIndex: props.kind === 'character' ? 0 : -1,
         'aria-selected': props.kind === 'character',
         onClick: () => openCardsPanel('character'),
       }, t('cards.person')),
       e('button', {
         type: 'button',
         role: 'tab',
+        tabIndex: props.kind === 'worldbook' ? 0 : -1,
         'aria-selected': props.kind === 'worldbook',
         onClick: () => openCardsPanel('worldbook'),
       }, t('cards.setting')),
