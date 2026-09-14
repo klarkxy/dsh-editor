@@ -187,11 +187,19 @@ export const proofreadClientStyles = `
   border-color: var(--accent, #1b365d);
   color: var(--accent-on, #faf9f5);
 }
+/* 活动反馈:三点呼吸(pulse-dots),参数改写自 Amicro(MIT License,
+   Copyright (c) 2026 Syed Subhan Uddin);装饰元素 aria-hidden。 */
+@keyframes dsh-proofread-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+.dsh-proofread-dots, .dsh-ui .dsh-proofread-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
+.dsh-proofread-dots i, .dsh-ui .dsh-proofread-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: dsh-proofread-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
+.dsh-proofread-dots i:nth-child(2), .dsh-ui .dsh-proofread-dots i:nth-child(2) { animation-delay: .2s; }
+.dsh-proofread-dots i:nth-child(3), .dsh-ui .dsh-proofread-dots i:nth-child(3) { animation-delay: .4s; }
 @media (prefers-reduced-motion: reduce) {
   .dsh-proofread-dock, .dsh-proofread-dock *, .dsh-proofread-panel, .dsh-proofread-panel *,
   .dsh-ui.dsh-proofread-panel, .dsh-ui.dsh-proofread-panel * {
     animation: none !important; transition: none !important;
   }
+  .dsh-proofread-dots i, .dsh-ui .dsh-proofread-dots i { animation: none; }
 }
 /* Ordinary DSH dark: body[data-ds-dark-theme] (ui-theme). Scoped ink tokens inherit to all children.
    html:not([data-theme]) keeps desktop :root paper/ink in charge. prefers-color-scheme must not override explicit light. */

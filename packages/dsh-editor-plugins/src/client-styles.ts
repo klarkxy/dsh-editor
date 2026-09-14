@@ -288,7 +288,17 @@ export const pluginsClientStyles = `
 .dsh-plugins-finding-error { color: var(--danger, #8a3a30); }
 .dsh-plugins-finding-warning { color: var(--fg-2, #3d3d3a); }
 .dsh-plugins-finding-info { color: var(--muted, #504e49); }
+/* 活动反馈:三点呼吸(pulse-dots),参数改写自 Amicro(MIT License,
+   Copyright (c) 2026 Syed Subhan Uddin);装饰元素 aria-hidden,reduced-motion
+   停掉循环,保留静态点与静态开关。 */
+@keyframes dsh-plugins-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+.dsh-plugins-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
+.dsh-plugins-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: dsh-plugins-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
+.dsh-plugins-dots i:nth-child(2) { animation-delay: .2s; }
+.dsh-plugins-dots i:nth-child(3) { animation-delay: .4s; }
+.dsh-plugins-switch.is-pending .dsh-plugins-switch-thumb { animation: dsh-plugins-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
 @media (prefers-reduced-motion: reduce) {
   .dsh-plugins-switch-thumb { transition: none; }
+  .dsh-plugins-dots i, .dsh-plugins-switch.is-pending .dsh-plugins-switch-thumb { animation: none; }
 }
 `

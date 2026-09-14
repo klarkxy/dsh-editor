@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { createElement as e, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { createElement as e, Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import {
   PROOFREAD_MAX_TEXT_BYTES,
   PROOFREAD_RPC_CHANNEL,
@@ -19,6 +19,10 @@ const SLOT_ID = 'proofread'
 const SLOT_ORDER = 110
 const SLOT_LABEL = '校对'
 const PROOFREAD_TEXT_EVENT = 'dsh-proofread:open-text'
+
+/* 活动暗示:三点呼吸(参数改写自 Amicro pulse-dots,MIT);装饰 aria-hidden,
+   关键帧在 client-styles.ts,reduced-motion 停循环后保留静态点。 */
+const activityDots = () => e('span', { className: 'dsh-proofread-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
 
 export type ProofreadOpenDetail = {
   text: string
@@ -312,7 +316,7 @@ function ProofreadDock(props: { rpc: RpcCaller; Dialog?: HostDialog }) {
           'data-testid': 'proofread-check',
           disabled: checkDisabled,
           onClick: () => void runCheck(),
-        }, phase === 'loading' ? '校对中…' : '开始校对'),
+        }, phase === 'loading' ? e(Fragment, null, activityDots(), '校对中…') : '开始校对'),
         phase === 'loading'
           ? e('button', { type: 'button', className: 'dsh-proofread-cancel', onClick: cancelRequest }, '取消')
           : null,
@@ -320,7 +324,7 @@ function ProofreadDock(props: { rpc: RpcCaller; Dialog?: HostDialog }) {
           overLimit ? '超出单篇长度上限' : 'Ctrl+Enter 校对'),
       ),
       phase === 'idle' && !text.trim() ? e('div', { className: 'dsh-proofread-status', role: 'status' }, '粘贴文本后开始校对。') : null,
-      phase === 'loading' ? e('div', { className: 'dsh-proofread-status', role: 'status' }, '正在校对…') : null,
+      phase === 'loading' ? e('div', { className: 'dsh-proofread-status', role: 'status' }, activityDots(), '正在校对…') : null,
       phase === 'error' ? e('div', { className: 'dsh-proofread-error', role: 'alert' }, `校对失败：${error}`) : null,
       phase === 'done' && result ? e(ProofreadResult, {
         result,

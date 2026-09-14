@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import {
   createElement as e,
+  Fragment,
   useCallback,
   useEffect,
   useRef,
@@ -20,6 +21,10 @@ export const inject = ['slots', 'connection', 'remote', 'remote.credentials'] as
 const SLOT_ID = 'zhihu'
 const SLOT_ORDER = 120
 const SLOT_LABEL = '知乎资料'
+
+/* 活动暗示:三点呼吸(参数改写自 Amicro pulse-dots,MIT);装饰 aria-hidden,
+   关键帧在 client-styles.ts,reduced-motion 停循环后保留静态点。 */
+const activityDots = () => e('span', { className: 'zhihu-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
 
 type RpcCaller = {
   call: (channel: string, endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>
@@ -343,7 +348,7 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
 
   if (state.status === 'loading') {
     return e('section', { 'data-testid': 'zhihu-settings', 'aria-label': '知乎凭证设置' },
-      e('p', { className: 'zhihu-status', role: 'status' }, '正在读取凭证状态…'),
+      e('p', { className: 'zhihu-status', role: 'status' }, activityDots(), '正在读取凭证状态…'),
     )
   }
 
@@ -463,13 +468,13 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
         className: 'zhihu-button zhihu-button-danger',
         disabled: busy || keyLocked || !configured,
         onClick: () => void clear(),
-      }, busy ? '处理中…' : '清除'),
+      }, busy ? e(Fragment, null, activityDots(), '处理中…') : '清除'),
       e('button', {
         type: 'button',
         className: 'zhihu-button zhihu-button-primary',
         disabled: busy || keyLocked || keyValue.length === 0 || draftFailure !== undefined,
         onClick: () => void save(),
-      }, busy ? '保存中…' : '保存'),
+      }, busy ? e(Fragment, null, activityDots(), '保存中…') : '保存'),
     ),
   )
 }
@@ -571,7 +576,7 @@ function UsageSection(props: { rpc: RpcCaller }): ReactNode {
 
   if (state.status === 'loading') {
     return e('section', { 'data-testid': 'zhihu-usage', 'aria-label': '知乎调用用量' },
-      e('p', { className: 'zhihu-status', role: 'status' }, '正在读取用量…'),
+      e('p', { className: 'zhihu-status', role: 'status' }, activityDots(), '正在读取用量…'),
     )
   }
 
@@ -700,7 +705,7 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): React
     e('p', null,
       e('a', { className: 'zhihu-link', href: KB_MANAGE_URL, target: '_blank', rel: 'noreferrer' }, '管理知识库'),
     ),
-    list.status === 'loading' ? e('p', { className: 'zhihu-status', role: 'status' }, '正在读取知识库列表…') : null,
+    list.status === 'loading' ? e('p', { className: 'zhihu-status', role: 'status' }, activityDots(), '正在读取知识库列表…') : null,
     list.status === 'error' ? e('p', { className: 'zhihu-error', role: 'alert' },
       `${list.failure.text} `,
       list.failure.kind !== 'credential'
@@ -748,7 +753,7 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): React
         className: 'zhihu-button zhihu-button-primary',
         disabled: busy || !file,
         onClick: () => void upload(),
-      }, busy ? '上传中…' : '确认上传'),
+      }, busy ? e(Fragment, null, activityDots(), '上传中…') : '确认上传'),
     ) : null,
     note ? e('p', { className: 'zhihu-saved', role: 'status' }, note) : null,
     failure ? e('p', { className: 'zhihu-warning', role: 'alert' }, failure) : null,
@@ -973,13 +978,13 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
             'data-testid': 'zhihu-search',
             disabled: searchDisabled,
             onClick: () => void runSearch(),
-          }, phase === 'loading' ? '请求中…' : mode === 'hot' ? '获取热榜' : '搜索'),
+          }, phase === 'loading' ? e(Fragment, null, activityDots(), '请求中…') : mode === 'hot' ? '获取热榜' : '搜索'),
           phase === 'loading'
             ? e('button', { type: 'button', className: 'zhihu-button', onClick: () => { gate.cancel(); setPhase('idle') } }, '取消')
             : null,
         ),
         phase === 'idle' && mode !== 'hot' && !query.trim() ? e('div', { className: 'zhihu-status', role: 'status' }, '输入关键词后搜索。') : null,
-        phase === 'loading' ? e('div', { className: 'zhihu-status', role: 'status' }, '正在请求知乎…') : null,
+        phase === 'loading' ? e('div', { className: 'zhihu-status', role: 'status' }, activityDots(), '正在请求知乎…') : null,
         phase === 'error' && failure ? e('div', { className: 'zhihu-error', role: 'alert' }, failure.text) : null,
         phase === 'done' && outcome ? e(OutcomeView, { outcome, stale }) : null,
       ) : null,

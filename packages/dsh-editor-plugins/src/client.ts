@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { createElement as e, useCallback, useEffect, useRef, useState, type ComponentType, type FormEvent, type ReactNode, type RefObject } from 'react'
+import { createElement as e, Fragment, useCallback, useEffect, useRef, useState, type ComponentType, type FormEvent, type ReactNode, type RefObject } from 'react'
 import {
   PLUGINS_RPC_CHANNEL,
   PLUGINS_SETTINGS_SLOT,
@@ -101,6 +101,10 @@ function toggleTestId(card: PluginCard): string {
   return `plugins-toggle-${id}`
 }
 
+/* 活动暗示:三点呼吸(参数改写自 Amicro pulse-dots,MIT);装饰 aria-hidden,
+   关键帧在 client-styles.ts,reduced-motion 停循环后保留静态点。 */
+const activityDots = () => e('span', { className: 'dsh-plugins-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
+
 function phaseLabel(card: PluginCard): string {
   if (!card.enabled) return '已停用'
   if (card.fiberPhase === 'failed') return '启用失败'
@@ -199,12 +203,13 @@ function FeatureCard(props: {
   ].filter(Boolean)
   const locked = cards.every((card) => card.locked)
   const canToggle = toggleableCards(cards).length > 0
+  const activating = cards.some((card) => card.fiberPhase === 'pending' || card.fiberPhase === 'loading' || card.fiberPhase === 'unloading')
   return e('article', { className: 'dsh-plugins-card', 'data-testid': `plugins-card-${primary.entryId}` },
     e('div', null,
       e('div', { id: titleId, className: 'dsh-plugins-card-title' }, props.title),
       e('div', { className: 'dsh-plugins-card-desc' }, props.description),
       status
-        ? e('div', { id: mixed ? mixedId : undefined, className: 'dsh-plugins-meta' }, status)
+        ? e('div', { id: mixed ? mixedId : undefined, className: 'dsh-plugins-meta' }, activating ? activityDots() : null, status)
         : null,
       extras.length > 0
         ? e('details', { className: 'dsh-plugins-composition' },
@@ -436,7 +441,7 @@ function UninstallConfirm(props: {
           className: 'danger-action',
           disabled: busy,
           onClick: props.onConfirm,
-        }, busy ? '卸载中…' : '确认卸载'),
+        }, busy ? e(Fragment, null, activityDots(), '卸载中…') : '确认卸载'),
       ),
     )
   }
@@ -459,7 +464,7 @@ function UninstallConfirm(props: {
         className: 'dsh-plugins-primary',
         disabled: busy,
         onClick: props.onConfirm,
-      }, busy ? '卸载中…' : '确认卸载'),
+      }, busy ? e(Fragment, null, activityDots(), '卸载中…') : '确认卸载'),
       ' ',
       e('button', { type: 'button', className: 'dsh-plugins-ghost', disabled: busy, onClick: props.onCancel }, '取消'),
     ),
@@ -494,7 +499,7 @@ function InstallAttemptView(props: {
     e('header', null, e('h2', { id: 'plugins-install-title' }, '安装插件')),
     e('p', { id: 'plugins-install-desc' }, `将安装 ${props.spec}。先做静态检查，确认后再写入。`),
     props.inspecting
-      ? e('p', { className: 'dsh-plugins-status', role: 'status', 'data-testid': 'plugins-inspect-status' }, '正在检查…')
+      ? e('p', { className: 'dsh-plugins-status', role: 'status', 'data-testid': 'plugins-inspect-status' }, activityDots(), '正在检查…')
       : props.report
         ? e(InspectReportView, { report: props.report })
         : null,
@@ -532,7 +537,7 @@ function InstallAttemptView(props: {
         'data-testid': 'plugins-install-confirm',
         disabled: confirmDisabled,
         onClick: props.onConfirm,
-      }, props.installing ? '安装中…' : '确认安装'),
+      }, props.installing ? e(Fragment, null, activityDots(), '安装中…') : '确认安装'),
     ),
   )
 }
@@ -636,7 +641,7 @@ function PluginPanel(props: PluginPanelProps) {
     }),
     props.tab === 'installed'
       ? props.loading
-        ? e('p', { className: 'dsh-plugins-status' }, '正在读取已安装插件…')
+        ? e('p', { className: 'dsh-plugins-status' }, activityDots(), '正在读取已安装插件…')
         : e('div', { className: 'dsh-plugins-groups' },
           e(CoreGroup, { cards: props.inventory?.core ?? [] }),
           e(FeatureGroup, { title: '写作功能', cards: props.inventory?.optional ?? [], empty: '没有可开关的写作功能。', busyPackage: props.busyPackage, onToggle: props.onToggle, byPurpose: true }),
@@ -657,9 +662,9 @@ function PluginPanel(props: PluginPanelProps) {
             className: 'dsh-plugins-primary',
             'data-testid': 'plugins-market-submit',
             disabled: submitBusy,
-          }, parsed ? (props.installing ? '安装中…' : '安装') : (props.searching ? '搜索中…' : '搜索')),
+          }, parsed ? (props.installing ? e(Fragment, null, activityDots(), '安装中…') : '安装') : (props.searching ? e(Fragment, null, activityDots(), '搜索中…') : '搜索')),
         ),
-        props.searching ? e('p', { className: 'dsh-plugins-status' }, '正在搜索 GitHub…') : null,
+        props.searching ? e('p', { className: 'dsh-plugins-status' }, activityDots(), '正在搜索 GitHub…') : null,
         !props.searching && props.listings.length === 0
           ? e('p', { className: 'dsh-plugins-empty' }, '输入关键词搜索，或粘贴 GitHub 仓库地址安装。')
           : e('div', { className: 'dsh-plugins-group' },
