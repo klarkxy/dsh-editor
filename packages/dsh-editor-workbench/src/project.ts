@@ -15,8 +15,8 @@ export class ProjectInitError extends Error {
   }
 }
 
-/** 新建作品只预建正文目录;大纲/人物卡/世界书等由用户或搭档实际创建后再出现。 */
-export const PROJECT_DIRECTORIES = ['正文'] as const
+/** 新建作品预建四类空目录以呈现前置规划入口，但不生成任何故事模板。 */
+export const PROJECT_DIRECTORIES = ['正文', '大纲', '人物卡', '世界书'] as const
 export const NOVEL_INDEX_DIRECTORY = '.dsh-editor'
 export const NOVEL_INDEX_PATH = `${NOVEL_INDEX_DIRECTORY}/作品索引.md`
 
@@ -274,7 +274,10 @@ export async function initializeProject(input: {
   const skipped: string[] = []
   const record = (relative: string, didCreate: boolean) => (didCreate ? created : skipped).push(relative)
 
-  for (const directory of PROJECT_DIRECTORIES) {
+  /* 新作品先呈现完整的规划工作台；旧作品继续只保证正文目录存在，
+     避免仅因打开项目就替作者新增资料结构。 */
+  const directories = input.newProject ? PROJECT_DIRECTORIES : ['正文'] as const
+  for (const directory of directories) {
     record(directory, await ensureDirectory(root, directory, input.signal))
   }
   if (input.newProject) {

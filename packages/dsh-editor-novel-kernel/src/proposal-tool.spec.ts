@@ -196,6 +196,12 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).toContain('未经确认不得当作已记住')
     expect(EDITOR_PROMPT).toContain('单次要求直接执行不记录')
     expect(EDITOR_PROMPT).toContain('作品级事实进大纲/世界书')
+    expect(EDITOR_PROMPT).toContain('默认短答')
+    expect(EDITOR_PROMPT).toContain('不要向作者索要文件路径')
+    expect(EDITOR_PROMPT).toContain('只根据实际工具回执报告完成')
+    expect(EDITOR_PROMPT).toContain('章纲统一写入 大纲/')
+    expect(EDITOR_PROMPT).toContain('落笔后不要求作者回头补章纲或章末小结')
+    expect(MEMORY_MAINTENANCE_PROMPT).not.toContain('chapter_summary')
   })
 })
 
@@ -211,15 +217,14 @@ it('allows Markdown/TXT globs and gives a recoverable example for unrestricted s
 })
 
 
-it('binds chapter proposals to the host-observed version, never a model-supplied version', async () => {
-  const actor = { agent: { session: { header: { cwd: '/project' } } }, signal: new AbortController().signal }
-  const seen: unknown[] = []
-  const tool = createProposalTool({ readVersion: async (path, exec) => { seen.push([path, exec]); return 'observed-v1' } })
-  const execute = tool.execute as unknown as (args: unknown, exec: unknown) => Promise<unknown>
-  const input = { kind: 'chapter_plan', path: '正文/001.md', summary: '章纲', beats: ['下山'], sourceVersion: 'forged' }
-  expect(editorToolGuard({ name: 'novel_propose', arguments: { ...input, sourceVersion: undefined } })).toBeUndefined()
-  expect(await execute(input, actor)).toMatchObject({ kind: 'chapter_plan', sourceVersion: 'observed-v1', beats: ['下山'] })
-  expect(seen).toEqual([['正文/001.md', actor]])
-  const noRead = createProposalTool({ readVersion: async () => { throw new Error('read first') } }).execute as unknown as typeof execute
-  await expect(noRead(input, actor)).rejects.toThrow('read first')
+it('rejects hidden chapter metadata proposals and directs planning to outline files', async () => {
+  const tool = createProposalTool()
+  const execute = tool.execute as unknown as (args: unknown, exec?: unknown) => Promise<unknown>
+  for (const input of [
+    { kind: 'chapter_plan', path: '正文/001.md', summary: '章纲', beats: ['下山'] },
+    { kind: 'chapter_summary', path: '正文/001.md', summary: '小结', state: { now: '面馆' } },
+  ]) {
+    expect(editorToolGuard({ name: 'novel_propose', arguments: input })).toContain('大纲/')
+    await expect(execute(input)).rejects.toThrow('大纲/')
+  }
 })
