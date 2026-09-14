@@ -805,10 +805,10 @@ async function coverWorkbench(page) {
   })
 
   await cover('create-folders', async () => {
-    await createFolder(page, '大纲')
-    await createFolder(page, '人物卡')
-    await createFolder(page, '世界书')
-    return '大纲 / 人物卡 / 世界书'
+    // New projects pre-create 大纲/人物卡/世界书 (workbench PROJECT_DIRECTORIES),
+    // so the create-folder flow is exercised with a fresh auxiliary folder.
+    await createFolder(page, '资料')
+    return '资料'
   })
 
   await cover('create-worldbook-file', async () => {
@@ -1010,19 +1010,20 @@ async function coverWorkbench(page) {
   })
 
   await cover('proofread', async () => {
+    // 桌面校对 UI 有意休眠（见 dsh-proofread 与 dsh-editor-proofread-panel
+    // README）：正文菜单无校对入口，Ctrl+Shift+L 快捷键也不打开面板。
     await openTreeFile(page, '001.md', '正文')
-    await page.keyboard.press('Control+Shift+L')
-    const panel = page.getByRole('region', { name: '校对' })
-    await panel.waitFor({ state: 'visible', timeout: 10_000 })
-    await panel.getByRole('button', { name: /重新检查|检查/ }).click()
-    await waitFor(async () => {
-      const text = await panel.innerText()
-      return /处 · 已查|未发现需要处理/.test(text)
-    }, 'proofread result', 30_000)
-    if (await panel.getByRole('button', { name: '设定对照' }).count()) {
-      await panel.getByRole('button', { name: '设定对照' }).click()
+    await page.getByTestId('paper-editor-menu-trigger').click()
+    if (await page.getByTestId('editor-menu-proofread').count()) {
+      throw new Error('paused proofread leaked into the editor menu')
     }
-    await shot(page, 'proofread')
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Control+Shift+L')
+    await delay(400)
+    if (await page.getByRole('region', { name: '校对' }).count()) {
+      throw new Error('paused proofread panel opened via Ctrl+Shift+L')
+    }
+    return 'paused: no menu entry, no panel'
   })
 
   await cover('cards-panel', async () => {
@@ -1083,8 +1084,11 @@ async function coverWorkbench(page) {
   })
 
   await cover('snapshot-commit', async () => {
-    await page.getByRole('button', { name: '提交' }).click()
-    const history = page.getByRole('region', { name: '提交历史' })
+    await page.getByRole('button', { name: '版本', exact: true }).click()
+    await page.getByRole('menu', { name: '版本' }).getByRole('menuitem', { name: '保存版本' }).click()
+    await page.getByRole('button', { name: '版本', exact: true }).click()
+    await page.getByRole('menu', { name: '版本' }).getByRole('menuitem', { name: '历史版本' }).click()
+    const history = page.getByRole('region', { name: '历史版本' })
     await history.waitFor({ state: 'visible', timeout: 15_000 })
     await waitFor(async () => (await history.locator('.snapshot-row').count()) > 0, 'snapshot row appears', 20_000)
   })
@@ -1192,7 +1196,7 @@ async function coverWorkbench(page) {
 
 async function coverAi(page) {
   await dismissOverlays(page)
-  const initIgnore = page.getByRole('article', { name: '项目初始化' }).getByRole('button', { name: '忽略' })
+  const initIgnore = page.getByRole('article', { name: '作品初始化' }).getByRole('button', { name: '忽略' })
   if (await initIgnore.isVisible().catch(() => false)) await initIgnore.click()
   await openAssistantWithModel(page)
   await shot(page, 'assistant-ready')

@@ -743,7 +743,7 @@ async function dismissNativeOnboarding(page) {
 async function dismissOverlays(page = activePage) {
   if (!page) return
   for (let step = 0; step < 8; step += 1) {
-    const initIgnore = page.getByRole('article', { name: '项目初始化' }).getByRole('button', { name: '忽略' })
+    const initIgnore = page.getByRole('article', { name: '作品初始化' }).getByRole('button', { name: '忽略' })
     if (await initIgnore.isVisible().catch(() => false)) {
       await initIgnore.click()
       await delay(200)
@@ -1096,7 +1096,7 @@ async function answerPending(page) {
     if (await ignore.isVisible().catch(() => false)) await ignore.click()
     return true
   }
-  const initIgnore = page.getByRole('article', { name: '项目初始化' }).getByRole('button', { name: '忽略' })
+  const initIgnore = page.getByRole('article', { name: '作品初始化' }).getByRole('button', { name: '忽略' })
   if (await initIgnore.isVisible().catch(() => false)) {
     await initIgnore.click()
     return true
@@ -1142,7 +1142,7 @@ async function sendChat(page, prompt, label, timeout = 30_000) {
 }
 
 async function waitForProposal(page, previousCount, label, expectedPath) {
-  const cards = page.getByRole('article', { name: '文件修改建议' })
+  const cards = page.locator('.proposal-card[aria-label="文件修改建议"]')
   const warnings = page.locator('.chat-history .warning, .chat-row.notice').filter({ hasText: /未能完成|中断/ })
   const warningBaseline = await warnings.count()
   const deadline = Date.now() + 30_000
@@ -1170,7 +1170,7 @@ async function waitForProposal(page, previousCount, label, expectedPath) {
 
 async function sendForProposal(page, prompt, expectedPath, label) {
   await assertStubSelected(page, label)
-  const cards = page.getByRole('article', { name: '文件修改建议' })
+  const cards = page.locator('.proposal-card[aria-label="文件修改建议"]')
   const before = await cards.count()
   const composer = page.getByRole('textbox', { name: '输入消息' })
   await composer.fill(prompt)
@@ -1627,9 +1627,9 @@ async function main() {
     recordCheck('edit-apply-writes', false, 'dependency-skipped-as-failure: edit-preview-leaves-file failed')
     recordCheck('edit-undo-restores', false, 'dependency-skipped-as-failure: edit-preview-leaves-file failed')
   } else if (!(await cover('edit-apply-writes', async () => {
-    const card = page.getByRole('article', { name: '文件修改建议' }).last()
+    const card = page.locator('.proposal-card[aria-label="文件修改建议"]').last()
     await card.getByRole('button', { name: '应用', exact: true }).click()
-    await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 20_000 })
+    await card.getByText('已应用到作品', { exact: true }).first().waitFor({ state: 'visible', timeout: 20_000 })
     await waitFor(async () => (await readChapter()).includes(EDITED_LINE), 'applied text on disk', 10_000)
     const text = await readChapter()
     if (text.includes(ORIGINAL_LINE)) throw new Error('original line still present after apply')
@@ -1639,11 +1639,13 @@ async function main() {
     recordCheck('edit-undo-restores', false, 'dependency-skipped-as-failure: edit-apply-writes failed')
   } else {
     await cover('edit-undo-restores', async () => {
-      const card = page.getByRole('article', { name: '文件修改建议' }).last()
+      const card = page.locator('.proposal-card[aria-label="文件修改建议"]').last()
+      // Settled cards render as a collapsed <details>: expand before reaching footer actions.
+      await card.locator('summary').click()
       const undo = card.getByRole('button', { name: '撤销此次修改' })
       await undo.waitFor({ state: 'visible', timeout: 10_000 })
       await undo.click()
-      await card.getByText('已撤销，作品已恢复到应用前的内容', { exact: true }).waitFor({ state: 'visible', timeout: 20_000 })
+      await card.getByText('已撤销，作品已恢复到应用前的内容', { exact: true }).first().waitFor({ state: 'visible', timeout: 20_000 })
       await waitFor(async () => (await readChapter()).includes(ORIGINAL_LINE), 'undo restored disk', 10_000)
       const text = await readChapter()
       if (text.includes(EDITED_LINE)) throw new Error('edited line remained after undo')
@@ -1656,7 +1658,7 @@ async function main() {
     if (await exists(resolve(workspace, '大纲', '总纲.md'))) throw new Error('create target already existed')
     const card = await sendForProposal(page, MARK.create, CREATE_REL, 'create proposal')
     await card.getByRole('button', { name: '忽略' }).click()
-    await card.getByText('已忽略，未修改作品', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 })
+    await card.getByText('已忽略，未修改作品', { exact: true }).first().waitFor({ state: 'visible', timeout: 10_000 })
     await delay(500)
     if (await exists(resolve(workspace, '大纲', '总纲.md'))) throw new Error('ignored CREATE wrote the file')
     await shot(page, 'create-ignored', '忽略 CREATE 未写盘')

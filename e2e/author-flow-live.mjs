@@ -685,8 +685,11 @@ async function coverWorkbench(page) {
   await page.locator('[data-testid="paper-path"]', { hasText: '正文/备忘.md' }).waitFor({ state: 'visible', timeout: 20_000 })
   recordFeature('rename-file', true, '正文/草稿.md → 正文/备忘.md')
 
-  await page.getByRole('button', { name: '提交' }).click()
-  const history = page.getByRole('region', { name: '提交历史' })
+  await page.getByRole('button', { name: '版本', exact: true }).click()
+  await page.getByRole('menu', { name: '版本' }).getByRole('menuitem', { name: '保存版本' }).click()
+  await page.getByRole('button', { name: '版本', exact: true }).click()
+  await page.getByRole('menu', { name: '版本' }).getByRole('menuitem', { name: '历史版本' }).click()
+  const history = page.getByRole('region', { name: '历史版本' })
   await history.waitFor({ state: 'visible', timeout: 15_000 })
   await waitFor(async () => (await history.locator('.snapshot-row').count()) > 0, 'snapshot row appears', 20_000)
   recordFeature('snapshot-commit', true)
@@ -716,12 +719,12 @@ async function startFreshConversation(page) {
 }
 
 async function dismissInitGuide(page) {
-  const card = page.getByRole('article', { name: '项目初始化' })
+  const card = page.getByRole('article', { name: '作品初始化' })
   if (!(await card.isVisible().catch(() => false))) return
   const ignore = card.getByRole('button', { name: '忽略' })
   if (await ignore.isVisible().catch(() => false)) {
     await ignore.click()
-    await recordPhase('忽略项目初始化引导')
+    await recordPhase('忽略作品初始化引导')
   }
 }
 
@@ -1038,7 +1041,8 @@ try {
   const leaked = ['.dsh-editor/作品索引.md', '状态已更新。', '为当前工作区建立作品索引'].filter((item) => assistantText.includes(item))
   if (leaked.length) fail(`搭档栏泄露内部内容：${leaked.join('、')}`)
   await verifyChaptersInEditor(page)
-  await page.getByRole('button', { name: '提交' }).click()
+  await page.getByRole('button', { name: '版本', exact: true }).click()
+  await page.getByRole('menu', { name: '版本' }).getByRole('menuitem', { name: '保存版本' }).click()
   await shot(page, 'complete')
   await recordPhase('完整作者流程通过', `${chapterCount}章，每章至少${minChapterChars}字；第5章校验=${check}`)
 } catch (error) {

@@ -281,11 +281,12 @@ try {
     }
   }
 
-  // The tree no longer carries preset 大纲/人物卡/世界书 groups: they appear
-  // only after they exist on disk (created by the user or the agent).
-  for (const label of ['大纲', '人物卡', '世界书']) {
-    if (await page.locator('.tree').getByText(label, { exact: true }).count()) {
-      failures.push(`preset tree group should stay absent until created: ${label}`)
+  // New projects pre-create the four preset directories (PROJECT_DIRECTORIES in
+  // workbench project.ts) so planning entries exist up front; the tree renders
+  // real on-disk entries, so all four show right after project creation.
+  for (const label of ['正文', '大纲', '人物卡', '世界书']) {
+    if (!(await page.locator('.tree').getByText(label, { exact: true }).count())) {
+      failures.push(`preset directory missing from new-project tree: ${label}`)
     }
   }
   await page.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
