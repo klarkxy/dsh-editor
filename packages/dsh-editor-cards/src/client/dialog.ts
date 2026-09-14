@@ -1,7 +1,11 @@
-import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type ComponentType, type FormEvent, type KeyboardEvent } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState, type ChangeEvent, type ComponentType, type FormEvent, type KeyboardEvent } from 'react'
 import type { ShellDialogProps } from 'dsh-editor-seats'
 import { guardImeEnter } from './host-ui.ts'
 import { t } from './messages.ts'
+
+/* 活动暗示:三点呼吸(参数改写自 Amicro pulse-dots,MIT);装饰 aria-hidden,
+   关键帧在 styles.ts。 */
+const activityDots = () => e('span', { className: 'panel-activity-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
 
 function useDialogReturnFocus(dialogRef: { current: HTMLElement | null }, firstFocus: () => void) {
   const returnFocus = useRef<HTMLElement | null>(null)
@@ -94,7 +98,7 @@ export function TextPromptDialog(props: {
           className: 'primary-action',
           type: 'submit',
           disabled: props.busy || !value.trim(),
-        }, props.busy ? t('common.saving') : display.confirmLabel),
+        }, props.busy ? e(Fragment, null, activityDots(), t('common.saving')) : display.confirmLabel),
       ),
     ),
   ]

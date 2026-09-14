@@ -70,6 +70,19 @@ export const proofreadPanelStyles = `
 .shell .proofread-panel .proposal-card header, .shell .proofread-panel .proposal-card footer,
 .dsh-ui .proofread-panel .proposal-card header, .dsh-ui .proofread-panel .proposal-card footer { flex-wrap: wrap; }
 .shell .proofread-panel .proposal-card pre, .dsh-ui .proofread-panel .proposal-card pre { max-height: 120px; }
+/* 活动反馈:三点呼吸(pulse-dots)与骨架光泽(fluid-skeleton),参数改写自
+   Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);reduced-motion
+   停掉循环,保留静态点与骨架条。骨架形状贴合检查结果列表。 */
+@keyframes proofread-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+@keyframes proofread-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+.shell .panel-activity-dots, .dsh-ui .panel-activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
+.shell .panel-activity-dots i, .dsh-ui .panel-activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: proofread-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
+.shell .panel-activity-dots i:nth-child(2), .dsh-ui .panel-activity-dots i:nth-child(2) { animation-delay: .2s; }
+.shell .panel-activity-dots i:nth-child(3), .dsh-ui .panel-activity-dots i:nth-child(3) { animation-delay: .4s; }
+.shell .panel-skeleton, .dsh-ui .panel-skeleton { display: grid; gap: 8px; }
+.shell .panel-skeleton i, .dsh-ui .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-sm, 6px); background: var(--hairline-strong, rgba(20, 20, 19, .12)); overflow: hidden; }
+.shell .panel-skeleton i::after, .dsh-ui .panel-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface, #fdfcf6) 65%, transparent), transparent); animation: proofread-activity-sheen 1.5s linear infinite; }
+.shell .proofread-loading, .dsh-ui .proofread-loading { display: grid; gap: 8px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   .shell .proofread-panel, .shell .proofread-panel *, .dsh-ui .proofread-panel, .dsh-ui .proofread-panel * {
     animation: none !important; transition: none !important; filter: none !important; transform: none !important;

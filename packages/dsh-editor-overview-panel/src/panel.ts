@@ -37,6 +37,13 @@ const STATUS_BAR_MAX = 28
 const CHAR_BAR_MAX = 72
 const CURVE_BAR_MAX = 56
 
+/* 活动暗示:三点呼吸(pulse-dots)与骨架行(fluid-skeleton),参数改写自
+   Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);装饰 aria-hidden,
+   关键帧在 styles.ts,reduced-motion 停循环后保留静态可读态。 */
+const activityDots = () => e('span', { className: 'panel-activity-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
+const skeletonRows = (widths: readonly string[]) => e('span', { className: 'panel-skeleton', 'aria-hidden': 'true' },
+  widths.map((width, index) => e('i', { key: index, style: { width } })))
+
 function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | null; onClose(): void }) {
   setOverviewLocale(props.locale)
   const [overview, setOverview] = useState<ProjectOverview | null | undefined>(undefined)
@@ -142,7 +149,11 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
       ),
       e('button', { className: 'icon-button', type: 'button', 'aria-label': t('overview.close'), onClick: props.onClose }, '×'),
     ),
-    loading ? e('p', { className: 'muted', role: 'status' }, t('overview.loading')) : null,
+    loading ? e('div', { className: 'overview-loading', role: 'status' },
+      e('span', { className: 'overview-loading-cards', 'aria-hidden': 'true' }, e('i'), e('i'), e('i')),
+      skeletonRows(['100%', '88%', '96%', '72%']),
+      e('span', { className: 'sr-only' }, t('overview.loading')),
+    ) : null,
     failed ? e('p', { className: 'warning', role: 'alert' },
       note || t('overview.loadError'),
       e('button', { type: 'button', onClick: () => { void loadOverview(); void loadHistory() } }, t('overview.retry')),
@@ -244,15 +255,18 @@ function ChapterRow(props: {
       marks.hasState ? e('span', { className: 'overview-meta-pill' }, t('chapterMeta.hasState')) : null,
     ),
     chapter.empty ? e('span', { className: 'overview-empty-flag' }, t('overview.bucketEmpty')) : null,
-    renderSelect(props.Select, {
-      'aria-label': t('overview.chapterStatusAria', { title: chapter.title }),
-      value: chapter.status,
-      disabled: props.busy,
-      options: CHAPTER_STATUSES.map((status) => ({ value: status, label: chapterStatusLabel(status) })),
-      onChange: (next) => {
-        if (next === 'draft' || next === 'revising' || next === 'final') props.onStatusChange(chapter.path, next)
-      },
-    }),
+    e('span', { className: 'overview-status-wrap' },
+      renderSelect(props.Select, {
+        'aria-label': t('overview.chapterStatusAria', { title: chapter.title }),
+        value: chapter.status,
+        disabled: props.busy,
+        options: CHAPTER_STATUSES.map((status) => ({ value: status, label: chapterStatusLabel(status) })),
+        onChange: (next) => {
+          if (next === 'draft' || next === 'revising' || next === 'final') props.onStatusChange(chapter.path, next)
+        },
+      }),
+      props.busy ? activityDots() : null,
+    ),
     e('time', { className: 'overview-chapter-time', dateTime: chapter.modifiedAt ?? undefined }, formatModifiedAt(chapter.modifiedAt)),
   )
 }

@@ -1,4 +1,4 @@
-import { createElement as e, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { WORKBENCH_RPC_CHANNEL, type ProofreadScanResponse } from 'dsh-editor-workbench/contracts'
 import type { ShellProposalCardProps, ShellToolSeatContext } from 'dsh-editor-seats'
 import {
@@ -35,6 +35,13 @@ export type RpcCaller = {
 }
 
 export type ProofreadSeatProps = ShellToolSeatContext & { rpc: RpcCaller }
+
+/* 活动暗示:三点呼吸(pulse-dots)与骨架行(fluid-skeleton),参数改写自
+   Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);装饰 aria-hidden,
+   关键帧在 styles.ts,reduced-motion 停循环后保留静态可读态。 */
+const activityDots = () => e('span', { className: 'panel-activity-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
+const skeletonRows = (widths: readonly string[]) => e('span', { className: 'panel-skeleton', 'aria-hidden': 'true' },
+  widths.map((width, index) => e('i', { key: index, style: { width } })))
 
 function toProposalMarker(draft: ProofreadEditDraft): ShellProposalCardProps['proposal'] {
   return {
@@ -255,7 +262,7 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
           onClick: () => changeScope('manuscript'),
         }, t('proofread.wholeBook')),
       ),
-      e('button', { type: 'button', disabled: busy, onClick: () => void scan(scope) }, busy ? t('proofread.checking') : t('proofread.recheck')),
+      e('button', { type: 'button', disabled: busy, onClick: () => void scan(scope) }, busy ? e(Fragment, null, activityDots(), t('proofread.checking')) : t('proofread.recheck')),
     ),
     e('div', { className: 'proofread-kinds', role: 'group', 'aria-label': t('proofread.kinds') }, PROOFREAD_KIND_CHIP_ORDER.map((kind) => e('button', {
       key: kind,
@@ -289,7 +296,10 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
         onApplied: handleApplied,
       }),
     ) : null,
-    busy && !result ? e('p', { className: 'muted', role: 'status' }, t('proofread.checking')) : null,
+    busy && !result ? e('div', { className: 'proofread-loading', role: 'status' },
+      skeletonRows(['100%', '88%', '96%', '72%']),
+      e('span', { className: 'sr-only' }, t('proofread.checking')),
+    ) : null,
     grouped.length ? e('ol', { className: 'proofread-results' }, grouped.map((group) => e('li', { key: group.path, className: 'proofread-file' },
       e('strong', null, group.path),
       e('ul', null, group.findings.map((item, index) => e('li', { key: `${item.path}:${item.start}:${item.kind}:${index}`, className: 'proofread-row' },

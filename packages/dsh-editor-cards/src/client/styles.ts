@@ -73,6 +73,21 @@ export const cardsPanelStyles = `
   min-height: 32px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); cursor: pointer; font-size: var(--text-chrome, 13px);
 }
 .dsh-ui.file-dialog.prompt-dialog, .shell .file-dialog.prompt-dialog, .dsh-ui .file-dialog.prompt-dialog { width: min(520px, 100%); }
+/* 活动反馈:三点呼吸(pulse-dots)与骨架光泽(fluid-skeleton),参数改写自
+   Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);reduced-motion
+   停掉循环,保留静态点与骨架条。卡片列表载入用骨架,出现仅淡入(不位移)。 */
+@keyframes cards-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+@keyframes cards-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+@keyframes cards-item-in { from { opacity: 0; } }
+.shell .panel-activity-dots, .dsh-ui .panel-activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
+.shell .panel-activity-dots i, .dsh-ui .panel-activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: cards-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
+.shell .panel-activity-dots i:nth-child(2), .dsh-ui .panel-activity-dots i:nth-child(2) { animation-delay: .2s; }
+.shell .panel-activity-dots i:nth-child(3), .dsh-ui .panel-activity-dots i:nth-child(3) { animation-delay: .4s; }
+.shell .panel-skeleton, .dsh-ui .panel-skeleton { display: grid; gap: 8px; }
+.shell .panel-skeleton i, .dsh-ui .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-sm, 6px); background: var(--hairline-strong, rgba(20, 20, 19, .12)); overflow: hidden; }
+.shell .panel-skeleton i::after, .dsh-ui .panel-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface, #fdfcf6) 65%, transparent), transparent); animation: cards-activity-sheen 1.5s linear infinite; }
+.shell .cards-loading, .dsh-ui .cards-loading { display: grid; gap: 8px; color: var(--meta); }
+.shell .cards-item, .dsh-ui .cards-item { animation: cards-item-in var(--duration-fast, 250ms) var(--ease-smooth-out, ease) both; }
 @media (max-width: 720px) {
   .shell .cards-fields, .shell .cards-relation-row, .dsh-ui .cards-fields, .dsh-ui .cards-relation-row { grid-template-columns: minmax(0, 1fr); }
 }

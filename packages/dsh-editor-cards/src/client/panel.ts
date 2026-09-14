@@ -1,4 +1,4 @@
-import { createElement as e, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
 import {
   CARDS_RPC_CHANNEL,
   type CardKind,
@@ -49,6 +49,13 @@ export type RpcCaller = {
 export type CardsSeatProps = ShellToolSeatContext & { rpc: RpcCaller }
 
 const EMPTY_CATALOG: CardsCatalog = { characters: [], worldbook: [] }
+
+/* 活动暗示:三点呼吸(pulse-dots)与骨架行(fluid-skeleton),参数改写自
+   Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);装饰 aria-hidden,
+   关键帧在 styles.ts,reduced-motion 停循环后保留静态可读态。 */
+const activityDots = () => e('span', { className: 'panel-activity-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
+const skeletonRows = (widths: readonly string[]) => e('span', { className: 'panel-skeleton', 'aria-hidden': 'true' },
+  widths.map((width, index) => e('i', { key: index, style: { width } })))
 
 export type ReferenceState =
   | { status: 'idle' }
@@ -263,7 +270,10 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
       selected: tagChips,
       onToggle: (value) => setTagChips((old) => toggleFilterValue(old, value)),
     }) : null,
-    busy ? e('p', { className: 'cards-status muted', role: 'status' }, t('cards.loading')) : null,
+    busy ? e('div', { className: 'cards-status cards-loading', role: 'status' },
+      skeletonRows(['100%', '88%', '96%', '72%']),
+      e('span', { className: 'sr-only' }, t('cards.loading')),
+    ) : null,
     note ? e('p', { className: `cards-status ${truncated ? 'warning' : 'muted'}`, role: note && !truncated && !busy ? 'alert' : 'status' },
       note,
       !busy && !truncated && note && !list.length ? e('button', { type: 'button', onClick: () => void load() }, t('cards.retry')) : null,
@@ -391,7 +401,7 @@ export function ReferenceBlock(props: {
 }) {
   const label = props.state.status === 'ready'
     ? t('cards.refCount', { count: props.state.value.hits.length })
-    : props.state.status === 'busy' ? t('cards.refsEllipsis') : t('cards.refs')
+    : props.state.status === 'busy' ? e(Fragment, null, activityDots(), t('cards.refsEllipsis')) : t('cards.refs')
   return e('div', { className: 'cards-refs' },
     e('button', {
       type: 'button',

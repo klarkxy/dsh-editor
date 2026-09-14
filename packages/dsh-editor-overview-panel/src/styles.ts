@@ -111,6 +111,24 @@ export const overviewPanelStyles = `
 .shell .overview-recent small, .dsh-ui .overview-recent small { color: var(--meta); }
 .shell .overview-panel button, .dsh-ui .overview-panel button { font-size: var(--text-chrome, 13px); }
 .shell .overview-panel .icon-button, .dsh-ui .overview-panel .icon-button { min-height: 32px; min-width: 32px; }
+/* 活动反馈:三点呼吸(pulse-dots)与骨架光泽(fluid-skeleton),参数改写自
+   Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);reduced-motion
+   停掉循环,保留静态点与骨架条。骨架形状贴合概览布局(统计卡+章节行)。 */
+@keyframes overview-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+@keyframes overview-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+.shell .panel-activity-dots, .dsh-ui .panel-activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
+.shell .panel-activity-dots i, .dsh-ui .panel-activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: overview-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
+.shell .panel-activity-dots i:nth-child(2), .dsh-ui .panel-activity-dots i:nth-child(2) { animation-delay: .2s; }
+.shell .panel-activity-dots i:nth-child(3), .dsh-ui .panel-activity-dots i:nth-child(3) { animation-delay: .4s; }
+.shell .panel-skeleton, .dsh-ui .panel-skeleton { display: grid; gap: 8px; }
+.shell .panel-skeleton i, .dsh-ui .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-sm, 6px); background: var(--hairline-strong, rgba(20, 20, 19, .12)); overflow: hidden; }
+.shell .panel-skeleton i::after, .dsh-ui .panel-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface, #fdfcf6) 65%, transparent), transparent); animation: overview-activity-sheen 1.5s linear infinite; }
+.shell .overview-loading, .dsh-ui .overview-loading { display: grid; gap: var(--space-5, 20px); padding: 16px 24px 32px; }
+.shell .overview-loading-cards, .dsh-ui .overview-loading-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: var(--space-3, 12px); }
+.shell .overview-loading-cards i, .dsh-ui .overview-loading-cards i { position: relative; display: block; height: 56px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); overflow: hidden; }
+.shell .overview-loading-cards i::after, .dsh-ui .overview-loading-cards i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface, #fdfcf6) 65%, transparent), transparent); animation: overview-activity-sheen 1.5s linear infinite; }
+.shell .overview-status-wrap, .dsh-ui .overview-status-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.shell .overview-status-wrap .panel-activity-dots, .dsh-ui .overview-status-wrap .panel-activity-dots { margin-inline-end: 0; color: var(--accent); }
 @media (max-width: 720px) {
   .shell .overview-totals, .shell .overview-chapter, .dsh-ui .overview-totals, .dsh-ui .overview-chapter { grid-template-columns: minmax(0, 1fr); }
 }

@@ -1,4 +1,4 @@
-import { createElement as e, useEffect, useState, useSyncExternalStore, type ChangeEvent, type ReactNode } from 'react'
+import { createElement as e, Fragment, useEffect, useState, useSyncExternalStore, type ChangeEvent, type ReactNode } from 'react'
 import {
   CARDS_RPC_CHANNEL,
   type CardKind,
@@ -24,6 +24,10 @@ import { errorMessage, isStaleFailure, safeRpcCall } from './rpc.ts'
 import { setCardsLocale, t } from './messages.ts'
 import { closeCardsDetail, getCardsState, selectCard, subscribeCardsStore } from './store.ts'
 import { ReferenceGroups, type CardsSeatProps, type ReferenceState } from './panel.ts'
+
+/* 活动暗示:三点呼吸(参数改写自 Amicro pulse-dots,MIT);装饰 aria-hidden,
+   关键帧在 styles.ts。 */
+const activityDots = () => e('span', { className: 'panel-activity-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
 
 export function CardsDetailSeat(props: CardsSeatProps) {
   setCardsLocale(props.locale)
@@ -224,12 +228,17 @@ function CardsDetail(props: CardsSeatProps & {
         field(t('cards.summary'), e('textarea', { value: summary, rows: 3, onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setSummary(event.target.value), 'aria-label': t('cards.summary') }), true),
       ),
       e('div', { className: 'cards-detail-actions' },
-        e('button', { type: 'button', disabled: busy, onClick: () => void save() }, busy ? t('common.saving') : t('common.save')),
+        e('button', { type: 'button', disabled: busy, onClick: () => void save() }, busy ? e(Fragment, null, activityDots(), t('common.saving')) : t('common.save')),
         e('button', { type: 'button', disabled: props.editorDirty, onClick: () => {
           props.expandTreePath(card.path)
           props.openDocument(card.path)
         } }, t('cards.openDoc')),
-        e('button', { type: 'button', disabled: references.status === 'busy', onClick: () => void loadReferences() }, references.status === 'ready' ? t('cards.refCount', { count: references.value.hits.length }) : t('cards.refs')),
+        e('button', { type: 'button', disabled: references.status === 'busy', onClick: () => void loadReferences() },
+          references.status === 'ready'
+            ? t('cards.refCount', { count: references.value.hits.length })
+            : references.status === 'busy'
+              ? e(Fragment, null, activityDots(), t('cards.refsEllipsis'))
+              : t('cards.refs')),
       ),
       note ? e('p', { className: /已保存|已重新读取|saved|re-?read/i.test(note) ? 'muted' : 'warning', role: 'status' }, note) : null,
       props.editorDirty ? e('p', { className: 'warning' }, t('cards.saveBeforeRef')) : null,

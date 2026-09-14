@@ -1,4 +1,4 @@
-import { createElement as e, useEffect, useRef, useState } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState } from 'react'
 import {
   WORKBENCH_RPC_CHANNEL,
   type MemoryChange,
@@ -27,6 +27,12 @@ const STATUS_LABEL: Record<MemoryStatus, MessageKey> = {
 }
 
 const STATUS_FILTERS: MemoryStatus[] = ['pending', 'applied', 'stale', 'failed', 'undone']
+
+/* 活动暗示:三点呼吸与骨架行,参数改写自 Amicro(MIT)pulse-dots / fluid-skeleton;
+   装饰性 aria-hidden,关键帧在 styles.ts,reduced-motion 停循环后保留静态可读态。 */
+const activityDots = () => e('span', { className: 'panel-activity-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
+const skeletonRows = (widths: readonly string[]) => e('span', { className: 'panel-skeleton', 'aria-hidden': 'true' },
+  widths.map((width, index) => e('i', { key: index, style: { width } })))
 
 function createdLabel(createdAt: string): string {
   const time = Date.parse(createdAt)
@@ -143,7 +149,7 @@ export function MemoryChangeDetail(props: {
   if (!record) {
     return e('article', { className: 'proposal-card checking', 'aria-label': t('memory.title') },
       e('header', null, e('strong', null, props.fallback?.summary ?? props.id), props.fallback ? e('code', null, props.fallback.path) : null),
-      e('footer', null, e('span', { role: 'status' }, t('memory.loading'))),
+      e('footer', null, e('span', { role: 'status' }, activityDots(), t('memory.loading'))),
     )
   }
   const update = record.update
@@ -169,9 +175,9 @@ export function MemoryChangeDetail(props: {
   ) : null
   const failedMessage = record.status === 'failed' && record.message ? e('p', { className: 'warning', role: 'alert' }, record.message) : null
   const footerRow = e('footer', null,
-    e('span', { role: 'status' }, note),
-    record.status === 'pending' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void apply() }, busy === 'apply' ? t('memory.applying') : t('memory.confirm')) : null,
-    record.status === 'applied' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void undo() }, busy === 'undo' ? t('memory.undoing') : t('memory.undo')) : null,
+    e('span', { role: 'status' }, busy ? activityDots() : null, note),
+    record.status === 'pending' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void apply() }, busy === 'apply' ? e(Fragment, null, activityDots(), t('memory.applying')) : t('memory.confirm')) : null,
+    record.status === 'applied' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void undo() }, busy === 'undo' ? e(Fragment, null, activityDots(), t('memory.undoing')) : t('memory.undo')) : null,
     props.onBack ? e('button', { type: 'button', disabled: Boolean(busy), onClick: props.onBack }, t('memory.back')) : null,
   )
   /* 聊天卡：已应用/已撤销默认收起差异与引用，摘要状态留在 summary；pending/failed/stale 需要作者注意，默认展开。 */
@@ -263,7 +269,7 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
       note,
       items === null ? e('button', { type: 'button', onClick: () => void load() }, t('memory.retryList')) : null,
     ) : null,
-    items === null && !note ? e('p', { className: 'memory-status', role: 'status' }, t('memory.loading')) : null,
+    items === null && !note ? e('div', { className: 'memory-status', role: 'status' }, skeletonRows(['100%', '88%', '96%']), e('span', { className: 'sr-only' }, t('memory.loading'))) : null,
     items !== null && items.length === 0 ? e('p', { className: 'memory-status' }, t('memory.empty')) : null,
     items !== null && items.length > 0 && visible.length === 0 ? e('p', { className: 'memory-status' }, t('memory.noMatch')) : null,
     visible.length ? e('ul', { className: 'memory-list' }, visible.map((item) => e('li', { key: item.id },
