@@ -1,8 +1,8 @@
-# 可组合插件：安装、接口与开发示例
+# 插件组合：选择与安装
 
-本文是桌面 **0.2.0** / DSH `0.1.5-rc.2` 的当前组合指南。历史验证保存在各自的日期记录；本轮结果见 [0.2.0 验收记录](release-0.2.0.md)。
+本文是桌面 **0.2.0** / DSH `0.1.5-rc.2` 的插件组合指南，覆盖 basic / smart / full 组合的选择、声明式拼装、本地 tarball 安装与复现验收。接口契约只在 [插件架构](plugin-architecture.md) 维护，本文不复制。本轮结果见 [0.2.0 验收记录](release-0.2.0.md)。
 
-桌面包版本与公开插件包版本分别维护；三个公开插件通过本地 tarball 安装。运行时边界见 [architecture.md](architecture.md)，拆分经过见 [实施记录](history/plugin-modularization-progress.md)。直观边界见 [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) 与 [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)；读图时 Host 插件在 DSH 进程内，`host-api` 是库导入。
+桌面包版本与公开插件包版本分别维护；三个公开插件经本地 tarball 安装。运行时边界见 [architecture.md](architecture.md)。直观边界见 [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) 与 [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)；读图时 Host 插件在 DSH 进程内，`host-api` 是进程内库导入。
 
 ## 选择组合
 
@@ -27,9 +27,9 @@
 | `zhihu` | 知乎普通服务 | 否 | 否 | 是 |
 | `zhihu-tools` | 知乎 Tool 入口 | 否 | 否 | 是 |
 
-基础写作仍使用 DSH session/workspace 权限，并安装上游基础服务。它证明业务 AI 可选，不代表整个编辑器没有 Harness。workbench 将校对引擎作为必需库使用：0.2.0 的桌面 profile 已默认停用 `proofread` 入口，且所有 recipe 移除 `proofread-panel`。保留 workbench 时不能删掉引擎包；独立 Web 的校对插件仍可使用。
+基础写作仍使用 DSH session/workspace 权限，并安装上游基础服务；它证明业务 AI 可选，不代表整个编辑器没有 Harness。workbench 把校对引擎作为必需库：桌面 0.2.0 的 profile 已默认停用 `proofread` 入口，所有 recipe 均移除 `proofread-panel`。保留 workbench 时不能删掉引擎包；独立 Web 的校对插件仍可使用。
 
-组合文件在 `apps/desktop/resources/compositions/{basic,smart,full}.json`，现在只声明 `id` / `label` / `features`。开发、模板准备、运行时物化和最终包校验经 `scripts/desktop-compositions.mjs` 调用 `scripts/plugin-manifest.mjs` 解析出包集合、停用入口、额外 insert 与 Shell feature 服务名。Shell 的业务 contracts 和编辑核心是构建时依赖，已内联，不会因 Shell 的运行依赖把移除的 kernel 或知乎装回来。
+组合文件在 `apps/desktop/resources/compositions/{basic,smart,full}.json`，只声明 `id` / `label` / `features`。开发、模板准备、运行时物化和最终包校验由 `scripts/desktop-compositions.mjs` 调用 `scripts/plugin-manifest.mjs` 解析，得出包集合、停用入口、额外 insert 与 Shell feature 服务名。Shell 的业务 contracts 和编辑核心是构建时依赖，已内联；不会因 Shell 的运行依赖把移除的 kernel 或知乎装回来。
 
 ## 声明式拼装：dshEditor 与 feature 组合
 
@@ -49,7 +49,7 @@
 
 新增插件：给包装上 `dshEditor`（并保证 `entries` 与包 patch 一致），若它是可选能力，再把对应 feature 写进需要它的组合食谱。不要再改脚本里的包名列表。
 
-侧栏工具走 Shell 座位与命令注册表，不要再改 `root.ts`。座位合同从 `dsh-editor-seats` 导入（构建时内联）。在 `dsh-editor.sidebar.tools` 或 `dsh-editor.center.overlays` 注册贡献，并从 `dshEditorCommands` 注册命令（含可选快捷键）。座位 props 是 Shell 传入的上下文（当前路径、脏标记、`openDocument`、`onApplied`、`refresh`、locale）；作者确认卡必须用座位上的 `ProposalCard`，插件不得自己写作者正文。中栏 overlay 打开时给根元素加 `CENTER_OVERLAY_ATTRIBUTE`（`data-dsh-center-overlay`），Shell 负责把它放进稿纸格并隐藏稿纸，插件不写 grid 规则。`cards`、`overview-panel` 与 `memory-panel` 使用这条路径；`proofread-panel` 保留合同和代码，但未加入当前 recipe。新增面板只在需要的 recipe 声明 feature。
+侧栏工具走 Shell 座位与命令注册表，不要再改 `root.ts`。座位合同从 `dsh-editor-seats` 导入（构建时内联）。在 `dsh-editor.sidebar.tools` 或 `dsh-editor.center.overlays` 注册贡献，并从 `dshEditorCommands` 注册命令（含可选快捷键）。座位 props 是 Shell 传入的上下文（当前路径、脏标记、`openDocument`、`onApplied`、`refresh`、locale）。作者确认卡必须用座位上的 `ProposalCard`，插件不得自己写作者正文。中栏 overlay 打开时给根元素加 `CENTER_OVERLAY_ATTRIBUTE`（`data-dsh-center-overlay`），Shell 负责把它放进稿纸格并隐藏稿纸，插件不写 grid 规则。`cards`、`overview-panel` 与 `memory-panel` 使用这条路径；`proofread-panel` 保留合同和代码，但未加入当前 recipe。新增面板只在需要的 recipe 声明 feature。
 
 ```powershell
 $env:DSH_EDITOR_COMPOSITION = 'basic' # smart / full
@@ -77,7 +77,7 @@ dsh plugin --profile web add "file:$($stage.Replace('\','/'))/dsh-zhihu-0.1.0.tg
 dsh --profile web
 ```
 
-这个 HOME 独立于日常配置。只需要其中一个能力时只执行对应的 add。官方 Web 的“校对”和“知乎”入口由插件各自贡献；不用打开小说作品或配置模型即可校对。联网知乎功能需要用户提供凭据，校对不需要。
+这个 HOME 独立于日常配置。只需要其中一个能力时只执行对应的 add。官方 Web 的「校对」和「知乎」入口由插件各自贡献；不用打开小说作品或配置模型即可校对。联网知乎功能需要用户提供凭据，校对不需要。
 
 关闭进程后可移除或重新安装：
 
@@ -123,41 +123,33 @@ node e2e/missing-private-plugin.mjs
 
 脚本使用隔离 HOME 与作品目录。错误、延迟与取消的界面测试使用受控响应；不会发送在线模型或知乎付费请求。复制模式仅影响开发验收，正常开发默认继续使用便于监听构建的链接。
 
-## 每块积木的合同
+## 接口合同的分工
 
-所有自定义 RPC 都使用已有 Connection 的 loopback 信任边界。返回统一的 `{ ok: true, value }` 或 `{ ok: false, error: { code, message, details } }`。
+插件的接口契约只在 [plugin-architecture.md](plugin-architecture.md) 维护，本文不复制。按需查阅：
 
-| 所有者 | 入口 | 核心输入/输出 | 权限与可选依赖 |
-| --- | --- | --- | --- |
-| proofread | `/proofread` → `text.check` | `{text, kinds?}` → `{findings, habitStats, truncated}` | connection + webServer；UTF-8 文本最多 2,000,000 字节、最多 500 条；不接受路径/session/自定义预算 |
-| manuscript | `/manuscript` → 现有文件、草稿、search、proposal | 旧输入和版本门禁保持 | live session 重建文件权限；只有它注册此 channel |
-| manuscript-assist | `manuscriptAssist` 服务 | 原 channel 转发 FIM/patch 与 usage | 同包可选 entry，依赖 llm/storageDomain；尚未另成 writing-assist 包 |
-| workbench | `/dsh-editor-workbench` | 作品、扫描、快照、导入、归档 | 仍用同一 workspace authority；scan 经 `dsh-editor-cards/host-api` 读卡片并做跨文件 habit 聚合 |
-| cards | `/dsh-editor-cards` | `cards.list` / `references` / `metaSet` / `create` | 同一 workspace authority；写入共享 `withWorkspaceWrite` |
-| workbench-tools | `novel_overview`、`novel_memory_update` | 概览只读；记忆更新生成待确认记录 | 可选 entry，依赖 tools 和工作区权限 |
-| zhihu | `/zhihu` → `search`、`global.search`、`hot.list`、`ask`、`knowledge.search` | 查询、条数、搜索源/模型/召回范围 → 原结构结果 | connection/credentials/storageDomain；无小说和会话依赖 |
-| zhihu | `knowledge.bases`、`knowledge.upload`、`usage.summary` | 上传显式确认，base64 ≤20 MB；用量默认30天、最大90天 | `ZHIHU_ACCESS_TOKEN` 引用保持；计量唯一所有者 |
-| zhihu-tools | `zhihu_search`、`zhihu_global_search`、`zhihu_hot_list`、`zhihu_ask`、`zhihu_knowledge_search` | 现有工具输入输出 | 通过同一 zhihu 服务的生命周期与计量；无重复 channel |
-| novel-kernel | 7个小说工具、guard、prompt | 小说协作 | 不依赖知乎凭据或 `/zhihu` |
-| shell | `/dsh-editor-shell` → `capabilities.get` | `{features: { [feature]: boolean }}` | 配置里的 feature 映射到服务名；已选服务缺失返回明确错误；未选 feature 不出现（视为 false） |
-| plugins | `/dsh-editor-plugins` | 已装清单、开关、GitHub `dsh-plugin` 搜索、静态检查与安装 | 核心插件锁定；`blocked` 拒绝安装；安装/卸载后重启 |
+- 入口目录、entry id 与 inject 清单：[插件与入口目录](plugin-architecture.md#插件与入口目录)。
+- 座位、命令与消息卡合同：[Shell 座位与命令注册表](plugin-architecture.md#shell-座位与命令注册表)。
+- RPC 端点表与 loopback 信任边界：[RPC 通用契约](plugin-architecture.md#rpc-通用契约)及 `/manuscript`、`/dsh-editor-workbench`、`/dsh-editor-cards`、`/dsh-editor-plugins` 四节（节标题即 channel 名）。
+- 修改、替换与新建步骤：[如何修改或替换现有插件](plugin-architecture.md#如何修改或替换现有插件)、[新建 Host-only 插件](plugin-architecture.md#新建-host-only-插件)、[新建 overlay 插件](plugin-architecture.md#新建-overlay-插件)。
 
-proofread finding 位置沿用 UTF-16 下标；结果只读，不直接修改当前文稿。支持 `punctuation/sensitive/repeat/typo/habit`，人物卡检查只在 workbench 作品扫描中提供。
+该篇未单列、组合安装需要知道的合同，在此保留一行式：
 
-知乎 UI 和 Tool 共用一个计量写入者，继续写 `dsh_editor_zhihu_usage` version 1。稿件、草稿、快照、设置 namespace 和凭据引用不迁移；换回旧代码不需要数据逆迁移，但仍应保留作品与应用数据备份。
+- proofread：`/proofread` → `text.check`，`{ text, kinds? }` → `{ findings, habitStats, truncated }`。UTF-8 文本 ≤ 2,000,000 字节、结果 ≤ 500 条；只接受文本，不接受路径或 session。finding 位置是 UTF-16 下标，结果只读；kinds 为 `punctuation` / `sensitive` / `repeat` / `typo` / `habit`，人物卡对照只在 workbench 作品扫描中提供。
+- manuscript-assist：FIM/patch 与计量的可选服务，是 `dsh-manuscript` 包内的可选 entry，以 `manuscriptAssist` 服务承接 `/manuscript` channel 的转发。
+- zhihu：`/zhihu` → `search` / `global.search` / `hot.list` / `ask` / `knowledge.search` / `knowledge.bases` / `knowledge.upload` / `usage.summary`。知识库上传只在界面显式发起，base64 ≤ 20 MB；用量默认 30 天、上限 90 天。五个知乎工具（`zhihu_search` 等）由 `zhihu-tools` 注册，与 UI 共用一个计量写入者（`dsh_editor_zhihu_usage`，version 1），凭据引用 `ZHIHU_ACCESS_TOKEN` 保持。卸载不迁移稿件、草稿、快照、设置 namespace 与凭据引用；换回旧代码不需要数据逆迁移，但仍应保留作品与应用数据备份。
 
 ## 最小插件开发范本
 
-直接阅读已可运行的 `packages/dsh-proofread/`，不另造示例协议：
+权威契约与完整的新建步骤见 [plugin-architecture.md](plugin-architecture.md)。直接阅读已可运行的 `packages/dsh-proofread/`，不另造示例协议：
 
 1. `package.json` 声明 bundle patch、Host/Client 导出与 client 的真实依赖；`cordis.patch.yml` 只插入一个 `proofread` entry。
 2. `src/contracts.ts` 固定 channel、输入预算和结果。`src/engine.ts`、`src/defaults.ts` 是纯库，不导入其他业务 Host。
 3. `src/index.ts` 只注入 connection / webServer；严格验证输入，注册一个 loopback handler；把返回的 disposer 交给 `ctx.effect`。
 4. `src/client.ts` 自己维护输入、加载、错误与结果；`client-state.ts` 用修订号和请求标识抑制旧结果，并实际取消过期请求。
-5. 当前 proofread Client 只在官方 `shell.overlay` 等待并贡献 UI。桌面 0.2.0 暂停该入口，不把通用扩展座位当成必须挂载的第二入口。
+5. proofread Client 只向官方 `shell.overlay` 贡献 UI。桌面 0.2.0 暂停该入口；不把通用扩展座位当成必须挂载的第二入口。
 6. `e2e/proofread-host.mjs` 验证无 AI 服务的真实 Host、信任边界、卸载、重装与端口释放；`e2e/plugin-matrix.mjs` 验证 tarball 装卸；`e2e/compositions.mjs` 验证实际 Shell 消费。
 
-桌面专用贡献由 Shell 通过 root 的 `children` 声明 `kind: list, scope: root` 并调用 `renderSlot`；插件使用 `slots.inject` 等待，再 `slots.register` 注册。知乎的桌面入口是 `dsh-editor.settings.zhihu`，普通 Web 仍用 `shell.overlay`；插件管理使用 `dsh-editor.settings.plugins`。通用 `dsh-editor.extensions` 保留，但当前 proofread / zhihu 不在此挂载。slot 撤销由 Cordis 清理贡献，React 卸载终止请求，样式通过 effect 移除。
+桌面专用贡献由 Shell 通过 root 的 `children` 声明 `kind: list`、`scope: root` 并调用 `renderSlot`；插件使用 `slots.inject` 等待，再 `slots.register` 注册。知乎的桌面入口是 `dsh-editor.settings.zhihu`，普通 Web 仍用 `shell.overlay`；插件管理使用 `dsh-editor.settings.plugins`。通用 `dsh-editor.extensions` 保留，但当前 proofread 与知乎不在此挂载。slot 撤销由 Cordis 清理贡献，React 卸载终止请求，样式通过 effect 移除。
 
 ## 精简宿主实验
 
@@ -165,8 +157,8 @@ proofread finding 位置沿用 UTF-16 下标；结果只读，不直接修改当
 node e2e/proofread-host.mjs
 ```
 
-该脚本启动真实 Cordis WebServer + Connection + proofread，没有 agents/sessions/fs/llm/tools/systemPrompt。不选择 `dsh-web-app` 时，仍可用显式通信、静态资源、settings、locale、theme、layout、renderer 等条目完成校对与页面重连；它仍保留 `dsh-base` 的 Agent 服务，也继续使用官方基础组件。
+该脚本启动真实的 Cordis WebServer + Connection + proofread，没有 agents/sessions/fs/llm/tools/systemPrompt。没有选择 `dsh-web-app` 时，仍可用显式通信、静态资源、settings、locale、theme、layout、renderer 等条目完成校对与页面重连；它保留 `dsh-base` 的 Agent 服务，也继续使用官方基础组件。
 
 完全移除 Agent 服务的浏览器组合目前无法启动。实际缺口为：`dsh-workspace` 要求 `sessionPersistence`；`dsh-host-apiproxy` 要求 agents/llm/sessions/tools 等全量服务；`dsh-cordis-host-runner` 要求 tools。最小上游工作是拆出仅服务普通业务的网关/客户端运行入口，让 Agent remotes 与工具宿主按需启用。文件型应用还需独立的工作区授权入口，当前继续保留 live session；不能在浏览器接受任意 cwd 或伪造 session。
 
-拆分初次验收时，在线模型与知乎付费调用未作为确定性回归执行；真实网络账单、服务配额和长时间运行不是这些回执的结论。
+拆分初次验收未把在线模型与知乎付费调用作为确定性回归执行；真实网络账单、服务配额和长时间运行表现不在这些回执的覆盖范围内。

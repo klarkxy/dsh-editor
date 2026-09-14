@@ -2,7 +2,7 @@
 
 面向 DSH Web 的公开稿件插件：工作区文本树、正文编辑、安全保存、浏览器草稿、字数、前后篇导航、稿内查找替换、全文搜索、剪贴板改写交接与可选补全。官方 DSH 仍是唯一 Chat / Agent 界面。
 
-插件版本 **`0.1.0`**（不是桌面应用 `0.2.0`）。DSH `0.1.5-rc.2`。桌面把本包当核心稿件 Host，并用 `./client/editor-core`；桌面根界面是 `dsh-editor-shell`，本 Client 不占 `root`。
+包版本 `0.1.0`，不是桌面应用 `0.2.0`。兼容 DSH `0.1.5-rc.2`。桌面把本包当核心稿件 Host，并用 `./client/editor-core`；桌面根界面是 `dsh-editor-shell`，本 Client 不占 `root`。
 
 ## 入口
 

@@ -6,7 +6,7 @@
 
 稿纸优先：中间是长文写作区，左右两栏是工具。观感应像灯下的一叠稿纸，坐在 DSH 里面，而不是另一套 IDE 或 AI 写作套件。
 
-- 界面语言默认简体中文；英文只覆盖外壳，右侧 DSH 对话仍用上游文案。
+- 界面语言默认简体中文；English 已覆盖全部 key（852 个，含右侧 DSH 对话的 `chat.*`），与中文一一对应，切换后立即生效。
 - 正文用宋体栈，chrome / 文件树 / 对话用无衬线栈。
 - 强调色只有一系墨蓝。禁止纯黑底、冷蓝灰 IDE 高对比、紫色渐变、玻璃拟态、霓虹装饰。
 - 纸主题的画布是暖米黄，不是 `#ffffff`。墨主题是带棕意的深暖色，正文是暖米白，不是纯白。
@@ -93,9 +93,35 @@
 
 ## 活动反馈词汇
 
-加载 / 等待 / 进行中 / 完成不再用纯文本，统一走一套活动原语。shell `src/client/ui/activity.tsx` 提供 `ActivityDots`（pulse 呼吸点 / typing 起伏点）、`ActivityRing`（墨蓝弧环）、`ActivityShimmer`（微光行）、`ActivitySkeleton`（贴合内容的稳定骨架行）、`ActivityText`（`role=status` + `aria-live` 的状态句，淡入不位移）与 `SuccessMark`（一次性描边完成勾），经 `ui/index.ts` 导出；关键帧 `shell-activity-*` 在 styles.ts，跟随现有 `--duration-*` / `--ease-*` 令牌。覆盖 shell 主流程（工作区检查、能力检查、聊天重连 / 回复 / 工具运行、钉住文件、导入、模型 / 用量 / 写作路由、更新检查 / 校验 / 完成）与次级流程（搜索提交与替换执行、归档读取、章节操作预览、导出、写作偏好与每日目标保存）。面板包（memory / overview / proofread / cards，含卡片编辑详情与新建对话框）不引入 Motion，各自以纯 CSS 的 `.panel-activity-dots` / `.panel-skeleton` 复刻同一词汇，`.shell` 与独立 `.dsh-ui` 下都生效。插件管理（dsh-editor-plugins，清单读取、检查、安装 / 卸载、GitHub 搜索、fiber 启动 / 停用、开关等待）用 `.dsh-plugins-dots` 与开关呼吸；独立校对（dsh-proofread）与知乎（dsh-zhihu，凭证 / 用量 / 知识库读取、上传 / 保存 / 清除、搜索请求）分别用 `.dsh-proofread-dots` / `.zhihu-dots`，同样纯 CSS、无新依赖。桌面启动页（apps/desktop `loadingHtml`）在 React 挂载前用纯内联 CSS 的弧环 + 微光行，CSP 与拖拽区不变。忙碌按钮保持原标签与 disabled 语义，只在文字前加内联三点暗示；装饰元素一律 `aria-hidden`。运动参数改写自 Amicro（MIT）：pulse-dots 1.4s 交错明灭、typing 0.6s 起伏、smooth-ring 1s 旋转、shimmer/skeleton 1.5s 扫过；配色只用 `currentColor` / `--accent` / `--hairline-strong`，不加霓虹、玻璃拟态或新依赖。确定性进度（如下载百分比进度条）保留原语义，不换成循环动效；reduced-motion 停掉所有循环，保留静态点、静态弧、骨架条与已描边的完成勾。
+加载 / 等待 / 进行中 / 完成不再用纯文本，统一走一套活动原语。
 
-共享弹层由 shell `src/client/ui` 提供：`Dialog` / `Confirm` / `Menu` / `Tooltip` / `Tabs` / `Button` / `Input`，外加已有 `Select`。作品菜单、文件右键、正文右键 /「⋯」、对话「⋯」都走同一套 `Menu`。正文菜单直接打开自定义改写；打字机与段落聚焦收在写作设置中。大纲和章纲作为 `大纲/` 下的普通 Markdown 管理，不在稿纸附近增加第二套控件。正文常驻仅保留文档名、章节导航、字数、保存状态和「⋯」，停止生成、预览采纳 / 放弃、冲突和备份恢复按需显示。菜单卸载后再交接焦点给搜索面板或弹窗。路径回退走受控 `Dialog`，不把输入框放进菜单 typeahead。Motion `m.*` 只用于首页两张入口卡和搜索面板 chrome；Radix 菜单/对话框继续 CSS Presence。稿纸、作曲区、FIM、长列表不用 Motion。IME 组字期间 Enter（含 `keyCode === 229`）由输入 `keydown` 自己 `preventDefault`，不得提交。
+### 原语
+
+shell `src/client/ui/activity.tsx` 提供 `ActivityDots`（pulse 呼吸点 / typing 起伏点）、`ActivityRing`（墨蓝弧环）、`ActivityShimmer`（微光行）、`ActivitySkeleton`（贴合内容的稳定骨架行）、`ActivityText`（`role=status` + `aria-live` 的状态句，淡入不位移）与 `SuccessMark`（一次性描边完成勾），经 `ui/index.ts` 导出。关键帧 `shell-activity-*` 在 styles.ts，跟随现有 `--duration-*` / `--ease-*` 令牌。
+
+### Shell 覆盖范围
+
+原语覆盖 shell 主流程（工作区检查、能力检查、聊天重连 / 回复 / 工具运行、钉住文件、导入、模型 / 用量 / 写作路由、更新检查 / 校验 / 完成）与次级流程（搜索提交与替换执行、归档读取、章节操作预览、导出、写作偏好与每日目标保存）。
+
+### 面板态
+
+面板包（memory / overview / proofread / cards，含卡片编辑详情与新建对话框）不引入 Motion，各自以纯 CSS 的 `.panel-activity-dots` / `.panel-skeleton` 复刻同一词汇，`.shell` 与独立 `.dsh-ui` 下都生效。
+
+### 独立插件态
+
+插件管理（dsh-editor-plugins，清单读取、检查、安装 / 卸载、GitHub 搜索、fiber 启动 / 停用、开关等待）用 `.dsh-plugins-dots` 与开关呼吸；独立校对（dsh-proofread）与知乎（dsh-zhihu，凭证 / 用量 / 知识库读取、上传 / 保存 / 清除、搜索请求）分别用 `.dsh-proofread-dots` / `.zhihu-dots`，同样纯 CSS、无新依赖。
+
+### 启动页
+
+桌面启动页（apps/desktop `loadingHtml`）在 React 挂载前用纯内联 CSS 的弧环 + 微光行，CSP 与拖拽区不变。
+
+### 通用约束
+
+忙碌按钮保持原标签与 disabled 语义，只在文字前加内联三点暗示；装饰元素一律 `aria-hidden`。运动参数改写自 Amicro（MIT）：pulse-dots 1.4s 交错明灭、typing 0.6s 起伏、smooth-ring 1s 旋转、shimmer/skeleton 1.5s 扫过；配色只用 `currentColor` / `--accent` / `--hairline-strong`，不加霓虹、玻璃拟态或新依赖。确定性进度（如下载百分比进度条）保留原语义，不换成循环动效；reduced-motion 停掉所有循环，保留静态点、静态弧、骨架条与已描边的完成勾。
+
+共享弹层由 shell `src/client/ui` 提供：`Dialog` / `Confirm` / `Menu` / `Tooltip` / `Tabs` / `Button` / `Input`，外加已有 `Select`。作品菜单、文件右键、正文右键 /「⋯」、对话「⋯」都走同一套 `Menu`。正文菜单直接打开自定义改写；打字机与段落聚焦收在写作设置中。大纲和章纲作为 `大纲/` 下的普通 Markdown 管理，不在稿纸附近增加第二套控件。正文常驻仅保留文档名、章节导航、字数、保存状态和「⋯」，停止生成、预览采纳 / 放弃、冲突和备份恢复按需显示。
+
+菜单卸载后再交接焦点给搜索面板或弹窗。路径回退走受控 `Dialog`，不把输入框放进菜单 typeahead。Motion `m.*` 只用于首页两张入口卡和搜索面板 chrome；Radix 菜单/对话框继续 CSS Presence。稿纸、作曲区、FIM、长列表不用 Motion。IME 组字期间 Enter（含 `keyCode === 229`）由输入 `keydown` 自己 `preventDefault`，不得提交。
 
 ## 已落地的写作交互
 
@@ -103,7 +129,7 @@
 
 | 交互 | 表现 | 写入规则 |
 | --- | --- | --- |
-| Ghost FIM | 光标处浅色续写，底栏 `Tab · Esc`；按钮为「补全 / 接受补全 / 再来一个 / 放弃」，最多三条 | 确认后进入草稿，按常规自动或手动保存 |
+| Ghost FIM | 光标处浅色续写，底栏 `Tab · Esc`；按钮随状态切换——标题栏为「补全 / 重新补全 / 停止补全」，候选出现后底栏为「接受补全 / 再来一个 / 放弃」（多条候选另有「上一条 / 下一条」），最多三条；这些文案在 editor-core 硬编码，不在 i18n 字典 | 确认后进入草稿，按常规自动或手动保存 |
 | 选段改写 | 原文与建议对照；「应用修改」或 `Ctrl+Enter`，「放弃」不动正文 | 同上；过期 ticket 丢弃 |
 | 文件提案 | 原文/新文件对比卡；标题与路径分行，状态与操作分行，「应用」为主操作；「应用」才落盘，「忽略」不写 | 版本校验；目标已变则失效 |
 | 空白章 | 安静稿纸，不自动生成 | — |

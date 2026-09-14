@@ -1,6 +1,6 @@
 # dsh-editor-workbench
 
-桌面私有、仅 Host 的作品生命周期：有界上下文、章节概览/状态、校对扫描、进度、导入、快照、移动与归档。包版本 `0.1.0`，不是桌面应用 `0.2.0`。`dshEditor.role: core`。
+桌面私有、仅 Host 的作品生命周期：有界上下文、章节概览 / 状态、校对扫描、进度、导入、快照、移动与归档。包版本 `0.1.0`，不是桌面应用 `0.2.0`。`dshEditor.role: core`。
 
 浏览器安全契约：`dsh-editor-workbench/contracts`。卡片 RPC 在 `dsh-editor-cards`；本包经 `dsh-editor-cards/host-api` 的 `listCards` 做校对对照。依赖 `dsh-proofread` 引擎（`./engine` / `./defaults` / `./contracts`）；三份桌面 recipe 都保留该依赖。桌面校对 UI 已停用，但 `proofread.scan` 仍在本 channel。
 

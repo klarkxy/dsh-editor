@@ -17,7 +17,7 @@ Root 子座位（`src/root-registration.ts`）：
 
 ## 工作台
 
-可折叠三栏；专注模式只留稿纸。左栏真实目录树：隐藏 `.` 开头项，以及 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `COPILOT.md`（`src/auxiliary-files.ts`）。新建作品只预建 `正文/`。栏顶：全文搜索（Ctrl+Shift+F）。概览 / 人物 / 设定由对应插件经座位与命令面板打开。**桌面校对入口已停用**（无 Ctrl+Shift+L、无顶栏校对）。提交 / 历史在文件栏菜单。
+可折叠三栏；专注模式只留稿纸。左栏真实目录树：隐藏 `.` 开头项，以及 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `COPILOT.md`（`src/auxiliary-files.ts`）。新建作品只预建 `正文/`。栏顶：全文搜索（Ctrl+Shift+F）。概览 / 人物卡 / 世界书由对应插件经座位与命令面板打开。**桌面校对入口已停用**（无 Ctrl+Shift+L、无顶栏校对）。保存版本 / 历史版本在文件栏菜单。
 
 跨文件搜索结果经 `acceptSearchResults` 再分组或替换（`src/client/search-panel.ts`）；辅助文件不进入命中与替换计划，磁盘文件保留。稿内查找替换仍是 Ctrl+F / Ctrl+H（`@codemirror/search`）。世界书触发词表单已移除。
 
@@ -25,9 +25,9 @@ Root 子座位（`src/root-registration.ts`）：
 
 ## 设置与其它
 
-Host 注册 `dsh-editor-writing`。设置分类：通用 / 模型 / 写作 / 用量 / 知乎资料 / 插件（`src/client/settings.tsx`）。模型页管理 provider，并分配补全 / 改写 / 默认对话模型（`src/client/writing-model-routes.tsx`、`src/writing-settings-contract.ts`）。用量页用打包的 ECharts SVG 柱状图（`src/client/settings-usage.tsx`）。知乎无桌面启动器，嵌入设置座位。对话 ⋯：归档 / 恢复 / 删除（删除只写本机墓碑；DSH `0.1.5-rc.2` 无会话删除 API）。
+Host 注册 `dsh-editor-writing`。设置分类：通用 / 模型 / 写作 / 用量 / 知乎资料 / 插件 / 关于（`src/client/settings.tsx`）。模型页管理 provider，并分配补全 / 改写 / 默认对话模型（`src/client/writing-model-routes.tsx`、`src/writing-settings-contract.ts`）。用量页用打包的 ECharts SVG 柱状图（`src/client/settings-usage.tsx`）。知乎无桌面启动器，嵌入设置座位。对话 ⋯：归档 / 恢复 / 删除（删除只写本机墓碑；DSH `0.1.5-rc.2` 无会话删除 API）。
 
-`/dsh-editor-shell` 仅 `capabilities.get`。项目与小说工具分属 workbench / novel-kernel。
+`/dsh-editor-shell` 仅 `capabilities.get`。作品与小说工具分属 workbench / novel-kernel。
 
 ## 文档
 

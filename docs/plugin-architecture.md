@@ -2,7 +2,7 @@
 
 本文是修改、替换或新建 DSH Editor 插件的权威手册。通用产品边界见 [architecture.md](architecture.md)，产品原则见 [product-principles.md](product-principles.md)，开发和验收命令见 [development.md](development.md)。
 
-本文适用于桌面 **0.2.0**，兼容基线固定为 DSH `0.1.5-rc.2`。私有 `root` 接口尤其不是上游公共承诺；升级 DSH 前必须重新验证本文列出的全部桌面能力。
+本文适用于桌面 **0.2.0**，兼容基线固定为 DSH `0.1.5-rc.2`。其中私有 `root` 接口不是上游公共承诺；升级 DSH 前必须重新验证本文列出的全部桌面能力。
 
 ## 交互架构图
 
@@ -17,7 +17,7 @@
 
 ## 运行拓扑与所有权
 
-当前支持 basic/smart/full 三份桌面组合及三个独立公开包。安装、最小插件范本和无 Web/Agent 实验见[组合指南](plugin-composition-guide.md)。下图展示默认 full；kernel、assist 和知乎按组合选择。
+当前支持 basic/smart/full 三份桌面组合及三个独立公开包。安装、最小插件范本和精简宿主实验见[组合指南](plugin-composition-guide.md)。下图展示默认 full；kernel、assist 和知乎按组合选择。
 
 一个 Electron 进程只启动一个 loopback DSH Host。所有插件共享 DSH 的 session、workspace、model、tools、approval 和 connection 权威，不创建第二套状态。交互图里的 Host 插件都画在 DSH 进程框内；箭头表示 Cordis 注入或 loopback RPC，不是跨进程服务调用。
 
@@ -30,7 +30,7 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
    │  ├─ Host: /manuscript、draft storage、稿件安全读写；FIM/计量由可选 assist 服务承接
    │  └─ Client: shell.overlay（公开 Web 插件）
    ├─ dsh-editor-workbench
-   │  └─ Host: /dsh-editor-workbench、项目/概览/状态/校对/进度/导入/快照/归档/context；可选 tools entry 提供 novel_overview / novel_memory_update
+   │  └─ Host: /dsh-editor-workbench、作品/概览/状态/校对/进度/导入/快照/归档/context；可选 tools entry 提供 novel_overview / novel_memory_update
    ├─ dsh-editor-cards
    │  ├─ Host: /dsh-editor-cards、人物卡/世界书 list/references/metaSet/create；`./host-api` 供 workbench 校对扫描
    │  └─ Client: `cards-character` / `cards-worldbook` 展开文件树目录；钉住栏仍读卡片字段
@@ -44,7 +44,7 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
    ├─ dsh-editor-overview-panel
    │  └─ Client-only: `dsh-editor.center.overlays` 作品概览 + `overview`（Ctrl+Shift+O）
    ├─ dsh-editor-memory-panel
-   │  └─ Client-only: `dsh-editor.sidebar.tools` 记忆维护 + `memory-open`（Chat 回执卡仍在 Shell）
+   │  └─ Client-only: `dsh-editor.sidebar.tools` 记忆维护 + `memory-open`（`novel_memory_update` 回执卡同由本包注册）
    └─ dsh-editor-plugins
       ├─ Host: `/dsh-editor-plugins`，开关、GitHub 市场搜索与安装
       └─ Client: 设置「插件」分类
@@ -55,7 +55,7 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
 └─ dsh-zhihu
 ```
 
-写作会话不挂载官方 `standard` 编码 preset：桌面应用在每次部署 profile 时，把模板里的 `agent-presets/dsh-editor/`（persona、`tool-fs`、`tool-fs-search`、`tool-ask-user`、compaction realm）原子部署到 `<dshHome>/.agent-presets/`，并由 profile 的 `cordis.patch.yml` 将 `agent-presets.default` 指向它。preset 目录遵循与 profile 相同的 owner marker 规则，未标记的同名目录拒绝覆盖。
+写作会话不挂载官方 `standard` 编码 preset。桌面应用每次部署 profile 时，把模板里的 `agent-presets/dsh-editor/`（persona、`tool-fs`、`tool-fs-search`、`tool-ask-user`、compaction realm）原子部署到 `<dshHome>/.agent-presets/`，再由 profile 的 `cordis.patch.yml` 将 `agent-presets.default` 指向它。preset 目录遵循与 profile 相同的 owner marker 规则：未标记的同名目录拒绝覆盖。
 
 依赖方向固定如下；禁止跨包导入另一个包的 `src`：
 
@@ -94,7 +94,7 @@ dsh-editor-novel-kernel/host
 └─ Cordis + DSH tools
 ```
 
-`dsh-editor-workspace-kit` 是私有的进程内库，压在 workbench 与 cards Host 之下，避免 cards 与 workbench 互相依赖：它没有 Cordis 入口，也不进入 profile bundles。主入口提供 Node 侧原语（access bag、`.dsh-editor/` sidecar 原子读写、条目名校验、安全 mkdir、Windows/POSIX no-replace move）；唯一的浏览器安全子入口是 `./frontmatter`，由 cards/workbench contracts 内联给 Client，不得从 kit 主入口进入 Client。
+`dsh-editor-workspace-kit` 是私有的进程内库，垫在 workbench 与 cards Host 之下，避免两者互相依赖。它没有 Cordis 入口，也不进入 profile bundles。主入口提供 Node 侧原语（access bag、`.dsh-editor/` sidecar 原子读写、条目名校验、安全 mkdir、Windows/POSIX no-replace move）；唯一的浏览器安全子入口是 `./frontmatter`，由 cards/workbench contracts 内联给 Client，不得从 kit 主入口进入 Client。
 
 `dsh-editor-seats` 是私有的浏览器安全库，承载 Shell 座位、命令注册表与消息卡注册表合同。插件与 Shell Client 在构建时内联它；它没有 Cordis 入口，也不进入 profile `libraries`。`dsh-editor-shell/seats` 仍再导出同一合同。
 
@@ -125,8 +125,8 @@ dsh-editor-novel-kernel/host
 | `dsh-proofread` | `proofread` | `dsh-proofread` |
 | `dsh-zhihu` | `zhihu` | `dsh-zhihu` |
 | 由 `dsh-zhihu` 的 `dshEditor.inserts` 按 feature `zhihu-tools` 加入 | `zhihu-tools` | `dsh-zhihu/tools` |
-| `dsh-editor-workbench` | `editor-workbench-tools` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer` |
-| `dsh-editor-workbench` | `editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer` |
+| `dsh-editor-workbench` | `editor-workbench-tools` | `dsh-editor-workbench/tools` |
+| `dsh-editor-workbench` | `editor-workbench` | `dsh-editor-workbench` |
 | `dsh-editor-cards` | `editor-cards` | `dsh-editor-cards` |
 | `dsh-editor-novel-kernel` | `editor-novel-kernel` | `dsh-editor-novel-kernel` |
 | `dsh-editor-shell` | `editor-shell` | `dsh-editor-shell` |
@@ -153,12 +153,13 @@ dsh-editor-novel-kernel/host
 | 包 | `name` | `inject` |
 | --- | --- | --- |
 | `dsh-manuscript` Host | `dsh-manuscript` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `storageDomain`, `webServer` |
+| `dsh-manuscript` Client | `dsh-manuscript-client` | `slots`, `sessions`, `connection` |
 | `dsh-editor-workbench` | `dsh-editor-workbench` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer` |
 | `dsh-editor-cards` Host | `dsh-editor-cards` | `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer` |
 | `dsh-editor-cards` Client | `dsh-editor-cards-client` | `slots`, `connection`, `dshEditorCommands` |
 | `dsh-editor-novel-kernel` | `dsh-editor-novel-kernel` | `tools`, `systemPrompt`, `fs`, `sandboxPolicy` |
 | `dsh-editor-shell` Host | `dsh-editor-shell` | `settings`, `connection`, `webServer` |
-| `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope`, `settingsSchema`, `remote`, `remote.session`, `remote.settings`, `remote.credentials`, `remote.llm`, `remote.directoryPicker`, `uiSession` |
+| `dsh-editor-shell` Client | `dsh-editor-shell-client` | `slots`, `sessions`, `workspaces`, `connection`, `settingsScope`, `settingsSchema`, `remote`, `remote.session`, `remote.settings`, `remote.credentials`, `remote.llm`, `remote.directoryPicker`, `uiSession`, `locale` |
 | `dsh-editor-plugins` Host | `dsh-editor-plugins` | `connection`, `loader`, `webServer` |
 | `dsh-editor-plugins` Client | `dsh-editor-plugins-client` | `slots`, `connection` |
 | `dsh-editor-proofread-panel` Host | `dsh-editor-proofread-panel` | （无） |
@@ -170,17 +171,18 @@ dsh-editor-novel-kernel/host
 | `dsh-proofread` Host | `dsh-proofread` | `connection`, `webServer` |
 | `dsh-proofread` Client | `dsh-proofread-client` | `slots`, `connection` |
 | `dsh-zhihu` Host | `dsh-zhihu` | `connection`, `credentials`, `storageDomain`, `webServer` |
+| `dsh-zhihu` Client | `dsh-zhihu-client` | `slots`, `connection`, `remote`, `remote.credentials` |
 | `dsh-zhihu/tools` | `dsh-zhihu-tools` | `zhihu`, `tools` |
 | `dsh-manuscript/assist` | `dsh-manuscript-assist` | `llm`, `storageDomain`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy` |
 | `dsh-editor-workbench/tools` | `dsh-editor-workbench-tools` | `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `tools` |
 
 Shell 以 `root` slot id `dsh-editor-shell-root`、priority `-100`、label `DSH 编辑器` 注册。manuscript client 只注册 `shell.overlay`（id `manuscript`，order `100`，label `稿纸`），禁止占用 `root` 或 `conversation.view`。
 
-Shell 声明 `dsh-editor.extensions`、`dsh-editor.settings.plugins`、`dsh-editor.settings.zhihu`、`dsh-editor.sidebar.tools` 与 `dsh-editor.center.overlays` 五个 list/root 座位。通用 extensions 合同保留，但当前 proofread 和 zhihu 都不向它贡献顶栏入口：proofread 只保留官方 Web 的 `shell.overlay`，知乎分别使用官方 overlay 和桌面 `.settings.zhihu`。知乎桌面组件默认展示配置，并提供用量、知识库与连接测试。详见[挂载合同](plugin-composition-guide.md#最小插件开发范本)。插件设置座位由 `dsh-editor-plugins` 渲染：核心锁定读 `dshEditor.entries[].locked`，扩展按作者用途分组；社区插件从 GitHub 市场检查和安装。
+Shell 声明 `dsh-editor.extensions`、`settings.section`、`dsh-editor.settings.plugins`、`dsh-editor.settings.zhihu`、`dsh-editor.sidebar.tools` 与 `dsh-editor.center.overlays` 六个 list/root 座位（`settings.section` 由设置弹窗消费，投影上游官方设置页）。通用 extensions 合同保留，但当前 proofread 与知乎都不向它贡献顶栏入口：proofread 只保留官方 Web 的 `shell.overlay`，知乎分别使用官方 overlay 和桌面 `.settings.zhihu`。知乎桌面组件默认展示配置，并提供用量、知识库与连接测试。详见[挂载合同](plugin-composition-guide.md#最小插件开发范本)。插件设置座位由 `dsh-editor-plugins` 渲染：核心入口按 `dshEditor.entries[].locked` 锁定，扩展按作者用途分组，社区插件从 GitHub 市场检查和安装。
 
 ### Shell 座位与命令注册表
 
-座位合同在 `dsh-editor-seats`（私有、浏览器安全；插件与 Shell 构建时内联）。`dsh-editor.sidebar.tools` 与 `dsh-editor.center.overlays` 都是带上下文的座位（`kind: list`, `scope: root`）。Root 在作品已打开时对两者调用 `renderSlot(..., seatContext)`，复用同一份 owner：侧栏工具画在文件树上方，中栏 overlay 画在稿纸之上（与人物卡详情同一列）。中栏 overlay 的布局由 Shell 独占：贡献在打开时给根元素加 `CENTER_OVERLAY_ATTRIBUTE`（`data-dsh-center-overlay`），关闭时渲染 `null`；Shell 把带该属性的元素放进稿纸所在的网格格并隐藏稿纸，插件不得自写 grid / 隐藏稿纸的规则。`ctx.slots.renderSlot` 只接受 `'root'`；子座位走 root 组件 props 上的 `renderSlot` 面。贡献组件收到的 props 就是这份 owner 对象（外加全局 standard kit）：
+座位合同在 `dsh-editor-seats`（私有、浏览器安全；插件与 Shell 构建时内联）。`dsh-editor.sidebar.tools` 与 `dsh-editor.center.overlays` 都是带上下文的座位（`kind: list`、`scope: root`）。Root 在作品已打开时对两者调用 `renderSlot(..., seatContext)`，复用同一份 owner：侧栏工具画在文件树上方，中栏 overlay 画在稿纸之上（与人物卡详情同一列）。中栏 overlay 的布局由 Shell 独占：贡献在打开时给根元素加 `CENTER_OVERLAY_ATTRIBUTE`（`data-dsh-center-overlay`），关闭时渲染 `null`；Shell 把带该属性的元素放进稿纸所在的网格格并隐藏稿纸，插件不得自写 grid / 隐藏稿纸的规则。`ctx.slots.renderSlot` 只接受 `'root'`；子座位走 root 组件 props 上的 `renderSlot` 面。贡献组件收到的 props 就是这份 owner 对象（外加全局 standard kit）：
 
 - `sessionId`：当前作品会话，无作品时为空
 - `activePath`：当前打开的稿件路径，未打开时为空
@@ -203,7 +205,7 @@ Shell 声明 `dsh-editor.extensions`、`dsh-editor.settings.plugins`、`dsh-edit
 
 `dshEditorCommands` 由 Shell Client `ctx.provide` 提供。插件 `inject: ['dshEditorCommands']` 后 `register(command)`，返回 disposer。`shortcut.ctrl` 表示 Windows 上的 Ctrl / macOS 上的 Cmd，与现有 `workspaceShortcut` 相同。Root 在内置快捷键未命中后再匹配注册表；`when: 'workspace'` 仅在作品就绪时生效。重复 `id` 在 `register` 时抛错。作者确认卡始终由 Shell 拥有。`/dsh-editor-shell` → `capabilities.get` 返回 `{ features: Record<feature, boolean> }`。
 
-`dshEditorMessageCards` 同样由 Shell Client `ctx.provide`：插件 `inject` 后 `register({ toolName, render })`，Chat 按工具结果行的 `toolName` 查表，命中则用插件的 `render({ result, context })` 代替默认工具行（`render` 返回 `null` 保留默认行），`context` 只含 `sessionId` / `locale` / `onApplied` / `refresh` / `note`。重复 `toolName` 抛错，disposer 随插件卸载撤销。`novel_memory_update` 的记忆维护卡由 `dsh-editor-memory-panel` 注册；`novel_propose` 提案卡、`author_observe` 记忆卡与初始化引导卡仍由 Shell 渲染，因为作者确认是 Shell 的职责。
+`dshEditorMessageCards` 同样由 Shell Client `ctx.provide`。插件 `inject` 后 `register({ toolName, render })`；Chat 按工具结果行的 `toolName` 查表，命中时用插件的 `render({ result, context })` 代替默认工具行，`render` 返回 `null` 则保留默认行。`context` 只含 `sessionId` / `locale` / `onApplied` / `refresh` / `note`。重复 `toolName` 抛错，disposer 随插件卸载撤销。`novel_memory_update` 的记忆维护卡由 `dsh-editor-memory-panel` 注册；`novel_propose` 提案卡、`author_observe` 记忆卡与初始化引导卡仍由 Shell 渲染，因为作者确认是 Shell 的职责。
 
 Shell 中剩下的业务知识只有：稿纸（`dsh-manuscript/client/editor-core`）、Chat 投影与三张 Shell 自有卡片、文件树的章节状态标记（`project.overview` 只读）、保存后的 `progress.record`、钉住面板对 `/dsh-editor-cards cards.list` 的只读调用。其余功能一律通过座位、命令注册表与消息卡注册表接入。
 
@@ -273,7 +275,7 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 | `directory.create` | `sessionId`, `path` | 写 · 在任意已存在的父目录下建一个可见目录（通用，无 正文 特化） |
 | `rules.get` | `sessionId` | 读 · `{ path, text, version, exists }`，读取作品根 `AGENTS.md`（包装 `dsh-manuscript/host-api` `readProjectRules`）；不存在时返回模板正文且 `exists: false` |
 | `rules.open` | `sessionId` | 写 · 若不存在则创建模板后返回同一形状（`ensureProjectRules`） |
-| `memory.list` | `sessionId` | 读 · `{ items }`，项目记忆更新摘要 |
+| `memory.list` | `sessionId` | 读 · `{ items }`，作品记忆更新摘要 |
 | `memory.get` | `sessionId`, `id` | 读 · `{ record }` 单条记忆更新 |
 | `memory.apply` | `sessionId`, `id` | 写 · 应用一条待确认记忆更新 |
 | `memory.undo` | `sessionId`, `id` | 写 · 撤销已应用的记忆更新 |
@@ -317,7 +319,7 @@ Channel：`/dsh-editor-cards`（常量 `CARDS_RPC_CHANNEL`）。类型面在 `ds
 
 章节状态存在 `.dsh-editor/chapter-status.json`（`{ version: 1, statuses }`，键为规范化相对路径，缺省与 `draft` 不落盘）。写作字数日志存在 `.dsh-editor/writing-log.json`（`[{ date, chars, delta? }]`，本地日期、按日去重）。两份文件缺失或损坏时 Host fail-open 到默认值，孤立键不影响概览。`chapter.statusSet` 只接受 `正文/` 下已存在的 Markdown/TXT。`progress.record` 必须便宜且原子，防抖由调用方负责。`proofread.scan` 合并包内默认敏感词与 `.dsh-editor/敏感词.txt`，并用 `.dsh-editor/敏感词-忽略.txt` 做允许表；列表缺失或损坏时 fail-open 到默认词库。人物卡 / 世界书 frontmatter 是容错 YAML：人物卡可选 `name` / `aliases` / `role` / `gender` / `age` / `faction` / `tags` / `status` / `relations` / `summary`；世界书可有 `category` / `tags` / `summary`，旧文件的 `triggers` / `enabled` / `priority` 按键原样保留但不再驱动自动注入。未知键在 `/dsh-editor-cards` `cards.metaSet` 中按原文保留，损坏字段 fail-open 到缺省值。
 
-旧版章节 Markdown（`正文/**/*.md`）可能带 YAML frontmatter：`beats`（字符串列表）与 `state`（`now` / `where` / `knows` / `ended` / `open`）。当前版本为兼容旧作品继续容错解析、在字数与纯正文投影中排除并原样保留；写作页、新的提案调用和维护工具不再创建或编辑它们。旧会话里已经存在的待处理章纲/小结卡仍可由作者显式采用，并继续接受原有版本校验；它们不会自动执行。新的大纲与章纲统一保存为 `大纲/` 下可见的普通 Markdown。
+旧版章节 Markdown（`正文/**/*.md`）可能带 YAML frontmatter：`beats`（字符串列表）与 `state`（`now` / `where` / `knows` / `ended` / `open`）。当前版本为兼容旧作品继续容错解析，在字数与纯正文投影中排除并原样保留；写作页、新的提案调用和维护工具不再创建或编辑它们。旧会话里已存在的待处理章纲/小结卡仍可由作者显式采用，并继续接受原有版本校验，不会自动执行。新的大纲与章纲统一保存为 `大纲/` 下可见的普通 Markdown。
 
 `.dsh-editor/*` 隐藏元数据一律不进入快照 payload。重命名、正文跨卷移动、归档和恢复响应可以带 `metadataWarning`，表示正文操作已经成功但附带的元数据未同步，调用方不得据此回滚正文。
 
@@ -325,23 +327,23 @@ Context 信封常量：
 
 - `schema`: `dsh-editor.project-context`
 - 历史版本 `1` / `2`（每轮注入固定来源与世界书全文），当前版本 `3`
-- V3 只含 `user_request` 与可选 `active_path`：固定资料与世界书不再自动注入，作品背景由项目根 `AGENTS.md`（system 区常驻）与按需 `glob`/`grep`/`read` 提供。旧会话恢复时，仍在模型上下文里的 V1/V2 信封会被有日志地替换回原用户请求。
+- V3 只含 `user_request` 与可选 `active_path`：固定资料与世界书不再自动注入；作品背景由作品根目录的 `AGENTS.md`（system 区常驻）与按需 `glob`/`grep`/`read` 提供。旧会话恢复时，仍在模型上下文里的 V1/V2 信封会被有日志地替换回原用户请求。
 - V2 可选 `chapter_context: { path, beats?, previous?: { path, state } }`：当前章 `beats` 与上一章非空 `state`；皆无则省略。回执带 `chapterContext?: { path, beats, previousPath? }`。
 
 ## Novel Kernel 契约
 
-- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`——由 workbench-tools 注册，以及 `novel_scratch_write`/`novel_scratch_read`/`novel_scratch_list` 临时工作区三件套）。项目内查找改用原生 `glob`/`grep`/`read`；旧的 `novel_search`/`project_knowledge` 不再向新会话注册。
-- `novel_memory_update`（workbench 注册）在协作中维护根 `AGENTS.md`、`世界书/**/*.md`、`人物卡/**/*.md`：来源逐字引用与文件版本由 Host 校验；明确的创建/追加自动落盘，修订、推断与冲突形成待确认记录，全部写入 `.dsh-editor/history/memory/`，重启后可查看与撤销（新建文件的撤销走归档）。
-- `novel_knowledge` 只接受唯一的 `topics` 数组，去重后 1–3 个固定主题；每张知识卡最多 6000 字符。它只返回建议，不提供项目事实或授权。
+- 工具名：`novel_knowledge`、`novel_propose`、`author_observe`、`novel_index_write`（另有只读的 `novel_overview`——由 workbench-tools 注册，以及 `novel_scratch_write`/`novel_scratch_read`/`novel_scratch_list` 临时工作区三件套）。作品内查找改用原生 `glob`/`grep`/`read`；旧的 `novel_search`/`project_knowledge` 不再向新会话注册。
+- `novel_memory_update`（workbench 注册）在协作中维护作品根 `AGENTS.md`、`世界书/**/*.md`、`人物卡/**/*.md`：来源逐字引用与文件版本由 Host 校验；明确的创建/追加自动落盘，修订、推断与冲突形成待确认记录，全部写入 `.dsh-editor/history/memory/`，重启后可查看与撤销（新建文件的撤销走归档）。
+- `novel_knowledge` 只接受唯一的 `topics` 数组，去重后 1–3 个固定主题；每张知识卡最多 6000 字符。它只返回建议，不提供作品事实或授权。
 - `novel_propose` 每次形成一个 Markdown `edit` / `create` / `split` / `merge` / `renames` 提案，绝不写文件；守卫只接受作者内容 `.md` 路径，`.dsh-editor/` 等隐藏目录不进提案。
 - 知乎工具由 `dsh-zhihu/tools` 唯一注册；知识库列表/上传走 `/zhihu`。
 - `novel_index_write` 把产品内部的作品索引（`.dsh-editor/作品索引.md`，固定路径、全文覆盖）直接落盘，不经提案确认；Shell 按工具名隐藏其结果行。它是唯一的例外：其余写入仍是助手提议、作者确认、Shell 执行。
-- `author_observe` 让助手提议"记住一条作者偏好"，仅作为建议显示在 `MemoryCard` 中：固定 `observation`（≤ 200 字符）与 `reason`（必填），marker `dsh-editor.memory`、version `1`。Shell 解析后必须经作者点击"记住"才会追加进本机 `authorMemory`；工具本身不直接写入任何文件、偏好或 storage。同一信任模型与 `novel_propose` 一致：助手提议，作者确认，Shell 执行。
+- `author_observe` 让助手提议「记住一条作者偏好」，仅作为建议显示在 `MemoryCard` 中：固定 `observation`（≤ 200 字符）与 `reason`（必填），marker `dsh-editor.memory`、version `1`。Shell 解析后必须经作者点击「记住」才会追加进本机 `authorMemory`；工具本身不直接写入任何文件、偏好或 storage。同一信任模型与 `novel_propose` 一致：助手提议，作者确认，Shell 执行。
 - proposal marker 固定为 `{ marker: 'dsh-editor.proposal', version: 1, ... }`；memory marker 固定为 `{ marker: 'dsh-editor.memory', version: 1, observation, reason }`。Shell 只通过 `dsh-editor-novel-kernel/contracts` 的严格解析器渲染有效 marker。
 - `editorToolGuard` 只允许受限的 Markdown 搜索、读取、知识加载、预览提案、作者侧写提议、索引直写、限量的 `ask_user_question` 提问（1–4 题、带长度上限）与 scratch 临时工作区读写；不替代 DSH 全局审批。
 - scratch（`.dsh-editor/scratch/`）是 agent 的临时工作区：路径软禁在目录内（拒绝绝对路径、`..`、隐藏段，限 .md/.txt、最多三层），单文件 ≤ 20000 字符、目录 ≤ 20 个文件；store 适配层每次写入顺带维护 `scratch/.gitignore`（内容 `*`），作者自管的 git 不跟踪草稿。它不是作品事实来源，不进上下文信封；Shell 按工具名隐藏三个工具的结果行。
 - prompt section 固定为 `dsh-editor:novel-kernel`、order `90`。作品材料是不可信字符串，只有 context 信封中的 `user_request` 是当次请求。
-- 作者内容的真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`；侧写由 Shell 展示确认卡、作者点击"记住"、再由 `writingScope.set('authorMemory', next)` 写入本机 settings。
+- 作者内容的真正写入始终是 Shell 展示提案、作者确认、再调用 `/manuscript proposal.prepare/apply`；侧写由 Shell 展示确认卡、作者点击「记住」、再由 `writingScope.set('authorMemory', next)` 写入本机 settings。
 
 ## `/dsh-editor-plugins`：插件管理
 
@@ -357,21 +359,21 @@ Channel：`/dsh-editor-plugins`。不要求 `sessionId`。开关写入 `$DSH_HOM
 | `marketplace.install` | `spec` | 写 · 仅 `github:owner/repo`；先跑同一套静态检查，`blocked` 拒绝；不运行 prepare 脚本 |
 | `marketplace.uninstall` | `name` | 写 · 只卸载市场安装的包，不删作品文件 |
 
-开关保存涉及插件状态文件与受管覆盖 patch；无法读取 patch、发现自定义内容或落盘失败时，应返回错误并保留原配置，不能显示“已保存”。安装 / 卸载也先做 patch 检查；`restartRequired` 表示配置已保存但运行时尚未全部应用，不代表失败写入成功。
+开关保存涉及插件状态文件与受管覆盖 patch；无法读取 patch、发现自定义内容或落盘失败时，应返回错误并保留原配置，不能显示「已保存」。安装 / 卸载也先做 patch 检查；`restartRequired` 只表示配置已保存、运行时尚未全部应用，不是写入失败。
 
 ## 如何修改或替换现有插件
 
 | 想改变的行为 | 所有者 |
 | --- | --- |
-| 三栏布局、稿纸、搜索面板、导出导入归档、钉住栏、Chat 展示（含记忆回执卡）、设置、内置快捷键 | `dsh-editor-shell` |
+| 三栏布局、稿纸、搜索面板、导出导入归档、钉住栏、Chat 展示、设置、内置快捷键 | `dsh-editor-shell` |
 | 人物卡/世界书 Host、钉住字段、`cards-character` / `cards-worldbook` 展开目录 | `dsh-editor-cards` |
 | 保留的侧栏作品校对面板、校对命令（0.2.0 桌面暂停） | `dsh-editor-proofread-panel` |
 | 中栏作品概览、`overview` 命令（Ctrl+Shift+O） | `dsh-editor-overview-panel` |
-| 侧栏记忆维护、`memory-open` 命令 | `dsh-editor-memory-panel` |
+| 侧栏记忆维护、`memory-open` 命令、`novel_memory_update` 回执卡 | `dsh-editor-memory-panel` |
 | 插件开关、GitHub 市场搜索与安装 | `dsh-editor-plugins` |
 | 普通 Web 的稿纸抽屉与共享稿纸核心（含查找替换、打字机、排版） | `dsh-manuscript` client + `dsh-manuscript/client/editor-core` |
 | 稿件安全读写、草稿、FIM/patch、proposal apply、`search.text` | `dsh-manuscript` Host |
-| 项目结构、章节概览/状态、校对扫描、进度、context、导入、快照、移动、归档 | `dsh-editor-workbench` |
+| 作品结构、章节概览/状态、校对扫描、进度、context、导入、快照、移动、归档 | `dsh-editor-workbench` |
 | 人物卡/世界书 RPC、frontmatter 编辑、引用导航、`listCards` 库 | `dsh-editor-cards` |
 | 小说知识、proposal Tool、guard、系统提示词 | `dsh-editor-novel-kernel` |
 | 窗口、内置 DSH、profile、portable | `apps/desktop` 与桌面物化脚本 |
@@ -399,22 +401,25 @@ export function apply(ctx: Context): void {
 
 建立步骤：
 
-1. 说明独立用户价值，选择 public 或 desktop-private；没有独立启停价值的代码留在原包内。
-2. 参考 `dsh-proofread` 或 novel-kernel 复制最小包形态，不复制 Chat、session 或 workspace 权威。
-3. 建立唯一 Cordis entry id/name，只声明实际 inject。
-4. 文件能力依赖 live session 和 `dsh-manuscript/host-api`；不接收 Renderer 提供的 cwd/provider/model。
+1. 说明独立用户价值，选择 public 或 desktop-private。没有独立启停价值的代码留在原包内。
+2. 参考 `dsh-proofread` 或 `dsh-editor-novel-kernel` 的最小包形态；不复制 Chat、session 或 workspace 权威。
+3. 确立全局唯一的 Cordis entry id 与 name，只声明实际使用的 inject。
+4. 文件能力必须经由 live session 与 `dsh-manuscript/host-api`；不接收 Renderer 提供的 cwd/provider/model。
 5. 增加 package-local unit/contract tests，再接入对应 profile、复制、校验和 E2E。
 6. 公开包加入 `pack:plugins` 与 fresh-home 安装矩阵；私有包只加入桌面 profile，不进入公开 tarball。
 
 ## 新建 overlay 插件
 
-dual-face Web 插件参考 `dsh-manuscript`：Host 为 ESM，client 通过 `wrap-client.mjs` 生成 DSH lazy CJS 包装，manifest 声明 `dsh.client.platform: "web"`、inject 与 `./client` export。
+dual-face Web 插件以 `dsh-manuscript` 为范本：
 
-Client 只能注册 additive slot，例如 `shell.overlay`；不得使用 `root` 或 `conversation.view`。若需求确实是替换整个产品根界面，应派生并替换 `dsh-editor-shell`，而不是同时安装第二个 root。
+1. Host 构建为 ESM。
+2. Client 经 `wrap-client.mjs` 生成 DSH lazy CJS 包装；manifest 声明 `dsh.client.platform: "web"`、inject 与 `./client` export。
+3. Client 只注册 additive slot（如 `shell.overlay`），不使用 `root` 或 `conversation.view`。
+4. 需求确实是替换整个产品根界面时，派生并替换 `dsh-editor-shell`，不要安装第二个 root。
 
 ## 兼容、卸载、失败与数据保留
 
-- workbench、kernel、shell 与 plugins 是桌面 profile 必需组件。前两者不提供运行时安装/禁用 UI；plugins 可开关非核心入口并从 GitHub 安装社区插件，但不能关闭或卸载核心包。缺必需包属于无效交付，由物化和包内容验证阻止。隔离负向 smoke 已确认：在 DSH `0.1.5-rc.2` 中移除 workbench 或 kernel 时，Host 在发布 loopback URL 前以退出码 `1` 失败，并在错误中指出缺失包；`pnpm test:e2e:missing-private` 固化该行为。
+- workbench、kernel、shell 与 plugins 是桌面 profile 必需组件。前两者不提供运行时安装/禁用 UI；plugins 可开关非核心入口并从 GitHub 安装社区插件，但不能关闭或卸载核心包。缺必需包属于无效交付，由物化和包内容验证阻止。隔离负向 smoke 已确认：在 DSH `0.1.5-rc.2` 中移除 workbench 或 kernel 时，Host 在发布 loopback URL 前以退出码 `1` 失败，并在错误中指出缺失包。`pnpm test:e2e:missing-private` 固化该行为。
 - workbench/kernel 运行失败沿用现有 RPC/tool fail-closed 路径；不增加备用执行面、重试守护或健康检查 RPC。
 - 卸载插件不删除 workspace 文件、home credentials、settings、sessions 或 storages。
 - `dsh-manuscript` 卸载前应保存正文并处理需保留草稿；插件不会主动清除 DSH storage domain。
@@ -427,7 +432,7 @@ Client 只能注册 additive slot，例如 `shell.overlay`；不得使用 `root`
 - 稿件文本和单份 draft 上限 2,000,000 bytes；创建 create-if-absent，保存 replace-if-version。
 - `patch.complete` 的 selectedText 最多 12,000 字符，before/after 各 4,000，候选最多 1,200。
 - project context 固定来源单份 4,000、合计 12,000；动态世界书另有 6,000 总预算。
-- `AbortSignal` 必须贯穿 RPC、文件和模型调用；超时不能被当作“必定未执行”。
+- `AbortSignal` 必须贯穿 RPC、文件和模型调用；超时不能被当作「必定未执行」。
 - 导入、恢复、移动、归档必须先重新 read/probe，再继续、清理或重试。
 
 ## 集成清单与验收

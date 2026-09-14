@@ -29,7 +29,6 @@ packages/                      公开与私有插件、座位库、workspace-kit
 scripts/                       开发、物化、打包与校验
 docs/                          当前手册与文档索引
 docs/diagrams/                 交互图规范与发布 HTML
-docs/history/                  日期快照（拆分计划、在线验证）
 e2e/                           Playwright 验收脚本
 .dev/                          本地忽略。只保留 desktop-home、desktop-profile-template、desktop-dsh-runtime、dsh-home
 .pack/                         打包产物（忽略，可删除后重打）
@@ -38,6 +37,8 @@ e2e/                           Playwright 验收脚本
 各包职责见下文「插件包职责」。共享 manifest、lockfile、profile、Electron 生命周期和 Git 状态由集成者统一维护。Renderer 不得新增 Node 文件访问或第二个 DSH connection。`.dev` 里除上述四个目录外的探测脚本、测试 home 和日志均可删除；`e2e/out` 与 `.pack` 也可随时清掉后重跑生成。
 
 ## 常用命令
+
+下表是开发者视角的完整命令清单，含参数与适用场景；README「验证与便携 EXE」一节的命令块是发布前的精简版，两者分工以此为准。
 
 | 命令 | 作用 |
 | --- | --- |
@@ -82,67 +83,33 @@ e2e/                           Playwright 验收脚本
 
 `DSH_DESKTOP_PREPARE_ONLY=1` 只做构建和开发资源准备，供诊断使用。
 
-应用内更新下载默认按“内置 GitHub 镜像列表 → github.com 直连”的顺序尝试；`DSH_UPDATE_MIRRORS`（逗号分隔的前缀式镜像地址，如 `https://ghproxy.net/`）可在内置列表之前追加自有镜像。下载完成后按 release 里的 `sha256sums.txt` 校验完整性（发布工作流自动上传该文件）。
+应用内更新下载默认按「内置 GitHub 镜像列表 → github.com 直连」的顺序尝试；`DSH_UPDATE_MIRRORS`（逗号分隔的前缀式镜像地址，如 `https://ghproxy.net/`）可在内置列表之前追加自有镜像。下载完成后按 release 里的 `sha256sums.txt` 校验完整性（发布工作流自动上传该文件）。
 
 ## 插件包职责
 
-### `dsh-editor-shell`
+各包职责、Cordis entry id、`inject` 清单、座位合同与 RPC 端点目录都以 [插件架构与接口](plugin-architecture.md) 为准，本节不再复述。下面只保留改代码时直接涉及的维护点。
 
-- Host 入口注册 `dsh-editor-writing` 设置 schema，并让 DSH 发布 `./client`。
-- package 必须导出 `./package.json`；DSH 客户端发现依赖该公开解析契约。
-- 通过 root slot `priority: -100` 遮蔽官方 priority 0 AppFrame；最低 priority 渲染。该行为与 rc.2 root 类型声明中的普通插件指导相冲突，只允许在固定 `0.1.5-rc.2`、私有 `dsh-editor` profile 和完整 E2E 闸门下使用；它是明确的升级阻断点。
-- 客户端注入 `slots`、`sessions`、`workspaces`、`connection`、`settingsScope`、`settingsSchema`、`remote`、`remote.session` / `settings` / `credentials` / `llm` / `directoryPicker` 和 `uiSession`。`dsh.client.inject` 必须先拉 `@deepseek-ai/dsh-typert-registry` 和 `@deepseek-ai/dsh-api-gateway`，再挂 connection / ui-settings / session-controller / workspace-controller / remotes / ui-session；缺 gateway 时 remotes `$mount` 不完成，写作壳不会出现。
-- 设置弹窗由 shell 自建（`src/client/settings*.tsx` + `src/client/ui/`，`select.tsx` 包装 Radix Select）：profile patch（`apps/desktop/resources/profile/cordis.patch.yml`）禁用上游 `ui-settings-general`/`ui-settings-models`，但保留 `ui-settings`（提供 settingsScope/settingsSchema 服务）。通用设置写 `ui-theme`/`locale`/`ui-conversation` namespace，模型页走 `llm.providers`/`settings.mutate`/`credentials.*`/`llm.discoverModels` 与上游同协议。上游升级（DSH_VERSION）时需复查这些 API 与禁用条目——与 root slot 遮蔽同为升级阻断点。
-- 弹窗内不使用原生 `<select>`（Windows Chromium 下其弹层不跟随 color-scheme）；残留原生下拉的 ink 兜底规则在 styles.ts 的 baseStyles 尾部。
-- `DshChatPort` 只投影单一 `ConversationSnapshot`，不 `connection.start()`、不持久化 Chat。
+### 打包与注入
 
-### 桌面客户端维护点
+- shell package 必须导出 `./package.json`；DSH 客户端发现依赖该公开解析契约。
+- 客户端注入有顺序：`dsh.client.inject` 先拉 `@deepseek-ai/dsh-typert-registry` 与 `@deepseek-ai/dsh-api-gateway`，再挂 connection / ui-settings / session-controller / workspace-controller / remotes / ui-session。缺 gateway 时 remotes `$mount` 不完成，写作壳不会出现。
 
-- Root 声明 `dsh-editor.extensions`、`dsh-editor.settings.plugins`、`dsh-editor.settings.zhihu`、`dsh-editor.sidebar.tools`、`dsh-editor.center.overlays`。知乎在专用设置座位渲染；当前没有桌面校对贡献。
+### 设置弹窗与上游协议
+
+- 设置弹窗由 shell 自建：`src/client/settings*.tsx` 与 `src/client/ui/`，其中 `select.tsx` 包装 Radix Select。
+- 弹窗内不使用原生 `<select>`（Windows Chromium 下其弹层不跟随 color-scheme）；残留原生下拉的 ink 兜底规则在 `styles.ts` 的 `baseStyles` 尾部。
+- profile patch（`apps/desktop/resources/profile/cordis.patch.yml`）禁用上游 `ui-settings-general`/`ui-settings-models`，保留 `ui-settings`（提供 settingsScope/settingsSchema 服务）；升级 DSH 时与 root slot 遮蔽一并复查。
+- 通用设置写 `ui-theme`/`locale`/`ui-conversation` namespace；模型页走 `llm.providers`/`settings.mutate`/`credentials.*`/`llm.discoverModels`，与上游同协议。
+
+### 文件树、搜索与剪贴板
+
+- `auxiliary-files.ts` 同时用于文件树和 SearchPanel 接受结果的边界，批量替换只使用已接受的作者文件结果。隐藏文件不会因此被删除或禁止写作搭档读取。
+- 正文剪贴板经 `apps/desktop/preload.cjs` 与 `src/clipboard.ts` 的受限 IPC 调用主进程，写入正文前再次校验文档代次、版本与选区；公开 Web 使用自己的安全退路。
+
+### 图表与模型页
+
 - 用量图在 `client/settings-usage.tsx` 按需引入 ECharts 的 Bar / Grid / Tooltip / Aria / SVG，`tsdown.config.ts` 将 ECharts 与 zrender 内联；不要新增运行时 CDN。
-- `auxiliary-files.ts` 同时用于文件树和 SearchPanel 接受结果的边界，批量替换只使用已接受的作者文件结果。隐藏文件不会因此被删除或禁止搭档读取。
-- 正文剪贴板通过 `apps/desktop/preload.cjs` 和 `src/clipboard.ts` 的受限 IPC 调用 Electron 主进程，写入正文前再次校验文档代次、版本与选区；公开 Web 使用自己的安全退路。
-- 模型页分配补全、改写和新对话默认模型；更改提供方后刷新目录，显示 provider 来源，已有对话保留原选择。
-- 插件开关先持久化再更新 loader；状态文件与受管 patch 的写入失败须补偿恢复。自定义或不可读 patch 在修改配置、安装或卸载前拒绝，失败回执不得显示成功。
-
-### `dsh-editor-workbench`
-
-- Host-only 私有包，独占 `/dsh-editor-workbench`。
-- 负责项目结构、章节概览/状态、校对扫描、写作进度、context、导入、快照、移动与归档；复用 `dsh-manuscript/host-api` 的同一 workspace authority。卡片 RPC 在 `dsh-editor-cards`；workbench 只通过 `host-api` 读卡做校对对照。
-- 主入口 `inject` 为 `connection`, `sessions`, `workspaceRegistry`, `fs`, `sandboxPolicy`, `webServer`。可选 tools 入口注册只读 `novel_overview` 和需要作者确认的 `novel_memory_update`。
-- `./contracts` 只含 browser-safe channel、类型、解析器与纯函数，并由 Shell client 构建内联。
-
-### `dsh-editor-novel-kernel`
-
-- Host-only 私有包，注册七个小说工具、guard 与 `dsh-editor:novel-kernel` prompt；不再提供 `/novel-kernel` 通道，知乎知识库走 `/zhihu`。
-- Host `inject` 为 `tools`, `systemPrompt`, `fs`, `sandboxPolicy`。
-- Tool 只返回知识或预览提案，正文写入仍由 Shell 展示并经 `/manuscript proposal.prepare/apply` 完成；拆章/合章/批量重命名走 workbench `proposal.*`。
-- `./contracts` 只含工具名、proposal / memory marker 类型和严格解析器。
-
-### `dsh-manuscript`
-
-- Host：`packages/dsh-manuscript/src/index.ts`
-- RPC：`/manuscript`
-- 文件 authority 来自 live session 的 `header.cwd`；浏览器 cwd/provider/model 一律不可信。
-- `patch.complete` 和 FIM 由 Host 按可信 live session 与写作模型设置选择有效 provider/model；未分配角色模型时跟随当前对话，支持 abort 与有界输入。
-- 公开 Web 客户端继续注册 `shell.overlay`，不得占 root。
-
-### `dsh-proofread`
-
-- 公开包：`/proofread` 文本校对，只注入 `connection` 与 `webServer`，不依赖 session、文件或模型。
-- 引擎、词库与 contracts 是纯库；桌面 workbench 把它们当依赖，不经过这条 RPC。0.2.0 的桌面 profile 默认禁用 `proofread` entry，并从三份 recipe 移除 `proofread-panel`；独立 Web 安装仍保留校对 UI。
-
-### `dsh-zhihu`
-
-- 公开包：`/zhihu` 资料、知识库与用量；普通 Web 使用 `shell.overlay`，桌面使用 `dsh-editor.settings.zhihu` 内嵌设置入口。
-- Tool 入口 `dsh-zhihu/tools` 按组合选择，默认 full 才加入。
-
-### `dsh-editor-plugins`
-
-- 私有包：`/dsh-editor-plugins` 列出/开关已装插件，并从 GitHub `topic:dsh-plugin` 搜索安装。
-- 核心入口（稿纸、工作台、写作界面、插件管理）与 `@deepseek-ai/*` 不能关闭或卸载。内置扩展按作者用途分组，用 `entries.setEnabled` 一次保存同组开关；单项 `entry.setEnabled` 保持兼容。
-- 市场安装写入 `$DSH_HOME/user-plugins/`，桌面每次部署 profile 后重新挂回；安装与卸载后需要重启。
-- 安装前 `marketplace.inspect` / 安装时同一套静态检查：构建产物、patch insert、root 冲突、DSH/cordis 主版本、客户端 lazy-CJS。`blocked` 拒绝安装。这不能证明运行时一定成功。
+- 模型页分配补全、改写和新对话默认模型。更改提供方后刷新目录，显示 provider 来源，已有对话保留原选择。
 
 ## 测试
 
@@ -166,7 +133,7 @@ pnpm test:e2e:desktop
 - loopback 随机端口；
 - `document.title === 'DSH Editor'`；
 - 私有 `.shell` 已挂载且没有官方首页身份；
-- 默认呈现三栏：左侧文件树（只列真实存在的目录，正文预建，大纲/人物卡/世界书等在实际创建后出现）、中央稿纸、右侧写作搭档；
+- 默认呈现三栏：左侧文件树（只列真实存在的目录；新建作品预建 `正文/`、`大纲/`、`人物卡/`、`世界书/` 四个空目录）、中央稿纸、右侧写作搭档；
 - 外窗可缩到 1280×720；
 - 关闭后原端口不可访问。
 
@@ -190,13 +157,17 @@ pnpm pack:desktop
 - 含私有依赖的 profile 模板；
 - `manifest.json` 中的平台、文件数、字节数与 tree SHA-256。
 
-运行时物化支持 `win32-x64`、`darwin-x64`、`darwin-arm64`，其他平台会直接报错。Electron Builder 读取这些已校验资源，按当前平台输出到 `.pack/desktop/`：Windows 产出 portable EXE（`DSH Editor-<版本>-win-x64.exe`）与 NSIS 安装器（`DSH Editor-Setup-<版本>-win-x64.exe`）；macOS 产出 Apple Silicon 的 dmg 与 zip。应用未签名：Windows 的 SmartScreen 提示与 macOS 的“无法验证开发者”都不是构建失败；签名与公证仍不在授权范围。
+运行时物化支持 `win32-x64`、`darwin-x64`、`darwin-arm64`，其他平台会直接报错。Electron Builder 读取这些已校验资源，按当前平台输出到 `.pack/desktop/`：Windows 产出 portable EXE（`DSH Editor-<版本>-win-x64.exe`）与 NSIS 安装器（`DSH Editor-Setup-<版本>-win-x64.exe`）；macOS 产出 Apple Silicon 的 dmg 与 zip。应用未签名：Windows 的 SmartScreen 提示与 macOS 的「无法验证开发者」都不是构建失败；签名与公证仍不在授权范围。
 
-桌面品牌图标的单一源文件是 `apps/desktop/build/icon.svg`。修改后运行 `pnpm render:icon`，同步生成并提交 `icon.png` 与包含 16–256 像素尺寸的 `icon.ico`；开发窗口使用 PNG，打包钩子用固定版本的 standalone `rcedit` 写入应用 EXE，NSIS 将同一 ICO 写入 portable 外壳，mac 图标由 electron-builder 从 1024×1024 PNG 派生。这样无需为了未签名构建解压 electron-builder 的跨平台签名工具包；生成命令仍需要仓库 Playwright 浏览器与 Python Pillow 环境。
+桌面品牌图标的单一源文件是 `apps/desktop/build/icon.svg`。修改后运行 `pnpm render:icon`，同步生成并提交 `icon.png` 与包含 16–256 像素尺寸的 `icon.ico`。开发窗口使用 PNG；打包钩子用固定版本的 standalone `rcedit` 把图标写入应用 EXE，NSIS 把同一 ICO 写入 portable 外壳，macOS 图标由 electron-builder 从 1024×1024 PNG 派生。这样无需为未签名构建解压 electron-builder 的跨平台签名工具包；生成命令仍需要仓库 Playwright 浏览器与 Python Pillow 环境。
 
 ## Release CI
 
-推送 `v*` tag 会触发 `.github/workflows/release.yml`，先要求标签严格等于 `v` 加桌面应用版本号；不一致会在构建前失败。之后 Windows 与 macOS runner 各自安装固定版本的 DSH CLI 和 workspace 依赖，先 `pnpm build`，再做类型检查与单元测试；Windows 还运行桌面和核心写作 E2E，随后两平台分别打包。统一上传任务等待两个平台成功后，把产物与 `sha256sums.txt` 上传到该 tag 的 GitHub Release（不存在则创建）。也可以用 workflow_dispatch 输入 tag 给已发布版本补传产物。tag、release 标题与 notes 由发布者维护；CI 负责构建与上传。正式发布前先创建 draft Release，再推送标签；保持 draft，直到两平台任务成功、下载文件与 SHA-256 一致且下载后的 Windows 便携包实际启动、保存与退出验证通过，最后再公开。不要把先前本地包的验收当成该标签下载包的证据。
+推送 `v*` tag 会触发 `.github/workflows/release.yml`。标签必须严格等于 `v` 加桌面应用版本号，不一致会在构建前失败。之后 Windows 与 macOS runner 各自安装固定版本的 DSH CLI 和 workspace 依赖，先 `pnpm build`，再做类型检查与单元测试；Windows 还运行桌面和核心写作 E2E，随后两平台分别打包。
+
+统一上传任务等待两个平台成功后，把产物与 `sha256sums.txt` 上传到该 tag 的 GitHub Release（不存在则创建）。也可以用 workflow_dispatch 输入 tag，给已发布版本补传产物。tag、release 标题与 notes 由发布者维护；CI 只负责构建与上传。
+
+正式发布前先创建 draft Release，再推送标签。保持 draft，直到两平台任务成功、下载文件与 SHA-256 一致，且下载后的 Windows 便携包实际启动、保存与退出验证通过，最后再公开。不要把先前本地包的验收当成该标签下载包的证据。
 
 ## 安全审查清单
 
@@ -211,4 +182,10 @@ pnpm pack:desktop
 
 ## DSH 升级
 
-升级时同步修改并验证：固定版本脚本、peer/dev dependencies、lockfile、profile bundle、内置资源路径、SessionFace/ConversationSnapshot、root priority、CSP、Host RPC、公开插件矩阵和 portable EXE。任何一项依赖 DSH 私有 UI 内部实现时，应停止升级而不是复制官方 Agent/UI 内部代码。
+升级时同步修改并验证：
+
+- 固定版本脚本、peer/dev dependencies、lockfile、profile bundle、内置资源路径；
+- SessionFace/ConversationSnapshot、root priority、CSP、Host RPC；
+- 公开插件矩阵和 portable EXE。
+
+任何一项依赖 DSH 私有 UI 内部实现时，应停止升级，而不是复制官方 Agent/UI 内部代码。

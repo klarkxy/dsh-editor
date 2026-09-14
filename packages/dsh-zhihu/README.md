@@ -1,6 +1,6 @@
 # dsh-zhihu
 
-独立知乎资料插件。普通 RPC 与可选 Tool 入口分开。插件版本 **`0.1.0`**（不是桌面应用 `0.2.0`）。DSH `0.1.5-rc.2`。凭据：DSH `ZHIHU_ACCESS_TOKEN`。禁用 `zhihu-tools` 不影响普通 RPC。
+独立知乎资料插件。普通 RPC 与可选 Tool 入口分开。包版本 `0.1.0`，不是桌面应用 `0.2.0`。兼容 DSH `0.1.5-rc.2`。凭据：DSH `ZHIHU_ACCESS_TOKEN`。禁用 `zhihu-tools` 不影响普通 RPC。
 
 ## 入口
 
