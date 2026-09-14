@@ -40,6 +40,7 @@ export {
   isWorldbookPath,
   LatestRequestGate,
   orderTreeEntries,
+  memoryAppliedNavigation,
   proposalAppliedNavigation,
   relocationFailureMessage,
   resumableConversationId,

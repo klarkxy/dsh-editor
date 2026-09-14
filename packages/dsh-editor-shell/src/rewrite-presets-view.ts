@@ -8,9 +8,9 @@ export function presetLabelKey(id: RewritePresetId): MessageKey {
   return `rewrite.preset.${id}`
 }
 
-/** Trim, collapse whitespace, cap at 400 characters; empty input becomes null. */
+/** Trim, keep line breaks, collapse horizontal whitespace, cap at 400 characters; empty input becomes null. */
 export function normalizeCustomInstruction(text: string): string | null {
-  const normalized = text.trim().replace(/\s+/g, ' ')
+  const normalized = text.replace(/\r\n/g, '\n').replace(/[^\S\n]+/g, ' ').replace(/ *\n */g, '\n').trim()
   if (!normalized) return null
   return normalized.length > CUSTOM_INSTRUCTION_MAX
     ? normalized.slice(0, CUSTOM_INSTRUCTION_MAX)

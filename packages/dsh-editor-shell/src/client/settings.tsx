@@ -40,8 +40,19 @@ function persistTab(tab: string): void {
   try { globalThis.localStorage?.setItem(SETTINGS_TAB_KEY, tab) } catch { /* optional preference */ }
 }
 
-function SettingsTabPage(props: { tab: string; active: boolean; children?: ReactNode }) {
+function SettingsTabPage(props: { tab: string; active: boolean; fromX?: number; children?: ReactNode }) {
   const reduce = useReducedMotion()
+  /* 隐藏位姿保持方向中性(x:0):否则反向切回时会从上次留下的旧偏移滑入。
+     方向只由入场 keyframes 携带——每次 activate,animate 从隐藏位姿变成新的
+     keyframes,Motion 从 keyframes[0](本次切换方向)重新开始,不重挂、不丢 state。 */
+  const enter = reduce
+    ? { opacity: 1, x: 0, y: 0, filter: 'blur(0px)' }
+    : { x: [props.fromX ?? 24, 0], opacity: [0, 1], y: [14, 0], filter: ['blur(4px)', 'blur(0px)'] }
+  const pose = reduce
+    ? { opacity: 1, x: 0, y: 0, filter: 'blur(0px)' }
+    : props.active
+      ? enter
+      : { opacity: 0, x: 0, y: 12, filter: 'blur(3px)' }
   return e(TabsContent, {
     value: props.tab,
     forceMount: true,
@@ -52,8 +63,8 @@ function SettingsTabPage(props: { tab: string; active: boolean; children?: React
     e(m.div, {
       className: 'settings-page',
       initial: false,
-      animate: reduce || props.active ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 },
-      transition: reduce ? { duration: 0 } : { type: 'spring' as const, stiffness: 360, damping: 32, mass: 0.85 },
+      animate: pose,
+      transition: reduce ? { duration: 0 } : { type: 'spring' as const, stiffness: 340, damping: 26, mass: 0.85 },
       style: { pointerEvents: props.active ? 'auto' : 'none' },
     }, props.children),
   )
@@ -145,6 +156,10 @@ export function SettingsDialog(props: {
   const navTabs: string[] = [...featureTabs, ...officialSections.map((section) => section.navId), 'about']
   /* 能力在弹窗打开期间变为停用时，或动态插件页消失时，回落到仍可用的分类。 */
   const activeTab = navTabs.includes(tab) ? tab : 'general'
+  /* 页面切换方向感:往列表下方切内容从右滑入,往上切从左滑入。 */
+  const previousTabRef = useRef(activeTab)
+  const fromX = navTabs.indexOf(activeTab) >= navTabs.indexOf(previousTabRef.current) ? 24 : -24
+  previousTabRef.current = activeTab
   const activeOfficial = officialSections.find((section) => section.navId === activeTab)
   const builtinPages: SettingsTab[] = [...featureTabs, 'about']
   const content: Record<SettingsTab, () => ReactNode> = {
@@ -186,9 +201,9 @@ export function SettingsDialog(props: {
         ),
         note ? e('p', { className: 'warning pad', role: 'alert' }, note) : null,
         e('div', { className: 'settings-pages', tabIndex: 0 },
-          builtinPages.map((key) => e(SettingsTabPage, { key, tab: key, active: key === activeTab }, content[key]())),
+          builtinPages.map((key) => e(SettingsTabPage, { key, tab: key, active: key === activeTab, fromX }, content[key]())),
           open && activeOfficial && props.renderSlot
-            ? e(SettingsTabPage, { key: activeOfficial.navId, tab: activeOfficial.navId, active: true },
+            ? e(SettingsTabPage, { key: activeOfficial.navId, tab: activeOfficial.navId, active: true, fromX },
               e(OfficialSettingsSectionPage, {
                 renderSlot: props.renderSlot,
                 sectionId: activeOfficial.id,

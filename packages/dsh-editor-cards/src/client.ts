@@ -8,9 +8,10 @@ import {
   type ShellCommandRegistry,
   type ShellToolSeatContext,
 } from 'dsh-editor-seats'
+import type { CardKind } from './contracts.ts'
 import { CardsDetailSeat } from './client/detail.ts'
 import { CardsPanelSeat, type RpcCaller } from './client/panel.ts'
-import { requestCardsOpen } from './client/requests.ts'
+import { closeCardsDetail, closeCardsPanel } from './client/store.ts'
 import { cardsPanelStyles } from './client/styles.ts'
 import { message } from './client/messages.ts'
 
@@ -50,6 +51,14 @@ function seatFromRenderProps(props: unknown): ShellToolSeatContext | undefined {
   return undefined
 }
 
+function revealCardFolder(kind: CardKind, context: ShellToolSeatContext): void {
+  closeCardsPanel()
+  closeCardsDetail()
+  const folder = kind === 'character' ? '人物卡' : '世界书'
+  context.expandTreePath(folder)
+  context.highlightTreePath(folder)
+}
+
 function cardsCommands(): ShellCommand[] {
   return [
     {
@@ -60,8 +69,8 @@ function cardsCommands(): ShellCommand[] {
       keywords: ['character', '人物', '人物卡', '角色'],
       shortcut: { key: 'c', ctrl: true, shift: true },
       when: 'workspace',
-      run() {
-        requestCardsOpen('character')
+      run(context) {
+        revealCardFolder('character', context)
       },
     },
     {
@@ -72,8 +81,8 @@ function cardsCommands(): ShellCommand[] {
       keywords: ['worldbook', '世界书', '设定', 'Lore', '触发词'],
       shortcut: { key: 'w', ctrl: true, shift: true },
       when: 'workspace',
-      run() {
-        requestCardsOpen('worldbook')
+      run(context) {
+        revealCardFolder('worldbook', context)
       },
     },
   ]

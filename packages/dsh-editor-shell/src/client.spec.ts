@@ -17,6 +17,7 @@ import {
   isWorldbookPath,
   LatestRequestGate,
   orderTreeEntries,
+  memoryAppliedNavigation,
   proposalAppliedNavigation,
   relocationFailureMessage,
   resumableConversationId,
@@ -392,6 +393,9 @@ describe('shell manuscript RPC safety', () => {
     expect(treeExpansionPaths('正文/第二卷/003.md')).toEqual(['正文', '正文/第二卷'])
     expect(treeExpansionPaths('人物卡/林见.md')).toEqual(['人物卡'])
     expect(treeExpansionPaths('世界书/港口/规则.md')).toEqual(['世界书', '世界书/港口'])
+    expect(treeExpansionPaths('人物卡')).toEqual(['人物卡'])
+    expect(treeExpansionPaths('世界书')).toEqual(['世界书'])
+    expect(treeExpansionPaths('正文')).toEqual(['正文'])
     expect(treeExpansionPaths('项目总览.md')).toEqual([])
     expect(proposalAppliedNavigation('正文/003.md', '', false)).toEqual({
       openPath: '正文/003.md',
@@ -403,6 +407,10 @@ describe('shell manuscript RPC safety', () => {
       expandPath: '正文/004.md',
       refreshContent: false,
     })
+    expect(memoryAppliedNavigation('人物卡/林舟.md', '正文/001.md', false)).toEqual({ refreshContent: false })
+    expect(memoryAppliedNavigation('正文/001.md', '正文/001.md', false)).toEqual({ refreshContent: true })
+    expect(memoryAppliedNavigation('正文/001.md', '正文/001.md', true)).toEqual({ refreshContent: false })
+    expect(memoryAppliedNavigation('人物卡/林舟.md', '正文/001.md', false)).not.toHaveProperty('openPath')
   })
 
   it('hides valid worldbook YAML from the paper and leaves invalid metadata untouched', () => {
@@ -479,6 +487,8 @@ describe('shell manuscript RPC safety', () => {
     expect(palette).not.toContain('onImport')
     expect(palette).toContain("t('command.archived')")
     expect(palette).toContain('cmd.split-at-cursor')
+    expect(source).not.toContain('side-refs')
+    expect(source).not.toContain('cards-character')
     expect(palette).toContain('cmd.pin-current')
     expect(palette).toContain('cmd.unpin')
     expect(palette).toContain("t('chapterOps.splitAtCursor')")
@@ -586,6 +596,8 @@ describe('shell manuscript RPC safety', () => {
     const seats = readFileSync(new URL('../../dsh-editor-seats/src/index.ts', import.meta.url), 'utf8')
     const palette = readFileSync(new URL('./client/command-palette.tsx', import.meta.url), 'utf8')
     const pinned = readFileSync(new URL('./client/pinned-pane.ts', import.meta.url), 'utf8')
+    expect(pinned).toContain('Markdown')
+    expect(pinned).toContain('pinned-markdown')
     expect(source).not.toContain('CardsPanel')
     expect(source).not.toContain('openCardsPanel')
     expect(source).toContain('highlightTreePath')
@@ -620,6 +632,8 @@ describe('shell manuscript RPC safety', () => {
     expect(editor).toContain('handle.revealRange(reveal.start, reveal.end)')
     expect(editor).not.toContain('__cmView')
     expect(editor).not.toContain('paperRevealRange')
+    expect(editor).toContain('rewrite-instruction')
+    expect(editor).toContain('editor-doc-title')
   })
 
   it('sends proofread source and locate callbacks and styles rewrite proposals', () => {
@@ -644,6 +658,8 @@ describe('shell manuscript RPC safety', () => {
     expect(chat).toContain('selectedLabel')
     expect(chat).toContain('`${group.name} · ${model.name || model.id}`')
     expect(chat).toContain("llm/adapters-updated")
+    expect(editor).toContain('rewrite-instruction')
+    expect(editor).toContain('editor-doc-title')
     const select = readFileSync(new URL('./client/select.tsx', import.meta.url), 'utf8')
     expect(select).toContain('selectedLabel')
   })

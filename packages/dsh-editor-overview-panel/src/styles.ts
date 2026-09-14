@@ -1,9 +1,15 @@
 export const overviewPanelStyles = `
+@keyframes overview-panel-in { from { opacity: 0; transform: translateY(20px) scale(.98); filter: blur(3px); } }
+@keyframes overview-item-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes overview-bar-in { from { transform: scaleY(0); opacity: .35; } }
+@keyframes overview-meter-in { from { transform: scaleX(0); opacity: .35; } }
 /* 概览打开时优先于其他中栏 overlay（沿用旧 Shell 的 overview-open 行为）。 */
 .shell.layout-shell:has(.overview-panel[data-dsh-center-overlay]) [data-dsh-center-overlay]:not(.overview-panel) { display: none; }
 .shell .overview-panel, .dsh-ui .overview-panel {
   min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: var(--surface);
   box-shadow: var(--elev-raised); font-size: var(--text-chrome, 13px);
+  animation: overview-panel-in var(--duration-medium, 350ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both;
+  will-change: transform, opacity, filter;
 }
 .shell .overview-header, .dsh-ui .overview-header {
   display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3, 12px);
@@ -15,7 +21,12 @@ export const overviewPanelStyles = `
 .shell .overview-totals, .dsh-ui .overview-totals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: var(--space-3, 12px); }
 .shell .overview-totals > article, .dsh-ui .overview-totals > article {
   display: grid; gap: 6px; padding: var(--space-3, 12px); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg);
+  transition: transform var(--duration-quick, 150ms) var(--ease-smooth-out, ease), box-shadow var(--duration-quick, 150ms) var(--ease-smooth-out, ease);
+  animation: overview-item-in var(--duration-fast, 250ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both;
 }
+.shell .overview-totals > article:hover, .dsh-ui .overview-totals > article:hover { transform: translateY(-2px); box-shadow: var(--elev-raised); }
+.shell .overview-totals > article:nth-child(2), .dsh-ui .overview-totals > article:nth-child(2) { animation-delay: var(--duration-stagger, 40ms); }
+.shell .overview-totals > article:nth-child(3), .dsh-ui .overview-totals > article:nth-child(3) { animation-delay: calc(var(--duration-stagger, 40ms) * 2); }
 .shell .overview-status-card, .dsh-ui .overview-status-card { min-width: 0; }
 .shell .overview-chapters, .shell .overview-chart, .dsh-ui .overview-chapters, .dsh-ui .overview-chart { min-width: 0; }
 .shell .overview-totals span, .dsh-ui .overview-totals span { font: 500 var(--text-chrome, 13px)/1.4 var(--font-sans); color: var(--meta); letter-spacing: .04em; }
@@ -24,6 +35,7 @@ export const overviewPanelStyles = `
 .shell .overview-status-bar, .dsh-ui .overview-status-bar { display: grid; gap: 3px; }
 .shell .overview-status-bar small, .dsh-ui .overview-status-bar small { color: var(--fg-2); font-size: var(--text-chrome, 13px); }
 .shell .overview-status-bar i, .dsh-ui .overview-status-bar i { display: block; height: 6px; border-radius: 999px; background: var(--surface-warm); }
+.shell .overview-status-bar i, .dsh-ui .overview-status-bar i { transform-origin: center left; animation: overview-meter-in var(--duration-medium, 350ms) var(--ease-smooth-out, ease) both; }
 .shell .overview-status-bar.draft i, .dsh-ui .overview-status-bar.draft i { background: var(--muted); }
 .shell .overview-status-bar.revising i, .dsh-ui .overview-status-bar.revising i { background: var(--accent); }
 .shell .overview-status-bar.final i, .dsh-ui .overview-status-bar.final i { background: var(--confirm); }
@@ -36,8 +48,15 @@ export const overviewPanelStyles = `
 .shell .overview-chapter-list, .dsh-ui .overview-chapter-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .shell .overview-chapter, .dsh-ui .overview-chapter {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm);
+  transition: background-color var(--duration-quick, 150ms) var(--ease-smooth-out, ease), transform var(--duration-quick, 150ms) var(--ease-smooth-out, ease);
+  animation: overview-item-in var(--duration-fast, 250ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both;
 }
-.shell .overview-chapter:hover, .dsh-ui .overview-chapter:hover { background: var(--bg); }
+/* 章节行错峰入场(40ms 逐级),与统计卡节奏一致。 */
+.shell .overview-chapter-list > :nth-child(2), .dsh-ui .overview-chapter-list > :nth-child(2) { animation-delay: var(--duration-stagger, 40ms); }
+.shell .overview-chapter-list > :nth-child(3), .dsh-ui .overview-chapter-list > :nth-child(3) { animation-delay: calc(var(--duration-stagger, 40ms) * 2); }
+.shell .overview-chapter-list > :nth-child(4), .dsh-ui .overview-chapter-list > :nth-child(4) { animation-delay: calc(var(--duration-stagger, 40ms) * 3); }
+.shell .overview-chapter-list > :nth-child(n+5), .dsh-ui .overview-chapter-list > :nth-child(n+5) { animation-delay: calc(var(--duration-stagger, 40ms) * 4); }
+.shell .overview-chapter:hover, .dsh-ui .overview-chapter:hover { background: var(--bg); transform: translateX(2px); }
 .shell .overview-chapter.empty, .dsh-ui .overview-chapter.empty { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 22%, transparent); }
 .shell .overview-chapter-title, .dsh-ui .overview-chapter-title {
   text-align: left; min-height: 32px; color: var(--fg); font: 500 var(--text-base, 14px)/1.4 var(--font-sans); border: 0; background: transparent; cursor: pointer;
@@ -70,6 +89,7 @@ export const overviewPanelStyles = `
 }
 .shell .overview-char-col i, .shell .overview-curve-col i, .dsh-ui .overview-char-col i, .dsh-ui .overview-curve-col i {
   display: block; width: 70%; max-width: 28px; min-height: 0; border-radius: 3px 3px 1px 1px; background: var(--accent);
+  transform-origin: bottom center; animation: overview-bar-in var(--duration-medium, 350ms) var(--ease-smooth-out, ease) both;
 }
 .shell .overview-char-col.empty i, .dsh-ui .overview-char-col.empty i { background: color-mix(in srgb, var(--danger) 45%, var(--surface-warm)); }
 .shell .overview-curve-col.today i, .dsh-ui .overview-curve-col.today i { background: var(--confirm); }
@@ -82,7 +102,10 @@ export const overviewPanelStyles = `
   min-height: 32px; border: 0; background: transparent; cursor: pointer;
 }
 .shell .overview-recent ul, .dsh-ui .overview-recent ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
-.shell .overview-recent li, .dsh-ui .overview-recent li { display: grid; gap: 2px; }
+.shell .overview-recent li, .dsh-ui .overview-recent li { display: grid; gap: 2px; animation: overview-item-in var(--duration-fast, 250ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both; }
+.shell .overview-recent li:nth-child(2), .dsh-ui .overview-recent li:nth-child(2) { animation-delay: var(--duration-stagger, 40ms); }
+.shell .overview-recent li:nth-child(3), .dsh-ui .overview-recent li:nth-child(3) { animation-delay: calc(var(--duration-stagger, 40ms) * 2); }
+.shell .overview-recent li:nth-child(n+4), .dsh-ui .overview-recent li:nth-child(n+4) { animation-delay: calc(var(--duration-stagger, 40ms) * 3); }
 .shell .overview-recent button, .dsh-ui .overview-recent button { text-align: left; min-height: 32px; color: var(--fg); font-weight: 500; border: 0; background: transparent; cursor: pointer; font-size: var(--text-base, 14px); }
 .shell .overview-recent button:hover, .dsh-ui .overview-recent button:hover { color: var(--accent); }
 .shell .overview-recent small, .dsh-ui .overview-recent small { color: var(--meta); }
@@ -93,7 +116,7 @@ export const overviewPanelStyles = `
 }
 @media (prefers-reduced-motion: reduce) {
   .shell .overview-panel, .shell .overview-panel *, .dsh-ui .overview-panel, .dsh-ui .overview-panel * {
-    animation: none !important; transition: none !important;
+    animation: none !important; transition: none !important; filter: none !important; transform: none !important;
   }
 }
 `

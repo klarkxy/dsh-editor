@@ -2,11 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { zh } from '../i18n/index.ts'
 import { errorMessage, errorReason, isStaleFailure, proposalAppliedNavigation, worldbookPaperProjection } from './shared.ts'
 import { buildExpectedVersions, unwrapWorkbenchPrepared } from './chat.ts'
-import {
-  applyOwnedChapterMetaField,
-  chapterMetaFieldForm,
-  chapterMetaSavePlan,
-} from './chapter-meta-settings.ts'
 
 describe('planning proposal prepare unwrap', () => {
   const createProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'create', path: '大纲/总纲.md', summary: '新建', text: '# 总纲' } as never
@@ -42,79 +37,6 @@ describe('planning proposal prepare unwrap', () => {
       .toEqual({ '正文/001.md': 'v1' })
     expect(buildExpectedVersions(summaryProposal, { kind: 'chapter_summary', version: 'v1', before: '', after: '' } as never))
       .toEqual({ '正文/001.md': 'v1' })
-  })
-})
-
-describe('chapter meta owned-field lifecycle', () => {
-  const source = '---\ncustom: keep-me\nbeats: [码头]\nstate:\n  now: 黄昏\n---\n# 第一章\n正文\n'
-
-  it('hydrates each owned field from the current buffer text', () => {
-    expect(chapterMetaFieldForm(source, 'beats')).toBe('码头')
-    expect(chapterMetaFieldForm(source, 'state')).toEqual({ now: '黄昏', where: '', knows: '', ended: '', open: '' })
-    expect(chapterMetaFieldForm('# 无章纲\n', 'beats')).toBe('')
-  })
-
-  it('chapter plan edits beats only and preserves state, body and other frontmatter', () => {
-    const result = applyOwnedChapterMetaField(source, 'beats', '码头\n海关')
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.text).toContain('custom: keep-me')
-    expect(result.text).toContain('正文')
-    expect(result.text).toContain('now: 黄昏')
-    expect(result.text).not.toContain('beats: [码头]')
-    expect(result.text).toContain('beats: [码头, 海关]')
-  })
-
-  it('chapter summary edits state only and preserves beats, body and other frontmatter', () => {
-    const result = applyOwnedChapterMetaField(source, 'state', { now: '黎明', open: '船没靠岸' })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.text).toContain('custom: keep-me')
-    expect(result.text).toContain('beats: [码头]')
-    expect(result.text).toContain('正文')
-    expect(result.text).toContain('now: 黎明')
-    expect(result.text).toContain('open: 船没靠岸')
-    expect(result.text).not.toContain('now: 黄昏')
-  })
-
-  it('clears only the owned field and never the other one', () => {
-    const clearedBeats = applyOwnedChapterMetaField(source, 'beats', '')
-    expect(clearedBeats.ok).toBe(true)
-    if (clearedBeats.ok) {
-      expect(clearedBeats.text).not.toContain('beats:')
-      expect(clearedBeats.text).toContain('now: 黄昏')
-    }
-    const clearedState = applyOwnedChapterMetaField(source, 'state', {})
-    expect(clearedState.ok).toBe(true)
-    if (clearedState.ok) {
-      expect(clearedState.text).not.toContain('state:')
-      expect(clearedState.text).toContain('beats: [码头]')
-    }
-  })
-
-  it('plans the save: unchanged closes, changed saves, failed retry re-saves the same value', () => {
-    /* 与缓冲区一致且无重试：直接关闭。 */
-    expect(chapterMetaSavePlan(source, 'beats', '码头', false)).toEqual({ action: 'unchanged', note: zh['chapterMeta.unchanged'] })
-    /* 有改动：写入完整新文本。 */
-    const changed = chapterMetaSavePlan(source, 'beats', '码头\n海关', false)
-    expect(changed.action).toBe('save')
-    if (changed.action === 'save') expect(changed.next).toContain('beats: [码头, 海关]')
-    /* 上一次写入失败后，同值重试仍要再次发起保存（而不是当作"无改动"关闭）。 */
-    const retry = chapterMetaSavePlan(source, 'beats', '码头', true)
-    expect(retry.action).toBe('save')
-    if (retry.action === 'save') expect(retry.next).toBe(source)
-    /* 校验失败：保持打开。 */
-    const overflow = chapterMetaSavePlan('# 章\n', 'state', { now: '甲'.repeat(200), where: '乙'.repeat(200) }, false)
-    expect(overflow.action).toBe('error')
-  })
-
-  it('refuses unclosed frontmatter and oversized owned fields', () => {
-    expect(applyOwnedChapterMetaField('---\nbeats: [码头]\n正文', 'beats', '码头').ok).toBe(false)
-    const overflow = applyOwnedChapterMetaField(source, 'state', { now: '甲'.repeat(200), where: '乙'.repeat(200) })
-    expect(overflow.ok).toBe(false)
-    if (!overflow.ok) expect(overflow.note).toContain('章末状态合计不能超过 300 字')
-    /* 校验只针对自有字段：章纲合法时不会被章末状态限制误伤 */
-    expect(applyOwnedChapterMetaField('# 章\n', 'beats', 'x'.repeat(120)).ok).toBe(true)
   })
 })
 
@@ -182,12 +104,9 @@ describe('metadata save safety', () => {
 })
 
 describe('planning flow labels', () => {
-  it('labels outline proposals and separate chapter metadata actions for authors', () => {
+  it('labels outline proposals and chapter metadata proposals for authors', () => {
     expect(zh['chat.outlineProposal']).toBe('作品大纲提案')
     expect(zh['chat.chapterPlanBadge']).toBe('章纲提案')
     expect(zh['chat.chapterSummaryBadge']).toBe('章末小结提案')
-    expect(zh['chapterMeta.planTitle']).toBe('章纲')
-    expect(zh['chapterMeta.summaryTitle']).toBe('章末小结')
-    expect((zh as Record<string, string>)['chapterMeta.title']).toBeUndefined()
   })
 })

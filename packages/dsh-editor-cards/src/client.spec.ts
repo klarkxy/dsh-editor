@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { CENTER_OVERLAYS_SLOT, COMMANDS_SERVICE, SIDEBAR_TOOLS_SLOT, createCommandRegistry } from 'dsh-editor-seats'
+import { describe, expect, it, vi } from 'vitest'
+import { CENTER_OVERLAYS_SLOT, COMMANDS_SERVICE, SIDEBAR_TOOLS_SLOT, createCommandRegistry, type ShellToolSeatContext } from 'dsh-editor-seats'
 import { apply } from './client.ts'
+import { getCardsState, openCardsPanel, resetCardsStore, selectCard } from './client/store.ts'
 
 describe('cards client', () => {
   it('registers sidebar and overlay seats plus character/worldbook commands, then disposes them', () => {
@@ -70,5 +71,40 @@ describe('cards client', () => {
     })
     expect(tree?.props.Select).toBe(Select)
     expect(tree?.props.Dialog).toBe(Dialog)
+  })
+
+  it('reveals the matching folder in the file tree instead of opening the catalog overlay', () => {
+    resetCardsStore()
+    const commands = createCommandRegistry()
+    const ctx = {
+      effect(fn: () => (() => void) | void) { fn() },
+      slots: {
+        inject(_key: string, callback: () => unknown) {
+          callback()
+          return () => {}
+        },
+        register() {
+          return () => {}
+        },
+      },
+      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
+      [COMMANDS_SERVICE]: commands,
+    }
+    apply(ctx as never)
+    openCardsPanel('worldbook')
+    selectCard('世界书/港口.md')
+    const expandTreePath = vi.fn()
+    const highlightTreePath = vi.fn()
+    const context = {
+      expandTreePath,
+      highlightTreePath,
+    } as Pick<ShellToolSeatContext, 'expandTreePath' | 'highlightTreePath'> as ShellToolSeatContext
+    commands.list().find((item) => item.id === 'cards-character')?.run(context)
+    expect(expandTreePath).toHaveBeenCalledWith('人物卡')
+    expect(highlightTreePath).toHaveBeenCalledWith('人物卡')
+    expect(getCardsState()).toMatchObject({ open: false, selectedPath: null })
+    commands.list().find((item) => item.id === 'cards-worldbook')?.run(context)
+    expect(expandTreePath).toHaveBeenCalledWith('世界书')
+    expect(highlightTreePath).toHaveBeenCalledWith('世界书')
   })
 })

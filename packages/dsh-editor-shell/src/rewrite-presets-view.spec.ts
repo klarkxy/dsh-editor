@@ -30,6 +30,7 @@ describe('rewrite-presets-view', () => {
     expect(normalizeCustomInstruction('')).toBeNull()
     expect(normalizeCustomInstruction('   \n\t  ')).toBeNull()
     expect(normalizeCustomInstruction('  tighten   the  dialogue \n')).toBe('tighten the dialogue')
+    expect(normalizeCustomInstruction('更冷一点。\n不要改情节。')).toBe('更冷一点。\n不要改情节。')
     expect(normalizeCustomInstruction(`${'a'.repeat(CUSTOM_INSTRUCTION_MAX + 20)}`)).toBe('a'.repeat(CUSTOM_INSTRUCTION_MAX))
   })
 

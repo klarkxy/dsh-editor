@@ -1,6 +1,7 @@
 import { createElement as e, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import { REWRITE_PRESETS } from 'dsh-manuscript/client/editor-core'
 import { t } from '../i18n/index.ts'
+import { isImeEvent } from './ui/ime.ts'
 import {
   CUSTOM_INSTRUCTION_MAX,
   normalizeCustomInstruction,
@@ -29,17 +30,20 @@ export function RewritePresetsBar(props: { onRewrite(instruction: string): void 
     }, t(presetLabelKey(preset.id)))),
     customOpen
       ? e('span', { className: 'rewrite-presets-custom' },
-        e('input', {
-          type: 'text',
+        e('textarea', {
           value: customText,
           maxLength: CUSTOM_INSTRUCTION_MAX,
+          rows: 3,
           placeholder: t('rewrite.customPlaceholder'),
           'aria-label': t('rewrite.customPlaceholder'),
           autoFocus: true,
-          onChange: (event: ChangeEvent<HTMLInputElement>) => setCustomText(event.target.value),
-          onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
-            if (event.key === 'Enter') { event.preventDefault(); runCustom(); return }
-            if (event.key === 'Escape') { event.preventDefault(); setCustomOpen(false) }
+          onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setCustomText(event.target.value),
+          onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
+            if (event.key === 'Escape') { event.preventDefault(); setCustomOpen(false); return }
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
+              event.preventDefault()
+              runCustom()
+            }
           },
         }),
         e('button', {

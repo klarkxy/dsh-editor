@@ -39,6 +39,8 @@ import { ChapterOpsLayer, chapterMenuModel, requestMergeChapter, requestSplitCha
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
 import { Editor } from './editor.ts'
 import { Chat, ProposalCard } from './chat.ts'
+import type { EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
+import { saveOpenEditor, type EditorSaveBlockReason } from '../wrap-up-view.ts'
 import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
@@ -54,10 +56,19 @@ import { prepareExport, type ChapterExport, type ExportFormat } from '../export.
 import { idleImportFlow, importReview, recoverImport, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ImportDialog } from './import-dialog.ts'
 import { ArchivePanel, canArchivePath, type ArchiveView } from './archive.ts'
-import { t, useLocale } from '../i18n/index.ts'
+import { t, useLocale, type MessageKey } from '../i18n/index.ts'
 
 
 const HOST_UI_OWNER = { Select: HostSelect, Dialog: HostDialog }
+
+/* 自动保存被拦住时的驻留原因提示：组字/冲突/保存失败/保存期间新输入/身份变化。 */
+const SAVE_STAY_NOTE: Record<EditorSaveBlockReason, MessageKey> = {
+  composing: 'note.staySaveComposing',
+  conflict: 'note.staySaveConflict',
+  save: 'note.staySaveFailed',
+  typing: 'note.staySaveTyping',
+  identity: 'note.staySaveIdentity',
+}
 
 const SIDEBAR_DEFAULT = 248
 const SIDEBAR_MIN = 196
@@ -281,7 +292,42 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [editorDirty, setEditorDirty] = useState(false)
   const [fileMenu, setFileMenu] = useState<FileMenuState>(null)
   const [chapterOps, setChapterOps] = useState<ChapterOpsRequest | null>(null)
-  const editorHandleRef = useRef<EditorSnapshotHandle | null>(null)
+  const editorHandleRef = useRef<EditorCoreHandle | null>(null)
+  /* 返回首页/切换作品/新建/打开/树内导航前，先通过当前编辑器句柄保存：保存成功才继续。
+     不依赖滞后的 dirty 布尔状态——句柄里存在与当前选择一致的有效文档就走保存
+     （干净缓冲区内部直接放行，不落盘）；组字/冲突/失败/保存期间新输入/身份变化都留在原处。 */
+  const navSaveBusyRef = useRef(false)
+  const latestDocRef = useRef({ path: '', fileSessionId: '' })
+  latestDocRef.current = { path, fileSessionId: fileSession?.sessionId ?? '' }
+  const saveEditorBeforeAction = async (): Promise<boolean> => {
+    const handle = editorHandleRef.current
+    const doc = handle?.getDocument()
+    const latest = latestDocRef.current
+    /* 空白稿纸/未选中文件等无有效当前文档：无可保存，放行。 */
+    if (!handle || !doc || doc.sessionId !== latest.fileSessionId || doc.path !== latest.path) return true
+    if (navSaveBusyRef.current) return false
+    navSaveBusyRef.current = true
+    const result = await saveOpenEditor(handle, { sessionId: doc.sessionId, path: doc.path })
+    navSaveBusyRef.current = false
+    if (!result.ok) {
+      setWorkbenchNote(t(SAVE_STAY_NOTE[result.reason]))
+      return false
+    }
+    /* await 之后复核：句柄文档身份与 root 当前文档/会话都不能变；保存期间发生的切换优先，
+       旧请求不得替新作品/新章节导航。 */
+    const after = handle.getDocument()
+    const now = latestDocRef.current
+    if (!after || after.sessionId !== doc.sessionId || after.path !== doc.path
+      || now.fileSessionId !== doc.sessionId || now.path !== doc.path) return false
+    return true
+  }
+  /* 编辑器 dirty 状态经 React 回传有滞后；是否真有未保存内容直接读句柄实时缓冲区。 */
+  const editorHasUnsavedText = () => {
+    const handle = editorHandleRef.current
+    if (!handle) return false
+    const doc = handle.getDocument()
+    return Boolean(doc && handle.getText() !== doc.text)
+  }
   const [clipboard, setClipboard] = useState<ClipboardEntry>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
   const [renameTarget, setRenameTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
@@ -356,7 +402,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const pathFallbackInput = useRef<HTMLInputElement | null>(null)
   const homeCardOpen = useChromeMotion('card', 0)
   const homeCardNew = useChromeMotion('card', 0.05)
-  const sidebarPanelMotion = useChromeMotion('panel')
+  const sidebarPanelMotion = useChromeMotion('panel', 0, 'left')
+  const workspaceChromeMotion = useChromeMotion('page')
+  const sidebarAsideMotion = useChromeMotion('panel', 0, 'left')
   const pinValidatedSession = useRef<string | undefined>()
   useEffect(() => { document.title = 'DSH Editor' }, [])
   useEffect(() => {
@@ -421,7 +469,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         void writingScope.set('focusParagraph', !writing.focusParagraph)
         return
       }
-      if (editorDirty) return
+      /* 章节导航按钮自己处理"先保存再跳转"；快捷键只负责触发按钮，脏文档不再拦截。 */
       const buttons = document.querySelectorAll<HTMLButtonElement>('.chapter-navigation button')
       const button = action === 'previous-chapter' ? buttons[0] : buttons[1]
       if (button && !button.disabled) button.click()
@@ -441,7 +489,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [assistantEnabled, commands, editorDirty, focusMode, path, session?.sessionId, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
+  }, [assistantEnabled, commands, focusMode, path, session?.sessionId, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
   useEffect(() => {
     if (!chatFocusNonce || !assistantOpen || focusMode || !assistantEnabled) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
@@ -499,9 +547,20 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     if (!fileSession) { setOverview(null); return }
     void loadOverview()
   }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision, contentRevision, overviewRevision])
+  /* 统一导航入口：树/搜索/钉住/命令面板/章节导航都先走保存 gate，成功再跳转；失败留原处。
+     导航发起时记下当前文档身份，保存期间被更新的导航优先，避免旧请求覆盖新选择。 */
   const openDocument = (nextPath: string, hit?: SearchHit) => {
-    if (editorDirty && (nextPath !== path || hit)) {
-      setWorkbenchNote(t('error.saveFirst'))
+    if (nextPath === path && !hit) return
+    if (editorHasUnsavedText()) {
+      const fromPath = path
+      const fromSessionId = latestDocRef.current.fileSessionId
+      void (async () => {
+        if (!(await saveEditorBeforeAction())) return
+        if (latestDocRef.current.path !== fromPath || latestDocRef.current.fileSessionId !== fromSessionId) return
+        setWorkbenchNote('')
+        setPath(nextPath)
+        setReveal(hit ? toRevealRequest(hit) : null)
+      })()
       return
     }
     setWorkbenchNote('')
@@ -741,11 +800,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
   const openTreeCreate = (kind: 'file' | 'folder', directory: string) => {
     if (!fileSession) return
-    if (editorDirty) { setCreateNote(t('error.saveFirst')); return }
-    if (fileMenu) yieldMenuToDialog()
-    else fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : fileManageReturnFocus.current
-    setCreateNote('')
-    setTreeCreateRequest({ kind, directory })
+    void (async () => {
+      /* 与导航同一套保存 gate：有未保存内容先保存；空白稿纸/无选中文件直接放行。 */
+      if (!(await saveEditorBeforeAction())) return
+      if (fileMenu) yieldMenuToDialog()
+      else fileManageReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : fileManageReturnFocus.current
+      setCreateNote('')
+      setTreeCreateRequest({ kind, directory })
+    })()
   }
   const closeTreeCreate = () => {
     if (createBusy) return
@@ -1272,8 +1334,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
   const leaveToHome = async () => {
     closeWorkspaceChrome()
-    if (editorDirty) { setWorkbenchNote(t('note.saveBeforeHome')); return }
+    if (!(await saveEditorBeforeAction())) return
     if (!(await canLeaveAssistantDraft())) return
+    /* 草稿确认期间作者可能继续输入：确认后重新保存并核对当前身份。 */
+    if (!(await saveEditorBeforeAction())) return
     consumeInitialWorkspaceResume(initialWorkspaceResumeStarted)
     setAssistantDraftDirty(false)
     setFocusMode(false)
@@ -1285,8 +1349,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const switchToWorkspace = async (id: WorkspaceId) => {
     closeWorkspaceChrome()
     if (!id || id === currentWorkspace?.workspaceId) return
-    if (editorDirty) { setWorkbenchNote(t('note.saveBeforeSwitch')); return }
+    if (!(await saveEditorBeforeAction())) return
     if (!(await canLeaveAssistantDraft())) return
+    /* 草稿确认期间作者可能继续输入：确认后重新保存并核对当前身份。 */
+    if (!(await saveEditorBeforeAction())) return
     setAssistantDraftDirty(false)
     const workspace = workspaces.items.find((item) => item.workspaceId === id)
     if (!workspace) { setWorkbenchNote(t('note.entryChanged')); return }
@@ -1296,8 +1362,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     closeWorkspaceChrome()
     if (openingWorkspace || newProject) return
     if (fileSession) {
-      if (editorDirty) { setWorkbenchNote(t('note.saveBeforeNew')); return }
+      if (!(await saveEditorBeforeAction())) return
       if (!(await canLeaveAssistantDraft())) return
+      /* 草稿确认期间作者可能继续输入：确认后重新保存并核对当前身份。 */
+      if (!(await saveEditorBeforeAction())) return
       setAssistantDraftDirty(false)
     }
     setHomeNote('')
@@ -1590,7 +1658,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     closeWorkspaceChrome()
     setPaletteOpen(false)
     if (!fileSession) return
-    if (editorDirty) { setExportNote(t('note.saveBeforeExport')); setExportChapters([]); return }
+    if (!(await saveEditorBeforeAction())) { setExportChapters([]); return }
     const requestSessionId = fileSession.sessionId
     setExporting(true)
     setExportNote(t('note.exportPreparing'))
@@ -1734,11 +1802,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   })
   const openAnotherWorkspace = async () => {
     closeWorkspaceChrome()
-    if (editorDirty) {
-      setWorkbenchNote(t('note.saveBeforeOpen'))
-      return
-    }
+    if (!(await saveEditorBeforeAction())) return
     if (!(await canLeaveAssistantDraft())) return
+    /* 草稿确认期间作者可能继续输入：确认后重新保存并核对当前身份。 */
+    if (!(await saveEditorBeforeAction())) return
     setAssistantDraftDirty(false)
     await startWorkspaceFromPicker()
   }
@@ -1876,7 +1943,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   },
     e('style', null, redesignedStyles),
     e('header', { className: 'chrome', onDoubleClick: titleBarDoubleClick },
-      e('div', { className: 'workspace-chrome', role: 'group', 'aria-label': t('workspace.work') },
+      e(m.div, { className: 'workspace-chrome', role: 'group', 'aria-label': t('workspace.work'), ...workspaceChromeMotion },
         e('div', { className: 'workspace-menu' },
           e(Menu, { open: workspaceMenuOpen, onOpenChange: (open: boolean) => { if (open) workspaceMenuYields.current = false; setWorkspaceMenuOpen(open) } },
             e(MenuTrigger, {
@@ -1956,7 +2023,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         e(WindowControls, null),
       ),
     ),
-    sidebarInGrid ? e('aside', { className: 'sidebar', 'aria-label': t('workspace.filesAndNotes') },
+    sidebarInGrid ? e(m.aside, { className: 'sidebar', 'aria-label': t('workspace.filesAndNotes'), ...sidebarAsideMotion },
       e('div', { className: 'side-title' },
         e(Menu, null,
           e(MenuTrigger, {
@@ -2004,7 +2071,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         query: searchQuery,
         onQueryChange: setSearchQuery,
         submitTick: searchSubmitTick,
-        navigationBlocked: editorDirty,
+        /* 跳转统一走 openDocument 的保存 gate，不再因脏禁用；替换写入仍受 activeDirty 保护。 */
+        navigationBlocked: false,
         activePath: path,
         activeDirty: editorDirty,
         onOpen: (hit: SearchHit) => openDocument(hit.path, hit),

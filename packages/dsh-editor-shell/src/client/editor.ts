@@ -6,7 +6,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type CSSProperties,
+  type KeyboardEvent,
 } from 'react'
 import type { SessionFace } from '../dsh-compat.ts'
 import {
@@ -27,22 +29,15 @@ import {
   errorMessage,
   isStaleFailure,
   replaceWorldbookPaperText,
-  safeRpcCall,
   worldbookPaperProjection,
   type RevealRequest,
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
-import { isChapterMetaPath, ChapterMetaDialog, ChapterPlanStrip } from './chapter-meta-settings.ts'
 import { canRewritePath, CUSTOM_INSTRUCTION_MAX, normalizeCustomInstruction } from '../rewrite-presets-view.ts'
-import {
-  chapterContextFor,
-  previousChapterPath,
-  previousChapterState,
-  type PreviousChapterState,
-} from '../chapter-meta-view.ts'
 import { t } from '../i18n/index.ts'
-import { Button, Dialog, Input } from './ui/index.ts'
+import { Button, Dialog, isImeEvent } from './ui/index.ts'
+import { readableDocumentTitle, rewriteSelectionExcerpt } from '../wrap-up-view.ts'
 import {
   clipboardResultMessage,
   copyEditorSelection,
@@ -188,8 +183,6 @@ export function Editor(props: {
     hasVisibleSelection: false, collapsed: true, dirty: false, canUndo: false, canRedo: false, paperLength: 0,
   }))
   const [menuTarget, setMenuTarget] = useState<EditorTargetSnapshot | null>(null)
-  const [chapterPlanOpen, setChapterPlanOpen] = useState(false)
-  const [chapterSummaryOpen, setChapterSummaryOpen] = useState(false)
   const [customRewriteOpen, setCustomRewriteOpen] = useState(false)
   const [customText, setCustomText] = useState('')
   const [customTarget, setCustomTarget] = useState<EditorTargetSnapshot | null>(null)
@@ -333,8 +326,6 @@ export function Editor(props: {
       })
       return
     }
-    if (action === 'chapterPlan') { if (live.loaded && !live.conflict && isChapterMetaPath(path)) afterMenu(() => setChapterPlanOpen(true)); return }
-    if (action === 'chapterSummary') { if (live.loaded && !live.conflict && isChapterMetaPath(path)) afterMenu(() => setChapterSummaryOpen(true)); return }
 
     const bridge = editorClipboardBridge()
     if (!bridge) {
@@ -371,7 +362,6 @@ export function Editor(props: {
 
   const menuModel: EditorMenuModel = {
     state: menuState,
-    canChapterMeta: isChapterMetaPath(path) && menuState.loaded && !menuState.conflict,
     canRewritePath: canRewritePath(path) && completionEnabled,
   }
 
@@ -438,62 +428,11 @@ export function Editor(props: {
     setBufferText('')
     setOverflowOpen(false)
     setContextMenu(null)
-    setChapterPlanOpen(false)
-    setChapterSummaryOpen(false)
     setCustomRewriteOpen(false)
     setCustomTarget(null)
   }, [path, session.sessionId, externalRevision])
 
-  /* 章纲/章末小结对话框的读取通道：返回最新未保存缓冲区（不是磁盘基准），
-   * 正文未保存的改动随元数据一起保留；path/sessionId 用于会话/路径/文档身份校验。 */
-  const readChapterBuffer = useCallback(() => {
-    const handle = handleRef.current
-    const doc = handle?.getDocument()
-    if (!handle || !doc || doc.path !== path || doc.sessionId !== session.sessionId) return null
-    return { path, text: handle.getText() }
-  }, [path, session.sessionId])
-
-  /* 统一元数据写入通道：EditorCore.saveMetadataText 校验目标快照（会话/路径/代次/修订）、
-   * 只允许改动隐藏文件头，并复用与正文相同的 setText + file.write 保存机制。
-   * 真实落盘回执返回给对话框；失败原因（冲突/保存飞行中/目标过期）由编辑器脚注提示。 */
-  const saveChapterMetadata = useCallback(async (next: string): Promise<{ ok: boolean; note: string }> => {
-    const handle = handleRef.current
-    const doc = handle?.getDocument()
-    if (!handle || !doc || doc.path !== path || doc.sessionId !== session.sessionId) {
-      return { ok: false, note: t('chapterMeta.moved') }
-    }
-    const target = handle.captureTarget()
-    if (!target) return { ok: false, note: t('chapterMeta.notLoaded') }
-    const saved = await handle.saveMetadataText(next, target)
-    return saved ? { ok: true, note: t('chapterMeta.addedDraft') } : { ok: false, note: t('chapterMeta.applyFailed') }
-  }, [path, session.sessionId])
-
   const currentText = bufferText || handleRef.current?.getText() || ''
-
-  // 上一章的章末状态表：只在正文章节读取一次，随文件树 / 外部修订刷新；读取失败时静默不带。
-  const previousPath = useMemo(
-    () => (isChapterMetaPath(path) ? previousChapterPath(path, files) : undefined),
-    [path, files],
-  )
-  const [previousState, setPreviousState] = useState<PreviousChapterState | undefined>(undefined)
-  useEffect(() => {
-    if (!previousPath) { setPreviousState(undefined); return }
-    let cancelled = false
-    void (async () => {
-      const read = await safeRpcCall<{ text: string; version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
-        sessionId: session.sessionId,
-        path: previousPath,
-      }))
-      if (cancelled) return
-      setPreviousState(read.ok && typeof read.value?.text === 'string' ? previousChapterState(previousPath, read.value.text) : undefined)
-    })()
-    return () => { cancelled = true }
-  }, [ctx.connection.rpc, session.sessionId, previousPath, incomingRevision, revisionTick])
-
-  const chapterContext = useMemo(
-    () => isChapterMetaPath(path) ? chapterContextFor(currentText, previousState) : undefined,
-    [path, currentText, previousState],
-  )
 
   useEffect(() => {
     if (!path || !reveal || reveal.path !== path) return
@@ -522,8 +461,6 @@ export function Editor(props: {
       ),
     )
   }
-
-  const navigationBlocked = status === 'draft' || status === 'conflict'
 
   return e(Fragment, null,
     /* .editor-stack 接管原 .editor 的直接子级网格座位（grid-row: 2，见 styles.ts），
@@ -558,25 +495,31 @@ export function Editor(props: {
       typography,
       compactControls: true,
       onEditorContextMenu,
-      headerExtras: e(EditorOverflowMenu, {
-        open: overflowOpen,
-        onOpenChange: (open: boolean) => {
-          if (open && !snapshotMenu()) return
-          setOverflowOpen(open)
-          if (open) setContextMenu(null)
-        },
-        model: menuModel,
-        onAction: runMenuAction,
-        onCloseAutoFocus: focusEditorIfNeeded,
-      }),
+      headerExtras: e(Fragment, null,
+        e('span', {
+          className: 'editor-doc-title',
+          title: path,
+        }, readableDocumentTitle(path, currentText)),
+        e(EditorOverflowMenu, {
+          open: overflowOpen,
+          onOpenChange: (open: boolean) => {
+            if (open && !snapshotMenu()) return
+            setOverflowOpen(open)
+            if (open) setContextMenu(null)
+          },
+          model: menuModel,
+          onAction: runMenuAction,
+          onCloseAutoFocus: focusEditorIfNeeded,
+        }),
+      ),
       maxGhostCandidates: 3,
       enablePatch: true,
       enableBeforeUnload: true,
       paperProjection: PAPER_PROJECTION,
-      chapterContext,
       siblings: files,
+      /* 兄弟章节跳转统一交给 root 的 openDocument 保存 gate，这里不重复保存。 */
       onOpenSibling: onOpen,
-      siblingsBlocked: navigationBlocked,
+      siblingsBlocked: false,
       onReloadDisk: () => setReloadConfirm(true),
       onSaveConflictCopy: saveConflictCopy,
       footerExtras: note ? e('div', {
@@ -586,7 +529,6 @@ export function Editor(props: {
         style: { padding: '4px 8px', fontSize: 12, opacity: 0.75 },
       }, note) : null,
         })),
-      isChapterMetaPath(path) ? e(ChapterPlanStrip, { key: `strip:${path}`, text: currentText }) : null,
     ),
     contextMenu ? e(EditorContextMenu, {
       x: contextMenu.x,
@@ -599,28 +541,6 @@ export function Editor(props: {
       onClose: closeMenus,
       onCloseAutoFocus: focusEditorIfNeeded,
     }) : null,
-    isChapterMetaPath(path) ? e(ChapterMetaDialog, {
-      key: `plan:${session.sessionId}:${path}`,
-      field: 'beats',
-      path,
-      open: chapterPlanOpen,
-      returnFocusRef: editorFocusTarget,
-      onOpenChange: setChapterPlanOpen,
-      readBuffer: readChapterBuffer,
-      saveMetadata: saveChapterMetadata,
-      onNote: setNote,
-    }) : null,
-    isChapterMetaPath(path) ? e(ChapterMetaDialog, {
-      key: `summary:${session.sessionId}:${path}`,
-      field: 'state',
-      path,
-      open: chapterSummaryOpen,
-      returnFocusRef: editorFocusTarget,
-      onOpenChange: setChapterSummaryOpen,
-      readBuffer: readChapterBuffer,
-      saveMetadata: saveChapterMetadata,
-      onNote: setNote,
-    }) : null,
     e(Dialog, {
       open: customRewriteOpen,
       onOpenChange: setCustomRewriteOpen,
@@ -629,16 +549,22 @@ export function Editor(props: {
       returnFocusRef: editorFocusTarget,
     },
       e('header', null, e('h2', null, t('editor.rewriteCustomTitle'))),
-      e(Input, {
+      customTarget?.selectedText ? e('p', { className: 'muted rewrite-excerpt' }, t('rewrite.excerpt', { text: rewriteSelectionExcerpt(customTarget.selectedText) })) : null,
+      e('textarea', {
+        className: 'rewrite-instruction',
         value: customText,
         maxLength: CUSTOM_INSTRUCTION_MAX,
+        rows: 4,
         placeholder: t('rewrite.customPlaceholder'),
         'aria-label': t('rewrite.customPlaceholder'),
         autoFocus: true,
-        onChange: setCustomText,
-        onKeyDown: (event) => {
-          if (event.key === 'Enter') { event.preventDefault(); runCustomRewrite() }
-          if (event.key === 'Escape') { event.preventDefault(); setCustomRewriteOpen(false) }
+        onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setCustomText(event.currentTarget.value),
+        onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
+          if (event.key === 'Escape') { event.preventDefault(); setCustomRewriteOpen(false); return }
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
+            event.preventDefault()
+            runCustomRewrite()
+          }
         },
       }),
       e('footer', null,

@@ -14,6 +14,8 @@ import {
 } from '../pinned-pane-view.ts'
 import { documentName, errorMessage, LatestRequestGate, safeRpcCall, type ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
+import { Markdown, parseBlocks } from './markdown.tsx'
+import { readableDocumentTitle } from '../wrap-up-view.ts'
 
 function fieldList(rows: readonly PinnedFieldRow[]) {
   return e('dl', { className: 'pinned-fields' },
@@ -86,8 +88,15 @@ export function PinnedPane(props: {
     return () => { live = false }
   }, [props.ctx.connection.rpc, props.sessionId, props.path, props.treeRevision, props.contentRevision, kind, requestScope, requestGate])
 
-  const title = card?.title || documentName(props.path)
+  const title = card?.title || (text ? readableDocumentTitle(props.path, text) : documentName(props.path))
   const body = text === null ? '' : stripChapterFrontmatter(text)
+  const firstHeading = parseBlocks(body).find((block) => block.kind === 'heading')
+  const headingText = firstHeading && firstHeading.kind === 'heading'
+    ? firstHeading.inlines.map((part) => typeof part === 'string' ? part : part.kind === 'link' ? part.text : part.text).join('')
+    : ''
+  const markdownBody = headingText.trim() === title.trim()
+    ? body.replace(/^\s{0,3}#{1,6}\s+.*(?:\r?\n)+/, '')
+    : body
   const fields = card
     ? kind === 'card'
       ? characterPinnedFields((card as CharacterCard).frontmatter)
@@ -100,8 +109,8 @@ export function PinnedPane(props: {
   return e('section', { className: 'pinned-pane', 'aria-label': t('pin.aria', { path: props.path }) },
     e('header', { className: 'pinned-header' },
       e('div', null,
-        e('h2', null, title),
-        e('p', { className: 'muted' }, props.path),
+        e('h2', { title: props.path }, title),
+        e('p', { className: 'muted pinned-path', title: props.path }, props.path),
       ),
       e('div', { className: 'pinned-actions' },
         e('button', { type: 'button', onClick: props.onUnpin }, t('pin.unpin')),
@@ -112,7 +121,7 @@ export function PinnedPane(props: {
       busy ? e('p', { className: 'muted', role: 'status' }, t('pin.loading')) : null,
       note ? e('p', { className: 'warning', role: 'status' }, note) : null,
       !busy && fields.length ? fieldList(fields) : null,
-      !busy && text !== null ? e('pre', { className: 'pinned-text' }, body) : null,
+      !busy && text !== null ? e('div', { className: 'pinned-markdown md' }, e(Markdown, { text: markdownBody })) : null,
     ),
   )
 }

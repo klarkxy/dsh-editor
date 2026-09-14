@@ -24,10 +24,11 @@ export function renderMemoryUpdateMessageCard(props: {
     sessionId: props.context.sessionId,
     id: receipt.id,
     fallback: receipt,
+    chatCard: true,
     onApplied: props.context.onApplied,
-    onRefresh: () => {
+    onRefresh: (path: string) => {
       props.context.refresh('tree')
-      props.context.refresh('content')
+      props.context.onApplied(path)
     },
   })
 }

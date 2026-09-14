@@ -61,6 +61,7 @@ function TreeRows(props: RowProps): ReactNode {
             style: { paddingLeft: treeRowPadding(level) },
             'data-tree-depth': level,
             'aria-expanded': isOpen,
+            'aria-current': highlightPath === child ? 'page' : undefined,
             onClick: () => toggleDirectory(child),
             onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => {
               event.preventDefault()

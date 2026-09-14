@@ -2,13 +2,22 @@ import { m, useReducedMotion } from 'motion/react'
 
 export { m }
 
-/** Entrance for home cards, search chrome, settings pages, sidebar panels, and new chat messages. Reduced motion drops translation/scale/spring. */
-export function useChromeMotion(kind: 'card' | 'panel' | 'page' | 'message', delay = 0) {
+export type ChromeMotionKind = 'card' | 'panel' | 'page' | 'message'
+/* Panel 入场方向:侧栏从左、聊天下拉从右、设置/首页内容从下。 */
+export type PanelDirection = 'left' | 'right' | 'up' | 'down'
+
+/*
+ * 统一的 chrome 入场词汇表。位移给足(卡片 24px / 面板 24px / 页面 16px /
+ * 消息 12px),卡片与页面带 scale + blur,spring 阻尼刻意放低让回弹肉眼可见。
+ * prefers-reduced-motion 时返回静止最终态(initial: false,零时长),
+ * hover/tap 反馈一并关闭。
+ */
+export function useChromeMotion(kind: ChromeMotionKind, delay = 0, direction: PanelDirection = 'up') {
   const reduce = useReducedMotion()
   if (reduce) {
     return {
       initial: false as const,
-      animate: { opacity: 1, y: 0, scale: 1 },
+      animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' },
       transition: { duration: 0 },
       whileHover: undefined,
       whileTap: undefined,
@@ -16,27 +25,42 @@ export function useChromeMotion(kind: 'card' | 'panel' | 'page' | 'message', del
   }
   if (kind === 'card') {
     return {
-      initial: { opacity: 0, y: 8, scale: 0.98 },
-      animate: { opacity: 1, y: 0, scale: 1 },
-      whileHover: { y: -2 },
-      whileTap: { y: -1 },
-      transition: { type: 'spring' as const, stiffness: 420, damping: 28, mass: 0.75, delay },
+      initial: { opacity: 0, y: 24, scale: 0.96, filter: 'blur(4px)' },
+      animate: { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' },
+      whileHover: { y: -3, scale: 1.015 },
+      whileTap: { scale: 0.97, y: -1 },
+      transition: { type: 'spring' as const, stiffness: 340, damping: 21, mass: 0.85, delay },
     }
   }
-  if (kind === 'message') {
+  if (kind === 'panel') {
+    const offset = direction === 'left' ? { x: -24, y: 0 }
+      : direction === 'right' ? { x: 24, y: 0 }
+        : direction === 'down' ? { x: 0, y: -24 }
+          : { x: 0, y: 24 }
     return {
-      initial: { opacity: 0, y: 8 },
-      animate: { opacity: 1, y: 0 },
+      initial: { opacity: 0, ...offset, filter: 'blur(3px)' },
+      animate: { opacity: 1, x: 0, y: 0, filter: 'blur(0px)' },
       whileHover: undefined,
       whileTap: undefined,
-      transition: { type: 'spring' as const, stiffness: 420, damping: 32, mass: 0.7, delay },
+      transition: { type: 'spring' as const, stiffness: 320, damping: 24, mass: 0.9, delay },
+    }
+  }
+  if (kind === 'page') {
+    /* 设置页/首页内容:16px 纵向位移 + crossfade + 轻 blur。 */
+    return {
+      initial: { opacity: 0, y: 16, filter: 'blur(3px)' },
+      animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
+      whileHover: undefined,
+      whileTap: undefined,
+      transition: { type: 'spring' as const, stiffness: 360, damping: 26, mass: 0.85, delay },
     }
   }
   return {
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
+    /* 新消息:12px 上滑,回弹轻,不打断阅读。 */
+    initial: { opacity: 0, y: 12, scale: 0.99 },
+    animate: { opacity: 1, y: 0, scale: 1 },
     whileHover: undefined,
     whileTap: undefined,
-    transition: { type: 'spring' as const, stiffness: 360, damping: 32, mass: 0.85, delay },
+    transition: { type: 'spring' as const, stiffness: 400, damping: 27, mass: 0.7, delay },
   }
 }

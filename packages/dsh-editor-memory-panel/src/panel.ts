@@ -38,6 +38,8 @@ export function MemoryChangeDetail(props: {
   sessionId: string
   id: string
   fallback?: MemoryUpdateReceipt
+  /* 聊天卡形态：已应用的记录默认收起差异与引用，只留摘要状态；需要作者注意的 pending/failed/stale 默认展开。侧栏完整详情不传此属性。 */
+  chatCard?: boolean
   onApplied(path: string): void
   onRefresh?(path: string): void
   onChanged?(): void
@@ -145,34 +147,56 @@ export function MemoryChangeDetail(props: {
     )
   }
   const update = record.update
+  /* 共用主体：聊天卡与侧栏只有外壳（details/summary vs article/header）不同。 */
+  const metaRow = e('section', { className: 'memory-change-meta' },
+    props.chatCard ? null : e('em', { className: 'cards-badge' }, t(STATUS_LABEL[record.status])),
+    e('span', { className: 'muted' }, t(update.category === 'rule' ? 'memory.category.rule' : 'memory.category.fact')),
+    e('span', { className: 'muted' }, t(update.certainty === 'explicit' ? 'memory.certainty.explicit' : 'memory.certainty.uncertain')),
+    e('small', { className: 'muted' }, createdLabel(record.createdAt)),
+  )
+  const contentBody = record.before === null
+    ? e('section', null, e('small', null, t('memory.newContent')), e('pre', null, record.after))
+    : e('div', { className: 'proposal-diff' },
+      e('section', null, e('small', null, t('memory.before')), e('pre', null, record.before)),
+      e('section', null, e('small', null, t('memory.after')), e('pre', null, record.after)),
+    )
+  const evidenceBody = update.evidence.length ? e('section', { className: 'memory-reason' },
+    e('small', null, t('memory.evidence')),
+    e('ul', null, update.evidence.map((item, index) => e('li', { key: index },
+      item.kind === 'file' ? e('code', null, item.path) : e('small', null, t('memory.evidenceUser')),
+      ` ${item.quote}`,
+    ))),
+  ) : null
+  const failedMessage = record.status === 'failed' && record.message ? e('p', { className: 'warning', role: 'alert' }, record.message) : null
+  const footerRow = e('footer', null,
+    e('span', { role: 'status' }, note),
+    record.status === 'pending' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void apply() }, busy === 'apply' ? t('memory.applying') : t('memory.confirm')) : null,
+    record.status === 'applied' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void undo() }, busy === 'undo' ? t('memory.undoing') : t('memory.undo')) : null,
+    props.onBack ? e('button', { type: 'button', disabled: Boolean(busy), onClick: props.onBack }, t('memory.back')) : null,
+  )
+  /* 聊天卡：已应用/已撤销默认收起差异与引用，摘要状态留在 summary；pending/failed/stale 需要作者注意，默认展开。 */
+  if (props.chatCard) {
+    const needsAttention = record.status === 'pending' || record.status === 'failed' || record.status === 'stale'
+    return e('details', { className: `proposal-card memory-change memory-change-chat ${record.status}`, open: needsAttention || undefined, 'aria-label': t('memory.title') },
+      e('summary', null,
+        e('strong', null, record.summary),
+        e('code', null, record.path),
+        e('em', { className: 'cards-badge' }, t(STATUS_LABEL[record.status])),
+      ),
+      metaRow,
+      contentBody,
+      evidenceBody,
+      failedMessage,
+      footerRow,
+    )
+  }
   return e('article', { className: `proposal-card memory-change ${record.status}`, 'aria-label': t('memory.title') },
     e('header', null, e('strong', null, record.summary), e('code', null, record.path)),
-    e('section', { className: 'memory-change-meta' },
-      e('em', { className: 'cards-badge' }, t(STATUS_LABEL[record.status])),
-      e('span', { className: 'muted' }, t(update.category === 'rule' ? 'memory.category.rule' : 'memory.category.fact')),
-      e('span', { className: 'muted' }, t(update.certainty === 'explicit' ? 'memory.certainty.explicit' : 'memory.certainty.uncertain')),
-      e('small', { className: 'muted' }, createdLabel(record.createdAt)),
-    ),
-    record.before === null
-      ? e('section', null, e('small', null, t('memory.newContent')), e('pre', null, record.after))
-      : e('div', { className: 'proposal-diff' },
-        e('section', null, e('small', null, t('memory.before')), e('pre', null, record.before)),
-        e('section', null, e('small', null, t('memory.after')), e('pre', null, record.after)),
-      ),
-    update.evidence.length ? e('section', { className: 'memory-reason' },
-      e('small', null, t('memory.evidence')),
-      e('ul', null, update.evidence.map((item, index) => e('li', { key: index },
-        item.kind === 'file' ? e('code', null, item.path) : e('small', null, t('memory.evidenceUser')),
-        ` ${item.quote}`,
-      ))),
-    ) : null,
-    record.status === 'failed' && record.message ? e('p', { className: 'warning', role: 'alert' }, record.message) : null,
-    e('footer', null,
-      e('span', { role: 'status' }, note),
-      record.status === 'pending' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void apply() }, busy === 'apply' ? t('memory.applying') : t('memory.confirm')) : null,
-      record.status === 'applied' ? e('button', { type: 'button', disabled: Boolean(busy), onClick: () => void undo() }, busy === 'undo' ? t('memory.undoing') : t('memory.undo')) : null,
-      props.onBack ? e('button', { type: 'button', disabled: Boolean(busy), onClick: props.onBack }, t('memory.back')) : null,
-    ),
+    metaRow,
+    contentBody,
+    evidenceBody,
+    failedMessage,
+    footerRow,
   )
 }
 
@@ -215,8 +239,7 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
 
   const refreshWritten = (path: string) => {
     props.refresh('tree')
-    props.refresh('content')
-    void path
+    if (path === props.activePath && !props.editorDirty) props.refresh('content')
   }
 
   const visible = items?.filter((item) => !statusFilter || item.status === statusFilter) ?? []
@@ -257,7 +280,7 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
         rpc: props.rpc,
         sessionId: props.sessionId,
         id: item.id,
-        onApplied: (path) => props.onApplied(path),
+        onApplied: refreshWritten,
         onRefresh: refreshWritten,
         onChanged: () => void load(),
         onBack: () => setOpenId(null),

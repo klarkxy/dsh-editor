@@ -677,6 +677,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         return false
       }
       const saved: EditorDocument = { ...savingDoc, text: savingText, version: result.value.version ?? savingDoc.version }
+      // Imperative callers must observe the committed version before React renders.
+      docRef.current = saved
       setDoc(saved)
       /* 草稿 base 已随落盘更新；保留的更新键入将以新磁盘版本为 base 重新 put。 */
       draftBaseRef.current = null

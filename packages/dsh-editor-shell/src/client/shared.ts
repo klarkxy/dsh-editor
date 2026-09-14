@@ -126,8 +126,9 @@ export function treeRowPadding(level: number): number {
 }
 
 export function treeExpansionPaths(path: string): string[] {
-  if (!/^(正文|人物卡|世界书)\//.test(path)) return []
+  if (!/^(正文|人物卡|世界书)(\/|$)/.test(path)) return []
   const parts = path.split('/').filter(Boolean)
+  if (parts.length === 1) return parts
   return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('/'))
 }
 
@@ -352,6 +353,13 @@ export function proposalAppliedNavigation(appliedPath: string, currentPath: stri
     ...(appliedPath.startsWith('正文/') ? { expandPath: appliedPath } : {}),
     refreshContent: !editorDirty && appliedPath === currentPath,
   }
+}
+
+/** Maintenance writes stay on the current paper; never open the updated notes file. */
+export function memoryAppliedNavigation(appliedPath: string, currentPath: string, editorDirty: boolean): {
+  refreshContent: boolean
+} {
+  return { refreshContent: !editorDirty && appliedPath === currentPath }
 }
 
 export type ResizablePanelSide = 'left' | 'right'

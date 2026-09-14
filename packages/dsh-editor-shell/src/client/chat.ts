@@ -397,7 +397,7 @@ function ChatEntry(props: {
   const Tag = props.as === 'details' ? m.details : m.article
   const motionProps = animate.current
     ? motion
-    : { initial: false as const, animate: { opacity: 1, y: 0 }, transition: { duration: 0 }, whileHover: undefined, whileTap: undefined }
+    : { initial: false as const, animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' }, transition: { duration: 0 }, whileHover: undefined, whileTap: undefined }
   return e(Tag, {
     className: props.className,
     ...(props.as === 'details' ? { open: props.open } : {}),
@@ -1118,10 +1118,11 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const messageCardContext: ShellMessageCardContext = {
     sessionId: session.sessionId,
     locale,
-    onApplied: handleApplied,
+    onApplied: (path) => onWritten?.(path),
     refresh: (scope) => {
       if (scope === 'overview') return
-      onWritten?.(activePath ?? '')
+      if (scope === 'tree') onWritten?.('')
+      else onWritten?.(activePath ?? '')
     },
     note: setNote,
   }
@@ -1422,7 +1423,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         }, t('common.restore')),
       ))),
     ) : null,
-    e('div', { className: 'chat-history', ref: historyRef, onScroll: (event: { currentTarget: HTMLDivElement }) => {
+    e('div', { className: 'chat-history', ref: historyRef, 'data-running': snapshot.running ? 'true' : 'false', onScroll: (event: { currentTarget: HTMLDivElement }) => {
       const el = event.currentTarget
       bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
     } },
@@ -1520,7 +1521,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         e('div', { className: 'composer-actions' },
           snapshot.running ? e('button', {
             type: 'button',
-            className: 'icon-button',
+            className: 'icon-button chat-stop',
             title: t('chat.stop'),
             'aria-label': t('chat.stop'),
             onClick: () => void stop(session),

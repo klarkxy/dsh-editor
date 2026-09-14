@@ -114,10 +114,22 @@ export const tokenStyles = `
   --elev-ring: 0 0 0 1px var(--hairline-strong);
   --elev-ring-accent: 0 0 0 1px var(--accent);
   --focus-ring: 0 0 0 2px var(--accent-active);
-  --motion-fast: 150ms;
+  /* Shared motion vocabulary: quick feedback, deliberate reveals, and a
+     smooth-out curve that settles without making the writing surface move. */
+  --duration-stagger: 40ms;
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --distance-micro: 4px;
+  --distance-base: 8px;
+  --distance-medium: 12px;
+  --blur-small: 2px;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-fast: var(--duration-quick);
   --motion-base: 200ms;
-  --motion-emphasis: 260ms;
-  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-emphasis: var(--duration-fast);
+  --ease: var(--ease-smooth-out);
   /* 轻微回弹:入场/弹层专用,幅度克制,不做循环装饰动画。 */
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   --topbar-h: 52px;
@@ -150,14 +162,22 @@ export const baseStyles = `
 .shell button, .dsh-ui button { cursor: pointer; transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease), transform var(--motion-base) var(--ease); }
 /* 按压反馈:整壳统一的 1px 下沉,配合上面的 transform 过渡形成"按下-回弹"。
    特例(如 .home-entry-card 的 -1px)由更高优先级选择器覆盖。 */
-.shell button:active, .dsh-ui button:active { transform: translateY(1px); }
+.shell button:active, .dsh-ui button:active { transform: translateY(1px) scale(.97); }
 /* 入场关键帧:只用于一次性进场(home 卡、菜单、侧栏面板、对话框),稿纸/编辑器
    正文不参与,避免打字时重排动画。 */
 @keyframes shell-fade-in { from { opacity: 0; } }
-@keyframes shell-rise-in { from { opacity: 0; transform: translateY(8px); } }
-@keyframes shell-pop-in { from { opacity: 0; transform: translateY(-3px) scale(.97); } }
-@keyframes shell-slide-in-right { from { opacity: 0; transform: translateX(12px); } }
-@keyframes shell-dialog-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+@keyframes shell-rise-in { from { opacity: 0; transform: translateY(18px) scale(.98); filter: blur(3px); } }
+@keyframes shell-pop-in { from { opacity: 0; transform: translateY(-6px) scale(.94); filter: blur(4px); } }
+@keyframes shell-slide-in-right { from { opacity: 0; transform: translateX(28px); filter: blur(3px); } }
+@keyframes shell-dialog-in { from { opacity: 0; transform: translateY(18px) scale(.96); filter: blur(4px); } }
+@keyframes shell-disclosure-in { from { opacity: 0; transform: translateY(8px); filter: blur(var(--blur-small)); } }
+@keyframes shell-tree-row-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes shell-status-in { from { opacity: 0; transform: translateY(12px); filter: blur(var(--blur-small)); } }
+@keyframes shell-toast-in { from { opacity: 0; transform: translateY(24px) scale(.96); filter: blur(var(--blur-small)); } }
+@keyframes shell-menu-out { to { opacity: 0; transform: translateY(-4px) scale(.96); filter: blur(2px); } }
+@keyframes shell-menu-item-in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes shell-thinking-pulse { 0%, 100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
+@keyframes shell-stop-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 35%, transparent); } 50% { box-shadow: 0 0 0 5px transparent; } }
 .shell textarea, .dsh-ui textarea { resize: none; outline: none; }
 .shell :focus, .dsh-ui :focus { outline: none; }
 .shell :focus-visible, .dsh-ui :focus-visible { box-shadow: var(--focus-ring); }
@@ -244,12 +264,14 @@ export const componentStyles = `
 .shell .workspace-menu-trigger::after, .dsh-ui .workspace-menu-trigger::after { content: '⌄'; flex: none; font-size: 11px; color: var(--meta); }
 .shell .workspace-menu-trigger:hover, .shell .workspace-menu-trigger[data-state="open"], .dsh-ui .workspace-menu-trigger:hover, .dsh-ui .workspace-menu-trigger[data-state="open"] { background: var(--surface); }
 .dsh-ui.workspace-menu-panel { z-index: 30; min-width: 240px; max-height: min(360px, 70dvh); overflow: auto; padding: 6px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-raised); }
-.dsh-ui.workspace-menu-panel[data-state="open"] { animation: shell-pop-in var(--motion-base) var(--ease-spring); transform-origin: top left; }
+.dsh-ui.workspace-menu-panel[data-state="open"] { animation: shell-pop-in 240ms var(--ease-spring); transform-origin: top left; }
+.dsh-ui.workspace-menu-panel[data-state="closed"] { animation: shell-menu-out 120ms var(--ease) forwards; }
 .dsh-ui.workspace-menu-panel .workspace-menu-item, .dsh-ui.workspace-menu-panel [role="menuitem"] { width: 100%; padding: 7px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-sm); color: var(--fg-2); outline: none; }
 .dsh-ui.workspace-menu-panel .workspace-menu-item:hover, .dsh-ui.workspace-menu-panel [role="menuitem"][data-highlighted] { background: var(--surface); color: var(--fg); }
 .dsh-ui.workspace-menu-panel [role="menuitem"][aria-current="true"] { color: var(--accent); font-weight: 600; }
 .shell .file-context-menu, .dsh-ui.file-context-menu { z-index: 30; min-width: 200px; padding: 6px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-raised); display: flex; flex-direction: column; gap: 2px; }
-.dsh-ui.file-context-menu[data-state="open"] { animation: shell-pop-in var(--motion-fast) var(--ease-spring); }
+.dsh-ui.file-context-menu[data-state="open"] { animation: shell-pop-in 220ms var(--ease-spring); }
+.dsh-ui.file-context-menu[data-state="closed"] { animation: shell-menu-out 110ms var(--ease) forwards; }
 .shell .file-context-menu button, .dsh-ui.file-context-menu button, .dsh-ui.file-context-menu [role="menuitem"] { width: 100%; padding: 7px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-sm); color: var(--fg-2); outline: none; }
 .shell .file-context-menu button:hover:not([disabled]), .shell .file-context-menu button:focus-visible:not([disabled]), .dsh-ui.file-context-menu button:hover:not([disabled]), .dsh-ui.file-context-menu button:focus-visible:not([disabled]), .dsh-ui.file-context-menu [role="menuitem"][data-highlighted] { background: var(--surface); color: var(--fg); }
 .shell .file-context-menu button:disabled, .dsh-ui.file-context-menu button:disabled, .dsh-ui.file-context-menu [role="menuitem"][data-disabled] { opacity: .45; cursor: not-allowed; }
@@ -270,7 +292,7 @@ export const componentStyles = `
 .shell .topbar-actions, .dsh-ui .topbar-actions { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .shell .topbar-actions > span, .dsh-ui .topbar-actions > span { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; }
 .shell .icon-button, .dsh-ui .icon-button, .dsh-ui .icon-button { display: grid; place-items: center; min-width: 32px; min-height: 32px; padding: 3px; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; color: var(--meta); }
-.shell .icon-button:hover, .dsh-ui .icon-button:hover { background: var(--surface); color: var(--fg); }
+.shell .icon-button:hover, .dsh-ui .icon-button:hover { background: var(--surface); color: var(--fg); transform: translateY(-1px) scale(1.06); }
 .shell .native-settings-control, .dsh-ui .native-settings-control { display: flex; align-items: center; }
 .shell .native-settings-control button, .dsh-ui .native-settings-control button { white-space: nowrap; width: var(--control-h); min-width: var(--control-h); min-height: var(--control-h); padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; cursor: pointer; color: var(--fg); }
 
@@ -308,8 +330,14 @@ export const componentStyles = `
 .shell .tree-directory-add, .dsh-ui .tree-directory-add { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; opacity: .68; color: var(--meta); font-size: 14px; }
 .shell .tree-directory-add:hover, .shell .tree-directory-add:focus-visible, .dsh-ui .tree-directory-add:hover, .dsh-ui .tree-directory-add:focus-visible { opacity: 1; background: var(--surface); color: var(--fg); }
 /* VSCode 式行内操作:每个目录悬停/聚焦时才露出「新建文件/文件夹」。 */
-.shell .tree-row-actions, .dsh-ui .tree-row-actions { flex: none; display: inline-flex; align-items: center; gap: 2px; visibility: hidden; }
-.shell .tree-directory-row:hover .tree-row-actions, .shell .tree-directory-row:focus-within .tree-row-actions, .dsh-ui .tree-directory-row:hover .tree-row-actions, .dsh-ui .tree-directory-row:focus-within .tree-row-actions { visibility: visible; }
+.shell .tree-row-actions, .dsh-ui .tree-row-actions { flex: none; display: inline-flex; align-items: center; gap: 2px; visibility: hidden; transition: visibility 0s linear var(--duration-quick); }
+.shell .tree-row-actions > button, .dsh-ui .tree-row-actions > button { opacity: 0; transform: translateX(8px) scale(.94); transition: opacity var(--duration-quick) var(--ease-smooth-out), transform var(--duration-quick) var(--ease-smooth-out); }
+.shell .tree-directory-row:hover .tree-row-actions, .shell .tree-directory-row:focus-within .tree-row-actions, .dsh-ui .tree-directory-row:hover .tree-row-actions, .dsh-ui .tree-directory-row:focus-within .tree-row-actions { visibility: visible; transition-delay: 0s; }
+.shell .tree-directory-row:hover .tree-row-actions > button, .shell .tree-directory-row:focus-within .tree-row-actions > button, .dsh-ui .tree-directory-row:hover .tree-row-actions > button, .dsh-ui .tree-directory-row:focus-within .tree-row-actions > button { opacity: 1; transform: translateX(0) scale(1); transition-delay: 0s; }
+/* 错峰由子按钮各自承担:第二个按钮展开时晚 40ms;收起不延迟,避免滞留。
+   focus-within 覆盖键盘聚焦路径,reduced-motion 下 transition 静止、状态即时切换。 */
+.shell .tree-row-actions > :nth-child(2), .dsh-ui .tree-row-actions > :nth-child(2) { transition-delay: 0s; }
+.shell .tree-directory-row:hover .tree-row-actions > :nth-child(2), .shell .tree-directory-row:focus-within .tree-row-actions > :nth-child(2), .dsh-ui .tree-directory-row:hover .tree-row-actions > :nth-child(2), .dsh-ui .tree-directory-row:focus-within .tree-row-actions > :nth-child(2) { transition-delay: var(--duration-stagger); }
 /* 侧栏头部工具组:版本溢出菜单,避免三枚文字按钮挤成一行。 */
 .shell .side-title-actions, .dsh-ui .side-title-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; flex: none; }
 .shell .side-action, .dsh-ui .side-action { border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; padding: 3px 6px; color: var(--meta); font: 500 var(--text-xs)/1.2 var(--font-sans); letter-spacing: .04em; }
@@ -319,7 +347,7 @@ export const componentStyles = `
 .shell .side-version-trigger:hover, .shell .side-version-trigger[data-state="open"], .dsh-ui .side-version-trigger:hover, .dsh-ui .side-version-trigger[data-state="open"] { background: var(--surface); color: var(--fg); }
 .shell .side-status, .dsh-ui .side-status { margin: 0 12px 8px; padding: 0; color: var(--meta); font-size: var(--text-xs); line-height: 1.4; }
 /* 提交历史面板:侧栏内树上方的小列表。 */
-.shell .snapshot-panel, .dsh-ui .snapshot-panel { margin: 0 12px 10px; padding: 8px; max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 2px; border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elev-ring); animation: shell-rise-in var(--motion-emphasis) var(--ease-spring); }
+.shell .snapshot-panel, .dsh-ui .snapshot-panel { margin: 0 12px 10px; padding: 8px; max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 2px; border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elev-ring); }
 .shell .snapshot-row, .dsh-ui .snapshot-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: var(--radius-xs); color: var(--fg-2); font-size: var(--text-xs); }
 .shell .snapshot-row:hover, .dsh-ui .snapshot-row:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
 .shell .snapshot-label, .dsh-ui .snapshot-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -359,31 +387,19 @@ export const componentStyles = `
 .shell .import-dialog h2, .dsh-ui .import-dialog h2 { margin: 0 0 12px; font: 500 20px/1.2 var(--font-serif); }
 .shell .import-dialog footer, .dsh-ui .import-dialog footer { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; margin-top: 16px; }
 .shell .rewrite-presets, .dsh-ui .rewrite-presets { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.shell .rewrite-presets button, .dsh-ui .rewrite-presets button { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 4px 10px; border: 0; border-radius: 999px; background: transparent; box-shadow: var(--elev-ring); color: var(--fg-2); font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .06em; cursor: pointer; }
-.shell .rewrite-presets button:hover, .dsh-ui .rewrite-presets button:hover { background: var(--bg); color: var(--fg); }
+.shell .rewrite-presets button, .dsh-ui .rewrite-presets button { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 4px 10px; border: 0; border-radius: 999px; background: transparent; box-shadow: var(--elev-ring); color: var(--fg-2); font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .06em; cursor: pointer; transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease); }
+.shell .rewrite-presets button:hover, .dsh-ui .rewrite-presets button:hover { background: var(--bg); color: var(--fg); transform: translateY(-1px) scale(1.03); }
 .shell .rewrite-presets button:disabled, .dsh-ui .rewrite-presets button:disabled { opacity: .45; cursor: default; }
-.shell .rewrite-presets-custom, .dsh-ui .rewrite-presets-custom { display: inline-flex; align-items: center; gap: 4px; }
-.shell .rewrite-presets input, .dsh-ui .rewrite-presets input { min-width: 12em; max-width: 22em; min-height: 28px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: 400 var(--text-xs)/1.3 var(--font-sans); }
-.shell .chapter-meta-settings, .dsh-ui .chapter-meta-settings { flex: 1 1 100%; padding: 8px 12px; border-top: 1px solid var(--hairline); background: var(--bg-sunken); }
-.shell .chapter-meta-settings > summary, .dsh-ui .chapter-meta-settings > summary { cursor: pointer; font: 500 var(--text-sm)/1.4 var(--font-sans); color: var(--fg); list-style: none; }
-.shell .chapter-meta-settings > summary::-webkit-details-marker, .dsh-ui .chapter-meta-settings > summary::-webkit-details-marker { display: none; }
-.shell .chapter-meta-body, .dsh-ui .chapter-meta-body { display: grid; gap: 8px; margin-top: 8px; }
-.shell .chapter-meta-body > label, .dsh-ui .chapter-meta-body > label { display: grid; gap: 4px; font-size: var(--text-xs); color: var(--muted); }
-.shell .chapter-meta-state, .dsh-ui .chapter-meta-state { display: grid; grid-template-columns: repeat(auto-fit, minmax(8em, 1fr)); gap: 8px; }
-.shell .chapter-meta-state label, .dsh-ui .chapter-meta-state label { display: grid; gap: 4px; font-size: var(--text-xs); color: var(--muted); }
-.shell .chapter-meta-settings textarea, .shell .chapter-meta-settings input[type="text"], .dsh-ui .chapter-meta-settings textarea, .dsh-ui .chapter-meta-settings input[type="text"] { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
-.shell .chapter-meta-count, .dsh-ui .chapter-meta-count { color: var(--meta); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-.shell .chapter-meta-count.over, .dsh-ui .chapter-meta-count.over { color: var(--danger); }
-/* 稿纸旁的紧凑章纲条：summary 只显示一行计数，展开后是带序号的节拍列表。 */
+.shell .rewrite-presets-custom, .dsh-ui .rewrite-presets-custom { display: inline-flex; align-items: center; gap: 4px; animation: shell-pop-in 200ms var(--ease-spring) both; transform-origin: bottom left; }
+.shell .rewrite-presets input, .dsh-ui .rewrite-presets input,
+.shell .rewrite-presets textarea, .dsh-ui .rewrite-presets textarea { min-width: 12em; max-width: 22em; min-height: 28px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: 400 var(--text-xs)/1.3 var(--font-sans); }
+.shell .rewrite-presets textarea, .dsh-ui .rewrite-presets textarea { min-height: 4.5em; resize: vertical; }
+.shell .rewrite-instruction, .dsh-ui .rewrite-instruction { width: 100%; min-height: 88px; resize: vertical; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: 400 var(--text-sm)/1.55 var(--font-serif); }
+.shell .rewrite-excerpt, .dsh-ui .rewrite-excerpt { margin: 0 0 8px; color: var(--meta); font-size: var(--text-xs); }
 .shell .editor-stack, .dsh-ui .editor-stack { display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; }
 .shell .editor-stack .editor-pane, .dsh-ui .editor-stack .editor-pane { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.shell .chapter-plan-strip, .dsh-ui .chapter-plan-strip { flex: none; }
-.shell .chapter-plan-strip summary, .dsh-ui .chapter-plan-strip summary { display: flex; align-items: center; gap: 6px; }
-.shell .chapter-plan-strip summary::before, .dsh-ui .chapter-plan-strip summary::before { content: '▸'; font-size: 10px; color: var(--meta); }
-.shell .chapter-plan-strip[open] summary::before, .dsh-ui .chapter-plan-strip[open] summary::before { content: '▾'; }
-.shell .chapter-plan-strip-label, .dsh-ui .chapter-plan-strip-label { font-size: var(--text-xs); color: var(--fg-2); letter-spacing: .02em; }
-.shell .chapter-plan-beats, .dsh-ui .chapter-plan-beats { margin: 6px 0 2px; padding-left: 22px; display: grid; gap: 3px; font-size: var(--text-xs); color: var(--fg-2); }
-.shell .tree-row, .shell .tree-file-row, .dsh-ui .tree-row, .dsh-ui .tree-file-row { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 32px; width: 100%; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-chrome); line-height: 1.35; letter-spacing: .02em; }
+.shell .tree-row, .shell .tree-file-row, .dsh-ui .tree-row, .dsh-ui .tree-file-row { position: relative; display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 32px; width: 100%; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-chrome); line-height: 1.35; letter-spacing: .02em; }
+.shell .tree-row::before, .shell .tree-file-row::before, .dsh-ui .tree-row::before, .dsh-ui .tree-file-row::before { content: ''; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0; transform: scaleY(.2); transition: opacity var(--duration-quick) var(--ease-smooth-out), transform 220ms var(--ease-spring); }
 /* 章节状态徽标:行末单字胶囊,草/修/定三色。 */
 .shell .tree-row .chapter-status, .dsh-ui .tree-row .chapter-status { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 6px; margin-left: auto; border-radius: 999px; box-shadow: var(--elev-ring); font-size: 10px; font-weight: 500; line-height: 1; letter-spacing: .04em; }
 .shell .tree-row .chapter-status.draft, .dsh-ui .tree-row .chapter-status.draft { color: var(--muted); background: var(--surface-warm); }
@@ -393,7 +409,10 @@ export const componentStyles = `
 .shell .tree-row:hover, .shell .tree-file-row:hover, .dsh-ui .tree-row:hover, .dsh-ui .tree-file-row:hover { background: var(--surface); color: var(--fg); }
 /* 选中态用 accent-soft(墨蓝淡底)替代原本的灰底,让"我现在在写哪一章"更醒目。 */
 .shell .tree-row[aria-current="page"], .shell .tree-file-row[aria-current="page"], .dsh-ui .tree-row[aria-current="page"], .dsh-ui .tree-file-row[aria-current="page"] { background: var(--accent-soft); color: var(--fg); }
-.shell .tree-row[aria-current="page"]::before, .shell .tree-file-row[aria-current="page"]::before, .dsh-ui .tree-row[aria-current="page"]::before, .dsh-ui .tree-file-row[aria-current="page"]::before { content: ''; width: 2px; align-self: stretch; margin: -2px 2px -2px -2px; background: var(--accent); border-radius: 2px; }
+.shell .tree-row[aria-current="page"]::before, .shell .tree-file-row[aria-current="page"]::before, .dsh-ui .tree-row[aria-current="page"]::before, .dsh-ui .tree-file-row[aria-current="page"]::before { opacity: 1; transform: scaleY(1); }
+.shell .tree-directory-wrap > .tree-directory-wrap, .shell .tree-directory-wrap > .tree-file-row, .dsh-ui .tree-directory-wrap > .tree-directory-wrap, .dsh-ui .tree-directory-wrap > .tree-file-row { animation: shell-tree-row-in var(--duration-fast) var(--ease-smooth-out) both; }
+.shell .tree-directory-wrap > :nth-child(3), .dsh-ui .tree-directory-wrap > :nth-child(3) { animation-delay: var(--duration-stagger); }
+.shell .tree-directory-wrap > :nth-child(4), .dsh-ui .tree-directory-wrap > :nth-child(4) { animation-delay: calc(var(--duration-stagger) * 2); }
 .shell .tree-row.danger, .shell .tree-file-row.danger, .dsh-ui .tree-row.danger, .dsh-ui .tree-file-row.danger { color: var(--danger); }
 
 /* Image preview: host Dialog content is the image box, not a full-viewport click catcher. */
@@ -434,7 +453,7 @@ export const componentStyles = `
 }
 
 /* 搭档面板关闭后的右下角浮动入口 */
-.shell > .assistant-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 12; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--hairline-strong); border-radius: 999px; background: var(--surface); color: var(--fg); box-shadow: var(--elev-card); cursor: pointer; }
+.shell > .assistant-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 12; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--hairline-strong); border-radius: 999px; background: var(--surface); color: var(--fg); box-shadow: var(--elev-card); cursor: pointer; animation: shell-status-in var(--duration-medium) var(--ease-smooth-out) both; }
 .shell > .assistant-launcher:hover { background: var(--surface-warm); box-shadow: var(--elev-card), var(--elev-ring-accent); transform: translateY(-2px); }
 .shell > .assistant-launcher .whale-mark { width: 18px; height: 18px; color: var(--accent); }
 
@@ -448,15 +467,27 @@ export const componentStyles = `
 .shell .editor, .dsh-ui .editor { grid-row: 2; min-width: 0; min-height: 0; display: grid; grid-template-rows: var(--topbar-h) minmax(0, 1fr) auto; background: var(--surface); position: relative; z-index: 1; box-shadow: var(--elev-raised); }
 .shell .editor-header, .dsh-ui .editor-header { display: flex; align-items: center; gap: var(--space-3); min-width: 0; height: var(--topbar-h); padding: 0 24px 0 20px; border-bottom: 1px solid var(--hairline); background: var(--surface); color: var(--meta); font-size: var(--text-chrome); letter-spacing: .06em; }
 .shell .editor-header > span:first-child, .dsh-ui .editor-header > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-family: var(--font-serif); font-size: var(--text-md); font-weight: 500; letter-spacing: .12em; }
+.shell .editor-header > [data-testid="paper-path"], .dsh-ui .editor-header > [data-testid="paper-path"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.shell .editor-doc-title, .dsh-ui .editor-doc-title { order: -1; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-family: var(--font-serif); font-size: var(--text-md); font-weight: 500; letter-spacing: .12em; }
 .shell .editor-header > span:last-child, .dsh-ui .editor-header > span:last-child { margin-left: auto; white-space: nowrap; }
 .shell .editor-header > .editor-notice, .dsh-ui .editor-header > .editor-notice { margin-left: auto; max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .paper-experience-toggles, .dsh-ui .paper-experience-toggles { display: inline-flex; align-items: center; gap: 4px; }
 .shell .paper-experience-toggles button, .dsh-ui .paper-experience-toggles button { min-height: 32px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--meta); cursor: pointer; font-size: var(--text-chrome); letter-spacing: .04em; }
 .shell .paper-experience-toggles button[aria-pressed="true"], .dsh-ui .paper-experience-toggles button[aria-pressed="true"] { background: var(--bg); color: var(--fg); }
 .shell .editor-menu-trigger, .dsh-ui .editor-menu-trigger { min-width: 32px; min-height: 32px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--meta); cursor: pointer; font-size: 16px; letter-spacing: .12em; }
-.shell .editor-menu-trigger:hover, .shell .editor-menu-trigger[data-state="open"], .dsh-ui .editor-menu-trigger:hover, .dsh-ui .editor-menu-trigger[data-state="open"] { background: var(--bg); color: var(--fg); }
+.shell .editor-menu-trigger:hover, .shell .editor-menu-trigger[data-state="open"], .dsh-ui .editor-menu-trigger:hover, .dsh-ui .editor-menu-trigger[data-state="open"] { background: var(--bg); color: var(--fg); transform: translateY(-1px) scale(1.05); }
 .dsh-ui.editor-action-menu { z-index: 40; min-width: 220px; max-height: min(calc(100dvh - 24px), var(--radix-dropdown-menu-content-available-height, 90dvh)); overflow: auto; padding: 6px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-raised); }
-.dsh-ui.editor-action-menu[data-state="open"] { animation: shell-pop-in var(--motion-fast) var(--ease-spring); }
+.dsh-ui.editor-action-menu[data-state="open"] { animation: shell-pop-in 240ms var(--ease-spring); }
+.dsh-ui.editor-action-menu[data-state="closed"] { animation: shell-menu-out 110ms var(--ease) forwards; }
+/* 通用 Radix 菜单内容(未自带面板类名时)与菜单项错峰:开慢(240ms 回弹)、
+   关快(110ms),项级 40ms 逐级 delay,肉眼可辨但不拖沓。 */
+.dsh-ui.menu-content[data-state="open"] { animation: shell-pop-in 220ms var(--ease-spring); }
+.dsh-ui.menu-content[data-state="closed"] { animation: shell-menu-out 110ms var(--ease) forwards; }
+.dsh-ui[data-state] [role="menuitem"], .dsh-ui[data-state] [role="menuitemcheckbox"] { animation: shell-menu-item-in 180ms var(--ease-spring) both; }
+.dsh-ui[data-state] [role="menuitem"]:nth-child(3), .dsh-ui[data-state] [role="menuitemcheckbox"]:nth-child(3) { animation-delay: var(--duration-stagger); }
+.dsh-ui[data-state] [role="menuitem"]:nth-child(4), .dsh-ui[data-state] [role="menuitemcheckbox"]:nth-child(4) { animation-delay: calc(var(--duration-stagger) * 2); }
+.dsh-ui[data-state] [role="menuitem"]:nth-child(5), .dsh-ui[data-state] [role="menuitemcheckbox"]:nth-child(5) { animation-delay: calc(var(--duration-stagger) * 3); }
+.dsh-ui[data-state] [role="menuitem"]:nth-child(n+6) { animation-delay: calc(var(--duration-stagger) * 4); }
 .dsh-ui.editor-action-menu .editor-menu-item, .dsh-ui.editor-action-menu [role="menuitem"], .dsh-ui.editor-action-menu [role="menuitemcheckbox"] { width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-sm); color: var(--fg-2); outline: none; }
 .dsh-ui.editor-action-menu [role="menuitem"][data-highlighted], .dsh-ui.editor-action-menu [role="menuitemcheckbox"][data-highlighted], .dsh-ui.editor-action-menu [role="menuitem"][data-state="open"] { background: var(--surface); color: var(--fg); }
 .dsh-ui.editor-action-menu [data-disabled] { opacity: .45; cursor: not-allowed; }
@@ -467,8 +498,6 @@ export const componentStyles = `
 .dsh-ui.editor-action-menu .editor-menu-sub-arrow { float: right; margin-left: 16px; }
 .dsh-ui.editor-action-menu .editor-menu-separator { border: 0; border-top: 1px solid var(--hairline); margin: 4px 2px; }
 .dsh-ui.editor-action-dialog { width: min(440px, 100%); }
-.dsh-ui.editor-action-dialog .chapter-meta-body { display: grid; gap: 8px; }
-.dsh-ui.editor-action-dialog .chapter-meta-state { display: grid; grid-template-columns: repeat(auto-fit, minmax(8em, 1fr)); gap: 8px; }
 .shell .chapter-navigation, .dsh-ui .chapter-navigation { display: flex; align-items: center; gap: 2px; }
 .shell .chapter-navigation > span, .dsh-ui .chapter-navigation > span { font-size: 11px; color: var(--meta); padding: 0 4px; }
 .shell .chapter-navigation button, .dsh-ui .chapter-navigation button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; color: var(--meta); font-size: 16px; line-height: 1; }
@@ -513,7 +542,7 @@ export const componentStyles = `
 .shell .editor-notice, .dsh-ui .editor-notice { font-size: var(--text-xs); color: var(--muted); padding: 4px 8px; opacity: .85; }
 
 /* Selection patch proposal card. */
-.shell .proposal, .dsh-ui .proposal { position: relative; padding: 12px 14px 10px; margin: 14px 0 8px 0; max-width: 100%; background: var(--bg); box-shadow: var(--elev-ring); border-radius: var(--radius-md); display: grid; gap: 8px; }
+.shell .proposal, .dsh-ui .proposal { position: relative; padding: 12px 14px 10px; margin: 14px 0 8px 0; max-width: 100%; background: var(--bg); box-shadow: var(--elev-ring); border-radius: var(--radius-md); display: grid; gap: 8px; animation: shell-rise-in 240ms var(--ease-spring) both; }
 .shell .proposal > strong, .dsh-ui .proposal > strong { font: 500 var(--text-sm)/1.4 var(--font-sans); letter-spacing: .08em; color: var(--fg); }
 .shell .proposal p, .dsh-ui .proposal p { margin: 0; white-space: pre-wrap; font: 400 16px/1.85 var(--font-serif); letter-spacing: .03em; color: var(--fg-2); }
 .shell .proposal p:last-child, .dsh-ui .proposal p:last-child { color: var(--fg); }
@@ -567,6 +596,8 @@ export const componentStyles = `
 .shell .conversation-select .select-trigger, .dsh-ui .conversation-select .select-trigger { min-width: 0; max-width: 100%; min-height: 26px; padding: 0 var(--space-2); border-color: var(--hairline); color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; }
 .shell .conversation-menu, .dsh-ui .conversation-menu { position: relative; }
 .dsh-ui.conversation-menu-pop { z-index: 30; min-width: 8em; padding: 4px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-card); }
+.dsh-ui.conversation-menu-pop[data-state="open"] { animation: shell-pop-in 220ms var(--ease-spring); transform-origin: top right; }
+.dsh-ui.conversation-menu-pop[data-state="closed"] { animation: shell-menu-out 110ms var(--ease) forwards; }
 .dsh-ui.conversation-menu-pop [role="menuitem"] { width: 100%; padding: 7px 9px; border: 0; border-radius: var(--radius-xs); background: transparent; text-align: left; cursor: pointer; font-size: var(--text-sm); color: var(--fg-2); outline: none; }
 .dsh-ui.conversation-menu-pop [role="menuitem"][data-highlighted] { background: var(--bg); color: var(--fg); }
 .dsh-ui.conversation-menu-pop [role="menuitem"][data-disabled] { opacity: .45; cursor: not-allowed; }
@@ -615,6 +646,12 @@ export const componentStyles = `
 .shell details.chat-row p { margin: 4px 0 0; white-space: pre-wrap; line-height: 1.55; }
 .shell details.chat-row pre { max-height: 160px; overflow: auto; margin: 4px 0 0; padding: 6px 8px; background: var(--bg); white-space: pre-wrap; border-radius: var(--radius-sm); font-size: var(--text-xs); line-height: 1.5; max-width: 100%; }
 .shell details.chat-row small { display: block; margin-top: 4px; color: var(--meta); }
+/* 运行中(模型正在思考/调用工具)时,思考行标题旁的脉冲点让"在转"肉眼可见;
+   停止按钮用红色脉环提示可中止。data-running 由 chat.ts 按真实 lifecycle 写入。 */
+.shell .chat-history[data-running="true"] .chat-row.thinking summary::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; animation: shell-thinking-pulse 1.1s var(--ease) infinite; }
+.shell .composer .chat-stop { color: var(--danger); animation: shell-stop-pulse 1.4s var(--ease) infinite; }
+/* 待答卡片(授权/提问)入场:真实新增时播放一次,已挂载不重播。 */
+.shell .pending-card, .dsh-ui .pending-card { animation: shell-rise-in 240ms var(--ease-spring) both; }
 
 .shell .composer, .dsh-ui .composer { border-top: 1px solid var(--hairline); padding: 10px var(--space-3) 12px; background: var(--chrome-sunken); display: grid; gap: var(--space-2); width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
 .shell .composer textarea, .dsh-ui .composer textarea { width: 100%; min-height: 64px; max-height: 132px; padding: 10px 12px; background: var(--surface); box-shadow: var(--elev-ring); border-radius: var(--radius-md); font-size: var(--text-sm); line-height: 1.6; letter-spacing: .02em; color: var(--fg); resize: none; box-sizing: border-box; }
@@ -712,7 +749,12 @@ export const componentStyles = `
 .shell .home-recent-empty, .dsh-ui .home-recent-empty { margin: 0; color: var(--meta); font-size: var(--text-sm); padding: 12px 14px; border: 1px dashed var(--hairline-strong); border-radius: var(--radius-md); }
 .shell .workspace-list, .dsh-ui .workspace-list { display: grid; gap: 8px; }
 .shell .workspace-row, .dsh-ui .workspace-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); transition: background-color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease), box-shadow var(--motion-base) var(--ease); animation: shell-rise-in var(--motion-base) var(--ease-spring) both; }
-.shell .workspace-row:hover, .dsh-ui .workspace-row:hover { border-color: var(--accent-soft); transform: translateY(-1px); box-shadow: var(--elev-raised); }
+.shell .workspace-row:hover, .dsh-ui .workspace-row:hover { border-color: var(--accent-soft); transform: translateY(-2px); box-shadow: var(--elev-raised); }
+/* 首页最近作品行错峰入场(40ms 逐级)。 */
+.shell .workspace-list > :nth-child(2), .dsh-ui .workspace-list > :nth-child(2) { animation-delay: var(--duration-stagger); }
+.shell .workspace-list > :nth-child(3), .dsh-ui .workspace-list > :nth-child(3) { animation-delay: calc(var(--duration-stagger) * 2); }
+.shell .workspace-list > :nth-child(4), .dsh-ui .workspace-list > :nth-child(4) { animation-delay: calc(var(--duration-stagger) * 3); }
+.shell .workspace-list > :nth-child(n+5), .dsh-ui .workspace-list > :nth-child(n+5) { animation-delay: calc(var(--duration-stagger) * 4); }
 .shell .workspace-row .tree-row, .dsh-ui .workspace-row .tree-row { display: grid; gap: 3px; padding: 4px; text-align: left; }
 .shell .workspace-row .tree-row strong, .dsh-ui .workspace-row .tree-row strong { font: 500 var(--text-base)/1.35 var(--font-sans); letter-spacing: .02em; color: var(--fg); }
 .shell .workspace-row .tree-row small, .dsh-ui .workspace-row .tree-row small { color: var(--muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -762,7 +804,9 @@ export const componentStyles = `
 .shell.layout-shell:has(> .center-overlays [data-dsh-center-overlay]) > .empty-paper { display: none !important; }
 .shell.layout-shell.focus-mode { grid-template-columns: minmax(0, 1fr) !important; }
 .shell.layout-shell.focus-mode .editor-header { justify-content: center; }
-.shell.layout-shell.focus-mode .editor-header > *:not(:first-child):not(:last-child) { display: none; }
+.shell.layout-shell.focus-mode .editor-header .chapter-navigation { display: none; }
+.shell.layout-shell.focus-mode .editor-header [data-testid="paper-wordcount"],
+.shell.layout-shell.focus-mode .editor-header [data-testid="paper-save-state"] { opacity: .45; }
 .shell.layout-shell.focus-mode .paper-input { padding: 56px 64px; max-width: 880px; margin-inline: auto; }
 .shell.layout-shell.focus-mode .editor-tools { justify-content: center; }
 
@@ -784,12 +828,12 @@ export const componentStyles = `
 .palette-overlay[data-state="closed"] { animation: palette-overlay-out var(--motion-fast) var(--ease); }
 .palette-content { position: fixed; z-index: 41; top: 20vh; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); max-height: min(540px, 64dvh); display: flex; flex-direction: column; padding: 0; border: 1px solid var(--hairline-strong); border-radius: var(--radius-lg); background: var(--bg); box-shadow: var(--elev-card); overflow: hidden; }
 /* 进场带回弹、退场更快更直:开是"召唤",关是"退场",节奏刻意不同。 */
-.palette-content[data-state="open"] { animation: palette-content-in var(--motion-emphasis) var(--ease-spring); }
-.palette-content[data-state="closed"] { animation: palette-content-out var(--motion-fast) var(--ease); }
+.palette-content[data-state="open"] { animation: palette-content-in 260ms var(--ease-spring); }
+.palette-content[data-state="closed"] { animation: palette-content-out 110ms var(--ease) forwards; }
 @keyframes palette-overlay-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes palette-overlay-out { from { opacity: 1; } to { opacity: 0; } }
-@keyframes palette-content-in { from { opacity: 0; transform: translate(-50%, -10px) scale(.97); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
-@keyframes palette-content-out { from { opacity: 1; transform: translate(-50%, 0) scale(1); } to { opacity: 0; transform: translate(-50%, 5px) scale(.99); } }
+@keyframes palette-content-in { from { opacity: 0; transform: translate(-50%, -16px) scale(.96); filter: blur(3px); } to { opacity: 1; transform: translate(-50%, 0) scale(1); filter: blur(0); } }
+@keyframes palette-content-out { from { opacity: 1; transform: translate(-50%, 0) scale(1); } to { opacity: 0; transform: translate(-50%, 8px) scale(.98); filter: blur(2px); } }
 
 .palette-command { display: flex; flex-direction: column; min-height: 0; }
 .palette-search { display: flex; align-items: center; gap: var(--space-3); padding: 14px 16px; border-bottom: 1px solid var(--hairline); transition: border-color var(--motion-fast) var(--ease); }
@@ -803,8 +847,8 @@ export const componentStyles = `
 .palette-group { padding: 6px 0; }
 .palette-group + .palette-group { border-top: 1px solid var(--hairline); margin-top: 4px; padding-top: 10px; }
 .palette-group [cmdk-group-heading] { padding: 4px 12px 6px; font: 500 11px/1 var(--font-sans); letter-spacing: .14em; color: var(--meta); text-transform: uppercase; }
-.palette-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 10px; border-radius: var(--radius-md); cursor: pointer; color: var(--fg-2); transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease); }
-.palette-item[data-selected="true"] { background: var(--accent-soft); color: var(--fg); }
+.palette-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 10px; border-radius: var(--radius-md); cursor: pointer; color: var(--fg-2); transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease); }
+.palette-item[data-selected="true"] { background: var(--accent-soft); color: var(--fg); transform: translateX(3px); }
 .palette-item[data-disabled="true"] { opacity: .5; cursor: not-allowed; }
 .palette-item-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--radius-sm); background: var(--surface); color: var(--accent); flex: none; }
 .palette-item[data-selected="true"] .palette-item-icon { background: var(--accent); color: var(--accent-on); }
@@ -896,9 +940,12 @@ export const componentStyles = `
 .shell .settings-nav h2, .dsh-ui .settings-nav h2 { margin: 0 0 var(--space-3); padding: 0 var(--space-2); font: 600 var(--text-md)/1.4 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
 /* 左侧导航是纯净列表:无框无底,hover 淡底,active 用 accent 淡底 + 强调色。
    width 100% 显式撑满(Chromium 的 button 默认收缩到内容宽度),并压过 .file-dialog button 的 inline-flex/justify-content。 */
-.shell .settings-nav .settings-tab, .dsh-ui .settings-nav .settings-tab { display: flex; align-items: center; justify-content: flex-start; width: 100%; min-height: 32px; padding: 0 var(--space-3); border: 0; box-shadow: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-sm)/1.2 var(--font-sans); letter-spacing: .04em; text-align: left; }
+.shell .settings-nav .settings-tab, .dsh-ui .settings-nav .settings-tab { position: relative; display: flex; align-items: center; justify-content: flex-start; width: 100%; min-height: 32px; padding: 0 var(--space-3); border: 0; box-shadow: none; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-sm)/1.2 var(--font-sans); letter-spacing: .04em; text-align: left; transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease); }
 .shell .settings-nav .settings-tab:hover, .dsh-ui .settings-nav .settings-tab:hover { background: var(--surface-warm); color: var(--fg); }
 .shell .settings-nav .settings-tab.active, .dsh-ui .settings-nav .settings-tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+/* 纵向导航 active 指示条:从中心"长"出来,带轻微回弹;DOM 不变,纯装饰。 */
+.shell .settings-nav .settings-tab::after, .dsh-ui .settings-nav .settings-tab::after { content: ''; position: absolute; left: 4px; top: 50%; width: 3px; height: 0; translate: 0 -50%; border-radius: 2px; background: var(--accent); opacity: 0; transition: height 220ms var(--ease-spring), opacity 140ms var(--ease-smooth-out); }
+.shell .settings-nav .settings-tab.active::after, .dsh-ui .settings-nav .settings-tab.active::after { height: 16px; opacity: 1; }
 .shell .settings-body, .dsh-ui .settings-body { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .shell .settings-header, .dsh-ui .settings-header { display: flex; align-items: center; gap: var(--space-2); flex: none; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--hairline); }
 .shell .settings-header-title, .dsh-ui .settings-header-title { font: 600 var(--text-md)/1.4 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
@@ -925,9 +972,9 @@ export const componentStyles = `
 .shell .settings-row-title, .dsh-ui .settings-row-title { font: 500 var(--text-sm)/1.5 var(--font-sans); color: var(--fg); }
 .shell .settings-row-description, .dsh-ui .settings-row-description { color: var(--chrome-muted); font-size: var(--text-xs); }
 .shell .settings-segmented, .dsh-ui .settings-segmented { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-md); background: var(--bg-sunken); box-shadow: var(--elev-ring); }
-.shell .settings-segmented button, .dsh-ui .settings-segmented button { min-height: 24px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); }
+.shell .settings-segmented button, .dsh-ui .settings-segmented button { min-height: 24px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease); }
 .shell .settings-segmented button:hover, .dsh-ui .settings-segmented button:hover { color: var(--fg); }
-.shell .settings-segmented button.active, .dsh-ui .settings-segmented button.active { background: var(--surface); color: var(--fg); box-shadow: var(--elev-ring); }
+.shell .settings-segmented button.active, .dsh-ui .settings-segmented button.active { background: var(--surface); color: var(--fg); box-shadow: var(--elev-ring); transform: scale(1.04); }
 
 /* 下拉(Radix Select):触发钮留在 .shell 内;弹层 Portal 到 document.body,
    选择器因此不带 .shell 前缀(与 palette 同理),主题变量仍由 :root[data-theme]
@@ -945,9 +992,9 @@ export const componentStyles = `
 .shell .select-trigger[data-state="open"] .select-caret, .dsh-ui .select-trigger[data-state="open"] .select-caret { transform: rotate(180deg); }
 .select-list, .select-list *, .select-list *::before, .select-list *::after { box-sizing: border-box; }
 .select-list { z-index: 60; min-width: var(--radix-select-trigger-width); max-width: calc(100vw - 16px); padding: 0; border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); color: var(--fg); box-shadow: var(--elev-card); transform-origin: var(--radix-select-content-transform-origin); font: 400 var(--text-sm)/1.4 var(--font-sans); }
-.select-list[data-state="open"] { animation: shell-pop-in var(--motion-base) var(--ease-spring); }
-.select-list[data-state="closed"] { animation: shell-fade-out var(--motion-fast) var(--ease); }
-@keyframes shell-fade-out { from { opacity: 1; } to { opacity: 0; transform: translateY(-2px) scale(.98); } }
+.select-list[data-state="open"] { animation: shell-pop-in 240ms var(--ease-spring); }
+.select-list[data-state="closed"] { animation: shell-fade-out 110ms var(--ease) forwards; }
+@keyframes shell-fade-out { from { opacity: 1; } to { opacity: 0; transform: translateY(-3px) scale(.97); filter: blur(2px); } }
 .select-viewport { padding: 4px; max-height: min(320px, var(--radix-select-content-available-height, 50dvh)); overflow: auto; }
 .select-viewport::-webkit-scrollbar { width: 8px; }
 .select-viewport::-webkit-scrollbar-track { background: transparent; }
@@ -969,7 +1016,7 @@ export const componentStyles = `
 .shell .settings-content.is-active, .dsh-ui .settings-content.is-active { position: relative; z-index: 1; display: block; }
 .shell .sidebar-tools { min-width: 0; }
 @keyframes shell-panel-enter { from { opacity: 0; transform: translateY(6px); } }
-.shell .sidebar-tools > * { animation: shell-panel-enter var(--motion-base) var(--ease); }
+.shell .sidebar-tools > *:not(.memory-panel):not(.proofread-panel) { animation: shell-panel-enter var(--motion-base) var(--ease); }
 .shell .models-header, .dsh-ui .models-header { display: grid; gap: 4px; }
 .shell .models-title, .dsh-ui .models-title { margin: 0; font: 600 var(--text-md)/1.3 var(--font-sans); letter-spacing: .04em; color: var(--fg); }
 .shell .models-intro, .dsh-ui .models-intro { margin: 0; color: var(--chrome-muted); font-size: var(--text-xs); }
@@ -1073,7 +1120,7 @@ export const componentStyles = `
 .shell .about-progress-fill, .dsh-ui .about-progress-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--motion-fast) var(--ease); }
 .shell .about-download-meta, .dsh-ui .about-download-meta { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.6; }
 /* 启动更新提示:右下角轻量 toast,只在后台检查发现新版本时出现。 */
-.shell .update-toast, .dsh-ui .update-toast { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 40; display: flex; align-items: center; gap: var(--space-3); padding: 6px 6px 6px var(--space-3); border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-raised); font-size: var(--text-sm); color: var(--fg); animation: shell-rise-in var(--motion-base) var(--ease-spring); }
+.shell .update-toast, .dsh-ui .update-toast { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 40; display: flex; align-items: center; gap: var(--space-3); padding: 6px 6px 6px var(--space-3); border: 1px solid var(--hairline-strong); border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--elev-raised); font-size: var(--text-sm); color: var(--fg); animation: shell-toast-in var(--duration-medium) var(--ease-smooth-out) both; will-change: transform, opacity, filter; }
 .shell .update-toast-action, .dsh-ui .update-toast-action { min-height: 26px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-on); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); letter-spacing: .04em; }
 .shell .update-toast-action:hover, .dsh-ui .update-toast-action:hover { background: var(--accent-active); }
 .shell .update-toast-action:focus-visible, .dsh-ui .update-toast-action:focus-visible { box-shadow: var(--focus-ring); }
@@ -1111,7 +1158,7 @@ export const componentStyles = `
 .shell .usage-button:hover, .dsh-ui .usage-button:hover { background: var(--surface-warm); border-color: var(--hairline-strong); }
 @media (max-width: 560px) { .shell .usage-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-.shell .pinned-pane, .dsh-ui .pinned-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); box-shadow: var(--elev-raised); }
+.shell .pinned-pane, .dsh-ui .pinned-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); box-shadow: var(--elev-raised); animation: shell-disclosure-in var(--duration-medium) var(--ease-smooth-out) both; will-change: transform, opacity, filter; }
 .shell .pinned-header, .dsh-ui .pinned-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: 16px 24px 12px; border-bottom: 1px solid var(--hairline); }
 .shell .pinned-header h2, .dsh-ui .pinned-header h2 { margin: 0; font: 500 20px/1.2 var(--font-serif); letter-spacing: -.02em; color: var(--fg); }
 .shell .pinned-header p, .dsh-ui .pinned-header p { margin: 6px 0 0; }
@@ -1123,6 +1170,12 @@ export const componentStyles = `
 .shell .pinned-field dt, .dsh-ui .pinned-field dt { color: var(--meta); font: 500 var(--text-xs)/1.4 var(--font-sans); }
 .shell .pinned-field dd, .dsh-ui .pinned-field dd { margin: 0; color: var(--fg); font: 400 var(--text-sm)/1.5 var(--font-sans); }
 .shell .pinned-text, .dsh-ui .pinned-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 400 var(--text-sm)/1.65 var(--font-serif); color: var(--fg); }
+.shell .pinned-path, .dsh-ui .pinned-path { font-size: 11px; opacity: .55; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell .pinned-markdown, .dsh-ui .pinned-markdown { min-width: 0; overflow-wrap: anywhere; font: 400 var(--text-sm)/1.65 var(--font-serif); color: var(--fg); }
+.shell .pinned-markdown h1, .dsh-ui .pinned-markdown h1 { margin: 0 0 .6em; font: 500 1.15em/1.3 var(--font-serif); }
+.shell .pinned-markdown h2, .dsh-ui .pinned-markdown h2 { margin: 0 0 .5em; font: 500 1.05em/1.3 var(--font-serif); }
+.shell .pinned-markdown p, .dsh-ui .pinned-markdown p { margin: 0 0 .7em; }
+.shell .pinned-markdown ul, .shell .pinned-markdown ol, .dsh-ui .pinned-markdown ul, .dsh-ui .pinned-markdown ol { margin: 0 0 .7em; padding-left: 1.2em; }
 
 /* ── Responsive collapse ────────────────────────────────── */
 @media (max-width: 1040px) {
@@ -1148,10 +1201,11 @@ export const componentStyles = `
 /* Portaled chrome: tooltip, CSS dialog exit, control sizing. */
 .confirm-overlay { z-index: 55; }
 .tooltip-content { z-index: 70; padding: 6px 10px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-sm); background: var(--chrome-raised); color: var(--chrome-fg); font: 500 12px/1.3 var(--font-sans); box-shadow: var(--elev-raised); }
-.tooltip-content[data-state="delayed-open"], .tooltip-content[data-state="instant-open"] { animation: shell-pop-in var(--motion-fast) var(--ease-spring); }
+.tooltip-content[data-state="delayed-open"], .tooltip-content[data-state="instant-open"] { animation: shell-pop-in 200ms var(--ease-spring); }
+.tooltip-content[data-state="closed"] { animation: shell-menu-out 100ms var(--ease) forwards; }
 .file-dialog-overlay[data-state="closed"], .dsh-ui.file-dialog-overlay[data-state="closed"] { pointer-events: none; animation: shell-fade-out var(--motion-fast) var(--ease) forwards; }
 .file-dialog[data-state="closed"], .dsh-ui.file-dialog[data-state="closed"] { pointer-events: none; animation: shell-dialog-out var(--motion-fast) var(--ease) forwards; }
-@keyframes shell-dialog-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px) scale(.98); } }
+@keyframes shell-dialog-out { from { opacity: 1; transform: none; filter: blur(0); } to { opacity: 0; transform: translateY(10px) scale(.97); filter: blur(2px); } }
 .dsh-ui .ui-button, .dsh-ui.file-dialog .ui-button { min-height: var(--control-h); }
 .dsh-ui .ui-input, .dsh-ui.file-dialog .ui-input { min-height: var(--control-h); padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
 .dsh-ui [role="tablist"] { display: flex; flex-direction: row; gap: 2px; width: 100%; }
@@ -1174,10 +1228,12 @@ export const componentStyles = `
   .palette-overlay, .palette-overlay::before, .palette-overlay::after,
   .palette-content, .palette-content *, .palette-content *::before, .palette-content *::after,
   .select-list, .select-list *, .select-list *::before, .select-list *::after,
-  .tooltip-content, .tooltip-content *, .file-context-menu, .file-context-menu * {
+  .tooltip-content, .tooltip-content *, .file-context-menu, .file-context-menu *,
+  [data-radix-popper-content-wrapper], [data-radix-popper-content-wrapper] * {
     scroll-behavior: auto !important;
     transition: none !important;
     animation: none !important;
+    filter: none !important;
   }
   .shell *:hover, .shell *:active, .dsh-ui *:hover, .dsh-ui *:active { transform: none !important; }
   .shell .settings-page, .dsh-ui .settings-page { opacity: 1 !important; transform: none !important; }

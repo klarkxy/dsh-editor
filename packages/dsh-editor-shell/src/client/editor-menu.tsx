@@ -23,12 +23,9 @@ export type EditorMenuAction =
   | 'complete'
   | 'rewrite'
   | 'proofread'
-  | 'chapterPlan'
-  | 'chapterSummary'
 
 export type EditorMenuModel = {
   state: EditorCommandState
-  canChapterMeta: boolean
   canRewritePath: boolean
 }
 
@@ -58,9 +55,6 @@ export function EditorActionMenuItems(props: {
       <MenuLabel className="editor-menu-label">{t('editor.groupAssist')}</MenuLabel>
       <MenuItem className={ITEM} disabled={!state.canComplete} data-testid="editor-menu-complete" onSelect={() => props.onAction('complete')}>{t('editor.complete')}</MenuItem>
       <MenuItem className={ITEM} disabled={rewriteDisabled} data-testid="editor-menu-rewrite" onSelect={() => props.onAction('rewrite')}>{t('editor.rewrite')}</MenuItem>
-      <MenuSeparator className="editor-menu-separator" aria-hidden="true" />
-      <MenuItem className={ITEM} disabled={!props.model.canChapterMeta} data-testid="editor-menu-chapter-meta" onSelect={() => props.onAction('chapterPlan')}>{t('chapterMeta.planTitle')}</MenuItem>
-      <MenuItem className={ITEM} disabled={!props.model.canChapterMeta} data-testid="editor-menu-chapter-summary" onSelect={() => props.onAction('chapterSummary')}>{t('chapterMeta.summaryTitle')}</MenuItem>
     </>
   )
 }
