@@ -217,7 +217,9 @@ try {
   await shot(page, 'workbench-paper', '工作台 · 纸主题：稿件目录、四组资料、稿纸、写入内容')
 
   // 03 — manual FIM attempt: editor stays usable while the FIM notice shows.
-  await page.getByRole('button', { name: /^(补全|停止补全|重新补全)$/ }).click()
+  // 正文常驻控件精简后(compactControls),手动补全收进「⋯」正文操作菜单。
+  await page.getByTestId('paper-editor-menu-trigger').click()
+  await page.getByTestId('editor-menu-complete').click()
   await page.waitForFunction(() => {
     const notice = document.querySelector('[data-testid="paper-notice"]')?.textContent || ''
     return notice.includes('正在生成补全')
