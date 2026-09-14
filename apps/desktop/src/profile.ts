@@ -1,7 +1,7 @@
-import { cp, mkdir, readdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { copyFile, cp, lstat, mkdir, readdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { restoreUserPlugins } from './user-plugins.js'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { isAbsolute, join, resolve as resolvePath } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 export const PROFILE_NAME = 'dsh-editor'
@@ -45,6 +45,27 @@ async function renameDirectory(source: string, target: string): Promise<void> {
   }
 }
 
+/** Copy a profile template, recreating Windows junctions instead of following or file-symlinking them. */
+async function copyTemplateTree(source: string, target: string): Promise<void> {
+  await mkdir(target, { recursive: true })
+  const entries = await readdir(source, { withFileTypes: true })
+  for (const entry of entries) {
+    const from = join(source, entry.name)
+    const to = join(target, entry.name)
+    const link = entry.isSymbolicLink() || (await lstat(from)).isSymbolicLink()
+    if (link) {
+      const real = await readlink(from)
+      await symlink(isAbsolute(real) ? real : resolvePath(source, real), to, 'junction')
+      continue
+    }
+    if (entry.isDirectory()) {
+      await copyTemplateTree(from, to)
+      continue
+    }
+    await copyFile(from, to)
+  }
+}
+
 /** Deploy only the marked profile, staging beside it so DSH home data survives. */
 export async function deployProfile(home: string, template: string, runtimeNodeModules?: string): Promise<string> {
   const profiles = join(home, 'profiles')
@@ -56,7 +77,7 @@ export async function deployProfile(home: string, template: string, runtimeNodeM
   const stage = join(profiles, `.${PROFILE_NAME}.stage-${nonce}`)
   const backup = join(profiles, `.${PROFILE_NAME}.backup-${nonce}`)
   try {
-    await cp(template, stage, { recursive: true, force: false, errorOnExist: true })
+    await copyTemplateTree(template, stage)
     if (runtimeNodeModules) {
       const peerParent = join(stage, 'node_modules', '@deepseek-ai')
       await mkdir(peerParent, { recursive: true })

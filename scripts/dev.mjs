@@ -1,6 +1,6 @@
 /** Build/watch the private profile and launch the Electron product window. */
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
@@ -80,9 +80,35 @@ for (const path of [prepareDesktopDev, electronCli]) {
   }
 }
 
+function packageHasBuildOutput(name) {
+  const dir = resolve(root, 'packages', name)
+  return existsSync(resolve(dir, 'lib/index.js')) || existsSync(resolve(dir, 'lib/client.js'))
+}
+
+function newestMtime(dir) {
+  let newest = 0
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = resolve(dir, entry.name)
+    newest = Math.max(newest, entry.isDirectory() ? newestMtime(path) : statSync(path).mtimeMs)
+  }
+  return newest
+}
+
+const composition = await desktopComposition()
+const pluginNames = compositionInstallNames(composition)
+const desktopMain = resolve(root, 'apps', 'desktop', 'dist', 'main.js')
+const forceBuild = process.env.DSH_DEV_FORCE_BUILD === '1'
+const pluginsReady = pluginNames.every(packageHasBuildOutput)
+const desktopReady = existsSync(desktopMain)
+  && newestMtime(resolve(root, 'apps', 'desktop', 'src')) <= statSync(desktopMain).mtimeMs
+
 console.log(`dev: DSH ${dsh.version}, isolated home ${devHome}`)
-console.log('dev: building the desktop profile plugins')
-await runNode(pnpmCli, ['-r', 'build'])
+if (forceBuild || !pluginsReady || !desktopReady) {
+  console.log('dev: building the desktop profile plugins')
+  await runNode(pnpmCli, ['-r', 'build'])
+} else {
+  console.log('dev: reusing existing package builds (set DSH_DEV_FORCE_BUILD=1 to rebuild)')
+}
 
 await runNode(prepareDesktopDev, [])
 
@@ -91,7 +117,7 @@ if (process.env.DSH_DESKTOP_PREPARE_ONLY === '1') {
   process.exit(0)
 }
 
-const composition = await desktopComposition()
+console.log('dev: starting plugin watchers and Electron')
 const wrapClients = new Set(clientPackages(loadPluginManifests(root)))
 const children = compositionInstallNames(composition).map(name => spawnNode(pnpmCli, [
   '--filter', name, 'exec', 'tsdown', '--watch', '--no-clean',
@@ -99,6 +125,7 @@ const children = compositionInstallNames(composition).map(name => spawnNode(pnpm
 ]))
 const electron = spawnNode(electronCli, [resolve(root, 'apps', 'desktop', 'dist', 'main.js')])
 children.push(electron)
+console.log('dev: Electron launched; keep this terminal open. The window may take a few seconds.')
 
 let stopping = false
 function shutdown(code = 0) {

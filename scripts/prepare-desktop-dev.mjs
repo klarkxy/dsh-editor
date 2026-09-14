@@ -22,19 +22,28 @@ function packageCopyFilter(source) {
   return !normalized.includes('/node_modules/') &&
     !normalized.includes('/src/') &&
     !normalized.includes('/test/') &&
+    !normalized.endsWith('.map') &&
     !normalized.endsWith('/tsconfig.json') &&
     !normalized.endsWith('/tsdown.config.ts')
+}
+
+async function installPackage(packageName, destination) {
+  await rm(destination, { recursive: true, force: true })
+  const source = resolve(root, 'packages', packageName)
+  if (process.env.DSH_EDITOR_COPY_PACKAGES === '1') {
+    await cp(source, destination, { recursive: true, filter: packageCopyFilter })
+    return
+  }
+  await symlink(source, destination, 'junction')
 }
 
 await rm(template, { recursive: true, force: true })
 await mkdir(dirname(template), { recursive: true })
 await cp(sourceTemplate, template, { recursive: true })
 await configureProfile(template, composition)
+await mkdir(resolve(template, 'node_modules'), { recursive: true })
 for (const packageName of packages) {
-  await cp(resolve(root, 'packages', packageName), resolve(template, 'node_modules', packageName), {
-    recursive: true,
-    filter: packageCopyFilter,
-  })
+  await installPackage(packageName, resolve(template, 'node_modules', packageName))
 }
 
 let runtimeReady = false
@@ -53,11 +62,8 @@ if (!runtimeReady) {
 }
 for (const packageName of DESKTOP_PACKAGE_NAMES) {
   const destination = resolve(devDshRuntime, 'node_modules', packageName)
-  await rm(destination, { recursive: true, force: true })
-  if (packages.includes(packageName)) {
-    if (process.env.DSH_EDITOR_COPY_PACKAGES === '1') await cp(resolve(root, 'packages', packageName), destination, { recursive: true, filter: packageCopyFilter })
-    else await symlink(resolve(root, 'packages', packageName), destination, 'junction')
-  }
+  if (packages.includes(packageName)) await installPackage(packageName, destination)
+  else await rm(destination, { recursive: true, force: true })
 }
 
 console.log(`desktop-dev: prepared ${template}`)

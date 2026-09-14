@@ -68,11 +68,11 @@ e2e/                           Playwright 验收脚本
 
 ## `pnpm run dev`
 
-桌面入口先构建全部 workspace，再运行 `prepare-desktop-dev.mjs`：
+桌面入口在缺少 `lib/` 或 `apps/desktop/dist` 产物时全量构建 workspace；产物已在则跳过，由 watcher 增量编译。设 `DSH_DEV_FORCE_BUILD=1` 可强制重编。随后运行 `prepare-desktop-dev.mjs`：
 
 1. 验证 Windows x64、Node 和 DSH 精确版本；
 2. 将 DSH 依赖闭包物化到 `.dev/desktop-dsh-runtime`；
-3. 按 `scripts/plugin-manifest.mjs` 解析当前 recipe，把选中的包与被依赖的库（`libraries`，如 workspace-kit）物化到 `.dev/desktop-profile-template/node_modules`；
+3. 按 `scripts/plugin-manifest.mjs` 解析当前 recipe，把选中的包与被依赖的库（`libraries`，如 workspace-kit）以目录联接放到 `.dev/desktop-profile-template/node_modules`（`DSH_EDITOR_COPY_PACKAGES=1` 时改为拷贝，且不带 `.map`）；
 4. 使用 `.dev/desktop-home`；
 5. 启动该组合的插件 watcher 和 Electron；
 6. Electron 部署带 owner marker 的 `profiles/dsh-editor`；

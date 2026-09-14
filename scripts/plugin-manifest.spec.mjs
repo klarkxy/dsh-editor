@@ -17,6 +17,17 @@ import {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
+describe('desktop dev prepare', () => {
+  it('links workspace packages into the template instead of copying plugin bundles', () => {
+    const prepare = readFileSync(resolve(root, 'scripts/prepare-desktop-dev.mjs'), 'utf8')
+    expect(prepare).toContain("await symlink(source, destination, 'junction')")
+    expect(prepare).toContain("!normalized.endsWith('.map')")
+    const dev = readFileSync(resolve(root, 'scripts/dev.mjs'), 'utf8')
+    expect(dev).toContain('reusing existing package builds')
+    expect(dev).toContain('DSH_DEV_FORCE_BUILD')
+  })
+})
+
 describe('plugin manifests and composition resolver', () => {
   const manifests = loadPluginManifests(root)
 

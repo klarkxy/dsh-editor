@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { once } from 'node:events'
 import { spawn } from 'node:child_process'
 import { PassThrough } from 'node:stream'
-import { copyFile, mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { copyFile, lstat, mkdtemp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -241,6 +241,22 @@ describe('profile deployment', () => {
     await deployProfile(root, template)
     expect(await readFile(join(deployed, 'agent.cordis.yml'), 'utf8')).toBe('# v2\n')
     expect((await (await import('node:fs/promises')).readdir(join(root, '.agent-presets'))).some((name) => name.includes('.stage-') || name.includes('.backup-'))).toBe(false)
+  })
+  it('keeps template package junctions as links so desktop restarts do not recopy plugin bundles', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    const template = join(root, 'template')
+    const pkg = join(root, 'packages', 'dsh-editor-shell')
+    await mkdir(join(pkg, 'lib'), { recursive: true })
+    await writeFile(join(pkg, 'lib', 'index.js'), 'export {}\n')
+    await mkdir(join(template, 'node_modules'), { recursive: true })
+    await writeFile(join(template, 'package.json'), '{}')
+    await symlink(pkg, join(template, 'node_modules', 'dsh-editor-shell'), 'junction')
+    const installed = await deployProfile(root, template)
+    const linked = join(installed, 'node_modules', 'dsh-editor-shell', 'lib', 'index.js')
+    expect(await readFile(linked, 'utf8')).toBe('export {}\n')
+    await writeFile(join(pkg, 'lib', 'index.js'), 'export const live = 1\n')
+    expect(await readFile(linked, 'utf8')).toBe('export const live = 1\n')
+    expect((await lstat(join(installed, 'node_modules', 'dsh-editor-shell'))).isSymbolicLink()).toBe(true)
   })
   it('fails closed when a preset id is occupied by an unmarked directory', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
