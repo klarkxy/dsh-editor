@@ -237,8 +237,9 @@ describe('shell manuscript RPC safety', () => {
     expect(root).not.toContain("openTreeCreate('folder', '')")
     expect(root).not.toContain('＋文件')
     expect(root).not.toContain('＋文件夹')
-    expect(root).toContain("onCreateFile: (directory: string) => openTreeCreate('file', directory)")
-    expect(root).toContain("onCreateFolder: (directory: string) => openTreeCreate('folder', directory)")
+    /* 树内新建仍统一走 openTreeCreate（回调已固化为 useCallback 供 memo 列复用）。 */
+    expect(root).toContain("openTreeCreate('file', directory)")
+    expect(root).toContain("openTreeCreate('folder', directory)")
     expect(root).toContain("'directory.create'")
     /* 文件名无扩展名时按 .md 创建 */
     expect(root).toContain("`${name}.md`")
@@ -519,7 +520,8 @@ describe('shell manuscript RPC safety', () => {
     const palette = readFileSync(new URL('./client/command-palette.tsx', import.meta.url), 'utf8')
     const statusView = readFileSync(new URL('./chapter-status-view.ts', import.meta.url), 'utf8')
     expect(source).toContain('CENTER_OVERLAYS_SLOT')
-    expect(source).toContain('chapterStatuses: buildChapterStatusMap(overview)')
+    /* 章状态映射提升为按 overview memo 的派生值（身份稳定，Tree 列才能跳过无关重渲染）。 */
+    expect(source).toContain('useMemo(() => buildChapterStatusMap(overview), [overview])')
     expect(source).toContain('progress.record')
     expect(source).not.toContain('OverviewPanel')
     expect(source).not.toContain('openOverviewPanel')

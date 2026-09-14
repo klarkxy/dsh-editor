@@ -2,15 +2,16 @@ import { m, useReducedMotion } from 'motion/react'
 
 export { m }
 
-export type ChromeMotionKind = 'card' | 'panel' | 'page' | 'message'
+export type ChromeMotionKind = 'card' | 'panel' | 'page'
 /* Panel 入场方向:侧栏从左、聊天下拉从右、设置/首页内容从下。 */
 export type PanelDirection = 'left' | 'right' | 'up' | 'down'
 
 /*
- * 统一的 chrome 入场词汇表。位移给足(卡片 24px / 面板 24px / 页面 16px /
- * 消息 12px),卡片与页面带 scale + blur,spring 阻尼刻意放低让回弹肉眼可见。
+ * 统一的 chrome 入场词汇表。位移给足(卡片 24px / 面板 24px / 页面 16px),
+ * 卡片与页面带 scale + blur,spring 阻尼刻意放低让回弹肉眼可见。
  * prefers-reduced-motion 时返回静止最终态(initial: false,零时长),
  * hover/tap 反馈一并关闭。
+ * 聊天条目入场不走这里:用 styles.ts 的 .chat-row-enter / shell-message-in。
  */
 export function useChromeMotion(kind: ChromeMotionKind, delay = 0, direction: PanelDirection = 'up') {
   const reduce = useReducedMotion()
@@ -68,12 +69,5 @@ export function useChromeMotion(kind: ChromeMotionKind, delay = 0, direction: Pa
       },
     }
   }
-  return {
-    /* 新消息:12px 上滑,回弹轻,不打断阅读。 */
-    initial: { opacity: 0, y: 12, scale: 0.99 },
-    animate: { opacity: 1, y: 0, scale: 1 },
-    whileHover: undefined,
-    whileTap: undefined,
-    transition: { type: 'spring' as const, stiffness: 400, damping: 27, mass: 0.7, delay },
-  }
+  throw new Error(`unknown chrome motion kind: ${String(kind)}`)
 }

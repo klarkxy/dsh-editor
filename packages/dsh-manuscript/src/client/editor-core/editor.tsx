@@ -1,4 +1,4 @@
-import { createElement as e, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { createElement as e, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, redo, redoDepth, undo, undoDepth } from '@codemirror/commands'
@@ -280,6 +280,10 @@ export type EditorCoreSlot =
 const SESSION_DRAFT_KEY = (cwd: string, path: string) =>
   `dsh-editor:draft:${encodeURIComponent(`${cwd}\u0000${path}`)}`
 
+/* 键入时权威文本同步进 textRef；驱动字数统计/投影/头部 UI 的 React `text` state
+   由尾部去抖收敛，一次击键连发只全量穿透 React 一次，而不是每键一次。 */
+const TEXT_STATE_FLUSH_DELAY_MS = 150
+
 const IDENTITY_PROJECTION: EditorCorePaperProjection = {
   project: (_path, text) => ({ text, offset: 0 }),
   replace: (_path, _text, paperText) => paperText,
@@ -450,6 +454,10 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
      冲突期间同步 put 必须沿用这个 base，否则重启后冲突会凭空消失、
      autosave 可能拿旧备份覆盖新正文。保存/放弃/重新载入时清空。 */
   const draftBaseRef = useRef<{ text: string; version: string } | null>(null)
+  /* 去抖挂起期间存活的 timer；显式 setText / 保存 / 失焦 / 切章 / 卸载都会立即收敛或取消。 */
+  const textFlushTimer = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null)
+  /* 脏标记上次上报值，仅在实际变化时回调 onDirtyChange。 */
+  const lastDirtyReportedRef = useRef<boolean | null>(null)
 
   const docRef = useRef<EditorDocument | null>(null)
   const textRef = useRef('')
@@ -473,7 +481,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const completionEnabledRef = useRef(completionEnabled)
   const enablePatchRef = useRef(enablePatch)
   docRef.current = doc
-  textRef.current = text
   revisionRef.current = revision
   ghostCandidatesRef.current = ghostCandidates
   ghostAtRef.current = ghostAt
@@ -498,18 +505,29 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const reportError = useCallback((next: string) => { setError(next); onError?.(next) }, [onError])
   const clearGhost = useCallback(() => { ghostSourceRef.current = null; setGhostCandidates([]); setGhostIndex(0) }, [])
 
-  const paperOffset = paperProjection.project(path, text).offset
-  const paperText = paperProjection.project(path, text).text
-  const state: SaveState = documentReady ? saveState(doc, text, conflict) : error ? 'error' : path ? 'loading' : 'empty'
+  const projected = useMemo(() => paperProjection.project(path, text), [paperProjection, path, text])
+  const paperOffset = projected.offset
+  const paperText = projected.text
+  const wordCount = useMemo(() => paperText.replace(/\s/g, '').length, [paperText])
+  const state: SaveState = documentReady ? saveState(doc, textRef.current, conflict) : error ? 'error' : path ? 'loading' : 'empty'
   const ghost = ghostCandidates[ghostIndex] ?? ''
 
   useEffect(() => { setStatus(state) }, [state, setStatus])
 
   useEffect(() => {
-    onDirtyChange?.(Boolean(doc && isDirty(doc, text)) || conflict)
-  }, [doc, text, conflict, onDirtyChange])
+    /* 键入只同步 bump revision（text state 去抖），脏标记按最新 textRef 计算，
+       且仅在布尔值实际变化时上报，避免每次击键都穿透到宿主 setState。 */
+    const dirty = Boolean(doc && isDirty(doc, textRef.current)) || conflict
+    if (lastDirtyReportedRef.current === dirty) return
+    lastDirtyReportedRef.current = dirty
+    onDirtyChange?.(dirty)
+  }, [doc, revision, conflict, onDirtyChange])
 
-  const setText = useCallback((next: string) => {
+  /* 缓冲区唯一写入入口。deferState 仅供稿纸键入路径使用：textRef / revision 仍同步更新
+     （保存、脏标记、建议失效、冲突检测立刻准确），而驱动字数统计与投影的 React
+     text state 交给 scheduleTextFlush 做尾部去抖，避免每次击键全量穿透 React。 */
+  const setText = useCallback((next: string, deferState = false) => {
+    if (textFlushTimer.current != null) { globalThis.clearTimeout(textFlushTimer.current); textFlushTimer.current = null }
     if (loadingFim || patching) report('正文已变化，已停止此前的建议。')
     fimAbort.current?.abort()
     patchAbort.current?.abort()
@@ -517,13 +535,28 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     setPatching(false)
     textRef.current = next
     revisionRef.current += 1
-    setTextState(next)
+    if (!deferState) setTextState(next)
     setRevision(revisionRef.current)
     clearGhost()
     setProposal(null)
   }, [loadingFim, patching, report, clearGhost])
 
+  const scheduleTextFlush = useCallback(() => {
+    if (textFlushTimer.current != null) globalThis.clearTimeout(textFlushTimer.current)
+    textFlushTimer.current = globalThis.setTimeout(() => {
+      textFlushTimer.current = null
+      setTextState(textRef.current)
+    }, TEXT_STATE_FLUSH_DELAY_MS)
+  }, [])
+
+  /* 保存 / 失焦时立即收敛去抖，保证读取 React state 的 UI（字数、状态标签）不落旧值。 */
+  const flushText = useCallback(() => {
+    if (textFlushTimer.current != null) { globalThis.clearTimeout(textFlushTimer.current); textFlushTimer.current = null }
+    setTextState(textRef.current)
+  }, [])
+
   useEffect(() => {
+    if (textFlushTimer.current != null) { globalThis.clearTimeout(textFlushTimer.current); textFlushTimer.current = null }
     fimAbort.current?.abort()
     patchAbort.current?.abort()
     setLoadingFim(false)
@@ -542,7 +575,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     loadedGenerationRef.current = -1
     docRef.current = null
     setDoc(null)
-    if (!path) { setDoc(null); setTextState(''); setNote(''); return }
+    if (!path) { setDoc(null); textRef.current = ''; setTextState(''); setNote(''); return }
     let live = true
     void (async () => {
       const readResult = await rpc.call('/manuscript', 'file.read', { sessionId, path }).catch((error: unknown) => ({
@@ -618,7 +651,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     const timer = globalThis.setTimeout(() => {
       if (!isDocumentReady() || docRef.current?.path !== doc.path) return
       if (draft.kind === 'host') {
-        const endpoint = text === doc.text ? 'draft.delete' : 'draft.put'
+        const current = textRef.current
+        const endpoint = current === doc.text ? 'draft.delete' : 'draft.put'
         /* 冲突期间沿用恢复时的 baseText/baseVersion；base 与 disk 一致时退化为当前 doc。 */
         const base = draftBaseRef.current
         const payload = endpoint === 'draft.delete'
@@ -626,7 +660,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           : {
             sessionId: doc.sessionId,
             path: doc.path,
-            text,
+            text: current,
             baseText: base ? base.text : doc.text,
             baseVersion: base ? base.version : doc.version,
           }
@@ -638,19 +672,22 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
         try {
           const key = SESSION_DRAFT_KEY(cwd, doc.path)
-          if (text === doc.text) globalThis.sessionStorage.removeItem(key)
-          else globalThis.sessionStorage.setItem(key, JSON.stringify({ ...doc, text }))
+          const current = textRef.current
+          if (current === doc.text) globalThis.sessionStorage.removeItem(key)
+          else globalThis.sessionStorage.setItem(key, JSON.stringify({ ...doc, text: current }))
         } catch { /* best effort */ }
       }
     }, delay)
     return () => globalThis.clearTimeout(timer)
-  }, [draft, doc, text, cwd, report])
+  }, [draft, doc, revision, cwd, report])
 
   const save = useCallback(async (): Promise<boolean> => {
     /* conflict 必须先经 放弃/重新载入/另存副本 解决，Ctrl+S 不得绕过。 */
     const savingDoc = docRef.current
     if (!savingDoc || !isDocumentReady() || saving.current) return false
     if (conflictRef.current) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
+    /* 保存以 textRef 为准已包含最新键入；这里同步收敛去抖，让读 React state 的 UI 一致。 */
+    flushText()
     const startGeneration = documentGenerationRef.current
     saving.current = true
     report('正在保存…')
@@ -709,13 +746,13 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     } finally {
       saving.current = false
     }
-  }, [rpc, draft, cwd, report, reportError, onSaved])
+  }, [rpc, draft, cwd, report, reportError, onSaved, flushText])
 
   useEffect(() => {
-    if (!doc || !isDocumentReady() || text === doc.text || conflict) return
+    if (!doc || !isDocumentReady() || textRef.current === doc.text || conflict) return
     const timer = globalThis.setTimeout(() => { void save() }, autoSaveDelayMs)
     return () => globalThis.clearTimeout(timer)
-  }, [doc, text, conflict, autoSaveDelayMs, save])
+  }, [doc, revision, conflict, autoSaveDelayMs, save])
 
   const discard = useCallback(() => {
     if (!doc || !isDocumentReady() || docRef.current !== doc) return
@@ -762,11 +799,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
 
   useEffect(() => {
     if (!enableBeforeUnload) return
-    if (!doc || (!isDirty(doc, text) && !conflict)) return
+    if (!doc || (!isDirty(doc, textRef.current) && !conflict)) return
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
     globalThis.addEventListener('beforeunload', warn)
     return () => globalThis.removeEventListener('beforeunload', warn)
-  }, [enableBeforeUnload, doc, text, conflict])
+  }, [enableBeforeUnload, doc, revision, conflict])
 
   const complete = useCallback(async (append = false) => {
     if (!doc || !isDocumentReady() || docRef.current !== doc || isGenerating() || viewRef.current?.composing) return
@@ -1104,7 +1141,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     if (!isDocumentReady() || !source || source.generation !== documentGenerationRef.current || source.revision !== revisionRef.current || !canApplyGhost(state, ghost)) return
     const cursor = ghostAt + ghost.length
     pendingCursorRef.current = Math.max(0, cursor - paperOffset)
-    setText(applyGhost(text, ghostAt, ghost))
+    setText(applyGhost(textRef.current, ghostAt, ghost))
     clearGhost()
     report('补全已加入草稿。')
     globalThis.setTimeout(() => { viewRef.current?.focus() }, 0)
@@ -1118,7 +1155,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     }
     const cursor = proposal.ticket.start + proposal.text.length
     pendingCursorRef.current = Math.max(0, cursor - paperOffset)
-    setText(applySelectionPatch(text, proposal.ticket, proposal.text))
+    setText(applySelectionPatch(textRef.current, proposal.ticket, proposal.text))
     setProposal(null)
     report('修改已加入草稿。')
     globalThis.setTimeout(() => { viewRef.current?.focus() }, 0)
@@ -1155,6 +1192,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   // latest render's closures.
   const callbacksRef = useRef({
     setTextFromPaper: (_paper: string) => {},
+    flushText: () => {},
     onSelection: (_start: number, _end: number) => {},
     acceptGhost: () => {},
     acceptPatch: () => {},
@@ -1169,9 +1207,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   })
   callbacksRef.current = {
     setTextFromPaper: (paper: string) => {
-      setText(paperProjection.replace(path, textRef.current, paper))
+      setText(paperProjection.replace(path, textRef.current, paper), true)
       setUserEditRevision((old) => old + 1)
+      scheduleTextFlush()
     },
+    flushText,
     onSelection: (start: number, end: number) => {
       setSelection({ start, end })
       setHasSelection(start !== end)
@@ -1242,6 +1282,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
               })
               return true
             },
+            blur() {
+              // Leaving the paper settles the debounced text state so header UI
+              // (word count / status) reflects the final buffer immediately.
+              cb.current.flushText()
+            },
           })),
           Prec.high(keymap.of([
             {
@@ -1295,6 +1340,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     // Test handle for e2e scripts: read/write the document via evaluate.
     ;(container as unknown as { __cmView: EditorView }).__cmView = view
     return () => {
+      if (textFlushTimer.current != null) { globalThis.clearTimeout(textFlushTimer.current); textFlushTimer.current = null }
       view.destroy()
       viewRef.current = null
       delete (container as unknown as { __cmView?: EditorView }).__cmView
@@ -1323,19 +1369,23 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
 
   // Replace a loaded document without carrying undo entries across chapters.
   // Local edits keep their existing history and flow back through the listener.
+  // The dispatch guard compares CM against the authoritative textRef — never the
+  // debounced React state — so a lagging flush can never wipe fresh keystrokes,
+  // while external updates (load / chapter switch / proposal apply) still land.
   useEffect(() => {
     const view = viewRef.current
     if (!view || !isDocumentReady()) return
     const generation = documentGenerationRef.current
     const changedDocument = syncedGenerationRef.current !== generation
     if (changedDocument) view.dispatch({ effects: writingCompartments.current.history.reconfigure([]) })
+    const target = paperProjection.project(path, textRef.current).text
     const current = view.state.doc.toString()
-    if (current !== paperText) {
+    if (current !== target) {
       const pending = pendingCursorRef.current
       pendingCursorRef.current = null
-      const anchor = pending == null ? undefined : Math.max(0, Math.min(paperText.length, pending))
+      const anchor = pending == null ? undefined : Math.max(0, Math.min(target.length, pending))
       view.dispatch({
-        changes: { from: 0, to: current.length, insert: paperText },
+        changes: { from: 0, to: current.length, insert: target },
         selection: anchor == null ? undefined : { anchor },
         annotations: externalSync.of(true),
       })
@@ -1344,7 +1394,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       view.dispatch({ effects: writingCompartments.current.history.reconfigure(history()) })
       syncedGenerationRef.current = generation
     }
-  }, [paperText, renderGeneration, documentReady, isDocumentReady])
+  }, [paperText, renderGeneration, documentReady, isDocumentReady, path, paperProjection])
 
   // React ghost state → CM ghost widget (paper coordinates).
   useEffect(() => {
@@ -1360,7 +1410,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     })
   }, [ghost, ghostAt, paperOffset, testIdPrefix, slotClassName])
 
-  const wordCount = paperText.replace(/\s/g, '').length
   if (!path) return null
 
   const cls = (slot: EditorCoreSlot) => slotClassName[slot]
@@ -1399,6 +1448,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           'data-testid': `${testIdPrefix}-prev`,
           disabled: siblingsBlocked || siblingIndex <= 0,
           title: siblingsBlocked ? '请先保存' : '上一章',
+          'aria-label': siblingsBlocked ? '请先保存' : '上一章',
           onClick: () => { if (siblingIndex > 0 && siblings) onOpenSibling(siblings[siblingIndex - 1]!) },
         }, '‹'),
         e('span', { style: { fontSize: 11, opacity: 0.6 } }, `${siblingIndex + 1} / ${siblings!.length}`),
@@ -1407,6 +1457,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           'data-testid': `${testIdPrefix}-next`,
           disabled: siblingsBlocked || siblingIndex >= siblings!.length - 1,
           title: siblingsBlocked ? '请先保存' : '下一章',
+          'aria-label': siblingsBlocked ? '请先保存' : '下一章',
           onClick: () => { if (siblingIndex < siblings!.length - 1 && siblings) onOpenSibling(siblings[siblingIndex + 1]!) },
         }, '›'),
       ) : null,
@@ -1415,7 +1466,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         'data-testid': `${testIdPrefix}-rewrite`,
         disabled: !hasSelection,
         onClick: () => {
-          const sel = text.slice(selection.start, selection.end)
+          const sel = textRef.current.slice(selection.start, selection.end)
           if (!sel) return
           void Promise.resolve(onRewriteSelection?.(sel, doc?.path || path))
         },
@@ -1490,8 +1541,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       backups.map((backup, index) => e('button', {
         key: `${backup.ownerId ?? 'legacy'}-${backup.revision ?? index}`,
         type: 'button',
-        disabled: isDirty(doc, text) || conflict,
-        title: isDirty(doc, text) || conflict ? '当前有未保存内容，请先保存或放弃修改，避免丢稿' : '把这份备份放入当前草稿',
+        disabled: isDirty(doc, textRef.current) || conflict,
+        title: isDirty(doc, textRef.current) || conflict ? '当前有未保存内容，请先保存或放弃修改，避免丢稿' : '把这份备份放入当前草稿',
         onClick: () => adoptBackup(backup),
       }, draftBackupLabel(backup, index))),
     ) : null,
@@ -1499,7 +1550,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       className: cls('footer'),
       style: { padding: '6px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', ...sty('footer') },
     },
-      !compactControls ? e('button', { type: 'button', disabled: !doc || text === doc.text || conflict, onClick: () => void save() }, '保存') : null,
+      !compactControls ? e('button', { type: 'button', disabled: !doc || textRef.current === doc.text || conflict, onClick: () => void save() }, '保存') : null,
       loadingFim ? e('button', { type: 'button', onClick: () => { fimAbort.current?.abort(); setLoadingFim(false); report('已停止补全。') } }, '停止补全') : null,
       patching ? e('button', {
         type: 'button',

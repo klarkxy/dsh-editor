@@ -1,4 +1,4 @@
-import { createElement as e, Fragment, type ReactNode } from 'react'
+import { createElement as e, Fragment, memo, type ReactNode } from 'react'
 
 /*
  * 聊天回复的最小 Markdown 渲染器。刻意不用 marked/DOMPurify：
@@ -133,7 +133,11 @@ function renderInline(inlines: readonly MdInline[]): ReactNode[] {
 
 const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const
 
-export function Markdown({ text }: { text: string }) {
+/*
+ * memo:唯一 prop 是 string,text 按值比较,行级缓存命中时直接跳过重渲染,
+ * 不再每个流式令牌都重新 parseBlocks。
+ */
+export const Markdown = memo(function Markdown({ text }: { text: string }) {
   const blocks = parseBlocks(text)
   return e(Fragment, null, blocks.map((block, index) => {
     const key = `b${index}`
@@ -152,4 +156,4 @@ export function Markdown({ text }: { text: string }) {
         return e('p', { key }, ...renderInline(block.inlines))
     }
   }))
-}
+})

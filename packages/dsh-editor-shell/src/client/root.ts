@@ -1,6 +1,8 @@
 import {
   createElement as e,
   Fragment,
+  memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -11,10 +13,11 @@ import {
   type ReactNode,
 } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsScope, SessionId, WorkspaceId, WorkspaceView } from '../dsh-compat.ts'
+import type { SettingsScope, SessionFace, SessionId, WorkspaceId, WorkspaceView } from '../dsh-compat.ts'
 import {
   WORKBENCH_RPC_CHANNEL,
   type ArchiveListResponse,
+  type ChapterStatus,
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
   type ProjectOverview,
@@ -24,7 +27,7 @@ import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferen
 import { sortChapterPaths } from '../project-files.ts'
 import { CENTER_OVERLAYS_SLOT, EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, ZHIHU_SETTINGS_SLOT, registerRoot } from '../root-registration.ts'
 import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry, type ShellProposalCardProps, type ShellRange, type ShellToolSeatContext } from '../seats.ts'
-import { writingPreferences, writingTypography, type WritingMigration, type WritingPreferences } from '../writing-settings.ts'
+import { writingPreferences, writingTypography, type WritingMigration, type WritingModelRoute, type WritingPreferences } from '../writing-settings.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
 import { buildChapterStatusMap } from '../chapter-status-view.ts'
@@ -40,7 +43,7 @@ import { ChapterOpsLayer, chapterMenuModel, requestMergeChapter, requestSplitCha
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
 import { Editor } from './editor.ts'
 import { Chat, ProposalCard } from './chat.ts'
-import type { EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
+import type { CompletionPreference, EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
 import { saveOpenEditor, type EditorSaveBlockReason } from '../wrap-up-view.ts'
 import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
@@ -204,6 +207,276 @@ function BoundProposalCard(props: ShellProposalCardProps & { ctx: ShellContext }
   })
 }
 
+/* 工作区三栏拆成模块级 memo 组件：侧栏搜索输入、面板拖拽、editorDirty 翻转等
+   高频重渲染不再连带重渲染全部三栏与插槽内容。props 一律由 Root 以
+   useMemo/useCallback 固化，memo 才能真的跳过渲染。 */
+
+function workspaceGridTemplateColumns(input: {
+  sidebarInGrid: boolean
+  sidebarWidth: number
+  pinnedVisible: boolean
+  pinnedWidth: number
+  assistantInGrid: boolean
+  assistantWidth: number
+}): string {
+  const layoutColumns = pinnedLayoutColumns({
+    sidebarVisible: input.sidebarInGrid,
+    sidebarWidth: input.sidebarWidth,
+    pinnedVisible: input.pinnedVisible,
+    pinnedWidth: input.pinnedWidth,
+    assistantVisible: input.assistantInGrid,
+    assistantWidth: input.assistantWidth,
+  })
+  return input.assistantInGrid
+    ? layoutColumns.replace(new RegExp(`${input.assistantWidth}px$`), `minmax(0, ${input.assistantWidth}px)`)
+    : layoutColumns
+}
+
+type SidebarFileMenuProps = {
+  onOpen(path: string): void
+  onPreviewImage(path: string): void
+  onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }, trigger?: HTMLElement | null): void
+  onCreateFile(directory: string): void
+  onCreateFolder(directory: string): void
+}
+
+const TreeColumn = memo(function TreeColumn(props: SidebarFileMenuProps & {
+  ctx: ShellContext
+  sessionId: string
+  active: string
+  expandPath: string
+  highlightPath?: string
+  revision: number
+  chapterStatuses: Record<string, ChapterStatus>
+}) {
+  return e(Tree, {
+    ctx: props.ctx,
+    sessionId: props.sessionId,
+    active: props.active,
+    expandPath: props.expandPath,
+    highlightPath: props.highlightPath,
+    onOpen: props.onOpen,
+    onPreviewImage: props.onPreviewImage,
+    onFileMenu: props.onFileMenu,
+    onCreateFile: props.onCreateFile,
+    onCreateFolder: props.onCreateFolder,
+    revision: props.revision,
+    chapterStatuses: props.chapterStatuses,
+  })
+})
+
+const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuProps & {
+  ctx: ShellContext
+  sessionId: string
+  searchOpen: boolean
+  onSearchRequestOpen(): void
+  onOpenDocument(path: string, hit?: SearchHit): void
+  onSearchReplaced(paths: string[]): void
+  activePath: string
+  activeDirty: boolean
+  fileRevision: number
+  historyOpen: boolean
+  snapshots: SnapshotResponse[] | null
+  snapshotBusy: boolean
+  onCommitSnapshot(): void
+  onToggleHistory(): void
+  onRollback(snapshot: SnapshotResponse): void
+  createNote: string
+  workspaceWarning: string | undefined
+  workbenchNote: string
+  chapterStatuses: Record<string, ChapterStatus>
+  expandPath: string
+  highlightPath?: string
+  renderSlot?: SettingsRenderSlot
+  seatContext: ShellToolSeatContext
+}) {
+  /* 搜索查询串留在侧栏层：按键只重渲染本列，不上升到 Root 惊动其余两栏。 */
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchSubmitTick, setSearchSubmitTick] = useState(0)
+  const panelMotion = useChromeMotion('panel', 0, 'left')
+  return e(m.aside, { className: 'sidebar', 'aria-label': t('workspace.filesAndNotes'), ...panelMotion },
+    e('div', { className: 'side-title' },
+      e(Menu, null,
+        e(MenuTrigger, {
+          className: 'side-version-trigger',
+          title: t('sidebar.versionMenu'),
+          'aria-label': t('sidebar.versionMenu'),
+        }, '⋯'),
+        e(MenuContent, { className: 'file-context-menu', align: 'end', side: 'bottom', 'aria-label': t('sidebar.versionMenu') },
+          e(MenuItem, {
+            disabled: props.snapshotBusy,
+            title: t('workspace.commitTitle'),
+            onSelect: () => { props.onCommitSnapshot() },
+          }, t('workspace.commit')),
+          e(MenuItem, {
+            'aria-current': props.historyOpen ? 'true' : undefined,
+            title: t('workspace.commitHistory'),
+            onSelect: () => props.onToggleHistory(),
+          }, t('common.history')),
+        ),
+      ),
+    ),
+    e('input', {
+      className: 'side-search',
+      type: 'search',
+      value: searchQuery,
+      maxLength: 120,
+      placeholder: t('search.placeholder'),
+      'aria-label': t('search.aria'),
+      title: t('workspace.searchTitle'),
+      onChange: (event: ChangeEvent<HTMLInputElement>) => {
+        setSearchQuery(event.target.value)
+        if (!props.searchOpen) props.onSearchRequestOpen()
+      },
+      onFocus: () => props.onSearchRequestOpen(),
+      onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => {
+        if (event.key !== 'Enter') return
+        props.onSearchRequestOpen()
+        setSearchSubmitTick((tick) => tick + 1)
+      },
+    }),
+    props.searchOpen ? e(SearchPanel, {
+      ctx: props.ctx,
+      sessionId: props.sessionId,
+      revision: props.fileRevision,
+      query: searchQuery,
+      onQueryChange: setSearchQuery,
+      submitTick: searchSubmitTick,
+      /* 跳转统一走 openDocument 的保存 gate，不再因脏禁用；替换写入仍受 activeDirty 保护。 */
+      navigationBlocked: false,
+      activePath: props.activePath,
+      activeDirty: props.activeDirty,
+      onOpen: (hit: SearchHit) => props.onOpenDocument(hit.path, hit),
+      onReplaced: props.onSearchReplaced,
+    }) : null,
+    e(m.div, { className: 'sidebar-tools', ...panelMotion }, props.renderSlot?.(SIDEBAR_TOOLS_SLOT, props.seatContext) ?? null),
+    props.historyOpen ? e(m.section, { className: 'snapshot-panel', 'aria-label': t('workspace.commitHistory'), ...panelMotion },
+      props.snapshots === null
+        ? e('div', { className: 'snapshot-empty', role: 'status', 'aria-live': 'polite' },
+          e(ActivitySkeleton, { lines: 3 }),
+          e('span', { className: 'sr-only' }, t('workspace.historyLoading')),
+        )
+        : props.snapshots.length === 0
+          ? e('p', { className: 'snapshot-empty' }, t('workspace.historyEmpty'))
+          : props.snapshots.map((item) => e('div', { key: item.snapshotId, className: 'snapshot-row' },
+              e('span', { className: 'snapshot-label', title: item.createdAt }, item.label ?? item.createdAt),
+              e('span', { className: 'snapshot-meta' }, t('workspace.historyFiles', { count: item.files })),
+              e('button', { className: 'snapshot-rollback', type: 'button', disabled: props.snapshotBusy, onClick: () => props.onRollback(item) }, t('workspace.rollback')),
+            )),
+    ) : null,
+    props.createNote ? e('p', { className: 'warning pad', role: 'alert' }, props.createNote) : null,
+    props.workspaceWarning ? e('p', { className: 'warning pad', role: 'status' }, props.workspaceWarning) : null,
+    props.workbenchNote ? e('p', {
+      className: isSuccessWorkbenchNote(props.workbenchNote) ? 'side-status' : 'warning pad',
+      role: isSuccessWorkbenchNote(props.workbenchNote) ? 'status' : 'alert',
+    }, props.workbenchNote) : null,
+    e(TreeColumn, {
+      ctx: props.ctx,
+      sessionId: props.sessionId,
+      active: props.activePath,
+      expandPath: props.expandPath,
+      highlightPath: props.highlightPath,
+      onOpen: props.onOpen,
+      onPreviewImage: props.onPreviewImage,
+      onFileMenu: props.onFileMenu,
+      onCreateFile: props.onCreateFile,
+      onCreateFolder: props.onCreateFolder,
+      revision: props.fileRevision,
+      chapterStatuses: props.chapterStatuses,
+    }),
+  )
+})
+
+const EditorColumn = memo(function EditorColumn(props: {
+  ctx: ShellContext
+  fileSession: SessionFace
+  path: string
+  files: string[]
+  onOpen(path: string): void
+  onCreate(): void
+  onHandle(handle: EditorCoreHandle | null): void
+  contentRevision: number
+  onDirtyChange(dirty: boolean): void
+  completionPreference: CompletionPreference
+  completionEnabled: boolean
+  authorPreferences: string
+  authorMemory: string
+  typewriter?: boolean
+  focusParagraph?: boolean
+  typography?: {
+    fontSize?: number
+    lineHeight?: number
+    fontFamily?: 'serif' | 'sans' | 'mono' | string
+    paragraphSpacing?: number
+    maxWidth?: number
+  }
+  onSaved(): void
+  reveal: RevealRequest | null
+}) {
+  const { ctx, fileSession, path, files } = props
+  /* 空态/改写弹窗等文案走 t()：自行订阅语言，memo 跳过时也能随语言切换刷新（同 Chat）。 */
+  useLocale()
+  return e(ShellErrorBoundary, null, e(Editor, {
+    ctx, session: fileSession, path, files, onOpen: props.onOpen, create: props.onCreate,
+    onHandle: props.onHandle,
+    externalRevision: props.contentRevision, onDirtyChange: props.onDirtyChange, reveal: props.reveal,
+    completionPreference: props.completionPreference,
+    /* 能力未加载完成前不发起补全/改写 RPC;显式错误态由用户重试恢复。 */
+    completionEnabled: props.completionEnabled,
+    authorPreferences: props.authorPreferences,
+    authorMemory: props.authorMemory,
+    typewriter: props.typewriter,
+    focusParagraph: props.focusParagraph,
+    typography: props.typography,
+    onSaved: props.onSaved,
+  }))
+})
+
+const ChatColumn = memo(function ChatColumn(props: {
+  ctx: ShellContext
+  chatSession: SessionFace
+  workspaceId?: WorkspaceId
+  activePath?: string
+  authorPreferences: string
+  authorMemory: string
+  chatModel?: WritingModelRoute
+  onAcceptMemory(observation: string): Promise<boolean> | boolean
+  hidden: boolean
+  overlay?: boolean
+  onConfigure(): void
+  onDraftDirtyChange(dirty: boolean): void
+  onWritten?(path: string): void
+  onApplied(path: string): void
+}) {
+  const { ctx, chatSession } = props
+  return e(ShellErrorBoundary, { key: chatSession.sessionId }, e(Chat, {
+    ctx,
+    session: chatSession,
+    workspaceId: props.workspaceId,
+    activePath: props.activePath,
+    authorPreferences: props.authorPreferences,
+    authorMemory: props.authorMemory,
+    chatModel: props.chatModel,
+    onAcceptMemory: props.onAcceptMemory,
+    hidden: props.hidden,
+    overlay: props.overlay,
+    onConfigure: props.onConfigure,
+    onDraftDirtyChange: props.onDraftDirtyChange,
+    onWritten: props.onWritten,
+    onApplied: props.onApplied,
+  }))
+})
+
+const CenterOverlays = memo(function CenterOverlays(props: {
+  show: boolean
+  renderSlot?: SettingsRenderSlot
+  seatContext: ShellToolSeatContext
+}) {
+  return props.show
+    ? e('div', { className: 'center-overlays' }, props.renderSlot?.(CENTER_OVERLAYS_SLOT, props.seatContext) ?? null)
+    : null
+})
+
 function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock, pluginsSettings, zhihuSettings, commands, renderSlot }: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
@@ -241,7 +514,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const conversationScope = useMemo(() => ctx.settingsScope.bind({ namespace: CONVERSATION_SETTINGS_NAMESPACE, decode: decodeConversationSettings }), [ctx])
   /* 助手提议 author_observe 时的写入回调：把 observation 作为新行追加到 authorMemory。
      限 AUTHOR_MEMORY_MAX_CHARS 字(2000),追加后超限直接拒绝,提示作者去设置页整理。 */
-  const onAcceptMemory = async (observation: string): Promise<boolean> => {
+  const onAcceptMemory = useCallback(async (observation: string): Promise<boolean> => {
     const trimmed = observation.trim()
     if (!trimmed) return false
     const current = writing.authorMemory ?? ''
@@ -253,7 +526,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     } catch {
       return false
     }
-  }
+  }, [writing.authorMemory, writingScope])
   const [path, setPath] = useState('')
   const [files, setFiles] = useState<string[]>([])
   const [workbenchNote, setWorkbenchNote] = useState('')
@@ -293,6 +566,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [overview, setOverview] = useState<ProjectOverview | null | undefined>(null)
   const [overviewRevision, setOverviewRevision] = useState(0)
   const [editorDirty, setEditorDirty] = useState(false)
+  /* editorDirty 的 ref 镜像：需要稳定身份的回调（memo 列的 props）读它而不是闭包值，
+     翻转不再连带重渲染所有列；新鲜度与闭包一致（渲染期同步，事件总在渲染后触发）。 */
+  const editorDirtyRef = useRef(editorDirty)
+  editorDirtyRef.current = editorDirty
   const [fileMenu, setFileMenu] = useState<FileMenuState>(null)
   const [chapterOps, setChapterOps] = useState<ChapterOpsRequest | null>(null)
   const editorHandleRef = useRef<EditorCoreHandle | null>(null)
@@ -343,8 +620,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchSubmitTick, setSearchSubmitTick] = useState(0)
+  /* searchQuery/searchSubmitTick 已下沉到 SidebarColumn：输入按键不再上升到 Root。 */
   const [highlightPath, setHighlightPath] = useState<string | null>(null)
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -385,10 +661,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsFocusTab, setSettingsFocusTab] = useState<SettingsTab | undefined>()
-  const openSettings = (tab?: SettingsTab) => {
+  const openSettings = useCallback((tab?: SettingsTab) => {
     setSettingsFocusTab(tab)
     setSettingsOpen(true)
-  }
+  }, [])
   const overviewRequestGate = useRef(new LatestRequestGate()).current
   const progressRecord = useRef(createDebouncedInvoker(PROGRESS_RECORD_DEBOUNCE_MS)).current
   const fileSessionRef = useRef(fileSession)
@@ -403,11 +679,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const workspaceMenuTrigger = useRef<HTMLButtonElement | null>(null)
   const workspaceMenuYields = useRef(false)
   const pathFallbackInput = useRef<HTMLInputElement | null>(null)
+  /* 工作区 <main> 的句柄：面板拖拽预览直接写它的 gridTemplateColumns。 */
+  const shellMainRef = useRef<HTMLElement | null>(null)
   const homeCardOpen = useChromeMotion('card', 0)
   const homeCardNew = useChromeMotion('card', 0.05)
-  const sidebarPanelMotion = useChromeMotion('panel', 0, 'left')
   const workspaceChromeMotion = useChromeMotion('page')
-  const sidebarAsideMotion = useChromeMotion('panel', 0, 'left')
   const pinValidatedSession = useRef<string | undefined>()
   useEffect(() => { document.title = 'DSH Editor' }, [])
   useEffect(() => {
@@ -552,7 +828,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision, contentRevision, overviewRevision])
   /* 统一导航入口：树/搜索/钉住/命令面板/章节导航都先走保存 gate，成功再跳转；失败留原处。
      导航发起时记下当前文档身份，保存期间被更新的导航优先，避免旧请求覆盖新选择。 */
-  const openDocument = (nextPath: string, hit?: SearchHit) => {
+  /* 保存 gate 与 dirty 判定的内部帮手都直读 ref（editorHandleRef/latestDocRef/navSaveBusyRef），
+     因此 openDocument 只以 path 为依赖：身份稳定，供 memo 列与命令面板复用。 */
+  const openDocument = useCallback((nextPath: string, hit?: SearchHit) => {
     if (nextPath === path && !hit) return
     if (editorHasUnsavedText()) {
       const fromPath = path
@@ -569,7 +847,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     setWorkbenchNote('')
     setPath(nextPath)
     setReveal(hit ? toRevealRequest(hit) : null)
-  }
+  }, [path])
   const recordSavedProgress = async () => {
     const session = fileSessionRef.current
     if (!session) return
@@ -583,7 +861,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       totalChars: chars,
     }))
   }
-  const openImagePreview = async (imagePath: string) => {
+  const openImagePreview = useCallback(async (imagePath: string) => {
     if (!fileSession) return
     const read = await safeRpcCall<{ base64: string; mime: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.readBinary', {
       sessionId: fileSession.sessionId,
@@ -598,7 +876,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       if (stale?.url && stale.url !== url) URL.revokeObjectURL(stale.url)
       return { path: imagePath, url }
     })
-  }
+  }, [fileSession, ctx])
   const closeImagePreview = () => setImagePreview(null)
   useEffect(() => {
     if (imagePreview) return undefined
@@ -612,13 +890,13 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     }, 400)
     return () => globalThis.clearTimeout(timer)
   }, [imagePreview])
-  const openFileMenu = (kind: FileMenuKind, selectedPath: string, position: { x: number; y: number }, trigger?: HTMLElement | null) => {
-    if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
+  const openFileMenu = useCallback((kind: FileMenuKind, selectedPath: string, position: { x: number; y: number }, trigger?: HTMLElement | null) => {
+    if (editorDirtyRef.current) { setWorkbenchNote(t('error.saveFirst')); return }
     setWorkbenchNote('')
     menuYieldsToDialog.current = false
     fileManageReturnFocus.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null)
     setFileMenu({ kind, path: selectedPath, x: position.x, y: position.y })
-  }
+  }, [])
   const yieldMenuToDialog = () => {
     menuYieldsToDialog.current = true
     setFileMenu(null)
@@ -859,7 +1137,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
   const requestRollback = (snapshot: SnapshotResponse) => {
     if (snapshotBusy) return
-    if (editorDirty) { setWorkbenchNote(t('note.saveBeforeRollback')); return }
+    if (editorDirtyRef.current) { setWorkbenchNote(t('note.saveBeforeRollback')); return }
     setRollbackTarget(snapshot)
   }
   const confirmRollback = async () => {
@@ -1408,8 +1686,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     setPaletteOpen(false)
   }
   /* 记忆更新确认/撤销成功后的刷新：与提案 onApplied 同一套导航与刷新规则。 */
-  const refreshAppliedPath = (appliedPath: string) => {
-    const navigation = proposalAppliedNavigation(appliedPath, path, editorDirty)
+  const refreshAppliedPath = useCallback((appliedPath: string) => {
+    const navigation = proposalAppliedNavigation(appliedPath, path, editorDirtyRef.current)
     setTreeRevision((old) => old + 1)
     if (navigation.expandPath) setTreeExpansionPath(navigation.expandPath)
     if (!navigation.openPath) {
@@ -1418,8 +1696,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     }
     openDocument(navigation.openPath)
     if (navigation.refreshContent) setContentRevision((old) => old + 1)
-  }
-  const openSeatDocument = (target: string, range?: ShellRange) => {
+  }, [openDocument, path])
+  const openSeatDocument = useCallback((target: string, range?: ShellRange) => {
     openDocument(target, range ? {
       path: target,
       line: range.line ?? 1,
@@ -1429,7 +1707,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       excerpt: range.excerpt ?? '',
       version: range.version ?? '',
     } : undefined)
-  }
+  }, [openDocument])
   const BoundSeatProposalCard = useMemo(() => {
     function Card(props: ShellProposalCardProps) {
       return e(BoundProposalCard, { ...props, ctx })
@@ -1438,7 +1716,21 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }, [ctx])
   const [commandTick, setCommandTick] = useState(0)
   useEffect(() => commands.subscribe(() => setCommandTick((value) => value + 1)), [commands])
-  const seatContext: ShellToolSeatContext = {
+  const revealSidebar = useCallback(() => {
+    setFocusMode(false)
+    setSidebarOpen(true)
+  }, [])
+  const refreshSeat = useCallback((scope: 'tree' | 'content' | 'overview') => {
+    if (scope === 'tree') setTreeRevision((value) => value + 1)
+    else if (scope === 'content') setContentRevision((value) => value + 1)
+    else setOverviewRevision((value) => value + 1)
+  }, [])
+  const toggleSeatPin = useCallback((target: string) => {
+    setPinnedPath((current) => current === target ? null : target)
+  }, [])
+  /* seatContext 固化为真实依赖的 memo：不再每次渲染都换身份，插槽内容只在
+     path/dirty/修订等字段变化时重渲染。 */
+  const seatContext: ShellToolSeatContext = useMemo(() => ({
     sessionId: fileSession?.sessionId ?? '',
     activePath: path,
     editorDirty,
@@ -1448,39 +1740,98 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     openDocument: openSeatDocument,
     onApplied: refreshAppliedPath,
     note: setWorkbenchNote,
-    revealSidebar: () => {
-      setFocusMode(false)
-      setSidebarOpen(true)
-    },
-    refresh: (scope) => {
-      if (scope === 'tree') setTreeRevision((value) => value + 1)
-      else if (scope === 'content') setContentRevision((value) => value + 1)
-      else setOverviewRevision((value) => value + 1)
-    },
-    expandTreePath: (target) => setTreeExpansionPath(target),
+    revealSidebar,
+    refresh: refreshSeat,
+    expandTreePath: setTreeExpansionPath,
     highlightTreePath: setHighlightPath,
     pinnedPath,
-    togglePin: (target) => setPinnedPath((current) => current === target ? null : target),
+    togglePin: toggleSeatPin,
     ProposalCard: BoundSeatProposalCard,
     Select: HostSelect,
     Dialog: HostDialog,
-  }
+  }), [fileSession?.sessionId, path, editorDirty, treeRevision, contentRevision, locale, openSeatDocument, refreshAppliedPath, revealSidebar, refreshSeat, toggleSeatPin, pinnedPath, BoundSeatProposalCard])
   seatContextRef.current = seatContext
+  /* 注册表命令只在构建期(enabled 判定)与执行期(run)读取 seat：全部经 ref 前向，
+     命令始终看到最新上下文，palette 项不再随每次渲染重建。 */
+  const seatRegistryContext = useMemo(() => new Proxy({} as ShellToolSeatContext, {
+    get(_target, prop) {
+      const current = seatContextRef.current
+      return current ? Reflect.get(current, prop) : undefined
+    },
+    has(_target, prop) {
+      const current = seatContextRef.current
+      return current ? Reflect.has(current, prop) : false
+    },
+    ownKeys() {
+      const current = seatContextRef.current
+      return current ? Reflect.ownKeys(current) : []
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      const current = seatContextRef.current
+      if (!current) return undefined
+      const descriptor = Reflect.getOwnPropertyDescriptor(current, prop)
+      if (descriptor) descriptor.configurable = true
+      return descriptor
+    },
+  }), [])
+  const hasFileSession = Boolean(fileSession)
   const registryCommands = useMemo(
-    () => registryPaletteItems(commands.list(), locale, seatContext, Boolean(fileSession)).map((item) => ({
+    () => registryPaletteItems(commands.list(), locale, seatRegistryContext, hasFileSession).map((item) => ({
       ...item,
       run: () => {
         setFocusMode(false)
         item.run()
       },
     })),
-    [commandTick, commands, fileSession, locale, seatContext],
+    [commandTick, commands, hasFileSession, locale, seatRegistryContext],
   )
   /* 自动写入落盘后的轻量刷新：只刷新树与当前内容，不做编辑器导航。 */
-  const refreshWrittenPath = (writtenPath: string) => {
+  const refreshWrittenPath = useCallback((writtenPath: string) => {
     setTreeRevision((old) => old + 1)
-    if (!editorDirty && writtenPath === path) setContentRevision((old) => old + 1)
-  }
+    if (!editorDirtyRef.current && writtenPath === path) setContentRevision((old) => old + 1)
+  }, [path])
+  /* Chat 写入提案后的应用：与 refreshAppliedPath 同一套导航规则，供 memo 化的聊天下列复用。 */
+  const onAppliedChat = useCallback((appliedPath: string) => {
+    const navigation = proposalAppliedNavigation(appliedPath, path, editorDirtyRef.current)
+    setTreeRevision((old) => old + 1)
+    if (navigation.expandPath) setTreeExpansionPath(navigation.expandPath)
+    if (!navigation.openPath) {
+      setWorkbenchNote(t('note.appliedDirty'))
+      return
+    }
+    openDocument(navigation.openPath)
+    if (navigation.refreshContent) setContentRevision((old) => old + 1)
+  }, [openDocument, path])
+  /* 侧栏搜索命中/替换后的刷新：均经保存 gate 或内容修订，供 memo 化的侧栏列复用。 */
+  const onSearchHitOpen = useCallback((hit: SearchHit) => openDocument(hit.path, hit), [openDocument])
+  const onSearchReplaced = useCallback((paths: string[]) => {
+    if (!paths.includes(path)) return
+    const navigation = proposalAppliedNavigation(path, path, editorDirtyRef.current)
+    if (navigation.refreshContent) setContentRevision((old) => old + 1)
+  }, [path])
+  const onSearchRequestOpen = useCallback(() => setSearchOpen(true), [])
+  /* 树内新建文件/文件夹：openTreeCreate 读取 fileSession/fileMenu，二者列入依赖。 */
+  const onTreeCreateFile = useCallback((directory: string) => openTreeCreate('file', directory), [fileSession, fileMenu])
+  const onTreeCreateFolder = useCallback((directory: string) => openTreeCreate('folder', directory), [fileSession, fileMenu])
+  const onCommitSnapshot = useCallback(() => { void commitSnapshot() }, [fileSession, snapshotBusy])
+  const onToggleHistory = useCallback(() => setHistoryOpen((value) => !value), [])
+  const onRequestRollback = useCallback((snapshot: SnapshotResponse) => requestRollback(snapshot), [snapshotBusy])
+  /* 编辑器空态"新建"与句柄回传、保存回调：身份稳定，editorDirty 翻转不连带重渲染编辑列。 */
+  const onEditorCreate = useCallback(() => openTreeCreate('file', '正文'), [fileSession, fileMenu])
+  const onEditorHandle = useCallback((handle: EditorCoreHandle | null) => { editorHandleRef.current = handle }, [])
+  const onEditorSaved = useCallback(() => {
+    setOverviewRevision((value) => value + 1)
+    if (path === pinnedPath) setContentRevision((value) => value + 1)
+    progressRecord.schedule(() => { void recordSavedProgress() })
+  }, [path, pinnedPath])
+  /* 树章状态与作者偏好/记忆/排版：由真实输入 memo，身份稳定，子列 memo 才能生效。 */
+  const chapterStatuses = useMemo(() => buildChapterStatusMap(overview), [overview])
+  const authorPreferences = useMemo(() => normalizeAuthorPreferences(writing.authorPreferences), [writing.authorPreferences])
+  const authorMemory = useMemo(() => normalizeAuthorMemory(writing.authorMemory), [writing.authorMemory])
+  const typography = useMemo(
+    () => writingTypography(writing),
+    [writing.fontSize, writing.lineHeight, writing.fontFamily, writing.paragraphSpacing, writing.paperWidth],
+  )
   const registerFlowWorkspace = async (workspacePath: string) => {
     const registration = await createFlowWorkspace(ctx, workspacePath)
     if (registration.created) temporaryFlowWorkspaces.current.add(registration.workspace.workspaceId)
@@ -1815,7 +2166,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
 
   if (workspaceOpen.kind === 'checking') {
     return e(ShellUiProvider, null, e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
-      e('style', null, redesignedStyles),
       e('section', { className: 'workspace-checking', 'aria-label': t('home.verifying') },
         e(ActivityRing, { size: 40 }),
         e('h1', null, t('home.checking')),
@@ -1829,7 +2179,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
 
   if (!fileSession || workspaceOpen.kind !== 'ready') {
     return e(ShellUiProvider, null, e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
-      e('style', null, redesignedStyles),
       e('header', { className: 'chrome', onDoubleClick: titleBarDoubleClick },
         e('div', { className: 'brand-lockup' },
           e('span', { className: 'brand-mark', 'aria-hidden': 'true' }, 'D'),
@@ -1930,23 +2279,30 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const assistantVisible = assistantOpen && !focusMode && assistantEnabled
   const assistantInGrid = assistantVisible && !overlayAssistant
   const pinnedVisible = pinnedPath !== null && !focusMode
-  const layoutColumns = pinnedLayoutColumns({
-    sidebarVisible: sidebarInGrid,
-    sidebarWidth,
-    pinnedVisible,
-    pinnedWidth,
-    assistantVisible: assistantInGrid,
-    assistantWidth,
-  })
-  const gridTemplateColumns = assistantInGrid
-    ? layoutColumns.replace(new RegExp(`${assistantWidth}px$`), `minmax(0, ${assistantWidth}px)`)
-    : layoutColumns
+  const gridTemplateColumns = workspaceGridTemplateColumns({ sidebarInGrid, sidebarWidth, pinnedVisible, pinnedWidth, assistantInGrid, assistantWidth })
+  /* 拖拽预览直接写 <main> 的 gridTemplateColumns（与渲染同一通道）， pointerup 才提交 setState；
+     value === null 表示拖动结束/取消，恢复 React 已提交的模板值。 */
+  const previewGridWidth = (panel: 'sidebar' | 'pinned' | 'assistant', value: number | null) => {
+    const main = shellMainRef.current
+    if (!main) return
+    main.style.gridTemplateColumns = value === null
+      ? gridTemplateColumns
+      : workspaceGridTemplateColumns({
+          sidebarInGrid,
+          sidebarWidth: panel === 'sidebar' ? value : sidebarWidth,
+          pinnedVisible,
+          pinnedWidth: panel === 'pinned' ? value : pinnedWidth,
+          assistantInGrid,
+          assistantWidth: panel === 'assistant' ? value : assistantWidth,
+        })
+  }
+  const fileMenuChapterModel = fileMenu ? chapterMenuModel(fileMenu.path, files) : null
 
   return e(ShellUiProvider, null, e('main', {
     className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`,
+    ref: shellMainRef,
     style: { minWidth: 0, gridTemplateColumns },
   },
-    e('style', null, redesignedStyles),
     e('header', { className: 'chrome', onDoubleClick: titleBarDoubleClick },
       e(m.div, { className: 'workspace-chrome', role: 'group', 'aria-label': t('workspace.work'), ...workspaceChromeMotion },
         e('div', { className: 'workspace-menu' },
@@ -2028,88 +2384,36 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         e(WindowControls, null),
       ),
     ),
-    sidebarInGrid ? e(m.aside, { className: 'sidebar', 'aria-label': t('workspace.filesAndNotes'), ...sidebarAsideMotion },
-      e('div', { className: 'side-title' },
-        e(Menu, null,
-          e(MenuTrigger, {
-            className: 'side-version-trigger',
-            title: t('sidebar.versionMenu'),
-            'aria-label': t('sidebar.versionMenu'),
-          }, '⋯'),
-          e(MenuContent, { className: 'file-context-menu', align: 'end', side: 'bottom', 'aria-label': t('sidebar.versionMenu') },
-            e(MenuItem, {
-              disabled: snapshotBusy,
-              title: t('workspace.commitTitle'),
-              onSelect: () => { void commitSnapshot() },
-            }, t('workspace.commit')),
-            e(MenuItem, {
-              'aria-current': historyOpen ? 'true' : undefined,
-              title: t('workspace.commitHistory'),
-              onSelect: () => setHistoryOpen((value) => !value),
-            }, t('common.history')),
-          ),
-        ),
-      ),
-      e('input', {
-        className: 'side-search',
-        type: 'search',
-        value: searchQuery,
-        maxLength: 120,
-        placeholder: t('search.placeholder'),
-        'aria-label': t('search.aria'),
-        title: t('workspace.searchTitle'),
-        onChange: (event: ChangeEvent<HTMLInputElement>) => {
-          setSearchQuery(event.target.value)
-          if (!searchOpen) setSearchOpen(true)
-        },
-        onFocus: () => setSearchOpen(true),
-        onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => {
-          if (event.key !== 'Enter') return
-          setSearchOpen(true)
-          setSearchSubmitTick((tick) => tick + 1)
-        },
-      }),
-      searchOpen ? e(SearchPanel, {
-        ctx,
-        sessionId: fileSession.sessionId,
-        revision: treeRevision,
-        query: searchQuery,
-        onQueryChange: setSearchQuery,
-        submitTick: searchSubmitTick,
-        /* 跳转统一走 openDocument 的保存 gate，不再因脏禁用；替换写入仍受 activeDirty 保护。 */
-        navigationBlocked: false,
-        activePath: path,
-        activeDirty: editorDirty,
-        onOpen: (hit: SearchHit) => openDocument(hit.path, hit),
-        onReplaced: (paths: string[]) => {
-          if (!paths.includes(path)) return
-          const navigation = proposalAppliedNavigation(path, path, editorDirty)
-          if (navigation.refreshContent) setContentRevision((old) => old + 1)
-        },
-      }) : null,
-      fileSession ? e(m.div, { className: 'sidebar-tools', ...sidebarPanelMotion }, renderSlot?.(SIDEBAR_TOOLS_SLOT, seatContext) ?? null) : null,
-      historyOpen ? e(m.section, { className: 'snapshot-panel', 'aria-label': t('workspace.commitHistory'), ...sidebarPanelMotion },
-        snapshots === null
-          ? e('div', { className: 'snapshot-empty', role: 'status', 'aria-live': 'polite' },
-            e(ActivitySkeleton, { lines: 3 }),
-            e('span', { className: 'sr-only' }, t('workspace.historyLoading')),
-          )
-          : snapshots.length === 0
-            ? e('p', { className: 'snapshot-empty' }, t('workspace.historyEmpty'))
-            : snapshots.map((item) => e('div', { key: item.snapshotId, className: 'snapshot-row' },
-                e('span', { className: 'snapshot-label', title: item.createdAt }, item.label ?? item.createdAt),
-                e('span', { className: 'snapshot-meta' }, t('workspace.historyFiles', { count: item.files })),
-                e('button', { className: 'snapshot-rollback', type: 'button', disabled: snapshotBusy, onClick: () => requestRollback(item) }, t('workspace.rollback')),
-              )),
-      ) : null,
-      createNote ? e('p', { className: 'warning pad', role: 'alert' }, createNote) : null,
-      workspaceOpen.warning ? e('p', { className: 'warning pad', role: 'status' }, workspaceOpen.warning) : null,
-      workbenchNote ? e('p', {
-        className: isSuccessWorkbenchNote(workbenchNote) ? 'side-status' : 'warning pad',
-        role: isSuccessWorkbenchNote(workbenchNote) ? 'status' : 'alert',
-      }, workbenchNote) : null,
-      e(Tree, { ctx, sessionId: fileSession.sessionId, active: path, expandPath: treeExpansionPath, highlightPath: highlightPath ?? undefined, onOpen: openDocument, onPreviewImage: (imagePath: string) => void openImagePreview(imagePath), onFileMenu: openFileMenu, onCreateFile: (directory: string) => openTreeCreate('file', directory), onCreateFolder: (directory: string) => openTreeCreate('folder', directory), revision: treeRevision, chapterStatuses: buildChapterStatusMap(overview) }),
-    ) : null,
+    sidebarInGrid ? e(SidebarColumn, {
+      ctx,
+      sessionId: fileSession.sessionId,
+      searchOpen,
+      onSearchRequestOpen,
+      onOpenDocument: openDocument,
+      onSearchReplaced,
+      activePath: path,
+      activeDirty: editorDirty,
+      fileRevision: treeRevision,
+      historyOpen,
+      snapshots,
+      snapshotBusy,
+      onCommitSnapshot,
+      onToggleHistory,
+      onRollback: onRequestRollback,
+      createNote,
+      workspaceWarning: workspaceOpen.warning,
+      workbenchNote,
+      chapterStatuses,
+      expandPath: treeExpansionPath,
+      highlightPath: highlightPath ?? undefined,
+      onOpen: openDocument,
+      onPreviewImage: openImagePreview,
+      onFileMenu: openFileMenu,
+      onCreateFile: onTreeCreateFile,
+      onCreateFolder: onTreeCreateFolder,
+      renderSlot,
+      seatContext,
+    }) : null,
     sidebarInGrid ? e(PanelResizer, {
       side: 'left',
       value: sidebarWidth,
@@ -2118,26 +2422,29 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       defaultValue: SIDEBAR_DEFAULT,
       label: t('workspace.resizeFiles'),
       onChange: setSidebarWidth,
+      onPreview: (value: number | null) => previewGridWidth('sidebar', value),
     }) : null,
-    e(ShellErrorBoundary, null, e(Editor, {
-      ctx, session: fileSession, path, files, onOpen: openDocument, create: () => openTreeCreate('file', '正文'),
-      onHandle: (handle) => { editorHandleRef.current = handle },
-      externalRevision: contentRevision, onDirtyChange: setEditorDirty, reveal,
+    e(EditorColumn, {
+      ctx,
+      fileSession,
+      path,
+      files,
+      onOpen: openDocument,
+      onCreate: onEditorCreate,
+      onHandle: onEditorHandle,
+      contentRevision,
+      onDirtyChange: setEditorDirty,
+      reveal,
       completionPreference: writing.completion,
-      /* 能力未加载完成前不发起补全/改写 RPC;显式错误态由用户重试恢复。 */
       completionEnabled: capabilityReady ? featureEnabled(capabilityState.value, 'completion') : false,
-      authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
-      authorMemory: normalizeAuthorMemory(writing.authorMemory),
+      authorPreferences,
+      authorMemory,
       typewriter: writing.typewriter,
       focusParagraph: writing.focusParagraph,
-      typography: writingTypography(writing),
-      onSaved: () => {
-        setOverviewRevision((value) => value + 1)
-        if (path === pinnedPath) setContentRevision((value) => value + 1)
-        progressRecord.schedule(() => { void recordSavedProgress() })
-      },
-    })),
-    fileSession ? e('div', { className: 'center-overlays' }, renderSlot?.(CENTER_OVERLAYS_SLOT, seatContext) ?? null) : null,
+      typography,
+      onSaved: onEditorSaved,
+    }),
+    e(CenterOverlays, { show: Boolean(fileSession), renderSlot, seatContext }),
     pinnedVisible && pinnedPath ? e(PanelResizer, {
       side: 'right',
       value: pinnedWidth,
@@ -2146,6 +2453,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       defaultValue: PINNED_DEFAULT,
       label: t('pin.resize'),
       onChange: setPinnedWidth,
+      onPreview: (value: number | null) => previewGridWidth('pinned', value),
     }) : null,
     pinnedVisible && pinnedPath ? e(PinnedPane, {
       ctx,
@@ -2171,6 +2479,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       defaultValue: ASSISTANT_DEFAULT,
       label: t('workspace.resizeAssistant'),
       onChange: setAssistantWidth,
+      onPreview: (value: number | null) => previewGridWidth('assistant', value),
     }) : null,
     assistantVisible && overlayAssistant ? e('button', {
       type: 'button',
@@ -2178,13 +2487,13 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       'aria-label': t('workspace.hideAssistant'),
       onClick: () => setAssistantOpen(false),
     }) : null,
-    assistantEnabled && chatSession ? e(ShellErrorBoundary, { key: chatSession.sessionId }, e(Chat, {
+    assistantEnabled && chatSession ? e(ChatColumn, {
       ctx,
-      session: chatSession,
+      chatSession,
       workspaceId: currentWorkspace?.workspaceId,
       activePath: path,
-      authorPreferences: normalizeAuthorPreferences(writing.authorPreferences),
-      authorMemory: normalizeAuthorMemory(writing.authorMemory),
+      authorPreferences,
+      authorMemory,
       chatModel: writing.chatModel,
       onAcceptMemory,
       hidden: !assistantVisible,
@@ -2192,18 +2501,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       onConfigure: openSettings,
       onDraftDirtyChange: setAssistantDraftDirty,
       onWritten: refreshWrittenPath,
-      onApplied: (appliedPath: string) => {
-        const navigation = proposalAppliedNavigation(appliedPath, path, editorDirty)
-        setTreeRevision((old) => old + 1)
-        if (navigation.expandPath) setTreeExpansionPath(navigation.expandPath)
-        if (!navigation.openPath) {
-          setWorkbenchNote(t('note.appliedDirty'))
-          return
-        }
-        openDocument(navigation.openPath)
-        if (navigation.refreshContent) setContentRevision((old) => old + 1)
-      },
-    })) : null,
+      onApplied: onAppliedChat,
+    }) : null,
     !assistantVisible && !focusMode ? (
       capabilityState.kind === 'error'
         ? e('div', { className: 'assistant-launcher capability-note', role: 'alert' },
@@ -2282,12 +2581,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       onSplit: () => beginChapterSplit(fileMenu.path, 'tree'),
       onMergePrevious: () => beginChapterMerge(fileMenu.path, 'previous'),
       onMergeNext: () => beginChapterMerge(fileMenu.path, 'next'),
-      canSplit: chapterMenuModel(fileMenu.path, files).canSplit,
-      canMergePrevious: chapterMenuModel(fileMenu.path, files).canMergePrevious,
-      canMergeNext: chapterMenuModel(fileMenu.path, files).canMergeNext,
-      splitDisabledTitle: chapterMenuModel(fileMenu.path, files).splitDisabledTitle,
-      mergePreviousDisabledTitle: chapterMenuModel(fileMenu.path, files).mergePreviousDisabledTitle,
-      mergeNextDisabledTitle: chapterMenuModel(fileMenu.path, files).mergeNextDisabledTitle,
+      canSplit: fileMenuChapterModel?.canSplit ?? false,
+      canMergePrevious: fileMenuChapterModel?.canMergePrevious ?? false,
+      canMergeNext: fileMenuChapterModel?.canMergeNext ?? false,
+      splitDisabledTitle: fileMenuChapterModel?.splitDisabledTitle ?? '',
+      mergePreviousDisabledTitle: fileMenuChapterModel?.mergePreviousDisabledTitle ?? '',
+      mergeNextDisabledTitle: fileMenuChapterModel?.mergeNextDisabledTitle ?? '',
       onPin: () => { setPinnedPath(fileMenu.path); setFileMenu(null) },
       onUnpin: () => { setPinnedPath(null); setFileMenu(null) },
       isPinned: pinnedPath === fileMenu.path,
@@ -2418,7 +2717,21 @@ function ExtensionsDock(props: { rootProps: unknown }) {
   }, renderSlot ? renderSlot(EXTENSIONS_SLOT, HOST_UI_OWNER) : null)
 }
 
+/* 样式一次注入 document.head（镜像面板包的 injectStyles 模式）：50KB 常量字符串
+   不再作为 React 子节点参与每次渲染的 diff。注册即注入，早于 root 首次渲染，无 FOUC；
+   去重标记保证 effect 重跑不会重复插入。 */
+function injectShellStyles(): () => void {
+  if (typeof document === 'undefined') return () => {}
+  if (document.head.querySelector('style[data-dsh-editor-shell-styles]')) return () => {}
+  const style = document.createElement('style')
+  style.setAttribute('data-dsh-editor-shell-styles', '')
+  style.textContent = redesignedStyles
+  document.head.appendChild(style)
+  return () => style.remove()
+}
+
 export function registerShellRoot(ctx: Context, options: RegisterShellRootOptions): void {
+  if (typeof document !== 'undefined') ctx.effect(() => injectShellStyles(), 'dsh-editor-shell-client.styles')
   const client = ctx as ShellContext
   options.registerRoot(client, (props) => e(ShellErrorBoundary, null, e(Root, {
     ctx: client,

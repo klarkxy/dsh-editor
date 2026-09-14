@@ -1,6 +1,8 @@
 import {
   createElement as e,
   Fragment,
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -49,6 +51,7 @@ import {
   sendProjectContext,
   stop,
   visibleRunningCalls,
+  type ChatRow,
   type QuestionAnswerItem,
 } from '../adapter.ts'
 import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
@@ -58,10 +61,10 @@ import { isObservableSource, useObservable } from './components.ts'
 import { Markdown } from './markdown.tsx'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
 import { Select } from './select.tsx'
-import { ActivityDots, ActivityText, SuccessMark, Menu, MenuContent, MenuItem, MenuTrigger, m, useChromeMotion } from './ui/index.ts'
+import { ActivityDots, ActivityText, SuccessMark, Menu, MenuContent, MenuItem, MenuTrigger } from './ui/index.ts'
 import type { WritingModelRoute } from '../writing-settings.ts'
 import { discardCreatedChatModelError, rememberCreatedChatModelError, takeCreatedChatModelError } from './ui-workspace.ts'
-import { t, useLocale, type MessageKey } from '../i18n/index.ts'
+import { t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
 import {
   canSubmitComposer,
   errorMessage,
@@ -392,18 +395,16 @@ function ChatEntry(props: {
   enter?: boolean
   'aria-live'?: 'polite' | 'off'
 }) {
+  /* 入场判定只在挂载时冻结一次(与原 Motion 变体行为一致):历史行完全不动画,
+     之后 enter prop 翻转也不会重播;动画本体是纯 CSS 的 .chat-row-enter,
+     reduced-motion 由全局媒体查询接管。 */
   const animate = useRef(props.enter !== false)
-  const motion = useChromeMotion('message')
-  const Tag = props.as === 'details' ? m.details : m.article
-  const motionProps = animate.current
-    ? motion
-    : { initial: false as const, animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' }, transition: { duration: 0 }, whileHover: undefined, whileTap: undefined }
-  return e(Tag, {
-    className: props.className,
+  const className = animate.current ? `${props.className} chat-row-enter` : props.className
+  return e(props.as === 'details' ? 'details' : 'article', {
+    className,
     ...(props.as === 'details' ? { open: props.open } : {}),
     role: props.role,
     'aria-live': props['aria-live'],
-    ...motionProps,
   }, props.children)
 }
 
@@ -956,10 +957,69 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
   )
 }
 
+type ChatRowViewProps = {
+  row: ChatRow
+  ctx: ShellContext
+  sessionId: string
+  locale: Locale
+  /* 注册表内容变化用 tick 破坏 memo(对象本身原地可变)。 */
+  cardTick: number
+  enter: boolean
+  messageCards?: ShellMessageCardRegistry
+  messageCardContext: ShellMessageCardContext
+  onApplied(path: string): void
+  onAcceptMemory(observation: string): Promise<boolean> | boolean
+}
+
+/* 单行 memo:流式期间 transcript 每个令牌都换新引用,但 rows 按 nodes 引用缓存,
+   未变化的行凭稳定的 row/props 引用跳过重渲染(Markdown 也随之跳过 parseBlocks);
+   locale/cardTick 变化会破坏 memo,保证 t() 文案与插件卡及时更新。 */
+const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
+  const { row } = props
+  if (row.proposal) return e(ProposalCard, { ctx: props.ctx, sessionId: props.sessionId, proposal: row.proposal, onApplied: props.onApplied })
+  if (row.memory) return e(MemoryCard, { memory: row.memory, onAccept: props.onAcceptMemory })
+  const registered = row.toolName ? props.messageCards?.get(row.toolName) : undefined
+  const pluginCard = registered?.render({ result: row.result ?? row.content ?? row.text, context: props.messageCardContext })
+  if (pluginCard != null) return e(Fragment, null, pluginCard)
+  if (row.role === 'thinking') {
+    return e(ChatEntry, { as: 'details', className: 'chat-row thinking', enter: props.enter },
+      e('summary', null, t('chat.thinkingProcess')),
+      e('p', null, row.text),
+    )
+  }
+  if (row.role === 'tool' && row.error) {
+    return e(ChatEntry, {
+      as: 'details',
+      className: row.recovered ? 'chat-row tool recovered' : 'chat-row tool error',
+      role: row.recovered ? undefined : 'status',
+      enter: props.enter,
+    },
+      e('summary', null, row.recovered ? row.text : `⚠ ${row.text}`),
+      row.reason ? e('p', { className: 'tool-error-reason' }, row.reason) : null,
+      row.content ? e('pre', null, row.content) : null,
+      row.detail ? e('small', null, row.detail) : null,
+    )
+  }
+  if (row.role === 'tool' && row.content) {
+    return e(ChatEntry, { as: 'details', className: 'chat-row tool', enter: props.enter },
+      e('summary', null, row.text),
+      e('pre', null, row.content),
+      row.detail ? e('small', null, row.detail) : null,
+    )
+  }
+  return e(ChatEntry, { className: `chat-row ${row.role}`, enter: props.enter },
+    row.role === 'assistant' && row.text
+      ? e('div', { className: 'md' }, e(Markdown, { text: row.text }))
+      : e('p', null, row.text || t('chat.noText')),
+    row.detail ? e('small', null, row.detail) : null,
+    row.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: row.projectContextReceipt }) : null,
+  )
+})
+
 export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, onAcceptMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
-  const [, setMessageCardTick] = useState(0)
+  const [messageCardTick, setMessageCardTick] = useState(0)
   useEffect(() => messageCards?.subscribe(() => setMessageCardTick((value) => value + 1)), [messageCards])
   const sessionSource = useMemo(() => {
     const sessionId = session.sessionId
@@ -980,10 +1040,13 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const snapshot = lifecycle
   const chatSource = useMemo(() => conversationChatSource(ctx, session.sessionId), [ctx, session.sessionId])
   const chat = useObservable(chatSource)
-  const transcript = chat?.legacy ?? emptyTranscript()
+  const transcript = chat?.legacy ?? EMPTY_TRANSCRIPT
   const chatLegacy = transcript
   const pendingRaw = useObservable(ctx.uiSession?.pendingInteractions ?? EMPTY_PENDING)
-  const pendingItems = pendingForSession(pendingRaw as ReadonlyMap<SessionId, PendingInteraction> | PendingInteraction[], session.sessionId)
+  const pendingItems = useMemo(
+    () => pendingForSession(pendingRaw as ReadonlyMap<SessionId, PendingInteraction> | PendingInteraction[], session.sessionId),
+    [pendingRaw, session.sessionId],
+  )
   const sessionList = useObservable(ctx.sessions.list)
   const workspaceList = useObservable(ctx.workspaces.list)
   const connectionState = useObservable(isObservableSource(ctx.connection.state) ? ctx.connection.state : DISCONNECTED)
@@ -1002,19 +1065,24 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const titleAttempted = useRef(new Set<string>())
   const historyRef = useRef<HTMLDivElement | null>(null)
   const bottomPinnedRef = useRef(true)
-  /* 流式更新跟随到底部；用户主动上翻阅读时松开，回到底部附近再重新跟随。 */
-  useEffect(() => {
-    const el = historyRef.current
-    if (el && bottomPinnedRef.current) el.scrollTop = el.scrollHeight
-  }, [lifecycle, outgoing])
   useEffect(() => {
     const error = takeCreatedChatModelError(session.sessionId)
     if (error) setNote(error)
   }, [session.sessionId])
-  const internalIndexActive = internalIndexTurnActive(transcript)
+  const internalIndexActive = useMemo(() => internalIndexTurnActive(transcript), [transcript.nodes])
   /* 初始化回合的思考/流式正文也照常显示,不再强制清空,避免t('chat.replying')随流式块一闪一闪。 */
-  const partial = partialView(transcript)
-  const rows = chatRows(transcript)
+  const partial = useMemo(() => partialView(transcript), [transcript.partial])
+  /* rows 只依赖 nodes 引用:流式期间 partial 每个令牌都换新对象,但 nodes 引用不变,
+     历史行得以凭缓存引用跳过重渲染;t() 文案(停止标记/通知行)随 locale 一起失效。 */
+  const rows = useMemo(() => chatRows(transcript), [transcript.nodes, locale])
+  const visibleCalls = useMemo(() => visibleRunningCalls(transcript.runningCalls ?? []), [transcript.runningCalls])
+  /* 流式更新跟随到底部；用户主动上翻阅读时松开，回到底部附近再重新跟随。
+     依赖全部是记忆化数据:只有历史内容真的变化才补 scrollTop,draft 输入等
+     无关重渲染不再触发;用 layout effect 在绘制前完成,避免跟随时闪一帧。 */
+  useLayoutEffect(() => {
+    const el = historyRef.current
+    if (el && bottomPinnedRef.current) el.scrollTop = el.scrollHeight
+  }, [rows, partial, outgoing, visibleCalls, snapshot.queue, pendingItems])
   const historyPrimed = useRef(false)
   const primedEmpty = useRef(false)
   const initialMessageIds = useRef(new Set<string>())
@@ -1109,8 +1177,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     void initScope.set('dismissedWorkspaceIds', [...current, workspaceId]).catch(() => setInitNote(t('chat.initIgnoreFailed')))
   }
   /* 采访式初始化已开始时,记录"采访期间有提案被应用",供上面的 effect 在
-   * 会话空闲时自动接上"建立作品索引"。非采访态或还没开始就只是透传。 */
-  const handleApplied = (path: string) => {
+   * 会话空闲时自动接上"建立作品索引"。非采访态或还没开始就只是透传。
+   * useCallback 让已挂载的提案行在流式期间凭稳定引用跳过 memo 重渲染。 */
+  const handleApplied = useCallback((path: string) => {
     if (initState === 'interview' && initCompleted) {
       appliedDuringInterviewRef.current = true
       /* 典型场景是回合已结束、作者才点t('common.apply')：此时 running 不会再有 true→false 跳变，
@@ -1127,8 +1196,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       }
     }
     onApplied(path)
-  }
-  const messageCardContext: ShellMessageCardContext = {
+  }, [initState, initCompleted, snapshot.running, ctx, session.sessionId, onApplied])
+  /* 记忆化:整份 context 作为 memo 行的 prop,引用稳定行才跳得过重渲染。 */
+  const messageCardContext = useMemo<ShellMessageCardContext>(() => ({
     sessionId: session.sessionId,
     locale,
     onApplied: (path) => onWritten?.(path),
@@ -1138,7 +1208,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       else onWritten?.(activePath ?? '')
     },
     note: setNote,
-  }
+  }), [session.sessionId, locale, onWritten, activePath])
   /* 项目里任何对话已有内容，就视为作者选择了直接聊天，不再展示引导；
    * 除非初始化正在跑或刚跑完，保留进行/完成反馈。 */
   const workspaceHasConversation = sessionList.ids.some((id) => {
@@ -1155,6 +1225,17 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     engaged: initEngaged,
     workspaceHasConversation,
   })
+  /* 空白列占位:没有任何历史行,且引导卡与在途内容(发送中/排队/运行中/思考/审批)都不在时,
+     给一句 muted 提示,避免空对话只剩一列空白。 */
+  const showEmptyHistory = rows.length === 0
+    && !showInitGuide
+    && !outgoing
+    && !snapshot.running
+    && snapshot.queue.length === 0
+    && visibleCalls.length === 0
+    && !partial.text
+    && !partial.thinking
+    && pendingItems.length === 0
   const sessionIds = sessionList.ids.filter((id) => workspace?.sessionIds.includes(id))
   const workspaceSessionIds = sessionIds.length ? sessionIds : [session.sessionId]
   const hostArchivedIds = workspaceList.archivedSessionIds ?? []
@@ -1450,47 +1531,20 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         onDismiss: dismissInitGuide,
       }) : null,
       snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? e(Fragment, null, e(ActivityDots, null), t('chat.loadingMore')) : t('chat.loadOlder')) : null,
-      rows.map((row) => {
-        if (row.proposal) return e(ProposalCard, { key: row.id, ctx, sessionId: session.sessionId, proposal: row.proposal, onApplied: handleApplied })
-        if (row.memory) return e(MemoryCard, { key: row.id, memory: row.memory, onAccept: (observation) => onAcceptMemory(observation) })
-        const registered = row.toolName ? messageCards?.get(row.toolName) : undefined
-        const pluginCard = registered?.render({ result: row.result ?? row.content ?? row.text, context: messageCardContext })
-        if (pluginCard != null) return e(Fragment, { key: row.id }, pluginCard)
-        if (row.role === 'thinking') {
-          return e(ChatEntry, { as: 'details', className: 'chat-row thinking', key: row.id, enter: isNewMessage(row.id) },
-            e('summary', null, t('chat.thinkingProcess')),
-            e('p', null, row.text),
-          )
-        }
-        if (row.role === 'tool' && row.error) {
-          return e(ChatEntry, {
-            as: 'details',
-            className: row.recovered ? 'chat-row tool recovered' : 'chat-row tool error',
-            key: row.id,
-            role: row.recovered ? undefined : 'status',
-            enter: isNewMessage(row.id),
-          },
-            e('summary', null, row.recovered ? row.text : `⚠ ${row.text}`),
-            row.reason ? e('p', { className: 'tool-error-reason' }, row.reason) : null,
-            row.content ? e('pre', null, row.content) : null,
-            row.detail ? e('small', null, row.detail) : null,
-          )
-        }
-        if (row.role === 'tool' && row.content) {
-          return e(ChatEntry, { as: 'details', className: 'chat-row tool', key: row.id, enter: isNewMessage(row.id) },
-            e('summary', null, row.text),
-            e('pre', null, row.content),
-            row.detail ? e('small', null, row.detail) : null,
-          )
-        }
-        return e(ChatEntry, { className: `chat-row ${row.role}`, key: row.id, enter: isNewMessage(row.id) },
-          row.role === 'assistant' && row.text
-            ? e('div', { className: 'md' }, e(Markdown, { text: row.text }))
-            : e('p', null, row.text || t('chat.noText')),
-          row.detail ? e('small', null, row.detail) : null,
-          row.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: row.projectContextReceipt }) : null,
-        )
-      }),
+      rows.map((row) => e(ChatRowView, {
+        key: row.id,
+        row,
+        ctx,
+        sessionId: session.sessionId,
+        locale,
+        cardTick: messageCardTick,
+        enter: isNewMessage(row.id),
+        messageCards,
+        messageCardContext,
+        onApplied: handleApplied,
+        onAcceptMemory,
+      })),
+      showEmptyHistory ? e('p', { className: 'chat-empty' }, t('chat.emptyHistory')) : null,
       outgoing && !outgoingIsCanonical ? e(ChatEntry, { className: 'chat-row user', key: 'local-outgoing', enter: isNewMessage('local-outgoing') },
         e('p', null, outgoing.text),
         outgoing.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: outgoing.projectContextReceipt }) : null,
@@ -1505,7 +1559,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       outgoing?.state === 'accepted' && !outgoingIsCanonical
         ? e(ChatEntry, { className: 'chat-row assistant', key: 'local-replying', 'aria-live': 'polite', enter: isNewMessage('local-replying') }, e(ActivityDots, { variant: 'typing' }), t('chat.replying'))
         : null,
-      visibleRunningCalls(transcript.runningCalls ?? []).map((call) => e(ChatEntry, { className: 'chat-row tool', key: `running:${call.callId}`, enter: isNewMessage(`running:${call.callId}`) }, e('strong', null,
+      visibleCalls.map((call) => e(ChatEntry, { className: 'chat-row tool', key: `running:${call.callId}`, enter: isNewMessage(`running:${call.callId}`) }, e('strong', null,
         e(ActivityDots, { variant: 'typing' }),
         call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' ? t('chat.preparingProposal') : t('chat.processing')
       ))),
