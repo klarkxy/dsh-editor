@@ -5,8 +5,8 @@
 ## 入口
 
 - Host `editor-cards`：`/dsh-editor-cards`（`src/index.ts`）
-- Client：`dsh-editor.sidebar.tools` 列表、`dsh-editor.center.overlays` 详情（`src/client.ts`）
-- 命令：`cards-character`（Ctrl+Shift+C）、`cards-worldbook`（Ctrl+Shift+W）
+- Client：命令展开文件树目录；钉住栏仍读卡片字段（`src/client.ts`）
+- 命令：`cards-character`（Ctrl+Shift+C）、`cards-worldbook`（Ctrl+Shift+W）展开 `人物卡/` / `世界书/`
 - Feature：`cards`（basic / smart / full 均选）
 
 ## 契约

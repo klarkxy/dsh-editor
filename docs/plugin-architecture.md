@@ -33,7 +33,7 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
    │  └─ Host: /dsh-editor-workbench、项目/概览/状态/校对/进度/导入/快照/归档/context；可选 tools entry 提供 novel_overview / novel_memory_update
    ├─ dsh-editor-cards
    │  ├─ Host: /dsh-editor-cards、人物卡/世界书 list/references/metaSet/create；`./host-api` 供 workbench 校对扫描
-   │  └─ Client: `dsh-editor.sidebar.tools` 卡片列表 + `dsh-editor.center.overlays` 详情 + `cards-character` / `cards-worldbook`
+   │  └─ Client: `cards-character` / `cards-worldbook` 展开文件树目录；钉住栏仍读卡片字段
    ├─ dsh-editor-novel-kernel
    │  └─ Host: novel_* 工具、guard、system prompt、知识卡
    ├─ dsh-proofread：保留纯引擎；桌面 proofread entry 默认禁用
@@ -262,9 +262,9 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 | --- | --- | --- |
 | `project.inspect` | `workspacePath` | 读 · `{ hasVisibleEntries, textFiles, indexReady }`；用已注册路径，不要求 `sessionId` |
 | `project.createHome` | `title` | 写 · `{ path }`，在「文档/dsh-editor」下独占创建同名空文件夹；不接受调用方传入的父路径 |
-| `project.init` | `sessionId`, `newProject` | 写 · `{ created, skipped }`，只建立空的 `正文` 目录，不写入 Markdown 模板；大纲/人物卡/世界书在实际创建后出现 |
+| `project.init` | `sessionId`, `newProject` | 写 · `{ created, skipped }`；新作品建立空的 `正文`、`大纲`、`人物卡`、`世界书` 四个目录但不写 Markdown 模板，旧作品只保证 `正文` 存在 |
 | `project.prepareIndex` | `sessionId` | 写 · 索引准备回执 |
-| `project.overview` | `sessionId` | 读 · 章节/大纲摘要（章节含 `status`、可选 `meta: { beats, hasState }`）、总字数、`totals.byStatus` 分布、最近 1 项 `recent` 与最近 5 项 `recentChapters`、有界扫描警告 |
+| `project.overview` | `sessionId` | 读 · 章节/大纲摘要（章节含 `status`；旧文件可带兼容性的 `meta: { beats, hasState }`）、总字数、`totals.byStatus` 分布、最近 1 项 `recent` 与最近 5 项 `recentChapters`、有界扫描警告 |
 | `proofread.scan` | `sessionId`, `scope`（`document` / `manuscript`），`document` 时必填 `path`，可选 `kinds` | 读 · 确定性校对：`punctuation` / `typo` / `sensitive` / `repeat` / `habit` / `card`（默认含 `card`）。返回 `findings`（最多 500，`truncated`）、`scannedFiles`、`skipped`、`habitStats`（口癖千分比前 30）。`document` 只扫一篇作者内容 `.md`/`.txt`；`manuscript` 按自然序扫 `正文/`。`card` 对照人物卡/世界书：代词性别不一致（`card-gender`）、专名近形误写（`card-nearmiss`，词表 >400 则跳过近形检查并计入 `skipped`）。默认词库在 `resources/proofread/`，作品可追加 `.dsh-editor/敏感词.txt`、忽略 `.dsh-editor/敏感词-忽略.txt`。卡片索引经 `dsh-editor-cards/host-api` `listCards` |
 | `chapter.statusSet` | `sessionId`, `path`, `status` | 写 · `{ path, status }`，把 `正文/` 下章节设为 `draft` / `revising` / `final`；默认草稿，损坏状态文件 fail-open |
 | `progress.record` | `sessionId`, `totalChars` | 写 · 按本地日期写入/覆盖当天 `.dsh-editor/writing-log.json` 条目（最多 400 天，原子写）；防抖由调用方负责（shell 保存后 5 秒） |
@@ -313,11 +313,11 @@ Channel：`/dsh-editor-cards`（常量 `CARDS_RPC_CHANNEL`）。类型面在 `ds
 | `cards.references` | `sessionId`, `path` | 读 · 引用导航：人物卡用 `name`+`aliases`，世界书用 `triggers`（否则文件名）。在 `正文/**/*.{md,txt}` 做字面量检索，最多 200 条 `hits`（`path`/`line`/`column`/`start`/`end`/`excerpt`），带 `terms`、`scannedFiles`、`truncated` |
 | `cards.create` | `sessionId`, `kind`, `title`，可选 `fields` | 写 · 在 `人物卡/<title>.md` 或 `世界书/<title>.md` 新建卡片（frontmatter + `# <title>`）。文件名规则与 `entry.*` 相同；重名或非法名拒绝。进入 `withWorkspaceWrite` |
 
-`dsh-editor-cards/host-api` 导出 `listCards`（及卡片索引辅助函数），供 workbench `proofread.scan` 的卡片对照使用。Client 贡献侧栏 `cards`（order 150）与中栏 `cards-detail`（order 150），命令 `cards-character`（Ctrl+Shift+C）与 `cards-worldbook`（Ctrl+Shift+W）。
+`dsh-editor-cards/host-api` 导出 `listCards`（及卡片索引辅助函数），供 workbench `proofread.scan` 的卡片对照使用。命令 `cards-character`（Ctrl+Shift+C）与 `cards-worldbook`（Ctrl+Shift+W）在文件树中展开对应目录，不再打开侧栏卡片列表。
 
 章节状态存在 `.dsh-editor/chapter-status.json`（`{ version: 1, statuses }`，键为规范化相对路径，缺省与 `draft` 不落盘）。写作字数日志存在 `.dsh-editor/writing-log.json`（`[{ date, chars, delta? }]`，本地日期、按日去重）。两份文件缺失或损坏时 Host fail-open 到默认值，孤立键不影响概览。`chapter.statusSet` 只接受 `正文/` 下已存在的 Markdown/TXT。`progress.record` 必须便宜且原子，防抖由调用方负责。`proofread.scan` 合并包内默认敏感词与 `.dsh-editor/敏感词.txt`，并用 `.dsh-editor/敏感词-忽略.txt` 做允许表；列表缺失或损坏时 fail-open 到默认词库。人物卡 / 世界书 frontmatter 是容错 YAML：人物卡可选 `name` / `aliases` / `role` / `gender` / `age` / `faction` / `tags` / `status` / `relations` / `summary`；世界书可有 `category` / `tags` / `summary`，旧文件的 `triggers` / `enabled` / `priority` 按键原样保留但不再驱动自动注入。未知键在 `/dsh-editor-cards` `cards.metaSet` 中按原文保留，损坏字段 fail-open 到缺省值。
 
-章节 Markdown（`正文/**/*.md`）可选 YAML frontmatter：`beats`（字符串列表，最多 12 条、每条 ≤ 120 字）与 `state`（可选 `now` / `where` / `knows` / `ended` / `open`，各为标量，合计 ≤ 300 字）。未知键与注释按原文保留；TXT 章节不使用 frontmatter。无 frontmatter 解析为 `{}`，损坏或未闭合解析为缺省。`project.overview` 的字数 / 标题 / 摘要 / 空章按去掉 frontmatter 的正文计算，并带可选 `ChapterSummary.meta`。
+旧版章节 Markdown（`正文/**/*.md`）可能带 YAML frontmatter：`beats`（字符串列表）与 `state`（`now` / `where` / `knows` / `ended` / `open`）。当前版本为兼容旧作品继续容错解析、在字数与纯正文投影中排除并原样保留；写作页、新的提案调用和维护工具不再创建或编辑它们。旧会话里已经存在的待处理章纲/小结卡仍可由作者显式采用，并继续接受原有版本校验；它们不会自动执行。新的大纲与章纲统一保存为 `大纲/` 下可见的普通 Markdown。
 
 `.dsh-editor/*` 隐藏元数据一律不进入快照 payload。重命名、正文跨卷移动、归档和恢复响应可以带 `metadataWarning`，表示正文操作已经成功但附带的元数据未同步，调用方不得据此回滚正文。
 
@@ -364,7 +364,7 @@ Channel：`/dsh-editor-plugins`。不要求 `sessionId`。开关写入 `$DSH_HOM
 | 想改变的行为 | 所有者 |
 | --- | --- |
 | 三栏布局、稿纸、搜索面板、导出导入归档、钉住栏、Chat 展示（含记忆回执卡）、设置、内置快捷键 | `dsh-editor-shell` |
-| 侧栏人物卡/世界书、详情 overlay、`cards-character` / `cards-worldbook` | `dsh-editor-cards` |
+| 人物卡/世界书 Host、钉住字段、`cards-character` / `cards-worldbook` 展开目录 | `dsh-editor-cards` |
 | 保留的侧栏作品校对面板、校对命令（0.2.0 桌面暂停） | `dsh-editor-proofread-panel` |
 | 中栏作品概览、`overview` 命令（Ctrl+Shift+O） | `dsh-editor-overview-panel` |
 | 侧栏记忆维护、`memory-open` 命令 | `dsh-editor-memory-panel` |

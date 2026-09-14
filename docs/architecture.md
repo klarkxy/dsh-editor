@@ -33,7 +33,7 @@ Electron（受控多窗口、资源校验、子进程生命周期）
          ├─ dsh-proofread：纯文本引擎依赖（basic/smart/full 均保留；桌面 entry 默认禁用）
          ├─ dsh-zhihu：资料 RPC、设置内嵌 UI 与可选 Tool（默认 full）
          ├─ dsh-editor-workbench：私有项目生命周期、概览/状态、校对、进度、context、导入、快照与归档
-         ├─ dsh-editor-cards：人物卡/世界书 Host RPC 与 Client UI（侧栏列表、中栏详情、Ctrl+Shift+C/W）
+         ├─ dsh-editor-cards：人物卡/世界书 Host RPC 与 Client UI（钉住字段、Ctrl+Shift+C/W 展开文件树目录）
          ├─ dsh-editor-novel-kernel：私有小说 Tool、guard、prompt 与知识卡（smart/full）
          ├─ dsh-editor-shell：私有根界面
          │  ├─ 三栏：左真实目录树（新建只预建 `正文/`；栏顶搜索与版本菜单；辅助文件隐藏，资料工具从命令面板打开），中稿纸（查找替换、打字机/段落聚焦、排版、ghost FIM、选段改写、‹ › 导航），右 DshChatPort（对话 ⋯ 归档/恢复/删除）

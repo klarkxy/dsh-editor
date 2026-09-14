@@ -91,7 +91,7 @@
 
 `prefers-reduced-motion: reduce` 时关掉过渡和动画（含 `.dsh-ui` / palette / select 等 Portal 浮层）；Motion 入场去掉位移/缩放/弹簧并 `duration: 0`。幽灵补全的 loading 不再闪，只保留 `--ghost` 色。焦点与状态变化仍在。
 
-共享弹层由 shell `src/client/ui` 提供：`Dialog` / `Confirm` / `Menu` / `Tooltip` / `Tabs` / `Button` / `Input`，外加已有 `Select`。作品菜单、文件右键、正文右键 /「⋯」、对话「⋯」都走同一套 `Menu`。正文菜单直接打开自定义改写；打字机与段落聚焦收在写作设置中，章纲与章末小结分别使用独立 Dialog，章纲可在稿纸附近展开对照。正文常驻仅保留文档名、章节导航、字数、保存状态和「⋯」，停止生成、预览采纳 / 放弃、冲突和备份恢复按需显示。菜单卸载后再交接焦点给搜索面板或弹窗。路径回退走受控 `Dialog`，不把输入框放进菜单 typeahead。Motion `m.*` 只用于首页两张入口卡和搜索面板 chrome；Radix 菜单/对话框继续 CSS Presence。稿纸、作曲区、FIM、长列表不用 Motion。IME 组字期间 Enter（含 `keyCode === 229`）由输入 `keydown` 自己 `preventDefault`，不得提交。
+共享弹层由 shell `src/client/ui` 提供：`Dialog` / `Confirm` / `Menu` / `Tooltip` / `Tabs` / `Button` / `Input`，外加已有 `Select`。作品菜单、文件右键、正文右键 /「⋯」、对话「⋯」都走同一套 `Menu`。正文菜单直接打开自定义改写；打字机与段落聚焦收在写作设置中。大纲和章纲作为 `大纲/` 下的普通 Markdown 管理，不在稿纸附近增加第二套控件。正文常驻仅保留文档名、章节导航、字数、保存状态和「⋯」，停止生成、预览采纳 / 放弃、冲突和备份恢复按需显示。菜单卸载后再交接焦点给搜索面板或弹窗。路径回退走受控 `Dialog`，不把输入框放进菜单 typeahead。Motion `m.*` 只用于首页两张入口卡和搜索面板 chrome；Radix 菜单/对话框继续 CSS Presence。稿纸、作曲区、FIM、长列表不用 Motion。IME 组字期间 Enter（含 `keyCode === 229`）由输入 `keydown` 自己 `preventDefault`，不得提交。
 
 ## 已落地的写作交互
 
