@@ -13,6 +13,15 @@ export {
   MenuLabel,
 } from './menu.tsx'
 export { m, useChromeMotion } from './motion.ts'
+export {
+  ActivityDots,
+  ActivityRing,
+  ActivityShimmer,
+  ActivitySkeleton,
+  ActivityText,
+  SuccessMark,
+  type ActivityCue,
+} from './activity.tsx'
 export { Tooltip, TooltipProvider } from './tooltip.tsx'
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs.tsx'
 export { Button, Input, type ButtonVariant } from './controls.tsx'

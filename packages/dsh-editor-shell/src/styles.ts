@@ -176,8 +176,17 @@ export const baseStyles = `
 @keyframes shell-toast-in { from { opacity: 0; transform: translateY(24px) scale(.96); filter: blur(var(--blur-small)); } }
 @keyframes shell-menu-out { to { opacity: 0; transform: translateY(-4px) scale(.96); filter: blur(2px); } }
 @keyframes shell-menu-item-in { from { opacity: 0; transform: translateY(6px); } }
-@keyframes shell-thinking-pulse { 0%, 100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
 @keyframes shell-stop-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 35%, transparent); } 50% { box-shadow: 0 0 0 5px transparent; } }
+/* 活动反馈循环:仅用于加载/等待/进行中原语(ui/activity.tsx 的 .activity-*),
+   参数改写自 Amicro(MIT) —— pulse-dots 1.4s 交错明灭、typing 0.6s 起伏、
+   smooth-ring 1s linear 旋转、shimmer-line 1.5s 扫过、fluid-skeleton 1.5s 光泽。
+   不做位移重排;reduced-motion 统一停掉,留下静态可读态。 */
+@keyframes shell-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+@keyframes shell-activity-typing { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes shell-activity-ring { to { transform: rotate(360deg); } }
+@keyframes shell-activity-shimmer { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+@keyframes shell-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+@keyframes shell-success-draw { from { stroke-dashoffset: 42; } }
 .shell textarea, .dsh-ui textarea { resize: none; outline: none; }
 .shell :focus, .dsh-ui :focus { outline: none; }
 .shell :focus-visible, .dsh-ui :focus-visible { box-shadow: var(--focus-ring); }
@@ -648,7 +657,7 @@ export const componentStyles = `
 .shell details.chat-row small { display: block; margin-top: 4px; color: var(--meta); }
 /* 运行中(模型正在思考/调用工具)时,思考行标题旁的脉冲点让"在转"肉眼可见;
    停止按钮用红色脉环提示可中止。data-running 由 chat.ts 按真实 lifecycle 写入。 */
-.shell .chat-history[data-running="true"] .chat-row.thinking summary::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; animation: shell-thinking-pulse 1.1s var(--ease) infinite; }
+.shell .chat-history[data-running="true"] .chat-row.thinking summary .activity-dots { color: var(--accent); }
 .shell .composer .chat-stop { color: var(--danger); animation: shell-stop-pulse 1.4s var(--ease) infinite; }
 /* 待答卡片(授权/提问)入场:真实新增时播放一次,已挂载不重播。 */
 .shell .pending-card, .dsh-ui .pending-card { animation: shell-rise-in 240ms var(--ease-spring) both; }
@@ -1218,6 +1227,44 @@ export const componentStyles = `
   gap: 2px;
 }
 .shell .settings-tabs, .dsh-ui .settings-tabs { display: contents; }
+
+/* ── 活动反馈(ui/activity.tsx)─────────────────────────────
+   加载/等待/进行中的统一视觉词汇:点(呼吸/起伏)、环、微光行、骨架、完成勾。
+   点随字号缩放并继承文字色,环与微光用单一墨蓝 --accent,骨架用纸面 hairline。
+   装饰元素 aria-hidden;reduced-motion 由下方媒体查询停循环,静态态仍可读。 */
+.shell .activity-dots, .dsh-ui .activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
+.shell .activity-text .activity-dots, .dsh-ui .activity-text .activity-dots { margin-inline-end: 0; }
+.shell button .activity-dots:only-child, .dsh-ui button .activity-dots:only-child { margin-inline-end: 0; }
+.shell .activity-dots i, .dsh-ui .activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; }
+.shell .activity-dots.is-pulse i, .dsh-ui .activity-dots.is-pulse i { animation: shell-activity-pulse 1.4s var(--ease) infinite; }
+.shell .activity-dots.is-typing i, .dsh-ui .activity-dots.is-typing i { animation: shell-activity-typing .6s ease-in-out infinite; }
+.shell .activity-dots.is-pulse i:nth-child(2), .dsh-ui .activity-dots.is-pulse i:nth-child(2) { animation-delay: .2s; }
+.shell .activity-dots.is-pulse i:nth-child(3), .dsh-ui .activity-dots.is-pulse i:nth-child(3) { animation-delay: .4s; }
+.shell .activity-dots.is-typing i:nth-child(2), .dsh-ui .activity-dots.is-typing i:nth-child(2) { animation-delay: .15s; }
+.shell .activity-dots.is-typing i:nth-child(3), .dsh-ui .activity-dots.is-typing i:nth-child(3) { animation-delay: .3s; }
+.shell .activity-ring, .dsh-ui .activity-ring { display: inline-block; width: 1.25em; height: 1.25em; color: var(--accent); vertical-align: middle; animation: shell-activity-ring 1s linear infinite; }
+.shell .activity-ring-track, .dsh-ui .activity-ring-track { stroke: var(--hairline-strong); }
+.shell .activity-ring-arc, .dsh-ui .activity-ring-arc { stroke: currentColor; }
+.shell .activity-shimmer, .dsh-ui .activity-shimmer { position: relative; display: block; width: 96px; height: 3px; border-radius: 999px; background: var(--hairline-strong); overflow: hidden; }
+.shell .activity-shimmer i, .dsh-ui .activity-shimmer i { position: absolute; top: 0; bottom: 0; left: 0; width: 33%; border-radius: inherit; background: var(--accent); opacity: .5; animation: shell-activity-shimmer 1.5s ease-in-out infinite; }
+.shell .activity-skeleton, .dsh-ui .activity-skeleton { display: grid; gap: 8px; }
+.shell .activity-skeleton i, .dsh-ui .activity-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-sm); background: var(--hairline-strong); overflow: hidden; }
+.shell .activity-skeleton i::after, .dsh-ui .activity-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 65%, transparent), transparent); animation: shell-activity-sheen 1.5s linear infinite; }
+.shell .activity-text, .dsh-ui .activity-text { display: inline-flex; align-items: center; gap: 6px; animation: shell-fade-in var(--duration-fast) var(--ease) both; }
+.shell .success-mark, .dsh-ui .success-mark { display: inline-block; width: 1.1em; height: 1.1em; color: var(--confirm); vertical-align: -.15em; }
+.shell .success-mark path, .dsh-ui .success-mark path { stroke: currentColor; stroke-dasharray: 42; stroke-dashoffset: 0; animation: shell-success-draw var(--duration-fast) var(--ease-smooth-out); }
+.shell .workspace-checking .activity-ring, .dsh-ui .workspace-checking .activity-ring { justify-self: center; }
+.shell .workspace-checking .activity-shimmer, .dsh-ui .workspace-checking .activity-shimmer { justify-self: center; }
+.shell .import-working, .dsh-ui .import-working { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--muted); }
+.shell .activity-reveal, .dsh-ui .activity-reveal { animation: shell-fade-in var(--duration-fast) var(--ease) both; }
+.shell .models-loading, .dsh-ui .models-loading { max-width: 480px; margin-top: 12px; }
+.shell .usage-loading, .dsh-ui .usage-loading { max-width: 420px; margin-top: 12px; }
+.shell .models-writing-route .route-saving, .dsh-ui .models-writing-route .route-saving { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; color: var(--meta); }
+.shell .models-writing-route .route-saving .activity-dots, .dsh-ui .models-writing-route .route-saving .activity-dots { margin-inline-end: 0; }
+.shell .export-loading, .dsh-ui .export-loading { display: grid; justify-items: center; gap: 12px; padding: 20px 0 8px; color: var(--muted); }
+.shell .export-loading .activity-skeleton, .dsh-ui .export-loading .activity-skeleton { width: min(320px, 100%); }
+.shell .writing-progress-settings .goal-saving, .dsh-ui .writing-progress-settings .goal-saving { display: inline-flex; align-items: center; margin-inline-start: 6px; color: var(--meta); vertical-align: middle; }
+.shell .writing-progress-settings .goal-saving .activity-dots, .dsh-ui .writing-progress-settings .goal-saving .activity-dots { margin-inline-end: 0; }
 
 /* ── Reduced motion ─────────────────────────────────────── */
 /* 覆盖 Portal 到 body 的浮层(palette/select,在 .shell 之外)与伪元素;
