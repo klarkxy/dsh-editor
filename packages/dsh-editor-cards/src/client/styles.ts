@@ -23,6 +23,7 @@ export const cardsPanelStyles = `
 .dsh-ui .cards-tabs button[aria-selected="true"], .dsh-ui .cards-chip[aria-pressed="true"] {
   background: var(--accent); color: var(--accent-on);
 }
+.shell .cards-tabs button:hover:not(:disabled), .dsh-ui .cards-tabs button:hover:not(:disabled) { background: var(--accent); color: var(--accent-on); }
 .shell .cards-toolbar, .dsh-ui .cards-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .shell .cards-toolbar input, .shell .cards-toolbar select, .shell .cards-fields input, .shell .cards-fields select, .shell .cards-fields textarea,
 .dsh-ui .cards-toolbar input, .dsh-ui .cards-toolbar select, .dsh-ui .cards-fields input, .dsh-ui .cards-fields select, .dsh-ui .cards-fields textarea {
@@ -32,12 +33,16 @@ export const cardsPanelStyles = `
 .shell .cards-fields textarea, .dsh-ui .cards-fields textarea { min-height: 72px; padding: 8px 10px; resize: vertical; }
 .shell .cards-chips, .dsh-ui .cards-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .shell .cards-chip, .dsh-ui .cards-chip { background: var(--bg); color: var(--fg-2); box-shadow: var(--elev-ring); }
-.shell .cards-groups, .dsh-ui .cards-groups { display: grid; gap: 8px; max-height: 320px; overflow: auto; }
+.shell .cards-chip:hover:not(:disabled), .dsh-ui .cards-chip:hover:not(:disabled) { background: var(--surface-warm); color: var(--fg); }
+.shell .cards-groups, .dsh-ui .cards-groups { display: grid; gap: 8px; max-height: min(40vh, 320px); overflow: auto; }
 .shell .cards-group h3, .dsh-ui .cards-group h3 { margin: 0; font: 500 var(--text-chrome, 13px)/1.3 var(--font-sans); color: var(--meta); letter-spacing: .04em; }
 .shell .cards-list, .dsh-ui .cards-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .shell .cards-item, .dsh-ui .cards-item { display: grid; gap: 4px; padding: 8px; border-radius: var(--radius-sm); }
 .shell .cards-item.selected, .dsh-ui .cards-item.selected { background: var(--accent-soft); }
+/* 列表行交互对齐 memory 面板:hover 用 --accent-soft 淡底,:focus-visible 用统一焦点环。 */
 .shell .cards-item-main, .dsh-ui .cards-item-main { display: grid; gap: 3px; width: 100%; text-align: left; border: 0; background: transparent; color: var(--fg); cursor: pointer; }
+.shell .cards-item-main:hover, .dsh-ui .cards-item-main:hover { background: var(--accent-soft); }
+.shell .cards-item-main:focus-visible, .dsh-ui .cards-item-main:focus-visible { box-shadow: var(--focus-ring); }
 .shell .cards-item-main strong, .dsh-ui .cards-item-main strong { font: 500 var(--text-base, 14px)/1.3 var(--font-sans); }
 .shell .cards-meta, .dsh-ui .cards-meta { display: flex; flex-wrap: wrap; gap: 6px; color: var(--meta); font-size: var(--text-chrome, 13px); }
 .shell .cards-badge, .dsh-ui .cards-badge { padding: 1px 6px; border-radius: 999px; background: var(--surface-warm); color: var(--fg-2); font-style: normal; }
@@ -73,19 +78,14 @@ export const cardsPanelStyles = `
   min-height: 32px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); cursor: pointer; font-size: var(--text-chrome, 13px);
 }
 .dsh-ui.file-dialog.prompt-dialog, .shell .file-dialog.prompt-dialog, .dsh-ui .file-dialog.prompt-dialog { width: min(520px, 100%); }
-/* 活动反馈:三点呼吸(pulse-dots)与骨架光泽(fluid-skeleton),参数改写自
-   Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);reduced-motion
-   停掉循环,保留静态点与骨架条。卡片列表载入用骨架,出现仅淡入(不位移)。 */
-@keyframes cards-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
-@keyframes cards-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+/* 焦点环:面板/详情/新建对话框可能渲染在 .shell/.dsh-ui 之外,自带 focus-visible 词汇(box-shadow 环,不用 outline)。 */
+.cards-panel :focus, .cards-detail :focus, .file-dialog.prompt-dialog :focus { outline: none; }
+.cards-panel button:focus-visible, .cards-panel input:focus-visible, .cards-panel select:focus-visible, .cards-panel textarea:focus-visible,
+.cards-detail button:focus-visible, .cards-detail input:focus-visible, .cards-detail select:focus-visible, .cards-detail textarea:focus-visible,
+.file-dialog.prompt-dialog button:focus-visible, .file-dialog.prompt-dialog input:focus-visible, .file-dialog.prompt-dialog select:focus-visible, .file-dialog.prompt-dialog textarea:focus-visible { box-shadow: var(--focus-ring); }
+/* 活动反馈:.panel-activity-dots / .panel-skeleton 共享类由 shell styles.ts 统一提供,
+   面板不再自带副本(跨包注入同名类会互相覆盖);reduced-motion 停掉循环,保留静态点与骨架条。卡片列表载入用骨架,出现仅淡入(不位移)。 */
 @keyframes cards-item-in { from { opacity: 0; } }
-.shell .panel-activity-dots, .dsh-ui .panel-activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
-.shell .panel-activity-dots i, .dsh-ui .panel-activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: cards-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
-.shell .panel-activity-dots i:nth-child(2), .dsh-ui .panel-activity-dots i:nth-child(2) { animation-delay: .2s; }
-.shell .panel-activity-dots i:nth-child(3), .dsh-ui .panel-activity-dots i:nth-child(3) { animation-delay: .4s; }
-.shell .panel-skeleton, .dsh-ui .panel-skeleton { display: grid; gap: 8px; }
-.shell .panel-skeleton i, .dsh-ui .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-sm, 6px); background: var(--hairline-strong, rgba(20, 20, 19, .12)); overflow: hidden; }
-.shell .panel-skeleton i::after, .dsh-ui .panel-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface, #fdfcf6) 65%, transparent), transparent); animation: cards-activity-sheen 1.5s linear infinite; }
 .shell .cards-loading, .dsh-ui .cards-loading { display: grid; gap: 8px; color: var(--meta); }
 .shell .cards-item, .dsh-ui .cards-item { animation: cards-item-in var(--duration-fast, 250ms) var(--ease-smooth-out, ease) both; }
 @media (max-width: 720px) {
@@ -97,5 +97,7 @@ export const cardsPanelStyles = `
   .dsh-ui.file-dialog.prompt-dialog, .dsh-ui.file-dialog.prompt-dialog * {
     animation: none !important; transition: none !important;
   }
+  .shell .panel-activity-dots i, .shell .panel-skeleton i::after,
+  .dsh-ui .panel-activity-dots i, .dsh-ui .panel-skeleton i::after { animation: none !important; }
 }
 `

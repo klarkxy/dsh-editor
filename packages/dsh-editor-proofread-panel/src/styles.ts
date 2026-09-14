@@ -29,7 +29,7 @@ export const proofreadPanelStyles = `
 .shell .proofread-chip[aria-pressed="true"], .dsh-ui .proofread-chip[aria-pressed="true"] { background: var(--accent-soft) !important; color: var(--accent) !important; }
 .shell .proofread-summary, .dsh-ui .proofread-summary { display: flex; flex-wrap: wrap; gap: 6px; color: var(--meta); font-size: var(--text-chrome, 13px); animation: proofread-item-in var(--duration-fast, 250ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both; }
 .shell .proofread-batch, .dsh-ui .proofread-batch { align-self: start; min-height: var(--control-h, 34px); }
-.shell .proofread-results, .dsh-ui .proofread-results { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow: auto; }
+.shell .proofread-results, .dsh-ui .proofread-results { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; max-height: min(40vh, 320px); overflow: auto; }
 .shell .proofread-file, .dsh-ui .proofread-file { display: grid; gap: 4px; min-width: 0; }
 .shell .proofread-results > li, .dsh-ui .proofread-results > li { animation: proofread-item-in var(--duration-fast, 250ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both; }
 .shell .proofread-results > li:nth-child(2), .dsh-ui .proofread-results > li:nth-child(2) { animation-delay: var(--duration-stagger, 40ms); }
@@ -48,7 +48,7 @@ export const proofreadPanelStyles = `
 .shell .proofread-head, .dsh-ui .proofread-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; min-width: 0; }
 .shell .proofread-message, .dsh-ui .proofread-message { min-width: 0; overflow-wrap: anywhere; }
 .shell .proofread-hit .proofread-kind, .dsh-ui .proofread-hit .proofread-kind { color: var(--meta); }
-.shell .proofread-severity, .dsh-ui .proofread-severity { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; vertical-align: middle; background: var(--muted); }
+.shell .proofread-severity, .dsh-ui .proofread-severity { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; vertical-align: middle; background: var(--muted); }
 .shell .proofread-severity.error, .dsh-ui .proofread-severity.error { background: var(--danger); }
 .shell .proofread-severity.warning, .dsh-ui .proofread-severity.warning { background: var(--accent); }
 .shell .proofread-severity.info, .dsh-ui .proofread-severity.info { background: var(--muted); }
@@ -70,21 +70,15 @@ export const proofreadPanelStyles = `
 .shell .proofread-panel .proposal-card header, .shell .proofread-panel .proposal-card footer,
 .dsh-ui .proofread-panel .proposal-card header, .dsh-ui .proofread-panel .proposal-card footer { flex-wrap: wrap; }
 .shell .proofread-panel .proposal-card pre, .dsh-ui .proofread-panel .proposal-card pre { max-height: 120px; }
-/* 活动反馈:三点呼吸(pulse-dots)与骨架光泽(fluid-skeleton),参数改写自
-   Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);reduced-motion
-   停掉循环,保留静态点与骨架条。骨架形状贴合检查结果列表。 */
-@keyframes proofread-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
-@keyframes proofread-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
-.shell .panel-activity-dots, .dsh-ui .panel-activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
-.shell .panel-activity-dots i, .dsh-ui .panel-activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: proofread-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
-.shell .panel-activity-dots i:nth-child(2), .dsh-ui .panel-activity-dots i:nth-child(2) { animation-delay: .2s; }
-.shell .panel-activity-dots i:nth-child(3), .dsh-ui .panel-activity-dots i:nth-child(3) { animation-delay: .4s; }
-.shell .panel-skeleton, .dsh-ui .panel-skeleton { display: grid; gap: 8px; }
-.shell .panel-skeleton i, .dsh-ui .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-sm, 6px); background: var(--hairline-strong, rgba(20, 20, 19, .12)); overflow: hidden; }
-.shell .panel-skeleton i::after, .dsh-ui .panel-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface, #fdfcf6) 65%, transparent), transparent); animation: proofread-activity-sheen 1.5s linear infinite; }
+/* 焦点环:面板可能渲染在 .shell/.dsh-ui 之外,自带 focus-visible 词汇(box-shadow 环,不用 outline)。 */
+.proofread-panel :focus { outline: none; }
+.proofread-panel button:focus-visible, .proofread-panel input:focus-visible, .proofread-panel select:focus-visible, .proofread-panel textarea:focus-visible, .proofread-panel a:focus-visible, .proofread-panel [tabindex]:focus-visible { box-shadow: var(--focus-ring); }
+/* 活动反馈:.panel-activity-dots / .panel-skeleton 共享类由 shell styles.ts 统一提供,
+   面板不再自带副本(跨包注入同名类会互相覆盖);reduced-motion 停掉循环,保留静态点与骨架条。 */
 .shell .proofread-loading, .dsh-ui .proofread-loading { display: grid; gap: 8px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
-  .shell .proofread-panel, .shell .proofread-panel *, .dsh-ui .proofread-panel, .dsh-ui .proofread-panel * {
+  .shell .proofread-panel, .shell .proofread-panel *, .dsh-ui .proofread-panel, .dsh-ui .proofread-panel *,
+  .shell .panel-activity-dots i, .shell .panel-skeleton i::after, .dsh-ui .panel-activity-dots i, .dsh-ui .panel-skeleton i::after {
     animation: none !important; transition: none !important; filter: none !important; transform: none !important;
   }
 }

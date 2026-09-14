@@ -3,7 +3,7 @@ export const memoryPanelStyles = `
 @keyframes memory-row-in { from { opacity: 0; transform: translateY(10px); } }
 @keyframes memory-detail-in { from { opacity: 0; transform: translateY(8px) scale(.98); filter: blur(2px); } }
 .shell .memory-panel, .dsh-ui .memory-panel {
-  margin: 0 10px 8px; padding: 8px; max-height: 420px; overflow: auto; display: flex; flex-direction: column; gap: 8px;
+  margin: 0 10px 8px; padding: 8px; max-height: min(40vh, 320px); overflow: auto; display: flex; flex-direction: column; gap: 8px;
   border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-ring); font-size: var(--text-chrome, 13px);
   animation: memory-panel-in var(--duration-medium, 350ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both;
   will-change: transform, opacity, filter;
@@ -59,20 +59,14 @@ export const memoryPanelStyles = `
 .shell .memory-panel .proposal-card.expired, .dsh-ui .memory-panel .proposal-card.expired { border-color: var(--danger); }
 .shell .memory-panel .proposal-card.checking, .dsh-ui .memory-panel .proposal-card.checking { color: var(--muted); }
 .shell .memory-status, .dsh-ui .memory-status { margin: 0; animation: memory-detail-in var(--duration-fast, 250ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both; }
-/* 活动反馈:三点呼吸(pulse-dots)与骨架光泽(fluid-skeleton),参数改写自
-   Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin),1.4s 交错明灭 /
-   1.5s linear 光泽扫过;reduced-motion 停掉循环,保留静态点与骨架条。 */
-@keyframes memory-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
-@keyframes memory-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
-.shell .panel-activity-dots, .dsh-ui .panel-activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
-.shell .panel-activity-dots i, .dsh-ui .panel-activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: memory-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
-.shell .panel-activity-dots i:nth-child(2), .dsh-ui .panel-activity-dots i:nth-child(2) { animation-delay: .2s; }
-.shell .panel-activity-dots i:nth-child(3), .dsh-ui .panel-activity-dots i:nth-child(3) { animation-delay: .4s; }
-.shell .panel-skeleton, .dsh-ui .panel-skeleton { display: grid; gap: 8px; }
-.shell .panel-skeleton i, .dsh-ui .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-sm, 6px); background: var(--hairline-strong, rgba(20, 20, 19, .12)); overflow: hidden; }
-.shell .panel-skeleton i::after, .dsh-ui .panel-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface, #fdfcf6) 65%, transparent), transparent); animation: memory-activity-sheen 1.5s linear infinite; }
+/* 焦点环:面板可能渲染在 .shell/.dsh-ui 之外,自带 focus-visible 词汇(box-shadow 环,不用 outline)。 */
+.memory-panel :focus { outline: none; }
+.memory-panel button:focus-visible, .memory-panel input:focus-visible, .memory-panel select:focus-visible, .memory-panel textarea:focus-visible, .memory-panel a:focus-visible, .memory-panel [tabindex]:focus-visible { box-shadow: var(--focus-ring); }
+/* 活动反馈:.panel-activity-dots / .panel-skeleton 共享类由 shell styles.ts 统一提供,
+   面板不再自带副本(跨包注入同名类会互相覆盖);reduced-motion 停掉循环,保留静态点与骨架条。 */
 @media (prefers-reduced-motion: reduce) {
-  .shell .memory-panel, .shell .memory-panel *, .dsh-ui .memory-panel, .dsh-ui .memory-panel * {
+  .shell .memory-panel, .shell .memory-panel *, .dsh-ui .memory-panel, .dsh-ui .memory-panel *,
+  .shell .panel-activity-dots i, .shell .panel-skeleton i::after, .dsh-ui .panel-activity-dots i, .dsh-ui .panel-skeleton i::after {
     animation: none !important; transition: none !important; filter: none !important; transform: none !important;
   }
 }

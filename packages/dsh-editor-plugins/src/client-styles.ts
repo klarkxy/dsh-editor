@@ -1,4 +1,31 @@
 export const pluginsClientStyles = `
+/* Dark host fallback: mirror the shell ink tokens (docs/ui.md table) for every
+   colour these styles reference, on the :root[data-theme] contract only.
+   Inside the shell the same values already apply at :root; standalone, a
+   data-theme="ink" host stays readable instead of falling back to paper. */
+:root[data-theme="ink"] {
+  --bg: #161310;
+  --bg-sunken: #100e0b;
+  --surface: #221e18;
+  --surface-warm: #2c2820;
+  --fg: #ede7d7;
+  --fg-2: #cdc7b8;
+  --muted: #a8a294;
+  --meta: #8f897b;
+  --border: #3d382f;
+  --border-soft: #2a261f;
+  --hairline: rgba(237, 231, 215, 0.07);
+  --hairline-strong: rgba(237, 231, 215, 0.14);
+  --accent: #9db4d0;
+  --accent-soft: rgba(157, 180, 208, 0.16);
+  --accent-on: #161310;
+  --accent-active: #b6c9e0;
+  --ghost: #8f897b;
+  --danger: #c4786a;
+  --confirm: #8aaa70;
+  --focus-ring: 0 0 0 2px var(--accent-active);
+  color-scheme: dark;
+}
 .dsh-plugins {
   display: grid;
   gap: var(--space-4, 16px);
@@ -40,7 +67,6 @@ export const pluginsClientStyles = `
   color: var(--fg-2, #3d3d3a);
   cursor: pointer;
   font: 500 var(--text-sm, 13px)/1 var(--font-sans, system-ui, sans-serif);
-  letter-spacing: 0;
 }
 .dsh-plugins-tabs button[aria-selected="true"],
 .dsh-ui.file-dialog .dsh-plugins-tabs button[aria-selected="true"],
@@ -68,8 +94,7 @@ export const pluginsClientStyles = `
   font: inherit;
 }
 .dsh-plugins-search input:focus-visible, .dsh-plugins button:focus-visible {
-  outline: 2px solid var(--accent, #1b365d);
-  outline-offset: 1px;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48));
 }
 .dsh-plugins-search button,
 .dsh-ui .dsh-plugins-search button,
@@ -86,7 +111,7 @@ export const pluginsClientStyles = `
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
   font: 500 var(--text-sm, 13px)/1 var(--font-sans, system-ui, sans-serif);
-  letter-spacing: 0;
+  letter-spacing: .04em;
 }
 .dsh-plugins-primary,
 .dsh-ui.file-dialog .dsh-plugins-primary,
@@ -120,8 +145,10 @@ export const pluginsClientStyles = `
   border: 1px solid var(--border-soft, #e5e3d8);
   border-radius: var(--radius-md, 8px);
   background: var(--surface, #fdfcf6);
+  transition: background-color var(--motion-fast, 150ms) var(--ease, ease);
 }
-.dsh-plugins-card-title { font: 600 var(--text-sm, 12px)/1.4 var(--font-sans, system-ui, sans-serif); }
+.dsh-plugins-card:hover { background: var(--surface-warm, #e8e6dc); }
+.dsh-plugins-card-title { font: 600 var(--text-sm, 13px)/1.4 var(--font-sans, system-ui, sans-serif); }
 .dsh-plugins-card-desc, .dsh-plugins-meta {
   color: var(--muted, #504e49);
   font-size: var(--text-xs, 11px);
@@ -181,8 +208,7 @@ export const pluginsClientStyles = `
 .dsh-plugins-switch.is-pending { opacity: .7; cursor: wait; }
 .dsh-plugins-switch:disabled { cursor: not-allowed; opacity: .7; }
 .dsh-plugins-switch:focus-visible {
-  outline: 2px solid var(--accent, #1b365d);
-  outline-offset: 2px;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48));
 }
 .dsh-plugins-switch-thumb {
   position: absolute;
@@ -238,8 +264,7 @@ export const pluginsClientStyles = `
 .dsh-plugins-stars { color: var(--meta, #6b6a64); }
 .dsh-plugins a { color: var(--accent, #1b365d); }
 .dsh-plugins a:focus-visible {
-  outline: 2px solid var(--accent, #1b365d);
-  outline-offset: 1px;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48));
 }
 .dsh-plugins-install-body {
   display: grid;
@@ -282,7 +307,7 @@ export const pluginsClientStyles = `
 .dsh-plugins-inspect-warn {
   border-color: color-mix(in srgb, var(--accent, #1b365d) 40%, var(--border, #d8d5c7));
 }
-.dsh-plugins-inspect-verdict { margin: 0; font: 600 var(--text-sm, 12px)/1.5 var(--font-sans, system-ui, sans-serif); }
+.dsh-plugins-inspect-verdict { margin: 0; font: 600 var(--text-sm, 13px)/1.5 var(--font-sans, system-ui, sans-serif); }
 .dsh-plugins-findings { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 .dsh-plugins-finding { font-size: var(--text-xs, 11px); line-height: 1.5; }
 .dsh-plugins-finding-error { color: var(--danger, #8a3a30); }
@@ -298,7 +323,8 @@ export const pluginsClientStyles = `
 .dsh-plugins-dots i:nth-child(3) { animation-delay: .4s; }
 .dsh-plugins-switch.is-pending .dsh-plugins-switch-thumb { animation: dsh-plugins-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .dsh-plugins-switch-thumb { transition: none; }
-  .dsh-plugins-dots i, .dsh-plugins-switch.is-pending .dsh-plugins-switch-thumb { animation: none; }
+  .dsh-plugins, .dsh-plugins *, .dsh-plugins *::before, .dsh-plugins *::after {
+    animation: none !important; transition: none !important;
+  }
 }
 `

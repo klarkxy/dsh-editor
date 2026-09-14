@@ -17,6 +17,127 @@
  */
 
 export const manuscriptOverlayStyles = `
+/* Token fallback block — the same intentional duplication as
+   editor-core/styles.ts, so the portaled overlay stays readable when the
+   shell stylesheet is absent. Canonical table: docs/ui.md. When both run
+   together the last writer wins (same values, harmless). */
+:root,
+:root[data-theme="paper"] {
+  --bg: #f3f1e8;
+  --bg-sunken: #ebe9df;
+  --surface: #fdfcf6;
+  --surface-warm: #e8e6dc;
+  --fg: #141413;
+  --fg-2: #3d3d3a;
+  --muted: #504e49;
+  --meta: #5a5954;
+  --border: #d8d5c7;
+  --border-soft: #e5e3d8;
+  --hairline: rgba(20, 20, 19, 0.08);
+  --hairline-strong: rgba(20, 20, 19, 0.12);
+  --accent: #1b365d;
+  --accent-soft: rgba(27, 54, 93, 0.08);
+  --accent-on: #faf9f5;
+  --accent-active: #142a48;
+  --ghost: #615f57;
+  --selection: #e4e6dc;
+  --danger: #8a3a30;
+  --confirm: #4a6b3a;
+  --chrome-bg: #e6e5e0;
+  --chrome-raised: #f2f1ec;
+  --chrome-sunken: #dddbd4;
+  --chrome-fg: #1c1c1b;
+  --chrome-muted: #5c5b57;
+  --elev-raised: 0 1px 2px rgba(20, 20, 19, 0.05), 0 8px 24px rgba(20, 20, 19, 0.07);
+  --elev-card: 0 2px 6px rgba(20, 20, 19, 0.06), 0 14px 36px rgba(20, 20, 19, 0.1);
+  --studio: #141413;
+  color-scheme: light;
+}
+:root[data-theme="ink"] {
+  --bg: #161310;
+  --bg-sunken: #100e0b;
+  --surface: #221e18;
+  --surface-warm: #2c2820;
+  --fg: #ede7d7;
+  --fg-2: #cdc7b8;
+  --muted: #a8a294;
+  --meta: #979285;
+  --border: #3d382f;
+  --border-soft: #2a261f;
+  --hairline: rgba(237, 231, 215, 0.07);
+  --hairline-strong: rgba(237, 231, 215, 0.14);
+  --accent: #9db4d0;
+  --accent-soft: rgba(157, 180, 208, 0.16);
+  --accent-on: #161310;
+  --accent-active: #b6c9e0;
+  --ghost: #979285;
+  --selection: #2e3547;
+  --danger: #c4786a;
+  --confirm: #8aaa70;
+  --chrome-bg: #1c1b18;
+  --chrome-raised: #25231f;
+  --chrome-sunken: #171612;
+  --chrome-fg: #e9e4d9;
+  --chrome-muted: #aaa397;
+  --elev-raised: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 28px rgba(8, 7, 6, 0.45);
+  --elev-card: 0 2px 8px rgba(0, 0, 0, 0.42), 0 16px 40px rgba(0, 0, 0, 0.55);
+  --studio: #0c0b0a;
+  color-scheme: dark;
+}
+:root {
+  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --font-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, Monaco, monospace;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-chrome: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-body: 17px;
+  --leading-body: 1.9;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  /* Tighter radii than the shell are intentional for the overlay (docs/ui.md). */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--hairline-strong);
+  --elev-ring-accent: 0 0 0 1px var(--accent);
+  --focus-ring: 0 0 0 2px var(--accent-active);
+  /* Shared motion vocabulary, mirrored from the shell token table. */
+  --duration-stagger: 40ms;
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --distance-micro: 4px;
+  --distance-base: 8px;
+  --distance-medium: 12px;
+  --blur-small: 2px;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-fast: var(--duration-quick);
+  --motion-base: 200ms;
+  --motion-emphasis: var(--duration-fast);
+  --ease: var(--ease-smooth-out);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --topbar-h: 52px;
+  --control-h: 34px;
+  --tree-w: 220px;
+  --chat-w: 360px;
+  --paper-font-size: var(--text-body);
+  --paper-line-height: var(--leading-body);
+  --paper-font-family: var(--font-serif);
+  --paper-paragraph-spacing: 0em;
+  --paper-max-width: none;
+  --paper-dim-opacity: 0.35;
+}
+
 [data-testid="manuscript-overlay"] {
   position: absolute;
   inset: 0;
@@ -145,7 +266,7 @@ export const manuscriptOverlayStyles = `
 }
 .manuscript-tree-button:hover,
 .manuscript-tree-row:hover { background: var(--surface); color: var(--fg); }
-.manuscript-tree-row.is-active { background: var(--surface-warm); color: var(--fg); }
+.manuscript-tree-row.is-active { background: var(--accent-soft); color: var(--fg); }
 .manuscript-tree-button[aria-expanded] { font-weight: 500; }
 
 .manuscript-panel-main {
@@ -201,5 +322,12 @@ export const manuscriptOverlayStyles = `
 
 @media (max-width: 760px) {
   .manuscript-panel { width: min(92vw, 380px); }
+}
+
+/* Reduced motion — the portaled drawers live outside .manuscript-paper,
+   so the editor-core block does not cover them. */
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="manuscript-overlay"],
+  [data-testid="manuscript-overlay"] * { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
 `

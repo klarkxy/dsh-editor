@@ -214,7 +214,7 @@ export function buildUsageChartOption(input: {
 function readChartTheme(node: HTMLElement): ChartTheme {
   const styles = getComputedStyle(node)
   return {
-    axis: styles.getPropertyValue('--meta').trim() || '#6b6a64',
+    axis: styles.getPropertyValue('--meta').trim() || '#5a5954',
     split: styles.getPropertyValue('--hairline').trim() || 'rgba(20, 20, 19, 0.08)',
     tooltipBg: styles.getPropertyValue('--surface').trim() || '#fdfcf6',
     tooltipFg: styles.getPropertyValue('--fg').trim() || '#141413',
@@ -231,7 +231,7 @@ function UsageChart(props: { days: readonly DailyUsage[]; series: readonly Model
     days: props.days,
     series: props.series,
     theme: {
-      axis: '#6b6a64',
+      axis: '#5a5954',
       split: 'rgba(20, 20, 19, 0.08)',
       tooltipBg: '#fdfcf6',
       tooltipFg: '#141413',

@@ -28,8 +28,7 @@ export const proofreadClientStyles = `
 .dsh-proofread-toggle:hover { border-color: var(--accent, #1b365d); color: var(--accent, #1b365d); }
 .dsh-proofread-toggle:focus-visible, .dsh-proofread-panel button:focus-visible, .dsh-proofread-input:focus-visible,
 .dsh-ui.dsh-proofread-panel button:focus-visible, .dsh-ui.dsh-proofread-panel .dsh-proofread-input:focus-visible {
-  outline: 2px solid var(--accent, #1b365d);
-  outline-offset: 1px;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48));
 }
 .dsh-proofread-dock .dsh-proofread-panel {
   position: absolute;
@@ -171,14 +170,14 @@ export const proofreadClientStyles = `
 .dsh-proofread-locate, .dsh-proofread-ignore,
 .dsh-ui .dsh-proofread-locate, .dsh-ui .dsh-proofread-ignore,
 .dsh-ui.file-dialog .dsh-proofread-locate, .dsh-ui.file-dialog .dsh-proofread-ignore {
-  min-height: 26px;
+  min-height: 32px;
   padding: 0 8px;
   border: 1px solid var(--border, #d8d5c7);
   border-radius: var(--radius-sm, 6px);
   background: var(--surface, #fdfcf6);
   color: var(--fg-2, #3d3d3a);
   cursor: pointer;
-  font: 500 var(--text-xs, 11px)/1 var(--font-sans, system-ui, sans-serif);
+  font: 500 var(--text-sm, 13px)/1 var(--font-sans, system-ui, sans-serif);
   letter-spacing: 0;
   box-shadow: none;
 }
@@ -201,12 +200,15 @@ export const proofreadClientStyles = `
   }
   .dsh-proofread-dots i, .dsh-ui .dsh-proofread-dots i { animation: none; }
 }
-/* Ordinary DSH dark: body[data-ds-dark-theme] (ui-theme). Scoped ink tokens inherit to all children.
-   html:not([data-theme]) keeps desktop :root paper/ink in charge. prefers-color-scheme must not override explicit light. */
-html:not([data-theme]) body[data-ds-dark-theme] .dsh-proofread-dock,
-html:not([data-theme]) body[data-ds-dark-theme] .dsh-proofread-toggle,
-html:not([data-theme]) body[data-ds-dark-theme] .dsh-proofread-panel,
-html:not([data-theme]) body[data-ds-dark-theme] .dsh-ui.dsh-proofread-panel {
+/* Scoped ink fallback for standalone hosts on the :root[data-theme] contract
+   (docs/ui.md bans body[data-ds-dark-theme]); tokens inherit to all children.
+   The desktop shell sets the same values at :root, so this only matters when
+   no shell stylesheet is present. prefers-color-scheme must not override
+   explicit light. */
+:root[data-theme="ink"] .dsh-proofread-dock,
+:root[data-theme="ink"] .dsh-proofread-toggle,
+:root[data-theme="ink"] .dsh-proofread-panel,
+:root[data-theme="ink"] .dsh-ui.dsh-proofread-panel {
   --bg: #161310;
   --bg-sunken: #100e0b;
   --surface: #221e18;
@@ -226,6 +228,7 @@ html:not([data-theme]) body[data-ds-dark-theme] .dsh-ui.dsh-proofread-panel {
   --ghost: #8f897b;
   --danger: #c4786a;
   --confirm: #8aaa70;
+  --focus-ring: 0 0 0 2px var(--accent-active);
   color-scheme: dark;
 }
 `

@@ -35,7 +35,7 @@ export const tokenStyles = `
   --fg: #141413;
   --fg-2: #3d3d3a;
   --muted: #504e49;
-  --meta: #6b6a64;
+  --meta: #5a5954;
   --border: #d8d5c7;
   --border-soft: #e5e3d8;
   --hairline: rgba(20, 20, 19, 0.08);
@@ -44,7 +44,7 @@ export const tokenStyles = `
   --accent-soft: rgba(27, 54, 93, 0.08);
   --accent-on: #faf9f5;
   --accent-active: #142a48;
-  --ghost: #78756c;
+  --ghost: #615f57;
   --selection: #e4e6dc;
   --danger: #8a3a30;
   --confirm: #4a6b3a;
@@ -66,7 +66,7 @@ export const tokenStyles = `
   --fg: #ede7d7;
   --fg-2: #cdc7b8;
   --muted: #a8a294;
-  --meta: #8f897b;
+  --meta: #979285;
   --border: #3d382f;
   --border-soft: #2a261f;
   --hairline: rgba(237, 231, 215, 0.07);
@@ -75,7 +75,7 @@ export const tokenStyles = `
   --accent-soft: rgba(157, 180, 208, 0.16);
   --accent-on: #161310;
   --accent-active: #b6c9e0;
-  --ghost: #8f897b;
+  --ghost: #979285;
   --selection: #2e3547;
   --danger: #c4786a;
   --confirm: #8aaa70;
@@ -163,7 +163,7 @@ export const baseStyles = `
 /* 按压反馈:整壳统一的 1px 下沉,配合上面的 transform 过渡形成"按下-回弹"。
    特例(如 .home-entry-card 的 -1px)由更高优先级选择器覆盖。 */
 .shell button:active, .dsh-ui button:active { transform: translateY(1px) scale(.97); }
-/* 入场关键帧:只用于一次性进场(home 卡、菜单、侧栏面板、对话框),稿纸/编辑器
+/* 入场关键帧:只用于一次性进场(home 卡、菜单、侧栏面板、对话框、聊天行),稿纸/编辑器
    正文不参与,避免打字时重排动画。 */
 @keyframes shell-fade-in { from { opacity: 0; } }
 @keyframes shell-rise-in { from { opacity: 0; transform: translateY(18px) scale(.98); filter: blur(3px); } }
@@ -176,6 +176,7 @@ export const baseStyles = `
 @keyframes shell-toast-in { from { opacity: 0; transform: translateY(24px) scale(.96); filter: blur(var(--blur-small)); } }
 @keyframes shell-menu-out { to { opacity: 0; transform: translateY(-4px) scale(.96); filter: blur(2px); } }
 @keyframes shell-menu-item-in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes shell-message-in { from { opacity: 0; transform: translateY(12px) scale(.99); } }
 @keyframes shell-stop-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 35%, transparent); } 50% { box-shadow: 0 0 0 5px transparent; } }
 /* 活动反馈循环:仅用于加载/等待/进行中原语(ui/activity.tsx 的 .activity-*),
    参数改写自 Amicro(MIT) —— pulse-dots 1.4s 交错明灭、typing 0.6s 起伏、
@@ -230,7 +231,7 @@ export const componentStyles = `
 .shell .window-controls, .dsh-ui .window-controls { display: inline-flex; align-items: center; gap: 0; -webkit-app-region: no-drag; }
 .shell .window-controls button, .dsh-ui .window-controls button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: var(--topbar-h); border: 0; border-radius: 0; background: transparent; color: var(--fg-2); cursor: pointer; font: 400 13px/1 var(--font-sans); }
 .shell .window-controls button:hover, .dsh-ui .window-controls button:hover { background: var(--surface-warm); color: var(--fg); }
-.shell .window-controls button.window-close:hover, .dsh-ui .window-controls button.window-close:hover { background: var(--danger); color: #fff; }
+.shell .window-controls button.window-close:hover, .dsh-ui .window-controls button.window-close:hover { background: var(--danger); color: var(--accent-on); }
 .shell > .chrome > * { min-width: 0; padding: 0 var(--space-4); }
 .shell > .chrome > .topbar-actions { flex: none; }
 .shell > .chrome > .workspace-chrome { min-width: 0; overflow: hidden; border-left: 1px solid var(--hairline); border-right: 1px solid var(--hairline); padding: 0 var(--space-5); }
@@ -336,7 +337,7 @@ export const componentStyles = `
 .shell .tree, .dsh-ui .tree { flex: 1 1 auto; min-height: 72px; overflow: auto; padding: 4px 6px 20px; display: flex; flex-direction: column; }
 .shell .tree-directory-row, .dsh-ui .tree-directory-row { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 2px 8px 2px 0; }
 .shell .tree-marker, .dsh-ui .tree-marker { width: 12px; flex: none; color: var(--meta); text-align: center; font-size: 11px; }
-.shell .tree-directory-add, .dsh-ui .tree-directory-add { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; opacity: .68; color: var(--meta); font-size: 14px; }
+.shell .tree-directory-add, .dsh-ui .tree-directory-add { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; opacity: .68; color: var(--meta); font-size: 14px; transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease), transform var(--motion-base) var(--ease), opacity var(--duration-quick) var(--ease); }
 .shell .tree-directory-add:hover, .shell .tree-directory-add:focus-visible, .dsh-ui .tree-directory-add:hover, .dsh-ui .tree-directory-add:focus-visible { opacity: 1; background: var(--surface); color: var(--fg); }
 /* VSCode 式行内操作:每个目录悬停/聚焦时才露出「新建文件/文件夹」。 */
 .shell .tree-row-actions, .dsh-ui .tree-row-actions { flex: none; display: inline-flex; align-items: center; gap: 2px; visibility: hidden; transition: visibility 0s linear var(--duration-quick); }
@@ -357,7 +358,7 @@ export const componentStyles = `
 .shell .side-status, .dsh-ui .side-status { margin: 0 12px 8px; padding: 0; color: var(--meta); font-size: var(--text-xs); line-height: 1.4; }
 /* 提交历史面板:侧栏内树上方的小列表。 */
 .shell .snapshot-panel, .dsh-ui .snapshot-panel { margin: 0 12px 10px; padding: 8px; max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 2px; border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elev-ring); }
-.shell .snapshot-row, .dsh-ui .snapshot-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: var(--radius-xs); color: var(--fg-2); font-size: var(--text-xs); }
+.shell .snapshot-row, .dsh-ui .snapshot-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: var(--radius-xs); color: var(--fg-2); font-size: var(--text-xs); transition: background-color var(--duration-quick) var(--ease); }
 .shell .snapshot-row:hover, .dsh-ui .snapshot-row:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
 .shell .snapshot-label, .dsh-ui .snapshot-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .snapshot-meta, .dsh-ui .snapshot-meta { flex: none; color: var(--muted); }
@@ -467,7 +468,7 @@ export const componentStyles = `
 .shell > .assistant-launcher .whale-mark { width: 18px; height: 18px; color: var(--accent); }
 
 /* ── Columns / paper / chat ─────────────────────────────── */
-.shell .panel-resizer, .dsh-ui .panel-resizer { grid-row: 2; position: relative; z-index: 4; cursor: col-resize; background: var(--border); }
+.shell .panel-resizer, .dsh-ui .panel-resizer { grid-row: 2; position: relative; z-index: 4; cursor: col-resize; background: var(--border); transition: background-color var(--duration-quick) var(--ease); }
 .shell .panel-resizer span, .dsh-ui .panel-resizer span { position: absolute; inset: 0; }
 .shell .panel-resizer:hover, .shell .panel-resizer:focus-visible, .dsh-ui .panel-resizer:hover, .dsh-ui .panel-resizer:focus-visible { background: var(--accent); }
 
@@ -660,6 +661,9 @@ export const componentStyles = `
    停止按钮用红色脉环提示可中止。data-running 由 chat.ts 按真实 lifecycle 写入。 */
 .shell .chat-history[data-running="true"] .chat-row.thinking summary .activity-dots { color: var(--accent); }
 .shell .composer .chat-stop { color: var(--danger); animation: shell-stop-pulse 1.4s var(--ease) infinite; }
+/* 聊天行入场:一次性 12px 上滑(替代原 Motion message 变体),只加在挂载时
+   enter=true 的行上;prefers-reduced-motion 由全局媒体查询停掉。 */
+.shell .chat-row.chat-row-enter, .dsh-ui .chat-row.chat-row-enter { animation: shell-message-in var(--motion-base) var(--ease-spring) both; }
 /* 待答卡片(授权/提问)入场:真实新增时播放一次,已挂载不重播。 */
 .shell .pending-card, .dsh-ui .pending-card { animation: shell-rise-in 240ms var(--ease-spring) both; }
 
@@ -772,7 +776,8 @@ export const componentStyles = `
 .shell .home-recent > header, .dsh-ui .home-recent > header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .shell .home-recent h2, .dsh-ui .home-recent h2 { margin: 0; font: 500 18px/1.2 var(--font-serif); letter-spacing: .01em; color: var(--fg); }
 .shell .home-recent header small, .dsh-ui .home-recent header small { color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; }
-.shell .home-recent-empty, .dsh-ui .home-recent-empty { margin: 0; color: var(--meta); font-size: var(--text-sm); padding: 12px 14px; border: 1px dashed var(--hairline-strong); border-radius: var(--radius-md); }
+/* 空态占位(最近作品/对话历史)共用同一套 muted 虚线词汇。 */
+.shell .home-recent-empty, .dsh-ui .home-recent-empty, .shell .chat-empty, .dsh-ui .chat-empty { margin: 0; color: var(--meta); font-size: var(--text-sm); padding: 12px 14px; border: 1px dashed var(--hairline-strong); border-radius: var(--radius-md); }
 .shell .workspace-list, .dsh-ui .workspace-list { display: grid; gap: 8px; }
 .shell .workspace-row, .dsh-ui .workspace-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); transition: background-color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease), box-shadow var(--motion-base) var(--ease); animation: shell-rise-in var(--motion-base) var(--ease-spring) both; }
 .shell .workspace-row:hover, .dsh-ui .workspace-row:hover { border-color: var(--accent-soft); transform: translateY(-2px); box-shadow: var(--elev-raised); }
@@ -1192,6 +1197,7 @@ export const componentStyles = `
 .shell .pinned-header p, .dsh-ui .pinned-header p { margin: 6px 0 0; }
 .shell .pinned-actions, .dsh-ui .pinned-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .shell .pinned-actions button, .dsh-ui .pinned-actions button { padding: 5px 7px; border: 0; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); cursor: pointer; font-size: var(--text-xs); }
+.shell .pinned-actions button:hover, .dsh-ui .pinned-actions button:hover { background: var(--surface-warm); color: var(--fg); }
 .shell .pinned-body, .dsh-ui .pinned-body { min-height: 0; overflow: auto; display: grid; gap: var(--space-4); padding: 16px 24px 32px; }
 .shell .pinned-fields, .dsh-ui .pinned-fields { margin: 0; display: grid; gap: 8px; }
 .shell .pinned-field, .dsh-ui .pinned-field { display: grid; gap: 2px; }
@@ -1238,13 +1244,6 @@ export const componentStyles = `
 .dsh-ui .ui-input, .dsh-ui.file-dialog .ui-input { min-height: var(--control-h); padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); }
 .dsh-ui [role="tablist"] { display: flex; flex-direction: row; gap: 2px; width: 100%; }
 .dsh-ui [role="tablist"][data-orientation="vertical"], .dsh-ui [role="tablist"][aria-orientation="vertical"] { flex-direction: column; }
-.dsh-ui .dsh-plugins-tabs[role="tablist"], .dsh-ui.file-dialog .dsh-plugins-tabs[role="tablist"] {
-  display: inline-flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  width: max-content;
-  gap: 2px;
-}
 .shell .settings-tabs, .dsh-ui .settings-tabs { display: contents; }
 
 /* ── 活动反馈(ui/activity.tsx)─────────────────────────────
@@ -1269,6 +1268,16 @@ export const componentStyles = `
 .shell .activity-skeleton, .dsh-ui .activity-skeleton { display: grid; gap: 8px; }
 .shell .activity-skeleton i, .dsh-ui .activity-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-sm); background: var(--hairline-strong); overflow: hidden; }
 .shell .activity-skeleton i::after, .dsh-ui .activity-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 65%, transparent), transparent); animation: shell-activity-sheen 1.5s linear infinite; }
+/* 面板包(memory/overview/proofread/cards)共享活动类的规范定义:三点呼吸与骨架光泽
+   复用上方 shell-activity-* 关键帧,面板不再各自重定义同名类与私有关键帧。
+   参数与旧面板副本一致(pulse 1.4s 交错 .2s/.4s、骨架行 10px、光泽 1.5s)。 */
+.shell .panel-activity-dots, .dsh-ui .panel-activity-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
+.shell .panel-activity-dots i, .dsh-ui .panel-activity-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: shell-activity-pulse 1.4s var(--ease) infinite; }
+.shell .panel-activity-dots i:nth-child(2), .dsh-ui .panel-activity-dots i:nth-child(2) { animation-delay: .2s; }
+.shell .panel-activity-dots i:nth-child(3), .dsh-ui .panel-activity-dots i:nth-child(3) { animation-delay: .4s; }
+.shell .panel-skeleton, .dsh-ui .panel-skeleton { display: grid; gap: 8px; }
+.shell .panel-skeleton i, .dsh-ui .panel-skeleton i { position: relative; display: block; height: 10px; border-radius: var(--radius-sm); background: var(--hairline-strong); overflow: hidden; }
+.shell .panel-skeleton i::after, .dsh-ui .panel-skeleton i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 65%, transparent), transparent); animation: shell-activity-sheen 1.5s linear infinite; }
 .shell .activity-text, .dsh-ui .activity-text { display: inline-flex; align-items: center; gap: 6px; animation: shell-fade-in var(--duration-fast) var(--ease) both; }
 .shell .success-mark, .dsh-ui .success-mark { display: inline-block; width: 1.1em; height: 1.1em; color: var(--confirm); vertical-align: -.15em; }
 .shell .success-mark path, .dsh-ui .success-mark path { stroke: currentColor; stroke-dasharray: 42; stroke-dashoffset: 0; animation: shell-success-draw var(--duration-fast) var(--ease-smooth-out); }
@@ -1304,6 +1313,9 @@ export const componentStyles = `
   .shell *:hover, .shell *:active, .dsh-ui *:hover, .dsh-ui *:active { transform: none !important; }
   .shell .settings-page, .dsh-ui .settings-page { opacity: 1 !important; transform: none !important; }
   .shell .ghost.is-loading, .dsh-ui .ghost.is-loading { animation: none; color: var(--ghost); background: none; }
+  /* 面板共享活动类:显式停掉呼吸点与骨架光泽循环,保留静态点与骨架条。 */
+  .shell .panel-activity-dots i, .dsh-ui .panel-activity-dots i,
+  .shell .panel-skeleton i::after, .dsh-ui .panel-skeleton i::after { animation: none !important; }
 }
 `
 

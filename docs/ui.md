@@ -22,10 +22,10 @@
 | 座位上的 Select / Dialog 类型 | `packages/dsh-editor-seats/src/index.ts` |
 | 纸 / 墨切换、与宿主 `ui-theme` 同步 | `packages/dsh-editor-shell/src/client/theme.ts` |
 | 公开稿纸 overlay 的同类 token（无 shell 时保底） | `packages/dsh-manuscript/src/client/editor-core/styles.ts` |
-| overlay 抽屉（不占 root） | `packages/dsh-manuscript/src/client/overlay-styles.ts` |
+| overlay 抽屉（不占 root；含同一 token 保底副本） | `packages/dsh-manuscript/src/client/overlay-styles.ts` |
 | 稿纸交互（FIM、选段、查找） | `packages/dsh-manuscript/src/client/editor-core/editor.tsx` |
 
-调整共享稿纸 token 时同步两份定义；桌面 `--chrome-*` 与纸面分开维护。shell 是桌面权威，editor-core 的副本让公开 `dsh-manuscript` overlay 在没有 shell 时仍可读。overlay 的圆角更紧，不必强行与 shell 对齐。
+调整共享稿纸 token 时同步三份定义（shell、editor-core、overlay-styles）；桌面 `--chrome-*` 与纸面分开维护。shell 是桌面权威，editor-core 与 overlay-styles 的副本让公开 `dsh-manuscript` overlay 在没有 shell 时仍可读。overlay 的圆角更紧，不必强行与 shell 对齐。
 
 选择写入 `localStorage["dsh-editor.theme"]`，并映射到宿主 `ui-theme`：纸 → `light`，墨 → `dark`。跟随系统没有对应稿纸主题，读取时按 `prefers-color-scheme` 落成纸或墨。
 
@@ -42,7 +42,7 @@
 | `--fg` | `#141413` | `#ede7d7` | 主文字 |
 | `--fg-2` | `#3d3d3a` | `#cdc7b8` | 次级文字 |
 | `--muted` | `#504e49` | `#a8a294` | 说明、弱化 |
-| `--meta` | `#6b6a64` | `#8f897b` | 日期、快捷键、三级 chrome |
+| `--meta` | `#5a5954` | `#979285` | 日期、快捷键、三级 chrome |
 | `--border` | `#d8d5c7` | `#3d382f` | 实色边 |
 | `--border-soft` | `#e5e3d8` | `#2a261f` | 内部分隔 |
 | `--hairline` | `rgba(20,20,19,.08)` | `rgba(237,231,215,.07)` | 默认细线 |
@@ -51,7 +51,7 @@
 | `--accent-soft` | `rgba(27,54,93,.08)` | `rgba(157,180,208,.16)` | 选中 / 激活底，不用灰底冒充强调 |
 | `--accent-on` | `#faf9f5` | `#161310` | 强调色底上的字 |
 | `--accent-active` | `#142a48` | `#b6c9e0` | 按下 / 焦点 |
-| `--ghost` | `#78756c` | `#8f897b` | FIM 幽灵字：同字体同字号，只降颜色 |
+| `--ghost` | `#615f57` | `#979285` | FIM 幽灵字：同字体同字号，只降颜色 |
 | `--selection` | `#e4e6dc` | `#2e3547` | 选区底 |
 | `--danger` | `#8a3a30` | `#c4786a` | 破坏性操作 |
 | `--confirm` | `#4a6b3a` | `#8aaa70` | 已保存 / 肯定 |
@@ -105,7 +105,7 @@ shell `src/client/ui/activity.tsx` 提供 `ActivityDots`（pulse 呼吸点 / typ
 
 ### 面板态
 
-面板包（memory / overview / proofread / cards，含卡片编辑详情与新建对话框）不引入 Motion，各自以纯 CSS 的 `.panel-activity-dots` / `.panel-skeleton` 复刻同一词汇，`.shell` 与独立 `.dsh-ui` 下都生效。
+面板包（memory / overview / proofread / cards，含卡片编辑详情与新建对话框）不引入 Motion，加载态直接复用 shell styles.ts 里的共享 `.panel-activity-dots` / `.panel-skeleton`（`.shell` 与 `.dsh-ui` 作用域下生效，复用 `shell-activity-*` 关键帧）；面板不再各自复刻这套类，避免全局选择器互相覆盖。
 
 ### 独立插件态
 
@@ -121,7 +121,7 @@ shell `src/client/ui/activity.tsx` 提供 `ActivityDots`（pulse 呼吸点 / typ
 
 共享弹层由 shell `src/client/ui` 提供：`Dialog` / `Confirm` / `Menu` / `Tooltip` / `Tabs` / `Button` / `Input`，外加已有 `Select`。作品菜单、文件右键、正文右键 /「⋯」、对话「⋯」都走同一套 `Menu`。正文菜单直接打开自定义改写；打字机与段落聚焦收在写作设置中。大纲和章纲作为 `大纲/` 下的普通 Markdown 管理，不在稿纸附近增加第二套控件。正文常驻仅保留文档名、章节导航、字数、保存状态和「⋯」，停止生成、预览采纳 / 放弃、冲突和备份恢复按需显示。
 
-菜单卸载后再交接焦点给搜索面板或弹窗。路径回退走受控 `Dialog`，不把输入框放进菜单 typeahead。Motion `m.*` 只用于首页两张入口卡和搜索面板 chrome；Radix 菜单/对话框继续 CSS Presence。稿纸、作曲区、FIM、长列表不用 Motion。IME 组字期间 Enter（含 `keyCode === 229`）由输入 `keydown` 自己 `preventDefault`，不得提交。
+菜单卸载后再交接焦点给搜索面板或弹窗。路径回退走受控 `Dialog`，不把输入框放进菜单 typeahead。Motion `m.*` 只用于首页两张入口卡、工作台页面 chrome 与侧栏 / 搜索面板入场（`useChromeMotion` 的 card / page / panel 三档）；聊天条目入场走纯 CSS 的 `.chat-row-enter`（`shell-message-in` 关键帧）；Radix 菜单/对话框继续 CSS Presence。稿纸、作曲区、FIM、长列表不用 Motion。IME 组字期间 Enter（含 `keyCode === 229`）由输入 `keydown` 自己 `preventDefault`，不得提交。
 
 ## 已落地的写作交互
 

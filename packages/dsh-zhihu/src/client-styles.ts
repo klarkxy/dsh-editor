@@ -17,7 +17,7 @@ export const zhihuClientStyles = `
   gap: 0;
 }
 .zhihu-settings-embed .zhihu-tabs {
-  padding: 0 0 var(--space-2, 8px);
+  margin: 0 0 var(--space-2, 8px);
 }
 .zhihu-settings-embed .zhihu-panel-body {
   padding: var(--space-3, 12px) 0 0;
@@ -42,8 +42,7 @@ export const zhihuClientStyles = `
 .zhihu-panel select:focus-visible, .zhihu-panel a:focus-visible,
 .dsh-ui.zhihu-panel button:focus-visible, .dsh-ui.zhihu-panel input:focus-visible,
 .dsh-ui.zhihu-panel select:focus-visible, .dsh-ui.zhihu-panel a:focus-visible {
-  outline: 2px solid var(--accent, #1b365d);
-  outline-offset: 1px;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48));
 }
 .zhihu-dock .zhihu-panel {
   position: absolute;
@@ -86,24 +85,34 @@ export const zhihuClientStyles = `
 .zhihu-panel-close:hover, .dsh-ui .zhihu-panel-close:hover { color: var(--fg, #141413); background: var(--surface-warm, #e8e6dc); }
 .zhihu-panel-close:disabled, .dsh-ui .zhihu-panel-close:disabled { opacity: 0.5; cursor: default; }
 .zhihu-tabs, .dsh-ui .zhihu-tabs {
-  display: flex;
-  gap: var(--space-1, 4px);
-  padding: var(--space-2, 8px) var(--space-3, 12px) 0;
-  border-bottom: 1px solid var(--border-soft, #e5e3d8);
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  margin: var(--space-2, 8px) var(--space-3, 12px) 0;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-sunken, #ebe9df);
+  box-shadow: var(--elev-ring, inset 0 0 0 1px var(--hairline, rgba(20,20,19,.08)));
+  width: max-content;
 }
 .zhihu-tab, .dsh-ui .zhihu-tab {
   font: inherit;
   font-size: var(--text-chrome, 13px);
-  min-height: 32px;
-  color: var(--meta, #6b6a64);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 4px 8px;
+  min-height: 28px;
+  padding: 0 var(--space-3, 12px);
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--fg-2, #3d3d3a);
   cursor: pointer;
 }
 .zhihu-tab:hover, .dsh-ui .zhihu-tab:hover { color: var(--fg, #141413); }
-.zhihu-tab[aria-selected="true"], .dsh-ui .zhihu-tab[aria-selected="true"] { color: var(--accent, #1b365d); border-bottom-color: var(--accent, #1b365d); font-weight: 600; }
+.zhihu-tab[aria-selected="true"], .dsh-ui .zhihu-tab[aria-selected="true"] {
+  background: var(--surface, #fdfcf6);
+  color: var(--fg, #141413);
+  box-shadow: var(--elev-ring, inset 0 0 0 1px var(--hairline, rgba(20,20,19,.08)));
+  font-weight: 600;
+  transform: scale(1.04);
+}
 .zhihu-panel-body, .dsh-ui .zhihu-panel-body {
   padding: var(--space-3, 12px);
   display: flex;
@@ -162,7 +171,9 @@ export const zhihuClientStyles = `
   display: flex;
   flex-direction: column;
   gap: 4px;
+  transition: background-color var(--motion-fast, 150ms) var(--ease, ease);
 }
+.zhihu-result-item:hover, .dsh-ui .zhihu-result-item:hover { background: var(--surface-warm, #e8e6dc); }
 .zhihu-result-title, .dsh-ui .zhihu-result-title { font-weight: 600; color: var(--fg, #141413); }
 .zhihu-result-meta, .dsh-ui .zhihu-result-meta { color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); }
 .zhihu-result-summary, .dsh-ui .zhihu-result-summary { color: var(--fg-2, #3d3d3a); }
@@ -178,8 +189,8 @@ export const zhihuClientStyles = `
 .zhihu-status-label, .dsh-ui .zhihu-status-label { color: var(--fg-2, #3d3d3a); font-weight: 600; }
 .zhihu-status-value, .dsh-ui .zhihu-status-value { margin: 0; display: flex; align-items: center; gap: 6px; }
 .zhihu-dot, .dsh-ui .zhihu-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.zhihu-dot-configured, .dsh-ui .zhihu-dot-configured { background: var(--accent, #1b365d); }
-.zhihu-dot-missing, .dsh-ui .zhihu-dot-missing { background: var(--ghost, #78756c); }
+.zhihu-dot-configured, .dsh-ui .zhihu-dot-configured { background: var(--confirm, #4a6b3a); }
+.zhihu-dot-missing, .dsh-ui .zhihu-dot-missing { background: var(--danger, #8a3a30); }
 .zhihu-dot-locked, .dsh-ui .zhihu-dot-locked { background: var(--danger, #8a3a30); }
 .zhihu-guide, .dsh-ui .zhihu-guide {
   border: 1px solid var(--border-soft, #e5e3d8);
@@ -193,7 +204,8 @@ export const zhihuClientStyles = `
 .zhihu-usage, .dsh-ui .zhihu-usage { display: flex; flex-direction: column; gap: var(--space-3, 12px); }
 .zhihu-usage-intro, .dsh-ui .zhihu-usage-intro { margin: 0; color: var(--meta, #6b6a64); line-height: 1.6; }
 .zhihu-usage-cards, .dsh-ui .zhihu-usage-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-2, 8px); }
-.zhihu-usage-card, .dsh-ui .zhihu-usage-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: var(--space-2, 8px); border: 1px solid var(--border-soft, #e5e3d8); border-radius: var(--radius-sm, 6px); background: var(--bg, #f3f1e8); }
+.zhihu-usage-card, .dsh-ui .zhihu-usage-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: var(--space-2, 8px); border: 1px solid var(--border-soft, #e5e3d8); border-radius: var(--radius-sm, 6px); background: var(--bg, #f3f1e8); transition: background-color var(--motion-fast, 150ms) var(--ease, ease); }
+.zhihu-usage-card:hover, .dsh-ui .zhihu-usage-card:hover { background: var(--surface-warm, #e8e6dc); }
 .zhihu-usage-card-label, .dsh-ui .zhihu-usage-card-label { color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); }
 .zhihu-usage-card-value, .dsh-ui .zhihu-usage-card-value { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg, #141413); }
 .zhihu-usage-card-unit, .dsh-ui .zhihu-usage-card-unit { margin-left: 4px; color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); font-weight: 400; }
@@ -210,7 +222,7 @@ export const zhihuClientStyles = `
 .zhihu-chart-grid, .dsh-ui .zhihu-chart-grid { stroke: var(--border-soft, #e5e3d8); stroke-width: 1; }
 .zhihu-chart-axis, .dsh-ui .zhihu-chart-axis { fill: var(--meta, #6b6a64); font-size: 11px; font-family: var(--font-mono, monospace); }
 .zhihu-chart-tick, .dsh-ui .zhihu-chart-tick { fill: var(--meta, #6b6a64); font-size: 11px; font-family: var(--font-mono, monospace); }
-.zhihu-chart-value, .dsh-ui .zhihu-chart-value { fill: var(--fg-2, #3d3d3a); font-size: 10px; font-family: var(--font-mono, monospace); }
+.zhihu-chart-value, .dsh-ui .zhihu-chart-value { fill: var(--fg-2, #3d3d3a); font-size: 11px; font-family: var(--font-mono, monospace); }
 .zhihu-usage-table-wrap, .dsh-ui .zhihu-usage-table-wrap { overflow-x: auto; }
 .zhihu-usage-table, .dsh-ui .zhihu-usage-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .zhihu-usage-table th, .zhihu-usage-table td, .dsh-ui .zhihu-usage-table th, .dsh-ui .zhihu-usage-table td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--border-soft, #e5e3d8); color: var(--fg-2, #3d3d3a); }
@@ -238,15 +250,19 @@ export const zhihuClientStyles = `
   .zhihu-dock, .zhihu-dock *, .zhihu-panel, .zhihu-panel *,
   .dsh-ui.zhihu-panel, .dsh-ui.zhihu-panel * {
     animation: none !important; transition: none !important;
+    transform: none !important; filter: none !important;
   }
   .zhihu-dots i, .dsh-ui .zhihu-dots i { animation: none; }
 }
-/* Ordinary DSH dark: body[data-ds-dark-theme] (ui-theme). Scoped ink tokens inherit to all children.
-   html:not([data-theme]) keeps desktop :root paper/ink in charge. prefers-color-scheme must not override explicit light. */
-html:not([data-theme]) body[data-ds-dark-theme] .zhihu-dock,
-html:not([data-theme]) body[data-ds-dark-theme] .zhihu-toggle,
-html:not([data-theme]) body[data-ds-dark-theme] .zhihu-panel,
-html:not([data-theme]) body[data-ds-dark-theme] .dsh-ui.zhihu-panel {
+/* Scoped ink fallback for standalone hosts on the :root[data-theme] contract
+   (docs/ui.md bans body[data-ds-dark-theme]); tokens inherit to all children.
+   The desktop shell sets the same values at :root, so this only matters when
+   no shell stylesheet is present. prefers-color-scheme must not override
+   explicit light. */
+:root[data-theme="ink"] .zhihu-dock,
+:root[data-theme="ink"] .zhihu-toggle,
+:root[data-theme="ink"] .zhihu-panel,
+:root[data-theme="ink"] .dsh-ui.zhihu-panel {
   --bg: #161310;
   --bg-sunken: #100e0b;
   --surface: #221e18;
@@ -266,6 +282,7 @@ html:not([data-theme]) body[data-ds-dark-theme] .dsh-ui.zhihu-panel {
   --ghost: #8f897b;
   --danger: #c4786a;
   --confirm: #8aaa70;
+  --focus-ring: 0 0 0 2px var(--accent-active);
   color-scheme: dark;
 }
 `
