@@ -89,7 +89,11 @@
 | `≤ 1040px` | 搭档栏改为覆盖稿纸的抽屉，点顶栏「搭档」打开；不再占第三列或拦截稿纸点击 |
 | `≤ 760px` | 只留稿纸，搭档仍用同一抽屉 |
 
-`prefers-reduced-motion: reduce` 时关掉过渡和动画（含 `.dsh-ui` / palette / select 等 Portal 浮层）；Motion 入场去掉位移/缩放/弹簧并 `duration: 0`。幽灵补全的 loading 不再闪，只保留 `--ghost` 色。焦点与状态变化仍在。
+`prefers-reduced-motion: reduce` 时关掉过渡和动画（含 `.dsh-ui` / palette / select 等 Portal 浮层）；Motion 入场去掉位移/缩放/弹簧并 `duration: 0`。幽灵补全的 loading 不再闪，只保留 `--ghost` 色。活动指示（点 / 环 / 微光 / 骨架）同样停掉循环，保留静态点、静态弧、骨架条与已描边的完成勾。焦点与状态变化仍在。
+
+## 活动反馈词汇
+
+加载 / 等待 / 进行中 / 完成不再用纯文本，统一走一套活动原语。shell `src/client/ui/activity.tsx` 提供 `ActivityDots`（pulse 呼吸点 / typing 起伏点）、`ActivityRing`（墨蓝弧环）、`ActivityShimmer`（微光行）、`ActivitySkeleton`（贴合内容的稳定骨架行）、`ActivityText`（`role=status` + `aria-live` 的状态句，淡入不位移）与 `SuccessMark`（一次性描边完成勾），经 `ui/index.ts` 导出；关键帧 `shell-activity-*` 在 styles.ts，跟随现有 `--duration-*` / `--ease-*` 令牌。覆盖 shell 主流程（工作区检查、能力检查、聊天重连 / 回复 / 工具运行、钉住文件、导入、模型 / 用量 / 写作路由、更新检查 / 校验 / 完成）与次级流程（搜索提交与替换执行、归档读取、章节操作预览、导出、写作偏好与每日目标保存）。面板包（memory / overview / proofread / cards，含卡片编辑详情与新建对话框）不引入 Motion，各自以纯 CSS 的 `.panel-activity-dots` / `.panel-skeleton` 复刻同一词汇，`.shell` 与独立 `.dsh-ui` 下都生效。插件管理（dsh-editor-plugins，清单读取、检查、安装 / 卸载、GitHub 搜索、fiber 启动 / 停用、开关等待）用 `.dsh-plugins-dots` 与开关呼吸；独立校对（dsh-proofread）与知乎（dsh-zhihu，凭证 / 用量 / 知识库读取、上传 / 保存 / 清除、搜索请求）分别用 `.dsh-proofread-dots` / `.zhihu-dots`，同样纯 CSS、无新依赖。桌面启动页（apps/desktop `loadingHtml`）在 React 挂载前用纯内联 CSS 的弧环 + 微光行，CSP 与拖拽区不变。忙碌按钮保持原标签与 disabled 语义，只在文字前加内联三点暗示；装饰元素一律 `aria-hidden`。运动参数改写自 Amicro（MIT）：pulse-dots 1.4s 交错明灭、typing 0.6s 起伏、smooth-ring 1s 旋转、shimmer/skeleton 1.5s 扫过；配色只用 `currentColor` / `--accent` / `--hairline-strong`，不加霓虹、玻璃拟态或新依赖。确定性进度（如下载百分比进度条）保留原语义，不换成循环动效；reduced-motion 停掉所有循环，保留静态点、静态弧、骨架条与已描边的完成勾。
 
 共享弹层由 shell `src/client/ui` 提供：`Dialog` / `Confirm` / `Menu` / `Tooltip` / `Tabs` / `Button` / `Input`，外加已有 `Select`。作品菜单、文件右键、正文右键 /「⋯」、对话「⋯」都走同一套 `Menu`。正文菜单直接打开自定义改写；打字机与段落聚焦收在写作设置中。大纲和章纲作为 `大纲/` 下的普通 Markdown 管理，不在稿纸附近增加第二套控件。正文常驻仅保留文档名、章节导航、字数、保存状态和「⋯」，停止生成、预览采纳 / 放弃、冲突和备份恢复按需显示。菜单卸载后再交接焦点给搜索面板或弹窗。路径回退走受控 `Dialog`，不把输入框放进菜单 typeahead。Motion `m.*` 只用于首页两张入口卡和搜索面板 chrome；Radix 菜单/对话框继续 CSS Presence。稿纸、作曲区、FIM、长列表不用 Motion。IME 组字期间 Enter（含 `keyCode === 229`）由输入 `keydown` 自己 `preventDefault`，不得提交。
 
