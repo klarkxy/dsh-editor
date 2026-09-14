@@ -32,6 +32,7 @@ const REWRITE_MODEL_ID = 'ui-rewrite-stub'
 const PLACEHOLDER_KEY = 'dsh-editor-e2e-placeholder-key'
 
 const CHAPTER_REL = '正文/001.md'
+const PLAN_REL = '大纲/章纲.md'
 const CREATE_REL = '大纲/总纲.md'
 const ORIGINAL_LINE = '雾比灯先到，把码头的广播塔切成一段一段的影子。'
 const EDITED_LINE = '灯还没亮，雾已经把广播塔切成一段一段的影子。'
@@ -115,7 +116,7 @@ function skipDependents(reason) {
   }
 }
 
-const MANDATORY = planningOnly ? ['configure-test-model', 'open-synthetic-work', 'planning-assistant', 'planning-create-directories', 'planning-field-proposals', 'planning-dialog-save', 'planning-stale-proposal', 'planning-glob', 'no-external-model-calls'] : [
+const MANDATORY = planningOnly ? ['configure-test-model', 'open-synthetic-work', 'planning-assistant', 'planning-create-directories', 'planning-outline-markdown', 'planning-stale-proposal', 'planning-glob', 'no-external-model-calls'] : [
   'configure-test-model',
   'open-synthetic-work',
   'open-assistant',
@@ -310,8 +311,8 @@ function classify(body) {
     if (userRequest === 'PLANNING_OUTLINE') return 'planning_outline'
     if (userRequest === 'PLANNING_CARD') return 'planning_card'
     if (userRequest === 'PLANNING_WORLD') return 'planning_world'
-    if (!calls.includes('read')) return 'planning_read'
-    return userRequest === 'PLANNING_SUMMARY' ? 'planning_summary' : 'planning_plan'
+    if (!calls.includes('read')) return userRequest === 'PLANNING_STALE' ? 'planning_stale_read' : 'planning_read'
+    return userRequest === 'PLANNING_STALE' ? 'planning_stale' : 'planning_plan'
   }
   if (blob.includes('【待改写】')) return 'rewrite'
   if (blob.includes('【光标前】')) return 'fim'
@@ -550,12 +551,13 @@ function startStub() {
           record.wire = wireMeta(body, kind)
           if (kind.startsWith('planning_')) {
             const action = kind === 'planning_read' ? ['read', { file_path: CHAPTER_REL }]
+              : kind === 'planning_stale_read' ? ['read', { file_path: PLAN_REL }]
               : kind === 'planning_glob' ? ['glob', { pattern: '**/*.{md,txt}' }]
               : kind === 'planning_outline' ? ['novel_propose', { kind: 'create', path: '大纲/第一卷/卷纲.md', summary: '采用第一卷大纲', text: '# 第一卷\n\n少年下山，在城市寻找师叔。\n' }]
               : kind === 'planning_card' ? ['novel_propose', { kind: 'create', path: '人物卡/少年.md', summary: '整理少年人物卡', text: '# 少年\n\n修为真实，初到城市。\n' }]
               : kind === 'planning_world' ? ['novel_propose', { kind: 'create', path: '世界书/山门.md', summary: '整理已确认山门设定', text: '# 山门\n\n山门外是现代都市。\n' }]
-              : kind === 'planning_plan' ? ['novel_propose', { kind: 'chapter_plan', path: CHAPTER_REL, summary: '采用本章章纲', beats: ['少年出山', '铜钱换不了面钱', '读信寻找师叔'] }]
-              : kind === 'planning_summary' ? ['novel_propose', { kind: 'chapter_summary', path: CHAPTER_REL, summary: '记录实际章末小结', state: { now: '面馆读信', where: '城市面馆', open: '师叔下落' } }]
+              : kind === 'planning_plan' ? ['novel_propose', { kind: 'create', path: PLAN_REL, summary: '本章章纲写入大纲 Markdown', text: '# 第一章章纲\n\n- 少年出山\n- 铜钱换不了面钱\n- 读信寻找师叔\n' }]
+              : kind === 'planning_stale' ? ['novel_propose', { kind: 'edit', path: PLAN_REL, summary: '补充章纲节拍', oldText: '读信寻找师叔', newText: '读信寻找师叔，随后码头夜谈' }]
               : null
             if (kind === 'planning_done') {
               record.toolReplies = (body.messages ?? []).filter(message => message.role === 'tool').slice(-2).map(messageText)
@@ -1235,7 +1237,14 @@ async function savePaper(page) {
 
 async function runPlanningFlow(page) {
   const chapter = () => readFile(resolve(workspace, CHAPTER_REL), 'utf8')
-  const body = text => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '')
+  const plan = () => readFile(resolve(workspace, PLAN_REL), 'utf8')
+  const openPlan = async () => {
+    await expandDirectory(page, '大纲')
+    const row = page.locator('.tree-row.tree-main').filter({ hasText: '章纲.md' }).first()
+    await row.waitFor({ state: 'visible', timeout: 15_000 })
+    await row.click()
+    await page.locator('[data-testid="paper-path"]', { hasText: /大纲\/章纲\.md/ }).waitFor({ state: 'visible', timeout: 20_000 })
+  }
   const proposal = async (request, path) => {
     await assertStubSelected(page, request)
     const before = await page.locator('.proposal-card').count()
@@ -1250,13 +1259,6 @@ async function runPlanningFlow(page) {
   const apply = async card => {
     await card.getByRole('button', { name: /^(应用|采用)$/ }).click()
     await waitFor(async () => /已应用|已采用/.test(await card.innerText()), 'applied card')
-  }
-  const openMeta = async name => {
-    await page.getByRole('button', { name: '正文操作', exact: true }).click()
-    await page.getByRole('menuitem', { name, exact: true }).click()
-    const dialog = page.getByRole('dialog', { name, exact: true })
-    await dialog.waitFor()
-    return dialog
   }
   if (!(await cover('planning-assistant', async () => {
     await ensureAssistantOpen(page)
@@ -1286,80 +1288,32 @@ async function runPlanningFlow(page) {
     await shot(page, 'planning-directories', '一次采用创建大纲、人物卡和世界书目录')
     return 'three first-use directories; retained failed proposal retry'
   })
-  await cover('planning-field-proposals', async () => {
-    const initial = body(await chapter())
-    const plan = await proposal('PLANNING_PLAN', CHAPTER_REL)
-    if (!/章纲/.test(await plan.innerText())) throw new Error('plan card lacks chapter purpose')
-    await apply(plan)
-    await waitFor(async () => (await chapter()).includes('beats:'), 'plan persisted')
-    const summary = await proposal('PLANNING_SUMMARY', CHAPTER_REL)
-    if (!/章末小结/.test(await summary.innerText())) throw new Error('summary card lacks purpose')
-    await apply(summary)
-    await waitFor(async () => (await chapter()).includes('面馆读信'), 'summary persisted')
-    const text = await chapter()
-    if (!text.includes('beats:') || body(text) !== initial) throw new Error('proposal lost plan or changed body')
-    await shot(page, 'planning-proposals', '真实 read 观察版本绑定与章纲、小结分别采用')
-    return 'actual runtime read -> proposal marker -> preview -> disk, body preserved'
-  })
-  await cover('planning-dialog-save', async () => {
-    await openChapter(page)
-    const original = await chapter()
-    const writeRoute = /\/manuscript\/file\.write$/
-    const failSave = route => route.abort('failed')
-    await page.route(writeRoute, failSave)
-    await page.locator('[data-testid="paper-editor"] .cm-content').click()
-    await page.keyboard.press('Control+End')
-    await page.keyboard.insertText('\n这句正文尚未保存，编辑章纲时必须保留。\n')
-    const expectedBody = await page.getByTestId('paper-editor').evaluate(el => el.__cmView.state.doc.toString())
-    let dialog = await openMeta('章纲')
-    const beats = dialog.getByRole('textbox').first()
-    const previous = await beats.inputValue()
-    if (!previous.includes('少年出山')) throw new Error('adopted plan not loaded')
-    await beats.fill(previous + '\n作者补充：雨停后离开')
-    await dialog.getByRole('button', { name: /写入|保存/ }).click()
-    await delay(900)
-    if (!(await dialog.isVisible())) throw new Error('failed save closed dialog')
-    if ((await chapter()) !== original) throw new Error('failed save mutated file')
-    await page.unroute(writeRoute, failSave)
-    await dialog.getByRole('button', { name: /写入|保存/ }).click()
-    await dialog.waitFor({ state: 'hidden' })
-    await waitFor(async () => (await chapter()).includes('作者补充：雨停后离开'), 'manual plan saved')
-    dialog = await openMeta('章末小结')
-    const now = dialog.getByRole('textbox', { name: '此刻', exact: true })
-    if ((await now.inputValue()) !== '面馆读信') throw new Error('summary not hydrated')
-    await now.fill('作者整理：准备离开面馆')
-    await dialog.getByRole('button', { name: /写入|保存/ }).click()
-    await dialog.waitFor({ state: 'hidden' })
-    await waitFor(async () => (await chapter()).includes('作者整理：准备离开面馆'), 'manual summary saved')
-    const final = await chapter()
-    if (!final.includes('作者补充：雨停后离开') || body(final) !== expectedBody) throw new Error('manual summary clobbered plan/body')
-    dialog = await openMeta('章纲')
-    await dialog.getByRole('textbox').first().fill('取消的修改')
-    await dialog.getByRole('button', { name: '取消', exact: true }).click()
-    dialog = await openMeta('章纲')
-    if ((await dialog.getByRole('textbox').first().inputValue()).includes('取消的修改')) throw new Error('cancelled form leaked on reopen')
-    await dialog.getByRole('button', { name: '取消', exact: true }).click()
-    await page.reload()
-    await page.locator('.shell').waitFor()
-    await openChapter(page)
-    dialog = await openMeta('章末小结')
-    if ((await dialog.getByRole('textbox', { name: '此刻', exact: true }).inputValue()) !== '作者整理：准备离开面馆') throw new Error('reload lost summary')
-    await shot(page, 'chapter-summary', '独立章末小结与持久化回读')
-    await dialog.getByRole('button', { name: '取消', exact: true }).click()
-    return 'dirty body retained across metadata edit/outage, explicit retry, separate fields, cancel/reopen, full reload'
+  await cover('planning-outline-markdown', async () => {
+    const before = await chapter()
+    const card = await proposal('PLANNING_PLAN', PLAN_REL)
+    if (!/章纲/.test(await card.innerText())) throw new Error('plan card lacks chapter purpose')
+    await apply(card)
+    await waitFor(() => exists(resolve(workspace, PLAN_REL)), PLAN_REL + ' on disk')
+    const text = await plan()
+    if (!text.includes('少年出山') || !text.includes('读信寻找师叔')) throw new Error('outline markdown missing beats')
+    if (text.includes('beats:') || /^---/.test(text)) throw new Error('outline is not ordinary Markdown')
+    if ((await chapter()) !== before) throw new Error('chapter planning touched manuscript')
+    await shot(page, 'planning-proposals', '章纲经 大纲/ 普通 Markdown 提案落盘，正文不动')
+    return 'chapter planning persisted as plain Markdown under 大纲/, manuscript untouched'
   })
   await cover('planning-stale-proposal', async () => {
     await ensureAssistantOpen(page)
     await chooseStubModel(modelScope(page), 'stale planning')
-    const card = await proposal('PLANNING_STALE', CHAPTER_REL)
+    const card = await proposal('PLANNING_STALE', PLAN_REL)
+    await openPlan(page)
     await page.locator('[data-testid="paper-editor"] .cm-content').click()
     await page.keyboard.press('Control+End')
-    await page.keyboard.insertText('\n作者改变了本章结局。\n')
-    await waitFor(async () => (await chapter()).includes('作者改变了本章结局。'), 'author changes persisted')
-    const before = await chapter()
+    await page.keyboard.insertText('\n作者改变了章纲走向。\n')
+    await waitFor(async () => (await plan()).includes('作者改变了章纲走向。'), 'author changes persisted')
+    const before = await plan()
     await card.getByRole('button', { name: /^(应用|采用)$/ }).click()
     await waitFor(async () => /变化|变更|失效|重新生成/.test(await card.innerText()), 'stale proposal feedback')
-    if ((await chapter()) !== before) throw new Error('stale proposal altered current manuscript')
+    if ((await plan()) !== before) throw new Error('stale proposal altered current outline')
     return 'old observed version refused after author editing'
   })
   await cover('planning-glob', async () => {
@@ -1451,7 +1405,7 @@ async function main() {
   }
   if (planningOnly) {
     await runPlanningFlow(page)
-    await shot(page, 'planning-complete', '章纲与小结协作闭环')
+    await shot(page, 'planning-complete', '章纲经大纲 Markdown 协作闭环')
     await context.close()
     return
   }

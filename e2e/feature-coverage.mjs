@@ -819,35 +819,14 @@ async function coverWorkbench(page) {
 
   await cover('worldbook-settings', async () => {
     await page.keyboard.press('Control+Shift+W')
-    const panel = page.getByRole('region', { name: '世界书' })
-    await panel.waitFor({ state: 'visible', timeout: 10_000 })
-    const settingTab = panel.getByRole('tab', { name: '设定' })
-    if (await settingTab.isVisible().catch(() => false)) await settingTab.click()
-    const card = panel.locator('.cards-item-main').filter({ hasText: '港口' }).first()
-    await card.waitFor({ state: 'visible', timeout: 15_000 })
-    await card.click()
-    const detail = page.getByRole('region', { name: '世界书详情' })
-    await detail.waitFor({ state: 'visible', timeout: 10_000 })
-    await chooseCustomSelect(detail, '世界书分类', (label) => label.trim() === '地点' || label.includes('地点'))
-    await detail.getByLabel('标签').fill('雾港，闸口')
-    await detail.getByLabel('摘要').fill('海关记忆税闸口控制的雾港港口。')
-    await detail.getByRole('button', { name: '保存', exact: true }).click()
-    const diskPath = resolve(workspace, '世界书', '港口.md')
-    await waitFor(async () => {
-      const text = await readFile(diskPath, 'utf8').catch(() => '')
-      if (!text.includes('category: 地点') || !text.includes('tags: [雾港, 闸口]') || !text.includes('海关记忆税闸口控制的雾港港口。')) return false
-      if (!(await detail.getByRole('button', { name: '保存', exact: true }).isEnabled().catch(() => false))) return false
-      const category = (await detail.getByRole('combobox', { name: '世界书分类' }).innerText().catch(() => '')).replace('⌄', '').trim()
-      const tags = await detail.getByLabel('标签').inputValue().catch(() => '')
-      const summary = await detail.getByLabel('摘要').inputValue().catch(() => '')
-      return category.includes('地点') && tags === '雾港，闸口' && summary.includes('海关记忆税闸口控制的雾港港口。')
-    }, 'worldbook card fields persisted', 10_000)
-    const disk = await readFile(diskPath, 'utf8')
+    await page.locator('.tree-row[aria-expanded="true"]').filter({ hasText: '世界书' }).first().waitFor({ state: 'visible', timeout: 10_000 })
+    await page.locator('.tree-row.tree-main').filter({ hasText: '港口' }).first().waitFor({ state: 'visible', timeout: 15_000 })
+    await openTreeFile(page, '港口.md', '世界书')
+    const text = await page.locator('[data-testid="paper-editor"]').innerText()
+    if (!text.includes('雾港的港口')) throw new Error('worldbook paper missing body')
+    const disk = await readFile(resolve(workspace, '世界书', '港口.md'), 'utf8')
     if (!disk.includes('triggers: [港口, 海关]')) throw new Error('worldbook triggers were not preserved')
-    if (!disk.includes('enabled: true') || !disk.includes('priority: 8')) throw new Error('worldbook trigger flags were not preserved')
-    if (!disk.includes('雾港的港口由海关记忆税闸口控制。')) throw new Error('worldbook body was not preserved')
-    await detail.getByRole('button', { name: '关闭卡片详情' }).click()
-    return '世界书/港口.md category/tags/summary'
+    return '世界书/港口.md in file tree'
   })
 
   await cover('create-character-file', async () => {
@@ -912,24 +891,11 @@ async function coverWorkbench(page) {
   await cover('chapter-meta', async () => {
     await openTreeFile(page, '001.md', '正文')
     await page.getByTestId('paper-editor-menu-trigger').click()
-    await page.getByTestId('editor-menu-chapter-meta').click()
-    const dialog = page.getByRole('dialog', { name: '章纲', exact: true })
-    await dialog.waitFor({ state: 'visible', timeout: 10_000 })
-    const beats = page.getByLabel('章纲节拍')
-    await beats.waitFor({ state: 'visible', timeout: 10_000 })
-    await beats.fill('林简过闸\n录音带被点名')
-    await dialog.getByRole('button', { name: '写入', exact: true }).click()
-    await dialog.waitFor({ state: 'hidden' })
-    await page.getByTestId('paper-editor-menu-trigger').click()
-    await page.getByTestId('editor-menu-chapter-summary').click()
-    await page.getByRole('dialog', { name: '章末小结', exact: true }).waitFor()
-    await page.getByLabel('此刻').fill('闸口外')
-    await page.getByLabel('地点').fill('雾港海关')
-    await page.getByRole('button', { name: '写入' }).click()
-    await page.getByRole('dialog', { name: '章末小结', exact: true }).waitFor({ state: 'hidden' })
-    await page.getByTestId('paper-save-state').filter({ hasText: '已保存' }).waitFor()
-    const saved = await readFile(resolve(workspace, '正文', '001.md'), 'utf8')
-    if (!saved.includes('林简过闸') || !saved.includes('录音带被点名') || !saved.includes('闸口外') || !saved.includes('雾港海关')) throw new Error('chapter metadata did not persist')
+    if (await page.getByTestId('editor-menu-chapter-meta').count()
+      || await page.getByTestId('editor-menu-chapter-summary').count()
+      || await page.getByTestId('editor-menu-wrap-up').count()) throw new Error('chapter meta / wrap-up entries still in editor menu')
+    await page.keyboard.press('Escape')
+    return '正文菜单无章纲/章末小结/整理本章入口'
   })
 
   await cover('typewriter-focus', async () => {
@@ -1061,18 +1027,13 @@ async function coverWorkbench(page) {
 
   await cover('cards-panel', async () => {
     await page.keyboard.press('Control+Shift+C')
-    const panel = page.getByRole('region', { name: '人物卡' })
-    await panel.waitFor({ state: 'visible', timeout: 10_000 })
-    await panel.getByRole('button', { name: '新建人物卡' }).click()
+    await page.locator('.tree-row[aria-expanded="true"]').filter({ hasText: '人物卡' }).first().waitFor({ state: 'visible', timeout: 10_000 })
+    await createFileIn(page, '人物卡', '姚梨')
     await shot(page, 'cards-create-dialog')
-    const dialog = page.getByRole('dialog', { name: '新建人物卡' })
-    await dialog.getByLabel('卡片标题').fill('姚梨')
-    await dialog.getByRole('button', { name: '创建' }).click()
-    await dialog.waitFor({ state: 'detached', timeout: 15_000 })
     await page.locator('.tree-row').filter({ hasText: /姚梨/ }).first().waitFor({ state: 'visible', timeout: 15_000 })
     await waitFor(() => exists(resolve(workspace, '人物卡', '姚梨.md')), 'created character saved', 10_000)
     await page.keyboard.press('Control+Shift+W')
-    await page.getByRole('region', { name: '世界书' }).waitFor({ state: 'visible', timeout: 10_000 })
+    await page.locator('.tree-row[aria-expanded="true"]').filter({ hasText: '世界书' }).first().waitFor({ state: 'visible', timeout: 10_000 })
   })
 
   await cover('pin-pane', async () => {
