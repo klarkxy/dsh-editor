@@ -1,5 +1,6 @@
-import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Select } from './select.tsx'
+import { ActivityDots } from './ui/index.ts'
 import { m, useChromeMotion } from './ui/motion.ts'
 import { errorMessage, isStaleFailure, LatestRequestGate, safeRpcCall, searchSkippedText, worldbookPaperProjection, type RevealRequest, type ShellContext } from './shared.ts'
 import {
@@ -230,7 +231,7 @@ function SearchPanel(props: {
         'aria-label': t('search.aria'),
         onChange: (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value),
       }),
-      e('button', { type: 'submit', disabled: busy || !query.trim(), 'aria-label': t('search.start') }, busy ? '…' : t('search.go')),
+      e('button', { type: 'submit', disabled: busy || !query.trim(), 'aria-label': t('search.start') }, busy ? e(ActivityDots, null) : t('search.go')),
       e(Select, {
         value: scope,
         'aria-label': t('search.scope'),
@@ -261,7 +262,7 @@ function SearchPanel(props: {
         t('search.replaceFileHits', { path: file.path, count: file.count }),
       ))) : null,
       e('div', { className: 'search-replace-actions' },
-        e('button', { type: 'button', disabled: busy || !replacePlan.files.length, onClick: () => void runReplace(replacePlan) }, t('search.replaceConfirm')),
+        e('button', { type: 'button', disabled: busy || !replacePlan.files.length, onClick: () => void runReplace(replacePlan) }, busy ? e(Fragment, null, e(ActivityDots, null), t('search.replaceConfirm')) : t('search.replaceConfirm')),
         e('button', { type: 'button', disabled: busy, onClick: () => setConfirming(false) }, t('common.cancel')),
       ),
     ) : null,
@@ -270,7 +271,7 @@ function SearchPanel(props: {
       outcome.stale.length ? e('p', { className: 'warning' }, t('search.replaceStale', { count: outcome.stale.length })) : null,
       outcome.changed.length ? e('p', { className: 'warning' }, t('search.replaceChanged', { count: outcome.changed.length })) : null,
       outcome.failed.length ? e('p', { className: 'warning' }, t('search.replaceFailed', { count: outcome.failed.length })) : null,
-      e('button', { type: 'button', disabled: busy, onClick: () => void search(query, scope, { keepOutcome: true }) }, t('search.replaceAgain')),
+      e('button', { type: 'button', disabled: busy, onClick: () => void search(query, scope, { keepOutcome: true }) }, busy ? e(Fragment, null, e(ActivityDots, null), t('search.replaceAgain')) : t('search.replaceAgain')),
     ) : null,
     result ? e('div', { className: 'search-summary', role: 'status' },
       t('search.summary', { hits: result.results.length, files: result.scannedFiles }),

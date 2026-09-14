@@ -1,6 +1,6 @@
-import { createElement as e, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { t } from '../i18n/index.ts'
-import { Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'
+import { ActivityDots, Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'
 
 export function ConfirmDialog(props: {
   id: string
@@ -84,7 +84,7 @@ export function TextPromptDialog(props: {
       props.note ? e('p', { className: 'warning', role: 'alert' }, props.note) : null,
       e('footer', null,
         e(Button, { disabled: props.busy, onClick: props.onCancel }, t('common.cancel')),
-        e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: props.busy || !value.trim() }, props.busy ? t('common.saving') : display.confirmLabel),
+        e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: props.busy || !value.trim() }, props.busy ? e(Fragment, null, e(ActivityDots, null), t('common.saving')) : display.confirmLabel),
       ),
     ),
   )
@@ -143,7 +143,7 @@ export function NewProjectDialog(props: {
       props.note ? e('p', { className: 'warning', role: 'alert' }, props.note) : null,
       e('footer', null,
         e(Button, { disabled: props.busy, onClick: props.onClose }, t('common.cancel')),
-        e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: props.busy || !title.trim() }, props.busy ? t('common.creating') : t('common.create')),
+        e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: props.busy || !title.trim() }, props.busy ? e(Fragment, null, e(ActivityDots, null), t('common.creating')) : t('common.create')),
       ),
     ),
   )

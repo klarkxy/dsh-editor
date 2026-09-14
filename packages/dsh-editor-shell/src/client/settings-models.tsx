@@ -15,6 +15,7 @@
  */
 import {
   createElement as e,
+  Fragment,
   useEffect,
   useMemo,
   useState,
@@ -53,7 +54,7 @@ import {
 } from './settings-models-store.ts'
 import { Select, type SelectOption } from './select.tsx'
 import { ConfirmDialog } from './dialogs.ts'
-import { Button, Dialog } from './ui/index.ts'
+import { ActivityDots, ActivitySkeleton, Button, Dialog } from './ui/index.ts'
 import type { SettingsDescribeFace, SettingsSchemaService, ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import type { SettingsScope } from '../dsh-compat.ts'
@@ -474,7 +475,10 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
   if (state.status === 'idle' || state.status === 'loading') {
     return e('section', { className: 'models-page', 'aria-label': t('settings.models') },
       e(Header, {}),
-      e('p', { className: 'models-status', role: 'status' }, text().loading),
+      e('div', { className: 'models-status', role: 'status', 'aria-live': 'polite' },
+        e(ActivitySkeleton, { lines: 4, className: 'models-loading' }),
+        e('span', { className: 'sr-only' }, text().loading),
+      ),
     )
   }
 
@@ -1005,7 +1009,7 @@ function ProviderEditor(props: {
             className: 'models-button models-button-primary',
             disabled: readOnly || busy || keyFailure !== undefined || modelFailure !== undefined,
             onClick: () => void submit(),
-          }, busy ? text().saving : t('common.save')),
+          }, busy ? e(Fragment, null, e(ActivityDots, null), text().saving) : t('common.save')),
         )
       : null,
     modelFailureText !== null ? e('p', { className: 'models-warning', role: 'alert' }, modelFailureText) : null,
@@ -1149,7 +1153,7 @@ function ModelListEditor(props: {
         className: 'models-button',
         disabled: disabled || busy || !fetchable,
         onClick: () => void fetch(),
-      }, busy ? t.fetching : t.fetchModels),
+      }, busy ? e(Fragment, null, e(ActivityDots, null), t.fetching) : t.fetchModels),
     ),
     models.length === 0
       ? e('p', { className: 'models-empty' }, t.noneAdded)
@@ -1482,7 +1486,7 @@ function CustomProviderCard(props: {
         className: 'models-button models-button-primary',
         disabled: readOnly || busy || !ready,
         onClick: () => void submit(),
-      }, busy ? text().creating : text().createCustom),
+      }, busy ? e(Fragment, null, e(ActivityDots, null), text().creating) : text().createCustom),
     ),
   )
 }

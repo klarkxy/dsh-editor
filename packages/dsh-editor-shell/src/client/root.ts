@@ -1,5 +1,6 @@
 import {
   createElement as e,
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -45,7 +46,7 @@ import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { Select as HostSelect } from './select.tsx'
-import { Dialog as HostDialog, Input, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, useChromeMotion } from './ui/index.ts'
+import { ActivityDots, ActivityRing, ActivityShimmer, ActivitySkeleton, ActivityText, Dialog as HostDialog, Input, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, useChromeMotion } from './ui/index.ts'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.ts'
 import { PinnedPane } from './pinned-pane.ts'
@@ -1320,7 +1321,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     e('div', null,
       e('button', { type: 'button', disabled: openingWorkspace, onClick: () => void pickWorkspaceDirectory() }, t('home.chooseFolder')),
       e('button', { className: 'primary-action', type: 'submit', disabled: openingWorkspace },
-        openingWorkspace ? t('home.opening') : t('home.openThisFolder'),
+        openingWorkspace ? e(Fragment, null, e(ActivityDots, null), t('home.opening')) : t('home.openThisFolder'),
       ),
       e('button', {
         type: 'button',
@@ -1814,8 +1815,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     return e(ShellUiProvider, null, e('main', { className: 'shell no-session', style: { minWidth: 0, display: 'grid' } },
       e('style', null, redesignedStyles),
       e('section', { className: 'workspace-checking', 'aria-label': t('home.verifying') },
+        e(ActivityRing, { size: 40 }),
         e('h1', null, t('home.checking')),
-        e('p', { role: 'status', 'aria-live': 'polite' }, t('home.checkingDetail')),
+        e(ActivityText, { cue: 'none' }, t('home.checkingDetail')),
+        e(ActivityShimmer, null),
         e('code', null, workspaceOpen.path),
       ),
       extensionsDock,
@@ -2085,7 +2088,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       fileSession ? e(m.div, { className: 'sidebar-tools', ...sidebarPanelMotion }, renderSlot?.(SIDEBAR_TOOLS_SLOT, seatContext) ?? null) : null,
       historyOpen ? e(m.section, { className: 'snapshot-panel', 'aria-label': t('workspace.commitHistory'), ...sidebarPanelMotion },
         snapshots === null
-          ? e('p', { className: 'snapshot-empty' }, t('workspace.historyLoading'))
+          ? e('div', { className: 'snapshot-empty', role: 'status', 'aria-live': 'polite' },
+            e(ActivitySkeleton, { lines: 3 }),
+            e('span', { className: 'sr-only' }, t('workspace.historyLoading')),
+          )
           : snapshots.length === 0
             ? e('p', { className: 'snapshot-empty' }, t('workspace.historyEmpty'))
             : snapshots.map((item) => e('div', { key: item.snapshotId, className: 'snapshot-row' },
@@ -2203,7 +2209,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           e('button', { type: 'button', onClick: shellCapabilities.retry }, t('capabilities.retry')),
         )
         : !capabilityReady
-          ? e('div', { className: 'assistant-launcher capability-note', role: 'status' }, t('capabilities.loading'))
+          ? e('div', { className: 'assistant-launcher capability-note', role: 'status' }, e(ActivityDots, null), t('capabilities.loading'))
           : assistantEnabled
             ? e('button', {
               className: 'assistant-launcher',
@@ -2331,7 +2337,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     renderCommandPalette(),
     renderImportDialog(),
     e(ExportPreviewDialog, {
-      open: exportChapters !== null,
+      open: exporting || exportChapters !== null,
       chapters: exportChapters ?? [],
       title: currentWorkspace?.title || t('workspace.untitled'),
       busy: exporting,

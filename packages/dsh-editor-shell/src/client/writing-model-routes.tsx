@@ -8,6 +8,7 @@ import {
   type WritingPreferences,
 } from '../writing-settings.ts'
 import { Select, type SelectOption } from './select.tsx'
+import { ActivityDots, ActivitySkeleton } from './ui/index.ts'
 import { t, useLocale } from '../i18n/index.ts'
 
 export type CatalogModelOption = {
@@ -104,7 +105,10 @@ export function WritingModelRoutes(props: {
 
   if (snapshot.status === 'loading') {
     return e('section', { className: 'models-writing-routes', 'aria-label': t('models.writingRoutes') },
-      e('p', { className: 'models-status', role: 'status' }, t('writing.loading')),
+      e('div', { className: 'models-status', role: 'status', 'aria-live': 'polite' },
+        e(ActivitySkeleton, { lines: 3 }),
+        e('span', { className: 'sr-only' }, t('writing.loading')),
+      ),
     )
   }
   if (snapshot.status === 'unavailable') {
@@ -139,6 +143,14 @@ export function WritingModelRoutes(props: {
           'aria-label': t(row.label),
           onChange: (value) => { void update(row.field, value) },
         }),
+        e('span', {
+          className: 'route-saving',
+          role: saving === row.field ? 'status' : undefined,
+          'aria-hidden': saving === row.field ? undefined : 'true',
+        },
+          saving === row.field ? e(ActivityDots, null) : null,
+          saving === row.field ? e('span', { className: 'sr-only' }, t('common.saving')) : null,
+        ),
       )
     }),
     failure ? e('p', { className: 'models-warning', role: 'alert' }, failure) : null,

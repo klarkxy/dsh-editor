@@ -1,4 +1,4 @@
-import { createElement as e, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type RefObject } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type RefObject } from 'react'
 import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import { isChapterDocumentPath } from '../chapter-status-view.ts'
 import {
@@ -15,7 +15,7 @@ import {
   suggestSplitName,
 } from '../chapter-ops-view.ts'
 import { ProposalCard } from './chat.ts'
-import { Button, Dialog } from './ui/index.ts'
+import { ActivityDots, Button, Dialog } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 
@@ -204,7 +204,7 @@ function SplitFormDialog(props: {
         note ? e('p', { className: 'warning', role: 'alert' }, note) : null,
         e('footer', null,
           e(Button, { disabled: busy, onClick: props.onCancel }, t('common.cancel')),
-          e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: busy || !anchor.trim() || !newName.trim() }, busy ? t('common.loading') : t('chapterOps.preview')),
+          e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: busy || !anchor.trim() || !newName.trim() }, busy ? e(Fragment, null, e(ActivityDots, null), t('common.loading')) : t('chapterOps.preview')),
         ),
       ),
   )

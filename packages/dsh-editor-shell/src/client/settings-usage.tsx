@@ -13,6 +13,7 @@ import type { EChartsCoreOption, EChartsType } from 'echarts/core'
 import { useReducedMotion } from 'motion/react'
 import type { RpcResult } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
+import { ActivitySkeleton } from './ui/index.ts'
 import { formatNumber as formatLocaleNumber, t, useLocale } from '../i18n/index.ts'
 
 use([BarChart, GridComponent, TooltipComponent, AriaComponent, SVGRenderer])
@@ -347,7 +348,10 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
   if (state.status === 'loading') {
     return e('section', { className: 'usage-page', 'aria-label': t('settings.usage') },
       e(Header, null),
-      e('p', { className: 'usage-status', role: 'status' }, text().loading),
+      e('div', { className: 'usage-status', role: 'status', 'aria-live': 'polite' },
+        e(ActivitySkeleton, { lines: 5, className: 'usage-loading' }),
+        e('span', { className: 'sr-only' }, text().loading),
+      ),
     )
   }
 

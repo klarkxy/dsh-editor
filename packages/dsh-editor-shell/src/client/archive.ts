@@ -2,7 +2,7 @@ import { createElement as e, useRef, type RefObject } from 'react'
 import type { ArchiveResponse } from 'dsh-editor-workbench/contracts'
 import { documentName } from './shared.ts'
 import { intlLocale, t } from '../i18n/index.ts'
-import { Button, Dialog } from './ui/index.ts'
+import { ActivityText, Button, Dialog } from './ui/index.ts'
 
 export type ArchiveView = ArchiveResponse
 
@@ -57,7 +57,7 @@ export function ArchivePanel(props: {
       e(Button, { variant: 'icon', className: 'icon-button', 'aria-label': t('common.close'), disabled: props.busy, onClick: props.onClose }, '×'),
     ),
     e('div', { className: 'archive-list' },
-      props.busy && !visible.length ? e('p', { className: 'muted' }, t('archive.loading')) : null,
+      props.busy && !visible.length ? e('p', { className: 'muted' }, e(ActivityText, null, t('archive.loading'))) : null,
       !props.busy && !visible.length ? e('p', { className: 'muted' }, t('archive.empty')) : null,
       visible.map((item) => e('article', { key: item.archiveId },
         e('div', null,

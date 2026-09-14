@@ -58,7 +58,7 @@ import { isObservableSource, useObservable } from './components.ts'
 import { Markdown } from './markdown.tsx'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
 import { Select } from './select.tsx'
-import { Menu, MenuContent, MenuItem, MenuTrigger, m, useChromeMotion } from './ui/index.ts'
+import { ActivityDots, ActivityText, SuccessMark, Menu, MenuContent, MenuItem, MenuTrigger, m, useChromeMotion } from './ui/index.ts'
 import type { WritingModelRoute } from '../writing-settings.ts'
 import { discardCreatedChatModelError, rememberCreatedChatModelError, takeCreatedChatModelError } from './ui-workspace.ts'
 import { t, useLocale, type MessageKey } from '../i18n/index.ts'
@@ -328,7 +328,7 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
   }, [models, customRoute, busy])
   if (!models || models.groups.length === 0) {
     return e('div', { className: 'compact-control model-empty' },
-      e('span', null, note || (models ? t('chat.noModels') : t('common.loading'))),
+      e('span', null, note || (models ? t('chat.noModels') : e(ActivityText, null, t('common.loading')))),
       e('button', { type: 'button', onClick: () => void refresh() }, t('common.retry')),
       e('button', { type: 'button', onClick: onConfigure }, t('chat.setApi')),
     )
@@ -496,7 +496,7 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
         },
       }),
     ) : null,
-    e('button', { type: 'submit', disabled: busy }, busy ? t('chat.submitting') : t('chat.submitAllAnswers')),
+    e('button', { type: 'submit', disabled: busy }, busy ? e(Fragment, null, e(ActivityDots, null), t('chat.submitting')) : t('chat.submitAllAnswers')),
     note ? e('small', { className: 'warning' }, note) : null,
   )
 }
@@ -841,7 +841,14 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   }
 
   const footer = e('footer', null,
-    e('span', { role: state === 'expired' ? 'alert' : 'status' }, note),
+    e('span', { role: state === 'expired' ? 'alert' : 'status' },
+      state === 'checking' || state === 'applying' || state === 'undoing'
+        ? e(ActivityDots, null)
+        : state === 'applied' || state === 'undone'
+          ? e(SuccessMark, null)
+          : null,
+      note,
+    ),
     state === 'ready' ? e('button', { type: 'button', onClick: () => void apply() }, t('common.apply')) : null,
     state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('deferred'); setNote(t('chat.deferred')) } }, t('chat.defer')) : null,
     state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('ignored'); setNote(t('chat.ignoredNoChange')) } }, t('common.ignore')) : null,
@@ -857,7 +864,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
           e('strong', null, props.proposal.summary),
           kindBadge ? e('small', { className: 'proposal-kind' }, kindBadge) : null),
         e('code', null, headerPathLabel),
-        e('span', { role: 'status' }, note),
+        e('span', { role: 'status' }, state === 'applied' || state === 'undone' ? e(SuccessMark, null) : null, note),
       ),
       renderBody(),
       footer,
@@ -899,7 +906,10 @@ export function MemoryCard(props: { memory: AuthorMemoryMarker; onAccept(observa
       e('p', null, props.memory.reason),
     ),
     e('footer', null,
-      e('span', { role: state === 'failed' ? 'alert' : 'status' }, note),
+      e('span', { role: state === 'failed' ? 'alert' : 'status' },
+        state === 'saving' ? e(ActivityDots, null) : state === 'saved' ? e(SuccessMark, null) : null,
+        note,
+      ),
       state === 'ready' ? e('button', { type: 'button', onClick: () => void accept() }, t('chat.remember')) : null,
       state === 'ready' ? e('button', { type: 'button', onClick: () => { setState('rejected'); setNote(t('chat.ignoredMemory')) } }, t('common.ignore')) : null,
     ),
@@ -912,9 +922,9 @@ export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boo
     e('summary', null, t('chat.initQuietTitle')),
     e('p', null, explore ? t('chat.initExplore') : t('chat.initInterview')),
     props.done
-      ? e('p', { role: 'status' }, t('chat.initDone'))
+      ? e('p', { role: 'status' }, e(SuccessMark, null), ' ', t('chat.initDone'))
       : e('div', { className: 'init-guide-actions' },
-        e('button', { type: 'button', disabled: props.busy || props.running, onClick: props.onStart }, props.running ? t('chat.initRunning') : t('chat.initStart')),
+        e('button', { type: 'button', disabled: props.busy || props.running, onClick: props.onStart }, props.running ? e(Fragment, null, e(ActivityDots, null), t('chat.initRunning')) : t('chat.initStart')),
         e('button', { type: 'button', disabled: props.busy, onClick: props.onDismiss }, t('common.ignore')),
       ),
     props.note ? e('small', { className: 'warning', role: 'alert' }, props.note) : null,
@@ -1368,7 +1378,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         }),
       ),
       e('div', { className: 'chat-header-actions' },
-        connected ? null : e('span', { className: 'chat-status', role: 'status' }, t('chat.reconnecting')),
+        connected ? null : e('span', { className: 'chat-status', role: 'status' }, e(ActivityDots, null), t('chat.reconnecting')),
         e('button', {
           className: 'icon-button',
           type: 'button',
@@ -1436,7 +1446,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         onStart: startInitGuide,
         onDismiss: dismissInitGuide,
       }) : null,
-      snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? t('chat.loadingMore') : t('chat.loadOlder')) : null,
+      snapshot.hasMore ? e('button', { type: 'button', onClick: () => void loadOlder(session), disabled: snapshot.loadingOlder }, snapshot.loadingOlder ? e(Fragment, null, e(ActivityDots, null), t('chat.loadingMore')) : t('chat.loadOlder')) : null,
       rows.map((row) => {
         if (row.proposal) return e(ProposalCard, { key: row.id, ctx, sessionId: session.sessionId, proposal: row.proposal, onApplied: handleApplied })
         if (row.memory) return e(MemoryCard, { key: row.id, memory: row.memory, onAccept: (observation) => onAcceptMemory(observation) })
@@ -1482,21 +1492,26 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         e('p', null, outgoing.text),
         outgoing.projectContextReceipt ? e(ProjectContextReceiptView, { receipt: outgoing.projectContextReceipt }) : null,
         e('small', { role: outgoing.state === 'failed' ? 'alert' : 'status' },
-          outgoing.state === 'sending' ? t('chat.sending') : outgoing.state === 'accepted' ? t('chat.sent') : t('chat.sendFailed'),
+          outgoing.state === 'sending'
+            ? e(Fragment, null, e(ActivityDots, null), t('chat.sending'))
+            : outgoing.state === 'accepted'
+              ? e(Fragment, null, e(SuccessMark, null), ' ', t('chat.sent'))
+              : t('chat.sendFailed'),
         ),
       ) : null,
       outgoing?.state === 'accepted' && !outgoingIsCanonical
-        ? e(ChatEntry, { className: 'chat-row assistant', key: 'local-replying', 'aria-live': 'polite', enter: isNewMessage('local-replying') }, t('chat.replying'))
+        ? e(ChatEntry, { className: 'chat-row assistant', key: 'local-replying', 'aria-live': 'polite', enter: isNewMessage('local-replying') }, e(ActivityDots, { variant: 'typing' }), t('chat.replying'))
         : null,
       visibleRunningCalls(transcript.runningCalls ?? []).map((call) => e(ChatEntry, { className: 'chat-row tool', key: `running:${call.callId}`, enter: isNewMessage(`running:${call.callId}`) }, e('strong', null,
+        e(ActivityDots, { variant: 'typing' }),
         call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' ? t('chat.preparingProposal') : t('chat.processing')
       ))),
       snapshot.queue.map((item) => e(ChatEntry, { className: 'chat-row notice', key: `queue:${item.id}`, enter: isNewMessage(`queue:${item.id}`) }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? t('chat.queued') : t('chat.steering')))),
       partial.thinking ? e(ChatEntry, { as: 'details', className: 'chat-row thinking', key: 'partial-thinking', enter: isNewMessage('partial-thinking') },
-        e('summary', { 'aria-live': 'polite' }, t('chat.thinking')),
+        e('summary', { 'aria-live': 'polite' }, e(ActivityDots, { variant: 'typing' }), t('chat.thinking')),
         e('p', null, partial.thinking),
       ) : null,
-      partial.text ? e(ChatEntry, { className: 'chat-row assistant', key: 'partial-text', 'aria-live': 'polite', enter: isNewMessage('partial-text') }, e('div', { className: 'md' }, e(Markdown, { text: partial.text }))) : chatLegacy.partial && !partial.thinking ? e(ChatEntry, { className: 'chat-row assistant', key: 'partial-replying', 'aria-live': 'polite', enter: isNewMessage('partial-replying') }, t('chat.replying')) : null,
+      partial.text ? e(ChatEntry, { className: 'chat-row assistant', key: 'partial-text', 'aria-live': 'polite', enter: isNewMessage('partial-text') }, e('div', { className: 'md' }, e(Markdown, { text: partial.text }))) : chatLegacy.partial && !partial.thinking ? e(ChatEntry, { className: 'chat-row assistant', key: 'partial-replying', 'aria-live': 'polite', enter: isNewMessage('partial-replying') }, e(ActivityDots, { variant: 'typing' }), t('chat.replying')) : null,
       pendingItems.map((item) => e(PendingCard, { key: item.key, item })),
       snapshot.openState === 'error' ? e('p', { className: 'warning' }, t('chat.connectionInterrupted')) : null,
       snapshot.promptError && !hasTurnError ? e('p', { className: 'warning' }, t('chat.requestFailed')) : null,

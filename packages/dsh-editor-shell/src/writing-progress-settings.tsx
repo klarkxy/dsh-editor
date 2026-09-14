@@ -6,6 +6,7 @@ import {
   type WritingProgressScope,
 } from './writing-progress.ts'
 import { t, useLocale } from './i18n/index.ts'
+import { ActivityDots } from './client/ui/index.ts'
 
 /*
  * 每日字数目标(goalChars) 的设置入口,渲染进 "写作" 标签页。
@@ -52,7 +53,7 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
 
   if (snapshot.status === 'loading') return e('fieldset', { className: 'writing-progress-settings', disabled: true },
     e('legend', null, t('progress.dailyGoal')),
-    e('p', { role: 'status' }, t('progress.loading')),
+    e('p', { role: 'status' }, e(ActivityDots, null), t('progress.loading')),
   )
 
   if (snapshot.status === 'unavailable') return e('fieldset', { className: 'writing-progress-settings', disabled: true },
@@ -77,7 +78,10 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
         onBlur: () => void commit(),
         onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => { if (event.key === 'Enter') { event.preventDefault(); void commit() } },
       }),
-      e('small', null, progress.goalChars > 0 ? t('progress.hintSet') : t('progress.hintUnset')),
+      e('small', null,
+        progress.goalChars > 0 ? t('progress.hintSet') : t('progress.hintUnset'),
+        saving ? e('span', { className: 'goal-saving', role: 'status' }, e(ActivityDots, null), e('span', { className: 'sr-only' }, t('common.saving'))) : null,
+      ),
     ),
     failure ? e('p', { role: 'alert' }, failure) : null,
   )

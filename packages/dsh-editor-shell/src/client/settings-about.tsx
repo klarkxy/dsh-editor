@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { windowBridge } from './window-controls.tsx'
+import { ActivityDots, ActivityText, SuccessMark } from './ui/index.ts'
 import { intlLocale, t, useLocale } from '../i18n/index.ts'
 
 type UpdateStatus = 'latest' | 'update-available' | 'error'
@@ -207,14 +208,14 @@ export function AboutSettingsSection(props: {
         className: 'about-button',
         disabled: !canCheck || state.status === 'loading',
         onClick: () => void runCheck(),
-      }, state.status === 'loading' ? t('about.checking') : t('about.check')),
+      }, state.status === 'loading' ? e(Fragment, null, e(ActivityDots, null), t('about.checking')) : t('about.check')),
     ),
   )
 }
 
 function renderStatus(state: CheckState): ReactNode {
   if (state.status === 'idle') return e('span', null, t('about.notChecked'))
-  if (state.status === 'loading') return e('span', null, t('about.checkingStatus'))
+  if (state.status === 'loading') return e(ActivityText, null, t('about.checkingStatus'))
   const result = state.result
   if (result.status === 'latest') {
     return e('span', { className: 'about-status-tag latest' }, t('about.latest'))
@@ -289,7 +290,7 @@ function renderDownloadArea(
       ),
       e('p', { className: 'about-download-meta' },
         download.verifying
-          ? t('about.verifying')
+          ? e(Fragment, null, e(ActivityDots, null), t('about.verifying'))
           : `${percent}% · ${formatMB(download.received)} / ${formatMB(download.total)} MB${download.mirror ? ` · ${download.mirror}` : ''}`,
       ),
       e('div', { className: 'about-actions' },
@@ -300,6 +301,8 @@ function renderDownloadArea(
   if (download.status === 'done') {
     return e('div', { className: 'about-download' },
       e('p', { className: 'about-download-meta' },
+        e(SuccessMark, null),
+        ' ',
         download.revealed
           ? t('about.macRevealed')
           : t('about.downloadReady'),

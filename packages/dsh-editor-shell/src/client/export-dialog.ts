@@ -1,5 +1,5 @@
-import { createElement as e, useRef, useState, type RefObject } from 'react'
-import { Button, Dialog } from './ui/index.ts'
+import { createElement as e, Fragment, useRef, useState, type RefObject } from 'react'
+import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type RpcResult, type ShellContext } from './shared.ts'
 import { prepareExport, sanitizeExportTitle, type ChapterExport, type ExportFormat, type PreparedExport } from '../export.ts'
 import { buildBook } from '../export-book.ts'
@@ -67,7 +67,12 @@ function ExportPreviewDialog(props: {
   const preview = shown.current.chapters.length ? previewExport(shown.current.chapters, shown.current.title) : { chapters: [], totalChars: 0 }
   const empty = preview.chapters.filter((item) => item.empty)
   const busy = props.busy || packing !== null
-  const note = packNote ?? props.note
+  /* 章节收集是既有的不可取消异步操作:此时还没有章节,展示紧凑加载块,
+     不渲染 0 摘要或可点的格式按钮;busy 结束后回到原预览/错误态。
+     收集期间只用本次的 props.note:packNote 属于上一轮打包的完成/失败留言,
+     弹窗常驻重用,不能盖住新一轮收集的 exportPreparing。 */
+  const collecting = props.busy && preview.chapters.length === 0
+  const note = collecting ? props.note : packNote ?? props.note
   const exportPacked = async (kind: 'docx' | 'epub') => {
     if (busy || !preview.chapters.length) return
     setPacking(kind)
@@ -95,22 +100,27 @@ function ExportPreviewDialog(props: {
     returnFocusRef: props.returnFocusRef,
   },
     e('header', null, e('div', null, e('small', null, t('export.title')), e('h2', { id: 'export-preview-title' }, t('export.fullText')))),
-    e('dl', { className: 'export-summary' },
+    collecting ? e('div', { className: 'export-loading' },
+      e(ActivityRing, { size: 24 }),
+      e(ActivityText, { cue: 'none' }, note || t('note.exportPreparing')),
+      e(ActivitySkeleton, { lines: 3 }),
+    ) : null,
+    collecting ? null : e('dl', { className: 'export-summary' },
       e('div', null, e('dt', null, t('export.chapters')), e('dd', null, preview.chapters.length)),
       e('div', null, e('dt', null, t('export.totalChars')), e('dd', null, preview.totalChars)),
     ),
     empty.length ? e('p', { className: 'warning', role: 'alert' }, t('export.emptyWarning', { count: empty.length })) : null,
-    note ? e('p', { className: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'warning' : 'muted', role: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'alert' : 'status' }, note) : null,
-    e('ol', { className: 'export-chapters' }, preview.chapters.map((chapter, index) => e('li', { key: chapter.path },
+    note && !collecting ? e('p', { className: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'warning' : 'muted', role: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'alert' : 'status' }, busy ? e(ActivityDots, null) : null, note) : null,
+    collecting ? null : e('ol', { className: 'export-chapters' }, preview.chapters.map((chapter, index) => e('li', { key: chapter.path },
       e('span', null, `${index + 1}. ${chapter.path}`),
       e('small', null, `${t('export.chapterMeta', { chars: chapter.chars })}${chapter.empty ? t('export.chapterEmpty') : ''}`),
     ))),
-    e('footer', null,
+    collecting ? null : e('footer', null,
       e(Button, { ref: cancel, disabled: busy, onClick: props.onCancel }, t('common.cancel')),
-      e(Button, { variant: 'primary', className: 'primary-action', disabled: busy || !preview.chapters.length, onClick: () => props.onExport('markdown') }, props.busy ? t('workspace.exporting') : t('export.markdown')),
+      e(Button, { variant: 'primary', className: 'primary-action', disabled: busy || !preview.chapters.length, onClick: () => props.onExport('markdown') }, t('export.markdown')),
       e(Button, { disabled: busy || !preview.chapters.length, onClick: () => props.onExport('text') }, t('export.txt')),
-      e(Button, { disabled: busy || !preview.chapters.length, onClick: () => { void exportPacked('docx') } }, packing === 'docx' ? t('workspace.exporting') : t('export.docx')),
-      e(Button, { disabled: busy || !preview.chapters.length, onClick: () => { void exportPacked('epub') } }, packing === 'epub' ? t('workspace.exporting') : t('export.epub')),
+      e(Button, { disabled: busy || !preview.chapters.length, onClick: () => { void exportPacked('docx') } }, packing === 'docx' ? e(Fragment, null, e(ActivityDots, null), t('workspace.exporting')) : t('export.docx')),
+      e(Button, { disabled: busy || !preview.chapters.length, onClick: () => { void exportPacked('epub') } }, packing === 'epub' ? e(Fragment, null, e(ActivityDots, null), t('workspace.exporting')) : t('export.epub')),
     ),
   )
 }

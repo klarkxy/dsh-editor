@@ -15,6 +15,7 @@ import {
 import { documentName, errorMessage, LatestRequestGate, safeRpcCall, type ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
 import { Markdown, parseBlocks } from './markdown.tsx'
+import { ActivitySkeleton } from './ui/index.ts'
 import { readableDocumentTitle } from '../wrap-up-view.ts'
 
 function fieldList(rows: readonly PinnedFieldRow[]) {
@@ -118,10 +119,13 @@ export function PinnedPane(props: {
       ),
     ),
     e('div', { className: 'pinned-body' },
-      busy ? e('p', { className: 'muted', role: 'status' }, t('pin.loading')) : null,
+      busy ? e('div', { role: 'status', 'aria-live': 'polite' },
+        e(ActivitySkeleton, { lines: 6, className: 'pinned-loading' }),
+        e('span', { className: 'sr-only' }, t('pin.loading')),
+      ) : null,
       note ? e('p', { className: 'warning', role: 'status' }, note) : null,
       !busy && fields.length ? fieldList(fields) : null,
-      !busy && text !== null ? e('div', { className: 'pinned-markdown md' }, e(Markdown, { text: markdownBody })) : null,
+      !busy && text !== null ? e('div', { className: 'pinned-markdown md activity-reveal' }, e(Markdown, { text: markdownBody })) : null,
     ),
   )
 }

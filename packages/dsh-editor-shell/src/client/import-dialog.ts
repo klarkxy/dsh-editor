@@ -1,7 +1,7 @@
 import { createElement as e, useRef } from 'react'
 import { importSummary, type ImportFlow } from './import-flow.ts'
 import { t } from '../i18n/index.ts'
-import { Button, Dialog } from './ui/index.ts'
+import { ActivityRing, ActivityText, Button, Dialog } from './ui/index.ts'
 
 function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): void; onContinue(): void; onCleanup(): void }) {
   const focus = useRef<HTMLButtonElement | null>(null)
@@ -25,7 +25,10 @@ function ImportDialog(props: { flow: ImportFlow; onCancel(): void; onApply(): vo
     initialFocusRef: focus,
   },
     e('header', null, e('h2', { id: 'import-dialog-title' }, title)),
-    working ? e('p', { role: 'status', 'aria-live': 'polite' }, flow.kind === 'working' ? flow.message : '')
+    working ? e('div', { className: 'import-working' },
+        e(ActivityRing, { size: 22 }),
+        e(ActivityText, { cue: 'none' }, flow.kind === 'working' ? flow.message : ''),
+      )
       : cleanup ? e('p', null, t('import.cleanupBody'))
         : recover ? e('div', null,
           e('p', null, cleaning ? t('import.cleanupOnly') : t('import.recoverBody', { summary: importSummary(probe!) })),

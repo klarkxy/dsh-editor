@@ -1,9 +1,10 @@
 import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
-import { createElement as e, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
+import { createElement as e, Fragment, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react'
 import { AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
 import { t, useLocale } from './i18n/index.ts'
+import { ActivityDots } from './client/ui/index.ts'
 
 
 export { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
@@ -281,7 +282,7 @@ export function WritingSettings({ scope, migrate }: {
   }
 
   if (snapshot.status === 'loading') return e('section', { className: 'writing-settings', 'aria-label': t('settings.writing') },
-    e('p', { role: 'status' }, t('writing.loading')),
+    e('p', { role: 'status' }, e(ActivityDots, null), t('writing.loading')),
   )
 
   if (snapshot.status === 'unavailable') return e('section', { className: 'writing-settings', 'aria-label': t('settings.writing') },
@@ -398,7 +399,7 @@ export function WritingSettings({ scope, migrate }: {
         }),
         e('small', null, t('writing.authorCount', { count: authorDraft.length, max: AUTHOR_PREFERENCES_MAX_CHARS })),
       ),
-      e('button', { type: 'button', disabled: saving !== null || authorDraft === values.authorPreferences, onClick: () => void update('authorPreferences', authorDraft) }, saving === 'authorPreferences' ? t('common.saving') : t('writing.saveAuthor')),
+      e('button', { type: 'button', disabled: saving !== null || authorDraft === values.authorPreferences, onClick: () => void update('authorPreferences', authorDraft) }, saving === 'authorPreferences' ? e(Fragment, null, e(ActivityDots, null), t('common.saving')) : t('writing.saveAuthor')),
     ),
     writeFailure ? e('p', { role: 'alert' }, writeFailure) : null,
     migrationFailure.length ? e('p', { role: 'alert' },
