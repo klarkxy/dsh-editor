@@ -18,6 +18,7 @@
 | [插件架构与接口](plugin-architecture.md) | 所有权、注入、RPC / Tool / slot 与替换合同 |
 | [组合指南](plugin-composition-guide.md) | basic / smart / full、独立 Web 插件与复现命令 |
 | [0.2.0 本地验收](release-0.2.0.md) | 本轮证据范围、产物与最终标签验证的区别 |
+| [作者优先工作流](author-first-workflow.md) | 前置规划动机、正文页去规划化的设计与两轮验收结论 |
 | [变更记录](../CHANGELOG.md) | 各版本已经发生的变化 |
 
 ## 包级合同
@@ -39,7 +40,3 @@
 ## 架构图
 
 [图站入口](diagrams/index.html) 包含桌面运行时、插件分级、组合边界和作者确认写入四张图。规范源 JSON 与生成 HTML 放在同一目录；更新规范后重新生成，并核对多尺寸截图。发布站点见 [GitHub Pages](https://klarkxy.github.io/dsh-editor/)。
-
-## 历史记录
-
-日期快照在 [history/](history/README.md)。它们保留当时版本、失败和后续修复，不代表 0.2.0 已验证了同一件事。发布状态以对应标签的 GitHub Actions 和 Release 附件为准。
