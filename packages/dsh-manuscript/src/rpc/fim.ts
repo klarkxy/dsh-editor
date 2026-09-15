@@ -20,7 +20,7 @@ type LlmBag = {
 }
 
 const CHAT_SYSTEM =
-  '你是小说行内补全引擎。只输出应插入光标位置的短正文，不解释、不复述前后文，并自然衔接后文。不要用Markdown围栏。'
+  '你是文稿行内补全引擎。只输出应插入光标位置的短插入文本，不解释、不复述前后文，并自然衔接后文。不要用Markdown围栏。'
 
 function fimSystem(input: { chapterContext: string; authorPreferences: string; projectRules?: string }): string {
   const system = withAuthorPreferences(

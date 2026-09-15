@@ -8,7 +8,7 @@
 
 - Host `manuscript`（锁定）：`/manuscript`（`src/index.ts`）
 - Client：官方 `shell.overlay`（id `manuscript`，order `100`，`src/client/slots.ts`）
-- 可选 `manuscript-assist`（feature `completion`，smart / full）：FIM / 选段改写
+- 可选 `manuscript-assist`（feature `completion`；当前三份桌面 recipe 均选，独立 Web 按 profile）：FIM / 选段改写
 
 ## 使用行为
 
@@ -30,7 +30,7 @@ editor-core 注册 Tab 采纳、Esc 取消 / 关闭查找、Ctrl / ⌘+Enter 应
 
 ## Host 契约
 
-Live `sessionId` → immutable workspace → membership 与 sandbox → DSH `ctx.fs`。创建 `createIfAbsent`，保存 `replaceIfVersion`。绝对路径、traversal、symlink、超过 2 MB 文本、stale version、未知 session、只读写入均 fail closed。`search.text` 只扫有界 Markdown/TXT，跳过隐藏、生成和链接路径。另有 `draft.list`、`usage.summary`。桌面导入 / 快照 / 归档不进入本公开 RPC。
+Live `sessionId` → immutable workspace → membership 与 sandbox → DSH `ctx.fs`。创建 `createIfAbsent`，保存 `replaceIfVersion`。绝对路径、traversal、symlink、超过 2 MB 文本、stale version、未知 session、只读写入均 fail closed。`search.text` 只扫有界 Markdown/TXT，跳过隐藏、生成和链接路径。可选 `directory` 在文件数/总字节/结果数上限生效前把扫描限制在该目录，不默认 `正文/`；缺失、非法或逃逸路径 fail closed。`proposal.apply` 同时接受历史 V1 与新模式 V2。V2 edit 必须带生成时 Host-read 的 `targetVersion`；可选 `basis` 是独立来源依赖，不能代替目标基线。V2 接受可见项目相对 `.md`/`.txt`。V2 create 是严格 create-if-absent，已有空文件也不覆盖；历史 V1 create 可填充已有空文件。另有 `draft.list`、`usage.summary`。桌面导入 / 快照 / 归档不进入本公开 RPC。
 
 `dsh-manuscript/host-api` 是同进程窄 authority/file 子入口，不增加公开 RPC。RPC 经 `webServer` 挂 channel（`src/rpc/channel.ts`）。该 loopback 只适用于本地单用户模型。
 

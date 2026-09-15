@@ -99,11 +99,34 @@ describe('completeFim', () => {
       signal: new AbortController().signal,
     })
     const { system, user } = captured(request)
-    expect(system.indexOf('你是小说行内补全引擎')).toBeLessThan(system.indexOf('【作者跨作品约定】'))
+    expect(system.indexOf('你是文稿行内补全引擎')).toBeLessThan(system.indexOf('【作者跨作品约定】'))
     expect(system.indexOf('【作者跨作品约定】')).toBeLessThan(system.indexOf('【本项目协作规则】'))
     expect(system).toContain('【本项目协作规则】\n本项目只用短句 {{model}}')
     expect(system).toContain('当前请求 > 本项目协作规则 > 作者跨作品约定')
     expect(system.split('【本项目协作规则】')).toHaveLength(2)
     expect(user).not.toContain('【本项目协作规则】')
+  })
+
+  it('keeps a genre-neutral inline-completion contract on the system prompt', async () => {
+    async function* stream() { yield { type: 'text-delta', text: '续句' } }
+    const request = vi.fn(() => stream())
+    await completeFim({
+      ctx: { get: () => ({ stream: request }) },
+      provider: 'provider',
+      model: 'model',
+      prefix: '前文',
+      suffix: '后文',
+      signal: new AbortController().signal,
+    })
+    const { system } = captured(request)
+    expect(system).toBe('你是文稿行内补全引擎。只输出应插入光标位置的短插入文本，不解释、不复述前后文，并自然衔接后文。不要用Markdown围栏。')
+    expect(system).toContain('只输出应插入光标位置的短插入文本')
+    expect(system).toContain('不解释')
+    expect(system).toContain('不复述前后文')
+    expect(system).toContain('自然衔接后文')
+    expect(system).toContain('不要用Markdown围栏')
+    for (const banned of ['小说', '正文', '章节', '人物', '叙述']) {
+      expect(system).not.toContain(banned)
+    }
   })
 })

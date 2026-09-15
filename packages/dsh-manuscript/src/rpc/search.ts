@@ -1,6 +1,7 @@
 import path from 'node:path'
 import type { WorkspaceFileContext } from './files.ts'
 import { FileOpError, listDirStrict, readTextFile } from './files.ts'
+import { normalizeWorkspaceRelative } from './paths.ts'
 
 const MAX_QUERY_CHARS = 120
 const MAX_FILES = 2_000
@@ -76,14 +77,34 @@ function lineExcerpt(line: string, start: number, length: number): string {
   return `${left > 0 ? '…' : ''}${line.slice(left, right).trim()}${right < line.length ? '…' : ''}`
 }
 
+function parseSearchDirectory(directory: unknown): string | undefined {
+  if (directory == null || directory === '') return undefined
+  if (typeof directory !== 'string') throw new SearchError('search directory must be text', 'BAD_QUERY')
+  const trimmed = directory.trim()
+  if (!trimmed) return undefined
+  if (/[\u0000-\u001f\u007f]/.test(trimmed)) {
+    throw new SearchError('search directory contains control characters', 'BAD_QUERY')
+  }
+  const relative = normalizeWorkspaceRelative(trimmed)
+  if (relative === '.') return undefined
+  if (hidden(relative) || generated(relative)) {
+    throw new FileOpError('search directory is hidden or generated', 'DENIED')
+  }
+  return relative
+}
+
 export async function searchWorkspaceText(input: {
   files: WorkspaceFileContext
   query: string
   scope?: SearchScope
+  directory?: unknown
 }): Promise<SearchResponse> {
   const query = validateQuery(input.query)
   const scope: SearchScope = input.scope === 'manuscript' ? 'manuscript' : 'project'
-  const queue = [scope === 'manuscript' ? '正文' : '']
+  const selected = parseSearchDirectory(input.directory)
+  const start = selected ?? (scope === 'manuscript' ? '正文' : '')
+  const implicitManuscriptRoot = !selected && scope === 'manuscript'
+  const queue = [start]
   const results: SearchHit[] = []
   let scannedFiles = 0
   let scannedBytes = 0
@@ -96,7 +117,7 @@ export async function searchWorkspaceText(input: {
     try {
       entries = await listDirStrict(input.files, directory || '.')
     } catch (error) {
-      if (scope === 'manuscript' && directory === '正文' && error instanceof FileOpError && error.code === 'NOT_FOUND') {
+      if (implicitManuscriptRoot && directory === '正文' && error instanceof FileOpError && error.code === 'NOT_FOUND') {
         return { query, scope, results, scannedFiles, scannedBytes, skipped, truncated }
       }
       throw error

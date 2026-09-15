@@ -6,6 +6,7 @@ import { parsePatchRequest, PatchInputError } from './rpc/patch.ts'
 import type { ManuscriptAssist } from './assist-api.ts'
 import { createDraftStore, draftDomainSpec, DraftInputError, type DraftStore } from './rpc/draft.ts'
 import { applyProposal, parseProposal, prepareProposal, ProposalError } from './rpc/proposal.ts'
+import { WritingProposalError } from './rpc/writing-proposal.ts'
 import { SearchError, searchWorkspaceText } from './rpc/search.ts'
 import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
 import { resolveDays, UsageInputError, type UsageRecorder } from './rpc/usage.ts'
@@ -29,7 +30,7 @@ export function mapError(error: unknown): RpcErr {
     if (error.code === 'BAD_QUERY') return badRequest(error.message)
     return fail({ code: 'internal', message: error.message, details: {} })
   }
-  if (error instanceof ProposalError || error instanceof PatchInputError || error instanceof DraftInputError || error instanceof UsageInputError || error instanceof AssistUnavailableError) return badRequest(error.message)
+  if (error instanceof ProposalError || error instanceof WritingProposalError || error instanceof PatchInputError || error instanceof DraftInputError || error instanceof UsageInputError || error instanceof AssistUnavailableError) return badRequest(error.message)
   return fail({ code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} })
 }
 
@@ -40,6 +41,14 @@ type Payload = Record<string, unknown>
 function str(payload: Payload, key: string): string {
   const value = payload[key]
   return typeof value === 'string' ? value : ''
+}
+
+/** Shell sends flat `{sessionId,...proposal}` / `{sessionId,...proposal,expectedVersion}`. Strip only those transport/control keys. */
+function proposalFromRpcBody(body: Payload): Record<string, unknown> {
+  const proposal = { ...body }
+  delete proposal.sessionId
+  delete proposal.expectedVersion
+  return proposal
 }
 
 export async function dispatch(
@@ -86,10 +95,11 @@ export async function dispatch(
       files,
       query: str(body, 'query'),
       scope: str(body, 'scope') === 'manuscript' ? 'manuscript' : 'project',
+      directory: body.directory,
     })
-    if (endpoint === 'proposal.prepare') return await prepareProposal(files, parseProposal(body))
+    if (endpoint === 'proposal.prepare') return await prepareProposal(files, parseProposal(proposalFromRpcBody(body)))
     if (endpoint === 'proposal.apply') {
-      return await applyProposal(files, parseProposal(body), str(body, 'expectedVersion'))
+      return await applyProposal(files, parseProposal(proposalFromRpcBody(body)), str(body, 'expectedVersion'))
     }
     if (endpoint === 'fim.complete' || endpoint === 'patch.complete') {
       // Validate the legacy patch request even when no model is configured.

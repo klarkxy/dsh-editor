@@ -60,3 +60,35 @@ export {
   type HostRpcContext,
   type HostRpcHandler,
 } from './rpc/channel.ts'
+
+export {
+  WRITING_PROPOSAL_BASIS_MAX,
+  WRITING_PROPOSAL_LABEL_MAX_CHARS,
+  WRITING_PROPOSAL_MARKER,
+  WRITING_PROPOSAL_PATH_MAX_CHARS,
+  WRITING_PROPOSAL_RENAMES_MAX,
+  WRITING_PROPOSAL_VERSION,
+  WRITING_PROPOSAL_VERSION_MAX_CHARS,
+  WRITING_PROPOSE_TOOL_NAME,
+  WRITING_V2_CREATE,
+  WritingProposalError,
+  isWritingProposalV2,
+  isWritingV2Create,
+  parseWritingProposal,
+  parseWritingProposalBasis,
+  parseWritingProposalMarker,
+  parseWritingReceiptVersion,
+  projectRelativePath,
+  type WritingProposalBasis,
+  type WritingProposalRename,
+  type WritingProposalV2,
+} from './rpc/writing-proposal.ts'
+
+export {
+  ProposalError,
+  assertWritingProposalBasis,
+  parseProposal,
+  type CreateProposal,
+  type EditProposal,
+  type Proposal,
+} from './rpc/proposal.ts'

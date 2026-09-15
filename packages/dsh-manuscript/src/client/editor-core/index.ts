@@ -56,3 +56,23 @@ export {
   type EditorTargetSnapshot,
 } from './editor-clipboard.ts'
 export { openFindPanel, openReplacePanel } from './search.ts'
+export {
+  WRITING_PROPOSAL_BASIS_MAX,
+  WRITING_PROPOSAL_LABEL_MAX_CHARS,
+  WRITING_PROPOSAL_MARKER,
+  WRITING_PROPOSAL_PATH_MAX_CHARS,
+  WRITING_PROPOSAL_RENAMES_MAX,
+  WRITING_PROPOSAL_VERSION,
+  WRITING_PROPOSAL_VERSION_MAX_CHARS,
+  WRITING_PROPOSE_TOOL_NAME,
+  WritingProposalError,
+  isWritingProposalV2,
+  parseWritingProposal,
+  parseWritingProposalBasis,
+  parseWritingProposalMarker,
+  parseWritingReceiptVersion,
+  projectRelativePath,
+  type WritingProposalBasis,
+  type WritingProposalRename,
+  type WritingProposalV2,
+} from '../../rpc/writing-proposal.ts'

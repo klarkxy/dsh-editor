@@ -4,6 +4,8 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { FileSystemLike, FsTargetLike } from '../host.ts'
 import type { WorkspaceFileContext } from './files.ts'
+import { FileOpError } from './files.ts'
+import { PathConfineError } from './paths.ts'
 import { SearchError, searchWorkspaceText } from './search.ts'
 
 let root = ''
@@ -68,5 +70,41 @@ describe('bounded author text search', () => {
 
   it('returns an honest empty manuscript result when the manuscript directory is absent', async () => {
     await expect(searchWorkspaceText({ files: context(), query: '测试', scope: 'manuscript' })).resolves.toMatchObject({ results: [], scannedFiles: 0, truncated: false })
+  })
+
+  it('finds a selected-directory match after a root file would fill the 200-result cap', async () => {
+    await fs.mkdir(path.join(root, 'docs'))
+    await fs.writeFile(path.join(root, 'aaa.md'), Array.from({ length: 200 }, () => 'needle').join('\n'))
+    await fs.writeFile(path.join(root, 'docs', 'target.md'), 'needle lives here')
+    const project = await searchWorkspaceText({ files: context(), query: 'needle' })
+    expect(project.truncated).toBe(true)
+    expect(project.results).toHaveLength(200)
+    expect(project.results.every((hit) => hit.path === 'aaa.md')).toBe(true)
+    const scoped = await searchWorkspaceText({ files: context(), query: 'needle', directory: 'docs' })
+    expect(scoped).toMatchObject({ truncated: false, scannedFiles: 1 })
+    expect(scoped.results.map((hit) => hit.path)).toEqual(['docs/target.md'])
+  })
+
+  it('fails closed on missing, non-directory, escaping, and hidden selected directories', async () => {
+    await fs.writeFile(path.join(root, 'file.md'), 'needle')
+    await expect(searchWorkspaceText({ files: context(), query: 'needle', directory: 'missing' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(searchWorkspaceText({ files: context(), query: 'needle', directory: 'file.md' })).rejects.toMatchObject({ code: 'NOT_DIRECTORY' })
+    await expect(searchWorkspaceText({ files: context(), query: 'needle', directory: '../escape' })).rejects.toBeInstanceOf(PathConfineError)
+    await expect(searchWorkspaceText({ files: context(), query: 'needle', directory: '/abs' })).rejects.toBeInstanceOf(PathConfineError)
+    await expect(searchWorkspaceText({ files: context(), query: 'needle', directory: 1 })).rejects.toBeInstanceOf(SearchError)
+    await expect(searchWorkspaceText({ files: context(), query: 'needle', directory: '.hidden' })).rejects.toBeInstanceOf(FileOpError)
+    await expect(searchWorkspaceText({ files: context(), query: 'needle', directory: 'dist' })).rejects.toMatchObject({ code: 'DENIED' })
+  })
+
+  it('still skips hidden, generated, and non-text files inside a selected directory', async () => {
+    await fs.mkdir(path.join(root, 'docs', '.cache'), { recursive: true })
+    await fs.mkdir(path.join(root, 'docs', 'dist'))
+    await fs.writeFile(path.join(root, 'docs', '.cache', 'secret.md'), 'needle')
+    await fs.writeFile(path.join(root, 'docs', 'dist', 'generated.md'), 'needle')
+    await fs.writeFile(path.join(root, 'docs', 'skip.bin'), 'needle')
+    await fs.writeFile(path.join(root, 'docs', 'keep.md'), 'needle kept')
+    const result = await searchWorkspaceText({ files: context(), query: 'needle', directory: 'docs' })
+    expect(result.results.map((hit) => hit.path)).toEqual(['docs/keep.md'])
+    expect(result.skipped).toBeGreaterThanOrEqual(3)
   })
 })

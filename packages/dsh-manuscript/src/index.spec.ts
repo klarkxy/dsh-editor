@@ -5,7 +5,10 @@ import { resolveWorkspaceAccess, WorkspaceAuthorityError } from './host.ts'
 import { dispatch, mapError } from './index.ts'
 import { createDraftStore, type DraftTableLike } from './rpc/draft.ts'
 import { FileOpError } from './rpc/files.ts'
+import { PathConfineError } from './rpc/paths.ts'
+import { parseProposal } from './rpc/proposal.ts'
 import { SearchError } from './rpc/search.ts'
+import { createMemoryContext } from './rpc/test-helpers.ts'
 
 function draftStoreFixture() {
   const rows = new Map<string, NonNullable<ReturnType<DraftTableLike['get']>>>()
@@ -212,5 +215,175 @@ describe('manuscript Host workspace authority', () => {
       new AbortController().signal,
     )).resolves.toMatchObject({ results: [], scannedFiles: 0 })
     expect(resolveCalls.every((call) => call.cwd === canonical)).toBe(true)
+  })
+
+  it('fences search.text directory to the live workspace and fails closed on escape or a missing folder', async () => {
+    const { host, canonical, resolveCalls } = fixture()
+    await expect(dispatch(
+      host as unknown as Context,
+      'search.text',
+      { sessionId: 'session-1', query: 'needle', directory: 'notes' },
+      new AbortController().signal,
+    )).resolves.toMatchObject({ results: [], scannedFiles: 0 })
+    await expect(dispatch(
+      host as unknown as Context,
+      'search.text',
+      { sessionId: 'session-1', query: 'needle', directory: '../secret' },
+      new AbortController().signal,
+    )).rejects.toBeInstanceOf(PathConfineError)
+    await expect(dispatch(
+      host as unknown as Context,
+      'search.text',
+      { sessionId: 'session-1', query: 'needle', directory: 'missing' },
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    expect(resolveCalls.every((call) => call.cwd === canonical)).toBe(true)
+  })
+})
+
+describe('manuscript search RPC directory scope', () => {
+  it('finds a selected-directory match through dispatch after a root file fills the result cap', async () => {
+    const { host } = proposalHost({
+      'aaa.md': Array.from({ length: 200 }, () => 'needle').join('\n'),
+      'docs/target.md': 'needle in docs',
+    })
+    const signal = new AbortController().signal
+    const project = await dispatch(
+      host as unknown as Context,
+      'search.text',
+      { sessionId: 'session-1', query: 'needle', scope: 'project' },
+      signal,
+    ) as { truncated: boolean; results: { path: string }[] }
+    expect(project.truncated).toBe(true)
+    expect(project.results.every((hit) => hit.path === 'aaa.md')).toBe(true)
+    const scoped = await dispatch(
+      host as unknown as Context,
+      'search.text',
+      { sessionId: 'session-1', query: 'needle', directory: 'docs' },
+      signal,
+    ) as { truncated: boolean; results: { path: string }[] }
+    expect(scoped.truncated).toBe(false)
+    expect(scoped.results.map((hit) => hit.path)).toEqual(['docs/target.md'])
+  })
+})
+
+function proposalHost(files: Record<string, string>) {
+  const memory = createMemoryContext(files)
+  const host = {
+    sessions: {
+      get: () => ({
+        id: 'session-1',
+        header: { cwd: '/header/workspace' },
+        requestHeader: () => undefined,
+      }),
+    },
+    workspaceRegistry: {
+      resolveByPath: vi.fn(async () => ({ path: '/workspace', sessionIds: ['session-1'] })),
+    },
+    sandboxPolicy: {
+      resolve: vi.fn(() => ({ mode: 'workspace-write' as const, workspaceRoot: '/workspace', sessionId: 'session-1' })),
+    },
+    fs: memory.fs,
+    connection: { rpc: { call: vi.fn(), handle: vi.fn() } },
+  } as unknown as ManuscriptHost
+  return { host, memory }
+}
+
+function flatV2Edit(extra: Record<string, unknown> = {}) {
+  return {
+    marker: 'dsh-editor.proposal',
+    version: 2,
+    kind: 'edit',
+    path: '正文/001.md',
+    oldText: '旧句。',
+    newText: '新句。',
+    summary: '替换一句',
+    targetVersion: 'initial-正文/001.md',
+    ...extra,
+  }
+}
+
+describe('manuscript proposal RPC envelope', () => {
+  it('keeps V2 parseProposal strict about sessionId and expectedVersion', () => {
+    expect(() => parseProposal({ ...flatV2Edit(), sessionId: 'session-1' })).toThrow(/unsupported/)
+    expect(() => parseProposal({ ...flatV2Edit(), expectedVersion: 'v1' })).toThrow(/unsupported/)
+  })
+
+  it('accepts a flat V2 edit prepare/apply envelope with sessionId, expectedVersion, and basis', async () => {
+    const { host } = proposalHost({ '正文/001.md': '# 第一章\n旧句。\n', '大纲/总纲.md': '来源纲要' })
+    const signal = new AbortController().signal
+    const basisSource = await dispatch(
+      host as unknown as Context,
+      'file.read',
+      { sessionId: 'session-1', path: '大纲/总纲.md' },
+      signal,
+    ) as { version: string }
+    const envelope = {
+      ...flatV2Edit(),
+      sessionId: 'session-1',
+      basis: [{ path: '大纲/总纲.md', version: basisSource.version, label: '总纲' }],
+    }
+    const prepared = await dispatch(host as unknown as Context, 'proposal.prepare', envelope, signal) as {
+      applicable: boolean
+      version: string
+      before: string
+      after: string
+    }
+    expect(prepared).toMatchObject({ applicable: true, before: '旧句。', after: '新句。', kind: 'edit' })
+    await expect(dispatch(
+      host as unknown as Context,
+      'proposal.apply',
+      { ...envelope, expectedVersion: prepared.version },
+      signal,
+    )).resolves.toMatchObject({ operation: 'edit', path: '正文/001.md' })
+    await expect(dispatch(
+      host as unknown as Context,
+      'file.read',
+      { sessionId: 'session-1', path: '正文/001.md' },
+      signal,
+    )).resolves.toMatchObject({ text: '# 第一章\n新句。\n' })
+  })
+
+  it('still fail-closes extra proposal fields on prepare and apply', async () => {
+    const { host } = proposalHost({ '正文/001.md': '# 第一章\n旧句。\n' })
+    const signal = new AbortController().signal
+    const extra = { ...flatV2Edit(), sessionId: 'session-1', extra: true }
+    await expect(dispatch(host as unknown as Context, 'proposal.prepare', extra, signal))
+      .rejects.toMatchObject({ code: 'INVALID', message: expect.stringMatching(/unsupported/) })
+    await expect(dispatch(
+      host as unknown as Context,
+      'proposal.apply',
+      { ...extra, expectedVersion: 'initial-正文/001.md' },
+      signal,
+    )).rejects.toMatchObject({ code: 'INVALID', message: expect.stringMatching(/unsupported/) })
+    await expect(dispatch(
+      host as unknown as Context,
+      'file.read',
+      { sessionId: 'session-1', path: '正文/001.md' },
+      signal,
+    )).resolves.toMatchObject({ text: '# 第一章\n旧句。\n' })
+  })
+
+  it('keeps V1 edit prepare/apply working with the same RPC envelope', async () => {
+    const { host } = proposalHost({ '正文/001.md': '# 第一章\n旧句。\n' })
+    const signal = new AbortController().signal
+    const envelope = {
+      sessionId: 'session-1',
+      kind: 'edit',
+      path: '正文/001.md',
+      oldText: '旧句。',
+      newText: '新句。',
+      summary: '替换一句',
+    }
+    const prepared = await dispatch(host as unknown as Context, 'proposal.prepare', envelope, signal) as {
+      version: string
+    }
+    expect(prepared).toMatchObject({ applicable: true, before: '旧句。', after: '新句。' })
+    await expect(dispatch(
+      host as unknown as Context,
+      'proposal.apply',
+      { ...envelope, expectedVersion: prepared.version },
+      signal,
+    )).resolves.toMatchObject({ operation: 'edit', path: '正文/001.md' })
   })
 })

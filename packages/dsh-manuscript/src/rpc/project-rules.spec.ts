@@ -11,6 +11,20 @@ import {
 import { createMemoryContext } from './test-helpers.ts'
 
 describe('project rules reader', () => {
+  it('keeps the default template genre-neutral', () => {
+    expect(PROJECT_RULES_TEMPLATE).toContain('作者要求')
+    expect(PROJECT_RULES_TEMPLATE).toContain('项目规则')
+    expect(PROJECT_RULES_TEMPLATE).toContain('事实')
+    expect(PROJECT_RULES_TEMPLATE).toContain('计划')
+    expect(PROJECT_RULES_TEMPLATE).toContain('来源')
+    expect(PROJECT_RULES_TEMPLATE).toMatch(/\bread\b/)
+    expect(PROJECT_RULES_TEMPLATE).toContain('提案')
+    expect(PROJECT_RULES_TEMPLATE).toContain('作者确认')
+    for (const banned of ['小说', '正文', '设定', '人物卡', '世界书', 'novel_memory_update', 'canon']) {
+      expect(PROJECT_RULES_TEMPLATE).not.toContain(banned)
+    }
+  })
+
   it('ignores nested AGENTS.md and returns the canonical template when the root file is missing', async () => {
     const context = createMemoryContext({
       'nested/AGENTS.md': 'nested-only {{model}}',

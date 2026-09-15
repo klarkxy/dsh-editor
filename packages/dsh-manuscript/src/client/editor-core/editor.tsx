@@ -111,6 +111,12 @@ export type EditorCoreHandle = {
    */
   revealRange(start: number, end: number): void
   /**
+   * Cancel a draft-sync timeout that has not yet called draft.put/delete.
+   * Does not abort an already-enqueued queue operation. Shell-owned
+   * conflict resolution must call this before deleting the owned draft.
+   */
+  cancelPendingDraftSync(): void
+  /**
    * Request a selection rewrite. When `instruction` is omitted the Host uses
    * the default patch prompt; the built-in footer button keeps that path.
    * An optional snapshot pins the original range across a custom-dialog gap.
@@ -284,6 +290,30 @@ const SESSION_DRAFT_KEY = (cwd: string, path: string) =>
    由尾部去抖收敛，一次击键连发只全量穿透 React 一次，而不是每键一次。 */
 const TEXT_STATE_FLUSH_DELAY_MS = 150
 
+export type DraftSyncTimer = {
+  schedule(delayMs: number, run: () => void): void
+  cancelPending(): void
+}
+
+/** Owns the not-yet-fired draft.put/delete timeout so explicit cleanup can drop it. */
+export function createDraftSyncTimer(): DraftSyncTimer {
+  let timer: ReturnType<typeof globalThis.setTimeout> | null = null
+  return {
+    schedule(delayMs, run) {
+      if (timer != null) globalThis.clearTimeout(timer)
+      timer = globalThis.setTimeout(() => {
+        timer = null
+        run()
+      }, delayMs)
+    },
+    cancelPending() {
+      if (timer == null) return
+      globalThis.clearTimeout(timer)
+      timer = null
+    },
+  }
+}
+
 const IDENTITY_PROJECTION: EditorCorePaperProjection = {
   project: (_path, text) => ({ text, offset: 0 }),
   replace: (_path, _text, paperText) => paperText,
@@ -456,6 +486,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const draftBaseRef = useRef<{ text: string; version: string } | null>(null)
   /* 去抖挂起期间存活的 timer；显式 setText / 保存 / 失焦 / 切章 / 卸载都会立即收敛或取消。 */
   const textFlushTimer = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null)
+  const draftSync = useRef(createDraftSyncTimer()).current
+  const cancelPendingDraftSync = useCallback(() => draftSync.cancelPending(), [draftSync])
   /* 脏标记上次上报值，仅在实际变化时回调 onDirtyChange。 */
   const lastDirtyReportedRef = useRef<boolean | null>(null)
 
@@ -528,7 +560,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
      text state 交给 scheduleTextFlush 做尾部去抖，避免每次击键全量穿透 React。 */
   const setText = useCallback((next: string, deferState = false) => {
     if (textFlushTimer.current != null) { globalThis.clearTimeout(textFlushTimer.current); textFlushTimer.current = null }
-    if (loadingFim || patching) report('正文已变化，已停止此前的建议。')
+    if (loadingFim || patching) report('文稿已变化，已停止此前的建议。')
     fimAbort.current?.abort()
     patchAbort.current?.abort()
     setLoadingFim(false)
@@ -556,6 +588,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   }, [])
 
   useEffect(() => {
+    cancelPendingDraftSync()
     if (textFlushTimer.current != null) { globalThis.clearTimeout(textFlushTimer.current); textFlushTimer.current = null }
     fimAbort.current?.abort()
     patchAbort.current?.abort()
@@ -640,15 +673,16 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       live = false
       loadedGenerationRef.current = -1
       documentGenerationRef.current += 1
+      cancelPendingDraftSync()
       fimAbort.current?.abort()
       patchAbort.current?.abort()
     }
-  }, [path, sessionId, cwd, externalRevision, rpc, draft, report, reportError, clearGhost])
+  }, [path, sessionId, cwd, externalRevision, rpc, draft, report, reportError, clearGhost, cancelPendingDraftSync])
 
   useEffect(() => {
     if (draft.kind === 'none' || !doc || !isDocumentReady()) return
     const delay = draft.syncDelayMs ?? 250
-    const timer = globalThis.setTimeout(() => {
+    draftSync.schedule(delay, () => {
       if (!isDocumentReady() || docRef.current?.path !== doc.path) return
       if (draft.kind === 'host') {
         const current = textRef.current
@@ -677,15 +711,16 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           else globalThis.sessionStorage.setItem(key, JSON.stringify({ ...doc, text: current }))
         } catch { /* best effort */ }
       }
-    }, delay)
-    return () => globalThis.clearTimeout(timer)
-  }, [draft, doc, revision, cwd, report])
+    })
+    return cancelPendingDraftSync
+  }, [draft, doc, revision, cwd, report, draftSync, cancelPendingDraftSync])
 
   const save = useCallback(async (): Promise<boolean> => {
     /* conflict 必须先经 放弃/重新载入/另存副本 解决，Ctrl+S 不得绕过。 */
     const savingDoc = docRef.current
     if (!savingDoc || !isDocumentReady() || saving.current) return false
     if (conflictRef.current) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
+    cancelPendingDraftSync()
     /* 保存以 textRef 为准已包含最新键入；这里同步收敛去抖，让读 React state 的 UI 一致。 */
     flushText()
     const startGeneration = documentGenerationRef.current
@@ -746,7 +781,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     } finally {
       saving.current = false
     }
-  }, [rpc, draft, cwd, report, reportError, onSaved, flushText])
+  }, [rpc, draft, cwd, report, reportError, onSaved, flushText, cancelPendingDraftSync])
 
   useEffect(() => {
     if (!doc || !isDocumentReady() || textRef.current === doc.text || conflict) return
@@ -756,6 +791,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
 
   const discard = useCallback(() => {
     if (!doc || !isDocumentReady() || docRef.current !== doc) return
+    cancelPendingDraftSync()
     if (draft.kind === 'host') {
       void draft.call('draft.delete', { sessionId: doc.sessionId, path: doc.path })
     } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
@@ -774,7 +810,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     clearGhost()
     setError('')
     report('已放弃本地修改。')
-  }, [doc, draft, cwd, clearGhost, report])
+  }, [doc, draft, cwd, clearGhost, report, cancelPendingDraftSync])
 
   /* 显式点击某条其他窗口的备份：把其 text 放进当前 buffer，按 baseVersion 决定
      是否标冲突；既有同步 effect 会通过 put 存成本窗口自己的副本，原备份保留。 */
@@ -1052,6 +1088,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       save,
       saveMetadataText,
       discard,
+      cancelPendingDraftSync,
       isDirty: () => isDirty(docRef.current, textRef.current),
       getText: () => textRef.current,
       getDocument: () => docRef.current,
@@ -1134,7 +1171,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     }
     onHandle(handle)
     return () => onHandle(null)
-  }, [onHandle, save, saveMetadataText, discard, clearGhost, requestPatch, captureTarget, liveTarget, restoreTarget, replaceSelection, readCommandState, complete])
+  }, [onHandle, save, saveMetadataText, discard, cancelPendingDraftSync, clearGhost, requestPatch, captureTarget, liveTarget, restoreTarget, replaceSelection, readCommandState, complete])
 
   const acceptGhost = useCallback(() => {
     const source = ghostSourceRef.current
@@ -1419,7 +1456,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
 
   return e('section', {
     className: [paperClassName, cls('outer')].filter(Boolean).join(' '),
-    'aria-label': '正文编辑区',
+    'aria-label': '文稿编辑区',
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -1489,7 +1526,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       e('div', {
         ref: containerRef,
         'data-testid': `${testIdPrefix}-editor`,
-        'aria-label': '正文编辑器',
+        'aria-label': '文档编辑器',
         style: { position: 'absolute', inset: 0 },
       }),
     ),
