@@ -128,7 +128,7 @@ async function readState(page) {
     const homeStage = Boolean(document.querySelector('.home-stage'))
     const tree = Boolean(document.querySelector('.tree'))
     const sidebar = Boolean(document.querySelector('.sidebar'))
-    const editorSection = Boolean(document.querySelector('[aria-label="正文编辑区"]'))
+    const editorSection = Boolean(document.querySelector('[aria-label="文稿编辑区"]'))
     const editorEl = document.querySelector('[data-testid="paper-editor"]')
     const cmView = editorEl && /** @type {any} */ (editorEl).__cmView
     const ghost = Boolean(document.querySelector('[data-testid="paper-ghost"]'))
@@ -248,17 +248,8 @@ try {
   await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
   await waitFor(async () => exists(targetWorkspace), 'new project home directory created')
   if (await exists(resolve(targetWorkspace, '项目总览.md'))) failures.push('new project should not pre-seed 项目总览.md')
-
-  // Seed a placeholder Markdown file directly on disk. The DSH home stage
-  // refuses to re-enter a workspace that has no .md or .txt files (see
-  // root.ts workspaceOpen 'error' branch), and the in-app chapter-create
-  // flow would trigger the Goal Mode takeover that the rest of this smoke
-  // test cannot survive. Writing to disk bypasses both: the workbench tree
-  // picks the file up via its filesystem watcher, and Goal Mode stays
-  // dormant because no chapter was created through the new-chapter dialog.
-  const placeholderChapter = resolve(targetWorkspace, '正文', '000-bootstrap.md')
-  await mkdir(resolve(targetWorkspace, '正文'), { recursive: true })
-  await writeFile(placeholderChapter, '# 起始页\n\n为重载而预留的占位章节。\n', 'utf8')
+  await waitFor(async () => exists(resolve(targetWorkspace, 'AGENTS.md')), 'new project root rules created')
+  await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
 
   // Top bar inventory: only the four chrome buttons that survived the refactor.
   await page.locator('.chrome').screenshot({ path: resolve(output, '01-chrome.png') })
@@ -281,16 +272,35 @@ try {
     }
   }
 
-  // New projects pre-create the four preset directories (PROJECT_DIRECTORIES in
-  // workbench project.ts) so planning entries exist up front; the tree renders
-  // real on-disk entries, so all four show right after project creation.
+  // New projects only seed neutral root rules. Specialist names stay ordinary
+  // folders the author creates; they must not appear until the tree UI makes them.
   for (const label of ['正文', '大纲', '人物卡', '世界书']) {
-    if (!(await page.locator('.tree').getByText(label, { exact: true }).count())) {
-      failures.push(`preset directory missing from new-project tree: ${label}`)
+    if (await exists(resolve(targetWorkspace, label))) {
+      failures.push(`new project should not pre-create ${label}`)
+    }
+    if (await page.locator('.tree').getByText(label, { exact: true }).count()) {
+      failures.push(`preset directory leaked into new-project tree: ${label}`)
+    }
+  }
+  const tree = page.locator('.tree')
+  const treeBox = await tree.boundingBox()
+  if (!treeBox) failures.push('tree missing after new project')
+  else {
+    await tree.click({ button: 'right', position: { x: 16, y: Math.max(12, treeBox.height - 18) } })
+    const newFolder = page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '新建文件夹' })
+    if (!(await newFolder.isVisible().catch(() => false))) failures.push('directory create action missing')
+    else {
+      await newFolder.click()
+      const createFolder = page.getByRole('dialog', { name: '新建文件夹' })
+      await createFolder.waitFor({ state: 'visible' })
+      await createFolder.getByLabel('文件夹名称').fill('正文')
+      await createFolder.getByRole('button', { name: '创建', exact: true }).click()
+      await createFolder.waitFor({ state: 'detached', timeout: 15_000 })
+      await page.locator('.tree-row').filter({ hasText: '正文' }).first().waitFor({ state: 'visible', timeout: 20_000 })
     }
   }
   await page.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
-  if (!(await page.getByRole('button', { name: '在 正文 中新建文件', exact: true }).isVisible())) failures.push('manuscript folder create action missing')
+  if (!(await page.getByRole('button', { name: '在 正文 中新建文件', exact: true }).isVisible())) failures.push('folder create-file action missing')
 
   // Create and save through the real author workflow before theme/navigation checks.
   await page.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
@@ -327,8 +337,8 @@ try {
   await page.waitForTimeout(500)
 
   // A page reload usually returns DSH to the home stage, but if the last
-  // workspace is still on disk and openable (it has a .md file thanks to
-  // the placeholder seed above) the shell may re-enter the workbench
+  // workspace is still on disk and openable (it has a .md file from the
+  // author-created 正文/001.md above) the shell may re-enter the workbench
   // directly. Either way, the tree must be in scope; handle both landings.
   if (await page.locator('.home-stage').isVisible().catch(() => false)) {
     await page.locator('.home-recent').getByRole('button', { name: /core-loop-workspace/ }).first().click()

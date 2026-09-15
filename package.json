@@ -25,6 +25,7 @@
     "test:e2e:visual-audit": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/visual-audit.mjs",
     "test:e2e:palette": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/palette.mjs",
     "test:e2e:author-flow": "pnpm build && node e2e/author-flow-live.mjs",
+    "test:e2e:preset-live": "pnpm build && node e2e/preset-live-smoke.mjs",
     "test:e2e:features": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/feature-coverage.mjs",
     "test:e2e:zhihu-live": "node scripts/prepare-desktop-dev.mjs && node e2e/zhihu-live.mjs",
     "test:e2e:portable": "node e2e/portable.mjs",

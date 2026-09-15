@@ -57,7 +57,7 @@ try {
   const create = page.getByRole('dialog', { name: '新建作品' })
   await create.getByLabel('作品名称').fill('menu-primary')
   await create.getByRole('button', { name: '创建', exact: true }).click()
-  await page.getByRole('navigation', { name: '稿件目录' }).waitFor()
+  await page.getByRole('tree', { name: '稿件目录' }).waitFor()
   const project = resolve(runRoot, 'projects/menu-primary')
   await mkdir(resolve(project, '正文'), { recursive: true })
   await writeFile(resolve(project, '正文/001 菜单验收.md'), original, 'utf8')

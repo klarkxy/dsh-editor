@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, rm, stat, writeFile, readFile, readdir, realpath, cp } from 'node:fs/promises'
+import { mkdir, rm, stat, writeFile, readFile, readdir, realpath } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
@@ -20,7 +20,7 @@ for (const target of [projectsRoot, home, output, targetWorkspace]) {
 }
 
 resolveDshInstallation('0.1.5-rc.2')
-const template = resolve(devRoot, 'entry-disable-template')
+const template = resolve(devRoot, 'desktop-profile-template')
 const runtime = resolve(devRoot, 'desktop-dsh-runtime')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
@@ -103,7 +103,7 @@ async function dismissNativeOnboarding(page) {
   }
 }
 
-await rm(home,{recursive:true,force:true});await rm(projectsRoot,{recursive:true,force:true});await mkdir(output,{recursive:true});await rm(template,{recursive:true,force:true});await cp(resolve(devRoot,'desktop-profile-template'),template,{recursive:true});
+await rm(home,{recursive:true,force:true});await rm(projectsRoot,{recursive:true,force:true});await mkdir(output,{recursive:true});
 if(!/- id: proofread\r?\n\s+disabled: true/.test(await readFile(resolve(template,'cordis.patch.yml'),'utf8')))throw new Error('desktop profile must pause proofreading by default');
 await deployProfile(home,template,resolve(runtime,'node_modules'));
 const report={ok:false,checks:[]};let page;

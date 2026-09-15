@@ -2,8 +2,8 @@
  * Real-machine feature coverage for the DSH Editor shell.
  *
  * Boots an isolated DSH home, drives the visible UI through the current
- * workbench surface, then uses MiniMax-M3 for chat, rewrite, FIM, and one
- * proposal. Product files are created through the UI.
+ * generic writing workbench, then uses MiniMax-M3 for chat, rewrite, FIM,
+ * and one writing_propose. Product files are created through the UI.
  *
  * Credentials default to ~/.mmx/config.json. They are never printed.
  */
@@ -170,9 +170,43 @@ async function shot(page, name) {
 
 let activePage
 
+const openOverlaySelector = [
+  '.palette-content[data-state="open"]',
+  '.palette-overlay[data-state="open"]',
+  '.file-dialog-overlay[data-state="open"]',
+  '.file-dialog[data-state="open"]',
+  '.import-overlay[data-state="open"]',
+  '.settings-overlay[data-state="open"]',
+].join(', ')
+
+async function openOverlayCount(page) {
+  return page.locator(openOverlaySelector).count()
+}
+
+async function closePalette(page = activePage) {
+  if (!page) return
+  if (!(await page.locator('.palette-content[data-state="open"], .palette-overlay[data-state="open"]').count())) return
+  await page.keyboard.press('Escape')
+  await waitFor(async () => !(await page.locator('.palette-content[data-state="open"], .palette-overlay[data-state="open"]').count()), 'palette closed', 5_000)
+}
+
+async function clickOpenOverlayDismiss(page) {
+  const labeled = page.locator('[data-state="open"] button[aria-label="关闭"], [data-state="open"] button[aria-label="取消"]')
+  if (await labeled.count()) {
+    await labeled.last().click({ force: true })
+    return
+  }
+  const named = page.locator('[data-state="open"] button').filter({ hasText: /^(关闭|取消)$/ })
+  if (await named.count()) {
+    await named.last().click({ force: true })
+    return
+  }
+  await page.keyboard.press('Escape')
+}
+
 async function dismissOverlays(page = activePage) {
   if (!page) return
-  for (let step = 0; step < 6; step += 1) {
+  for (let step = 0; step < 10; step += 1) {
     const closeCardDetail = page.getByRole('button', { name: '关闭卡片详情' })
     if (await closeCardDetail.isVisible().catch(() => false)) {
       await closeCardDetail.click()
@@ -185,13 +219,16 @@ async function dismissOverlays(page = activePage) {
       await workspaceMenu.waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => undefined)
       continue
     }
-    const overlay = page.locator('.file-dialog-overlay, .palette-overlay, .import-overlay, .settings-overlay').first()
-    if (!(await overlay.isVisible().catch(() => false))) return
-    const close = overlay.getByRole('button', { name: /^(关闭|取消)$/ }).first()
-    if (await close.isVisible().catch(() => false)) await close.click({ force: true }).catch(() => undefined)
-    else await page.keyboard.press('Escape')
+    if (!(await openOverlayCount(page))) return
+    await clickOpenOverlayDismiss(page).catch(() => undefined)
     await delay(200)
   }
+  await waitFor(async () => !(await openOverlayCount(page)), 'overlays closed', 5_000).catch(() => undefined)
+}
+
+async function ensureOverlaysClosed(page = activePage) {
+  await dismissOverlays(page)
+  await waitFor(async () => !(await openOverlayCount(page)), 'overlays still open', 8_000)
 }
 
 async function cover(name, action) {
@@ -329,16 +366,16 @@ async function configureMiniMax(page) {
   await openShellSettings(page)
   const dialog = page.locator('.settings-dialog')
   if (!aiOnly) {
-  await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '通用设置' }).click()
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '通用设置', exact: true }).click()
   await dialog.getByRole('region', { name: '通用设置' }).waitFor({ state: 'visible', timeout: 15_000 })
   await chooseCustomSelect(dialog, '语言', (label) => /English/i.test(label))
-  await dialog.getByRole('button', { name: 'General', exact: true }).waitFor({ state: 'visible', timeout: 10_000 })
+  await dialog.locator('.settings-nav').getByRole('tab', { name: 'General', exact: true }).waitFor({ state: 'visible', timeout: 10_000 })
   recordFeature('i18n-english', true)
   await chooseCustomSelect(dialog, 'Language', (label) => /中文/.test(label))
-  await dialog.getByRole('button', { name: '通用设置', exact: true }).waitFor({ state: 'visible', timeout: 10_000 })
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '通用设置', exact: true }).waitFor({ state: 'visible', timeout: 10_000 })
   recordFeature('i18n-chinese', true)
 
-  await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '写作' }).click()
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '写作', exact: true }).click()
   const authorBox = dialog.getByRole('textbox', { name: '跨作品作者约定' })
   await authorBox.waitFor({ state: 'visible', timeout: 15_000 })
   await authorBox.fill('第三人称限知；少用感叹号；对白保持克制。')
@@ -376,13 +413,13 @@ async function configureMiniMax(page) {
   await closeShellSettings(page)
   await openShellSettings(page)
   recordFeature('zhihu-panel-settings', true)
-  await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '用量' }).click()
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '用量', exact: true }).click()
   await dialog.getByRole('region', { name: '用量' }).waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined)
   recordFeature('settings-usage', true)
 
   }
-  await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: '模型' }).click()
-  const models = dialog.getByRole('region', { name: '模型' })
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '模型', exact: true }).click()
+  const models = dialog.getByRole('region', { name: '模型', exact: true })
   await models.waitFor({ state: 'visible', timeout: 15_000 })
   await waitModelsReady(models)
   const created = await submitCustomMiniMax(models)
@@ -403,12 +440,22 @@ async function createProjectFromHome(page) {
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
   await dialog.getByLabel('作品名称').fill(book)
   await dialog.getByRole('button', { name: '创建', exact: true }).click()
-  await page.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
-  await page.locator('.tree-row', { hasText: '正文' }).first().waitFor({ state: 'visible', timeout: 20_000 })
+  await page.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
+  for (const extra of ['正文', '大纲', '人物卡', '世界书']) {
+    if (await exists(resolve(workspace, extra))) throw new Error(`new project should not pre-seed ${extra}`)
+    if (await page.locator('.tree').getByText(extra, { exact: true }).count()) {
+      throw new Error(`new project should not pre-seed ${extra}`)
+    }
+  }
   await recordPhase('新建作品', workspace)
 }
 
 async function createFolder(page, name) {
+  if (await exists(resolve(workspace, name)) || await page.locator('.tree-row', { hasText: name }).first().isVisible().catch(() => false)) {
+    await page.locator('.tree-row', { hasText: name }).first().waitFor({ state: 'visible', timeout: 20_000 })
+    return
+  }
   const tree = page.locator('.tree')
   const box = await tree.boundingBox()
   if (!box) throw new Error('tree missing')
@@ -424,11 +471,14 @@ async function createFolder(page, name) {
 
 async function hoverDirectoryRow(page, directory) {
   const row = page.locator('.tree-row').filter({ hasText: directory }).first()
+  await row.waitFor({ state: 'attached', timeout: 15_000 })
+  await row.scrollIntoViewIfNeeded()
   await row.waitFor({ state: 'visible', timeout: 15_000 })
   await row.hover()
 }
 
 async function createFileIn(page, directory, name) {
+  await expandDirectory(page, directory)
   await hoverDirectoryRow(page, directory)
   await page.getByRole('button', { name: `在 ${directory} 中新建文件`, exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '新建文件' })
@@ -438,6 +488,7 @@ async function createFileIn(page, directory, name) {
   await dialog.waitFor({ state: 'detached', timeout: 15_000 })
   await page.locator('[data-testid="paper-path"]', { hasText: `${directory}/${name}.md` }).waitFor({ state: 'visible', timeout: 20_000 })
   await page.locator('[data-testid="paper-save-state"]', { hasText: '已保存' }).waitFor({ state: 'visible', timeout: 15_000 })
+  await expandDirectory(page, directory)
 }
 
 async function savePaper(page) {
@@ -470,6 +521,7 @@ async function directoryRow(page, name) {
 }
 
 async function expandDirectory(page, name) {
+  await dismissOverlays(page)
   const dir = await directoryRow(page, name)
   await dir.waitFor({ state: 'attached', timeout: 15_000 })
   await dir.scrollIntoViewIfNeeded()
@@ -534,16 +586,63 @@ async function ensureAssistantOpen(page) {
   return page.getByRole('complementary', { name: '写作助手' })
 }
 
+async function confirmWritingPreset(page) {
+  const picker = page.getByRole('dialog', { name: '选择对话模式' })
+  await picker.waitFor({ state: 'visible', timeout: 15_000 })
+  const writing = picker.getByRole('radio', { name: /通用写作/ })
+  await writing.waitFor({ state: 'visible', timeout: 15_000 })
+  if (await writing.isDisabled()) throw new Error('通用写作 preset is unavailable')
+  await writing.click()
+  const confirm = picker.getByRole('button', { name: '开始对话' })
+  await waitFor(async () => confirm.isEnabled(), 'writing preset confirm enabled', 10_000)
+  await confirm.click()
+  await picker.waitFor({ state: 'hidden', timeout: 20_000 })
+}
+
+async function startWritingConversation(page, assistant) {
+  await assistant.getByRole('button', { name: '新对话' }).click()
+  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+  if (await discard.isVisible({ timeout: 2_000 }).catch(() => false)) await discard.click()
+  await confirmWritingPreset(page)
+}
+
+async function waitProofreadFinished(panel, expectedFiles, label) {
+  await waitFor(async () => {
+    const text = (await panel.innerText()).replace(/\s+/g, ' ')
+    if (/操作未能完成|未能读取|会话已失效|未找到该文件/.test(text)) {
+      throw new Error(`${label}: ${text.slice(0, 240)}`)
+    }
+    return /\d+ 处 · 已查 \d+ 份文件/.test(text) && !/检查中/.test(text)
+  }, label, 25_000)
+  const text = (await panel.innerText()).replace(/\s+/g, ' ')
+  const match = /(\d+) 处 · 已查 (\d+) 份文件/.exec(text)
+  if (!match) throw new Error(`${label}: missing summary (${text.slice(0, 240)})`)
+  const files = Number(match[2])
+  const wanted = typeof expectedFiles === 'number' ? expectedFiles : expectedFiles.min
+  if (typeof expectedFiles === 'number') {
+    if (files !== wanted) throw new Error(`${label}: scanned ${files} files, expected ${wanted}`)
+  } else if (files < wanted) {
+    throw new Error(`${label}: scanned ${files} files, expected at least ${wanted}`)
+  }
+}
+
 async function runPaletteCommand(page, query, label) {
+  await dismissOverlays(page)
+  await closePalette(page)
   await page.getByRole('button', { name: '搜索与命令' }).click()
-  await page.locator('.palette-overlay').waitFor({ state: 'visible', timeout: 10_000 })
+  await page.locator('.palette-overlay').waitFor({ state: 'attached', timeout: 10_000 })
   const input = page.locator('.palette-input')
   await input.waitFor({ state: 'visible', timeout: 5_000 })
   await input.fill(query)
   const item = page.getByRole('option', { name: new RegExp(label) }).first()
   await item.waitFor({ state: 'visible', timeout: 10_000 })
+  if (await item.getAttribute('aria-disabled') === 'true') {
+    const paperPath = (await page.locator('[data-testid="paper-path"]').innerText().catch(() => '')).trim()
+    await closePalette(page)
+    throw new Error(`palette command ${label} is disabled (paper-path=${paperPath || 'empty'})`)
+  }
   await item.click()
-  await page.locator('.palette-overlay').waitFor({ state: 'detached', timeout: 8_000 }).catch(() => undefined)
+  await waitFor(async () => !(await page.locator('.palette-content[data-state="open"], .palette-overlay[data-state="open"]').count()), 'palette closed after command', 8_000).catch(() => undefined)
 }
 
 async function selectPaperRange(page, from, to) {
@@ -672,9 +771,17 @@ async function sendAndApply(page, prompt, expectedPath, label) {
     return page.getByRole('button', { name: /停止/ }).isVisible().catch(() => false)
   }, `${label}: turn started`, 30_000)
   const card = await waitForProposal(page, before, assistantBefore, label, expectedPath)
-  if (!(await card.getByText('已应用到作品', { exact: true }).isVisible().catch(() => false))) {
-    await card.getByRole('button', { name: '应用', exact: true }).click()
-    await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
+  const appliedOnCard = () => cards.last().getByText('已应用到作品', { exact: true }).isVisible().catch(() => false)
+  if (!(await appliedOnCard())) {
+    const apply = cards.last().getByRole('button', { name: '应用', exact: true })
+    if (await apply.isVisible().catch(() => false)) await apply.click()
+    await waitFor(async () => {
+      if (await appliedOnCard()) return true
+      if (!expectedPath) return false
+      const onDisk = await exists(resolve(workspace, ...expectedPath.split('/')))
+      const paper = await page.locator('[data-testid="paper-path"]').innerText().catch(() => '')
+      return onDisk && paper.includes(expectedPath)
+    }, `${label}: applied`, 45_000)
   }
   await recordPhase(label, expectedPath)
 }
@@ -693,9 +800,7 @@ async function openAssistantWithModel(page) {
     await recordPhase('切换对话模型', report.model)
     return
   } catch { /* fall back to a new conversation, then pick in the composer */ }
-  await assistant.getByRole('button', { name: '新对话' }).click()
-  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
-  if (await discard.isVisible({ timeout: 1_500 }).catch(() => false)) await discard.click()
+  await startWritingConversation(page, assistant)
   const chosen = await chooseCustomSelect(assistant, '选择模型', (label) => /MiniMax-M3/i.test(label))
   const effort = assistant.getByRole('combobox', { name: '思考强度' })
   if (await effort.isVisible().catch(() => false)) {
@@ -713,8 +818,8 @@ async function openAssistantWithModel(page) {
 }
 
 async function openExportPreview(page) {
-  await runPaletteCommand(page, '导出', '导出全文')
-  const dialog = page.getByRole('dialog', { name: '导出全文' })
+  await runPaletteCommand(page, '导出', '导出稿件')
+  const dialog = page.getByRole('dialog', { name: '导出稿件' })
   await dialog.waitFor({ state: 'visible', timeout: 20_000 })
   await waitFor(async () => {
     const markdown = await dialog.getByRole('button', { name: '导出 Markdown' }).isEnabled().catch(() => false)
@@ -730,7 +835,7 @@ async function closeExportPreview(page, dialog) {
     const cancel = dialog.getByRole('button', { name: '取消' })
     if (await cancel.isVisible().catch(() => false)) await cancel.click()
   }
-  await page.getByRole('dialog', { name: '导出全文' }).waitFor({ state: 'hidden', timeout: 10_000 })
+  await page.getByRole('dialog', { name: '导出稿件' }).waitFor({ state: 'hidden', timeout: 10_000 })
 }
 
 async function saveExportDownload(page, dialog, buttonName) {
@@ -805,33 +910,31 @@ async function coverWorkbench(page) {
   })
 
   await cover('create-folders', async () => {
-    // New projects pre-create 大纲/人物卡/世界书 (workbench PROJECT_DIRECTORIES),
-    // so the create-folder flow is exercised with a fresh auxiliary folder.
+    // Journey folders are ordinary directories created after new-project.
+    // Skip if 资料 is already present so this step does not create it twice.
     await createFolder(page, '资料')
     return '资料'
   })
 
   await cover('create-worldbook-file', async () => {
     await createFileIn(page, '世界书', '港口')
-    await typeIntoPaper(page, '---\ntriggers: [港口, 海关]\nenabled: true\npriority: 8\n---\n\n雾港的港口由海关记忆税闸口控制。\n')
+    await typeIntoPaper(page, '# 港口\n\n雾港的港口由海关记忆税闸口控制。\n')
     return '世界书/港口.md'
   })
 
-  await cover('worldbook-settings', async () => {
-    await page.keyboard.press('Control+Shift+W')
-    await page.locator('.tree-row[aria-expanded="true"]').filter({ hasText: '世界书' }).first().waitFor({ state: 'visible', timeout: 10_000 })
-    await page.locator('.tree-row.tree-main').filter({ hasText: '港口' }).first().waitFor({ state: 'visible', timeout: 15_000 })
+  await cover('open-ordinary-markdown', async () => {
     await openTreeFile(page, '港口.md', '世界书')
     const text = await page.locator('[data-testid="paper-editor"]').innerText()
-    if (!text.includes('雾港的港口')) throw new Error('worldbook paper missing body')
+    if (!text.includes('雾港的港口')) throw new Error('ordinary markdown paper missing body')
     const disk = await readFile(resolve(workspace, '世界书', '港口.md'), 'utf8')
-    if (!disk.includes('triggers: [港口, 海关]')) throw new Error('worldbook triggers were not preserved')
-    return '世界书/港口.md in file tree'
+    if (!disk.includes('雾港的港口')) throw new Error('ordinary markdown missing on disk')
+    if (/^---[\s\S]*\ntriggers:/.test(disk)) throw new Error('ordinary markdown still uses worldbook schema')
+    return '世界书/港口.md as ordinary markdown'
   })
 
   await cover('create-character-file', async () => {
     await createFileIn(page, '人物卡', '林简')
-    await typeIntoPaper(page, '---\nname: 林简\nalias: [简]\nrole: 主角\ngender: 女\n---\n\n维修师，亡姐留下的录音能绕过记忆税。\n')
+    await typeIntoPaper(page, '# 林简\n\n维修师，亡姐留下的录音能绕过记忆税。\n')
     return '人物卡/林简.md'
   })
 
@@ -1002,44 +1105,60 @@ async function coverWorkbench(page) {
 
   await cover('overview', async () => {
     await page.keyboard.press('Control+Shift+O')
-    const panel = page.getByRole('region', { name: '作品概览' })
+    const panel = page.getByRole('region', { name: '文档概览' })
     await panel.waitFor({ state: 'visible', timeout: 15_000 })
-    await panel.getByRole('region', { name: '章节列表' }).waitFor({ state: 'visible', timeout: 10_000 })
+    await panel.getByRole('region', { name: '文档列表' }).waitFor({ state: 'visible', timeout: 10_000 })
     await shot(page, 'overview')
-    await panel.getByRole('button', { name: '关闭概览' }).click().catch(() => undefined)
+    const closeOverview = panel.getByRole('button', { name: '关闭概览' })
+    if (await closeOverview.isVisible().catch(() => false)) await closeOverview.click()
+    await panel.waitFor({ state: 'hidden', timeout: 10_000 })
   })
 
   await cover('proofread', async () => {
-    // 桌面校对 UI 有意休眠（见 dsh-proofread 与 dsh-editor-proofread-panel
-    // README）：正文菜单无校对入口，Ctrl+Shift+L 快捷键也不打开面板。
+    await dismissOverlays(page)
     await openTreeFile(page, '001.md', '正文')
-    await page.getByTestId('paper-editor-menu-trigger').click()
-    if (await page.getByTestId('editor-menu-proofread').count()) {
-      throw new Error('paused proofread leaked into the editor menu')
-    }
-    await page.keyboard.press('Escape')
+    await page.locator('[data-testid="paper-path"]', { hasText: '正文/001.md' }).waitFor({ state: 'attached', timeout: 15_000 })
+    await page.locator('[data-testid="paper-editor"]').waitFor({ state: 'visible', timeout: 10_000 })
     await page.keyboard.press('Control+Shift+L')
-    await delay(400)
-    if (await page.getByRole('region', { name: '校对' }).count()) {
-      throw new Error('paused proofread panel opened via Ctrl+Shift+L')
+    const panel = page.getByRole('region', { name: '文稿校对' })
+    await panel.waitFor({ state: 'visible', timeout: 15_000 })
+    if (await page.getByTestId('editor-proofread-panel').count() === 0) {
+      throw new Error('shared proofread panel did not mount')
     }
-    return 'paused: no menu entry, no panel'
+    const kinds = panel.getByRole('group', { name: '问题类型' })
+    await kinds.waitFor({ state: 'visible', timeout: 10_000 })
+    const kindText = (await kinds.innerText()).replace(/\s+/g, ' ')
+    if (/人物卡|\bcard\b/i.test(kindText)) throw new Error(`proofread still exposes card kind: ${kindText}`)
+    for (const kind of ['标点', '错别字', '敏感词', '重复', '口癖']) {
+      await kinds.getByRole('button', { name: new RegExp(`^${kind}`) }).waitFor({ state: 'visible', timeout: 5_000 })
+    }
+    await waitProofreadFinished(panel, 1, 'current document proofread')
+    await panel.getByRole('button', { name: '全部文档', exact: true }).click()
+    await waitProofreadFinished(panel, { min: 2 }, 'all documents proofread')
+    await panel.getByRole('button', { name: '关闭文稿校对' }).click()
+    await panel.waitFor({ state: 'hidden', timeout: 10_000 })
+    await page.keyboard.press('Control+Shift+L')
+    const again = page.getByRole('region', { name: '文稿校对' })
+    await again.waitFor({ state: 'visible', timeout: 10_000 })
+    await waitProofreadFinished(again, 1, 'shortcut current document proofread')
+    return 'current + all documents'
   })
 
-  await cover('cards-panel', async () => {
-    await page.keyboard.press('Control+Shift+C')
-    await page.locator('.tree-row[aria-expanded="true"]').filter({ hasText: '人物卡' }).first().waitFor({ state: 'visible', timeout: 10_000 })
+  await cover('create-plain-file', async () => {
     await createFileIn(page, '人物卡', '姚梨')
-    await shot(page, 'cards-create-dialog')
-    await page.locator('.tree-row').filter({ hasText: /姚梨/ }).first().waitFor({ state: 'visible', timeout: 15_000 })
-    await waitFor(() => exists(resolve(workspace, '人物卡', '姚梨.md')), 'created character saved', 10_000)
-    await page.keyboard.press('Control+Shift+W')
-    await page.locator('.tree-row[aria-expanded="true"]').filter({ hasText: '世界书' }).first().waitFor({ state: 'visible', timeout: 10_000 })
+    await typeIntoPaper(page, '# 姚梨\n\n档案员。窗后记下名字。\n')
+    await shot(page, 'plain-file-create')
+    await expandDirectory(page, '人物卡')
+    const yaoli = page.locator('.tree-row.tree-main').filter({ hasText: '姚梨.md' }).first()
+    await yaoli.scrollIntoViewIfNeeded()
+    await yaoli.waitFor({ state: 'visible', timeout: 15_000 })
+    await waitFor(() => exists(resolve(workspace, '人物卡', '姚梨.md')), 'created markdown saved', 10_000)
+    return '人物卡/姚梨.md as ordinary markdown'
   })
 
   await cover('pin-pane', async () => {
-    await openTreeFile(page, '林简.md', '人物卡')
-    await (await treeFileRow(page, '林简.md')).click({ button: 'right' })
+    await openTreeFile(page, '港口.md', '世界书')
+    await (await treeFileRow(page, '港口.md')).click({ button: 'right' })
     await page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '钉在旁边' }).click()
     await page.getByRole('region', { name: /钉住/ }).waitFor({ state: 'visible', timeout: 15_000 })
     await shot(page, 'pinned-pane')
@@ -1048,6 +1167,9 @@ async function coverWorkbench(page) {
   })
 
   await cover('export', async () => {
+    await dismissOverlays(page)
+    await openTreeFile(page, '001.md', '正文')
+    await page.locator('[data-testid="paper-path"]', { hasText: '正文/001.md' }).waitFor({ state: 'attached', timeout: 15_000 })
     const markdownDialog = await openExportPreview(page)
     const markdown = await saveExportDownload(page, markdownDialog, '导出 Markdown')
     const markdownText = await readFile(markdown.target, 'utf8')
@@ -1084,6 +1206,7 @@ async function coverWorkbench(page) {
   })
 
   await cover('snapshot-commit', async () => {
+    await ensureOverlaysClosed(page)
     await page.getByRole('button', { name: '版本', exact: true }).click()
     await page.getByRole('menu', { name: '版本' }).getByRole('menuitem', { name: '保存版本' }).click()
     await page.getByRole('button', { name: '版本', exact: true }).click()
@@ -1125,8 +1248,9 @@ async function coverWorkbench(page) {
     const review = page.getByRole('dialog', { name: /确认提案|拆章/ }).last()
     await review.getByRole('button', { name: '应用' }).click()
     await page.locator('.tree-row').filter({ hasText: '003.md' }).first().waitFor({ state: 'attached', timeout: 20_000 })
-    await review.getByRole('button', { name: '关闭' }).click().catch(() => undefined)
-    await dismissOverlays(page)
+    await review.getByRole('button', { name: '关闭' }).click({ force: true }).catch(() => undefined)
+    await page.keyboard.press('Escape')
+    await ensureOverlaysClosed(page)
   })
 
   await cover('chapter-merge', async () => {
@@ -1138,47 +1262,87 @@ async function coverWorkbench(page) {
     let held = false
     let captured = false
     let delivered = false
-    let release
+    let settled = false
+    let captureError
+    let release = () => {}
     const gate = new Promise((resolvePromise) => { release = resolvePromise })
     const delayedTree = async (route) => {
-      const payload = route.request().postDataJSON()?.payload
-      if (held || payload?.path !== '正文') return route.continue()
-      held = true
-      const response = await route.fetch()
-      const body = await response.json()
-      if (!(body.result?.value?.entries || []).some((entry) => entry.name === '003.md')) throw new Error('Old tree response did not contain merge source')
-      captured = true
-      await gate
-      await route.fulfill({ response })
-      delivered = true
+      try {
+        const payload = route.request().postDataJSON()?.payload
+        if (held || payload?.path !== '正文') {
+          await route.continue()
+          return
+        }
+        held = true
+        const response = await route.fetch()
+        const body = await response.json()
+        if (!(body.result?.value?.entries || []).some((entry) => entry.name === '003.md')) {
+          captureError = new Error('Old tree response did not contain merge source')
+          captured = true
+          if (!settled) {
+            settled = true
+            await route.continue()
+          }
+          return
+        }
+        captured = true
+        await gate
+        if (settled) return
+        settled = true
+        await route.fulfill({ response })
+        delivered = true
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!captureError && !/already handled/i.test(message)) {
+          captureError = error instanceof Error ? error : new Error(message)
+        }
+        if (!settled) {
+          settled = true
+          await route.continue().catch(() => undefined)
+        }
+      }
     }
+    await ensureOverlaysClosed(page)
     await page.route('**/manuscript/tree.list', delayedTree)
     try {
       const directory = await directoryRow(page, '正文')
-      await directory.click()
-      await directory.click()
+      await directory.click({ force: true })
+      await directory.click({ force: true })
       await waitFor(() => captured, 'capture pre-merge directory response', 10_000)
+      if (captureError) throw captureError
       await (await treeFileRow(page, '002.md')).click({ button: 'right' })
       await page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '与下一章合并' }).click()
       const review = page.getByRole('dialog', { name: '合章' })
       await review.waitFor({ state: 'visible', timeout: 10_000 })
       await review.getByRole('button', { name: '应用' }).click()
-      await waitFor(async () => !(await page.locator('.tree-row.tree-main').filter({ hasText: '003.md' }).count()), 'merged chapter archived', 20_000)
-      await page.locator('.tree-row.tree-main').filter({ hasText: '002.md' }).waitFor({ state: 'visible' })
+      await waitFor(async () => !(await exists(resolve(workspace, '正文', '003.md'))), 'merged source removed from disk', 20_000)
+      await waitFor(async () => !(await page.locator('.tree-row.tree-main').filter({ hasText: '003.md' }).count()), 'pre-release tree dropped merge source', 15_000)
       release()
-      await waitFor(() => delivered, 'release old directory response', 10_000)
+      await waitFor(() => delivered || settled, 'release old directory response', 10_000)
+      if (captureError) throw captureError
+      if (!delivered) throw new Error('Delayed pre-merge tree response was not fulfilled')
       await page.evaluate(() => new Promise((resolvePromise) => requestAnimationFrame(() => requestAnimationFrame(resolvePromise))))
       if (await page.locator('.tree-row.tree-main').filter({ hasText: '003.md' }).count()) throw new Error('Late pre-merge response restored archived chapter in tree')
+      await review.getByRole('button', { name: '关闭' }).click({ force: true }).catch(() => undefined)
+      await ensureOverlaysClosed(page)
+      const directoryAfter = await directoryRow(page, '正文')
+      if (await directoryAfter.getAttribute('aria-expanded') === 'true') await directoryAfter.click({ force: true })
+      await expandDirectory(page, '正文')
+      const mergedRow = page.locator('.tree-row.tree-main').filter({ hasText: '002.md' }).first()
+      await waitFor(async () => (await page.locator('.tree-row.tree-main').filter({ hasText: '002.md' }).count()) > 0, 'merged target row present', 15_000)
+      await mergedRow.scrollIntoViewIfNeeded()
+      await mergedRow.waitFor({ state: 'visible', timeout: 15_000 })
+      if (await page.locator('.tree-row.tree-main').filter({ hasText: '003.md' }).count()) throw new Error('Archived chapter remains in tree after merge')
       report.treeRace = { realResponseDelayed: true, archivedRowRemainsAbsent: true }
       await shot(page, 'merge-refreshed')
       if (await exists(resolve(workspace, '正文', '003.md'))) throw new Error('Merged source remains on disk')
       const merged = await readFile(resolve(workspace, '正文', '002.md'), 'utf8')
       if (merged !== `${targetBefore.trimEnd()}\n\n${sourceBefore.trim()}\n`) throw new Error('Merged text does not preserve both source chapters')
-      await page.locator('[data-testid="paper-path"]', { hasText: /正文\/002\.md/ }).waitFor({ state: 'visible', timeout: 10_000 })
-      await review.getByRole('button', { name: '关闭' }).click().catch(() => undefined)
-      await dismissOverlays(page)
+      await page.locator('[data-testid="paper-path"]', { hasText: /正文\/002\.md/ }).waitFor({ state: 'attached', timeout: 15_000 })
     } finally {
       release()
+      await waitFor(() => !held || settled || delivered, 'delayed tree handler settled', 8_000).catch(() => undefined)
+      settled = true
       await page.unroute('**/manuscript/tree.list', delayedTree)
     }
   })
@@ -1235,6 +1399,26 @@ async function coverAi(page) {
     await proposal.getByRole('button', { name: '应用修改' }).click()
     await savePaper(page)
     await shot(page, 'rewrite')
+
+    await createFileIn(page, '资料', 'draft')
+    await typeIntoPaper(page, '普通文档改写探针。她听见广播重复同一句话，脚步停在栈桥上。\n')
+    await openTreeFile(page, 'draft.md', '资料')
+    const ordinary = await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="paper-editor"]')
+      const view = /** @type {any} */ (el)?.__cmView
+      return view ? view.state.doc.toString() : ''
+    })
+    const ordinaryNeedle = '她听见广播重复同一句'
+    const ordinaryStart = ordinary.indexOf(ordinaryNeedle)
+    if (ordinaryStart < 0) throw new Error('ordinary rewrite needle missing')
+    await selectPaperRange(page, ordinaryStart, ordinaryStart + ordinaryNeedle.length)
+    await page.getByTestId('paper-editor-menu-trigger').click()
+    await page.getByTestId('editor-menu-rewrite').click()
+    const ordinaryCustom = page.getByRole('dialog', { name: '自定义改写' })
+    await ordinaryCustom.waitFor({ state: 'visible', timeout: 10_000 })
+    await ordinaryCustom.getByRole('button', { name: '取消', exact: true }).click()
+    await ordinaryCustom.waitFor({ state: 'detached', timeout: 10_000 })
+    return '正文/001.md rewritten; 资料/draft.md rewrite eligible'
   })
 
   await cover('fim-complete', async () => {
@@ -1267,15 +1451,13 @@ async function coverAi(page) {
   })
 
   await cover('chat-proposal', async () => {
-    await sendAndApply(page, `请读取 正文/001.md。只调用一次 novel_propose：若 大纲/总纲.md 不存在则 create 创建，若已存在则 edit 完整替换。用不超过 400 字写两章章纲，点出雾港记忆税和林简。不要提问，不要只在聊天回答。`, '大纲/总纲.md', '规划总纲')
+    await sendAndApply(page, `请读取 正文/001.md。只调用一次 writing_propose（V2）create：对 大纲/总纲.md 使用 create（只传 path、text、summary）。不要传 targetVersion。该文件必须尚不存在；不要覆盖任何已有文件，也不要改成 edit。若你先读了 正文/001.md，它只能进 basis，不能代替目标生成基线。用不超过 400 字写两章章纲，点出雾港记忆税和林简。不要提问，不要只在聊天回答。不要调用 novel_propose、novel_memory_update，也不要写 index、scratch 或调用 context.compile。`, '大纲/总纲.md', '规划总纲')
     if (!(await exists(resolve(workspace, '大纲', '总纲.md')))) throw new Error('大纲/总纲.md missing after apply')
   })
 
   await cover('conversation-menu', async () => {
     const assistant = await ensureAssistantOpen(page)
-    await assistant.getByRole('button', { name: '新对话' }).click()
-    const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
-    if (await discard.isVisible({ timeout: 2_000 }).catch(() => false)) await discard.click()
+    await startWritingConversation(page, assistant)
     await delay(800)
     await assistant.getByRole('button', { name: '对话操作' }).click()
     const menu = page.getByRole('menu', { name: '对话操作' })
@@ -1343,7 +1525,9 @@ try {
 
   if (!workbenchOnly) await configureMiniMax(page)
   {
-    await createProjectFromHome(page);await shot(page, 'project-open');
+    await createProjectFromHome(page)
+    for (const name of ['正文', '大纲', '人物卡', '世界书', '资料']) await createFolder(page, name)
+    await shot(page, 'project-open');
     if(aiOnly){
       await createFolder(page,'大纲');
       await createFileIn(page,'正文','001');await typeIntoPaper(page,'# 第一章 雾港\n\n林简站在港口，望着雾里的灯。她听见广播重复同一句话，脚步缓缓地停在空荡荡的栈桥上。\n');

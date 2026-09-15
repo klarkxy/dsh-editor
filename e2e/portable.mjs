@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
+import { existsSync } from 'node:fs'
 import { mkdir, rm, stat, writeFile, readFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { dirname, resolve } from 'node:path'
@@ -63,6 +64,51 @@ async function waitForExit(child, timeoutMs) {
     child.once('exit', done)
     if (child.exitCode !== null) done()
   })
+}
+
+async function assertNewProjectHasNoManuscriptFolder(page, workspace) {
+  await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
+  for (const extra of ['正文', '大纲', '人物卡', '世界书']) {
+    if (existsSync(resolve(workspace, extra))) throw new Error(`new project should not pre-create ${extra}`)
+    if (await page.locator('.tree').getByText(extra, { exact: true }).count()) {
+      throw new Error(`new project should not pre-seed ${extra}`)
+    }
+  }
+}
+
+async function createRootFolderFromTree(page, name) {
+  const tree = page.locator('.tree')
+  const box = await tree.boundingBox()
+  if (!box) throw new Error('tree missing')
+  await tree.click({ button: 'right', position: { x: 16, y: Math.max(12, box.height - 18) } })
+  await page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '新建文件夹' }).click()
+  const dialog = page.getByRole('dialog', { name: '新建文件夹' })
+  await dialog.waitFor({ state: 'visible', timeout: 10_000 })
+  await dialog.getByLabel('文件夹名称').fill(name)
+  await dialog.getByRole('button', { name: '创建', exact: true }).click()
+  await dialog.waitFor({ state: 'detached', timeout: 15_000 })
+  await page.locator('.tree-row').filter({ hasText: name }).first().waitFor({ state: 'visible', timeout: 20_000 })
+}
+
+async function openAndCloseProofreadPanel(page) {
+  await page.getByRole('button', { name: '搜索与命令' }).click()
+  await page.locator('.palette-overlay').waitFor({ state: 'visible', timeout: 10_000 })
+  const input = page.locator('.palette-input')
+  await input.waitFor({ state: 'visible', timeout: 5_000 })
+  await input.fill('校对当前文档')
+  await page.getByRole('option', { name: /校对当前文档/ }).first().click()
+  await page.locator('.palette-overlay').waitFor({ state: 'detached', timeout: 8_000 }).catch(() => undefined)
+  const panel = page.getByRole('region', { name: '文稿校对' })
+  await panel.waitFor({ state: 'visible', timeout: 15_000 })
+  if (await page.getByTestId('editor-proofread-panel').count() === 0) {
+    throw new Error('shared proofread panel did not mount')
+  }
+  const kinds = panel.getByRole('group', { name: '问题类型' })
+  await kinds.waitFor({ state: 'visible', timeout: 10_000 })
+  const kindText = (await kinds.innerText()).replace(/\s+/g, ' ')
+  if (/人物卡|\bcard\b/i.test(kindText)) throw new Error(`proofread still exposes card kind: ${kindText}`)
+  await panel.getByRole('button', { name: '关闭文稿校对' }).click()
+  await panel.waitFor({ state: 'hidden', timeout: 10_000 })
 }
 
 const debuggingPort = await freePort()
@@ -147,6 +193,9 @@ try {
   await project.getByLabel('作品名称').fill('便携组合验证')
   await project.getByRole('button',{name:'创建',exact:true}).click()
   await window.locator('.tree').waitFor({timeout:30000})
+  const portableWorkspace = resolve(home, 'projects', '便携组合验证')
+  await assertNewProjectHasNoManuscriptFolder(window, portableWorkspace)
+  await createRootFolderFromTree(window, '正文')
   await window.locator('.tree-row').filter({hasText:'正文'}).first().hover()
   await window.getByRole('button',{name:'在 正文 中新建文件',exact:true}).click()
   const file=window.getByRole('dialog',{name:'新建文件'})
@@ -156,8 +205,9 @@ try {
   await window.keyboard.insertText('最终便携产物保存验证。')
   await window.keyboard.press('Control+s')
   await window.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor()
-  if(!(await readFile(resolve(home,'projects','便携组合验证','正文','001.md'),'utf8')).includes('最终便携产物保存验证'))throw new Error('portable save missing on disk')
-  state.operations=['proofreading and Zhihu desktop launchers absent','Zhihu configuration opens inside settings','create project/document and save to disk']
+  if(!(await readFile(resolve(portableWorkspace,'正文','001.md'),'utf8')).includes('最终便携产物保存验证'))throw new Error('portable save missing on disk')
+  await openAndCloseProofreadPanel(window)
+  state.operations=['proofreading and Zhihu desktop launchers absent','Zhihu configuration opens inside settings','create ordinary 正文 from tree, then document, and save to disk','open and close 文稿校对 from command palette without card UI']
   await window.screenshot({ path: resolve(output, 'window.png') })
   const origin = url.origin
   await window.close()

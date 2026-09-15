@@ -3,9 +3,10 @@
  * E2E_AUTHOR_FLOW_RESUME=1 only when diagnosing an interrupted run.
  *
  * Product files are created through the visible DSH Editor UI: homepage
- * project creation, the file tree, Chat proposals, and the proposal card's
- * Apply button. The harness only reads project files afterwards for
- * acceptance checks.
+ * project creation, the file tree, a 小说创作 conversation from the
+ * new-conversation picker, Chat proposals via writing_propose V2, and the
+ * proposal card's Apply button. The harness only reads project files
+ * afterwards for acceptance checks. Preset choice stays on the session.
  *
  * Credentials default to ~/.mmx/config.json. They are never printed.
  */
@@ -29,6 +30,9 @@ const reset = process.env.E2E_AUTHOR_FLOW_RESUME !== '1'
 const sendTimeout = Number(process.env.E2E_AUTHOR_FLOW_SEND_TIMEOUT_MS || 720_000)
 const minChapterChars = 4_000
 const chapterCount = 10
+const writingProposeOnce = '只调用一次 writing_propose（V2）。create 只用 path + text + summary，不要传 targetVersion，且不得覆盖任何已有文件（即使是空文件）。edit 用 oldText/newText，且必须先读取目标文件，把该次 Host 读回执里的 version 原样作为 targetVersion；basis 只列其它来源，不能代替 targetVersion，也不得编造 version。一次只改这一个文件，等作者确认后才由产品写入。规划、正文与 canon 必须各自独立提案，不要写进同一份提案。不要调用 novel_propose，不要调用 index、scratch、chapter_plan、chapter_summary，也不要调用 context.compile。'
+
+let capturedSessionId = ''
 
 for (const target of [projectsRoot, workspace, home]) {
   if (!target.startsWith(`${devRoot}${sep}`)) throw new Error(`unsafe test path: ${target}`)
@@ -238,6 +242,85 @@ async function ensureAssistantOpen(page) {
   else await page.getByRole('button', { name: '搭档', exact: true }).click()
   await assistant.waitFor({ state: 'visible', timeout: 30_000 })
   return page.getByRole('complementary', { name: '写作助手' })
+}
+
+function captureManuscriptSession(request) {
+  if (request.method() !== 'POST' || !/\/manuscript\//.test(request.url())) return
+  try {
+    const id = request.postDataJSON()?.payload?.sessionId
+    if (typeof id === 'string' && id.trim()) capturedSessionId = id.trim()
+  } catch { /* ignore non-JSON posts */ }
+}
+
+async function manuscriptFileRead(page, path) {
+  if (!capturedSessionId) throw new Error(`no manuscript session captured before reading ${path}`)
+  const response = await page.request.post(new URL('/manuscript/file.read', page.url()).href, {
+    data: {
+      type: 'client-request',
+      rpcId: `author-flow-${Date.now().toString(36)}`,
+      method: 'file.read',
+      payload: { sessionId: capturedSessionId, path },
+    },
+  })
+  if (!response.ok()) throw new Error(`file.read ${path}: HTTP ${response.status()}`)
+  const result = (await response.json()).result
+  if (!result?.ok) throw new Error(`file.read ${path}: ${JSON.stringify(result)}`)
+  const version = result.value?.version
+  if (typeof version !== 'string' || !version.trim()) throw new Error(`file.read ${path}: missing version`)
+  return { path, version: version.trim() }
+}
+
+async function readSourceBasis(page, paths) {
+  const basis = []
+  for (const path of paths) {
+    const absolute = resolve(workspace, ...path.split('/'))
+    if (!(await exists(absolute))) throw new Error(`basis source missing: ${path}`)
+    basis.push(await manuscriptFileRead(page, path))
+  }
+  return basis
+}
+
+function basisClause(basis) {
+  if (!basis.length) return ''
+  return `你必须先读取这些来源文件；writing_propose 的 basis 必须原样传入这些真实 path/version，不得编造或省略：${JSON.stringify(basis)}。`
+}
+
+function writingProposeClause(path, kind) {
+  if (kind === 'edit') {
+    return `${writingProposeOnce}对 ${path} 使用 edit。先读取 ${path}，把该次读回执的 version 原样传入 targetVersion，不得编造或用后来的读取替换。`
+  }
+  if (kind === 'create') {
+    return `${writingProposeOnce}对 ${path} 使用 create（path + text）。目标文件必须尚不存在；不要传 targetVersion；不要改成 edit。`
+  }
+  if (kind === 'optional') {
+    return `${writingProposeOnce}仅在必须改 ${path} 时使用 edit：先读取 ${path} 并传入该次回执的 targetVersion；没有硬冲突则不要调用 writing_propose。`
+  }
+  return `${writingProposeOnce}对 ${path} 使用 create（path + text）。不要在同一提示里改成 edit。不要传 targetVersion。`
+}
+
+async function confirmNovelPreset(page) {
+  const picker = page.getByRole('dialog', { name: '选择对话模式' })
+  await picker.waitFor({ state: 'visible', timeout: 15_000 })
+  const novel = picker.getByRole('radio', { name: /小说创作/ })
+  await novel.waitFor({ state: 'visible', timeout: 15_000 })
+  if (await novel.isDisabled()) throw new Error('小说创作 preset is unavailable')
+  await novel.click()
+  const confirm = picker.getByRole('button', { name: '开始对话' })
+  await waitFor(async () => confirm.isEnabled(), 'novel preset confirm enabled', 10_000)
+  await confirm.click()
+  await picker.waitFor({ state: 'hidden', timeout: 20_000 })
+}
+
+async function startNovelConversation(page) {
+  const assistant = await ensureAssistantOpen(page)
+  await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
+  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+  if (await discard.isVisible({ timeout: 2_000 }).catch(() => false)) await discard.click()
+  await confirmNovelPreset(page)
+  await assistant.waitFor({ state: 'visible', timeout: 15_000 })
+  await page.getByRole('textbox', { name: '输入消息' }).waitFor({ state: 'visible', timeout: 15_000 })
+  await dismissInitGuide(page)
+  return assistant
 }
 
 async function waitForProposal(page, previousCount, previousAssistantCount, label, expectedPath, warningBaseline = 0) {
@@ -574,9 +657,10 @@ async function createProjectFromHome(page) {
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
   await dialog.getByLabel('作品名称').fill(book)
   await dialog.getByRole('button', { name: '创建', exact: true }).click()
-  await page.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
-  await page.locator('.tree-row', { hasText: '正文' }).first().waitFor({ state: 'visible', timeout: 20_000 })
-  for (const extra of ['大纲', '人物卡', '世界书']) {
+  await page.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
+  for (const extra of ['正文', '大纲', '人物卡', '世界书']) {
+    if (await exists(resolve(workspace, extra))) throw new Error(`new project should not pre-seed ${extra}`)
     if (await page.locator('.tree').getByText(extra, { exact: true }).count()) {
       throw new Error(`new project should not pre-seed ${extra}`)
     }
@@ -585,6 +669,10 @@ async function createProjectFromHome(page) {
 }
 
 async function createFolder(page, name) {
+  if (await exists(resolve(workspace, name)) || await page.locator('.tree-row', { hasText: name }).first().isVisible().catch(() => false)) {
+    await page.locator('.tree-row', { hasText: name }).first().waitFor({ state: 'visible', timeout: 20_000 })
+    return
+  }
   const tree = page.locator('.tree')
   const box = await tree.boundingBox()
   if (!box) throw new Error('tree missing')
@@ -596,6 +684,10 @@ async function createFolder(page, name) {
   await dialog.getByRole('button', { name: '创建', exact: true }).click()
   await dialog.waitFor({ state: 'detached', timeout: 15_000 })
   await page.locator('.tree-row', { hasText: name }).first().waitFor({ state: 'visible', timeout: 20_000 })
+}
+
+async function ensureNovelFolders(page) {
+  for (const name of ['正文', '大纲', '人物卡', '世界书']) await createFolder(page, name)
 }
 
 async function hoverDirectoryRow(page, directory) {
@@ -662,10 +754,8 @@ async function coverWorkbench(page) {
   await page.locator('.palette-overlay').waitFor({ state: 'detached', timeout: 5_000 })
   recordFeature('command-palette', true)
 
-  await createFolder(page, '大纲')
-  await createFolder(page, '人物卡')
-  await createFolder(page, '世界书')
-  recordFeature('create-folders', true, '大纲 / 人物卡 / 世界书')
+  await ensureNovelFolders(page)
+  recordFeature('create-folders', true, '正文 / 大纲 / 人物卡 / 世界书')
 
   await createFileIn(page, '世界书', '港口')
   await typeIntoPaper(page, '---\ntriggers: [港口, 海关]\nenabled: true\npriority: 8\n---\n\n雾港的港口由海关记忆税闸口控制，过闸要核验可验证记忆。\n')
@@ -711,11 +801,7 @@ async function coverWorkbench(page) {
 }
 
 async function startFreshConversation(page) {
-  const assistant = await ensureAssistantOpen(page)
-  await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
-  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
-  if (await discard.isVisible({ timeout: 1_500 }).catch(() => false)) await discard.click()
-  await dismissInitGuide(page)
+  await startNovelConversation(page)
 }
 
 async function dismissInitGuide(page) {
@@ -756,8 +842,8 @@ async function verifyChaptersInEditor(page) {
 }
 
 async function openAssistantWithModel(page) {
-  const assistant = await ensureAssistantOpen(page)
-  await dismissInitGuide(page)
+  const assistant = await startNovelConversation(page)
+  await recordPhase('小说创作会话已打开')
   const currentModel = await assistant.locator('.model-picker, .composer-model').innerText().catch(() => '')
   if (/MiniMax-M3/i.test(currentModel)) {
     report.model = currentModel.replace(/\s+/g, ' ').trim()
@@ -771,10 +857,7 @@ async function openAssistantWithModel(page) {
     const ping = await sendChat(page, '请只回复一个英文单词 pong，不要使用任何工具。', '模型连通探测', 90_000)
     await recordPhase('模型连通探测', ping.slice(0, 80))
     return
-  } catch { /* fall back to a new conversation, then pick in the composer */ }
-  await assistant.getByRole('button', { name: '新对话' }).click({ force: true })
-  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
-  if (await discard.isVisible({ timeout: 1_500 }).catch(() => false)) await discard.click()
+  } catch { /* pick from the composer of the novel conversation already opened */ }
   const chosen = await chooseCustomSelect(assistant, '选择模型', (label, labels) => {
     const pick = labels.find((item) => /MiniMax-M3/i.test(item))
       || labels.find((item) => /MiniMax-M2\.7-highspeed/i.test(item))
@@ -834,36 +917,67 @@ const planPrompts = [
   {
     path: '项目总览.md',
     label: '项目总览规划',
-    prompt: `请为长篇小说《${book}》完成项目总览。类型是近未来都市悬疑，第三人称限知，主题是记忆、责任与城市共同体。核心设定：海平面上升后的浮岛城“雾港”把可验证记忆作为公共信用；维修师林简发现亡姐林澜留下的录音能绕过记忆税。只调用一次 novel_propose：若 项目总览.md 不存在则 create 创建，若已存在则 edit 完整替换。写清作品定位、核心冲突、叙事视角、十章规模、文风和明确禁区。人物姓名以本提示为准，不另造同功能替代人物。不要只在聊天里贴正文，不要提问。`,
+    sources: [],
+    body: `请为长篇小说《${book}》完成项目总览。类型是近未来都市悬疑，第三人称限知，主题是记忆、责任与城市共同体。核心设定：海平面上升后的浮岛城“雾港”把可验证记忆作为公共信用；维修师林简发现亡姐林澜留下的录音能绕过记忆税。写清作品定位、核心冲突、叙事视角、十章规模、文风和明确禁区。人物姓名以本提示为准，不另造同功能替代人物。不要只在聊天里贴正文，不要提问。`,
   },
   {
     path: '世界书/设定总汇.md',
     label: '世界观规划',
-    prompt: `请基于《${book}》完成世界观总设定。请读取已有的 项目总览.md。只调用一次 novel_propose：若 世界书/设定总汇.md 不存在则 create 创建，若已存在则 edit 完整替换。至少覆盖：雾港地理与阶层、记忆税的技术和法律边界、回声库、雾潮、维修行业、公共广播、不能随意突破的规则、故事时间线。设定要能支撑十章，不要魔法化，不要提问，不要只在聊天回答。`,
+    sources: ['项目总览.md'],
+    body: `请基于《${book}》完成世界观总设定。请读取已有的 项目总览.md。至少覆盖：雾港地理与阶层、记忆税的技术和法律边界、回声库、雾潮、维修行业、公共广播、不能随意突破的规则、故事时间线。设定要能支撑十章，不要魔法化，不要提问，不要只在聊天回答。`,
   },
   {
     path: '人物卡/人物索引.md',
     label: '人物卡规划',
-    prompt: `请为《${book}》完成人物卡索引。读取已有的 项目总览.md 和 世界书/设定总汇.md。只调用一次 novel_propose：若 人物卡/人物索引.md 不存在则 create 创建，若已存在则 edit 完整替换。至少写林简、档案员姚梨、广播工程师周野、调查官季衡、亡姐林澜五人；每人包含外在目标、内在需求、秘密、底线、说话方式、关系变化和十章弧线。不要提问，不要只在聊天回答。`,
+    sources: ['项目总览.md', '世界书/设定总汇.md'],
+    body: `请为《${book}》完成人物卡索引。读取已有的 项目总览.md 和 世界书/设定总汇.md。至少写林简、档案员姚梨、广播工程师周野、调查官季衡、亡姐林澜五人；每人包含外在目标、内在需求、秘密、底线、说话方式、关系变化和十章弧线。不要提问，不要只在聊天回答。`,
   },
   {
     path: '大纲/总纲.md',
     label: '十章章纲规划',
-    prompt: `请为《${book}》编排完整十章章纲。读取已有的 项目总览.md、世界书/设定总汇.md、人物卡/人物索引.md。只调用一次 novel_propose：若 大纲/总纲.md 不存在则 create 创建，若已存在则 edit 完整替换。必须恰好列出第001章到第010章；每章写本章目标、主要阻力、关键行动、人物变化、揭示信息、结尾钩子，并保证因果连续、最终收束核心冲突。不要提问，不要写正文，不要只在聊天回答。`,
+    sources: ['项目总览.md', '世界书/设定总汇.md', '人物卡/人物索引.md'],
+    body: `请为《${book}》编排完整十章章纲。读取已有的 项目总览.md、世界书/设定总汇.md、人物卡/人物索引.md。必须恰好列出第001章到第010章；每章写本章目标、主要阻力、关键行动、人物变化、揭示信息、结尾钩子，并保证因果连续、最终收束核心冲突。不要提问，不要写正文，不要只在聊天回答。`,
   },
 ]
 
-function chapterPrompt(number, kind) {
+async function composeWritingPrompt(page, body, path, sources = [], kind) {
+  const basisSources = sources.filter((item) => item !== path)
+  const basis = basisSources.length ? await readSourceBasis(page, basisSources) : []
+  const parts = [body, writingProposeClause(path, kind)]
+  if ((kind === 'edit' || kind === 'optional') && await exists(resolve(workspace, ...path.split('/')))) {
+    const target = await manuscriptFileRead(page, path)
+    parts.push(`这次若调用 edit，targetVersion 必须是 Host 读回执 ${JSON.stringify(target)} 里的 version，不得编造，也不得用 basis 代替。`)
+  }
+  parts.push(basisClause(basis))
+  return parts.filter(Boolean).join('')
+}
+
+async function chapterPrompt(page, number, kind) {
   const id = String(number).padStart(3, '0')
   const path = `正文/${id}.md`
   const previous = number > 1 ? `正文/${String(number - 1).padStart(3, '0')}.md` : ''
-  return `现在写《${book}》第${number}章。请先读取 项目总览.md、世界书/设定总汇.md、人物卡/人物索引.md、大纲/总纲.md${previous ? ` 和上一章 ${previous}` : ` 以及现有 ${path}`}。只调用一次 novel_propose，对 ${path} 使用 ${kind}；${kind === 'edit' ? '完整替换模板内容' : '创建新文件'}。正文先写成约2800至3200个去空白字符，第三人称限知，场景化叙事，有动作、感官、对白和心理承接，严格执行对应章纲，不能写总结说明、创作注释或“未完待续”。不要提问，不要只在聊天回答。`
+  const sources = ['项目总览.md', '世界书/设定总汇.md', '人物卡/人物索引.md', '大纲/总纲.md']
+  if (previous) sources.push(previous)
+  return composeWritingPrompt(
+    page,
+    `现在写《${book}》第${number}章。请先读取 ${sources.join('、')}。${kind === 'edit' ? `再读取目标 ${path}，完整替换模板内容` : '创建新文件'}。正文先写成约2800至3200个去空白字符，第三人称限知，场景化叙事，有动作、感官、对白和心理承接，严格执行对应章纲，不能写总结说明、创作注释或“未完待续”。不要提问，不要只在聊天回答。`,
+    path,
+    sources,
+    kind,
+  )
 }
 
-function expansionPrompt(number, count) {
+async function expansionPrompt(page, number, count) {
   const id = String(number).padStart(3, '0')
   const path = `正文/${id}.md`
-  return `第${number}章 ${path} 当前只有约${count}个去空白字符，未达到4000字验收。请读取该文件和 大纲/总纲.md，只调用一次 novel_propose，以 edit 方式扩写。请选择文件末尾一个唯一、完整的段落作为 oldText；newText 必须保留这个段落并自然追加一段约900至1200个去空白字符的完整场景，使冲突、动作、感官或人物余波更充分，但不得改变既定结局、硬设定和下一章接口。不要完整重写全章，不要提问，不要只在聊天回答。`
+  const sources = [path, '大纲/总纲.md']
+  return composeWritingPrompt(
+    page,
+    `第${number}章 ${path} 当前只有约${count}个去空白字符，未达到4000字验收。请读取该文件和 大纲/总纲.md。请选择文件末尾一个唯一、完整的段落作为 oldText；newText 必须保留这个段落并自然追加一段约900至1200个去空白字符的完整场景，使冲突、动作、感官或人物余波更充分，但不得改变既定结局、硬设定和下一章接口。不要完整重写全章，不要提问，不要只在聊天回答。`,
+    path,
+    sources,
+    'edit',
+  )
 }
 
 async function coverFim(page) {
@@ -902,12 +1016,24 @@ async function coverFim(page) {
   }
 }
 
-function dialogueCorrectionPrompt() {
-  return `第1章里林简的对白偏完整、像在解释设定。请读取 正文/001.md 和 人物卡/人物索引.md，只调用一次 novel_propose，对 正文/001.md 使用 edit。选一段林简的对白作为 oldText；newText 改成更短、更冲、不解释记忆税或系统，但不得改变情节和下一章接口。不要提问，不要只在聊天回答。`
+function dialogueCorrectionPrompt(page) {
+  return composeWritingPrompt(
+    page,
+    '第1章里林简的对白偏完整、像在解释设定。请读取 正文/001.md 和 人物卡/人物索引.md。选一段林简的对白作为 oldText；newText 改成更短、更冲、不解释记忆税或系统，但不得改变情节和下一章接口。不要提问，不要只在聊天回答。',
+    '正文/001.md',
+    ['正文/001.md', '人物卡/人物索引.md'],
+    'edit',
+  )
 }
 
-function canonCheckPrompt() {
-  return `请对照 世界书/设定总汇.md 和 人物卡/人物索引.md 审读 正文/005.md。若存在违反记忆税规则或人物底线的硬冲突，只调用一次 novel_propose，对 正文/005.md 使用 edit，只替换冲突段落。若没有硬冲突，不要改文件，在聊天里写「校验通过」和一句具体理由。不要提问。`
+function canonCheckPrompt(page) {
+  return composeWritingPrompt(
+    page,
+    '请对照 世界书/设定总汇.md 和 人物卡/人物索引.md 审读 正文/005.md。若存在违反记忆税规则或人物底线的硬冲突，对 正文/005.md 使用 edit，只替换冲突段落。若没有硬冲突，不要改文件，在聊天里写「校验通过」和一句具体理由。不要提问。',
+    '正文/005.md',
+    ['世界书/设定总汇.md', '人物卡/人物索引.md', '正文/005.md'],
+    'optional',
+  )
 }
 
 if (reset) {
@@ -944,6 +1070,7 @@ try {
   browser = await chromium.launch({ headless: true })
   page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN' })
   page.setDefaultTimeout(30_000)
+  page.on('request', captureManuscriptSession)
   page.on('pageerror', (error) => fail(`pageerror: ${sanitize(error.message)}`))
   page.on('console', (message) => {
     if (message.type() !== 'error') return
@@ -963,11 +1090,14 @@ try {
   await page.waitForTimeout(1_000)
   await shot(page, 'home')
 
-  const projectNavigation = page.getByRole('navigation', { name: '稿件目录' })
+  const projectNavigation = page.getByRole('tree', { name: '稿件目录' })
   if (!(await projectNavigation.isVisible().catch(() => false))) {
     await configureMiniMax(page)
     const projectAlreadyExists = await exists(resolve(workspace, '正文'))
-    if (!projectAlreadyExists) await createProjectFromHome(page)
+    if (!projectAlreadyExists) {
+      await createProjectFromHome(page)
+      await ensureNovelFolders(page)
+    }
     else {
       const recent = page.locator('.workspace-row').getByRole('button', { name: /雾港回声/ }).first()
       if (await recent.isVisible().catch(() => false)) await recent.click()
@@ -994,7 +1124,7 @@ try {
     const current = present ? await readFile(absolute, 'utf8') : ''
     const stillTemplate = !present || compactChars(current) < 220
     if (stillTemplate) {
-      await sendAndApply(page, item.prompt, item.path, item.label)
+      await sendAndApply(page, await composeWritingPrompt(page, item.body, item.path, item.sources, present ? 'edit' : 'create'), item.path, item.label)
       await shot(page, item.label)
     } else await recordPhase(`${item.label}已存在`, `${item.path} · ${compactChars(current)}字`)
   }
@@ -1007,13 +1137,13 @@ try {
     let count = chapterExists ? compactChars(await readFile(absolute, 'utf8')) : 0
     if (count < 700) {
       await startFreshConversation(page)
-      await sendAndApply(page, chapterPrompt(number, chapterExists ? 'edit' : 'create'), relative, `生成第${number}章`)
+      await sendAndApply(page, await chapterPrompt(page, number, chapterExists ? 'edit' : 'create'), relative, `生成第${number}章`)
       count = compactChars(await readFile(absolute, 'utf8'))
     }
     let expansions = 0
     while (count < minChapterChars && expansions < 5) {
       expansions += 1
-      await sendAndApply(page, expansionPrompt(number, count), relative, `扩写第${number}章-${expansions}`)
+      await sendAndApply(page, await expansionPrompt(page, number, count), relative, `扩写第${number}章-${expansions}`)
       count = compactChars(await readFile(absolute, 'utf8'))
     }
     report.chapters.push({ path: relative, chars: count, expansions })
@@ -1023,7 +1153,7 @@ try {
     await shot(page, `chapter-${id}`)
     if (number === 1 && reset) {
       await coverFim(page)
-      await sendAndApply(page, dialogueCorrectionPrompt(), relative, '对话纠正第1章对白')
+      await sendAndApply(page, await dialogueCorrectionPrompt(page), relative, '对话纠正第1章对白')
       report.chapters[report.chapters.length - 1].chars = compactChars(await readFile(absolute, 'utf8'))
       await shot(page, 'chapter-001-corrected')
     }
@@ -1035,7 +1165,7 @@ try {
   for (const required of ['项目总览.md', '世界书/设定总汇.md', '人物卡/人物索引.md', '大纲/总纲.md']) {
     if (!markdown.includes(required)) throw new Error(`missing planning artifact: ${required}`)
   }
-  const check = await sendMaybeApply(page, canonCheckPrompt(), '正文/005.md', '对话校验第5章设定')
+  const check = await sendMaybeApply(page, await canonCheckPrompt(page), '正文/005.md', '对话校验第5章设定')
   report.canonCheck = check
   const assistantText = sanitize((await page.locator('.chat-row.assistant').allInnerTexts().then((rows) => rows.join('\n')).catch(() => '')).slice(-2_500))
   const leaked = ['.dsh-editor/作品索引.md', '状态已更新。', '为当前工作区建立作品索引'].filter((item) => assistantText.includes(item))

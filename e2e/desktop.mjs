@@ -119,6 +119,30 @@ async function dismissNativeOnboarding(page) {
   return { notice: steps > 0, steps, setup }
 }
 
+async function assertNewProjectHasNoManuscriptFolder(page, workspace) {
+  await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
+  for (const extra of ['正文', '大纲', '人物卡', '世界书']) {
+    if (existsSync(resolve(workspace, extra))) throw new Error(`new project should not pre-create ${extra}`)
+    if (await page.locator('.tree').getByText(extra, { exact: true }).count()) {
+      throw new Error(`new project should not pre-seed ${extra}`)
+    }
+  }
+}
+
+async function createRootFolderFromTree(page, name) {
+  const tree = page.locator('.tree')
+  const box = await tree.boundingBox()
+  if (!box) throw new Error('tree missing')
+  await tree.click({ button: 'right', position: { x: 16, y: Math.max(12, box.height - 18) } })
+  await page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '新建文件夹' }).click()
+  const dialog = page.getByRole('dialog', { name: '新建文件夹' })
+  await dialog.waitFor({ state: 'visible', timeout: 10_000 })
+  await dialog.getByLabel('文件夹名称').fill(name)
+  await dialog.getByRole('button', { name: '创建', exact: true }).click()
+  await dialog.waitFor({ state: 'detached', timeout: 15_000 })
+  await page.locator('.tree-row').filter({ hasText: name }).first().waitFor({ state: 'visible', timeout: 20_000 })
+}
+
 const baseEnv = {
   ...process.env,
   DSH_TELEMETRY_DISABLED: '1',
@@ -289,7 +313,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await nameBox.fill('multi-window-workspace')
   await ctx.window.getByRole('button', { name: '创建', exact: true }).click()
   try {
-    await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+    await ctx.window.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   } catch (error) {
     const body = await ctx.window.evaluate(() => ({
       text: document.body.innerText.slice(0, 1200),
@@ -303,7 +327,9 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     await ctx.window.screenshot({ path: resolve(output, 'multi-window-create-failure.png') }).catch(() => undefined)
     throw new Error(`manuscript tree did not appear after 新建: ${JSON.stringify(body)}; ${error instanceof Error ? error.message : String(error)}`)
   }
-  // New works start with an empty manuscript: create inside the real manuscript folder.
+  // New works start empty. 正文 is an ordinary folder created from the tree, not mkdir.
+  await assertNewProjectHasNoManuscriptFolder(ctx.window, multiWindowWorkspace)
+  await createRootFolderFromTree(ctx.window, '正文')
   await ctx.window.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
   await ctx.window.getByRole('button', { name: '在 正文 中新建文件', exact: true }).click()
   const chapterNameBox = ctx.window.getByLabel('文件名称（无扩展名时按 .md 创建）')
@@ -333,7 +359,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   if (firstUrl.origin !== secondUrl.origin || firstUrl.port !== secondUrl.port) {
     throw new Error(`windows did not share DSH origin: ${firstUrl.href} vs ${secondUrl.href}`)
   }
-  await second.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  await second.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   await second.locator('.tree-row', { hasText: '正文' }).first().click()
   await second.locator('.tree-row', { hasText: '001.md' }).first().click()
   const secondEditor = second.locator('[data-testid="paper-editor"]')
@@ -383,7 +409,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
 // Restart the entire Electron/DSH process against the same home, not just a React remount.
 phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (_state, ctx) => {
   try {
-    await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+    await ctx.window.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   } catch (error) {
     const body = await ctx.window.evaluate(() => ({
       text: document.body.innerText.slice(0, 1200),
@@ -427,13 +453,17 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     BrowserWindow.getAllWindows()[0]?.webContents.once('will-prevent-unload', event => event.preventDefault())
   })
   await ctx.window.reload()
-  await ctx.window.getByRole('navigation', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
+  await ctx.window.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   if (!await editor.isVisible()) {
     const chapter = ctx.window.locator('.tree-row', { hasText: '001.md' }).first()
     if (!await chapter.isVisible()) await ctx.window.locator('.tree-row', { hasText: '正文' }).first().click()
     await chapter.click()
   }
   await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '版本冲突' }).waitFor({ timeout: 15_000 })
+  // Reload restore schedules the same 250 ms host-draft put as adoptBackup.
+  // Clicking 另存冲突副本 before that put lands lets delete run, then the
+  // delayed put recreates the conflict draft and remount restores 版本冲突.
+  await ctx.window.waitForTimeout(1_000)
   await ctx.window.keyboard.press(process.platform === 'darwin' ? 'Meta+s' : 'Control+s')
   if (await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8') !== disk) throw new Error('reloaded conflict bypassed version protection')
   if (!(await editor.evaluate(el => el.__cmView.state.doc.toString())).includes('第二窗口草稿')) throw new Error('reloaded conflict draft lost its text')
@@ -441,7 +471,19 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   // Complete the author workflow before closing: preserve the recovered draft
   // as a conflict copy, then leave the original document in a clean state.
   await ctx.window.locator('[data-testid="paper-save-conflict-copy"]').click()
-  await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '已保存' }).waitFor({ timeout: 15_000 })
+  try {
+    await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '已保存' }).waitFor({ state: 'visible', timeout: 15_000 })
+  } catch (error) {
+    const names = await readdir(resolve(multiWindowWorkspace, '正文')).catch(() => [])
+    const ui = await ctx.window.evaluate(() => ({
+      saveStates: [...document.querySelectorAll('[data-testid="paper-save-state"]')].map((node) => node.textContent ?? ''),
+      notice: document.querySelector('[data-testid="paper-notice"]')?.textContent ?? '',
+      path: document.querySelector('[data-testid="paper-path"]')?.textContent ?? '',
+      conflictCopy: Boolean(document.querySelector('[data-testid="paper-save-conflict-copy"]')),
+    })).catch((evaluateError) => ({ evaluateError: evaluateError instanceof Error ? evaluateError.message : String(evaluateError) }))
+    await ctx.window.screenshot({ path: resolve(output, 'conflict-copy-timeout.png'), fullPage: true }).catch(() => undefined)
+    throw new Error(`conflict copy did not reach 已保存: ${JSON.stringify({ ui, files: names })}; ${error instanceof Error ? error.message : String(error)}`)
+  }
   const copies = (await readdir(resolve(multiWindowWorkspace, '正文'))).filter(name => /^001\.冲突-.*\.md$/.test(name))
   if (copies.length !== 1) throw new Error('conflict copy was not created exactly once')
   const copied = await readFile(resolve(multiWindowWorkspace, '正文', copies[0]), 'utf8')
