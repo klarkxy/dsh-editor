@@ -44,8 +44,8 @@
     "entries": [
       {
         "id": "editor-overview-panel",
-        "title": "作品概览",
-        "description": "章节状态、字数分布、写作曲线与最近编辑",
+        "title": "文档概览",
+        "description": "文档状态、字数分布、写作曲线与最近编辑",
         "feature": "overview-panel"
       }
     ]

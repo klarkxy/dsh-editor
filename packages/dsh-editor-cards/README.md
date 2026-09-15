@@ -7,7 +7,7 @@
 - Host `editor-cards`：`/dsh-editor-cards`（`src/index.ts`）
 - Client：命令展开文件树目录；钉住栏仍读卡片字段（`src/client.ts`）
 - 命令：`cards-character`（Ctrl+Shift+C）、`cards-worldbook`（Ctrl+Shift+W）展开 `人物卡/` / `世界书/`
-- Feature：`cards`（basic / smart / full 均选）
+- Feature：`cards`（canonical basic / smart / full 均不选；默认关闭，可由兼容/自定义组合显式启用）
 
 ## 契约
 

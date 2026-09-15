@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { ProofreadFinding } from 'dsh-editor-workbench/contracts'
 import {
+  PROOFREAD_KIND_CHIP_ORDER,
+  PROOFREAD_KINDS,
+  allProofreadKinds,
   appendIgnoreLine,
   batchPunctuationEdit,
   combineReplacements,
@@ -65,8 +68,20 @@ describe('proofread view helpers', () => {
     ]
     expect(filterProofreadFindings(items, { kinds: ['habit'], habitTerm: null }).map((item) => quotedTerm(item.message))).toEqual(['忽然', '然后'])
     expect(filterProofreadFindings(items, { kinds: ['punctuation', 'typo'], habitTerm: '忽然' }).map((item) => quotedTerm(item.message))).toEqual(['忽然'])
-    expect(kindCounts(items)).toEqual({ punctuation: 1, sensitive: 1, repeat: 0, typo: 0, habit: 2, card: 0 })
+    expect(kindCounts(items)).toEqual({ punctuation: 1, typo: 0, sensitive: 1, repeat: 0, habit: 2 })
     expect(toggleProofreadKind(['punctuation', 'typo'], 'typo')).toEqual(['punctuation'])
+  })
+
+  it('keeps only punctuation, typo, sensitive, repeat, and habit', () => {
+    expect(PROOFREAD_KINDS).toEqual(['punctuation', 'typo', 'sensitive', 'repeat', 'habit'])
+    expect(allProofreadKinds()).toEqual(['punctuation', 'typo', 'sensitive', 'repeat', 'habit'])
+    expect(PROOFREAD_KIND_CHIP_ORDER).toEqual(['punctuation', 'typo', 'sensitive', 'repeat', 'habit'])
+    const items = [
+      finding({ kind: 'card', message: '人物卡对照「甲」', suggestion: undefined }),
+      finding({ kind: 'punctuation', start: 2 }),
+    ]
+    expect(kindCounts(items)).toEqual({ punctuation: 1, typo: 0, sensitive: 0, repeat: 0, habit: 0 })
+    expect(filterProofreadFindings(items, { kinds: allProofreadKinds(), habitTerm: null }).map((item) => item.kind)).toEqual(['punctuation'])
   })
 
   it('highlights the matched span inside an excerpt', () => {

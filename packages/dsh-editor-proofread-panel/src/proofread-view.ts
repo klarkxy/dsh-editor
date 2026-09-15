@@ -1,7 +1,10 @@
-import { PROOFREAD_KINDS, type ProofreadFinding, type ProofreadHabitStat, type ProofreadKind, type ProofreadSeverity } from 'dsh-editor-workbench/contracts'
+import { type ProofreadFinding, type ProofreadHabitStat, type ProofreadSeverity } from 'dsh-editor-workbench/contracts'
 import { intlLocale, t } from './messages.ts'
 
-export { PROOFREAD_KINDS, type ProofreadFinding, type ProofreadHabitStat, type ProofreadKind, type ProofreadSeverity }
+export type { ProofreadFinding, ProofreadHabitStat, ProofreadSeverity }
+
+export const PROOFREAD_KINDS = ['punctuation', 'typo', 'sensitive', 'repeat', 'habit'] as const
+export type ProofreadKind = typeof PROOFREAD_KINDS[number]
 
 export const SENSITIVE_LIST_PATH = '.dsh-editor/敏感词.txt'
 export const SENSITIVE_ALLOW_PATH = '.dsh-editor/敏感词-忽略.txt'
@@ -12,10 +15,9 @@ export const PROOFREAD_KIND_LABELS: Record<ProofreadKind, string> = {
   get sensitive() { return t('proofread.kind.sensitive') },
   get repeat() { return t('proofread.kind.repeat') },
   get habit() { return t('proofread.kind.habit') },
-  get card() { return t('proofread.kind.card') },
 }
 
-export const PROOFREAD_KIND_CHIP_ORDER: readonly ProofreadKind[] = ['punctuation', 'typo', 'sensitive', 'repeat', 'habit', 'card']
+export const PROOFREAD_KIND_CHIP_ORDER: readonly ProofreadKind[] = PROOFREAD_KINDS
 
 const SEVERITY_RANK: Record<ProofreadSeverity, number> = { error: 0, warning: 1, info: 2 }
 
@@ -40,8 +42,12 @@ export type ExcerptParts = { before: string; match: string; after: string }
 
 export type ProofreadEditDraft = { path: string; oldText: string; newText: string; summary: string }
 
-export function proofreadKindLabel(kind: ProofreadKind): string {
-  return PROOFREAD_KIND_LABELS[kind] ?? kind
+export function isProofreadKind(kind: string): kind is ProofreadKind {
+  return (PROOFREAD_KINDS as readonly string[]).includes(kind)
+}
+
+export function proofreadKindLabel(kind: string): string {
+  return isProofreadKind(kind) ? PROOFREAD_KIND_LABELS[kind] : kind
 }
 
 export function quotedTerm(message: string): string {
@@ -58,8 +64,10 @@ export function toggleProofreadKind(kinds: readonly ProofreadKind[], kind: Proof
 }
 
 export function kindCounts(findings: readonly ProofreadFinding[]): Record<ProofreadKind, number> {
-  const counts = { punctuation: 0, sensitive: 0, repeat: 0, typo: 0, habit: 0, card: 0 }
-  for (const finding of findings) counts[finding.kind] += 1
+  const counts = { punctuation: 0, typo: 0, sensitive: 0, repeat: 0, habit: 0 }
+  for (const finding of findings) {
+    if (isProofreadKind(finding.kind)) counts[finding.kind] += 1
+  }
   return counts
 }
 
@@ -82,6 +90,7 @@ export function sortProofreadFindings(findings: readonly ProofreadFinding[]): Pr
 
 export function filterProofreadFindings(findings: readonly ProofreadFinding[], filter: ProofreadFilter): ProofreadFinding[] {
   return findings.filter((finding) => {
+    if (!isProofreadKind(finding.kind)) return false
     if (filter.habitTerm) {
       return finding.kind === 'habit' && quotedTerm(finding.message) === filter.habitTerm
     }

@@ -30,7 +30,7 @@ describe('overview panel client', () => {
     expect(registered).toEqual([{ spec: { name: CENTER_OVERLAYS_SLOT, id: 'overview', order: 100, label: '概览' } }])
     expect(commands.list().map((item) => item.id)).toEqual(['overview'])
     expect(commands.list()[0]?.shortcut).toEqual({ key: 'o', ctrl: true, shift: true })
-    expect(commands.list()[0]?.label.zh).toBe('作品概览')
+    expect(commands.list()[0]?.label.zh).toBe('文档概览')
     for (const dispose of disposers) dispose()
     expect(commands.list()).toEqual([])
   })

@@ -84,7 +84,7 @@ export function apply(ctx: Context): void {
     return e(ProofreadSeat, { ...seat, rpc: client.connection.rpc })
   }
   ctx.effect(() => client.slots.inject(SIDEBAR_TOOLS_SLOT, () =>
-    client.slots.register({ name: SIDEBAR_TOOLS_SLOT, id: 'proofread', order: 100, label: '校对' }, render)),
+    client.slots.register({ name: SIDEBAR_TOOLS_SLOT, id: 'proofread', order: 100, label: '文稿校对' }, render)),
   'dsh-editor-proofread-panel-client.slot')
   for (const command of proofreadCommands()) {
     ctx.effect(() => client[COMMANDS_SERVICE].register(command), `dsh-editor-proofread-panel-client.command.${command.id}`)

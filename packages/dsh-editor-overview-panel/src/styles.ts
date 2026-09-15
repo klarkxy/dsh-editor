@@ -51,7 +51,7 @@ export const overviewPanelStyles = `
   transition: background-color var(--duration-quick, 150ms) var(--ease-smooth-out, ease), transform var(--duration-quick, 150ms) var(--ease-smooth-out, ease);
   animation: overview-item-in var(--duration-fast, 250ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both;
 }
-/* 章节行错峰入场(40ms 逐级),与统计卡节奏一致。 */
+/* 文档行错峰入场(40ms 逐级),与统计卡节奏一致。 */
 .shell .overview-chapter-list > :nth-child(2), .dsh-ui .overview-chapter-list > :nth-child(2) { animation-delay: var(--duration-stagger, 40ms); }
 .shell .overview-chapter-list > :nth-child(3), .dsh-ui .overview-chapter-list > :nth-child(3) { animation-delay: calc(var(--duration-stagger, 40ms) * 2); }
 .shell .overview-chapter-list > :nth-child(4), .dsh-ui .overview-chapter-list > :nth-child(4) { animation-delay: calc(var(--duration-stagger, 40ms) * 3); }
