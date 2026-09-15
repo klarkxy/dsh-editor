@@ -28,6 +28,14 @@ export {
 } from './chapter-meta.ts'
 
 export { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
+export {
+  AUTHOR_MEMORY_MARKER,
+  AUTHOR_OBSERVE_MAX_CHARS,
+  AUTHOR_OBSERVE_TOOL_NAME,
+  authorMemoryMarker,
+  parseAuthorMemoryMarker,
+  type AuthorMemoryMarker,
+} from './author-memory.ts'
 
 export {
   WORKBENCH_RPC_CHANNEL,
@@ -63,22 +71,6 @@ export type {
   WorkbenchPathResponse,
   WritingLogEntry,
 } from './contracts/project.ts'
-
-export type {
-  CardKind,
-  CardReferenceHit,
-  CardsCreateRequest,
-  CardsCreateResponse,
-  CardsListKind,
-  CardsListRequest,
-  CardsListResponse,
-  CardsMetaSetRequest,
-  CardsMetaSetResponse,
-  CardsReferencesRequest,
-  CardsReferencesResponse,
-  CharacterCard,
-  WorldbookCard,
-} from 'dsh-editor-cards/contracts'
 
 export type { ImportProbeResponse } from './contracts/import.ts'
 export type { RestoreProbeResponse, SnapshotResponse } from './contracts/snapshot.ts'

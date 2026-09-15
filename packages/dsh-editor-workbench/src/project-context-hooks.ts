@@ -6,7 +6,20 @@ import { asHost, readProjectRules, resolveWorkspaceAccess } from 'dsh-manuscript
 import { normalizeAuthorMemory, normalizeAuthorPreferences, parseProjectContextEnvelope } from './contracts.ts'
 
 type EditorAgent = { session: Session }
-function isEditor(agent: EditorAgent | undefined): agent is EditorAgent { return agent?.session.header.agentPreset === 'dsh-editor' }
+
+/** Creation-time header fact. A later blank UI selection does not change it. */
+const WRITING_PRESET_IDS = new Set([
+  'dsh-editor',
+  'dsh-editor-writing',
+  'dsh-editor-novel',
+  'dsh-editor-article',
+  'dsh-editor-technical',
+])
+
+function isEditor(agent: EditorAgent | undefined): agent is EditorAgent {
+  const preset = agent?.session.header.agentPreset
+  return typeof preset === 'string' && WRITING_PRESET_IDS.has(preset)
+}
 
 /** Only the model-visible projection changes; append-origin transcript events remain intact. */
 export function retireLegacyContext(session: Pick<Session, 'surface' | 'eventAt' | 'append'>): number {

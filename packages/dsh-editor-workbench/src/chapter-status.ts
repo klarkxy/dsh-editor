@@ -1,4 +1,5 @@
 import { FileOpError, normalizeWorkspaceRelative, readTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
+import { isGeneratedPath, isHiddenPath } from 'dsh-editor-workspace-kit'
 import type { ChapterStatus } from './contracts.ts'
 import {
   assertWritableMetadata,
@@ -10,7 +11,6 @@ import {
 export const CHAPTER_STATUS_PATH = '.dsh-editor/chapter-status.json'
 export const CHAPTER_STATUSES = ['draft', 'revising', 'final'] as const
 
-const MANUSCRIPT_ROOT = '正文'
 const MAX_STATUS_ENTRIES = 2_000
 
 export type ChapterStatusAccess = MetadataAccess & { files: WorkspaceFileContext }
@@ -45,10 +45,8 @@ export function manuscriptChapterPath(relative: string): string {
   if (normalized !== relative.replace(/\\/g, '/') || normalized === '.' || !/\.(md|txt)$/i.test(normalized)) {
     throw new ChapterStatusError('chapter path is invalid', 'INVALID_PATH')
   }
-  const parts = normalized.split('/')
-  if (parts.some((part) => part.startsWith('.'))) throw new ChapterStatusError('chapter path is invalid', 'INVALID_PATH')
-  if (parts[0] !== MANUSCRIPT_ROOT || parts.length < 2) {
-    throw new ChapterStatusError('chapter status path must be in 正文', 'INVALID_PATH')
+  if (isHiddenPath(normalized) || isGeneratedPath(normalized)) {
+    throw new ChapterStatusError('chapter path is invalid', 'INVALID_PATH')
   }
   return normalized
 }

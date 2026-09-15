@@ -40,6 +40,7 @@ describe('initializeProject', () => {
     await initializeProject({ root, mode: 'workspace-write', newProject: true })
     await expect(inspectProjectRoot(root)).resolves.toMatchObject({ hasVisibleEntries: true, textFiles: ['AGENTS.md'] })
 
+    await fs.mkdir(path.join(root, '正文'))
     await fs.writeFile(path.join(root, '正文', '001.md'), '# 第一章\n', 'utf8')
     await expect(inspectProjectRoot(root)).resolves.toMatchObject({ hasVisibleEntries: true, textFiles: ['正文/001.md', 'AGENTS.md'] })
   })
@@ -54,23 +55,24 @@ describe('initializeProject', () => {
     await expect(inspectProjectRoot(root)).resolves.toMatchObject({ indexReady: true })
   })
 
-  it('creates rules and filing directories once without seeding story templates', async () => {
+  it('ensures only root project rules for a new project and creates no specialist directories', async () => {
     const first = await initializeProject({ root, mode: 'workspace-write', newProject: true })
-    expect(first.created.sort()).toEqual(['AGENTS.md', ...PROJECT_DIRECTORIES].sort())
+    expect(first.created).toEqual(['AGENTS.md'])
+    expect(first.skipped).toEqual([])
+    expect(await fs.readdir(root)).toEqual(['AGENTS.md'])
     expect(first.created).not.toContain('正文/001.md')
     expect(first.created).not.toContain('大纲/总纲.md')
     await expect(fs.stat(path.join(root, '项目总览.md'))).rejects.toThrow()
-    await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toThrow()
+    for (const relative of PROJECT_DIRECTORIES) {
+      await expect(fs.stat(path.join(root, relative))).rejects.toMatchObject({ code: 'ENOENT' })
+    }
     const second = await initializeProject({ root, mode: 'workspace-write', newProject: true })
     expect(second.created).toEqual([])
-    expect(second.skipped.sort()).toEqual(['AGENTS.md', ...PROJECT_DIRECTORIES].sort())
-    for (const relative of PROJECT_DIRECTORIES) {
-      expect((await fs.stat(path.join(root, relative))).isDirectory()).toBe(true)
-    }
+    expect(second.skipped).toEqual(['AGENTS.md'])
   })
 
   it('creates one visible manuscript group without moving or overwriting chapters', async () => {
-    await initializeProject({ root, mode: 'workspace-write', newProject: true })
+    await createDirectory({ root, mode: 'workspace-write', relative: '正文' })
     await expect(createManuscriptGroup({ root, mode: 'workspace-write', relative: '正文/第一卷' })).resolves.toEqual({ path: '正文/第一卷' })
     expect((await fs.stat(path.join(root, '正文', '第一卷'))).isDirectory()).toBe(true)
     await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toThrow()
@@ -78,7 +80,7 @@ describe('initializeProject', () => {
   })
 
   it('rejects hidden, nested, reserved and read-only manuscript groups', async () => {
-    await initializeProject({ root, mode: 'workspace-write', newProject: false })
+    await createDirectory({ root, mode: 'workspace-write', relative: '正文' })
     for (const relative of ['正文/.秘密', '正文/第一卷/上部', '正文/CON', '../正文/越界']) {
       await expect(createManuscriptGroup({ root, mode: 'workspace-write', relative })).rejects.toMatchObject({ code: 'INVALID_PATH' })
     }
@@ -86,18 +88,20 @@ describe('initializeProject', () => {
     expect(await fs.readdir(path.join(root, '正文'))).toEqual([])
   })
 
-  it('does not add markdown templates when initializing an existing project', async () => {
-    await initializeProject({ root, mode: 'workspace-write', newProject: false })
-    await expect(fs.stat(path.join(root, '正文', '001.md'))).rejects.toThrow()
-    await expect(fs.stat(path.join(root, '世界书', '设定总汇.md'))).rejects.toThrow()
-    // 预设资料目录不再预建,由用户或搭档实际创建
-    await expect(fs.stat(path.join(root, '世界书'))).rejects.toThrow()
-    expect((await fs.stat(path.join(root, '正文'))).isDirectory()).toBe(true)
+  it('does not create directories or files when opening an existing project', async () => {
+    await fs.writeFile(path.join(root, 'notes.md'), 'keep', 'utf8')
+    const result = await initializeProject({ root, mode: 'workspace-write', newProject: false })
+    expect(result).toEqual({ created: [], skipped: [] })
+    expect(await fs.readdir(root)).toEqual(['notes.md'])
+    for (const relative of PROJECT_DIRECTORIES) {
+      await expect(fs.stat(path.join(root, relative))).rejects.toMatchObject({ code: 'ENOENT' })
+    }
+    await expect(fs.stat(path.join(root, 'AGENTS.md'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('refuses read-only projects and wrong-type paths', async () => {
     await expect(initializeProject({ root, mode: 'read-only', newProject: true })).rejects.toMatchObject({ code: 'READ_ONLY' })
-    await fs.writeFile(path.join(root, '正文'), 'occupied', 'utf8')
+    await fs.mkdir(path.join(root, 'AGENTS.md'))
     await expect(initializeProject({ root, mode: 'workspace-write', newProject: true })).rejects.toMatchObject({ code: 'NOT_DIRECTORY' })
   })
 

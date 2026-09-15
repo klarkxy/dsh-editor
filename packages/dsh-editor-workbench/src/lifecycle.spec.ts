@@ -11,6 +11,7 @@ import {
   deleteEntry,
   LifecycleError,
   listArchives,
+  moveDocument,
   moveEntry,
   moveManuscriptDocument,
   moveNoReplace,
@@ -122,6 +123,36 @@ describe('safe document lifecycle', () => {
     await expect(moveManuscriptDocument({ access: access(root), path: '正文/002.md', targetDirectory: '正文/第一卷', expectedVersion: second.version })).rejects.toMatchObject({ code: 'EXISTS' })
     await expect(fs.readFile(path.join(root, '正文', '002.md'), 'utf8')).resolves.toBe('source')
     await expect(fs.readFile(path.join(root, '正文', '第一卷', '002.md'), 'utf8')).resolves.toBe('occupied')
+  })
+
+  it('moves a visible document between ordinary directories and can rename at the same time', async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, 'notes', 'nested'), { recursive: true })
+    await fs.mkdir(path.join(root, 'drafts'))
+    await fs.writeFile(path.join(root, 'readme.md'), 'root')
+    await fs.writeFile(path.join(root, 'notes', 'nested', 'a.txt'), 'nested')
+    await fs.writeFile(path.join(root, 'notes', 'keep.md'), 'keep')
+    const rootFile = await readTextFile(access(root).files, 'readme.md')
+    await expect(moveDocument({ access: access(root), path: 'readme.md', targetPath: 'drafts/intro.md', expectedVersion: rootFile.version }))
+      .resolves.toMatchObject({ path: 'drafts/intro.md' })
+    await expect(fs.readFile(path.join(root, 'drafts', 'intro.md'), 'utf8')).resolves.toBe('root')
+    await expect(fs.stat(path.join(root, 'readme.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+
+    const nested = await readTextFile(access(root).files, 'notes/nested/a.txt')
+    await expect(moveDocument({ access: access(root), path: 'notes/nested/a.txt', targetPath: 'a.txt', expectedVersion: nested.version }))
+      .resolves.toMatchObject({ path: 'a.txt' })
+    await expect(fs.readFile(path.join(root, 'a.txt'), 'utf8')).resolves.toBe('nested')
+
+    const keep = await readTextFile(access(root).files, 'notes/keep.md')
+    await expect(moveDocument({ access: access(root), path: 'notes/keep.md', targetPath: 'drafts/intro.md', expectedVersion: keep.version })).rejects.toMatchObject({ code: 'EXISTS' })
+    await expect(moveDocument({ access: access(root), path: 'notes/keep.md', targetPath: 'missing/out.md', expectedVersion: keep.version })).rejects.toMatchObject({ code: 'BLOCKED' })
+    await fs.writeFile(path.join(root, 'notes', 'keep.md'), 'changed')
+    await expect(moveDocument({ access: access(root), path: 'notes/keep.md', targetPath: 'drafts/later.md', expectedVersion: keep.version })).rejects.toMatchObject({ code: 'STALE' })
+    await expect(moveDocument({ access: access(root), path: 'dist/out.md', targetPath: 'notes/out.md', expectedVersion: 'v' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(moveDocument({ access: access(root), path: '.hidden/a.md', targetPath: 'notes/a.md', expectedVersion: 'v' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(moveDocument({ access: access(root), path: '../escape.md', targetPath: 'notes/a.md', expectedVersion: 'v' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(moveDocument({ access: access(root), path: 'notes/keep.md', targetPath: 'notes/keep.json', expectedVersion: keep.version })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(fs.readFile(path.join(root, 'notes', 'keep.md'), 'utf8')).resolves.toBe('changed')
   })
 
   it('rejects stale, same-directory, non-manuscript and linked move targets', async () => {

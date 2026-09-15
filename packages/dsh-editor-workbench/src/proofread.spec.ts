@@ -102,7 +102,7 @@ async function write(relative: string, text: string): Promise<void> {
   await fs.writeFile(target, text, 'utf8')
 }
 
-function kindsOf(text: string, kinds: Array<'punctuation' | 'sensitive' | 'repeat' | 'typo' | 'habit' | 'card'>, extra?: Parameters<typeof proofreadText>[1]) {
+function kindsOf(text: string, kinds: Array<'punctuation' | 'sensitive' | 'repeat' | 'typo' | 'habit'>, extra?: Parameters<typeof proofreadText>[1]) {
   return proofreadText(text, { path: '正文/测.md', version: 'v1', kinds, ...extra })
 }
 
@@ -240,20 +240,24 @@ describe('truncation', () => {
 })
 
 describe('scanProofread', () => {
-  it('scans a single author document and walks manuscript chapters in natural order', async () => {
+  it('scans a single author document and walks every visible md/txt for the manuscript token', async () => {
     await write('正文/10.md', '他说,然后走了。')
     await write('正文/2.md', '的时后到了。')
     await write('正文/.hidden.md', '的的')
     await write('大纲/总纲.md', '冰毒')
+    await write('README.md', '的时后。')
+    await write('资料/说明.txt', '他说,好。')
+    await write('.dsh-editor/秘密.md', '的的')
+    await write('dist/out.md', '他说,生成。')
     const document = await scanProofread({ access: access(), scope: 'document', path: '正文/2.md', kinds: ['typo'] })
     expect(document.scannedFiles).toBe(1)
     expect(document.findings).toMatchObject([{ path: '正文/2.md', suggestion: '的时候', version: expect.any(String) }])
     const outline = await scanProofread({ access: access(), scope: 'document', path: '大纲/总纲.md', kinds: ['sensitive'] })
     expect(outline.findings).toMatchObject([{ path: '大纲/总纲.md', message: '敏感词「冰毒」' }])
     const manuscript = await scanProofread({ access: access(), scope: 'manuscript', kinds: ['punctuation', 'typo'] })
-    expect(manuscript.scannedFiles).toBe(2)
-    expect(manuscript.findings.map((item) => item.path)).toEqual(['正文/2.md', '正文/10.md'])
-    expect(manuscript.findings.some((item) => item.path.includes('.hidden'))).toBe(false)
+    expect(manuscript.scannedFiles).toBe(5)
+    expect(manuscript.findings.map((item) => item.path)).toEqual(['正文/2.md', '正文/10.md', '资料/说明.txt', 'README.md'])
+    expect(manuscript.findings.some((item) => item.path.includes('.hidden') || item.path.includes('.dsh-editor') || item.path.startsWith('dist/'))).toBe(false)
   })
 
   it('merges the user sensitive list with the bundled list and allowlist', async () => {
@@ -300,107 +304,15 @@ describe('scanProofread', () => {
 })
 
 describe('card', () => {
-  async function seedCards(): Promise<void> {
-    await write('人物卡/林见.md', '---\nname: 林见\naliases: [见哥]\ngender: 男\n---\n\n# 林见\n')
-    await write('人物卡/苏晚.md', '---\nname: 苏晚\ngender: female\n---\n\n# 苏晚\n')
-    await write('世界书/青云门.md', '---\ntriggers: [青云门, 青云派]\n---\n\n# 青云门\n')
-  }
-
-  it('flags a pronoun/gender mismatch and offers the card pronoun', async () => {
-    await seedCards()
-    const text = '林见走了，她没有回头。'
-    await write('正文/001.md', text)
-    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['card'] })
-    expect(result.findings.filter((item) => item.code === 'card-gender')).toMatchObject([{
-      kind: 'card',
-      code: 'card-gender',
-      severity: 'warning',
-      suggestion: '他',
-      start: text.indexOf('她'),
-      end: text.indexOf('她') + 1,
-      message: '“林见”在人物卡中为男，此处用了“她”',
-    }])
-    expect(result.findings.filter((item) => item.code === 'card-nearmiss')).toEqual([])
-  })
-
-  it('does not flag when another opposite-gender character is in the sentence', async () => {
-    await seedCards()
-    await write('正文/001.md', '林见看着苏晚，她没有回头。')
-    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['card'] })
-    expect(result.findings.filter((item) => item.code === 'card-gender')).toEqual([])
-  })
-
-  it('ignores plural 她们', async () => {
-    await seedCards()
-    await write('正文/001.md', '林见走了，她们没有回头。')
-    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['card'] })
-    expect(result.findings.filter((item) => item.code === 'card-gender')).toEqual([])
-  })
-
-  it('flags a near-miss proper noun with the canonical term as suggestion', async () => {
-    await seedCards()
-    const text = '他加入了青峰门。'
-    await write('正文/001.md', text)
-    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['card'] })
-    expect(result.findings).toMatchObject([{
-      kind: 'card',
-      code: 'card-nearmiss',
-      severity: 'info',
-      suggestion: '青云门',
-      term: '青云门',
-      start: text.indexOf('青峰门'),
-      end: text.indexOf('青峰门') + 3,
-      message: '“青峰门”疑似与设定“青云门”写法不一致',
-    }])
-  })
-
-  it('does not report a known alias as a near-miss', async () => {
-    await seedCards()
-    await write('正文/001.md', '见哥走进青云派。')
-    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['card'] })
-    expect(result.findings.filter((item) => item.code === 'card-nearmiss')).toEqual([])
-  })
-
-  it('does not report a frequent variant that appears more than three times', async () => {
-    await seedCards()
-    await write('正文/001.md', '青峰门。青峰门。青峰门。青峰门。')
-    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['card'] })
-    expect(result.findings.filter((item) => item.code === 'card-nearmiss')).toEqual([])
-  })
-
-  it('excludes card findings when kinds is only punctuation', async () => {
-    await seedCards()
+  it('fails closed when card is requested and never runs it by default', async () => {
     await write('正文/001.md', '林见走了，她没有回头。他加入了青峰门。')
-    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['punctuation'] })
-    expect(result.findings.filter((item) => item.kind === 'card')).toEqual([])
-  })
-
-  it('returns no card findings and does not throw when card directories are missing', async () => {
-    await write('正文/001.md', '林见走了，她没有回头。他加入了青峰门。')
-    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['card'] })
-    expect(result.findings).toEqual([])
-    expect(result.skipped).toBe(0)
-  })
-
-  it('masks frontmatter and heading markers the same way as other analyzers', async () => {
-    await seedCards()
-    const text = '---\ntitle: 林见她青峰门\n---\n# 标题\n林见走了，她没有回头。\n'
-    await write('正文/001.md', text)
-    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['card'] })
-    expect(result.findings.filter((item) => item.code === 'card-nearmiss')).toEqual([])
-    expect(result.findings.filter((item) => item.code === 'card-gender')).toMatchObject([{
-      start: text.lastIndexOf('她'),
-      suggestion: '他',
-    }])
-  })
-
-  it('includes card when kinds is omitted and supports manuscript scope', async () => {
-    await seedCards()
-    await write('正文/2.md', '林见走了，她没有回头。')
-    await write('正文/10.md', '他加入了青峰门。')
-    const result = await scanProofread({ access: access(), scope: 'manuscript' })
-    expect(result.findings.some((item) => item.code === 'card-gender' && item.path === '正文/2.md')).toBe(true)
-    expect(result.findings.some((item) => item.code === 'card-nearmiss' && item.path === '正文/10.md')).toBe(true)
-    expect(result.habitStats).toEqual([])
+    await write('人物卡/林见.md', '---\nname: 林见\ngender: 男\n---\n\n# 林见\n')
+    await expect(scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['card'] }))
+      .rejects.toMatchObject({ name: 'ProofreadError', code: 'INVALID' })
+    await expect(scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['punctuation', 'card'] }))
+      .rejects.toMatchObject({ name: 'ProofreadError', code: 'INVALID' })
+    const omitted = await scanProofread({ access: access(), scope: 'manuscript' })
+    expect(omitted.findings.some((item) => item.kind === 'card')).toBe(false)
+    expect(omitted.habitStats).toEqual([])
   })
 })

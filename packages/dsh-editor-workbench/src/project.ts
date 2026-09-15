@@ -15,7 +15,7 @@ export class ProjectInitError extends Error {
   }
 }
 
-/** 新建作品预建四类空目录以呈现前置规划入口，但不生成任何故事模板。 */
+/** Legacy specialist novel directories. initializeProject no longer creates them. */
 export const PROJECT_DIRECTORIES = ['正文', '大纲', '人物卡', '世界书'] as const
 export const NOVEL_INDEX_DIRECTORY = '.dsh-editor'
 export const NOVEL_INDEX_PATH = `${NOVEL_INDEX_DIRECTORY}/作品索引.md`
@@ -237,7 +237,7 @@ export async function inspectProjectRoot(rootPath: string, signal?: AbortSignal)
       const relative = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name
       if (entry.isDirectory()) queue.push(relative)
       else if (entry.isFile()) {
-        // 只按文件判定内容：新建作品只预建空目录，不能因此被认为“已有内容”
+        // Count visible files only. Empty directories are not existing content.
         hasVisibleEntries = true
         if (/\.(?:md|txt)$/i.test(entry.name)) textFiles.push(relative)
       }
@@ -270,22 +270,15 @@ export async function initializeProject(input: {
   throwIfAborted(input.signal)
   const root = path.resolve(input.root)
   await assertDirectory(root, 'project folder')
+  if (!input.newProject) return { created: [], skipped: [] }
+
   const created: string[] = []
   const skipped: string[] = []
-  const record = (relative: string, didCreate: boolean) => (didCreate ? created : skipped).push(relative)
-
-  /* 新作品先呈现完整的规划工作台；旧作品继续只保证正文目录存在，
-     避免仅因打开项目就替作者新增资料结构。 */
-  const directories = input.newProject ? PROJECT_DIRECTORIES : ['正文'] as const
-  for (const directory of directories) {
-    record(directory, await ensureDirectory(root, directory, input.signal))
-  }
-  if (input.newProject) {
-    const names = (await fs.readdir(root)).filter(name => name.toLowerCase() === 'agents.md')
-    if (names.length > 1) throw new ProjectInitError('multiple root AGENTS.md files', 'INVALID_PATH')
-    const rulesPath = names[0] ?? 'AGENTS.md'
-    record(rulesPath, await createFile(root, rulesPath, PROJECT_RULES_TEMPLATE, input.signal))
-  }
+  const names = (await fs.readdir(root)).filter(name => name.toLowerCase() === 'agents.md')
+  if (names.length > 1) throw new ProjectInitError('multiple root AGENTS.md files', 'INVALID_PATH')
+  const rulesPath = names[0] ?? 'AGENTS.md'
+  const didCreate = await createFile(root, rulesPath, PROJECT_RULES_TEMPLATE, input.signal)
+  ;(didCreate ? created : skipped).push(rulesPath)
   created.sort()
   skipped.sort()
   return { created, skipped }

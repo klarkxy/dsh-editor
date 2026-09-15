@@ -123,13 +123,25 @@ describe('chapter status', () => {
     await expect(setChapterStatus({ access: access(), path: '正文/001.md', status: 1 })).rejects.toBeInstanceOf(ChapterStatusError)
   })
 
-  it('rejects unknown paths that are not under 正文', async () => {
+  it('accepts any visible project-relative md/txt and rejects hidden, generated, or missing paths', async () => {
     await write('大纲/总纲.md', '# 总纲\n\n主线')
     await write('正文/001.md', '# 第一章\n\n正文')
-    await expect(setChapterStatus({ access: access(), path: '大纲/总纲.md', status: 'final' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await write('README.md', '# 根\n\n入口')
+    await write('资料/说明.txt', '笔记')
+    await write('.dsh-editor/秘密.md', '# 隐藏')
+    await write('dist/out.md', '# 生成')
+    await expect(setChapterStatus({ access: access(), path: '大纲/总纲.md', status: 'final' })).resolves.toEqual({ path: '大纲/总纲.md', status: 'final' })
+    await expect(setChapterStatus({ access: access(), path: 'README.md', status: 'revising' })).resolves.toEqual({ path: 'README.md', status: 'revising' })
+    await expect(setChapterStatus({ access: access(), path: '资料/说明.txt', status: 'final' })).resolves.toEqual({ path: '资料/说明.txt', status: 'final' })
     await expect(setChapterStatus({ access: access(), path: '正文/不存在.md', status: 'final' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
     await expect(setChapterStatus({ access: access(), path: '../escape.md', status: 'final' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
-    await expect(fs.stat(path.join(root, '.dsh-editor', 'chapter-status.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(setChapterStatus({ access: access(), path: '.dsh-editor/秘密.md', status: 'final' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    await expect(setChapterStatus({ access: access(), path: 'dist/out.md', status: 'final' })).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    expect(JSON.parse(await fs.readFile(path.join(root, '.dsh-editor', 'chapter-status.json'), 'utf8')).statuses).toEqual({
+      'README.md': 'revising',
+      '大纲/总纲.md': 'final',
+      '资料/说明.txt': 'final',
+    })
   })
 
   it('rejects status writes in a read-only workspace', async () => {
@@ -156,7 +168,9 @@ describe('chapter status', () => {
     })
     await expect(moveEntry({ access: access(), path: '正文/序章.md', targetDir: '大纲' })).resolves.toEqual({ path: '大纲/序章.md' })
     await expect(deleteEntry({ access: access(), path: '正文/第一卷' })).resolves.toEqual({ path: '正文/第一卷' })
-    expect(JSON.parse(await fs.readFile(path.join(root, '.dsh-editor', 'chapter-status.json'), 'utf8')).statuses).toEqual({})
+    expect(JSON.parse(await fs.readFile(path.join(root, '.dsh-editor', 'chapter-status.json'), 'utf8')).statuses).toEqual({
+      '大纲/序章.md': 'revising',
+    })
     await syncChapterStatusPaths(access(), '正文/幽灵.md', null)
   })
 })

@@ -8,14 +8,12 @@ import {
 import type { OverviewAccess } from './overview.ts'
 import { METADATA_DIRECTORY, readMetadataText } from './metadata-io.ts'
 import { isGeneratedPath, isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
-import { listCards } from 'dsh-editor-cards/host-api'
 import {
-  PROOFREAD_KINDS,
   type ProofreadFinding,
   type ProofreadKind,
   type ProofreadScanResponse,
 } from './contracts.ts'
-import { PROOFREAD_MAX_FINDINGS } from 'dsh-proofread/contracts'
+import { PROOFREAD_MAX_FINDINGS, TEXT_PROOFREAD_KINDS } from 'dsh-proofread/contracts'
 import {
   HABIT_MAX_OCCURRENCES,
   HABIT_PER_THOUSAND_THRESHOLD,
@@ -23,7 +21,6 @@ import {
   bundledSensitiveTerms,
   collectHabitHits,
   emitHabitFindings,
-  finding,
   habitStatsFrom,
   maskForAnalysis,
   parseTermList,
@@ -32,15 +29,6 @@ import {
   type HabitHit,
 } from 'dsh-proofread/engine'
 import { HABIT_TERMS } from 'dsh-proofread/defaults'
-import {
-  buildCardProofreadIndex,
-  collectCardNearmiss,
-  emitCardNearmiss,
-  scanCardGender,
-  type CardFindingDraft,
-  type CardNearmissHit,
-  type CardProofreadIndex,
-} from './proofread-cards.ts'
 
 export { HABIT_MAX_OCCURRENCES, HABIT_PER_THOUSAND_THRESHOLD, HABIT_STATS_LIMIT } from 'dsh-proofread/engine'
 export { PROOFREAD_MAX_FINDINGS } from 'dsh-proofread/contracts'
@@ -50,7 +38,6 @@ export type { HabitHit, ProofreadTextOptions, ProofreadTextResult } from 'dsh-pr
 export const SENSITIVE_LIST_PATH = `${METADATA_DIRECTORY}/敏感词.txt`
 export const SENSITIVE_ALLOW_PATH = `${METADATA_DIRECTORY}/敏感词-忽略.txt`
 
-const MANUSCRIPT_ROOT = '正文'
 const MAX_TOTAL_BYTES = 100_000_000
 const MAX_TEXT_BYTES = 2_000_000
 const MAX_DIRECTORIES = 2_000
@@ -70,13 +57,6 @@ export class ProofreadError extends Error {
 
 function byteSize(text: string): number {
   return new TextEncoder().encode(text).byteLength
-}
-
-function cardFinding(raw: string, path: string, version: string, draft: CardFindingDraft): ProofreadFinding {
-  return finding(raw, draft.start, draft.end, 'card', draft.severity, draft.message, path, version, draft.suggestion, {
-    code: draft.code,
-    term: draft.term,
-  })
 }
 
 function generated(relative: string): boolean {
@@ -105,12 +85,13 @@ function parseScope(value: unknown): 'document' | 'manuscript' {
 }
 
 function parseKinds(value: unknown): ProofreadKind[] {
-  if (value === undefined) return [...PROOFREAD_KINDS]
+  if (value === undefined) return [...TEXT_PROOFREAD_KINDS]
   if (!Array.isArray(value) || value.length === 0) throw new ProofreadError('kinds must be a non-empty array', 'INVALID')
   const kinds: ProofreadKind[] = []
   const seen = new Set<string>()
   for (const item of value) {
-    if (!(PROOFREAD_KINDS as readonly string[]).includes(item as string)) {
+    if (item === 'card') throw new ProofreadError('card checks are not available', 'INVALID')
+    if (!(TEXT_PROOFREAD_KINDS as readonly string[]).includes(item as string)) {
       throw new ProofreadError('kinds contains an unknown check', 'INVALID')
     }
     if (seen.has(item as string)) continue
@@ -137,9 +118,9 @@ async function readDocument(files: WorkspaceFileContext, relative: string, remai
   }
 }
 
-async function walkManuscript(access: OverviewAccess): Promise<{ files: LoadedDocument[]; skipped: number; truncated: boolean }> {
+async function walkVisibleDocuments(access: OverviewAccess): Promise<{ files: LoadedDocument[]; skipped: number; truncated: boolean }> {
   const files: LoadedDocument[] = []
-  const queue = [MANUSCRIPT_ROOT]
+  const queue = ['']
   let truncated = false
   let skipped = 0
   let scannedFiles = 0
@@ -147,20 +128,21 @@ async function walkManuscript(access: OverviewAccess): Promise<{ files: LoadedDo
   let directories = 0
   let entriesSeen = 0
   while (queue.length && !truncated) {
+    access.files.signal?.throwIfAborted()
     const directory = queue.shift()!
     if (++directories > MAX_DIRECTORIES) { truncated = true; skipped++; break }
     let entries
     try {
-      entries = await listDirStrict(access.files, directory)
+      entries = await listDirStrict(access.files, directory || '.')
     } catch (error) {
-      if (directory === MANUSCRIPT_ROOT && error instanceof FileOpError && error.code === 'NOT_FOUND') break
+      if (directory === '' && error instanceof FileOpError && error.code === 'NOT_FOUND') break
       skipped++
       continue
     }
     for (const entry of entries) {
       if (++entriesSeen > MAX_DIRECTORY_ENTRIES) { truncated = true; skipped++; break }
-      const relative = `${directory}/${entry.name}`
-      if (entry.name.startsWith('.') || generated(relative)) { skipped++; continue }
+      const relative = directory ? `${directory}/${entry.name}` : entry.name
+      if (entry.name.startsWith('.') || isHiddenPath(relative) || generated(relative)) { skipped++; continue }
       if (entry.type === 'directory') {
         if (relative.split('/').length > MAX_DEPTH) { skipped++; continue }
         queue.push(relative)
@@ -223,7 +205,7 @@ export async function scanProofread(input: {
     const relative = authorDocumentPath(input.path)
     files = [await readDocument(input.access.files, relative, MAX_TOTAL_BYTES)]
   } else {
-    const walked = await walkManuscript(input.access)
+    const walked = await walkVisibleDocuments(input.access)
     files = walked.files
     skipped = walked.skipped
     truncated = walked.truncated
@@ -233,13 +215,6 @@ export async function scanProofread(input: {
   const counts = new Map<string, number>()
   const habitHits: HabitHit[] = []
   let habitChars = 0
-  let cardIndex: CardProofreadIndex | undefined
-  if (enabled(kinds, 'card')) {
-    cardIndex = buildCardProofreadIndex(await listCards({ access: input.access, kind: 'all' }))
-    if (cardIndex.nearmiss.skipped) skipped += 1
-  }
-  const cardFiles: Array<{ path: string; raw: string; version: string; masked: string }> = []
-  const nearmissHits: CardNearmissHit[] = []
   for (const file of files) {
     const result = proofreadText(file.text, {
       path: file.path,
@@ -249,30 +224,14 @@ export async function scanProofread(input: {
       maxFindings: Number.MAX_SAFE_INTEGER,
     })
     findings.push(...result.findings)
-    const needMask = enabled(kinds, 'habit') || Boolean(cardIndex)
-    const masked = needMask ? maskForAnalysis(file.text) : ''
     if (enabled(kinds, 'habit')) {
+      const masked = maskForAnalysis(file.text)
       habitChars += analyzedChars(masked)
       habitHits.push(...collectHabitHits(masked, file.text, file.path, file.version, HABIT_TERMS, counts))
-    }
-    if (cardIndex) {
-      cardFiles.push({ path: file.path, raw: file.text, version: file.version, masked })
-      for (const draft of scanCardGender(masked, cardIndex)) {
-        findings.push(cardFinding(file.text, file.path, file.version, draft))
-      }
-      if (!cardIndex.nearmiss.skipped) nearmissHits.push(...collectCardNearmiss(masked, file.path, cardIndex))
     }
   }
   if (enabled(kinds, 'habit')) {
     emitHabitFindings(habitHits, counts, habitChars, HABIT_PER_THOUSAND_THRESHOLD, HABIT_MAX_OCCURRENCES, findings)
-  }
-  if (cardIndex && !cardIndex.nearmiss.skipped) {
-    const byPath = new Map(cardFiles.map((file) => [file.path, file]))
-    for (const draft of emitCardNearmiss(nearmissHits, cardFiles)) {
-      const file = draft.path ? byPath.get(draft.path) : undefined
-      if (!file) continue
-      findings.push(cardFinding(file.raw, file.path, file.version, draft))
-    }
   }
   findings.sort((left, right) => pathCompare(left.path, right.path) || left.start - right.start || left.kind.localeCompare(right.kind))
   const capped = findings.length > PROOFREAD_MAX_FINDINGS

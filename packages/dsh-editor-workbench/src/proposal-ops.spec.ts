@@ -1,3 +1,4 @@
+import { WRITING_V2_CREATE } from 'dsh-manuscript/host-api'
 import { applyChapterProposal, applyCreate, parsePlanningProposal, prepareChapterMeta, prepareCreate } from './planning-proposals.ts'
 import { parseChapterMeta, stripChapterFrontmatter } from './chapter-meta.ts'
 /**
@@ -185,16 +186,25 @@ describe('parseProposal', () => {
   it('accepts a valid split / merge / renames payload', () => {
     expect(parseProposal({
       marker: 'dsh-editor.proposal', version: 1, kind: 'split', summary: 's',
+      path: '正文/001.md', anchor: '## x', newPath: '正文/001b.md', targetVersion: 'v7',
+    })).toEqual({
+      marker: 'dsh-editor.proposal', version: 1, kind: 'split', summary: 's',
       path: '正文/001.md', anchor: '## x', newPath: '正文/001b.md',
-    }).kind).toBe('split')
+    })
     expect(parseProposal({
       marker: 'dsh-editor.proposal', version: 1, kind: 'merge', summary: 's',
+      path: '正文/001.md', sourcePath: '正文/001-补.md', targetVersion: 'v7', sourceVersion: 'v3',
+    })).toEqual({
+      marker: 'dsh-editor.proposal', version: 1, kind: 'merge', summary: 's',
       path: '正文/001.md', sourcePath: '正文/001-补.md',
-    }).kind).toBe('merge')
+    })
     expect(parseProposal({
       marker: 'dsh-editor.proposal', version: 1, kind: 'renames', summary: 's',
+      renames: [{ from: '正文/001.md', to: '正文/001-改名.md', version: 'v7' }],
+    })).toEqual({
+      marker: 'dsh-editor.proposal', version: 1, kind: 'renames', summary: 's',
       renames: [{ from: '正文/001.md', to: '正文/001-改名.md' }],
-    }).kind).toBe('renames')
+    })
   })
 })
 
@@ -234,6 +244,28 @@ describe('prepareSplit / applySplit', () => {
     // 快照里保存的是 apply 之前的原文
     expect(await readHistoryFile(result.snapshotDir, '正文/002.md')).toBe('第一幕\n## 第二幕\n第二幕内容')
     await expect(applySplit(filesContext(), splitProposal(), 'stale-version')).rejects.toMatchObject({ code: 'STALE' })
+  })
+
+  it('splits and merges visible TXT files in a custom directory', async () => {
+    await writeText('notes/a.txt', '前\n## 第二幕\n后')
+    await writeText('notes/b.txt', '附录')
+    const split = await prepareSplit(filesContext(), splitProposal({
+      path: 'notes/a.txt', newPath: 'notes/a2.txt',
+    }))
+    const splitResult = await applySplit(filesContext(), splitProposal({
+      path: 'notes/a.txt', newPath: 'notes/a2.txt',
+    }), split.version)
+    expect(splitResult.applied).toEqual(['notes/a.txt', 'notes/a2.txt'])
+    expect(await readRelative('notes/a.txt')).toBe('前')
+    expect(await readRelative('notes/a2.txt')).toBe('## 第二幕\n后')
+    const merge = await prepareMerge(filesContext(), mergeProposal({
+      path: 'notes/a.txt', sourcePath: 'notes/b.txt',
+    }))
+    const mergeResult = await applyMerge(lifecycleAccess(), mergeProposal({
+      path: 'notes/a.txt', sourcePath: 'notes/b.txt',
+    }), merge.versions)
+    expect(mergeResult.applied).toEqual(['notes/a.txt', 'notes/b.txt'])
+    expect(await readRelative('notes/a.txt')).toBe('前\n\n附录\n')
   })
 })
 
@@ -405,6 +437,84 @@ describe('prepareRenames / applyRenames', () => {
     expect(result2.failed?.reason).toMatch(/跨目录|正文/)
     expect(await readRelative('正文/001.md')).toBe('一')
   })
+
+  it('generic V2 renames move between ordinary directories, including root, nested, TXT, and rename+move', async () => {
+    await writeText('notes.md', 'root')
+    await writeText('notes/nested/a.txt', 'nested')
+    await writeText('drafts/keep.md', 'keep')
+    await fs.mkdir(path.join(base, 'archive'), { recursive: true })
+    const plan = await prepareRenames(filesContext(), renamesProposal({
+      renames: [
+        { from: 'notes.md', to: 'drafts/intro.md' },
+        { from: 'notes/nested/a.txt', to: 'archive/renamed.txt' },
+      ],
+    }), 'generic')
+    expect(Object.keys(plan.versions)).toEqual(['notes.md', 'notes/nested/a.txt'])
+    const result = await applyRenames(lifecycleAccess(), renamesProposal({
+      renames: [
+        { from: 'notes.md', to: 'drafts/intro.md' },
+        { from: 'notes/nested/a.txt', to: 'archive/renamed.txt' },
+      ],
+    }), plan.versions, 'generic')
+    expect(result.applied).toEqual(['drafts/intro.md', 'archive/renamed.txt'])
+    expect(result.failed).toBeUndefined()
+    expect(await readRelative('drafts/intro.md')).toBe('root')
+    expect(await readRelative('archive/renamed.txt')).toBe('nested')
+    await expect(fs.stat(path.join(base, 'notes.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.stat(path.join(base, 'notes/nested/a.txt'))).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readRelative('drafts/keep.md')).toBe('keep')
+    expect(await readHistoryFile(result.snapshotDir, 'notes.md')).toBe('root')
+  })
+
+  it('generic V2 renames keep stale, missing parents, generated, and no-replace checks', async () => {
+    await writeText('notes/a.md', '一')
+    await writeText('drafts/taken.md', 'occupied')
+    await expect(prepareRenames(filesContext(), renamesProposal({
+      renames: [{ from: 'notes/a.md', to: 'missing/b.md' }],
+    }), 'generic')).rejects.toMatchObject({ code: 'INVALID' })
+    await expect(prepareRenames(filesContext(), renamesProposal({
+      renames: [{ from: 'notes/a.md', to: 'drafts/taken.md' }],
+    }), 'generic')).rejects.toMatchObject({ code: 'EXISTS' })
+    await expect(prepareRenames(filesContext(), renamesProposal({
+      renames: [{ from: 'notes/a.md', to: 'dist/out.md' }],
+    }), 'generic')).rejects.toMatchObject({ code: 'INVALID' })
+    const plan = await prepareRenames(filesContext(), renamesProposal({
+      renames: [{ from: 'notes/a.md', to: 'drafts/moved.md' }],
+    }), 'generic')
+    const stale = await applyRenames(lifecycleAccess(), renamesProposal({
+      renames: [{ from: 'notes/a.md', to: 'drafts/moved.md' }],
+    }), { 'notes/a.md': 'stale-version' }, 'generic')
+    expect(stale.applied).toEqual([])
+    expect(stale.failed?.from).toBe('notes/a.md')
+    expect(await readRelative('notes/a.md')).toBe('一')
+    expect(plan.versions['notes/a.md']).toBeTruthy()
+  })
+
+  it('legacy V1 renames still refuse leaving 正文/ or changing basename across directories', async () => {
+    await writeText('正文/001.md', '一')
+    await expect(prepareRenames(filesContext(), renamesProposal({
+      renames: [{ from: '正文/001.md', to: '大纲/001.md' }],
+    }))).rejects.toMatchObject({ code: 'INVALID' })
+    await expect(prepareRenames(filesContext(), renamesProposal({
+      renames: [{ from: '正文/001.md', to: 'notes/renamed.md' }],
+    }), 'legacy')).rejects.toMatchObject({ code: 'INVALID' })
+    expect(() => parseProposal({
+      marker: 'dsh-editor.proposal', version: 1, kind: 'renames', summary: 'x',
+      renames: [{ from: 'notes/a.txt', to: 'notes/b.txt' }],
+    })).toThrow(/Markdown/)
+  })
+
+  it('routes generic renames through moveDocument and never uses versionless moveEntry', async () => {
+    const source = await fs.readFile(new URL('./proposal-ops.ts', import.meta.url), 'utf8')
+    expect(source).toContain('moveDocument')
+    expect(source).toContain("mode === 'generic'")
+    expect(source).toContain('expectedVersion: version')
+    expect(source).not.toMatch(/moveEntry\s*\(/)
+    const rpc = await fs.readFile(new URL('./rpc/proposal.ts', import.meta.url), 'utf8')
+    expect(rpc).toContain("prepareRenames(files, legacy, 'generic')")
+    expect(rpc).toContain("applyRenames(op, legacy, expectedVersions, 'generic')")
+    expect(rpc).toMatch(/'proposal\.apply':\s*\{\s*mutation:\s*true/)
+  })
 })
 
 describe('snapshotProposalTargets', () => {
@@ -511,6 +621,113 @@ it('reports the committed target when source archiving fails during merge', asyn
 })
 
 
+describe('V2 generation baselines on split/merge/renames', () => {
+  it('rejects split/merge/renames when the target moved from v7 to v8 before prepare', async () => {
+    await writeText('正文/002.md', '第一幕\n## 第二幕\n后')
+    const splitV7 = (await readTextFile(filesContext(), '正文/002.md')).version
+    await writeText('正文/002.md', '第一幕改了\n## 第二幕\n后')
+    await expect(prepareSplit(filesContext(), splitProposal({ targetVersion: splitV7 }))).rejects.toMatchObject({ code: 'STALE' })
+
+    await writeText('正文/010.md', '第十章主文')
+    await writeText('正文/010-补.md', '附录内容')
+    const mergeTargetV7 = (await readTextFile(filesContext(), '正文/010.md')).version
+    const mergeSourceV7 = (await readTextFile(filesContext(), '正文/010-补.md')).version
+    await writeText('正文/010.md', '第十章主文改了')
+    await expect(prepareMerge(filesContext(), mergeProposal({
+      targetVersion: mergeTargetV7,
+      sourceVersion: mergeSourceV7,
+    }))).rejects.toMatchObject({ code: 'STALE' })
+    await writeText('正文/010.md', '第十章主文')
+    await writeText('正文/010-补.md', '附录改了')
+    await expect(prepareMerge(filesContext(), mergeProposal({
+      targetVersion: (await readTextFile(filesContext(), '正文/010.md')).version,
+      sourceVersion: mergeSourceV7,
+    }))).rejects.toMatchObject({ code: 'STALE' })
+
+    await writeText('正文/001.md', '一')
+    await writeText('正文/002.md', '二')
+    const renameV7 = (await readTextFile(filesContext(), '正文/001.md')).version
+    await writeText('正文/001.md', '一改了')
+    await expect(prepareRenames(filesContext(), renamesProposal({
+      renames: [
+        { from: '正文/001.md', to: '正文/001-改名.md', version: renameV7 },
+        { from: '正文/002.md', to: '正文/002-改名.md', version: (await readTextFile(filesContext(), '正文/002.md')).version },
+      ],
+    }))).rejects.toMatchObject({ code: 'STALE' })
+  })
+
+  it('applies unchanged V2 split/merge/renames and rejects a target change between prepare and apply', async () => {
+    await writeText('正文/002.md', '第一幕\n## 第二幕\n后')
+    const splitVersion = (await readTextFile(filesContext(), '正文/002.md')).version
+    const split = splitProposal({ targetVersion: splitVersion })
+    const splitPlan = await prepareSplit(filesContext(), split)
+    expect(splitPlan.version).toBe(splitVersion)
+    const splitApplied = await applySplit(filesContext(), split, splitPlan.version)
+    expect(splitApplied.applied).toEqual(['正文/002.md', '正文/002b.md'])
+
+    await writeText('正文/010.md', '第十章主文')
+    await writeText('正文/010-补.md', '附录内容')
+    const merge = mergeProposal({
+      targetVersion: (await readTextFile(filesContext(), '正文/010.md')).version,
+      sourceVersion: (await readTextFile(filesContext(), '正文/010-补.md')).version,
+    })
+    const mergePlan = await prepareMerge(filesContext(), merge)
+    const mergeApplied = await applyMerge(lifecycleAccess(), merge, mergePlan.versions)
+    expect(mergeApplied.applied).toEqual(['正文/010.md', '正文/010-补.md'])
+
+    await writeText('正文/003.md', '三')
+    const renameVersion = (await readTextFile(filesContext(), '正文/003.md')).version
+    const rename = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'renames' as const, summary: '改名', renames: [{ from: '正文/003.md', to: '正文/003-改名.md', version: renameVersion }] }
+    const renamePlan = await prepareRenames(filesContext(), rename)
+    const renameApplied = await applyRenames(lifecycleAccess(), rename, renamePlan.versions)
+    expect(renameApplied.applied).toEqual(['正文/003-改名.md'])
+
+    await writeText('正文/004.md', '四\n## 第二幕\n尾')
+    const racedVersion = (await readTextFile(filesContext(), '正文/004.md')).version
+    const raced = splitProposal({ path: '正文/004.md', newPath: '正文/004b.md', targetVersion: racedVersion })
+    const racedPlan = await prepareSplit(filesContext(), raced)
+    await writeText('正文/004.md', '四改了\n## 第二幕\n尾')
+    const racedCurrent = (await readTextFile(filesContext(), '正文/004.md')).version
+    await expect(applySplit(filesContext(), raced, racedPlan.version)).rejects.toMatchObject({ code: 'STALE' })
+    await expect(applySplit(filesContext(), raced, racedCurrent)).rejects.toMatchObject({ code: 'STALE' })
+    expect(await readRelative('正文/004.md')).toBe('四改了\n## 第二幕\n尾')
+
+    await writeText('正文/011.md', '目标')
+    await writeText('正文/011-补.md', '来源')
+    const mergeRace = mergeProposal({
+      path: '正文/011.md',
+      sourcePath: '正文/011-补.md',
+      targetVersion: (await readTextFile(filesContext(), '正文/011.md')).version,
+      sourceVersion: (await readTextFile(filesContext(), '正文/011-补.md')).version,
+    })
+    const mergeRacePlan = await prepareMerge(filesContext(), mergeRace)
+    await writeText('正文/011.md', '目标改了')
+    const mergeCurrent = (await readTextFile(filesContext(), '正文/011.md')).version
+    await expect(applyMerge(lifecycleAccess(), mergeRace, mergeRacePlan.versions)).rejects.toMatchObject({ code: 'STALE' })
+    await expect(applyMerge(lifecycleAccess(), mergeRace, {
+      path: mergeCurrent,
+      sourcePath: mergeRacePlan.versions.sourcePath,
+    })).rejects.toMatchObject({ code: 'STALE' })
+    expect(await readRelative('正文/011.md')).toBe('目标改了')
+
+    await writeText('正文/005.md', '五')
+    const renameRaceVersion = (await readTextFile(filesContext(), '正文/005.md')).version
+    const renameRace = {
+      marker: 'dsh-editor.proposal' as const,
+      version: 1 as const,
+      kind: 'renames' as const,
+      summary: '改名',
+      renames: [{ from: '正文/005.md', to: '正文/005-改名.md', version: renameRaceVersion }],
+    }
+    const renameRacePlan = await prepareRenames(filesContext(), renameRace)
+    await writeText('正文/005.md', '五改了')
+    const renameCurrent = (await readTextFile(filesContext(), '正文/005.md')).version
+    await expect(applyRenames(lifecycleAccess(), renameRace, renameRacePlan.versions)).rejects.toMatchObject({ code: 'STALE' })
+    await expect(applyRenames(lifecycleAccess(), renameRace, { '正文/005.md': renameCurrent })).rejects.toMatchObject({ code: 'STALE' })
+    expect(await readRelative('正文/005.md')).toBe('五改了')
+  })
+})
+
 describe('author planning proposals', () => {
   const create = (pathValue: string, text = '# 内容\n') => ({ marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, summary: '创建资料', path: pathValue, text })
 
@@ -533,6 +750,22 @@ describe('author planning proposals', () => {
     await fs.unlink(path.join(base, '世界书'))
     await applyCreate(files, proposal, (await prepareCreate(files, proposal)).version)
     expect(await readRelative(proposal.path)).toBe(proposal.text)
+  })
+
+  it('V2 exclusive create refuses an existing empty file and a TOCTOU create', async () => {
+    const files = filesContext()
+    await writeText('正文/占位.md', ' ')
+    const empty = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, summary: '创建资料', path: '正文/占位.md', text: '# 内容\n', writingV2: WRITING_V2_CREATE }
+    await expect(prepareCreate(files, empty)).rejects.toMatchObject({ code: 'EXISTS' })
+    await expect(applyCreate(files, empty, '')).rejects.toMatchObject({ code: 'EXISTS' })
+    expect(await readRelative(empty.path)).toBe(' ')
+
+    const absent = { ...empty, path: '正文/新章.md' }
+    const prepared = await prepareCreate(files, absent)
+    expect(prepared).toEqual({ kind: 'create', applicable: true, version: '', missingDirectories: [] })
+    await writeText(absent.path, '作者刚写的正文')
+    await expect(applyCreate(files, absent, prepared.version)).rejects.toMatchObject({ code: 'EXISTS' })
+    expect(await readRelative(absent.path)).toBe('作者刚写的正文')
   })
 
   it('pins empty-file versions and refuses files created or edited after preview', async () => {

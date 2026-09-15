@@ -1,15 +1,8 @@
 /**
- * workbench 侧注册给 agent 的只读工具。
+ * Host-only novel overview tool. Mounted by installNovelWorkbenchTools.
  *
- * 设计说明：
- *   - 工具名字符串在本文件本地常量（与内核 `novel_overview` 同名同语义；
- *     guard 仍由内核管理）。
- *   - cwd 来自 `exec.agent?.session?.header?.cwd`——与 search-tool /
- *     project-knowledge 的写法一致；缺失则抛错，不静默回退到 process.cwd。
- *   - 解析 cwd→workspace→access 的具体逻辑通过 `resolveAccess` 注入，
- *     单元测试可传 stub。`host.workspaceRegistry.resolveByPath(cwd)` 在
- *     真实 host 上下文里完成，工具层只持有回调，避免与 cordis 强耦合。
- *   - 不写文件：novel_overview 只读。
+ * Access is resolved from `exec.agent.session.id` through live-session
+ * workspace authority. header.cwd is never trusted.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { readProjectOverview, type OverviewAccess } from './overview.ts'
@@ -27,18 +20,18 @@ export class WorkbenchToolError extends Error {
   }
 }
 
-export type OverviewAccessResolver = (cwd: string) => Promise<OverviewAccess>
+export type OverviewAccessResolver = (sessionId: string, signal?: AbortSignal) => Promise<OverviewAccess>
 
 export type CreateOverviewToolOptions = {
   resolveAccess: OverviewAccessResolver
 }
 
-function readExecCwd(exec: { agent?: { session?: { header?: { cwd?: unknown } } } }): string {
-  const cwd = exec.agent?.session?.header?.cwd
-  if (typeof cwd !== 'string' || cwd.length === 0) {
-    throw new WorkbenchToolError('UNREADABLE', '工具需要当前 agent 会话工作目录')
+function readExecSessionId(exec: { agent?: { session?: { id?: unknown } } }): string {
+  const sessionId = exec.agent?.session?.id
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    throw new WorkbenchToolError('UNREADABLE', '工具需要当前 agent 会话')
   }
-  return cwd
+  return sessionId
 }
 
 /**
@@ -143,8 +136,8 @@ export function createNovelOverviewTool(options: CreateOverviewToolOptions) {
     },
     isConcurrencySafe() { return true },
     async execute(_args, exec) {
-      const cwd = readExecCwd(exec)
-      const access = await options.resolveAccess(cwd)
+      const sessionId = readExecSessionId(exec)
+      const access = await options.resolveAccess(sessionId, exec.signal)
       const overview = await readProjectOverview(access)
       return toOverviewResult(overview)
     },

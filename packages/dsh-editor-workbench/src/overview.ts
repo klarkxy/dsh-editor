@@ -10,11 +10,10 @@ import { CHAPTER_STATE_KEYS, parseChapterMeta, stripChapterFrontmatter } from '.
 import type { ChapterStatus, ChapterSummary, OutlineSummary, ProjectOverview } from './contracts.ts'
 import { loadChapterStatuses } from './chapter-status.ts'
 import type { OverviewAccess } from './kit/access.ts'
-import { isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
+import { isGeneratedPath, isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
 
 export type { OverviewAccess } from './kit/access.ts'
 
-const MANUSCRIPT_ROOT = '正文'
 const OUTLINE_ROOT = '大纲'
 const MAX_TOTAL_BYTES = 100_000_000
 const MAX_TEXT_BYTES = 2_000_000
@@ -51,20 +50,8 @@ function pathCompare(left: string, right: string): number {
   return left.localeCompare(right, 'zh-CN', { numeric: true, sensitivity: 'base' })
 }
 
-function visibleTextPath(relative: string, root?: typeof MANUSCRIPT_ROOT | typeof OUTLINE_ROOT): string {
-  let normalized: string
-  try {
-    normalized = normalizeWorkspaceRelative(relative)
-  } catch (error) {
-    throw new OverviewError('chapter path is invalid', 'INVALID_PATH', { cause: error })
-  }
-  if (normalized !== relative || normalized === '.' || !/\.(md|txt)$/i.test(normalized)) {
-    throw new OverviewError('chapter path is invalid', 'INVALID_PATH')
-  }
-  const parts = normalized.split('/')
-  if (isHiddenPath(normalized)) throw new OverviewError('chapter path is invalid', 'INVALID_PATH')
-  if (root && (parts[0] !== root || parts.length < 2)) throw new OverviewError('chapter path is outside its project area', 'INVALID_PATH')
-  return normalized
+function excludedDocumentPath(relative: string): boolean {
+  return isHiddenPath(relative) || isGeneratedPath(relative)
 }
 
 function titleAndExcerpt(relative: string, text: string): { title: string; excerpt: string; empty: boolean; chars: number } {
@@ -141,31 +128,31 @@ async function mtimeReader(root: string): Promise<(relative: string) => Promise<
   }
 }
 
-async function scanArea(
+async function scanVisibleDocuments(
   access: OverviewAccess,
-  root: typeof MANUSCRIPT_ROOT | typeof OUTLINE_ROOT,
   limit: { files: number; bytes: number; directories: number; entries: number },
   modifiedAt: (relative: string) => Promise<string | null>,
 ): Promise<{ items: ScannedChapter[]; truncated: boolean; skipped: number }> {
   const items: ScannedChapter[] = []
-  const queue: string[] = [root]
+  const queue: string[] = ['']
   let truncated = false
   let skipped = 0
   while (queue.length && !truncated) {
+    access.files.signal?.throwIfAborted()
     const directory = queue.shift()!
     if (++limit.directories > MAX_DIRECTORIES) { truncated = true; skipped++; break }
     let entries
     try {
-      entries = await listDirStrict(access.files, directory)
+      entries = await listDirStrict(access.files, directory || '.')
     } catch (error) {
-      if (directory === root && error instanceof FileOpError && error.code === 'NOT_FOUND') break
+      if (directory === '' && error instanceof FileOpError && error.code === 'NOT_FOUND') break
       skipped++
       continue
     }
     for (const entry of entries) {
       if (++limit.entries > MAX_DIRECTORY_ENTRIES) { truncated = true; skipped++; break }
-      if (entry.name.startsWith('.')) continue
-      const relative = `${directory}/${entry.name}`
+      const relative = directory ? `${directory}/${entry.name}` : entry.name
+      if (entry.name.startsWith('.') || excludedDocumentPath(relative)) continue
       if (entry.type === 'directory') {
         if (relative.split('/').length > MAX_DEPTH) { skipped++; continue }
         queue.push(relative)
@@ -200,23 +187,26 @@ async function scanArea(
   return { items, truncated, skipped }
 }
 
+function isOutlinePath(relative: string): boolean {
+  return relative === OUTLINE_ROOT || relative.startsWith(`${OUTLINE_ROOT}/`)
+}
+
 async function scanProject(access: OverviewAccess): Promise<ScanResult> {
   const modifiedAt = await mtimeReader(access.path)
   const limit = { files: 0, bytes: 0, directories: 0, entries: 0 }
-  const chapters = await scanArea(access, MANUSCRIPT_ROOT, limit, modifiedAt)
-  const outlines = chapters.truncated ? { items: [] as ScannedChapter[], truncated: true, skipped: 0 } : await scanArea(access, OUTLINE_ROOT, limit, modifiedAt)
+  const documents = await scanVisibleDocuments(access, limit, modifiedAt)
   return {
-    chapters: chapters.items,
-    outlines: outlines.items.map((item) => ({
+    chapters: documents.items,
+    outlines: documents.items.filter((item) => isOutlinePath(item.path)).map((item) => ({
       path: item.path,
       title: item.title,
       chars: item.chars,
       excerpt: item.excerpt,
       modifiedAt: item.modifiedAt,
     })),
-    totalChars: chapters.items.reduce((total, chapter) => total + chapter.chars, 0),
-    truncated: chapters.truncated || outlines.truncated,
-    skipped: chapters.skipped + outlines.skipped,
+    totalChars: documents.items.reduce((total, chapter) => total + chapter.chars, 0),
+    truncated: documents.truncated,
+    skipped: documents.skipped,
   }
 }
 

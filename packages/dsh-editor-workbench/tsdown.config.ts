@@ -14,7 +14,7 @@ export default defineConfig([
     target: 'node22',
     sourcemap: true,
     hash: false,
-    deps: { neverBundle: ['@deepseek-ai/cordis', 'dsh-manuscript', 'dsh-editor-workspace-kit', 'dsh-editor-cards'] },
+    deps: { neverBundle: ['@deepseek-ai/cordis', 'dsh-manuscript', 'dsh-editor-workspace-kit'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
   },
   {
@@ -28,7 +28,7 @@ export default defineConfig([
     sourcemap: true,
     hash: false,
     deps: {
-      neverBundle: ['@deepseek-ai/cordis', 'dsh-manuscript', 'dsh-editor-cards'],
+      neverBundle: ['@deepseek-ai/cordis', 'dsh-manuscript'],
       alwaysBundle: ['dsh-editor-workspace-kit/frontmatter'],
     },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),

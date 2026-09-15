@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { withWorkspaceWrite, FileOpError, asHost, badRequest, mapHostError, registerHostRpc, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
+import { withWorkspaceWrite, FileOpError, asHost, badRequest, mapHostError, registerHostRpc, resolveWorkspaceAccess, ProposalError, WritingProposalError } from 'dsh-manuscript/host-api'
+import { hostToolGuard } from './host-guard.ts'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
 import { BinaryError } from './binary.ts'
 import { ImportError } from './import.ts'
@@ -16,7 +17,7 @@ import { ProposalOpsError } from './proposal-ops.ts'
 import { getWorkbenchHandler, str, type WorkbenchRequestContext } from './rpc/index.ts'
 
 export const name = 'dsh-editor-workbench'
-export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer'] as const
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer', 'tools'] as const
 
 type Payload = Record<string, unknown>
 
@@ -67,6 +68,9 @@ function mapEditorFilesErrorBase(error: unknown): WorkbenchRpcResult {
     if (error.code === 'INVALID_EXTENSION' || error.code === 'TOO_LARGE') return badRequest(error.message)
     return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
   }
+  if (error instanceof WritingProposalError || error instanceof ProposalError) {
+    return badRequest(error.message)
+  }
   if (error instanceof ProposalOpsError) {
     if (error.code === 'NOT_FOUND') return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
     if (error.code === 'EXISTS') return { ok: false, error: { code: 'directory-exists', message: error.message, details: { path: '' } } }
@@ -79,7 +83,7 @@ function mapEditorFilesErrorBase(error: unknown): WorkbenchRpcResult {
 /** Preserve the actionable cause while keeping the established RPC error codes. */
 export function mapEditorFilesError(error: unknown): WorkbenchRpcResult {
   const result = mapEditorFilesErrorBase(error)
-  if (!result.ok && (error instanceof ProposalOpsError || error instanceof FileOpError)) {
+  if (!result.ok && (error instanceof ProposalOpsError || error instanceof FileOpError || error instanceof WritingProposalError || error instanceof ProposalError)) {
     result.error.details.reason = error.code
   }
   return result
@@ -119,6 +123,12 @@ export function registerWorkbenchRpc(ctx: Context): () => void {
   })
 }
 
+type WorkbenchTools = { guard: (guard: typeof hostToolGuard) => () => void }
+
 export function apply(ctx: Context): void {
   ctx.effect(() => registerWorkbenchRpc(ctx), 'dsh-editor-workbench.rpc')
+  ctx.effect(() => (ctx as Context & { tools: WorkbenchTools }).tools.guard(hostToolGuard), 'dsh-editor-workbench.host-guard')
 }
+
+export { createAuthorObserveTool } from './observe-tool.ts'
+export { installNovelWorkbenchTools } from './novel-tools.ts'

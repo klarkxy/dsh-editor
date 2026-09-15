@@ -16,6 +16,7 @@ import type { ArchiveListResponse, ArchiveResponse } from './archive.ts'
 import type { ProofreadScanRequest, ProofreadScanResponse } from './proofread.ts'
 import type { ProjectContextCompilation, TaskContextCompilation } from './context.ts'
 import type { OperationRecovery } from './recovery.ts'
+import type { WritingProposalV2 } from 'dsh-manuscript/client/editor-core'
 
 /** Loopback-only Host RPC channel for desktop workspace lifecycle operations. */
 export const WORKBENCH_RPC_CHANNEL = '/dsh-editor-workbench'
@@ -69,6 +70,7 @@ export type ProposalPayload =
   | { marker: 'dsh-editor.proposal'; version: 1; kind: 'split'; summary: string; path: string; anchor: string; newPath: string }
   | { marker: 'dsh-editor.proposal'; version: 1; kind: 'merge'; summary: string; path: string; sourcePath: string }
   | { marker: 'dsh-editor.proposal'; version: 1; kind: 'renames'; summary: string; renames: ProposalRename[] }
+  | WritingProposalV2
 export type ProposalCreatePlan = { kind: 'create'; applicable: true; version: string; missingDirectories: string[] }
 export type ProposalChapterMetaPlan = { kind: 'chapter_plan' | 'chapter_summary'; version: string; before: string; after: string }
 export type ProposalFileApplied = { path: string; version: string; operation: 'create' | 'edit' }

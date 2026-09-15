@@ -8,6 +8,7 @@ import { moveChecked } from './kit/move.ts'
 import type { LifecycleAccess } from './kit/access.ts'
 import {
   LifecycleError,
+  isGeneratedPath,
   loadedDocument,
   lstatOptional,
   safeAbsentFile,
@@ -191,6 +192,33 @@ export async function renameDocument(input: {
   const target = parent === '.' ? filename : `${parent}/${filename}`
   if (source.normalize('NFC').toLocaleLowerCase() === target.normalize('NFC').toLocaleLowerCase()) {
     throw new LifecycleError('case-only or unchanged rename is not supported', 'INVALID_PATH')
+  }
+  const moved = await moveChecked({ access: input.access, source, target, expectedVersion: input.expectedVersion })
+  const metadataWarning = await syncStatusAfterMove(input.access, source, target)
+  return { path: target, version: moved.version, ...(metadataWarning ? { metadataWarning } : {}) }
+}
+
+/**
+ * Versioned no-replace document relocate. Target parent must already exist.
+ * Callers hold the workspace write queue; this primitive does not enqueue.
+ */
+export async function moveDocument(input: {
+  access: LifecycleAccess
+  path: string
+  targetPath: string
+  expectedVersion: string
+}): Promise<{ path: string; version: string; metadataWarning?: string }> {
+  const source = authorPath(input.path)
+  const rawTarget = authorPath(input.targetPath)
+  if (isGeneratedPath(source) || isGeneratedPath(rawTarget)) {
+    throw new LifecycleError('only visible Markdown or TXT documents can be managed', 'INVALID_PATH')
+  }
+  const extension = path.posix.extname(rawTarget)
+  const filename = safeNewName(path.posix.basename(rawTarget), extension)
+  const parent = path.posix.dirname(rawTarget)
+  const target = parent === '.' ? filename : `${parent}/${filename}`
+  if (source.normalize('NFC').toLocaleLowerCase() === target.normalize('NFC').toLocaleLowerCase()) {
+    throw new LifecycleError('case-only or unchanged move is not supported', 'INVALID_PATH')
   }
   const moved = await moveChecked({ access: input.access, source, target, expectedVersion: input.expectedVersion })
   const metadataWarning = await syncStatusAfterMove(input.access, source, target)

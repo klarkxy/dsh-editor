@@ -1,6 +1,7 @@
 /** Author-approved file creation and field-scoped chapter planning proposals. */
 import {
-  createTextFile, FileOpError, listDirStrict, MAX_TEXT_BYTES, normalizeWorkspaceRelative,
+  WRITING_V2_CREATE,
+  createTextFile, FileOpError, isWritingV2Create, listDirStrict, MAX_TEXT_BYTES, normalizeWorkspaceRelative,
   parentRelative, readTextFile, writeTextFile, type WorkspaceFileContext,
 } from 'dsh-manuscript/host-api'
 import { applyChapterMeta, CHAPTER_STATE_KEYS, parseChapterMeta, validateChapterMeta, type ChapterStateFields } from './chapter-meta.ts'
@@ -10,6 +11,9 @@ import { ProposalOpsError, snapshotProposalTargets } from './proposal-ops.ts'
 
 export type PlanningProposal = Extract<ProposalPayload, { kind: 'create' | 'chapter_plan' | 'chapter_summary' }>
 export type ChapterProposal = Exclude<PlanningProposal, { kind: 'create' }>
+export type PlanningCreateProposal = Extract<PlanningProposal, { kind: 'create' }> & {
+  writingV2?: typeof WRITING_V2_CREATE
+}
 
 export function isPlanningKind(kind: unknown): boolean {
   return kind === 'create' || kind === 'chapter_plan' || kind === 'chapter_summary'
@@ -82,13 +86,14 @@ async function missingParents(files: WorkspaceFileContext, target: string): Prom
   return missing
 }
 
-export async function prepareCreate(files: WorkspaceFileContext, proposal: Extract<PlanningProposal, { kind: 'create' }>): Promise<ProposalCreatePlan> {
+export async function prepareCreate(files: WorkspaceFileContext, proposal: PlanningCreateProposal): Promise<ProposalCreatePlan> {
   assertWritable(files)
   const missingDirectories = await missingParents(files, proposal.path)
   let version = ''
   if (!missingDirectories.length) {
     try {
       const current = await readTextFile(files, proposal.path)
+      if (isWritingV2Create(proposal)) throw new ProposalOpsError('目标文件已存在，请改用修改提案', 'EXISTS')
       if (current.text.trim()) throw new ProposalOpsError('目标文件已有内容，请改用修改提案', 'EXISTS')
       version = current.version
     } catch (error) {
@@ -98,12 +103,13 @@ export async function prepareCreate(files: WorkspaceFileContext, proposal: Extra
   return { kind: 'create', applicable: true, version, missingDirectories }
 }
 
-export async function applyCreate(files: WorkspaceFileContext, proposal: Extract<PlanningProposal, { kind: 'create' }>, expectedVersion: string | undefined): Promise<ProposalFileApplied> {
+export async function applyCreate(files: WorkspaceFileContext, proposal: PlanningCreateProposal, expectedVersion: string | undefined): Promise<ProposalFileApplied> {
   assertWritable(files)
   if (typeof expectedVersion !== 'string') throw new ProposalOpsError('请先核对创建提案', 'STALE')
   const prepared = await prepareCreate(files, proposal)
   if (prepared.version !== expectedVersion) throw new ProposalOpsError('目标文件已变化，请重新核对提案', 'STALE')
   if (prepared.version) {
+    if (isWritingV2Create(proposal)) throw new ProposalOpsError('目标文件已存在，请改用修改提案', 'EXISTS')
     const result = await writeTextFile(files, proposal.path, proposal.text, prepared.version)
     return { path: proposal.path, version: result.version, operation: 'create' }
   }

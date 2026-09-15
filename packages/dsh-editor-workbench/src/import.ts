@@ -4,7 +4,7 @@ import path from 'node:path'
 import { createTextFile, FileOpError, listDirStrict, normalizeWorkspaceRelative, readTextFile, writeTextFile } from 'dsh-manuscript/host-api'
 
 import type { ImportAccess } from './kit/access.ts'
-import { isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
+import { isGeneratedPath, isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
 
 export type { ImportAccess } from './kit/access.ts'
 
@@ -22,8 +22,21 @@ function hash(text: string): string { return createHash('sha256').update(text, '
 function bytes(text: string): number { return new TextEncoder().encode(text).byteLength }
 function token(source: ImportAccess, target: ImportAccess, files: readonly ImportFile[]): string { return hash(JSON.stringify({ version: 1, source: source.rootKey, target: target.rootKey, files })) }
 function hidden(relative: string): boolean { return isHiddenPath(relative) }
+function generated(relative: string): boolean { return isGeneratedPath(relative) }
 function nested(a: string, b: string): boolean { const rel = path.relative(a, b); return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel)) }
-function targetPath(relative: string): string { return `正文/${relative.replace(/\.txt$/i, '.md')}` }
+function confinedRelative(relative: string): string | undefined {
+  try {
+    if (normalizeWorkspaceRelative(relative) !== relative || hidden(relative) || generated(relative) || relative === '.') return undefined
+    return relative
+  } catch { return undefined }
+}
+function targetPath(relative: string): string { return relative.replace(/\.txt$/i, '.md') }
+function mappedTarget(relative: string): string {
+  if (!confinedRelative(relative)) throw new ImportError(`${relative} is not a safe import path`, 'BLOCKED')
+  const target = targetPath(relative)
+  if (!confinedRelative(target) || !/\.(md|txt)$/i.test(target)) throw new ImportError(`${relative} maps outside the project`, 'BLOCKED')
+  return target
+}
 function normal(value: string): string { return value.split(path.sep).join('/') }
 function summary(receipt: ImportReceipt, state: ImportProbe['state']): ImportProbe { return { state, receiptId: receipt.receiptId, files: receipt.files.length, bytes: receipt.files.reduce((sum, file) => sum + file.bytes, 0), skipped: [], preview: receipt.files.slice(0, 12).map((file) => file.target) } }
 
@@ -36,7 +49,7 @@ function validReceiptFile(file: unknown, seen: Set<string>): file is ImportFile 
   const item = file as Partial<ImportFile>
   if (typeof item.source !== 'string' || typeof item.target !== 'string' || typeof item.version !== 'string' || !item.version || typeof item.bytes !== 'number' || !Number.isInteger(item.bytes) || item.bytes < 0 || typeof item.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(item.sha256)) return false
   try {
-    if (normalizeWorkspaceRelative(item.source) !== item.source || normalizeWorkspaceRelative(item.target) !== item.target || hidden(item.source) || hidden(item.target) || !item.target.startsWith('正文/')) return false
+    if (!confinedRelative(item.source) || !confinedRelative(item.target) || !/\.(md|txt)$/i.test(item.source) || !/\.(md|txt)$/i.test(item.target)) return false
   } catch { return false }
   const key = item.target.normalize('NFC').toLocaleLowerCase()
   if (seen.has(key)) return false
@@ -87,6 +100,7 @@ async function walk(source: ImportAccess): Promise<{ files: ImportFile[]; skippe
     for (const entry of entries) {
       const relative = normal(path.join(relativeDir, entry.name))
       if (hidden(relative)) { skipped.push({ path: relative, reason: 'hidden' }); continue }
+      if (generated(relative)) { skipped.push({ path: relative, reason: 'other' }); continue }
       if (entry.type === 'directory') { queue.push(relative); continue }
       if (entry.type !== 'file' || !/\.(md|txt)$/i.test(entry.name)) { skipped.push({ path: relative, reason: 'other' }); continue }
       let loaded
@@ -98,7 +112,7 @@ async function walk(source: ImportAccess): Promise<{ files: ImportFile[]; skippe
       if (size > 2_000_000) throw new ImportError(`${relative} exceeds 2 MB`, 'BLOCKED')
       total += size
       if (files.length + 1 > MAX_FILES || total > MAX_TOTAL_BYTES) throw new ImportError('import exceeds its bounded file or byte limit', 'BLOCKED')
-      const target = targetPath(relative); const folded = target.normalize('NFC').toLocaleLowerCase()
+      const target = mappedTarget(relative); const folded = target.normalize('NFC').toLocaleLowerCase()
       if (targets.has(folded)) throw new ImportError(`${relative} conflicts with ${targets.get(folded)}`, 'BLOCKED')
       targets.set(folded, relative); files.push({ source: relative, target, version: loaded.version, bytes: size, sha256: hash(loaded.text) })
     }

@@ -11,11 +11,12 @@ import type { OperationRecovery } from './contracts.ts'
  *     tail 落到 newPath。before/after 是各 200 字预览。
  *   - merge：合并文本 = path.trimEnd() + '\n\n' + source.trim() + '\n'；
  *     写回 path 后用 archiveDocument 归档 sourcePath。
- *   - renames：允许两种形态——
- *       * 同目录：basename(to) 直接喂给 renameDocument；
- *       * 跨目录：要求 basename(from) === basename(to)，且 from / to 都在
- *         正文/ 之下，落到 moveManuscriptDocument；任一项不满足按
- *         prepare 阶段 INVALID / apply 阶段 failed 报错。
+ *   - renames：
+ *       * V1 legacy：同目录用 renameDocument；跨目录要求 basename 相同且
+ *         from / to 都在 正文/ 之下，落到 moveManuscriptDocument。
+ *       * V2 generic：任意普通目录间可同时改名+移动，目标父目录必须已存在、
+ *         no-replace，落到带 expectedVersion 的 moveDocument；不可用无版本
+ *         moveEntry。外层 RPC mutation 持有 workspace write queue。
  *   - apply 之前会先用 snapshotProposalTargets 把目标文件原文写入
  *     .dsh-editor/history/<timestamp>/<原相对路径> 作为统一后悔药；
  *     任一快照失败抛 ProposalOpsError('IO') 中止本次 apply。
@@ -27,7 +28,7 @@ import type { OperationRecovery } from './contracts.ts'
  */
 import path from 'node:path'
 import { createTextFile, FileOpError, listDirStrict, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
-import { LifecycleError, archiveDocument, moveManuscriptDocument, renameDocument, type LifecycleAccess } from './lifecycle.ts'
+import { LifecycleError, archiveDocument, moveDocument, moveManuscriptDocument, renameDocument, type LifecycleAccess } from './lifecycle.ts'
 import { mkdirSafe as mkdirSafeWalk } from './kit/entries.ts'
 
 const PROPOSAL_MARKER = 'dsh-editor.proposal'
@@ -37,9 +38,12 @@ const PREVIEW_CHARS = 200
 const MAX_RENAMES = 50
 const HISTORY_DIRECTORY = '.dsh-editor/history'
 const MANUSCRIPT_ROOT = '正文/'
+const GENERATED_DIRECTORIES = new Set(['build', 'coverage', 'dist', 'node_modules', 'out', 'target'])
+
+export type RenamesMode = 'legacy' | 'generic'
 
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
-export type ProposalRename = { from: string; to: string }
+export type ProposalRename = { from: string; to: string; version?: string }
 
 export type SplitProposal = {
   marker: typeof PROPOSAL_MARKER
@@ -49,6 +53,7 @@ export type SplitProposal = {
   path: string
   anchor: string
   newPath: string
+  targetVersion?: string
 }
 
 export type MergeProposal = {
@@ -58,6 +63,8 @@ export type MergeProposal = {
   summary: string
   path: string
   sourcePath: string
+  targetVersion?: string
+  sourceVersion?: string
 }
 
 export type RenamesProposal = {
@@ -119,6 +126,14 @@ function isMarkdownRelative(value: string): boolean {
   return /\.md$/i.test(value)
 }
 
+function isVisibleTextRelative(value: string): boolean {
+  if (!value || value.startsWith('/') || /^[a-z]:/i.test(value) || value.includes('\0') || value.includes(':')) return false
+  const parts = value.split('/')
+  if (parts.includes('..') || parts.some((part) => part.startsWith('.'))) return false
+  if (parts.some((part) => GENERATED_DIRECTORIES.has(part.toLocaleLowerCase()))) return false
+  return /\.(md|txt)$/i.test(value)
+}
+
 function findAnchor(text: string, anchor: string): number {
   if (!anchor) return -1
   let count = 0
@@ -131,6 +146,12 @@ function findAnchor(text: string, anchor: string): number {
     index = text.indexOf(anchor, index + anchor.length)
   }
   return first
+}
+
+function assertGenerationBaseline(pathValue: string, actual: string, expected: string | undefined): void {
+  if (expected !== undefined && actual !== expected) {
+    throw new ProposalOpsError(`${pathValue} 已被修改`, 'STALE')
+  }
 }
 
 function preview(value: string, limit: number): string {
@@ -248,6 +269,7 @@ export async function mkdirSafe(root: string, relative: string): Promise<void> {
 /** split：读 path，校验 anchor 唯一、newPath 不存在，返回 200 字预览。 */
 export async function prepareSplit(files: WorkspaceFileContext, proposal: SplitProposal): Promise<SplitPlan> {
   const loaded = await safeRead(files, proposal.path)
+  assertGenerationBaseline(proposal.path, loaded.version, proposal.targetVersion)
   const anchorAt = findAnchor(loaded.text, proposal.anchor)
   if (anchorAt === -1) throw new ProposalOpsError(`split.anchor 在 ${proposal.path} 中未出现`, 'AMBIGUOUS')
   if (anchorAt === -2) throw new ProposalOpsError(`split.anchor 在 ${proposal.path} 中出现多次`, 'AMBIGUOUS')
@@ -274,6 +296,7 @@ export async function applySplit(
   if (!expectedVersion) throw new ProposalOpsError('apply 需要 expectedVersions[path]', 'STALE')
   const { snapshotDir } = await snapshotProposalTargets(files, [proposal.path])
   const loaded = await safeRead(files, proposal.path)
+  assertGenerationBaseline(proposal.path, loaded.version, proposal.targetVersion)
   if (loaded.version !== expectedVersion) throw new ProposalOpsError(`${proposal.path} 已被修改`, 'STALE')
   const anchorAt = findAnchor(loaded.text, proposal.anchor)
   if (anchorAt === -1) throw new ProposalOpsError(`split.anchor 在 ${proposal.path} 中已不存在`, 'AMBIGUOUS')
@@ -297,6 +320,8 @@ export async function applySplit(
 /** merge：读两侧文件，回报各自 version 与字符数。 */
 export async function prepareMerge(files: WorkspaceFileContext, proposal: MergeProposal): Promise<MergePlan> {
   const [pathLoaded, sourceLoaded] = await Promise.all([safeRead(files, proposal.path), safeRead(files, proposal.sourcePath)])
+  assertGenerationBaseline(proposal.path, pathLoaded.version, proposal.targetVersion)
+  assertGenerationBaseline(proposal.sourcePath, sourceLoaded.version, proposal.sourceVersion)
   return {
     kind: 'merge',
     versions: { path: pathLoaded.version, sourcePath: sourceLoaded.version },
@@ -319,6 +344,8 @@ export async function applyMerge(
     safeRead(access.files, proposal.path),
     safeRead(access.files, proposal.sourcePath),
   ])
+  assertGenerationBaseline(proposal.path, pathLoaded.version, proposal.targetVersion)
+  assertGenerationBaseline(proposal.sourcePath, sourceLoaded.version, proposal.sourceVersion)
   if (pathLoaded.version !== expectedPathVersion) throw new ProposalOpsError(`${proposal.path} 已被修改`, 'STALE')
   if (sourceLoaded.version !== expectedSourceVersion) throw new ProposalOpsError(`${proposal.sourcePath} 已被修改`, 'STALE')
   const merged = `${pathLoaded.text.trimEnd()}\n\n${sourceLoaded.text.trim()}\n`
@@ -335,15 +362,25 @@ export async function applyMerge(
 }
 
 /**
- * renames prepare：同目录 / 跨目录（basename 相同、双方都在 正文/、目标目录存在）都接受；
- * 跨目录不满足条件时直接报 INVALID 让模型修正。逐项校验 from 存在、to 不存在。
+ * renames prepare：legacy 同目录 / 正文内同名跨目录；generic 任意普通目录、可同时改名。
+ * 目标父目录必须已存在。逐项校验 from 存在、to 不存在。
  */
-export async function prepareRenames(files: WorkspaceFileContext, proposal: RenamesProposal): Promise<RenamesPlan> {
+export async function prepareRenames(
+  files: WorkspaceFileContext,
+  proposal: RenamesProposal,
+  mode: RenamesMode = 'legacy',
+): Promise<RenamesPlan> {
   const versions: Record<string, string> = {}
   for (const entry of proposal.renames) {
+    if (mode === 'generic' && (!isVisibleTextRelative(entry.from) || !isVisibleTextRelative(entry.to))) {
+      throw new ProposalOpsError(
+        `renames 项 ${entry.from} → ${entry.to} 必须是可见的项目相对 Markdown 或 TXT，且不能指向隐藏或生成目录`,
+        'INVALID',
+      )
+    }
     const sameDir = path.posix.dirname(entry.from) === path.posix.dirname(entry.to)
     if (!sameDir) {
-      if (!crossDirectoryEligible(entry.from, entry.to)) {
+      if (mode === 'legacy' && !crossDirectoryEligible(entry.from, entry.to)) {
         throw new ProposalOpsError(
           `renames 项 ${entry.from} → ${entry.to} 跨目录需满足：文件名相同且双方都在 ${MANUSCRIPT_ROOT} 之下`,
           'INVALID',
@@ -351,10 +388,7 @@ export async function prepareRenames(files: WorkspaceFileContext, proposal: Rena
       }
       const targetDirectory = path.posix.dirname(entry.to)
       try {
-        const entries = await listDirStrict(files, targetDirectory)
-        if (!entries.some((item) => item.name === path.posix.basename(entry.to))) {
-          // 目标目录存在即可；to 是否被同名占用交给 assertAbsent。
-        }
+        await listDirStrict(files, targetDirectory)
       } catch (error) {
         if (error instanceof FileOpError && error.code === 'NOT_FOUND') {
           throw new ProposalOpsError(`renames 项 ${entry.from} → ${entry.to} 的目标目录 ${targetDirectory} 不存在`, 'INVALID')
@@ -363,6 +397,7 @@ export async function prepareRenames(files: WorkspaceFileContext, proposal: Rena
       }
     }
     const loaded = await safeRead(files, entry.from)
+    assertGenerationBaseline(entry.from, loaded.version, entry.version)
     versions[entry.from] = loaded.version
     await assertAbsent(files, entry.to)
   }
@@ -370,22 +405,38 @@ export async function prepareRenames(files: WorkspaceFileContext, proposal: Rena
 }
 
 /**
- * renames apply：先快照所有 from，再逐项操作——同目录用 renameDocument，
- * 跨目录（basename 相同、正文/ 内）用 moveManuscriptDocument。任一项失败
- * 立即回报已成功的路径与失败项，不回滚。
+ * renames apply：先快照所有 from。legacy 同目录用 renameDocument，正文内跨目录用
+ * moveManuscriptDocument；generic 一律走带 expectedVersion 的 moveDocument。
+ * 任一项失败立即回报已成功的路径与失败项，不回滚。
  */
 export async function applyRenames(
   access: LifecycleAccess,
   proposal: RenamesProposal,
   expectedVersions: Record<string, string> | undefined,
+  mode: RenamesMode = 'legacy',
 ): Promise<{ applied: string[]; failed?: { from: string; reason: string }; snapshotDir: string }> {
   const expected = expectedVersions ?? {}
   const froms = proposal.renames.map((entry) => entry.from)
   const { snapshotDir } = await snapshotProposalTargets(access.files, froms)
+  for (const entry of proposal.renames) {
+    if (entry.version === undefined) continue
+    const loaded = await safeRead(access.files, entry.from)
+    assertGenerationBaseline(entry.from, loaded.version, entry.version)
+  }
   const applied: string[] = []
   for (const entry of proposal.renames) {
     const version = expected[entry.from]
     if (!version) return { applied, failed: { from: entry.from, reason: '缺少 expectedVersions' }, snapshotDir }
+    if (mode === 'generic') {
+      try {
+        const result = await moveDocument({ access, path: entry.from, targetPath: entry.to, expectedVersion: version })
+        applied.push(result.path)
+        continue
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error)
+        return { applied, failed: { from: entry.from, reason }, snapshotDir }
+      }
+    }
     const sameDir = path.posix.dirname(entry.from) === path.posix.dirname(entry.to)
     if (sameDir) {
       try {

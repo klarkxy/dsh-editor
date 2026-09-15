@@ -8,13 +8,15 @@ import { createMemoryContext } from './test-helpers.ts'
 import { compileProjectContext, compileProjectContextV2 } from './contracts.ts'
 import { assembleProjectRules, installProjectContextHooks, retireLegacyContext } from './project-context-hooks.ts'
 
-function session() {
+const WRITING_PRESETS = ['dsh-editor', 'dsh-editor-writing', 'dsh-editor-novel', 'dsh-editor-article', 'dsh-editor-technical'] as const
+
+function session(agentPreset: string = 'dsh-editor') {
   return Session.create(SessionId('rules-test'), [], {
     id: SessionId('rules-test'),
     version: SESSION_FORMAT_VERSION,
     createdAt: 1,
     cwd: '/workspace',
-    agentPreset: 'dsh-editor',
+    agentPreset,
     isSeeded: false,
   })
 }
@@ -66,5 +68,29 @@ describe('rules and history on the actual host contracts', () => {
     handlers['fs/observed']!({}, { kind: 'present', version: 'new-version' }, exec)
     const blocked = await handlers['tools/post-execute']!(exec, { content: [] }, async () => ({ kind: 'block', feedback: [] }))
     expect(blocked).toEqual({ kind: 'block', feedback: [] })
+  })
+
+  it('scopes prompt and read-version hooks to the writing preset allowlist', async () => {
+    const handlers: Record<string, (...args: any[]) => any> = {}
+    const ctx = { on: (name: string, fn: (...args: any[]) => any) => { handlers[name] = fn }, effect: () => {} } as unknown as Context
+    installProjectContextHooks(ctx)
+    const nextAssembly = async () => ({ ...emptyAssembly(), variables: { touched: 'yes' } })
+    const missingPreset = { ...session(), header: { ...session().header, agentPreset: undefined } }
+    for (const foreign of [session('standard'), session(''), session('blank'), missingPreset]) {
+      const assembly = await handlers['system-prompt/assemble']!(emptyAssembly(), { agent: { session: foreign } }, nextAssembly)
+      expect(assembly).toEqual({ ...emptyAssembly(), variables: { touched: 'yes' } })
+      const decision = await handlers['agent/pre-step']!({ agent: { session: foreign }, signal: { throwIfAborted() {} } }, async () => ({ kind: 'enter' }))
+      expect(decision).toEqual({ kind: 'enter' })
+      const exec = { name: 'read', token: `foreign-${String(foreign.header.agentPreset)}`, agent: { session: foreign } }
+      handlers['fs/observed']!({}, { kind: 'present', version: 'hidden-version' }, exec)
+      const result = await handlers['tools/post-execute']!(exec, { content: [{ type: 'text', text: 'source' }] }, async () => ({ kind: 'accept' }))
+      expect(result).toEqual({ kind: 'accept' })
+    }
+    for (const preset of WRITING_PRESETS) {
+      const exec = { name: 'read', token: `allow-${preset}`, agent: { session: session(preset) } }
+      handlers['fs/observed']!({}, { kind: 'present', version: `version-${preset}` }, exec)
+      const result = await handlers['tools/post-execute']!(exec, { content: [{ type: 'text', text: 'source' }] }, async () => ({ kind: 'accept' }))
+      expect(result.content[1].text).toContain(`version-${preset}`)
+    }
   })
 })

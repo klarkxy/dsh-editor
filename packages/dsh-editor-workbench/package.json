@@ -51,9 +51,10 @@
       },
       {
         "id": "editor-workbench-tools",
-        "title": "作品概览工具",
-        "description": "供写作搭档读取作品概览",
-        "feature": "assistant"
+        "title": "写作工具",
+        "description": "通用提案、作者侧写观察与项目上下文",
+        "feature": "assistant",
+        "service": "sessions"
       }
     ]
   },
@@ -70,7 +71,6 @@
     "@deepseek-ai/dsh-system-prompt": ">=0.1.5-rc.2 <0.2.0"
   },
   "dependencies": {
-    "dsh-editor-cards": "workspace:*",
     "dsh-editor-workspace-kit": "workspace:*",
     "dsh-manuscript": "workspace:*",
     "dsh-proofread": "workspace:*"

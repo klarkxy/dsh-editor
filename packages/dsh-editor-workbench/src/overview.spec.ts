@@ -88,25 +88,40 @@ async function write(relative: string, text: string): Promise<void> {
 }
 
 describe('project overview', () => {
-  it('summarizes visible chapters and outlines in natural order', async () => {
+  it('summarizes visible documents from the project root in natural order', async () => {
     await write('正文/10.txt', '# 第十章\n\n正文十')
     await write('正文/2.md', '# 第二章\n\n正文二')
     await write('正文/空.md', '# 空章\n\n')
     await write('正文/.hidden.md', '# hidden')
     await write('大纲/总纲.md', '# 总纲\n\n主线')
+    await write('README.md', '# 根说明\n\n入口')
+    await write('资料/说明.txt', '笔记正文')
+    await write('.dsh-editor/秘密.md', '# 不该出现')
+    await write('dist/out.md', '# 生成物')
     const overview = await readProjectOverview(access())
-    expect(overview.chapters.map((chapter) => chapter.path)).toEqual(['正文/2.md', '正文/10.txt', '正文/空.md'])
+    expect(overview.chapters.map((chapter) => chapter.path)).toEqual([
+      '大纲/总纲.md',
+      '正文/2.md',
+      '正文/10.txt',
+      '正文/空.md',
+      '资料/说明.txt',
+      'README.md',
+    ])
     expect(overview.chapters.map((chapter) => [chapter.title, chapter.excerpt, chapter.empty, chapter.chars])).toEqual([
+      ['总纲', '主线', false, 5],
       ['第二章', '正文二', false, 7],
       ['第十章', '正文十', false, 7],
       ['空章', '', true, 3],
+      ['说明', '笔记正文', false, 4],
+      ['根说明', '入口', false, 6],
     ])
-    expect(overview.chapters.map((chapter) => chapter.status)).toEqual(['draft', 'draft', 'draft'])
+    expect(overview.chapters.map((chapter) => chapter.status)).toEqual(['draft', 'draft', 'draft', 'draft', 'draft', 'draft'])
     expect(overview.outlines).toMatchObject([{ path: '大纲/总纲.md', title: '总纲', excerpt: '主线' }])
-    expect(overview.totals).toEqual({ chapters: 3, chars: 17, byStatus: { draft: 3, revising: 0, final: 0 } })
-    expect(overview.recentChapters).toHaveLength(3)
+    expect(overview.totals).toEqual({ chapters: 6, chars: 32, byStatus: { draft: 6, revising: 0, final: 0 } })
+    expect(overview.recentChapters).toHaveLength(5)
     expect(overview.recent?.path).toBeTruthy()
     expect(overview.chapters.every((chapter) => typeof chapter.modifiedAt === 'string')).toBe(true)
+    expect(overview.chapters.some((chapter) => chapter.path.includes('.dsh-editor') || chapter.path.startsWith('dist/'))).toBe(false)
   })
 
   it('excludes chapter frontmatter from prose stats and fills meta', async () => {

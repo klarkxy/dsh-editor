@@ -23,6 +23,12 @@
       "dsh-manuscript/client/editor-core": [
         "packages/dsh-manuscript/src/client/editor-core/index.ts"
       ],
+      "dsh-editor-workbench": [
+        "packages/dsh-editor-workbench/src/index.ts"
+      ],
+      "dsh-editor-workbench/tools": [
+        "packages/dsh-editor-workbench/src/tools.ts"
+      ],
       "dsh-editor-workbench/contracts": [
         "packages/dsh-editor-workbench/src/contracts.ts"
       ],

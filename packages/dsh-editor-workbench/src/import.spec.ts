@@ -39,15 +39,24 @@ function access(root: string, mode: SandboxExecutionPolicyLike['mode'] = 'worksp
 }
 
 describe('safe external import', () => {
-  it('maps Markdown and TXT into 正文, skipping hidden paths without modifying the source', async () => {
+  it('maps Markdown and TXT onto the project root, skipping hidden and generated paths without modifying the source', async () => {
     const source = path.join(base, 'source'); const target = path.join(base, 'target')
-    await fs.mkdir(path.join(source, 'drafts'), { recursive: true }); await fs.mkdir(target)
-    await fs.writeFile(path.join(source, 'drafts', 'one.md'), '# one', 'utf8'); await fs.writeFile(path.join(source, 'two.txt'), 'two', 'utf8'); await fs.mkdir(path.join(source, '.git')); await fs.writeFile(path.join(source, '.git', 'ignore'), 'x')
+    await fs.mkdir(path.join(source, 'drafts'), { recursive: true }); await fs.mkdir(path.join(source, 'dist'), { recursive: true }); await fs.mkdir(target)
+    await fs.writeFile(path.join(source, 'drafts', 'one.md'), '# one', 'utf8'); await fs.writeFile(path.join(source, 'two.txt'), 'two', 'utf8')
+    await fs.mkdir(path.join(source, '.git')); await fs.writeFile(path.join(source, '.git', 'ignore'), 'x')
+    await fs.writeFile(path.join(source, 'dist', 'generated.md'), 'generated')
     const ready = await probeImport({ source: access(source), target: access(target) })
-    expect(ready).toMatchObject({ state: 'ready', files: 2, preview: ['正文/drafts/one.md', '正文/two.md'] })
+    expect(ready).toMatchObject({ state: 'ready', files: 2, preview: ['drafts/one.md', 'two.md'] })
+    expect(ready.skipped).toEqual(expect.arrayContaining([
+      { path: '.git', reason: 'hidden' },
+      { path: 'dist', reason: 'other' },
+    ]))
     const applied = await applyImport({ source: access(source), target: access(target), token: ready.token! })
     expect(applied).toEqual({ imported: 2, skipped: 0 })
-    await expect(fs.readFile(path.join(target, '正文', 'two.md'), 'utf8')).resolves.toBe('two')
+    await expect(fs.readFile(path.join(target, 'two.md'), 'utf8')).resolves.toBe('two')
+    await expect(fs.readFile(path.join(target, 'drafts', 'one.md'), 'utf8')).resolves.toBe('# one')
+    await expect(fs.stat(path.join(target, '正文'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(fs.stat(path.join(target, 'dist'))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(fs.readFile(path.join(source, 'two.txt'), 'utf8')).resolves.toBe('two')
     await expect(probeImport({ target: access(target) })).resolves.toMatchObject({ state: 'complete', files: 2 })
   })
@@ -71,13 +80,13 @@ describe('safe external import', () => {
   it('continues an interrupted receipt without overwriting matching files and blocks cleanup after author changes', async () => {
     const source = path.join(base, 'source'); const target = path.join(base, 'target'); await fs.mkdir(source); await fs.mkdir(target); await fs.writeFile(path.join(source, 'a.md'), 'a'); await fs.writeFile(path.join(source, 'b.md'), 'b')
     const first = await probeImport({ source: access(source), target: access(target) }); await applyImport({ source: access(source), target: access(target), token: first.token! })
-    const receiptPath = path.join(target, IMPORT_RECEIPT_PATH); const receipt = JSON.parse(await fs.readFile(receiptPath, 'utf8')); receipt.state = 'copying'; await fs.writeFile(receiptPath, JSON.stringify(receipt)); await fs.unlink(path.join(target, '正文', 'b.md'))
+    const receiptPath = path.join(target, IMPORT_RECEIPT_PATH); const receipt = JSON.parse(await fs.readFile(receiptPath, 'utf8')); receipt.state = 'copying'; await fs.writeFile(receiptPath, JSON.stringify(receipt)); await fs.unlink(path.join(target, 'b.md'))
     await expect(probeImport({ target: access(target) })).resolves.toMatchObject({ state: 'recoverable' })
     const resumed = await probeImport({ source: access(source), target: access(target) }); await expect(applyImport({ source: access(source), target: access(target), token: resumed.token! })).resolves.toEqual({ imported: 1, skipped: 1 })
-    receipt.state = 'copying'; await fs.writeFile(receiptPath, JSON.stringify(receipt)); await fs.writeFile(path.join(target, '正文', 'a.md'), 'author changed')
+    receipt.state = 'copying'; await fs.writeFile(receiptPath, JSON.stringify(receipt)); await fs.writeFile(path.join(target, 'a.md'), 'author changed')
     const interrupted = await probeImport({ target: access(target) })
     await expect(cleanupImport({ target: access(target), receiptId: interrupted.receiptId! })).rejects.toMatchObject({ code: 'CLEANUP_BLOCKED' })
-    await expect(fs.readFile(path.join(target, '正文', 'a.md'), 'utf8')).resolves.toBe('author changed')
+    await expect(fs.readFile(path.join(target, 'a.md'), 'utf8')).resolves.toBe('author changed')
   })
 
   it('does not create a receipt when the target gains a file after probe', async () => {
@@ -117,10 +126,10 @@ describe('safe external import', () => {
     const recoverable = await probeImport({ target: access(target) })
     let changed = false
     const guardedFs = nativeFs({ afterWrite: async (written, content) => {
-      if (!changed && written === receiptPath && JSON.parse(content).state === 'cleaning') { changed = true; await fs.writeFile(path.join(target, '正文', 'a.md'), 'changed during cleanup') }
+      if (!changed && written === receiptPath && JSON.parse(content).state === 'cleaning') { changed = true; await fs.writeFile(path.join(target, 'a.md'), 'changed during cleanup') }
     } })
     await expect(cleanupImport({ target: access(target, 'workspace-write', guardedFs), receiptId: recoverable.receiptId! })).rejects.toMatchObject({ code: 'CLEANUP_BLOCKED' })
-    await expect(fs.readFile(path.join(target, '正文', 'a.md'), 'utf8')).resolves.toBe('changed during cleanup')
+    await expect(fs.readFile(path.join(target, 'a.md'), 'utf8')).resolves.toBe('changed during cleanup')
   })
 
   it('rejects a queued directory replaced by a junction before enumeration', async () => {
@@ -132,5 +141,24 @@ describe('safe external import', () => {
     } })
     await expect(probeImport({ source: access(source, 'workspace-write', guardedFs), target: access(target) })).rejects.toMatchObject({ code: 'SYMLINK' })
     await expect(fs.readdir(target)).resolves.toEqual([])
+  })
+
+  it('rejects TXT/MD collisions and treats traversal or absolute receipt targets as absent', async () => {
+    const source = path.join(base, 'source'); const target = path.join(base, 'target'); await fs.mkdir(source); await fs.mkdir(target)
+    await fs.writeFile(path.join(source, 'a.md'), 'md'); await fs.writeFile(path.join(source, 'a.txt'), 'txt')
+    await expect(probeImport({ source: access(source), target: access(target) })).rejects.toMatchObject({ code: 'BLOCKED' })
+    await expect(fs.readdir(target)).resolves.toEqual([])
+
+    const first = path.join(base, 'first'); await fs.mkdir(first); await fs.writeFile(path.join(source, 'only.md'), 'only')
+    await fs.unlink(path.join(source, 'a.md')); await fs.unlink(path.join(source, 'a.txt'))
+    const ready = await probeImport({ source: access(source), target: access(first) }); await applyImport({ source: access(source), target: access(first), token: ready.token! })
+    const receiptPath = path.join(first, IMPORT_RECEIPT_PATH); const receipt = JSON.parse(await fs.readFile(receiptPath, 'utf8'))
+    receipt.state = 'copying'
+    receipt.files = [{ ...receipt.files[0], target: '../escape.md' }]
+    await fs.writeFile(receiptPath, JSON.stringify(receipt))
+    await expect(probeImport({ target: access(first) })).resolves.toMatchObject({ state: 'none', files: 0 })
+    receipt.files = [{ ...receipt.files[0], target: 'C:/abs.md' }]
+    await fs.writeFile(receiptPath, JSON.stringify(receipt))
+    await expect(probeImport({ target: access(first) })).resolves.toMatchObject({ state: 'none', files: 0 })
   })
 })

@@ -1,5 +1,5 @@
 /**
- * workbench-tools 的烟雾测试：覆盖工具工厂、参数校验、cwd 解析、execute 通路。
+ * workbench-tools 的烟雾测试：覆盖工具工厂、参数校验、session.id 解析、execute 通路。
  * 走真实 fs（mkdtemp）+ stub resolver，验证 dsh-tools defineTool 集成正确。
  */
 import fs from 'node:fs/promises'
@@ -81,10 +81,10 @@ function access(): OverviewAccess {
   return { path: base, rootKey: base, mode: 'workspace-write', files }
 }
 
-const execWith = (cwd?: string) => ({
-  agent: cwd === undefined
+const execWith = (sessionId?: string, cwd = '/forged/outside') => ({
+  agent: sessionId === undefined
     ? undefined
-    : { session: { header: { cwd } } },
+    : { session: { id: sessionId, header: { cwd } } },
 }) as unknown as Parameters<ReturnType<typeof createNovelOverviewTool>['execute']>[1]
 
 describe('workbench tools', () => {
@@ -95,15 +95,23 @@ describe('workbench tools', () => {
     expect(tools.every((tool) => tool.output.schema && typeof tool.output.render === 'function')).toBe(true)
   })
 
-  it('novel_overview 在没有 cwd 时抛 UNREADABLE', async () => {
+  it('novel_overview 在没有 session.id 时抛 UNREADABLE', async () => {
     const tool = createNovelOverviewTool({ resolveAccess: vi.fn(async () => access()) })
     await expect(tool.execute({}, execWith(undefined))).rejects.toBeInstanceOf(WorkbenchToolError)
+  })
+
+  it('novel_overview.execute 用 session.id 解析并忽略 header.cwd', async () => {
+    const resolveAccess = vi.fn(async () => access())
+    const tool = createNovelOverviewTool({ resolveAccess })
+    await fs.writeFile(path.join(base, '正文', '001.md'), '# 第一章\n\n正文一', 'utf8')
+    await tool.execute({}, execWith('session-1', '/forged/outside'))
+    expect(resolveAccess).toHaveBeenCalledWith('session-1', undefined)
   })
 
   it('novel_overview.execute 返回符合 schema 的 overview', async () => {
     await fs.writeFile(path.join(base, '正文', '001.md'), '# 第一章\n\n正文一', 'utf8')
     const tool = createNovelOverviewTool({ resolveAccess: vi.fn(async () => access()) })
-    const value = (await tool.execute({}, execWith(base))) as { version: number; chapters: Array<{ path: string }>; totals: { chapters: number } }
+    const value = (await tool.execute({}, execWith('session-1'))) as { version: number; chapters: Array<{ path: string }>; totals: { chapters: number } }
     expect(value.version).toBe(1)
     expect(value.chapters.map((c) => c.path)).toEqual(['正文/001.md'])
     expect(value.totals.chapters).toBe(1)
