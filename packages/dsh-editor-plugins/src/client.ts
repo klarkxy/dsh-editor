@@ -788,7 +788,7 @@ function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDial
       else if (listed) {
         const current = [...listed.optional, ...listed.community].filter((card) => targets.some((item) => item.entryId === card.entryId))
         const allMatch = current.length > 0 && current.every((card) => card.enabled === enabled)
-        if (restart && !allMatch) setNote('已保存。请重启应用后完全生效。')
+        if (restart && !allMatch) setNote('已保存，重启应用后完全生效。')
         else if (allMatch) setNote(enabled ? `已启用 ${title}。` : `已停用 ${title}。`)
         else showError('插件状态未完全同步，请重试或重启后再确认。')
       }
