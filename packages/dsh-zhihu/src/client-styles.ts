@@ -155,6 +155,10 @@ export const zhihuClientStyles = `
 .zhihu-warning, .dsh-ui .zhihu-warning { color: var(--danger, #8a3a30); margin: 0; }
 .zhihu-saved, .dsh-ui .zhihu-saved { color: var(--accent, #1b365d); margin: 0; }
 .zhihu-link, .dsh-ui .zhihu-link { color: var(--accent, #1b365d); }
+/* Ordinary DSH paints a light fill on bare <a>. Keep plugin links
+   transparent so computed contrast falls through to the panel surface. */
+.zhihu-panel .zhihu-link, .zhihu-panel .zhihu-result-title,
+.dsh-ui .zhihu-link, .dsh-ui .zhihu-result-title { background: transparent; }
 .zhihu-stale, .dsh-ui .zhihu-stale {
   color: var(--meta, #6b6a64);
   background: var(--surface-warm, #e8e6dc);
@@ -171,7 +175,7 @@ export const zhihuClientStyles = `
   display: flex;
   flex-direction: column;
   gap: 4px;
-  transition: background-color var(--motion-fast, 150ms) var(--ease, ease);
+  background: var(--surface, #fdfcf6);
 }
 .zhihu-result-item:hover, .dsh-ui .zhihu-result-item:hover { background: var(--surface-warm, #e8e6dc); }
 .zhihu-result-title, .dsh-ui .zhihu-result-title { font-weight: 600; color: var(--fg, #141413); }
@@ -190,7 +194,7 @@ export const zhihuClientStyles = `
 .zhihu-status-value, .dsh-ui .zhihu-status-value { margin: 0; display: flex; align-items: center; gap: 6px; }
 .zhihu-dot, .dsh-ui .zhihu-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .zhihu-dot-configured, .dsh-ui .zhihu-dot-configured { background: var(--confirm, #4a6b3a); }
-.zhihu-dot-missing, .dsh-ui .zhihu-dot-missing { background: var(--danger, #8a3a30); }
+.zhihu-dot-missing, .dsh-ui .zhihu-dot-missing { background: var(--ghost, #78756c); }
 .zhihu-dot-locked, .dsh-ui .zhihu-dot-locked { background: var(--danger, #8a3a30); }
 .zhihu-guide, .dsh-ui .zhihu-guide {
   border: 1px solid var(--border-soft, #e5e3d8);
@@ -204,7 +208,7 @@ export const zhihuClientStyles = `
 .zhihu-usage, .dsh-ui .zhihu-usage { display: flex; flex-direction: column; gap: var(--space-3, 12px); }
 .zhihu-usage-intro, .dsh-ui .zhihu-usage-intro { margin: 0; color: var(--meta, #6b6a64); line-height: 1.6; }
 .zhihu-usage-cards, .dsh-ui .zhihu-usage-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-2, 8px); }
-.zhihu-usage-card, .dsh-ui .zhihu-usage-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: var(--space-2, 8px); border: 1px solid var(--border-soft, #e5e3d8); border-radius: var(--radius-sm, 6px); background: var(--bg, #f3f1e8); transition: background-color var(--motion-fast, 150ms) var(--ease, ease); }
+.zhihu-usage-card, .dsh-ui .zhihu-usage-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: var(--space-2, 8px); border: 1px solid var(--border-soft, #e5e3d8); border-radius: var(--radius-sm, 6px); background: var(--bg, #f3f1e8); }
 .zhihu-usage-card:hover, .dsh-ui .zhihu-usage-card:hover { background: var(--surface-warm, #e8e6dc); }
 .zhihu-usage-card-label, .dsh-ui .zhihu-usage-card-label { color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); }
 .zhihu-usage-card-value, .dsh-ui .zhihu-usage-card-value { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg, #141413); }
@@ -254,11 +258,16 @@ export const zhihuClientStyles = `
   }
   .zhihu-dots i, .dsh-ui .zhihu-dots i { animation: none; }
 }
-/* Scoped ink fallback for standalone hosts on the :root[data-theme] contract
-   (docs/ui.md bans body[data-ds-dark-theme]); tokens inherit to all children.
-   The desktop shell sets the same values at :root, so this only matters when
-   no shell stylesheet is present. prefers-color-scheme must not override
-   explicit light. */
+/* Scoped ink tokens inherit to dock/toggle/panel children. Desktop theme
+   switching must not write body[data-ds-dark-theme]; a standalone Web plugin
+   still reads the ordinary DSH host attribute. html:not([data-theme]) keeps
+   desktop :root paper/ink in charge. :root[data-theme="ink"] covers a
+   native/desktop host without the shell stylesheet. Do not use
+   prefers-color-scheme: it would override an explicit user light choice. */
+html:not([data-theme]) body[data-ds-dark-theme] .zhihu-dock,
+html:not([data-theme]) body[data-ds-dark-theme] .zhihu-toggle,
+html:not([data-theme]) body[data-ds-dark-theme] .zhihu-panel,
+html:not([data-theme]) body[data-ds-dark-theme] .dsh-ui.zhihu-panel,
 :root[data-theme="ink"] .zhihu-dock,
 :root[data-theme="ink"] .zhihu-toggle,
 :root[data-theme="ink"] .zhihu-panel,
