@@ -200,11 +200,16 @@ export const proofreadClientStyles = `
   }
   .dsh-proofread-dots i, .dsh-ui .dsh-proofread-dots i { animation: none; }
 }
-/* Scoped ink fallback for standalone hosts on the :root[data-theme] contract
-   (docs/ui.md bans body[data-ds-dark-theme]); tokens inherit to all children.
-   The desktop shell sets the same values at :root, so this only matters when
-   no shell stylesheet is present. prefers-color-scheme must not override
-   explicit light. */
+/* Scoped ink tokens inherit to dock/toggle/panel children. Desktop theme
+   switching must not write body[data-ds-dark-theme]; a standalone Web plugin
+   still reads the ordinary DSH host attribute. html:not([data-theme]) keeps
+   desktop :root paper/ink in charge. :root[data-theme="ink"] covers a
+   native/desktop host without the shell stylesheet. Do not use
+   prefers-color-scheme: it would override an explicit user light choice. */
+html:not([data-theme]) body[data-ds-dark-theme] .dsh-proofread-dock,
+html:not([data-theme]) body[data-ds-dark-theme] .dsh-proofread-toggle,
+html:not([data-theme]) body[data-ds-dark-theme] .dsh-proofread-panel,
+html:not([data-theme]) body[data-ds-dark-theme] .dsh-ui.dsh-proofread-panel,
 :root[data-theme="ink"] .dsh-proofread-dock,
 :root[data-theme="ink"] .dsh-proofread-toggle,
 :root[data-theme="ink"] .dsh-proofread-panel,
