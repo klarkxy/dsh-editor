@@ -20,6 +20,7 @@ export type DshEditorBlock = {
   wrapClient?: boolean
   entries?: DshEditorEntry[]
   inserts?: DshEditorEntry[]
+  presets?: { id: string; path: string }[]
 }
 
 export type CatalogEntry = {

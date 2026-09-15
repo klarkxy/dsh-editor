@@ -69,6 +69,7 @@ import {
 } from '../conversation-presets.ts'
 import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
+import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
 import { isObservableSource, useObservable } from './components.ts'
 import { Markdown } from './markdown.tsx'
@@ -1222,6 +1223,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const initSettings = useObservable(initScope)
   const conversationScope = useMemo(() => ctx.settingsScope.bind({ namespace: CONVERSATION_SETTINGS_NAMESPACE, decode: decodeConversationSettings }), [ctx])
   const conversationSettings = useObservable(conversationScope)
+  const developerScope = useMemo(() => ctx.settingsScope.bind({ namespace: DEVELOPER_SETTINGS_NAMESPACE, decode: decodeDeveloperSettings }), [ctx])
+  const developerSettings = useObservable(developerScope)
+  const developerMode = developerSettings.value?.developerMode === true
   const [inspection, setInspection] = useState<ProjectInspectionResponse | null>(null)
   const [initBusy, setInitBusy] = useState(false)
   const [initNote, setInitNote] = useState('')
@@ -1456,6 +1460,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
           setNote('')
           return ctx.remote.agentPresets.list()
         },
+        projection: { developerMode },
       })
       if (started.kind === 'blocked') return
       if (started.kind === 'list-error') {
@@ -1477,7 +1482,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     if (presetPicker.busy) return
     const pendingSessionId = presetPicker.pendingSessionId
     setPresetPicker((current) => ({ ...current, kind: 'loading', error: undefined }))
-    const loaded = await loadNewConversationPresets(() => ctx.remote.agentPresets.list())
+    const loaded = await loadNewConversationPresets(() => ctx.remote.agentPresets.list(), { developerMode })
     if (!loaded.ok) {
       setPresetPicker({ kind: 'list-error', presets: [], pendingSessionId, error: loaded.error })
       return
@@ -1509,7 +1514,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
             if (error) setNote(error)
           }
         },
-      }, { workspaceId, presetId, pendingSessionId })
+      }, { workspaceId, presetId, pendingSessionId, allowCustomPreset: developerMode })
       if (!result.ok) {
         setPresetPicker((current) => ({
           ...current,

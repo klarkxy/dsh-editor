@@ -59,6 +59,8 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
 
 写作会话不挂载官方 `standard` 编码 preset。桌面应用每次部署 profile 时，把模板里的五个 app-owned writing preset 原子部署到 `<dshHome>/.agent-presets/`，再由 profile 的 `cordis.patch.yml` 将 `agent-presets.default` 指向通用写作 `dsh-editor-writing`。四个当前名称是通用写作、小说创作、文章与自媒体、技术文档。`dsh-editor-novel-kernel` 由可见 `dsh-editor-novel` 以 `knowledge-only` 挂载，由 hidden legacy `dsh-editor` 以默认完整表面挂载；通用 / 文章 / 技术不挂。preset 目录遵循与 profile 相同的 owner marker 规则：未标记的同名目录拒绝覆盖。
 
+插件可以提供自己的对话 preset：在 package.json 的 `dshEditor.presets` 声明 `[{ id, path }]`，`path` 指向包内含 `preset.yml` + `agent.cordis.yml` 的目录。preset id 不得以 `dsh-editor` 开头（内置写作 preset 保留前缀），同 id 跨包冲突在安装与构建时都会被拒绝。安装（`installGitHubPlugin`）把 preset 原子部署到 `<dshHome>/.agent-presets/<id>` 并写入带 `plugin` 字段的 owner marker；卸载（`uninstallUserPlugin`）按 marker 回收；每次部署 profile 时桌面端会重扫全部 bundle 的声明、更新自己名下的 preset 并回收 owner 已不在 bundle 列表里的目录。插件 preset 不进默认的新对话 picker——在设置「通用 → 开发者 → 开发者模式」开启后才会追加显示（旧版 `dsh-editor` 带"旧版兼容"徽标）。构建时 `scripts/plugin-manifest.mjs` 对工作区插件做同样的 id / 路径 / 文件校验。
+
 依赖方向固定如下；禁止跨包导入另一个包的 `src`：
 
 ```text

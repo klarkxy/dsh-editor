@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
@@ -144,5 +145,58 @@ describe('plugin manifests and composition resolver', () => {
     expect(docs).not.toMatch(/basic\s*\/\s*smart 只是更小的 feature 集合/)
     expect(docs).not.toMatch(/桌面写作会话走专属 `dsh-editor` agent preset/)
     expect(docs).not.toMatch(/默认[:：].{0,12}dsh-editor(?!-)/)
+  })
+})
+describe('plugin conversation preset manifests', () => {
+  function manifestRoot(packages) {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-manifest-'))
+    for (const [name, pkg] of Object.entries(packages)) {
+      const dir = join(root, 'packages', name)
+      mkdirSync(join(dir, 'agent-presets', 'team-style'), { recursive: true })
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg))
+      writeFileSync(join(dir, 'cordis.patch.yml'), `- insert:\n    - id: entry-${name}\n      name: ${name}\n`)
+      writeFileSync(join(dir, 'agent-presets', 'team-style', 'preset.yml'), 'name: x\n')
+      writeFileSync(join(dir, 'agent-presets', 'team-style', 'agent.cordis.yml'), '[]\n')
+    }
+    return root
+  }
+  const basePkg = (name, presets) => ({
+    name,
+    dsh: { bundle: { patch: './cordis.patch.yml' } },
+    dshEditor: {
+      role: 'feature',
+      visibility: 'public',
+      entries: [{ id: `entry-${name}`, title: 't', description: 'd' }],
+      ...(presets ? { presets } : {}),
+    },
+  })
+
+  it('accepts and normalizes declared presets', () => {
+    const root = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'team-style', path: 'agent-presets/team-style' }]) })
+    const manifests = loadPluginManifests(root)
+    expect(manifests).toHaveLength(1)
+    expect(manifests[0].presets).toEqual([{ id: 'team-style', path: 'agent-presets/team-style' }])
+  })
+
+  it('rejects reserved-prefix and unsafe preset ids', () => {
+    const reserved = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }]) })
+    expect(() => loadPluginManifests(reserved)).toThrow(/must not start with dsh-editor/)
+    const unsafe = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'bad id', path: 'agent-presets/team-style' }]) })
+    expect(() => loadPluginManifests(unsafe)).toThrow(/invalid preset id/)
+  })
+
+  it('rejects preset paths that escape the package or lack the required files', () => {
+    const escaping = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'team-style', path: '../outside' }]) })
+    expect(() => loadPluginManifests(escaping)).toThrow(/invalid path/)
+    const missing = manifestRoot({ 'team-plugin': basePkg('team-plugin', [{ id: 'team-style', path: 'agent-presets/absent' }]) })
+    expect(() => loadPluginManifests(missing)).toThrow(/preset\.yml and agent\.cordis\.yml/)
+  })
+
+  it('rejects duplicate preset ids across packages', () => {
+    const root = manifestRoot({
+      'plugin-one': basePkg('plugin-one', [{ id: 'team-style', path: 'agent-presets/team-style' }]),
+      'plugin-two': basePkg('plugin-two', [{ id: 'team-style', path: 'agent-presets/team-style' }]),
+    })
+    expect(() => loadPluginManifests(root)).toThrow(/duplicate conversation preset id team-style/)
   })
 })

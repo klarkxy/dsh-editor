@@ -3,6 +3,11 @@ import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
 import { setLocale, t, useLocale, type Locale } from '../i18n/index.ts'
+import {
+  DEVELOPER_SETTINGS_NAMESPACE,
+  decodeDeveloperSettings,
+  type DeveloperSettings,
+} from '../developer-settings.ts'
 
 /*
  * 通用设置页:语言 / 外观 / 繁忙时 Enter 行为,与上游 dsh-client-ui-settings-general
@@ -50,11 +55,13 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
   const scopes = useMemo(() => ({
     theme: props.ctx.settingsScope.bind({ namespace: 'ui-theme', decode: decodeThemePreference }),
     conversation: props.ctx.settingsScope.bind({ namespace: 'ui-conversation', decode: decodeBusyEnter }),
+    developer: props.ctx.settingsScope.bind({ namespace: DEVELOPER_SETTINGS_NAMESPACE, decode: decodeDeveloperSettings }),
   }), [props.ctx])
 
   const [theme, setTheme] = usePreference(scopes.theme, 'system')
   const locale = useLocale()
   const [busyEnter, setBusyEnter] = useBusyEnter(scopes.conversation)
+  const [developerMode, setDeveloperMode] = useDeveloperMode(scopes.developer)
 
   const appearanceOptions: { value: ThemePreference; label: string }[] = [
     { value: 'light', label: t('settings.themeLight') },
@@ -89,7 +96,29 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
         'aria-label': t('settings.busyEnter'),
       }) }),
     ),
+    e('section', { className: 'settings-block' },
+      e('header', { className: 'settings-block-head' },
+        e('h3', { className: 'settings-block-title' }, t('settings.developer')),
+      ),
+      e(Row, { title: t('settings.developerMode'), description: t('settings.developerModeHint'), children: e('div', { className: 'settings-segmented', role: 'group', 'aria-label': t('settings.developerMode') },
+        ([false, true] as const).map((value) => e('button', {
+          key: String(value),
+          type: 'button',
+          className: developerMode === value ? 'active' : '',
+          'aria-pressed': developerMode === value,
+          onClick: () => setDeveloperMode(value),
+        }, value ? t('settings.developerModeOn') : t('settings.developerModeOff'))),
+      ) }),
+    ),
   )
+}
+
+function useDeveloperMode(scope: SettingsScope<DeveloperSettings>): [boolean, (value: boolean) => void] {
+  const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope), scope.getSnapshot.bind(scope))
+  const value = snapshot.status === 'ready' && snapshot.value ? snapshot.value.developerMode : false
+  const writable = snapshot.status === 'ready' && snapshot.writable !== false
+  const set = (next: boolean) => { if (writable) void scope.set('developerMode', next).catch(() => { /* 同上 */ }) }
+  return [value, set]
 }
 
 function useBusyEnter(scope: SettingsScope<{ busyEnter: BusyEnterBehavior }>): [BusyEnterBehavior, (value: BusyEnterBehavior) => void] {

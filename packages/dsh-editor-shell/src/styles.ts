@@ -1134,6 +1134,7 @@ export const componentStyles = `
 .shell .about-status-tag.latest, .dsh-ui .about-status-tag.latest { background: color-mix(in srgb, var(--confirm) 12%, var(--surface)); color: var(--confirm); }
 .shell .about-status-tag.available, .dsh-ui .about-status-tag.available { background: var(--accent-soft); color: var(--accent); }
 .shell .about-status-tag.error, .dsh-ui .about-status-tag.error { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); }
+.shell .preset-badge, .dsh-ui .preset-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font: 500 var(--text-xs)/1.4 var(--font-sans); letter-spacing: .04em; }
 .shell .about-release, .dsh-ui .about-release { display: grid; gap: 6px; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg-sunken); }
 .shell .about-release-meta, .dsh-ui .about-release-meta { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
 .shell .about-release-version, .dsh-ui .about-release-version { font: 500 var(--text-sm)/1.3 var(--font-sans); color: var(--fg); }

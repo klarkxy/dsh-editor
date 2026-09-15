@@ -9,6 +9,7 @@ import { INSTALL_TARBALL_MAX_BYTES } from './contracts.ts'
 import { isProtectedPackage, isSafePackageName, type RuntimeCatalog } from './core.ts'
 import { githubHeaders, githubTarballUrl, tarEntryIsSafe, type GitHubSpec } from './github.ts'
 import { blockedReason, inspectPluginPackage, type PluginInspectReport } from './inspect.ts'
+import { deployPluginPresets, removePluginPresets } from './presets.ts'
 import type { PluginPaths } from './paths.ts'
 
 export type InstalledBundle = { name: string; version: string; spec: string; inspect: PluginInspectReport }
@@ -234,6 +235,7 @@ export async function installGitHubPlugin(
     await rename(staged.unpacked, destination)
     await io.link(destination, join(paths.profileDir, 'node_modules', manifest.name))
     await addBundleToProfile(paths.profileDir, manifest.name)
+    await deployPluginPresets(paths.home, manifest.name, destination)
     return { name: manifest.name, version: manifest.version, spec: spec.spec, inspect: manifest.inspect }
   } finally {
     await rm(staged.staging, { recursive: true, force: true })
@@ -245,4 +247,5 @@ export async function uninstallUserPlugin(packageName: string, paths: PluginPath
   await removeBundleFromProfile(paths.profileDir, packageName)
   await rm(join(paths.profileDir, 'node_modules', packageName), { recursive: true, force: true })
   await rm(join(paths.userPluginsDir, packageName), { recursive: true, force: true })
+  await removePluginPresets(paths.home, packageName)
 }

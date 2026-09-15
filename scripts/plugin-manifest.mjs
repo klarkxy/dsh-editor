@@ -1,9 +1,13 @@
 /** Declarative dshEditor manifests and composition resolution. */
-import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
+
+/** App-owned writing presets all carry this prefix; plugin presets must not. */
+export const PLUGIN_PRESET_RESERVED_PREFIX = 'dsh-editor'
+const PRESET_ID_PATTERN = /^[A-Za-z0-9._-]+$/
 
 /** Historical desktop bundle order; unknown packages append alphabetically. */
 const STABLE_PACKAGE_ORDER = [
@@ -101,6 +105,24 @@ function normalizeInsert(row, label) {
   }
 }
 
+function normalizePreset(row, label, dir) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) fail(`${label} must be an object`)
+  if (typeof row.id !== 'string' || !PRESET_ID_PATTERN.test(row.id) || row.id.length > 80) {
+    fail(`${label} has an invalid preset id`)
+  }
+  if (row.id.startsWith(PLUGIN_PRESET_RESERVED_PREFIX)) {
+    fail(`${label} (${row.id}) must not start with ${PLUGIN_PRESET_RESERVED_PREFIX} (reserved for app-owned presets)`)
+  }
+  if (typeof row.path !== 'string' || !row.path.trim() || row.path.includes('..') || isAbsolute(row.path) || /^[A-Za-z]:/.test(row.path)) {
+    fail(`${label} (${row.id}) has an invalid path`)
+  }
+  const source = join(dir, row.path)
+  if (!existsSync(join(source, 'preset.yml')) || !existsSync(join(source, 'agent.cordis.yml'))) {
+    fail(`${label} (${row.id}) needs preset.yml and agent.cordis.yml under ${row.path}`)
+  }
+  return { id: row.id, path: row.path }
+}
+
 export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.meta.url)), '..')) {
   const packagesDir = resolve(root, 'packages')
   let entries
@@ -145,6 +167,9 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
     const inserts = asEntries(block.inserts, `${pkg.name} dshEditor.inserts`).map((row, index) => (
       normalizeInsert(row, `${pkg.name} dshEditor.inserts[${index}]`)
     ))
+    const presets = asEntries(block.presets, `${pkg.name} dshEditor.presets`).map((row, index) => (
+      normalizePreset(row, `${pkg.name} dshEditor.presets[${index}]`, dir)
+    ))
     const patchPath = join(dir, patchRel)
     let patchIds
     try {
@@ -167,6 +192,7 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
       wrapClient: Boolean(block.wrapClient) || Boolean(pkg.dsh?.client),
       entries: packageEntries,
       inserts,
+      presets,
       workspaceDeps,
     })
   }
@@ -183,6 +209,14 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
       if (owner) fail(`duplicate plugin id ${row.id} in ${owner} and ${manifest.name}`)
       seen.set(row.id, manifest.name)
       if (row.feature) features.add(row.feature)
+    }
+  }
+  const seenPresets = new Map()
+  for (const manifest of manifests) {
+    for (const preset of manifest.presets) {
+      const owner = seenPresets.get(preset.id)
+      if (owner) fail(`duplicate conversation preset id ${preset.id} in ${owner} and ${manifest.name}`)
+      seenPresets.set(preset.id, manifest.name)
     }
   }
   for (const manifest of manifests) {

@@ -13,11 +13,14 @@ export const NEW_CONVERSATION_PRESET_IDS = [
 export type NewConversationPresetId = typeof NEW_CONVERSATION_PRESET_IDS[number]
 
 export type ConversationPresetChoice = {
-  id: NewConversationPresetId
+  /* 开发者模式下可能超出四个写作模式的 id，因此类型放宽为 string。 */
+  id: string
   name: string
   description: string
   available: boolean
   reason?: string
+  /* 旧版 dsh-editor 会话，仅开发者模式列出，picker 里以徽标区分。 */
+  legacy?: boolean
 }
 
 const PRESET_COPY: Record<NewConversationPresetId, { name: MessageKey; description: MessageKey }> = {
@@ -104,17 +107,43 @@ function projectedChoice(
   }
 }
 
-export function projectNewConversationPresets(value: unknown): ConversationPresetChoice[] {
-  const listed = listedPresetRecords(value)
-  const byId: Record<string, Record<string, unknown>> = {}
-  for (const item of listed) {
-    const id = item.id
-    if (typeof id === 'string' && isNewConversationPresetId(id)) byId[id] = item
+export type PresetProjectionOptions = { developerMode?: boolean }
+
+function extraChoice(item: Record<string, unknown>): ConversationPresetChoice {
+  const id = item.id as string
+  const legacy = isLegacyEditorPreset(id)
+  const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : id
+  const description = typeof item.description === 'string' && item.description.trim() ? item.description.trim() : ''
+  const broken = listedBrokenReason(item)
+  if (broken !== undefined) return { id, name, description, available: false, reason: broken, ...(legacy ? { legacy } : {}) }
+  const status = listedStatus(item)
+  const unavailable = status === 'missing' || status === 'broken'
+  return {
+    id,
+    name,
+    description,
+    available: !unavailable,
+    ...(unavailable ? { reason: listedReason(item, status) ?? t(status === 'missing' ? 'chat.presetMissing' : 'chat.presetBroken') } : {}),
+    ...(legacy ? { legacy } : {}),
   }
-  return NEW_CONVERSATION_PRESET_IDS.map((id) => projectedChoice(id, byId[id]))
 }
 
-export function firstAvailableConversationPreset(presets: readonly ConversationPresetChoice[]): NewConversationPresetId | undefined {
+export function projectNewConversationPresets(value: unknown, options?: PresetProjectionOptions): ConversationPresetChoice[] {
+  const listed = listedPresetRecords(value)
+  const byId: Record<string, Record<string, unknown>> = {}
+  const extras: Array<Record<string, unknown>> = []
+  for (const item of listed) {
+    const id = item.id
+    if (typeof id !== 'string') continue
+    if (isNewConversationPresetId(id)) byId[id] = item
+    else if (options?.developerMode) extras.push(item)
+  }
+  const choices: ConversationPresetChoice[] = NEW_CONVERSATION_PRESET_IDS.map((id) => projectedChoice(id, byId[id]))
+  for (const item of extras) choices.push(extraChoice(item))
+  return choices
+}
+
+export function firstAvailableConversationPreset(presets: readonly ConversationPresetChoice[]): string | undefined {
   return presets.find((item) => item.available)?.id
 }
 
@@ -125,24 +154,25 @@ export function canConfirmConversationPreset(presets: readonly ConversationPrese
 export async function startNewConversationPresetFlow(input: {
   canDiscardDraft(): Promise<boolean>
   list(): Promise<RpcResult<unknown>>
+  projection?: PresetProjectionOptions
 }): Promise<
   | { kind: 'blocked' }
   | { kind: 'listed'; presets: ConversationPresetChoice[] }
   | { kind: 'list-error'; error: string }
 > {
   if (!await input.canDiscardDraft()) return { kind: 'blocked' }
-  const loaded = await loadNewConversationPresets(input.list)
+  const loaded = await loadNewConversationPresets(input.list, input.projection)
   if (!loaded.ok) return { kind: 'list-error', error: loaded.error }
   return { kind: 'listed', presets: loaded.presets }
 }
 
-export async function loadNewConversationPresets(list: () => Promise<RpcResult<unknown>>): Promise<
+export async function loadNewConversationPresets(list: () => Promise<RpcResult<unknown>>, options?: PresetProjectionOptions): Promise<
   { ok: true; presets: ConversationPresetChoice[] } | { ok: false; error: string }
 > {
   try {
     const result = await list()
     if (!result.ok) return { ok: false, error: t('chat.presetListFailed') }
-    return { ok: true, presets: projectNewConversationPresets(result.value) }
+    return { ok: true, presets: projectNewConversationPresets(result.value, options) }
   } catch {
     return { ok: false, error: t('chat.presetListFailed') }
   }
@@ -167,12 +197,12 @@ export type ConfirmNewConversationPresetHost = {
 
 export async function confirmNewConversationPreset(
   host: ConfirmNewConversationPresetHost,
-  input: { workspaceId: WorkspaceId; presetId: string; pendingSessionId?: SessionId },
+  input: { workspaceId: WorkspaceId; presetId: string; pendingSessionId?: SessionId; allowCustomPreset?: boolean },
 ): Promise<
   | { ok: true; sessionId: SessionId; agentPreset: string }
   | { ok: false; sessionId?: SessionId; error: string }
 > {
-  if (!isNewConversationPresetId(input.presetId)) {
+  if (!isNewConversationPresetId(input.presetId) && !input.allowCustomPreset) {
     return { ok: false, sessionId: input.pendingSessionId, error: t('chat.presetSelectFailed') }
   }
   let sessionId = input.pendingSessionId

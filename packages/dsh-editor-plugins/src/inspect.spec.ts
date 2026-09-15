@@ -191,3 +191,41 @@ describe('inspectPluginPackage', () => {
     }
   })
 })
+
+describe('conversation preset declarations', () => {
+  const presetFiles = {
+    'package.json': JSON.stringify({
+      name: 'team-plugin',
+      version: '1.0.0',
+      main: 'index.js',
+      dsh: { bundle: { patch: './cordis.patch.yml' } },
+      dshEditor: { presets: [{ id: 'team-style', path: 'agent-presets/team-style' }] },
+    }),
+    'index.js': 'export {}\n',
+    'cordis.patch.yml': '- insert:\n    - id: team-entry\n      name: team-plugin\n',
+    'agent-presets/team-style/preset.yml': 'name: 团队风格\n',
+    'agent-presets/team-style/agent.cordis.yml': '[]\n',
+  }
+
+  it('reports well-formed presets as an info finding without affecting the verdict', async () => {
+    const dir = await fixture(presetFiles)
+    const report = await inspectPluginPackage(dir, productCatalog)
+    expect(report.verdict).toBe('ready')
+    expect(report.presets).toEqual([{ id: 'team-style', path: 'agent-presets/team-style' }])
+    expect(report.findings.some((item) => item.code === 'presets' && item.severity === 'info')).toBe(true)
+  })
+
+  it('blocks on a reserved or broken preset declaration', async () => {
+    const manifest = JSON.parse(presetFiles['package.json']!)
+    manifest.dshEditor = { presets: [{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }] }
+    const reserved = await inspectPluginPackage(await fixture({ ...presetFiles, 'package.json': JSON.stringify(manifest) }), productCatalog)
+    expect(reserved.verdict).toBe('blocked')
+    expect(reserved.presets).toBeUndefined()
+    expect(blockedReason(reserved)).toContain('dsh-editor')
+
+    manifest.dshEditor = { presets: [{ id: 'team-style', path: 'agent-presets/missing' }] }
+    const missing = await inspectPluginPackage(await fixture({ ...presetFiles, 'package.json': JSON.stringify(manifest) }), productCatalog)
+    expect(missing.verdict).toBe('blocked')
+    expect(missing.findings.some((item) => item.code === 'preset-files')).toBe(true)
+  })
+})

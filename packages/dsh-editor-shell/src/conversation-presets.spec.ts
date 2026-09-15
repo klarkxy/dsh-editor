@@ -128,6 +128,58 @@ describe('new conversation preset allowlist', () => {
   })
 })
 
+describe('developer mode preset projection', () => {
+  it('appends legacy and plugin presets after the four writing modes', () => {
+    const presets = projectNewConversationPresets(listed, { developerMode: true })
+    expect(presets.map((item) => item.id)).toEqual([...NEW_CONVERSATION_PRESET_IDS, LEGACY_AGENT_PRESET, 'standard'])
+    const legacy = presets.find((item) => item.id === LEGACY_AGENT_PRESET)
+    expect(legacy).toMatchObject({ name: '旧采访', available: true, legacy: true })
+    expect(presets.find((item) => item.id === 'standard')).toMatchObject({ name: '编码', available: true })
+    expect(presets.find((item) => item.id === 'standard')?.legacy).toBeUndefined()
+    expect(firstAvailableConversationPreset(presets)).toBe('dsh-editor-writing')
+  })
+
+  it('keeps broken extras visible but disabled with a reason', () => {
+    const presets = projectNewConversationPresets([
+      { id: 'dsh-editor-writing', status: 'ok' },
+      { id: 'dsh-editor', status: 'broken', reason: 'legacy skill missing' },
+      { id: 'plugin-preset', state: 'missing' },
+    ], { developerMode: true })
+    expect(presets.find((item) => item.id === 'dsh-editor')).toMatchObject({
+      available: false,
+      reason: 'legacy skill missing',
+      legacy: true,
+    })
+    expect(presets.find((item) => item.id === 'plugin-preset')).toMatchObject({
+      available: false,
+      reason: '这个模式当前不可用。',
+    })
+    expect(canConfirmConversationPreset(presets, 'dsh-editor')).toBe(false)
+  })
+
+  it('falls back to the preset id when an extra has no host-provided name', () => {
+    const presets = projectNewConversationPresets([{ id: 'plugin-preset', status: 'ok' }], { developerMode: true })
+    expect(presets.find((item) => item.id === 'plugin-preset')).toMatchObject({ name: 'plugin-preset', description: '' })
+  })
+
+  it('rejects a custom preset id without the dev flag and accepts it with the flag', async () => {
+    const host = hostFixture()
+    host.select.mockResolvedValue({ ok: true, value: 'standard' })
+    await expect(confirmNewConversationPreset(host, {
+      workspaceId: 'ws-1',
+      presetId: 'standard',
+    })).resolves.toMatchObject({ ok: false, sessionId: undefined })
+    expect(host.create).not.toHaveBeenCalled()
+    await expect(confirmNewConversationPreset(host, {
+      workspaceId: 'ws-1',
+      presetId: 'standard',
+      allowCustomPreset: true,
+    })).resolves.toEqual({ ok: true, sessionId: 'session-new', agentPreset: 'standard' })
+    expect(host.select).toHaveBeenCalledWith('session-new', 'standard')
+    expect(host.open).toHaveBeenCalledWith('session-new')
+  })
+})
+
 describe('new conversation preset picker flow', () => {
   it('cancels before confirm with zero create', async () => {
     const list = vi.fn(async () => ({ ok: true as const, value: listed }))

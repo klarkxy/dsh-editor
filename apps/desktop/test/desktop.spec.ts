@@ -512,6 +512,36 @@ describe('profile deployment', () => {
     await writeFile(join(occupied, 'agent.cordis.yml'), '[]\n')
     await expect(deployProfile(root, template)).rejects.toBeInstanceOf(ProfileCollisionError)
   })
+  it('deploys plugin-declared presets on restore and reclaims them once the plugin is gone', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    const template = join(root, 'template')
+    await mkdir(join(template, 'node_modules'), { recursive: true })
+    await writeFile(join(template, 'package.json'), JSON.stringify({
+      name: 'dsh-editor-profile',
+      dsh: { profile: { bundles: [] } },
+    }))
+    const plugin = join(root, 'user-plugins', 'community-preset')
+    await mkdir(join(plugin, 'agent-presets', 'team-style'), { recursive: true })
+    await writeFile(join(plugin, 'package.json'), JSON.stringify({
+      name: 'community-preset',
+      version: '1.0.0',
+      dshEditor: { presets: [{ id: 'team-style', path: 'agent-presets/team-style' }] },
+    }))
+    await writeFile(join(plugin, 'agent-presets', 'team-style', 'preset.yml'), 'name: 团队风格\n')
+    await writeFile(join(plugin, 'agent-presets', 'team-style', 'agent.cordis.yml'), '[]\n')
+    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({
+      schema: 1,
+      installed: [{ name: 'community-preset', spec: 'github:acme/community-preset', version: '1.0.0' }],
+    }))
+    await deployProfile(root, template)
+    const deployed = join(root, '.agent-presets', 'team-style')
+    expect(await readFile(join(deployed, 'preset.yml'), 'utf8')).toBe('name: 团队风格\n')
+    expect(JSON.parse(await readFile(join(deployed, PROFILE_MARKER), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1, plugin: 'community-preset' })
+    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({ schema: 1, installed: [] }))
+    await deployProfile(root, template)
+    expect(existsSync(deployed)).toBe(false)
+    expect((await (await import('node:fs/promises')).readdir(join(root, '.agent-presets'))).some((name) => name.includes('.stage-') || name.includes('.backup-'))).toBe(false)
+  })
 })
 
 describe('persistent packaged runtime cache', () => {

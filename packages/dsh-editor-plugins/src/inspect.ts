@@ -9,6 +9,7 @@ import {
   type PluginInspectReport,
 } from './contracts.ts'
 import { isProtectedPackage, isSafeEntryId, isSafePackageName, type RuntimeCatalog } from './core.ts'
+import { inspectPluginPresets } from './presets.ts'
 
 export const PINNED_DSH = '0.1.5-rc.2'
 export const PINNED_CORDIS = '4.0.2'
@@ -322,6 +323,13 @@ export async function inspectPluginPackage(pkgDir: string, catalog?: RuntimeCata
       findings.push(finding('native-addon', 'warning', '包内含有 .node 原生文件，当前安装路径不会为其编译'))
     }
   } catch { /* listing is advisory */ }
+
+  const presetScan = await inspectPluginPresets(pkgDir)
+  for (const problem of presetScan.problems) findings.push(finding(problem.code, 'error', problem.message))
+  if (presetScan.presets.length) {
+    report.presets = presetScan.presets.map(({ id, path }) => ({ id, path }))
+    findings.push(finding('presets', 'info', `提供对话 preset：${presetScan.presets.map((item) => item.id).join('、')}（重启后在新对话的模式列表中可选）`))
+  }
 
   report.verdict = verdictOf(findings)
   return report

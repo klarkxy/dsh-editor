@@ -54,6 +54,7 @@ export type InspectSeverity = 'error' | 'warning' | 'info'
 export type InspectVerdict = 'ready' | 'warn' | 'blocked'
 export type InspectFinding = { code: string; severity: InspectSeverity; message: string }
 export type InspectEntry = { id: string; name: string }
+export type PluginPresetDeclaration = { id: string; path: string }
 export type PluginInspectReport = {
   verdict: InspectVerdict
   name?: string
@@ -61,6 +62,8 @@ export type PluginInspectReport = {
   entries: InspectEntry[]
   hasClient: boolean
   findings: InspectFinding[]
+  /** 插件通过 dshEditor.presets 声明、且通过静态检查的对话 preset。 */
+  presets?: PluginPresetDeclaration[]
 }
 
 export type PluginsErrorCode = 'bad-request' | 'cancelled' | 'forbidden' | 'not-found' | 'network' | 'internal'

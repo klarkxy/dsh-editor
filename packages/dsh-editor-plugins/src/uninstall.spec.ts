@@ -103,3 +103,41 @@ describe('installed plugin removal', () => {
     expect(await readFile(join(paths.profileDir, 'node_modules', builtin, 'keep.txt'), 'utf8')).toBe('builtin stays')
   })
 })
+
+describe('plugin conversation preset lifecycle', () => {
+  it('deploys declared presets on install and reclaims them on uninstall', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-preset-lifecycle-'))
+    roots.push(home)
+    const paths = resolvePluginPaths({ DSH_HOME: home }, [])
+    await mkdir(join(paths.profileDir, 'node_modules', builtin), { recursive: true })
+    await writeFile(join(paths.profileDir, 'package.json'), JSON.stringify({ name: 'fixture', private: true, dsh: { profile: { bundles: [builtin] } } }))
+    await installGitHubPlugin(parseGitHubSpec('acme/sample')!, paths, signal(), {
+      fetch: (async () => new Response(new Uint8Array(128))) as typeof fetch,
+      extract: async (_archive, destination) => {
+        await mkdir(join(destination, 'lib'), { recursive: true })
+        await mkdir(join(destination, 'agent-presets', 'team-style'), { recursive: true })
+        await writeFile(join(destination, 'package.json'), JSON.stringify({
+          name: packageName,
+          version: '1.0.0',
+          main: 'lib/index.js',
+          dsh: { bundle: { patch: './cordis.patch.yml' } },
+          dshEditor: { presets: [{ id: 'team-style', path: 'agent-presets/team-style' }] },
+        }))
+        await writeFile(join(destination, 'lib/index.js'), 'export const name = "sample"')
+        await writeFile(join(destination, 'cordis.patch.yml'), '- insert:\n    - id: sample-entry\n      name: sample-plugin\n')
+        await writeFile(join(destination, 'agent-presets', 'team-style', 'preset.yml'), 'name: 团队风格\n')
+        await writeFile(join(destination, 'agent-presets', 'team-style', 'agent.cordis.yml'), '[]\n')
+      },
+      npmInstall: async () => {},
+      link: defaultLink,
+    }, catalog).then(async (installed) => {
+      await persistPluginState(paths, { ...emptyPluginState(), installed: [installed] })
+    })
+    const deployed = join(paths.home, '.agent-presets', 'team-style')
+    expect(await readFile(join(deployed, 'preset.yml'), 'utf8')).toBe('name: 团队风格\n')
+    expect(JSON.parse(await readFile(join(deployed, '.dsh-editor-owner.json'), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1, plugin: packageName })
+    const result = await handlePluginsRpc('marketplace.uninstall', { name: packageName }, signal(), { paths, loader: loader(false) })
+    expect(result).toMatchObject({ ok: true })
+    await expect(stat(deployed)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})

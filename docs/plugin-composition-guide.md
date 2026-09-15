@@ -17,7 +17,7 @@
 | `dsh-editor-article` | 文章与自媒体；不挂 novel-kernel |
 | `dsh-editor-technical` | 技术文档；不挂 novel-kernel |
 
-历史 `dsh-editor` 不进新建 picker。新对话：草稿保护通过后 `list` 四个 Preset → 确认后才 blank `create` → `select` → 以 Host 真实投影打开；取消确认不 create。已有对话只切换。四个新 Preset 走 `writing_propose` V2：改已有文件必须带生成时 Host-read 的目标基线（edit/split 的 `targetVersion`，merge 的 `targetVersion`+`sourceVersion`，renames 每项 `version`）；可选 `basis` 只做独立来源依赖校验，不能代替目标基线。V2 create 是独占新建。不自动建索引、scratch、frontmatter，也不走 `context.compile`。可见 `dsh-editor-novel` 只多 `novel_knowledge`。只有 Host 上的 hidden legacy 会话才挂 novel-kernel 完整表面，并跑旧采访、自动索引、frontmatter 与 `context.compile`。通用 / 文章 / 技术不挂 novel-kernel。作品是普通文件夹；专业目录只在作者确认 create 提案后出现。
+历史 `dsh-editor` 不进新建 picker（设置页"开发者模式"开启时例外：picker 追加列出 Host 返回的全部 preset，旧版带"旧版兼容"徽标）。新对话：草稿保护通过后 `list` 四个 Preset → 确认后才 blank `create` → `select` → 以 Host 真实投影打开；取消确认不 create。已有对话只切换。四个新 Preset 走 `writing_propose` V2：改已有文件必须带生成时 Host-read 的目标基线（edit/split 的 `targetVersion`，merge 的 `targetVersion`+`sourceVersion`，renames 每项 `version`）；可选 `basis` 只做独立来源依赖校验，不能代替目标基线。V2 create 是独占新建。不自动建索引、scratch、frontmatter，也不走 `context.compile`。可见 `dsh-editor-novel` 只多 `novel_knowledge`。只有 Host 上的 hidden legacy 会话才挂 novel-kernel 完整表面，并跑旧采访、自动索引、frontmatter 与 `context.compile`。通用 / 文章 / 技术不挂 novel-kernel。作品是普通文件夹；专业目录只在作者确认 create 提案后出现。
 
 | 交付 | 实际业务包 | AI/外部资料 |
 | --- | --- | --- |
