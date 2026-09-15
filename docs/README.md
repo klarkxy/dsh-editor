@@ -4,7 +4,9 @@
 
 先读 [使用者指南](user-guide.md) 或 [开发者指南](development.md)。改产品边界先读 [产品原则](product-principles.md)，改界面先读 [界面与设计系统](ui.md)，改插件先读 [插件架构](plugin-architecture.md)。
 
-0.2.0 暂停桌面校对；知乎入口在「设置 → 知乎资料」。辅助文件不显示在文件树和作者全文搜索中，原文件仍保留。不要按旧版截图寻找这些入口。
+四个 Preset 共用侧栏文稿校对（当前文档 / 全部可见 `.md`/`.txt`；kind 为标点、错别字、敏感词、重复、口癖，不含 `card`）。顶层 `dsh-proofread` 入口仍可 disabled，因为面板走 workbench `proofread.scan`。知乎入口在「设置 → 知乎资料」。辅助文件不显示在文件树和作者全文搜索中，原文件仍保留。不要按旧版截图寻找这些入口。
+
+新对话四个 Preset（默认 `dsh-editor-writing`）加历史 `dsh-editor`；`basic` / `smart` / `full` 是同一桌面能力的兼容别名。可见 `dsh-editor-novel` 以 `knowledge-only` 挂 novel-kernel（仅 `novel_knowledge`，外加共用的 `writing_propose` / `author_observe`）；通用 / 文章 / 技术不挂。完整小说工具与采访 / 索引 / frontmatter / `context.compile` 管线只留在隐藏的 legacy `dsh-editor`。作品是普通文件夹。当前手册对齐源码，不改 `release-*.md`、历史验收记录或 `docs/diagrams`。
 
 ## 使用与维护
 
@@ -16,7 +18,7 @@
 | [开发者指南](development.md) | 固定版本、构建顺序、调试、验收、打包与发布 |
 | [架构与边界](architecture.md) | 进程、profile、持久化与安全约束 |
 | [插件架构与接口](plugin-architecture.md) | 所有权、注入、RPC / Tool / slot 与替换合同 |
-| [组合指南](plugin-composition-guide.md) | basic / smart / full、独立 Web 插件与复现命令 |
+| [组合指南](plugin-composition-guide.md) | 桌面能力集合的 basic / smart / full 兼容别名、独立 Web 插件与复现命令 |
 | [0.2.0 本地验收](release-0.2.0.md) | 本轮证据范围、产物与最终标签验证的区别 |
 | [作者优先工作流](author-first-workflow.md) | 前置规划动机、正文页去规划化的设计与两轮验收结论 |
 | [变更记录](../CHANGELOG.md) | 各版本已经发生的变化 |

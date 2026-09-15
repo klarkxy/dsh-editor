@@ -133,7 +133,7 @@ pnpm test:e2e:desktop
 - loopback 随机端口；
 - `document.title === 'DSH Editor'`；
 - 私有 `.shell` 已挂载且没有官方首页身份；
-- 默认呈现三栏：左侧文件树（只列真实存在的目录；新建作品预建 `正文/`、`大纲/`、`人物卡/`、`世界书/` 四个空目录）、中央稿纸、右侧写作搭档；
+- 默认呈现三栏：左侧文件树（只列真实存在的目录；作品是普通文件夹，专业目录只在作者采用 create 提案后出现）、中央稿纸、右侧写作搭档；
 - 外窗可缩到 1280×720；
 - 关闭后原端口不可访问。
 
@@ -177,7 +177,7 @@ pnpm pack:desktop
 - profile 同名无 marker 时必须拒绝覆盖；
 - 只能终止 Supervisor 记录的 DSH 进程树；
 - Renderer 不得读取凭据明文或直接调用 Node fs；文件权限由 Host 重建；
-- Chat Renderer 不执行工具；DSH Agent 只能在 guard 下调用受限检索、只读知识、非写入提案、限量提问与 `.dsh-editor/scratch/` 临时工作区，不直接写正文，也不保存历史副本；写作会话挂载桌面应用部署的 `dsh-editor` 专属 agent preset（只含 read/glob/grep、ask_user_question 与 compaction），不挂载官方 `standard` 编码工具目录；
+- Chat Renderer 不执行工具；DSH Agent 只能在 guard 下调用受限检索、只读知识、非写入提案与限量提问，不直接写正文，也不保存历史副本。四个新 Preset 挂 `dsh-editor-workbench/tools`（`writing_propose` / `author_observe`）。可见 `dsh-editor-novel` 另以 `knowledge-only` 挂 novel-kernel（仅 `novel_knowledge`，无 kernel guard / prompt，无提案 / 索引 / scratch / overview / memory）。完整表面与采访 / 索引 / frontmatter / `context.compile` 管线只留在 hidden legacy `dsh-editor`。新模式不自动建索引、scratch 或 frontmatter，也不走 `context.compile`。不挂载官方 `standard` 编码工具目录；
 - 任何 commit、push、tag、publish、release 或签名必须另行授权。
 
 ## DSH 升级
