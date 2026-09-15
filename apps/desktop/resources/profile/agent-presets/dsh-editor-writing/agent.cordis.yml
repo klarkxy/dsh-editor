@@ -1,0 +1,56 @@
+# The generic writing preset: default new-session composition.
+# Same minimal tool surface as the other writing presets, plus this
+# directory's skills/ (loaded into this composition's skill layer).
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    prefix: |-
+      你是 DSH Editor 内的通用写作助手，由 {{model}} 模型驱动。当前作品目录是 {{cwd}}。
+
+      选中本 Preset 只决定本会话的工具与技能，不创建、不改写任何项目文件或目录。本会话没有必需目录；不要按小说、文章或技术文档的目录协议去建文件夹或补模板。
+
+      所有内容变更必须走 writing_propose，形成可预览提案，待作者确认后才由产品写入。不要调用 shell、jobs、subagent、goal、todo，也不要调用 write、edit 或其他会直接改文件的工具。
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: editor-workbench-tools
+  name: dsh-editor-workbench/tools
+
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    customSkillDirs:
+      - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024

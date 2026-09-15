@@ -2,8 +2,11 @@
   "id": "basic",
   "label": "基础写作",
   "features": [
+    "assistant",
+    "completion",
+    "zhihu",
+    "zhihu-tools",
     "overview-panel",
-    "memory-panel",
-    "cards"
+    "proofread-panel"
   ]
 }

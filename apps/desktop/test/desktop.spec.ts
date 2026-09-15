@@ -26,6 +26,92 @@ class FakeChild extends EventEmitter implements ChildLike {
   exit(code = 0): void { this.exitCode = code; this.emit('exit', code, null) }
 }
 
+type CompositionRow = { id?: string; name?: unknown; group?: unknown; config?: unknown }
+
+function compositionProblem(text: string): string | undefined {
+  return entryListProblem(parseCompositionRows(text))
+}
+
+function entryListProblem(rows: unknown, at = ''): string | undefined {
+  if (!Array.isArray(rows)) return at === '' ? 'the composition must be a top-level list of plugin rows' : `group ${at} must hold a list of plugin rows`
+  for (const [index, row] of rows.entries()) {
+    const label = at === '' ? `row ${String(index + 1)}` : `${at} row ${String(index + 1)}`
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) return `${label} is not a plugin row (expected a map with a "name")`
+    const { name, group, config } = row as CompositionRow
+    if (typeof name !== 'string' || name === '') return `${label} names no plugin (a "name" string is required)`
+    if (group === true) {
+      const nested = entryListProblem(config, label)
+      if (nested !== undefined) return nested
+    }
+  }
+}
+
+function parseCompositionRows(text: string): CompositionRow[] {
+  const roots: CompositionRow[] = []
+  const stack: Array<{ indent: number; row: CompositionRow; kind: 'row' | 'config' }> = []
+  const attach = (indent: number, row: CompositionRow) => {
+    while (stack.length && stack[stack.length - 1]!.indent >= indent) stack.pop()
+    const parent = stack[stack.length - 1]
+    if (!parent) roots.push(row)
+    else if (parent.kind === 'config') {
+      const list = Array.isArray(parent.row.config) ? parent.row.config as CompositionRow[] : []
+      list.push(row)
+      parent.row.config = list
+    }
+    stack.push({ indent, row, kind: 'row' })
+  }
+  for (const raw of text.replace(/\r\n/g, '\n').split('\n')) {
+    if (!raw.trim() || raw.trimStart().startsWith('#')) continue
+    const indent = raw.length - raw.trimStart().length
+    const trimmed = raw.trim()
+    if (trimmed.startsWith('- id:')) {
+      attach(indent, { id: trimmed.slice('- id:'.length).trim() })
+      continue
+    }
+    const current = stack[stack.length - 1]?.row as Record<string, unknown> | undefined
+    if (!current) continue
+    if (trimmed === 'config:' || trimmed === 'config: |' || trimmed === 'config: |-') {
+      current.config = []
+      stack.push({ indent, row: current, kind: 'config' })
+      continue
+    }
+    const pair = trimmed.match(/^([A-Za-z][\w-]*):\s*(.*)$/)
+    if (!pair) continue
+    const [, key, value] = pair
+    if (key === 'config') {
+      current.config = []
+      stack.push({ indent, row: current, kind: 'config' })
+      continue
+    }
+    current[key] = value === 'true' ? true : value === 'false' ? false : value
+  }
+  return roots
+}
+
+async function skillDirectoryNames(directory: string): Promise<string[]> {
+  return (await readdir(directory, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
+}
+
+function unquoteYaml(value: unknown): unknown {
+  return typeof value === 'string' && /^(['"]).*\1$/.test(value) ? value.slice(1, -1) : value
+}
+
+function topLevelPluginRows(text: string): Array<{ id?: string; name?: unknown }> {
+  return parseCompositionRows(text).map((row) => ({ id: row.id, name: unquoteYaml(row.name) }))
+}
+
+function parseSkillDocument(text: string): { name: string; description: string } {
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  if (!match) throw new Error('skill is missing YAML frontmatter')
+  const name = match[1].match(/^name:\s*(.+)$/m)?.[1]?.trim()
+  const description = match[1].match(/^description:\s*(.+)$/m)?.[1]?.trim()
+  if (!name || !description) throw new Error('skill frontmatter needs name and description')
+  return { name, description }
+}
+
 async function runtimeFixture(version = 'one', executableNode = false): Promise<{ root: string; resources: string }> {
   const root = await mkdtemp(join(tmpdir(), 'dsh-runtime-'))
   const resources = join(root, 'resources')
@@ -217,15 +303,174 @@ describe('profile deployment', () => {
     expect(JSON.parse(await readFile(join(installed, 'package.json'), 'utf8')).dsh.profile.bundles).toContain('community-theme')
     expect(existsSync(join(installed, 'node_modules', 'community-theme', 'package.json'))).toBe(true)
   })
-  it('points the agent preset default at the editor preset and keeps that preset minimal', async () => {
+  it('points the agent preset default at generic writing and keeps the legacy preset compatible', async () => {
     const profileResources = join(import.meta.dirname, '..', 'resources', 'profile')
     const patch = await readFile(join(profileResources, 'cordis.patch.yml'), 'utf8')
-    expect(patch).toMatch(/- id: agent-presets\s+config:\s+default: dsh-editor/)
-    const composition = await readFile(join(profileResources, 'agent-presets', 'dsh-editor', 'agent.cordis.yml'), 'utf8')
-    expect(composition).toContain('dsh-tool-ask-user')
-    expect(composition).toContain('dsh-tool-fs')
-    expect(composition).not.toMatch(/dsh-tool-(bash|pwsh|web|todo|goal|subagent|workflow|ralph|skill)/)
-    expect(composition).not.toContain('dsh-plan-mode')
+    expect(patch).toMatch(/- id: agent-presets\s+config:\s+default: dsh-editor-writing/)
+    expect(patch).not.toMatch(/- id: agent-presets\s+config:\s+default: dsh-editor\s*$/m)
+    expect(patch).toMatch(/- id: editor-workbench-tools\r?\n  disabled: true/)
+    expect(patch).toMatch(/- id: editor-novel-kernel\r?\n  disabled: true/)
+    expect(patch).not.toMatch(/- id: editor-workbench\r?\n  disabled: true/)
+    const legacy = await readFile(join(profileResources, 'agent-presets', 'dsh-editor', 'agent.cordis.yml'), 'utf8')
+    expect(legacy).toContain('dsh-tool-ask-user')
+    expect(legacy).toContain('dsh-tool-fs')
+    expect(legacy).not.toMatch(/dsh-tool-(bash|pwsh|web|todo|goal|subagent|workflow|ralph|skill)/)
+    expect(legacy).not.toContain('dsh-plan-mode')
+    expect(topLevelPluginRows(legacy)).toEqual([
+      { id: 'persona', name: '@deepseek-ai/dsh-persona' },
+      { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
+      { id: 'tool-fs-search', name: '@deepseek-ai/dsh-tool-fs-search' },
+      { id: 'tool-ask-user', name: '@deepseek-ai/dsh-tool-ask-user' },
+      { id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' },
+      { id: 'editor-novel-kernel', name: 'dsh-editor-novel-kernel' },
+      { id: 'compaction', name: 'cordis:group' },
+    ])
+    expect(legacy).toMatch(/- id: editor-novel-kernel\r?\n  name: dsh-editor-novel-kernel(?:\r?\n(?!  config:)|$)/)
+    expect(legacy).not.toContain('knowledge-only')
+    expect(existsSync(join(profileResources, 'agent-presets', 'dsh-editor', 'skills'))).toBe(false)
+  })
+  it('ships five app-owned writing presets with parseable compositions and uncrossed skills', async () => {
+    const profileResources = join(import.meta.dirname, '..', 'resources', 'profile')
+    const presetRoot = join(profileResources, 'agent-presets')
+    const ids = (await readdir(presetRoot, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+    expect(ids).toEqual(['dsh-editor', 'dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical', 'dsh-editor-writing'])
+
+    const writingIds = ['dsh-editor-writing', 'dsh-editor-novel', 'dsh-editor-article', 'dsh-editor-technical'] as const
+    const writingLabels = {
+      'dsh-editor-writing': '通用写作',
+      'dsh-editor-novel': '小说创作',
+      'dsh-editor-article': '文章与自媒体',
+      'dsh-editor-technical': '技术文档',
+    } as const
+    const professionalSkill = {
+      'dsh-editor-writing': undefined,
+      'dsh-editor-novel': 'novel-writing',
+      'dsh-editor-article': 'article-writing',
+      'dsh-editor-technical': 'technical-writing',
+    } as const
+    const scopedTools = {
+      'dsh-editor-writing': [{ id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' }],
+      'dsh-editor-novel': [
+        { id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' },
+        { id: 'editor-novel-kernel', name: 'dsh-editor-novel-kernel' },
+      ],
+      'dsh-editor-article': [{ id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' }],
+      'dsh-editor-technical': [{ id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' }],
+    } as const
+    const descriptions = new Map<string, string>()
+
+    for (const id of ids) {
+      const directory = join(presetRoot, id)
+      expect(existsSync(join(directory, 'preset.yml'))).toBe(true)
+      expect(existsSync(join(directory, 'agent.cordis.yml'))).toBe(true)
+      expect(JSON.parse(await readFile(join(directory, PROFILE_MARKER), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
+      const composition = await readFile(join(directory, 'agent.cordis.yml'), 'utf8')
+      expect(compositionProblem(composition)).toBeUndefined()
+    }
+
+    for (const id of writingIds) {
+      const presetYml = await readFile(join(presetRoot, id, 'preset.yml'), 'utf8')
+      expect(presetYml.match(/^name:\s*(.+)$/m)?.[1]?.trim()).toBe(writingLabels[id])
+      const composition = await readFile(join(presetRoot, id, 'agent.cordis.yml'), 'utf8')
+      expect(composition).toContain('dsh-tool-ask-user')
+      expect(composition).toContain('dsh-tool-fs')
+      expect(composition).toContain('dsh-skill-filesystem')
+      expect(composition).toContain('dsh-tool-skill')
+      expect(composition).toContain("new URL('skills/', baseUrl)")
+      expect(composition).toContain('writing_propose')
+      expect(composition).toContain('作者确认')
+      expect(composition).toMatch(/不创建|不建目录/)
+      expect(composition).not.toMatch(/dsh-tool-(bash|pwsh|web|todo|goal|subagent|workflow|ralph)(?!-)/)
+      expect(composition).not.toContain('dsh-plan-mode')
+      expect(topLevelPluginRows(composition)).toEqual([
+        { id: 'persona', name: '@deepseek-ai/dsh-persona' },
+        { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
+        { id: 'tool-fs-search', name: '@deepseek-ai/dsh-tool-fs-search' },
+        { id: 'tool-ask-user', name: '@deepseek-ai/dsh-tool-ask-user' },
+        ...scopedTools[id],
+        { id: 'skill-filesystem', name: '@deepseek-ai/dsh-skill-filesystem' },
+        { id: 'tool-skill', name: '@deepseek-ai/dsh-tool-skill' },
+        { id: 'compaction', name: 'cordis:group' },
+      ])
+      // Four new presets exclude legacy novel write/index/scratch tools:
+      // writing/article/technical omit the kernel; novel mounts it knowledge-only.
+      if (id === 'dsh-editor-novel') {
+        expect(composition).toMatch(/- id: editor-novel-kernel\r?\n  name: dsh-editor-novel-kernel\r?\n  config:\r?\n    mode: knowledge-only/)
+      } else {
+        expect(composition).not.toContain('dsh-editor-novel-kernel')
+        expect(composition).not.toContain('knowledge-only')
+      }
+      const skillNames = await skillDirectoryNames(join(presetRoot, id, 'skills'))
+      const expected = professionalSkill[id] ? ['prose-revision', professionalSkill[id]] : ['prose-revision']
+      expect(skillNames).toEqual(expected.sort())
+      for (const name of skillNames) {
+        const skill = parseSkillDocument(await readFile(join(presetRoot, id, 'skills', name, 'SKILL.md'), 'utf8'))
+        expect(skill.name).toBe(name)
+        expect(skill.description.length).toBeGreaterThan(0)
+        descriptions.set(`${id}:${name}`, skill.description)
+      }
+    }
+
+    expect(descriptions.get('dsh-editor-writing:prose-revision')).toBe(descriptions.get('dsh-editor-novel:prose-revision'))
+    expect(descriptions.get('dsh-editor-writing:prose-revision')).toBe(descriptions.get('dsh-editor-article:prose-revision'))
+    expect(descriptions.get('dsh-editor-writing:prose-revision')).toBe(descriptions.get('dsh-editor-technical:prose-revision'))
+    expect(descriptions.get('dsh-editor-writing:prose-revision')).toContain('当前 Preset 的专业工作流（若有）')
+    expect(descriptions.get('dsh-editor-writing:prose-revision')).not.toMatch(/novel-writing|article-writing|technical-writing/)
+    expect(descriptions.get('dsh-editor-novel:novel-writing')).not.toBe(descriptions.get('dsh-editor-article:article-writing'))
+    expect(descriptions.get('dsh-editor-novel:novel-writing')).not.toBe(descriptions.get('dsh-editor-technical:technical-writing'))
+    expect(descriptions.get('dsh-editor-article:article-writing')).not.toBe(descriptions.get('dsh-editor-technical:technical-writing'))
+    expect(descriptions.get('dsh-editor-novel:novel-writing')).not.toContain('article-writing 用于小说')
+    for (const [key, description] of descriptions) {
+      if (key.endsWith(':novel-writing')) expect(description).toMatch(/不要用于文章|不要用于.*技术/)
+      if (key.endsWith(':article-writing')) expect(description).toMatch(/不要用于小说|不要用于.*技术/)
+      if (key.endsWith(':technical-writing')) expect(description).toMatch(/不要用于小说|不要用于.*文章/)
+    }
+
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    await deployProfile(root, profileResources)
+    const deployed = (await readdir(join(root, '.agent-presets'))).sort()
+    expect(deployed).toEqual(ids)
+    expect(await skillDirectoryNames(join(root, '.agent-presets', 'dsh-editor-writing', 'skills'))).toEqual(['prose-revision'])
+    expect(await skillDirectoryNames(join(root, '.agent-presets', 'dsh-editor-novel', 'skills'))).toEqual(['novel-writing', 'prose-revision'])
+    expect(existsSync(join(root, '.agent-presets', 'dsh-editor-writing', 'skills', 'novel-writing'))).toBe(false)
+    expect(existsSync(join(root, '.agent-presets', 'dsh-editor', 'skills'))).toBe(false)
+  })
+  it('keeps scoped tools disabled after preparing the full composition', async () => {
+    const { configureProfile, desktopComposition } = await import('../../../scripts/desktop-compositions.mjs')
+    const aliases = ['basic', 'smart', 'full'] as const
+    const resolved = await Promise.all(aliases.map((id) => desktopComposition(id)))
+    const stripped = resolved.map(({ id: _id, label: _label, ...rest }) => rest)
+    expect(stripped[0]).toEqual(stripped[1])
+    expect(stripped[1]).toEqual(stripped[2])
+    for (const item of resolved) {
+      expect(item.features).toEqual(['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel'])
+      expect(item.features).toContain('proofread-panel')
+      expect(item.features).not.toContain('cards')
+      expect(item.features).not.toContain('memory-panel')
+      expect(item.packages).toContain('dsh-editor-proofread-panel')
+      expect(item.packages).not.toContain('dsh-editor-cards')
+      expect(item.packages).not.toContain('dsh-editor-memory-panel')
+      expect(item.extraInserts.map((row: { id: string }) => row.id)).not.toContain('editor-workbench-tools')
+      expect(item.extraInserts.map((row: { id: string }) => row.id)).not.toContain('editor-novel-kernel')
+    }
+    const composition = resolved[2]!
+
+    const destination = await mkdtemp(join(tmpdir(), 'dsh-prepared-'))
+    await writeFile(join(destination, 'package.json'), JSON.stringify({
+      name: 'dsh-editor-profile',
+      dsh: { profile: { bundles: [] } },
+    }))
+    await configureProfile(destination, composition)
+    const patch = await readFile(join(destination, 'cordis.patch.yml'), 'utf8')
+    expect(patch).toMatch(/- id: editor-workbench-tools\r?\n  disabled: true/)
+    expect(patch).toMatch(/- id: editor-novel-kernel\r?\n  disabled: true/)
+    expect(patch).not.toMatch(/- id: editor-cards\r?\n/)
+    expect(patch).not.toMatch(/- id: editor-workbench-tools\r?\n  disabled: false/)
+    expect(patch).not.toMatch(/- id: editor-novel-kernel\r?\n  disabled: false/)
+    expect(patch).not.toMatch(/- id: editor-workbench\r?\n  disabled: true/)
   })
   it('deploys app-owned agent presets into the harness-home user preset root', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))

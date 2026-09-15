@@ -53,14 +53,21 @@
   disabled: true
 - id: ui-trajectory
   disabled: true
-# Writing sessions mount the editor's own minimal preset (deployed into
+# Writing sessions mount the editor's own presets (deployed into
 # <dshHome>/.agent-presets by the desktop app) instead of the shipped
-# `standard` coding agent; ui-user-questions stays disabled because the
-# editor Shell renders the question card itself.
+# `standard` coding agent. The new default is dsh-editor-writing; the
+# historical dsh-editor preset remains selectable. ui-user-questions stays
+# disabled because the editor Shell renders the question card itself.
 - id: agent-presets
   config:
-    default: dsh-editor
+    default: dsh-editor-writing
 
 # Temporarily suspend desktop proofreading while its results are reviewed.
 - id: proofread
+  disabled: true
+# Scoped writing tools stay resolvable for app-owned presets. The locked
+# editor-workbench core still loads host-wide and owns fail-closed guard/RPC.
+- id: editor-workbench-tools
+  disabled: true
+- id: editor-novel-kernel
   disabled: true

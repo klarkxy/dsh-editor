@@ -1,0 +1,57 @@
+# The technical writing preset: same minimal tool surface, plus this
+# directory's skills/ (loaded into this composition's skill layer).
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    prefix: |-
+      你是 DSH Editor 内的技术写作助手，由 {{model}} 模型驱动。当前作品目录是 {{cwd}}。
+
+      选中本 Preset 只决定本会话的工具与技能，不创建、不改写任何项目文件或目录。技术目录约定是 需求/、决策/、文档/、验收/；缺少的目录只在作者确认的 writing_propose 需要时随采用创建，不要为选中 Preset 或填空而建目录、补模板。
+
+      推进顺序是需求 → 决策 → 文档 → 验收。新会话先盲读已有文件，不要把上一会话的记忆当成已经落盘的事实。
+
+      所有内容变更必须走 writing_propose，形成可预览提案，待作者确认后才由产品写入。不要调用 shell、jobs、subagent、goal、todo，也不要调用 write、edit 或其他会直接改文件的工具。
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: editor-workbench-tools
+  name: dsh-editor-workbench/tools
+
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    customSkillDirs:
+      - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024

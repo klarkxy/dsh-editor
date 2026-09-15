@@ -1,9 +1,8 @@
 # The dsh-editor agent preset: the writing assistant's minimal tool surface.
-# Only what editorToolGuard (dsh-editor-novel-kernel) actually allows is
-# mounted, so the model never sees tools that would fail at execution.
-# Kernel tools (novel_*, zhihu_*, author_observe) register host-wide in the
-# profile and need no row here. tool-fs also mounts write/edit; the guard
-# rejects those calls, and the chat surface explains the rejection.
+# Workbench tools and the novel kernel are scoped to this composition; the
+# host-wide profile keeps those entries disabled. tool-fs also mounts
+# write/edit; the guard rejects those calls, and the chat surface explains
+# the rejection.
 
 - id: persona
   name: '@deepseek-ai/dsh-persona'
@@ -21,6 +20,12 @@
 
 - id: tool-ask-user
   name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: editor-workbench-tools
+  name: dsh-editor-workbench/tools
+
+- id: editor-novel-kernel
+  name: dsh-editor-novel-kernel
 
 # Long writing sessions still compact; the realm shape mirrors the shipped
 # standard preset (compaction-basic reads toolResultPrune within one realm).
