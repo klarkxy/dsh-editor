@@ -30,7 +30,6 @@ export default defineConfig([
         'dsh-editor-seats',
         'dsh-editor-workbench/contracts',
         'dsh-editor-novel-kernel/contracts',
-        'dsh-editor-cards/contracts',
         'dsh-manuscript/client/editor-core',
         // cmdk + @radix-ui/react-dialog 没有自己的 CSS,tsdown 默认会把
         // package.json 里的 production dep 当 external,所以必须显式列进

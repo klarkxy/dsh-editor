@@ -1,6 +1,6 @@
 import { createElement as e, Fragment, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type RefObject } from 'react'
 import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
-import { isChapterDocumentPath } from '../chapter-status-view.ts'
+import { isManuscriptChapterPath } from '../project-files.ts'
 import {
   anchorOccurrences,
   basenameOf,
@@ -91,7 +91,7 @@ export function chapterMenuModel(path: string, files: readonly string[]): {
   mergePreviousDisabledTitle: string
   mergeNextDisabledTitle: string
 } {
-  const visible = isChapterDocumentPath(path)
+  const visible = isManuscriptChapterPath(path)
   const markdown = isMarkdownChapterPath(path)
   const { previous, next } = neighbourChapters(path, files)
   const canMergePrevious = Boolean(previous && markdown && isMarkdownChapterPath(previous))

@@ -90,7 +90,6 @@
     "@deepseek-ai/dsh-client-connection": "0.1.5-rc.2",
     "@deepseek-ai/dsh-settings": "0.1.5-rc.2",
     "@types/react": "18.3.31",
-    "dsh-editor-cards": "workspace:*",
     "dsh-editor-novel-kernel": "workspace:*",
     "dsh-editor-seats": "workspace:*",
     "dsh-editor-workbench": "workspace:*",

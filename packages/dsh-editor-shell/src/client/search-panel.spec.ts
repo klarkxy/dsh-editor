@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { planReplace } from '../search-replace.ts'
-import { acceptSearchResults, canReplaceAll, groupSearchHits, paperRevealRange, replaceBlockedByDirty, type SearchHit } from './search-panel.ts'
+import { acceptSearchResults, canReplaceAll, groupSearchHits, paperRevealRange, replaceBlockedByDirty, scopeSearchResults, searchTextRequest, type SearchHit } from './search-panel.ts'
 
 function hit(path: string, start: number, excerpt: string): SearchHit {
   return { path, line: 1, column: 1, start, end: start + excerpt.length, excerpt, version: 'v1' }
@@ -34,6 +34,54 @@ describe('search result grouping', () => {
     const range = paperRevealRange('正文/002.md', text, { start: text.indexOf('港口规则'), end: text.indexOf('港口规则') + 4 })
     expect(range.from).toBe(0)
     expect(range.to).toBe(4)
+  })
+})
+
+describe('directory search request payload', () => {
+  it('sends the active document directory for directory scope and omits it for project scope', () => {
+    expect(searchTextRequest({
+      sessionId: 's1',
+      query: '港口',
+      scope: 'directory',
+      activePath: 'docs/target.md',
+    })).toEqual({
+      sessionId: 's1',
+      query: '港口',
+      scope: 'project',
+      directory: 'docs',
+    })
+    expect(searchTextRequest({
+      sessionId: 's1',
+      query: '港口',
+      scope: 'project',
+      activePath: 'docs/target.md',
+    })).toEqual({
+      sessionId: 's1',
+      query: '港口',
+      scope: 'project',
+    })
+    expect(searchTextRequest({
+      sessionId: 's1',
+      query: '港口',
+      scope: 'directory',
+      activePath: 'root.md',
+    })).toEqual({
+      sessionId: 's1',
+      query: '港口',
+      scope: 'project',
+    })
+  })
+
+  it('still filters Host hits to the active folder as defense in depth', () => {
+    const scoped = scopeSearchResults({
+      results: [hit('docs/target.md', 0, 'needle'), hit('aaa.md', 0, 'needle')],
+      scannedFiles: 2,
+      scannedBytes: 40,
+      skipped: 0,
+      truncated: true,
+    }, 'directory', 'docs/target.md')
+    expect(scoped.results.map((item) => item.path)).toEqual(['docs/target.md'])
+    expect(scoped.truncated).toBe(true)
   })
 })
 

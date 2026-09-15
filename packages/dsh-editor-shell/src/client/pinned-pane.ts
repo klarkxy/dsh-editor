@@ -1,31 +1,10 @@
 import { createElement as e, useEffect, useRef, useState } from 'react'
-import {
-  stripChapterFrontmatter,
-  type CardsListResponse,
-  type CharacterCard,
-  type WorldbookCard,
-} from 'dsh-editor-workbench/contracts'
-import { CARDS_RPC_CHANNEL } from 'dsh-editor-cards/contracts'
-import {
-  characterPinnedFields,
-  pinnedPaneKind,
-  worldbookPinnedFields,
-  type PinnedFieldRow,
-} from '../pinned-pane-view.ts'
+import { stripChapterFrontmatter } from 'dsh-editor-workbench/contracts'
 import { documentName, errorMessage, LatestRequestGate, safeRpcCall, type ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
 import { Markdown, parseBlocks } from './markdown.tsx'
 import { ActivitySkeleton } from './ui/index.ts'
 import { readableDocumentTitle } from '../wrap-up-view.ts'
-
-function fieldList(rows: readonly PinnedFieldRow[]) {
-  return e('dl', { className: 'pinned-fields' },
-    rows.map((row) => e('div', { key: row.label, className: 'pinned-field' },
-      e('dt', null, t(row.label)),
-      e('dd', null, row.value),
-    )),
-  )
-}
 
 export function PinnedPane(props: {
   ctx: ShellContext
@@ -38,13 +17,11 @@ export function PinnedPane(props: {
   onMissing(): void
 }) {
   const [text, setText] = useState<string | null>(null)
-  const [card, setCard] = useState<CharacterCard | WorldbookCard | null>(null)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(true)
   const requestGate = useRef(new LatestRequestGate()).current
   const requestScope = `${props.sessionId}\u0000${props.path}\u0000${props.treeRevision}\u0000${props.contentRevision}`
   requestGate.setScope(requestScope)
-  const kind = pinnedPaneKind(props.path)
 
   useEffect(() => {
     const ticket = requestGate.begin(requestScope)
@@ -60,36 +37,18 @@ export function PinnedPane(props: {
       if (!read.ok) {
         setBusy(false)
         setText(null)
-        setCard(null)
         setNote(errorMessage(read))
         const blob = `${read.error.code ?? ''} ${read.error.message ?? ''}`
         if (/not-found|missing/i.test(blob)) props.onMissing()
         return
       }
       setText(read.value.text)
-      if (kind === 'card' || kind === 'worldbook') {
-        const listed = await safeRpcCall<CardsListResponse>(() => props.ctx.connection.rpc.call(CARDS_RPC_CHANNEL, 'cards.list', {
-          sessionId: props.sessionId,
-          kind: kind === 'card' ? 'character' : 'worldbook',
-        }))
-        if (!live || !requestGate.isCurrent(ticket)) return
-        if (listed.ok) {
-          const found = kind === 'card'
-            ? listed.value.characters.find((item) => item.path === props.path)
-            : listed.value.worldbook.find((item) => item.path === props.path)
-          setCard(found ?? null)
-        } else {
-          setCard(null)
-        }
-      } else {
-        setCard(null)
-      }
       setBusy(false)
     })()
     return () => { live = false }
-  }, [props.ctx.connection.rpc, props.sessionId, props.path, props.treeRevision, props.contentRevision, kind, requestScope, requestGate])
+  }, [props.ctx.connection.rpc, props.sessionId, props.path, props.treeRevision, props.contentRevision, requestScope, requestGate])
 
-  const title = card?.title || (text ? readableDocumentTitle(props.path, text) : documentName(props.path))
+  const title = text ? readableDocumentTitle(props.path, text) : documentName(props.path)
   const body = text === null ? '' : stripChapterFrontmatter(text)
   const firstHeading = parseBlocks(body).find((block) => block.kind === 'heading')
   const headingText = firstHeading && firstHeading.kind === 'heading'
@@ -98,14 +57,6 @@ export function PinnedPane(props: {
   const markdownBody = headingText.trim() === title.trim()
     ? body.replace(/^\s{0,3}#{1,6}\s+.*(?:\r?\n)+/, '')
     : body
-  const fields = card
-    ? kind === 'card'
-      ? characterPinnedFields((card as CharacterCard).frontmatter)
-      : [
-          ...worldbookPinnedFields((card as WorldbookCard).frontmatter),
-          { label: 'common.enable' as const, value: (card as WorldbookCard).frontmatter.enabled === false ? t('common.disable') : t('common.enable') },
-        ]
-    : []
 
   return e('section', { className: 'pinned-pane', 'aria-label': t('pin.aria', { path: props.path }) },
     e('header', { className: 'pinned-header' },
@@ -124,7 +75,6 @@ export function PinnedPane(props: {
         e('span', { className: 'sr-only' }, t('pin.loading')),
       ) : null,
       note ? e('p', { className: 'warning', role: 'status' }, note) : null,
-      !busy && fields.length ? fieldList(fields) : null,
       !busy && text !== null ? e('div', { className: 'pinned-markdown md activity-reveal' }, e(Markdown, { text: markdownBody })) : null,
     ),
   )

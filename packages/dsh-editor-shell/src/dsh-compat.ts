@@ -114,6 +114,7 @@ export type SessionSummary = {
   blank?: boolean
   running?: boolean
   updatedAt?: number
+  agentPreset?: string | null
 }
 
 export type SessionListState = {
@@ -207,6 +208,10 @@ export type EditorRemote = {
     list?(path?: string, signal?: AbortSignal): Promise<RpcResult<unknown>>
     createDirectory?(path: string, name: string): Promise<RpcResult<string>>
   }
+  agentPresets: {
+    list(): Promise<RpcResult<unknown>>
+    select(sessionId: SessionId, id: string): Promise<RpcResult<string>>
+  }
 }
 
 export type EditorSessions = {
@@ -226,6 +231,7 @@ export type EditorWorkspaces = {
 
 export type EditorUiWorkspace = {
   connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>
+  createSession(workspaceId: WorkspaceId): Promise<SessionId>
   openSession(sessionId: SessionId): void
   openWorkspace(workspaceId: WorkspaceId, beforeOpen?: (sessionId: SessionId) => void): Promise<void>
   pickDirectory(): Promise<string | null>

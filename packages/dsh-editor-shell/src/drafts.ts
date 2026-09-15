@@ -40,9 +40,10 @@ function revisionFromResult(endpoint: DraftEndpoint, result: DraftRpcResult): st
 /**
  * Preserve per-renderer RPC order so a delayed put cannot land after save's
  * delete. The queue also remembers the latest revision each draft.get/put
- * returned per file; tracked deletes carry that revision (Host rejects
- * mismatches with `{ deleted: false }`), and a file whose revision was never
- * observed is left alone rather than deleted blindly.
+ * returned per file; tracked deletes carry that revision. Host `{ deleted: false }`
+ * is surfaced as a failed cleanup so callers do not remount as if the owned
+ * draft is gone. A file whose revision was never observed is left alone
+ * (`{ deleted: false }` without an RPC) rather than deleted blindly.
  */
 export class DraftSyncQueue {
   private tail: Promise<void> = Promise.resolve()
@@ -76,7 +77,15 @@ export class DraftSyncQueue {
       const revision = this.revisions.get(key)
       if (!revision) return { ok: true, value: { deleted: false } }
       const result = await this.call('draft.delete', { ...payload, revision }) as DraftRpcResult
-      if (result.ok) this.revisions.delete(key)
+      const deleted = Boolean(
+        result.ok && result.value && typeof result.value === 'object'
+        && (result.value as { deleted?: unknown }).deleted === true,
+      )
+      if (deleted) {
+        this.revisions.delete(key)
+        return result
+      }
+      if (result.ok) return { ok: false, error: { message: '草稿未能删除' } }
       return result
     })
     this.tail = operation.then(() => undefined, () => undefined)

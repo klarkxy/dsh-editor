@@ -125,11 +125,20 @@ export function treeRowPadding(level: number): number {
   return 12 + Math.max(0, level) * 12
 }
 
-export function treeExpansionPaths(path: string): string[] {
-  if (!/^(正文|人物卡|世界书)(\/|$)/.test(path)) return []
+function visibleOrdinaryParts(path: string): string[] | undefined {
+  if (!path || path.includes('\\') || path.includes('\0') || path.startsWith('/') || /^[a-zA-Z]:/.test(path) || path.includes(':')) return undefined
   const parts = path.split('/').filter(Boolean)
-  if (parts.length === 1) return parts
-  return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('/'))
+  if (!parts.length || parts.join('/') !== path) return undefined
+  if (parts.some((part) => part === '.' || part === '..' || part.startsWith('.'))) return undefined
+  return parts
+}
+
+export function treeExpansionPaths(path: string): string[] {
+  const parts = visibleOrdinaryParts(path)
+  if (!parts) return []
+  const leaf = parts[parts.length - 1]!
+  const directories = /\.[A-Za-z0-9]+$/.test(leaf) ? parts.slice(0, -1) : parts
+  return directories.map((_, index) => directories.slice(0, index + 1).join('/'))
 }
 
 export function safeRpcCall<T>(request: () => Promise<unknown>): Promise<RpcResult<T>> {
@@ -295,7 +304,7 @@ export function hasVisibleWorkspaceEntries(entries: readonly { name: string }[])
 }
 
 export function hasRelocatableManuscriptFiles(files: readonly string[]): boolean {
-  return files.some((path) => /^正文\/.+\.(md|txt)$/i.test(path))
+  return supportedWorkspaceTextPaths(files).length > 0
 }
 
 /**
@@ -348,9 +357,10 @@ export function proposalAppliedNavigation(appliedPath: string, currentPath: stri
   expandPath?: string
   refreshContent: boolean
 } {
+  const parts = visibleOrdinaryParts(appliedPath)
   return {
     ...(!editorDirty ? { openPath: appliedPath } : {}),
-    ...(appliedPath.startsWith('正文/') ? { expandPath: appliedPath } : {}),
+    ...(parts && parts.length > 1 ? { expandPath: appliedPath } : {}),
     refreshContent: !editorDirty && appliedPath === currentPath,
   }
 }

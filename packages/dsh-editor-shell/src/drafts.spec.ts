@@ -58,6 +58,45 @@ describe('tracked draft deletion', () => {
     expect(result).toEqual({ ok: true, value: { deleted: false } })
   })
 
+  it('surfaces a host deleted:false as failed cleanup and keeps the revision', async () => {
+    const deletes: Array<Record<string, unknown>> = []
+    const queue = new DraftSyncQueue(async (endpoint, payload) => {
+      if (endpoint === 'draft.put') return { ok: true, value: { stored: true, revision: 'r1' } }
+      deletes.push(payload)
+      return { ok: true, value: { deleted: false } }
+    })
+    await queue.run('draft.put', { path: '正文/04.md', text: '冲突稿' })
+    const first = await queue.delete({ path: '正文/04.md' }) as { ok: boolean; error?: { message?: string } }
+    expect(first.ok).toBe(false)
+    expect(first.error?.message).toBe('草稿未能删除')
+    expect(deletes).toEqual([{ path: '正文/04.md', revision: 'r1' }])
+    await queue.delete({ path: '正文/04.md' })
+    expect(deletes[1]).toEqual({ path: '正文/04.md', revision: 'r1' })
+  })
+
+  it('lets an already-enqueued put finish before delete uses its revision', async () => {
+    const order: string[] = []
+    let releasePut!: () => void
+    const putPending = new Promise<void>((resolve) => { releasePut = resolve })
+    const queue = new DraftSyncQueue(async (endpoint, payload) => {
+      order.push(endpoint)
+      if (endpoint === 'draft.put') {
+        await putPending
+        return { ok: true, value: { stored: true, revision: 'r-late' } }
+      }
+      return { ok: true, value: { deleted: true, revision: payload.revision } }
+    })
+    const put = queue.run('draft.put', { path: '正文/05.md', text: '晚到' })
+    const del = queue.delete({ path: '正文/05.md' })
+    await Promise.resolve()
+    expect(order).toEqual(['draft.put'])
+    releasePut()
+    const deleted = await del as { ok: boolean; value?: { deleted?: boolean; revision?: string } }
+    await put
+    expect(order).toEqual(['draft.put', 'draft.delete'])
+    expect(deleted).toEqual({ ok: true, value: { deleted: true, revision: 'r-late' } })
+  })
+
   it('keeps the revision record after a failed delete and clears it only on success', async () => {
     const deletes: Array<Record<string, unknown>> = []
     let failDelete = true

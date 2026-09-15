@@ -35,18 +35,25 @@ describe('chapter status tree helpers', () => {
     expect(chapterStatusGlyph('final')).toBe('定')
   })
 
-  it('keeps status badges on manuscript chapter paths only', () => {
+  it('keeps status badges on any visible md/txt and excludes hidden or generated paths', () => {
     expect(isChapterDocumentPath('正文/001.md')).toBe(true)
     expect(isChapterDocumentPath('正文/第二卷/003.txt')).toBe(true)
-    expect(isChapterDocumentPath('世界书/港口规则.md')).toBe(false)
-    expect(isChapterDocumentPath('项目总览.md')).toBe(false)
+    expect(isChapterDocumentPath('世界书/港口规则.md')).toBe(true)
+    expect(isChapterDocumentPath('项目总览.md')).toBe(true)
+    expect(isChapterDocumentPath('资料/说明.txt')).toBe(true)
+    expect(isChapterDocumentPath('.dsh-editor/秘密.md')).toBe(false)
+    expect(isChapterDocumentPath('dist/out.md')).toBe(false)
     expect(buildChapterStatusMap(null)).toEqual({})
     expect(buildChapterStatusMap(overview([
       chapter('正文/001.md', { status: 'draft' }),
       chapter('正文/001.md', { status: 'revising' }),
       chapter('正文/第二卷/003.txt', { status: 'final' }),
       chapter('大纲/章纲.md', { status: 'draft' }),
+      chapter('README.md', { status: 'final' }),
+      chapter('dist/out.md', { status: 'revising' }),
     ]))).toEqual({
+      'README.md': 'final',
+      '大纲/章纲.md': 'draft',
       '正文/001.md': 'revising',
       '正文/第二卷/003.txt': 'final',
     })

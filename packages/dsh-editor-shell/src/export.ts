@@ -1,6 +1,6 @@
 import { stripChapterFrontmatter } from 'dsh-editor-workbench/contracts'
 import { t } from './i18n/index.ts'
-import { sortChapterPaths } from './project-files.ts'
+import { isVisibleTextPath, sortDocumentPaths } from './project-files.ts'
 
 export type ChapterExport = { path: string; text: string }
 export type ExportFormat = 'markdown' | 'text'
@@ -19,9 +19,9 @@ export function sanitizeExportTitle(value: string): string {
 
 export function orderedExportChapters(chapters: readonly ChapterExport[]): ChapterExport[] {
   const byPath = new Map(chapters
-    .filter((item) => /^正文\/.*\.(?:md|txt)$/i.test(item.path))
+    .filter((item) => isVisibleTextPath(item.path))
     .map((item) => [item.path, item] as const))
-  const sorted = sortChapterPaths([...byPath.keys()]).map((path) => byPath.get(path)!)
+  const sorted = sortDocumentPaths([...byPath.keys()]).map((path) => byPath.get(path)!)
   if (!sorted.length) throw new Error(t('export.emptyError'))
   return sorted
 }

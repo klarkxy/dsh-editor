@@ -35,10 +35,11 @@ function fixture(defaultChatModel?: () => { provider: string; model: string } | 
   provideEditorUiWorkspace(ctx, { defaultChatModel })
   const uiWorkspace = provide.mock.calls[0]?.[1] as {
     connectWorkspace(id: string): Promise<string>
+    createSession(id: string): Promise<string>
     openWorkspace(id: string, beforeOpen?: (id: string) => void): Promise<void>
     pickDirectory(): Promise<string | null>
   }
-  return { create, open, pick, uiWorkspace, selectModel }
+  return { archiveSession, create, open, pick, uiWorkspace, selectModel }
 }
 
 describe('provideEditorUiWorkspace', () => {
@@ -91,9 +92,10 @@ it('never changes the model of a reused blank session when the default changes',
   expect(selectModel).not.toHaveBeenCalled()
 })
 
-it('creates a new session when the bound blank session is no longer live', async () => {
+it('creates a new session when the bound blank session is no longer live, archiving the dead one', async () => {
   const create = vi.fn(async () => 'session-new')
   const provide = vi.fn()
+  const archiveSession = vi.fn(async () => undefined)
   const ctx = {
     provide,
     connection: {
@@ -112,7 +114,7 @@ it('creates a new session when the bound blank session is no longer live', async
       },
     },
     workspaces: {
-      archiveSession: vi.fn(async () => undefined),
+      archiveSession,
       list: {
         getSnapshot: () => ({
           items: [{ workspaceId: 'ws-1', path: '/work', title: '作品', sessionIds: ['blank-1'], createdAt: '', updatedAt: '' }],
@@ -126,6 +128,53 @@ it('creates a new session when the bound blank session is no longer live', async
   const uiWorkspace = provide.mock.calls[0]?.[1] as { connectWorkspace(id: string): Promise<string> }
   await expect(uiWorkspace.connectWorkspace('ws-1')).resolves.toBe('session-new')
   expect(create).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
+  expect(archiveSession).toHaveBeenCalledWith('blank-1')
+})
+
+it('fails the connection instead of churning a new session when the blank session ping fails transiently', async () => {
+  const create = vi.fn(async () => 'session-new')
+  const provide = vi.fn()
+  const archiveSession = vi.fn(async () => undefined)
+  const ctx = {
+    provide,
+    connection: {
+      rpc: {
+        call: vi.fn(async () => ({ ok: false, error: { code: 'internal', message: 'backend timeout' } })),
+      },
+    },
+    sessions: {
+      create,
+      open: vi.fn(),
+      list: {
+        getSnapshot: () => ({
+          ids: ['blank-1'],
+          byId: { 'blank-1': { id: 'blank-1', blank: true, cwd: '/work' } },
+        }),
+      },
+    },
+    workspaces: {
+      archiveSession,
+      list: {
+        getSnapshot: () => ({
+          items: [{ workspaceId: 'ws-1', path: '/work', title: '作品', sessionIds: ['blank-1'], createdAt: '', updatedAt: '' }],
+          archivedSessionIds: [],
+        }),
+      },
+    },
+    remote: { directoryPicker: { pick: vi.fn() }, session: { selectModel: vi.fn() } },
+  } as unknown as ShellContext
+  provideEditorUiWorkspace(ctx)
+  const uiWorkspace = provide.mock.calls[0]?.[1] as { connectWorkspace(id: string): Promise<string> }
+  await expect(uiWorkspace.connectWorkspace('ws-1')).rejects.toThrow('操作未能完成，请重试。')
+  expect(create).not.toHaveBeenCalled()
+  expect(archiveSession).not.toHaveBeenCalled()
+})
+
+it('applies the default chat model when createSession forces a new session', async () => {
+  const { create, uiWorkspace, selectModel } = fixture(() => ({ provider: 'configured', model: 'default-chat' }))
+  await expect(uiWorkspace.createSession('ws-1')).resolves.toBe('session-new')
+  expect(create).toHaveBeenCalledWith({ workspaceId: 'ws-1' })
+  expect(selectModel).toHaveBeenCalledWith({ sessionId: 'session-new', provider: 'configured', model: 'default-chat' })
 })
 
 it('remembers a created-chat model error for the next Chat mount', () => {

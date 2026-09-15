@@ -34,6 +34,7 @@ import {
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
+import { isVisibleTextPath } from '../project-files.ts'
 import { canRewritePath, CUSTOM_INSTRUCTION_MAX, normalizeCustomInstruction } from '../rewrite-presets-view.ts'
 import { t } from '../i18n/index.ts'
 import { Button, Dialog, isImeEvent } from './ui/index.ts'
@@ -389,6 +390,7 @@ export function Editor(props: {
 
   const reloadDisk = useCallback(async () => {
     setReloadConfirm(false)
+    handleRef.current?.cancelPendingDraftSync()
     const deleted = await draftQueue.current!.delete({ sessionId: session.sessionId, path }) as RpcResult
     if (!deleted.ok && !isStaleFailure(deleted)) {
       setNote(t('editor.draftCleanupFailed', { error: errorMessage(deleted) }))
@@ -413,6 +415,7 @@ export function Editor(props: {
     }) as RpcResult
     if (!created.ok) { setNote(errorMessage(created)); return }
     setNote(t('editor.draftSavedAs', { path: copy }))
+    handleRef.current?.cancelPendingDraftSync()
     const deleted = await draftQueue.current!.delete({ sessionId: session.sessionId, path }) as RpcResult
     if (!deleted.ok && !isStaleFailure(deleted)) {
       setNote(t('editor.draftCleanupFailed', { error: errorMessage(deleted) }))
@@ -454,10 +457,10 @@ export function Editor(props: {
   }, [path, reveal?.nonce, reveal?.path, reveal?.version, externalRevision])
 
   if (!path) {
-    const hasChapter = files.some((item) => /^正文\/.+\.(md|txt)$/i.test(item))
+    const hasDocument = files.some((item) => isVisibleTextPath(item))
     return e(PaperStage, { label: t('editor.emptyChapter') },
       e('div', { className: 'home-actions' },
-        e('button', { className: 'primary-action', type: 'button', onClick: create }, hasChapter ? t('editor.newChapter') : t('editor.writeFirstChapter')),
+        e('button', { className: 'primary-action', type: 'button', onClick: create }, hasDocument ? t('editor.newChapter') : t('editor.writeFirstChapter')),
       ),
     )
   }

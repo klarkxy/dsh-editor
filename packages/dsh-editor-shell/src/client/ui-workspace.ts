@@ -1,6 +1,6 @@
 import type { SessionId, WorkspaceId } from '../dsh-compat.ts'
 import { t } from '../i18n/index.ts'
-import { safeRpcCall, type ShellContext } from './shared.ts'
+import { errorMessage, isSessionMissing, safeRpcCall, type ShellContext } from './shared.ts'
 
 /**
  * Official ui-conversation waits for `uiWorkspace`. The profile keeps
@@ -33,6 +33,23 @@ export function provideEditorUiWorkspace(ctx: ShellContext, options?: {
 }): void {
   const connecting = new Map<WorkspaceId, Promise<SessionId>>()
 
+  const createSession = async (workspaceId: WorkspaceId): Promise<SessionId> => {
+    const sessionId = await ctx.sessions.create({ workspaceId })
+    const route = options?.defaultChatModel?.()
+    const provider = route?.provider?.trim() ?? ''
+    const model = route?.model?.trim() ?? ''
+    if (!provider || !model) return sessionId
+    try {
+      const selected = await ctx.remote.session.selectModel({ sessionId, provider, model })
+      if (!selected.ok) {
+        createdChatModelError = { sessionId, message: t('chat.defaultModelFailed') }
+      }
+    } catch {
+      createdChatModelError = { sessionId, message: t('chat.defaultModelFailed') }
+    }
+    return sessionId
+  }
+
   const uiWorkspace = {
     async connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId> {
       const inflight = connecting.get(workspaceId)
@@ -48,29 +65,18 @@ export function provideEditorUiWorkspace(ctx: ShellContext, options?: {
             if (!ctx.connection?.rpc) return summary.id
             const ping = await safeRpcCall(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId: summary.id, path: '.' }))
             if (ping.ok) return summary.id
+            if (!isSessionMissing(ping)) throw new Error(errorMessage(ping))
+            await ctx.workspaces.archiveSession(summary.id)
           }
         }
       }
-      const attempt = ctx.sessions.create({ workspaceId }).then(async (sessionId) => {
-        const route = options?.defaultChatModel?.()
-        const provider = route?.provider?.trim() ?? ''
-        const model = route?.model?.trim() ?? ''
-        if (!provider || !model) return sessionId
-        try {
-          const selected = await ctx.remote.session.selectModel({ sessionId, provider, model })
-          if (!selected.ok) {
-            createdChatModelError = { sessionId, message: t('chat.defaultModelFailed') }
-          }
-        } catch {
-          createdChatModelError = { sessionId, message: t('chat.defaultModelFailed') }
-        }
-        return sessionId
-      }).finally(() => {
+      const attempt = createSession(workspaceId).finally(() => {
         connecting.delete(workspaceId)
       })
       connecting.set(workspaceId, attempt)
       return attempt
     },
+    createSession,
     openSession(sessionId: SessionId) {
       ctx.sessions.open(sessionId)
     },

@@ -1,6 +1,7 @@
 import { createElement as e, Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { ChapterStatus } from 'dsh-editor-workbench/contracts'
 import { chapterStatusGlyph, chapterStatusLabel, isChapterDocumentPath } from '../chapter-status-view.ts'
+import { isManuscriptChapterPath } from '../project-files.ts'
 import { canPinPath } from '../pinned-pane-view.ts'
 import { errorMessage, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
 import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
@@ -58,6 +59,7 @@ type RowProps = {
   chapterStatuses: Record<string, ChapterStatus>
   highlightPath?: string
   tabbablePath: string
+  onRowFocus(path: string): void
   onOpen(path: string): void
   onPreviewImage(path: string): void
   onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }, trigger?: HTMLElement | null): void
@@ -68,7 +70,7 @@ type RowProps = {
 }
 
 function TreeRows(props: RowProps): ReactNode {
-  const { path, level, loaded, active, openPaths, chapterStatuses, highlightPath, tabbablePath, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory } = props
+  const { path, level, loaded, active, openPaths, chapterStatuses, highlightPath, tabbablePath, onRowFocus, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory } = props
   /* loaded 在写入时已按 visibleTreeEntries 排序并过滤,这里直接渲染。 */
   const visible = loaded[path] ?? []
   return e(Fragment, null, ...visible.map((item) => {
@@ -88,6 +90,7 @@ function TreeRows(props: RowProps): ReactNode {
             'data-tree-depth': level,
             'aria-expanded': isOpen,
             'aria-current': highlightPath === child ? 'page' : undefined,
+            onFocus: () => onRowFocus(child),
             onClick: () => toggleDirectory(child),
             onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => {
               event.preventDefault()
@@ -134,6 +137,7 @@ function TreeRows(props: RowProps): ReactNode {
         'aria-current': active === child || highlightPath === child ? 'page' : undefined,
         style: { paddingLeft: treeRowPadding(level) },
         'data-tree-depth': level,
+        onFocus: () => onRowFocus(child),
         onClick: () => (isImagePath(child) ? onPreviewImage(child) : onOpen(child)),
         onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => {
           event.preventDefault()
@@ -176,6 +180,9 @@ export function Tree(props: {
   const [loaded, setLoaded] = useState<Record<string, TreeEntry[]>>({})
   const [openPaths, setOpenPaths] = useState<Set<string>>(() => new Set())
   const [note, setNote] = useState('')
+  /* roving tabindex 的锚点:最近聚焦过的行(行 onFocus 同步进来),空串表示尚未聚焦,
+     停靠行推导时回退到活动文件。 */
+  const [focusedPath, setFocusedPath] = useState('')
   /* 加载代际：session/revision 重置（含 effect 清理、卸载）时递增。
      早于当前代际的 tree.list 响应一律丢弃——否则合章/归档前的慢响应会在刷新
      完成后落地，把已归档的章节行写回目录树。成功与错误路径都受守护。
@@ -212,6 +219,7 @@ export function Tree(props: {
     loadGeneration.current += 1
     loadedRef.current = {}
     setLoaded({})
+    setFocusedPath('')
     const expansion = treeExpansionPaths(expandPath)
     setOpenPaths(new Set(expansion))
     void loadSubtree('')
@@ -244,8 +252,9 @@ export function Tree(props: {
     if (!openPaths.has(path)) void loadSubtree(path)
   }
 
-  /* 键盘导航（WAI-ARIA treeview）：全树只有 tabbablePath 一行可 Tab 到达，
-     方向键在可见行间移动焦点；行内原有的 ContextMenu/Shift+F10 不受影响。 */
+  /* 键盘导航（WAI-ARIA treeview roving tabindex）：方向键/Home/End 在可见行间移动
+     DOM 焦点，行 onFocus 把 focusedPath 同步成新的停靠行，因此 Tab 始终以聚焦行为
+     锚点离开/回到树内；行内原有的 ContextMenu/Shift+F10 不受影响。 */
   const onTreeKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
@@ -288,11 +297,12 @@ export function Tree(props: {
     }
   }
 
-  /* 唯一 tab 停靠行：当前文件优先，其次高亮行，最后回退第一可见行；
-     数据变化（如活动文件被删除）后随渲染重新推导，停靠自然回退。 */
+  /* 唯一 tab 停靠行（roving tabindex）：默认跟随最近聚焦的行；聚焦行已不在可见行
+     里（整树刷新、目录折叠、文件被删）时回退：活动文件 → 高亮行 → 第一可见行。 */
   const rootEntries = loaded['']
   const rowPaths = visibleTreePaths(loaded, openPaths, '')
-  const tabbablePath = rowPaths.includes(active) ? active : highlightPath && rowPaths.includes(highlightPath) ? highlightPath : rowPaths[0] ?? ''
+  const fallbackTabbablePath = rowPaths.includes(active) ? active : highlightPath && rowPaths.includes(highlightPath) ? highlightPath : rowPaths[0] ?? ''
+  const tabbablePath = rowPaths.includes(focusedPath) ? focusedPath : fallbackTabbablePath
 
   return e('nav', {
     className: 'tree',
@@ -324,6 +334,7 @@ export function Tree(props: {
       chapterStatuses,
       highlightPath,
       tabbablePath,
+      onRowFocus: setFocusedPath,
       onOpen,
       onPreviewImage,
       onFileMenu,
@@ -344,6 +355,7 @@ export function FileContextMenu(props: {
   canPaste: boolean
   onCreateFile(): void
   onCreateFolder(): void
+  onExportDirectory(): void
   onCopy(): void
   onCut(): void
   onPaste(): void
@@ -387,26 +399,27 @@ export function FileContextMenu(props: {
       },
         e(MenuItem, { role: 'menuitem', onSelect: () => props.onCreateFile() }, t('sidebar.newFile')),
         e(MenuItem, { role: 'menuitem', onSelect: () => props.onCreateFolder() }, t('sidebar.newFolder')),
+        props.kind === 'directory' ? e(MenuItem, { role: 'menuitem', onSelect: () => props.onExportDirectory() }, t('sidebar.exportDirectory')) : null,
         e(MenuSeparator, { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
         e(MenuItem, { role: 'menuitem', onSelect: () => props.onCopy() }, t('common.copy')),
         e(MenuItem, { role: 'menuitem', onSelect: () => props.onCut() }, t('common.cut')),
         e(MenuItem, { role: 'menuitem', disabled: !props.canPaste, onSelect: () => props.onPaste() }, t('common.paste')),
         e(MenuSeparator, { className: 'file-context-menu-separator', 'aria-hidden': 'true' }),
         e(MenuItem, { role: 'menuitem', onSelect: () => props.onRename() }, t('common.rename')),
-        props.kind === 'file' && isChapterDocumentPath(props.path) ? e(MenuSeparator, { className: 'file-context-menu-separator', 'aria-hidden': 'true' }) : null,
-        props.kind === 'file' && isChapterDocumentPath(props.path) ? e(MenuItem, {
+        props.kind === 'file' && isManuscriptChapterPath(props.path) ? e(MenuSeparator, { className: 'file-context-menu-separator', 'aria-hidden': 'true' }) : null,
+        props.kind === 'file' && isManuscriptChapterPath(props.path) ? e(MenuItem, {
           role: 'menuitem',
           disabled: !props.canSplit,
           title: props.canSplit ? undefined : props.splitDisabledTitle,
           onSelect: () => props.onSplit(),
         }, t('chapterOps.split')) : null,
-        props.kind === 'file' && isChapterDocumentPath(props.path) ? e(MenuItem, {
+        props.kind === 'file' && isManuscriptChapterPath(props.path) ? e(MenuItem, {
           role: 'menuitem',
           disabled: !props.canMergePrevious,
           title: props.canMergePrevious ? undefined : props.mergePreviousDisabledTitle,
           onSelect: () => props.onMergePrevious(),
         }, t('chapterOps.mergePrevious')) : null,
-        props.kind === 'file' && isChapterDocumentPath(props.path) ? e(MenuItem, {
+        props.kind === 'file' && isManuscriptChapterPath(props.path) ? e(MenuItem, {
           role: 'menuitem',
           disabled: !props.canMergeNext,
           title: props.canMergeNext ? undefined : props.mergeNextDisabledTitle,

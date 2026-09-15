@@ -10,9 +10,10 @@ import {
   type ReplacePlan,
 } from '../search-replace.ts'
 import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
+import { documentDirectory, searchPathInDirectory } from '../project-files.ts'
 import { t } from '../i18n/index.ts'
 
-export type SearchScope = 'project' | 'manuscript'
+export type SearchScope = 'project' | 'directory'
 
 export type SearchHit = {
   path: string
@@ -47,6 +48,37 @@ export function acceptSearchResults(response: SearchResponse): SearchResponse {
   return {
     ...response,
     results: response.results.filter((hit) => !isAuxiliaryAuthorFile(hit.path)),
+  }
+}
+
+export type SearchTextRequest = {
+  sessionId: string
+  query: string
+  scope: 'project'
+  directory?: string
+}
+
+/** Host payload: project walk by default; directory scope sends the active document folder. */
+export function searchTextRequest(input: {
+  sessionId: string
+  query: string
+  scope: SearchScope
+  activePath: string
+}): SearchTextRequest {
+  const directory = input.scope === 'directory' ? documentDirectory(input.activePath) : ''
+  return directory
+    ? { sessionId: input.sessionId, query: input.query, scope: 'project', directory }
+    : { sessionId: input.sessionId, query: input.query, scope: 'project' }
+}
+
+/** Defense-in-depth folder filter after Host results. Never lock the RPC to 正文/. */
+export function scopeSearchResults(response: SearchResponse, scope: SearchScope, activePath: string): SearchResponse {
+  if (scope !== 'directory') return response
+  const directory = documentDirectory(activePath)
+  if (!directory) return response
+  return {
+    ...response,
+    results: response.results.filter((hit) => searchPathInDirectory(hit.path, directory)),
   }
 }
 
@@ -132,15 +164,16 @@ function SearchPanel(props: {
     const ticket = requestGate.begin(requestScope)
     setBusy(true)
     setNote('')
-    const searched = await safeRpcCall<SearchResponse>(() => props.ctx.connection.rpc.call('/manuscript', 'search.text', {
+    const searched = await safeRpcCall<SearchResponse>(() => props.ctx.connection.rpc.call('/manuscript', 'search.text', searchTextRequest({
       sessionId: props.sessionId,
       query: value,
       scope: nextScope,
-    }))
+      activePath: props.activePath,
+    })))
     if (!requestGate.isCurrent(ticket)) return
     setBusy(false)
     if (!searched.ok) { setResult(null); setNote(errorMessage(searched)); return }
-    const accepted = acceptSearchResults(searched.value)
+    const accepted = scopeSearchResults(acceptSearchResults(searched.value), nextScope, props.activePath)
     setResult(accepted)
     setNote(accepted.results.length ? '' : t('search.noMatch'))
   }
@@ -237,9 +270,9 @@ function SearchPanel(props: {
         'aria-label': t('search.scope'),
         options: [
           { value: 'project', label: t('search.wholeWork') },
-          { value: 'manuscript', label: t('search.manuscriptOnly') },
+          { value: 'directory', label: t('search.manuscriptOnly') },
         ],
-        onChange: (value: string) => setScope(value === 'manuscript' ? 'manuscript' : 'project'),
+        onChange: (value: string) => setScope(value === 'directory' ? 'directory' : 'project'),
       }),
     ),
     e('form', {

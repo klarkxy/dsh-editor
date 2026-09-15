@@ -24,7 +24,7 @@ import {
   type SnapshotResponse,
 } from 'dsh-editor-workbench/contracts'
 import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
-import { sortChapterPaths } from '../project-files.ts'
+import { defaultCreateDirectory, exportDirectoryOf, firstOpenDocumentPath, isManuscriptChapterPath, normalizeProjectDirectory, sortChapterPaths, sortDocumentPaths } from '../project-files.ts'
 import { CENTER_OVERLAYS_SLOT, EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, ZHIHU_SETTINGS_SLOT, registerRoot } from '../root-registration.ts'
 import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry, type ShellProposalCardProps, type ShellRange, type ShellToolSeatContext } from '../seats.ts'
 import { writingPreferences, writingTypography, type WritingMigration, type WritingModelRoute, type WritingPreferences } from '../writing-settings.ts'
@@ -55,7 +55,7 @@ import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.ts'
 import { PinnedPane } from './pinned-pane.ts'
 import { canPinPath, pinnedLayoutColumns, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
 
-import { collectChapters, downloadExport, ExportPreviewDialog } from './export-dialog.ts'
+import { collectDocuments, downloadExport, ExportPreviewDialog } from './export-dialog.ts'
 import { prepareExport, type ChapterExport, type ExportFormat } from '../export.ts'
 import { idleImportFlow, importReview, recoverImport, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ImportDialog } from './import-dialog.ts'
@@ -139,8 +139,8 @@ async function collectWorkspaceFiles(ctx: ShellContext, sessionId: string): Prom
 async function verifyWorkspaceSession(ctx: ShellContext, sessionId: SessionId, knownFiles?: string[]): Promise<string | undefined> {
   const files = knownFiles ?? await collectWorkspaceFiles(ctx, sessionId)
   const textFiles = supportedWorkspaceTextPaths(files)
-  /* 根目录的项目规则文件是协作约定而非正文：新作只有它时仍落在新建文件封面。 */
-  const initialPath = sortChapterPaths(textFiles)[0] ?? textFiles.find((path) => !/^agents\.md$/i.test(path))
+  /* 根目录的项目规则文件是协作约定而非稿件：只有 AGENTS.md 时仍落在新建文件封面。 */
+  const initialPath = firstOpenDocumentPath(textFiles)
   if (!initialPath) return undefined
   const read = await safeRpcCall<{ text: string; version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
     sessionId,
@@ -179,7 +179,7 @@ async function connectUsableWorkspaceSession(
   await ctx.workspaces.archiveSession(first)
   let second = await ctx.uiWorkspace.connectWorkspace(workspaceId)
   /* archive 后快照可能还挂着同一条空白会话；再拿到同一个 id 就强制新建，避免死循环。 */
-  if (second === first) second = await ctx.sessions.create({ workspaceId })
+  if (second === first) second = await ctx.uiWorkspace.createSession(workspaceId)
   if (second === first) throw new Error('session is not live')
   const retry = await pingWorkspaceSession(ctx, second)
   if (!retry.ok) throw new Error(isSessionMissing(retry) ? 'session is not live' : errorMessage(retry))
@@ -189,7 +189,9 @@ async function connectUsableWorkspaceSession(
 async function verifyRelocatedWorkspaceSession(ctx: ShellContext, sessionId: SessionId): Promise<string> {
   const files = await collectWorkspaceFiles(ctx, sessionId)
   if (!hasRelocatableManuscriptFiles(files)) throw new Error('relocated workspace has no readable manuscript')
-  const initialPath = sortChapterPaths(files)[0]!
+  /* 与打开作品同一套自动打开规则：任意可见 md/txt，排除 AGENTS.md；没有候选就失败。 */
+  const initialPath = firstOpenDocumentPath(supportedWorkspaceTextPaths(files))
+  if (!initialPath) throw new Error('relocated workspace has no readable manuscript')
   const read = await safeRpcCall<{ text: string; version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
     sessionId,
     path: initialPath,
@@ -800,7 +802,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     let live = true
     void collectWorkspaceFiles(ctx, fileSession.sessionId).then((paths) => {
       if (!live) return
-      const next = sortChapterPaths(paths)
+      const next = sortDocumentPaths(paths)
       setFiles(next)
       if (pinValidatedSession.current !== fileSession.sessionId) {
         pinValidatedSession.current = fileSession.sessionId
@@ -811,6 +813,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     })
     return () => { live = false }
   }, [ctx.connection.rpc, fileSession?.sessionId, treeRevision])
+  const chapterFiles = useMemo(() => sortChapterPaths(files), [files])
   const loadOverview = async () => {
     if (!fileSession) return
     const ticket = overviewRequestGate.begin(fileSession.sessionId)
@@ -919,7 +922,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
   const beginChapterMerge = (chapterPath: string, direction: 'previous' | 'next') => {
     yieldMenuToDialog()
-    const next = requestMergeChapter({ chapterPath, direction, files, editorDirty, activePath: path })
+    const next = requestMergeChapter({ chapterPath, direction, files: chapterFiles, editorDirty, activePath: path })
     if (!next.ok) {
       setWorkbenchNote(next.reason === 'unsaved' ? t('error.saveFirst') : t('chapterOps.mergeMdOnly'))
       return
@@ -1751,8 +1754,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     Dialog: HostDialog,
   }), [fileSession?.sessionId, path, editorDirty, treeRevision, contentRevision, locale, openSeatDocument, refreshAppliedPath, revealSidebar, refreshSeat, toggleSeatPin, pinnedPath, BoundSeatProposalCard])
   seatContextRef.current = seatContext
-  /* 注册表命令只在构建期(enabled 判定)与执行期(run)读取 seat：全部经 ref 前向，
-     命令始终看到最新上下文，palette 项不再随每次渲染重建。 */
+  /* 注册表命令执行期经 proxy 读最新 seat；enabled 在投影构建时求值，所以
+     依赖 memo 化的 seatContext 身份，不随无关根渲染重建。 */
   const seatRegistryContext = useMemo(() => new Proxy({} as ShellToolSeatContext, {
     get(_target, prop) {
       const current = seatContextRef.current
@@ -1783,7 +1786,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         item.run()
       },
     })),
-    [commandTick, commands, hasFileSession, locale, seatRegistryContext],
+    [commandTick, commands, hasFileSession, locale, seatContext, seatRegistryContext],
   )
   /* 自动写入落盘后的轻量刷新：只刷新树与当前内容，不做编辑器导航。 */
   const refreshWrittenPath = useCallback((writtenPath: string) => {
@@ -1817,7 +1820,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const onToggleHistory = useCallback(() => setHistoryOpen((value) => !value), [])
   const onRequestRollback = useCallback((snapshot: SnapshotResponse) => requestRollback(snapshot), [snapshotBusy])
   /* 编辑器空态"新建"与句柄回传、保存回调：身份稳定，editorDirty 翻转不连带重渲染编辑列。 */
-  const onEditorCreate = useCallback(() => openTreeCreate('file', '正文'), [fileSession, fileMenu])
+  const onEditorCreate = useCallback(() => openTreeCreate('file', defaultCreateDirectory({
+    treeDirectory: fileMenu?.kind === 'directory' ? fileMenu.path : undefined,
+    activePath: path,
+  })), [fileSession, fileMenu, path])
   const onEditorHandle = useCallback((handle: EditorCoreHandle | null) => { editorHandleRef.current = handle }, [])
   const onEditorSaved = useCallback(() => {
     setOverviewRevision((value) => value + 1)
@@ -2008,16 +2014,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       : undefined,
     onCleanup: () => void cleanupImportFlow(),
   })
-  const exportNovel = async () => {
+  const exportDocuments = async (directory?: string) => {
     closeWorkspaceChrome()
     setPaletteOpen(false)
     if (!fileSession) return
     if (!(await saveEditorBeforeAction())) { setExportChapters([]); return }
     const requestSessionId = fileSession.sessionId
+    const target = directory === undefined ? exportDirectoryOf(path) : normalizeProjectDirectory(directory)
     setExporting(true)
     setExportNote(t('note.exportPreparing'))
     try {
-      const chapters = await collectChapters(ctx, requestSessionId)
+      const chapters = await collectDocuments(ctx, requestSessionId, target)
       if (fileSessionIdRef.current !== requestSessionId) return
       setExportChapters(chapters)
       setExportNote(chapters.length ? t('note.exportReady') : t('note.exportEmpty'))
@@ -2137,7 +2144,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     onOpenDocument: (target: string) => openDocument(target),
     onOpenSearch: () => openSearchPanel(),
     registryCommands,
-    onExport: () => { void exportNovel() },
+    onExport: () => { void exportDocuments() },
     onOpenArchives: () => openArchivePanel(),
     onSplitAtCursor: () => beginChapterSplit(path, 'cursor'),
     canSplitAtCursor: Boolean(fileSession) && !editorDirty && isMarkdownChapterPath(path),
@@ -2296,7 +2303,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           assistantWidth: panel === 'assistant' ? value : assistantWidth,
         })
   }
-  const fileMenuChapterModel = fileMenu ? chapterMenuModel(fileMenu.path, files) : null
+  const fileMenuChapterModel = fileMenu ? chapterMenuModel(fileMenu.path, chapterFiles) : null
 
   return e(ShellUiProvider, null, e('main', {
     className: `shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`,
@@ -2334,8 +2341,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               workspaces.items.length ? e(MenuSeparator, { className: 'workspace-menu-divider', 'aria-hidden': 'true' }) : null,
               e(MenuItem, { className: 'workspace-menu-item', disabled: openingWorkspace || Boolean(newProject), onSelect: () => { workspaceMenuYields.current = true; void openAnotherWorkspace() } }, t('home.openWork')),
               e(MenuItem, { className: 'workspace-menu-item', disabled: openingWorkspace || Boolean(newProject), onSelect: () => { workspaceMenuYields.current = true; void startNewProject() } }, t('home.new')),
-              e(MenuItem, { className: 'workspace-menu-item', disabled: exporting, onSelect: () => { workspaceMenuYields.current = true; void exportNovel() } }, exporting ? t('workspace.exporting') : t('workspace.exportMarkdown')),
-              e(MenuItem, { className: 'workspace-menu-item', disabled: exporting, onSelect: () => { workspaceMenuYields.current = true; void exportNovel() } }, t('workspace.exportTxt')),
+              e(MenuItem, { className: 'workspace-menu-item', disabled: exporting, onSelect: () => { workspaceMenuYields.current = true; void exportDocuments() } }, exporting ? t('workspace.exporting') : t('workspace.exportMarkdown')),
+              e(MenuItem, { className: 'workspace-menu-item', disabled: exporting, onSelect: () => { workspaceMenuYields.current = true; void exportDocuments() } }, t('workspace.exportTxt')),
               e(MenuItem, { className: 'workspace-menu-item', onSelect: () => { workspaceMenuYields.current = true; openArchivePanel() } }, t('workspace.archived')),
               e(MenuItem, { className: 'workspace-menu-item', 'aria-label': t('workspace.backHome'), onSelect: () => { void leaveToHome() } }, t('workspace.backHome')),
             ),
@@ -2428,7 +2435,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       ctx,
       fileSession,
       path,
-      files,
+      files: isManuscriptChapterPath(path) ? chapterFiles : files,
       onOpen: openDocument,
       onCreate: onEditorCreate,
       onHandle: onEditorHandle,
@@ -2560,8 +2567,15 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       canPaste: Boolean(clipboard),
       onClose: closeFileMenu,
       onDismissFocus: restoreTreeTriggerIfMenuDismissed,
-      onCreateFile: () => openTreeCreate('file', fileMenu.kind === 'directory' ? fileMenu.path : parentOf(fileMenu.path)),
-      onCreateFolder: () => openTreeCreate('folder', fileMenu.kind === 'directory' ? fileMenu.path : parentOf(fileMenu.path)),
+      onCreateFile: () => openTreeCreate('file', defaultCreateDirectory({
+        treeDirectory: fileMenu.kind === 'directory' ? fileMenu.path : parentOf(fileMenu.path),
+        activePath: path,
+      })),
+      onCreateFolder: () => openTreeCreate('folder', defaultCreateDirectory({
+        treeDirectory: fileMenu.kind === 'directory' ? fileMenu.path : parentOf(fileMenu.path),
+        activePath: path,
+      })),
+      onExportDirectory: () => { void exportDocuments(fileMenu.kind === 'directory' ? fileMenu.path : undefined) },
       onCopy: () => setClipboardFromMenu('copy', fileMenu.kind, fileMenu.path),
       onCut: () => setClipboardFromMenu('cut', fileMenu.kind, fileMenu.path),
       onPaste: () => void pasteFromMenu(),

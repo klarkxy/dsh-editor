@@ -38,6 +38,7 @@ import {
   bindOfficialConversation,
 } from './client.ts'
 import { isObservableSource } from './client/components.ts'
+import { firstOpenDocumentPath, isVisibleTextPath } from './project-files.ts'
 import { partialApplyDetails } from './client/shared.ts'
 import { appendRegistryCommands } from './client/command-palette.tsx'
 import { createCommandRegistry, matchRegistryShortcut, registryPaletteItems, type ShellToolSeatContext } from './seats.ts'
@@ -49,7 +50,7 @@ describe('shell client inject', () => {
   it('declares every Remote face the renderer reads through ctx.remote', () => {
     expect(inject).toEqual([
       'slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote',
-      'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker',
+      'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker', 'remote.agentPresets',
       'uiSession', 'locale',
     ])
   })
@@ -97,12 +98,27 @@ describe('shell manuscript RPC safety', () => {
 
   it('accepts relocation only when a readable manuscript file can be identified', () => {
     expect(hasRelocatableManuscriptFiles([])).toBe(false)
-    expect(hasRelocatableManuscriptFiles(['项目总览.md', '人物卡/主角.md'])).toBe(false)
+    expect(hasRelocatableManuscriptFiles(['封面.jpg', '.dsh-editor/作品索引.md'])).toBe(false)
+    expect(hasRelocatableManuscriptFiles(['项目总览.md', '人物卡/主角.md'])).toBe(true)
     expect(hasRelocatableManuscriptFiles(['正文/001.md'])).toBe(true)
     expect(hasRelocatableManuscriptFiles(['正文/第一卷/001.txt'])).toBe(true)
+    expect(hasRelocatableManuscriptFiles(['资料/说明.txt'])).toBe(true)
+    expect(firstOpenDocumentPath(['文档/guide.md'])).toBe('文档/guide.md')
+    expect(firstOpenDocumentPath(['guide.md'])).toBe('guide.md')
+    expect(firstOpenDocumentPath(['AGENTS.md'])).toBeUndefined()
+    expect(firstOpenDocumentPath(['.dsh-editor/作品索引.md'])).toBeUndefined()
+    expect(firstOpenDocumentPath(['文档/.hidden.md'])).toBeUndefined()
     expect(relocationFailureMessage(false)).toContain('原作品入口已保留')
     expect(relocationFailureMessage(false)).not.toContain('未能自动移除')
     expect(relocationFailureMessage(true)).toContain('新位置入口未能自动移除')
+    const relocated = rootSource().slice(
+      rootSource().indexOf('async function verifyRelocatedWorkspaceSession'),
+      rootSource().indexOf('function BoundProposalCard'),
+    )
+    expect(relocated).toContain('firstOpenDocumentPath')
+    expect(relocated).toContain('supportedWorkspaceTextPaths(files)')
+    expect(relocated).toContain("if (!initialPath) throw new Error('relocated workspace has no readable manuscript')")
+    expect(relocated).not.toContain('sortChapterPaths')
   })
 
   it('triggers the index run from the init guide card via the shared init-guide module', () => {
@@ -185,7 +201,11 @@ describe('shell manuscript RPC safety', () => {
     const source = rootSource()
     expect(source).toContain('await ctx.workspaces.archiveSession(first)')
     expect(source).toContain('let second = await ctx.uiWorkspace.connectWorkspace(workspaceId)')
-    expect(source).toContain('if (second === first) second = await ctx.sessions.create({ workspaceId })')
+    expect(source).toContain('if (second === first) second = await ctx.uiWorkspace.createSession(workspaceId)')
+    expect(source).not.toContain('ctx.sessions.create({ workspaceId })')
+    const uiWorkspaceSource = readFileSync(new URL('./client/ui-workspace.ts', import.meta.url), 'utf8')
+    expect(uiWorkspaceSource).toContain('if (!isSessionMissing(ping)) throw new Error(errorMessage(ping))')
+    expect(uiWorkspaceSource).toContain('await ctx.workspaces.archiveSession(summary.id)')
   })
 
   it('claims automatic startup resume once so returning home stays on the project list', () => {
@@ -252,6 +272,10 @@ describe('shell manuscript RPC safety', () => {
     expect(sidebar).not.toContain('中新建章节')
     expect(sidebar).not.toContain('新建卷/部')
     expect(root).not.toContain('新建资料')
+    expect(root).not.toContain("openTreeCreate('file', '正文')")
+    expect(root).toContain('defaultCreateDirectory')
+    expect(root).toContain('firstOpenDocumentPath')
+    expect(root).toContain('sortDocumentPaths')
   })
 
   it('exposes copy/cut/paste/delete/rename through the tree right-click menu', () => {
@@ -264,6 +288,9 @@ describe('shell manuscript RPC safety', () => {
     expect(sidebar).toMatch(/onDelete\(\)/)
     expect(sidebar).toMatch(/onCreateFile\(\)/)
     expect(sidebar).toMatch(/onCreateFolder\(\)/)
+    expect(sidebar).toMatch(/onExportDirectory\(\)/)
+    expect(sidebar).toContain("t('sidebar.exportDirectory')")
+    expect(zh['sidebar.exportDirectory']).toBe('导出此目录')
     expect(sidebar).toMatch(/onRename\(\)/)
     expect(sidebar).toMatch(/onArchive\(\)/)
     expect(sidebar).toMatch(/onClose\(\)/)
@@ -397,18 +424,37 @@ describe('shell manuscript RPC safety', () => {
     expect(treeExpansionPaths('正文/第二卷/003.md')).toEqual(['正文', '正文/第二卷'])
     expect(treeExpansionPaths('人物卡/林见.md')).toEqual(['人物卡'])
     expect(treeExpansionPaths('世界书/港口/规则.md')).toEqual(['世界书', '世界书/港口'])
+    expect(treeExpansionPaths('笔记/卷一/003.md')).toEqual(['笔记', '笔记/卷一'])
+    expect(treeExpansionPaths('资料/说明.txt')).toEqual(['资料'])
     expect(treeExpansionPaths('人物卡')).toEqual(['人物卡'])
     expect(treeExpansionPaths('世界书')).toEqual(['世界书'])
     expect(treeExpansionPaths('正文')).toEqual(['正文'])
+    expect(treeExpansionPaths('大纲')).toEqual(['大纲'])
     expect(treeExpansionPaths('项目总览.md')).toEqual([])
+    expect(treeExpansionPaths('.dsh-editor/作品索引.md')).toEqual([])
+    expect(treeExpansionPaths('../secret.md')).toEqual([])
+    expect(treeExpansionPaths('/abs/file.md')).toEqual([])
     expect(proposalAppliedNavigation('正文/003.md', '', false)).toEqual({
       openPath: '正文/003.md',
       expandPath: '正文/003.md',
       refreshContent: false,
     })
+    expect(proposalAppliedNavigation('资料/说明.md', '', false)).toEqual({
+      openPath: '资料/说明.md',
+      expandPath: '资料/说明.md',
+      refreshContent: false,
+    })
+    expect(proposalAppliedNavigation('项目总览.md', '', false)).toEqual({
+      openPath: '项目总览.md',
+      refreshContent: false,
+    })
     expect(proposalAppliedNavigation('正文/003.md', '正文/003.md', false).refreshContent).toBe(true)
     expect(proposalAppliedNavigation('正文/004.md', '正文/003.md', true)).toEqual({
       expandPath: '正文/004.md',
+      refreshContent: false,
+    })
+    expect(proposalAppliedNavigation('笔记/备忘.md', '项目总览.md', true)).toEqual({
+      expandPath: '笔记/备忘.md',
       refreshContent: false,
     })
     expect(memoryAppliedNavigation('人物卡/林舟.md', '正文/001.md', false)).toEqual({ refreshContent: false })
@@ -477,7 +523,8 @@ describe('shell manuscript RPC safety', () => {
     expect(source).not.toContain('startImportProject')
     expect(source).not.toContain("t('workspace.import')")
     expect(exportDialog).toContain('function ExportPreviewDialog(')
-    expect(source).toContain('exportNovel')
+    expect(exportDialog).toContain('collectDocuments')
+    expect(source).toContain('exportDocuments')
     expect(source).toContain('confirmExport')
     expect(source).toContain("t('workspace.exportMarkdown')")
     expect(source).toContain("t('workspace.exportTxt')")
@@ -500,8 +547,45 @@ describe('shell manuscript RPC safety', () => {
     expect(palette).toContain("t('pin.unpin')")
     expect(zh['chapterOps.splitAtCursor']).toBe('在光标处拆章')
     expect(zh['command.search']).toBe('全文搜索')
-    expect(zh['command.export']).toBe('导出全文')
+    expect(zh['command.export']).toBe('导出稿件')
     expect(zh['command.archived']).toBe('已归档')
+  })
+
+  it('keeps new/open/search/export generic and does not clear the save gate', () => {
+    const source = rootSource()
+    const search = readFileSync(new URL('./client/search-panel.ts', import.meta.url), 'utf8')
+    const exportDialog = readFileSync(new URL('./client/export-dialog.ts', import.meta.url), 'utf8')
+    expect(source).toContain('saveEditorBeforeAction')
+    expect(source).toContain('openTreeCreate')
+    expect(source).toContain('exportDocuments')
+    expect(source).toContain('collectDocuments')
+    expect(source).toContain('exportDirectoryOf')
+    expect(source).toContain('chapterFiles')
+    expect(source).toContain('isManuscriptChapterPath(path) ? chapterFiles : files')
+    expect(source).not.toContain('saveOpenEditor =')
+    expect(search).toContain('searchTextRequest')
+    expect(search).toContain("scope: 'project'")
+    expect(search).not.toContain("'正文'")
+    expect(search).not.toContain('preset')
+    expect(exportDialog).toContain("t('export.markdown')")
+    expect(exportDialog).toContain("t('export.txt')")
+    expect(exportDialog).toContain("t('export.docx')")
+    expect(exportDialog).toContain("t('export.epub')")
+    expect(exportDialog).not.toContain('preset')
+    expect(zh['search.manuscriptOnly']).toBe('当前目录')
+    expect(zh['search.wholeWork']).toBe('整个作品')
+    expect(zh['editor.writeFirstChapter']).toBe('写第一篇')
+    expect(zh['editor.newChapter']).toBe('新建文档')
+    expect(zh['chapterOps.split']).toBe('拆章…')
+    const editor = readFileSync(new URL('./client/editor.ts', import.meta.url), 'utf8')
+    expect(editor).toContain('isVisibleTextPath')
+    expect(editor).toContain("t('editor.newChapter')")
+    expect(editor).toContain("t('editor.writeFirstChapter')")
+    expect(editor).not.toContain('^正文\\/')
+    expect(isVisibleTextPath('文档/guide.md')).toBe(true)
+    expect(isVisibleTextPath('guide.md')).toBe(true)
+    expect(isVisibleTextPath('.dsh-editor/作品索引.md')).toBe(false)
+    expect(isVisibleTextPath('文档/.hidden.md')).toBe(false)
   })
 
   it('lets the home recent list remove an entry after confirmation', () => {
@@ -596,6 +680,84 @@ describe('shell manuscript RPC safety', () => {
     expect(context.revealSidebar).toHaveBeenCalled()
   })
 
+  it('recomputes registry palette enablement when seatContext activePath updates', () => {
+    const memo = rootSource().slice(
+      rootSource().indexOf('const registryCommands = useMemo'),
+      rootSource().indexOf('const refreshWrittenPath'),
+    )
+    expect(memo).toContain('registryPaletteItems(commands.list(), locale, seatRegistryContext, hasFileSession)')
+    expect(memo).toContain('[commandTick, commands, hasFileSession, locale, seatContext, seatRegistryContext]')
+
+    const documentRun = vi.fn()
+    const manuscriptRun = vi.fn()
+    const registry = createCommandRegistry()
+    registry.register({
+      id: 'proofread-document',
+      group: 'writing',
+      label: { zh: '校对当前文档', en: 'Proofread current document' },
+      when: 'workspace',
+      enabled: (context) => Boolean(context.activePath),
+      run: documentRun,
+    })
+    registry.register({
+      id: 'proofread-manuscript',
+      group: 'writing',
+      label: { zh: '校对全书', en: 'Proofread manuscript' },
+      when: 'workspace',
+      run: manuscriptRun,
+    })
+    const seatRef: { current: ShellToolSeatContext } = {
+      current: {
+        sessionId: 's1',
+        activePath: '',
+        editorDirty: false,
+        treeRevision: 0,
+        contentRevision: 0,
+        locale: 'zh',
+        openDocument: vi.fn(),
+        onApplied: vi.fn(),
+        note: vi.fn(),
+        revealSidebar: vi.fn(),
+        refresh: vi.fn(),
+        expandTreePath: vi.fn(),
+        highlightTreePath: vi.fn(),
+        pinnedPath: null,
+        togglePin: vi.fn(),
+        ProposalCard: () => null,
+      },
+    }
+    const proxy = new Proxy({} as ShellToolSeatContext, {
+      get(_target, prop) {
+        return Reflect.get(seatRef.current, prop)
+      },
+    })
+    const project = (hasWorkspace: boolean) => registryPaletteItems(registry.list(), 'zh', proxy, hasWorkspace)
+    const byId = (items: ReturnType<typeof project>) => Object.fromEntries(items.map((item) => [item.id, item]))
+
+    const empty = byId(project(true))
+    expect(empty['proofread-document']?.disabled).toBe(true)
+    expect(empty['proofread-manuscript']?.disabled).toBe(false)
+
+    seatRef.current = { ...seatRef.current, activePath: '正文/001.md' }
+    const opened = byId(project(true))
+    expect(opened['proofread-document']?.disabled).toBe(false)
+    expect(opened['proofread-manuscript']?.disabled).toBe(false)
+    opened['proofread-document']?.run()
+    expect(documentRun).toHaveBeenCalledWith(proxy)
+    expect(seatRef.current.activePath).toBe('正文/001.md')
+
+    seatRef.current = { ...seatRef.current, activePath: '' }
+    const afterClose = byId(project(true))
+    expect(afterClose['proofread-document']?.disabled).toBe(true)
+    expect(afterClose['proofread-manuscript']?.disabled).toBe(false)
+    afterClose['proofread-document']?.run()
+    expect(documentRun).toHaveBeenCalledTimes(1)
+
+    const noWorkspace = byId(project(false))
+    expect(noWorkspace['proofread-document']?.disabled).toBe(true)
+    expect(noWorkspace['proofread-manuscript']?.disabled).toBe(true)
+  })
+
   it('leaves character and worldbook cards to the cards plugin seats and registry commands', () => {
     const source = rootSource()
     const seats = readFileSync(new URL('../../dsh-editor-seats/src/index.ts', import.meta.url), 'utf8')
@@ -608,8 +770,9 @@ describe('shell manuscript RPC safety', () => {
     expect(source).toContain('highlightTreePath')
     expect(seats).toContain('highlightTreePath')
     expect(seats).toContain('togglePin')
-    expect(pinned).toContain('CARDS_RPC_CHANNEL')
-    expect(pinned).toContain('cards.list')
+    expect(pinned).not.toContain('CARDS_RPC_CHANNEL')
+    expect(pinned).not.toContain('cards.list')
+    expect(pinned).not.toContain('dsh-editor-cards')
     expect(palette).not.toContain('cmd.cards')
     expect(palette).not.toContain('cmd.worldbook')
     expect(palette).toContain('keywords: item.keywords')
@@ -641,6 +804,21 @@ describe('shell manuscript RPC safety', () => {
     expect(editor).toContain('editor-doc-title')
   })
 
+  it('cancels not-yet-fired draft sync before reload/conflict-copy delete and does not remount on a failed cleanup', () => {
+    const editor = readFileSync(new URL('./client/editor.ts', import.meta.url), 'utf8')
+    expect(editor).toContain('cancelPendingDraftSync()')
+    expect(editor).toContain('handleRef.current?.cancelPendingDraftSync()')
+    const reload = editor.slice(editor.indexOf('const reloadDisk'), editor.indexOf('const saveConflictCopy'))
+    expect(reload.indexOf('cancelPendingDraftSync()')).toBeLessThan(reload.indexOf('draftQueue.current!.delete'))
+    expect(reload).toContain('if (!deleted.ok && !isStaleFailure(deleted))')
+    expect(reload.indexOf('draftCleanupFailed')).toBeLessThan(reload.indexOf('setRevisionTick'))
+    const copy = editor.slice(editor.indexOf('const saveConflictCopy'), editor.indexOf('// Clear stale notes'))
+    expect(copy.indexOf("file.create")).toBeLessThan(copy.indexOf('cancelPendingDraftSync()'))
+    expect(copy.indexOf('cancelPendingDraftSync()')).toBeLessThan(copy.indexOf('draftQueue.current!.delete'))
+    expect(copy).toContain('if (!deleted.ok && !isStaleFailure(deleted))')
+    expect(copy.indexOf('draftCleanupFailed')).toBeLessThan(copy.indexOf('setRevisionTick'))
+  })
+
   it('sends proofread source and locate callbacks and styles rewrite proposals', () => {
     const editor = readFileSync(new URL('./client/editor.ts', import.meta.url), 'utf8')
     expect(editor).toContain('sourceLabel')
@@ -660,6 +838,12 @@ describe('shell manuscript RPC safety', () => {
     expect(chat).toContain('proposal-heading')
     expect(chat).toContain("className: 'primary-action'")
     expect(chat).toContain("t('chat.createBadge')")
+    expect(chat).toContain("t('chat.proposalBasis')")
+    expect(chat).toContain('proposalFingerprint(props.proposal)')
+    expect(chat).toContain('proposalBasisItems(props.proposal)')
+    expect(chat).toContain("className: 'proposal-basis'")
+    expect(chat).toContain("className: 'proposal-target'")
+    expect(chat).toContain("t('chat.proposalTarget')")
     expect(chat).toContain('chat-overlay')
     expect(chat).toContain("inert: ''")
     expect(chat).not.toContain("open: true, role: 'alert'")
@@ -844,6 +1028,7 @@ describe('shell manuscript RPC safety', () => {
     expect(canSubmitComposer({ draft: '写下去', connected: false, removed: false })).toBe(false)
     expect(canSubmitComposer({ draft: '写下去', connected: true, removed: true })).toBe(false)
     expect(canSubmitComposer({ draft: '写下去', connected: true, removed: false, outgoingState: 'sending' })).toBe(false)
+    expect(canSubmitComposer({ draft: '写下去', connected: true, removed: false, outgoingState: 'accepted' })).toBe(false)
     expect(canSubmitComposer({ draft: '重试', connected: true, removed: false, outgoingState: 'failed' })).toBe(true)
   })
 
@@ -984,6 +1169,42 @@ describe('shell manuscript RPC safety', () => {
     expect(chatSource).toMatch(/proposal\.kind === 'split'/)
     expect(chatSource).toMatch(/proposal\.kind === 'merge'/)
     expect(chatSource).toMatch(/proposal\.kind === 'renames'/)
+  })
+
+  it('shows V2 basis metadata on the confirmation card, reruns prepare on fingerprint change, and keeps stale regenerate-only', async () => {
+    const { proposalBasisItems, proposalFingerprint, proposalTargetBaselines } = await import('./client/chat.ts')
+    const chat = readFileSync(new URL('./client/chat.ts', import.meta.url), 'utf8')
+    const v2 = {
+      marker: 'dsh-editor.proposal', version: 2, kind: 'edit', path: 'notes/a.md', summary: '改', oldText: '旧', newText: '新',
+      targetVersion: 'v7',
+      basis: [{ path: '大纲/总纲.md', version: 'v1', label: '总纲' }],
+    }
+    expect(proposalTargetBaselines(v2 as never)).toEqual([{ path: 'notes/a.md', version: 'v7' }])
+    expect(proposalBasisItems(v2 as never)).toEqual([{ path: '大纲/总纲.md', version: 'v1', label: '总纲' }])
+    expect(proposalFingerprint(v2 as never)).toContain('target|notes/a.md|v7')
+    expect(proposalFingerprint(v2 as never)).toContain('大纲/总纲.md|v1|总纲')
+    expect(proposalFingerprint({ ...v2, targetVersion: 'v8' } as never))
+      .not.toBe(proposalFingerprint(v2 as never))
+    expect(proposalFingerprint({ ...v2, basis: [{ path: '大纲/总纲.md', version: 'v2', label: '总纲' }] } as never))
+      .not.toBe(proposalFingerprint(v2 as never))
+    expect(zh['chat.proposalBasis']).toBe('依据与基线')
+    expect(zh['chat.proposalTarget']).toBe('生成基线')
+    expect(chat).toContain('proposalFingerprint(props.proposal)')
+    expect(chat).toMatch(/\[props\.sessionId, fingerprint\]/)
+    expect(chat).toContain("t('chat.proposalBasis')")
+    expect(chat).toContain("t('chat.proposalTarget')")
+    expect(chat).toContain("className: 'proposal-target'")
+    expect(chat).toContain('proposalBasisLine(item)')
+    expect(chat).toContain('item.path')
+    expect(chat).toContain('item.version')
+    expect(chat).not.toContain('item.text')
+    expect(chat).not.toMatch(/basis[\s\S]{0,160}file\.read/)
+    expect(chat).not.toMatch(/targetVersion\s*=/)
+    expect(chat).toContain('setCanRecheck(!stale)')
+    expect(chat).toContain("t('chat.filesChangedNoWrite')")
+    expect(proposalBasisItems({
+      marker: 'dsh-editor.proposal', version: 1, kind: 'edit', path: 'notes/a.md', summary: '改', oldText: '旧', newText: '新',
+    } as never)).toEqual([])
   })
 
   it('removes daily goal settings while preserving writing statistics and sidebar search', () => {

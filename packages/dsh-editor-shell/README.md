@@ -17,7 +17,9 @@ Root 子座位（`src/root-registration.ts`）：
 
 ## 工作台
 
-可折叠三栏；专注模式只留稿纸。左栏真实目录树：隐藏 `.` 开头项，以及 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `COPILOT.md`（`src/auxiliary-files.ts`）。新建作品只预建 `正文/`。栏顶：全文搜索（Ctrl+Shift+F）。概览 / 人物卡 / 世界书由对应插件经座位与命令面板打开。**桌面校对入口已停用**（无 Ctrl+Shift+L、无顶栏校对）。保存版本 / 历史版本在文件栏菜单。
+可折叠三栏；专注模式只留稿纸。左栏真实目录树：隐藏 `.` 开头项，以及 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `COPILOT.md`（`src/auxiliary-files.ts`）。作品是普通文件夹：`project.createHome` 只建空目录，`project.init` 至多写入根目录 `AGENTS.md`，不预建 `正文/` 等专业目录。栏顶：全文搜索（Ctrl+Shift+F）。概览由 overview-panel 经座位打开。四个 Preset 共用侧栏文稿校对（`dsh-editor-proofread-panel`）：当前文档或全部可见 `.md`/`.txt`，kind 为标点 / 错别字 / 敏感词 / 重复 / 口癖，不含 `card`。人物卡 / 记忆面板默认不装。保存版本 / 历史版本在文件栏菜单。
+
+新对话：`agentPresets.list()` → 确认后 blank `sessions.create` → `agentPresets.select` → Host 真实投影。四个当前 Preset 是 `dsh-editor-writing` / `dsh-editor-novel` / `dsh-editor-article` / `dsh-editor-technical`；历史 `dsh-editor` 不进 picker。已有对话只切换。新模式发送纯文本、走 `writing_propose` V2：edit/split 要生成时 Host-read 的 `targetVersion`，merge 要 `targetVersion`+`sourceVersion`，renames 每项 `version`；可选 `basis` 不能代替目标基线。全部操作接受可见项目相对 `.md`/`.txt`。V2 create 严格 create-if-absent。可见 `dsh-editor-novel` 以 `knowledge-only` 挂 novel-kernel（仅 `novel_knowledge`）。Client `inject` 含 `remote.agentPresets`。
 
 跨文件搜索结果经 `acceptSearchResults` 再分组或替换（`src/client/search-panel.ts`）；辅助文件不进入命中与替换计划，磁盘文件保留。稿内查找替换仍是 Ctrl+F / Ctrl+H（`@codemirror/search`）。世界书触发词表单已移除。
 

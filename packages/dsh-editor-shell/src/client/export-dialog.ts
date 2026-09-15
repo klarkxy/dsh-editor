@@ -2,28 +2,33 @@ import { createElement as e, Fragment, useRef, useState, type RefObject } from '
 import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type RpcResult, type ShellContext } from './shared.ts'
 import { prepareExport, sanitizeExportTitle, type ChapterExport, type ExportFormat, type PreparedExport } from '../export.ts'
+import { isHiddenProjectPath, normalizeProjectDirectory, sortDocumentPaths } from '../project-files.ts'
 import { buildBook } from '../export-book.ts'
 import { buildDocxBlob } from '../export-docx.ts'
 import { buildEpubBlob } from '../export-epub.ts'
 import { t } from '../i18n/index.ts'
 
-export async function collectChapters(ctx: ShellContext, sessionId: string): Promise<ChapterExport[]> {
-  const queue = ['正文']
+export async function collectDocuments(ctx: ShellContext, sessionId: string, directory: string): Promise<ChapterExport[]> {
+  const root = normalizeProjectDirectory(directory)
+  if (root && isHiddenProjectPath(root)) return []
+  const queue = [root]
   const files: string[] = []
   while (queue.length) {
-    const directory = queue.shift()!
+    const current = queue.shift()!
     const listed = await safeRpcCall<{ entries?: { name: string; type: 'file' | 'directory' | 'other' }[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', {
       sessionId,
-      path: directory,
+      path: current || '.',
     }))
     if (!listed.ok) throw new Error(errorMessage(listed))
     for (const entry of listed.value.entries ?? []) {
-      const child = `${directory}/${entry.name}`
+      if (entry.name.startsWith('.')) continue
+      const child = current ? `${current}/${entry.name}` : entry.name
+      if (isHiddenProjectPath(child)) continue
       if (entry.type === 'directory') queue.push(child)
       else if (entry.type === 'file' && /\.(?:md|txt)$/i.test(entry.name)) files.push(child)
     }
   }
-  return await Promise.all(files.map(async (path) => {
+  return await Promise.all(sortDocumentPaths(files).map(async (path) => {
     const read = await ctx.connection.rpc.call('/manuscript', 'file.read', { sessionId, path }) as RpcResult<{ text: string }>
     if (!read.ok) throw new Error(errorMessage(read))
     return { path, text: read.value.text }
@@ -72,7 +77,10 @@ function ExportPreviewDialog(props: {
      收集期间只用本次的 props.note:packNote 属于上一轮打包的完成/失败留言,
      弹窗常驻重用,不能盖住新一轮收集的 exportPreparing。 */
   const collecting = props.busy && preview.chapters.length === 0
-  const note = collecting ? props.note : packNote ?? props.note
+  /* 打包一开始就清空 packNote,此刻 props.note 往往还是上一轮的"已生成/已就绪"
+     完成留言:在途期间用它顶替,圆点也只配给这条真正的在途文案。 */
+  const packingNote = packing ? t('workspace.exporting') : undefined
+  const note = collecting ? props.note : packingNote ?? packNote ?? props.note
   const exportPacked = async (kind: 'docx' | 'epub') => {
     if (busy || !preview.chapters.length) return
     setPacking(kind)
@@ -110,7 +118,7 @@ function ExportPreviewDialog(props: {
       e('div', null, e('dt', null, t('export.totalChars')), e('dd', null, preview.totalChars)),
     ),
     empty.length ? e('p', { className: 'warning', role: 'alert' }, t('export.emptyWarning', { count: empty.length })) : null,
-    note && !collecting ? e('p', { className: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'warning' : 'muted', role: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'alert' : 'status' }, busy ? e(ActivityDots, null) : null, note) : null,
+    note && !collecting ? e('p', { className: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'warning' : 'muted', role: /无法|失败|为空|empty|failed|cannot/i.test(note) ? 'alert' : 'status' }, packingNote ? e(ActivityDots, null) : null, note) : null,
     collecting ? null : e('ol', { className: 'export-chapters' }, preview.chapters.map((chapter, index) => e('li', { key: chapter.path },
       e('span', null, `${index + 1}. ${chapter.path}`),
       e('small', null, `${t('export.chapterMeta', { chars: chapter.chars })}${chapter.empty ? t('export.chapterEmpty') : ''}`),
