@@ -20,7 +20,7 @@ import { COMMANDS_SERVICE, MESSAGE_CARDS_SERVICE, createCommandRegistry, createM
 export const name = 'dsh-editor-shell-client'
 export const inject = [
   'slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote',
-  'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker',
+  'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker', 'remote.agentPresets',
   'uiSession', 'locale',
 ] as const
 
@@ -73,7 +73,7 @@ export type {
 } from './client/shared.ts'
 export { THEME_STORAGE_KEY, THEME_VALUES, ThemeToggle, useTheme } from './client/theme.ts'
 export type { HostThemeSync, ThemeValue } from './client/theme.ts'
-export { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './client/dialogs.ts'
+export { ConfirmDialog, ConversationPresetPicker, NewProjectDialog, TextPromptDialog } from './client/dialogs.ts'
 export { Chat, ModelPicker, PendingCard, ProjectContextReceiptView, ProposalCard, bindOfficialConversation, conversationChatSource } from './client/chat.ts'
 export { Editor } from './client/editor.ts'
 export { FileContextMenu, Tree } from './client/sidebar.ts'

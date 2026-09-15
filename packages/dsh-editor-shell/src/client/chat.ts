@@ -13,7 +13,25 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
-import type { PendingInteraction } from '../adapter.ts'
+import {
+  answerApproval,
+  answerQuestions,
+  chatRows,
+  internalIndexTurnActive,
+  loadOlder,
+  partialView,
+  readModels,
+  selectModel,
+  send,
+  sendProjectContext,
+  stop,
+  visibleRunningCalls,
+  WRITING_PROPOSE_TOOL_NAME,
+  type AuthorProposal,
+  type ChatRow,
+  type PendingInteraction,
+  type QuestionAnswerItem,
+} from '../adapter.ts'
 import type {
   EditorUiConversation,
   SessionFace,
@@ -28,7 +46,7 @@ import {
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
 } from 'dsh-editor-workbench/contracts'
-import type { AuthorMemoryMarker, ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+import type { AuthorMemoryMarker } from 'dsh-editor-workbench/contracts'
 import {
   buildInterviewPrompt,
   decodeInitSettings,
@@ -39,27 +57,22 @@ import {
   startExploreInit,
 } from '../init-guide.ts'
 import {
-  answerApproval,
-  answerQuestions,
-  chatRows,
-  internalIndexTurnActive,
-  loadOlder,
-  partialView,
-  readModels,
-  selectModel,
-  send,
-  sendProjectContext,
-  stop,
-  visibleRunningCalls,
-  type ChatRow,
-  type QuestionAnswerItem,
-} from '../adapter.ts'
+  canConfirmConversationPreset,
+  cancelNewConversationPresetPicker,
+  confirmNewConversationPreset,
+  firstAvailableConversationPreset,
+  loadNewConversationPresets,
+  sessionAgentPreset,
+  shouldRunLegacyNovelPipeline,
+  startNewConversationPresetFlow,
+  type ConversationPresetChoice,
+} from '../conversation-presets.ts'
 import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
 import { isObservableSource, useObservable } from './components.ts'
 import { Markdown } from './markdown.tsx'
-import { ConfirmDialog, TextPromptDialog } from './dialogs.ts'
+import { ConfirmDialog, ConversationPresetPicker, TextPromptDialog } from './dialogs.ts'
 import { Select } from './select.tsx'
 import { ActivityDots, ActivityText, SuccessMark, Menu, MenuContent, MenuItem, MenuTrigger } from './ui/index.ts'
 import type { WritingModelRoute } from '../writing-settings.ts'
@@ -524,7 +537,7 @@ export type WorkbenchPrepareResponse = {
 }
 
 /** 按 kind 拆 workbench prepare 的外层包裹；kind 不匹配时返回 undefined（调用方按核对失败处理）。 */
-export function unwrapWorkbenchPrepared(proposal: ProposalMarker, value: unknown): WorkbenchProposalPrepared | undefined {
+export function unwrapWorkbenchPrepared(proposal: AuthorProposal, value: unknown): WorkbenchProposalPrepared | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
   const wrapped = value as WorkbenchPrepareResponse
   if (proposal.kind === 'create') return wrapped.create
@@ -559,8 +572,59 @@ const CHAPTER_STATE_LABEL_KEYS: Record<(typeof CHAPTER_STATE_LABEL_ORDER)[number
   open: 'chapterMeta.stateOpen',
 }
 
+export type ProposalBasisRef = { path: string; version: string; label?: string }
+export type ProposalTargetBaseline = { path: string; version: string }
+
+/** V2 非空 basis 才进入确认卡；legacy V1 与空数组都不展示。 */
+export function proposalBasisItems(proposal: AuthorProposal): readonly ProposalBasisRef[] {
+  if (proposal.version !== 2 || !proposal.basis?.length) return []
+  return proposal.basis
+}
+
+/** V2 目标生成基线，与可选 basis[] 分开。create 与 V1 都不展示。 */
+export function proposalTargetBaselines(proposal: AuthorProposal): readonly ProposalTargetBaseline[] {
+  if (proposal.version !== 2) return []
+  if (proposal.kind === 'edit' || proposal.kind === 'split') return [{ path: proposal.path, version: proposal.targetVersion }]
+  if (proposal.kind === 'merge') {
+    return [
+      { path: proposal.path, version: proposal.targetVersion },
+      { path: proposal.sourcePath, version: proposal.sourceVersion },
+    ]
+  }
+  if (proposal.kind === 'renames') return proposal.renames.map((rename) => ({ path: rename.from, version: rename.version }))
+  return []
+}
+
+/** 优先 label，path/version 始终写入可读行；不包含来源正文。 */
+export function proposalBasisLine(item: ProposalBasisRef): string {
+  const label = item.label?.trim()
+  return label
+    ? t('chat.proposalBasisNamed', { label, path: item.path, version: item.version })
+    : t('chat.proposalBasisPath', { path: item.path, version: item.version })
+}
+
+/** 把提案压缩成字符串，作为 prepare 的 useEffect 依赖。V2 生成基线与有序 basis 分别纳入。 */
+export function proposalFingerprint(proposal: AuthorProposal): string {
+  const p = proposal
+  const head = `${p.kind}|${p.summary}`
+  const core = p.kind === 'edit' ? `${head}|${p.path}|${p.oldText}|${p.newText}`
+    : p.kind === 'create' ? `${head}|${p.path}|${p.text}`
+    : p.kind === 'chapter_plan' ? `${head}|${p.path}|${p.sourceVersion}|${p.beats.join('\n')}`
+    : p.kind === 'chapter_summary' ? `${head}|${p.path}|${p.sourceVersion}|${JSON.stringify(p.state)}`
+    : p.kind === 'split' ? `${head}|${p.path}|${p.anchor}|${p.newPath}`
+    : p.kind === 'merge' ? `${head}|${p.path}|${p.sourcePath}`
+      : `${head}|${p.renames.map((rename) => `${rename.from}->${rename.to}`).join(',')}`
+  const targets = proposalTargetBaselines(p)
+  const withTargets = targets.length
+    ? `${core}|${targets.map((item) => `target|${item.path}|${item.version}`).join(';')}`
+    : core
+  const items = proposalBasisItems(p)
+  if (!items.length) return withTargets
+  return `${withTargets}|${items.map((item) => `${item.path}|${item.version}|${item.label ?? ''}`).join(';')}`
+}
+
 /** 从 prepare 响应里抽取 expectedVersions:apply 阶段原子地校验所有参与文件的版本。key 一律是真实文件路径（workbench 端按路径查找）。 */
-export function buildExpectedVersions(proposal: ProposalMarker, prepared: ProposalPrepared): Record<string, string> | undefined {
+export function buildExpectedVersions(proposal: AuthorProposal, prepared: ProposalPrepared): Record<string, string> | undefined {
   if (proposal.kind === 'split' && prepared.kind === 'split') return { [proposal.path]: prepared.version }
   if (proposal.kind === 'merge' && prepared.kind === 'merge') return { [proposal.path]: prepared.versions.path, [proposal.sourcePath]: prepared.versions.sourcePath }
   if (proposal.kind === 'renames' && prepared.kind === 'renames') return { ...prepared.versions }
@@ -570,7 +634,7 @@ export function buildExpectedVersions(proposal: ProposalMarker, prepared: Propos
   return undefined
 }
 
-export function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: ProposalMarker; onApplied(path: string): void }) {
+export function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: AuthorProposal; onApplied(path: string): void }) {
   const [prepared, setPrepared] = useState<ProposalPrepared | null>(null)
   const [appliedVersion, setAppliedVersion] = useState('')
   const [undoText, setUndoText] = useState('')
@@ -626,24 +690,14 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     setPrepared(value); setState('ready'); setNote(t('chat.safeToApply'))
   }
 
-  /* 把提案压缩成字符串,作为 useEffect 依赖;按 kind narrow 后才访问独有字段,避免类型/越界错误。 */
-  const proposalFingerprint = useMemo(() => {
-    const p = props.proposal
-    const head = `${p.kind}|${p.summary}`
-    if (p.kind === 'edit') return `${head}|${p.path}|${p.oldText}|${p.newText}`
-    if (p.kind === 'create') return `${head}|${p.path}|${p.text}`
-    /* 章纲/章末小结带 sourceVersion：指纹不变才能让重新核对复用旧提案；内容或版本一变即重新核对。 */
-    if (p.kind === 'chapter_plan') return `${head}|${p.path}|${p.sourceVersion}|${p.beats.join('\n')}`
-    if (p.kind === 'chapter_summary') return `${head}|${p.path}|${p.sourceVersion}|${JSON.stringify(p.state)}`
-    if (p.kind === 'split') return `${head}|${p.path}|${p.anchor}|${p.newPath}`
-    if (p.kind === 'merge') return `${head}|${p.path}|${p.sourcePath}`
-    return `${head}|${p.renames.map((rename) => `${rename.from}->${rename.to}`).join(',')}`
-  }, [props.proposal])
+  /* 指纹含 V2 生成基线与有序依据条目；变更会重跑 prepare。 */
+  /* 绝不把当前 file.read 写回目标生成基线。 */
+  const fingerprint = useMemo(() => proposalFingerprint(props.proposal), [props.proposal])
 
   useEffect(() => {
     void check()
     return () => { requestGeneration.current += 1 }
-  }, [props.sessionId, proposalFingerprint])
+  }, [props.sessionId, fingerprint])
 
   const apply = async () => {
     if (!prepared) return
@@ -779,8 +833,40 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
 
   /* 按 kind 决定主区域内容。edit 复用 proposal-diff 块;create 单 pre 并在可应用时列出将自动创建的目录;
      章纲/章末小结展示可读的字段前后对照;split 同 edit 但 before/after 来自 prepared;
-     merge 展示两个文件的字符数与归档说明;renames 用 ul/li 列出 from→to。 */
-  const renderBody = () => {
+     merge 展示两个文件的字符数与归档说明;renames 用 ul/li 列出 from→to。
+     V2 非空 basis 只展示 label/path/version，不拉取也不渲染来源正文。 */
+  const renderTargets = () => {
+    const items = proposalTargetBaselines(props.proposal)
+    if (!items.length) return null
+    return e('section', { className: 'proposal-target', 'aria-label': t('chat.proposalTarget') },
+      e('small', null, t('chat.proposalTarget')),
+      e('ul', null, items.map((item) => e('li', {
+        key: `${item.path}|${item.version}`,
+        'aria-label': t('chat.proposalTargetPath', { path: item.path, version: item.version }),
+      },
+        e('code', { className: 'proposal-path' }, item.path),
+        ' · ',
+        e('code', null, item.version),
+      ))),
+    )
+  }
+  const renderBasis = () => {
+    const items = proposalBasisItems(props.proposal)
+    if (!items.length) return null
+    return e('section', { className: 'proposal-basis', 'aria-label': t('chat.proposalBasis') },
+      e('small', null, t('chat.proposalBasis')),
+      e('ul', null, items.map((item) => {
+        const label = item.label?.trim()
+        return e('li', { key: `${item.path}|${item.version}|${label ?? ''}`, 'aria-label': proposalBasisLine(item) },
+          label ? e(Fragment, null, e('span', null, label), ' · ') : null,
+          e('code', { className: 'proposal-path' }, item.path),
+          ' · ',
+          e('code', null, item.version),
+        )
+      })),
+    )
+  }
+  const renderKindBody = () => {
     if (props.proposal.kind === 'edit') {
       const editPrepared = prepared?.kind === 'edit' ? prepared : null
       return e('div', { className: 'proposal-diff' },
@@ -840,6 +926,12 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
         e('code', null, rename.from), ' → ', e('code', null, rename.to),
       ))),
     )
+  }
+  const renderBody = () => {
+    const targets = renderTargets()
+    const basis = renderBasis()
+    if (!targets && !basis) return renderKindBody()
+    return e(Fragment, null, targets, basis, renderKindBody())
   }
 
   const canRecheckNow = state === 'deferred' || (state === 'expired' && canRecheck)
@@ -1016,6 +1108,19 @@ const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
   )
 })
 
+/* 停止必须在 cancel 结算后松开 outgoing；拒绝或 RPC 失败也不能把发送闸门永久锁在 accepted。
+   与 rows 对齐后的清场仍由 outgoingIsCanonical 负责，这里只覆盖显式停止。 */
+export async function settleConversationStop(input: {
+  cancel(): Promise<unknown>
+  releaseOutgoing(): void
+}): Promise<void> {
+  try {
+    await input.cancel()
+  } finally {
+    input.releaseOutgoing()
+  }
+}
+
 export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, onAcceptMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
@@ -1049,6 +1154,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   )
   const sessionList = useObservable(ctx.sessions.list)
   const workspaceList = useObservable(ctx.workspaces.list)
+  const legacyEditor = shouldRunLegacyNovelPipeline(sessionAgentPreset(sessionList.byId, session.sessionId))
   const connectionState = useObservable(isObservableSource(ctx.connection.state) ? ctx.connection.state : DISCONNECTED)
   const connected = connectionState === 'connected'
   const [draft, setDraft] = useState('')
@@ -1061,6 +1167,15 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const [conversationBusy, setConversationBusy] = useState(false)
   const [titleOverrides, setTitleOverrides] = useState<Record<string, string>>({})
   const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
+  const [presetPicker, setPresetPicker] = useState<{
+    kind: 'closed' | 'loading' | 'list-error' | 'ready'
+    presets: ConversationPresetChoice[]
+    selectedId?: string
+    pendingSessionId?: SessionId
+    error?: string
+    busy?: boolean
+  }>({ kind: 'closed', presets: [] })
+  const newConversationButton = useRef<HTMLButtonElement | null>(null)
   const [modelRevision, setModelRevision] = useState(0)
   const titleAttempted = useRef(new Set<string>())
   const historyRef = useRef<HTMLDivElement | null>(null)
@@ -1123,13 +1238,13 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     appliedDuringInterviewRef.current = false
     autoIndexTriggeredRef.current = false
     prevRunningRef.current = false
-    if (!workspaceId || !workspacePath) return
+    if (!legacyEditor || !workspaceId || !workspacePath) return
     let live = true
     void safeRpcCall<ProjectInspectionResponse>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.inspect', { workspacePath })).then((result) => {
       if (live && result.ok) setInspection(result.value)
     })
     return () => { live = false }
-  }, [ctx.connection, workspaceId, workspacePath])
+  }, [ctx.connection, workspaceId, workspacePath, legacyEditor])
   const initState = inspection ? initGuideState(inspection) : 'done'
   const [initDismissedLocal, setInitDismissedLocal] = useState(false)
   const initDismissed = initDismissedLocal || Boolean(workspaceId && initSettings.value?.dismissedWorkspaceIds.includes(workspaceId))
@@ -1146,7 +1261,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   useEffect(() => {
     const runningJustStopped = prevRunningRef.current === true && !snapshot.running
     prevRunningRef.current = snapshot.running
-    if (!runningJustStopped) return
+    if (!legacyEditor || !runningJustStopped) return
     if (!shouldAutoIndexAfterInterview({
       initState,
       initCompleted,
@@ -1156,7 +1271,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     })) return
     autoIndexTriggeredRef.current = true
     void startExploreInit(ctx, session.sessionId)
-  }, [snapshot.running, initState, initCompleted, ctx, session.sessionId])
+  }, [snapshot.running, initState, initCompleted, ctx, session.sessionId, legacyEditor])
   const startInitGuide = () => {
     if (initBusy || initState === 'done') return
     setInitBusy(true); setInitNote('')
@@ -1180,7 +1295,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
    * 会话空闲时自动接上"建立作品索引"。非采访态或还没开始就只是透传。
    * useCallback 让已挂载的提案行在流式期间凭稳定引用跳过 memo 重渲染。 */
   const handleApplied = useCallback((path: string) => {
-    if (initState === 'interview' && initCompleted) {
+    if (legacyEditor && initState === 'interview' && initCompleted) {
       appliedDuringInterviewRef.current = true
       /* 典型场景是回合已结束、作者才点t('common.apply')：此时 running 不会再有 true→false 跳变，
        * 上面的 effect 等不到它，在这里空闲即触发，否则自动索引永远不会启动。 */
@@ -1196,7 +1311,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       }
     }
     onApplied(path)
-  }, [initState, initCompleted, snapshot.running, ctx, session.sessionId, onApplied])
+  }, [legacyEditor, initState, initCompleted, snapshot.running, ctx, session.sessionId, onApplied])
   /* 记忆化:整份 context 作为 memo 行的 prop,引用稳定行才跳得过重渲染。 */
   const messageCardContext = useMemo<ShellMessageCardContext>(() => ({
     sessionId: session.sessionId,
@@ -1216,7 +1331,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     return Boolean(item && workspace?.sessionIds.includes(id) && !item.blank)
   })
   const initEngaged = initBusy || initCompleted || (initState === 'explore' && internalIndexActive)
-  const showInitGuide = shouldShowInitGuide({
+  const showInitGuide = legacyEditor && shouldShowInitGuide({
     hasWorkspace: Boolean(workspace),
     inspected: Boolean(inspection),
     initState,
@@ -1315,35 +1430,109 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     }).catch(() => setNote(t('chat.renameFailed')))
   }
 
+  const applyDefaultChatModel = async (sessionId: SessionId) => {
+    let groups: SessionModels['groups'] = []
+    const preferred = resolveNewConversationModel({ preferred: chatModel })
+    if (!preferred) {
+      const catalog = await readModels(ctx.remote.session, session)
+      if (catalog.ok) groups = catalog.value.groups
+    }
+    const route = preferred ?? resolveNewConversationModel({ groups })
+    if (!route) return
+    const selected = await selectModel(ctx.remote.session, sessionId, route.provider, route.model)
+    if (!selected.ok) rememberCreatedChatModelError(sessionId, t('chat.defaultModelFailed'))
+    else discardCreatedChatModelError(sessionId)
+  }
+  const closePresetPicker = () => {
+    setPresetPicker({ kind: 'closed', presets: [] })
+  }
   const createConversation = async () => {
-    if (!workspaceId || conversationBusy) return
-    if (!(await canDiscardDraft('__new-conversation__'))) return
-    setConversationBusy(true)
-    setNote('')
+    if (!workspaceId || conversationBusy || presetPicker.kind !== 'closed') return
     try {
-      const sessionId = await ctx.uiWorkspace.connectWorkspace(workspaceId)
-      let groups: SessionModels['groups'] = []
-      const preferred = resolveNewConversationModel({ preferred: chatModel })
-      if (!preferred) {
-        const catalog = await readModels(ctx.remote.session, session)
-        if (catalog.ok) groups = catalog.value.groups
+      const started = await startNewConversationPresetFlow({
+        canDiscardDraft: () => canDiscardDraft('__new-conversation__'),
+        list: () => {
+          setConversationBusy(true)
+          setNote('')
+          return ctx.remote.agentPresets.list()
+        },
+      })
+      if (started.kind === 'blocked') return
+      if (started.kind === 'list-error') {
+        setPresetPicker({ kind: 'list-error', presets: [], error: started.error })
+        return
       }
-      const route = preferred ?? resolveNewConversationModel({ groups })
-      if (route) {
-        const selected = await selectModel(ctx.remote.session, sessionId, route.provider, route.model)
-        if (!selected.ok) rememberCreatedChatModelError(sessionId, t('chat.defaultModelFailed'))
-        else discardCreatedChatModelError(sessionId)
-      }
-      openConversation(sessionId)
-      if (sessionId === session.sessionId) {
-        const error = takeCreatedChatModelError(sessionId)
-        if (error) setNote(error)
-      }
+      setPresetPicker({
+        kind: 'ready',
+        presets: started.presets,
+        selectedId: firstAvailableConversationPreset(started.presets),
+      })
     } catch {
-      setNote(t('chat.newFailed'))
+      setPresetPicker({ kind: 'list-error', presets: [], error: t('chat.presetListFailed') })
     } finally {
       setConversationBusy(false)
     }
+  }
+  const retryPresetList = async () => {
+    if (presetPicker.busy) return
+    const pendingSessionId = presetPicker.pendingSessionId
+    setPresetPicker((current) => ({ ...current, kind: 'loading', error: undefined }))
+    const loaded = await loadNewConversationPresets(() => ctx.remote.agentPresets.list())
+    if (!loaded.ok) {
+      setPresetPicker({ kind: 'list-error', presets: [], pendingSessionId, error: loaded.error })
+      return
+    }
+    setPresetPicker({
+      kind: 'ready',
+      presets: loaded.presets,
+      selectedId: firstAvailableConversationPreset(loaded.presets),
+      pendingSessionId,
+    })
+  }
+  const confirmPresetPicker = async () => {
+    if (!workspaceId || presetPicker.kind !== 'ready' || presetPicker.busy) return
+    if (!canConfirmConversationPreset(presetPicker.presets, presetPicker.selectedId)) return
+    const presetId = presetPicker.selectedId
+    if (!presetId) return
+    const pendingSessionId = presetPicker.pendingSessionId
+    setPresetPicker((current) => ({ ...current, busy: true, error: undefined }))
+    setConversationBusy(true)
+    try {
+      const result = await confirmNewConversationPreset({
+        create: ({ workspaceId }) => ctx.sessions.create({ workspaceId }),
+        select: (sessionId, id) => ctx.remote.agentPresets.select(sessionId, id),
+        applyDefaultModel: applyDefaultChatModel,
+        open: (id) => {
+          openConversation(id)
+          if (id === session.sessionId) {
+            const error = takeCreatedChatModelError(id)
+            if (error) setNote(error)
+          }
+        },
+      }, { workspaceId, presetId, pendingSessionId })
+      if (!result.ok) {
+        setPresetPicker((current) => ({
+          ...current,
+          kind: current.kind === 'closed' ? 'ready' : current.kind,
+          pendingSessionId: result.sessionId ?? pendingSessionId,
+          error: result.error,
+          busy: false,
+        }))
+        return
+      }
+      closePresetPicker()
+    } finally {
+      setConversationBusy(false)
+    }
+  }
+  const cancelPresetPicker = () => {
+    if (presetPicker.busy) return
+    const pendingSessionId = presetPicker.pendingSessionId
+    closePresetPicker()
+    void cancelNewConversationPresetPicker({
+      pendingSessionId,
+      archive: (id) => ctx.workspaces.archiveSession(id),
+    })
   }
   const persistConversationWork = async (record: typeof workRecord) => {
     if (!workspaceId) throw new Error('workspace unavailable')
@@ -1418,6 +1607,20 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setOutgoing({ text: value, state: 'sending', afterRows: rows.length })
     setDraft('')
     setNote('')
+    if (!legacyEditor) {
+      void send(session, value).then((result) => {
+        if (!result || !result.ok) {
+          setOutgoing((current) => current?.text === value ? { ...current, state: 'failed' } : current)
+          setNote(t('chat.sendFailedRetry'))
+          return
+        }
+        setOutgoing((current) => current?.text === value ? { ...current, state: 'accepted' } : current)
+      }).catch(() => {
+        setOutgoing((current) => current?.text === value ? { ...current, state: 'failed' } : current)
+        setNote(t('chat.sendFailedRetry'))
+      })
+      return
+    }
     let contextCompileFailed = false
     void sendProjectContext(session, value, async () => {
       const compiled = await safeRpcCall<{ serialized: string; receipt: ProjectContextReceiptBundle }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'context.compile', { sessionId: session.sessionId, userRequest: value, activePath, authorPreferences, authorMemory }))
@@ -1464,11 +1667,12 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       e('div', { className: 'chat-header-actions' },
         connected ? null : e('span', { className: 'chat-status', role: 'status' }, e(ActivityDots, null), t('chat.reconnecting')),
         e('button', {
+          ref: newConversationButton,
           className: 'icon-button',
           type: 'button',
           title: t('chat.newConversation'),
           'aria-label': t('chat.newConversation'),
-          disabled: conversationBusy || !workspaceId,
+          disabled: conversationBusy || !workspaceId || presetPicker.kind !== 'closed',
           onClick: () => { void createConversation() },
         }, '＋'),
         e('div', { className: 'conversation-menu' },
@@ -1561,7 +1765,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         : null,
       visibleCalls.map((call) => e(ChatEntry, { className: 'chat-row tool', key: `running:${call.callId}`, enter: isNewMessage(`running:${call.callId}`) }, e('strong', null,
         e(ActivityDots, { variant: 'typing' }),
-        call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' ? t('chat.preparingProposal') : t('chat.processing')
+        call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' || call.name === WRITING_PROPOSE_TOOL_NAME ? t('chat.preparingProposal') : t('chat.processing')
       ))),
       snapshot.queue.map((item) => e(ChatEntry, { className: 'chat-row notice', key: `queue:${item.id}`, enter: isNewMessage(`queue:${item.id}`) }, e('p', null, item.preview), e('small', null, item.placement === 'queued' ? t('chat.queued') : t('chat.steering')))),
       partial.thinking ? e(ChatEntry, { as: 'details', className: 'chat-row thinking', key: 'partial-thinking', enter: isNewMessage('partial-thinking') },
@@ -1596,7 +1800,12 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
             className: 'icon-button chat-stop',
             title: t('chat.stop'),
             'aria-label': t('chat.stop'),
-            onClick: () => void stop(session),
+            onClick: () => {
+              void settleConversationStop({
+                cancel: () => stop(session),
+                releaseOutgoing: () => setOutgoing(null),
+              })
+            },
           }, e(StopIcon, { size: 14 })) : null,
           e('button', {
             className: 'send',
@@ -1630,6 +1839,19 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       confirmLabel: t('chat.discardAndContinue'),
       onCancel: () => resolveDraftConfirm(false),
       onConfirm: () => resolveDraftConfirm(true),
+    }),
+    e(ConversationPresetPicker, {
+      open: presetPicker.kind !== 'closed',
+      phase: presetPicker.kind === 'closed' ? 'ready' : presetPicker.kind,
+      presets: presetPicker.presets,
+      selectedId: presetPicker.selectedId,
+      error: presetPicker.error,
+      busy: presetPicker.busy,
+      returnFocusRef: newConversationButton,
+      onSelect: (id: string) => setPresetPicker((current) => ({ ...current, selectedId: id })),
+      onRetry: () => { void retryPresetList() },
+      onCancel: cancelPresetPicker,
+      onConfirm: () => { void confirmPresetPicker() },
     }),
   )
 }

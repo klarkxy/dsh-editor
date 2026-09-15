@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseAuthorMemoryMarker, parseProposalMarker, partialView, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
+import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseAuthorMemoryMarker, parseAuthorProposal, parseProposalMarker, partialView, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
 import { compileProjectContext, compileProjectContextV2 } from 'dsh-editor-workbench/contracts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
@@ -7,6 +7,19 @@ describe('DSH snapshot adapter', () => {
   it('recognizes only exact versioned proposal markers', () => {
     expect(parseProposalMarker(JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'create', path: '正文/001.md', summary: '创建', text: '# 第一章' }))).toMatchObject({ kind: 'create' })
     expect(parseProposalMarker(JSON.stringify({ marker: 'dsh-editor.proposal', version: 2 }))).toBeUndefined()
+    expect(parseAuthorProposal(JSON.stringify({
+      marker: 'dsh-editor.proposal', version: 2, kind: 'edit', path: 'notes/a.md', summary: '改', oldText: '旧', newText: '新', targetVersion: 'v7',
+      basis: [{ path: 'notes/source.md', version: 'v1' }],
+    }))).toMatchObject({ version: 2, kind: 'edit', targetVersion: 'v7', basis: [{ path: 'notes/source.md', version: 'v1' }] })
+    expect(parseAuthorProposal(JSON.stringify({
+      marker: 'dsh-editor.proposal', version: 2, kind: 'edit', path: 'notes/a.txt', summary: '改', oldText: '旧', newText: '新', targetVersion: 'v7',
+    }))).toMatchObject({ version: 2, path: 'notes/a.txt', targetVersion: 'v7' })
+    expect(parseAuthorProposal(JSON.stringify({
+      marker: 'dsh-editor.proposal', version: 2, kind: 'edit', path: 'notes/a.md', summary: '改', oldText: '旧', newText: '新',
+    }))).toBeUndefined()
+    expect(parseAuthorProposal(JSON.stringify({
+      marker: 'dsh-editor.proposal', version: 2, kind: 'edit', path: 'notes/a.md', summary: '改', old_text: '旧', new_text: '新', targetVersion: 'v7',
+    }))).toBeUndefined()
   })
   it('renders proposals from the canonical nested tool-result content block', () => {
     const marker = JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'edit', path: '项目总览.md', summary: '完善总览', oldText: '旧', newText: '新' })
@@ -15,6 +28,12 @@ describe('DSH snapshot adapter', () => {
       content: [{ type: 'tool-result', toolCallId: 'proposal', content: [{ type: 'text', text: marker }] }], isError: false,
     }] } as never)
     expect(row).toMatchObject({ role: 'tool', proposal: { path: '项目总览.md', oldText: '旧', newText: '新' } })
+    const v2 = JSON.stringify({ marker: 'dsh-editor.proposal', version: 2, kind: 'create', path: 'notes/a.md', summary: '新建', text: '# 新' })
+    const [v2Row] = chatRows({ nodes: [{
+      kind: 'tool-result', seq: 4, callId: 'proposal', call: { name: 'writing_propose', argsRaw: '{}' },
+      content: [{ type: 'text', text: v2 }], isError: false,
+    }] } as never)
+    expect(v2Row).toMatchObject({ role: 'tool', proposal: { version: 2, kind: 'create', path: 'notes/a.md' } })
   })
   it('labels split/merge/renames proposals with their own detail copy and never touches proposal.path on renames', () => {
     const splitMarker = JSON.stringify({ marker: 'dsh-editor.proposal', version: 1, kind: 'split', path: '正文/001.md', summary: '把后半章拆出来', anchor: '### 转折', newPath: '正文/002.md' })

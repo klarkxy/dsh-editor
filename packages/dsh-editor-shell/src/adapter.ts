@@ -11,14 +11,24 @@ import type {
   SessionModels,
 } from './dsh-compat.ts'
 import { catalogToSessionModels, modelSelectionOf } from './dsh-compat.ts'
-import { parseAuthorMemoryMarker, parseProposalMarker, type AuthorMemoryMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+import { parseProposalMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+import { parseAuthorMemoryMarker, type AuthorMemoryMarker } from 'dsh-editor-workbench/contracts'
+import { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME, type WritingProposalV2 } from 'dsh-manuscript/client/editor-core'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
 import { t } from './i18n/index.ts'
 import { stripReasoningText } from './conversation-lifecycle.ts'
 import { isNovelIndexJobPrompt } from './novel-index.ts'
 
-export { parseAuthorMemoryMarker, parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+export { parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
+export { parseAuthorMemoryMarker } from 'dsh-editor-workbench/contracts'
+export { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME } from 'dsh-manuscript/client/editor-core'
+
+export type AuthorProposal = ProposalMarker | WritingProposalV2
+
+export function parseAuthorProposal(text: string): AuthorProposal | undefined {
+  return parseWritingProposalMarker(text) ?? parseProposalMarker(text)
+}
 
 const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'novel_index_write', 'novel_scratch_write', 'novel_scratch_read', 'novel_scratch_list'])
 const HIDDEN_REASONING_BLOCKS = new Set(['reasoning', 'thinking', 'thought', 'analysis'])
@@ -40,7 +50,7 @@ export type ChatRow = {
   recovered?: boolean
   /** Author-readable cause of a failed tool call, shown above the verbatim body. */
   reason?: string
-  proposal?: ProposalMarker
+  proposal?: AuthorProposal
   memory?: AuthorMemoryMarker
   /** `node.call.name` when present; Chat looks up plugin message cards by this key. */
   toolName?: string
@@ -145,7 +155,7 @@ export function splitAssistantContent(blocks: readonly AssistantBlock[] | readon
 }
 
 /** 区分不同 kind 的提案,以便聊天行展示对应的"提案"标签文案。renames 不带 path 字段,需要在使用前 narrow。 */
-function proposalDetailText(proposal: ProposalMarker): string {
+function proposalDetailText(proposal: AuthorProposal): string {
   switch (proposal.kind) {
     case 'split': return t('adapter.splitProposal')
     case 'merge': return t('adapter.mergeProposal')
@@ -164,7 +174,7 @@ export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-resu
   const body = blocksText(node.content)
   const name = node.call?.name ?? t('adapter.toolFallback', { id: node.callId })
   const toolName = node.call?.name
-  const proposal = name === 'novel_propose' ? parseProposalMarker(body) : undefined
+  const proposal = name === 'novel_propose' || name === WRITING_PROPOSE_TOOL_NAME ? parseAuthorProposal(body) : undefined
   if (proposal) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: proposalDetailText(proposal), proposal, toolName }
   }

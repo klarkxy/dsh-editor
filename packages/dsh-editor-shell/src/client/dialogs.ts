@@ -1,4 +1,5 @@
 import { createElement as e, Fragment, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
+import type { ConversationPresetChoice } from '../conversation-presets.ts'
 import { t } from '../i18n/index.ts'
 import { ActivityDots, Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'
 
@@ -145,6 +146,86 @@ export function NewProjectDialog(props: {
         e(Button, { disabled: props.busy, onClick: props.onClose }, t('common.cancel')),
         e(Button, { variant: 'primary', type: 'submit', className: 'primary-action', disabled: props.busy || !title.trim() }, props.busy ? e(Fragment, null, e(ActivityDots, null), t('common.creating')) : t('common.create')),
       ),
+    ),
+  )
+}
+
+export function ConversationPresetPicker(props: {
+  open: boolean
+  phase: 'loading' | 'list-error' | 'ready'
+  presets: readonly ConversationPresetChoice[]
+  selectedId?: string
+  error?: string
+  busy?: boolean
+  returnFocusRef?: RefObject<HTMLElement | null>
+  onSelect(id: string): void
+  onRetry(): void
+  onCancel(): void
+  onConfirm(): void
+}) {
+  const close = useRef<HTMLButtonElement | null>(null)
+  const retry = useRef<HTMLButtonElement | null>(null)
+  const firstChoice = useRef<HTMLButtonElement | null>(null)
+  const confirm = useRef<HTMLButtonElement | null>(null)
+  const initialFocus = props.phase === 'list-error' ? retry : props.phase === 'ready' ? firstChoice : close
+  const canConfirm = props.phase === 'ready' && Boolean(props.selectedId) && props.presets.some((item) => item.id === props.selectedId && item.available)
+  useEffect(() => {
+    if (!props.open || props.busy) return
+    if (props.phase === 'list-error') retry.current?.focus()
+    else if (props.phase === 'ready') firstChoice.current?.focus()
+  }, [props.open, props.phase, props.busy])
+  return e(Dialog, {
+    open: props.open,
+    onOpenChange: (next: boolean) => { if (!next && !props.busy) props.onCancel() },
+    title: t('chat.presetPickerTitle'),
+    description: t('chat.presetPickerHint'),
+    className: 'file-dialog prompt-dialog preset-picker-dialog',
+    overlayClassName: 'file-dialog-overlay',
+    dismissible: !props.busy,
+    initialFocusRef: initialFocus,
+    returnFocusRef: props.returnFocusRef,
+  },
+    e('header', null,
+      e('div', null,
+        e('h2', { id: 'conversation-preset-picker-title' }, t('chat.presetPickerTitle')),
+        e('small', { id: 'conversation-preset-picker-hint' }, t('chat.presetPickerHint')),
+      ),
+      e(Button, { ref: close, variant: 'icon', className: 'icon-button', 'aria-label': t('common.close'), disabled: props.busy, onClick: props.onCancel }, '×'),
+    ),
+    props.phase === 'loading' ? e('p', { role: 'status', 'aria-live': 'polite' }, e(ActivityDots, null), ' ', t('chat.presetLoading')) : null,
+    props.phase === 'list-error' ? e('p', { className: 'warning', role: 'alert' }, props.error ?? t('chat.presetListFailed')) : null,
+    props.phase === 'ready' ? e('div', {
+      className: 'file-dialog-actions',
+      role: 'radiogroup',
+      'aria-labelledby': 'conversation-preset-picker-title',
+      'aria-describedby': 'conversation-preset-picker-hint',
+    }, props.presets.map((preset, index) => e('button', {
+      key: preset.id,
+      ref: index === 0 ? firstChoice : undefined,
+      type: 'button',
+      role: 'radio',
+      'aria-checked': props.selectedId === preset.id,
+      'aria-label': preset.reason ? `${preset.name}. ${preset.reason}` : `${preset.name}. ${preset.description}`,
+      disabled: !preset.available || props.busy,
+      className: props.selectedId === preset.id ? 'primary-action' : undefined,
+      onClick: () => props.onSelect(preset.id),
+    },
+      e('strong', null, preset.name),
+      e('small', null, preset.description),
+      preset.reason ? e('small', { className: 'warning' }, preset.reason) : null,
+    ))) : null,
+    props.phase === 'ready' && props.error ? e('p', { className: 'warning', role: 'alert' }, props.error) : null,
+    e('footer', null,
+      e(Button, { disabled: props.busy, onClick: props.onCancel }, t('common.cancel')),
+      props.phase === 'list-error' || props.phase === 'loading'
+        ? e(Button, { ref: retry, variant: 'primary', className: 'primary-action', disabled: props.busy || props.phase === 'loading', onClick: props.onRetry }, props.phase === 'loading' ? e(Fragment, null, e(ActivityDots, null), t('common.loading')) : t('common.retry'))
+        : e(Button, {
+          ref: confirm,
+          variant: 'primary',
+          className: 'primary-action',
+          disabled: props.busy || !canConfirm,
+          onClick: props.onConfirm,
+        }, props.busy ? e(Fragment, null, e(ActivityDots, null), t('common.creating')) : t('chat.presetConfirm')),
     ),
   )
 }
