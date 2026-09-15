@@ -10,5 +10,6 @@ export default defineConfig({
   target: 'node22',
   sourcemap: true,
   hash: false,
+  deps: { neverBundle: ['dsh-manuscript', 'dsh-editor-workbench'] },
   outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
 })

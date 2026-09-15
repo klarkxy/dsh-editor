@@ -9,13 +9,12 @@
  *   - 路径固定为 NOVEL_INDEX_PATH，模型只给全文 text；没有路径参数，
  *     从根上杜绝写错位置。守卫（proposal-tool.ts 的 editorToolGuard）
  *     也只放行 text 一个参数。
- *   - 与 project-knowledge 同一注入模式：工厂接收 writer({ text, signal, cwd, session })，
- *     由 index.ts 把 ctx.fs 的 resolve + writeText（带会话沙箱策略）适配成这个签名，
- *     单元测试传内存 stub。
- *   - cwd 来自 exec.agent?.session?.header?.cwd，缺失即抛错，不静默回退。
+ *   - 工厂接收 writer({ text, signal, sessionId })；index.ts 用 live session
+ *     + 写队列适配，单元测试传内存 stub。不信任 header.cwd。
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { NOVEL_INDEX_PATH, NOVEL_INDEX_WRITE_TOOL_NAME } from './contracts.ts'
+import { sessionIdFromExec } from './internal-workspace-access.ts'
 
 export { NOVEL_INDEX_PATH, NOVEL_INDEX_WRITE_TOOL_NAME } from './contracts.ts'
 
@@ -28,10 +27,10 @@ export type IndexWriteResult = {
   chars: number
 }
 
-export type IndexWriter = (args: { text: string; signal: AbortSignal; cwd: string; session: unknown }) => Promise<unknown>
+export type IndexWriter = (args: { text: string; signal: AbortSignal; sessionId: string }) => Promise<unknown>
 
 export class IndexWriteError extends Error {
-  readonly code: 'INVALID_ARGS' | 'UNWRITABLE'
+  readonly code: 'INVALID_ARGS'
   constructor(code: IndexWriteError['code'], message: string) {
     super(message)
     this.name = 'IndexWriteError'
@@ -78,14 +77,8 @@ export function createIndexWriteTool(options: { writer: IndexWriter }) {
     isConcurrencySafe() { return false },
     async execute(args, exec) {
       const text = normalizeIndexWriteArguments(args as Readonly<Record<string, unknown>>)
-      const session = exec.agent?.session
-      const cwd = session?.header?.cwd
-      if (typeof cwd !== 'string' || cwd.length === 0) {
-        throw new IndexWriteError('UNWRITABLE', 'novel_index_write 需要当前 agent 会话工作目录')
-      }
-      /* 必须带上会话沙箱策略：不带时 fs 回退到宿主进程 cwd 作为可写根，
-         工作区内的索引文件反而会被 workspace-write 拒绝（本次事故的实测）。 */
-      await options.writer({ text, signal: exec.signal, cwd, session })
+      const sessionId = sessionIdFromExec(exec, NOVEL_INDEX_WRITE_TOOL_NAME)
+      await options.writer({ text, signal: exec.signal, sessionId })
       return { version: NOVEL_INDEX_WRITE_VERSION, path: NOVEL_INDEX_PATH, chars: text.length } satisfies IndexWriteResult
     },
   })

@@ -13,28 +13,38 @@ import {
   isScratchRelativePath,
   type ScratchStore,
 } from './scratch-tool.ts'
+import { WorkspaceAuthorityError } from './internal-workspace-access.ts'
 
 const NOOP_SIGNAL = new AbortController().signal
 
-type Exec = { signal: AbortSignal; agent?: { session: { header: { cwd?: string } } } }
+type Exec = { signal: AbortSignal; agent?: { session: { id: string; header: { cwd?: string } } } }
 
-function makeExec(cwd?: string): Exec {
-  return cwd === undefined
+function makeExec(sessionId?: string, cwd = '/forged/outside'): Exec {
+  return sessionId === undefined
     ? { signal: NOOP_SIGNAL }
-    : { signal: NOOP_SIGNAL, agent: { session: { header: { cwd } } } }
+    : { signal: NOOP_SIGNAL, agent: { session: { id: sessionId, header: { cwd } } } }
 }
 
-function memoryStore(initial: Record<string, string> = {}): ScratchStore & { files: Map<string, string> } {
+function memoryStore(initial: Record<string, string> = {}): ScratchStore & { files: Map<string, string>; sessionIds: string[] } {
   const files = new Map(Object.entries(initial))
+  const sessionIds: string[] = []
   return {
     files,
-    async read({ path }) {
+    sessionIds,
+    async read({ path, sessionId }) {
+      sessionIds.push(sessionId)
       const text = files.get(path)
       if (text === undefined) throw new Error('missing')
       return text
     },
-    async write({ path, text }) { files.set(path, text) },
-    async list() { return [...files.keys()].sort((a, b) => a.localeCompare(b)) },
+    async write({ path, text, sessionId }) {
+      sessionIds.push(sessionId)
+      files.set(path, text)
+    },
+    async list({ sessionId }) {
+      sessionIds.push(sessionId)
+      return [...files.keys()].sort((a, b) => a.localeCompare(b))
+    },
   }
 }
 
@@ -66,10 +76,11 @@ describe('scratch tools', () => {
       const store = memoryStore()
       const tool = createScratchWriteTool({ store }) as unknown as Tool
       expect(tool.name).toBe(NOVEL_SCRATCH_WRITE_TOOL_NAME)
-      const result = await tool.execute({ path: '分析/线索.md', text: '# 线索整理' }, makeExec('D:/work/project'))
+      const result = await tool.execute({ path: '分析/线索.md', text: '# 线索整理' }, makeExec('session-1'))
       expect(result).toEqual({ version: 1, path: '分析/线索.md', chars: '# 线索整理'.length })
       expect(store.files.get('分析/线索.md')).toBe('# 线索整理')
-      await tool.execute({ path: '分析/线索.md', text: '# v2' }, makeExec('D:/work/project'))
+      expect(store.sessionIds).toEqual(['session-1', 'session-1'])
+      await tool.execute({ path: '分析/线索.md', text: '# v2' }, makeExec('session-1'))
       expect(store.files.get('分析/线索.md')).toBe('# v2')
     })
 
@@ -78,20 +89,20 @@ describe('scratch tools', () => {
       for (let n = 0; n < SCRATCH_MAX_FILES; n += 1) initial[`f${n}.md`] = 'x'
       const store = memoryStore(initial)
       const tool = createScratchWriteTool({ store }) as unknown as Tool
-      await expect(tool.execute({ path: 'new.md', text: 'x' }, makeExec('D:/p'))).rejects.toMatchObject({ name: 'ScratchError', code: 'LIMIT' })
-      await tool.execute({ path: 'f0.md', text: 'y' }, makeExec('D:/p'))
+      await expect(tool.execute({ path: 'new.md', text: 'x' }, makeExec('session-1'))).rejects.toMatchObject({ name: 'ScratchError', code: 'LIMIT' })
+      await tool.execute({ path: 'f0.md', text: 'y' }, makeExec('session-1'))
       expect(store.files.get('f0.md')).toBe('y')
       const slash = createScratchWriteTool({ store: memoryStore() }) as unknown as Tool
-      await slash.execute({ path: 'sub\\win.md', text: 'z' }, makeExec('D:/p'))
-      expect(await slash.execute({ path: 'sub/win.md', text: 'z2' }, makeExec('D:/p'))).toMatchObject({ path: 'sub/win.md' })
+      await slash.execute({ path: 'sub\\win.md', text: 'z' }, makeExec('session-1'))
+      expect(await slash.execute({ path: 'sub/win.md', text: 'z2' }, makeExec('session-1'))).toMatchObject({ path: 'sub/win.md' })
     })
 
-    it('rejects bad paths, oversized text and missing cwd', async () => {
+    it('rejects bad paths, oversized text and missing session id', async () => {
       const tool = createScratchWriteTool({ store: memoryStore() }) as unknown as Tool
-      await expect(tool.execute({ path: '../x.md', text: 'x' }, makeExec('D:/p'))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
-      await expect(tool.execute({ path: 'x.md', text: 'a'.repeat(SCRATCH_MAX_FILE_CHARS + 1) }, makeExec('D:/p'))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
-      await expect(tool.execute({ path: 'x.md', text: 'x', extra: 1 }, makeExec('D:/p'))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
-      await expect(tool.execute({ path: 'x.md', text: 'x' }, makeExec())).rejects.toMatchObject({ code: 'UNREADABLE' })
+      await expect(tool.execute({ path: '../x.md', text: 'x' }, makeExec('session-1'))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
+      await expect(tool.execute({ path: 'x.md', text: 'a'.repeat(SCRATCH_MAX_FILE_CHARS + 1) }, makeExec('session-1'))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
+      await expect(tool.execute({ path: 'x.md', text: 'x', extra: 1 }, makeExec('session-1'))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
+      await expect(tool.execute({ path: 'x.md', text: 'x' }, makeExec())).rejects.toMatchObject({ name: 'WorkspaceAuthorityError', code: 'SESSION_REQUIRED' })
       expect(() => createScratchWriteTool({})).toThrow(ScratchError)
     })
   })
@@ -101,11 +112,25 @@ describe('scratch tools', () => {
       const store = memoryStore({ '笔记.md': '内容' })
       const tool = createScratchReadTool({ store }) as unknown as Tool
       expect(tool.name).toBe(NOVEL_SCRATCH_READ_TOOL_NAME)
-      await expect(tool.execute({ path: '笔记.md' }, makeExec('D:/p'))).resolves.toEqual({ version: 1, path: '笔记.md', text: '内容' })
-      await expect(tool.execute({ path: '没有.md' }, makeExec('D:/p'))).rejects.toMatchObject({ code: 'UNREADABLE' })
-      await expect(tool.execute({ path: '.gitignore' }, makeExec('D:/p'))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
+      await expect(tool.execute({ path: '笔记.md' }, makeExec('session-1'))).resolves.toEqual({ version: 1, path: '笔记.md', text: '内容' })
+      await expect(tool.execute({ path: '没有.md' }, makeExec('session-1'))).rejects.toMatchObject({ code: 'UNREADABLE' })
+      await expect(tool.execute({ path: '.gitignore' }, makeExec('session-1'))).rejects.toMatchObject({ code: 'INVALID_ARGS' })
       const blocks = tool.output.render({}, { version: 1, path: '笔记.md', text: '内容' })
       expect(blocks[0]?.text).toContain('内容')
+    })
+
+    it('does not hide a live-session authority failure as a missing file', async () => {
+      const tool = createScratchReadTool({
+        store: {
+          async read() { throw new WorkspaceAuthorityError('session is not live', 'SESSION_NOT_FOUND', { sessionId: 'gone' }) },
+          async write() { throw new Error('unused') },
+          async list() { return [] },
+        },
+      }) as unknown as Tool
+      await expect(tool.execute({ path: '笔记.md' }, makeExec('gone'))).rejects.toMatchObject({
+        name: 'WorkspaceAuthorityError',
+        code: 'SESSION_NOT_FOUND',
+      })
     })
   })
 
@@ -113,11 +138,12 @@ describe('scratch tools', () => {
     it('lists files and renders the empty state', async () => {
       const empty = createScratchListTool({ store: memoryStore() }) as unknown as Tool
       expect(empty.name).toBe(NOVEL_SCRATCH_LIST_TOOL_NAME)
-      await expect(empty.execute({}, makeExec('D:/p'))).resolves.toEqual({ version: 1, files: [] })
+      await expect(empty.execute({}, makeExec('session-1'))).resolves.toEqual({ version: 1, files: [] })
       expect(empty.output.render({}, { files: [] })[0]?.text).toContain('为空')
       const store = memoryStore({ 'b.md': '1', 'a/x.txt': '2' })
       const tool = createScratchListTool({ store }) as unknown as Tool
-      await expect(tool.execute({}, makeExec('D:/p'))).resolves.toEqual({ version: 1, files: ['a/x.txt', 'b.md'] })
+      await expect(tool.execute({}, makeExec('session-1'))).resolves.toEqual({ version: 1, files: ['a/x.txt', 'b.md'] })
+      expect(store.sessionIds).toEqual(['session-1'])
     })
   })
 
@@ -133,6 +159,14 @@ describe('scratch tools', () => {
         return entries
       })
       expect(files).toEqual(['a.md', 'sub/b.txt'])
+    })
+
+    it('does not treat abort or a dead session as an empty scratch directory', async () => {
+      const aborted = Object.assign(new Error('aborted'), { name: 'AbortError' })
+      await expect(collectScratchFiles(async () => { throw aborted })).rejects.toMatchObject({ name: 'AbortError' })
+      await expect(collectScratchFiles(async () => {
+        throw new WorkspaceAuthorityError('session is not live', 'SESSION_NOT_FOUND', { sessionId: 'gone' })
+      })).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' })
     })
   })
 })

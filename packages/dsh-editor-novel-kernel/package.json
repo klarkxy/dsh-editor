@@ -39,8 +39,7 @@
         "id": "editor-novel-kernel",
         "title": "小说工具",
         "description": "提案、知识卡与写作搭档工具",
-        "feature": "assistant",
-        "service": "novelKernel"
+        "feature": "assistant"
       }
     ]
   },
@@ -52,6 +51,10 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
     "@deepseek-ai/dsh-tools": ">=0.1.5-rc.2 <0.2.0"
+  },
+  "dependencies": {
+    "dsh-editor-workbench": "workspace:*",
+    "dsh-manuscript": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",

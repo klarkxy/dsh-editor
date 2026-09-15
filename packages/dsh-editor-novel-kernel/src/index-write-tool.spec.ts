@@ -8,16 +8,18 @@ import {
   normalizeIndexWriteArguments,
   type IndexWriter,
 } from './index-write-tool.ts'
+import { WorkspaceAuthorityError } from './internal-workspace-access.ts'
 
 const NOOP_SIGNAL = new AbortController().signal
 
-type Exec = { signal: AbortSignal; agent?: { session: { header: { cwd?: string } } } }
+type Exec = { signal: AbortSignal; agent?: { session: { id: string; header: { cwd?: string } } } }
 
-function makeExec(cwd?: string): Exec {
-  return cwd === undefined
+function makeExec(sessionId?: string, cwd = '/forged/outside'): Exec {
+  return sessionId === undefined
     ? { signal: NOOP_SIGNAL }
-    : { signal: NOOP_SIGNAL, agent: { session: { header: { cwd } } } }
+    : { signal: NOOP_SIGNAL, agent: { session: { id: sessionId, header: { cwd } } } }
 }
+
 describe('novel_index_write', () => {
   describe('normalizeIndexWriteArguments', () => {
     it('accepts exactly one non-empty text parameter', () => {
@@ -35,22 +37,22 @@ describe('novel_index_write', () => {
       expect(() => createIndexWriteTool({ writer: undefined as unknown as IndexWriter })).toThrow(IndexWriteError)
     })
 
-    it('writes the fixed internal index path through the injected writer', async () => {
-      let captured: { text: string; cwd: string; session: unknown } | undefined
-      const writer: IndexWriter = async ({ text, cwd, session }) => {
-        captured = { text, cwd, session }
+    it('writes through the injected writer using the live session id, not header.cwd', async () => {
+      let captured: { text: string; sessionId: string } | undefined
+      const writer: IndexWriter = async ({ text, sessionId }) => {
+        captured = { text, sessionId }
       }
       const tool = createIndexWriteTool({ writer })
       expect(tool.name).toBe(NOVEL_INDEX_WRITE_TOOL_NAME)
       const result = await (tool as unknown as { execute: (args: unknown, exec: unknown) => Promise<unknown> }).execute(
         { text: '# 作品索引\n正文' },
-        makeExec('D:/work/project'),
+        makeExec('session-1', '/forged/outside'),
       )
-      expect(captured).toEqual({ text: '# 作品索引\n正文', cwd: 'D:/work/project', session: { header: { cwd: 'D:/work/project' } } })
+      expect(captured).toEqual({ text: '# 作品索引\n正文', sessionId: 'session-1' })
       expect(result).toEqual({ version: 1, path: NOVEL_INDEX_PATH, chars: '# 作品索引\n正文'.length })
     })
 
-    it('throws UNWRITABLE when no agent session cwd is available', async () => {
+    it('throws SESSION_REQUIRED when no agent session id is available', async () => {
       const writer: IndexWriter = async () => { throw new Error('never called') }
       const tool = createIndexWriteTool({ writer })
       await expect(
@@ -58,7 +60,7 @@ describe('novel_index_write', () => {
           { text: '内容' },
           makeExec(),
         ),
-      ).rejects.toMatchObject({ name: 'IndexWriteError', code: 'UNWRITABLE' })
+      ).rejects.toMatchObject({ name: 'WorkspaceAuthorityError', code: 'SESSION_REQUIRED' })
     })
 
     it('renders a confirmation without leaking the internal dot-path', () => {

@@ -141,7 +141,40 @@ function userQuestionProblem(args: Readonly<Record<string, unknown>>): string | 
   return undefined
 }
 
-export function editorToolGuard(exec: { name: string; arguments: Readonly<Record<string, unknown>> }): string | undefined {  const args = exec.arguments
+const GENERATED_DIRECTORIES = new Set(['build', 'coverage', 'dist', 'node_modules', 'out', 'target'])
+
+function hasGeneratedPart(value: unknown): boolean {
+  return typeof value === 'string' && value.replace(/\\/g, '/').split('/').some((part) => GENERATED_DIRECTORIES.has(part.toLocaleLowerCase()))
+}
+
+function visibleProposalPath(value: unknown, markdownOnly: boolean): boolean {
+  if (value === undefined) return true
+  if (!safeRelative(value, markdownOnly) || hasHiddenPart(value) || hasGeneratedPart(value)) return false
+  if (markdownOnly || typeof value !== 'string') return true
+  return /\.(md|txt)$/i.test(value.replace(/\\/g, '/'))
+}
+
+export function editorToolGuard(exec: { name: string; arguments: Readonly<Record<string, unknown>> }): string | undefined {
+  const args = exec.arguments
+  if (exec.name === 'writing_propose') {
+    if (args.kind === 'chapter_plan' || args.kind === 'chapter_summary') return 'Chapter planning belongs in Markdown under 大纲/; post-draft chapter summaries are not supported.'
+    if (args.kind === 'renames') {
+      const list = args.renames
+      return Array.isArray(list) && list.every((entry) => entry && typeof entry === 'object'
+        && visibleProposalPath((entry as Record<string, unknown>).from, false)
+        && visibleProposalPath((entry as Record<string, unknown>).to, false))
+        ? undefined
+        : 'Batch renames are limited to project-relative Markdown or text paths.'
+    }
+    if (args.kind === 'edit' || args.kind === 'create' || args.kind === 'split' || args.kind === 'merge') {
+      return visibleProposalPath(args.path, false)
+        && visibleProposalPath(args.newPath, false)
+        && visibleProposalPath(args.sourcePath, false)
+        ? undefined
+        : 'Only project-relative Markdown or text proposals are allowed.'
+    }
+    return 'Only project-relative Markdown or text proposals are allowed.'
+  }
   if (exec.name === NOVEL_KNOWLEDGE_TOOL_NAME) {
     return isNovelKnowledgeArguments(args) ? undefined : 'Novel knowledge is limited to one to three bundled topics.'
   }

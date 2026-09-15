@@ -113,6 +113,13 @@ importers:
         version: 3.2.7(@types/debug@4.1.13)(@types/node@25.9.5)(jiti@2.7.0)
 
   packages/dsh-editor-novel-kernel:
+    dependencies:
+      dsh-editor-workbench:
+        specifier: workspace:*
+        version: link:../dsh-editor-workbench
+      dsh-manuscript:
+        specifier: workspace:*
+        version: link:../dsh-manuscript
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.2
@@ -284,9 +291,6 @@ importers:
       '@types/react':
         specifier: 18.3.31
         version: 18.3.31
-      dsh-editor-cards:
-        specifier: workspace:*
-        version: link:../dsh-editor-cards
       dsh-editor-novel-kernel:
         specifier: workspace:*
         version: link:../dsh-editor-novel-kernel
@@ -314,9 +318,6 @@ importers:
 
   packages/dsh-editor-workbench:
     dependencies:
-      dsh-editor-cards:
-        specifier: workspace:*
-        version: link:../dsh-editor-cards
       dsh-editor-workspace-kit:
         specifier: workspace:*
         version: link:../dsh-editor-workspace-kit

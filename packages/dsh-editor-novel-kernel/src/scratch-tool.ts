@@ -10,7 +10,7 @@
  *   - 总量有界：单文件 ≤ SCRATCH_MAX_FILE_CHARS，目录内文件数 ≤ SCRATCH_MAX_FILES，
  *     防止注入内容把它当无限仓库。文件数上限在写入时按实际列表判断（覆盖现有文件不受限）。
  *   - 与 novel_index_write 同一注入模式：工厂接收 ScratchStore 高级操作，
- *     由 index.ts 把 ctx.fs + 会话沙箱策略适配进来，单元测试传内存 stub。
+ *     由 index.ts 把 live session + 写队列适配进来，单元测试传内存 stub。
  *     适配层每次写入顺带维护 scratch/.gitignore（内容 `*`），让作者自管的
  *     git 工作区不跟踪草稿；产品自身快照本就排除隐藏目录。
  *   - Shell 按工具名隐藏三个工具的结果行（HIDDEN_TOOL_NAMES）。
@@ -23,6 +23,7 @@ import {
   SCRATCH_MAX_FILE_CHARS,
   SCRATCH_MAX_FILES,
 } from './contracts.ts'
+import { sessionIdFromExec, WorkspaceAuthorityError } from './internal-workspace-access.ts'
 
 export {
   NOVEL_SCRATCH_LIST_TOOL_NAME,
@@ -48,10 +49,10 @@ export class ScratchError extends Error {
 }
 
 export type ScratchStore = {
-  read(args: { path: string; signal: AbortSignal; cwd: string }): Promise<string>
-  write(args: { path: string; text: string; signal: AbortSignal; cwd: string; session: unknown }): Promise<void>
+  read(args: { path: string; signal: AbortSignal; sessionId: string }): Promise<string>
+  write(args: { path: string; text: string; signal: AbortSignal; sessionId: string }): Promise<void>
   /** scratch 根下的相对路径列表（.md/.txt，不含隐藏项）；目录不存在时返回空表。 */
-  list(args: { signal: AbortSignal; cwd: string }): Promise<string[]>
+  list(args: { signal: AbortSignal; sessionId: string }): Promise<string[]>
 }
 
 /** 纯路径校验，供工具与 editorToolGuard 共用；返回规范化的相对路径。 */
@@ -83,15 +84,14 @@ function normalizeReadArguments(args: Readonly<Record<string, unknown>>): string
   return args.path.replace(/\\/g, '/')
 }
 
-function scratchCwd(exec: { agent?: { session?: { header?: { cwd?: string } } } }, tool: string): string {
-  const cwd = exec.agent?.session?.header?.cwd
-  if (typeof cwd !== 'string' || cwd.length === 0) throw new ScratchError('UNREADABLE', `${tool} 需要当前 agent 会话工作目录`)
-  return cwd
-}
-
 function makeStore(options: { store?: ScratchStore }): ScratchStore {
   if (!options.store) throw new ScratchError('UNWRITABLE', 'scratch 工具需要注入 store')
   return options.store
+}
+
+function rethrowInterrupt(error: unknown): void {
+  if (error instanceof WorkspaceAuthorityError) throw error
+  if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) throw error
 }
 
 export function createScratchWriteTool(options: { store?: ScratchStore }) {
@@ -121,13 +121,12 @@ export function createScratchWriteTool(options: { store?: ScratchStore }) {
     isConcurrencySafe() { return false },
     async execute(args, exec) {
       const { path, text } = normalizeWriteArguments(args as Readonly<Record<string, unknown>>)
-      const cwd = scratchCwd(exec, NOVEL_SCRATCH_WRITE_TOOL_NAME)
-      const session = exec.agent?.session
-      const files = await store.list({ signal: exec.signal, cwd })
+      const sessionId = sessionIdFromExec(exec, NOVEL_SCRATCH_WRITE_TOOL_NAME)
+      const files = await store.list({ signal: exec.signal, sessionId })
       if (!files.includes(path) && files.length >= SCRATCH_MAX_FILES) {
         throw new ScratchError('LIMIT', `临时工作区最多 ${SCRATCH_MAX_FILES} 个文件，请覆盖现有文件或先清理`)
       }
-      await store.write({ path, text, signal: exec.signal, cwd, session })
+      await store.write({ path, text, signal: exec.signal, sessionId })
       return { version: NOVEL_SCRATCH_VERSION, path, chars: text.length }
     },
   })
@@ -159,11 +158,12 @@ export function createScratchReadTool(options: { store?: ScratchStore }) {
     isConcurrencySafe() { return true },
     async execute(args, exec) {
       const path = normalizeReadArguments(args as Readonly<Record<string, unknown>>)
-      const cwd = scratchCwd(exec, NOVEL_SCRATCH_READ_TOOL_NAME)
+      const sessionId = sessionIdFromExec(exec, NOVEL_SCRATCH_READ_TOOL_NAME)
       let text: string
       try {
-        text = await store.read({ path, signal: exec.signal, cwd })
-      } catch {
+        text = await store.read({ path, signal: exec.signal, sessionId })
+      } catch (error) {
+        rethrowInterrupt(error)
         throw new ScratchError('UNREADABLE', `临时工作区文件不存在或不可读：${path}`)
       }
       return { version: NOVEL_SCRATCH_VERSION, path, text }
@@ -194,8 +194,8 @@ export function createScratchListTool(options: { store?: ScratchStore }) {
     },
     isConcurrencySafe() { return true },
     async execute(_args, exec) {
-      const cwd = scratchCwd(exec, NOVEL_SCRATCH_LIST_TOOL_NAME)
-      const files = await store.list({ signal: exec.signal, cwd })
+      const sessionId = sessionIdFromExec(exec, NOVEL_SCRATCH_LIST_TOOL_NAME)
+      const files = await store.list({ signal: exec.signal, sessionId })
       return { version: NOVEL_SCRATCH_VERSION, files }
     },
   })
@@ -211,7 +211,8 @@ export async function collectScratchFiles(
     let entries: Array<{ name: string; type: 'file' | 'directory' | 'other' }>
     try {
       entries = await listDir(scope)
-    } catch {
+    } catch (error) {
+      rethrowInterrupt(error)
       return
     }
     for (const entry of entries) {
