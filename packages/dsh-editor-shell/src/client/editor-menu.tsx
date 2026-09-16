@@ -22,7 +22,6 @@ export type EditorMenuAction =
   | 'replace'
   | 'complete'
   | 'rewrite'
-  | 'proofread'
 
 export type EditorMenuModel = {
   state: EditorCommandState

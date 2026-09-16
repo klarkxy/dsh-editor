@@ -58,40 +58,6 @@ const PAPER_PROJECTION: EditorCorePaperProjection = {
   replace: replaceWorldbookPaperText,
 }
 
-/** Opens the existing dsh-proofread dialog with captured visible paper text. */
-const PROOFREAD_TEXT_EVENT = 'dsh-proofread:open-text'
-
-export type ProofreadOpenDetail = {
-  text: string
-  sourceLabel?: string
-  onLocate?(start: number, end: number): boolean
-}
-
-function requestProofreadText(detail: ProofreadOpenDetail): boolean {
-  const event = new CustomEvent(PROOFREAD_TEXT_EVENT, { detail, cancelable: true })
-  globalThis.dispatchEvent(event)
-  return event.defaultPrevented
-}
-
-export function locateProofreadOffsets(input: {
-  handle: EditorCoreHandle
-  snapshot: EditorTargetSnapshot
-  sentText: string
-  originStart: number
-  start: number
-  end: number
-}): boolean {
-  if (!input.handle.isTargetCurrent(input.snapshot)) return false
-  const selected = input.snapshot.start < input.snapshot.end
-  // isTargetCurrent already validates the captured span against the live document.
-  // A prior locate may move the cursor without changing that source span.
-  const liveText = selected ? input.snapshot.selectedText : input.handle.getVisiblePaperText()
-  if (liveText !== input.sentText) return false
-  if (input.start < 0 || input.end < input.start || input.end > input.sentText.length) return false
-  input.handle.revealRange(input.originStart + input.start, input.originStart + input.end)
-  return true
-}
-
 const HIDE_NOTICE: CSSProperties = { display: 'none' }
 
 /* 草稿归属窗口的 ownerId：sessionStorage 每个窗口（标签页）独立且重启后可恢复，
@@ -290,44 +256,6 @@ export function Editor(props: {
       })
       return
     }
-    if (action === 'proofread') {
-      afterMenu(() => {
-        const liveHandle = handleRef.current
-        if (!liveHandle || (target && !liveHandle.isTargetCurrent(target))) {
-          setNote(t('editor.clipboardExpired'))
-          return
-        }
-        const selected = liveHandle.getVisibleSelectionText()
-        const paper = liveHandle.getVisiblePaperText()
-        const text = selected || paper
-        if (!text.trim()) {
-          setNote(t('editor.proofreadEmpty'))
-          return
-        }
-        const snapshot = liveHandle.captureTarget()
-        if (!snapshot) {
-          setNote(t('editor.clipboardExpired'))
-          return
-        }
-        const usingSelection = selected.length > 0
-        const originStart = usingSelection ? snapshot.start : liveHandle.getPaperOffset()
-        const sourceLabel = usingSelection ? t('editor.proofreadSelection') : t('editor.proofreadChapter')
-        const opened = requestProofreadText({
-          text,
-          sourceLabel,
-          onLocate: (start, end) => {
-            const current = handleRef.current
-            if (!current) return false
-            const ok = locateProofreadOffsets({ handle: current, snapshot, sentText: text, originStart, start, end })
-            if (!ok) setNote(t('editor.proofreadLocateFailed'))
-            return ok
-          },
-        })
-        if (!opened) setNote(t('editor.proofreadUnavailable'))
-      })
-      return
-    }
-
     const bridge = editorClipboardBridge()
     if (!bridge) {
       setNote(t('editor.clipboardUnavailable'))
