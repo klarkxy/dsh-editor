@@ -1,4 +1,4 @@
-import { createElement as e, useEffect, useRef, useState } from 'react'
+import { createElement as e, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { t, useLocale } from '../i18n/index.ts'
 import { ThemeInkIcon, ThemePaperIcon } from './icons.tsx'
 import { Tooltip } from './ui/index.ts'
@@ -169,8 +169,61 @@ export function useTheme(
   return [theme, setTheme]
 }
 
-export function ThemeToggle({ theme, onChange, label }: { theme: ThemeValue; onChange(next: ThemeValue): void; label?: string }) {
-  useLocale()
+/*
+ * 色彩风格(accent):与纸/墨明暗正交,只覆盖 --accent 系四个变量,token 定义在
+ * styles.ts 的 :root[data-accent] 块。选择只落 localStorage —— 宿主 ui-theme
+ * 命名空间不认识色彩风格,host chrome 也不需要它。
+ * 状态放在模块级 store:设置弹窗与 shell root 各挂一个 hook 实例,
+ * 两边通过 subscribe 保持同步。
+ */
+export const ACCENT_STORAGE_KEY = 'dsh-editor.accent'
+export const ACCENT_VALUES = ['indigo', 'pine', 'ochre', 'violet'] as const
+export type AccentValue = (typeof ACCENT_VALUES)[number]
+
+const DEFAULT_ACCENT: AccentValue = 'indigo'
+
+function readStoredAccent(storage: Pick<Storage, 'getItem'> | undefined): AccentValue {
+  try {
+    const value = storage?.getItem(ACCENT_STORAGE_KEY)
+    if (value && (ACCENT_VALUES as readonly string[]).includes(value)) return value as AccentValue
+  } catch {
+    /* Storage is best-effort; fall back to the default. */
+  }
+  return DEFAULT_ACCENT
+}
+
+function applyAccent(accent: AccentValue): void {
+  if (typeof document === 'undefined') return
+  if (accent === DEFAULT_ACCENT) document.documentElement.removeAttribute('data-accent')
+  else document.documentElement.setAttribute('data-accent', accent)
+}
+
+const accentListeners = new Set<() => void>()
+let currentAccent: AccentValue | undefined
+
+function accentSnapshot(): AccentValue {
+  if (currentAccent === undefined) currentAccent = readStoredAccent(globalThis.localStorage)
+  return currentAccent
+}
+
+// Apply at import time so the first paint already carries the stored accent.
+if (typeof document !== 'undefined') applyAccent(accentSnapshot())
+
+export function useAccent(): [AccentValue, (value: AccentValue) => void] {
+  const accent = useSyncExternalStore(
+    (listener) => { accentListeners.add(listener); return () => { accentListeners.delete(listener) } },
+    accentSnapshot,
+  )
+  const setAccent = (value: AccentValue) => {
+    currentAccent = value
+    try { globalThis.localStorage?.setItem(ACCENT_STORAGE_KEY, value) } catch { /* best-effort */ }
+    applyAccent(value)
+    for (const listener of [...accentListeners]) listener()
+  }
+  return [accent, setAccent]
+}
+
+export function ThemeToggle({ theme, onChange, label }: { theme: ThemeValue; onChange(next: ThemeValue): void; label?: string }) {  useLocale()
   const resolvedLabel = label ?? t('theme.label')
   const value = theme === 'paper' ? t('theme.paper') : t('theme.ink')
   const hint = theme === 'paper' ? t('theme.toInk') : t('theme.toPaper')

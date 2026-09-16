@@ -8,7 +8,7 @@
 
 - 界面语言默认简体中文；English 已覆盖全部 key（852 个，含右侧 DSH 对话的 `chat.*`），与中文一一对应，切换后立即生效。
 - 正文用宋体栈，chrome / 文件树 / 对话用无衬线栈。
-- 强调色只有一系墨蓝。禁止纯黑底、冷蓝灰 IDE 高对比、紫色渐变、玻璃拟态、霓虹装饰。
+- 强调色默认墨蓝（indigo），通用设置的「色彩风格」可换松绿 / 赭石 / 黛紫；四系都保持低饱和、纸感，禁止纯黑底、冷蓝灰 IDE 高对比、紫色渐变、玻璃拟态、霓虹装饰。
 - 纸主题的画布是暖米黄，不是 `#ffffff`。墨主题是带棕意的深暖色，正文是暖米白，不是纯白。
 - Chrome 与稿纸分层：顶栏/侧栏/对话用偏中性的 `--chrome-*`，稿纸继续用暖 `--surface` / `--bg`。Chrome 字号 13–14px，常用控件 32–36px，顶栏约 52px。
 - 弹层 Portal 走 `.dsh-ui` 命名空间，复用同一套 token；旧 `.shell` 选择器通过 `.dsh-ui` 镜像继续生效。
@@ -28,6 +28,8 @@
 调整共享稿纸 token 时同步三份定义（shell、editor-core、overlay-styles）；桌面 `--chrome-*` 与纸面分开维护。shell 是桌面权威，editor-core 与 overlay-styles 的副本让公开 `dsh-manuscript` overlay 在没有 shell 时仍可读。overlay 的圆角更紧，不必强行与 shell 对齐。
 
 选择写入 `localStorage["dsh-editor.theme"]`，并映射到宿主 `ui-theme`：纸 → `light`，墨 → `dark`。跟随系统没有对应稿纸主题，读取时按 `prefers-color-scheme` 落成纸或墨。
+
+色彩风格与明暗正交：选择写入 `localStorage["dsh-editor.accent"]`，经 `:root[data-accent="pine"|"ochre"|"violet"]` 只覆盖 `--accent` / `--accent-soft` / `--accent-on` / `--accent-active`（不写属性即默认墨蓝）。覆盖块只维护在 shell；editor-core 与 overlay-styles 的 token 副本不含色彩风格，独立渲染时保持墨蓝。覆盖选择器双写 `:root` 抬高特异度，压住各包里 `:root[data-theme]` 的 accent 副本，与 `<style>` 注入顺序无关。
 
 ## 纸 / 墨 token
 

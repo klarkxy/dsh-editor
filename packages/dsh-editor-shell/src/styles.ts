@@ -4,6 +4,9 @@
  *
  *   tokens    : paper/ink colour, type, space, radius, elev. Driven by
  *               :root[data-theme="paper"|"ink"]. Default is paper.
+ *               Accent colour families are orthogonal overrides driven by
+ *               :root[data-accent="pine"|"ochre"|"violet"]; default (no
+ *               attribute) is the indigo ink-blue.
  *   base      : reset, typography, focus ring, scrollbar. Applies inside
  *               the .shell root so it never leaks onto DSH host chrome —
  *               with one deliberate exception: the ink-mode select
@@ -88,6 +91,47 @@ export const tokenStyles = `
   --elev-card: 0 2px 8px rgba(0, 0, 0, 0.42), 0 16px 40px rgba(0, 0, 0, 0.55);
   --studio: #0c0b0a;
   color-scheme: dark;
+}
+/* ── 色彩风格(accent)覆盖 ─────────────────────────────────
+   与明暗正交,只覆盖 --accent 系。默认 indigo 不写 data-accent,保持上面
+   paper/ink 的墨蓝原值。:root 双写是刻意的:editor-core / overlay-styles /
+   插件包里各有一份 :root[data-theme] 的 accent 副本,特异度 (0,3,0)/(0,4,0)
+   才能无视 <style> 注入顺序稳定压过它们。 */
+:root:root[data-accent="pine"] {
+  --accent: #2e5c46;
+  --accent-soft: rgba(46, 92, 70, 0.09);
+  --accent-on: #faf9f5;
+  --accent-active: #244739;
+}
+:root:root[data-theme="ink"][data-accent="pine"] {
+  --accent: #a4c3ae;
+  --accent-soft: rgba(164, 195, 174, 0.16);
+  --accent-on: #161310;
+  --accent-active: #becfbe;
+}
+:root:root[data-accent="ochre"] {
+  --accent: #8a5a1e;
+  --accent-soft: rgba(138, 90, 30, 0.1);
+  --accent-on: #faf9f5;
+  --accent-active: #6e4717;
+}
+:root:root[data-theme="ink"][data-accent="ochre"] {
+  --accent: #d9b075;
+  --accent-soft: rgba(217, 176, 117, 0.16);
+  --accent-on: #161310;
+  --accent-active: #e6c591;
+}
+:root:root[data-accent="violet"] {
+  --accent: #54407a;
+  --accent-soft: rgba(84, 64, 122, 0.09);
+  --accent-on: #faf9f5;
+  --accent-active: #433363;
+}
+:root:root[data-theme="ink"][data-accent="violet"] {
+  --accent: #bdaede;
+  --accent-soft: rgba(189, 174, 222, 0.16);
+  --accent-on: #161310;
+  --accent-active: #cfc4e8;
 }
 :root {
   --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
@@ -535,10 +579,10 @@ export const componentStyles = `
 @keyframes ghost-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -80% 0; } }
 
 .shell .editor-tools, .dsh-ui .editor-tools { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 24px; border-top: 1px solid var(--hairline); background: var(--surface); color: var(--meta); flex-shrink: 0; }
-.shell .editor-tools button, .shell .primary-action, .shell .composer-actions button:not(.send), .shell .proposal-actions button, .shell .pending-card button, .shell .file-dialog button:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.dsh-plugins-primary):not(.dsh-plugins-ghost), .dsh-ui .editor-tools button, .dsh-ui .primary-action, .dsh-ui .composer-actions button:not(.send), .dsh-ui .proposal-actions button, .dsh-ui .pending-card button, .dsh-ui.file-dialog button:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.dsh-plugins-primary):not(.dsh-plugins-ghost) { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-h); padding: 5px 12px; border-radius: var(--radius-md); font: 500 var(--text-sm)/1 var(--font-sans); letter-spacing: .08em; transition: box-shadow var(--motion-base) var(--ease), background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease); border: 0; cursor: pointer; }
-.shell .editor-tools button, .shell .pending-card button, .shell .file-dialog button:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.dsh-plugins-primary):not(.dsh-plugins-ghost), .dsh-ui .editor-tools button, .dsh-ui .pending-card button, .dsh-ui.file-dialog button:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.dsh-plugins-primary):not(.dsh-plugins-ghost) { box-shadow: var(--elev-ring); background: transparent; color: var(--fg-2); }
-.shell .editor-tools button:hover, .shell .pending-card button:hover, .shell .file-dialog button:hover:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch), .dsh-ui .editor-tools button:hover, .dsh-ui .pending-card button:hover, .dsh-ui.file-dialog button:hover:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch) { background: var(--surface); color: var(--fg); }
-.shell .editor-tools button:active, .shell .pending-card button:active, .shell .file-dialog button:active:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch), .dsh-ui .editor-tools button:active, .dsh-ui .pending-card button:active, .dsh-ui.file-dialog button:active:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch) { background: var(--surface-warm); }
+.shell .editor-tools button, .shell .primary-action, .shell .composer-actions button:not(.send), .shell .proposal-actions button, .shell .pending-card button, .shell .file-dialog button:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.dsh-plugins-primary):not(.dsh-plugins-ghost), .dsh-ui .editor-tools button, .dsh-ui .primary-action, .dsh-ui .composer-actions button:not(.send), .dsh-ui .proposal-actions button, .dsh-ui .pending-card button, .dsh-ui.file-dialog button:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.dsh-plugins-primary):not(.dsh-plugins-ghost):not(.accent-swatch) { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-h); padding: 5px 12px; border-radius: var(--radius-md); font: 500 var(--text-sm)/1 var(--font-sans); letter-spacing: .08em; transition: box-shadow var(--motion-base) var(--ease), background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease); border: 0; cursor: pointer; }
+.shell .editor-tools button, .shell .pending-card button, .shell .file-dialog button:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.dsh-plugins-primary):not(.dsh-plugins-ghost), .dsh-ui .editor-tools button, .dsh-ui .pending-card button, .dsh-ui.file-dialog button:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.dsh-plugins-primary):not(.dsh-plugins-ghost):not(.accent-swatch) { box-shadow: var(--elev-ring); background: transparent; color: var(--fg-2); }
+.shell .editor-tools button:hover, .shell .pending-card button:hover, .shell .file-dialog button:hover:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch), .dsh-ui .editor-tools button:hover, .dsh-ui .pending-card button:hover, .dsh-ui.file-dialog button:hover:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.accent-swatch) { background: var(--surface); color: var(--fg); }
+.shell .editor-tools button:active, .shell .pending-card button:active, .shell .file-dialog button:active:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch), .dsh-ui .editor-tools button:active, .dsh-ui .pending-card button:active, .dsh-ui.file-dialog button:active:not([role="switch"]):not([role="tab"]):not(.dsh-plugins-switch):not(.accent-swatch) { background: var(--surface-warm); }
 .shell .primary-action, .dsh-ui .primary-action { background: var(--accent); color: var(--accent-on); box-shadow: var(--elev-ring-accent); }
 .shell .primary-action:hover, .dsh-ui .primary-action:hover { box-shadow: var(--elev-ring-accent), var(--elev-raised); }
 .shell .primary-action:active, .dsh-ui .primary-action:active { background: var(--accent-active); }
@@ -1026,6 +1070,18 @@ export const componentStyles = `
 .shell .settings-switch[aria-checked="true"], .dsh-ui .settings-switch[aria-checked="true"] { background: var(--accent); box-shadow: inset 0 0 0 1px transparent; }
 .shell .settings-switch-knob, .dsh-ui .settings-switch-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28); transition: transform var(--motion-fast) var(--ease-spring); }
 .shell .settings-switch[aria-checked="true"] .settings-switch-knob, .dsh-ui .settings-switch[aria-checked="true"] .settings-switch-knob { transform: translateX(16px); }
+
+/* 色彩风格色板:圆点即该风格的 accent 色,选中态用双色环压住相邻圆点。
+   注意必须挂在 .file-dialog button 通用控件样式的 :not() 排除名单里(见上方
+   (0,7,1) 特异性的那组规则),否则对话框里会被压成 34px 透明控件。 */
+.shell .settings-swatches, .dsh-ui .settings-swatches { display: inline-flex; align-items: center; gap: var(--space-2); }
+.shell .accent-swatch, .dsh-ui .accent-swatch { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; box-shadow: var(--elev-ring); transition: transform var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease); }
+.shell .accent-swatch:hover, .dsh-ui .accent-swatch:hover { transform: scale(1.12); }
+.shell .accent-swatch.active, .dsh-ui .accent-swatch.active { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--fg-2); }
+.shell .accent-swatch[data-swatch="indigo"], .dsh-ui .accent-swatch[data-swatch="indigo"] { background: #1b365d; }
+.shell .accent-swatch[data-swatch="pine"], .dsh-ui .accent-swatch[data-swatch="pine"] { background: #2e5c46; }
+.shell .accent-swatch[data-swatch="ochre"], .dsh-ui .accent-swatch[data-swatch="ochre"] { background: #8a5a1e; }
+.shell .accent-swatch[data-swatch="violet"], .dsh-ui .accent-swatch[data-swatch="violet"] { background: #54407a; }
 
 /* 下拉(Radix Select):触发钮留在 .shell 内;弹层 Portal 到 document.body,
    选择器因此不带 .shell 前缀(与 palette 同理),主题变量仍由 :root[data-theme]

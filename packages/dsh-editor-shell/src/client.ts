@@ -72,7 +72,8 @@ export type {
   WorkspaceShortcutAction,
 } from './client/shared.ts'
 export { THEME_STORAGE_KEY, THEME_VALUES, ThemeToggle, useTheme } from './client/theme.ts'
-export type { HostThemeSync, ThemeValue } from './client/theme.ts'
+export { ACCENT_STORAGE_KEY, ACCENT_VALUES, useAccent } from './client/theme.ts'
+export type { AccentValue, HostThemeSync, ThemeValue } from './client/theme.ts'
 export { ConfirmDialog, ConversationPresetPicker, NewProjectDialog, TextPromptDialog } from './client/dialogs.ts'
 export { Chat, ModelPicker, PendingCard, ProjectContextReceiptView, ProposalCard, bindOfficialConversation, conversationChatSource } from './client/chat.ts'
 export { Editor } from './client/editor.ts'

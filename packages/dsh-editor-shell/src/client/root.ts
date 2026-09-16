@@ -37,7 +37,7 @@ import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, Pan
 import { FolderIcon, FocusIcon, NewDocIcon } from './icons.tsx'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.ts'
 import { SettingsDialog, SettingsTrigger, type SettingsRenderSlot, type SettingsTab } from './settings.tsx'
-import { ThemeToggle, useTheme, type HostThemeSync } from './theme.ts'
+import { ThemeToggle, useAccent, useTheme, type HostThemeSync } from './theme.ts'
 import { Tree, FileContextMenu } from './sidebar.ts'
 import { ChapterOpsLayer, chapterMenuModel, requestMergeChapter, requestSplitChapter, shouldOpenAfterChapterApply, snapshotFromHandle, type ChapterOpsRequest, type EditorSnapshotHandle } from './chapter-ops.ts'
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
@@ -620,6 +620,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [manageBusy, setManageBusy] = useState(false)
   const [manageNote, setManageNote] = useState('')
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
+  // 色彩风格只需订阅:模块级 store 负责落 data-accent,设置弹窗内改选时这里同步重渲染。
+  useAccent()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   /* searchQuery/searchSubmitTick 已下沉到 SidebarColumn：输入按键不再上升到 Root。 */

@@ -2,7 +2,8 @@ import { createElement as e, useMemo, useSyncExternalStore, type ReactNode } fro
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
-import { setLocale, t, useLocale, type Locale } from '../i18n/index.ts'
+import { ACCENT_VALUES, useAccent, type AccentValue } from './theme.ts'
+import { setLocale, t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
 import {
   DEVELOPER_SETTINGS_NAMESPACE,
   decodeDeveloperSettings,
@@ -17,6 +18,13 @@ import {
 type ThemePreference = 'light' | 'dark' | 'system'
 type LocalePreference = Locale
 type BusyEnterBehavior = 'queue' | 'steer'
+
+const ACCENT_LABEL_KEYS: Record<AccentValue, MessageKey> = {
+  indigo: 'settings.accent.indigo',
+  pine: 'settings.accent.pine',
+  ochre: 'settings.accent.ochre',
+  violet: 'settings.accent.violet',
+}
 
 function decodePreference<T extends string>(values: readonly T[]) {
   return (value: unknown): { preference: T } | undefined => {
@@ -59,6 +67,7 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
   }), [props.ctx])
 
   const [theme, setTheme] = usePreference(scopes.theme, 'system')
+  const [accent, setAccent] = useAccent()
   const locale = useLocale()
   const [busyEnter, setBusyEnter] = useBusyEnter(scopes.conversation)
   const [developerMode, setDeveloperMode] = useDeveloperMode(scopes.developer)
@@ -88,6 +97,18 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
           'aria-pressed': theme === option.value,
           onClick: () => setTheme(option.value),
         }, option.label)),
+      ) }),
+      e(Row, { title: t('settings.accent'), children: e('div', { className: 'settings-swatches', role: 'group', 'aria-label': t('settings.accent') },
+        ACCENT_VALUES.map((value) => e('button', {
+          key: value,
+          type: 'button',
+          className: accent === value ? 'accent-swatch active' : 'accent-swatch',
+          'data-swatch': value,
+          title: t(ACCENT_LABEL_KEYS[value]),
+          'aria-label': t(ACCENT_LABEL_KEYS[value]),
+          'aria-pressed': accent === value,
+          onClick: () => setAccent(value),
+        })),
       ) }),
       e(Row, { title: t('settings.busyEnter'), children: e(Select, {
         value: busyEnter,
