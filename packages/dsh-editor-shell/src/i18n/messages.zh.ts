@@ -690,8 +690,6 @@ export const zh = {
   'settings.developer': '开发者',
   'settings.developerMode': '开发者模式',
   'settings.developerModeHint': '新对话的模式列表显示全部 preset，包括旧版会话和插件提供的 preset。',
-  'settings.developerModeOn': '开启',
-  'settings.developerModeOff': '关闭',
 
   'writing.loading': '正在读取写作偏好…',
   'writing.unavailable': '写作偏好当前不可用，尚未保存任何更改。',

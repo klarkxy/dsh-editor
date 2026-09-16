@@ -100,15 +100,14 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
       e('header', { className: 'settings-block-head' },
         e('h3', { className: 'settings-block-title' }, t('settings.developer')),
       ),
-      e(Row, { title: t('settings.developerMode'), description: t('settings.developerModeHint'), children: e('div', { className: 'settings-segmented', role: 'group', 'aria-label': t('settings.developerMode') },
-        ([false, true] as const).map((value) => e('button', {
-          key: String(value),
-          type: 'button',
-          className: developerMode === value ? 'active' : '',
-          'aria-pressed': developerMode === value,
-          onClick: () => setDeveloperMode(value),
-        }, value ? t('settings.developerModeOn') : t('settings.developerModeOff'))),
-      ) }),
+      e(Row, { title: t('settings.developerMode'), description: t('settings.developerModeHint'), children: e('button', {
+        type: 'button',
+        role: 'switch',
+        className: 'settings-switch',
+        'aria-checked': developerMode,
+        'aria-label': t('settings.developerMode'),
+        onClick: () => setDeveloperMode(!developerMode),
+      }, e('span', { className: 'settings-switch-knob', 'aria-hidden': true })) }),
     ),
   )
 }

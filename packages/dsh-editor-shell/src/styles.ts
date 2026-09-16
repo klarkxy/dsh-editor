@@ -824,6 +824,17 @@ export const componentStyles = `
 .shell .file-dialog footer, .dsh-ui.file-dialog footer { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; margin-top: 16px; }
 .shell .file-dialog-actions, .dsh-ui .file-dialog-actions { display: grid; gap: 6px; }
 .shell .file-dialog-actions button, .dsh-ui .file-dialog-actions button { text-align: left; }
+/* 对话模式选择:压过 .file-dialog button 通用按钮样式(带 5 个 :not(),特异性 (0,7,1),
+   普通选择器赢不了,与 baseStyles 尾部同理用 !important)的 inline-flex/justify-content:center,
+   名称独占一行、描述另起一行左对齐;preset 增多时列表内部滚动,底部按钮保持可见。 */
+.shell .preset-picker-dialog .file-dialog-actions, .dsh-ui.preset-picker-dialog .file-dialog-actions { max-height: clamp(160px, calc(100dvh - 300px), 520px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.shell .preset-picker-dialog .file-dialog-actions button, .dsh-ui.preset-picker-dialog .file-dialog-actions button { display: grid !important; justify-content: stretch !important; justify-items: start; align-content: center; gap: 3px; width: 100%; padding: 8px 12px !important; letter-spacing: normal; }
+.shell .preset-picker-dialog .file-dialog-actions button strong, .dsh-ui.preset-picker-dialog .file-dialog-actions button strong { font: 600 var(--text-sm)/1.4 var(--font-sans); letter-spacing: .04em; }
+.shell .preset-picker-dialog .file-dialog-actions button small:not(.preset-badge), .dsh-ui.preset-picker-dialog .file-dialog-actions button small:not(.preset-badge) { color: var(--muted); font: 400 var(--text-xs)/1.55 var(--font-sans); letter-spacing: normal; }
+.shell .preset-picker-dialog .file-dialog-actions button.primary-action, .dsh-ui.preset-picker-dialog .file-dialog-actions button.primary-action { background: var(--accent) !important; color: var(--accent-on) !important; box-shadow: var(--elev-ring-accent) !important; }
+.shell .preset-picker-dialog .file-dialog-actions button.primary-action small:not(.preset-badge), .dsh-ui.preset-picker-dialog .file-dialog-actions button.primary-action small:not(.preset-badge) { color: color-mix(in srgb, var(--accent-on) 78%, transparent); }
+.shell .preset-picker-dialog .file-dialog-actions button small.warning, .dsh-ui.preset-picker-dialog .file-dialog-actions button small.warning { color: var(--danger); }
+.shell .preset-picker-dialog .file-dialog-actions button.primary-action small.warning, .dsh-ui.preset-picker-dialog .file-dialog-actions button.primary-action small.warning { color: color-mix(in srgb, var(--accent-on) 78%, transparent); }
 
 /* ── Focus mode / layout toggles ────────────────────────── */
 .shell.layout-shell { grid-template-rows: var(--topbar-h) minmax(0, 1fr); }
@@ -1008,6 +1019,13 @@ export const componentStyles = `
 .shell .settings-segmented button, .dsh-ui .settings-segmented button { min-height: 24px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); cursor: pointer; font: 500 var(--text-xs)/1 var(--font-sans); transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease); }
 .shell .settings-segmented button:hover, .dsh-ui .settings-segmented button:hover { color: var(--fg); }
 .shell .settings-segmented button.active, .dsh-ui .settings-segmented button.active { background: var(--surface); color: var(--fg); box-shadow: var(--elev-ring); transform: scale(1.04); }
+
+/* 开关(role="switch"):36×20 滑道 + 16 圆钮,开启态吃当前 accent,随色彩风格联动。 */
+.shell .settings-switch, .dsh-ui .settings-switch { position: relative; width: 36px; height: 20px; border-radius: 999px; background: var(--chrome-sunken); box-shadow: inset 0 0 0 1px var(--hairline-strong); cursor: pointer; transition: background-color var(--motion-fast) var(--ease); }
+.shell .settings-switch:hover, .dsh-ui .settings-switch:hover { box-shadow: inset 0 0 0 1px var(--meta); }
+.shell .settings-switch[aria-checked="true"], .dsh-ui .settings-switch[aria-checked="true"] { background: var(--accent); box-shadow: inset 0 0 0 1px transparent; }
+.shell .settings-switch-knob, .dsh-ui .settings-switch-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28); transition: transform var(--motion-fast) var(--ease-spring); }
+.shell .settings-switch[aria-checked="true"] .settings-switch-knob, .dsh-ui .settings-switch[aria-checked="true"] .settings-switch-knob { transform: translateX(16px); }
 
 /* 下拉(Radix Select):触发钮留在 .shell 内;弹层 Portal 到 document.body,
    选择器因此不带 .shell 前缀(与 palette 同理),主题变量仍由 :root[data-theme]

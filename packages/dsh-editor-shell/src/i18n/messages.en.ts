@@ -692,8 +692,6 @@ export const en: { [K in keyof typeof zh]: string } = {
   'settings.developer': 'Developer',
   'settings.developerMode': 'Developer mode',
   'settings.developerModeHint': 'The new-conversation mode list shows every preset, including the legacy session and plugin-provided presets.',
-  'settings.developerModeOn': 'On',
-  'settings.developerModeOff': 'Off',
 
   'writing.loading': 'Loading writing preferences…',
   'writing.unavailable': 'Writing preferences are unavailable. Nothing was saved.',
