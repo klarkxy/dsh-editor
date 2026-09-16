@@ -15,6 +15,7 @@ import {
   publicPackages,
   resolveComposition,
 } from './plugin-manifest.mjs'
+import { desktopComposition } from './desktop-compositions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -38,6 +39,7 @@ describe('plugin manifests and composition resolver', () => {
       'dsh-proofread',
       'dsh-editor-workbench',
       'dsh-editor-novel-kernel',
+      'dsh-editor-writing-presets',
       'dsh-zhihu',
       'dsh-editor-shell',
       'dsh-editor-plugins',
@@ -76,24 +78,28 @@ describe('plugin manifests and composition resolver', () => {
     ])
   })
 
-  it('resolves basic/smart/full as one desktop capability set, differing only by id and label', () => {
-    const recipe = (id) => JSON.parse(readFileSync(resolve(root, 'apps/desktop/resources/compositions', `${id}.json`), 'utf8'))
-    const labels = { basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
+  it('resolves desktop and the basic/smart/full aliases as one capability set, differing only by id and label', async () => {
+    const labels = { desktop: '桌面写作', basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
     const panels = ['dsh-editor-overview-panel', 'dsh-editor-proofread-panel']
     const core = ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench']
     const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels]
-    const packages = [...core, 'dsh-editor-novel-kernel', 'dsh-zhihu', ...tail]
+    const packages = [...core, 'dsh-editor-novel-kernel', 'dsh-editor-writing-presets', 'dsh-zhihu', ...tail]
     const capability = {
-      features: ['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel'],
+      features: ['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets'],
       packages,
       libraries: ['dsh-editor-workspace-kit'],
       disabledEntries: [],
       extraInserts: [{ id: 'zhihu-tools', name: 'dsh-zhihu/tools' }],
       shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist', zhihu: 'zhihu' },
+      presets: [
+        { id: 'dsh-editor-article', packageName: 'dsh-editor-writing-presets', path: 'presets/dsh-editor-article' },
+        { id: 'dsh-editor-novel', packageName: 'dsh-editor-novel-kernel', path: 'presets/dsh-editor-novel' },
+        { id: 'dsh-editor-technical', packageName: 'dsh-editor-writing-presets', path: 'presets/dsh-editor-technical' },
+      ],
       bundles: [...BASE_BUNDLES, ...packages],
     }
 
-    const resolved = Object.keys(labels).map((id) => resolveComposition(manifests, recipe(id)))
+    const resolved = await Promise.all(Object.keys(labels).map((id) => desktopComposition(id)))
     for (const item of resolved) {
       expect(item.id in labels).toBe(true)
       expect(item.label).toBe(labels[item.id])
@@ -101,12 +107,14 @@ describe('plugin manifests and composition resolver', () => {
       expect(rest).toEqual(capability)
     }
     const stripped = resolved.map(({ id: _id, label: _label, ...rest }) => rest)
-    expect(stripped[0]).toEqual(stripped[1])
-    expect(stripped[1]).toEqual(stripped[2])
+    for (let index = 1; index < stripped.length; index += 1) {
+      expect(stripped[index]).toEqual(stripped[0])
+    }
     expect(capability.features).toContain('proofread-panel')
     expect(capability.features).not.toContain('cards')
     expect(capability.features).not.toContain('memory-panel')
     expect(capability.packages).toContain('dsh-editor-novel-kernel')
+    expect(capability.packages).toContain('dsh-editor-writing-presets')
     expect(capability.packages).toContain('dsh-editor-proofread-panel')
     expect(capability.packages).not.toContain('dsh-editor-cards')
     expect(capability.packages).not.toContain('dsh-editor-memory-panel')
@@ -120,9 +128,15 @@ describe('plugin manifests and composition resolver', () => {
     expect(patch).toMatch(/- id: agent-presets\s+config:\s+default: dsh-editor-writing/)
     expect(patch).not.toMatch(/- id: agent-presets\s+config:\s+default: dsh-editor\s*$/m)
 
+    /* 模板只保留 legacy 与核心通用写作；小说/文章/技术由第一方包提供。 */
+    const sourceDir = (id) => {
+      if (id === 'dsh-editor' || id === 'dsh-editor-writing') return resolve(profile, 'agent-presets', id)
+      if (id === 'dsh-editor-novel') return resolve(root, 'packages/dsh-editor-novel-kernel/presets', id)
+      return resolve(root, 'packages/dsh-editor-writing-presets/presets', id)
+    }
     const kernelPresets = new Set(['dsh-editor', 'dsh-editor-novel'])
     for (const id of ['dsh-editor', 'dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical', 'dsh-editor-writing']) {
-      const composition = readFileSync(resolve(profile, 'agent-presets', id, 'agent.cordis.yml'), 'utf8')
+      const composition = readFileSync(resolve(sourceDir(id), 'agent.cordis.yml'), 'utf8')
       if (kernelPresets.has(id)) expect(composition).toContain('dsh-editor-novel-kernel')
       else expect(composition).not.toContain('dsh-editor-novel-kernel')
     }
@@ -198,5 +212,28 @@ describe('plugin conversation preset manifests', () => {
       'plugin-two': basePkg('plugin-two', [{ id: 'team-style', path: 'agent-presets/team-style' }]),
     })
     expect(() => loadPluginManifests(root)).toThrow(/duplicate conversation preset id team-style/)
+  })
+
+  it('lets first-party desktop packages declare app-prefixed preset ids', () => {
+    const pkg = basePkg('first-party', [{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }])
+    pkg.dshEditor.visibility = 'desktop'
+    const manifests = loadPluginManifests(manifestRoot({ 'first-party': pkg }))
+    expect(manifests).toHaveLength(1)
+    expect(manifests[0].presets).toEqual([{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }])
+  })
+
+  it('selects feature-only packages and flows their presets into resolveComposition', () => {
+    const pkg = basePkg('first-party', [{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }])
+    pkg.dshEditor.visibility = 'desktop'
+    pkg.dshEditor.features = ['writing-presets']
+    const manifests = loadPluginManifests(manifestRoot({ 'first-party': pkg }))
+    const resolved = resolveComposition(manifests, { id: 'x', label: 'x', features: ['writing-presets'] })
+    expect(resolved.packages).toEqual(['first-party'])
+    expect(resolved.presets).toEqual([
+      { id: 'dsh-editor-clone', packageName: 'first-party', path: 'agent-presets/team-style' },
+    ])
+    const dropped = resolveComposition(manifests, { id: 'x', label: 'x', features: [] })
+    expect(dropped.packages).toEqual([])
+    expect(dropped.presets).toEqual([])
   })
 })

@@ -26,6 +26,8 @@
 
 - id: editor-novel-kernel
   name: dsh-editor-novel-kernel
+  config:
+    mode: legacy
 
 # Long writing sessions still compact; the realm shape mirrors the shipped
 # standard preset (compaction-basic reads toolResultPrune within one realm).

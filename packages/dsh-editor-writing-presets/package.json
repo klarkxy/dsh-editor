@@ -1,0 +1,56 @@
+{
+  "name": "dsh-editor-writing-presets",
+  "version": "0.1.0",
+  "description": "Private first-party article/technical writing-mode conversation presets for DSH Editor",
+  "license": "SEE LICENSE IN LICENSE",
+  "private": true,
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "presets",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dshEditor": {
+    "role": "feature",
+    "visibility": "desktop",
+    "features": [
+      "writing-presets"
+    ],
+    "presets": [
+      {
+        "id": "dsh-editor-article",
+        "path": "presets/dsh-editor-article"
+      },
+      {
+        "id": "dsh-editor-technical",
+        "path": "presets/dsh-editor-technical"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. packages/dsh-editor-writing-presets/src"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

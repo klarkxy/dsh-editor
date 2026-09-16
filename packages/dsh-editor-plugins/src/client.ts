@@ -8,6 +8,8 @@ import {
   type PluginInspectReport,
   type PluginInventory,
   type PluginsRpcResult,
+  type WritingPresetCard,
+  type WritingPresetInventory,
 } from './contracts.ts'
 import { pluginsClientStyles } from './client-styles.ts'
 import {
@@ -299,6 +301,38 @@ function InspectReportView(props: { report: PluginInspectReport }) {
   )
 }
 
+function WritingPresetGroup(props: {
+  presets: WritingPresetCard[]
+  busyPreset: string | null
+  onToggle(id: string, enabled: boolean): void
+}) {
+  return e('section', { className: 'dsh-plugins-group', 'data-testid': 'plugins-writing-presets' },
+    e('h3', null, '写作模式'),
+    e('p', { className: 'dsh-plugins-core-hint' }, '新对话可选的写作模式。开关立即生效；进行中的对话不受影响。'),
+    props.presets.map((preset) => {
+      const titleId = `preset-title-${preset.id}`
+      return e('article', { key: preset.id, className: 'dsh-plugins-card', 'data-testid': `plugins-preset-${preset.id}` },
+        e('div', null,
+          e('div', { id: titleId, className: 'dsh-plugins-card-title' }, preset.title),
+          preset.description ? e('div', { className: 'dsh-plugins-card-desc' }, preset.description) : null,
+          e('div', { className: 'dsh-plugins-meta' }, preset.locked ? '始终可用' : preset.enabled ? '已启用' : '已停用'),
+        ),
+        e('div', { className: 'dsh-plugins-actions' },
+          preset.locked
+            ? e('span', { className: 'dsh-plugins-locked' }, '核心')
+            : e(Switch, {
+              checked: preset.enabled,
+              busy: props.busyPreset === preset.id,
+              labelledBy: titleId,
+              testId: `plugins-preset-toggle-${preset.id}`,
+              onToggle: () => props.onToggle(preset.id, !preset.enabled),
+            }),
+        ),
+      )
+    }),
+  )
+}
+
 function CoreGroup(props: { cards: PluginCard[] }) {
   if (props.cards.length === 0) return e('section', { className: 'dsh-plugins-group' },
     e('h3', null, '系统核心'),
@@ -368,6 +402,7 @@ type PluginInstallAttempt = {
 
 type PluginPanelProps = {
   inventory: PluginInventory | null
+  presets: WritingPresetCard[] | null
   listings: MarketplaceListing[]
   tab: 'installed' | 'market'
   query: string
@@ -388,6 +423,8 @@ type PluginPanelProps = {
   onRetryInspect(): void
   onToggle(cards: PluginCard[], enabled: boolean): void
   busyPackage: string | null
+  busyPreset: string | null
+  onTogglePreset(id: string, enabled: boolean): void
   onUninstall(card: PluginCard): void
   onConfirmUninstall(): void
   onCancelUninstall(): void
@@ -643,6 +680,9 @@ function PluginPanel(props: PluginPanelProps) {
       ? props.loading
         ? e('p', { className: 'dsh-plugins-status' }, activityDots(), '正在读取已安装插件…')
         : e('div', { className: 'dsh-plugins-groups' },
+          props.presets
+            ? e(WritingPresetGroup, { presets: props.presets, busyPreset: props.busyPreset, onToggle: props.onTogglePreset })
+            : null,
           e(CoreGroup, { cards: props.inventory?.core ?? [] }),
           e(FeatureGroup, { title: '写作功能', cards: props.inventory?.optional ?? [], empty: '没有可开关的写作功能。', busyPackage: props.busyPackage, onToggle: props.onToggle, byPurpose: true }),
           e(FeatureGroup, { title: '已安装的社区插件', cards: props.inventory?.community ?? [], empty: '还没有从市场安装插件。', busyPackage: props.busyPackage, onToggle: props.onToggle, onUninstall: props.onUninstall, community: true }),
@@ -701,6 +741,8 @@ function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDial
   const caller = props.rpc
   const [tab, setTab] = useState<'installed' | 'market'>('installed')
   const [inventory, setInventory] = useState<PluginInventory | null>(null)
+  const [presets, setPresets] = useState<WritingPresetCard[] | null>(null)
+  const [busyPreset, setBusyPreset] = useState<string | null>(null)
   const [listings, setListings] = useState<MarketplaceListing[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -734,6 +776,8 @@ function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDial
     }
     try {
       const result = await callRpc<PluginInventory>(caller, 'inventory.list', {})
+      const presetResult = await callRpc<WritingPresetInventory>(caller, 'presets.list', {}).catch(() => null)
+      if (presetResult?.ok) setPresets(presetResult.value.presets)
       if (result.ok) {
         setInventory(result.value)
         return result.value
@@ -792,6 +836,31 @@ function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDial
         else if (allMatch) setNote(enabled ? `已启用 ${title}。` : `已停用 ${title}。`)
         else showError('插件状态未完全同步，请重试或重启后再确认。')
       }
+    }
+  }
+
+  const onTogglePreset = async (id: string, enabled: boolean) => {
+    const title = presets?.find((preset) => preset.id === id)?.title ?? id
+    setBusyPreset(id)
+    setError('')
+    setErrorDetail('')
+    setNote('')
+    try {
+      const result = await callRpc<{ restartRequired: boolean }>(caller, 'presets.setEnabled', { id, enabled })
+      if (!result.ok) {
+        const view = errorView(result, `未能更新「${title}」`)
+        showError(view.message, view.detail)
+      } else {
+        setNote(enabled
+          ? `已启用 ${title}。新对话立即可选；进行中的对话不受影响。`
+          : `已停用 ${title}。新对话不再提供该模式；进行中的对话不受影响。`)
+      }
+    } catch (cause) {
+      showError(cause instanceof Error ? cause.message : `未能更新「${title}」`)
+    } finally {
+      const listed = await callRpc<WritingPresetInventory>(caller, 'presets.list', {}).catch(() => null)
+      if (listed?.ok) setPresets(listed.value.presets)
+      setBusyPreset(null)
     }
   }
 
@@ -996,14 +1065,15 @@ function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDial
   }
 
   return e(PluginPanel, {
-    inventory, listings, tab, query, loading, searching, installing, pendingInstall, pendingUninstall, error, errorDetail, note,
-    busyPackage, uninstalling, uninstallError, uninstallErrorDetail,
+    inventory, presets, listings, tab, query, loading, searching, installing, pendingInstall, pendingUninstall, error, errorDetail, note,
+    busyPackage, busyPreset, uninstalling, uninstallError, uninstallErrorDetail,
     onTab: setTab, onQuery: setQuery, onSearch: () => void onSearch(),
     onInstall: beginInstall,
     onConfirmInstall: confirmInstall,
     onCancelInstall: cancelInstall,
     onRetryInspect: retryInspect,
     onToggle: (cards, enabled) => void onToggle(cards, enabled),
+    onTogglePreset: (id, enabled) => void onTogglePreset(id, enabled),
     onUninstall,
     onConfirmUninstall: () => void onConfirmUninstall(),
     onCancelUninstall,

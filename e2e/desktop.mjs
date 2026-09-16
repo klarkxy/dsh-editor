@@ -298,6 +298,12 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   if (await core.locator('button, [role="switch"], input').count()) {
     throw new Error('core plugin group exposes a mutation control')
   }
+  await pluginsRoot.getByTestId('plugins-writing-presets').getByText('小说创作', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 })
+  const presetSwitch = pluginsRoot.getByTestId('plugins-preset-toggle-dsh-editor-novel')
+  await presetSwitch.waitFor({ state: 'visible', timeout: 10_000 })
+  if ((await presetSwitch.getAttribute('aria-checked')) !== 'true') throw new Error('小说创作 writing preset should be enabled by default')
+  const lockedCore = pluginsRoot.getByTestId('plugins-preset-dsh-editor-writing')
+  if (await lockedCore.locator('[role="switch"]').count()) throw new Error('core writing preset exposes a toggle')
   await window.keyboard.press('Escape')
   await dialog.waitFor({ state: 'detached', timeout: 10_000 })
 }))

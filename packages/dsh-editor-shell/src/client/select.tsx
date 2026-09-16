@@ -9,7 +9,7 @@ import {
   ItemText as SelectItemText,
   ItemIndicator as SelectItemIndicator,
 } from '@radix-ui/react-select'
-import { createElement as e, useRef, useState, type KeyboardEvent } from 'react'
+import { createElement as e, useRef, useState, type ComponentProps, type KeyboardEvent } from 'react'
 import { t } from '../i18n/index.ts'
 
 export type SelectOption = { value: string; label: string }
@@ -92,7 +92,9 @@ export function Select(props: {
               key: encodeValue(option.value),
               className: 'select-option',
               value: encodeValue(option.value),
-            },
+              /* Radix 会把未知 prop 透传到 DOM；e2e 以 data-value 定位选项。 */
+              ...{ 'data-value': encodeValue(option.value) },
+            } as ComponentProps<typeof SelectItem>,
               e(SelectItemText, null, option.label),
               e(SelectItemIndicator, { className: 'select-option-check' }, '✓'),
             )),

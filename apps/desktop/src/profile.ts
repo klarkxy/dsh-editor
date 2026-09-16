@@ -104,22 +104,66 @@ export async function deployProfile(home: string, template: string, runtimeNodeM
 }
 
 /**
+ * First-party toggleable presets declared by the composition. App-owned presets
+ * absent from this list (the legacy `dsh-editor` and the locked
+ * `dsh-editor-writing` fallback) always deploy.
+ */
+async function readToggleablePresetIds(template: string): Promise<Set<string>> {
+  try {
+    const composition = JSON.parse(await readFile(join(template, 'composition.json'), 'utf8')) as { presets?: unknown }
+    const ids = new Set<string>()
+    if (Array.isArray(composition.presets)) {
+      for (const row of composition.presets) {
+        const id = (row as { id?: unknown } | null)?.id
+        if (typeof id === 'string' && /^[A-Za-z0-9._-]+$/.test(id)) ids.add(id)
+      }
+    }
+    return ids
+  } catch {
+    return new Set()
+  }
+}
+
+/** Author toggles from `<home>/dsh-plugins.json`; a missing file means everything enabled. */
+async function readDisabledPresetIds(home: string, toggleable: ReadonlySet<string>): Promise<Set<string>> {
+  const disabled = new Set<string>()
+  if (toggleable.size === 0) return disabled
+  try {
+    const state = JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8')) as { schema?: unknown; presets?: unknown }
+    if (state.schema !== 1 || !state.presets || typeof state.presets !== 'object' || Array.isArray(state.presets)) return disabled
+    for (const [id, enabled] of Object.entries(state.presets as Record<string, unknown>)) {
+      if (enabled === false && toggleable.has(id)) disabled.add(id)
+    }
+  } catch { /* no state yet */ }
+  return disabled
+}
+
+/**
  * Deploy the app-owned agent presets from the template into the harness-home
  * user preset root. Same ownership and staging rules as the profile itself:
  * only directories carrying the editor marker are ever replaced. The roster
  * skips dot-directories, so in-flight stage/backup siblings are invisible.
  * The template copy inside the deployed profile keeps an inert duplicate of
  * this directory; the live copy is the one under `.agent-presets`.
+ * Toggleable first-party presets the author disabled are skipped, and a
+ * previously deployed app-owned copy is removed so the roster drops it.
  */
 async function deployAgentPresets(home: string, template: string): Promise<void> {
   let entries: import('node:fs').Dirent[]
   try { entries = await readdir(join(template, 'agent-presets'), { withFileTypes: true }) } catch { return }
+  const toggleable = await readToggleablePresetIds(template)
+  const disabled = await readDisabledPresetIds(home, toggleable)
   const presets = join(home, '.agent-presets')
   await mkdir(presets, { recursive: true })
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
     const source = join(template, 'agent-presets', entry.name)
     const target = join(presets, entry.name)
+    if (disabled.has(entry.name)) {
+      const owner = await readPresetOwnerMarker(target)
+      if (owner) await rm(target, { recursive: true, force: true })
+      continue
+    }
     await ensureDirectory(target)
     if (existsSync(target) && !(await isOwnedProfile(target))) throw new ProfileCollisionError(target)
     const nonce = randomUUID()
@@ -138,4 +182,12 @@ async function deployAgentPresets(home: string, template: string): Promise<void>
       throw error
     }
   }
+}
+
+/** True only for directories carrying the app-owned preset marker without a plugin owner. */
+async function readPresetOwnerMarker(directory: string): Promise<boolean> {
+  try {
+    const marker = JSON.parse(await readFile(join(directory, PROFILE_MARKER), 'utf8')) as { app?: unknown; schema?: unknown; plugin?: unknown }
+    return marker.app === 'dsh-editor' && marker.schema === 1 && marker.plugin === undefined
+  } catch { return false }
 }

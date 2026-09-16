@@ -64,7 +64,7 @@ describe('plugin manager RPC', () => {
       { id: 'include:zhihu', name: 'dsh-zhihu' },
       { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
       { id: 'group-a', name: 'ignored', group: true },
-    ]), { schema: 1, overrides: {}, installed: [] }, catalog)
+    ]), { schema: 1, overrides: {}, presets: {}, installed: [] }, catalog)
     expect(inventory.core.map((card) => card.entryId)).toEqual(['include:editor-shell'])
     expect(inventory.optional.map((card) => card.entryId)).toEqual(['include:zhihu'])
     expect(inventory.community).toEqual([])
@@ -473,5 +473,74 @@ describe('grouped plugin enable', () => {
     expect(await readFile(profilePath, 'utf8')).toBe(profileText)
     expect(await readFile(userMarker, 'utf8')).toBe('user package')
     expect(await readFile(linkMarker, 'utf8')).toBe('profile link')
+  })
+})
+
+describe('first-party writing preset RPC', () => {
+  async function presetFixture() {
+    const paths = await fixture()
+    const source = join(paths.profileDir, 'node_modules', 'dsh-editor-novel-kernel', 'presets', 'dsh-editor-novel')
+    await mkdir(source, { recursive: true })
+    await writeFile(join(source, 'preset.yml'), 'name: 小说创作\ndescription: 正文、大纲、人物卡与世界书分册推进。\n')
+    await writeFile(join(source, 'agent.cordis.yml'), '[]\n')
+    await writeFile(join(paths.profileDir, 'composition.json'), JSON.stringify({
+      id: 'desktop',
+      presets: [{ id: 'dsh-editor-novel', packageName: 'dsh-editor-novel-kernel', path: 'presets/dsh-editor-novel' }],
+    }))
+    const deployedCore = join(paths.home, '.agent-presets', 'dsh-editor-writing')
+    await mkdir(deployedCore, { recursive: true })
+    await writeFile(join(deployedCore, 'preset.yml'), 'name: 通用写作\ndescription: 默认写作\n')
+    return paths
+  }
+
+  it('lists the locked core plus toggleable first-party presets', async () => {
+    const paths = await presetFixture()
+    const result = await handlePluginsRpc('presets.list', {}, signal(), { loader: loader([]), paths })
+    expect(result).toMatchObject({ ok: true })
+    const value = (result as { ok: true; value: { presets: Array<Record<string, unknown>> } }).value
+    expect(value.presets).toEqual([
+      { id: 'dsh-editor-writing', title: '通用写作', description: '默认写作', enabled: true, locked: true },
+      {
+        id: 'dsh-editor-novel',
+        title: '小说创作',
+        description: '正文、大纲、人物卡与世界书分册推进。',
+        enabled: true,
+        locked: false,
+        packageName: 'dsh-editor-novel-kernel',
+      },
+    ])
+  })
+
+  it('toggles a first-party preset live: removes and redeploys the roster dir without restart', async () => {
+    const paths = await presetFixture()
+    const deployed = join(paths.home, '.agent-presets', 'dsh-editor-novel')
+    const disabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { loader: loader([]), paths })
+    expect(disabled).toMatchObject({ ok: true, value: { restartRequired: false } })
+    const state = JSON.parse(await readFile(paths.stateFile, 'utf8'))
+    expect(state.presets).toEqual({ 'dsh-editor-novel': false })
+    const listed = await handlePluginsRpc('presets.list', {}, signal(), { loader: loader([]), paths })
+    expect(listed).toMatchObject({ ok: true })
+    const rows = (listed as { ok: true; value: { presets: Array<{ id: string; enabled: boolean }> } }).value.presets
+    expect(rows.find((row) => row.id === 'dsh-editor-novel')?.enabled).toBe(false)
+
+    /* 停用前已部署的目录先放一个，验证停用会移除；再启用会带 marker 重新部署。 */
+    const enabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: true }, signal(), { loader: loader([]), paths })
+    expect(enabled).toMatchObject({ ok: true, value: { restartRequired: false } })
+    expect(JSON.parse(await readFile(join(deployed, '.dsh-editor-owner.json'), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
+    expect(await readFile(join(deployed, 'preset.yml'), 'utf8')).toContain('name: 小说创作')
+    const again = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { loader: loader([]), paths })
+    expect(again).toMatchObject({ ok: true })
+    expect(await readFile(join(paths.home, '.agent-presets', 'dsh-editor-writing', 'preset.yml'), 'utf8')).toContain('通用写作')
+    await expect(readFile(join(deployed, 'preset.yml'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('refuses to disable the core writing preset or unknown ids', async () => {
+    const paths = await presetFixture()
+    const core = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-writing', enabled: false }, signal(), { loader: loader([]), paths })
+    expect(core).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    const unknown = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-article', enabled: false }, signal(), { loader: loader([]), paths })
+    expect(unknown).toMatchObject({ ok: false, error: { code: 'not-found' } })
+    const malformed = await handlePluginsRpc('presets.setEnabled', { id: '' }, signal(), { loader: loader([]), paths })
+    expect(malformed).toMatchObject({ ok: false, error: { code: 'bad-request' } })
   })
 })

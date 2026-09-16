@@ -4,7 +4,7 @@
  * Uses the Access Secret from ZHIHU_ACCESS_TOKEN / ZHIHU_ACCESS_SECRET or
  * ~/.config/zhihu-search/credentials.json. Credentials are never printed.
  *
- *   $env:DSH_EDITOR_COMPOSITION = 'full'
+ *   $env:DSH_EDITOR_COMPOSITION = 'desktop' # basic / smart / full 为兼容别名
  *   node scripts/prepare-desktop-dev.mjs
  *   node e2e/zhihu-live.mjs
  */

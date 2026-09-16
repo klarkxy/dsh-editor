@@ -1,7 +1,7 @@
 /** Explicit product recipes shared by preparation, development and artifact verification. */
 import { readdirSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   BASE_BUNDLES,
@@ -14,26 +14,31 @@ import {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const compositionsDir = resolve(root, 'apps/desktop/resources/compositions')
-const RECIPE_ORDER = ['basic', 'smart', 'full']
-const listedRecipes = readdirSync(compositionsDir)
+export const COMPOSITION_ALIASES = { basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
+const canonicalIds = readdirSync(compositionsDir)
   .filter((name) => name.endsWith('.json'))
   .map((name) => name.slice(0, -5))
-export const COMPOSITION_IDS = [
-  ...RECIPE_ORDER.filter((id) => listedRecipes.includes(id)),
-  ...listedRecipes.filter((id) => !RECIPE_ORDER.includes(id)).sort(),
-]
+  .filter((id) => !(id in COMPOSITION_ALIASES))
+  .sort()
+export const COMPOSITION_IDS = [...canonicalIds, ...Object.keys(COMPOSITION_ALIASES)]
 const manifests = loadPluginManifests(root)
 export { BASE_BUNDLES }
 export const DESKTOP_PACKAGE_NAMES = desktopCopiedPackageNames(manifests)
 export const PUBLIC_PLUGIN_PACKAGES = publicPackages(manifests)
 
-export async function desktopComposition(id = process.env.DSH_EDITOR_COMPOSITION || 'full') {
+export async function desktopComposition(id = process.env.DSH_EDITOR_COMPOSITION || 'desktop') {
   if (!COMPOSITION_IDS.includes(id)) throw new Error(`unsupported desktop composition: ${id}`)
-  const recipe = JSON.parse(await readFile(resolve(compositionsDir, `${id}.json`), 'utf8'))
-  if (recipe.id !== id || typeof recipe.label !== 'string' || !Array.isArray(recipe.features)) {
+  const aliasLabel = COMPOSITION_ALIASES[id]
+  const recipe = JSON.parse(await readFile(resolve(compositionsDir, aliasLabel ? 'desktop.json' : `${id}.json`), 'utf8'))
+  if (recipe.id !== (aliasLabel ? 'desktop' : id) || typeof recipe.label !== 'string' || !Array.isArray(recipe.features)) {
     throw new Error(`invalid composition recipe: ${id}`)
   }
-  return resolveComposition(manifests, recipe)
+  const resolved = resolveComposition(manifests, recipe)
+  if (aliasLabel) {
+    resolved.id = id
+    resolved.label = aliasLabel
+  }
+  return resolved
 }
 
 export async function configureProfile(destination, composition) {
@@ -58,4 +63,20 @@ export async function configureProfile(destination, composition) {
     bundles: composition.bundles,
     entries: catalogFromManifests(selected),
   }, null, 2)}\n`)
+  // First-party plugin presets ship through the same template channel as the
+  // app-owned ones: copy each declared dir next to them and mark it app-owned.
+  const presets = composition.presets ?? []
+  if (presets.length) {
+    const byName = new Map(manifests.map((item) => [item.name, item]))
+    const presetRoot = resolve(destination, 'agent-presets')
+    await mkdir(presetRoot, { recursive: true })
+    for (const preset of presets) {
+      const manifest = byName.get(preset.packageName)
+      if (!manifest) throw new Error(`composition preset ${preset.id} comes from unknown package ${preset.packageName}`)
+      const target = join(presetRoot, preset.id)
+      await rm(target, { recursive: true, force: true })
+      await cp(resolve(manifest.dir, preset.path), target, { recursive: true })
+      await writeFile(join(target, '.dsh-editor-owner.json'), `${JSON.stringify({ app: 'dsh-editor', schema: 1 })}\n`)
+    }
+  }
 }

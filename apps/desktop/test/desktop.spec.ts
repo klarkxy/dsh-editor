@@ -325,18 +325,26 @@ describe('profile deployment', () => {
       { id: 'editor-novel-kernel', name: 'dsh-editor-novel-kernel' },
       { id: 'compaction', name: 'cordis:group' },
     ])
-    expect(legacy).toMatch(/- id: editor-novel-kernel\r?\n  name: dsh-editor-novel-kernel(?:\r?\n(?!  config:)|$)/)
+    expect(legacy).toMatch(/- id: editor-novel-kernel\r?\n  name: dsh-editor-novel-kernel\r?\n  config:\r?\n    mode: legacy/)
     expect(legacy).not.toContain('knowledge-only')
     expect(existsSync(join(profileResources, 'agent-presets', 'dsh-editor', 'skills'))).toBe(false)
   })
-  it('ships five app-owned writing presets with parseable compositions and uncrossed skills', async () => {
+  it('ships five writing presets from app template and first-party packages with parseable compositions and uncrossed skills', async () => {
     const profileResources = join(import.meta.dirname, '..', 'resources', 'profile')
     const presetRoot = join(profileResources, 'agent-presets')
     const ids = (await readdir(presetRoot, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .sort()
-    expect(ids).toEqual(['dsh-editor', 'dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical', 'dsh-editor-writing'])
+    /* 模板源只保留核心通用写作与 legacy；另外三个由第一方包提供。 */
+    expect(ids).toEqual(['dsh-editor', 'dsh-editor-writing'])
+    const repoRoot = join(import.meta.dirname, '..', '..', '..')
+    const presetSource = (id: string) => {
+      if (id === 'dsh-editor' || id === 'dsh-editor-writing') return join(presetRoot, id)
+      if (id === 'dsh-editor-novel') return join(repoRoot, 'packages', 'dsh-editor-novel-kernel', 'presets', id)
+      return join(repoRoot, 'packages', 'dsh-editor-writing-presets', 'presets', id)
+    }
+    const allIds = ['dsh-editor', 'dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical', 'dsh-editor-writing']
 
     const writingIds = ['dsh-editor-writing', 'dsh-editor-novel', 'dsh-editor-article', 'dsh-editor-technical'] as const
     const writingLabels = {
@@ -362,19 +370,24 @@ describe('profile deployment', () => {
     } as const
     const descriptions = new Map<string, string>()
 
-    for (const id of ids) {
-      const directory = join(presetRoot, id)
+    for (const id of allIds) {
+      const directory = presetSource(id)
       expect(existsSync(join(directory, 'preset.yml'))).toBe(true)
       expect(existsSync(join(directory, 'agent.cordis.yml'))).toBe(true)
-      expect(JSON.parse(await readFile(join(directory, PROFILE_MARKER), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
+      /* 包内源目录不带 marker；owner marker 由 configureProfile 在物化模板时写入。 */
+      if (ids.includes(id)) {
+        expect(JSON.parse(await readFile(join(directory, PROFILE_MARKER), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
+      } else {
+        expect(existsSync(join(directory, PROFILE_MARKER))).toBe(false)
+      }
       const composition = await readFile(join(directory, 'agent.cordis.yml'), 'utf8')
       expect(compositionProblem(composition)).toBeUndefined()
     }
 
     for (const id of writingIds) {
-      const presetYml = await readFile(join(presetRoot, id, 'preset.yml'), 'utf8')
+      const presetYml = await readFile(join(presetSource(id), 'preset.yml'), 'utf8')
       expect(presetYml.match(/^name:\s*(.+)$/m)?.[1]?.trim()).toBe(writingLabels[id])
-      const composition = await readFile(join(presetRoot, id, 'agent.cordis.yml'), 'utf8')
+      const composition = await readFile(join(presetSource(id), 'agent.cordis.yml'), 'utf8')
       expect(composition).toContain('dsh-tool-ask-user')
       expect(composition).toContain('dsh-tool-fs')
       expect(composition).toContain('dsh-skill-filesystem')
@@ -403,11 +416,11 @@ describe('profile deployment', () => {
         expect(composition).not.toContain('dsh-editor-novel-kernel')
         expect(composition).not.toContain('knowledge-only')
       }
-      const skillNames = await skillDirectoryNames(join(presetRoot, id, 'skills'))
+      const skillNames = await skillDirectoryNames(join(presetSource(id), 'skills'))
       const expected = professionalSkill[id] ? ['prose-revision', professionalSkill[id]] : ['prose-revision']
       expect(skillNames).toEqual(expected.sort())
       for (const name of skillNames) {
-        const skill = parseSkillDocument(await readFile(join(presetRoot, id, 'skills', name, 'SKILL.md'), 'utf8'))
+        const skill = parseSkillDocument(await readFile(join(presetSource(id), 'skills', name, 'SKILL.md'), 'utf8'))
         expect(skill.name).toBe(name)
         expect(skill.description.length).toBeGreaterThan(0)
         descriptions.set(`${id}:${name}`, skill.description)
@@ -429,15 +442,42 @@ describe('profile deployment', () => {
       if (key.endsWith(':technical-writing')) expect(description).toMatch(/不要用于小说|不要用于.*文章/)
     }
 
+    const { configureProfile, desktopComposition } = await import('../../../scripts/desktop-compositions.mjs')
+    const composition = await desktopComposition('desktop')
+    const materialized = await mkdtemp(join(tmpdir(), 'dsh-template-'))
+    /* 与 prepare 脚本同序：先复制资源模板（含两个 app-owned preset），再由 configureProfile 补进第一方包的三个。 */
+    await (await import('node:fs/promises')).cp(profileResources, materialized, { recursive: true })
+    await configureProfile(materialized, composition)
+    /* 物化模板重新集齐五个 preset，且全部由模板通道写入 app-owned marker。 */
+    const templateIds = (await readdir(join(materialized, 'agent-presets'))).sort()
+    expect(templateIds).toEqual(allIds)
+    for (const id of allIds) {
+      expect(JSON.parse(await readFile(join(materialized, 'agent-presets', id, PROFILE_MARKER), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
+    }
+
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
-    await deployProfile(root, profileResources)
+    await deployProfile(root, materialized)
     const deployed = (await readdir(join(root, '.agent-presets'))).sort()
-    expect(deployed).toEqual(ids)
+    expect(deployed).toEqual(allIds)
     expect(await skillDirectoryNames(join(root, '.agent-presets', 'dsh-editor-writing', 'skills'))).toEqual(['prose-revision'])
     expect(await skillDirectoryNames(join(root, '.agent-presets', 'dsh-editor-novel', 'skills'))).toEqual(['novel-writing', 'prose-revision'])
     expect(existsSync(join(root, '.agent-presets', 'dsh-editor-writing', 'skills', 'novel-writing'))).toBe(false)
     expect(existsSync(join(root, '.agent-presets', 'dsh-editor', 'skills'))).toBe(false)
-  })
+
+    /* 作者停用第一方模式后，重启部署跳过并清掉它的 app-owned 目录。 */
+    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({
+      schema: 1,
+      overrides: {},
+      presets: { 'dsh-editor-novel': false },
+      installed: [],
+    }))
+    await deployProfile(root, materialized)
+    const afterDisable = (await readdir(join(root, '.agent-presets'))).sort()
+    expect(afterDisable).toEqual(allIds.filter((id) => id !== 'dsh-editor-novel'))
+    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({ schema: 1, overrides: {}, presets: {}, installed: [] }))
+    await deployProfile(root, materialized)
+    expect((await readdir(join(root, '.agent-presets'))).sort()).toEqual(allIds)
+  }, 15000)
   it('keeps scoped tools disabled after preparing the full composition', async () => {
     const { configureProfile, desktopComposition } = await import('../../../scripts/desktop-compositions.mjs')
     const aliases = ['basic', 'smart', 'full'] as const
@@ -446,11 +486,12 @@ describe('profile deployment', () => {
     expect(stripped[0]).toEqual(stripped[1])
     expect(stripped[1]).toEqual(stripped[2])
     for (const item of resolved) {
-      expect(item.features).toEqual(['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel'])
+      expect(item.features).toEqual(['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets'])
       expect(item.features).toContain('proofread-panel')
       expect(item.features).not.toContain('cards')
       expect(item.features).not.toContain('memory-panel')
       expect(item.packages).toContain('dsh-editor-proofread-panel')
+      expect(item.packages).toContain('dsh-editor-writing-presets')
       expect(item.packages).not.toContain('dsh-editor-cards')
       expect(item.packages).not.toContain('dsh-editor-memory-panel')
       expect(item.extraInserts.map((row: { id: string }) => row.id)).not.toContain('editor-workbench-tools')
@@ -541,6 +582,42 @@ describe('profile deployment', () => {
     await deployProfile(root, template)
     expect(existsSync(deployed)).toBe(false)
     expect((await (await import('node:fs/promises')).readdir(join(root, '.agent-presets'))).some((name) => name.includes('.stage-') || name.includes('.backup-'))).toBe(false)
+  })
+  it('never deploys presets for bundles that are not marketplace installs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    const template = join(root, 'template')
+    const bundled = join(template, 'node_modules', 'first-party-pack')
+    await mkdir(join(bundled, 'agent-presets', 'team-style'), { recursive: true })
+    await writeFile(join(bundled, 'package.json'), JSON.stringify({
+      name: 'first-party-pack',
+      version: '1.0.0',
+      dshEditor: { presets: [{ id: 'team-style', path: 'agent-presets/team-style' }] },
+    }))
+    await writeFile(join(bundled, 'agent-presets', 'team-style', 'preset.yml'), 'name: 内置\n')
+    await writeFile(join(bundled, 'agent-presets', 'team-style', 'agent.cordis.yml'), '[]\n')
+    await writeFile(join(template, 'package.json'), JSON.stringify({
+      name: 'dsh-editor-profile',
+      dsh: { profile: { bundles: ['first-party-pack'] } },
+    }))
+    /* 第一方 bundle 不在 dsh-plugins.json 的 installed 里，社区 preset 通道跳过它。 */
+    await deployProfile(root, template)
+    expect(existsSync(join(root, '.agent-presets', 'team-style'))).toBe(false)
+    /* 另一个名字、登记为市集安装的包，同样声明才会部署。 */
+    const installedSource = join(root, 'user-plugins', 'community-pack')
+    await mkdir(join(installedSource, 'agent-presets', 'team-style'), { recursive: true })
+    await writeFile(join(installedSource, 'package.json'), JSON.stringify({
+      name: 'community-pack',
+      version: '1.0.0',
+      dshEditor: { presets: [{ id: 'team-style', path: 'agent-presets/team-style' }] },
+    }))
+    await writeFile(join(installedSource, 'agent-presets', 'team-style', 'preset.yml'), 'name: 市集\n')
+    await writeFile(join(installedSource, 'agent-presets', 'team-style', 'agent.cordis.yml'), '[]\n')
+    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({
+      schema: 1,
+      installed: [{ name: 'community-pack', spec: 'github:acme/community-pack', version: '1.0.0' }],
+    }))
+    await deployProfile(root, template)
+    expect(await readFile(join(root, '.agent-presets', 'team-style', 'preset.yml'), 'utf8')).toBe('name: 市集\n')
   })
 })
 

@@ -115,6 +115,8 @@ export type SessionSummary = {
   running?: boolean
   updatedAt?: number
   agentPreset?: string | null
+  /* 会话控制器的列表条目把 agentPreset 等投影嵌在 projectionValues 里。 */
+  projectionValues?: { agentPreset?: string | null }
 }
 
 export type SessionListState = {

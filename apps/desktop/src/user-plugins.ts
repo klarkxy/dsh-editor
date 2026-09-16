@@ -89,22 +89,27 @@ async function deployPluginPreset(presetsRoot: string, owner: string, preset: Pr
 }
 
 /**
- * 每次部署 profile 后同步插件 preset：扫描全部 bundle（含内置包与市集安装），
+ * 每次部署 profile 后同步插件 preset：扫描市集安装的 bundle，
  * 把声明的 preset 部署进 <dshHome>/.agent-presets，并回收 owner 已不在
  * bundle 列表里的插件 preset。app-owned 目录(marker 无 plugin 字段)永不动。
+ * 第一方包的 preset 由模板通道部署（configureProfile → deployAgentPresets），
+ * 本通道只认 dsh-plugins.json 里登记为市集安装的包，避免重复部署或误拒
+ * 第一方的 dsh-editor 前缀声明。
  */
-async function restorePluginPresets(home: string, profilePath: string, bundles: readonly string[]): Promise<void> {
+async function restorePluginPresets(home: string, profilePath: string, bundles: readonly string[], installedNames: ReadonlySet<string>): Promise<void> {
   const presetsRoot = join(home, '.agent-presets')
   await mkdir(presetsRoot, { recursive: true })
   for (const name of bundles) {
+    if (!installedNames.has(name)) continue
+    const packageDir = join(profilePath, 'node_modules', name)
     let manifest: unknown
     try {
-      manifest = JSON.parse(await readFile(join(profilePath, 'node_modules', name, 'package.json'), 'utf8'))
+      manifest = JSON.parse(await readFile(join(packageDir, 'package.json'), 'utf8'))
     } catch {
       continue
     }
     for (const preset of readPresetDeclarations(manifest)) {
-      const source = join(profilePath, 'node_modules', name, preset.path)
+      const source = join(packageDir, preset.path)
       if (!existsSync(join(source, 'preset.yml')) || !existsSync(join(source, 'agent.cordis.yml'))) continue
       await deployPluginPreset(presetsRoot, name, preset, source)
     }
@@ -140,6 +145,7 @@ export async function restoreUserPlugins(home: string, profilePath: string): Pro
     return
   }
   const bundles = [...(manifest.dsh?.profile?.bundles ?? [])]
+  const installedNames = new Set<string>()
   let changed = false
   for (const item of state.installed) {
     if (!item || typeof item !== 'object') continue
@@ -155,12 +161,13 @@ export async function restoreUserPlugins(home: string, profilePath: string): Pro
     } catch {
       await cp(source, destination, { recursive: true })
     }
+    installedNames.add(name)
     if (!bundles.includes(name)) {
       bundles.push(name)
       changed = true
     }
   }
-  await restorePluginPresets(home, profilePath, bundles)
+  await restorePluginPresets(home, profilePath, bundles, installedNames)
   if (!changed) return
   manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)

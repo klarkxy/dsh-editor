@@ -115,7 +115,7 @@ function kernelFixture(label: string, options: { live?: boolean; member?: boolea
     effect: (setup: () => unknown) => setup(),
     provide: vi.fn(),
   }
-  apply(host as unknown as Context)
+  apply(host as unknown as Context, { mode: NOVEL_KERNEL_LEGACY_MODE })
   const exec = (sessionId = 'session-1', cwd = '/forged/outside', signal = new AbortController().signal) => ({
     signal,
     agent: { session: { id: sessionId, header: { cwd } } },
@@ -170,7 +170,7 @@ function registrationHost() {
 describe('novel-kernel Host entry', () => {
   it('registers novel-only tools via the workbench installer and does not register author_observe', () => {
     const { ctx, names, guards, sections } = registrationHost()
-    apply(ctx)
+    apply(ctx, { mode: NOVEL_KERNEL_LEGACY_MODE })
 
     expect(name).toBe('dsh-editor-novel-kernel')
     expect(inject).toEqual(['tools', 'systemPrompt', 'fs', 'sandboxPolicy', 'sessions', 'workspaceRegistry'])
@@ -200,7 +200,7 @@ describe('novel-kernel Host entry', () => {
   it('novel/legacy mount workbench tools plus kernel: no duplicate author_observe, novel_* present', () => {
     const { ctx, names } = registrationHost()
     applyWorkbenchTools(ctx)
-    apply(ctx)
+    apply(ctx, { mode: NOVEL_KERNEL_LEGACY_MODE })
     expect(names().filter((toolName) => toolName === AUTHOR_OBSERVE_TOOL_NAME)).toHaveLength(1)
     expect(names()).toContain(WRITING_PROPOSE_TOOL_NAME)
     expect(names()).toEqual(expect.arrayContaining([
@@ -212,10 +212,18 @@ describe('novel-kernel Host entry', () => {
     expect(names().filter((toolName) => toolName.startsWith('novel_'))).toHaveLength(8)
   })
 
-  it('omitted, empty, legacy, and full config all resolve to the historical full surface', () => {
-    expect(resolveNovelKernelMode(undefined)).toBe(NOVEL_KERNEL_LEGACY_MODE)
-    expect(resolveNovelKernelMode(null)).toBe(NOVEL_KERNEL_LEGACY_MODE)
-    expect(resolveNovelKernelMode({})).toBe(NOVEL_KERNEL_LEGACY_MODE)
+  it('omitted, null, and empty config fail closed instead of resolving to the full surface', () => {
+    expect(() => resolveNovelKernelMode(undefined)).toThrow(/requires an explicit mode/)
+    expect(() => resolveNovelKernelMode(null)).toThrow(/requires an explicit mode/)
+    expect(() => resolveNovelKernelMode({})).toThrow(/requires an explicit mode/)
+    const { ctx, names, guards, sections } = registrationHost()
+    expect(() => apply(ctx, undefined)).toThrow(/requires an explicit mode/)
+    expect(names()).toEqual([])
+    expect(guards).toHaveLength(0)
+    expect(sections).toEqual([])
+  })
+
+  it('legacy and full config resolve to the historical full surface', () => {
     expect(resolveNovelKernelMode({ mode: NOVEL_KERNEL_LEGACY_MODE })).toBe(NOVEL_KERNEL_LEGACY_MODE)
     expect(resolveNovelKernelMode({ mode: 'full' })).toBe(NOVEL_KERNEL_LEGACY_MODE)
     expect(resolveNovelKernelMode(NOVEL_KERNEL_LEGACY_MODE)).toBe(NOVEL_KERNEL_LEGACY_MODE)

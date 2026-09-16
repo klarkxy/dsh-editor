@@ -1,3 +1,5 @@
+# The host's official UI surfaces are taken over by dsh-editor-shell; these
+# upstream UI entries are not used on desktop.
 - id: ui-sidebar
   disabled: true
 - id: ui-settings-plugin-inventory
@@ -49,6 +51,7 @@
   disabled: true
 - id: ui-plan
   disabled: true
+# The editor Shell renders the question card itself.
 - id: ui-user-questions
   disabled: true
 - id: ui-trajectory
@@ -56,17 +59,21 @@
 # Writing sessions mount the editor's own presets (deployed into
 # <dshHome>/.agent-presets by the desktop app) instead of the shipped
 # `standard` coding agent. The new default is dsh-editor-writing; the
-# historical dsh-editor preset remains selectable. ui-user-questions stays
-# disabled because the editor Shell renders the question card itself.
+# historical dsh-editor preset remains selectable.
 - id: agent-presets
   config:
     default: dsh-editor-writing
 
-# Temporarily suspend desktop proofreading while its results are reviewed.
+# Desktop proofreading runs through the proofread panel via workbench
+# `proofread.scan`, not dsh-proofread's standalone text-check route or dock.
+# This entry stays disabled to keep the standalone `/proofread` text.check
+# route and dock out of the desktop.
 - id: proofread
   disabled: true
 # Scoped writing tools stay resolvable for app-owned presets. The locked
 # editor-workbench core still loads host-wide and owns fail-closed guard/RPC.
+# editor-novel-kernel likewise stays resolvable for app-owned presets
+# (session-scoped mount) while disabled host-wide.
 - id: editor-workbench-tools
   disabled: true
 - id: editor-novel-kernel

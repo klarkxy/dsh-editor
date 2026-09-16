@@ -19,6 +19,14 @@ import { defaultExtract, defaultLink, defaultNpmInstall, installGitHubPlugin, st
 import { emptyPluginState, isOwnedManagedPatch, parsePluginState, renderOverridePatch, type PluginState } from './overlay.ts'
 import { resolvePluginPaths, type PluginPaths } from './paths.ts'
 import {
+  CORE_WRITING_PRESET_ID,
+  deployAppOwnedPreset,
+  listWritingPresets,
+  readCompositionPresets,
+  removeAppOwnedPreset,
+} from './writing-presets.ts'
+import { join } from 'node:path'
+import {
   defaultPersistIo,
   isEnoent,
   PluginPersistBlockedError,
@@ -335,6 +343,38 @@ export async function handlePluginsRpc(
       for (const entry of running) delete state.overrides[catalogLookupId(entry.id)]
       await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
       return { ok: true, value: { restartRequired: true } satisfies PluginActionReceipt }
+    }
+    if (endpoint === 'presets.list') {
+      const state = await readPluginState(options.paths)
+      return { ok: true, value: await listWritingPresets(options.paths, state) }
+    }
+    if (endpoint === 'presets.setEnabled') {
+      const id = typeof body.id === 'string' ? body.id : ''
+      if (!id || typeof body.enabled !== 'boolean') return bad('请指定要开关的写作模式')
+      if (id === CORE_WRITING_PRESET_ID) return forbidden('通用写作是核心写作模式，不能关闭')
+      const declared = await readCompositionPresets(options.paths.profileDir)
+      const row = declared.find((item) => item.id === id)
+      if (!row) return fail('not-found', '未找到该写作模式')
+      const source = join(options.paths.profileDir, 'node_modules', row.packageName, row.path)
+      try {
+        if (body.enabled) await deployAppOwnedPreset(options.paths.home, id, source)
+        else await removeAppOwnedPreset(options.paths.home, id)
+      } catch (error) {
+        const cause = error instanceof Error ? error.message : String(error)
+        return fail('internal', '未能更新写作模式，请重试。', { cause })
+      }
+      const state = await readPluginState(options.paths)
+      state.presets = { ...state.presets, [id]: body.enabled }
+      try {
+        await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
+      } catch (error) {
+        try {
+          if (body.enabled) await removeAppOwnedPreset(options.paths.home, id)
+          else await deployAppOwnedPreset(options.paths.home, id, source)
+        } catch { /* best-effort rollback; the next boot re-applies the saved state */ }
+        return persistFailed(error)
+      }
+      return { ok: true, value: { restartRequired: false } satisfies PluginActionReceipt }
     }
     return bad('不支持的插件操作')
   } catch (error) {

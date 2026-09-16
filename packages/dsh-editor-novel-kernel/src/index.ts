@@ -15,7 +15,7 @@ import { collectScratchFiles, createScratchListTool, createScratchReadTool, crea
 export const name = 'dsh-editor-novel-kernel'
 export const inject = ['tools', 'systemPrompt', 'fs', 'sandboxPolicy', 'sessions', 'workspaceRegistry'] as const
 
-/** Historical full surface. Omitted/`full` resolve here so legacy `dsh-editor` stays compatible. */
+/** Historical full surface. Mode is required; `full` remains a legacy alias of `legacy`. */
 export const NOVEL_KERNEL_LEGACY_MODE = 'legacy'
 /** Read-only surface: `novel_knowledge` only. New `dsh-editor-novel` must pass this explicitly. */
 export const NOVEL_KERNEL_KNOWLEDGE_ONLY_MODE = 'knowledge-only'
@@ -32,13 +32,15 @@ function parseNovelKernelMode(mode: unknown): NovelKernelMode {
   throw new Error(`dsh-editor-novel-kernel rejected unknown mode: ${String(mode)}`)
 }
 
-/** Default/omitted config stays the historical full novel-kernel. Unknown values fail closed. */
+const REQUIRED_MODE_MESSAGE = "dsh-editor-novel-kernel requires an explicit mode: 'legacy' | 'knowledge-only'"
+
+/** Mode is required: omitted config is rejected. Unknown values fail closed. */
 export function resolveNovelKernelMode(config: unknown): NovelKernelMode {
-  if (config === undefined || config === null) return NOVEL_KERNEL_LEGACY_MODE
+  if (config === undefined || config === null) throw new Error(REQUIRED_MODE_MESSAGE)
   if (typeof config === 'string') return parseNovelKernelMode(config)
   if (typeof config === 'object' && !Array.isArray(config)) {
     const mode = (config as NovelKernelConfig).mode
-    if (mode === undefined) return NOVEL_KERNEL_LEGACY_MODE
+    if (mode === undefined) throw new Error(REQUIRED_MODE_MESSAGE)
     return parseNovelKernelMode(mode)
   }
   throw new Error('dsh-editor-novel-kernel config must be an object or mode string')
@@ -109,7 +111,7 @@ function makeScratchStore(ctx: Context): ScratchStore {
 /**
  * Registers novel tools for this composition.
  * knowledge-only: `novel_knowledge` only (persona + Skill own workflow).
- * Default/legacy: full historical surface, guard, and prompt sections.
+ * legacy (`full` alias): full historical surface, guard, and prompt sections.
  */
 export function apply(ctx: Context, config?: unknown): void {
   const mode = resolveNovelKernelMode(config)

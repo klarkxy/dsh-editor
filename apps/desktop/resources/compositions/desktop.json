@@ -1,12 +1,13 @@
 {
-  "id": "basic",
-  "label": "基础写作",
+  "id": "desktop",
+  "label": "桌面写作",
   "features": [
     "assistant",
     "completion",
     "zhihu",
     "zhihu-tools",
     "overview-panel",
-    "proofread-panel"
+    "proofread-panel",
+    "writing-presets"
   ]
 }

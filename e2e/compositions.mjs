@@ -7,18 +7,20 @@ import { compositionInstallNames } from '../scripts/plugin-manifest.mjs'
 import { DESKTOP_PACKAGE_NAMES, desktopComposition, configureProfile } from '../scripts/desktop-compositions.mjs'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 
-const composition = process.env.DSH_EDITOR_COMPOSITION || 'full'
+const composition = process.env.DSH_EDITOR_COMPOSITION || 'desktop'
+const CANONICAL_ID = 'desktop'
 const ALIAS_IDS = ['basic', 'smart', 'full']
-const EXPECTED_LABELS = { basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
+const EXPECTED_LABELS = { [CANONICAL_ID]: '桌面写作', basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
 const WRITING_PRESETS = ['dsh-editor-writing', 'dsh-editor-novel', 'dsh-editor-article', 'dsh-editor-technical']
 const root = resolve(import.meta.dirname, '..')
 const devRoot = resolve(root, '.dev')
 const projectsRoot = resolve(devRoot, `composition-${composition}-projects`)
 const home = resolve(devRoot, `composition-${composition}-home`)
+const toggleHome = resolve(devRoot, `composition-${composition}-toggle-home`)
 const output = resolve(root, 'e2e', 'out', `composition-${composition}`)
 const targetWorkspace = resolve(projectsRoot, 'core-loop-workspace')
 
-for (const target of [projectsRoot, home, output, targetWorkspace]) {
+for (const target of [projectsRoot, home, toggleHome, output, targetWorkspace]) {
   if (!target.startsWith(`${devRoot}${sep}`) && !target.startsWith(`${resolve(root, 'e2e', 'out')}${sep}`)) {
     throw new Error(`unsafe path: ${target}`)
   }
@@ -202,7 +204,7 @@ await deployProfile(home,template,resolve(runtime,'node_modules'));
 let page;
 try {
  const aliases=[];
- for (const id of ALIAS_IDS) {
+ for (const id of [CANONICAL_ID, ...ALIAS_IDS]) {
   const item=await materializeAlias(id);
   item.files=await readMaterialized(item.dest);
   aliases.push(item);
@@ -212,10 +214,25 @@ try {
  if(shared.features.includes('cards')||shared.packages.includes('dsh-editor-cards'))throw new Error('canonical composition still includes cards');
  evidence.aliases=aliases.map((item)=>({id:item.id,label:item.label}));
  evidence.capability=shared;
- evidence.checks.push('basic/smart/full materialize to one capability set except id/label');
+ evidence.checks.push('desktop/basic/smart/full materialize to one capability set except id/label');
 
  if(!/- id: agent-presets\s+config:\s+default: dsh-editor-writing/.test(aliases[0].files.patch))throw new Error('materialized profile default is not dsh-editor-writing');
- await assertWritingPresetsHealthy(resolve(root,'apps','desktop','resources','profile'));
+ const sourcePresetIds=(await readdir(resolve(root,'apps','desktop','resources','profile','agent-presets'))).sort();
+ if(JSON.stringify(sourcePresetIds)!==JSON.stringify(['dsh-editor','dsh-editor-writing']))throw new Error('template source must keep only the locked core and legacy presets: '+sourcePresetIds.join(','));
+ await assertWritingPresetsHealthy(template);
+ const deployedNames=(await readdir(resolve(home,'.agent-presets'))).sort();
+ const expectedDeployed=['dsh-editor','dsh-editor-article','dsh-editor-novel','dsh-editor-technical','dsh-editor-writing'];
+ if(JSON.stringify(deployedNames)!==JSON.stringify(expectedDeployed))throw new Error('deployed preset roster mismatch: '+deployedNames.join(','));
+ for(const id of expectedDeployed){
+  const marker=JSON.parse(await readFile(resolve(home,'.agent-presets',id,'.dsh-editor-owner.json'),'utf8'));
+  if(marker.app!=='dsh-editor'||marker.schema!==1||marker.plugin!==undefined)throw new Error(id+' deployed marker is not app-owned');
+ }
+ /* 停用态：隔离 HOME 预写 dsh-plugins.json，部署应跳过并清除该 preset。 */
+ await rm(toggleHome,{recursive:true,force:true});await mkdir(toggleHome,{recursive:true});
+ await writeFile(resolve(toggleHome,'dsh-plugins.json'),JSON.stringify({schema:1,overrides:{},presets:{'dsh-editor-novel':false},installed:[]}));
+ await deployProfile(toggleHome,template,resolve(runtime,'node_modules'));
+ const toggledNames=(await readdir(resolve(toggleHome,'.agent-presets'))).sort();
+ if(JSON.stringify(toggledNames)!==JSON.stringify(expectedDeployed.filter((id)=>id!=='dsh-editor-novel')))throw new Error('disabled preset was not skipped: '+toggledNames.join(','));
  const deployedPresets=resolve(home,'.agent-presets');
  if(await exists(deployedPresets)){
   const leftover=(await readdir(deployedPresets)).filter((name)=>name.includes('.stage-')||name.includes('.backup-'));
@@ -226,8 +243,8 @@ try {
   const leftover=(await readdir(deployedProfiles)).filter((name)=>name.includes('.stage-')||name.includes('.backup-'));
   if(leftover.length)throw new Error('profile stage/backup leftover: '+leftover.join(','));
  }
- evidence.writingPresets={ids:WRITING_PRESETS,default:'dsh-editor-writing'};
- evidence.checks.push('four app-owned writing presets are healthy; default is dsh-editor-writing');
+ evidence.writingPresets={ids:WRITING_PRESETS,default:'dsh-editor-writing',toggleable:['dsh-editor-novel','dsh-editor-article','dsh-editor-technical']};
+ evidence.checks.push('template ships 5 presets (2 app-owned + 3 first-party plugin); deploy honors the disabled toggle');
 
  const started=await startDsh(env);dshChild=started.child;
  browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1440,height:900},locale:'zh-CN'});page.setDefaultTimeout(15000);

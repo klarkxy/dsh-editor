@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 export const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']
 
-/** App-owned writing presets all carry this prefix; plugin presets must not. */
+/** App-owned writing presets all carry this prefix; only first-party (desktop-visibility) packages may declare them. */
 export const PLUGIN_PRESET_RESERVED_PREFIX = 'dsh-editor'
 const PRESET_ID_PATTERN = /^[A-Za-z0-9._-]+$/
 
@@ -15,6 +15,7 @@ const STABLE_PACKAGE_ORDER = [
   'dsh-proofread',
   'dsh-editor-workbench',
   'dsh-editor-novel-kernel',
+  'dsh-editor-writing-presets',
   'dsh-zhihu',
   'dsh-editor-shell',
   'dsh-editor-plugins',
@@ -105,12 +106,12 @@ function normalizeInsert(row, label) {
   }
 }
 
-function normalizePreset(row, label, dir) {
+function normalizePreset(row, label, dir, visibility) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) fail(`${label} must be an object`)
   if (typeof row.id !== 'string' || !PRESET_ID_PATTERN.test(row.id) || row.id.length > 80) {
     fail(`${label} has an invalid preset id`)
   }
-  if (row.id.startsWith(PLUGIN_PRESET_RESERVED_PREFIX)) {
+  if (row.id.startsWith(PLUGIN_PRESET_RESERVED_PREFIX) && visibility !== 'desktop') {
     fail(`${label} (${row.id}) must not start with ${PLUGIN_PRESET_RESERVED_PREFIX} (reserved for app-owned presets)`)
   }
   if (typeof row.path !== 'string' || !row.path.trim() || row.path.includes('..') || isAbsolute(row.path) || /^[A-Za-z]:/.test(row.path)) {
@@ -168,8 +169,12 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
       normalizeInsert(row, `${pkg.name} dshEditor.inserts[${index}]`)
     ))
     const presets = asEntries(block.presets, `${pkg.name} dshEditor.presets`).map((row, index) => (
-      normalizePreset(row, `${pkg.name} dshEditor.presets[${index}]`, dir)
+      normalizePreset(row, `${pkg.name} dshEditor.presets[${index}]`, dir, block.visibility)
     ))
+    const declaredFeatures = asEntries(block.features, `${pkg.name} dshEditor.features`).map((row, index) => {
+      if (typeof row !== 'string' || !row.trim()) fail(`${pkg.name} dshEditor.features[${index}] must be a non-empty string`)
+      return row
+    })
     const patchPath = join(dir, patchRel)
     let patchIds
     try {
@@ -193,6 +198,7 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
       entries: packageEntries,
       inserts,
       presets,
+      features: declaredFeatures,
       workspaceDeps,
     })
   }
@@ -204,6 +210,7 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
   const seen = new Map()
   const features = new Set()
   for (const manifest of manifests) {
+    for (const feature of manifest.features) features.add(feature)
     for (const row of [...manifest.entries, ...manifest.inserts]) {
       const owner = seen.get(row.id)
       if (owner) fail(`duplicate plugin id ${row.id} in ${owner} and ${manifest.name}`)
@@ -276,6 +283,7 @@ function serviceByFeature(manifests) {
 function knownFeatures(manifests) {
   const features = new Set()
   for (const manifest of manifests) {
+    for (const feature of manifest.features ?? []) features.add(feature)
     for (const row of rowsOf(manifest)) {
       if (row.feature) features.add(row.feature)
     }
@@ -308,6 +316,7 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
   for (const manifest of manifests) {
     if (manifest.role === 'core') selected.add(manifest.name)
     if (rowsOf(manifest).some((row) => row.feature && selectedFeatures.has(row.feature))) selected.add(manifest.name)
+    if ((manifest.features ?? []).some((feature) => selectedFeatures.has(feature))) selected.add(manifest.name)
   }
   let growing = true
   while (growing) {
@@ -358,6 +367,14 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
     const service = services.get(feature)
     if (service) shellFeatures[feature] = service
   }
+  const presets = []
+  for (const name of packages) {
+    const manifest = byName.get(name)
+    for (const preset of manifest.presets) {
+      presets.push({ id: preset.id, packageName: name, path: preset.path })
+    }
+  }
+  presets.sort((left, right) => left.id.localeCompare(right.id))
   return {
     id: recipe.id,
     label: recipe.label,
@@ -367,6 +384,7 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
     disabledEntries,
     extraInserts,
     shellFeatures,
+    presets,
     bundles: [...BASE_BUNDLES, ...packages],
   }
 }

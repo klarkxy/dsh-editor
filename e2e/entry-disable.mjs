@@ -5,7 +5,7 @@ import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 
-const composition = process.env.DSH_EDITOR_COMPOSITION || 'full'
+const composition = process.env.DSH_EDITOR_COMPOSITION || 'desktop'
 const root = resolve(import.meta.dirname, '..')
 const devRoot = resolve(root, '.dev')
 const projectsRoot = resolve(devRoot, `entry-disable-projects`)

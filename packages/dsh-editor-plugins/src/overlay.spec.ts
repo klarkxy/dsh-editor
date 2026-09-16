@@ -25,9 +25,26 @@ describe('plugin overlay persistence', () => {
     expect(parsePluginState({ schema: 1, overrides: { zhihu: false, '../x': true }, installed: [{ name: 'ok-plug', spec: 'github:acme/ok', version: '1' }, { name: '../x' }] })).toEqual({
       schema: 1,
       overrides: { zhihu: false },
+      presets: {},
       installed: [{ name: 'ok-plug', spec: 'github:acme/ok', version: '1' }],
     })
     expect(parsePluginState({ schema: 2 })).toBeUndefined()
     expect(emptyPluginState().installed).toEqual([])
+  })
+
+  it('round-trips first-party writing preset toggles and drops malformed rows', () => {
+    expect(parsePluginState({
+      schema: 1,
+      overrides: {},
+      presets: { 'dsh-editor-novel': false, 'dsh-editor-article': true, '../bad': false, 'dsh-editor-technical': 'yes' },
+      installed: [],
+    })).toEqual({
+      schema: 1,
+      overrides: {},
+      presets: { 'dsh-editor-novel': false, 'dsh-editor-article': true },
+      installed: [],
+    })
+    expect(parsePluginState({ schema: 1 })?.presets).toEqual({})
+    expect(emptyPluginState().presets).toEqual({})
   })
 })

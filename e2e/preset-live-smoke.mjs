@@ -39,6 +39,7 @@ const strayParents = PRESETS.map((item) => item.parent).filter((parent) => paren
 if (strayParents.length) throw new Error(`PRESETS parents missing from SEED_DIRS: ${strayParents.join(', ')}`)
 
 let capturedSessionId = ''
+let lastBoundSessionId = ''
 const hostBindings = []
 
 for (const target of [projectsRoot, workspace, home]) {
@@ -193,7 +194,9 @@ function noteHostBinding(value, fallbackSessionId = '') {
     if (!preset) return
     const sessionId = typeof record.sessionId === 'string' && record.sessionId.trim()
       ? record.sessionId.trim()
-      : fallbackSessionId
+      : typeof record.agentId === 'string' && record.agentId.trim()
+        ? record.agentId.trim()
+        : fallbackSessionId
     hostBindings.push({ sessionId, agentPreset: preset })
   })
 }
@@ -212,6 +215,8 @@ function capturePresetSelect(request) {
     if (!body || typeof body !== 'object') return
     const method = String(body.method || body.rpc || '')
     if (!/agentPreset|agent-preset|selectPreset/i.test(method) && !/agentPreset|agent-preset/.test(request.url())) return
+    const agentId = body?.payload?.args?.agentId ?? body?.args?.agentId
+    if (typeof agentId === 'string' && agentId.trim()) lastBoundSessionId = agentId.trim()
     noteHostBinding(body, capturedSessionId)
   } catch { /* ignore non-JSON posts */ }
 }
@@ -377,7 +382,7 @@ async function configureMiniMax(page) {
   await openShellSettings(page)
   const dialog = page.getByRole('dialog', { name: '设置' })
   await dialog.locator('.settings-nav').getByRole('tab', { name: '模型', exact: true }).click()
-  const models = dialog.getByRole('region', { name: '模型' })
+  const models = dialog.getByRole('region', { name: '模型', exact: true })
   await models.waitFor({ state: 'visible', timeout: 15_000 })
   await waitFor(async () => !(await models.getByText('正在读取…').isVisible().catch(() => false)), 'models page loaded', 45_000)
   const addCustom = models.getByRole('button', { name: '添加自定义提供方' })
@@ -461,21 +466,33 @@ async function startPresetConversation(page, radioName, presetId) {
 async function readActiveSessionId(page) {
   const root = page.locator('aside.chat .conversation-select').first()
   await root.waitFor({ state: 'visible', timeout: 10_000 })
+  /* 会话切换 trigger 不暴露 session id（无 data-value、无代理 select）；
+     最新的 agentPresets/select 绑定请求是最诚实的当前会话来源。 */
   const fromUi = await root.evaluate((node) => {
+    const proxy = node.querySelector('select')
+    if (proxy instanceof HTMLSelectElement && proxy.value) return proxy.value.replace(/^v:/, '').trim()
     const trigger = node.querySelector('[role="combobox"]')
     return String(trigger?.getAttribute('data-value') || trigger?.getAttribute('value') || '').replace(/^v:/, '').trim()
   }).catch(() => '')
-  return fromUi || capturedSessionId
+  return fromUi || lastBoundSessionId || capturedSessionId
 }
 
 async function switchConversation(page, sessionId) {
-  if ((await readActiveSessionId(page)) === sessionId) return
+  /* 不做提前返回：线层 fallback（lastBoundSessionId）在手动切换后已过期的。
+     打开列表点选目标项，再重新打开列表确认 aria-selected 落在目标上——
+     trigger 不暴露 session id，aria-selected 是唯一的真实 UI 证据。 */
   const assistant = await ensureAssistantOpen(page)
-  await assistant.getByRole('combobox', { name: '切换对话' }).click()
+  const trigger = assistant.getByRole('combobox', { name: '切换对话' })
   const option = page.locator(`[role="option"][data-value="v:${sessionId}"]`)
+  await trigger.click()
   await option.waitFor({ state: 'visible', timeout: 10_000 })
   await option.click()
-  await waitFor(async () => (await readActiveSessionId(page)) === sessionId, `switch to ${sessionId}`, 15_000)
+  await waitFor(async () => {
+    await trigger.click()
+    const selected = await option.getAttribute('aria-selected').catch(() => null)
+    await page.keyboard.press('Escape')
+    return selected === 'true'
+  }, `switch to ${sessionId}`, 15_000)
 }
 
 async function selectMiniMaxM3(page) {
@@ -554,7 +571,7 @@ function createPrompt(spec) {
 }
 
 async function waitForProposal(page, previousCount, previousAssistantCount, label, expectedPath, warningBaseline = 0) {
-  const cards = page.getByRole('article', { name: '文件修改建议' })
+  const cards = page.locator('.proposal-card[aria-label="文件修改建议"]')
   const warnings = page.locator('.chat-history .warning').filter({ hasText: /未能完成|中断/ })
   const deadline = Date.now() + sendTimeout
   let completedWithoutProposalAt = 0
@@ -591,8 +608,8 @@ async function waitForProposal(page, previousCount, previousAssistantCount, labe
   throw new Error(`${label}: no proposal within timeout; chat tail=${sanitize(tail)}`)
 }
 
-async function sendAndApply(page, prompt, expectedPath, label) {
-  const cards = page.getByRole('article', { name: '文件修改建议' })
+async function sendForProposal(page, prompt, expectedPath, label) {
+  const cards = page.locator('.proposal-card[aria-label="文件修改建议"]')
   const before = await cards.count()
   const assistantBefore = await page.locator('.chat-row.assistant').count()
   const warningBaseline = await page.locator('.chat-history .warning').filter({ hasText: /未能完成|中断/ }).count()
@@ -609,11 +626,18 @@ async function sendAndApply(page, prompt, expectedPath, label) {
   const cardText = await card.innerText()
   if (!cardText.includes(expectedPath)) throw new Error(`${label}: proposed unexpected path: ${cardText.slice(0, 300)}`)
   await shot(page, `${label}-proposal`)
-  if (!(await card.getByText('已应用到作品', { exact: true }).isVisible().catch(() => false))) {
+  return card
+}
+
+/* 采用已就绪的提案卡（重开后卡片会重新核对，等它回到可应用态再点）。 */
+async function applyProposalCard(card, label) {
+  await card.getByText('可以安全应用', { exact: true }).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined)
+  if (!(await card.getByText('已应用到作品', { exact: true }).first().isVisible().catch(() => false))) {
     await card.getByRole('button', { name: '应用', exact: true }).click()
-    await card.getByText('已应用到作品', { exact: true }).waitFor({ state: 'visible', timeout: 90_000 })
+    /* 结算后卡片折成 details，摘要与页脚各有一份完成文案，取第一份。 */
+    await card.getByText('已应用到作品', { exact: true }).first().waitFor({ state: 'visible', timeout: 90_000 })
   }
-  await recordPhase(label, expectedPath)
+  await recordPhase(label)
 }
 
 async function verifyWriteback(page, spec) {
@@ -681,12 +705,17 @@ try {
   for (const spec of PRESETS) {
     await startPresetConversation(page, spec.radio, spec.id)
     const model = await selectMiniMaxM3(page)
+    /* 新会话的绑定以 agentPresets/select 线为准；combobox 不暴露 session id。 */
+    await waitFor(async () => {
+      const id = await readActiveSessionId(page)
+      return Boolean(id) && !sessions.some((item) => item.sessionId === id)
+    }, `${spec.id}: fresh session id visible`, 15_000)
     const sessionId = await readActiveSessionId(page)
     if (!sessionId) throw new Error(`${spec.id}: missing session id after picker confirm`)
-    if (sessions.some((item) => item.sessionId === sessionId)) {
-      throw new Error(`${spec.id}: reused session ${sessionId}`)
-    }
     const agentPreset = await waitHostPreset(sessionId, spec.id)
+    /* 提案只停在预览态：落盘在第二轮统一采用，先证明四套选择都不建目录。
+       发过消息的会话不再是空白会话，第二轮才能从切换器里选回它。 */
+    await sendForProposal(page, createPrompt(spec), spec.path, spec.id)
     sessions.push({ ...spec, sessionId, model, agentPreset })
     await recordPhase('会话已绑定', `${spec.id} · ${sessionId} · ${model}`)
   }
@@ -701,7 +730,10 @@ try {
     await switchConversation(page, spec.sessionId)
     capturedSessionId = spec.sessionId
     const agentPreset = await waitHostPreset(spec.sessionId, spec.id)
-    await sendAndApply(page, createPrompt(spec), spec.path, spec.id)
+    const card = page.locator('.proposal-card[aria-label="文件修改建议"]').last()
+    await card.waitFor({ state: 'visible', timeout: 15_000 })
+    if (!(await card.innerText()).includes(spec.path)) throw new Error(`${spec.id}: restored proposal card missing ${spec.path}`)
+    await applyProposalCard(card, spec.id)
     const writeback = await verifyWriteback(page, spec)
     if (spec.parent) allowedParents.push(spec.parent)
     await assertNoSeededDirs(page, allowedParents, `after apply ${spec.id}`)
