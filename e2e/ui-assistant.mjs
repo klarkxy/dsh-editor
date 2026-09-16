@@ -1547,6 +1547,8 @@ async function setDeveloperMode(page, enabled) {
      只在 scope ready 后才会激活，用它当作就绪信号。 */
   const appearance = dialog.getByRole('group', { name: '外观' })
   await waitFor(async () => (await appearance.getByRole('button', { name: '浅色', exact: true }).getAttribute('aria-pressed')) === 'true', 'settings scopes ready', 20_000)
+  const reveal = dialog.getByRole('button', { name: '显示开发者选项', exact: true })
+  if (await reveal.isVisible().catch(() => false)) await reveal.click()
   const target = dialog.getByRole('switch', { name: '开发者模式' })
   await target.waitFor({ state: 'visible', timeout: 15_000 })
   const deadline = Date.now() + 20_000

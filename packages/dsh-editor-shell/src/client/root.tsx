@@ -1962,6 +1962,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           onOpenArchive={openArchivePanel}
           onLeaveHome={() => void leaveToHome()}
           sidebarOpen={sidebarOpen}
+          compactChrome={compactChrome}
           focusMode={focusMode}
           assistantOpen={assistantOpen}
           onToggleSidebar={() => setSidebarOpen((value) => !value)}
@@ -2108,21 +2109,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           className="chat-overlay-dismiss"
           aria-label={t('workspace.hideAssistant')}
           onClick={() => setAssistantOpen(false)} /> : null}
-        {assistantEnabled && chatSession ? <ChatColumn
-          ctx={ctx}
-          chatSession={chatSession}
-          workspaceId={currentWorkspace?.workspaceId}
-          activePath={path}
-          authorPreferences={authorPreferences}
-          authorMemory={authorMemory}
-          chatModel={writing.chatModel}
-          onAcceptMemory={onAcceptMemory}
-          hidden={!assistantVisible}
-          overlay={assistantVisible && overlayAssistant}
-          onConfigure={openSettings}
-          onDraftDirtyChange={setAssistantDraftDirty}
-          onWritten={refreshWrittenPath}
-          onApplied={onAppliedChat} /> : null}
         {!assistantVisible && !focusMode ? (
           capabilityState.kind === 'error'
             ? <div className="assistant-launcher capability-note" role="alert">

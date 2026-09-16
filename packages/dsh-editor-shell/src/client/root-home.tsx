@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import type { WorkspaceView } from '../dsh-compat.ts'
 import type { WorkspaceOpenState } from './shared.ts'
-import { t } from '../i18n/index.ts'
+import { t, useLocale } from '../i18n/index.ts'
+import { homeStageCopy } from '../home-stage.ts'
 import { PaperStage } from './components.tsx'
 import { FolderIcon, NewDocIcon } from './icons.tsx'
 import { CommandPaletteTrigger } from './command-palette.tsx'
@@ -61,6 +62,8 @@ export function HomeScreen(props: {
   onOpenSettings(tab?: SettingsTab): void
 }) {
   const { workspaceOpen, extensionsDock } = props
+  useLocale()
+  const homeCopy = homeStageCopy()
   if (workspaceOpen.kind === 'checking') {
     return (
       <main className="shell no-session" style={{ minWidth: 0, display: 'grid' }}>
@@ -101,6 +104,9 @@ export function HomeScreen(props: {
         </span>
       </header>
       <PaperStage label={t('home.blankPaper')}>
+        <p className="home-hint">
+          {homeCopy.intro}
+        </p>
         <div
           className="home-actions home-command-bar"
           role="group"
@@ -116,7 +122,7 @@ export function HomeScreen(props: {
               <FolderIcon size={20} />
             </span>
             <span className="home-entry-title">
-              {t('home.openWork')}
+              {homeCopy.openWork}
             </span>
           </m.button>
           <m.button
@@ -130,7 +136,7 @@ export function HomeScreen(props: {
               <NewDocIcon size={20} />
             </span>
             <span className="home-entry-title">
-              {t('home.new')}
+              {homeCopy.newWork}
             </span>
           </m.button>
         </div>

@@ -1,10 +1,10 @@
 /**
  * Slim visual audit for the DSH Editor shell after the UI refactor.
  *
- * Captures ~8 screenshots covering the new chrome and both themes:
+ * Captures screenshots covering the new chrome and both themes:
  *   - home stage (paper, ink)
- *   - empty paper (paper, ink)
  *   - editor with typed content (paper, ink)
+ *   - narrow overlay drawer
  *   - sidebar with all four groups expanded (paper)
  *   - theme toggle round-trip
  *
@@ -225,8 +225,30 @@ try {
     return notice.includes('正在生成补全')
       || notice.includes('模型未返回')
       || notice.includes('补全候选')
+      || notice.includes('尚未配置写作模型')
+      || notice.includes('写作模型配置不完整')
+      || notice.includes('当前写作模型')
   }, undefined, { timeout: 8_000 })
   await shot(page, 'workbench-fim-attempt', '稿纸补全触发：manual 模式下 补全 按钮可点；无模型时返回提示而不阻塞编辑')
+
+  // Narrow overlay: one Chat instance as a right drawer; the dimmer covers
+  // the tree/editor on purpose (clicking it dismisses the assistant).
+  await page.setViewportSize({ width: 980, height: 800 })
+  await page.waitForFunction(() => {
+    const chat = document.querySelector('.chat:not([hidden])')
+    return Boolean(chat?.classList.contains('chat-overlay'))
+      && document.querySelectorAll('.chat:not([hidden])').length === 1
+      && Boolean(document.querySelector('.chat-overlay-dismiss'))
+  }, undefined, { timeout: 8_000 })
+  await shot(page, 'workbench-overlay', '窄窗 · 搭档抽屉 overlay，幕布盖住稿纸')
+  await page.getByRole('button', { name: '隐藏写作搭档', exact: true }).click()
+  await page.locator('.chat-overlay-dismiss').waitFor({ state: 'hidden' })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.getByRole('button', { name: '搭档', exact: true }).click()
+  await page.waitForFunction(() => {
+    const chat = document.querySelector('.chat:not([hidden])')
+    return Boolean(chat) && !chat.classList.contains('chat-overlay')
+  }, undefined, { timeout: 8_000 })
 
   // 04 — sidebar expanded close-up.
   await page.locator('.sidebar').screenshot({ path: resolve(output, `${String(shotIndex + 1).padStart(2, '0')}-sidebar-expanded.png`) })
@@ -240,25 +262,18 @@ try {
   await page.waitForTimeout(400)
   await shot(page, 'workbench-ink', '工作台 · 墨主题：data-theme=ink + localStorage 同步')
 
-  // 06 — back to paper.
+  // 06 — paper still works, then back to ink before leaving the workbench.
   await page.getByRole('button', { name: /主题（当前墨）/ }).click()
   await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'paper')
+  await page.getByRole('button', { name: /主题（当前纸）/ }).click()
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'ink')
 
-  // 07 — return to home and capture the ink variant.
+  // 07 — return to home while ink is already the live theme. Do not reload:
+  // a reload restores the last workspace and would capture the workbench.
   await page.getByRole('button', { name: '作品菜单' }).click()
   await page.getByRole('menuitem', { name: '返回作品列表' }).click()
   await page.locator('.home-stage').waitFor({ state: 'visible' })
-  // The home chrome has no theme toggle (the workbench toggle is the only
-  // in-app control). Set the theme through the localStorage channel that
-  // useTheme subscribes to, then reload so the new value takes effect.
-  await page.evaluate(() => globalThis.localStorage.setItem('dsh-editor.theme', 'ink'))
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.waitForFunction(
-    () => document.title === 'DSH Editor' && document.documentElement.getAttribute('data-theme') === 'ink',
-    undefined,
-    { timeout: 45_000 },
-  )
-  await dismissNativeOnboarding(page)
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'ink')
   await page.waitForTimeout(300)
   await shot(page, 'home-ink', '首页 · 墨主题：与纸主题同一布局，仅 token 切换')
 

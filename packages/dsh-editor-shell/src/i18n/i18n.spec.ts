@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { homeStageCopy } from '../home-stage.ts'
 import {
   documentLang,
   en,
@@ -68,5 +69,14 @@ describe('i18n dictionaries', () => {
   it('keeps representative zh labels identical to the previous UI copy', () => {
     expect(zh['sidebar.search']).toBe('搜索')
     expect(zh['common.search']).toBe('搜索')
+  })
+
+  it('keeps home.intro in both dictionaries and interpolates it on the home stage', () => {
+    expect(zh['home.intro']).toBeTruthy()
+    expect(en['home.intro']).toBeTruthy()
+    expect(homeStageCopy().intro).toBe(t('home.intro'))
+    expect(homeStageCopy().intro).toBe(zh['home.intro'])
+    setLocale('en')
+    expect(homeStageCopy().intro).toBe(en['home.intro'])
   })
 })

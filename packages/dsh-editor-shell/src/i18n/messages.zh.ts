@@ -193,8 +193,6 @@ export const zh = {
   'workspace.actions': '作品操作',
   'workspace.switch': '切换作品',
   'workspace.exporting': '导出中…',
-  'workspace.exportMarkdown': '导出 Markdown',
-  'workspace.exportTxt': '导出 TXT',
   'workspace.archived': '已归档',
   'workspace.backHome': '返回作品列表',
   'workspace.layout': '工作台布局',
@@ -681,6 +679,7 @@ export const zh = {
   'settings.busyQueue': '排队发送',
   'settings.busySteer': '插话发送',
   'settings.developer': '开发者',
+  'settings.showDeveloper': '显示开发者选项',
   'settings.developerMode': '开发者模式',
   'settings.developerModeHint': '新对话的模式列表显示全部 preset，包括旧版会话和插件提供的 preset。',
 

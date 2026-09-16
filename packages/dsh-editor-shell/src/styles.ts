@@ -129,7 +129,7 @@ export const baseStyles = `
   width: 100%;
   height: 100dvh;
   display: grid;
-  grid-template-columns: var(--tree-w) minmax(0, 1fr) var(--chat-w);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--topbar-h) minmax(0, 1fr);
   background: var(--chrome-bg);
   color: var(--fg);
@@ -200,8 +200,7 @@ export const componentStyles = `
 /* 无框窗口:顶栏即标题栏,整体可拖拽,交互控件排除。 */
 .shell > .chrome {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: var(--tree-w) minmax(0, 1fr) auto auto;
+  display: flex;
   align-items: center;
   height: var(--topbar-h);
   border-bottom: 1px solid var(--hairline);
@@ -216,23 +215,31 @@ export const componentStyles = `
 .shell .window-controls button:hover, .dsh-ui .window-controls button:hover { background: var(--surface-warm); color: var(--fg); }
 .shell .window-controls button.window-close:hover, .dsh-ui .window-controls button.window-close:hover { background: var(--danger); color: var(--accent-on); }
 .shell > .chrome > * { min-width: 0; padding: 0 var(--space-4); }
-.shell > .chrome > .topbar-actions { flex: none; }
-.shell > .chrome > .workspace-chrome { min-width: 0; overflow: hidden; border-left: 1px solid var(--hairline); border-right: 1px solid var(--hairline); padding: 0 var(--space-5); }
-.shell > .chrome > .topbar-actions { justify-content: flex-end; gap: var(--space-4); }
-.shell > .chrome > .layout-controls { width: fit-content; min-width: min-content; max-width: 100%; justify-self: start; }
+.shell > .chrome > .workspace-chrome {
+  flex: 0 1 auto;
+  min-width: 7rem;
+  max-width: min(18rem, 42vw);
+  overflow: hidden;
+  border-left: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
+  padding: 0 var(--space-5);
+}
+.shell > .chrome > .layout-controls { flex: none; width: fit-content; min-width: min-content; }
+.shell > .chrome > .brand-lockup { flex: none; }
+.shell > .chrome > .topbar-actions { flex: none; margin-left: auto; justify-content: flex-end; gap: var(--space-4); }
+.shell > .chrome > .shell-extensions-dock + .topbar-actions { margin-left: 0; }
 /* Extension launcher rail: a host-reserved strip, not an overlay. Inside the
-   top chrome it is a real grid child, so contributed launchers take layout
-   space and can never cover the composer or other app controls at any width;
-   on bare screens without chrome (e.g. workspace verification) it pins to the
-   free top-right corner instead. The rail itself stays click-through and each
-   contribution opts into pointer events. The --dsh-ext-* variables are the
-   placement contract with contributions: they pull a dock inline and make its
-   open panel drop below the launcher (open panels overlay intentionally). */
+   top chrome it is a flex child so contributed launchers take layout space and
+   cannot cover the composer; on bare screens without chrome (e.g. workspace
+   verification) it pins to the free top-right corner instead. The rail itself
+   stays click-through and each contribution opts into pointer events. The
+   --dsh-ext-* variables are the placement contract with contributions: they
+   pull a dock inline and make its open panel drop below the launcher
+   (open panels overlay intentionally). */
 .shell-extensions-dock {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  justify-self: end;
   min-width: 0;
   position: fixed;
   top: 0;
@@ -246,7 +253,7 @@ export const componentStyles = `
   --dsh-ext-panel-top: calc(100% + 6px);
   --dsh-ext-panel-bottom: auto;
 }
-.shell > .chrome > .shell-extensions-dock { position: static; height: auto; padding: 0; }
+.shell > .chrome > .shell-extensions-dock { position: static; height: auto; padding: 0; margin-left: auto; }
 .shell .brand-lockup, .dsh-ui .brand-lockup { display: flex; align-items: center; gap: 8px; flex: none; font-size: var(--text-sm); letter-spacing: .08em; }
 .shell .brand-mark, .dsh-ui .brand-mark { display: grid; width: 22px; height: 22px; place-items: center; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-on); font-weight: 700; font-size: 12px; }
 .shell .workspace-chrome, .dsh-ui .workspace-chrome { display: flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; }
@@ -827,11 +834,21 @@ export const componentStyles = `
 .shell .shell-panels [data-panel] > div { height: 100%; min-width: 0; }
 .shell .shell-panel { height: 100%; min-height: 0; }
 .shell .shell-panel > .sidebar, .shell .shell-panel > .editor, .shell .shell-panel > .editor-stack, .shell .shell-panel > .empty-paper, .shell .shell-panel > .chat, .shell .shell-panel > .pinned-pane { height: 100%; }
+/* 窄窗抽屉把搭档面板折到 0 宽,聊天用 position:fixed 浮出;
+   Group/Panel 的内联 overflow 会把抽屉裁成一条缝,overlay 时放开。 */
+.shell.assistant-overlay .shell-panels,
+.shell.assistant-overlay #assistant,
+.shell.assistant-overlay #assistant > div {
+  overflow: visible !important;
+}
+.shell.assistant-overlay #assistant > div {
+  max-width: none !important;
+}
 /* 中栏 overlay 座位：座位容器和渲染器包裹层都不占格；插件标记 data-dsh-center-overlay 的根元素
    直接成为网格项，落在稿纸所在的列。稿纸根元素带内联 display，因此隐藏必须 !important。 */
 .shell .editor-cell { position: relative; }
-.shell .editor-cell > .center-overlays { position: absolute; inset: 0; z-index: 5; }
-.shell .center-overlays [data-dsh-center-overlay] { height: 100%; min-width: 0; min-height: 0; overflow: auto; background: var(--surface); }
+.shell .editor-cell > .center-overlays { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.shell .center-overlays [data-dsh-center-overlay] { height: 100%; min-width: 0; min-height: 0; overflow: auto; background: var(--surface); pointer-events: auto; }
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor,
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor-stack,
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .empty-paper { display: none !important; }
@@ -899,7 +916,7 @@ export const componentStyles = `
 .shell .palette-trigger-icon, .dsh-ui .palette-trigger-icon { display: grid; place-items: center; color: var(--meta); }
 .shell .palette-trigger:hover .palette-trigger-icon, .dsh-ui .palette-trigger:hover .palette-trigger-icon { color: var(--fg); }
 .shell .palette-trigger-label, .dsh-ui .palette-trigger-label { display: none; }
-.shell .palette-trigger-kbd, .dsh-ui .palette-trigger-kbd { display: inline-grid; place-items: center; min-width: 22px; height: 18px; padding: 0 4px; font: 500 10px/1 var(--font-mono); letter-spacing: .04em; color: var(--meta); background: var(--bg); border-radius: var(--radius-xs); box-shadow: var(--elev-ring); }
+.shell .palette-trigger-kbd, .dsh-ui .palette-trigger-kbd { display: inline-grid; place-items: center; min-width: 22px; height: 18px; padding: 0 5px; font: 500 10px/1 var(--font-mono); letter-spacing: .02em; color: var(--meta); background: var(--bg); border-radius: var(--radius-xs); box-shadow: var(--elev-ring); white-space: nowrap; }
 .shell .palette-trigger:hover .palette-trigger-kbd, .dsh-ui .palette-trigger:hover .palette-trigger-kbd { color: var(--fg-2); }
 
 /* 760px 折叠:trigger 的文字 label 隐藏,只保留放大镜 + kbd。 */
@@ -994,6 +1011,8 @@ export const componentStyles = `
 .shell .settings-block-head, .dsh-ui .settings-block-head { display: grid; gap: 4px; }
 .shell .settings-block-title, .dsh-ui .settings-block-title { margin: 0; font: 600 var(--text-base)/1.4 var(--font-sans); letter-spacing: .02em; color: var(--fg); }
 .shell .settings-block-help, .dsh-ui .settings-block-help { margin: 0; color: var(--chrome-muted); font-size: var(--text-sm); line-height: 1.55; }
+.shell .settings-reveal-developer, .dsh-ui .settings-reveal-developer { justify-self: start; min-height: 28px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--chrome-muted); cursor: pointer; font: 500 var(--text-xs)/1.4 var(--font-sans); letter-spacing: .04em; }
+.shell .settings-reveal-developer:hover, .dsh-ui .settings-reveal-developer:hover { color: var(--fg-2); }
 .shell .writing-settings fieldset.settings-block, .dsh-ui .writing-settings fieldset.settings-block { padding: var(--space-3) var(--space-4) var(--space-4); border: 1px solid var(--border-soft); }
 .shell .settings-content:has(.dsh-plugins), .dsh-ui .settings-content:has(.dsh-plugins) { padding-right: var(--space-4); }
 
@@ -1231,17 +1250,14 @@ export const componentStyles = `
 .shell .pinned-markdown ul, .shell .pinned-markdown ol, .dsh-ui .pinned-markdown ul, .dsh-ui .pinned-markdown ol { margin: 0 0 .7em; padding-left: 1.2em; }
 
 /* ── Responsive collapse ────────────────────────────────── */
+/* 栏几何由 react-resizable-panels 与 overlayAssistant / compactChrome 负责。
+   顶栏不再按旧三列 grid 藏作品菜单或布局开关：窄窗仍要返回首页、开关文件栏和搭档抽屉。 */
 @media (max-width: 1040px) {
-  .shell { grid-template-columns: 196px minmax(0, 1fr); }
-  .shell > .chrome { grid-template-columns: 196px minmax(0, 1fr); }
-  .shell > .chrome > .workspace-chrome { display: none; }
-  .shell > .chrome > .topbar-actions { padding-right: var(--space-4); }
-.shell .editor-header, .dsh-ui .editor-header { padding-inline: 20px; }
+  .shell > .chrome > .workspace-chrome { max-width: min(12rem, 36vw); }
+  .shell .editor-header, .dsh-ui .editor-header { padding-inline: 20px; }
 }
 @media (max-width: 760px) {
-  .shell { grid-template-columns: minmax(0, 1fr); }
-  .shell > .chrome { grid-template-columns: minmax(0, 1fr); }
-  .shell > .chrome > .workspace-chrome, .shell > .chrome > .layout-controls, .shell > .chrome > .topbar-actions > .settings-link { display: none; }
+  .shell > .chrome > .workspace-chrome { min-width: 5.5rem; max-width: min(10rem, 40vw); padding: 0 var(--space-3); }
   .editor-header { padding-inline: 12px; }
   .paper-input { padding: 28px 22px; font-size: 16px; }
   .no-session .home-card { padding: 24px 18px; }

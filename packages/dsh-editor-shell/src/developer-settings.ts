@@ -1,5 +1,5 @@
 /*
- * 开发者设置：目前只有"开发者模式"一个开关。设置页（settings-general.tsx）负责写入，
+ * 开发者设置：目前只有"开发者模式"一个开关。设置页在显式开发者闸门后写入，
  * 会话面板（chat.ts）在列出/应用对话模式 preset 时读取，绕过四个写作模式的白名单。
  * 命名空间由宿主侧 apply()（index.ts）注册；未注册的命名空间在客户端是不可用死开关。
  */
@@ -13,4 +13,15 @@ export const DEFAULT_DEVELOPER_SETTINGS: DeveloperSettings = { developerMode: fa
 export function decodeDeveloperSettings(value: unknown): DeveloperSettings | undefined {
   const developerMode = (value as { developerMode?: unknown } | null | undefined)?.developerMode
   return typeof developerMode === 'boolean' ? { developerMode } : undefined
+}
+
+/** Ordinary-author settings chrome. The developer gate is an explicit reveal, not the default landing. */
+export function authorSettingsChrome(developerGate: boolean): {
+  showDeveloperMode: boolean
+  showOpenConfig: boolean
+} {
+  return {
+    showDeveloperMode: developerGate,
+    showOpenConfig: developerGate,
+  }
 }

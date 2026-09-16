@@ -65,7 +65,11 @@ function Row(props: { title: string; description?: string; children: ReactNode }
   );
 }
 
-export function SettingsGeneralSection(props: { ctx: ShellContext }) {
+export function SettingsGeneralSection(props: {
+  ctx: ShellContext
+  showDeveloperMode?: boolean
+  onRevealDeveloper?(): void
+}) {
   const scopes = useMemo(() => ({
     theme: props.ctx.settingsScope.bind({ namespace: 'ui-theme', decode: decodeThemePreference }),
     conversation: props.ctx.settingsScope.bind({ namespace: 'ui-conversation', decode: decodeBusyEnter }),
@@ -77,6 +81,7 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
   const locale = useLocale()
   const [busyEnter, setBusyEnter] = useBusyEnter(scopes.conversation)
   const [developerMode, setDeveloperMode] = useDeveloperMode(scopes.developer)
+  const showDeveloperMode = props.showDeveloperMode === true
 
   const appearanceOptions: { value: ThemePreference; label: string }[] = [
     { value: 'light', label: t('settings.themeLight') },
@@ -138,7 +143,7 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
             onChange={(value) => setBusyEnter(value as BusyEnterBehavior)}
             aria-label={t('settings.busyEnter')} />} />
       </section>
-      <section className="settings-block">
+      {showDeveloperMode ? <section className="settings-block">
         <header className="settings-block-head">
           <h3 className="settings-block-title">
             {t('settings.developer')}
@@ -156,12 +161,19 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
             onClick={() => setDeveloperMode(!developerMode)}>
             {<span className="settings-switch-knob" aria-hidden={true} />}
           </button>} />
-      </section>
+      </section> : props.onRevealDeveloper ? <section className="settings-block">
+        <button
+          type="button"
+          className="settings-reveal-developer"
+          onClick={props.onRevealDeveloper}>
+          {t('settings.showDeveloper')}
+        </button>
+      </section> : null}
     </section>
   );
 }
 
-function useDeveloperMode(scope: SettingsScope<DeveloperSettings>): [boolean, (value: boolean) => void] {
+export function useDeveloperMode(scope: SettingsScope<DeveloperSettings>): [boolean, (value: boolean) => void] {
   const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope), scope.getSnapshot.bind(scope))
   const value = snapshot.status === 'ready' && snapshot.value ? snapshot.value.developerMode : false
   const writable = snapshot.status === 'ready' && snapshot.writable !== false

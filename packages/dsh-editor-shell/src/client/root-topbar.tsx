@@ -30,6 +30,7 @@ export function WorkbenchTopbar(props: {
   onOpenArchive(): void
   onLeaveHome(): void
   sidebarOpen: boolean
+  compactChrome: boolean
   focusMode: boolean
   assistantOpen: boolean
   onToggleSidebar(): void
@@ -99,13 +100,7 @@ export function WorkbenchTopbar(props: {
                 className="workspace-menu-item"
                 disabled={props.exporting}
                 onSelect={() => { props.onWorkspaceMenuYield(); void props.onExportDocuments() }}>
-                {props.exporting ? t('workspace.exporting') : t('workspace.exportMarkdown')}
-              </MenuItem>
-              <MenuItem
-                className="workspace-menu-item"
-                disabled={props.exporting}
-                onSelect={() => { props.onWorkspaceMenuYield(); void props.onExportDocuments() }}>
-                {t('workspace.exportTxt')}
+                {props.exporting ? t('workspace.exporting') : t('command.export')}
               </MenuItem>
               <MenuItem
                 className="workspace-menu-item"
@@ -127,8 +122,8 @@ export function WorkbenchTopbar(props: {
           content={props.sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
           children={<button
             type="button"
-            disabled={props.focusMode}
-            aria-pressed={props.sidebarOpen}
+            disabled={props.focusMode || props.compactChrome}
+            aria-pressed={props.sidebarOpen && !props.compactChrome}
             aria-label={t('workspace.files')}
             title={props.sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
             onClick={props.onToggleSidebar}>

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { WritingSettings } from '../writing-settings.tsx'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.tsx'
 import { AboutSettingsSection } from './settings-about.tsx'
-import { SettingsGeneralSection } from './settings-general.tsx'
+import { SettingsGeneralSection, useDeveloperMode } from './settings-general.tsx'
+import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { SettingsModelsSection } from './settings-models.tsx'
 import {
   OfficialSettingsSectionPage,
@@ -129,6 +130,14 @@ export function SettingsDialog(props: {
   const [tab, setTab] = useState(readStoredTab)
   const [note, setNote] = useState('')
   const [aboutBusy, setAboutBusy] = useState(false)
+  const [developerRevealed, setDeveloperRevealed] = useState(false)
+  const developerScope = useMemo(() => props.ctx.settingsScope.bind({
+    namespace: DEVELOPER_SETTINGS_NAMESPACE,
+    decode: decodeDeveloperSettings,
+  }), [props.ctx])
+  const [developerMode] = useDeveloperMode(developerScope)
+  const developerGate = developerRevealed || developerMode
+  const authorChrome = authorSettingsChrome(developerGate)
   const closeRef = useRef<HTMLButtonElement | null>(null)
   const official = useOfficialSettingsSections(props.ctx)
   const officialSections = props.renderSlot ? official.sections : []
@@ -136,8 +145,9 @@ export function SettingsDialog(props: {
     if (!open) {
       setNote('')
       setAboutBusy(false)
+      if (!developerMode) setDeveloperRevealed(false)
     }
-  }, [open])
+  }, [open, developerMode])
   const selectTab = (next: string) => {
     setTab(next)
     persistTab(next)
@@ -172,7 +182,10 @@ export function SettingsDialog(props: {
   const activeOfficial = officialSections.find((section) => section.navId === activeTab)
   const builtinPages: SettingsTab[] = [...featureTabs, 'about']
   const content: Record<SettingsTab, () => ReactNode> = {
-    general: () => <SettingsGeneralSection ctx={props.ctx} />,
+    general: () => <SettingsGeneralSection
+      ctx={props.ctx}
+      showDeveloperMode={authorChrome.showDeveloperMode}
+      onRevealDeveloper={() => setDeveloperRevealed(true)} />,
     models: () => <SettingsModelsSection ctx={props.ctx} writingScope={props.writingScope} />,
     writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} />,
     usage: () => <SettingsUsageSection ctx={props.ctx} />,
@@ -218,7 +231,7 @@ export function SettingsDialog(props: {
             <span className="settings-header-title">
               {navLabel(activeTab, officialSections)}
             </span>
-            {props.ctx.connection.isLoopback ? <button
+            {authorChrome.showOpenConfig && props.ctx.connection.isLoopback ? <button
               type="button"
               className="settings-open-config"
               onClick={() => void openConfigFile()}>

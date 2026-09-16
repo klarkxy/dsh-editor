@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodeBusyEnter, decodeLocalePreference, decodeThemePreference } from './client/settings-general.tsx'
-import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from './developer-settings.ts'
+import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from './developer-settings.ts'
 
 describe('settings general preference decoders', () => {
   it('decodes the host theme preference values', () => {
@@ -32,5 +32,21 @@ describe('settings general preference decoders', () => {
     expect(decodeDeveloperSettings({ developerMode: false })).toEqual({ developerMode: false })
     expect(decodeDeveloperSettings({})).toBeUndefined()
     expect(decodeDeveloperSettings(undefined)).toBeUndefined()
+  })
+})
+
+describe('authorSettingsChrome', () => {
+  it('hides developer mode and open-config from ordinary-author chrome', () => {
+    expect(authorSettingsChrome(false)).toEqual({
+      showDeveloperMode: false,
+      showOpenConfig: false,
+    })
+  })
+
+  it('shows developer mode and open-config after the developer gate', () => {
+    expect(authorSettingsChrome(true)).toEqual({
+      showDeveloperMode: true,
+      showOpenConfig: true,
+    })
   })
 })

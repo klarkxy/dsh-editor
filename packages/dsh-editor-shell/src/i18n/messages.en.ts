@@ -195,8 +195,6 @@ export const en: { [K in keyof typeof zh]: string } = {
   'workspace.actions': 'Work actions',
   'workspace.switch': 'Switch work',
   'workspace.exporting': 'Exporting…',
-  'workspace.exportMarkdown': 'Export Markdown',
-  'workspace.exportTxt': 'Export TXT',
   'workspace.archived': 'Archived',
   'workspace.backHome': 'Back to work list',
   'workspace.layout': 'Workbench layout',
@@ -683,6 +681,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'settings.busyQueue': 'Queue send',
   'settings.busySteer': 'Steer send',
   'settings.developer': 'Developer',
+  'settings.showDeveloper': 'Show developer options',
   'settings.developerMode': 'Developer mode',
   'settings.developerModeHint': 'The new-conversation mode list shows every preset, including the legacy session and plugin-provided presets.',
 

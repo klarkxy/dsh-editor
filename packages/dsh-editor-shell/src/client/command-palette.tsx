@@ -30,6 +30,7 @@ import {
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ThemeValue } from './theme.tsx'
 import { t, useLocale } from '../i18n/index.ts'
+import { runtimePaletteShortcutHint } from '../palette-shortcut.ts'
 import {
   ArchiveIcon,
   ExportIcon,
@@ -416,9 +417,10 @@ export function CommandPalette(props: CommandPaletteProps) {
   )
 }
 
-/* 顶栏触发按钮:放大镜 + ⌘K。可访问名称仍是「搜索与命令」。 */
+/* 顶栏触发按钮:放大镜 + 当前系统的快捷键提示。可访问名称仍是「搜索与命令」。 */
 export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
   useLocale()
+  const shortcut = runtimePaletteShortcutHint()
   return (
     <button
       type="button"
@@ -430,7 +432,7 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
       <span className="palette-trigger-icon" aria-hidden="true">
         <SearchIcon size={14} />
       </span>
-      <kbd className="palette-trigger-kbd" aria-hidden="true">⌘K</kbd>
+      <kbd className="palette-trigger-kbd" aria-hidden="true">{shortcut}</kbd>
     </button>
   )
 }
