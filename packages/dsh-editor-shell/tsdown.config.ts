@@ -35,6 +35,8 @@ export default defineConfig([
         // package.json 里的 production dep 当 external,所以必须显式列进
         // alwaysBundle,让它们进 bundle 而不是运行时 require。
         'cmdk',
+        'react-markdown',
+        'remark-gfm',
         '@radix-ui/react-dialog',
         '@radix-ui/react-select',
         '@radix-ui/react-dropdown-menu',

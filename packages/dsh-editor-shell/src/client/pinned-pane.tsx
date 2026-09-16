@@ -2,9 +2,21 @@ import React, { useEffect, useRef, useState } from 'react';
 import { stripChapterFrontmatter } from 'dsh-editor-workbench/contracts'
 import { documentName, errorMessage, LatestRequestGate, safeRpcCall, type ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
-import { Markdown, parseBlocks } from './markdown.tsx'
+import { Markdown } from './markdown.tsx'
 import { ActivitySkeleton } from './ui/index.ts'
 import { readableDocumentTitle } from '../wrap-up-view.ts'
+
+/* 首个 ATX 标题的纯文本(去掉行内标记),用于与文档标题去重。 */
+function firstHeadingPlainText(body: string): string {
+  const match = body.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/m)
+  if (!match) return ''
+  return match[1]!
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+}
 
 export function PinnedPane(props: {
   ctx: ShellContext
@@ -50,11 +62,8 @@ export function PinnedPane(props: {
 
   const title = text ? readableDocumentTitle(props.path, text) : documentName(props.path)
   const body = text === null ? '' : stripChapterFrontmatter(text)
-  const firstHeading = parseBlocks(body).find((block) => block.kind === 'heading')
-  const headingText = firstHeading && firstHeading.kind === 'heading'
-    ? firstHeading.inlines.map((part) => typeof part === 'string' ? part : part.kind === 'link' ? part.text : part.text).join('')
-    : ''
-  const markdownBody = headingText.trim() === title.trim()
+  const firstHeading = firstHeadingPlainText(body)
+  const markdownBody = firstHeading.trim() === title.trim()
     ? body.replace(/^\s{0,3}#{1,6}\s+.*(?:\r?\n)+/, '')
     : body
 

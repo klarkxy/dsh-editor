@@ -1,41 +1,41 @@
 import { describe, expect, it } from 'vitest'
-import { parseBlocks, parseInline } from './markdown.tsx'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { createElement } from 'react'
+import { Markdown } from './markdown.tsx'
+
+function render(text: string): string {
+  return renderToStaticMarkup(createElement(Markdown, { text }))
+}
 
 describe('chat markdown renderer', () => {
-  it('parses inline emphasis, code, strike, and links', () => {
-    expect(parseInline('普通 **粗体** *斜体* ~~删除~~ `代码` 结尾')).toEqual([
-      '普通 ',
-      { kind: 'bold', text: '粗体' },
-      ' ',
-      { kind: 'italic', text: '斜体' },
-      ' ',
-      { kind: 'strike', text: '删除' },
-      ' ',
-      { kind: 'code', text: '代码' },
-      ' 结尾',
-    ])
-    expect(parseInline('[官网](https://example.com)')).toEqual([{ kind: 'link', text: '官网', href: 'https://example.com' }])
+  it('renders inline emphasis, code, strike, and links', () => {
+    const html = render('普通 **粗体** *斜体* ~~删除~~ `代码` [官网](https://example.com)')
+    expect(html).toContain('<strong>粗体</strong>')
+    expect(html).toContain('<em>斜体</em>')
+    expect(html).toContain('<del>删除</del>')
+    expect(html).toContain('<code>代码</code>')
+    expect(html).toContain('<a href="https://example.com">官网</a>')
   })
-  it('downgrades non-http links and keeps them as literal text', () => {
-    expect(parseInline('[坏](javascript:alert(1))')).toEqual(['[坏](javascript:alert(1))'])
-    expect(parseInline('[文件](file:///etc/passwd)')).toEqual(['[文件](file:///etc/passwd)'])
+
+  it('downgrades non-http links to plain text', () => {
+    const html = render('[坏](javascript:alert(1))')
+    expect(html).not.toContain('javascript:')
+    expect(html).not.toContain('<a')
+    expect(html).toContain('坏')
   })
-  it('parses headings, lists, quotes, hr, and fenced code blocks', () => {
-    expect(parseBlocks('## 第二节\n\n- 甲\n- 乙\n\n1. 一\n2. 二\n\n> 引文一行\n> 引文二行\n\n---\n\n```json\n{"a":1}\n```\n\n收尾段落')).toEqual([
-      { kind: 'heading', level: 2, inlines: ['第二节'] },
-      { kind: 'list', ordered: false, items: [['甲'], ['乙']] },
-      { kind: 'list', ordered: true, items: [['一'], ['二']] },
-      { kind: 'quote', inlines: ['引文一行\n引文二行'] },
-      { kind: 'hr' },
-      { kind: 'code', language: 'json', text: '{"a":1}' },
-      { kind: 'paragraph', inlines: ['收尾段落'] },
-    ])
+
+  it('renders headings, lists, quotes, code blocks, and rules', () => {
+    const html = render('# 标题\n\n- 一\n- 二\n\n> 引用\n\n```ts\nconst x = 1\n```\n\n---')
+    expect(html).toContain('<h1>标题</h1>')
+    expect(html).toContain('<li>一</li>')
+    expect(html).toContain('<blockquote>')
+    expect(html).toContain('language-ts')
+    expect(html).toContain('<hr')
   })
-  it('keeps soft line breaks inside a paragraph and tolerates an unclosed fence', () => {
-    expect(parseBlocks('第一行\n第二行')).toEqual([{ kind: 'paragraph', inlines: ['第一行\n第二行'] }])
-    expect(parseBlocks('```\n流式中的代码')).toEqual([{ kind: 'code', language: '', text: '流式中的代码' }])
-  })
-  it('treats raw HTML as plain text instead of markup', () => {
-    expect(parseBlocks('<script>alert(1)</script>')).toEqual([{ kind: 'paragraph', inlines: ['<script>alert(1)</script>'] }])
+
+  it('never emits raw HTML from the model', () => {
+    const html = render('<script>alert(1)</script>\n\n**安全**')
+    expect(html).not.toContain('<script>')
+    expect(html).toContain('<strong>安全</strong>')
   })
 })

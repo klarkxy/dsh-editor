@@ -83,7 +83,9 @@
     "docx": "^9.7.1",
     "echarts": "^6.1.0",
     "jszip": "^3.10.1",
-    "motion": "^13.2.0"
+    "motion": "^13.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
@@ -95,6 +97,7 @@
     "dsh-editor-workbench": "workspace:*",
     "dsh-manuscript": "workspace:*",
     "react": "^18.2.0",
+    "react-dom": "18.3.1",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
