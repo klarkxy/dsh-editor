@@ -6,6 +6,7 @@ import {
   type MemoryUpdateReceipt,
 } from 'dsh-editor-workbench/contracts'
 import type { ShellToolSeatContext } from 'dsh-editor-seats'
+import { SeatButton } from 'dsh-editor-seats/seat-button'
 import { errorMessage, LatestRequestGate, safeRpcCall, snapshotTimeLabel } from './rpc.ts'
 import { setMemoryLocale, t, type MessageKey } from './messages.ts'
 import { consumeMemoryRequest, pendingMemoryRequest, subscribeMemoryRequest, type MemoryRequest } from './requests.ts'
@@ -55,6 +56,7 @@ export function MemoryChangeDetail(props: {
   onRefresh?(path: string): void
   onChanged?(): void
   onBack?(): void
+  hostButton?: ShellToolSeatContext['Button']
 }) {
   const [record, setRecord] = useState<MemoryChange | null>(null)
   const [note, setNote] = useState('')
@@ -157,9 +159,9 @@ export function MemoryChangeDetail(props: {
           <span role="alert">
             {failed}
           </span>
-          <button type="button" onClick={() => { setFailed(''); void load(props.id) }}>
+          <SeatButton host={props.hostButton} onClick={() => { setFailed(''); void load(props.id) }}>
             {t('memory.retry')}
-          </button>
+          </SeatButton>
         </footer>
       </article>
     );
@@ -250,21 +252,21 @@ export function MemoryChangeDetail(props: {
       {busy ? activityDots() : null}
       {note}
     </span>
-    {record.status === 'pending' ? <button type="button" disabled={Boolean(busy)} onClick={() => void apply()}>
+    {record.status === 'pending' ? <SeatButton host={props.hostButton} disabled={Boolean(busy)} onClick={() => void apply()}>
       {busy === 'apply' ? <Fragment>
         {activityDots()}
         {t('memory.applying')}
       </Fragment> : t('memory.confirm')}
-    </button> : null}
-    {record.status === 'applied' ? <button type="button" disabled={Boolean(busy)} onClick={() => void undo()}>
+    </SeatButton> : null}
+    {record.status === 'applied' ? <SeatButton host={props.hostButton} disabled={Boolean(busy)} onClick={() => void undo()}>
       {busy === 'undo' ? <Fragment>
         {activityDots()}
         {t('memory.undoing')}
       </Fragment> : t('memory.undo')}
-    </button> : null}
-    {props.onBack ? <button type="button" disabled={Boolean(busy)} onClick={props.onBack}>
+    </SeatButton> : null}
+    {props.onBack ? <SeatButton host={props.hostButton} disabled={Boolean(busy)} onClick={props.onBack}>
       {t('memory.back')}
-    </button> : null}
+    </SeatButton> : null}
   </footer>
   /* 聊天卡：已应用/已撤销默认收起差异与引用，摘要状态留在 summary；pending/failed/stale 需要作者注意，默认展开。 */
   if (props.chatCard) {
@@ -369,28 +371,29 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
             {t('memory.title')}
           </h2>
         </div>
-        <button
+        <SeatButton
+          host={props.Button}
+          variant="icon"
           className="icon-button"
-          type="button"
           aria-label={t('memory.close')}
           onClick={props.onClose}>
           ×
-        </button>
+        </SeatButton>
       </header>
       <div className="memory-filters" role="group" aria-label={t('memory.filter')}>
-        {STATUS_FILTERS.map((status) => <button
+        {STATUS_FILTERS.map((status) => <SeatButton
+          host={props.Button}
           key={status}
-          type="button"
           aria-pressed={statusFilter === status}
           onClick={() => setStatusFilter((current) => current === status ? null : status)}>
           {t(STATUS_LABEL[status])}
-        </button>)}
+        </SeatButton>)}
       </div>
       {note ? <p className="memory-status warning" role="alert">
         {note}
-        {items === null ? <button type="button" onClick={() => void load()}>
+        {items === null ? <SeatButton host={props.Button} onClick={() => void load()}>
           {t('memory.retryList')}
-        </button> : null}
+        </SeatButton> : null}
       </p> : null}
       {items === null && !note ? <div className="memory-status" role="status">
         {skeletonRows(['100%', '88%', '96%'])}
@@ -406,8 +409,8 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
       </p> : null}
       {visible.length ? <ul className="memory-list">
         {visible.map((item) => <li key={item.id}>
-          <button
-            type="button"
+          <SeatButton
+            host={props.Button}
             className="memory-row-main"
             aria-expanded={openId === item.id}
             onClick={() => setOpenId((current) => current === item.id ? null : item.id)}>
@@ -417,8 +420,9 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
             <span className="memory-meta">
               {`${t(STATUS_LABEL[item.status])} · ${createdLabel(item.createdAt)}`}
             </span>
-          </button>
+          </SeatButton>
           {openId === item.id ? <MemoryChangeDetail
+            hostButton={props.Button}
             rpc={props.rpc}
             sessionId={props.sessionId}
             id={item.id}

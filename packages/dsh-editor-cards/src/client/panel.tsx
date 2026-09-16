@@ -18,6 +18,7 @@ import {
   type WorldbookCard,
 } from '../contracts.ts'
 import type { ShellRange, ShellToolSeatContext } from 'dsh-editor-seats'
+import { SeatButton } from 'dsh-editor-seats/seat-button'
 import {
   UNGROUPED_ROLE,
   collectCharacterRoles,
@@ -244,13 +245,14 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
         <h2>
           {title}
         </h2>
-        <button
+        <SeatButton
+          host={props.Button}
+          variant="icon"
           className="icon-button"
-          type="button"
           aria-label={t('cards.closePanel')}
           onClick={() => closeCardsPanel()}>
           ×
-        </button>
+        </SeatButton>
       </header>
       <div
         className="cards-tabs"
@@ -290,27 +292,30 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
             if (next === 'title' || next === 'modified' || next === 'role' || next === 'category') setSort(next)
           },
         })}
-        <button type="button" onClick={() => { setCreateNote(''); setCreateOpen(true) }}>
+        <SeatButton host={props.Button} onClick={() => { setCreateNote(''); setCreateOpen(true) }}>
           {props.kind === 'character' ? t('cards.newPerson') : t('cards.newSetting')}
-        </button>
+        </SeatButton>
       </div>
       {roleOptions.length && props.kind === 'character' ? <ChipRow
         label={t('cards.role')}
         values={roleOptions}
         selected={roleChips}
         onToggle={(value) => setRoleChips((old) => toggleFilterValue(old, value))}
-        display={(value) => value === UNGROUPED_ROLE ? ungroupedRoleLabel() : value} /> : null}
+        display={(value) => value === UNGROUPED_ROLE ? ungroupedRoleLabel() : value}
+        hostButton={props.Button} /> : null}
       {categoryOptions.length && props.kind === 'worldbook' ? <ChipRow
         label={t('cards.category')}
         values={categoryOptions}
         selected={categoryChips}
         onToggle={(value) => setCategoryChips((old) => toggleFilterValue(old, value))}
-        display={worldbookCategoryLabel} /> : null}
+        display={worldbookCategoryLabel}
+        hostButton={props.Button} /> : null}
       {tagOptions.length ? <ChipRow
         label={t('cards.tags')}
         values={tagOptions}
         selected={tagChips}
-        onToggle={(value) => setTagChips((old) => toggleFilterValue(old, value))} /> : null}
+        onToggle={(value) => setTagChips((old) => toggleFilterValue(old, value))}
+        hostButton={props.Button} /> : null}
       {busy ? <div className="cards-status cards-loading" role="status">
         {skeletonRows(['100%', '88%', '96%', '72%'])}
         <span className="sr-only">
@@ -321,9 +326,9 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
         className={`cards-status ${truncated ? 'warning' : 'muted'}`}
         role={note && !truncated && !busy ? 'alert' : 'status'}>
         {note}
-        {!busy && !truncated && note && !list.length ? <button type="button" onClick={() => void load()}>
+        {!busy && !truncated && note && !list.length ? <SeatButton host={props.Button} onClick={() => void load()}>
           {t('cards.retry')}
-        </button> : null}
+        </SeatButton> : null}
       </p> : null}
       {!busy && !list.length && !(note && !truncated) ? <p className="cards-status muted">
         {emptyLabel}
@@ -343,7 +348,8 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
               navigationBlocked={props.editorDirty}
               onSelect={() => selectCard(card.path)}
               onReferences={() => void loadReferences(card.path)}
-              onOpenHit={(item) => void openHit(item)} />)}
+              onOpenHit={(item) => void openHit(item)}
+              hostButton={props.Button} />)}
           </ul>
         </section>)}
       </div>
@@ -363,13 +369,15 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
               navigationBlocked={props.editorDirty}
               onSelect={() => selectCard(card.path)}
               onReferences={() => void loadReferences(card.path)}
-              onOpenHit={(item) => void openHit(item)} />)}
+              onOpenHit={(item) => void openHit(item)}
+              hostButton={props.Button} />)}
           </ul>
         </section>)}
       </div>
         : null}
       <TextPromptDialog
         Dialog={props.Dialog}
+        Button={props.Button}
         id="cards-create"
         open={createOpen}
         title={props.kind === 'character' ? t('cards.newPerson') : t('cards.newSetting')}
@@ -390,17 +398,18 @@ function ChipRow(props: {
   selected: readonly string[]
   onToggle(value: string): void
   display?(value: string): string
+  hostButton?: ShellToolSeatContext['Button']
 }) {
   return (
     <div className="cards-chips" aria-label={props.label}>
-      {props.values.map((value) => <button
+      {props.values.map((value) => <SeatButton
+        host={props.hostButton}
         key={value}
-        type="button"
         className="cards-chip"
         aria-pressed={props.selected.includes(value)}
         onClick={() => props.onToggle(value)}>
         {props.display?.(value) ?? value}
-      </button>)}
+      </SeatButton>)}
     </div>
   );
 }
@@ -413,13 +422,14 @@ function CharacterCardRow(props: {
   onSelect(): void
   onReferences(): void
   onOpenHit(hit: CardReferenceHit): void
+  hostButton?: ShellToolSeatContext['Button']
 }) {
   const { card } = props
   const fields = card.frontmatter
   return (
     <li className={`cards-item${props.selected ? ' selected' : ''}`}>
-      <button
-        type="button"
+      <SeatButton
+        host={props.hostButton}
         className="cards-item-main"
         aria-current={props.selected ? 'true' : undefined}
         onClick={props.onSelect}>
@@ -443,12 +453,13 @@ function CharacterCardRow(props: {
         {card.summary ? <small>
           {card.summary}
         </small> : null}
-      </button>
+      </SeatButton>
       <ReferenceBlock
         state={props.refs}
         navigationBlocked={props.navigationBlocked}
         onRequest={props.onReferences}
-        onOpenHit={props.onOpenHit} />
+        onOpenHit={props.onOpenHit}
+        hostButton={props.hostButton} />
     </li>
   );
 }
@@ -461,13 +472,14 @@ function WorldbookCardRow(props: {
   onSelect(): void
   onReferences(): void
   onOpenHit(hit: CardReferenceHit): void
+  hostButton?: ShellToolSeatContext['Button']
 }) {
   const { card } = props
   const fields = card.frontmatter
   return (
     <li className={`cards-item${props.selected ? ' selected' : ''}`}>
-      <button
-        type="button"
+      <SeatButton
+        host={props.hostButton}
         className="cards-item-main"
         aria-current={props.selected ? 'true' : undefined}
         onClick={props.onSelect}>
@@ -485,12 +497,13 @@ function WorldbookCardRow(props: {
         {card.summary ? <small>
           {card.summary}
         </small> : null}
-      </button>
+      </SeatButton>
       <ReferenceBlock
         state={props.refs}
         navigationBlocked={props.navigationBlocked}
         onRequest={props.onReferences}
-        onOpenHit={props.onOpenHit} />
+        onOpenHit={props.onOpenHit}
+        hostButton={props.hostButton} />
     </li>
   );
 }
@@ -500,6 +513,7 @@ export function ReferenceBlock(props: {
   navigationBlocked: boolean
   onRequest(): void
   onOpenHit(hit: CardReferenceHit): void
+  hostButton?: ShellToolSeatContext['Button']
 }) {
   const label = props.state.status === 'ready'
     ? t('cards.refCount', { count: props.state.value.hits.length })
@@ -509,13 +523,13 @@ export function ReferenceBlock(props: {
   </Fragment> : t('cards.refs')
   return (
     <div className="cards-refs">
-      <button
-        type="button"
+      <SeatButton
+        host={props.hostButton}
         className="cards-ref-toggle"
         disabled={props.state.status === 'busy'}
         onClick={props.onRequest}>
         {label}
-      </button>
+      </SeatButton>
       {props.state.status === 'error' ? <p className="muted">
         {props.state.note}
       </p> : null}
@@ -523,7 +537,8 @@ export function ReferenceBlock(props: {
         hits={props.state.value.hits}
         truncated={props.state.value.truncated}
         navigationBlocked={props.navigationBlocked}
-        onOpenHit={props.onOpenHit} /> : null}
+        onOpenHit={props.onOpenHit}
+        hostButton={props.hostButton} /> : null}
     </div>
   );
 }
@@ -533,6 +548,7 @@ export function ReferenceGroups(props: {
   truncated?: boolean
   navigationBlocked: boolean
   onOpenHit(hit: CardReferenceHit): void
+  hostButton?: ShellToolSeatContext['Button']
 }) {
   const grouped = groupReferencesByChapter(props.hits)
   if (!grouped.length) return (
@@ -552,12 +568,12 @@ export function ReferenceGroups(props: {
           </strong>
           <ul>
             {group.hits.map((item, index) => <li key={`${item.path}:${item.start}:${index}`}>
-              <button
-                type="button"
+              <SeatButton
+                host={props.hostButton}
                 disabled={props.navigationBlocked}
                 onClick={() => props.onOpenHit(item)}>
                 {t('cards.refLine', { line: item.line, excerpt: item.excerpt })}
-              </button>
+              </SeatButton>
             </li>)}
           </ul>
         </li>)}

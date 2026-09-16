@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: { index: 'src/index.ts', tokens: 'src/tokens.ts' },
+  entry: { index: 'src/index.ts', tokens: 'src/tokens.ts', 'seat-button': 'src/seat-button.tsx' },
   format: ['esm'],
   dts: true,
   clean: true,

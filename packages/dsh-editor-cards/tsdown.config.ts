@@ -31,6 +31,7 @@ export default defineConfig([
     deps: {
       alwaysBundle: [
         'dsh-editor-seats',
+        'dsh-editor-seats/seat-button',
         'dsh-editor-cards/contracts',
       ],
       neverBundle: ['react', 'react-dom', 'react/jsx-runtime'],

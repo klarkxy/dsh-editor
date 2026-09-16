@@ -8,7 +8,8 @@ import React, {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import type { ShellDialogProps } from 'dsh-editor-seats'
+import type { ShellDialogProps, ShellToolSeatContext } from 'dsh-editor-seats'
+import { SeatButton } from 'dsh-editor-seats/seat-button'
 import { guardImeEnter } from './host-ui.tsx'
 import { t } from './messages.ts'
 
@@ -53,6 +54,7 @@ export function cardsPromptKeyDown(event: {
 
 export function TextPromptDialog(props: {
   Dialog?: ComponentType<ShellDialogProps>
+  Button?: ShellToolSeatContext['Button']
   id: string
   open: boolean
   title: string
@@ -89,14 +91,15 @@ export function TextPromptDialog(props: {
       <h2 id={`${props.id}-title`}>
         {display.title}
       </h2>
-      <button
+      <SeatButton
+        host={props.Button}
+        variant="icon"
         className="icon-button"
-        type="button"
         aria-label={t('common.close')}
         disabled={props.busy}
         onClick={props.onCancel}>
         ×
-      </button>
+      </SeatButton>
     </header>,
     <form key="form" onSubmit={submit}>
       <label>
@@ -113,10 +116,12 @@ export function TextPromptDialog(props: {
         {props.note}
       </p> : null}
       <footer>
-        <button type="button" disabled={props.busy} onClick={props.onCancel}>
+        <SeatButton host={props.Button} disabled={props.busy} onClick={props.onCancel}>
           {t('common.cancel')}
-        </button>
-        <button
+        </SeatButton>
+        <SeatButton
+          host={props.Button}
+          variant="primary"
           className="primary-action"
           type="submit"
           disabled={props.busy || !value.trim()}>
@@ -124,7 +129,7 @@ export function TextPromptDialog(props: {
             {activityDots()}
             {t('common.saving')}
           </Fragment> : display.confirmLabel}
-        </button>
+        </SeatButton>
       </footer>
     </form>,
   ]

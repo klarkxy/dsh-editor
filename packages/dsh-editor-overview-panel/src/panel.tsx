@@ -6,6 +6,7 @@ import {
   type ProjectOverview,
 } from 'dsh-editor-workbench/contracts'
 import { CENTER_OVERLAY_ATTRIBUTE, type ShellToolSeatContext } from 'dsh-editor-seats'
+import { SeatButton } from 'dsh-editor-seats/seat-button'
 import {
   barHeight,
   chapterCharBars,
@@ -124,13 +125,14 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
             {t('overview.title')}
           </h2>
         </div>
-        <button
+        <SeatButton
+          host={props.Button}
+          variant="icon"
           className="icon-button"
-          type="button"
           aria-label={t('overview.close')}
           onClick={props.onClose}>
           ×
-        </button>
+        </SeatButton>
       </header>
       {loading ? <div className="overview-loading" role="status">
         <span className="overview-loading-cards" aria-hidden="true">
@@ -144,9 +146,9 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
       </div> : null}
       {failed ? <p className="warning" role="alert">
         {note || t('overview.loadError')}
-        <button type="button" onClick={() => { void loadOverview(); void loadHistory() }}>
+        <SeatButton host={props.Button} onClick={() => { void loadOverview(); void loadHistory() }}>
           {t('overview.retry')}
-        </button>
+        </SeatButton>
       </p> : null}
       {overview ? <div className="overview-body">
         <section className="overview-totals" aria-label={t('overview.totals')}>
@@ -193,7 +195,8 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
             {t('overview.noMatch')}
           </p>
               : <ol className="overview-chapter-list">
-            {visibleChapters.map((chapter) => <ChapterRow key={chapter.path} chapter={chapter} onOpen={openChapter} />)}
+            {visibleChapters.map((chapter) => <ChapterRow
+            hostButton={props.Button} key={chapter.path} chapter={chapter} onOpen={openChapter} />)}
           </ol>}
         </section>
         <section className="overview-chart" aria-label={t('overview.charDist')}>
@@ -215,12 +218,12 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
               <i
                 style={{ height: `${barHeight(bar.ratio, CHAR_BAR_MAX)}px` }}
                 aria-hidden="true" />
-              <button
-                type="button"
+              <SeatButton
+                host={props.Button}
                 className="overview-char-label"
                 onClick={() => openChapter(bar.path)}>
                 {bar.title}
-              </button>
+              </SeatButton>
             </div>)}
           </div>}
         </section>
@@ -270,9 +273,9 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
           </p>
             : <ul>
             {overview.recentChapters.map((chapter) => <li key={chapter.path}>
-              <button type="button" onClick={() => openChapter(chapter.path)}>
+              <SeatButton host={props.Button} onClick={() => openChapter(chapter.path)}>
                 {chapter.title}
-              </button>
+              </SeatButton>
               <small>
                 {t('overview.chapterMeta', { chars: formatCount(chapter.chars), modified: formatModifiedAt(chapter.modifiedAt) })}
               </small>
@@ -287,17 +290,18 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
 function ChapterRow(props: {
   chapter: ChapterSummary
   onOpen(path: string): void
+  hostButton?: ShellToolSeatContext['Button']
 }) {
   const { chapter } = props
   const marks = chapterMetaMarks(chapter.meta)
   return (
     <li className={`overview-chapter${chapter.empty ? ' empty' : ''}`}>
-      <button
-        type="button"
+      <SeatButton
+        host={props.hostButton}
         className="overview-chapter-title"
         onClick={() => props.onOpen(chapter.path)}>
         {chapter.title}
-      </button>
+      </SeatButton>
       <span className="overview-chapter-chars">
         {t('overview.charsOnly', { chars: formatCount(chapter.chars) })}
       </span>

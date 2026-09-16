@@ -96,6 +96,13 @@ export type ShellButtonProps = {
   onClick?(event: MouseEvent<HTMLButtonElement>): void
   'aria-label'?: string
   'aria-pressed'?: boolean
+  'aria-expanded'?: boolean
+  'aria-selected'?: boolean
+  'aria-current'?: boolean | 'true' | 'false' | 'page' | 'step' | 'location' | 'date' | 'time'
+  'aria-controls'?: string
+  'aria-describedby'?: string
+  role?: string
+  tabIndex?: number
   children?: ReactNode
 }
 

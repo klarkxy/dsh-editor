@@ -13,6 +13,7 @@ export default defineConfig([
       alwaysBundle: [
         'dsh-editor-workbench/contracts',
         'dsh-editor-seats',
+        'dsh-editor-seats/seat-button',
       ],
       neverBundle: ['react', 'react-dom', 'react/jsx-runtime'],
     },

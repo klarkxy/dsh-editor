@@ -12,6 +12,13 @@ export const Button = forwardRef<HTMLButtonElement, {
   onClick?(event: MouseEvent<HTMLButtonElement>): void
   'aria-label'?: string
   'aria-pressed'?: boolean
+  'aria-expanded'?: boolean
+  'aria-selected'?: boolean
+  'aria-current'?: boolean | 'true' | 'false' | 'page' | 'step' | 'location' | 'date' | 'time'
+  'aria-controls'?: string
+  'aria-describedby'?: string
+  role?: string
+  tabIndex?: number
   children?: ReactNode
 }>(function Button(props, ref) {
   const variantClass = props.variant === 'primary'
@@ -31,6 +38,13 @@ export const Button = forwardRef<HTMLButtonElement, {
       title={props.title}
       aria-label={props['aria-label']}
       aria-pressed={props['aria-pressed']}
+      aria-expanded={props['aria-expanded']}
+      aria-selected={props['aria-selected']}
+      aria-current={props['aria-current']}
+      aria-controls={props['aria-controls']}
+      aria-describedby={props['aria-describedby']}
+      role={props.role}
+      tabIndex={props.tabIndex}
       onClick={props.onClick}
     >
       {props.children}

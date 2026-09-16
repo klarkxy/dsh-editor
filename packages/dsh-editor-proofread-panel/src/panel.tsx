@@ -36,24 +36,7 @@ export type RpcCaller = {
 
 export type ProofreadSeatProps = ShellToolSeatContext & { rpc: RpcCaller }
 
-/* 宿主 Button 优先；独立运行（无 shell）时降级为带相同变体类的原生 button。 */
-function SeatButton(props: {
-  host?: ShellToolSeatContext['Button']
-  variant?: 'default' | 'primary' | 'danger' | 'icon'
-  className?: string
-  disabled?: boolean
-  title?: string
-  onClick?(event: ReactMouseEvent<HTMLButtonElement>): void
-  'aria-label'?: string
-  'aria-pressed'?: boolean
-  children?: ReactNode
-}) {
-  const { host: Host, variant, className, ...rest } = props
-  if (Host) return <Host variant={variant} className={className} {...rest} />
-  const variantClass = variant === 'primary' ? 'primary-action' : variant === 'danger' ? 'danger-action' : variant === 'icon' ? 'icon-button' : ''
-  return <button type="button" className={[variantClass, className].filter(Boolean).join(' ')} {...rest} />
-}
-
+import { SeatButton } from 'dsh-editor-seats/seat-button'
 /* 活动暗示:三点呼吸(pulse-dots)与骨架行(fluid-skeleton),参数改写自
    Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);装饰 aria-hidden,
    关键帧在 styles.ts,reduced-motion 停循环后保留静态可读态。 */

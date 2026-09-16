@@ -21,6 +21,11 @@
       "types": "./lib/tokens.d.ts",
       "import": "./lib/tokens.js",
       "default": "./lib/tokens.js"
+    },
+    "./seat-button": {
+      "types": "./lib/seat-button.d.ts",
+      "import": "./lib/seat-button.js",
+      "default": "./lib/seat-button.js"
     }
   },
   "files": [

@@ -18,6 +18,7 @@ import {
   type WorldbookCardFields,
 } from '../contracts.ts'
 import { CENTER_OVERLAY_ATTRIBUTE, type ShellRange } from 'dsh-editor-seats'
+import { SeatButton } from 'dsh-editor-seats/seat-button'
 import { renderSelect } from './host-ui.tsx'
 import {
   WORLDBOOK_CATEGORIES,
@@ -185,22 +186,23 @@ function CardsDetail(props: CardsSeatProps & {
           </p>
         </div>
         <div className="cards-detail-header-actions">
-          <button type="button" onClick={() => closeCardsDetail()}>
+          <SeatButton host={props.Button} onClick={() => closeCardsDetail()}>
             {t('cards.back')}
-          </button>
-          <button
-            type="button"
+          </SeatButton>
+          <SeatButton
+            host={props.Button}
             aria-pressed={props.pinnedPath === card.path}
             onClick={() => props.togglePin(card.path)}>
             {props.pinnedPath === card.path ? t('pin.unpin') : t('pin.beside')}
-          </button>
-          <button
+          </SeatButton>
+          <SeatButton
+            host={props.Button}
+            variant="icon"
             className="icon-button"
-            type="button"
             aria-label={t('cards.closeDetail')}
             onClick={() => closeCardsDetail()}>
             ×
-          </button>
+          </SeatButton>
         </div>
       </header>
       <div className="cards-detail-body">
@@ -253,30 +255,30 @@ function CardsDetail(props: CardsSeatProps & {
                       placeholder={t('cards.relationTo')}
                       aria-label={t('cards.relationToAria', { n: index + 1 })}
                       onChange={(event: ChangeEvent<HTMLInputElement>) => setRelations((old) => old.map((item, itemIndex) => itemIndex === index ? { ...item, to: event.target.value } : item))} />
-                    {target ? <button
-                      type="button"
+                    {target ? <SeatButton
+                      host={props.Button}
                       className="cards-relation-link"
                       onClick={() => selectCard(target.path)}>
                       {target.title}
-                    </button> : null}
+                    </SeatButton> : null}
                     <input
                       value={row.kind}
                       placeholder={t('cards.relations')}
                       aria-label={t('cards.relationKindAria', { n: index + 1 })}
                       onChange={(event: ChangeEvent<HTMLInputElement>) => setRelations((old) => old.map((item, itemIndex) => itemIndex === index ? { ...item, kind: event.target.value } : item))} />
-                    <button
-                      type="button"
+                    <SeatButton
+                      host={props.Button}
                       onClick={() => setRelations((old) => old.filter((_, itemIndex) => itemIndex !== index))}>
                       {t('cards.removeShort')}
-                    </button>
+                    </SeatButton>
                   </div>
                 );
               })}
-              <button
-                type="button"
+              <SeatButton
+                host={props.Button}
                 onClick={() => setRelations((old) => [...old, { to: '', kind: '' }])}>
                 {t('cards.addRelation')}
-              </button>
+              </SeatButton>
             </div>
           </label>
           {field(t('cards.summary'), <textarea
@@ -311,23 +313,23 @@ function CardsDetail(props: CardsSeatProps & {
             aria-label={t('cards.summary')} />, true)}
         </div>}
         <div className="cards-detail-actions">
-          <button type="button" disabled={busy} onClick={() => void save()}>
+          <SeatButton host={props.Button} disabled={busy} onClick={() => void save()}>
             {busy ? <Fragment>
               {activityDots()}
               {t('common.saving')}
             </Fragment> : t('common.save')}
-          </button>
-          <button
-            type="button"
+          </SeatButton>
+          <SeatButton
+            host={props.Button}
             disabled={props.editorDirty}
             onClick={() => {
               props.expandTreePath(card.path)
               props.openDocument(card.path)
             }}>
             {t('cards.openDoc')}
-          </button>
-          <button
-            type="button"
+          </SeatButton>
+          <SeatButton
+            host={props.Button}
             disabled={references.status === 'busy'}
             onClick={() => void loadReferences()}>
             {references.status === 'ready'
@@ -338,7 +340,7 @@ function CardsDetail(props: CardsSeatProps & {
               {t('cards.refsEllipsis')}
             </Fragment>
                 : t('cards.refs')}
-          </button>
+          </SeatButton>
         </div>
         {note ? <p
           className={/已保存|已重新读取|saved|re-?read/i.test(note) ? 'muted' : 'warning'}

@@ -38,6 +38,9 @@
       "dsh-editor-seats/tokens": [
         "packages/dsh-editor-seats/src/tokens.ts"
       ],
+      "dsh-editor-seats/seat-button": [
+        "packages/dsh-editor-seats/src/seat-button.tsx"
+      ],
       "dsh-editor-shell/seats": [
         "packages/dsh-editor-shell/src/seats.ts"
       ],
