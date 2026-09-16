@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import {
   WORKBENCH_RPC_CHANNEL,
   type ChapterSummary,

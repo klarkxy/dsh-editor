@@ -1,11 +1,9 @@
 import {
   Fragment,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from 'react'
 import { WRITING_PROPOSE_TOOL_NAME, type AuthorProposal } from '../adapter.ts'
 import { WORKBENCH_RPC_CHANNEL } from 'dsh-editor-workbench/contracts'
@@ -14,7 +12,6 @@ import {
   errorMessage,
   isStaleFailure,
   partialApplyDetails,
-  safeRpcCall,
   type RpcResult,
   type ShellContext,
 } from './shared.ts'

@@ -4,7 +4,6 @@ import type { SessionFace, SessionModels } from '../dsh-compat.ts'
 import { Select } from './select.tsx'
 import { ActivityText, Menu, MenuContent, MenuItem, MenuTrigger } from './ui/index.ts'
 import { t, useLocale } from '../i18n/index.ts'
-import { useObservable } from './components.tsx'
 import type { ShellContext } from './shared.ts'
 import { STANDARD_REASONING_EFFORTS } from './settings-models-store.ts'
 

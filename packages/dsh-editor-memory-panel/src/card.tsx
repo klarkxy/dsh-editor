@@ -1,4 +1,4 @@
-import React, { type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { parseMemoryUpdateReceipt, type MemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
 import type { ShellMessageCardContext } from 'dsh-editor-seats'
 import { MemoryChangeDetail, type RpcCaller } from './panel.tsx'

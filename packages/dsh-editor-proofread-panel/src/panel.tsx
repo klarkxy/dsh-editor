@@ -1,4 +1,11 @@
-import React, { Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import { WORKBENCH_RPC_CHANNEL, type ProofreadScanResponse } from 'dsh-editor-workbench/contracts'
 import type { ShellProposalCardProps, ShellToolSeatContext } from 'dsh-editor-seats'
 import {

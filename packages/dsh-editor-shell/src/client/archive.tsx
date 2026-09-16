@@ -1,4 +1,4 @@
-import React, { useRef, type RefObject } from 'react';
+import { useRef, type RefObject } from 'react';
 import type { ArchiveResponse } from 'dsh-editor-workbench/contracts'
 import { documentName } from './shared.ts'
 import { intlLocale, t } from '../i18n/index.ts'

@@ -1,5 +1,4 @@
 import type { Context } from '@deepseek-ai/cordis'
-import React from 'react';
 import {
   CENTER_OVERLAYS_SLOT,
   COMMANDS_SERVICE,

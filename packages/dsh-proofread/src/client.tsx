@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import React, { Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
   PROOFREAD_MAX_TEXT_BYTES,
   PROOFREAD_RPC_CHANNEL,

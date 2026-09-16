@@ -1,4 +1,4 @@
-import React, { type ChangeEvent, type ComponentType } from 'react';
+import { type ChangeEvent, type ComponentType } from 'react';
 import type { ShellSelectProps } from 'dsh-editor-seats'
 
 /** IME composition keyCode used by Chromium/WebKit while composing. */

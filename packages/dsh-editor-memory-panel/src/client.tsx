@@ -1,5 +1,4 @@
 import type { Context } from '@deepseek-ai/cordis'
-import React from 'react';
 import {
   COMMANDS_SERVICE,
   MESSAGE_CARDS_SERVICE,

@@ -1,4 +1,4 @@
-import React, { useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { REWRITE_PRESETS } from 'dsh-manuscript/client/editor-core'
 import { t } from '../i18n/index.ts'
 import { isImeEvent } from './ui/ime.ts'

@@ -1,4 +1,4 @@
-import React, {
+import {
   Fragment,
   memo,
   useCallback,
@@ -10,11 +10,8 @@ import React, {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
-  type ReactNode,
 } from 'react';
 import {
-  answerApproval,
-  answerQuestions,
   chatRows,
   internalIndexTurnActive,
   loadOlder,
@@ -26,16 +23,11 @@ import {
   stop,
   visibleRunningCalls,
   WRITING_PROPOSE_TOOL_NAME,
-  type AuthorProposal,
-  type ChatRow,
   type PendingInteraction,
-  type QuestionAnswerItem,
 } from '../adapter.ts'
 import type {
-  EditorUiConversation,
   SessionFace,
   SessionId,
-  SessionLifecycle,
   SessionModels,
   WorkspaceId,
 } from '../dsh-compat.ts'
@@ -45,7 +37,6 @@ import {
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
 } from 'dsh-editor-workbench/contracts'
-import type { AuthorMemoryMarker } from 'dsh-editor-workbench/contracts'
 import {
   buildInterviewPrompt,
   decodeInitSettings,
@@ -81,15 +72,10 @@ import { discardCreatedChatModelError, rememberCreatedChatModelError, takeCreate
 import { t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
 import {
   canSubmitComposer,
-  errorMessage,
-  isStaleFailure,
-  partialApplyDetails,
   safeRpcCall,
   shouldSubmitComposer,
-  type RpcResult,
   type ShellContext,
 } from './shared.ts'
-import { STANDARD_REASONING_EFFORTS } from './settings-models-store.ts'
 import { StopIcon } from './icons.tsx'
 import {
   bindOfficialConversation,

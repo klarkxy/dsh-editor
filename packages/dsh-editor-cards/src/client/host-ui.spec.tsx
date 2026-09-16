@@ -1,4 +1,4 @@
-import React, { type ReactElement } from 'react';
+import { type ReactElement } from 'react';
 import { describe, expect, it } from 'vitest'
 import { cardsPromptKeyDown } from './dialog.tsx'
 import { guardImeEnter, renderSelect, IME_KEYCODE } from './host-ui.tsx'

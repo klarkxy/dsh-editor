@@ -1,7 +1,6 @@
 import type { EditorUiConversation, SessionId, SessionLifecycle } from '../dsh-compat.ts'
 import { emptyTranscript, type ChatTranscript } from '../dsh-compat.ts'
 import type { PendingInteraction } from '../adapter.ts'
-import { isObservableSource } from './components.tsx'
 import type { ShellContext } from './shared.ts'
 
 export const EMPTY_PENDING_LIST: PendingInteraction[] = []

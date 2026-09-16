@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { stripChapterFrontmatter } from 'dsh-editor-workbench/contracts'
 import { documentName, errorMessage, LatestRequestGate, safeRpcCall, type ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
@@ -15,7 +15,7 @@ function firstHeadingPlainText(body: string): string {
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, '$1')
     .replace(/~~([^~]+)~~/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
+    .replace(/`([^`]+)`/g, '$1');
 }
 
 export function PinnedPane(props: {

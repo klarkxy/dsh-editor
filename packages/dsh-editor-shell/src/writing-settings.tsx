@@ -1,5 +1,5 @@
 import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
-import React, {
+import {
   Fragment,
   useEffect,
   useRef,

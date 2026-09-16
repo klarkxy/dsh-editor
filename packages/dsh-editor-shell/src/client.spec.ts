@@ -21,7 +21,6 @@ import {
   relocationFailureMessage,
   resumableConversationId,
   replaceWorldbookPaperText,
-  resizedPanelWidth,
   safeRpcCall,
   searchSkippedText,
   shouldSubmitComposer,
@@ -405,9 +404,6 @@ describe('shell manuscript RPC safety', () => {
   it('clamps both panel resize directions to their accessible bounds', () => {
     expect(clampPanelWidth(120, 196, 420)).toBe(196)
     expect(clampPanelWidth(520, 196, 420)).toBe(420)
-    expect(resizedPanelWidth('left', 248, 32, 196, 420)).toBe(280)
-    expect(resizedPanelWidth('right', 384, 32, 300, 560)).toBe(352)
-    expect(resizedPanelWidth('right', 384, -500, 300, 560)).toBe(560)
   })
 
   it('maps workspace shortcuts without stealing modified variants', () => {

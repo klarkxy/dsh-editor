@@ -1,4 +1,4 @@
-import React, {
+import {
   Fragment,
   memo,
   useRef,
@@ -6,7 +6,7 @@ import React, {
   type ChangeEvent,
   type FormEvent,
   type ReactNode,
-} from 'react'
+} from 'react';
 import {
   answerApproval,
   answerQuestions,
@@ -36,12 +36,16 @@ export function ChatEntry(props: {
      reduced-motion 由全局媒体查询接管。 */
   const animate = useRef(props.enter !== false)
   const className = animate.current ? `${props.className} chat-row-enter` : props.className
-  return React.createElement(props.as === 'details' ? 'details' : 'article', {
-    className,
-    ...(props.as === 'details' ? { open: props.open } : {}),
-    role: props.role,
-    'aria-live': props['aria-live'],
-  }, props.children);
+  const Tag = props.as === 'details' ? 'details' : 'article'
+  return (
+    <Tag
+      className={className}
+      {...(props.as === 'details' ? { open: props.open } : {})}
+      role={props.role}
+      aria-live={props['aria-live']}>
+      {props.children}
+    </Tag>
+  );
 }
 
 export function PendingCard({ item }: { item: PendingInteraction }) {
@@ -335,7 +339,7 @@ type ChatRowViewProps = {
 }
 
 /* 单行 memo:流式期间 transcript 每个令牌都换新引用,但 rows 按 nodes 引用缓存,
-   未变化的行凭稳定的 row/props 引用跳过重渲染(Markdown 也随之跳过 parseBlocks);
+   未变化的行凭稳定的 row/props 引用跳过重渲染(Markdown 也随之跳过解析);
    locale/cardTick 变化会破坏 memo,保证 t() 文案与插件卡及时更新。 */
 export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
   const { row } = props

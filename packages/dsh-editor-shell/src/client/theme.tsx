@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { t, useLocale } from '../i18n/index.ts'
 import { ThemeInkIcon, ThemePaperIcon } from './icons.tsx'
 import { Tooltip } from './ui/index.ts'

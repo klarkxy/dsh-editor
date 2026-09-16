@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { asClient, type ManuscriptClient } from '../host.ts'
 import { activeWorkspaceFromSessionList, type ActiveWorkspace } from './session-cwd.ts'
 import { registerManuscriptUi, type SlotHandle } from './slots.ts'

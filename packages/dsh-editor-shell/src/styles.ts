@@ -653,8 +653,8 @@ export const componentStyles = `
 .shell .composer-model .model-picker, .dsh-ui .composer-model .model-picker { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; width: 100%; }
 .shell .composer-model .model-picker > .select, .dsh-ui .composer-model .model-picker > .select { flex: 1 1 auto; min-width: 0; }
 .shell .composer-model .model-picker .select-value, .dsh-ui .composer-model .model-picker .select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.shell > .chat .select, .dsh-ui .chat .select { display: block; width: 100%; max-width: 100%; min-width: 0; }
-.shell > .chat .select-trigger, .dsh-ui .chat .select-trigger { min-width: 0; width: 100%; max-width: 100%; }
+.shell .chat .select, .dsh-ui .chat .select { display: block; width: 100%; max-width: 100%; min-width: 0; }
+.shell .chat .select-trigger, .dsh-ui .chat .select-trigger { min-width: 0; width: 100%; max-width: 100%; }
 .shell .composer-model .select, .dsh-ui .composer-model .select { flex: 1 1 7rem; min-width: 0; }
 .shell .composer-model .select-trigger, .dsh-ui .composer-model .select-trigger { min-width: 0; width: 100%; max-width: 100%; min-height: 24px; padding: 0 var(--space-2); border-color: var(--hairline); background: transparent; color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; }
 .shell .composer-model .select-trigger:hover:not(:disabled), .dsh-ui .composer-model .select-trigger:hover:not(:disabled) { color: var(--fg); }
@@ -833,6 +833,7 @@ export const componentStyles = `
 .shell .editor-cell > .center-overlays { position: absolute; inset: 0; z-index: 5; }
 .shell .center-overlays [data-dsh-center-overlay] { height: 100%; min-width: 0; min-height: 0; overflow: auto; background: var(--surface); }
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor,
+.shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor-stack,
 .shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .empty-paper { display: none !important; }
 .shell.layout-shell.focus-mode .editor-header { justify-content: center; }
 .shell.layout-shell.focus-mode .editor-header .chapter-navigation { display: none; }

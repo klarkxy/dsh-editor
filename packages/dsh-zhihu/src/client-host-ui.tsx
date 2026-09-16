@@ -1,4 +1,4 @@
-import React, { type ChangeEvent, type ComponentType, type MouseEvent, type ReactNode } from 'react';
+import { type ChangeEvent, type ComponentType, type MouseEvent, type ReactNode } from 'react';
 
 /** Structural host Select — no private package import. */
 export type HostSelectProps = {

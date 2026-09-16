@@ -1,4 +1,4 @@
-import React, { Fragment, useRef, useState, type RefObject } from 'react';
+import { Fragment, useRef, useState, type RefObject } from 'react';
 import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type RpcResult, type ShellContext } from './shared.ts'
 import { prepareExport, sanitizeExportTitle, type ChapterExport, type ExportFormat, type PreparedExport } from '../export.ts'

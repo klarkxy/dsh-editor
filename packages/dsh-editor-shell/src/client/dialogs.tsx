@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { ConversationPresetChoice } from '../conversation-presets.ts'
 import { t } from '../i18n/index.ts'
 import { ActivityDots, Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'

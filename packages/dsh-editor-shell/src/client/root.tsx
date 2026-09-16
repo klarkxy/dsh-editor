@@ -1,4 +1,4 @@
-import React, {
+import {
   Fragment,
   memo,
   useCallback,
@@ -379,7 +379,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const workspaceMenuTrigger = useRef<HTMLButtonElement | null>(null)
   const workspaceMenuYields = useRef(false)
   const pathFallbackInput = useRef<HTMLInputElement | null>(null)
-  /* 工作区 <main> 的句柄：面板拖拽预览直接写它的 gridTemplateColumns。 */
+  /* 工作区 <main> 的句柄。 */
   const shellMainRef = useRef<HTMLElement | null>(null)
   const homeCardOpen = useChromeMotion('card', 0)
   const homeCardNew = useChromeMotion('card', 0.05)

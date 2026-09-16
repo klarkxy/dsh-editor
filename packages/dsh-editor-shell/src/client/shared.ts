@@ -372,15 +372,10 @@ export function memoryAppliedNavigation(appliedPath: string, currentPath: string
   return { refreshContent: !editorDirty && appliedPath === currentPath }
 }
 
-export type ResizablePanelSide = 'left' | 'right'
-
 export function clampPanelWidth(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, Math.round(value)))
 }
 
-export function resizedPanelWidth(side: ResizablePanelSide, start: number, pointerDelta: number, minimum: number, maximum: number): number {
-  return clampPanelWidth(start + (side === 'left' ? pointerDelta : -pointerDelta), minimum, maximum)
-}
 
 export function storedPanelWidth(key: string, fallback: number, minimum: number, maximum: number): number {
   try {
