@@ -1,4 +1,4 @@
-import React, { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { SettingsScope } from '../dsh-compat.ts'
 import {
   normalizeWritingModelRoute,

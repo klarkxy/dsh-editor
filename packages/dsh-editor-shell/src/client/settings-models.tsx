@@ -13,7 +13,7 @@
  * loading, error with retry, the row list with editor / custom-provider cards
  * inlined, the candidate picker modal, and the delete confirmation.
  */
-import React, {
+import {
   Fragment,
   useEffect,
   useMemo,

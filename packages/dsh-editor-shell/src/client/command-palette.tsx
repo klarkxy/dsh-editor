@@ -27,7 +27,7 @@ import {
   Content as RadixDialogContent,
   Description as RadixDialogDescription,
 } from '@radix-ui/react-dialog'
-import React, { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ThemeValue } from './theme.tsx'
 import { t, useLocale } from '../i18n/index.ts'
 import {

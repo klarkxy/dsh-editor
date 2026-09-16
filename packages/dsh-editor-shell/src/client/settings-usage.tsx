@@ -4,7 +4,7 @@
  *   value = { days: DailyUsage[] }, DailyUsage = { date, inputTokens, outputTokens,
  *   cacheReadTokens, cacheWriteTokens, reasoningTokens, requests, byModel }
  */
-import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { format, init, use } from 'echarts/core'
 import { BarChart } from 'echarts/charts'
 import { AriaComponent, GridComponent, TooltipComponent } from 'echarts/components'

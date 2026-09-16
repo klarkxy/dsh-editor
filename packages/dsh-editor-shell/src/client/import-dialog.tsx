@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import { useRef } from 'react';
 import { importSummary, type ImportFlow } from './import-flow.ts'
 import { t } from '../i18n/index.ts'
 import { ActivityRing, ActivityText, Button, Dialog } from './ui/index.ts'

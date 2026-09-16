@@ -9,7 +9,7 @@ import {
   ItemText as SelectItemText,
   ItemIndicator as SelectItemIndicator,
 } from '@radix-ui/react-select'
-import React, { useRef, useState, type ComponentProps, type KeyboardEvent } from 'react';
+import { useRef, useState, type ComponentProps, type KeyboardEvent } from 'react';
 import { t } from '../i18n/index.ts'
 
 export type SelectOption = { value: string; label: string }

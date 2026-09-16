@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { windowBridge } from './window-controls.tsx'
 import { ActivityDots, ActivityText, SuccessMark } from './ui/index.ts'
 import { intlLocale, t, useLocale } from '../i18n/index.ts'
