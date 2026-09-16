@@ -1873,6 +1873,23 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     await startWorkspaceFromPicker()
   }
 
+  const chatSession = session ?? fileSession
+  const sidebarVisible = sidebarOpen && !focusMode
+  const sidebarInGrid = sidebarVisible && !compactChrome
+  const assistantVisible = assistantOpen && !focusMode && assistantEnabled
+  const assistantInGrid = assistantVisible && !overlayAssistant
+  const pinnedVisible = pinnedPath !== null && !focusMode
+  /* 写作搭档面板始终挂载（草稿是 Chat 本地 state），关闭=折叠到 0 宽；
+     窄窗 overlay 抽屉与网格共用同一实例，窗口越过断点不丢草稿。
+     hooks 必须全部早于下方的首页早退分支，否则违反渲染顺序。 */
+  const assistantPanelRef = useRef<PanelImperativeHandle>(null)
+  useEffect(() => {
+    const panel = assistantPanelRef.current
+    if (!panel) return
+    if (assistantInGrid) { if (panel.isCollapsed()) panel.expand() }
+    else if (!panel.isCollapsed()) panel.collapse()
+  }, [assistantInGrid])
+
   if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
       <ShellUiProvider>
@@ -1918,21 +1935,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     );
   }
 
-  const chatSession = session ?? fileSession
-  const sidebarVisible = sidebarOpen && !focusMode
-  const sidebarInGrid = sidebarVisible && !compactChrome
-  const assistantVisible = assistantOpen && !focusMode && assistantEnabled
-  const assistantInGrid = assistantVisible && !overlayAssistant
-  const pinnedVisible = pinnedPath !== null && !focusMode
-  /* 写作搭档面板始终挂载（草稿是 Chat 本地 state），关闭=折叠到 0 宽；
-     窄窗 overlay 抽屉与网格共用同一实例，窗口越过断点不丢草稿。 */
-  const assistantPanelRef = useRef<PanelImperativeHandle>(null)
-  useEffect(() => {
-    const panel = assistantPanelRef.current
-    if (!panel) return
-    if (assistantInGrid) { if (panel.isCollapsed()) panel.expand() }
-    else if (!panel.isCollapsed()) panel.collapse()
-  }, [assistantInGrid])
   const fileMenuChapterModel = fileMenu ? chapterMenuModel(fileMenu.path, chapterFiles) : null
 
   return (
