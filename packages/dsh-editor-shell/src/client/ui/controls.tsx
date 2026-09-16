@@ -1,4 +1,4 @@
-import { forwardRef, type KeyboardEvent, type ReactNode } from 'react'
+import { forwardRef, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { isImeEvent } from './ime.ts'
 
 export type ButtonVariant = 'default' | 'primary' | 'danger' | 'icon'
@@ -8,8 +8,10 @@ export const Button = forwardRef<HTMLButtonElement, {
   variant?: ButtonVariant
   className?: string
   disabled?: boolean
-  onClick?(): void
+  title?: string
+  onClick?(event: MouseEvent<HTMLButtonElement>): void
   'aria-label'?: string
+  'aria-pressed'?: boolean
   children?: ReactNode
 }>(function Button(props, ref) {
   const variantClass = props.variant === 'primary'
@@ -26,7 +28,9 @@ export const Button = forwardRef<HTMLButtonElement, {
       type={props.type ?? 'button'}
       className={className}
       disabled={props.disabled}
+      title={props.title}
       aria-label={props['aria-label']}
+      aria-pressed={props['aria-pressed']}
       onClick={props.onClick}
     >
       {props.children}

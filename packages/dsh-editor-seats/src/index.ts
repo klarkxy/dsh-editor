@@ -17,7 +17,7 @@
  * `(props: ShellToolSeatContext) => …` therefore receives `sessionId`,
  * `openDocument`, `ProposalCard`, and the rest as its own props.
  */
-import type { ComponentType, ReactNode, RefObject } from 'react'
+import type { ComponentType, KeyboardEvent, MouseEvent, ReactNode, RefObject } from 'react'
 
 export const SIDEBAR_TOOLS_SLOT = 'dsh-editor.sidebar.tools'
 export const CENTER_OVERLAYS_SLOT = 'dsh-editor.center.overlays'
@@ -86,6 +86,32 @@ export type ShellDialogProps = {
   initialFocusRef?: RefObject<HTMLElement | null>
 }
 
+/** Host Button contract. Variants map onto the shell's shared action classes. */
+export type ShellButtonProps = {
+  type?: 'button' | 'submit'
+  variant?: 'default' | 'primary' | 'danger' | 'icon'
+  className?: string
+  disabled?: boolean
+  title?: string
+  onClick?(event: MouseEvent<HTMLButtonElement>): void
+  'aria-label'?: string
+  'aria-pressed'?: boolean
+  children?: ReactNode
+}
+
+/** Host Input contract. Single-line text input with IME-safe Enter handling. */
+export type ShellInputProps = {
+  value: string
+  onChange(value: string): void
+  disabled?: boolean
+  maxLength?: number
+  placeholder?: string
+  'aria-label'?: string
+  autoFocus?: boolean
+  className?: string
+  onKeyDown?(event: KeyboardEvent<HTMLInputElement>): void
+}
+
 export type ShellToolSeatContext = {
   /** Live workbench session, or empty when no workspace is open. */
   sessionId: string
@@ -123,6 +149,10 @@ export type ShellToolSeatContext = {
   Select?: ComponentType<ShellSelectProps>
   /** Optional host Dialog. Standalone plugins keep their own fallback. */
   Dialog?: ComponentType<ShellDialogProps>
+  /** Optional host Button. Standalone plugins keep their own fallback. */
+  Button?: ComponentType<ShellButtonProps>
+  /** Optional host Input. Standalone plugins keep their own fallback. */
+  Input?: ComponentType<ShellInputProps>
 }
 
 export type ShellCommandShortcut = {

@@ -50,7 +50,7 @@ import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { Select as HostSelect } from './select.tsx'
-import { ActivityDots, ActivityRing, ActivityShimmer, ActivitySkeleton, ActivityText, Dialog as HostDialog, Input, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, useChromeMotion } from './ui/index.ts'
+import { ActivityDots, ActivityRing, ActivityShimmer, ActivitySkeleton, ActivityText, Button as HostButton, Dialog as HostDialog, Input, Input as HostInput, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, useChromeMotion } from './ui/index.ts'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.tsx'
 import { PinnedPane } from './pinned-pane.tsx'
@@ -64,7 +64,7 @@ import { ArchivePanel, canArchivePath, type ArchiveView } from './archive.tsx'
 import { t, useLocale, type MessageKey } from '../i18n/index.ts'
 
 
-const HOST_UI_OWNER = { Select: HostSelect, Dialog: HostDialog }
+const HOST_UI_OWNER = { Select: HostSelect, Dialog: HostDialog, Button: HostButton, Input: HostInput }
 
 /* 自动保存被拦住时的驻留原因提示：组字/冲突/保存失败/保存期间新输入/身份变化。 */
 const SAVE_STAY_NOTE: Record<EditorSaveBlockReason, MessageKey> = {
@@ -1456,6 +1456,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     ProposalCard: BoundSeatProposalCard,
     Select: HostSelect,
     Dialog: HostDialog,
+    Button: HostButton,
+    Input: HostInput,
   }), [fileSession?.sessionId, path, editorDirty, treeRevision, contentRevision, locale, openSeatDocument, refreshAppliedPath, revealSidebar, refreshSeat, toggleSeatPin, pinnedPath, BoundSeatProposalCard])
   seatContextRef.current = seatContext
   /* 注册表命令执行期经 proxy 读最新 seat；enabled 在投影构建时求值，所以

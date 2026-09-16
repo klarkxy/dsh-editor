@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import React, { Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { WORKBENCH_RPC_CHANNEL, type ProofreadScanResponse } from 'dsh-editor-workbench/contracts'
 import type { ShellProposalCardProps, ShellToolSeatContext } from 'dsh-editor-seats'
 import {
@@ -35,6 +35,24 @@ export type RpcCaller = {
 }
 
 export type ProofreadSeatProps = ShellToolSeatContext & { rpc: RpcCaller }
+
+/* 宿主 Button 优先；独立运行（无 shell）时降级为带相同变体类的原生 button。 */
+function SeatButton(props: {
+  host?: ShellToolSeatContext['Button']
+  variant?: 'default' | 'primary' | 'danger' | 'icon'
+  className?: string
+  disabled?: boolean
+  title?: string
+  onClick?(event: ReactMouseEvent<HTMLButtonElement>): void
+  'aria-label'?: string
+  'aria-pressed'?: boolean
+  children?: ReactNode
+}) {
+  const { host: Host, variant, className, ...rest } = props
+  if (Host) return <Host variant={variant} className={className} {...rest} />
+  const variantClass = variant === 'primary' ? 'primary-action' : variant === 'danger' ? 'danger-action' : variant === 'icon' ? 'icon-button' : ''
+  return <button type="button" className={[variantClass, className].filter(Boolean).join(' ')} {...rest} />
+}
 
 /* 活动暗示:三点呼吸(pulse-dots)与骨架行(fluid-skeleton),参数改写自
    Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);装饰 aria-hidden,
@@ -256,53 +274,54 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
             {t('proofread.title')}
           </h2>
         </div>
-        <button
+        <SeatButton
+          host={props.Button}
+          variant="icon"
           className="icon-button"
-          type="button"
           aria-label={t('proofread.close')}
           onClick={props.onClose}>
           ×
-        </button>
+        </SeatButton>
       </header>
       <div className="proofread-toolbar">
         <div
           className="proofread-scopes"
           role="group"
           aria-label={t('proofread.scope')}>
-          <button
-            type="button"
+          <SeatButton
+            host={props.Button}
             aria-pressed={scope === 'document'}
             disabled={busy}
             onClick={() => changeScope('document')}>
             {t('proofread.currentDoc')}
-          </button>
-          <button
-            type="button"
+          </SeatButton>
+          <SeatButton
+            host={props.Button}
             aria-pressed={scope === 'manuscript'}
             disabled={busy}
             onClick={() => changeScope('manuscript')}>
             {t('proofread.wholeBook')}
-          </button>
+          </SeatButton>
         </div>
-        <button type="button" disabled={busy} onClick={() => void scan(scope)}>
+        <SeatButton host={props.Button} disabled={busy} onClick={() => void scan(scope)}>
           {busy ? <Fragment>
             {activityDots()}
             {t('proofread.checking')}
           </Fragment> : t('proofread.recheck')}
-        </button>
+        </SeatButton>
       </div>
       <div
         className="proofread-kinds"
         role="group"
         aria-label={t('proofread.kinds')}>
-        {PROOFREAD_KIND_CHIP_ORDER.map((kind) => <button
+        {PROOFREAD_KIND_CHIP_ORDER.map((kind) => <SeatButton
+          host={props.Button}
           key={kind}
-          type="button"
           className="proofread-chip"
           aria-pressed={kinds.includes(kind)}
           onClick={() => toggleKind(kind)}>
           {`${proofreadKindLabel(kind)} ${counts[kind]}`}
-        </button>)}
+        </SeatButton>)}
       </div>
       {result ? <div className="proofread-summary" role="status">
         {t('proofread.summary', { hits: visible.length, files: result.scannedFiles })}
@@ -315,9 +334,9 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
       </div> : null}
       {stale ? <p className="warning" role="alert">
         {t('proofread.versionDiff')}
-        <button type="button" onClick={() => void scan(scope)}>
+        <SeatButton host={props.Button} onClick={() => void scan(scope)}>
           {t('proofread.recheck')}
-        </button>
+        </SeatButton>
       </p> : null}
       {props.editorDirty && visible.length ? <p className="warning" role="alert">
         {t('proofread.saveBeforeJump')}
@@ -328,13 +347,13 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
       {ignoreGap ? <p className="warning" role="status">
         {ignoreGap}
       </p> : null}
-      {punctuationFixes.length && canProposeProofreadPath(props.activePath) ? <button
-        type="button"
+      {punctuationFixes.length && canProposeProofreadPath(props.activePath) ? <SeatButton
+        host={props.Button}
         className="proofread-batch"
         disabled={busy || props.editorDirty}
         onClick={() => void applyPunctuationBatch()}>
         {t('proofread.batchPunct', { count: punctuationFixes.length })}
-      </button> : null}
+      </SeatButton> : null}
       {proposal ? <div className="proofread-fix">
         <props.ProposalCard sessionId={props.sessionId} proposal={proposal} onApplied={handleApplied} />
       </div> : null}
@@ -353,8 +372,8 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
             {group.findings.map((item, index) => <li
               key={`${item.path}:${item.start}:${item.kind}:${index}`}
               className="proofread-row">
-              <button
-                type="button"
+              <SeatButton
+                host={props.Button}
                 className="proofread-hit"
                 disabled={props.editorDirty}
                 onClick={() => void openFinding(item)}>
@@ -373,20 +392,20 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
                 {item.suggestion !== undefined ? <span className="proofread-suggestion">
                   {t('proofread.suggestion', { text: item.suggestion || t('proofread.remove') })}
                 </span> : null}
-              </button>
+              </SeatButton>
               <div className="proofread-row-actions">
-                {item.suggestion !== undefined ? <button
-                  type="button"
+                {item.suggestion !== undefined ? <SeatButton
+                  host={props.Button}
                   disabled={busy || (props.editorDirty && item.path === props.activePath)}
                   onClick={(event: ReactMouseEvent<HTMLButtonElement>) => { event.stopPropagation(); void applySuggestion(item) }}>
                   {t('proofread.apply')}
-                </button> : null}
-                {item.kind === 'sensitive' ? <button
-                  type="button"
+                </SeatButton> : null}
+                {item.kind === 'sensitive' ? <SeatButton
+                  host={props.Button}
                   disabled={ignoreBusy}
                   onClick={(event: ReactMouseEvent<HTMLButtonElement>) => { event.stopPropagation(); void ignoreSensitive(item) }}>
                   {t('proofread.ignoreSensitive')}
-                </button> : null}
+                </SeatButton> : null}
               </div>
             </li>)}
           </ul>
@@ -398,9 +417,9 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
         </h3>
         {habitTerm ? <p className="muted">
           {t('proofread.viewingHabit', { term: habitTerm })}
-          <button type="button" onClick={() => setHabitTerm(null)}>
+          <SeatButton host={props.Button} onClick={() => setHabitTerm(null)}>
             {t('common.clear')}
-          </button>
+          </SeatButton>
         </p> : null}
         <table>
           <thead>
@@ -419,15 +438,15 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
           <tbody>
             {result.habitStats.map((stat) => <tr key={stat.term}>
               <td>
-                <button
-                  type="button"
+                <SeatButton
+                  host={props.Button}
                   className={habitTerm === stat.term ? 'active' : undefined}
                   onClick={() => {
                     setHabitTerm((current) => current === stat.term ? null : stat.term)
                     setKinds((current) => current.includes('habit') ? current : [...current, 'habit'])
                   }}>
                   {stat.term}
-                </button>
+                </SeatButton>
               </td>
               <td>
                 {String(stat.count)}
