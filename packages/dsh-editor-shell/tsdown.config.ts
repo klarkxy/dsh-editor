@@ -1,4 +1,7 @@
 import { defineConfig } from 'tsdown'
+import { fileURLToPath } from 'node:url'
+
+const shim = (name: string) => fileURLToPath(new URL(`./src/client/shims/${name}.ts`, import.meta.url))
 
 export default defineConfig([
   {
@@ -24,6 +27,14 @@ export default defineConfig([
     target: 'es2022',
     sourcemap: true,
     hash: false,
+    /* react-markdown 依赖链(unified → vfile/min*)会在模块加载期 require
+       node:process/node:path/node:url;DSH 插件运行时的模块表不提供它们,
+       构建期改写为 src/client/shims 下的浏览器替身(见 shims/*.ts)。 */
+    alias: {
+      'node:process': shim('node-process'),
+      'node:path': shim('node-path'),
+      'node:url': shim('node-url'),
+    },
     deps: {
       neverBundle: ['react', 'react-dom', 'react/jsx-runtime'],
       alwaysBundle: [
