@@ -1,8 +1,8 @@
-import { createElement as e, useMemo, useSyncExternalStore, type ReactNode } from 'react'
+import React, { useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
-import { ACCENT_VALUES, useAccent, type AccentValue } from './theme.ts'
+import { ACCENT_VALUES, useAccent, type AccentValue } from './theme.tsx'
 import { setLocale, t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
 import {
   DEVELOPER_SETTINGS_NAMESPACE,
@@ -50,13 +50,19 @@ function usePreference<T>(scope: SettingsScope<{ preference: T }>, fallback: T):
 }
 
 function Row(props: { title: string; description?: string; children: ReactNode }) {
-  return e('div', { className: 'settings-row' },
-    e('div', { className: 'settings-row-text' },
-      e('span', { className: 'settings-row-title' }, props.title),
-      props.description ? e('small', { className: 'settings-row-description' }, props.description) : null,
-    ),
-    props.children,
-  )
+  return (
+    <div className="settings-row">
+      <div className="settings-row-text">
+        <span className="settings-row-title">
+          {props.title}
+        </span>
+        {props.description ? <small className="settings-row-description">
+          {props.description}
+        </small> : null}
+      </div>
+      {props.children}
+    </div>
+  );
 }
 
 export function SettingsGeneralSection(props: { ctx: ShellContext }) {
@@ -78,59 +84,81 @@ export function SettingsGeneralSection(props: { ctx: ShellContext }) {
     { value: 'system', label: t('settings.themeSystem') },
   ]
 
-  return e('section', { className: 'settings-general', 'aria-label': t('settings.general') },
-    e('section', { className: 'settings-block' },
-      e('header', { className: 'settings-block-head' },
-        e('h3', { className: 'settings-block-title' }, t('settings.interface')),
-      ),
-      e(Row, { title: t('settings.language'), children: e(Select, {
-        value: locale,
-        options: [{ value: 'zh', label: t('settings.chinese') }, { value: 'en', label: t('settings.english') }],
-        onChange: (value) => setLocale(value as Locale),
-        'aria-label': t('settings.language'),
-      }) }),
-      e(Row, { title: t('settings.appearance'), children: e('div', { className: 'settings-segmented', role: 'group', 'aria-label': t('settings.appearance') },
-        appearanceOptions.map((option) => e('button', {
-          key: option.value,
-          type: 'button',
-          className: theme === option.value ? 'active' : '',
-          'aria-pressed': theme === option.value,
-          onClick: () => setTheme(option.value),
-        }, option.label)),
-      ) }),
-      e(Row, { title: t('settings.accent'), children: e('div', { className: 'settings-swatches', role: 'group', 'aria-label': t('settings.accent') },
-        ACCENT_VALUES.map((value) => e('button', {
-          key: value,
-          type: 'button',
-          className: accent === value ? 'accent-swatch active' : 'accent-swatch',
-          'data-swatch': value,
-          title: t(ACCENT_LABEL_KEYS[value]),
-          'aria-label': t(ACCENT_LABEL_KEYS[value]),
-          'aria-pressed': accent === value,
-          onClick: () => setAccent(value),
-        })),
-      ) }),
-      e(Row, { title: t('settings.busyEnter'), children: e(Select, {
-        value: busyEnter,
-        options: [{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }],
-        onChange: (value) => setBusyEnter(value as BusyEnterBehavior),
-        'aria-label': t('settings.busyEnter'),
-      }) }),
-    ),
-    e('section', { className: 'settings-block' },
-      e('header', { className: 'settings-block-head' },
-        e('h3', { className: 'settings-block-title' }, t('settings.developer')),
-      ),
-      e(Row, { title: t('settings.developerMode'), description: t('settings.developerModeHint'), children: e('button', {
-        type: 'button',
-        role: 'switch',
-        className: 'settings-switch',
-        'aria-checked': developerMode,
-        'aria-label': t('settings.developerMode'),
-        onClick: () => setDeveloperMode(!developerMode),
-      }, e('span', { className: 'settings-switch-knob', 'aria-hidden': true })) }),
-    ),
-  )
+  return (
+    <section className="settings-general" aria-label={t('settings.general')}>
+      <section className="settings-block">
+        <header className="settings-block-head">
+          <h3 className="settings-block-title">
+            {t('settings.interface')}
+          </h3>
+        </header>
+        <Row
+          title={t('settings.language')}
+          children={<Select
+            value={locale}
+            options={[{ value: 'zh', label: t('settings.chinese') }, { value: 'en', label: t('settings.english') }]}
+            onChange={(value) => setLocale(value as Locale)}
+            aria-label={t('settings.language')} />} />
+        <Row
+          title={t('settings.appearance')}
+          children={<div
+            className="settings-segmented"
+            role="group"
+            aria-label={t('settings.appearance')}>
+            {appearanceOptions.map((option) => <button
+              key={option.value}
+              type="button"
+              className={theme === option.value ? 'active' : ''}
+              aria-pressed={theme === option.value}
+              onClick={() => setTheme(option.value)}>
+              {option.label}
+            </button>)}
+          </div>} />
+        <Row
+          title={t('settings.accent')}
+          children={<div
+            className="settings-swatches"
+            role="group"
+            aria-label={t('settings.accent')}>
+            {ACCENT_VALUES.map((value) => <button
+              key={value}
+              type="button"
+              className={accent === value ? 'accent-swatch active' : 'accent-swatch'}
+              data-swatch={value}
+              title={t(ACCENT_LABEL_KEYS[value])}
+              aria-label={t(ACCENT_LABEL_KEYS[value])}
+              aria-pressed={accent === value}
+              onClick={() => setAccent(value)} />)}
+          </div>} />
+        <Row
+          title={t('settings.busyEnter')}
+          children={<Select
+            value={busyEnter}
+            options={[{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }]}
+            onChange={(value) => setBusyEnter(value as BusyEnterBehavior)}
+            aria-label={t('settings.busyEnter')} />} />
+      </section>
+      <section className="settings-block">
+        <header className="settings-block-head">
+          <h3 className="settings-block-title">
+            {t('settings.developer')}
+          </h3>
+        </header>
+        <Row
+          title={t('settings.developerMode')}
+          description={t('settings.developerModeHint')}
+          children={<button
+            type="button"
+            role="switch"
+            className="settings-switch"
+            aria-checked={developerMode}
+            aria-label={t('settings.developerMode')}
+            onClick={() => setDeveloperMode(!developerMode)}>
+            {<span className="settings-switch-knob" aria-hidden={true} />}
+          </button>} />
+      </section>
+    </section>
+  );
 }
 
 function useDeveloperMode(scope: SettingsScope<DeveloperSettings>): [boolean, (value: boolean) => void] {

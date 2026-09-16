@@ -1,4 +1,4 @@
-import { createElement as e, Fragment, memo, type ReactNode } from 'react'
+import React, { Fragment, memo, type ReactNode } from 'react';
 
 /*
  * 聊天回复的最小 Markdown 渲染器。刻意不用 marked/DOMPurify：
@@ -123,12 +123,12 @@ function renderInline(inlines: readonly MdInline[]): ReactNode[] {
   return inlines.map((inline, index) => {
     if (typeof inline === 'string') return inline
     const key = `i${index}`
-    if (inline.kind === 'code') return e('code', { key }, inline.text)
-    if (inline.kind === 'bold') return e('strong', { key }, inline.text)
-    if (inline.kind === 'italic') return e('em', { key }, inline.text)
-    if (inline.kind === 'strike') return e('s', { key }, inline.text)
-    return e('a', { key, href: inline.href }, inline.text)
-  })
+    if (inline.kind === 'code') return React.createElement('code', { key }, inline.text);
+    if (inline.kind === 'bold') return React.createElement('strong', { key }, inline.text);
+    if (inline.kind === 'italic') return React.createElement('em', { key }, inline.text);
+    if (inline.kind === 'strike') return React.createElement('s', { key }, inline.text);
+    return React.createElement('a', { key, href: inline.href }, inline.text);
+  });
 }
 
 const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const
@@ -139,21 +139,21 @@ const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const
  */
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
   const blocks = parseBlocks(text)
-  return e(Fragment, null, blocks.map((block, index) => {
+  return React.createElement(Fragment, null, blocks.map((block, index) => {
     const key = `b${index}`
     switch (block.kind) {
       case 'heading':
-        return e(HEADING_TAGS[Math.min(block.level, 6) - 1] ?? 'h1', { key }, ...renderInline(block.inlines))
+        return React.createElement(HEADING_TAGS[Math.min(block.level, 6) - 1] ?? 'h1', { key }, ...renderInline(block.inlines));
       case 'code':
-        return e('pre', { key }, e('code', block.language ? { className: `language-${block.language}` } : undefined, block.text))
+        return React.createElement('pre', { key }, React.createElement('code', block.language ? { className: `language-${block.language}` } : undefined, block.text));
       case 'quote':
-        return e('blockquote', { key }, ...renderInline(block.inlines))
+        return React.createElement('blockquote', { key }, ...renderInline(block.inlines));
       case 'list':
-        return e(block.ordered ? 'ol' : 'ul', { key }, block.items.map((item, at) => e('li', { key: `li${at}` }, ...renderInline(item))))
+        return React.createElement(block.ordered ? 'ol' : 'ul', { key }, block.items.map((item, at) => React.createElement('li', { key: `li${at}` }, ...renderInline(item))));
       case 'hr':
-        return e('hr', { key })
+        return React.createElement('hr', { key });
       default:
-        return e('p', { key }, ...renderInline(block.inlines))
+        return React.createElement('p', { key }, ...renderInline(block.inlines));
     }
-  }))
+  }));
 })

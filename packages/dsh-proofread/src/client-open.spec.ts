@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyProofreadLocateResult, parseProofreadOpenDetail } from './client.ts'
+import { applyProofreadLocateResult, parseProofreadOpenDetail } from './client.tsx'
 
 describe('proofread open-text detail', () => {
   it('keeps text and optional locate metadata', () => {

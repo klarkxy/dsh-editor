@@ -4,7 +4,7 @@
  *   value = { days: DailyUsage[] }, DailyUsage = { date, inputTokens, outputTokens,
  *   cacheReadTokens, cacheWriteTokens, reasoningTokens, requests, byModel }
  */
-import { createElement as e, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { format, init, use } from 'echarts/core'
 import { BarChart } from 'echarts/charts'
 import { AriaComponent, GridComponent, TooltipComponent } from 'echarts/components'
@@ -277,41 +277,65 @@ function UsageChart(props: { days: readonly DailyUsage[]; series: readonly Model
     }
   }, [option, props.days, props.series, reduceMotion])
 
-  return e('div', { className: 'usage-chart' },
-    e('div', {
-      ref: hostRef,
-      className: 'usage-chart-plot',
-      role: 'img',
-      'aria-label': t('usage.chartAria'),
-    }),
-    e('ul', { className: 'usage-chart-legend' },
-      props.series.map((item) => e('li', { key: item.key, title: item.key },
-        e('span', { className: 'usage-chart-chip', style: { background: item.color }, 'aria-hidden': 'true' }),
-        e('span', { className: 'usage-chart-model' }, modelDisplayName(item.key)),
-        e('span', { className: 'usage-chart-meta' }, t('usage.legend', { tokens: formatNumber(item.tokens), requests: formatNumber(item.requests) })),
-      )),
-    ),
-    e('details', { className: 'usage-chart-table' },
-      e('summary', null, t('usage.exactData')),
-      e('table', null,
-        e('caption', { className: 'sr-only' }, t('usage.chartAria')),
-        e('thead', null,
-          e('tr', null,
-            e('th', { scope: 'col' }, t('usage.recent7')),
-            ...props.series.map((item) => e('th', { key: item.key, scope: 'col', title: item.key }, modelDisplayName(item.key))),
-            e('th', { scope: 'col' }, t('usage.dayTotal')),
-          ),
-        ),
-        e('tbody', null,
-          props.days.map((day) => e('tr', { key: day.date },
-            e('th', { scope: 'row' }, day.date),
-            ...props.series.map((item) => e('td', { key: item.key }, formatNumber(modelTokens(day.byModel?.[item.key])))),
-            e('td', null, formatNumber(dayTotal(day, props.series))),
-          )),
-        ),
-      ),
-    ),
-  )
+  return (
+    <div className="usage-chart">
+      <div
+        ref={hostRef}
+        className="usage-chart-plot"
+        role="img"
+        aria-label={t('usage.chartAria')} />
+      <ul className="usage-chart-legend">
+        {props.series.map((item) => <li key={item.key} title={item.key}>
+          <span
+            className="usage-chart-chip"
+            style={{ background: item.color }}
+            aria-hidden="true" />
+          <span className="usage-chart-model">
+            {modelDisplayName(item.key)}
+          </span>
+          <span className="usage-chart-meta">
+            {t('usage.legend', { tokens: formatNumber(item.tokens), requests: formatNumber(item.requests) })}
+          </span>
+        </li>)}
+      </ul>
+      <details className="usage-chart-table">
+        <summary>
+          {t('usage.exactData')}
+        </summary>
+        <table>
+          <caption className="sr-only">
+            {t('usage.chartAria')}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">
+                {t('usage.recent7')}
+              </th>
+              {props.series.map((item) => <th key={item.key} scope="col" title={item.key}>
+                {modelDisplayName(item.key)}
+              </th>)}
+              <th scope="col">
+                {t('usage.dayTotal')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.days.map((day) => <tr key={day.date}>
+              <th scope="row">
+                {day.date}
+              </th>
+              {props.series.map((item) => <td key={item.key}>
+                {formatNumber(modelTokens(day.byModel?.[item.key]))}
+              </td>)}
+              <td>
+                {formatNumber(dayTotal(day, props.series))}
+              </td>
+            </tr>)}
+          </tbody>
+        </table>
+      </details>
+    </div>
+  );
 }
 
 export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
@@ -346,26 +370,34 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
   }, [props.ctx])
 
   if (state.status === 'loading') {
-    return e('section', { className: 'usage-page', 'aria-label': t('settings.usage') },
-      e(Header, null),
-      e('div', { className: 'usage-status', role: 'status', 'aria-live': 'polite' },
-        e(ActivitySkeleton, { lines: 5, className: 'usage-loading' }),
-        e('span', { className: 'sr-only' }, text().loading),
-      ),
-    )
+    return (
+      <section className="usage-page" aria-label={t('settings.usage')}>
+        <Header />
+        <div className="usage-status" role="status" aria-live="polite">
+          <ActivitySkeleton lines={5} className="usage-loading" />
+          <span className="sr-only">
+            {text().loading}
+          </span>
+        </div>
+      </section>
+    );
   }
 
   if (state.status === 'error') {
-    return e('section', { className: 'usage-page', 'aria-label': t('settings.usage') },
-      e(Header, null),
-      e('p', { className: 'usage-error', role: 'alert' },
-        `${text().loadFailedPrefix}${state.error}`,
-        e('button', { type: 'button', className: 'usage-button', onClick: () => void load() }, text().retry),
-      ),
-    )
+    return (
+      <section className="usage-page" aria-label={t('settings.usage')}>
+        <Header />
+        <p className="usage-error" role="alert">
+          {`${text().loadFailedPrefix}${state.error}`}
+          <button type="button" className="usage-button" onClick={() => void load()}>
+            {text().retry}
+          </button>
+        </p>
+      </section>
+    );
   }
 
-  return e(Loaded, { summary: state.summary })
+  return <Loaded summary={state.summary} />;
 }
 
 function Header(): ReactNode {
@@ -379,29 +411,43 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
   const series = collectModelSeries(recent)
   const hasAny = recent.some((day) => day.requests > 0)
 
-  return e('section', { className: 'usage-page', 'aria-label': t('settings.usage') },
-    e(Header, null),
-    e('section', { className: 'usage-today settings-block', 'aria-label': text().todayHeading },
-      e('h3', { className: 'usage-section-title settings-block-title' }, text().todayHeading),
-      e('div', { className: 'usage-cards' },
-        e(Card, { label: text().cacheHit, value: today?.cacheReadTokens ?? 0 }),
-        e(Card, { label: text().input, value: today?.inputTokens ?? 0 }),
-        e(Card, { label: text().output, value: today?.outputTokens ?? 0 }),
-        e(Card, { label: text().requests, value: today?.requests ?? 0 }),
-      ),
-    ),
-    e('section', { className: 'usage-recent settings-block', 'aria-label': text().recentHeading },
-      e('h3', { className: 'usage-section-title settings-block-title' }, text().recentHeading),
-      !hasAny || series.length === 0
-        ? e('p', { className: 'usage-empty' }, text().empty)
-        : e(UsageChart, { days: recent, series }),
-    ),
-  )
+  return (
+    <section className="usage-page" aria-label={t('settings.usage')}>
+      <Header />
+      <section className="usage-today settings-block" aria-label={text().todayHeading}>
+        <h3 className="usage-section-title settings-block-title">
+          {text().todayHeading}
+        </h3>
+        <div className="usage-cards">
+          <Card label={text().cacheHit} value={today?.cacheReadTokens ?? 0} />
+          <Card label={text().input} value={today?.inputTokens ?? 0} />
+          <Card label={text().output} value={today?.outputTokens ?? 0} />
+          <Card label={text().requests} value={today?.requests ?? 0} />
+        </div>
+      </section>
+      <section className="usage-recent settings-block" aria-label={text().recentHeading}>
+        <h3 className="usage-section-title settings-block-title">
+          {text().recentHeading}
+        </h3>
+        {!hasAny || series.length === 0
+          ? <p className="usage-empty">
+          {text().empty}
+        </p>
+          : <UsageChart days={recent} series={series} />}
+      </section>
+    </section>
+  );
 }
 
 function Card(props: { label: string; value: number }): ReactNode {
-  return e('div', { className: 'usage-card' },
-    e('span', { className: 'usage-card-label' }, props.label),
-    e('span', { className: 'usage-card-value' }, formatNumber(props.value)),
-  )
+  return (
+    <div className="usage-card">
+      <span className="usage-card-label">
+        {props.label}
+      </span>
+      <span className="usage-card-value">
+        {formatNumber(props.value)}
+      </span>
+    </div>
+  );
 }

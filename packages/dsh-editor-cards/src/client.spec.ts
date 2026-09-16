@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CENTER_OVERLAYS_SLOT, COMMANDS_SERVICE, SIDEBAR_TOOLS_SLOT, createCommandRegistry, type ShellToolSeatContext } from 'dsh-editor-seats'
-import { apply } from './client.ts'
+import { apply } from './client.tsx'
 import { getCardsState, openCardsPanel, resetCardsStore, selectCard } from './client/store.ts'
 
 describe('cards client', () => {

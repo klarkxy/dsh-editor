@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
 import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_KEY, normalizeAuthorMemory } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY } from './completion-preference.ts'
-import { DEFAULT_WRITING_PREFERENCES, decodeWritingPreferences, migrateLegacyWritingPreferences, writingPreferences, type WritingPreferences } from './writing-settings.ts'
+import { DEFAULT_WRITING_PREFERENCES, decodeWritingPreferences, migrateLegacyWritingPreferences, writingPreferences, type WritingPreferences } from './writing-settings.tsx'
 
 function scopeWith(snapshot: SettingsScopeSnapshot<WritingPreferences>, write?: (field: string, value: unknown) => Promise<void>): SettingsScope<WritingPreferences> {
   return {

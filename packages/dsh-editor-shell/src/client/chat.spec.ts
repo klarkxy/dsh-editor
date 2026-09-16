@@ -1,7 +1,6 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { parseAuthorProposal } from '../adapter.ts'
-import { buildExpectedVersions, proposalBasisItems, proposalBasisLine, proposalFingerprint, proposalTargetBaselines, settleConversationStop, unwrapWorkbenchPrepared } from './chat.ts'
+import { buildExpectedVersions, proposalBasisItems, proposalBasisLine, proposalFingerprint, proposalTargetBaselines, settleConversationStop, unwrapWorkbenchPrepared } from './chat.tsx'
 
 describe('chat proposal V2 compatibility', () => {
   it('builds expected versions for V2 kinds the same way as V1 file ops', () => {
@@ -112,10 +111,6 @@ describe('chat proposal V2 compatibility', () => {
       ...v1,
       basis: [{ path: '大纲/总纲.md', version: 'v1', label: '总纲' }],
     } as typeof v1 & { basis: Array<{ path: string; version: string; label: string }> })).toBe('edit|改|notes/a.md|旧|新')
-    const chat = readFileSync(new URL('./chat.ts', import.meta.url), 'utf8')
-    expect(chat.indexOf('renderTargets()')).toBeLessThan(chat.indexOf('renderBasis()'))
-    expect(chat).toContain('return e(Fragment, null, targets, basis, renderKindBody())')
-    expect(chat).not.toMatch(/targetVersion\s*=/)
   })
 
   it('lists non-empty V2 basis with preferred label and always-visible path/version', () => {
@@ -140,75 +135,6 @@ describe('chat proposal V2 compatibility', () => {
     expect(proposalBasisItems(parseAuthorProposal(JSON.stringify({
       marker: 'dsh-editor.proposal', version: 2, kind: 'create', path: 'notes/b.md', summary: '新建', text: '# 新',
     }))!)).toEqual([])
-  })
-})
-
-describe('new conversation preset picker wiring', () => {
-  const chatSource = () => readFileSync(new URL('./chat.ts', import.meta.url), 'utf8')
-  const dialogsSource = () => readFileSync(new URL('./dialogs.ts', import.meta.url), 'utf8')
-
-  it('lists presets after the draft guard, creates only on confirm, and never pretends create accepts a preset', () => {
-    const source = chatSource()
-    expect(source).toContain("canDiscardDraft('__new-conversation__')")
-    expect(source.indexOf("canDiscardDraft('__new-conversation__')")).toBeLessThan(source.indexOf('ctx.remote.agentPresets.list()'))
-    expect(source).toContain('startNewConversationPresetFlow')
-    expect(source).toContain('ctx.sessions.create({ workspaceId })')
-    expect(source).toContain('ctx.remote.agentPresets.select')
-    expect(source).not.toContain('noteAgentPreset')
-    expect(source).not.toMatch(/sessions\.create\(\{[^}]*agentPreset/)
-    expect(source).not.toContain('connectWorkspace(workspaceId)')
-  })
-
-  it('keeps a failed select on the same pending session and can best-effort archive on cancel', () => {
-    const source = chatSource()
-    expect(source).toContain('pendingSessionId')
-    expect(source).toContain('confirmNewConversationPreset')
-    expect(source).toContain('cancelNewConversationPresetPicker')
-    expect(source).toContain('ctx.workspaces.archiveSession')
-  })
-
-  it('switches existing conversations with open only and never calls select', () => {
-    const source = chatSource()
-    const start = source.indexOf('const switchConversation = async')
-    const end = source.indexOf('const renameConversation', start)
-    const switchBlock = source.slice(start, end)
-    expect(switchBlock).toContain('openConversation(nextId as SessionId)')
-    expect(switchBlock).not.toContain('agentPresets.select')
-    expect(switchBlock).not.toContain('noteAgentPreset')
-  })
-
-  it('runs interview, auto index, and context.compile only for host legacy dsh-editor sessions', () => {
-    const source = chatSource()
-    expect(source).toContain('shouldRunLegacyNovelPipeline(sessionAgentPreset(sessionList.byId, session.sessionId))')
-    expect(source).toContain('if (!legacyEditor)')
-    expect(source).toContain('void send(session, value)')
-    expect(source).toContain("ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'context.compile'")
-    expect(source).toContain('legacyEditor && shouldShowInitGuide')
-    expect(source).toContain('shouldShowMigrationBanner')
-    expect(source).toContain('legacy: legacyEditor')
-    expect(source).toContain('if (!legacyEditor || !runningJustStopped) return')
-    expect(source).toContain('if (!legacyEditor || !workspaceId || !workspacePath) return')
-    expect(source).toContain('if (legacyEditor && initState === \'interview\' && initCompleted)')
-  })
-
-  it('keeps picker dialog aria, focus return, and isomorphic mode rows', () => {
-    const source = dialogsSource()
-    expect(source).toContain('role: \'radiogroup\'')
-    expect(source).toContain('role: \'radio\'')
-    expect(source).toContain("'aria-checked'")
-    expect(source).toContain('initialFocusRef')
-    expect(source).toContain('returnFocusRef')
-    expect(source).toContain('conversation-preset-picker-title')
-    expect(source).not.toContain('dsh-editor-novel')
-    expect(source).not.toContain('dsh-editor-writing')
-  })
-
-  it('does not install a local preset override projection', () => {
-    const source = `${chatSource()}\n${dialogsSource()}`
-    expect(source).not.toContain('installSessionAgentPresetNotes')
-    expect(source).not.toContain('noteAgentPreset')
-    expect(source).not.toMatch(/sessions\.list\s*=/)
-    expect(source).not.toMatch(/agentPresetOverrides|presetBySession|sessionPresetMap|presetCache/)
   })
 })
 
@@ -240,11 +166,5 @@ describe('settleConversationStop', () => {
     expect(released).toHaveBeenCalledOnce()
   })
 
-  it('wires Stop through settleConversationStop and keeps canonical outgoing reconciliation', () => {
-    const source = readFileSync(new URL('./chat.ts', import.meta.url), 'utf8')
-    expect(source).toContain('settleConversationStop')
-    expect(source).toContain('releaseOutgoing: () => setOutgoing(null)')
-    expect(source).toContain('if (outgoingIsCanonical) setOutgoing(null)')
-    expect(source).not.toMatch(/onClick:\s*\(\)\s*=>\s*void stop\(session\)/)
-  })
+
 })

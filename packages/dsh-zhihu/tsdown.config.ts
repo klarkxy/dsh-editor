@@ -7,7 +7,7 @@ export default defineConfig([
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
   },
   {
-    entry: { 'client.inner': 'src/client.ts' }, format: ['cjs'], dts: false, clean: false, outDir: 'lib',
+    entry: { 'client.inner': 'src/client.tsx' }, format: ['cjs'], dts: false, clean: false, outDir: 'lib',
     platform: 'browser', target: 'es2022', sourcemap: true, hash: false,
     deps: { neverBundle: ['react', 'react/jsx-runtime'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),

@@ -1,4 +1,10 @@
-import { createElement as e, useEffect, useState, useSyncExternalStore, type ChangeEvent, type KeyboardEvent } from 'react'
+import React, {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from 'react';
 import {
   MAX_GOAL_CHARS,
   writingProgressFor,
@@ -51,38 +57,63 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
     }
   }
 
-  if (snapshot.status === 'loading') return e('fieldset', { className: 'writing-progress-settings', disabled: true },
-    e('legend', null, t('progress.dailyGoal')),
-    e('p', { role: 'status' }, e(ActivityDots, null), t('progress.loading')),
-  )
+  if (snapshot.status === 'loading') return (
+    <fieldset className="writing-progress-settings" disabled={true}>
+      <legend>
+        {t('progress.dailyGoal')}
+      </legend>
+      <p role="status">
+        <ActivityDots />
+        {t('progress.loading')}
+      </p>
+    </fieldset>
+  );
 
-  if (snapshot.status === 'unavailable') return e('fieldset', { className: 'writing-progress-settings', disabled: true },
-    e('legend', null, t('progress.dailyGoal')),
-    e('p', { role: 'alert' }, t('progress.unavailable')),
-  )
+  if (snapshot.status === 'unavailable') return (
+    <fieldset className="writing-progress-settings" disabled={true}>
+      <legend>
+        {t('progress.dailyGoal')}
+      </legend>
+      <p role="alert">
+        {t('progress.unavailable')}
+      </p>
+    </fieldset>
+  );
 
-  return e('fieldset', { className: 'writing-progress-settings', disabled: !writable || saving },
-    e('legend', null, t('progress.dailyGoal')),
-    e('label', { className: 'goal-input' },
-      e('span', null, t('progress.goalChars')),
-      e('input', {
-        type: 'text',
-        inputMode: 'numeric',
-        pattern: '\\d*',
-        value: goalDraft,
-        maxLength: 7,
-        placeholder: t('progress.placeholder'),
-        'aria-label': t('progress.goalChars'),
-        disabled: !writable || saving,
-        onChange,
-        onBlur: () => void commit(),
-        onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => { if (event.key === 'Enter') { event.preventDefault(); void commit() } },
-      }),
-      e('small', null,
-        progress.goalChars > 0 ? t('progress.hintSet') : t('progress.hintUnset'),
-        saving ? e('span', { className: 'goal-saving', role: 'status' }, e(ActivityDots, null), e('span', { className: 'sr-only' }, t('common.saving'))) : null,
-      ),
-    ),
-    failure ? e('p', { role: 'alert' }, failure) : null,
-  )
+  return (
+    <fieldset className="writing-progress-settings" disabled={!writable || saving}>
+      <legend>
+        {t('progress.dailyGoal')}
+      </legend>
+      <label className="goal-input">
+        <span>
+          {t('progress.goalChars')}
+        </span>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern={'\\d*'}
+          value={goalDraft}
+          maxLength={7}
+          placeholder={t('progress.placeholder')}
+          aria-label={t('progress.goalChars')}
+          disabled={!writable || saving}
+          onChange={onChange}
+          onBlur={() => void commit()}
+          onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => { if (event.key === 'Enter') { event.preventDefault(); void commit() } }} />
+        <small>
+          {progress.goalChars > 0 ? t('progress.hintSet') : t('progress.hintUnset')}
+          {saving ? <span className="goal-saving" role="status">
+            <ActivityDots />
+            <span className="sr-only">
+              {t('common.saving')}
+            </span>
+          </span> : null}
+        </small>
+      </label>
+      {failure ? <p role="alert">
+        {failure}
+      </p> : null}
+    </fieldset>
+  );
 }

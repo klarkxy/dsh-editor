@@ -1,4 +1,4 @@
-import { createElement as e, useState, useSyncExternalStore, type ReactNode } from 'react'
+import React, { useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { SettingsScope } from '../dsh-compat.ts'
 import {
   normalizeWritingModelRoute,
@@ -6,7 +6,7 @@ import {
   writingPreferences,
   type WritingModelRoute,
   type WritingPreferences,
-} from '../writing-settings.ts'
+} from '../writing-settings.tsx'
 import { Select, type SelectOption } from './select.tsx'
 import { ActivityDots, ActivitySkeleton } from './ui/index.ts'
 import { t, useLocale } from '../i18n/index.ts'
@@ -104,55 +104,75 @@ export function WritingModelRoutes(props: {
   ]
 
   if (snapshot.status === 'loading') {
-    return e('section', { className: 'models-writing-routes', 'aria-label': t('models.writingRoutes') },
-      e('div', { className: 'models-status', role: 'status', 'aria-live': 'polite' },
-        e(ActivitySkeleton, { lines: 3 }),
-        e('span', { className: 'sr-only' }, t('writing.loading')),
-      ),
-    )
+    return (
+      <section className="models-writing-routes" aria-label={t('models.writingRoutes')}>
+        <div className="models-status" role="status" aria-live="polite">
+          <ActivitySkeleton lines={3} />
+          <span className="sr-only">
+            {t('writing.loading')}
+          </span>
+        </div>
+      </section>
+    );
   }
   if (snapshot.status === 'unavailable') {
-    return e('section', { className: 'models-writing-routes', 'aria-label': t('models.writingRoutes') },
-      e('p', { className: 'models-error', role: 'alert' }, t('writing.unavailable')),
-    )
+    return (
+      <section className="models-writing-routes" aria-label={t('models.writingRoutes')}>
+        <p className="models-error" role="alert">
+          {t('writing.unavailable')}
+        </p>
+      </section>
+    );
   }
 
-  return e('section', { className: 'models-writing-routes', 'aria-label': t('models.writingRoutes') },
-    e('header', { className: 'settings-block-head' },
-      e('h3', { className: 'settings-block-title' }, t('models.writingRoutes')),
-    ),
-    rows.map((row) => {
-      const selected = values[row.field]
-      const missing = Boolean(selected && !props.catalog.some((item) => item.provider === selected.provider && item.model === selected.model))
-      const options: SelectOption[] = [
-        { value: EMPTY, label: row.empty },
-        ...props.catalog.map((item) => ({ value: routeKey(item), label: item.label })),
-      ]
-      if (selected && !options.some((item) => item.value === routeKey(selected))) {
-        options.push(optionFor(selected, props.catalog, row.empty))
-      }
-      return e('div', { key: row.field, className: 'settings-row models-writing-route' },
-        e('div', { className: 'settings-row-text' },
-          e('span', { className: 'settings-row-title' }, t(row.label)),
-          missing ? e('small', { className: 'models-warning', role: 'status' }, t('models.missingModelHint')) : null,
-        ),
-        e(Select, {
-          value: selected ? routeKey(selected) : EMPTY,
-          options,
-          disabled: !writable || saving !== null,
-          'aria-label': t(row.label),
-          onChange: (value) => { void update(row.field, value) },
-        }),
-        e('span', {
-          className: 'route-saving',
-          role: saving === row.field ? 'status' : undefined,
-          'aria-hidden': saving === row.field ? undefined : 'true',
-        },
-          saving === row.field ? e(ActivityDots, null) : null,
-          saving === row.field ? e('span', { className: 'sr-only' }, t('common.saving')) : null,
-        ),
-      )
-    }),
-    failure ? e('p', { className: 'models-warning', role: 'alert' }, failure) : null,
-  )
+  return (
+    <section className="models-writing-routes" aria-label={t('models.writingRoutes')}>
+      <header className="settings-block-head">
+        <h3 className="settings-block-title">
+          {t('models.writingRoutes')}
+        </h3>
+      </header>
+      {rows.map((row) => {
+        const selected = values[row.field]
+        const missing = Boolean(selected && !props.catalog.some((item) => item.provider === selected.provider && item.model === selected.model))
+        const options: SelectOption[] = [
+          { value: EMPTY, label: row.empty },
+          ...props.catalog.map((item) => ({ value: routeKey(item), label: item.label })),
+        ]
+        if (selected && !options.some((item) => item.value === routeKey(selected))) {
+          options.push(optionFor(selected, props.catalog, row.empty))
+        }
+        return (
+          <div key={row.field} className="settings-row models-writing-route">
+            <div className="settings-row-text">
+              <span className="settings-row-title">
+                {t(row.label)}
+              </span>
+              {missing ? <small className="models-warning" role="status">
+                {t('models.missingModelHint')}
+              </small> : null}
+            </div>
+            <Select
+              value={selected ? routeKey(selected) : EMPTY}
+              options={options}
+              disabled={!writable || saving !== null}
+              aria-label={t(row.label)}
+              onChange={(value) => { void update(row.field, value) }} />
+            <span
+              className="route-saving"
+              role={saving === row.field ? 'status' : undefined}
+              aria-hidden={saving === row.field ? undefined : 'true'}>
+              {saving === row.field ? <ActivityDots /> : null}
+              {saving === row.field ? <span className="sr-only">
+                {t('common.saving')}
+              </span> : null}
+            </span>
+          </div>
+        );
+      })}
+      {failure ? <p className="models-warning" role="alert">
+        {failure}
+      </p> : null}
+    </section>
+  );
 }

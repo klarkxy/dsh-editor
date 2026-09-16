@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { archiveStateText, canArchivePath, visibleArchives, type ArchiveView } from './archive.ts'
+import { archiveStateText, canArchivePath, visibleArchives, type ArchiveView } from './archive.tsx'
 import { documentName } from './shared.ts'
 
 describe('author file lifecycle presentation', () => {

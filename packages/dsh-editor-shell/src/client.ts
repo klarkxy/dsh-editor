@@ -7,14 +7,14 @@ import {
   createWritingMigration,
   decodeWritingPreferences,
   writingPreferences,
-} from './writing-settings.ts'
-import { decodeHostThemePreference, writeHostThemePreference, type HostThemeSync } from './client/theme.ts'
+} from './writing-settings.tsx'
+import { decodeHostThemePreference, writeHostThemePreference, type HostThemeSync } from './client/theme.tsx'
 import { decodeLocalePreference } from './client/settings-general.tsx'
 import { bindLocalePreference } from './i18n/index.ts'
 import { type ShellContext } from './client/shared.ts'
-import { registerShellRoot } from './client/root.ts'
+import { registerShellRoot } from './client/root.tsx'
 import { provideEditorUiWorkspace } from './client/ui-workspace.ts'
-import { bindOfficialConversation } from './client/chat.ts'
+import { bindOfficialConversation } from './client/chat.tsx'
 import { COMMANDS_SERVICE, MESSAGE_CARDS_SERVICE, createCommandRegistry, createMessageCardRegistry } from './seats.ts'
 
 export const name = 'dsh-editor-shell-client'
@@ -71,14 +71,14 @@ export type {
   WorkspaceOpenState,
   WorkspaceShortcutAction,
 } from './client/shared.ts'
-export { THEME_STORAGE_KEY, THEME_VALUES, ThemeToggle, useTheme } from './client/theme.ts'
-export { ACCENT_STORAGE_KEY, ACCENT_VALUES, useAccent } from './client/theme.ts'
-export type { AccentValue, HostThemeSync, ThemeValue } from './client/theme.ts'
-export { ConfirmDialog, ConversationPresetPicker, NewProjectDialog, TextPromptDialog } from './client/dialogs.ts'
-export { Chat, ModelPicker, PendingCard, ProjectContextReceiptView, ProposalCard, bindOfficialConversation, conversationChatSource } from './client/chat.ts'
-export { Editor } from './client/editor.ts'
-export { FileContextMenu, Tree } from './client/sidebar.ts'
-export { DeepSeekWhaleMark, PaperStage, PanelResizer, currentSession, useObservable } from './client/components.ts'
+export { THEME_STORAGE_KEY, THEME_VALUES, ThemeToggle, useTheme } from './client/theme.tsx'
+export { ACCENT_STORAGE_KEY, ACCENT_VALUES, useAccent } from './client/theme.tsx'
+export type { AccentValue, HostThemeSync, ThemeValue } from './client/theme.tsx'
+export { ConfirmDialog, ConversationPresetPicker, NewProjectDialog, TextPromptDialog } from './client/dialogs.tsx'
+export { Chat, ModelPicker, PendingCard, ProjectContextReceiptView, ProposalCard, bindOfficialConversation, conversationChatSource } from './client/chat.tsx'
+export { Editor } from './client/editor.tsx'
+export { FileContextMenu, Tree } from './client/sidebar.tsx'
+export { DeepSeekWhaleMark, PaperStage, PanelResizer, currentSession, useObservable } from './client/components.tsx'
 
 type SettingsSlot = { bind<T>(spec: { namespace: string; decode?(value: unknown): T | undefined }): SettingsScope<T> }
 

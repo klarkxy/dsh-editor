@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collectDocuments } from './client/export-dialog.ts'
+import { collectDocuments } from './client/export-dialog.tsx'
 import { buildExport, prepareExport } from './export.ts'
 import type { ShellContext } from './client/shared.ts'
 

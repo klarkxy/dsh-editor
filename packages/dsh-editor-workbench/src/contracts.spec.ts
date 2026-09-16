@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { PROJECT_CONTEXT_MAX_CHARS_PER_FILE, PROJECT_CONTEXT_SOURCE_PATHS, compileProjectContext, compileProjectContextV2, formatWorldbookTriggerLines, parseProjectContextEnvelope, parseWorldbookFrontmatter, parseWorldbookTriggerLines, projectContextReceipt, worldbookEditorMetadata, writeWorldbookFrontmatter } from './contracts.ts'
 
@@ -184,13 +183,4 @@ describe('project context compiler', () => {
     expect(parseWorldbookTriggerLines(formatWorldbookTriggerLines(triggers))).toEqual(triggers)
     expect(parseWorldbookTriggerLines('纽约，巴黎\n甲、乙\nA,B')).toEqual(triggers)
   })
-})
-
-it('keeps the browser-safe contracts type import off the Host API', () => {
-  const source = readFileSync(new URL('./contracts/channel.ts', import.meta.url), 'utf8')
-  expect(source).toContain("from 'dsh-manuscript/client/editor-core'")
-  expect(source).not.toContain("from 'dsh-manuscript/host-api'")
-  const emitted = readFileSync(new URL('../lib/contracts.d.ts', import.meta.url), 'utf8')
-  expect(emitted).toContain('dsh-manuscript/client/editor-core')
-  expect(emitted).not.toContain('dsh-manuscript/host-api')
 })

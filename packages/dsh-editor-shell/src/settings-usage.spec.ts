@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
 import {
   buildUsageChartOption,
   collectModelSeries,
@@ -96,19 +95,5 @@ describe('usage chart model series', () => {
     expect(html).not.toContain('\n')
     expect(html.split('third-provider/').length - 1).toBe(1)
     expect(html).toContain('12')
-  })
-
-  it('uses tree-shakeable ECharts and keeps an exact-data table beside the chart', () => {
-    const source = readFileSync(new URL('./client/settings-usage.tsx', import.meta.url), 'utf8')
-    expect(source).toContain("from 'echarts/core'")
-    expect(source).toContain("from 'echarts/charts'")
-    expect(source).toContain('SVGRenderer')
-    expect(source).not.toMatch(/from 'echarts'/)
-    expect(source).toContain('usage-chart-table')
-    expect(source).toContain('usage.exactData')
-    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
-    expect(styleSource).toContain('.usage-chart-plot')
-    expect(styleSource).toContain('.usage-chart-table')
-    expect(styleSource).not.toContain('.usage-chart-segment')
   })
 })

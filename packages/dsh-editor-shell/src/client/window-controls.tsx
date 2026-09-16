@@ -1,4 +1,4 @@
-import { createElement as e, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react';
 import { t } from '../i18n/index.ts'
 
 /*
@@ -61,9 +61,27 @@ export function WindowControls() {
   const [maximized, setMaximized] = useState(false)
   useEffect(() => bridge?.onMaximizedChange?.(setMaximized), [bridge])
   if (!bridge) return null
-  return e('div', { className: 'window-controls' },
-    e('button', { type: 'button', 'aria-label': t('window.minimize'), onClick: () => bridge.minimize() }, '–'),
-    e('button', { type: 'button', 'aria-label': maximized ? t('window.restore') : t('window.maximize'), onClick: () => bridge.toggleMaximize() }, maximized ? '❐' : '▢'),
-    e('button', { type: 'button', className: 'window-close', 'aria-label': t('window.close'), onClick: () => bridge.close() }, '×'),
-  )
+  return (
+    <div className="window-controls">
+      <button
+        type="button"
+        aria-label={t('window.minimize')}
+        onClick={() => bridge.minimize()}>
+        –
+      </button>
+      <button
+        type="button"
+        aria-label={maximized ? t('window.restore') : t('window.maximize')}
+        onClick={() => bridge.toggleMaximize()}>
+        {maximized ? '❐' : '▢'}
+      </button>
+      <button
+        type="button"
+        className="window-close"
+        aria-label={t('window.close')}
+        onClick={() => bridge.close()}>
+        ×
+      </button>
+    </div>
+  );
 }

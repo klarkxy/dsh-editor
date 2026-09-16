@@ -1,4 +1,13 @@
-import { createElement as e, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, redo, redoDepth, undo, undoDepth } from '@codemirror/commands'
@@ -385,7 +394,7 @@ function describeStatus(state: SaveState, conflict: boolean): string {
 }
 
 function isStaleMessage(message: string): boolean {
-  return /changed on disk|\bSTALE\b|version|版本/i.test(message)
+  return /changed on disk|\bSTALE\b|version|版本/i.test(message);
 }
 
 /** 备份按钮的小标签：序号 + 可读的更新时间（没有 updatedAt 时只有序号）。 */
@@ -1454,169 +1463,254 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const showFooter = Boolean(footerExtras) || loadingFim || patching || ghost || conflict || (!compactControls && (proposal || note))
   const paperVars = typographyCssVariables(normalizeTypography(typography)) as CSSProperties
 
-  return e('section', {
-    className: [paperClassName, cls('outer')].filter(Boolean).join(' '),
-    'aria-label': '文稿编辑区',
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      '--paper-dim-opacity': '0.35',
-      ...paperVars,
-      ...paperStyle,
-      ...sty('outer'),
-    } as CSSProperties,
-  },
-    e('header', {
-      className: cls('header'),
-      style: { padding: '4px 8px', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', ...sty('header') },
-    },
-      e('span', {
-        'data-testid': `${testIdPrefix}-path`,
-        style: { opacity: 0.7, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' },
-      }, doc?.path || path),
-      showSiblings ? e('nav', {
-        className: ['chapter-navigation', cls('chapterNav')].filter(Boolean).join(' '),
-        'aria-label': '章节导航',
-        style: { display: 'inline-flex', gap: 4, alignItems: 'center' },
-      },
-        e('button', {
-          type: 'button',
-          'data-testid': `${testIdPrefix}-prev`,
-          disabled: siblingsBlocked || siblingIndex <= 0,
-          title: siblingsBlocked ? '请先保存' : '上一章',
-          'aria-label': siblingsBlocked ? '请先保存' : '上一章',
-          onClick: () => { if (siblingIndex > 0 && siblings) onOpenSibling(siblings[siblingIndex - 1]!) },
-        }, '‹'),
-        e('span', { style: { fontSize: 11, opacity: 0.6 } }, `${siblingIndex + 1} / ${siblings!.length}`),
-        e('button', {
-          type: 'button',
-          'data-testid': `${testIdPrefix}-next`,
-          disabled: siblingsBlocked || siblingIndex >= siblings!.length - 1,
-          title: siblingsBlocked ? '请先保存' : '下一章',
-          'aria-label': siblingsBlocked ? '请先保存' : '下一章',
-          onClick: () => { if (siblingIndex < siblings!.length - 1 && siblings) onOpenSibling(siblings[siblingIndex + 1]!) },
-        }, '›'),
-      ) : null,
-      !compactControls && enableRewriteSelection && completionEnabled ? e('button', {
-        type: 'button',
-        'data-testid': `${testIdPrefix}-rewrite`,
-        disabled: !hasSelection,
-        onClick: () => {
-          const sel = textRef.current.slice(selection.start, selection.end)
-          if (!sel) return
-          void Promise.resolve(onRewriteSelection?.(sel, doc?.path || path))
-        },
-      }, '改这段') : null,
-      !compactControls && completionEnabled ? e('button', {
-        type: 'button',
-        'data-testid': `${testIdPrefix}-fim`,
-        onClick: () => { void complete(false) },
-      }, loadingFim ? '停止补全' : ghost ? '重新补全' : '补全') : null,
-      e('span', { 'data-testid': `${testIdPrefix}-wordcount`, style: { opacity: 0.55 } }, `${wordCount} 字`),
-      e('span', { 'data-testid': `${testIdPrefix}-save-state`, style: { opacity: 0.55 } }, describeStatus(state, conflict)),
-      headerExtras,
-    ),
-    e('div', {
-      className: cls('textarea'),
-      style: { position: 'relative', flex: 1, minHeight: 0, ...sty('textarea') },
-    },
-      // CodeMirror mounts here. The container keeps the legacy testid and
-      // fills the wrapper; the EditorView lives on `__cmView` for e2e.
-      e('div', {
-        ref: containerRef,
-        'data-testid': `${testIdPrefix}-editor`,
-        'aria-label': '文档编辑器',
-        style: { position: 'absolute', inset: 0 },
-      }),
-    ),
-    showGhostTip && ghost ? e('div', {
-      className: cls('ghostTip'),
-      style: { padding: '4px 8px', fontSize: 12, opacity: 0.55, ...sty('ghostTip') },
-    }, 'Tab · Esc') : null,
-    proposal ? e('div', {
-      ref: proposalRef,
-      className: [cls('proposal') || 'proposal', 'manuscript-paper-proposal'].filter(Boolean).join(' '),
-      'aria-label': '选段修改建议',
-      style: { padding: 12, border: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', borderRadius: 6, ...sty('proposal') },
-    },
-      e('strong', null, '选段修改建议'),
-      showProposalDiff ? e('div', { className: 'selection-diff' },
-        e('section', { className: 'selection-diff-original' }, e('small', null, '原文'), e('p', null, proposal.ticket.selectedText)),
-        e('section', { className: 'selection-diff-revised' }, e('small', null, '修改后'), e('p', null, proposal.text)),
-      ) : e('p', null, proposal.text),
-      e('div', { className: 'proposal-actions' },
-        e('button', { type: 'button', className: 'primary-action', onClick: acceptPatch }, '应用修改'),
-        e('button', { type: 'button', className: 'proposal-dismiss', onClick: () => { setProposal(null); report('已放弃修改建议。'); viewRef.current?.focus() } }, '放弃'),
-      ),
-    ) : null,
-    conflict ? e('div', {
-      'data-testid': `${testIdPrefix}-conflict-guard`,
-      className: cls('conflict'),
-      style: { padding: '6px 8px', borderTop: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', fontSize: 12, ...sty('conflict') },
-    },
-      e('span', null, '当前草稿与磁盘版本不一致，已保留本地内容。'),
-    ) : null,
-    note && sty('notice')?.display !== 'none' ? e('div', {
-      'data-testid': `${testIdPrefix}-notice`,
-      className: cls('notice'),
-      role: conflict ? 'alert' : 'status',
-      style: { padding: '4px 8px', fontSize: 12, opacity: 0.7, ...sty('notice') },
-    }, note) : null,
-    error ? e('div', {
-      className: cls('notice'),
-      style: { padding: 8, color: '#8a3a30', fontSize: 12, ...sty('notice') },
-    }, error) : null,
-    /* 恢复备份入口独立于 notice 槽：shell 会把 slotStyle.notice 设为 display:none
-       只隐藏普通提示，这里的按钮必须始终可见可点。 */
-    backups.length > 0 && doc ? e('div', {
-      'data-testid': `${testIdPrefix}-draft-backups`,
-      role: 'status',
-      style: { padding: '4px 8px', fontSize: 12, opacity: 0.8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
-    },
-      e('span', null, `发现 ${backups.length} 份其他窗口留下的未保存备份（采纳后原备份仍保留）：`),
-      backups.map((backup, index) => e('button', {
-        key: `${backup.ownerId ?? 'legacy'}-${backup.revision ?? index}`,
-        type: 'button',
-        disabled: isDirty(doc, textRef.current) || conflict,
-        title: isDirty(doc, textRef.current) || conflict ? '当前有未保存内容，请先保存或放弃修改，避免丢稿' : '把这份备份放入当前草稿',
-        onClick: () => adoptBackup(backup),
-      }, draftBackupLabel(backup, index))),
-    ) : null,
-    showFooter ? e('footer', {
-      className: cls('footer'),
-      style: { padding: '6px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', ...sty('footer') },
-    },
-      !compactControls ? e('button', { type: 'button', disabled: !doc || textRef.current === doc.text || conflict, onClick: () => void save() }, '保存') : null,
-      loadingFim ? e('button', { type: 'button', onClick: () => { fimAbort.current?.abort(); setLoadingFim(false); report('已停止补全。') } }, '停止补全') : null,
-      patching ? e('button', {
-        type: 'button',
-        onClick: () => {
-          patchAbort.current?.abort()
-          setPatching(false)
-          report('已停止改写。')
-        },
-      }, '停止改写') : null,
-      !compactControls && enablePatch && completionEnabled ? e('button', {
-        type: 'button',
-        disabled: !doc || conflict || loadingFim || selection.start === selection.end,
-        onClick: () => { void requestPatch() },
-      }, '修改选段') : null,
-      ghost ? e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' } },
-        e('strong', null, '补全建议'),
-        e('small', null, `候选 ${ghostIndex + 1}/${ghostCandidates.length}`),
-        e('button', { type: 'button', onClick: acceptGhost }, '接受补全'),
-        ghostCandidates.length < maxGhostCandidates ? e('button', { type: 'button', disabled: loadingFim, onClick: () => void complete(true) }, '再来一个') : e('span', { style: { opacity: 0.55 } }, `已满 ${maxGhostCandidates} 条`),
-        e('button', { type: 'button', onClick: () => { clearGhost(); report('已放弃补全。'); viewRef.current?.focus() } }, '放弃'),
-        ghostCandidates.length > 1 ? e('nav', { 'aria-label': '切换补全候选', style: { display: 'flex', gap: 4 } },
-          e('button', { type: 'button', disabled: ghostIndex <= 0, onClick: () => setGhostIndex((old) => Math.max(0, old - 1)) }, '上一条'),
-          e('button', { type: 'button', disabled: ghostIndex >= ghostCandidates.length - 1, onClick: () => setGhostIndex((old) => Math.min(ghostCandidates.length - 1, old + 1)) }, '下一条'),
-        ) : null,
-      ) : null,
-      conflict ? e('button', { type: 'button', onClick: discard }, '放弃草稿并重新读取') : null,
-      conflict && onReloadDisk ? e('button', { type: 'button', 'data-testid': `${testIdPrefix}-reload-disk`, onClick: onReloadDisk }, '重新载入磁盘版本') : null,
-      conflict && onSaveConflictCopy ? e('button', { type: 'button', 'data-testid': `${testIdPrefix}-save-conflict-copy`, onClick: onSaveConflictCopy }, '另存冲突副本') : null,
-      footerExtras,
-    ) : null,
-  )
+  return (
+    <section
+      className={[paperClassName, cls('outer')].filter(Boolean).join(' ')}
+      aria-label="文稿编辑区"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        '--paper-dim-opacity': '0.35',
+        ...paperVars,
+        ...paperStyle,
+        ...sty('outer'),
+      } as CSSProperties}>
+      <header
+        className={cls('header')}
+        style={{ padding: '4px 8px', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', ...sty('header') }}>
+        <span
+          data-testid={`${testIdPrefix}-path`}
+          style={{ opacity: 0.7, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {doc?.path || path}
+        </span>
+        {showSiblings ? <nav
+          className={['chapter-navigation', cls('chapterNav')].filter(Boolean).join(' ')}
+          aria-label="章节导航"
+          style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+          <button
+            type="button"
+            data-testid={`${testIdPrefix}-prev`}
+            disabled={siblingsBlocked || siblingIndex <= 0}
+            title={siblingsBlocked ? '请先保存' : '上一章'}
+            aria-label={siblingsBlocked ? '请先保存' : '上一章'}
+            onClick={() => { if (siblingIndex > 0 && siblings) onOpenSibling(siblings[siblingIndex - 1]!) }}>
+            ‹
+          </button>
+          <span style={{ fontSize: 11, opacity: 0.6 }}>
+            {`${siblingIndex + 1} / ${siblings!.length}`}
+          </span>
+          <button
+            type="button"
+            data-testid={`${testIdPrefix}-next`}
+            disabled={siblingsBlocked || siblingIndex >= siblings!.length - 1}
+            title={siblingsBlocked ? '请先保存' : '下一章'}
+            aria-label={siblingsBlocked ? '请先保存' : '下一章'}
+            onClick={() => { if (siblingIndex < siblings!.length - 1 && siblings) onOpenSibling(siblings[siblingIndex + 1]!) }}>
+            ›
+          </button>
+        </nav> : null}
+        {!compactControls && enableRewriteSelection && completionEnabled ? <button
+          type="button"
+          data-testid={`${testIdPrefix}-rewrite`}
+          disabled={!hasSelection}
+          onClick={() => {
+            const sel = textRef.current.slice(selection.start, selection.end)
+            if (!sel) return
+            void Promise.resolve(onRewriteSelection?.(sel, doc?.path || path))
+          }}>
+          改这段
+        </button> : null}
+        {!compactControls && completionEnabled ? <button
+          type="button"
+          data-testid={`${testIdPrefix}-fim`}
+          onClick={() => { void complete(false) }}>
+          {loadingFim ? '停止补全' : ghost ? '重新补全' : '补全'}
+        </button> : null}
+        <span data-testid={`${testIdPrefix}-wordcount`} style={{ opacity: 0.55 }}>
+          {`${wordCount} 字`}
+        </span>
+        <span data-testid={`${testIdPrefix}-save-state`} style={{ opacity: 0.55 }}>
+          {describeStatus(state, conflict)}
+        </span>
+        {headerExtras}
+      </header>
+      <div
+        className={cls('textarea')}
+        style={{ position: 'relative', flex: 1, minHeight: 0, ...sty('textarea') }}>
+        {// CodeMirror mounts here. The container keeps the legacy testid and
+        // fills the wrapper; the EditorView lives on `__cmView` for e2e.
+        <div
+          ref={containerRef}
+          data-testid={`${testIdPrefix}-editor`}
+          aria-label="文档编辑器"
+          style={{ position: 'absolute', inset: 0 }} />}
+      </div>
+      {showGhostTip && ghost ? <div
+        className={cls('ghostTip')}
+        style={{ padding: '4px 8px', fontSize: 12, opacity: 0.55, ...sty('ghostTip') }}>
+        Tab · Esc
+      </div> : null}
+      {proposal ? <div
+        ref={proposalRef}
+        className={[cls('proposal') || 'proposal', 'manuscript-paper-proposal'].filter(Boolean).join(' ')}
+        aria-label="选段修改建议"
+        style={{ padding: 12, border: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', borderRadius: 6, ...sty('proposal') }}>
+        <strong>
+          选段修改建议
+        </strong>
+        {showProposalDiff ? <div className="selection-diff">
+          <section className="selection-diff-original">
+            <small>
+              原文
+            </small>
+            <p>
+              {proposal.ticket.selectedText}
+            </p>
+          </section>
+          <section className="selection-diff-revised">
+            <small>
+              修改后
+            </small>
+            <p>
+              {proposal.text}
+            </p>
+          </section>
+        </div> : <p>
+          {proposal.text}
+        </p>}
+        <div className="proposal-actions">
+          <button type="button" className="primary-action" onClick={acceptPatch}>
+            应用修改
+          </button>
+          <button
+            type="button"
+            className="proposal-dismiss"
+            onClick={() => { setProposal(null); report('已放弃修改建议。'); viewRef.current?.focus() }}>
+            放弃
+          </button>
+        </div>
+      </div> : null}
+      {conflict ? <div
+        data-testid={`${testIdPrefix}-conflict-guard`}
+        className={cls('conflict')}
+        style={{ padding: '6px 8px', borderTop: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', fontSize: 12, ...sty('conflict') }}>
+        <span>
+          当前草稿与磁盘版本不一致，已保留本地内容。
+        </span>
+      </div> : null}
+      {note && sty('notice')?.display !== 'none' ? <div
+        data-testid={`${testIdPrefix}-notice`}
+        className={cls('notice')}
+        role={conflict ? 'alert' : 'status'}
+        style={{ padding: '4px 8px', fontSize: 12, opacity: 0.7, ...sty('notice') }}>
+        {note}
+      </div> : null}
+      {error ? <div
+        className={cls('notice')}
+        style={{ padding: 8, color: '#8a3a30', fontSize: 12, ...sty('notice') }}>
+        {error}
+      </div> : null}
+      {/* 恢复备份入口独立于 notice 槽：shell 会把 slotStyle.notice 设为 display:none
+         只隐藏普通提示，这里的按钮必须始终可见可点。 */
+      backups.length > 0 && doc ? <div
+        data-testid={`${testIdPrefix}-draft-backups`}
+        role="status"
+        style={{ padding: '4px 8px', fontSize: 12, opacity: 0.8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span>
+          {`发现 ${backups.length} 份其他窗口留下的未保存备份（采纳后原备份仍保留）：`}
+        </span>
+        {backups.map((backup, index) => <button
+          key={`${backup.ownerId ?? 'legacy'}-${backup.revision ?? index}`}
+          type="button"
+          disabled={isDirty(doc, textRef.current) || conflict}
+          title={isDirty(doc, textRef.current) || conflict ? '当前有未保存内容，请先保存或放弃修改，避免丢稿' : '把这份备份放入当前草稿'}
+          onClick={() => adoptBackup(backup)}>
+          {draftBackupLabel(backup, index)}
+        </button>)}
+      </div> : null}
+      {showFooter ? <footer
+        className={cls('footer')}
+        style={{ padding: '6px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', ...sty('footer') }}>
+        {!compactControls ? <button
+          type="button"
+          disabled={!doc || textRef.current === doc.text || conflict}
+          onClick={() => void save()}>
+          保存
+        </button> : null}
+        {loadingFim ? <button
+          type="button"
+          onClick={() => { fimAbort.current?.abort(); setLoadingFim(false); report('已停止补全。') }}>
+          停止补全
+        </button> : null}
+        {patching ? <button
+          type="button"
+          onClick={() => {
+            patchAbort.current?.abort()
+            setPatching(false)
+            report('已停止改写。')
+          }}>
+          停止改写
+        </button> : null}
+        {!compactControls && enablePatch && completionEnabled ? <button
+          type="button"
+          disabled={!doc || conflict || loadingFim || selection.start === selection.end}
+          onClick={() => { void requestPatch() }}>
+          修改选段
+        </button> : null}
+        {ghost ? <div
+          style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <strong>
+            补全建议
+          </strong>
+          <small>
+            {`候选 ${ghostIndex + 1}/${ghostCandidates.length}`}
+          </small>
+          <button type="button" onClick={acceptGhost}>
+            接受补全
+          </button>
+          {ghostCandidates.length < maxGhostCandidates ? <button type="button" disabled={loadingFim} onClick={() => void complete(true)}>
+            再来一个
+          </button> : <span style={{ opacity: 0.55 }}>
+            {`已满 ${maxGhostCandidates} 条`}
+          </span>}
+          <button
+            type="button"
+            onClick={() => { clearGhost(); report('已放弃补全。'); viewRef.current?.focus() }}>
+            放弃
+          </button>
+          {ghostCandidates.length > 1 ? <nav aria-label="切换补全候选" style={{ display: 'flex', gap: 4 }}>
+            <button
+              type="button"
+              disabled={ghostIndex <= 0}
+              onClick={() => setGhostIndex((old) => Math.max(0, old - 1))}>
+              上一条
+            </button>
+            <button
+              type="button"
+              disabled={ghostIndex >= ghostCandidates.length - 1}
+              onClick={() => setGhostIndex((old) => Math.min(ghostCandidates.length - 1, old + 1))}>
+              下一条
+            </button>
+          </nav> : null}
+        </div> : null}
+        {conflict ? <button type="button" onClick={discard}>
+          放弃草稿并重新读取
+        </button> : null}
+        {conflict && onReloadDisk ? <button
+          type="button"
+          data-testid={`${testIdPrefix}-reload-disk`}
+          onClick={onReloadDisk}>
+          重新载入磁盘版本
+        </button> : null}
+        {conflict && onSaveConflictCopy ? <button
+          type="button"
+          data-testid={`${testIdPrefix}-save-conflict-copy`}
+          onClick={onSaveConflictCopy}>
+          另存冲突副本
+        </button> : null}
+        {footerExtras}
+      </footer> : null}
+    </section>
+  );
 }

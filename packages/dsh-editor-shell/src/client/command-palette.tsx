@@ -27,8 +27,8 @@ import {
   Content as RadixDialogContent,
   Description as RadixDialogDescription,
 } from '@radix-ui/react-dialog'
-import { createElement as e, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
-import type { ThemeValue } from './theme.ts'
+import React, { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import type { ThemeValue } from './theme.tsx'
 import { t, useLocale } from '../i18n/index.ts'
 import {
   ArchiveIcon,
@@ -94,12 +94,12 @@ export function appendRegistryCommands(groups: CommandGroup[], extras: readonly 
         label: item.label,
         hint: item.hint,
         keywords: item.keywords,
-        icon: e(RegistryCommandIcon, null),
+        icon: <RegistryCommandIcon />,
         disabled: item.disabled,
         run: () => item.run(),
       }))
     return added.length ? { ...group, items: [...group.items, ...added] } : group
-  })
+  });
 }
 
 export type CommandPaletteProps = {
@@ -182,7 +182,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('command.openWork'),
         hint: t('command.openWorkHint'),
         keywords: ['folder', 'open', 'open workspace', 'open project'],
-        icon: e(FolderIcon, null),
+        icon: <FolderIcon />,
         run: () => props.onOpenWorkspace(),
       },
       {
@@ -190,7 +190,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('command.newWork'),
         hint: t('command.newWorkHint'),
         keywords: ['new', 'create', 'new project'],
-        icon: e(PlusIcon, null),
+        icon: <PlusIcon />,
         run: () => props.onNewProject(),
       },
     ],
@@ -205,7 +205,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('command.search'),
         hint: t('command.searchHint'),
         keywords: ['search', 'find', t('command.find'), t('common.search')],
-        icon: e(SearchIcon, null),
+        icon: <SearchIcon />,
         disabled: !props.hasWorkspace,
         run: () => props.onOpenSearch(),
       },
@@ -214,7 +214,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: props.typewriter ? t('command.typewriterOff') : t('command.typewriterOn'),
         hint: t('command.typewriterHint'),
         keywords: ['typewriter', t('command.kw.typewriter'), t('command.kw.scroll')],
-        icon: e(FocusIcon, null),
+        icon: <FocusIcon />,
         disabled: !props.hasWorkspace || !props.onToggleTypewriter,
         run: () => props.onToggleTypewriter?.(),
       },
@@ -223,7 +223,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: props.focusParagraph ? t('command.focusParaOff') : t('command.focusParaOn'),
         hint: t('command.focusParaHint'),
         keywords: ['focus', t('command.kw.focus'), t('command.paragraph'), 'paragraph'],
-        icon: e(FocusIcon, null),
+        icon: <FocusIcon />,
         disabled: !props.hasWorkspace || !props.onToggleFocusParagraph,
         run: () => props.onToggleFocusParagraph?.(),
       },
@@ -232,7 +232,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('command.export'),
         hint: t('command.exportHint'),
         keywords: ['export', t('command.exportShort'), 'markdown', 'txt'],
-        icon: e(ExportIcon, null),
+        icon: <ExportIcon />,
         disabled: !props.hasWorkspace,
         run: () => props.onExport(),
       },
@@ -241,7 +241,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('command.archived'),
         hint: t('command.archivedHint'),
         keywords: ['archive', t('common.archive'), t('common.restore')],
-        icon: e(ArchiveIcon, null),
+        icon: <ArchiveIcon />,
         disabled: !props.hasWorkspace,
         run: () => props.onOpenArchives(),
       },
@@ -250,7 +250,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('chapterOps.splitAtCursor'),
         hint: t('chapterOps.splitAtCursorHint'),
         keywords: ['split', 'chapter', 'cursor'],
-        icon: e(FileIcon, null),
+        icon: <FileIcon />,
         disabled: !props.canSplitAtCursor,
         run: () => props.onSplitAtCursor(),
       },
@@ -266,7 +266,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: themeNext === 'ink' ? t('command.themeInk') : t('command.themePaper'),
         hint: props.theme === 'paper' ? t('command.themeNowPaper') : t('command.themeNowInk'),
         keywords: ['theme', t('command.theme'), t('command.switch'), 'paper', 'ink', 'dark', 'light'],
-        icon: e(ThemeInkIcon, null),
+        icon: <ThemeInkIcon />,
         run: () => props.onThemeChange(themeNext),
       },
       {
@@ -274,7 +274,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: props.focusMode ? t('command.exitFocus') : t('command.enterFocus'),
         hint: t('command.focusHint'),
         keywords: ['focus', t('workspace.focus'), 'toggle', 'zen'],
-        icon: e(FocusIcon, null),
+        icon: <FocusIcon />,
         disabled: !props.hasWorkspace,
         run: () => props.onToggleFocus(),
       },
@@ -283,7 +283,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('pin.current'),
         hint: t('pin.currentHint'),
         keywords: ['pin', 'beside', 'split'],
-        icon: e(PinIcon, null),
+        icon: <PinIcon />,
         disabled: !props.canPinCurrent,
         run: () => props.onPinCurrent(),
       },
@@ -292,7 +292,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('pin.unpin'),
         hint: t('pin.unpinHint'),
         keywords: ['unpin', 'pin'],
-        icon: e(PinIcon, null),
+        icon: <PinIcon />,
         disabled: !props.pinnedPath,
         run: () => props.onUnpin(),
       },
@@ -301,7 +301,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         label: t('command.openSettings'),
         hint: t('command.openSettingsHint'),
         keywords: ['settings', 'preferences', t('command.kw.settings'), t('command.preferences')],
-        icon: e(SettingsIcon, null),
+        icon: <SettingsIcon />,
         run: () => props.onOpenSettings(),
       },
     ],
@@ -321,10 +321,10 @@ export function CommandPalette(props: CommandPaletteProps) {
             label: name,
             hint: directory || t('command.rootDir'),
             keywords: [directory, filePath],
-            icon: e(FileIcon, null),
+            icon: <FileIcon />,
             disabled: props.activePath === filePath,
             run: () => props.onOpenDocument(filePath),
-          }
+          };
         }),
       }
     : null

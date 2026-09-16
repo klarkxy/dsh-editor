@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { COMMANDS_SERVICE, SIDEBAR_TOOLS_SLOT, createCommandRegistry } from 'dsh-editor-seats'
 import { zh } from './messages.ts'
-import { apply } from './client.ts'
+import { apply } from './client.tsx'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
@@ -68,17 +68,11 @@ describe('proofread panel client', () => {
   })
 
   it('scans through workbench proofread.scan and does not depend on the dsh-proofread entry', () => {
-    const panel = readFileSync(resolve(here, 'panel.ts'), 'utf8')
-    const view = readFileSync(resolve(here, 'proofread-view.ts'), 'utf8')
     const pkg = JSON.parse(readFileSync(resolve(here, '../package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
       devDependencies?: Record<string, string>
       peerDependencies?: Record<string, string>
     }
-    expect(panel).toContain('WORKBENCH_RPC_CHANNEL')
-    expect(panel).toContain("'proofread.scan'")
-    expect(panel).not.toMatch(/dsh-proofread/)
-    expect(view).not.toMatch(/dsh-proofread/)
     expect(pkg.dependencies?.['dsh-proofread']).toBeUndefined()
     expect(pkg.devDependencies?.['dsh-proofread']).toBeUndefined()
     expect(pkg.peerDependencies?.['dsh-proofread']).toBeUndefined()

@@ -1,11 +1,4 @@
-import {
-  createElement as e,
-  Fragment,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import React, { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { windowBridge } from './window-controls.tsx'
 import { ActivityDots, ActivityText, SuccessMark } from './ui/index.ts'
 import { intlLocale, t, useLocale } from '../i18n/index.ts'
@@ -43,7 +36,7 @@ function previewBody(body: string): string {
 /** IPC 错误带着 "Error invoking remote method …" 包装,剥掉再显示。 */
 function cleanIpcError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
-  return message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '')
+  return message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '');
 }
 
 function formatMB(bytes: number): string {
@@ -178,55 +171,87 @@ export function AboutSettingsSection(props: {
   const versionLabel = appInfo ? `${appInfo.name} ${appInfo.version}` : t('about.devMode')
   const canCheck = hasBridge
 
-  return e('section', { className: 'about-page', 'aria-label': t('settings.about') },
-    e('div', { className: 'about-header' },
-      e('h3', { className: 'about-title' }, t('about.title')),
-      e('p', { className: 'about-version' },
-        e('strong', null, versionLabel),
-      ),
-      !hasBridge ? e('p', { className: 'about-note' },
-        t('about.browserHint'),
-      ) : null,
-    ),
-    e('div', { className: 'about-status' },
-      renderStatus(state),
-    ),
-    renderResultBody(state, download, appInfo, {
-      onOpen: onOpenDownload,
-      onDownload: (asset) => void startDownload(asset),
-      onCancel: cancelDownload,
-      onInstall: (path) => void installDownloaded(path),
-    }),
-    e('p', { className: 'about-note' },
-      state.status === 'ready' && state.result.status === 'update-available'
-        ? t('about.macHint')
-        : t('about.proxyHint'),
-    ),
-    e('div', { className: 'about-actions' },
-      e('button', {
-        type: 'button',
-        className: 'about-button',
-        disabled: !canCheck || state.status === 'loading',
-        onClick: () => void runCheck(),
-      }, state.status === 'loading' ? e(Fragment, null, e(ActivityDots, null), t('about.checking')) : t('about.check')),
-    ),
-  )
+  return (
+    <section className="about-page" aria-label={t('settings.about')}>
+      <div className="about-header">
+        <h3 className="about-title">
+          {t('about.title')}
+        </h3>
+        <p className="about-version">
+          <strong>
+            {versionLabel}
+          </strong>
+        </p>
+        {!hasBridge ? <p className="about-note">
+          {t('about.browserHint')}
+        </p> : null}
+      </div>
+      <div className="about-status">
+        {renderStatus(state)}
+      </div>
+      {renderResultBody(state, download, appInfo, {
+        onOpen: onOpenDownload,
+        onDownload: (asset) => void startDownload(asset),
+        onCancel: cancelDownload,
+        onInstall: (path) => void installDownloaded(path),
+      })}
+      <p className="about-note">
+        {state.status === 'ready' && state.result.status === 'update-available'
+          ? t('about.macHint')
+          : t('about.proxyHint')}
+      </p>
+      <div className="about-actions">
+        <button
+          type="button"
+          className="about-button"
+          disabled={!canCheck || state.status === 'loading'}
+          onClick={() => void runCheck()}>
+          {state.status === 'loading' ? <Fragment>
+            <ActivityDots />
+            {t('about.checking')}
+          </Fragment> : t('about.check')}
+        </button>
+      </div>
+    </section>
+  );
 }
 
 function renderStatus(state: CheckState): ReactNode {
-  if (state.status === 'idle') return e('span', null, t('about.notChecked'))
-  if (state.status === 'loading') return e(ActivityText, null, t('about.checkingStatus'))
+  if (state.status === 'idle') return (
+    <span>
+      {t('about.notChecked')}
+    </span>
+  );
+  if (state.status === 'loading') return (
+    <ActivityText>
+      {t('about.checkingStatus')}
+    </ActivityText>
+  );
   const result = state.result
   if (result.status === 'latest') {
-    return e('span', { className: 'about-status-tag latest' }, t('about.latest'))
+    return (
+      <span className="about-status-tag latest">
+        {t('about.latest')}
+      </span>
+    );
   }
   if (result.status === 'update-available' && result.latest) {
-    return e(Fragment, null,
-      e('span', { className: 'about-status-tag available' }, t('about.updateAvailable')),
-      e('span', null, t('about.versionRange', { current: result.currentVersion, latest: result.latest.version })),
-    )
+    return (
+      <Fragment>
+        <span className="about-status-tag available">
+          {t('about.updateAvailable')}
+        </span>
+        <span>
+          {t('about.versionRange', { current: result.currentVersion, latest: result.latest.version })}
+        </span>
+      </Fragment>
+    );
   }
-  return e('span', { className: 'about-status-tag error' }, t('about.checkFailed'))
+  return (
+    <span className="about-status-tag error">
+      {t('about.checkFailed')}
+    </span>
+  );
 }
 
 interface ResultBodyHandlers {
@@ -251,20 +276,30 @@ function renderResultBody(
   if (state.status !== 'ready') return null
   const result = state.result
   if (result.status === 'error') {
-    return e('p', { className: 'about-error', role: 'alert' },
-      result.error ?? t('about.checkFailedRetry'),
-    )
+    return (
+      <p className="about-error" role="alert">
+        {result.error ?? t('about.checkFailedRetry')}
+      </p>
+    );
   }
   if (result.status === 'update-available' && result.latest) {
     const release = result.latest
-    return e('div', { className: 'about-release', 'aria-label': t('about.releaseAria') },
-      e('div', { className: 'about-release-meta' },
-        e('span', { className: 'about-release-version' }, release.name || release.version),
-        e('span', { className: 'about-release-date' }, formatPublishedAt(release.publishedAt)),
-      ),
-      e('p', { className: 'about-release-body' }, previewBody(release.body)),
-      renderDownloadArea(release, download, appInfo, handlers),
-    )
+    return (
+      <div className="about-release" aria-label={t('about.releaseAria')}>
+        <div className="about-release-meta">
+          <span className="about-release-version">
+            {release.name || release.version}
+          </span>
+          <span className="about-release-date">
+            {formatPublishedAt(release.publishedAt)}
+          </span>
+        </div>
+        <p className="about-release-body">
+          {previewBody(release.body)}
+        </p>
+        {renderDownloadArea(release, download, appInfo, handlers)}
+      </div>
+    );
   }
   return null
 }
@@ -278,61 +313,76 @@ function renderDownloadArea(
   const asset = release.asset
   if (download.status === 'downloading') {
     const percent = download.total > 0 ? Math.min(100, Math.round((download.received / download.total) * 100)) : 0
-    return e('div', { className: 'about-download' },
-      e('div', {
-        className: 'about-progress',
-        role: 'progressbar',
-        'aria-valuemin': 0,
-        'aria-valuemax': 100,
-        'aria-valuenow': percent,
-      },
-        e('div', { className: 'about-progress-fill', style: { width: `${percent}%` } }),
-      ),
-      e('p', { className: 'about-download-meta' },
-        download.verifying
-          ? e(Fragment, null, e(ActivityDots, null), t('about.verifying'))
-          : `${percent}% · ${formatMB(download.received)} / ${formatMB(download.total)} MB${download.mirror ? ` · ${download.mirror}` : ''}`,
-      ),
-      e('div', { className: 'about-actions' },
-        e('button', { type: 'button', className: 'about-button', onClick: handlers.onCancel }, t('about.cancelDownload')),
-      ),
-    )
+    return (
+      <div className="about-download">
+        <div
+          className="about-progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}>
+          <div className="about-progress-fill" style={{ width: `${percent}%` }} />
+        </div>
+        <p className="about-download-meta">
+          {download.verifying
+            ? <Fragment>
+            <ActivityDots />
+            {t('about.verifying')}
+          </Fragment>
+            : `${percent}% · ${formatMB(download.received)} / ${formatMB(download.total)} MB${download.mirror ? ` · ${download.mirror}` : ''}`}
+        </p>
+        <div className="about-actions">
+          <button type="button" className="about-button" onClick={handlers.onCancel}>
+            {t('about.cancelDownload')}
+          </button>
+        </div>
+      </div>
+    );
   }
   if (download.status === 'done') {
-    return e('div', { className: 'about-download' },
-      e('p', { className: 'about-download-meta' },
-        e(SuccessMark, null),
-        ' ',
-        download.revealed
-          ? t('about.macRevealed')
-          : t('about.downloadReady'),
-      ),
-      !download.revealed ? e('div', { className: 'about-actions' },
-        e('button', {
-          type: 'button',
-          className: 'about-button about-button-primary',
-          onClick: () => handlers.onInstall(download.path),
-        }, installButtonLabel(appInfo)),
-      ) : null,
-    )
+    return (
+      <div className="about-download">
+        <p className="about-download-meta">
+          <SuccessMark />
+          {' '}
+          {download.revealed
+            ? t('about.macRevealed')
+            : t('about.downloadReady')}
+        </p>
+        {!download.revealed ? <div className="about-actions">
+          <button
+            type="button"
+            className="about-button about-button-primary"
+            onClick={() => handlers.onInstall(download.path)}>
+            {installButtonLabel(appInfo)}
+          </button>
+        </div> : null}
+      </div>
+    );
   }
-  return e(Fragment, null,
-    download.status === 'error'
-      ? e('p', { className: 'about-error', role: 'alert' }, t('about.downloadFailed', { message: download.message }))
-      : null,
-    e('div', { className: 'about-actions' },
-      asset
-        ? e('button', {
-            type: 'button',
-            className: 'about-button about-button-primary',
-            onClick: () => handlers.onDownload(asset),
-          }, t('about.downloadUpdate', { size: formatMB(asset.size) }))
-        : null,
-      e('button', {
-        type: 'button',
-        className: asset ? 'about-button' : 'about-button about-button-primary',
-        onClick: () => handlers.onOpen(release.url),
-      }, t('about.goDownload')),
-    ),
-  )
+  return (
+    <Fragment>
+      {download.status === 'error'
+        ? <p className="about-error" role="alert">
+        {t('about.downloadFailed', { message: download.message })}
+      </p>
+        : null}
+      <div className="about-actions">
+        {asset
+          ? <button
+          type="button"
+          className="about-button about-button-primary"
+          onClick={() => handlers.onDownload(asset)}>
+          {t('about.downloadUpdate', { size: formatMB(asset.size) })}
+        </button>
+          : null}
+        <button
+          type="button"
+          className={asset ? 'about-button' : 'about-button about-button-primary'}
+          onClick={() => handlers.onOpen(release.url)}>
+          {t('about.goDownload')}
+        </button>
+      </div>
+    </Fragment>
+  );
 }

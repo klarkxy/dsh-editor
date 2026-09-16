@@ -1,8 +1,8 @@
-import { createElement as e, useEffect, useRef, useState, type ReactNode } from 'react'
+import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
-import { WritingSettings } from '../writing-settings.ts'
-import type { WritingMigration, WritingPreferences } from '../writing-settings.ts'
+import { WritingSettings } from '../writing-settings.tsx'
+import type { WritingMigration, WritingPreferences } from '../writing-settings.tsx'
 import { AboutSettingsSection } from './settings-about.tsx'
 import { SettingsGeneralSection } from './settings-general.tsx'
 import { SettingsModelsSection } from './settings-models.tsx'
@@ -53,25 +53,27 @@ function SettingsTabPage(props: { tab: string; active: boolean; fromX?: number; 
     : props.active
       ? enter
       : { opacity: 0, x: 0, y: 12, filter: 'blur(3px)' }
-  return e(TabsContent, {
-    value: props.tab,
-    forceMount: true,
-    hidden: !props.active,
-    className: `settings-content${props.active ? ' is-active' : ''}`,
-    style: { pointerEvents: props.active ? 'auto' : 'none' },
-  },
-    e(m.div, {
-      className: 'settings-page',
-      initial: false,
-      animate: pose,
-      transition: reduce ? { duration: 0 } : {
-        type: 'spring' as const, stiffness: 340, damping: 26, mass: 0.85,
-        /* blur 不走弹簧：keyframes + 欠阻尼 spring 过冲会把 filter 插成负数。 */
-        filter: { type: 'tween' as const, duration: 0.45, ease: 'easeOut' },
-      },
-      style: { pointerEvents: props.active ? 'auto' : 'none' },
-    }, props.children),
-  )
+  return (
+    <TabsContent
+      value={props.tab}
+      forceMount={true}
+      hidden={!props.active}
+      className={`settings-content${props.active ? ' is-active' : ''}`}
+      style={{ pointerEvents: props.active ? 'auto' : 'none' }}>
+      <m.div
+        className="settings-page"
+        initial={false}
+        animate={pose}
+        transition={reduce ? { duration: 0 } : {
+          type: 'spring' as const, stiffness: 340, damping: 26, mass: 0.85,
+          /* blur 不走弹簧：keyframes + 欠阻尼 spring 过冲会把 filter 插成负数。 */
+          filter: { type: 'tween' as const, duration: 0.45, ease: 'easeOut' },
+        }}
+        style={{ pointerEvents: props.active ? 'auto' : 'none' }}>
+        {props.children}
+      </m.div>
+    </TabsContent>
+  );
 }
 
 function tabLabel(tab: SettingsTab): string {
@@ -92,18 +94,21 @@ function navLabel(tab: string, sections: readonly OfficialSettingsSection[]): st
 /** 顶栏设置入口。保留 .native-settings-control 包裹和 aria-haspopup 约定（e2e 依赖）。 */
 export function SettingsTrigger(props: { onOpen(): void }) {
   useLocale()
-  return e('span', { className: 'native-settings-control' },
-    e('button', {
-      type: 'button',
-      className: 'settings-trigger',
-      'aria-haspopup': 'dialog',
-      'aria-label': t('common.settings'),
-      title: t('common.settings'),
-      onClick: props.onOpen,
-    },
-      e('span', { className: 'settings-trigger-icon', 'aria-hidden': true }, e(SettingsIcon, { size: 16 })),
-    ),
-  )
+  return (
+    <span className="native-settings-control">
+      <button
+        type="button"
+        className="settings-trigger"
+        aria-haspopup="dialog"
+        aria-label={t('common.settings')}
+        title={t('common.settings')}
+        onClick={props.onOpen}>
+        <span className="settings-trigger-icon" aria-hidden={true}>
+          <SettingsIcon size={16} />
+        </span>
+      </button>
+    </span>
+  );
 }
 
 export function SettingsDialog(props: {
@@ -167,56 +172,91 @@ export function SettingsDialog(props: {
   const activeOfficial = officialSections.find((section) => section.navId === activeTab)
   const builtinPages: SettingsTab[] = [...featureTabs, 'about']
   const content: Record<SettingsTab, () => ReactNode> = {
-    general: () => e(SettingsGeneralSection, { ctx: props.ctx }),
-    models: () => e(SettingsModelsSection, { ctx: props.ctx, writingScope: props.writingScope }),
-    writing: () => e(WritingSettings, { scope: props.writingScope, migrate: props.migrateWriting }),
-    usage: () => e(SettingsUsageSection, { ctx: props.ctx }),
-    zhihu: () => props.zhihuTab ?? e('p', { className: 'muted' }, t('settings.zhihuUnavailable')),
-    plugins: () => props.pluginsTab ?? e('p', { className: 'muted' }, t('settings.pluginsUnavailable')),
-    about: () => e(AboutSettingsSection, { active: activeTab === 'about', onBusyChange: setAboutBusy }),
+    general: () => <SettingsGeneralSection ctx={props.ctx} />,
+    models: () => <SettingsModelsSection ctx={props.ctx} writingScope={props.writingScope} />,
+    writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} />,
+    usage: () => <SettingsUsageSection ctx={props.ctx} />,
+    zhihu: () => props.zhihuTab ?? <p className="muted">
+      {t('settings.zhihuUnavailable')}
+    </p>,
+    plugins: () => props.pluginsTab ?? <p className="muted">
+      {t('settings.pluginsUnavailable')}
+    </p>,
+    about: () => <AboutSettingsSection active={activeTab === 'about'} onBusyChange={setAboutBusy} />,
   }
 
-  return e(Dialog, {
-    open,
-    onOpenChange: (next: boolean) => { if (!next && !aboutBusy) props.onClose() },
-    title: t('common.settings'),
-    className: 'file-dialog settings-dialog',
-    overlayClassName: 'file-dialog-overlay settings-overlay',
-    dismissible: !aboutBusy,
-    initialFocusRef: closeRef,
-  },
-    e(Tabs, { value: activeTab, onValueChange: selectTab, orientation: 'vertical', className: 'settings-tabs' },
-      e('aside', { className: 'settings-nav' },
-        e('h2', { id: 'settings-dialog-title' }, t('common.settings')),
-        e(TabsList, { 'aria-label': t('settings.nav') },
-          navTabs.map((key) => e(TabsTrigger, {
-            key,
-            value: key,
-            className: `settings-tab${activeTab === key ? ' active' : ''}`,
-            'aria-current': activeTab === key,
-          }, navLabel(key, officialSections))),
-        ),
-      ),
-      e('div', { className: 'settings-body' },
-        e('header', { className: 'settings-header' },
-          e('span', { className: 'settings-header-title' }, navLabel(activeTab, officialSections)),
-          props.ctx.connection.isLoopback ? e('button', { type: 'button', className: 'settings-open-config', onClick: () => void openConfigFile() }, t('settings.openConfig')) : null,
-          e(Button, { ref: closeRef, variant: 'icon', className: 'icon-button settings-close', 'aria-label': t('settings.close'), disabled: aboutBusy, onClick: props.onClose }, '×'),
-        ),
-        note ? e('p', { className: 'warning pad', role: 'alert' }, note) : null,
-        e('div', { className: 'settings-pages', tabIndex: 0 },
-          builtinPages.map((key) => e(SettingsTabPage, { key, tab: key, active: key === activeTab, fromX }, content[key]())),
-          open && activeOfficial && props.renderSlot
-            ? e(SettingsTabPage, { key: activeOfficial.navId, tab: activeOfficial.navId, active: true, fromX },
-              e(OfficialSettingsSectionPage, {
-                renderSlot: props.renderSlot,
-                sectionId: activeOfficial.id,
-                version: official.version,
-                onClose: props.onClose,
-              }))
-            : null,
-        ),
-      ),
-    ),
-  )
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next: boolean) => { if (!next && !aboutBusy) props.onClose() }}
+      title={t('common.settings')}
+      className="file-dialog settings-dialog"
+      overlayClassName="file-dialog-overlay settings-overlay"
+      dismissible={!aboutBusy}
+      initialFocusRef={closeRef}>
+      <Tabs
+        value={activeTab}
+        onValueChange={selectTab}
+        orientation="vertical"
+        className="settings-tabs">
+        <aside className="settings-nav">
+          <h2 id="settings-dialog-title">
+            {t('common.settings')}
+          </h2>
+          <TabsList aria-label={t('settings.nav')}>
+            {navTabs.map((key) => <TabsTrigger
+              key={key}
+              value={key}
+              className={`settings-tab${activeTab === key ? ' active' : ''}`}
+              aria-current={activeTab === key}>
+              {navLabel(key, officialSections)}
+            </TabsTrigger>)}
+          </TabsList>
+        </aside>
+        <div className="settings-body">
+          <header className="settings-header">
+            <span className="settings-header-title">
+              {navLabel(activeTab, officialSections)}
+            </span>
+            {props.ctx.connection.isLoopback ? <button
+              type="button"
+              className="settings-open-config"
+              onClick={() => void openConfigFile()}>
+              {t('settings.openConfig')}
+            </button> : null}
+            <Button
+              ref={closeRef}
+              variant="icon"
+              className="icon-button settings-close"
+              aria-label={t('settings.close')}
+              disabled={aboutBusy}
+              onClick={props.onClose}>
+              ×
+            </Button>
+          </header>
+          {note ? <p className="warning pad" role="alert">
+            {note}
+          </p> : null}
+          <div className="settings-pages" tabIndex={0}>
+            {builtinPages.map((key) => <SettingsTabPage key={key} tab={key} active={key === activeTab} fromX={fromX}>
+              {content[key]()}
+            </SettingsTabPage>)}
+            {open && activeOfficial && props.renderSlot
+              ? <SettingsTabPage
+              key={activeOfficial.navId}
+              tab={activeOfficial.navId}
+              active={true}
+              fromX={fromX}>
+              <OfficialSettingsSectionPage
+                renderSlot={props.renderSlot}
+                sectionId={activeOfficial.id}
+                version={official.version}
+                onClose={props.onClose} />
+            </SettingsTabPage>
+              : null}
+          </div>
+        </div>
+      </Tabs>
+    </Dialog>
+  );
 }

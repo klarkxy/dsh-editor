@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatUsageDate, summarizeUsage, usageChartTicks } from './client.ts'
+import { formatUsageDate, summarizeUsage, usageChartTicks } from './client.tsx'
 
 function day(date: string, calls: number, failures = 0, results = 0) {
   return { date, calls, failures, results }

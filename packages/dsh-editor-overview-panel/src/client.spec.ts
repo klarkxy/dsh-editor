@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CENTER_OVERLAYS_SLOT, COMMANDS_SERVICE, createCommandRegistry } from 'dsh-editor-seats'
-import { apply } from './client.ts'
+import { apply } from './client.tsx'
 
 describe('overview panel client', () => {
   it('registers the center-overlay seat and overview command, then disposes them', () => {

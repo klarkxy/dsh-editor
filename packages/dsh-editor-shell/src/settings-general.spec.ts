@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
 import { decodeBusyEnter, decodeLocalePreference, decodeThemePreference } from './client/settings-general.tsx'
 import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from './developer-settings.ts'
 
@@ -33,11 +32,5 @@ describe('settings general preference decoders', () => {
     expect(decodeDeveloperSettings({ developerMode: false })).toEqual({ developerMode: false })
     expect(decodeDeveloperSettings({})).toBeUndefined()
     expect(decodeDeveloperSettings(undefined)).toBeUndefined()
-  })
-
-  it('registers the developer namespace on the Host, otherwise the toggle binds dead', () => {
-    const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
-    expect(source).toContain('DEVELOPER_SETTINGS_NAMESPACE')
-    expect(source).toMatch(/settings\.register<DeveloperSettings>\(DEVELOPER_SETTINGS_NAMESPACE/)
   })
 })

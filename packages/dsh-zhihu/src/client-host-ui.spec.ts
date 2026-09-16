@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { apply } from './client.ts'
+import { apply } from './client.tsx'
 import {
   dockEscapeKeyDown,
   guardImeEnter,
   hostComponentsFromRenderProps,
   IME_KEYCODE,
   zhihuQueryKeyDown,
-} from './client-host-ui.ts'
+} from './client-host-ui.tsx'
 
 function MockSelect() { return null }
 function MockDialog() { return null }

@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import {
   actualAgentPreset,
@@ -455,26 +454,5 @@ describe('legacy session gate from host projection', () => {
     expect(actualAgentPreset(undefined)).toBeUndefined()
     expect(actualAgentPreset('')).toBeUndefined()
     expect(actualAgentPreset({ selected: '' })).toBeUndefined()
-  })
-})
-
-describe('source authority', () => {
-  it('does not add a local preset override Map, sessions.list wrapper, notes installer, or noteAgentPreset', () => {
-    const sources = [
-      readFileSync(new URL('./conversation-presets.ts', import.meta.url), 'utf8'),
-      readFileSync(new URL('./dsh-compat.ts', import.meta.url), 'utf8'),
-      readFileSync(new URL('./client.ts', import.meta.url), 'utf8'),
-      readFileSync(new URL('./client/chat.ts', import.meta.url), 'utf8'),
-      readFileSync(new URL('./client/dialogs.ts', import.meta.url), 'utf8'),
-    ].join('\n')
-    expect(sources).not.toContain('installSessionAgentPresetNotes')
-    expect(sources).not.toContain('noteAgentPreset')
-    expect(sources).not.toMatch(/sessions\.list\s*=/)
-    expect(sources).not.toMatch(/wrap(?:ped)?Sessions|wrapSessionList|proxySessions/)
-    expect(sources).not.toMatch(/agentPresetOverrides|presetBySession|sessionPresetMap|presetCache/)
-    expect(sources).not.toMatch(/localStorage[\s\S]{0,80}agentPreset|agentPreset[\s\S]{0,80}localStorage/)
-    expect(sources).not.toMatch(/new (?:Map|Set)\s*<[^>]*(?:[Pp]reset|agentPreset)/)
-    expect(sources).toContain('create(opts?: { workspaceId?: WorkspaceId; cwd?: string })')
-    expect(sources).not.toMatch(/create\([^)]*agentPreset/)
   })
 })

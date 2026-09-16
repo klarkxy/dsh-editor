@@ -6,7 +6,7 @@ import {
   writeHostThemePreference,
   type HostThemePreference,
   type HostThemeScope,
-} from './client/theme.ts'
+} from './client/theme.tsx'
 
 describe('host theme preference mapping', () => {
   it('maps paper/ink onto the host light/dark pair', () => {

@@ -9,7 +9,7 @@ import {
   ItemText as SelectItemText,
   ItemIndicator as SelectItemIndicator,
 } from '@radix-ui/react-select'
-import { createElement as e, useRef, useState, type ComponentProps, type KeyboardEvent } from 'react'
+import React, { useRef, useState, type ComponentProps, type KeyboardEvent } from 'react';
 import { t } from '../i18n/index.ts'
 
 export type SelectOption = { value: string; label: string }
@@ -44,63 +44,77 @@ export function Select(props: {
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
   const selected = props.options.find((option) => option.value === props.value)
-  return e('span', { className: `select${open ? ' open' : ''}` },
-    e(SelectRoot, {
-      open,
-      onOpenChange: (next: boolean) => {
-        // 空列表不展开(与旧实现一致);disabled 由 Radix 自身拦截。
-        if (next && props.options.length === 0) return
-        setOpen(next)
-      },
-      // 没有匹配项时传 '':Radix 视为未选择并显示 placeholder。
-      value: selected ? encodeValue(selected.value) : '',
-      onValueChange: (next: string) => {
-        const value = decodeValue(next)
-        if (value !== props.value) props.onChange(value)
-      },
-      disabled: props.disabled,
-    },
-      e(SelectTrigger, { ref: triggerRef, type: 'button', className: 'select-trigger', 'aria-label': props['aria-label'], title: props.title },
-        e('span', { className: selected || props.selectedLabel ? 'select-value' : 'select-value placeholder' },
-          props.selectedLabel ?? e(SelectValue, { placeholder: props.placeholder ?? t('select.unselected') })),
-        e('span', { className: 'select-caret', 'aria-hidden': true }, '⌄'),
-      ),
-      e(SelectPortal, null,
-        e(SelectContent, {
-          className: 'dsh-ui select-list',
-          position: 'popper',
-          sideOffset: 4,
-          collisionPadding: 8,
-          'aria-label': props['aria-label'],
-          /*
-           * Escape 只关本弹层、不关外层设置窗:设置弹窗的 keydown 是 React 合成
-           * 事件,Portal 内容的事件会沿 React 树冒泡到它(它检查 defaultPrevented
-           * 放行);而 Radix 的 DismissableLayer 在 document 原生监听,若 default
-           * 已被 prevent 则跳过自身关闭——所以这里 preventDefault + 自己关 +
-           * 自己把焦点还给触发钮,两条路径都被幂等接管。
-           */
-          onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
-            if (event.key !== 'Escape') return
-            event.preventDefault()
-            event.stopPropagation()
-            setOpen(false)
-            globalThis.setTimeout(() => triggerRef.current?.focus(), 0)
-          },
-        },
-          e(SelectViewport, { className: 'select-viewport' },
-            props.options.map((option) => e(SelectItem, {
-              key: encodeValue(option.value),
-              className: 'select-option',
-              value: encodeValue(option.value),
-              /* Radix 会把未知 prop 透传到 DOM；e2e 以 data-value 定位选项。 */
-              ...{ 'data-value': encodeValue(option.value) },
-            } as ComponentProps<typeof SelectItem>,
-              e(SelectItemText, null, option.label),
-              e(SelectItemIndicator, { className: 'select-option-check' }, '✓'),
-            )),
-          ),
-        ),
-      ),
-    ),
-  )
+  return (
+    <span className={`select${open ? ' open' : ''}`}>
+      <SelectRoot
+        open={open}
+        onOpenChange={(next: boolean) => {
+          // 空列表不展开(与旧实现一致);disabled 由 Radix 自身拦截。
+          if (next && props.options.length === 0) return
+          setOpen(next)
+        }}
+        // 没有匹配项时传 '':Radix 视为未选择并显示 placeholder。
+        value={selected ? encodeValue(selected.value) : ''}
+        onValueChange={(next: string) => {
+          const value = decodeValue(next)
+          if (value !== props.value) props.onChange(value)
+        }}
+        disabled={props.disabled}>
+        <SelectTrigger
+          ref={triggerRef}
+          type="button"
+          className="select-trigger"
+          aria-label={props['aria-label']}
+          title={props.title}>
+          <span
+            className={selected || props.selectedLabel ? 'select-value' : 'select-value placeholder'}>
+            {props.selectedLabel ?? <SelectValue placeholder={props.placeholder ?? t('select.unselected')} />}
+          </span>
+          <span className="select-caret" aria-hidden={true}>
+            ⌄
+          </span>
+        </SelectTrigger>
+        <SelectPortal>
+          <SelectContent
+            className="dsh-ui select-list"
+            position="popper"
+            sideOffset={4}
+            collisionPadding={8}
+            aria-label={props['aria-label']}
+            /*
+             * Escape 只关本弹层、不关外层设置窗:设置弹窗的 keydown 是 React 合成
+             * 事件,Portal 内容的事件会沿 React 树冒泡到它(它检查 defaultPrevented
+             * 放行);而 Radix 的 DismissableLayer 在 document 原生监听,若 default
+             * 已被 prevent 则跳过自身关闭——所以这里 preventDefault + 自己关 +
+             * 自己把焦点还给触发钮,两条路径都被幂等接管。
+             */
+            onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+              if (event.key !== 'Escape') return
+              event.preventDefault()
+              event.stopPropagation()
+              setOpen(false)
+              globalThis.setTimeout(() => triggerRef.current?.focus(), 0)
+            }}>
+            <SelectViewport className="select-viewport">
+              {props.options.map((option) => <SelectItem
+                {...{
+                  key: encodeValue(option.value),
+                  className: 'select-option',
+                  value: encodeValue(option.value),
+                  /* Radix 会把未知 prop 透传到 DOM；e2e 以 data-value 定位选项。 */
+                  ...{ 'data-value': encodeValue(option.value) },
+                } as ComponentProps<typeof SelectItem>}>
+                <SelectItemText>
+                  {option.label}
+                </SelectItemText>
+                <SelectItemIndicator className="select-option-check">
+                  ✓
+                </SelectItemIndicator>
+              </SelectItem>)}
+            </SelectViewport>
+          </SelectContent>
+        </SelectPortal>
+      </SelectRoot>
+    </span>
+  );
 }

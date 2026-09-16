@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { COMMANDS_SERVICE, MESSAGE_CARDS_SERVICE, SIDEBAR_TOOLS_SLOT, createCommandRegistry, createMessageCardRegistry } from 'dsh-editor-seats'
-import { apply } from './client.ts'
+import { apply } from './client.tsx'
 
 describe('memory panel client', () => {
   it('registers the sidebar seat, memory-open command, and memory-update card, then disposes them', () => {

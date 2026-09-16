@@ -13,8 +13,7 @@
  * loading, error with retry, the row list with editor / custom-provider cards
  * inlined, the candidate picker modal, and the delete confirmation.
  */
-import {
-  createElement as e,
+import React, {
   Fragment,
   useEffect,
   useMemo,
@@ -22,7 +21,7 @@ import {
   useSyncExternalStore,
   type ChangeEvent,
   type ReactNode,
-} from 'react'
+} from 'react';
 import type {
   ConfigurableProviderView,
   CredentialView,
@@ -53,12 +52,12 @@ import {
   type ReasoningChoice,
 } from './settings-models-store.ts'
 import { Select, type SelectOption } from './select.tsx'
-import { ConfirmDialog } from './dialogs.ts'
+import { ConfirmDialog } from './dialogs.tsx'
 import { ActivityDots, ActivitySkeleton, Button, Dialog } from './ui/index.ts'
 import type { SettingsDescribeFace, SettingsSchemaService, ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import type { SettingsScope } from '../dsh-compat.ts'
-import type { WritingPreferences } from '../writing-settings.ts'
+import type { WritingPreferences } from '../writing-settings.tsx'
 import { catalogFromSessionGroups, mergeCatalogOptions, WritingModelRoutes, type CatalogModelOption } from './writing-model-routes.tsx'
 
 type ModelsRemote = EditorRemote
@@ -430,7 +429,13 @@ export function SettingsModelsSection(props: { ctx: ShellContext; writingScope: 
     void store.load()
   }, [store])
 
-  return e(Loaded, { ctx: props.ctx, store, state, writingScope: props.writingScope })
+  return (
+    <Loaded
+      ctx={props.ctx}
+      store={store}
+      state={state}
+      writingScope={props.writingScope} />
+  );
 }
 
 function catalogOptions(rows: ProviderRow[], namespaces: Map<string, SettingsNamespaceView>, schema: SettingsSchemaService): CatalogModelOption[] {
@@ -473,24 +478,32 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
   }, [ctx, state.rows])
 
   if (state.status === 'idle' || state.status === 'loading') {
-    return e('section', { className: 'models-page', 'aria-label': t('settings.models') },
-      e(Header, {}),
-      e('div', { className: 'models-status', role: 'status', 'aria-live': 'polite' },
-        e(ActivitySkeleton, { lines: 4, className: 'models-loading' }),
-        e('span', { className: 'sr-only' }, text().loading),
-      ),
-    )
+    return (
+      <section className="models-page" aria-label={t('settings.models')}>
+        <Header />
+        <div className="models-status" role="status" aria-live="polite">
+          <ActivitySkeleton lines={4} className="models-loading" />
+          <span className="sr-only">
+            {text().loading}
+          </span>
+        </div>
+      </section>
+    );
   }
 
   if (state.status === 'error') {
     const message = state.error ?? text().loadFailed
-    return e('section', { className: 'models-page', 'aria-label': t('settings.models') },
-      e(Header, {}),
-      e('p', { className: 'models-error', role: 'alert' },
-        `${text().loadFailed}：${message}`,
-        e('button', { type: 'button', className: 'models-button', onClick: () => void store.load() }, text().retry),
-      ),
-    )
+    return (
+      <section className="models-page" aria-label={t('settings.models')}>
+        <Header />
+        <p className="models-error" role="alert">
+          {`${text().loadFailed}：${message}`}
+          <button type="button" className="models-button" onClick={() => void store.load()}>
+            {text().retry}
+          </button>
+        </p>
+      </section>
+    );
   }
 
   const writable = state.writable
@@ -502,184 +515,192 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
   const addTarget = section.adding ? section.editing : undefined
   const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.entry.settingsNs)
 
-  return e('section', { className: 'models-page', 'aria-label': t('settings.models') },
-    e(Header, { note: section.savedNote }),
-    e(WritingModelRoutes, {
-      scope: props.writingScope,
-      catalog: mergeCatalogOptions(runtimeCatalog, catalogOptions(state.rows, state.namespaces, ctx.settingsSchema)),
-      writable,
-    }),
-    !writable ? e('p', { className: 'models-notice', role: 'status' }, text().readOnly) : null,
-    state.credentialError !== null
-      ? e('p', { className: 'models-warning', role: 'status' },
-          `${text().credentialErrorPrefix}${state.credentialError}`,
-        )
-      : null,
-    e('ul', { className: 'models-rows' },
-      configured.map((row) => {
-        const target = row
-        const namespace = state.namespaces.get(target.entry.settingsNs)
-        if (namespace === undefined) return null
-        const editing = !section.adding && section.editing !== undefined && providerIdOf(section.editing.entry) === providerIdOf(target.entry)
-        const wantsSetup = needsSetup(target, anyUsable) && !section.dismissing.has(providerIdOf(target.entry))
-        if (wantsSetup) {
-          return e('li', { key: providerIdOf(target.entry), className: 'models-row-card' },
-            e(ProviderEditor, {
-              ctx,
-              store,
-              namespace,
-              row: target,
-              hideTitle: false,
-              setup: true,
-              readOnly: !writable,
-              onClose: (changed) => {
-                setSection((current) => {
-                  const dismissing = new Set(current.dismissing)
-                  dismissing.add(providerIdOf(target.entry))
-                  return {
+  return (
+    <section className="models-page" aria-label={t('settings.models')}>
+      <Header note={section.savedNote} />
+      <WritingModelRoutes
+        scope={props.writingScope}
+        catalog={mergeCatalogOptions(runtimeCatalog, catalogOptions(state.rows, state.namespaces, ctx.settingsSchema))}
+        writable={writable} />
+      {!writable ? <p className="models-notice" role="status">
+        {text().readOnly}
+      </p> : null}
+      {state.credentialError !== null
+        ? <p className="models-warning" role="status">
+        {`${text().credentialErrorPrefix}${state.credentialError}`}
+      </p>
+        : null}
+      <ul className="models-rows">
+        {configured.map((row) => {
+          const target = row
+          const namespace = state.namespaces.get(target.entry.settingsNs)
+          if (namespace === undefined) return null
+          const editing = !section.adding && section.editing !== undefined && providerIdOf(section.editing.entry) === providerIdOf(target.entry)
+          const wantsSetup = needsSetup(target, anyUsable) && !section.dismissing.has(providerIdOf(target.entry))
+          if (wantsSetup) {
+            return (
+              <li key={providerIdOf(target.entry)} className="models-row-card">
+                <ProviderEditor
+                  ctx={ctx}
+                  store={store}
+                  namespace={namespace}
+                  row={target}
+                  hideTitle={false}
+                  setup={true}
+                  readOnly={!writable}
+                  onClose={(changed) => {
+                    setSection((current) => {
+                      const dismissing = new Set(current.dismissing)
+                      dismissing.add(providerIdOf(target.entry))
+                      return {
+                        ...current,
+                        dismissing,
+                        savedNote: changed ? text().saved : current.savedNote,
+                      }
+                    })
+                  }} />
+              </li>
+            );
+          }
+          return (
+            <li key={providerIdOf(target.entry)} className="models-row-card">
+              <RowHead
+                row={target}
+                writable={writable}
+                open={editing}
+                onEdit={() => {
+                  setSection((current) => ({
                     ...current,
-                    dismissing,
+                    editing: editing ? undefined : target,
+                    adding: false,
+                    declaring: false,
+                    savedNote: null,
+                  }))
+                }}
+                onDelete={() => {
+                  setSection((current) => ({ ...current, deleteTarget: target, savedNote: null }))
+                }} />
+              {editing ? <ProviderEditor
+                ctx={ctx}
+                store={store}
+                namespace={namespace}
+                row={target}
+                hideTitle={false}
+                setup={false}
+                readOnly={!writable}
+                onClose={(changed) => {
+                  setSection((current) => ({
+                    ...current,
+                    editing: undefined,
+                    adding: false,
+                    declaring: false,
                     savedNote: changed ? text().saved : current.savedNote,
-                  }
-                })
-              },
-            }),
-          )
-        }
-        return e('li', { key: providerIdOf(target.entry), className: 'models-row-card' },
-          e(RowHead, {
-            row: target,
-            writable,
-            open: editing,
-            onEdit: () => {
-              setSection((current) => ({
-                ...current,
-                editing: editing ? undefined : target,
-                adding: false,
-                declaring: false,
-                savedNote: null,
-              }))
-            },
-            onDelete: () => {
-              setSection((current) => ({ ...current, deleteTarget: target, savedNote: null }))
-            },
-          }),
-          editing ? e(ProviderEditor, {
-            ctx,
-            store,
-            namespace,
-            row: target,
-            hideTitle: false,
-            setup: false,
-            readOnly: !writable,
-            onClose: (changed) => {
-              setSection((current) => ({
-                ...current,
-                editing: undefined,
-                adding: false,
-                declaring: false,
-                savedNote: changed ? text().saved : current.savedNote,
-              }))
-            },
-          }) : null,
-        )
-      }),
-    ),
-    addTarget !== undefined && addNamespace !== undefined
-      ? e('div', { className: 'models-add-card' },
-          e('div', { className: 'models-add-picker' },
-            e('label', { className: 'models-field' },
-              e('span', { className: 'models-field-label' }, t('models.provider')),
-              e(Select, {
-                value: providerIdOf(addTarget.entry),
-                options: addable.map<SelectOption>((row) => ({ value: providerIdOf(row.entry), label: targetLabel(row) })),
-                onChange: (provider) => {
-                  const next = addable.find((row) => providerIdOf(row.entry) === provider)
-                  if (next === undefined) return
-                  setSection((current) => ({ ...current, editing: next, adding: true }))
-                },
-                disabled: !writable,
-                'aria-label': t('models.provider'),
-              }),
-            ),
-          ),
-          e(ProviderEditor, {
-            ctx,
-            store,
-            namespace: addNamespace,
-            row: addTarget,
-            hideTitle: true,
-            setup: false,
-            readOnly: !writable,
-            onClose: (changed) => {
-              setSection((current) => ({
-                ...current,
-                editing: undefined,
-                adding: false,
-                declaring: false,
-                savedNote: changed ? text().saved : current.savedNote,
-              }))
-            },
-          }),
-        )
-      : section.declaring
-        ? e('div', { className: 'models-add-card' },
-            e(CustomProviderCard, {
-              ctx,
-              store,
-              protocols,
-              taken: state.rows.map((row) => providerIdOf(row.entry)),
-              readOnly: !writable,
-              onClose: (changed) => {
-                setSection((current) => ({
-                  ...current,
-                  declaring: false,
-                  savedNote: changed ? text().saved : current.savedNote,
-                }))
-              },
-            }),
-          )
-        : e('div', { className: 'models-add-actions' },
-            e('button', {
-              type: 'button',
-              className: 'models-button',
-              disabled: !writable || addable.length === 0,
-              onClick: () => {
-                const first = addable[0]
-                if (first === undefined) return
-                setSection({ ...emptySectionState(), editing: first, adding: true })
-              },
-            }, text().add),
-            e('button', {
-              type: 'button',
-              className: 'models-button',
-              disabled: !writable || protocols.length === 0,
-              onClick: () => setSection({ ...emptySectionState(), declaring: true }),
-            }, text().addCustom),
-          ),
-    e(DeleteDialog, {
-      open: section.deleteTarget !== undefined,
-      row: section.deleteTarget,
-      onCancel: () => setSection((current) => ({ ...current, deleteTarget: undefined })),
-      onConfirm: () => {
-        const target = section.deleteTarget
-        if (target === undefined) return
-        void removeProviderProfile(ctx, store, target)
-          .then(() => setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: text().saved })))
-          .catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : String(error)
-            setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: message }))
-          })
-      },
-    }),
-  )
+                  }))
+                }} /> : null}
+            </li>
+          );
+        })}
+      </ul>
+      {addTarget !== undefined && addNamespace !== undefined
+        ? <div className="models-add-card">
+        <div className="models-add-picker">
+          <label className="models-field">
+            <span className="models-field-label">
+              {t('models.provider')}
+            </span>
+            <Select
+              value={providerIdOf(addTarget.entry)}
+              options={addable.map<SelectOption>((row) => ({ value: providerIdOf(row.entry), label: targetLabel(row) }))}
+              onChange={(provider) => {
+                const next = addable.find((row) => providerIdOf(row.entry) === provider)
+                if (next === undefined) return
+                setSection((current) => ({ ...current, editing: next, adding: true }))
+              }}
+              disabled={!writable}
+              aria-label={t('models.provider')} />
+          </label>
+        </div>
+        <ProviderEditor
+          ctx={ctx}
+          store={store}
+          namespace={addNamespace}
+          row={addTarget}
+          hideTitle={true}
+          setup={false}
+          readOnly={!writable}
+          onClose={(changed) => {
+            setSection((current) => ({
+              ...current,
+              editing: undefined,
+              adding: false,
+              declaring: false,
+              savedNote: changed ? text().saved : current.savedNote,
+            }))
+          }} />
+      </div>
+        : section.declaring
+          ? <div className="models-add-card">
+        <CustomProviderCard
+          ctx={ctx}
+          store={store}
+          protocols={protocols}
+          taken={state.rows.map((row) => providerIdOf(row.entry))}
+          readOnly={!writable}
+          onClose={(changed) => {
+            setSection((current) => ({
+              ...current,
+              declaring: false,
+              savedNote: changed ? text().saved : current.savedNote,
+            }))
+          }} />
+      </div>
+          : <div className="models-add-actions">
+        <button
+          type="button"
+          className="models-button"
+          disabled={!writable || addable.length === 0}
+          onClick={() => {
+            const first = addable[0]
+            if (first === undefined) return
+            setSection({ ...emptySectionState(), editing: first, adding: true })
+          }}>
+          {text().add}
+        </button>
+        <button
+          type="button"
+          className="models-button"
+          disabled={!writable || protocols.length === 0}
+          onClick={() => setSection({ ...emptySectionState(), declaring: true })}>
+          {text().addCustom}
+        </button>
+      </div>}
+      <DeleteDialog
+        open={section.deleteTarget !== undefined}
+        row={section.deleteTarget}
+        onCancel={() => setSection((current) => ({ ...current, deleteTarget: undefined }))}
+        onConfirm={() => {
+          const target = section.deleteTarget
+          if (target === undefined) return
+          void removeProviderProfile(ctx, store, target)
+            .then(() => setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: text().saved })))
+            .catch((error: unknown) => {
+              const message = error instanceof Error ? error.message : String(error)
+              setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: message }))
+            })
+        }} />
+    </section>
+  );
 }
 
 function Header(props: { note?: string | null }): ReactNode {
   if (!props.note) return null
-  return e('header', { className: 'models-header settings-block-head' },
-    e('p', { className: 'models-saved', role: 'status' }, props.note),
-  )
+  return (
+    <header className="models-header settings-block-head">
+      <p className="models-saved" role="status">
+        {props.note}
+      </p>
+    </header>
+  );
 }
 
 function RowHead(props: {
@@ -692,35 +713,51 @@ function RowHead(props: {
   const { row, writable, open, onEdit, onDelete } = props
   const dot = credentialDot(row)
   const label = targetLabel(row)
-  return e('div', { className: 'models-row-head' },
-    e('div', { className: 'models-row-identity' },
-      e('span', { className: 'models-row-name' }, label),
-      row.entry.declared === true ? e('span', { className: 'models-row-tag' }, text().custom) : null,
-      dot === 'configured'
-        ? e('span', { className: 'models-credential-dot models-credential-dot-configured', role: 'img', 'aria-label': t('models.keyConfigured'), title: t('models.keyConfigured') })
-        : dot === 'missing'
-          ? e('span', { className: 'models-credential-dot models-credential-dot-missing', role: 'img', 'aria-label': t('models.keyMissing'), title: t('models.keyMissing') })
-          : null,
-    ),
-    e('div', { className: 'models-row-actions' },
-      e('button', {
-        type: 'button',
-        className: 'models-button',
-        'aria-label': formatTemplate(text().editProviderAria, label),
-        onClick: onEdit,
-      }, text().edit),
-      row.removable
-        ? e('button', {
-            type: 'button',
-            className: 'models-button models-button-danger',
-            'aria-label': formatTemplate(text().deleteProviderAria, label),
-            disabled: !writable,
-            onClick: onDelete,
-          }, text().delete)
-        : null,
-      open ? null : e('span', { className: 'models-row-state', 'aria-hidden': open ? 'true' : 'false' }),
-    ),
-  )
+  return (
+    <div className="models-row-head">
+      <div className="models-row-identity">
+        <span className="models-row-name">
+          {label}
+        </span>
+        {row.entry.declared === true ? <span className="models-row-tag">
+          {text().custom}
+        </span> : null}
+        {dot === 'configured'
+          ? <span
+          className="models-credential-dot models-credential-dot-configured"
+          role="img"
+          aria-label={t('models.keyConfigured')}
+          title={t('models.keyConfigured')} />
+          : dot === 'missing'
+            ? <span
+          className="models-credential-dot models-credential-dot-missing"
+          role="img"
+          aria-label={t('models.keyMissing')}
+          title={t('models.keyMissing')} />
+            : null}
+      </div>
+      <div className="models-row-actions">
+        <button
+          type="button"
+          className="models-button"
+          aria-label={formatTemplate(text().editProviderAria, label)}
+          onClick={onEdit}>
+          {text().edit}
+        </button>
+        {row.removable
+          ? <button
+          type="button"
+          className="models-button models-button-danger"
+          aria-label={formatTemplate(text().deleteProviderAria, label)}
+          disabled={!writable}
+          onClick={onDelete}>
+          {text().delete}
+        </button>
+          : null}
+        {open ? null : <span className="models-row-state" aria-hidden={open ? 'true' : 'false'} />}
+      </div>
+    </div>
+  );
 }
 
 /* Drop a user-added provider and (if its key is one this page owns) the
@@ -748,15 +785,16 @@ function DeleteDialog(props: { open: boolean; row?: ProviderRow; onCancel(): voi
   const row = props.row
   const managed = row !== undefined && managedCredentialRef(row) !== undefined
   const message = managed ? text().confirmDeleteManage : text().confirmDeleteKeep
-  return e(ConfirmDialog, {
-    open: props.open,
-    id: 'models-delete',
-    title: row ? formatTemplate(text().deleteTitle, targetLabel(row)) : text().delete,
-    message,
-    confirmLabel: text().delete,
-    onCancel: props.onCancel,
-    onConfirm: props.onConfirm,
-  })
+  return (
+    <ConfirmDialog
+      open={props.open}
+      id="models-delete"
+      title={row ? formatTemplate(text().deleteTitle, targetLabel(row)) : text().delete}
+      message={message}
+      confirmLabel={text().delete}
+      onCancel={props.onCancel}
+      onConfirm={props.onConfirm} />
+  );
 }
 
 /* A single provider's editor card. Owns its own draft and key buffers so
@@ -914,106 +952,135 @@ function ProviderEditor(props: {
   }
 
   if (node === undefined) {
-    return e('div', { className: 'models-editor' },
-      e('p', { className: 'models-warning' }, t('models.pathUnresolvable', { ns: namespace.ns })),
-    )
+    return (
+      <div className="models-editor">
+        <p className="models-warning">
+          {t('models.pathUnresolvable', { ns: namespace.ns })}
+        </p>
+      </div>
+    );
   }
 
-  return e('div', { className: 'models-editor' },
-    hideTitle ? null : e('div', { className: 'models-editor-header' },
-      e('span', { className: 'models-editor-title' }, targetLabel(row)),
-      targetLabel(row) !== providerIdOf(row.entry)
-        ? e('span', { className: 'models-editor-route' }, providerIdOf(row.entry))
-        : null,
-    ),
-    e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, text().apiKey),
-      e('input', {
-        type: 'password',
-        autoComplete: 'off',
-        className: 'models-input',
-        value: keyDraft,
-        placeholder: keyPlaceholder,
-        'aria-label': text().apiKey,
-        'aria-invalid': showKeyFailure !== undefined,
-        disabled: readOnly || busy || keyLocked,
-        onChange: (event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value),
-      }),
-      showKeyFailure === undefined
-        ? null
-        : e('p', { className: 'models-warning', role: 'alert' },
-            showKeyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal,
-          ),
-    ),
-    e('details', { className: 'models-customized' },
-      e('summary', { className: 'models-customized-summary' }, text().customized),
-      e('div', { className: 'models-customized-body' },
-        isDeclared ? e('div', { className: 'models-field' },
-          e('span', { className: 'models-field-label' }, text().displayName),
-          e('input', {
-            type: 'text',
-            className: 'models-input',
-            value: stringAt(draft, 'displayName') ?? '',
-            placeholder: stringAt(fallbackRecord, 'displayName') ?? providerIdOf(row.entry),
-            'aria-label': text().displayName,
-            disabled: readOnly || busy,
-            onChange: (event: ChangeEvent<HTMLInputElement>) => setField('displayName', event.target.value),
-          }),
-        ) : null,
-        e('div', { className: 'models-field' },
-          e('span', { className: 'models-field-label' }, text().baseUrl),
-          e('input', {
-            type: 'text',
-            className: 'models-input',
-            value: stringAt(draft, 'baseURL') ?? '',
-            placeholder: family === 'deepseek' ? text().baseUrlDeepseekPlaceholder : text().baseUrlPlaceholder,
-            'aria-label': text().baseUrl,
-            disabled: readOnly || busy,
-            onChange: (event: ChangeEvent<HTMLInputElement>) => setField('baseURL', event.target.value),
-          }),
-        ),
-        isPiAi && isDeclared ? e('div', { className: 'models-field' },
-          e('span', { className: 'models-field-label' }, text().protocol),
-          e(Select, {
-            value: stringAt(draft, 'api') ?? '',
-            options: [
-              { value: '', label: text().protocolUnset },
-              ...protocols.map<SelectOption>((value) => ({ value, label: value })),
-            ],
-            onChange: (value) => setField('api', value),
-            disabled: readOnly || busy,
-            'aria-label': text().protocol,
-            placeholder: text().protocolUnset,
-          }),
-        ) : null,
-        e(ModelListEditor, {
-          ctx,
-          models,
-          settingsNs: namespace.ns,
-          provider: providerIdOf(row.entry),
-          baseURL: stringAt(draft, 'baseURL') ?? stringAt(fallbackRecord, 'baseURL'),
-          api: isPiAi ? stringAt(draft, 'api') ?? stringAt(fallbackRecord, 'api') : undefined,
-          apiKey: keyValue.length > 0 ? keyValue : undefined,
-          disabled: readOnly || busy,
-          onChange: setModelsRef,
-          t: text(),
-        }),
-      ),
-    ),
-    failure !== undefined ? e('p', { className: 'models-warning', role: 'alert' }, failure) : null,
-    isSetup || keyFailure === undefined && modelFailure === undefined
-      ? e('div', { className: 'models-editor-actions' },
-          e('button', { type: 'button', className: 'models-button', disabled: busy, onClick: () => onClose(false) }, text().cancel),
-          e('button', {
-            type: 'button',
-            className: 'models-button models-button-primary',
-            disabled: readOnly || busy || keyFailure !== undefined || modelFailure !== undefined,
-            onClick: () => void submit(),
-          }, busy ? e(Fragment, null, e(ActivityDots, null), text().saving) : t('common.save')),
-        )
-      : null,
-    modelFailureText !== null ? e('p', { className: 'models-warning', role: 'alert' }, modelFailureText) : null,
-  )
+  return (
+    <div className="models-editor">
+      {hideTitle ? null : <div className="models-editor-header">
+        <span className="models-editor-title">
+          {targetLabel(row)}
+        </span>
+        {targetLabel(row) !== providerIdOf(row.entry)
+          ? <span className="models-editor-route">
+          {providerIdOf(row.entry)}
+        </span>
+          : null}
+      </div>}
+      <div className="models-field">
+        <span className="models-field-label">
+          {text().apiKey}
+        </span>
+        <input
+          type="password"
+          autoComplete="off"
+          className="models-input"
+          value={keyDraft}
+          placeholder={keyPlaceholder}
+          aria-label={text().apiKey}
+          aria-invalid={showKeyFailure !== undefined}
+          disabled={readOnly || busy || keyLocked}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value)} />
+        {showKeyFailure === undefined
+          ? null
+          : <p className="models-warning" role="alert">
+          {showKeyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal}
+        </p>}
+      </div>
+      <details className="models-customized">
+        <summary className="models-customized-summary">
+          {text().customized}
+        </summary>
+        <div className="models-customized-body">
+          {isDeclared ? <div className="models-field">
+            <span className="models-field-label">
+              {text().displayName}
+            </span>
+            <input
+              type="text"
+              className="models-input"
+              value={stringAt(draft, 'displayName') ?? ''}
+              placeholder={stringAt(fallbackRecord, 'displayName') ?? providerIdOf(row.entry)}
+              aria-label={text().displayName}
+              disabled={readOnly || busy}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setField('displayName', event.target.value)} />
+          </div> : null}
+          <div className="models-field">
+            <span className="models-field-label">
+              {text().baseUrl}
+            </span>
+            <input
+              type="text"
+              className="models-input"
+              value={stringAt(draft, 'baseURL') ?? ''}
+              placeholder={family === 'deepseek' ? text().baseUrlDeepseekPlaceholder : text().baseUrlPlaceholder}
+              aria-label={text().baseUrl}
+              disabled={readOnly || busy}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setField('baseURL', event.target.value)} />
+          </div>
+          {isPiAi && isDeclared ? <div className="models-field">
+            <span className="models-field-label">
+              {text().protocol}
+            </span>
+            <Select
+              value={stringAt(draft, 'api') ?? ''}
+              options={[
+                { value: '', label: text().protocolUnset },
+                ...protocols.map<SelectOption>((value) => ({ value, label: value })),
+              ]}
+              onChange={(value) => setField('api', value)}
+              disabled={readOnly || busy}
+              aria-label={text().protocol}
+              placeholder={text().protocolUnset} />
+          </div> : null}
+          <ModelListEditor
+            ctx={ctx}
+            models={models}
+            settingsNs={namespace.ns}
+            provider={providerIdOf(row.entry)}
+            baseURL={stringAt(draft, 'baseURL') ?? stringAt(fallbackRecord, 'baseURL')}
+            api={isPiAi ? stringAt(draft, 'api') ?? stringAt(fallbackRecord, 'api') : undefined}
+            apiKey={keyValue.length > 0 ? keyValue : undefined}
+            disabled={readOnly || busy}
+            onChange={setModelsRef}
+            t={text()} />
+        </div>
+      </details>
+      {failure !== undefined ? <p className="models-warning" role="alert">
+        {failure}
+      </p> : null}
+      {isSetup || keyFailure === undefined && modelFailure === undefined
+        ? <div className="models-editor-actions">
+        <button
+          type="button"
+          className="models-button"
+          disabled={busy}
+          onClick={() => onClose(false)}>
+          {text().cancel}
+        </button>
+        <button
+          type="button"
+          className="models-button models-button-primary"
+          disabled={readOnly || busy || keyFailure !== undefined || modelFailure !== undefined}
+          onClick={() => void submit()}>
+          {busy ? <Fragment>
+            <ActivityDots />
+            {text().saving}
+          </Fragment> : t('common.save')}
+        </button>
+      </div>
+        : null}
+      {modelFailureText !== null ? <p className="models-warning" role="alert">
+        {modelFailureText}
+      </p> : null}
+    </div>
+  );
 }
 
 /* Model-list editor shared by the editing and creating cards. Local state
@@ -1145,159 +1212,191 @@ function ModelListEditor(props: {
     })
   }
 
-  return e('section', { className: 'models-catalog', 'aria-label': t.models },
-    e('div', { className: 'models-catalog-head' },
-      e('span', { className: 'models-catalog-title' }, t.models),
-      e('button', {
-        type: 'button',
-        className: 'models-button',
-        disabled: disabled || busy || !fetchable,
-        onClick: () => void fetch(),
-      }, busy ? e(Fragment, null, e(ActivityDots, null), t.fetching) : t.fetchModels),
-    ),
-    models.length === 0
-      ? e('p', { className: 'models-empty' }, t.noneAdded)
-      : null,
-    models.map((model, index) => e('div', { key: `${index}-${typeof model['id'] === 'string' ? model['id'] : ''}`, className: 'models-catalog-entry' },
-      e('div', { className: 'models-catalog-row' },
-        e('input', {
-          type: 'text',
-          className: 'models-input models-input-id',
-          value: typeof model['id'] === 'string' ? (model['id'] as string) : '',
-          placeholder: t.modelId,
-          'aria-label': `${t.modelId} ${index + 1}`,
-          disabled,
-          onChange: (event: ChangeEvent<HTMLInputElement>) => patch(index, { id: event.target.value }),
-        }),
-        e('input', {
-          type: 'text',
-          className: 'models-input models-input-name',
-          value: typeof model['name'] === 'string' ? (model['name'] as string) : '',
-          placeholder: t.modelName,
-          'aria-label': `${t.modelName} ${index + 1}`,
-          disabled,
-          onChange: (event: ChangeEvent<HTMLInputElement>) => patch(index, { name: event.target.value === '' ? undefined : event.target.value }),
-        }),
-        e('button', {
-          type: 'button',
-          className: 'models-button models-button-icon',
-          'aria-label': `${t.modelAdvanced} ${index + 1}`,
-          'aria-expanded': expanded.has(index),
-          onClick: () => toggle(index),
-        }, expanded.has(index) ? '▾' : '▸'),
-        e('button', {
-          type: 'button',
-          className: 'models-button models-button-icon models-button-danger',
-          'aria-label': `${t.removeModel} ${index + 1}`,
-          disabled,
-          onClick: () => remove(index),
-        }, '×'),
-      ),
-      expanded.has(index) ? e('div', { className: 'models-catalog-advanced' },
-        e('label', { className: 'models-field models-field-row' },
-          e('span', { className: 'models-field-label' }, t.modelContext),
-          e('input', {
-            type: 'number',
-            className: 'models-input',
-            min: 1,
-            step: 1,
-            value: typeof model['contextWindow'] === 'number' ? String(model['contextWindow']) : '',
-            placeholder: '256000',
-            'aria-label': `${t.modelContext} ${index + 1}`,
-            disabled,
-            onChange: (event: ChangeEvent<HTMLInputElement>) => {
-              const raw = event.target.value
-              if (raw === '') patch(index, { contextWindow: undefined })
-              else {
-                const n = Number(raw)
-                patch(index, { contextWindow: Number.isFinite(n) ? n : raw })
-              }
-            },
-          }),
-        ),
-        e('label', { className: 'models-field models-field-row' },
-          e('span', { className: 'models-field-label' }, t.modelMax),
-          e('input', {
-            type: 'number',
-            className: 'models-input',
-            min: 1,
-            step: 1,
-            value: typeof model['maxTokens'] === 'number' ? String(model['maxTokens']) : '',
-            placeholder: '8192',
-            'aria-label': `${t.modelMax} ${index + 1}`,
-            disabled,
-            onChange: (event: ChangeEvent<HTMLInputElement>) => {
-              const raw = event.target.value
-              if (raw === '') patch(index, { maxTokens: undefined })
-              else {
-                const n = Number(raw)
-                patch(index, { maxTokens: Number.isFinite(n) ? n : raw })
-              }
-            },
-          }),
-        ),
-        e('label', { className: 'models-field models-field-row' },
-          e('span', { className: 'models-field-label' }, t.modelReasoning),
-          e(Select, {
-            value: reasoningChoiceOf(model),
-            options: [
-              { value: 'off', label: t.modelReasoningOff },
-              { value: 'standard', label: t.modelReasoningStandard },
-              ...(reasoningChoiceOf(model) === 'custom' ? [{ value: 'custom', label: t.modelReasoningCustom }] : []),
-            ],
-            disabled,
-            'aria-label': `${t.modelReasoning} ${index + 1}`,
-            onChange: (choice) => {
-              // custom 只在读取手写配置时出现,不可由此写入;切回其它档位才会落盘。
-              if (choice === 'custom') return
-              patch(index, { reasoningEfforts: reasoningEffortsFor(choice as ReasoningChoice) })
-            },
-          }),
-        ),
-      ) : null,
-    )),
-    e('button', {
-      type: 'button',
-      className: 'models-button models-button-add',
-      disabled,
-      onClick: add,
-    }, `+ ${t.addModel}`),
-    failure !== undefined ? e('p', { className: 'models-warning', role: 'alert' }, failure) : null,
-    e(Dialog, {
-      open: candidates !== undefined,
-      onOpenChange: (next: boolean) => { if (!next) closePicker() },
-      title: t.candidateTitle,
-      description: t.candidateDescription,
-      className: 'file-dialog models-candidate-dialog',
-      overlayClassName: 'file-dialog-overlay models-overlay',
-    },
-      e('header', null,
-        e('h2', null, t.candidateTitle),
-        e('p', { className: 'models-candidate-description' }, t.candidateDescription),
-        e(Button, { className: 'models-button', onClick: closePicker }, t.candidateClose),
-      ),
-      e('div', { className: 'models-candidate-actions' },
-        e(Button, { className: 'models-button', onClick: toggleAll }, allPicked ? t.candidateDeselectAll : t.candidateSelectAll),
-      ),
-      e('ul', { className: 'models-candidate-list' },
-        (candidates ?? []).map((candidate) => e('li', { key: candidate.id, className: 'models-candidate' },
-          e('label', { className: 'models-candidate-label' },
-            e('input', {
-              type: 'checkbox',
-              checked: picked.has(candidate.id),
-              onChange: () => togglePick(candidate.id),
-            }),
-            e('span', { className: 'models-candidate-id' }, candidate.id),
-            candidate.name !== undefined ? e('span', { className: 'models-candidate-name' }, candidate.name) : null,
-          ),
-        )),
-      ),
-      e('footer', null,
-        e(Button, { className: 'models-button', onClick: closePicker }, t.cancel),
-        e(Button, { className: 'models-button models-button-primary', onClick: adoptPicked }, t.candidateAdopt),
-      ),
-    ),
-  )
+  return (
+    <section className="models-catalog" aria-label={t.models}>
+      <div className="models-catalog-head">
+        <span className="models-catalog-title">
+          {t.models}
+        </span>
+        <button
+          type="button"
+          className="models-button"
+          disabled={disabled || busy || !fetchable}
+          onClick={() => void fetch()}>
+          {busy ? <Fragment>
+            <ActivityDots />
+            {t.fetching}
+          </Fragment> : t.fetchModels}
+        </button>
+      </div>
+      {models.length === 0
+        ? <p className="models-empty">
+        {t.noneAdded}
+      </p>
+        : null}
+      {models.map((model, index) => <div
+        key={`${index}-${typeof model['id'] === 'string' ? model['id'] : ''}`}
+        className="models-catalog-entry">
+        <div className="models-catalog-row">
+          <input
+            type="text"
+            className="models-input models-input-id"
+            value={typeof model['id'] === 'string' ? (model['id'] as string) : ''}
+            placeholder={t.modelId}
+            aria-label={`${t.modelId} ${index + 1}`}
+            disabled={disabled}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => patch(index, { id: event.target.value })} />
+          <input
+            type="text"
+            className="models-input models-input-name"
+            value={typeof model['name'] === 'string' ? (model['name'] as string) : ''}
+            placeholder={t.modelName}
+            aria-label={`${t.modelName} ${index + 1}`}
+            disabled={disabled}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => patch(index, { name: event.target.value === '' ? undefined : event.target.value })} />
+          <button
+            type="button"
+            className="models-button models-button-icon"
+            aria-label={`${t.modelAdvanced} ${index + 1}`}
+            aria-expanded={expanded.has(index)}
+            onClick={() => toggle(index)}>
+            {expanded.has(index) ? '▾' : '▸'}
+          </button>
+          <button
+            type="button"
+            className="models-button models-button-icon models-button-danger"
+            aria-label={`${t.removeModel} ${index + 1}`}
+            disabled={disabled}
+            onClick={() => remove(index)}>
+            ×
+          </button>
+        </div>
+        {expanded.has(index) ? <div className="models-catalog-advanced">
+          <label className="models-field models-field-row">
+            <span className="models-field-label">
+              {t.modelContext}
+            </span>
+            <input
+              type="number"
+              className="models-input"
+              min={1}
+              step={1}
+              value={typeof model['contextWindow'] === 'number' ? String(model['contextWindow']) : ''}
+              placeholder="256000"
+              aria-label={`${t.modelContext} ${index + 1}`}
+              disabled={disabled}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                const raw = event.target.value
+                if (raw === '') patch(index, { contextWindow: undefined })
+                else {
+                  const n = Number(raw)
+                  patch(index, { contextWindow: Number.isFinite(n) ? n : raw })
+                }
+              }} />
+          </label>
+          <label className="models-field models-field-row">
+            <span className="models-field-label">
+              {t.modelMax}
+            </span>
+            <input
+              type="number"
+              className="models-input"
+              min={1}
+              step={1}
+              value={typeof model['maxTokens'] === 'number' ? String(model['maxTokens']) : ''}
+              placeholder="8192"
+              aria-label={`${t.modelMax} ${index + 1}`}
+              disabled={disabled}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                const raw = event.target.value
+                if (raw === '') patch(index, { maxTokens: undefined })
+                else {
+                  const n = Number(raw)
+                  patch(index, { maxTokens: Number.isFinite(n) ? n : raw })
+                }
+              }} />
+          </label>
+          <label className="models-field models-field-row">
+            <span className="models-field-label">
+              {t.modelReasoning}
+            </span>
+            <Select
+              value={reasoningChoiceOf(model)}
+              options={[
+                { value: 'off', label: t.modelReasoningOff },
+                { value: 'standard', label: t.modelReasoningStandard },
+                ...(reasoningChoiceOf(model) === 'custom' ? [{ value: 'custom', label: t.modelReasoningCustom }] : []),
+              ]}
+              disabled={disabled}
+              aria-label={`${t.modelReasoning} ${index + 1}`}
+              onChange={(choice) => {
+                // custom 只在读取手写配置时出现,不可由此写入;切回其它档位才会落盘。
+                if (choice === 'custom') return
+                patch(index, { reasoningEfforts: reasoningEffortsFor(choice as ReasoningChoice) })
+              }} />
+          </label>
+        </div> : null}
+      </div>)}
+      <button
+        type="button"
+        className="models-button models-button-add"
+        disabled={disabled}
+        onClick={add}>
+        {`+ ${t.addModel}`}
+      </button>
+      {failure !== undefined ? <p className="models-warning" role="alert">
+        {failure}
+      </p> : null}
+      <Dialog
+        open={candidates !== undefined}
+        onOpenChange={(next: boolean) => { if (!next) closePicker() }}
+        title={t.candidateTitle}
+        description={t.candidateDescription}
+        className="file-dialog models-candidate-dialog"
+        overlayClassName="file-dialog-overlay models-overlay">
+        <header>
+          <h2>
+            {t.candidateTitle}
+          </h2>
+          <p className="models-candidate-description">
+            {t.candidateDescription}
+          </p>
+          <Button className="models-button" onClick={closePicker}>
+            {t.candidateClose}
+          </Button>
+        </header>
+        <div className="models-candidate-actions">
+          <Button className="models-button" onClick={toggleAll}>
+            {allPicked ? t.candidateDeselectAll : t.candidateSelectAll}
+          </Button>
+        </div>
+        <ul className="models-candidate-list">
+          {(candidates ?? []).map((candidate) => <li key={candidate.id} className="models-candidate">
+            <label className="models-candidate-label">
+              <input
+                type="checkbox"
+                checked={picked.has(candidate.id)}
+                onChange={() => togglePick(candidate.id)} />
+              <span className="models-candidate-id">
+                {candidate.id}
+              </span>
+              {candidate.name !== undefined ? <span className="models-candidate-name">
+                {candidate.name}
+              </span> : null}
+            </label>
+          </li>)}
+        </ul>
+        <footer>
+          <Button className="models-button" onClick={closePicker}>
+            {t.cancel}
+          </Button>
+          <Button className="models-button models-button-primary" onClick={adoptPicked}>
+            {t.candidateAdopt}
+          </Button>
+        </footer>
+      </Dialog>
+    </section>
+  );
 }
 
 /* The custom-provider creation card. A separate component so the create
@@ -1381,112 +1480,134 @@ function CustomProviderCard(props: {
     }
   }
 
-  return e('div', { className: 'models-editor' },
-    e('div', { className: 'models-editor-header' },
-      e('span', { className: 'models-editor-title' }, t('models.customProvider')),
-    ),
-    e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, text().customRoute),
-      e('input', {
-        type: 'text',
-        className: 'models-input',
-        value: route,
-        placeholder: 'acme-gateway',
-        'aria-label': text().customRoute,
-        'aria-invalid': routeInvalid !== undefined,
-        disabled: readOnly || busy || committed,
-        onChange: (event: ChangeEvent<HTMLInputElement>) => setRoute(event.target.value),
-      }),
-    ),
-    routeInvalid !== undefined
-      ? e('p', { className: 'models-warning', role: 'alert' },
-          routeInvalid === 'routeInvalid' ? text().customRouteInvalid : text().customRouteTaken,
-        )
-      : e('p', { className: 'models-hint' }, text().customRouteHint),
-    e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, text().displayName),
-      e('input', {
-        type: 'text',
-        className: 'models-input',
-        value: displayName,
-        placeholder: route.length > 0 ? route : text().displayName,
-        'aria-label': text().displayName,
-        disabled: readOnly || busy || committed,
-        onChange: (event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value),
-      }),
-    ),
-    e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, text().baseUrl),
-      e('input', {
-        type: 'text',
-        className: 'models-input',
-        value: baseURL,
-        placeholder: 'https://gateway.example/v1',
-        'aria-label': text().baseUrl,
-        disabled: readOnly || busy || committed,
-        onChange: (event: ChangeEvent<HTMLInputElement>) => setBaseURL(event.target.value),
-      }),
-    ),
-    e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, text().protocol),
-      e(Select, {
-        value: protocol,
-        options: protocols.map<SelectOption>((value) => ({ value, label: value })),
-        onChange: setProtocol,
-        disabled: readOnly || busy || committed,
-        'aria-label': text().protocol,
-      }),
-    ),
-    e('div', { className: 'models-field' },
-      e('span', { className: 'models-field-label' }, text().apiKey),
-      e('input', {
-        type: 'password',
-        autoComplete: 'off',
-        className: 'models-input',
-        value: keyDraft,
-        placeholder: text().apiKeyPlaceholder,
-        'aria-label': text().apiKey,
-        'aria-invalid': keyFailure !== undefined,
-        disabled: readOnly || busy,
-        onChange: (event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value),
-      }),
-      keyFailure === undefined
-        ? null
-        : e('p', { className: 'models-warning', role: 'alert' },
-            keyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal,
-          ),
-    ),
-    e(ModelListEditor, {
-      ctx,
-      models,
-      settingsNs: 'llm-pi-ai',
-      provider: route,
-      baseURL,
-      api: protocol,
-      apiKey: keyValue.length > 0 ? keyValue : undefined,
-      disabled: readOnly || busy || committed,
-      onChange: setModels,
-      t: text(),
-    }),
-    e('div', { className: 'models-hint' },
-      baseURL.trim().length === 0 ? text().customNeedsBaseUrl
-        : models.length === 0 ? text().customNeedsModels
-          : null,
-    ),
-    modelFailure !== undefined
-      ? e('p', { className: 'models-warning', role: 'alert' },
-          text().modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key)),
-        )
-      : null,
-    failure !== undefined ? e('p', { className: 'models-warning', role: 'alert' }, failure) : null,
-    e('div', { className: 'models-editor-actions' },
-      e('button', { type: 'button', className: 'models-button', disabled: busy, onClick: () => onClose(false) }, text().cancel),
-      e('button', {
-        type: 'button',
-        className: 'models-button models-button-primary',
-        disabled: readOnly || busy || !ready,
-        onClick: () => void submit(),
-      }, busy ? e(Fragment, null, e(ActivityDots, null), text().creating) : text().createCustom),
-    ),
-  )
+  return (
+    <div className="models-editor">
+      <div className="models-editor-header">
+        <span className="models-editor-title">
+          {t('models.customProvider')}
+        </span>
+      </div>
+      <div className="models-field">
+        <span className="models-field-label">
+          {text().customRoute}
+        </span>
+        <input
+          type="text"
+          className="models-input"
+          value={route}
+          placeholder="acme-gateway"
+          aria-label={text().customRoute}
+          aria-invalid={routeInvalid !== undefined}
+          disabled={readOnly || busy || committed}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setRoute(event.target.value)} />
+      </div>
+      {routeInvalid !== undefined
+        ? <p className="models-warning" role="alert">
+        {routeInvalid === 'routeInvalid' ? text().customRouteInvalid : text().customRouteTaken}
+      </p>
+        : <p className="models-hint">
+        {text().customRouteHint}
+      </p>}
+      <div className="models-field">
+        <span className="models-field-label">
+          {text().displayName}
+        </span>
+        <input
+          type="text"
+          className="models-input"
+          value={displayName}
+          placeholder={route.length > 0 ? route : text().displayName}
+          aria-label={text().displayName}
+          disabled={readOnly || busy || committed}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value)} />
+      </div>
+      <div className="models-field">
+        <span className="models-field-label">
+          {text().baseUrl}
+        </span>
+        <input
+          type="text"
+          className="models-input"
+          value={baseURL}
+          placeholder="https://gateway.example/v1"
+          aria-label={text().baseUrl}
+          disabled={readOnly || busy || committed}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setBaseURL(event.target.value)} />
+      </div>
+      <div className="models-field">
+        <span className="models-field-label">
+          {text().protocol}
+        </span>
+        <Select
+          value={protocol}
+          options={protocols.map<SelectOption>((value) => ({ value, label: value }))}
+          onChange={setProtocol}
+          disabled={readOnly || busy || committed}
+          aria-label={text().protocol} />
+      </div>
+      <div className="models-field">
+        <span className="models-field-label">
+          {text().apiKey}
+        </span>
+        <input
+          type="password"
+          autoComplete="off"
+          className="models-input"
+          value={keyDraft}
+          placeholder={text().apiKeyPlaceholder}
+          aria-label={text().apiKey}
+          aria-invalid={keyFailure !== undefined}
+          disabled={readOnly || busy}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value)} />
+        {keyFailure === undefined
+          ? null
+          : <p className="models-warning" role="alert">
+          {keyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal}
+        </p>}
+      </div>
+      <ModelListEditor
+        ctx={ctx}
+        models={models}
+        settingsNs="llm-pi-ai"
+        provider={route}
+        baseURL={baseURL}
+        api={protocol}
+        apiKey={keyValue.length > 0 ? keyValue : undefined}
+        disabled={readOnly || busy || committed}
+        onChange={setModels}
+        t={text()} />
+      <div className="models-hint">
+        {baseURL.trim().length === 0 ? text().customNeedsBaseUrl
+          : models.length === 0 ? text().customNeedsModels
+            : null}
+      </div>
+      {modelFailure !== undefined
+        ? <p className="models-warning" role="alert">
+        {text().modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key))}
+      </p>
+        : null}
+      {failure !== undefined ? <p className="models-warning" role="alert">
+        {failure}
+      </p> : null}
+      <div className="models-editor-actions">
+        <button
+          type="button"
+          className="models-button"
+          disabled={busy}
+          onClick={() => onClose(false)}>
+          {text().cancel}
+        </button>
+        <button
+          type="button"
+          className="models-button models-button-primary"
+          disabled={readOnly || busy || !ready}
+          onClick={() => void submit()}>
+          {busy ? <Fragment>
+            <ActivityDots />
+            {text().creating}
+          </Fragment> : text().createCustom}
+        </button>
+      </div>
+    </div>
+  );
 }

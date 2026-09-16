@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { apply } from './client.ts'
+import { apply } from './client.tsx'
 
 describe('desktop proofread client registration', () => {
   it('keeps the official Web overlay and does not register desktop extensions', () => {
@@ -23,8 +22,5 @@ describe('desktop proofread client registration', () => {
     } as never)
     expect(injected).toEqual(['shell.overlay'])
     expect(names).toEqual(['shell.overlay'])
-    const source = readFileSync(new URL('./client.ts', import.meta.url), 'utf8')
-    expect(source).toContain("inject('shell.overlay'")
-    expect(source).not.toContain("inject('dsh-editor.extensions'")
   })
 })

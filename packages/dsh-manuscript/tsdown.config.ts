@@ -14,7 +14,7 @@ export default defineConfig([
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
   },
   {
-    entry: { 'client.inner': 'src/client/index.ts' },
+    entry: { 'client.inner': 'src/client/index.tsx' },
     format: ['cjs'],
     dts: false,
     clean: false,

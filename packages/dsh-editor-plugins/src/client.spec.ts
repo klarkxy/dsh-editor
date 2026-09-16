@@ -5,7 +5,7 @@ import {
   handleMarketplaceGithubClick,
   isCurrentInstallAttempt,
   pluginInstallNotice,
-} from './client.ts'
+} from './client.tsx'
 
 const ready: PluginInspectReport = { verdict: 'ready', entries: [], hasClient: false, findings: [] }
 const warn: PluginInspectReport = {

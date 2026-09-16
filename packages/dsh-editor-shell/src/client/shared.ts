@@ -15,7 +15,7 @@ import type {
   WorkspaceView,
 } from '../dsh-compat.ts'
 import { stripChapterFrontmatter, worldbookEditorMetadata, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
-import type { WritingSettingsSlots } from '../writing-settings.ts'
+import type { WritingSettingsSlots } from '../writing-settings.tsx'
 import { isChapterMetaPath } from '../chapter-meta-view.ts'
 import { intlLocale, t } from '../i18n/index.ts'
 import { isImeEvent } from './ui/ime.ts'

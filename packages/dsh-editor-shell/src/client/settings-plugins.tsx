@@ -1,12 +1,11 @@
-import {
+import React, {
   Component,
   Fragment,
-  createElement as e,
   useCallback,
   useMemo,
   useSyncExternalStore,
   type ReactNode,
-} from 'react'
+} from 'react';
 import { OFFICIAL_SETTINGS_SLOT } from '../root-registration.ts'
 import { getLocale, subscribeLocale, t } from '../i18n/index.ts'
 
@@ -190,18 +189,30 @@ class OfficialSettingsPageBoundary extends Component<BoundaryProps, BoundaryStat
 
   render() {
     if (this.state.error) {
-      return e('div', { className: 'warning pad', role: 'alert', 'data-testid': 'settings-official-error' },
-        e('p', null, this.state.error ? `页面无法显示。${this.state.error}` : '页面无法显示。'),
-        e('button', {
-          type: 'button',
-          'data-testid': 'settings-official-retry',
-          onClick: () => this.setState((current) => ({ error: null, nonce: current.nonce + 1 })),
-        }, t('common.retry')),
-      )
+      return (
+        <div
+          className="warning pad"
+          role="alert"
+          data-testid="settings-official-error">
+          <p>
+            {this.state.error ? `页面无法显示。${this.state.error}` : '页面无法显示。'}
+          </p>
+          <button
+            type="button"
+            data-testid="settings-official-retry"
+            onClick={() => this.setState((current) => ({ error: null, nonce: current.nonce + 1 }))}>
+            {t('common.retry')}
+          </button>
+        </div>
+      );
     }
-    return e('div', { className: 'settings-official-page', 'data-testid': 'settings-official-page' },
-      e(Fragment, { key: this.state.nonce }, this.props.children),
-    )
+    return (
+      <div className="settings-official-page" data-testid="settings-official-page">
+        <Fragment key={this.state.nonce}>
+          {this.props.children}
+        </Fragment>
+      </div>
+    );
   }
 }
 
@@ -219,11 +230,12 @@ export function OfficialSettingsSectionPage(props: {
   version: number
   onClose(): void
 }) {
-  return e(OfficialSettingsPageBoundary, { identity: `${props.sectionId}:${props.version}` },
-    e(OfficialSettingsSlotOutlet, {
-      renderSlot: props.renderSlot,
-      sectionId: props.sectionId,
-      onClose: props.onClose,
-    }),
-  )
+  return (
+    <OfficialSettingsPageBoundary identity={`${props.sectionId}:${props.version}`}>
+      <OfficialSettingsSlotOutlet
+        renderSlot={props.renderSlot}
+        sectionId={props.sectionId}
+        onClose={props.onClose} />
+    </OfficialSettingsPageBoundary>
+  );
 }

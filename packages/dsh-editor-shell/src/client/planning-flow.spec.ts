@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { zh } from '../i18n/index.ts'
 import { errorMessage, errorReason, isStaleFailure, proposalAppliedNavigation, worldbookPaperProjection } from './shared.ts'
-import { buildExpectedVersions, unwrapWorkbenchPrepared } from './chat.ts'
+import { buildExpectedVersions, unwrapWorkbenchPrepared } from './chat.tsx'
 
 describe('planning proposal prepare unwrap', () => {
   const createProposal = { marker: 'dsh-editor.proposal', version: 1, kind: 'create', path: '大纲/总纲.md', summary: '新建', text: '# 总纲' } as never

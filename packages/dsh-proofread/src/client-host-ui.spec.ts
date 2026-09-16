@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { apply } from './client.ts'
+import { apply } from './client.tsx'
 import {
   dockEscapeKeyDown,
   guardImeEnter,
