@@ -32,6 +32,9 @@ import { redesignedStyles } from '../styles.ts'
 import { errorMessage, isStaleFailure, isSuccessWorkbenchNote, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, type PanelImperativeHandle, type PanelSize } from 'react-resizable-panels'
+import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarColumn, panelPixels, type FileMenuKind } from './root-columns.tsx'
+import { HomeScreen } from './root-home.tsx'
+import { WorkbenchTopbar } from './root-topbar.tsx'
 import { FolderIcon, FocusIcon, NewDocIcon } from './icons.tsx'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.tsx'
 import { SettingsDialog, SettingsTrigger, type SettingsRenderSlot, type SettingsTab } from './settings.tsx'
@@ -82,35 +85,9 @@ const PINNED_DEFAULT = 340
 const PINNED_MIN = 260
 const PINNED_MAX = 560
 
-/* 把 WorkspaceView.updatedAt(ISO-8601)格式化为首页最近作品区使用的简短时间标签:
-   60 秒内=刚刚,1 小时内=分钟前,今天=小时前,昨天,7 天内=天数前,
-   更早用 M月D日(同年)或 YYYY/MM/DD(跨年)。失败时退回到空串,DOM 仍能挂上小标签。 */
-function formatRecentTime(iso: string | undefined, now: Date = new Date()): string {
-  if (!iso) return ''
-  const stamp = Date.parse(iso)
-  if (!Number.isFinite(stamp)) return ''
-  const diff = Math.max(0, now.getTime() - stamp)
-  const minute = 60_000
-  const hour = 60 * minute
-  const day = 24 * hour
-  if (diff < minute) return t('time.justNow')
-  if (diff < hour) return t('time.minutesAgo', { count: Math.floor(diff / minute) })
-  if (diff < day && now.getDate() === new Date(stamp).getDate()) return t('time.hoursAgo', { count: Math.floor(diff / hour) })
-  const stampDate = new Date(stamp)
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
-  if (stampDate.getFullYear() === yesterday.getFullYear() && stampDate.getMonth() === yesterday.getMonth() && stampDate.getDate() === yesterday.getDate()) return t('time.yesterday')
-  if (diff < 7 * day) return t('time.daysAgo', { count: Math.floor(diff / day) })
-  if (stampDate.getFullYear() === now.getFullYear()) return t('time.monthDay', { month: stampDate.getMonth() + 1, day: stampDate.getDate() })
-  const yyyy = stampDate.getFullYear()
-  const mm = String(stampDate.getMonth() + 1).padStart(2, '0')
-  const dd = String(stampDate.getDate()).padStart(2, '0')
-  return `${yyyy}/${mm}/${dd}`
-}
-
 type TreeCreateRequest = { kind: 'file' | 'folder'; directory: string }
 type FileSession = NonNullable<NonNullable<ReturnType<ShellContext['sessions']['binding']>>['session']> | undefined
 
-type FileMenuKind = 'file' | 'directory'
 type FileMenuState = { kind: FileMenuKind; path: string; x: number; y: number } | null
 type ClipboardEntry = { op: 'copy' | 'cut'; path: string; kind: FileMenuKind } | null
 
@@ -197,313 +174,6 @@ async function verifyRelocatedWorkspaceSession(ctx: ShellContext, sessionId: Ses
   if (!read.ok) throw new Error(errorMessage(read))
   return initialPath
 }
-
-function BoundProposalCard(props: ShellProposalCardProps & { ctx: ShellContext }) {
-  return (
-    <ProposalCard
-      ctx={props.ctx}
-      sessionId={props.sessionId}
-      proposal={props.proposal}
-      onApplied={props.onApplied} />
-  );
-}
-
-/* 工作区三栏拆成模块级 memo 组件：侧栏搜索输入、面板拖拽、editorDirty 翻转等
-   高频重渲染不再连带重渲染全部三栏与插槽内容。props 一律由 Root 以
-   useMemo/useCallback 固化，memo 才能真的跳过渲染。面板几何交给
-   react-resizable-panels：像素 min/max、双击复位、键盘与 aria 全部内置。 */
-
-const panelPixels = (size: PanelSize): number => Math.round(size.inPixels)
-
-type SidebarFileMenuProps = {
-  onOpen(path: string): void
-  onPreviewImage(path: string): void
-  onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }, trigger?: HTMLElement | null): void
-  onCreateFile(directory: string): void
-  onCreateFolder(directory: string): void
-}
-
-const TreeColumn = memo(function TreeColumn(props: SidebarFileMenuProps & {
-  ctx: ShellContext
-  sessionId: string
-  active: string
-  expandPath: string
-  highlightPath?: string
-  revision: number
-}) {
-  return (
-    <Tree
-      ctx={props.ctx}
-      sessionId={props.sessionId}
-      active={props.active}
-      expandPath={props.expandPath}
-      highlightPath={props.highlightPath}
-      onOpen={props.onOpen}
-      onPreviewImage={props.onPreviewImage}
-      onFileMenu={props.onFileMenu}
-      onCreateFile={props.onCreateFile}
-      onCreateFolder={props.onCreateFolder}
-      revision={props.revision} />
-  );
-})
-
-const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuProps & {
-  ctx: ShellContext
-  sessionId: string
-  searchOpen: boolean
-  onSearchRequestOpen(): void
-  onOpenDocument(path: string, hit?: SearchHit): void
-  onSearchReplaced(paths: string[]): void
-  activePath: string
-  activeDirty: boolean
-  fileRevision: number
-  historyOpen: boolean
-  snapshots: SnapshotResponse[] | null
-  snapshotBusy: boolean
-  onCommitSnapshot(): void
-  onToggleHistory(): void
-  onRollback(snapshot: SnapshotResponse): void
-  createNote: string
-  workspaceWarning: string | undefined
-  workbenchNote: string
-  expandPath: string
-  highlightPath?: string
-  renderSlot?: SettingsRenderSlot
-  seatContext: ShellToolSeatContext
-}) {
-  /* 搜索查询串留在侧栏层：按键只重渲染本列，不上升到 Root 惊动其余两栏。 */
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchSubmitTick, setSearchSubmitTick] = useState(0)
-  const panelMotion = useChromeMotion('panel', 0, 'left')
-  return (
-    <m.aside
-      className="sidebar"
-      aria-label={t('workspace.filesAndNotes')}
-      {...panelMotion}>
-      <div className="side-title">
-        <Menu>
-          <MenuTrigger
-            className="side-version-trigger"
-            title={t('sidebar.versionMenu')}
-            aria-label={t('sidebar.versionMenu')}>
-            ⋯
-          </MenuTrigger>
-          <MenuContent
-            className="file-context-menu"
-            align="end"
-            side="bottom"
-            aria-label={t('sidebar.versionMenu')}>
-            <MenuItem
-              disabled={props.snapshotBusy}
-              title={t('workspace.commitTitle')}
-              onSelect={() => { props.onCommitSnapshot() }}>
-              {t('workspace.commit')}
-            </MenuItem>
-            <MenuItem
-              aria-current={props.historyOpen ? 'true' : undefined}
-              title={t('workspace.commitHistory')}
-              onSelect={() => props.onToggleHistory()}>
-              {t('common.history')}
-            </MenuItem>
-          </MenuContent>
-        </Menu>
-      </div>
-      <input
-        className="side-search"
-        type="search"
-        value={searchQuery}
-        maxLength={120}
-        placeholder={t('search.placeholder')}
-        aria-label={t('search.aria')}
-        title={t('workspace.searchTitle')}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          setSearchQuery(event.target.value)
-          if (!props.searchOpen) props.onSearchRequestOpen()
-        }}
-        onFocus={() => props.onSearchRequestOpen()}
-        onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
-          if (event.key !== 'Enter') return
-          props.onSearchRequestOpen()
-          setSearchSubmitTick((tick) => tick + 1)
-        }} />
-      {props.searchOpen ? <SearchPanel
-        ctx={props.ctx}
-        sessionId={props.sessionId}
-        revision={props.fileRevision}
-        query={searchQuery}
-        onQueryChange={setSearchQuery}
-        submitTick={searchSubmitTick}
-        /* 跳转统一走 openDocument 的保存 gate，不再因脏禁用；替换写入仍受 activeDirty 保护。 */
-        navigationBlocked={false}
-        activePath={props.activePath}
-        activeDirty={props.activeDirty}
-        onOpen={(hit: SearchHit) => props.onOpenDocument(hit.path, hit)}
-        onReplaced={props.onSearchReplaced} /> : null}
-      <m.div className="sidebar-tools" {...panelMotion}>
-        {props.renderSlot?.(SIDEBAR_TOOLS_SLOT, props.seatContext) ?? null}
-      </m.div>
-      {props.historyOpen ? <m.section
-        className="snapshot-panel"
-        aria-label={t('workspace.commitHistory')}
-        {...panelMotion}>
-        {props.snapshots === null
-          ? <div className="snapshot-empty" role="status" aria-live="polite">
-          <ActivitySkeleton lines={3} />
-          <span className="sr-only">
-            {t('workspace.historyLoading')}
-          </span>
-        </div>
-          : props.snapshots.length === 0
-            ? <p className="snapshot-empty">
-          {t('workspace.historyEmpty')}
-        </p>
-            : props.snapshots.map((item) => <div key={item.snapshotId} className="snapshot-row">
-          <span className="snapshot-label" title={item.createdAt}>
-            {item.label ?? item.createdAt}
-          </span>
-          <span className="snapshot-meta">
-            {t('workspace.historyFiles', { count: item.files })}
-          </span>
-          <button
-            className="snapshot-rollback"
-            type="button"
-            disabled={props.snapshotBusy}
-            onClick={() => props.onRollback(item)}>
-            {t('workspace.rollback')}
-          </button>
-        </div>)}
-      </m.section> : null}
-      {props.createNote ? <p className="warning pad" role="alert">
-        {props.createNote}
-      </p> : null}
-      {props.workspaceWarning ? <p className="warning pad" role="status">
-        {props.workspaceWarning}
-      </p> : null}
-      {props.workbenchNote ? <p
-        className={isSuccessWorkbenchNote(props.workbenchNote) ? 'side-status' : 'warning pad'}
-        role={isSuccessWorkbenchNote(props.workbenchNote) ? 'status' : 'alert'}>
-        {props.workbenchNote}
-      </p> : null}
-      <TreeColumn
-        ctx={props.ctx}
-        sessionId={props.sessionId}
-        active={props.activePath}
-        expandPath={props.expandPath}
-        highlightPath={props.highlightPath}
-        onOpen={props.onOpen}
-        onPreviewImage={props.onPreviewImage}
-        onFileMenu={props.onFileMenu}
-        onCreateFile={props.onCreateFile}
-        onCreateFolder={props.onCreateFolder}
-        revision={props.fileRevision} />
-    </m.aside>
-  );
-})
-
-const EditorColumn = memo(function EditorColumn(props: {
-  ctx: ShellContext
-  fileSession: SessionFace
-  path: string
-  files: string[]
-  onOpen(path: string): void
-  onCreate(): void
-  onHandle(handle: EditorCoreHandle | null): void
-  contentRevision: number
-  onDirtyChange(dirty: boolean): void
-  completionPreference: CompletionPreference
-  completionEnabled: boolean
-  authorPreferences: string
-  authorMemory: string
-  typewriter?: boolean
-  focusParagraph?: boolean
-  typography?: {
-    fontSize?: number
-    lineHeight?: number
-    fontFamily?: 'serif' | 'sans' | 'mono' | string
-    paragraphSpacing?: number
-    maxWidth?: number
-  }
-  onSaved(): void
-  reveal: RevealRequest | null
-}) {
-  const { ctx, fileSession, path, files } = props
-  /* 空态/改写弹窗等文案走 t()：自行订阅语言，memo 跳过时也能随语言切换刷新（同 Chat）。 */
-  useLocale()
-  return (
-    <ShellErrorBoundary>
-      <Editor
-        ctx={ctx}
-        session={fileSession}
-        path={path}
-        files={files}
-        onOpen={props.onOpen}
-        create={props.onCreate}
-        onHandle={props.onHandle}
-        externalRevision={props.contentRevision}
-        onDirtyChange={props.onDirtyChange}
-        reveal={props.reveal}
-        completionPreference={props.completionPreference}
-        /* 能力未加载完成前不发起补全/改写 RPC;显式错误态由用户重试恢复。 */
-        completionEnabled={props.completionEnabled}
-        authorPreferences={props.authorPreferences}
-        authorMemory={props.authorMemory}
-        typewriter={props.typewriter}
-        focusParagraph={props.focusParagraph}
-        typography={props.typography}
-        onSaved={props.onSaved} />
-    </ShellErrorBoundary>
-  );
-})
-
-const ChatColumn = memo(function ChatColumn(props: {
-  ctx: ShellContext
-  chatSession: SessionFace
-  workspaceId?: WorkspaceId
-  activePath?: string
-  authorPreferences: string
-  authorMemory: string
-  chatModel?: WritingModelRoute
-  onAcceptMemory(observation: string): Promise<boolean> | boolean
-  hidden: boolean
-  overlay?: boolean
-  onConfigure(): void
-  onDraftDirtyChange(dirty: boolean): void
-  onWritten?(path: string): void
-  onApplied(path: string): void
-}) {
-  const { ctx, chatSession } = props
-  return (
-    <ShellErrorBoundary key={chatSession.sessionId}>
-      <Chat
-        ctx={ctx}
-        session={chatSession}
-        workspaceId={props.workspaceId}
-        activePath={props.activePath}
-        authorPreferences={props.authorPreferences}
-        authorMemory={props.authorMemory}
-        chatModel={props.chatModel}
-        onAcceptMemory={props.onAcceptMemory}
-        hidden={props.hidden}
-        overlay={props.overlay}
-        onConfigure={props.onConfigure}
-        onDraftDirtyChange={props.onDraftDirtyChange}
-        onWritten={props.onWritten}
-        onApplied={props.onApplied} />
-    </ShellErrorBoundary>
-  );
-})
-
-const CenterOverlays = memo(function CenterOverlays(props: {
-  show: boolean
-  renderSlot?: SettingsRenderSlot
-  seatContext: ShellToolSeatContext
-}) {
-  return props.show
-    ? <div className="center-overlays">
-    {props.renderSlot?.(CENTER_OVERLAYS_SLOT, props.seatContext) ?? null}
-  </div>
-    : null;
-})
 
 function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock, pluginsSettings, zhihuSettings, commands, renderSlot }: {
   ctx: ShellContext
@@ -2201,197 +1871,35 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     await startWorkspaceFromPicker()
   }
 
-  if (workspaceOpen.kind === 'checking') {
+  if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
       <ShellUiProvider>
-        <main className="shell no-session" style={{ minWidth: 0, display: 'grid' }}>
-          <section className="workspace-checking" aria-label={t('home.verifying')}>
-            <ActivityRing size={40} />
-            <h1>
-              {t('home.checking')}
-            </h1>
-            <ActivityText cue="none">
-              {t('home.checkingDetail')}
-            </ActivityText>
-            <ActivityShimmer />
-            <code>
-              {workspaceOpen.path}
-            </code>
-          </section>
-          {extensionsDock}
-        </main>
-      </ShellUiProvider>
-    );
-  }
-
-  if (!fileSession || workspaceOpen.kind !== 'ready') {
-    return (
-      <ShellUiProvider>
-        <main className="shell no-session" style={{ minWidth: 0, display: 'grid' }}>
-          <header className="chrome" onDoubleClick={titleBarDoubleClick}>
-            <div className="brand-lockup">
-              <span className="brand-mark" aria-hidden="true">
-                D
-              </span>
-              <strong>
-                DSH Editor
-              </strong>
-            </div>
-            {extensionsDock}
-            <span className="topbar-actions">
-              <CommandPaletteTrigger onClick={() => setPaletteOpen(true)} />
-              <SettingsTrigger onOpen={openSettings} />
-              <WindowControls />
-            </span>
-          </header>
-          <PaperStage label={t('home.blankPaper')}>
-            <div
-              className="home-actions home-command-bar"
-              role="group"
-              aria-label={t('home.commands')}>
-              <m.button
-                className="home-entry-card"
-                type="button"
-                aria-label={t('home.openWork')}
-                disabled={openingWorkspace || Boolean(newProject)}
-                onClick={() => void startWorkspaceFromPicker()}
-                {...homeCardOpen}>
-                <span className="home-entry-icon" aria-hidden="true">
-                  <FolderIcon size={20} />
-                </span>
-                <span className="home-entry-title">
-                  {t('home.openWork')}
-                </span>
-              </m.button>
-              <m.button
-                className="home-entry-card"
-                type="button"
-                aria-label={t('home.new')}
-                disabled={openingWorkspace || Boolean(newProject)}
-                onClick={() => void startNewProject()}
-                {...homeCardNew}>
-                <span className="home-entry-icon" aria-hidden="true">
-                  <NewDocIcon size={20} />
-                </span>
-                <span className="home-entry-title">
-                  {t('home.new')}
-                </span>
-              </m.button>
-            </div>
-            {pathFallbackForm}
-            {workspaceOpen.kind === 'needs-intent' ? <section className="workspace-intent-prompt" role="alert">
-              <strong>
-                {workspaceOpen.intent === 'create' ? t('home.folderNotWork') : t('home.folderHasWork')}
-              </strong>
-              <p>
-                {workspaceOpen.message}
-              </p>
-              <code>
-                {workspaceOpen.path}
-              </code>
-              <div>
-                <button
-                  className="primary-action"
-                  type="button"
-                  disabled={openingWorkspace}
-                  onClick={() => void continuePendingWorkspaceIntent()}>
-                  {workspaceOpen.intent === 'create' ? t('home.createHere') : t('home.openInstead')}
-                </button>
-                <button
-                  type="button"
-                  disabled={openingWorkspace}
-                  onClick={() => void cancelPendingWorkspaceIntent()}>
-                  {t('common.cancel')}
-                </button>
-              </div>
-            </section> : null}
-            {workspaceOpen.kind === 'error' ? <code>
-              {workspaceOpen.path}
-            </code> : null}
-            {homeNote ? <p className="warning" role="alert">
-              {homeNote}
-            </p> : null}
-            <section className="home-recent" aria-label={t('home.recent')}>
-              <header>
-                <h2>
-                  {t('home.recent')}
-                </h2>
-              </header>
-              {workspaces.items.length ? <div className="workspace-list">
-                {workspaces.items.map((workspace) => {
-                  const needsRelocation = workspaceOpen.kind === 'needs-relocation' && workspaceOpen.workspaceId === workspace.workspaceId
-                  const recentLabel = formatRecentTime(workspace.updatedAt)
-                  return (
-                    <article
-                      className={`workspace-row${needsRelocation ? ' needs-relocation' : ''}`}
-                      key={workspace.workspaceId}>
-                      <button
-                        className="tree-row"
-                        type="button"
-                        disabled={openingWorkspace}
-                        onClick={() => void openRegisteredWorkspace(workspace)}>
-                        <strong>
-                          {workspace.title || workspace.path}
-                        </strong>
-                        <small>
-                          {workspace.path}
-                        </small>
-                        {recentLabel ? <span
-                          className="workspace-time"
-                          aria-label={t('home.recentOpened', { label: recentLabel })}>
-                          {recentLabel}
-                        </span> : null}
-                      </button>
-                      <button
-                        className="workspace-manage icon-button"
-                        type="button"
-                        disabled={openingWorkspace}
-                        title={t('home.removeRecent')}
-                        aria-label={t('home.removeRecent')}
-                        onClick={() => requestRemoveRecent(workspace)}>
-                        ×
-                      </button>
-                      {needsRelocation ? <div className="workspace-relocation" role="alert">
-                        <p>
-                          {workspaceOpen.message}
-                        </p>
-                        <code>
-                          {workspaceOpen.path}
-                        </code>
-                        <button
-                          className="primary-action"
-                          type="button"
-                          disabled={openingWorkspace}
-                          onClick={() => void relocateWorkspace(workspace)}>
-                          {t('home.relocate')}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={openingWorkspace}
-                          onClick={() => requestRemoveRecent(workspace)}>
-                          {t('home.removeRecent')}
-                        </button>
-                      </div> : null}
-                    </article>
-                  );
-                })}
-              </div> : <p className="muted home-recent-empty">
-                {t('home.recentEmpty')}
-              </p>}
-            </section>
-          </PaperStage>
-          {renderNewProjectDialog()}
-          {renderCommandPalette()}
-          {renderImportDialog()}
-          <ConfirmDialog
-            open={Boolean(removeRecentTarget)}
-            id="remove-recent"
-            title={t('home.removeRecent')}
-            message={t('home.removeRecentBody', { title: removeRecentTarget?.title || removeRecentTarget?.path || '' })}
-            confirmLabel={t('home.removeRecent')}
-            onCancel={() => setRemoveRecentTarget(null)}
-            onConfirm={() => void confirmRemoveRecent()} />
-          <SettingsDialog
+        <HomeScreen
+          workspaceOpen={workspaceOpen}
+          extensionsDock={extensionsDock}
+          openingWorkspace={openingWorkspace}
+          newProjectBusy={Boolean(newProject)}
+          onOpenWork={startWorkspaceFromPicker}
+          onNewProject={startNewProject}
+          homeCardOpen={homeCardOpen}
+          homeCardNew={homeCardNew}
+          pathFallbackForm={pathFallbackForm}
+          onContinueIntent={continuePendingWorkspaceIntent}
+          onCancelIntent={cancelPendingWorkspaceIntent}
+          homeNote={homeNote}
+          workspaces={workspaces.items}
+          onOpenWorkspace={(workspace) => void openRegisteredWorkspace(workspace)}
+          onRelocate={(workspace) => void relocateWorkspace(workspace)}
+          removeRecentTarget={removeRecentTarget}
+          onRequestRemoveRecent={requestRemoveRecent}
+          onCancelRemoveRecent={() => setRemoveRecentTarget(null)}
+          onConfirmRemoveRecent={() => void confirmRemoveRecent()}
+          dialogs={<>
+            {renderNewProjectDialog()}
+            {renderCommandPalette()}
+            {renderImportDialog()}
+          </>}
+          settingsDialog={<SettingsDialog
             open={settingsOpen}
             ctx={ctx}
             writingScope={writingScope}
@@ -2401,8 +1909,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             zhihuTab={zhihuSettings}
             focusTab={settingsFocusTab}
             renderSlot={renderSlot}
-            onClose={() => setSettingsOpen(false)} />
-        </main>
+            onClose={() => setSettingsOpen(false)} />}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onOpenSettings={openSettings} />
       </ShellUiProvider>
     );
   }
@@ -2430,127 +1939,35 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         className={`shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`}
         ref={shellMainRef}
         style={{ minWidth: 0 }}>
-        <header className="chrome" onDoubleClick={titleBarDoubleClick}>
-          <m.div
-            className="workspace-chrome"
-            role="group"
-            aria-label={t('workspace.work')}
-            {...workspaceChromeMotion}>
-            <div className="workspace-menu">
-              <Menu
-                open={workspaceMenuOpen}
-                onOpenChange={(open: boolean) => { if (open) workspaceMenuYields.current = false; setWorkspaceMenuOpen(open) }}>
-                <MenuTrigger
-                  ref={workspaceMenuTrigger}
-                  className="workspace-menu-trigger"
-                  title={currentWorkspace?.title || currentWorkspace?.path || t('workspace.work')}
-                  aria-label={t('workspace.menu')}
-                  aria-controls="workspace-actions">
-                  <span>
-                    {currentWorkspace?.title || currentWorkspace?.path || t('workspace.work')}
-                  </span>
-                </MenuTrigger>
-                <MenuContent
-                  id="workspace-actions"
-                  className="workspace-menu-panel"
-                  aria-label={t('workspace.actions')}
-                  align="start"
-                  onCloseAutoFocus={(event: Event) => {
-                    if (workspaceMenuYields.current) event.preventDefault()
-                  }}>
-                  {workspaces.items.length ? <span className="sr-only">
-                    {t('workspace.switch')}
-                  </span> : null}
-                  {workspaces.items.length ? workspaces.items.map((workspace) => <MenuItem
-                    key={workspace.workspaceId}
-                    className="workspace-menu-item"
-                    aria-current={workspace.workspaceId === currentWorkspace?.workspaceId ? 'true' : undefined}
-                    disabled={openingWorkspace}
-                    onSelect={() => { void switchToWorkspace(workspace.workspaceId) }}>
-                    {workspace.title || workspace.path}
-                  </MenuItem>) : null}
-                  {workspaces.items.length ? <MenuSeparator className="workspace-menu-divider" aria-hidden="true" /> : null}
-                  <MenuItem
-                    className="workspace-menu-item"
-                    disabled={openingWorkspace || Boolean(newProject)}
-                    onSelect={() => { workspaceMenuYields.current = true; void openAnotherWorkspace() }}>
-                    {t('home.openWork')}
-                  </MenuItem>
-                  <MenuItem
-                    className="workspace-menu-item"
-                    disabled={openingWorkspace || Boolean(newProject)}
-                    onSelect={() => { workspaceMenuYields.current = true; void startNewProject() }}>
-                    {t('home.new')}
-                  </MenuItem>
-                  <MenuItem
-                    className="workspace-menu-item"
-                    disabled={exporting}
-                    onSelect={() => { workspaceMenuYields.current = true; void exportDocuments() }}>
-                    {exporting ? t('workspace.exporting') : t('workspace.exportMarkdown')}
-                  </MenuItem>
-                  <MenuItem
-                    className="workspace-menu-item"
-                    disabled={exporting}
-                    onSelect={() => { workspaceMenuYields.current = true; void exportDocuments() }}>
-                    {t('workspace.exportTxt')}
-                  </MenuItem>
-                  <MenuItem
-                    className="workspace-menu-item"
-                    onSelect={() => { workspaceMenuYields.current = true; openArchivePanel() }}>
-                    {t('workspace.archived')}
-                  </MenuItem>
-                  <MenuItem
-                    className="workspace-menu-item"
-                    aria-label={t('workspace.backHome')}
-                    onSelect={() => { void leaveToHome() }}>
-                    {t('workspace.backHome')}
-                  </MenuItem>
-                </MenuContent>
-              </Menu>
-            </div>
-          </m.div>
-          <nav className="layout-controls" aria-label={t('workspace.layout')}>
-            <Tooltip
-              content={sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
-              children={<button
-                type="button"
-                disabled={focusMode}
-                aria-pressed={sidebarOpen}
-                aria-label={t('workspace.files')}
-                title={sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
-                onClick={() => setSidebarOpen((value) => !value)}>
-                {<FolderIcon size={16} />}
-              </button>} />
-            <Tooltip
-              content={focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus')}
-              children={<button
-                type="button"
-                aria-pressed={focusMode}
-                aria-label={focusMode ? t('workspace.exitFocusShort') : t('workspace.focus')}
-                title={focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus')}
-                onClick={() => setFocusMode((value) => !value)}>
-                {<FocusIcon size={16} />}
-              </button>} />
-            <Tooltip
-              content={assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant')}
-              children={<button
-                type="button"
-                disabled={focusMode}
-                aria-pressed={assistantOpen}
-                aria-label={t('workspace.assistant')}
-                title={assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant')}
-                onClick={() => setAssistantOpen((value) => !value)}>
-                {<DeepSeekWhaleMark />}
-              </button>} />
-          </nav>
-          {extensionsDock}
-          <div className="topbar-actions">
-            <ThemeToggle theme={theme} onChange={setTheme} />
-            <CommandPaletteTrigger onClick={() => setPaletteOpen(true)} />
-            <SettingsTrigger onOpen={openSettings} />
-            <WindowControls />
-          </div>
-        </header>
+        <WorkbenchTopbar
+          workspaceChromeMotion={workspaceChromeMotion}
+          workspaceMenuOpen={workspaceMenuOpen}
+          onWorkspaceMenuOpenChange={(open: boolean) => { if (open) workspaceMenuYields.current = false; setWorkspaceMenuOpen(open) }}
+          onWorkspaceMenuYield={() => { workspaceMenuYields.current = true }}
+          menuTriggerRef={workspaceMenuTrigger}
+          menuYieldsRef={workspaceMenuYields}
+          currentWorkspace={currentWorkspace}
+          workspaces={workspaces.items}
+          openingWorkspace={openingWorkspace}
+          newProjectBusy={Boolean(newProject)}
+          exporting={exporting}
+          onSwitchWorkspace={(workspaceId) => void switchToWorkspace(workspaceId)}
+          onOpenAnotherWorkspace={() => void openAnotherWorkspace()}
+          onNewProject={() => void startNewProject()}
+          onExportDocuments={() => void exportDocuments()}
+          onOpenArchive={openArchivePanel}
+          onLeaveHome={() => void leaveToHome()}
+          sidebarOpen={sidebarOpen}
+          focusMode={focusMode}
+          assistantOpen={assistantOpen}
+          onToggleSidebar={() => setSidebarOpen((value) => !value)}
+          onToggleFocusMode={() => setFocusMode((value) => !value)}
+          onToggleAssistant={() => setAssistantOpen((value) => !value)}
+          extensionsDock={extensionsDock}
+          theme={theme}
+          onThemeChange={setTheme}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onOpenSettings={openSettings} />
         <PanelGroup orientation="horizontal" className="shell-panels">
           {sidebarInGrid ? <>
             <Panel
