@@ -410,6 +410,9 @@ importers:
       '@lezer/markdown':
         specifier: ^1.7.2
         version: 1.7.2
+      dsh-editor-seats:
+        specifier: workspace:*
+        version: link:../dsh-editor-seats
       zod:
         specifier: ^4.1.5
         version: 4.4.3

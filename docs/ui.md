@@ -25,7 +25,7 @@
 | overlay 抽屉（不占 root；含同一 token 保底副本） | `packages/dsh-manuscript/src/client/overlay-styles.ts` |
 | 稿纸交互（FIM、选段、查找） | `packages/dsh-manuscript/src/client/editor-core/editor.tsx` |
 
-调整共享稿纸 token 时同步三份定义（shell、editor-core、overlay-styles）；桌面 `--chrome-*` 与纸面分开维护。shell 是桌面权威，editor-core 与 overlay-styles 的副本让公开 `dsh-manuscript` overlay 在没有 shell 时仍可读。overlay 的圆角更紧，不必强行与 shell 对齐。
+稿纸 token 的唯一来源是 `packages/dsh-editor-seats/src/tokens.ts`（paperInkTokens）；shell、editor-core、overlay-styles 在构建期内联同一字符串，注入顺序不再敏感。桌面 `--chrome-*` 与纸面分开维护。overlay 的圆角更紧，不必强行与 shell 对齐。
 
 选择写入 `localStorage["dsh-editor.theme"]`，并映射到宿主 `ui-theme`：纸 → `light`，墨 → `dark`。跟随系统没有对应稿纸主题，读取时按 `prefers-color-scheme` 落成纸或墨。
 

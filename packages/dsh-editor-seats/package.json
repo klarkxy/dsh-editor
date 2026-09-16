@@ -16,7 +16,12 @@
       "import": "./lib/index.js",
       "default": "./lib/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./tokens": {
+      "types": "./lib/tokens.d.ts",
+      "import": "./lib/tokens.js",
+      "default": "./lib/tokens.js"
+    }
   },
   "files": [
     "lib"
