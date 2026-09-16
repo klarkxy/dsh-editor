@@ -2,12 +2,12 @@
 
 桌面私有、仅 Host 的小说工具边界。包版本 `0.1.0`，不是桌面应用 `0.2.0`。`editor-novel-kernel` 在 profile 顶层 disabled。通用 / 文章 / 技术写作 Preset 不挂本包。
 
-`resolveNovelKernelMode`（`src/index.ts`）决定注册面。未知 mode fail closed；省略 config、`legacy` 与历史别名 `full` 都落完整表面。
+`resolveNovelKernelMode`（`src/index.ts`）决定注册面。mode 必填：省略 config 与未知 mode 一样 fail closed；`legacy` 与历史别名 `full` 落完整表面。
 
 | 模式 | 谁挂载 | 本包注册 |
 | --- | --- | --- |
 | `knowledge-only` | 可见的新 `dsh-editor-novel` 必须显式传入 | 仅 `novel_knowledge`。不注册提案 / 索引 / scratch / overview / memory，不装 `editorToolGuard`，不写 `dsh-editor:novel-kernel` 提示段 |
-| `legacy` | 隐藏的历史 `dsh-editor`（默认 / 省略 / `full`） | `novel_knowledge`、`novel_propose`、`novel_index_write`、scratch 三件套，并调用 workbench `installNovelWorkbenchTools` 挂 `novel_overview` / `novel_memory_update`；装 guard 与 prompt 段 |
+| `legacy` | 隐藏的历史 `dsh-editor`（显式 `mode: legacy`；`full` 是其历史别名） | `novel_knowledge`、`novel_propose`、`novel_index_write`、scratch 三件套，并调用 workbench `installNovelWorkbenchTools` 挂 `novel_overview` / `novel_memory_update`；装 guard 与 prompt 段 |
 
 采访、自动索引、`context.compile`、scratch 与 frontmatter 自动管线只服务 legacy 会话，不由 knowledge-only 启动。可见小说会话的写入合同是 workbench 的 `writing_propose` V2 与共用的 `author_observe`，不在本包。
 

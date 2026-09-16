@@ -7,9 +7,9 @@
 - Host `zhihu`（feature `zhihu`）：`/zhihu`（`src/index.ts`）
 - 官方 Web：`shell.overlay`（id `zhihu`，搜索 / 设置 / 用量 / 知识库）
 - 桌面：`dsh-editor.settings.zhihu` 嵌入设置「知乎资料」（配置 / 用量 / 知识库 / 连接测试）。**无桌面启动器**，不注册 `dsh-editor.extensions`（`src/client.ts`）
-- `zhihu-tools`（feature `zhihu-tools`，`dshEditor.inserts`）：仅 full 组合；工具名未改
+- `zhihu-tools`（feature `zhihu-tools`，`dshEditor.inserts`）：桌面组合自动加入；工具名未改
 
-桌面 full 仍启用 `zhihu` + `zhihu-tools`。basic / smart 不选这两项。
+桌面 canonical recipe `desktop` 启用 `zhihu` + `zhihu-tools`；`basic` / `smart` / `full` 别名解析同一集合。
 
 ## 契约
 

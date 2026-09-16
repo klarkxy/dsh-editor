@@ -1,31 +1,33 @@
 # 插件组合：选择与安装
 
-本文是桌面 **0.2.0** / DSH `0.1.5-rc.2` 的插件组合指南，覆盖桌面能力集合、`basic` / `smart` / `full` 兼容别名、声明式拼装、本地 tarball 安装与复现验收。接口契约只在 [插件架构](plugin-architecture.md) 维护，本文不复制。本轮结果见 [0.2.0 验收记录](release-0.2.0.md)。
+本文是桌面 **0.2.0** / DSH `0.1.5-rc.2` 的插件组合指南，覆盖桌面能力集合、canonical recipe `desktop` 与 `basic` / `smart` / `full` 兼容别名、声明式拼装、本地 tarball 安装与复现验收。接口契约只在 [插件架构](plugin-architecture.md) 维护，本文不复制。本轮结果见 [0.2.0 验收记录](release-0.2.0.md)。
 
 桌面包版本与公开插件包版本分别维护；三个公开插件经本地 tarball 安装。运行时边界见 [architecture.md](architecture.md)。直观边界见 [组合边界图](https://klarkxy.github.io/dsh-editor/plugin-composition-boundaries.html) 与 [插件分级图](https://klarkxy.github.io/dsh-editor/dsh-editor-plugins.html)；读图时 Host 插件在 DSH 进程内，`host-api` 是进程内库导入。
 
-## 一份桌面能力，三个兼容别名
+## 一份 canonical recipe，三个兼容别名
 
-`basic`、`smart`、`full` 不再是三种产品模式。三份 recipe 只保留不同的 `id` / `label`，解析出的 feature、包、停用入口、insert 与 Shell 服务名必须完全相同。三个 id 只给脚本和环境变量（`DSH_EDITOR_COMPOSITION`）做兼容；未指定时习惯写 `full`。
+桌面能力集合只有一份 canonical recipe：`apps/desktop/resources/compositions/desktop.json`（label `桌面写作`）。`basic`、`smart`、`full` 不再是三种产品模式，只是工具解析的兼容别名——解析 `desktop.json` 后仅覆盖 `id` / `label`，feature、包、停用入口、insert 与 Shell 服务名完全相同。四个 id 都可写给脚本和环境变量（`DSH_EDITOR_COMPOSITION`），未指定时默认 `desktop`。
 
 写作模式属于新对话 Preset，不在 recipe 里分支。四个当前 Preset 共用同一套桌面 UI：
 
-| Preset | 用途 |
-| --- | --- |
-| `dsh-editor-writing` | 通用写作；新会话默认；不挂 novel-kernel |
-| `dsh-editor-novel` | 小说创作；以 `knowledge-only` 挂 novel-kernel（仅 `novel_knowledge`），外加共用 `writing_propose` / `author_observe` |
-| `dsh-editor-article` | 文章与自媒体；不挂 novel-kernel |
-| `dsh-editor-technical` | 技术文档；不挂 novel-kernel |
+| Preset | 用途 | 来源 |
+| --- | --- | --- |
+| `dsh-editor-writing` | 通用写作；新会话默认；不挂 novel-kernel | 应用模板内建；核心锁定，不可关闭 |
+| `dsh-editor-novel` | 小说创作；以 `knowledge-only` 挂 novel-kernel（仅 `novel_knowledge`），外加共用 `writing_propose` / `author_observe` | `dsh-editor-novel-kernel` 的 `presets/`；可在设置「插件 → 写作模式」开关 |
+| `dsh-editor-article` | 文章与自媒体；不挂 novel-kernel | `dsh-editor-writing-presets` 的 `presets/`；同上可开关 |
+| `dsh-editor-technical` | 技术文档；不挂 novel-kernel | `dsh-editor-writing-presets` 的 `presets/`；同上可开关 |
 
-历史 `dsh-editor` 不进新建 picker（设置页"开发者模式"开启时例外：picker 追加列出 Host 返回的全部 preset，旧版带"旧版兼容"徽标）。新对话：草稿保护通过后 `list` 四个 Preset → 确认后才 blank `create` → `select` → 以 Host 真实投影打开；取消确认不 create。已有对话只切换。四个新 Preset 走 `writing_propose` V2：改已有文件必须带生成时 Host-read 的目标基线（edit/split 的 `targetVersion`，merge 的 `targetVersion`+`sourceVersion`，renames 每项 `version`）；可选 `basis` 只做独立来源依赖校验，不能代替目标基线。V2 create 是独占新建。不自动建索引、scratch、frontmatter，也不走 `context.compile`。可见 `dsh-editor-novel` 只多 `novel_knowledge`。只有 Host 上的 hidden legacy 会话才挂 novel-kernel 完整表面，并跑旧采访、自动索引、frontmatter 与 `context.compile`。通用 / 文章 / 技术不挂 novel-kernel。作品是普通文件夹；专业目录只在作者确认 create 提案后出现。
+第一方 preset 由包以 `dshEditor.presets` 声明、随 recipe feature `writing-presets` 进入组合，`configureProfile` 把它们复制进物化模板的 `agent-presets/`（写 app-owned marker），部署通道与模板内建 preset 相同。开关立即部署 / 删除 `<dshHome>/.agent-presets/<id>`，picker 下次列表即反映；进行中的会话不受影响。
+
+历史 `dsh-editor` 不进新建 picker（设置页"开发者模式"开启时例外：picker 追加列出 Host 返回的全部 preset，旧版带"诊断用途"徽标与迁移指引描述）。新对话：草稿保护通过后 `list` 四个 Preset → 确认后才 blank `create` → `select` → 以 Host 真实投影打开；取消确认不 create。已有对话只切换。四个新 Preset 走 `writing_propose` V2：改已有文件必须带生成时 Host-read 的目标基线（edit/split 的 `targetVersion`，merge 的 `targetVersion`+`sourceVersion`，renames 每项 `version`）；可选 `basis` 只做独立来源依赖校验，不能代替目标基线。V2 create 是独占新建。不自动建索引、scratch、frontmatter，也不走 `context.compile`。可见 `dsh-editor-novel` 只多 `novel_knowledge`。只有 Host 上的 hidden legacy 会话才挂 novel-kernel 完整表面，并跑旧采访、自动索引、frontmatter 与 `context.compile`。旧版会话打开时顶部显示迁移横幅（可新建写作会话继续作品；关闭仅记忆在内存，历史与文件不动）。通用 / 文章 / 技术不挂 novel-kernel。作品是普通文件夹；专业目录只在作者确认 create 提案后出现。
 
 | 交付 | 实际业务包 | AI/外部资料 |
 | --- | --- | --- |
 | 独立文本校对 | `dsh-proofread` | 文本 RPC 无 Agent、会话、文件、模型依赖 |
 | 独立资料查询 | `dsh-zhihu` | 普通 RPC/UI 默认启用；Tool 入口另行加入 |
-| 桌面能力集合（任一别名） | manuscript、proofread、workbench、novel-kernel、zhihu、shell、plugins、overview-panel、proofread-panel | 启用 Chat、补全、知乎普通服务与 Tool、四个 Preset 共用的文稿校对 UI；不装 cards / memory-panel（core 不强依赖） |
+| 桌面能力集合（canonical 或任一别名） | manuscript、proofread、workbench、novel-kernel、writing-presets、zhihu、shell、plugins、overview-panel、proofread-panel | 启用 Chat、补全、知乎普通服务与 Tool、四个 Preset 共用的文稿校对 UI；不装 cards / memory-panel（core 不强依赖） |
 
-桌面 recipe 的 canonical features 是 `assistant`、`completion`、`zhihu`、`zhihu-tools`、`overview-panel`、`proofread-panel`：
+桌面 recipe 的 canonical features 是 `assistant`、`completion`、`zhihu`、`zhihu-tools`、`overview-panel`、`proofread-panel`、`writing-presets`：
 
 | Feature | 作用 | 当前桌面 |
 | --- | --- | --- |
@@ -35,41 +37,44 @@
 | `zhihu-tools` | 知乎 Tool 入口 | 是 |
 | `overview-panel` | 中栏作品概览（`dsh-editor-overview-panel`） | 是 |
 | `proofread-panel` | 侧栏文稿校对（`dsh-editor-proofread-panel`）；当前文档 / 全部可见 md/txt；五项 kind，不含 `card` | 是 |
+| `writing-presets` | 第一方写作模式 preset 包（`dsh-editor-writing-presets`：文章与自媒体、技术文档） | 是 |
 | `cards` | 人物卡与世界书 UI（`dsh-editor-cards`） | 否（默认关闭；需显式 feature 才会装入） |
 | `memory-panel` | 侧栏记忆维护（`dsh-editor-memory-panel`） | 否 |
 
-novel-kernel 包随桌面能力集合安装。可见 `dsh-editor-novel` 显式 `mode: knowledge-only`（仅 `novel_knowledge`）；完整表面只挂 hidden legacy `dsh-editor`；通用 / 文章 / 技术不挂该入口。四个 Preset 共用 `proofread-panel` 文稿校对 UI。workbench 把校对引擎作为必需库；桌面顶层 `proofread` 入口仍可 disabled，因为面板调 workbench `proofread.scan`。保留 workbench 时不能删掉引擎包；独立 Web 的校对插件仍可使用。
+novel-kernel 包随桌面能力集合安装。可见 `dsh-editor-novel` 显式 `mode: knowledge-only`（仅 `novel_knowledge`）；完整表面只挂 hidden legacy `dsh-editor`（显式 `mode: legacy`）；通用 / 文章 / 技术不挂该入口。四个 Preset 共用 `proofread-panel` 文稿校对 UI。workbench 把校对引擎作为必需库；桌面顶层 `proofread` 入口仍可 disabled，因为面板调 workbench `proofread.scan`。保留 workbench 时不能删掉引擎包；独立 Web 的校对插件仍可使用。
 
-组合文件在 `apps/desktop/resources/compositions/{basic,smart,full}.json`，只声明 `id` / `label` / `features`。开发、模板准备、运行时物化和最终包校验由 `scripts/desktop-compositions.mjs` 调用 `scripts/plugin-manifest.mjs` 解析，得出包集合、停用入口、额外 insert 与 Shell feature 服务名。Shell 的业务 contracts 和编辑核心是构建时依赖，已内联；不会因 Shell 的运行依赖把未选中的面板装回来。
+组合文件只有一份：`apps/desktop/resources/compositions/desktop.json`，只声明 `id` / `label` / `features`。`basic` / `smart` / `full` 没有独立文件，由 `scripts/desktop-compositions.mjs` 的内置别名表解析为同一份 recipe 并覆盖 `id` / `label`。开发、模板准备、运行时物化和最终包校验由 `scripts/desktop-compositions.mjs` 调用 `scripts/plugin-manifest.mjs` 解析，得出包集合、停用入口、额外 insert 与 Shell feature 服务名。Shell 的业务 contracts 和编辑核心是构建时依赖，已内联；不会因 Shell 的运行依赖把未选中的面板装回来。
 
 ## 声明式拼装：dshEditor 与 feature 组合
 
 每个业务包在 `package.json` 里声明 `dshEditor`：
 
-- `role`: `core` 进入每份桌面组合并在插件界面锁定；`feature` 仅在被选中或被 workspace 依赖闭包拉入时装配。
+- `role`: `core` 进入桌面组合并在插件界面锁定；`feature` 仅在被选中或被 workspace 依赖闭包拉入时装配。
 - `visibility`: `public` 打 tarball；`desktop` 只进桌面 profile。
 - `entries`: 与该包 `cordis.patch.yml` 的 insert 一一对应。带 `feature` 的入口在未选中该 feature 时写入 `disabledEntries`；`locked: true` 的入口在插件管理里不可关闭。带 `service` 的 feature 会写入 Shell `config.features`。
 - `inserts`: 不在包 patch 里、只由组合脚本插入的入口（如 `zhihu-tools`），且仅在其 `feature` 被选中、`requires` 也已选中时加入。
+- `features`: 没有 Cordis 入口的包（如 `dsh-editor-writing-presets`）靠这个清单参与 feature 选择；选中即整包进入组合。
+- `presets`: 包内对话 preset `[{ id, path }]`；`visibility: desktop` 的第一方包可声明 `dsh-editor` 前缀 id，社区/公开插件不可。被选中包的 preset 进入 `composition.json`，由 `configureProfile` 复制进模板 `agent-presets/`。
 - `wrapClient`: 开发监听是否在 tsdown 成功后跑 `wrap-client.mjs`；未写时也可由 `dsh.client` 推导。
 
-食谱只列 feature。解析器选出全部 core 包、声明了所选 feature 的包，再并上 `dependencies` 里其他 `dsh-*` 工作区包。`proofread` 没有 feature，但 workbench 依赖它，因此每份桌面组合都会带上校对引擎。
+食谱只列 feature。解析器选出全部 core 包、声明了所选 feature 的包（入口的 `feature` 或包级 `dshEditor.features`），再并上 `dependencies` 里其他 `dsh-*` 工作区包。`proofread` 没有 feature，但 workbench 依赖它，因此桌面组合总会带上校对引擎。
 
 没有 `dshEditor` 的纯库包（如 `dsh-editor-workspace-kit`）不成为 bundle：解析结果把它们放进 `libraries`，prepare/verify/e2e 按 `packages + libraries` 复制并断言，但 profile `dsh.profile.bundles` 只列 `packages`。只被 `devDependencies` 引用、构建时内联的库（如 `dsh-editor-seats`）既不进 `packages` 也不进 `libraries`。
 
 运行时插件分级不再读死表：`dsh-editor-plugins` 从 profile `node_modules/<pkg>/package.json` 的 `dshEditor` 建目录。`@deepseek-ai/*` 隐藏；`locked` 入口归核心；其余带 `dshEditor` 的入口可开关；没有该块的包视为社区插件。受保护、不可卸载的包 = 当前 profile `dsh.profile.bundles` 加上 `@deepseek-ai/*`。
 
-新增插件：给包装上 `dshEditor`（并保证 `entries` 与包 patch 一致），若它是可选能力，再把对应 feature 写进当前桌面能力集合（三份别名必须同步）。不要再改脚本里的包名列表，也不要再按 basic / smart / full 拆产品模式。
+新增插件：给包装上 `dshEditor`（并保证 `entries` 与包 patch 一致），若它是可选能力，再把对应 feature 写进 canonical recipe `desktop.json`（三个别名自动跟随）。不要再改脚本里的包名列表，也不要再按 basic / smart / full 拆产品模式。
 
 侧栏工具走 Shell 座位与命令注册表，不要再改 `root.ts`。座位合同从 `dsh-editor-seats` 导入（构建时内联）。在 `dsh-editor.sidebar.tools` 或 `dsh-editor.center.overlays` 注册贡献，并从 `dshEditorCommands` 注册命令（含可选快捷键）。座位 props 是 Shell 传入的上下文（当前路径、脏标记、`openDocument`、`onApplied`、`refresh`、locale）。作者确认卡必须用座位上的 `ProposalCard`，插件不得自己写作者正文。中栏 overlay 打开时给根元素加 `CENTER_OVERLAY_ATTRIBUTE`（`data-dsh-center-overlay`），Shell 负责把它放进稿纸格并隐藏稿纸，插件不写 grid 规则。`overview-panel` 与 `proofread-panel` 使用这条路径；`cards` 与 `memory-panel` 合同仍在，但当前能力集合不启用。
 
 ```powershell
-$env:DSH_EDITOR_COMPOSITION = 'full' # basic / smart 解析结果除 id/label 外相同
+$env:DSH_EDITOR_COMPOSITION = 'desktop' # canonical recipe；basic / smart / full 为兼容别名，解析结果除 id/label 外相同
 pnpm dev
-# 或构建该别名的便携产物
+# 或构建该组合的便携产物
 pnpm pack:desktop
 ```
 
-更换别名 id 在保存草稿并关闭宿主后重启生效，能力集合不变。运行中的模型任务不承诺热卸载；普通请求、slot 与监听器仍有进程内清理。
+更换组合 id（`desktop` 或任一别名）在保存草稿并关闭宿主后重启生效，能力集合不变。运行中的模型任务不承诺热卸载；普通请求、slot 与监听器仍有进程内清理。
 
 ## 从本地 tarball 单独安装
 
@@ -121,13 +126,12 @@ pnpm test --maxWorkers=2 --testTimeout=20000
 pnpm pack:plugins
 node e2e/plugin-matrix.mjs
 $env:DSH_EDITOR_COPY_PACKAGES = '1'
-foreach ($recipe in @('basic', 'smart', 'full')) {
-  $env:DSH_EDITOR_COMPOSITION = $recipe
-  node scripts/prepare-desktop-dev.mjs
-  node e2e/compositions.mjs
-  if ($LASTEXITCODE -ne 0) { throw '组合验收失败' }
-}
-# 三个别名解析同一能力集合后，验证默认禁用 proofread entry，但保留 workbench 引擎
+# canonical recipe 一次即可：e2e/compositions.mjs 内部会同时物化 desktop 与 basic/smart/full 三个别名并断言一致
+$env:DSH_EDITOR_COMPOSITION = 'desktop'
+node scripts/prepare-desktop-dev.mjs
+node e2e/compositions.mjs
+if ($LASTEXITCODE -ne 0) { throw '组合验收失败' }
+# canonical 与三个别名解析同一能力集合后，验证默认禁用 proofread entry，但保留 workbench 引擎
 node e2e/entry-disable.mjs
 node e2e/missing-private-plugin.mjs
 ```

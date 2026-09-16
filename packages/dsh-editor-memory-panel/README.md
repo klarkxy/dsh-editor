@@ -7,7 +7,7 @@
 - 侧栏：`dsh-editor.sidebar.tools`（id `memory`，`src/client.ts`）
 - 命令：`memory-open`
 - Chat 回执卡：`dshEditorMessageCards` 注册 `novel_memory_update`（`src/card.ts`）
-- Feature：`memory-panel`（canonical basic / smart / full 均不选；默认关闭，可由兼容/自定义组合显式启用）
+- Feature：`memory-panel`（canonical recipe `desktop` 不选；默认关闭，可由显式 feature 启用）
 
 ## 契约
 

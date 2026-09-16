@@ -8,11 +8,11 @@ DSH Editor 是 Windows / macOS 桌面写作应用。Electron 负责窗口、受�
 
 - 左栏是真实目录树。作品是普通文件夹，不预建专业目录；作者确认「新建文件」提案后，才出现该模式需要的目录。栏顶提供搜索和版本操作，辅助文件隐藏；概览从命令面板打开。四个 Preset 共用侧栏文稿校对：当前文档或全部可见 `.md`/`.txt`，kind 为标点 / 错别字 / 敏感词 / 重复 / 口癖，不含 `card`。人物卡与记忆面板默认不装。知乎配置收在设置中。
 - 中栏是稿纸：稿内查找替换、打字机滚动、段落聚焦与排版、ghost FIM、选段改写，以及 ‹ › 文档导航。
-- 右栏是写作搭档（dsh 对话线程）。新对话先 `list` 四个 Preset，确认后再 blank `create` → `select`，以 Host 返回的真实投影打开：`dsh-editor-writing`（通用写作，默认）、`dsh-editor-novel`（小说创作）、`dsh-editor-article`（文章与自媒体）、`dsh-editor-technical`（技术文档）。已有对话只切换、不改模式。新模式发送纯文本，正文变更走 `writing_propose` V2：edit/split 必须带生成时 Host-read 的 `targetVersion`，merge 必须带 `targetVersion`+`sourceVersion`，renames 每项必须带 `version`；可选 `basis` 是独立的来源依赖列表，不能代替目标基线。全部 V2 操作接受可见项目相对 `.md`/`.txt`。V2 create 是严格 create-if-absent，已有空文件也不覆盖；历史 V1 create 可填充已有空文件。不自动建索引、scratch、frontmatter，也不走 `context.compile`。可见 `dsh-editor-novel` 以 `knowledge-only` 挂 novel-kernel，只多只读 `novel_knowledge`，外加共用的 `writing_propose` / `author_observe`。通用 / 文章 / 技术不挂 novel-kernel。完整小说工具与采访管线只留在隐藏的历史 `dsh-editor`，见[架构 · Legacy](docs/architecture.md#legacy-会话历史-dsh-editor)。⋯ 菜单支持归档、恢复或删除；删除只在本机记墓碑，DSH `0.1.5-rc.2` 没有会话删除。
+- 右栏是写作搭档（dsh 对话线程）。新对话先 `list` 四个 Preset，确认后再 blank `create` → `select`，以 Host 返回的真实投影打开：`dsh-editor-writing`（通用写作，默认）、`dsh-editor-novel`（小说创作）、`dsh-editor-article`（文章与自媒体）、`dsh-editor-technical`（技术文档）。已有对话只切换、不改模式。新模式发送纯文本，正文变更走 `writing_propose` V2：edit/split 必须带生成时 Host-read 的 `targetVersion`，merge 必须带 `targetVersion`+`sourceVersion`，renames 每项必须带 `version`；可选 `basis` 是独立的来源依赖列表，不能代替目标基线。全部 V2 操作接受可见项目相对 `.md`/`.txt`。V2 create 是严格 create-if-absent，已有空文件也不覆盖；历史 V1 create 可填充已有空文件。不自动建索引、scratch、frontmatter，也不走 `context.compile`。可见 `dsh-editor-novel` 以 `knowledge-only` 挂 novel-kernel，只多只读 `novel_knowledge`，外加共用的 `writing_propose` / `author_observe`。通用 / 文章 / 技术不挂 novel-kernel。小说创作 / 文章与自媒体 / 技术文档三个模式由第一方插件包提供，可在设置「插件 → 写作模式」里开关（立即生效，进行中的对话不受影响）；通用写作是锁定的核心 fallback。完整小说工具与采访管线只留在隐藏的历史 `dsh-editor`（显式 `mode: legacy`），见[架构 · Legacy](docs/architecture.md#legacy-会话历史-dsh-editor)。⋯ 菜单支持归档、恢复或删除；删除只在本机记墓碑，DSH `0.1.5-rc.2` 没有会话删除。
 
 两侧栏可以折叠或进入专注模式；窗口收窄时，对话以覆盖稿纸的抽屉呈现。
 
-仓库提供三个可独立安装到普通 DSH Web profile 的公开插件，以及随桌面交付的私有插件。`basic` / `smart` / `full` 只是同一桌面能力集合的兼容别名，安装与接口见[组合指南](docs/plugin-composition-guide.md)：
+仓库提供三个可独立安装到普通 DSH Web profile 的公开插件，以及随桌面交付的私有插件。桌面能力集合由一份 canonical recipe `desktop` 定义，`basic` / `smart` / `full` 只是它的兼容别名，安装与接口见[组合指南](docs/plugin-composition-guide.md)：
 
 | 组件 | 用途 | 数据所有者 |
 | --- | --- | --- |
@@ -22,9 +22,9 @@ DSH Editor 是 Windows / macOS 桌面写作应用。Electron 负责窗口、受�
 | `dsh-zhihu` | 独立资料查询、知识库与用量；Tool 入口可选 | DSH 凭据与计量 domain |
 | `dsh-editor-workbench` | 作品结构、文档概览与状态、校对、进度、导入、快照、移动与归档；通用 `writing_propose` / `author_observe` | 同一 live-session workspace authority |
 | `dsh-editor-cards` | 人物卡与世界书（列表、frontmatter、引用导航、新建），Host RPC + Client 座位 | 不发布；默认不装，core 不强依赖；卡片文件仍在作品目录 |
-| `dsh-editor-novel-kernel` | 两种模式：`knowledge-only` 只注册 `novel_knowledge`；默认 `legacy`/`full` 才有 V1 `novel_propose`、索引直写、scratch、overview/memory、guard 与系统提示 | 顶层 disabled；可见 `dsh-editor-novel` 显式 `knowledge-only`；完整表面只挂隐藏的 legacy `dsh-editor`；通用 / 文章 / 技术不挂 |
+| `dsh-editor-novel-kernel` | 两种模式（mode 必填，省略 fail closed）：`knowledge-only` 只注册 `novel_knowledge`；`legacy`/`full` 才有 V1 `novel_propose`、索引直写、scratch、overview/memory、guard 与系统提示 | 顶层 disabled；可见 `dsh-editor-novel` 显式 `knowledge-only`；完整表面只挂隐藏的 legacy `dsh-editor`；通用 / 文章 / 技术不挂 |
 | `dsh-editor-shell` | 桌面唯一根界面、三栏布局与编辑状态、Chat 投影；向插件开放座位与命令注册表 | 不发布、不安装到日常 `web` profile |
-| `dsh-editor-proofread-panel` | 文稿校对面板（当前文档 / 全部可见 `.md`/`.txt`；五项 kind，不含 `card`） | 不发布；三份 recipe 均装；只调 workbench `proofread.scan`，顶层 `dsh-proofread` 入口仍可 disabled |
+| `dsh-editor-proofread-panel` | 文稿校对面板（当前文档 / 全部可见 `.md`/`.txt`；五项 kind，不含 `card`） | 不发布；canonical recipe 安装；只调 workbench `proofread.scan`，顶层 `dsh-proofread` 入口仍可 disabled |
 | `dsh-editor-overview-panel` | 作品概览（文档状态、字数分布、写作曲线），通过中栏 overlay 座位接入 | 不发布；只消费 workbench RPC |
 | `dsh-editor-memory-panel` | 记忆维护（查看、应用与撤销 AGENTS.md / 人物卡 / 世界书记录），通过侧栏座位接入 | 不发布；默认不装，core 不强依赖；只消费 workbench RPC |
 | `dsh-editor-plugins` | 设置里开关非核心插件，并从 GitHub `topic:dsh-plugin` 市场搜索安装 | 不发布；锁定与分类读各包 `dshEditor` 声明 |

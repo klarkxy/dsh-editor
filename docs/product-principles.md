@@ -22,8 +22,6 @@ DSH 拥有 Agent、会话、模型、工具、审批、权限和对话历史。D
 
 ## 进度属于作品
 
-文档只有三种固定状态：草稿、修订中、已定稿。状态写在作品旁路 `.dsh-editor/chapter-status.json`，由概览和文件树消费，覆盖全部可见 Markdown/TXT。`novel_overview` 只在 hidden legacy `dsh-editor`（novel-kernel 完整表面）出现；可见 `dsh-editor-novel` 的 knowledge-only 不注册它。状态不是写入门禁，也不是可配置工作流。
-
 人物卡和世界书是同一批 Markdown 文件上的轻量目录，带引用导航，不做关系图或向量库。默认不装卡片或记忆面板，core 不强依赖它们。导出前预检可见文档顺序、空文档和总字数，再生成 Markdown / TXT / DOCX / EPUB。
 
 ## 明确不做
@@ -41,7 +39,9 @@ DSH 拥有 Agent、会话、模型、工具、审批、权限和对话历史。D
 - Android、远程多用户、云同步
 - 未经授权的 commit、push、tag、release 或代码签名
 
-三个公开插件 `dsh-manuscript`、`dsh-proofread`、`dsh-zhihu` 仍可独立安装到普通 DSH Web profile。桌面新对话默认 `dsh-editor-writing`，另有 `dsh-editor-novel`、`dsh-editor-article`、`dsh-editor-technical`；历史 `dsh-editor` 只作为 legacy 会话。不挂载官方编码工具目录。
+三个公开插件 `dsh-manuscript`、`dsh-proofread`、`dsh-zhihu` 仍可独立安装到普通 DSH Web profile。桌面新对话默认 `dsh-editor-writing`，另有 `dsh-editor-novel`、`dsh-editor-article`、`dsh-editor-technical`，三者由第一方插件包提供，作者可在设置「插件 → 写作模式」里开关（进行中的对话不受影响）；`dsh-editor-writing` 是锁定的核心 fallback。历史 `dsh-editor` 只作为 legacy 会话。不挂载官方编码工具目录。
+
+Legacy 退出判据：3a 恢复测试与迁移入口已上线；下一个 minor 版本删除 legacy 采访 / 自动索引 / scratch 旧流程与 `dsh-editor` preset（保留 V1 提案解析与章节 frontmatter 解析做转录兼容），届时删除本判据。
 
 ## 参考过、但不复制的开源产品
 

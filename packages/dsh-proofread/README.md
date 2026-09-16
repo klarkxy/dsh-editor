@@ -2,7 +2,7 @@
 
 可独立安装的中文文本校对插件。不读文件、不建会话、不调用模型。包版本 `0.1.0`，不是桌面应用 `0.2.0`。兼容 DSH `0.1.5-rc.2`。
 
-官方 Web 入口仍是 `shell.overlay`（id `proofread`，`src/client.ts`）。不注册 `dsh-editor.extensions`。桌面文稿校对 UI 由 `dsh-editor-proofread-panel` 提供（三份 canonical recipe 均装，侧栏 / `Ctrl+Shift+L`）；本 Client 在桌面 profile 无 overlay 座位，不出现独立启动器。顶层本包 entry 是否 disabled 不影响该面板。三份 recipe 仍因 workbench 依赖闭包装上本包，作为引擎库。
+官方 Web 入口仍是 `shell.overlay`（id `proofread`，`src/client.ts`）。不注册 `dsh-editor.extensions`。桌面文稿校对 UI 由 `dsh-editor-proofread-panel` 提供（canonical recipe `desktop` 安装，侧栏 / `Ctrl+Shift+L`）；本 Client 在桌面 profile 无 overlay 座位，不出现独立启动器。顶层本包 entry 是否 disabled 不影响该面板。桌面组合仍因 workbench 依赖闭包装上本包，作为引擎库。
 
 ## 契约
 

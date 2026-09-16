@@ -73,7 +73,7 @@ e2e/                           Playwright 验收脚本
 
 1. 验证 Windows x64、Node 和 DSH 精确版本；
 2. 将 DSH 依赖闭包物化到 `.dev/desktop-dsh-runtime`；
-3. 按 `scripts/plugin-manifest.mjs` 解析当前 recipe，把选中的包与被依赖的库（`libraries`，如 workspace-kit）以目录联接放到 `.dev/desktop-profile-template/node_modules`（`DSH_EDITOR_COPY_PACKAGES=1` 时改为拷贝，且不带 `.map`）；
+3. 按 `scripts/plugin-manifest.mjs` 解析当前 recipe（canonical `desktop.json`；`DSH_EDITOR_COMPOSITION` 接受 `desktop` / `basic` / `smart` / `full`，默认 `desktop`），把选中的包与被依赖的库（`libraries`，如 workspace-kit）以目录联接放到 `.dev/desktop-profile-template/node_modules`（`DSH_EDITOR_COPY_PACKAGES=1` 时改为拷贝，且不带 `.map`）；
 4. 使用 `.dev/desktop-home`；
 5. 启动该组合的插件 watcher 和 Electron；
 6. Electron 部署带 owner marker 的 `profiles/dsh-editor`；
@@ -88,6 +88,15 @@ e2e/                           Playwright 验收脚本
 ## 插件包职责
 
 各包职责、Cordis entry id、`inject` 清单、座位合同与 RPC 端点目录都以 [插件架构与接口](plugin-architecture.md) 为准，本节不再复述。下面只保留改代码时直接涉及的维护点。
+
+### 写作模式 preset 的归属与开关
+
+- 模板源 `apps/desktop/resources/profile/agent-presets/` 只保留核心 `dsh-editor-writing`（永远部署、不可关闭）与 legacy `dsh-editor`（开发者模式诊断）。`dsh-editor-novel` 由 `packages/dsh-editor-novel-kernel/presets/` 提供，`dsh-editor-article` / `dsh-editor-technical` 由 `packages/dsh-editor-writing-presets/presets/` 提供；包经 `dshEditor.presets` 声明，`configureProfile` 在物化模板时把目录复制进 `agent-presets/` 并写入 app-owned marker，仍由 `deployAgentPresets` 通道部署。
+- 作者在设置「插件 → 写作模式」里开关这三个第一方 preset：状态存 `<dshHome>/dsh-plugins.json` 的 `presets` 字段；开关立即部署/删除 `<dshHome>/.agent-presets/<id>`，picker 下次列表即反映，无需重启；进行中的会话不受影响。修改 preset 内容时改包内源目录，不要再放回 resources。
+
+### Legacy 退出判据（Phase 3d）
+
+3a 恢复测试与迁移入口已上线。下一个 minor 版本删除 legacy 采访 / 自动索引 / scratch 旧流程与 `dsh-editor` preset（保留 V1 提案解析与章节 frontmatter 解析做转录兼容），届时删除本判据。
 
 ### 打包与注入
 
@@ -153,7 +162,7 @@ pnpm pack:desktop
 
 - `node-24.16.0/`（Windows 为 `node.exe`，macOS 为 `node`）；
 - 完整、dereference 后的 DSH `0.1.5-rc.2` 依赖闭包；
-- 当前 recipe 解析出的全部业务包与库（`composition.json` 里的 `packages` + `libraries`）；
+- 当前 recipe（canonical `desktop`）解析出的全部业务包与库（`composition.json` 里的 `packages` + `libraries`）；
 - 含私有依赖的 profile 模板；
 - `manifest.json` 中的平台、文件数、字节数与 tree SHA-256。
 
@@ -177,7 +186,7 @@ pnpm pack:desktop
 - profile 同名无 marker 时必须拒绝覆盖；
 - 只能终止 Supervisor 记录的 DSH 进程树；
 - Renderer 不得读取凭据明文或直接调用 Node fs；文件权限由 Host 重建；
-- Chat Renderer 不执行工具；DSH Agent 只能在 guard 下调用受限检索、只读知识、非写入提案与限量提问，不直接写正文，也不保存历史副本。四个新 Preset 挂 `dsh-editor-workbench/tools`（`writing_propose` / `author_observe`）。可见 `dsh-editor-novel` 另以 `knowledge-only` 挂 novel-kernel（仅 `novel_knowledge`，无 kernel guard / prompt，无提案 / 索引 / scratch / overview / memory）。完整表面与采访 / 索引 / frontmatter / `context.compile` 管线只留在 hidden legacy `dsh-editor`。新模式不自动建索引、scratch 或 frontmatter，也不走 `context.compile`。不挂载官方 `standard` 编码工具目录；
+- Chat Renderer 不执行工具；DSH Agent 只能在 guard 下调用受限检索、只读知识、非写入提案与限量提问，不直接写正文，也不保存历史副本。四个新 Preset 挂 `dsh-editor-workbench/tools`（`writing_propose` / `author_observe`）。可见 `dsh-editor-novel` 另以 `knowledge-only` 挂 novel-kernel（仅 `novel_knowledge`，无 kernel guard / prompt，无提案 / 索引 / scratch / overview / memory）。完整表面（显式 `mode: legacy`）与采访 / 索引 / frontmatter / `context.compile` 管线只留在 hidden legacy `dsh-editor`。新模式不自动建索引、scratch 或 frontmatter，也不走 `context.compile`。不挂载官方 `standard` 编码工具目录；
 - 任何 commit、push、tag、publish、release 或签名必须另行授权。
 
 ## DSH 升级

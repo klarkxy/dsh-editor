@@ -1,12 +1,12 @@
 # dsh-editor-proofread-panel
 
-桌面私有、仅 Client 的中性文稿校对座位。四个 Preset 共用。Host 为空操作（`src/index.ts`）。包版本 `0.1.0`，不是桌面应用 `0.2.0`。canonical 三别名（`basic` / `smart` / `full`）均装。
+桌面私有、仅 Client 的中性文稿校对座位。四个 Preset 共用。Host 为空操作（`src/index.ts`）。包版本 `0.1.0`，不是桌面应用 `0.2.0`。canonical recipe `desktop` 安装（`basic` / `smart` / `full` 为兼容别名）。
 
 ## 入口
 
 - 侧栏：`dsh-editor.sidebar.tools`（id `proofread`，`src/client.ts`）
 - 命令：`proofread-document`（Ctrl+Shift+L，当前文档）、`proofread-manuscript`（全部可见 Markdown/TXT）
-- Feature：`proofread-panel`（三份 recipe 均选）
+- Feature：`proofread-panel`（canonical recipe 已选）
 
 ## 契约
 
