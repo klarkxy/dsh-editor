@@ -67,6 +67,7 @@ import {
   startNewConversationPresetFlow,
   type ConversationPresetChoice,
 } from '../conversation-presets.ts'
+import { shouldShowMigrationBanner } from '../legacy-migration.ts'
 import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
 import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
@@ -1028,6 +1029,17 @@ export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boo
   )
 }
 
+/** 旧版会话顶部的迁移横幅：新建写作会话继续作品，旧会话保持可读；关闭仅记忆在内存。 */
+export function LegacyMigrationBanner(props: { onMigrate(): void; onDismiss(): void }) {
+  return e('div', { className: 'migration-banner', role: 'note', 'aria-label': t('chat.legacyMigrationTitle') },
+    e('p', null, t('chat.legacyMigrationBanner')),
+    e('div', { className: 'migration-banner-actions' },
+      e('button', { type: 'button', onClick: props.onMigrate }, t('chat.legacyMigrationAction')),
+      e('button', { type: 'button', className: 'icon-button', 'aria-label': t('common.close'), onClick: props.onDismiss }, '×'),
+    ),
+  )
+}
+
 export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContextReceiptBundle }) {
   /* V3 轻量请求的回执是 {sources:[]}：不展示空注入回执；V1/V2 历史消息照常渲染。 */
   if (!receipt.sources.length) return null
@@ -1179,6 +1191,8 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const newConversationButton = useRef<HTMLButtonElement | null>(null)
   const [modelRevision, setModelRevision] = useState(0)
   const titleAttempted = useRef(new Set<string>())
+  /* 迁移横幅的关闭按会话记在内存里，不落盘。 */
+  const [dismissedMigrations, setDismissedMigrations] = useState<ReadonlySet<string>>(new Set())
   const historyRef = useRef<HTMLDivElement | null>(null)
   const bottomPinnedRef = useRef(true)
   useEffect(() => {
@@ -1343,6 +1357,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     interviewCompleted: initState === 'interview' && initCompleted,
     engaged: initEngaged,
     workspaceHasConversation,
+  })
+  const showMigrationBanner = shouldShowMigrationBanner({
+    legacy: legacyEditor,
+    dismissed: dismissedMigrations.has(session.sessionId),
   })
   /* 空白列占位:没有任何历史行,且引导卡与在途内容(发送中/排队/运行中/思考/审批)都不在时,
      给一句 muted 提示,避免空对话只剩一列空白。 */
@@ -1514,7 +1532,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
             if (error) setNote(error)
           }
         },
-      }, { workspaceId, presetId, pendingSessionId, allowCustomPreset: developerMode })
+      }, { workspaceId, presetId, pendingSessionId, allowCustomPreset: developerMode, allowedPresetIds: presetPicker.presets.map((preset) => preset.id) })
       if (!result.ok) {
         setPresetPicker((current) => ({
           ...current,
@@ -1726,6 +1744,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         }, t('common.restore')),
       ))),
     ) : null,
+    showMigrationBanner ? e(LegacyMigrationBanner, {
+      onMigrate: () => { void createConversation() },
+      onDismiss: () => setDismissedMigrations((current) => new Set(current).add(session.sessionId)),
+    }) : null,
     e('div', { className: 'chat-history', ref: historyRef, 'data-running': snapshot.running ? 'true' : 'false', onScroll: (event: { currentTarget: HTMLDivElement }) => {
       const el = event.currentTarget
       bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48

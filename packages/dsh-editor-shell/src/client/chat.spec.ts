@@ -184,6 +184,8 @@ describe('new conversation preset picker wiring', () => {
     expect(source).toContain('void send(session, value)')
     expect(source).toContain("ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'context.compile'")
     expect(source).toContain('legacyEditor && shouldShowInitGuide')
+    expect(source).toContain('shouldShowMigrationBanner')
+    expect(source).toContain('legacy: legacyEditor')
     expect(source).toContain('if (!legacyEditor || !runningJustStopped) return')
     expect(source).toContain('if (!legacyEditor || !workspaceId || !workspacePath) return')
     expect(source).toContain('if (legacyEditor && initState === \'interview\' && initCompleted)')

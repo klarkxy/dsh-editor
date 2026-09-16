@@ -454,12 +454,7 @@ export const componentStyles = `
 .shell .editor-stack .editor-pane, .dsh-ui .editor-stack .editor-pane { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .shell .tree-row, .shell .tree-file-row, .dsh-ui .tree-row, .dsh-ui .tree-file-row { position: relative; display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 32px; width: 100%; padding: 4px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; color: var(--fg-2); font-size: var(--text-chrome); line-height: 1.35; letter-spacing: .02em; }
 .shell .tree-row::before, .shell .tree-file-row::before, .dsh-ui .tree-row::before, .dsh-ui .tree-file-row::before { content: ''; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0; transform: scaleY(.2); transition: opacity var(--duration-quick) var(--ease-smooth-out), transform 220ms var(--ease-spring); }
-/* 章节状态徽标:行末单字胶囊,草/修/定三色。 */
-.shell .tree-row .chapter-status, .dsh-ui .tree-row .chapter-status { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 6px; margin-left: auto; border-radius: 999px; box-shadow: var(--elev-ring); font-size: 10px; font-weight: 500; line-height: 1; letter-spacing: .04em; }
-.shell .tree-row .chapter-status.draft, .dsh-ui .tree-row .chapter-status.draft { color: var(--muted); background: var(--surface-warm); }
-.shell .tree-row .chapter-status.revising, .dsh-ui .tree-row .chapter-status.revising { color: var(--accent-on); background: var(--accent); }
-.shell .tree-row .chapter-status.final, .dsh-ui .tree-row .chapter-status.final { color: var(--surface); background: var(--confirm); }
-.shell .tree-row > span:not(.chapter-status):last-child, .shell .tree-file-row > span:not(.chapter-status):last-child, .dsh-ui .tree-row > span:not(.chapter-status):last-child, .dsh-ui .tree-file-row > span:not(.chapter-status):last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell .tree-row > span:last-child, .shell .tree-file-row > span:last-child, .dsh-ui .tree-row > span:last-child, .dsh-ui .tree-file-row > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .tree-row:hover, .shell .tree-file-row:hover, .dsh-ui .tree-row:hover, .dsh-ui .tree-file-row:hover { background: var(--surface); color: var(--fg); }
 /* 选中态用 accent-soft(墨蓝淡底)替代原本的灰底,让"我现在在写哪一章"更醒目。 */
 .shell .tree-row[aria-current="page"], .shell .tree-file-row[aria-current="page"], .dsh-ui .tree-row[aria-current="page"], .dsh-ui .tree-file-row[aria-current="page"] { background: var(--accent-soft); color: var(--fg); }
@@ -739,6 +734,11 @@ export const componentStyles = `
 .shell .init-guide-quiet p, .dsh-ui .init-guide-quiet p { margin: 6px 0; line-height: 1.6; color: var(--fg-2); }
 .shell .init-guide-quiet .init-guide-actions, .dsh-ui .init-guide-quiet .init-guide-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .shell .init-guide-quiet button, .dsh-ui .init-guide-quiet button { min-height: 26px; padding: 0 8px; font-size: var(--text-xs); letter-spacing: .04em; }
+.shell .migration-banner, .dsh-ui .migration-banner { margin: 0 0 var(--space-2); padding: 8px 10px; border: 1px solid var(--hairline); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: transparent; color: var(--fg-2); font-size: var(--text-xs); line-height: 1.6; }
+.shell .migration-banner p, .dsh-ui .migration-banner p { margin: 0; }
+.shell .migration-banner .migration-banner-actions, .dsh-ui .migration-banner .migration-banner-actions { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.shell .migration-banner .migration-banner-actions button, .dsh-ui .migration-banner .migration-banner-actions button { min-height: 26px; padding: 0 8px; font-size: var(--text-xs); letter-spacing: .04em; }
+.shell .migration-banner .migration-banner-actions .icon-button, .dsh-ui .migration-banner .migration-banner-actions .icon-button { margin-left: auto; }
 .shell .pending-card input, .dsh-ui .pending-card input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); }
 .shell .pending-card input::placeholder, .dsh-ui .pending-card input::placeholder { color: var(--meta); }
 /* 提问卡片:编号页签切换问题,页签透出作答状态(当前高亮/已答对勾)。 */

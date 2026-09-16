@@ -61,12 +61,13 @@ describe('new conversation preset allowlist', () => {
     expect(presets.map((item) => item.name)).toEqual(['通用写作', '小说创作', '文章与自媒体', '技术文档'])
   })
 
-  it('keeps missing and broken modes visible but disabled with a reason', () => {
+  it('omits roster-missing modes (disabled by the author) but keeps broken ones visible with a reason', () => {
     const presets = projectNewConversationPresets([
       { id: 'dsh-editor-writing', status: 'ok' },
       { id: 'dsh-editor-novel', status: 'missing' },
       { id: 'dsh-editor-article', status: 'broken', reason: 'skill missing' },
     ])
+    expect(presets.map((item) => item.id)).toEqual(['dsh-editor-writing', 'dsh-editor-novel', 'dsh-editor-article'])
     expect(presets.find((item) => item.id === 'dsh-editor-writing')?.available).toBe(true)
     expect(presets.find((item) => item.id === 'dsh-editor-novel')).toMatchObject({
       available: false,
@@ -76,18 +77,29 @@ describe('new conversation preset allowlist', () => {
       available: false,
       reason: 'skill missing',
     })
-    expect(presets.find((item) => item.id === 'dsh-editor-technical')).toMatchObject({
-      available: false,
-      reason: '这个模式当前不可用。',
-    })
+    expect(presets.some((item) => item.id === 'dsh-editor-technical')).toBe(false)
     expect(canConfirmConversationPreset(presets, 'dsh-editor-article')).toBe(false)
+    expect(canConfirmConversationPreset(presets, 'dsh-editor-technical')).toBe(false)
     expect(canConfirmConversationPreset(presets, 'dsh-editor-writing')).toBe(true)
     expect(firstAvailableConversationPreset(presets)).toBe('dsh-editor-writing')
   })
 
+  it('always lists the core writing mode, degraded to unavailable when the roster loses it', () => {
+    const presets = projectNewConversationPresets([{ id: 'dsh-editor-novel', status: 'ok' }])
+    expect(presets.map((item) => item.id)).toEqual(['dsh-editor-writing', 'dsh-editor-novel'])
+    expect(presets[0]).toMatchObject({
+      id: 'dsh-editor-writing',
+      name: '通用写作',
+      available: false,
+      reason: '这个模式当前不可用。',
+    })
+    expect(firstAvailableConversationPreset(presets)).toBe('dsh-editor-novel')
+  })
+
   it('projects the real AgentPresetRoster shape and treats a non-empty broken string as unavailable', () => {
     const presets = projectNewConversationPresets(realRoster)
-    expect(presets.map((item) => item.id)).toEqual([...NEW_CONVERSATION_PRESET_IDS])
+    /* realRoster 没有 dsh-editor-technical（等效于作者已停用），picker 不再占位。 */
+    expect(presets.map((item) => item.id)).toEqual(['dsh-editor-writing', 'dsh-editor-novel', 'dsh-editor-article'])
     expect(presets.find((item) => item.id === 'dsh-editor-writing')).toMatchObject({
       available: true,
       name: '通用写作',
@@ -97,11 +109,8 @@ describe('new conversation preset allowlist', () => {
       reason: 'skill missing',
     })
     expect(presets.find((item) => item.id === 'dsh-editor-article')?.available).toBe(true)
-    expect(presets.find((item) => item.id === 'dsh-editor-technical')).toMatchObject({
-      available: false,
-      reason: '这个模式当前不可用。',
-    })
     expect(canConfirmConversationPreset(presets, 'dsh-editor-novel')).toBe(false)
+    expect(canConfirmConversationPreset(presets, 'dsh-editor-technical')).toBe(false)
     expect(firstAvailableConversationPreset(presets)).toBe('dsh-editor-writing')
   })
 
@@ -134,6 +143,7 @@ describe('developer mode preset projection', () => {
     expect(presets.map((item) => item.id)).toEqual([...NEW_CONVERSATION_PRESET_IDS, LEGACY_AGENT_PRESET, 'standard'])
     const legacy = presets.find((item) => item.id === LEGACY_AGENT_PRESET)
     expect(legacy).toMatchObject({ name: '旧采访', available: true, legacy: true })
+    expect(legacy?.description).toBe('仅用于打开或迁移旧会话；正常写作请使用写作模式。')
     expect(presets.find((item) => item.id === 'standard')).toMatchObject({ name: '编码', available: true })
     expect(presets.find((item) => item.id === 'standard')?.legacy).toBeUndefined()
     expect(firstAvailableConversationPreset(presets)).toBe('dsh-editor-writing')
@@ -178,6 +188,23 @@ describe('developer mode preset projection', () => {
     expect(host.select).toHaveBeenCalledWith('session-new', 'standard')
     expect(host.open).toHaveBeenCalledWith('session-new')
   })
+
+  it('gates confirm on the projected set when allowedPresetIds is given', async () => {
+    const host = hostFixture()
+    await expect(confirmNewConversationPreset(host, {
+      workspaceId: 'ws-1',
+      presetId: 'dsh-editor-novel',
+      allowedPresetIds: ['dsh-editor-writing', 'dsh-editor-article'],
+    })).resolves.toMatchObject({ ok: false, sessionId: undefined })
+    expect(host.create).not.toHaveBeenCalled()
+    host.select.mockResolvedValue({ ok: true, value: 'dsh-editor-article' })
+    await expect(confirmNewConversationPreset(host, {
+      workspaceId: 'ws-1',
+      presetId: 'dsh-editor-article',
+      allowedPresetIds: ['dsh-editor-writing', 'dsh-editor-article'],
+    })).resolves.toEqual({ ok: true, sessionId: 'session-new', agentPreset: 'dsh-editor-article' })
+    expect(host.select).toHaveBeenCalledWith('session-new', 'dsh-editor-article')
+  })
 })
 
 describe('new conversation preset picker flow', () => {
@@ -198,12 +225,12 @@ describe('new conversation preset picker flow', () => {
     const loaded = await loadNewConversationPresets(async () => ({ ok: true, value: realRoster }))
     expect(loaded.ok).toBe(true)
     if (!loaded.ok) return
-    expect(loaded.presets).toHaveLength(4)
+    expect(loaded.presets).toHaveLength(3)
     expect(loaded.presets.find((item) => item.id === 'dsh-editor-novel')).toMatchObject({
       available: false,
       reason: 'skill missing',
     })
-    expect(loaded.presets.find((item) => item.id === 'dsh-editor-technical')?.available).toBe(false)
+    expect(loaded.presets.some((item) => item.id === 'dsh-editor-technical')).toBe(false)
   })
 
   it('retries a failed list without creating a session', async () => {
@@ -370,20 +397,35 @@ describe('new conversation preset picker flow', () => {
 })
 
 describe('legacy session gate from host projection', () => {
-  it('reads agentPreset only from sessions.byId and treats the four new modes as non-legacy', () => {
+  it('reads agentPreset from sessions.byId, flat or nested under projectionValues, and treats the four new modes as non-legacy', () => {
     const byId = {
       legacy: { agentPreset: 'dsh-editor' },
+      legacyNested: { projectionValues: { agentPreset: 'dsh-editor' } },
       writing: { agentPreset: 'dsh-editor-writing' },
-      novel: { agentPreset: 'dsh-editor-novel' },
+      novel: { projectionValues: { agentPreset: 'dsh-editor-novel' } },
       article: { agentPreset: 'dsh-editor-article' },
       technical: { agentPreset: 'dsh-editor-technical' },
       unknown: {},
     }
     expect(isLegacyEditorPreset(sessionAgentPreset(byId, 'legacy'))).toBe(true)
     expect(shouldRunLegacyNovelPipeline(sessionAgentPreset(byId, 'legacy'))).toBe(true)
+    expect(shouldRunLegacyNovelPipeline(sessionAgentPreset(byId, 'legacyNested'))).toBe(true)
     for (const id of ['writing', 'novel', 'article', 'technical', 'unknown'] as const) {
       expect(shouldRunLegacyNovelPipeline(sessionAgentPreset(byId, id))).toBe(false)
     }
+  })
+
+  it('prefers an explicit flat value over the nested projection, including null', () => {
+    const byId = {
+      flatWins: { agentPreset: 'dsh-editor-writing', projectionValues: { agentPreset: 'dsh-editor' } },
+      nestedNull: { projectionValues: { agentPreset: null } },
+      nestedEmpty: { projectionValues: {} },
+    }
+    expect(sessionAgentPreset(byId, 'flatWins')).toBe('dsh-editor-writing')
+    expect(sessionAgentPreset(byId, 'nestedNull')).toBeNull()
+    expect(sessionAgentPreset(byId, 'nestedEmpty')).toBeUndefined()
+    expect(shouldRunLegacyNovelPipeline(sessionAgentPreset(byId, 'flatWins'))).toBe(false)
+    expect(shouldRunLegacyNovelPipeline(sessionAgentPreset(byId, 'nestedNull'))).toBe(false)
   })
 
   it('treats null, undefined, and unknown ids as non-legacy without fallback', () => {

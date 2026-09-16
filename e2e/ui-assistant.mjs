@@ -15,7 +15,12 @@
  * New 小说创作 exposes only novel_knowledge plus common writing_propose/
  * author_observe; legacy novel_* write/maintain tools stay on hidden dsh-editor,
  * which is not in this four-preset matrix. The novel conversation stays current
- * for the V2 flow.
+ * for the V2 flow. A separate legacy scenario enables developer mode through the
+ * real settings dialog, creates a hidden dsh-editor session from the picker
+ * (诊断用途 badge), proves the context.compile V3 send path and the init-guide
+ * card, applies/stale-rejects V1 (unmarked, no targetVersion) proposals, and
+ * restores the session after reload; developer mode is switched off again so
+ * the picker-hides-legacy assertions below still run against the default.
  *
  * Fixtures: `.dev/ui-assistant-*`. Evidence: `e2e/out/ui-assistant`.
  * Method: synthetic local model, real host write. Not live vendor or AI quality.
@@ -73,6 +78,16 @@ const FIM_INSERT = '握着旧票根，没有回头。'
 const CHAPTER_TEXT = `# 第一章 试笔\n\n${ORIGINAL_LINE}\n\n${REWRITE_NEEDLE}，脚步缓缓地停在空荡荡的栈桥上。\n`
 const CREATE_TEXT = '# 总纲\n\n本地桩生成的忽略用草稿，不应落盘。\n'
 const PONG_TEXT = 'UI_STUB_PONG'
+/* Legacy dsh-editor (写作助手) session: only reachable with developer mode on. */
+const LEGACY_PROPOSE_TOOL = 'novel_propose'
+const LEGACY_PONG_TEXT = 'UI_STUB_LEGACY_PONG'
+const LEGACY_TITLE_TEXT = 'UI_STUB_TITLE_LEGACY'
+const AFTER_LEGACY_EDIT_TEXT = 'UI_STUB_LEGACY_EDIT_DONE'
+const LEGACY_EDIT_OLD = '第一章 试笔'
+const LEGACY_EDIT_NEW = '第一章 旧版试笔'
+const LEGACY_STALE_OLD = '脚步缓缓地停在空荡荡的栈桥上'
+const LEGACY_STALE_NEW = '脚步停在空荡的栈桥上'
+const LEGACY_AUTHOR_MUTATION = '作者改了正文，旧版提案应失效。'
 const READING_TEXT = "这一段最有力的地方，是雾、广播和旧票根三个细节都指向一件尚未说出的往事。读者能感觉到有人在等她，却还不知道是谁。\n\n我建议先保留码头和广播塔，把“脚步缓缓地停在空荡荡的栈桥上”压短。它与前面的雾气都在延缓节奏，放在一起会让开场迟迟没有动作。\n\n可以让广播突然念出她的名字。她停在栈桥尽头，摸了摸口袋。那张票还在，边角已被汗浸软。对岸没有船，只有一盏忽明忽暗的灯。\n\n名字让危险靠近，摸票让人物作出反应，最后的灯把读者引向下一步。暂时不用解释票的来历，让她先决定要不要过去。\n\n如果希望保留原来的慢节奏，也可以让窗边的人抬起头。先给出一个变化，再继续补充人物的往事。"
 const TITLE_TEXT = 'UI_STUB_TITLE'
 const PRESET_TITLE = {
@@ -100,6 +115,9 @@ const MARK = {
   presetArticle: 'UI_PRESET_ARTICLE',
   presetTechnical: 'UI_PRESET_TECHNICAL',
   presetNovel: 'UI_PRESET_NOVEL',
+  legacyPing: 'UI_ASSISTANT_LEGACY_PING',
+  legacyEdit: 'UI_ASSISTANT_LEGACY_EDIT',
+  legacyEditStale: 'UI_ASSISTANT_LEGACY_EDIT_STALE',
 }
 
 const owned = [home, projectsRoot, workspace, output]
@@ -135,6 +153,8 @@ let stub
 let activePage
 let capturedSessionId = ''
 let lastPresetTitle = TITLE_TEXT
+const contextCompileCalls = []
+const workbenchCalls = []
 
 function delay(ms) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms))
@@ -171,6 +191,12 @@ function skipDependents(reason) {
 const MANDATORY = planningOnly ? ['configure-test-model', 'open-synthetic-work', 'planning-assistant', 'planning-create-directories', 'planning-outline-markdown', 'planning-stale-proposal', 'planning-glob', 'no-external-model-calls'] : [
   'configure-test-model',
   'open-synthetic-work',
+  'legacy-session-create',
+  'legacy-context-compile-v3',
+  'legacy-v1-proposal-apply',
+  'legacy-session-restore',
+  'legacy-v1-stale-rejected',
+  'legacy-developer-mode-off',
   'four-preset-runtime-isolation',
   'open-assistant',
   'ime-composing-enter',
@@ -317,6 +343,17 @@ function envelopeUserRequest(text) {
   return ''
 }
 
+function isProjectContextEnvelope(text) {
+  const trimmed = String(text ?? '').trim()
+  if (!trimmed.startsWith('{')) return false
+  try {
+    const parsed = JSON.parse(trimmed)
+    return parsed?.schema === 'dsh-editor.project-context' && parsed?.version === 3 && typeof parsed?.user_request === 'string'
+  } catch {
+    return false
+  }
+}
+
 function extractTaskUserRequest(text) {
   return envelopeUserRequest(text) || String(text ?? '').trim()
 }
@@ -405,6 +442,7 @@ function classify(body) {
   if (isTool && blob.includes(MARK.editMissingTarget)) return 'after_edit_missing_target'
   if (isTool && blob.includes(MARK.writeBypass)) return 'after_write_bypass'
   if (isTool && blob.includes(MARK.unknownTool)) return 'after_unknown_tool'
+  if (isTool && blob.includes(MARK.legacyEdit)) return 'after_legacy_edit'
   if (isTool && blob.includes(MARK.edit)) return 'after_edit'
   if (isTool && blob.includes(MARK.create)) return 'after_create'
   if (isTool) return 'after_tool'
@@ -420,6 +458,9 @@ function classify(body) {
   }
   if (userRequest.includes(MARK.writeBypass)) return 'write_bypass'
   if (userRequest.includes(MARK.unknownTool)) return 'unknown_tool'
+  if (userRequest.includes(MARK.legacyEditStale)) return 'legacy_propose_edit_stale'
+  if (userRequest.includes(MARK.legacyEdit)) return 'legacy_propose_edit'
+  if (userRequest.includes(MARK.legacyPing)) return 'legacy_ping'
   if (userRequest.includes(MARK.edit) || userRequest.includes(MARK.create)) {
     if (!hasWritingPropose) return 'missing_writing_propose'
     return userRequest.includes(MARK.edit) ? 'propose_edit' : 'propose_create'
@@ -578,6 +619,22 @@ function verifyClassify() {
   if (classify({ messages: [{ role: 'user', content: MARK.presetWriting }] }) !== 'preset_probe') {
     throw new Error('preset probe classified incorrectly')
   }
+  const legacyEnvelope = (marker) => JSON.stringify({ schema: 'dsh-editor.project-context', version: 3, user_request: marker, active_path: CHAPTER_REL })
+  if (classify({ messages: [{ role: 'user', content: legacyEnvelope(MARK.legacyPing) }] }) !== 'legacy_ping') {
+    throw new Error('legacy envelope ping classified incorrectly')
+  }
+  if (classify({ messages: [{ role: 'user', content: legacyEnvelope(MARK.legacyEdit) }] }) !== 'legacy_propose_edit') {
+    throw new Error('legacy envelope edit classified incorrectly')
+  }
+  if (classify({ messages: [{ role: 'user', content: legacyEnvelope(MARK.legacyEditStale) }] }) !== 'legacy_propose_edit_stale') {
+    throw new Error('legacy stale edit classified as its non-stale marker')
+  }
+  if (classify({ messages: [{ role: 'tool', content: `tool_call_id call_ui_legacy_edit_1 ${MARK.legacyEdit}` }] }) !== 'after_legacy_edit') {
+    throw new Error('legacy tool follow-up classified incorrectly')
+  }
+  if (!isProjectContextEnvelope(legacyEnvelope(MARK.legacyPing)) || isProjectContextEnvelope(MARK.legacyPing)) {
+    throw new Error('project-context envelope detection broken')
+  }
   const v2Tools = { tools: [{ type: 'function', function: { name: WRITING_PROPOSE } }] }
   if (classify({ messages: [{ role: 'user', content: MARK.editMissingTarget }], ...v2Tools }) !== 'propose_edit_missing_target') {
     throw new Error('missing-target edit classified incorrectly')
@@ -710,6 +767,7 @@ function lastWritingProposal() {
 
 function titleForBody(body) {
   const blob = flattenMessages(body)
+  if (blob.includes(MARK.legacyPing) || blob.includes(MARK.legacyEdit)) return LEGACY_TITLE_TEXT
   if (blob.includes(MARK.presetWriting)) return PRESET_TITLE['dsh-editor-writing']
   if (blob.includes(MARK.presetArticle)) return PRESET_TITLE['dsh-editor-article']
   if (blob.includes(MARK.presetTechnical)) return PRESET_TITLE['dsh-editor-technical']
@@ -826,6 +884,7 @@ function startStub() {
           record.personaText = personaText(body)
           record.skills = listedSkillNames(body)
           record.toolNames = listedToolNames(body)
+          record.contextEnvelope = (body.messages ?? []).some((message) => message?.role === 'user' && isProjectContextEnvelope(messageText(message)))
           if (kind === 'missing_writing_propose' || kind === 'legacy_propose_forbidden') {
             await respondSse(req, res, flags, record, model, textChunks(model, kind === 'legacy_propose_forbidden' ? 'UI_STUB_LEGACY_PROPOSE_FORBIDDEN' : 'UI_STUB_MISSING_WRITING_PROPOSE'))
             return
@@ -887,6 +946,20 @@ function startStub() {
           }
           if (kind === 'fim') {
             await respondSse(req, res, flags, record, model, textChunks(model, FIM_INSERT))
+            return
+          }
+          if (kind === 'legacy_propose_edit' || kind === 'legacy_propose_edit_stale') {
+            const stale = kind === 'legacy_propose_edit_stale'
+            /* Unmarked V1 args: the kernel adds marker/version 1; no targetVersion exists on this path. */
+            const args = {
+              kind: 'edit',
+              path: CHAPTER_REL,
+              summary: stale ? '旧版 V1 过期探测' : '旧版 V1 改题',
+              oldText: stale ? LEGACY_STALE_OLD : LEGACY_EDIT_OLD,
+              newText: stale ? LEGACY_STALE_NEW : LEGACY_EDIT_NEW,
+            }
+            record.proposal = { tool: LEGACY_PROPOSE_TOOL, ...args }
+            await respondSse(req, res, flags, record, model, toolChunks(model, LEGACY_PROPOSE_TOOL, args, stale ? 'call_ui_legacy_stale_1' : 'call_ui_legacy_edit_1'))
             return
           }
           if (kind === 'propose_edit') {
@@ -955,7 +1028,9 @@ function startStub() {
           }
           const reply = kind === 'after_edit' ? AFTER_EDIT_TEXT
             : kind === 'after_create' ? AFTER_CREATE_TEXT
-              : kind === 'read_long' ? READING_TEXT
+              : kind === 'after_legacy_edit' ? AFTER_LEGACY_EDIT_TEXT
+                : kind === 'legacy_ping' ? LEGACY_PONG_TEXT
+                  : kind === 'read_long' ? READING_TEXT
               : kind === 'ping' ? PONG_TEXT
                 : kind === 'preset_probe' ? PRESET_OK_TEXT
                   : kind === 'title' ? (titleForBody(body) === TITLE_TEXT ? lastPresetTitle : titleForBody(body))
@@ -1371,9 +1446,16 @@ async function openChapter(page) {
 async function ensureAssistantOpen(page) {
   const assistant = page.locator('aside.chat')
   if (await assistant.isVisible().catch(() => false)) return page.getByRole('complementary', { name: '写作助手' })
+  /* 重载后水合未完成时第一次点击可能丢失；两个入口轮询重试直到面板出现。 */
   const launcher = page.getByRole('button', { name: '打开写作搭档' })
-  if (await launcher.isVisible().catch(() => false)) await launcher.click()
-  else await page.getByRole('button', { name: '搭档', exact: true }).click()
+  const toggle = page.getByRole('button', { name: '搭档', exact: true })
+  await waitFor(async () => {
+    if (await assistant.isVisible().catch(() => false)) return true
+    if (await launcher.isVisible().catch(() => false)) await launcher.click().catch(() => undefined)
+    else if (await toggle.isVisible().catch(() => false) && await toggle.isEnabled().catch(() => false)) await toggle.click().catch(() => undefined)
+    await delay(600)
+    return false
+  }, 'assistant panel opens', 45_000)
   await assistant.waitFor({ state: 'visible', timeout: 30_000 })
   return page.getByRole('complementary', { name: '写作助手' })
 }
@@ -1444,13 +1526,87 @@ function lastSelectedSessionId() {
 async function readActiveSessionId(page) {
   const root = page.locator('aside.chat .conversation-select').first()
   await root.waitFor({ state: 'visible', timeout: 10_000 })
+  /* 会话切换 Select 的当前值在隐藏的原生 select 代理上，trigger 没有 data-value。 */
   const fromUi = await root.evaluate((node) => {
+    const proxy = node.querySelector('select')
+    if (proxy instanceof HTMLSelectElement && proxy.value) return proxy.value.replace(/^v:/, '').trim()
     const trigger = node.querySelector('[role="combobox"]')
     const raw = String(trigger?.getAttribute('data-value') || trigger?.getAttribute('value') || '')
     return raw.replace(/^v:/, '').trim()
   }).catch(() => '')
   if (fromUi) return fromUi
   return lastSelectedSessionId()
+}
+
+/* 开发者模式走真实设置弹窗（通用设置 → 开发者模式开关，role="switch"），持久化在 settings.yaml 的 ui-developer 命名空间。 */
+async function setDeveloperMode(page, enabled) {
+  await openShellSettings(page)
+  const dialog = page.getByRole('dialog', { name: '设置' })
+  await dialog.getByRole('tab', { name: '通用设置', exact: true }).click()
+  /* 开关在 settings scope ready 前点击是静默无效操作；种子里的浅色外观偏好
+     只在 scope ready 后才会激活，用它当作就绪信号。 */
+  const appearance = dialog.getByRole('group', { name: '外观' })
+  await waitFor(async () => (await appearance.getByRole('button', { name: '浅色', exact: true }).getAttribute('aria-pressed')) === 'true', 'settings scopes ready', 20_000)
+  const target = dialog.getByRole('switch', { name: '开发者模式' })
+  await target.waitFor({ state: 'visible', timeout: 15_000 })
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    if ((await target.getAttribute('aria-checked')) === String(enabled)) break
+    await target.click().catch(() => undefined)
+    await delay(700)
+  }
+  if ((await target.getAttribute('aria-checked')) !== String(enabled)) throw new Error(`developer mode ${enabled ? 'on' : 'off'} did not stick`)
+  await closeShellSettings(page)
+  await waitFor(async () => {
+    const yaml = await readFile(resolve(home, 'settings.yaml'), 'utf8').catch(() => '')
+    const block = /ui-developer:\n((?:\s.*\n?)*)/.exec(yaml)?.[1] ?? ''
+    const value = /developerMode:\s*(true|false)/.exec(block)?.[1]
+    return value ? value === String(enabled) : !enabled
+  }, `settings.yaml ui-developer developerMode=${enabled}`, 15_000)
+}
+
+/* 与 confirmConversationPreset 相对：开发者模式下旧版 preset 必须带徽标可见可选。 */async function confirmLegacyConversationPreset(page) {
+  const picker = page.getByRole('dialog', { name: '选择对话模式' })
+  await picker.waitFor({ state: 'visible', timeout: 15_000 })
+  const choice = picker.getByRole('radio', { name: /写作助手/ })
+  await choice.waitFor({ state: 'visible', timeout: 15_000 })
+  const label = (await choice.getAttribute('aria-label')) || ''
+  if (!label.includes('诊断用途')) throw new Error(`legacy preset lost its diagnostic badge: ${label}`)
+  if (await choice.isDisabled()) throw new Error('dsh-editor preset is unavailable')
+  await choice.click()
+  const confirm = picker.getByRole('button', { name: '开始对话' })
+  await waitFor(async () => confirm.isEnabled(), 'dsh-editor confirm enabled', 10_000)
+  await confirm.click()
+  await picker.waitFor({ state: 'hidden', timeout: 20_000 })
+}
+
+async function startLegacyConversation(page) {
+  const assistant = await ensureAssistantOpen(page)
+  const neu = assistant.getByRole('button', { name: '新对话' })
+  await waitFor(async () => neu.isEnabled().catch(() => false), 'dsh-editor: new conversation enabled', 20_000)
+  await neu.click()
+  const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+  if (await discard.isVisible({ timeout: 2_000 }).catch(() => false)) await discard.click()
+  await confirmLegacyConversationPreset(page)
+  await assistant.waitFor({ state: 'visible', timeout: 15_000 })
+  await page.getByRole('textbox', { name: '输入消息' }).waitFor({ state: 'visible', timeout: 15_000 })
+  return assistant
+}
+
+/* 本地自动标题与宿主生成标题是竞态；恢复步骤需要一个确定的标题，走真实重命名 UI 钉死它。 */
+async function renameCurrentConversation(page, title) {
+  const assistant = await ensureAssistantOpen(page)
+  await assistant.getByRole('button', { name: '对话操作' }).click()
+  await page.getByRole('menuitem', { name: '重命名对话' }).click()
+  const dialog = page.getByRole('dialog', { name: '重命名对话' })
+  await dialog.waitFor({ state: 'visible', timeout: 10_000 })
+  await dialog.getByLabel('对话名称').fill(title)
+  await dialog.getByRole('button', { name: '保存名称' }).click()
+  await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+  await waitFor(async () => {
+    const text = (await assistant.getByRole('combobox', { name: '切换对话' }).innerText()).replace(/\s+/g, ' ').trim()
+    return text.includes(title)
+  }, `rename to ${title}`, 15_000)
 }
 
 async function exportedToolName(file, exportName) {
@@ -1478,7 +1634,8 @@ async function legacyNovelToolNamesFromSource(knowledgeName) {
 }
 
 async function skillNamesForPreset(presetId) {
-  const dir = resolve(root, 'apps/desktop/resources/profile/agent-presets', presetId, 'skills')
+  /* 三个第一方 preset 已迁入插件包；物化模板是唯一完整 roster 源。 */
+  const dir = resolve(template, 'agent-presets', presetId, 'skills')
   const names = []
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
@@ -1921,6 +2078,18 @@ async function sendForProposal(page, prompt, expectedPath, label) {
   return card
 }
 
+/* V1 legacy proposals carry no targetVersion/basis; the card contract is asserted by the scenario itself. */
+async function sendLegacyProposal(page, prompt, expectedPath, label) {
+  await assertStubSelected(page, label)
+  const cards = page.locator('.proposal-card[aria-label="文件修改建议"]')
+  const before = await cards.count()
+  await page.getByRole('textbox', { name: '输入消息' }).fill(prompt)
+  const send = page.getByRole('button', { name: '发送', exact: true })
+  await waitFor(async () => send.isEnabled(), `${label}: send enabled`, 20_000)
+  await send.click()
+  return waitForProposal(page, before, label, expectedPath)
+}
+
 async function sendExpectingHostRejection(page, prompt, label, expectedName) {
   await assertStubSelected(page, label)
   const readyBefore = await page.getByText('可以安全应用', { exact: true }).count()
@@ -2142,6 +2311,14 @@ async function main() {
   activePage = page
   page.setDefaultTimeout(20_000)
   page.on('request', captureManuscriptSession)
+  page.on('request', (request) => {
+    if (request.method() !== 'POST' || !request.url().includes('/dsh-editor-workbench/')) return
+    const method = new URL(request.url()).pathname.split('/').pop() ?? ''
+    let sessionId = ''
+    try { sessionId = String(request.postDataJSON()?.payload?.sessionId ?? '') } catch { /* non-JSON post */ }
+    workbenchCalls.push({ method, sessionId, at: Date.now() })
+    if (method === 'context.compile') contextCompileCalls.push({ sessionId, at: Date.now() })
+  })
   page.on('pageerror', (error) => fail(`pageerror: ${error.message}`))
   if (planningOnly) page.on('console', message => {
     if (message.type() !== 'error') return
@@ -2187,6 +2364,146 @@ async function main() {
     await context.close()
     return
   }
+
+  /* 旧版 dsh-editor 会话：开发者模式（真实设置弹窗）→ picker 徽标 → context.compile V3 →
+     V1 提案应用 → 重载恢复 → V1 过期拒绝。chapter_plan 的 sourceVersion 冲突在工具层已被拒
+     （章纲只走 大纲/ Markdown），这里用同一 prepare-version→apply 核对管线的 V1 edit 代替。 */
+  const legacyCreated = await cover('legacy-session-create', async () => {
+    await setDeveloperMode(page, true)
+    const assistant = await startLegacyConversation(page)
+    const card = assistant.locator('.init-guide-quiet')
+    try {
+      await card.waitFor({ state: 'visible', timeout: 20_000 })
+    } catch (error) {
+      const chatState = await assistant.evaluate((el) => el.outerHTML.slice(0, 600)).catch(() => '')
+      throw new Error(`init-guide card missing; workbenchCalls=${JSON.stringify(workbenchCalls.map((item) => item.method))}; chat=${chatState}`)
+    }
+    const cardText = await card.evaluate((el) => el.textContent || '')
+    if (!cardText.includes('了解作品') || !cardText.includes('通读现有内容')) {
+      throw new Error(`legacy init-guide card unexpected: ${cardText.slice(0, 160)}`)
+    }
+    const sessionId = await readActiveSessionId(page)
+    if (!sessionId) throw new Error('legacy session id missing')
+    report.legacySessionId = sessionId
+    await selectAssistantModel(page)
+    await waitForChatReady(page, 'legacy session')
+    await shot(page, 'legacy-session', '开发者模式下的旧版会话与了解作品卡片')
+    return `dsh-editor session ${sessionId}; init-guide card visible on non-indexed project`
+  })
+  const legacyPingOk = legacyCreated && await cover('legacy-context-compile-v3', async () => {
+    const compileBefore = contextCompileCalls.length
+    const requestsBefore = stub.requests.length
+    const reply = await sendChat(page, MARK.legacyPing, 'legacy ping', 30_000)
+    if (!reply.includes(LEGACY_PONG_TEXT)) throw new Error(`legacy reply was ${JSON.stringify(reply.slice(0, 160))}`)
+    await waitUntilIdle(page)
+    await waitFor(async () => contextCompileCalls.slice(compileBefore).some((item) => item.sessionId === report.legacySessionId), 'context.compile RPC for legacy session', 15_000)
+    const request = stub.requests.slice(requestsBefore).find((item) => item.kind === 'legacy_ping')
+    if (!request) throw new Error(`no legacy_ping on kinds=${JSON.stringify(stub.requests.slice(requestsBefore).map((item) => item.kind))}`)
+    if (!request.contextEnvelope) throw new Error('legacy send did not carry the dsh-editor.project-context V3 envelope')
+    if ((request.wire?.userPreviews ?? []).some((preview) => preview.trim() === MARK.legacyPing)) {
+      throw new Error('legacy send used the plain-text path')
+    }
+    await renameCurrentConversation(page, LEGACY_TITLE_TEXT)
+    await waitForChatReady(page, 'legacy after ping')
+    return 'context.compile V3 envelope observed on the stub wire; conversation renamed for restore'
+  })
+  if (!legacyPingOk) {
+    for (const name of ['legacy-v1-proposal-apply', 'legacy-session-restore', 'legacy-v1-stale-rejected']) {
+      recordCheck(name, false, `dependency-skipped-as-failure: ${legacyCreated ? 'legacy-context-compile-v3' : 'legacy-session-create'} failed`)
+    }
+  }
+  const legacyApplied = legacyPingOk && await cover('legacy-v1-proposal-apply', async () => {
+    const card = await sendLegacyProposal(page, MARK.legacyEdit, CHAPTER_REL, 'legacy V1 edit')
+    const proposal = lastWritingProposal()
+    if (!proposal || proposal.tool !== LEGACY_PROPOSE_TOOL) {
+      throw new Error(`legacy proposal was not ${LEGACY_PROPOSE_TOOL}: ${JSON.stringify(proposal)}`)
+    }
+    if ('targetVersion' in proposal || 'marker' in proposal || 'version' in proposal) {
+      throw new Error(`legacy fixture should stay unmarked V1 args: ${JSON.stringify(proposal)}`)
+    }
+    await card.getByRole('button', { name: '应用', exact: true }).click()
+    await card.getByText('已应用到作品', { exact: true }).first().waitFor({ state: 'visible', timeout: 20_000 })
+    await waitFor(async () => (await readChapter()).includes(LEGACY_EDIT_NEW), 'legacy V1 edit on disk', 10_000)
+    if (!(await readChapter()).includes(ORIGINAL_LINE)) throw new Error('legacy V1 edit disturbed the main-flow line')
+    return 'V1 edit (no targetVersion) applied through /manuscript proposal.apply'
+  })
+  const legacyRestored = legacyApplied && await cover('legacy-session-restore', async () => {
+    await page.reload()
+    await page.locator('.shell').waitFor({ timeout: 45_000 })
+    if (await page.getByTestId('shell-error').count()) throw new Error('shell boot after reload: ' + await page.getByTestId('shell-error').first().innerText())
+    const assistant = await ensureAssistantOpen(page)
+    await switchConversationByTitle(page, LEGACY_TITLE_TEXT)
+    await selectAssistantModel(page)
+    await waitForChatReady(page, 'legacy restored')
+    const sessionId = await readActiveSessionId(page)
+    if (sessionId !== report.legacySessionId) throw new Error(`restored session ${sessionId} ≠ ${report.legacySessionId}`)
+    const history = await assistant.locator('.chat-history').innerText()
+    if (!history.includes(LEGACY_PONG_TEXT)) throw new Error('restored legacy transcript lost the assistant reply')
+    /* 应用完成态是 UI 局部状态；重载后卡片重新核对。这里只要求历史提案卡还在并指向正文文件。 */
+    const cardTexts = await assistant.locator('.proposal-card[aria-label="文件修改建议"]').allTextContents()
+    if (!cardTexts.some((text) => text.includes(CHAPTER_REL) && text.includes('旧版 V1 改题'))) {
+      throw new Error(`restored legacy transcript lost the historical proposal card: ${JSON.stringify(cardTexts).slice(0, 240)}`)
+    }
+    const compileBefore = contextCompileCalls.length
+    const requestsBefore = stub.requests.length
+    const reply = await sendChat(page, MARK.legacyPing, 'legacy ping after restore', 30_000)
+    if (!reply.includes(LEGACY_PONG_TEXT)) throw new Error(`restored legacy reply was ${JSON.stringify(reply.slice(0, 160))}`)
+    await waitUntilIdle(page)
+    await waitFor(async () => contextCompileCalls.slice(compileBefore).some((item) => item.sessionId === report.legacySessionId), 'context.compile after restore', 15_000)
+    const request = stub.requests.slice(requestsBefore).find((item) => item.kind === 'legacy_ping')
+    if (!request?.contextEnvelope) throw new Error('restored legacy session lost the V3 envelope path')
+    const banner = assistant.getByRole('note', { name: '旧版会话' })
+    await banner.waitFor({ state: 'visible', timeout: 15_000 })
+    const bannerText = await banner.innerText()
+    if (!bannerText.includes('此会话使用旧版模式') || !bannerText.includes('新建写作会话')) {
+      throw new Error(`migration banner copy unexpected: ${bannerText.slice(0, 160)}`)
+    }
+    await shot(page, 'legacy-restored', '重载后经对话切换恢复旧版会话')
+    await banner.getByRole('button', { name: '关闭', exact: true }).click()
+    await banner.waitFor({ state: 'hidden', timeout: 10_000 })
+    return 'reload + combobox restore kept legacyEditor behavior; migration banner shown and dismissed'
+  })
+  if (legacyApplied && !legacyRestored) {
+    recordCheck('legacy-v1-stale-rejected', false, 'dependency-skipped-as-failure: legacy-session-restore failed')
+  }
+  if (legacyRestored) await cover('legacy-v1-stale-rejected', async () => {
+    await openChapter(page)
+    const card = await sendLegacyProposal(page, MARK.legacyEditStale, CHAPTER_REL, 'legacy V1 stale')
+    const proposal = lastWritingProposal()
+    if (!proposal || proposal.tool !== LEGACY_PROPOSE_TOOL) {
+      throw new Error(`legacy stale proposal was not ${LEGACY_PROPOSE_TOOL}: ${JSON.stringify(proposal)}`)
+    }
+    await page.locator('[data-testid="paper-editor"] .cm-content').click()
+    await page.keyboard.press('Control+End')
+    await page.keyboard.insertText(`\n${LEGACY_AUTHOR_MUTATION}\n`)
+    await savePaper(page)
+    const mutated = await readChapter()
+    if (!mutated.includes(LEGACY_AUTHOR_MUTATION)) throw new Error('author mutation did not persist')
+    await card.getByRole('button', { name: '应用', exact: true }).click()
+    await waitFor(async () => /变化|变更|失效|重新生成/.test(await card.innerText()), 'legacy stale feedback')
+    if ((await readChapter()) !== mutated) throw new Error('stale V1 edit wrote the chapter')
+    if (mutated.includes(LEGACY_STALE_NEW)) throw new Error('stale V1 edit applied its text')
+    await typeIntoPaper(page, CHAPTER_TEXT)
+    await openChapter(page)
+    return 'stale V1 apply refused (substitute for the tool-guarded chapter_plan sourceVersion conflict)'
+  })
+  await cover('legacy-developer-mode-off', async () => {
+    await setDeveloperMode(page, false)
+    const assistant = await ensureAssistantOpen(page)
+    await assistant.getByRole('button', { name: '新对话' }).click()
+    const discard = page.getByRole('button', { name: '放弃并继续', exact: true })
+    if (await discard.isVisible({ timeout: 1_500 }).catch(() => false)) await discard.click()
+    const picker = page.getByRole('dialog', { name: '选择对话模式' })
+    await picker.waitFor({ state: 'visible', timeout: 15_000 })
+    const labels = await picker.getByRole('radio').allTextContents()
+    if (labels.some((label) => /旧采访|写作助手|dsh-editor(?!-)/i.test(label))) {
+      throw new Error(`legacy preset visible after developer mode off: ${JSON.stringify(labels)}`)
+    }
+    await picker.getByRole('button', { name: '取消', exact: true }).click()
+    await picker.waitFor({ state: 'hidden', timeout: 10_000 })
+    return 'developer mode off; picker hides 写作助手 again'
+  })
+
   if (!(await cover('independent-model-settings', async () => {
     const { dialog } = await openModelsSettings(page)
     for (const [label, id] of [['补全模型', FIM_MODEL_ID], ['改写模型', REWRITE_MODEL_ID], ['默认对话模型', MODEL_ID]]) {
@@ -2268,7 +2585,8 @@ async function main() {
     if (await switches.count() !== 1) throw new Error('Zhihu still has separate switches')
     if (await dialog.getByRole('switch', {name: '校对', exact: true}).count() !== 1) throw new Error('proofreading is not one user-facing feature')
     if (await dialog.getByRole('switch', {name: '作品概览', exact: true}).count() !== 1) throw new Error('overview is not one user-facing feature')
-    if (await dialog.getByRole('switch').count() > 6) throw new Error('bundled features are still split by implementation package')
+    /* 写作功能 4 个（写作辅助/校对/作品概览/知乎资料）+ 写作模式 3 个可开关 preset；再多才算按实现包拆散。 */
+    if (await dialog.getByRole('switch').count() > 9) throw new Error('bundled features are still split by implementation package')
     const control = switches.first()
     await waitFor(async () => !(await control.isDisabled()), 'feature switch ready', 10000)
     const enabledAppearance = await switchAppearance(control)
@@ -2303,12 +2621,8 @@ async function main() {
   })
 
   recordGap(
-    'hidden-legacy-dsh-editor-v1',
-    'This harness cannot bind or restore hidden dsh-editor: the new-conversation picker hides it (already asserted), a fresh isolated DSH_HOME has no legacy session to restore, and writing Host session state or adding a picker path would be outside these three files and would fake the Host boundary. V1 unmarked/version-1 apply stays a manuscript unit-test contract. dsh-editor-novel isolation plus the writing↔novel switch-back prove the visible novel session never receives legacy novel_* tools.',
-  )
-  recordGap(
     'unknown-preset-picker',
-    'The visible picker only offers the four professional presets. There is no UI in this harness to select an unknown agentPreset, so Host write-guard coverage uses a direct write tool and an unknown_tool call on the current novel session instead of inventing a fake preset binding.',
+    'The visible picker only offers the four professional presets (developer mode adds only deployed legacy/plugin presets). There is no UI in this harness to select an unknown agentPreset, so Host write-guard coverage uses a direct write tool and an unknown_tool call on the current novel session instead of inventing a fake preset binding.',
   )
 
   if (!(await cover('four-preset-runtime-isolation', async () => {
@@ -2781,7 +3095,10 @@ if (process.argv.includes('--verify-ids')) {
   try {
     verifyResponseIds()
     const source = await readFile(new URL(import.meta.url), 'utf8')
-    if (/toolChunks\([^;\n]*novel_propose/.test(source)) throw new Error('stub still emits novel_propose')
+    if (/toolChunks\([^;\n]*'novel_propose'/.test(source)) throw new Error('stub emits novel_propose outside the named legacy constant')
+    if (!/kind === 'legacy_propose_edit_stale'[\s\S]{0,600}?toolChunks\(model, LEGACY_PROPOSE_TOOL/.test(source)) {
+      throw new Error('legacy stub branch no longer emits the V1 novel_propose fixture')
+    }
     if (/tools\.includes\('novel_propose'\)/.test(source)) throw new Error('classify still keys off novel_propose')
     const answerPendingFn = source.match(/async function answerPending\([\s\S]*?\nasync function /)?.[0] ?? ''
     if (answerPendingFn.includes('作者侧写建议')) {

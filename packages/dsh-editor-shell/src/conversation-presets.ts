@@ -3,6 +3,11 @@ import { t, type MessageKey } from './i18n/index.ts'
 
 export const LEGACY_AGENT_PRESET = 'dsh-editor'
 
+/*
+ * 第一方写作模式的已知 id 与文案顺序。picker 投影以 Host roster 为准：
+ * 被作者停用的模式不再部署、不进 roster，picker 直接省略；核心的
+ * dsh-editor-writing 永远列出（roster 缺失时降级为不可用行）。
+ */
 export const NEW_CONVERSATION_PRESET_IDS = [
   'dsh-editor-writing',
   'dsh-editor-novel',
@@ -12,6 +17,8 @@ export const NEW_CONVERSATION_PRESET_IDS = [
 
 export type NewConversationPresetId = typeof NEW_CONVERSATION_PRESET_IDS[number]
 
+const CORE_WRITING_PRESET_ID: NewConversationPresetId = 'dsh-editor-writing'
+
 export type ConversationPresetChoice = {
   /* 开发者模式下可能超出四个写作模式的 id，因此类型放宽为 string。 */
   id: string
@@ -19,7 +26,7 @@ export type ConversationPresetChoice = {
   description: string
   available: boolean
   reason?: string
-  /* 旧版 dsh-editor 会话，仅开发者模式列出，picker 里以徽标区分。 */
+  /* 旧版 dsh-editor 会话，仅开发者模式列出，picker 里以诊断徽标区分。 */
   legacy?: boolean
 }
 
@@ -39,10 +46,14 @@ export function isLegacyEditorPreset(preset: string | null | undefined): boolean
 }
 
 export function sessionAgentPreset(
-  byId: Record<string, { agentPreset?: string | null } | undefined> | undefined,
+  byId: Record<string, { agentPreset?: string | null; projectionValues?: { agentPreset?: string | null } | undefined } | undefined> | undefined,
   sessionId: string,
 ): string | null | undefined {
-  return byId?.[sessionId]?.agentPreset
+  const summary = byId?.[sessionId]
+  if (!summary) return undefined
+  /* 运行时的会话列表把 preset 放在 projectionValues 里；扁平 agentPreset 只是旧线形。 */
+  if (summary.agentPreset !== undefined) return summary.agentPreset
+  return summary.projectionValues?.agentPreset
 }
 
 export function shouldRunLegacyNovelPipeline(preset: string | null | undefined): boolean {
@@ -113,7 +124,10 @@ function extraChoice(item: Record<string, unknown>): ConversationPresetChoice {
   const id = item.id as string
   const legacy = isLegacyEditorPreset(id)
   const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : id
-  const description = typeof item.description === 'string' && item.description.trim() ? item.description.trim() : ''
+  /* 旧版 preset 的展示描述固定为迁移指引，不沿用 host 侧的历史文案。 */
+  const description = legacy
+    ? t('chat.presetLegacyDescription')
+    : typeof item.description === 'string' && item.description.trim() ? item.description.trim() : ''
   const broken = listedBrokenReason(item)
   if (broken !== undefined) return { id, name, description, available: false, reason: broken, ...(legacy ? { legacy } : {}) }
   const status = listedStatus(item)
@@ -138,7 +152,12 @@ export function projectNewConversationPresets(value: unknown, options?: PresetPr
     if (isNewConversationPresetId(id)) byId[id] = item
     else if (options?.developerMode) extras.push(item)
   }
-  const choices: ConversationPresetChoice[] = NEW_CONVERSATION_PRESET_IDS.map((id) => projectedChoice(id, byId[id]))
+  const choices: ConversationPresetChoice[] = []
+  for (const id of NEW_CONVERSATION_PRESET_IDS) {
+    /* 停用的第一方模式已从 roster 消失，不再占位；核心通用写作始终列出。 */
+    if (id !== CORE_WRITING_PRESET_ID && !byId[id]) continue
+    choices.push(projectedChoice(id, byId[id]))
+  }
   for (const item of extras) choices.push(extraChoice(item))
   return choices
 }
@@ -197,12 +216,16 @@ export type ConfirmNewConversationPresetHost = {
 
 export async function confirmNewConversationPreset(
   host: ConfirmNewConversationPresetHost,
-  input: { workspaceId: WorkspaceId; presetId: string; pendingSessionId?: SessionId; allowCustomPreset?: boolean },
+  input: { workspaceId: WorkspaceId; presetId: string; pendingSessionId?: SessionId; allowCustomPreset?: boolean; allowedPresetIds?: readonly string[] },
 ): Promise<
   | { ok: true; sessionId: SessionId; agentPreset: string }
   | { ok: false; sessionId?: SessionId; error: string }
 > {
-  if (!isNewConversationPresetId(input.presetId) && !input.allowCustomPreset) {
+  /* 确认闸与 picker 投影同源：只放行当前投影里的 id；开发者模式才放行自选 id。 */
+  const allowed = input.allowedPresetIds
+    ? input.allowedPresetIds.includes(input.presetId)
+    : isNewConversationPresetId(input.presetId)
+  if (!allowed && !input.allowCustomPreset) {
     return { ok: false, sessionId: input.pendingSessionId, error: t('chat.presetSelectFailed') }
   }
   let sessionId = input.pendingSessionId

@@ -4,6 +4,7 @@ import { SHELL_RPC_CHANNEL, resolveShellCapabilities, type ShellFeatureConfig } 
 import Schema from '@deepseek-ai/schemastery'
 import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-settings-contract.ts'
+import { DEVELOPER_SETTINGS_NAMESPACE, type DeveloperSettings } from './developer-settings.ts'
 
 export const name = 'dsh-editor-shell'
 export const inject = ['settings', 'connection', 'webServer'] as const
@@ -30,9 +31,15 @@ const WritingPreferencesSchema = Schema.object({
 
 type HostSettings = { register<T>(namespace: string, schema: unknown): unknown }
 
+const DeveloperSettingsSchema = Schema.object({
+  developerMode: Schema.boolean().default(false),
+})
+
 /** Host owns the editor's one durable writing-preference namespace. */
 export function apply(ctx: Context, config: ShellFeatureConfig = {}): void {
   ;(ctx as Context & { settings: HostSettings }).settings.register<WritingPreferences>(WRITING_SETTINGS_NAMESPACE, WritingPreferencesSchema)
+  /* 未注册的命名空间在 settingsScope 里是 unavailable 死开关，客户端绑定读取不到它。 */
+  ;(ctx as Context & { settings: HostSettings }).settings.register<DeveloperSettings>(DEVELOPER_SETTINGS_NAMESPACE, DeveloperSettingsSchema)
   ctx.effect(() => registerHostRpc(ctx as Context & HostRpcContext, SHELL_RPC_CHANNEL, async (endpoint) => {
     if (endpoint !== 'capabilities.get') return { ok: false, error: { code: 'bad-request', message: '不支持的界面操作', details: {} } }
     return resolveShellCapabilities(config, (name) => ctx.get(name))
