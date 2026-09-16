@@ -1,6 +1,4 @@
 import { createElement as e, Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
-import type { ChapterStatus } from 'dsh-editor-workbench/contracts'
-import { chapterStatusGlyph, chapterStatusLabel, isChapterDocumentPath } from '../chapter-status-view.ts'
 import { isManuscriptChapterPath } from '../project-files.ts'
 import { canPinPath } from '../pinned-pane-view.ts'
 import { errorMessage, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
@@ -56,7 +54,6 @@ type RowProps = {
   active: string
   revision: number
   openPaths: Set<string>
-  chapterStatuses: Record<string, ChapterStatus>
   highlightPath?: string
   tabbablePath: string
   onRowFocus(path: string): void
@@ -70,7 +67,7 @@ type RowProps = {
 }
 
 function TreeRows(props: RowProps): ReactNode {
-  const { path, level, loaded, active, openPaths, chapterStatuses, highlightPath, tabbablePath, onRowFocus, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory } = props
+  const { path, level, loaded, active, openPaths, highlightPath, tabbablePath, onRowFocus, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder, loadSubtree, toggleDirectory } = props
   /* loaded 在写入时已按 visibleTreeEntries 排序并过滤,这里直接渲染。 */
   const visible = loaded[path] ?? []
   return e(Fragment, null, ...visible.map((item) => {
@@ -125,7 +122,6 @@ function TreeRows(props: RowProps): ReactNode {
         isOpen ? e(TreeRows, { ...props, path: child, level: level + 1 }) : null,
       )
     }
-    const chapterStatus = isChapterDocumentPath(child) ? chapterStatuses[child] : undefined
     return e('div', { key: child, className: 'tree-file-row' },
       e('button', {
         className: 'tree-row tree-main',
@@ -151,12 +147,6 @@ function TreeRows(props: RowProps): ReactNode {
       },
       e('span', { className: 'tree-marker', 'aria-hidden': 'true' }, '·'),
       e('span', null, item.name),
-      chapterStatus ? e('span', {
-        className: `chapter-status ${chapterStatus}`,
-        role: 'img',
-        title: chapterStatusLabel(chapterStatus),
-        'aria-label': chapterStatusLabel(chapterStatus),
-      }, chapterStatusGlyph(chapterStatus)) : null,
       ),
     )
   }))
@@ -168,7 +158,6 @@ export function Tree(props: {
   active: string
   expandPath: string
   revision: number
-  chapterStatuses: Record<string, ChapterStatus>
   highlightPath?: string
   onOpen(path: string): void
   onPreviewImage(path: string): void
@@ -176,7 +165,7 @@ export function Tree(props: {
   onCreateFile(directory: string): void
   onCreateFolder(directory: string): void
 }) {
-  const { ctx, sessionId, active, expandPath, revision, chapterStatuses, highlightPath, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder } = props
+  const { ctx, sessionId, active, expandPath, revision, highlightPath, onOpen, onPreviewImage, onFileMenu, onCreateFile, onCreateFolder } = props
   const [loaded, setLoaded] = useState<Record<string, TreeEntry[]>>({})
   const [openPaths, setOpenPaths] = useState<Set<string>>(() => new Set())
   const [note, setNote] = useState('')
@@ -331,7 +320,6 @@ export function Tree(props: {
       active,
       revision,
       openPaths,
-      chapterStatuses,
       highlightPath,
       tabbablePath,
       onRowFocus: setFocusedPath,

@@ -17,7 +17,6 @@ import type { SettingsScope, SessionFace, SessionId, WorkspaceId, WorkspaceView 
 import {
   WORKBENCH_RPC_CHANNEL,
   type ArchiveListResponse,
-  type ChapterStatus,
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
   type ProjectOverview,
@@ -30,7 +29,6 @@ import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry,
 import { writingPreferences, writingTypography, type WritingMigration, type WritingModelRoute, type WritingPreferences } from '../writing-settings.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
-import { buildChapterStatusMap } from '../chapter-status-view.ts'
 import { redesignedStyles } from '../styles.ts'
 import { errorMessage, isStaleFailure, isSuccessWorkbenchNote, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, ShellErrorBoundary, useMediaQuery, useObservable } from './components.ts'
@@ -249,7 +247,6 @@ const TreeColumn = memo(function TreeColumn(props: SidebarFileMenuProps & {
   expandPath: string
   highlightPath?: string
   revision: number
-  chapterStatuses: Record<string, ChapterStatus>
 }) {
   return e(Tree, {
     ctx: props.ctx,
@@ -263,7 +260,6 @@ const TreeColumn = memo(function TreeColumn(props: SidebarFileMenuProps & {
     onCreateFile: props.onCreateFile,
     onCreateFolder: props.onCreateFolder,
     revision: props.revision,
-    chapterStatuses: props.chapterStatuses,
   })
 })
 
@@ -286,7 +282,6 @@ const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuProps & 
   createNote: string
   workspaceWarning: string | undefined
   workbenchNote: string
-  chapterStatuses: Record<string, ChapterStatus>
   expandPath: string
   highlightPath?: string
   renderSlot?: SettingsRenderSlot
@@ -384,7 +379,6 @@ const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuProps & 
       onCreateFile: props.onCreateFile,
       onCreateFolder: props.onCreateFolder,
       revision: props.fileRevision,
-      chapterStatuses: props.chapterStatuses,
     }),
   )
 })
@@ -963,7 +957,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     const read = await safeRpcCall<{ version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', { sessionId: fileSession.sessionId, path: managePath }))
     setManageBusy(false)
     if (!read.ok) { setManageNote(errorMessage(read)); return }
-    const renamed = await safeRpcCall<{ path: string; metadataWarning?: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.rename', {
+    const renamed = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.rename', {
       sessionId: fileSession.sessionId,
       path: managePath,
       newName: name,
@@ -972,7 +966,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     if (!renamed.ok) { setManageNote(errorMessage(renamed)); return }
     if (path === managePath) setPath(renamed.value.path)
     setTreeRevision((value) => value + 1)
-    setWorkbenchNote(renamed.value.metadataWarning ? t('note.renamedWithWarning', { path: renamed.value.path, warning: renamed.value.metadataWarning }) : t('note.renamed', { path: renamed.value.path }))
+    setWorkbenchNote(t('note.renamed', { path: renamed.value.path }))
     setManagePath(null)
   }
   /* 目录行重命名:走 workbench entry.rename,不需要读 version；失败时把 note 放进
@@ -1832,8 +1826,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     if (path === pinnedPath) setContentRevision((value) => value + 1)
     progressRecord.schedule(() => { void recordSavedProgress() })
   }, [path, pinnedPath])
-  /* 树章状态与作者偏好/记忆/排版：由真实输入 memo，身份稳定，子列 memo 才能生效。 */
-  const chapterStatuses = useMemo(() => buildChapterStatusMap(overview), [overview])
+  /* 作者偏好/记忆/排版：由真实输入 memo，身份稳定，子列 memo 才能生效。 */
   const authorPreferences = useMemo(() => normalizeAuthorPreferences(writing.authorPreferences), [writing.authorPreferences])
   const authorMemory = useMemo(() => normalizeAuthorMemory(writing.authorMemory), [writing.authorMemory])
   const typography = useMemo(
@@ -2095,7 +2088,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     if (archived.value.state !== 'archived') { setWorkbenchNote(t('note.archiveIncomplete')); await loadArchives(); return }
     if (path === selectedPath) { setPath(''); setReveal(null) }
     setTreeRevision((value) => value + 1)
-    setWorkbenchNote(archived.value.metadataWarning ? t('note.archivedWithWarning', { path: archived.value.path, warning: archived.value.metadataWarning }) : t('note.archived', { path: archived.value.path }))
+    setWorkbenchNote(t('note.archived', { path: archived.value.path }))
     await loadArchives()
   }
   const continueArchive = async (item: ArchiveView) => {
@@ -2108,7 +2101,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     }))
     setArchiveBusy(false)
     if (!result.ok) { setArchiveNote(errorMessage(result)); return }
-    if (result.value.metadataWarning) setArchiveNote(result.value.metadataWarning)
     setTreeRevision((value) => value + 1)
     await loadArchives()
   }
@@ -2127,7 +2119,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     if (result.value.state !== 'restored') { setArchiveNote(t('note.restoreBlocked')); await loadArchives(); return }
     setTreeRevision((value) => value + 1)
     openDocument(result.value.path)
-    setWorkbenchNote(result.value.metadataWarning ? t('note.restoredWithWarning', { path: result.value.path, warning: result.value.metadataWarning }) : t('note.restored', { path: result.value.path }))
+    setWorkbenchNote(t('note.restored', { path: result.value.path }))
     await loadArchives()
   }
   /* 命令面板:复用 useTheme / openSettings / startWorkspaceFromPicker /
@@ -2412,7 +2404,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       createNote,
       workspaceWarning: workspaceOpen.warning,
       workbenchNote,
-      chapterStatuses,
       expandPath: treeExpansionPath,
       highlightPath: highlightPath ?? undefined,
       onOpen: openDocument,

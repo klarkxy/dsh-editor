@@ -6,6 +6,5 @@ export type ArchiveResponse = {
   state: 'archived' | 'pending-archive' | 'pending-restore' | 'restored' | 'blocked'
   version?: string
   message?: string
-  metadataWarning?: string
 }
 export type ArchiveListResponse = { items: ArchiveResponse[]; invalid: number }

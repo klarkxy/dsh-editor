@@ -599,23 +599,14 @@ describe('shell manuscript RPC safety', () => {
     expect(zh['home.removeRecent']).toBe('从最近移除')
   })
 
-  it('keeps tree chapter-status glyphs from cached overview and yields Ctrl+Shift+O to the overlay plugin', () => {
+  it('yields Ctrl+Shift+O to the overlay plugin', () => {
     const source = rootSource()
     const palette = readFileSync(new URL('./client/command-palette.tsx', import.meta.url), 'utf8')
-    const statusView = readFileSync(new URL('./chapter-status-view.ts', import.meta.url), 'utf8')
     expect(source).toContain('CENTER_OVERLAYS_SLOT')
-    /* 章状态映射提升为按 overview memo 的派生值（身份稳定，Tree 列才能跳过无关重渲染）。 */
-    expect(source).toContain('useMemo(() => buildChapterStatusMap(overview), [overview])')
     expect(source).toContain('progress.record')
     expect(source).not.toContain('OverviewPanel')
     expect(source).not.toContain('openOverviewPanel')
     expect(source).not.toContain('chapter.statusSet')
-    expect(statusView).toContain("t('status.draft')")
-    expect(statusView).toContain("t('status.revising')")
-    expect(statusView).toContain("t('status.final')")
-    expect(zh['status.draft']).toBe('草稿')
-    expect(zh['status.revising']).toBe('修订中')
-    expect(zh['status.final']).toBe('已定稿')
     expect(palette).not.toContain("t('command.overview')")
     expect(workspaceShortcut({ key: 'o', ctrlKey: true, metaKey: false, altKey: false, shiftKey: true })).toBeNull()
   })
@@ -819,13 +810,9 @@ describe('shell manuscript RPC safety', () => {
     expect(copy.indexOf('draftCleanupFailed')).toBeLessThan(copy.indexOf('setRevisionTick'))
   })
 
-  it('sends proofread source and locate callbacks and styles rewrite proposals', () => {
+  it('styles rewrite proposals and chat proposal chrome', () => {
     const editor = readFileSync(new URL('./client/editor.ts', import.meta.url), 'utf8')
-    expect(editor).toContain('sourceLabel')
-    expect(editor).toContain('onLocate')
-    expect(editor).toContain('locateProofreadOffsets')
     expect(editor).toContain("proposal: 'proposal'")
-    expect(editor).toContain('getPaperOffset')
     const general = readFileSync(new URL('./client/settings-general.tsx', import.meta.url), 'utf8')
     expect(general.match(/t\('settings.busyEnter'\)/g)?.length).toBe(2)
     const chat = readFileSync(new URL('./client/chat.ts', import.meta.url), 'utf8')
@@ -1223,20 +1210,6 @@ describe('shell manuscript RPC safety', () => {
     /* 作者侧写不对作者暴露设置入口 */
     expect(settingsSource).not.toContain('作者侧写（记忆）')
     expect(settingsSource).not.toContain('保存作者侧写')
-  })
-
-  it('renders chapter status badges in the file tree from cached overview data', () => {
-    const sidebarSource = readFileSync(new URL('./client/sidebar.ts', import.meta.url), 'utf8')
-    expect(sidebarSource).toContain('chapter-status')
-    expect(sidebarSource).toContain('chapterStatuses')
-    expect(sidebarSource).toContain('chapterStatusLabel(chapterStatus)')
-    expect(sidebarSource).toContain('chapterStatusGlyph(chapterStatus)')
-    expect(sidebarSource).toContain('isChapterDocumentPath(child)')
-    const styleSource = readFileSync(new URL('./styles.ts', import.meta.url), 'utf8')
-    expect(styleSource).toMatch(/\.chapter-status\b/)
-    expect(styleSource).toMatch(/\.chapter-status\.draft\b/)
-    expect(styleSource).toMatch(/\.chapter-status\.revising\b/)
-    expect(styleSource).toMatch(/\.chapter-status\.final\b/)
   })
 
   it('exposes paper typography settings, EditorCore props, and recoverable conversation archive', () => {

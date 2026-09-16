@@ -25,7 +25,6 @@ const PREVIOUS_MUTATIONS = [
   'entry.move',
   'entry.delete',
   'entry.rename',
-  'chapter.statusSet',
   'progress.record',
 ] as const
 

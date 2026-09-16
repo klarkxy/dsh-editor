@@ -1,15 +1,5 @@
-import type { ChapterStatus, ChapterSummary, ProgressDay, ProgressWeek, ProjectOverview } from 'dsh-editor-workbench/contracts'
+import type { ChapterSummary, ProgressDay, ProgressWeek } from 'dsh-editor-workbench/contracts'
 import { formatNumber, intlLocale, t } from './messages.ts'
-
-export type { ChapterStatus }
-
-export const CHAPTER_STATUSES = ['draft', 'revising', 'final'] as const
-
-export const CHAPTER_STATUS_LABELS: Record<ChapterStatus, string> = {
-  get draft() { return t('status.draft') },
-  get revising() { return t('status.revising') },
-  get final() { return t('status.final') },
-}
 
 const CHAR_BUCKETS = [
   { id: 'empty', max: 0 },
@@ -33,35 +23,12 @@ export function localDateKey(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-export function chapterStatusLabel(status: ChapterStatus): string {
-  return CHAPTER_STATUS_LABELS[status] ?? CHAPTER_STATUS_LABELS.draft
-}
-
 export function filterChapters<T extends { title: string; path: string }>(chapters: readonly T[], text: string): T[] {
   const query = text.trim().toLocaleLowerCase()
   if (!query) return [...chapters]
   return chapters.filter((chapter) => (
     chapter.title.toLocaleLowerCase().includes(query) || chapter.path.toLocaleLowerCase().includes(query)
   ))
-}
-
-export function applyChapterStatus(overview: ProjectOverview, path: string, status: ChapterStatus): ProjectOverview {
-  const chapters = overview.chapters.map((chapter) => chapter.path === path ? { ...chapter, status } : chapter)
-  const byStatus: Record<ChapterStatus, number> = { draft: 0, revising: 0, final: 0 }
-  for (const chapter of chapters) byStatus[chapter.status]++
-  const recentChapters = overview.recentChapters.map((chapter) => chapter.path === path ? { ...chapter, status } : chapter)
-  const recent = overview.recent && overview.recent.path === path ? { ...overview.recent, status } : overview.recent
-  return { ...overview, chapters, recentChapters, recent, totals: { ...overview.totals, byStatus } }
-}
-
-export type StatusBar = { status: ChapterStatus; label: string; count: number; ratio: number }
-
-export function statusDistributionBars(byStatus: Record<ChapterStatus, number>): StatusBar[] {
-  const total = CHAPTER_STATUSES.reduce((sum, status) => sum + Math.max(0, byStatus[status] ?? 0), 0)
-  return CHAPTER_STATUSES.map((status) => {
-    const count = Math.max(0, byStatus[status] ?? 0)
-    return { status, label: chapterStatusLabel(status), count, ratio: scaleBar(count, total) }
-  })
 }
 
 /** Map a value onto 0–1 against `max`. Zero max or non-positive values stay at 0. */

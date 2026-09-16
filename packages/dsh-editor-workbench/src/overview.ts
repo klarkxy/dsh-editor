@@ -7,8 +7,7 @@ import {
   readTextFileLimited,
 } from 'dsh-manuscript/host-api'
 import { CHAPTER_STATE_KEYS, parseChapterMeta, stripChapterFrontmatter } from './chapter-meta.ts'
-import type { ChapterStatus, ChapterSummary, OutlineSummary, ProjectOverview } from './contracts.ts'
-import { loadChapterStatuses } from './chapter-status.ts'
+import type { ChapterSummary, OutlineSummary, ProjectOverview } from './contracts.ts'
 import type { OverviewAccess } from './kit/access.ts'
 import { isGeneratedPath, isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
 
@@ -22,7 +21,7 @@ const MAX_DIRECTORY_ENTRIES = 10_000
 const MAX_DEPTH = 12
 const EXCERPT_MAX_CHARS = 160
 
-type ScannedChapter = Omit<ChapterSummary, 'status'>
+type ScannedChapter = ChapterSummary
 type ScanResult = {
   chapters: ScannedChapter[]
   outlines: OutlineSummary[]
@@ -211,13 +210,8 @@ async function scanProject(access: OverviewAccess): Promise<ScanResult> {
 }
 
 export async function readProjectOverview(access: OverviewAccess): Promise<ProjectOverview> {
-  const [scan, stored] = await Promise.all([scanProject(access), loadChapterStatuses(access)])
-  const chapters: ChapterSummary[] = scan.chapters.map((chapter) => ({
-    ...chapter,
-    status: stored.get(chapter.path) ?? 'draft',
-  }))
-  const byStatus: Record<ChapterStatus, number> = { draft: 0, revising: 0, final: 0 }
-  for (const chapter of chapters) byStatus[chapter.status]++
+  const scan = await scanProject(access)
+  const chapters: ChapterSummary[] = scan.chapters
   const recentChapters = [...chapters].sort((left, right) => {
     const time = (right.modifiedAt ?? '').localeCompare(left.modifiedAt ?? '')
     return time || pathCompare(left.path, right.path)
@@ -225,7 +219,7 @@ export async function readProjectOverview(access: OverviewAccess): Promise<Proje
   return {
     chapters,
     outlines: scan.outlines,
-    totals: { chapters: chapters.length, chars: scan.totalChars, byStatus },
+    totals: { chapters: chapters.length, chars: scan.totalChars },
     recent: recentChapters[0] ?? null,
     recentChapters,
     truncated: scan.truncated,

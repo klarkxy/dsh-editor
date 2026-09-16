@@ -1,8 +1,6 @@
 import type { ChapterStateFields } from '../chapter-meta.ts'
 import type { MemoryChange, MemoryChangeSummary, MemoryUpdateReceipt } from './memory.ts'
 import type {
-  ChapterStatus,
-  ChapterStatusSetResponse,
   ProgressHistory,
   ProgressRecordResult,
   ProjectInitResponse,
@@ -27,7 +25,6 @@ export type WorkbenchEndpoint =
   | 'project.init'
   | 'project.prepareIndex'
   | 'project.overview'
-  | 'chapter.statusSet'
   | 'progress.record'
   | 'progress.history'
   | 'structure.groupCreate'
@@ -85,7 +82,6 @@ export type WorkbenchRequestMap = {
   'project.init': { sessionId: string; newProject: boolean }
   'project.prepareIndex': { sessionId: string }
   'project.overview': { sessionId: string }
-  'chapter.statusSet': { sessionId: string; path: string; status: ChapterStatus }
   'progress.record': { sessionId: string; totalChars: number }
   'progress.history': { sessionId: string; days?: number }
   'structure.groupCreate': { sessionId: string; path: string }
@@ -127,7 +123,6 @@ export type WorkbenchResponseMap = {
   'project.init': ProjectInitResponse
   'project.prepareIndex': ProjectInitResponse
   'project.overview': ProjectOverview
-  'chapter.statusSet': ChapterStatusSetResponse
   'progress.record': ProgressRecordResult
   'progress.history': ProgressHistory
   'structure.groupCreate': WorkbenchPathResponse

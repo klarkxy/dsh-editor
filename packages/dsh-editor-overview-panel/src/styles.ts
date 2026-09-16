@@ -18,7 +18,7 @@ export const overviewPanelStyles = `
 .shell .overview-header h2, .dsh-ui .overview-header h2 { margin: 0; font: 500 20px/1.2 var(--font-serif); letter-spacing: -.02em; color: var(--fg); }
 .shell .overview-header p, .dsh-ui .overview-header p { margin: 6px 0 0; }
 .shell .overview-body, .dsh-ui .overview-body { display: grid; gap: var(--space-5, 20px); padding: 16px 24px 32px; }
-.shell .overview-totals, .dsh-ui .overview-totals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: var(--space-3, 12px); }
+.shell .overview-totals, .dsh-ui .overview-totals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3, 12px); }
 .shell .overview-totals > article, .dsh-ui .overview-totals > article {
   display: grid; gap: 6px; padding: var(--space-3, 12px); border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg);
   transition: transform var(--duration-quick, 150ms) var(--ease-smooth-out, ease), box-shadow var(--duration-quick, 150ms) var(--ease-smooth-out, ease);
@@ -26,19 +26,9 @@ export const overviewPanelStyles = `
 }
 .shell .overview-totals > article:hover, .dsh-ui .overview-totals > article:hover { transform: translateY(-2px); box-shadow: var(--elev-raised); }
 .shell .overview-totals > article:nth-child(2), .dsh-ui .overview-totals > article:nth-child(2) { animation-delay: var(--duration-stagger, 40ms); }
-.shell .overview-totals > article:nth-child(3), .dsh-ui .overview-totals > article:nth-child(3) { animation-delay: calc(var(--duration-stagger, 40ms) * 2); }
-.shell .overview-status-card, .dsh-ui .overview-status-card { min-width: 0; }
 .shell .overview-chapters, .shell .overview-chart, .dsh-ui .overview-chapters, .dsh-ui .overview-chart { min-width: 0; }
 .shell .overview-totals span, .dsh-ui .overview-totals span { font: 500 var(--text-chrome, 13px)/1.4 var(--font-sans); color: var(--meta); letter-spacing: .04em; }
 .shell .overview-totals strong, .dsh-ui .overview-totals strong { font: 600 var(--text-base, 14px)/1.2 var(--font-sans); color: var(--fg); font-variant-numeric: tabular-nums; }
-.shell .overview-status-bars, .dsh-ui .overview-status-bars { display: grid; gap: 6px; }
-.shell .overview-status-bar, .dsh-ui .overview-status-bar { display: grid; gap: 3px; }
-.shell .overview-status-bar small, .dsh-ui .overview-status-bar small { color: var(--fg-2); font-size: var(--text-chrome, 13px); }
-.shell .overview-status-bar i, .dsh-ui .overview-status-bar i { display: block; height: 6px; border-radius: 999px; background: var(--surface-warm); }
-.shell .overview-status-bar i, .dsh-ui .overview-status-bar i { transform-origin: center left; animation: overview-meter-in var(--duration-medium, 350ms) var(--ease-smooth-out, ease) both; }
-.shell .overview-status-bar.draft i, .dsh-ui .overview-status-bar.draft i { background: var(--muted); }
-.shell .overview-status-bar.revising i, .dsh-ui .overview-status-bar.revising i { background: var(--accent); }
-.shell .overview-status-bar.final i, .dsh-ui .overview-status-bar.final i { background: var(--confirm); }
 .shell .overview-body h3, .dsh-ui .overview-body h3 { margin: 0 0 var(--space-2, 8px); font: 500 var(--text-base, 14px)/1.4 var(--font-sans); letter-spacing: .04em; color: var(--fg-2); }
 .shell .overview-filter, .dsh-ui .overview-filter {
   width: 100%; min-height: var(--control-h, 34px); margin: 0 0 8px; padding: 0 10px; box-sizing: border-box;
@@ -47,7 +37,7 @@ export const overviewPanelStyles = `
 }
 .shell .overview-chapter-list, .dsh-ui .overview-chapter-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .shell .overview-chapter, .dsh-ui .overview-chapter {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm);
   transition: background-color var(--duration-quick, 150ms) var(--ease-smooth-out, ease), transform var(--duration-quick, 150ms) var(--ease-smooth-out, ease);
   animation: overview-item-in var(--duration-fast, 250ms) var(--ease-spring, cubic-bezier(0.34, 1.4, 0.64, 1)) both;
 }
@@ -73,12 +63,6 @@ export const overviewPanelStyles = `
 .shell .overview-empty-flag, .dsh-ui .overview-empty-flag {
   padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); font-size: var(--text-chrome, 13px);
 }
-.shell .overview-status-select, .dsh-ui .overview-status-select {
-  min-height: var(--control-h, 34px); padding: 0 8px; border: 1px solid var(--hairline); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--muted); font-size: var(--text-chrome, 13px);
-}
-.shell .overview-status-select:hover, .shell .overview-status-select:focus-visible,
-.dsh-ui .overview-status-select:hover, .dsh-ui .overview-status-select:focus-visible { color: var(--fg); border-color: var(--hairline-strong); }
 .shell .overview-char-bars, .shell .overview-curve, .dsh-ui .overview-char-bars, .dsh-ui .overview-curve {
   display: flex; align-items: flex-end; gap: 6px; min-height: 96px; padding: var(--space-3, 12px); border: 1px solid var(--hairline);
   border-radius: var(--radius-md); background: var(--bg); overflow-x: auto;
@@ -116,11 +100,9 @@ export const overviewPanelStyles = `
    概览载入卡片是面板私有骨架条(非共享类),保留本地 sheen 关键帧。 */
 @keyframes overview-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
 .shell .overview-loading, .dsh-ui .overview-loading { display: grid; gap: var(--space-5, 20px); padding: 16px 24px 32px; }
-.shell .overview-loading-cards, .dsh-ui .overview-loading-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: var(--space-3, 12px); }
+.shell .overview-loading-cards, .dsh-ui .overview-loading-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3, 12px); }
 .shell .overview-loading-cards i, .dsh-ui .overview-loading-cards i { position: relative; display: block; height: 56px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--bg); overflow: hidden; }
 .shell .overview-loading-cards i::after, .dsh-ui .overview-loading-cards i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface, #fdfcf6) 65%, transparent), transparent); animation: overview-activity-sheen 1.5s linear infinite; }
-.shell .overview-status-wrap, .dsh-ui .overview-status-wrap { display: inline-flex; align-items: center; gap: 4px; }
-.shell .overview-status-wrap .panel-activity-dots, .dsh-ui .overview-status-wrap .panel-activity-dots { margin-inline-end: 0; color: var(--accent); }
 /* 焦点环:概览可能渲染在 .shell/.dsh-ui 之外,自带 focus-visible 词汇(box-shadow 环,不用 outline)。 */
 .overview-panel :focus { outline: none; }
 .overview-panel button:focus-visible, .overview-panel input:focus-visible, .overview-panel select:focus-visible, .overview-panel textarea:focus-visible, .overview-panel a:focus-visible, .overview-panel [tabindex]:focus-visible { box-shadow: var(--focus-ring); }

@@ -57,8 +57,6 @@ export {
 } from './contracts/channel.ts'
 
 export type {
-  ChapterStatus,
-  ChapterStatusSetResponse,
   ChapterSummary,
   OutlineSummary,
   ProgressDay,

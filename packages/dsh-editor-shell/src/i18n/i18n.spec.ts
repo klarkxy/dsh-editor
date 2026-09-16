@@ -86,9 +86,6 @@ describe('i18n dictionaries', () => {
   it('keeps representative zh labels identical to the previous UI copy', () => {
     expect(zh['sidebar.search']).toBe('搜索')
     expect(zh['common.search']).toBe('搜索')
-    expect(zh['status.draft']).toBe('草稿')
-    expect(zh['status.revising']).toBe('修订中')
-    expect(zh['status.final']).toBe('已定稿')
   })
 })
 

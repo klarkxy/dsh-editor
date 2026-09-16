@@ -6,11 +6,11 @@
 
 - 中栏：`dsh-editor.center.overlays`（id `overview`，`src/client.ts`）
 - 命令：`overview`（Ctrl+Shift+O）
-- Feature：`overview-panel`（basic / smart / full 均选）
+- Feature：`overview-panel`（canonical recipe `desktop` 已选；basic / smart / full 别名同一集合）
 
 ## 契约
 
-数据在 `/dsh-editor-workbench`：`project.overview`、`progress.history`、`chapter.statusSet`。打开时根元素带 `data-dsh-center-overlay`，由 Shell 放入稿纸格；插件不写 grid。座位 `Select` 用共享控件，缺省回退原生（`src/host-ui.ts`）。文档状态变更走 workbench RPC，刷新用座位 `refresh('overview'|'tree')`。
+数据在 `/dsh-editor-workbench`：`project.overview`、`progress.history`。打开时根元素带 `data-dsh-center-overlay`，由 Shell 放入稿纸格；插件不写 grid。
 
 ## 文档
 

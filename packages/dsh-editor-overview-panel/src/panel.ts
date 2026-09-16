@@ -1,28 +1,22 @@
 import { createElement as e, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import {
   WORKBENCH_RPC_CHANNEL,
-  type ChapterStatus,
   type ChapterSummary,
   type ProgressHistory,
   type ProjectOverview,
 } from 'dsh-editor-workbench/contracts'
 import { CENTER_OVERLAY_ATTRIBUTE, type ShellToolSeatContext } from 'dsh-editor-seats'
 import {
-  CHAPTER_STATUSES,
-  applyChapterStatus,
   barHeight,
   chapterCharBars,
   chapterMetaMarks,
-  chapterStatusLabel,
   dailyCurveSeries,
   filterChapters,
   formatCount,
   formatModifiedAt,
   localDateKey,
-  statusDistributionBars,
   weeklyCurveSeries,
 } from './overview-view.ts'
-import { renderSelect } from './host-ui.ts'
 import { errorMessage, LatestRequestGate, safeRpcCall } from './rpc.ts'
 import { setOverviewLocale, t } from './messages.ts'
 import { consumeOverviewRequest, pendingOverviewRequest, subscribeOverviewRequest, type OverviewRequest } from './requests.ts'
@@ -37,10 +31,9 @@ const STATUS_BAR_MAX = 28
 const CHAR_BAR_MAX = 72
 const CURVE_BAR_MAX = 56
 
-/* 活动暗示:三点呼吸(pulse-dots)与骨架行(fluid-skeleton),参数改写自
+/* 活动暗示:骨架行(fluid-skeleton),参数改写自
    Amicro(MIT License, Copyright (c) 2026 Syed Subhan Uddin);装饰 aria-hidden,
    关键帧在 styles.ts,reduced-motion 停循环后保留静态可读态。 */
-const activityDots = () => e('span', { className: 'panel-activity-dots', 'aria-hidden': 'true' }, e('i'), e('i'), e('i'))
 const skeletonRows = (widths: readonly string[]) => e('span', { className: 'panel-skeleton', 'aria-hidden': 'true' },
   widths.map((width, index) => e('i', { key: index, style: { width } })))
 
@@ -48,7 +41,6 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
   setOverviewLocale(props.locale)
   const [overview, setOverview] = useState<ProjectOverview | null | undefined>(undefined)
   const [note, setNote] = useState('')
-  const [statusBusyPath, setStatusBusyPath] = useState<string | null>(null)
   const [history, setHistory] = useState<ProgressHistory | null>(null)
   const [historyNote, setHistoryNote] = useState('')
   const [filter, setFilter] = useState('')
@@ -95,7 +87,6 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
   useEffect(() => {
     setOverview(undefined)
     setNote('')
-    setStatusBusyPath(null)
     setHistory(null)
     setHistoryNote('')
     setFilter('')
@@ -108,33 +99,11 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
     consumeOverviewRequest(props.request)
   }, [props.request?.nonce])
 
-  const changeStatus = async (chapterPath: string, status: ChapterStatus) => {
-    if (!overview) return
-    const previous = overview
-    setOverview(applyChapterStatus(overview, chapterPath, status))
-    setStatusBusyPath(chapterPath)
-    setNote('')
-    const result = await safeRpcCall<{ path: string; status: ChapterStatus }>(() => props.rpc.call(WORKBENCH_RPC_CHANNEL, 'chapter.statusSet', {
-      sessionId: props.sessionId,
-      path: chapterPath,
-      status,
-    }))
-    setStatusBusyPath(null)
-    if (!result.ok) {
-      setOverview(previous)
-      setNote(errorMessage(result, props.locale))
-      return
-    }
-    props.refresh('overview')
-    props.refresh('tree')
-  }
-
   const openChapter = (path: string) => {
     props.onClose()
     props.openDocument(path)
   }
 
-  const statusBars = overview ? statusDistributionBars(overview.totals.byStatus) : []
   const visibleChapters = overview ? filterChapters(overview.chapters, filter) : []
   const charBars = overview ? chapterCharBars(overview.chapters) : []
   const daily = history ? dailyCurveSeries(history.days, today, 30) : []
@@ -150,7 +119,7 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
       e('button', { className: 'icon-button', type: 'button', 'aria-label': t('overview.close'), onClick: props.onClose }, '×'),
     ),
     loading ? e('div', { className: 'overview-loading', role: 'status' },
-      e('span', { className: 'overview-loading-cards', 'aria-hidden': 'true' }, e('i'), e('i'), e('i')),
+      e('span', { className: 'overview-loading-cards', 'aria-hidden': 'true' }, e('i'), e('i')),
       skeletonRows(['100%', '88%', '96%', '72%']),
       e('span', { className: 'sr-only' }, t('overview.loading')),
     ) : null,
@@ -162,13 +131,6 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
       e('section', { className: 'overview-totals', 'aria-label': t('overview.totals') },
         e('article', null, e('span', null, t('overview.chapterCount')), e('strong', null, formatCount(overview.totals.chapters))),
         e('article', null, e('span', null, t('overview.totalChars')), e('strong', null, formatCount(overview.totals.chars))),
-        e('article', { className: 'overview-status-card' },
-          e('span', null, t('overview.statusDist')),
-          e('div', { className: 'overview-status-bars' }, statusBars.map((bar) => e('div', { key: bar.status, className: `overview-status-bar ${bar.status}` },
-            e('small', null, `${bar.label} ${formatCount(bar.count)}`),
-            e('i', { style: { width: `${Math.round(bar.ratio * 100)}%` }, 'aria-hidden': 'true' }),
-          ))),
-        ),
       ),
       overview.truncated ? e('p', { className: 'warning', role: 'status' }, `${t('overview.truncated')}${overview.skipped ? `（${t('overview.skipped', { count: overview.skipped })}）` : ''}`) : null,
       note ? e('p', { className: 'warning', role: 'alert' }, note) : null,
@@ -189,10 +151,7 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
             : e('ol', { className: 'overview-chapter-list' }, visibleChapters.map((chapter) => e(ChapterRow, {
               key: chapter.path,
               chapter,
-              busy: statusBusyPath === chapter.path,
-              Select: props.Select,
               onOpen: openChapter,
-              onStatusChange: (path, status) => { void changeStatus(path, status) },
             }))),
       ),
       e('section', { className: 'overview-chart', 'aria-label': t('overview.charDist') },
@@ -231,7 +190,7 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
           ? e('p', { className: 'muted' }, t('overview.noRecent'))
           : e('ul', null, overview.recentChapters.map((chapter) => e('li', { key: chapter.path },
             e('button', { type: 'button', onClick: () => openChapter(chapter.path) }, chapter.title),
-            e('small', null, t('overview.chapterMeta', { chars: formatCount(chapter.chars), status: chapterStatusLabel(chapter.status), modified: formatModifiedAt(chapter.modifiedAt) })),
+            e('small', null, t('overview.chapterMeta', { chars: formatCount(chapter.chars), modified: formatModifiedAt(chapter.modifiedAt) })),
           ))),
       ),
     ) : null,
@@ -240,10 +199,7 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
 
 function ChapterRow(props: {
   chapter: ChapterSummary
-  busy: boolean
-  Select: OverviewSeatProps['Select']
   onOpen(path: string): void
-  onStatusChange(path: string, status: ChapterStatus): void
 }) {
   const { chapter } = props
   const marks = chapterMetaMarks(chapter.meta)
@@ -255,18 +211,6 @@ function ChapterRow(props: {
       marks.hasState ? e('span', { className: 'overview-meta-pill' }, t('chapterMeta.hasState')) : null,
     ),
     chapter.empty ? e('span', { className: 'overview-empty-flag' }, t('overview.bucketEmpty')) : null,
-    e('span', { className: 'overview-status-wrap' },
-      renderSelect(props.Select, {
-        'aria-label': t('overview.chapterStatusAria', { title: chapter.title }),
-        value: chapter.status,
-        disabled: props.busy,
-        options: CHAPTER_STATUSES.map((status) => ({ value: status, label: chapterStatusLabel(status) })),
-        onChange: (next) => {
-          if (next === 'draft' || next === 'revising' || next === 'final') props.onStatusChange(chapter.path, next)
-        },
-      }),
-      props.busy ? activityDots() : null,
-    ),
     e('time', { className: 'overview-chapter-time', dateTime: chapter.modifiedAt ?? undefined }, formatModifiedAt(chapter.modifiedAt)),
   )
 }

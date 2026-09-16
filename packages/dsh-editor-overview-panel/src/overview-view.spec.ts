@@ -1,75 +1,35 @@
 import { describe, expect, it } from 'vitest'
-import type { ChapterSummary, ProjectOverview } from 'dsh-editor-workbench/contracts'
+import type { ChapterSummary } from 'dsh-editor-workbench/contracts'
 import {
-  applyChapterStatus,
   barHeight,
   chapterCharBars,
   chapterCharBuckets,
   chapterMetaMarks,
-  chapterStatusLabel,
   filterChapters,
   dailyCurveSeries,
   formatCount,
   formatModifiedAt,
   scaleBar,
-  statusDistributionBars,
   weeklyCurveSeries,
 } from './overview-view.ts'
 
 function chapter(path: string, extra: Partial<ChapterSummary> = {}): ChapterSummary {
-  return { path, title: path, chars: 0, empty: true, excerpt: '', status: 'draft', modifiedAt: null, ...extra }
-}
-
-function overview(chapters: ChapterSummary[]): ProjectOverview {
-  const byStatus = { draft: 0, revising: 0, final: 0 }
-  for (const item of chapters) byStatus[item.status]++
-  return {
-    chapters,
-    outlines: [],
-    totals: { chapters: chapters.length, chars: chapters.reduce((sum, item) => sum + item.chars, 0), byStatus },
-    recent: chapters[0] ?? null,
-    recentChapters: chapters.slice(0, 5),
-    truncated: false,
-    skipped: 0,
-  }
+  return { path, title: path, chars: 0, empty: true, excerpt: '', modifiedAt: null, ...extra }
 }
 
 describe('overview view helpers', () => {
-  it('maps chapter status labels', () => {
-    expect(chapterStatusLabel('draft')).toBe('草稿')
-    expect(chapterStatusLabel('revising')).toBe('修订中')
-    expect(chapterStatusLabel('final')).toBe('已定稿')
-  })
-
-  it('filters chapters by title or path without dropping status fields', () => {
+  it('filters chapters by title or path', () => {
     const chapters = [
-      chapter('正文/001.md', { title: '雾闸', status: 'draft' }),
-      chapter('正文/002.md', { title: '回声', status: 'revising' }),
+      chapter('正文/001.md', { title: '雾闸' }),
+      chapter('正文/002.md', { title: '回声' }),
     ]
     expect(filterChapters(chapters, '').map((item) => item.title)).toEqual(['雾闸', '回声'])
-    expect(filterChapters(chapters, '回声').map((item) => item.status)).toEqual(['revising'])
+    expect(filterChapters(chapters, '回声').map((item) => item.path)).toEqual(['正文/002.md'])
     expect(filterChapters(chapters, '001').map((item) => item.path)).toEqual(['正文/001.md'])
     expect(filterChapters(chapters, '没有')).toEqual([])
   })
 
-  it('applies an optimistic status change and rebuilds the status totals', () => {
-    const start = overview([
-      chapter('正文/001.md', { status: 'draft', chars: 12, empty: false }),
-      chapter('正文/002.md', { status: 'final', chars: 40, empty: false }),
-    ])
-    const next = applyChapterStatus(start, '正文/001.md', 'revising')
-    expect(next.chapters[0]?.status).toBe('revising')
-    expect(next.totals.byStatus).toEqual({ draft: 0, revising: 1, final: 1 })
-    expect(next.recent?.status).toBe('revising')
-  })
-
-  it('builds status bars and chapter char bars against the current max', () => {
-    expect(statusDistributionBars({ draft: 2, revising: 1, final: 1 })).toEqual([
-      { status: 'draft', label: '草稿', count: 2, ratio: 0.5 },
-      { status: 'revising', label: '修订中', count: 1, ratio: 0.25 },
-      { status: 'final', label: '已定稿', count: 1, ratio: 0.25 },
-    ])
-    expect(statusDistributionBars({ draft: 0, revising: 0, final: 0 }).map((bar) => bar.ratio)).toEqual([0, 0, 0])
+  it('builds chapter char bars against the current max', () => {
     const bars = chapterCharBars([
       { path: '正文/001.md', title: '一', chars: 100, empty: false },
       { path: '正文/002.md', title: '二', chars: 50, empty: false },

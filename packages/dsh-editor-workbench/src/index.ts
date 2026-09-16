@@ -9,7 +9,6 @@ import { workspaceOpAccess } from './kit/access.ts'
 import { ProjectInitError } from './project.ts'
 import { SnapshotError } from './snapshot.ts'
 import { OverviewError } from './overview.ts'
-import { ChapterStatusError } from './chapter-status.ts'
 import { MetadataIoError } from './metadata-io.ts'
 import { WritingLogError } from './writing-log.ts'
 import { ProofreadError } from './proofread.ts'
@@ -53,7 +52,7 @@ function mapEditorFilesErrorBase(error: unknown): WorkbenchRpcResult {
     if (error.code === 'IO' || error.code === 'UNSUPPORTED') return { ok: false, error: { code: 'internal', message: error.message, details: {} } }
     return badRequest(error.message)
   }
-  if (error instanceof OverviewError || error instanceof ChapterStatusError || error instanceof WritingLogError || error instanceof MetadataIoError || error instanceof ProofreadError) {
+  if (error instanceof OverviewError || error instanceof WritingLogError || error instanceof MetadataIoError || error instanceof ProofreadError) {
     if (error.code === 'READ_ONLY') return { ok: false, error: { code: 'directory-unreadable', message: error.message, details: { path: '' } } }
     if (error.code === 'BLOCKED' || error.code === 'INVALID_PATH' || error.code === 'INVALID') return badRequest(error.message)
     return { ok: false, error: { code: 'internal', message: error.message, details: {} } }

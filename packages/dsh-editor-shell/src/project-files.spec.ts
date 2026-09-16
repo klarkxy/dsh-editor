@@ -3,6 +3,7 @@ import {
   defaultCreateDirectory,
   exportDirectoryOf,
   firstOpenDocumentPath,
+  isChapterDocumentPath,
   searchPathInDirectory,
   sortChapterPaths,
   sortDocumentPaths,
@@ -63,5 +64,15 @@ describe('project file naming', () => {
     expect(searchPathInDirectory('正文/001.md', '笔记')).toBe(false)
     expect(searchPathInDirectory('笔记/卷一/002.md', '')).toBe(true)
     expect(searchPathInDirectory('正文/001.md', '')).toBe(true)
+  })
+
+  it('treats any visible md/txt as a chapter document and excludes hidden or generated paths', () => {
+    expect(isChapterDocumentPath('正文/001.md')).toBe(true)
+    expect(isChapterDocumentPath('正文/第二卷/003.txt')).toBe(true)
+    expect(isChapterDocumentPath('世界书/港口规则.md')).toBe(true)
+    expect(isChapterDocumentPath('项目总览.md')).toBe(true)
+    expect(isChapterDocumentPath('资料/说明.txt')).toBe(true)
+    expect(isChapterDocumentPath('.dsh-editor/秘密.md')).toBe(false)
+    expect(isChapterDocumentPath('dist/out.md')).toBe(false)
   })
 })

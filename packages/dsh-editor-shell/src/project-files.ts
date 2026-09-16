@@ -14,6 +14,14 @@ export function isVisibleTextPath(path: string): boolean {
   return /\.(?:md|txt)$/i.test(normalized) && !isHiddenProjectPath(normalized)
 }
 
+const GENERATED_DIRECTORIES = new Set(['build', 'coverage', 'dist', 'node_modules', 'out', 'target'])
+
+export function isChapterDocumentPath(path: string): boolean {
+  const normalized = path.replace(/\\/g, '/')
+  if (!isVisibleTextPath(normalized)) return false
+  return !normalized.split('/').some((part) => GENERATED_DIRECTORIES.has(part.toLocaleLowerCase()))
+}
+
 export function documentDirectory(path: string | null | undefined): string {
   const normalized = normalizeProjectDirectory(path)
   const index = normalized.lastIndexOf('/')
