@@ -30,7 +30,8 @@ import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversa
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
 import { redesignedStyles } from '../styles.ts'
 import { errorMessage, isStaleFailure, isSuccessWorkbenchNote, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
-import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, PanelResizer, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
+import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
+import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, type PanelImperativeHandle, type PanelSize } from 'react-resizable-panels'
 import { FolderIcon, FocusIcon, NewDocIcon } from './icons.tsx'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.tsx'
 import { SettingsDialog, SettingsTrigger, type SettingsRenderSlot, type SettingsTab } from './settings.tsx'
@@ -50,7 +51,7 @@ import { ActivityDots, ActivityRing, ActivityShimmer, ActivitySkeleton, Activity
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.tsx'
 import { PinnedPane } from './pinned-pane.tsx'
-import { canPinPath, pinnedLayoutColumns, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
+import { canPinPath, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
 
 import { collectDocuments, downloadExport, ExportPreviewDialog } from './export-dialog.tsx'
 import { prepareExport, type ChapterExport, type ExportFormat } from '../export.ts'
@@ -209,28 +210,10 @@ function BoundProposalCard(props: ShellProposalCardProps & { ctx: ShellContext }
 
 /* 工作区三栏拆成模块级 memo 组件：侧栏搜索输入、面板拖拽、editorDirty 翻转等
    高频重渲染不再连带重渲染全部三栏与插槽内容。props 一律由 Root 以
-   useMemo/useCallback 固化，memo 才能真的跳过渲染。 */
+   useMemo/useCallback 固化，memo 才能真的跳过渲染。面板几何交给
+   react-resizable-panels：像素 min/max、双击复位、键盘与 aria 全部内置。 */
 
-function workspaceGridTemplateColumns(input: {
-  sidebarInGrid: boolean
-  sidebarWidth: number
-  pinnedVisible: boolean
-  pinnedWidth: number
-  assistantInGrid: boolean
-  assistantWidth: number
-}): string {
-  const layoutColumns = pinnedLayoutColumns({
-    sidebarVisible: input.sidebarInGrid,
-    sidebarWidth: input.sidebarWidth,
-    pinnedVisible: input.pinnedVisible,
-    pinnedWidth: input.pinnedWidth,
-    assistantVisible: input.assistantInGrid,
-    assistantWidth: input.assistantWidth,
-  })
-  return input.assistantInGrid
-    ? layoutColumns.replace(new RegExp(`${input.assistantWidth}px$`), `minmax(0, ${input.assistantWidth}px)`)
-    : layoutColumns
-}
+const panelPixels = (size: PanelSize): number => Math.round(size.inPixels)
 
 type SidebarFileMenuProps = {
   onOpen(path: string): void
@@ -2430,23 +2413,15 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const assistantVisible = assistantOpen && !focusMode && assistantEnabled
   const assistantInGrid = assistantVisible && !overlayAssistant
   const pinnedVisible = pinnedPath !== null && !focusMode
-  const gridTemplateColumns = workspaceGridTemplateColumns({ sidebarInGrid, sidebarWidth, pinnedVisible, pinnedWidth, assistantInGrid, assistantWidth })
-  /* 拖拽预览直接写 <main> 的 gridTemplateColumns（与渲染同一通道）， pointerup 才提交 setState；
-     value === null 表示拖动结束/取消，恢复 React 已提交的模板值。 */
-  const previewGridWidth = (panel: 'sidebar' | 'pinned' | 'assistant', value: number | null) => {
-    const main = shellMainRef.current
-    if (!main) return
-    main.style.gridTemplateColumns = value === null
-      ? gridTemplateColumns
-      : workspaceGridTemplateColumns({
-          sidebarInGrid,
-          sidebarWidth: panel === 'sidebar' ? value : sidebarWidth,
-          pinnedVisible,
-          pinnedWidth: panel === 'pinned' ? value : pinnedWidth,
-          assistantInGrid,
-          assistantWidth: panel === 'assistant' ? value : assistantWidth,
-        })
-  }
+  /* 写作搭档面板始终挂载（草稿是 Chat 本地 state），关闭=折叠到 0 宽；
+     窄窗 overlay 抽屉与网格共用同一实例，窗口越过断点不丢草稿。 */
+  const assistantPanelRef = useRef<PanelImperativeHandle>(null)
+  useEffect(() => {
+    const panel = assistantPanelRef.current
+    if (!panel) return
+    if (assistantInGrid) { if (panel.isCollapsed()) panel.expand() }
+    else if (!panel.isCollapsed()) panel.collapse()
+  }, [assistantInGrid])
   const fileMenuChapterModel = fileMenu ? chapterMenuModel(fileMenu.path, chapterFiles) : null
 
   return (
@@ -2454,7 +2429,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       <main
         className={`shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`}
         ref={shellMainRef}
-        style={{ minWidth: 0, gridTemplateColumns }}>
+        style={{ minWidth: 0 }}>
         <header className="chrome" onDoubleClick={titleBarDoubleClick}>
           <m.div
             className="workspace-chrome"
@@ -2576,99 +2551,137 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             <WindowControls />
           </div>
         </header>
-        {sidebarInGrid ? <SidebarColumn
-          ctx={ctx}
-          sessionId={fileSession.sessionId}
-          searchOpen={searchOpen}
-          onSearchRequestOpen={onSearchRequestOpen}
-          onOpenDocument={openDocument}
-          onSearchReplaced={onSearchReplaced}
-          activePath={path}
-          activeDirty={editorDirty}
-          fileRevision={treeRevision}
-          historyOpen={historyOpen}
-          snapshots={snapshots}
-          snapshotBusy={snapshotBusy}
-          onCommitSnapshot={onCommitSnapshot}
-          onToggleHistory={onToggleHistory}
-          onRollback={onRequestRollback}
-          createNote={createNote}
-          workspaceWarning={workspaceOpen.warning}
-          workbenchNote={workbenchNote}
-          expandPath={treeExpansionPath}
-          highlightPath={highlightPath ?? undefined}
-          onOpen={openDocument}
-          onPreviewImage={openImagePreview}
-          onFileMenu={openFileMenu}
-          onCreateFile={onTreeCreateFile}
-          onCreateFolder={onTreeCreateFolder}
-          renderSlot={renderSlot}
-          seatContext={seatContext} /> : null}
-        {sidebarInGrid ? <PanelResizer
-          side="left"
-          value={sidebarWidth}
-          minimum={SIDEBAR_MIN}
-          maximum={SIDEBAR_MAX}
-          defaultValue={SIDEBAR_DEFAULT}
-          label={t('workspace.resizeFiles')}
-          onChange={setSidebarWidth}
-          onPreview={(value: number | null) => previewGridWidth('sidebar', value)} /> : null}
-        <EditorColumn
-          ctx={ctx}
-          fileSession={fileSession}
-          path={path}
-          files={isManuscriptChapterPath(path) ? chapterFiles : files}
-          onOpen={openDocument}
-          onCreate={onEditorCreate}
-          onHandle={onEditorHandle}
-          contentRevision={contentRevision}
-          onDirtyChange={setEditorDirty}
-          reveal={reveal}
-          completionPreference={writing.completion}
-          completionEnabled={capabilityReady ? featureEnabled(capabilityState.value, 'completion') : false}
-          authorPreferences={authorPreferences}
-          authorMemory={authorMemory}
-          typewriter={writing.typewriter}
-          focusParagraph={writing.focusParagraph}
-          typography={typography}
-          onSaved={onEditorSaved} />
-        <CenterOverlays
-          show={Boolean(fileSession)}
-          renderSlot={renderSlot}
-          seatContext={seatContext} />
-        {pinnedVisible && pinnedPath ? <PanelResizer
-          side="right"
-          value={pinnedWidth}
-          minimum={PINNED_MIN}
-          maximum={PINNED_MAX}
-          defaultValue={PINNED_DEFAULT}
-          label={t('pin.resize')}
-          onChange={setPinnedWidth}
-          onPreview={(value: number | null) => previewGridWidth('pinned', value)} /> : null}
-        {pinnedVisible && pinnedPath ? <PinnedPane
-          ctx={ctx}
-          sessionId={fileSession.sessionId}
-          path={pinnedPath}
-          treeRevision={treeRevision}
-          contentRevision={contentRevision}
-          onUnpin={() => setPinnedPath(null)}
-          onOpenDocument={(cardPath: string) => {
-            setTreeExpansionPath(cardPath)
-            openDocument(cardPath)
-          }}
-          onMissing={() => {
-            setWorkbenchNote(t('pin.missing'))
-            setPinnedPath(null)
-          }} /> : null}
-        {assistantInGrid ? <PanelResizer
-          side="right"
-          value={assistantWidth}
-          minimum={ASSISTANT_MIN}
-          maximum={ASSISTANT_MAX}
-          defaultValue={ASSISTANT_DEFAULT}
-          label={t('workspace.resizeAssistant')}
-          onChange={setAssistantWidth}
-          onPreview={(value: number | null) => previewGridWidth('assistant', value)} /> : null}
+        <PanelGroup orientation="horizontal" className="shell-panels">
+          {sidebarInGrid ? <>
+            <Panel
+              id="sidebar"
+              className="shell-panel"
+              defaultSize={sidebarWidth}
+              minSize={SIDEBAR_MIN}
+              maxSize={SIDEBAR_MAX}
+              groupResizeBehavior="preserve-pixel-size"
+              onResize={(size: PanelSize) => setSidebarWidth(panelPixels(size))}>
+              <SidebarColumn
+                ctx={ctx}
+                sessionId={fileSession.sessionId}
+                searchOpen={searchOpen}
+                onSearchRequestOpen={onSearchRequestOpen}
+                onOpenDocument={openDocument}
+                onSearchReplaced={onSearchReplaced}
+                activePath={path}
+                activeDirty={editorDirty}
+                fileRevision={treeRevision}
+                historyOpen={historyOpen}
+                snapshots={snapshots}
+                snapshotBusy={snapshotBusy}
+                onCommitSnapshot={onCommitSnapshot}
+                onToggleHistory={onToggleHistory}
+                onRollback={onRequestRollback}
+                createNote={createNote}
+                workspaceWarning={workspaceOpen.warning}
+                workbenchNote={workbenchNote}
+                expandPath={treeExpansionPath}
+                highlightPath={highlightPath ?? undefined}
+                onOpen={openDocument}
+                onPreviewImage={openImagePreview}
+                onFileMenu={openFileMenu}
+                onCreateFile={onTreeCreateFile}
+                onCreateFolder={onTreeCreateFolder}
+                renderSlot={renderSlot}
+                seatContext={seatContext} />
+            </Panel>
+            <PanelResizeHandle
+              className="panel-resizer left"
+              aria-label={t('workspace.resizeFiles')}
+              title={t('resizer.aria', { label: t('workspace.resizeFiles') })} />
+          </> : null}
+          <Panel id="editor" className="shell-panel editor-cell" minSize={420}>
+            <EditorColumn
+              ctx={ctx}
+              fileSession={fileSession}
+              path={path}
+              files={isManuscriptChapterPath(path) ? chapterFiles : files}
+              onOpen={openDocument}
+              onCreate={onEditorCreate}
+              onHandle={onEditorHandle}
+              contentRevision={contentRevision}
+              onDirtyChange={setEditorDirty}
+              reveal={reveal}
+              completionPreference={writing.completion}
+              completionEnabled={capabilityReady ? featureEnabled(capabilityState.value, 'completion') : false}
+              authorPreferences={authorPreferences}
+              authorMemory={authorMemory}
+              typewriter={writing.typewriter}
+              focusParagraph={writing.focusParagraph}
+              typography={typography}
+              onSaved={onEditorSaved} />
+            <CenterOverlays
+              show={Boolean(fileSession)}
+              renderSlot={renderSlot}
+              seatContext={seatContext} />
+          </Panel>
+          {pinnedVisible && pinnedPath ? <>
+            <PanelResizeHandle
+              className="panel-resizer right"
+              aria-label={t('pin.resize')}
+              title={t('resizer.aria', { label: t('pin.resize') })} />
+            <Panel
+              id="pinned"
+              className="shell-panel"
+              defaultSize={pinnedWidth}
+              minSize={PINNED_MIN}
+              maxSize={PINNED_MAX}
+              groupResizeBehavior="preserve-pixel-size"
+              onResize={(size: PanelSize) => setPinnedWidth(panelPixels(size))}>
+              <PinnedPane
+                ctx={ctx}
+                sessionId={fileSession.sessionId}
+                path={pinnedPath}
+                treeRevision={treeRevision}
+                contentRevision={contentRevision}
+                onUnpin={() => setPinnedPath(null)}
+                onOpenDocument={(cardPath: string) => {
+                  setTreeExpansionPath(cardPath)
+                  openDocument(cardPath)
+                }}
+                onMissing={() => {
+                  setWorkbenchNote(t('pin.missing'))
+                  setPinnedPath(null)
+                }} />
+            </Panel>
+          </> : null}
+          {assistantInGrid ? <PanelResizeHandle
+            className="panel-resizer right"
+            aria-label={t('workspace.resizeAssistant')}
+            title={t('resizer.aria', { label: t('workspace.resizeAssistant') })} /> : null}
+          {assistantEnabled && chatSession ? <Panel
+            id="assistant"
+            className="shell-panel"
+            panelRef={assistantPanelRef}
+            collapsible
+            collapsedSize={0}
+            defaultSize={assistantWidth}
+            minSize={ASSISTANT_MIN}
+            maxSize={ASSISTANT_MAX}
+            groupResizeBehavior="preserve-pixel-size"
+            onResize={(size: PanelSize) => { if (size.inPixels > 0) setAssistantWidth(panelPixels(size)) }}>
+            <ChatColumn
+              ctx={ctx}
+              chatSession={chatSession}
+              workspaceId={currentWorkspace?.workspaceId}
+              activePath={path}
+              authorPreferences={authorPreferences}
+              authorMemory={authorMemory}
+              chatModel={writing.chatModel}
+              onAcceptMemory={onAcceptMemory}
+              hidden={!assistantVisible}
+              overlay={assistantVisible && overlayAssistant}
+              onConfigure={openSettings}
+              onDraftDirtyChange={setAssistantDraftDirty}
+              onWritten={refreshWrittenPath}
+              onApplied={onAppliedChat} />
+          </Panel> : null}
+        </PanelGroup>
         {assistantVisible && overlayAssistant ? <button
           type="button"
           className="chat-overlay-dismiss"

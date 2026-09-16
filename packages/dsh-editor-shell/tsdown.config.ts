@@ -37,6 +37,7 @@ export default defineConfig([
         'cmdk',
         'react-markdown',
         'remark-gfm',
+        'react-resizable-panels',
         '@radix-ui/react-dialog',
         '@radix-ui/react-select',
         '@radix-ui/react-dropdown-menu',

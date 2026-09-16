@@ -78,7 +78,7 @@ export { ConfirmDialog, ConversationPresetPicker, NewProjectDialog, TextPromptDi
 export { Chat, ModelPicker, PendingCard, ProjectContextReceiptView, ProposalCard, bindOfficialConversation, conversationChatSource } from './client/chat.tsx'
 export { Editor } from './client/editor.tsx'
 export { FileContextMenu, Tree } from './client/sidebar.tsx'
-export { DeepSeekWhaleMark, PaperStage, PanelResizer, currentSession, useObservable } from './client/components.tsx'
+export { DeepSeekWhaleMark, PaperStage, currentSession, useObservable } from './client/components.tsx'
 
 type SettingsSlot = { bind<T>(spec: { namespace: string; decode?(value: unknown): T | undefined }): SettingsScope<T> }
 

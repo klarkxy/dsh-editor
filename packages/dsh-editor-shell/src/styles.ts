@@ -372,7 +372,7 @@ export const componentStyles = `
 /* ── Sidebar / tree ─────────────────────────────────────── */
 /* 侧栏整体下沉 1 度,与主区在纸/墨双主题下都形成温和的层级对比,
    同时把 1px 实色边框换为半透明 hairline,避免"上一代工具"的硬切感。 */
-.shell > .sidebar { grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--hairline); background: var(--chrome-sunken); overflow-x: hidden; overflow-y: auto; }
+.shell .sidebar { height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--hairline); background: var(--chrome-sunken); overflow-x: hidden; overflow-y: auto; }
 .shell .side-title, .dsh-ui .side-title { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 8px; min-height: 40px; padding: 8px 12px; font-size: var(--text-chrome); font-weight: 600; letter-spacing: .08em; color: var(--chrome-fg); }
 .shell .side-title .icon-button, .dsh-ui .side-title .icon-button { font-size: 14px; }
 .shell .side-search, .dsh-ui .side-search { margin: 0 12px 8px; padding: 0 12px; width: auto; min-height: var(--control-h); border: 1px solid transparent; border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elev-ring); color: var(--fg); font: 400 var(--text-chrome)/1.4 var(--font-sans); appearance: none; -webkit-appearance: none; }
@@ -507,13 +507,12 @@ export const componentStyles = `
 .shell > .assistant-launcher .whale-mark { width: 18px; height: 18px; color: var(--accent); }
 
 /* ── Columns / paper / chat ─────────────────────────────── */
-.shell .panel-resizer, .dsh-ui .panel-resizer { grid-row: 2; position: relative; z-index: 4; cursor: col-resize; background: var(--border); transition: background-color var(--duration-quick) var(--ease); }
-.shell .panel-resizer span, .dsh-ui .panel-resizer span { position: absolute; inset: 0; }
-.shell .panel-resizer:hover, .shell .panel-resizer:focus-visible, .dsh-ui .panel-resizer:hover, .dsh-ui .panel-resizer:focus-visible { background: var(--accent); }
+.shell .panel-resizer, .dsh-ui .panel-resizer { position: relative; z-index: 4; width: 7px; cursor: col-resize; background: var(--border); transition: background-color var(--duration-quick) var(--ease); }
+.shell .panel-resizer:hover, .shell .panel-resizer:focus-visible, .shell .panel-resizer[data-separator="active"], .dsh-ui .panel-resizer:hover, .dsh-ui .panel-resizer:focus-visible, .dsh-ui .panel-resizer[data-separator="active"] { background: var(--accent); }
 
 /* ── Editor / paper ─────────────────────────────────────── */
 /* 稿纸是视觉中心,保持 --surface 主色;底/顶栏 hairline 分隔。 */
-.shell .editor, .dsh-ui .editor { grid-row: 2; min-width: 0; min-height: 0; display: grid; grid-template-rows: var(--topbar-h) minmax(0, 1fr) auto; background: var(--surface); position: relative; z-index: 1; box-shadow: var(--elev-raised); }
+.shell .editor, .dsh-ui .editor { height: 100%; min-width: 0; min-height: 0; display: grid; grid-template-rows: var(--topbar-h) minmax(0, 1fr) auto; background: var(--surface); position: relative; z-index: 1; box-shadow: var(--elev-raised); }
 .shell .editor-header, .dsh-ui .editor-header { display: flex; align-items: center; gap: var(--space-3); min-width: 0; height: var(--topbar-h); padding: 0 24px 0 20px; border-bottom: 1px solid var(--hairline); background: var(--surface); color: var(--meta); font-size: var(--text-chrome); letter-spacing: .06em; }
 .shell .editor-header > span:first-child, .dsh-ui .editor-header > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-family: var(--font-serif); font-size: var(--text-md); font-weight: 500; letter-spacing: .12em; }
 .shell .editor-header > [data-testid="paper-path"], .dsh-ui .editor-header > [data-testid="paper-path"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -608,10 +607,10 @@ export const componentStyles = `
 
 /* ── Chat ───────────────────────────────────────────────── */
 /* 聊天下沉:与侧栏同 --bg-sunken,让写作者的目光始终回到稿纸。 */
-.shell > .chat { grid-row: 2; position: relative; width: 100%; max-width: 100%; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; border-left: 1px solid var(--hairline); background: var(--chrome-sunken); animation: shell-slide-in-right var(--motion-base) var(--ease); }
-.shell > .chat > * { min-width: 0; max-width: 100%; }
-.shell > .chat[hidden] { display: none !important; pointer-events: none; }
-.shell > .chat.chat-overlay:not([hidden]) {
+.shell .chat { height: 100%; position: relative; width: 100%; max-width: 100%; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; border-left: 1px solid var(--hairline); background: var(--chrome-sunken); animation: shell-slide-in-right var(--motion-base) var(--ease); }
+.shell .chat > * { min-width: 0; max-width: 100%; }
+.shell .chat[hidden] { display: none !important; pointer-events: none; }
+.shell .chat.chat-overlay:not([hidden]) {
   position: fixed;
   top: var(--topbar-h);
   right: 0;
@@ -794,7 +793,7 @@ export const componentStyles = `
 .shell .proposal-card .proposal-missing-dirs, .dsh-ui .proposal-card .proposal-missing-dirs { margin: 0; padding: 6px 8px; border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--fg-2); font-size: var(--text-xs); }
 
 /* ── Empty / home ───────────────────────────────────────── */
-.shell .empty-paper, .dsh-ui .empty-paper { grid-row: 2; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 32px; background: var(--surface); }
+.shell .empty-paper, .dsh-ui .empty-paper { height: 100%; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 32px; background: var(--surface); }
 .shell .empty-paper.home-stage, .dsh-ui .empty-paper.home-stage { background: var(--bg); }
 /* ── Home (空白稿纸) 空状态 ────────────────────────────────
    命令条两列入口卡(打开 / 新建)由 Motion m.button 负责入场弹簧;
@@ -881,16 +880,21 @@ export const componentStyles = `
 .shell .preset-picker-dialog .file-dialog-actions button.primary-action small.warning, .dsh-ui.preset-picker-dialog .file-dialog-actions button.primary-action small.warning { color: color-mix(in srgb, var(--accent-on) 78%, transparent); }
 
 /* ── Focus mode / layout toggles ────────────────────────── */
-.shell.layout-shell { grid-template-rows: var(--topbar-h) minmax(0, 1fr); }
-.shell.layout-shell > .sidebar, .shell.layout-shell > .editor-stack, .shell.layout-shell > .editor, .shell.layout-shell > .empty-paper, .shell.layout-shell > .chat, .shell.layout-shell > .panel-resizer, .shell.layout-shell.pinned-open > .pinned-pane, .shell.layout-shell > .pinned-pane { grid-row: 2; }
+.shell.layout-shell { display: flex; flex-direction: column; }
+.shell.layout-shell > .chrome { flex: none; }
+/* react-resizable-panels 接管三栏几何:像素 min/max、窗口缩放时钉住像素宽。 */
+.shell .shell-panels { flex: 1 1 0; min-height: 0; display: flex; }
+.shell .shell-panels [data-panel] { min-width: 0; min-height: 0; }
+.shell .shell-panels [data-panel] > div { height: 100%; min-width: 0; }
+.shell .shell-panel { height: 100%; min-height: 0; }
+.shell .shell-panel > .sidebar, .shell .shell-panel > .editor, .shell .shell-panel > .editor-stack, .shell .shell-panel > .empty-paper, .shell .shell-panel > .chat, .shell .shell-panel > .pinned-pane { height: 100%; }
 /* 中栏 overlay 座位：座位容器和渲染器包裹层都不占格；插件标记 data-dsh-center-overlay 的根元素
    直接成为网格项，落在稿纸所在的列。稿纸根元素带内联 display，因此隐藏必须 !important。 */
-.shell.layout-shell > .center-overlays, .shell.layout-shell > .center-overlays > * { display: contents; }
-.shell.layout-shell > .center-overlays [data-dsh-center-overlay] { grid-row: 2; min-width: 0; min-height: 0; overflow: auto; }
-.shell.layout-shell:has(> .center-overlays [data-dsh-center-overlay]) > .editor-stack,
-.shell.layout-shell:has(> .center-overlays [data-dsh-center-overlay]) > .editor,
-.shell.layout-shell:has(> .center-overlays [data-dsh-center-overlay]) > .empty-paper { display: none !important; }
-.shell.layout-shell.focus-mode { grid-template-columns: minmax(0, 1fr) !important; }
+.shell .editor-cell { position: relative; }
+.shell .editor-cell > .center-overlays { position: absolute; inset: 0; z-index: 5; }
+.shell .center-overlays [data-dsh-center-overlay] { height: 100%; min-width: 0; min-height: 0; overflow: auto; background: var(--surface); }
+.shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .editor,
+.shell .editor-cell:has(> .center-overlays [data-dsh-center-overlay]) > .empty-paper { display: none !important; }
 .shell.layout-shell.focus-mode .editor-header { justify-content: center; }
 .shell.layout-shell.focus-mode .editor-header .chapter-navigation { display: none; }
 .shell.layout-shell.focus-mode .editor-header [data-testid="paper-wordcount"],
@@ -1289,7 +1293,6 @@ export const componentStyles = `
 /* ── Responsive collapse ────────────────────────────────── */
 @media (max-width: 1040px) {
   .shell { grid-template-columns: 196px minmax(0, 1fr); }
-  .shell > .chat:not(.chat-overlay), .shell > .panel-resizer.right { display: none; }
   .shell > .chrome { grid-template-columns: 196px minmax(0, 1fr); }
   .shell > .chrome > .workspace-chrome { display: none; }
   .shell > .chrome > .topbar-actions { padding-right: var(--space-4); }
@@ -1297,7 +1300,6 @@ export const componentStyles = `
 }
 @media (max-width: 760px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
-  .shell > .sidebar, .shell > .panel-resizer.left { display: none; }
   .shell > .chrome { grid-template-columns: minmax(0, 1fr); }
   .shell > .chrome > .workspace-chrome, .shell > .chrome > .layout-controls, .shell > .chrome > .topbar-actions > .settings-link { display: none; }
   .editor-header { padding-inline: 12px; }

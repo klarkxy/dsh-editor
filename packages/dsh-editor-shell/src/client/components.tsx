@@ -1,19 +1,12 @@
 import React, {
   Component,
   useRef,
-  useState,
   useSyncExternalStore,
-  type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
 import type { SessionFace } from '../dsh-compat.ts'
-import {
-  resizedPanelWidth,
-  type ResizablePanelSide,
-  type RpcResult,
-  type ShellContext,
-} from './shared.ts'
+import type { RpcResult, ShellContext } from './shared.ts'
 import { Button, Dialog } from './ui/index.ts'
 import { t } from '../i18n/index.ts'
 
@@ -73,71 +66,6 @@ export function ImagePreviewOverlay(props: { path: string; url: string; onClose(
         ×
       </Button>
     </Dialog>
-  );
-}
-
-export function PanelResizer(props: {
-  side: ResizablePanelSide
-  value: number
-  minimum: number
-  maximum: number
-  defaultValue: number
-  label: string
-  onChange(value: number): void
-  /* 拖动预览：move 时以当前宽度调用（写布局通道但不提交状态），抬起/取消时以 null 调用恢复提交值。 */
-  onPreview?(value: number | null): void
-}) {
-  const drag = useRef<{ pointerId: number; startX: number; startValue: number } | null>(null)
-  /* 拖动中的本地预览值：aria-valuenow 保持真实，Root 在 pointerup 前不重渲染。 */
-  const [dragValue, setDragValue] = useState<number | null>(null)
-  const widthAt = (event: { pointerId: number; clientX: number }) => {
-    const active = drag.current
-    if (!active || active.pointerId !== event.pointerId) return null
-    return resizedPanelWidth(props.side, active.startValue, event.clientX - active.startX, props.minimum, props.maximum)
-  }
-  const endDrag = (event: ReactPointerEvent<HTMLDivElement>, commit: boolean) => {
-    const next = widthAt(event)
-    if (next !== null && commit) props.onChange(next)
-    drag.current = null
-    setDragValue(null)
-    props.onPreview?.(null)
-  }
-  return (
-    <div
-      className={`panel-resizer ${props.side}`}
-      role="separator"
-      tabIndex={0}
-      aria-label={props.label}
-      aria-orientation="vertical"
-      aria-valuemin={props.minimum}
-      aria-valuemax={props.maximum}
-      aria-valuenow={dragValue ?? props.value}
-      title={t('resizer.aria', { label: props.label })}
-      onPointerDown={(event: ReactPointerEvent<HTMLDivElement>) => {
-        drag.current = { pointerId: event.pointerId, startX: event.clientX, startValue: props.value }
-        event.currentTarget.setPointerCapture(event.pointerId)
-      }}
-      onPointerMove={(event: ReactPointerEvent<HTMLDivElement>) => {
-        const next = widthAt(event)
-        if (next === null) return
-        setDragValue(next)
-        props.onPreview?.(next)
-      }}
-      onPointerUp={(event: ReactPointerEvent<HTMLDivElement>) => {
-        endDrag(event, true)
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
-      }}
-      onLostPointerCapture={(event: ReactPointerEvent<HTMLDivElement>) => { endDrag(event, false) }}
-      onDoubleClick={() => props.onChange(props.defaultValue)}
-      onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-        if (event.key === 'Home') { event.preventDefault(); props.onChange(props.defaultValue); return }
-        if (event.key === 'End') { event.preventDefault(); props.onChange(props.maximum); return }
-        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-        event.preventDefault()
-        props.onChange(resizedPanelWidth(props.side, props.value, event.key === 'ArrowRight' ? 12 : -12, props.minimum, props.maximum))
-      }}>
-      <span aria-hidden="true" />
-    </div>
   );
 }
 
