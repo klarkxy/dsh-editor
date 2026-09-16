@@ -71,9 +71,10 @@ describe('plugin manifests and composition resolver', () => {
       feature: 'zhihu-tools',
       locked: false,
     })
-    expect(loadWorkspaceLibraries(root).map((item) => item.name)).toEqual(['dsh-editor-workspace-kit'])
+    expect(loadWorkspaceLibraries(root).map((item) => item.name)).toEqual(['dsh-editor-seats', 'dsh-editor-workspace-kit'])
     expect(desktopCopiedPackageNames(manifests)).toEqual([
       ...desktopPackageNames(manifests),
+      'dsh-editor-seats',
       'dsh-editor-workspace-kit',
     ])
   })
@@ -87,7 +88,7 @@ describe('plugin manifests and composition resolver', () => {
     const capability = {
       features: ['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets'],
       packages,
-      libraries: ['dsh-editor-workspace-kit'],
+      libraries: ['dsh-editor-seats', 'dsh-editor-workspace-kit'],
       disabledEntries: [],
       extraInserts: [{ id: 'zhihu-tools', name: 'dsh-zhihu/tools' }],
       shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist', zhihu: 'zhihu' },
