@@ -1,4 +1,4 @@
-import React, { type ChangeEvent, type ComponentType, type ReactNode } from 'react';
+import React, { type ChangeEvent, type ComponentType, type MouseEvent, type ReactNode } from 'react';
 
 /** Structural host Select — no private package import. */
 export type HostSelectProps = {
@@ -8,6 +8,20 @@ export type HostSelectProps = {
   disabled?: boolean
   'aria-label': string
   placeholder?: string
+}
+
+/** Structural host Button — no private package import. */
+export type HostButtonProps = {
+  type?: 'button' | 'submit'
+  variant?: 'default' | 'primary' | 'danger' | 'icon'
+  className?: string
+  disabled?: boolean
+  title?: string
+  onClick?(event: MouseEvent<HTMLButtonElement>): void
+  'aria-label'?: string
+  'aria-pressed'?: boolean
+  'aria-expanded'?: boolean
+  children?: ReactNode
 }
 
 /** Structural host Dialog — no private package import. */
@@ -24,6 +38,7 @@ export type HostDialogProps = {
 }
 
 export type HostSelect = ComponentType<HostSelectProps>
+export type HostButton = ComponentType<HostButtonProps>
 export type HostDialog = ComponentType<HostDialogProps>
 
 export const IME_KEYCODE = 229
@@ -77,18 +92,20 @@ export function dockEscapeKeyDown(
   run.close()
 }
 
-export function hostComponentsFromRenderProps(props: unknown): { Select?: HostSelect; Dialog?: HostDialog } {
+export function hostComponentsFromRenderProps(props: unknown): { Select?: HostSelect; Dialog?: HostDialog; Button?: HostButton } {
   if (!props || typeof props !== 'object') return {}
   const record = props as Record<string, unknown>
   const sources: Record<string, unknown>[] = [record]
   if (record.owner && typeof record.owner === 'object') sources.push(record.owner as Record<string, unknown>)
   let Select: HostSelect | undefined
   let Dialog: HostDialog | undefined
+  let Button: HostButton | undefined
   for (const source of sources) {
     if (typeof source.Select === 'function') Select = source.Select as HostSelect
     if (typeof source.Dialog === 'function') Dialog = source.Dialog as HostDialog
+    if (typeof source.Button === 'function') Button = source.Button as HostButton
   }
-  return { Select, Dialog }
+  return { Select, Dialog, Button }
 }
 
 export function renderSelect(Select: HostSelect | undefined, props: HostSelectProps, className?: string) {

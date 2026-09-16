@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from 'react'
+import { forwardRef, type ComponentType, type MouseEvent, type ReactNode, type Ref } from 'react'
 import type { ShellButtonProps, ShellToolSeatContext } from './index.ts'
 
 /*
@@ -6,7 +6,7 @@ import type { ShellButtonProps, ShellToolSeatContext } from './index.ts'
  * 降级为带相同变体类的原生 <button>。变体类名与 shell 的 ui/controls
  * 保持一致，插件样式只按类名命中，两种路径观感一致。
  */
-export function SeatButton(props: {
+export const SeatButton = forwardRef<HTMLButtonElement, {
   host?: ShellToolSeatContext['Button']
   variant?: ShellButtonProps['variant']
   type?: 'button' | 'submit'
@@ -18,15 +18,21 @@ export function SeatButton(props: {
   'aria-pressed'?: boolean
   'aria-expanded'?: boolean
   'aria-selected'?: boolean
-  'aria-current'?: boolean | 'true' | 'false' | 'page' | 'step' | 'location' | 'date' | 'time'
+  'aria-current'?: ShellButtonProps['aria-current']
   'aria-controls'?: string
   'aria-describedby'?: string
+  'data-testid'?: string
   role?: string
   tabIndex?: number
   children?: ReactNode
-}) {
-  const { host: Host, variant, className, ...rest } = props
-  if (Host) return <Host variant={variant} className={className} {...rest} />
+}>(function SeatButton(props, ref) {
+  const { host, variant, className, ...rest } = props
+  if (host) {
+    /* 合同类型是 ComponentType；宿主实现（shell 的 ui Button）是 forwardRef，
+       结构类型的宿主若不接受 ref 只是被 React 忽略，不影响行为。 */
+    const Host = host as ComponentType<ShellButtonProps & { ref?: Ref<HTMLButtonElement> }>
+    return <Host ref={ref} variant={variant} className={className} {...rest} />
+  }
   const variantClass = variant === 'primary'
     ? 'primary-action'
     : variant === 'danger'
@@ -36,9 +42,10 @@ export function SeatButton(props: {
         : ''
   return (
     <button
+      ref={ref}
       type="button"
       className={[variantClass, className].filter(Boolean).join(' ')}
       {...rest}
     />
   )
-}
+})

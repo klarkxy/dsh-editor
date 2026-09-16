@@ -65,7 +65,8 @@
   },
   "dependencies": {
     "dsh-manuscript": "workspace:*",
-    "semver": "^7.8.5"
+    "semver": "^7.8.5",
+    "dsh-editor-seats": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",

@@ -106,9 +106,11 @@ describe('public zhihu host compatibility', () => {
     const hosted = renders[0]!({ Select: MockSelect, Dialog: MockDialog })
     expect(hosted.props.Select).toBe(MockSelect)
     expect(hosted.props.Dialog).toBe(MockDialog)
+    /* 设置槽现在拿到完整宿主组件集：设置分区里的按钮走宿主 Button,
+       Dialog 虽传入但 settings surface 不使用。 */
     const settings = renders[1]!({ Select: MockSelect, Dialog: MockDialog })
     expect(settings.props.surface).toBe('settings')
     expect(settings.props.Select).toBe(MockSelect)
-    expect(settings.props.Dialog).toBeUndefined()
+    expect(settings.props.Dialog).toBe(MockDialog)
   })
 })

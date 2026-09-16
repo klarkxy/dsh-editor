@@ -101,6 +101,7 @@ export type ShellButtonProps = {
   'aria-current'?: boolean | 'true' | 'false' | 'page' | 'step' | 'location' | 'date' | 'time'
   'aria-controls'?: string
   'aria-describedby'?: string
+  'data-testid'?: string
   role?: string
   tabIndex?: number
   children?: ReactNode

@@ -12,7 +12,8 @@ import React, {
 import { ZHIHU_CREDENTIAL_REF, ZHIHU_RPC_CHANNEL, type ZhihuRpcResult } from './contracts.ts'
 import { createZhihuClientState, type ZhihuClientState } from './client-state.ts'
 import { zhihuClientStyles } from './client-styles.ts'
-import { dockEscapeKeyDown, hostComponentsFromRenderProps, renderSelect, zhihuQueryKeyDown, type HostDialog, type HostSelect } from './client-host-ui.tsx'
+import { dockEscapeKeyDown, hostComponentsFromRenderProps, renderSelect, zhihuQueryKeyDown, type HostButton, type HostDialog, type HostSelect } from './client-host-ui.tsx'
+import { SeatButton } from 'dsh-editor-seats/seat-button'
 
 export const name = 'dsh-zhihu-client'
 export const inject = ['slots', 'connection', 'remote', 'remote.credentials'] as const
@@ -370,7 +371,7 @@ function useAlive() {
   return alive
 }
 
-function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
+function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButton }): ReactNode {
   const { credentials } = props
   const alive = useAlive()
   const [state, setState] = useState<CredentialLoad>({ status: 'loading' })
@@ -410,9 +411,9 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
       <section data-testid="zhihu-settings" aria-label="知乎凭证设置">
         <p className="zhihu-error" role="alert">
           {`读取失败：${state.error} `}
-          <button type="button" className="zhihu-button" onClick={() => void load()}>
+          <SeatButton host={props.Button} className="zhihu-button" onClick={() => void load()}>
             重试
-          </button>
+          </SeatButton>
         </p>
       </section>
     );
@@ -540,8 +541,9 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
         {note}
       </p> : null}
       <div className="zhihu-row">
-        <button
-          type="button"
+        <SeatButton
+          host={props.Button}
+          variant="danger"
           className="zhihu-button zhihu-button-danger"
           disabled={busy || keyLocked || !configured}
           onClick={() => void clear()}>
@@ -549,9 +551,10 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
             {activityDots()}
             处理中…
           </Fragment> : '清除'}
-        </button>
-        <button
-          type="button"
+        </SeatButton>
+        <SeatButton
+          host={props.Button}
+          variant="primary"
           className="zhihu-button zhihu-button-primary"
           disabled={busy || keyLocked || keyValue.length === 0 || draftFailure !== undefined}
           onClick={() => void save()}>
@@ -559,7 +562,7 @@ function SettingsSection(props: { credentials: CredentialsApi }): ReactNode {
             {activityDots()}
             保存中…
           </Fragment> : '保存'}
-        </button>
+        </SeatButton>
       </div>
     </section>
   );
@@ -775,7 +778,7 @@ type UsageLoad =
   | { status: 'ready'; days: DailyUsage[] }
   | { status: 'error'; error: string }
 
-function UsageSection(props: { rpc: RpcCaller }): ReactNode {
+function UsageSection(props: { rpc: RpcCaller; Button?: HostButton }): ReactNode {
   const { rpc } = props
   const gateRef = useRef<ZhihuClientState | null>(null)
   if (!gateRef.current) gateRef.current = createZhihuClientState()
@@ -821,9 +824,9 @@ function UsageSection(props: { rpc: RpcCaller }): ReactNode {
       <section data-testid="zhihu-usage" aria-label="知乎调用用量">
         <p className="zhihu-error" role="alert">
           {`读取失败：${state.error} `}
-          <button type="button" className="zhihu-button" onClick={() => void load()}>
+          <SeatButton host={props.Button} className="zhihu-button" onClick={() => void load()}>
             重试
-          </button>
+          </SeatButton>
         </p>
       </section>
     );
@@ -961,7 +964,7 @@ function formatSize(size: number): string {
   return `${size} B`
 }
 
-function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): ReactNode {
+function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?: HostButton }): ReactNode {
   const { rpc } = props
   const gateRef = useRef<ZhihuClientState | null>(null)
   if (!gateRef.current) gateRef.current = createZhihuClientState()
@@ -1049,9 +1052,9 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): React
       {list.status === 'error' ? <p className="zhihu-error" role="alert">
         {`${list.failure.text} `}
         {list.failure.kind !== 'credential'
-          ? <button type="button" className="zhihu-button" onClick={() => void load()}>
+          ? <SeatButton host={props.Button} className="zhihu-button" onClick={() => void load()}>
           重试
-        </button>
+        </SeatButton>
           : null}
       </p> : null}
       {list.status === 'ready' ? <div className="zhihu-field">
@@ -1072,13 +1075,13 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): React
               })),
             ],
           }, 'zhihu-select')}
-          <button
-            type="button"
+          <SeatButton
+            host={props.Button}
             className="zhihu-button"
             disabled={busy}
             onClick={() => void load()}>
             刷新
-          </button>
+          </SeatButton>
         </div>
         {list.bases.length === 0 ? <p className="zhihu-hint">
           暂无可用知识库。
@@ -1101,8 +1104,9 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): React
         {`确认将「${file.name}」（${formatSize(file.size)}）上传到${baseId ? '所选知识库' : '默认知识库'}？文件会进入知乎云端。`}
       </div> : null}
       {list.status === 'ready' ? <div className="zhihu-row">
-        <button
-          type="button"
+        <SeatButton
+          host={props.Button}
+          variant="primary"
           className="zhihu-button zhihu-button-primary"
           disabled={busy || !file}
           onClick={() => void upload()}>
@@ -1110,7 +1114,7 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect }): React
             {activityDots()}
             上传中…
           </Fragment> : '确认上传'}
-        </button>
+        </SeatButton>
       </div> : null}
       {note ? <p className="zhihu-saved" role="status">
         {note}
@@ -1144,8 +1148,8 @@ function tabLabel(tab: Tab, surface: ZhihuSurface): string {
   return TAB_LABEL[tab]
 }
 
-function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?: HostSelect; Dialog?: HostDialog; surface?: ZhihuSurface }) {
-  const { rpc, credentials, Select, Dialog } = props
+function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?: HostSelect; Dialog?: HostDialog; Button?: HostButton; surface?: ZhihuSurface }) {
+  const { rpc, credentials, Select, Dialog, Button } = props
   const surface: ZhihuSurface = props.surface === 'settings' ? 'settings' : 'overlay'
   const tabs = surface === 'settings' ? SETTINGS_TABS : OVERLAY_TABS
   const gateRef = useRef<ZhihuClientState | null>(null)
@@ -1333,8 +1337,9 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
         onChange={(event: ChangeEvent<HTMLInputElement>) => onQueryChange(event.target.value)}
         onKeyDown={onQueryKeyDown} />
       <div className="zhihu-row">
-        <button
-          type="button"
+        <SeatButton
+          host={Button}
+          variant="primary"
           className="zhihu-button zhihu-button-primary"
           data-testid="zhihu-search"
           disabled={searchDisabled}
@@ -1343,14 +1348,14 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
             {activityDots()}
             请求中…
           </Fragment> : mode === 'hot' ? '获取热榜' : '搜索'}
-        </button>
+        </SeatButton>
         {phase === 'loading'
-          ? <button
-          type="button"
+          ? <SeatButton
+          host={Button}
           className="zhihu-button"
           onClick={() => { gate.cancel(); setPhase('idle') }}>
           取消
-        </button>
+        </SeatButton>
           : null}
       </div>
       {phase === 'idle' && mode !== 'hot' && !query.trim() ? <div className="zhihu-status" role="status">
@@ -1365,22 +1370,22 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
       </div> : null}
       {phase === 'done' && outcome ? <OutcomeView outcome={outcome} stale={stale} /> : null}
     </div> : null}
-    {tab === 'settings' ? <SettingsSection credentials={credentials} /> : null}
-    {tab === 'usage' ? <UsageSection rpc={rpc} /> : null}
-    {tab === 'knowledge' ? <KnowledgeSection rpc={rpc} Select={Select} /> : null}
+    {tab === 'settings' ? <SettingsSection credentials={credentials} Button={Button} /> : null}
+    {tab === 'usage' ? <UsageSection rpc={rpc} Button={Button} /> : null}
+    {tab === 'knowledge' ? <KnowledgeSection rpc={rpc} Select={Select} Button={Button} /> : null}
   </div>
   const inner = [
     <header key="header" className="zhihu-panel-header">
       <h2 className="zhihu-panel-title">
         知乎资料
       </h2>
-      <button
-        type="button"
+      <SeatButton
+        host={Button}
         className="zhihu-panel-close"
         disabled={phase === 'loading'}
         onClick={closePanel}>
         关闭
-      </button>
+      </SeatButton>
     </header>,
     tablist,
     body,
@@ -1447,13 +1452,13 @@ export function apply(ctx: Context): void {
     surface="overlay"
     {...hostComponentsFromRenderProps(props)} />
   const settingsRender = (props: unknown) => {
-    const { Select } = hostComponentsFromRenderProps(props)
+    const host = hostComponentsFromRenderProps(props)
     return (
       <ZhihuDock
         rpc={client.connection.rpc}
         credentials={wrapCredentials(client.remote.credentials)}
         surface="settings"
-        Select={Select} />
+        {...host} />
     );
   }
   // Official Web declares shell.overlay. Desktop settings consume the

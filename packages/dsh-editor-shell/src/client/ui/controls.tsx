@@ -17,6 +17,7 @@ export const Button = forwardRef<HTMLButtonElement, {
   'aria-current'?: boolean | 'true' | 'false' | 'page' | 'step' | 'location' | 'date' | 'time'
   'aria-controls'?: string
   'aria-describedby'?: string
+  'data-testid'?: string
   role?: string
   tabIndex?: number
   children?: ReactNode
@@ -43,6 +44,7 @@ export const Button = forwardRef<HTMLButtonElement, {
       aria-current={props['aria-current']}
       aria-controls={props['aria-controls']}
       aria-describedby={props['aria-describedby']}
+      data-testid={props['data-testid']}
       role={props.role}
       tabIndex={props.tabIndex}
       onClick={props.onClick}

@@ -7,6 +7,7 @@ import React, {
   useState,
   type ComponentType,
   type FormEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -22,6 +23,7 @@ import {
   type WritingPresetInventory,
 } from './contracts.ts'
 import { pluginsClientStyles } from './client-styles.ts'
+import { SeatButton } from 'dsh-editor-seats/seat-button'
 import {
   authorPluginError,
   enabledState,
@@ -200,6 +202,7 @@ function FeatureCard(props: {
   community?: boolean
   onToggle(cards: PluginCard[], enabled: boolean): void
   onUninstall?(card: PluginCard): void
+  hostButton?: ComponentType<HostButtonProps>
 }) {
   const { cards } = props
   const primary = cards[0]!
@@ -269,17 +272,31 @@ function FeatureCard(props: {
           onToggle={() => props.onToggle(toggleableCards(cards), state !== true)} />
             : null}
         {primary.origin === 'installed' && props.onUninstall
-          ? <button
-          type="button"
+          ? <SeatButton
+          host={props.hostButton}
           className="dsh-plugins-ghost"
           disabled={props.busy}
           onClick={() => props.onUninstall?.(primary)}>
           卸载
-        </button>
+        </SeatButton>
           : null}
       </div>
     </article>
   );
+}
+
+type HostButtonProps = {
+  type?: 'button' | 'submit'
+  variant?: 'default' | 'primary' | 'danger' | 'icon'
+  className?: string
+  disabled?: boolean
+  title?: string
+  onClick?(event: ReactMouseEvent<HTMLButtonElement>): void
+  'aria-label'?: string
+  'aria-pressed'?: boolean
+  'aria-expanded'?: boolean
+  'data-testid'?: string
+  children?: ReactNode
 }
 
 type HostDialogProps = {
@@ -444,6 +461,7 @@ function FeatureGroup(props: {
   onUninstall?: (card: PluginCard) => void
   byPurpose?: boolean
   community?: boolean
+  hostButton?: ComponentType<HostButtonProps>
 }) {
   const groups: FeatureGroupView[] = props.byPurpose
     ? groupOptionalFeatures(props.cards)
@@ -479,7 +497,8 @@ function FeatureGroup(props: {
         busy={props.busyPackage === group.id || group.cards.some((card) => card.packageName === props.busyPackage)}
         community={props.community}
         onToggle={props.onToggle}
-        onUninstall={props.onUninstall} />)}
+        onUninstall={props.onUninstall}
+        hostButton={props.hostButton} />)}
     </section>
   );
 }
@@ -524,6 +543,7 @@ type PluginPanelProps = {
   uninstallError: string
   uninstallErrorDetail?: string
   Dialog?: ComponentType<HostDialogProps>
+  Button?: ComponentType<HostButtonProps>
 }
 
 function UninstallConfirm(props: {
@@ -532,6 +552,7 @@ function UninstallConfirm(props: {
   error?: string
   errorDetail?: string
   Dialog?: ComponentType<HostDialogProps>
+  Button?: ComponentType<HostButtonProps>
   onConfirm(): void
   onCancel(): void
 }) {
@@ -579,11 +600,12 @@ function UninstallConfirm(props: {
         </p>
         {errorNode}
         <footer>
-          <button ref={cancel} type="button" disabled={busy} onClick={props.onCancel}>
+          <SeatButton ref={cancel} host={props.Button} disabled={busy} onClick={props.onCancel}>
             取消
-          </button>
-          <button
-            type="button"
+          </SeatButton>
+          <SeatButton
+            host={props.Button}
+            variant="danger"
             className="danger-action"
             disabled={busy}
             onClick={props.onConfirm}>
@@ -591,7 +613,7 @@ function UninstallConfirm(props: {
               {activityDots()}
               卸载中…
             </Fragment> : '确认卸载'}
-          </button>
+          </SeatButton>
         </footer>
       </HostDialog>
     );
@@ -612,8 +634,9 @@ function UninstallConfirm(props: {
       </p>
       {errorNode}
       <p>
-        <button
-          type="button"
+        <SeatButton
+          host={props.Button}
+          variant="primary"
           className="dsh-plugins-primary"
           disabled={busy}
           onClick={props.onConfirm}>
@@ -621,15 +644,15 @@ function UninstallConfirm(props: {
             {activityDots()}
             卸载中…
           </Fragment> : '确认卸载'}
-        </button>
+        </SeatButton>
         {' '}
-        <button
-          type="button"
+        <SeatButton
+          host={props.Button}
           className="dsh-plugins-ghost"
           disabled={busy}
           onClick={props.onCancel}>
           取消
-        </button>
+        </SeatButton>
       </p>
     </section>
   );
@@ -644,6 +667,7 @@ function InstallAttemptView(props: {
   errorDetail?: string
   host?: boolean
   cancelRef: RefObject<HTMLButtonElement>
+  Button?: ComponentType<HostButtonProps>
   onConfirm(): void
   onCancel(): void
   onRetry(): void
@@ -700,26 +724,27 @@ function InstallAttemptView(props: {
       </div>
         : null}
       <footer>
-        <button
+        <SeatButton
           ref={props.cancelRef}
-          type="button"
+          host={props.Button}
           className={ghost}
           data-testid="plugins-install-cancel"
           disabled={props.installing}
           onClick={props.onCancel}>
           取消
-        </button>
+        </SeatButton>
         {retry
-          ? <button
-          type="button"
+          ? <SeatButton
+          host={props.Button}
           className={ghost}
           data-testid="plugins-install-retry"
           onClick={props.onRetry}>
           重新检查
-        </button>
+        </SeatButton>
           : null}
-        <button
-          type="button"
+        <SeatButton
+          host={props.Button}
+          variant="primary"
           className={primary}
           data-testid="plugins-install-confirm"
           disabled={confirmDisabled}
@@ -728,13 +753,14 @@ function InstallAttemptView(props: {
             {activityDots()}
             安装中…
           </Fragment> : '确认安装'}
-        </button>
+        </SeatButton>
       </footer>
     </div>
   );
 }
 
 function InstallConfirm(props: {
+  Button?: ComponentType<HostButtonProps>
   attempt: PluginInstallAttempt | null
   installing: boolean
   Dialog?: ComponentType<HostDialogProps>
@@ -747,6 +773,7 @@ function InstallConfirm(props: {
   const HostDialog = props.Dialog
   const body = attempt
     ? <InstallAttemptView
+    Button={props.Button}
     spec={attempt.spec}
     inspecting={attempt.inspecting}
     installing={props.installing}
@@ -843,6 +870,7 @@ function PluginPanel(props: PluginPanelProps) {
       </div>
         : null}
       <UninstallConfirm
+        Button={props.Button}
         card={props.pendingUninstall}
         busy={props.uninstalling}
         error={props.uninstallError}
@@ -851,6 +879,7 @@ function PluginPanel(props: PluginPanelProps) {
         onConfirm={props.onConfirmUninstall}
         onCancel={props.onCancelUninstall} />
       <InstallConfirm
+        Button={props.Button}
         attempt={props.pendingInstall}
         installing={props.installing}
         Dialog={props.Dialog}
@@ -872,6 +901,7 @@ function PluginPanel(props: PluginPanelProps) {
           : null}
         <CoreGroup cards={props.inventory?.core ?? []} />
         <FeatureGroup
+          hostButton={props.Button}
           title="写作功能"
           cards={props.inventory?.optional ?? []}
           empty="没有可开关的写作功能。"
@@ -879,6 +909,7 @@ function PluginPanel(props: PluginPanelProps) {
           onToggle={props.onToggle}
           byPurpose={true} />
         <FeatureGroup
+          hostButton={props.Button}
           title="已安装的社区插件"
           cards={props.inventory?.community ?? []}
           empty="还没有从市场安装插件。"
@@ -896,7 +927,9 @@ function PluginPanel(props: PluginPanelProps) {
             placeholder="搜索插件，或粘贴 GitHub 仓库地址"
             aria-label="搜索插件，或粘贴 GitHub 仓库地址"
             onChange={(event: { target: { value: string } }) => props.onQuery(event.target.value)} />
-          <button
+          <SeatButton
+            host={props.Button}
+            variant="primary"
             type="submit"
             className="dsh-plugins-primary"
             data-testid="plugins-market-submit"
@@ -908,7 +941,7 @@ function PluginPanel(props: PluginPanelProps) {
               {activityDots()}
               搜索中…
             </Fragment> : '搜索')}
-          </button>
+          </SeatButton>
         </form>
         {props.searching ? <p className="dsh-plugins-status">
           {activityDots()}
@@ -944,13 +977,14 @@ function PluginPanel(props: PluginPanelProps) {
               </div>
             </div>
             <div className="dsh-plugins-actions">
-              <button
-                type="button"
+              <SeatButton
+                host={props.Button}
+                variant="primary"
                 className="dsh-plugins-primary"
                 disabled={installBusy}
                 onClick={() => props.onInstall(item.spec)}>
                 安装
-              </button>
+              </SeatButton>
             </div>
           </article>)}
         </div>}
@@ -959,7 +993,7 @@ function PluginPanel(props: PluginPanelProps) {
   );
 }
 
-function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDialogProps> }) {
+function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDialogProps>; Button?: ComponentType<HostButtonProps> }) {
   const caller = props.rpc
   const [tab, setTab] = useState<'installed' | 'market'>('installed')
   const [inventory, setInventory] = useState<PluginInventory | null>(null)
@@ -1325,8 +1359,8 @@ function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDial
 export function apply(ctx: Context): void {
   if (typeof document !== 'undefined') ctx.effect(() => injectStyles(), 'dsh-editor-plugins-client.styles')
   const client = ctx as PluginsClientContext
-  function PluginsSettingsContribution(props?: { Dialog?: ComponentType<HostDialogProps> }) {
-    return <PluginSettings rpc={client.connection.rpc} Dialog={props?.Dialog} />;
+  function PluginsSettingsContribution(props?: { Dialog?: ComponentType<HostDialogProps>; Button?: ComponentType<HostButtonProps> }) {
+    return <PluginSettings rpc={client.connection.rpc} Dialog={props?.Dialog} Button={props?.Button} />;
   }
   client.slots.inject(PLUGINS_SETTINGS_SLOT, () =>
     client.slots.register({ name: PLUGINS_SETTINGS_SLOT, id: 'plugins', order: 0, label: '插件' }, PluginsSettingsContribution))

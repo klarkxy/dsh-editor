@@ -9,7 +9,7 @@ export default defineConfig([
   {
     entry: { 'client.inner': 'src/client.tsx' }, format: ['cjs'], dts: false, clean: false, outDir: 'lib',
     platform: 'browser', target: 'es2022', sourcemap: true, hash: false,
-    deps: { neverBundle: ['react', 'react/jsx-runtime'] },
+    deps: { neverBundle: ['react', 'react/jsx-runtime'], alwaysBundle: ['dsh-editor-seats/seat-button'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },
 ])

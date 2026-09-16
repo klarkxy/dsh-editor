@@ -88,7 +88,8 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-storage-domain": "0.1.5-rc.2",
-    "zod": "^4.1.5"
+    "zod": "^4.1.5",
+    "dsh-editor-seats": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
