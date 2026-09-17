@@ -9,8 +9,8 @@
  *   design-token CSS vars so 纸/墨 themes keep working.
  * - `livePreview` is the Typora-style renderer: a ViewPlugin that walks the
  *   lezer markdown syntax tree over the visible ranges and decorates
- *   headings / emphasis / code / quotes / list marks — except on lines the
- *   selection touches, which stay raw source.
+ *   headings / links / emphasis / code / quotes / list marks — except on
+ *   ranges the selection touches, which stay raw source.
  * - `ghostField` + `setGhostEffect` render the FIM ghost as an inline widget
  *   at a document position, replacing the old absolutely-positioned mirror
  *   div (whose padding/font had to match the textarea character-for-character).
@@ -19,7 +19,7 @@
  *   them back as user edits.
  */
 
-import { Annotation, RangeSet, StateEffect, StateField, type Extension } from '@codemirror/state'
+import { Annotation, RangeSet, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { defineLanguageFacet, HighlightStyle, Language, LanguageSupport, syntaxHighlighting, syntaxTree } from '@codemirror/language'
 import { Emoji, GFM, Subscript, Superscript, parser as lezerMarkdownParser } from '@lezer/markdown'
@@ -109,6 +109,12 @@ export const paperTheme: Extension = EditorView.theme({
   },
   '.cm-lp-hr-line': { borderTop: '1px solid var(--border, #ccc)' },
   '.cm-lp-hr': { color: 'transparent' },
+  '.cm-lp-link': {
+    color: 'var(--accent, inherit)',
+    textDecoration: 'underline',
+    textUnderlineOffset: '3px',
+    textDecorationThickness: 'from-font',
+  },
   /* FIM ghost inline widget. */
   '.cm-ghost': { color: 'var(--ghost, #888)', whiteSpace: 'pre-wrap' },
 })
@@ -132,24 +138,63 @@ const headingLine: Record<string, Decoration> = {
   ATXHeading4: Decoration.line({ class: 'cm-lp-h4' }),
   ATXHeading5: Decoration.line({ class: 'cm-lp-h5' }),
   ATXHeading6: Decoration.line({ class: 'cm-lp-h6' }),
+  SetextHeading1: Decoration.line({ class: 'cm-lp-h1' }),
+  SetextHeading2: Decoration.line({ class: 'cm-lp-h2' }),
 }
 const hiddenMark = Decoration.replace({})
 const fadedMark = Decoration.mark({ class: 'cm-lp-mark' })
 const strongMark = Decoration.mark({ class: 'cm-lp-strong' })
 const emMark = Decoration.mark({ class: 'cm-lp-em' })
 const codeMark = Decoration.mark({ class: 'cm-lp-code' })
+const linkMark = Decoration.mark({ class: 'cm-lp-link' })
 const quoteLine = Decoration.line({ class: 'cm-lp-quote' })
 const hrLine = Decoration.line({ class: 'cm-lp-hr-line' })
 const hrText = Decoration.mark({ class: 'cm-lp-hr' })
 
-function buildLivePreview(view: EditorView): DecorationSet {
+const LINK_SYNTAX = new Set(['LinkMark', 'URL', 'LinkTitle', 'LinkLabel'])
+
+type PreviewRange = { from: number; to: number; deco: Decoration }
+
+function hideInlineLink(node: { firstChild: { name: string; from: number; to: number; nextSibling: unknown } | null }, ranges: PreviewRange[]): void {
+  const children: Array<{ name: string; from: number; to: number }> = []
+  for (let child = node.firstChild; child; child = child.nextSibling as typeof child) {
+    children.push({ name: child.name, from: child.from, to: child.to })
+  }
+  if (children.length === 0) return
+  const open = children[0]!
+  let closeBracket: (typeof children)[number] | undefined
+  if (open.name === 'LinkMark') {
+    for (let index = 1; index < children.length; index++) {
+      if (children[index]!.name === 'LinkMark') {
+        closeBracket = children[index]
+        break
+      }
+    }
+  }
+  if (closeBracket && open.to < closeBracket.from) {
+    ranges.push({ from: open.to, to: closeBracket.from, deco: linkMark })
+  }
+  for (const child of children) {
+    if (!LINK_SYNTAX.has(child.name) || child.from >= child.to) continue
+    if (closeBracket && child.from >= open.to && child.from < closeBracket.from) continue
+    ranges.push({ from: child.from, to: child.to, deco: hiddenMark })
+  }
+}
+
+export type LivePreviewHost = {
+  state: EditorState
+  visibleRanges: readonly { from: number; to: number }[]
+}
+
+export function buildLivePreview(view: LivePreviewHost): DecorationSet {
   const ranges: { from: number; to: number; deco: Decoration }[] = []
   const selection = view.state.selection
   const active = (from: number, to: number) =>
     selection.ranges.some((range) => range.from <= to && range.to >= from)
   const pushLineDeco = (from: number, deco: Decoration) => ranges.push({ from, to: from, deco })
 
-  for (const { from: vFrom, to: vTo } of view.visibleRanges) {
+  const windows = view.visibleRanges.length > 0 ? view.visibleRanges : [{ from: 0, to: view.state.doc.length }]
+  for (const { from: vFrom, to: vTo } of windows) {
     syntaxTree(view.state).iterate({
       from: vFrom,
       to: vTo,
@@ -164,6 +209,19 @@ function buildLivePreview(view: EditorView): DecorationSet {
         if (name === 'HeaderMark') {
           // Only reached when the heading line itself is not active.
           ranges.push({ from, to, deco: hiddenMark })
+          return false
+        }
+        if (name === 'Link' || name === 'Image') {
+          if (active(from, to)) return false
+          hideInlineLink(node.node, ranges)
+          return false
+        }
+        if (name === 'Autolink') {
+          if (active(from, to)) return false
+          ranges.push({ from, to, deco: linkMark })
+          for (let child = node.node.firstChild; child; child = child.nextSibling) {
+            if (child.name === 'LinkMark' && child.from < child.to) ranges.push({ from: child.from, to: child.to, deco: hiddenMark })
+          }
           return false
         }
         if (name === 'StrongEmphasis' || name === 'Emphasis') {
