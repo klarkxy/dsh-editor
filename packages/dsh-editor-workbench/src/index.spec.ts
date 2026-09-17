@@ -74,8 +74,11 @@ describe('private editor workbench Host RPC', () => {
     apply(ctx as unknown as Context)
     expect(guards).toEqual([hostToolGuard])
     expect(effectNames).toContain('dsh-editor-workbench.host-guard')
-    expect(hostToolGuard({ name: 'write', arguments: {} })).toBeDefined()
-    expect(hostToolGuard({ name: 'writing_propose', arguments: {} })).toBeUndefined()
+    const writing = { agent: { session: { header: { agentPreset: 'dsh-editor-writing' } } } }
+    expect(hostToolGuard({ name: 'write', arguments: {}, ...writing })).toBeDefined()
+    expect(hostToolGuard({ name: 'pwsh', arguments: {}, ...writing })).toBeDefined()
+    expect(hostToolGuard({ name: 'writing_propose', arguments: {}, ...writing })).toBeUndefined()
+    expect(hostToolGuard({ name: 'pwsh', arguments: {}, agent: { session: { header: { agentPreset: 'standard' } } } })).toBeUndefined()
   })
 
   it('does not remount the Host guard from the tools plugin', () => {

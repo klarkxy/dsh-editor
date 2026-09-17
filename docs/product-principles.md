@@ -39,7 +39,7 @@ DSH 拥有 Agent、会话、模型、工具、审批、权限和对话历史。D
 - Android、远程多用户、云同步
 - 未经授权的 commit、push、tag、release 或代码签名
 
-三个公开插件 `dsh-manuscript`、`dsh-proofread`、`dsh-zhihu` 仍可独立安装到普通 DSH Web profile。桌面新对话默认 `dsh-editor-writing`，另有 `dsh-editor-novel`、`dsh-editor-article`、`dsh-editor-technical`，三者由第一方插件包提供，作者可在设置「插件 → 写作模式」里开关（进行中的对话不受影响）；`dsh-editor-writing` 是锁定的核心 fallback。历史 `dsh-editor` 只作为 legacy 会话。不挂载官方编码工具目录。
+三个公开插件 `dsh-manuscript`、`dsh-proofread`、`dsh-zhihu` 仍可独立安装到普通 DSH Web profile。桌面新对话默认 `dsh-editor-writing`，另有 `dsh-editor-novel`、`dsh-editor-article`、`dsh-editor-technical`，三者由第一方插件包提供，作者可在设置「插件 → 写作模式」里开关（进行中的对话不受影响）；`dsh-editor-writing` 是锁定的核心 fallback。历史 `dsh-editor` 只作为 legacy 会话。写作会话不挂载官方编码工具目录；开发者模式下可选的官方 Agent 模式保留自身完整工具，不受写作守卫限制。
 
 Legacy 退出判据：3a 恢复测试与迁移入口已上线；下一个 minor 版本删除 legacy 采访 / 自动索引 / scratch 旧流程与 `dsh-editor` preset（保留 V1 提案解析与章节 frontmatter 解析做转录兼容），届时删除本判据。
 

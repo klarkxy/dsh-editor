@@ -7,8 +7,7 @@ import { writeTextFile } from 'dsh-manuscript/host-api'
 import { createMemoryContext } from './test-helpers.ts'
 import { compileProjectContext, compileProjectContextV2 } from './contracts.ts'
 import { assembleProjectRules, installProjectContextHooks, retireLegacyContext } from './project-context-hooks.ts'
-
-const WRITING_PRESETS = ['dsh-editor', 'dsh-editor-writing', 'dsh-editor-novel', 'dsh-editor-article', 'dsh-editor-technical'] as const
+import { WRITING_AGENT_PRESETS } from './host-guard.ts'
 
 function session(agentPreset: string = 'dsh-editor') {
   return Session.create(SessionId('rules-test'), [], {
@@ -86,7 +85,7 @@ describe('rules and history on the actual host contracts', () => {
       const result = await handlers['tools/post-execute']!(exec, { content: [{ type: 'text', text: 'source' }] }, async () => ({ kind: 'accept' }))
       expect(result).toEqual({ kind: 'accept' })
     }
-    for (const preset of WRITING_PRESETS) {
+    for (const preset of WRITING_AGENT_PRESETS) {
       const exec = { name: 'read', token: `allow-${preset}`, agent: { session: session(preset) } }
       handlers['fs/observed']!({}, { kind: 'present', version: `version-${preset}` }, exec)
       const result = await handlers['tools/post-execute']!(exec, { content: [{ type: 'text', text: 'source' }] }, async () => ({ kind: 'accept' }))

@@ -93,6 +93,7 @@ e2e/                           Playwright 验收脚本
 
 - 模板源 `apps/desktop/resources/profile/agent-presets/` 只保留核心 `dsh-editor-writing`（永远部署、不可关闭）与 legacy `dsh-editor`（开发者模式诊断）。`dsh-editor-novel` 由 `packages/dsh-editor-novel-kernel/presets/` 提供，`dsh-editor-article` / `dsh-editor-technical` 由 `packages/dsh-editor-writing-presets/presets/` 提供；包经 `dshEditor.presets` 声明，`configureProfile` 在物化模板时把目录复制进 `agent-presets/` 并写入 app-owned marker，仍由 `deployAgentPresets` 通道部署。
 - 作者在设置「插件 → 写作模式」里开关这三个第一方 preset：状态存 `<dshHome>/dsh-plugins.json` 的 `presets` 字段；开关立即部署/删除 `<dshHome>/.agent-presets/<id>`，picker 下次列表即反映，无需重启；进行中的会话不受影响。修改 preset 内容时改包内源目录，不要再放回 resources。
+- 禁止 `pwsh` / `bash` 等终端与直接写入的 Host tool guard 只对四个写作 Preset 与 legacy `dsh-editor` 生效。官方或社区 Agent 模式（开发者模式可选）不得被该守卫拦截。
 
 ### Legacy 退出判据（Phase 3d）
 

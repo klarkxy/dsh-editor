@@ -4,21 +4,13 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import { asHost, readProjectRules, resolveWorkspaceAccess } from 'dsh-manuscript/host-api'
 import { normalizeAuthorMemory, normalizeAuthorPreferences, parseProjectContextEnvelope } from './contracts.ts'
+import { isWritingAgentPreset } from './host-guard.ts'
 
 type EditorAgent = { session: Session }
 
 /** Creation-time header fact. A later blank UI selection does not change it. */
-const WRITING_PRESET_IDS = new Set([
-  'dsh-editor',
-  'dsh-editor-writing',
-  'dsh-editor-novel',
-  'dsh-editor-article',
-  'dsh-editor-technical',
-])
-
 function isEditor(agent: EditorAgent | undefined): agent is EditorAgent {
-  const preset = agent?.session.header.agentPreset
-  return typeof preset === 'string' && WRITING_PRESET_IDS.has(preset)
+  return isWritingAgentPreset(agent?.session.header.agentPreset)
 }
 
 /** Only the model-visible projection changes; append-origin transcript events remain intact. */
