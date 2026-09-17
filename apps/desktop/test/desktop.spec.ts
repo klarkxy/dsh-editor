@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { isAllowedNavigation, parseDshWebUrl } from '../src/dsh-url.js'
 import { clipboardWritePayload, isTrustedClipboardSender, readTrustedClipboardText, writeTrustedClipboardText } from '../src/clipboard.js'
 import { PROFILE_MARKER, ProfileCollisionError, deployProfile, resolveDshHome } from '../src/profile.js'
+import { sanitizeHostLockedPluginOverrides } from '../src/user-plugins.js'
 import { installNavigationPolicy, isAllowedExternalUrl } from '../src/navigation.js'
 import { DshSupervisor } from '../src/supervisor.js'
 import { materializePackagedRuntime, treeDigest } from '../src/runtime-cache.js'
@@ -213,6 +214,22 @@ describe('desktop clipboard IPC trust', () => {
     expect(main).toContain("'dsh-window:clipboard-read-text'")
     expect(main).toContain("'dsh-window:clipboard-write-text'")
   })
+
+  it('wires the startup error retry button through preload IPC', async () => {
+    const preload = await readFile(join(import.meta.dirname, '..', 'preload.cjs'), 'utf8')
+    const main = await readFile(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8')
+    expect(main).toContain('data-dsh-startup-retry')
+    expect(main).toContain('onclick="window.dshWindow.retry()"')
+    expect(main).toContain('onclick="window.dshWindow.close()"')
+    expect(main).toContain('>关闭</button>')
+    expect(main).toContain("script-src 'unsafe-inline'")
+    expect(main).not.toContain('dsh-editor://retry')
+    expect(main).toContain("'dsh-window:retry'")
+    expect(main).toContain("if (!trust.url.includes('data-dsh-startup-retry')) return")
+    expect(preload).toContain("send('dsh-window:retry')")
+    expect(preload).toContain('retry: () => ipcRenderer.send')
+    expect(preload).toContain("send('dsh-window:close')")
+  })
 })
 
 describe('desktop branding assets', () => {
@@ -264,6 +281,43 @@ describe('profile deployment', () => {
     expect(resolveDshHome({ DSH_HOME: 'D:/custom' }, 'D:/Users/example')).toBe('D:/custom')
     expect(resolveDshHome({ DSH_HOME: '   ' }, 'D:/Users/example')).toBe(join('D:/Users/example', '.dsh-editor'))
     expect(resolveDshHome({}, 'D:/Users/example')).toBe(join('D:/Users/example', '.dsh-editor'))
+  })
+  it('strips leftover host-locked plugin overrides before DSH boots', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-locked-overrides-'))
+    await writeFile(join(home, 'dsh-plugins.json'), `${JSON.stringify({
+      schema: 1,
+      overrides: {
+        'editor-novel-kernel': true,
+        'editor-workbench-tools': true,
+        proofread: true,
+        zhihu: false,
+      },
+      presets: { 'dsh-editor-novel': true },
+      installed: [],
+    }, null, 2)}\n`)
+    await writeFile(join(home, 'cordis.patch.yml'), [
+      '# managed-by: dsh-editor-plugins',
+      '- id: editor-novel-kernel',
+      '  disabled: false',
+      '- id: editor-workbench-tools',
+      '  disabled: false',
+      '- id: proofread',
+      '  disabled: false',
+      '- id: zhihu',
+      '  disabled: true',
+      '',
+    ].join('\n'))
+    await sanitizeHostLockedPluginOverrides(home)
+    expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toMatchObject({
+      overrides: { zhihu: false },
+      presets: { 'dsh-editor-novel': true },
+    })
+    expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe([
+      '# managed-by: dsh-editor-plugins',
+      '- id: zhihu',
+      '  disabled: true',
+      '',
+    ].join('\n'))
   })
   it('fails closed on an unmarked collision', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
@@ -317,13 +371,17 @@ describe('profile deployment', () => {
     const legacy = await readFile(join(profileResources, 'agent-presets', 'dsh-editor', 'agent.cordis.yml'), 'utf8')
     expect(legacy).toContain('dsh-tool-ask-user')
     expect(legacy).toContain('dsh-tool-fs')
-    expect(legacy).not.toMatch(/dsh-tool-(bash|pwsh|web|todo|goal|subagent|workflow|ralph|skill)/)
+    expect(legacy).toMatch(/- id: tool-bash\r?\n  name: '@deepseek-ai\/dsh-tool-bash'\r?\n  disabled: true/)
+    expect(legacy).toMatch(/- id: tool-pwsh\r?\n  name: '@deepseek-ai\/dsh-tool-pwsh'\r?\n  disabled: true/)
+    expect(legacy).not.toMatch(/dsh-tool-(web|todo|goal|subagent|workflow|ralph|skill)/)
     expect(legacy).not.toContain('dsh-plan-mode')
     expect(topLevelPluginRows(legacy)).toEqual([
       { id: 'persona', name: '@deepseek-ai/dsh-persona' },
       { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
       { id: 'tool-fs-search', name: '@deepseek-ai/dsh-tool-fs-search' },
       { id: 'tool-ask-user', name: '@deepseek-ai/dsh-tool-ask-user' },
+      { id: 'tool-bash', name: '@deepseek-ai/dsh-tool-bash' },
+      { id: 'tool-pwsh', name: '@deepseek-ai/dsh-tool-pwsh' },
       { id: 'editor-workbench-tools', name: 'dsh-editor-workbench/tools' },
       { id: 'editor-novel-kernel', name: 'dsh-editor-novel-kernel' },
       { id: 'compaction', name: 'cordis:group' },
@@ -399,13 +457,17 @@ describe('profile deployment', () => {
       expect(composition).toContain('writing_propose')
       expect(composition).toContain('作者确认')
       expect(composition).toMatch(/不创建|不建目录/)
-      expect(composition).not.toMatch(/dsh-tool-(bash|pwsh|web|todo|goal|subagent|workflow|ralph)(?!-)/)
+      expect(composition).toMatch(/- id: tool-bash\r?\n  name: '@deepseek-ai\/dsh-tool-bash'\r?\n  disabled: true/)
+      expect(composition).toMatch(/- id: tool-pwsh\r?\n  name: '@deepseek-ai\/dsh-tool-pwsh'\r?\n  disabled: true/)
+      expect(composition).not.toMatch(/dsh-tool-(web|todo|goal|subagent|workflow|ralph)(?!-)/)
       expect(composition).not.toContain('dsh-plan-mode')
       expect(topLevelPluginRows(composition)).toEqual([
         { id: 'persona', name: '@deepseek-ai/dsh-persona' },
         { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
         { id: 'tool-fs-search', name: '@deepseek-ai/dsh-tool-fs-search' },
         { id: 'tool-ask-user', name: '@deepseek-ai/dsh-tool-ask-user' },
+        { id: 'tool-bash', name: '@deepseek-ai/dsh-tool-bash' },
+        { id: 'tool-pwsh', name: '@deepseek-ai/dsh-tool-pwsh' },
         ...scopedTools[id],
         { id: 'skill-filesystem', name: '@deepseek-ai/dsh-skill-filesystem' },
         { id: 'tool-skill', name: '@deepseek-ai/dsh-tool-skill' },
@@ -726,6 +788,15 @@ describe('child supervision', () => {
     child.exit(23)
     expect(unexpected).toHaveBeenCalledOnce()
   })
+  it('includes DSH output when the child exits before readiness', async () => {
+    const child = new FakeChild()
+    const supervisor = new DshSupervisor({ spawn: () => child, gracefulStopMs: 1 })
+    const ready = supervisor.start(launch)
+    child.stderr.write('dsh: plugin tree failed to load: editor-novel-kernel requires an explicit mode\n')
+    child.exit(1)
+    await expect(ready).rejects.toThrow(/exited before readiness[\s\S]*editor-novel-kernel requires an explicit mode/)
+  })
+
   it('rejects a readiness timeout', async () => {
     const child = new FakeChild()
     const forceKillTree = vi.fn(async () => undefined)
@@ -833,11 +904,6 @@ class FakeWindow implements EditorWindow {
     return this
   }
   close(): void { for (const listener of this.closedListeners) listener() }
-  emitNavigate(url: string): { preventDefault: ReturnType<typeof vi.fn> } {
-    const event = { preventDefault: vi.fn() }
-    for (const listener of this.navigateListeners) listener(event, url)
-    return event
-  }
   emitInput(input: EditorInput): { preventDefault: ReturnType<typeof vi.fn> } {
     const event = { preventDefault: vi.fn() }
     for (const listener of this.inputListeners) listener(event, input)
@@ -994,14 +1060,34 @@ describe('controlled multi-window', () => {
       expect(harness.windows[0]!.loaded.at(-1)).toBe('error:DSH exited unexpectedly (code 23, signal none)')
       expect(harness.windows[1]!.loaded.at(-1)).toBe('error:DSH exited unexpectedly (code 23, signal none)')
     })
-    harness.windows[0]!.emitNavigate('dsh-editor://retry')
-    harness.windows[1]!.emitNavigate('dsh-editor://retry/')
+    void lifecycle.retry()
+    void lifecycle.retry()
     await vi.waitFor(() => {
       expect(harness.windows[0]!.loaded.at(-1)).toBe('http://127.0.0.1:43111/')
       expect(harness.windows[1]!.loaded.at(-1)).toBe('http://127.0.0.1:43111/')
     })
+    expect(harness.windows[0]!.loaded.filter((url) => url === 'loading:')).toHaveLength(2)
     expect(harness.counts()).toEqual({ starts: 2, stops: 1, supervisors: 1, windows: 2 })
     expect(harness.deploy).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries a failed first start from the error page', async () => {
+    const harness = multiWindowHarness()
+    let fail = true
+    harness.deps.createSupervisor = () => ({
+      async start() {
+        if (fail) throw new Error('backend missing')
+        return new URL('http://127.0.0.1:43111/')
+      },
+      async stop() { /* first start never reached a running child */ },
+    })
+    const lifecycle = createDesktopLifecycle(harness.deps)
+    await lifecycle.createWindow()
+    expect(harness.windows[0]!.loaded.at(-1)).toBe('error:backend missing')
+    fail = false
+    await lifecycle.retry()
+    expect(harness.windows[0]!.loaded.at(-1)).toBe('http://127.0.0.1:43111/')
+    expect(harness.windows[0]!.loaded).toEqual(['loading:', 'error:backend missing', 'loading:', 'http://127.0.0.1:43111/'])
   })
 
   it('registers the download handler once and routes the save dialog to the initiating window', async () => {

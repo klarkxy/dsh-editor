@@ -3,8 +3,6 @@ import { installNavigationPolicy } from './navigation.js'
 import { deployProfile, resolveDshHome } from './profile.js'
 import type { DshLaunch, DshSupervisorOptions } from './supervisor.js'
 
-const RETRY_HREFS = new Set(['dsh-editor://retry', 'dsh-editor://retry/'])
-
 export interface EditorInput {
   type: string
   key: string
@@ -56,6 +54,7 @@ export interface DesktopLifecycleDeps {
 export interface DesktopLifecycle {
   createWindow(): Promise<void>
   handleSecondInstance(): void
+  retry(): Promise<void>
   shutdown(): Promise<void>
   needsGracefulShutdown(): boolean
   isOwnedWindow(window: EditorWindow | undefined): boolean
@@ -79,6 +78,7 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
   let supervisor: DesktopSupervisor | undefined
   let currentUrl: URL | undefined
   let inflight: Promise<URL> | undefined
+  let retrying: Promise<void> | undefined
   let closing = false
   let downloadInstalled = false
 
@@ -142,18 +142,23 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
 
   async function retryAll(): Promise<void> {
     if (closing) return
-    try {
-      const url = await ensureBackend(true)
-      for (const window of [...windows]) {
-        try {
-          await attach(window, url)
-        } catch (error) {
-          if (windows.has(window)) throw error
+    if (retrying) return retrying
+    retrying = (async () => {
+      try {
+        await loadAll(deps.loadingHtml())
+        const url = await ensureBackend(true)
+        for (const window of [...windows]) {
+          try {
+            await attach(window, url)
+          } catch (error) {
+            if (windows.has(window)) throw error
+          }
         }
+      } catch (error) {
+        await loadAll(deps.errorHtml(error))
       }
-    } catch (error) {
-      await loadAll(deps.errorHtml(error))
-    }
+    })().finally(() => { retrying = undefined })
+    return retrying
   }
 
   async function createWindow(): Promise<void> {
@@ -161,11 +166,6 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
     const window = deps.createBrowserWindow()
     windows.add(window)
     installDownloadHandler(window)
-    window.webContents.on('will-navigate', (event, url) => {
-      if (!RETRY_HREFS.has(url)) return
-      event.preventDefault()
-      void retryAll()
-    })
     window.webContents.on('before-input-event', (event, input) => {
       if (!isNewWindowShortcut(input)) return
       event.preventDefault()
@@ -188,6 +188,7 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
   return {
     createWindow,
     handleSecondInstance() { void createWindow() },
+    retry: retryAll,
     async shutdown() {
       if (closing) return
       closing = true

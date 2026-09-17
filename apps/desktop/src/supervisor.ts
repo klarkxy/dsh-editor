@@ -89,6 +89,7 @@ export class DshSupervisor {
     })
     const readiness = new Promise<URL>((resolve, reject) => {
       let settled = false
+      const traces: string[] = []
       const timeoutMs = launch.timeoutMs ?? READY_TIMEOUT_MS
       const settle = (callback: () => void) => {
         if (settled) return
@@ -97,9 +98,14 @@ export class DshSupervisor {
         callback()
       }
       const succeed = (url: URL) => settle(() => resolve(url))
-      const fail = (error: Error) => settle(() => reject(error))
+      const fail = (error: Error) => settle(() => {
+        const detail = traces.length ? `\n${traces.join('\n')}` : ''
+        reject(detail ? new Error(`${error.message}${detail}`) : error)
+      })
       const timer = setTimeout(() => fail(new Error(`Timed out waiting ${timeoutMs}ms for DSH loopback readiness`)), timeoutMs)
       const inspect = (line: string) => {
+        traces.push(line)
+        if (traces.length > 80) traces.splice(0, traces.length - 80)
         const url = parseDshWebUrl(line)
         if (url) succeed(url)
       }

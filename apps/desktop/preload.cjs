@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('dshWindow', {
   minimize: () => ipcRenderer.send('dsh-window:minimize'),
   toggleMaximize: () => ipcRenderer.send('dsh-window:toggle-maximize'),
   close: () => ipcRenderer.send('dsh-window:close'),
+  retry: () => ipcRenderer.send('dsh-window:retry'),
   // Whitelisted https links only; the main process validates before opening.
   openExternal: (url) => ipcRenderer.send('dsh-window:open-external', url),
   // About / update page: renderer is locked behind a strict CSP that blocks
