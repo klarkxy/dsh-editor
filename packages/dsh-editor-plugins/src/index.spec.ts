@@ -481,7 +481,7 @@ describe('first-party writing preset RPC', () => {
     const paths = await fixture()
     const source = join(paths.profileDir, 'node_modules', 'dsh-editor-novel-kernel', 'presets', 'dsh-editor-novel')
     await mkdir(source, { recursive: true })
-    await writeFile(join(source, 'preset.yml'), 'name: 小说创作\ndescription: 正文、大纲、人物卡与世界书分册推进。\n')
+    await writeFile(join(source, 'preset.yml'), 'name: 小说创作\ndescription: 面向长篇小说的写作 Agent，按正文、大纲、人物卡与世界书分册推进。\n')
     await writeFile(join(source, 'agent.cordis.yml'), '[]\n')
     await writeFile(join(paths.profileDir, 'composition.json'), JSON.stringify({
       id: 'desktop',
@@ -503,7 +503,7 @@ describe('first-party writing preset RPC', () => {
       {
         id: 'dsh-editor-novel',
         title: '小说创作',
-        description: '正文、大纲、人物卡与世界书分册推进。',
+        description: '面向长篇小说的写作 Agent，按正文、大纲、人物卡与世界书分册推进。',
         enabled: true,
         locked: false,
         packageName: 'dsh-editor-novel-kernel',

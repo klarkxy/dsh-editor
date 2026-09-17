@@ -1893,9 +1893,9 @@ async function selectAssistantModel(page) {
   const effort = assistant.getByRole('combobox', { name: '思考强度' })
   if (await effort.isVisible().catch(() => false)) {
     const effortText = await effort.innerText()
-    if (!/off|Off|低/i.test(effortText)) {
+    if (!/none|off|low/i.test(effortText)) {
       try {
-        await chooseCustomSelect(assistant, '思考强度', (label) => /^(off|Off|低)$/i.test(label.trim()) || /\boff\b/i.test(label))
+        await chooseCustomSelect(assistant, '思考强度', (label) => /^(none|off|low)$/i.test(label.trim()))
       } catch {
         await page.keyboard.press('Escape').catch(() => undefined)
       }
@@ -2046,7 +2046,7 @@ async function assertWritingV2Card(card, expectedPath) {
       throw new Error(`card missing basis ${item.label} ${item.path} ${item.version}`)
     }
   }
-  if (!(await card.locator('.proposal-basis').count()) && !text.includes('依据与基线')) {
+  if (!(await card.locator('.proposal-basis').count()) && !text.includes('依据与版本')) {
     throw new Error('V2 basis section missing on card')
   }
   if (proposal.kind === 'create') {
@@ -2054,7 +2054,7 @@ async function assertWritingV2Card(card, expectedPath) {
   }
   if (proposal.kind === 'edit' || proposal.kind === 'split') {
     if (!proposal.targetVersion) throw new Error(`V2 ${proposal.kind} missing targetVersion: ${JSON.stringify(proposal)}`)
-    if (!text.includes('生成基线')) throw new Error('V2 target baseline section missing on card')
+    if (!text.includes('生成时版本')) throw new Error('V2 target baseline section missing on card')
     if (!text.includes(proposal.targetVersion)) throw new Error(`card missing targetVersion ${proposal.targetVersion}`)
   }
   if (proposal.kind === 'merge') {
@@ -2589,6 +2589,7 @@ async function main() {
     if (await switches.count() !== 1) throw new Error('Zhihu still has separate switches')
     if (await dialog.getByRole('switch', {name: '校对', exact: true}).count() !== 1) throw new Error('proofreading is not one user-facing feature')
     if (await dialog.getByRole('switch', {name: '作品概览', exact: true}).count() !== 1) throw new Error('overview is not one user-facing feature')
+    if (await dialog.getByText('部分启用').count()) throw new Error('feature switches still show partial enablement')
     /* 写作功能 4 个（写作辅助/校对/作品概览/知乎资料）+ 写作模式 3 个可开关 preset；再多才算按实现包拆散。 */
     if (await dialog.getByRole('switch').count() > 9) throw new Error('bundled features are still split by implementation package')
     const control = switches.first()

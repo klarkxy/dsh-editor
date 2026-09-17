@@ -585,8 +585,8 @@ describe('shell manuscript RPC safety', () => {
       .not.toBe(proposalFingerprint(v2 as never))
     expect(proposalFingerprint({ ...v2, basis: [{ path: '大纲/总纲.md', version: 'v2', label: '总纲' }] } as never))
       .not.toBe(proposalFingerprint(v2 as never))
-    expect(zh['chat.proposalBasis']).toBe('依据与基线')
-    expect(zh['chat.proposalTarget']).toBe('生成基线')
+    expect(zh['chat.proposalBasis']).toBe('依据与版本')
+    expect(zh['chat.proposalTarget']).toBe('生成时版本')
     expect(proposalBasisItems({
       marker: 'dsh-editor.proposal', version: 1, kind: 'edit', path: 'notes/a.md', summary: '改', oldText: '旧', newText: '新',
     } as never)).toEqual([])

@@ -130,7 +130,7 @@ describe('new conversation preset allowlist', () => {
     })
     expect(presets.find((item) => item.id === 'dsh-editor-novel')).toMatchObject({
       available: false,
-      reason: '这个模式已损坏，无法使用。',
+      reason: '这个模式的文件有问题，暂时无法使用。',
     })
     expect(presets.find((item) => item.id === 'dsh-editor-article')?.available).toBe(true)
     expect(presets.find((item) => item.id === 'dsh-editor-technical')?.available).toBe(true)
