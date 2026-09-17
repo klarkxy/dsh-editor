@@ -169,7 +169,7 @@ dsh-editor-proofread-panel
 
 新对话在草稿保护通过后调用 `agentPresets.list()`，只投影四个当前 Preset；确认前不 `create`。确认后 `sessions.create({ workspaceId })` 得到空白会话（create 不带 preset），再 `agentPresets.select`，以 Host 返回的真实 `agentPreset` 记入投影并打开。已有对话只 `open`，不 `select`、不改模式。搭档栏输入区以只读标签显示当前模式。四个新 Preset 发送原始用户文本，不调用 `context.compile`；正文变更走 `writing_propose` V2。edit/split 必须带生成时 Host-read 的 `targetVersion`，merge 必须带 `targetVersion` 与 `sourceVersion`，renames 每项必须带 `version`。可选 `basis` 是独立的来源依赖列表，不能代替目标基线。全部 V2 操作接受可见项目相对 `.md`/`.txt`。V2 create 是严格 create-if-absent，已有空文件也不覆盖；历史 V1 create 可填充已有空文件。人物卡、世界书、总纲与作品索引不自动拼入请求，由 Agent 按需 `glob` / `grep` / `read`。
 
-五个写作 Preset（四个新 Preset 与 legacy）都经 `system-prompt/assemble` 读取工作区根目录 `AGENTS.md`，并带入有界的跨作品作者偏好与已确认侧写。根目录存在多份大小写冲突文件时失败，不发现全局或子目录规则。优先级为当轮明确要求、作品规则、跨作品默认偏好；这些文本不扩大文件和工具权限。FIM 与选段修改也读取同一作品根规则，并保持现有取消、版本与写入边界。Host 的 fail-closed tool guard 只对这五个 app-owned writing preset 生效（拦截终端、直接写入等）；官方 / 社区 Agent 模式使用自身工具目录，不被该守卫拦截。
+五个写作 Preset（四个新 Preset 与 legacy）都经 `system-prompt/assemble` 读取工作区根目录 `AGENTS.md`，并带入有界的跨作品作者偏好与已确认侧写。根目录存在多份大小写冲突文件时失败，不发现全局或子目录规则。优先级为当轮明确要求、作品规则、跨作品默认偏好；这些文本不扩大文件和工具权限。FIM 与选段修改也读取同一作品根规则，并保持现有取消、版本与写入边界。五个写作 Preset 在 `agent.cordis.yml` 关闭 `tool-pwsh` / `tool-bash`，并由写作工具插件对继承来的 `write` / `edit` / 终端做 preset 级 `tools.restrict`。没有全局 tool guard；官方 / 社区 Agent 模式（如标准模式）使用自身工具目录。
 
 历史 V1/V2 注入信封在下一轮进入模型前只替换模型可见投影为原始用户请求，来源事件保留。世界书旧 frontmatter 仍可作为文件内容保存，但不再驱动自动注入，稿纸触发设置表单已移除。卡片详情仅在装了 `dsh-editor-cards` 时可用。
 

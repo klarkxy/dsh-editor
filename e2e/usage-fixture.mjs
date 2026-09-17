@@ -21,5 +21,19 @@ export function usageFixture(kind = 'mixed') {
     add(5, 'second-provider/a-very-long-model-name-for-responsive-layout-verification', 2000, 1000, 1000, 1)
     add(6, 'second-provider/a-very-long-model-name-for-responsive-layout-verification', 15000, 4000, 7000, 2)
   }
-  return { days }
+  const stamp = (offsetMinutes, model, inputTokens, outputTokens, cacheReadTokens) => ({
+    at: new Date(Date.now() - offsetMinutes * 60_000).toISOString(),
+    model,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens: 0,
+  })
+  const log = kind === 'empty'
+    ? []
+    : [
+      stamp(5, 'dsh-editor-custom/MiniMax-M3', 18363, 2185, 30516),
+      ...(kind === 'mixed' ? [stamp(20, 'second-provider/a-very-long-model-name-for-responsive-layout-verification', 15000, 4000, 7000)] : []),
+    ]
+  return { days, log }
 }

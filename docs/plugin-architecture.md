@@ -62,7 +62,7 @@ Electron bootstrap（不可插件化：窗口、内置运行时、profile 部署
 
 写作会话不挂载官方 `standard` 编码 preset。桌面应用每次部署 profile 时，把模板里的 app-owned writing preset 原子部署到 `<dshHome>/.agent-presets/`，再由 profile 的 `cordis.patch.yml` 将 `agent-presets.default` 指向通用写作 `dsh-editor-writing`。四个当前名称是通用写作、小说创作、文章与自媒体、技术文档。模板源只含核心 `dsh-editor-writing` 与 legacy `dsh-editor`；小说创作由 `dsh-editor-novel-kernel`、文章与技术由 `dsh-editor-writing-presets` 以 `dshEditor.presets` 声明提供，`configureProfile` 物化模板时复制进 `agent-presets/` 并写入 app-owned marker。这三个第一方 preset 可在设置「插件 → 写作模式」里开关（状态存 `dsh-plugins.json`，开关即时生效，进行中的会话不受影响）；`dsh-editor-writing` 永远部署、不可关闭。`dsh-editor-novel-kernel` 由可见 `dsh-editor-novel` 以 `knowledge-only` 挂载，由 hidden legacy `dsh-editor` 以显式 `mode: legacy` 挂完整表面；通用 / 文章 / 技术不挂。preset 目录遵循与 profile 相同的 owner marker 规则：未标记的同名目录拒绝覆盖。
 
-插件可以提供自己的对话 preset：在 package.json 的 `dshEditor.presets` 声明 `[{ id, path }]`，`path` 指向包内含 `preset.yml` + `agent.cordis.yml` 的目录。社区/公开插件的 preset id 不得以 `dsh-editor` 开头（内置写作 preset 保留前缀）；只有 `visibility: desktop` 的第一方包可以声明该前缀的 id。同 id 跨包冲突在安装与构建时都会被拒绝。安装（`installGitHubPlugin`）把 preset 原子部署到 `<dshHome>/.agent-presets/<id>` 并写入带 `plugin` 字段的 owner marker；卸载（`uninstallUserPlugin`）按 marker 回收；每次部署 profile 时桌面端会重扫市集安装的 bundle 的声明、更新自己名下的 preset 并回收 owner 已不在 bundle 列表里的目录（第一方包的 preset 走模板通道，不在此列）。社区插件 preset 不进默认的新对话 picker——在设置「通用 → 开发者 → 开发者模式」开启后才会追加显示（旧版 `dsh-editor` 带"诊断用途"徽标，描述标明仅用于打开/迁移旧会话）。写作 Host 的 fail-closed tool guard 只对四个写作 Preset 与 legacy `dsh-editor` 生效；官方 / 社区 preset 使用自身工具目录，不被该守卫拦截。构建时 `scripts/plugin-manifest.mjs` 对工作区插件做同样的 id / 路径 / 文件校验。
+插件可以提供自己的对话 preset：在 package.json 的 `dshEditor.presets` 声明 `[{ id, path }]`，`path` 指向包内含 `preset.yml` + `agent.cordis.yml` 的目录。社区/公开插件的 preset id 不得以 `dsh-editor` 开头（内置写作 preset 保留前缀）；只有 `visibility: desktop` 的第一方包可以声明该前缀的 id。同 id 跨包冲突在安装与构建时都会被拒绝。安装（`installGitHubPlugin`）把 preset 原子部署到 `<dshHome>/.agent-presets/<id>` 并写入带 `plugin` 字段的 owner marker；卸载（`uninstallUserPlugin`）按 marker 回收；每次部署 profile 时桌面端会重扫市集安装的 bundle 的声明、更新自己名下的 preset 并回收 owner 已不在 bundle 列表里的目录（第一方包的 preset 走模板通道，不在此列）。社区插件 preset 不进默认的新对话 picker——在设置「通用 → 开发者 → 开发者模式」开启后才会追加显示（旧版 `dsh-editor` 带"诊断用途"徽标，描述标明仅用于打开/迁移旧会话）。四个写作 Preset 与 legacy 在 `agent.cordis.yml` 关闭 `tool-pwsh` / `tool-bash`，并由写作工具插件对继承来的 `write` / `edit` / 终端做 preset 级 `tools.restrict`。没有全局 tool guard；官方 / 社区 preset 使用自身工具目录。构建时 `scripts/plugin-manifest.mjs` 对工作区插件做同样的 id / 路径 / 文件校验。
 
 依赖方向固定如下；禁止跨包导入另一个包的 `src`：
 
@@ -289,7 +289,7 @@ Channel：`/dsh-editor-workbench`（常量 `WORKBENCH_RPC_CHANNEL`）。类型�
 | `project.importProbe` | `targetSessionId`，可选 `sourceSessionId` | 读 · token、统计、预览或恢复状态；不写入 |
 | `project.importApply` | `targetSessionId`, `sourceSessionId`, `probeToken` | 写 · 重新 probe 后执行 no-clobber 导入 |
 | `project.importCleanup` | `targetSessionId`, `receiptId` | 写 · 只清理 manifest/hash 证明归属的中断写入 |
-| `snapshot.list` | `sessionId` | 读 · 快照列表；不包含未保存 buffer；`.dsh-editor/*` 不在 payload 内 |
+| `snapshot.list` | `sessionId` | 读 · 快照列表（短哈希 + 相对上一版的文件增减）；不包含未保存 buffer；`.dsh-editor/*` 不在 payload 内 |
 | `snapshot.create` | `sessionId`，可选 `label` | 写 · 原子发布后的 snapshot view；简易提交流程的 label 即当前时间 |
 | `snapshot.rollback` | `sessionId`, `snapshotId` | 写 · 原地回滚：覆盖/删除回到快照状态，先自动创建安全快照（可再回滚撤销）；非文本文件不动 |
 | `snapshot.restoreProbe` | `targetSessionId`，可选 `sourceSessionId`, `snapshotId` | 读 · 只恢复到新空 workspace 的 token/状态（跨作品恢复，与原地回滚不同） |

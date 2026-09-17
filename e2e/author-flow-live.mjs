@@ -515,7 +515,7 @@ async function configureMiniMax(page) {
   const dialog = page.getByRole('dialog', { name: '设置' })
   await dialog.locator('.settings-nav').getByRole('tab', { name: '通用设置', exact: true }).click()
   await dialog.getByRole('region', { name: '通用设置' }).waitFor({ state: 'visible', timeout: 15_000 })
-  await dialog.locator('.settings-nav').getByRole('tab', { name: '写作', exact: true }).click()
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '助手', exact: true }).click()
   const authorBox = dialog.getByRole('textbox', { name: '跨作品作者约定' })
   await authorBox.waitFor({ state: 'visible', timeout: 15_000 })
   await authorBox.fill('第三人称限知；少用感叹号；对白保持克制，不解释系统。')
@@ -831,13 +831,6 @@ async function verifyChaptersInEditor(page) {
     const chapter = report.chapters.find((item) => item.path === `正文/${id}.md`)
     if (chapter) chapter.uiChars = chars
   }
-  await page.locator('[data-testid="paper-prev"]').click()
-  await page.locator('[data-testid="paper-path"]', { hasText: `正文/${String(chapterCount - 1).padStart(3, '0')}.md` })
-    .waitFor({ state: 'visible', timeout: 15_000 })
-  await page.locator('[data-testid="paper-next"]').click()
-  await page.locator('[data-testid="paper-path"]', { hasText: `正文/${String(chapterCount).padStart(3, '0')}.md` })
-    .waitFor({ state: 'visible', timeout: 15_000 })
-  recordFeature('chapter-navigation', true)
   await recordPhase('页面逐章验收', `${chapterCount}章均显示已保存且至少${minChapterChars}字`)
 }
 

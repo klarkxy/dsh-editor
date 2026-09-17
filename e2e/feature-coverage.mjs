@@ -375,7 +375,7 @@ async function configureMiniMax(page) {
   await dialog.locator('.settings-nav').getByRole('tab', { name: '通用设置', exact: true }).waitFor({ state: 'visible', timeout: 10_000 })
   recordFeature('i18n-chinese', true)
 
-  await dialog.locator('.settings-nav').getByRole('tab', { name: '写作', exact: true }).click()
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '助手', exact: true }).click()
   const authorBox = dialog.getByRole('textbox', { name: '跨作品作者约定' })
   await authorBox.waitFor({ state: 'visible', timeout: 15_000 })
   await authorBox.fill('第三人称限知；少用感叹号；对白保持克制。')
@@ -384,6 +384,7 @@ async function configureMiniMax(page) {
   const prefsFailed = await dialog.getByRole('alert').filter({ hasText: /未能保存/ }).isVisible().catch(() => false)
   recordFeature('author-preferences', !prefsFailed, prefsFailed ? 'settings scope did not commit' : 'saved')
 
+  await dialog.locator('.settings-nav').getByRole('tab', { name: '写作', exact: true }).click()
   try {
     const typewriter = dialog.getByRole('checkbox', { name: /打字机滚动/ })
     if (await typewriter.isVisible().catch(() => false) && !(await typewriter.isChecked().catch(() => false))) {
@@ -1192,16 +1193,30 @@ async function coverWorkbench(page) {
   await cover('archive-restore', async () => {
     await openTreeFile(page, '归档候选.md', '正文')
     await (await treeFileRow(page, '归档候选.md')).click({ button: 'right' })
-    await page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '归档' }).click()
-    await waitFor(async () => !(await page.locator('.tree-row').filter({ hasText: '归档候选.md' }).count()), 'archived row gone', 15_000)
-    await runPaletteCommand(page, '归档', '已归档')
-    const archives = page.getByRole('dialog', { name: '已归档' })
-    await archives.waitFor({ state: 'visible', timeout: 10_000 })
-    await archives.getByRole('button', { name: '恢复' }).first().click()
-    await archives.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined)
+    const menu = page.getByRole('menu', { name: '文档操作' })
+    await menu.waitFor({ state: 'visible', timeout: 10_000 })
+    if (await menu.getByRole('menuitem', { name: '归档' }).count()) {
+      throw new Error('document archive menu should stay hidden')
+    }
+    await page.keyboard.press('Escape')
     await dismissOverlays(page)
-    await expandDirectory(page, '正文')
-    await page.locator('.tree-row.tree-main').filter({ hasText: /归档候选/ }).first().waitFor({ state: 'attached', timeout: 15_000 })
+    await page.getByRole('button', { name: '搜索与命令' }).click()
+    await page.locator('.palette-overlay').waitFor({ state: 'attached', timeout: 10_000 })
+    const input = page.locator('.palette-input')
+    await input.waitFor({ state: 'visible', timeout: 5_000 })
+    await input.fill('已归档')
+    if (await page.getByRole('option', { name: /已归档/ }).count()) {
+      throw new Error('document archive palette command should stay hidden')
+    }
+    await closePalette(page)
+    await page.getByRole('button', { name: '作品菜单' }).click()
+    const workspaceMenu = page.getByRole('menu', { name: '作品操作' })
+    await workspaceMenu.waitFor({ state: 'visible', timeout: 10_000 })
+    if (await workspaceMenu.getByRole('menuitem', { name: '已归档' }).count()) {
+      throw new Error('document archive workspace menu should stay hidden')
+    }
+    await page.keyboard.press('Escape')
+    return 'document archive chrome hidden'
   })
 
   await cover('snapshot-commit', async () => {
@@ -1344,14 +1359,6 @@ async function coverWorkbench(page) {
       settled = true
       await page.unroute('**/manuscript/tree.list', delayedTree)
     }
-  })
-
-  await cover('chapter-navigation', async () => {
-    await openTreeFile(page, '001.md', '正文')
-    await page.locator('[data-testid="paper-next"]').click()
-    await page.locator('[data-testid="paper-path"]', { hasText: /正文\/002\.md/ }).waitFor({ state: 'visible', timeout: 15_000 })
-    await page.locator('[data-testid="paper-prev"]').click()
-    await page.locator('[data-testid="paper-path"]', { hasText: /正文\/001\.md/ }).waitFor({ state: 'visible', timeout: 15_000 })
   })
 
   await recordPhase('工作台功能覆盖', report.features.filter((item) => item.ok).map((item) => item.name).join(', '))

@@ -192,6 +192,13 @@ try {
   await overlay.waitFor({ state: 'visible', timeout: 5_000 })
   const content = page.locator('.palette-content')
   await content.waitFor({ state: 'visible' })
+  const hosted = await overlay.evaluate((node) => Boolean(node.closest('.radix-themes.shell-theme')))
+  if (!hosted) fail('palette overlay escaped Theme root; panel tokens will not resolve')
+  const isTransparent = (value) => value === 'transparent' || value === 'rgba(0, 0, 0, 0)'
+  const overlayBg = await overlay.evaluate((node) => getComputedStyle(node).backgroundColor)
+  const contentBg = await content.evaluate((node) => getComputedStyle(node).backgroundColor)
+  if (isTransparent(overlayBg)) fail(`palette overlay background is transparent: ${overlayBg}`)
+  if (isTransparent(contentBg)) fail(`palette content background is transparent: ${contentBg}`)
   const searchInput = content.locator('input[cmdk-input]')
   if (!(await searchInput.count())) fail('palette search input is not mounted')
   // Group headings are rendered by cmdk as <div cmdk-group-heading="">; match
@@ -303,6 +310,7 @@ try {
   // Portaled overlays are outside .shell; reduced motion must cover them too.
   await page.setViewportSize({ width: 1280, height: 720 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.locator('.rt-DialogOverlay, .settings-dialog').waitFor({ state: 'detached', timeout: 5_000 }).catch(() => undefined)
   await workbenchTrigger.click()
   await content.waitFor({ state: 'visible' })
   const still = await content.evaluate((el) => ({ animation: getComputedStyle(el).animationName, transition: getComputedStyle(el).transitionDuration }))

@@ -30,7 +30,21 @@
 - 手写 CSS 只允许：三栏 grid、`-webkit-app-region`、CodeMirror、cmdk、分隔条、`@keyframes`、fixed/absolute 定位。
 - **颜色只用 Radix 变量，组件里禁止 hex / rgba。**
 
-`.radix-themes` 上覆盖 CJK 无衬线与等宽栈：`--default-font-family`、`--code-font-family`。稿纸宋体 / 字号 / 行距仍由写作设置写 `--paper-*`。`.shell-theme` 提供栏高常量 `--topbar-h`（52px）。
+`.radix-themes` 上覆盖 CJK 无衬线与等宽栈：`--default-font-family`、`--code-font-family`。Chrome 把 `--font-size-1` 抬到 **13px**，对齐 [product-principles.md](product-principles.md) 的常用 chrome 地板。稿纸宋体 / 字号 / 行距仍由写作设置写 `--paper-*`（默认 17px，作者可调 14–28px），不跟 chrome 混成一套。`.shell-theme` 提供栏高常量 `--topbar-h`（52px）。
+
+## 字号角色
+
+Chrome 只认角色，不写 `11px` / `12px` / `13px` / `18px`。`Text` / `Heading` 的 `size` 对应 `--font-size-N`。
+
+| 角色 | 用法 | token | 值 |
+| --- | --- | --- | --- |
+| caption | 次级说明、时间、badge、kbd、步骤细节 | `size="1"` / `--font-size-1` | 13px |
+| body | 默认界面字、设置行标题、树 / 列表、聊天正文、表单 label、主按钮字 | `size="2"` / `--font-size-2` | 14px |
+| section | 设置卡片小标题、侧栏分区 | `Heading size="3"` / `--font-size-3` | 16px |
+| title | 对话框、设置页眉、侧栏面板标题 | `Heading size="4"` / `--font-size-4` | 18px |
+| display | 首页校验态、空稿纸大标题 | `Heading size="6"` / `--font-size-6` | 24px |
+
+禁止：把可读正文或表单 label 写成 `size="1"`；chrome 里用 `Heading size="5"|"7"|"8"|"9"`。`size="3"` 以上其余阶仍用 Radix 原值（16 / 18 / 20 / 24 / …），独立渲染时由 `dsh-editor-seats/tokens` 补齐 `--font-size-1`–`9`。搭档回复正文至少 14px。
 
 ## 变量速查
 
@@ -78,4 +92,4 @@ e2e 依赖语义 class / `data-testid`（`.shell`、`.chrome`、`.home-stage`、
 3. 不要为新面板引入第二套色板或英文-only chrome。
 4. 验收：`pnpm typecheck`、`pnpm test`、`pnpm --filter dsh-editor-shell build`、`pnpm test:e2e:visual-audit`。截图写到 `e2e/out/`，不提交。
 
-设置主体要有受约束高度，`.settings-pages` 是唯一内容滚动区。用量图用 ECharts SVG，系列色在运行时用 `getComputedStyle` 读 `--indigo-9` 等。搭档回复正文至少 14px。
+设置主体要有受约束高度，`.settings-pages` 是唯一内容滚动区。用量图用 ECharts SVG，系列色在运行时用 `getComputedStyle` 读 `--indigo-9` 等。字号按上文角色表，不要另起一套。

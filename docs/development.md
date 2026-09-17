@@ -94,7 +94,7 @@ e2e/                           Playwright 验收脚本
 
 - 模板源 `apps/desktop/resources/profile/agent-presets/` 只保留核心 `dsh-editor-writing`（永远部署、不可关闭）与 legacy `dsh-editor`（开发者模式诊断）。`dsh-editor-novel` 由 `packages/dsh-editor-novel-kernel/presets/` 提供，`dsh-editor-article` / `dsh-editor-technical` 由 `packages/dsh-editor-writing-presets/presets/` 提供；包经 `dshEditor.presets` 声明，`configureProfile` 在物化模板时把目录复制进 `agent-presets/` 并写入 app-owned marker，仍由 `deployAgentPresets` 通道部署。
 - 作者在设置「插件 → 写作模式」里开关这三个第一方 preset：状态存 `<dshHome>/dsh-plugins.json` 的 `presets` 字段；开关立即部署/删除 `<dshHome>/.agent-presets/<id>`，picker 下次列表即反映，无需重启；进行中的会话不受影响。修改 preset 内容时改包内源目录，不要再放回 resources。
-- 禁止 `pwsh` / `bash` 等终端与直接写入的 Host tool guard 只对四个写作 Preset 与 legacy `dsh-editor` 生效。官方或社区 Agent 模式（开发者模式可选）不得被该守卫拦截。
+- 不要挂全局 tool guard。四个写作 Preset 与 legacy 在 `agent.cordis.yml` 关闭 `tool-pwsh` / `tool-bash`，并由 `dsh-editor-workbench/tools` 对继承来的 `write` / `edit` / 终端做 preset 级 `tools.restrict`。官方或社区 Agent 模式（如标准模式）保留完整工具面。
 
 ### Legacy 退出判据（Phase 3d）
 
@@ -108,7 +108,7 @@ e2e/                           Playwright 验收脚本
 ### 设置弹窗与上游协议
 
 - 设置弹窗由 shell 自建：`src/client/settings*.tsx` 与 `src/client/ui/`，其中 `select.tsx` 包装 Radix Select。
-- 弹窗内不使用原生 `<select>`（Windows Chromium 下其弹层不跟随 color-scheme）；残留原生下拉的 ink 兜底规则在 `styles.ts` 的 `baseStyles` 尾部。
+- 弹窗内不使用原生 `<select>`（Windows Chromium 下其弹层不跟随 color-scheme）；下拉由 Radix Select 承担，不再保留 ink 兜底规则。
 - profile patch（`apps/desktop/resources/profile/cordis.patch.yml`）禁用上游 `ui-settings-general`/`ui-settings-models`，保留 `ui-settings`（提供 settingsScope/settingsSchema 服务）；升级 DSH 时与 root slot 遮蔽一并复查。
 - 通用设置写 `ui-theme`/`locale`/`ui-conversation` namespace；模型页走 `llm.providers`/`settings.mutate`/`credentials.*`/`llm.discoverModels`，与上游同协议。
 

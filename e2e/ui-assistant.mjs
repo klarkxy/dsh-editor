@@ -2510,7 +2510,7 @@ async function main() {
 
   if (!(await cover('independent-model-settings', async () => {
     const { dialog } = await openModelsSettings(page)
-    for (const [label, id] of [['补全模型', FIM_MODEL_ID], ['改写模型', REWRITE_MODEL_ID], ['默认对话模型', MODEL_ID]]) {
+    for (const [label, id] of [['补全模型', FIM_MODEL_ID], ['改写模型', REWRITE_MODEL_ID], ['对话模型', MODEL_ID]]) {
       await chooseCustomSelect(dialog, label, text => text.includes(id))
       await waitFor(async () => !(await dialog.getByRole('combobox', { name: label, exact: true }).isDisabled()), `${label} saved`, 10000)
     }
@@ -2520,7 +2520,7 @@ async function main() {
     await page.reload()
     await page.locator('.shell').waitFor()
     const reloaded = (await openModelsSettings(page)).dialog
-    for (const [label, id] of [['补全模型', FIM_MODEL_ID], ['改写模型', REWRITE_MODEL_ID], ['默认对话模型', MODEL_ID]]) {
+    for (const [label, id] of [['补全模型', FIM_MODEL_ID], ['改写模型', REWRITE_MODEL_ID], ['对话模型', MODEL_ID]]) {
       await reloaded.getByRole('combobox', { name: label, exact: true }).filter({hasText: id}).waitFor()
     }
     await closeShellSettings(page)
@@ -2543,7 +2543,7 @@ async function main() {
   await cover('settings-motion-and-draft', async () => {
     await openShellSettings(page)
     const dialog = page.getByRole('dialog', {name: '设置'})
-    await dialog.getByRole('tab', {name: '写作', exact: true}).click()
+    await dialog.getByRole('tab', {name: '助手', exact: true}).click()
     const authorDraft = dialog.getByRole('textbox', {name: '跨作品作者约定', exact: true})
     await authorDraft.fill('UI_DRAFT_PRESERVED')
     const sample = async tab => {
@@ -2569,7 +2569,7 @@ async function main() {
     if (await dialog.getByRole('tabpanel').count() !== 1) throw new Error('inactive settings tabs remain in the accessibility tree')
     const moved = row => row.opacity < 0.99 || !['none', 'matrix(1, 0, 0, 1, 0, 0)'].includes(row.transform)
     if (!samples.some(moved)) throw new Error('tab switch has no visible entrance motion')
-    await dialog.getByRole('tab', {name: '写作', exact: true}).click()
+    await dialog.getByRole('tab', {name: '助手', exact: true}).click()
     if (await authorDraft.inputValue() !== 'UI_DRAFT_PRESERVED') throw new Error('switching settings tabs lost unsaved author draft')
     await page.emulateMedia({reducedMotion: 'reduce'})
     await delay(200)
@@ -3052,8 +3052,8 @@ async function main() {
 
   await cover('default-chat-only-affects-new-conversations', async () => {
     const {dialog} = await openModelsSettings(page)
-    await chooseCustomSelect(dialog, '默认对话模型', text => text.includes(REWRITE_MODEL_ID))
-    await waitFor(async () => !(await dialog.getByRole('combobox', {name: '默认对话模型', exact: true}).isDisabled()), 'default saved', 10000)
+    await chooseCustomSelect(dialog, '对话模型', text => text.includes(REWRITE_MODEL_ID))
+    await waitFor(async () => !(await dialog.getByRole('combobox', {name: '对话模型', exact: true}).isDisabled()), 'default saved', 10000)
     await closeShellSettings(page)
     await assertStubSelected(page, 'existing chat retains selected model')
     const assistant = await ensureAssistantOpen(page)
