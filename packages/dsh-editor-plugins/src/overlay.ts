@@ -13,6 +13,21 @@ export type PluginState = {
 
 export const MANAGED_PATCH_MARK = 'managed-by: dsh-editor-plugins'
 
+/** Host-wide entries the profile keeps disabled; session presets remount them. */
+export const HOST_LOCKED_ENTRY_IDS = new Set([
+  'editor-novel-kernel',
+  'editor-workbench-tools',
+  'proofread',
+])
+
+export function withoutHostLockedOverrides(overrides: Record<string, boolean>): Record<string, boolean> {
+  const next: Record<string, boolean> = {}
+  for (const [id, enabled] of Object.entries(overrides)) {
+    if (!HOST_LOCKED_ENTRY_IDS.has(id)) next[id] = enabled
+  }
+  return next
+}
+
 export function emptyPluginState(): PluginState {
   return { schema: PLUGIN_STATE_SCHEMA, overrides: {}, presets: {}, installed: [] }
 }
@@ -24,7 +39,7 @@ export function parsePluginState(value: unknown): PluginState | undefined {
   const overrides: Record<string, boolean> = {}
   if (row.overrides && typeof row.overrides === 'object' && !Array.isArray(row.overrides)) {
     for (const [id, enabled] of Object.entries(row.overrides as Record<string, unknown>)) {
-      if (isSafeEntryId(id) && typeof enabled === 'boolean') overrides[id] = enabled
+      if (isSafeEntryId(id) && typeof enabled === 'boolean' && !HOST_LOCKED_ENTRY_IDS.has(id)) overrides[id] = enabled
     }
   }
   const installed: InstalledPlugin[] = []

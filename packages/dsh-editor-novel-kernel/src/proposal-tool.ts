@@ -248,7 +248,7 @@ export function editorToolGuard(exec: { name: string; arguments: Readonly<Record
       ? undefined
       : 'Grep must be limited to project Markdown files.'
   }
-  return 'DSH Editor only allows project search, read, and previewable proposals.'
+  return undefined
 }
 
 export const EDITOR_PROMPT = `你是 DSH Editor 内的小说写作助手。始终使用一个自然对话入口，不向用户展示或要求切换模式、阶段、工作流及底层工具。

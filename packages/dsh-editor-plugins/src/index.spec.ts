@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { catalogFromEditorBlocks } from './core.ts'
-import { handlePluginsRpc, inventoryFromLoader } from './index.ts'
+import { handlePluginsRpc, inventoryFromLoader, persistPluginState } from './index.ts'
 import { MANAGED_PATCH_MARK, renderOverridePatch } from './overlay.ts'
 import type { PluginPaths } from './paths.ts'
 import { profileDirFromPluginModule, resolvePluginPaths } from './paths.ts'
@@ -180,6 +180,29 @@ describe('grouped plugin enable', () => {
     expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
     await expect(readFile(paths.stateFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     expect([...host.entries()].every((entry) => !entry.disabled)).toBe(true)
+  })
+
+  it('refuses to toggle host-locked writing entries', async () => {
+    const paths = await fixture()
+    const host = loader([{ id: 'include:editor-novel-kernel', name: 'dsh-editor-novel-kernel' }])
+    const blocked = await handlePluginsRpc('entries.setEnabled', {
+      entryIds: ['include:editor-novel-kernel'],
+      enabled: true,
+    }, signal(), { loader: host, paths, catalog })
+    expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
+    await expect(readFile(paths.stateFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('strips host-locked overrides when persisting plugin state', async () => {
+    const paths = await fixture()
+    await persistPluginState(paths, {
+      schema: 1,
+      overrides: { zhihu: false, 'editor-novel-kernel': true, proofread: true },
+      presets: {},
+      installed: [],
+    })
+    expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({ zhihu: false })
+    expect(await readFile(paths.patchFile, 'utf8')).toBe(renderOverridePatch({ zhihu: false }))
   })
 
   it('refuses a missing entry without writing overrides', async () => {
@@ -481,7 +504,7 @@ describe('first-party writing preset RPC', () => {
     const paths = await fixture()
     const source = join(paths.profileDir, 'node_modules', 'dsh-editor-novel-kernel', 'presets', 'dsh-editor-novel')
     await mkdir(source, { recursive: true })
-    await writeFile(join(source, 'preset.yml'), 'name: 小说创作\ndescription: 面向长篇小说的写作 Agent，按正文、大纲、人物卡与世界书分册推进。\n')
+    await writeFile(join(source, 'preset.yml'), 'name: 小说创作\ndescription: 面向长篇小说的写作搭档，按正文、大纲、人物卡与世界书分册推进。\n')
     await writeFile(join(source, 'agent.cordis.yml'), '[]\n')
     await writeFile(join(paths.profileDir, 'composition.json'), JSON.stringify({
       id: 'desktop',
@@ -503,7 +526,7 @@ describe('first-party writing preset RPC', () => {
       {
         id: 'dsh-editor-novel',
         title: '小说创作',
-        description: '面向长篇小说的写作 Agent，按正文、大纲、人物卡与世界书分册推进。',
+        description: '面向长篇小说的写作搭档，按正文、大纲、人物卡与世界书分册推进。',
         enabled: true,
         locked: false,
         packageName: 'dsh-editor-novel-kernel',

@@ -16,7 +16,7 @@ import {
 import { githubHeaders, marketplaceSearchUrl, parseGitHubSpec, parseMarketplaceSearch, sanitizeMarketplaceQuery } from './github.ts'
 import { inspectPluginPackage } from './inspect.ts'
 import { defaultExtract, defaultLink, defaultNpmInstall, installGitHubPlugin, stageGitHubPlugin, uninstallUserPlugin } from './install.ts'
-import { emptyPluginState, isOwnedManagedPatch, parsePluginState, renderOverridePatch, type PluginState } from './overlay.ts'
+import { emptyPluginState, HOST_LOCKED_ENTRY_IDS, isOwnedManagedPatch, parsePluginState, renderOverridePatch, withoutHostLockedOverrides, type PluginState } from './overlay.ts'
 import { resolvePluginPaths, type PluginPaths } from './paths.ts'
 import {
   CORE_WRITING_PRESET_ID,
@@ -112,6 +112,7 @@ async function validatePluginPersistence(paths: PluginPaths, io: PersistIo): Pro
 }
 
 export async function persistPluginState(paths: PluginPaths, state: PluginState, io: PersistIo = defaultPersistIo): Promise<void> {
+  state.overrides = withoutHostLockedOverrides(state.overrides)
   await runQueuedSorted([paths.home, paths.stateFile, paths.patchFile], async () => {
     await validatePluginPersistence(paths, io)
     const previousState = await readOptionalText(paths.stateFile, io)
@@ -216,6 +217,7 @@ async function setEntriesEnabled(
     const match = running.find((entry) => entry.id === entryId)
     if (!match) return fail('not-found', '未找到该插件')
     if (isProtectedEntry(entryId, match.options.name, catalog)) return forbidden('系统核心插件不能关闭')
+    if (HOST_LOCKED_ENTRY_IDS.has(patchId)) return forbidden('该入口由写作模式挂载，不能在这里开关')
     matches.push({ entryId, patchId })
   }
   const state = await readPluginState(options.paths)

@@ -33,7 +33,9 @@ describe('editor proposal boundary', () => {
   it('allows only Markdown search/read/propose tools', () => {
     expect(editorToolGuard({ name: 'read', arguments: { file_path: '世界书/设定总汇.md' } })).toBeUndefined()
     expect(editorToolGuard({ name: 'grep', arguments: { pattern: '名字', include: '*.md' } })).toBeUndefined()
-    expect(editorToolGuard({ name: 'write', arguments: { file_path: '正文/001.md' } })).toContain('only allows')
+    expect(editorToolGuard({ name: 'write', arguments: { file_path: '正文/001.md' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'pwsh', arguments: { command: 'Get-ChildItem' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'bash', arguments: { command: 'ls' } })).toBeUndefined()
     expect(editorToolGuard({ name: 'writing_propose', arguments: { kind: 'edit', path: 'notes/a.md', summary: 'x' } })).toBeUndefined()
     expect(editorToolGuard({ name: 'writing_propose', arguments: { kind: 'edit', path: 'notes/a.txt', summary: 'x' } })).toBeUndefined()
     expect(editorToolGuard({ name: 'writing_propose', arguments: { kind: 'split', path: 'notes/a.txt', newPath: 'notes/b.txt', summary: 'x' } })).toBeUndefined()
@@ -71,8 +73,8 @@ describe('editor proposal boundary', () => {
   })
 
   it('rejects unregistered novel_search and project_knowledge tools', () => {
-    expect(editorToolGuard({ name: 'novel_search', arguments: { query: '伏笔' } })).toContain('only allows')
-    expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: ['大纲/总纲.md'] } })).toContain('only allows')
+    expect(editorToolGuard({ name: 'novel_search', arguments: { query: '伏笔' } })).toBeUndefined()
+    expect(editorToolGuard({ name: 'project_knowledge', arguments: { paths: ['大纲/总纲.md'] } })).toBeUndefined()
   })
 
   it('validates split, merge and renames proposals without writing anything', () => {

@@ -11,7 +11,7 @@
 - `editor-workbench`：`/dsh-editor-workbench`（锁定）
 - `editor-workbench-tools`（feature `assistant`）：只注册 `writing_propose`（V2：edit/split 要生成时 Host-read 的 `targetVersion`，merge 要 `targetVersion`+`sourceVersion`，renames 每项 `version`；可选 `basis` 不能代替目标基线；全部操作接受可见 `.md`/`.txt`；create 严格 create-if-absent）与 `author_observe`，外加通用 context hooks（`src/tools.ts`）。不注册任何 `novel_*`。`novel_overview` / `novel_memory_update` 由 novel-kernel 仅在 `legacy` / `full` 模式下调用 Host-only `installNovelWorkbenchTools`；`knowledge-only` 不调用。
 
-注入：`connection`、`sessions`、`workspaceRegistry`、`fs`、`sandboxPolicy`、`webServer`、`tools`。锁定的 Host 主入口挂载不可关闭的 fail-closed tool guard，但只对四个写作 Preset 与 legacy `dsh-editor` 生效；官方 / 社区 Agent 模式不被拦截。根目录只从 live session 推导，复用 `dsh-manuscript/host-api`。
+注入：`connection`、`sessions`、`workspaceRegistry`、`fs`、`sandboxPolicy`、`webServer`。Host 主入口不再挂全局 tool guard。写作 Preset 在 `agent.cordis.yml` 关闭 `tool-pwsh` / `tool-bash`，并由 `dsh-editor-workbench/tools` 对继承来的 `write` / `edit` / 终端工具做 `tools.restrict`。官方 / 社区 Agent 模式保留自身工具面。根目录只从 live session 推导，复用 `dsh-manuscript/host-api`。
 
 ## 契约
 

@@ -1,5 +1,5 @@
 import { copyFile, cp, lstat, mkdir, readdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
-import { restoreUserPlugins } from './user-plugins.js'
+import { restoreUserPlugins, sanitizeHostLockedPluginOverrides } from './user-plugins.js'
 import { existsSync } from 'node:fs'
 import { isAbsolute, join, resolve as resolvePath } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -68,6 +68,7 @@ async function copyTemplateTree(source: string, target: string): Promise<void> {
 
 /** Deploy only the marked profile, staging beside it so DSH home data survives. */
 export async function deployProfile(home: string, template: string, runtimeNodeModules?: string): Promise<string> {
+  await sanitizeHostLockedPluginOverrides(home)
   const profiles = join(home, 'profiles')
   const target = join(profiles, PROFILE_NAME)
   await mkdir(profiles, { recursive: true })

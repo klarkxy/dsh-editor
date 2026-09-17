@@ -4,6 +4,9 @@ import { randomUUID } from 'node:crypto'
 import { dirname, isAbsolute, join } from 'node:path'
 
 const PACKAGE_NAME = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/
+/** Keep in sync with HOST_LOCKED_ENTRY_IDS in dsh-editor-plugins. */
+const HOST_LOCKED_PLUGIN_IDS = new Set(['editor-novel-kernel', 'editor-workbench-tools', 'proofread'])
+const MANAGED_PATCH_MARK = 'managed-by: dsh-editor-plugins'
 const PRESET_ID = /^[A-Za-z0-9._-]+$/
 const PRESET_OWNER_MARKER = '.dsh-editor-owner.json'
 /** 内置写作 preset 全部使用此前缀，插件 preset 不得占用。 */
@@ -127,6 +130,65 @@ async function restorePluginPresets(home: string, profilePath: string, bundles: 
     if (typeof owner?.plugin !== 'string' || bundles.includes(owner.plugin)) continue
     await rm(directory, { recursive: true, force: true })
   }
+}
+
+function renderManagedOverridePatch(overrides: Record<string, boolean>): string {
+  const ids = Object.keys(overrides).sort()
+  if (ids.length === 0) return '[]\n'
+  return `# ${MANAGED_PATCH_MARK}\n${ids.map((id) => `- id: ${id}\n  disabled: ${overrides[id] ? 'false' : 'true'}`).join('\n')}\n`
+}
+
+function parseManagedOverridePatch(text: string): Record<string, boolean> | undefined {
+  const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
+  const trimmed = normalized.trim()
+  if (!trimmed || trimmed === '[]') return {}
+  if (!trimmed.includes(MANAGED_PATCH_MARK)) return undefined
+  const overrides: Record<string, boolean> = {}
+  const pattern = /- id:\s*([A-Za-z0-9._-]+)\r?\n\s+disabled:\s*(true|false)/g
+  for (const match of normalized.matchAll(pattern)) {
+    if (match[1]) overrides[match[1]] = match[2] === 'false'
+  }
+  const comparable = normalized.endsWith('\n') ? normalized : `${normalized}\n`
+  if (comparable !== renderManagedOverridePatch(overrides)) return undefined
+  return overrides
+}
+
+/**
+ * Stale plugin toggles used to re-enable host-wide novel-kernel / workbench
+ * / standalone proofread. Those entries stay disabled so presets can remount
+ * them; leftover `disabled: false` overlays crash DSH boot.
+ */
+export async function sanitizeHostLockedPluginOverrides(home: string): Promise<void> {
+  const statePath = join(home, 'dsh-plugins.json')
+  try {
+    const state = JSON.parse(await readFile(statePath, 'utf8')) as { schema?: unknown; overrides?: unknown }
+    if (state.schema === 1 && state.overrides && typeof state.overrides === 'object' && !Array.isArray(state.overrides)) {
+      const overrides = state.overrides as Record<string, unknown>
+      let changed = false
+      for (const id of HOST_LOCKED_PLUGIN_IDS) {
+        if (Object.prototype.hasOwnProperty.call(overrides, id)) {
+          delete overrides[id]
+          changed = true
+        }
+      }
+      if (changed) await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+    }
+  } catch { /* missing or unreadable state is left alone */ }
+
+  const patchPath = join(home, 'cordis.patch.yml')
+  try {
+    const text = await readFile(patchPath, 'utf8')
+    const parsed = parseManagedOverridePatch(text)
+    if (!parsed) return
+    const next: Record<string, boolean> = {}
+    for (const [id, enabled] of Object.entries(parsed)) {
+      if (!HOST_LOCKED_PLUGIN_IDS.has(id)) next[id] = enabled
+    }
+    const rendered = renderManagedOverridePatch(next)
+    const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
+    const comparable = normalized.endsWith('\n') ? normalized : `${normalized}\n`
+    if (comparable !== rendered) await writeFile(patchPath, rendered, 'utf8')
+  } catch { /* missing overlay is a clean home */ }
 }
 
 export async function restoreUserPlugins(home: string, profilePath: string): Promise<void> {

@@ -6,7 +6,6 @@ import path from 'node:path'
 import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, FsTargetLike, FsWriteIntentLike, ManuscriptHost } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL } from './contracts.ts'
 import { apply, dispatchEditorFiles, inject, mapEditorFilesError, registerWorkbenchRpc } from './index.ts'
-import { hostToolGuard } from './host-guard.ts'
 import { apply as applyTools } from './tools.ts'
 import { defaultProjectsRoot } from './project.ts'
 import { withWorkspaceWrite } from 'dsh-manuscript/host-api'
@@ -58,30 +57,24 @@ function rpcHandler(host: ManuscriptHost) {
 }
 
 describe('private editor workbench Host RPC', () => {
-  it('declares tools inject and mounts the fail-closed Host tool guard once', () => {
-    expect(inject).toEqual(['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer', 'tools'])
+  it('does not mount a global tool guard', () => {
+    expect(inject).toEqual(['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer'])
     const { host } = fixture()
-    const guards: unknown[] = []
+    const guard = vi.fn()
     const effectNames: string[] = []
-    const ctx = {
+    apply({
       ...host,
       effect: (setup: () => unknown, name?: string) => {
         if (name) effectNames.push(name)
         return setup()
       },
-      tools: { guard: (guard: unknown) => { guards.push(guard); return () => undefined } },
-    }
-    apply(ctx as unknown as Context)
-    expect(guards).toEqual([hostToolGuard])
-    expect(effectNames).toContain('dsh-editor-workbench.host-guard')
-    const writing = { agent: { session: { header: { agentPreset: 'dsh-editor-writing' } } } }
-    expect(hostToolGuard({ name: 'write', arguments: {}, ...writing })).toBeDefined()
-    expect(hostToolGuard({ name: 'pwsh', arguments: {}, ...writing })).toBeDefined()
-    expect(hostToolGuard({ name: 'writing_propose', arguments: {}, ...writing })).toBeUndefined()
-    expect(hostToolGuard({ name: 'pwsh', arguments: {}, agent: { session: { header: { agentPreset: 'standard' } } } })).toBeUndefined()
+      tools: { guard },
+    } as unknown as Context)
+    expect(guard).not.toHaveBeenCalled()
+    expect(effectNames).not.toContain('dsh-editor-workbench.host-guard')
   })
 
-  it('does not remount the Host guard from the tools plugin', () => {
+  it('does not remount a tool guard from the tools plugin', () => {
     const guard = vi.fn(() => () => undefined)
     const register = vi.fn()
     applyTools({
@@ -91,6 +84,22 @@ describe('private editor workbench Host RPC', () => {
     } as unknown as Context)
     expect(guard).not.toHaveBeenCalled()
     expect(register.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual(['writing_propose', 'author_observe'])
+  })
+
+  it('hides inherited host coding tools from writing presets without a guard', () => {
+    const denied: string[][] = []
+    applyTools({
+      effect: (setup: () => unknown) => setup(),
+      on: () => undefined,
+      tools: {
+        register: vi.fn(),
+        restrict: (filter: { deny: string[] }) => {
+          denied.push(filter.deny)
+          return () => undefined
+        },
+      },
+    } as unknown as Context)
+    expect(denied).toEqual([['write'], ['edit'], ['pwsh'], ['bash'], ['shell'], ['str_replace'], ['NotebookEdit']])
   })
 
   it('registers the workbench channel on the Host web server', () => {

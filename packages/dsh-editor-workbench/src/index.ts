@@ -1,6 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { withWorkspaceWrite, FileOpError, asHost, badRequest, mapHostError, registerHostRpc, resolveWorkspaceAccess, ProposalError, WritingProposalError } from 'dsh-manuscript/host-api'
-import { hostToolGuard } from './host-guard.ts'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
 import { BinaryError } from './binary.ts'
 import { ImportError } from './import.ts'
@@ -16,7 +15,7 @@ import { ProposalOpsError } from './proposal-ops.ts'
 import { getWorkbenchHandler, str, type WorkbenchRequestContext } from './rpc/index.ts'
 
 export const name = 'dsh-editor-workbench'
-export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer', 'tools'] as const
+export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'webServer'] as const
 
 type Payload = Record<string, unknown>
 
@@ -122,11 +121,8 @@ export function registerWorkbenchRpc(ctx: Context): () => void {
   })
 }
 
-type WorkbenchTools = { guard: (guard: typeof hostToolGuard) => () => void }
-
 export function apply(ctx: Context): void {
   ctx.effect(() => registerWorkbenchRpc(ctx), 'dsh-editor-workbench.rpc')
-  ctx.effect(() => (ctx as Context & { tools: WorkbenchTools }).tools.guard(hostToolGuard), 'dsh-editor-workbench.host-guard')
 }
 
 export { createAuthorObserveTool } from './observe-tool.ts'

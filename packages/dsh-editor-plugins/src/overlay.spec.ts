@@ -47,4 +47,23 @@ describe('plugin overlay persistence', () => {
     expect(parsePluginState({ schema: 1 })?.presets).toEqual({})
     expect(emptyPluginState().presets).toEqual({})
   })
+
+  it('drops leftover host-locked writing entry overrides', () => {
+    expect(parsePluginState({
+      schema: 1,
+      overrides: {
+        zhihu: false,
+        'editor-novel-kernel': true,
+        'editor-workbench-tools': true,
+        proofread: true,
+        'editor-proofread-panel': true,
+      },
+      installed: [],
+    })).toEqual({
+      schema: 1,
+      overrides: { zhihu: false, 'editor-proofread-panel': true },
+      presets: {},
+      installed: [],
+    })
+  })
 })
