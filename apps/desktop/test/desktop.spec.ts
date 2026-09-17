@@ -249,6 +249,9 @@ describe('desktop branding assets', () => {
     // cached for the renderer to pull once its UI is up.
     expect(main).toContain("'dsh-window:startup-update'")
     expect(main).toContain('checkLatest(app.getVersion())')
+    expect(main).toContain('timeoutMs: 120_000')
+    expect(main).toContain("join(process.env.DSH_HOME.trim(), 'electron-user-data')")
+    expect(main).toContain("app.setName('dsh-editor-dev')")
   })
 })
 

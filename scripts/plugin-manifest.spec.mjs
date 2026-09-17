@@ -27,6 +27,11 @@ describe('desktop dev prepare', () => {
     const dev = readFileSync(resolve(root, 'scripts/dev.mjs'), 'utf8')
     expect(dev).toContain('reusing existing package builds')
     expect(dev).toContain('DSH_DEV_FORCE_BUILD')
+    expect(dev).toContain('killLeftoverDevProcesses')
+    expect(dev).toContain('waitForFirstCompile')
+    expect(dev).toContain('DSH_DESKTOP_USER_DATA_DIR')
+    expect(dev).toContain('FIRST_COMPILE_MS')
+    expect(dev).toContain("resolve(root, 'packages', name)")
   })
 })
 

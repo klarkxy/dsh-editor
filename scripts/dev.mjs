@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
 import { desktopComposition } from './desktop-compositions.mjs'
+import { firstCompilePattern, isLeftoverDevCommand } from './dev-process.mjs'
 import { clientPackages, compositionInstallNames, loadPluginManifests } from './plugin-manifest.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -14,7 +15,10 @@ const template = resolve(root, '.dev', 'desktop-profile-template')
 const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime')
 const prepareDesktopDev = resolve(root, 'scripts', 'prepare-desktop-dev.mjs')
 const electronCli = resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'cli.js')
+const tsdownCli = resolve(root, 'node_modules', 'tsdown', 'dist', 'run.mjs')
+const electronUserData = resolve(devHome, 'electron-user-data')
 const win = process.platform === 'win32'
+const FIRST_COMPILE_MS = 90_000
 
 if (!pnpmCli || !existsSync(pnpmCli)) {
   console.error('dev: start this command through pnpm: pnpm run dev')
@@ -40,16 +44,17 @@ const env = {
   DSH_DESKTOP_NODE_PATH: process.execPath,
   DSH_DESKTOP_CLI_PATH: resolve(devDshRuntime, 'lib', 'bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: template,
+  DSH_DESKTOP_USER_DATA_DIR: process.env.DSH_DESKTOP_USER_DATA_DIR || electronUserData,
 }
 // Some terminals (VS Code and other Electron-based tools) export
 // ELECTRON_RUN_AS_NODE=1; inherited, it turns the Electron binary into plain
 // Node and the desktop main fails to boot.
 delete env.ELECTRON_RUN_AS_NODE
 
-function spawnNode(script, args, cwd = root) {
+function spawnNode(script, args, cwd = root, stdio = 'inherit') {
   return spawn(process.execPath, [script, ...args], {
     cwd,
-    stdio: 'inherit',
+    stdio,
     windowsHide: false,
     env,
   })
@@ -65,15 +70,86 @@ function runNode(script, args, cwd = root) {
   })
 }
 
-function killTree(child) {
-  if (!child?.pid || child.exitCode != null) return
-  spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
-    windowsHide: true,
-    stdio: 'ignore',
+function runTaskkill(pid) {
+  return new Promise((resolvePromise) => {
+    const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    const done = () => resolvePromise()
+    killer.once('exit', done)
+    killer.once('error', done)
+    setTimeout(done, 8_000)
   })
 }
 
-for (const path of [prepareDesktopDev, electronCli]) {
+function killTree(child) {
+  if (!child?.pid) return Promise.resolve()
+  return runTaskkill(child.pid)
+}
+
+function listCandidateProcesses() {
+  return new Promise((resolvePromise) => {
+    const child = spawn('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      "Get-CimInstance Win32_Process -Filter \"Name = 'node.exe' OR Name = 'electron.exe'\" | Where-Object { $_.CommandLine } | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress",
+    ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    let out = ''
+    child.stdout.on('data', (chunk) => { out += chunk })
+    child.on('error', () => resolvePromise([]))
+    child.on('exit', () => {
+      try {
+        const parsed = JSON.parse(out || '[]')
+        const rows = Array.isArray(parsed) ? parsed : [parsed]
+        resolvePromise(rows.map((row) => ({
+          pid: Number(row.ProcessId),
+          command: String(row.CommandLine ?? ''),
+        })).filter((row) => Number.isInteger(row.pid) && row.pid > 0))
+      } catch {
+        resolvePromise([])
+      }
+    })
+  })
+}
+
+async function killLeftoverDevProcesses() {
+  const rows = await listCandidateProcesses()
+  const pids = [...new Set(rows
+    .filter((row) => row.pid !== process.pid && isLeftoverDevCommand(row.command, root))
+    .map((row) => row.pid))]
+  if (!pids.length) return
+  console.log(`dev: stopping leftover watcher/electron/dsh processes (${pids.length})`)
+  await Promise.all(pids.map(runTaskkill))
+}
+
+function waitForFirstCompile(child, packageName, wrapClient) {
+  const pattern = firstCompilePattern(packageName, wrapClient)
+  return new Promise((resolvePromise, reject) => {
+    let settled = false
+    let buffered = ''
+    const inspect = (chunk) => {
+      const text = String(chunk)
+      process.stdout.write(text)
+      buffered += text
+      if (buffered.length > 8_000) buffered = buffered.slice(-4_000)
+      if (!settled && pattern.test(buffered)) {
+        settled = true
+        resolvePromise()
+      }
+    }
+    child.stdout?.on('data', inspect)
+    child.stderr?.on('data', inspect)
+    child.once('error', (error) => {
+      if (!settled) reject(error)
+    })
+    child.once('exit', (code) => {
+      if (!settled && !stopping) reject(new Error(`${packageName} watcher exited ${code ?? 1} before the first compile`))
+    })
+  })
+}
+
+for (const path of [prepareDesktopDev, electronCli, tsdownCli]) {
   if (!existsSync(path)) {
     console.error(`dev: required desktop input is missing: ${path}`)
     process.exit(1)
@@ -103,6 +179,7 @@ const desktopReady = existsSync(desktopMain)
   && newestMtime(resolve(root, 'apps', 'desktop', 'src')) <= statSync(desktopMain).mtimeMs
 
 console.log(`dev: DSH ${dsh.version}, isolated home ${devHome}`)
+await killLeftoverDevProcesses()
 if (forceBuild || !pluginsReady || !desktopReady) {
   console.log('dev: building the desktop profile plugins')
   await runNode(pnpmCli, ['-r', 'build'])
@@ -117,36 +194,61 @@ if (process.env.DSH_DESKTOP_PREPARE_ONLY === '1') {
   process.exit(0)
 }
 
-console.log('dev: starting plugin watchers and Electron')
-const wrapClients = new Set(clientPackages(loadPluginManifests(root)))
-const children = compositionInstallNames(composition).map(name => spawnNode(pnpmCli, [
-  '--filter', name, 'exec', 'tsdown', '--watch', '--no-clean',
-  ...(wrapClients.has(name) ? ['--on-success', `node ../../scripts/wrap-client.mjs ${name}`] : []),
-]))
-const electron = spawnNode(electronCli, [resolve(root, 'apps', 'desktop', 'dist', 'main.js')])
-children.push(electron)
-console.log('dev: Electron launched; keep this terminal open. The window may take a few seconds.')
-
 let stopping = false
-function shutdown(code = 0) {
+const children = []
+let electron
+
+async function shutdown(code = 0) {
   if (stopping) return
   stopping = true
-  for (const child of children) killTree(child)
+  await Promise.all(children.map(killTree))
+  await killLeftoverDevProcesses()
   process.exit(code)
 }
 
-electron.on('exit', (code) => shutdown(code ?? 0))
-for (const child of children) {
+function bindChild(child, role) {
+  children.push(child)
   child.on('error', (error) => {
     console.error(error)
-    shutdown(1)
+    void shutdown(1)
   })
   child.on('exit', (code) => {
-    if (!stopping && child !== electron) {
-      console.error(`dev: watcher exited ${code ?? 1}; stopping the desktop process`)
-      shutdown(code || 1)
+    if (stopping) return
+    if (role === 'electron') {
+      void shutdown(code ?? 0)
+      return
     }
+    console.error(`dev: watcher exited ${code ?? 1}; stopping the desktop process`)
+    void shutdown(code || 1)
   })
 }
-process.on('SIGINT', () => shutdown(0))
-process.on('SIGTERM', () => shutdown(0))
+
+process.on('SIGINT', () => { void shutdown(0) })
+process.on('SIGTERM', () => { void shutdown(0) })
+
+console.log('dev: starting plugin watchers')
+const wrapClients = new Set(clientPackages(loadPluginManifests(root)))
+const watchers = compositionInstallNames(composition).map((name) => {
+  const wrapClient = wrapClients.has(name)
+  const child = spawnNode(tsdownCli, [
+    '--watch', '--no-clean',
+    ...(wrapClient ? ['--on-success', `node ../../scripts/wrap-client.mjs ${name}`] : []),
+  ], resolve(root, 'packages', name), ['ignore', 'pipe', 'pipe'])
+  bindChild(child, 'watcher')
+  return { name, child, wrapClient }
+})
+
+try {
+  await Promise.race([
+    Promise.all(watchers.map((row) => waitForFirstCompile(row.child, row.name, row.wrapClient))),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`plugin watchers did not finish the first compile within ${FIRST_COMPILE_MS}ms`)), FIRST_COMPILE_MS)),
+  ])
+} catch (error) {
+  console.error(`dev: ${error instanceof Error ? error.message : String(error)}`)
+  await shutdown(1)
+}
+
+console.log('dev: starting Electron')
+electron = spawnNode(electronCli, [resolve(root, 'apps', 'desktop', 'dist', 'main.js')])
+bindChild(electron, 'electron')
+console.log('dev: Electron launched; keep this terminal open. The window may take a few seconds.')

@@ -14,10 +14,12 @@ import { claimPrimaryInstance, createDesktopLifecycle, type EditorWindow, type P
 
 const desktopRoot = fileURLToPath(new URL('../', import.meta.url))
 
-const isolatedUserData = process.env.DSH_DESKTOP_USER_DATA_DIR
-if (isolatedUserData) {
-  app.setPath('userData', isolatedUserData)
-}
+const isolatedUserData = process.env.DSH_DESKTOP_USER_DATA_DIR?.trim()
+  || (!app.isPackaged && process.env.DSH_HOME?.trim()
+    ? join(process.env.DSH_HOME.trim(), 'electron-user-data')
+    : '')
+if (isolatedUserData) app.setPath('userData', isolatedUserData)
+if (!app.isPackaged) app.setName('dsh-editor-dev')
 
 async function resolveRuntime(home: string): Promise<{ nodePath: string; cliPath: string; template: string }> {
   const cached = app.isPackaged ? await materializePackagedRuntime(home, process.resourcesPath) : undefined
@@ -91,7 +93,7 @@ const lifecycle = createDesktopLifecycle({
   loadingHtml,
   getHomePath: () => app.getPath('home'),
   env: process.env,
-  timeoutMs: app.isPackaged ? 120_000 : 20_000,
+  timeoutMs: 120_000,
 })
 
 const isPrimary = claimPrimaryInstance(app as unknown as PrimaryApp, lifecycle)

@@ -74,10 +74,11 @@ e2e/                           Playwright 验收脚本
 1. 验证 Windows x64、Node 和 DSH 精确版本；
 2. 将 DSH 依赖闭包物化到 `.dev/desktop-dsh-runtime`；
 3. 按 `scripts/plugin-manifest.mjs` 解析当前 recipe（canonical `desktop.json`；`DSH_EDITOR_COMPOSITION` 接受 `desktop` / `basic` / `smart` / `full`，默认 `desktop`），把选中的包与被依赖的库（`libraries`，如 workspace-kit）以目录联接放到 `.dev/desktop-profile-template/node_modules`（`DSH_EDITOR_COPY_PACKAGES=1` 时改为拷贝，且不带 `.map`）；
-4. 使用 `.dev/desktop-home`；
-5. 启动该组合的插件 watcher 和 Electron；
-6. Electron 部署带 owner marker 的 `profiles/dsh-editor`；
-7. 以 `127.0.0.1:0 --no-open` 启动 DSH 并加载返回的同源 URL。
+4. 使用 `.dev/desktop-home`，并把 Electron userData 放到该 home 下的 `electron-user-data`，避免和本机其他未命名 Electron 抢单实例锁；
+5. 清掉上次残留的 tsdown watcher / Electron / DSH，再启动当前组合的插件 watcher；
+6. 等全部 watcher 完成首轮编译（wrap-client 包等到 `wrapped`）后再启动 Electron，避免 DSH 读到正在改写的 `lib/`；
+7. Electron 部署带 owner marker 的 `profiles/dsh-editor`；
+8. 以 `127.0.0.1:0 --no-open` 启动 DSH 并加载返回的同源 URL。关闭时会等 `taskkill` 结束，避免 watcher 变成孤儿。
 
 关闭 Electron 会停止 watcher 和 DSH。不要把 `.dev` 复制、分享或提交；其中可能包含隔离 profile 的本地会话状态。
 
