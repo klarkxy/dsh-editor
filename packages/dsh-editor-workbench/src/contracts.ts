@@ -71,7 +71,7 @@ export type {
 } from './contracts/project.ts'
 
 export type { ImportProbeResponse } from './contracts/import.ts'
-export type { RestoreProbeResponse, SnapshotResponse } from './contracts/snapshot.ts'
+export type { RestoreProbeResponse, SnapshotChange, SnapshotResponse } from './contracts/snapshot.ts'
 export type { ArchiveListResponse, ArchiveResponse } from './contracts/archive.ts'
 
 export {

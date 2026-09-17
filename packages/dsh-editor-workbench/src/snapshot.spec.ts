@@ -86,11 +86,41 @@ describe('whole-work text snapshots', () => {
     expect(first).toMatchObject({ label: '开篇', files: 2 })
     expect(await fs.readFile(path.join(source, SNAPSHOT_DIRECTORY, first.snapshotId, 'files', '正文', '001.md'), 'utf8')).toBe('# first')
     await expect(fs.stat(path.join(source, SNAPSHOT_DIRECTORY, first.snapshotId, 'files', '.dsh-editor', 'do-not-copy.txt'))).rejects.toMatchObject({ code: 'ENOENT' })
-    expect(await listSnapshots(access(source))).toMatchObject([{ snapshotId: first.snapshotId, label: '开篇', files: 2 }])
+    expect(first.hash).toMatch(/^[0-9a-f]{7}$/)
+    expect(first.changes).toEqual(expect.arrayContaining([
+      { path: '正文/001.md', kind: 'added' },
+      { path: 'notes.txt', kind: 'added' },
+    ]))
+    expect(await listSnapshots(access(source))).toMatchObject([{ snapshotId: first.snapshotId, hash: first.hash, label: '开篇', files: 2 }])
     const second = await createSnapshot(access(source))
     expect(second.files).toBe(2)
+    expect(second.hash).toMatch(/^[0-9a-f]{7}$/)
+    expect(second.changes).toEqual([])
     expect(await fs.readFile(path.join(source, '正文', '001.md'), 'utf8')).toBe(before)
     await expect(createSnapshot(access(source, 'read-only'))).rejects.toMatchObject({ code: 'READ_ONLY' })
+  })
+
+  it('lists consecutive snapshots with a short hash and file-level changes', async () => {
+    const source = await project('history')
+    await fs.mkdir(path.join(source, '正文'), { recursive: true })
+    await fs.writeFile(path.join(source, '正文', '001.md'), '# first')
+    await fs.writeFile(path.join(source, 'keep.md'), 'keep')
+    const first = await createSnapshot(access(source), '开篇')
+    await fs.writeFile(path.join(source, '正文', '001.md'), '# revised')
+    await fs.writeFile(path.join(source, '正文', '002.md'), '# second')
+    await fs.unlink(path.join(source, 'keep.md'))
+    const second = await createSnapshot(access(source), '修订')
+    expect(second.changes).toHaveLength(3)
+    expect(second.changes).toEqual(expect.arrayContaining([
+      { path: 'keep.md', kind: 'removed' },
+      { path: '正文/001.md', kind: 'modified' },
+      { path: '正文/002.md', kind: 'added' },
+    ]))
+    const listed = await listSnapshots(access(source))
+    expect(listed.map((item) => item.snapshotId)).toEqual([second.snapshotId, first.snapshotId])
+    expect(listed[0]).toMatchObject({ hash: second.hash, label: '修订' })
+    expect(listed[0]!.changes).toEqual(second.changes)
+    expect(listed[1]!.changes.every((change) => change.kind === 'added')).toBe(true)
   })
 
   it('rejects a tampered payload before writing the target', async () => {

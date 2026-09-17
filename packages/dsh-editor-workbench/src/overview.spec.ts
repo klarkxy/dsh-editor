@@ -155,6 +155,16 @@ describe('project overview', () => {
     expect(overview.totals.chars).toBe(14)
   })
 
+  it('excludes AGENTS.md and other assistant files from counts and the chapter list', async () => {
+    await write('AGENTS.md', '# 规则\n\n不应计入作者字数的辅助说明')
+    await write('CLAUDE.md', '# 其他规则\n\n同样隐藏')
+    await write('正文/001.md', '# 第一章\n\n正文一')
+    const overview = await readProjectOverview(access())
+    expect(overview.chapters.map((chapter) => chapter.path)).toEqual(['正文/001.md'])
+    expect(overview.totals).toEqual({ chapters: 1, chars: 7 })
+    expect(overview.chapters.some((chapter) => /AGENTS|CLAUDE|GEMINI|COPILOT/i.test(chapter.path))).toBe(false)
+  })
+
   it('allows overview reads in a read-only workspace', async () => {
     await write('正文/001.md', '# 第一章\n\n正文')
     await expect(readProjectOverview(access('read-only'))).resolves.toMatchObject({ totals: { chapters: 1 } })

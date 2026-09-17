@@ -41,6 +41,7 @@ export {
 } from './move.ts'
 export {
   GENERATED_DIRECTORIES,
+  isAuxiliaryAuthorFile,
   isGeneratedPath,
   isHiddenPath,
   MAX_FILES,

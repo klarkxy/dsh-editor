@@ -9,7 +9,7 @@ import {
 import { CHAPTER_STATE_KEYS, parseChapterMeta, stripChapterFrontmatter } from './chapter-meta.ts'
 import type { ChapterSummary, OutlineSummary, ProjectOverview } from './contracts.ts'
 import type { OverviewAccess } from './kit/access.ts'
-import { isGeneratedPath, isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
+import { isAuxiliaryAuthorFile, isGeneratedPath, isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
 
 export type { OverviewAccess } from './kit/access.ts'
 
@@ -50,7 +50,7 @@ function pathCompare(left: string, right: string): number {
 }
 
 function excludedDocumentPath(relative: string): boolean {
-  return isHiddenPath(relative) || isGeneratedPath(relative)
+  return isHiddenPath(relative) || isGeneratedPath(relative) || isAuxiliaryAuthorFile(relative)
 }
 
 function titleAndExcerpt(relative: string, text: string): { title: string; excerpt: string; empty: boolean; chars: number } {

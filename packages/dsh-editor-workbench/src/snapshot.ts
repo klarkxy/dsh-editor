@@ -42,13 +42,57 @@ type RestoreReceipt = {
   files: SnapshotFile[]
 }
 
+export type SnapshotChange = {
+  path: string
+  kind: 'added' | 'removed' | 'modified'
+}
+
 export type SnapshotView = {
   snapshotId: string
+  hash: string
   label?: string
   createdAt: string
   files: number
   bytes: number
   excluded: number
+  changes: SnapshotChange[]
+}
+
+export function snapshotShortHash(snapshotId: string): string {
+  return snapshotId.replace(/-/g, '').slice(0, 7)
+}
+
+export function diffSnapshotFiles(
+  current: readonly { path: string; sha256: string }[],
+  previous?: readonly { path: string; sha256: string }[],
+): SnapshotChange[] {
+  if (!previous) return current.map((file) => ({ path: file.path, kind: 'added' }))
+  const before = new Map(previous.map((file) => [file.path, file.sha256]))
+  const seen = new Set<string>()
+  const changes: SnapshotChange[] = []
+  for (const file of current) {
+    seen.add(file.path)
+    const hash = before.get(file.path)
+    if (hash === undefined) changes.push({ path: file.path, kind: 'added' })
+    else if (hash !== file.sha256) changes.push({ path: file.path, kind: 'modified' })
+  }
+  for (const file of previous) {
+    if (!seen.has(file.path)) changes.push({ path: file.path, kind: 'removed' })
+  }
+  return changes.sort((left, right) => left.path.localeCompare(right.path, 'en') || left.kind.localeCompare(right.kind, 'en'))
+}
+
+function toSnapshotView(snapshot: LoadedSnapshot, previous?: LoadedSnapshot): SnapshotView {
+  return {
+    snapshotId: snapshot.snapshotId,
+    hash: snapshotShortHash(snapshot.snapshotId),
+    ...(snapshot.label === undefined ? {} : { label: snapshot.label }),
+    createdAt: snapshot.createdAt,
+    files: snapshot.files.length,
+    bytes: snapshot.totalBytes,
+    excluded: snapshot.excluded.length,
+    changes: diffSnapshotFiles(snapshot.files, previous?.files),
+  }
 }
 
 export type RestoreProbe = {
@@ -436,22 +480,14 @@ function summary(
   }
 }
 
-export async function listSnapshots(source: SnapshotAccess): Promise<SnapshotView[]> {
+async function loadPublishedSnapshots(source: SnapshotAccess): Promise<LoadedSnapshot[]> {
   try {
     const entries = await listDirStrict(source.files, SNAPSHOT_DIRECTORY)
-    const snapshots: SnapshotView[] = []
+    const snapshots: LoadedSnapshot[] = []
     for (const entry of entries) {
       if (entry.type !== 'directory' || !UUID_V4.test(entry.name)) continue
       try {
-        const snapshot = await loadSnapshotAt(source, snapshotRelative(entry.name), entry.name, false)
-        snapshots.push({
-          snapshotId: snapshot.snapshotId,
-          ...(snapshot.label === undefined ? {} : { label: snapshot.label }),
-          createdAt: snapshot.createdAt,
-          files: snapshot.files.length,
-          bytes: snapshot.totalBytes,
-          excluded: snapshot.excluded.length,
-        })
+        snapshots.push(await loadSnapshotAt(source, snapshotRelative(entry.name), entry.name, false))
       } catch {
         // Corrupt and incomplete directories are never advertised as snapshots.
       }
@@ -461,6 +497,11 @@ export async function listSnapshots(source: SnapshotAccess): Promise<SnapshotVie
     if (error instanceof FileOpError && error.code === 'NOT_FOUND') return []
     throw error
   }
+}
+
+export async function listSnapshots(source: SnapshotAccess): Promise<SnapshotView[]> {
+  const snapshots = await loadPublishedSnapshots(source)
+  return snapshots.map((snapshot, index) => toSnapshotView(snapshot, snapshots[index + 1]))
 }
 
 export async function createSnapshot(
@@ -484,6 +525,7 @@ async function publishSnapshot(
   second: Awaited<ReturnType<typeof scan>>,
 ): Promise<SnapshotView> {
   if (!second.files.length) throw new SnapshotError('no eligible novel text to snapshot', 'BLOCKED')
+  const previous = (await loadPublishedSnapshots(source))[0]
   const snapshotId = randomUUID()
   const createdAt = new Date().toISOString()
   const stage = `${SNAPSHOT_DIRECTORY}/.creating-${snapshotId}`
@@ -514,14 +556,7 @@ async function publishSnapshot(
     path.join(source.path, ...stage.split('/')),
     path.join(source.path, ...published.split('/')),
   )
-  return {
-    snapshotId,
-    ...(normalizedLabel ? { label: normalizedLabel } : {}),
-    createdAt,
-    files: files.length,
-    bytes: manifest.totalBytes,
-    excluded: second.excluded.length,
-  }
+  return toSnapshotView({ ...manifest, payload: [] }, previous)
 }
 
 /**
