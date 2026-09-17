@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
 import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_KEY, normalizeAuthorMemory } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY } from './completion-preference.ts'
-import { DEFAULT_WRITING_PREFERENCES, decodeWritingPreferences, migrateLegacyWritingPreferences, writingPreferences, type WritingPreferences } from './writing-settings.tsx'
+import { DEFAULT_WRITING_PREFERENCES, decodeWritingPreferences, migrateLegacyWritingPreferences, normalizeWritingEffort, normalizeWritingModelRoute, writingPreferences, type WritingPreferences } from './writing-settings.tsx'
 
 function scopeWith(snapshot: SettingsScopeSnapshot<WritingPreferences>, write?: (field: string, value: unknown) => Promise<void>): SettingsScope<WritingPreferences> {
   return {
@@ -74,6 +74,25 @@ describe('writing preference migration', () => {
     })
     expect(result).toEqual({ failed: ['completion'] })
     expect(removeItem).not.toHaveBeenCalled()
+  })
+})
+
+describe('writing model route effort', () => {
+  it('keeps a public reasoning token on a configured route', () => {
+    expect(normalizeWritingEffort('none')).toBe('off')
+    expect(normalizeWritingEffort('off')).toBe('off')
+    expect(normalizeWritingEffort('xhigh')).toBe('xhigh')
+    expect(normalizeWritingEffort('ultra')).toBeUndefined()
+    expect(normalizeWritingModelRoute({ provider: 'custom', model: 'MiniMax-M3', reasoningEffort: 'high' })).toEqual({
+      provider: 'custom',
+      model: 'MiniMax-M3',
+      reasoningEffort: 'high',
+    })
+    expect(normalizeWritingModelRoute({ provider: 'custom', model: 'MiniMax-M3' })).toEqual({
+      provider: 'custom',
+      model: 'MiniMax-M3',
+    })
+    expect(normalizeWritingModelRoute({ provider: '', model: '', reasoningEffort: 'high' })).toBeUndefined()
   })
 })
 

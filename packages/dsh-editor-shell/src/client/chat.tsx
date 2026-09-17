@@ -67,7 +67,20 @@ import { isObservableSource, useObservable } from './components.tsx'
 import { Markdown } from './markdown.tsx'
 import { ConfirmDialog, ConversationPresetPicker, TextPromptDialog } from './dialogs.tsx'
 import { Select } from './select.tsx'
-import { ActivityDots, ActivityText, SuccessMark, Menu, MenuContent, MenuItem, MenuTrigger } from './ui/index.ts'
+import {
+  Badge,
+  Box,
+  Button,
+  Callout,
+  Card,
+  DropdownMenu,
+  Flex,
+  IconButton,
+  ScrollArea,
+  Text,
+  TextArea,
+} from '@radix-ui/themes'
+import { ActivityDots, SuccessMark } from './ui/index.ts'
 import type { WritingModelRoute } from '../writing-settings.tsx'
 import { discardCreatedChatModelError, rememberCreatedChatModelError, takeCreatedChatModelError } from './ui-workspace.ts'
 import { t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
@@ -77,7 +90,7 @@ import {
   shouldSubmitComposer,
   type ShellContext,
 } from './shared.ts'
-import { StopIcon } from './icons.tsx'
+import { PlusIcon, StopIcon } from './icons.tsx'
 import {
   bindOfficialConversation,
   conversationChatSource,
@@ -196,6 +209,13 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const [dismissedMigrations, setDismissedMigrations] = useState<ReadonlySet<string>>(new Set())
   const historyRef = useRef<HTMLDivElement | null>(null)
   const bottomPinnedRef = useRef(true)
+  const composerRef = useRef<HTMLTextAreaElement | null>(null)
+  const growComposer = (el: HTMLTextAreaElement | null) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 64), 132)}px`
+  }
+  useLayoutEffect(() => { growComposer(composerRef.current) }, [draft])
   useEffect(() => {
     const error = takeCreatedChatModelError(session.sessionId)
     if (error) setNote(error)
@@ -462,7 +482,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     }
     const route = preferred ?? resolveNewConversationModel({ groups })
     if (!route) return
-    const selected = await selectModel(ctx.remote.session, sessionId, route.provider, route.model)
+    const selected = await selectModel(ctx.remote.session, sessionId, route.provider, route.model, route.reasoningEffort)
     if (!selected.ok) rememberCreatedChatModelError(sessionId, t('chat.defaultModelFailed'))
     else discardCreatedChatModelError(sessionId)
   }
@@ -677,289 +697,349 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       {...(hidden ? { inert: '' } : {})}
       data-chat-face={conversationFace(ctx) ? 'official' : 'missing'}
       data-chat-nodes={String(transcript.nodes.length)}>
-      <header className="chat-header">
-        <div className="conversation-select">
-          <Select
-            value={session.sessionId}
-            aria-label={t('chat.switchConversation')}
-            title={currentConversationTitle}
-            selectedLabel={currentConversationTitle}
-            options={conversations.map((item) => ({ value: item.id, label: item.title }))}
-            onChange={(next) => void switchConversation(next)} />
-        </div>
-        <div className="chat-header-actions">
-          {connected ? null : <span className="chat-status" role="status">
-            <ActivityDots />
-            {t('chat.reconnecting')}
-          </span>}
-          <button
-            ref={newConversationButton}
-            className="icon-button"
-            type="button"
-            title={t('chat.newConversation')}
-            aria-label={t('chat.newConversation')}
-            disabled={conversationBusy || !workspaceId || presetPicker.kind !== 'closed'}
-            onClick={() => { void createConversation() }}>
-            ＋
-          </button>
-          <div className="conversation-menu">
-            <Menu
-              open={conversationMenuOpen}
-              onOpenChange={(open: boolean) => { if (open) conversationMenuYields.current = false; setConversationMenuOpen(open) }}>
-              <MenuTrigger
-                ref={conversationMenuTrigger}
-                className="icon-button"
-                title={t('chat.conversationActions')}
-                aria-label={t('chat.conversationActions')}
-                disabled={conversationBusy}>
-                ⋯
-              </MenuTrigger>
-              <MenuContent
-                className="conversation-menu-pop"
-                align="end"
-                aria-label={t('chat.conversationActions')}
-                onCloseAutoFocus={(event: Event) => {
-                  if (conversationMenuYields.current) event.preventDefault()
-                }}>
-                <MenuItem
-                  disabled={conversationBusy}
-                  onSelect={() => { conversationMenuYields.current = true; setRenamingConversation(true) }}>
-                  {t('chat.renameConversation')}
-                </MenuItem>
-                <MenuItem
-                  disabled={conversationBusy || currentIsArchived || !canMutateConversation}
-                  title={!canMutateConversation ? t('chat.archiveNeedAnother') : undefined}
-                  onSelect={() => { void archiveConversation(session.sessionId) }}>
-                  {t('common.archive')}
-                </MenuItem>
-                <MenuItem
-                  disabled={conversationBusy || !currentIsArchived}
-                  onSelect={() => { void restoreConversation(session.sessionId) }}>
-                  {t('common.restore')}
-                </MenuItem>
-              </MenuContent>
-            </Menu>
-          </div>
-        </div>
-      </header>
-      {archivedConversations.length ? <details className="archived-conversations">
-        <summary>
-          {t('chat.archivedConversations')}
-        </summary>
-        <ul>
-          {archivedConversations.map((item) => <li key={item.id}>
-            <span>
-              {item.title}
-            </span>
-            <button
+      <Flex asChild align="center" gap="2" px="3" py="2" justify="between" width="100%" minWidth="0">
+        <header className="chat-header">
+          <Box className="conversation-select" flexGrow="1" minWidth="0">
+            <Select
+              value={session.sessionId}
+              aria-label={t('chat.switchConversation')}
+              title={currentConversationTitle}
+              selectedLabel={currentConversationTitle}
+              options={conversations.map((item) => ({ value: item.id, label: item.title }))}
+              onChange={(next) => void switchConversation(next)} />
+          </Box>
+          {currentMode ? <Badge
+            className="composer-mode"
+            variant="soft"
+            color="gray"
+            size="1"
+            data-chat-mode={currentMode.id}
+            title={currentMode.description}
+            aria-label={`${t('chat.currentMode')}：${currentMode.name}`}>
+            {currentMode.name}
+          </Badge> : null}
+          <Flex className="chat-header-actions" align="center" gap="1" flexShrink="0">
+            {connected ? null : <Text size="1" color="gray" className="chat-status" role="status">
+              <ActivityDots />
+              {t('chat.reconnecting')}
+            </Text>}
+            <IconButton
+              ref={newConversationButton}
+              variant="ghost"
+              color="gray"
+              size="2"
               type="button"
-              disabled={conversationBusy}
-              onClick={() => void restoreConversation(item.id)}>
-              {t('common.restore')}
-            </button>
-          </li>)}
-        </ul>
-      </details> : null}
+              title={t('chat.newConversation')}
+              aria-label={t('chat.newConversation')}
+              disabled={conversationBusy || !workspaceId || presetPicker.kind !== 'closed'}
+              onClick={() => { void createConversation() }}>
+              <PlusIcon size={14} />
+            </IconButton>
+            <Box className="conversation-menu">
+              <DropdownMenu.Root
+                open={conversationMenuOpen}
+                onOpenChange={(open: boolean) => { if (open) conversationMenuYields.current = false; setConversationMenuOpen(open) }}>
+                <DropdownMenu.Trigger>
+                  <IconButton
+                    ref={conversationMenuTrigger}
+                    variant="ghost"
+                    color="gray"
+                    size="2"
+                    title={t('chat.conversationActions')}
+                    aria-label={t('chat.conversationActions')}
+                    disabled={conversationBusy}>
+                    ⋯
+                  </IconButton>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content
+                  className="conversation-menu-pop"
+                  align="end"
+                  aria-label={t('chat.conversationActions')}
+                  onCloseAutoFocus={(event: Event) => {
+                    if (conversationMenuYields.current) event.preventDefault()
+                  }}>
+                  <DropdownMenu.Item
+                    disabled={conversationBusy}
+                    onSelect={() => { conversationMenuYields.current = true; setRenamingConversation(true) }}>
+                    {t('chat.renameConversation')}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    disabled={conversationBusy || currentIsArchived || !canMutateConversation}
+                    title={!canMutateConversation ? t('chat.archiveNeedAnother') : undefined}
+                    onSelect={() => { void archiveConversation(session.sessionId) }}>
+                    {t('common.archive')}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    disabled={conversationBusy || !currentIsArchived}
+                    onSelect={() => { void restoreConversation(session.sessionId) }}>
+                    {t('common.restore')}
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            </Box>
+          </Flex>
+        </header>
+      </Flex>
+      {archivedConversations.length ? <Box asChild px="3" py="2">
+        <details className="archived-conversations">
+          <summary>
+            <Text size="1" color="gray">
+              {t('chat.archivedConversations')}
+            </Text>
+          </summary>
+          <Box asChild mt="2">
+            <ul>
+              {archivedConversations.map((item) => <li key={item.id}>
+                <Flex align="center" justify="between" gap="2">
+                  <Text size="2">
+                    {item.title}
+                  </Text>
+                  <Button
+                    type="button"
+                    size="1"
+                    variant="soft"
+                    color="gray"
+                    disabled={conversationBusy}
+                    onClick={() => void restoreConversation(item.id)}>
+                    {t('common.restore')}
+                  </Button>
+                </Flex>
+              </li>)}
+            </ul>
+          </Box>
+        </details>
+      </Box> : null}
       {showMigrationBanner ? <LegacyMigrationBanner
         onMigrate={() => { void createConversation() }}
         onDismiss={() => setDismissedMigrations((current) => new Set(current).add(session.sessionId))} /> : null}
-      <div
-        className="chat-history"
-        ref={historyRef}
-        data-running={snapshot.running ? 'true' : 'false'}
-        onScroll={(event: { currentTarget: HTMLDivElement }) => {
-          const el = event.currentTarget
-          bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
-        }}>
-        {showInitGuide ? <InitGuideCard
-          state={initState as 'explore' | 'interview'}
-          busy={initBusy}
-          running={initState === 'explore' ? internalIndexActive : snapshot.running}
-          done={initCompleted}
-          note={initNote}
-          onStart={startInitGuide}
-          onDismiss={dismissInitGuide} /> : null}
-        {snapshot.hasMore ? <button
-          type="button"
-          onClick={() => void loadOlder(session)}
-          disabled={snapshot.loadingOlder}>
-          {snapshot.loadingOlder ? <Fragment>
-            <ActivityDots />
-            {t('chat.loadingMore')}
-          </Fragment> : t('chat.loadOlder')}
-        </button> : null}
-        {rows.map((row) => <ChatRowView
-          key={row.id}
-          row={row}
-          ctx={ctx}
-          sessionId={session.sessionId}
-          locale={locale}
-          cardTick={messageCardTick}
-          enter={isNewMessage(row.id)}
-          messageCards={messageCards}
-          messageCardContext={messageCardContext}
-          onApplied={handleApplied}
-          onAcceptMemory={onAcceptMemory} />)}
-        {showEmptyHistory ? <p className="chat-empty">
-          {t('chat.emptyHistory')}
-        </p> : null}
-        {outgoing && !outgoingIsCanonical ? <ChatEntry
-          className="chat-row user"
-          key="local-outgoing"
-          enter={isNewMessage('local-outgoing')}>
-          <p>
-            {outgoing.text}
-          </p>
-          {outgoing.projectContextReceipt ? <ProjectContextReceiptView receipt={outgoing.projectContextReceipt} /> : null}
-          <small role={outgoing.state === 'failed' ? 'alert' : 'status'}>
-            {outgoing.state === 'sending'
-              ? <Fragment>
-              <ActivityDots />
-              {t('chat.sending')}
-            </Fragment>
-              : outgoing.state === 'accepted'
-                ? <Fragment>
-              <SuccessMark />
-              {' '}
-              {t('chat.sent')}
-            </Fragment>
-                : t('chat.sendFailed')}
-          </small>
-        </ChatEntry> : null}
-        {outgoing?.state === 'accepted' && !outgoingIsCanonical
-          ? <ChatEntry
-          className="chat-row assistant"
-          key="local-replying"
-          aria-live="polite"
-          enter={isNewMessage('local-replying')}>
-          <ActivityDots variant="typing" />
-          {t('chat.replying')}
-        </ChatEntry>
-          : null}
-        {visibleCalls.map((call) => <ChatEntry
-          className="chat-row tool"
-          key={`running:${call.callId}`}
-          enter={isNewMessage(`running:${call.callId}`)}>
-          <strong>
-            <ActivityDots variant="typing" />
-            {call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' || call.name === WRITING_PROPOSE_TOOL_NAME ? t('chat.preparingProposal') : t('chat.processing')}
-          </strong>
-        </ChatEntry>)}
-        {snapshot.queue.map((item) => <ChatEntry
-          className="chat-row notice"
-          key={`queue:${item.id}`}
-          enter={isNewMessage(`queue:${item.id}`)}>
-          <p>
-            {item.preview}
-          </p>
-          <small>
-            {item.placement === 'queued' ? t('chat.queued') : t('chat.steering')}
-          </small>
-        </ChatEntry>)}
-        {partial.thinking ? <ChatEntry
-          as="details"
-          className="chat-row thinking"
-          key="partial-thinking"
-          enter={isNewMessage('partial-thinking')}>
-          <summary aria-live="polite">
-            <ActivityDots variant="typing" />
-            {t('chat.thinking')}
-          </summary>
-          <p>
-            {partial.thinking}
-          </p>
-        </ChatEntry> : null}
-        {partial.text ? <ChatEntry
-          className="chat-row assistant"
-          key="partial-text"
-          aria-live="polite"
-          enter={isNewMessage('partial-text')}>
-          <div className="md">
-            <Markdown text={partial.text} />
-          </div>
-        </ChatEntry> : chatLegacy.partial && !partial.thinking ? <ChatEntry
-          className="chat-row assistant"
-          key="partial-replying"
-          aria-live="polite"
-          enter={isNewMessage('partial-replying')}>
-          <ActivityDots variant="typing" />
-          {t('chat.replying')}
-        </ChatEntry> : null}
-        {pendingItems.map((item) => <PendingCard key={item.key} item={item} />)}
-        {snapshot.openState === 'error' ? <p className="warning">
-          {t('chat.connectionInterrupted')}
-        </p> : null}
-        {snapshot.promptError && !hasTurnError ? <p className="warning">
-          {t('chat.requestFailed')}
-        </p> : null}
-      </div>
-      <form className="composer" onSubmit={submit}>
-        <textarea
-          value={draft}
-          onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraft(event.target.value)}
-          onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-            if (!shouldSubmitComposer({ key: event.key, shiftKey: event.shiftKey, isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) return
-            event.preventDefault()
-            event.currentTarget.form?.requestSubmit()
-          }}
-          placeholder={t('chat.placeholder')}
-          aria-label={t('chat.inputLabel')} />
-        {note ? <small className="warning">
-          {note}
-        </small> : null}
-        <div className="composer-toolbar">
-          <div className="composer-model">
-            {currentMode ? <span
-              className="composer-mode"
-              data-chat-mode={currentMode.id}
-              title={currentMode.description}
-              aria-label={`${t('chat.currentMode')}：${currentMode.name}`}>
-              {currentMode.name}
-            </span> : null}
-            <ModelPicker
-              key={`${session.sessionId}:${modelRevision}`}
-              ctx={ctx}
-              session={session}
-              onConfigure={onConfigure} />
-          </div>
-          <div className="composer-actions">
-            {snapshot.running ? <button
+      <Box className="chat-history" data-running={snapshot.running ? 'true' : 'false'} minWidth="0" minHeight="0" height="100%">
+        <ScrollArea
+          ref={historyRef}
+          type="hover"
+          scrollbars="vertical"
+          size="1"
+          style={{ height: '100%' }}
+          onScroll={(event: { currentTarget: HTMLDivElement }) => {
+            const el = event.currentTarget
+            bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+          }}>
+          <Flex direction="column" gap="3" p="3">
+            {showInitGuide ? <InitGuideCard
+              state={initState as 'explore' | 'interview'}
+              busy={initBusy}
+              running={initState === 'explore' ? internalIndexActive : snapshot.running}
+              done={initCompleted}
+              note={initNote}
+              onStart={startInitGuide}
+              onDismiss={dismissInitGuide} /> : null}
+            {snapshot.hasMore ? <Button
               type="button"
-              className="icon-button chat-stop"
-              title={t('chat.stop')}
-              aria-label={t('chat.stop')}
-              onClick={() => {
-                void settleConversationStop({
-                  cancel: () => stop(session),
-                  releaseOutgoing: () => setOutgoing(null),
-                })
-              }}>
-              <StopIcon size={14} />
-            </button> : null}
-            <button
-              className="send"
-              type="submit"
-              disabled={!composerCanSubmit}
-              title={t('chat.send')}
-              aria-label={t('chat.send')}>
-              <svg
-                viewBox="0 0 24 24"
-                width={16}
-                height={16}
-                fill="none"
-                stroke="currentColor"
-                stroke-width={2}
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                focusable="false">
-                <path d="m22 2-7 20-4-9-9-4Z" />
-                <path d="M22 2 11 13" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </form>
+              variant="soft"
+              color="gray"
+              size="1"
+              onClick={() => void loadOlder(session)}
+              disabled={snapshot.loadingOlder}>
+              {snapshot.loadingOlder ? <Fragment>
+                <ActivityDots />
+                {t('chat.loadingMore')}
+              </Fragment> : t('chat.loadOlder')}
+            </Button> : null}
+            {rows.map((row) => <ChatRowView
+              key={row.id}
+              row={row}
+              ctx={ctx}
+              sessionId={session.sessionId}
+              locale={locale}
+              cardTick={messageCardTick}
+              enter={isNewMessage(row.id)}
+              messageCards={messageCards}
+              messageCardContext={messageCardContext}
+              onApplied={handleApplied}
+              onAcceptMemory={onAcceptMemory} />)}
+            {showEmptyHistory ? <Text as="p" size="2" color="gray" className="chat-empty">
+              {t('chat.emptyHistory')}
+            </Text> : null}
+            {outgoing && !outgoingIsCanonical ? <ChatEntry
+              className="chat-row user"
+              key="local-outgoing"
+              enter={isNewMessage('local-outgoing')}>
+              <Card size="2">
+                <Text size="2" as="p">
+                  {outgoing.text}
+                </Text>
+                {outgoing.projectContextReceipt ? <ProjectContextReceiptView receipt={outgoing.projectContextReceipt} /> : null}
+                <Text size="1" color="gray" mt="1" role={outgoing.state === 'failed' ? 'alert' : 'status'}>
+                  {outgoing.state === 'sending'
+                    ? <Fragment>
+                    <ActivityDots />
+                    {t('chat.sending')}
+                  </Fragment>
+                    : outgoing.state === 'accepted'
+                      ? <Fragment>
+                    <SuccessMark />
+                    {' '}
+                    {t('chat.sent')}
+                  </Fragment>
+                      : t('chat.sendFailed')}
+                </Text>
+              </Card>
+            </ChatEntry> : null}
+            {outgoing?.state === 'accepted' && !outgoingIsCanonical
+              ? <ChatEntry
+              className="chat-row assistant"
+              key="local-replying"
+              aria-live="polite"
+              enter={isNewMessage('local-replying')}>
+              <Text size="2">
+                <ActivityDots variant="typing" />
+                {t('chat.replying')}
+              </Text>
+            </ChatEntry>
+              : null}
+            {visibleCalls.map((call) => <ChatEntry
+              className="chat-row tool"
+              key={`running:${call.callId}`}
+              enter={isNewMessage(`running:${call.callId}`)}>
+              <Badge variant="soft" color="gray" size="1">
+                <ActivityDots variant="typing" />
+                {call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' || call.name === WRITING_PROPOSE_TOOL_NAME ? t('chat.preparingProposal') : t('chat.processing')}
+              </Badge>
+            </ChatEntry>)}
+            {snapshot.queue.map((item) => <ChatEntry
+              className="chat-row notice"
+              key={`queue:${item.id}`}
+              enter={isNewMessage(`queue:${item.id}`)}>
+              <Text size="2" as="p">
+                {item.preview}
+              </Text>
+              <Text size="1" color="gray">
+                {item.placement === 'queued' ? t('chat.queued') : t('chat.steering')}
+              </Text>
+            </ChatEntry>)}
+            {partial.thinking ? <ChatEntry
+              as="details"
+              className="chat-row thinking"
+              key="partial-thinking"
+              enter={isNewMessage('partial-thinking')}>
+              <summary aria-live="polite">
+                <Text size="1" color="gray">
+                  <ActivityDots variant="typing" />
+                  {t('chat.thinking')}
+                </Text>
+              </summary>
+              <Text as="p" size="2" mt="2">
+                {partial.thinking}
+              </Text>
+            </ChatEntry> : null}
+            {partial.text ? <ChatEntry
+              className="chat-row assistant"
+              key="partial-text"
+              aria-live="polite"
+              enter={isNewMessage('partial-text')}>
+              <Text size="2" as="div">
+                <Markdown text={partial.text} />
+              </Text>
+            </ChatEntry> : chatLegacy.partial && !partial.thinking ? <ChatEntry
+              className="chat-row assistant"
+              key="partial-replying"
+              aria-live="polite"
+              enter={isNewMessage('partial-replying')}>
+              <Text size="2">
+                <ActivityDots variant="typing" />
+                {t('chat.replying')}
+              </Text>
+            </ChatEntry> : null}
+            {pendingItems.map((item) => <PendingCard key={item.key} item={item} />)}
+            {snapshot.openState === 'error' ? <Callout.Root color="red" className="warning">
+              <Callout.Text>
+                {t('chat.connectionInterrupted')}
+              </Callout.Text>
+            </Callout.Root> : null}
+            {snapshot.promptError && !hasTurnError ? <Callout.Root color="red" className="warning">
+              <Callout.Text>
+                {t('chat.requestFailed')}
+              </Callout.Text>
+            </Callout.Root> : null}
+          </Flex>
+        </ScrollArea>
+      </Box>
+      <Box asChild px="3" py="2">
+        <form className="composer" onSubmit={submit}>
+          <Flex direction="column" gap="2">
+            <TextArea
+              ref={composerRef}
+              resize="none"
+              size="2"
+              style={{ width: '100%' }}
+              value={draft}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+                setDraft(event.target.value)
+                growComposer(event.currentTarget)
+              }}
+              onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+                if (!shouldSubmitComposer({ key: event.key, shiftKey: event.shiftKey, isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) return
+                event.preventDefault()
+                event.currentTarget.form?.requestSubmit()
+              }}
+              placeholder={t('chat.placeholder')}
+              aria-label={t('chat.inputLabel')} />
+            {note ? <Text size="1" className="warning" color="red">
+              {note}
+            </Text> : null}
+            <Flex className="composer-toolbar" align="center" justify="between" gap="2" wrap="wrap" minWidth="0">
+              <Box className="composer-model" flexGrow="1" minWidth="0">
+                <ModelPicker
+                  key={`${session.sessionId}:${modelRevision}`}
+                  ctx={ctx}
+                  session={session}
+                  onConfigure={onConfigure} />
+              </Box>
+              <Flex className="composer-actions" align="center" gap="2" flexShrink="0">
+                {snapshot.running ? <IconButton
+                  type="button"
+                  variant="soft"
+                  color="red"
+                  size="2"
+                  className="chat-stop"
+                  title={t('chat.stop')}
+                  aria-label={t('chat.stop')}
+                  onClick={() => {
+                    void settleConversationStop({
+                      cancel: () => stop(session),
+                      releaseOutgoing: () => setOutgoing(null),
+                    })
+                  }}>
+                  <StopIcon size={14} />
+                </IconButton> : null}
+                <IconButton
+                  className="send"
+                  type="submit"
+                  variant="ghost"
+                  color="gray"
+                  size="2"
+                  disabled={!composerCanSubmit}
+                  title={t('chat.send')}
+                  aria-label={t('chat.send')}>
+                  <svg
+                    viewBox="0 0 24 24"
+                    width={16}
+                    height={16}
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width={2}
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                    focusable="false">
+                    <path d="m22 2-7 20-4-9-9-4Z" />
+                    <path d="M22 2 11 13" />
+                  </svg>
+                </IconButton>
+              </Flex>
+            </Flex>
+          </Flex>
+        </form>
+      </Box>
       <TextPromptDialog
         open={Boolean(renamingConversation)}
         id="rename-conversation"

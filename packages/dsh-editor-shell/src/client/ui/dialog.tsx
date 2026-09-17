@@ -1,11 +1,4 @@
-import {
-  Root as DialogRoot,
-  Portal as DialogPortal,
-  Overlay as DialogOverlay,
-  Content as DialogContent,
-  Title as DialogTitle,
-  Description as DialogDescription,
-} from '@radix-ui/react-dialog'
+import { Dialog as ThemesDialog, VisuallyHidden } from '@radix-ui/themes'
 import { useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { pickReturnFocus, scheduleReturnFocus, takeInvokerOnOpen } from './focus-return.ts'
 
@@ -40,55 +33,55 @@ export function Dialog(props: DialogProps) {
   }
 
   return (
-    <DialogRoot
+    <ThemesDialog.Root
       open={props.open}
       onOpenChange={(next: boolean) => {
         if (!next && !dismissible) return
         props.onOpenChange(next)
       }}
     >
-      <DialogPortal>
-        <DialogOverlay className={['dsh-ui', props.overlayClassName ?? 'file-dialog-overlay'].filter(Boolean).join(' ')} />
-        <DialogContent
-          className={['dsh-ui', props.className ?? 'file-dialog'].filter(Boolean).join(' ')}
-          {...(props.description ? {} : { 'aria-describedby': undefined })}
-          onOpenAutoFocus={(event: Event) => {
-            const target = props.initialFocusRef?.current
-            if (!target) return
+      {/* Themes Content owns the overlay; overlayClassName is kept for the seat API and ignored. */}
+      <ThemesDialog.Content
+        className={props.className ?? 'file-dialog'}
+        {...(props.description ? {} : { 'aria-describedby': undefined })}
+        onOpenAutoFocus={(event: Event) => {
+          const target = props.initialFocusRef?.current
+          if (!target) return
+          event.preventDefault()
+          globalThis.requestAnimationFrame(() => target.focus())
+        }}
+        onCloseAutoFocus={(event: Event) => {
+          props.onCloseAutoFocus?.(event)
+          if (event.defaultPrevented) return
+          event.preventDefault()
+          scheduleReturnFocus(returnFocus.current, restoreGen)
+        }}
+        onPointerDownOutside={blockDismiss}
+        onInteractOutside={blockDismiss}
+        onEscapeKeyDown={(event: { preventDefault(): void; target: EventTarget | null }) => {
+          if (!dismissible) {
             event.preventDefault()
-            globalThis.requestAnimationFrame(() => target.focus())
-          }}
-          onCloseAutoFocus={(event: Event) => {
-            props.onCloseAutoFocus?.(event)
-            if (event.defaultPrevented) return
+            return
+          }
+          const node = event.target instanceof Element ? event.target : null
+          if (node?.closest('[role="listbox"], .select-list, [data-radix-select-content]')) event.preventDefault()
+        }}
+        onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+          if (event.key !== 'Escape') return
+          if (!dismissible || event.defaultPrevented) {
             event.preventDefault()
-            scheduleReturnFocus(returnFocus.current, restoreGen)
-          }}
-          onPointerDownOutside={blockDismiss}
-          onInteractOutside={blockDismiss}
-          onEscapeKeyDown={(event: { preventDefault(): void; target: EventTarget | null }) => {
-            if (!dismissible) {
-              event.preventDefault()
-              return
-            }
-            const node = event.target instanceof Element ? event.target : null
-            if (node?.closest('[role="listbox"], .select-list, [data-radix-select-content]')) event.preventDefault()
-          }}
-          onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-            if (event.key !== 'Escape') return
-            if (!dismissible || event.defaultPrevented) {
-              event.preventDefault()
-              event.stopPropagation()
-            }
-          }}
-        >
-          <DialogTitle className="dsh-ui-sr-only">{props.title}</DialogTitle>
-          {props.description
-            ? <DialogDescription className="dsh-ui-sr-only">{props.description}</DialogDescription>
-            : null}
-          {props.children}
-        </DialogContent>
-      </DialogPortal>
-    </DialogRoot>
+            event.stopPropagation()
+          }
+        }}
+      >
+        <VisuallyHidden>
+          <ThemesDialog.Title>{props.title}</ThemesDialog.Title>
+        </VisuallyHidden>
+        {props.description
+          ? <VisuallyHidden><ThemesDialog.Description>{props.description}</ThemesDialog.Description></VisuallyHidden>
+          : null}
+        {props.children}
+      </ThemesDialog.Content>
+    </ThemesDialog.Root>
   )
 }

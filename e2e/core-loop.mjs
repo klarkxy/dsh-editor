@@ -216,13 +216,13 @@ try {
   // button here, so the user cannot observe the theme directly. We just
   // require the useTheme hook's defaults to have propagated to either the
   // document attribute or localStorage. A brief race where neither is
-  // populated yet is treated as the default paper value rather than a
+  // populated yet is treated as the default light value rather than a
   // hard failure.
-  const homeThemeOk = homeState.theme === 'paper'
-    || homeState.stored === 'paper'
+  const homeThemeOk = homeState.theme === 'light'
+    || homeState.stored === 'light'
     || (!homeState.theme && !homeState.stored)
   if (!homeThemeOk) {
-    failures.push(`home theme should default to paper; got theme=${homeState.theme} stored=${homeState.stored}`)
+    failures.push(`home theme should default to light; got theme=${homeState.theme} stored=${homeState.stored}`)
   }
   // The theme toggle lives on the workbench chrome, not the home chrome — the
   // home chrome only renders brand-lockup / local-state / native-settings-control.
@@ -316,19 +316,19 @@ try {
   const savedChapter = await readFile(resolve(targetWorkspace, '正文', '001.md'), 'utf8')
   if (!savedChapter.includes('核心闭环保存验证。')) throw new Error('core-loop chapter save missing on disk')
 
-  // Theme toggle: paper → ink → paper. The DOM data-theme and localStorage must
+  // Theme toggle: light → dark → light. The DOM data-theme and localStorage must
   // both update and survive a reload.
-  await page.getByRole('button', { name: /主题（当前纸）/ }).click()
-  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'ink')
-  const inkStored = await page.evaluate(() => globalThis.localStorage.getItem('dsh-editor.theme'))
-  if (inkStored !== 'ink') failures.push(`localStorage theme did not persist ink; got ${inkStored}`)
-  const inkToggle = await page.getByRole('button', { name: /主题（当前墨）/ }).count()
-  if (!inkToggle) failures.push('theme toggle did not re-label itself as 当前墨 after switching to ink')
-  await page.screenshot({ path: resolve(output, '05-editor-ink.png') })
+  await page.getByRole('button', { name: /主题（当前浅色）/ }).click()
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'dark')
+  const darkStored = await page.evaluate(() => globalThis.localStorage.getItem('dsh-editor.theme'))
+  if (darkStored !== 'dark') failures.push(`localStorage theme did not persist dark; got ${darkStored}`)
+  const darkToggle = await page.getByRole('button', { name: /主题（当前深色）/ }).count()
+  if (!darkToggle) failures.push('theme toggle did not re-label itself as 当前深色 after switching to dark')
+  await page.screenshot({ path: resolve(output, '05-editor-dark.png') })
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   await page.waitForFunction(
-    () => document.title === 'DSH Editor' && document.documentElement.getAttribute('data-theme') === 'ink',
+    () => document.title === 'DSH Editor' && document.documentElement.getAttribute('data-theme') === 'dark',
     undefined,
     { timeout: 45_000 },
   )
@@ -346,13 +346,13 @@ try {
   await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
 
   const reloadedState = await readState(page)
-  if (reloadedState.theme !== 'ink') failures.push(`theme did not survive reload; got ${reloadedState.theme}`)
-  if (reloadedState.stored !== 'ink') failures.push(`localStorage theme did not survive reload; got ${reloadedState.stored}`)
+  if (reloadedState.theme !== 'dark') failures.push(`theme did not survive reload; got ${reloadedState.theme}`)
+  if (reloadedState.stored !== 'dark') failures.push(`localStorage theme did not survive reload; got ${reloadedState.stored}`)
 
-  // Back to paper.
-  await page.getByRole('button', { name: /主题（当前墨）/ }).click()
-  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'paper')
-  await page.waitForFunction(() => globalThis.localStorage.getItem('dsh-editor.theme') === 'paper')
+  // Back to light.
+  await page.getByRole('button', { name: /主题（当前深色）/ }).click()
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'light')
+  await page.waitForFunction(() => globalThis.localStorage.getItem('dsh-editor.theme') === 'light')
 
   // Chat: open via the launcher, focus composer via Ctrl+L, verify the placeholder.
   const launcher = page.getByRole('button', { name: '打开写作搭档' })
@@ -398,8 +398,8 @@ try {
   await page.locator('.home-recent').getByRole('button', { name: /core-loop-workspace/ }).first().click()
   await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
 
-  // Final screenshot: full workbench in paper theme for the visual reference set.
-  await page.screenshot({ path: resolve(output, '07-workbench-paper.png'), fullPage: true })
+  // Final screenshot: full workbench in light theme for the visual reference set.
+  await page.screenshot({ path: resolve(output, '07-workbench-light.png'), fullPage: true })
 
   if (browserErrors.length) failures.push(...browserErrors)
 } catch (error) {

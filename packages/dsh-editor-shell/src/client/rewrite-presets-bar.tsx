@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { Button, Flex, TextArea } from '@radix-ui/themes'
 import { REWRITE_PRESETS } from 'dsh-manuscript/client/editor-core'
 import { t } from '../i18n/index.ts'
 import { isImeEvent } from './ui/ime.ts'
@@ -23,22 +24,30 @@ export function RewritePresetsBar(props: { onRewrite(instruction: string): void 
   }
 
   return (
-    <div
+    <Flex
       className="rewrite-presets"
       role="group"
-      aria-label={t('rewrite.barLabel')}>
-      {REWRITE_PRESETS.map((preset) => <button
+      aria-label={t('rewrite.barLabel')}
+      align="center"
+      gap="1"
+      wrap="wrap">
+      {REWRITE_PRESETS.map((preset) => <Button
         key={preset.id}
         type="button"
+        size="1"
+        variant="soft"
+        color="gray"
         onClick={() => props.onRewrite(preset.instruction)}>
         {t(presetLabelKey(preset.id))}
-      </button>)}
+      </Button>)}
       {customOpen
-        ? <span className="rewrite-presets-custom">
-        <textarea
+        ? <Flex className="rewrite-presets-custom" align="center" gap="1" wrap="wrap">
+        <TextArea
           value={customText}
           maxLength={CUSTOM_INSTRUCTION_MAX}
           rows={3}
+          resize="vertical"
+          size="1"
           placeholder={t('rewrite.customPlaceholder')}
           aria-label={t('rewrite.customPlaceholder')}
           autoFocus={true}
@@ -50,21 +59,26 @@ export function RewritePresetsBar(props: { onRewrite(instruction: string): void 
               runCustom()
             }
           }} />
-        <button
+        <Button
           type="button"
+          size="1"
+          variant="soft"
           disabled={!normalizeCustomInstruction(customText)}
           onClick={runCustom}>
           {t('rewrite.customRun')}
-        </button>
-      </span>
-        : <button
+        </Button>
+      </Flex>
+        : <Button
         type="button"
+        size="1"
+        variant="soft"
+        color="gray"
         onClick={() => {
           setCustomText(lastCustom)
           setCustomOpen(true)
         }}>
         {t('rewrite.custom')}
-      </button>}
-    </div>
+      </Button>}
+    </Flex>
   );
 }

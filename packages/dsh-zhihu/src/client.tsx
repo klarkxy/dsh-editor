@@ -1291,15 +1291,16 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
   const searchDisabled = isSearchDisabled()
 
   const tablist = <div key="tabs" className="zhihu-tabs" role="tablist" aria-label="知乎资料分区">
-    {tabs.map((key) => <button
+    {tabs.map((key) => <SeatButton
       key={key}
+      host={Button}
       type="button"
       role="tab"
       aria-selected={tab === key}
       className="zhihu-tab"
       onClick={() => onTabChange(key)}>
       {tabLabel(key, surface)}
-    </button>)}
+    </SeatButton>)}
   </div>
   const body = <div key="body" className="zhihu-panel-body">
     {tab === 'search' ? <div role="tabpanel" className="zhihu-field">
@@ -1407,14 +1408,14 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
   // while closed so CSS exit can run; standalone unmounts the dock panel.
   return (
     <div className="zhihu-dock">
-      <button
-        type="button"
+      <SeatButton
+        host={Button}
         ref={toggleRef}
         className="zhihu-toggle"
         data-testid="zhihu-open"
         onClick={() => setOpen(true)}>
         {SLOT_LABEL}
-      </button>
+      </SeatButton>
       {Dialog
         ? <Dialog
         open={open}

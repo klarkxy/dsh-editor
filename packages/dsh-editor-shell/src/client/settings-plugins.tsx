@@ -6,6 +6,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
+import { Box, Button, Callout } from '@radix-ui/themes'
 import { OFFICIAL_SETTINGS_SLOT } from '../root-registration.ts'
 import { getLocale, subscribeLocale, t } from '../i18n/index.ts'
 
@@ -190,28 +191,31 @@ class OfficialSettingsPageBoundary extends Component<BoundaryProps, BoundaryStat
   render() {
     if (this.state.error) {
       return (
-        <div
-          className="warning pad"
+        <Callout.Root
+          color="red"
           role="alert"
+          className="warning pad"
           data-testid="settings-official-error">
-          <p>
+          <Callout.Text>
             {this.state.error ? `页面无法显示。${this.state.error}` : '页面无法显示。'}
-          </p>
-          <button
+          </Callout.Text>
+          <Button
             type="button"
+            variant="soft"
+            color="gray"
             data-testid="settings-official-retry"
             onClick={() => this.setState((current) => ({ error: null, nonce: current.nonce + 1 }))}>
             {t('common.retry')}
-          </button>
-        </div>
+          </Button>
+        </Callout.Root>
       );
     }
     return (
-      <div className="settings-official-page" data-testid="settings-official-page">
+      <Box className="settings-official-page" data-testid="settings-official-page">
         <Fragment key={this.state.nonce}>
           {this.props.children}
         </Fragment>
-      </div>
+      </Box>
     );
   }
 }

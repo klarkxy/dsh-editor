@@ -8,6 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import { Callout, Card, Flex, Heading, IconButton, Text, TextArea } from '@radix-ui/themes'
 import type { ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
 import { isManuscriptChapterPath } from '../project-files.ts'
 import {
@@ -24,7 +25,7 @@ import {
   suggestSplitName,
 } from '../chapter-ops-view.ts'
 import { ProposalCard } from './chat.tsx'
-import { ActivityDots, Button, Dialog } from './ui/index.ts'
+import { ActivityDots, Button, Dialog, Input } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 
@@ -181,72 +182,86 @@ function SplitFormDialog(props: {
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !busy) props.onCancel() }}
       title={t('chapterOps.splitTitle')}
-      className="file-dialog prompt-dialog chapter-ops-dialog"
+      className="file-dialog prompt-dialog chapter-ops-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!busy}
       initialFocusRef={textarea}
       returnFocusRef={props.returnFocusRef}>
-      <header>
-        <h2 id="chapter-ops-split-title">
-          {t('chapterOps.splitTitle')}
-        </h2>
-        <Button
-          variant="icon"
-          className="icon-button"
-          aria-label={t('common.close')}
-          disabled={busy}
-          onClick={props.onCancel}>
-          ×
-        </Button>
-      </header>
-      <form
-        onSubmit={(event: FormEvent) => { event.preventDefault(); if (!busy) void submit() }}>
-        <p className="muted">
-          {t('chapterOps.splitFile')}
-          {' '}
-          <code>
-            {props.path}
-          </code>
-        </p>
-        <label>
-          {t('chapterOps.anchor')}
-          <textarea
-            ref={textarea}
-            value={anchor}
-            rows={4}
+      <Flex direction="column" gap="3">
+        <Flex justify="between" align="start" gap="3">
+          <Heading as="h2" size="4" id="chapter-ops-split-title">
+            {t('chapterOps.splitTitle')}
+          </Heading>
+          <IconButton
+            variant="ghost"
+            color="gray"
+            className="icon-button"
+            aria-label={t('common.close')}
             disabled={busy}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setAnchor(event.target.value)} />
-        </label>
-        <p className="muted">
-          {t('chapterOps.anchorHint')}
-        </p>
-        <label>
-          {t('chapterOps.newFileName')}
-          <input
-            value={newName}
-            maxLength={120}
-            disabled={busy}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setNewName(event.target.value)} />
-        </label>
-        {note ? <p className="warning" role="alert">
-          {note}
-        </p> : null}
-        <footer>
-          <Button disabled={busy} onClick={props.onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            type="submit"
-            className="primary-action"
-            disabled={busy || !anchor.trim() || !newName.trim()}>
-            {busy ? <Fragment>
-              <ActivityDots />
-              {t('common.loading')}
-            </Fragment> : t('chapterOps.preview')}
-          </Button>
-        </footer>
-      </form>
+            onClick={props.onCancel}>
+            ×
+          </IconButton>
+        </Flex>
+        <Flex
+          direction="column"
+          gap="3"
+          asChild>
+          <form
+            onSubmit={(event: FormEvent) => { event.preventDefault(); if (!busy) void submit() }}>
+            <Text size="1" color="gray">
+              {t('chapterOps.splitFile')}
+              {' '}
+              <code>
+                {props.path}
+              </code>
+            </Text>
+            <Text as="label" size="2">
+              <Flex direction="column" gap="1">
+                {t('chapterOps.anchor')}
+                <TextArea
+                  ref={textarea}
+                  value={anchor}
+                  rows={4}
+                  disabled={busy}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setAnchor(event.target.value)} />
+              </Flex>
+            </Text>
+            <Text size="1" color="gray">
+              {t('chapterOps.anchorHint')}
+            </Text>
+            <Text as="label" size="2">
+              <Flex direction="column" gap="1">
+                {t('chapterOps.newFileName')}
+                <Input
+                  value={newName}
+                  maxLength={120}
+                  disabled={busy}
+                  onChange={setNewName} />
+              </Flex>
+            </Text>
+            {note ? <Callout.Root className="warning" color="red" role="alert" size="1">
+              <Callout.Text>
+                {note}
+              </Callout.Text>
+            </Callout.Root> : null}
+            <Flex justify="end" gap="2">
+              <Button disabled={busy} onClick={props.onCancel}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                className="primary-action"
+                disabled={busy || !anchor.trim() || !newName.trim()}>
+                {busy ? <Fragment>
+                  <ActivityDots />
+                  {t('common.loading')}
+                </Fragment> : t('chapterOps.preview')}
+              </Button>
+            </Flex>
+          </form>
+        </Flex>
+      </Flex>
     </Dialog>
   );
 }
@@ -268,38 +283,41 @@ function ProposalReviewDialog(props: {
       open={open}
       onOpenChange={(next: boolean) => { if (!next) props.onClose() }}
       title={title}
-      className="file-dialog chapter-ops-dialog"
+      className="file-dialog chapter-ops-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       initialFocusRef={close}
       returnFocusRef={props.returnFocusRef}>
-      <header>
-        <h2 id="chapter-ops-review-title">
-          {title}
-        </h2>
-        <Button
-          ref={close}
-          variant="icon"
-          className="icon-button"
-          aria-label={t('common.close')}
-          onClick={props.onClose}>
-          ×
-        </Button>
-      </header>
-      {props.proposal.kind === 'merge' ? <p className="muted">
-        {t('chapterOps.mergeArchiveHint')}
-      </p> : null}
-      <div className="chapter-ops-card">
-        <ProposalCard
-          ctx={props.ctx}
-          sessionId={props.sessionId}
-          proposal={props.proposal}
-          onApplied={props.onApplied} />
-      </div>
-      <footer>
-        <Button onClick={props.onClose}>
-          {t('chapterOps.closeReview')}
-        </Button>
-      </footer>
+      <Flex direction="column" gap="3">
+        <Flex justify="between" align="start" gap="3">
+          <Heading as="h2" size="4" id="chapter-ops-review-title">
+            {title}
+          </Heading>
+          <IconButton
+            ref={close}
+            variant="ghost"
+            color="gray"
+            className="icon-button"
+            aria-label={t('common.close')}
+            onClick={props.onClose}>
+            ×
+          </IconButton>
+        </Flex>
+        {props.proposal.kind === 'merge' ? <Text size="1" color="gray">
+          {t('chapterOps.mergeArchiveHint')}
+        </Text> : null}
+        <Card className="chapter-ops-card">
+          <ProposalCard
+            ctx={props.ctx}
+            sessionId={props.sessionId}
+            proposal={props.proposal}
+            onApplied={props.onApplied} />
+        </Card>
+        <Flex justify="end" gap="2">
+          <Button onClick={props.onClose}>
+            {t('chapterOps.closeReview')}
+          </Button>
+        </Flex>
+      </Flex>
     </Dialog>
   );
 }

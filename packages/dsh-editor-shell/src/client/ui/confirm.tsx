@@ -1,12 +1,4 @@
-import {
-  Root as AlertRoot,
-  Portal as AlertPortal,
-  Overlay as AlertOverlay,
-  Content as AlertContent,
-  Title as AlertTitle,
-  Description as AlertDescription,
-  Cancel as AlertCancel,
-} from '@radix-ui/react-alert-dialog'
+import { AlertDialog, VisuallyHidden } from '@radix-ui/themes'
 import { useRef, type ReactElement, type ReactNode, type RefObject } from 'react'
 import { pickReturnFocus, scheduleReturnFocus, takeInvokerOnOpen } from './focus-return.ts'
 
@@ -25,7 +17,7 @@ export type ConfirmProps = {
 }
 
 export function ConfirmCancel(props: { children: ReactElement }) {
-  return <AlertCancel asChild>{props.children}</AlertCancel>
+  return <AlertDialog.Cancel>{props.children}</AlertDialog.Cancel>
 }
 
 export function Confirm(props: ConfirmProps) {
@@ -40,37 +32,37 @@ export function Confirm(props: ConfirmProps) {
   }
 
   return (
-    <AlertRoot
+    <AlertDialog.Root
       open={props.open}
       onOpenChange={(next: boolean) => {
         if (!next && !dismissible) return
         props.onOpenChange(next)
       }}
     >
-      <AlertPortal>
-        <AlertOverlay className={['dsh-ui', props.overlayClassName ?? 'file-dialog-overlay'].filter(Boolean).join(' ')} />
-        <AlertContent
-          className={['dsh-ui', props.className ?? 'file-dialog confirm-dialog'].filter(Boolean).join(' ')}
-          onOpenAutoFocus={(event: Event) => {
-            event.preventDefault()
-            const target = props.initialFocusRef?.current
-            globalThis.requestAnimationFrame(() => target?.focus())
-          }}
-          onCloseAutoFocus={(event: Event) => {
-            event.preventDefault()
-            scheduleReturnFocus(returnFocus.current, restoreGen)
-          }}
-          onEscapeKeyDown={(event: { preventDefault(): void }) => {
-            if (!dismissible) event.preventDefault()
-          }}
-        >
-          <AlertTitle className="dsh-ui-sr-only">{props.title}</AlertTitle>
-          {props.description
-            ? <AlertDescription className="dsh-ui-sr-only">{props.description}</AlertDescription>
-            : null}
-          {props.children}
-        </AlertContent>
-      </AlertPortal>
-    </AlertRoot>
+      {/* Themes AlertDialog.Content owns the overlay; overlayClassName is kept for the seat API and ignored. */}
+      <AlertDialog.Content
+        className={props.className ?? 'file-dialog confirm-dialog'}
+        onOpenAutoFocus={(event: Event) => {
+          event.preventDefault()
+          const target = props.initialFocusRef?.current
+          globalThis.requestAnimationFrame(() => target?.focus())
+        }}
+        onCloseAutoFocus={(event: Event) => {
+          event.preventDefault()
+          scheduleReturnFocus(returnFocus.current, restoreGen)
+        }}
+        onEscapeKeyDown={(event: { preventDefault(): void }) => {
+          if (!dismissible) event.preventDefault()
+        }}
+      >
+        <VisuallyHidden>
+          <AlertDialog.Title>{props.title}</AlertDialog.Title>
+        </VisuallyHidden>
+        {props.description
+          ? <VisuallyHidden><AlertDialog.Description>{props.description}</AlertDialog.Description></VisuallyHidden>
+          : null}
+        {props.children}
+      </AlertDialog.Content>
+    </AlertDialog.Root>
   )
 }

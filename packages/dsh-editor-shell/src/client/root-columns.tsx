@@ -1,4 +1,5 @@
 import { memo, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { Box, Button, Callout, Card, DropdownMenu, Flex, IconButton, Text } from '@radix-ui/themes'
 import type { PanelSize } from 'react-resizable-panels'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
 import type { SnapshotResponse } from 'dsh-editor-workbench/contracts'
@@ -11,10 +12,11 @@ import { isSuccessWorkbenchNote, type RevealRequest, type ShellContext } from '.
 import { ShellErrorBoundary } from './components.tsx'
 import { Chat, ProposalCard } from './chat.tsx'
 import { Editor } from './editor.tsx'
+import { SearchIcon } from './icons.tsx'
 import { Tree } from './sidebar.tsx'
 import { SearchPanel, type SearchHit } from './search-panel.tsx'
 import type { SettingsRenderSlot } from './settings.tsx'
-import { ActivitySkeleton, Menu, MenuContent, MenuItem, MenuTrigger, m, useChromeMotion } from './ui/index.ts'
+import { ActivitySkeleton, isImeEvent, Menu, MenuContent, MenuItem, m, useChromeMotion } from './ui/index.ts'
 
 /* 工作区三栏拆成模块级 memo 组件：侧栏搜索输入、面板拖拽、editorDirty 翻转等
    高频重渲染不再连带重渲染全部三栏与插槽内容。props 一律由 Root 以
@@ -98,14 +100,19 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
       className="sidebar"
       aria-label={t('workspace.filesAndNotes')}
       {...panelMotion}>
-      <div className="side-title">
+      <Flex className="side-title" align="center" justify="end" px="3" py="2">
         <Menu>
-          <MenuTrigger
-            className="side-version-trigger"
-            title={t('sidebar.versionMenu')}
-            aria-label={t('sidebar.versionMenu')}>
-            ⋯
-          </MenuTrigger>
+          <DropdownMenu.Trigger>
+            <IconButton
+              className="side-version-trigger"
+              variant="ghost"
+              color="gray"
+              size="2"
+              title={t('sidebar.versionMenu')}
+              aria-label={t('sidebar.versionMenu')}>
+              ⋯
+            </IconButton>
+          </DropdownMenu.Trigger>
           <MenuContent
             className="file-context-menu"
             align="end"
@@ -125,25 +132,33 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
             </MenuItem>
           </MenuContent>
         </Menu>
-      </div>
-      <input
-        className="side-search"
-        type="search"
-        value={searchQuery}
-        maxLength={120}
-        placeholder={t('search.placeholder')}
-        aria-label={t('search.aria')}
-        title={t('workspace.searchTitle')}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          setSearchQuery(event.target.value)
-          if (!props.searchOpen) props.onSearchRequestOpen()
-        }}
-        onFocus={() => props.onSearchRequestOpen()}
-        onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
-          if (event.key !== 'Enter') return
-          props.onSearchRequestOpen()
-          setSearchSubmitTick((tick) => tick + 1)
-        }} />
+      </Flex>
+      {/* TextField.Root 把 className 打在包装 div 上，e2e 要的是 input.side-search。 */}
+      <Flex className="side-search-wrap" align="center" gap="2" mx="3" mb="2" px="2">
+        <SearchIcon size={14} />
+        <input
+          className="side-search"
+          type="search"
+          value={searchQuery}
+          maxLength={120}
+          placeholder={t('search.placeholder')}
+          aria-label={t('search.aria')}
+          title={t('workspace.searchTitle')}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            setSearchQuery(event.target.value)
+            if (!props.searchOpen) props.onSearchRequestOpen()
+          }}
+          onFocus={() => props.onSearchRequestOpen()}
+          onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
+            if (event.key !== 'Enter') return
+            if (isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
+              event.preventDefault()
+              return
+            }
+            props.onSearchRequestOpen()
+            setSearchSubmitTick((tick) => tick + 1)
+          }} />
+      </Flex>
       {props.searchOpen ? <SearchPanel
         ctx={props.ctx}
         sessionId={props.sessionId}
@@ -164,44 +179,60 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
         className="snapshot-panel"
         aria-label={t('workspace.commitHistory')}
         {...panelMotion}>
-        {props.snapshots === null
-          ? <div className="snapshot-empty" role="status" aria-live="polite">
-          <ActivitySkeleton lines={3} />
-          <span className="sr-only">
-            {t('workspace.historyLoading')}
-          </span>
-        </div>
-          : props.snapshots.length === 0
-            ? <p className="snapshot-empty">
-          {t('workspace.historyEmpty')}
-        </p>
-            : props.snapshots.map((item) => <div key={item.snapshotId} className="snapshot-row">
-          <span className="snapshot-label" title={item.createdAt}>
-            {item.label ?? item.createdAt}
-          </span>
-          <span className="snapshot-meta">
-            {t('workspace.historyFiles', { count: item.files })}
-          </span>
-          <button
-            className="snapshot-rollback"
-            type="button"
-            disabled={props.snapshotBusy}
-            onClick={() => props.onRollback(item)}>
-            {t('workspace.rollback')}
-          </button>
-        </div>)}
+        <Card size="1">
+          {props.snapshots === null
+            ? <Box className="snapshot-empty" role="status" aria-live="polite">
+            <ActivitySkeleton lines={3} />
+            <span className="sr-only">
+              {t('workspace.historyLoading')}
+            </span>
+          </Box>
+            : props.snapshots.length === 0
+              ? <Text as="p" className="snapshot-empty" size="1" color="gray">
+            {t('workspace.historyEmpty')}
+          </Text>
+              : props.snapshots.map((item) => <Flex key={item.snapshotId} className="snapshot-row" align="center" gap="2" px="1" py="1">
+            <Text className="snapshot-label" size="1" title={item.createdAt} truncate>
+              {item.label ?? item.createdAt}
+            </Text>
+            <Text className="snapshot-meta" size="1" color="gray">
+              {t('workspace.historyFiles', { count: item.files })}
+            </Text>
+            <Button
+              className="snapshot-rollback"
+              type="button"
+              size="1"
+              variant="soft"
+              disabled={props.snapshotBusy}
+              onClick={() => props.onRollback(item)}>
+              {t('workspace.rollback')}
+            </Button>
+          </Flex>)}
+        </Card>
       </m.section> : null}
-      {props.createNote ? <p className="warning pad" role="alert">
-        {props.createNote}
-      </p> : null}
-      {props.workspaceWarning ? <p className="warning pad" role="status">
-        {props.workspaceWarning}
-      </p> : null}
-      {props.workbenchNote ? <p
-        className={isSuccessWorkbenchNote(props.workbenchNote) ? 'side-status' : 'warning pad'}
-        role={isSuccessWorkbenchNote(props.workbenchNote) ? 'status' : 'alert'}>
-        {props.workbenchNote}
-      </p> : null}
+      {props.createNote ? <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="alert">
+        <Callout.Text>
+          {props.createNote}
+        </Callout.Text>
+      </Callout.Root> : null}
+      {props.workspaceWarning ? <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="status">
+        <Callout.Text>
+          {props.workspaceWarning}
+        </Callout.Text>
+      </Callout.Root> : null}
+      {props.workbenchNote ? (
+        isSuccessWorkbenchNote(props.workbenchNote)
+          ? <Callout.Root className="side-status" size="1" mx="3" mb="2" role="status">
+            <Callout.Text>
+              {props.workbenchNote}
+            </Callout.Text>
+          </Callout.Root>
+          : <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="alert">
+            <Callout.Text>
+              {props.workbenchNote}
+            </Callout.Text>
+          </Callout.Root>
+      ) : null}
       <TreeColumn
         ctx={props.ctx}
         sessionId={props.sessionId}
@@ -317,9 +348,9 @@ export const CenterOverlays = memo(function CenterOverlays(props: {
   seatContext: ShellToolSeatContext
 }) {
   return props.show
-    ? <div className="center-overlays">
+    ? <Box className="center-overlays">
     {props.renderSlot?.(CENTER_OVERLAYS_SLOT, props.seatContext) ?? null}
-  </div>
+  </Box>
     : null;
 })
 

@@ -51,6 +51,7 @@ import {
   type ProviderRow,
   type ReasoningChoice,
 } from './settings-models-store.ts'
+import { Badge, Box, Callout, Card, Flex, Heading, Text, TextField } from '@radix-ui/themes'
 import { Select, type SelectOption } from './select.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
 import { ActivityDots, ActivitySkeleton, Button, Dialog } from './ui/index.ts'
@@ -481,12 +482,12 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
     return (
       <section className="models-page" aria-label={t('settings.models')}>
         <Header />
-        <div className="models-status" role="status" aria-live="polite">
+        <Box className="models-status" role="status" aria-live="polite">
           <ActivitySkeleton lines={4} className="models-loading" />
           <span className="sr-only">
             {text().loading}
           </span>
-        </div>
+        </Box>
       </section>
     );
   }
@@ -496,12 +497,14 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
     return (
       <section className="models-page" aria-label={t('settings.models')}>
         <Header />
-        <p className="models-error" role="alert">
-          {`${text().loadFailed}：${message}`}
-          <button type="button" className="models-button" onClick={() => void store.load()}>
+        <Callout.Root color="red" role="alert" className="models-error">
+          <Callout.Text>
+            {`${text().loadFailed}：${message}`}
+          </Callout.Text>
+          <Button className="models-button" onClick={() => void store.load()}>
             {text().retry}
-          </button>
-        </p>
+          </Button>
+        </Callout.Root>
       </section>
     );
   }
@@ -522,15 +525,18 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
         scope={props.writingScope}
         catalog={mergeCatalogOptions(runtimeCatalog, catalogOptions(state.rows, state.namespaces, ctx.settingsSchema))}
         writable={writable} />
-      {!writable ? <p className="models-notice" role="status">
+      {!writable ? <Text size="1" color="gray" className="models-notice" role="status">
         {text().readOnly}
-      </p> : null}
+      </Text> : null}
       {state.credentialError !== null
-        ? <p className="models-warning" role="status">
-        {`${text().credentialErrorPrefix}${state.credentialError}`}
-      </p>
+        ? <Callout.Root color="red" className="models-warning" role="status">
+        <Callout.Text>
+          {`${text().credentialErrorPrefix}${state.credentialError}`}
+        </Callout.Text>
+      </Callout.Root>
         : null}
-      <ul className="models-rows">
+      <Flex asChild direction="column" gap="3" m="0" p="0">
+        <ul className="models-rows">
         {configured.map((row) => {
           const target = row
           const namespace = state.namespaces.get(target.entry.settingsNs)
@@ -539,7 +545,8 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
           const wantsSetup = needsSetup(target, anyUsable) && !section.dismissing.has(providerIdOf(target.entry))
           if (wantsSetup) {
             return (
-              <li key={providerIdOf(target.entry)} className="models-row-card">
+              <Card asChild key={providerIdOf(target.entry)}>
+                <li className="models-row-card">
                 <ProviderEditor
                   ctx={ctx}
                   store={store}
@@ -559,11 +566,13 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
                       }
                     })
                   }} />
-              </li>
+                </li>
+              </Card>
             );
           }
           return (
-            <li key={providerIdOf(target.entry)} className="models-row-card">
+            <Card asChild key={providerIdOf(target.entry)}>
+              <li className="models-row-card">
               <RowHead
                 row={target}
                 writable={writable}
@@ -597,17 +606,19 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
                     savedNote: changed ? text().saved : current.savedNote,
                   }))
                 }} /> : null}
-            </li>
+              </li>
+            </Card>
           );
         })}
-      </ul>
+        </ul>
+      </Flex>
       {addTarget !== undefined && addNamespace !== undefined
-        ? <div className="models-add-card">
-        <div className="models-add-picker">
-          <label className="models-field">
-            <span className="models-field-label">
+        ? <Card className="models-add-card">
+        <Box className="models-add-picker">
+          <Flex direction="column" gap="2" className="models-field">
+            <Text size="1" weight="medium" className="models-field-label">
               {t('models.provider')}
-            </span>
+            </Text>
             <Select
               value={providerIdOf(addTarget.entry)}
               options={addable.map<SelectOption>((row) => ({ value: providerIdOf(row.entry), label: targetLabel(row) }))}
@@ -618,8 +629,8 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
               }}
               disabled={!writable}
               aria-label={t('models.provider')} />
-          </label>
-        </div>
+          </Flex>
+        </Box>
         <ProviderEditor
           ctx={ctx}
           store={store}
@@ -637,9 +648,9 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
               savedNote: changed ? text().saved : current.savedNote,
             }))
           }} />
-      </div>
+      </Card>
         : section.declaring
-          ? <div className="models-add-card">
+          ? <Card className="models-add-card">
         <CustomProviderCard
           ctx={ctx}
           store={store}
@@ -653,10 +664,9 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
               savedNote: changed ? text().saved : current.savedNote,
             }))
           }} />
-      </div>
-          : <div className="models-add-actions">
-        <button
-          type="button"
+      </Card>
+          : <Flex className="models-add-actions" gap="2">
+        <Button
           className="models-button"
           disabled={!writable || addable.length === 0}
           onClick={() => {
@@ -665,15 +675,14 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
             setSection({ ...emptySectionState(), editing: first, adding: true })
           }}>
           {text().add}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           className="models-button"
           disabled={!writable || protocols.length === 0}
           onClick={() => setSection({ ...emptySectionState(), declaring: true })}>
           {text().addCustom}
-        </button>
-      </div>}
+        </Button>
+      </Flex>}
       <DeleteDialog
         open={section.deleteTarget !== undefined}
         row={section.deleteTarget}
@@ -696,9 +705,11 @@ function Header(props: { note?: string | null }): ReactNode {
   if (!props.note) return null
   return (
     <header className="models-header settings-block-head">
-      <p className="models-saved" role="status">
-        {props.note}
-      </p>
+      <Callout.Root color="green" className="models-saved" role="status">
+        <Callout.Text>
+          {props.note}
+        </Callout.Text>
+      </Callout.Root>
     </header>
   );
 }
@@ -714,14 +725,14 @@ function RowHead(props: {
   const dot = credentialDot(row)
   const label = targetLabel(row)
   return (
-    <div className="models-row-head">
-      <div className="models-row-identity">
-        <span className="models-row-name">
+    <Flex className="models-row-head" align="center" justify="between" gap="3">
+      <Flex className="models-row-identity" align="center" gap="2" minWidth="0">
+        <Text size="2" weight="medium" className="models-row-name">
           {label}
-        </span>
-        {row.entry.declared === true ? <span className="models-row-tag">
+        </Text>
+        {row.entry.declared === true ? <Badge size="1" className="models-row-tag">
           {text().custom}
-        </span> : null}
+        </Badge> : null}
         {dot === 'configured'
           ? <span
           className="models-credential-dot models-credential-dot-configured"
@@ -735,28 +746,27 @@ function RowHead(props: {
           aria-label={t('models.keyMissing')}
           title={t('models.keyMissing')} />
             : null}
-      </div>
-      <div className="models-row-actions">
-        <button
-          type="button"
+      </Flex>
+      <Flex className="models-row-actions" align="center" gap="2">
+        <Button
           className="models-button"
           aria-label={formatTemplate(text().editProviderAria, label)}
           onClick={onEdit}>
           {text().edit}
-        </button>
+        </Button>
         {row.removable
-          ? <button
-          type="button"
+          ? <Button
+          variant="danger"
           className="models-button models-button-danger"
           aria-label={formatTemplate(text().deleteProviderAria, label)}
           disabled={!writable}
           onClick={onDelete}>
           {text().delete}
-        </button>
+        </Button>
           : null}
         {open ? null : <span className="models-row-state" aria-hidden={open ? 'true' : 'false'} />}
-      </div>
-    </div>
+      </Flex>
+    </Flex>
   );
 }
 
@@ -953,31 +963,31 @@ function ProviderEditor(props: {
 
   if (node === undefined) {
     return (
-      <div className="models-editor">
-        <p className="models-warning">
+      <Box className="models-editor">
+        <Text size="1" color="red" className="models-warning">
           {t('models.pathUnresolvable', { ns: namespace.ns })}
-        </p>
-      </div>
+        </Text>
+      </Box>
     );
   }
 
   return (
-    <div className="models-editor">
-      {hideTitle ? null : <div className="models-editor-header">
-        <span className="models-editor-title">
+    <Box className="models-editor">
+      {hideTitle ? null : <Flex className="models-editor-header" align="baseline" gap="2">
+        <Text size="2" weight="medium" className="models-editor-title">
           {targetLabel(row)}
-        </span>
+        </Text>
         {targetLabel(row) !== providerIdOf(row.entry)
-          ? <span className="models-editor-route">
+          ? <Text size="1" color="gray" className="models-editor-route">
           {providerIdOf(row.entry)}
-        </span>
+        </Text>
           : null}
-      </div>}
-      <div className="models-field">
-        <span className="models-field-label">
+      </Flex>}
+      <Flex direction="column" gap="2" className="models-field" minWidth="0">
+        <Text size="1" weight="medium" className="models-field-label">
           {text().apiKey}
-        </span>
-        <input
+        </Text>
+        <TextField.Root
           type="password"
           autoComplete="off"
           className="models-input"
@@ -989,20 +999,22 @@ function ProviderEditor(props: {
           onChange={(event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value)} />
         {showKeyFailure === undefined
           ? null
-          : <p className="models-warning" role="alert">
-          {showKeyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal}
-        </p>}
-      </div>
+          : <Callout.Root color="red" role="alert" className="models-warning">
+          <Callout.Text>
+            {showKeyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal}
+          </Callout.Text>
+        </Callout.Root>}
+      </Flex>
       <details className="models-customized">
         <summary className="models-customized-summary">
           {text().customized}
         </summary>
         <div className="models-customized-body">
-          {isDeclared ? <div className="models-field">
-            <span className="models-field-label">
+          {isDeclared ? <Flex direction="column" gap="2" className="models-field" minWidth="0">
+            <Text size="1" weight="medium" className="models-field-label">
               {text().displayName}
-            </span>
-            <input
+            </Text>
+            <TextField.Root
               type="text"
               className="models-input"
               value={stringAt(draft, 'displayName') ?? ''}
@@ -1010,12 +1022,12 @@ function ProviderEditor(props: {
               aria-label={text().displayName}
               disabled={readOnly || busy}
               onChange={(event: ChangeEvent<HTMLInputElement>) => setField('displayName', event.target.value)} />
-          </div> : null}
-          <div className="models-field">
-            <span className="models-field-label">
+          </Flex> : null}
+          <Flex direction="column" gap="2" className="models-field" minWidth="0">
+            <Text size="1" weight="medium" className="models-field-label">
               {text().baseUrl}
-            </span>
-            <input
+            </Text>
+            <TextField.Root
               type="text"
               className="models-input"
               value={stringAt(draft, 'baseURL') ?? ''}
@@ -1023,11 +1035,11 @@ function ProviderEditor(props: {
               aria-label={text().baseUrl}
               disabled={readOnly || busy}
               onChange={(event: ChangeEvent<HTMLInputElement>) => setField('baseURL', event.target.value)} />
-          </div>
-          {isPiAi && isDeclared ? <div className="models-field">
-            <span className="models-field-label">
+          </Flex>
+          {isPiAi && isDeclared ? <Flex direction="column" gap="2" className="models-field" minWidth="0">
+            <Text size="1" weight="medium" className="models-field-label">
               {text().protocol}
-            </span>
+            </Text>
             <Select
               value={stringAt(draft, 'api') ?? ''}
               options={[
@@ -1038,7 +1050,7 @@ function ProviderEditor(props: {
               disabled={readOnly || busy}
               aria-label={text().protocol}
               placeholder={text().protocolUnset} />
-          </div> : null}
+          </Flex> : null}
           <ModelListEditor
             ctx={ctx}
             models={models}
@@ -1052,20 +1064,21 @@ function ProviderEditor(props: {
             t={text()} />
         </div>
       </details>
-      {failure !== undefined ? <p className="models-warning" role="alert">
-        {failure}
-      </p> : null}
+      {failure !== undefined ? <Callout.Root color="red" role="alert" className="models-warning">
+        <Callout.Text>
+          {failure}
+        </Callout.Text>
+      </Callout.Root> : null}
       {isSetup || keyFailure === undefined && modelFailure === undefined
-        ? <div className="models-editor-actions">
-        <button
-          type="button"
+        ? <Flex className="models-editor-actions" gap="2" justify="end">
+        <Button
           className="models-button"
           disabled={busy}
           onClick={() => onClose(false)}>
           {text().cancel}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="primary"
           className="models-button models-button-primary"
           disabled={readOnly || busy || keyFailure !== undefined || modelFailure !== undefined}
           onClick={() => void submit()}>
@@ -1073,13 +1086,15 @@ function ProviderEditor(props: {
             <ActivityDots />
             {text().saving}
           </Fragment> : t('common.save')}
-        </button>
-      </div>
+        </Button>
+      </Flex>
         : null}
-      {modelFailureText !== null ? <p className="models-warning" role="alert">
-        {modelFailureText}
-      </p> : null}
-    </div>
+      {modelFailureText !== null ? <Callout.Root color="red" role="alert" className="models-warning">
+        <Callout.Text>
+          {modelFailureText}
+        </Callout.Text>
+      </Callout.Root> : null}
+    </Box>
   );
 }
 
@@ -1214,12 +1229,11 @@ function ModelListEditor(props: {
 
   return (
     <section className="models-catalog" aria-label={t.models}>
-      <div className="models-catalog-head">
-        <span className="models-catalog-title">
+      <Flex className="models-catalog-head" align="center" justify="between" gap="2">
+        <Text size="1" weight="medium" className="models-catalog-title">
           {t.models}
-        </span>
-        <button
-          type="button"
+        </Text>
+        <Button
           className="models-button"
           disabled={disabled || busy || !fetchable}
           onClick={() => void fetch()}>
@@ -1227,18 +1241,18 @@ function ModelListEditor(props: {
             <ActivityDots />
             {t.fetching}
           </Fragment> : t.fetchModels}
-        </button>
-      </div>
+        </Button>
+      </Flex>
       {models.length === 0
-        ? <p className="models-empty">
+        ? <Text size="1" color="gray" className="models-empty">
         {t.noneAdded}
-      </p>
+      </Text>
         : null}
-      {models.map((model, index) => <div
+      {models.map((model, index) => <Card
         key={`${index}-${typeof model['id'] === 'string' ? model['id'] : ''}`}
         className="models-catalog-entry">
-        <div className="models-catalog-row">
-          <input
+        <Flex className="models-catalog-row" align="center" gap="2" wrap="wrap">
+          <TextField.Root
             type="text"
             className="models-input models-input-id"
             value={typeof model['id'] === 'string' ? (model['id'] as string) : ''}
@@ -1246,7 +1260,7 @@ function ModelListEditor(props: {
             aria-label={`${t.modelId} ${index + 1}`}
             disabled={disabled}
             onChange={(event: ChangeEvent<HTMLInputElement>) => patch(index, { id: event.target.value })} />
-          <input
+          <TextField.Root
             type="text"
             className="models-input models-input-name"
             value={typeof model['name'] === 'string' ? (model['name'] as string) : ''}
@@ -1254,29 +1268,30 @@ function ModelListEditor(props: {
             aria-label={`${t.modelName} ${index + 1}`}
             disabled={disabled}
             onChange={(event: ChangeEvent<HTMLInputElement>) => patch(index, { name: event.target.value === '' ? undefined : event.target.value })} />
-          <button
-            type="button"
+          <Button
+            variant="icon"
             className="models-button models-button-icon"
             aria-label={`${t.modelAdvanced} ${index + 1}`}
             aria-expanded={expanded.has(index)}
             onClick={() => toggle(index)}>
             {expanded.has(index) ? '▾' : '▸'}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="danger"
             className="models-button models-button-icon models-button-danger"
             aria-label={`${t.removeModel} ${index + 1}`}
             disabled={disabled}
             onClick={() => remove(index)}>
             ×
-          </button>
-        </div>
-        {expanded.has(index) ? <div className="models-catalog-advanced">
-          <label className="models-field models-field-row">
-            <span className="models-field-label">
+          </Button>
+        </Flex>
+        {expanded.has(index) ? <Flex className="models-catalog-advanced" direction="column" gap="2">
+          <Flex asChild align="center" gap="3" className="models-field models-field-row">
+            <label>
+            <Text size="1" weight="medium" className="models-field-label">
               {t.modelContext}
-            </span>
-            <input
+            </Text>
+            <TextField.Root
               type="number"
               className="models-input"
               min={1}
@@ -1293,12 +1308,14 @@ function ModelListEditor(props: {
                   patch(index, { contextWindow: Number.isFinite(n) ? n : raw })
                 }
               }} />
-          </label>
-          <label className="models-field models-field-row">
-            <span className="models-field-label">
+            </label>
+          </Flex>
+          <Flex asChild align="center" gap="3" className="models-field models-field-row">
+            <label>
+            <Text size="1" weight="medium" className="models-field-label">
               {t.modelMax}
-            </span>
-            <input
+            </Text>
+            <TextField.Root
               type="number"
               className="models-input"
               min={1}
@@ -1315,11 +1332,13 @@ function ModelListEditor(props: {
                   patch(index, { maxTokens: Number.isFinite(n) ? n : raw })
                 }
               }} />
-          </label>
-          <label className="models-field models-field-row">
-            <span className="models-field-label">
+            </label>
+          </Flex>
+          <Flex asChild align="center" gap="3" className="models-field models-field-row">
+            <label>
+            <Text size="1" weight="medium" className="models-field-label">
               {t.modelReasoning}
-            </span>
+            </Text>
             <Select
               value={reasoningChoiceOf(model)}
               options={[
@@ -1334,19 +1353,21 @@ function ModelListEditor(props: {
                 if (choice === 'custom') return
                 patch(index, { reasoningEfforts: reasoningEffortsFor(choice as ReasoningChoice) })
               }} />
-          </label>
-        </div> : null}
-      </div>)}
-      <button
-        type="button"
+            </label>
+          </Flex>
+        </Flex> : null}
+      </Card>)}
+      <Button
         className="models-button models-button-add"
         disabled={disabled}
         onClick={add}>
         {`+ ${t.addModel}`}
-      </button>
-      {failure !== undefined ? <p className="models-warning" role="alert">
-        {failure}
-      </p> : null}
+      </Button>
+      {failure !== undefined ? <Callout.Root color="red" role="alert" className="models-warning">
+        <Callout.Text>
+          {failure}
+        </Callout.Text>
+      </Callout.Root> : null}
       <Dialog
         open={candidates !== undefined}
         onOpenChange={(next: boolean) => { if (!next) closePicker() }}
@@ -1355,45 +1376,51 @@ function ModelListEditor(props: {
         className="file-dialog models-candidate-dialog"
         overlayClassName="file-dialog-overlay models-overlay">
         <header>
-          <h2>
+          <Heading as="h2" size="4">
             {t.candidateTitle}
-          </h2>
-          <p className="models-candidate-description">
+          </Heading>
+          <Text as="p" size="2" color="gray" className="models-candidate-description">
             {t.candidateDescription}
-          </p>
+          </Text>
           <Button className="models-button" onClick={closePicker}>
             {t.candidateClose}
           </Button>
         </header>
-        <div className="models-candidate-actions">
+        <Flex className="models-candidate-actions" justify="end" gap="2" mb="2">
           <Button className="models-button" onClick={toggleAll}>
             {allPicked ? t.candidateDeselectAll : t.candidateSelectAll}
           </Button>
-        </div>
-        <ul className="models-candidate-list">
-          {(candidates ?? []).map((candidate) => <li key={candidate.id} className="models-candidate">
+        </Flex>
+        <Flex asChild direction="column" gap="1" m="0" p="0">
+          <ul className="models-candidate-list">
+          {(candidates ?? []).map((candidate) => <Card asChild key={candidate.id}>
+            <li className="models-candidate">
             <label className="models-candidate-label">
               <input
                 type="checkbox"
                 checked={picked.has(candidate.id)}
                 onChange={() => togglePick(candidate.id)} />
-              <span className="models-candidate-id">
+              <Text size="2" weight="medium" className="models-candidate-id">
                 {candidate.id}
-              </span>
-              {candidate.name !== undefined ? <span className="models-candidate-name">
+              </Text>
+              {candidate.name !== undefined ? <Badge size="1" color="gray" className="models-candidate-name">
                 {candidate.name}
-              </span> : null}
+              </Badge> : null}
             </label>
-          </li>)}
-        </ul>
-        <footer>
+            </li>
+          </Card>)}
+          </ul>
+        </Flex>
+        <Flex asChild justify="end" gap="2">
+          <footer>
           <Button className="models-button" onClick={closePicker}>
             {t.cancel}
           </Button>
-          <Button className="models-button models-button-primary" onClick={adoptPicked}>
+          <Button variant="primary" className="models-button models-button-primary" onClick={adoptPicked}>
             {t.candidateAdopt}
           </Button>
-        </footer>
+          </footer>
+        </Flex>
       </Dialog>
     </section>
   );
@@ -1481,17 +1508,17 @@ function CustomProviderCard(props: {
   }
 
   return (
-    <div className="models-editor">
-      <div className="models-editor-header">
-        <span className="models-editor-title">
+    <Box className="models-editor">
+      <Flex className="models-editor-header" align="baseline" gap="2">
+        <Text size="2" weight="medium" className="models-editor-title">
           {t('models.customProvider')}
-        </span>
-      </div>
-      <div className="models-field">
-        <span className="models-field-label">
+        </Text>
+      </Flex>
+      <Flex direction="column" gap="2" className="models-field" minWidth="0">
+        <Text size="1" weight="medium" className="models-field-label">
           {text().customRoute}
-        </span>
-        <input
+        </Text>
+        <TextField.Root
           type="text"
           className="models-input"
           value={route}
@@ -1500,19 +1527,21 @@ function CustomProviderCard(props: {
           aria-invalid={routeInvalid !== undefined}
           disabled={readOnly || busy || committed}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setRoute(event.target.value)} />
-      </div>
+      </Flex>
       {routeInvalid !== undefined
-        ? <p className="models-warning" role="alert">
-        {routeInvalid === 'routeInvalid' ? text().customRouteInvalid : text().customRouteTaken}
-      </p>
-        : <p className="models-hint">
+        ? <Callout.Root color="red" role="alert" className="models-warning">
+        <Callout.Text>
+          {routeInvalid === 'routeInvalid' ? text().customRouteInvalid : text().customRouteTaken}
+        </Callout.Text>
+      </Callout.Root>
+        : <Text size="1" color="gray" className="models-hint">
         {text().customRouteHint}
-      </p>}
-      <div className="models-field">
-        <span className="models-field-label">
+      </Text>}
+      <Flex direction="column" gap="2" className="models-field" minWidth="0">
+        <Text size="1" weight="medium" className="models-field-label">
           {text().displayName}
-        </span>
-        <input
+        </Text>
+        <TextField.Root
           type="text"
           className="models-input"
           value={displayName}
@@ -1520,12 +1549,12 @@ function CustomProviderCard(props: {
           aria-label={text().displayName}
           disabled={readOnly || busy || committed}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value)} />
-      </div>
-      <div className="models-field">
-        <span className="models-field-label">
+      </Flex>
+      <Flex direction="column" gap="2" className="models-field" minWidth="0">
+        <Text size="1" weight="medium" className="models-field-label">
           {text().baseUrl}
-        </span>
-        <input
+        </Text>
+        <TextField.Root
           type="text"
           className="models-input"
           value={baseURL}
@@ -1533,23 +1562,23 @@ function CustomProviderCard(props: {
           aria-label={text().baseUrl}
           disabled={readOnly || busy || committed}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setBaseURL(event.target.value)} />
-      </div>
-      <div className="models-field">
-        <span className="models-field-label">
+      </Flex>
+      <Flex direction="column" gap="2" className="models-field" minWidth="0">
+        <Text size="1" weight="medium" className="models-field-label">
           {text().protocol}
-        </span>
+        </Text>
         <Select
           value={protocol}
           options={protocols.map<SelectOption>((value) => ({ value, label: value }))}
           onChange={setProtocol}
           disabled={readOnly || busy || committed}
           aria-label={text().protocol} />
-      </div>
-      <div className="models-field">
-        <span className="models-field-label">
+      </Flex>
+      <Flex direction="column" gap="2" className="models-field" minWidth="0">
+        <Text size="1" weight="medium" className="models-field-label">
           {text().apiKey}
-        </span>
-        <input
+        </Text>
+        <TextField.Root
           type="password"
           autoComplete="off"
           className="models-input"
@@ -1561,10 +1590,12 @@ function CustomProviderCard(props: {
           onChange={(event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value)} />
         {keyFailure === undefined
           ? null
-          : <p className="models-warning" role="alert">
-          {keyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal}
-        </p>}
-      </div>
+          : <Callout.Root color="red" role="alert" className="models-warning">
+          <Callout.Text>
+            {keyFailure === 'keyBlank' ? text().keyBlank : text().keyIllegal}
+          </Callout.Text>
+        </Callout.Root>}
+      </Flex>
       <ModelListEditor
         ctx={ctx}
         models={models}
@@ -1576,29 +1607,32 @@ function CustomProviderCard(props: {
         disabled={readOnly || busy || committed}
         onChange={setModels}
         t={text()} />
-      <div className="models-hint">
+      <Text size="1" color="gray" className="models-hint">
         {baseURL.trim().length === 0 ? text().customNeedsBaseUrl
           : models.length === 0 ? text().customNeedsModels
             : null}
-      </div>
+      </Text>
       {modelFailure !== undefined
-        ? <p className="models-warning" role="alert">
-        {text().modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key))}
-      </p>
+        ? <Callout.Root color="red" role="alert" className="models-warning">
+        <Callout.Text>
+          {text().modelFailure(modelFailure.index, modelFailureLabel(modelFailure.key))}
+        </Callout.Text>
+      </Callout.Root>
         : null}
-      {failure !== undefined ? <p className="models-warning" role="alert">
-        {failure}
-      </p> : null}
-      <div className="models-editor-actions">
-        <button
-          type="button"
+      {failure !== undefined ? <Callout.Root color="red" role="alert" className="models-warning">
+        <Callout.Text>
+          {failure}
+        </Callout.Text>
+      </Callout.Root> : null}
+      <Flex className="models-editor-actions" gap="2" justify="end">
+        <Button
           className="models-button"
           disabled={busy}
           onClick={() => onClose(false)}>
           {text().cancel}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="primary"
           className="models-button models-button-primary"
           disabled={readOnly || busy || !ready}
           onClick={() => void submit()}>
@@ -1606,8 +1640,8 @@ function CustomProviderCard(props: {
             <ActivityDots />
             {text().creating}
           </Fragment> : text().createCustom}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Flex>
+    </Box>
   );
 }

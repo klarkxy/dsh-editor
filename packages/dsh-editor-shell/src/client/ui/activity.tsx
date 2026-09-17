@@ -1,15 +1,10 @@
+import { Skeleton, Spinner } from '@radix-ui/themes'
 import type { ReactNode } from 'react'
 
 /* 统一活动反馈原语:加载 / 等待 / 进行中 / 完成。
-   运动参数改写自 Amicro — Micro Transitions(MIT License,
-   Copyright (c) 2026 Syed Subhan Uddin):pulse-dots(opacity .2→1→.2,1.4s,
-   i×0.2s 交错)、typing-indicator(translateY 0→-4px→0,0.6s ease-in-out,
-   i×0.15s 交错)、smooth-ring(r=14 弧 dasharray 38 80,1s linear 旋转)、
-   shimmer-line(1/3 宽扫过 -100%→300%,1.5s ease-in-out)、
-   fluid-skeleton(光泽扫过 -100%→200%,1.5s linear)。
-   配色改用 paper/ink 令牌(currentColor / --accent / --hairline-strong),
-   关键帧在 styles.ts(shell-activity-*);装饰元素一律 aria-hidden,
-   reduced-motion 由全局媒体查询停掉循环并保留静态可读态。 */
+   ActivityRing / ActivitySkeleton 用 Themes Spinner / Skeleton。
+   点、微光、完成勾仍是纯 CSS,配色走 Radix 变量;关键帧在 styles.ts。
+   装饰元素一律 aria-hidden,reduced-motion 由全局媒体查询停掉循环。 */
 
 export type ActivityCue = 'dots' | 'typing' | 'ring' | 'none'
 
@@ -26,18 +21,14 @@ export function ActivityDots(props: { variant?: 'pulse' | 'typing'; className?: 
   )
 }
 
-/** 圆环弧:确定性检查 / 导入 / 启动等块状等待。 */
+/** 圆环:确定性检查 / 导入 / 启动等块状等待。Themes Spinner 承担旋转。 */
 export function ActivityRing(props: { size?: number; className?: string }) {
   return (
-    <svg
+    <Spinner
       className={['activity-ring', props.className].filter(Boolean).join(' ')}
       style={props.size ? { width: props.size, height: props.size } : undefined}
-      viewBox="0 0 32 32"
       aria-hidden="true"
-    >
-      <circle className="activity-ring-track" cx="16" cy="16" r="14" fill="none" strokeWidth="3" />
-      <circle className="activity-ring-arc" cx="16" cy="16" r="14" fill="none" strokeWidth="3" strokeDasharray="38 80" strokeLinecap="round" />
-    </svg>
+    />
   )
 }
 
@@ -58,7 +49,10 @@ export function ActivitySkeleton(props: { lines?: number; className?: string }) 
   return (
     <span className={['activity-skeleton', props.className].filter(Boolean).join(' ')} aria-hidden="true">
       {Array.from({ length: lines }, (_, index) => (
-        <i key={index} style={{ width: SKELETON_WIDTHS[index % SKELETON_WIDTHS.length] }} />
+        <Skeleton
+          key={index}
+          style={{ width: SKELETON_WIDTHS[index % SKELETON_WIDTHS.length], height: 10 }}
+        />
       ))}
     </span>
   )

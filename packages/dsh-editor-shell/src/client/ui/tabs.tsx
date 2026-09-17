@@ -1,9 +1,4 @@
-import {
-  Root as TabsRoot,
-  List as TabsListRoot,
-  Trigger as TabsTriggerRoot,
-  Content as TabsContentRoot,
-} from '@radix-ui/react-tabs'
+import { Tabs as ThemesTabs } from '@radix-ui/themes'
 import type { CSSProperties, ReactNode } from 'react'
 
 export function Tabs(props: {
@@ -14,22 +9,22 @@ export function Tabs(props: {
   orientation?: 'horizontal' | 'vertical'
 }) {
   return (
-    <TabsRoot
+    <ThemesTabs.Root
       value={props.value}
       onValueChange={props.onValueChange}
       className={props.className}
       orientation={props.orientation ?? 'vertical'}
     >
       {props.children}
-    </TabsRoot>
+    </ThemesTabs.Root>
   )
 }
 
 export function TabsList(props: { children?: ReactNode; className?: string; 'aria-label'?: string }) {
   return (
-    <TabsListRoot className={props.className} aria-label={props['aria-label']}>
+    <ThemesTabs.List className={props.className} aria-label={props['aria-label']}>
       {props.children}
-    </TabsListRoot>
+    </ThemesTabs.List>
   )
 }
 
@@ -40,9 +35,9 @@ export function TabsTrigger(props: {
   'aria-current'?: boolean | 'page' | 'step' | 'location' | 'date' | 'time' | 'true' | 'false'
 }) {
   return (
-    <TabsTriggerRoot value={props.value} className={props.className} aria-current={props['aria-current']}>
+    <ThemesTabs.Trigger value={props.value} className={props.className} aria-current={props['aria-current']}>
       {props.children}
-    </TabsTriggerRoot>
+    </ThemesTabs.Trigger>
   )
 }
 
@@ -55,7 +50,7 @@ export function TabsContent(props: {
   style?: CSSProperties
 }) {
   return (
-    <TabsContentRoot
+    <ThemesTabs.Content
       value={props.value}
       className={props.className}
       forceMount={props.forceMount}
@@ -64,6 +59,6 @@ export function TabsContent(props: {
       style={props.style}
     >
       {props.children}
-    </TabsContentRoot>
+    </ThemesTabs.Content>
   )
 }

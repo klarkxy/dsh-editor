@@ -1,4 +1,5 @@
 import type { EditorCommandState } from 'dsh-manuscript/client/editor-core'
+import { DropdownMenu, IconButton } from '@radix-ui/themes'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { t } from '../i18n/index.ts'
 import {
@@ -67,14 +68,19 @@ export function EditorOverflowMenu(props: {
 }) {
   return (
     <Menu open={props.open} onOpenChange={props.onOpenChange}>
-      <MenuTrigger
-        className="editor-menu-trigger"
-        title={t('editor.menu')}
-        aria-label={t('editor.menu')}
-        data-testid="paper-editor-menu-trigger"
-      >
-        ⋯
-      </MenuTrigger>
+      <DropdownMenu.Trigger>
+        <IconButton
+          className="editor-menu-trigger"
+          variant="ghost"
+          color="gray"
+          size="2"
+          title={t('editor.menu')}
+          aria-label={t('editor.menu')}
+          data-testid="paper-editor-menu-trigger"
+        >
+          ⋯
+        </IconButton>
+      </DropdownMenu.Trigger>
       <MenuContent
         className="editor-action-menu"
         align="end"

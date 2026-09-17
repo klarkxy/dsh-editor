@@ -2,10 +2,10 @@
  * Slim visual audit for the DSH Editor shell after the UI refactor.
  *
  * Captures screenshots covering the new chrome and both themes:
- *   - home stage (paper, ink)
- *   - editor with typed content (paper, ink)
+ *   - home stage (light, dark)
+ *   - editor with typed content (light, dark)
  *   - narrow overlay drawer
- *   - sidebar with all four groups expanded (paper)
+ *   - sidebar with all four groups expanded (light)
  *   - theme toggle round-trip
  *
  * Never sends a paid model turn: ghost FIM is exercised in its `manual`
@@ -172,8 +172,8 @@ try {
   await dismissNativeOnboarding(page)
   await page.waitForTimeout(400)
 
-  // 01 — home, paper theme (default).
-  await shot(page, 'home-paper', '首页 · 纸主题：新建与打开作品入口')
+  // 01 — home, light theme (default).
+  await shot(page, 'home-light', '首页 · 浅色主题：新建与打开作品入口')
 
   // The DSH "内测声明" modal can re-appear after the first dismissal if the
   // initial pass ran before the modal had a chance to mount. Re-dismiss so
@@ -214,7 +214,7 @@ try {
     const view = el && /** @type {any} */ (el).__cmView
     if (view) view.dispatch({ selection: { anchor: view.state.doc.length } })
   })
-  await shot(page, 'workbench-paper', '工作台 · 纸主题：稿件目录、四组资料、稿纸、写入内容')
+  await shot(page, 'workbench-light', '工作台 · 浅色主题：稿件目录、四组资料、稿纸、写入内容')
 
   // 03 — manual FIM attempt: editor stays usable while the FIM notice shows.
   // 正文常驻控件精简后(compactControls),手动补全收进「⋯」正文操作菜单。
@@ -256,26 +256,26 @@ try {
   shotIndex += 1
   note('截图', 'sidebar-expanded — 侧栏：正文/大纲/人物卡/世界书四组展开')
 
-  // 05 — ink theme round-trip on the workbench.
-  await page.getByRole('button', { name: /主题（当前纸）/ }).click()
-  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'ink')
+  // 05 — dark theme round-trip on the workbench.
+  await page.getByRole('button', { name: /主题（当前浅色）/ }).click()
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'dark')
   await page.waitForTimeout(400)
-  await shot(page, 'workbench-ink', '工作台 · 墨主题：data-theme=ink + localStorage 同步')
+  await shot(page, 'workbench-dark', '工作台 · 深色主题：data-theme=dark + localStorage 同步')
 
-  // 06 — paper still works, then back to ink before leaving the workbench.
-  await page.getByRole('button', { name: /主题（当前墨）/ }).click()
-  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'paper')
-  await page.getByRole('button', { name: /主题（当前纸）/ }).click()
-  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'ink')
+  // 06 — light still works, then back to dark before leaving the workbench.
+  await page.getByRole('button', { name: /主题（当前深色）/ }).click()
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'light')
+  await page.getByRole('button', { name: /主题（当前浅色）/ }).click()
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'dark')
 
-  // 07 — return to home while ink is already the live theme. Do not reload:
+  // 07 — return to home while dark is already the live theme. Do not reload:
   // a reload restores the last workspace and would capture the workbench.
   await page.getByRole('button', { name: '作品菜单' }).click()
   await page.getByRole('menuitem', { name: '返回作品列表' }).click()
   await page.locator('.home-stage').waitFor({ state: 'visible' })
-  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'ink')
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'dark')
   await page.waitForTimeout(300)
-  await shot(page, 'home-ink', '首页 · 墨主题：与纸主题同一布局，仅 token 切换')
+  await shot(page, 'home-dark', '首页 · 深色主题：与浅色主题同一布局，仅 token 切换')
 
   if (browserErrors.length) failures.push(...browserErrors)
 } catch (error) {

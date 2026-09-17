@@ -1,19 +1,19 @@
-import { type ReactElement } from 'react';
+import { createElement, type ReactElement } from 'react';
 import { describe, expect, it } from 'vitest'
 import { cardsPromptKeyDown } from './dialog.tsx'
-import { guardImeEnter, renderSelect, IME_KEYCODE } from './host-ui.tsx'
-import type { ShellSelectProps } from 'dsh-editor-seats'
+import { guardImeEnter, renderInput, renderSelect, IME_KEYCODE } from './host-ui.tsx'
+import type { ShellInputProps, ShellSelectProps } from 'dsh-editor-seats'
 
 function MockSelect(props: ShellSelectProps) {
-  return (
-    <div data-host="select" aria-label={props['aria-label']}>
-      {props.value}
-    </div>
-  );
+  return createElement('div', { 'data-host': 'select', 'aria-label': props['aria-label'] }, props.value)
 }
 
-function asElement(node: unknown): ReactElement<{ children?: unknown; 'aria-label'?: string; value?: string; disabled?: boolean }> {
-  return node as ReactElement<{ children?: unknown; 'aria-label'?: string; value?: string; disabled?: boolean }>
+function MockInput(props: ShellInputProps) {
+  return createElement('div', { 'data-host': 'input', 'aria-label': props['aria-label'] }, props.value)
+}
+
+function asElement(node: unknown): ReactElement<{ children?: unknown; 'aria-label'?: string; value?: string; disabled?: boolean; placeholder?: string }> {
+  return node as ReactElement<{ children?: unknown; 'aria-label'?: string; value?: string; disabled?: boolean; placeholder?: string }>
 }
 
 describe('cards host UI helpers', () => {
@@ -60,7 +60,28 @@ describe('cards host UI helpers', () => {
     expect(native.type).toBe('select')
     expect(native.props['aria-label']).toBe('排序')
     expect(native.props.value).toBe('title')
-    const options = native.props.children as ReactElement[]
-    expect(options.filter(Boolean).map((item) => item.props.value)).toEqual(['title', 'modified'])
+    const options = (Array.isArray(native.props.children) ? native.props.children : [native.props.children])
+      .flat()
+      .filter(Boolean) as ReactElement<{ value?: string }>[]
+    expect(options.map((item) => item.props.value)).toEqual(['title', 'modified'])
+  })
+
+  it('uses the host Input when provided and a native input otherwise', () => {
+    const props: ShellInputProps = {
+      value: '港口',
+      onChange() {},
+      'aria-label': '筛选',
+      placeholder: '按名称',
+    }
+    const hosted = asElement(renderInput(MockInput, props))
+    expect(hosted.type).toBe(MockInput)
+    expect(hosted.props['aria-label']).toBe('筛选')
+    expect(hosted.props.value).toBe('港口')
+
+    const native = asElement(renderInput(undefined, props))
+    expect(native.type).toBe('input')
+    expect(native.props['aria-label']).toBe('筛选')
+    expect(native.props.value).toBe('港口')
+    expect(native.props.placeholder).toBe('按名称')
   })
 })

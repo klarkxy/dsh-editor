@@ -7,11 +7,13 @@ import {
   useSyncExternalStore,
   type ChangeEvent,
 } from 'react';
+import { Button, Callout, Card, Flex, Heading, Kbd, RadioGroup, Switch, Text, TextArea } from '@radix-ui/themes'
 import { AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
 import { t, useLocale } from './i18n/index.ts'
 import { ActivityDots } from './client/ui/index.ts'
+import { Select } from './client/select.tsx'
 
 
 export { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
@@ -73,6 +75,16 @@ function normalizePaperPreferences(record: Record<string, unknown>): Pick<Writin
   }
 }
 
+const WRITING_EFFORTS = new Set(['off', 'low', 'medium', 'high', 'xhigh', 'max'])
+
+/** Host `off` and public `none` are the same none-thinking slot. */
+export function normalizeWritingEffort(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const id = value.trim()
+  if (id === 'none') return 'off'
+  return WRITING_EFFORTS.has(id) ? id : undefined
+}
+
 /** Empty provider+model means the documented fallback (current chat / runtime default). */
 export function normalizeWritingModelRoute(value: unknown): WritingModelRoute | undefined {
   const record = object(value)
@@ -81,7 +93,8 @@ export function normalizeWritingModelRoute(value: unknown): WritingModelRoute | 
   const provider = record.provider.trim()
   const model = record.model.trim()
   if (!provider && !model) return undefined
-  return { provider, model }
+  const reasoningEffort = normalizeWritingEffort(record.reasoningEffort)
+  return reasoningEffort ? { provider, model, reasoningEffort } : { provider, model }
 }
 
 export function writingModelRouteValue(route: WritingModelRoute | undefined): WritingModelRoute {
@@ -290,18 +303,20 @@ export function WritingSettings({ scope, migrate }: {
 
   if (snapshot.status === 'loading') return (
     <section className="writing-settings" aria-label={t('settings.writing')}>
-      <p role="status">
+      <Text as="p" size="2" role="status">
         <ActivityDots />
         {t('writing.loading')}
-      </p>
+      </Text>
     </section>
   );
 
   if (snapshot.status === 'unavailable') return (
     <section className="writing-settings" aria-label={t('settings.writing')}>
-      <p role="alert">
-        {t('writing.unavailable')}
-      </p>
+      <Callout.Root color="red" role="alert">
+        <Callout.Text>
+          {t('writing.unavailable')}
+        </Callout.Text>
+      </Callout.Root>
     </section>
   );
 
@@ -311,113 +326,125 @@ export function WritingSettings({ scope, migrate }: {
         <legend className="settings-block-title">
           {t('writing.completion')}
         </legend>
-        {([['manual', t('writing.manualOnly')], ['pause', t('writing.pauseHint')]] as const).map(([value, label]) => <label key={value}>
-          <input
-            type="radio"
+        <Card>
+          <RadioGroup.Root
+            value={values.completion}
             name="completion-preference"
-            checked={values.completion === value}
-            onChange={() => void update('completion', value)} />
-          {label}
-        </label>)}
+            aria-label={t('writing.completion')}
+            onValueChange={(value) => void update('completion', value as WritingPreferences['completion'])}>
+            <Flex direction="column" gap="2">
+              <RadioGroup.Item value="manual">{t('writing.manualOnly')}</RadioGroup.Item>
+              <RadioGroup.Item value="pause">{t('writing.pauseHint')}</RadioGroup.Item>
+            </Flex>
+          </RadioGroup.Root>
+        </Card>
       </fieldset>
       <fieldset className="paper-typography settings-block">
         <legend className="settings-block-title">
           {t('writing.paper')}
         </legend>
-        <label>
-          <input
-            type="checkbox"
-            checked={values.typewriter}
-            onChange={() => void update('typewriter', !values.typewriter)} />
-          {t('writing.typewriter')}
-          <kbd>
-            Ctrl+Alt+T
-          </kbd>
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={values.focusParagraph}
-            onChange={() => void update('focusParagraph', !values.focusParagraph)} />
-          {t('writing.focusParagraph')}
-          <kbd>
-            Ctrl+Alt+P
-          </kbd>
-        </label>
-        <label className="slider-row">
-          <span>
-            {t('writing.fontSize', { size: values.fontSize })}
-          </span>
-          <input
-            type="range"
-            min={PAPER_FONT_SIZE.min}
-            max={PAPER_FONT_SIZE.max}
-            step={1}
-            value={values.fontSize}
-            aria-label={t('writing.fontSizeAria')}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => void update('fontSize', Number(event.target.value))} />
-        </label>
-        <label className="slider-row">
-          <span>
-            {t('writing.lineHeight', { value: values.lineHeight.toFixed(1) })}
-          </span>
-          <input
-            type="range"
-            min={PAPER_LINE_HEIGHT.min}
-            max={PAPER_LINE_HEIGHT.max}
-            step={0.1}
-            value={values.lineHeight}
-            aria-label={t('writing.lineHeightAria')}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => void update('lineHeight', Number(event.target.value))} />
-        </label>
-        <label className="slider-row">
-          <span>
-            {t('writing.paragraphSpacing', { value: values.paragraphSpacing.toFixed(2) })}
-          </span>
-          <input
-            type="range"
-            min={PAPER_PARAGRAPH_SPACING.min}
-            max={PAPER_PARAGRAPH_SPACING.max}
-            step={0.05}
-            value={values.paragraphSpacing}
-            aria-label={t('writing.paragraphSpacingAria')}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => void update('paragraphSpacing', Number(event.target.value))} />
-        </label>
-        <div className="choice-row" role="group" aria-label={t('writing.font')}>
-          <span>
-            {t('writing.font')}
-          </span>
-          {([['serif', t('writing.serif')], ['sans', t('writing.sans')], ['mono', t('writing.mono')]] as const).map(([value, label]) => <label key={value}>
+        <Card>
+          <Flex direction="column" gap="3">
+          <Flex className="paper-experience-toggles" direction="column" gap="3">
+            <Flex align="center" justify="between" gap="3">
+              <Text size="2">
+                {t('writing.typewriter')}
+              </Text>
+              <Flex align="center" gap="2">
+                <Kbd>
+                  Ctrl+Alt+T
+                </Kbd>
+                <Switch
+                  checked={values.typewriter}
+                  aria-label={t('writing.typewriter')}
+                  onCheckedChange={(next) => void update('typewriter', next)} />
+              </Flex>
+            </Flex>
+            <Flex align="center" justify="between" gap="3">
+              <Text size="2">
+                {t('writing.focusParagraph')}
+              </Text>
+              <Flex align="center" gap="2">
+                <Kbd>
+                  Ctrl+Alt+P
+                </Kbd>
+                <Switch
+                  checked={values.focusParagraph}
+                  aria-label={t('writing.focusParagraph')}
+                  onCheckedChange={(next) => void update('focusParagraph', next)} />
+              </Flex>
+            </Flex>
+          </Flex>
+          <label className="slider-row">
+            <Text as="span" size="2">
+              {t('writing.fontSize', { size: values.fontSize })}
+            </Text>
             <input
-              type="radio"
-              name="paper-font-family"
-              checked={values.fontFamily === value}
-              onChange={() => void update('fontFamily', value)} />
-            {label}
-          </label>)}
-        </div>
-        <div className="choice-row" role="group" aria-label={t('writing.paperWidth')}>
-          <span>
-            {t('writing.paperWidth')}
-          </span>
-          {([['narrow', t('writing.narrow')], ['medium', t('writing.medium')], ['wide', t('writing.wide')]] as const).map(([value, label]) => <label key={value}>
+              type="range"
+              min={PAPER_FONT_SIZE.min}
+              max={PAPER_FONT_SIZE.max}
+              step={1}
+              value={values.fontSize}
+              aria-label={t('writing.fontSizeAria')}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => void update('fontSize', Number(event.target.value))} />
+          </label>
+          <label className="slider-row">
+            <Text as="span" size="2">
+              {t('writing.lineHeight', { value: values.lineHeight.toFixed(1) })}
+            </Text>
             <input
-              type="radio"
-              name="paper-width"
-              checked={values.paperWidth === value}
-              onChange={() => void update('paperWidth', value)} />
-            {label}
-          </label>)}
-        </div>
+              type="range"
+              min={PAPER_LINE_HEIGHT.min}
+              max={PAPER_LINE_HEIGHT.max}
+              step={0.1}
+              value={values.lineHeight}
+              aria-label={t('writing.lineHeightAria')}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => void update('lineHeight', Number(event.target.value))} />
+          </label>
+          <label className="slider-row">
+            <Text as="span" size="2">
+              {t('writing.paragraphSpacing', { value: values.paragraphSpacing.toFixed(2) })}
+            </Text>
+            <input
+              type="range"
+              min={PAPER_PARAGRAPH_SPACING.min}
+              max={PAPER_PARAGRAPH_SPACING.max}
+              step={0.05}
+              value={values.paragraphSpacing}
+              aria-label={t('writing.paragraphSpacingAria')}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => void update('paragraphSpacing', Number(event.target.value))} />
+          </label>
+          <Flex className="choice-row" role="group" aria-label={t('writing.font')} align="center" gap="2" wrap="wrap">
+            <Text as="span" size="2" weight="medium">
+              {t('writing.font')}
+            </Text>
+            <Select
+              value={values.fontFamily}
+              options={[{ value: 'serif', label: t('writing.serif') }, { value: 'sans', label: t('writing.sans') }, { value: 'mono', label: t('writing.mono') }]}
+              onChange={(value) => void update('fontFamily', value as PaperFontFamily)}
+              aria-label={t('writing.font')} />
+          </Flex>
+          <Flex className="choice-row" role="group" aria-label={t('writing.paperWidth')} align="center" gap="2" wrap="wrap">
+            <Text as="span" size="2" weight="medium">
+              {t('writing.paperWidth')}
+            </Text>
+            <Select
+              value={values.paperWidth}
+              options={[{ value: 'narrow', label: t('writing.narrow') }, { value: 'medium', label: t('writing.medium') }, { value: 'wide', label: t('writing.wide') }]}
+              onChange={(value) => void update('paperWidth', value as PaperWidth)}
+              aria-label={t('writing.paperWidth')} />
+          </Flex>
+          </Flex>
+        </Card>
       </fieldset>
-      <section className="settings-block">
+      <Card className="settings-block">
         <header className="settings-block-head">
-          <h3 id="writing-author-pref" className="settings-block-title">
+          <Heading as="h3" id="writing-author-pref" size="3" className="settings-block-title">
             {t('writing.authorPref')}
-          </h3>
+          </Heading>
         </header>
-        <label className="author-preferences">
-          <textarea
+        <Flex className="author-preferences" direction="column" gap="2">
+          <TextArea
             value={authorDraft}
             maxLength={AUTHOR_PREFERENCES_MAX_CHARS}
             rows={5}
@@ -425,32 +452,40 @@ export function WritingSettings({ scope, migrate }: {
             aria-labelledby="writing-author-pref"
             disabled={saving !== null}
             onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setAuthorDraft(event.target.value)} />
-          <small>
+          <Text size="1" color="gray">
             {t('writing.authorCount', { count: authorDraft.length, max: AUTHOR_PREFERENCES_MAX_CHARS })}
-          </small>
-        </label>
-        <button
+          </Text>
+        </Flex>
+        <Button
           type="button"
+          variant="solid"
+          mt="3"
           disabled={saving !== null || authorDraft === values.authorPreferences}
           onClick={() => void update('authorPreferences', authorDraft)}>
           {saving === 'authorPreferences' ? <Fragment>
             <ActivityDots />
             {t('common.saving')}
           </Fragment> : t('writing.saveAuthor')}
-        </button>
-      </section>
-      {writeFailure ? <p role="alert">
-        {writeFailure}
-      </p> : null}
-      {migrationFailure.length ? <p role="alert">
-        {t('writing.migrationPending')}
-        <button
+        </Button>
+      </Card>
+      {writeFailure ? <Callout.Root color="red" role="alert">
+        <Callout.Text>
+          {writeFailure}
+        </Callout.Text>
+      </Callout.Root> : null}
+      {migrationFailure.length ? <Callout.Root color="amber" role="alert">
+        <Callout.Text>
+          {t('writing.migrationPending')}
+        </Callout.Text>
+        <Button
           type="button"
+          variant="soft"
+          color="gray"
           onClick={() => void runMigration()}
           disabled={saving !== null}>
           {t('writing.retryMigration')}
-        </button>
-      </p> : null}
+        </Button>
+      </Callout.Root> : null}
     </section>
   );
 }

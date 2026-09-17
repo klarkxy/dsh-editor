@@ -35,7 +35,7 @@ function parentOf(rel: string): string {
 // One-shot stylesheet injection. The manuscript overlay renders outside the
 // shell's `.shell` root, so the editor-core paper surface and the overlay
 // chrome need their own stylesheet. Tokens are still driven by the shell
-// (`:root[data-theme=...]`), which lives in the same document.
+// (`:root[data-theme=light|dark]`), which lives in the same document.
 let manuscriptStylesInjected = false
 function ensureManuscriptStyles(): void {
   if (manuscriptStylesInjected) return

@@ -14,7 +14,7 @@
 | --- | --- |
 | [使用者指南](user-guide.md) | 新建作品、编辑保存、正文菜单、搭档、资料、设置与升级 |
 | [产品原则](product-principles.md) | 作者确认、普通文件与单一 DSH 权威边界 |
-| [界面与设计系统](ui.md) | 纸 / 墨主题、共享控件、设置滚动、图表与辅助文件展示 |
+| [界面与设计系统](ui.md) | Radix Themes 设计系统、浅色 / 深色主题、共享控件、设置滚动、图表与辅助文件展示 |
 | [开发者指南](development.md) | 固定版本、构建顺序、调试、验收、打包与发布 |
 | [架构与边界](architecture.md) | 进程、profile、持久化与安全约束 |
 | [插件架构与接口](plugin-architecture.md) | 所有权、注入、RPC / Tool / slot 与替换合同 |

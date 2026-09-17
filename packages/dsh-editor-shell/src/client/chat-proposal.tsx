@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { Badge, Box, Button, Card, Flex, Text } from '@radix-ui/themes'
 import { WRITING_PROPOSE_TOOL_NAME, type AuthorProposal } from '../adapter.ts'
 import { WORKBENCH_RPC_CHANNEL } from 'dsh-editor-workbench/contracts'
 import { t, useLocale, type MessageKey } from '../i18n/index.ts'
@@ -336,83 +337,103 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     const items = proposalTargetBaselines(props.proposal)
     if (!items.length) return null
     return (
-      <section className="proposal-target" aria-label={t('chat.proposalTarget')}>
-        <small>
-          {t('chat.proposalTarget')}
-        </small>
-        <ul>
-          {items.map((item) => <li
-            key={`${item.path}|${item.version}`}
-            aria-label={t('chat.proposalTargetPath', { path: item.path, version: item.version })}>
-            <code className="proposal-path">
-              {item.path}
-            </code>
-            {' · '}
-            <code>
-              {item.version}
-            </code>
-          </li>)}
-        </ul>
-      </section>
+      <Box asChild>
+        <section className="proposal-target" aria-label={t('chat.proposalTarget')}>
+          <Text size="1" color="gray">
+            {t('chat.proposalTarget')}
+          </Text>
+          <Box asChild mt="1">
+            <ul>
+              {items.map((item) => <li
+                key={`${item.path}|${item.version}`}
+                aria-label={t('chat.proposalTargetPath', { path: item.path, version: item.version })}>
+                <Text size="1" color="gray">
+                  <code className="proposal-path">
+                    {item.path}
+                  </code>
+                  {' · '}
+                  <code>
+                    {item.version}
+                  </code>
+                </Text>
+              </li>)}
+            </ul>
+          </Box>
+        </section>
+      </Box>
     );
   }
   const renderBasis = () => {
     const items = proposalBasisItems(props.proposal)
     if (!items.length) return null
     return (
-      <section className="proposal-basis" aria-label={t('chat.proposalBasis')}>
-        <small>
-          {t('chat.proposalBasis')}
-        </small>
-        <ul>
-          {items.map((item) => {
-            const label = item.label?.trim()
-            return (
-              <li
-                key={`${item.path}|${item.version}|${label ?? ''}`}
-                aria-label={proposalBasisLine(item)}>
-                {label ? <Fragment>
-                  <span>
-                    {label}
-                  </span>
-                  {' · '}
-                </Fragment> : null}
-                <code className="proposal-path">
-                  {item.path}
-                </code>
-                {' · '}
-                <code>
-                  {item.version}
-                </code>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      <Box asChild>
+        <section className="proposal-basis" aria-label={t('chat.proposalBasis')}>
+          <Text size="1" color="gray">
+            {t('chat.proposalBasis')}
+          </Text>
+          <Box asChild mt="1">
+            <ul>
+              {items.map((item) => {
+                const label = item.label?.trim()
+                return (
+                  <li
+                    key={`${item.path}|${item.version}|${label ?? ''}`}
+                    aria-label={proposalBasisLine(item)}>
+                    <Text size="1" color="gray">
+                      {label ? <Fragment>
+                        <span>
+                          {label}
+                        </span>
+                        {' · '}
+                      </Fragment> : null}
+                      <code className="proposal-path">
+                        {item.path}
+                      </code>
+                      {' · '}
+                      <code>
+                        {item.version}
+                      </code>
+                    </Text>
+                  </li>
+                );
+              })}
+            </ul>
+          </Box>
+        </section>
+      </Box>
     );
   }
   const renderKindBody = () => {
     if (props.proposal.kind === 'edit') {
       const editPrepared = prepared?.kind === 'edit' ? prepared : null
       return (
-        <div className="proposal-diff">
-          <section>
-            <small>
-              {t('chat.original')}
-            </small>
-            <pre>
-              {editPrepared?.before ?? props.proposal.oldText}
-            </pre>
-          </section>
-          <section>
-            <small>
-              {t('chat.revised')}
-            </small>
-            <pre>
-              {editPrepared?.after ?? props.proposal.newText}
-            </pre>
-          </section>
-        </div>
+        <Flex className="proposal-diff" direction="column" gap="3">
+          <Box asChild>
+            <section>
+              <Text size="1" color="gray">
+                {t('chat.original')}
+              </Text>
+              <Box asChild mt="1" overflow="auto">
+                <pre>
+                  {editPrepared?.before ?? props.proposal.oldText}
+                </pre>
+              </Box>
+            </section>
+          </Box>
+          <Box asChild>
+            <section>
+              <Text size="1" color="gray">
+                {t('chat.revised')}
+              </Text>
+              <Box asChild mt="1" overflow="auto">
+                <pre>
+                  {editPrepared?.after ?? props.proposal.newText}
+                </pre>
+              </Box>
+            </section>
+          </Box>
+        </Flex>
       );
     }
     if (props.proposal.kind === 'create') {
@@ -420,18 +441,22 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
       return (
         <Fragment>
           {createPrepared && createPrepared.missingDirectories.length
-            ? <p className="proposal-missing-dirs">
+            ? <Text as="p" size="1" color="gray" className="proposal-missing-dirs">
             {t('chat.missingDirs', { paths: createPrepared.missingDirectories.join('、') })}
-          </p>
+          </Text>
             : null}
-          <section className="proposal-preview">
-            <small>
-              {t('chat.newFileContent')}
-            </small>
-            <pre>
-              {props.proposal.text}
-            </pre>
-          </section>
+          <Box asChild>
+            <section className="proposal-preview">
+              <Text size="1" color="gray">
+                {t('chat.newFileContent')}
+              </Text>
+              <Box asChild mt="1" overflow="auto">
+                <pre>
+                  {props.proposal.text}
+                </pre>
+              </Box>
+            </section>
+          </Box>
         </Fragment>
       );
     }
@@ -444,101 +469,125 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
         : CHAPTER_STATE_LABEL_ORDER.filter((key) => proposal.state[key]?.trim())
             .map((key) => `${t(CHAPTER_STATE_LABEL_KEYS[key])}：${proposal.state[key]}`).join('\n')
       return (
-        <div className="proposal-diff">
-          <section>
-            <small>
-              {t('chat.metaBefore')}
-            </small>
-            <pre>
-              {metaPrepared?.before ?? ''}
-            </pre>
-          </section>
-          <section>
-            <small>
-              {t('chat.metaAfter')}
-            </small>
-            <pre>
-              {metaPrepared?.after ?? fallback}
-            </pre>
-          </section>
-        </div>
+        <Flex className="proposal-diff" direction="column" gap="3">
+          <Box asChild>
+            <section>
+              <Text size="1" color="gray">
+                {t('chat.metaBefore')}
+              </Text>
+              <Box asChild mt="1" overflow="auto">
+                <pre>
+                  {metaPrepared?.before ?? ''}
+                </pre>
+              </Box>
+            </section>
+          </Box>
+          <Box asChild>
+            <section>
+              <Text size="1" color="gray">
+                {t('chat.metaAfter')}
+              </Text>
+              <Box asChild mt="1" overflow="auto">
+                <pre>
+                  {metaPrepared?.after ?? fallback}
+                </pre>
+              </Box>
+            </section>
+          </Box>
+        </Flex>
       );
     }
     if (props.proposal.kind === 'split') {
       const splitPrepared = prepared?.kind === 'split' ? prepared : null
       return (
-        <div className="proposal-diff">
-          <section>
-            <small>
-              {t('chat.splitBefore')}
-            </small>
-            <pre>
-              {splitPrepared?.before ?? ''}
-            </pre>
-          </section>
-          <section>
-            <small>
-              {t('chat.splitAfter')}
-            </small>
-            <pre>
-              {splitPrepared?.after ?? ''}
-            </pre>
-          </section>
-          <section className="proposal-split-summary">
-            <small>
-              {t('chat.toNewFile')}
-            </small>
-            <code>
-              {props.proposal.newPath}
-            </code>
-            {splitPrepared
-              ? <small>
-              {t('chat.splitChars', { head: splitPrepared.headChars, tail: splitPrepared.tailChars })}
-            </small>
-              : null}
-          </section>
-        </div>
+        <Flex className="proposal-diff" direction="column" gap="3">
+          <Box asChild>
+            <section>
+              <Text size="1" color="gray">
+                {t('chat.splitBefore')}
+              </Text>
+              <Box asChild mt="1" overflow="auto">
+                <pre>
+                  {splitPrepared?.before ?? ''}
+                </pre>
+              </Box>
+            </section>
+          </Box>
+          <Box asChild>
+            <section>
+              <Text size="1" color="gray">
+                {t('chat.splitAfter')}
+              </Text>
+              <Box asChild mt="1" overflow="auto">
+                <pre>
+                  {splitPrepared?.after ?? ''}
+                </pre>
+              </Box>
+            </section>
+          </Box>
+          <Box asChild>
+            <section className="proposal-split-summary">
+              <Text size="1" color="gray">
+                {t('chat.toNewFile')}
+              </Text>
+              <code>
+                {props.proposal.newPath}
+              </code>
+              {splitPrepared
+                ? <Text size="1" color="gray">
+                {t('chat.splitChars', { head: splitPrepared.headChars, tail: splitPrepared.tailChars })}
+              </Text>
+                : null}
+            </section>
+          </Box>
+        </Flex>
       );
     }
     if (props.proposal.kind === 'merge') {
       const mergePrepared = prepared?.kind === 'merge' ? prepared : null
       return (
-        <section className="proposal-merge-summary">
-          <p>
-            <code>
-              {props.proposal.sourcePath}
-            </code>
-            {' → '}
-            <code>
-              {props.proposal.path}
-            </code>
-          </p>
-          {mergePrepared
-            ? <p>
-            {t('chat.mergeChars', { pathChars: mergePrepared.pathChars, sourceChars: mergePrepared.sourceChars })}
-          </p>
-            : null}
-          <small>
-            {t('chat.mergeArchiveHint')}
-          </small>
-        </section>
+        <Box asChild>
+          <section className="proposal-merge-summary">
+            <Text as="p" size="2">
+              <code>
+                {props.proposal.sourcePath}
+              </code>
+              {' → '}
+              <code>
+                {props.proposal.path}
+              </code>
+            </Text>
+            {mergePrepared
+              ? <Text as="p" size="2">
+              {t('chat.mergeChars', { pathChars: mergePrepared.pathChars, sourceChars: mergePrepared.sourceChars })}
+            </Text>
+              : null}
+            <Text size="1" color="gray">
+              {t('chat.mergeArchiveHint')}
+            </Text>
+          </section>
+        </Box>
       );
     }
     /* renames */
     return (
-      <section className="proposal-renames">
-        <ul>
-          {props.proposal.renames.map((rename) => <li key={`${rename.from}->${rename.to}`}>
-            <code>
-              {rename.from}
-            </code>
-            {' → '}
-            <code>
-              {rename.to}
-            </code>
-          </li>)}
-        </ul>
-      </section>
+      <Box asChild>
+        <section className="proposal-renames">
+          <ul>
+            {props.proposal.renames.map((rename) => <li key={`${rename.from}->${rename.to}`}>
+              <Text size="1" color="gray">
+                <code>
+                  {rename.from}
+                </code>
+                {' → '}
+                <code>
+                  {rename.to}
+                </code>
+              </Text>
+            </li>)}
+          </ul>
+        </section>
+      </Box>
     );
   }
   const renderBody = () => {
@@ -557,78 +606,92 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   const canRecheckNow = state === 'deferred' || (state === 'expired' && canRecheck)
   const canUndo = state === 'applied' && props.proposal.kind === 'edit'
   const hasActions = state === 'ready' || canRecheckNow || canUndo
-  const footer = <footer>
-    <span
-      className="proposal-status"
-      role={state === 'expired' ? 'alert' : 'status'}>
-      {state === 'checking' || state === 'applying' || state === 'undoing'
-        ? <ActivityDots />
-        : state === 'applied' || state === 'undone'
-          ? <SuccessMark />
-          : null}
-      {note}
-    </span>
-    {hasActions ? <div className="proposal-actions">
-      {state === 'ready' ? <button type="button" className="primary-action" onClick={() => void apply()}>
-        {t('common.apply')}
-      </button> : null}
-      {state === 'ready' ? <button
-        type="button"
-        onClick={() => { setState('deferred'); setNote(t('chat.deferred')) }}>
-        {t('chat.defer')}
-      </button> : null}
-      {state === 'ready' ? <button
-        type="button"
-        className="proposal-dismiss"
-        onClick={() => { setState('ignored'); setNote(t('chat.ignoredNoChange')) }}>
-        {t('common.ignore')}
-      </button> : null}
-      {canRecheckNow ? <button type="button" className="primary-action" onClick={() => void check()}>
-        {t('chat.recheck')}
-      </button> : null}
-      {canUndo ? <button type="button" onClick={() => void undo()}>
-        {t('chat.undoThis')}
-      </button> : null}
-    </div> : null}
-  </footer>
-  const titleBlock = <strong className="proposal-heading">
+  const footer = <Flex asChild direction="column" gap="2" mt="3">
+    <footer>
+      <Text
+        size="1"
+        color={state === 'expired' ? 'red' : 'gray'}
+        className="proposal-status"
+        role={state === 'expired' ? 'alert' : 'status'}>
+        {state === 'checking' || state === 'applying' || state === 'undoing'
+          ? <ActivityDots />
+          : state === 'applied' || state === 'undone'
+            ? <SuccessMark />
+            : null}
+        {note}
+      </Text>
+      {hasActions ? <Flex className="proposal-actions" gap="2" wrap="wrap">
+        {state === 'ready' ? <Button type="button" variant="solid" onClick={() => void apply()}>
+          {t('common.apply')}
+        </Button> : null}
+        {state === 'ready' ? <Button
+          type="button"
+          variant="soft"
+          color="gray"
+          onClick={() => { setState('deferred'); setNote(t('chat.deferred')) }}>
+          {t('chat.defer')}
+        </Button> : null}
+        {state === 'ready' ? <Button
+          type="button"
+          variant="soft"
+          color="gray"
+          className="proposal-dismiss"
+          onClick={() => { setState('ignored'); setNote(t('chat.ignoredNoChange')) }}>
+          {t('common.ignore')}
+        </Button> : null}
+        {canRecheckNow ? <Button type="button" variant="solid" onClick={() => void check()}>
+          {t('chat.recheck')}
+        </Button> : null}
+        {canUndo ? <Button type="button" variant="soft" color="gray" onClick={() => void undo()}>
+          {t('chat.undoThis')}
+        </Button> : null}
+      </Flex> : null}
+    </footer>
+  </Flex>
+  const titleBlock = <Text size="2" weight="medium" className="proposal-heading">
     {props.proposal.summary}
-  </strong>
-  const metaBlock = <div className="proposal-meta">
-    {kindBadge ? <small className="proposal-kind">
+  </Text>
+  const metaBlock = <Flex className="proposal-meta" align="center" gap="2" wrap="wrap" minWidth="0">
+    {kindBadge ? <Badge className="proposal-kind" variant="soft" size="1">
       {kindBadge}
-    </small> : null}
-    <code className="proposal-path">
+    </Badge> : null}
+    <Text size="1" color="gray" className="proposal-path">
       {headerPathLabel}
-    </code>
-  </div>
+    </Text>
+  </Flex>
   if (settled) {
     return (
-      <details
-        className={`proposal-card ${state} proposal-card-settled`}
-        aria-label={t('chat.fileProposal')}>
-        <summary>
-          {titleBlock}
-          {metaBlock}
-          <span className="proposal-status" role="status">
-            {state === 'applied' || state === 'undone' ? <SuccessMark /> : null}
-            {note}
-          </span>
-        </summary>
-        {renderBody()}
-        {footer}
-      </details>
+      <Card className={`proposal-card ${state} proposal-card-settled`} size="2" aria-label={t('chat.fileProposal')}>
+        <details>
+          <summary>
+            <Flex direction="column" gap="1" minWidth="0">
+              {titleBlock}
+              <Flex align="center" justify="between" gap="2" wrap="wrap">
+                {metaBlock}
+                <Text size="1" color="gray" className="proposal-status" role="status">
+                  {state === 'applied' || state === 'undone' ? <SuccessMark /> : null}
+                  {note}
+                </Text>
+              </Flex>
+            </Flex>
+          </summary>
+          {renderBody()}
+          {footer}
+        </details>
+      </Card>
     );
   }
   return (
-    <article className={`proposal-card ${state}`} aria-label={t('chat.fileProposal')}>
-      <header>
-        {titleBlock}
-        {metaBlock}
-      </header>
+    <Card className={`proposal-card ${state}`} size="2" aria-label={t('chat.fileProposal')}>
+      <Flex asChild align="start" justify="between" gap="2" wrap="wrap" mb="3">
+        <header>
+          {titleBlock}
+          {metaBlock}
+        </header>
+      </Flex>
       {renderBody()}
       {footer}
-    </article>
+    </Card>
   );
 }
 

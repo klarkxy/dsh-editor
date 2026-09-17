@@ -179,13 +179,21 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
           <h3>
             {t('overview.chapter')}
           </h3>
-          <input
-            className="overview-filter"
-            value={filter}
-            maxLength={80}
-            placeholder={t('overview.filterPlaceholder')}
-            aria-label={t('overview.filter')}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setFilter(event.target.value)} />
+          {props.Input
+            ? <props.Input
+              className="overview-filter"
+              value={filter}
+              maxLength={80}
+              placeholder={t('overview.filterPlaceholder')}
+              aria-label={t('overview.filter')}
+              onChange={(value) => setFilter(value)} />
+            : <input
+              className="overview-filter"
+              value={filter}
+              maxLength={80}
+              placeholder={t('overview.filterPlaceholder')}
+              aria-label={t('overview.filter')}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setFilter(event.target.value)} />}
           {overview.chapters.length === 0
             ? <p className="muted">
             {t('overview.noChapters')}

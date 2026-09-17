@@ -1555,7 +1555,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         ref={proposalRef}
         className={[cls('proposal') || 'proposal', 'manuscript-paper-proposal'].filter(Boolean).join(' ')}
         aria-label="选段修改建议"
-        style={{ padding: 12, border: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', borderRadius: 6, ...sty('proposal') }}>
+        style={{ padding: 12, border: '1px solid var(--gray-6)', borderRadius: 6, ...sty('proposal') }}>
         <strong>
           选段修改建议
         </strong>
@@ -1594,7 +1594,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       {conflict ? <div
         data-testid={`${testIdPrefix}-conflict-guard`}
         className={cls('conflict')}
-        style={{ padding: '6px 8px', borderTop: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))', fontSize: 12, ...sty('conflict') }}>
+        style={{ padding: '6px 8px', borderTop: '1px solid var(--gray-6)', fontSize: 12, ...sty('conflict') }}>
         <span>
           当前草稿与磁盘版本不一致，已保留本地内容。
         </span>
@@ -1608,7 +1608,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       </div> : null}
       {error ? <div
         className={cls('notice')}
-        style={{ padding: 8, color: '#8a3a30', fontSize: 12, ...sty('notice') }}>
+        style={{ padding: 8, color: 'var(--red-11)', fontSize: 12, ...sty('notice') }}>
         {error}
       </div> : null}
       {/* 恢复备份入口独立于 notice 槽：shell 会把 slotStyle.notice 设为 display:none

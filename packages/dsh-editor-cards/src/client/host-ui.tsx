@@ -1,5 +1,5 @@
-import { type ChangeEvent, type ComponentType } from 'react';
-import type { ShellSelectProps } from 'dsh-editor-seats'
+import { type ChangeEvent, type ComponentType, type Ref } from 'react';
+import type { ShellInputProps, ShellSelectProps } from 'dsh-editor-seats'
 
 /** IME composition keyCode used by Chromium/WebKit while composing. */
 export const IME_KEYCODE = 229
@@ -25,6 +25,25 @@ export function guardImeEnter(event: {
   if (!ime) return false
   if (enter) event.preventDefault()
   return true
+}
+
+export type RenderInputProps = ShellInputProps & { ref?: Ref<HTMLInputElement> }
+
+/** Host Input when the seat provides one; otherwise a native control. */
+export function renderInput(
+  Input: ComponentType<ShellInputProps> | undefined,
+  props: RenderInputProps,
+) {
+  if (Input) {
+    const Host = Input as ComponentType<RenderInputProps>
+    return <Host {...props} />;
+  }
+  const { onChange, ...rest } = props
+  return (
+    <input
+      {...rest}
+      onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)} />
+  );
 }
 
 /** Host Select when the seat provides one; otherwise a native control. Not a layer registry. */

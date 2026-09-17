@@ -1,12 +1,12 @@
-// One-shot stylesheet for the zhihu dock. Colors come from the host
-// `:root[data-theme]` tokens (paper/ink); fallbacks keep the panel readable in
-// a bare host. Placement follows the host's --dsh-ext-* contract. Host Dialog
-// portals content outside .shell; those rules also target .dsh-ui.
+// One-shot stylesheet for the zhihu dock. Colors use Radix Themes
+// variables from the host Theme tree. Placement follows the host's
+// --dsh-ext-* contract.
+
 export const zhihuClientStyles = `
 .zhihu-dock {
   position: var(--dsh-ext-dock-position, absolute);
-  right: var(--dsh-ext-dock-right, var(--space-4, 16px));
-  bottom: var(--dsh-ext-dock-bottom, calc(var(--space-4, 16px) + 44px));
+  right: var(--dsh-ext-dock-right, var(--space-4));
+  bottom: var(--dsh-ext-dock-bottom, calc(var(--space-4) + 44px));
   pointer-events: auto;
 }
 .zhihu-settings-embed {
@@ -17,32 +17,33 @@ export const zhihuClientStyles = `
   gap: 0;
 }
 .zhihu-settings-embed .zhihu-tabs {
-  margin: 0 0 var(--space-2, 8px);
+  margin: 0 0 var(--space-2);
 }
 .zhihu-settings-embed .zhihu-panel-body {
-  padding: var(--space-3, 12px) 0 0;
+  padding: var(--space-3) 0 0;
   overflow: visible;
 }
 .zhihu-toggle {
   pointer-events: auto;
   font: inherit;
-  font-family: var(--font-sans, system-ui, sans-serif);
-  font-size: var(--text-chrome, 13px);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
   min-height: var(--control-h, 34px);
-  color: var(--fg-2, #3d3d3a);
-  background: var(--surface, #fdfcf6);
-  border: 1px solid var(--border, #d8d5c7);
+  color: var(--gray-11);
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-6);
   border-radius: 999px;
   padding: 0 14px;
   cursor: pointer;
-  box-shadow: var(--elev-raised, 0 8px 24px rgba(20, 20, 19, 0.06));
+  box-shadow: var(--shadow-3);
 }
-.zhihu-toggle:hover { border-color: var(--accent, #1b365d); color: var(--accent, #1b365d); }
-.zhihu-toggle:focus-visible, .zhihu-panel button:focus-visible, .zhihu-panel input:focus-visible,
-.zhihu-panel select:focus-visible, .zhihu-panel a:focus-visible,
-.dsh-ui.zhihu-panel button:focus-visible, .dsh-ui.zhihu-panel input:focus-visible,
-.dsh-ui.zhihu-panel select:focus-visible, .dsh-ui.zhihu-panel a:focus-visible {
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48));
+.zhihu-toggle:hover { border-color: var(--accent-9); color: var(--accent-11); background: var(--gray-a3); }
+.zhihu-toggle:focus-visible,
+.zhihu-panel button:focus-visible,
+.zhihu-panel input:focus-visible,
+.zhihu-panel select:focus-visible,
+.zhihu-panel a:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-a8);
 }
 .zhihu-dock .zhihu-panel {
   position: absolute;
@@ -55,243 +56,221 @@ export const zhihuClientStyles = `
   display: flex;
   flex-direction: column;
   pointer-events: auto;
-  font-family: var(--font-sans, system-ui, sans-serif);
-  font-size: var(--text-chrome, 13px);
-  color: var(--fg, #141413);
-  background: var(--surface, #fdfcf6);
-  border: 1px solid var(--border, #d8d5c7);
-  border-radius: var(--radius-md, 8px);
-  box-shadow: var(--elev-card, 0 10px 28px rgba(20, 20, 19, 0.08));
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  color: var(--gray-12);
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-4);
   overflow: hidden;
 }
-.dsh-ui.zhihu-panel, .dsh-ui .zhihu-panel {
-  font-family: var(--font-sans, system-ui, sans-serif);
-  font-size: var(--text-chrome, 13px);
-  color: var(--fg, #141413);
-  background: var(--surface, #fdfcf6);
+.zhihu-panel {
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  color: var(--gray-12);
+  background: var(--color-panel-solid);
 }
-.zhihu-panel-header, .dsh-ui .zhihu-panel-header {
+.zhihu-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2, 8px) var(--space-3, 12px);
-  border-bottom: 1px solid var(--border-soft, #e5e3d8);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--gray-6);
 }
-.zhihu-panel-title, .dsh-ui .zhihu-panel-title { margin: 0; font-size: var(--text-base, 14px); font-weight: 600; }
-.zhihu-panel-close, .dsh-ui .zhihu-panel-close {
-  font: inherit; font-size: var(--text-chrome, 13px); min-height: 32px; color: var(--meta, #6b6a64); background: none; border: none;
-  border-radius: var(--radius-xs, 3px); padding: 0 8px; cursor: pointer;
+.zhihu-panel-title {
+  margin: 0;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  font-family: var(--default-font-family);
 }
-.zhihu-panel-close:hover, .dsh-ui .zhihu-panel-close:hover { color: var(--fg, #141413); background: var(--surface-warm, #e8e6dc); }
-.zhihu-panel-close:disabled, .dsh-ui .zhihu-panel-close:disabled { opacity: 0.5; cursor: default; }
-.zhihu-tabs, .dsh-ui .zhihu-tabs {
+.zhihu-panel-close {
+  font: inherit; font-size: var(--font-size-2); min-height: 32px; color: var(--gray-11); background: none; border: none;
+  border-radius: var(--radius-2); padding: 0 8px; cursor: pointer;
+}
+.zhihu-panel-close:hover { color: var(--gray-12); background: var(--gray-a3); }
+.zhihu-panel-close:disabled { opacity: 0.5; cursor: default; }
+.zhihu-tabs {
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  margin: var(--space-2, 8px) var(--space-3, 12px) 0;
-  border-radius: var(--radius-md, 8px);
-  background: var(--bg-sunken, #ebe9df);
-  box-shadow: var(--elev-ring, inset 0 0 0 1px var(--hairline, rgba(20,20,19,.08)));
+  margin: var(--space-2) var(--space-3) 0;
+  border-radius: var(--radius-3);
+  background: var(--gray-3);
+  box-shadow: 0 0 0 1px var(--gray-a5);
   width: max-content;
 }
-.zhihu-tab, .dsh-ui .zhihu-tab {
+.zhihu-tab {
   font: inherit;
-  font-size: var(--text-chrome, 13px);
+  font-size: var(--font-size-2);
   min-height: 28px;
-  padding: 0 var(--space-3, 12px);
+  padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-2);
   background: transparent;
-  color: var(--fg-2, #3d3d3a);
+  color: var(--gray-11);
   cursor: pointer;
 }
-.zhihu-tab:hover, .dsh-ui .zhihu-tab:hover { color: var(--fg, #141413); }
-.zhihu-tab[aria-selected="true"], .dsh-ui .zhihu-tab[aria-selected="true"] {
-  background: var(--surface, #fdfcf6);
-  color: var(--fg, #141413);
-  box-shadow: var(--elev-ring, inset 0 0 0 1px var(--hairline, rgba(20,20,19,.08)));
-  font-weight: 600;
+.zhihu-tab:hover { color: var(--gray-12); background: var(--gray-a3); }
+.zhihu-tab[aria-selected="true"] {
+  background: var(--accent-a3);
+  color: var(--accent-11);
+  box-shadow: 0 0 0 1px var(--gray-a5);
+  font-weight: var(--font-weight-medium);
   transform: scale(1.04);
 }
-.zhihu-panel-body, .dsh-ui .zhihu-panel-body {
-  padding: var(--space-3, 12px);
+.zhihu-panel-body {
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   overflow-y: auto;
 }
-.zhihu-field, .dsh-ui .zhihu-field { display: flex; flex-direction: column; gap: 4px; }
-.zhihu-field-label, .dsh-ui .zhihu-field-label { color: var(--fg-2, #3d3d3a); font-weight: 600; }
-.zhihu-input, .zhihu-select, .dsh-ui .zhihu-input, .dsh-ui .zhihu-select {
+.zhihu-field { display: flex; flex-direction: column; gap: 4px; }
+.zhihu-field-label { color: var(--gray-11); font-weight: var(--font-weight-medium); }
+.zhihu-input, .zhihu-select {
   width: 100%;
   min-height: var(--control-h, 34px);
   box-sizing: border-box;
   font: inherit;
-  font-family: var(--font-sans, system-ui, sans-serif);
-  font-size: var(--text-chrome, 13px);
-  color: var(--fg, #141413);
-  background: var(--bg, #f3f1e8);
-  border: 1px solid var(--border, #d8d5c7);
-  border-radius: var(--radius-sm, 6px);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  color: var(--gray-12);
+  background: var(--color-surface);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
   padding: 0 8px;
 }
-.zhihu-row, .dsh-ui .zhihu-row { display: flex; align-items: center; gap: var(--space-2, 8px); }
-.zhihu-button, .dsh-ui .zhihu-button {
-  font: inherit; font-size: var(--text-chrome, 13px); min-height: var(--control-h, 34px); color: var(--fg-2, #3d3d3a); background: none;
-  border: 1px solid var(--border, #d8d5c7); border-radius: var(--radius-sm, 6px);
+.zhihu-row { display: flex; align-items: center; gap: var(--space-2); }
+.zhihu-button {
+  font: inherit; font-size: var(--font-size-2); min-height: var(--control-h, 34px); color: var(--gray-11); background: none;
+  border: 1px solid var(--gray-6); border-radius: var(--radius-2);
   padding: 0 12px; cursor: pointer;
 }
-.zhihu-button:disabled, .dsh-ui .zhihu-button:disabled { opacity: 0.5; cursor: default; }
-.zhihu-button-primary, .dsh-ui .zhihu-button-primary {
-  color: var(--accent-on, #faf9f5);
-  background: var(--accent, #1b365d);
-  border-color: var(--accent, #1b365d);
+.zhihu-button:hover { background: var(--gray-a3); }
+.zhihu-button:disabled { opacity: 0.5; cursor: default; }
+.zhihu-button-primary {
+  color: var(--accent-contrast);
+  background: var(--accent-9);
+  border-color: var(--accent-9);
 }
-.zhihu-button-primary:hover:not(:disabled), .dsh-ui .zhihu-button-primary:hover:not(:disabled) { background: var(--accent-active, #142a48); }
-.zhihu-button-danger, .dsh-ui .zhihu-button-danger { color: var(--danger, #8a3a30); }
-.zhihu-hint, .dsh-ui .zhihu-hint { color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); margin: 0; }
-.zhihu-status, .dsh-ui .zhihu-status { color: var(--meta, #6b6a64); margin: 0; padding: var(--space-2, 8px) 0; }
-.zhihu-error, .dsh-ui .zhihu-error { color: var(--danger, #8a3a30); margin: 0; padding: var(--space-2, 8px) 0; }
-.zhihu-warning, .dsh-ui .zhihu-warning { color: var(--danger, #8a3a30); margin: 0; }
-.zhihu-saved, .dsh-ui .zhihu-saved { color: var(--accent, #1b365d); margin: 0; }
-.zhihu-link, .dsh-ui .zhihu-link { color: var(--accent, #1b365d); }
+.zhihu-button-primary:hover:not(:disabled) { background: var(--accent-10); }
+.zhihu-button-danger { color: var(--red-11); }
+.zhihu-hint { color: var(--gray-11); font-size: var(--font-size-2); margin: 0; }
+.zhihu-status { color: var(--gray-11); margin: 0; padding: var(--space-2) 0; }
+.zhihu-error { color: var(--red-11); margin: 0; padding: var(--space-2) 0; }
+.zhihu-warning { color: var(--red-11); margin: 0; }
+.zhihu-saved { color: var(--green-11); margin: 0; }
+.zhihu-link { color: var(--accent-11); }
 /* Ordinary DSH paints a light fill on bare <a>. Keep plugin links
    transparent so computed contrast falls through to the panel surface. */
-.zhihu-panel .zhihu-link, .zhihu-panel .zhihu-result-title,
-.dsh-ui .zhihu-link, .dsh-ui .zhihu-result-title { background: transparent; }
-.zhihu-stale, .dsh-ui .zhihu-stale {
-  color: var(--meta, #6b6a64);
-  background: var(--surface-warm, #e8e6dc);
-  border-radius: var(--radius-sm, 6px);
-  padding: var(--space-2, 8px);
+.zhihu-panel .zhihu-link, .zhihu-panel .zhihu-result-title { background: transparent; }
+.zhihu-stale {
+  color: var(--gray-11);
+  background: var(--gray-a3);
+  border-radius: var(--radius-2);
+  padding: var(--space-2);
 }
-.zhihu-results, .dsh-ui .zhihu-results { display: flex; flex-direction: column; gap: var(--space-2, 8px); }
-.zhihu-results-summary, .dsh-ui .zhihu-results-summary { color: var(--fg-2, #3d3d3a); font-weight: 600; margin: 0; }
-.zhihu-result-list, .dsh-ui .zhihu-result-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2, 8px); }
-.zhihu-result-item, .dsh-ui .zhihu-result-item {
-  border: 1px solid var(--border-soft, #e5e3d8);
-  border-radius: var(--radius-sm, 6px);
-  padding: var(--space-2, 8px);
+.zhihu-results { display: flex; flex-direction: column; gap: var(--space-2); }
+.zhihu-results-summary { color: var(--gray-11); font-weight: var(--font-weight-medium); margin: 0; }
+.zhihu-result-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.zhihu-result-item {
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
+  padding: var(--space-2);
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: var(--surface, #fdfcf6);
+  background: var(--color-surface);
 }
-.zhihu-result-item:hover, .dsh-ui .zhihu-result-item:hover { background: var(--surface-warm, #e8e6dc); }
-.zhihu-result-title, .dsh-ui .zhihu-result-title { font-weight: 600; color: var(--fg, #141413); }
-.zhihu-result-meta, .dsh-ui .zhihu-result-meta { color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); }
-.zhihu-result-summary, .dsh-ui .zhihu-result-summary { color: var(--fg-2, #3d3d3a); }
-.zhihu-result-snippet, .dsh-ui .zhihu-result-snippet {
-  color: var(--fg-2, #3d3d3a);
-  background: var(--bg-sunken, #ebe9df);
-  border-radius: var(--radius-xs, 3px);
+.zhihu-result-item:hover { background: var(--gray-a3); }
+.zhihu-result-title { font-weight: var(--font-weight-medium); color: var(--gray-12); }
+.zhihu-result-meta { color: var(--gray-11); font-size: var(--font-size-2); }
+.zhihu-result-summary { color: var(--gray-11); }
+.zhihu-result-snippet {
+  color: var(--gray-11);
+  background: var(--gray-3);
+  border-radius: var(--radius-2);
   padding: 4px 8px;
 }
-.zhihu-ask-content, .dsh-ui .zhihu-ask-content { white-space: pre-wrap; line-height: 1.7; color: var(--fg, #141413); }
-.zhihu-ask-reasoning, .dsh-ui .zhihu-ask-reasoning { color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); }
-.zhihu-status-grid, .dsh-ui .zhihu-status-grid { display: flex; gap: var(--space-2, 8px); margin: 0; align-items: baseline; }
-.zhihu-status-label, .dsh-ui .zhihu-status-label { color: var(--fg-2, #3d3d3a); font-weight: 600; }
-.zhihu-status-value, .dsh-ui .zhihu-status-value { margin: 0; display: flex; align-items: center; gap: 6px; }
-.zhihu-dot, .dsh-ui .zhihu-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.zhihu-dot-configured, .dsh-ui .zhihu-dot-configured { background: var(--confirm, #4a6b3a); }
-.zhihu-dot-missing, .dsh-ui .zhihu-dot-missing { background: var(--ghost, #78756c); }
-.zhihu-dot-locked, .dsh-ui .zhihu-dot-locked { background: var(--danger, #8a3a30); }
-.zhihu-guide, .dsh-ui .zhihu-guide {
-  border: 1px solid var(--border-soft, #e5e3d8);
-  border-radius: var(--radius-sm, 6px);
-  padding: var(--space-2, 8px);
+.zhihu-ask-content { white-space: pre-wrap; line-height: 1.7; color: var(--gray-12); }
+.zhihu-ask-reasoning { color: var(--gray-11); font-size: var(--font-size-2); }
+.zhihu-status-grid { display: flex; gap: var(--space-2); margin: 0; align-items: baseline; }
+.zhihu-status-label { color: var(--gray-11); font-weight: var(--font-weight-medium); }
+.zhihu-status-value { margin: 0; display: flex; align-items: center; gap: 6px; }
+.zhihu-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.zhihu-dot-configured { background: var(--green-11); }
+.zhihu-dot-missing { background: var(--gray-9); }
+.zhihu-dot-locked { background: var(--red-9); }
+.zhihu-guide {
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
+  padding: var(--space-2);
 }
-.zhihu-guide-title, .dsh-ui .zhihu-guide-title { margin: 0 0 4px; font-size: var(--text-chrome, 13px); font-weight: 600; }
-.zhihu-guide-steps, .dsh-ui .zhihu-guide-steps { margin: 0; padding-left: 18px; color: var(--fg-2, #3d3d3a); }
-.zhihu-scopes, .dsh-ui .zhihu-scopes { display: flex; gap: var(--space-3, 12px); flex-wrap: wrap; }
-.zhihu-scope, .dsh-ui .zhihu-scope { display: flex; align-items: center; gap: 4px; color: var(--fg-2, #3d3d3a); }
-.zhihu-usage, .dsh-ui .zhihu-usage { display: flex; flex-direction: column; gap: var(--space-3, 12px); }
-.zhihu-usage-intro, .dsh-ui .zhihu-usage-intro { margin: 0; color: var(--meta, #6b6a64); line-height: 1.6; }
-.zhihu-usage-cards, .dsh-ui .zhihu-usage-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-2, 8px); }
-.zhihu-usage-card, .dsh-ui .zhihu-usage-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: var(--space-2, 8px); border: 1px solid var(--border-soft, #e5e3d8); border-radius: var(--radius-sm, 6px); background: var(--bg, #f3f1e8); }
-.zhihu-usage-card:hover, .dsh-ui .zhihu-usage-card:hover { background: var(--surface-warm, #e8e6dc); }
-.zhihu-usage-card-label, .dsh-ui .zhihu-usage-card-label { color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); }
-.zhihu-usage-card-value, .dsh-ui .zhihu-usage-card-value { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg, #141413); }
-.zhihu-usage-card-unit, .dsh-ui .zhihu-usage-card-unit { margin-left: 4px; color: var(--meta, #6b6a64); font-size: var(--text-chrome, 13px); font-weight: 400; }
-.zhihu-usage-heading, .dsh-ui .zhihu-usage-heading { margin: 0; font-size: var(--text-chrome, 13px); font-weight: 600; color: var(--fg-2, #3d3d3a); }
-.zhihu-usage-legend, .dsh-ui .zhihu-usage-legend { display: flex; flex-wrap: wrap; gap: 6px var(--space-3, 12px); margin: 0; padding: 0; list-style: none; color: var(--fg-2, #3d3d3a); font-size: var(--text-chrome, 13px); }
-.zhihu-usage-legend li, .dsh-ui .zhihu-usage-legend li { display: inline-flex; align-items: center; gap: 6px; }
-.zhihu-chart-chip, .dsh-ui .zhihu-chart-chip { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.zhihu-chart-chip-ok, .dsh-ui .zhihu-chart-chip-ok { background: var(--accent, #1b365d); }
-.zhihu-chart-chip-fail, .dsh-ui .zhihu-chart-chip-fail { background: var(--danger, #8a3a30); }
-.zhihu-chart, .dsh-ui .zhihu-chart { width: 100%; height: auto; aspect-ratio: 600 / 176; display: block; }
-.zhihu-chart-bar-ok, .dsh-ui .zhihu-chart-bar-ok { fill: var(--accent, #1b365d); }
-.zhihu-chart-bar-fail, .dsh-ui .zhihu-chart-bar-fail { fill: var(--danger, #8a3a30); }
-.zhihu-chart-hit, .dsh-ui .zhihu-chart-hit { fill: transparent; }
-.zhihu-chart-grid, .dsh-ui .zhihu-chart-grid { stroke: var(--border-soft, #e5e3d8); stroke-width: 1; }
-.zhihu-chart-axis, .dsh-ui .zhihu-chart-axis { fill: var(--meta, #6b6a64); font-size: 11px; font-family: var(--font-mono, monospace); }
-.zhihu-chart-tick, .dsh-ui .zhihu-chart-tick { fill: var(--meta, #6b6a64); font-size: 11px; font-family: var(--font-mono, monospace); }
-.zhihu-chart-value, .dsh-ui .zhihu-chart-value { fill: var(--fg-2, #3d3d3a); font-size: 11px; font-family: var(--font-mono, monospace); }
-.zhihu-usage-table-wrap, .dsh-ui .zhihu-usage-table-wrap { overflow-x: auto; }
-.zhihu-usage-table, .dsh-ui .zhihu-usage-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.zhihu-usage-table th, .zhihu-usage-table td, .dsh-ui .zhihu-usage-table th, .dsh-ui .zhihu-usage-table td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--border-soft, #e5e3d8); color: var(--fg-2, #3d3d3a); }
-.zhihu-usage-table th:first-child, .zhihu-usage-table td:first-child, .dsh-ui .zhihu-usage-table th:first-child, .dsh-ui .zhihu-usage-table td:first-child { text-align: left; }
-.zhihu-usage-table th, .dsh-ui .zhihu-usage-table th { color: var(--meta, #6b6a64); font-weight: 600; }
-.zhihu-file, .dsh-ui .zhihu-file {
+.zhihu-guide-title { margin: 0 0 4px; font-size: var(--font-size-2); font-weight: var(--font-weight-medium); font-family: var(--default-font-family); }
+.zhihu-guide-steps { margin: 0; padding-left: 18px; color: var(--gray-11); }
+.zhihu-scopes { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.zhihu-scope { display: flex; align-items: center; gap: 4px; color: var(--gray-11); }
+.zhihu-usage { display: flex; flex-direction: column; gap: var(--space-3); }
+.zhihu-usage-intro { margin: 0; color: var(--gray-11); line-height: 1.6; }
+.zhihu-usage-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-2); }
+.zhihu-usage-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: var(--space-2); border: 1px solid var(--gray-6); border-radius: var(--radius-2); background: var(--color-panel-solid); }
+.zhihu-usage-card:hover { background: var(--gray-a3); }
+.zhihu-usage-card-label { color: var(--gray-11); font-size: var(--font-size-2); }
+.zhihu-usage-card-value { font-weight: var(--font-weight-medium); font-variant-numeric: tabular-nums; color: var(--gray-12); }
+.zhihu-usage-card-unit { margin-left: 4px; color: var(--gray-11); font-size: var(--font-size-2); font-weight: 400; }
+.zhihu-usage-heading { margin: 0; font-size: var(--font-size-2); font-weight: var(--font-weight-medium); color: var(--gray-11); font-family: var(--default-font-family); }
+.zhihu-usage-legend { display: flex; flex-wrap: wrap; gap: 6px var(--space-3); margin: 0; padding: 0; list-style: none; color: var(--gray-11); font-size: var(--font-size-2); }
+.zhihu-usage-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.zhihu-chart-chip { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.zhihu-chart-chip-ok { background: var(--accent-9); }
+.zhihu-chart-chip-fail { background: var(--red-9); }
+.zhihu-chart { width: 100%; height: auto; aspect-ratio: 600 / 176; display: block; }
+.zhihu-chart-bar-ok { fill: var(--accent-9); }
+.zhihu-chart-bar-fail { fill: var(--red-9); }
+.zhihu-chart-hit { fill: transparent; }
+.zhihu-chart-grid { stroke: var(--gray-6); stroke-width: 1; }
+.zhihu-chart-axis { fill: var(--gray-11); font-size: var(--font-size-1); font-family: var(--code-font-family); }
+.zhihu-chart-tick { fill: var(--gray-11); font-size: var(--font-size-1); font-family: var(--code-font-family); }
+.zhihu-chart-value { fill: var(--gray-11); font-size: var(--font-size-1); font-family: var(--code-font-family); }
+.zhihu-usage-table-wrap { overflow-x: auto; }
+.zhihu-usage-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.zhihu-usage-table th, .zhihu-usage-table td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--gray-6); color: var(--gray-11); }
+.zhihu-usage-table th:first-child, .zhihu-usage-table td:first-child { text-align: left; }
+.zhihu-usage-table th { color: var(--gray-11); font-weight: var(--font-weight-medium); }
+.zhihu-file {
   font: inherit;
-  font-size: var(--text-chrome, 13px);
-  color: var(--fg-2, #3d3d3a);
+  font-size: var(--font-size-2);
+  color: var(--gray-11);
 }
-.zhihu-upload-confirm, .dsh-ui .zhihu-upload-confirm {
-  border: 1px solid var(--border-soft, #e5e3d8);
-  border-radius: var(--radius-sm, 6px);
-  padding: var(--space-2, 8px);
-  color: var(--fg-2, #3d3d3a);
+.zhihu-upload-confirm {
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
+  padding: var(--space-2);
+  color: var(--gray-11);
 }
 /* 活动反馈:三点呼吸(pulse-dots),参数改写自 Amicro(MIT License,
    Copyright (c) 2026 Syed Subhan Uddin);装饰元素 aria-hidden。 */
 @keyframes zhihu-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
-.zhihu-dots, .dsh-ui .zhihu-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
-.zhihu-dots i, .dsh-ui .zhihu-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: zhihu-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
-.zhihu-dots i:nth-child(2), .dsh-ui .zhihu-dots i:nth-child(2) { animation-delay: .2s; }
-.zhihu-dots i:nth-child(3), .dsh-ui .zhihu-dots i:nth-child(3) { animation-delay: .4s; }
+.zhihu-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; color: var(--accent-9); }
+.zhihu-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: zhihu-activity-pulse 1.4s ease infinite; }
+.zhihu-dots i:nth-child(2) { animation-delay: .2s; }
+.zhihu-dots i:nth-child(3) { animation-delay: .4s; }
 @media (prefers-reduced-motion: reduce) {
-  .zhihu-dock, .zhihu-dock *, .zhihu-panel, .zhihu-panel *,
-  .dsh-ui.zhihu-panel, .dsh-ui.zhihu-panel * {
+  .zhihu-dock, .zhihu-dock *, .zhihu-panel, .zhihu-panel * {
     animation: none !important; transition: none !important;
     transform: none !important; filter: none !important;
   }
-  .zhihu-dots i, .dsh-ui .zhihu-dots i { animation: none; }
+  .zhihu-dots i { animation: none; }
 }
-/* Scoped ink tokens inherit to dock/toggle/panel children. Desktop theme
-   switching must not write body[data-ds-dark-theme]; a standalone Web plugin
-   still reads the ordinary DSH host attribute. html:not([data-theme]) keeps
-   desktop :root paper/ink in charge. :root[data-theme="ink"] covers a
-   native/desktop host without the shell stylesheet. Do not use
-   prefers-color-scheme: it would override an explicit user light choice. */
+/* Keep the standalone dark-host selectors so specs and a DSH host without
+   Theme still recognize the contract. Do not use prefers-color-scheme. */
 html:not([data-theme]) body[data-ds-dark-theme] .zhihu-dock,
 html:not([data-theme]) body[data-ds-dark-theme] .zhihu-toggle,
 html:not([data-theme]) body[data-ds-dark-theme] .zhihu-panel,
-html:not([data-theme]) body[data-ds-dark-theme] .dsh-ui.zhihu-panel,
-:root[data-theme="ink"] .zhihu-dock,
-:root[data-theme="ink"] .zhihu-toggle,
-:root[data-theme="ink"] .zhihu-panel,
-:root[data-theme="ink"] .dsh-ui.zhihu-panel {
-  --bg: #161310;
-  --bg-sunken: #100e0b;
-  --surface: #221e18;
-  --surface-warm: #2c2820;
-  --fg: #ede7d7;
-  --fg-2: #cdc7b8;
-  --muted: #a8a294;
-  --meta: #8f897b;
-  --border: #3d382f;
-  --border-soft: #2a261f;
-  --hairline: rgba(237, 231, 215, 0.07);
-  --hairline-strong: rgba(237, 231, 215, 0.14);
-  --accent: #9db4d0;
-  --accent-soft: rgba(157, 180, 208, 0.16);
-  --accent-on: #161310;
-  --accent-active: #b6c9e0;
-  --ghost: #8f897b;
-  --danger: #c4786a;
-  --confirm: #8aaa70;
-  --focus-ring: 0 0 0 2px var(--accent-active);
+:root[data-theme="dark"] .zhihu-dock,
+:root[data-theme="dark"] .zhihu-toggle,
+:root[data-theme="dark"] .zhihu-panel {
   color-scheme: dark;
 }
 `

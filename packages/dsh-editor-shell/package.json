@@ -79,6 +79,7 @@
     "@radix-ui/react-select": "^2.3.7",
     "@radix-ui/react-tabs": "^1.1.21",
     "@radix-ui/react-tooltip": "^1.2.16",
+    "@radix-ui/themes": "^3.3.0",
     "cmdk": "^1.1.1",
     "docx": "^9.7.1",
     "echarts": "^6.1.0",

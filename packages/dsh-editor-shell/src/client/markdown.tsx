@@ -1,4 +1,5 @@
 import { memo, type ReactNode } from 'react'
+import { Box } from '@radix-ui/themes'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -21,12 +22,14 @@ function PlainLink(props: { href?: string; children?: ReactNode }) {
 
 export const Markdown = memo(function Markdown(props: { text: string }) {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      urlTransform={safeHref}
-      components={{ a: PlainLink }}
-    >
-      {props.text}
-    </ReactMarkdown>
+    <Box className="chat-markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={safeHref}
+        components={{ a: PlainLink }}
+      >
+        {props.text}
+      </ReactMarkdown>
+    </Box>
   )
 })

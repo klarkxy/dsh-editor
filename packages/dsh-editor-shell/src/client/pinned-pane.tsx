@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { Callout, Flex, Heading, IconButton, ScrollArea, Text } from '@radix-ui/themes'
 import { stripChapterFrontmatter } from 'dsh-editor-workbench/contracts'
 import { documentName, errorMessage, LatestRequestGate, safeRpcCall, type ShellContext } from './shared.ts'
 import { t } from '../i18n/index.ts'
+import { FileIcon, PinIcon } from './icons.tsx'
 import { Markdown } from './markdown.tsx'
 import { ActivitySkeleton } from './ui/index.ts'
 import { readableDocumentTitle } from '../wrap-up-view.ts'
@@ -68,39 +70,67 @@ export function PinnedPane(props: {
     : body
 
   return (
-    <section className="pinned-pane" aria-label={t('pin.aria', { path: props.path })}>
-      <header className="pinned-header">
-        <div>
-          <h2 title={props.path}>
-            {title}
-          </h2>
-          <p className="muted pinned-path" title={props.path}>
-            {props.path}
-          </p>
-        </div>
-        <div className="pinned-actions">
-          <button type="button" onClick={props.onUnpin}>
-            {t('pin.unpin')}
-          </button>
-          <button type="button" onClick={() => props.onOpenDocument(props.path)}>
-            {t('pin.openEditor')}
-          </button>
-        </div>
-      </header>
-      <div className="pinned-body">
-        {busy ? <div role="status" aria-live="polite">
-          <ActivitySkeleton lines={6} className="pinned-loading" />
-          <span className="sr-only">
-            {t('pin.loading')}
-          </span>
-        </div> : null}
-        {note ? <p className="warning" role="status">
-          {note}
-        </p> : null}
-        {!busy && text !== null ? <div className="pinned-markdown md activity-reveal">
-          <Markdown text={markdownBody} />
-        </div> : null}
-      </div>
-    </section>
+    <Flex
+      asChild
+      direction="column"
+      minWidth="0"
+      minHeight="0"
+      overflow="hidden"
+      height="100%">
+      <section className="pinned-pane" aria-label={t('pin.aria', { path: props.path })}>
+        <Flex asChild align="start" justify="between" gap="3" px="5" pt="4" pb="3">
+          <header className="pinned-header">
+            <Flex direction="column" gap="1" minWidth="0">
+              <Heading size="4" title={props.path} truncate>
+                {title}
+              </Heading>
+              <Text className="pinned-path" size="1" color="gray" title={props.path} truncate>
+                {props.path}
+              </Text>
+            </Flex>
+            <Flex className="pinned-actions" align="center" gap="2">
+              <IconButton
+                type="button"
+                variant="ghost"
+                color="gray"
+                size="2"
+                title={t('pin.unpin')}
+                aria-label={t('pin.unpin')}
+                onClick={props.onUnpin}>
+                <PinIcon size={16} />
+              </IconButton>
+              <IconButton
+                type="button"
+                variant="ghost"
+                color="gray"
+                size="2"
+                title={t('pin.openEditor')}
+                aria-label={t('pin.openEditor')}
+                onClick={() => props.onOpenDocument(props.path)}>
+                <FileIcon size={16} />
+              </IconButton>
+            </Flex>
+          </header>
+        </Flex>
+        <ScrollArea className="pinned-body" type="auto" scrollbars="vertical">
+          <Flex direction="column" gap="4" px="5" pt="4" pb="6">
+            {busy ? <div role="status" aria-live="polite">
+              <ActivitySkeleton lines={6} className="pinned-loading" />
+              <span className="sr-only">
+                {t('pin.loading')}
+              </span>
+            </div> : null}
+            {note ? <Callout.Root className="warning" color="red" size="1" role="status">
+              <Callout.Text>
+                {note}
+              </Callout.Text>
+            </Callout.Root> : null}
+            {!busy && text !== null ? <div className="pinned-markdown md activity-reveal">
+              <Markdown text={markdownBody} />
+            </div> : null}
+          </Flex>
+        </ScrollArea>
+      </section>
+    </Flex>
   );
 }

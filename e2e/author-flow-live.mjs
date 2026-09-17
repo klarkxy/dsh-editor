@@ -739,8 +739,8 @@ async function coverWorkbench(page) {
   if (!(await page.getByRole('button', { name: '搜索与命令' }).count())) throw new Error('command palette trigger missing')
 
   const themeToggle = page.locator('.chrome .theme-toggle')
-  const before = await page.evaluate(() => document.documentElement.getAttribute('data-theme') || 'paper')
-  const next = before === 'paper' ? 'ink' : 'paper'
+  const before = await page.evaluate(() => document.documentElement.getAttribute('data-theme') || 'light')
+  const next = before === 'light' ? 'dark' : 'light'
   await themeToggle.click()
   await page.waitForFunction((wanted) => document.documentElement.getAttribute('data-theme') === wanted, next)
   await themeToggle.click()

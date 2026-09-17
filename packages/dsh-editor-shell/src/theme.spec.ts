@@ -1,24 +1,37 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ACCENT_STORAGE_KEY,
+  THEME_STORAGE_KEY,
   decodeHostThemePreference,
   hostPreferenceToTheme,
+  readInitialTheme,
+  readStoredAccent,
   themeToHostPreference,
   writeHostThemePreference,
   type HostThemePreference,
   type HostThemeScope,
 } from './client/theme.tsx'
 
+function memoryStorage(initial: Record<string, string> = {}) {
+  const data = { ...initial }
+  return {
+    getItem: (key: string) => (key in data ? data[key] : null),
+    setItem: (key: string, value: string) => { data[key] = value },
+    data,
+  }
+}
+
 describe('host theme preference mapping', () => {
-  it('maps paper/ink onto the host light/dark pair', () => {
-    expect(themeToHostPreference('paper')).toBe('light')
-    expect(themeToHostPreference('ink')).toBe('dark')
-    expect(hostPreferenceToTheme('light')).toBe('paper')
-    expect(hostPreferenceToTheme('dark')).toBe('ink')
+  it('maps light/dark onto the host light/dark pair', () => {
+    expect(themeToHostPreference('light')).toBe('light')
+    expect(themeToHostPreference('dark')).toBe('dark')
+    expect(hostPreferenceToTheme('light')).toBe('light')
+    expect(hostPreferenceToTheme('dark')).toBe('dark')
   })
 
-  it('resolves the host system preference without matchMedia to paper', () => {
+  it('resolves the host system preference without matchMedia to light', () => {
     // Vitest runs in node: no matchMedia, so system falls back to the light default.
-    expect(hostPreferenceToTheme('system')).toBe('paper')
+    expect(hostPreferenceToTheme('system')).toBe('light')
   })
 
   it('decodes only the supported preference values', () => {
@@ -105,5 +118,34 @@ describe('host theme preference write-through', () => {
     writeHostThemePreference(replaying, 'dark')
     expect(state.writes).toEqual(['dark'])
     expect(state.listeners.size).toBe(0)
+  })
+})
+
+describe('legacy theme and accent migration', () => {
+  it('reads stored light/dark without rewriting them', () => {
+    const light = memoryStorage({ [THEME_STORAGE_KEY]: 'light' })
+    expect(readInitialTheme(light)).toBe('light')
+    expect(light.data[THEME_STORAGE_KEY]).toBe('light')
+    const dark = memoryStorage({ [THEME_STORAGE_KEY]: 'dark' })
+    expect(readInitialTheme(dark)).toBe('dark')
+    expect(dark.data[THEME_STORAGE_KEY]).toBe('dark')
+  })
+
+  it('migrates stored paper/ink onto light/dark and persists the new value', () => {
+    const paper = memoryStorage({ [THEME_STORAGE_KEY]: 'paper' })
+    expect(readInitialTheme(paper)).toBe('light')
+    expect(paper.data[THEME_STORAGE_KEY]).toBe('light')
+    const ink = memoryStorage({ [THEME_STORAGE_KEY]: 'ink' })
+    expect(readInitialTheme(ink)).toBe('dark')
+    expect(ink.data[THEME_STORAGE_KEY]).toBe('dark')
+  })
+
+  it('migrates stored pine/ochre onto green/amber and persists the new value', () => {
+    const pine = memoryStorage({ [ACCENT_STORAGE_KEY]: 'pine' })
+    expect(readStoredAccent(pine)).toBe('green')
+    expect(pine.data[ACCENT_STORAGE_KEY]).toBe('green')
+    const ochre = memoryStorage({ [ACCENT_STORAGE_KEY]: 'ochre' })
+    expect(readStoredAccent(ochre)).toBe('amber')
+    expect(ochre.data[ACCENT_STORAGE_KEY]).toBe('amber')
   })
 })

@@ -1,4 +1,5 @@
 import { useRef, type RefObject } from 'react';
+import { Callout, Card, Flex, Heading, IconButton, Text } from '@radix-ui/themes'
 import type { ArchiveResponse } from 'dsh-editor-workbench/contracts'
 import { documentName } from './shared.ts'
 import { intlLocale, t } from '../i18n/index.ts'
@@ -45,76 +46,89 @@ export function ArchivePanel(props: {
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onClose() }}
       title={t('archive.title')}
       description={t('archive.hint')}
-      className="file-dialog archive-panel"
+      className="file-dialog archive-panel file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
       initialFocusRef={close}
       returnFocusRef={props.returnFocusRef}>
-      <header>
-        <div>
-          <h2 id="archive-panel-title">
+      <Flex direction="column" gap="3">
+        <Flex justify="between" align="start" gap="3">
+          <Heading as="h2" size="4" id="archive-panel-title">
             {t('archive.title')}
-          </h2>
-        </div>
-        <Button
-          variant="icon"
-          className="icon-button"
-          aria-label={t('common.close')}
-          disabled={props.busy}
-          onClick={props.onClose}>
-          ×
-        </Button>
-      </header>
-      <div className="archive-list">
-        {props.busy && !visible.length ? <p className="muted">
-          <ActivityText>
-            {t('archive.loading')}
-          </ActivityText>
-        </p> : null}
-        {!props.busy && !visible.length ? <p className="muted">
-          {t('archive.empty')}
-        </p> : null}
-        {visible.map((item) => <article key={item.archiveId}>
-          <div>
-            <strong>
-              {documentName(item.path)}
-            </strong>
-            <small>
-              {`${archiveStateText(item)} · ${new Date(item.createdAt).toLocaleString(intlLocale())}`}
-            </small>
-            <code>
-              {item.path}
-            </code>
-          </div>
-          {item.state === 'archived' || item.state === 'pending-restore'
-            ? <Button
-            disabled={props.busy || props.editorDirty}
-            onClick={() => props.onRestore(item)}>
-            {item.state === 'pending-restore' ? t('archive.continueRestore') : t('common.restore')}
+          </Heading>
+          <IconButton
+            variant="ghost"
+            color="gray"
+            className="icon-button"
+            aria-label={t('common.close')}
+            disabled={props.busy}
+            onClick={props.onClose}>
+            ×
+          </IconButton>
+        </Flex>
+        <Flex className="archive-list" direction="column" gap="2">
+          {props.busy && !visible.length ? <Text size="1" color="gray">
+            <ActivityText>
+              {t('archive.loading')}
+            </ActivityText>
+          </Text> : null}
+          {!props.busy && !visible.length ? <Text size="1" color="gray">
+            {t('archive.empty')}
+          </Text> : null}
+          {visible.map((item) => <Card key={item.archiveId} asChild>
+            <article>
+              <Flex justify="between" align="start" gap="3">
+                <Flex direction="column" gap="1" minWidth="0">
+                  <Text weight="medium" size="2">
+                    {documentName(item.path)}
+                  </Text>
+                  <Text size="1" color="gray">
+                    {`${archiveStateText(item)} · ${new Date(item.createdAt).toLocaleString(intlLocale())}`}
+                  </Text>
+                  <Text size="1" color="gray">
+                    <code>
+                      {item.path}
+                    </code>
+                  </Text>
+                </Flex>
+                {item.state === 'archived' || item.state === 'pending-restore'
+                  ? <Button
+                  disabled={props.busy || props.editorDirty}
+                  onClick={() => props.onRestore(item)}>
+                  {item.state === 'pending-restore' ? t('archive.continueRestore') : t('common.restore')}
+                </Button>
+                  : item.state === 'pending-archive'
+                    ? <Button
+                  disabled={props.busy || props.editorDirty}
+                  onClick={() => props.onContinue(item)}>
+                  {t('archive.continueArchive')}
+                </Button>
+                    : null}
+              </Flex>
+              {item.message ? <Callout.Root className="warning" color="red" size="1">
+                <Callout.Text>
+                  {t('archive.unsafe')}
+                </Callout.Text>
+              </Callout.Root> : null}
+            </article>
+          </Card>)}
+          {props.invalid ? <Callout.Root className="warning" color="red" role="alert" size="1">
+            <Callout.Text>
+              {t('archive.invalid', { count: props.invalid })}
+            </Callout.Text>
+          </Callout.Root> : null}
+          {props.note ? <Callout.Root className="warning" color="red" role="alert" size="1">
+            <Callout.Text>
+              {props.note}
+            </Callout.Text>
+          </Callout.Root> : null}
+        </Flex>
+        <Flex justify="end" gap="2">
+          <Button ref={close} disabled={props.busy} onClick={props.onClose}>
+            {t('common.close')}
           </Button>
-            : item.state === 'pending-archive'
-              ? <Button
-            disabled={props.busy || props.editorDirty}
-            onClick={() => props.onContinue(item)}>
-            {t('archive.continueArchive')}
-          </Button>
-              : null}
-          {item.message ? <p className="warning">
-            {t('archive.unsafe')}
-          </p> : null}
-        </article>)}
-        {props.invalid ? <p className="warning" role="alert">
-          {t('archive.invalid', { count: props.invalid })}
-        </p> : null}
-        {props.note ? <p className="warning" role="alert">
-          {props.note}
-        </p> : null}
-      </div>
-      <footer>
-        <Button ref={close} disabled={props.busy} onClick={props.onClose}>
-          {t('common.close')}
-        </Button>
-      </footer>
+        </Flex>
+      </Flex>
     </Dialog>
   );
 }

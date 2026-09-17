@@ -205,22 +205,22 @@ export const paperSearchKeymap: readonly KeyBinding[] = [
 
 const paperSearchTheme = EditorView.theme({
   '.cm-panels': {
-    backgroundColor: 'var(--surface, inherit)',
-    color: 'var(--fg, inherit)',
-    borderColor: 'var(--border-soft, var(--border, #ccc))',
+    backgroundColor: 'var(--color-panel-solid)',
+    color: 'var(--gray-12)',
+    borderColor: 'var(--gray-6)',
   },
   '.cm-panels-top': {
-    borderBottom: '1px solid var(--border-soft, var(--border, #ccc))',
+    borderBottom: '1px solid var(--gray-6)',
   },
   '.cm-paper-search': {
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
     padding: '8px 12px',
-    backgroundColor: 'var(--surface, inherit)',
-    color: 'var(--fg, inherit)',
-    fontFamily: 'var(--font-sans, system-ui, sans-serif)',
-    fontSize: 'var(--text-sm, 12px)',
+    backgroundColor: 'var(--color-panel-solid)',
+    color: 'var(--gray-12)',
+    fontFamily: 'var(--default-font-family)',
+    fontSize: 'var(--font-size-2)',
     letterSpacing: '.04em',
   },
   '.cm-paper-search-row': {
@@ -234,15 +234,15 @@ const paperSearchTheme = EditorView.theme({
     flex: '1 1 10em',
     minHeight: '28px',
     padding: '4px 8px',
-    border: '1px solid var(--border, #ccc)',
+    border: '1px solid var(--gray-6)',
     borderRadius: '4px',
-    backgroundColor: 'var(--bg, inherit)',
-    color: 'var(--fg, inherit)',
-    font: '400 var(--text-sm, 12px)/1.4 var(--font-sans, system-ui, sans-serif)',
+    backgroundColor: 'var(--color-surface)',
+    color: 'var(--gray-12)',
+    font: '400 var(--font-size-2)/1.4 var(--default-font-family)',
   },
   '.cm-paper-search input:focus': {
     outline: 'none',
-    boxShadow: 'var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48))',
+    boxShadow: '0 0 0 2px var(--accent-a8)',
   },
   '.cm-paper-search button': {
     display: 'inline-flex',
@@ -253,51 +253,51 @@ const paperSearchTheme = EditorView.theme({
     border: 0,
     borderRadius: '4px',
     background: 'transparent',
-    boxShadow: 'var(--elev-ring, 0 0 0 1px var(--border, #ccc))',
-    color: 'var(--fg-2, inherit)',
-    font: '500 var(--text-xs, 11px)/1 var(--font-sans, system-ui, sans-serif)',
+    boxShadow: '0 0 0 1px var(--gray-6)',
+    color: 'var(--gray-11)',
+    font: '500 var(--font-size-1)/1 var(--default-font-family)',
     letterSpacing: '.08em',
     cursor: 'pointer',
   },
   '.cm-paper-search button:hover': {
-    backgroundColor: 'var(--bg, rgba(127, 127, 127, 0.08))',
-    color: 'var(--fg, inherit)',
+    backgroundColor: 'var(--gray-a3)',
+    color: 'var(--gray-12)',
   },
   '.cm-paper-search button[aria-pressed="true"]': {
-    backgroundColor: 'var(--surface-warm, rgba(127, 127, 127, 0.12))',
-    color: 'var(--accent, inherit)',
+    backgroundColor: 'var(--accent-a3)',
+    color: 'var(--accent-11)',
   },
   '.cm-paper-search-count': {
     minWidth: '4.5em',
-    color: 'var(--meta, #888)',
+    color: 'var(--gray-10)',
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'center',
   },
   '.cm-paper-search [name="close"]': {
     minWidth: '28px',
     padding: '4px 8px',
-    color: 'var(--meta, #888)',
+    color: 'var(--gray-10)',
   },
 })
 
 const paperSearchMatchTheme = EditorView.baseTheme({
   '&light .cm-searchMatch': {
-    backgroundColor: 'color-mix(in srgb, var(--accent, #1b365d) 22%, transparent)',
+    backgroundColor: 'var(--amber-a4)',
   },
   '&dark .cm-searchMatch': {
-    backgroundColor: 'color-mix(in srgb, var(--accent, #1b365d) 22%, transparent)',
+    backgroundColor: 'var(--amber-a4)',
   },
   '&light .cm-searchMatch-selected': {
-    backgroundColor: 'color-mix(in srgb, var(--accent, #1b365d) 40%, transparent)',
+    backgroundColor: 'var(--amber-a6)',
   },
   '&dark .cm-searchMatch-selected': {
-    backgroundColor: 'color-mix(in srgb, var(--accent, #1b365d) 40%, transparent)',
+    backgroundColor: 'var(--amber-a6)',
   },
   '&light .cm-selectionMatch': {
-    backgroundColor: 'color-mix(in srgb, var(--accent, #1b365d) 12%, transparent)',
+    backgroundColor: 'var(--accent-a3)',
   },
   '&dark .cm-selectionMatch': {
-    backgroundColor: 'color-mix(in srgb, var(--accent, #1b365d) 12%, transparent)',
+    backgroundColor: 'var(--accent-a3)',
   },
 })
 

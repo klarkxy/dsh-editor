@@ -1,124 +1,84 @@
 export const pluginsClientStyles = `
-/* Dark host fallback: mirror the shell ink tokens (docs/ui.md table) for every
-   colour these styles reference, on the :root[data-theme] contract only.
-   Inside the shell the same values already apply at :root; standalone, a
-   data-theme="ink" host stays readable instead of falling back to paper. */
-:root[data-theme="ink"] {
-  --bg: #161310;
-  --bg-sunken: #100e0b;
-  --surface: #221e18;
-  --surface-warm: #2c2820;
-  --fg: #ede7d7;
-  --fg-2: #cdc7b8;
-  --muted: #a8a294;
-  --meta: #8f897b;
-  --border: #3d382f;
-  --border-soft: #2a261f;
-  --hairline: rgba(237, 231, 215, 0.07);
-  --hairline-strong: rgba(237, 231, 215, 0.14);
-  --accent: #9db4d0;
-  --accent-soft: rgba(157, 180, 208, 0.16);
-  --accent-on: #161310;
-  --accent-active: #b6c9e0;
-  --ghost: #8f897b;
-  --danger: #c4786a;
-  --confirm: #8aaa70;
-  --focus-ring: 0 0 0 2px var(--accent-active);
-  color-scheme: dark;
-}
 .dsh-plugins {
   display: grid;
-  gap: var(--space-4, 16px);
+  gap: var(--space-4);
   min-height: 0;
-  font-family: var(--font-sans, system-ui, sans-serif);
-  color: var(--fg, #141413);
-  font-size: var(--text-chrome, 13px);
+  font-family: var(--default-font-family);
+  color: var(--gray-12);
+  font-size: var(--font-size-2);
 }
 .dsh-plugins-intro {
   margin: 0;
-  color: var(--muted, #504e49);
-  font-size: var(--text-sm, 13px);
+  color: var(--gray-11);
+  font-size: var(--font-size-2);
   line-height: 1.6;
 }
-.dsh-plugins-tabs,
-.dsh-ui .dsh-plugins-tabs[role="tablist"],
-.dsh-ui.file-dialog .dsh-plugins-tabs[role="tablist"] {
+.dsh-plugins-tabs {
   display: inline-flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
   gap: 2px;
   padding: 2px;
-  border-radius: var(--radius-md, 8px);
-  background: var(--bg-sunken, #ebe9df);
-  box-shadow: var(--elev-ring, inset 0 0 0 1px var(--hairline, rgba(20,20,19,.08)));
+  border-radius: var(--radius-3);
+  background: var(--gray-3);
+  box-shadow: 0 0 0 1px var(--gray-a5);
   width: max-content;
 }
-.dsh-plugins-tabs button,
-.dsh-ui.file-dialog .dsh-plugins-tabs button,
-.dsh-ui .dsh-plugins-tabs button {
+.dsh-plugins-tabs button {
   min-height: 28px;
   min-width: 0;
-  padding: 0 var(--space-3, 12px);
+  padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-2);
   box-shadow: none;
   background: transparent;
-  color: var(--fg-2, #3d3d3a);
+  color: var(--gray-11);
   cursor: pointer;
-  font: 500 var(--text-sm, 13px)/1 var(--font-sans, system-ui, sans-serif);
+  font: var(--font-weight-medium) var(--font-size-2)/1 var(--default-font-family);
 }
-.dsh-plugins-tabs button[aria-selected="true"],
-.dsh-ui.file-dialog .dsh-plugins-tabs button[aria-selected="true"],
-.dsh-ui .dsh-plugins-tabs button[aria-selected="true"] {
-  background: var(--surface, #fdfcf6);
-  color: var(--fg, #141413);
-  box-shadow: var(--elev-ring, inset 0 0 0 1px var(--hairline, rgba(20,20,19,.08)));
+.dsh-plugins-tabs button[aria-selected="true"] {
+  background: var(--accent-a3);
+  color: var(--accent-11);
+  box-shadow: 0 0 0 1px var(--gray-a5);
 }
-.dsh-plugins-search,
-.dsh-ui .dsh-plugins-search,
-.dsh-ui.file-dialog .dsh-plugins-search {
+.dsh-plugins-search {
   display: flex;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   min-width: 0;
 }
 .dsh-plugins-search input {
   flex: 1;
   min-width: 0;
   min-height: 32px;
-  padding: 0 var(--space-3, 12px);
-  border: 1px solid var(--border, #d8d5c7);
-  border-radius: var(--radius-sm, 6px);
-  background: var(--surface, #fdfcf6);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
+  background: var(--color-surface);
   color: inherit;
   font: inherit;
 }
 .dsh-plugins-search input:focus-visible, .dsh-plugins button:focus-visible {
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48));
+  box-shadow: 0 0 0 2px var(--accent-a8);
 }
-.dsh-plugins-search button,
-.dsh-ui .dsh-plugins-search button,
-.dsh-ui.file-dialog .dsh-plugins-search button {
+.dsh-plugins-search button {
   width: auto;
   white-space: nowrap;
   flex: none;
 }
-.dsh-plugins-primary, .dsh-plugins-ghost,
-.dsh-ui.file-dialog .dsh-plugins-primary, .dsh-ui.file-dialog .dsh-plugins-ghost,
-.dsh-ui .dsh-plugins-primary, .dsh-ui .dsh-plugins-ghost {
+.dsh-plugins-primary,
+.dsh-plugins-ghost {
   min-height: 32px;
-  padding: 0 var(--space-3, 12px);
-  border-radius: var(--radius-sm, 6px);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-2);
   cursor: pointer;
-  font: 500 var(--text-sm, 13px)/1 var(--font-sans, system-ui, sans-serif);
+  font: var(--font-weight-medium) var(--font-size-2)/1 var(--default-font-family);
   letter-spacing: .04em;
 }
-.dsh-plugins-primary,
-.dsh-ui.file-dialog .dsh-plugins-primary,
-.dsh-ui .dsh-plugins-primary {
+.dsh-plugins-primary {
   border: 0;
-  background: var(--accent, #1b365d);
-  color: var(--accent-on, #faf9f5);
+  background: var(--accent-9);
+  color: var(--accent-contrast);
   box-shadow: none;
 }
 .dsh-plugins-primary:disabled, .dsh-plugins-ghost:disabled {
@@ -126,39 +86,39 @@ export const pluginsClientStyles = `
   cursor: not-allowed;
 }
 .dsh-plugins-ghost {
-  border: 1px solid var(--border, #d8d5c7);
-  background: var(--surface, #fdfcf6);
-  color: var(--fg-2, #3d3d3a);
+  border: 1px solid var(--gray-6);
+  background: var(--color-surface);
+  color: var(--gray-11);
 }
-.dsh-plugins-group { display: grid; gap: var(--space-2, 8px); }
+.dsh-plugins-ghost:hover {
+  background: var(--gray-a3);
+}
+.dsh-plugins-group { display: grid; gap: var(--space-2); }
 .dsh-plugins-group h3 {
   margin: 0;
-  font: 600 var(--text-sm, 13px)/1.4 var(--font-sans, system-ui, sans-serif);
+  font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--default-font-family);
   letter-spacing: .04em;
-  color: var(--meta, #6b6a64);
+  color: var(--gray-11);
 }
 .dsh-plugins-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-2, 8px) var(--space-3, 12px);
-  padding: var(--space-3, 12px);
-  border: 1px solid var(--border-soft, #e5e3d8);
-  border-radius: var(--radius-md, 8px);
-  background: var(--surface, #fdfcf6);
-  transition: background-color var(--motion-fast, 150ms) var(--ease, ease);
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-3);
+  background: var(--color-surface);
+  transition: background-color 150ms ease;
 }
-.dsh-plugins-card:hover { background: var(--surface-warm, #e8e6dc); }
-.dsh-plugins-card-title { font: 600 var(--text-sm, 13px)/1.4 var(--font-sans, system-ui, sans-serif); }
+.dsh-plugins-card:hover { background: var(--gray-a3); }
+.dsh-plugins-card-title { font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--default-font-family); }
 .dsh-plugins-card-desc, .dsh-plugins-meta {
-  color: var(--muted, #504e49);
-  font-size: var(--text-xs, 11px);
+  color: var(--gray-11);
+  font-size: var(--font-size-1);
   line-height: 1.5;
 }
-.dsh-plugins-actions { display: flex; align-items: start; gap: var(--space-2, 8px); }
-.dsh-plugins-switch,
-.dsh-ui .dsh-plugins-switch,
-.dsh-ui.file-dialog .dsh-plugins-switch,
-.dsh-ui.file-dialog button.dsh-plugins-switch {
+.dsh-plugins-actions { display: flex; align-items: start; gap: var(--space-2); }
+.dsh-plugins-switch {
   position: relative;
   display: inline-block;
   flex: none;
@@ -169,9 +129,9 @@ export const pluginsClientStyles = `
   min-height: 20px;
   max-height: 20px;
   padding: 0;
-  border: 1px solid var(--border, #d8d5c7);
+  border: 1px solid var(--gray-6);
   border-radius: 999px;
-  background: var(--bg-sunken, #ebe9df);
+  background: var(--gray-3);
   box-shadow: none;
   color: transparent;
   letter-spacing: 0;
@@ -179,32 +139,23 @@ export const pluginsClientStyles = `
   appearance: none;
   transform: none;
 }
-.dsh-plugins-switch.is-on,
-.dsh-ui .dsh-plugins-switch.is-on,
-.dsh-ui.file-dialog .dsh-plugins-switch.is-on,
-.dsh-ui.file-dialog button.dsh-plugins-switch.is-on {
-  background: var(--accent, #1b365d);
-  border-color: var(--accent, #1b365d);
+.dsh-plugins-switch.is-on {
+  background: var(--accent-9);
+  border-color: var(--accent-9);
 }
-.dsh-plugins-switch:hover,
-.dsh-ui.file-dialog .dsh-plugins-switch:hover,
-.dsh-ui.file-dialog button.dsh-plugins-switch:hover {
-  background: var(--bg-sunken, #ebe9df);
+.dsh-plugins-switch:hover {
+  background: var(--gray-4);
 }
-.dsh-plugins-switch.is-on:hover,
-.dsh-ui.file-dialog .dsh-plugins-switch.is-on:hover,
-.dsh-ui.file-dialog button.dsh-plugins-switch.is-on:hover {
-  background: var(--accent, #1b365d);
+.dsh-plugins-switch.is-on:hover {
+  background: var(--accent-10);
 }
-.dsh-plugins-switch:active,
-.dsh-ui .dsh-plugins-switch:active,
-.dsh-ui.file-dialog .dsh-plugins-switch:active {
+.dsh-plugins-switch:active {
   transform: none;
 }
 .dsh-plugins-switch.is-pending { opacity: .7; cursor: wait; }
 .dsh-plugins-switch:disabled { cursor: not-allowed; opacity: .7; }
 .dsh-plugins-switch:focus-visible {
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48));
+  box-shadow: 0 0 0 2px var(--accent-a8);
 }
 .dsh-plugins-switch-thumb {
   position: absolute;
@@ -213,75 +164,75 @@ export const pluginsClientStyles = `
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  background: var(--surface, #fdfcf6);
-  box-shadow: 0 1px 2px rgba(20, 20, 19, 0.18);
-  transition: transform var(--motion-fast, 150ms) var(--ease, ease);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  transition: transform 150ms ease;
 }
 .dsh-plugins-switch.is-on .dsh-plugins-switch-thumb { transform: translateX(16px); }
 .dsh-plugins-core summary {
   cursor: pointer;
-  font: 600 var(--text-sm, 13px)/1.4 var(--font-sans, system-ui, sans-serif);
-  color: var(--meta, #6b6a64);
+  font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--default-font-family);
+  color: var(--gray-11);
 }
 .dsh-plugins-core-hint, .dsh-plugins-core-list {
-  margin: var(--space-2, 8px) 0 0;
-  color: var(--muted, #504e49);
-  font-size: var(--text-xs, 11px);
+  margin: var(--space-2) 0 0;
+  color: var(--gray-11);
+  font-size: var(--font-size-1);
   line-height: 1.5;
 }
 .dsh-plugins-core-list { padding-left: 1.1em; display: grid; gap: 6px; }
 .dsh-plugins-core-list li { display: grid; gap: 2px; }
-.dsh-plugins-locked { color: var(--meta, #6b6a64); font-size: 11px; }
-.dsh-plugins-status, .dsh-plugins-empty { color: var(--muted, #504e49); font-size: var(--text-sm, 13px); }
-.dsh-plugins-error { color: var(--danger, #8a3a30); font-size: var(--text-sm, 13px); display: grid; gap: 6px; }
+.dsh-plugins-locked { color: var(--gray-11); font-size: var(--font-size-1); }
+.dsh-plugins-status, .dsh-plugins-empty { color: var(--gray-11); font-size: var(--font-size-2); }
+.dsh-plugins-error { color: var(--red-11); font-size: var(--font-size-2); display: grid; gap: 6px; }
 .dsh-plugins-error-message { margin: 0; }
-.dsh-plugins-error-detail summary { cursor: pointer; color: var(--muted, #504e49); font-size: var(--text-xs, 11px); }
+.dsh-plugins-error-detail summary { cursor: pointer; color: var(--gray-11); font-size: var(--font-size-1); }
 .dsh-plugins-error-detail pre {
   margin: 6px 0 0;
   max-height: 8em;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
-  font: 400 11px/1.45 var(--font-mono, ui-monospace, monospace);
-  color: var(--fg-2, #3d3d3a);
+  font: 400 var(--font-size-1)/1.45 var(--code-font-family);
+  color: var(--gray-11);
 }
 .dsh-plugins-composition { margin-top: 4px; }
-.dsh-plugins-composition summary { cursor: pointer; color: var(--meta, #6b6a64); font-size: 11px; line-height: 1.3; }
-.dsh-plugins-composition ul { margin: 2px 0 0; padding-left: 1.1em; color: var(--muted, #504e49); font-size: 11px; line-height: 1.4; }
+.dsh-plugins-composition summary { cursor: pointer; color: var(--gray-11); font-size: var(--font-size-1); line-height: 1.3; }
+.dsh-plugins-composition ul { margin: 2px 0 0; padding-left: 1.1em; color: var(--gray-11); font-size: var(--font-size-1); line-height: 1.4; }
 .dsh-plugins-note {
   margin: 0;
-  padding: var(--space-2, 8px) var(--space-3, 12px);
-  border-radius: var(--radius-sm, 6px);
-  background: var(--accent-soft, rgba(27,54,93,.08));
-  color: var(--accent, #1b365d);
-  font-size: var(--text-sm, 13px);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-2);
+  background: var(--accent-a3);
+  color: var(--accent-11);
+  font-size: var(--font-size-2);
 }
-.dsh-plugins-stars { color: var(--meta, #6b6a64); }
-.dsh-plugins a { color: var(--accent, #1b365d); }
+.dsh-plugins-stars { color: var(--gray-11); }
+.dsh-plugins a { color: var(--accent-11); }
 .dsh-plugins a:focus-visible {
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--accent-active, #142a48));
+  box-shadow: 0 0 0 2px var(--accent-a8);
 }
 .dsh-plugins-install-body {
   display: grid;
-  gap: var(--space-3, 12px);
+  gap: var(--space-3);
 }
 .dsh-plugins-install-body header,
 .dsh-plugins-install-body footer { margin: 0; }
-.dsh-plugins-install-body p { margin: 0; color: var(--muted, #504e49); line-height: 1.55; }
+.dsh-plugins-install-body p { margin: 0; color: var(--gray-11); line-height: 1.55; }
 .dsh-plugins-install-fallback {
   display: grid;
-  gap: var(--space-3, 12px);
-  padding: var(--space-3, 12px);
-  border: 1px solid var(--border, #d8d5c7);
-  border-radius: var(--radius-md, 8px);
-  background: var(--surface, #fdfcf6);
-  color: var(--fg, #141413);
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-3);
+  background: var(--color-surface);
+  color: var(--gray-12);
 }
 .dsh-plugins-install-fallback h2 {
   margin: 0;
-  font: 500 20px/1.2 var(--font-serif, Georgia, 'Noto Serif', serif);
+  font: var(--font-weight-medium) var(--font-size-5)/1.2 var(--default-font-family);
   letter-spacing: -.02em;
-  color: var(--fg, #141413);
+  color: var(--gray-12);
 }
 .dsh-plugins-install-fallback footer,
 .dsh-plugins-install-body footer {
@@ -292,31 +243,31 @@ export const pluginsClientStyles = `
 }
 .dsh-plugins-inspect {
   display: grid;
-  gap: var(--space-2, 8px);
-  padding: var(--space-3, 12px);
-  border: 1px solid var(--border, #d8d5c7);
-  border-radius: var(--radius-md, 8px);
-  background: var(--surface, #fdfcf6);
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-3);
+  background: var(--color-surface);
 }
-.dsh-plugins-inspect-blocked { border-color: var(--danger, #8a3a30); }
+.dsh-plugins-inspect-blocked { border-color: var(--red-9); }
 .dsh-plugins-inspect-warn {
-  border-color: color-mix(in srgb, var(--accent, #1b365d) 40%, var(--border, #d8d5c7));
+  border-color: var(--amber-a8);
 }
-.dsh-plugins-inspect-verdict { margin: 0; font: 600 var(--text-sm, 13px)/1.5 var(--font-sans, system-ui, sans-serif); }
+.dsh-plugins-inspect-verdict { margin: 0; font: var(--font-weight-medium) var(--font-size-2)/1.5 var(--default-font-family); }
 .dsh-plugins-findings { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
-.dsh-plugins-finding { font-size: var(--text-xs, 11px); line-height: 1.5; }
-.dsh-plugins-finding-error { color: var(--danger, #8a3a30); }
-.dsh-plugins-finding-warning { color: var(--fg-2, #3d3d3a); }
-.dsh-plugins-finding-info { color: var(--muted, #504e49); }
+.dsh-plugins-finding { font-size: var(--font-size-1); line-height: 1.5; }
+.dsh-plugins-finding-error { color: var(--red-11); }
+.dsh-plugins-finding-warning { color: var(--gray-11); }
+.dsh-plugins-finding-info { color: var(--gray-11); }
 /* 活动反馈:三点呼吸(pulse-dots),参数改写自 Amicro(MIT License,
    Copyright (c) 2026 Syed Subhan Uddin);装饰元素 aria-hidden,reduced-motion
    停掉循环,保留静态点与静态开关。 */
 @keyframes dsh-plugins-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
-.dsh-plugins-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; }
-.dsh-plugins-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: dsh-plugins-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
+.dsh-plugins-dots { display: inline-flex; align-items: center; gap: 3px; margin-inline-end: .4em; vertical-align: middle; color: var(--accent-9); }
+.dsh-plugins-dots i { width: .32em; height: .32em; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; animation: dsh-plugins-activity-pulse 1.4s ease infinite; }
 .dsh-plugins-dots i:nth-child(2) { animation-delay: .2s; }
 .dsh-plugins-dots i:nth-child(3) { animation-delay: .4s; }
-.dsh-plugins-switch.is-pending .dsh-plugins-switch-thumb { animation: dsh-plugins-activity-pulse 1.4s var(--ease-smooth-out, ease) infinite; }
+.dsh-plugins-switch.is-pending .dsh-plugins-switch-thumb { animation: dsh-plugins-activity-pulse 1.4s ease infinite; }
 @media (prefers-reduced-motion: reduce) {
   .dsh-plugins, .dsh-plugins *, .dsh-plugins *::before, .dsh-plugins *::after {
     animation: none !important; transition: none !important;

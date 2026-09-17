@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { Button as ThemesButton, Callout, Card, Flex, Heading, IconButton, ScrollArea, Text } from '@radix-ui/themes'
 import type { ConversationPresetChoice } from '../conversation-presets.ts'
 import { t } from '../i18n/index.ts'
 import { ActivityDots, Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'
@@ -24,27 +25,27 @@ export function ConfirmDialog(props: {
       onOpenChange={(next: boolean) => { if (!next) props.onCancel() }}
       title={display.title}
       description={display.message}
-      className="file-dialog confirm-dialog"
+      className="file-dialog confirm-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay confirm-overlay"
       initialFocusRef={cancel}
       returnFocusRef={props.returnFocusRef}>
-      <header>
-        <h2 id={`${props.id}-title`}>
+      <Flex direction="column" gap="3">
+        <Heading as="h2" size="4" id={`${props.id}-title`}>
           {display.title}
-        </h2>
-      </header>
-      <p id={`${props.id}-message`}>
-        {display.message}
-      </p>
-      <footer>
-        <ConfirmCancel
-          children={<Button ref={cancel}>
-            {t('common.cancel')}
-          </Button>} />
-        <Button variant="danger" className="danger-action" onClick={props.onConfirm}>
-          {display.confirmLabel}
-        </Button>
-      </footer>
+        </Heading>
+        <Text size="2" id={`${props.id}-message`}>
+          {display.message}
+        </Text>
+        <Flex justify="end" gap="2">
+          <ConfirmCancel
+            children={<Button ref={cancel}>
+              {t('common.cancel')}
+            </Button>} />
+          <ThemesButton variant="solid" color="red" className="danger-action" onClick={props.onConfirm}>
+            {display.confirmLabel}
+          </ThemesButton>
+        </Flex>
+      </Flex>
     </Confirm>
   );
 }
@@ -78,57 +79,69 @@ export function TextPromptDialog(props: {
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onCancel() }}
       title={display.title}
-      className="file-dialog prompt-dialog"
+      className="file-dialog prompt-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
       initialFocusRef={input}
       returnFocusRef={props.returnFocusRef}>
-      <header>
-        <h2 id={`${props.id}-title`}>
-          {display.title}
-        </h2>
-        <Button
-          variant="icon"
-          className="icon-button"
-          aria-label={t('common.close')}
-          disabled={props.busy}
-          onClick={props.onCancel}>
-          ×
-        </Button>
-      </header>
-      <form
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault()
-          if (value.trim() && !props.busy) props.onConfirm(value.trim())
-        }}>
-        <label>
-          {display.label}
-          <Input
-            ref={input}
-            value={value}
-            maxLength={80}
+      <Flex direction="column" gap="3">
+        <Flex justify="between" align="start" gap="3">
+          <Heading as="h2" size="4" id={`${props.id}-title`}>
+            {display.title}
+          </Heading>
+          <IconButton
+            variant="ghost"
+            color="gray"
+            className="icon-button"
+            aria-label={t('common.close')}
             disabled={props.busy}
-            onChange={setValue} />
-        </label>
-        {props.note ? <p className="warning" role="alert">
-          {props.note}
-        </p> : null}
-        <footer>
-          <Button disabled={props.busy} onClick={props.onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            type="submit"
-            className="primary-action"
-            disabled={props.busy || !value.trim()}>
-            {props.busy ? <Fragment>
-              <ActivityDots />
-              {t('common.saving')}
-            </Fragment> : display.confirmLabel}
-          </Button>
-        </footer>
-      </form>
+            onClick={props.onCancel}>
+            ×
+          </IconButton>
+        </Flex>
+        <Flex
+          direction="column"
+          gap="3"
+          asChild>
+          <form
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault()
+              if (value.trim() && !props.busy) props.onConfirm(value.trim())
+            }}>
+            <Text as="label" size="2">
+              <Flex direction="column" gap="1">
+                {display.label}
+                <Input
+                  ref={input}
+                  value={value}
+                  maxLength={80}
+                  disabled={props.busy}
+                  onChange={setValue} />
+              </Flex>
+            </Text>
+            {props.note ? <Callout.Root className="warning" color="red" role="alert" size="1">
+              <Callout.Text>
+                {props.note}
+              </Callout.Text>
+            </Callout.Root> : null}
+            <Flex justify="end" gap="2">
+              <Button disabled={props.busy} onClick={props.onCancel}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                className="primary-action"
+                disabled={props.busy || !value.trim()}>
+                {props.busy ? <Fragment>
+                  <ActivityDots />
+                  {t('common.saving')}
+                </Fragment> : display.confirmLabel}
+              </Button>
+            </Flex>
+          </form>
+        </Flex>
+      </Flex>
     </Dialog>
   );
 }
@@ -155,63 +168,75 @@ export function NewProjectDialog(props: {
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onClose() }}
       title={t('dialog.newProject')}
       description={t('dialog.newProjectHint')}
-      className="file-dialog create-dialog"
+      className="file-dialog create-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
       initialFocusRef={input}
       returnFocusRef={props.returnFocusRef}>
-      <header>
-        <div>
-          <h2 id="new-project-dialog-title">
-            {t('dialog.newProject')}
-          </h2>
-          <small>
-            {t('dialog.newProjectHint')}
-          </small>
-        </div>
-        <Button
-          variant="icon"
-          className="icon-button"
-          aria-label={t('common.close')}
-          disabled={props.busy}
-          onClick={props.onClose}>
-          ×
-        </Button>
-      </header>
-      <form
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault()
-          if (title.trim() && !props.busy) props.onCreate(title.trim())
-        }}>
-        <label>
-          {t('dialog.workName')}
-          <Input
-            ref={input}
-            value={title}
-            maxLength={80}
-            placeholder={t('dialog.workNamePlaceholder')}
+      <Flex direction="column" gap="3">
+        <Flex justify="between" align="start" gap="3">
+          <Flex direction="column" gap="1">
+            <Heading as="h2" size="4" id="new-project-dialog-title">
+              {t('dialog.newProject')}
+            </Heading>
+            <Text size="1" color="gray">
+              {t('dialog.newProjectHint')}
+            </Text>
+          </Flex>
+          <IconButton
+            variant="ghost"
+            color="gray"
+            className="icon-button"
+            aria-label={t('common.close')}
             disabled={props.busy}
-            onChange={setTitle} />
-        </label>
-        {props.note ? <p className="warning" role="alert">
-          {props.note}
-        </p> : null}
-        <footer>
-          <Button disabled={props.busy} onClick={props.onClose}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            type="submit"
-            className="primary-action"
-            disabled={props.busy || !title.trim()}>
-            {props.busy ? <Fragment>
-              <ActivityDots />
-              {t('common.creating')}
-            </Fragment> : t('common.create')}
-          </Button>
-        </footer>
-      </form>
+            onClick={props.onClose}>
+            ×
+          </IconButton>
+        </Flex>
+        <Flex
+          direction="column"
+          gap="3"
+          asChild>
+          <form
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault()
+              if (title.trim() && !props.busy) props.onCreate(title.trim())
+            }}>
+            <Text as="label" size="2">
+              <Flex direction="column" gap="1">
+                {t('dialog.workName')}
+                <Input
+                  ref={input}
+                  value={title}
+                  maxLength={80}
+                  placeholder={t('dialog.workNamePlaceholder')}
+                  disabled={props.busy}
+                  onChange={setTitle} />
+              </Flex>
+            </Text>
+            {props.note ? <Callout.Root className="warning" color="red" role="alert" size="1">
+              <Callout.Text>
+                {props.note}
+              </Callout.Text>
+            </Callout.Root> : null}
+            <Flex justify="end" gap="2">
+              <Button disabled={props.busy} onClick={props.onClose}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                className="primary-action"
+                disabled={props.busy || !title.trim()}>
+                {props.busy ? <Fragment>
+                  <ActivityDots />
+                  {t('common.creating')}
+                </Fragment> : t('common.create')}
+              </Button>
+            </Flex>
+          </form>
+        </Flex>
+      </Flex>
     </Dialog>
   );
 }
@@ -246,100 +271,117 @@ export function ConversationPresetPicker(props: {
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onCancel() }}
       title={t('chat.presetPickerTitle')}
       description={t('chat.presetPickerHint')}
-      className="file-dialog prompt-dialog preset-picker-dialog"
+      className="file-dialog prompt-dialog preset-picker-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
       initialFocusRef={initialFocus}
       returnFocusRef={props.returnFocusRef}>
-      <header>
-        <div>
-          <h2 id="conversation-preset-picker-title">
-            {t('chat.presetPickerTitle')}
-          </h2>
-          <small id="conversation-preset-picker-hint">
-            {t('chat.presetPickerHint')}
-          </small>
-        </div>
-        <Button
-          ref={close}
-          variant="icon"
-          className="icon-button"
-          aria-label={t('common.close')}
-          disabled={props.busy}
-          onClick={props.onCancel}>
-          ×
-        </Button>
-      </header>
-      {props.phase === 'loading' ? <p role="status" aria-live="polite">
-        <ActivityDots />
-        {' '}
-        {t('chat.presetLoading')}
-      </p> : null}
-      {props.phase === 'list-error' ? <p className="warning" role="alert">
-        {props.error ?? t('chat.presetListFailed')}
-      </p> : null}
-      {props.phase === 'ready' ? <div
-        className="file-dialog-actions"
-        role="radiogroup"
-        aria-labelledby="conversation-preset-picker-title"
-        aria-describedby="conversation-preset-picker-hint">
-        {props.presets.map((preset, index) => <button
-          key={preset.id}
-          ref={index === 0 ? firstChoice : undefined}
-          type="button"
-          role="radio"
-          aria-checked={props.selectedId === preset.id}
-          aria-label={preset.reason
-            ? `${preset.name}. ${preset.reason}`
-            : `${preset.name}. ${preset.legacy ? `${t('chat.presetLegacyBadge')} ` : ''}${preset.description}`}
-          disabled={!preset.available || props.busy}
-          className={props.selectedId === preset.id ? 'primary-action' : undefined}
-          onClick={() => props.onSelect(preset.id)}>
-          <strong>
-            {preset.name}
-            {preset.legacy ? <small className="preset-badge">
-              {t('chat.presetLegacyBadge')}
-            </small> : null}
-          </strong>
-          <small>
-            {preset.description}
-          </small>
-          {preset.reason ? <small className="warning">
-            {preset.reason}
-          </small> : null}
-        </button>)}
-      </div> : null}
-      {props.phase === 'ready' && props.error ? <p className="warning" role="alert">
-        {props.error}
-      </p> : null}
-      <footer>
-        <Button disabled={props.busy} onClick={props.onCancel}>
-          {t('common.cancel')}
-        </Button>
-        {props.phase === 'list-error' || props.phase === 'loading'
-          ? <Button
-          ref={retry}
-          variant="primary"
-          className="primary-action"
-          disabled={props.busy || props.phase === 'loading'}
-          onClick={props.onRetry}>
-          {props.phase === 'loading' ? <Fragment>
-            <ActivityDots />
-            {t('common.loading')}
-          </Fragment> : t('common.retry')}
-        </Button>
-          : <Button
-          ref={confirm}
-          variant="primary"
-          className="primary-action"
-          disabled={props.busy || !canConfirm}
-          onClick={props.onConfirm}>
-          {props.busy ? <Fragment>
-            <ActivityDots />
-            {t('common.creating')}
-          </Fragment> : t('chat.presetConfirm')}
-        </Button>}
-      </footer>
+      <Flex direction="column" gap="3">
+        <Flex justify="between" align="start" gap="3">
+          <Flex direction="column" gap="1">
+            <Heading as="h2" size="4" id="conversation-preset-picker-title">
+              {t('chat.presetPickerTitle')}
+            </Heading>
+            <Text size="1" color="gray" id="conversation-preset-picker-hint">
+              {t('chat.presetPickerHint')}
+            </Text>
+          </Flex>
+          <IconButton
+            ref={close}
+            variant="ghost"
+            color="gray"
+            className="icon-button"
+            aria-label={t('common.close')}
+            disabled={props.busy}
+            onClick={props.onCancel}>
+            ×
+          </IconButton>
+        </Flex>
+        {props.phase === 'loading' ? <Text size="2" role="status" aria-live="polite">
+          <ActivityDots />
+          {' '}
+          {t('chat.presetLoading')}
+        </Text> : null}
+        {props.phase === 'list-error' ? <Callout.Root className="warning" color="red" role="alert" size="1">
+          <Callout.Text>
+            {props.error ?? t('chat.presetListFailed')}
+          </Callout.Text>
+        </Callout.Root> : null}
+        {props.phase === 'ready' ? <ScrollArea
+          className="file-dialog-actions"
+          type="auto"
+          scrollbars="vertical"
+          role="radiogroup"
+          aria-labelledby="conversation-preset-picker-title"
+          aria-describedby="conversation-preset-picker-hint">
+          <Flex direction="column" gap="2">
+            {props.presets.map((preset, index) => <Card
+              key={preset.id}
+              asChild
+              variant={props.selectedId === preset.id ? 'classic' : 'surface'}>
+              <button
+                ref={index === 0 ? firstChoice : undefined}
+                type="button"
+                role="radio"
+                aria-checked={props.selectedId === preset.id}
+                aria-label={preset.reason
+                  ? `${preset.name}. ${preset.reason}`
+                  : `${preset.name}. ${preset.legacy ? `${t('chat.presetLegacyBadge')} ` : ''}${preset.description}`}
+                disabled={!preset.available || props.busy}
+                className={props.selectedId === preset.id ? 'primary-action' : undefined}
+                onClick={() => props.onSelect(preset.id)}>
+                <Flex direction="column" gap="1" align="start">
+                  <Text weight="medium" size="2">
+                    {preset.name}
+                    {preset.legacy ? <Text size="1" className="preset-badge">
+                      {t('chat.presetLegacyBadge')}
+                    </Text> : null}
+                  </Text>
+                  <Text size="1" color="gray">
+                    {preset.description}
+                  </Text>
+                  {preset.reason ? <Text size="1" className="warning" color="red">
+                    {preset.reason}
+                  </Text> : null}
+                </Flex>
+              </button>
+            </Card>)}
+          </Flex>
+        </ScrollArea> : null}
+        {props.phase === 'ready' && props.error ? <Callout.Root className="warning" color="red" role="alert" size="1">
+          <Callout.Text>
+            {props.error}
+          </Callout.Text>
+        </Callout.Root> : null}
+        <Flex justify="end" gap="2">
+          <Button disabled={props.busy} onClick={props.onCancel}>
+            {t('common.cancel')}
+          </Button>
+          {props.phase === 'list-error' || props.phase === 'loading'
+            ? <Button
+            ref={retry}
+            variant="primary"
+            className="primary-action"
+            disabled={props.busy || props.phase === 'loading'}
+            onClick={props.onRetry}>
+            {props.phase === 'loading' ? <Fragment>
+              <ActivityDots />
+              {t('common.loading')}
+            </Fragment> : t('common.retry')}
+          </Button>
+            : <Button
+            ref={confirm}
+            variant="primary"
+            className="primary-action"
+            disabled={props.busy || !canConfirm}
+            onClick={props.onConfirm}>
+            {props.busy ? <Fragment>
+              <ActivityDots />
+              {t('common.creating')}
+            </Fragment> : t('chat.presetConfirm')}
+          </Button>}
+        </Flex>
+      </Flex>
     </Dialog>
   );
 }

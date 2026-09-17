@@ -37,6 +37,7 @@ import { isVisibleTextPath } from '../project-files.ts'
 import { canRewritePath, CUSTOM_INSTRUCTION_MAX, normalizeCustomInstruction } from '../rewrite-presets-view.ts'
 import { t } from '../i18n/index.ts'
 import { Button, Dialog, isImeEvent } from './ui/index.ts'
+import { Button as ThemesButton, Callout, Flex, Heading, Text, TextArea } from '@radix-ui/themes'
 import { readableDocumentTitle, rewriteSelectionExcerpt } from '../wrap-up-view.ts'
 import {
   clipboardResultMessage,
@@ -388,9 +389,9 @@ export function Editor(props: {
     return (
       <PaperStage label={t('editor.emptyChapter')}>
         <div className="home-actions">
-          <button className="primary-action" type="button" onClick={create}>
+          <ThemesButton variant="solid" type="button" onClick={create}>
             {hasDocument ? t('editor.newChapter') : t('editor.writeFirstChapter')}
-          </button>
+          </ThemesButton>
         </div>
       </PaperStage>
     );
@@ -422,6 +423,8 @@ export function Editor(props: {
               header: 'editor-header',
               textarea: 'paper-input',
               proposal: 'proposal',
+              footer: 'editor-tools',
+              ghostTip: 'editor-ghost-tip',
             }}
             slotStyle={{ notice: HIDE_NOTICE }}
             completionPreference={completionPreference}
@@ -433,10 +436,10 @@ export function Editor(props: {
             compactControls={true}
             onEditorContextMenu={onEditorContextMenu}
             headerExtras={<Fragment>
-              {<span className="editor-doc-title" title={path}>
+              <Text weight="medium" className="editor-doc-title" title={path} truncate>
                 {readableDocumentTitle(path, currentText)}
-              </span>}
-              {<EditorOverflowMenu
+              </Text>
+              <EditorOverflowMenu
                 open={overflowOpen}
                 onOpenChange={(open: boolean) => {
                   if (open && !snapshotMenu()) return
@@ -445,7 +448,7 @@ export function Editor(props: {
                 }}
                 model={menuModel}
                 onAction={runMenuAction}
-                onCloseAutoFocus={focusEditorIfNeeded} />}
+                onCloseAutoFocus={focusEditorIfNeeded} />
             </Fragment>}
             maxGhostCandidates={3}
             enablePatch={true}
@@ -457,13 +460,16 @@ export function Editor(props: {
             siblingsBlocked={false}
             onReloadDisk={() => setReloadConfirm(true)}
             onSaveConflictCopy={saveConflictCopy}
-            footerExtras={note ? <div
+            footerExtras={note ? <Callout.Root
               className="editor-notice"
               data-testid="paper-notice"
               role={status === 'conflict' || status === 'error' ? 'alert' : 'status'}
-              style={{ padding: '4px 8px', fontSize: 12, opacity: 0.75 }}>
-              {note}
-            </div> : null} />
+              color={status === 'conflict' || status === 'error' ? 'red' : 'gray'}
+              size="1">
+              <Callout.Text>
+                {note}
+              </Callout.Text>
+            </Callout.Root> : null} />
         </div>
       </div>}
       {contextMenu ? <EditorContextMenu
@@ -480,43 +486,43 @@ export function Editor(props: {
         open={customRewriteOpen}
         onOpenChange={setCustomRewriteOpen}
         title={t('editor.rewriteCustomTitle')}
-        className="file-dialog editor-action-dialog"
+        className="file-dialog editor-action-dialog file-dialog-overlay"
         returnFocusRef={editorFocusTarget}>
-        <header>
-          <h2>
+        <Flex direction="column" gap="3">
+          <Heading as="h2" size="4">
             {t('editor.rewriteCustomTitle')}
-          </h2>
-        </header>
-        {customTarget?.selectedText ? <p className="muted rewrite-excerpt">
-          {t('rewrite.excerpt', { text: rewriteSelectionExcerpt(customTarget.selectedText) })}
-        </p> : null}
-        <textarea
-          className="rewrite-instruction"
-          value={customText}
-          maxLength={CUSTOM_INSTRUCTION_MAX}
-          rows={4}
-          placeholder={t('rewrite.customPlaceholder')}
-          aria-label={t('rewrite.customPlaceholder')}
-          autoFocus={true}
-          onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setCustomText(event.currentTarget.value)}
-          onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-            if (event.key === 'Escape') { event.preventDefault(); setCustomRewriteOpen(false); return }
-            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
-              event.preventDefault()
-              runCustomRewrite()
-            }
-          }} />
-        <footer>
-          <Button onClick={() => setCustomRewriteOpen(false)}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!normalizeCustomInstruction(customText)}
-            onClick={runCustomRewrite}>
-            {t('rewrite.customRun')}
-          </Button>
-        </footer>
+          </Heading>
+          {customTarget?.selectedText ? <Text size="1" color="gray" className="rewrite-excerpt">
+            {t('rewrite.excerpt', { text: rewriteSelectionExcerpt(customTarget.selectedText) })}
+          </Text> : null}
+          <TextArea
+            className="rewrite-instruction"
+            value={customText}
+            maxLength={CUSTOM_INSTRUCTION_MAX}
+            rows={4}
+            placeholder={t('rewrite.customPlaceholder')}
+            aria-label={t('rewrite.customPlaceholder')}
+            autoFocus={true}
+            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setCustomText(event.currentTarget.value)}
+            onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+              if (event.key === 'Escape') { event.preventDefault(); setCustomRewriteOpen(false); return }
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
+                event.preventDefault()
+                runCustomRewrite()
+              }
+            }} />
+          <Flex justify="end" gap="2">
+            <Button onClick={() => setCustomRewriteOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!normalizeCustomInstruction(customText)}
+              onClick={runCustomRewrite}>
+              {t('rewrite.customRun')}
+            </Button>
+          </Flex>
+        </Flex>
       </Dialog>
       <ConfirmDialog
         open={Boolean(reloadConfirm)}

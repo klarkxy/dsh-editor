@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Button, Callout, Card, DataList, Flex, Heading, Progress, Text } from '@radix-ui/themes'
 import { windowBridge } from './window-controls.tsx'
 import { ActivityDots, ActivityText, SuccessMark } from './ui/index.ts'
 import { intlLocale, t, useLocale } from '../i18n/index.ts'
@@ -173,19 +174,26 @@ export function AboutSettingsSection(props: {
 
   return (
     <section className="about-page" aria-label={t('settings.about')}>
-      <div className="about-header">
-        <h3 className="about-title">
+      <Flex className="about-header" direction="column" gap="2">
+        <Heading as="h3" size="3" className="about-title">
           {t('about.title')}
-        </h3>
-        <p className="about-version">
-          <strong>
-            {versionLabel}
-          </strong>
-        </p>
-        {!hasBridge ? <p className="about-note">
+        </Heading>
+        <DataList.Root size="2">
+          <DataList.Item align="center">
+            <DataList.Label>
+              {t('settings.about')}
+            </DataList.Label>
+            <DataList.Value>
+              <Text weight="medium" className="about-version">
+                {versionLabel}
+              </Text>
+            </DataList.Value>
+          </DataList.Item>
+        </DataList.Root>
+        {!hasBridge ? <Text size="1" color="gray" className="about-note">
           {t('about.browserHint')}
-        </p> : null}
-      </div>
+        </Text> : null}
+      </Flex>
       <div className="about-status">
         {renderStatus(state)}
       </div>
@@ -195,14 +203,16 @@ export function AboutSettingsSection(props: {
         onCancel: cancelDownload,
         onInstall: (path) => void installDownloaded(path),
       })}
-      <p className="about-note">
+      <Text size="1" color="gray" className="about-note">
         {state.status === 'ready' && state.result.status === 'update-available'
           ? t('about.macHint')
           : t('about.proxyHint')}
-      </p>
-      <div className="about-actions">
-        <button
+      </Text>
+      <Flex className="about-actions" gap="2" wrap="wrap">
+        <Button
           type="button"
+          variant="soft"
+          color="gray"
           className="about-button"
           disabled={!canCheck || state.status === 'loading'}
           onClick={() => void runCheck()}>
@@ -210,17 +220,17 @@ export function AboutSettingsSection(props: {
             <ActivityDots />
             {t('about.checking')}
           </Fragment> : t('about.check')}
-        </button>
-      </div>
+        </Button>
+      </Flex>
     </section>
   );
 }
 
 function renderStatus(state: CheckState): ReactNode {
   if (state.status === 'idle') return (
-    <span>
+    <Text size="2">
       {t('about.notChecked')}
-    </span>
+    </Text>
   );
   if (state.status === 'loading') return (
     <ActivityText>
@@ -230,27 +240,32 @@ function renderStatus(state: CheckState): ReactNode {
   const result = state.result
   if (result.status === 'latest') {
     return (
-      <span className="about-status-tag latest">
-        {t('about.latest')}
-      </span>
+      <Callout.Root color="green" className="about-status-tag latest">
+        <Callout.Text>
+          {t('about.latest')}
+        </Callout.Text>
+      </Callout.Root>
     );
   }
   if (result.status === 'update-available' && result.latest) {
     return (
-      <Fragment>
-        <span className="about-status-tag available">
-          {t('about.updateAvailable')}
-        </span>
-        <span>
+      <Callout.Root color="indigo">
+        <Callout.Text>
+          <Text className="about-status-tag available">
+            {t('about.updateAvailable')}
+          </Text>
+          {' '}
           {t('about.versionRange', { current: result.currentVersion, latest: result.latest.version })}
-        </span>
-      </Fragment>
+        </Callout.Text>
+      </Callout.Root>
     );
   }
   return (
-    <span className="about-status-tag error">
-      {t('about.checkFailed')}
-    </span>
+    <Callout.Root color="red" className="about-status-tag error">
+      <Callout.Text>
+        {t('about.checkFailed')}
+      </Callout.Text>
+    </Callout.Root>
   );
 }
 
@@ -277,28 +292,30 @@ function renderResultBody(
   const result = state.result
   if (result.status === 'error') {
     return (
-      <p className="about-error" role="alert">
-        {result.error ?? t('about.checkFailedRetry')}
-      </p>
+      <Callout.Root color="red" role="alert" className="about-error">
+        <Callout.Text>
+          {result.error ?? t('about.checkFailedRetry')}
+        </Callout.Text>
+      </Callout.Root>
     );
   }
   if (result.status === 'update-available' && result.latest) {
     const release = result.latest
     return (
-      <div className="about-release" aria-label={t('about.releaseAria')}>
-        <div className="about-release-meta">
-          <span className="about-release-version">
+      <Card className="about-release" aria-label={t('about.releaseAria')}>
+        <Flex className="about-release-meta" align="baseline" gap="3" wrap="wrap">
+          <Text weight="medium" className="about-release-version">
             {release.name || release.version}
-          </span>
-          <span className="about-release-date">
+          </Text>
+          <Text size="1" color="gray" className="about-release-date">
             {formatPublishedAt(release.publishedAt)}
-          </span>
-        </div>
-        <p className="about-release-body">
+          </Text>
+        </Flex>
+        <Text as="p" size="2" className="about-release-body">
           {previewBody(release.body)}
-        </p>
+        </Text>
         {renderDownloadArea(release, download, appInfo, handlers)}
-      </div>
+      </Card>
     );
   }
   return null
@@ -314,75 +331,79 @@ function renderDownloadArea(
   if (download.status === 'downloading') {
     const percent = download.total > 0 ? Math.min(100, Math.round((download.received / download.total) * 100)) : 0
     return (
-      <div className="about-download">
-        <div
+      <Flex className="about-download" direction="column" gap="2">
+        <Progress
           className="about-progress"
-          role="progressbar"
+          value={percent}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={percent}>
-          <div className="about-progress-fill" style={{ width: `${percent}%` }} />
-        </div>
-        <p className="about-download-meta">
+          aria-valuenow={percent} />
+        <Text size="1" color="gray" className="about-download-meta">
           {download.verifying
             ? <Fragment>
             <ActivityDots />
             {t('about.verifying')}
           </Fragment>
             : `${percent}% · ${formatMB(download.received)} / ${formatMB(download.total)} MB${download.mirror ? ` · ${download.mirror}` : ''}`}
-        </p>
-        <div className="about-actions">
-          <button type="button" className="about-button" onClick={handlers.onCancel}>
+        </Text>
+        <Flex className="about-actions" gap="2">
+          <Button type="button" variant="soft" color="gray" className="about-button" onClick={handlers.onCancel}>
             {t('about.cancelDownload')}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Flex>
+      </Flex>
     );
   }
   if (download.status === 'done') {
     return (
-      <div className="about-download">
-        <p className="about-download-meta">
+      <Flex className="about-download" direction="column" gap="2">
+        <Text size="2" className="about-download-meta">
           <SuccessMark />
           {' '}
           {download.revealed
             ? t('about.macRevealed')
             : t('about.downloadReady')}
-        </p>
-        {!download.revealed ? <div className="about-actions">
-          <button
+        </Text>
+        {!download.revealed ? <Flex className="about-actions" gap="2">
+          <Button
             type="button"
+            variant="solid"
             className="about-button about-button-primary"
             onClick={() => handlers.onInstall(download.path)}>
             {installButtonLabel(appInfo)}
-          </button>
-        </div> : null}
-      </div>
+          </Button>
+        </Flex> : null}
+      </Flex>
     );
   }
   return (
     <Fragment>
       {download.status === 'error'
-        ? <p className="about-error" role="alert">
-        {t('about.downloadFailed', { message: download.message })}
-      </p>
+        ? <Callout.Root color="red" role="alert" className="about-error">
+        <Callout.Text>
+          {t('about.downloadFailed', { message: download.message })}
+        </Callout.Text>
+      </Callout.Root>
         : null}
-      <div className="about-actions">
+      <Flex className="about-actions" gap="2" wrap="wrap">
         {asset
-          ? <button
+          ? <Button
           type="button"
+          variant="solid"
           className="about-button about-button-primary"
           onClick={() => handlers.onDownload(asset)}>
           {t('about.downloadUpdate', { size: formatMB(asset.size) })}
-        </button>
+        </Button>
           : null}
-        <button
+        <Button
           type="button"
+          variant={asset ? 'soft' : 'solid'}
+          color={asset ? 'gray' : undefined}
           className={asset ? 'about-button' : 'about-button about-button-primary'}
           onClick={() => handlers.onOpen(release.url)}>
           {t('about.goDownload')}
-        </button>
-      </div>
+        </Button>
+      </Flex>
     </Fragment>
   );
 }

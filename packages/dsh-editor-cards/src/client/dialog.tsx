@@ -3,14 +3,13 @@ import {
   useEffect,
   useRef,
   useState,
-  type ChangeEvent,
   type ComponentType,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
 import type { ShellDialogProps, ShellToolSeatContext } from 'dsh-editor-seats'
 import { SeatButton } from 'dsh-editor-seats/seat-button'
-import { guardImeEnter } from './host-ui.tsx'
+import { guardImeEnter, renderInput } from './host-ui.tsx'
 import { t } from './messages.ts'
 
 /* 活动暗示:三点呼吸(参数改写自 Amicro pulse-dots,MIT);装饰 aria-hidden,
@@ -55,6 +54,7 @@ export function cardsPromptKeyDown(event: {
 export function TextPromptDialog(props: {
   Dialog?: ComponentType<ShellDialogProps>
   Button?: ShellToolSeatContext['Button']
+  Input?: ShellToolSeatContext['Input']
   id: string
   open: boolean
   title: string
@@ -104,13 +104,15 @@ export function TextPromptDialog(props: {
     <form key="form" onSubmit={submit}>
       <label>
         {display.label}
-        <input
-          ref={input}
-          value={value}
-          maxLength={80}
-          disabled={props.busy}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value)}
-          onKeyDown={onInputKeyDown} />
+        {renderInput(props.Input, {
+          ref: input,
+          value,
+          maxLength: 80,
+          disabled: props.busy,
+          'aria-label': display.label,
+          onChange: setValue,
+          onKeyDown: onInputKeyDown,
+        })}
       </label>
       {props.note ? <p className="warning" role="alert">
         {props.note}
@@ -176,13 +178,13 @@ function NativePromptFallback(props: {
   }
   return (
     <div
-      className="dsh-ui file-dialog-overlay"
+      className="file-dialog-overlay"
       onClick={(event: { target: EventTarget | null; currentTarget: EventTarget | null }) => {
         if (event.target === event.currentTarget && !props.busy) props.onCancel()
       }}>
       <div
         ref={dialog}
-        className="dsh-ui file-dialog prompt-dialog"
+        className="file-dialog prompt-dialog"
         role="dialog"
         aria-modal={true}
         aria-labelledby={props.titleId}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Box, Callout, Flex, Heading, IconButton, Text } from '@radix-ui/themes'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { WritingSettings } from '../writing-settings.tsx'
@@ -97,8 +98,11 @@ export function SettingsTrigger(props: { onOpen(): void }) {
   useLocale()
   return (
     <span className="native-settings-control">
-      <button
+      <IconButton
         type="button"
+        variant="ghost"
+        color="gray"
+        size="2"
         className="settings-trigger"
         aria-haspopup="dialog"
         aria-label={t('common.settings')}
@@ -107,7 +111,7 @@ export function SettingsTrigger(props: { onOpen(): void }) {
         <span className="settings-trigger-icon" aria-hidden={true}>
           <SettingsIcon size={16} />
         </span>
-      </button>
+      </IconButton>
     </span>
   );
 }
@@ -189,12 +193,12 @@ export function SettingsDialog(props: {
     models: () => <SettingsModelsSection ctx={props.ctx} writingScope={props.writingScope} />,
     writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} />,
     usage: () => <SettingsUsageSection ctx={props.ctx} />,
-    zhihu: () => props.zhihuTab ?? <p className="muted">
+    zhihu: () => props.zhihuTab ?? <Text size="2" color="gray" className="muted">
       {t('settings.zhihuUnavailable')}
-    </p>,
-    plugins: () => props.pluginsTab ?? <p className="muted">
+    </Text>,
+    plugins: () => props.pluginsTab ?? <Text size="2" color="gray" className="muted">
       {t('settings.pluginsUnavailable')}
-    </p>,
+    </Text>,
     about: () => <AboutSettingsSection active={activeTab === 'about'} onBusyChange={setAboutBusy} />,
   }
 
@@ -213,9 +217,9 @@ export function SettingsDialog(props: {
         orientation="vertical"
         className="settings-tabs">
         <aside className="settings-nav">
-          <h2 id="settings-dialog-title">
+          <Heading as="h2" size="4" id="settings-dialog-title" mb="3">
             {t('common.settings')}
-          </h2>
+          </Heading>
           <TabsList aria-label={t('settings.nav')}>
             {navTabs.map((key) => <TabsTrigger
               key={key}
@@ -226,31 +230,39 @@ export function SettingsDialog(props: {
             </TabsTrigger>)}
           </TabsList>
         </aside>
-        <div className="settings-body">
-          <header className="settings-header">
-            <span className="settings-header-title">
+        <Flex className="settings-body" direction="column" minWidth="0" minHeight="0" overflow="hidden">
+          <Flex className="settings-header" align="center" gap="2" px="4" py="3" flexShrink="0">
+            <Heading size="3" className="settings-header-title">
               {navLabel(activeTab, officialSections)}
-            </span>
-            {authorChrome.showOpenConfig && props.ctx.connection.isLoopback ? <button
-              type="button"
-              className="settings-open-config"
-              onClick={() => void openConfigFile()}>
-              {t('settings.openConfig')}
-            </button> : null}
-            <Button
-              ref={closeRef}
-              variant="icon"
-              className="icon-button settings-close"
-              aria-label={t('settings.close')}
-              disabled={aboutBusy}
-              onClick={props.onClose}>
-              ×
-            </Button>
-          </header>
-          {note ? <p className="warning pad" role="alert">
-            {note}
-          </p> : null}
-          <div className="settings-pages" tabIndex={0}>
+            </Heading>
+            <Flex align="center" gap="2" ml="auto">
+              {authorChrome.showOpenConfig && props.ctx.connection.isLoopback ? <Button
+                className="settings-open-config"
+                onClick={() => void openConfigFile()}>
+                {t('settings.openConfig')}
+              </Button> : null}
+              <Button
+                ref={closeRef}
+                variant="icon"
+                className="icon-button settings-close"
+                aria-label={t('settings.close')}
+                disabled={aboutBusy}
+                onClick={props.onClose}>
+                ×
+              </Button>
+            </Flex>
+          </Flex>
+          {note ? <Callout.Root color="red" role="alert" className="warning pad">
+            <Callout.Text>
+              {note}
+            </Callout.Text>
+          </Callout.Root> : null}
+          {/*
+            .settings-pages 必须是真正的 overflow 容器：e2e 读这个节点的
+            scrollTop / scrollHeight。Themes ScrollArea 把滚动放在内层 viewport,
+            所以这里用 Box 而不是 ScrollArea。
+          */}
+          <Box className="settings-pages" tabIndex={0} overflow="auto" flexGrow="1" minWidth="0" minHeight="0">
             {builtinPages.map((key) => <SettingsTabPage key={key} tab={key} active={key === activeTab} fromX={fromX}>
               {content[key]()}
             </SettingsTabPage>)}
@@ -267,8 +279,8 @@ export function SettingsDialog(props: {
                 onClose={props.onClose} />
             </SettingsTabPage>
               : null}
-          </div>
-        </div>
+          </Box>
+        </Flex>
       </Tabs>
     </Dialog>
   );

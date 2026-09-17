@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button, Flex, Text } from '@radix-ui/themes'
 import { readModels, selectModel } from '../adapter.ts'
 import type { SessionFace, SessionModels } from '../dsh-compat.ts'
 import { Select } from './select.tsx'
@@ -11,6 +12,11 @@ import { STANDARD_REASONING_EFFORTS } from './settings-models-store.ts'
 export function effortDisplay(id: string): string {
   if (!id) return ''
   return id === 'off' ? 'none' : id
+}
+
+/** Visible trigger next to the model name; never the localized "思考强度" label. */
+export function effortTriggerLabel(id: string): string {
+  return effortDisplay(id) || 'none'
 }
 
 function fallbackEffortOptions(): { value: string; label: string }[] {
@@ -120,19 +126,19 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
   }, [models, customRoute, busy])
   if (!models || models.groups.length === 0) {
     return (
-      <div className="compact-control model-empty">
-        <span>
+      <Flex className="model-picker" align="center" gap="2" wrap="wrap" minWidth="0">
+        <Text size="1" color="gray">
           {note || (models ? t('chat.noModels') : <ActivityText>
             {t('common.loading')}
           </ActivityText>)}
-        </span>
-        <button type="button" onClick={() => void refresh()}>
+        </Text>
+        <Button type="button" size="1" variant="soft" color="gray" onClick={() => void refresh()}>
           {t('common.retry')}
-        </button>
-        <button type="button" onClick={onConfigure}>
+        </Button>
+        <Button type="button" size="1" variant="soft" color="gray" onClick={onConfigure}>
           {t('chat.setApi')}
-        </button>
-      </div>
+        </Button>
+      </Flex>
     );
   }
   const options = models.groups.flatMap((group) => group.models.map((model) => ({
@@ -152,36 +158,38 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
     ? efforts.map((effort) => ({ value: effort.id, label: effortDisplay(effort.id) }))
     : fallbackEffortOptions()
   const showReasoning = efforts.length > 0 || customRoute
-  const effortLabel = effortDisplay(effortValue)
+  const effortLabel = effortTriggerLabel(effortValue)
   return (
-    <div className="compact-control model-picker">
+    <Flex className="model-picker" align="center" gap="1" wrap="nowrap" minWidth="0">
       <Select
         value={options.some((option) => option.value === currentValue) ? currentValue : ''}
         placeholder={currentCatalogModel?.name || models.current.model}
         selectedLabel={currentCatalogModel?.name || models.current.model}
         aria-label={t('chat.chooseModel')}
         title={currentFull}
+        align="start"
         disabled={busy}
         options={options}
         onChange={(next) => {
           const [provider, model] = next.split(' ')
           if (provider && model) void choose(provider, model)
         }} />
-      {showReasoning ? <span className="model-effort">
+      {showReasoning ? <Flex className="model-effort" flexShrink="0">
         <Select
           value={effortOptions.some((option) => option.value === effortValue) ? effortValue : ''}
-          placeholder={t('chat.reasoning')}
-          selectedLabel={effortLabel || undefined}
+          placeholder="none"
+          selectedLabel={effortLabel}
           aria-label={t('chat.reasoning')}
-          title={effortLabel || t('chat.reasoning')}
+          title={effortLabel}
+          align="end"
           disabled={busy}
           options={effortOptions}
           onChange={(next) => { void choose(models.current.provider, models.current.model, next) }} />
-      </span> : null}
-      {note ? <small className="warning" role="alert">
+      </Flex> : null}
+      {note ? <Text size="1" className="warning" color="red" role="alert">
         {note}
-      </small> : null}
-    </div>
+      </Text> : null}
+    </Flex>
   );
 }
 

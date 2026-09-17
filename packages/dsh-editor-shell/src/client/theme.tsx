@@ -1,22 +1,28 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { t, useLocale } from '../i18n/index.ts'
+import { IconButton } from '@radix-ui/themes'
 import { ThemeInkIcon, ThemePaperIcon } from './icons.tsx'
 import { Tooltip } from './ui/index.ts'
 
 
 export const THEME_STORAGE_KEY = 'dsh-editor.theme'
-export const THEME_VALUES = ['paper', 'ink'] as const
+export const THEME_VALUES = ['light', 'dark'] as const
 export type ThemeValue = (typeof THEME_VALUES)[number]
 
-const DEFAULT_THEME: ThemeValue = 'paper'
+export const DEFAULT_THEME: ThemeValue = 'light'
+
+const LEGACY_THEME_VALUES: Record<string, ThemeValue> = {
+  paper: 'light',
+  ink: 'dark',
+}
 
 /*
  * Host appearance sync: the DSH host owns a `ui-theme` settings namespace with
  * `preference: 'light' | 'dark' | 'system'`; the settings dialog and all host
- * chrome follow it. The editor's paper/ink toggle is the primary control, so
- * we write it through (paper→light, ink→dark) and mirror host-side edits back.
+ * chrome follow it. The editor's light/dark toggle is the primary control, so
+ * we write it through (light→light, dark→dark) and mirror host-side edits back.
  * `system` has no editor equivalent — it resolves through prefers-color-scheme
- * at the moment we read it, then lands as a concrete paper/ink value.
+ * at the moment we read it, then lands as a concrete light/dark value.
  */
 export const HOST_THEME_PREFERENCES = ['light', 'dark', 'system'] as const
 export type HostThemePreference = (typeof HOST_THEME_PREFERENCES)[number]
@@ -36,7 +42,7 @@ export function decodeHostThemePreference(value: unknown): { preference: HostThe
 }
 
 export function themeToHostPreference(theme: ThemeValue): HostThemePreference {
-  return theme === 'ink' ? 'dark' : 'light'
+  return theme === 'dark' ? 'dark' : 'light'
 }
 
 export type HostThemeScope = {
@@ -49,7 +55,7 @@ export type HostThemeScope = {
  * Write-through with one retry subscription: at shell mount the settings
  * document is often still loading (`writable: false`, no value), and a
  * fire-and-forget write is silently dropped, leaving the host chrome on the
- * default theme while the editor renders ink. Subscribe BEFORE the first
+ * default theme while the editor renders dark. Subscribe BEFORE the first
  * attempt so a load completing between check and subscribe cannot strand
  * the write; once the scope is readable the write lands (or is skipped
  * because the host already agrees) and the subscription disposes.
@@ -79,9 +85,9 @@ export function writeHostThemePreference(scope: HostThemeScope, preference: Host
 
 export function hostPreferenceToTheme(preference: HostThemePreference): ThemeValue {
   if (preference === 'system') {
-    return prefersDark() ? 'ink' : 'paper'
+    return prefersDark() ? 'dark' : 'light'
   }
-  return preference === 'dark' ? 'ink' : 'paper'
+  return preference === 'dark' ? 'dark' : 'light'
 }
 
 function prefersDark(): boolean {
@@ -89,15 +95,20 @@ function prefersDark(): boolean {
   return globalThis.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
-function readInitialTheme(storage: Pick<Storage, 'getItem'> | undefined): ThemeValue {
+export function readInitialTheme(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined): ThemeValue {
   try {
     const value = storage?.getItem(THEME_STORAGE_KEY)
     if (value && (THEME_VALUES as readonly string[]).includes(value)) return value as ThemeValue
+    const migrated = value ? LEGACY_THEME_VALUES[value] : undefined
+    if (migrated) {
+      persistTheme(storage, migrated)
+      return migrated
+    }
   } catch {
     /* Storage is best-effort; fall through to the system preference. */
   }
   if (typeof globalThis.matchMedia === 'function') {
-    return prefersDark() ? 'ink' : 'paper'
+    return prefersDark() ? 'dark' : 'light'
   }
   return DEFAULT_THEME
 }
@@ -118,7 +129,7 @@ export function useTheme(
   const [theme, setThemeState] = useState<ThemeValue>(() => readInitialTheme(storage))
   const themeRef = useRef(theme)
   themeRef.current = theme
-  // The local paper/ink choice is the source of truth at mount: the host may
+  // The local light/dark choice is the source of truth at mount: the host may
   // still hold its default `system` preference, and its scope replays that
   // value to subscribers before our write lands. Ignore host events until the
   // first write is issued, then only mirror genuine host-side edits (values
@@ -170,32 +181,42 @@ export function useTheme(
 }
 
 /*
- * 色彩风格(accent):与纸/墨明暗正交,只覆盖 --accent 系四个变量,token 定义在
- * styles.ts 的 :root[data-accent] 块。选择只落 localStorage —— 宿主 ui-theme
- * 命名空间不认识色彩风格,host chrome 也不需要它。
- * 状态放在模块级 store:设置弹窗与 shell root 各挂一个 hook 实例,
- * 两边通过 subscribe 保持同步。
+ * Accent is orthogonal to light/dark. Radix Themes owns the colour scales;
+ * this store only persists the curated accent name. Selection lives in
+ * localStorage — the host ui-theme namespace does not know accents, and
+ * host chrome does not need them.
+ * State is a module-level store: the settings dialog and shell root each
+ * mount a hook instance and stay in sync through subscribe.
  */
 export const ACCENT_STORAGE_KEY = 'dsh-editor.accent'
-export const ACCENT_VALUES = ['indigo', 'pine', 'ochre', 'violet'] as const
+export const ACCENT_VALUES = ['indigo', 'blue', 'teal', 'green', 'amber', 'crimson', 'violet'] as const
 export type AccentValue = (typeof ACCENT_VALUES)[number]
 
 const DEFAULT_ACCENT: AccentValue = 'indigo'
 
-function readStoredAccent(storage: Pick<Storage, 'getItem'> | undefined): AccentValue {
+const LEGACY_ACCENT_VALUES: Record<string, AccentValue> = {
+  pine: 'green',
+  ochre: 'amber',
+}
+
+export function readStoredAccent(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined): AccentValue {
   try {
     const value = storage?.getItem(ACCENT_STORAGE_KEY)
     if (value && (ACCENT_VALUES as readonly string[]).includes(value)) return value as AccentValue
+    const migrated = value ? LEGACY_ACCENT_VALUES[value] : undefined
+    if (migrated) {
+      try { storage?.setItem(ACCENT_STORAGE_KEY, migrated) } catch { /* Persistence is best-effort. */ }
+      return migrated
+    }
   } catch {
     /* Storage is best-effort; fall back to the default. */
   }
   return DEFAULT_ACCENT
 }
 
-function applyAccent(accent: AccentValue): void {
+function applyAccent(_accent: AccentValue): void {
   if (typeof document === 'undefined') return
-  if (accent === DEFAULT_ACCENT) document.documentElement.removeAttribute('data-accent')
-  else document.documentElement.setAttribute('data-accent', accent)
+  document.documentElement.removeAttribute('data-accent')
 }
 
 const accentListeners = new Set<() => void>()
@@ -206,7 +227,7 @@ function accentSnapshot(): AccentValue {
   return currentAccent
 }
 
-// Apply at import time so the first paint already carries the stored accent.
+// Apply at import time so a leftover data-accent from a previous build is cleared.
 if (typeof document !== 'undefined') applyAccent(accentSnapshot())
 
 export function useAccent(): [AccentValue, (value: AccentValue) => void] {
@@ -223,20 +244,24 @@ export function useAccent(): [AccentValue, (value: AccentValue) => void] {
   return [accent, setAccent]
 }
 
-export function ThemeToggle({ theme, onChange, label }: { theme: ThemeValue; onChange(next: ThemeValue): void; label?: string }) {  useLocale()
+export function ThemeToggle({ theme, onChange, label }: { theme: ThemeValue; onChange(next: ThemeValue): void; label?: string }) {
+  useLocale()
   const resolvedLabel = label ?? t('theme.label')
-  const value = theme === 'paper' ? t('theme.paper') : t('theme.ink')
-  const hint = theme === 'paper' ? t('theme.toInk') : t('theme.toPaper')
+  const value = theme === 'light' ? t('theme.light') : t('theme.dark')
+  const hint = theme === 'light' ? t('theme.toDark') : t('theme.toLight')
   return (
     <Tooltip
       content={hint}
-      children={<button
+      children={<IconButton
         type="button"
         className="theme-toggle"
+        variant="ghost"
+        color="gray"
+        size="2"
         title={hint}
         aria-label={t('theme.aria', { label: resolvedLabel, value })}
-        onClick={() => onChange(theme === 'paper' ? 'ink' : 'paper')}>
-        {theme === 'paper' ? <ThemePaperIcon size={16} /> : <ThemeInkIcon size={16} />}
-      </button>} />
+        onClick={() => onChange(theme === 'light' ? 'dark' : 'light')}>
+        {theme === 'light' ? <ThemePaperIcon size={16} /> : <ThemeInkIcon size={16} />}
+      </IconButton>} />
   );
 }

@@ -1,17 +1,4 @@
-import {
-  Root as MenuRoot,
-  Trigger as MenuTriggerRoot,
-  Portal as MenuPortal,
-  Content as MenuContentRoot,
-  Item as MenuItemRoot,
-  Separator as MenuSeparatorRoot,
-  Sub as MenuSubRoot,
-  SubTrigger as MenuSubTriggerRoot,
-  SubContent as MenuSubContentRoot,
-  CheckboxItem as MenuCheckboxItemRoot,
-  Label as MenuLabelRoot,
-  ItemIndicator as MenuItemIndicatorRoot,
-} from '@radix-ui/react-dropdown-menu'
+import { DropdownMenu } from '@radix-ui/themes'
 import { forwardRef, type ReactNode } from 'react'
 
 export type MenuProps = {
@@ -23,9 +10,9 @@ export type MenuProps = {
 
 export function Menu(props: MenuProps) {
   return (
-    <MenuRoot open={props.open} onOpenChange={props.onOpenChange} modal={props.modal !== false}>
+    <DropdownMenu.Root open={props.open} onOpenChange={props.onOpenChange} modal={props.modal !== false}>
       {props.children}
-    </MenuRoot>
+    </DropdownMenu.Root>
   )
 }
 
@@ -40,18 +27,21 @@ export const MenuTrigger = forwardRef<HTMLButtonElement, {
   'data-testid'?: string
 }>(function MenuTrigger(props, ref) {
   return (
-    <MenuTriggerRoot
-      ref={ref}
-      className={props.className}
-      tabIndex={props.tabIndex}
-      disabled={props.disabled}
-      title={props.title}
-      aria-label={props['aria-label']}
-      aria-controls={props['aria-controls']}
-      data-testid={props['data-testid']}
-    >
-      {props.children}
-    </MenuTriggerRoot>
+    <DropdownMenu.Trigger>
+      <button
+        ref={ref}
+        type="button"
+        className={props.className}
+        tabIndex={props.tabIndex}
+        disabled={props.disabled}
+        title={props.title}
+        aria-label={props['aria-label']}
+        aria-controls={props['aria-controls']}
+        data-testid={props['data-testid']}
+      >
+        {props.children}
+      </button>
+    </DropdownMenu.Trigger>
   )
 })
 
@@ -66,21 +56,24 @@ export function MenuContent(props: {
   onCloseAutoFocus?(event: Event): void
 }) {
   return (
-    <MenuPortal>
-      <MenuContentRoot
-        id={props.id}
-        className={['dsh-ui', props.className ?? 'menu-content'].filter(Boolean).join(' ')}
-        align={props.align ?? 'start'}
-        side={props.side ?? 'bottom'}
-        sideOffset={props.sideOffset ?? 4}
-        collisionPadding={8}
-        aria-label={props['aria-label']}
-        onCloseAutoFocus={props.onCloseAutoFocus}
-      >
-        {props.children}
-      </MenuContentRoot>
-    </MenuPortal>
+    <DropdownMenu.Content
+      id={props.id}
+      className={props.className ?? 'menu-content'}
+      align={props.align ?? 'start'}
+      side={props.side ?? 'bottom'}
+      sideOffset={props.sideOffset ?? 4}
+      collisionPadding={8}
+      aria-label={props['aria-label']}
+      onCloseAutoFocus={props.onCloseAutoFocus}
+    >
+      {props.children}
+    </DropdownMenu.Content>
   )
+}
+
+function isDangerItem(props: { className?: string; 'data-danger'?: string }): boolean {
+  if (props['data-danger'] === 'true' || props['data-danger'] === '') return true
+  return Boolean(props.className?.split(/\s+/).includes('danger'))
 }
 
 export function MenuItem(props: {
@@ -96,11 +89,12 @@ export function MenuItem(props: {
   onSelect?(): void
 }) {
   return (
-    <MenuItemRoot
+    <DropdownMenu.Item
       className={props.className}
       disabled={props.disabled}
       title={props.title}
       role={props.role ?? 'menuitem'}
+      color={isDangerItem(props) ? 'red' : undefined}
       data-danger={props['data-danger']}
       data-testid={props['data-testid']}
       aria-current={props['aria-current']}
@@ -108,16 +102,16 @@ export function MenuItem(props: {
       onSelect={() => { if (!props.disabled) props.onSelect?.() }}
     >
       {props.children}
-    </MenuItemRoot>
+    </DropdownMenu.Item>
   )
 }
 
 export function MenuSeparator(props: { className?: string; 'aria-hidden'?: boolean | 'true' }) {
-  return <MenuSeparatorRoot className={props.className} aria-hidden={props['aria-hidden']} />
+  return <DropdownMenu.Separator className={props.className} aria-hidden={props['aria-hidden']} />
 }
 
 export function MenuSub(props: { children?: ReactNode }) {
-  return <MenuSubRoot>{props.children}</MenuSubRoot>
+  return <DropdownMenu.Sub>{props.children}</DropdownMenu.Sub>
 }
 
 export function MenuSubTrigger(props: {
@@ -127,13 +121,13 @@ export function MenuSubTrigger(props: {
   'data-testid'?: string
 }) {
   return (
-    <MenuSubTriggerRoot
+    <DropdownMenu.SubTrigger
       className={props.className}
       disabled={props.disabled}
       data-testid={props['data-testid']}
     >
-      {props.children}<span className="editor-menu-sub-arrow" aria-hidden="true">›</span>
-    </MenuSubTriggerRoot>
+      {props.children}
+    </DropdownMenu.SubTrigger>
   )
 }
 
@@ -143,15 +137,13 @@ export function MenuSubContent(props: {
   'aria-label'?: string
 }) {
   return (
-    <MenuPortal>
-      <MenuSubContentRoot
-        className={['dsh-ui', props.className ?? 'menu-content'].filter(Boolean).join(' ')}
-        collisionPadding={8}
-        aria-label={props['aria-label']}
-      >
-        {props.children}
-      </MenuSubContentRoot>
-    </MenuPortal>
+    <DropdownMenu.SubContent
+      className={props.className ?? 'menu-content'}
+      collisionPadding={8}
+      aria-label={props['aria-label']}
+    >
+      {props.children}
+    </DropdownMenu.SubContent>
   )
 }
 
@@ -164,19 +156,18 @@ export function MenuCheckboxItem(props: {
   onCheckedChange?(checked: boolean): void
 }) {
   return (
-    <MenuCheckboxItemRoot
+    <DropdownMenu.CheckboxItem
       className={props.className}
       checked={Boolean(props.checked)}
       disabled={props.disabled}
       data-testid={props['data-testid']}
       onCheckedChange={(next) => { if (!props.disabled) props.onCheckedChange?.(next === true) }}
     >
-      <MenuItemIndicatorRoot className="editor-menu-check">✓</MenuItemIndicatorRoot>
       {props.children}
-    </MenuCheckboxItemRoot>
+    </DropdownMenu.CheckboxItem>
   )
 }
 
 export function MenuLabel(props: { children?: ReactNode; className?: string }) {
-  return <MenuLabelRoot className={props.className}>{props.children}</MenuLabelRoot>
+  return <DropdownMenu.Label className={props.className}>{props.children}</DropdownMenu.Label>
 }

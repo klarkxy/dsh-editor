@@ -50,7 +50,8 @@ import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { Select as HostSelect } from './select.tsx'
-import { ActivityDots, ActivityRing, ActivityShimmer, ActivitySkeleton, ActivityText, Button as HostButton, Dialog as HostDialog, Input, Input as HostInput, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, useChromeMotion } from './ui/index.ts'
+import { ActivityDots, ActivityRing, ActivityShimmer, ActivitySkeleton, ActivityText, Button as HostButton, Dialog as HostDialog, Input, Input as HostInput, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, radixThemesStyles, useChromeMotion } from './ui/index.ts'
+import { Button as ThemesButton, Callout, Flex, IconButton, Text } from '@radix-ui/themes'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.tsx'
 import { PinnedPane } from './pinned-pane.tsx'
@@ -317,7 +318,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [manageNote, setManageNote] = useState('')
   const [theme, setTheme] = useTheme(undefined, hostThemeSync)
   // 色彩风格只需订阅:模块级 store 负责落 data-accent,设置弹窗内改选时这里同步重渲染。
-  useAccent()
+  const [accent] = useAccent()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   /* searchQuery/searchSubmitTick 已下沉到 SidebarColumn：输入按键不再上升到 Root。 */
@@ -1288,35 +1289,41 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     if (session) setWorkbenchNote('')
   }
   const pathFallbackForm = manualWorkspaceMode ? <form className="path-fallback" onSubmit={submitWorkspacePath}>
-    <label>
-      <span>
-        {t('home.pathLabel')}
-      </span>
-      <Input
-        ref={pathFallbackInput}
-        value={manualWorkspacePath}
-        onChange={setManualWorkspacePath}
-        placeholder={t('home.pathPlaceholder')}
-        aria-label={t('home.pathLabel')}
-        disabled={openingWorkspace} />
-    </label>
-    <div>
-      <button
-        type="button"
-        disabled={openingWorkspace}
-        onClick={() => void pickWorkspaceDirectory()}>
-        {t('home.chooseFolder')}
-      </button>
-      <button className="primary-action" type="submit" disabled={openingWorkspace}>
-        {openingWorkspace ? <Fragment>
-          <ActivityDots />
-          {t('home.opening')}
-        </Fragment> : t('home.openThisFolder')}
-      </button>
-      <button type="button" disabled={openingWorkspace} onClick={closePathFallback}>
-        {t('common.cancel')}
-      </button>
-    </div>
+    <Flex direction="column" gap="3">
+      <Text as="label" size="2">
+        <Flex direction="column" gap="1">
+          <span>
+            {t('home.pathLabel')}
+          </span>
+          <Input
+            ref={pathFallbackInput}
+            value={manualWorkspacePath}
+            onChange={setManualWorkspacePath}
+            placeholder={t('home.pathPlaceholder')}
+            aria-label={t('home.pathLabel')}
+            disabled={openingWorkspace} />
+        </Flex>
+      </Text>
+      <Flex justify="end" gap="2" wrap="wrap">
+        <ThemesButton
+          variant="soft"
+          color="gray"
+          type="button"
+          disabled={openingWorkspace}
+          onClick={() => void pickWorkspaceDirectory()}>
+          {t('home.chooseFolder')}
+        </ThemesButton>
+        <ThemesButton variant="solid" type="submit" disabled={openingWorkspace}>
+          {openingWorkspace ? <Fragment>
+            <ActivityDots />
+            {t('home.opening')}
+          </Fragment> : t('home.openThisFolder')}
+        </ThemesButton>
+        <ThemesButton variant="soft" color="gray" type="button" disabled={openingWorkspace} onClick={closePathFallback}>
+          {t('common.cancel')}
+        </ThemesButton>
+      </Flex>
+    </Flex>
   </form> : null
   const closeWorkspaceChrome = () => {
     setWorkspaceMenuOpen(false)
@@ -1892,7 +1899,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
 
   if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
-      <ShellUiProvider>
+      <ShellUiProvider theme={theme} accent={accent}>
         <HomeScreen
           workspaceOpen={workspaceOpen}
           extensionsDock={extensionsDock}
@@ -1938,7 +1945,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const fileMenuChapterModel = fileMenu ? chapterMenuModel(fileMenu.path, chapterFiles) : null
 
   return (
-    <ShellUiProvider>
+    <ShellUiProvider theme={theme} accent={accent}>
       <main
         className={`shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`}
         ref={shellMainRef}
@@ -2111,22 +2118,30 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           onClick={() => setAssistantOpen(false)} /> : null}
         {!assistantVisible && !focusMode ? (
           capabilityState.kind === 'error'
-            ? <div className="assistant-launcher capability-note" role="alert">
-            <span>
-              {t('capabilities.loadFailed', { error: capabilityState.message })}
-            </span>
-            <button type="button" onClick={shellCapabilities.retry}>
-              {t('capabilities.retry')}
-            </button>
-          </div>
+            ? <Callout.Root className="assistant-launcher capability-note" color="red" role="alert">
+            <Flex direction="column" gap="2">
+              <Callout.Text>
+                {t('capabilities.loadFailed', { error: capabilityState.message })}
+              </Callout.Text>
+              <ThemesButton size="1" variant="solid" type="button" onClick={shellCapabilities.retry}>
+                {t('capabilities.retry')}
+              </ThemesButton>
+            </Flex>
+          </Callout.Root>
             : !capabilityReady
-              ? <div className="assistant-launcher capability-note" role="status">
-            <ActivityDots />
-            {t('capabilities.loading')}
-          </div>
+              ? <Callout.Root className="assistant-launcher capability-note" role="status">
+            <Flex align="center" gap="2">
+              <ActivityDots />
+              <Callout.Text>
+                {t('capabilities.loading')}
+              </Callout.Text>
+            </Flex>
+          </Callout.Root>
               : assistantEnabled
-                ? <button
+                ? <IconButton
             className="assistant-launcher"
+            variant="solid"
+            size="3"
             type="button"
             aria-label={t('workspace.openAssistant')}
             aria-expanded={false}
@@ -2134,7 +2149,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             <span aria-hidden="true">
               <DeepSeekWhaleMark />
             </span>
-          </button>
+          </IconButton>
                 : null
         ) : null}
         <ConfirmDialog
@@ -2276,7 +2291,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           open={Boolean(manualWorkspaceMode)}
           onOpenChange={(next: boolean) => { if (!next) closePathFallback() }}
           title={t('home.pathLabel')}
-          className="file-dialog path-fallback-dialog"
+          className="file-dialog path-fallback-dialog file-dialog-overlay"
           overlayClassName="file-dialog-overlay"
           dismissible={!openingWorkspace}
           initialFocusRef={pathFallbackInput}
@@ -2299,24 +2314,31 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           focusTab={settingsFocusTab}
           renderSlot={renderSlot}
           onClose={() => setSettingsOpen(false)} />
-        {startupUpdate && !settingsOpen ? <div className="update-toast" role="status">
-          <span className="update-toast-text">
-            {t('about.toast', { version: startupUpdate.version })}
-          </span>
-          <button
-            type="button"
-            className="update-toast-action"
-            onClick={() => { setStartupUpdate(null); openSettings('about') }}>
-            {t('about.viewDetails')}
-          </button>
-          <button
-            type="button"
-            className="icon-button update-toast-close"
-            aria-label={t('about.dismissToast')}
-            onClick={() => setStartupUpdate(null)}>
-            ×
-          </button>
-        </div> : null}
+        {startupUpdate && !settingsOpen ? <Callout.Root className="update-toast" role="status">
+          <Flex align="center" gap="3">
+            <Text className="update-toast-text" size="2">
+              {t('about.toast', { version: startupUpdate.version })}
+            </Text>
+            <ThemesButton
+              size="1"
+              variant="solid"
+              type="button"
+              className="update-toast-action"
+              onClick={() => { setStartupUpdate(null); openSettings('about') }}>
+              {t('about.viewDetails')}
+            </ThemesButton>
+            <IconButton
+              size="1"
+              variant="ghost"
+              color="gray"
+              type="button"
+              className="icon-button update-toast-close"
+              aria-label={t('about.dismissToast')}
+              onClick={() => setStartupUpdate(null)}>
+              ×
+            </IconButton>
+          </Flex>
+        </Callout.Root> : null}
       </main>
     </ShellUiProvider>
   );
@@ -2355,7 +2377,7 @@ function injectShellStyles(): () => void {
   if (document.head.querySelector('style[data-dsh-editor-shell-styles]')) return () => {}
   const style = document.createElement('style')
   style.setAttribute('data-dsh-editor-shell-styles', '')
-  style.textContent = redesignedStyles
+  style.textContent = radixThemesStyles + redesignedStyles
   document.head.appendChild(style)
   return () => style.remove()
 }

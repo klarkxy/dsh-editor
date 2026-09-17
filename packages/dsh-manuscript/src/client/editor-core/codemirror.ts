@@ -6,7 +6,7 @@
  *
  * - `paperTheme` ports the old textarea typography (serif 17/1.9, 36/64
  *   padding, accent caret) into an EditorView.theme, all colors via the
- *   design-token CSS vars so 纸/墨 themes keep working.
+ *   design-token CSS vars so light/dark themes keep working.
  * - `livePreview` is the Typora-style renderer: a ViewPlugin that walks the
  *   lezer markdown syntax tree over the visible ranges and decorates
  *   headings / links / emphasis / code / quotes / list marks — except on
@@ -50,11 +50,11 @@ export const paperTheme: Extension = EditorView.theme({
   '&': {
     height: '100%',
     backgroundColor: 'transparent',
-    color: 'var(--fg, inherit)',
+    color: 'var(--gray-12)',
     fontWeight: '400',
-    fontSize: 'var(--paper-font-size, var(--text-body, 17px))',
+    fontSize: 'var(--paper-font-size)',
     lineHeight: 'var(--paper-line-height, var(--leading-body, 1.9))',
-    fontFamily: 'var(--paper-font-family, var(--font-serif, Georgia, serif))',
+    fontFamily: 'var(--paper-font-family, var(--default-font-family))',
     letterSpacing: '.03em',
   },
   '.cm-scroller': {
@@ -64,7 +64,7 @@ export const paperTheme: Extension = EditorView.theme({
   },
   '.cm-content': {
     padding: '36px 64px 32px',
-    caretColor: 'var(--accent, inherit)',
+    caretColor: 'var(--accent-9)',
     boxSizing: 'border-box',
     width: '100%',
     maxWidth: 'var(--paper-max-width, none)',
@@ -77,12 +77,12 @@ export const paperTheme: Extension = EditorView.theme({
     opacity: 'var(--paper-dim-opacity, 0.35)',
   },
   '&.cm-focused': { outline: 'none' },
-  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent, currentColor)' },
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent-9)' },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-    backgroundColor: 'var(--selection, rgba(27, 54, 93, 0.16))',
+    backgroundColor: 'var(--accent-a4)',
   },
   '.cm-placeholder': {
-    color: 'var(--meta, #888)',
+    color: 'var(--gray-10)',
     fontStyle: 'italic',
   },
   /* Live-preview decorations. */
@@ -94,37 +94,37 @@ export const paperTheme: Extension = EditorView.theme({
   '.cm-lp-strong': { fontWeight: '700' },
   '.cm-lp-em': { fontStyle: 'italic' },
   '.cm-lp-code': {
-    fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+    fontFamily: 'var(--code-font-family)',
     fontSize: '0.88em',
-    backgroundColor: 'var(--surface-warm, rgba(127, 127, 127, 0.12))',
+    backgroundColor: 'var(--gray-a3)',
     borderRadius: '3px',
     padding: '0 3px',
   },
-  '.cm-lp-mark': { color: 'var(--meta, #888)' },
+  '.cm-lp-mark': { color: 'var(--gray-10)' },
   '.cm-lp-quote': {
-    borderLeft: '3px solid var(--border, #ccc)',
+    borderLeft: '3px solid var(--gray-6)',
     paddingLeft: '12px',
     fontStyle: 'italic',
-    color: 'var(--fg-2, inherit)',
+    color: 'var(--gray-11)',
   },
-  '.cm-lp-hr-line': { borderTop: '1px solid var(--border, #ccc)' },
+  '.cm-lp-hr-line': { borderTop: '1px solid var(--gray-6)' },
   '.cm-lp-hr': { color: 'transparent' },
   '.cm-lp-link': {
-    color: 'var(--accent, inherit)',
+    color: 'var(--accent-11)',
     textDecoration: 'underline',
     textUnderlineOffset: '3px',
     textDecorationThickness: 'from-font',
   },
   /* FIM ghost inline widget. */
-  '.cm-ghost': { color: 'var(--ghost, #888)', whiteSpace: 'pre-wrap' },
+  '.cm-ghost': { color: 'var(--gray-9)', whiteSpace: 'pre-wrap' },
 })
 
 /* Base syntax colors for markdown tokens the live preview leaves alone
  * (links, raw marks while editing). All token-driven. */
 const paperHighlightStyle = HighlightStyle.define([
-  { tag: [tags.processingInstruction, tags.punctuation, tags.contentSeparator], color: 'var(--meta, #888)' },
-  { tag: tags.link, color: 'var(--accent, inherit)' },
-  { tag: tags.monospace, fontFamily: 'var(--font-mono, ui-monospace, monospace)' },
+  { tag: [tags.processingInstruction, tags.punctuation, tags.contentSeparator], color: 'var(--gray-10)' },
+  { tag: tags.link, color: 'var(--accent-11)' },
+  { tag: tags.monospace, fontFamily: 'var(--code-font-family)' },
 ])
 
 export const paperHighlight: Extension = syntaxHighlighting(paperHighlightStyle)

@@ -8,6 +8,18 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  Badge,
+  Box,
+  Button,
+  Callout,
+  Card,
+  Flex,
+  IconButton,
+  SegmentedControl,
+  Text,
+  TextField,
+} from '@radix-ui/themes'
+import {
   answerApproval,
   answerQuestions,
   type ChatRow,
@@ -17,7 +29,7 @@ import {
 import type { AuthorMemoryMarker, ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import type { ShellMessageCardContext, ShellMessageCardRegistry } from '../seats.ts'
 import { Markdown } from './markdown.tsx'
-import { ActivityDots, ActivityText, SuccessMark } from './ui/index.ts'
+import { ActivityDots, SuccessMark } from './ui/index.ts'
 import { t, type Locale } from '../i18n/index.ts'
 import { ProposalCard } from './chat-proposal.tsx'
 import type { ShellContext } from './shared.ts'
@@ -61,25 +73,29 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
       }).catch(() => setNote(t('note.submitFailed'))).finally(() => setBusy(false))
     }
     return (
-      <article className="pending-card" aria-label={t('chat.approvalTitle')}>
-        <strong>
-          {t('chat.needsAuth')}
-        </strong>
-        <p>
-          {t('chat.allowStep')}
-        </p>
-        <div>
-          <button type="button" disabled={busy} onClick={() => decide('allowed-once')}>
-            {t('chat.allowOnce')}
-          </button>
-          <button type="button" disabled={busy} onClick={() => decide('rejected')}>
-            {t('chat.refuse')}
-          </button>
-        </div>
-        {note ? <small className="warning">
-          {note}
-        </small> : null}
-      </article>
+      <Card size="2">
+        <article className="pending-card" aria-label={t('chat.approvalTitle')}>
+          <Flex direction="column" gap="3">
+            <Text size="2" weight="medium">
+              {t('chat.needsAuth')}
+            </Text>
+            <Text size="2">
+              {t('chat.allowStep')}
+            </Text>
+            <Flex gap="2" wrap="wrap">
+              <Button type="button" variant="solid" disabled={busy} onClick={() => decide('allowed-once')}>
+                {t('chat.allowOnce')}
+              </Button>
+              <Button type="button" variant="soft" color="gray" disabled={busy} onClick={() => decide('rejected')}>
+                {t('chat.refuse')}
+              </Button>
+            </Flex>
+            {note ? <Text size="1" className="warning" color="red">
+              {note}
+            </Text> : null}
+          </Flex>
+        </article>
+      </Card>
     );
   }
   const submit = (event: FormEvent) => {
@@ -110,68 +126,79 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
     }
   }
   return (
-    <form
-      className="pending-card"
-      aria-label={t('chat.answerQuestions')}
-      onSubmit={submit}>
-      {questions.length > 1 ? <div className="question-tabs" role="tablist">
-        {questions.map((question, index) => <button
-          key={question.id}
-          type="button"
-          role="tab"
-          aria-selected={index === tab}
-          aria-label={t('chat.questionTab', { index: index + 1 })}
-          className={`question-tab${index === tab ? ' is-active' : ''}${isAnswered(question.id) ? ' is-done' : ''}`}
-          onClick={() => setTab(index)}>
-          {isAnswered(question.id) ? '✓' : String(index + 1)}
-        </button>)}
-      </div> : null}
-      {current ? <section className="question-panel" role="tabpanel">
-        <strong>
-          {current.header ?? t('chat.needsAnswers')}
-        </strong>
-        <p>
-          {current.question}
-        </p>
-        {current.detail ? <small>
-          {current.detail}
-        </small> : null}
-        {current.options?.length ? <div className="question-options">
-          {current.options.map((option) => <button
-            key={option.label}
-            type="button"
-            className={`question-option${answers[current.id] === option.label ? ' is-selected' : ''}`}
-            aria-pressed={answers[current.id] === option.label}
-            onClick={() => choose(current.id, option.label)}>
-            <strong>
-              {option.label}
-            </strong>
-            {option.description ? <small>
-              {option.description}
-            </small> : null}
-          </button>)}
-        </div> : null}
-        <input
-          className="question-custom"
-          placeholder={t('chat.customAnswer')}
-          aria-label={t('chat.customAnswerFor', { question: current.question })}
-          value={current.options?.some((option) => option.label === answers[current.id]) ? '' : answers[current.id] ?? ''}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => {
-            const value = event.target.value
-            setAnswers((old) => ({ ...old, [current.id]: value }))
-            setNote('')
-          }} />
-      </section> : null}
-      <button type="submit" disabled={busy}>
-        {busy ? <Fragment>
-          <ActivityDots />
-          {t('chat.submitting')}
-        </Fragment> : t('chat.submitAllAnswers')}
-      </button>
-      {note ? <small className="warning">
-        {note}
-      </small> : null}
-    </form>
+    <Card size="2">
+      <form
+        className="pending-card"
+        aria-label={t('chat.answerQuestions')}
+        onSubmit={submit}>
+        <Flex direction="column" gap="3">
+          {questions.length > 1 ? <SegmentedControl.Root
+            className="question-tabs"
+            value={String(tab)}
+            onValueChange={(value) => setTab(Number(value))}
+            size="1">
+            {questions.map((question, index) => <SegmentedControl.Item
+              key={question.id}
+              value={String(index)}
+              className={`question-tab${index === tab ? ' is-active' : ''}${isAnswered(question.id) ? ' is-done' : ''}`}
+              aria-label={t('chat.questionTab', { index: index + 1 })}>
+              {isAnswered(question.id) ? '✓' : String(index + 1)}
+            </SegmentedControl.Item>)}
+          </SegmentedControl.Root> : null}
+          {current ? <Box className="question-panel" role="tabpanel">
+            <Flex direction="column" gap="2">
+              <Text size="1" color="gray" weight="medium">
+                {current.header ?? t('chat.needsAnswers')}
+              </Text>
+              <Text size="2">
+                {current.question}
+              </Text>
+              {current.detail ? <Text size="1" color="gray">
+                {current.detail}
+              </Text> : null}
+              {current.options?.length ? <Flex className="question-options" direction="column" gap="2">
+                {current.options.map((option) => <Button
+                  key={option.label}
+                  type="button"
+                  variant="soft"
+                  color={answers[current.id] === option.label ? undefined : 'gray'}
+                  className={`question-option${answers[current.id] === option.label ? ' is-selected' : ''}`}
+                  aria-pressed={answers[current.id] === option.label}
+                  onClick={() => choose(current.id, option.label)}>
+                  <Flex direction="column" align="start" gap="1">
+                    <Text size="2" weight="medium">
+                      {option.label}
+                    </Text>
+                    {option.description ? <Text size="1" color="gray">
+                      {option.description}
+                    </Text> : null}
+                  </Flex>
+                </Button>)}
+              </Flex> : null}
+              <TextField.Root
+                placeholder={t('chat.customAnswer')}
+                aria-label={t('chat.customAnswerFor', { question: current.question })}
+                value={current.options?.some((option) => option.label === answers[current.id]) ? '' : answers[current.id] ?? ''}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  const value = event.target.value
+                  setAnswers((old) => ({ ...old, [current.id]: value }))
+                  setNote('')
+                }}
+                ref={(el) => { el?.classList.add('question-custom') }} />
+            </Flex>
+          </Box> : null}
+          <Button type="submit" variant="solid" disabled={busy}>
+            {busy ? <Fragment>
+              <ActivityDots />
+              {t('chat.submitting')}
+            </Fragment> : t('chat.submitAllAnswers')}
+          </Button>
+          {note ? <Text size="1" className="warning" color="red">
+            {note}
+          </Text> : null}
+        </Flex>
+      </form>
+    </Card>
   );
 }
 
@@ -197,98 +224,116 @@ export function MemoryCard(props: { memory: AuthorMemoryMarker; onAccept(observa
     else { setState('failed'); setNote(t('chat.memoryFull')) }
   }
   return (
-    <article className={`memory-card ${state}`} aria-label={t('chat.memoryTitle')}>
-      <section className="memory-observation">
-        <p>
-          {props.memory.observation}
-        </p>
-      </section>
-      <section className="memory-reason">
-        <small>
-          {t('chat.why')}
-        </small>
-        <p>
-          {props.memory.reason}
-        </p>
-      </section>
-      <footer>
-        <span role={state === 'failed' ? 'alert' : 'status'}>
-          {state === 'saving' ? <ActivityDots /> : state === 'saved' ? <SuccessMark /> : null}
-          {note}
-        </span>
-        {state === 'ready' ? <button type="button" onClick={() => void accept()}>
-          {t('chat.remember')}
-        </button> : null}
-        {state === 'ready' ? <button
-          type="button"
-          onClick={() => { setState('rejected'); setNote(t('chat.ignoredMemory')) }}>
-          {t('common.ignore')}
-        </button> : null}
-      </footer>
-    </article>
+    <Card size="2">
+      <article className={`memory-card ${state}`} aria-label={t('chat.memoryTitle')}>
+        <Flex direction="column" gap="3">
+          <Box className="memory-observation">
+            <Text size="2">
+              {props.memory.observation}
+            </Text>
+          </Box>
+          <Box className="memory-reason">
+            <Text size="1" color="gray">
+              {t('chat.why')}
+            </Text>
+            <Text size="2">
+              {props.memory.reason}
+            </Text>
+          </Box>
+          <Flex asChild align="center" gap="2" wrap="wrap">
+            <footer>
+              <Text size="1" color={state === 'failed' ? 'red' : 'gray'} role={state === 'failed' ? 'alert' : 'status'}>
+                {state === 'saving' ? <ActivityDots /> : state === 'saved' ? <SuccessMark /> : null}
+                {note}
+              </Text>
+              {state === 'ready' ? <Button type="button" variant="solid" onClick={() => void accept()}>
+                {t('chat.remember')}
+              </Button> : null}
+              {state === 'ready' ? <Button
+                type="button"
+                variant="soft"
+                color="gray"
+                onClick={() => { setState('rejected'); setNote(t('chat.ignoredMemory')) }}>
+                {t('common.ignore')}
+              </Button> : null}
+            </footer>
+          </Flex>
+        </Flex>
+      </article>
+    </Card>
   );
 }
 
 export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boolean; running: boolean; done: boolean; note: string; onStart(): void; onDismiss(): void }) {
   const explore = props.state === 'explore'
   return (
-    <details className="init-guide-quiet" aria-label={t('chat.initQuietTitle')}>
-      <summary>
-        {t('chat.initQuietTitle')}
-      </summary>
-      <p>
-        {explore ? t('chat.initExplore') : t('chat.initInterview')}
-      </p>
-      {props.done
-        ? <p role="status">
-        <SuccessMark />
-        {' '}
-        {t('chat.initDone')}
-      </p>
-        : <div className="init-guide-actions">
-        <button
-          type="button"
-          disabled={props.busy || props.running}
-          onClick={props.onStart}>
-          {props.running ? <Fragment>
-            <ActivityDots />
-            {t('chat.initRunning')}
-          </Fragment> : t('chat.initStart')}
-        </button>
-        <button type="button" disabled={props.busy} onClick={props.onDismiss}>
-          {t('common.ignore')}
-        </button>
-      </div>}
-      {props.note ? <small className="warning" role="alert">
-        {props.note}
-      </small> : null}
-    </details>
+    <Box asChild>
+      <details className="init-guide-quiet" aria-label={t('chat.initQuietTitle')}>
+        <summary>
+          <Text size="1" color="gray">
+            {t('chat.initQuietTitle')}
+          </Text>
+        </summary>
+        <Text as="p" size="2" my="2">
+          {explore ? t('chat.initExplore') : t('chat.initInterview')}
+        </Text>
+        {props.done
+          ? <Text as="p" size="2" role="status">
+          <SuccessMark />
+          {' '}
+          {t('chat.initDone')}
+        </Text>
+          : <Flex className="init-guide-actions" gap="2" wrap="wrap">
+          <Button
+            type="button"
+            variant="solid"
+            size="1"
+            disabled={props.busy || props.running}
+            onClick={props.onStart}>
+            {props.running ? <Fragment>
+              <ActivityDots />
+              {t('chat.initRunning')}
+            </Fragment> : t('chat.initStart')}
+          </Button>
+          <Button type="button" variant="soft" color="gray" size="1" disabled={props.busy} onClick={props.onDismiss}>
+            {t('common.ignore')}
+          </Button>
+        </Flex>}
+        {props.note ? <Text size="1" className="warning" color="red" role="alert">
+          {props.note}
+        </Text> : null}
+      </details>
+    </Box>
   );
 }
 
 /** 旧版会话顶部的迁移横幅：新建写作会话继续作品，旧会话保持可读；关闭仅记忆在内存。 */
 export function LegacyMigrationBanner(props: { onMigrate(): void; onDismiss(): void }) {
   return (
-    <div
+    <Callout.Root
       className="migration-banner"
       role="note"
-      aria-label={t('chat.legacyMigrationTitle')}>
-      <p>
+      aria-label={t('chat.legacyMigrationTitle')}
+      color="indigo"
+      size="1">
+      <Callout.Text>
         {t('chat.legacyMigrationBanner')}
-      </p>
-      <div className="migration-banner-actions">
-        <button type="button" onClick={props.onMigrate}>
+      </Callout.Text>
+      <Flex className="migration-banner-actions" align="center" gap="2" mt="2">
+        <Button type="button" size="1" variant="soft" onClick={props.onMigrate}>
           {t('chat.legacyMigrationAction')}
-        </button>
-        <button
+        </Button>
+        <IconButton
           type="button"
-          className="icon-button"
+          variant="ghost"
+          color="gray"
+          size="1"
           aria-label={t('common.close')}
           onClick={props.onDismiss}>
           ×
-        </button>
-      </div>
-    </div>
+        </IconButton>
+      </Flex>
+    </Callout.Root>
   );
 }
 
@@ -300,27 +345,35 @@ export function ProjectContextReceiptView({ receipt }: { receipt: ProjectContext
   const worldbook = receipt.sources.filter((item) => item.kind === 'worldbook')
   const matchedByText = (value: string | undefined) => value === 'both' ? t('chat.requestAndDoc') : value === 'saved-document' ? t('chat.currentDoc') : t('chat.thisRequest')
   return (
-    <details className="project-context-receipt">
-      <summary>
-        {`${t('chat.contextSummary', { included: includedFixed, total: fixed.length, worldbook: worldbook.length })}${receipt.authorPreferencesChars ? t('chat.contextAuthorPref', { count: receipt.authorPreferencesChars }) : ''}${receipt.authorMemoryChars ? t('chat.contextAuthorMemory', { count: receipt.authorMemoryChars }) : ''}`}
-      </summary>
-      <ul>
-        {receipt.sources.map((item) => <li key={item.path}>
-          <code>
-            {item.path}
-          </code>
-          {` · ${item.status === 'included'
-            ? item.includedChars > 0 ? t('chat.includedChars', { count: item.includedChars }) : item.truncated ? t('chat.notIncludedCap') : t('chat.emptyFile')
-            : item.status === 'missing' ? t('chat.missingFile') : t('chat.readFailed')}`}
-          {item.truncated ? t('chat.truncated') : ''}
-          {item.kind === 'worldbook' ? t('chat.worldbookMatch', { priority: item.priority ?? 0, matched: `${matchedByText(item.matchedBy)}${item.matchedTriggers?.length ? ` (${item.matchedTriggers.join('、')})` : ''}` }) : ''}
-          {item.version ? ` · ${item.version}` : ''}
-        </li>)}
-      </ul>
-      {receipt.scan ? <p className="muted">
-        {t('chat.worldbookScan', { scanned: receipt.scan.scanned, unmatched: receipt.scan.unmatched, disabled: receipt.scan.disabled, invalid: receipt.scan.invalid, limits: receipt.scan.limits, errors: receipt.scan.readErrors })}
-      </p> : null}
-    </details>
+    <Box asChild>
+      <details className="project-context-receipt">
+        <summary>
+          <Text size="1" color="gray">
+            {`${t('chat.contextSummary', { included: includedFixed, total: fixed.length, worldbook: worldbook.length })}${receipt.authorPreferencesChars ? t('chat.contextAuthorPref', { count: receipt.authorPreferencesChars }) : ''}${receipt.authorMemoryChars ? t('chat.contextAuthorMemory', { count: receipt.authorMemoryChars }) : ''}`}
+          </Text>
+        </summary>
+        <Box asChild my="2">
+          <ul>
+            {receipt.sources.map((item) => <li key={item.path}>
+              <Text size="1" color="gray">
+                <code>
+                  {item.path}
+                </code>
+                {` · ${item.status === 'included'
+                  ? item.includedChars > 0 ? t('chat.includedChars', { count: item.includedChars }) : item.truncated ? t('chat.notIncludedCap') : t('chat.emptyFile')
+                  : item.status === 'missing' ? t('chat.missingFile') : t('chat.readFailed')}`}
+                {item.truncated ? t('chat.truncated') : ''}
+                {item.kind === 'worldbook' ? t('chat.worldbookMatch', { priority: item.priority ?? 0, matched: `${matchedByText(item.matchedBy)}${item.matchedTriggers?.length ? ` (${item.matchedTriggers.join('、')})` : ''}` }) : ''}
+                {item.version ? ` · ${item.version}` : ''}
+              </Text>
+            </li>)}
+          </ul>
+        </Box>
+        {receipt.scan ? <Text as="p" size="1" color="gray" className="muted">
+          {t('chat.worldbookScan', { scanned: receipt.scan.scanned, unmatched: receipt.scan.unmatched, disabled: receipt.scan.disabled, invalid: receipt.scan.invalid, limits: receipt.scan.limits, errors: receipt.scan.readErrors })}
+        </Text> : null}
+      </details>
+    </Box>
   );
 }
 
@@ -362,11 +415,13 @@ export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
     return (
       <ChatEntry as="details" className="chat-row thinking" enter={props.enter}>
         <summary>
-          {t('chat.thinkingProcess')}
+          <Text size="1" color="gray">
+            {t('chat.thinkingProcess')}
+          </Text>
         </summary>
-        <p>
+        <Text as="p" size="2" mt="2">
           {row.text}
-        </p>
+        </Text>
       </ChatEntry>
     );
   }
@@ -378,17 +433,39 @@ export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
         role={row.recovered ? undefined : 'status'}
         enter={props.enter}>
         <summary>
-          {row.recovered ? row.text : `⚠ ${row.text}`}
+          <Flex align="center" gap="2">
+            <Badge color={row.recovered ? 'gray' : 'red'} variant="soft" size="1">
+              {row.recovered ? row.text : `⚠ ${row.text}`}
+            </Badge>
+          </Flex>
         </summary>
-        {row.reason ? <p className="tool-error-reason">
-          {row.reason}
-        </p> : null}
-        {row.content ? <pre>
-          {row.content}
-        </pre> : null}
-        {row.detail ? <small>
-          {row.detail}
-        </small> : null}
+        {row.recovered
+          ? <Box mt="2">
+            {row.reason ? <Text as="p" size="2" className="tool-error-reason">
+              {row.reason}
+            </Text> : null}
+            {row.content ? <Box asChild mt="2">
+              <pre>
+                {row.content}
+              </pre>
+            </Box> : null}
+            {row.detail ? <Text as="p" size="1" color="gray" mt="1">
+              {row.detail}
+            </Text> : null}
+          </Box>
+          : <Callout.Root color="red" mt="2">
+            {row.reason ? <Callout.Text className="tool-error-reason">
+              {row.reason}
+            </Callout.Text> : null}
+            {row.content ? <Box asChild mt="2">
+              <pre>
+                {row.content}
+              </pre>
+            </Box> : null}
+            {row.detail ? <Text size="1" mt="1">
+              {row.detail}
+            </Text> : null}
+          </Callout.Root>}
       </ChatEntry>
     );
   }
@@ -396,30 +473,52 @@ export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
     return (
       <ChatEntry as="details" className="chat-row tool" enter={props.enter}>
         <summary>
-          {row.text}
+          <Badge variant="soft" color="gray" size="1">
+            {row.text}
+          </Badge>
         </summary>
-        <pre>
-          {row.content}
-        </pre>
-        {row.detail ? <small>
+        <Box asChild mt="2">
+          <pre>
+            {row.content}
+          </pre>
+        </Box>
+        {row.detail ? <Text as="p" size="1" color="gray" mt="1">
           {row.detail}
-        </small> : null}
+        </Text> : null}
       </ChatEntry>
     );
   }
   return (
     <ChatEntry className={`chat-row ${row.role}`} enter={props.enter}>
-      {row.role === 'assistant' && row.text
-        ? <div className="md">
-        <Markdown text={row.text} />
-      </div>
-        : <p>
-        {row.text || t('chat.noText')}
-      </p>}
-      {row.detail ? <small>
-        {row.detail}
-      </small> : null}
-      {row.projectContextReceipt ? <ProjectContextReceiptView receipt={row.projectContextReceipt} /> : null}
+      {row.role === 'user'
+        ? <Card size="2">
+          <Text size="2" as="p">
+            {row.text || t('chat.noText')}
+          </Text>
+          {row.detail ? <Text as="p" size="1" color="gray" mt="1">
+            {row.detail}
+          </Text> : null}
+          {row.projectContextReceipt ? <ProjectContextReceiptView receipt={row.projectContextReceipt} /> : null}
+        </Card>
+        : row.role === 'assistant' && row.text
+          ? <Box>
+            <Text size="2" as="div">
+              <Markdown text={row.text} />
+            </Text>
+            {row.detail ? <Text as="p" size="1" color="gray" mt="1">
+              {row.detail}
+            </Text> : null}
+            {row.projectContextReceipt ? <ProjectContextReceiptView receipt={row.projectContextReceipt} /> : null}
+          </Box>
+          : <Box>
+            <Text size="2" as="p">
+              {row.text || t('chat.noText')}
+            </Text>
+            {row.detail ? <Text as="p" size="1" color="gray" mt="1">
+              {row.detail}
+            </Text> : null}
+            {row.projectContextReceipt ? <ProjectContextReceiptView receipt={row.projectContextReceipt} /> : null}
+          </Box>}
     </ChatEntry>
   );
 })

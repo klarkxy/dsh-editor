@@ -1,4 +1,5 @@
 import { Fragment, useRef, useState, type RefObject } from 'react';
+import { Callout, Card, Flex, Heading, ScrollArea, Text } from '@radix-ui/themes'
 import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type RpcResult, type ShellContext } from './shared.ts'
 import { prepareExport, sanitizeExportTitle, type ChapterExport, type ExportFormat, type PreparedExport } from '../export.ts'
@@ -97,103 +98,118 @@ function ExportPreviewDialog(props: {
       setPacking(null)
     }
   }
+  const noteFailed = Boolean(note && /无法|失败|为空|empty|failed|cannot/i.test(note))
   return (
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !busy) props.onCancel() }}
       title={t('export.fullText')}
-      className="file-dialog export-preview-dialog"
+      className="file-dialog export-preview-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!busy}
       initialFocusRef={cancel}
       returnFocusRef={props.returnFocusRef}>
-      <header>
-        <div>
-          <small>
+      <Flex direction="column" gap="3">
+        <Flex direction="column" gap="1">
+          <Text size="1" color="gray">
             {t('export.title')}
-          </small>
-          <h2 id="export-preview-title">
+          </Text>
+          <Heading as="h2" size="4" id="export-preview-title">
             {t('export.fullText')}
-          </h2>
-        </div>
-      </header>
-      {collecting ? <div className="export-loading">
-        <ActivityRing size={24} />
-        <ActivityText cue="none">
-          {note || t('note.exportPreparing')}
-        </ActivityText>
-        <ActivitySkeleton lines={3} />
-      </div> : null}
-      {collecting ? null : <dl className="export-summary">
-        <div>
-          <dt>
-            {t('export.chapters')}
-          </dt>
-          <dd>
-            {preview.chapters.length}
-          </dd>
-        </div>
-        <div>
-          <dt>
-            {t('export.totalChars')}
-          </dt>
-          <dd>
-            {preview.totalChars}
-          </dd>
-        </div>
-      </dl>}
-      {empty.length ? <p className="warning" role="alert">
-        {t('export.emptyWarning', { count: empty.length })}
-      </p> : null}
-      {note && !collecting ? <p
-        className={/无法|失败|为空|empty|failed|cannot/i.test(note) ? 'warning' : 'muted'}
-        role={/无法|失败|为空|empty|failed|cannot/i.test(note) ? 'alert' : 'status'}>
-        {packingNote ? <ActivityDots /> : null}
-        {note}
-      </p> : null}
-      {collecting ? null : <ol className="export-chapters">
-        {preview.chapters.map((chapter, index) => <li key={chapter.path}>
-          <span>
-            {`${index + 1}. ${chapter.path}`}
-          </span>
-          <small>
-            {`${t('export.chapterMeta', { chars: chapter.chars })}${chapter.empty ? t('export.chapterEmpty') : ''}`}
-          </small>
-        </li>)}
-      </ol>}
-      {collecting ? null : <footer>
-        <Button ref={cancel} disabled={busy} onClick={props.onCancel}>
-          {t('common.cancel')}
-        </Button>
-        <Button
-          variant="primary"
-          className="primary-action"
-          disabled={busy || !preview.chapters.length}
-          onClick={() => props.onExport('markdown')}>
-          {t('export.markdown')}
-        </Button>
-        <Button
-          disabled={busy || !preview.chapters.length}
-          onClick={() => props.onExport('text')}>
-          {t('export.txt')}
-        </Button>
-        <Button
-          disabled={busy || !preview.chapters.length}
-          onClick={() => { void exportPacked('docx') }}>
-          {packing === 'docx' ? <Fragment>
-            <ActivityDots />
-            {t('workspace.exporting')}
-          </Fragment> : t('export.docx')}
-        </Button>
-        <Button
-          disabled={busy || !preview.chapters.length}
-          onClick={() => { void exportPacked('epub') }}>
-          {packing === 'epub' ? <Fragment>
-            <ActivityDots />
-            {t('workspace.exporting')}
-          </Fragment> : t('export.epub')}
-        </Button>
-      </footer>}
+          </Heading>
+        </Flex>
+        {collecting ? <Flex className="export-loading" direction="column" align="center" gap="3">
+          <ActivityRing size={24} />
+          <ActivityText cue="none">
+            {note || t('note.exportPreparing')}
+          </ActivityText>
+          <ActivitySkeleton lines={3} />
+        </Flex> : null}
+        {collecting ? null : <Flex className="export-summary" gap="3">
+          <Flex direction="column" gap="1">
+            <Text size="1" color="gray">
+              {t('export.chapters')}
+            </Text>
+            <Text size="3" weight="medium">
+              {preview.chapters.length}
+            </Text>
+          </Flex>
+          <Flex direction="column" gap="1">
+            <Text size="1" color="gray">
+              {t('export.totalChars')}
+            </Text>
+            <Text size="3" weight="medium">
+              {preview.totalChars}
+            </Text>
+          </Flex>
+        </Flex>}
+        {empty.length ? <Callout.Root className="warning" color="amber" role="alert" size="1">
+          <Callout.Text>
+            {t('export.emptyWarning', { count: empty.length })}
+          </Callout.Text>
+        </Callout.Root> : null}
+        {note && !collecting ? <Callout.Root
+          className={noteFailed ? 'warning' : undefined}
+          color={noteFailed ? 'red' : 'gray'}
+          role={noteFailed ? 'alert' : 'status'}
+          size="1">
+          <Callout.Text>
+            {packingNote ? <ActivityDots /> : null}
+            {note}
+          </Callout.Text>
+        </Callout.Root> : null}
+        {collecting ? null : <Card>
+          <ScrollArea className="export-chapters" type="auto" scrollbars="vertical">
+            <Flex direction="column" gap="2" asChild>
+              <ol>
+                {preview.chapters.map((chapter, index) => <li key={chapter.path}>
+                  <Flex justify="between" gap="2">
+                    <Text size="2">
+                      {`${index + 1}. ${chapter.path}`}
+                    </Text>
+                    <Text size="1" color="gray">
+                      {`${t('export.chapterMeta', { chars: chapter.chars })}${chapter.empty ? t('export.chapterEmpty') : ''}`}
+                    </Text>
+                  </Flex>
+                </li>)}
+              </ol>
+            </Flex>
+          </ScrollArea>
+        </Card>}
+        {collecting ? null : <Flex justify="end" gap="2" wrap="wrap">
+          <Button ref={cancel} disabled={busy} onClick={props.onCancel}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            className="primary-action"
+            disabled={busy || !preview.chapters.length}
+            onClick={() => props.onExport('markdown')}>
+            {t('export.markdown')}
+          </Button>
+          <Button
+            disabled={busy || !preview.chapters.length}
+            onClick={() => props.onExport('text')}>
+            {t('export.txt')}
+          </Button>
+          <Button
+            disabled={busy || !preview.chapters.length}
+            onClick={() => { void exportPacked('docx') }}>
+            {packing === 'docx' ? <Fragment>
+              <ActivityDots />
+              {t('workspace.exporting')}
+            </Fragment> : t('export.docx')}
+          </Button>
+          <Button
+            disabled={busy || !preview.chapters.length}
+            onClick={() => { void exportPacked('epub') }}>
+            {packing === 'epub' ? <Fragment>
+              <ActivityDots />
+              {t('workspace.exporting')}
+            </Fragment> : t('export.epub')}
+          </Button>
+        </Flex>}
+      </Flex>
     </Dialog>
   );
 }

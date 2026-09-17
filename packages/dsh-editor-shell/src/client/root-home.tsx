@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Box, Button, Callout, Card, Flex, Heading, IconButton, ScrollArea, Separator, Text } from '@radix-ui/themes'
 import type { WorkspaceView } from '../dsh-compat.ts'
 import type { WorkspaceOpenState } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
@@ -36,6 +37,52 @@ function formatRecentTime(iso: string | undefined, now: Date = new Date()): stri
   return `${yyyy}/${mm}/${dd}`
 }
 
+function HomeChrome(props: {
+  extensionsDock?: ReactNode
+  onOpenPalette(): void
+  onOpenSettings(tab?: SettingsTab): void
+}) {
+  return (
+    <Flex
+      className="chrome"
+      role="banner"
+      align="center"
+      gap="3"
+      px="3"
+      width="100%"
+      minWidth="0"
+      onDoubleClick={titleBarDoubleClick}>
+      <Flex className="brand-lockup" align="center" gap="2" flexShrink="0">
+        <Flex
+          className="brand-mark"
+          aria-hidden="true"
+          align="center"
+          justify="center"
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 'var(--radius-2)',
+            background: 'var(--accent-9)',
+            color: 'var(--accent-contrast)',
+            fontWeight: 700,
+            fontSize: 'var(--font-size-1)',
+          }}>
+          D
+        </Flex>
+        <Text weight="bold" size="2">
+          DSH Editor
+        </Text>
+      </Flex>
+      {props.extensionsDock}
+      <Flex className="topbar-actions" align="center" gap="2" flexShrink="0">
+        <CommandPaletteTrigger onClick={props.onOpenPalette} />
+        <SettingsTrigger onOpen={props.onOpenSettings} />
+        <WindowControls />
+      </Flex>
+    </Flex>
+  )
+}
+
 export function HomeScreen(props: {
   workspaceOpen: WorkspaceOpenState
   extensionsDock?: ReactNode
@@ -67,19 +114,28 @@ export function HomeScreen(props: {
   if (workspaceOpen.kind === 'checking') {
     return (
       <main className="shell no-session" style={{ minWidth: 0, display: 'grid' }}>
-        <section className="workspace-checking" aria-label={t('home.verifying')}>
+        <Flex
+          className="workspace-checking"
+          direction="column"
+          align="center"
+          justify="center"
+          gap="3"
+          p="8"
+          aria-label={t('home.verifying')}>
           <ActivityRing size={40} />
-          <h1>
+          <Heading as="h1" size="6">
             {t('home.checking')}
-          </h1>
+          </Heading>
           <ActivityText cue="none">
             {t('home.checkingDetail')}
           </ActivityText>
           <ActivityShimmer />
-          <code>
-            {workspaceOpen.path}
-          </code>
-        </section>
+          <Text size="1" color="gray">
+            <code>
+              {workspaceOpen.path}
+            </code>
+          </Text>
+        </Flex>
         {extensionsDock}
       </main>
     );
@@ -87,159 +143,218 @@ export function HomeScreen(props: {
 
   return (
     <main className="shell no-session" style={{ minWidth: 0, display: 'grid' }}>
-      <header className="chrome" onDoubleClick={titleBarDoubleClick}>
-        <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true">
-            D
-          </span>
-          <strong>
-            DSH Editor
-          </strong>
-        </div>
-        {extensionsDock}
-        <span className="topbar-actions">
-          <CommandPaletteTrigger onClick={props.onOpenPalette} />
-          <SettingsTrigger onOpen={props.onOpenSettings} />
-          <WindowControls />
-        </span>
-      </header>
+      <HomeChrome
+        extensionsDock={extensionsDock}
+        onOpenPalette={props.onOpenPalette}
+        onOpenSettings={props.onOpenSettings} />
       <PaperStage label={t('home.blankPaper')}>
-        <p className="home-hint">
+        <Text className="home-hint" size="2" color="gray">
           {homeCopy.intro}
-        </p>
-        <div
+        </Text>
+        <Flex
           className="home-actions home-command-bar"
           role="group"
-          aria-label={t('home.commands')}>
-          <m.button
-            className="home-entry-card"
-            type="button"
-            aria-label={t('home.openWork')}
-            disabled={props.openingWorkspace || props.newProjectBusy}
-            onClick={() => void props.onOpenWork()}
-            {...props.homeCardOpen}>
-            <span className="home-entry-icon" aria-hidden="true">
-              <FolderIcon size={20} />
-            </span>
-            <span className="home-entry-title">
-              {homeCopy.openWork}
-            </span>
-          </m.button>
-          <m.button
-            className="home-entry-card"
-            type="button"
-            aria-label={t('home.new')}
-            disabled={props.openingWorkspace || props.newProjectBusy}
-            onClick={() => void props.onNewProject()}
-            {...props.homeCardNew}>
-            <span className="home-entry-icon" aria-hidden="true">
-              <NewDocIcon size={20} />
-            </span>
-            <span className="home-entry-title">
-              {homeCopy.newWork}
-            </span>
-          </m.button>
-        </div>
+          aria-label={t('home.commands')}
+          gap="3"
+          wrap="wrap"
+          width="100%">
+          <Box flexGrow="1" flexBasis="16rem" minWidth="0">
+            <Card asChild size="2">
+              <m.button
+                className="home-entry-card"
+                type="button"
+                aria-label={t('home.openWork')}
+                disabled={props.openingWorkspace || props.newProjectBusy}
+                onClick={() => void props.onOpenWork()}
+                style={{ width: '100%', textAlign: 'left' }}
+                {...props.homeCardOpen}>
+                <Flex align="center" gap="3">
+                  <Flex
+                    className="home-entry-icon"
+                    aria-hidden="true"
+                    align="center"
+                    justify="center"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 'var(--radius-3)',
+                      background: 'var(--accent-a3)',
+                      color: 'var(--accent-11)',
+                    }}>
+                    <FolderIcon size={20} />
+                  </Flex>
+                  <Text className="home-entry-title" size="3" weight="medium">
+                    {homeCopy.openWork}
+                  </Text>
+                </Flex>
+              </m.button>
+            </Card>
+          </Box>
+          <Box flexGrow="1" flexBasis="16rem" minWidth="0">
+            <Card asChild size="2">
+              <m.button
+                className="home-entry-card"
+                type="button"
+                aria-label={t('home.new')}
+                disabled={props.openingWorkspace || props.newProjectBusy}
+                onClick={() => void props.onNewProject()}
+                style={{ width: '100%', textAlign: 'left' }}
+                {...props.homeCardNew}>
+                <Flex align="center" gap="3">
+                  <Flex
+                    className="home-entry-icon"
+                    aria-hidden="true"
+                    align="center"
+                    justify="center"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 'var(--radius-3)',
+                      background: 'var(--accent-a3)',
+                      color: 'var(--accent-11)',
+                    }}>
+                    <NewDocIcon size={20} />
+                  </Flex>
+                  <Text className="home-entry-title" size="3" weight="medium">
+                    {homeCopy.newWork}
+                  </Text>
+                </Flex>
+              </m.button>
+            </Card>
+          </Box>
+        </Flex>
         {props.pathFallbackForm}
-        {workspaceOpen.kind === 'needs-intent' ? <section className="workspace-intent-prompt" role="alert">
-          <strong>
+        {workspaceOpen.kind === 'needs-intent' ? <Callout.Root className="workspace-intent-prompt" role="alert" color="amber">
+          <Text weight="bold" as="div">
             {workspaceOpen.intent === 'create' ? t('home.folderNotWork') : t('home.folderHasWork')}
-          </strong>
-          <p>
+          </Text>
+          <Text as="p" mt="1">
             {workspaceOpen.message}
-          </p>
-          <code>
-            {workspaceOpen.path}
-          </code>
-          <div>
-            <button
+          </Text>
+          <Text as="p" size="1" color="gray" mt="1">
+            <code>
+              {workspaceOpen.path}
+            </code>
+          </Text>
+          <Flex gap="2" mt="2" wrap="wrap">
+            <Button
               className="primary-action"
+              variant="solid"
               type="button"
               disabled={props.openingWorkspace}
               onClick={() => void props.onContinueIntent()}>
               {workspaceOpen.intent === 'create' ? t('home.createHere') : t('home.openInstead')}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="soft"
+              color="gray"
               type="button"
               disabled={props.openingWorkspace}
               onClick={() => void props.onCancelIntent()}>
               {t('common.cancel')}
-            </button>
-          </div>
-        </section> : null}
-        {workspaceOpen.kind === 'error' ? <code>
-          {workspaceOpen.path}
-        </code> : null}
-        {props.homeNote ? <p className="warning" role="alert">
-          {props.homeNote}
-        </p> : null}
+            </Button>
+          </Flex>
+        </Callout.Root> : null}
+        {workspaceOpen.kind === 'error' ? <Text size="1" color="gray">
+          <code>
+            {workspaceOpen.path}
+          </code>
+        </Text> : null}
+        {props.homeNote ? <Callout.Root className="warning" role="alert" color="red">
+          <Callout.Text>
+            {props.homeNote}
+          </Callout.Text>
+        </Callout.Root> : null}
+        <Separator size="4" my="2" />
         <section className="home-recent" aria-label={t('home.recent')}>
-          <header>
-            <h2>
+          <Flex direction="column" gap="3">
+            <Heading as="h2" size="4">
               {t('home.recent')}
-            </h2>
-          </header>
-          {props.workspaces.length ? <div className="workspace-list">
-            {props.workspaces.map((workspace) => {
-              const needsRelocation = workspaceOpen.kind === 'needs-relocation' && workspaceOpen.workspaceId === workspace.workspaceId
-              const recentLabel = formatRecentTime(workspace.updatedAt)
-              return (
-                <article
-                  className={`workspace-row${needsRelocation ? ' needs-relocation' : ''}`}
-                  key={workspace.workspaceId}>
-                  <button
-                    className="tree-row"
-                    type="button"
-                    disabled={props.openingWorkspace}
-                    onClick={() => void props.onOpenWorkspace(workspace)}>
-                    <strong>
-                      {workspace.title || workspace.path}
-                    </strong>
-                    <small>
-                      {workspace.path}
-                    </small>
-                    {recentLabel ? <span
-                      className="workspace-time"
-                      aria-label={t('home.recentOpened', { label: recentLabel })}>
-                      {recentLabel}
-                    </span> : null}
-                  </button>
-                  <button
-                    className="workspace-manage icon-button"
-                    type="button"
-                    disabled={props.openingWorkspace}
-                    title={t('home.removeRecent')}
-                    aria-label={t('home.removeRecent')}
-                    onClick={() => props.onRequestRemoveRecent(workspace)}>
-                    ×
-                  </button>
-                  {needsRelocation ? <div className="workspace-relocation" role="alert">
-                    <p>
-                      {workspaceOpen.message}
-                    </p>
-                    <code>
-                      {workspaceOpen.path}
-                    </code>
-                    <button
-                      className="primary-action"
-                      type="button"
-                      disabled={props.openingWorkspace}
-                      onClick={() => void props.onRelocate(workspace)}>
-                      {t('home.relocate')}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={props.openingWorkspace}
-                      onClick={() => props.onRequestRemoveRecent(workspace)}>
-                      {t('home.removeRecent')}
-                    </button>
-                  </div> : null}
-                </article>
-              );
-            })}
-          </div> : <p className="muted home-recent-empty">
-            {t('home.recentEmpty')}
-          </p>}
+            </Heading>
+            {props.workspaces.length ? <ScrollArea type="auto" scrollbars="vertical" style={{ maxHeight: '40vh' }}>
+              <Flex className="workspace-list" direction="column" gap="2" pr="2">
+                {props.workspaces.map((workspace) => {
+                  const needsRelocation = workspaceOpen.kind === 'needs-relocation' && workspaceOpen.workspaceId === workspace.workspaceId
+                  const recentLabel = formatRecentTime(workspace.updatedAt)
+                  return (
+                    <Card
+                      className={`workspace-row${needsRelocation ? ' needs-relocation' : ''}`}
+                      key={workspace.workspaceId}
+                      size="2">
+                      <Flex align="center" gap="2">
+                        <Box flexGrow="1" minWidth="0">
+                          <button
+                            className="tree-row"
+                            type="button"
+                            disabled={props.openingWorkspace}
+                            style={{ width: '100%', textAlign: 'left', background: 'transparent' }}
+                            onClick={() => void props.onOpenWorkspace(workspace)}>
+                            <Flex direction="column" align="start" gap="1">
+                              <Text weight="medium" size="2">
+                                {workspace.title || workspace.path}
+                              </Text>
+                              <Text size="1" color="gray" truncate>
+                                {workspace.path}
+                              </Text>
+                              {recentLabel ? <Text
+                                className="workspace-time"
+                                size="1"
+                                color="gray"
+                                aria-label={t('home.recentOpened', { label: recentLabel })}>
+                                {recentLabel}
+                              </Text> : null}
+                            </Flex>
+                          </button>
+                        </Box>
+                        <IconButton
+                          className="workspace-manage icon-button"
+                          type="button"
+                          variant="ghost"
+                          color="gray"
+                          size="1"
+                          disabled={props.openingWorkspace}
+                          title={t('home.removeRecent')}
+                          aria-label={t('home.removeRecent')}
+                          onClick={() => props.onRequestRemoveRecent(workspace)}>
+                          ×
+                        </IconButton>
+                      </Flex>
+                      {needsRelocation ? <Callout.Root className="workspace-relocation" role="alert" color="red" mt="2">
+                        <Callout.Text>
+                          {workspaceOpen.message}
+                        </Callout.Text>
+                        <Text as="p" size="1" color="gray" mt="1">
+                          <code>
+                            {workspaceOpen.path}
+                          </code>
+                        </Text>
+                        <Flex gap="2" mt="2" wrap="wrap">
+                          <Button
+                            className="primary-action"
+                            variant="solid"
+                            type="button"
+                            disabled={props.openingWorkspace}
+                            onClick={() => void props.onRelocate(workspace)}>
+                            {t('home.relocate')}
+                          </Button>
+                          <Button
+                            variant="soft"
+                            color="gray"
+                            type="button"
+                            disabled={props.openingWorkspace}
+                            onClick={() => props.onRequestRemoveRecent(workspace)}>
+                            {t('home.removeRecent')}
+                          </Button>
+                        </Flex>
+                      </Callout.Root> : null}
+                    </Card>
+                  );
+                })}
+              </Flex>
+            </ScrollArea> : <Text className="muted home-recent-empty" size="2" color="gray">
+              {t('home.recentEmpty')}
+            </Text>}
+          </Flex>
         </section>
       </PaperStage>
       {props.dialogs}

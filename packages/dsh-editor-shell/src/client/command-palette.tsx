@@ -27,6 +27,7 @@ import {
   Content as RadixDialogContent,
   Description as RadixDialogDescription,
 } from '@radix-ui/react-dialog'
+import { Button, Flex, Kbd } from '@radix-ui/themes'
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ThemeValue } from './theme.tsx'
 import { t, useLocale } from '../i18n/index.ts'
@@ -173,7 +174,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     return () => globalThis.removeEventListener('keydown', onKey)
   }, [props.open, props.onOpenChange])
 
-  const themeNext: ThemeValue = props.theme === 'paper' ? 'ink' : 'paper'
+  const themeNext: ThemeValue = props.theme === 'light' ? 'dark' : 'light'
   const workspaceGroup: CommandGroup = {
     id: 'workspace',
     heading: t('command.workspace'),
@@ -264,9 +265,9 @@ export function CommandPalette(props: CommandPaletteProps) {
     items: [
       {
         id: 'cmd.toggle-theme',
-        label: themeNext === 'ink' ? t('command.themeInk') : t('command.themePaper'),
-        hint: props.theme === 'paper' ? t('command.themeNowPaper') : t('command.themeNowInk'),
-        keywords: ['theme', t('command.theme'), t('command.switch'), 'paper', 'ink', 'dark', 'light'],
+        label: themeNext === 'dark' ? t('command.themeDark') : t('command.themeLight'),
+        hint: props.theme === 'light' ? t('command.themeNowLight') : t('command.themeNowDark'),
+        keywords: ['theme', t('command.theme'), t('command.switch'), 'dark', 'light'],
         icon: <ThemeInkIcon />,
         run: () => props.onThemeChange(themeNext),
       },
@@ -346,9 +347,9 @@ export function CommandPalette(props: CommandPaletteProps) {
   return (
     <RadixDialogRoot open={props.open} onOpenChange={props.onOpenChange}>
       <RadixDialogPortal>
-        <RadixDialogOverlay className="dsh-ui palette-overlay" />
+        <RadixDialogOverlay className="palette-overlay" />
         <RadixDialogContent
-          className="dsh-ui palette-content"
+          className="palette-content"
           aria-label={t('command.searchCommands')}
           onOpenAutoFocus={(event: Event) => {
             /* cmdk 的 Input 已经会自己 focus,我们只需要阻止 Radix 把焦点
@@ -362,7 +363,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               一条视觉隐藏的描述(复用现有本地化串),消除 a11y 警告。 */}
           <RadixDialogDescription style={visuallyHidden}>{t('command.searchTitle')}</RadixDialogDescription>
           <Command className="palette-command" label={t('command.searchCommands')} loop shouldFilter>
-            <div className="palette-search">
+            <Flex className="palette-search" align="center" gap="3">
               <span className="palette-search-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="11" cy="11" r="6.5" />
@@ -377,8 +378,8 @@ export function CommandPalette(props: CommandPaletteProps) {
                 autoComplete="off"
                 spellCheck={false}
               />
-              <kbd className="palette-kbd" aria-hidden="true">ESC</kbd>
-            </div>
+              <Kbd className="palette-kbd" aria-hidden="true">ESC</Kbd>
+            </Flex>
             <Command.List className="palette-list">
               <Command.Empty className="palette-empty">{t('command.empty')}</Command.Empty>
               {groups.map((group) => (
@@ -399,17 +400,18 @@ export function CommandPalette(props: CommandPaletteProps) {
                       <span className="palette-item-icon" aria-hidden="true">{action.icon}</span>
                       <span className="palette-item-text">
                         <span className="palette-item-label">{action.label}</span>
+                        {action.hint ? <span className="palette-item-hint">{action.hint}</span> : null}
                       </span>
                     </Command.Item>
                   ))}
                 </Command.Group>
               ))}
             </Command.List>
-            <div className="palette-footer" aria-hidden="true">
-              <span><kbd className="palette-kbd">↑</kbd><kbd className="palette-kbd">↓</kbd></span>
-              <span><kbd className="palette-kbd">↵</kbd></span>
-              <span><kbd className="palette-kbd">ESC</kbd></span>
-            </div>
+            <Flex className="palette-footer" align="center" gap="3" aria-hidden="true">
+              <span><Kbd className="palette-kbd">↑</Kbd><Kbd className="palette-kbd">↓</Kbd></span>
+              <span><Kbd className="palette-kbd">↵</Kbd></span>
+              <span><Kbd className="palette-kbd">ESC</Kbd></span>
+            </Flex>
           </Command>
         </RadixDialogContent>
       </RadixDialogPortal>
@@ -422,8 +424,10 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
   useLocale()
   const shortcut = runtimePaletteShortcutHint()
   return (
-    <button
+    <Button
       type="button"
+      variant="soft"
+      color="gray"
       className="palette-trigger"
       onClick={onClick}
       aria-label={t('command.searchCommands')}
@@ -432,7 +436,7 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
       <span className="palette-trigger-icon" aria-hidden="true">
         <SearchIcon size={14} />
       </span>
-      <kbd className="palette-trigger-kbd" aria-hidden="true">{shortcut}</kbd>
-    </button>
+      <Kbd className="palette-trigger-kbd">{shortcut}</Kbd>
+    </Button>
   )
 }

@@ -310,13 +310,13 @@ try {
  await rpc('/dsh-editor-workbench','snapshot.create',{sessionId,label:'组合验收'});evidence.checks.push('live-session search/plain-files/snapshot');
 
  const panelColors=[];
- for(const theme of ['paper','ink']){
-   if(theme==='ink')await page.locator('.chrome .theme-toggle').click();
+ for(const theme of ['light','dark']){
+   if(theme==='dark')await page.locator('.chrome .theme-toggle').click();
    await openSettings('通用设置');panelColors.push(await page.locator('.settings-dialog').evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
    await openSettings('知乎资料');await page.screenshot({path:resolve(output,'zhihu-settings-'+theme+'.png')});await closeSettings();
  }
  if(panelColors[0]===panelColors[1])throw new Error('settings theme did not adapt');
- await page.locator('.chrome .theme-toggle').click();evidence.checks.push('paper/ink settings and embedded Zhihu configuration');
+ await page.locator('.chrome .theme-toggle').click();evidence.checks.push('light/dark settings and embedded Zhihu configuration');
 
  const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();await page.locator('aside.chat').waitFor();evidence.checks.push('optional Chat mounts');
  await page.reload();await page.locator('.shell').waitFor();await dismissNativeOnboarding(page);if(await page.getByTestId('proofread-open').count()||await page.getByTestId('zhihu-open').count())throw new Error('removed desktop launcher returned after reload');

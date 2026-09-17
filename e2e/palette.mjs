@@ -184,7 +184,7 @@ try {
   const workbenchTrigger = page.getByRole('button', { name: '搜索与命令' })
   if (!(await workbenchTrigger.count())) fail('workbench chrome is missing the command palette trigger')
 
-  // Open the palette via the topbar trigger and capture the paper-theme
+  // Open the palette via the topbar trigger and capture the light-theme
   // snapshot. The default selection lands on the first workspace command
   // ("打开作品"), giving the accent-soft highlight something to render.
   await workbenchTrigger.click()
@@ -199,14 +199,14 @@ try {
   // each one so the assertion stays stable if cmdk ever reorders groups.
   const headingTexts = await content.locator('[cmdk-group-heading=""]').allTextContents()
   if (headingTexts.join('|') !== '作品|写作|视图|跳转到文档') {
-    fail(`paper palette group headings drifted: ${JSON.stringify(headingTexts)}`)
+    fail(`light palette group headings drifted: ${JSON.stringify(headingTexts)}`)
   }
   // The "跳转到文档" group should list the seeded 001.md chapter; the cmdk
   // item text is the concatenation of label + hint, so just check the label
   // substring rather than asserting an exact textContent.
   const fileItems = await content.locator('[cmdk-item=""]').allTextContents()
   if (!fileItems.some((text) => text.includes('001.md'))) {
-    fail(`paper palette is missing the seeded 001.md file entry: ${JSON.stringify(fileItems)}`)
+    fail(`light palette is missing the seeded 001.md file entry: ${JSON.stringify(fileItems)}`)
   }
   // The default selection lands on the first item ("打开作品"), which
   // should carry aria-selected="true" out of the box.
@@ -214,7 +214,7 @@ try {
   if (!firstSelected || !firstSelected.includes('打开作品')) {
     fail(`first item should be pre-selected as "打开作品"; got ${JSON.stringify(firstSelected)}`)
   }
-  await shot(page, 'palette-paper', '命令面板打开，纸主题，默认全部命令')
+  await shot(page, 'palette-light', '命令面板打开，浅色主题，默认全部命令')
 
   // Close via ESC to verify the keyboard path works before re-opening
   // through the global Cmd/Ctrl+K shortcut.
@@ -231,26 +231,26 @@ try {
   await page.keyboard.press('Control+k')
   await overlay.waitFor({ state: 'detached', timeout: 5_000 })
 
-  // Switch to ink theme and re-open the palette for the second shot.
-  await page.getByRole('button', { name: /主题（当前纸）/ }).click()
-  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'ink')
+  // Switch to dark theme and re-open the palette for the second shot.
+  await page.getByRole('button', { name: /主题（当前浅色）/ }).click()
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'dark')
   await page.waitForTimeout(200)
   await workbenchTrigger.click()
   await content.waitFor({ state: 'visible' })
   await content.locator('input[cmdk-input]').waitFor({ state: 'visible' })
-  // After the theme flipped to ink, the toggle command label must reflect
-  // the inverted target ("切换到纸主题" instead of "切换到墨主题").
-  const inkItemTexts = await content.locator('[cmdk-item=""]').allTextContents()
-  if (!inkItemTexts.some((text) => text.includes('切换到纸主题'))) {
-    fail(`ink palette should offer a "切换到纸主题" toggle; got ${JSON.stringify(inkItemTexts)}`)
+  // After the theme flipped to dark, the toggle command label must reflect
+  // the inverted target ("切换到浅色" instead of "切换到深色").
+  const darkItemTexts = await content.locator('[cmdk-item=""]').allTextContents()
+  if (!darkItemTexts.some((text) => text.includes('切换到浅色'))) {
+    fail(`dark palette should offer a "切换到浅色" toggle; got ${JSON.stringify(darkItemTexts)}`)
   }
-  await shot(page, 'palette-ink', '命令面板打开，墨主题，确认 token 反转正确')
+  await shot(page, 'palette-dark', '命令面板打开，深色主题，确认 token 反转正确')
 
   // Exercise the shared Radix Select in a real settings dialog. Escape must
   // dismiss only the nested list and restore focus, in both shell themes.
   await page.keyboard.press('Escape')
   await overlay.waitFor({ state: 'detached' })
-  for (const theme of ['paper', 'ink']) {
+  for (const theme of ['light', 'dark']) {
     if (await page.locator('html').getAttribute('data-theme') !== theme) {
       await page.locator('.chrome .theme-toggle').click()
       await page.waitForFunction((value) => document.documentElement.dataset.theme === value, theme)
@@ -321,7 +321,7 @@ try {
   await reducedList.waitFor({ state: 'detached' })
   await page.getByRole('button', { name: '关闭设置' }).click()
   await page.emulateMedia({ reducedMotion: 'no-preference' })
-  note('交互验收', '纸墨主题、键盘选择、嵌套 Escape、焦点返回、减少动态效果')
+  note('交互验收', '浅色/深色主题、键盘选择、嵌套 Escape、焦点返回、减少动态效果')
   if (browserErrors.length) failures.push(...browserErrors)
 } catch (error) {
   if (browser) {

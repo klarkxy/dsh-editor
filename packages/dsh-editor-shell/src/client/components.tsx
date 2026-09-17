@@ -7,6 +7,7 @@ import {
 } from 'react';
 import type { SessionFace } from '../dsh-compat.ts'
 import type { RpcResult, ShellContext } from './shared.ts'
+import { Box, Card, Flex, Heading } from '@radix-ui/themes'
 import { Button, Dialog } from './ui/index.ts'
 import { t } from '../i18n/index.ts'
 
@@ -15,26 +16,42 @@ export function DeepSeekWhaleMark() {
     <svg
       className="whale-mark"
       viewBox="0 0 32 32"
+      width={18}
+      height={18}
       aria-hidden="true"
-      focusable="false">
+      focusable="false"
+      style={{ width: 18, height: 18, color: 'var(--accent-9)' }}>
       <path
         fill="currentColor"
         d="M3.4 12.2c1.2-3.6 4.2-5.4 7.6-5.2.6-2.6 2.8-4.6 5.8-5 3.2-.4 6 1.2 7.2 4.2 2.8.4 5 2.6 5.4 5.4.4 3-1.2 5.8-4 7.2-2 .9-4.4 1.3-7 1.3-3.4 0-6.4-.8-8.8-2.4C6 16.2 4.2 14.2 3.8 12c1.2.6 2.4 1 3.6 1.2-.4-1.2-.6-2.4-.4-3.6-1.4.4-2.6 1.2-3.6 2.6Z" />
-      <circle cx="21.2" cy="11.6" r="1.55" fill="#fffdf6" />
+      <circle cx="21.2" cy="11.6" r="1.55" fill="var(--accent-contrast)" />
     </svg>
   );
 }
 
 export function PaperStage(props: { label: string; heading?: string; children?: ReactNode }) {
   return (
-    <section className="empty-paper home-stage" aria-label={props.label}>
-      <div className="home-card">
-        {props.heading ? <h1>
-          {props.heading}
-        </h1> : null}
-        {props.children}
-      </div>
-    </section>
+    <Flex
+      className="empty-paper home-stage"
+      role="region"
+      aria-label={props.label}
+      direction="column"
+      align="center"
+      justify="center"
+      width="100%"
+      height="100%"
+      minWidth="0"
+      minHeight="0"
+      p="6">
+      <Card className="home-card" size="3" style={{ width: 'min(720px, 100%)' }}>
+        <Flex direction="column" gap="4">
+          {props.heading ? <Heading as="h1" size="8">
+            {props.heading}
+          </Heading> : null}
+          {props.children}
+        </Flex>
+      </Card>
+    </Flex>
   );
 }
 
@@ -55,7 +72,9 @@ export function ImagePreviewOverlay(props: { path: string; url: string; onClose(
       className="file-dialog image-preview-dialog"
       overlayClassName="file-dialog-overlay"
       initialFocusRef={closeRef}>
-      {url ? <img src={url} alt={path} /> : null}
+      {url ? <Box>
+        <img src={url} alt={path} />
+      </Box> : null}
       <Button
         ref={closeRef}
         type="button"

@@ -1,6 +1,8 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Box, Callout, Flex, Heading, Text } from '@radix-ui/themes'
 import type { SettingsScope } from '../dsh-compat.ts'
 import {
+  normalizeWritingEffort,
   normalizeWritingModelRoute,
   writingModelRouteValue,
   writingPreferences,
@@ -8,8 +10,14 @@ import {
   type WritingPreferences,
 } from '../writing-settings.tsx'
 import { Select, type SelectOption } from './select.tsx'
+import { effortDisplay, effortTriggerLabel } from './chat-model-picker.tsx'
+import { STANDARD_REASONING_EFFORTS } from './settings-models-store.ts'
 import { ActivityDots, ActivitySkeleton } from './ui/index.ts'
 import { t, useLocale } from '../i18n/index.ts'
+
+function effortOptions(): SelectOption[] {
+  return Object.keys(STANDARD_REASONING_EFFORTS).map((id) => ({ value: id, label: effortDisplay(id) }))
+}
 
 export type CatalogModelOption = {
   provider: string
@@ -81,12 +89,11 @@ export function WritingModelRoutes(props: {
   const [saving, setSaving] = useState<keyof WritingPreferences | null>(null)
   const [failure, setFailure] = useState('')
 
-  const update = async (field: 'completionModel' | 'rewriteModel' | 'chatModel', value: string) => {
+  const save = async (field: 'completionModel' | 'rewriteModel' | 'chatModel', route: WritingModelRoute | undefined) => {
     setSaving(field)
     setFailure('')
     try {
-      const route = writingModelRouteValue(parseRouteKey(value))
-      await props.scope.set(field, route)
+      await props.scope.set(field, writingModelRouteValue(route))
       const committed = props.scope.getSnapshot()
       const user = committed.user && typeof committed.user === 'object' ? committed.user as Record<string, unknown> : undefined
       if (!user || !Object.prototype.hasOwnProperty.call(user, field)) throw new Error('write did not commit')
@@ -95,6 +102,19 @@ export function WritingModelRoutes(props: {
     } finally {
       setSaving(null)
     }
+  }
+
+  const updateModel = (field: 'completionModel' | 'rewriteModel' | 'chatModel', value: string) => {
+    const parsed = parseRouteKey(value)
+    const current = values[field]
+    void save(field, parsed ? { ...parsed, reasoningEffort: current?.reasoningEffort } : undefined)
+  }
+
+  const updateEffort = (field: 'completionModel' | 'rewriteModel' | 'chatModel', value: string) => {
+    const current = values[field]
+    if (!current) return
+    const reasoningEffort = normalizeWritingEffort(value)
+    void save(field, reasoningEffort ? { ...current, reasoningEffort } : { provider: current.provider, model: current.model })
   }
 
   const rows: Array<{ field: 'completionModel' | 'rewriteModel' | 'chatModel'; label: 'models.completionModel' | 'models.rewriteModel' | 'models.chatModel'; empty: string }> = [
@@ -106,21 +126,23 @@ export function WritingModelRoutes(props: {
   if (snapshot.status === 'loading') {
     return (
       <section className="models-writing-routes" aria-label={t('models.writingRoutes')}>
-        <div className="models-status" role="status" aria-live="polite">
+        <Box className="models-status" role="status" aria-live="polite">
           <ActivitySkeleton lines={3} />
           <span className="sr-only">
             {t('writing.loading')}
           </span>
-        </div>
+        </Box>
       </section>
     );
   }
   if (snapshot.status === 'unavailable') {
     return (
       <section className="models-writing-routes" aria-label={t('models.writingRoutes')}>
-        <p className="models-error" role="alert">
-          {t('writing.unavailable')}
-        </p>
+        <Callout.Root color="red" role="alert" className="models-error">
+          <Callout.Text>
+            {t('writing.unavailable')}
+          </Callout.Text>
+        </Callout.Root>
       </section>
     );
   }
@@ -128,9 +150,9 @@ export function WritingModelRoutes(props: {
   return (
     <section className="models-writing-routes" aria-label={t('models.writingRoutes')}>
       <header className="settings-block-head">
-        <h3 className="settings-block-title">
+        <Heading as="h3" size="3" className="settings-block-title">
           {t('models.writingRoutes')}
-        </h3>
+        </Heading>
       </header>
       {rows.map((row) => {
         const selected = values[row.field]
@@ -143,21 +165,35 @@ export function WritingModelRoutes(props: {
           options.push(optionFor(selected, props.catalog, row.empty))
         }
         return (
-          <div key={row.field} className="settings-row models-writing-route">
-            <div className="settings-row-text">
-              <span className="settings-row-title">
+          <Flex key={row.field} className="settings-row models-writing-route" align="center" justify="between" gap="4" minWidth="0" py="2">
+            <Flex direction="column" className="settings-row-text" gap="1" minWidth="0">
+              <Text size="2" weight="medium" className="settings-row-title">
                 {t(row.label)}
-              </span>
-              {missing ? <small className="models-warning" role="status">
+              </Text>
+              {missing ? <Text size="1" color="red" className="models-warning" role="status">
                 {t('models.missingModelHint')}
-              </small> : null}
-            </div>
-            <Select
-              value={selected ? routeKey(selected) : EMPTY}
-              options={options}
-              disabled={!writable || saving !== null}
-              aria-label={t(row.label)}
-              onChange={(value) => { void update(row.field, value) }} />
+              </Text> : null}
+            </Flex>
+            <Flex className="models-writing-route-controls" align="center" gap="2" minWidth="0">
+              <Select
+                value={selected ? routeKey(selected) : EMPTY}
+                options={options}
+                disabled={!writable || saving !== null}
+                aria-label={t(row.label)}
+                onChange={(value) => { void updateModel(row.field, value) }} />
+              {selected ? <span className="model-effort">
+                <Select
+                  value={selected.reasoningEffort && effortOptions().some((item) => item.value === selected.reasoningEffort) ? selected.reasoningEffort : 'off'}
+                  options={effortOptions()}
+                  placeholder="none"
+                  selectedLabel={effortTriggerLabel(selected.reasoningEffort ?? 'off')}
+                  disabled={!writable || saving !== null}
+                  aria-label={`${t(row.label)} · ${t('chat.reasoning')}`}
+                  title={effortTriggerLabel(selected.reasoningEffort ?? 'off')}
+                  align="end"
+                  onChange={(value) => { void updateEffort(row.field, value) }} />
+              </span> : null}
+            </Flex>
             <span
               className="route-saving"
               role={saving === row.field ? 'status' : undefined}
@@ -167,12 +203,14 @@ export function WritingModelRoutes(props: {
                 {t('common.saving')}
               </span> : null}
             </span>
-          </div>
+          </Flex>
         );
       })}
-      {failure ? <p className="models-warning" role="alert">
-        {failure}
-      </p> : null}
+      {failure ? <Callout.Root color="red" role="alert" className="models-warning">
+        <Callout.Text>
+          {failure}
+        </Callout.Text>
+      </Callout.Root> : null}
     </section>
   );
 }

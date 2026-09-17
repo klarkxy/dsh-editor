@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Flex, IconButton } from '@radix-ui/themes'
 import { t } from '../i18n/index.ts'
 
 /*
@@ -62,26 +63,38 @@ export function WindowControls() {
   useEffect(() => bridge?.onMaximizedChange?.(setMaximized), [bridge])
   if (!bridge) return null
   return (
-    <div className="window-controls">
-      <button
+    <Flex className="window-controls" align="center" flexShrink="0">
+      <IconButton
         type="button"
+        variant="ghost"
+        color="gray"
+        size="2"
+        radius="none"
         aria-label={t('window.minimize')}
         onClick={() => bridge.minimize()}>
         –
-      </button>
-      <button
+      </IconButton>
+      <IconButton
         type="button"
+        variant="ghost"
+        color="gray"
+        size="2"
+        radius="none"
         aria-label={maximized ? t('window.restore') : t('window.maximize')}
         onClick={() => bridge.toggleMaximize()}>
         {maximized ? '❐' : '▢'}
-      </button>
-      <button
+      </IconButton>
+      <IconButton
         type="button"
         className="window-close"
+        variant="ghost"
+        color="gray"
+        size="2"
+        radius="none"
         aria-label={t('window.close')}
         onClick={() => bridge.close()}>
         ×
-      </button>
-    </div>
+      </IconButton>
+    </Flex>
   );
 }

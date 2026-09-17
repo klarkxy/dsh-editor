@@ -19,7 +19,7 @@ import {
 } from '../contracts.ts'
 import { CENTER_OVERLAY_ATTRIBUTE, type ShellRange } from 'dsh-editor-seats'
 import { SeatButton } from 'dsh-editor-seats/seat-button'
-import { renderSelect } from './host-ui.tsx'
+import { renderInput, renderSelect } from './host-ui.tsx'
 import {
   WORLDBOOK_CATEGORIES,
   formatListInput,
@@ -207,40 +207,48 @@ function CardsDetail(props: CardsSeatProps & {
       </header>
       <div className="cards-detail-body">
         {isCharacter ? <div className="cards-fields">
-          {field(t('cards.name'), <input
-            value={name}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setName(event.target.value)}
-            aria-label={t('cards.name')} />)}
-          {field(t('cards.aliases'), <input
-            value={aliases}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setAliases(event.target.value)}
-            aria-label={t('cards.aliases')}
-            placeholder={t('cards.commaSep')} />)}
-          {field(t('cards.role'), <input
-            value={role}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setRole(event.target.value)}
-            aria-label={t('cards.role')} />)}
-          {field(t('cards.gender'), <input
-            value={gender}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setGender(event.target.value)}
-            aria-label={t('cards.gender')} />)}
-          {field(t('cards.age'), <input
-            value={age}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setAge(event.target.value)}
-            aria-label={t('cards.age')} />)}
-          {field(t('cards.faction'), <input
-            value={faction}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setFaction(event.target.value)}
-            aria-label={t('cards.faction')} />)}
-          {field(t('cards.status'), <input
-            value={status}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setStatus(event.target.value)}
-            aria-label={t('cards.status')} />)}
-          {field(t('cards.tags'), <input
-            value={tags}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setTags(event.target.value)}
-            aria-label={t('cards.tags')}
-            placeholder={t('cards.commaSep')} />)}
+          {field(t('cards.name'), renderInput(props.Input, {
+            value: name,
+            onChange: setName,
+            'aria-label': t('cards.name'),
+          }))}
+          {field(t('cards.aliases'), renderInput(props.Input, {
+            value: aliases,
+            onChange: setAliases,
+            'aria-label': t('cards.aliases'),
+            placeholder: t('cards.commaSep'),
+          }))}
+          {field(t('cards.role'), renderInput(props.Input, {
+            value: role,
+            onChange: setRole,
+            'aria-label': t('cards.role'),
+          }))}
+          {field(t('cards.gender'), renderInput(props.Input, {
+            value: gender,
+            onChange: setGender,
+            'aria-label': t('cards.gender'),
+          }))}
+          {field(t('cards.age'), renderInput(props.Input, {
+            value: age,
+            onChange: setAge,
+            'aria-label': t('cards.age'),
+          }))}
+          {field(t('cards.faction'), renderInput(props.Input, {
+            value: faction,
+            onChange: setFaction,
+            'aria-label': t('cards.faction'),
+          }))}
+          {field(t('cards.status'), renderInput(props.Input, {
+            value: status,
+            onChange: setStatus,
+            'aria-label': t('cards.status'),
+          }))}
+          {field(t('cards.tags'), renderInput(props.Input, {
+            value: tags,
+            onChange: setTags,
+            'aria-label': t('cards.tags'),
+            placeholder: t('cards.commaSep'),
+          }))}
           <label className="cards-field cards-field-wide">
             <span>
               {t('cards.relations')}
@@ -250,22 +258,24 @@ function CardsDetail(props: CardsSeatProps & {
                 const target = resolveRelationTarget(row.to, props.characters)
                 return (
                   <div key={`${index}:${row.to}`} className="cards-relation-row">
-                    <input
-                      value={row.to}
-                      placeholder={t('cards.relationTo')}
-                      aria-label={t('cards.relationToAria', { n: index + 1 })}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) => setRelations((old) => old.map((item, itemIndex) => itemIndex === index ? { ...item, to: event.target.value } : item))} />
+                    {renderInput(props.Input, {
+                      value: row.to,
+                      placeholder: t('cards.relationTo'),
+                      'aria-label': t('cards.relationToAria', { n: index + 1 }),
+                      onChange: (value) => setRelations((old) => old.map((item, itemIndex) => itemIndex === index ? { ...item, to: value } : item)),
+                    })}
                     {target ? <SeatButton
                       host={props.Button}
                       className="cards-relation-link"
                       onClick={() => selectCard(target.path)}>
                       {target.title}
                     </SeatButton> : null}
-                    <input
-                      value={row.kind}
-                      placeholder={t('cards.relations')}
-                      aria-label={t('cards.relationKindAria', { n: index + 1 })}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) => setRelations((old) => old.map((item, itemIndex) => itemIndex === index ? { ...item, kind: event.target.value } : item))} />
+                    {renderInput(props.Input, {
+                      value: row.kind,
+                      placeholder: t('cards.relations'),
+                      'aria-label': t('cards.relationKindAria', { n: index + 1 }),
+                      onChange: (value) => setRelations((old) => old.map((item, itemIndex) => itemIndex === index ? { ...item, kind: value } : item)),
+                    })}
                     <SeatButton
                       host={props.Button}
                       onClick={() => setRelations((old) => old.filter((_, itemIndex) => itemIndex !== index))}>
@@ -297,15 +307,17 @@ function CardsDetail(props: CardsSeatProps & {
               { value: '__custom__', label: t('common.custom') },
             ],
           }))}
-          {category === '__custom__' ? field(t('cards.customCategory'), <input
-            value={categoryCustom}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setCategoryCustom(event.target.value)}
-            aria-label={t('cards.customCategory')} />) : null}
-          {field(t('cards.tags'), <input
-            value={tags}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setTags(event.target.value)}
-            aria-label={t('cards.tags')}
-            placeholder={t('cards.commaSep')} />)}
+          {category === '__custom__' ? field(t('cards.customCategory'), renderInput(props.Input, {
+            value: categoryCustom,
+            onChange: setCategoryCustom,
+            'aria-label': t('cards.customCategory'),
+          })) : null}
+          {field(t('cards.tags'), renderInput(props.Input, {
+            value: tags,
+            onChange: setTags,
+            'aria-label': t('cards.tags'),
+            placeholder: t('cards.commaSep'),
+          }))}
           {field(t('cards.summary'), <textarea
             value={summary}
             rows={3}

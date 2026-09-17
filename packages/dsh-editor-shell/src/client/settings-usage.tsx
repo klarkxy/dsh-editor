@@ -5,6 +5,7 @@
  *   cacheReadTokens, cacheWriteTokens, reasoningTokens, requests, byModel }
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Box, Button, Callout, Card, Flex, Grid, Heading, Text } from '@radix-ui/themes'
 import { format, init, use } from 'echarts/core'
 import { BarChart } from 'echarts/charts'
 import { AriaComponent, GridComponent, TooltipComponent } from 'echarts/components'
@@ -21,8 +22,9 @@ use([BarChart, GridComponent, TooltipComponent, AriaComponent, SVGRenderer])
 const USAGE_DAYS = 30
 const RECENT_DAYS = 7
 
-/* 模型配色:纸/墨可用的闷蓝、赭、绿,按近 7 日总量降序分配,柱子与图例同色同序。 */
-const MODEL_PALETTE = ['#7c9ecb', '#d9a05b', '#8fbf8f', '#6b9e8a', '#c4a574', '#5f8aa8', '#9bb07a', '#b8956a']
+/* 模型配色:按近 7 日总量降序分配 Radix 色阶,柱子与图例同色同序。
+   collectModelSeries 只存变量名;画图时用 getComputedStyle 解析。 */
+const MODEL_PALETTE = ['--indigo-9', '--teal-9', '--amber-9', '--crimson-9', '--violet-9', '--green-9', '--blue-9', '--orange-9']
 
 type ModelUsage = {
   inputTokens?: number
@@ -211,14 +213,28 @@ export function buildUsageChartOption(input: {
   }
 }
 
+function cssColor(token: string): string {
+  return token.startsWith('--') ? `var(${token})` : token
+}
+
+function resolveToken(styles: CSSStyleDeclaration, token: string): string {
+  if (!token.startsWith('--')) return token
+  return styles.getPropertyValue(token).trim() || cssColor(token)
+}
+
 function readChartTheme(node: HTMLElement): ChartTheme {
   const styles = getComputedStyle(node)
   return {
-    axis: styles.getPropertyValue('--meta').trim() || '#5a5954',
-    split: styles.getPropertyValue('--hairline').trim() || 'rgba(20, 20, 19, 0.08)',
-    tooltipBg: styles.getPropertyValue('--surface').trim() || '#fdfcf6',
-    tooltipFg: styles.getPropertyValue('--fg').trim() || '#141413',
+    axis: styles.getPropertyValue('--gray-11').trim(),
+    split: styles.getPropertyValue('--gray-a5').trim(),
+    tooltipBg: styles.getPropertyValue('--color-panel-solid').trim(),
+    tooltipFg: styles.getPropertyValue('--gray-12').trim(),
   }
+}
+
+function resolveSeries(node: HTMLElement, series: readonly ModelSeries[]): ModelSeries[] {
+  const styles = getComputedStyle(node)
+  return series.map((item) => ({ ...item, color: resolveToken(styles, item.color) }))
 }
 
 function UsageChart(props: { days: readonly DailyUsage[]; series: readonly ModelSeries[] }): ReactNode {
@@ -231,10 +247,10 @@ function UsageChart(props: { days: readonly DailyUsage[]; series: readonly Model
     days: props.days,
     series: props.series,
     theme: {
-      axis: '#5a5954',
-      split: 'rgba(20, 20, 19, 0.08)',
-      tooltipBg: '#fdfcf6',
-      tooltipFg: '#141413',
+      axis: 'var(--gray-11)',
+      split: 'var(--gray-a5)',
+      tooltipBg: 'var(--color-panel-solid)',
+      tooltipFg: 'var(--gray-12)',
     },
     reduceMotion,
     formatNumber,
@@ -250,7 +266,7 @@ function UsageChart(props: { days: readonly DailyUsage[]; series: readonly Model
       if (box.width < 8 || box.height < 8) return
       const themed = buildUsageChartOption({
         days: props.days,
-        series: props.series,
+        series: resolveSeries(host, props.series),
         theme: readChartTheme(host),
         reduceMotion,
         formatNumber,
@@ -278,26 +294,28 @@ function UsageChart(props: { days: readonly DailyUsage[]; series: readonly Model
   }, [option, props.days, props.series, reduceMotion])
 
   return (
-    <div className="usage-chart">
-      <div
+    <Flex className="usage-chart" direction="column" gap="3" minWidth="0">
+      <Box
         ref={hostRef}
         className="usage-chart-plot"
         role="img"
         aria-label={t('usage.chartAria')} />
-      <ul className="usage-chart-legend">
-        {props.series.map((item) => <li key={item.key} title={item.key}>
-          <span
-            className="usage-chart-chip"
-            style={{ background: item.color }}
-            aria-hidden="true" />
-          <span className="usage-chart-model">
-            {modelDisplayName(item.key)}
-          </span>
-          <span className="usage-chart-meta">
-            {t('usage.legend', { tokens: formatNumber(item.tokens), requests: formatNumber(item.requests) })}
-          </span>
-        </li>)}
-      </ul>
+      <Flex asChild wrap="wrap" gap="4" m="0" p="0">
+        <ul className="usage-chart-legend">
+          {props.series.map((item) => <li key={item.key} title={item.key}>
+            <span
+              className="usage-chart-chip"
+              style={{ background: cssColor(item.color) }}
+              aria-hidden="true" />
+            <Text size="1" weight="medium" className="usage-chart-model">
+              {modelDisplayName(item.key)}
+            </Text>
+            <Text size="1" color="gray" className="usage-chart-meta">
+              {t('usage.legend', { tokens: formatNumber(item.tokens), requests: formatNumber(item.requests) })}
+            </Text>
+          </li>)}
+        </ul>
+      </Flex>
       <details className="usage-chart-table">
         <summary>
           {t('usage.exactData')}
@@ -334,7 +352,7 @@ function UsageChart(props: { days: readonly DailyUsage[]; series: readonly Model
           </tbody>
         </table>
       </details>
-    </div>
+    </Flex>
   );
 }
 
@@ -373,12 +391,12 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
     return (
       <section className="usage-page" aria-label={t('settings.usage')}>
         <Header />
-        <div className="usage-status" role="status" aria-live="polite">
+        <Box className="usage-status" role="status" aria-live="polite">
           <ActivitySkeleton lines={5} className="usage-loading" />
           <span className="sr-only">
             {text().loading}
           </span>
-        </div>
+        </Box>
       </section>
     );
   }
@@ -387,12 +405,14 @@ export function SettingsUsageSection(props: { ctx: ShellContext }): ReactNode {
     return (
       <section className="usage-page" aria-label={t('settings.usage')}>
         <Header />
-        <p className="usage-error" role="alert">
-          {`${text().loadFailedPrefix}${state.error}`}
-          <button type="button" className="usage-button" onClick={() => void load()}>
+        <Callout.Root color="red" role="alert" className="usage-error">
+          <Callout.Text>
+            {`${text().loadFailedPrefix}${state.error}`}
+          </Callout.Text>
+          <Button type="button" variant="soft" color="gray" className="usage-button" onClick={() => void load()}>
             {text().retry}
-          </button>
-        </p>
+          </Button>
+        </Callout.Root>
       </section>
     );
   }
@@ -415,39 +435,41 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
     <section className="usage-page" aria-label={t('settings.usage')}>
       <Header />
       <section className="usage-today settings-block" aria-label={text().todayHeading}>
-        <h3 className="usage-section-title settings-block-title">
+        <Heading as="h3" size="3" className="usage-section-title settings-block-title" mb="3">
           {text().todayHeading}
-        </h3>
-        <div className="usage-cards">
-          <Card label={text().cacheHit} value={today?.cacheReadTokens ?? 0} />
-          <Card label={text().input} value={today?.inputTokens ?? 0} />
-          <Card label={text().output} value={today?.outputTokens ?? 0} />
-          <Card label={text().requests} value={today?.requests ?? 0} />
-        </div>
+        </Heading>
+        <Grid className="usage-cards" columns={{ initial: '2', sm: '4' }} gap="3">
+          <UsageStatCard label={text().cacheHit} value={today?.cacheReadTokens ?? 0} />
+          <UsageStatCard label={text().input} value={today?.inputTokens ?? 0} />
+          <UsageStatCard label={text().output} value={today?.outputTokens ?? 0} />
+          <UsageStatCard label={text().requests} value={today?.requests ?? 0} />
+        </Grid>
       </section>
       <section className="usage-recent settings-block" aria-label={text().recentHeading}>
-        <h3 className="usage-section-title settings-block-title">
+        <Heading as="h3" size="3" className="usage-section-title settings-block-title" mb="3">
           {text().recentHeading}
-        </h3>
+        </Heading>
         {!hasAny || series.length === 0
-          ? <p className="usage-empty">
+          ? <Text size="2" color="gray" className="usage-empty">
           {text().empty}
-        </p>
+        </Text>
           : <UsageChart days={recent} series={series} />}
       </section>
     </section>
   );
 }
 
-function Card(props: { label: string; value: number }): ReactNode {
+function UsageStatCard(props: { label: string; value: number }): ReactNode {
   return (
-    <div className="usage-card">
-      <span className="usage-card-label">
-        {props.label}
-      </span>
-      <span className="usage-card-value">
-        {formatNumber(props.value)}
-      </span>
-    </div>
+    <Card className="usage-card">
+      <Flex direction="column" gap="2">
+        <Text size="1" color="gray" className="usage-card-label">
+          {props.label}
+        </Text>
+        <Text size="5" weight="bold" className="usage-card-value">
+          {formatNumber(props.value)}
+        </Text>
+      </Flex>
+    </Card>
   );
 }

@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type ChangeEvent,
   type KeyboardEvent,
 } from 'react';
 import {
@@ -35,7 +34,7 @@ import {
   type CardSortKey,
 } from '../cards-view.ts'
 import { TextPromptDialog } from './dialog.tsx'
-import { renderSelect } from './host-ui.tsx'
+import { renderInput, renderSelect } from './host-ui.tsx'
 import { errorMessage, LatestRequestGate, safeRpcCall } from './rpc.ts'
 import { setCardsLocale, t } from './messages.ts'
 import { consumeCardsRequest, pendingCardsRequest, subscribeCardsRequest } from './requests.ts'
@@ -260,30 +259,31 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
         aria-label={t('cards.kind')}
         ref={tablistRef}
         onKeyDown={onCardsTabsKeyDown}>
-        <button
-          type="button"
+        <SeatButton
+          host={props.Button}
           role="tab"
           tabIndex={props.kind === 'character' ? 0 : -1}
           aria-selected={props.kind === 'character'}
           onClick={() => openCardsPanel('character')}>
           {t('cards.person')}
-        </button>
-        <button
-          type="button"
+        </SeatButton>
+        <SeatButton
+          host={props.Button}
           role="tab"
           tabIndex={props.kind === 'worldbook' ? 0 : -1}
           aria-selected={props.kind === 'worldbook'}
           onClick={() => openCardsPanel('worldbook')}>
           {t('cards.setting')}
-        </button>
+        </SeatButton>
       </div>
       <div className="cards-toolbar">
-        <input
-          value={text}
-          maxLength={80}
-          placeholder={props.kind === 'character' ? t('cards.filterPeople') : t('cards.filterWorld')}
-          aria-label={t('cards.filter')}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setText(event.target.value)} />
+        {renderInput(props.Input, {
+          value: text,
+          maxLength: 80,
+          placeholder: props.kind === 'character' ? t('cards.filterPeople') : t('cards.filterWorld'),
+          'aria-label': t('cards.filter'),
+          onChange: setText,
+        })}
         {renderSelect(props.Select, {
           value: sort,
           'aria-label': t('cards.sort'),
@@ -378,6 +378,7 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
       <TextPromptDialog
         Dialog={props.Dialog}
         Button={props.Button}
+        Input={props.Input}
         id="cards-create"
         open={createOpen}
         title={props.kind === 'character' ? t('cards.newPerson') : t('cards.newSetting')}

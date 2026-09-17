@@ -1,9 +1,30 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 
+function cssAsTextModule(id: string): string | null {
+  const file = id.split('?')[0]
+  if (!file.endsWith('.css')) return null
+  try {
+    return `export default ${JSON.stringify(readFileSync(file, 'utf8'))}`
+  } catch {
+    return null
+  }
+}
+
 export default defineConfig({
+  plugins: [{
+    name: 'css-as-text',
+    enforce: 'pre',
+    load(id) {
+      return cssAsTextModule(id)
+    },
+    transform(_code, id) {
+      return cssAsTextModule(id)
+    },
+  }],
   resolve: {
     alias: {
       'dsh-zhihu/usage': `${root}packages/dsh-zhihu/src/usage.ts`,

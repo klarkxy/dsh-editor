@@ -1,4 +1,4 @@
-import { paperInkTokens } from 'dsh-editor-seats/tokens'
+import { radixFallbackTokens } from 'dsh-editor-seats/tokens'
 /*
  * Manuscript overlay chrome styles — the ManuscriptFrame root, its panel
  * (header, action row, tree, switch guard) and the collapsed toggle.
@@ -13,68 +13,19 @@ import { paperInkTokens } from 'dsh-editor-seats/tokens'
  * `.manuscript-panel-main`, `.manuscript-panel-empty`, `.manuscript-switch-guard`,
  * `.manuscript-toggle`.
  *
- * All visual properties come from the same paper/ink tokens the shell
- * injects on `:root[data-theme=...]`. No font CDNs; system font stack only.
+ * Colors use Radix Themes variables. No font CDNs; system / theme stacks only.
  */
 
 export const manuscriptOverlayStyles = `
-/* Token block from dsh-editor-seats/tokens (single source, canonical
-   table: docs/ui.md), inlined at build time so the portaled overlay stays
-   readable when the shell stylesheet is absent. Every consumer injects the
-   same string, so injection order cannot matter. */
-${paperInkTokens}
+/* Token block from dsh-editor-seats/tokens, inlined at build time so the
+   portaled overlay stays readable when no .radix-themes ancestor exists. */
+${radixFallbackTokens}
 :root {
-  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
-  --font-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, Monaco, monospace;
-  --text-xs: 11px;
-  --text-sm: 13px;
-  --text-chrome: 13px;
-  --text-base: 14px;
-  --text-md: 15px;
-  --text-body: 17px;
-  --leading-body: 1.9;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  /* Tighter radii than the shell are intentional for the overlay (docs/ui.md). */
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --elev-flat: none;
-  --elev-ring: 0 0 0 1px var(--hairline-strong);
-  --elev-ring-accent: 0 0 0 1px var(--accent);
-  --focus-ring: 0 0 0 2px var(--accent-active);
-  /* Shared motion vocabulary, mirrored from the shell token table. */
-  --duration-stagger: 40ms;
-  --duration-micro: 80ms;
+  --control-h: 34px;
   --duration-quick: 150ms;
-  --duration-fast: 250ms;
-  --duration-medium: 350ms;
-  --distance-micro: 4px;
-  --distance-base: 8px;
-  --distance-medium: 12px;
-  --blur-small: 2px;
-  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
   --motion-fast: var(--duration-quick);
   --motion-base: 200ms;
-  --motion-emphasis: var(--duration-fast);
-  --ease: var(--ease-smooth-out);
-  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
-  --topbar-h: 52px;
-  --control-h: 34px;
-  --tree-w: 220px;
-  --chat-w: 360px;
-  --paper-font-size: var(--text-body);
-  --paper-line-height: var(--leading-body);
-  --paper-font-family: var(--font-serif);
-  --paper-paragraph-spacing: 0em;
-  --paper-max-width: none;
-  --paper-dim-opacity: 0.35;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-testid="manuscript-overlay"] {
@@ -95,21 +46,21 @@ ${paperInkTokens}
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 34px;
+  min-height: var(--control-h, 34px);
   padding: 5px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--fg-2);
-  font: 500 var(--text-sm)/1 var(--font-sans);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-3);
+  background: var(--color-panel-solid);
+  color: var(--gray-11);
+  font: var(--font-weight-medium) var(--font-size-2)/1 var(--default-font-family);
   letter-spacing: .14em;
-  box-shadow: var(--elev-ring);
+  box-shadow: var(--shadow-4);
   cursor: pointer;
   pointer-events: auto;
   transition: box-shadow var(--motion-base) var(--ease), background var(--motion-fast) var(--ease);
 }
-.manuscript-toggle:hover { background: var(--bg); color: var(--fg); box-shadow: var(--elev-raised); }
-.manuscript-toggle:active { background: var(--surface-warm); }
+.manuscript-toggle:hover { background: var(--gray-a3); color: var(--gray-12); box-shadow: var(--shadow-4); }
+.manuscript-toggle:active { background: var(--gray-a4); }
 
 .manuscript-panel {
   position: absolute;
@@ -120,11 +71,11 @@ ${paperInkTokens}
   pointer-events: auto;
   display: grid;
   grid-template-rows: auto minmax(140px, 40%) minmax(0, 1fr);
-  background: var(--bg);
-  color: var(--fg);
-  border-right: 1px solid var(--border);
-  box-shadow: 4px 0 24px color-mix(in srgb, var(--studio) 16%, transparent);
-  font-family: var(--font-sans);
+  background: var(--color-panel-solid);
+  color: var(--gray-12);
+  border-right: 1px solid var(--gray-6);
+  box-shadow: var(--shadow-4);
+  font-family: var(--default-font-family);
 }
 
 .manuscript-panel-header {
@@ -132,13 +83,13 @@ ${paperInkTokens}
   gap: 6px;
   min-height: 52px;
   padding: 12px 16px 14px;
-  border-bottom: 1px solid var(--hairline, var(--border-soft));
-  background: var(--chrome-bg, var(--bg));
+  border-bottom: 1px solid var(--gray-a5);
+  background: var(--color-panel-solid);
 }
 .manuscript-panel-title {
-  font: 500 var(--text-md)/1.2 var(--font-serif);
+  font: var(--font-weight-medium) var(--font-size-3)/1.2 var(--default-font-family);
   letter-spacing: .12em;
-  color: var(--fg);
+  color: var(--gray-12);
   margin: 0;
 }
 .manuscript-panel-actions {
@@ -153,37 +104,37 @@ ${paperInkTokens}
   min-height: 28px;
   padding: 4px 10px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-2);
   background: transparent;
-  box-shadow: var(--elev-ring);
-  color: var(--fg-2);
-  font: 500 var(--text-xs)/1 var(--font-sans);
+  box-shadow: 0 0 0 1px var(--gray-a5);
+  color: var(--gray-11);
+  font: var(--font-weight-medium) var(--font-size-1)/1 var(--default-font-family);
   letter-spacing: .12em;
   cursor: pointer;
   transition: box-shadow var(--motion-base) var(--ease), background var(--motion-fast) var(--ease);
 }
-.manuscript-panel-actions > button:hover { background: var(--surface); color: var(--fg); }
-.manuscript-panel-actions > button:active { background: var(--surface-warm); }
+.manuscript-panel-actions > button:hover { background: var(--gray-a3); color: var(--gray-12); }
+.manuscript-panel-actions > button:active { background: var(--gray-a4); }
 .manuscript-panel-actions > button:disabled { opacity: .55; cursor: not-allowed; }
 
 .manuscript-panel-tree {
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--gray-a5);
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: var(--color-panel-solid);
 }
 .manuscript-panel-tree-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  font-size: var(--text-sm);
+  font-size: var(--font-size-2);
 }
 .manuscript-tree-empty {
   padding: 14px;
-  color: var(--muted);
-  font-size: var(--text-sm);
+  color: var(--gray-11);
+  font-size: var(--font-size-2);
 }
 .manuscript-tree-button,
 .manuscript-tree-row {
@@ -196,29 +147,29 @@ ${paperInkTokens}
   background: transparent;
   text-align: left;
   cursor: pointer;
-  color: var(--fg-2);
-  font: 400 var(--text-sm)/1.4 var(--font-sans);
+  color: var(--gray-11);
+  font: 400 var(--font-size-2)/1.4 var(--default-font-family);
   letter-spacing: .04em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .manuscript-tree-button:hover,
-.manuscript-tree-row:hover { background: var(--surface); color: var(--fg); }
-.manuscript-tree-row.is-active { background: var(--accent-soft); color: var(--fg); }
-.manuscript-tree-button[aria-expanded] { font-weight: 500; }
+.manuscript-tree-row:hover { background: var(--gray-a3); color: var(--gray-12); }
+.manuscript-tree-row.is-active { background: var(--accent-a3); color: var(--accent-11); }
+.manuscript-tree-button[aria-expanded] { font-weight: var(--font-weight-medium); }
 
 .manuscript-panel-main {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: var(--color-panel-solid);
 }
 .manuscript-panel-empty {
   padding: 24px;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-family: var(--font-serif);
+  color: var(--gray-11);
+  font-size: var(--font-size-2);
+  font-family: var(--default-font-family);
 }
 
 .manuscript-switch-guard {
@@ -226,11 +177,11 @@ ${paperInkTokens}
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-top: 1px solid var(--border-soft);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-family: var(--font-sans);
+  border-top: 1px solid var(--gray-a5);
+  background: var(--color-panel-solid);
+  color: var(--gray-11);
+  font-size: var(--font-size-1);
+  font-family: var(--default-font-family);
 }
 .manuscript-switch-guard > span { flex: 1; min-width: 0; }
 .manuscript-switch-guard > button {
@@ -240,23 +191,23 @@ ${paperInkTokens}
   min-height: 28px;
   padding: 4px 10px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-2);
   background: transparent;
-  box-shadow: var(--elev-ring);
-  color: var(--fg-2);
-  font: 500 var(--text-xs)/1 var(--font-sans);
+  box-shadow: 0 0 0 1px var(--gray-a5);
+  color: var(--gray-11);
+  font: var(--font-weight-medium) var(--font-size-1)/1 var(--default-font-family);
   letter-spacing: .08em;
   cursor: pointer;
 }
 .manuscript-switch-guard > button:first-of-type {
-  background: var(--accent);
-  color: var(--accent-on);
-  box-shadow: var(--elev-ring-accent);
+  background: var(--accent-9);
+  color: var(--accent-contrast);
+  box-shadow: 0 0 0 1px var(--accent-9);
 }
-.manuscript-switch-guard > button:hover { background: var(--bg); color: var(--fg); }
+.manuscript-switch-guard > button:hover { background: var(--gray-a3); color: var(--gray-12); }
 .manuscript-switch-guard > button:first-of-type:hover {
-  background: var(--accent-active);
-  color: var(--accent-on);
+  background: var(--accent-10);
+  color: var(--accent-contrast);
 }
 
 @media (max-width: 760px) {

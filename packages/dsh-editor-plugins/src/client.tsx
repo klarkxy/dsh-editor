@@ -822,22 +822,24 @@ function PluginPanel(props: PluginPanelProps) {
   return (
     <section className="dsh-plugins" data-testid="plugins-settings" aria-label="插件">
       <div className="dsh-plugins-tabs" role="tablist" aria-label="插件分类">
-        <button
+        <SeatButton
+          host={props.Button}
           type="button"
           role="tab"
           aria-selected={props.tab === 'installed'}
           data-testid="plugins-tab-installed"
           onClick={() => props.onTab('installed')}>
           已安装
-        </button>
-        <button
+        </SeatButton>
+        <SeatButton
+          host={props.Button}
           type="button"
           role="tab"
           aria-selected={props.tab === 'market'}
           data-testid="plugins-tab-market"
           onClick={() => props.onTab('market')}>
           市场
-        </button>
+        </SeatButton>
       </div>
       {props.note ? <p className="dsh-plugins-note" role="status">
         {props.note}

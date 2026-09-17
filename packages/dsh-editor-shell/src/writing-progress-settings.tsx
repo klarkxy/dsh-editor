@@ -5,6 +5,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from 'react';
+import { Callout, Flex, Text, TextField } from '@radix-ui/themes'
 import {
   MAX_GOAL_CHARS,
   writingProgressFor,
@@ -62,10 +63,10 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
       <legend>
         {t('progress.dailyGoal')}
       </legend>
-      <p role="status">
+      <Text as="p" size="2" role="status">
         <ActivityDots />
         {t('progress.loading')}
-      </p>
+      </Text>
     </fieldset>
   );
 
@@ -74,9 +75,11 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
       <legend>
         {t('progress.dailyGoal')}
       </legend>
-      <p role="alert">
-        {t('progress.unavailable')}
-      </p>
+      <Callout.Root color="red" role="alert">
+        <Callout.Text>
+          {t('progress.unavailable')}
+        </Callout.Text>
+      </Callout.Root>
     </fieldset>
   );
 
@@ -85,11 +88,11 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
       <legend>
         {t('progress.dailyGoal')}
       </legend>
-      <label className="goal-input">
-        <span>
+      <Flex className="goal-input" direction="column" gap="2">
+        <Text as="span" size="2" weight="medium">
           {t('progress.goalChars')}
-        </span>
-        <input
+        </Text>
+        <TextField.Root
           type="text"
           inputMode="numeric"
           pattern={'\\d*'}
@@ -101,7 +104,7 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
           onChange={onChange}
           onBlur={() => void commit()}
           onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => { if (event.key === 'Enter') { event.preventDefault(); void commit() } }} />
-        <small>
+        <Text size="1" color="gray">
           {progress.goalChars > 0 ? t('progress.hintSet') : t('progress.hintUnset')}
           {saving ? <span className="goal-saving" role="status">
             <ActivityDots />
@@ -109,11 +112,13 @@ export function WritingProgressSettings({ scope }: { scope: WritingProgressScope
               {t('common.saving')}
             </span>
           </span> : null}
-        </small>
-      </label>
-      {failure ? <p role="alert">
-        {failure}
-      </p> : null}
+        </Text>
+      </Flex>
+      {failure ? <Callout.Root color="red" role="alert">
+        <Callout.Text>
+          {failure}
+        </Callout.Text>
+      </Callout.Root> : null}
     </fieldset>
   );
 }

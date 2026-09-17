@@ -1,3 +1,4 @@
+import { Skeleton, Spinner } from '@radix-ui/themes'
 import type { ReactElement, ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
 import {
@@ -37,22 +38,20 @@ describe('activity primitives', () => {
     expect(element.props.className).toContain('is-typing')
   })
 
-  it('renders the smooth-ring arc adapted from Amicro (dasharray 38 80)', () => {
+  it('renders ActivityRing as a Themes Spinner', () => {
     const element = render(ActivityRing, { size: 24 })
+    expect(element.type).toBe(Spinner)
+    expect(element.props.className).toContain('activity-ring')
     expect(element.props['aria-hidden']).toBe('true')
     expect(element.props.style).toEqual({ width: 24, height: 24 })
-    const [track, arc] = childrenOf(element) as Rendered[]
-    expect(track.props.className).toBe('activity-ring-track')
-    expect(arc.props.className).toBe('activity-ring-arc')
-    expect(arc.props.strokeDasharray).toBe('38 80')
-    expect(arc.props.strokeLinecap).toBe('round')
   })
 
-  it('renders a stable skeleton with deterministic line widths', () => {
+  it('renders a stable skeleton with Themes Skeleton rows', () => {
     const element = render(ActivitySkeleton, { lines: 4 })
     expect(element.props['aria-hidden']).toBe('true')
     const lines = childrenOf(element) as Rendered[]
     expect(lines).toHaveLength(4)
+    expect(lines.every((line) => line.type === Skeleton)).toBe(true)
     expect(lines.map((line) => (line.props.style as { width: string }).width)).toEqual(['100%', '88%', '96%', '72%'])
   })
 

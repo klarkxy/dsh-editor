@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { Button, Card, Flex, Heading, Separator, Switch, Text } from '@radix-ui/themes'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
@@ -21,8 +22,11 @@ type BusyEnterBehavior = 'queue' | 'steer'
 
 const ACCENT_LABEL_KEYS: Record<AccentValue, MessageKey> = {
   indigo: 'settings.accent.indigo',
-  pine: 'settings.accent.pine',
-  ochre: 'settings.accent.ochre',
+  blue: 'settings.accent.blue',
+  teal: 'settings.accent.teal',
+  green: 'settings.accent.green',
+  amber: 'settings.accent.amber',
+  crimson: 'settings.accent.crimson',
   violet: 'settings.accent.violet',
 }
 
@@ -51,17 +55,17 @@ function usePreference<T>(scope: SettingsScope<{ preference: T }>, fallback: T):
 
 function Row(props: { title: string; description?: string; children: ReactNode }) {
   return (
-    <div className="settings-row">
-      <div className="settings-row-text">
-        <span className="settings-row-title">
+    <Flex className="settings-row" align="center" justify="between" gap="4" py="3">
+      <Flex direction="column" className="settings-row-text" gap="1" minWidth="0">
+        <Text size="2" weight="medium" className="settings-row-title">
           {props.title}
-        </span>
-        {props.description ? <small className="settings-row-description">
+        </Text>
+        {props.description ? <Text size="1" color="gray" className="settings-row-description">
           {props.description}
-        </small> : null}
-      </div>
+        </Text> : null}
+      </Flex>
       {props.children}
-    </div>
+    </Flex>
   );
 }
 
@@ -91,11 +95,11 @@ export function SettingsGeneralSection(props: {
 
   return (
     <section className="settings-general" aria-label={t('settings.general')}>
-      <section className="settings-block">
+      <Card className="settings-block">
         <header className="settings-block-head">
-          <h3 className="settings-block-title">
+          <Heading as="h3" size="3" className="settings-block-title">
             {t('settings.interface')}
-          </h3>
+          </Heading>
         </header>
         <Row
           title={t('settings.language')}
@@ -104,37 +108,47 @@ export function SettingsGeneralSection(props: {
             options={[{ value: 'zh', label: t('settings.chinese') }, { value: 'en', label: t('settings.english') }]}
             onChange={(value) => setLocale(value as Locale)}
             aria-label={t('settings.language')} />} />
+        <Separator size="4" />
         <Row
           title={t('settings.appearance')}
-          children={<div
+          children={<Flex
             className="settings-segmented"
             role="group"
-            aria-label={t('settings.appearance')}>
-            {appearanceOptions.map((option) => <button
+            aria-label={t('settings.appearance')}
+            gap="1">
+            {appearanceOptions.map((option) => <Button
               key={option.value}
               type="button"
+              size="1"
+              variant={theme === option.value ? 'soft' : 'ghost'}
+              color="gray"
               className={theme === option.value ? 'active' : ''}
               aria-pressed={theme === option.value}
               onClick={() => setTheme(option.value)}>
               {option.label}
-            </button>)}
-          </div>} />
+            </Button>)}
+          </Flex>} />
+        <Separator size="4" />
         <Row
           title={t('settings.accent')}
-          children={<div
+          children={<Flex
             className="settings-swatches"
             role="group"
-            aria-label={t('settings.accent')}>
+            aria-label={t('settings.accent')}
+            align="center"
+            gap="2">
             {ACCENT_VALUES.map((value) => <button
               key={value}
               type="button"
               className={accent === value ? 'accent-swatch active' : 'accent-swatch'}
               data-swatch={value}
+              style={{ background: `var(--${value}-9)` }}
               title={t(ACCENT_LABEL_KEYS[value])}
               aria-label={t(ACCENT_LABEL_KEYS[value])}
               aria-pressed={accent === value}
               onClick={() => setAccent(value)} />)}
-          </div>} />
+          </Flex>} />
+        <Separator size="4" />
         <Row
           title={t('settings.busyEnter')}
           children={<Select
@@ -142,33 +156,32 @@ export function SettingsGeneralSection(props: {
             options={[{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }]}
             onChange={(value) => setBusyEnter(value as BusyEnterBehavior)}
             aria-label={t('settings.busyEnter')} />} />
-      </section>
-      {showDeveloperMode ? <section className="settings-block">
+      </Card>
+      {showDeveloperMode ? <Card className="settings-block">
         <header className="settings-block-head">
-          <h3 className="settings-block-title">
+          <Heading as="h3" size="3" className="settings-block-title">
             {t('settings.developer')}
-          </h3>
+          </Heading>
         </header>
         <Row
           title={t('settings.developerMode')}
           description={t('settings.developerModeHint')}
-          children={<button
-            type="button"
-            role="switch"
+          children={<Switch
             className="settings-switch"
-            aria-checked={developerMode}
+            checked={developerMode}
             aria-label={t('settings.developerMode')}
-            onClick={() => setDeveloperMode(!developerMode)}>
-            {<span className="settings-switch-knob" aria-hidden={true} />}
-          </button>} />
-      </section> : props.onRevealDeveloper ? <section className="settings-block">
-        <button
+            onCheckedChange={setDeveloperMode} />} />
+      </Card> : props.onRevealDeveloper ? <Card className="settings-block">
+        <Button
           type="button"
+          variant="ghost"
+          color="gray"
+          size="1"
           className="settings-reveal-developer"
           onClick={props.onRevealDeveloper}>
           {t('settings.showDeveloper')}
-        </button>
-      </section> : null}
+        </Button>
+      </Card> : null}
     </section>
   );
 }

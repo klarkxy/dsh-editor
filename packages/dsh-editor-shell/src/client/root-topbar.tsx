@@ -1,4 +1,5 @@
 import type { ReactNode, RefObject } from 'react'
+import { Button, DropdownMenu, Flex, IconButton, Text } from '@radix-ui/themes'
 import type { WorkspaceId, WorkspaceView } from '../dsh-compat.ts'
 import { t } from '../i18n/index.ts'
 import { DeepSeekWhaleMark } from './components.tsx'
@@ -7,7 +8,33 @@ import { CommandPaletteTrigger } from './command-palette.tsx'
 import { SettingsTrigger, type SettingsTab } from './settings.tsx'
 import { ThemeToggle, type ThemeValue } from './theme.tsx'
 import { titleBarDoubleClick, WindowControls } from './window-controls.tsx'
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Tooltip, m, useChromeMotion } from './ui/index.ts'
+import { Menu, MenuContent, MenuItem, MenuSeparator, Tooltip, m, useChromeMotion } from './ui/index.ts'
+
+function LayoutToggle(props: {
+  pressed: boolean
+  disabled?: boolean
+  label: string
+  tooltip: string
+  onClick(): void
+  children: ReactNode
+}) {
+  return (
+    <Tooltip
+      content={props.tooltip}
+      children={<IconButton
+        type="button"
+        variant={props.pressed ? 'soft' : 'ghost'}
+        color={props.pressed ? undefined : 'gray'}
+        size="2"
+        disabled={props.disabled}
+        aria-pressed={props.pressed}
+        aria-label={props.label}
+        title={props.tooltip}
+        onClick={props.onClick}>
+        {props.children}
+      </IconButton>} />
+  )
+}
 
 /* 工作台顶栏：作品菜单(切换/新建/导出/归档/返回首页)、布局开关(侧栏/专注/搭档)、
    主题/命令面板/设置/窗口控制。全部状态由 Root 持有,这里只做呈现。 */
@@ -43,27 +70,44 @@ export function WorkbenchTopbar(props: {
   onOpenSettings(tab?: SettingsTab): void
 }) {
   const currentWorkspace = props.currentWorkspace
+  const workspaceTitle = currentWorkspace?.title || currentWorkspace?.path || t('workspace.work')
   return (
-    <header className="chrome" onDoubleClick={titleBarDoubleClick}>
+    <Flex
+      className="chrome"
+      role="banner"
+      align="center"
+      gap="3"
+      px="3"
+      width="100%"
+      minWidth="0"
+      onDoubleClick={titleBarDoubleClick}>
       <m.div
         className="workspace-chrome"
         role="group"
         aria-label={t('workspace.work')}
+        style={{ minWidth: '7rem', maxWidth: 'min(18rem, 42vw)', flex: '0 1 auto', overflow: 'hidden' }}
         {...props.workspaceChromeMotion}>
         <div className="workspace-menu">
           <Menu
             open={props.workspaceMenuOpen}
             onOpenChange={props.onWorkspaceMenuOpenChange}>
-            <MenuTrigger
-              ref={props.menuTriggerRef as RefObject<HTMLButtonElement>}
-              className="workspace-menu-trigger"
-              title={currentWorkspace?.title || currentWorkspace?.path || t('workspace.work')}
-              aria-label={t('workspace.menu')}
-              aria-controls="workspace-actions">
-              <span>
-                {currentWorkspace?.title || currentWorkspace?.path || t('workspace.work')}
-              </span>
-            </MenuTrigger>
+            <DropdownMenu.Trigger>
+              <Button
+                ref={props.menuTriggerRef as RefObject<HTMLButtonElement>}
+                className="workspace-menu-trigger"
+                variant="soft"
+                color="gray"
+                size="2"
+                title={workspaceTitle}
+                aria-label={t('workspace.menu')}
+                aria-controls="workspace-actions"
+                style={{ maxWidth: '100%', minWidth: 0 }}>
+                <Text size="2" weight="medium" truncate>
+                  {workspaceTitle}
+                </Text>
+                <DropdownMenu.TriggerIcon />
+              </Button>
+            </DropdownMenu.Trigger>
             <MenuContent
               id="workspace-actions"
               className="workspace-menu-panel"
@@ -117,47 +161,44 @@ export function WorkbenchTopbar(props: {
           </Menu>
         </div>
       </m.div>
-      <nav className="layout-controls" aria-label={t('workspace.layout')}>
-        <Tooltip
-          content={props.sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
-          children={<button
-            type="button"
-            disabled={props.focusMode || props.compactChrome}
-            aria-pressed={props.sidebarOpen && !props.compactChrome}
-            aria-label={t('workspace.files')}
-            title={props.sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
-            onClick={props.onToggleSidebar}>
-            {<FolderIcon size={16} />}
-          </button>} />
-        <Tooltip
-          content={props.focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus')}
-          children={<button
-            type="button"
-            aria-pressed={props.focusMode}
-            aria-label={props.focusMode ? t('workspace.exitFocusShort') : t('workspace.focus')}
-            title={props.focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus')}
-            onClick={props.onToggleFocusMode}>
-            {<FocusIcon size={16} />}
-          </button>} />
-        <Tooltip
-          content={props.assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant')}
-          children={<button
-            type="button"
-            disabled={props.focusMode}
-            aria-pressed={props.assistantOpen}
-            aria-label={t('workspace.assistant')}
-            title={props.assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant')}
-            onClick={props.onToggleAssistant}>
-            {<DeepSeekWhaleMark />}
-          </button>} />
-      </nav>
+      <Flex
+        className="layout-controls"
+        role="navigation"
+        aria-label={t('workspace.layout')}
+        align="center"
+        gap="1"
+        flexShrink="0">
+        <LayoutToggle
+          pressed={props.sidebarOpen && !props.compactChrome}
+          disabled={props.focusMode || props.compactChrome}
+          label={t('workspace.files')}
+          tooltip={props.sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
+          onClick={props.onToggleSidebar}>
+          <FolderIcon size={16} />
+        </LayoutToggle>
+        <LayoutToggle
+          pressed={props.focusMode}
+          label={props.focusMode ? t('workspace.exitFocusShort') : t('workspace.focus')}
+          tooltip={props.focusMode ? t('workspace.exitFocus') : t('workspace.enterFocus')}
+          onClick={props.onToggleFocusMode}>
+          <FocusIcon size={16} />
+        </LayoutToggle>
+        <LayoutToggle
+          pressed={props.assistantOpen}
+          disabled={props.focusMode}
+          label={t('workspace.assistant')}
+          tooltip={props.assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant')}
+          onClick={props.onToggleAssistant}>
+          <DeepSeekWhaleMark />
+        </LayoutToggle>
+      </Flex>
       {props.extensionsDock}
-      <div className="topbar-actions">
+      <Flex className="topbar-actions" align="center" gap="2" flexShrink="0">
         <ThemeToggle theme={props.theme} onChange={props.onThemeChange} />
         <CommandPaletteTrigger onClick={props.onOpenPalette} />
         <SettingsTrigger onOpen={props.onOpenSettings} />
         <WindowControls />
-      </div>
-    </header>
+      </Flex>
+    </Flex>
   );
 }
