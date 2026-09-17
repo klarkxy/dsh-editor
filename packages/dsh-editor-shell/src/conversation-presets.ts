@@ -45,6 +45,33 @@ export function isLegacyEditorPreset(preset: string | null | undefined): boolean
   return preset === LEGACY_AGENT_PRESET
 }
 
+export type ConversationPresetLabel = {
+  id: string
+  name: string
+  description: string
+}
+
+/**
+ * Display name for the bound session mode. The four writing modes and
+ * legacy use product copy; official/community ids use the Host roster
+ * name when present, otherwise the raw id.
+ */
+export function conversationPresetLabel(presetId: string | null | undefined, roster?: unknown): ConversationPresetLabel | undefined {
+  if (typeof presetId !== 'string' || !presetId.trim()) return undefined
+  const id = presetId.trim()
+  const listed = listedPresetRecords(roster).find((item) => item.id === id)
+  const listedName = typeof listed?.name === 'string' && listed.name.trim() ? listed.name.trim() : undefined
+  const listedDescription = typeof listed?.description === 'string' && listed.description.trim() ? listed.description.trim() : undefined
+  if (isNewConversationPresetId(id)) {
+    const copy = PRESET_COPY[id]
+    return { id, name: t(copy.name), description: t(copy.description) }
+  }
+  if (isLegacyEditorPreset(id)) {
+    return { id, name: listedName ?? t('chat.legacyMigrationTitle'), description: t('chat.presetLegacyDescription') }
+  }
+  return { id, name: listedName ?? id, description: listedDescription ?? t('chat.presetHostHint') }
+}
+
 export function sessionAgentPreset(
   byId: Record<string, { agentPreset?: string | null; projectionValues?: { agentPreset?: string | null } | undefined } | undefined> | undefined,
   sessionId: string,

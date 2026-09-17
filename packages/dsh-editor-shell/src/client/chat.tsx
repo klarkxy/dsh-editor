@@ -50,6 +50,7 @@ import {
   canConfirmConversationPreset,
   cancelNewConversationPresetPicker,
   confirmNewConversationPreset,
+  conversationPresetLabel,
   firstAvailableConversationPreset,
   loadNewConversationPresets,
   sessionAgentPreset,
@@ -157,7 +158,17 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   )
   const sessionList = useObservable(ctx.sessions.list)
   const workspaceList = useObservable(ctx.workspaces.list)
-  const legacyEditor = shouldRunLegacyNovelPipeline(sessionAgentPreset(sessionList.byId, session.sessionId))
+  const agentPreset = sessionAgentPreset(sessionList.byId, session.sessionId)
+  const legacyEditor = shouldRunLegacyNovelPipeline(agentPreset)
+  const [presetRoster, setPresetRoster] = useState<unknown>()
+  useEffect(() => {
+    let live = true
+    void ctx.remote.agentPresets.list().then((result) => {
+      if (live && result.ok) setPresetRoster(result.value)
+    }).catch(() => undefined)
+    return () => { live = false }
+  }, [ctx])
+  const currentMode = useMemo(() => conversationPresetLabel(agentPreset, presetRoster), [agentPreset, presetRoster, locale])
   const connectionState = useObservable(isObservableSource(ctx.connection.state) ? ctx.connection.state : DISCONNECTED)
   const connected = connectionState === 'connected'
   const [draft, setDraft] = useState('')
@@ -898,6 +909,13 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         </small> : null}
         <div className="composer-toolbar">
           <div className="composer-model">
+            {currentMode ? <span
+              className="composer-mode"
+              data-chat-mode={currentMode.id}
+              title={currentMode.description}
+              aria-label={`${t('chat.currentMode')}：${currentMode.name}`}>
+              {currentMode.name}
+            </span> : null}
             <ModelPicker
               key={`${session.sessionId}:${modelRevision}`}
               ctx={ctx}

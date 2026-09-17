@@ -131,8 +131,8 @@ export function pendingForSession(
 export type ChatLifecycle = SessionLifecycle & { hasMore?: boolean; loadingOlder?: boolean }
 
 /*
- * 约定俗成的思考强度档位展示名。自定义提供方(llm-pi-ai 手工声明)的模型
- * 在目录里不带推理元数据时,强度下拉先用这套档位渲染;首次选择时把同一套
- * 档位补写进该模型的 settings 声明,之后目录自己提供档位。host 在派发前
- * 校验档位,不声明直接传会被拒,所以必须先补声明。
+ * 思考强度档位。自定义提供方(llm-pi-ai 手工声明)的模型在目录里不带推理
+ * 元数据时,强度下拉先用 none/low/medium/high/xhigh/max 渲染;首次选择时
+ * 把同一套档位补写进该模型的 settings 声明,之后目录自己提供档位。host
+ * 在派发前校验档位,不声明直接传会被拒,所以必须先补声明。
  */

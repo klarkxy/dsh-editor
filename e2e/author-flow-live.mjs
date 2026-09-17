@@ -872,11 +872,11 @@ async function openAssistantWithModel(page) {
   const effort = assistant.getByRole('combobox', { name: '思考强度' })
   if (await effort.isVisible().catch(() => false)) {
     const current = await effort.innerText()
-    if (!/low|Low|低|medium|Medium|中/.test(current)) {
+    if (!/low|medium/i.test(current)) {
       try {
-        await chooseCustomSelect(assistant, '思考强度', (label) => /^(low|Low|低)$/.test(label.trim()) || /\blow\b/i.test(label))
+        await chooseCustomSelect(assistant, '思考强度', (label) => /^low$/i.test(label.trim()))
       } catch {
-        await chooseCustomSelect(assistant, '思考强度', (label) => /medium|Medium|中/.test(label))
+        await chooseCustomSelect(assistant, '思考强度', (label) => /^medium$/i.test(label.trim()))
       }
     }
   }

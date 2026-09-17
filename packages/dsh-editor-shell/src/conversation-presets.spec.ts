@@ -4,6 +4,7 @@ import {
   canConfirmConversationPreset,
   cancelNewConversationPresetPicker,
   confirmNewConversationPreset,
+  conversationPresetLabel,
   firstAvailableConversationPreset,
   isLegacyEditorPreset,
   LEGACY_AGENT_PRESET,
@@ -454,5 +455,37 @@ describe('legacy session gate from host projection', () => {
     expect(actualAgentPreset(undefined)).toBeUndefined()
     expect(actualAgentPreset('')).toBeUndefined()
     expect(actualAgentPreset({ selected: '' })).toBeUndefined()
+  })
+})
+
+describe('conversation preset label for the current session', () => {
+  it('uses product copy for the four writing modes regardless of roster names', () => {
+    expect(conversationPresetLabel('dsh-editor-writing')?.name).toBe('通用写作')
+    expect(conversationPresetLabel('dsh-editor-writing')?.description).toContain('查找、阅读、提案')
+    expect(conversationPresetLabel('dsh-editor-novel')?.name).toBe('小说创作')
+    expect(conversationPresetLabel('dsh-editor-article')?.name).toBe('文章与自媒体')
+    expect(conversationPresetLabel('dsh-editor-technical')?.name).toBe('技术文档')
+    expect(conversationPresetLabel(null)).toBeUndefined()
+    expect(conversationPresetLabel('  ')).toBeUndefined()
+  })
+
+  it('labels legacy and official/community ids from the roster, with product fallbacks', () => {
+    expect(conversationPresetLabel('dsh-editor')?.name).toBe('旧版会话')
+    expect(conversationPresetLabel('dsh-editor', listed)?.name).toBe('旧采访')
+    expect(conversationPresetLabel('standard')).toEqual({
+      id: 'standard',
+      name: 'standard',
+      description: '此模式使用自身工具目录，不限制终端等官方工具。',
+    })
+    expect(conversationPresetLabel('standard', listed)).toEqual({
+      id: 'standard',
+      name: '编码',
+      description: '此模式使用自身工具目录，不限制终端等官方工具。',
+    })
+    expect(conversationPresetLabel('plugin-preset', [{ id: 'plugin-preset', name: '团队风格', description: '组内约定' }])).toEqual({
+      id: 'plugin-preset',
+      name: '团队风格',
+      description: '组内约定',
+    })
   })
 })

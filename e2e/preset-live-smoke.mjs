@@ -460,6 +460,8 @@ async function startPresetConversation(page, radioName, presetId) {
   await confirmConversationPreset(page, radioName, presetId)
   await assistant.waitFor({ state: 'visible', timeout: 15_000 })
   await page.getByRole('textbox', { name: '输入消息' }).waitFor({ state: 'visible', timeout: 15_000 })
+  const mode = assistant.locator('.composer-mode')
+  await waitFor(async () => (await mode.getAttribute('data-chat-mode')) === presetId, `${presetId}: current mode visible`, 15_000)
   return assistant
 }
 

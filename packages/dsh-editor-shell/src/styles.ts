@@ -655,10 +655,13 @@ export const componentStyles = `
 .shell .composer textarea, .dsh-ui .composer textarea { width: 100%; min-height: 64px; max-height: 132px; padding: 10px 12px; background: var(--surface); box-shadow: var(--elev-ring); border-radius: var(--radius-md); font-size: var(--text-sm); line-height: 1.6; letter-spacing: .02em; color: var(--fg); resize: none; box-sizing: border-box; }
 .shell .composer textarea::placeholder, .dsh-ui .composer textarea::placeholder { color: var(--meta); }
 .shell .composer-toolbar, .dsh-ui .composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
-.shell .composer-model, .dsh-ui .composer-model { flex: 1 1 160px; min-width: 0; }
-/* 模型选择器占满底部;思考档位收进次级菜单,避免把模型名挤没。 */
-.shell .composer-model .model-picker, .dsh-ui .composer-model .model-picker { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; width: 100%; }
+.shell .composer-model, .dsh-ui .composer-model { display: flex; align-items: center; gap: 8px; flex: 1 1 160px; min-width: 0; }
+.shell .composer-mode, .dsh-ui .composer-mode { flex: 0 1 auto; max-width: 7.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--text-xs); letter-spacing: .04em; line-height: 24px; padding-right: 8px; border-right: 1px solid var(--hairline); }
+/* 模型名占满剩余宽度;思考档位紧挨在旁边,用固定短宽显示 none/low/… */
+.shell .composer-model .model-picker, .dsh-ui .composer-model .model-picker { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; flex: 1 1 auto; }
 .shell .composer-model .model-picker > .select, .dsh-ui .composer-model .model-picker > .select { flex: 1 1 auto; min-width: 0; }
+.shell .composer-model .model-effort, .dsh-ui .composer-model .model-effort { flex: 0 1 5.5rem; min-width: 4.25rem; max-width: 6.5rem; }
+.shell .composer-model .model-effort .select, .dsh-ui .composer-model .model-effort .select { width: 100%; flex: none; min-width: 0; }
 .shell .composer-model .model-picker .select-value, .dsh-ui .composer-model .model-picker .select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell .chat .select, .dsh-ui .chat .select { display: block; width: 100%; max-width: 100%; min-width: 0; }
 .shell .chat .select-trigger, .dsh-ui .chat .select-trigger { min-width: 0; width: 100%; max-width: 100%; }

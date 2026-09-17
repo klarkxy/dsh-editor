@@ -135,7 +135,7 @@ shell `src/client/ui/activity.tsx` 提供 `ActivityDots`（pulse 呼吸点 / typ
 | 选段改写 | 原文与建议对照；「应用修改」或 `Ctrl+Enter`，「放弃」不动正文 | 同上；过期 ticket 丢弃 |
 | 文件提案 | 原文/新文件对比卡；标题与路径分行，状态与操作分行，「应用」为主操作；「应用」才落盘，「忽略」不写 | 版本校验；目标已变则失效 |
 | 空白章 | 安静稿纸，不自动生成 | — |
-| 对话输入 | placeholder「问剧情、审一段、对质人物……」 | 不把生成章节倒进文件 |
+| 对话输入 | placeholder「问剧情、审一段、对质人物……」；输入框下方只读显示当前对话模式，旁为可换模型和思考强度（none / low / medium / high / xhigh / max） | 不把生成章节倒进文件 |
 
 概览、卡片、搜索使用已有面板；文稿校对由中性 `dsh-editor-proofread-panel` 走侧栏与 `Ctrl+Shift+L`（当前文档 / 全部可见 Markdown/TXT；kind 为 punctuation / typo / sensitive / repeat / habit，不含 card），不占顶栏或正文菜单。知乎作为搭档工具保留，配置、调用用量和知识库管理在设置内嵌显示。插件开关和页签必须在真实设置弹窗中检查外观，避免被通用按钮规则覆盖。写作搭档栏宽用分隔线调整，不另做展开阅读或关闭按钮。不另做 IDE 式 Problems / minimap / Git blame。
 

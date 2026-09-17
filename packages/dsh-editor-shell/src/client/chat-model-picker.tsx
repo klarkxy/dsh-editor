@@ -2,23 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import { readModels, selectModel } from '../adapter.ts'
 import type { SessionFace, SessionModels } from '../dsh-compat.ts'
 import { Select } from './select.tsx'
-import { ActivityText, Menu, MenuContent, MenuItem, MenuTrigger } from './ui/index.ts'
-import { t, useLocale } from '../i18n/index.ts'
+import { ActivityText } from './ui/index.ts'
+import { t } from '../i18n/index.ts'
 import type { ShellContext } from './shared.ts'
 import { STANDARD_REASONING_EFFORTS } from './settings-models-store.ts'
 
-function reasoningLabel(id: string): string {
-  if (id === 'off') return t('chat.reasoningOff')
-  if (id === 'low') return t('chat.reasoningLow')
-  if (id === 'medium') return t('chat.reasoningMedium')
-  if (id === 'high') return t('chat.reasoningHigh')
-  if (id === 'xhigh') return t('chat.reasoningVeryHigh')
-  if (id === 'max') return t('chat.reasoningMax')
-  return id
+/** Host `off` is the none-thinking slot; show the public name `none`. */
+export function effortDisplay(id: string): string {
+  if (!id) return ''
+  return id === 'off' ? 'none' : id
 }
 
 function fallbackEffortOptions(): { value: string; label: string }[] {
-  return Object.keys(STANDARD_REASONING_EFFORTS).map((id) => ({ value: id, label: reasoningLabel(id) }))
+  return Object.keys(STANDARD_REASONING_EFFORTS).map((id) => ({ value: id, label: effortDisplay(id) }))
 }
 
 /* 自定义模型未显式选过强度时的默认档:写真实的选择,而不是只显示一个值。 */
@@ -153,9 +149,10 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
   const efforts = currentCatalogModel?.reasoning?.efforts ?? []
   const effortValue = models.current.reasoningEffort ?? currentCatalogModel?.reasoning?.defaultEffort ?? ''
   const effortOptions = efforts.length > 0
-    ? efforts.map((effort) => ({ value: effort.id, label: reasoningLabel(effort.id) !== effort.id ? reasoningLabel(effort.id) : effort.name }))
+    ? efforts.map((effort) => ({ value: effort.id, label: effortDisplay(effort.id) }))
     : fallbackEffortOptions()
   const showReasoning = efforts.length > 0 || customRoute
+  const effortLabel = effortDisplay(effortValue)
   return (
     <div className="compact-control model-picker">
       <Select
@@ -170,26 +167,17 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
           const [provider, model] = next.split(' ')
           if (provider && model) void choose(provider, model)
         }} />
-      {showReasoning ? <Menu>
-        <MenuTrigger
-          className="icon-button"
-          title={t('chat.reasoningMenu')}
-          aria-label={t('chat.reasoningMenu')}
-          disabled={busy}>
-          ⋯
-        </MenuTrigger>
-        <MenuContent
-          className="conversation-menu-pop"
-          align="end"
-          aria-label={t('chat.reasoningMenu')}>
-          {effortOptions.map((effort) => <MenuItem
-            key={effort.value}
-            disabled={busy}
-            onSelect={() => { void choose(models.current.provider, models.current.model, effort.value) }}>
-            {effort.value === effortValue ? `✓ ${effort.label}` : effort.label}
-          </MenuItem>)}
-        </MenuContent>
-      </Menu> : null}
+      {showReasoning ? <span className="model-effort">
+        <Select
+          value={effortOptions.some((option) => option.value === effortValue) ? effortValue : ''}
+          placeholder={t('chat.reasoning')}
+          selectedLabel={effortLabel || undefined}
+          aria-label={t('chat.reasoning')}
+          title={effortLabel || t('chat.reasoning')}
+          disabled={busy}
+          options={effortOptions}
+          onChange={(next) => { void choose(models.current.provider, models.current.model, next) }} />
+      </span> : null}
       {note ? <small className="warning" role="alert">
         {note}
       </small> : null}
