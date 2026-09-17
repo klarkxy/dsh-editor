@@ -115,6 +115,7 @@ export function SettingsGeneralSection(props: {
             className="settings-segmented"
             role="group"
             aria-label={t('settings.appearance')}
+            align="center"
             gap="1">
             {appearanceOptions.map((option) => <Button
               key={option.value}

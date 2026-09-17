@@ -7,6 +7,7 @@ import {
   isCurrentInstallAttempt,
   pluginInstallNotice,
 } from './client.tsx'
+import { pluginsClientStyles } from './client-styles.ts'
 
 const ready: PluginInspectReport = { verdict: 'ready', entries: [], hasClient: false, findings: [] }
 const warn: PluginInspectReport = {
@@ -111,4 +112,15 @@ describe('plugin market install confirmation', () => {
     expect(hosted.props.Input).toBe(MockInput)
   })
 
+})
+
+describe('plugin settings chrome', () => {
+  it('keeps cards and switches distinct from the settings panel surface', () => {
+    expect(pluginsClientStyles).toContain('.dsh-plugins-card')
+    expect(pluginsClientStyles).toContain('background: var(--gray-2)')
+    expect(pluginsClientStyles).toContain('box-shadow: inset 0 0 0 1px var(--gray-a5)')
+    expect(pluginsClientStyles).toContain('.dsh-plugins button.dsh-plugins-switch')
+    expect(pluginsClientStyles).toContain('background: var(--gray-7)')
+    expect(pluginsClientStyles).toContain('background: var(--accent-9)')
+  })
 })

@@ -44,6 +44,11 @@ export type ReplaceOutcome = {
   failed: string[]
 }
 
+/** Sidebar owns the live query; a blank field must drop the current hit list. */
+export function searchQueryClearsResults(query: string): boolean {
+  return !query.trim()
+}
+
 /** Drop assistant/config files before grouping, counting, or planning replace. */
 export function acceptSearchResults(response: SearchResponse): SearchResponse {
   return {
@@ -127,10 +132,21 @@ function SearchPanel(props: {
 }) {
   const [internalQuery, setInternalQuery] = useState('')
   const query = props.onQueryChange ? props.query ?? '' : internalQuery
+  const clearResults = () => {
+    setResult(null)
+    setOutcome(null)
+    setConfirming(false)
+    setNote('')
+  }
   const setQuery = (value: string) => {
     if (props.onQueryChange) props.onQueryChange(value)
     else setInternalQuery(value)
+    if (searchQueryClearsResults(value)) clearResults()
   }
+  /* Sidebar owns the live query field; this panel only sees props.query. */
+  useEffect(() => {
+    if (searchQueryClearsResults(query)) clearResults()
+  }, [query])
   const [replacement, setReplacement] = useState('')
   const [scope, setScope] = useState<SearchScope>('project')
   const [result, setResult] = useState<SearchResponse | null>(null)
@@ -159,7 +175,13 @@ function SearchPanel(props: {
 
   const search = async (raw: string, nextScope: SearchScope, options?: { keepOutcome?: boolean }) => {
     const value = raw.trim()
-    if (!value) { setNote(t('search.emptyQuery')); return }
+    if (!value) {
+      setResult(null)
+      setOutcome(null)
+      setConfirming(false)
+      setNote(t('search.emptyQuery'))
+      return
+    }
     if (!options?.keepOutcome) setOutcome(null)
     setConfirming(false)
     const ticket = requestGate.begin(requestScope)

@@ -13,6 +13,10 @@ import {
   isSessionMissing,
   isStaleFailure,
   isSuccessWorkbenchNote,
+  canMoveTreeEntry,
+  treeDropDirectory,
+  treeMoveTargetDir,
+  treeParentPath,
   isWorldbookPath,
   LatestRequestGate,
   orderTreeEntries,
@@ -28,6 +32,7 @@ import {
   startupResumeWorkspace,
   supportedWorkspaceTextPaths,
   treeExpansionPaths,
+  treeRevealDirectories,
   treeRowPadding,
   worldbookPaperProjection,
   workspaceOpenFailureMessage,
@@ -161,6 +166,30 @@ describe('shell manuscript RPC safety', () => {
     expect(treeRowPadding(1)).toBe(24)
   })
 
+  it('treats success status notes as transient and rejects invalid tree drops', () => {
+    expect(isSuccessWorkbenchNote('已移动到 废稿/1.1坠落后的第一夜')).toBe(true)
+    expect(isSuccessWorkbenchNote('已删除 正文/001.md')).toBe(true)
+    expect(isSuccessWorkbenchNote('已复制 大纲/总纲.md')).toBe(true)
+    expect(isSuccessWorkbenchNote('已复制到 废稿/总纲.md')).toBe(true)
+    expect(isSuccessWorkbenchNote('已剪切 正文/卷一')).toBe(true)
+    expect(isSuccessWorkbenchNote('已保存。')).toBe(true)
+    expect(isSuccessWorkbenchNote('Moved to archive/ch1.md')).toBe(true)
+    expect(isSuccessWorkbenchNote('Deleted 正文/001.md')).toBe(true)
+    expect(isSuccessWorkbenchNote('Saved.')).toBe(true)
+    expect(isSuccessWorkbenchNote('请先保存当前文档，再剪切它所在的文件或目录。')).toBe(false)
+    expect(isSuccessWorkbenchNote('保存未能完成，已留在当前位置。')).toBe(false)
+    expect(treeParentPath('废稿/1.1坠落后的第一夜')).toBe('废稿')
+    expect(treeParentPath('001.md')).toBe('')
+    expect(treeDropDirectory('directory', '废稿')).toBe('废稿')
+    expect(treeDropDirectory('file', '正文/001.md')).toBe('正文')
+    expect(treeMoveTargetDir('')).toBe('.')
+    expect(canMoveTreeEntry('正文/001.md', '废稿')).toBe(true)
+    expect(canMoveTreeEntry('正文/001.md', '正文')).toBe(false)
+    expect(canMoveTreeEntry('正文/卷一', '正文/卷一')).toBe(false)
+    expect(canMoveTreeEntry('正文/卷一', '正文/卷一/深层')).toBe(false)
+    expect(canMoveTreeEntry('正文/卷一', '.')).toBe(true)
+  })
+
   it('renders every real directory in the tree and hides only dot-prefixed entries', () => {
     // 预设分组(大纲/人物卡/世界书/正文)已移除:目录被实际创建后自然出现在树里。
     const root = [
@@ -188,6 +217,8 @@ describe('shell manuscript RPC safety', () => {
     expect(treeExpansionPaths('.dsh-editor/作品索引.md')).toEqual([])
     expect(treeExpansionPaths('../secret.md')).toEqual([])
     expect(treeExpansionPaths('/abs/file.md')).toEqual([])
+    expect(treeRevealDirectories('', '正文/006新的开始.md')).toEqual(['正文'])
+    expect(treeRevealDirectories('资料/说明.md', '正文/006新的开始.md')).toEqual(['资料', '正文'])
     expect(proposalAppliedNavigation('正文/003.md', '', false)).toEqual({
       openPath: '正文/003.md',
       expandPath: '正文/003.md',
@@ -415,7 +446,7 @@ describe('shell manuscript RPC safety', () => {
     expect(workspaceShortcut(key('\\'))).toBe('toggle-focus')
     expect(workspaceShortcut(key('l'))).toBe('focus-assistant')
     expect(workspaceShortcut(key(',', { ctrlKey: false, metaKey: true }))).toBe('settings')
-    expect(workspaceShortcut(key('[', { ctrlKey: false, altKey: true, code: 'BracketLeft' }))).toBe('previous-chapter')
+    expect(workspaceShortcut(key('[', { ctrlKey: false, altKey: true, code: 'BracketLeft' }))).toBeNull()
     expect(workspaceShortcut(key('b', { shiftKey: true }))).toBeNull()
     expect(workspaceShortcut(key('f', { shiftKey: true }))).toBe('search')
     expect(workspaceShortcut(key('o', { shiftKey: true }))).toBeNull()
@@ -585,8 +616,8 @@ describe('shell manuscript RPC safety', () => {
       .not.toBe(proposalFingerprint(v2 as never))
     expect(proposalFingerprint({ ...v2, basis: [{ path: '大纲/总纲.md', version: 'v2', label: '总纲' }] } as never))
       .not.toBe(proposalFingerprint(v2 as never))
-    expect(zh['chat.proposalBasis']).toBe('依据与版本')
-    expect(zh['chat.proposalTarget']).toBe('生成时版本')
+    expect(zh['chat.proposalBasis']).toBe('参考')
+    expect(zh['chat.proposalTarget']).toBe('将改动的文件')
     expect(proposalBasisItems({
       marker: 'dsh-editor.proposal', version: 1, kind: 'edit', path: 'notes/a.md', summary: '改', oldText: '旧', newText: '新',
     } as never)).toEqual([])

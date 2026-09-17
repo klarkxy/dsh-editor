@@ -156,13 +156,19 @@ describe('conversation lifecycle projection', () => {
       { id: 'second', models: [{ id: 'later' }] },
     ]
     expect(resolveNewConversationModel({
-      preferred: { provider: 'configured', model: 'default-chat' },
+      preferred: { provider: 'configured', model: 'default-chat', reasoningEffort: 'high' },
       groups,
-    })).toEqual({ provider: 'configured', model: 'default-chat' })
+    })).toEqual({ provider: 'configured', model: 'default-chat', reasoningEffort: 'high' })
     expect(resolveNewConversationModel({ preferred: { provider: '', model: '' }, groups })).toEqual({
       provider: 'custom',
       model: 'MiniMax-M3',
     })
+    expect(resolveNewConversationModel({
+      groups: [
+        { id: 'deepseek', models: [{ id: 'DeepSeek-V4-Flash' }], usable: false },
+        { id: 'custom', models: [{ id: 'MiniMax-M3' }], usable: true },
+      ],
+    })).toEqual({ provider: 'custom', model: 'MiniMax-M3' })
     expect(resolveNewConversationModel({ groups: [] })).toBeUndefined()
   })
 })

@@ -3,6 +3,7 @@ export const pluginsClientStyles = `
   display: grid;
   gap: var(--space-4);
   min-height: 0;
+  padding-bottom: var(--space-2);
   font-family: var(--default-font-family);
   color: var(--gray-12);
   font-size: var(--font-size-2);
@@ -25,8 +26,10 @@ export const pluginsClientStyles = `
   box-shadow: 0 0 0 1px var(--gray-a5);
   width: max-content;
 }
-.dsh-plugins-tabs button {
+.dsh-plugins-tabs button,
+.dsh-plugins-tabs .rt-BaseButton {
   min-height: 28px;
+  height: 28px;
   min-width: 0;
   padding: 0 var(--space-3);
   border: 0;
@@ -35,9 +38,10 @@ export const pluginsClientStyles = `
   background: transparent;
   color: var(--gray-11);
   cursor: pointer;
-  font: var(--font-weight-medium) var(--font-size-2)/1 var(--default-font-family);
+  font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--default-font-family);
 }
-.dsh-plugins-tabs button[aria-selected="true"] {
+.dsh-plugins-tabs button[aria-selected="true"],
+.dsh-plugins-tabs .rt-BaseButton[aria-selected="true"] {
   background: var(--accent-a3);
   color: var(--accent-11);
   box-shadow: 0 0 0 1px var(--gray-a5);
@@ -97,6 +101,7 @@ export const pluginsClientStyles = `
 .dsh-plugins-ghost:hover {
   background: var(--gray-a3);
 }
+.dsh-plugins-groups { display: grid; gap: var(--space-5); }
 .dsh-plugins-group { display: grid; gap: var(--space-2); }
 .dsh-plugins-group h3 {
   margin: 0;
@@ -107,72 +112,71 @@ export const pluginsClientStyles = `
 .dsh-plugins-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: var(--space-2) var(--space-3);
   padding: var(--space-3);
-  border: 1px solid var(--gray-6);
+  border: 0;
   border-radius: var(--radius-3);
-  background: var(--color-surface);
+  background: var(--gray-2);
+  box-shadow: inset 0 0 0 1px var(--gray-a5);
   transition: background-color 150ms ease;
 }
-.dsh-plugins-card:hover { background: var(--gray-a3); }
+.dsh-plugins-card:hover { background: var(--gray-3); }
 .dsh-plugins-card-title { font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--default-font-family); }
 .dsh-plugins-card-desc, .dsh-plugins-meta {
   color: var(--gray-11);
   font-size: var(--font-size-1);
   line-height: 1.5;
 }
-.dsh-plugins-actions { display: flex; align-items: start; gap: var(--space-2); }
-.dsh-plugins-switch {
+.dsh-plugins-actions { display: flex; align-items: center; gap: var(--space-2); }
+.dsh-plugins button.dsh-plugins-switch,
+.dsh-plugins .dsh-plugins-switch {
+  all: unset;
+  box-sizing: border-box;
   position: relative;
   display: inline-block;
   flex: none;
-  box-sizing: border-box;
   width: 36px;
   height: 20px;
   min-width: 36px;
   min-height: 20px;
+  max-width: 36px;
   max-height: 20px;
-  padding: 0;
-  border: 1px solid var(--gray-6);
   border-radius: 999px;
-  background: var(--gray-3);
-  box-shadow: none;
+  background: var(--gray-7);
+  box-shadow: inset 0 0 0 1px var(--gray-a6);
   color: transparent;
-  letter-spacing: 0;
+  overflow: hidden;
   cursor: pointer;
-  appearance: none;
-  transform: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.dsh-plugins-switch.is-on {
+.dsh-plugins .dsh-plugins-switch.is-on {
   background: var(--accent-9);
-  border-color: var(--accent-9);
+  box-shadow: none;
 }
-.dsh-plugins-switch:hover {
-  background: var(--gray-4);
+.dsh-plugins .dsh-plugins-switch:hover {
+  background: var(--gray-8);
 }
-.dsh-plugins-switch.is-on:hover {
+.dsh-plugins .dsh-plugins-switch.is-on:hover {
   background: var(--accent-10);
 }
-.dsh-plugins-switch:active {
-  transform: none;
-}
-.dsh-plugins-switch.is-pending { opacity: .7; cursor: wait; }
-.dsh-plugins-switch:disabled { cursor: not-allowed; opacity: .7; }
-.dsh-plugins-switch:focus-visible {
+.dsh-plugins .dsh-plugins-switch.is-pending { opacity: .7; cursor: wait; }
+.dsh-plugins .dsh-plugins-switch:disabled { cursor: not-allowed; opacity: .7; }
+.dsh-plugins .dsh-plugins-switch:focus-visible {
   box-shadow: 0 0 0 2px var(--accent-a8);
 }
-.dsh-plugins-switch-thumb {
+.dsh-plugins .dsh-plugins-switch-thumb {
   position: absolute;
   top: 2px;
   left: 2px;
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-1);
+  background: var(--gray-1);
+  box-shadow: var(--shadow-2);
   transition: transform 150ms ease;
 }
-.dsh-plugins-switch.is-on .dsh-plugins-switch-thumb { transform: translateX(16px); }
+.dsh-plugins .dsh-plugins-switch.is-on .dsh-plugins-switch-thumb { transform: translateX(16px); }
 .dsh-plugins-core summary {
   cursor: pointer;
   font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--default-font-family);
@@ -234,7 +238,7 @@ export const pluginsClientStyles = `
 }
 .dsh-plugins-install-fallback h2 {
   margin: 0;
-  font: var(--font-weight-medium) var(--font-size-5)/1.2 var(--default-font-family);
+  font: var(--font-weight-medium) var(--font-size-4)/1.2 var(--default-font-family);
   letter-spacing: -.02em;
   color: var(--gray-12);
 }

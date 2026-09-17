@@ -33,7 +33,8 @@ import {
   type RpcResult,
   type ShellContext,
 } from './shared.ts'
-import { isVisibleTextPath } from '../project-files.ts'
+import { useTransientSuccessNote } from './transient-note.ts'
+import { isAuthorFacingDocumentPath } from '../project-files.ts'
 import { canRewritePath, CUSTOM_INSTRUCTION_MAX, normalizeCustomInstruction } from '../rewrite-presets-view.ts'
 import { t } from '../i18n/index.ts'
 import { Button, Dialog, isImeEvent } from './ui/index.ts'
@@ -91,7 +92,6 @@ export function Editor(props: {
   session: SessionFace
   path: string
   files: string[]
-  onOpen(path: string): void
   create(): void
   externalRevision: number
   onDirtyChange(dirty: boolean): void
@@ -118,7 +118,6 @@ export function Editor(props: {
     session,
     path,
     files,
-    onOpen,
     create,
     externalRevision: incomingRevision,
     onDirtyChange,
@@ -133,6 +132,10 @@ export function Editor(props: {
   } = props
 
   const [note, setNote] = useState('')
+  const expireNote = useCallback((expired: string) => {
+    setNote((current) => current === expired ? '' : current)
+  }, [])
+  useTransientSuccessNote(note, expireNote)
   const [status, setStatus] = useState<EditorCoreStatus>('empty')
   const [reloadConfirm, setReloadConfirm] = useState(false)
   // Local copy of externalRevision so the reload-conflict flow can force a
@@ -385,9 +388,12 @@ export function Editor(props: {
   }, [path, reveal?.nonce, reveal?.path, reveal?.version, externalRevision])
 
   if (!path) {
-    const hasDocument = files.some((item) => isVisibleTextPath(item))
+    const hasDocument = files.some((item) => isAuthorFacingDocumentPath(item))
     return (
       <PaperStage label={t('editor.emptyChapter')}>
+        {hasDocument ? null : <Text className="home-hint" size="2" color="gray">
+          {t('editor.emptyHint')}
+        </Text>}
         <div className="home-actions">
           <ThemesButton variant="solid" type="button" onClick={create}>
             {hasDocument ? t('editor.newChapter') : t('editor.writeFirstChapter')}
@@ -454,10 +460,6 @@ export function Editor(props: {
             enablePatch={true}
             enableBeforeUnload={true}
             paperProjection={PAPER_PROJECTION}
-            siblings={files}
-            /* 兄弟章节跳转统一交给 root 的 openDocument 保存 gate，这里不重复保存。 */
-            onOpenSibling={onOpen}
-            siblingsBlocked={false}
             onReloadDisk={() => setReloadConfirm(true)}
             onSaveConflictCopy={saveConflictCopy}
             footerExtras={note ? <Callout.Root

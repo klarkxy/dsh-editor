@@ -27,7 +27,7 @@ async function fixture(): Promise<PluginPaths> {
   }
 }
 
-async function writePresetSource(dir: string, name = '小说创作', description = '面向长篇小说的写作 Agent，按正文、大纲、人物卡与世界书分册推进。') {
+async function writePresetSource(dir: string, name = '小说创作', description = '面向长篇小说的写作搭档，按正文、大纲、人物卡与世界书分册推进。') {
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, 'preset.yml'), `name: ${name}\ndescription: ${description}\n`)
   await writeFile(join(dir, 'agent.cordis.yml'), '[]\n')
@@ -72,7 +72,7 @@ describe('writing preset inventory', () => {
       {
         id: 'dsh-editor-novel',
         title: '小说创作',
-        description: '面向长篇小说的写作 Agent，按正文、大纲、人物卡与世界书分册推进。',
+        description: '面向长篇小说的写作搭档，按正文、大纲、人物卡与世界书分册推进。',
         enabled: false,
         locked: false,
         packageName: 'dsh-editor-novel-kernel',

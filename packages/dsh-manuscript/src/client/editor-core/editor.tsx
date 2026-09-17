@@ -8,7 +8,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import { Button, IconButton } from '@radix-ui/themes'
+import { Button } from '@radix-ui/themes'
 import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, redo, redoDepth, undo, undoDepth } from '@codemirror/commands'
@@ -243,13 +243,6 @@ export type EditorCoreProps = {
   autoSaveDelayMs?: number
   externalRevision?: number
 
-  // Optional chapter navigation. The shell passes the file list; the
-  // manuscript client passes siblings for the same directory. Prev/next
-  // are hidden when the current path is not in the list.
-  siblings?: readonly string[]
-  onOpenSibling?(path: string): void
-  siblingsBlocked?: boolean
-
   // Shell-specific conflict recovery actions. When provided, the matching
   // button is rendered alongside EditorCore's built-in discard. The host
   // owns the actual flow (e.g. confirm dialog, copy-as-conflict).
@@ -281,7 +274,6 @@ export type EditorCoreStatus = 'empty' | 'loading' | 'saved' | 'draft' | 'confli
 export type EditorCoreSlot =
   | 'outer'
   | 'header'
-  | 'chapterNav'
   | 'tools'
   | 'textarea'
   | 'mirror'
@@ -442,9 +434,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     focusParagraph = false,
     autoSaveDelayMs = 800,
     externalRevision = 0,
-    siblings,
-    onOpenSibling,
-    siblingsBlocked = false,
     onReloadDisk,
     onSaveConflictCopy,
     enableBeforeUnload = false,
@@ -839,9 +828,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       ? '已把备份内容放入当前草稿；备份基于的磁盘版本已变化，请确认后再保存。原备份仍保留给其他窗口。'
       : '已把备份内容放入当前草稿；原备份仍保留给其他窗口，不会自动清理。')
   }, [conflict, setText, report])
-
-  const siblingIndex = siblings ? siblings.indexOf(path) : -1
-  const showSiblings = !!siblings && !!onOpenSibling && siblingIndex >= 0
 
   useEffect(() => {
     if (!enableBeforeUnload) return
@@ -1479,44 +1465,20 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       } as CSSProperties}>
       <header
         className={cls('header')}
-        style={{ padding: '4px 8px', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', ...sty('header') }}>
+        style={{
+          fontSize: 'var(--font-size-1)',
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          ...(cls('header') ? undefined : { padding: '4px 8px' }),
+          ...sty('header'),
+        }}>
         <span
           data-testid={`${testIdPrefix}-path`}
           style={{ opacity: 0.7, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {doc?.path || path}
         </span>
-        {showSiblings ? <nav
-          className={['chapter-navigation', cls('chapterNav')].filter(Boolean).join(' ')}
-          aria-label="章节导航"
-          style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-          <IconButton
-            type="button"
-            variant="ghost"
-            color="gray"
-            size="1"
-            data-testid={`${testIdPrefix}-prev`}
-            disabled={siblingsBlocked || siblingIndex <= 0}
-            title={siblingsBlocked ? '请先保存' : '上一章'}
-            aria-label={siblingsBlocked ? '请先保存' : '上一章'}
-            onClick={() => { if (siblingIndex > 0 && siblings) onOpenSibling(siblings[siblingIndex - 1]!) }}>
-            ‹
-          </IconButton>
-          <span style={{ fontSize: 11, opacity: 0.6 }}>
-            {`${siblingIndex + 1} / ${siblings!.length}`}
-          </span>
-          <IconButton
-            type="button"
-            variant="ghost"
-            color="gray"
-            size="1"
-            data-testid={`${testIdPrefix}-next`}
-            disabled={siblingsBlocked || siblingIndex >= siblings!.length - 1}
-            title={siblingsBlocked ? '请先保存' : '下一章'}
-            aria-label={siblingsBlocked ? '请先保存' : '下一章'}
-            onClick={() => { if (siblingIndex < siblings!.length - 1 && siblings) onOpenSibling(siblings[siblingIndex + 1]!) }}>
-            ›
-          </IconButton>
-        </nav> : null}
         {!compactControls && enableRewriteSelection && completionEnabled ? <Button
           type="button"
           variant="soft"
@@ -1544,7 +1506,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           {`${wordCount} 字`}
         </span>
         <span data-testid={`${testIdPrefix}-save-state`} style={{ opacity: 0.55 }}>
-          {describeStatus(state, conflict)}
+          {loadingFim ? '正在补全' : patching ? '正在改写' : describeStatus(state, conflict)}
         </span>
         {headerExtras}
       </header>
@@ -1561,7 +1523,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       </div>
       {showGhostTip && ghost ? <div
         className={cls('ghostTip')}
-        style={{ padding: '4px 8px', fontSize: 12, opacity: 0.55, ...sty('ghostTip') }}>
+        style={{ padding: '4px 8px', fontSize: 'var(--font-size-1)', opacity: 0.55, ...sty('ghostTip') }}>
         Tab · Esc
       </div> : null}
       {proposal ? <div
@@ -1610,7 +1572,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       {conflict ? <div
         data-testid={`${testIdPrefix}-conflict-guard`}
         className={cls('conflict')}
-        style={{ padding: '6px 8px', borderTop: '1px solid var(--gray-6)', fontSize: 12, ...sty('conflict') }}>
+        style={{ padding: '6px 8px', borderTop: '1px solid var(--gray-6)', fontSize: 'var(--font-size-1)', ...sty('conflict') }}>
         <span>
           当前草稿与磁盘版本不一致，已保留本地内容。
         </span>
@@ -1619,12 +1581,12 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         data-testid={`${testIdPrefix}-notice`}
         className={cls('notice')}
         role={conflict ? 'alert' : 'status'}
-        style={{ padding: '4px 8px', fontSize: 12, opacity: 0.7, ...sty('notice') }}>
+        style={{ padding: '4px 8px', fontSize: 'var(--font-size-1)', opacity: 0.7, ...sty('notice') }}>
         {note}
       </div> : null}
       {error ? <div
         className={cls('notice')}
-        style={{ padding: 8, color: 'var(--red-11)', fontSize: 12, ...sty('notice') }}>
+        style={{ padding: 8, color: 'var(--red-11)', fontSize: 'var(--font-size-1)', ...sty('notice') }}>
         {error}
       </div> : null}
       {/* 恢复备份入口独立于 notice 槽：shell 会把 slotStyle.notice 设为 display:none
@@ -1632,7 +1594,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       backups.length > 0 && doc ? <div
         data-testid={`${testIdPrefix}-draft-backups`}
         role="status"
-        style={{ padding: '4px 8px', fontSize: 12, opacity: 0.8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        style={{ padding: '4px 8px', fontSize: 'var(--font-size-1)', opacity: 0.8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <span>
           {`发现 ${backups.length} 份其他窗口留下的未保存备份（采纳后原备份仍保留）：`}
         </span>
@@ -1754,7 +1716,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           onClick={onSaveConflictCopy}>
           另存冲突副本
         </Button> : null}
-        {footerExtras}
+        {loadingFim || patching ? null : footerExtras}
       </footer> : null}
     </section>
   );

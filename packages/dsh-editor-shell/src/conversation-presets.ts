@@ -26,7 +26,7 @@ export type ConversationPresetChoice = {
   description: string
   available: boolean
   reason?: string
-  /* 旧版 dsh-editor 会话，仅开发者模式列出，picker 里以诊断徽标区分。 */
+  /* 旧版 dsh-editor 兼容入口不进新对话列表；仅会话标签等处使用。 */
   legacy?: boolean
 }
 
@@ -123,10 +123,8 @@ function projectedChoice(
   item: Record<string, unknown> | undefined,
 ): ConversationPresetChoice {
   const copy = PRESET_COPY[id]
-  const name = item && typeof item.name === 'string' && item.name.trim() ? item.name.trim() : t(copy.name)
-  const description = item && typeof item.description === 'string' && item.description.trim()
-    ? item.description.trim()
-    : t(copy.description)
+  const name = t(copy.name)
+  const description = t(copy.description)
   if (!item) {
     return { id, name, description, available: false, reason: t('chat.presetMissing') }
   }
@@ -177,7 +175,7 @@ export function projectNewConversationPresets(value: unknown, options?: PresetPr
     const id = item.id
     if (typeof id !== 'string') continue
     if (isNewConversationPresetId(id)) byId[id] = item
-    else if (options?.developerMode) extras.push(item)
+    else if (options?.developerMode && !isLegacyEditorPreset(id)) extras.push(item)
   }
   const choices: ConversationPresetChoice[] = []
   for (const id of NEW_CONVERSATION_PRESET_IDS) {

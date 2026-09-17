@@ -61,7 +61,7 @@ export const cardsPanelStyles = `
   padding: var(--space-4) var(--space-5) var(--space-3); border-bottom: 1px solid var(--gray-a5);
 }
 .radix-themes .cards-detail-header-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.radix-themes .cards-detail-header h2 { margin: 0; font: var(--font-weight-medium) var(--font-size-5)/var(--line-height-5) var(--default-font-family); color: var(--gray-12); }
+.radix-themes .cards-detail-header h2 { margin: 0; font: var(--font-weight-medium) var(--font-size-4)/var(--line-height-4) var(--default-font-family); color: var(--gray-12); }
 .radix-themes .cards-detail-header p { margin: var(--space-2) 0 0; }
 .radix-themes .cards-detail-body { display: grid; gap: var(--space-4); padding: var(--space-4) var(--space-5) var(--space-6); }
 .radix-themes .cards-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); }

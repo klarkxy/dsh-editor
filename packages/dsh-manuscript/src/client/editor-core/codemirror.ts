@@ -46,9 +46,14 @@ export const externalSync = Annotation.define<boolean>()
 
 /* ── Theme ─────────────────────────────────────────────────────────── */
 
-export const paperTheme: Extension = EditorView.theme({
+/** Shared with shell / overlay CSS so the header title and first line share an inset. */
+export const PAPER_PAD_INLINE = '64px'
+export const PAPER_PAD_BLOCK = '36px'
+
+export const paperThemeSpec = {
   '&': {
     height: '100%',
+    width: '100%',
     backgroundColor: 'transparent',
     color: 'var(--gray-12)',
     fontWeight: '400',
@@ -61,18 +66,28 @@ export const paperTheme: Extension = EditorView.theme({
     overflow: 'auto',
     fontFamily: 'inherit',
     lineHeight: 'inherit',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
   },
   '.cm-content': {
-    padding: '36px 64px 32px',
+    padding: `var(--paper-pad-block, ${PAPER_PAD_BLOCK}) var(--paper-pad-inline, ${PAPER_PAD_INLINE}) 32px`,
     caretColor: 'var(--accent-9)',
     boxSizing: 'border-box',
     width: '100%',
     maxWidth: 'var(--paper-max-width, none)',
     marginInline: 'auto',
+    flexGrow: '2',
+    minWidth: '0',
+    textAlign: 'start',
   },
   '.cm-line': {
     paddingBottom: 'var(--paper-paragraph-spacing, 0em)',
+    textAlign: 'start',
   },
+}
+
+export const paperTheme: Extension = EditorView.theme({
+  ...paperThemeSpec,
   '.cm-paper-dim': {
     opacity: 'var(--paper-dim-opacity, 0.35)',
   },

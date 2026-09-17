@@ -3,7 +3,8 @@
  * that is not already inside `.radix-themes`) so those styles can read the
  * same variables the shell gets from `@radix-ui/themes`. Hex is allowed here
  * only; values are copied from Radix Themes gray + indigo (+ red / green /
- * amber) light/dark scales and tokens/base.css.
+ * amber) light/dark scales and tokens/base.css. `--font-size-1` is 13px
+ * (chrome caption floor), not Radix's 12px.
  *
  * Light: `:root:not(:has(.radix-themes))`
  * Dark:  `:root[data-theme="dark"]:not(:has(.radix-themes))`
@@ -13,9 +14,15 @@ const fonts = `
   --default-font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
   --code-font-family: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace;
   --font-weight-medium: 500;
-  --font-size-1: 12px;
+  --font-size-1: 13px;
   --font-size-2: 14px;
   --font-size-3: 16px;
+  --font-size-4: 18px;
+  --font-size-5: 20px;
+  --font-size-6: 24px;
+  --font-size-7: 28px;
+  --font-size-8: 35px;
+  --font-size-9: 60px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;

@@ -45,11 +45,13 @@ describe('document export', () => {
       { path: '笔记/002.md', text: '# 前\n\n前。\n' },
       { path: '.dsh-editor/作品索引.md', text: '隐藏' },
       { path: '笔记/.archive/旧.md', text: '隐藏' },
+      { path: 'AGENTS.md', text: '辅助规则' },
     ], '根目录稿', 'markdown')
     expect(prepared.chapters.map((item) => item.path)).toEqual(['笔记/002.md', '笔记/010.md', '资料/说明.txt'])
     expect(prepared.content).toContain('前。')
     expect(prepared.content).toContain('说明。')
     expect(prepared.content).not.toContain('隐藏')
+    expect(prepared.content).not.toContain('辅助规则')
   })
 
   it('strips chapter frontmatter before counting and exporting Markdown, and leaves TXT intact', () => {
@@ -133,7 +135,7 @@ describe('collectDocuments', () => {
       'AGENTS.md': '规则',
     })
     const root = await collectDocuments(ctx, 's1', '')
-    expect(root.map((item) => item.path)).toEqual(['人物卡/主角.md', '正文/002.md', '正文/010.md', 'AGENTS.md'])
+    expect(root.map((item) => item.path)).toEqual(['人物卡/主角.md', '正文/002.md', '正文/010.md'])
     const manuscript = await collectDocuments(ctx, 's1', '正文')
     expect(manuscript.map((item) => item.path)).toEqual(['正文/002.md', '正文/010.md'])
   })

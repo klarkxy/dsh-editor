@@ -29,7 +29,8 @@ import { writingPreferences, writingTypography, type WritingMigration, type Writ
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
 import { redesignedStyles } from '../styles.ts'
-import { errorMessage, isStaleFailure, isSuccessWorkbenchNote, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
+import { errorMessage, isStaleFailure, canMoveTreeEntry, treeMoveTargetDir, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
+import { useTransientSuccessNote } from './transient-note.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, type PanelImperativeHandle, type PanelSize } from 'react-resizable-panels'
 import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarColumn, panelPixels, type FileMenuKind } from './root-columns.tsx'
@@ -61,7 +62,8 @@ import { collectDocuments, downloadExport, ExportPreviewDialog } from './export-
 import { prepareExport, type ChapterExport, type ExportFormat } from '../export.ts'
 import { idleImportFlow, importReview, recoverImport, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ImportDialog } from './import-dialog.tsx'
-import { ArchivePanel, canArchivePath, type ArchiveView } from './archive.tsx'
+import { ArchivePanel, DOCUMENT_ARCHIVE_UI, canArchivePath, type ArchiveView } from './archive.tsx'
+import { HistoryPanel } from './history-dialog.tsx'
 import { t, useLocale, type MessageKey } from '../i18n/index.ts'
 
 
@@ -229,6 +231,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [path, setPath] = useState('')
   const [files, setFiles] = useState<string[]>([])
   const [workbenchNote, setWorkbenchNote] = useState('')
+  const expireWorkbenchNote = useCallback((note: string) => {
+    setWorkbenchNote((current) => current === note ? '' : current)
+  }, [])
+  useTransientSuccessNote(workbenchNote, expireWorkbenchNote)
   const [treeRevision, setTreeRevision] = useState(0)
   const [treeExpansionPath, setTreeExpansionPath] = useState('')
   const [contentRevision, setContentRevision] = useState(0)
@@ -258,6 +264,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     return stored && canPinPath(stored) ? stored : null
   })
   const [pinnedWidth, setPinnedWidth] = useState(() => storedPanelWidth('dsh-editor.layout.pinned-width', PINNED_DEFAULT, PINNED_MIN, PINNED_MAX))
+  const sidebarWidthRef = useRef(sidebarWidth)
+  const assistantWidthRef = useRef(assistantWidth)
+  const pinnedWidthRef = useRef(pinnedWidth)
   const [assistantDraftDirty, setAssistantDraftDirty] = useState(false)
   const [leaveConfirm, setLeaveConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   const [focusMode, setFocusMode] = useState(false)
@@ -449,11 +458,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         void writingScope.set('focusParagraph', !writing.focusParagraph)
         return
       }
-      /* 章节导航按钮自己处理"先保存再跳转"；快捷键只负责触发按钮，脏文档不再拦截。 */
-      const buttons = document.querySelectorAll<HTMLButtonElement>('.chapter-navigation button')
-      const button = action === 'previous-chapter' ? buttons[0] : buttons[1]
-      if (button && !button.disabled) button.click()
-        return
       }
       if (event.repeat) return
       const command = matchRegistryShortcut(commands.list(), event)
@@ -491,7 +495,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     void (async () => {
       const result = await safeRpcCall<SnapshotResponse[]>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'snapshot.list', { sessionId: fileSession.sessionId }))
       if (!live) return
-      setSnapshots(result.ok ? result.value : [])
+      setSnapshots(result.ok && Array.isArray(result.value) ? result.value : [])
       if (!result.ok) setWorkbenchNote(errorMessage(result))
     })()
     return () => { live = false }
@@ -749,6 +753,29 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     /* 文件行粘贴:放进该文件所在目录。 */
     await runClipboardPaste(parentOf(fileMenu.path))
   }
+  const moveTreeEntry = useCallback(async (entry: { kind: FileMenuKind; path: string }, targetDir: string) => {
+    if (!fileSession) return
+    const dest = treeMoveTargetDir(targetDir)
+    if (!canMoveTreeEntry(entry.path, dest)) return
+    if (editorDirty && (entry.path === path || (entry.kind === 'directory' && path.startsWith(`${entry.path}/`)))) {
+      setWorkbenchNote(t('note.saveBeforeCut'))
+      return
+    }
+    const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'entry.move', {
+      sessionId: fileSession.sessionId,
+      path: entry.path,
+      targetDir: dest,
+    }))
+    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
+    if (entry.kind === 'file' && path === entry.path) setPath(result.value.path)
+    else if (entry.kind === 'directory' && path.startsWith(`${entry.path}/`)) {
+      setPath(`${result.value.path}${path.slice(entry.path.length)}`)
+    }
+    if (clipboard?.path === entry.path) setClipboard(null)
+    setTreeExpansionPath(result.value.path)
+    setTreeRevision((value) => value + 1)
+    setWorkbenchNote(t('note.movedTo', { path: result.value.path }))
+  }, [fileSession, editorDirty, path, clipboard, ctx])
   const runClipboardPaste = async (targetDir: string) => {
     if (!fileSession || !clipboard) return
     const sessionId = fileSession.sessionId
@@ -765,21 +792,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       setWorkbenchNote(t('note.copiedTo', { path: result.value.path }))
       return
     }
-    /* cut:用 entry.move 走 workbench,内部其实是移动;成功后清空剪贴板。 */
-    const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'entry.move', {
-      sessionId,
-      path: entry.path,
-      targetDir,
-    }))
-    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
-    if (entry.kind === 'file' && path === entry.path) setPath(result.value.path)
-    else if (entry.kind === 'directory' && path.startsWith(`${entry.path}/`)) {
-      /* 剪切的是当前文稿的父目录：同步改写当前子路径，防 buffer 丢失。 */
-      setPath(`${result.value.path}${path.slice(entry.path.length)}`)
-    }
-    setClipboard(null)
-    setTreeRevision((value) => value + 1)
-    setWorkbenchNote(t('note.movedTo', { path: result.value.path }))
+    await moveTreeEntry(entry, targetDir)
   }
   const openTreeCreate = (kind: 'file' | 'folder', directory: string) => {
     if (!fileSession) return
@@ -1531,7 +1544,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const onTreeCreateFile = useCallback((directory: string) => openTreeCreate('file', directory), [fileSession, fileMenu])
   const onTreeCreateFolder = useCallback((directory: string) => openTreeCreate('folder', directory), [fileSession, fileMenu])
   const onCommitSnapshot = useCallback(() => { void commitSnapshot() }, [fileSession, snapshotBusy])
-  const onToggleHistory = useCallback(() => setHistoryOpen((value) => !value), [])
+  const openHistoryPanel = useCallback(() => {
+    closeWorkspaceChrome()
+    setPaletteOpen(false)
+    if (!fileSession) return
+    setHistoryOpen(true)
+  }, [fileSession])
   const onRequestRollback = useCallback((snapshot: SnapshotResponse) => requestRollback(snapshot), [snapshotBusy])
   /* 编辑器空态"新建"与句柄回传、保存回调：身份稳定，editorDirty 翻转不连带重渲染编辑列。 */
   const onEditorCreate = useCallback(() => openTreeCreate('file', defaultCreateDirectory({
@@ -1857,6 +1875,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     registryCommands={registryCommands}
     onExport={() => { void exportDocuments() }}
     onOpenArchives={() => openArchivePanel()}
+    onOpenHistory={() => openHistoryPanel()}
     onSplitAtCursor={() => beginChapterSplit(path, 'cursor')}
     canSplitAtCursor={Boolean(fileSession) && !editorDirty && isMarkdownChapterPath(path)}
     onToggleTypewriter={() => { void writingScope.set('typewriter', !writing.typewriter) }}
@@ -1884,7 +1903,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const chatSession = session ?? fileSession
   const sidebarVisible = sidebarOpen && !focusMode
   const sidebarInGrid = sidebarVisible && !compactChrome
-  const assistantVisible = assistantOpen && !focusMode && assistantEnabled
+  const assistantVisible = assistantOpen && !focusMode && assistantEnabled && !compactChrome
   const assistantInGrid = assistantVisible && !overlayAssistant
   const pinnedVisible = pinnedPath !== null && !focusMode
   /* 写作搭档面板始终挂载（草稿是 Chat 本地 state），关闭=折叠到 0 宽；
@@ -1894,9 +1913,16 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   useEffect(() => {
     const panel = assistantPanelRef.current
     if (!panel) return
-    if (assistantInGrid) { if (panel.isCollapsed()) panel.expand() }
-    else if (!panel.isCollapsed()) panel.collapse()
-  }, [assistantInGrid])
+    const sync = () => {
+      if (assistantInGrid) { if (panel.isCollapsed()) panel.expand() }
+      else if (!panel.isCollapsed()) panel.collapse()
+    }
+    /* 侧栏/钉住栏挂上或卸下时 Group 会重算尺寸；折叠态可能被 minSize 顶开。
+       先同步一次，再在下一帧补一次，避免空列留在稿纸右侧。 */
+    sync()
+    const frame = globalThis.requestAnimationFrame(sync)
+    return () => globalThis.cancelAnimationFrame(frame)
+  }, [assistantInGrid, sidebarInGrid, pinnedVisible])
 
   if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
@@ -1948,7 +1974,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   return (
     <ShellUiProvider theme={theme} accent={accent}>
       <main
-        className={`shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`}
+        className={`shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantInGrid ? ' assistant-in-grid' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`}
         ref={shellMainRef}
         style={{ minWidth: 0 }}>
         <WorkbenchTopbar
@@ -1981,7 +2007,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           onThemeChange={setTheme}
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenSettings={openSettings} />
-        <PanelGroup orientation="horizontal" className="shell-panels">
+        <PanelGroup
+          orientation="horizontal"
+          className="shell-panels"
+          resizeTargetMinimumSize={{ coarse: 28, fine: 12 }}
+          onLayoutChanged={(_layout, meta) => {
+            /* 拖动中途不要 setState：v4 会把变化中的 defaultSize 当成新布局，pointer capture 也会丢。 */
+            if (!meta.isUserInteraction) return
+            setSidebarWidth(sidebarWidthRef.current)
+            if (assistantWidthRef.current > 0) setAssistantWidth(assistantWidthRef.current)
+            setPinnedWidth(pinnedWidthRef.current)
+          }}>
           {sidebarInGrid ? <>
             <Panel
               id="sidebar"
@@ -1990,7 +2026,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               minSize={SIDEBAR_MIN}
               maxSize={SIDEBAR_MAX}
               groupResizeBehavior="preserve-pixel-size"
-              onResize={(size: PanelSize) => setSidebarWidth(panelPixels(size))}>
+              onResize={(size: PanelSize) => { if (size.inPixels > 0) sidebarWidthRef.current = panelPixels(size) }}>
               <SidebarColumn
                 ctx={ctx}
                 sessionId={fileSession.sessionId}
@@ -2002,11 +2038,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
                 activeDirty={editorDirty}
                 fileRevision={treeRevision}
                 historyOpen={historyOpen}
-                snapshots={snapshots}
                 snapshotBusy={snapshotBusy}
                 onCommitSnapshot={onCommitSnapshot}
-                onToggleHistory={onToggleHistory}
-                onRollback={onRequestRollback}
+                onOpenHistory={openHistoryPanel}
                 createNote={createNote}
                 workspaceWarning={workspaceOpen.warning}
                 workbenchNote={workbenchNote}
@@ -2017,6 +2051,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
                 onFileMenu={openFileMenu}
                 onCreateFile={onTreeCreateFile}
                 onCreateFolder={onTreeCreateFolder}
+                onMove={moveTreeEntry}
                 renderSlot={renderSlot}
                 seatContext={seatContext} />
             </Panel>
@@ -2031,7 +2066,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               fileSession={fileSession}
               path={path}
               files={isManuscriptChapterPath(path) ? chapterFiles : files}
-              onOpen={openDocument}
               onCreate={onEditorCreate}
               onHandle={onEditorHandle}
               contentRevision={contentRevision}
@@ -2046,7 +2080,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               typography={typography}
               onSaved={onEditorSaved} />
             <CenterOverlays
-              show={Boolean(fileSession)}
+              show={Boolean(fileSession) && !focusMode}
               renderSlot={renderSlot}
               seatContext={seatContext} />
           </Panel>
@@ -2062,7 +2096,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               minSize={PINNED_MIN}
               maxSize={PINNED_MAX}
               groupResizeBehavior="preserve-pixel-size"
-              onResize={(size: PanelSize) => setPinnedWidth(panelPixels(size))}>
+              onResize={(size: PanelSize) => { if (size.inPixels > 0) pinnedWidthRef.current = panelPixels(size) }}>
               <PinnedPane
                 ctx={ctx}
                 sessionId={fileSession.sessionId}
@@ -2094,7 +2128,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             minSize={ASSISTANT_MIN}
             maxSize={ASSISTANT_MAX}
             groupResizeBehavior="preserve-pixel-size"
-            onResize={(size: PanelSize) => { if (size.inPixels > 0) setAssistantWidth(panelPixels(size)) }}>
+            onResize={(size: PanelSize) => { if (size.inPixels > 0) assistantWidthRef.current = panelPixels(size) }}>
             <ChatColumn
               ctx={ctx}
               chatSession={chatSession}
@@ -2119,7 +2153,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           className="chat-overlay-dismiss"
           aria-label={t('workspace.hideAssistant')}
           onClick={() => setAssistantOpen(false)} /> : null}
-        {!assistantVisible && !focusMode ? (
+        {!assistantVisible && !focusMode && !compactChrome ? (
           capabilityState.kind === 'error'
             ? <Callout.Root className="assistant-launcher capability-note" color="red" role="alert">
             <Flex direction="column" gap="2">
@@ -2279,7 +2313,16 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           returnFocusRef={workspaceMenuTrigger}
           onCancel={() => { setExportChapters(null); setExportNote('') }}
           onExport={confirmExport} />
-        <ArchivePanel
+        <ShellErrorBoundary>
+          <HistoryPanel
+            open={historyOpen}
+            snapshots={snapshots}
+            busy={snapshotBusy}
+            editorDirty={editorDirty}
+            onRollback={onRequestRollback}
+            onClose={() => { if (!snapshotBusy) setHistoryOpen(false) }} />
+        </ShellErrorBoundary>
+        {DOCUMENT_ARCHIVE_UI ? <ArchivePanel
           open={archiveOpen}
           items={archives}
           invalid={archiveInvalid}
@@ -2289,7 +2332,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           returnFocusRef={workspaceMenuTrigger}
           onRestore={(item: ArchiveView) => void restoreArchived(item)}
           onContinue={(item: ArchiveView) => void continueArchive(item)}
-          onClose={() => { if (!archiveBusy) setArchiveOpen(false) }} />
+          onClose={() => { if (!archiveBusy) setArchiveOpen(false) }} /> : null}
         <HostDialog
           open={Boolean(manualWorkspaceMode)}
           onOpenChange={(next: boolean) => { if (!next) closePathFallback() }}
@@ -2377,10 +2420,15 @@ function ExtensionsDock(props: { rootProps: unknown }) {
    去重标记保证 effect 重跑不会重复插入。 */
 function injectShellStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
-  if (document.head.querySelector('style[data-dsh-editor-shell-styles]')) return () => {}
+  const css = radixThemesStyles + redesignedStyles
+  const existing = document.head.querySelector('style[data-dsh-editor-shell-styles]')
+  if (existing) {
+    existing.textContent = css
+    return () => existing.remove()
+  }
   const style = document.createElement('style')
   style.setAttribute('data-dsh-editor-shell-styles', '')
-  style.textContent = radixThemesStyles + redesignedStyles
+  style.textContent = css
   document.head.appendChild(style)
   return () => style.remove()
 }

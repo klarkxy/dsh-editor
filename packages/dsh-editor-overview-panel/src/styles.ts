@@ -11,7 +11,7 @@ export const overviewPanelStyles = `
   display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3);
   padding: var(--space-4) var(--space-5) var(--space-3); border-bottom: 1px solid var(--gray-a5);
 }
-.radix-themes .overview-header h2 { margin: 0; font: var(--font-weight-medium) var(--font-size-5)/var(--line-height-5) var(--default-font-family); color: var(--gray-12); }
+.radix-themes .overview-header h2 { margin: 0; font: var(--font-weight-medium) var(--font-size-4)/var(--line-height-4) var(--default-font-family); color: var(--gray-12); }
 .radix-themes .overview-header p { margin: var(--space-2) 0 0; }
 .radix-themes .overview-body { display: grid; gap: var(--space-5); padding: var(--space-4) var(--space-5) var(--space-6); }
 .radix-themes .overview-totals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); }

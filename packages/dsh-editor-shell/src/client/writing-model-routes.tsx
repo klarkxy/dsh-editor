@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Box, Callout, Flex, Heading, Text } from '@radix-ui/themes'
+import { Box, Callout, Flex, Text } from '@radix-ui/themes'
 import type { SettingsScope } from '../dsh-compat.ts'
 import {
   normalizeWritingEffort,
@@ -47,6 +47,16 @@ export function catalogFromSessionGroups(groups: ReadonlyArray<{ id: string; nam
     model: model.id,
     label: `${group.name} · ${model.name}`,
   })))
+}
+
+/** First catalog model whose provider can actually serve requests. */
+export function firstUsableCatalogModel(
+  catalog: readonly CatalogModelOption[],
+  usableProviders: Iterable<string>,
+): CatalogModelOption | undefined {
+  const usable = new Set(usableProviders)
+  if (usable.size === 0) return undefined
+  return catalog.find((item) => usable.has(item.provider))
 }
 
 const EMPTY = ''
@@ -117,10 +127,10 @@ export function WritingModelRoutes(props: {
     void save(field, reasoningEffort ? { ...current, reasoningEffort } : { provider: current.provider, model: current.model })
   }
 
-  const rows: Array<{ field: 'completionModel' | 'rewriteModel' | 'chatModel'; label: 'models.completionModel' | 'models.rewriteModel' | 'models.chatModel'; empty: string }> = [
+  const rows: Array<{ field: 'completionModel' | 'rewriteModel' | 'chatModel'; label: 'models.completionModel' | 'models.rewriteModel' | 'models.chatModel'; empty?: string }> = [
+    { field: 'chatModel', label: 'models.chatModel' },
     { field: 'completionModel', label: 'models.completionModel', empty: t('models.followChat') },
     { field: 'rewriteModel', label: 'models.rewriteModel', empty: t('models.followChat') },
-    { field: 'chatModel', label: 'models.chatModel', empty: t('models.runtimeDefault') },
   ]
 
   if (snapshot.status === 'loading') {
@@ -149,20 +159,15 @@ export function WritingModelRoutes(props: {
 
   return (
     <section className="models-writing-routes" aria-label={t('models.writingRoutes')}>
-      <header className="settings-block-head">
-        <Heading as="h3" size="3" className="settings-block-title">
-          {t('models.writingRoutes')}
-        </Heading>
-      </header>
       {rows.map((row) => {
         const selected = values[row.field]
         const missing = Boolean(selected && !props.catalog.some((item) => item.provider === selected.provider && item.model === selected.model))
         const options: SelectOption[] = [
-          { value: EMPTY, label: row.empty },
+          ...(row.empty ? [{ value: EMPTY, label: row.empty }] : []),
           ...props.catalog.map((item) => ({ value: routeKey(item), label: item.label })),
         ]
         if (selected && !options.some((item) => item.value === routeKey(selected))) {
-          options.push(optionFor(selected, props.catalog, row.empty))
+          options.push(optionFor(selected, props.catalog, row.empty ?? t(row.label)))
         }
         return (
           <Flex key={row.field} className="settings-row models-writing-route" align="center" justify="between" gap="4" minWidth="0" py="2">

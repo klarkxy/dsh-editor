@@ -3,7 +3,7 @@ import { Callout, Card, Flex, Heading, ScrollArea, Text } from '@radix-ui/themes
 import { ActivityDots, ActivityRing, ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type RpcResult, type ShellContext } from './shared.ts'
 import { prepareExport, sanitizeExportTitle, type ChapterExport, type ExportFormat, type PreparedExport } from '../export.ts'
-import { isHiddenProjectPath, normalizeProjectDirectory, sortDocumentPaths } from '../project-files.ts'
+import { isAuthorFacingDocumentPath, isHiddenProjectPath, normalizeProjectDirectory, sortDocumentPaths } from '../project-files.ts'
 import { buildBook } from '../export-book.ts'
 import { buildDocxBlob } from '../export-docx.ts'
 import { buildEpubBlob } from '../export-epub.ts'
@@ -26,7 +26,7 @@ export async function collectDocuments(ctx: ShellContext, sessionId: string, dir
       const child = current ? `${current}/${entry.name}` : entry.name
       if (isHiddenProjectPath(child)) continue
       if (entry.type === 'directory') queue.push(child)
-      else if (entry.type === 'file' && /\.(?:md|txt)$/i.test(entry.name)) files.push(child)
+      else if (entry.type === 'file' && isAuthorFacingDocumentPath(child)) files.push(child)
     }
   }
   return await Promise.all(sortDocumentPaths(files).map(async (path) => {

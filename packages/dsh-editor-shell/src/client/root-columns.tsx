@@ -1,8 +1,7 @@
 import { memo, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Box, Button, Callout, Card, DropdownMenu, Flex, IconButton, Text, TextField } from '@radix-ui/themes'
+import { Box, Callout, DropdownMenu, Flex, IconButton, Text, TextField } from '@radix-ui/themes'
 import type { PanelSize } from 'react-resizable-panels'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
-import type { SnapshotResponse } from 'dsh-editor-workbench/contracts'
 import type { CompletionPreference, EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
 import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from '../root-registration.ts'
 import type { ShellProposalCardProps, ShellToolSeatContext } from '../seats.ts'
@@ -16,7 +15,7 @@ import { SearchIcon } from './icons.tsx'
 import { Tree } from './sidebar.tsx'
 import { SearchPanel, type SearchHit } from './search-panel.tsx'
 import type { SettingsRenderSlot } from './settings.tsx'
-import { ActivitySkeleton, isImeEvent, Menu, MenuContent, MenuItem, m, useChromeMotion } from './ui/index.ts'
+import { isImeEvent, Menu, MenuContent, MenuItem, m, useChromeMotion } from './ui/index.ts'
 
 /* 工作区三栏拆成模块级 memo 组件：侧栏搜索输入、面板拖拽、editorDirty 翻转等
    高频重渲染不再连带重渲染全部三栏与插槽内容。props 一律由 Root 以
@@ -29,6 +28,7 @@ export type SidebarFileMenuProps = {
   onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }, trigger?: HTMLElement | null): void
   onCreateFile(directory: string): void
   onCreateFolder(directory: string): void
+  onMove(source: { kind: FileMenuKind; path: string }, targetDir: string): void
 }
 
 export const panelPixels = (size: PanelSize): number => Math.round(size.inPixels)
@@ -63,6 +63,7 @@ export const TreeColumn = memo(function TreeColumn(props: SidebarFileMenuProps &
       onFileMenu={props.onFileMenu}
       onCreateFile={props.onCreateFile}
       onCreateFolder={props.onCreateFolder}
+      onMove={props.onMove}
       revision={props.revision} />
   );
 })
@@ -78,11 +79,9 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
   activeDirty: boolean
   fileRevision: number
   historyOpen: boolean
-  snapshots: SnapshotResponse[] | null
   snapshotBusy: boolean
   onCommitSnapshot(): void
-  onToggleHistory(): void
-  onRollback(snapshot: SnapshotResponse): void
+  onOpenHistory(): void
   createNote: string
   workspaceWarning: string | undefined
   workbenchNote: string
@@ -95,12 +94,16 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
   const [searchQuery, setSearchQuery] = useState('')
   const [searchSubmitTick, setSearchSubmitTick] = useState(0)
   const panelMotion = useChromeMotion('panel', 0, 'left')
+  useLocale()
   return (
     <m.aside
       className="sidebar"
       aria-label={t('workspace.filesAndNotes')}
       {...panelMotion}>
-      <Flex className="side-title" align="center" justify="end" px="3" py="2">
+      <Flex className="side-title" align="center" justify="between" px="3">
+        <Text size="2" weight="medium" className="side-title-label" truncate>
+          {t('sidebar.manuscriptTree')}
+        </Text>
         <Menu>
           <DropdownMenu.Trigger>
             <IconButton
@@ -127,7 +130,7 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
             <MenuItem
               aria-current={props.historyOpen ? 'true' : undefined}
               title={t('workspace.commitHistory')}
-              onSelect={() => props.onToggleHistory()}>
+              onSelect={() => props.onOpenHistory()}>
               {t('common.history')}
             </MenuItem>
           </MenuContent>
@@ -178,41 +181,6 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
       <m.div className="sidebar-tools" {...panelMotion}>
         {props.renderSlot?.(SIDEBAR_TOOLS_SLOT, props.seatContext) ?? null}
       </m.div>
-      {props.historyOpen ? <m.section
-        className="snapshot-panel"
-        aria-label={t('workspace.commitHistory')}
-        {...panelMotion}>
-        <Card size="1">
-          {props.snapshots === null
-            ? <Box className="snapshot-empty" role="status" aria-live="polite">
-            <ActivitySkeleton lines={3} />
-            <span className="sr-only">
-              {t('workspace.historyLoading')}
-            </span>
-          </Box>
-            : props.snapshots.length === 0
-              ? <Text as="p" className="snapshot-empty" size="1" color="gray">
-            {t('workspace.historyEmpty')}
-          </Text>
-              : props.snapshots.map((item) => <Flex key={item.snapshotId} className="snapshot-row" align="center" gap="2" px="1" py="1">
-            <Text className="snapshot-label" size="1" title={item.createdAt} truncate>
-              {item.label ?? item.createdAt}
-            </Text>
-            <Text className="snapshot-meta" size="1" color="gray">
-              {t('workspace.historyFiles', { count: item.files })}
-            </Text>
-            <Button
-              className="snapshot-rollback"
-              type="button"
-              size="1"
-              variant="soft"
-              disabled={props.snapshotBusy}
-              onClick={() => props.onRollback(item)}>
-              {t('workspace.rollback')}
-            </Button>
-          </Flex>)}
-        </Card>
-      </m.section> : null}
       {props.createNote ? <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="alert">
         <Callout.Text>
           {props.createNote}
@@ -247,6 +215,7 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
         onFileMenu={props.onFileMenu}
         onCreateFile={props.onCreateFile}
         onCreateFolder={props.onCreateFolder}
+        onMove={props.onMove}
         revision={props.fileRevision} />
     </m.aside>
   );
@@ -257,7 +226,6 @@ export const EditorColumn = memo(function EditorColumn(props: {
   fileSession: SessionFace
   path: string
   files: string[]
-  onOpen(path: string): void
   onCreate(): void
   onHandle(handle: EditorCoreHandle | null): void
   contentRevision: number
@@ -288,7 +256,6 @@ export const EditorColumn = memo(function EditorColumn(props: {
         session={fileSession}
         path={path}
         files={files}
-        onOpen={props.onOpen}
         create={props.onCreate}
         onHandle={props.onHandle}
         externalRevision={props.contentRevision}

@@ -114,7 +114,14 @@ import {
 } from './chat-proposal.tsx'
 import {
   ChatEntry,
+  ChatProcessBlock,
+  ChatProcessStack,
   ChatRowView,
+  ChatStepFromRow,
+  ChatStepHead,
+  ChatStepItem,
+  clusterChatRows,
+  processDetailRows,
   InitGuideCard,
   LegacyMigrationBanner,
   MemoryCard,
@@ -226,6 +233,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   /* rows 只依赖 nodes 引用:流式期间 partial 每个令牌都换新对象,但 nodes 引用不变,
      历史行得以凭缓存引用跳过重渲染;t() 文案(停止标记/通知行)随 locale 一起失效。 */
   const rows = useMemo(() => chatRows(transcript), [transcript.nodes, locale])
+  const historyBlocks = useMemo(() => clusterChatRows(rows, messageCards), [rows, messageCards, messageCardTick])
   const visibleCalls = useMemo(() => visibleRunningCalls(transcript.runningCalls ?? []), [transcript.runningCalls])
   /* 流式更新跟随到底部；用户主动上翻阅读时松开，回到底部附近再重新跟随。
      依赖全部是记忆化数据:只有历史内容真的变化才补 scrollTop,draft 输入等
@@ -486,6 +494,17 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     if (!selected.ok) rememberCreatedChatModelError(sessionId, t('chat.defaultModelFailed'))
     else discardCreatedChatModelError(sessionId)
   }
+  const hadPreferredChatModel = useRef(Boolean(resolveNewConversationModel({ preferred: chatModel })))
+  useEffect(() => {
+    const preferred = resolveNewConversationModel({ preferred: chatModel })
+    if (!preferred) {
+      hadPreferredChatModel.current = false
+      return
+    }
+    if (hadPreferredChatModel.current) return
+    hadPreferredChatModel.current = true
+    void applyDefaultChatModel(session.sessionId)
+  }, [chatModel?.provider, chatModel?.model, session.sessionId])
   const closePresetPicker = () => {
     setPresetPicker({ kind: 'closed', presets: [] })
   }
@@ -689,6 +708,23 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       } else setNote(t('chat.sendFailedRetry'))
     })
   }
+  const liveOpen = snapshot.running
+  const liveSteps = <Fragment>
+    {visibleCalls.map((call) => <ChatStepItem
+      key={`running:${call.callId}`}
+      className="tool"
+      busy
+      label={call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' || call.name === WRITING_PROPOSE_TOOL_NAME ? t('chat.preparingProposal') : t('chat.processing')} />)}
+    {partial.thinking ? <ChatStepItem
+      key="partial-thinking"
+      className="thinking"
+      expandable
+      live
+      busy
+      label={t('chat.think')}>
+      {partial.thinking}
+    </ChatStepItem> : null}
+  </Fragment>
   return (
     <aside
       className={overlay ? 'chat chat-overlay' : 'chat'}
@@ -823,7 +859,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
             const el = event.currentTarget
             bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
           }}>
-          <Flex direction="column" gap="3" p="3">
+          <Flex direction="column" gap="3" p="3" minWidth="0" width="100%">
             {showInitGuide ? <InitGuideCard
               state={initState as 'explore' | 'interview'}
               busy={initBusy}
@@ -844,18 +880,41 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                 {t('chat.loadingMore')}
               </Fragment> : t('chat.loadOlder')}
             </Button> : null}
-            {rows.map((row) => <ChatRowView
-              key={row.id}
-              row={row}
-              ctx={ctx}
-              sessionId={session.sessionId}
-              locale={locale}
-              cardTick={messageCardTick}
-              enter={isNewMessage(row.id)}
-              messageCards={messageCards}
-              messageCardContext={messageCardContext}
-              onApplied={handleApplied}
-              onAcceptMemory={onAcceptMemory} />)}
+            {historyBlocks.map((block, index) => {
+              if (block.kind === 'item') return (
+                <ChatRowView
+                  key={block.row.id}
+                  row={block.row}
+                  ctx={ctx}
+                  sessionId={session.sessionId}
+                  locale={locale}
+                  cardTick={messageCardTick}
+                  enter={isNewMessage(block.row.id)}
+                  messageCards={messageCards}
+                  messageCardContext={messageCardContext}
+                  onApplied={handleApplied}
+                  onAcceptMemory={onAcceptMemory} />
+              )
+              const attachLive = liveOpen && index === historyBlocks.length - 1
+              if (attachLive) return (
+                <ChatProcessStack
+                  key={block.rows[0]!.id}
+                  enter={block.rows.some((row) => isNewMessage(row.id)) || visibleCalls.some((call) => isNewMessage(`running:${call.callId}`)) || isNewMessage('partial-thinking')}>
+                  {processDetailRows(block.rows).map((row) => <ChatStepFromRow key={row.id} row={row} running />)}
+                  {liveSteps}
+                </ChatProcessStack>
+              )
+              return (
+                <ChatProcessBlock
+                  key={block.rows[0]!.id}
+                  rows={block.rows}
+                  enter={block.rows.some((row) => isNewMessage(row.id))} />
+              )
+            })}
+            {liveOpen && (visibleCalls.length > 0 || Boolean(partial.thinking)) && historyBlocks.at(-1)?.kind !== 'steps' ? <ChatProcessStack
+              enter={visibleCalls.some((call) => isNewMessage(`running:${call.callId}`)) || isNewMessage('partial-thinking')}>
+              {liveSteps}
+            </ChatProcessStack> : null}
             {showEmptyHistory ? <Text as="p" size="2" color="gray" className="chat-empty">
               {t('chat.emptyHistory')}
             </Text> : null}
@@ -896,15 +955,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
               </Text>
             </ChatEntry>
               : null}
-            {visibleCalls.map((call) => <ChatEntry
-              className="chat-row tool"
-              key={`running:${call.callId}`}
-              enter={isNewMessage(`running:${call.callId}`)}>
-              <Badge variant="soft" color="gray" size="1">
-                <ActivityDots variant="typing" />
-                {call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' || call.name === WRITING_PROPOSE_TOOL_NAME ? t('chat.preparingProposal') : t('chat.processing')}
-              </Badge>
-            </ChatEntry>)}
             {snapshot.queue.map((item) => <ChatEntry
               className="chat-row notice"
               key={`queue:${item.id}`}
@@ -916,21 +966,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                 {item.placement === 'queued' ? t('chat.queued') : t('chat.steering')}
               </Text>
             </ChatEntry>)}
-            {partial.thinking ? <ChatEntry
-              as="details"
-              className="chat-row thinking"
-              key="partial-thinking"
-              enter={isNewMessage('partial-thinking')}>
-              <summary aria-live="polite">
-                <Text size="1" color="gray">
-                  <ActivityDots variant="typing" />
-                  {t('chat.thinking')}
-                </Text>
-              </summary>
-              <Text as="p" size="2" mt="2">
-                {partial.thinking}
-              </Text>
-            </ChatEntry> : null}
             {partial.text ? <ChatEntry
               className="chat-row assistant"
               key="partial-text"
@@ -1091,7 +1126,13 @@ export {
   proposalTargetBaselines,
   unwrapWorkbenchPrepared,
   ChatEntry,
+  ChatProcessBlock,
+  ChatProcessStack,
   ChatRowView,
+  ChatStepFromRow,
+  ChatStepHead,
+  ChatStepItem,
+  clusterChatRows,
   InitGuideCard,
   LegacyMigrationBanner,
   MemoryCard,

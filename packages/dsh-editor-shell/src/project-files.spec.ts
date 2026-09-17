@@ -3,6 +3,7 @@ import {
   defaultCreateDirectory,
   exportDirectoryOf,
   firstOpenDocumentPath,
+  isAuthorFacingDocumentPath,
   isChapterDocumentPath,
   searchPathInDirectory,
   sortChapterPaths,
@@ -35,12 +36,20 @@ describe('project file naming', () => {
 
   it('never auto-opens AGENTS.md and prefers a naturally ordered visible document', () => {
     expect(firstOpenDocumentPath(['AGENTS.md'])).toBeUndefined()
+    expect(firstOpenDocumentPath(['CLAUDE.md', 'GEMINI.md'])).toBeUndefined()
     expect(firstOpenDocumentPath(['AGENTS.md', '笔记/010.md', '笔记/002.txt'])).toBe('笔记/002.txt')
     expect(firstOpenDocumentPath(['正文/010.md', '资料/说明.txt'])).toBe('正文/010.md')
     expect(firstOpenDocumentPath(['文档/guide.md'])).toBe('文档/guide.md')
     expect(firstOpenDocumentPath(['guide.md'])).toBe('guide.md')
     expect(firstOpenDocumentPath(['.dsh-editor/作品索引.md'])).toBeUndefined()
     expect(firstOpenDocumentPath(['文档/.hidden.md'])).toBeUndefined()
+  })
+
+  it('treats assistant config files as hidden from author-facing paper', () => {
+    expect(isAuthorFacingDocumentPath('AGENTS.md')).toBe(false)
+    expect(isAuthorFacingDocumentPath('CLAUDE.md')).toBe(false)
+    expect(isAuthorFacingDocumentPath('笔记/001.md')).toBe(true)
+    expect(isChapterDocumentPath('AGENTS.md')).toBe(false)
   })
 
   it('picks new-file directories from tree context, then the current sibling, then the root', () => {

@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   buildUsageChartOption,
   collectModelSeries,
+  formatCompactNumber,
   formatUsageTooltip,
+  logTokens,
   modelDisplayName,
   modelTokens,
+  usageLogFromSummary,
 } from './client/settings-usage.tsx'
 
 const theme = {
@@ -94,5 +97,29 @@ describe('usage chart model series', () => {
     expect(html).not.toContain('\n')
     expect(html.split('third-provider/').length - 1).toBe(1)
     expect(html).toContain('12')
+  })
+
+  it('compacts counts with K / M / T after the stated thresholds', () => {
+    expect(formatCompactNumber(0)).toBe('0')
+    expect(formatCompactNumber(999)).toBe('999')
+    expect(formatCompactNumber(1000)).toBe('1K')
+    expect(formatCompactNumber(1500)).toBe('1.5K')
+    expect(formatCompactNumber(51064)).toBe('51K')
+    expect(formatCompactNumber(999_999)).toBe('1000K')
+    expect(formatCompactNumber(1_000_000)).toBe('1M')
+    expect(formatCompactNumber(1_250_000)).toBe('1.3M')
+    expect(formatCompactNumber(1_000_000_000_000)).toBe('1T')
+  })
+
+  it('lists request log newest first and totals tokens the same way as the chart', () => {
+    const log = usageLogFromSummary({
+      days: [],
+      log: [
+        { at: '2026-09-17T01:00:00.000Z', model: 'custom/MiniMax-M3', inputTokens: 100, outputTokens: 20, cacheReadTokens: 5, cacheWriteTokens: 0 },
+        { at: '2026-09-17T03:00:00.000Z', model: 'custom/other', inputTokens: 10, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      ],
+    })
+    expect(log.map((row) => row.model)).toEqual(['custom/other', 'custom/MiniMax-M3'])
+    expect(logTokens(log[1]!)).toBe(125)
   })
 })

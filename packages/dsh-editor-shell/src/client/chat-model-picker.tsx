@@ -4,19 +4,30 @@ import { readModels, selectModel } from '../adapter.ts'
 import type { SessionFace, SessionModels } from '../dsh-compat.ts'
 import { Select } from './select.tsx'
 import { ActivityText } from './ui/index.ts'
-import { t } from '../i18n/index.ts'
+import { t, type MessageKey } from '../i18n/index.ts'
 import type { ShellContext } from './shared.ts'
 import { STANDARD_REASONING_EFFORTS } from './settings-models-store.ts'
 
-/** Host `off` is the none-thinking slot; show the public name `none`. */
-export function effortDisplay(id: string): string {
-  if (!id) return ''
-  return id === 'off' ? 'none' : id
+const EFFORT_LABELS: Record<string, MessageKey> = {
+  off: 'chat.effortOff',
+  none: 'chat.effortOff',
+  low: 'chat.effortLow',
+  medium: 'chat.effortMedium',
+  high: 'chat.effortHigh',
+  xhigh: 'chat.effortXHigh',
+  max: 'chat.effortMax',
 }
 
-/** Visible trigger next to the model name; never the localized "思考强度" label. */
+/** Host `off` is the none-thinking slot. Labels follow the UI locale. */
+export function effortDisplay(id: string): string {
+  if (!id) return ''
+  const key = EFFORT_LABELS[id]
+  return key ? t(key) : id
+}
+
+/** Visible trigger next to the model name; never the field name “思考强度”. */
 export function effortTriggerLabel(id: string): string {
-  return effortDisplay(id) || 'none'
+  return effortDisplay(id) || t('chat.effortOff')
 }
 
 function fallbackEffortOptions(): { value: string; label: string }[] {

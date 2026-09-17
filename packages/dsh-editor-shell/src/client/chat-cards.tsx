@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  Badge,
   Box,
   Button,
   Callout,
@@ -29,10 +28,92 @@ import {
 import type { AuthorMemoryMarker, ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import type { ShellMessageCardContext, ShellMessageCardRegistry } from '../seats.ts'
 import { Markdown } from './markdown.tsx'
+import { ChevronDownIcon, ChevronRightIcon } from './icons.tsx'
 import { ActivityDots, SuccessMark } from './ui/index.ts'
 import { t, type Locale } from '../i18n/index.ts'
 import { ProposalCard } from './chat-proposal.tsx'
 import type { ShellContext } from './shared.ts'
+
+export function isChatStepRow(row: ChatRow, cards?: ShellMessageCardRegistry) {
+  if (row.proposal || row.memory) return false
+  if (row.toolName && cards?.get(row.toolName)) return false
+  if (row.role === 'thinking') return true
+  return row.role === 'tool' && Boolean(row.error || row.content)
+}
+
+export function clusterChatRows(rows: readonly ChatRow[], cards?: ShellMessageCardRegistry) {
+  const blocks: Array<{ kind: 'item'; row: ChatRow } | { kind: 'steps'; rows: ChatRow[] }> = []
+  for (const row of rows) {
+    if (!isChatStepRow(row, cards)) {
+      blocks.push({ kind: 'item', row })
+      continue
+    }
+    const last = blocks.at(-1)
+    if (last?.kind === 'steps') last.rows.push(row)
+    else blocks.push({ kind: 'steps', rows: [row] })
+  }
+  return blocks
+}
+
+/** DSH compact transcript: first line when settled, last line while streaming. */
+export function stepPreview(text: string, running = false): string {
+  const visible = text.replaceAll('**', '').trim()
+  if (!visible) return ''
+  if (running) {
+    const newline = visible.lastIndexOf('\n')
+    return (newline === -1 ? visible : visible.slice(newline + 1)).trim()
+  }
+  const newline = visible.indexOf('\n')
+  return (newline === -1 ? visible : visible.slice(0, newline)).trim()
+}
+
+/** Same rule as DSH `TurnProcessNodeView`: tools take the label, else “已思考”. */
+export function turnProcessLabel(input: { tools: number; running?: boolean }): string {
+  if (input.running && input.tools === 0) return t('chat.thinking')
+  if (input.tools === 1) return t('chat.turnToolOne', { count: 1 })
+  if (input.tools > 1) return t('chat.turnTools', { count: input.tools })
+  return t('chat.turnThought')
+}
+
+/** DSH DisclosureRow：14px 标记 + 标题 + · + 摘要，展开箭头在右侧。 */
+export function ChatStepHead(props: {
+  label: ReactNode
+  preview?: string
+  tone?: 'muted' | 'ok' | 'error' | 'recovered'
+  expandable?: boolean
+  busy?: boolean
+  live?: boolean
+}) {
+  const color = props.tone === 'error' ? 'red' : 'gray'
+  const status = props.tone === 'error' ? 'error' : props.tone === 'ok' || props.tone === 'recovered' ? 'ok' : 'muted'
+  const head = (
+    <Flex align="center" gap="2" className="chat-step-head" minWidth="0" width="100%">
+      <span className="chat-step-mark" aria-hidden="true">
+        {props.busy
+          ? <ActivityDots variant="typing" />
+          : <span className={`chat-step-status is-${status}${status === 'error' ? ' chat-step-error-dot' : ''}`} />}
+      </span>
+      <Text size="2" color={color} className="chat-step-label" wrap="nowrap">
+        {props.label}
+      </Text>
+      {props.preview ? <Fragment>
+        <span className="chat-step-dot" aria-hidden="true" />
+        <Text size="1" color={color} className="chat-step-preview" wrap="nowrap">
+          {props.preview}
+        </Text>
+      </Fragment> : null}
+      {props.expandable ? <span className="chat-step-chevron" aria-hidden="true">
+        <ChevronRightIcon size={12} />
+      </span> : null}
+    </Flex>
+  )
+  if (!props.expandable) return head
+  return (
+    <summary className="chat-step-summary" aria-live={props.live ? 'polite' : undefined}>
+      {head}
+    </summary>
+  )
+}
 
 export function ChatEntry(props: {
   as?: 'article' | 'details'
@@ -58,6 +139,113 @@ export function ChatEntry(props: {
       {props.children}
     </Tag>
   );
+}
+
+export function ChatStepItem(props: {
+  className: string
+  label: ReactNode
+  preview?: string
+  tone?: 'muted' | 'ok' | 'error' | 'recovered'
+  expandable?: boolean
+  busy?: boolean
+  live?: boolean
+  open?: boolean
+  role?: string
+  children?: ReactNode
+}) {
+  const className = `chat-row chat-step ${props.className}`
+  if (!props.expandable) {
+    return (
+      <div className={className}>
+        <ChatStepHead busy={props.busy} tone={props.tone} label={props.label} preview={props.preview} />
+      </div>
+    )
+  }
+  return (
+    <details className={className} open={props.open} role={props.role}>
+      <ChatStepHead expandable live={props.live} tone={props.tone} label={props.label} preview={props.preview} />
+      {props.children ? <Box className="chat-step-body">{props.children}</Box> : null}
+    </details>
+  )
+}
+
+export function toolStepTitle(row: ChatRow): string {
+  return row.text || row.detail || row.toolName || ''
+}
+
+/** Keep thinking, tool use, and errors; details stay inside each row. */
+export function processDetailRows(rows: readonly ChatRow[]): ChatRow[] {
+  return rows.filter((row) => row.role === 'thinking' || row.role === 'tool')
+}
+
+export function ChatStepFromRow({ row }: { row: ChatRow; running?: boolean }) {
+  if (row.role === 'thinking') {
+    return (
+      <ChatStepItem
+        className="thinking"
+        expandable={Boolean(row.text)}
+        tone="muted"
+        label={t('chat.think')}>
+        {row.text}
+      </ChatStepItem>
+    )
+  }
+  const failed = Boolean(row.error && !row.recovered)
+  const body = Boolean(row.reason || row.content)
+  return (
+    <ChatStepItem
+      className={row.error ? (row.recovered ? 'tool recovered' : 'tool error') : 'tool'}
+      expandable={body}
+      tone={failed ? 'error' : 'ok'}
+      role={failed ? 'status' : undefined}
+      label={toolStepTitle(row)}>
+      {row.reason ? <Text as="p" size="1" color={failed ? 'red' : 'gray'} className="tool-error-reason">
+        {row.reason}
+      </Text> : null}
+      {row.content ? <pre className="chat-step-code">
+        {row.content}
+      </pre> : null}
+    </ChatStepItem>
+  )
+}
+
+/** Live turn: DSH keeps process rows visible until the turn closes. */
+export function ChatProcessStack(props: { children?: ReactNode; enter?: boolean }) {
+  return (
+    <ChatEntry className="chat-row chat-process-stack" enter={props.enter}>
+      {props.children}
+    </ChatEntry>
+  )
+}
+
+/** Settled DSH compact turn-process: one 33px row, expand to see thinking and tools. */
+export function ChatProcessBlock(props: {
+  rows: ChatRow[]
+  enter?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const tools = props.rows.filter((row) => row.role === 'tool').length
+  const label = turnProcessLabel({ tools })
+  return (
+    <ChatEntry className="chat-row chat-process" enter={props.enter}>
+      <button
+        type="button"
+        className="chat-process-toggle"
+        data-open={open || undefined}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}>
+        <Text size="2" color="gray" className="chat-process-label">
+          {label}
+        </Text>
+        <span className="chat-process-chevron" aria-hidden="true">
+          <ChevronDownIcon size={14} />
+        </span>
+      </button>
+      <Box className="chat-process-body" minWidth="0" hidden={!open}>
+        {processDetailRows(props.rows).map((row) => <ChatStepFromRow key={row.id} row={row} />)}
+      </Box>
+    </ChatEntry>
+  )
 }
 
 export function PendingCard({ item }: { item: PendingInteraction }) {
@@ -411,82 +599,8 @@ export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
       {pluginCard}
     </Fragment>
   );
-  if (row.role === 'thinking') {
-    return (
-      <ChatEntry as="details" className="chat-row thinking" enter={props.enter}>
-        <summary>
-          <Text size="1" color="gray">
-            {t('chat.thinkingProcess')}
-          </Text>
-        </summary>
-        <Text as="p" size="2" mt="2">
-          {row.text}
-        </Text>
-      </ChatEntry>
-    );
-  }
-  if (row.role === 'tool' && row.error) {
-    return (
-      <ChatEntry
-        as="details"
-        className={row.recovered ? 'chat-row tool recovered' : 'chat-row tool error'}
-        role={row.recovered ? undefined : 'status'}
-        enter={props.enter}>
-        <summary>
-          <Flex align="center" gap="2">
-            <Badge color={row.recovered ? 'gray' : 'red'} variant="soft" size="1">
-              {row.recovered ? row.text : `⚠ ${row.text}`}
-            </Badge>
-          </Flex>
-        </summary>
-        {row.recovered
-          ? <Box mt="2">
-            {row.reason ? <Text as="p" size="2" className="tool-error-reason">
-              {row.reason}
-            </Text> : null}
-            {row.content ? <Box asChild mt="2">
-              <pre>
-                {row.content}
-              </pre>
-            </Box> : null}
-            {row.detail ? <Text as="p" size="1" color="gray" mt="1">
-              {row.detail}
-            </Text> : null}
-          </Box>
-          : <Callout.Root color="red" mt="2">
-            {row.reason ? <Callout.Text className="tool-error-reason">
-              {row.reason}
-            </Callout.Text> : null}
-            {row.content ? <Box asChild mt="2">
-              <pre>
-                {row.content}
-              </pre>
-            </Box> : null}
-            {row.detail ? <Text size="1" mt="1">
-              {row.detail}
-            </Text> : null}
-          </Callout.Root>}
-      </ChatEntry>
-    );
-  }
-  if (row.role === 'tool' && row.content) {
-    return (
-      <ChatEntry as="details" className="chat-row tool" enter={props.enter}>
-        <summary>
-          <Badge variant="soft" color="gray" size="1">
-            {row.text}
-          </Badge>
-        </summary>
-        <Box asChild mt="2">
-          <pre>
-            {row.content}
-          </pre>
-        </Box>
-        {row.detail ? <Text as="p" size="1" color="gray" mt="1">
-          {row.detail}
-        </Text> : null}
-      </ChatEntry>
-    );
+  if (isChatStepRow(row, props.messageCards) || row.role === 'thinking' || (row.role === 'tool' && (row.error || row.content))) {
+    return <ChatStepFromRow row={row} />
   }
   return (
     <ChatEntry className={`chat-row ${row.role}`} enter={props.enter}>

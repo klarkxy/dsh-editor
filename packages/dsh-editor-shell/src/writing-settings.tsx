@@ -1,15 +1,14 @@
 import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
 import {
-  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
-  type ChangeEvent,
+  type ReactNode,
 } from 'react';
-import { Button, Callout, Card, Flex, Heading, Kbd, RadioGroup, Slider, Switch, Text, TextArea } from '@radix-ui/themes'
-import { AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
+import { Button, Callout, Card, Flex, Heading, Kbd, RadioGroup, Separator, Slider, Switch, Text } from '@radix-ui/themes'
+import { AUTHOR_PREFERENCES_KEY, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
 import { t, useLocale } from './i18n/index.ts'
@@ -253,10 +252,15 @@ function LabeledSlider(props: {
     if (thumb) thumb.setAttribute('aria-label', props.label)
   }, [props.label, props.value])
   return (
-    <Flex className="slider-row" direction="column" gap="1">
-      <Text as="label" size="2">
-        {props.valueLabel}
-      </Text>
+    <Flex className="slider-row" direction="column" gap="2">
+      <Flex align="center" justify="between" gap="3">
+        <Text as="label" size="2" weight="medium">
+          {props.label}
+        </Text>
+        <Text size="2" color="gray" className="slider-value">
+          {props.valueLabel}
+        </Text>
+      </Flex>
       <Slider
         ref={root}
         value={[props.value]}
@@ -269,6 +273,17 @@ function LabeledSlider(props: {
           const value = next[0]
           if (value !== undefined) props.onValueChange(value)
         }} />
+    </Flex>
+  )
+}
+
+function SettingRow(props: { title: string; children: ReactNode }) {
+  return (
+    <Flex className="settings-row" align="center" justify="between" gap="4" py="3">
+      <Text size="2" weight="medium" className="settings-row-title">
+        {props.title}
+      </Text>
+      {props.children}
     </Flex>
   )
 }
@@ -288,7 +303,6 @@ export function WritingSettings({ scope, migrate }: {
   const [migrationFailure, setMigrationFailure] = useState<(keyof WritingPreferences)[]>([])
   const [saving, setSaving] = useState<keyof WritingPreferences | null>(null)
   const [writeFailure, setWriteFailure] = useState('')
-  const [authorDraft, setAuthorDraft] = useState(values.authorPreferences)
 
   const runMigration = async () => {
     const result = await migrate()
@@ -301,37 +315,26 @@ export function WritingSettings({ scope, migrate }: {
     void runMigration()
   }, [snapshot.status])
 
-  useEffect(() => {
-    setAuthorDraft(values.authorPreferences)
-  }, [values.authorPreferences])
-
   const update = async <K extends keyof WritingPreferences>(field: K, value: WritingPreferences[K]) => {
-    const paperField = field !== 'completion' && field !== 'authorPreferences' && field !== 'authorMemory'
+    const paperField = field !== 'completion'
     if (!paperField) setSaving(field)
     setWriteFailure('')
     try {
-      const normalized = field === 'authorPreferences'
-        ? normalizeAuthorPreferences(value as string)
-        : field === 'fontSize'
-          ? clampNumber(value, PAPER_FONT_SIZE.min, PAPER_FONT_SIZE.max, PAPER_FONT_SIZE.default)
-          : field === 'lineHeight'
-            ? clampNumber(value, PAPER_LINE_HEIGHT.min, PAPER_LINE_HEIGHT.max, PAPER_LINE_HEIGHT.default)
-            : field === 'paragraphSpacing'
-              ? clampNumber(value, PAPER_PARAGRAPH_SPACING.min, PAPER_PARAGRAPH_SPACING.max, PAPER_PARAGRAPH_SPACING.default)
-              : field === 'fontFamily'
-                ? normalizePaperFontFamily(value)
-                : field === 'paperWidth'
-                  ? normalizePaperWidth(value)
-                  : value
+      const normalized = field === 'fontSize'
+        ? clampNumber(value, PAPER_FONT_SIZE.min, PAPER_FONT_SIZE.max, PAPER_FONT_SIZE.default)
+        : field === 'lineHeight'
+          ? clampNumber(value, PAPER_LINE_HEIGHT.min, PAPER_LINE_HEIGHT.max, PAPER_LINE_HEIGHT.default)
+          : field === 'paragraphSpacing'
+            ? clampNumber(value, PAPER_PARAGRAPH_SPACING.min, PAPER_PARAGRAPH_SPACING.max, PAPER_PARAGRAPH_SPACING.default)
+            : field === 'fontFamily'
+              ? normalizePaperFontFamily(value)
+              : field === 'paperWidth'
+                ? normalizePaperWidth(value)
+                : value
       await scope.set(field, normalized as WritingPreferences[K])
       if (!hasOwn(scope.getSnapshot().user, field)) throw new Error('write did not commit')
     } catch {
-      const failure = field === 'completion'
-        ? t('writing.completionFailed')
-        : field === 'authorPreferences'
-          ? t('writing.authorFailed')
-          : t('writing.paperFailed')
-      setWriteFailure(failure)
+      setWriteFailure(field === 'completion' ? t('writing.completionFailed') : t('writing.paperFailed'))
     } finally {
       if (!paperField) setSaving(null)
     }
@@ -358,136 +361,94 @@ export function WritingSettings({ scope, migrate }: {
 
   return (
     <section className="writing-settings" aria-label={t('settings.writing')}>
-      <fieldset className="settings-block" disabled={saving !== null}>
-        <legend className="settings-block-title">
-          {t('writing.completion')}
-        </legend>
-        <Card>
-          <RadioGroup.Root
-            value={values.completion}
-            name="completion-preference"
-            aria-label={t('writing.completion')}
-            onValueChange={(value) => void update('completion', value as WritingPreferences['completion'])}>
-            <Flex direction="column" gap="2">
-              <RadioGroup.Item value="manual">{t('writing.manualOnly')}</RadioGroup.Item>
-              <RadioGroup.Item value="pause">{t('writing.pauseHint')}</RadioGroup.Item>
-            </Flex>
-          </RadioGroup.Root>
-        </Card>
-      </fieldset>
-      <fieldset className="paper-typography settings-block">
-        <legend className="settings-block-title">
-          {t('writing.paper')}
-        </legend>
-        <Card>
-          <Flex direction="column" gap="3">
-          <Flex className="paper-experience-toggles" direction="column" gap="3">
-            <Flex align="center" justify="between" gap="3">
-              <Text size="2">
-                {t('writing.typewriter')}
-              </Text>
-              <Flex align="center" gap="2">
-                <Kbd>
-                  Ctrl+Alt+T
-                </Kbd>
-                <Switch
-                  checked={values.typewriter}
-                  aria-label={t('writing.typewriter')}
-                  onCheckedChange={(next) => void update('typewriter', next)} />
-              </Flex>
-            </Flex>
-            <Flex align="center" justify="between" gap="3">
-              <Text size="2">
-                {t('writing.focusParagraph')}
-              </Text>
-              <Flex align="center" gap="2">
-                <Kbd>
-                  Ctrl+Alt+P
-                </Kbd>
-                <Switch
-                  checked={values.focusParagraph}
-                  aria-label={t('writing.focusParagraph')}
-                  onCheckedChange={(next) => void update('focusParagraph', next)} />
-              </Flex>
-            </Flex>
-          </Flex>
-          <LabeledSlider
-            label={t('writing.fontSizeAria')}
-            valueLabel={t('writing.fontSize', { size: values.fontSize })}
-            value={values.fontSize}
-            min={PAPER_FONT_SIZE.min}
-            max={PAPER_FONT_SIZE.max}
-            step={1}
-            onValueChange={(value) => void update('fontSize', value)} />
-          <LabeledSlider
-            label={t('writing.lineHeightAria')}
-            valueLabel={t('writing.lineHeight', { value: values.lineHeight.toFixed(1) })}
-            value={values.lineHeight}
-            min={PAPER_LINE_HEIGHT.min}
-            max={PAPER_LINE_HEIGHT.max}
-            step={0.1}
-            onValueChange={(value) => void update('lineHeight', value)} />
-          <LabeledSlider
-            label={t('writing.paragraphSpacingAria')}
-            valueLabel={t('writing.paragraphSpacing', { value: values.paragraphSpacing.toFixed(2) })}
-            value={values.paragraphSpacing}
-            min={PAPER_PARAGRAPH_SPACING.min}
-            max={PAPER_PARAGRAPH_SPACING.max}
-            step={0.05}
-            onValueChange={(value) => void update('paragraphSpacing', value)} />
-          <Flex className="choice-row" role="group" aria-label={t('writing.font')} align="center" gap="2" wrap="wrap">
-            <Text as="span" size="2" weight="medium">
-              {t('writing.font')}
-            </Text>
-            <Select
-              value={values.fontFamily}
-              options={[{ value: 'serif', label: t('writing.serif') }, { value: 'sans', label: t('writing.sans') }, { value: 'mono', label: t('writing.mono') }]}
-              onChange={(value) => void update('fontFamily', value as PaperFontFamily)}
-              aria-label={t('writing.font')} />
-          </Flex>
-          <Flex className="choice-row" role="group" aria-label={t('writing.paperWidth')} align="center" gap="2" wrap="wrap">
-            <Text as="span" size="2" weight="medium">
-              {t('writing.paperWidth')}
-            </Text>
-            <Select
-              value={values.paperWidth}
-              options={[{ value: 'narrow', label: t('writing.narrow') }, { value: 'medium', label: t('writing.medium') }, { value: 'wide', label: t('writing.wide') }]}
-              onChange={(value) => void update('paperWidth', value as PaperWidth)}
-              aria-label={t('writing.paperWidth')} />
-          </Flex>
-          </Flex>
-        </Card>
-      </fieldset>
       <Card className="settings-block">
         <header className="settings-block-head">
-          <Heading as="h3" id="writing-author-pref" size="3" className="settings-block-title">
-            {t('writing.authorPref')}
+          <Heading as="h3" size="3" className="settings-block-title">
+            {t('writing.completion')}
           </Heading>
         </header>
-        <Flex className="author-preferences" direction="column" gap="2">
-          <TextArea
-            value={authorDraft}
-            maxLength={AUTHOR_PREFERENCES_MAX_CHARS}
-            rows={5}
-            placeholder={t('writing.authorPlaceholder')}
-            aria-labelledby="writing-author-pref"
-            disabled={saving !== null}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setAuthorDraft(event.target.value)} />
-          <Text size="1" color="gray">
-            {t('writing.authorCount', { count: authorDraft.length, max: AUTHOR_PREFERENCES_MAX_CHARS })}
-          </Text>
-        </Flex>
-        <Button
-          type="button"
-          variant="solid"
-          mt="3"
-          disabled={saving !== null || authorDraft === values.authorPreferences}
-          onClick={() => void update('authorPreferences', authorDraft)}>
-          {saving === 'authorPreferences' ? <Fragment>
-            <ActivityDots />
-            {t('common.saving')}
-          </Fragment> : t('writing.saveAuthor')}
-        </Button>
+        <RadioGroup.Root
+          value={values.completion}
+          name="completion-preference"
+          aria-label={t('writing.completion')}
+          disabled={saving !== null}
+          onValueChange={(value) => void update('completion', value as WritingPreferences['completion'])}>
+          <Flex direction="column" gap="3" py="2">
+            <RadioGroup.Item value="manual">{t('writing.manualOnly')}</RadioGroup.Item>
+            <RadioGroup.Item value="pause">{t('writing.pauseHint')}</RadioGroup.Item>
+          </Flex>
+        </RadioGroup.Root>
+      </Card>
+      <Card className="paper-typography settings-block">
+        <header className="settings-block-head">
+          <Heading as="h3" size="3" className="settings-block-title">
+            {t('writing.paper')}
+          </Heading>
+        </header>
+        <SettingRow title={t('writing.typewriter')}>
+          <Flex align="center" gap="2">
+            <Kbd>
+              Ctrl+Alt+T
+            </Kbd>
+            <Switch
+              checked={values.typewriter}
+              aria-label={t('writing.typewriter')}
+              onCheckedChange={(next) => void update('typewriter', next)} />
+          </Flex>
+        </SettingRow>
+        <Separator size="4" />
+        <SettingRow title={t('writing.focusParagraph')}>
+          <Flex align="center" gap="2">
+            <Kbd>
+              Ctrl+Alt+P
+            </Kbd>
+            <Switch
+              checked={values.focusParagraph}
+              aria-label={t('writing.focusParagraph')}
+              onCheckedChange={(next) => void update('focusParagraph', next)} />
+          </Flex>
+        </SettingRow>
+        <Separator size="4" />
+        <LabeledSlider
+          label={t('writing.fontSizeAria')}
+          valueLabel={`${values.fontSize}px`}
+          value={values.fontSize}
+          min={PAPER_FONT_SIZE.min}
+          max={PAPER_FONT_SIZE.max}
+          step={1}
+          onValueChange={(value) => void update('fontSize', value)} />
+        <LabeledSlider
+          label={t('writing.lineHeightAria')}
+          valueLabel={values.lineHeight.toFixed(1)}
+          value={values.lineHeight}
+          min={PAPER_LINE_HEIGHT.min}
+          max={PAPER_LINE_HEIGHT.max}
+          step={0.1}
+          onValueChange={(value) => void update('lineHeight', value)} />
+        <LabeledSlider
+          label={t('writing.paragraphSpacingAria')}
+          valueLabel={`${values.paragraphSpacing.toFixed(2)}em`}
+          value={values.paragraphSpacing}
+          min={PAPER_PARAGRAPH_SPACING.min}
+          max={PAPER_PARAGRAPH_SPACING.max}
+          step={0.05}
+          onValueChange={(value) => void update('paragraphSpacing', value)} />
+        <Separator size="4" />
+        <SettingRow title={t('writing.font')}>
+          <Select
+            value={values.fontFamily}
+            options={[{ value: 'serif', label: t('writing.serif') }, { value: 'sans', label: t('writing.sans') }, { value: 'mono', label: t('writing.mono') }]}
+            onChange={(value) => void update('fontFamily', value as PaperFontFamily)}
+            aria-label={t('writing.font')} />
+        </SettingRow>
+        <Separator size="4" />
+        <SettingRow title={t('writing.paperWidth')}>
+          <Select
+            value={values.paperWidth}
+            options={[{ value: 'narrow', label: t('writing.narrow') }, { value: 'medium', label: t('writing.medium') }, { value: 'wide', label: t('writing.wide') }]}
+            onChange={(value) => void update('paperWidth', value as PaperWidth)}
+            aria-label={t('writing.paperWidth')} />
+        </SettingRow>
       </Card>
       {writeFailure ? <Callout.Root color="red" role="alert">
         <Callout.Text>

@@ -14,9 +14,9 @@ export const Config: Schema<ShellFeatureConfig> = Schema.object({
 
 const WritingPreferencesSchema = Schema.object({
   completion: Schema.union(['manual', 'pause']).default('manual'),
-  completionModel: Schema.object({ provider: Schema.string().default(''), model: Schema.string().default('') }).default({ provider: '', model: '' }),
-  rewriteModel: Schema.object({ provider: Schema.string().default(''), model: Schema.string().default('') }).default({ provider: '', model: '' }),
-  chatModel: Schema.object({ provider: Schema.string().default(''), model: Schema.string().default('') }).default({ provider: '', model: '' }),
+  completionModel: Schema.object({ provider: Schema.string().default(''), model: Schema.string().default(''), reasoningEffort: Schema.string().default('') }).default({ provider: '', model: '', reasoningEffort: '' }),
+  rewriteModel: Schema.object({ provider: Schema.string().default(''), model: Schema.string().default(''), reasoningEffort: Schema.string().default('') }).default({ provider: '', model: '', reasoningEffort: '' }),
+  chatModel: Schema.object({ provider: Schema.string().default(''), model: Schema.string().default(''), reasoningEffort: Schema.string().default('') }).default({ provider: '', model: '', reasoningEffort: '' }),
 
   authorPreferences: Schema.transform(Schema.string().max(AUTHOR_PREFERENCES_MAX_CHARS), normalizeAuthorPreferences).default(''),
   authorMemory: Schema.transform(Schema.string().max(AUTHOR_MEMORY_MAX_CHARS), normalizeAuthorMemory).default(''),

@@ -214,6 +214,9 @@ export function NewProjectDialog(props: {
                   onChange={setTitle} />
               </Flex>
             </Text>
+            {!title.trim() && !props.note ? <Text size="1" color="gray">
+              {t('dialog.workNameRequired')}
+            </Text> : null}
             {props.note ? <Callout.Root className="warning" color="red" role="alert" size="1">
               <Callout.Text>
                 {props.note}
@@ -270,22 +273,16 @@ export function ConversationPresetPicker(props: {
       open={props.open}
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onCancel() }}
       title={t('chat.presetPickerTitle')}
-      description={t('chat.presetPickerHint')}
       className="file-dialog prompt-dialog preset-picker-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
       initialFocusRef={initialFocus}
       returnFocusRef={props.returnFocusRef}>
       <Flex direction="column" gap="3">
-        <Flex justify="between" align="start" gap="3">
-          <Flex direction="column" gap="1">
-            <Heading as="h2" size="4" id="conversation-preset-picker-title">
-              {t('chat.presetPickerTitle')}
-            </Heading>
-            <Text size="1" color="gray" id="conversation-preset-picker-hint">
-              {t('chat.presetPickerHint')}
-            </Text>
-          </Flex>
+        <Flex justify="between" align="center" gap="3">
+          <Heading as="h2" size="4" id="conversation-preset-picker-title">
+            {t('chat.presetPickerTitle')}
+          </Heading>
           <IconButton
             ref={close}
             variant="ghost"
@@ -309,32 +306,32 @@ export function ConversationPresetPicker(props: {
         </Callout.Root> : null}
         {props.phase === 'ready' ? <ScrollArea
           className="file-dialog-actions"
-          type="auto"
+          type="hover"
           scrollbars="vertical">
           <RadioCards.Root
             columns="1"
             gap="2"
+            size="1"
             value={props.selectedId ?? ''}
             onValueChange={(id) => { if (id) props.onSelect(id) }}
-            aria-labelledby="conversation-preset-picker-title"
-            aria-describedby="conversation-preset-picker-hint">
+            aria-labelledby="conversation-preset-picker-title">
             {props.presets.map((preset, index) => <RadioCards.Item
               key={preset.id}
               ref={index === 0 ? firstChoice : undefined}
               value={preset.id}
               disabled={!preset.available || props.busy}
-              className={props.selectedId === preset.id ? 'primary-action' : undefined}
+              className="preset-choice"
               aria-label={preset.reason
                 ? `${preset.name}. ${preset.reason}`
                 : `${preset.name}. ${preset.legacy ? `${t('chat.presetLegacyBadge')} ` : ''}${preset.description}`}>
-              <Flex direction="column" gap="1" align="start">
-                <Text weight="medium" size="2">
+              <Flex className="preset-choice-body" direction="column" gap="1" align="start" width="100%">
+                <Text className="preset-choice-name" weight="medium" size="2">
                   {preset.name}
                   {preset.legacy ? <Text size="1" className="preset-badge">
                     {t('chat.presetLegacyBadge')}
                   </Text> : null}
                 </Text>
-                <Text size="1" color="gray">
+                <Text className="preset-choice-copy" size="1" color="gray" title={preset.description}>
                   {preset.description}
                 </Text>
                 {preset.reason ? <Text size="1" className="warning" color="red">

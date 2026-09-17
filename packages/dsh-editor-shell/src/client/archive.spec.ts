@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { archiveStateText, canArchivePath, visibleArchives, type ArchiveView } from './archive.tsx'
+import { DOCUMENT_ARCHIVE_UI, archiveStateText, canArchivePath, visibleArchives, type ArchiveView } from './archive.tsx'
 import { documentName } from './shared.ts'
 
 describe('author file lifecycle presentation', () => {
@@ -17,6 +17,10 @@ describe('author file lifecycle presentation', () => {
     ]
     expect(visibleArchives(items).map((item) => item.archiveId)).toEqual(['a', 'b'])
     expect(archiveStateText(items[1]!)).toBe('归档未完成')
+  })
+
+  it('parks document archive chrome until the recover flow is decided', () => {
+    expect(DOCUMENT_ARCHIVE_UI).toBe(false)
   })
 
   it('only archives visible Markdown or TXT documents', () => {

@@ -51,11 +51,15 @@ type PluginsClientContext = Context & {
 
 function injectStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
-  const style = document.createElement('style')
-  style.setAttribute('data-dsh-plugins-styles', '')
+  let style = document.head.querySelector('style[data-dsh-plugins-styles]')
+  if (!style) {
+    style = document.createElement('style')
+    style.setAttribute('data-dsh-plugins-styles', '')
+    document.head.appendChild(style)
+  }
   style.textContent = pluginsClientStyles
-  document.head.appendChild(style)
-  return () => style.remove()
+  /* 设置页 React 树可能比 client fiber 活得更久；卸 fiber 时不要拆样式。 */
+  return () => {}
 }
 
 async function callRpc<T>(caller: RpcCaller, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<PluginsRpcResult<T>> {
@@ -166,11 +170,10 @@ function Switch(props: {
   describedBy?: string
   testId?: string
   onToggle(): void
-  hostButton?: ComponentType<HostButtonProps>
 }) {
   return (
-    <SeatButton
-      host={props.hostButton}
+    <button
+      type="button"
       role="switch"
       className={`dsh-plugins-switch${props.checked ? ' is-on' : ''}${props.busy ? ' is-pending' : ''}`}
       aria-checked={props.checked}
@@ -180,7 +183,7 @@ function Switch(props: {
       disabled={props.disabled || props.busy}
       onClick={() => { if (!props.disabled && !props.busy) props.onToggle() }}>
       <span className="dsh-plugins-switch-thumb" aria-hidden={true} />
-    </SeatButton>
+    </button>
   );
 }
 
@@ -251,7 +254,6 @@ function FeatureCard(props: {
         </span>
           : canToggle
             ? <Switch
-          hostButton={props.hostButton}
           checked={on}
           busy={props.busy}
           labelledBy={titleId}
@@ -411,7 +413,6 @@ function WritingPresetGroup(props: {
                 核心
               </span>
                 : <Switch
-                hostButton={props.hostButton}
                 checked={preset.enabled}
                 busy={props.busyPreset === preset.id}
                 labelledBy={titleId}
@@ -1043,6 +1044,25 @@ function PluginSettings(props: {
   const inspectAbortRef = useRef<AbortController | null>(null)
   const confirmingRef = useRef(false)
   const uninstallingRef = useRef(false)
+  const noteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearNote = () => {
+    if (noteTimerRef.current !== null) {
+      clearTimeout(noteTimerRef.current)
+      noteTimerRef.current = null
+    }
+    setNote('')
+  }
+
+  const flashNote = (message: string) => {
+    setNote(message)
+    if (noteTimerRef.current !== null) clearTimeout(noteTimerRef.current)
+    noteTimerRef.current = setTimeout(() => {
+      if (!mountedRef.current) return
+      setNote('')
+      noteTimerRef.current = null
+    }, 2800)
+  }
 
   const showError = (message: string, detail?: string) => {
     setError(message)
@@ -1085,6 +1105,10 @@ function PluginSettings(props: {
       inspectAbortRef.current = null
       confirmingRef.current = false
       uninstallingRef.current = false
+      if (noteTimerRef.current !== null) {
+        clearTimeout(noteTimerRef.current)
+        noteTimerRef.current = null
+      }
     }
   }, [])
 
@@ -1096,7 +1120,7 @@ function PluginSettings(props: {
     setBusyPackage(pkg)
     setError('')
     setErrorDetail('')
-    setNote('')
+    clearNote()
     let restart = false
     let failed: { message: string; detail?: string } | undefined
     try {
@@ -1113,8 +1137,8 @@ function PluginSettings(props: {
       else if (listed) {
         const current = [...listed.optional, ...listed.community].filter((card) => targets.some((item) => item.entryId === card.entryId))
         const allMatch = current.length > 0 && current.every((card) => card.enabled === enabled)
-        if (restart && !allMatch) setNote('已保存，重启应用后完全生效。')
-        else if (allMatch) setNote(enabled ? `已启用 ${title}。` : `已停用 ${title}。`)
+        if (restart && !allMatch) flashNote('已保存，重启应用后完全生效。')
+        else if (allMatch) flashNote(enabled ? `已启用 ${title}。` : `已停用 ${title}。`)
         else showError('插件状态未完全同步，请重试或重启后再确认。')
       }
     }
@@ -1125,16 +1149,14 @@ function PluginSettings(props: {
     setBusyPreset(id)
     setError('')
     setErrorDetail('')
-    setNote('')
+    clearNote()
     try {
       const result = await callRpc<{ restartRequired: boolean }>(caller, 'presets.setEnabled', { id, enabled })
       if (!result.ok) {
         const view = errorView(result, `未能更新「${title}」`)
         showError(view.message, view.detail)
       } else {
-        setNote(enabled
-          ? `已启用 ${title}。新对话立即可选；进行中的对话不受影响。`
-          : `已停用 ${title}。新对话不再提供该模式；进行中的对话不受影响。`)
+        flashNote(enabled ? `已启用 ${title}。` : `已停用 ${title}。`)
       }
     } catch (cause) {
       showError(cause instanceof Error ? cause.message : `未能更新「${title}」`)
@@ -1173,7 +1195,7 @@ function PluginSettings(props: {
         setUninstallErrorDetail(view.detail ?? '')
         return
       }
-      setNote(`已卸载 ${card.title}。请重启应用后生效。`)
+      flashNote(`已卸载 ${card.title}。请重启应用后生效。`)
       setPendingUninstall(null)
       setUninstallError('')
       setUninstallErrorDetail('')
@@ -1251,7 +1273,7 @@ function PluginSettings(props: {
     setPendingInstall({ spec: trimmed, inspecting: true, report: null, error: '', errorDetail: '' })
     setError('')
     setErrorDetail('')
-    setNote('')
+    clearNote()
     void runInspect(trimmed, token, controller.signal)
   }
 
@@ -1315,7 +1337,7 @@ function PluginSettings(props: {
           })
           return
         }
-        setNote(pluginInstallNotice(result.value.name, result.value.inspect ?? inspected))
+        flashNote(pluginInstallNotice(result.value.name, result.value.inspect ?? inspected))
         confirmingRef.current = false
         setInstalling(false)
         setPendingInstall(null)
@@ -1365,7 +1387,7 @@ function PluginSettings(props: {
       uninstalling={uninstalling}
       uninstallError={uninstallError}
       uninstallErrorDetail={uninstallErrorDetail}
-      onTab={setTab}
+      onTab={(next) => { clearNote(); setTab(next) }}
       onQuery={setQuery}
       onSearch={() => void onSearch()}
       onInstall={beginInstall}

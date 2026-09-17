@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { homeStageCopy } from '../home-stage.ts'
+import { formatRecentTime, homeStageCopy, recentWorkPath } from '../home-stage.ts'
 import {
   documentLang,
   en,
@@ -78,5 +78,17 @@ describe('i18n dictionaries', () => {
     expect(homeStageCopy().intro).toBe(zh['home.intro'])
     setLocale('en')
     expect(homeStageCopy().intro).toBe(en['home.intro'])
+    expect(homeStageCopy().openWorkDesc).toBe(en['home.openWorkDesc'])
+    expect(homeStageCopy().newWorkDesc).toBe(en['home.newDesc'])
+  })
+
+  it('formats same-year recent dates with month and day, and shortens disk paths', () => {
+    const now = new Date(2026, 8, 17)
+    const sameYear = new Date(2026, 2, 5).toISOString()
+    expect(formatRecentTime(sameYear, now)).toBe('3月5日')
+    setLocale('en')
+    expect(formatRecentTime(sameYear, now)).toBe('3/5')
+    expect(recentWorkPath('C:\\Users\\ada\\Documents\\dsh-editor\\未名之书')).toBe('dsh-editor/未名之书')
+    expect(recentWorkPath('未名之书')).toBe('未名之书')
   })
 })

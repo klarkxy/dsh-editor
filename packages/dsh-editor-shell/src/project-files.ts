@@ -1,3 +1,5 @@
+import { isAuxiliaryAuthorFile } from './auxiliary-files.ts'
+
 const pathCollator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
 
 export function normalizeProjectDirectory(directory: string | null | undefined): string {
@@ -14,11 +16,16 @@ export function isVisibleTextPath(path: string): boolean {
   return /\.(?:md|txt)$/i.test(normalized) && !isHiddenProjectPath(normalized)
 }
 
+/** Author-facing manuscript: visible text that is not an assistant/config file. */
+export function isAuthorFacingDocumentPath(path: string): boolean {
+  return isVisibleTextPath(path) && !isAuxiliaryAuthorFile(path)
+}
+
 const GENERATED_DIRECTORIES = new Set(['build', 'coverage', 'dist', 'node_modules', 'out', 'target'])
 
 export function isChapterDocumentPath(path: string): boolean {
   const normalized = path.replace(/\\/g, '/')
-  if (!isVisibleTextPath(normalized)) return false
+  if (!isAuthorFacingDocumentPath(normalized)) return false
   return !normalized.split('/').some((part) => GENERATED_DIRECTORIES.has(part.toLocaleLowerCase()))
 }
 
@@ -52,9 +59,7 @@ export function searchPathInDirectory(path: string, directory: string): boolean 
 }
 
 export function isAutoOpenDocumentPath(path: string): boolean {
-  if (!isVisibleTextPath(path)) return false
-  const base = path.split('/').pop() ?? path
-  return !/^agents\.md$/i.test(base)
+  return isAuthorFacingDocumentPath(path)
 }
 
 export function sortDocumentPaths(paths: readonly string[]): string[] {

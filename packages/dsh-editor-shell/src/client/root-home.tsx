@@ -3,7 +3,7 @@ import { Box, Button, Callout, Card, Flex, Heading, IconButton, ScrollArea, Sepa
 import type { WorkspaceView } from '../dsh-compat.ts'
 import type { WorkspaceOpenState } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
-import { homeStageCopy } from '../home-stage.ts'
+import { formatRecentTime, homeStageCopy, recentWorkPath } from '../home-stage.ts'
 import { PaperStage } from './components.tsx'
 import { FolderIcon, NewDocIcon } from './icons.tsx'
 import { CommandPaletteTrigger } from './command-palette.tsx'
@@ -11,31 +11,6 @@ import { SettingsTrigger, type SettingsTab } from './settings.tsx'
 import { titleBarDoubleClick, WindowControls } from './window-controls.tsx'
 import { ActivityRing, ActivityShimmer, ActivityText, m, useChromeMotion } from './ui/index.ts'
 import { ConfirmDialog } from './dialogs.tsx'
-
-/* 把 WorkspaceView.updatedAt(ISO-8601)格式化为首页最近作品区使用的简短时间标签:
-   60 秒内=刚刚,1 小时内=分钟前,今天=小时前,昨天,7 天内=天数前,
-   更早用 M月D日(同年)或 YYYY/MM/DD(跨年)。失败时退回到空串,DOM 仍能挂上小标签。 */
-function formatRecentTime(iso: string | undefined, now: Date = new Date()): string {
-  if (!iso) return ''
-  const stamp = Date.parse(iso)
-  if (!Number.isFinite(stamp)) return ''
-  const diff = Math.max(0, now.getTime() - stamp)
-  const minute = 60_000
-  const hour = 60 * minute
-  const day = 24 * hour
-  if (diff < minute) return t('time.justNow')
-  if (diff < hour) return t('time.minutesAgo', { count: Math.floor(diff / minute) })
-  if (diff < day && now.getDate() === new Date(stamp).getDate()) return t('time.hoursAgo', { count: Math.floor(diff / hour) })
-  const stampDate = new Date(stamp)
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
-  if (stampDate.getFullYear() === yesterday.getFullYear() && stampDate.getMonth() === yesterday.getMonth() && stampDate.getDate() === yesterday.getDate()) return t('time.yesterday')
-  if (diff < 7 * day) return t('time.daysAgo', { count: Math.floor(diff / day) })
-  const yyyy = stampDate.getFullYear()
-  const mm = String(stampDate.getMonth() + 1).padStart(2, '0')
-  const dd = String(stampDate.getDate()).padStart(2, '0')
-  if (yyyy === now.getFullYear()) return t('time.monthDay', { date: `${stampDate.getMonth() + 1}月${stampDate.getDate()}日` })
-  return `${yyyy}/${mm}/${dd}`
-}
 
 function HomeChrome(props: {
   extensionsDock?: ReactNode
@@ -47,12 +22,13 @@ function HomeChrome(props: {
       className="chrome"
       role="banner"
       align="center"
-      gap="3"
-      px="3"
+      gap="0"
+      pl="3"
       width="100%"
       minWidth="0"
       onDoubleClick={titleBarDoubleClick}>
-      <Flex className="brand-lockup" align="center" gap="2" flexShrink="0">
+      <Flex className="chrome-main" align="center" gap="3" minWidth="0" flexGrow="1">
+        <Flex className="brand-lockup" align="center" gap="2" flexShrink="0">
         <Flex
           className="brand-mark"
           aria-hidden="true"
@@ -72,13 +48,14 @@ function HomeChrome(props: {
         <Text weight="bold" size="2">
           DSH Editor
         </Text>
+        </Flex>
+        {props.extensionsDock}
       </Flex>
-      {props.extensionsDock}
       <Flex className="topbar-actions" align="center" gap="2" flexShrink="0">
         <CommandPaletteTrigger onClick={props.onOpenPalette} />
         <SettingsTrigger onOpen={props.onOpenSettings} />
-        <WindowControls />
       </Flex>
+      <WindowControls />
     </Flex>
   )
 }
@@ -183,9 +160,14 @@ export function HomeScreen(props: {
                     }}>
                     <FolderIcon size={20} />
                   </Flex>
-                  <Text className="home-entry-title" size="3" weight="medium">
-                    {homeCopy.openWork}
-                  </Text>
+                  <Flex direction="column" align="start" gap="1" minWidth="0">
+                    <Text className="home-entry-title" size="3" weight="medium">
+                      {homeCopy.openWork}
+                    </Text>
+                    <Text size="1" color="gray">
+                      {homeCopy.openWorkDesc}
+                    </Text>
+                  </Flex>
                 </Flex>
               </m.button>
             </Card>
@@ -215,9 +197,14 @@ export function HomeScreen(props: {
                     }}>
                     <NewDocIcon size={20} />
                   </Flex>
-                  <Text className="home-entry-title" size="3" weight="medium">
-                    {homeCopy.newWork}
-                  </Text>
+                  <Flex direction="column" align="start" gap="1" minWidth="0">
+                    <Text className="home-entry-title" size="3" weight="medium">
+                      {homeCopy.newWork}
+                    </Text>
+                    <Text size="1" color="gray">
+                      {homeCopy.newWorkDesc}
+                    </Text>
+                  </Flex>
                 </Flex>
               </m.button>
             </Card>
@@ -295,8 +282,8 @@ export function HomeScreen(props: {
                               <Text weight="medium" size="2">
                                 {workspace.title || workspace.path}
                               </Text>
-                              <Text size="1" color="gray" truncate>
-                                {workspace.path}
+                              <Text size="1" color="gray" truncate title={workspace.path}>
+                                {recentWorkPath(workspace.path)}
                               </Text>
                               {recentLabel ? <Text
                                 className="workspace-time"

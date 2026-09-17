@@ -56,6 +56,19 @@ describe('new conversation preset allowlist', () => {
     expect(presets.map((item) => item.name)).toEqual(['通用写作', '小说创作', '文章与自媒体', '技术文档'])
   })
 
+  it('uses product copy for writing-mode descriptions even when Host YAML says Agent', () => {
+    const presets = projectNewConversationPresets([
+      { id: 'dsh-editor-writing', name: 'Host Writing', description: '功能完整的写作 Agent，支持查找、阅读、提案', status: 'ok' },
+      { id: 'dsh-editor-novel', name: 'Host Novel', description: '面向长篇小说的写作 Agent', status: 'ok' },
+      { id: 'dsh-editor-article', name: 'Host Article', description: '面向文章与自媒体的写作 Agent', status: 'ok' },
+      { id: 'dsh-editor-technical', name: 'Host Tech', description: '面向技术文档的写作 Agent', status: 'ok' },
+    ])
+    expect(presets.map((item) => item.name)).toEqual(['通用写作', '小说创作', '文章与自媒体', '技术文档'])
+    expect(presets.every((item) => !item.description.includes('Agent'))).toBe(true)
+    expect(presets.find((item) => item.id === 'dsh-editor-writing')?.description).toContain('写作搭档')
+    expect(presets.find((item) => item.id === 'dsh-editor-novel')?.description).toContain('写作搭档')
+  })
+
   it('falls back to i18n names that match the approved roster labels', () => {
     const presets = projectNewConversationPresets(NEW_CONVERSATION_PRESET_IDS.map((id) => ({ id, status: 'ok' })))
     expect(presets.map((item) => item.name)).toEqual(['通用写作', '小说创作', '文章与自媒体', '技术文档'])
@@ -138,28 +151,22 @@ describe('new conversation preset allowlist', () => {
 })
 
 describe('developer mode preset projection', () => {
-  it('appends legacy and plugin presets after the four writing modes', () => {
+  it('appends plugin presets after the four writing modes and never lists the legacy compatibility entry', () => {
     const presets = projectNewConversationPresets(listed, { developerMode: true })
-    expect(presets.map((item) => item.id)).toEqual([...NEW_CONVERSATION_PRESET_IDS, LEGACY_AGENT_PRESET, 'standard'])
-    const legacy = presets.find((item) => item.id === LEGACY_AGENT_PRESET)
-    expect(legacy).toMatchObject({ name: '旧采访', available: true, legacy: true })
-    expect(legacy?.description).toBe('仅用于打开或迁移旧会话；正常写作请使用写作模式。')
+    expect(presets.map((item) => item.id)).toEqual([...NEW_CONVERSATION_PRESET_IDS, 'standard'])
+    expect(presets.some((item) => item.id === LEGACY_AGENT_PRESET)).toBe(false)
     expect(presets.find((item) => item.id === 'standard')).toMatchObject({ name: '编码', available: true })
     expect(presets.find((item) => item.id === 'standard')?.legacy).toBeUndefined()
     expect(firstAvailableConversationPreset(presets)).toBe('dsh-editor-writing')
   })
 
-  it('keeps broken extras visible but disabled with a reason', () => {
+  it('keeps broken extras visible but disabled with a reason, still omitting legacy', () => {
     const presets = projectNewConversationPresets([
       { id: 'dsh-editor-writing', status: 'ok' },
       { id: 'dsh-editor', status: 'broken', reason: 'legacy skill missing' },
       { id: 'plugin-preset', state: 'missing' },
     ], { developerMode: true })
-    expect(presets.find((item) => item.id === 'dsh-editor')).toMatchObject({
-      available: false,
-      reason: 'legacy skill missing',
-      legacy: true,
-    })
+    expect(presets.some((item) => item.id === 'dsh-editor')).toBe(false)
     expect(presets.find((item) => item.id === 'plugin-preset')).toMatchObject({
       available: false,
       reason: '这个模式当前不可用。',
@@ -461,7 +468,7 @@ describe('legacy session gate from host projection', () => {
 describe('conversation preset label for the current session', () => {
   it('uses product copy for the four writing modes regardless of roster names', () => {
     expect(conversationPresetLabel('dsh-editor-writing')?.name).toBe('通用写作')
-    expect(conversationPresetLabel('dsh-editor-writing')?.description).toContain('查找、阅读、提案')
+    expect(conversationPresetLabel('dsh-editor-writing')?.description).toContain('查找、阅读、提出修改建议')
     expect(conversationPresetLabel('dsh-editor-novel')?.name).toBe('小说创作')
     expect(conversationPresetLabel('dsh-editor-article')?.name).toBe('文章与自媒体')
     expect(conversationPresetLabel('dsh-editor-technical')?.name).toBe('技术文档')

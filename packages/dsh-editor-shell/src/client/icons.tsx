@@ -28,6 +28,18 @@ export function FolderIcon({ size = 16 }: IconProps) {
   );
 }
 
+export function ChevronRightIcon({ size = 16 }: IconProps) {
+  return svg(size,
+    <path d="m9 6 6 6-6 6" />,
+  );
+}
+
+export function ChevronDownIcon({ size = 16 }: IconProps) {
+  return svg(size,
+    <path d="m6 9 6 6 6-6" />,
+  );
+}
+
 export function NewDocIcon({ size = 16 }: IconProps) {
   return svg(size,
     <path d="M7 3.5h6.5l4 4v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" />,
@@ -66,7 +78,7 @@ export function SettingsIcon({ size = 16 }: IconProps) {
 
 export function FocusIcon({ size = 16 }: IconProps) {
   return svg(size,
-    <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" />,
+    <path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />,
   );
 }
 
@@ -89,6 +101,14 @@ export function ExportIcon({ size = 16 }: IconProps) {
   return svg(size,
     <path d="M12 4v10M8 8l4-4 4 4" />,
     <path d="M5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18.5v-2" />,
+  );
+}
+
+export function HistoryIcon({ size = 16 }: IconProps) {
+  return svg(size,
+    <circle cx="12" cy="6.8" r="2.1" />,
+    <circle cx="12" cy="17.2" r="2.1" />,
+    <path d="M12 9v6" />,
   );
 }
 

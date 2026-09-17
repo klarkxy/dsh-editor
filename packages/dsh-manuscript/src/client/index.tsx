@@ -376,7 +376,6 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
             paperClassName="manuscript-paper"
             slotClassName={{
               header: 'manuscript-paper-header',
-              chapterNav: 'manuscript-paper-chapter-nav',
               textarea: 'manuscript-paper-textarea',
               mirror: 'manuscript-paper-mirror',
               ghost: 'manuscript-paper-ghost',
@@ -403,7 +402,7 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
           {capability.kind === 'error' ? <div
             data-testid="manuscript-capability-error"
             role="alert"
-            style={{ padding: '6px 8px', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+            style={{ padding: '6px 8px', fontSize: 'var(--font-size-1)', display: 'flex', gap: 8, alignItems: 'center' }}>
             <span>
               AI 补全能力不可用，补全与选段改写已暂停。
             </span>

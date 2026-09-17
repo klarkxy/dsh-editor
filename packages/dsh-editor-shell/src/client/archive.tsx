@@ -7,6 +7,9 @@ import { ActivityText, Button, Dialog } from './ui/index.ts'
 
 export type ArchiveView = ArchiveResponse
 
+/** 文档归档入口先从界面拿掉；Host `archive.*` 与合章内部归档仍保留。 */
+export const DOCUMENT_ARCHIVE_UI: boolean = false
+
 export function archiveStateText(item: ArchiveView): string {
   if (item.state === 'archived') return t('archive.title')
   if (item.state === 'pending-archive') return t('archive.incomplete')

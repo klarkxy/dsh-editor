@@ -125,6 +125,27 @@ export function treeRowPadding(level: number): number {
   return 12 + Math.max(0, level) * 12
 }
 
+export function treeParentPath(path: string): string {
+  const index = path.lastIndexOf('/')
+  return index < 0 ? '' : path.slice(0, index)
+}
+
+export function treeDropDirectory(kind: 'file' | 'directory', path: string): string {
+  return kind === 'directory' ? path : treeParentPath(path)
+}
+
+/** Host `entry.move` accepts `''` and `'.'` for the workspace root. */
+export function treeMoveTargetDir(path: string): string {
+  return path || '.'
+}
+
+export function canMoveTreeEntry(sourcePath: string, targetDir: string): boolean {
+  const dest = targetDir === '.' ? '' : targetDir
+  if (!sourcePath || sourcePath === dest) return false
+  if (dest === sourcePath || dest.startsWith(`${sourcePath}/`)) return false
+  return treeParentPath(sourcePath) !== dest
+}
+
 function visibleOrdinaryParts(path: string): string[] | undefined {
   if (!path || path.includes('\\') || path.includes('\0') || path.startsWith('/') || /^[a-zA-Z]:/.test(path) || path.includes(':')) return undefined
   const parts = path.split('/').filter(Boolean)
@@ -139,6 +160,18 @@ export function treeExpansionPaths(path: string): string[] {
   const leaf = parts[parts.length - 1]!
   const directories = /\.[A-Za-z0-9]+$/.test(leaf) ? parts.slice(0, -1) : parts
   return directories.map((_, index) => directories.slice(0, index + 1).join('/'))
+}
+
+/** Directories that must stay open so `expandPath` or the active file is visible. */
+export function treeRevealDirectories(expandPath: string, activePath: string): string[] {
+  const seen = new Set<string>()
+  const directories: string[] = []
+  for (const directory of [...treeExpansionPaths(expandPath), ...treeExpansionPaths(activePath)]) {
+    if (seen.has(directory)) continue
+    seen.add(directory)
+    directories.push(directory)
+  }
+  return directories
 }
 
 export function safeRpcCall<T>(request: () => Promise<unknown>): Promise<RpcResult<T>> {
@@ -348,8 +381,10 @@ export function relocationFailureMessage(cleanupFailed: boolean): string {
   return cleanupFailed ? t('error.relocationCleanupFailed') : t('error.relocationKept')
 }
 
+export const TRANSIENT_STATUS_NOTE_MS = 3200
+
 export function isSuccessWorkbenchNote(note: string): boolean {
-  return /^(?:已(?:创建|重命名为|移动到|归档|恢复|保存版本)|(?:Created|Renamed to|Moved to|Archived|Restored|Saved version))(?:\s|$)/.test(note)
+  return /^(?:已(?:创建|重命名为|删除|复制到|复制|剪切|移动到|归档|恢复|保存版本|保存。|回滚到|重新载入|生成)|草稿已另存为|已清理未完成导入|已从最近移除|(?:Created|Renamed to|Deleted|Copied to|Copied|Cut|Moved to|Archived|Restored|Saved version|Saved\.|Rolled back to|Reloaded the disk version|Draft saved as|Generated))/.test(note)
 }
 
 export function proposalAppliedNavigation(appliedPath: string, currentPath: string, editorDirty: boolean): {
@@ -397,7 +432,7 @@ export function storedPanelOpen(key: string, fallback: boolean): boolean {
   }
 }
 
-export type WorkspaceShortcutAction = 'settings' | 'toggle-sidebar' | 'toggle-assistant' | 'toggle-focus' | 'focus-assistant' | 'previous-chapter' | 'next-chapter' | 'search' | 'toggle-typewriter' | 'toggle-focus-paragraph'
+export type WorkspaceShortcutAction = 'settings' | 'toggle-sidebar' | 'toggle-assistant' | 'toggle-focus' | 'focus-assistant' | 'search' | 'toggle-typewriter' | 'toggle-focus-paragraph'
 
 type ShortcutInput = {
   key: string
@@ -422,10 +457,6 @@ export function workspaceShortcut(input: ShortcutInput): WorkspaceShortcutAction
   if (mod && input.altKey && !input.shiftKey) {
     if (key === 't') return 'toggle-typewriter'
     if (key === 'p') return 'toggle-focus-paragraph'
-  }
-  if (!mod && input.altKey && !input.shiftKey) {
-    if (input.code === 'BracketLeft' || key === '[') return 'previous-chapter'
-    if (input.code === 'BracketRight' || key === ']') return 'next-chapter'
   }
   return null
 }

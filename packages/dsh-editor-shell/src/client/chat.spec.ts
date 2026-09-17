@@ -113,7 +113,7 @@ describe('chat proposal V2 compatibility', () => {
     } as typeof v1 & { basis: Array<{ path: string; version: string; label: string }> })).toBe('edit|改|notes/a.md|旧|新')
   })
 
-  it('lists non-empty V2 basis with preferred label and always-visible path/version', () => {
+  it('lists non-empty V2 basis with preferred label and path, without version hashes', () => {
     const v2 = parseAuthorProposal(JSON.stringify({
       marker: 'dsh-editor.proposal', version: 2, kind: 'create', path: 'notes/b.md', summary: '新建', text: '# 新',
       basis: [
@@ -126,9 +126,9 @@ describe('chat proposal V2 compatibility', () => {
       { path: 'notes/source.md', version: 'v1', label: '来源' },
       { path: 'notes/other.md', version: 'v3' },
     ])
-    expect(proposalBasisLine(items[0]!)).toBe('来源 · notes/source.md · v1')
-    expect(proposalBasisLine(items[1]!)).toBe('notes/other.md · v3')
-    expect(proposalBasisLine(items[0]!)).not.toMatch(/旧|# 新|正文内容/)
+    expect(proposalBasisLine(items[0]!)).toBe('来源 · notes/source.md')
+    expect(proposalBasisLine(items[1]!)).toBe('notes/other.md')
+    expect(proposalBasisLine(items[0]!)).not.toMatch(/旧|# 新|正文内容|v1/)
 
     const v1 = { marker: 'dsh-editor.proposal', version: 1, kind: 'create', path: 'notes/b.md', summary: '新建', text: '# 新' } as const
     expect(proposalBasisItems(v1)).toEqual([])

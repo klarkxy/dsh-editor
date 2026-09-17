@@ -1,6 +1,6 @@
 import { EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { buildLivePreview, paperMarkdown } from './codemirror.ts'
+import { buildLivePreview, paperMarkdown, paperThemeSpec } from './codemirror.ts'
 
 function preview(doc: string, cursor = 0) {
   const state = EditorState.create({
@@ -48,5 +48,21 @@ describe('paper live preview', () => {
     const result = preview(doc, inside)
     expect(result.hidden.join('')).not.toContain('(世界观)')
     expect(result.styled.some((item) => item.class === 'cm-lp-link')).toBe(false)
+  })
+})
+
+describe('paper theme alignment', () => {
+  it('pins short documents to the start of the scroller instead of floating them', () => {
+    expect(paperThemeSpec['.cm-scroller']).toMatchObject({
+      alignItems: 'flex-start',
+      justifyContent: 'flex-start',
+    })
+    expect(paperThemeSpec['.cm-content']).toMatchObject({
+      width: '100%',
+      flexGrow: '2',
+      minWidth: '0',
+      textAlign: 'start',
+    })
+    expect(paperThemeSpec['.cm-line']).toMatchObject({ textAlign: 'start' })
   })
 })

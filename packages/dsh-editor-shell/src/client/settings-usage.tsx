@@ -15,7 +15,7 @@ import { useReducedMotion } from 'motion/react'
 import type { RpcResult } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { ActivitySkeleton } from './ui/index.ts'
-import { formatNumber as formatLocaleNumber, t, useLocale } from '../i18n/index.ts'
+import { t, useLocale } from '../i18n/index.ts'
 
 use([BarChart, GridComponent, TooltipComponent, AriaComponent, SVGRenderer])
 
@@ -34,6 +34,15 @@ type ModelUsage = {
   requests?: number
 }
 
+type UsageLogEntry = {
+  at: string
+  model: string
+  inputTokens?: number
+  outputTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+}
+
 type DailyUsage = {
   date: string
   inputTokens: number
@@ -43,10 +52,12 @@ type DailyUsage = {
   reasoningTokens: number
   requests: number
   byModel?: Record<string, ModelUsage>
+  events?: UsageLogEntry[]
 }
 
 type UsageSummary = {
   days: DailyUsage[]
+  log?: UsageLogEntry[]
 }
 
 export type ChartTheme = {
@@ -58,25 +69,64 @@ export type ChartTheme = {
 
 function text() {
   return {
-  intro: t('usage.intro'),
-  todayHeading: t('usage.today'),
-  recentHeading: t('usage.recent7'),
-  cacheHit: t('usage.cacheHit'),
-  input: t('usage.input'),
-  output: t('usage.output'),
-  requests: t('usage.requests'),
-  empty: t('usage.empty'),
-  loading: t('zhihu.reading'),
-  loadFailed: t('usage.loadFailed'),
-  retry: t('common.retry'),
-  loadFailedPrefix: t('usage.loadFailedPrefix'),
-  note: t('usage.note'),
+    intro: t('usage.intro'),
+    todayHeading: t('usage.today'),
+    recentHeading: t('usage.recent7'),
+    cacheHit: t('usage.cacheHit'),
+    input: t('usage.input'),
+    output: t('usage.output'),
+    requests: t('usage.requests'),
+    empty: t('usage.empty'),
+    loading: t('zhihu.reading'),
+    loadFailed: t('usage.loadFailed'),
+    retry: t('common.retry'),
+    loadFailedPrefix: t('usage.loadFailedPrefix'),
+    note: t('usage.note'),
+    log: t('usage.log'),
+    logEmpty: t('usage.logEmpty'),
   }
 }
 
-function formatNumber(value: number): string {
+/** Compact token/request counts: 999 stays, then K / M / T. */
+export function formatCompactNumber(value: number): string {
   if (!Number.isFinite(value)) return '0'
-  return formatLocaleNumber(Math.round(value))
+  const sign = value < 0 ? '-' : ''
+  const amount = Math.round(Math.abs(value))
+  const scale = (raw: number, suffix: string) => {
+    const rounded = raw >= 10 ? Math.round(raw) : Math.round(raw * 10) / 10
+    const body = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+    return `${sign}${body}${suffix}`
+  }
+  if (amount >= 1_000_000_000_000) return scale(amount / 1_000_000_000_000, 'T')
+  if (amount >= 1_000_000) return scale(amount / 1_000_000, 'M')
+  if (amount >= 1_000) return scale(amount / 1_000, 'K')
+  return `${sign}${amount}`
+}
+
+function formatNumber(value: number): string {
+  return formatCompactNumber(value)
+}
+
+export function logTokens(entry: UsageLogEntry): number {
+  return (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0) + (entry.cacheReadTokens ?? 0) + (entry.cacheWriteTokens ?? 0)
+}
+
+export function formatUsageLogTime(at: string): string {
+  const date = new Date(at)
+  if (Number.isNaN(date.getTime())) return at
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  return `${month}/${day} ${hour}:${minute}`
+}
+
+export function usageLogFromSummary(summary: UsageSummary): UsageLogEntry[] {
+  if (Array.isArray(summary.log)) {
+    return [...summary.log].sort((left, right) => right.at.localeCompare(left.at))
+  }
+  const events = summary.days.flatMap((day) => day.events ?? [])
+  return events.sort((left, right) => right.at.localeCompare(left.at))
 }
 
 function failureMessage(result: RpcResult<unknown>): string {
@@ -316,42 +366,6 @@ function UsageChart(props: { days: readonly DailyUsage[]; series: readonly Model
           </li>)}
         </ul>
       </Flex>
-      <details className="usage-chart-table">
-        <summary>
-          {t('usage.exactData')}
-        </summary>
-        <table>
-          <caption className="sr-only">
-            {t('usage.chartAria')}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">
-                {t('usage.recent7')}
-              </th>
-              {props.series.map((item) => <th key={item.key} scope="col" title={item.key}>
-                {modelDisplayName(item.key)}
-              </th>)}
-              <th scope="col">
-                {t('usage.dayTotal')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {props.days.map((day) => <tr key={day.date}>
-              <th scope="row">
-                {day.date}
-              </th>
-              {props.series.map((item) => <td key={item.key}>
-                {formatNumber(modelTokens(day.byModel?.[item.key]))}
-              </td>)}
-              <td>
-                {formatNumber(dayTotal(day, props.series))}
-              </td>
-            </tr>)}
-          </tbody>
-        </table>
-      </details>
     </Flex>
   );
 }
@@ -430,6 +444,7 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
   const recent = summary.days.slice(-RECENT_DAYS)
   const series = collectModelSeries(recent)
   const hasAny = recent.some((day) => day.requests > 0)
+  const log = usageLogFromSummary(summary)
 
   return (
     <section className="usage-page" aria-label={t('settings.usage')}>
@@ -454,6 +469,28 @@ function Loaded(props: { summary: UsageSummary }): ReactNode {
           {text().empty}
         </Text>
           : <UsageChart days={recent} series={series} />}
+      </section>
+      <section className="usage-log settings-block" aria-label={text().log}>
+        <Heading as="h3" size="3" className="usage-section-title settings-block-title" mb="3">
+          {text().log}
+        </Heading>
+        {log.length === 0
+          ? <Text size="2" color="gray" className="usage-empty">
+          {text().logEmpty}
+        </Text>
+          : <ul className="usage-log-list">
+          {log.map((entry, index) => <li key={`${entry.at}-${entry.model}-${index}`} className="usage-log-row">
+            <Text size="1" color="gray" className="usage-log-time">
+              {formatUsageLogTime(entry.at)}
+            </Text>
+            <Text size="2" weight="medium" className="usage-log-model" title={entry.model}>
+              {modelDisplayName(entry.model)}
+            </Text>
+            <Text size="2" className="usage-log-tokens">
+              {formatNumber(logTokens(entry))}
+            </Text>
+          </li>)}
+        </ul>}
       </section>
     </section>
   );

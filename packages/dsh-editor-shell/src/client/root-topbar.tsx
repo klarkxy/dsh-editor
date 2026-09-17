@@ -8,6 +8,7 @@ import { CommandPaletteTrigger } from './command-palette.tsx'
 import { SettingsTrigger, type SettingsTab } from './settings.tsx'
 import { ThemeToggle, type ThemeValue } from './theme.tsx'
 import { titleBarDoubleClick, WindowControls } from './window-controls.tsx'
+import { DOCUMENT_ARCHIVE_UI } from './archive.tsx'
 import { Menu, MenuContent, MenuItem, MenuSeparator, Tooltip, m, useChromeMotion } from './ui/index.ts'
 
 function LayoutToggle(props: {
@@ -36,7 +37,7 @@ function LayoutToggle(props: {
   )
 }
 
-/* 工作台顶栏：作品菜单(切换/新建/导出/归档/返回首页)、布局开关(侧栏/专注/搭档)、
+/* 工作台顶栏：作品菜单(切换/新建/导出/返回首页)、布局开关(侧栏/专注/搭档)、
    主题/命令面板/设置/窗口控制。全部状态由 Root 持有,这里只做呈现。 */
 export function WorkbenchTopbar(props: {
   workspaceChromeMotion: ReturnType<typeof useChromeMotion>
@@ -76,17 +77,18 @@ export function WorkbenchTopbar(props: {
       className="chrome"
       role="banner"
       align="center"
-      gap="3"
-      px="3"
+      gap="0"
+      pl="3"
       width="100%"
       minWidth="0"
       onDoubleClick={titleBarDoubleClick}>
-      <m.div
-        className="workspace-chrome"
-        role="group"
-        aria-label={t('workspace.work')}
-        style={{ minWidth: '7rem', maxWidth: 'min(18rem, 42vw)', flex: '0 1 auto', overflow: 'hidden' }}
-        {...props.workspaceChromeMotion}>
+      <Flex className="chrome-main" align="center" gap="2" minWidth="0" flexGrow="1">
+        <m.div
+          className="workspace-chrome"
+          role="group"
+          aria-label={t('workspace.work')}
+          style={{ display: 'flex', alignItems: 'center', width: 'auto', minWidth: '8.5rem', maxWidth: '16rem' }}
+          {...props.workspaceChromeMotion}>
         <div className="workspace-menu">
           <Menu
             open={props.workspaceMenuOpen}
@@ -101,7 +103,14 @@ export function WorkbenchTopbar(props: {
                 title={workspaceTitle}
                 aria-label={t('workspace.menu')}
                 aria-controls="workspace-actions"
-                style={{ maxWidth: '100%', minWidth: 0 }}>
+                style={{
+                  width: 'auto',
+                  minWidth: '8.5rem',
+                  maxWidth: '16rem',
+                  height: 'var(--control-h)',
+                  justifyContent: 'flex-start',
+                  gap: 'var(--space-2)',
+                }}>
                 <Text size="2" weight="medium" truncate>
                   {workspaceTitle}
                 </Text>
@@ -146,11 +155,11 @@ export function WorkbenchTopbar(props: {
                 onSelect={() => { props.onWorkspaceMenuYield(); void props.onExportDocuments() }}>
                 {props.exporting ? t('workspace.exporting') : t('command.export')}
               </MenuItem>
-              <MenuItem
+              {DOCUMENT_ARCHIVE_UI ? <MenuItem
                 className="workspace-menu-item"
                 onSelect={() => { props.onWorkspaceMenuYield(); props.onOpenArchive() }}>
                 {t('workspace.archived')}
-              </MenuItem>
+              </MenuItem> : null}
               <MenuItem
                 className="workspace-menu-item"
                 aria-label={t('workspace.backHome')}
@@ -184,8 +193,8 @@ export function WorkbenchTopbar(props: {
           <FocusIcon size={16} />
         </LayoutToggle>
         <LayoutToggle
-          pressed={props.assistantOpen}
-          disabled={props.focusMode}
+          pressed={props.assistantOpen && !props.compactChrome}
+          disabled={props.focusMode || props.compactChrome}
           label={t('workspace.assistant')}
           tooltip={props.assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant')}
           onClick={props.onToggleAssistant}>
@@ -193,12 +202,13 @@ export function WorkbenchTopbar(props: {
         </LayoutToggle>
       </Flex>
       {props.extensionsDock}
+      </Flex>
       <Flex className="topbar-actions" align="center" gap="2" flexShrink="0">
         <ThemeToggle theme={props.theme} onChange={props.onThemeChange} />
         <CommandPaletteTrigger onClick={props.onOpenPalette} />
         <SettingsTrigger onOpen={props.onOpenSettings} />
-        <WindowControls />
       </Flex>
+      <WindowControls />
     </Flex>
   );
 }

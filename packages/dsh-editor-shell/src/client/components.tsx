@@ -15,12 +15,12 @@ export function DeepSeekWhaleMark() {
   return (
     <svg
       className="whale-mark"
-      viewBox="0 0 32 32"
-      width={18}
-      height={18}
+      viewBox="2 1 28 21"
+      width={16}
+      height={16}
       aria-hidden="true"
       focusable="false"
-      style={{ width: 18, height: 18, color: 'var(--accent-9)' }}>
+      style={{ width: 16, height: 16, color: 'var(--accent-9)' }}>
       <path
         fill="currentColor"
         d="M3.4 12.2c1.2-3.6 4.2-5.4 7.6-5.2.6-2.6 2.8-4.6 5.8-5 3.2-.4 6 1.2 7.2 4.2 2.8.4 5 2.6 5.4 5.4.4 3-1.2 5.8-4 7.2-2 .9-4.4 1.3-7 1.3-3.4 0-6.4-.8-8.8-2.4C6 16.2 4.2 14.2 3.8 12c1.2.6 2.4 1 3.6 1.2-.4-1.2-.6-2.4-.4-3.6-1.4.4-2.6 1.2-3.6 2.6Z" />
@@ -45,7 +45,7 @@ export function PaperStage(props: { label: string; heading?: string; children?: 
       p="6">
       <Card className="home-card" size="3" style={{ width: 'min(720px, 100%)' }}>
         <Flex direction="column" gap="4">
-          {props.heading ? <Heading as="h1" size="8">
+          {props.heading ? <Heading as="h1" size="6">
             {props.heading}
           </Heading> : null}
           {props.children}

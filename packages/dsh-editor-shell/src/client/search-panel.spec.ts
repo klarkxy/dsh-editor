@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { planReplace } from '../search-replace.ts'
-import { acceptSearchResults, canReplaceAll, groupSearchHits, paperRevealRange, replaceBlockedByDirty, scopeSearchResults, searchTextRequest, type SearchHit } from './search-panel.tsx'
+import { acceptSearchResults, canReplaceAll, groupSearchHits, paperRevealRange, replaceBlockedByDirty, scopeSearchResults, searchQueryClearsResults, searchTextRequest, type SearchHit } from './search-panel.tsx'
 
 function hit(path: string, start: number, excerpt: string): SearchHit {
   return { path, line: 1, column: 1, start, end: start + excerpt.length, excerpt, version: 'v1' }
@@ -82,6 +82,14 @@ describe('directory search request payload', () => {
     }, 'directory', 'docs/target.md')
     expect(scoped.results.map((item) => item.path)).toEqual(['docs/target.md'])
     expect(scoped.truncated).toBe(true)
+  })
+})
+
+describe('controlled search query', () => {
+  it('clears the current result set when the sidebar query is blank', () => {
+    expect(searchQueryClearsResults('')).toBe(true)
+    expect(searchQueryClearsResults('   ')).toBe(true)
+    expect(searchQueryClearsResults('港口')).toBe(false)
   })
 })
 

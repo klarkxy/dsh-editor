@@ -93,12 +93,12 @@ export function proposalTargetBaselines(proposal: AuthorProposal): readonly Prop
   return []
 }
 
-/** 优先 label，path/version 始终写入可读行；不包含来源正文。 */
+/** 优先 label，再写 path；版本只用于核对，不给作者看。 */
 export function proposalBasisLine(item: ProposalBasisRef): string {
   const label = item.label?.trim()
   return label
-    ? t('chat.proposalBasisNamed', { label, path: item.path, version: item.version })
-    : t('chat.proposalBasisPath', { path: item.path, version: item.version })
+    ? t('chat.proposalBasisNamed', { label, path: item.path })
+    : t('chat.proposalBasisPath', { path: item.path })
 }
 
 /** 把提案压缩成字符串，作为 prepare 的 useEffect 依赖。V2 生成基线与有序 basis 分别纳入。 */
@@ -332,7 +332,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   /* 按 kind 决定主区域内容。edit 复用 proposal-diff 块;create 单 pre 并在可应用时列出将自动创建的目录;
      章纲/章末小结展示可读的字段前后对照;split 同 edit 但 before/after 来自 prepared;
      merge 展示两个文件的字符数与归档说明;renames 用 ul/li 列出 from→to。
-     V2 非空 basis 只展示 label/path/version，不拉取也不渲染来源正文。 */
+     V2 非空 basis 只展示 label/path，不拉取也不渲染来源正文或版本哈希。 */
   const renderTargets = () => {
     const items = proposalTargetBaselines(props.proposal)
     if (!items.length) return null
@@ -346,14 +346,10 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
             <ul>
               {items.map((item) => <li
                 key={`${item.path}|${item.version}`}
-                aria-label={t('chat.proposalTargetPath', { path: item.path, version: item.version })}>
+                aria-label={t('chat.proposalTargetPath', { path: item.path })}>
                 <Text size="1" color="gray">
                   <code className="proposal-path">
                     {item.path}
-                  </code>
-                  {' · '}
-                  <code>
-                    {item.version}
                   </code>
                 </Text>
               </li>)}
@@ -389,10 +385,6 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
                       </Fragment> : null}
                       <code className="proposal-path">
                         {item.path}
-                      </code>
-                      {' · '}
-                      <code>
-                        {item.version}
                       </code>
                     </Text>
                   </li>

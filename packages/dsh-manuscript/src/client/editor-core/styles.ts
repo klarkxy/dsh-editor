@@ -56,6 +56,8 @@ ${editorCoreTokens}
   background: var(--color-background);
   color: var(--gray-12);
   font-family: var(--default-font-family);
+  --paper-pad-inline: 64px;
+  --paper-pad-block: 36px;
 }
 
 /* Header row inside the paper. */
@@ -65,7 +67,7 @@ ${editorCoreTokens}
   gap: var(--space-3);
   min-width: 0;
   min-height: var(--topbar-h);
-  padding: 0 20px;
+  padding: 0 var(--paper-pad-inline);
   border-bottom: 1px solid var(--gray-a5);
   background: var(--color-background);
   color: var(--gray-11);
@@ -118,27 +120,6 @@ ${editorCoreTokens}
   font: var(--font-weight-medium) var(--font-size-1)/1 var(--default-font-family);
   letter-spacing: .12em;
 }
-.manuscript-paper-chapter-nav {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-.manuscript-paper-chapter-nav > button {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: var(--radius-2);
-  background: transparent;
-  cursor: pointer;
-  color: var(--gray-11);
-  font-size: var(--font-size-3);
-  line-height: 1;
-}
-.manuscript-paper-chapter-nav > button:hover { background: var(--gray-a3); color: var(--gray-12); }
-.manuscript-paper-chapter-nav > span { font-size: var(--font-size-1); color: var(--gray-11); padding: 0 4px; }
-
 /* Paper surface — CodeMirror mounts inside the wrapper div. Layout only;
    typography lives in the CM theme (editor-core/codemirror.ts) so the same
    rules apply whether the editor runs in the shell or standalone here. */
@@ -160,11 +141,16 @@ ${editorCoreTokens}
   font-family: var(--paper-font-family);
 }
 .manuscript-paper-textarea .cm-editor .cm-scroller {
+  align-items: flex-start !important;
+  justify-content: flex-start;
   font-family: inherit;
 }
 .manuscript-paper-textarea .cm-content {
+  width: 100%;
   max-width: var(--paper-max-width, none);
   margin-inline: auto;
+  box-sizing: border-box;
+  text-align: start;
   caret-color: var(--accent-9);
 }
 .manuscript-paper-textarea .cm-line {

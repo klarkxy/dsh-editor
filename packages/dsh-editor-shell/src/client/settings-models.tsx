@@ -55,11 +55,11 @@ import { Badge, Box, Callout, Card, Checkbox, Flex, Heading, Text, TextField } f
 import { Select, type SelectOption } from './select.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
 import { ActivityDots, ActivitySkeleton, Button, Dialog } from './ui/index.ts'
-import type { SettingsDescribeFace, SettingsSchemaService, ShellContext } from './shared.ts'
+import { isSuccessWorkbenchNote, TRANSIENT_STATUS_NOTE_MS, type SettingsDescribeFace, type SettingsSchemaService, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import type { SettingsScope } from '../dsh-compat.ts'
-import type { WritingPreferences } from '../writing-settings.tsx'
-import { catalogFromSessionGroups, mergeCatalogOptions, WritingModelRoutes, type CatalogModelOption } from './writing-model-routes.tsx'
+import { writingModelRouteValue, writingPreferences, type WritingPreferences } from '../writing-settings.tsx'
+import { catalogFromSessionGroups, firstUsableCatalogModel, mergeCatalogOptions, WritingModelRoutes, type CatalogModelOption } from './writing-model-routes.tsx'
 
 type ModelsRemote = EditorRemote
 
@@ -468,6 +468,14 @@ function catalogOptions(rows: ProviderRow[], namespaces: Map<string, SettingsNam
 function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writingScope: SettingsScope<WritingPreferences> }): ReactNode {
   const { ctx, store, state } = props
   const [section, setSection] = useState<SectionState>(emptySectionState)
+  useEffect(() => {
+    const saved = section.savedNote
+    if (!saved || !isSuccessWorkbenchNote(saved)) return
+    const timer = globalThis.setTimeout(() => {
+      setSection((current) => current.savedNote === saved ? { ...current, savedNote: null } : current)
+    }, TRANSIENT_STATUS_NOTE_MS)
+    return () => globalThis.clearTimeout(timer)
+  }, [section.savedNote])
   const [runtimeCatalog, setRuntimeCatalog] = useState<CatalogModelOption[]>([])
   useEffect(() => {
     let live = true
@@ -477,6 +485,18 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
     }).catch(() => { /* keep profile catalog */ })
     return () => { live = false }
   }, [ctx, state.rows])
+  useEffect(() => {
+    if (state.status !== 'ready' || !state.writable) return
+    const current = writingPreferences(props.writingScope.getSnapshot()).chatModel
+    if (current?.provider?.trim() && current?.model?.trim()) return
+    const catalog = mergeCatalogOptions(runtimeCatalog, catalogOptions(state.rows, state.namespaces, ctx.settingsSchema))
+    const usable = firstUsableCatalogModel(
+      catalog,
+      state.rows.filter(providerUsable).map((row) => providerIdOf(row.entry)),
+    )
+    if (!usable) return
+    void props.writingScope.set('chatModel', writingModelRouteValue({ provider: usable.provider, model: usable.model }))
+  }, [ctx.settingsSchema, props.writingScope, runtimeCatalog, state.namespaces, state.rows, state.status, state.writable])
 
   if (state.status === 'idle' || state.status === 'loading') {
     return (
@@ -616,7 +636,7 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
         ? <Card className="models-add-card">
         <Box className="models-add-picker">
           <Flex direction="column" gap="2" className="models-field">
-            <Text size="1" weight="medium" className="models-field-label">
+            <Text size="2" weight="medium" className="models-field-label">
               {t('models.provider')}
             </Text>
             <Select
@@ -984,7 +1004,7 @@ function ProviderEditor(props: {
           : null}
       </Flex>}
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="1" weight="medium" className="models-field-label">
+        <Text size="2" weight="medium" className="models-field-label">
           {text().apiKey}
         </Text>
         <TextField.Root
@@ -1011,7 +1031,7 @@ function ProviderEditor(props: {
         </summary>
         <div className="models-customized-body">
           {isDeclared ? <Flex direction="column" gap="2" className="models-field" minWidth="0">
-            <Text size="1" weight="medium" className="models-field-label">
+            <Text size="2" weight="medium" className="models-field-label">
               {text().displayName}
             </Text>
             <TextField.Root
@@ -1024,7 +1044,7 @@ function ProviderEditor(props: {
               onChange={(event: ChangeEvent<HTMLInputElement>) => setField('displayName', event.target.value)} />
           </Flex> : null}
           <Flex direction="column" gap="2" className="models-field" minWidth="0">
-            <Text size="1" weight="medium" className="models-field-label">
+            <Text size="2" weight="medium" className="models-field-label">
               {text().baseUrl}
             </Text>
             <TextField.Root
@@ -1037,7 +1057,7 @@ function ProviderEditor(props: {
               onChange={(event: ChangeEvent<HTMLInputElement>) => setField('baseURL', event.target.value)} />
           </Flex>
           {isPiAi && isDeclared ? <Flex direction="column" gap="2" className="models-field" minWidth="0">
-            <Text size="1" weight="medium" className="models-field-label">
+            <Text size="2" weight="medium" className="models-field-label">
               {text().protocol}
             </Text>
             <Select
@@ -1230,7 +1250,7 @@ function ModelListEditor(props: {
   return (
     <section className="models-catalog" aria-label={t.models}>
       <Flex className="models-catalog-head" align="center" justify="between" gap="2">
-        <Text size="1" weight="medium" className="models-catalog-title">
+        <Text size="2" weight="medium" className="models-catalog-title">
           {t.models}
         </Text>
         <Button
@@ -1288,7 +1308,7 @@ function ModelListEditor(props: {
         {expanded.has(index) ? <Flex className="models-catalog-advanced" direction="column" gap="2">
           <Flex asChild align="center" gap="3" className="models-field models-field-row">
             <label>
-            <Text size="1" weight="medium" className="models-field-label">
+            <Text size="2" weight="medium" className="models-field-label">
               {t.modelContext}
             </Text>
             <TextField.Root
@@ -1312,7 +1332,7 @@ function ModelListEditor(props: {
           </Flex>
           <Flex asChild align="center" gap="3" className="models-field models-field-row">
             <label>
-            <Text size="1" weight="medium" className="models-field-label">
+            <Text size="2" weight="medium" className="models-field-label">
               {t.modelMax}
             </Text>
             <TextField.Root
@@ -1336,7 +1356,7 @@ function ModelListEditor(props: {
           </Flex>
           <Flex asChild align="center" gap="3" className="models-field models-field-row">
             <label>
-            <Text size="1" weight="medium" className="models-field-label">
+            <Text size="2" weight="medium" className="models-field-label">
               {t.modelReasoning}
             </Text>
             <Select
@@ -1515,7 +1535,7 @@ function CustomProviderCard(props: {
         </Text>
       </Flex>
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="1" weight="medium" className="models-field-label">
+        <Text size="2" weight="medium" className="models-field-label">
           {text().customRoute}
         </Text>
         <TextField.Root
@@ -1538,7 +1558,7 @@ function CustomProviderCard(props: {
         {text().customRouteHint}
       </Text>}
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="1" weight="medium" className="models-field-label">
+        <Text size="2" weight="medium" className="models-field-label">
           {text().displayName}
         </Text>
         <TextField.Root
@@ -1551,7 +1571,7 @@ function CustomProviderCard(props: {
           onChange={(event: ChangeEvent<HTMLInputElement>) => setDisplayName(event.target.value)} />
       </Flex>
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="1" weight="medium" className="models-field-label">
+        <Text size="2" weight="medium" className="models-field-label">
           {text().baseUrl}
         </Text>
         <TextField.Root
@@ -1564,7 +1584,7 @@ function CustomProviderCard(props: {
           onChange={(event: ChangeEvent<HTMLInputElement>) => setBaseURL(event.target.value)} />
       </Flex>
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="1" weight="medium" className="models-field-label">
+        <Text size="2" weight="medium" className="models-field-label">
           {text().protocol}
         </Text>
         <Select
@@ -1575,7 +1595,7 @@ function CustomProviderCard(props: {
           aria-label={text().protocol} />
       </Flex>
       <Flex direction="column" gap="2" className="models-field" minWidth="0">
-        <Text size="1" weight="medium" className="models-field-label">
+        <Text size="2" weight="medium" className="models-field-label">
           {text().apiKey}
         </Text>
         <TextField.Root

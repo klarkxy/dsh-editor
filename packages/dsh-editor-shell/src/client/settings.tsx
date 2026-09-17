@@ -5,6 +5,7 @@ import type { ShellContext } from './shared.ts'
 import { WritingSettings } from '../writing-settings.tsx'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.tsx'
 import { AboutSettingsSection } from './settings-about.tsx'
+import { AssistantSettings } from './settings-assistant.tsx'
 import { SettingsGeneralSection, useDeveloperMode } from './settings-general.tsx'
 import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { SettingsModelsSection } from './settings-models.tsx'
@@ -24,10 +25,10 @@ import { useReducedMotion } from 'motion/react'
 
 export type { SettingsRenderSlot }
 
-export type SettingsTab = 'general' | 'models' | 'writing' | 'usage' | 'zhihu' | 'plugins' | 'about'
+export type SettingsTab = 'general' | 'models' | 'assistant' | 'writing' | 'usage' | 'zhihu' | 'plugins' | 'about'
 
 const SETTINGS_TAB_KEY = 'dsh-editor.settings.tab'
-const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'writing', 'usage', 'zhihu', 'plugins', 'about']
+const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'assistant', 'writing', 'usage', 'zhihu', 'plugins', 'about']
 
 function readStoredTab(): string {
   try {
@@ -81,6 +82,7 @@ function SettingsTabPage(props: { tab: string; active: boolean; fromX?: number; 
 function tabLabel(tab: SettingsTab): string {
   if (tab === 'general') return t('settings.general')
   if (tab === 'models') return t('settings.models')
+  if (tab === 'assistant') return t('settings.assistant')
   if (tab === 'writing') return t('settings.writing')
   if (tab === 'plugins') return t('settings.plugins')
   if (tab === 'zhihu') return t('settings.zhihu')
@@ -175,7 +177,7 @@ export function SettingsDialog(props: {
 
   const featureTabs: SettingsTab[] = props.assistant === false
     ? ['general', 'writing', 'usage', 'zhihu', 'plugins']
-    : ['general', 'models', 'writing', 'usage', 'zhihu', 'plugins']
+    : ['general', 'models', 'assistant', 'writing', 'usage', 'zhihu', 'plugins']
   const navTabs: string[] = [...featureTabs, ...officialSections.map((section) => section.navId), 'about']
   /* 能力在弹窗打开期间变为停用时，或动态插件页消失时，回落到仍可用的分类。 */
   const activeTab = navTabs.includes(tab) ? tab : 'general'
@@ -191,6 +193,7 @@ export function SettingsDialog(props: {
       showDeveloperMode={authorChrome.showDeveloperMode}
       onRevealDeveloper={() => setDeveloperRevealed(true)} />,
     models: () => <SettingsModelsSection ctx={props.ctx} writingScope={props.writingScope} />,
+    assistant: () => <AssistantSettings scope={props.writingScope} migrate={props.migrateWriting} />,
     writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} />,
     usage: () => <SettingsUsageSection ctx={props.ctx} />,
     zhihu: () => props.zhihuTab ?? <Text size="2" color="gray" className="muted">
@@ -232,7 +235,7 @@ export function SettingsDialog(props: {
         </aside>
         <Flex className="settings-body" direction="column" minWidth="0" minHeight="0" overflow="hidden">
           <Flex className="settings-header" align="center" gap="2" px="4" py="3" flexShrink="0">
-            <Heading size="3" className="settings-header-title">
+            <Heading size="4" className="settings-header-title">
               {navLabel(activeTab, officialSections)}
             </Heading>
             <Flex align="center" gap="2" ml="auto">

@@ -5,8 +5,11 @@
  * cmdk 负责输入过滤 + 命令项渲染。
  *
  * 设计要点:
+ *   - Portal 挂到当前实例的 .radix-themes.shell-theme：主题 token 不在
+ *     :root 上，容器未就绪时不挂载，避免掉到 document.body 后底板透明、
+ *     命令条目叠在稿纸上。
  *   - 不与 root.ts 现有的工作区快捷键冲突:Cmd/Ctrl+K 是新增的,没有占用
- *     workspaceShortcut 的 Ctrl+,/B/J/\\/L/Alt+[/] 分支;全文搜索走
+ *     workspaceShortcut 的 Ctrl+,/B/J/\\/L 分支;全文搜索走
  *     Ctrl+Shift+F,由 root.ts 打开侧栏搜索面板;作品概览走注册表命令 Ctrl+Shift+O;
  *     校对走注册表命令 Ctrl+Shift+L；人物卡/世界书走注册表命令 Ctrl+Shift+C/W。
  *   - 关闭时不残留热键:本组件挂自己的 keydown 监听(只接受 K 切换 / Esc 关
@@ -28,13 +31,15 @@ import {
   Description as RadixDialogDescription,
 } from '@radix-ui/react-dialog'
 import { Button, Flex, Kbd } from '@radix-ui/themes'
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ThemeValue } from './theme.tsx'
 import { t, useLocale } from '../i18n/index.ts'
 import { runtimePaletteShortcutHint } from '../palette-shortcut.ts'
+import { DOCUMENT_ARCHIVE_UI } from './archive.tsx'
 import {
   ArchiveIcon,
   ExportIcon,
+  HistoryIcon,
   FileIcon,
   FocusIcon,
   FolderIcon,
@@ -45,6 +50,34 @@ import {
   SettingsIcon,
   ThemeInkIcon,
 } from './icons.tsx'
+
+/* 主题变量只挂在 .radix-themes 上（:root 已被 rewrite 掉，有 Theme 时
+   seats fallback 也不生效）。命令面板必须 Portal 进 Theme 根，否则底板 /
+   遮罩的 var(--color-panel-solid) / var(--gray-a6) 全是空的，条目会直接
+   叠在稿纸上。 */
+export function resolveThemePortalContainer(root: Pick<ParentNode, 'querySelector'>): HTMLElement | undefined {
+  return root.querySelector<HTMLElement>('.radix-themes.shell-theme')
+    ?? root.querySelector<HTMLElement>('.radix-themes')
+    ?? undefined
+}
+
+export function resolveThemePortalFromAnchor(anchor: Element | null): HTMLElement | undefined {
+  return anchor?.closest<HTMLElement>('.radix-themes.shell-theme')
+    ?? anchor?.closest<HTMLElement>('.radix-themes')
+    ?? undefined
+}
+
+function useThemePortalContainer() {
+  const anchorRef = useRef<HTMLSpanElement>(null)
+  const [container, setContainer] = useState<HTMLElement | undefined>()
+  useLayoutEffect(() => {
+    setContainer(resolveThemePortalFromAnchor(anchorRef.current) ?? resolveThemePortalContainer(document))
+  }, [])
+  return {
+    container,
+    anchor: <span ref={anchorRef} hidden data-palette-theme-anchor="" />,
+  }
+}
 
 /* 视觉隐藏(.shell .sr-only 在 Portal 内容上不生效,这里内联自带)。 */
 const visuallyHidden: CSSProperties = {
@@ -122,6 +155,7 @@ export type CommandPaletteProps = {
   registryCommands?: readonly RegistryCommandItem[]
   onExport(): void
   onOpenArchives(): void
+  onOpenHistory(): void
   onSplitAtCursor(): void
   canSplitAtCursor: boolean
   onToggleTypewriter?(): void
@@ -152,6 +186,7 @@ function splitPath(path: string): { directory: string; name: string } {
 
 export function CommandPalette(props: CommandPaletteProps) {
   useLocale()
+  const { container: portalContainer, anchor: themeAnchor } = useThemePortalContainer()
   /* 全局 Cmd/Ctrl+K 监听:不管 palette 当前开没开,都能切换。
      用 useEffect 在打开/关闭时挂同一个 listener,这样 palette 不会因为
      onOpenChange 路径在 hotkey 阶段还是直接阶段而漏掉 ESC 关闭。 */
@@ -238,7 +273,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         disabled: !props.hasWorkspace,
         run: () => props.onExport(),
       },
-      {
+      ...(DOCUMENT_ARCHIVE_UI ? [{
         id: 'cmd.archives',
         label: t('command.archived'),
         hint: t('command.archivedHint'),
@@ -246,6 +281,15 @@ export function CommandPalette(props: CommandPaletteProps) {
         icon: <ArchiveIcon />,
         disabled: !props.hasWorkspace,
         run: () => props.onOpenArchives(),
+      }] : []),
+      {
+        id: 'cmd.history',
+        label: t('command.history'),
+        hint: t('command.historyHint'),
+        keywords: ['history', 'git', 'commit', t('common.history'), t('workspace.rollback')],
+        icon: <HistoryIcon />,
+        disabled: !props.hasWorkspace,
+        run: () => props.onOpenHistory(),
       },
       {
         id: 'cmd.split-at-cursor',
@@ -345,8 +389,10 @@ export function CommandPalette(props: CommandPaletteProps) {
   }, [props.open])
 
   return (
-    <RadixDialogRoot open={props.open} onOpenChange={props.onOpenChange}>
-      <RadixDialogPortal>
+    <>
+      {themeAnchor}
+      <RadixDialogRoot open={props.open} onOpenChange={props.onOpenChange}>
+      {portalContainer ? <RadixDialogPortal container={portalContainer}>
         <RadixDialogOverlay className="palette-overlay" />
         <RadixDialogContent
           className="palette-content"
@@ -414,8 +460,9 @@ export function CommandPalette(props: CommandPaletteProps) {
             </Flex>
           </Command>
         </RadixDialogContent>
-      </RadixDialogPortal>
-    </RadixDialogRoot>
+      </RadixDialogPortal> : null}
+      </RadixDialogRoot>
+    </>
   )
 }
 
@@ -428,6 +475,7 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
       type="button"
       variant="soft"
       color="gray"
+      size="2"
       className="palette-trigger"
       onClick={onClick}
       aria-label={t('command.searchCommands')}

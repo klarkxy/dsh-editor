@@ -103,15 +103,18 @@ export function shouldConfirmConversationSwitch(draft: string, nextId: string, c
   return Boolean(draft.trim()) && nextId !== currentId
 }
 
-/** Settings default if both fields are set; otherwise the first catalog model. */
+/** Settings default if both fields are set; otherwise the first usable catalog model. */
 export function resolveNewConversationModel(input: {
-  preferred?: { provider?: string; model?: string }
-  groups?: readonly { id: string; models: readonly { id: string }[] }[]
-}): { provider: string; model: string } | undefined {
+  preferred?: { provider?: string; model?: string; reasoningEffort?: string }
+  groups?: readonly { id: string; models: readonly { id: string }[]; usable?: boolean }[]
+}): { provider: string; model: string; reasoningEffort?: string } | undefined {
   const provider = input.preferred?.provider?.trim() ?? ''
   const model = input.preferred?.model?.trim() ?? ''
-  if (provider && model) return { provider, model }
-  for (const group of input.groups ?? []) {
+  const reasoningEffort = input.preferred?.reasoningEffort?.trim()
+  if (provider && model) return reasoningEffort ? { provider, model, reasoningEffort } : { provider, model }
+  const groups = input.groups ?? []
+  const usable = groups.filter((group) => group.usable !== false)
+  for (const group of usable.length ? usable : groups) {
     const first = group.models[0]
     if (group.id && first?.id) return { provider: group.id, model: first.id }
   }

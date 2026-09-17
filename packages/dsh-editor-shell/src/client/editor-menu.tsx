@@ -6,7 +6,6 @@ import {
   Menu,
   MenuContent,
   MenuItem,
-  MenuLabel,
   MenuSeparator,
   MenuTrigger,
 } from './ui/index.ts'
@@ -34,12 +33,12 @@ const ITEM = 'editor-menu-item'
 export function EditorActionMenuItems(props: {
   model: EditorMenuModel
   onAction(action: EditorMenuAction): void
+  showSave?: boolean
 }) {
   const { state } = props.model
   const rewriteDisabled = !state.canRewrite || !props.model.canRewritePath
   return (
     <>
-      <MenuLabel className="editor-menu-label">{t('editor.groupEdit')}</MenuLabel>
       <MenuItem className={ITEM} disabled={!state.canUndo} data-testid="editor-menu-undo" onSelect={() => props.onAction('undo')}>{t('editor.undo')}</MenuItem>
       <MenuItem className={ITEM} disabled={!state.canRedo} data-testid="editor-menu-redo" onSelect={() => props.onAction('redo')}>{t('editor.redo')}</MenuItem>
       <MenuItem className={ITEM} disabled={!state.canCut} data-testid="editor-menu-cut" onSelect={() => props.onAction('cut')}>{t('common.cut')}</MenuItem>
@@ -47,12 +46,10 @@ export function EditorActionMenuItems(props: {
       <MenuItem className={ITEM} disabled={!state.canPaste} data-testid="editor-menu-paste" onSelect={() => props.onAction('paste')}>{t('common.paste')}</MenuItem>
       <MenuItem className={ITEM} disabled={!state.canSelectAll} data-testid="editor-menu-select-all" onSelect={() => props.onAction('selectAll')}>{t('editor.selectAll')}</MenuItem>
       <MenuSeparator className="editor-menu-separator" aria-hidden="true" />
-      <MenuLabel className="editor-menu-label">{t('editor.groupDocument')}</MenuLabel>
-      <MenuItem className={ITEM} disabled={!state.canSave} data-testid="editor-menu-save" onSelect={() => props.onAction('save')}>{t('common.save')}</MenuItem>
+      {props.showSave ? <MenuItem className={ITEM} disabled={!state.canSave} data-testid="editor-menu-save" onSelect={() => props.onAction('save')}>{t('common.save')}</MenuItem> : null}
       <MenuItem className={ITEM} disabled={!state.canFind} data-testid="editor-menu-find" onSelect={() => props.onAction('find')}>{t('editor.find')}</MenuItem>
       <MenuItem className={ITEM} disabled={!state.canReplace} data-testid="editor-menu-replace" onSelect={() => props.onAction('replace')}>{t('editor.replace')}</MenuItem>
       <MenuSeparator className="editor-menu-separator" aria-hidden="true" />
-      <MenuLabel className="editor-menu-label">{t('editor.groupAssist')}</MenuLabel>
       <MenuItem className={ITEM} disabled={!state.canComplete} data-testid="editor-menu-complete" onSelect={() => props.onAction('complete')}>{t('editor.complete')}</MenuItem>
       <MenuItem className={ITEM} disabled={rewriteDisabled} data-testid="editor-menu-rewrite" onSelect={() => props.onAction('rewrite')}>{t('editor.rewrite')}</MenuItem>
     </>
@@ -88,7 +85,7 @@ export function EditorOverflowMenu(props: {
         aria-label={t('editor.menu')}
         onCloseAutoFocus={props.onCloseAutoFocus}
       >
-        <EditorActionMenuItems model={props.model} onAction={props.onAction} />
+        <EditorActionMenuItems model={props.model} onAction={props.onAction} showSave />
       </MenuContent>
     </Menu>
   )
