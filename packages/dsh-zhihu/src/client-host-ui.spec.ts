@@ -5,11 +5,14 @@ import {
   guardImeEnter,
   hostComponentsFromRenderProps,
   IME_KEYCODE,
+  renderInput,
   zhihuQueryKeyDown,
 } from './client-host-ui.tsx'
 
 function MockSelect() { return null }
 function MockDialog() { return null }
+function MockButton() { return null }
+function MockInput() { return null }
 
 function reactKey(partial: {
   key?: string
@@ -31,15 +34,48 @@ function reactKey(partial: {
 }
 
 describe('public zhihu host compatibility', () => {
-  it('extracts structural Select/Dialog from the slot owner without private imports', () => {
-    expect(hostComponentsFromRenderProps({ Select: MockSelect, Dialog: MockDialog })).toEqual({
+  it('extracts structural Select/Dialog/Button/Input from the slot owner without private imports', () => {
+    expect(hostComponentsFromRenderProps({
       Select: MockSelect,
       Dialog: MockDialog,
-    })
-    expect(hostComponentsFromRenderProps({ owner: { Select: MockSelect, Dialog: MockDialog } })).toEqual({
+      Button: MockButton,
+      Input: MockInput,
+    })).toEqual({
       Select: MockSelect,
       Dialog: MockDialog,
+      Button: MockButton,
+      Input: MockInput,
     })
+    expect(hostComponentsFromRenderProps({
+      owner: { Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput },
+    })).toEqual({
+      Select: MockSelect,
+      Dialog: MockDialog,
+      Button: MockButton,
+      Input: MockInput,
+    })
+  })
+
+  it('uses the host Input when provided and a native input otherwise', () => {
+    const hosted = renderInput(MockInput, {
+      value: '港口',
+      type: 'search',
+      onChange() {},
+      'aria-label': '搜索',
+    }) as { type: unknown; props: { value?: string; type?: string } }
+    expect(hosted.type).toBe(MockInput)
+    expect(hosted.props.value).toBe('港口')
+    expect(hosted.props.type).toBe('search')
+
+    const native = renderInput(undefined, {
+      value: '港口',
+      type: 'password',
+      onChange() {},
+      'aria-label': '密钥',
+    }) as { type: unknown; props: { value?: string; type?: string } }
+    expect(native.type).toBe('input')
+    expect(native.props.value).toBe('港口')
+    expect(native.props.type).toBe('password')
   })
 
   it('query consumer ignores synthetic isComposing and blocks native IME Enter/229', () => {
@@ -103,14 +139,18 @@ describe('public zhihu host compatibility', () => {
     expect(standalone.props.surface).toBe('overlay')
     expect(standalone.props.Select).toBeUndefined()
     expect(standalone.props.Dialog).toBeUndefined()
-    const hosted = renders[0]!({ Select: MockSelect, Dialog: MockDialog })
+    const hosted = renders[0]!({ Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput })
     expect(hosted.props.Select).toBe(MockSelect)
     expect(hosted.props.Dialog).toBe(MockDialog)
+    expect(hosted.props.Button).toBe(MockButton)
+    expect(hosted.props.Input).toBe(MockInput)
     /* 设置槽现在拿到完整宿主组件集：设置分区里的按钮走宿主 Button,
        Dialog 虽传入但 settings surface 不使用。 */
-    const settings = renders[1]!({ Select: MockSelect, Dialog: MockDialog })
+    const settings = renders[1]!({ Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput })
     expect(settings.props.surface).toBe('settings')
     expect(settings.props.Select).toBe(MockSelect)
     expect(settings.props.Dialog).toBe(MockDialog)
+    expect(settings.props.Button).toBe(MockButton)
+    expect(settings.props.Input).toBe(MockInput)
   })
 })

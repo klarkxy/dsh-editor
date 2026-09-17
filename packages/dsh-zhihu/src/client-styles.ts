@@ -210,7 +210,15 @@ export const zhihuClientStyles = `
 .zhihu-guide-title { margin: 0 0 4px; font-size: var(--font-size-2); font-weight: var(--font-weight-medium); font-family: var(--default-font-family); }
 .zhihu-guide-steps { margin: 0; padding-left: 18px; color: var(--gray-11); }
 .zhihu-scopes { display: flex; gap: var(--space-3); flex-wrap: wrap; }
-.zhihu-scope { display: flex; align-items: center; gap: 4px; color: var(--gray-11); }
+.zhihu-scope {
+  display: inline-flex; align-items: center; gap: 4px; color: var(--gray-11);
+  font: inherit; background: none; border: 1px solid var(--gray-6); border-radius: var(--radius-2);
+  padding: 0 10px; min-height: var(--control-h, 34px); cursor: pointer;
+}
+.zhihu-scope.is-on, .zhihu-scope[aria-pressed="true"] {
+  color: var(--accent-11); background: var(--accent-a3); border-color: var(--accent-a6);
+}
+.zhihu-input.ui-input { width: 100%; }
 .zhihu-usage { display: flex; flex-direction: column; gap: var(--space-3); }
 .zhihu-usage-intro { margin: 0; color: var(--gray-11); line-height: 1.6; }
 .zhihu-usage-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-2); }
@@ -239,9 +247,15 @@ export const zhihuClientStyles = `
 .zhihu-usage-table th:first-child, .zhihu-usage-table td:first-child { text-align: left; }
 .zhihu-usage-table th { color: var(--gray-11); font-weight: var(--font-weight-medium); }
 .zhihu-file {
-  font: inherit;
-  font-size: var(--font-size-2);
-  color: var(--gray-11);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .zhihu-upload-confirm {
   border: 1px solid var(--gray-6);

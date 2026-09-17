@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
-import { Button as ThemesButton, Callout, Card, Flex, Heading, IconButton, ScrollArea, Text } from '@radix-ui/themes'
+import { Button as ThemesButton, Callout, Flex, Heading, IconButton, RadioCards, ScrollArea, Text } from '@radix-ui/themes'
 import type { ConversationPresetChoice } from '../conversation-presets.ts'
 import { t } from '../i18n/index.ts'
 import { ActivityDots, Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'
@@ -310,43 +310,39 @@ export function ConversationPresetPicker(props: {
         {props.phase === 'ready' ? <ScrollArea
           className="file-dialog-actions"
           type="auto"
-          scrollbars="vertical"
-          role="radiogroup"
-          aria-labelledby="conversation-preset-picker-title"
-          aria-describedby="conversation-preset-picker-hint">
-          <Flex direction="column" gap="2">
-            {props.presets.map((preset, index) => <Card
+          scrollbars="vertical">
+          <RadioCards.Root
+            columns="1"
+            gap="2"
+            value={props.selectedId ?? ''}
+            onValueChange={(id) => { if (id) props.onSelect(id) }}
+            aria-labelledby="conversation-preset-picker-title"
+            aria-describedby="conversation-preset-picker-hint">
+            {props.presets.map((preset, index) => <RadioCards.Item
               key={preset.id}
-              asChild
-              variant={props.selectedId === preset.id ? 'classic' : 'surface'}>
-              <button
-                ref={index === 0 ? firstChoice : undefined}
-                type="button"
-                role="radio"
-                aria-checked={props.selectedId === preset.id}
-                aria-label={preset.reason
-                  ? `${preset.name}. ${preset.reason}`
-                  : `${preset.name}. ${preset.legacy ? `${t('chat.presetLegacyBadge')} ` : ''}${preset.description}`}
-                disabled={!preset.available || props.busy}
-                className={props.selectedId === preset.id ? 'primary-action' : undefined}
-                onClick={() => props.onSelect(preset.id)}>
-                <Flex direction="column" gap="1" align="start">
-                  <Text weight="medium" size="2">
-                    {preset.name}
-                    {preset.legacy ? <Text size="1" className="preset-badge">
-                      {t('chat.presetLegacyBadge')}
-                    </Text> : null}
-                  </Text>
-                  <Text size="1" color="gray">
-                    {preset.description}
-                  </Text>
-                  {preset.reason ? <Text size="1" className="warning" color="red">
-                    {preset.reason}
+              ref={index === 0 ? firstChoice : undefined}
+              value={preset.id}
+              disabled={!preset.available || props.busy}
+              className={props.selectedId === preset.id ? 'primary-action' : undefined}
+              aria-label={preset.reason
+                ? `${preset.name}. ${preset.reason}`
+                : `${preset.name}. ${preset.legacy ? `${t('chat.presetLegacyBadge')} ` : ''}${preset.description}`}>
+              <Flex direction="column" gap="1" align="start">
+                <Text weight="medium" size="2">
+                  {preset.name}
+                  {preset.legacy ? <Text size="1" className="preset-badge">
+                    {t('chat.presetLegacyBadge')}
                   </Text> : null}
-                </Flex>
-              </button>
-            </Card>)}
-          </Flex>
+                </Text>
+                <Text size="1" color="gray">
+                  {preset.description}
+                </Text>
+                {preset.reason ? <Text size="1" className="warning" color="red">
+                  {preset.reason}
+                </Text> : null}
+              </Flex>
+            </RadioCards.Item>)}
+          </RadioCards.Root>
         </ScrollArea> : null}
         {props.phase === 'ready' && props.error ? <Callout.Root className="warning" color="red" role="alert" size="1">
           <Callout.Text>

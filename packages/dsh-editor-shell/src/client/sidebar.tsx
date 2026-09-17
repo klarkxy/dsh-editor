@@ -7,7 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
-import { Callout, Flex, IconButton, Text } from '@radix-ui/themes'
+import { Button, Callout, Flex, IconButton, Text } from '@radix-ui/themes'
 import { isManuscriptChapterPath } from '../project-files.ts'
 import { canPinPath } from '../pinned-pane-view.ts'
 import { errorMessage, isImagePath, orderTreeEntries, safeRpcCall, treeRowPadding, treeExpansionPaths, type ShellContext, type TreeEntry } from './shared.ts'
@@ -102,9 +102,11 @@ function TreeRows(props: RowProps): ReactNode {
                   flexGrow="1"
                   minWidth="0"
                   pl={`${treeRowPadding(level)}px`}>
-                  <button
+                  <Button
                     className="tree-row"
                     type="button"
+                    variant="ghost"
+                    color="gray"
                     role="treeitem"
                     aria-level={level + 1}
                     tabIndex={child === tabbablePath ? 0 : -1}
@@ -129,7 +131,7 @@ function TreeRows(props: RowProps): ReactNode {
                     <Text size="2" truncate>
                       {item.name}
                     </Text>
-                  </button>
+                  </Button>
                 </Flex>
                 <Flex className="tree-row-actions" align="center" gap="1" flexShrink="0">
                   <IconButton
@@ -169,9 +171,11 @@ function TreeRows(props: RowProps): ReactNode {
               width="100%"
               minWidth="0"
               pl={`${treeRowPadding(level)}px`}>
-              <button
+              <Button
                 className="tree-row tree-main"
                 type="button"
+                variant="ghost"
+                color="gray"
                 role="treeitem"
                 aria-level={level + 1}
                 tabIndex={child === tabbablePath ? 0 : -1}
@@ -195,7 +199,7 @@ function TreeRows(props: RowProps): ReactNode {
                 <Text size="2" truncate>
                   {item.name}
                 </Text>
-              </button>
+              </Button>
             </Flex>
           </div>
         );

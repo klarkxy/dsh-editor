@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { Button, Card, Flex, Heading, Separator, Switch, Text } from '@radix-ui/themes'
+import { Button, Card, Flex, Heading, IconButton, Separator, Switch, Text } from '@radix-ui/themes'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
@@ -137,16 +137,21 @@ export function SettingsGeneralSection(props: {
             aria-label={t('settings.accent')}
             align="center"
             gap="2">
-            {ACCENT_VALUES.map((value) => <button
+            {ACCENT_VALUES.map((value) => <IconButton
               key={value}
               type="button"
+              variant="ghost"
+              size="1"
+              highContrast
               className={accent === value ? 'accent-swatch active' : 'accent-swatch'}
               data-swatch={value}
               style={{ background: `var(--${value}-9)` }}
               title={t(ACCENT_LABEL_KEYS[value])}
               aria-label={t(ACCENT_LABEL_KEYS[value])}
               aria-pressed={accent === value}
-              onClick={() => setAccent(value)} />)}
+              onClick={() => setAccent(value)}>
+              <span aria-hidden="true" />
+            </IconButton>)}
           </Flex>} />
         <Separator size="4" />
         <Row

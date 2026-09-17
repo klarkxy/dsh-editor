@@ -1,5 +1,5 @@
 import { type ChangeEvent, type ComponentType, type Ref } from 'react';
-import type { ShellInputProps, ShellSelectProps } from 'dsh-editor-seats'
+import type { ShellInputProps, ShellSelectProps, ShellTextAreaProps } from 'dsh-editor-seats'
 
 /** IME composition keyCode used by Chromium/WebKit while composing. */
 export const IME_KEYCODE = 229
@@ -43,6 +43,25 @@ export function renderInput(
     <input
       {...rest}
       onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)} />
+  );
+}
+
+export type RenderTextAreaProps = ShellTextAreaProps & { ref?: Ref<HTMLTextAreaElement> }
+
+/** Host TextArea when the seat provides one; otherwise a native control. */
+export function renderTextArea(
+  TextArea: ComponentType<ShellTextAreaProps> | undefined,
+  props: RenderTextAreaProps,
+) {
+  if (TextArea) {
+    const Host = TextArea as ComponentType<RenderTextAreaProps>
+    return <Host {...props} />;
+  }
+  const { onChange, ...rest } = props
+  return (
+    <textarea
+      {...rest}
+      onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value)} />
   );
 }
 

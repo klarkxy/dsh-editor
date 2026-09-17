@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PluginInspectReport } from './contracts.ts'
 import {
+  apply,
   canConfirmPluginInstall,
   handleMarketplaceGithubClick,
   isCurrentInstallAttempt,
@@ -84,6 +85,30 @@ describe('plugin market install confirmation', () => {
       if (previousWindow) scope.window = previousWindow
       if (previousBridge !== undefined) scope.dshWindow = previousBridge
     }
+  })
+
+  it('forwards host Button and Input from settings slot props', () => {
+    function MockButton() { return null }
+    function MockInput() { return null }
+    const renders: Array<(props: unknown) => { props: Record<string, unknown> }> = []
+    apply({
+      effect(fn: () => (() => void) | void) { fn() },
+      slots: {
+        inject(_key: string, callback: () => unknown) {
+          callback()
+          return () => {}
+        },
+        register(_spec: unknown, render: unknown) {
+          renders.push(render as (typeof renders)[number])
+          return () => {}
+        },
+      },
+      connection: { rpc: { call: async () => ({}) } },
+    } as never)
+    expect(renders.length).toBe(1)
+    const hosted = renders[0]!({ Button: MockButton, Input: MockInput })
+    expect(hosted.props.Button).toBe(MockButton)
+    expect(hosted.props.Input).toBe(MockInput)
   })
 
 })

@@ -1,5 +1,5 @@
 import { memo, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Box, Button, Callout, Card, DropdownMenu, Flex, IconButton, Text } from '@radix-ui/themes'
+import { Box, Button, Callout, Card, DropdownMenu, Flex, IconButton, Text, TextField } from '@radix-ui/themes'
 import type { PanelSize } from 'react-resizable-panels'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
 import type { SnapshotResponse } from 'dsh-editor-workbench/contracts'
@@ -133,32 +133,35 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
           </MenuContent>
         </Menu>
       </Flex>
-      {/* TextField.Root 把 className 打在包装 div 上，e2e 要的是 input.side-search。 */}
-      <Flex className="side-search-wrap" align="center" gap="2" mx="3" mb="2" px="2">
-        <SearchIcon size={14} />
-        <input
-          className="side-search"
-          type="search"
-          value={searchQuery}
-          maxLength={120}
-          placeholder={t('search.placeholder')}
-          aria-label={t('search.aria')}
-          title={t('workspace.searchTitle')}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => {
-            setSearchQuery(event.target.value)
-            if (!props.searchOpen) props.onSearchRequestOpen()
-          }}
-          onFocus={() => props.onSearchRequestOpen()}
-          onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
-            if (event.key !== 'Enter') return
-            if (isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
-              event.preventDefault()
-              return
-            }
-            props.onSearchRequestOpen()
-            setSearchSubmitTick((tick) => tick + 1)
-          }} />
-      </Flex>
+      <TextField.Root
+        className="side-search"
+        type="search"
+        size="2"
+        mx="3"
+        mb="2"
+        value={searchQuery}
+        maxLength={120}
+        placeholder={t('search.placeholder')}
+        aria-label={t('search.aria')}
+        title={t('workspace.searchTitle')}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+          setSearchQuery(event.target.value)
+          if (!props.searchOpen) props.onSearchRequestOpen()
+        }}
+        onFocus={() => props.onSearchRequestOpen()}
+        onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
+          if (event.key !== 'Enter') return
+          if (isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
+            event.preventDefault()
+            return
+          }
+          props.onSearchRequestOpen()
+          setSearchSubmitTick((tick) => tick + 1)
+        }}>
+        <TextField.Slot>
+          <SearchIcon size={14} />
+        </TextField.Slot>
+      </TextField.Root>
       {props.searchOpen ? <SearchPanel
         ctx={props.ctx}
         sessionId={props.sessionId}

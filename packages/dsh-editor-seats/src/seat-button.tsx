@@ -15,9 +15,11 @@ export const SeatButton = forwardRef<HTMLButtonElement, {
   title?: string
   onClick?(event: MouseEvent<HTMLButtonElement>): void
   'aria-label'?: string
+  'aria-labelledby'?: string
   'aria-pressed'?: boolean
   'aria-expanded'?: boolean
   'aria-selected'?: boolean
+  'aria-checked'?: boolean
   'aria-current'?: ShellButtonProps['aria-current']
   'aria-controls'?: string
   'aria-describedby'?: string

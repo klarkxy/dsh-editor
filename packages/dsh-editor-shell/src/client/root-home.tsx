@@ -283,9 +283,11 @@ export function HomeScreen(props: {
                       size="2">
                       <Flex align="center" gap="2">
                         <Box flexGrow="1" minWidth="0">
-                          <button
+                          <Button
                             className="tree-row"
                             type="button"
+                            variant="ghost"
+                            color="gray"
                             disabled={props.openingWorkspace}
                             style={{ width: '100%', textAlign: 'left', background: 'transparent' }}
                             onClick={() => void props.onOpenWorkspace(workspace)}>
@@ -304,7 +306,7 @@ export function HomeScreen(props: {
                                 {recentLabel}
                               </Text> : null}
                             </Flex>
-                          </button>
+                          </Button>
                         </Box>
                         <IconButton
                           className="workspace-manage icon-button"

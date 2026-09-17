@@ -11,6 +11,9 @@ import {
 
 function MockSelect() { return null }
 function MockDialog() { return null }
+function MockButton() { return null }
+function MockInput() { return null }
+function MockTextArea() { return null }
 
 function reactKey(partial: {
   key?: string
@@ -36,10 +39,15 @@ function reactKey(partial: {
 }
 
 describe('public proofread host compatibility', () => {
-  it('extracts structural Select/Dialog from the slot owner without private imports', () => {
-    expect(hostComponentsFromRenderProps({ owner: { Select: MockSelect, Dialog: MockDialog } })).toEqual({
+  it('extracts structural Select/Dialog/Button/Input/TextArea from the slot owner without private imports', () => {
+    expect(hostComponentsFromRenderProps({
+      owner: { Select: MockSelect, Dialog: MockDialog, Button: MockButton, Input: MockInput, TextArea: MockTextArea },
+    })).toEqual({
       Select: MockSelect,
       Dialog: MockDialog,
+      Button: MockButton,
+      Input: MockInput,
+      TextArea: MockTextArea,
     })
   })
 
@@ -107,8 +115,10 @@ describe('public proofread host compatibility', () => {
     expect(renders.length).toBeGreaterThan(0)
     const standalone = renders[0]!({})
     expect(standalone.props.Dialog).toBeUndefined()
-    const hosted = renders[0]!({ owner: { Select: MockSelect, Dialog: MockDialog } })
+    const hosted = renders[0]!({ owner: { Select: MockSelect, Dialog: MockDialog, Button: MockButton, TextArea: MockTextArea } })
     expect(hosted.props.Dialog).toBe(MockDialog)
+    expect(hosted.props.Button).toBe(MockButton)
+    expect(hosted.props.TextArea).toBe(MockTextArea)
     expect(hosted.props.Select).toBeUndefined()
   })
 })

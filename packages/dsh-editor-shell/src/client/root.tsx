@@ -50,7 +50,7 @@ import { featureEnabled } from '../capabilities.ts'
 import { useShellCapabilities } from './capabilities.ts'
 import { CommandPalette, CommandPaletteTrigger } from './command-palette.tsx'
 import { Select as HostSelect } from './select.tsx'
-import { ActivityDots, ActivityRing, ActivityShimmer, ActivitySkeleton, ActivityText, Button as HostButton, Dialog as HostDialog, Input, Input as HostInput, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, radixThemesStyles, useChromeMotion } from './ui/index.ts'
+import { ActivityDots, ActivityRing, ActivityShimmer, ActivitySkeleton, ActivityText, Button as HostButton, Dialog as HostDialog, Input, Input as HostInput, TextArea as HostTextArea, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, radixThemesStyles, useChromeMotion } from './ui/index.ts'
 import { Button as ThemesButton, Callout, Flex, IconButton, Text } from '@radix-ui/themes'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
 import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.tsx'
@@ -65,7 +65,7 @@ import { ArchivePanel, canArchivePath, type ArchiveView } from './archive.tsx'
 import { t, useLocale, type MessageKey } from '../i18n/index.ts'
 
 
-const HOST_UI_OWNER = { Select: HostSelect, Dialog: HostDialog, Button: HostButton, Input: HostInput }
+const HOST_UI_OWNER = { Select: HostSelect, Dialog: HostDialog, Button: HostButton, Input: HostInput, TextArea: HostTextArea }
 
 /* 自动保存被拦住时的驻留原因提示：组字/冲突/保存失败/保存期间新输入/身份变化。 */
 const SAVE_STAY_NOTE: Record<EditorSaveBlockReason, MessageKey> = {
@@ -1465,6 +1465,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     Dialog: HostDialog,
     Button: HostButton,
     Input: HostInput,
+    TextArea: HostTextArea,
   }), [fileSession?.sessionId, path, editorDirty, treeRevision, contentRevision, locale, openSeatDocument, refreshAppliedPath, revealSidebar, refreshSeat, toggleSeatPin, pinnedPath, BoundSeatProposalCard])
   seatContextRef.current = seatContext
   /* 注册表命令执行期经 proxy 读最新 seat；enabled 在投影构建时求值，所以
@@ -2111,8 +2112,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               onApplied={onAppliedChat} />
           </Panel> : null}
         </PanelGroup>
-        {assistantVisible && overlayAssistant ? <button
+        {assistantVisible && overlayAssistant ? <ThemesButton
           type="button"
+          variant="ghost"
+          color="gray"
           className="chat-overlay-dismiss"
           aria-label={t('workspace.hideAssistant')}
           onClick={() => setAssistantOpen(false)} /> : null}

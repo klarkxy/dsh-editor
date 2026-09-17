@@ -1,9 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { Button } from '@radix-ui/themes'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { asClient, type ManuscriptClient } from '../host.ts'
 import { activeWorkspaceFromSessionList, type ActiveWorkspace } from './session-cwd.ts'
 import { registerManuscriptUi, type SlotHandle } from './slots.ts'
 import { manuscriptOverlayStyles } from './overlay-styles.ts'
+import { ManuscriptTheme, ensureManuscriptThemes } from './themes.tsx'
 import {
   EditorCore,
   editorCoreStyles,
@@ -38,6 +40,7 @@ function parentOf(rel: string): string {
 // (`:root[data-theme=light|dark]`), which lives in the same document.
 let manuscriptStylesInjected = false
 function ensureManuscriptStyles(): void {
+  ensureManuscriptThemes()
   if (manuscriptStylesInjected) return
   if (typeof document === 'undefined') return
   const style = document.createElement('style')
@@ -100,8 +103,10 @@ function Tree(props: {
         const expanded = open[child] !== undefined
         return (
           <div key={child}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              color="gray"
               className="manuscript-tree-button"
               aria-expanded={expanded ? 'true' : 'false'}
               style={{ paddingLeft: 12 + depth * 12 }}
@@ -110,21 +115,23 @@ function Tree(props: {
                 else void load(child)
               }}>
               {`${expanded ? '▾' : '▸'} ${entry.name}`}
-            </button>
+            </Button>
             {expanded ? render(child, depth + 1) : null}
           </div>
         );
       }
       const isActive = props.active === child
       return (
-        <button
+        <Button
           key={child}
           type="button"
+          variant="ghost"
+          color="gray"
           className={`manuscript-tree-row${isActive ? ' is-active' : ''}`}
           onClick={() => props.onOpen(child)}
           style={{ paddingLeft: 12 + depth * 12 }}>
           {entry.name}
-        </button>
+        </Button>
       );
     });
   }
@@ -300,43 +307,51 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
   }
 
   return (
+    <ManuscriptTheme>
     <div data-testid="manuscript-overlay" data-state={open ? 'open' : 'closed'}>
-      {!open ? <button
+      {!open ? <Button
         type="button"
+        variant="soft"
+        color="gray"
         className="manuscript-toggle"
         data-testid="manuscript-open"
         onClick={() => setOpen(true)}>
         稿纸
-      </button> : <section className="manuscript-panel">
+      </Button> : <section className="manuscript-panel">
         <header className="manuscript-panel-header">
           <h2 className="manuscript-panel-title">
             稿纸
           </h2>
           <div className="manuscript-panel-actions">
-            <button type="button" data-testid="manuscript-close" onClick={requestClose}>
+            <Button type="button" variant="ghost" color="gray" data-testid="manuscript-close" onClick={requestClose}>
               关闭
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="solid"
               data-testid="manuscript-new"
               disabled={!cwd}
               onClick={createFile}>
               新建
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              color="gray"
               data-testid="manuscript-prev"
               disabled={siblingIndex <= 0}
               onClick={() => go(-1)}>
               上一篇
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              color="gray"
               data-testid="manuscript-next"
               disabled={siblingIndex < 0 || siblingIndex >= siblings.length - 1}
               onClick={() => go(1)}>
               下一篇
-            </button>
+            </Button>
           </div>
         </header>
         <aside className="manuscript-panel-tree">
@@ -392,24 +407,25 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
             <span>
               AI 补全能力不可用，补全与选段改写已暂停。
             </span>
-            <button type="button" onClick={() => { void loadCapability() }}>
+            <Button type="button" variant="soft" color="gray" onClick={() => { void loadCapability() }}>
               重试
-            </button>
+            </Button>
           </div> : null}
           {pendingTarget ? <div data-testid="manuscript-switch-guard" className="manuscript-switch-guard">
             <span>
               目标已变更，当前草稿尚未处理。
             </span>
-            <button type="button" onClick={() => { void acceptPendingSave() }}>
+            <Button type="button" variant="solid" onClick={() => { void acceptPendingSave() }}>
               保存后切换
-            </button>
-            <button type="button" onClick={acceptPendingDiscard}>
+            </Button>
+            <Button type="button" variant="soft" color="red" onClick={acceptPendingDiscard}>
               放弃修改并切换
-            </button>
+            </Button>
           </div> : null}
         </main>
       </section>}
     </div>
+    </ManuscriptTheme>
   );
 }
 

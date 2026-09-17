@@ -24,7 +24,7 @@ export {
 } from './activity.tsx'
 export { Tooltip, TooltipProvider } from './tooltip.tsx'
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs.tsx'
-export { Button, Input, type ButtonVariant } from './controls.tsx'
+export { Button, Input, TextArea, type ButtonVariant } from './controls.tsx'
 export { ShellUiProvider } from './provider.tsx'
 export { ShellTheme, radixThemesStyles, ACCENT_TO_RADIX } from './theme-root.tsx'
 export { isImeEvent, IME_KEYCODE } from './ime.ts'

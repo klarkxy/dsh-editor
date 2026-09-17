@@ -2,12 +2,13 @@ import type { SettingsScope, SettingsScopeSnapshot } from './dsh-compat.ts'
 import {
   Fragment,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
   type ChangeEvent,
 } from 'react';
-import { Button, Callout, Card, Flex, Heading, Kbd, RadioGroup, Switch, Text, TextArea } from '@radix-ui/themes'
+import { Button, Callout, Card, Flex, Heading, Kbd, RadioGroup, Slider, Switch, Text, TextArea } from '@radix-ui/themes'
 import { AUTHOR_PREFERENCES_KEY, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
 import { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
@@ -237,6 +238,41 @@ export type WritingSettingsSlots = {
  * 禁用,不再注册进去。
  * 作者侧写不对作者暴露设置入口,记忆仍只通过对话里的确认卡写入。
  */
+function LabeledSlider(props: {
+  label: string
+  valueLabel: string
+  value: number
+  min: number
+  max: number
+  step: number
+  onValueChange(value: number): void
+}) {
+  const root = useRef<HTMLSpanElement | null>(null)
+  useLayoutEffect(() => {
+    const thumb = root.current?.querySelector<HTMLElement>('[role="slider"]')
+    if (thumb) thumb.setAttribute('aria-label', props.label)
+  }, [props.label, props.value])
+  return (
+    <Flex className="slider-row" direction="column" gap="1">
+      <Text as="label" size="2">
+        {props.valueLabel}
+      </Text>
+      <Slider
+        ref={root}
+        value={[props.value]}
+        min={props.min}
+        max={props.max}
+        step={props.step}
+        aria-label={props.label}
+        style={{ width: '100%' }}
+        onValueChange={(next) => {
+          const value = next[0]
+          if (value !== undefined) props.onValueChange(value)
+        }} />
+    </Flex>
+  )
+}
+
 export function WritingSettings({ scope, migrate }: {
   scope: SettingsScope<WritingPreferences>
   migrate: WritingMigration
@@ -375,45 +411,30 @@ export function WritingSettings({ scope, migrate }: {
               </Flex>
             </Flex>
           </Flex>
-          <label className="slider-row">
-            <Text as="span" size="2">
-              {t('writing.fontSize', { size: values.fontSize })}
-            </Text>
-            <input
-              type="range"
-              min={PAPER_FONT_SIZE.min}
-              max={PAPER_FONT_SIZE.max}
-              step={1}
-              value={values.fontSize}
-              aria-label={t('writing.fontSizeAria')}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => void update('fontSize', Number(event.target.value))} />
-          </label>
-          <label className="slider-row">
-            <Text as="span" size="2">
-              {t('writing.lineHeight', { value: values.lineHeight.toFixed(1) })}
-            </Text>
-            <input
-              type="range"
-              min={PAPER_LINE_HEIGHT.min}
-              max={PAPER_LINE_HEIGHT.max}
-              step={0.1}
-              value={values.lineHeight}
-              aria-label={t('writing.lineHeightAria')}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => void update('lineHeight', Number(event.target.value))} />
-          </label>
-          <label className="slider-row">
-            <Text as="span" size="2">
-              {t('writing.paragraphSpacing', { value: values.paragraphSpacing.toFixed(2) })}
-            </Text>
-            <input
-              type="range"
-              min={PAPER_PARAGRAPH_SPACING.min}
-              max={PAPER_PARAGRAPH_SPACING.max}
-              step={0.05}
-              value={values.paragraphSpacing}
-              aria-label={t('writing.paragraphSpacingAria')}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => void update('paragraphSpacing', Number(event.target.value))} />
-          </label>
+          <LabeledSlider
+            label={t('writing.fontSizeAria')}
+            valueLabel={t('writing.fontSize', { size: values.fontSize })}
+            value={values.fontSize}
+            min={PAPER_FONT_SIZE.min}
+            max={PAPER_FONT_SIZE.max}
+            step={1}
+            onValueChange={(value) => void update('fontSize', value)} />
+          <LabeledSlider
+            label={t('writing.lineHeightAria')}
+            valueLabel={t('writing.lineHeight', { value: values.lineHeight.toFixed(1) })}
+            value={values.lineHeight}
+            min={PAPER_LINE_HEIGHT.min}
+            max={PAPER_LINE_HEIGHT.max}
+            step={0.1}
+            onValueChange={(value) => void update('lineHeight', value)} />
+          <LabeledSlider
+            label={t('writing.paragraphSpacingAria')}
+            valueLabel={t('writing.paragraphSpacing', { value: values.paragraphSpacing.toFixed(2) })}
+            value={values.paragraphSpacing}
+            min={PAPER_PARAGRAPH_SPACING.min}
+            max={PAPER_PARAGRAPH_SPACING.max}
+            step={0.05}
+            onValueChange={(value) => void update('paragraphSpacing', value)} />
           <Flex className="choice-row" role="group" aria-label={t('writing.font')} align="center" gap="2" wrap="wrap">
             <Text as="span" size="2" weight="medium">
               {t('writing.font')}

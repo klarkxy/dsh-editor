@@ -166,10 +166,11 @@ function Switch(props: {
   describedBy?: string
   testId?: string
   onToggle(): void
+  hostButton?: ComponentType<HostButtonProps>
 }) {
   return (
-    <button
-      type="button"
+    <SeatButton
+      host={props.hostButton}
       role="switch"
       className={`dsh-plugins-switch${props.checked ? ' is-on' : ''}${props.busy ? ' is-pending' : ''}`}
       aria-checked={props.checked}
@@ -177,14 +178,9 @@ function Switch(props: {
       aria-describedby={props.describedBy}
       data-testid={props.testId}
       disabled={props.disabled || props.busy}
-      onClick={() => { if (!props.disabled && !props.busy) props.onToggle() }}
-      onKeyDown={(event: { key: string; preventDefault(): void }) => {
-        if (event.key !== ' ' && event.key !== 'Enter') return
-        event.preventDefault()
-        if (!props.disabled && !props.busy) props.onToggle()
-      }}>
+      onClick={() => { if (!props.disabled && !props.busy) props.onToggle() }}>
       <span className="dsh-plugins-switch-thumb" aria-hidden={true} />
-    </button>
+    </SeatButton>
   );
 }
 
@@ -255,6 +251,7 @@ function FeatureCard(props: {
         </span>
           : canToggle
             ? <Switch
+          hostButton={props.hostButton}
           checked={on}
           busy={props.busy}
           labelledBy={titleId}
@@ -283,10 +280,29 @@ type HostButtonProps = {
   title?: string
   onClick?(event: ReactMouseEvent<HTMLButtonElement>): void
   'aria-label'?: string
+  'aria-labelledby'?: string
   'aria-pressed'?: boolean
   'aria-expanded'?: boolean
+  'aria-selected'?: boolean
+  'aria-checked'?: boolean
+  'aria-describedby'?: string
   'data-testid'?: string
+  role?: string
+  tabIndex?: number
   children?: ReactNode
+}
+
+type HostInputProps = {
+  value: string
+  onChange(value: string): void
+  disabled?: boolean
+  maxLength?: number
+  placeholder?: string
+  type?: 'text' | 'search' | 'password'
+  'aria-label'?: string
+  autoFocus?: boolean
+  className?: string
+  'data-testid'?: string
 }
 
 type HostDialogProps = {
@@ -361,6 +377,7 @@ function WritingPresetGroup(props: {
   presets: WritingPresetCard[]
   busyPreset: string | null
   onToggle(id: string, enabled: boolean): void
+  hostButton?: ComponentType<HostButtonProps>
 }) {
   return (
     <section className="dsh-plugins-group" data-testid="plugins-writing-presets">
@@ -394,6 +411,7 @@ function WritingPresetGroup(props: {
                 核心
               </span>
                 : <Switch
+                hostButton={props.hostButton}
                 checked={preset.enabled}
                 busy={props.busyPreset === preset.id}
                 labelledBy={titleId}
@@ -534,6 +552,7 @@ type PluginPanelProps = {
   uninstallErrorDetail?: string
   Dialog?: ComponentType<HostDialogProps>
   Button?: ComponentType<HostButtonProps>
+  Input?: ComponentType<HostInputProps>
 }
 
 function UninstallConfirm(props: {
@@ -887,6 +906,7 @@ function PluginPanel(props: PluginPanelProps) {
           : <div className="dsh-plugins-groups">
         {props.presets
           ? <WritingPresetGroup
+          hostButton={props.Button}
           presets={props.presets}
           busyPreset={props.busyPreset}
           onToggle={props.onTogglePreset} />
@@ -912,13 +932,21 @@ function PluginPanel(props: PluginPanelProps) {
       </div>
         : <div className="dsh-plugins-market">
         <form className="dsh-plugins-search" onSubmit={onMarketSubmit}>
-          <input
+          {props.Input
+            ? <props.Input
             type="search"
             value={props.query}
             data-testid="plugins-search"
             placeholder="搜索插件，或粘贴 GitHub 仓库地址"
             aria-label="搜索插件，或粘贴 GitHub 仓库地址"
-            onChange={(event: { target: { value: string } }) => props.onQuery(event.target.value)} />
+            onChange={props.onQuery} />
+            : <input
+            type="search"
+            value={props.query}
+            data-testid="plugins-search"
+            placeholder="搜索插件，或粘贴 GitHub 仓库地址"
+            aria-label="搜索插件，或粘贴 GitHub 仓库地址"
+            onChange={(event: { target: { value: string } }) => props.onQuery(event.target.value)} />}
           <SeatButton
             host={props.Button}
             variant="primary"
@@ -985,7 +1013,12 @@ function PluginPanel(props: PluginPanelProps) {
   );
 }
 
-function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDialogProps>; Button?: ComponentType<HostButtonProps> }) {
+function PluginSettings(props: {
+  rpc: RpcCaller
+  Dialog?: ComponentType<HostDialogProps>
+  Button?: ComponentType<HostButtonProps>
+  Input?: ComponentType<HostInputProps>
+}) {
   const caller = props.rpc
   const [tab, setTab] = useState<'installed' | 'market'>('installed')
   const [inventory, setInventory] = useState<PluginInventory | null>(null)
@@ -1344,15 +1377,25 @@ function PluginSettings(props: { rpc: RpcCaller; Dialog?: ComponentType<HostDial
       onUninstall={onUninstall}
       onConfirmUninstall={() => void onConfirmUninstall()}
       onCancelUninstall={onCancelUninstall}
-      Dialog={props.Dialog} />
+      Dialog={props.Dialog}
+      Button={props.Button}
+      Input={props.Input} />
   );
 }
 
 export function apply(ctx: Context): void {
   if (typeof document !== 'undefined') ctx.effect(() => injectStyles(), 'dsh-editor-plugins-client.styles')
   const client = ctx as PluginsClientContext
-  function PluginsSettingsContribution(props?: { Dialog?: ComponentType<HostDialogProps>; Button?: ComponentType<HostButtonProps> }) {
-    return <PluginSettings rpc={client.connection.rpc} Dialog={props?.Dialog} Button={props?.Button} />;
+  function PluginsSettingsContribution(props?: {
+    Dialog?: ComponentType<HostDialogProps>
+    Button?: ComponentType<HostButtonProps>
+    Input?: ComponentType<HostInputProps>
+  }) {
+    return <PluginSettings
+      rpc={client.connection.rpc}
+      Dialog={props?.Dialog}
+      Button={props?.Button}
+      Input={props?.Input} />;
   }
   client.slots.inject(PLUGINS_SETTINGS_SLOT, () =>
     client.slots.register({ name: PLUGINS_SETTINGS_SLOT, id: 'plugins', order: 0, label: '插件' }, PluginsSettingsContribution))

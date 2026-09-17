@@ -12,7 +12,7 @@ import {
 import { ZHIHU_CREDENTIAL_REF, ZHIHU_RPC_CHANNEL, type ZhihuRpcResult } from './contracts.ts'
 import { createZhihuClientState, type ZhihuClientState } from './client-state.ts'
 import { zhihuClientStyles } from './client-styles.ts'
-import { dockEscapeKeyDown, hostComponentsFromRenderProps, renderSelect, zhihuQueryKeyDown, type HostButton, type HostDialog, type HostSelect } from './client-host-ui.tsx'
+import { dockEscapeKeyDown, hostComponentsFromRenderProps, renderInput, renderSelect, zhihuQueryKeyDown, type HostButton, type HostDialog, type HostInput, type HostSelect } from './client-host-ui.tsx'
 import { SeatButton } from 'dsh-editor-seats/seat-button'
 
 export const name = 'dsh-zhihu-client'
@@ -371,7 +371,7 @@ function useAlive() {
   return alive
 }
 
-function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButton }): ReactNode {
+function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButton; Input?: HostInput }): ReactNode {
   const { credentials } = props
   const alive = useAlive()
   const [state, setState] = useState<CredentialLoad>({ status: 'loading' })
@@ -515,19 +515,18 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
         </dd>
       </dl>
       <div className="zhihu-field">
-        <label className="zhihu-field-label" htmlFor="zhihu-access-secret">
+        <span className="zhihu-field-label" id="zhihu-access-secret-label">
           Access Secret
-        </label>
-        <input
-          id="zhihu-access-secret"
-          type="password"
-          autoComplete="off"
-          className="zhihu-input"
-          value={keyDraft}
-          placeholder={placeholder}
-          aria-invalid={draftFailure !== undefined}
-          disabled={busy || keyLocked}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => setKeyDraft(event.target.value)} />
+        </span>
+        {renderInput(props.Input, {
+          type: 'password',
+          className: 'zhihu-input',
+          value: keyDraft,
+          placeholder,
+          disabled: busy || keyLocked,
+          'aria-label': 'Access Secret',
+          onChange: setKeyDraft,
+        })}
         {draftFailure === undefined
           ? null
           : <p className="zhihu-warning" role="alert">
@@ -973,6 +972,7 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
   const [baseId, setBaseId] = useState('')
   const [file, setFile] = useState<File | undefined>(undefined)
   const [fileKey, setFileKey] = useState(0)
+  const fileRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | undefined>(undefined)
   const [failure, setFailure] = useState<string | undefined>(undefined)
@@ -1088,17 +1088,26 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
         </p> : null}
       </div> : null}
       {list.status === 'ready' ? <div className="zhihu-field">
-        <label className="zhihu-field-label" htmlFor="zhihu-kb-file">
+        <span className="zhihu-field-label">
           选择文件
-        </label>
+        </span>
         <input
           key={fileKey}
+          ref={fileRef}
           id="zhihu-kb-file"
           type="file"
           accept={KB_ACCEPT}
+          hidden={true}
           className="zhihu-file"
           disabled={busy}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0])} />
+        <SeatButton
+          host={props.Button}
+          className="zhihu-button"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}>
+          {file ? file.name : '选择文件'}
+        </SeatButton>
       </div> : null}
       {list.status === 'ready' && file ? <div className="zhihu-upload-confirm">
         {`确认将「${file.name}」（${formatSize(file.size)}）上传到${baseId ? '所选知识库' : '默认知识库'}？文件会进入知乎云端。`}
@@ -1148,8 +1157,8 @@ function tabLabel(tab: Tab, surface: ZhihuSurface): string {
   return TAB_LABEL[tab]
 }
 
-function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?: HostSelect; Dialog?: HostDialog; Button?: HostButton; surface?: ZhihuSurface }) {
-  const { rpc, credentials, Select, Dialog, Button } = props
+function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?: HostSelect; Dialog?: HostDialog; Button?: HostButton; Input?: HostInput; surface?: ZhihuSurface }) {
+  const { rpc, credentials, Select, Dialog, Button, Input } = props
   const surface: ZhihuSurface = props.surface === 'settings' ? 'settings' : 'overlay'
   const tabs = surface === 'settings' ? SETTINGS_TABS : OVERLAY_TABS
   const gateRef = useRef<ZhihuClientState | null>(null)
@@ -1319,24 +1328,27 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
         }, 'zhihu-select') : null}
       </div>
       {mode === 'knowledge' ? <div className="zhihu-scopes">
-        {SCOPE_OPTIONS.map((scope) => <label key={scope.value} className="zhihu-scope">
-          <input
-            type="checkbox"
-            checked={scopes.includes(scope.value)}
-            onChange={() => toggleScope(scope.value)} />
+        {SCOPE_OPTIONS.map((scope) => <SeatButton
+          key={scope.value}
+          host={Button}
+          role="checkbox"
+          aria-pressed={scopes.includes(scope.value)}
+          className={`zhihu-scope${scopes.includes(scope.value) ? ' is-on' : ''}`}
+          onClick={() => toggleScope(scope.value)}>
           {scope.label}
-        </label>)}
+        </SeatButton>)}
       </div> : null}
-      <input
-        ref={queryRef}
-        type="search"
-        className="zhihu-input"
-        data-testid="zhihu-query"
-        placeholder={mode === 'hot' ? '热榜无需关键词' : '输入关键词…'}
-        value={query}
-        disabled={mode === 'hot'}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => onQueryChange(event.target.value)}
-        onKeyDown={onQueryKeyDown} />
+      {renderInput(Input, {
+        ref: queryRef,
+        type: 'search',
+        className: 'zhihu-input',
+        'data-testid': 'zhihu-query',
+        placeholder: mode === 'hot' ? '热榜无需关键词' : '输入关键词…',
+        value: query,
+        disabled: mode === 'hot',
+        onChange: onQueryChange,
+        onKeyDown: onQueryKeyDown,
+      })}
       <div className="zhihu-row">
         <SeatButton
           host={Button}
@@ -1371,7 +1383,7 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
       </div> : null}
       {phase === 'done' && outcome ? <OutcomeView outcome={outcome} stale={stale} /> : null}
     </div> : null}
-    {tab === 'settings' ? <SettingsSection credentials={credentials} Button={Button} /> : null}
+    {tab === 'settings' ? <SettingsSection credentials={credentials} Button={Button} Input={Input} /> : null}
     {tab === 'usage' ? <UsageSection rpc={rpc} Button={Button} /> : null}
     {tab === 'knowledge' ? <KnowledgeSection rpc={rpc} Select={Select} Button={Button} /> : null}
   </div>

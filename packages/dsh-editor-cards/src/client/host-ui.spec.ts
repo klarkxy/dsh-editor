@@ -1,8 +1,8 @@
 import { createElement, type ReactElement } from 'react';
 import { describe, expect, it } from 'vitest'
 import { cardsPromptKeyDown } from './dialog.tsx'
-import { guardImeEnter, renderInput, renderSelect, IME_KEYCODE } from './host-ui.tsx'
-import type { ShellInputProps, ShellSelectProps } from 'dsh-editor-seats'
+import { guardImeEnter, renderInput, renderSelect, renderTextArea, IME_KEYCODE } from './host-ui.tsx'
+import type { ShellInputProps, ShellSelectProps, ShellTextAreaProps } from 'dsh-editor-seats'
 
 function MockSelect(props: ShellSelectProps) {
   return createElement('div', { 'data-host': 'select', 'aria-label': props['aria-label'] }, props.value)
@@ -12,8 +12,12 @@ function MockInput(props: ShellInputProps) {
   return createElement('div', { 'data-host': 'input', 'aria-label': props['aria-label'] }, props.value)
 }
 
-function asElement(node: unknown): ReactElement<{ children?: unknown; 'aria-label'?: string; value?: string; disabled?: boolean; placeholder?: string }> {
-  return node as ReactElement<{ children?: unknown; 'aria-label'?: string; value?: string; disabled?: boolean; placeholder?: string }>
+function MockTextArea(props: ShellTextAreaProps) {
+  return createElement('div', { 'data-host': 'textarea', 'aria-label': props['aria-label'] }, props.value)
+}
+
+function asElement(node: unknown): ReactElement<{ children?: unknown; 'aria-label'?: string; value?: string; disabled?: boolean; placeholder?: string; rows?: number }> {
+  return node as ReactElement<{ children?: unknown; 'aria-label'?: string; value?: string; disabled?: boolean; placeholder?: string; rows?: number }>
 }
 
 describe('cards host UI helpers', () => {
@@ -83,5 +87,24 @@ describe('cards host UI helpers', () => {
     expect(native.props['aria-label']).toBe('筛选')
     expect(native.props.value).toBe('港口')
     expect(native.props.placeholder).toBe('按名称')
+  })
+
+  it('uses the host TextArea when provided and a native textarea otherwise', () => {
+    const props: ShellTextAreaProps = {
+      value: '港口简介',
+      onChange() {},
+      rows: 3,
+      'aria-label': '简介',
+    }
+    const hosted = asElement(renderTextArea(MockTextArea, props))
+    expect(hosted.type).toBe(MockTextArea)
+    expect(hosted.props['aria-label']).toBe('简介')
+    expect(hosted.props.value).toBe('港口简介')
+
+    const native = asElement(renderTextArea(undefined, props))
+    expect(native.type).toBe('textarea')
+    expect(native.props['aria-label']).toBe('简介')
+    expect(native.props.value).toBe('港口简介')
+    expect(native.props.rows).toBe(3)
   })
 })

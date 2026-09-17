@@ -391,15 +391,14 @@ async function configureMiniMax(page) {
         if (el instanceof HTMLInputElement && !el.checked) el.click()
       })
     }
-    const fontSize = dialog.getByLabel('字号')
+    const fontSize = dialog.getByRole('slider', { name: /字号/ })
     if (await fontSize.isVisible().catch(() => false)) {
-      await fontSize.evaluate((el) => {
-        if (el instanceof HTMLInputElement) {
-          el.value = '18'
-          el.dispatchEvent(new Event('input', { bubbles: true }))
-          el.dispatchEvent(new Event('change', { bubbles: true }))
-        }
-      })
+      await fontSize.focus()
+      const now = Number(await fontSize.getAttribute('aria-valuenow'))
+      if (Number.isFinite(now) && now !== 18) {
+        const key = now < 18 ? 'ArrowRight' : 'ArrowLeft'
+        for (let i = 0; i < Math.abs(18 - now); i += 1) await fontSize.press(key)
+      }
     }
     recordFeature('writing-paper', true)
   } catch (error) {
@@ -1077,7 +1076,7 @@ async function coverWorkbench(page) {
     await page.keyboard.press('Control+Shift+F')
     const panel = page.getByRole('region', { name: '全文搜索' })
     await panel.waitFor({ state: 'visible', timeout: 10_000 })
-    const searchBox = page.locator('.sidebar input.side-search')
+    const searchBox = page.getByRole('searchbox', { name: '搜索作品文字' })
     await searchBox.waitFor({ state: 'visible', timeout: 10_000 })
     await searchBox.fill('锚点词ALPHA')
     await panel.getByRole('button', { name: '开始搜索' }).click()

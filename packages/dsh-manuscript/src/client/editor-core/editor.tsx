@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import { Button, IconButton } from '@radix-ui/themes'
 import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, redo, redoDepth, undo, undoDepth } from '@codemirror/commands'
@@ -1488,30 +1489,39 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           className={['chapter-navigation', cls('chapterNav')].filter(Boolean).join(' ')}
           aria-label="章节导航"
           style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-          <button
+          <IconButton
             type="button"
+            variant="ghost"
+            color="gray"
+            size="1"
             data-testid={`${testIdPrefix}-prev`}
             disabled={siblingsBlocked || siblingIndex <= 0}
             title={siblingsBlocked ? '请先保存' : '上一章'}
             aria-label={siblingsBlocked ? '请先保存' : '上一章'}
             onClick={() => { if (siblingIndex > 0 && siblings) onOpenSibling(siblings[siblingIndex - 1]!) }}>
             ‹
-          </button>
+          </IconButton>
           <span style={{ fontSize: 11, opacity: 0.6 }}>
             {`${siblingIndex + 1} / ${siblings!.length}`}
           </span>
-          <button
+          <IconButton
             type="button"
+            variant="ghost"
+            color="gray"
+            size="1"
             data-testid={`${testIdPrefix}-next`}
             disabled={siblingsBlocked || siblingIndex >= siblings!.length - 1}
             title={siblingsBlocked ? '请先保存' : '下一章'}
             aria-label={siblingsBlocked ? '请先保存' : '下一章'}
             onClick={() => { if (siblingIndex < siblings!.length - 1 && siblings) onOpenSibling(siblings[siblingIndex + 1]!) }}>
             ›
-          </button>
+          </IconButton>
         </nav> : null}
-        {!compactControls && enableRewriteSelection && completionEnabled ? <button
+        {!compactControls && enableRewriteSelection && completionEnabled ? <Button
           type="button"
+          variant="soft"
+          color="gray"
+          size="1"
           data-testid={`${testIdPrefix}-rewrite`}
           disabled={!hasSelection}
           onClick={() => {
@@ -1520,13 +1530,16 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
             void Promise.resolve(onRewriteSelection?.(sel, doc?.path || path))
           }}>
           改这段
-        </button> : null}
-        {!compactControls && completionEnabled ? <button
+        </Button> : null}
+        {!compactControls && completionEnabled ? <Button
           type="button"
+          variant={loadingFim ? 'soft' : 'solid'}
+          color={loadingFim ? 'gray' : undefined}
+          size="1"
           data-testid={`${testIdPrefix}-fim`}
           onClick={() => { void complete(false) }}>
           {loadingFim ? '停止补全' : ghost ? '重新补全' : '补全'}
-        </button> : null}
+        </Button> : null}
         <span data-testid={`${testIdPrefix}-wordcount`} style={{ opacity: 0.55 }}>
           {`${wordCount} 字`}
         </span>
@@ -1580,15 +1593,18 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           {proposal.text}
         </p>}
         <div className="proposal-actions">
-          <button type="button" className="primary-action" onClick={acceptPatch}>
+          <Button type="button" variant="solid" className="primary-action" size="1" onClick={acceptPatch}>
             应用修改
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="soft"
+            color="red"
             className="proposal-dismiss"
+            size="1"
             onClick={() => { setProposal(null); report('已放弃修改建议。'); viewRef.current?.focus() }}>
             放弃
-          </button>
+          </Button>
         </div>
       </div> : null}
       {conflict ? <div
@@ -1620,44 +1636,58 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         <span>
           {`发现 ${backups.length} 份其他窗口留下的未保存备份（采纳后原备份仍保留）：`}
         </span>
-        {backups.map((backup, index) => <button
+        {backups.map((backup, index) => <Button
           key={`${backup.ownerId ?? 'legacy'}-${backup.revision ?? index}`}
           type="button"
+          variant="soft"
+          color="gray"
+          size="1"
           disabled={isDirty(doc, textRef.current) || conflict}
           title={isDirty(doc, textRef.current) || conflict ? '当前有未保存内容，请先保存或放弃修改，避免丢稿' : '把这份备份放入当前草稿'}
           onClick={() => adoptBackup(backup)}>
           {draftBackupLabel(backup, index)}
-        </button>)}
+        </Button>)}
       </div> : null}
       {showFooter ? <footer
         className={cls('footer')}
         style={{ padding: '6px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', ...sty('footer') }}>
-        {!compactControls ? <button
+        {!compactControls ? <Button
           type="button"
+          variant="solid"
+          size="1"
           disabled={!doc || textRef.current === doc.text || conflict}
           onClick={() => void save()}>
           保存
-        </button> : null}
-        {loadingFim ? <button
+        </Button> : null}
+        {loadingFim ? <Button
           type="button"
+          variant="soft"
+          color="gray"
+          size="1"
           onClick={() => { fimAbort.current?.abort(); setLoadingFim(false); report('已停止补全。') }}>
           停止补全
-        </button> : null}
-        {patching ? <button
+        </Button> : null}
+        {patching ? <Button
           type="button"
+          variant="soft"
+          color="gray"
+          size="1"
           onClick={() => {
             patchAbort.current?.abort()
             setPatching(false)
             report('已停止改写。')
           }}>
           停止改写
-        </button> : null}
-        {!compactControls && enablePatch && completionEnabled ? <button
+        </Button> : null}
+        {!compactControls && enablePatch && completionEnabled ? <Button
           type="button"
+          variant="soft"
+          color="gray"
+          size="1"
           disabled={!doc || conflict || loadingFim || selection.start === selection.end}
           onClick={() => { void requestPatch() }}>
           修改选段
-        </button> : null}
+        </Button> : null}
         {ghost ? <div
           style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <strong>
@@ -1666,49 +1696,64 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           <small>
             {`候选 ${ghostIndex + 1}/${ghostCandidates.length}`}
           </small>
-          <button type="button" onClick={acceptGhost}>
+          <Button type="button" variant="solid" size="1" onClick={acceptGhost}>
             接受补全
-          </button>
-          {ghostCandidates.length < maxGhostCandidates ? <button type="button" disabled={loadingFim} onClick={() => void complete(true)}>
+          </Button>
+          {ghostCandidates.length < maxGhostCandidates ? <Button type="button" variant="soft" color="gray" size="1" disabled={loadingFim} onClick={() => void complete(true)}>
             再来一个
-          </button> : <span style={{ opacity: 0.55 }}>
+          </Button> : <span style={{ opacity: 0.55 }}>
             {`已满 ${maxGhostCandidates} 条`}
           </span>}
-          <button
+          <Button
             type="button"
+            variant="soft"
+            color="red"
+            size="1"
             onClick={() => { clearGhost(); report('已放弃补全。'); viewRef.current?.focus() }}>
             放弃
-          </button>
+          </Button>
           {ghostCandidates.length > 1 ? <nav aria-label="切换补全候选" style={{ display: 'flex', gap: 4 }}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              color="gray"
+              size="1"
               disabled={ghostIndex <= 0}
               onClick={() => setGhostIndex((old) => Math.max(0, old - 1))}>
               上一条
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              color="gray"
+              size="1"
               disabled={ghostIndex >= ghostCandidates.length - 1}
               onClick={() => setGhostIndex((old) => Math.min(ghostCandidates.length - 1, old + 1))}>
               下一条
-            </button>
+            </Button>
           </nav> : null}
         </div> : null}
-        {conflict ? <button type="button" onClick={discard}>
+        {conflict ? <Button type="button" variant="soft" color="red" size="1" onClick={discard}>
           放弃草稿并重新读取
-        </button> : null}
-        {conflict && onReloadDisk ? <button
+        </Button> : null}
+        {conflict && onReloadDisk ? <Button
           type="button"
+          variant="soft"
+          color="gray"
+          size="1"
           data-testid={`${testIdPrefix}-reload-disk`}
           onClick={onReloadDisk}>
           重新载入磁盘版本
-        </button> : null}
-        {conflict && onSaveConflictCopy ? <button
+        </Button> : null}
+        {conflict && onSaveConflictCopy ? <Button
           type="button"
+          variant="soft"
+          color="gray"
+          size="1"
           data-testid={`${testIdPrefix}-save-conflict-copy`}
           onClick={onSaveConflictCopy}>
           另存冲突副本
-        </button> : null}
+        </Button> : null}
         {footerExtras}
       </footer> : null}
     </section>

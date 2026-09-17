@@ -58,6 +58,10 @@ export const pluginsClientStyles = `
   color: inherit;
   font: inherit;
 }
+.dsh-plugins-search .ui-input {
+  flex: 1;
+  min-width: 0;
+}
 .dsh-plugins-search input:focus-visible, .dsh-plugins button:focus-visible {
   box-shadow: 0 0 0 2px var(--accent-a8);
 }

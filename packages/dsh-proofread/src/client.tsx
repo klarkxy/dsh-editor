@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type ComponentType, type KeyboardEvent, type Ref } from 'react';
 import {
   PROOFREAD_MAX_TEXT_BYTES,
   PROOFREAD_RPC_CHANNEL,
@@ -10,7 +10,16 @@ import {
 } from './contracts.ts'
 import { createProofreadClientState, type ProofreadClientState } from './client-state.ts'
 import { proofreadClientStyles } from './client-styles.ts'
-import { dockEscapeKeyDown, hostComponentsFromRenderProps, proofreadInputKeyDown, type HostDialog } from './client-host-ui.ts'
+import {
+  dockEscapeKeyDown,
+  hostComponentsFromRenderProps,
+  proofreadInputKeyDown,
+  type HostButton,
+  type HostButtonProps,
+  type HostDialog,
+  type HostTextArea,
+  type HostTextAreaProps,
+} from './client-host-ui.ts'
 
 export const name = 'dsh-proofread-client'
 export const inject = ['slots', 'connection'] as const
@@ -91,11 +100,35 @@ function byteSize(text: string): number {
   return new TextEncoder().encode(text).byteLength
 }
 
+function ActionButton(props: HostButtonProps & { host?: HostButton; buttonRef?: Ref<HTMLButtonElement> }) {
+  const { host: Host, buttonRef, variant, ...rest } = props
+  if (Host) {
+    const Typed = Host as ComponentType<HostButtonProps & { ref?: Ref<HTMLButtonElement> }>
+    return <Typed ref={buttonRef} variant={variant} {...rest} />;
+  }
+  return <button type={rest.type ?? 'button'} ref={buttonRef} {...rest} />;
+}
+
+function ActionTextArea(props: HostTextAreaProps & { host?: HostTextArea; areaRef?: Ref<HTMLTextAreaElement> }) {
+  const { host: Host, areaRef, onChange, ...rest } = props
+  if (Host) {
+    const Typed = Host as ComponentType<HostTextAreaProps & { ref?: Ref<HTMLTextAreaElement> }>
+    return <Typed ref={areaRef} onChange={onChange} {...rest} />;
+  }
+  return (
+    <textarea
+      ref={areaRef}
+      {...rest}
+      onChange={(event: { target: { value: string } }) => onChange(event.target.value)} />
+  );
+}
+
 function FindingRow(props: {
   finding: ProofreadFinding
   canLocate: boolean
   onLocate(): void
   onIgnore(): void
+  Button?: HostButton
 }) {
   const { finding } = props
   const kind = finding.kind === 'repeat' && finding.severity === 'info' ? '叠词' : (KIND_LABEL[finding.kind] ?? finding.kind)
@@ -126,13 +159,13 @@ function FindingRow(props: {
         : null}
       <div className="dsh-proofread-finding-actions">
         {props.canLocate
-          ? <button type="button" className="dsh-proofread-locate" onClick={props.onLocate}>
+          ? <ActionButton host={props.Button} className="dsh-proofread-locate" onClick={props.onLocate}>
           定位原稿
-        </button>
+        </ActionButton>
           : null}
-        <button type="button" className="dsh-proofread-ignore" onClick={props.onIgnore}>
+        <ActionButton host={props.Button} className="dsh-proofread-ignore" onClick={props.onIgnore}>
           忽略
-        </button>
+        </ActionButton>
       </div>
     </li>
   );
@@ -147,6 +180,7 @@ function ProofreadResult(props: {
   canLocate: boolean
   onLocate(finding: ProofreadFinding): void
   onIgnore(finding: ProofreadFinding): void
+  Button?: HostButton
 }) {
   const { result, stale } = props
   const habits = result.habitStats.slice(0, 8)
@@ -183,6 +217,7 @@ function ProofreadResult(props: {
             key={`${finding.kind}:${finding.start}:${index}`}
             finding={finding}
             canLocate={props.canLocate}
+            Button={props.Button}
             onLocate={() => props.onLocate(finding)}
             onIgnore={() => props.onIgnore(finding)} />)}
       </ul>
@@ -191,8 +226,8 @@ function ProofreadResult(props: {
   );
 }
 
-function ProofreadDock(props: { rpc: RpcCaller; Dialog?: HostDialog }) {
-  const { rpc, Dialog } = props
+function ProofreadDock(props: { rpc: RpcCaller; Dialog?: HostDialog; Button?: HostButton; TextArea?: HostTextArea }) {
+  const { rpc, Dialog, Button, TextArea } = props
   const gateRef = useRef<ProofreadClientState | null>(null)
   if (!gateRef.current) gateRef.current = createProofreadClientState()
   const gate = gateRef.current
@@ -326,27 +361,29 @@ function ProofreadDock(props: { rpc: RpcCaller; Dialog?: HostDialog }) {
       <h2 className="dsh-proofread-panel-title">
         文本校对
       </h2>
-      <button
-        type="button"
+      <ActionButton
+        host={Button}
         className="dsh-proofread-panel-close"
         disabled={phase === 'loading'}
         onClick={closePanel}>
         关闭
-      </button>
+      </ActionButton>
     </header>,
     <div key="body" className="dsh-proofread-panel-body">
-      <textarea
-        ref={inputRef}
+      <ActionTextArea
+        host={TextArea}
+        areaRef={inputRef}
         className="dsh-proofread-input"
         data-testid="proofread-input"
         aria-label="待校对文本"
         placeholder="粘贴或输入要校对的中文文本…"
         value={text}
-        onChange={(event: { target: { value: string } }) => onTextChange(event.target.value)}
+        onChange={onTextChange}
         onKeyDown={onInputKeyDown} />
       <div className="dsh-proofread-panel-footer">
-        <button
-          type="button"
+        <ActionButton
+          host={Button}
+          variant="primary"
           className="dsh-proofread-check"
           data-testid="proofread-check"
           disabled={checkDisabled}
@@ -355,11 +392,11 @@ function ProofreadDock(props: { rpc: RpcCaller; Dialog?: HostDialog }) {
             {activityDots()}
             校对中…
           </Fragment> : '开始校对'}
-        </button>
+        </ActionButton>
         {phase === 'loading'
-          ? <button type="button" className="dsh-proofread-cancel" onClick={cancelRequest}>
+          ? <ActionButton host={Button} className="dsh-proofread-cancel" onClick={cancelRequest}>
           取消
-        </button>
+        </ActionButton>
           : null}
         <span
           className={`dsh-proofread-hint${overLimit ? ' dsh-proofread-is-over' : ''}`}>
@@ -382,6 +419,7 @@ function ProofreadDock(props: { rpc: RpcCaller; Dialog?: HostDialog }) {
         scopeLabel={checkScope || undefined}
         locateNote={locateNote}
         ignored={ignored}
+        Button={Button}
         canLocate={Boolean(locateRef.current) && !stale}
         onLocate={(finding) => {
           const locate = locateRef.current
@@ -409,9 +447,9 @@ function ProofreadDock(props: { rpc: RpcCaller; Dialog?: HostDialog }) {
   // while closed so CSS exit can run; standalone unmounts the dock panel.
   return (
     <div className="dsh-proofread-dock">
-      <button
-        type="button"
-        ref={toggleRef}
+      <ActionButton
+        host={Button}
+        buttonRef={toggleRef}
         className="dsh-proofread-toggle"
         data-testid="proofread-open"
         onClick={() => {
@@ -421,7 +459,7 @@ function ProofreadDock(props: { rpc: RpcCaller; Dialog?: HostDialog }) {
           setOpen(true)
         }}>
         校对
-      </button>
+      </ActionButton>
       {Dialog
         ? <Dialog
         open={open}
@@ -462,8 +500,8 @@ export function apply(ctx: Context): void {
   }
   const client = ctx as ProofreadClientContext
   const render = (props: unknown) => {
-    const { Dialog } = hostComponentsFromRenderProps(props)
-    return <ProofreadDock rpc={client.connection.rpc} Dialog={Dialog} />;
+    const { Dialog, Button, TextArea } = hostComponentsFromRenderProps(props)
+    return <ProofreadDock rpc={client.connection.rpc} Dialog={Dialog} Button={Button} TextArea={TextArea} />;
   }
   // Official Web declares shell.overlay. Desktop composition currently omits
   // the proofread panel and quick service, so this client does not register

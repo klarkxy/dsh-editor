@@ -1,4 +1,4 @@
-import { DropdownMenu } from '@radix-ui/themes'
+import { Button, DropdownMenu } from '@radix-ui/themes'
 import { forwardRef, type ReactNode } from 'react'
 
 export type MenuProps = {
@@ -28,9 +28,11 @@ export const MenuTrigger = forwardRef<HTMLButtonElement, {
 }>(function MenuTrigger(props, ref) {
   return (
     <DropdownMenu.Trigger>
-      <button
+      <Button
         ref={ref}
         type="button"
+        variant="ghost"
+        color="gray"
         className={props.className}
         tabIndex={props.tabIndex}
         disabled={props.disabled}
@@ -40,7 +42,7 @@ export const MenuTrigger = forwardRef<HTMLButtonElement, {
         data-testid={props['data-testid']}
       >
         {props.children}
-      </button>
+      </Button>
     </DropdownMenu.Trigger>
   )
 })

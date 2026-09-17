@@ -1,4 +1,4 @@
-import { type ChangeEvent, type ComponentType, type MouseEvent, type ReactNode } from 'react';
+import { type ChangeEvent, type ComponentType, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from 'react';
 
 /** Structural host Select — no private package import. */
 export type HostSelectProps = {
@@ -21,7 +21,27 @@ export type HostButtonProps = {
   'aria-label'?: string
   'aria-pressed'?: boolean
   'aria-expanded'?: boolean
+  'aria-selected'?: boolean
+  'aria-checked'?: boolean
+  'data-testid'?: string
+  role?: string
+  tabIndex?: number
   children?: ReactNode
+}
+
+/** Structural host Input — no private package import. */
+export type HostInputProps = {
+  value: string
+  onChange(value: string): void
+  disabled?: boolean
+  maxLength?: number
+  placeholder?: string
+  type?: 'text' | 'search' | 'password'
+  'aria-label'?: string
+  autoFocus?: boolean
+  className?: string
+  'data-testid'?: string
+  onKeyDown?(event: KeyboardEvent<HTMLInputElement>): void
 }
 
 /** Structural host Dialog — no private package import. */
@@ -40,6 +60,7 @@ export type HostDialogProps = {
 export type HostSelect = ComponentType<HostSelectProps>
 export type HostButton = ComponentType<HostButtonProps>
 export type HostDialog = ComponentType<HostDialogProps>
+export type HostInput = ComponentType<HostInputProps>
 
 export const IME_KEYCODE = 229
 
@@ -92,7 +113,12 @@ export function dockEscapeKeyDown(
   run.close()
 }
 
-export function hostComponentsFromRenderProps(props: unknown): { Select?: HostSelect; Dialog?: HostDialog; Button?: HostButton } {
+export function hostComponentsFromRenderProps(props: unknown): {
+  Select?: HostSelect
+  Dialog?: HostDialog
+  Button?: HostButton
+  Input?: HostInput
+} {
   if (!props || typeof props !== 'object') return {}
   const record = props as Record<string, unknown>
   const sources: Record<string, unknown>[] = [record]
@@ -100,12 +126,29 @@ export function hostComponentsFromRenderProps(props: unknown): { Select?: HostSe
   let Select: HostSelect | undefined
   let Dialog: HostDialog | undefined
   let Button: HostButton | undefined
+  let Input: HostInput | undefined
   for (const source of sources) {
     if (typeof source.Select === 'function') Select = source.Select as HostSelect
     if (typeof source.Dialog === 'function') Dialog = source.Dialog as HostDialog
     if (typeof source.Button === 'function') Button = source.Button as HostButton
+    if (typeof source.Input === 'function') Input = source.Input as HostInput
   }
-  return { Select, Dialog, Button }
+  return { Select, Dialog, Button, Input }
+}
+
+export type RenderInputProps = HostInputProps & { ref?: Ref<HTMLInputElement> }
+
+export function renderInput(Input: HostInput | undefined, props: RenderInputProps) {
+  if (Input) {
+    const Host = Input as ComponentType<RenderInputProps>
+    return <Host {...props} />;
+  }
+  const { onChange, ...rest } = props
+  return (
+    <input
+      {...rest}
+      onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)} />
+  );
 }
 
 export function renderSelect(Select: HostSelect | undefined, props: HostSelectProps, className?: string) {

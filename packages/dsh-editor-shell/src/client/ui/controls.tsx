@@ -1,4 +1,4 @@
-import { Button as ThemesButton, IconButton, TextField } from '@radix-ui/themes'
+import { Button as ThemesButton, IconButton, TextArea as ThemesTextArea, TextField } from '@radix-ui/themes'
 import { forwardRef, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { isImeEvent } from './ime.ts'
 
@@ -12,9 +12,11 @@ export const Button = forwardRef<HTMLButtonElement, {
   title?: string
   onClick?(event: MouseEvent<HTMLButtonElement>): void
   'aria-label'?: string
+  'aria-labelledby'?: string
   'aria-pressed'?: boolean
   'aria-expanded'?: boolean
   'aria-selected'?: boolean
+  'aria-checked'?: boolean
   'aria-current'?: boolean | 'true' | 'false' | 'page' | 'step' | 'location' | 'date' | 'time'
   'aria-controls'?: string
   'aria-describedby'?: string
@@ -39,9 +41,11 @@ export const Button = forwardRef<HTMLButtonElement, {
     disabled: props.disabled,
     title: props.title,
     'aria-label': props['aria-label'],
+    'aria-labelledby': props['aria-labelledby'],
     'aria-pressed': props['aria-pressed'],
     'aria-expanded': props['aria-expanded'],
     'aria-selected': props['aria-selected'],
+    'aria-checked': props['aria-checked'],
     'aria-current': props['aria-current'],
     'aria-controls': props['aria-controls'],
     'aria-describedby': props['aria-describedby'],
@@ -68,15 +72,18 @@ export const Input = forwardRef<HTMLInputElement, {
   disabled?: boolean
   maxLength?: number
   placeholder?: string
+  type?: 'text' | 'search' | 'password'
   'aria-label'?: string
   autoFocus?: boolean
   className?: string
+  'data-testid'?: string
   onKeyDown?(event: KeyboardEvent<HTMLInputElement>): void
 }>(function Input(props, ref) {
   return (
     <TextField.Root
       ref={ref}
       size="2"
+      type={props.type ?? 'text'}
       className={['ui-input', props.className].filter(Boolean).join(' ')}
       value={props.value}
       maxLength={props.maxLength}
@@ -84,6 +91,7 @@ export const Input = forwardRef<HTMLInputElement, {
       aria-label={props['aria-label']}
       disabled={props.disabled}
       autoFocus={props.autoFocus}
+      data-testid={props['data-testid']}
       onChange={(event) => props.onChange(event.target.value)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' && isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
@@ -92,6 +100,38 @@ export const Input = forwardRef<HTMLInputElement, {
         }
         props.onKeyDown?.(event)
       }}
+    />
+  )
+})
+
+export const TextArea = forwardRef<HTMLTextAreaElement, {
+  value: string
+  onChange(value: string): void
+  disabled?: boolean
+  maxLength?: number
+  placeholder?: string
+  rows?: number
+  'aria-label'?: string
+  autoFocus?: boolean
+  className?: string
+  'data-testid'?: string
+  onKeyDown?(event: KeyboardEvent<HTMLTextAreaElement>): void
+}>(function TextArea(props, ref) {
+  return (
+    <ThemesTextArea
+      ref={ref}
+      size="2"
+      className={['ui-textarea', props.className].filter(Boolean).join(' ')}
+      value={props.value}
+      maxLength={props.maxLength}
+      placeholder={props.placeholder}
+      rows={props.rows}
+      aria-label={props['aria-label']}
+      disabled={props.disabled}
+      autoFocus={props.autoFocus}
+      data-testid={props['data-testid']}
+      onChange={(event) => props.onChange(event.target.value)}
+      onKeyDown={props.onKeyDown}
     />
   )
 })

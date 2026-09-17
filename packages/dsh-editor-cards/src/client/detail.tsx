@@ -3,7 +3,6 @@ import {
   useEffect,
   useState,
   useSyncExternalStore,
-  type ChangeEvent,
   type ReactNode,
 } from 'react';
 import {
@@ -19,7 +18,7 @@ import {
 } from '../contracts.ts'
 import { CENTER_OVERLAY_ATTRIBUTE, type ShellRange } from 'dsh-editor-seats'
 import { SeatButton } from 'dsh-editor-seats/seat-button'
-import { renderInput, renderSelect } from './host-ui.tsx'
+import { renderInput, renderSelect, renderTextArea } from './host-ui.tsx'
 import {
   WORLDBOOK_CATEGORIES,
   formatListInput,
@@ -291,11 +290,12 @@ function CardsDetail(props: CardsSeatProps & {
               </SeatButton>
             </div>
           </label>
-          {field(t('cards.summary'), <textarea
-            value={summary}
-            rows={3}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setSummary(event.target.value)}
-            aria-label={t('cards.summary')} />, true)}
+          {field(t('cards.summary'), renderTextArea(props.TextArea, {
+            value: summary,
+            rows: 3,
+            onChange: setSummary,
+            'aria-label': t('cards.summary'),
+          }), true)}
         </div> : <div className="cards-fields">
           {field(t('cards.category'), renderSelect(props.Select, {
             value: category,
@@ -318,11 +318,12 @@ function CardsDetail(props: CardsSeatProps & {
             'aria-label': t('cards.tags'),
             placeholder: t('cards.commaSep'),
           }))}
-          {field(t('cards.summary'), <textarea
-            value={summary}
-            rows={3}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setSummary(event.target.value)}
-            aria-label={t('cards.summary')} />, true)}
+          {field(t('cards.summary'), renderTextArea(props.TextArea, {
+            value: summary,
+            rows: 3,
+            onChange: setSummary,
+            'aria-label': t('cards.summary'),
+          }), true)}
         </div>}
         <div className="cards-detail-actions">
           <SeatButton host={props.Button} disabled={busy} onClick={() => void save()}>

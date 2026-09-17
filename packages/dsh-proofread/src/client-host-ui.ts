@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 
 /** Structural host Select — no private package import. */
 export type HostSelectProps = {
@@ -24,8 +24,57 @@ export type HostDialogProps = {
   onCloseAutoFocus?(event: Event): void
 }
 
+/** Structural host Button — no private package import. */
+export type HostButtonProps = {
+  type?: 'button' | 'submit'
+  variant?: 'default' | 'primary' | 'danger' | 'icon'
+  className?: string
+  disabled?: boolean
+  title?: string
+  onClick?(event: MouseEvent<HTMLButtonElement>): void
+  'aria-label'?: string
+  'aria-pressed'?: boolean
+  'aria-expanded'?: boolean
+  'data-testid'?: string
+  role?: string
+  children?: ReactNode
+}
+
+/** Structural host Input — no private package import. */
+export type HostInputProps = {
+  value: string
+  onChange(value: string): void
+  disabled?: boolean
+  maxLength?: number
+  placeholder?: string
+  type?: 'text' | 'search' | 'password'
+  'aria-label'?: string
+  autoFocus?: boolean
+  className?: string
+  'data-testid'?: string
+  onKeyDown?(event: KeyboardEvent<HTMLInputElement>): void
+}
+
+/** Structural host TextArea — no private package import. */
+export type HostTextAreaProps = {
+  value: string
+  onChange(value: string): void
+  disabled?: boolean
+  maxLength?: number
+  placeholder?: string
+  rows?: number
+  'aria-label'?: string
+  autoFocus?: boolean
+  className?: string
+  'data-testid'?: string
+  onKeyDown?(event: KeyboardEvent<HTMLTextAreaElement>): void
+}
+
 export type HostSelect = ComponentType<HostSelectProps>
 export type HostDialog = ComponentType<HostDialogProps>
+export type HostButton = ComponentType<HostButtonProps>
+export type HostInput = ComponentType<HostInputProps>
+export type HostTextArea = ComponentType<HostTextAreaProps>
 
 export const IME_KEYCODE = 229
 
@@ -84,16 +133,28 @@ export function dockEscapeKeyDown(
   run.close()
 }
 
-export function hostComponentsFromRenderProps(props: unknown): { Select?: HostSelect; Dialog?: HostDialog } {
+export function hostComponentsFromRenderProps(props: unknown): {
+  Select?: HostSelect
+  Dialog?: HostDialog
+  Button?: HostButton
+  Input?: HostInput
+  TextArea?: HostTextArea
+} {
   if (!props || typeof props !== 'object') return {}
   const record = props as Record<string, unknown>
   const sources: Record<string, unknown>[] = [record]
   if (record.owner && typeof record.owner === 'object') sources.push(record.owner as Record<string, unknown>)
   let Select: HostSelect | undefined
   let Dialog: HostDialog | undefined
+  let Button: HostButton | undefined
+  let Input: HostInput | undefined
+  let TextArea: HostTextArea | undefined
   for (const source of sources) {
     if (typeof source.Select === 'function') Select = source.Select as HostSelect
     if (typeof source.Dialog === 'function') Dialog = source.Dialog as HostDialog
+    if (typeof source.Button === 'function') Button = source.Button as HostButton
+    if (typeof source.Input === 'function') Input = source.Input as HostInput
+    if (typeof source.TextArea === 'function') TextArea = source.TextArea as HostTextArea
   }
-  return { Select, Dialog }
+  return { Select, Dialog, Button, Input, TextArea }
 }

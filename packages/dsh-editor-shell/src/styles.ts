@@ -112,26 +112,9 @@ export const componentStyles = `
   border-right: 1px solid var(--gray-a5);
   background: var(--gray-2);
 }
-.shell .side-search-wrap {
-  min-height: var(--space-6);
-  border-radius: var(--radius-3);
-  background: var(--color-surface);
-  box-shadow: inset 0 0 0 1px var(--gray-a6);
-  color: var(--gray-11);
-}
-.shell .side-search-wrap:focus-within { box-shadow: inset 0 0 0 1px var(--accent-8); }
-.shell .sidebar input.side-search {
-  flex: 1 1 auto;
+.shell .sidebar .side-search {
   min-width: 0;
-  min-height: var(--space-5);
-  border: 0;
-  background: transparent;
-  color: var(--gray-12);
-  outline: none;
-  appearance: none;
-  -webkit-appearance: none;
 }
-.shell .sidebar input.side-search::-webkit-search-cancel-button { -webkit-appearance: none; }
 .shell .tree .tree-row {
   position: relative;
   width: 100%;
@@ -440,26 +423,6 @@ export const componentStyles = `
 .radix-themes .writing-settings fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 .radix-themes .writing-settings legend { padding: 0; }
 .radix-themes .writing-settings .paper-typography .slider-row { display: grid; gap: var(--space-1); }
-.radix-themes .writing-settings .paper-typography input[type="range"] {
-  width: 100%; height: 18px; margin: 0; padding: 0; border: 0; background: transparent; accent-color: var(--accent-9);
-  -webkit-appearance: none; appearance: none;
-}
-.radix-themes .writing-settings .paper-typography input[type="range"]:focus-visible {
-  outline: none; box-shadow: 0 0 0 2px var(--accent-a6); border-radius: 999px;
-}
-.radix-themes .writing-settings .paper-typography input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px; border-radius: 999px; background: var(--gray-a5);
-}
-.radix-themes .writing-settings .paper-typography input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: -5px;
-  border: 0; border-radius: 50%; background: var(--accent-9);
-}
-.radix-themes .writing-settings .paper-typography input[type="range"]::-moz-range-track {
-  height: 4px; border-radius: 999px; background: var(--gray-a5);
-}
-.radix-themes .writing-settings .paper-typography input[type="range"]::-moz-range-thumb {
-  width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--accent-9);
-}
 
 /* ── Settings dialog ────────────────────────────────────── */
 .radix-themes .settings-dialog {
@@ -531,9 +494,6 @@ export const componentStyles = `
 .radix-themes .models-candidate-dialog { width: min(560px, 100%); max-height: min(640px, calc(100dvh - 48px)); }
 .radix-themes .models-candidate-list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; max-height: 360px; overflow: auto; }
 .radix-themes .models-candidate-dialog .models-candidate-label { display: flex; align-items: center; gap: var(--space-2); }
-.radix-themes .models-candidate-dialog .models-candidate-label input[type="checkbox"] {
-  width: 14px; height: 14px; margin: 0; padding: 0; flex: none; accent-color: var(--accent-9);
-}
 
 .radix-themes .about-release-body { white-space: pre-wrap; max-height: 220px; overflow: auto; }
 .radix-themes .preset-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-a3); color: var(--accent-11); font: 500 var(--font-size-1)/1.4 var(--default-font-family); }

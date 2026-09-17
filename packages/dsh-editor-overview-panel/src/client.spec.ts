@@ -35,6 +35,29 @@ describe('overview panel client', () => {
     expect(commands.list()).toEqual([])
   })
 
+  it('forwards optional host Input from the seat owner', () => {
+    const Input = () => null
+    let render: ((props: unknown) => { props: Record<string, unknown> }) | undefined
+    const ctx = {
+      effect(fn: () => (() => void) | void) { fn() },
+      slots: {
+        inject(_key: string, callback: () => unknown) {
+          callback()
+          return () => {}
+        },
+        register(_spec: unknown, next: unknown) {
+          render = next as typeof render
+          return () => {}
+        },
+      },
+      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
+      [COMMANDS_SERVICE]: createCommandRegistry(),
+    }
+    apply(ctx as never)
+    const tree = render?.({ sessionId: 's1', openDocument() {}, Input })
+    expect(tree?.props.Input).toBe(Input)
+  })
+
   it('forwards optional host Select from the seat owner', () => {
     const Select = () => null
     let render: ((props: unknown) => { props: Record<string, unknown> }) | undefined

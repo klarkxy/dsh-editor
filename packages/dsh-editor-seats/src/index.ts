@@ -95,9 +95,11 @@ export type ShellButtonProps = {
   title?: string
   onClick?(event: MouseEvent<HTMLButtonElement>): void
   'aria-label'?: string
+  'aria-labelledby'?: string
   'aria-pressed'?: boolean
   'aria-expanded'?: boolean
   'aria-selected'?: boolean
+  'aria-checked'?: boolean
   'aria-current'?: boolean | 'true' | 'false' | 'page' | 'step' | 'location' | 'date' | 'time'
   'aria-controls'?: string
   'aria-describedby'?: string
@@ -114,10 +116,27 @@ export type ShellInputProps = {
   disabled?: boolean
   maxLength?: number
   placeholder?: string
+  type?: 'text' | 'search' | 'password'
   'aria-label'?: string
   autoFocus?: boolean
   className?: string
+  'data-testid'?: string
   onKeyDown?(event: KeyboardEvent<HTMLInputElement>): void
+}
+
+/** Host TextArea contract. Multiline text with IME-safe Enter handling left to the caller. */
+export type ShellTextAreaProps = {
+  value: string
+  onChange(value: string): void
+  disabled?: boolean
+  maxLength?: number
+  placeholder?: string
+  rows?: number
+  'aria-label'?: string
+  autoFocus?: boolean
+  className?: string
+  'data-testid'?: string
+  onKeyDown?(event: KeyboardEvent<HTMLTextAreaElement>): void
 }
 
 export type ShellToolSeatContext = {
@@ -161,6 +180,8 @@ export type ShellToolSeatContext = {
   Button?: ComponentType<ShellButtonProps>
   /** Optional host Input. Standalone plugins keep their own fallback. */
   Input?: ComponentType<ShellInputProps>
+  /** Optional host TextArea. Standalone plugins keep their own fallback. */
+  TextArea?: ComponentType<ShellTextAreaProps>
 }
 
 export type ShellCommandShortcut = {

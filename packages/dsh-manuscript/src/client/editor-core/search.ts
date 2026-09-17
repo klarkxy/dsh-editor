@@ -301,6 +301,9 @@ const paperSearchMatchTheme = EditorView.baseTheme({
   },
 })
 
+export const PAPER_SEARCH_INPUT_CLASS = 'rt-reset rt-TextFieldRoot rt-r-size-1'
+export const PAPER_SEARCH_BUTTON_CLASS = 'rt-reset rt-BaseButton rt-r-size-1 rt-variant-soft'
+
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string | undefined> | null,
@@ -324,6 +327,7 @@ function createPaperSearchPanel(view: EditorView): Panel {
   const searchField = createElement('input', {
     type: 'text',
     name: 'search',
+    class: PAPER_SEARCH_INPUT_CLASS,
     placeholder: '查找',
     'aria-label': '查找',
     'data-testid': 'paper-search-query',
@@ -336,6 +340,7 @@ function createPaperSearchPanel(view: EditorView): Panel {
   const replaceField = createElement('input', {
     type: 'text',
     name: 'replace',
+    class: PAPER_SEARCH_INPUT_CLASS,
     placeholder: '替换为',
     'aria-label': '替换为',
     'data-testid': 'paper-search-replace',
@@ -352,6 +357,7 @@ function createPaperSearchPanel(view: EditorView): Panel {
   const caseButton = createElement('button', {
     type: 'button',
     name: 'case',
+    class: PAPER_SEARCH_BUTTON_CLASS,
     title: '区分大小写',
     'aria-label': '区分大小写',
     'data-testid': 'paper-search-case',
@@ -361,6 +367,7 @@ function createPaperSearchPanel(view: EditorView): Panel {
   const wordButton = createElement('button', {
     type: 'button',
     name: 'word',
+    class: PAPER_SEARCH_BUTTON_CLASS,
     title: '全词匹配',
     'aria-label': '全词匹配',
     'data-testid': 'paper-search-word',
@@ -369,8 +376,8 @@ function createPaperSearchPanel(view: EditorView): Panel {
 
   const replaceRow = createElement('div', { class: 'cm-paper-search-row cm-paper-search-replace' },
     replaceField,
-    createElement('button', { type: 'button', name: 'replace', 'data-testid': 'paper-search-replace-one' }, '替换'),
-    createElement('button', { type: 'button', name: 'replaceAll', 'data-testid': 'paper-search-replace-all' }, '全部替换'),
+    createElement('button', { type: 'button', name: 'replace', class: PAPER_SEARCH_BUTTON_CLASS, 'data-testid': 'paper-search-replace-one' }, '替换'),
+    createElement('button', { type: 'button', name: 'replaceAll', class: PAPER_SEARCH_BUTTON_CLASS, 'data-testid': 'paper-search-replace-all' }, '全部替换'),
   )
 
   const dom = createElement('div', {
@@ -382,11 +389,11 @@ function createPaperSearchPanel(view: EditorView): Panel {
     createElement('div', { class: 'cm-paper-search-row' },
       searchField,
       count,
-      createElement('button', { type: 'button', name: 'prev', title: '上一处', 'aria-label': '上一处', 'data-testid': 'paper-search-prev' }, '上一处'),
-      createElement('button', { type: 'button', name: 'next', title: '下一处', 'aria-label': '下一处', 'data-testid': 'paper-search-next' }, '下一处'),
+      createElement('button', { type: 'button', name: 'prev', class: PAPER_SEARCH_BUTTON_CLASS, title: '上一处', 'aria-label': '上一处', 'data-testid': 'paper-search-prev' }, '上一处'),
+      createElement('button', { type: 'button', name: 'next', class: PAPER_SEARCH_BUTTON_CLASS, title: '下一处', 'aria-label': '下一处', 'data-testid': 'paper-search-next' }, '下一处'),
       caseButton,
       wordButton,
-      createElement('button', { type: 'button', name: 'close', title: '关闭', 'aria-label': '关闭', 'data-testid': 'paper-search-close' }, '×'),
+      createElement('button', { type: 'button', name: 'close', class: PAPER_SEARCH_BUTTON_CLASS, title: '关闭', 'aria-label': '关闭', 'data-testid': 'paper-search-close' }, '×'),
     ),
     replaceRow,
   )

@@ -1,6 +1,8 @@
 import { EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
+  PAPER_SEARCH_BUTTON_CLASS,
+  PAPER_SEARCH_INPUT_CLASS,
   SearchQuery,
   clampPaperRange,
   describeMatchCount,
@@ -43,6 +45,11 @@ describe('paper search shortcuts', () => {
     expect(searchShortcut({ key: 'Tab', ctrlKey: false, shiftKey: false })).toBeNull()
     expect(searchShortcut({ key: 'Enter', ctrlKey: true, shiftKey: false })).toBeNull()
     expect(searchShortcut({ key: 's', ctrlKey: true, shiftKey: false })).toBeNull()
+  })
+
+  it('uses Radix Themes class names on the CodeMirror search controls', () => {
+    expect(PAPER_SEARCH_INPUT_CLASS).toBe('rt-reset rt-TextFieldRoot rt-r-size-1')
+    expect(PAPER_SEARCH_BUTTON_CLASS).toBe('rt-reset rt-BaseButton rt-r-size-1 rt-variant-soft')
   })
 
   it('binds Mod-f / Mod-h to the matching panel mode', () => {

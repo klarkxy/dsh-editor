@@ -51,7 +51,7 @@ import {
   type ProviderRow,
   type ReasoningChoice,
 } from './settings-models-store.ts'
-import { Badge, Box, Callout, Card, Flex, Heading, Text, TextField } from '@radix-ui/themes'
+import { Badge, Box, Callout, Card, Checkbox, Flex, Heading, Text, TextField } from '@radix-ui/themes'
 import { Select, type SelectOption } from './select.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
 import { ActivityDots, ActivitySkeleton, Button, Dialog } from './ui/index.ts'
@@ -1395,18 +1395,18 @@ function ModelListEditor(props: {
           <ul className="models-candidate-list">
           {(candidates ?? []).map((candidate) => <Card asChild key={candidate.id}>
             <li className="models-candidate">
-            <label className="models-candidate-label">
-              <input
-                type="checkbox"
+            <Flex className="models-candidate-label" align="center" gap="2">
+              <Checkbox
+                id={`model-candidate-${candidate.id}`}
                 checked={picked.has(candidate.id)}
-                onChange={() => togglePick(candidate.id)} />
-              <Text size="2" weight="medium" className="models-candidate-id">
+                onCheckedChange={() => togglePick(candidate.id)} />
+              <Text as="label" htmlFor={`model-candidate-${candidate.id}`} size="2" weight="medium" className="models-candidate-id">
                 {candidate.id}
               </Text>
               {candidate.name !== undefined ? <Badge size="1" color="gray" className="models-candidate-name">
                 {candidate.name}
               </Badge> : null}
-            </label>
+            </Flex>
             </li>
           </Card>)}
           </ul>
