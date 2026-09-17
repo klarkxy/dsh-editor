@@ -7,25 +7,35 @@ export type FeatureGroupDef = {
   packages: readonly string[]
 }
 
+/**
+ * Host-owned or session-scoped entries. Authors toggle the user-facing
+ * panel instead; these must not leak as leftover switches or mixed state.
+ */
+export const HIDDEN_OPTIONAL_PACKAGES = new Set([
+  'dsh-proofread',
+  'dsh-editor-novel-kernel',
+  'dsh-editor-workbench',
+])
+
 /** Author-purpose groups. Package names stay in details; do not merge packages. */
 export const FEATURE_GROUP_DEFS: readonly FeatureGroupDef[] = [
   {
     id: 'writing',
     title: '写作辅助',
-    description: '行内补全、选段改写，以及写作搭档可用的小说工具。',
-    packages: ['dsh-manuscript', 'dsh-editor-novel-kernel'],
+    description: '行内补全与选段改写。',
+    packages: ['dsh-manuscript'],
   },
   {
     id: 'proofread',
     title: '校对',
     description: '检查标点、错别字与常见用词问题。',
-    packages: ['dsh-proofread', 'dsh-editor-proofread-panel'],
+    packages: ['dsh-editor-proofread-panel'],
   },
   {
     id: 'overview',
     title: '作品概览',
     description: '章节状态、字数分布与写作进度。',
-    packages: ['dsh-editor-workbench', 'dsh-editor-overview-panel'],
+    packages: ['dsh-editor-overview-panel'],
   },
   {
     id: 'cards',
@@ -68,11 +78,10 @@ export function authorFacingDescription(text: string): string {
   return cleaned || text.trim()
 }
 
-export function enabledState(cards: PluginCard[]): boolean | 'mixed' {
-  const enabled = cards.filter((card) => card.enabled).length
-  if (enabled === 0) return false
-  if (enabled === cards.length) return true
-  return 'mixed'
+export function enabledState(cards: PluginCard[]): boolean {
+  const items = cards.filter((card) => !card.locked)
+  if (items.length === 0) return false
+  return items.every((card) => card.enabled)
 }
 
 export function toggleableCards(cards: PluginCard[]): PluginCard[] {
@@ -130,6 +139,7 @@ export function groupOptionalFeatures(cards: PluginCard[]): FeatureGroupView[] {
   }
   for (const group of groupByPackage(remaining)) {
     const primary = group[0]!
+    if (HIDDEN_OPTIONAL_PACKAGES.has(primary.packageName)) continue
     views.push({
       id: primary.packageName,
       title: primary.title,

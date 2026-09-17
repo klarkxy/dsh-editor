@@ -201,10 +201,6 @@ export const pluginsClientStyles = `
 .dsh-ui.file-dialog .dsh-plugins-switch:active {
   transform: none;
 }
-.dsh-plugins-switch.is-mixed {
-  background: color-mix(in srgb, var(--accent, #1b365d) 45%, var(--bg-sunken, #ebe9df));
-  border-color: var(--accent, #1b365d);
-}
 .dsh-plugins-switch.is-pending { opacity: .7; cursor: wait; }
 .dsh-plugins-switch:disabled { cursor: not-allowed; opacity: .7; }
 .dsh-plugins-switch:focus-visible {
@@ -222,7 +218,6 @@ export const pluginsClientStyles = `
   transition: transform var(--motion-fast, 150ms) var(--ease, ease);
 }
 .dsh-plugins-switch.is-on .dsh-plugins-switch-thumb { transform: translateX(16px); }
-.dsh-plugins-switch.is-mixed .dsh-plugins-switch-thumb { transform: translateX(8px); }
 .dsh-plugins-core summary {
   cursor: pointer;
   font: 600 var(--text-sm, 13px)/1.4 var(--font-sans, system-ui, sans-serif);

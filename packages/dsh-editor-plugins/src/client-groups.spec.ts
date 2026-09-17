@@ -6,6 +6,7 @@ import {
   enabledState,
   FEATURE_GROUP_DEFS,
   groupOptionalFeatures,
+  HIDDEN_OPTIONAL_PACKAGES,
   toggleableCards,
 } from './client-groups.ts'
 
@@ -41,7 +42,10 @@ describe('plugin feature grouping', () => {
     expect(views.find((view) => view.id === 'zhihu')?.cards.map((item) => item.entryId)).toEqual(['include:zhihu', 'include:zhihu-tools'])
     expect(views.find((view) => view.id === 'proofread')?.title).toBe('校对')
     expect(views.find((view) => view.id === 'overview')?.title).toBe('作品概览')
-    expect(views.find((view) => view.id === 'writing')?.cards).toHaveLength(2)
+    expect(views.find((view) => view.id === 'writing')?.cards.map((item) => item.packageName)).toEqual(['dsh-manuscript'])
+    expect(views.find((view) => view.id === 'proofread')?.cards.map((item) => item.packageName)).toEqual(['dsh-editor-proofread-panel'])
+    expect(views.find((view) => view.id === 'overview')?.cards.map((item) => item.packageName)).toEqual(['dsh-editor-overview-panel'])
+    expect(views.some((view) => view.cards.some((item) => HIDDEN_OPTIONAL_PACKAGES.has(item.packageName)))).toBe(false)
     expect(views.some((view) => view.cards.some((item) => item.locked))).toBe(false)
     expect(views.find((view) => view.id === 'memory')?.description).not.toMatch(/AGENTS\.md/)
     expect(views.find((view) => view.id === 'cards')?.description).not.toMatch(/frontmatter/i)
@@ -61,13 +65,14 @@ describe('plugin feature grouping', () => {
     expect(authorFacingDescription('查看、应用 AGENTS.md / 人物卡')).toBe('查看、应用 人物卡')
   })
 
-  it('reports mixed enablement and skips locked cards when toggling', () => {
+  it('is on only when every unlocked card is enabled, and skips locked cards when toggling', () => {
     const cards = [
       card({ entryId: 'a', packageName: 'p', title: 'A', enabled: true }),
       card({ entryId: 'b', packageName: 'p', title: 'B', enabled: false }),
       card({ entryId: 'c', packageName: 'p', title: 'C', locked: true, enabled: true }),
     ]
-    expect(enabledState(cards)).toBe('mixed')
+    expect(enabledState(cards)).toBe(false)
+    expect(enabledState(cards.filter((item) => item.enabled))).toBe(true)
     expect(toggleableCards(cards).map((item) => item.entryId)).toEqual(['a', 'b'])
   })
 

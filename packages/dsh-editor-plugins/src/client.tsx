@@ -144,9 +144,8 @@ function communityRuntimeLabel(card: PluginCard): string {
 }
 
 function communityCardStatus(cards: PluginCard[]): string {
-  const mixed = enabledState(cards) === 'mixed'
-  const parts: string[] = mixed ? ['部分启用'] : []
-  const seen = new Set(parts)
+  const parts: string[] = []
+  const seen = new Set<string>()
   const push = (item: string) => {
     if (!item || seen.has(item)) return
     seen.add(item)
@@ -154,16 +153,13 @@ function communityCardStatus(cards: PluginCard[]): string {
   }
   for (const card of cards) {
     if (card.pendingRestart) push('待重启')
-    const runtime = communityRuntimeLabel(card)
-    if (runtime === '已停用' && mixed) continue
-    push(runtime)
+    push(communityRuntimeLabel(card))
   }
   return parts.join(' · ')
 }
 
 function Switch(props: {
   checked: boolean
-  mixed?: boolean
   disabled?: boolean
   busy?: boolean
   labelledBy?: string
@@ -175,7 +171,7 @@ function Switch(props: {
     <button
       type="button"
       role="switch"
-      className={`dsh-plugins-switch${props.checked ? ' is-on' : ''}${props.mixed ? ' is-mixed' : ''}${props.busy ? ' is-pending' : ''}`}
+      className={`dsh-plugins-switch${props.checked ? ' is-on' : ''}${props.busy ? ' is-pending' : ''}`}
       aria-checked={props.checked}
       aria-labelledby={props.labelledBy}
       aria-describedby={props.describedBy}
@@ -207,14 +203,10 @@ function FeatureCard(props: {
   const { cards } = props
   const primary = cards[0]!
   const titleId = `plugin-title-${props.groupId.replace(/[^A-Za-z0-9._-]+/g, '-')}`
-  const mixedId = `${titleId}-mixed`
-  const state = enabledState(cards)
-  const mixed = state === 'mixed'
+  const on = enabledState(cards)
   const pendingRestart = cards.some((card) => card.pendingRestart)
   const phases = [...new Set(cards.map(phaseLabel))]
-  const alert = mixed
-    ? '部分启用'
-    : phases.find((item) => item === '启用失败' || item === '启动中' || item === '正在停用')
+  const alert = phases.find((item) => item === '启用失败' || item === '启动中' || item === '正在停用')
   const status = props.community
     ? communityCardStatus(cards)
     : [alert, pendingRestart ? '待重启' : ''].filter(Boolean).join(' · ')
@@ -238,7 +230,7 @@ function FeatureCard(props: {
           {props.description}
         </div>
         {status
-          ? <div id={mixed ? mixedId : undefined} className="dsh-plugins-meta">
+          ? <div className="dsh-plugins-meta">
           {activating ? activityDots() : null}
           {status}
         </div>
@@ -263,13 +255,11 @@ function FeatureCard(props: {
         </span>
           : canToggle
             ? <Switch
-          checked={state === true}
-          mixed={mixed}
+          checked={on}
           busy={props.busy}
           labelledBy={titleId}
-          describedBy={mixed ? mixedId : undefined}
           testId={`plugins-toggle-${props.groupId.includes('/') ? toggleTestId(primary) : props.groupId}`}
-          onToggle={() => props.onToggle(toggleableCards(cards), state !== true)} />
+          onToggle={() => props.onToggle(toggleableCards(cards), !on)} />
             : null}
         {primary.origin === 'installed' && props.onUninstall
           ? <SeatButton
