@@ -10,6 +10,16 @@ export type ModelUsage = {
   requests: number
 }
 
+/** One completed model call, newest last inside a daily row. */
+export type UsageLogEntry = {
+  at: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+
 /** Aggregated daily usage across the active chat/fim/patch paths. `byModel` keys use the `provider/model` form. */
 export type DailyUsage = {
   date: string
@@ -20,6 +30,7 @@ export type DailyUsage = {
   reasoningTokens: number
   requests: number
   byModel: Record<string, ModelUsage>
+  events?: UsageLogEntry[]
 }
 
 export class UsageInputError extends Error {
@@ -37,6 +48,15 @@ const modelUsageSchema = z.object({
   requests: z.number().int().nonnegative(),
 })
 
+const usageEventSchema = z.object({
+  at: z.string(),
+  model: z.string(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  cacheReadTokens: z.number().int().nonnegative(),
+  cacheWriteTokens: z.number().int().nonnegative(),
+})
+
 const dailyRowSchema = z.object({
   date: z.string(),
   inputTokens: z.number().int().nonnegative(),
@@ -46,6 +66,7 @@ const dailyRowSchema = z.object({
   reasoningTokens: z.number().int().nonnegative(),
   requests: z.number().int().nonnegative(),
   byModel: z.record(z.string(), modelUsageSchema),
+  events: z.array(usageEventSchema).optional(),
 })
 
 export const usageDomainSpec = defineDomain({
@@ -65,6 +86,7 @@ export type UsageChunk = {
 
 export const USAGE_DEFAULT_DAYS = 30
 export const USAGE_MAX_DAYS = 90
+export const USAGE_LOG_LIMIT = 200
 
 /** Normalize a usage payload so every field is a non-negative integer, dropping anything else. */
 function int(value: number | undefined): number {
@@ -89,6 +111,7 @@ function emptyDay(date: string): DailyUsage {
     reasoningTokens: 0,
     requests: 0,
     byModel: {},
+    events: [],
   }
 }
 
@@ -118,6 +141,7 @@ export function mergeUsage(
         reasoningTokens: day.reasoningTokens,
         requests: day.requests,
         byModel: { ...day.byModel },
+        events: [...(day.events ?? [])],
       }
     : emptyDay('')
   const inputTokens = int(usage.inputTokens)
@@ -136,8 +160,28 @@ export function mergeUsage(
   modelEntry.outputTokens += outputTokens
   modelEntry.cacheReadTokens += cacheReadTokens
   modelEntry.cacheWriteTokens += cacheWriteTokens
-  if (counted.request) modelEntry.requests += 1
+  if (counted.request) {
+    modelEntry.requests += 1
+    next.events = [...(next.events ?? []), {
+      at: new Date().toISOString(),
+      model,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+    }].slice(-USAGE_LOG_LIMIT)
+  }
   return next
+}
+
+/** Newest-first request log across a day window. */
+export function collectUsageLog(days: Iterable<DailyUsage | undefined>, limit = USAGE_LOG_LIMIT): UsageLogEntry[] {
+  const events: UsageLogEntry[] = []
+  for (const day of days) {
+    if (!day?.events) continue
+    events.push(...day.events)
+  }
+  return events.sort((left, right) => right.at.localeCompare(left.at)).slice(0, limit)
 }
 
 /** Validate the `days` argument for `usage.summary`, clamping to the supported range. */

@@ -418,6 +418,21 @@ describe('independent writing model preferences', () => {
     expect(stream).toHaveBeenNthCalledWith(3, expect.objectContaining(preferences.completionModel))
     expect(models).not.toHaveBeenCalled()
   })
+  it('forwards a configured reasoning effort on the writing route', async () => {
+    const {host, stream, services} = await fixture()
+    services.set('settings', {get: () => ({completionModel: {provider: 'fast', model: 'small', reasoningEffort: 'high'}})})
+    await dispatch(host as unknown as Context, 'fim.complete', {sessionId: 'session-1', prefix: '雨声', suffix: ''}, new AbortController().signal)
+    expect(stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'fast', model: 'small', reasoningEffort: 'high' }))
+  })
+  it('does not send an off reasoning effort', async () => {
+    const {host, stream, services} = await fixture()
+    services.set('settings', {get: () => ({completionModel: {provider: 'fast', model: 'small', reasoningEffort: 'off'}})})
+    await dispatch(host as unknown as Context, 'fim.complete', {sessionId: 'session-1', prefix: '雨声', suffix: ''}, new AbortController().signal)
+    const options = stream.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(options.provider).toBe('fast')
+    expect(options.model).toBe('small')
+    expect(options).not.toHaveProperty('reasoningEffort')
+  })
   it('rejects a partially configured route instead of silently using chat', async () => {
     const {host, stream, services} = await fixture()
     services.set('settings', {get: () => ({completionModel: {provider: 'fast', model: ''}})})

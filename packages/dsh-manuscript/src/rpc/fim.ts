@@ -34,6 +34,7 @@ async function streamCompletion(input: {
   llm: LlmBag
   provider: string
   model: string
+  reasoningEffort?: string
   prefix: string
   suffix: string
   authorPreferences: string
@@ -46,6 +47,7 @@ async function streamCompletion(input: {
   const stream = input.llm.stream({
     provider: input.provider,
     model: input.model,
+    ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
     signal: input.signal,
     system: fimSystem(input),
     messages: [
@@ -67,6 +69,7 @@ export async function completeFim(input: {
   ctx: FimContext
   provider: string
   model: string
+  reasoningEffort?: string
   prefix: string
   suffix: string
   authorPreferences?: string
@@ -79,6 +82,7 @@ export async function completeFim(input: {
     llm,
     provider: input.provider,
     model: input.model,
+    reasoningEffort: input.reasoningEffort,
     prefix: input.prefix,
     suffix: input.suffix,
     authorPreferences: input.authorPreferences ?? '',

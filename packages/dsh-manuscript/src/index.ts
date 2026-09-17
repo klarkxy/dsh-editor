@@ -9,7 +9,7 @@ import { applyProposal, parseProposal, prepareProposal, ProposalError } from './
 import { WritingProposalError } from './rpc/writing-proposal.ts'
 import { SearchError, searchWorkspaceText } from './rpc/search.ts'
 import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
-import { resolveDays, UsageInputError, type UsageRecorder } from './rpc/usage.ts'
+import { collectUsageLog, resolveDays, UsageInputError, type UsageRecorder } from './rpc/usage.ts'
 
 export const name = 'dsh-manuscript'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'storageDomain', 'webServer'] as const
@@ -67,8 +67,8 @@ export async function dispatch(
     const assist = ctx.get?.('manuscriptAssist') as ManuscriptAssist | undefined
     if (!usage && assist) return assist.summary(body.days)
     if (!usage) throw new Error('manuscript usage storage is unavailable')
-    const days = resolveDays(body.days)
-    return { days: await usage.read(days) }
+    const days = await usage.read(resolveDays(body.days))
+    return { days, log: collectUsageLog(days) }
   }
   const host = asHost(ctx)
   const targetSessionId = str(body, 'sessionId')

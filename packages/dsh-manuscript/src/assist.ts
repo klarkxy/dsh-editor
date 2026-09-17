@@ -6,7 +6,26 @@ import { completeFim } from './rpc/fim.ts'
 import { completePatch, parsePatchRequest } from './rpc/patch.ts'
 import { parseAuthorPreferences, parseChapterContext } from './rpc/author-preferences.ts'
 import { readProjectRules } from './rpc/project-rules.ts'
-import { createUsageRecorder, usageDomainSpec, resolveDays, type UsageRecorder } from './rpc/usage.ts'
+import { collectUsageLog, createUsageRecorder, usageDomainSpec, resolveDays, type UsageRecorder } from './rpc/usage.ts'
+
+type SessionModelsProxy = {
+  sessions?: {
+    models(request: unknown): Promise<{
+      result: {
+        ok: boolean
+        value?: { current?: { provider?: string; model?: string; reasoningEffort?: string }; routable?: boolean }
+        error?: { message?: string }
+      }
+    }>
+  }
+}
+
+function streamReasoningEffort(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const id = value.trim()
+  if (!id || id === 'off' || id === 'none') return undefined
+  return id
+}
 
 export const name = 'dsh-manuscript-assist'
 export const inject = ['llm', 'storageDomain', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
@@ -17,21 +36,25 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.effect(() => () => domain.close(), 'manuscript-assist.usageDomainClose')
   installUsageWaterfall(ctx, usage)
   const service: ManuscriptAssist = {
-    summary: async days => ({ days: await usage.read(resolveDays(days)) }),
+    summary: async days => {
+      const rows = await usage.read(resolveDays(days))
+      return { days: rows, log: collectUsageLog(rows) }
+    },
     async complete(endpoint, body, route, signal) {
       const settings = ctx.get('settings') as { get(namespace: string): Record<string, unknown> | undefined } | undefined
       const configured = settings?.get('dsh-editor-writing')?.[endpoint === 'fim.complete' ? 'completionModel' : 'rewriteModel']
       const preference = configured && typeof configured === 'object' ? configured as Record<string, unknown> : undefined
       const provider = typeof preference?.provider === 'string' ? preference.provider.trim() : ''
       const model = typeof preference?.model === 'string' ? preference.model.trim() : ''
+      const reasoningEffort = streamReasoningEffort(preference?.reasoningEffort)
       const hasOverride = Boolean(provider || model)
       if (hasOverride) {
         if (!provider || !model) throw new Error('写作模型配置不完整，请在设置中重新选择模型')
-        route = { provider, model }
+        route = reasoningEffort ? { provider, model, reasoningEffort } : { provider, model }
       }
       // requestHeader is the last executed request, not the current picker value.
       // Reuse the existing gateway's selection owner when this host provides it.
-      const api = ctx.get('apiProxy') as { sessions?: { models(request: unknown): Promise<{ result: { ok: boolean; value?: { current?: { provider?: string; model?: string }; routable?: boolean }; error?: { message?: string } } }> } } | undefined
+      const api = ctx.get('apiProxy') as SessionModelsProxy | undefined
       if (signal.aborted) return { text: '', route: 'dsh-llm' }
       if (!hasOverride && api?.sessions?.models) {
         const response = await api.sessions.models({ type: 'client-request', rpcId: randomUUID(), method: 'session.models', payload: { sessionId: body.sessionId } })
@@ -40,7 +63,10 @@ export async function apply(ctx: Context): Promise<void> {
         const selected = response.result.value?.current
         if (!selected || typeof selected.provider !== 'string' || typeof selected.model !== 'string') throw new Error('当前写作模型响应无效')
         if (response.result.value?.routable === false) throw new Error('当前写作模型不可用')
-        route = { provider: selected.provider, model: selected.model }
+        const selectedEffort = streamReasoningEffort(selected.reasoningEffort)
+        route = selectedEffort
+          ? { provider: selected.provider, model: selected.model, reasoningEffort: selectedEffort }
+          : { provider: selected.provider, model: selected.model }
       }
       if (!route.provider || !route.model) throw new Error('尚未配置写作模型，请在设置中选择补全或改写模型')
 

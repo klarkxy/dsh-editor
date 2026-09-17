@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  collectUsageLog,
   createUsageRecorder,
   dayKey,
   mergeUsage,
@@ -46,6 +47,47 @@ describe('LLM usage accounting', () => {
       cacheWriteTokens: 0,
       requests: 2,
     })
+    expect(next.events).toHaveLength(2)
+    expect(next.events?.[1]).toMatchObject({
+      model: 'dsh-official/dsh-v3',
+      inputTokens: 50,
+      outputTokens: 20,
+      cacheReadTokens: 25,
+      cacheWriteTokens: 0,
+    })
+    expect(next.events?.[1]?.at).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+
+  it('omits a log row when the stream did not count as a completed request', () => {
+    const day = mergeUsage(undefined, 'p/m', { inputTokens: 4 }, { request: false })
+    expect(day.events).toEqual([])
+    expect(day.requests).toBe(0)
+  })
+
+  it('orders the request log newest first across days', () => {
+    const older = mergeUsage({
+      date: '2026-03-08',
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      requests: 0,
+      byModel: {},
+      events: [{ at: '2026-03-08T10:00:00.000Z', model: 'p/old', inputTokens: 1, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }],
+    }, 'p/m', { inputTokens: 2 }, { request: false })
+    const newer = mergeUsage({
+      date: '2026-03-09',
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      requests: 0,
+      byModel: {},
+      events: [{ at: '2026-03-09T12:00:00.000Z', model: 'p/new', inputTokens: 3, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 }],
+    }, 'p/m', { inputTokens: 2 }, { request: false })
+    expect(collectUsageLog([older, newer]).map((row) => row.model)).toEqual(['p/new', 'p/old'])
   })
 
   it('creates a new day row when none is stored, and a new model entry on first use', () => {

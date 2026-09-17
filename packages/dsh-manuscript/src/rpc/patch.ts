@@ -99,6 +99,7 @@ async function streamPatch(input: {
   llm: LlmBag
   provider: string
   model: string
+  reasoningEffort?: string
   request: PatchRequest
   projectRules?: string
   signal: AbortSignal
@@ -109,6 +110,7 @@ async function streamPatch(input: {
     const stream = input.llm.stream({
       provider: input.provider,
       model: input.model,
+      ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
       signal: input.signal,
       system: patchSystem(input.request, input.projectRules),
       messages: [
@@ -143,6 +145,7 @@ export async function completePatch(input: {
   ctx: PatchContext
   provider: string
   model: string
+  reasoningEffort?: string
   request: PatchRequest
   projectRules?: string
   signal: AbortSignal
@@ -152,6 +155,7 @@ export async function completePatch(input: {
     llm,
     provider: input.provider,
     model: input.model,
+    reasoningEffort: input.reasoningEffort,
     request: input.request,
     projectRules: input.projectRules,
     signal: input.signal,
