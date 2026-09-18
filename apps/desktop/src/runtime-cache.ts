@@ -1,7 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto'
-import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
+import { copyRuntimeTree, treeMeasure, type TreeDigest } from './runtime-tree.js'
+export { treeDigest } from './runtime-tree.js'
+export type { TreeDigest } from './runtime-tree.js'
 
 const CACHE_NAME = 'dsh-editor-runtime'
 const CACHE_MARKER = '.dsh-editor-runtime.json'
@@ -11,7 +14,6 @@ const EXPECTED_DSH_VERSION = '0.1.5-rc.2'
 const PLATFORM_ID = `${process.platform}-${process.arch}`
 const NODE_EXECUTABLE = process.platform === 'win32' ? 'node.exe' : 'node'
 
-export interface TreeDigest { sha256: string; files: number; bytes: number }
 interface RuntimeManifest {
   format: number
   platform: string
@@ -21,30 +23,6 @@ interface RuntimeManifest {
 }
 interface CacheMarker { app?: unknown; schema?: unknown; manifest?: unknown }
 export interface CachedRuntime { nodePath: string; cliPath: string; template: string }
-
-export async function treeDigest(root: string): Promise<TreeDigest> {
-  const hash = createHash('sha256')
-  let files = 0
-  let bytes = 0
-  async function visit(directory: string): Promise<void> {
-    const entries = await readdir(directory, { withFileTypes: true })
-    entries.sort((left, right) => left.name.localeCompare(right.name))
-    for (const entry of entries) {
-      const path = join(directory, entry.name)
-      if (entry.isDirectory()) { await visit(path); continue }
-      if (!entry.isFile()) continue
-      const data = await readFile(path)
-      hash.update(relative(root, path).replaceAll('\\', '/'))
-      hash.update('\0')
-      hash.update(createHash('sha256').update(data).digest('hex'))
-      hash.update('\n')
-      files += 1
-      bytes += data.byteLength
-    }
-  }
-  await visit(root)
-  return { sha256: hash.digest('hex'), files, bytes }
-}
 
 function manifestKey(manifest: RuntimeManifest): string { return JSON.stringify(manifest) }
 function assertManifest(value: unknown): asserts value is RuntimeManifest {
@@ -95,36 +73,17 @@ export function hasPackagedRuntimeCache(home: string): boolean {
   return existsSync(join(home, 'runtime', CACHE_NAME, CACHE_MARKER))
 }
 
-async function treeMeasure(root: string): Promise<{ files: number; bytes: number }> {
-  let files = 0
-  let bytes = 0
-  async function visit(directory: string): Promise<void> {
-    const entries = await readdir(directory, { withFileTypes: true })
-    for (const entry of entries) {
-      const path = join(directory, entry.name)
-      if (entry.isDirectory()) { await visit(path); continue }
-      if (!entry.isFile()) continue
-      files += 1
-      bytes += (await stat(path)).size
-    }
-  }
-  await visit(root)
-  return { files, bytes }
-}
-
 function sameMeasure(actual: { files: number; bytes: number }, expected: TreeDigest): boolean {
   return actual.files === expected.files && actual.bytes === expected.bytes
 }
 
 async function copyMatchesManifest(root: string, manifest: RuntimeManifest): Promise<boolean> {
-  try {
-    const [node, dsh, profile] = await Promise.all([
-      treeMeasure(join(root, 'node')),
-      treeMeasure(join(root, 'dsh')),
-      treeMeasure(join(root, 'profile-template')),
-    ])
-    return sameMeasure(node, manifest.node) && sameMeasure(dsh, manifest.dsh) && sameMeasure(profile, manifest.profile)
-  } catch { return false }
+  const [node, dsh, profile] = await Promise.all([
+    treeMeasure(join(root, 'node')),
+    treeMeasure(join(root, 'dsh')),
+    treeMeasure(join(root, 'profile-template')),
+  ])
+  return sameMeasure(node, manifest.node) && sameMeasure(dsh, manifest.dsh) && sameMeasure(profile, manifest.profile)
 }
 
 function cacheReady(root: string): boolean {
@@ -179,22 +138,34 @@ export async function materializePackagedRuntime(home: string, resources: string
   const backup = join(cacheParent, `.${CACHE_NAME}.backup-${nonce}`)
   try {
     await mkdir(stage)
-    await Promise.all([
-      cp(join(resources, 'node'), join(stage, 'node'), { recursive: true, dereference: true }),
-      cp(join(resources, 'dsh'), join(stage, 'dsh'), { recursive: true, dereference: true }),
-      cp(join(resources, 'profile-template'), join(stage, 'profile-template'), { recursive: true, dereference: true }),
+    // A rejected copy does not cancel its siblings. Drain all writers before
+    // cleanup, otherwise rm races with them and can hide ENOENT with ENOTEMPTY.
+    const copies = await Promise.allSettled([
+      copyRuntimeTree(join(resources, 'node'), join(stage, 'node')),
+      copyRuntimeTree(join(resources, 'dsh'), join(stage, 'dsh')),
+      copyRuntimeTree(join(resources, 'profile-template'), join(stage, 'profile-template')),
     ])
+    const failure = copies.find((result) => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
     if (!(await copyMatchesManifest(stage, manifest))) throw new Error('Persistent desktop runtime cache did not match the bundled runtime manifest.')
     await writeFile(join(stage, CACHE_MARKER), `${JSON.stringify({ app: 'dsh-editor', schema: CACHE_SCHEMA, manifest: manifestKey(manifest) })}\n`, 'utf8')
     if (existsSync(target)) await rename(target, backup)
     try { await rename(stage, target) } catch (error) {
-      if (existsSync(backup) && !existsSync(target)) await rename(backup, target)
+      try {
+        if (existsSync(backup) && !existsSync(target)) await rename(backup, target)
+      } catch (restoreError) {
+        console.warn('Could not restore desktop runtime backup:', backup, restoreError)
+      }
       throw error
     }
     await cleanupRuntimeBackup(backup)
     return runtimePaths(target)
   } catch (error) {
-    if (existsSync(stage)) await rm(stage, { recursive: true, force: true })
+    try {
+      await rm(stage, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+    } catch (cleanupError) {
+      console.warn('Could not remove desktop runtime staging directory:', stage, cleanupError)
+    }
     throw error
   }
 }

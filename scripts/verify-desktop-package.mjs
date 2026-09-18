@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { readFile, readdir, stat, writeFile } from 'node:fs/promises'
-import { dirname, relative, resolve } from 'node:path'
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { compositionInstallNames } from './plugin-manifest.mjs'
 import { desktopComposition } from './desktop-compositions.mjs'
 import { localArtifactsForPlatform } from './release-artifacts.mjs'
+import { treeDigest } from '../apps/desktop/dist/runtime-tree.js'
+import { materializePackagedRuntime } from '../apps/desktop/dist/runtime-cache.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, process.argv[2] ?? '.pack/desktop')
@@ -19,30 +22,6 @@ async function json(path) { return JSON.parse(await readFile(path, 'utf8')) }
 
 const desktopVersion = (await json(resolve(root, 'apps', 'desktop', 'package.json'))).version
 const artifactNames = localArtifactsForPlatform(process.platform, desktopVersion, process.arch)
-
-async function treeDigest(path) {
-  const hash = createHash('sha256')
-  let files = 0
-  let bytes = 0
-  async function visit(dir) {
-    const entries = await readdir(dir, { withFileTypes: true })
-    entries.sort((a, b) => a.name.localeCompare(b.name))
-    for (const entry of entries) {
-      const absolute = resolve(dir, entry.name)
-      if (entry.isDirectory()) { await visit(absolute); continue }
-      if (!entry.isFile()) continue
-      const data = await readFile(absolute)
-      hash.update(relative(path, absolute).replaceAll('\\', '/'))
-      hash.update('\0')
-      hash.update(createHash('sha256').update(data).digest('hex'))
-      hash.update('\n')
-      files += 1
-      bytes += data.byteLength
-    }
-  }
-  await visit(path)
-  return { sha256: hash.digest('hex'), files, bytes }
-}
 
 const manifest = await json(resolve(resources, 'runtime-manifest.json'))
 if (manifest.platform !== platformId) throw new Error(`runtime manifest platform mismatch: expected ${platformId}, found ${manifest.platform}`)
@@ -78,11 +57,38 @@ const installed = (await readdir(resolve(resources, 'profile-template', 'node_mo
 if (JSON.stringify(installed) !== JSON.stringify([...installedNames].sort())) throw new Error('unexpected packaged business dependencies')
 const nodeProbe = spawnSync(resolve(resources, 'node', nodeExecutableName), ['--version'], { encoding: 'utf8', windowsHide: true })
 if (nodeProbe.status !== 0 || nodeProbe.stdout.trim() !== 'v24.16.0') throw new Error('packaged Node probe failed')
+
+// Exercise the real portable materializer against the final packaged resources,
+// even on macOS where the normal installed launch intentionally skips copying.
+const smokeHome = await mkdtemp(join(tmpdir(), 'dsh-runtime-smoke-'))
+try {
+  const runtime = await materializePackagedRuntime(smokeHome, resources)
+  const reused = await materializePackagedRuntime(smokeHome, resources)
+  if (runtime.nodePath !== reused.nodePath) throw new Error('packaged runtime cache was not reused')
+  const probe = spawnSync(runtime.nodePath, ['--version'], { encoding: 'utf8', windowsHide: true })
+  if (probe.status !== 0 || probe.stdout.trim() !== 'v24.16.0') throw new Error('materialized Node probe failed')
+  const npmRoot = resolve(dirname(runtime.nodePath), 'node_modules', 'npm')
+  const npmVersion = (await json(resolve(npmRoot, 'package.json'))).version
+  for (const name of ['npm', 'npx']) {
+    const npmProbe = process.platform === 'win32'
+      ? spawnSync(runtime.nodePath, [resolve(npmRoot, 'bin', `${name}-cli.js`), '--version'], { encoding: 'utf8', windowsHide: true })
+      : spawnSync(resolve(dirname(runtime.nodePath), name), ['--version'], { encoding: 'utf8', env: { ...process.env, PATH: '/usr/bin:/bin' } })
+    if (npmProbe.status !== 0 || npmProbe.stdout.trim() !== npmVersion) throw new Error(`materialized ${name} probe failed: ${npmProbe.stderr || npmProbe.stdout}`)
+  }
+  const leftovers = await readdir(join(smokeHome, 'runtime'))
+  if (leftovers.length !== 1 || leftovers[0] !== 'dsh-editor-runtime') throw new Error('packaged runtime left staging directories behind')
+} finally {
+  await rm(smokeHome, { recursive: true, force: true, maxRetries: 3 })
+}
+
+// Every macOS release also boots the actual ZIP in a clean user environment.
+if (process.platform === 'darwin') await import('../e2e/macos-packaged.mjs')
+
 const artifacts = []
 for (const name of artifactNames) {
   const file = resolve(output, name)
   artifacts.push({ file, bytes: (await stat(file)).size, sha256: createHash('sha256').update(await readFile(file)).digest('hex') })
 }
-const report = { ok: true, source: 'current', platform: platformId, artifacts, manifest, actual }
+const report = { ok: true, source: 'current', platform: platformId, artifacts, manifest, actual, runtimeSmoke: true }
 await writeFile(resolve(output, 'verification.json'), `${JSON.stringify(report, null, 2)}\n`)
 console.log(JSON.stringify(report, null, 2))
