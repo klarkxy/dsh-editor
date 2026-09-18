@@ -91,6 +91,23 @@ async function createRootFolderFromTree(page, name) {
   await page.locator('.tree-row').filter({ hasText: name }).first().waitFor({ state: 'visible', timeout: 20_000 })
 }
 
+async function revealPaperEditor(page) {
+  const hideAssistant = page.getByRole('button', { name: '隐藏写作搭档' })
+  if (await hideAssistant.isVisible().catch(() => false)) {
+    await hideAssistant.click()
+    await hideAssistant.waitFor({ state: 'hidden', timeout: 10_000 })
+  }
+  await page.locator('.rt-DialogOverlay').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined)
+  const editor = page.locator('[data-testid="paper-editor"] .cm-content')
+  await editor.waitFor({ state: 'visible', timeout: 30_000 })
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="paper-editor"] .cm-content')?.getAttribute('contenteditable') === 'true',
+    undefined,
+    { timeout: 20_000 },
+  )
+  await editor.click()
+}
+
 async function openAndCloseProofreadPanel(page) {
   await page.getByRole('button', { name: '搜索与命令' }).click()
   await page.locator('.palette-overlay').waitFor({ state: 'visible', timeout: 10_000 })
@@ -202,7 +219,8 @@ try {
   const file=window.getByRole('dialog',{name:'新建文件'})
   await file.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001')
   await file.getByRole('button',{name:'创建',exact:true}).click()
-  await window.locator('[data-testid="paper-editor"] .cm-content').click()
+  await file.waitFor({ state: 'detached', timeout: 15_000 })
+  await revealPaperEditor(window)
   await window.keyboard.insertText('最终便携产物保存验证。')
   await window.keyboard.press('Control+s')
   await window.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor()
