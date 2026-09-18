@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { catalogFromEditorBlocks } from './core.ts'
+import { assertSafeTarListing, listTarEntries } from './install.ts'
 import { blockedReason, inspectPluginPackage, parseBundlePatch, peerAllows, resolveEntryFile, resolveInside } from './inspect.ts'
 
 const productCatalog = catalogFromEditorBlocks([
@@ -41,6 +42,15 @@ const readyClient = `window.__ModuleLoader__.load({
   }
 });
 `
+
+describe('install tarball inspection', () => {
+  it('rejects empty, oversized or escaping archives before extract', () => {
+    expect(() => assertSafeTarListing([])).toThrow(/空/)
+    expect(() => assertSafeTarListing(['../evil'])).toThrow(/不安全/)
+    expect(() => assertSafeTarListing(['/etc/passwd'])).toThrow(/不安全/)
+    expect(() => assertSafeTarListing(listTarEntries('owner-repo/package.json\nowner-repo/lib/index.js\n'))).not.toThrow()
+  })
+})
 
 describe('bundle patch parser', () => {
   it('reads insert id/name pairs used by real DSH bundles', () => {

@@ -656,14 +656,13 @@ describe('V2 generation baselines on split/merge/renames', () => {
     }))).rejects.toMatchObject({ code: 'STALE' })
   })
 
-  it('applies unchanged V2 split/merge/renames and rejects a target change between prepare and apply', async () => {
+  it('applies unchanged V2 split, merge and rename', async () => {
     await writeText('正文/002.md', '第一幕\n## 第二幕\n后')
     const splitVersion = (await readTextFile(filesContext(), '正文/002.md')).version
     const split = splitProposal({ targetVersion: splitVersion })
     const splitPlan = await prepareSplit(filesContext(), split)
     expect(splitPlan.version).toBe(splitVersion)
-    const splitApplied = await applySplit(filesContext(), split, splitPlan.version)
-    expect(splitApplied.applied).toEqual(['正文/002.md', '正文/002b.md'])
+    expect((await applySplit(filesContext(), split, splitPlan.version)).applied).toEqual(['正文/002.md', '正文/002b.md'])
 
     await writeText('正文/010.md', '第十章主文')
     await writeText('正文/010-补.md', '附录内容')
@@ -672,24 +671,22 @@ describe('V2 generation baselines on split/merge/renames', () => {
       sourceVersion: (await readTextFile(filesContext(), '正文/010-补.md')).version,
     })
     const mergePlan = await prepareMerge(filesContext(), merge)
-    const mergeApplied = await applyMerge(lifecycleAccess(), merge, mergePlan.versions)
-    expect(mergeApplied.applied).toEqual(['正文/010.md', '正文/010-补.md'])
+    expect((await applyMerge(lifecycleAccess(), merge, mergePlan.versions)).applied).toEqual(['正文/010.md', '正文/010-补.md'])
 
     await writeText('正文/003.md', '三')
     const renameVersion = (await readTextFile(filesContext(), '正文/003.md')).version
     const rename = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'renames' as const, summary: '改名', renames: [{ from: '正文/003.md', to: '正文/003-改名.md', version: renameVersion }] }
     const renamePlan = await prepareRenames(filesContext(), rename)
-    const renameApplied = await applyRenames(lifecycleAccess(), rename, renamePlan.versions)
-    expect(renameApplied.applied).toEqual(['正文/003-改名.md'])
+    expect((await applyRenames(lifecycleAccess(), rename, renamePlan.versions)).applied).toEqual(['正文/003-改名.md'])
+  })
 
+  it('rejects a target change between prepare and apply', async () => {
     await writeText('正文/004.md', '四\n## 第二幕\n尾')
-    const racedVersion = (await readTextFile(filesContext(), '正文/004.md')).version
-    const raced = splitProposal({ path: '正文/004.md', newPath: '正文/004b.md', targetVersion: racedVersion })
+    const raced = splitProposal({ path: '正文/004.md', newPath: '正文/004b.md', targetVersion: (await readTextFile(filesContext(), '正文/004.md')).version })
     const racedPlan = await prepareSplit(filesContext(), raced)
     await writeText('正文/004.md', '四改了\n## 第二幕\n尾')
-    const racedCurrent = (await readTextFile(filesContext(), '正文/004.md')).version
     await expect(applySplit(filesContext(), raced, racedPlan.version)).rejects.toMatchObject({ code: 'STALE' })
-    await expect(applySplit(filesContext(), raced, racedCurrent)).rejects.toMatchObject({ code: 'STALE' })
+    await expect(applySplit(filesContext(), raced, (await readTextFile(filesContext(), '正文/004.md')).version)).rejects.toMatchObject({ code: 'STALE' })
     expect(await readRelative('正文/004.md')).toBe('四改了\n## 第二幕\n尾')
 
     await writeText('正文/011.md', '目标')
@@ -702,28 +699,25 @@ describe('V2 generation baselines on split/merge/renames', () => {
     })
     const mergeRacePlan = await prepareMerge(filesContext(), mergeRace)
     await writeText('正文/011.md', '目标改了')
-    const mergeCurrent = (await readTextFile(filesContext(), '正文/011.md')).version
     await expect(applyMerge(lifecycleAccess(), mergeRace, mergeRacePlan.versions)).rejects.toMatchObject({ code: 'STALE' })
     await expect(applyMerge(lifecycleAccess(), mergeRace, {
-      path: mergeCurrent,
+      path: (await readTextFile(filesContext(), '正文/011.md')).version,
       sourcePath: mergeRacePlan.versions.sourcePath,
     })).rejects.toMatchObject({ code: 'STALE' })
     expect(await readRelative('正文/011.md')).toBe('目标改了')
 
     await writeText('正文/005.md', '五')
-    const renameRaceVersion = (await readTextFile(filesContext(), '正文/005.md')).version
     const renameRace = {
       marker: 'dsh-editor.proposal' as const,
       version: 1 as const,
       kind: 'renames' as const,
       summary: '改名',
-      renames: [{ from: '正文/005.md', to: '正文/005-改名.md', version: renameRaceVersion }],
+      renames: [{ from: '正文/005.md', to: '正文/005-改名.md', version: (await readTextFile(filesContext(), '正文/005.md')).version }],
     }
     const renameRacePlan = await prepareRenames(filesContext(), renameRace)
     await writeText('正文/005.md', '五改了')
-    const renameCurrent = (await readTextFile(filesContext(), '正文/005.md')).version
     await expect(applyRenames(lifecycleAccess(), renameRace, renameRacePlan.versions)).rejects.toMatchObject({ code: 'STALE' })
-    await expect(applyRenames(lifecycleAccess(), renameRace, { '正文/005.md': renameCurrent })).rejects.toMatchObject({ code: 'STALE' })
+    await expect(applyRenames(lifecycleAccess(), renameRace, { '正文/005.md': (await readTextFile(filesContext(), '正文/005.md')).version })).rejects.toMatchObject({ code: 'STALE' })
     expect(await readRelative('正文/005.md')).toBe('五改了')
   })
 })

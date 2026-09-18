@@ -108,5 +108,7 @@ describe('planning flow labels', () => {
     expect(zh['chat.outlineProposal']).toBe('作品大纲提案')
     expect(zh['chat.chapterPlanBadge']).toBe('章纲提案')
     expect(zh['chat.chapterSummaryBadge']).toBe('章末小结提案')
+    expect(zh['chat.proposalBasis']).toBe('参考')
+    expect(zh['chat.proposalTarget']).toBe('将改动的文件')
   })
 })

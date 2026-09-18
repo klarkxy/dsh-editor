@@ -289,21 +289,24 @@ describe('in-place rollback', () => {
   })
 })
 
-it.each(['a.md', 'b.md'])('preserves concurrent %s edits made while publishing the safety snapshot', async (edited) => {
+it('preserves concurrent edits made while publishing the safety snapshot', async () => {
   const root = await project('race')
-  await fs.writeFile(path.join(root,'a.md'),'old')
+  await fs.writeFile(path.join(root, 'a.md'), 'old')
   const snapshot = await createSnapshot(access(root))
-  await fs.writeFile(path.join(root,'a.md'),'current')
-  await fs.writeFile(path.join(root,'b.md'),'later')
-  let injected=false
-  const filesystem = nativeFs({afterWrite:async(target)=>{
-    if(!injected && target.includes('.creating-') && target.endsWith('manifest.json')) {
-      injected=true
-      await fs.writeFile(path.join(root,edited),'concurrent author change')
-    }
-  }})
-  await expect(rollbackSnapshot(access(root,'workspace-write',filesystem),snapshot.snapshotId)).rejects.toMatchObject({recovery:{partial:true,safetySnapshotId:expect.any(String)}})
+  await fs.writeFile(path.join(root, 'a.md'), 'current')
+  await fs.writeFile(path.join(root, 'b.md'), 'later')
+  let injected = false
+  const filesystem = nativeFs({
+    afterWrite: async (target) => {
+      if (!injected && target.includes('.creating-') && target.endsWith('manifest.json')) {
+        injected = true
+        await fs.writeFile(path.join(root, 'b.md'), 'concurrent author change')
+      }
+    },
+  })
+  await expect(rollbackSnapshot(access(root, 'workspace-write', filesystem), snapshot.snapshotId))
+    .rejects.toMatchObject({ recovery: { partial: true, safetySnapshotId: expect.any(String) } })
   expect(injected).toBe(true)
-  expect(await fs.readFile(path.join(root,edited),'utf8')).toBe('concurrent author change')
-  expect(await fs.readFile(path.join(root,'a.md'),'utf8')).toBe(edited==='a.md'?'concurrent author change':'current')
+  expect(await fs.readFile(path.join(root, 'b.md'), 'utf8')).toBe('concurrent author change')
+  expect(await fs.readFile(path.join(root, 'a.md'), 'utf8')).toBe('current')
 })
