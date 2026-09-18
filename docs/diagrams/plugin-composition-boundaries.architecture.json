@@ -2,7 +2,7 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "DSH Editor 0.2.0：界面与宿主边界",
+    "title": "DSH Editor 0.3.0：界面与宿主边界",
     "quality_profile": "showcase",
     "legend": {
       "mode": "auto",
