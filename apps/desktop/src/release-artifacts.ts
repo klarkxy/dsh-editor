@@ -70,6 +70,8 @@ export function selectAsset<T extends { name: string }>(
 export function isSafeAssetFileName(name: string): boolean {
   if (!name || name !== name.trim()) return false
   if (name.includes('\0') || name === '.' || name === '..') return false
+  // Reject both separators: POSIX basename ignores `\`, so `..\..\evil.exe` would otherwise pass.
+  if (name.includes('/') || name.includes('\\')) return false
   if (name !== basename(name)) return false
   if (/[<>:"|?*]/.test(name)) return false
   return true

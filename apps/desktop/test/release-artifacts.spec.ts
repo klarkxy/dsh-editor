@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  isSafeAssetFileName,
   localArtifactName,
   localArtifactsForPlatform,
   releaseArtifactName,
@@ -51,6 +52,13 @@ describe('release artifact naming contract', () => {
     expect(selectAsset(assets, 'win32', true)?.name).toBe('DSH-Editor-0.3.0-win-x64.exe')
     expect(selectAsset(assets, 'win32', false)?.name).toBe('DSH-Editor-Setup-0.3.0-win-x64.exe')
     expect(selectAsset(assets, 'darwin', false)?.name).toBe('DSH-Editor-0.3.0-mac-arm64.dmg')
+  })
+
+  it('rejects path separators on every platform, including Windows backslashes', () => {
+    expect(isSafeAssetFileName('DSH-Editor-0.3.0-win-x64.exe')).toBe(true)
+    expect(isSafeAssetFileName('../evil.exe')).toBe(false)
+    expect(isSafeAssetFileName(String.raw`..\..\Windows\evil.exe`)).toBe(false)
+    expect(isSafeAssetFileName('nested/update.exe')).toBe(false)
   })
 
   it('requires pack verification and portable e2e to import the same contract', async () => {

@@ -93,6 +93,7 @@ describe('update session trust boundary', () => {
   it('rejects renderer-controlled file names that escape the update directory', () => {
     const dir = join('C:', 'Users', 'me', 'AppData', 'Local', 'Temp', 'dsh-editor-update')
     expect(() => resolveUpdateFilePath(dir, String.raw`..\..\Windows\evil.exe`)).toThrow('非法的更新文件名')
+    expect(() => resolveUpdateFilePath(dir, '../evil.exe')).toThrow('非法的更新文件名')
     expect(() => resolveUpdateFilePath(dir, 'DSH-Editor-0.3.0-win-x64.exe')).not.toThrow()
   })
 
