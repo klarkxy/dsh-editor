@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { existsSync, rmSync, watch } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -123,17 +123,19 @@ describeWin('portable swap on Windows', () => {
     await writeFile(target, 'old-bytes', 'utf8')
     await writeFile(next, 'new-bytes', 'utf8')
     await writeFile(script, buildPortableSwapScript(PID, target, next), 'utf8')
-    const watcher = watch(dir, () => {
+    // Poll instead of fs.watch: libuv's Windows watcher aborts the process
+    // (fs-event.c !_wcsnicmp) when a watched temp dir is renamed mid-callback.
+    const interval = setInterval(() => {
       try {
         if (existsSync(backup) && existsSync(staged)) rmSync(staged, { force: true })
       } catch {
         // the swap script owns the race; a late delete still leaves either backup or target
       }
-    })
+    }, 50)
     try {
       await runBat(script, { DSH_UPDATE_TEST_PAUSE: '1' })
     } finally {
-      watcher.close()
+      clearInterval(interval)
     }
     expect(await readFile(target, 'utf8')).toBe('old-bytes')
   })
