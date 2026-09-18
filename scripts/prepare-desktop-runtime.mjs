@@ -1,12 +1,13 @@
-import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, relative, resolve, sep } from 'node:path'
+import { cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
 import { compositionInstallNames } from './plugin-manifest.mjs'
 import { desktopComposition, configureProfile } from './desktop-compositions.mjs'
+import { prepareNodeRuntime } from './prepare-node-runtime.mjs'
+import { treeDigest } from '../apps/desktop/dist/runtime-tree.js'
 
 const NODE_VERSION = '24.16.0'
 const DSH_VERSION = '0.1.5-rc.2'
@@ -27,36 +28,6 @@ function assertSafeOutput(path) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'))
-}
-
-async function treeDigest(path) {
-  const hash = createHash('sha256')
-  let files = 0
-  let bytes = 0
-
-  async function visit(dir) {
-    const entries = await readdir(dir, { withFileTypes: true })
-    entries.sort((a, b) => a.name.localeCompare(b.name))
-    for (const entry of entries) {
-      const absolute = resolve(dir, entry.name)
-      if (entry.isDirectory()) {
-        await visit(absolute)
-        continue
-      }
-      if (!entry.isFile()) continue
-      const data = await readFile(absolute)
-      const name = relative(path, absolute).replaceAll('\\', '/')
-      hash.update(name)
-      hash.update('\0')
-      hash.update(createHash('sha256').update(data).digest('hex'))
-      hash.update('\n')
-      files += 1
-      bytes += data.byteLength
-    }
-  }
-
-  await visit(path)
-  return { sha256: hash.digest('hex'), files, bytes }
 }
 
 function packageCopyFilter(source) {
@@ -98,18 +69,7 @@ await rm(outputRoot, { recursive: true, force: true })
 await mkdir(nodeOutput, { recursive: true })
 await mkdir(dshOutput, { recursive: true })
 
-const nodeExecutable = process.execPath
-await cp(nodeExecutable, resolve(nodeOutput, nodeExecutableName))
-const nodeDir = dirname(nodeExecutable)
-for (const name of process.platform === 'win32' ? ['npm.cmd', 'npm.exe', 'npx.cmd', 'npx.exe'] : ['npm', 'npx']) {
-  const source = resolve(nodeDir, name)
-  if (existsSync(source)) await cp(source, resolve(nodeOutput, name))
-}
-const npmPackage = resolve(nodeDir, 'node_modules', 'npm')
-if (existsSync(npmPackage)) {
-  await mkdir(resolve(nodeOutput, 'node_modules'), { recursive: true })
-  await cp(npmPackage, resolve(nodeOutput, 'node_modules', 'npm'), { recursive: true })
-}
+await prepareNodeRuntime(nodeOutput)
 await cp(dsh.packageRoot, dshOutput, {
   recursive: true,
   dereference: true,
@@ -120,7 +80,7 @@ for (const packageName of privateProfilePackages) {
   const source = resolve(root, 'packages', packageName)
   const destination = resolve(dshOutput, 'node_modules', packageName)
   await rm(destination, { recursive: true, force: true })
-  await cp(source, destination, { recursive: true, filter: packageCopyFilter })
+  await cp(source, destination, { recursive: true, dereference: true, filter: packageCopyFilter })
 }
 
 const bundledDsh = await readJson(resolve(dshOutput, 'package.json'))
@@ -138,11 +98,12 @@ const dshDigest = await treeDigest(dshOutput)
 await rename(resolve(dshOutput, 'node_modules'), resolve(dshOutput, 'vendor-dependencies'))
 
 const profileSource = resolve(root, 'apps', 'desktop', 'resources', 'profile')
-await cp(profileSource, profileOutput, { recursive: true })
+await cp(profileSource, profileOutput, { recursive: true, dereference: true })
 await configureProfile(profileOutput, composition)
 for (const packageName of privateProfilePackages) {
   await cp(resolve(root, 'packages', packageName), resolve(profileOutput, 'node_modules', packageName), {
     recursive: true,
+    dereference: true,
     filter: packageCopyFilter,
   })
 }
