@@ -93,9 +93,11 @@ async function createRootFolderFromTree(page, name) {
 
 async function revealPaperEditor(page) {
   const hideAssistant = page.getByRole('button', { name: '隐藏写作搭档' })
-  if (await hideAssistant.isVisible().catch(() => false)) {
-    await hideAssistant.click()
+  try {
+    await hideAssistant.click({ timeout: 3_000 })
     await hideAssistant.waitFor({ state: 'hidden', timeout: 10_000 })
+  } catch {
+    // Wide layouts keep the partner in the grid; the paper still needs a click.
   }
   await page.locator('.rt-DialogOverlay').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined)
   const editor = page.locator('[data-testid="paper-editor"] .cm-content')
@@ -105,7 +107,7 @@ async function revealPaperEditor(page) {
     undefined,
     { timeout: 20_000 },
   )
-  await editor.click()
+  await editor.click({ force: true })
 }
 
 async function openAndCloseProofreadPanel(page) {
