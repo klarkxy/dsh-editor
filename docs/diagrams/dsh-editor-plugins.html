@@ -4866,7 +4866,7 @@
       </div>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[{"id":"desktop-profile","label":"桌面 profile","focus":["electron","dsh-host","shell","manuscript","workbench","kernel"],"note":"Electron 启动唯一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"},{"id":"public-web","label":"公开 Web 插件","focus":["web-dsh","manuscript","proofread","zhihu"],"note":"三个 tarball 可按任意顺序安装到普通 web profile。"},{"id":"in-process-deps","label":"进程内依赖","focus":["shell","manuscript","workbench","kernel","dsh-host"],"note":"host-api 是库导入；kernel 只注册 tools，可见 novel 为 knowledge-only，不对外提供文件 RPC。"}]</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"desktop-profile","label":"桌面 profile","focus":["electron","dsh-host","shell","plugins","workbench","manuscript","kernel","panels"],"note":"锁定核心、写作模式和作者工具都在同一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"},{"id":"author-tools","label":"作者工具","focus":["shell","plugins","panels","proofread","zhihu"],"note":"设置里按作者用途分组：校对、概览、人物卡、记忆、知乎；人物卡与记忆默认关。"},{"id":"public-web","label":"公开 Web 插件","focus":["web-dsh","manuscript","proofread","zhihu"],"note":"三个 tarball 仍可单独装进普通 web profile；桌面面板与写作模式不对外发布。"}]</script>
 
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
       <button id="guided-view-prev" type="button" aria-label="Previous guided view" title="Previous guided view ([)">&#8592;</button>
@@ -4935,20 +4935,21 @@
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Boundaries (behind everything) -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" x="18" y="274" width="1120" height="332" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" x="18" y="274" width="1412" height="332" rx="12" class="c-region" stroke-width="1"/>
         <text x="26" y="292" class="t-cloud" font-size="9" font-weight="600">桌面 profiles/dsh-editor（canonical desktop）</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" x="602" y="58" width="828" height="548" rx="12" class="c-region" stroke-width="1"/>
-        <text x="610" y="76" class="t-cloud" font-size="9" font-weight="600">公开 Web 交付</text>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" x="894" y="58" width="536" height="548" rx="12" class="c-region" stroke-width="1"/>
+        <text x="902" y="76" class="t-cloud" font-size="9" font-weight="600">公开 Web 交付</text>
 
         <!-- Connection paths (before components for correct z-order) -->
         <path data-edge-from="electron" data-edge-to="dsh-host" data-edge-label="启动子进程" data-edge-key="0" data-edge-id="electron-to-host" data-composition-points="140,154;140,304" d="M 140 154 L 140 304" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="dsh-host" data-edge-to="shell" data-edge-label="加载 root" data-edge-key="1" data-edge-id="host-to-shell" data-composition-points="232,337;340,337" d="M 232 337 L 340 337" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="dsh-host" data-edge-to="kernel" data-edge-label="注册 tools" data-edge-key="2" data-edge-id="host-to-kernel" data-composition-points="140,370;140,520" d="M 140 370 L 140 520" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="shell" data-edge-to="workbench" data-edge-label="私有 RPC" data-edge-key="3" data-edge-id="shell-to-workbench" data-composition-points="432,370;432,520" d="M 432 370 L 432 520" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="shell" data-edge-to="manuscript" data-edge-label="/manuscript" data-edge-key="4" data-edge-id="shell-to-manuscript" data-composition-points="524,337;548,337;548,496;724,496;724,520" d="M 524 337 L 540 337 Q 548 337 548 345 L 548 488 Q 548 496 556 496 L 716 496 Q 724 496 724 504 L 724 520" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="workbench" data-edge-to="manuscript" data-edge-label="host-api 库" data-edge-key="5" data-edge-id="workbench-to-manuscript" data-composition-points="524,553;632,553" d="M 524 553 L 632 553" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="web-dsh" data-edge-to="zhihu" data-edge-label="可独立安装" data-edge-key="6" data-edge-id="web-to-zhihu" data-composition-points="1216,121;1162,121;1162,337;1108,337" d="M 1216 121 L 1170 121 Q 1162 121 1162 129 L 1162 329 Q 1162 337 1154 337 L 1108 337" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="shell" data-edge-to="plugins" data-edge-label="设置座位" data-edge-key="2" data-edge-id="shell-to-plugins" data-composition-points="524,330;632,330" d="M 524 330 L 632 330" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="dsh-host" data-edge-to="kernel" data-edge-label="注册 novel tools" data-edge-key="3" data-edge-id="host-to-kernel" data-composition-points="140,370;140,520" d="M 140 370 L 140 520" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="shell" data-edge-to="workbench" data-edge-label="私有 RPC" data-edge-key="4" data-edge-id="shell-to-workbench" data-composition-points="432,370;432,520" d="M 432 370 L 432 520" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="workbench" data-edge-to="panels" data-edge-label="侧栏数据" data-edge-key="5" data-edge-id="workbench-to-panels" data-composition-points="524,553;632,553" d="M 524 553 L 632 553" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="shell" data-edge-to="manuscript" data-edge-label="/manuscript" data-edge-key="6" data-edge-id="shell-to-manuscript" data-composition-points="524,344;548,344;548,496;1016,496;1016,520" d="M 524 344 L 540 344 Q 548 344 548 352 L 548 488 Q 548 496 556 496 L 1008 496 Q 1016 496 1016 504 L 1016 520" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="web-dsh" data-edge-to="zhihu" data-edge-label="可独立安装" data-edge-key="7" data-edge-id="web-to-zhihu" data-composition-points="1308,154;1308,304" d="M 1308 154 L 1308 304" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
 
         <!-- Components -->
         <g id="node-electron" data-node-id="electron" data-node-label="桌面 Electron" tabindex="0" role="button" aria-label="Focus 桌面 Electron, 不可插件化, Architecture component" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="不可插件化" data-node-context="Architecture component">
@@ -4988,8 +4989,8 @@
         <text data-detail="context" x="140" y="351" class="t-muted" font-size="9" text-anchor="middle">桌面子进程</text>
         </g>
 
-        <g id="node-shell" data-node-id="shell" data-node-label="dsh-editor-shell" tabindex="0" role="button" aria-label="Focus dsh-editor-shell, fixed-version root, 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="fixed-version root" data-node-context="桌面 profiles/dsh-editor（canonical desktop）">
-          <title>dsh-editor-shell · fixed-version root · 桌面 profiles/dsh-editor（canonical desktop）</title>
+        <g id="node-shell" data-node-id="shell" data-node-label="dsh-editor-shell" tabindex="0" role="button" aria-label="Focus dsh-editor-shell, 锁定 root, 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="锁定 root" data-node-context="桌面 profiles/dsh-editor（canonical desktop）">
+          <title>dsh-editor-shell · 锁定 root · 桌面 profiles/dsh-editor（canonical desktop）</title>
           <rect x="340" y="304" width="184" height="66" rx="6" class="c-mask"/>
           <rect x="340" y="304" width="184" height="66" rx="6" class="c-frontend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(346 310) scale(0.6875)">
@@ -4999,65 +5000,90 @@
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
           <text data-detail-anchor x="432" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-editor-shell</text>
-        <text data-detail="context" x="432" y="351" class="t-muted" font-size="9" text-anchor="middle">fixed-version root</text>
+        <text data-detail="context" x="432" y="351" class="t-muted" font-size="9" text-anchor="middle">锁定 root</text>
         </g>
 
-        <g id="node-proofread" data-node-id="proofread" data-node-label="dsh-proofread" tabindex="0" role="button" aria-label="Focus dsh-proofread, 公开 · 纯校对, 公开 Web 交付 › 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="公开 · 纯校对" data-node-tag="公开 tarball" data-node-context="公开 Web 交付 › 桌面 profiles/dsh-editor（canonical desktop）">
-          <title>dsh-proofread · 公开 · 纯校对 · 公开 Web 交付 › 桌面 profiles/dsh-editor（canonical desktop） · 公开 tarball</title>
+        <g id="node-plugins" data-node-id="plugins" data-node-label="dsh-editor-plugins" tabindex="0" role="button" aria-label="Focus dsh-editor-plugins, 开关 / 四种写作模式, 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="开关 / 四种写作模式" data-node-context="桌面 profiles/dsh-editor（canonical desktop）">
+          <title>dsh-editor-plugins · 开关 / 四种写作模式 · 桌面 profiles/dsh-editor（canonical desktop）</title>
           <rect x="632" y="304" width="184" height="66" rx="6" class="c-mask"/>
           <rect x="632" y="304" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(638 310) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="724" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-proofread</text>
-        <text data-detail="context" x="724" y="351" class="t-muted" font-size="9" text-anchor="middle">公开 · 纯校对</text>
-        <text data-detail="fine" x="724" y="362" class="t-backend" font-size="7" text-anchor="middle">公开 tarball</text>
+          <text data-detail-anchor x="724" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-editor-plugins</text>
+        <text data-detail="context" x="724" y="351" class="t-muted" font-size="9" text-anchor="middle">开关 / 四种写作模式</text>
         </g>
 
-        <g id="node-zhihu" data-node-id="zhihu" data-node-label="dsh-zhihu" tabindex="0" role="button" aria-label="Focus dsh-zhihu, 公开 · 资料, 公开 Web 交付 › 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="公开 · 资料" data-node-tag="公开 tarball" data-node-context="公开 Web 交付 › 桌面 profiles/dsh-editor（canonical desktop）">
-          <title>dsh-zhihu · 公开 · 资料 · 公开 Web 交付 › 桌面 profiles/dsh-editor（canonical desktop） · 公开 tarball</title>
+        <g id="node-proofread" data-node-id="proofread" data-node-label="dsh-proofread" tabindex="0" role="button" aria-label="Focus dsh-proofread, 公开 · 校对引擎, 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付" aria-pressed="false" data-node-kind="backend" data-node-sublabel="公开 · 校对引擎" data-node-tag="公开 tarball" data-node-context="桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付">
+          <title>dsh-proofread · 公开 · 校对引擎 · 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付 · 公开 tarball</title>
           <rect x="924" y="304" width="184" height="66" rx="6" class="c-mask"/>
           <rect x="924" y="304" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(930 310) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="1016" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-zhihu</text>
-        <text data-detail="context" x="1016" y="351" class="t-muted" font-size="9" text-anchor="middle">公开 · 资料</text>
+          <text data-detail-anchor x="1016" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-proofread</text>
+        <text data-detail="context" x="1016" y="351" class="t-muted" font-size="9" text-anchor="middle">公开 · 校对引擎</text>
         <text data-detail="fine" x="1016" y="362" class="t-backend" font-size="7" text-anchor="middle">公开 tarball</text>
         </g>
 
-        <g id="node-kernel" data-node-id="kernel" data-node-label="novel-kernel" tabindex="0" role="button" aria-label="Focus novel-kernel, private host-only, 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="private host-only" data-node-context="桌面 profiles/dsh-editor（canonical desktop）">
-          <title>novel-kernel · private host-only · 桌面 profiles/dsh-editor（canonical desktop）</title>
+        <g id="node-zhihu" data-node-id="zhihu" data-node-label="dsh-zhihu" tabindex="0" role="button" aria-label="Focus dsh-zhihu, 公开 · 资料, 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付" aria-pressed="false" data-node-kind="backend" data-node-sublabel="公开 · 资料" data-node-tag="公开 tarball" data-node-context="桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付">
+          <title>dsh-zhihu · 公开 · 资料 · 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付 · 公开 tarball</title>
+          <rect x="1216" y="304" width="184" height="66" rx="6" class="c-mask"/>
+          <rect x="1216" y="304" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1222 310) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-detail-anchor x="1308" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-zhihu</text>
+        <text data-detail="context" x="1308" y="351" class="t-muted" font-size="9" text-anchor="middle">公开 · 资料</text>
+        <text data-detail="fine" x="1308" y="362" class="t-backend" font-size="7" text-anchor="middle">公开 tarball</text>
+        </g>
+
+        <g id="node-kernel" data-node-id="kernel" data-node-label="novel-kernel" tabindex="0" role="button" aria-label="Focus novel-kernel, 小说模式 + 知识卡, 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="小说模式 + 知识卡" data-node-context="桌面 profiles/dsh-editor（canonical desktop）">
+          <title>novel-kernel · 小说模式 + 知识卡 · 桌面 profiles/dsh-editor（canonical desktop）</title>
           <rect x="48" y="520" width="184" height="66" rx="6" class="c-mask"/>
           <rect x="48" y="520" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(54 526) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor x="140" y="551" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">novel-kernel</text>
-        <text data-detail="context" x="140" y="567" class="t-muted" font-size="9" text-anchor="middle">private host-only</text>
+        <text data-detail="context" x="140" y="567" class="t-muted" font-size="9" text-anchor="middle">小说模式 + 知识卡</text>
         </g>
 
-        <g id="node-workbench" data-node-id="workbench" data-node-label="workbench" tabindex="0" role="button" aria-label="Focus workbench, private host-only, 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="private host-only" data-node-context="桌面 profiles/dsh-editor（canonical desktop）">
-          <title>workbench · private host-only · 桌面 profiles/dsh-editor（canonical desktop）</title>
+        <g id="node-workbench" data-node-id="workbench" data-node-label="workbench" tabindex="0" role="button" aria-label="Focus workbench, 锁定 · 提案 / 快照, 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="锁定 · 提案 / 快照" data-node-context="桌面 profiles/dsh-editor（canonical desktop）">
+          <title>workbench · 锁定 · 提案 / 快照 · 桌面 profiles/dsh-editor（canonical desktop）</title>
           <rect x="340" y="520" width="184" height="66" rx="6" class="c-mask"/>
           <rect x="340" y="520" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(346 526) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor x="432" y="551" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">workbench</text>
-        <text data-detail="context" x="432" y="567" class="t-muted" font-size="9" text-anchor="middle">private host-only</text>
+        <text data-detail="context" x="432" y="567" class="t-muted" font-size="9" text-anchor="middle">锁定 · 提案 / 快照</text>
         </g>
 
-        <g id="node-manuscript" data-node-id="manuscript" data-node-label="dsh-manuscript" tabindex="0" role="button" aria-label="Focus dsh-manuscript, public dual-face, 公开 Web 交付 › 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="public dual-face" data-node-tag="公开 tarball" data-node-context="公开 Web 交付 › 桌面 profiles/dsh-editor（canonical desktop）">
-          <title>dsh-manuscript · public dual-face · 公开 Web 交付 › 桌面 profiles/dsh-editor（canonical desktop） · 公开 tarball</title>
+        <g id="node-panels" data-node-id="panels" data-node-label="作者工具面板" tabindex="0" role="button" aria-label="Focus 作者工具面板, 概览 / 校对 / 人物卡 / 记忆, 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="概览 / 校对 / 人物卡 / 记忆" data-node-context="桌面 profiles/dsh-editor（canonical desktop）">
+          <title>作者工具面板 · 概览 / 校对 / 人物卡 / 记忆 · 桌面 profiles/dsh-editor（canonical desktop）</title>
           <rect x="632" y="520" width="184" height="66" rx="6" class="c-mask"/>
-          <rect x="632" y="520" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(638 526) scale(0.6875)">
+          <rect x="632" y="520" width="184" height="66" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(638 526) scale(0.6875)">
+            <rect x="2" y="3" width="12" height="10" rx="2"/>
+            <path d="M2 6.5h12"/>
+            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+          </g>
+          <text data-detail-anchor x="724" y="551" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">作者工具面板</text>
+        <text data-detail="context" x="724" y="567" class="t-muted" font-size="9" text-anchor="middle">概览 / 校对 / 人物卡 / 记忆</text>
+        </g>
+
+        <g id="node-manuscript" data-node-id="manuscript" data-node-label="dsh-manuscript" tabindex="0" role="button" aria-label="Focus dsh-manuscript, 公开 · 稿纸, 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付" aria-pressed="false" data-node-kind="backend" data-node-sublabel="公开 · 稿纸" data-node-tag="公开 tarball" data-node-context="桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付">
+          <title>dsh-manuscript · 公开 · 稿纸 · 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付 · 公开 tarball</title>
+          <rect x="924" y="520" width="184" height="66" rx="6" class="c-mask"/>
+          <rect x="924" y="520" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(930 526) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="724" y="551" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-manuscript</text>
-        <text data-detail="context" x="724" y="567" class="t-muted" font-size="9" text-anchor="middle">public dual-face</text>
-        <text data-detail="fine" x="724" y="578" class="t-backend" font-size="7" text-anchor="middle">公开 tarball</text>
+          <text data-detail-anchor x="1016" y="551" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-manuscript</text>
+        <text data-detail="context" x="1016" y="567" class="t-muted" font-size="9" text-anchor="middle">公开 · 稿纸</text>
+        <text data-detail="fine" x="1016" y="578" class="t-backend" font-size="7" text-anchor="middle">公开 tarball</text>
         </g>
 
         <!-- Connection labels -->
@@ -5069,25 +5095,29 @@
           <rect x="259.4" y="317" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
           <text x="286" y="327" class="t-backend" font-size="8" text-anchor="middle">加载 root</text>
         </g>
-        <g data-detail="context" data-edge-from="dsh-host" data-edge-to="kernel" data-edge-label="注册 tools" data-edge-key="2" data-edge-id="host-to-kernel">
-          <rect x="111" y="374" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="140" y="384" class="t-muted" font-size="8" text-anchor="middle">注册 tools</text>
+        <g data-detail="context" data-edge-from="shell" data-edge-to="plugins" data-edge-label="设置座位" data-edge-key="2" data-edge-id="shell-to-plugins">
+          <rect x="553.8" y="310" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="578" y="320" class="t-muted" font-size="8" text-anchor="middle">设置座位</text>
         </g>
-        <g data-detail="context" data-edge-from="shell" data-edge-to="workbench" data-edge-label="私有 RPC" data-edge-key="3" data-edge-id="shell-to-workbench">
+        <g data-detail="context" data-edge-from="dsh-host" data-edge-to="kernel" data-edge-label="注册 novel tools" data-edge-key="3" data-edge-id="host-to-kernel">
+          <rect x="96.6" y="374" width="86.8" height="14" rx="3" class="c-mask"/>
+          <text x="140" y="384" class="t-muted" font-size="8" text-anchor="middle">注册 novel tools</text>
+        </g>
+        <g data-detail="context" data-edge-from="shell" data-edge-to="workbench" data-edge-label="私有 RPC" data-edge-key="4" data-edge-id="shell-to-workbench">
           <rect x="407.8" y="374" width="48.4" height="14" rx="3" class="c-mask"/>
           <text x="432" y="384" class="t-muted" font-size="8" text-anchor="middle">私有 RPC</text>
         </g>
-        <g data-detail="context" data-edge-from="shell" data-edge-to="manuscript" data-edge-label="/manuscript" data-edge-key="4" data-edge-id="shell-to-manuscript">
-          <rect x="516.6" y="396.5" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="548" y="406.5" class="t-backend" font-size="8" text-anchor="middle">/manuscript</text>
+        <g data-detail="context" data-edge-from="workbench" data-edge-to="panels" data-edge-label="侧栏数据" data-edge-key="5" data-edge-id="workbench-to-panels">
+          <rect x="553.8" y="533" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="578" y="543" class="t-muted" font-size="8" text-anchor="middle">侧栏数据</text>
         </g>
-        <g data-detail="context" data-edge-from="workbench" data-edge-to="manuscript" data-edge-label="host-api 库" data-edge-key="5" data-edge-id="workbench-to-manuscript">
-          <rect x="546.6" y="533" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="578" y="543" class="t-muted" font-size="8" text-anchor="middle">host-api 库</text>
+        <g data-detail="context" data-edge-from="shell" data-edge-to="manuscript" data-edge-label="/manuscript" data-edge-key="6" data-edge-id="shell-to-manuscript">
+          <rect x="516.6" y="400" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="548" y="410" class="t-backend" font-size="8" text-anchor="middle">/manuscript</text>
         </g>
-        <g data-detail="context" data-edge-from="web-dsh" data-edge-to="zhihu" data-edge-label="可独立安装" data-edge-key="6" data-edge-id="web-to-zhihu">
-          <rect x="1133" y="209" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="1162" y="219" class="t-messagebus" font-size="8" text-anchor="middle">可独立安装</text>
+        <g data-detail="context" data-edge-from="web-dsh" data-edge-to="zhihu" data-edge-label="可独立安装" data-edge-key="7" data-edge-id="web-to-zhihu">
+          <rect x="1279" y="158" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="1308" y="168" class="t-messagebus" font-size="8" text-anchor="middle">可独立安装</text>
         </g>
 
         <!-- Legend -->
@@ -5297,37 +5327,36 @@
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
-          <h3>分级</h3>
+          <h3>锁定核心</h3>
         </div>
         <ul>
-          <li>&bull; manuscript、proofread、zhihu 是公开 tarball</li>
-          <li>&bull; shell、workbench、kernel 只随桌面 profile 交付</li>
-          <li>&bull; 桌面保留校对引擎；知乎配置移入设置</li>
+          <li>&bull; shell、workbench、manuscript、plugins 不能关</li>
+          <li>&bull; 默认写作模式 dsh-editor-writing 随桌面 profile 锁定</li>
+          <li>&bull; seats 与 workspace-kit 是构建时内联库，不是独立插件</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot violet"></div>
-          <h3>依赖方向</h3>
+          <h3>写作模式</h3>
         </div>
         <ul>
-          <li>&bull; host-api 与校对引擎都是进程内库，不是对 DSH 的 RPC</li>
-          <li>&bull; kernel 注册 tools：可见 novel 只挂只读 novel_knowledge</li>
-          <li>&bull; guard / prompt / 完整小说工具只留给 legacy 会话</li>
-          <li>&bull; 禁止跨包导入另一个包的 src</li>
+          <li>&bull; 新对话先选通用 / 小说 / 文章 / 技术文档</li>
+          <li>&bull; 小说模式与知识卡在 novel-kernel；文章与技术文档在 writing-presets</li>
+          <li>&bull; 后三种可在设置「插件 → 写作模式」关闭</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot rose"></div>
-          <h3>替换规则</h3>
+          <h3>作者工具</h3>
         </div>
         <ul>
-          <li>&bull; 同一能力只能注册一次 Cordis entry</li>
-          <li>&bull; root 只能有一个所有者</li>
-          <li>&bull; 缺私有包时 Host 以退出码 1 fail-closed</li>
+          <li>&bull; 概览、校对、人物卡、记忆经 seats 接入 shell</li>
+          <li>&bull; 校对面板默认开；人物卡与记忆默认关</li>
+          <li>&bull; manuscript、proofread、zhihu 仍是公开 tarball</li>
         </ul>
       </div>
     </div>

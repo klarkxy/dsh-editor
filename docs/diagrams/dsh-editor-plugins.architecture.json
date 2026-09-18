@@ -30,11 +30,25 @@
           "electron",
           "dsh-host",
           "shell",
-          "manuscript",
+          "plugins",
           "workbench",
-          "kernel"
+          "manuscript",
+          "kernel",
+          "panels"
         ],
-        "note": "Electron 启动唯一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"
+        "note": "锁定核心、写作模式和作者工具都在同一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"
+      },
+      {
+        "id": "author-tools",
+        "label": "作者工具",
+        "focus": [
+          "shell",
+          "plugins",
+          "panels",
+          "proofread",
+          "zhihu"
+        ],
+        "note": "设置里按作者用途分组：校对、概览、人物卡、记忆、知乎；人物卡与记忆默认关。"
       },
       {
         "id": "public-web",
@@ -45,19 +59,7 @@
           "proofread",
           "zhihu"
         ],
-        "note": "三个 tarball 可按任意顺序安装到普通 web profile。"
-      },
-      {
-        "id": "in-process-deps",
-        "label": "进程内依赖",
-        "focus": [
-          "shell",
-          "manuscript",
-          "workbench",
-          "kernel",
-          "dsh-host"
-        ],
-        "note": "host-api 是库导入；kernel 只注册 tools，可见 novel 为 knowledge-only，不对外提供文件 RPC。"
+        "note": "三个 tarball 仍可单独装进普通 web profile；桌面面板与写作模式不对外发布。"
       }
     ]
   },
@@ -67,70 +69,48 @@
       "type": "frontend",
       "label": "桌面 Electron",
       "sublabel": "不可插件化",
-      "pos": [
-        48,
-        88
-      ],
-      "size": [
-        184,
-        66
-      ]
+      "pos": [48, 88],
+      "size": [184, 66]
     },
     {
       "id": "web-dsh",
       "type": "external",
       "label": "普通 web profile",
       "sublabel": "可独立安装",
-      "pos": [
-        1216,
-        88
-      ],
-      "size": [
-        184,
-        66
-      ]
+      "pos": [1216, 88],
+      "size": [184, 66]
     },
     {
       "id": "dsh-host",
       "type": "cloud",
       "label": "DSH Host",
       "sublabel": "桌面子进程",
-      "pos": [
-        48,
-        304
-      ],
-      "size": [
-        184,
-        66
-      ]
+      "pos": [48, 304],
+      "size": [184, 66]
     },
     {
       "id": "shell",
       "type": "frontend",
       "label": "dsh-editor-shell",
-      "sublabel": "fixed-version root",
-      "pos": [
-        340,
-        304
-      ],
-      "size": [
-        184,
-        66
-      ]
+      "sublabel": "锁定 root",
+      "pos": [340, 304],
+      "size": [184, 66]
+    },
+    {
+      "id": "plugins",
+      "type": "backend",
+      "label": "dsh-editor-plugins",
+      "sublabel": "开关 / 四种写作模式",
+      "pos": [632, 304],
+      "size": [184, 66]
     },
     {
       "id": "proofread",
       "type": "backend",
       "label": "dsh-proofread",
-      "sublabel": "公开 · 纯校对",
-      "pos": [
-        632,
-        304
-      ],
-      "size": [
-        184,
-        66
-      ],
+      "sublabel": "公开 · 校对引擎",
+      "pos": [924, 304],
+      "size": [184, 66],
       "tag": "公开 tarball"
     },
     {
@@ -138,57 +118,41 @@
       "type": "backend",
       "label": "dsh-zhihu",
       "sublabel": "公开 · 资料",
-      "pos": [
-        924,
-        304
-      ],
-      "size": [
-        184,
-        66
-      ],
+      "pos": [1216, 304],
+      "size": [184, 66],
       "tag": "公开 tarball"
     },
     {
       "id": "kernel",
       "type": "backend",
       "label": "novel-kernel",
-      "sublabel": "private host-only",
-      "pos": [
-        48,
-        520
-      ],
-      "size": [
-        184,
-        66
-      ]
+      "sublabel": "小说模式 + 知识卡",
+      "pos": [48, 520],
+      "size": [184, 66]
     },
     {
       "id": "workbench",
       "type": "backend",
       "label": "workbench",
-      "sublabel": "private host-only",
-      "pos": [
-        340,
-        520
-      ],
-      "size": [
-        184,
-        66
-      ]
+      "sublabel": "锁定 · 提案 / 快照",
+      "pos": [340, 520],
+      "size": [184, 66]
+    },
+    {
+      "id": "panels",
+      "type": "frontend",
+      "label": "作者工具面板",
+      "sublabel": "概览 / 校对 / 人物卡 / 记忆",
+      "pos": [632, 520],
+      "size": [184, 66]
     },
     {
       "id": "manuscript",
       "type": "backend",
       "label": "dsh-manuscript",
-      "sublabel": "public dual-face",
-      "pos": [
-        632,
-        520
-      ],
-      "size": [
-        184,
-        66
-      ],
+      "sublabel": "公开 · 稿纸",
+      "pos": [924, 520],
+      "size": [184, 66],
       "tag": "公开 tarball"
     }
   ],
@@ -199,8 +163,10 @@
       "wraps": [
         "dsh-host",
         "shell",
+        "plugins",
         "kernel",
         "workbench",
+        "panels",
         "manuscript",
         "proofread",
         "zhihu"
@@ -234,10 +200,16 @@
       "variant": "emphasis"
     },
     {
+      "id": "shell-to-plugins",
+      "from": "shell",
+      "to": "plugins",
+      "label": "设置座位"
+    },
+    {
       "id": "host-to-kernel",
       "from": "dsh-host",
       "to": "kernel",
-      "label": "注册 tools",
+      "label": "注册 novel tools",
       "labelDy": 24
     },
     {
@@ -246,6 +218,12 @@
       "to": "workbench",
       "label": "私有 RPC",
       "labelDy": 24
+    },
+    {
+      "id": "workbench-to-panels",
+      "from": "workbench",
+      "to": "panels",
+      "label": "侧栏数据"
     },
     {
       "id": "shell-to-manuscript",
@@ -257,46 +235,40 @@
       "toSide": "top"
     },
     {
-      "id": "workbench-to-manuscript",
-      "from": "workbench",
-      "to": "manuscript",
-      "label": "host-api 库"
-    },
-    {
       "id": "web-to-zhihu",
       "from": "web-dsh",
       "to": "zhihu",
       "label": "可独立安装",
-      "variant": "dashed"
+      "variant": "dashed",
+      "labelDy": 24
     }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "分级",
+      "title": "锁定核心",
       "items": [
-        "manuscript、proofread、zhihu 是公开 tarball",
-        "shell、workbench、kernel 只随桌面 profile 交付",
-        "桌面保留校对引擎；知乎配置移入设置"
+        "shell、workbench、manuscript、plugins 不能关",
+        "默认写作模式 dsh-editor-writing 随桌面 profile 锁定",
+        "seats 与 workspace-kit 是构建时内联库，不是独立插件"
       ]
     },
     {
       "dot": "violet",
-      "title": "依赖方向",
+      "title": "写作模式",
       "items": [
-        "host-api 与校对引擎都是进程内库，不是对 DSH 的 RPC",
-        "kernel 注册 tools：可见 novel 只挂只读 novel_knowledge",
-        "guard / prompt / 完整小说工具只留给 legacy 会话",
-        "禁止跨包导入另一个包的 src"
+        "新对话先选通用 / 小说 / 文章 / 技术文档",
+        "小说模式与知识卡在 novel-kernel；文章与技术文档在 writing-presets",
+        "后三种可在设置「插件 → 写作模式」关闭"
       ]
     },
     {
       "dot": "rose",
-      "title": "替换规则",
+      "title": "作者工具",
       "items": [
-        "同一能力只能注册一次 Cordis entry",
-        "root 只能有一个所有者",
-        "缺私有包时 Host 以退出码 1 fail-closed"
+        "概览、校对、人物卡、记忆经 seats 接入 shell",
+        "校对面板默认开；人物卡与记忆默认关",
+        "manuscript、proofread、zhihu 仍是公开 tarball"
       ]
     }
   ]

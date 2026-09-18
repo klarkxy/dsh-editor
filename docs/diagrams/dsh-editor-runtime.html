@@ -4866,7 +4866,7 @@
       </div>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[{"id":"write-path","label":"写作主路径","focus":["author","electron","dsh-host","shell","manuscript","workspace"],"note":"Electron 只打开 DSH 的 loopback URL；稿件经同一进程内的 /manuscript 写入作品目录。"},{"id":"in-process","label":"插件住在 DSH 里","focus":["dsh-host","shell","manuscript","workbench","kernel"],"note":"shell / manuscript / workbench / kernel 是 Cordis 插件，不是 DSH 旁边的独立服务。"},{"id":"agent-loop","label":"助手与模型","focus":["shell","dsh-host","kernel","llm"],"note":"DshChatPort 投影 DSH 会话；模型与工具仍由同一 Host 执行。"}]</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"write-path","label":"写作主路径","focus":["author","electron","dsh-host","shell","manuscript","workspace"],"note":"Electron 只打开 DSH 的 loopback URL；稿件经同一进程内的 /manuscript 写入作品目录。"},{"id":"in-process","label":"插件住在 DSH 里","focus":["dsh-host","shell","plugins","panels","manuscript","workbench","kernel"],"note":"shell、plugins、workbench、manuscript、写作模式、作者面板和 kernel 都是同一 Cordis 进程的插件。"},{"id":"agent-loop","label":"助手与模型","focus":["shell","dsh-host","kernel","llm"],"note":"DshChatPort 投影 DSH 会话；模型与工具仍由同一 Host 执行。"}]</script>
 
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
       <button id="guided-view-prev" type="button" aria-label="Previous guided view" title="Previous guided view ([)">&#8592;</button>
@@ -4951,6 +4951,8 @@
         <path data-edge-from="workbench" data-edge-to="manuscript" data-edge-label="host-api 库" data-edge-key="6" data-edge-id="workbench-to-manuscript" data-composition-points="1268,540;1268,392" d="M 1268 540 L 1268 392" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="dsh-host" data-edge-to="kernel" data-edge-label="注册 tools" data-edge-key="7" data-edge-id="host-to-kernel" data-composition-points="699,328;699,246;980,246;980,164" d="M 699 328 L 699 254 Q 699 246 707 246 L 972 246 Q 980 246 980 238 L 980 164" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="dsh-host" data-edge-to="llm" data-edge-label="session.prompt" data-edge-key="8" data-edge-id="host-to-llm" data-composition-points="685,328;685,304;512,304;512,132;488,132" d="M 685 328 L 685 312 Q 685 304 677 304 L 520 304 Q 512 304 512 296 L 512 140 Q 512 132 504 132 L 488 132" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="dsh-host" data-edge-to="plugins" data-edge-label="加载插件管理" data-edge-key="9" data-edge-id="host-to-plugins" data-composition-points="692,392;692,540" d="M 692 392 L 692 540" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="shell" data-edge-to="panels" data-edge-label="seats" data-edge-key="10" data-edge-id="shell-to-panels" data-composition-points="980,392;980,540" d="M 980 392 L 980 540" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
         <!-- Components -->
         <g id="node-author" data-node-id="author" data-node-label="作者" tabindex="0" role="button" aria-label="Focus 作者, 本机单用户, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="本机单用户" data-node-context="Architecture component">
@@ -5062,6 +5064,31 @@
         <text data-detail="context" x="1268" y="586" class="t-muted" font-size="9" text-anchor="middle">私有 Host</text>
         </g>
 
+        <g id="node-plugins" data-node-id="plugins" data-node-label="plugins" tabindex="0" role="button" aria-label="Focus plugins, 开关 / 市场 / 预设, DSH 子进程 · profiles/dsh-editor" aria-pressed="false" data-node-kind="backend" data-node-sublabel="开关 / 市场 / 预设" data-node-context="DSH 子进程 · profiles/dsh-editor">
+          <title>plugins · 开关 / 市场 / 预设 · DSH 子进程 · profiles/dsh-editor</title>
+          <rect x="608" y="540" width="168" height="64" rx="6" class="c-mask"/>
+          <rect x="608" y="540" width="168" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(614 546) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-detail-anchor x="692" y="570" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">plugins</text>
+        <text data-detail="context" x="692" y="586" class="t-muted" font-size="9" text-anchor="middle">开关 / 市场 / 预设</text>
+        </g>
+
+        <g id="node-panels" data-node-id="panels" data-node-label="作者工具面板" tabindex="0" role="button" aria-label="Focus 作者工具面板, 概览 / 校对 / 人物卡 / 记忆, DSH 子进程 · profiles/dsh-editor" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="概览 / 校对 / 人物卡 / 记忆" data-node-context="DSH 子进程 · profiles/dsh-editor">
+          <title>作者工具面板 · 概览 / 校对 / 人物卡 / 记忆 · DSH 子进程 · profiles/dsh-editor</title>
+          <rect x="896" y="540" width="168" height="64" rx="6" class="c-mask"/>
+          <rect x="896" y="540" width="168" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(902 546) scale(0.6875)">
+            <rect x="2" y="3" width="12" height="10" rx="2"/>
+            <path d="M2 6.5h12"/>
+            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+          </g>
+          <text data-detail-anchor x="980" y="570" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">作者工具面板</text>
+        <text data-detail="context" x="980" y="586" class="t-muted" font-size="9" text-anchor="middle">概览 / 校对 / 人物卡 / 记忆</text>
+        </g>
+
         <!-- Connection labels -->
         <g data-detail="context" data-edge-from="author" data-edge-to="electron" data-edge-label="写作操作" data-edge-key="0" data-edge-id="author-to-electron">
           <rect x="239.8" y="340" width="48.4" height="14" rx="3" class="c-mask"/>
@@ -5098,6 +5125,14 @@
         <g data-detail="context" data-edge-from="dsh-host" data-edge-to="llm" data-edge-label="session.prompt" data-edge-key="8" data-edge-id="host-to-llm">
           <rect x="559.9" y="284" width="77.2" height="14" rx="3" class="c-mask"/>
           <text x="598.5" y="294" class="t-muted" font-size="8" text-anchor="middle">session.prompt</text>
+        </g>
+        <g data-detail="context" data-edge-from="dsh-host" data-edge-to="plugins" data-edge-label="加载插件管理" data-edge-key="9" data-edge-id="host-to-plugins">
+          <rect x="658.2" y="396" width="67.6" height="14" rx="3" class="c-mask"/>
+          <text x="692" y="406" class="t-muted" font-size="8" text-anchor="middle">加载插件管理</text>
+        </g>
+        <g data-detail="context" data-edge-from="shell" data-edge-to="panels" data-edge-label="seats" data-edge-key="10" data-edge-id="shell-to-panels">
+          <rect x="963" y="396" width="34" height="14" rx="3" class="c-mask"/>
+          <text x="980" y="406" class="t-muted" font-size="8" text-anchor="middle">seats</text>
         </g>
 
         <!-- Legend -->
@@ -5326,9 +5361,9 @@
           <h3>插件在 Host 内</h3>
         </div>
         <ul>
-          <li>&bull; 虚线框里的包都是同一 Cordis 进程的插件</li>
+          <li>&bull; 虚线框里是 0.3.0 的 Host 插件，不是旁边的独立服务</li>
           <li>&bull; host-api 是 workbench 对 manuscript 的进程内导入</li>
-          <li>&bull; 校对走侧栏 proofread 面板；知乎配置在设置内</li>
+          <li>&bull; 作者面板经 seats 接入；写作模式由 plugins 部署</li>
         </ul>
       </div>
 

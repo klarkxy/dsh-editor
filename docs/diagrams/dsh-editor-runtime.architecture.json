@@ -45,11 +45,13 @@
         "focus": [
           "dsh-host",
           "shell",
+          "plugins",
+          "panels",
           "manuscript",
           "workbench",
           "kernel"
         ],
-        "note": "shell / manuscript / workbench / kernel 是 Cordis 插件，不是 DSH 旁边的独立服务。"
+        "note": "shell、plugins、workbench、manuscript、写作模式、作者面板和 kernel 都是同一 Cordis 进程的插件。"
       },
       {
         "id": "agent-loop",
@@ -191,6 +193,34 @@
         168,
         64
       ]
+    },
+    {
+      "id": "plugins",
+      "type": "backend",
+      "label": "plugins",
+      "sublabel": "开关 / 市场 / 预设",
+      "pos": [
+        608,
+        540
+      ],
+      "size": [
+        168,
+        64
+      ]
+    },
+    {
+      "id": "panels",
+      "type": "frontend",
+      "label": "作者工具面板",
+      "sublabel": "概览 / 校对 / 人物卡 / 记忆",
+      "pos": [
+        896,
+        540
+      ],
+      "size": [
+        168,
+        64
+      ]
     }
   ],
   "boundaries": [
@@ -209,7 +239,9 @@
         "shell",
         "manuscript",
         "workbench",
-        "kernel"
+        "kernel",
+        "plugins",
+        "panels"
       ]
     }
   ],
@@ -275,6 +307,24 @@
       "label": "session.prompt",
       "fromSide": "top",
       "toSide": "right"
+    },
+    {
+      "id": "host-to-plugins",
+      "from": "dsh-host",
+      "to": "plugins",
+      "label": "加载插件管理",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "shell-to-panels",
+      "from": "shell",
+      "to": "panels",
+      "label": "seats",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
     }
   ],
   "cards": [
@@ -291,9 +341,9 @@
       "dot": "emerald",
       "title": "插件在 Host 内",
       "items": [
-        "虚线框里的包都是同一 Cordis 进程的插件",
+        "虚线框里是 0.3.0 的 Host 插件，不是旁边的独立服务",
         "host-api 是 workbench 对 manuscript 的进程内导入",
-        "校对走侧栏 proofread 面板；知乎配置在设置内"
+        "作者面板经 seats 接入；写作模式由 plugins 部署"
       ]
     },
     {
