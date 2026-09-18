@@ -10,6 +10,7 @@ import { treeDigest } from '../apps/desktop/dist/runtime-tree.js'
 
 if (process.platform !== 'darwin') throw new Error('macOS packaged smoke must run on macOS')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const artifactOutput = resolve(root, process.argv[2] ?? '.pack/desktop')
 const output = join(root, '.pack', 'macos-e2e')
 await mkdir(output, { recursive: true })
 const version = JSON.parse(await readFile(join(root, 'apps', 'desktop', 'package.json'), 'utf8')).version
@@ -24,7 +25,7 @@ let application
 let page
 try {
   // Test the distributable ZIP, not the development Electron executable.
-  execFileSync('/usr/bin/ditto', ['-x', '-k', join(root, '.pack', 'desktop', zipName), unpacked])
+  execFileSync('/usr/bin/ditto', ['-x', '-k', join(artifactOutput, zipName), unpacked])
   const bundle = join(unpacked, 'DSH Editor.app', 'Contents')
   const resources = join(bundle, 'Resources')
   const manifest = JSON.parse(await readFile(join(resources, 'runtime-manifest.json'), 'utf8'))
