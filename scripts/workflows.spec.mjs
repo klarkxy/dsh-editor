@@ -19,6 +19,11 @@ describe('github workflows', () => {
     expect(release).not.toMatch(/gh release create "\$RELEASE_TAG" --title/)
   })
 
+  it('runs Windows unit tests in a single fork pool', () => {
+    expect(release).toContain('--pool=forks')
+    expect(release).toContain("runner.os == 'Windows' && '1'")
+  })
+
   it('starts the packed Windows portable wrapper before publishing', () => {
     expect(release).toContain('pnpm test:e2e:portable')
     expect(release).toMatch(/if: runner\.os == 'Windows'\s*\n\s*run: pnpm test:e2e:portable/)

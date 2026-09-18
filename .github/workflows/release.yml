@@ -83,7 +83,9 @@ jobs:
       - name: Check types and tests
         # Windows integration tests spawn PowerShell; the production move deadline
         # is 15s, so let assertions observe that result instead of timing out at 5s.
-        run: pnpm typecheck && pnpm test --maxWorkers=2 --testTimeout=${{ runner.os == 'Windows' && '20000' || '5000' }}
+        # Windows + vitest threads can trip libuv fs-event.c assertions; forks + one
+        # worker keep the suite isolated from that watcher crash.
+        run: pnpm typecheck && pnpm test --pool=forks --maxWorkers=${{ runner.os == 'Windows' && '1' || '2' }} --testTimeout=${{ runner.os == 'Windows' && '20000' || '5000' }}
       # 桌面 e2e 依赖 prepare-desktop-dev.mjs(Windows junction + win-x64
       # 运行时),按设计只在 Windows 上跑;mac 的打包校验由 pack:desktop 自带。
       - name: Install the test browser

@@ -45,6 +45,7 @@ export default defineConfig({
     },
   },
   test: {
+    watch: false,
     include: [
       'packages/*/src/**/*.spec.ts',
       'packages/*/test/**/*.spec.ts',
