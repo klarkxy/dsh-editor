@@ -21,6 +21,16 @@ exports.default = async function afterPack(context) {
     const executable = join(context.appOutDir, `${context.packager.appInfo.productFilename}.exe`)
     const icon = join(context.packager.buildResourcesDir, 'icon.ico')
     const rcedit = require.resolve('electron-winstaller/vendor/rcedit.exe')
-    await execFileAsync(rcedit, [executable, '--set-icon', icon], { windowsHide: true })
+    const productName = context.packager.appInfo.productName
+    const version = context.packager.appInfo.version
+    await execFileAsync(rcedit, [
+      executable,
+      '--set-icon', icon,
+      '--set-version-string', 'FileDescription', productName,
+      '--set-version-string', 'ProductName', productName,
+      '--set-version-string', 'InternalName', productName,
+      '--set-file-version', version,
+      '--set-product-version', version,
+    ], { windowsHide: true })
   }
 }

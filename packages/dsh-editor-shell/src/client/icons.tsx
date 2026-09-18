@@ -20,6 +20,7 @@ function svg(size: number, ...children: ReactNode[]) {
   );
 }
 
+/** Blue-tile whale mark. Keep paths in sync with apps/desktop/build/icon-mark.svg. */
 export function AppBrandMark({ size = 22 }: IconProps) {
   return (
     <svg

@@ -2,6 +2,9 @@
  * uses `dsh-editor-dev` only to isolate userData. */
 export const DESKTOP_PRODUCT_NAME = 'DSH Editor'
 
+/** Windows AppUserModelID; must match electron-builder `appId`. */
+export const DESKTOP_APP_ID = 'com.dsh-editor.desktop'
+
 /** Unpackaged `app.getVersion()` is Electron's own version (e.g. 37.2.6). */
 export function readDesktopVersion(packageJson: string): string {
   const manifest = JSON.parse(packageJson) as { version?: unknown }

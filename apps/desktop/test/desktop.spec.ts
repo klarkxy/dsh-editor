@@ -13,7 +13,7 @@ import { PROFILE_MARKER, ProfileCollisionError, deployProfile, resolveDshHome } 
 import { sanitizeHostLockedPluginOverrides } from '../src/user-plugins.js'
 import { installNavigationPolicy, isAllowedExternalUrl } from '../src/navigation.js'
 import { DshSupervisor } from '../src/supervisor.js'
-import { materializePackagedRuntime, treeDigest } from '../src/runtime-cache.js'
+import { hasPackagedRuntimeCache, materializePackagedRuntime, runtimeFromResources, shouldMaterializePackagedRuntime, treeDigest } from '../src/runtime-cache.js'
 import { claimPrimaryInstance, createDesktopLifecycle, type DesktopLifecycleDeps, type EditorInput, type EditorWindow } from '../src/window-lifecycle.js'
 import type { ChildLike } from '../src/contracts.js'
 
@@ -236,8 +236,9 @@ describe('desktop branding assets', () => {
   it('keeps the source icon, window icon, and Windows package icon wired together', async () => {
     const repo = join(import.meta.dirname, '..', '..', '..')
     const build = join(repo, 'apps', 'desktop', 'build')
-    const [svg, sourcePng, png, ico, main, preload, builder, afterPack] = await Promise.all([
+    const [svg, mark, sourcePng, png, ico, main, preload, builder, afterPack, identity] = await Promise.all([
       readFile(join(build, 'icon.svg'), 'utf8'),
+      readFile(join(build, 'icon-mark.svg'), 'utf8'),
       readFile(join(build, 'icon-source.png')),
       readFile(join(build, 'icon.png')),
       readFile(join(build, 'icon.ico')),
@@ -245,9 +246,12 @@ describe('desktop branding assets', () => {
       readFile(join(repo, 'apps', 'desktop', 'preload.cjs'), 'utf8'),
       readFile(join(repo, 'apps', 'desktop', 'electron-builder.yml'), 'utf8'),
       readFile(join(repo, 'scripts', 'after-pack-desktop.cjs'), 'utf8'),
+      readFile(join(repo, 'apps', 'desktop', 'src', 'app-identity.ts'), 'utf8'),
     ])
     expect(svg).toContain('<title>DSH Editor</title>')
     expect(svg).toContain('icon-source.png')
+    expect(mark).toContain('<title>DSH Editor</title>')
+    expect(mark).toContain('#1a7ff0')
     expect(sourcePng.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
     expect(sourcePng.readUInt32BE(16)).toBe(1024)
     expect(sourcePng.readUInt32BE(20)).toBe(1024)
@@ -257,11 +261,22 @@ describe('desktop branding assets', () => {
     expect(ico.readUInt16LE(0)).toBe(0)
     expect(ico.readUInt16LE(2)).toBe(1)
     expect(ico.readUInt16LE(4)).toBe(7)
-    expect(main).toContain("build', 'icon.png")
+    expect(main).toContain("'icon.ico'")
+    expect(main).toContain("'icon.png'")
+    expect(main).toContain('setAppUserModelId')
+    expect(main).toContain('shouldMaterializePackagedRuntime')
+    expect(main).toContain('runtimeFromResources')
+    expect(main).toContain('首次启动正在复制本地写作环境')
+    expect(main).toContain('class="mark"')
+    expect(identity).toContain("com.dsh-editor.desktop")
+    expect(builder).toContain('appId: com.dsh-editor.desktop')
     expect(builder).toContain('icon: build/icon.ico')
     expect(builder).toContain('installerIcon: build/icon.ico')
+    expect(builder).toContain('- "build/icon.ico"')
     expect(builder).toContain('signAndEditExecutable: false')
     expect(afterPack).toContain("electron-winstaller/vendor/rcedit.exe")
+    expect(afterPack).toContain('FileDescription')
+    expect(afterPack).toContain('ProductName')
     // About / update page wiring: the renderer is locked behind a strict CSP
     // that blocks api.github.com, so the main process owns the round-trip and
     // the preload bridge exposes invoke-style methods.
@@ -702,6 +717,21 @@ describe('profile deployment', () => {
 })
 
 describe('persistent packaged runtime cache', () => {
+  it('copies the packaged runtime only for portable executables', () => {
+    expect(shouldMaterializePackagedRuntime({})).toBe(false)
+    expect(shouldMaterializePackagedRuntime({ PORTABLE_EXECUTABLE_FILE: '  ' })).toBe(false)
+    expect(shouldMaterializePackagedRuntime({ PORTABLE_EXECUTABLE_FILE: 'C:\\Apps\\DSH Editor.exe' })).toBe(true)
+    const runtime = runtimeFromResources(join('D:', 'Program Files', 'DSH Editor', 'resources'))
+    expect(runtime.cliPath).toBe(join('D:', 'Program Files', 'DSH Editor', 'resources', 'dsh', 'lib', 'bin.js'))
+  })
+  it('does not hash the runtime tree after copy or when the marker already matches', async () => {
+    const source = await readFile(join(import.meta.dirname, '..', 'src', 'runtime-cache.ts'), 'utf8')
+    expect(source).toContain('copyMatchesManifest')
+    expect(source).toContain('treeMeasure')
+    expect(source).toContain('cacheReady')
+    expect(source).not.toContain('await treeDigest(')
+    expect(source).not.toContain('await validate(')
+  })
   it('copies and verifies the bundled runtime outside the portable extraction tree', async () => {
     const { root, resources } = await runtimeFixture()
     const runtime = await materializePackagedRuntime(join(root, 'home'), resources)
@@ -709,6 +739,7 @@ describe('persistent packaged runtime cache', () => {
     expect(runtime.cliPath).not.toContain(resources)
     expect(await readFile(runtime.cliPath, 'utf8')).toBe('dsh-one')
     expect(existsSync(join(root, 'home', 'runtime', 'dsh-editor-runtime', '.dsh-editor-runtime.json'))).toBe(true)
+    expect(hasPackagedRuntimeCache(join(root, 'home'))).toBe(true)
   })
   it('rejects a bundled runtime manifest built for a different platform', async () => {
     const { root, resources } = await runtimeFixture()

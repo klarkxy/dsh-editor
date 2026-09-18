@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1024" height="1024" role="img" aria-label="DSH Editor app mark">
+  <title>DSH Editor</title>
+  <rect width="24" height="24" fill="#1a7ff0"/>
+  <path fill="#0a4ea8" fill-opacity="0.38" d="M0 17.6c3-1.1 5.6 0 8.1.55 2.5.55 5 .15 7.3-.6 2.5-.85 5.2-.7 8.6.25V24H0Z"/>
+  <ellipse cx="9" cy="12.35" rx="5.55" ry="3.55" fill="#fff"/>
+  <path d="M14.05 10.2C15.5 7.1 16.7 4.9 17.6 3.45" fill="none" stroke="#fff" stroke-width="0.9" stroke-linecap="round"/>
+  <ellipse cx="17.15" cy="3.2" rx="0.95" ry="0.42" transform="rotate(-50 17.15 3.2)" fill="#fff"/>
+  <ellipse cx="18.15" cy="3.05" rx="0.95" ry="0.42" transform="rotate(40 18.15 3.05)" fill="#fff"/>
+  <circle cx="6.35" cy="11.55" r=".4" fill="#163a66"/>
+  <rect x="14.35" y="10.7" width="6.15" height="7.15" rx="1" fill="#fff"/>
+  <path fill="#1a5aaa" d="M15.3 10.25h.75v.95h-.75zm1.75 0h.75v.95h-.75zm1.75 0h.75v.95h-.75z"/>
+  <path fill="none" stroke="#b7c7d6" stroke-width=".45" stroke-linecap="round" d="M15.55 13h3.55M15.55 14.55h3.55M15.55 16.1h2.35"/>
+</svg>

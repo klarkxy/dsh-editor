@@ -46,9 +46,6 @@ export async function treeDigest(root: string): Promise<TreeDigest> {
   return { sha256: hash.digest('hex'), files, bytes }
 }
 
-function sameDigest(actual: TreeDigest, expected: TreeDigest): boolean {
-  return actual.sha256 === expected.sha256 && actual.files === expected.files && actual.bytes === expected.bytes
-}
 function manifestKey(manifest: RuntimeManifest): string { return JSON.stringify(manifest) }
 function assertManifest(value: unknown): asserts value is RuntimeManifest {
   const manifest = value as Partial<RuntimeManifest>
@@ -76,22 +73,63 @@ async function appOwned(path: string): Promise<boolean> {
     return marker.app === 'dsh-editor' && marker.schema === CACHE_SCHEMA
   } catch { return false }
 }
-async function validate(root: string, manifest: RuntimeManifest): Promise<boolean> {
-  try {
-    const [node, dsh, profile] = await Promise.all([
-      treeDigest(join(root, 'node')),
-      treeDigest(join(root, 'dsh')),
-      treeDigest(join(root, 'profile-template')),
-    ])
-    return sameDigest(node, manifest.node) && sameDigest(dsh, manifest.dsh) && sameDigest(profile, manifest.profile)
-  } catch { return false }
-}
 function runtimePaths(root: string): CachedRuntime {
   return {
     nodePath: join(root, 'node', NODE_EXECUTABLE),
     cliPath: join(root, 'dsh', 'lib', 'bin.js'),
     template: join(root, 'profile-template'),
   }
+}
+
+/** Installed / dmg builds already have a stable `resources` tree. Only the
+ * portable EXE lives in TEMP and must be copied into DSH_HOME. */
+export function shouldMaterializePackagedRuntime(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env.PORTABLE_EXECUTABLE_FILE?.trim())
+}
+
+export function runtimeFromResources(resources: string): CachedRuntime {
+  return runtimePaths(resources)
+}
+
+export function hasPackagedRuntimeCache(home: string): boolean {
+  return existsSync(join(home, 'runtime', CACHE_NAME, CACHE_MARKER))
+}
+
+async function treeMeasure(root: string): Promise<{ files: number; bytes: number }> {
+  let files = 0
+  let bytes = 0
+  async function visit(directory: string): Promise<void> {
+    const entries = await readdir(directory, { withFileTypes: true })
+    for (const entry of entries) {
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) { await visit(path); continue }
+      if (!entry.isFile()) continue
+      files += 1
+      bytes += (await stat(path)).size
+    }
+  }
+  await visit(root)
+  return { files, bytes }
+}
+
+function sameMeasure(actual: { files: number; bytes: number }, expected: TreeDigest): boolean {
+  return actual.files === expected.files && actual.bytes === expected.bytes
+}
+
+async function copyMatchesManifest(root: string, manifest: RuntimeManifest): Promise<boolean> {
+  try {
+    const [node, dsh, profile] = await Promise.all([
+      treeMeasure(join(root, 'node')),
+      treeMeasure(join(root, 'dsh')),
+      treeMeasure(join(root, 'profile-template')),
+    ])
+    return sameMeasure(node, manifest.node) && sameMeasure(dsh, manifest.dsh) && sameMeasure(profile, manifest.profile)
+  } catch { return false }
+}
+
+function cacheReady(root: string): boolean {
+  const paths = runtimePaths(root)
+  return existsSync(paths.nodePath) && existsSync(paths.cliPath) && existsSync(paths.template)
 }
 
 async function cleanupRuntimeBackup(backup: string): Promise<void> {
@@ -114,8 +152,10 @@ async function cleanupStaleRuntimeBackups(cacheParent: string): Promise<void> {
 }
 
 /**
- * Portable executables are extracted to TEMP. Copy the dependency-heavy DSH
- * tree once into DSH_HOME, then run only the marked, manifest-verified cache.
+ * Portable executables are extracted to TEMP. Copy that dependency-heavy
+ * tree once into DSH_HOME, then run the marked cache. Installed builds skip
+ * this and use `runtimeFromResources`. A matching owner marker plus the
+ * Node/DSH entry files is enough to reuse a portable cache.
  */
 export async function materializePackagedRuntime(home: string, resources: string): Promise<CachedRuntime> {
   const manifest = await readManifest(resources)
@@ -129,7 +169,7 @@ export async function materializePackagedRuntime(home: string, resources: string
     const marker = JSON.parse(await readFile(join(target, CACHE_MARKER), 'utf8')) as CacheMarker
     if (marker.app !== 'dsh-editor' || marker.schema !== CACHE_SCHEMA) throw new Error(`Refusing to replace unowned desktop runtime cache: ${target}`)
   }
-  if (existsSync(target) && await owned(target, manifest) && await validate(target, manifest)) {
+  if (existsSync(target) && await owned(target, manifest) && cacheReady(target)) {
     await cleanupStaleRuntimeBackups(cacheParent)
     return runtimePaths(target)
   }
@@ -144,7 +184,7 @@ export async function materializePackagedRuntime(home: string, resources: string
       cp(join(resources, 'dsh'), join(stage, 'dsh'), { recursive: true, dereference: true }),
       cp(join(resources, 'profile-template'), join(stage, 'profile-template'), { recursive: true, dereference: true }),
     ])
-    if (!(await validate(stage, manifest))) throw new Error('Persistent desktop runtime cache did not match the bundled runtime manifest.')
+    if (!(await copyMatchesManifest(stage, manifest))) throw new Error('Persistent desktop runtime cache did not match the bundled runtime manifest.')
     await writeFile(join(stage, CACHE_MARKER), `${JSON.stringify({ app: 'dsh-editor', schema: CACHE_SCHEMA, manifest: manifestKey(manifest) })}\n`, 'utf8')
     if (existsSync(target)) await rename(target, backup)
     try { await rename(stage, target) } catch (error) {
