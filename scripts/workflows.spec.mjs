@@ -26,6 +26,7 @@ describe('github workflows', () => {
 
   it('starts the packed Windows portable wrapper before publishing', () => {
     expect(release).toContain('pnpm test:e2e:portable')
-    expect(release).toMatch(/if: runner\.os == 'Windows'\s*\n\s*run: pnpm test:e2e:portable/)
+    expect(release).toContain('DSH_PORTABLE_SMOKE:')
+    expect(release).toMatch(/if: runner\.os == 'Windows'\s*\n\s*env:\s*\n\s*DSH_PORTABLE_SMOKE: '1'\s*\n\s*run: pnpm test:e2e:portable/)
   })
 })

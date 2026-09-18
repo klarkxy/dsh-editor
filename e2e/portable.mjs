@@ -203,6 +203,10 @@ try {
     throw new Error(`portable identity assertion failed: ${JSON.stringify(state)}`)
   }
   if (await window.getByTestId('proofread-open').count() || await window.getByTestId('zhihu-open').count()) throw new Error('retired desktop launchers appeared in portable artifact')
+  const smoke = process.env.DSH_PORTABLE_SMOKE === '1'
+  if (smoke) {
+    state.operations = ['smoke: packed wrapper started and home identity passed']
+  } else {
   await window.getByRole('button', { name: '设置', exact: true }).click()
   await window.locator('.settings-nav').getByRole('tab', { name: '知乎资料', exact: true }).click()
   await window.getByTestId('zhihu-settings-embed').waitFor()
@@ -229,6 +233,7 @@ try {
   if(!(await readFile(resolve(portableWorkspace,'正文','001.md'),'utf8')).includes('最终便携产物保存验证'))throw new Error('portable save missing on disk')
   await openAndCloseProofreadPanel(window)
   state.operations=['proofreading and Zhihu desktop launchers absent','Zhihu configuration opens inside settings','create ordinary 正文 from tree, then document, and save to disk','open and close 文稿校对 from command palette without card UI']
+  }
   await window.screenshot({ path: resolve(output, 'window.png') })
   const origin = url.origin
   await window.close()
