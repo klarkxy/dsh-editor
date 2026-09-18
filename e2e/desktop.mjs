@@ -366,8 +366,12 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     throw new Error(`windows did not share DSH origin: ${firstUrl.href} vs ${secondUrl.href}`)
   }
   await second.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
-  await second.locator('.tree-row', { hasText: '正文' }).first().click()
-  await second.locator('.tree-row', { hasText: '001.md' }).first().click()
+  const secondChapter = second.locator('.tree-row', { hasText: '001.md' }).first()
+  if (!await secondChapter.isVisible()) {
+    await second.locator('.tree-row', { hasText: '正文' }).first().click()
+    await secondChapter.waitFor({ state: 'visible', timeout: 20_000 })
+  }
+  await secondChapter.click()
   const secondEditor = second.locator('[data-testid="paper-editor"]')
   await secondEditor.waitFor({ state: 'visible', timeout: 30_000 })
 
