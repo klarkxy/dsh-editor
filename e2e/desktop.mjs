@@ -70,6 +70,31 @@ async function waitForFileText(path, expected, timeoutMs = 30_000) {
   throw new Error(`file did not reach expected text within ${timeoutMs}ms: ${path}`)
 }
 
+async function waitForPath(path, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (existsSync(path)) return
+    await delay(100)
+  }
+  throw new Error(`path did not appear within ${timeoutMs}ms: ${path}`)
+}
+
+async function openTreeFile(page, directory, file) {
+  const folder = page.locator('.tree-row', { hasText: directory }).first()
+  const fileRow = page.locator('.tree-row', { hasText: file }).first()
+  await folder.waitFor({ state: 'visible', timeout: 20_000 })
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    if (await fileRow.isVisible()) {
+      await fileRow.click()
+      return
+    }
+    if (await folder.getAttribute('aria-expanded') !== 'true') await folder.click()
+    await delay(200)
+  }
+  throw new Error(`tree file ${file} did not become visible under ${directory}`)
+}
+
 async function closeElectronApplication(app) {
   const pid = app.process().pid
   const graceful = await Promise.race([
@@ -342,6 +367,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await chapterNameBox.waitFor({ state: 'visible', timeout: 10_000 })
   await chapterNameBox.fill('001')
   await ctx.window.getByRole('button', { name: '创建', exact: true }).click()
+  await waitForPath(resolve(multiWindowWorkspace, '正文', '001.md'))
   // The create flow opens the document directly; the tree starts collapsed.
   const firstEditor = ctx.window.locator('[data-testid="paper-editor"]')
   await firstEditor.waitFor({ state: 'visible', timeout: 30_000 })
@@ -366,12 +392,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     throw new Error(`windows did not share DSH origin: ${firstUrl.href} vs ${secondUrl.href}`)
   }
   await second.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
-  const secondChapter = second.locator('.tree-row', { hasText: '001.md' }).first()
-  if (!await secondChapter.isVisible()) {
-    await second.locator('.tree-row', { hasText: '正文' }).first().click()
-    await secondChapter.waitFor({ state: 'visible', timeout: 20_000 })
-  }
-  await secondChapter.click()
+  await openTreeFile(second, '正文', '001.md')
   const secondEditor = second.locator('[data-testid="paper-editor"]')
   await secondEditor.waitFor({ state: 'visible', timeout: 30_000 })
 
@@ -433,11 +454,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     throw new Error(`manuscript tree did not appear after restart: ${JSON.stringify(body)}; ${error instanceof Error ? error.message : String(error)}`)
   }
   const editor = ctx.window.locator('[data-testid="paper-editor"]')
-  if (!await editor.isVisible()) {
-    const chapter = ctx.window.locator('.tree-row', { hasText: '001.md' }).first()
-    if (!await chapter.isVisible()) await ctx.window.locator('.tree-row', { hasText: '正文' }).first().click()
-    await chapter.click()
-  }
+  if (!await editor.isVisible()) await openTreeFile(ctx.window, '正文', '001.md')
   await editor.waitFor({ state: 'visible', timeout: 30_000 })
   const backups = ctx.window.locator('[data-testid="paper-draft-backups"]')
   await backups.waitFor({ state: 'visible', timeout: 15_000 })
@@ -464,11 +481,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   })
   await ctx.window.reload()
   await ctx.window.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
-  if (!await editor.isVisible()) {
-    const chapter = ctx.window.locator('.tree-row', { hasText: '001.md' }).first()
-    if (!await chapter.isVisible()) await ctx.window.locator('.tree-row', { hasText: '正文' }).first().click()
-    await chapter.click()
-  }
+  if (!await editor.isVisible()) await openTreeFile(ctx.window, '正文', '001.md')
   await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '版本冲突' }).waitFor({ timeout: 15_000 })
   // Reload restore schedules the same 250 ms host-draft put as adoptBackup.
   // Clicking 另存冲突副本 before that put lands lets delete run, then the
