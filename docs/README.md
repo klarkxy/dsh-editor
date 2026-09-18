@@ -1,44 +1,22 @@
 # DSH Editor 文档
 
-当前操作手册对应桌面 **0.2.0** 与内置 DSH `0.1.5-rc.2`。桌面应用版本与公开插件包版本分别维护；公开插件当前包版本为 `0.1.0`。
+文档只保留源码说不出来的东西：给作者的操作手册、产品边界、以及关键架构决策。
 
-先读 [使用者指南](user-guide.md) 或 [开发者指南](development.md)。改产品边界先读 [产品原则](product-principles.md)，改界面先读 [界面与设计系统](ui.md)，改插件先读 [插件架构](plugin-architecture.md)。
+| 文档 | 给谁看 | 内容 |
+| --- | --- | --- |
+| [使用者指南](user-guide.md) | 作者 | 新建作品、编辑保存、正文菜单、搭档、资料、设置与升级 |
+| [产品原则](product-principles.md) | 维护者 | 作者确认、普通文件与单一 DSH 权威边界；改任何一条需单独授权 |
+| [架构决策](architecture.md) | 维护者 | 信任模型、不自建运行时的理由、root 遮蔽接缝、写入与发布纪律 |
+| [变更记录](../CHANGELOG.md) | 所有人 | 各版本已经发生的变化 |
 
-四个 Preset 共用侧栏文稿校对（当前文档 / 全部可见 `.md`/`.txt`；kind 为标点、错别字、敏感词、重复、口癖，不含 `card`）。顶层 `dsh-proofread` 入口仍可 disabled，因为面板走 workbench `proofread.scan`。知乎入口在「设置 → 知乎资料」。辅助文件不显示在文件树和作者全文搜索中，原文件仍保留。不要按旧版截图寻找这些入口。
+## 每个包是干嘛的
 
-新对话四个 Preset（默认 `dsh-editor-writing`）加历史 `dsh-editor`；桌面能力由一份 canonical recipe `desktop` 定义，`basic` / `smart` / `full` 是它的兼容别名。可见 `dsh-editor-novel` 以 `knowledge-only` 挂 novel-kernel（仅 `novel_knowledge`，外加共用的 `writing_propose` / `author_observe`）；通用 / 文章 / 技术不挂。完整小说工具与采访 / 索引 / frontmatter / `context.compile` 管线只留在隐藏的 legacy `dsh-editor`（显式 `mode: legacy`）。作品是普通文件夹。当前手册对齐源码，不改 `release-*.md`、历史验收记录或 `docs/diagrams`。
+`packages/` 下每个包都有自己的 README，说明用途、入口与数据归属。更细的声明读源码：入口、feature、锁定与分类在 `package.json` 的 `dshEditor` 字段，RPC / Tool 的字段级契约在各自的 `src/contracts.ts`，新建插件可直接参照 `packages/dsh-proofread/`。
 
-## 使用与维护
-
-| 文档 | 内容 |
-| --- | --- |
-| [使用者指南](user-guide.md) | 新建作品、编辑保存、正文菜单、搭档、资料、设置与升级 |
-| [产品原则](product-principles.md) | 作者确认、普通文件与单一 DSH 权威边界 |
-| [界面与设计系统](ui.md) | Radix Themes 设计系统、浅色 / 深色主题、共享控件、设置滚动、图表与辅助文件展示 |
-| [开发者指南](development.md) | 固定版本、构建顺序、调试、验收、打包与发布 |
-| [架构与边界](architecture.md) | 进程、profile、持久化与安全约束 |
-| [插件架构与接口](plugin-architecture.md) | 所有权、注入、RPC / Tool / slot 与替换合同 |
-| [组合指南](plugin-composition-guide.md) | 桌面能力集合的 canonical recipe 与 basic / smart / full 兼容别名、独立 Web 插件与复现命令 |
-| [0.2.0 本地验收](release-0.2.0.md) | 本轮证据范围、产物与最终标签验证的区别 |
-| [作者优先工作流](author-first-workflow.md) | 前置规划动机、正文页去规划化的设计与两轮验收结论 |
-| [变更记录](../CHANGELOG.md) | 各版本已经发生的变化 |
-
-## 包级合同
-
-- [dsh-editor-cards](../packages/dsh-editor-cards/README.md)
-- [dsh-editor-memory-panel](../packages/dsh-editor-memory-panel/README.md)
-- [dsh-editor-novel-kernel](../packages/dsh-editor-novel-kernel/README.md)
-- [dsh-editor-overview-panel](../packages/dsh-editor-overview-panel/README.md)
-- [dsh-editor-plugins](../packages/dsh-editor-plugins/README.md)
-- [dsh-editor-proofread-panel](../packages/dsh-editor-proofread-panel/README.md)
-- [dsh-editor-shell](../packages/dsh-editor-shell/README.md)
-- [dsh-editor-workbench](../packages/dsh-editor-workbench/README.md)
-- [dsh-manuscript](../packages/dsh-manuscript/README.md)
-- [dsh-proofread](../packages/dsh-proofread/README.md)
-- [dsh-zhihu](../packages/dsh-zhihu/README.md)
-
-`dsh-editor-seats` 的类型合同见 [源码](../packages/dsh-editor-seats/src/index.ts)，`dsh-editor-workspace-kit` 的职责见 [插件架构](plugin-architecture.md)。小说知识卡 `resources/novel-knowledge/` 是搭档读取的运行时材料，其出处记录保留，不随界面版本改写。
+命令与脚本看根 `package.json` 的 scripts（`dev`、`build`、`typecheck`、`test`、`pack:desktop` 等）。桌面能力集合由 `apps/desktop/resources/compositions/desktop.json` 定义，`basic` / `smart` / `full` 是同一集合的兼容别名，由 `scripts/plugin-manifest.mjs` 解析。界面语义 class 与 `data-testid` 是 e2e 钩子，改名前先搜 `e2e/`。
 
 ## 架构图
 
-[图站入口](diagrams/index.html) 包含桌面运行时、插件分级、组合边界和作者确认写入四张图。规范源 JSON 与生成 HTML 放在同一目录；更新规范后重新生成，并核对多尺寸截图。发布站点见 [GitHub Pages](https://klarkxy.github.io/dsh-editor/)。
+[图站入口](diagrams/index.html) 包含桌面运行时、插件分级、组合边界、作者确认写入与提案版本门禁五张图，发布在 [GitHub Pages](https://klarkxy.github.io/dsh-editor/)。规范源 JSON 与生成 HTML 同目录；更新规范后用 archify 重新交付并核对多尺寸截图。
+
+小说知识卡 `packages/dsh-editor-novel-kernel/resources/novel-knowledge/` 是搭档读取的运行时材料，其出处记录保留，不随界面版本改写。

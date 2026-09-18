@@ -42,7 +42,7 @@
 <main>
   <h1>DSH Editor 0.2.0 · 架构图</h1>
   <p class="sub">规范源文件在仓库 <code>docs/diagrams/</code>；推送 <code>main</code> 后由 GitHub Pages 发布。</p>
-  <p class="note">四张图是同一套系统的不同切面。Host 插件住在 DSH 进程里，不是旁边的独立服务；<code>host-api</code> 是进程内库导入。Electron 只启动 DSH 并打开 loopback URL，不直接加载 shell。</p>
+  <p class="note">五张图是同一套系统的不同切面。Host 插件住在 DSH 进程里，不是旁边的独立服务；<code>host-api</code> 是进程内库导入。Electron 只启动 DSH 并打开 loopback URL，不直接加载 shell。</p>
 
   <a class="card" href="dsh-editor-runtime.html">
     <h2>桌面运行时</h2>
@@ -51,17 +51,22 @@
 
   <a class="card" href="dsh-editor-plugins.html">
     <h2>插件分级与依赖</h2>
-    <p>三个公开 tarball 与桌面 profile。桌面保留校对引擎但暂停校对界面，知乎配置位于设置中。</p>
+    <p>三个公开 tarball 与桌面 profile。桌面校对走侧栏面板，知乎配置位于设置中。</p>
   </a>
 
   <a class="card" href="plugin-composition-boundaries.html">
     <h2>组合边界</h2>
-    <p>普通业务、可选智能增强、独立公开插件三个视角。独立 Web 校对和资料 RPC 可以不经过 Agent；桌面入口按 0.2.0 整理。</p>
+    <p>普通业务、可选智能增强、独立公开插件三个视角。独立 Web 校对和资料 RPC 可以不经过 Agent。</p>
   </a>
 
   <a class="card" href="author-confirm-write.html">
     <h2>作者确认后写入</h2>
-    <p>从 context.compile 到 proposal.apply。泳道分开只为读顺序；Workbench / Kernel / Manuscript 仍是同一 DSH 进程。</p>
+    <p>从纯文本发送到 writing_propose V2 提案，再到带版本基线的 proposal.apply。泳道分开只为读顺序；Workbench 与 Manuscript 仍是同一 DSH 进程。</p>
+  </a>
+
+  <a class="card" href="proposal-version-gate.html">
+    <h2>提案的版本门禁</h2>
+    <p>提案生命周期：生成、待确认、版本复核、应用与撤销；版本不符或后段失败一律 fail closed。</p>
   </a>
 
   <footer>由仓库 GitHub Actions 发布。产品名、channel 与代码标识保持原样。</footer>

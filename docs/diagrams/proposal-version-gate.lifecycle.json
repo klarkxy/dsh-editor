@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "提案的版本门禁（writing_propose V2）",
+    "output": "proposal-version-gate.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1280,
+      680
+    ],
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "start": {
+          "label": "生成"
+        },
+        "waiting": {
+          "label": "等待作者"
+        },
+        "decision": {
+          "label": "门禁"
+        },
+        "success": {
+          "label": "写入"
+        },
+        "failure": {
+          "label": "fail closed"
+        },
+        "neutral": {
+          "label": "其他终态"
+        }
+      }
+    },
+    "views": [
+      {
+        "id": "main-path",
+        "label": "主路径",
+        "focus": [
+          "prepare",
+          "pending",
+          "verify",
+          "applied"
+        ],
+        "note": "提案从生成到写入：确认前正文不变，确认后经版本复核才落盘。"
+      },
+      {
+        "id": "gates",
+        "label": "写入门禁",
+        "focus": [
+          "verify",
+          "stale",
+          "partial",
+          "prepare"
+        ],
+        "note": "版本不符或后段失败都 fail closed：不覆盖、不降级、不自动重试。"
+      },
+      {
+        "id": "author-control",
+        "label": "作者主权",
+        "focus": [
+          "pending",
+          "ignored",
+          "applied",
+          "undone"
+        ],
+        "note": "确认、忽略、撤销都由作者决定；忽略不删除提案，撤销有严格前提。"
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "提案主路径"
+    },
+    {
+      "id": "author",
+      "label": "作者决定"
+    },
+    {
+      "id": "guard",
+      "label": "写入门禁"
+    },
+    {
+      "id": "terminal",
+      "label": "终态"
+    }
+  ],
+  "states": [
+    {
+      "id": "prepare",
+      "type": "start",
+      "label": "生成提案",
+      "sublabel": "只读预检 · 记录版本基线",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "writing_propose"
+    },
+    {
+      "id": "pending",
+      "type": "waiting",
+      "label": "待作者确认",
+      "sublabel": "提案卡可见 · 正文未变",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "tag": "marker"
+    },
+    {
+      "id": "verify",
+      "type": "decision",
+      "label": "版本复核",
+      "sublabel": "withWorkspaceWrite 内复核基线",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "tag": "apply"
+    },
+    {
+      "id": "applied",
+      "type": "success",
+      "label": "已应用",
+      "sublabel": "正文已写入",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "tag": "done"
+    },
+    {
+      "id": "ignored",
+      "type": "neutral",
+      "label": "已忽略",
+      "sublabel": "提案留在对话，重开重新核对",
+      "lane": "author",
+      "col": 0,
+      "tag": "dismiss"
+    },
+    {
+      "id": "stale",
+      "type": "failure",
+      "label": "STALE",
+      "sublabel": "目标或来源已变 · 拒绝写入",
+      "lane": "guard",
+      "col": 1,
+      "tag": "fail closed"
+    },
+    {
+      "id": "partial",
+      "type": "failure",
+      "label": "部分完成",
+      "sublabel": "拆合章后段失败 · 如实回报",
+      "lane": "guard",
+      "col": 2,
+      "tag": "fail closed"
+    },
+    {
+      "id": "undone",
+      "type": "neutral",
+      "label": "已撤销",
+      "sublabel": "回到应用前文本",
+      "lane": "terminal",
+      "col": 2,
+      "tag": "undo"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t-prepare-pending",
+      "from": "prepare",
+      "to": "pending",
+      "label": "marker 渲染为提案卡",
+      "variant": "emphasis",
+      "labelDy": -25
+    },
+    {
+      "id": "t-pending-verify",
+      "from": "pending",
+      "to": "verify",
+      "label": "作者确认",
+      "variant": "emphasis",
+      "labelDy": -25
+    },
+    {
+      "id": "t-pending-ignored",
+      "from": "pending",
+      "to": "ignored",
+      "label": "作者忽略",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "t-verify-applied",
+      "from": "verify",
+      "to": "applied",
+      "label": "版本一致 · 写入",
+      "variant": "emphasis",
+      "labelDy": -25
+    },
+    {
+      "id": "t-verify-stale",
+      "from": "verify",
+      "to": "stale",
+      "label": "版本不符 · 拒绝",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        468,
+        212
+      ]
+    },
+    {
+      "id": "t-verify-partial",
+      "from": "verify",
+      "to": "partial",
+      "label": "后段失败 · 停止",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        655,
+        250
+      ]
+    },
+    {
+      "id": "t-stale-prepare",
+      "from": "stale",
+      "to": "prepare",
+      "label": "回到对话重新生成",
+      "variant": "dashed",
+      "route": "bottom-channel"
+    },
+    {
+      "id": "t-applied-undone",
+      "from": "applied",
+      "to": "undone",
+      "label": "作者撤销",
+      "variant": "dashed",
+      "route": "right-channel",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "版本基线",
+      "items": [
+        "edit / split 带生成时 Host-read 的 targetVersion",
+        "merge 加 sourceVersion；renames 每项 version",
+        "basis 只是来源依赖列表，不能代替目标基线"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "fail closed",
+      "items": [
+        "目标变了不覆盖、不降级、不假装没写",
+        "create 严格 create-if-absent，已有空文件也不覆盖",
+        "partial 回报 appliedPaths 与恢复路径，不自动重试"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "作者主权",
+      "items": [
+        "确认前正文不变；忽略只是把提案留在对话里",
+        "撤销要求提案卡仍在且目标未再变化",
+        "新建文件不提供自动删除式撤销，走归档"
+      ]
+    }
+  ]
+}

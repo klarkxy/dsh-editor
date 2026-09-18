@@ -1,22 +1,9 @@
 # dsh-editor-workbench
 
-桌面私有、仅 Host 的作品生命周期：文档概览、校对扫描、进度、导入、快照、移动与归档。包版本 `0.1.0`，不是桌面应用 `0.2.0`。`dshEditor.role: core`。不强依赖 `dsh-editor-cards` 或 memory-panel。
+作品工作台 Host。私有核心包，只随桌面应用交付，锁定不可关闭。
 
-浏览器安全契约：`dsh-editor-workbench/contracts`。依赖 `dsh-proofread` 引擎（`./engine` / `./defaults` / `./contracts`）；三份桌面 recipe 都保留该依赖。`project.overview` 与 `proofread.scan` 面向全部可见 `.md`/`.txt`。四个 Preset 共用的 `dsh-editor-proofread-panel` 调本 channel 的 `proofread.scan`（当前文档 / 全部文档；kind 五项不含 `card`），因此顶层 `dsh-proofread` 入口仍可 disabled。`card` 校对请求 fail closed。人物卡扩展在默认关闭的 `dsh-editor-cards`。
+- **用途**：私有 RPC `/dsh-editor-workbench` 承载作品生命周期——作品结构、文档概览、校对扫描、写作进度、外部作品导入、文本快照与回滚、安全重命名、跨目录移动与可恢复归档；同时提供各面板（概览、校对、记忆）消费的数据端点。
+- **写作工具**：可选入口 `dsh-editor-workbench/tools` 注册通用提案 `writing_propose` 与作者观察 `author_observe`，四个写作模式 preset 显式挂载；提案只返回 marker，写入一律等作者确认。
+- **工作方式**：复用 `dsh-manuscript/host-api` 的 live-session 工作区权威；所有写操作带版本基线，目标变化即拒绝（STALE）；同一作品的写入串行执行。
 
-`project.init` 在 `newProject: true` 时至多写入根目录 `AGENTS.md`，不预建专业目录。`context.compile` 仍在 channel 上，但只有 legacy 发送路径调用。
-
-## 入口
-
-- `editor-workbench`：`/dsh-editor-workbench`（锁定）
-- `editor-workbench-tools`（feature `assistant`）：只注册 `writing_propose`（V2：edit/split 要生成时 Host-read 的 `targetVersion`，merge 要 `targetVersion`+`sourceVersion`，renames 每项 `version`；可选 `basis` 不能代替目标基线；全部操作接受可见 `.md`/`.txt`；create 严格 create-if-absent）与 `author_observe`，外加通用 context hooks（`src/tools.ts`）。不注册任何 `novel_*`。`novel_overview` / `novel_memory_update` 由 novel-kernel 仅在 `legacy` / `full` 模式下调用 Host-only `installNovelWorkbenchTools`；`knowledge-only` 不调用。
-
-注入：`connection`、`sessions`、`workspaceRegistry`、`fs`、`sandboxPolicy`、`webServer`。Host 主入口不再挂全局 tool guard。写作 Preset 在 `agent.cordis.yml` 关闭 `tool-pwsh` / `tool-bash`，并由 `dsh-editor-workbench/tools` 对继承来的 `write` / `edit` / 终端工具做 `tools.restrict`。官方 / 社区 Agent 模式保留自身工具面。根目录只从 live session 推导，复用 `dsh-manuscript/host-api`。
-
-## 契约
-
-端点表在 `src/contracts/channel.ts`；分发在 `src/rpc/`（`mutation` / `sessionless` / `sessionKey`）。写入（含 `progress.record`）走 `withWorkspaceWrite`。`.dsh-editor/` 侧车（`writing-log.json`、`敏感词.txt`、`敏感词-忽略.txt`）不进快照。替换时保留 channel 与载荷，且只保留一个 `editor-workbench`。
-
-## 文档
-
-[插件架构](../../docs/plugin-architecture.md) · [架构](../../docs/architecture.md) · [组合指南](../../docs/plugin-composition-guide.md)
+声明见 `package.json` 的 `dshEditor`（role `core`，`editor-workbench` 锁定，`editor-workbench-tools` 为 feature `assistant`）。

@@ -152,9 +152,7 @@ describe('plugin manifests and composition resolver', () => {
     const docs = [
       'README.md',
       'docs/README.md',
-      'docs/plugin-composition-guide.md',
       'docs/architecture.md',
-      'docs/development.md',
       'docs/product-principles.md',
     ].map((path) => readFileSync(resolve(root, path), 'utf8')).join('\n')
     expect(docs).toContain('dsh-editor-writing')

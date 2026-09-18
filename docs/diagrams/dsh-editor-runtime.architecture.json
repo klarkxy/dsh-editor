@@ -168,7 +168,7 @@
       "id": "kernel",
       "type": "backend",
       "label": "novel-kernel",
-      "sublabel": "tools + prompt",
+      "sublabel": "knowledge-only · legacy 完整",
       "pos": [
         896,
         100
@@ -293,7 +293,7 @@
       "items": [
         "虚线框里的包都是同一 Cordis 进程的插件",
         "host-api 是 workbench 对 manuscript 的进程内导入",
-        "校对引擎保留，桌面校对暂停；知乎配置在设置内"
+        "校对走侧栏 proofread 面板；知乎配置在设置内"
       ]
     },
     {

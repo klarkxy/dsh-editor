@@ -1,17 +1,9 @@
 # dsh-editor-overview-panel
 
-桌面私有、仅 Client 的文档概览座位。Host 为空操作（`src/index.ts`）。包版本 `0.1.0`，不是桌面应用 `0.2.0`。
+作品概览面板。私有包，只随桌面应用交付，默认安装；可在设置「插件」里开关「作品概览」。
 
-## 入口
+- **用途**：以中栏 overlay 展示作品概览——章节数与总字数、各章字数分布、近 30 天与 12 周写作曲线、最近编辑。
+- **入口**：纯 Client 包，通过 shell 的中栏 overlay 座位接入（`src/client/`）。
+- **数据**：数据全部来自 `dsh-editor-workbench` 的 `project.overview` 与 `progress.history` RPC。
 
-- 中栏：`dsh-editor.center.overlays`（id `overview`，`src/client.ts`）
-- 命令：`overview`（Ctrl+Shift+O）
-- Feature：`overview-panel`（canonical recipe `desktop` 已选；basic / smart / full 别名同一集合）
-
-## 契约
-
-数据在 `/dsh-editor-workbench`：`project.overview`、`progress.history`。打开时根元素带 `data-dsh-center-overlay`，由 Shell 放入稿纸格；插件不写 grid。
-
-## 文档
-
-[插件架构](../../docs/plugin-architecture.md) · [使用者指南](../../docs/user-guide.md)
+声明见 `package.json` 的 `dshEditor`（feature `overview-panel`）。

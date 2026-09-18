@@ -1,18 +1,9 @@
 # dsh-editor-cards
 
-桌面私有包：人物卡与世界书。不发布；包版本 `0.1.0`，不是桌面应用 `0.2.0`。卡片文件仍在作品目录。
+人物卡与世界书扩展。私有包，只随桌面应用交付，默认不安装；作者在设置「插件」里打开「人物与世界书」后启用。
 
-## 入口
+- **用途**：把作品目录里的 `人物卡/`、`世界书/` Markdown 呈现为带结构的卡片列表，支持 frontmatter 字段编辑、按名字/别名/触发词的引用导航，以及从侧栏新建卡片。
+- **入口**：Host RPC `/dsh-editor-cards`（`src/index.ts`）；Client 通过 shell 的侧栏与中栏座位接入。
+- **数据**：卡片文件始终是作品目录里的普通 Markdown，本包只读写字段与列表。
 
-- Host `editor-cards`：`/dsh-editor-cards`（`src/index.ts`）
-- Client：命令展开文件树目录；钉住栏仍读卡片字段（`src/client.ts`）
-- 命令：`cards-character`（Ctrl+Shift+C）、`cards-worldbook`（Ctrl+Shift+W）展开 `人物卡/` / `世界书/`
-- Feature：`cards`（canonical recipe `desktop` 不选；默认关闭，可由显式 feature 启用）
-
-## 契约
-
-RPC：`cards.list` / `cards.references` / `cards.metaSet` / `cards.create`（`src/contracts.ts`）。写入走 `dsh-manuscript/host-api` 的 `withWorkspaceWrite`。进程内 `./host-api` 供 workbench 校对扫描读卡片索引。座位上的 `Select` / `Dialog` 用 Shell 共享控件，缺省回退原生控件（`src/client/host-ui.ts`、`src/client/dialog.ts`）。
-
-## 文档
-
-[组合指南](../../docs/plugin-composition-guide.md) · [插件架构](../../docs/plugin-architecture.md) · [使用者指南](../../docs/user-guide.md)
+声明见 `package.json` 的 `dshEditor`（feature `cards`）。

@@ -1,10 +1,9 @@
 /*
  * DSH Editor shell — residual CSS on top of Radix Themes.
- * Canonical usage: docs/ui.md.
- *
  * Hand-written CSS is only for grid / -webkit-app-region / CodeMirror /
  * cmdk / resizer / keyframes. Colours, space, radius, and type use Radix
- * variables. Semantic class names stay as e2e / panel hooks.
+ * variables — no hex / rgba in components. Semantic class names stay as
+ * e2e / panel hooks; search e2e/ before renaming them.
  */
 
 const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'

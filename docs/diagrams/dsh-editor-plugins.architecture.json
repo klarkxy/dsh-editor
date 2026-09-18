@@ -57,7 +57,7 @@
           "kernel",
           "dsh-host"
         ],
-        "note": "host-api 是库导入；kernel 向同一 Host 注册 tools，不对外提供文件 RPC。"
+        "note": "host-api 是库导入；kernel 只注册 tools，可见 novel 为 knowledge-only，不对外提供文件 RPC。"
       }
     ]
   },
@@ -195,7 +195,7 @@
   "boundaries": [
     {
       "kind": "region",
-      "label": "桌面 profiles/dsh-editor（默认 full）",
+      "label": "桌面 profiles/dsh-editor（canonical desktop）",
       "wraps": [
         "dsh-host",
         "shell",
@@ -285,7 +285,8 @@
       "title": "依赖方向",
       "items": [
         "host-api 与校对引擎都是进程内库，不是对 DSH 的 RPC",
-        "kernel 向同一 Host 注册 tools / guard，不直连作品目录",
+        "kernel 注册 tools：可见 novel 只挂只读 novel_knowledge",
+        "guard / prompt / 完整小说工具只留给 legacy 会话",
         "禁止跨包导入另一个包的 src"
       ]
     },

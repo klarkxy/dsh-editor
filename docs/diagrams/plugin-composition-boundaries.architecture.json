@@ -28,7 +28,7 @@
           "workbench",
           "zhihu"
         ],
-        "note": "独立校对与资料 RPC 无需 Agent；桌面校对暂停，知乎在设置中。"
+        "note": "独立校对与资料 RPC 无需 Agent；桌面校对走侧栏面板，知乎在设置中。"
       },
       {
         "id": "agent",
@@ -38,7 +38,7 @@
           "dsh-host",
           "manuscript"
         ],
-        "note": "Chat、补全、小说工具按 smart/full 启用；文件权限仍由原 Host 控制。"
+        "note": "Chat、补全与写作模式随桌面集合交付，写作模式在设置里开关；文件权限仍由原 Host 控制。"
       },
       {
         "id": "public",
@@ -141,7 +141,7 @@
       "id": "kernel",
       "type": "backend",
       "label": "dsh-editor-novel-kernel",
-      "sublabel": "小说工具 · guard / prompt",
+      "sublabel": "小说知识 · 完整表面仅 legacy",
       "pos": [
         980,
         520
@@ -209,8 +209,8 @@
       "title": "已落实的组合边界",
       "items": [
         "三个公开包分别安装与移除",
-        "basic / smart / full 三份写作组合",
-        "桌面校对暂停；知乎使用专用设置座位"
+        "桌面单份 canonical 能力集合，写作模式可在设置开关",
+        "桌面校对走侧栏面板；知乎使用专用设置座位"
       ]
     },
     {

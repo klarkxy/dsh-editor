@@ -2,7 +2,7 @@
 
 面向 DSH Web 的公开稿件插件：工作区文本树、正文编辑、安全保存、浏览器草稿、字数、前后篇导航、稿内查找替换、全文搜索、剪贴板改写交接与可选补全。官方 DSH 仍是唯一 Chat / Agent 界面。
 
-包版本 `0.1.0`，不是桌面应用 `0.2.0`。兼容 DSH `0.1.5-rc.2`。桌面把本包当核心稿件 Host，并用 `./client/editor-core`；桌面根界面是 `dsh-editor-shell`，本 Client 不占 `root`。
+包版本独立维护，当前 `0.1.0`；兼容 DSH `0.1.5-rc.2`。桌面把本包当核心稿件 Host，并复用 `./client/editor-core`；桌面根界面由 `dsh-editor-shell` 提供。
 
 ## 入口
 
@@ -13,7 +13,7 @@
 ## 使用行为
 
 - 公开 Web：默认收起的 360px「稿纸」抽屉。
-- `Ctrl+S` 保存；切换、关闭、冲突和晚到响应不会静默覆盖本地 buffer。
+- `Ctrl+S` 保存；切换、关闭、冲突和晚到响应时都保留本地 buffer 并提示。
 - 「改这段」只复制请求到剪贴板，不注入官方 Chat DOM。
 - FIM / 选段改写由 Host 按写作角色设置与可信 live session 解析有效 provider/model，并调用 DSH `llm.stream`；无候选时返回空。可选 `chapterContext`（≤1 200）写入用户提示中的本章工作笔记；`patch.complete` 可带 `instruction`（≤400）。
 - editor-core 剪切先确认剪贴板写入再删除（`src/client/editor-core/editor-clipboard.ts`）。
@@ -46,4 +46,4 @@ dsh --profile web
 
 卸载：`dsh plugin --profile web remove dsh-manuscript`。不删除工作区文件。
 
-仓库文档（不打进 tarball）：[使用者指南](../../docs/user-guide.md) · [开发者指南](../../docs/development.md) · [产品原则](../../docs/product-principles.md) · [界面](../../docs/ui.md) · [架构](../../docs/architecture.md) · [组合指南](../../docs/plugin-composition-guide.md)
+仓库文档（不打进 tarball）：[使用者指南](../../docs/user-guide.md) · [产品原则](../../docs/product-principles.md) · [架构决策](../../docs/architecture.md)

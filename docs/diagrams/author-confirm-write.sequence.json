@@ -2,7 +2,7 @@
   "schema_version": 1,
   "diagram_type": "sequence",
   "meta": {
-    "title": "作者确认后写入正文",
+    "title": "作者确认后写入正文（writing_propose V2）",
     "output": "author-confirm-write.html",
     "quality_profile": "showcase",
     "column_fit": "spread",
@@ -19,56 +19,53 @@
     },
     "views": [
       {
-        "id": "compose-prompt",
-        "label": "编译上下文",
-        "focus": ["author", "shell", "workbench", "dsh"],
-        "note": "Workbench 是同一 DSH 进程内的插件；文件文本视为不可信数据。"
+        "id": "send-plain",
+        "label": "发送纯文本",
+        "focus": ["author", "shell", "dsh"],
+        "note": "四个写作 Preset 发送原始用户文本，不走 context.compile，不自动拼入资料。"
       },
       {
         "id": "preview-proposal",
         "label": "预览提案",
-        "focus": ["dsh", "kernel", "shell"],
-        "note": "novel_propose 只返回 marker，不写文件。Kernel 在进程内注册，不是外调服务。"
+        "focus": ["dsh", "workbench", "shell"],
+        "note": "writing_propose 只返回 marker，不写文件。Workbench 是同一 DSH 进程内的插件。"
       },
       {
         "id": "author-write",
         "label": "确认写入",
         "focus": ["author", "shell", "manuscript", "workspace"],
-        "note": "作者确认后才走 /manuscript proposal.apply。拆合章改走 workbench。"
+        "note": "作者确认后才走 proposal.apply；拆章 / 合章 / 批量重命名改走 workbench。"
       }
     ]
   },
   "participants": [
     { "id": "author", "type": "external", "label": "作者", "sublabel": "确认写入" },
     { "id": "shell", "type": "frontend", "label": "Shell", "sublabel": "root GUI" },
-    { "id": "workbench", "type": "backend", "label": "Workbench", "sublabel": "同进程插件" },
     { "id": "dsh", "type": "cloud", "label": "DSH Session", "sublabel": "唯一 Agent" },
-    { "id": "kernel", "type": "backend", "label": "Kernel", "sublabel": "同进程插件" },
+    { "id": "workbench", "type": "backend", "label": "Workbench", "sublabel": "writing_propose 工具" },
     { "id": "manuscript", "type": "backend", "label": "Manuscript", "sublabel": "同进程 /manuscript" },
     { "id": "workspace", "type": "database", "label": "作品目录", "sublabel": "replaceIfVersion" }
   ],
   "segments": [
-    { "from": 148, "to": 250, "label": "编译并发送" },
-    { "from": 262, "to": 368, "label": "预览提案" },
-    { "from": 380, "to": 512, "label": "确认写入" }
+    { "from": 148, "to": 240, "label": "发送纯文本" },
+    { "from": 252, "to": 340, "label": "预览提案" },
+    { "from": 372, "to": 512, "label": "确认写入" }
   ],
   "messages": [
     { "id": "author-send", "from": "author", "to": "shell", "y": 168, "label": "发送写作请求", "variant": "emphasis" },
-    { "id": "compile-context", "from": "shell", "to": "workbench", "y": 204, "label": "context.compile" },
-    { "id": "session-prompt", "from": "shell", "to": "dsh", "y": 240, "label": "session.prompt", "variant": "emphasis" },
-    { "id": "novel-propose", "from": "dsh", "to": "kernel", "y": 286, "label": "novel_propose", "variant": "dashed" },
-    { "id": "marker-return", "from": "kernel", "to": "dsh", "y": 318, "label": "proposal marker", "variant": "return" },
-    { "id": "snapshot", "from": "dsh", "to": "shell", "y": 350, "label": "ConversationSnapshot", "variant": "return" },
+    { "id": "session-prompt", "from": "shell", "to": "dsh", "y": 204, "label": "session.prompt（纯文本）", "variant": "emphasis" },
+    { "id": "writing-propose", "from": "dsh", "to": "workbench", "y": 276, "label": "writing_propose V2", "variant": "dashed" },
+    { "id": "marker-return", "from": "workbench", "to": "dsh", "y": 308, "label": "proposal marker", "variant": "return" },
+    { "id": "snapshot", "from": "dsh", "to": "shell", "y": 336, "label": "ConversationSnapshot", "variant": "return" },
     { "id": "confirm-write", "from": "author", "to": "shell", "y": 400, "label": "确认写入", "variant": "emphasis" },
-    { "id": "proposal-apply", "from": "shell", "to": "manuscript", "y": 436, "label": "proposal.apply", "variant": "security" },
-    { "id": "replace-version", "from": "manuscript", "to": "workspace", "y": 468, "label": "replaceIfVersion", "variant": "security" },
+    { "id": "proposal-apply", "from": "shell", "to": "manuscript", "y": 436, "label": "proposal.apply（带版本基线）", "variant": "security" },
+    { "id": "replace-version", "from": "manuscript", "to": "workspace", "y": 468, "label": "createIfAbsent / replaceIfVersion", "variant": "security" },
     { "id": "buffer-updated", "from": "shell", "to": "author", "y": 496, "label": "稿纸已更新", "variant": "return" }
   ],
   "activations": [
     { "participant": "shell", "from": 163, "to": 500, "type": "frontend" },
-    { "participant": "workbench", "from": 199, "to": 216, "type": "backend" },
-    { "participant": "dsh", "from": 235, "to": 357, "type": "cloud" },
-    { "participant": "kernel", "from": 281, "to": 325, "type": "backend" },
+    { "participant": "dsh", "from": 199, "to": 341, "type": "cloud" },
+    { "participant": "workbench", "from": 271, "to": 315, "type": "backend" },
     { "participant": "manuscript", "from": 431, "to": 475, "type": "backend" },
     { "participant": "workspace", "from": 463, "to": 480, "type": "database" }
   ],
@@ -77,7 +74,7 @@
       "dot": "cyan",
       "title": "同进程协作",
       "items": [
-        "Workbench、Kernel、Manuscript 都是这份 DSH Host 里的插件",
+        "Workbench、Manuscript 都是这份 DSH Host 里的插件",
         "泳道分开只为读调用顺序，不表示独立服务",
         "DshChatPort 只投影 SessionFace，不自己跑工具"
       ]
@@ -86,18 +83,18 @@
       "dot": "amber",
       "title": "预览不写盘",
       "items": [
-        "novel_propose 只返回 marker",
+        "writing_propose V2 只返回 marker",
         "作者确认前正文不变",
-        "拆章 / 合章 / 批量重命名改走 workbench proposal"
+        "拆章 / 合章 / 批量重命名走 workbench proposal"
       ]
     },
     {
       "dot": "rose",
       "title": "写入门禁",
       "items": [
-        "正文创建或覆盖走 /manuscript proposal.apply",
-        "replaceIfVersion，冲突时保留编辑 buffer",
-        "Host 忽略 Renderer 提供的 cwd 与模型"
+        "edit / split 带生成时 Host-read 的 targetVersion；merge 加 sourceVersion；renames 每项 version",
+        "create 严格 create-if-absent；basis 不能代替目标基线",
+        "目标变了就 STALE，冲突时保留编辑 buffer"
       ]
     }
   ]
