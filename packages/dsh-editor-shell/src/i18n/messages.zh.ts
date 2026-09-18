@@ -157,6 +157,8 @@ export const zh = {
   'note.proposalStale': '这项操作状态已变化，请重新发起。',
   'note.submitFailed': '提交未能完成，请重试。',
 
+  'mascot.alt': 'DSH Editor 看板娘',
+
   'home.title': '本地作品',
   'home.blankPaper': '空白稿纸',
   'home.intro': '选择本地已有的作品目录继续，或在「文档/dsh-editor」下从空白稿纸新建。',
@@ -847,7 +849,6 @@ export const zh = {
   'about.devMode': '开发模式',
   'about.browserHint': '当前在浏览器开发模式，无法检查更新；请在桌面客户端中打开此窗口。',
   'about.macHint': '应用内下载优先使用 GitHub 镜像，失败时自动改为直接连接；macOS 下载后需手动替换「应用程序」中的应用。',
-  'about.proxyHint': '更新检查通过应用内置通道访问 GitHub，编辑界面不直接联网。',
   'about.checking': '检查中…',
   'about.check': '检查更新',
   'about.notChecked': '尚未检查更新。',
@@ -868,6 +869,8 @@ export const zh = {
   'about.downloadFailed': '应用内下载失败：\n{message}',
   'about.downloadUpdate': '下载更新（{size} MB）',
   'about.goDownload': '前往下载',
+  'about.manualDownloadOnly': '当前平台没有可自动安装的附件，请从发布页手动下载。',
+  'about.missingIntegrity': '发布元数据缺少可信校验信息，已停止自动安装。请从发布页手动下载。',
   'about.toast': '发现新版本 {version}',
   'about.viewDetails': '查看详情',
   'about.dismissToast': '关闭更新提示',

@@ -18,10 +18,10 @@ contextBridge.exposeInMainWorld('dshWindow', {
   checkForUpdate: () => ipcRenderer.invoke('dsh-window:check-update'),
   // 启动时的后台更新检查:主进程缓存结果,渲染端挂载后拉取,仅在发现新版本时提示。
   getStartupUpdate: () => ipcRenderer.invoke('dsh-window:startup-update'),
-  // 一键更新:主进程下载(镜像优先)并负责安装/重启;进度经事件回推。
-  downloadUpdate: (asset) => ipcRenderer.invoke('dsh-window:download-update', asset),
+  // 一键更新:渲染端只传主进程签发的 updateId,不能指定 URL、文件名或安装路径。
+  downloadUpdate: (updateId) => ipcRenderer.invoke('dsh-window:download-update', { updateId }),
   cancelUpdateDownload: () => ipcRenderer.invoke('dsh-window:cancel-update-download'),
-  installUpdate: (path) => ipcRenderer.invoke('dsh-window:install-update', { path }),
+  installUpdate: (updateId) => ipcRenderer.invoke('dsh-window:install-update', { updateId }),
   onUpdateProgress: (listener) => {
     const handler = (_event, progress) => listener(progress)
     ipcRenderer.on('dsh-window:update-progress', handler)

@@ -12,6 +12,16 @@ describe('chrome type scale', () => {
 })
 
 describe('paper pane alignment', () => {
+  it('warms the whole light theme and puts accent on selected settings chrome', () => {
+    expect(redesignedStyles).toContain('--color-background: #f2eee5')
+    expect(redesignedStyles).toContain('--color-panel-solid: #f7f3eb')
+    expect(redesignedStyles).toContain('--paper-fill: var(--color-background)')
+    expect(redesignedStyles).toMatch(/\.radix-themes \.editor \{[^}]*background: var\(--paper-fill\)/)
+    expect(redesignedStyles).toMatch(/\.shell \.editor-cell \{[^}]*background: var\(--paper-fill\)/)
+    expect(redesignedStyles).toMatch(/\.settings-nav \.settings-tab\[data-state="active"\][^}]*background: var\(--accent-a3\)/)
+    expect(redesignedStyles).toMatch(/\.shell > \.chrome \{[^}]*box-shadow: inset 0 -2px 0 var\(--accent-a5\)/)
+  })
+
   it('keeps the CodeMirror scroller top-start so a short chapter does not float', () => {
     expect(redesignedStyles).toContain('.paper-input .cm-scroller')
     expect(redesignedStyles).toContain('align-items: flex-start !important')
@@ -33,6 +43,18 @@ describe('paper pane alignment', () => {
     expect(redesignedStyles).toMatch(/\.shell \.tree \.tree-row \{[^}]*padding-inline: 0/)
     expect(redesignedStyles).toContain('.shell .tree .tree-marker')
     expect(redesignedStyles).toMatch(/\.shell \.tree \.tree-marker \{[^}]*display: inline-flex/)
+  })
+
+  it('keeps the two home entry cards on one stretched row', () => {
+    expect(redesignedStyles).toContain('.radix-themes .home-command-bar')
+    expect(redesignedStyles).toMatch(/\.home-command-bar \{[^}]*display: grid/)
+    expect(redesignedStyles).toMatch(/\.home-entry-card \{[^}]*height: 100%/)
+  })
+
+  it('left-aligns home recent-work rows instead of centering Radix button contents', () => {
+    expect(redesignedStyles).toContain('.radix-themes .home-recent .workspace-row .tree-row')
+    expect(redesignedStyles).toMatch(/\.home-recent \.workspace-row \.tree-row \{[^}]*justify-content: flex-start/)
+    expect(redesignedStyles).toMatch(/\.home-recent \.workspace-row \.tree-row \{[^}]*text-align: start/)
   })
 
   it('collapses the assistant panel to zero width when it is not in the grid', () => {

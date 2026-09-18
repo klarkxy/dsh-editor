@@ -7,7 +7,7 @@ import { t } from '../i18n/index.ts'
  * 浏览器/dev:web 里不存在,返回 null 不渲染。
  */
 /** 主进程代理 GitHub Releases 的更新检查结果:status/当前版本/最新版本信息或错误。 */
-export type UpdateAsset = { name: string; url: string; size: number }
+export type UpdateAsset = { id: string; name: string; size: number }
 export type UpdateCheckResult = {
   status: 'latest' | 'update-available' | 'error'
   currentVersion: string
@@ -15,6 +15,7 @@ export type UpdateCheckResult = {
     version: string; tag: string; name: string; publishedAt: string; url: string; body: string
     /** 当前平台对应的安装包;为 null 时只能走浏览器「前往下载」。 */
     asset?: UpdateAsset | null
+    installBlockedReason?: 'missing-integrity' | 'no-matching-asset'
   }
   error?: string
 }
@@ -33,11 +34,11 @@ type WindowBridge = {
   checkForUpdate?(): Promise<UpdateCheckResult>
   /** 启动时主进程在后台完成的更新检查;渲染端挂载后拉取,仅 update-available 时提示。 */
   getStartupUpdate?(): Promise<UpdateCheckResult>
-  /** 一键下载更新(镜像优先、直连兜底),完成后返回本地文件路径;失败抛出汇总错误。 */
-  downloadUpdate?(asset: UpdateAsset): Promise<{ path: string }>
+  /** 按主进程签发的 updateId 下载;渲染端不能指定 URL 或落盘路径。 */
+  downloadUpdate?(updateId: string): Promise<{ updateId: string }>
   cancelUpdateDownload?(): Promise<void>
-  /** 安装已下载的更新:Windows 退出并替换/运行安装器,mac 仅打开所在文件夹。 */
-  installUpdate?(path: string): Promise<'restarting' | 'revealed'>
+  /** 安装已下载并复验过的更新:Windows 退出并替换/运行安装器,mac 仅打开所在文件夹。 */
+  installUpdate?(updateId: string): Promise<'restarting' | 'revealed'>
   /** 订阅下载进度;返回退订函数。 */
   onUpdateProgress?(listener: (progress: UpdateProgress) => void): () => void
   onMaximizedChange?(listener: (maximized: boolean) => void): () => void

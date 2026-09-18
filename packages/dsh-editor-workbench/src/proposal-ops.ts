@@ -27,7 +27,7 @@ import type { OperationRecovery } from './contracts.ts'
  *     kind 直接抛 INVALID（INVALID 不是 INVALID_PATH 命名冲突）。
  */
 import path from 'node:path'
-import { createTextFile, FileOpError, listDirStrict, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
+import { createTextFile, FileOpError, findUniqueIndex, listDirStrict, readTextFile, writeTextFile, type WorkspaceFileContext } from 'dsh-manuscript/host-api'
 import { LifecycleError, archiveDocument, moveDocument, moveManuscriptDocument, renameDocument, type LifecycleAccess } from './lifecycle.ts'
 import { mkdirSafe as mkdirSafeWalk } from './kit/entries.ts'
 
@@ -135,17 +135,7 @@ function isVisibleTextRelative(value: string): boolean {
 }
 
 function findAnchor(text: string, anchor: string): number {
-  if (!anchor) return -1
-  let count = 0
-  let index = text.indexOf(anchor)
-  let first = -1
-  while (index >= 0) {
-    if (count === 0) first = index
-    count += 1
-    if (count > 1) return -2
-    index = text.indexOf(anchor, index + anchor.length)
-  }
-  return first
+  return findUniqueIndex(text, anchor)
 }
 
 function assertGenerationBaseline(pathValue: string, actual: string, expected: string | undefined): void {

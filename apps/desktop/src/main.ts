@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import { readTrustedClipboardText, writeTrustedClipboardText } from './clipboard.js'
+import { assertTrustedIpcSender } from './ipc-trust.js'
 import { isAllowedExternalUrl } from './navigation.js'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
@@ -8,11 +9,14 @@ import { fileURLToPath } from 'node:url'
 import { deployProfile } from './profile.js'
 import { materializePackagedRuntime } from './runtime-cache.js'
 import { DshSupervisor } from './supervisor.js'
-import { checkLatest, selectAsset, type UpdateCheckResult } from './update-checker.js'
+import { checkLatest } from './update-checker.js'
 import { cancelUpdateDownload, downloadUpdate, installUpdate } from './update-download.js'
+import { presentUpdateCheck, UpdateOfferStore, type PublicUpdateCheckResult } from './update-session.js'
 import { claimPrimaryInstance, createDesktopLifecycle, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
+import { DESKTOP_PRODUCT_NAME, readDesktopVersion } from './app-identity.js'
 
 const desktopRoot = fileURLToPath(new URL('../', import.meta.url))
+const desktopVersion = readDesktopVersion(readFileSync(join(desktopRoot, 'package.json'), 'utf8'))
 
 const isolatedUserData = process.env.DSH_DESKTOP_USER_DATA_DIR?.trim()
   || (!app.isPackaged && process.env.DSH_HOME?.trim()
@@ -98,21 +102,27 @@ const lifecycle = createDesktopLifecycle({
 
 const isPrimary = claimPrimaryInstance(app as unknown as PrimaryApp, lifecycle)
 
-/* 检查结果补上当前平台/安装形态对应的附件,渲染端才知道能不能一键下载。
- * 便携单文件由 PORTABLE_EXECUTABLE_FILE 标识(进程本体跑在临时解压目录)。 */
-function withSelectedAsset(result: UpdateCheckResult): UpdateCheckResult {
-  if (!result.latest) return result
-  const portable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE)
-  return { ...result, latest: { ...result.latest, asset: selectAsset(result.latest.assets, process.platform, portable) } }
+const updateStore = new UpdateOfferStore()
+
+/* 检查结果只把主进程已验证的附件公开给渲染端。便携单文件由
+ * PORTABLE_EXECUTABLE_FILE 标识(进程本体跑在临时解压目录)。缺 digest 时
+ * 不提供一键下载,避免静默降级成只比大小。 */
+function presentCheckedUpdate(result: Awaited<ReturnType<typeof checkLatest>>): Promise<PublicUpdateCheckResult> {
+  return presentUpdateCheck(result, {
+    platform: process.platform,
+    portable: Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
+    store: updateStore,
+    fetchImpl: (input, init) => globalThis.fetch(input, init),
+  })
 }
 
 /* 启动时后台检查更新:与窗口创建并行,慢网络不阻塞启动。渲染端挂载后通过
  * dsh-window:startup-update 拉取缓存的 Promise——拉取模型没有推送竞态,
  * 晚挂载的窗口也能拿到同一份结果。 */
-let startupUpdate: Promise<UpdateCheckResult> | undefined
+let startupUpdate: Promise<PublicUpdateCheckResult> | undefined
 if (isPrimary) {
   void app.whenReady().then(() => {
-    startupUpdate ??= checkLatest(app.getVersion()).then(withSelectedAsset)
+    startupUpdate ??= checkLatest(desktopVersion).then(presentCheckedUpdate)
   })
 }
 
@@ -132,7 +142,7 @@ ipcMain.on('dsh-window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
 })
 
-function clipboardTrust(event: {
+function senderTrust(event: {
   sender: { isDestroyed?: () => boolean; getURL?: () => string }
   senderFrame?: { url?: string; parent?: unknown } | null
 }) {
@@ -151,34 +161,59 @@ function clipboardTrust(event: {
 // Startup error pages are sandboxed data: documents. A custom-scheme <a>
 // never reaches will-navigate, so retry goes through the preload bridge.
 ipcMain.on('dsh-window:retry', (event) => {
-  const trust = clipboardTrust(event)
+  const trust = senderTrust(event)
   if (!trust.owned || trust.destroyed || !trust.isMainFrame) return
   if (!trust.url.includes('data-dsh-startup-retry')) return
   void lifecycle.retry()
 })
 
 ipcMain.handle('dsh-window:clipboard-read-text', (event) => {
-  return readTrustedClipboardText(clipboard, clipboardTrust(event))
+  return readTrustedClipboardText(clipboard, senderTrust(event))
 })
 ipcMain.handle('dsh-window:clipboard-write-text', (event, text) => {
-  writeTrustedClipboardText(clipboard, clipboardTrust(event), text)
+  writeTrustedClipboardText(clipboard, senderTrust(event), text)
 })
+
+function updateIdFrom(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return ''
+  const id = (payload as { updateId?: unknown }).updateId
+  return typeof id === 'string' ? id : ''
+}
 
 // "About / update" page: the renderer is locked behind a strict CSP that
 // blocks api.github.com, so these calls run through the main process instead.
-ipcMain.handle('dsh-window:get-app-info', () => ({
-  name: app.getName(),
-  version: app.getVersion(),
-  platform: process.platform,
-  portable: Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
-}))
-ipcMain.handle('dsh-window:check-update', () => checkLatest(app.getVersion()).then(withSelectedAsset))
+// Sender 校验不能代替资产白名单:被注入的主页面也拥有合法 sender。
+ipcMain.handle('dsh-window:get-app-info', (event) => {
+  assertTrustedIpcSender(senderTrust(event), 'app info')
+  return {
+    name: DESKTOP_PRODUCT_NAME,
+    version: desktopVersion,
+    platform: process.platform,
+    portable: Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
+  }
+})
+ipcMain.handle('dsh-window:check-update', (event) => {
+  assertTrustedIpcSender(senderTrust(event), 'update')
+  return checkLatest(desktopVersion).then(presentCheckedUpdate)
+})
 // 启动检查走同一轮询;渲染端拉缓存结果,仅 update-available 时提示,其余静默。
-ipcMain.handle('dsh-window:startup-update', () => startupUpdate ?? checkLatest(app.getVersion()).then(withSelectedAsset))
-// 一键下载/安装:镜像优先、直连兜底,进度经 dsh-window:update-progress 推给发起方。
-ipcMain.handle('dsh-window:download-update', (event, asset) => downloadUpdate(asset, event.sender))
-ipcMain.handle('dsh-window:cancel-update-download', () => cancelUpdateDownload())
-ipcMain.handle('dsh-window:install-update', (_event, payload: { path?: string }) => installUpdate(String(payload?.path ?? '')))
+ipcMain.handle('dsh-window:startup-update', (event) => {
+  assertTrustedIpcSender(senderTrust(event), 'update')
+  return startupUpdate ?? checkLatest(desktopVersion).then(presentCheckedUpdate)
+})
+// 一键下载/安装:主进程按已验证的 updateId 下载并安装,渲染端不能指定 URL 或路径。
+ipcMain.handle('dsh-window:download-update', (event, payload) => {
+  assertTrustedIpcSender(senderTrust(event), 'update')
+  return downloadUpdate(updateIdFrom(payload), event.sender, updateStore)
+})
+ipcMain.handle('dsh-window:cancel-update-download', (event) => {
+  assertTrustedIpcSender(senderTrust(event), 'update')
+  cancelUpdateDownload()
+})
+ipcMain.handle('dsh-window:install-update', (event, payload) => {
+  assertTrustedIpcSender(senderTrust(event), 'update')
+  return installUpdate(updateIdFrom(payload), updateStore)
+})
 
 // Open marketplace and help links in the OS browser; in-app popups stay blocked.
 ipcMain.on('dsh-window:open-external', (_event, url) => {

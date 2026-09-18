@@ -21,6 +21,8 @@ export const ACCENT_TO_RADIX: Record<AccentValue, ThemeProps['accentColor']> = {
   violet: 'violet',
 }
 
+export const SHELL_GRAY_COLOR: ThemeProps['grayColor'] = 'sand'
+
 export function ShellTheme(props: {
   appearance: ThemeValue
   accent: AccentValue
@@ -31,7 +33,7 @@ export function ShellTheme(props: {
       className="shell-theme"
       appearance={props.appearance}
       accentColor={ACCENT_TO_RADIX[props.accent]}
-      grayColor="auto"
+      grayColor={SHELL_GRAY_COLOR}
       radius="medium"
       scaling="100%"
       panelBackground="solid"

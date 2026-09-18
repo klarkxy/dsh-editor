@@ -14,6 +14,14 @@ describe('proposal workflow', () => {
     await expect(context.fs.readText(await context.fs.resolve('正文/001.md'))).resolves.toContain('新句。')
   })
 
+  it('rejects overlapping originals that would otherwise look unique', async () => {
+    const context = createMemoryContext({ '正文/001.md': '她哈哈哈地笑了。\n' })
+    const proposal = parseProposal({ kind: 'edit', path: '正文/001.md', oldText: '哈哈', newText: '轻笑', summary: '改语气' })
+    await expect(prepareProposal(context, proposal)).rejects.toMatchObject({ code: 'AMBIGUOUS' })
+    await expect(applyProposal(context, proposal, (await readTextFile(context, '正文/001.md')).version)).rejects.toMatchObject({ code: 'AMBIGUOUS' })
+    await expect(readTextFile(context, '正文/001.md')).resolves.toMatchObject({ text: '她哈哈哈地笑了。\n' })
+  })
+
   it('rejects ambiguous and stale edits', async () => {
     const context = createMemoryContext({ '正文/001.md': '重复 重复' })
     const ambiguous = parseProposal({ kind: 'edit', path: '正文/001.md', oldText: '重复', newText: '唯一', summary: '修改' })

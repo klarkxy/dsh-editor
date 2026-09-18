@@ -227,6 +227,11 @@ describe('prepareSplit / applySplit', () => {
     await expect(prepareSplit(filesContext(), splitProposal())).rejects.toMatchObject({ code: 'AMBIGUOUS' })
   })
 
+  it('rejects an overlapping split anchor instead of taking the first match', async () => {
+    await writeText('正文/002.md', '她哈哈哈地笑了。\n后半章')
+    await expect(prepareSplit(filesContext(), splitProposal({ anchor: '哈哈' }))).rejects.toMatchObject({ code: 'AMBIGUOUS' })
+  })
+
   it('rejects when the destination path already exists', async () => {
     await writeText('正文/002.md', '前\n## 第二幕\n后')
     await writeText('正文/002b.md', '已存在')

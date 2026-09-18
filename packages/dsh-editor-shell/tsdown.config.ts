@@ -46,7 +46,7 @@ export default defineConfig([
     target: 'es2022',
     sourcemap: true,
     hash: false,
-    loader: { '.css': 'text' },
+    loader: { '.css': 'text', '.webp': 'dataurl' },
     plugins: [cssAsTextPlugin],
     /* react-markdown 依赖链(unified → vfile/min*)会在模块加载期 require
        node:process/node:path/node:url;DSH 插件运行时的模块表不提供它们,

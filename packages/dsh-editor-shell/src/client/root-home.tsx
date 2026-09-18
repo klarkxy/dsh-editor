@@ -5,7 +5,8 @@ import type { WorkspaceOpenState } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import { formatRecentTime, homeStageCopy, recentWorkPath } from '../home-stage.ts'
 import { PaperStage } from './components.tsx'
-import { FolderIcon, NewDocIcon } from './icons.tsx'
+import { AppBrandMark, FolderIcon, NewDocIcon } from './icons.tsx'
+import { AppMascot } from './mascot.tsx'
 import { CommandPaletteTrigger } from './command-palette.tsx'
 import { SettingsTrigger, type SettingsTab } from './settings.tsx'
 import { titleBarDoubleClick, WindowControls } from './window-controls.tsx'
@@ -29,22 +30,7 @@ function HomeChrome(props: {
       onDoubleClick={titleBarDoubleClick}>
       <Flex className="chrome-main" align="center" gap="3" minWidth="0" flexGrow="1">
         <Flex className="brand-lockup" align="center" gap="2" flexShrink="0">
-        <Flex
-          className="brand-mark"
-          aria-hidden="true"
-          align="center"
-          justify="center"
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 'var(--radius-2)',
-            background: 'var(--accent-9)',
-            color: 'var(--accent-contrast)',
-            fontWeight: 700,
-            fontSize: 'var(--font-size-1)',
-          }}>
-          D
-        </Flex>
+        <AppBrandMark size={22} />
         <Text weight="bold" size="2">
           DSH Editor
         </Text>
@@ -124,7 +110,7 @@ export function HomeScreen(props: {
         extensionsDock={extensionsDock}
         onOpenPalette={props.onOpenPalette}
         onOpenSettings={props.onOpenSettings} />
-      <PaperStage label={t('home.blankPaper')}>
+      <PaperStage label={t('home.blankPaper')} companion={<AppMascot size="home" />}>
         <Text className="home-hint" size="2" color="gray">
           {homeCopy.intro}
         </Text>
@@ -133,9 +119,8 @@ export function HomeScreen(props: {
           role="group"
           aria-label={t('home.commands')}
           gap="3"
-          wrap="wrap"
           width="100%">
-          <Box flexGrow="1" flexBasis="16rem" minWidth="0">
+          <Box minWidth="0">
             <Card asChild size="2">
               <m.button
                 className="home-entry-card"
@@ -143,9 +128,8 @@ export function HomeScreen(props: {
                 aria-label={t('home.openWork')}
                 disabled={props.openingWorkspace || props.newProjectBusy}
                 onClick={() => void props.onOpenWork()}
-                style={{ width: '100%', textAlign: 'left' }}
                 {...props.homeCardOpen}>
-                <Flex align="center" gap="3">
+                <Flex align="start" gap="3">
                   <Flex
                     className="home-entry-icon"
                     aria-hidden="true"
@@ -172,7 +156,7 @@ export function HomeScreen(props: {
               </m.button>
             </Card>
           </Box>
-          <Box flexGrow="1" flexBasis="16rem" minWidth="0">
+          <Box minWidth="0">
             <Card asChild size="2">
               <m.button
                 className="home-entry-card"
@@ -180,9 +164,8 @@ export function HomeScreen(props: {
                 aria-label={t('home.new')}
                 disabled={props.openingWorkspace || props.newProjectBusy}
                 onClick={() => void props.onNewProject()}
-                style={{ width: '100%', textAlign: 'left' }}
                 {...props.homeCardNew}>
-                <Flex align="center" gap="3">
+                <Flex align="start" gap="3">
                   <Flex
                     className="home-entry-icon"
                     aria-hidden="true"
@@ -278,7 +261,7 @@ export function HomeScreen(props: {
                             disabled={props.openingWorkspace}
                             style={{ width: '100%', textAlign: 'left', background: 'transparent' }}
                             onClick={() => void props.onOpenWorkspace(workspace)}>
-                            <Flex direction="column" align="start" gap="1">
+                            <Flex direction="column" align="start" gap="1" width="100%">
                               <Text weight="medium" size="2">
                                 {workspace.title || workspace.path}
                               </Text>

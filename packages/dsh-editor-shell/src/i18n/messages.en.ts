@@ -159,6 +159,8 @@ export const en: { [K in keyof typeof zh]: string } = {
   'note.proposalStale': 'This action is out of date. Start it again.',
   'note.submitFailed': 'Submit did not finish. Try again.',
 
+  'mascot.alt': 'DSH Editor mascot',
+
   'home.title': 'Local works',
   'home.blankPaper': 'Blank paper',
   'home.intro': 'Open an existing local work folder, or start from blank paper under Documents/dsh-editor.',
@@ -849,7 +851,6 @@ export const en: { [K in keyof typeof zh]: string } = {
   'about.devMode': 'Development mode',
   'about.browserHint': 'Update checks are unavailable in browser development mode. Open this window in the desktop app.',
   'about.macHint': 'In-app downloads try the GitHub mirror first and switch to a direct connection on failure. On macOS, replace the app in Applications after downloading.',
-  'about.proxyHint': 'Update checks reach GitHub through the app’s built-in channel; the editor itself does not access the network directly.',
   'about.checking': 'Checking…',
   'about.check': 'Check for updates',
   'about.notChecked': 'Updates have not been checked yet.',
@@ -870,6 +871,8 @@ export const en: { [K in keyof typeof zh]: string } = {
   'about.downloadFailed': 'In-app download failed:\n{message}',
   'about.downloadUpdate': 'Download update ({size} MB)',
   'about.goDownload': 'Download in browser',
+  'about.manualDownloadOnly': 'No automatically installable package is available for this platform. Download it from the release page.',
+  'about.missingIntegrity': 'This release is missing trusted checksum metadata, so automatic install is disabled. Download it from the release page.',
   'about.toast': 'Update available: {version}',
   'about.viewDetails': 'View details',
   'about.dismissToast': 'Dismiss update notice',

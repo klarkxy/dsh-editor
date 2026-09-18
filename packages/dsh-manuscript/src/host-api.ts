@@ -92,3 +92,8 @@ export {
   type EditProposal,
   type Proposal,
 } from './rpc/proposal.ts'
+
+export {
+  countOccurrences,
+  findUniqueIndex,
+} from './rpc/unique-text.ts'

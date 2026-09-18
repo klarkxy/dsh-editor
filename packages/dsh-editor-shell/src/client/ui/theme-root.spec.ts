@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
-import { ACCENT_TO_RADIX, radixThemesStyles, rewriteRadixThemesCss } from './theme-root.tsx'
+import { ACCENT_TO_RADIX, SHELL_GRAY_COLOR, radixThemesStyles, rewriteRadixThemesCss } from './theme-root.tsx'
 
 const require = createRequire(import.meta.url)
 const publishedCss = readFileSync(require.resolve('@radix-ui/themes/styles.css'), 'utf8')
@@ -26,6 +26,10 @@ describe('radix themes css rewrite', () => {
     expect(lines.some((line) => line.startsWith(':root,') || line.startsWith(':root {'))).toBe(false)
     expect(rewritten).toContain('.rt-BaseButton')
     expect(rewritten).toContain(':root:where(:has(.radix-themes[data-is-root-theme=')
+  })
+
+  it('anchors neutrals on sand so accents sit on warm chrome', () => {
+    expect(SHELL_GRAY_COLOR).toBe('sand')
   })
 
   it('maps stored accents onto Radix accent colors', () => {

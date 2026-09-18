@@ -6,11 +6,12 @@ import { createServer } from 'node:net'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { localArtifactName } from '../scripts/release-artifacts.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack', 'portable-e2e')
 const desktopVersion = JSON.parse(await readFile(resolve(root, 'apps/desktop/package.json'), 'utf8')).version
-const portable = resolve(root, '.pack', 'desktop', `DSH Editor-${desktopVersion}-win-x64.exe`)
+const portable = resolve(root, '.pack', 'desktop', localArtifactName('win32-portable', desktopVersion))
 const home = resolve(root, '.dev', 'portable-home')
 const portableStat = await stat(portable)
 await rm(home, { recursive: true, force: true })

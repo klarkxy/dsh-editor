@@ -1,13 +1,23 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Callout, Card, DataList, Flex, Heading, Progress, Text } from '@radix-ui/themes'
 import { windowBridge } from './window-controls.tsx'
+import { AppMascot } from './mascot.tsx'
 import { ActivityDots, ActivityText, SuccessMark } from './ui/index.ts'
 import { intlLocale, t, useLocale } from '../i18n/index.ts'
 
 type UpdateStatus = 'latest' | 'update-available' | 'error'
 type AppInfo = { name: string; version: string; platform: string; portable: boolean }
-type Asset = { name: string; url: string; size: number }
-type ReleaseInfo = { version: string; tag: string; name: string; publishedAt: string; url: string; body: string; asset?: Asset | null }
+type Asset = { id: string; name: string; size: number }
+type ReleaseInfo = {
+  version: string
+  tag: string
+  name: string
+  publishedAt: string
+  url: string
+  body: string
+  asset?: Asset | null
+  installBlockedReason?: 'missing-integrity' | 'no-matching-asset'
+}
 type CheckResult = { status: UpdateStatus; currentVersion: string; latest?: ReleaseInfo; error?: string }
 
 type CheckState =
@@ -19,7 +29,7 @@ type CheckState =
 type DownloadState =
   | { status: 'idle' }
   | { status: 'downloading'; received: number; total: number; mirror: string; verifying: boolean }
-  | { status: 'done'; path: string; revealed: boolean }
+  | { status: 'done'; updateId: string; revealed: boolean }
   | { status: 'error'; message: string }
 
 const BODY_PREVIEW_CHARS = 500
@@ -134,9 +144,9 @@ export function AboutSettingsSection(props: {
     const token = ++liveToken.current
     setDownload({ status: 'downloading', received: 0, total: asset.size, mirror: '', verifying: false })
     try {
-      const result = await downloadUpdate(asset)
+      const result = await downloadUpdate(asset.id)
       if (liveToken.current !== token) return
-      setDownload({ status: 'done', path: result.path, revealed: false })
+      setDownload({ status: 'done', updateId: result.updateId, revealed: false })
     } catch (error) {
       if (liveToken.current !== token) return
       const message = cleanIpcError(error)
@@ -149,11 +159,11 @@ export function AboutSettingsSection(props: {
     void bridge?.cancelUpdateDownload?.()
   }
 
-  const installDownloaded = async (path: string) => {
+  const installDownloaded = async (updateId: string) => {
     const install = bridge?.installUpdate
     if (!install) return
     try {
-      const result = await install(path)
+      const result = await install(updateId)
       // 'restarting' 时应用随即退出,无需更新状态;'revealed' 展示手动替换说明。
       if (result === 'revealed') {
         setDownload((prev) => (prev.status === 'done' ? { ...prev, revealed: true } : prev))
@@ -174,54 +184,55 @@ export function AboutSettingsSection(props: {
 
   return (
     <section className="about-page" aria-label={t('settings.about')}>
-      <Flex className="about-header" direction="column" gap="2">
-        <Heading as="h3" size="3" className="about-title">
-          {t('about.title')}
-        </Heading>
-        <DataList.Root size="2">
-          <DataList.Item align="center">
-            <DataList.Label>
-              {t('settings.about')}
-            </DataList.Label>
-            <DataList.Value>
-              <Text weight="medium" className="about-version">
-                {versionLabel}
-              </Text>
-            </DataList.Value>
-          </DataList.Item>
-        </DataList.Root>
-        {!hasBridge ? <Text size="1" color="gray" className="about-note">
-          {t('about.browserHint')}
+      <Flex className="about-copy" direction="column" gap="4" minWidth="0">
+        <Flex className="about-header" direction="column" gap="2">
+          <Heading as="h3" size="3" className="about-title">
+            {t('about.title')}
+          </Heading>
+          <DataList.Root size="2">
+            <DataList.Item align="center">
+              <DataList.Label>
+                {t('settings.about')}
+              </DataList.Label>
+              <DataList.Value>
+                <Text weight="medium" className="about-version">
+                  {versionLabel}
+                </Text>
+              </DataList.Value>
+            </DataList.Item>
+          </DataList.Root>
+          {!hasBridge ? <Text size="1" color="gray" className="about-note">
+            {t('about.browserHint')}
+          </Text> : null}
+        </Flex>
+        <div className="about-status">
+          {renderStatus(state)}
+        </div>
+        {renderResultBody(state, download, appInfo, {
+          onOpen: onOpenDownload,
+          onDownload: (asset) => void startDownload(asset),
+          onCancel: cancelDownload,
+          onInstall: (updateId) => void installDownloaded(updateId),
+        })}
+        {state.status === 'ready' && state.result.status === 'update-available' ? <Text size="1" color="gray" className="about-note">
+          {t('about.macHint')}
         </Text> : null}
+        <Flex className="about-actions" gap="2" wrap="wrap">
+          <Button
+            type="button"
+            variant="soft"
+            color="gray"
+            className="about-button"
+            disabled={!canCheck || state.status === 'loading'}
+            onClick={() => void runCheck()}>
+            {state.status === 'loading' ? <Fragment>
+              <ActivityDots />
+              {t('about.checking')}
+            </Fragment> : t('about.check')}
+          </Button>
+        </Flex>
       </Flex>
-      <div className="about-status">
-        {renderStatus(state)}
-      </div>
-      {renderResultBody(state, download, appInfo, {
-        onOpen: onOpenDownload,
-        onDownload: (asset) => void startDownload(asset),
-        onCancel: cancelDownload,
-        onInstall: (path) => void installDownloaded(path),
-      })}
-      <Text size="1" color="gray" className="about-note">
-        {state.status === 'ready' && state.result.status === 'update-available'
-          ? t('about.macHint')
-          : t('about.proxyHint')}
-      </Text>
-      <Flex className="about-actions" gap="2" wrap="wrap">
-        <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          className="about-button"
-          disabled={!canCheck || state.status === 'loading'}
-          onClick={() => void runCheck()}>
-          {state.status === 'loading' ? <Fragment>
-            <ActivityDots />
-            {t('about.checking')}
-          </Fragment> : t('about.check')}
-        </Button>
-      </Flex>
+      <AppMascot size="about" />
     </section>
   );
 }
@@ -273,7 +284,7 @@ interface ResultBodyHandlers {
   onOpen(url: string): void
   onDownload(asset: Asset): void
   onCancel(): void
-  onInstall(path: string): void
+  onInstall(updateId: string): void
 }
 
 function installButtonLabel(appInfo: AppInfo | null): string {
@@ -369,7 +380,7 @@ function renderDownloadArea(
             type="button"
             variant="solid"
             className="about-button about-button-primary"
-            onClick={() => handlers.onInstall(download.path)}>
+            onClick={() => handlers.onInstall(download.updateId)}>
             {installButtonLabel(appInfo)}
           </Button>
         </Flex> : null}
@@ -385,6 +396,15 @@ function renderDownloadArea(
         </Callout.Text>
       </Callout.Root>
         : null}
+      {!asset && release.installBlockedReason === 'missing-integrity'
+        ? <Text size="1" color="gray" className="about-note">
+          {t('about.missingIntegrity')}
+        </Text>
+        : !asset
+          ? <Text size="1" color="gray" className="about-note">
+            {t('about.manualDownloadOnly')}
+          </Text>
+          : null}
       <Flex className="about-actions" gap="2" wrap="wrap">
         {asset
           ? <Button

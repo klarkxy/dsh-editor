@@ -122,7 +122,7 @@ export function SettingsGeneralSection(props: {
               type="button"
               size="1"
               variant={theme === option.value ? 'soft' : 'ghost'}
-              color="gray"
+              color={theme === option.value ? undefined : 'gray'}
               className={theme === option.value ? 'active' : ''}
               aria-pressed={theme === option.value}
               onClick={() => setTheme(option.value)}>

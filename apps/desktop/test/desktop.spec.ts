@@ -236,15 +236,21 @@ describe('desktop branding assets', () => {
   it('keeps the source icon, window icon, and Windows package icon wired together', async () => {
     const repo = join(import.meta.dirname, '..', '..', '..')
     const build = join(repo, 'apps', 'desktop', 'build')
-    const [svg, png, ico, main, builder, afterPack] = await Promise.all([
+    const [svg, sourcePng, png, ico, main, preload, builder, afterPack] = await Promise.all([
       readFile(join(build, 'icon.svg'), 'utf8'),
+      readFile(join(build, 'icon-source.png')),
       readFile(join(build, 'icon.png')),
       readFile(join(build, 'icon.ico')),
       readFile(join(repo, 'apps', 'desktop', 'src', 'main.ts'), 'utf8'),
+      readFile(join(repo, 'apps', 'desktop', 'preload.cjs'), 'utf8'),
       readFile(join(repo, 'apps', 'desktop', 'electron-builder.yml'), 'utf8'),
       readFile(join(repo, 'scripts', 'after-pack-desktop.cjs'), 'utf8'),
     ])
     expect(svg).toContain('<title>DSH Editor</title>')
+    expect(svg).toContain('icon-source.png')
+    expect(sourcePng.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
+    expect(sourcePng.readUInt32BE(16)).toBe(1024)
+    expect(sourcePng.readUInt32BE(20)).toBe(1024)
     expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
     expect(png.readUInt32BE(16)).toBe(1024)
     expect(png.readUInt32BE(20)).toBe(1024)
@@ -265,7 +271,16 @@ describe('desktop branding assets', () => {
     // Startup check: same round-trip kicked off in the background at launch,
     // cached for the renderer to pull once its UI is up.
     expect(main).toContain("'dsh-window:startup-update'")
-    expect(main).toContain('checkLatest(app.getVersion())')
+    expect(main).toContain('checkLatest(desktopVersion)')
+    expect(main).toContain('readDesktopVersion')
+    expect(main).not.toContain('version: app.getVersion()')
+    expect(main).toContain('assertTrustedIpcSender')
+    expect(main).toContain('updateIdFrom(payload)')
+    expect(main).not.toContain('downloadUpdate(asset, event.sender)')
+    expect(main).not.toContain('installUpdate(String(payload?.path')
+    expect(preload).toContain("invoke('dsh-window:download-update', { updateId })")
+    expect(preload).toContain("invoke('dsh-window:install-update', { updateId })")
+    expect(preload).not.toContain('downloadUpdate: (asset)')
     expect(main).toContain('timeoutMs: 120_000')
     expect(main).toContain("join(process.env.DSH_HOME.trim(), 'electron-user-data')")
     expect(main).toContain("app.setName('dsh-editor-dev')")

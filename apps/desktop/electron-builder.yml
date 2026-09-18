@@ -45,6 +45,8 @@ win:
       arch:
         - x64
 portable:
+  # useZip only packs the payload; the published artifact is still an EXE.
+  # In-app update selection and verify-desktop-package both consume that EXE name.
   artifactName: "${productName}-${version}-win-x64.${ext}"
   useZip: true
 nsis:

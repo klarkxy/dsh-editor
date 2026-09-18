@@ -7,6 +7,7 @@ import { completePatch, parsePatchRequest } from './rpc/patch.ts'
 import { parseAuthorPreferences, parseChapterContext } from './rpc/author-preferences.ts'
 import { readProjectRules } from './rpc/project-rules.ts'
 import { collectUsageLog, createUsageRecorder, usageDomainSpec, resolveDays, type UsageRecorder } from './rpc/usage.ts'
+import { trackUsageStream } from './usage-stream.ts'
 
 type SessionModelsProxy = {
   sessions?: {
@@ -128,35 +129,11 @@ async function* trackUsage(
   const provider = typeof options?.provider === 'string' ? options.provider : ''
   const model = typeof options?.model === 'string' ? options.model : ''
   const modelKey = provider && model ? `${provider}/${model}` : ''
-  const iterator = next()[Symbol.asyncIterator]()
-  let lastUsage: Record<string, number> | undefined
-  let observed = false
-  let completed = false
-  try {
-    while (true) {
-      const { value, done } = await iterator.next()
-      if (done) {
-        completed = true
-        break
-      }
-      if (value && value.type === 'usage' && value.usage) {
-        lastUsage = value.usage
-        observed = true
-      }
-      yield value
-    }
-  } finally {
-    if (observed && modelKey) {
-      try {
-        await recorder.record(modelKey, lastUsage ?? {}, { request: completed })
-      } catch (error) {
-        // Metering must never influence the LLM stream itself.
-        logWarning(ctx, error)
-      }
-    }
-  }
+  yield* trackUsageStream(next(), async (usage, completed) => {
+    if (!modelKey) return
+    await recorder.record(modelKey, usage, { request: completed })
+  }, (error) => logWarning(ctx, error))
 }
-
 
 function logWarning(ctx: Context, error: unknown): void {
   try {

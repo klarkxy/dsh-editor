@@ -5,6 +5,7 @@ import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { compositionInstallNames } from './plugin-manifest.mjs'
 import { desktopComposition } from './desktop-compositions.mjs'
+import { localArtifactsForPlatform } from './release-artifacts.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, process.argv[2] ?? '.pack/desktop')
@@ -17,9 +18,7 @@ const resources = process.platform === 'darwin'
 async function json(path) { return JSON.parse(await readFile(path, 'utf8')) }
 
 const desktopVersion = (await json(resolve(root, 'apps', 'desktop', 'package.json'))).version
-const artifactNames = process.platform === 'darwin'
-  ? [`DSH Editor-${desktopVersion}-mac-${process.arch}.dmg`, `DSH Editor-${desktopVersion}-mac-${process.arch}.zip`]
-  : [`DSH Editor-${desktopVersion}-win-x64.exe`, `DSH Editor-Setup-${desktopVersion}-win-x64.exe`]
+const artifactNames = localArtifactsForPlatform(process.platform, desktopVersion, process.arch)
 
 async function treeDigest(path) {
   const hash = createHash('sha256')

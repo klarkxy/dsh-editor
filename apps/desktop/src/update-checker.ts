@@ -5,31 +5,24 @@
 // api.github.com has to go through the main process. This module stays free of
 // Electron imports on purpose so it can be unit-tested with a stubbed fetch.
 
-/** Release 附件:GitHub 原始下载地址 + 字节数,镜像下载前用它比对候选。 */
+import {
+  isTrustedReleaseAssetUrl,
+  parseGitHubDigest,
+  selectAsset,
+} from './release-artifacts.js'
+import type { InternalUpdateCheckResult } from './update-session.js'
+
+export { selectAsset }
+
+/** Release 附件:GitHub 原始下载地址 + 字节数 + 官方 digest。只留在主进程。 */
 export interface UpdateAsset {
   name: string
   url: string
   size: number
+  digest?: string
 }
 
-export interface UpdateCheckLatest {
-  version: string
-  tag: string
-  name: string
-  publishedAt: string
-  url: string
-  body: string
-  assets: UpdateAsset[]
-  /** 当前平台/安装形态对应的附件,由主进程 selectAsset 选出;无匹配为 null。 */
-  asset: UpdateAsset | null
-}
-
-export interface UpdateCheckResult {
-  status: 'latest' | 'update-available' | 'error'
-  currentVersion: string
-  latest?: UpdateCheckLatest
-  error?: string
-}
+export type UpdateCheckResult = InternalUpdateCheckResult
 
 const RELEASES_URL = 'https://api.github.com/repos/klarkxy/dsh-editor/releases/latest'
 const REQUEST_TIMEOUT_MS = 10_000
@@ -62,11 +55,11 @@ function joinMirrorPrefix(prefix: string, url: string): string {
 }
 
 /**
- * 把一个 GitHub 下载地址展开成按优先级排序的候选列表:环境变量镜像 →
- * 内置镜像 → 直连。非 github.com 地址不套镜像,直接返回原地址。
+ * 把一个官方 GitHub 下载地址展开成按优先级排序的候选列表:环境变量镜像 →
+ * 内置镜像 → 直连。非本仓库发布附件拒绝套镜像,避免渲染端或脏数据指定任意 URL。
  */
 export function buildDownloadCandidates(url: string, envValue?: string): DownloadCandidate[] {
-  if (!url.startsWith('https://github.com/')) return [{ label: '直连', url }]
+  if (!isTrustedReleaseAssetUrl(url)) throw new Error('更新地址不是官方 GitHub 发布附件')
   const envPrefixes = (envValue ?? '').split(',').map((item) => item.trim()).filter(Boolean)
   const candidates = [...envPrefixes, ...BUILTIN_MIRROR_PREFIXES].map((prefix) => ({
     label: mirrorLabel(prefix),
@@ -77,29 +70,9 @@ export function buildDownloadCandidates(url: string, envValue?: string): Downloa
 }
 
 /**
- * 从 release 附件里挑出当前平台/安装形态对应的安装包。CI 上传时把空格改成了
- * 连字符,正则不锚定完整产品名,只按后缀特征匹配,兼容两种命名。
- */
-export function selectAsset(
-  assets: UpdateAsset[],
-  platform: NodeJS.Platform | string,
-  portable: boolean,
-): UpdateAsset | null {
-  if (platform === 'win32') {
-    if (portable) {
-      return assets.find((asset) => /-win-x64\.zip$/i.test(asset.name) && !/setup/i.test(asset.name)) ?? null
-    }
-    return assets.find((asset) => /setup-.+-win-x64\.exe$/i.test(asset.name)) ?? null
-  }
-  if (platform === 'darwin') {
-    return assets.find((asset) => /-mac-arm64\.dmg$/i.test(asset.name)) ?? null
-  }
-  return null
-}
-
-/**
  * 解析 release 里随产物上传的 sha256sums.txt(`<hash>  <文件名>` 每行一条,
- * 兼容 `sha256sum` 的 `*` 二进制标记)。镜像有可能被劫持,下载后按它校验。
+ * 兼容 `sha256sum` 的 `*` 二进制标记)。这份清单只有从官方 GitHub 取得时
+ * 才能当作可信摘要;镜像上的同名文件不能单独证明发布身份。
  */
 export function parseSha256Sums(text: string): Map<string, string> {
   const sums = new Map<string, string>()
@@ -164,7 +137,8 @@ function parseAssets(value: unknown): UpdateAsset[] {
     const name = typeof record.name === 'string' ? record.name : ''
     const url = typeof record.browser_download_url === 'string' ? record.browser_download_url : ''
     const size = typeof record.size === 'number' ? record.size : 0
-    if (name && url) assets.push({ name, url, size })
+    const digest = parseGitHubDigest(record.digest)
+    if (name && url) assets.push({ name, url, size, ...(digest ? { digest } : {}) })
   }
   return assets
 }
@@ -210,7 +184,7 @@ export async function checkLatest(
     return {
       status,
       currentVersion,
-      latest: { version, tag, name, publishedAt, url, body, assets, asset: null },
+      latest: { version, tag, name, publishedAt, url, body, assets },
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

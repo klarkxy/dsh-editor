@@ -9,6 +9,7 @@ import {
   WritingProposalError,
   type WritingProposalBasis,
 } from './writing-proposal.ts'
+import { findUniqueIndex } from './unique-text.ts'
 
 export class ProposalError extends Error {
   constructor(
@@ -113,16 +114,6 @@ export async function assertWritingProposalBasis(
   }
 }
 
-function occurrences(text: string, needle: string): number {
-  let count = 0
-  let index = 0
-  while ((index = text.indexOf(needle, index)) >= 0) {
-    count++
-    index += Math.max(1, needle.length)
-  }
-  return count
-}
-
 function assertGenerationBaseline(actual: string, expected: string | undefined): void {
   if (expected !== undefined && actual !== expected) {
     throw new ProposalError('proposal is stale', 'STALE')
@@ -137,7 +128,7 @@ function assertEditable(currentText: string, oldText: string): void {
     }
     return
   }
-  if (occurrences(currentText, oldText) !== 1) {
+  if (findUniqueIndex(currentText, oldText) < 0) {
     throw new ProposalError('original text is missing or not unique', 'AMBIGUOUS')
   }
 }
