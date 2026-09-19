@@ -11,6 +11,8 @@
 // DSH_UPDATE_TEST_PAUSE / DSH_UPDATE_TEST_SKIP_START 只给故障注入测试用,
 // 正式升级不会设置。跳过 start 是因为测试夹具是假 .cmd,start 会弹出
 // 停在 vitest 工作目录的可见命令行窗口。
+// `timeout` 在 detached / stdin 重定向时会立即报错退出；ping loopback
+// 提供不依赖控制台输入的一秒延迟。
 
 export function buildPortableSwapScript(pid: number, targetExe: string, newExe: string): string {
   return [
@@ -30,7 +32,7 @@ export function buildPortableSwapScript(pid: number, targetExe: string, newExe: 
     '  >> "%LOG%" echo timeout waiting for pid %PID%',
     '  goto fail_keep_old',
     ')',
-    'timeout /t 1 /nobreak >nul',
+    'ping 127.0.0.1 -n 2 >nul',
     'set /a waited+=1',
     'goto wait_pid',
     ':pid_gone',
@@ -66,11 +68,11 @@ export function buildPortableSwapScript(pid: number, targetExe: string, newExe: 
     '  del /f /q "%STAGED%" >nul 2>nul',
     '  goto fail_keep_old',
     ')',
-    'timeout /t 1 /nobreak >nul',
+    'ping 127.0.0.1 -n 2 >nul',
     'set /a waited+=1',
     'goto backup_old',
     ':old_backed_up',
-    'if defined DSH_UPDATE_TEST_PAUSE timeout /t 1 /nobreak >nul',
+    'if defined DSH_UPDATE_TEST_PAUSE ping 127.0.0.1 -n 2 >nul',
     'move /y "%STAGED%" "%TARGET%" >nul',
     'if errorlevel 1 goto restore',
     'if not exist "%TARGET%" goto restore',

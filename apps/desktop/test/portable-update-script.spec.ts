@@ -35,6 +35,8 @@ describe('buildPortableSwapScript', () => {
     expect(script).toContain(`set "PID=${PID}"`)
     expect(script).toContain('tasklist /FI "PID eq %PID%"')
     expect(script).toContain('GEQ %MAX_WAIT%')
+    expect(script.match(/ping 127\.0\.0\.1 -n 2 >nul/g)).toHaveLength(3)
+    expect(script).not.toContain('timeout /t')
     expect(script.indexOf('tasklist')).toBeLessThan(script.indexOf('copy /y "%NEW%" "%STAGED%"'))
   })
 
