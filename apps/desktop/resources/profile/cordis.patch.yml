@@ -78,3 +78,14 @@
   disabled: true
 - id: editor-novel-kernel
   disabled: true
+
+# Never revive automatic native search when the optional manager is disabled
+# or removed. Managed providers and tools require explicit user authorization.
+- id: web
+  config: {}
+- id: web-search-deepseek
+  disabled: true
+- id: web-fetch-http
+  disabled: true
+- id: tool-web
+  disabled: true
