@@ -100,6 +100,7 @@ describe('plugin manifests and composition resolver', () => {
       features: ['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search', 'web-search-tavily'],
       packages,
       libraries: ['dsh-editor-seats', 'dsh-editor-workspace-kit'],
+      runtimeDependencies: ['@deepseek-ai/dsh-web-search-exa'],
       disabledEntries: [],
       extraInserts: [{ id: 'zhihu-tools', name: 'dsh-zhihu/tools' }],
       shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist', zhihu: 'zhihu', 'web-search': 'webSearchManager' },
@@ -230,6 +231,19 @@ describe('plugin conversation preset manifests', () => {
     const manifests = loadPluginManifests(manifestRoot({ 'first-party': pkg }))
     expect(manifests).toHaveLength(1)
     expect(manifests[0].presets).toEqual([{ id: 'dsh-editor-clone', path: 'agent-presets/team-style' }])
+  })
+
+  it('requires runtime dependencies to be production dependencies and includes them only with their package', () => {
+    const pkg = basePkg('runtime-plugin')
+    pkg.dshEditor.role = 'core'
+    pkg.dshEditor.runtimeDependencies = ['runtime-adapter']
+    pkg.dependencies = { 'runtime-adapter': '1.0.0' }
+    const manifests = loadPluginManifests(manifestRoot({ 'runtime-plugin': pkg }))
+    expect(resolveComposition(manifests, { id: 'x', label: 'x', features: [] }).runtimeDependencies).toEqual(['runtime-adapter'])
+
+    const invalid = basePkg('invalid-runtime-plugin')
+    invalid.dshEditor.runtimeDependencies = ['missing-adapter']
+    expect(() => loadPluginManifests(manifestRoot({ 'invalid-runtime-plugin': invalid }))).toThrow(/must be declared in dependencies/)
   })
 
   it('selects feature-only packages and flows their presets into resolveComposition', () => {

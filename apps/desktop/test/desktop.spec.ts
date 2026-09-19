@@ -608,7 +608,7 @@ describe('profile deployment', () => {
     expect(patch).not.toMatch(/- id: editor-novel-kernel\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-workbench\r?\n  disabled: true/)
     for (const id of ['web-search-deepseek', 'web-fetch-http', 'tool-web']) {
-      expect(patch).toContain(`- id: ${id}\n  disabled: true`)
+      expect(patch).toMatch(new RegExp(`- id: ${id}\\r?\\n  disabled: true`))
     }
     for (const id of ['dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical']) {
       const agent = await readFile(join(destination, 'agent-presets', id, 'agent.cordis.yml'), 'utf8')

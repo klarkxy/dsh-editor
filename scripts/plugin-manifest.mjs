@@ -175,6 +175,12 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
       if (typeof row !== 'string' || !row.trim()) fail(`${pkg.name} dshEditor.features[${index}] must be a non-empty string`)
       return row
     })
+    const runtimeDependencies = asEntries(block.runtimeDependencies, `${pkg.name} dshEditor.runtimeDependencies`).map((row, index) => {
+      if (typeof row !== 'string' || !row.trim()) fail(`${pkg.name} dshEditor.runtimeDependencies[${index}] must be a non-empty string`)
+      if (!(row in (pkg.dependencies ?? {}))) fail(`${pkg.name} runtime dependency ${row} must be declared in dependencies`)
+      return row
+    })
+    if (new Set(runtimeDependencies).size !== runtimeDependencies.length) fail(`${pkg.name}: duplicate runtime dependencies`)
     const patchPath = join(dir, patchRel)
     let patchIds
     try {
@@ -199,6 +205,7 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
       inserts,
       presets,
       features: declaredFeatures,
+      runtimeDependencies,
       workspaceDeps,
     })
   }
@@ -347,6 +354,7 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
     }
   }
   const resolvedLibraries = sortPackageNames([...selectedLibraries])
+  const runtimeDependencies = [...new Set(packages.flatMap((name) => byName.get(name)?.runtimeDependencies ?? []))].sort()
   const disabledEntries = []
   const extraInserts = []
   for (const name of packages) {
@@ -381,6 +389,7 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
     features: [...recipe.features],
     packages,
     libraries: resolvedLibraries,
+    runtimeDependencies,
     disabledEntries,
     extraInserts,
     shellFeatures,

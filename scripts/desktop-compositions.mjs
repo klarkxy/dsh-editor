@@ -42,6 +42,22 @@ export async function desktopComposition(id = process.env.DSH_EDITOR_COMPOSITION
   return resolved
 }
 
+export function runtimeDependencySources(composition) {
+  const selected = new Set(composition.packages)
+  const owners = new Map()
+  for (const manifest of manifests) {
+    if (!selected.has(manifest.name)) continue
+    for (const dependency of manifest.runtimeDependencies) {
+      if (!owners.has(dependency)) owners.set(dependency, resolve(manifest.dir, 'package.json'))
+    }
+  }
+  return (composition.runtimeDependencies ?? []).map((name) => {
+    const packageManifest = owners.get(name)
+    if (!packageManifest) throw new Error(`runtime dependency ${name} has no selected package owner`)
+    return { name, packageManifest }
+  })
+}
+
 export async function configureProfile(destination, composition) {
   const manifestPath = resolve(destination, 'package.json')
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))

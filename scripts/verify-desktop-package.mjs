@@ -40,6 +40,10 @@ if (dsh.name !== '@deepseek-ai/dsh' || dsh.version !== '0.1.5-rc.2') throw new E
 const composition = await json(resolve(resources, 'profile-template', 'composition.json'))
 const expectedComposition = await desktopComposition(composition.id)
 if (JSON.stringify(composition) !== JSON.stringify(expectedComposition)) throw new Error('packaged composition mismatch')
+for (const dependencyName of composition.runtimeDependencies ?? []) {
+  const dependency = await json(resolve(resources, 'dsh', 'node_modules', ...dependencyName.split('/'), 'package.json'))
+  if (dependency.name !== dependencyName) throw new Error(`packaged runtime dependency identity mismatch: ${dependencyName}`)
+}
 const installedNames = compositionInstallNames(composition)
 for (const packageName of installedNames) {
   await stat(resolve(resources, 'profile-template', 'node_modules', packageName, 'package.json'))
