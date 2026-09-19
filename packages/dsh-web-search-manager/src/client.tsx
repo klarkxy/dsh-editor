@@ -65,7 +65,8 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
     // Stop active searches BEFORE replacing a key; never send a new key to the old endpoint.
     if (apiKey.trim()) {
       if (!selected?.credentialRef) throw new Error('请先选择搜索供应商。')
-      if (base.settings.searchEnabled) base = await update({ ...editable(base.settings), searchEnabled: false }, base.settings.revision)
+      // Check the revision before mutating credentials, including when search was already off.
+      base = await update({ ...editable(base.settings), searchEnabled: false }, base.settings.revision)
       unwrap(await client.remote.credentials.set(selected.credentialRef, apiKey.trim()))
       setApiKey('')
     }

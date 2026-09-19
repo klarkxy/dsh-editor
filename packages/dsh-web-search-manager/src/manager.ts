@@ -197,7 +197,8 @@ export class WebSearchManager {
     } catch (error) {
       if (started) entry.failures += 1
       const code = error instanceof WebError ? error.code : undefined
-      if (code === 'WEB_CREDENTIAL_MISSING' || code === 'WEB_DISABLED') throw error
+      if (code === 'WEB_CREDENTIAL_MISSING') throw new WebError('搜索凭据不可用，请重新配置。', 'WEB_CREDENTIAL_MISSING')
+      if (code === 'WEB_DISABLED') throw new WebError('网络搜索未启用或设置已改变。', 'WEB_DISABLED')
       if (combined.aborted || code === 'WEB_ABORTED') throw new WebError('网络请求已取消或超时。', 'WEB_ABORTED')
       // Do not forward raw provider responses, token-bearing errors, or causes.
       throw new WebError('网络供应商请求失败，请检查凭据、额度和连接。未切换到其他供应商。', 'WEB_PROVIDER_ERROR')
