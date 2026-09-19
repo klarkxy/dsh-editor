@@ -80,10 +80,13 @@ describe('plugin manifests and composition resolver', () => {
       locked: false,
     })
     expect(loadWorkspaceLibraries(root).map((item) => item.name)).toEqual(['dsh-editor-seats', 'dsh-editor-workspace-kit'])
+    // The resolver preserves the established desktop/library order, then appends new packages.
     expect(desktopCopiedPackageNames(manifests)).toEqual([
-      ...desktopPackageNames(manifests),
+      ...desktopPackageNames(manifests).filter((name) => !name.startsWith('dsh-web-search-')),
       'dsh-editor-seats',
       'dsh-editor-workspace-kit',
+      'dsh-web-search-manager',
+      'dsh-web-search-tavily',
     ])
   })
 
