@@ -581,7 +581,7 @@ describe('profile deployment', () => {
     expect(stripped[0]).toEqual(stripped[1])
     expect(stripped[1]).toEqual(stripped[2])
     for (const item of resolved) {
-      expect(item.features).toEqual(['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets'])
+      expect(item.features).toEqual(['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search', 'web-search-tavily'])
       expect(item.features).toContain('proofread-panel')
       expect(item.features).not.toContain('cards')
       expect(item.features).not.toContain('memory-panel')
@@ -607,6 +607,13 @@ describe('profile deployment', () => {
     expect(patch).not.toMatch(/- id: editor-workbench-tools\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-novel-kernel\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-workbench\r?\n  disabled: true/)
+    for (const id of ['web-search-deepseek', 'web-fetch-http', 'tool-web']) {
+      expect(patch).toContain(`- id: ${id}\n  disabled: true`)
+    }
+    for (const id of ['dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical']) {
+      const agent = await readFile(join(destination, 'agent-presets', id, 'agent.cordis.yml'), 'utf8')
+      expect(agent.match(/name: dsh-web-search-manager\/tools/g)).toHaveLength(1)
+    }
   })
   it('deploys app-owned agent presets into the harness-home user preset root', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))

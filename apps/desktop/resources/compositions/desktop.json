@@ -8,6 +8,8 @@
     "zhihu-tools",
     "overview-panel",
     "proofread-panel",
-    "writing-presets"
+    "writing-presets",
+    "web-search",
+    "web-search-tavily"
   ]
 }

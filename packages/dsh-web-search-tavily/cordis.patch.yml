@@ -1,0 +1,3 @@
+- insert:
+    - id: web-search-tavily
+      name: dsh-web-search-tavily
