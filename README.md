@@ -6,7 +6,7 @@
 
 DSH Editor 是一款 Windows / macOS 桌面写作应用。稿纸位于界面中央，AI 写作搭档在侧栏协作：作者写正文，搭档提供补全、改写、讨论与文件提案，所有正文修改经作者确认后才写入。
 
-当前版本 **0.3.2**，内置固定版本的 DSH `0.1.5-rc.2`（Agent、会话、模型、工具与文件权限均由它提供）。
+当前版本 **0.3.4**，内置固定版本的 DSH `0.1.5-rc.2`（Agent、会话、模型、工具与文件权限均由它提供）。
 
 [下载](https://github.com/klarkxy/dsh-editor/releases) · [使用者指南](docs/user-guide.md) · [CHANGELOG](CHANGELOG.md)
 
