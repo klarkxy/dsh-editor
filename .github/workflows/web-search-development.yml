@@ -19,17 +19,117 @@ jobs:
           version: 10.14.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - run: pnpm install --no-frozen-lockfile
-      - name: Commit only the generated lockfile
+          node-version: '24.1.0'
+      - name: Apply reviewed, exact-match source updates
         run: |
-          if ! git diff --quiet -- pnpm-lock.yaml; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add pnpm-lock.yaml
-            git commit -m 'chore(web): lock managed search dependencies'
-            git push origin HEAD:feat/managed-web-search
-          fi
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
+          function edit(path, before, after) {
+            const content = readFileSync(path, 'utf8')
+            if (content.split(before).length !== 2) throw new Error(`Expected one reviewed match in ${path}`)
+            writeFileSync(path, content.replace(before, after))
+          }
+          const manifest = 'scripts/plugin-manifest.spec.mjs'
+          edit(manifest,
+            "      'dsh-editor-proofread-panel',\n    ])\n    expect(publicPackages",
+            "      'dsh-editor-proofread-panel',\n      'dsh-web-search-manager',\n      'dsh-web-search-tavily',\n    ])\n    expect(publicPackages")
+          edit(manifest,
+            "expect(publicPackages(manifests)).toEqual(['dsh-manuscript', 'dsh-proofread', 'dsh-zhihu'])",
+            "expect(publicPackages(manifests)).toEqual(['dsh-manuscript', 'dsh-proofread', 'dsh-zhihu', 'dsh-web-search-manager', 'dsh-web-search-tavily'])")
+          edit(manifest,
+            "      'dsh-editor-proofread-panel',\n    ])\n    expect(catalogFromManifests",
+            "      'dsh-editor-proofread-panel',\n      'dsh-web-search-manager',\n    ])\n    expect(catalogFromManifests")
+          edit(manifest,
+            "const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels]",
+            "const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels, 'dsh-web-search-manager', 'dsh-web-search-tavily']")
+          const beforeFeatures = "['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets']"
+          const afterFeatures = "['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search', 'web-search-tavily']"
+          edit(manifest, beforeFeatures, afterFeatures)
+          edit(manifest,
+            "shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist', zhihu: 'zhihu' },",
+            "shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist', zhihu: 'zhihu', 'web-search': 'webSearchManager' },")
+          const desktop = 'apps/desktop/test/desktop.spec.ts'
+          edit(desktop, beforeFeatures, afterFeatures)
+          edit(desktop,
+            "    expect(patch).not.toMatch(/- id: editor-workbench\\r?\\n  disabled: true/)\n  })",
+            "    expect(patch).not.toMatch(/- id: editor-workbench\\r?\\n  disabled: true/)\n    for (const id of ['web-search-deepseek', 'web-fetch-http', 'tool-web']) {\n      expect(patch).toContain(`- id: ${id}\\n  disabled: true`)\n    }\n    for (const id of ['dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical']) {\n      const agent = await readFile(join(destination, 'agent-presets', id, 'agent.cordis.yml'), 'utf8')\n      expect(agent.match(/name: dsh-web-search-manager\\/tools/g)).toHaveLength(1)\n    }\n  })")
+          edit('packages/dsh-web-search-manager/src/manager.ts',
+            "      if (code === 'WEB_CREDENTIAL_MISSING' || code === 'WEB_DISABLED') throw error",
+            "      if (code === 'WEB_CREDENTIAL_MISSING') throw new WebError('搜索凭据不可用，请重新配置。', 'WEB_CREDENTIAL_MISSING')\n      if (code === 'WEB_DISABLED') throw new WebError('网络搜索未启用或设置已改变。', 'WEB_DISABLED')")
+          edit('packages/dsh-web-search-manager/src/client.tsx',
+            "      if (base.settings.searchEnabled) base = await update({ ...editable(base.settings), searchEnabled: false }, base.settings.revision)",
+            "      // Check the revision before mutating credentials, including when search was already off.\n      base = await update({ ...editable(base.settings), searchEnabled: false }, base.settings.revision)")
+          unlinkSync('scripts/configure-web-search.spec.ts')
+          writeFileSync('scripts/configure-web-search.spec.mjs', `import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
+          import { tmpdir } from 'node:os'
+          import { join } from 'node:path'
+          import { afterEach, expect, it } from 'vitest'
+          import { configureWebSearchPresets } from './configure-web-search.mjs'
+          const roots = []
+          afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
+          it('adds a single tool bridge only to application presets when enabled', async () => {
+            const root = await mkdtemp(join(tmpdir(), 'web-presets-')); roots.push(root)
+            for (const name of ['dsh-editor-writing', 'custom-user-preset']) {
+              await mkdir(join(root, 'agent-presets', name), { recursive: true })
+              await writeFile(join(root, 'agent-presets', name, 'agent.cordis.yml'), '# existing persona and tools\\n')
+            }
+            await configureWebSearchPresets(root, { shellFeatures: {} })
+            const path = join(root, 'agent-presets/dsh-editor-writing/agent.cordis.yml')
+            expect(await readFile(path, 'utf8')).not.toContain('web-search-manager')
+            await configureWebSearchPresets(root, { shellFeatures: { 'web-search': 'webSearchManager' } })
+            await configureWebSearchPresets(root, { shellFeatures: { 'web-search': 'webSearchManager' } })
+            expect((await readFile(path, 'utf8')).match(/name: dsh-web-search-manager\\/tools/g)).toHaveLength(1)
+            expect(await readFile(join(root, 'agent-presets/custom-user-preset/agent.cordis.yml'), 'utf8')).not.toContain('web-search-manager')
+          })
+          it('does not require a preset directory when the capability is absent', async () => {
+            const root = await mkdtemp(join(tmpdir(), 'web-no-presets-')); roots.push(root)
+            await expect(configureWebSearchPresets(root, { shellFeatures: {} })).resolves.toBeUndefined()
+          })
+          `)
+          writeFileSync('packages/dsh-web-search-manager/src/manager-error.spec.ts', `import { expect, it } from 'vitest'
+          import { WebError, type WebSearchProvider } from '@deepseek-ai/dsh-web'
+          import { WebSearchManager } from './manager.ts'
+          it.each(['WEB_CREDENTIAL_MISSING', 'WEB_DISABLED', 'WEB_ABORTED', 'WEB_PROVIDER_ERROR'])(
+            'redacts extension errors even when they use the trusted %s code', async code => {
+              let registered: WebSearchProvider | undefined
+              const manager = new WebSearchManager({
+                web: {
+                  registerSearchProvider(provider) { registered = provider; return () => { registered = undefined } },
+                  registerFetchProvider() { return () => {} },
+                },
+                resolveCredential: async () => 'fixture-private-key', save: async () => {},
+              })
+              try {
+                manager.registerSearchProvider({
+                  id: 'test', label: 'Test', description: 'Untrusted extension error fixture',
+                  credentialRef: 'TEST_WEB_API_KEY', billing: 'request',
+                }, () => ({
+                  id: 'test', available: () => true,
+                  async search() { throw new WebError('provider echoed fixture-private-key', code) },
+                }))
+                const { revision, ...settings } = manager.status().settings
+                await manager.update({ ...settings, searchEnabled: true, searchProvider: 'test' }, revision)
+                expect(registered?.available()).toBe(true)
+                const error = await registered!.search({ query: 'fixed fixture query' }).catch(error => error)
+                expect(error).toBeInstanceOf(WebError)
+                expect(error.code).toBe(code)
+                expect(String(error)).not.toContain('fixture-private-key')
+                expect(JSON.stringify(error)).not.toContain('fixture-private-key')
+                expect(error.cause).toBeUndefined()
+              } finally { await manager.dispose() }
+            },
+          )
+          `)
+          NODE
+      - name: Commit reviewed source changes only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/plugin-manifest.spec.mjs apps/desktop/test/desktop.spec.ts packages/dsh-web-search-manager/src/manager.ts packages/dsh-web-search-manager/src/client.tsx scripts/configure-web-search.spec.ts scripts/configure-web-search.spec.mjs packages/dsh-web-search-manager/src/manager-error.spec.ts
+          git commit -m 'fix(web): align composition tests and redact provider failures'
+          git push origin HEAD:feat/managed-web-search
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm build
+      - run: pnpm pack:plugins
