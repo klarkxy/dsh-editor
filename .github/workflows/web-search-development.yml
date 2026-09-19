@@ -1,0 +1,33 @@
+name: Web search development validation
+on:
+  push:
+    branches: [feat/managed-web-search]
+permissions:
+  contents: read
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install --no-frozen-lockfile
+      - name: Export reproducible offline validation workspace
+        run: |
+          mkdir -p .validation-tools
+          cp -a "$(dirname "$(dirname "$(readlink -f "$(command -v pnpm)")")")" .validation-tools/pnpm
+          tar --exclude='./.git' --exclude='./.pack' -czf /tmp/web-search-workspace.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-search-validation-workspace
+          path: /tmp/web-search-workspace.tgz
+          retention-days: 1
