@@ -98,10 +98,10 @@
     "@lezer/highlight": "^1.2.3",
     "@lezer/markdown": "^1.7.2",
     "@radix-ui/themes": "^3.3.0",
-    "dsh-editor-seats": "workspace:*",
     "zod": "^4.1.5"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2"
+    "@deepseek-ai/cordis": "^4.0.2",
+    "dsh-editor-seats": "workspace:*"
   }
 }
