@@ -10,6 +10,7 @@ import { type ZhihuClientOptions, type ZhihuSearchExecuted, ZhihuSearchError } f
 import { createZhihuUsageRecorder, resolveDays, zhihuUsageDomainSpec, type ZhihuUsageRecorder } from './usage.ts'
 import { ZHIHU_RPC_CHANNEL, ZHIHU_CREDENTIAL_REF, ZHIHU_SEARCH_EVENT, type ZhihuRpcResult } from './contracts.ts'
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
+import { bindZhihuWebSearch } from './web-search-provider.ts'
 
 export const name = 'dsh-zhihu'
 export const inject = ['connection', 'credentials', 'storageDomain', 'webServer'] as const
@@ -134,4 +135,5 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.effect(() => async () => { await service.dispose(); await domain.close() }, 'zhihu.usageDomainClose')
   ctx.provide('zhihu', service)
   ctx.effect(() => registerHostRpc(host, ZHIHU_RPC_CHANNEL, service.call))
+  bindZhihuWebSearch(ctx, service)
 }

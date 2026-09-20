@@ -29,6 +29,15 @@ export type SettingsTab = 'general' | 'models' | 'assistant' | 'writing' | 'usag
 
 const SETTINGS_TAB_KEY = 'dsh-editor.settings.tab'
 const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'assistant', 'writing', 'usage', 'zhihu', 'plugins', 'about']
+/** 侧栏末两项：插件管理与关于。官方插件设置页插在它们前面。 */
+const SETTINGS_TRAILING_TABS: SettingsTab[] = ['plugins', 'about']
+
+export function composeSettingsNavTabs(
+  featureTabs: readonly SettingsTab[],
+  official: readonly Pick<OfficialSettingsSection, 'navId'>[],
+): string[] {
+  return [...featureTabs, ...official.map((section) => section.navId), ...SETTINGS_TRAILING_TABS]
+}
 
 function readStoredTab(): string {
   try {
@@ -176,9 +185,9 @@ export function SettingsDialog(props: {
   }
 
   const featureTabs: SettingsTab[] = props.assistant === false
-    ? ['general', 'writing', 'usage', 'zhihu', 'plugins']
-    : ['general', 'models', 'assistant', 'writing', 'usage', 'zhihu', 'plugins']
-  const navTabs: string[] = [...featureTabs, ...officialSections.map((section) => section.navId), 'about']
+    ? ['general', 'writing', 'usage', 'zhihu']
+    : ['general', 'models', 'assistant', 'writing', 'usage', 'zhihu']
+  const navTabs = composeSettingsNavTabs(featureTabs, officialSections)
   /* 能力在弹窗打开期间变为停用时，或动态插件页消失时，回落到仍可用的分类。 */
   const activeTab = navTabs.includes(tab) ? tab : 'general'
   /* 页面切换方向感:往列表下方切内容从右滑入,往上切从左滑入。 */
@@ -186,7 +195,7 @@ export function SettingsDialog(props: {
   const fromX = navTabs.indexOf(activeTab) >= navTabs.indexOf(previousTabRef.current) ? 24 : -24
   previousTabRef.current = activeTab
   const activeOfficial = officialSections.find((section) => section.navId === activeTab)
-  const builtinPages: SettingsTab[] = [...featureTabs, 'about']
+  const builtinPages: SettingsTab[] = [...featureTabs, ...SETTINGS_TRAILING_TABS]
   const content: Record<SettingsTab, () => ReactNode> = {
     general: () => <SettingsGeneralSection
       ctx={props.ctx}

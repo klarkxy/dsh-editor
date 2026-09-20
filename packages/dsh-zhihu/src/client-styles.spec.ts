@@ -18,6 +18,12 @@ describe('zhihu standalone theme selectors', () => {
     expect(zhihuClientStyles).not.toMatch(/@media\s*\(\s*prefers-color-scheme/)
   })
 
+  it('stacks settings and knowledge copy so capability notes have a gap', () => {
+    expect(zhihuClientStyles).toMatch(/\.zhihu-settings, \.zhihu-knowledge \{[^}]*display: flex/)
+    expect(zhihuClientStyles).toContain('.zhihu-intro {')
+    expect(zhihuClientStyles).toContain('.zhihu-field > .zhihu-intro { margin-bottom: var(--space-2); }')
+  })
+
   it('resets host link background on self-contained result titles', () => {
     expect(zhihuClientStyles).toContain('.zhihu-panel .zhihu-link, .zhihu-panel .zhihu-result-title { background: transparent; }')
   })

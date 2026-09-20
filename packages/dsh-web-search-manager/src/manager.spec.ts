@@ -13,7 +13,15 @@ function setup(initial?: WebSettings) {
   const keys = new Map([['TEST_EXA_KEY', 'fixture-exa-secret'], ['TEST_TAVILY_KEY', 'fixture-tavily-secret']])
   const save = vi.fn(async (_settings: WebSettings) => {})
   const resolveCredential = vi.fn(async (ref: string) => keys.get(ref))
-  const manager = new WebSearchManager({ web, initial, save, resolveCredential })
+  const manager = new WebSearchManager({
+    web,
+    initial: {
+      ...defaultSettings(),
+      searchEnabled: false, fetchEnabled: false, searchProvider: '', searchOrder: [],
+      ...initial,
+    },
+    save, resolveCredential,
+  })
   fixtures.push(manager)
   const search = vi.fn(async () => ({ sources: [{ url: 'https://example.com', title: 'Example', snippet: 'source' }], truncated: false }))
   const factory = vi.fn((options) => ({ id: 'exa', available: () => Boolean(options.apiKey), search }))
@@ -32,11 +40,38 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     await expect(web.search({ query: 'hello' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
     expect(search).not.toHaveBeenCalled(); expect(factory).not.toHaveBeenCalled()
   })
-  it('requires an explicit available provider and never enables from a saved key alone', async () => {
+  it('stays off until enabled, then uses the first ready backend', async () => {
     const { manager, keys } = setup()
-    await expect(update(manager, { searchEnabled: true })).rejects.toMatchObject({ code: 'WEB_CREDENTIAL_MISSING' })
+    expect(manager.status().searchActive).toBe(false)
+    await update(manager, { searchEnabled: true, searchOrder: ['exa'] })
+    expect(manager.status()).toMatchObject({ searchActive: true, settings: { searchProvider: 'exa' } })
     keys.clear()
-    await expect(update(manager, { searchProvider: 'exa', searchEnabled: true })).rejects.toMatchObject({ code: 'WEB_CREDENTIAL_MISSING' })
+    await manager.refresh()
+    expect(manager.status().searchActive).toBe(false)
+    await expect(update(manager, { searchEnabled: true, searchProvider: 'exa' })).rejects.toMatchObject({ code: 'WEB_CREDENTIAL_MISSING' })
+  })
+  it('skips an unconfigured higher-priority backend', async () => {
+    const { manager, keys } = setup()
+    keys.clear()
+    const search = vi.fn(async () => ({ sources: [{ url: 'https://example.com' }], truncated: false }))
+    manager.registerSearchProvider(
+      { id: 'ddg', label: 'DuckDuckGo', description: 'test', billing: 'none' },
+      () => ({ id: 'ddg', available: () => true, search }),
+    )
+    await update(manager, { searchEnabled: true, searchOrder: ['exa', 'ddg'] })
+    expect(manager.status().settings.searchProvider).toBe('ddg')
+  })
+  it('allows a keyless search engine provider to be enabled', async () => {
+    const { manager, web } = setup()
+    const search = vi.fn(async () => ({ sources: [{ url: 'https://example.com' }], truncated: false }))
+    manager.registerSearchProvider(
+      { id: 'search-engine', label: '搜索引擎', description: 'test', billing: 'none' },
+      () => ({ id: 'search-engine', available: () => true, search }),
+    )
+    await update(manager, { searchEnabled: true, searchProvider: 'search-engine' })
+    expect(manager.status()).toMatchObject({ searchActive: true })
+    await web.search({ query: 'hello' })
+    expect(search).toHaveBeenCalledOnce()
   })
   it('lets other plugins call ctx.web, resolves credentials per request, and never persists a secret', async () => {
     const { manager, web, keys, factory, save } = setup()
@@ -61,7 +96,7 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     expect(error).toBeInstanceOf(WebError); expect(error.code).toBe('WEB_PROVIDER_ERROR')
     expect(JSON.stringify(error)).not.toContain('fixture-exa-secret')
     expect(other).not.toHaveBeenCalled()
-    await update(manager, { searchProvider: 'tavily' })
+    await update(manager, { searchOrder: ['tavily', 'exa'], searchProvider: 'tavily' })
     await web.search({ query: 'hello' })
     expect(other).toHaveBeenCalledOnce()
   })
@@ -102,8 +137,8 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     const { manager, web, search } = setup()
     const fetch = vi.fn(async () => ({ url: 'https://example.com', statusCode: 200, body: { kind: 'text' as const, content: 'hello' }, truncated: false }))
     manager.registerFetchProvider({ id: 'http', label: 'HTTP', description: 'test', billing: 'none' }, () => ({ id: 'http', available: () => true, fetch }))
-    await update(manager, { fetchEnabled: true })
-    expect(manager.status()).toMatchObject({ fetchActive: true, searchActive: false })
+    await update(manager, { searchEnabled: true, searchOrder: ['exa'] })
+    expect(manager.status()).toMatchObject({ fetchActive: true, searchActive: true })
     await web.fetch({ url: 'https://example.com' })
     expect(fetch).toHaveBeenCalledOnce()
     search.mockResolvedValueOnce({ sources: Array.from({ length: 9 }, (_, n) => ({ url: `https://example.com/${n}`, title: '', snippet: '' })), truncated: false })
@@ -114,7 +149,7 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
   it('rejects unsafe endpoints without sending requests and preserves previous settings', async () => {
     const { manager, search } = setup()
     await expect(update(manager, { endpoints: { 'search:exa': 'https://secret@example.com?api_key=secret' } })).rejects.toMatchObject({ code: 'WEB_INVALID_CONFIG' })
-    expect(manager.status().settings).toEqual(defaultSettings())
+    expect(manager.status().settings).toMatchObject({ searchEnabled: false, searchOrder: [], endpoints: {} })
     expect(search).not.toHaveBeenCalled()
   })
   it('still permits disabling after a provider with an endpoint override is uninstalled', async () => {

@@ -15,6 +15,8 @@
 
 `/zhihu`：`search`、`global.search`、`hot.list`、`ask`、`knowledge.search`、`knowledge.bases`、`knowledge.upload`、`usage.summary`。工具：`zhihu_search`、`zhihu_global_search`、`zhihu_hot_list`、`zhihu_ask`、`zhihu_knowledge_search`（`src/tools.ts`）。UI 与 Tool 共用计量 `dsh_editor_zhihu_usage`。Client 用结构型 `Select` / `Dialog`，不导入私有 Shell 包（`src/client-host-ui.ts`）。
 
+若当前 profile 已经提供 `webSearchManager`（安装了 `dsh-web-search-manager`），Host 还会把知乎全网搜索注册为网络搜索后端（id `zhihu-global`），与「知乎资料」共用 `ZHIHU_ACCESS_TOKEN`。未安装管理插件时不注册，也不额外增加依赖。模型侧仍走官方 `web_search`；专用 `zhihu_global_search` 工具不受影响。
+
 在不含空格的目录放置 tarball 后执行：
 
 ```powershell

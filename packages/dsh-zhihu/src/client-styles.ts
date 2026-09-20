@@ -157,6 +157,10 @@ export const zhihuClientStyles = `
 .zhihu-button-primary:hover:not(:disabled) { background: var(--accent-10); }
 .zhihu-button-danger { color: var(--red-11); }
 .zhihu-hint { color: var(--gray-11); font-size: var(--font-size-2); margin: 0; }
+.zhihu-intro { margin: 0; color: var(--gray-11); line-height: 1.6; }
+.zhihu-field > .zhihu-intro { margin-bottom: var(--space-2); }
+.zhihu-settings, .zhihu-knowledge { display: flex; flex-direction: column; gap: var(--space-3); }
+.zhihu-knowledge > p { margin: 0; }
 .zhihu-status { color: var(--gray-11); margin: 0; padding: var(--space-2) 0; }
 .zhihu-error { color: var(--red-11); margin: 0; padding: var(--space-2) 0; }
 .zhihu-warning { color: var(--red-11); margin: 0; }
@@ -208,7 +212,7 @@ export const zhihuClientStyles = `
   padding: var(--space-2);
 }
 .zhihu-guide-title { margin: 0 0 4px; font-size: var(--font-size-2); font-weight: var(--font-weight-medium); font-family: var(--default-font-family); }
-.zhihu-guide-steps { margin: 0; padding-left: 18px; color: var(--gray-11); }
+.zhihu-guide-steps { margin: 0; padding-left: 18px; color: var(--gray-11); line-height: 1.7; }
 .zhihu-scopes { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .zhihu-scope {
   display: inline-flex; align-items: center; gap: 4px; color: var(--gray-11);

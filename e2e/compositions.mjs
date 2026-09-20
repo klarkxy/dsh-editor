@@ -271,7 +271,7 @@ try {
  if(await page.getByTestId('zhihu-open').count())throw new Error('Zhihu must not contribute a desktop launcher');
  const openSettings=async(tab)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('.settings-nav').getByRole('tab',{name:tab,exact:true}).click();await page.waitForTimeout(250)};
  const closeSettings=async()=>{await page.getByRole('button',{name:'关闭设置',exact:true}).click();await page.locator('.settings-dialog').waitFor({state:'hidden'})};
- await openSettings('知乎资料');await page.locator('.settings-content.is-active').getByText('Access Secret',{exact:false}).first().waitFor();await closeSettings();
+ await openSettings('知乎资料');await page.getByTestId('zhihu-capabilities').waitFor();await page.locator('.settings-content.is-active').getByText('Access Secret',{exact:false}).first().waitFor();await closeSettings();
  evidence.checks.push('proofreading paused; Zhihu configuration is inside settings');
  await page.getByRole('button',{name:'新建',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator('.tree').waitFor({timeout:30000});
  await page.locator('.tree-empty').waitFor({state:'visible',timeout:20000});

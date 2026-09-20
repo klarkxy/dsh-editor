@@ -1,6 +1,6 @@
 import { WebError, type WebFetchProvider, type WebSearchProvider } from '@deepseek-ai/dsh-web'
 import {
-  defaultSettings, providerKey, validateBaseURL,
+  defaultSettings, pickActiveSearch, providerKey, resolveSearchOrder, validateBaseURL,
   type FetchProviderFactory, type ProviderDescriptor, type ProviderKind, type ProviderOptions,
   type SearchProviderFactory, type WebSettings, type WebStatus,
 } from './contracts.ts'
@@ -50,7 +50,8 @@ export class WebSearchManager {
   private storageFailed = false
 
   constructor(private readonly options: ManagerOptions) {
-    this.settings = structuredClone(options.initial ?? defaultSettings())
+    const initial = structuredClone(options.initial ?? defaultSettings())
+    this.settings = { ...defaultSettings(), ...initial, searchOrder: Array.isArray(initial.searchOrder) ? initial.searchOrder : [] }
   }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
@@ -61,11 +62,29 @@ export class WebSearchManager {
       try { listener() } catch { /* observer failure cannot authorize a request */ }
     }
   }
+  private knownSearchIds(): string[] {
+    return [...this.entries.values()].filter(entry => entry.kind === 'search').map(entry => entry.descriptor.id)
+  }
+  private keyed(id: string): boolean {
+    return Boolean(this.entries.get(providerKey('search', id))?.descriptor.credentialRef)
+  }
+  private configured(id: string): boolean {
+    return Boolean(this.entries.get(providerKey('search', id))?.configured)
+  }
+  private searchOrder(settings: WebSettings = this.settings): string[] {
+    return resolveSearchOrder(this.knownSearchIds(), settings, id => this.keyed(id))
+  }
+  private activeSearchId(settings: WebSettings = this.settings): string {
+    return pickActiveSearch(this.searchOrder(settings), id => this.configured(id))
+  }
   private selected(entry: Entry): boolean {
-    return !this.disposed && !this.suspended && entry.configured
-      && this.settings[entry.kind === 'search' ? 'searchEnabled' : 'fetchEnabled']
-      && this.settings[entry.kind === 'search' ? 'searchProvider' : 'fetchProvider'] === entry.descriptor.id
-      && this.entries.get(providerKey(entry.kind, entry.descriptor.id)) === entry
+    if (this.disposed || this.suspended || !entry.configured) return false
+    if (entry.kind === 'fetch') {
+      return this.settings.fetchEnabled
+        && this.settings.fetchProvider === entry.descriptor.id
+        && this.entries.get(providerKey('fetch', entry.descriptor.id)) === entry
+    }
+    return this.settings.searchEnabled && this.activeSearchId() === entry.descriptor.id
   }
   status(): WebStatus {
     const entries = [...this.entries.values()]
@@ -108,6 +127,12 @@ export class WebSearchManager {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(descriptor.id) || !descriptor.label.trim()) fail('WEB_INVALID_PROVIDER', '供应商标识或名称无效。')
     if (descriptor.credentialRef && !/^[A-Z][A-Z0-9_]{1,127}$/.test(descriptor.credentialRef)) fail('WEB_INVALID_PROVIDER', '供应商凭据引用无效。')
     if (descriptor.defaultBaseURL) validateBaseURL(descriptor.defaultBaseURL)
+    if (descriptor.signupUrl) {
+      try {
+        const url = new URL(descriptor.signupUrl)
+        if (url.protocol !== 'https:' || url.username || url.password) fail('WEB_INVALID_PROVIDER', '注册地址须为 HTTPS。')
+      } catch { fail('WEB_INVALID_PROVIDER', '注册地址须为 HTTPS。') }
+    }
     if (this.entries.has(key)) fail('WEB_DUPLICATE_PROVIDER', '供应商标识已注册。')
     const entry: Entry = {
       descriptor: Object.freeze({ ...descriptor }), kind, configured: !descriptor.credentialRef,
@@ -132,7 +157,6 @@ export class WebSearchManager {
     }
   }
   registerSearchProvider(descriptor: ProviderDescriptor, factory: SearchProviderFactory): () => void {
-    if (!descriptor.credentialRef) fail('WEB_INVALID_PROVIDER', '联网搜索供应商须声明凭据引用。')
     const entry = this.add('search', descriptor)
     return this.registration(entry, () => this.options.web.registerSearchProvider({
       id: descriptor.id, available: () => this.selected(entry),
@@ -223,10 +247,20 @@ export class WebSearchManager {
         catch { fail('WEB_INVALID_CONFIG', '供应商地址须为无凭据、无查询参数的 HTTPS 地址。') }
       }
       await this.refresh()
-      for (const kind of ['search', 'fetch'] as const) {
-        if (!proposed[kind === 'search' ? 'searchEnabled' : 'fetchEnabled']) continue
-        const id = proposed[kind === 'search' ? 'searchProvider' : 'fetchProvider']
-        if (!this.entries.get(providerKey(kind, id))?.configured) fail('WEB_CREDENTIAL_MISSING', '请先选择已安装的供应商并填写有效凭据。')
+      proposed.searchOrder = this.searchOrder(proposed)
+      proposed.searchProvider = this.activeSearchId(proposed)
+      if (proposed.searchEnabled && !proposed.searchProvider) {
+        fail('WEB_CREDENTIAL_MISSING', '请先选择已安装的供应商并填写有效凭据。')
+      }
+      if (proposed.searchEnabled && this.entries.get(providerKey('fetch', 'http'))) {
+        proposed.fetchEnabled = true
+        proposed.fetchProvider = 'http'
+      }
+      if (!proposed.searchEnabled) proposed.fetchEnabled = false
+      if (proposed.fetchEnabled) {
+        const entry = this.entries.get(providerKey('fetch', proposed.fetchProvider))
+        if (!entry) proposed.fetchEnabled = false
+        else if (!entry.configured) fail('WEB_CREDENTIAL_MISSING', '请先选择已安装的供应商并填写有效凭据。')
       }
       this.suspended = true
       this.epoch += 1

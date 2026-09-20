@@ -371,6 +371,39 @@ function useAlive() {
   return alive
 }
 
+function CapabilitiesNote(): ReactNode {
+  return (
+    <div className="zhihu-guide" data-testid="zhihu-capabilities">
+      <h3 className="zhihu-guide-title">
+        可以做什么
+      </h3>
+      <ul className="zhihu-guide-steps">
+        <li>
+          搭档可调用站内搜索、全网搜索、热榜、直答
+        </li>
+        <li>
+          若已启用网络搜索，全网搜索也可作为其中一个搜索后端
+        </li>
+        <li>
+          知识库检索；本页可上传参考资料
+        </li>
+        <li>
+          查看近 30 天本机调用用量
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+function SettingsShell(props: { children?: ReactNode }): ReactNode {
+  return (
+    <section className="zhihu-settings" data-testid="zhihu-settings" aria-label="知乎凭证设置">
+      <CapabilitiesNote />
+      {props.children}
+    </section>
+  );
+}
+
 function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButton; Input?: HostInput }): ReactNode {
   const { credentials } = props
   const alive = useAlive()
@@ -397,25 +430,25 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
 
   if (state.status === 'loading') {
     return (
-      <section data-testid="zhihu-settings" aria-label="知乎凭证设置">
+      <SettingsShell>
         <p className="zhihu-status" role="status">
           {activityDots()}
           正在读取凭证状态…
         </p>
-      </section>
+      </SettingsShell>
     );
   }
 
   if (state.status === 'error') {
     return (
-      <section data-testid="zhihu-settings" aria-label="知乎凭证设置">
+      <SettingsShell>
         <p className="zhihu-error" role="alert">
           {`读取失败：${state.error} `}
           <SeatButton host={props.Button} className="zhihu-button" onClick={() => void load()}>
             重试
           </SeatButton>
         </p>
-      </section>
+      </SettingsShell>
     );
   }
 
@@ -480,7 +513,7 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
   }
 
   return (
-    <section data-testid="zhihu-settings" aria-label="知乎凭证设置">
+    <SettingsShell>
       {configured ? null : <div className="zhihu-guide">
         <h3 className="zhihu-guide-title">
           获取 Access Secret
@@ -563,7 +596,7 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
           </Fragment> : '保存'}
         </SeatButton>
       </div>
-    </section>
+    </SettingsShell>
   );
 }
 
@@ -1035,7 +1068,10 @@ function KnowledgeSection(props: { rpc: RpcCaller; Select?: HostSelect; Button?:
   }
 
   return (
-    <section data-testid="zhihu-knowledge" aria-label="知乎知识库">
+    <section className="zhihu-knowledge" data-testid="zhihu-knowledge" aria-label="知乎知识库">
+      <p className="zhihu-intro">
+        把参考资料上传到知乎知识库，供搭档检索。文件会进入知乎云端，请勿上传未发表手稿。
+      </p>
       <p>
         <a
           className="zhihu-link"
@@ -1313,6 +1349,9 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
   </div>
   const body = <div key="body" className="zhihu-panel-body">
     {tab === 'search' ? <div role="tabpanel" className="zhihu-field">
+      {surface === 'settings' ? <p className="zhihu-intro">
+        试调站内搜索、全网搜索、热榜、直答和知识库检索，确认知乎通路可用。
+      </p> : null}
       <div className="zhihu-row">
         {renderSelect(Select, {
           'aria-label': '搜索方式',
