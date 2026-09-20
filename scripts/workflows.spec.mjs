@@ -29,4 +29,25 @@ describe('github workflows', () => {
     expect(release).toContain('DSH_PORTABLE_SMOKE:')
     expect(release).toMatch(/if: runner\.os == 'Windows'\s*\n\s*env:\s*\n\s*DSH_PORTABLE_SMOKE: '1'\s*\n\s*run: pnpm test:e2e:portable/)
   })
+
+  it('verifies plugin delivery and search settings on Windows before packing', () => {
+    const commands =
+      'pnpm pack:plugins && node e2e/plugin-matrix.mjs && node e2e/missing-private-plugin.mjs && node e2e/web-search-settings.mjs'
+    const stepStart = release.indexOf('- name: Verify plugin delivery and search settings')
+    const packStart = release.indexOf('- name: Pack desktop artifacts')
+    const uploadStart = release.indexOf('actions/upload-artifact')
+    expect(stepStart).toBeGreaterThan(-1)
+    expect(packStart).toBeGreaterThan(stepStart)
+    expect(uploadStart).toBeGreaterThan(packStart)
+    const step = release.slice(stepStart, packStart)
+    expect(step).toContain("if: runner.os == 'Windows'")
+    expect(step).toContain(`run: ${commands}`)
+    expect(step).not.toMatch(/continue-on-error/)
+    expect(release).toMatch(
+      /if: runner\.os == 'Windows'\s*\n\s*run: pnpm pack:plugins && node e2e\/plugin-matrix\.mjs && node e2e\/missing-private-plugin\.mjs && node e2e\/web-search-settings\.mjs/,
+    )
+    expect(release.indexOf(commands)).toBeGreaterThan(-1)
+    expect(release.indexOf(commands)).toBeLessThan(release.indexOf('pnpm pack:desktop'))
+    expect(release.indexOf(commands)).toBeLessThan(uploadStart)
+  })
 })

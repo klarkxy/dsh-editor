@@ -13,7 +13,11 @@ const packageNames = PUBLIC_PLUGIN_PACKAGES
 const desktopOnlyNames = pluginManifests.filter((item) => item.visibility === 'desktop').map((item) => item.name)
 
 function expectedEntries(name) {
-  const output = fs.readdirSync(path.join(root, 'packages', name, 'lib')).filter(file => /\.(?:js|js\.map|d\.ts)$/.test(file))
+  const files = readManifest(name).files
+  const packedWholeLib = Array.isArray(files) && files.includes('lib')
+  const output = fs.readdirSync(path.join(root, 'packages', name, 'lib')).filter(file =>
+    /\.(?:js|js\.map|d\.ts)$/.test(file) || (packedWholeLib && /\.cjs(?:\.map)?$/.test(file))
+  )
   if (name === 'dsh-manuscript') output.push('client-editor-core.cjs')
   return ['package/LICENSE', 'package/README.md', 'package/cordis.patch.yml', 'package/package.json', ...output.map(file => 'package/lib/' + file)]
 }
@@ -23,8 +27,16 @@ function readManifest(name) {
 }
 
 function tar(args) {
-  const result = spawnSync('tar', args, { cwd: root, encoding: 'utf8', windowsHide: true })
-  if (result.status !== 0) throw new Error(result.stderr || `tar ${args.join(' ')} failed`)
+  const result = spawnSync('tar', args, {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+    maxBuffer: 32 * 1024 * 1024,
+  })
+  if (result.error || result.status !== 0) {
+    const detail = result.stderr || result.error?.message || `tar ${args.join(' ')} failed`
+    throw new Error(result.error?.code ? `${detail} (${result.error.code})` : detail)
+  }
   return result.stdout
 }
 

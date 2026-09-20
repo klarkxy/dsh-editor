@@ -207,22 +207,99 @@ function contrastRatio(fg, bg) {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
 }
 
+function sourceOver(src, dst) {
+  const sa = src.a
+  const da = dst.a
+  const a = sa + da * (1 - sa)
+  if (a <= 0) return { r: 0, g: 0, b: 0, a: 0 }
+  return {
+    r: (src.r * sa + dst.r * da * (1 - sa)) / a,
+    g: (src.g * sa + dst.g * da * (1 - sa)) / a,
+    b: (src.b * sa + dst.b * da * (1 - sa)) / a,
+    a,
+  }
+}
+
+function rgbOf(color) {
+  return [Math.round(color.r), Math.round(color.g), Math.round(color.b)]
+}
+
+function compositeBackgrounds(backgrounds) {
+  const painted = []
+  for (const value of backgrounds) {
+    const parsed = parseCssColor(value)
+    if (parsed.r == null || parsed.a == null) {
+      throw new Error(`sampleColors: unparsable background ${value}`)
+    }
+    if (parsed.a <= 0) continue
+    painted.push(parsed)
+    if (parsed.a >= 1) break
+  }
+  const bottom = painted[painted.length - 1]
+  if (!bottom || bottom.a < 1) {
+    throw new Error(`sampleColors: no opaque background in ${backgrounds.join(' | ')}`)
+  }
+  let acc = { r: bottom.r, g: bottom.g, b: bottom.b, a: 1 }
+  for (let i = painted.length - 2; i >= 0; i -= 1) {
+    acc = sourceOver(painted[i], acc)
+  }
+  return { bg: rgbOf(acc), layers: painted.map((item) => item.raw) }
+}
+
 async function sampleColors(locator) {
-  return locator.evaluate((el) => {
-    const parse = (value) => {
-      const match = String(value).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-      return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null
-    }
+  const raw = await locator.evaluate((el) => {
+    const backgrounds = []
     let node = el
-    let background = getComputedStyle(node).backgroundColor
-    while (node && background === 'rgba(0, 0, 0, 0)') {
+    while (node) {
+      backgrounds.push(getComputedStyle(node).backgroundColor)
       node = node.parentElement
-      if (!node) break
-      background = getComputedStyle(node).backgroundColor
     }
-    const color = getComputedStyle(el).color
-    return { color, background, fg: parse(color), bg: parse(background) }
+    return { color: getComputedStyle(el).color, backgrounds }
   })
+  const fgParsed = parseCssColor(raw.color)
+  if (fgParsed.r == null || fgParsed.a == null) {
+    throw new Error(`sampleColors: unparsable color ${raw.color}`)
+  }
+  const composed = compositeBackgrounds(raw.backgrounds)
+  const fg = sourceOver(fgParsed, { r: composed.bg[0], g: composed.bg[1], b: composed.bg[2], a: 1 })
+  return {
+    color: raw.color,
+    background: composed.layers.join(' over '),
+    fg: rgbOf(fg),
+    bg: composed.bg,
+  }
+}
+
+async function probeSampleColorCompositing(page) {
+  await page.setContent(`<!doctype html><html><body>
+    <div style="background:#fff;color:rgb(32,32,32)">
+      <div id="probe-dim" style="background:rgba(0,0,0,.06)">title</div>
+      <div id="probe-near-opaque-bg" style="background:rgba(0,0,0,.96)">title</div>
+    </div>
+    <div style="background:#000">
+      <span id="probe-wash" style="color:rgba(255,255,255,.5)">text</span>
+      <span id="probe-near-opaque-fg" style="color:rgba(255,255,255,.96)">text</span>
+    </div>
+  </body></html>`)
+  const dim = await sampleColors(page.locator('#probe-dim'))
+  const wash = await sampleColors(page.locator('#probe-wash'))
+  const same = (rgb, expected, label, sample) => {
+    if (rgb[0] !== expected[0] || rgb[1] !== expected[1] || rgb[2] !== expected[2]) {
+      throw new Error(`${label}: expected ${expected.join(',')} got ${rgb.join(',')} ${JSON.stringify(sample)}`)
+    }
+  }
+  same(dim.bg, [240, 240, 240], 'probe rgba(0,0,0,.06) over white bg', dim)
+  same(dim.fg, [32, 32, 32], 'probe opaque text fg', dim)
+  const dimRatio = contrastRatio(dim.fg, dim.bg)
+  if (dimRatio < 14) {
+    throw new Error(`probe rgba(0,0,0,.06) over white contrast ${dimRatio.toFixed(2)} expected >14 ${JSON.stringify(dim)}`)
+  }
+  same(wash.bg, [0, 0, 0], 'probe black bg', wash)
+  same(wash.fg, [128, 128, 128], 'probe rgba(255,255,255,.5) over black fg', wash)
+  const nearBg = await sampleColors(page.locator('#probe-near-opaque-bg'))
+  const nearFg = await sampleColors(page.locator('#probe-near-opaque-fg'))
+  same(nearBg.bg, [10, 10, 10], 'probe 96% black background over white', nearBg)
+  same(nearFg.fg, [245, 245, 245], 'probe 96% white foreground over black', nearFg)
 }
 
 function assertThemeSample(sample, label, expectDark) {
@@ -282,13 +359,14 @@ async function fulfillRpc(route, result) {
   })
 }
 
-async function assertStandaloneThemes(page, name, samples) {
+async function assertStandaloneThemes(page, name, samples, afterTheme) {
   const check = async (theme, expectDark) => {
     const darkAttr = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
     if (darkAttr !== expectDark) throw new Error(`${name} ${theme}: body[data-ds-dark-theme]=${darkAttr}`)
     for (const item of samples) {
       assertThemeSample(await sampleColors(item.locator), `${name} ${theme} ${item.label}`, expectDark)
     }
+    if (afterTheme) await afterTheme(theme, expectDark)
   }
   // emulateMedia is the OS scheme. Default preference is system, not an explicit user light write.
   await page.emulateMedia({ colorScheme: 'light' })
@@ -310,6 +388,266 @@ async function assertStandaloneThemes(page, name, samples) {
       dark: true,
     }
   }
+}
+
+function boxInsideViewport(box, viewport, label) {
+  if (!viewport) throw new Error(`${label}: missing viewport`)
+  if (!box || box.width <= 0 || box.height <= 0) {
+    throw new Error(`${label}: missing box ${JSON.stringify(box)}`)
+  }
+  const top = box.top ?? box.y
+  const left = box.left ?? box.x
+  const bottom = box.bottom ?? box.y + box.height
+  const right = box.right ?? box.x + box.width
+  const cx = left + box.width / 2
+  const cy = top + box.height / 2
+  if (cx < 0 || cy < 0 || cx > viewport.width || cy > viewport.height) {
+    throw new Error(`${label}: click point (${cx.toFixed(1)}, ${cy.toFixed(1)}) outside ${viewport.width}x${viewport.height}; box=${JSON.stringify(box)}`)
+  }
+  if (top < -1 || left < -1 || bottom > viewport.height + 1 || right > viewport.width + 1) {
+    throw new Error(`${label}: box ${JSON.stringify(box)} outside ${viewport.width}x${viewport.height}`)
+  }
+}
+
+function parseCssColor(value) {
+  if (!value || value === 'transparent') return { r: 0, g: 0, b: 0, a: 0, raw: value }
+  const text = String(value)
+  const comma = text.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i)
+  if (comma) {
+    return {
+      r: Number(comma[1]),
+      g: Number(comma[2]),
+      b: Number(comma[3]),
+      a: comma[4] === undefined ? 1 : Number(comma[4]),
+      raw: value,
+    }
+  }
+  const space = text.match(/rgba?\(\s*(\d+)\s+(\d+)\s+(\d+)(?:\s*\/\s*([\d.]+%?))?\s*\)/i)
+  if (space) {
+    const alpha = space[4]
+    const a = alpha === undefined
+      ? 1
+      : String(alpha).endsWith('%')
+        ? Number.parseFloat(alpha) / 100
+        : Number(alpha)
+    return { r: Number(space[1]), g: Number(space[2]), b: Number(space[3]), a, raw: value }
+  }
+  return { raw: value }
+}
+
+function assertOpaquePaint(color, label, minAlpha = 0.95) {
+  const parsed = parseCssColor(color)
+  if (parsed.r == null || parsed.a == null) throw new Error(`${label}: unparsable color ${color}`)
+  if (parsed.a < minAlpha) throw new Error(`${label}: expected opaque paint, got ${color}`)
+  return parsed
+}
+
+async function readOverlayChrome(page, selectors) {
+  return page.evaluate((selectors) => {
+    const styleOf = (el) => {
+      if (!el) return null
+      const style = getComputedStyle(el)
+      return {
+        color: style.color,
+        backgroundColor: style.backgroundColor,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        paddingTop: style.paddingTop,
+        paddingRight: style.paddingRight,
+        paddingBottom: style.paddingBottom,
+        paddingLeft: style.paddingLeft,
+        borderTopWidth: style.borderTopWidth,
+        borderTopStyle: style.borderTopStyle,
+        borderTopColor: style.borderTopColor,
+      }
+    }
+    return {
+      panel: styleOf(document.querySelector(selectors.panel)),
+      header: styleOf(document.querySelector(selectors.header)),
+      button: styleOf(document.querySelector(selectors.button)),
+      input: styleOf(document.querySelector(selectors.input)),
+    }
+  }, selectors)
+}
+
+function assertStandaloneOverlayChrome(chrome, label, expectDark) {
+  if (!chrome?.panel || !chrome.header || !chrome.button || !chrome.input) {
+    throw new Error(`${label}: missing chrome nodes ${JSON.stringify(chrome)}`)
+  }
+  const panelBg = assertOpaquePaint(chrome.panel.backgroundColor, `${label} panel background`)
+  const buttonBg = assertOpaquePaint(chrome.button.backgroundColor, `${label} button background`)
+  const panelFg = parseCssColor(chrome.panel.color)
+  if (panelFg.r == null) throw new Error(`${label} panel color: ${chrome.panel.color}`)
+  const panelSum = panelBg.r + panelBg.g + panelBg.b
+  const buttonSum = buttonBg.r + buttonBg.g + buttonBg.b
+  if (expectDark && panelSum > 180) {
+    throw new Error(`${label}: expected dark panel fill, got ${chrome.panel.backgroundColor}`)
+  }
+  if (!expectDark && panelSum < 600) {
+    throw new Error(`${label}: expected light panel fill, got ${chrome.panel.backgroundColor}`)
+  }
+  if (Math.abs(panelSum - buttonSum) < 40) {
+    throw new Error(`${label}: button fill ${chrome.button.backgroundColor} collapsed onto panel ${chrome.panel.backgroundColor}`)
+  }
+  const ratio = contrastRatio([panelFg.r, panelFg.g, panelFg.b], [panelBg.r, panelBg.g, panelBg.b])
+  if (ratio < 3) {
+    throw new Error(`${label}: panel text contrast ${ratio.toFixed(2)} on its own background (${chrome.panel.color} / ${chrome.panel.backgroundColor})`)
+  }
+  const font = String(chrome.panel.fontFamily || '')
+  if (/times/i.test(font)) throw new Error(`${label}: panel still using Times (${font})`)
+  if (!/Noto Sans SC|PingFang SC|Microsoft YaHei|system-ui|sans-serif/i.test(font)) {
+    throw new Error(`${label}: panel font ${font}`)
+  }
+  const padTop = Number.parseFloat(chrome.header.paddingTop)
+  const padInline = Number.parseFloat(chrome.header.paddingLeft)
+  if (!(padTop >= 8) || !(padInline >= 12)) {
+    throw new Error(`${label}: header padding ${chrome.header.paddingTop} ${chrome.header.paddingLeft}`)
+  }
+  const border = Number.parseFloat(chrome.panel.borderTopWidth)
+  if (!(border >= 1) || chrome.panel.borderTopStyle === 'none') {
+    throw new Error(`${label}: panel border ${chrome.panel.borderTopWidth} ${chrome.panel.borderTopStyle}`)
+  }
+  const inputBg = parseCssColor(chrome.input.backgroundColor)
+  if (inputBg.a == null || inputBg.a === 0) {
+    throw new Error(`${label}: input background not painted ${chrome.input.backgroundColor}`)
+  }
+  return chrome
+}
+
+async function readProofreadPlacement(page) {
+  return page.evaluate(() => {
+    const rect = (el) => {
+      if (!el) return null
+      const box = el.getBoundingClientRect()
+      return { x: box.x, y: box.y, width: box.width, height: box.height, top: box.top, right: box.right, bottom: box.bottom, left: box.left }
+    }
+    const dock = document.querySelector('.dsh-proofread-dock')
+    const style = dock ? getComputedStyle(dock) : null
+    const panel = document.querySelector('[data-testid="proofread-panel"]')
+    const panelStyle = panel ? getComputedStyle(panel) : null
+    return {
+      space4: dock ? getComputedStyle(dock).getPropertyValue('--space-4').trim() : '',
+      dockVars: dock ? {
+        position: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-position').trim(),
+        right: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-right').trim(),
+        bottom: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-bottom').trim(),
+      } : null,
+      dock: style ? { position: style.position, right: style.right, bottom: style.bottom, top: style.top, left: style.left } : null,
+      panel: panelStyle ? { position: panelStyle.position, top: panelStyle.top, bottom: panelStyle.bottom, right: panelStyle.right } : null,
+      boxes: {
+        dock: rect(dock),
+        toggle: rect(document.querySelector('[data-testid="proofread-open"]')),
+        panel: rect(panel),
+        check: rect(document.querySelector('[data-testid="proofread-check"]')),
+      },
+    }
+  })
+}
+
+async function assertProofreadStandalonePlacement(page, label) {
+  const viewport = page.viewportSize()
+  if (!viewport) throw new Error(`${label}: missing viewport`)
+  await page.getByTestId('proofread-panel').waitFor({ state: 'visible' })
+  await page.getByTestId('proofread-check').waitFor({ state: 'visible' })
+  const placement = await readProofreadPlacement(page)
+  if (!placement.dock || !placement.dockVars) throw new Error(`${label}: missing .dsh-proofread-dock`)
+  if (placement.dockVars.position || placement.dockVars.right || placement.dockVars.bottom) {
+    throw new Error(`${label}: host --dsh-ext-* unexpectedly set ${JSON.stringify(placement.dockVars)}`)
+  }
+  if (placement.dock.position !== 'absolute') {
+    throw new Error(`${label}: expected dock position absolute, got ${placement.dock.position}`)
+  }
+  if (placement.dock.right === 'auto' || placement.dock.bottom === 'auto') {
+    throw new Error(`${label}: dock right/bottom collapsed to auto (space-4=${JSON.stringify(placement.space4)}); ${JSON.stringify(placement.dock)}`)
+  }
+  const rightPx = Number.parseFloat(placement.dock.right)
+  const bottomPx = Number.parseFloat(placement.dock.bottom)
+  if (!Number.isFinite(rightPx) || rightPx < 0 || !Number.isFinite(bottomPx) || bottomPx < 0) {
+    throw new Error(`${label}: dock right/bottom not a length ${JSON.stringify(placement.dock)}`)
+  }
+  boxInsideViewport(placement.boxes.panel, viewport, `${label} proofread-panel`)
+  boxInsideViewport(placement.boxes.check, viewport, `${label} proofread-check`)
+  boxInsideViewport(placement.boxes.toggle, viewport, `${label} proofread-open`)
+  const expectDark = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
+  const chrome = assertStandaloneOverlayChrome(
+    await readOverlayChrome(page, {
+      panel: '[data-testid="proofread-panel"]',
+      header: '.dsh-proofread-panel-header',
+      button: '[data-testid="proofread-check"]',
+      input: '[data-testid="proofread-input"]',
+    }),
+    label,
+    expectDark,
+  )
+  return { viewport, ...placement, chrome, expectDark }
+}
+
+async function readZhihuPlacement(page) {
+  return page.evaluate(() => {
+    const rect = (el) => {
+      if (!el) return null
+      const box = el.getBoundingClientRect()
+      return { x: box.x, y: box.y, width: box.width, height: box.height, top: box.top, right: box.right, bottom: box.bottom, left: box.left }
+    }
+    const dock = document.querySelector('.zhihu-dock')
+    const style = dock ? getComputedStyle(dock) : null
+    const panel = document.querySelector('[data-testid="zhihu-panel"]')
+    const panelStyle = panel ? getComputedStyle(panel) : null
+    return {
+      space4: dock ? getComputedStyle(dock).getPropertyValue('--space-4').trim() : '',
+      dockVars: dock ? {
+        position: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-position').trim(),
+        right: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-right').trim(),
+        bottom: getComputedStyle(dock).getPropertyValue('--dsh-ext-dock-bottom').trim(),
+      } : null,
+      dock: style ? { position: style.position, right: style.right, bottom: style.bottom, top: style.top, left: style.left } : null,
+      panel: panelStyle ? { position: panelStyle.position, top: panelStyle.top, bottom: panelStyle.bottom, right: panelStyle.right } : null,
+      boxes: {
+        dock: rect(dock),
+        toggle: rect(document.querySelector('[data-testid="zhihu-open"]')),
+        panel: rect(panel),
+        search: rect(document.querySelector('[data-testid="zhihu-search"]')),
+      },
+    }
+  })
+}
+
+async function assertZhihuStandalonePlacement(page, label) {
+  const viewport = page.viewportSize()
+  if (!viewport) throw new Error(`${label}: missing viewport`)
+  await page.getByTestId('zhihu-panel').waitFor({ state: 'visible' })
+  await page.getByTestId('zhihu-search').waitFor({ state: 'visible' })
+  const placement = await readZhihuPlacement(page)
+  if (!placement.dock || !placement.dockVars) throw new Error(`${label}: missing .zhihu-dock`)
+  if (placement.dockVars.position || placement.dockVars.right || placement.dockVars.bottom) {
+    throw new Error(`${label}: host --dsh-ext-* unexpectedly set ${JSON.stringify(placement.dockVars)}`)
+  }
+  if (placement.dock.position !== 'absolute') {
+    throw new Error(`${label}: expected dock position absolute, got ${placement.dock.position}`)
+  }
+  if (placement.dock.right === 'auto' || placement.dock.bottom === 'auto') {
+    throw new Error(`${label}: dock right/bottom collapsed to auto (space-4=${JSON.stringify(placement.space4)}); ${JSON.stringify(placement.dock)}`)
+  }
+  const rightPx = Number.parseFloat(placement.dock.right)
+  const bottomPx = Number.parseFloat(placement.dock.bottom)
+  if (!Number.isFinite(rightPx) || rightPx < 0 || !Number.isFinite(bottomPx) || bottomPx < 16) {
+    throw new Error(`${label}: dock right/bottom not a stacked length ${JSON.stringify(placement.dock)}`)
+  }
+  boxInsideViewport(placement.boxes.panel, viewport, `${label} zhihu-panel`)
+  boxInsideViewport(placement.boxes.search, viewport, `${label} zhihu-search`)
+  boxInsideViewport(placement.boxes.toggle, viewport, `${label} zhihu-open`)
+  const expectDark = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
+  const chrome = assertStandaloneOverlayChrome(
+    await readOverlayChrome(page, {
+      panel: '[data-testid="zhihu-panel"]',
+      header: '.zhihu-panel-header',
+      button: '[data-testid="zhihu-search"]',
+      input: '[data-testid="zhihu-query"]',
+    }),
+    label,
+    expectDark,
+  )
+  return { viewport, ...placement, chrome, expectDark }
 }
 
 async function probeWeb(browser, name, expectedPlugins, index) {
@@ -367,20 +705,39 @@ async function probeWeb(browser, name, expectedPlugins, index) {
     const expectsProofread = expectedPlugins.includes('dsh-proofread');
     if (expectsProofread) {
       await page.getByTestId('proofread-open').click();
+      await page.getByTestId('proofread-panel').waitFor();
       await page.getByTestId('proofread-input').fill('我们以经做好准备。');
       await page.getByTestId('proofread-input').press('Control+Enter');
       await page.getByTestId('proofread-result').getByText('建议：已经',{exact:true}).waitFor();
       if (name === '06-proofread-only') {
         const panel = page.getByTestId('proofread-panel')
+        const placements = {}
+        placements['1280x800'] = await assertProofreadStandalonePlacement(page, `${name} 1280x800`)
         await assertStandaloneThemes(page, name, [
           { label: 'finding-message', locator: panel.locator('.dsh-proofread-finding-message').first() },
           { label: 'result-summary', locator: panel.locator('.dsh-proofread-result-summary').first() },
           { label: 'input', locator: page.getByTestId('proofread-input') },
-        ])
+        ], async (theme) => {
+          placements[theme] = await assertProofreadStandalonePlacement(page, `${name} ${theme}`)
+        })
+        const state = report.states.find((item) => item.name === name)
+        if (state) state.standaloneDock = placements
       }
       await page.getByTestId('proofread-input').fill('今天晴天。');
+      boxInsideViewport(await page.getByTestId('proofread-check').boundingBox(), page.viewportSize(), `${name} proofread-check before click`)
       await page.getByTestId('proofread-check').click();
       await page.getByTestId('proofread-result').waitFor();
+      if (name === '06-proofread-only') {
+        await page.setViewportSize({ width: 900, height: 640 })
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
+        const narrow = await assertProofreadStandalonePlacement(page, `${name} 900x640`)
+        const state = report.states.find((item) => item.name === name)
+        if (state?.standaloneDock) state.standaloneDock['900x640'] = narrow
+        await page.getByTestId('proofread-input').fill('我们以经做好准备。')
+        await page.getByTestId('proofread-check').click()
+        await page.getByTestId('proofread-result').getByText('建议：已经', { exact: true }).waitFor()
+        await page.setViewportSize({ width: 1280, height: 800 })
+      }
       await page.getByTestId('proofread-input').press('Escape');
       await page.getByTestId('proofread-open').waitFor();
       if (await page.getByTestId('proofread-open').count() !== 1) throw new Error('duplicate proofread contribution');
@@ -407,14 +764,28 @@ async function probeWeb(browser, name, expectedPlugins, index) {
         }))
         try {
           const panel = page.getByTestId('zhihu-panel')
+          const placements = {}
+          placements['1280x800'] = await assertZhihuStandalonePlacement(page, `${name} 1280x800`)
           await panel.getByTestId('zhihu-query').fill('合成查询')
+          boxInsideViewport(await panel.getByTestId('zhihu-search').boundingBox(), page.viewportSize(), `${name} zhihu-search before click`)
           await panel.getByTestId('zhihu-search').click()
           await panel.getByTestId('zhihu-results').waitFor()
           await assertStandaloneThemes(page, name, [
             { label: 'result-title', locator: panel.locator('.zhihu-result-title').first() },
             { label: 'input', locator: panel.getByTestId('zhihu-query') },
             { label: 'results-summary', locator: panel.locator('.zhihu-results-summary').first() },
-          ])
+          ], async (theme) => {
+            placements[theme] = await assertZhihuStandalonePlacement(page, `${name} ${theme}`)
+          })
+          await page.setViewportSize({ width: 900, height: 640 })
+          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
+          placements['900x640'] = await assertZhihuStandalonePlacement(page, `${name} 900x640`)
+          await panel.getByTestId('zhihu-query').fill('合成查询')
+          await panel.getByTestId('zhihu-search').click()
+          await panel.getByTestId('zhihu-results').waitFor()
+          await page.setViewportSize({ width: 1280, height: 800 })
+          const state = report.states.find((item) => item.name === name)
+          if (state) state.standaloneDock = placements
         } finally {
           await page.unroute('**/zhihu/search')
         }
@@ -461,6 +832,12 @@ const zhihuTarball = stageTarball('dsh-zhihu')
 const browser = await chromium.launch({ headless: true })
 
 try {
+  const probePage = await browser.newPage()
+  try {
+    await probeSampleColorCompositing(probePage)
+  } finally {
+    await probePage.close()
+  }
   transition('add', 'dsh-manuscript', `file:${manuscriptTarball}`)
   inspectState('01-manuscript-only', ['dsh-manuscript'])
   await probeWeb(browser, '01-manuscript-only', ['dsh-manuscript'], 0)
