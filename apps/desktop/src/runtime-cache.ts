@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { copyRuntimeTree, treeMeasure, type TreeDigest } from './runtime-tree.js'
+import { PROFILE_DEPLOY_ALGORITHM, type ProfileDeployIdentity } from './profile.js'
 export { treeDigest } from './runtime-tree.js'
 export type { TreeDigest } from './runtime-tree.js'
 
@@ -67,6 +68,19 @@ export function shouldMaterializePackagedRuntime(env: NodeJS.ProcessEnv): boolea
 
 export function runtimeFromResources(resources: string): CachedRuntime {
   return runtimePaths(resources)
+}
+
+/** Packaged profile identity from the prepared runtime manifest. Does not hash the template. */
+export function readProfileDeployIdentity(resources: string, runtime: { nodePath: string; cliPath: string }): ProfileDeployIdentity {
+  const manifest = JSON.parse(readFileSync(join(resources, 'runtime-manifest.json'), 'utf8')) as unknown
+  assertManifest(manifest)
+  return {
+    algorithm: PROFILE_DEPLOY_ALGORITHM,
+    profileSha256: manifest.profile.sha256,
+    dsh: `@deepseek-ai/dsh@${manifest.dsh.version}`,
+    nodePath: runtime.nodePath,
+    cliPath: runtime.cliPath,
+  }
 }
 
 export function hasPackagedRuntimeCache(home: string): boolean {

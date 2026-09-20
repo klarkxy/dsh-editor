@@ -2,18 +2,18 @@ import { EventEmitter } from 'node:events'
 import { once } from 'node:events'
 import { spawn } from 'node:child_process'
 import { PassThrough } from 'node:stream'
-import { copyFile, lstat, mkdtemp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises'
+import { copyFile, lstat, mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { isAllowedNavigation, parseDshWebUrl } from '../src/dsh-url.js'
 import { clipboardWritePayload, isTrustedClipboardSender, readTrustedClipboardText, writeTrustedClipboardText } from '../src/clipboard.js'
-import { PROFILE_MARKER, ProfileCollisionError, deployProfile, resolveDshHome } from '../src/profile.js'
+import { PROFILE_DEPLOY_ALGORITHM, PROFILE_MARKER, ProfileCollisionError, deployOwnedProfile, deployProfile, resolveDshHome, type ProfileDeployIdentity } from '../src/profile.js'
 import { sanitizeHostLockedPluginOverrides } from '../src/user-plugins.js'
 import { installNavigationPolicy, isAllowedExternalUrl } from '../src/navigation.js'
 import { DshSupervisor } from '../src/supervisor.js'
-import { hasPackagedRuntimeCache, materializePackagedRuntime, runtimeFromResources, shouldMaterializePackagedRuntime, treeDigest } from '../src/runtime-cache.js'
+import { hasPackagedRuntimeCache, materializePackagedRuntime, readProfileDeployIdentity, runtimeFromResources, shouldMaterializePackagedRuntime, treeDigest } from '../src/runtime-cache.js'
 import { claimPrimaryInstance, createDesktopLifecycle, type DesktopLifecycleDeps, type EditorInput, type EditorWindow } from '../src/window-lifecycle.js'
 import type { ChildLike } from '../src/contracts.js'
 
@@ -236,13 +236,16 @@ describe('desktop branding assets', () => {
   it('keeps the source icon, window icon, and Windows package icon wired together', async () => {
     const repo = join(import.meta.dirname, '..', '..', '..')
     const build = join(repo, 'apps', 'desktop', 'build')
-    const [svg, mark, sourcePng, png, ico, main, preload, builder, afterPack, identity] = await Promise.all([
+    const [svg, mark, sourcePng, png, ico, mascot, shellMascot, main, loadingPage, preload, builder, afterPack, identity] = await Promise.all([
       readFile(join(build, 'icon.svg'), 'utf8'),
       readFile(join(build, 'icon-mark.svg'), 'utf8'),
       readFile(join(build, 'icon-source.png')),
       readFile(join(build, 'icon.png')),
       readFile(join(build, 'icon.ico')),
+      readFile(join(build, 'mascot.webp')),
+      readFile(join(repo, 'packages', 'dsh-editor-shell', 'src', 'client', 'assets', 'mascot.webp')),
       readFile(join(repo, 'apps', 'desktop', 'src', 'main.ts'), 'utf8'),
+      readFile(join(repo, 'apps', 'desktop', 'src', 'loading-page.ts'), 'utf8'),
       readFile(join(repo, 'apps', 'desktop', 'preload.cjs'), 'utf8'),
       readFile(join(repo, 'apps', 'desktop', 'electron-builder.yml'), 'utf8'),
       readFile(join(repo, 'scripts', 'after-pack-desktop.cjs'), 'utf8'),
@@ -266,8 +269,14 @@ describe('desktop branding assets', () => {
     expect(main).toContain('setAppUserModelId')
     expect(main).toContain('shouldMaterializePackagedRuntime')
     expect(main).toContain('runtimeFromResources')
-    expect(main).toContain('首次启动正在复制本地写作环境')
-    expect(main).toContain('class="mark"')
+    expect(mascot.subarray(0, 4).toString()).toBe('RIFF')
+    expect(mascot.equals(shellMascot)).toBe(true)
+    expect(main).toContain("'mascot.webp'")
+    expect(loadingPage).toContain('首次启动正在复制本地写作环境')
+    expect(loadingPage).toContain('class="mascot"')
+    expect(loadingPage).toContain("img-src data:")
+    expect(loadingPage).not.toContain('class="mark"')
+    expect(builder).toContain('- "build/mascot.webp"')
     expect(identity).toContain("com.dsh-editor.desktop")
     expect(builder).toContain('appId: com.dsh-editor.desktop')
     expect(builder).toContain('icon: build/icon.ico')
@@ -721,7 +730,138 @@ describe('profile deployment', () => {
     await deployProfile(root, template)
     expect(await readFile(join(root, '.agent-presets', 'team-style', 'preset.yml'), 'utf8')).toBe('name: 市集\n')
   })
+  it('reuses an owned profile when the packaged deploy identity still matches', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    const template = join(root, 'template')
+    const runtime = join(root, 'runtime', 'node_modules', '@deepseek-ai')
+    await mkdir(join(template, 'node_modules'), { recursive: true })
+    await mkdir(join(runtime, 'dsh-tools'), { recursive: true })
+    await mkdir(join(runtime, 'dsh-llm'), { recursive: true })
+    await writeFile(join(template, 'package.json'), JSON.stringify({
+      name: 'dsh-editor-profile',
+      dsh: { profile: { bundles: ['dsh-editor-shell'] } },
+    }))
+    await writeFile(join(template, 'cordis.patch.yml'), '[]\n')
+    await mkdir(join(template, 'node_modules', 'dsh-editor-shell'), { recursive: true })
+    await writeFile(join(template, 'node_modules', 'dsh-editor-shell', 'package.json'), '{"name":"dsh-editor-shell"}')
+    const id = deployIdentity({ nodePath: join(root, 'node.exe'), cliPath: join(root, 'dsh', 'lib', 'bin.js') })
+    const first = await deployOwnedProfile(root, template, join(root, 'runtime', 'node_modules'), id)
+    expect(first.reused).toBe(false)
+    const sentinel = join(first.path, 'node_modules', 'sentinel.txt')
+    await writeFile(sentinel, 'keep')
+    const marker = JSON.parse(await readFile(join(first.path, PROFILE_MARKER), 'utf8')) as { deploy?: unknown }
+    expect(marker.deploy).toEqual({
+      algorithm: PROFILE_DEPLOY_ALGORITHM,
+      profileSha256: id.profileSha256,
+      dsh: id.dsh,
+      nodePath: id.nodePath,
+      cliPath: id.cliPath,
+    })
+    const second = await deployOwnedProfile(root, template, join(root, 'runtime', 'node_modules'), id)
+    expect(second.reused).toBe(true)
+    expect(await readFile(sentinel, 'utf8')).toBe('keep')
+    expect((await readdir(join(root, 'profiles'))).some((name) => name.includes('.stage-') || name.includes('.backup-'))).toBe(false)
+  })
+  it('restages when the template digest, runtime path, or required files change', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    const template = join(root, 'template')
+    await mkdir(template, { recursive: true })
+    await writeFile(join(template, 'package.json'), '{"version":1}')
+    await writeFile(join(template, 'cordis.patch.yml'), '[]\n')
+    const id = deployIdentity()
+    const first = await deployOwnedProfile(root, template, undefined, id)
+    await mkdir(join(first.path, 'node_modules'), { recursive: true })
+    await writeFile(join(first.path, 'node_modules', 'sentinel.txt'), 'keep')
+    const digestChanged = await deployOwnedProfile(root, template, undefined, deployIdentity({ profileSha256: 'other' }))
+    expect(digestChanged.reused).toBe(false)
+    expect(existsSync(join(digestChanged.path, 'node_modules', 'sentinel.txt'))).toBe(false)
+    await mkdir(join(digestChanged.path, 'node_modules'), { recursive: true })
+    await writeFile(join(digestChanged.path, 'node_modules', 'sentinel.txt'), 'keep')
+    const pathChanged = await deployOwnedProfile(root, template, undefined, deployIdentity({ nodePath: 'D:/other/node.exe' }))
+    expect(pathChanged.reused).toBe(false)
+    await writeFile(join(pathChanged.path, PROFILE_MARKER), JSON.stringify({ app: 'dsh-editor', schema: 1 }))
+    const oldMarker = await deployOwnedProfile(root, template, undefined, id)
+    expect(oldMarker.reused).toBe(false)
+    await rm(join(oldMarker.path, 'package.json'))
+    const missing = await deployOwnedProfile(root, template, undefined, id)
+    expect(missing.reused).toBe(false)
+    expect(existsSync(join(missing.path, 'package.json'))).toBe(true)
+  })
+  it('still sanitizes locked overlays and preset toggles on a stamp hit', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    const template = join(root, 'template')
+    const novel = join(template, 'agent-presets', 'dsh-editor-novel')
+    await mkdir(novel, { recursive: true })
+    await writeFile(join(template, 'package.json'), '{"name":"dsh-editor-profile"}')
+    await writeFile(join(template, 'composition.json'), JSON.stringify({ presets: [{ id: 'dsh-editor-novel' }] }))
+    await writeFile(join(novel, 'agent.cordis.yml'), '[]\n')
+    await writeFile(join(novel, PROFILE_MARKER), JSON.stringify({ app: 'dsh-editor', schema: 1 }))
+    const id = deployIdentity()
+    await deployOwnedProfile(root, template, undefined, id)
+    expect(existsSync(join(root, '.agent-presets', 'dsh-editor-novel'))).toBe(true)
+    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({
+      schema: 1,
+      overrides: { 'editor-novel-kernel': true, zhihu: false },
+      presets: { 'dsh-editor-novel': false },
+      installed: [],
+    }))
+    const second = await deployOwnedProfile(root, template, undefined, id)
+    expect(second.reused).toBe(true)
+    expect(JSON.parse(await readFile(join(root, 'dsh-plugins.json'), 'utf8')).overrides).toEqual({ zhihu: false })
+    expect(existsSync(join(root, '.agent-presets', 'dsh-editor-novel'))).toBe(false)
+  })
+  it('relinks a community plugin already listed in profile bundles', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    const template = join(root, 'template')
+    await mkdir(join(template, 'node_modules'), { recursive: true })
+    await writeFile(join(template, 'package.json'), JSON.stringify({
+      name: 'dsh-editor-profile',
+      dsh: { profile: { bundles: ['dsh-editor-shell'] } },
+    }))
+    const plugin = join(root, 'user-plugins', 'community-theme')
+    await mkdir(plugin, { recursive: true })
+    await writeFile(join(plugin, 'package.json'), '{"name":"community-theme","version":"1.0.0"}')
+    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({
+      schema: 1,
+      installed: [{ name: 'community-theme', spec: 'github:acme/community-theme', version: '1.0.0' }],
+    }))
+    const id = deployIdentity()
+    const first = await deployOwnedProfile(root, template, undefined, id)
+    expect(JSON.parse(await readFile(join(first.path, 'package.json'), 'utf8')).dsh.profile.bundles).toContain('community-theme')
+    const linked = join(first.path, 'node_modules', 'community-theme')
+    await writeFile(join(root, 'user-plugins', 'community-theme', 'package.json'), '{"name":"community-theme","version":"1.0.1"}')
+    await rm(linked, { recursive: true, force: true })
+    const second = await deployOwnedProfile(root, template, undefined, id)
+    expect(second.reused).toBe(true)
+    expect(JSON.parse(await readFile(join(linked, 'package.json'), 'utf8')).version).toBe('1.0.1')
+  })
+  it('skips recopying an unchanged app-owned preset', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
+    const template = join(root, 'template')
+    const preset = join(template, 'agent-presets', 'dsh-editor')
+    await mkdir(preset, { recursive: true })
+    await writeFile(join(preset, 'agent.cordis.yml'), '[]\n')
+    await writeFile(join(preset, PROFILE_MARKER), JSON.stringify({ app: 'dsh-editor', schema: 1 }))
+    const id = deployIdentity()
+    await deployOwnedProfile(root, template, undefined, id)
+    const deployed = join(root, '.agent-presets', 'dsh-editor', 'agent.cordis.yml')
+    const before = (await stat(deployed)).mtimeMs
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    await deployOwnedProfile(root, template, undefined, id)
+    expect((await stat(deployed)).mtimeMs).toBe(before)
+  })
 })
+
+function deployIdentity(partial: Partial<ProfileDeployIdentity> = {}): ProfileDeployIdentity {
+  return {
+    algorithm: PROFILE_DEPLOY_ALGORITHM,
+    profileSha256: 'sha-template',
+    dsh: '@deepseek-ai/dsh@0.1.5-rc.2',
+    nodePath: 'C:/runtime/node.exe',
+    cliPath: 'C:/runtime/dsh/lib/bin.js',
+    ...partial,
+  }
+}
 
 describe('persistent packaged runtime cache', () => {
   it('copies the packaged runtime only for portable executables', () => {
@@ -738,6 +878,18 @@ describe('persistent packaged runtime cache', () => {
     expect(source).toContain('cacheReady')
     expect(source).not.toContain('await treeDigest(')
     expect(source).not.toContain('await validate(')
+  })
+  it('reads profile deploy identity from the runtime manifest without hashing the template', async () => {
+    const { resources } = await runtimeFixture()
+    const identity = readProfileDeployIdentity(resources, { nodePath: 'n', cliPath: 'c' })
+    expect(identity).toEqual({
+      algorithm: PROFILE_DEPLOY_ALGORITHM,
+      profileSha256: identity.profileSha256,
+      dsh: '@deepseek-ai/dsh@0.1.5-rc.2',
+      nodePath: 'n',
+      cliPath: 'c',
+    })
+    expect(identity.profileSha256).toMatch(/^[0-9a-f]{64}$/)
   })
   it('copies and verifies the bundled runtime outside the portable extraction tree', async () => {
     const { root, resources } = await runtimeFixture()

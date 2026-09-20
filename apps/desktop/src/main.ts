@@ -6,14 +6,15 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { deployProfile, resolveDshHome } from './profile.js'
-import { hasPackagedRuntimeCache, materializePackagedRuntime, runtimeFromResources, shouldMaterializePackagedRuntime } from './runtime-cache.js'
+import { deployOwnedProfile, resolveDshHome } from './profile.js'
+import { hasPackagedRuntimeCache, materializePackagedRuntime, readProfileDeployIdentity, runtimeFromResources, shouldMaterializePackagedRuntime } from './runtime-cache.js'
 import { DshSupervisor } from './supervisor.js'
 import { checkLatest } from './update-checker.js'
 import { cancelUpdateDownload, downloadUpdate, installUpdate } from './update-download.js'
 import { presentUpdateCheck, UpdateOfferStore, type PublicUpdateCheckResult } from './update-session.js'
 import { claimPrimaryInstance, createDesktopLifecycle, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
 import { DESKTOP_APP_ID, DESKTOP_PRODUCT_NAME, readDesktopVersion } from './app-identity.js'
+import { loadingPageDataUrl } from './loading-page.js'
 
 const desktopRoot = fileURLToPath(new URL('../', import.meta.url))
 const desktopVersion = readDesktopVersion(readFileSync(join(desktopRoot, 'package.json'), 'utf8'))
@@ -26,7 +27,12 @@ if (isolatedUserData) app.setPath('userData', isolatedUserData)
 if (!app.isPackaged) app.setName('dsh-editor-dev')
 app.setAppUserModelId(app.isPackaged ? DESKTOP_APP_ID : `${DESKTOP_APP_ID}.dev`)
 
-async function resolveRuntime(home: string): Promise<{ nodePath: string; cliPath: string; template: string }> {
+async function resolveRuntime(home: string): Promise<{
+  nodePath: string
+  cliPath: string
+  template: string
+  deploy?: ReturnType<typeof readProfileDeployIdentity>
+}> {
   const cached = !app.isPackaged
     ? undefined
     : shouldMaterializePackagedRuntime(process.env)
@@ -43,7 +49,11 @@ async function resolveRuntime(home: string): Promise<{ nodePath: string; cliPath
   if (manifest.name !== '@deepseek-ai/dsh' || manifest.version !== '0.1.5-rc.2') {
     throw new Error(`DSH runtime mismatch: expected @deepseek-ai/dsh@0.1.5-rc.2, found ${manifest.name ?? 'unknown'}@${manifest.version ?? 'unknown'}`)
   }
-  return { nodePath, cliPath, template }
+  let deploy: ReturnType<typeof readProfileDeployIdentity> | undefined
+  if (app.isPackaged) {
+    try { deploy = readProfileDeployIdentity(process.resourcesPath, { nodePath, cliPath }) } catch { /* unpackaged-shaped resources keep the full deploy path */ }
+  }
+  return { nodePath, cliPath, template, deploy }
 }
 
 function errorHtml(error: unknown): string {
@@ -52,17 +62,11 @@ function errorHtml(error: unknown): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><title>DSH Editor</title><style>body{font-family:system-ui;margin:3rem;max-width:48rem;line-height:1.5;-webkit-app-region:drag}main{-webkit-app-region:no-drag}code{display:block;white-space:pre-wrap;margin:1rem 0;padding:1rem;background:#f4f2ea}.actions{display:flex;gap:.6rem}button{padding:.5rem .8rem;border:1px solid #777;color:#222;background:transparent;font:inherit;cursor:pointer}</style><main><h1>DSH Editor 启动失败</h1><p>本地 DSH 服务未能就绪，请根据下面的诊断信息排查后重试。</p><code>${escaped}</code><p class="actions"><button type="button" data-dsh-startup-retry onclick="window.dshWindow.retry()">重试</button><button type="button" onclick="window.dshWindow.close()">关闭</button></p></main>`)}`
 }
 
-/* 启动加载页:React 挂载前的纯内联 CSS。品牌标与界面 AppBrandMark 同形；
-   微光行改写自 Amicro (MIT License, Copyright (c) 2026 Syed Subhan Uddin)
-   的 shimmer-line。CSP 保持 default-src 'none'; style-src 'unsafe-inline',
-   reduced-motion 停掉循环，保留静态微光段。 */
-const BRAND_MARK_SVG = '<svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#1a7ff0"/><path fill="#0a4ea8" fill-opacity="0.38" d="M0 17.6c3-1.1 5.6 0 8.1.55 2.5.55 5 .15 7.3-.6 2.5-.85 5.2-.7 8.6.25V24H0Z"/><ellipse cx="9" cy="12.35" rx="5.55" ry="3.55" fill="#fff"/><path d="M14.05 10.2C15.5 7.1 16.7 4.9 17.6 3.45" fill="none" stroke="#fff" stroke-width="0.9" stroke-linecap="round"/><ellipse cx="17.15" cy="3.2" rx="0.95" ry="0.42" transform="rotate(-50 17.15 3.2)" fill="#fff"/><ellipse cx="18.15" cy="3.05" rx="0.95" ry="0.42" transform="rotate(40 18.15 3.05)" fill="#fff"/><circle cx="6.35" cy="11.55" r=".4" fill="#163a66"/><rect x="14.35" y="10.7" width="6.15" height="7.15" rx="1" fill="#fff"/><path fill="#1a5aaa" d="M15.3 10.25h.75v.95h-.75zm1.75 0h.75v.95h-.75zm1.75 0h.75v.95h-.75z"/><path fill="none" stroke="#b7c7d6" stroke-width=".45" stroke-linecap="round" d="M15.55 13h3.55M15.55 14.55h3.55M15.55 16.1h2.35"/></svg>'
-
 function loadingHtml(firstLaunch: boolean): string {
-  const message = firstLaunch
-    ? '首次启动正在复制本地写作环境，可能需要一分钟…'
-    : '正在启动本地写作环境…'
-  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>DSH Editor</title><style>body{font-family:system-ui;display:grid;place-content:center;height:100vh;margin:0;background:#faf9f5;color:#393832;-webkit-app-region:drag}main{display:grid;justify-items:center;gap:14px;text-align:center}h1{margin:0;font-size:22px}p{margin:0;color:#77746c;max-width:22rem}.mark{width:56px;height:56px;display:block}.shimmer{position:relative;width:96px;height:3px;border-radius:999px;background:rgba(20,20,19,.12);overflow:hidden}.shimmer i{position:absolute;top:0;bottom:0;left:0;width:33%;border-radius:inherit;background:#1b365d;opacity:.5;animation:shimmer-sweep 1.5s ease-in-out infinite}@keyframes shimmer-sweep{from{transform:translateX(-100%)}to{transform:translateX(300%)}}@media (prefers-reduced-motion:reduce){.shimmer i{animation:none}}</style><main>${BRAND_MARK_SVG}<h1>DSH Editor</h1><p>${message}</p><span class="shimmer" aria-hidden="true"><i></i></span></main>`)}`
+  return loadingPageDataUrl({
+    firstLaunch,
+    mascotBytes: readFileSync(join(desktopRoot, 'build', 'mascot.webp')),
+  })
 }
 
 function firstLaunchLoading(): boolean {
@@ -106,7 +110,7 @@ const lifecycle = createDesktopLifecycle({
       : dialog.showSaveDialogSync(options)
   },
   resolveRuntime,
-  deployProfile,
+  deployProfile: deployOwnedProfile,
   createSupervisor: (options) => new DshSupervisor(options),
   errorHtml,
   loadingHtml: () => loadingHtml(firstLaunchLoading()),

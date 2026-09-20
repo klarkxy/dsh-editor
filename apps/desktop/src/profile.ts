@@ -1,11 +1,29 @@
 import { copyFile, cp, lstat, mkdir, readdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { restoreUserPlugins, sanitizeHostLockedPluginOverrides } from './user-plugins.js'
+import { linkPointsTo, sameFileTree } from './file-tree.js'
 import { existsSync } from 'node:fs'
 import { isAbsolute, join, resolve as resolvePath } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 export const PROFILE_NAME = 'dsh-editor'
 export const PROFILE_MARKER = '.dsh-editor-owner.json'
+/** Bump when skip-path invariants change so old stamps restage. */
+export const PROFILE_DEPLOY_ALGORITHM = 1
+
+export interface ProfileDeployIdentity {
+  algorithm: number
+  profileSha256: string
+  dsh: string
+  nodePath: string
+  cliPath: string
+}
+
+export interface ProfileDeployResult {
+  path: string
+  reused: boolean
+}
+
+const PEER_PACKAGES = ['dsh-tools', 'dsh-llm'] as const
 
 export class ProfileCollisionError extends Error {
   constructor(profilePath: string) {
@@ -18,11 +36,94 @@ export function resolveDshHome(env: NodeJS.ProcessEnv, homeDirectory: string): s
   return env.DSH_HOME?.trim() || join(homeDirectory, '.dsh-editor')
 }
 
-async function isOwnedProfile(profilePath: string): Promise<boolean> {
+async function readOwnerMarker(profilePath: string): Promise<{ app?: unknown; schema?: unknown; deploy?: unknown } | undefined> {
   try {
-    const marker = JSON.parse(await readFile(join(profilePath, PROFILE_MARKER), 'utf8')) as { app?: unknown; schema?: unknown }
-    return marker.app === 'dsh-editor' && marker.schema === 1
-  } catch { return false }
+    return JSON.parse(await readFile(join(profilePath, PROFILE_MARKER), 'utf8')) as { app?: unknown; schema?: unknown; deploy?: unknown }
+  } catch {
+    return undefined
+  }
+}
+
+async function isOwnedProfile(profilePath: string): Promise<boolean> {
+  const marker = await readOwnerMarker(profilePath)
+  return marker?.app === 'dsh-editor' && marker.schema === 1
+}
+
+function deployStamp(identity: ProfileDeployIdentity): ProfileDeployIdentity {
+  return {
+    algorithm: identity.algorithm,
+    profileSha256: identity.profileSha256,
+    dsh: identity.dsh,
+    nodePath: identity.nodePath,
+    cliPath: identity.cliPath,
+  }
+}
+
+async function writeOwnerMarker(profilePath: string, deploy?: ProfileDeployIdentity): Promise<void> {
+  const marker = deploy
+    ? { app: 'dsh-editor', schema: 1, deploy: deployStamp(deploy) }
+    : { app: 'dsh-editor', schema: 1 }
+  await writeFile(join(profilePath, PROFILE_MARKER), `${JSON.stringify(marker)}\n`, 'utf8')
+}
+
+async function stampMatches(profilePath: string, deploy: ProfileDeployIdentity): Promise<boolean> {
+  const marker = await readOwnerMarker(profilePath)
+  if (marker?.app !== 'dsh-editor' || marker.schema !== 1) return false
+  return JSON.stringify(marker.deploy) === JSON.stringify(deployStamp(deploy))
+}
+
+async function readTemplateBundles(template: string): Promise<string[]> {
+  try {
+    const manifest = JSON.parse(await readFile(join(template, 'package.json'), 'utf8')) as { dsh?: { profile?: { bundles?: unknown } } }
+    return Array.isArray(manifest.dsh?.profile?.bundles)
+      ? manifest.dsh.profile.bundles.filter((name): name is string => typeof name === 'string' && name !== '')
+      : []
+  } catch {
+    return []
+  }
+}
+
+async function requiredTemplateFilesPresent(template: string, profilePath: string): Promise<boolean> {
+  let entries: import('node:fs').Dirent[]
+  try { entries = await readdir(template, { withFileTypes: true }) } catch { return false }
+  for (const entry of entries) {
+    if (entry.name === 'node_modules' || entry.name === 'agent-presets' || entry.name.startsWith('.')) continue
+    if (!entry.isFile()) continue
+    if (!existsSync(join(profilePath, entry.name))) return false
+  }
+  return existsSync(join(profilePath, 'package.json'))
+}
+
+async function bundledEntriesPresent(template: string, profilePath: string): Promise<boolean> {
+  for (const name of await readTemplateBundles(template)) {
+    const source = join(template, 'node_modules', name)
+    if (!existsSync(source)) continue
+    const destination = join(profilePath, 'node_modules', name)
+    if (!existsSync(destination)) return false
+  }
+  return true
+}
+
+async function peerLinksValid(profilePath: string, runtimeNodeModules: string): Promise<boolean> {
+  for (const peer of PEER_PACKAGES) {
+    const target = join(runtimeNodeModules, '@deepseek-ai', peer)
+    if (!existsSync(target)) return false
+    if (!await linkPointsTo(join(profilePath, 'node_modules', '@deepseek-ai', peer), target)) return false
+  }
+  return true
+}
+
+async function canReuseProfile(
+  profilePath: string,
+  template: string,
+  runtimeNodeModules: string | undefined,
+  deploy: ProfileDeployIdentity,
+): Promise<boolean> {
+  if (!await stampMatches(profilePath, deploy)) return false
+  if (!await requiredTemplateFilesPresent(template, profilePath)) return false
+  if (!await bundledEntriesPresent(template, profilePath)) return false
+  if (runtimeNodeModules && !await peerLinksValid(profilePath, runtimeNodeModules)) return false
+  return true
 }
 
 async function ensureDirectory(path: string): Promise<void> {
@@ -66,29 +167,25 @@ async function copyTemplateTree(source: string, target: string): Promise<void> {
   }
 }
 
-/** Deploy only the marked profile, staging beside it so DSH home data survives. */
-export async function deployProfile(home: string, template: string, runtimeNodeModules?: string): Promise<string> {
-  await sanitizeHostLockedPluginOverrides(home)
-  const profiles = join(home, 'profiles')
-  const target = join(profiles, PROFILE_NAME)
-  await mkdir(profiles, { recursive: true })
-  await ensureDirectory(target)
-  if (existsSync(target) && !(await isOwnedProfile(target))) throw new ProfileCollisionError(target)
+async function stageProfileTree(template: string, stage: string, runtimeNodeModules?: string): Promise<void> {
+  await copyTemplateTree(template, stage)
+  if (!runtimeNodeModules) return
+  const peerParent = join(stage, 'node_modules', '@deepseek-ai')
+  await mkdir(peerParent, { recursive: true })
+  for (const peer of PEER_PACKAGES) {
+    const source = join(runtimeNodeModules, '@deepseek-ai', peer)
+    if (!existsSync(source)) throw new Error(`Bundled DSH dependency is missing: ${source}`)
+    await symlink(source, join(peerParent, peer), 'junction')
+  }
+}
+
+async function replaceOwnedProfile(profiles: string, target: string, template: string, runtimeNodeModules?: string): Promise<void> {
   const nonce = randomUUID()
   const stage = join(profiles, `.${PROFILE_NAME}.stage-${nonce}`)
   const backup = join(profiles, `.${PROFILE_NAME}.backup-${nonce}`)
   try {
-    await copyTemplateTree(template, stage)
-    if (runtimeNodeModules) {
-      const peerParent = join(stage, 'node_modules', '@deepseek-ai')
-      await mkdir(peerParent, { recursive: true })
-      for (const peer of ['dsh-tools', 'dsh-llm']) {
-        const target = join(runtimeNodeModules, '@deepseek-ai', peer)
-        if (!existsSync(target)) throw new Error(`Bundled DSH dependency is missing: ${target}`)
-        await symlink(target, join(peerParent, peer), 'junction')
-      }
-    }
-    await writeFile(join(stage, PROFILE_MARKER), `${JSON.stringify({ app: 'dsh-editor', schema: 1 })}\n`, 'utf8')
+    await stageProfileTree(template, stage, runtimeNodeModules)
+    await writeOwnerMarker(stage)
     if (existsSync(target)) await renameDirectory(target, backup)
     try { await renameDirectory(stage, target) } catch (error) {
       if (existsSync(backup) && !existsSync(target)) await renameDirectory(backup, target)
@@ -99,9 +196,38 @@ export async function deployProfile(home: string, template: string, runtimeNodeM
     if (existsSync(stage)) await rm(stage, { recursive: true, force: true })
     throw error
   }
-  await deployAgentPresets(home, template)
-  await restoreUserPlugins(home, target)
-  return target
+}
+
+/** Deploy the owned profile. Same identity skips the tree copy; sanitize and preset/plugin sync still run. */
+export async function deployOwnedProfile(
+  home: string,
+  template: string,
+  runtimeNodeModules?: string,
+  deploy?: ProfileDeployIdentity,
+): Promise<ProfileDeployResult> {
+  await sanitizeHostLockedPluginOverrides(home)
+  const profiles = join(home, 'profiles')
+  const target = join(profiles, PROFILE_NAME)
+  await mkdir(profiles, { recursive: true })
+  await ensureDirectory(target)
+  if (existsSync(target) && !(await isOwnedProfile(target))) throw new ProfileCollisionError(target)
+  const reused = Boolean(deploy && existsSync(target) && await canReuseProfile(target, template, runtimeNodeModules, deploy))
+  if (!reused) await replaceOwnedProfile(profiles, target, template, runtimeNodeModules)
+  const bundled = await readTemplateBundles(template)
+  try {
+    await deployAgentPresets(home, template)
+    await restoreUserPlugins(home, target, bundled)
+    if (deploy) await writeOwnerMarker(target, deploy)
+  } catch (error) {
+    if (existsSync(target) && await isOwnedProfile(target)) await writeOwnerMarker(target)
+    throw error
+  }
+  return { path: target, reused }
+}
+
+/** Deploy only the marked profile, staging beside it so DSH home data survives. */
+export async function deployProfile(home: string, template: string, runtimeNodeModules?: string, deploy?: ProfileDeployIdentity): Promise<string> {
+  return (await deployOwnedProfile(home, template, runtimeNodeModules, deploy)).path
 }
 
 /**
@@ -167,6 +293,7 @@ async function deployAgentPresets(home: string, template: string): Promise<void>
     }
     await ensureDirectory(target)
     if (existsSync(target) && !(await isOwnedProfile(target))) throw new ProfileCollisionError(target)
+    if (existsSync(target) && await sameFileTree(source, target)) continue
     const nonce = randomUUID()
     const stage = join(presets, `.${entry.name}.stage-${nonce}`)
     const backup = join(presets, `.${entry.name}.backup-${nonce}`)

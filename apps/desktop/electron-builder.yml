@@ -20,6 +20,7 @@ files:
   - "dist/**"
   - "build/icon.png"
   - "build/icon.ico"
+  - "build/mascot.webp"
   - "package.json"
   - "preload.cjs"
 extraResources:

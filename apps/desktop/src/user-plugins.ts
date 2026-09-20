@@ -2,6 +2,7 @@ import { cp, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 'no
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname, isAbsolute, join } from 'node:path'
+import { linkPointsTo, sameFileTree } from './file-tree.js'
 
 const PACKAGE_NAME = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/
 /** Keep in sync with HOST_LOCKED_ENTRY_IDS in dsh-editor-plugins. */
@@ -70,6 +71,7 @@ async function deployPluginPreset(presetsRoot: string, owner: string, preset: Pr
   if (existsSync(target)) {
     const existing = await readPresetOwner(target)
     if (existing?.plugin !== owner) return
+    if (await sameFileTree(source, target, new Set([PRESET_OWNER_MARKER]))) return
   }
   const nonce = randomUUID()
   const stage = join(presetsRoot, `.${preset.id}.stage-${nonce}`)
@@ -191,7 +193,18 @@ export async function sanitizeHostLockedPluginOverrides(home: string): Promise<v
   } catch { /* missing overlay is a clean home */ }
 }
 
-export async function restoreUserPlugins(home: string, profilePath: string): Promise<void> {
+async function linkUserPlugin(source: string, destination: string): Promise<void> {
+  if (await linkPointsTo(destination, source)) return
+  await mkdir(dirname(destination), { recursive: true })
+  if (existsSync(destination)) await rm(destination, { recursive: true, force: true })
+  try {
+    await symlink(source, destination, process.platform === 'win32' ? 'junction' : 'dir')
+  } catch {
+    await cp(source, destination, { recursive: true })
+  }
+}
+
+export async function restoreUserPlugins(home: string, profilePath: string, bundledNames: readonly string[] = []): Promise<void> {
   let state: { schema?: unknown; installed?: unknown }
   try {
     state = JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8')) as { schema?: unknown; installed?: unknown }
@@ -206,31 +219,27 @@ export async function restoreUserPlugins(home: string, profilePath: string): Pro
   } catch {
     return
   }
-  const bundles = [...(manifest.dsh?.profile?.bundles ?? [])]
+  const previous = [...(manifest.dsh?.profile?.bundles ?? [])]
   const installedNames = new Set<string>()
-  let changed = false
   for (const item of state.installed) {
     if (!item || typeof item !== 'object') continue
     const name = (item as { name?: unknown }).name
-    if (typeof name !== 'string' || !isSafePackageName(name, bundles)) continue
+    if (typeof name !== 'string' || !isSafePackageName(name, bundledNames)) continue
     const source = join(home, 'user-plugins', name)
     if (!existsSync(join(source, 'package.json'))) continue
-    const destination = join(profilePath, 'node_modules', name)
-    await mkdir(dirname(destination), { recursive: true })
-    if (existsSync(destination)) await rm(destination, { recursive: true, force: true })
-    try {
-      await symlink(source, destination, process.platform === 'win32' ? 'junction' : 'dir')
-    } catch {
-      await cp(source, destination, { recursive: true })
-    }
+    await linkUserPlugin(source, join(profilePath, 'node_modules', name))
     installedNames.add(name)
-    if (!bundles.includes(name)) {
-      bundles.push(name)
-      changed = true
-    }
+  }
+  const bundles = [...bundledNames]
+  for (const name of installedNames) if (!bundles.includes(name)) bundles.push(name)
+  for (const name of previous) {
+    if (bundles.includes(name) || bundledNames.includes(name) || name.startsWith('@deepseek-ai/')) continue
+    const destination = join(profilePath, 'node_modules', name)
+    if (existsSync(destination)) await rm(destination, { recursive: true, force: true })
   }
   await restorePluginPresets(home, profilePath, bundles, installedNames)
-  if (!changed) return
+  const unchanged = previous.length === bundles.length && previous.every((name, index) => name === bundles[index])
+  if (unchanged) return
   manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 }

@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path'
 import { installNavigationPolicy } from './navigation.js'
-import { deployProfile, resolveDshHome } from './profile.js'
+import { resolveDshHome, type ProfileDeployIdentity, type ProfileDeployResult } from './profile.js'
+import { StartupTiming } from './startup-timing.js'
 import type { DshLaunch, DshSupervisorOptions } from './supervisor.js'
 
 export interface EditorInput {
@@ -41,8 +42,8 @@ export interface DesktopLifecycleDeps {
   createBrowserWindow(): EditorWindow
   fromWebContents(contents: unknown): EditorWindow | undefined
   showSaveDialog(window: EditorWindow | undefined, suggested: string): string | undefined
-  resolveRuntime(home: string): Promise<{ nodePath: string; cliPath: string; template: string }>
-  deployProfile: typeof deployProfile
+  resolveRuntime(home: string): Promise<{ nodePath: string; cliPath: string; template: string; deploy?: ProfileDeployIdentity }>
+  deployProfile: (home: string, template: string, runtimeNodeModules?: string, deploy?: ProfileDeployIdentity) => Promise<ProfileDeployResult | string>
   createSupervisor(options: DshSupervisorOptions): DesktopSupervisor
   errorHtml(error: unknown): string
   loadingHtml(): string
@@ -81,6 +82,7 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
   let retrying: Promise<void> | undefined
   let closing = false
   let downloadInstalled = false
+  let bootTiming: StartupTiming | undefined
 
   function installDownloadHandler(window: EditorWindow): void {
     if (downloadInstalled) return
@@ -110,7 +112,17 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
     const policy = navigationPolicies.get(window)
     if (policy) policy.setExpected(url)
     else navigationPolicies.set(window, installNavigationPolicy(window.webContents, url))
-    await window.loadURL(url.href)
+    const timing = bootTiming
+    bootTiming = undefined
+    if (!timing) {
+      await window.loadURL(url.href)
+      return
+    }
+    try {
+      await timing.measure('page', () => window.loadURL(url.href))
+    } finally {
+      timing.flush()
+    }
   }
 
   async function runStart(restart: boolean): Promise<URL> {
@@ -118,19 +130,30 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
       currentUrl = undefined
       await supervisor?.stop()
     }
-    const home = resolveDshHome(deps.env, deps.getHomePath())
-    const runtime = await deps.resolveRuntime(home)
-    await deps.deployProfile(home, runtime.template, join(dirname(dirname(runtime.cliPath)), 'node_modules'))
-    supervisor ??= deps.createSupervisor({
-      onUnexpectedExit: (reason) => {
-        if (closing) return
-        currentUrl = undefined
-        void loadAll(deps.errorHtml(reason))
-      },
-    })
-    const url = await supervisor.start({ ...runtime, home, env: deps.env, timeoutMs: deps.timeoutMs })
-    currentUrl = url
-    return url
+    const timing = new StartupTiming()
+    bootTiming = timing
+    try {
+      const home = resolveDshHome(deps.env, deps.getHomePath())
+      const runtime = await timing.measure('runtime', () => deps.resolveRuntime(home))
+      await timing.measure('profile', async () => {
+        const result = await deps.deployProfile(home, runtime.template, join(dirname(dirname(runtime.cliPath)), 'node_modules'), runtime.deploy)
+        return typeof result === 'string' ? { path: result, reused: false } : result
+      }, (result) => result.reused ? 'hit' : 'deploy')
+      supervisor ??= deps.createSupervisor({
+        onUnexpectedExit: (reason) => {
+          if (closing) return
+          currentUrl = undefined
+          void loadAll(deps.errorHtml(reason))
+        },
+      })
+      const url = await timing.measure('spawn-ready', () => supervisor!.start({ ...runtime, home, env: deps.env, timeoutMs: deps.timeoutMs }))
+      currentUrl = url
+      return url
+    } catch (error) {
+      timing.flush()
+      if (bootTiming === timing) bootTiming = undefined
+      throw error
+    }
   }
 
   function ensureBackend(restart: boolean): Promise<URL> {
