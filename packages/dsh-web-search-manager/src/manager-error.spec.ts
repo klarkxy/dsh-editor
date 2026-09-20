@@ -20,7 +20,7 @@ it.each(['WEB_CREDENTIAL_MISSING', 'WEB_DISABLED', 'WEB_ABORTED', 'WEB_PROVIDER_
         async search() { throw new WebError('provider echoed fixture-private-key', code) },
       }))
       const { revision, ...settings } = manager.status().settings
-      await manager.update({ ...settings, searchEnabled: true, searchProvider: 'test' }, revision)
+      await manager.update({ ...settings, searchEnabled: true, searchProvider: 'test', searchOrder: ['test'] }, revision)
       expect(registered?.available()).toBe(true)
       const error = await registered!.search({ query: 'fixed fixture query' }).catch(error => error)
       expect(error).toBeInstanceOf(WebError)

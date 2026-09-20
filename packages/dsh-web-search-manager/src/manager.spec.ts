@@ -48,7 +48,7 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     keys.clear()
     await manager.refresh()
     expect(manager.status().searchActive).toBe(false)
-    await expect(update(manager, { searchEnabled: true, searchProvider: 'exa' })).rejects.toMatchObject({ code: 'WEB_CREDENTIAL_MISSING' })
+    await expect(update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'] })).rejects.toMatchObject({ code: 'WEB_CREDENTIAL_MISSING' })
   })
   it('skips an unconfigured higher-priority backend', async () => {
     const { manager, keys } = setup()
@@ -68,14 +68,14 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
       { id: 'search-engine', label: '搜索引擎', description: 'test', billing: 'none' },
       () => ({ id: 'search-engine', available: () => true, search }),
     )
-    await update(manager, { searchEnabled: true, searchProvider: 'search-engine' })
+    await update(manager, { searchEnabled: true, searchProvider: 'search-engine', searchOrder: ['search-engine'] })
     expect(manager.status()).toMatchObject({ searchActive: true })
     await web.search({ query: 'hello' })
     expect(search).toHaveBeenCalledOnce()
   })
   it('lets other plugins call ctx.web, resolves credentials per request, and never persists a secret', async () => {
     const { manager, web, keys, factory, save } = setup()
-    await update(manager, { searchProvider: 'exa', searchEnabled: true })
+    await update(manager, { searchProvider: 'exa', searchEnabled: true, searchOrder: ['exa'] })
     await web.search({ query: 'hello', maxResults: 2 })
     keys.set('TEST_EXA_KEY', 'rotated-fixture-secret')
     await web.search({ query: 'hello again' })
@@ -90,7 +90,7 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     const { manager, web, search } = setup()
     const other = vi.fn(async () => ({ sources: [], truncated: false }))
     manager.registerSearchProvider({ id: 'tavily', label: 'Tavily', description: 'test', credentialRef: 'TEST_TAVILY_KEY', billing: 'request' }, () => ({ id: 'tavily', available: () => true, search: other }))
-    await update(manager, { searchEnabled: true, searchProvider: 'exa' })
+    await update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'] })
     search.mockRejectedValueOnce(new Error('leaked fixture-exa-secret'))
     const error = await web.search({ query: 'hello' }).catch(error => error)
     expect(error).toBeInstanceOf(WebError); expect(error.code).toBe('WEB_PROVIDER_ERROR')
@@ -103,7 +103,7 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
   it('rejects duplicate IDs and unloads the provider without retaining a route', async () => {
     const { manager, web, off } = setup()
     expect(() => manager.registerSearchProvider({ id: 'exa', label: 'duplicate', description: '', billing: 'request', credentialRef: 'TEST_EXA_KEY' }, () => { throw new Error() })).toThrow()
-    await update(manager, { searchEnabled: true, searchProvider: 'exa' })
+    await update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'] })
     off(); off()
     expect(manager.status().providers).toHaveLength(0)
     await expect(web.search({ query: 'hello' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
@@ -111,7 +111,7 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
   it('cancels an in-flight adapter even if that adapter ignores cancellation', async () => {
     const { manager, web, search } = setup()
     search.mockImplementationOnce(() => new Promise(() => {}))
-    await update(manager, { searchEnabled: true, searchProvider: 'exa' })
+    await update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'] })
     const pending = web.search({ query: 'slow' }).catch(error => error)
     await vi.waitFor(() => expect(search).toHaveBeenCalledOnce())
     await update(manager, { searchEnabled: false })
@@ -119,13 +119,13 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
   })
   it('does not start a request whose caller was already cancelled', async () => {
     const { manager, web, search } = setup()
-    await update(manager, { searchEnabled: true, searchProvider: 'exa' })
+    await update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'] })
     await expect(web.search({ query: 'hello' }, AbortSignal.abort())).rejects.toMatchObject({ code: 'WEB_ABORTED' })
     expect(search).not.toHaveBeenCalled()
   })
   it('fails closed when persistence fails and rejects stale configuration revisions', async () => {
     const { manager, save, web } = setup()
-    const state = await update(manager, { searchProvider: 'exa', searchEnabled: true })
+    const state = await update(manager, { searchProvider: 'exa', searchEnabled: true, searchOrder: ['exa'] })
     const { revision: _revision, ...settings } = state.settings
     await expect(manager.update(settings, 0)).rejects.toMatchObject({ code: 'WEB_CONFIG_CONFLICT' })
     save.mockRejectedValueOnce(new Error('disk full'))
@@ -142,7 +142,7 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     await web.fetch({ url: 'https://example.com' })
     expect(fetch).toHaveBeenCalledOnce()
     search.mockResolvedValueOnce({ sources: Array.from({ length: 9 }, (_, n) => ({ url: `https://example.com/${n}`, title: '', snippet: '' })), truncated: false })
-    await update(manager, { searchEnabled: true, searchProvider: 'exa', maxResults: 3 })
+    await update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'], maxResults: 3 })
     const result = await web.search({ query: 'bounded', maxResults: 10 })
     expect(result.sources).toHaveLength(3); expect(result.truncated).toBe(true)
   })
@@ -154,9 +154,25 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
   })
   it('still permits disabling after a provider with an endpoint override is uninstalled', async () => {
     const { manager, off } = setup()
-    await update(manager, { searchEnabled: true, searchProvider: 'exa', endpoints: { 'search:exa': 'https://example.com/api' } })
+    await update(manager, { searchEnabled: true, searchProvider: 'exa', searchOrder: ['exa'], endpoints: { 'search:exa': 'https://example.com/api' } })
     off()
     await expect(update(manager, { searchEnabled: false })).resolves.toMatchObject({ searchActive: false })
+  })
+  it('saves an empty searchOrder after the last backend is disabled and does not revive DuckDuckGo on refresh', async () => {
+    const { manager, save } = setup()
+    await update(manager, { searchEnabled: true, searchOrder: ['exa'] })
+    await update(manager, { searchEnabled: false, searchOrder: [] })
+    const saved = save.mock.calls.at(-1)?.[0]
+    expect(saved?.searchOrder).toEqual([])
+    const { manager: next } = setup(saved)
+    const search = vi.fn(async () => ({ sources: [{ url: 'https://example.com' }], truncated: false }))
+    next.registerSearchProvider(
+      { id: 'ddg', label: 'DuckDuckGo', description: 'test', billing: 'none' },
+      () => ({ id: 'ddg', available: () => true, search }),
+    )
+    await next.refresh()
+    expect(next.status()).toMatchObject({ searchActive: false, settings: { searchOrder: [] } })
+    expect(search).not.toHaveBeenCalled()
   })
   it('serializes concurrent updates and accepts only one writer for a revision', async () => {
     const { manager } = setup()

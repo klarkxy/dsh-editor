@@ -1,6 +1,6 @@
 import { WebError, type WebFetchProvider, type WebSearchProvider } from '@deepseek-ai/dsh-web'
 import {
-  defaultSettings, pickActiveSearch, providerKey, resolveSearchOrder, validateBaseURL,
+  defaultSettings, migrateSearchOrder, pickActiveSearch, providerKey, resolveSearchOrder, validateBaseURL,
   type FetchProviderFactory, type ProviderDescriptor, type ProviderKind, type ProviderOptions,
   type SearchProviderFactory, type WebSettings, type WebStatus,
 } from './contracts.ts'
@@ -11,7 +11,7 @@ export interface WebRegistry {
 }
 export interface ManagerOptions {
   web: WebRegistry
-  initial?: WebSettings
+  initial?: Omit<WebSettings, 'searchOrder'> & { searchOrder?: string[] }
   resolveCredential(ref: string): Promise<string | undefined>
   save(settings: WebSettings): Promise<void>
 }
@@ -51,7 +51,7 @@ export class WebSearchManager {
 
   constructor(private readonly options: ManagerOptions) {
     const initial = structuredClone(options.initial ?? defaultSettings())
-    this.settings = { ...defaultSettings(), ...initial, searchOrder: Array.isArray(initial.searchOrder) ? initial.searchOrder : [] }
+    this.settings = { ...defaultSettings(), ...initial, searchOrder: migrateSearchOrder(initial) }
   }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener)

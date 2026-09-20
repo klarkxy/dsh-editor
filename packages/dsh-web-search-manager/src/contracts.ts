@@ -54,18 +54,16 @@ export function defaultSearchOrder(ids: readonly string[], keyed: (id: string) =
   return [...ids.filter(keyed), ...ids.filter(id => !keyed(id))]
 }
 
+export function migrateSearchOrder(settings: { searchOrder?: string[]; searchProvider?: string }): string[] {
+  return settings.searchOrder ?? (settings.searchProvider ? [settings.searchProvider] : [...DEFAULT_SEARCH_ORDER])
+}
+
 export function resolveSearchOrder(
   knownIds: readonly string[],
   settings: Pick<WebSettings, 'searchOrder' | 'searchProvider'>,
-  keyed: (id: string) => boolean,
+  _keyed: (id: string) => boolean,
 ): string[] {
-  const known = knownIds.filter((id, index) => knownIds.indexOf(id) === index)
-  const listed = settings.searchOrder.filter(id => known.includes(id))
-  if (listed.length) return listed
-  if (settings.searchProvider && known.includes(settings.searchProvider)) return [settings.searchProvider]
-  if (settings.searchOrder.length) return []
-  if (known.includes('ddg')) return ['ddg']
-  return defaultSearchOrder(known, keyed)
+  return [...new Set(settings.searchOrder.filter(id => knownIds.includes(id)))]
 }
 
 export function pickActiveSearch(order: readonly string[], configured: (id: string) => boolean): string {

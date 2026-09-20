@@ -25,6 +25,27 @@ describe('search engine URL concat', () => {
     expect(unwrapSearchHref('https://user:pass@example.com', SEARCH_ENGINE_PAGE)).toBeUndefined()
   })
 
+  it('only unwraps DDG /l/ redirects and keeps other u/uddg params', () => {
+    expect(unwrapSearchHref('https://example.com/path?u=alice', SEARCH_ENGINE_PAGE))
+      .toBe('https://example.com/path?u=alice')
+    expect(unwrapSearchHref('https://example.com/?u=https%3A%2F%2Fexample.org%2F', SEARCH_ENGINE_PAGE))
+      .toBe('https://example.com/?u=https%3A%2F%2Fexample.org%2F')
+    expect(unwrapSearchHref('https://example.com/?uddg=https%3A%2F%2Fexample.org%2F', SEARCH_ENGINE_PAGE))
+      .toBe('https://example.com/?uddg=https%3A%2F%2Fexample.org%2F')
+    expect(unwrapSearchHref('/l/?uddg=https%3A%2F%2Fexample.com%2Fb', SEARCH_ENGINE_PAGE))
+      .toBe('https://example.com/b')
+    expect(unwrapSearchHref('//duckduckgo.com/l/?u=https%3A%2F%2Fexample.com%2Fc', SEARCH_ENGINE_PAGE))
+      .toBe('https://example.com/c')
+    expect(unwrapSearchHref('https://duckduckgo.com/about?u=https%3A%2F%2Fexample.org%2F', SEARCH_ENGINE_PAGE))
+      .toBeUndefined()
+    expect(unwrapSearchHref('https://duckduckgo.com/l/?uddg=javascript%3Aalert(1)', SEARCH_ENGINE_PAGE))
+      .toBeUndefined()
+    expect(unwrapSearchHref('https://duckduckgo.com/l/?uddg=https%3A%2F%2Fuser%3Apass%40example.com', SEARCH_ENGINE_PAGE))
+      .toBeUndefined()
+    expect(unwrapSearchHref('https://duckduckgo.com.evil.com/l/?uddg=https%3A%2F%2Fexample.org%2F', SEARCH_ENGINE_PAGE))
+      .toBe('https://duckduckgo.com.evil.com/l/?uddg=https%3A%2F%2Fexample.org%2F')
+  })
+
   it('parses result anchors from a search-page HTML fixture', () => {
     expect(parseSearchEngineHtml(html)).toEqual([
       { url: 'https://example.com/a', title: 'Alpha' },

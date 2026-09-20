@@ -14,7 +14,7 @@ type RestSpec = {
   parse(payload: unknown): WebSearchSource[]
 }
 
-function createRestSearch(spec: RestSpec) {
+function createRestSearch(spec: RestSpec): new (options: RestSearchOptions) => WebSearchProvider {
   return class implements WebSearchProvider {
     readonly id = spec.id
     constructor(private readonly options: RestSearchOptions) {}

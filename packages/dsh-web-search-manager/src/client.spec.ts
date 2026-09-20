@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { defaultSettings, type ProviderView, type WebStatus } from './contracts.ts'
-import { isProviderOn, providerCostNote, searchBackends, selectedSearchBackend } from './client.tsx'
+import {
+  canEnableSearch, catalogSearchBackends, isProviderOn, nextSearchEnabled,
+  providerCostNote, searchBackends, selectedSearchBackend,
+} from './client.tsx'
 
 function provider(partial: Partial<ProviderView> & Pick<ProviderView, 'id' | 'kind'>): ProviderView {
   return {
@@ -50,5 +53,45 @@ describe('web search settings cards', () => {
     })
     expect(searchBackends(current).map(row => row.id)).toEqual(['exa'])
     expect(selectedSearchBackend(current)?.id).toBe('exa')
+  })
+
+  it('keeps an unconfigured backend in the explicit order so the key field can show', () => {
+    const current = status({
+      providers: [
+        provider({ id: 'brave', kind: 'search', configured: false, credentialRef: 'search:brave' }),
+        provider({ id: 'ddg', kind: 'search', billing: 'none' }),
+      ],
+      settings: { searchEnabled: false, searchOrder: ['brave'] },
+    })
+    expect(searchBackends(current).map(row => row.id)).toEqual(['brave'])
+    expect(catalogSearchBackends(current).map(row => row.id)).toEqual(['brave', 'ddg'])
+  })
+
+  it('only treats ordered backends as enough to enable search', () => {
+    const providers = [
+      provider({ id: 'ddg', kind: 'search', billing: 'none' }),
+      provider({ id: 'brave', kind: 'search', configured: false, credentialRef: 'search:brave' }),
+      provider({ id: 'http', kind: 'fetch', billing: 'none' }),
+    ]
+    expect(canEnableSearch([], providers, {}, {})).toBe(false)
+    expect(canEnableSearch(['brave'], providers, {}, {})).toBe(false)
+    expect(canEnableSearch(['brave'], providers, { brave: 'sk-test' }, {})).toBe(true)
+    expect(canEnableSearch(['brave'], providers, { brave: 'sk-test' }, { 'search:brave': false })).toBe(false)
+    expect(canEnableSearch(['brave'], providers, { brave: 'sk-test' }, { 'search:brave': true })).toBe(true)
+    expect(canEnableSearch(['ddg'], providers, {}, {})).toBe(true)
+    expect(canEnableSearch(['http'], providers, {}, {})).toBe(false)
+  })
+
+  it('keeps the master switch off when adding a backend while search is already off', () => {
+    const providers = [
+      provider({ id: 'brave', kind: 'search', configured: false, credentialRef: 'search:brave' }),
+      provider({ id: 'ddg', kind: 'search', billing: 'none' }),
+    ]
+    expect(nextSearchEnabled(false, ['brave'], providers, { brave: 'sk-test' }, {})).toBe(false)
+    expect(nextSearchEnabled(false, ['ddg'], providers, {}, {})).toBe(false)
+    expect(nextSearchEnabled(true, ['brave'], providers, {}, {})).toBe(false)
+    expect(nextSearchEnabled(true, ['brave'], providers, { brave: 'sk-test' }, {})).toBe(true)
+    expect(nextSearchEnabled(true, ['ddg', 'brave'], providers, {}, {})).toBe(true)
+    expect(nextSearchEnabled(true, [], providers, {}, {})).toBe(false)
   })
 })

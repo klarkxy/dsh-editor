@@ -31,13 +31,18 @@ export function unwrapSearchHref(href: string, pageUrl: string): string | undefi
   let raw = decodeEntities(href.trim())
   let url: URL
   try { url = new URL(raw, pageUrl) } catch { return }
-  const nested = url.searchParams.get('uddg') ?? url.searchParams.get('u')
-  if (nested) {
-    try { url = new URL(nested) } catch { return }
-  }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return
-  const host = url.hostname.replace(/^www\./, '')
-  if (host === 'duckduckgo.com' || host.endsWith('.duckduckgo.com')) return
+  const host = url.hostname
+  const isDdg = host === 'duckduckgo.com' || host.endsWith('.duckduckgo.com')
+  if (isDdg && (url.pathname === '/l/' || url.pathname === '/l')) {
+    const nested = url.searchParams.get('uddg') ?? url.searchParams.get('u')
+    if (nested) {
+      try { url = new URL(nested) } catch { return }
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return
+    }
+  }
+  const resultHost = url.hostname.replace(/^www\./, '')
+  if (resultHost === 'duckduckgo.com' || resultHost.endsWith('.duckduckgo.com')) return
   return url.href
 }
 

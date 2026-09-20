@@ -65,6 +65,31 @@ export function providerCostNote(billing: ProviderView['billing']): string {
   return ''
 }
 
+export function canEnableSearch(
+  order: readonly string[],
+  providers: readonly ProviderView[],
+  keys: Record<string, string>,
+  writable: Record<string, boolean>,
+): boolean {
+  return order.some(id => {
+    const provider = providers.find(item => item.kind === 'search' && item.id === id)
+    if (!provider) return false
+    if (provider.configured) return true
+    const typed = (keys[provider.id] ?? '').trim()
+    return Boolean(provider.credentialRef && typed && writable[provider.credentialRef] !== false)
+  })
+}
+
+export function nextSearchEnabled(
+  currentlyEnabled: boolean,
+  nextOrder: readonly string[],
+  providers: readonly ProviderView[],
+  keys: Record<string, string>,
+  writable: Record<string, boolean>,
+): boolean {
+  return currentlyEnabled && canEnableSearch(nextOrder, providers, keys, writable)
+}
+
 export function NetworkSearchSettings({ client }: { client: Client }) {
   const [status, setStatus] = useState<WebStatus>()
   const [draft, setDraft] = useState<WebSettings>()
@@ -103,25 +128,23 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
 
   async function persist(on: boolean, order: string[]) {
     if (!status || !draft) return
-    let base = status
-    for (const provider of searchBackends(status)) {
-      const typed = (keys[provider.id] ?? '').trim()
-      if (!on || !provider.credentialRef || !typed) continue
-      if (base.searchActive) {
-        base = await update({ ...editable(base.settings), searchEnabled: false, fetchEnabled: false }, base.settings.revision)
-      }
+    for (const provider of status.providers) {
+      if (provider.kind !== 'search') continue
+      const snapshot = keys[provider.id] ?? ''
+      const typed = snapshot.trim()
+      if (!provider.credentialRef || !typed) continue
+      if (writable[provider.credentialRef] === false) throw new Error('当前凭据为只读，无法写入。')
       unwrap(await client.remote.credentials.set(provider.credentialRef, typed))
-      setKeys(current => ({ ...current, [provider.id]: '' }))
+      setKeys(current => current[provider.id] === snapshot ? { ...current, [provider.id]: '' } : current)
     }
     await update({
-      ...editable(base.settings),
+      ...editable(status.settings),
       maxResults: draft.maxResults, maxQueries: draft.maxQueries,
       timeoutMs: draft.timeoutMs, maxFetchChars: draft.maxFetchChars,
       endpoints: draft.endpoints, searchOrder: order,
       searchEnabled: on, fetchProvider: 'http', fetchEnabled: on,
-    }, base.settings.revision)
+    }, status.settings.revision)
     await load()
-    setNote(on ? '联网搜索已启用。按优先级使用第一个已就绪的后端。' : '联网搜索已关闭。')
   }
 
   async function removeKey(provider: ProviderView) {
@@ -142,9 +165,9 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
   const enabled = searchBackends(status)
   const backends = catalogSearchBackends(status)
   const selected = selectedSearchBackend(status)
-  const on = status.searchActive
+  const on = status.settings.searchEnabled
   const order = enabled.map(provider => provider.id)
-  const canEnable = backends.some(provider => !provider.credentialRef || provider.configured || Boolean((keys[provider.id] ?? '').trim()))
+  const canEnable = canEnableSearch(order, status.providers, keys, writable)
   const limits = [
     ['maxResults', '每条查询的结果上限', 1, 20],
     ['maxQueries', '每次工具调用的查询上限', 1, 5],
@@ -183,7 +206,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
           aria-checked={on}
           aria-label={on ? '关闭联网搜索' : '启用联网搜索'}
           disabled={busy || (!on && !canEnable)}
-          onClick={() => void action(() => persist(!on, order.length ? order : ['ddg']))}>
+          onClick={() => void action(() => persist(!on, order))}>
           <span className="web-search-switch-thumb" aria-hidden="true" />
         </button>
       </header>
@@ -191,7 +214,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
         {backends.map(provider => {
           const participating = order.includes(provider.id)
           const rank = order.indexOf(provider.id)
-          const active = on && selected?.id === provider.id
+          const active = status.searchActive && selected?.id === provider.id
           const cost = providerCostNote(provider.billing)
           const needsKey = Boolean(provider.credentialRef)
           const shared = Boolean(provider.credentialShared)
@@ -205,7 +228,8 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
               {provider.signupUrl ? <p><a href={provider.signupUrl} target="_blank" rel="noreferrer noopener">去注册</a></p> : null}
               <p className="web-search-meta">{active ? '当前使用' : participating ? (provider.configured ? '已就绪' : '未就绪，将跳过') : '未开启'}</p>
               {showKey ? <label>API Key
-                <input type="password" autoComplete="off" spellCheck={false} disabled={busy}
+                <input type="password" autoComplete="off" spellCheck={false}
+                  disabled={busy || writable[provider.credentialRef ?? ''] === false}
                   value={keys[provider.id] ?? ''}
                   placeholder={provider.configured ? '已配置，留空不替换' : '请输入 API Key'}
                   onChange={event => setKeys(current => ({ ...current, [provider.id]: event.target.value }))} />
@@ -225,7 +249,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
                 disabled={busy}
                 onClick={() => {
                   const next = participating ? order.filter(id => id !== provider.id) : [...order, provider.id]
-                  void action(() => persist(next.length > 0, next))
+                  void action(() => persist(nextSearchEnabled(status.settings.searchEnabled, next, status.providers, keys, writable), next))
                 }}>
                 <span className="web-search-switch-thumb" aria-hidden="true" />
               </button>
@@ -239,6 +263,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
       </ol>
       {on ? <div className="web-search-card-actions">
         <button type="button" disabled={busy} onClick={() => void action(async () => {
+          await persist(status.settings.searchEnabled, order)
           const result = await call<{ sources: number }>('test')
           await load()
           setNote(`连接正常，返回 ${result.sources} 条来源。`)
@@ -254,12 +279,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
         </label>
       ))}
       <button type="button" onClick={() => void action(async () => {
-        await update({
-          ...editable(status.settings),
-          maxResults: draft.maxResults, maxQueries: draft.maxQueries,
-          timeoutMs: draft.timeoutMs, maxFetchChars: draft.maxFetchChars, endpoints: draft.endpoints,
-          searchOrder: order, fetchEnabled: status.settings.searchEnabled, fetchProvider: 'http',
-        }, status.settings.revision)
+        await persist(status.settings.searchEnabled, order)
         setNote('已保存。')
       })}>保存</button>
     </fieldset>
