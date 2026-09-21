@@ -4,6 +4,8 @@
 
 ## npm 安装
 
+2026-09-21 已发布首版：[@klarkxy/dsh-zhihu@0.1.0](https://www.npmjs.com/package/@klarkxy/dsh-zhihu/v/0.1.0) 和 [@klarkxy/dsh-web-search-manager@0.1.0](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager/v/0.1.0)。[发布 CI](https://github.com/klarkxy/dsh-editor/actions/runs/35566521366) 已完成 npm 完整性回读和版本回写。
+
 本次发布使用统一的 `@klarkxy/` scope：
 
 ```sh
@@ -104,7 +106,7 @@ CI 按公开包之间的运行时依赖顺序处理。`workspace:*`、`workspace
 
 工作流提交到 GitHub 后仍需 npm 授权。根据 [npm trust 的前提](https://docs.npmjs.com/cli/v11/commands/npm-trust/#prerequisites)，可信发布绑定要求包已经存在；新包不能只靠一个未绑定的 OIDC 工作流首次创建。新增包也需要完成一次初始化，不能用仓库级配置取代 npm 的逐包授权。
 
-可先完成一次普通 npm 发布，或由维护者在本仓库的 Actions secrets 中设置有新包发布权限的临时 `NPM_TOKEN`，让本工作流完成首次创建。不要把 token 写入仓库或聊天；可在自己的终端执行 `gh secret set NPM_TOKEN --repo klarkxy/dsh-editor` 并按提示输入。受 2FA 限制而不能直接发布的 token 不能用于这个引导流程。
+可先完成一次普通 npm 发布，或由维护者在本仓库的 Actions secrets 中设置有新包发布权限的临时 `NPM_TOKEN`，让本工作流完成首次创建。不要把 token 写入仓库或聊天；可在自己的终端执行 `gh secret set NPM_TOKEN --repo klarkxy/dsh-editor` 并按提示输入。创建引导用 granular token 时，勾选 **Bypass two-factor authentication**，包权限选择 **Read and write (publish and stage)**，范围覆盖待发布包的 scope，并设置短有效期。普通要求交互式 2FA 的令牌会让 CI 报 `EOTP`；仅有 stage 权限的令牌不能直接发布。该临时配置只用于首次创建，后续使用 OIDC。具体字段见 [npm 令牌创建说明](https://docs.npmjs.com/creating-and-viewing-access-tokens/)。
 
 每个新包首次成功后，打开它的 **Settings → Trusted publishing**，新增 GitHub Actions 配置：
 
