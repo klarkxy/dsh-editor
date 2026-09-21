@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Opt-in web search settings and managed provider lifecycle over DSH ctx.web",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -114,6 +114,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-37ddd81206a74bc67ae4cfebce7cbe71baf3434c6c32d447d2ca58a5f4be4c6c"
+    "contentHash": "sha256-7e4c1b2f102f69e49b427bb574c0c858801dd8621d1072625c798e67565c141d"
   }
 }
