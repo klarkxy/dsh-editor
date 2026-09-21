@@ -19,7 +19,8 @@ function expectedEntries(name) {
     /\.(?:js|js\.map|d\.ts)$/.test(file) || (packedWholeLib && /\.cjs(?:\.map)?$/.test(file))
   )
   if (name === 'dsh-manuscript') output.push('client-editor-core.cjs')
-  return ['package/LICENSE', 'package/README.md', 'package/cordis.patch.yml', 'package/package.json', ...output.map(file => 'package/lib/' + file)]
+  const localizedReadme = files?.includes('README.zh-CN.md') ? ['package/README.zh-CN.md'] : []
+  return ['package/LICENSE', 'package/README.md', ...localizedReadme, 'package/cordis.patch.yml', 'package/package.json', ...output.map(file => 'package/lib/' + file)]
 }
 
 function readManifest(name) {

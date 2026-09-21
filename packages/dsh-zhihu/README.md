@@ -1,45 +1,62 @@
 # @klarkxy/dsh-zhihu
 
-独立知乎资料插件。普通 RPC 与可选 Tool 入口分开，可单独使用。包版本独立维护；兼容 DSH `0.1.5-rc.2`。凭据：DSH `ZHIHU_ACCESS_TOKEN`。
+Zhihu search, knowledge-base access, usage tracking, and optional agent tools for DSH. The service and tool entry points can be used separately.
 
-## 安装到 DSH Web
+[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-zhihu/README.zh-CN.md)
 
-需要 Node.js 22 或更高版本，以及 DSH `0.1.5-rc.2` 的 Web profile。
+## Install in DSH Web
+
+Requires Node.js 22 or later and a DSH `0.1.5-rc.2` Web profile.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-zhihu
 ```
 
-安装后重启 `dsh web`，打开「知乎资料」并配置 `ZHIHU_ACCESS_TOKEN`。模型需要知乎工具时，在所用 `agent.cordis.yml` 的插件列表中加入：
+Restart `dsh web`, open **Zhihu resources (知乎资料)**, and configure the DSH credential `ZHIHU_ACCESS_TOKEN`.
+
+To make the Zhihu tools available to an agent, add this entry to the plugin list in its `agent.cordis.yml`:
 
 ```yaml
 - name: '@klarkxy/dsh-zhihu/tools'
 ```
 
-npm 上无 scope 的 `dsh-zhihu` 属于其他维护者，请使用完整的 `@klarkxy/dsh-zhihu` 包名。此包已经编译，安装时无需构建本仓库。
+Use the full scoped package name. The unscoped npm package `dsh-zhihu` belongs to another maintainer. This package includes compiled output; you do not need to clone or build this repository to install it. Its version is maintained independently of the DSH version.
 
-## 入口
+## Features and entry points
 
-- Host `zhihu`（feature `zhihu`）：`/zhihu`（`src/index.ts`）
-- 官方 Web：`shell.overlay`（id `zhihu`，搜索 / 设置 / 用量 / 知识库）
-- 桌面：`dsh-editor.settings.zhihu` 嵌入设置「知乎资料」（配置 / 用量 / 知识库 / 连接测试），桌面上只有这一个入口（`src/client.ts`）
-- `zhihu-tools`（feature `zhihu-tools`，`dshEditor.inserts`）：桌面组合自动加入；工具名未改
+- **DSH Web:** a `shell.overlay` entry with ID `zhihu`, containing search, settings, usage, and knowledge-base views.
+- **DSH Editor desktop:** **Settings → Zhihu resources (知乎资料)** provides configuration, usage, knowledge bases, and a connection test.
+- **Host service:** `zhihu`, exposed through `/zhihu`.
+- **Agent tools:** the optional `@klarkxy/dsh-zhihu/tools` entry.
 
-桌面 canonical recipe `desktop` 启用 `zhihu` + `zhihu-tools`；`basic` / `smart` / `full` 别名解析同一集合。
+The desktop composition enables both the `zhihu` and `zhihu-tools` features. The `basic`, `smart`, and `full` recipe aliases resolve to the same desktop feature set.
 
-## 契约
+## Service and tool API
 
-`/zhihu`：`search`、`global.search`、`hot.list`、`ask`、`knowledge.search`、`knowledge.bases`、`knowledge.upload`、`usage.summary`。工具：`zhihu_search`、`zhihu_global_search`、`zhihu_hot_list`、`zhihu_ask`、`zhihu_knowledge_search`（`src/tools.ts`）。UI 与 Tool 共用计量 `dsh_editor_zhihu_usage`。Client 用结构型 `Select` / `Dialog`，不导入私有 Shell 包（`src/client-host-ui.ts`）。
+The `/zhihu` RPC methods are `search`, `global.search`, `hot.list`, `ask`, `knowledge.search`, `knowledge.bases`, `knowledge.upload`, and `usage.summary`.
 
-若当前 profile 已经提供 `webSearchManager`（安装了 `@klarkxy/dsh-web-search-manager`），Host 还会把知乎全网搜索注册为网络搜索后端（id `zhihu-global`），与「知乎资料」共用 `ZHIHU_ACCESS_TOKEN`。未安装管理插件时不注册，也不额外增加依赖。模型侧仍走官方 `web_search`；专用 `zhihu_global_search` 工具不受影响。
+The agent tools are:
 
-在不含空格的目录放置 tarball 后执行：
+- `zhihu_search`
+- `zhihu_global_search`
+- `zhihu_hot_list`
+- `zhihu_ask`
+- `zhihu_knowledge_search`
 
-```powershell
-$packagePath = (Resolve-Path .\klarkxy-dsh-zhihu-0.1.0.tgz).Path.Replace('\', '/')
-dsh plugin --profile web add "file:$packagePath"   # klarkxy-dsh-zhihu-0.1.0.tgz
-```
+The UI and tools share usage accounting in `dsh_editor_zhihu_usage`. The Web client uses the host UI contracts without importing private Shell packages.
 
-## 文档
+## Integration with web search
 
-[使用者指南](https://github.com/klarkxy/dsh-editor/blob/main/docs/user-guide.md) · [产品原则](https://github.com/klarkxy/dsh-editor/blob/main/docs/product-principles.md) · [插件发布与发现](https://github.com/klarkxy/dsh-editor/blob/main/docs/plugin-distribution.md)
+When the same profile provides `webSearchManager` through [@klarkxy/dsh-web-search-manager](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager), this plugin also registers a `zhihu-global` search backend. It shares `ZHIHU_ACCESS_TOKEN` with the Zhihu settings and is available through the standard `web_search` tool when enabled in the manager.
+
+The integration is optional: without the manager, no backend is registered and no extra dependency is required. The dedicated `zhihu_global_search` tool remains available independently.
+
+## Documentation
+
+The following repository guides are in Chinese:
+
+- [User guide](https://github.com/klarkxy/dsh-editor/blob/main/docs/user-guide.md)
+- [Product principles](https://github.com/klarkxy/dsh-editor/blob/main/docs/product-principles.md)
+- [Plugin publishing and marketplace discovery](https://github.com/klarkxy/dsh-editor/blob/main/docs/plugin-distribution.md)
+
+See [LICENSE](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-zhihu/LICENSE) for the package license.

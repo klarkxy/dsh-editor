@@ -13,7 +13,9 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-两个包需要 Node.js ≥22，兼容目标是 DSH `0.1.5-rc.2`。安装后重启 DSH Web；模型工具的挂载方式见[知乎插件](../packages/dsh-zhihu/README.md)和[网络搜索插件](../packages/dsh-web-search-manager/README.md)。npm 上无 scope 的 `dsh-zhihu` 由其他维护者发布，与本仓库不是同一个包。
+两个包需要 Node.js ≥22，兼容目标是 DSH `0.1.5-rc.2`。安装后重启 DSH Web；模型工具的挂载方式见[知乎插件](../packages/dsh-zhihu/README.zh-CN.md)和[网络搜索插件](../packages/dsh-web-search-manager/README.zh-CN.md)。npm 上无 scope 的 `dsh-zhihu` 由其他维护者发布，与本仓库不是同一个包。
+
+npm 默认展示各包的英文 `README.md`；中文说明保留为 `README.zh-CN.md` 并随包附带，两种语言互相链接。
 
 源码目录保持原名，npm 包名、Cordis patch、客户端装载 ID 与工具入口统一使用 scoped 名称。每个包声明 `repository.url`、`repository.directory`、`homepage`、`bugs`、`dsh-plugin` 等 keywords，发布内容包含编译产物、类型声明、patch、README 和许可证。keywords 便于 npm 搜索，但不能代替市场收录。
 

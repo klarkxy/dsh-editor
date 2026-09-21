@@ -1,68 +1,92 @@
 # @klarkxy/dsh-web-search-manager
 
-DSH `0.1.5-rc.2` 的独立网络搜索管理插件。提供设置页、明确授权、供应商管理描述和生命周期控制；不实现第二套搜索执行服务。
+Manage web search providers, credentials, permissions, and request lifecycles through DSH's existing `ctx.web` service. Includes a settings UI and an optional agent tool entry point.
 
-## 安装到 DSH Web
+[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/README.zh-CN.md)
 
-需要 Node.js 22 或更高版本，以及 DSH `0.1.5-rc.2` 的 Web profile。npm 包名是 `@klarkxy/dsh-web-search-manager`（`web-search` 之间有连字符）。
+## Install in DSH Web
+
+Requires Node.js 22 or later and a DSH `0.1.5-rc.2` Web profile.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-安装后重启 `dsh web`，进入 **设置 → 网络搜索**。模型需要使用搜索工具时，还需在所用 `agent.cordis.yml` 的插件列表中加入：
+Restart `dsh web`, then open **Settings → Web search (设置 → 网络搜索)**. To expose search tools to an agent, add this entry to the plugin list in its `agent.cordis.yml`:
 
 ```yaml
-- name: "@klarkxy/dsh-web-search-manager/tools"
+- name: '@klarkxy/dsh-web-search-manager/tools'
 ```
 
-包内附带编译后的 Host、Web 客户端、类型声明与 `cordis.patch.yml`，安装时无需克隆或构建本仓库。发布状态与市场收录见[插件发布与发现](https://github.com/klarkxy/dsh-editor/blob/main/docs/plugin-distribution.md)。
+The package includes the compiled host plugin, Web client, type declarations, and `cordis.patch.yml`. No repository build is needed for installation. DSH Editor's desktop composition already includes this plugin and its Tavily adapter.
 
-## 使用
+## Choose a provider
 
-桌面默认组合安装此插件，Tavily 与其它搜索供应商一同内置。进入 **设置 → 网络搜索**：只需开启一个后端。默认只打开 DuckDuckGo；Brave、博查、Serper、Firecrawl、Exa、DeepSeek、Tavily 需自行注册（各有注册链接）。同一 profile 若还装了知乎资料，会多出一个「知乎全网搜索」后端，与知乎设置共用 Access Secret。打开后按优先级选用第一个已就绪的后端；缺 Key 的跳过，单次失败不换家。模型只看到官方 `web_search`。打开搜索时会同时挂上本机公开网页读取。DeepSeek 搜索复用模型设置中的 API Key，并可能产生额外搜索费用。测试连接是用户主动触发的固定查询，可能产生一次供应商调用费用，不发送作品内容。
+DuckDuckGo is enabled by default and requires no API key. Brave, Bocha, Serper, Firecrawl, Exa, DeepSeek, and Tavily are also supported; enable the provider you want and configure its credentials in the settings page. DeepSeek reuses the API key from the model settings and may incur additional search charges.
 
-DeepSeek 搜索复用 `@deepseek-ai/dsh-web-search-deepseek`（Anthropic 兼容 `web_search`），Exa 复用官方 `ExaSearchProvider`，HTTP 读取复用 `HttpFetchProvider` 的公开地址、DNS 固定和重定向安全策略。DuckDuckGo 无需 Key；其它供应商不会在鉴权或额度失败时自动切换。供应商可配置可信 HTTPS API 端点，密钥将发送到该端点。
+One enabled provider is enough. The manager selects the first ready provider by priority, skipping providers with missing credentials. A failed request does not trigger a retry with another provider, including on authentication or quota errors.
 
-模型工具由 `@klarkxy/dsh-web-search-manager/tools` 在会话上下文内按授权状态挂载官方 `dsh-tool-web`。关闭、切换配置或卸载供应商会取消正在进行的受管请求。其他业务插件继续使用：
+Installing [@klarkxy/dsh-zhihu](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) in the same profile adds a **Zhihu global search (知乎全网搜索)** backend. It shares the access token configured in the Zhihu settings.
+
+Enabling search also enables public-page fetching through the local HTTP adapter. Agents use the standard `web_search` tool. Connection tests run a fixed query only when requested by the user; they may incur a provider charge and do not send manuscript content.
+
+Provider endpoints can be customized to trusted HTTPS URLs. API keys are sent to the configured endpoint.
+
+## Runtime behavior
+
+The `@klarkxy/dsh-web-search-manager/tools` entry mounts the official `dsh-tool-web` tools in the session context according to the current authorization state. Disabling a provider, changing its configuration, or uninstalling it cancels its in-flight managed requests.
+
+Other plugins continue to use the standard DSH API:
 
 ```ts
 const result = await ctx.web.search({ query: 'example', maxResults: 5 }, signal)
 const page = await ctx.web.fetch({ url: 'https://example.com' }, signal)
 ```
 
-Tavily 沿用凭据引用 `DSH_EDITOR_WEB_TAVILY_API_KEY`、供应商 ID `tavily` 与原有排序和端点配置。使用 basic 搜索，不自动升级深度、不重试计费请求、不跟随重定向转发密钥。无需额外安装 Tavily 插件。
+DeepSeek uses `@deepseek-ai/dsh-web-search-deepseek` and its Anthropic-compatible `web_search` support. Exa uses the official `ExaSearchProvider`. Page fetching uses `HttpFetchProvider`, including its public-address checks, DNS pinning, and redirect restrictions.
 
-## 扩展供应商
+The bundled Tavily adapter retains provider ID `tavily`, credential reference `DSH_EDITOR_WEB_TAVILY_API_KEY`, and existing priority and endpoint settings. It uses basic search, does not upgrade search depth automatically, does not retry billable requests, and does not forward keys through redirects. A separate Tavily plugin is not required.
 
-独立插件注入 `webSearchManager`，使用管理注册接口贡献描述和工厂。管理层把受授权保护的标准 `WebSearchProvider` 注册到 **现有 `ctx.web`**；供应商选择和结果协议仍归 DSH 管理。
+## Add a provider
+
+A plugin can inject `webSearchManager` and register a provider descriptor and factory. The manager registers an authorized standard `WebSearchProvider` with the existing `ctx.web` service; DSH retains provider selection and the search result contract.
+
+The following sketch assumes you have implemented `ExampleProvider`:
 
 ```ts
 export const inject = ['webSearchManager']
+
 export function apply(ctx) {
   ctx.effect(() => ctx.webSearchManager.registerSearchProvider({
-    id: 'example', label: 'Example Search', description: 'Independent REST search',
+    id: 'example',
+    label: 'Example Search',
+    description: 'Independent REST search',
     defaultBaseURL: 'https://search.example.com',
-    credentialRef: 'DSH_EDITOR_WEB_EXAMPLE_API_KEY', billing: 'request',
+    credentialRef: 'DSH_EDITOR_WEB_EXAMPLE_API_KEY',
+    billing: 'request',
   }, options => new ExampleProvider(options)))
 }
 ```
 
-工厂遵循 `ProviderOptions`，返回标准 `WebSearchProvider`，必须传递取消信号。`available()` 只检查本地状态，不进行联网测试。无 Key 的搜索后端可以不声明凭据引用。纯网页读取供应商可通过 `registerFetchProvider` 注册；Editor 在启用搜索时同时挂上本机 HTTP 读取。内置 Tavily 适配器位于 `src/tavily.ts`。
+The factory accepts `ProviderOptions` and returns a standard `WebSearchProvider`. Providers must forward cancellation signals. Their `available()` method checks local state only; it must not make a network request. Providers that do not require a key can omit the credential reference.
 
-独立 DSH 部署还需在所用的 `agent.cordis.yml` 加入 `name: "@klarkxy/dsh-web-search-manager/tools"`。Editor 的组合构建会为已选择该能力的应用自带写作预设加入这一入口；未选择该插件的组合不会产生悬空引用。
+Use `registerFetchProvider` to register a page-fetching provider. The built-in Tavily adapter in `src/tavily.ts` is a concrete search-provider example.
 
-## 边界与安全
+Standalone DSH deployments need the `/tools` entry shown above in each relevant `agent.cordis.yml`. DSH Editor's composition build adds it to bundled writing presets when this feature is selected.
 
-- 设置通过 Host 的认证/来源检查，按版本号串行保存，配置不包含密钥。凭据写入现有 Host 凭据服务，每次请求重新解析，不复制到环境变量或模型上下文。现有凭据后端的落盘保护取决于 DSH 配置，本插件不宣称操作系统密钥库加密。
-- 默认只开启 DuckDuckGo。其它后端须手动打开并填写 Key。只需开启一个。打开后按优先级使用第一个已就绪的后端；缺 Key 的跳过。单次请求失败不会自动换下一家。
-- 全局 `ctx.web` 的环境供应商选择覆盖可能与管理页选择冲突，此时 DSH 会拒绝调用，不进行隐藏回退。移除这类部署覆盖再使用设置页选择供应商。
-- 管理接口的关闭操作约束受管供应商，不是任意第三方插件 HTTP 请求的网络沙箱。自行绕过管理注册直接发 HTTP 的插件不在此授权边界内。
-- API Key 输入不落本地存储。界面删除前先停用搜索；并发设置有 revision 冲突检查。配置保存失败时，本次 Host 运行暂停受管网络访问。
-- 网页和搜索结果是外部不可信资料，不授权模型执行网页内指令，也不改变写作提案和作者确认边界。
-- 查询数量、结果数、超时及正文长度有边界，但不是美元预算上限。当前运行的计数只统计适配器调用尝试，不保存查询或正文，不声称等于供应商账单。模型原生搜索的内部计费与精确账单仍应由对应扩展另行提供。
+## Credentials and authorization
 
-## 验证
+- Settings use the host's authentication and origin checks. Saves are serialized and checked for revision conflicts. Provider configuration does not contain secrets.
+- Credentials are stored through the existing DSH host credential service and resolved for each request. They are not copied into environment variables or model context. Protection at rest depends on the DSH credential backend; this plugin does not guarantee operating-system keychain encryption.
+- API key inputs are not saved to browser local storage. The UI disables search before deleting a key. If saving configuration fails, managed network access is paused for the current host process.
+- Global `ctx.web` environment overrides can conflict with the settings page's provider selection. DSH rejects the call in that case; remove the conflicting deployment override to use the settings selection.
+- Disabling managed providers controls requests made through this registration API. It does not sandbox arbitrary HTTP calls made directly by other plugins.
+- Search results and fetched pages are untrusted external material. They do not authorize instructions embedded in a page or change the application's author-confirmation requirements.
+- Query count, result count, timeouts, and response length are bounded. These limits are not a monetary budget. Runtime counters track adapter call attempts without retaining queries or page bodies; they are not provider billing statements. Provider-specific extensions must supply exact billing or model-native search accounting where needed.
+
+## Development
+
+From the repository root:
 
 ```sh
 pnpm --filter @klarkxy/dsh-web-search-manager typecheck
@@ -70,4 +94,6 @@ pnpm exec vitest run packages/dsh-web-search-manager/src
 pnpm --filter @klarkxy/dsh-web-search-manager build
 ```
 
-测试使用模拟 Key 和响应，不产生真实搜索费用。
+Tests use mock credentials and responses and do not incur real search charges.
+
+See the Chinese [user guide](https://github.com/klarkxy/dsh-editor/blob/main/docs/user-guide.md) and [publishing and marketplace guide](https://github.com/klarkxy/dsh-editor/blob/main/docs/plugin-distribution.md) for repository documentation. Package license: [LICENSE](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/LICENSE).
