@@ -32,6 +32,7 @@ type MemoryClientContext = Context & {
 function injectStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
   const style = document.createElement('style')
+  style.setAttribute('data-plugin', 'dsh-editor-memory-panel')
   style.setAttribute('data-dsh-memory-panel-styles', '')
   style.textContent = memoryPanelStyles
   document.head.appendChild(style)

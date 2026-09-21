@@ -20,8 +20,7 @@ import {
 import { SettingsUsageSection } from './settings-usage.tsx'
 import { t, useLocale } from '../i18n/index.ts'
 import { SettingsIcon } from './icons.tsx'
-import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger, m } from './ui/index.ts'
-import { useReducedMotion } from 'motion/react'
+import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger } from './ui/index.ts'
 
 export type { SettingsRenderSlot }
 
@@ -52,40 +51,13 @@ function persistTab(tab: string): void {
   try { globalThis.localStorage?.setItem(SETTINGS_TAB_KEY, tab) } catch { /* optional preference */ }
 }
 
-function SettingsTabPage(props: { tab: string; active: boolean; fromX?: number; children?: ReactNode }) {
-  const reduce = useReducedMotion()
-  /* 隐藏位姿保持方向中性(x:0):否则反向切回时会从上次留下的旧偏移滑入。
-     方向只由入场 keyframes 携带——每次 activate,animate 从隐藏位姿变成新的
-     keyframes,Motion 从 keyframes[0](本次切换方向)重新开始,不重挂、不丢 state。 */
-  const enter = reduce
-    ? { opacity: 1, x: 0, y: 0, filter: 'blur(0px)' }
-    : { x: [props.fromX ?? 24, 0], opacity: [0, 1], y: [14, 0], filter: ['blur(4px)', 'blur(0px)'] }
-  const pose = reduce
-    ? { opacity: 1, x: 0, y: 0, filter: 'blur(0px)' }
-    : props.active
-      ? enter
-      : { opacity: 0, x: 0, y: 12, filter: 'blur(3px)' }
+function SettingsTabPage(props: { tab: string; active: boolean; children?: ReactNode }) {
   return (
-    <TabsContent
-      value={props.tab}
-      forceMount={true}
-      hidden={!props.active}
-      className={`settings-content${props.active ? ' is-active' : ''}`}
-      style={{ pointerEvents: props.active ? 'auto' : 'none' }}>
-      <m.div
-        className="settings-page"
-        initial={false}
-        animate={pose}
-        transition={reduce ? { duration: 0 } : {
-          type: 'spring' as const, stiffness: 340, damping: 26, mass: 0.85,
-          /* blur 不走弹簧：keyframes + 欠阻尼 spring 过冲会把 filter 插成负数。 */
-          filter: { type: 'tween' as const, duration: 0.45, ease: 'easeOut' },
-        }}
-        style={{ pointerEvents: props.active ? 'auto' : 'none' }}>
-        {props.children}
-      </m.div>
+    <TabsContent value={props.tab} forceMount={true} hidden={!props.active}
+      className={`settings-content${props.active ? ' is-active' : ''}`}>
+      <div className="settings-page">{props.children}</div>
     </TabsContent>
-  );
+  )
 }
 
 function tabLabel(tab: SettingsTab): string {
@@ -154,6 +126,7 @@ export function SettingsDialog(props: {
   const developerGate = developerRevealed || developerMode
   const authorChrome = authorSettingsChrome(developerGate)
   const closeRef = useRef<HTMLButtonElement | null>(null)
+  const pagesRef = useRef<HTMLDivElement | null>(null)
   const official = useOfficialSettingsSections(props.ctx)
   const officialSections = props.renderSlot ? official.sections : []
   useEffect(() => {
@@ -190,10 +163,7 @@ export function SettingsDialog(props: {
   const navTabs = composeSettingsNavTabs(featureTabs, officialSections)
   /* 能力在弹窗打开期间变为停用时，或动态插件页消失时，回落到仍可用的分类。 */
   const activeTab = navTabs.includes(tab) ? tab : 'general'
-  /* 页面切换方向感:往列表下方切内容从右滑入,往上切从左滑入。 */
-  const previousTabRef = useRef(activeTab)
-  const fromX = navTabs.indexOf(activeTab) >= navTabs.indexOf(previousTabRef.current) ? 24 : -24
-  previousTabRef.current = activeTab
+  useEffect(() => { pagesRef.current?.scrollTo({ top: 0 }) }, [activeTab])
   const activeOfficial = officialSections.find((section) => section.navId === activeTab)
   const builtinPages: SettingsTab[] = [...featureTabs, ...SETTINGS_TRAILING_TABS]
   const content: Record<SettingsTab, () => ReactNode> = {
@@ -274,16 +244,15 @@ export function SettingsDialog(props: {
             scrollTop / scrollHeight。Themes ScrollArea 把滚动放在内层 viewport,
             所以这里用 Box 而不是 ScrollArea。
           */}
-          <Box className="settings-pages" tabIndex={0} overflow="auto" flexGrow="1" minWidth="0" minHeight="0">
-            {builtinPages.map((key) => <SettingsTabPage key={key} tab={key} active={key === activeTab} fromX={fromX}>
+          <Box ref={pagesRef} className="settings-pages" tabIndex={0} role="region" aria-label={navLabel(activeTab, officialSections)} overflow="auto" flexGrow="1" minWidth="0" minHeight="0">
+            {builtinPages.map((key) => <SettingsTabPage key={key} tab={key} active={key === activeTab}>
               {content[key]()}
             </SettingsTabPage>)}
             {open && activeOfficial && props.renderSlot
               ? <SettingsTabPage
               key={activeOfficial.navId}
               tab={activeOfficial.navId}
-              active={true}
-              fromX={fromX}>
+              active={true}>
               <OfficialSettingsSectionPage
                 renderSlot={props.renderSlot}
                 sectionId={activeOfficial.id}

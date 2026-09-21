@@ -135,6 +135,8 @@ export const zhihuClientStyles = `
   pointer-events: auto;
 }
 .zhihu-settings-embed {
+  font: 400 var(--font-size-2)/1.5 var(--default-font-family);
+  color: var(--gray-12);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -145,7 +147,7 @@ export const zhihuClientStyles = `
   margin: 0 0 var(--space-2);
 }
 .zhihu-settings-embed .zhihu-panel-body {
-  padding: var(--space-3) 0 0;
+  padding: var(--space-4) 0 0;
   overflow: visible;
 }
 .zhihu-toggle {
@@ -239,7 +241,7 @@ export const zhihuClientStyles = `
 .zhihu-tab:hover { color: var(--gray-12); background: var(--gray-a3); }
 .zhihu-tab[aria-selected="true"] {
   background: var(--accent-a3);
-  color: var(--accent-11);
+  color: var(--accent-12, var(--accent-11));
   box-shadow: 0 0 0 1px var(--gray-a5);
   font-weight: var(--font-weight-medium);
   transform: scale(1.04);
@@ -335,6 +337,12 @@ export const zhihuClientStyles = `
 .zhihu-dot-configured { background: var(--green-11); }
 .zhihu-dot-missing { background: var(--gray-9); }
 .zhihu-dot-locked { background: var(--red-9); }
+.zhihu-field-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.zhihu-settings .zhihu-guide { border: 0; padding: 0; color: var(--gray-11); font-size: var(--font-size-1); }
+.zhihu-settings .zhihu-guide summary { cursor: pointer; width: fit-content; }
+.zhihu-settings .zhihu-guide p { margin-top: var(--space-2); font-size: var(--font-size-1); }
+.zhihu-settings :is(.zhihu-field-heading a,.zhihu-status-grid) { font-size: var(--font-size-1); }
+.zhihu-settings :is(a,summary):focus-visible { outline: 2px solid var(--accent-8); outline-offset: 2px; }
 .zhihu-guide {
   border: 1px solid var(--gray-6);
   border-radius: var(--radius-2);

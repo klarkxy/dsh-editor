@@ -28,6 +28,7 @@ type ProofreadClientContext = Context & {
 function injectStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
   const style = document.createElement('style')
+  style.setAttribute('data-plugin', 'dsh-editor-proofread-panel')
   style.setAttribute('data-dsh-proofread-panel-styles', '')
   style.textContent = proofreadPanelStyles
   document.head.appendChild(style)

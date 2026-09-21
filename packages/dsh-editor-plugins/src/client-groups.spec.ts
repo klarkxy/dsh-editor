@@ -26,8 +26,8 @@ function card(partial: Partial<PluginCard> & Pick<PluginCard, 'entryId' | 'packa
 describe('plugin feature grouping', () => {
   it('groups by author purpose instead of package name', () => {
     const views = groupOptionalFeatures([
-      card({ entryId: 'include:zhihu', packageName: 'dsh-zhihu', title: '知乎资料' }),
-      card({ entryId: 'include:zhihu-tools', packageName: 'dsh-zhihu', title: '知乎工具' }),
+      card({ entryId: 'include:zhihu', packageName: '@klarkxy/dsh-zhihu', title: '知乎资料' }),
+      card({ entryId: 'include:zhihu-tools', packageName: '@klarkxy/dsh-zhihu', title: '知乎工具' }),
       card({ entryId: 'include:proofread', packageName: 'dsh-proofread', title: '校对' }),
       card({ entryId: 'include:editor-proofread-panel', packageName: 'dsh-editor-proofread-panel', title: '作品校对' }),
       card({ entryId: 'include:editor-overview-panel', packageName: 'dsh-editor-overview-panel', title: '作品概览' }),
@@ -83,6 +83,6 @@ describe('plugin feature grouping', () => {
     )
     expect(wrapped.message).toBe('未能保存插件开关，请重试。')
     expect(wrapped.detail).toContain('EPERM')
-    expect(FEATURE_GROUP_DEFS.some((def) => def.packages.includes('dsh-zhihu'))).toBe(true)
+    expect(FEATURE_GROUP_DEFS.some((def) => def.packages.includes('@klarkxy/dsh-zhihu'))).toBe(true)
   })
 })

@@ -56,10 +56,10 @@
       "dsh-proofread/defaults": [
         "packages/dsh-proofread/src/defaults.ts"
       ],
-      "dsh-zhihu/usage": [
+      "@klarkxy/dsh-zhihu/usage": [
         "packages/dsh-zhihu/src/usage.ts"
       ],
-      "dsh-zhihu/contracts": [
+      "@klarkxy/dsh-zhihu/contracts": [
         "packages/dsh-zhihu/src/contracts.ts"
       ]
     }

@@ -1,5 +1,0 @@
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "paths": { "dsh-web-search-manager": ["packages/dsh-web-search-manager/src/index.ts"] } },
-  "include": ["src"], "exclude": ["src/**/*.spec.ts"]
-}

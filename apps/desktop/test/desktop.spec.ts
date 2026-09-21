@@ -261,6 +261,7 @@ describe('desktop branding assets', () => {
     expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a')
     expect(png.readUInt32BE(16)).toBe(1024)
     expect(png.readUInt32BE(20)).toBe(1024)
+    expect(png.equals(sourcePng)).toBe(true)
     expect(ico.readUInt16LE(0)).toBe(0)
     expect(ico.readUInt16LE(2)).toBe(1)
     expect(ico.readUInt16LE(4)).toBe(7)
@@ -590,7 +591,7 @@ describe('profile deployment', () => {
     expect(stripped[0]).toEqual(stripped[1])
     expect(stripped[1]).toEqual(stripped[2])
     for (const item of resolved) {
-      expect(item.features).toEqual(['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search', 'web-search-tavily'])
+      expect(item.features).toEqual(['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search'])
       expect(item.features).toContain('proofread-panel')
       expect(item.features).not.toContain('cards')
       expect(item.features).not.toContain('memory-panel')
@@ -621,7 +622,7 @@ describe('profile deployment', () => {
     }
     for (const id of ['dsh-editor-article', 'dsh-editor-novel', 'dsh-editor-technical']) {
       const agent = await readFile(join(destination, 'agent-presets', id, 'agent.cordis.yml'), 'utf8')
-      expect(agent.match(/name: dsh-web-search-manager\/tools/g)).toHaveLength(1)
+      expect(agent.match(/name: "@klarkxy\/dsh-web-search-manager\/tools"/g)).toHaveLength(1)
     }
   })
   it('deploys app-owned agent presets into the harness-home user preset root', async () => {
@@ -1343,6 +1344,20 @@ describe('controlled multi-window', () => {
 
 
 describe('external repository links', () => {
+  it('allows search provider signup URLs without allowing lookalike or unsafe URLs', () => {
+    for (const url of [
+      'https://platform.deepseek.com/api_keys', 'https://dashboard.exa.ai/api-keys',
+      'https://api.search.brave.com', 'https://open.bochaai.com', 'https://serper.dev',
+      'https://www.firecrawl.dev', 'https://app.tavily.com',
+    ]) {
+      expect(isAllowedExternalUrl(url)).toBe(true)
+      const parsed = new URL(url)
+      expect(isAllowedExternalUrl(url.replace('https:', 'http:'))).toBe(false)
+      expect(isAllowedExternalUrl(`https://${parsed.hostname}.evil.test${parsed.pathname}`)).toBe(false)
+      expect(isAllowedExternalUrl(`https://user@${parsed.hostname}${parsed.pathname}`)).toBe(false)
+      expect(isAllowedExternalUrl(`https://${parsed.hostname}:8443${parsed.pathname}`)).toBe(false)
+    }
+  })
   it('allows marketplace repos and existing help URLs but rejects other destinations', () => {
     expect(isAllowedExternalUrl('https://github.com/V1ki/dsh-plugin-subscriptions')).toBe(true)
     expect(isAllowedExternalUrl('https://github.com/klarkxy/dsh-editor/releases')).toBe(true)
@@ -1350,5 +1365,38 @@ describe('external repository links', () => {
     for (const url of ['http://github.com/a/b', 'https://github.com.evil.test/a/b', 'https://user@github.com/a/b', 'https://github.com:8443/a/b', 'https://github.com/login', 'file:///tmp/x', 'javascript:alert(1)', null]) {
       expect(isAllowedExternalUrl(url)).toBe(false)
     }
+  })
+})
+
+
+describe('Tavily integration upgrade', () => {
+  it('retires the old bundle and managed entry with backups, preserving user data', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-tavily-upgrade-'))
+    const template = join(home, 'template')
+    await mkdir(template, { recursive: true })
+    await writeFile(join(template, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@klarkxy/dsh-web-search-manager'] } } }))
+    const target = join(home, 'profiles', 'dsh-editor')
+    await mkdir(join(target, 'node_modules', 'dsh-web-search-tavily'), { recursive: true })
+    await writeFile(join(target, PROFILE_MARKER), JSON.stringify({ app: 'dsh-editor', schema: 1 }))
+    await writeFile(join(target, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@klarkxy/dsh-web-search-manager', 'dsh-web-search-tavily'] } } }))
+    const source = join(home, 'user-plugins', 'dsh-web-search-tavily')
+    await mkdir(source, { recursive: true })
+    await writeFile(join(source, 'package.json'), JSON.stringify({ name: 'dsh-web-search-tavily' }))
+    const oldState = JSON.stringify({ schema: 1, overrides: { 'web-search-tavily': true, zhihu: false }, presets: { 'dsh-editor-novel': false }, installed: [{ name: 'dsh-web-search-tavily', spec: 'old-tavily', version: '0.1.0' }] })
+    const oldPatch = '# managed-by: dsh-editor-plugins\n- id: web-search-tavily\n  disabled: false\n- id: zhihu\n  disabled: true\n'
+    await writeFile(join(home, 'dsh-plugins.json'), oldState)
+    await writeFile(join(home, 'cordis.patch.yml'), oldPatch)
+    await writeFile(join(home, '.credentials.yaml'), 'fixture credentials remain byte-for-byte')
+    const deployed = await deployProfile(home, template)
+    expect(JSON.parse(await readFile(join(deployed, 'package.json'), 'utf8')).dsh.profile.bundles).toEqual(['@klarkxy/dsh-web-search-manager'])
+    expect(existsSync(join(deployed, 'node_modules', 'dsh-web-search-tavily'))).toBe(false)
+    expect(existsSync(join(source, 'package.json'))).toBe(true)
+    expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toMatchObject({ overrides: { zhihu: false }, presets: { 'dsh-editor-novel': false }, installed: [] })
+    expect(await readFile(join(home, 'dsh-plugins.json.before-tavily-merge'), 'utf8')).toBe(oldState)
+    expect(await readFile(join(home, 'cordis.patch.yml.before-tavily-merge'), 'utf8')).toBe(oldPatch)
+    expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).not.toContain('web-search-tavily')
+    expect(await readFile(join(home, '.credentials.yaml'), 'utf8')).toBe('fixture credentials remain byte-for-byte')
+    await deployProfile(home, template)
+    expect(await readFile(join(home, 'dsh-plugins.json.before-tavily-merge'), 'utf8')).toBe(oldState)
   })
 })

@@ -1,5 +1,5 @@
 {
-  "name": "dsh-zhihu",
+  "name": "@klarkxy/dsh-zhihu",
   "version": "0.1.0",
   "description": "Independent Zhihu services, tools and UI for DSH",
   "license": "SEE LICENSE IN LICENSE",
@@ -71,7 +71,7 @@
     "inserts": [
       {
         "id": "zhihu-tools",
-        "name": "dsh-zhihu/tools",
+        "name": "@klarkxy/dsh-zhihu/tools",
         "title": "知乎工具",
         "description": "供写作搭档调用的知乎检索",
         "feature": "zhihu-tools",
@@ -82,7 +82,7 @@
     ]
   },
   "scripts": {
-    "build": "tsdown && node ../../scripts/wrap-client.mjs dsh-zhihu",
+    "build": "tsdown && node ../../scripts/wrap-client.mjs @klarkxy/dsh-zhihu",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. packages/dsh-zhihu/src"
   },
@@ -107,5 +107,26 @@
     "@deepseek-ai/dsh-tools": {
       "optional": true
     }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "zhihu",
+    "search",
+    "knowledge-base"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-editor.git",
+    "directory": "packages/dsh-zhihu"
+  },
+  "homepage": "https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-zhihu#readme",
+  "bugs": {
+    "url": "https://github.com/klarkxy/dsh-editor/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

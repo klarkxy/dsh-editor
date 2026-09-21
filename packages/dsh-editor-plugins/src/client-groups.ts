@@ -53,7 +53,7 @@ export const FEATURE_GROUP_DEFS: readonly FeatureGroupDef[] = [
     id: 'zhihu',
     title: '知乎资料',
     description: '检索知乎资料，供写作时查阅。',
-    packages: ['dsh-zhihu'],
+    packages: ['@klarkxy/dsh-zhihu'],
   },
 ]
 

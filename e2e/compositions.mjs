@@ -259,7 +259,13 @@ try {
   if(actualFeatures[feature]!==expectedFeatures[feature])throw new Error('capability mismatch '+JSON.stringify(capabilities));
  }
  evidence.capabilities=capabilities;
- const installed=(await readdir(resolve(runtime,'node_modules'))).filter(name=>DESKTOP_PACKAGE_NAMES.includes(name)).sort();
+ const installed=[];
+ for(const name of await readdir(resolve(runtime,'node_modules'))){
+   if(name.startsWith('@')){
+     for(const child of await readdir(resolve(runtime,'node_modules',name))){const full=name+'/'+child;if(DESKTOP_PACKAGE_NAMES.includes(full))installed.push(full)}
+   }else if(DESKTOP_PACKAGE_NAMES.includes(name))installed.push(name);
+ }
+ installed.sort();
  const expected=[...compositionInstallNames({packages:shared.packages,libraries:shared.libraries})].sort();
  if(JSON.stringify(installed)!==JSON.stringify(expected))throw new Error('installed package set mismatch '+installed.join(','));evidence.installed=installed;
  if(process.env.DSH_EDITOR_COPY_PACKAGES==='1'){

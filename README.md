@@ -25,11 +25,14 @@ Windows 提供便携版 EXE 与 NSIS 安装器，macOS 提供 Apple Silicon 的 
 
 ## 公开插件
 
-三个插件可单独安装到普通 DSH Web profile，安装步骤见各自 README：
+四个插件可单独安装到普通 DSH Web profile，安装步骤见各自 README：
 
 - [dsh-manuscript](packages/dsh-manuscript/README.md)：稿纸抽屉——工作区文本树、正文编辑、安全保存与补全。
 - [dsh-proofread](packages/dsh-proofread/README.md)：基于确定性规则的中文文本校对。
-- [dsh-zhihu](packages/dsh-zhihu/README.md)：知乎搜索、知识库与用量。
+- [@klarkxy/dsh-zhihu](packages/dsh-zhihu/README.md)：知乎搜索、知识库与用量。
+- [@klarkxy/dsh-web-search-manager](packages/dsh-web-search-manager/README.md)：网络搜索设置、供应商管理与网页读取，内置 Tavily 等后端。
+
+插件源码在 `packages/` 子目录；仓库根目录是桌面应用 workspace，不能作为单个 DSH 插件安装。npm 发布与市场收录方式见[插件发布与发现](docs/plugin-distribution.md)。
 
 ## 开发
 

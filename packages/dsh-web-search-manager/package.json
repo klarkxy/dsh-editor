@@ -1,31 +1,72 @@
 {
-  "name": "dsh-web-search-manager",
+  "name": "@klarkxy/dsh-web-search-manager",
   "version": "0.1.0",
   "description": "Opt-in web search settings and managed provider lifecycle over DSH ctx.web",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/index.d.ts", "import": "./lib/index.js", "default": "./lib/index.js" },
-    "./contracts": { "types": "./lib/contracts.d.ts", "import": "./lib/contracts.js", "default": "./lib/contracts.js" },
-    "./tools": { "types": "./lib/tools.d.ts", "import": "./lib/tools.js", "default": "./lib/tools.js" },
-    "./client": { "default": "./lib/client.js" },
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./contracts": {
+      "types": "./lib/contracts.d.ts",
+      "import": "./lib/contracts.js",
+      "default": "./lib/contracts.js"
+    },
+    "./tools": {
+      "types": "./lib/tools.d.ts",
+      "import": "./lib/tools.js",
+      "default": "./lib/tools.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
   },
-  "files": ["lib", "cordis.patch.yml", "README.md", "LICENSE"],
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
-    "client": { "platform": "web", "inject": ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-api-remotes"] }
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
   },
   "dshEditor": {
-    "role": "feature", "visibility": "public", "wrapClient": true,
-    "runtimeDependencies": ["@deepseek-ai/dsh-web-search-exa"],
-    "entries": [{ "id": "web-search-manager", "title": "网络搜索", "description": "主动授权联网搜索和网页读取，管理搜索供应商", "feature": "web-search", "service": "webSearchManager" }]
+    "role": "feature",
+    "visibility": "public",
+    "wrapClient": true,
+    "runtimeDependencies": [
+      "@deepseek-ai/dsh-web-search-exa"
+    ],
+    "entries": [
+      {
+        "id": "web-search-manager",
+        "title": "网络搜索",
+        "description": "主动授权联网搜索和网页读取，管理搜索供应商",
+        "feature": "web-search",
+        "service": "webSearchManager"
+      }
+    ]
   },
   "scripts": {
-    "build": "tsdown && node ../../scripts/wrap-client.mjs dsh-web-search-manager",
+    "build": "tsdown && node ../../scripts/wrap-client.mjs @klarkxy/dsh-web-search-manager",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. packages/dsh-web-search-manager/src"
   },
@@ -49,5 +90,26 @@
     "@deepseek-ai/dsh-tool-web": "0.1.5-rc.2",
     "react": "^18.2.0",
     "@types/react": "18.3.31"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "web-search",
+    "tavily",
+    "search-provider"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-editor.git",
+    "directory": "packages/dsh-web-search-manager"
+  },
+  "homepage": "https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-web-search-manager#readme",
+  "bugs": {
+    "url": "https://github.com/klarkxy/dsh-editor/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

@@ -1,3 +1,3 @@
 - insert:
     - id: zhihu
-      name: dsh-zhihu
+      name: '@klarkxy/dsh-zhihu'

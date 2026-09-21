@@ -16,7 +16,7 @@ it('adds a single tool bridge only to application presets when enabled', async (
   expect(await readFile(path, 'utf8')).not.toContain('web-search-manager')
   await configureWebSearchPresets(root, { shellFeatures: { 'web-search': 'webSearchManager' } })
   await configureWebSearchPresets(root, { shellFeatures: { 'web-search': 'webSearchManager' } })
-  expect((await readFile(path, 'utf8')).match(/name: dsh-web-search-manager\/tools/g)).toHaveLength(1)
+  expect((await readFile(path, 'utf8')).match(/name: "@klarkxy\/dsh-web-search-manager\/tools"/g)).toHaveLength(1)
   expect(await readFile(join(root, 'agent-presets/custom-user-preset/agent.cordis.yml'), 'utf8')).not.toContain('web-search-manager')
 })
 it('does not require a preset directory when the capability is absent', async () => {

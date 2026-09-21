@@ -10,4 +10,4 @@
   disabled: true
 - insert:
     - id: web-search-manager
-      name: dsh-web-search-manager
+      name: '@klarkxy/dsh-web-search-manager'

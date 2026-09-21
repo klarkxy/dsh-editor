@@ -115,10 +115,9 @@ describe('plugin market install confirmation', () => {
 })
 
 describe('plugin settings chrome', () => {
-  it('keeps cards and switches distinct from the settings panel surface', () => {
+  it('separates plugin rows while keeping switch states visible', () => {
     expect(pluginsClientStyles).toContain('.dsh-plugins-card')
-    expect(pluginsClientStyles).toContain('background: var(--gray-2)')
-    expect(pluginsClientStyles).toContain('box-shadow: inset 0 0 0 1px var(--gray-a5)')
+    expect(pluginsClientStyles).toContain('border-top: 1px solid var(--gray-a5)')
     expect(pluginsClientStyles).toContain('.dsh-plugins button.dsh-plugins-switch')
     expect(pluginsClientStyles).toContain('background: var(--gray-7)')
     expect(pluginsClientStyles).toContain('background: var(--accent-9)')

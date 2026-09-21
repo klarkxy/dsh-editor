@@ -45,12 +45,12 @@ export function decodeBusyEnter(value: unknown): { busyEnter: BusyEnterBehavior 
   return busyEnter === 'queue' || busyEnter === 'steer' ? { busyEnter } : undefined
 }
 
-function usePreference<T>(scope: SettingsScope<{ preference: T }>, fallback: T): [T, (value: T) => void] {
+function usePreference<T>(scope: SettingsScope<{ preference: T }>, fallback: T): [T, (value: T) => void, boolean] {
   const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope), scope.getSnapshot.bind(scope))
   const value = snapshot.status === 'ready' && snapshot.value ? snapshot.value.preference : fallback
   const writable = snapshot.status === 'ready' && snapshot.writable !== false
   const set = (next: T) => { if (writable) void scope.set('preference', next).catch(() => { /* 宿主拒绝时快照会回弹 */ }) }
-  return [value, set]
+  return [value, set, writable]
 }
 
 function Row(props: { title: string; description?: string; children: ReactNode }) {
@@ -80,11 +80,11 @@ export function SettingsGeneralSection(props: {
     developer: props.ctx.settingsScope.bind({ namespace: DEVELOPER_SETTINGS_NAMESPACE, decode: decodeDeveloperSettings }),
   }), [props.ctx])
 
-  const [theme, setTheme] = usePreference(scopes.theme, 'system')
+  const [theme, setTheme, themeWritable] = usePreference(scopes.theme, 'system')
   const [accent, setAccent] = useAccent()
   const locale = useLocale()
-  const [busyEnter, setBusyEnter] = useBusyEnter(scopes.conversation)
-  const [developerMode, setDeveloperMode] = useDeveloperMode(scopes.developer)
+  const [busyEnter, setBusyEnter, conversationWritable] = useBusyEnter(scopes.conversation)
+  const [developerMode, setDeveloperMode, developerWritable] = useDeveloperMode(scopes.developer)
   const showDeveloperMode = props.showDeveloperMode === true
 
   const appearanceOptions: { value: ThemePreference; label: string }[] = [
@@ -125,6 +125,7 @@ export function SettingsGeneralSection(props: {
               color={theme === option.value ? undefined : 'gray'}
               className={theme === option.value ? 'active' : ''}
               aria-pressed={theme === option.value}
+              disabled={!themeWritable}
               onClick={() => setTheme(option.value)}>
               {option.label}
             </Button>)}
@@ -159,6 +160,7 @@ export function SettingsGeneralSection(props: {
           title={t('settings.busyEnter')}
           children={<Select
             value={busyEnter}
+            disabled={!conversationWritable}
             options={[{ value: 'queue', label: t('settings.busyQueue') }, { value: 'steer', label: t('settings.busySteer') }]}
             onChange={(value) => setBusyEnter(value as BusyEnterBehavior)}
             aria-label={t('settings.busyEnter')} />} />
@@ -175,6 +177,7 @@ export function SettingsGeneralSection(props: {
           children={<Switch
             className="settings-switch"
             checked={developerMode}
+            disabled={!developerWritable}
             aria-label={t('settings.developerMode')}
             onCheckedChange={setDeveloperMode} />} />
       </Card> : props.onRevealDeveloper ? <Card className="settings-block">
@@ -192,18 +195,18 @@ export function SettingsGeneralSection(props: {
   );
 }
 
-export function useDeveloperMode(scope: SettingsScope<DeveloperSettings>): [boolean, (value: boolean) => void] {
+export function useDeveloperMode(scope: SettingsScope<DeveloperSettings>): [boolean, (value: boolean) => void, boolean] {
   const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope), scope.getSnapshot.bind(scope))
   const value = snapshot.status === 'ready' && snapshot.value ? snapshot.value.developerMode : false
   const writable = snapshot.status === 'ready' && snapshot.writable !== false
   const set = (next: boolean) => { if (writable) void scope.set('developerMode', next).catch(() => { /* 同上 */ }) }
-  return [value, set]
+  return [value, set, writable]
 }
 
-function useBusyEnter(scope: SettingsScope<{ busyEnter: BusyEnterBehavior }>): [BusyEnterBehavior, (value: BusyEnterBehavior) => void] {
+function useBusyEnter(scope: SettingsScope<{ busyEnter: BusyEnterBehavior }>): [BusyEnterBehavior, (value: BusyEnterBehavior) => void, boolean] {
   const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope), scope.getSnapshot.bind(scope))
   const value = snapshot.status === 'ready' && snapshot.value ? snapshot.value.busyEnter : 'queue'
   const writable = snapshot.status === 'ready' && snapshot.writable !== false
   const set = (next: BusyEnterBehavior) => { if (writable) void scope.set('busyEnter', next).catch(() => { /* 同上 */ }) }
-  return [value, set]
+  return [value, set, writable]
 }

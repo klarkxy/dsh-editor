@@ -36,7 +36,7 @@ const catalog = catalogFromEditorBlocks([
     },
   },
   {
-    name: 'dsh-zhihu',
+    name: '@klarkxy/dsh-zhihu',
     dshEditor: {
       role: 'feature',
       visibility: 'public',
@@ -56,7 +56,7 @@ const catalog = catalogFromEditorBlocks([
   'dsh-editor-shell',
   'dsh-editor-plugins',
   'dsh-manuscript',
-  'dsh-zhihu',
+  '@klarkxy/dsh-zhihu',
   'dsh-proofread',
 ])
 
@@ -70,7 +70,7 @@ describe('plugin core protection', () => {
     expect(isProtectedEntry('editor-shell', 'dsh-editor-shell', catalog)).toBe(true)
     expect(isProtectedEntry('editor-plugins', 'dsh-editor-plugins', catalog)).toBe(true)
     expect(isProtectedEntry('manuscript', 'dsh-manuscript', catalog)).toBe(true)
-    expect(isProtectedEntry('zhihu', 'dsh-zhihu', catalog)).toBe(false)
+    expect(isProtectedEntry('zhihu', '@klarkxy/dsh-zhihu', catalog)).toBe(false)
     expect(isProtectedEntry('proofread', 'dsh-proofread', catalog)).toBe(false)
     expect(isProtectedEntry('ui-sidebar', '@deepseek-ai/dsh-client-ui-sidebar', catalog)).toBe(true)
   })
@@ -78,15 +78,15 @@ describe('plugin core protection', () => {
   it('classifies catalog entries and hides harness internals', () => {
     expect(classifyEntry('manuscript', 'dsh-manuscript', catalog)).toBe('core')
     expect(classifyEntry('include:manuscript', 'dsh-manuscript', catalog)).toBe('core')
-    expect(classifyEntry('zhihu', 'dsh-zhihu', catalog)).toBe('optional')
-    expect(classifyEntry('include:zhihu', 'dsh-zhihu', catalog)).toBe('optional')
+    expect(classifyEntry('zhihu', '@klarkxy/dsh-zhihu', catalog)).toBe('optional')
+    expect(classifyEntry('include:zhihu', '@klarkxy/dsh-zhihu', catalog)).toBe('optional')
     expect(classifyEntry('ui-sidebar', '@deepseek-ai/dsh-client-ui-sidebar', catalog)).toBe('hidden')
     expect(classifyEntry('theme-paper', 'dsh-theme-paper', catalog)).toBe('community')
     expect(classifyEntry('include', 'cordis:include', catalog)).toBe('hidden')
     expect(catalogFor('include:manuscript', 'dsh-manuscript', catalog).title).toBe('稿纸')
     expect(isProtectedEntry('include:editor-shell', 'dsh-editor-shell', catalog)).toBe(true)
-    expect(catalogFor('zhihu', 'dsh-zhihu', catalog).title).toBe('知乎资料')
-    expect(packageNameOf('dsh-zhihu/tools')).toBe('dsh-zhihu')
+    expect(catalogFor('zhihu', '@klarkxy/dsh-zhihu', catalog).title).toBe('知乎资料')
+    expect(packageNameOf('@klarkxy/dsh-zhihu/tools')).toBe('@klarkxy/dsh-zhihu')
     expect(packageNameOf('@scope/pkg/tools')).toBe('@scope/pkg')
   })
 
@@ -101,16 +101,16 @@ describe('plugin core protection', () => {
   it('reads the prepared catalog without scanning node_modules', async () => {
     const profileDir = await mkdtemp(join(tmpdir(), 'dsh-catalog-'))
     await writeFile(join(profileDir, RUNTIME_CATALOG_FILE), `${JSON.stringify({
-      bundles: ['dsh-editor-shell', 'dsh-zhihu'],
+      bundles: ['dsh-editor-shell', '@klarkxy/dsh-zhihu'],
       entries: {
         'editor-shell': { title: '写作界面', description: '三栏稿纸与设置', locked: true, packageName: 'dsh-editor-shell' },
-        zhihu: { title: '知乎资料', description: '知乎搜索', locked: false, packageName: 'dsh-zhihu', feature: 'zhihu' },
+        zhihu: { title: '知乎资料', description: '知乎搜索', locked: false, packageName: '@klarkxy/dsh-zhihu', feature: 'zhihu' },
       },
     }, null, 2)}\n`)
     const loaded = await loadRuntimeCatalog(profileDir, [])
     expect(loaded.entries['editor-shell']?.locked).toBe(true)
     expect(loaded.entries.zhihu?.title).toBe('知乎资料')
     expect(classifyEntry('editor-shell', 'dsh-editor-shell', loaded)).toBe('core')
-    expect(classifyEntry('zhihu', 'dsh-zhihu', loaded)).toBe('optional')
+    expect(classifyEntry('zhihu', '@klarkxy/dsh-zhihu', loaded)).toBe('optional')
   })
 })

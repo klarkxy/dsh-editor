@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
+import { PROVIDER_PRICING_CHECKED, searchProviderInfo } from './provider-info.ts'
 import {
   WEB_SEARCH_RPC_CHANNEL, pickActiveSearch, resolveSearchOrder,
   type ProviderView, type RpcResult, type WebSettings, type WebStatus,
@@ -59,10 +60,15 @@ export function selectedSearchBackend(status: WebStatus): ProviderView | undefin
   return backends.find(provider => provider.id === id)
 }
 
-export function providerCostNote(billing: ProviderView['billing']): string {
-  if (billing === 'model-and-tools') return '可能产生额外的搜索费用。'
-  if (billing === 'request') return '按供应商 API 计费。'
-  return ''
+function ExternalLink({ url, label, children }: { url: string; label: string; children: string }) {
+  return <a href={url} target="_blank" rel="noreferrer noopener" aria-label={label}
+    onClick={event => {
+      const bridge = (globalThis as { dshWindow?: { openExternal?(url: string): void } }).dshWindow
+      if (bridge?.openExternal) {
+        event.preventDefault()
+        bridge.openExternal(url)
+      }
+    }}>{children}</a>
 }
 
 export function canEnableSearch(
@@ -91,10 +97,15 @@ export function nextSearchEnabled(
 }
 
 export function NetworkSearchSettings({ client }: { client: Client }) {
+  const tabsId = useId()
+  const [tab, setTab] = useState<'providers' | 'limits'>('providers')
   const [status, setStatus] = useState<WebStatus>()
   const [draft, setDraft] = useState<WebSettings>()
   const [keys, setKeys] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  const [dragSource, setDragSource] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const [sortAnnouncement, setSortAnnouncement] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [writable, setWritable] = useState<Record<string, boolean>>({})
@@ -152,7 +163,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
     unwrap(await client.remote.credentials.unset(provider.credentialRef))
     setKeys(current => ({ ...current, [provider.id]: '' }))
     await load()
-    setNote('已删除托管凭据。将改用优先级列表中下一个已就绪的后端。')
+    setNote('已删除 Key。')
   }
 
   if (!status || !draft) {
@@ -175,154 +186,243 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
     ['maxFetchChars', '网页正文字符上限', 1000, 200000],
   ] as const
 
-  function move(id: string, direction: -1 | 1) {
+  function move(id: string, nextIndex: number) {
     const index = order.indexOf(id)
-    const nextIndex = index + direction
-    if (index < 0 || nextIndex < 0 || nextIndex >= order.length) return
+    if (busy || index < 0 || nextIndex < 0 || nextIndex >= order.length || index === nextIndex) return
     const next = [...order]
     const [item] = next.splice(index, 1)
     next.splice(nextIndex, 0, item)
-    void action(() => persist(on, next))
+    void action(async () => {
+      await persist(on, next)
+      setSortAnnouncement((backends.find(provider => provider.id === id)?.label ?? id) + ' 已移至第 ' + (nextIndex + 1) + ' 位')
+    })
+  }
+
+  function endDrag() {
+    setDragSource(null)
+    setDropTarget(null)
   }
 
   return <section className="web-search-settings" data-testid="web-search-settings">
-    <p className="web-search-intro">只需开启一个后端。默认只用 DuckDuckGo；其它厂商请自行注册。打开后按优先级选用第一个已就绪的后端，单次失败不会自动换家。</p>
+    <div className="web-search-tabs" role="tablist" aria-label="网络搜索设置" onKeyDown={event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+      const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+      const index = buttons.indexOf(event.target as HTMLButtonElement)
+      if (index < 0) return
+      event.preventDefault()
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+      buttons[next]?.focus()
+      buttons[next]?.click()
+    }}>
+      {([['providers', '搜索服务'], ['limits', '请求限制']] as const).map(([key, label]) => (
+        <button key={key} type="button" role="tab" id={tabsId + '-' + key + '-tab'}
+          aria-controls={tabsId + '-' + key + '-panel'} aria-selected={tab === key}
+          tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)}>{label}</button>
+      ))}
+    </div>
+    <span className="web-search-sr-only" role="status" aria-live="polite">{sortAnnouncement}</span>
     {error && <p role="alert" className="web-search-error">{error}</p>}
     {note && <p role="status">{note}</p>}
     {status.storageFailed && <p role="alert">配置保存异常，当前运行已暂停网络访问。请重新保存。</p>}
-    {backends.length === 0 ? <p className="web-search-empty">还没有可用的搜索后端。</p> : <article
-      className={`web-search-card${on ? ' is-on' : ''}`}
-      data-testid="web-search-tool"
-      data-on={on ? 'true' : 'false'}>
-      <header>
-        <div>
-          <h3>联网搜索</h3>
-          <p>{selected ? `当前使用 ${selected.label}。` : '开启任意一个已就绪的后端即可。'}</p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          className={`web-search-switch${on ? ' is-on' : ''}`}
-          aria-checked={on}
-          aria-label={on ? '关闭联网搜索' : '启用联网搜索'}
-          disabled={busy || (!on && !canEnable)}
-          onClick={() => void action(() => persist(!on, order))}>
-          <span className="web-search-switch-thumb" aria-hidden="true" />
-        </button>
-      </header>
-      <ol className="web-search-rank" aria-label="搜索后端">
-        {backends.map(provider => {
-          const participating = order.includes(provider.id)
-          const rank = order.indexOf(provider.id)
-          const active = status.searchActive && selected?.id === provider.id
-          const cost = providerCostNote(provider.billing)
-          const needsKey = Boolean(provider.credentialRef)
-          const shared = Boolean(provider.credentialShared)
-          const showKey = needsKey && participating && (!shared || !provider.configured)
-          return <li key={provider.id} className={active ? 'is-active' : undefined} data-testid={`web-search-rank-${provider.id}`}>
-            <span className="web-search-rank-index">{participating ? rank + 1 : '—'}</span>
-            <div>
-              <strong>{provider.label}</strong>
-              <p className="web-search-meta">{provider.description}</p>
-              {cost ? <p className={provider.billing === 'model-and-tools' ? 'web-search-cost' : 'web-search-meta'}>{cost}</p> : null}
-              {provider.signupUrl ? <p><a href={provider.signupUrl} target="_blank" rel="noreferrer noopener">去注册</a></p> : null}
-              <p className="web-search-meta">{active ? '当前使用' : participating ? (provider.configured ? '已就绪' : '未就绪，将跳过') : '未开启'}</p>
-              {showKey ? <label>API Key
-                <input type="password" autoComplete="off" spellCheck={false}
-                  disabled={busy || writable[provider.credentialRef ?? ''] === false}
-                  value={keys[provider.id] ?? ''}
-                  placeholder={provider.configured ? '已配置，留空不替换' : '请输入 API Key'}
-                  onChange={event => setKeys(current => ({ ...current, [provider.id]: event.target.value }))} />
-                {shared ? <small>与模型设置共用。不会在此删除。</small> : null}
-              </label> : null}
-              {needsKey && !shared && provider.configured ? <button type="button"
-                disabled={busy || writable[provider.credentialRef ?? ''] === false}
-                onClick={() => void action(() => removeKey(provider))}>删除 Key</button> : null}
-            </div>
-            <div className="web-search-rank-move">
-              <button
-                type="button"
-                role="switch"
-                className={`web-search-switch${participating ? ' is-on' : ''}`}
-                aria-checked={participating}
-                aria-label={`${participating ? '关闭' : '开启'} ${provider.label}`}
-                disabled={busy}
-                onClick={() => {
-                  const next = participating ? order.filter(id => id !== provider.id) : [...order, provider.id]
-                  void action(() => persist(nextSearchEnabled(status.settings.searchEnabled, next, status.providers, keys, writable), next))
+    <div role="tabpanel" id={tabsId + '-providers-panel'} aria-labelledby={tabsId + '-providers-tab'}
+      hidden={tab !== 'providers'} tabIndex={0}>
+      {backends.length === 0 ? <p className="web-search-empty">还没有可用的搜索后端。</p> : <article
+        className="web-search-card"
+        data-testid="web-search-tool"
+        data-on={on ? 'true' : 'false'}>
+        <header>
+          <div>
+            <h3>联网搜索</h3>
+            {!canEnable && <p className="web-search-meta">请选择搜索服务并配置 Key。</p>}
+          </div>
+          <button
+            type="button"
+            role="switch"
+            className={`web-search-switch${on ? ' is-on' : ''}`}
+            aria-checked={on}
+            aria-label={on ? '关闭联网搜索' : '启用联网搜索'}
+            disabled={busy || (!on && !canEnable)}
+            onClick={() => void action(() => persist(!on, order))}>
+            <span className="web-search-switch-thumb" aria-hidden="true" />
+          </button>
+        </header>
+        <ol className="web-search-rank" aria-label="搜索后端">
+          {backends.map(provider => {
+            const participating = order.includes(provider.id)
+            const rank = order.indexOf(provider.id)
+            const active = status.searchActive && selected?.id === provider.id
+            const info = searchProviderInfo(provider)
+            const needsKey = Boolean(provider.credentialRef)
+            const shared = Boolean(provider.credentialShared)
+            const showKey = needsKey && participating && (!shared || !provider.configured)
+            const canSort = participating && order.length > 1
+            return <li key={provider.id} className={active ? 'is-active' : undefined} data-testid={`web-search-rank-${provider.id}`}
+              data-dragging={dragSource === provider.id || undefined}
+              data-drop={dropTarget === provider.id && dragSource ? (order.indexOf(dragSource) < rank ? 'after' : 'before') : undefined}
+              onDragOver={event => {
+                if (busy || !canSort || !dragSource || dragSource === provider.id) return
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+                setDropTarget(provider.id)
+              }}
+              onDragLeave={event => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null)
+              }}
+              onDrop={event => {
+                if (busy || !canSort || !dragSource) return
+                event.preventDefault()
+                move(dragSource, rank)
+                endDrag()
+              }}>
+              {canSort ? <button type="button" className="web-search-drag-handle"
+                draggable={!busy} aria-disabled={busy}
+                aria-label={'拖动排序 ' + provider.label}
+                title="拖动排序，或用上下方向键调整"
+                onDragStart={event => {
+                  if (busy) { event.preventDefault(); return }
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('application/x-dsh-search-provider', provider.id)
+                  const row = event.currentTarget.closest('li')
+                  if (row) event.dataTransfer.setDragImage(row, 16, 16)
+                  setDragSource(provider.id)
+                  setSortAnnouncement('')
+                }}
+                onDragEnd={endDrag}
+                onKeyDown={event => {
+                  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+                  event.preventDefault()
+                  move(provider.id, rank + (event.key === 'ArrowUp' ? -1 : 1))
                 }}>
-                <span className="web-search-switch-thumb" aria-hidden="true" />
-              </button>
-              {participating ? <>
-                <button type="button" disabled={busy || rank === 0} aria-label={`提高 ${provider.label} 优先级`} onClick={() => move(provider.id, -1)}>上移</button>
-                <button type="button" disabled={busy || rank === order.length - 1} aria-label={`降低 ${provider.label} 优先级`} onClick={() => move(provider.id, 1)}>下移</button>
-              </> : null}
-            </div>
-          </li>
-        })}
-      </ol>
-      {on ? <div className="web-search-card-actions">
-        <button type="button" disabled={busy} onClick={() => void action(async () => {
-          await persist(status.settings.searchEnabled, order)
-          const result = await call<{ sources: number }>('test')
-          await load()
-          setNote(`连接正常，返回 ${result.sources} 条来源。`)
-        })}>测试连接（可能计费）</button>
-      </div> : null}
-    </article>}
-    <fieldset className="web-search-limits" disabled={busy}>
-      <legend>请求限制</legend>
-      {limits.map(([key, label, min, max]) => (
-        <label key={key}>{label}
-          <input type="number" min={min} max={max} step={1} value={draft[key]}
-            onChange={event => setDraft({ ...draft, [key]: Number(event.target.value) })} />
-        </label>
-      ))}
-      <button type="button" onClick={() => void action(async () => {
-        await persist(status.settings.searchEnabled, order)
-        setNote('已保存。')
-      })}>保存</button>
-    </fieldset>
+                <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="5" r="1.5" /><circle cx="11" cy="5" r="1.5" />
+                  <circle cx="5" cy="10" r="1.5" /><circle cx="11" cy="10" r="1.5" />
+                  <circle cx="5" cy="15" r="1.5" /><circle cx="11" cy="15" r="1.5" />
+                </svg>
+              </button> : <span className="web-search-rank-index">{participating ? rank + 1 : '—'}</span>}
+              <div className="web-search-provider">
+                <div className="web-search-provider-heading">
+                  <strong>{provider.label}</strong>
+                  {active && <span className="web-search-meta">当前使用</span>}
+                  {provider.signupUrl && <ExternalLink url={provider.signupUrl} label={provider.label + ' 去注册'}>去注册</ExternalLink>}
+                </div>
+                <div className="web-search-provider-info">
+                  <p>{info.description}</p>
+                  <p>{info.pricing}{info.pricingUrl && <> <ExternalLink url={info.pricingUrl}
+                    label={provider.label + ' 费用说明'}>{provider.id === 'ddg' ? '官网' : '费用说明'}</ExternalLink></>}</p>
+                </div>
+                {participating && !provider.configured && <p className="web-search-meta">{needsKey ? '待配置 Key' : '暂不可用'}</p>}
+                {shared && participating && <small>{provider.id === 'zhihu-global' ? '与「知乎资料」共用 Access Secret' : '与模型设置共用 Key'}</small>}
+                {showKey ? <label>API Key
+                  <input type="password" autoComplete="off" spellCheck={false}
+                    disabled={busy || writable[provider.credentialRef ?? ''] === false}
+                    value={keys[provider.id] ?? ''}
+                    placeholder={provider.configured ? '已配置，留空不替换' : '请输入 API Key'}
+                    onChange={event => setKeys(current => ({ ...current, [provider.id]: event.target.value }))} />
+                </label> : null}
+                {needsKey && !shared && provider.configured ? <button type="button"
+                  disabled={busy || writable[provider.credentialRef ?? ''] === false}
+                  onClick={() => void action(() => removeKey(provider))}>删除 Key</button> : null}
+              </div>
+              <div className="web-search-rank-move">
+                <button
+                  type="button"
+                  role="switch"
+                  className={`web-search-switch${participating ? ' is-on' : ''}`}
+                  aria-checked={participating}
+                  aria-label={`${participating ? '关闭' : '开启'} ${provider.label}`}
+                  disabled={busy}
+                  onClick={() => {
+                    const next = participating ? order.filter(id => id !== provider.id) : [...order, provider.id]
+                    void action(() => persist(nextSearchEnabled(status.settings.searchEnabled, next, status.providers, keys, writable), next))
+                  }}>
+                  <span className="web-search-switch-thumb" aria-hidden="true" />
+                </button>
+              </div>
+            </li>
+          })}
+        </ol>
+        <p className="web-search-meta">价格核对于 {PROVIDER_PRICING_CHECKED}，实际额度与费用以供应商账户为准。</p>
+        {on ? <div className="web-search-card-actions">
+          <button type="button" disabled={busy} onClick={() => void action(async () => {
+            await persist(status.settings.searchEnabled, order)
+            const result = await call<{ sources: number }>('test')
+            await load()
+            setNote(`连接正常，返回 ${result.sources} 条来源。`)
+          })}>测试连接（可能计费）</button>
+        </div> : null}
+      </article>}
+    </div>
+    <div role="tabpanel" id={tabsId + '-limits-panel'} aria-labelledby={tabsId + '-limits-tab'}
+      hidden={tab !== 'limits'} tabIndex={0}>
+      <fieldset className="web-search-limits" disabled={busy} aria-label="请求限制">
+        {limits.map(([key, label, min, max]) => (
+          <label key={key}>{label}
+            <input type="number" min={min} max={max} step={1} value={draft[key]}
+              onChange={event => setDraft({ ...draft, [key]: Number(event.target.value) })} />
+          </label>
+        ))}
+      </fieldset>
+    </div>
+    <button type="button" disabled={busy} onClick={() => void action(async () => {
+      await persist(status.settings.searchEnabled, order)
+      setNote('已保存。')
+    })}>保存</button>
   </section>
 }
 
 const styles = `
-.web-search-settings{max-width:760px;display:grid;gap:16px;color:inherit;font:inherit}
-.web-search-intro,.web-search-settings small,.web-search-meta,.web-search-empty{margin:0;opacity:.75;line-height:1.6}
-.web-search-settings p{margin:0;line-height:1.65}
+.web-search-settings{max-width:760px;display:grid;gap:24px;color:inherit;font:400 var(--font-size-2,14px)/1.5 var(--default-font-family,system-ui,sans-serif)}
+.web-search-settings p{margin:0;line-height:1.5}
+.web-search-settings small,.web-search-meta,.web-search-empty{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
 .web-search-error{color:var(--red-11,#b42318)}
-.web-search-cards{display:grid;gap:12px}
-.web-search-card{display:grid;gap:10px;padding:14px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:10px;background:var(--gray-3,color-mix(in srgb,currentColor 10%,transparent))}
-.web-search-card.is-on{border-color:var(--accent-8,#5b8def);background:var(--accent-a3,color-mix(in srgb,#5b8def 16%,transparent));box-shadow:0 0 0 1px var(--accent-a6,color-mix(in srgb,#5b8def 28%,transparent))}
-.web-search-card header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start}
-.web-search-card h3{margin:0;font-size:1em}
-.web-search-cost{color:var(--amber-11,#dba15b)}
+.web-search-card{display:grid;gap:12px}
+.web-search-card header{display:flex;justify-content:space-between;gap:12px;align-items:center;padding-bottom:8px}
+.web-search-card h3{margin:0;font-size:var(--font-size-3,16px);font-weight:600}
+.web-search-provider{display:grid;gap:8px;min-width:0}
+.web-search-provider-info{display:grid;gap:3px;font-size:var(--font-size-1,13px);color:var(--gray-11,inherit);overflow-wrap:anywhere}
+.web-search-provider-heading{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-height:24px}
+.web-search-provider-heading strong{font-weight:500}
 .web-search-card label{display:grid;gap:6px}
-.web-search-settings input,.web-search-settings select{box-sizing:border-box;width:100%;padding:9px 12px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:7px;background:var(--color-surface,var(--gray-2,color-mix(in srgb,currentColor 6%,transparent)));color:inherit;font:inherit}
-.web-search-settings button:not([role="switch"]){padding:8px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:7px;background:transparent;color:inherit;cursor:pointer;font:inherit}
+.web-search-settings input{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:6px;background:var(--color-surface,transparent);color:inherit;font:inherit}
+.web-search-settings button:not([role="switch"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:6px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start}
 .web-search-settings button:disabled{opacity:.45;cursor:not-allowed}
-.web-search-settings :focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.web-search-tabs{display:flex;gap:20px;border-bottom:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
+.web-search-tabs button[role="tab"]{padding:8px 0;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--gray-11,inherit)}
+.web-search-tabs button[aria-selected="true"]{border-bottom-color:var(--accent-9,#3b82f6);color:var(--accent-11,inherit);font-weight:600}
 .web-search-settings .web-search-switch{all:unset;box-sizing:border-box;position:relative;display:inline-block;width:36px;height:20px;flex:none;border-radius:999px;background:var(--gray-7,color-mix(in srgb,currentColor 28%,transparent));cursor:pointer}
 .web-search-switch.is-on{background:var(--accent-9,#3b82f6)}
 .web-search-switch:disabled{cursor:not-allowed;opacity:.7}
-.web-search-switch-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:999px;background:var(--gray-1,#fff);transition:transform 150ms ease}
+.web-search-switch-thumb{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:999px;background:#fff;transition:transform 150ms ease}
 .web-search-switch.is-on .web-search-switch-thumb{transform:translateX(16px)}
+.web-search-settings :focus-visible{outline:2px solid currentColor;outline-offset:3px}
 .web-search-card-actions{display:flex;flex-wrap:wrap;gap:8px}
-.web-search-rank{display:grid;gap:8px;margin:0;padding:0;list-style:none}
-.web-search-rank li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:8px}
-.web-search-rank li.is-active{border-color:var(--accent-8,#5b8def)}
-.web-search-rank-index{opacity:.6;font-variant-numeric:tabular-nums;padding-top:2px}
-.web-search-rank-move{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
-.web-search-settings a{color:var(--accent-11,#8cb4ff)}
-.web-search-limits{border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:10px;padding:14px;display:grid;gap:10px;background:var(--gray-3,color-mix(in srgb,currentColor 10%,transparent))}
-.web-search-limits legend{padding:0 8px;font-weight:600}
+.web-search-rank{margin:0;padding:0;list-style:none}
+.web-search-rank li{position:relative;display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:start;padding:14px 0;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
+.web-search-settings button.web-search-drag-handle{display:grid;place-items:center;width:24px;height:24px;min-height:24px;padding:0;border:0;cursor:grab;color:inherit;opacity:.65}
+.web-search-settings button.web-search-drag-handle:hover{opacity:1;background:var(--gray-3,color-mix(in srgb,currentColor 8%,transparent))}
+.web-search-settings button.web-search-drag-handle:active{cursor:grabbing}
+.web-search-settings button.web-search-drag-handle[aria-disabled="true"]{cursor:wait;opacity:.4}
+.web-search-rank li[data-dragging]{opacity:.45}
+.web-search-rank li[data-drop]::after{content:'';position:absolute;left:0;right:0;height:2px;background:var(--accent-9,#3b82f6);pointer-events:none}
+.web-search-rank li[data-drop="before"]::after{top:-1px}
+.web-search-rank li[data-drop="after"]::after{bottom:-1px}
+.web-search-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.web-search-rank-index{opacity:.6;font-variant-numeric:tabular-nums;line-height:24px}
+.web-search-rank-move{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;padding-top:2px}
+.web-search-settings a{color:var(--accent-11,currentColor);font-size:var(--font-size-1,13px);text-underline-offset:3px}
+.web-search-limits{margin:0;border:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px}
+.web-search-limits label{display:grid;gap:6px;font-size:var(--font-size-2,14px)}
+@media(max-width:560px){.web-search-rank-move{flex-direction:column;align-items:flex-end}.web-search-limits{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.web-search-switch-thumb{transition:none}}
 `
 
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
-    const style = document.createElement('style'); style.textContent = styles
+    const style = document.createElement('style')
+    style.setAttribute('data-plugin', '@klarkxy/dsh-web-search-manager'); style.textContent = styles
     style.dataset.dshWebSearch = ''; document.head.appendChild(style)
     return () => style.remove()
   }, 'web-search-manager.styles')

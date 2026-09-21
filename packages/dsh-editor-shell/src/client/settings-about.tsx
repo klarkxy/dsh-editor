@@ -214,7 +214,7 @@ export function AboutSettingsSection(props: {
           onCancel: cancelDownload,
           onInstall: (updateId) => void installDownloaded(updateId),
         })}
-        {state.status === 'ready' && state.result.status === 'update-available' ? <Text size="1" color="gray" className="about-note">
+        {appInfo?.platform === 'darwin' && state.status === 'ready' && state.result.status === 'update-available' ? <Text size="1" color="gray" className="about-note">
           {t('about.macHint')}
         </Text> : null}
         <Flex className="about-actions" gap="2" wrap="wrap">

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packagesDir = join(root, 'packages')
 const PRODUCTION_FIELDS = ['dependencies', 'optionalDependencies']
-const SEAT_CONSUMERS = ['dsh-manuscript', 'dsh-zhihu']
+const SEAT_CONSUMERS = ['dsh-manuscript', '@klarkxy/dsh-zhihu']
 
 function loadWorkspacePackages() {
   const packages = []

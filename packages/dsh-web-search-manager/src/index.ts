@@ -8,7 +8,7 @@ import { WebSearchManager } from './manager.ts'
 import { updateSchema, webSettingsDomain } from './storage.ts'
 export { WebSearchManager } from './manager.ts'
 export type { ProviderDescriptor, ProviderOptions, SearchProviderFactory, FetchProviderFactory } from './contracts.ts'
-export const name = 'dsh-web-search-manager'
+export const name = '@klarkxy/dsh-web-search-manager'
 export const inject = ['web', 'credentials', 'storageDomain', 'connection', 'webServer'] as const
 
 declare module '@deepseek-ai/cordis' { interface Context { webSearchManager: WebSearchManager } }

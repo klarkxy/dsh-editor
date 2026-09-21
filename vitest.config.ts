@@ -27,8 +27,8 @@ export default defineConfig({
   }],
   resolve: {
     alias: {
-      'dsh-zhihu/usage': `${root}packages/dsh-zhihu/src/usage.ts`,
-      'dsh-zhihu/contracts': `${root}packages/dsh-zhihu/src/contracts.ts`,
+      '@klarkxy/dsh-zhihu/usage': `${root}packages/dsh-zhihu/src/usage.ts`,
+      '@klarkxy/dsh-zhihu/contracts': `${root}packages/dsh-zhihu/src/contracts.ts`,
       'dsh-proofread/engine': `${root}packages/dsh-proofread/src/engine.ts`,
       'dsh-proofread/contracts': `${root}packages/dsh-proofread/src/contracts.ts`,
       'dsh-proofread/defaults': `${root}packages/dsh-proofread/src/defaults.ts`,

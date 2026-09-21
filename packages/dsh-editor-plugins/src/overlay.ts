@@ -13,11 +13,12 @@ export type PluginState = {
 
 export const MANAGED_PATCH_MARK = 'managed-by: dsh-editor-plugins'
 
-/** Host-wide entries the profile keeps disabled; session presets remount them. */
+/** Entries controlled by session presets, or retired into another feature. */
 export const HOST_LOCKED_ENTRY_IDS = new Set([
   'editor-novel-kernel',
   'editor-workbench-tools',
   'proofread',
+  'web-search-tavily', // Supplied by web-search-manager; the old entry no longer exists.
 ])
 
 export function withoutHostLockedOverrides(overrides: Record<string, boolean>): Record<string, boolean> {
@@ -47,7 +48,7 @@ export function parsePluginState(value: unknown): PluginState | undefined {
     for (const item of row.installed) {
       if (!item || typeof item !== 'object') continue
       const record = item as Record<string, unknown>
-      if (typeof record.name !== 'string' || !isSafePackageName(record.name)) continue
+      if (typeof record.name !== 'string' || !isSafePackageName(record.name) || record.name === 'dsh-web-search-tavily') continue
       if (typeof record.spec !== 'string' || record.spec.length > 200) continue
       installed.push({
         name: record.name,

@@ -17,7 +17,7 @@ export async function configureWebSearchPresets(profilePath, composition) {
       if (error?.code === 'ENOENT') continue
       throw error
     }
-    if (content.includes('name: dsh-web-search-manager/tools')) continue
-    await writeFile(path, `${content.trimEnd()}\n\n# Authorization and limits come from the host network-search manager.\n- id: editor-web-search-tools\n  name: dsh-web-search-manager/tools\n`)
+    if (content.includes('name: "@klarkxy/dsh-web-search-manager/tools"')) continue
+    await writeFile(path, `${content.trimEnd()}\n\n# Authorization and limits come from the host network-search manager.\n- id: editor-web-search-tools\n  name: "@klarkxy/dsh-web-search-manager/tools"\n`)
   }
 }

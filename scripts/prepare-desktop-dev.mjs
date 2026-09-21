@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
 import { compositionInstallNames } from './plugin-manifest.mjs'
-import { desktopComposition, configureProfile, DESKTOP_PACKAGE_NAMES } from './desktop-compositions.mjs'
+import { workspacePackageDir, desktopComposition, configureProfile, DESKTOP_PACKAGE_NAMES } from './desktop-compositions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceTemplate = resolve(root, 'apps', 'desktop', 'resources', 'profile')
@@ -29,11 +29,12 @@ function packageCopyFilter(source) {
 
 async function installPackage(packageName, destination) {
   await rm(destination, { recursive: true, force: true })
-  const source = resolve(root, 'packages', packageName)
+  const source = workspacePackageDir(packageName)
   if (process.env.DSH_EDITOR_COPY_PACKAGES === '1') {
     await cp(source, destination, { recursive: true, filter: packageCopyFilter })
     return
   }
+  await mkdir(dirname(destination), { recursive: true })
   await symlink(source, destination, 'junction')
 }
 

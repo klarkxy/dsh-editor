@@ -1,10 +1,11 @@
 export const pluginsClientStyles = `
 .dsh-plugins {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-5);
   min-height: 0;
   padding-bottom: var(--space-2);
   font-family: var(--default-font-family);
+  line-height: 1.5;
   color: var(--gray-12);
   font-size: var(--font-size-2);
 }
@@ -28,8 +29,8 @@ export const pluginsClientStyles = `
 }
 .dsh-plugins-tabs button,
 .dsh-plugins-tabs .rt-BaseButton {
-  min-height: 28px;
-  height: 28px;
+  min-height: 32px;
+  height: 32px;
   min-width: 0;
   padding: 0 var(--space-3);
   border: 0;
@@ -105,23 +106,22 @@ export const pluginsClientStyles = `
 .dsh-plugins-group { display: grid; gap: var(--space-2); }
 .dsh-plugins-group h3 {
   margin: 0;
-  font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--default-font-family);
-  letter-spacing: .04em;
-  color: var(--gray-11);
+  font: 600 var(--font-size-3)/1.5 var(--default-font-family);
+  color: var(--gray-12);
 }
 .dsh-plugins-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  padding: var(--space-3);
+  padding: var(--space-3) 0;
   border: 0;
-  border-radius: var(--radius-3);
-  background: var(--gray-2);
-  box-shadow: inset 0 0 0 1px var(--gray-a5);
+  border-top: 1px solid var(--gray-a5);
+  border-radius: 0;
+  background: transparent;
   transition: background-color 150ms ease;
 }
-.dsh-plugins-card:hover { background: var(--gray-3); }
+.dsh-plugins-card:hover { background: var(--gray-a2); }
 .dsh-plugins-card-title { font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--default-font-family); }
 .dsh-plugins-card-desc, .dsh-plugins-meta {
   color: var(--gray-11);

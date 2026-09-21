@@ -4,7 +4,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
-import { desktopComposition } from './desktop-compositions.mjs'
+import { workspacePackageDir, desktopComposition } from './desktop-compositions.mjs'
 import { firstCompilePattern, isLeftoverDevCommand } from './dev-process.mjs'
 import { clientPackages, compositionInstallNames, loadPluginManifests } from './plugin-manifest.mjs'
 
@@ -157,7 +157,7 @@ for (const path of [prepareDesktopDev, electronCli, tsdownCli]) {
 }
 
 function packageHasBuildOutput(name) {
-  const dir = resolve(root, 'packages', name)
+  const dir = workspacePackageDir(name)
   return existsSync(resolve(dir, 'lib/index.js')) || existsSync(resolve(dir, 'lib/client.js'))
 }
 
@@ -233,7 +233,7 @@ const watchers = compositionInstallNames(composition).map((name) => {
   const child = spawnNode(tsdownCli, [
     '--watch', '--no-clean',
     ...(wrapClient ? ['--on-success', `node ../../scripts/wrap-client.mjs ${name}`] : []),
-  ], resolve(root, 'packages', name), ['ignore', 'pipe', 'pipe'])
+  ], workspacePackageDir(name), ['ignore', 'pipe', 'pipe'])
   bindChild(child, 'watcher')
   return { name, child, wrapClient }
 })

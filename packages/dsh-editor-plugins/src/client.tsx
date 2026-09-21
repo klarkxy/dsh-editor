@@ -57,6 +57,9 @@ function injectStyles(): () => void {
     style.setAttribute('data-dsh-plugins-styles', '')
     document.head.appendChild(style)
   }
+  // The module loader claims unowned styles for the next materialized module.
+  // Declare ownership before HMR can mistake these styles for another plugin's.
+  style.setAttribute('data-plugin', 'dsh-editor-plugins')
   style.textContent = pluginsClientStyles
   /* 设置页 React 树可能比 client fiber 活得更久；卸 fiber 时不要拆样式。 */
   return () => {}
@@ -387,7 +390,7 @@ function WritingPresetGroup(props: {
         写作模式
       </h3>
       <p className="dsh-plugins-core-hint">
-        新对话可选的写作模式。开关立即生效；进行中的对话不受影响。
+        仅影响新对话，进行中的对话不变。
       </p>
       {props.presets.map((preset) => {
         const titleId = `preset-title-${preset.id}`
@@ -403,9 +406,6 @@ function WritingPresetGroup(props: {
               {preset.description ? <div className="dsh-plugins-card-desc">
                 {preset.description}
               </div> : null}
-              <div className="dsh-plugins-meta">
-                {preset.locked ? '始终可用' : preset.enabled ? '已启用' : '已停用'}
-              </div>
             </div>
             <div className="dsh-plugins-actions">
               {preset.locked
@@ -841,12 +841,23 @@ function PluginPanel(props: PluginPanelProps) {
   const submitBusy = props.searching || installBusy
   return (
     <section className="dsh-plugins" data-testid="plugins-settings" aria-label="插件">
-      <div className="dsh-plugins-tabs" role="tablist" aria-label="插件分类">
+      <div className="dsh-plugins-tabs" role="tablist" aria-label="插件分类" onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+        const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+        const index = buttons.indexOf(event.target as HTMLButtonElement)
+        if (index < 0) return
+        event.preventDefault()
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+        buttons[next]?.focus()
+        buttons[next]?.click()
+      }}>
         <SeatButton
           host={props.Button}
           type="button"
           role="tab"
           aria-selected={props.tab === 'installed'}
+          tabIndex={props.tab === 'installed' ? 0 : -1}
           data-testid="plugins-tab-installed"
           onClick={() => props.onTab('installed')}>
           已安装
@@ -856,6 +867,7 @@ function PluginPanel(props: PluginPanelProps) {
           type="button"
           role="tab"
           aria-selected={props.tab === 'market'}
+          tabIndex={props.tab === 'market' ? 0 : -1}
           data-testid="plugins-tab-market"
           onClick={() => props.onTab('market')}>
           市场

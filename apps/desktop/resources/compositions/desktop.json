@@ -9,7 +9,6 @@
     "overview-panel",
     "proofread-panel",
     "writing-presets",
-    "web-search",
-    "web-search-tavily"
+    "web-search"
   ]
 }

@@ -2,10 +2,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const pkg = process.argv[2]
-if (!pkg) {
+const requestedPackage = process.argv[2]
+if (!requestedPackage) {
   console.error('usage: wrap-client.mjs <package-name>')
   process.exit(1)
+}
+const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8')).name
+if (typeof pkg !== 'string' || (requestedPackage !== pkg && requestedPackage !== pkg.split('/').at(-1))) {
+  throw new Error('wrap-client package argument does not match the working directory manifest')
 }
 const inner = path.resolve('lib/client.inner.cjs')
 const alt = path.resolve('lib/client.inner.js')

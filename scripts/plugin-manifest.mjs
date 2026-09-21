@@ -16,7 +16,7 @@ const STABLE_PACKAGE_ORDER = [
   'dsh-editor-workbench',
   'dsh-editor-novel-kernel',
   'dsh-editor-writing-presets',
-  'dsh-zhihu',
+  '@klarkxy/dsh-zhihu',
   'dsh-editor-shell',
   'dsh-editor-plugins',
 ]
@@ -57,7 +57,7 @@ function sortPackageNames(names) {
   return [...names].sort((left, right) => {
     const leftIndex = STABLE_PACKAGE_ORDER.indexOf(left)
     const rightIndex = STABLE_PACKAGE_ORDER.indexOf(right)
-    if (leftIndex === -1 && rightIndex === -1) return left.localeCompare(right)
+    if (leftIndex === -1 && rightIndex === -1) return left.replace(/^@[^/]+\//, '').localeCompare(right.replace(/^@[^/]+\//, ''))
     if (leftIndex === -1) return 1
     if (rightIndex === -1) return -1
     return leftIndex - rightIndex

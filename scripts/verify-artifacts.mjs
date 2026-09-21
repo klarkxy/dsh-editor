@@ -3,7 +3,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PUBLIC_PLUGIN_PACKAGES } from './desktop-compositions.mjs'
+import { PUBLIC_PLUGIN_PACKAGES, workspacePackageDir } from './desktop-compositions.mjs'
 import { loadPluginManifests } from './plugin-manifest.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -15,7 +15,7 @@ const desktopOnlyNames = pluginManifests.filter((item) => item.visibility === 'd
 function expectedEntries(name) {
   const files = readManifest(name).files
   const packedWholeLib = Array.isArray(files) && files.includes('lib')
-  const output = fs.readdirSync(path.join(root, 'packages', name, 'lib')).filter(file =>
+  const output = fs.readdirSync(path.join(workspacePackageDir(name), 'lib')).filter(file =>
     /\.(?:js|js\.map|d\.ts)$/.test(file) || (packedWholeLib && /\.cjs(?:\.map)?$/.test(file))
   )
   if (name === 'dsh-manuscript') output.push('client-editor-core.cjs')
@@ -23,7 +23,7 @@ function expectedEntries(name) {
 }
 
 function readManifest(name) {
-  return JSON.parse(fs.readFileSync(path.join(root, 'packages', name, 'package.json'), 'utf8'))
+  return JSON.parse(fs.readFileSync(path.join(workspacePackageDir(name), 'package.json'), 'utf8'))
 }
 
 function tar(args) {
@@ -59,13 +59,13 @@ function assertExact(label, actual, expected) {
 }
 
 const manifests = Object.fromEntries(packageNames.map((name) => [name, readManifest(name)]))
-const expectedTarballs = packageNames.map((name) => `${name}-${manifests[name].version}.tgz`)
+const expectedTarballs = packageNames.map((name) => `${name.replace(/^@/, '').replaceAll('/', '-')}-${manifests[name].version}.tgz`)
 const actualTarballs = fs.readdirSync(packDir).filter((name) => name.endsWith('.tgz'))
 assertExact('tarball set', actualTarballs, expectedTarballs)
 
 const artifacts = []
 for (const name of packageNames) {
-  const filename = `${name}-${manifests[name].version}.tgz`
+  const filename = `${name.replace(/^@/, '').replaceAll('/', '-')}-${manifests[name].version}.tgz`
   const absolute = path.join(packDir, filename)
   const entries = tar(['-tf', absolute]).trim().split(/\r?\n/).filter(Boolean)
   assertExact(`${name} archive contents`, entries, expectedEntries(name))
@@ -96,7 +96,7 @@ for (const name of packageNames) {
     : [
       ...desktopOnlyNames.filter((item) => item !== name),
       ...(name === 'dsh-proofread' ? ['dsh-manuscript', 'node:fs', '@deepseek-ai/dsh-tools'] : []),
-      ...(name === 'dsh-zhihu' ? ['dsh-manuscript'] : []),
+      ...(name === '@klarkxy/dsh-zhihu' ? ['dsh-manuscript'] : []),
     ]
   for (const token of runtimeForbidden) {
     if (code.includes(token)) throw new Error(`${name} packed code contains forbidden coupling: ${token}`)

@@ -57,7 +57,17 @@ for (const fileName of [
   await stat(resolve(knowledgeRoot, fileName))
 }
 }
-const installed = (await readdir(resolve(resources, 'profile-template', 'node_modules'))).filter(name => name.startsWith('dsh-')).sort()
+const profileModules = resolve(resources, 'profile-template', 'node_modules')
+const installed = []
+for (const name of await readdir(profileModules)) {
+  if (name.startsWith('dsh-')) installed.push(name)
+  else if (name.startsWith('@')) {
+    for (const child of await readdir(resolve(profileModules, name))) {
+      if (child.startsWith('dsh-')) installed.push(`${name}/${child}`)
+    }
+  }
+}
+installed.sort()
 if (JSON.stringify(installed) !== JSON.stringify([...installedNames].sort())) throw new Error('unexpected packaged business dependencies')
 const nodeProbe = spawnSync(resolve(resources, 'node', nodeExecutableName), ['--version'], { encoding: 'utf8', windowsHide: true })
 if (nodeProbe.status !== 0 || nodeProbe.stdout.trim() !== 'v24.16.0') throw new Error('packaged Node probe failed')

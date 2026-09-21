@@ -25,7 +25,8 @@
     "test:e2e:missing-private": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/missing-private-plugin.mjs",
     "test:e2e:portable": "node e2e/portable.mjs",
     "verify:desktop": "pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e:desktop && pnpm test:e2e:core-loop",
-    "verify:delivery": "pnpm verify:desktop && pnpm test:e2e:matrix && pnpm test:e2e:missing-private && pnpm pack:desktop && pnpm test:e2e:portable"
+    "verify:delivery": "pnpm verify:desktop && pnpm test:e2e:matrix && pnpm test:e2e:missing-private && pnpm pack:desktop && pnpm test:e2e:portable",
+    "publish:plugins": "node scripts/publish-npm-plugins.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -78,6 +78,7 @@ const KB_MANAGE_URL = 'https://zhida.zhihu.com/repositories/square'
 function injectStyles(): HTMLStyleElement | null {
   if (typeof document === 'undefined') return null
   const style = document.createElement('style')
+  style.setAttribute('data-plugin', '@klarkxy/dsh-zhihu')
   style.setAttribute('data-dsh-zhihu-styles', '')
   style.textContent = zhihuClientStyles
   document.head.appendChild(style)
@@ -373,26 +374,11 @@ function useAlive() {
 
 function CapabilitiesNote(): ReactNode {
   return (
-    <div className="zhihu-guide" data-testid="zhihu-capabilities">
-      <h3 className="zhihu-guide-title">
-        可以做什么
-      </h3>
-      <ul className="zhihu-guide-steps">
-        <li>
-          搭档可调用站内搜索、全网搜索、热榜、直答
-        </li>
-        <li>
-          若已启用网络搜索，全网搜索也可作为其中一个搜索后端
-        </li>
-        <li>
-          知识库检索；本页可上传参考资料
-        </li>
-        <li>
-          查看近 30 天本机调用用量
-        </li>
-      </ul>
-    </div>
-  );
+    <details className="zhihu-guide" data-testid="zhihu-capabilities">
+      <summary>可用能力</summary>
+      <p className="zhihu-hint">站内搜索、全网搜索、热榜、直答和知识库检索。全网搜索可在「网络搜索」中启用。</p>
+    </details>
+  )
 }
 
 function SettingsShell(props: { children?: ReactNode }): ReactNode {
@@ -514,30 +500,6 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
 
   return (
     <SettingsShell>
-      {configured ? null : <div className="zhihu-guide">
-        <h3 className="zhihu-guide-title">
-          获取 Access Secret
-        </h3>
-        <ol className="zhihu-guide-steps">
-          <li>
-            {'打开 '}
-            <a
-              className="zhihu-link"
-              href={ZHIHU_CONSOLE_URL}
-              target="_blank"
-              rel="noreferrer">
-              developer.zhihu.com
-            </a>
-            {' 并登录。'}
-          </li>
-          <li>
-            在控制台创建应用或进入既有应用，复制 Access Secret。
-          </li>
-          <li>
-            粘贴到下方输入框并保存。
-          </li>
-        </ol>
-      </div>}
       <dl className="zhihu-status-grid">
         <dt className="zhihu-status-label">
           状态
@@ -548,9 +510,14 @@ function SettingsSection(props: { credentials: CredentialsApi; Button?: HostButt
         </dd>
       </dl>
       <div className="zhihu-field">
-        <span className="zhihu-field-label" id="zhihu-access-secret-label">
-          Access Secret
-        </span>
+        <div className="zhihu-field-heading">
+          <span className="zhihu-field-label" id="zhihu-access-secret-label">Access Secret</span>
+          <a className="zhihu-link" href={ZHIHU_CONSOLE_URL} target="_blank" rel="noreferrer noopener"
+            onClick={event => {
+              const bridge = (globalThis as { dshWindow?: { openExternal?(url: string): void } }).dshWindow
+              if (bridge?.openExternal) { event.preventDefault(); bridge.openExternal(ZHIHU_CONSOLE_URL) }
+            }}>获取密钥</a>
+        </div>
         {renderInput(props.Input, {
           type: 'password',
           className: 'zhihu-input',
@@ -1335,13 +1302,24 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
   const stale = outcome !== null && resultRevision !== revision
   const searchDisabled = isSearchDisabled()
 
-  const tablist = <div key="tabs" className="zhihu-tabs" role="tablist" aria-label="知乎资料分区">
+  const tablist = <div key="tabs" className="zhihu-tabs" role="tablist" aria-label="知乎资料分区" onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+        const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+        const index = buttons.indexOf(event.target as HTMLButtonElement)
+        if (index < 0) return
+        event.preventDefault()
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+        buttons[next]?.focus()
+        buttons[next]?.click()
+      }}>
     {tabs.map((key) => <SeatButton
       key={key}
       host={Button}
       type="button"
       role="tab"
       aria-selected={tab === key}
+      tabIndex={tab === key ? 0 : -1}
       className="zhihu-tab"
       onClick={() => onTabChange(key)}>
       {tabLabel(key, surface)}
@@ -1349,9 +1327,6 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
   </div>
   const body = <div key="body" className="zhihu-panel-body">
     {tab === 'search' ? <div role="tabpanel" className="zhihu-field">
-      {surface === 'settings' ? <p className="zhihu-intro">
-        试调站内搜索、全网搜索、热榜、直答和知识库检索，确认知乎通路可用。
-      </p> : null}
       <div className="zhihu-row">
         {renderSelect(Select, {
           'aria-label': '搜索方式',
@@ -1366,12 +1341,12 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
           options: ASK_MODELS.map((model) => ({ value: model.value, label: model.label })),
         }, 'zhihu-select') : null}
       </div>
-      {mode === 'knowledge' ? <div className="zhihu-scopes">
+      {mode === 'knowledge' ? <div className="zhihu-scopes" role="group" aria-label="检索范围">
         {SCOPE_OPTIONS.map((scope) => <SeatButton
           key={scope.value}
           host={Button}
           role="checkbox"
-          aria-pressed={scopes.includes(scope.value)}
+          aria-checked={scopes.includes(scope.value)}
           className={`zhihu-scope${scopes.includes(scope.value) ? ' is-on' : ''}`}
           onClick={() => toggleScope(scope.value)}>
           {scope.label}
@@ -1382,6 +1357,7 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
         type: 'search',
         className: 'zhihu-input',
         'data-testid': 'zhihu-query',
+        'aria-label': '搜索关键词',
         placeholder: mode === 'hot' ? '热榜无需关键词' : '输入关键词…',
         value: query,
         disabled: mode === 'hot',
@@ -1410,7 +1386,7 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
         </SeatButton>
           : null}
       </div>
-      {phase === 'idle' && mode !== 'hot' && !query.trim() ? <div className="zhihu-status" role="status">
+      {surface !== 'settings' && phase === 'idle' && mode !== 'hot' && !query.trim() ? <div className="zhihu-status" role="status">
         输入关键词后搜索。
       </div> : null}
       {phase === 'loading' ? <div className="zhihu-status" role="status">
@@ -1494,9 +1470,10 @@ function ZhihuDock(props: { rpc: RpcCaller; credentials: CredentialsApi; Select?
 }
 
 export function apply(ctx: Context): void {
-  const style = injectStyles()
-  // Styles live and die with the plugin fiber: unload/reload removes the node.
-  if (style) ctx.effect(() => () => style.remove(), 'zhihu.styles')
+  ctx.effect(() => {
+    const style = injectStyles()
+    return () => style?.remove()
+  }, 'zhihu.styles')
   const client = ctx as ZhihuClientContext
   const overlayRender = (props: unknown) => <ZhihuDock
     rpc={client.connection.rpc}

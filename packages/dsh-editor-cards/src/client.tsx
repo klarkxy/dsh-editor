@@ -31,6 +31,7 @@ type CardsClientContext = Context & {
 function injectStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
   const style = document.createElement('style')
+  style.setAttribute('data-plugin', 'dsh-editor-cards')
   style.setAttribute('data-dsh-cards-styles', '')
   style.textContent = cardsPanelStyles
   document.head.appendChild(style)

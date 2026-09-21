@@ -12,7 +12,7 @@ import { ZHIHU_RPC_CHANNEL, ZHIHU_CREDENTIAL_REF, ZHIHU_SEARCH_EVENT, type Zhihu
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
 import { bindZhihuWebSearch } from './web-search-provider.ts'
 
-export const name = 'dsh-zhihu'
+export const name = '@klarkxy/dsh-zhihu'
 export const inject = ['connection', 'credentials', 'storageDomain', 'webServer'] as const
 export type ZhihuService = {
   call(endpoint: string, payload: unknown, signal: AbortSignal): Promise<ZhihuRpcResult>

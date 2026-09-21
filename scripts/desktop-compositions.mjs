@@ -27,6 +27,13 @@ export { BASE_BUNDLES }
 export const DESKTOP_PACKAGE_NAMES = desktopCopiedPackageNames(manifests)
 export const PUBLIC_PLUGIN_PACKAGES = publicPackages(manifests)
 
+/** Package names can be scoped while source directories stay flat. */
+export function workspacePackageDir(name) {
+  const pkg = [...manifests, ...(manifests.libraries ?? [])].find((item) => item.name === name)
+  if (!pkg) throw new Error(`unknown workspace package: ${name}`)
+  return pkg.dir
+}
+
 export async function desktopComposition(id = process.env.DSH_EDITOR_COMPOSITION || 'desktop') {
   if (!COMPOSITION_IDS.includes(id)) throw new Error(`unsupported desktop composition: ${id}`)
   const aliasLabel = COMPOSITION_ALIASES[id]
@@ -65,7 +72,7 @@ export async function configureProfile(destination, composition) {
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
   const basePatch = await readFile(resolve(root, 'apps/desktop/resources/profile/cordis.patch.yml'), 'utf8')
   const extraInsertPatch = composition.extraInserts.length
-    ? `- insert:\n${composition.extraInserts.map((row) => `    - id: ${row.id}\n      name: ${row.name}\n`).join('')}`
+    ? `- insert:\n${composition.extraInserts.map((row) => `    - id: ${row.id}\n      name: ${JSON.stringify(row.name)}\n`).join('')}`
     : ''
   const disabledPatch = composition.disabledEntries.map((id) => `- id: ${id}\n  disabled: true\n`).join('')
   const featureKeys = Object.keys(composition.shellFeatures)

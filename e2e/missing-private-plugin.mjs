@@ -1,3 +1,4 @@
+import { workspacePackageDir } from '../scripts/desktop-compositions.mjs'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
@@ -49,7 +50,7 @@ function assertUnresolved(packageName, anchors, label) {
 }
 
 function assertProtected(packageName) {
-  if (!existsSync(join(root, 'packages', packageName, 'package.json'))) {
+  if (!existsSync(join(workspacePackageDir(packageName), 'package.json'))) {
     throw new Error(`probe deleted source package ${packageName}`)
   }
   if (!existsSync(join(runtime, 'node_modules', packageName))) {

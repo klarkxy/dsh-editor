@@ -17,12 +17,12 @@ const catalog = catalogFromEditorBlocks([
     },
   },
   {
-    name: 'dsh-zhihu',
+    name: '@klarkxy/dsh-zhihu',
     dshEditor: {
       entries: [{ id: 'zhihu', title: '知乎资料', description: '知乎搜索、知识库与用量' }],
     },
   },
-], ['dsh-editor-shell', 'dsh-zhihu'])
+], ['dsh-editor-shell', '@klarkxy/dsh-zhihu'])
 
 const signal = () => new AbortController().signal
 
@@ -61,7 +61,7 @@ describe('plugin manager RPC', () => {
   it('lists core and optional plugins and hides harness internals', () => {
     const inventory = inventoryFromLoader(loader([
       { id: 'include:editor-shell', name: 'dsh-editor-shell' },
-      { id: 'include:zhihu', name: 'dsh-zhihu' },
+      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
       { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
       { id: 'group-a', name: 'ignored', group: true },
     ]), { schema: 1, overrides: {}, presets: {}, installed: [] }, catalog)
@@ -76,7 +76,7 @@ describe('plugin manager RPC', () => {
     const paths = await fixture()
     const host = loader([
       { id: 'editor-shell', name: 'dsh-editor-shell' },
-      { id: 'zhihu', name: 'dsh-zhihu' },
+      { id: 'zhihu', name: '@klarkxy/dsh-zhihu' },
     ])
     const blocked = await handlePluginsRpc('entry.setEnabled', { entryId: 'editor-shell', enabled: false }, signal(), { loader: host, paths, catalog })
     expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
@@ -136,7 +136,7 @@ describe('plugin paths', () => {
 
 it('toggles real include IDs and persists the unprefixed profile patch ID', async () => {
   const paths = await fixture()
-  const host = loader([{id: 'include:zhihu', name: 'dsh-zhihu'}, {id: 'include:editor-shell', name: 'dsh-editor-shell'}])
+  const host = loader([{id: 'include:zhihu', name: '@klarkxy/dsh-zhihu'}, {id: 'include:editor-shell', name: 'dsh-editor-shell'}])
   expect(await handlePluginsRpc('entry.setEnabled', {entryId: 'include:editor-shell', enabled: false}, signal(), {loader: host, paths, catalog})).toMatchObject({ok: false, error: {code: 'forbidden'}})
   expect(await handlePluginsRpc('entry.setEnabled', {entryId: 'include:zhihu', enabled: false}, signal(), {loader: host, paths, catalog})).toMatchObject({ok: true, value: {restartRequired: false}})
   expect([...host.entries()][0].disabled).toBe(true)
@@ -145,7 +145,7 @@ it('toggles real include IDs and persists the unprefixed profile patch ID', asyn
 })
 it('reports restart required if the live loader rejects a saved toggle', async () => {
   const paths = await fixture()
-  const host = loader([{id: 'include:zhihu', name: 'dsh-zhihu'}])
+  const host = loader([{id: 'include:zhihu', name: '@klarkxy/dsh-zhihu'}])
   host.update = async () => { throw new Error('busy') }
   expect(await handlePluginsRpc('entry.setEnabled', {entryId: 'include:zhihu', enabled: false}, signal(), {loader: host, paths, catalog})).toMatchObject({ok: true, value: {restartRequired: true}})
   expect([...host.entries()][0].disabled).toBe(false)
@@ -158,19 +158,19 @@ const zhihuCatalog = catalogFromEditorBlocks([
     dshEditor: { entries: [{ id: 'editor-shell', title: '写作界面', description: '三栏稿纸与设置', locked: true }] },
   },
   {
-    name: 'dsh-zhihu',
+    name: '@klarkxy/dsh-zhihu',
     dshEditor: {
       entries: [{ id: 'zhihu', title: '知乎资料', description: '知乎搜索' }],
       inserts: [{ id: 'zhihu-tools', title: '知乎工具', description: '检索' }],
     },
   },
-], ['dsh-editor-shell', 'dsh-zhihu'])
+], ['dsh-editor-shell', '@klarkxy/dsh-zhihu'])
 
 describe('grouped plugin enable', () => {
   it('validates the whole group before persisting any override', async () => {
     const paths = await fixture()
     const host = loader([
-      { id: 'include:zhihu', name: 'dsh-zhihu' },
+      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
       { id: 'include:editor-shell', name: 'dsh-editor-shell' },
     ])
     const blocked = await handlePluginsRpc('entries.setEnabled', {
@@ -207,7 +207,7 @@ describe('grouped plugin enable', () => {
 
   it('refuses a missing entry without writing overrides', async () => {
     const paths = await fixture()
-    const host = loader([{ id: 'include:zhihu', name: 'dsh-zhihu' }])
+    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
     const missing = await handlePluginsRpc('entries.setEnabled', {
       entryIds: ['include:zhihu', 'include:zhihu-tools'],
       enabled: false,
@@ -219,8 +219,8 @@ describe('grouped plugin enable', () => {
   it('persists both Zhihu entries in one override write and confirms inventory', async () => {
     const paths = await fixture()
     const host = loader([
-      { id: 'include:zhihu', name: 'dsh-zhihu' },
-      { id: 'include:zhihu-tools', name: 'dsh-zhihu/tools' },
+      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
+      { id: 'include:zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' },
     ])
     const toggled = await handlePluginsRpc('entries.setEnabled', {
       entryIds: ['include:zhihu', 'include:zhihu-tools'],
@@ -244,7 +244,7 @@ describe('grouped plugin enable', () => {
     const paths = await fixture()
     const custom = '- id: custom\n  config: {}\n'
     await writeFile(paths.patchFile, custom)
-    const host = loader([{ id: 'include:zhihu', name: 'dsh-zhihu' }])
+    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
     const result = await handlePluginsRpc('entries.setEnabled', {
       entryIds: ['include:zhihu'],
       enabled: false,
@@ -258,8 +258,8 @@ describe('grouped plugin enable', () => {
   it('returns an author-facing persist error and does not apply the loader', async () => {
     const paths = await fixture()
     const host = loader([
-      { id: 'include:zhihu', name: 'dsh-zhihu' },
-      { id: 'include:zhihu-tools', name: 'dsh-zhihu/tools' },
+      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
+      { id: 'include:zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' },
     ])
     const result = await handlePluginsRpc('entries.setEnabled', {
       entryIds: ['include:zhihu', 'include:zhihu-tools'],
@@ -285,8 +285,8 @@ describe('grouped plugin enable', () => {
   it('retries a transient rename failure and then confirms inventory', async () => {
     const paths = await fixture()
     const host = loader([
-      { id: 'include:zhihu', name: 'dsh-zhihu' },
-      { id: 'include:zhihu-tools', name: 'dsh-zhihu/tools' },
+      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
+      { id: 'include:zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' },
     ])
     const { rename } = await import('node:fs/promises')
     let failures = 0
@@ -320,8 +320,8 @@ describe('grouped plugin enable', () => {
     await writeFile(paths.stateFile, stateText)
     await writeFile(paths.patchFile, patchText)
     const host = loader([
-      { id: 'include:zhihu', name: 'dsh-zhihu' },
-      { id: 'include:zhihu-tools', name: 'dsh-zhihu/tools' },
+      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
+      { id: 'include:zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' },
     ])
     const { rename } = await import('node:fs/promises')
     const result = await handlePluginsRpc('entries.setEnabled', {
@@ -349,7 +349,7 @@ describe('grouped plugin enable', () => {
 
   it('removes a just-written state when a missing patch cannot be created', async () => {
     const paths = await fixture()
-    const host = loader([{ id: 'include:zhihu', name: 'dsh-zhihu' }])
+    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
     const { rename } = await import('node:fs/promises')
     const result = await handlePluginsRpc('entry.setEnabled', { entryId: 'include:zhihu', enabled: false }, signal(), {
       loader: host,
@@ -373,7 +373,7 @@ describe('grouped plugin enable', () => {
 
   it('reports failed cleanup truthfully after a missing-state rollback failure', async () => {
     const paths = await fixture()
-    const host = loader([{ id: 'include:zhihu', name: 'dsh-zhihu' }])
+    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
     const { rename } = await import('node:fs/promises')
     const result = await handlePluginsRpc('entry.setEnabled', { entryId: 'include:zhihu', enabled: false }, signal(), {
       loader: host,
@@ -405,7 +405,7 @@ describe('grouped plugin enable', () => {
     const patchText = '- id: custom-author-rule\n  config:\n    preserve: true\n'
     await writeFile(paths.stateFile, stateText)
     await writeFile(paths.patchFile, patchText)
-    const host = loader([{ id: 'include:zhihu', name: 'dsh-zhihu' }])
+    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
     const result = await handlePluginsRpc('entries.setEnabled', {
       entryIds: ['include:zhihu'],
       enabled: false,
@@ -436,7 +436,7 @@ describe('grouped plugin enable', () => {
     const patchText = `${renderOverridePatch(oldState.overrides)}- id: custom-author-rule\n  config:\n    preserve: true\n`
     await writeFile(paths.stateFile, stateText)
     await writeFile(paths.patchFile, patchText)
-    const host = loader([{ id: 'include:zhihu', name: 'dsh-zhihu' }])
+    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
     const result = await handlePluginsRpc('entries.setEnabled', {
       entryIds: ['include:zhihu'],
       enabled: false,

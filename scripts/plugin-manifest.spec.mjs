@@ -31,7 +31,7 @@ describe('desktop dev prepare', () => {
     expect(dev).toContain('waitForFirstCompile')
     expect(dev).toContain('DSH_DESKTOP_USER_DATA_DIR')
     expect(dev).toContain('FIRST_COMPILE_MS')
-    expect(dev).toContain("resolve(root, 'packages', name)")
+    expect(dev).toContain('workspacePackageDir(name)')
   })
 })
 
@@ -45,17 +45,16 @@ describe('plugin manifests and composition resolver', () => {
       'dsh-editor-workbench',
       'dsh-editor-novel-kernel',
       'dsh-editor-writing-presets',
-      'dsh-zhihu',
+      '@klarkxy/dsh-zhihu',
       'dsh-editor-shell',
       'dsh-editor-plugins',
       'dsh-editor-cards',
       'dsh-editor-memory-panel',
       'dsh-editor-overview-panel',
       'dsh-editor-proofread-panel',
-      'dsh-web-search-manager',
-      'dsh-web-search-tavily',
+      '@klarkxy/dsh-web-search-manager',
     ])
-    expect(publicPackages(manifests)).toEqual(['dsh-manuscript', 'dsh-proofread', 'dsh-zhihu', 'dsh-web-search-manager', 'dsh-web-search-tavily'])
+    expect(publicPackages(manifests)).toEqual(['dsh-manuscript', 'dsh-proofread', '@klarkxy/dsh-zhihu', '@klarkxy/dsh-web-search-manager'])
     expect(corePackageNames(manifests)).toEqual([
       'dsh-manuscript',
       'dsh-editor-workbench',
@@ -65,28 +64,27 @@ describe('plugin manifests and composition resolver', () => {
     expect(clientPackages(manifests)).toEqual([
       'dsh-manuscript',
       'dsh-proofread',
-      'dsh-zhihu',
+      '@klarkxy/dsh-zhihu',
       'dsh-editor-shell',
       'dsh-editor-plugins',
       'dsh-editor-cards',
       'dsh-editor-memory-panel',
       'dsh-editor-overview-panel',
       'dsh-editor-proofread-panel',
-      'dsh-web-search-manager',
+      '@klarkxy/dsh-web-search-manager',
     ])
     expect(catalogFromManifests(manifests)['zhihu-tools']).toMatchObject({
-      packageName: 'dsh-zhihu',
+      packageName: '@klarkxy/dsh-zhihu',
       feature: 'zhihu-tools',
       locked: false,
     })
     expect(loadWorkspaceLibraries(root).map((item) => item.name)).toEqual(['dsh-editor-seats', 'dsh-editor-workspace-kit'])
     // The resolver preserves the established desktop/library order, then appends new packages.
     expect(desktopCopiedPackageNames(manifests)).toEqual([
-      ...desktopPackageNames(manifests).filter((name) => !name.startsWith('dsh-web-search-')),
+      ...desktopPackageNames(manifests).filter((name) => !name.includes('dsh-web-search-')),
       'dsh-editor-seats',
       'dsh-editor-workspace-kit',
-      'dsh-web-search-manager',
-      'dsh-web-search-tavily',
+      '@klarkxy/dsh-web-search-manager',
     ])
   })
 
@@ -94,15 +92,15 @@ describe('plugin manifests and composition resolver', () => {
     const labels = { desktop: '桌面写作', basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
     const panels = ['dsh-editor-overview-panel', 'dsh-editor-proofread-panel']
     const core = ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench']
-    const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels, 'dsh-web-search-manager', 'dsh-web-search-tavily']
-    const packages = [...core, 'dsh-editor-novel-kernel', 'dsh-editor-writing-presets', 'dsh-zhihu', ...tail]
+    const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels, '@klarkxy/dsh-web-search-manager']
+    const packages = [...core, 'dsh-editor-novel-kernel', 'dsh-editor-writing-presets', '@klarkxy/dsh-zhihu', ...tail]
     const capability = {
-      features: ['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search', 'web-search-tavily'],
+      features: ['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search'],
       packages,
       libraries: ['dsh-editor-seats', 'dsh-editor-workspace-kit'],
       runtimeDependencies: ['@deepseek-ai/dsh-web-search-exa'],
       disabledEntries: [],
-      extraInserts: [{ id: 'zhihu-tools', name: 'dsh-zhihu/tools' }],
+      extraInserts: [{ id: 'zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' }],
       shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist', zhihu: 'zhihu', 'web-search': 'webSearchManager' },
       presets: [
         { id: 'dsh-editor-article', packageName: 'dsh-editor-writing-presets', path: 'presets/dsh-editor-article' },

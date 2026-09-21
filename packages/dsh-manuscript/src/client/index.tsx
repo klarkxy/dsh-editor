@@ -44,6 +44,7 @@ function ensureManuscriptStyles(): void {
   if (manuscriptStylesInjected) return
   if (typeof document === 'undefined') return
   const style = document.createElement('style')
+  style.setAttribute('data-plugin', 'dsh-manuscript')
   style.setAttribute('data-dsh-manuscript-styles', '')
   style.textContent = editorCoreStyles + manuscriptOverlayStyles
   document.head.appendChild(style)

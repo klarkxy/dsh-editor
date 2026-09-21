@@ -6,7 +6,7 @@ import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
 import { compositionInstallNames } from './plugin-manifest.mjs'
-import { desktopComposition, configureProfile, runtimeDependencySources } from './desktop-compositions.mjs'
+import { workspacePackageDir, desktopComposition, configureProfile, runtimeDependencySources } from './desktop-compositions.mjs'
 import { prepareNodeRuntime } from './prepare-node-runtime.mjs'
 import { treeDigest } from '../apps/desktop/dist/runtime-tree.js'
 
@@ -96,7 +96,7 @@ const nodeExecutableName = process.platform === 'win32' ? 'node.exe' : 'node'
 
 const dsh = resolveDshInstallation(DSH_VERSION)
 for (const packageName of privateProfilePackages) {
-  const packageRoot = resolve(root, 'packages', packageName)
+  const packageRoot = workspacePackageDir(packageName)
   const manifest = await readJson(resolve(packageRoot, 'package.json'))
   if (manifest.name !== packageName) throw new Error(`unexpected package identity at ${packageRoot}`)
   await stat(resolve(packageRoot, 'lib'))
@@ -116,7 +116,7 @@ await cp(dsh.packageRoot, dshOutput, {
 for (const dependency of runtimeDependencies) await copyRuntimeDependency(dependency)
 
 for (const packageName of privateProfilePackages) {
-  const source = resolve(root, 'packages', packageName)
+  const source = workspacePackageDir(packageName)
   const destination = resolve(dshOutput, 'node_modules', packageName)
   await rm(destination, { recursive: true, force: true })
   await cp(source, destination, { recursive: true, dereference: true, filter: packageCopyFilter })
@@ -140,7 +140,7 @@ const profileSource = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 await cp(profileSource, profileOutput, { recursive: true, dereference: true })
 await configureProfile(profileOutput, composition)
 for (const packageName of privateProfilePackages) {
-  await cp(resolve(root, 'packages', packageName), resolve(profileOutput, 'node_modules', packageName), {
+  await cp(workspacePackageDir(packageName), resolve(profileOutput, 'node_modules', packageName), {
     recursive: true,
     dereference: true,
     filter: packageCopyFilter,

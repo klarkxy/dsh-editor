@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { TavilySearchProvider } from './provider.ts'
+import { TavilySearchProvider } from './tavily.ts'
 function adapter(payload: unknown) {
   const transport = vi.fn(async () => Response.json(payload))
   return { transport, provider: new TavilySearchProvider({ apiKey: 'fixture-secret', fetch: transport }) }

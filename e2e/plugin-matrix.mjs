@@ -1,3 +1,4 @@
+import { workspacePackageDir } from '../scripts/desktop-compositions.mjs'
 /**
  * Delivery matrix for the three public business plugins.
  *
@@ -62,12 +63,12 @@ function childEnv(extra = {}) {
 }
 
 function manifestFor(name) {
-  return JSON.parse(fs.readFileSync(path.join(root, 'packages', name, 'package.json'), 'utf8'))
+  return JSON.parse(fs.readFileSync(path.join(workspacePackageDir(name), 'package.json'), 'utf8'))
 }
 
 function stageTarball(name) {
   const manifest = manifestFor(name)
-  const source = path.join(root, '.pack', `${name}-${manifest.version}.tgz`)
+  const source = path.join(root, '.pack', `${name.replace(/^@/, '').replaceAll('/', '-')}-${manifest.version}.tgz`)
   if (!fs.existsSync(source)) throw new Error(`missing current tarball: ${source}`)
   const target = path.join(staging, path.basename(source))
   fs.copyFileSync(source, target)
@@ -115,7 +116,7 @@ function assertEqualSet(actual, expected, label) {
 
 function inspectState(name, expectedPlugins) {
   const manifest = readProfileManifest()
-  const dependencies = Object.keys(manifest.dependencies || {}).filter((item) => item.startsWith('dsh-'))
+  const dependencies = Object.keys(manifest.dependencies || {}).filter((item) => publicPluginPackages.includes(item))
   const bundles = manifest.dsh?.profile?.bundles || []
   const pluginBundles = bundles.filter((item) => publicPluginPackages.includes(item))
   assertEqualSet(dependencies, expectedPlugins, `${name} dependencies`)
@@ -742,7 +743,7 @@ async function probeWeb(browser, name, expectedPlugins, index) {
       await page.getByTestId('proofread-open').waitFor();
       if (await page.getByTestId('proofread-open').count() !== 1) throw new Error('duplicate proofread contribution');
     } else if (await page.getByTestId('proofread-open').count()) throw new Error('proofread entry survived removal');
-    const expectsZhihu = expectedPlugins.includes('dsh-zhihu');
+    const expectsZhihu = expectedPlugins.includes('@klarkxy/dsh-zhihu');
     if (expectsZhihu) {
       const callZhihu=async(method,payload)=>{const response=await page.request.post(`${origin}/zhihu/${method}`,{headers:{'content-type':'application/json'},data:{type:'client-request',rpcId:name,method,payload}});return (await response.json()).result};
       if(!report.zhihuUsageSeeded){
@@ -828,7 +829,7 @@ function safeCleanup() {
 resetOutput()
 const manuscriptTarball = stageTarball('dsh-manuscript')
 const proofreadTarball = stageTarball('dsh-proofread')
-const zhihuTarball = stageTarball('dsh-zhihu')
+const zhihuTarball = stageTarball('@klarkxy/dsh-zhihu')
 const browser = await chromium.launch({ headless: true })
 
 try {
@@ -844,12 +845,12 @@ try {
   transition('remove','dsh-manuscript');
   const states = [
     ['add','dsh-proofread',proofreadTarball,'06-proofread-only',['dsh-proofread']],
-    ['add','dsh-zhihu',zhihuTarball,'07-proofread-then-zhihu',['dsh-proofread','dsh-zhihu']],
-    ['remove','dsh-proofread',null,'08-zhihu-after-remove-proofread',['dsh-zhihu']],
-    ['add','dsh-proofread',proofreadTarball,'09-zhihu-then-proofread',['dsh-proofread','dsh-zhihu']],
-    ['remove','dsh-zhihu',null,'10-proofread-after-remove-zhihu',['dsh-proofread']],
+    ['add','@klarkxy/dsh-zhihu',zhihuTarball,'07-proofread-then-zhihu',['dsh-proofread','@klarkxy/dsh-zhihu']],
+    ['remove','dsh-proofread',null,'08-zhihu-after-remove-proofread',['@klarkxy/dsh-zhihu']],
+    ['add','dsh-proofread',proofreadTarball,'09-zhihu-then-proofread',['dsh-proofread','@klarkxy/dsh-zhihu']],
+    ['remove','@klarkxy/dsh-zhihu',null,'10-proofread-after-remove-zhihu',['dsh-proofread']],
     ['remove','dsh-proofread',null,'11-empty',[]],
-    ['add','dsh-zhihu',zhihuTarball,'12-zhihu-only',['dsh-zhihu']],
+    ['add','@klarkxy/dsh-zhihu',zhihuTarball,'12-zhihu-only',['@klarkxy/dsh-zhihu']],
   ];
   // Data outside package installation must survive both removal directions and restarts.
   const retained=path.join(dshHome,'storages','plugin-matrix-retained.txt');
@@ -861,7 +862,7 @@ try {
   }
   transition('add','dsh-proofread','file:'+proofreadTarball);
   transition('add','dsh-manuscript','file:'+manuscriptTarball);
-  const all=['dsh-proofread','dsh-zhihu','dsh-manuscript'];
+  const all=['dsh-proofread','@klarkxy/dsh-zhihu','dsh-manuscript'];
   inspectState('13-all-public',all);await probeWeb(browser,'13-all-public',all,13);
 
 } catch (error) {

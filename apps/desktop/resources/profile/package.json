@@ -10,7 +10,7 @@
         "dsh-proofread",
         "dsh-editor-workbench",
         "dsh-editor-novel-kernel",
-        "dsh-zhihu",
+        "@klarkxy/dsh-zhihu",
         "dsh-editor-shell",
         "dsh-editor-plugins"
       ]

@@ -67,3 +67,12 @@ describe('plugin overlay persistence', () => {
     })
   })
 })
+
+
+it('ignores the retired Tavily plugin while preserving other plugin settings', () => {
+  expect(parsePluginState({ schema: 1,
+    overrides: { 'web-search-tavily': false, 'web-search-manager': true, zhihu: false },
+    installed: [{ name: 'dsh-web-search-tavily', spec: 'old-tavily', version: '0.1.0' }, { name: 'community-plugin', spec: 'community-plugin', version: '1' }],
+  })).toMatchObject({ overrides: { 'web-search-manager': true, zhihu: false },
+    installed: [{ name: 'community-plugin', spec: 'community-plugin', version: '1' }] })
+})

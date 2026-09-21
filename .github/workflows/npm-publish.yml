@@ -1,0 +1,78 @@
+name: Publish npm plugins
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish-main
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'klarkxy/dsh-editor' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.16.0
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build workspace packages
+        run: pnpm build
+      - name: Check types and behavior
+        run: |
+          pnpm typecheck
+          pnpm test --maxWorkers=2
+      - name: Publish changed packages and confirm registry integrity
+        id: release
+        run: pnpm run publish:plugins --publish
+        env:
+          # Optional only for the first publication of a new package before npm permits OIDC setup.
+          # Leave absent when every publishable package trusts this workflow.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Write confirmed versions back to main
+        if: always() && steps.release.outputs.writeback == 'true'
+        shell: bash
+        run: |
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo 'main advanced during publication; do not label new source with an older artifact.'
+            echo 'The next main run reconciles npm state and writes the matching versions.'
+            exit 1
+          fi
+          while IFS= read -r manifest; do
+            [ -z "$manifest" ] || git add -- "$manifest"
+          done < .pack/npm-release/writeback-paths.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore: sync published npm plugin versions'
+          git push origin HEAD:main
+      - name: Preserve packages and publication receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-plugin-release-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            .pack/npm-release/*.tgz
+            .pack/npm-release/report.json
+            .pack/npm-release/writeback-paths.txt

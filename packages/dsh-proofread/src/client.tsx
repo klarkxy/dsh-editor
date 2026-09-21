@@ -90,6 +90,7 @@ const SEVERITY_LABEL: Record<ProofreadSeverity, string> = { error: '错误', war
 
 function injectProofreadStyles(): () => void {
   const style = document.createElement('style')
+  style.setAttribute('data-plugin', 'dsh-proofread')
   style.setAttribute('data-dsh-proofread-styles', '')
   style.textContent = proofreadClientStyles
   document.head.appendChild(style)

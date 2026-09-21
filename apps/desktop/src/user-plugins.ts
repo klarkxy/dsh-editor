@@ -1,12 +1,12 @@
-import { cp, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { copyFile, cp, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { constants, existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname, isAbsolute, join } from 'node:path'
 import { linkPointsTo, sameFileTree } from './file-tree.js'
 
 const PACKAGE_NAME = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/
 /** Keep in sync with HOST_LOCKED_ENTRY_IDS in dsh-editor-plugins. */
-const HOST_LOCKED_PLUGIN_IDS = new Set(['editor-novel-kernel', 'editor-workbench-tools', 'proofread'])
+const HOST_LOCKED_PLUGIN_IDS = new Set(['editor-novel-kernel', 'editor-workbench-tools', 'proofread', 'web-search-tavily'])
 const MANAGED_PATCH_MARK = 'managed-by: dsh-editor-plugins'
 const PRESET_ID = /^[A-Za-z0-9._-]+$/
 const PRESET_OWNER_MARKER = '.dsh-editor-owner.json'
@@ -18,7 +18,7 @@ function isProtectedName(name: string, bundles: readonly string[]): boolean {
 }
 
 function isSafePackageName(name: string, bundles: readonly string[]): boolean {
-  return PACKAGE_NAME.test(name) && !name.includes('..') && !isProtectedName(name, bundles)
+  return name !== 'dsh-web-search-tavily' && PACKAGE_NAME.test(name) && !name.includes('..') && !isProtectedName(name, bundles)
 }
 
 type PresetDeclaration = { id: string; path: string }
@@ -159,21 +159,36 @@ function parseManagedOverridePatch(text: string): Record<string, boolean> | unde
  * Stale plugin toggles used to re-enable host-wide novel-kernel / workbench
  * / standalone proofread. Those entries stay disabled so presets can remount
  * them; leftover `disabled: false` overlays crash DSH boot.
+ * The retired Tavily entry is removed from managed state with a backup; its
+ * credentials and the web-search settings domain remain in place.
  */
+async function backupBeforeTavilyMerge(file: string): Promise<void> {
+  try { await copyFile(file, file + '.before-tavily-merge', constants.COPYFILE_EXCL) }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error }
+}
+
 export async function sanitizeHostLockedPluginOverrides(home: string): Promise<void> {
   const statePath = join(home, 'dsh-plugins.json')
   try {
-    const state = JSON.parse(await readFile(statePath, 'utf8')) as { schema?: unknown; overrides?: unknown }
-    if (state.schema === 1 && state.overrides && typeof state.overrides === 'object' && !Array.isArray(state.overrides)) {
-      const overrides = state.overrides as Record<string, unknown>
+    const state = JSON.parse(await readFile(statePath, 'utf8')) as { schema?: unknown; overrides?: unknown; installed?: unknown }
+    if (state.schema === 1) {
       let changed = false
-      for (const id of HOST_LOCKED_PLUGIN_IDS) {
-        if (Object.prototype.hasOwnProperty.call(overrides, id)) {
-          delete overrides[id]
-          changed = true
+      let retired = false
+      if (state.overrides && typeof state.overrides === 'object' && !Array.isArray(state.overrides)) {
+        const overrides = state.overrides as Record<string, unknown>
+        retired = Object.prototype.hasOwnProperty.call(overrides, 'web-search-tavily')
+        for (const id of HOST_LOCKED_PLUGIN_IDS) {
+          if (Object.prototype.hasOwnProperty.call(overrides, id)) { delete overrides[id]; changed = true }
         }
       }
-      if (changed) await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+      if (Array.isArray(state.installed)) {
+        const installed = state.installed.filter(item => item?.name !== 'dsh-web-search-tavily')
+        if (installed.length !== state.installed.length) { state.installed = installed; changed = true; retired = true }
+      }
+      if (changed) {
+        if (retired) await backupBeforeTavilyMerge(statePath)
+        await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+      }
     }
   } catch { /* missing or unreadable state is left alone */ }
 
@@ -189,7 +204,10 @@ export async function sanitizeHostLockedPluginOverrides(home: string): Promise<v
     const rendered = renderManagedOverridePatch(next)
     const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
     const comparable = normalized.endsWith('\n') ? normalized : `${normalized}\n`
-    if (comparable !== rendered) await writeFile(patchPath, rendered, 'utf8')
+    if (comparable !== rendered) {
+      if (Object.prototype.hasOwnProperty.call(parsed, 'web-search-tavily')) await backupBeforeTavilyMerge(patchPath)
+      await writeFile(patchPath, rendered, 'utf8')
+    }
   } catch { /* missing overlay is a clean home */ }
 }
 

@@ -14,6 +14,7 @@ export function ensureManuscriptThemes(): void {
   if (typeof document === 'undefined') return
   if (document.querySelector('style[data-dsh-editor-shell-styles], style[data-dsh-manuscript-themes]')) return
   const style = document.createElement('style')
+  style.setAttribute('data-plugin', 'dsh-manuscript')
   style.setAttribute('data-dsh-manuscript-themes', '')
   style.textContent = radixThemesStyles
   document.head.appendChild(style)

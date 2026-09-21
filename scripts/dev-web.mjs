@@ -1,3 +1,4 @@
+import { workspacePackageDir } from './desktop-compositions.mjs'
 /**
  * Local DSH plugin loop: build, link into an isolated profile, watch, boot the web UI.
  *
@@ -75,7 +76,7 @@ function killTree(child) {
 
 const publicPlugins = publicPackages(loadPluginManifests(root))
 for (const name of publicPlugins) {
-  if (!existsSync(resolve(root, 'packages', name, 'package.json'))) {
+  if (!existsSync(resolve(workspacePackageDir(name), 'package.json'))) {
     console.error(`dev: expected packages/${name}`)
     process.exit(1)
   }
@@ -96,7 +97,7 @@ const profileDir = resolve(devHome, 'profiles', profile)
 // add space-bearing Windows paths without a .cmd/shell quoting round-trip.
 // The final manager pass reconciles the installed packages into profile bundles.
 await runNode(dshInstallation.cliPath, ['plugin', '--profile', profile, 'install'])
-await runNode(pnpmCli, ['add', ...publicPlugins.map((name) => `link:${resolve(root, 'packages', name)}`)], profileDir)
+await runNode(pnpmCli, ['add', ...publicPlugins.map((name) => `link:${workspacePackageDir(name)}`)], profileDir)
 await runNode(dshInstallation.cliPath, ['plugin', '--profile', profile, 'install'])
 
 console.log('dev: watching. Refresh the browser after editor/client rebuilds; restart this command after host/tool changes if HMR misses them.')

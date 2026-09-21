@@ -25,7 +25,7 @@ const INDEX_HTML = `<!doctype html>
   <script type="module">
     import React from 'react'
     import { createRoot } from 'react-dom/client'
-    import { NetworkSearchSettings } from '/packages/dsh-web-search-manager/src/client.tsx'
+    import { NetworkSearchSettings, apply } from '/packages/dsh-web-search-manager/src/client.tsx'
 
     function makeClient() {
       return {
@@ -47,6 +47,7 @@ const INDEX_HTML = `<!doctype html>
       }
     }
 
+    apply({ ...makeClient(), effect(run) { run() } })
     let root
     window.mountSettings = () => {
       const el = document.getElementById('root')
@@ -170,6 +171,19 @@ function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings }) 
         })
       },
     }))
+    if (options.catalog) {
+      for (const [id, label] of [
+        ['zhihu-global', '知乎全网搜索'], ['bocha', '博查'], ['deepseek-official', 'DeepSeek 搜索'],
+        ['exa', 'Exa'], ['firecrawl', 'Firecrawl'], ['serper', 'Serper'], ['tavily', 'Tavily'],
+      ]) {
+        state.manager.registerSearchProvider({
+          id, label, description: 'Provider fixture', billing: 'request',
+          credentialRef: 'FIXTURE_' + id.replaceAll('-', '_').toUpperCase(), credentialShared: id === 'zhihu-global' || id === 'deepseek-official',
+        }, options => ({ id, available: () => Boolean(options.apiKey),
+          async search() { throw new Error('Catalog rendering must not call providers') },
+        }))
+      }
+    }
     await state.manager.refresh()
     return snapshot()
   }
@@ -297,7 +311,7 @@ try {
     root,
     appType: 'custom',
     logLevel: 'error',
-    server: { middlewareMode: true, hmr: false },
+    server: { middlewareMode: true, hmr: false, watch: null },
     resolve: {
       alias: {
         'react-dom/client': reactDomClient,
@@ -370,6 +384,109 @@ try {
     assert.ok(mounted)
   })
 
+  await test('request limits tab preserves drafts and saves across tab switches', async () => {
+    const providers = page.getByRole('tab', { name: '搜索服务', exact: true })
+    const limits = page.getByRole('tab', { name: '请求限制', exact: true })
+    assert.equal(await providers.getAttribute('aria-selected'), 'true')
+    assert.equal(await page.getByRole('spinbutton').count(), 0)
+    await providers.focus()
+    await page.keyboard.press('ArrowRight')
+    assert.equal(await limits.getAttribute('aria-selected'), 'true')
+    assert.equal(await limits.evaluate(el => document.activeElement === el), true)
+    assert.equal(await page.getByTestId('web-search-tool').isVisible(), false)
+    assert.equal(await page.getByRole('spinbutton').count(), 4)
+    await page.getByLabel('每条查询的结果上限').fill('8')
+    await page.getByLabel('请求超时（毫秒）').fill('45000')
+    await providers.click()
+    await limits.click()
+    assert.equal(await page.getByLabel('每条查询的结果上限').inputValue(), '8')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await settle(page)
+    assert.equal(host.snapshot().status.settings.maxResults, 8)
+    assert.equal(host.snapshot().status.settings.timeoutMs, 45000)
+    await page.setViewportSize({ width: 760, height: 900 })
+    await shot(page, 'request-limits-dark.png')
+    await page.evaluate(() => { document.body.style.background = '#fff'; document.body.style.color = '#222' })
+    await shot(page, 'request-limits-light.png')
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    await shot(page, 'request-limits-narrow.png')
+    await limits.focus()
+    await page.keyboard.press('Home')
+    assert.equal(await providers.getAttribute('aria-selected'), 'true')
+    await page.keyboard.press('End')
+    assert.equal(await limits.getAttribute('aria-selected'), 'true')
+    await page.keyboard.press('ArrowLeft')
+    assert.equal(await providers.getAttribute('aria-selected'), 'true')
+    await page.evaluate(() => { document.body.style.background = ''; document.body.style.color = '' })
+    await page.setViewportSize({ width: 960, height: 1400 })
+    await host.reset()
+    await remount(page)
+  })
+
+  await test('signup link uses desktop bridge for click and keyboard', async () => {
+    await page.evaluate(() => {
+      window.openedSignupUrls = []
+      window.dshWindow = { openExternal(url) { window.openedSignupUrls.push(url) } }
+    })
+    try {
+      const link = page.getByRole('link', { name: 'Brave 去注册' })
+      const beforePages = page.context().pages().length
+      await link.click()
+      await link.focus()
+      await page.keyboard.press('Enter')
+      assert.deepEqual(await page.evaluate(() => window.openedSignupUrls), [
+        'https://api.search.brave.com', 'https://api.search.brave.com',
+      ])
+      assert.equal(page.context().pages().length, beforePages)
+      assert.equal(page.url(), origin + '/')
+    } finally {
+      await page.evaluate(() => { delete window.dshWindow })
+    }
+  })
+
+  await test('signup link opens a browser tab without the desktop bridge', async () => {
+    await page.context().route('https://api.search.brave.com/**', route => route.fulfill({
+      contentType: 'text/html', body: '<title>Signup fixture</title>',
+    }))
+    const [popup] = await Promise.all([
+      page.waitForEvent('popup'),
+      page.getByRole('link', { name: 'Brave 去注册' }).click(),
+    ])
+    try {
+      await popup.waitForLoadState('domcontentloaded')
+      assert.equal(popup.url(), 'https://api.search.brave.com/')
+      assert.equal(await popup.evaluate(() => window.opener), null)
+      assert.equal(page.url(), origin + '/')
+    } finally {
+      await popup.close()
+      await page.context().unroute('https://api.search.brave.com/**')
+    }
+  })
+
+  await test('compact styled settings retain visible keyboard focus across themes', async () => {
+    assert.equal(await page.locator('style[data-dsh-web-search]').count(), 1)
+    assert.equal(await page.getByText('未开启', { exact: true }).count(), 0)
+    assert.equal(await page.getByRole('button', { name: '提高 DuckDuckGo 优先级' }).count(), 0)
+    await page.getByRole('switch', { name: '关闭联网搜索' }).focus()
+    assert.notEqual(await page.getByRole('switch', { name: '关闭联网搜索' }).evaluate(el => getComputedStyle(el).outlineStyle), 'none')
+    await page.setViewportSize({ width: 760, height: 900 })
+    await shot(page, 'compact-dark.png')
+    await page.evaluate(() => {
+      document.body.style.background = '#fff'
+      document.body.style.color = '#222'
+    })
+    await shot(page, 'compact-light.png')
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    await shot(page, 'compact-narrow.png')
+    await page.evaluate(() => {
+      document.body.style.background = ''
+      document.body.style.color = ''
+    })
+    await page.setViewportSize({ width: 960, height: 1400 })
+  })
+
   await test('initial DDG -> enable Brave -> move up -> save key1 -> test uses key1', async () => {
     await host.reset()
     await remount(page)
@@ -380,15 +497,13 @@ try {
     })
     await page.getByRole('switch', { name: '开启 Brave' }).click()
     await settle(page)
-    await page.waitForFunction(() => {
-      const index = document.querySelector('[data-testid="web-search-rank-brave"] .web-search-rank-index')
-      return index && index.textContent.trim() !== '—'
-    })
-    await page.getByRole('button', { name: '提高 Brave 优先级' }).click()
+    await page.getByRole('button', { name: '拖动排序 Brave' }).waitFor()
+    await page.getByRole('button', { name: '拖动排序 Brave' }).dragTo(page.getByTestId('web-search-rank-ddg'))
     await settle(page)
     await page.waitForFunction(() => (
-      document.querySelector('[data-testid="web-search-rank-brave"] .web-search-rank-index')?.textContent?.trim() === '1'
+      document.querySelector('.web-search-rank > li')?.getAttribute('data-testid') === 'web-search-rank-brave'
     ))
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['brave', 'ddg'])
     const keyBox = page.locator('[data-testid="web-search-rank-brave"] input[type="password"]')
     await keyBox.fill('synthetic-key-1')
     await page.getByRole('button', { name: '保存' }).click()
@@ -410,6 +525,42 @@ try {
       `Brave adapter did not receive key1: ${JSON.stringify(afterTest.braveRequests)}`,
     )
     await shot(page, '01-key1-test.png')
+  })
+
+  await test('dragging down persists and keyboard sorting keeps focus', async () => {
+    await page.getByRole('button', { name: '拖动排序 Brave' }).dragTo(page.getByTestId('web-search-rank-ddg'))
+    await settle(page)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['ddg', 'brave'])
+    await remount(page)
+    assert.equal(await page.locator('.web-search-rank > li').first().getAttribute('data-testid'), 'web-search-rank-ddg')
+    await page.getByRole('button', { name: '拖动排序 Brave' }).focus()
+    await page.keyboard.press('ArrowUp')
+    await settle(page)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['brave', 'ddg'])
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '拖动排序 Brave')
+    const revision = host.snapshot().status.settings.revision
+    await page.keyboard.press('ArrowUp')
+    assert.equal(host.snapshot().status.settings.revision, revision)
+    assert.equal(await page.getByRole('button', { name: '上移', exact: true }).count(), 0)
+    assert.equal(await page.getByRole('button', { name: '下移', exact: true }).count(), 0)
+    await shot(page, 'drag-sorting.png')
+  })
+
+  await test('cancelling a drag clears feedback without saving', async () => {
+    const revision = host.snapshot().status.settings.revision
+    const source = await page.getByRole('button', { name: '拖动排序 Brave' }).boundingBox()
+    const target = await page.getByTestId('web-search-rank-ddg').boundingBox()
+    assert.ok(source && target)
+    await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(source.x + source.width / 2 + 12, source.y + source.height / 2, { steps: 3 })
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 6 })
+    await page.waitForFunction(() => Boolean(document.querySelector('[data-dragging]')))
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    await page.waitForFunction(() => !document.querySelector('[data-dragging], [data-drop]'))
+    assert.equal(host.snapshot().status.settings.revision, revision)
+    assert.deepEqual(host.snapshot().status.settings.searchOrder, ['brave', 'ddg'])
   })
 
   await test('typing key2 then test saves key2 before the request', async () => {
@@ -548,6 +699,50 @@ try {
     const snap = host.snapshot()
     assert.ok(snap.braveRequests.some((row) => row.token === 'synthetic-key-new'), JSON.stringify(snap.braveRequests))
     await shot(page, '02-brave-enabled.png')
+  })
+  await test('all provider introductions and prices remain readable when disabled', async () => {
+    await host.reset({ catalog: true })
+    await remount(page)
+    const rows = page.locator('.web-search-rank > li')
+    assert.equal(await rows.count(), 9)
+    for (const row of await rows.all()) {
+      const info = row.locator('.web-search-provider-info')
+      assert.equal(await info.isVisible(), true)
+      assert.equal(await info.locator('p').count(), 2)
+      assert.ok((await info.innerText()).length > 25)
+      const link = info.getByRole('link')
+      assert.match(await link.getAttribute('href'), /^https:\/\//)
+      assert.equal(await link.getAttribute('target'), '_blank')
+      assert.match(await link.getAttribute('rel'), /noopener/)
+    }
+    assert.match(await page.getByTestId('web-search-rank-zhihu-global').innerText(), /5,000 次\/天/)
+    assert.match(await page.getByTestId('web-search-rank-tavily').innerText(), /1,000 积分/)
+    assert.equal(await page.getByText('API 计费', { exact: true }).count(), 0)
+    await page.evaluate(() => {
+      window.openedPriceUrls = []
+      window.dshWindow = { openExternal(url) { window.openedPriceUrls.push(url) } }
+    })
+    const priceLink = page.getByRole('link', { name: 'Brave 费用说明' })
+    await priceLink.click()
+    await priceLink.focus()
+    await page.keyboard.press('Enter')
+    assert.deepEqual(await page.evaluate(() => window.openedPriceUrls), [
+      'https://brave.com/search/api/', 'https://brave.com/search/api/',
+    ])
+    await page.evaluate(() => { delete window.dshWindow })
+    await page.setViewportSize({ width: 960, height: 1100 })
+    await shot(page, 'provider-pricing-dark.png')
+    await page.evaluate(() => { document.body.style.background = '#fff'; document.body.style.color = '#222' })
+    await shot(page, 'provider-pricing-light.png')
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    await shot(page, 'provider-pricing-narrow.png')
+    await host.reset({ catalog: true, keys: { FIXTURE_ZHIHU_GLOBAL: 'synthetic-key' },
+      settings: { searchOrder: ['ddg', 'zhihu-global'] } })
+    await remount(page)
+    const zhihu = page.getByTestId('web-search-rank-zhihu-global')
+    assert.match(await zhihu.innerText(), /与「知乎资料」共用 Access Secret/)
+    assert.doesNotMatch(await zhihu.innerText(), /与模型设置共用/)
   })
 } catch (error) {
   results.push({ name: 'setup', ok: false, error: String(error?.stack || error) })

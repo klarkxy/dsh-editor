@@ -1,6 +1,10 @@
 import { isAllowedNavigation } from './dsh-url.js'
 
-const EXTERNAL_HOSTS = new Set(['developer.zhihu.com', 'zhida.zhihu.com', 'www.zhihu.com', 'zhuanlan.zhihu.com', 'github.com'])
+const EXTERNAL_HOSTS = new Set([
+  'developer.zhihu.com', 'zhida.zhihu.com', 'www.zhihu.com', 'zhuanlan.zhihu.com', 'github.com',
+  'platform.deepseek.com', 'dashboard.exa.ai', 'api.search.brave.com', 'open.bochaai.com',
+  'serper.dev', 'www.firecrawl.dev', 'app.tavily.com',
+])
 
 export function isAllowedExternalUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false

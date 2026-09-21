@@ -479,19 +479,6 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
-  packages/dsh-web-search-tavily:
-    dependencies:
-      dsh-web-search-manager:
-        specifier: workspace:*
-        version: link:../dsh-web-search-manager
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: ^4.0.2
-        version: 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
-      '@deepseek-ai/dsh-web':
-        specifier: 0.1.5-rc.2
-        version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-llm@0.1.5-rc.2(@deepseek-ai/cordis@4.0.2))
-
   packages/dsh-zhihu:
     dependencies:
       '@deepseek-ai/dsh-storage-domain':

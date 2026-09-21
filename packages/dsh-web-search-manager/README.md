@@ -1,19 +1,37 @@
-# dsh-web-search-manager
+# @klarkxy/dsh-web-search-manager
 
 DSH `0.1.5-rc.2` 的独立网络搜索管理插件。提供设置页、明确授权、供应商管理描述和生命周期控制；不实现第二套搜索执行服务。
 
+## 安装到 DSH Web
+
+需要 Node.js 22 或更高版本，以及 DSH `0.1.5-rc.2` 的 Web profile。npm 包名是 `@klarkxy/dsh-web-search-manager`（`web-search` 之间有连字符）。
+
+```sh
+dsh plugin --profile web add @klarkxy/dsh-web-search-manager
+```
+
+安装后重启 `dsh web`，进入 **设置 → 网络搜索**。模型需要使用搜索工具时，还需在所用 `agent.cordis.yml` 的插件列表中加入：
+
+```yaml
+- name: "@klarkxy/dsh-web-search-manager/tools"
+```
+
+包内附带编译后的 Host、Web 客户端、类型声明与 `cordis.patch.yml`，安装时无需克隆或构建本仓库。发布状态与市场收录见[插件发布与发现](https://github.com/klarkxy/dsh-editor/blob/main/docs/plugin-distribution.md)。
+
 ## 使用
 
-桌面默认组合安装此插件和 Tavily 扩展。进入 **设置 → 网络搜索**：只需开启一个后端。默认只打开 DuckDuckGo；Brave、博查、Serper、Firecrawl、Exa、DeepSeek、Tavily 需自行注册（各有注册链接）。同一 profile 若还装了知乎资料，会多出一个「知乎全网搜索」后端，与知乎设置共用 Access Secret。打开后按优先级选用第一个已就绪的后端；缺 Key 的跳过，单次失败不换家。模型只看到官方 `web_search`。打开搜索时会同时挂上本机公开网页读取。DeepSeek 搜索复用模型设置中的 API Key，并可能产生额外搜索费用。测试连接是用户主动触发的固定查询，可能产生一次供应商调用费用，不发送作品内容。
+桌面默认组合安装此插件，Tavily 与其它搜索供应商一同内置。进入 **设置 → 网络搜索**：只需开启一个后端。默认只打开 DuckDuckGo；Brave、博查、Serper、Firecrawl、Exa、DeepSeek、Tavily 需自行注册（各有注册链接）。同一 profile 若还装了知乎资料，会多出一个「知乎全网搜索」后端，与知乎设置共用 Access Secret。打开后按优先级选用第一个已就绪的后端；缺 Key 的跳过，单次失败不换家。模型只看到官方 `web_search`。打开搜索时会同时挂上本机公开网页读取。DeepSeek 搜索复用模型设置中的 API Key，并可能产生额外搜索费用。测试连接是用户主动触发的固定查询，可能产生一次供应商调用费用，不发送作品内容。
 
-DeepSeek 搜索复用 `@deepseek-ai/dsh-web-search-deepseek`（Anthropic 兼容 `web_search`），Exa 复用官方 `ExaSearchProvider`，HTTP 读取复用 `HttpFetchProvider` 的公开地址、DNS 固定和重定向安全策略。不会匿名搜索，不会在鉴权或额度失败时自动切换供应商。供应商可配置可信 HTTPS API 端点，密钥将发送到该端点。
+DeepSeek 搜索复用 `@deepseek-ai/dsh-web-search-deepseek`（Anthropic 兼容 `web_search`），Exa 复用官方 `ExaSearchProvider`，HTTP 读取复用 `HttpFetchProvider` 的公开地址、DNS 固定和重定向安全策略。DuckDuckGo 无需 Key；其它供应商不会在鉴权或额度失败时自动切换。供应商可配置可信 HTTPS API 端点，密钥将发送到该端点。
 
-模型工具由 `dsh-web-search-manager/tools` 在会话上下文内按授权状态挂载官方 `dsh-tool-web`。关闭、切换配置或卸载供应商会取消正在进行的受管请求。其他业务插件继续使用：
+模型工具由 `@klarkxy/dsh-web-search-manager/tools` 在会话上下文内按授权状态挂载官方 `dsh-tool-web`。关闭、切换配置或卸载供应商会取消正在进行的受管请求。其他业务插件继续使用：
 
 ```ts
 const result = await ctx.web.search({ query: 'example', maxResults: 5 }, signal)
 const page = await ctx.web.fetch({ url: 'https://example.com' }, signal)
 ```
+
+Tavily 沿用凭据引用 `DSH_EDITOR_WEB_TAVILY_API_KEY`、供应商 ID `tavily` 与原有排序和端点配置。使用 basic 搜索，不自动升级深度、不重试计费请求、不跟随重定向转发密钥。无需额外安装 Tavily 插件。
 
 ## 扩展供应商
 
@@ -30,9 +48,9 @@ export function apply(ctx) {
 }
 ```
 
-工厂遵循 `ProviderOptions`，返回标准 `WebSearchProvider`，必须传递取消信号。`available()` 只检查本地状态，不进行联网测试。无 Key 的搜索后端可以不声明凭据引用。纯网页读取供应商可通过 `registerFetchProvider` 注册；Editor 在启用搜索时同时挂上本机 HTTP 读取。Tavily 包是带 Key 的完整示例。
+工厂遵循 `ProviderOptions`，返回标准 `WebSearchProvider`，必须传递取消信号。`available()` 只检查本地状态，不进行联网测试。无 Key 的搜索后端可以不声明凭据引用。纯网页读取供应商可通过 `registerFetchProvider` 注册；Editor 在启用搜索时同时挂上本机 HTTP 读取。内置 Tavily 适配器位于 `src/tavily.ts`。
 
-独立 DSH 部署还需在所用的 `agent.cordis.yml` 加入 `name: dsh-web-search-manager/tools`。Editor 的组合构建会为已选择该能力的应用自带写作预设加入这一入口；未选择该插件的组合不会产生悬空引用。
+独立 DSH 部署还需在所用的 `agent.cordis.yml` 加入 `name: "@klarkxy/dsh-web-search-manager/tools"`。Editor 的组合构建会为已选择该能力的应用自带写作预设加入这一入口；未选择该插件的组合不会产生悬空引用。
 
 ## 边界与安全
 
@@ -47,9 +65,9 @@ export function apply(ctx) {
 ## 验证
 
 ```sh
-pnpm --filter dsh-web-search-manager typecheck
-pnpm exec vitest run packages/dsh-web-search-manager/src packages/dsh-web-search-tavily/src
-pnpm --filter dsh-web-search-manager build
+pnpm --filter @klarkxy/dsh-web-search-manager typecheck
+pnpm exec vitest run packages/dsh-web-search-manager/src
+pnpm --filter @klarkxy/dsh-web-search-manager build
 ```
 
 测试使用模拟 Key 和响应，不产生真实搜索费用。

@@ -14,13 +14,13 @@ const productCatalog = catalogFromEditorBlocks([
     },
   },
   {
-    name: 'dsh-zhihu',
+    name: '@klarkxy/dsh-zhihu',
     dshEditor: {
       entries: [{ id: 'zhihu', title: '知乎资料', description: '知乎搜索、知识库与用量' }],
-      inserts: [{ id: 'zhihu-tools', name: 'dsh-zhihu/tools', title: '知乎工具', description: '供写作搭档调用的知乎检索', feature: 'zhihu-tools' }],
+      inserts: [{ id: 'zhihu-tools', name: '@klarkxy/dsh-zhihu/tools', title: '知乎工具', description: '供写作搭档调用的知乎检索', feature: 'zhihu-tools' }],
     },
   },
-], ['dsh-editor-shell', 'dsh-zhihu'])
+], ['dsh-editor-shell', '@klarkxy/dsh-zhihu'])
 
 async function fixture(files: Record<string, string>): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'dsh-inspect-'))
@@ -67,13 +67,13 @@ describe('bundle patch parser', () => {
 describe('entry file resolution', () => {
   it('maps package name and subpath exports', () => {
     const manifest = {
-      name: 'dsh-zhihu',
+      name: '@klarkxy/dsh-zhihu',
       main: './lib/index.js',
       exports: { '.': { import: './lib/index.js' }, './tools': { default: './lib/tools.js' }, './client': { default: './lib/client.js' } },
     }
-    expect(resolveEntryFile(manifest, 'dsh-zhihu')).toBe('./lib/index.js')
-    expect(resolveEntryFile(manifest, 'dsh-zhihu/tools')).toBe('./lib/tools.js')
-    expect(resolveEntryFile(manifest, 'dsh-zhihu/client')).toBe('./lib/client.js')
+    expect(resolveEntryFile(manifest, '@klarkxy/dsh-zhihu')).toBe('./lib/index.js')
+    expect(resolveEntryFile(manifest, '@klarkxy/dsh-zhihu/tools')).toBe('./lib/tools.js')
+    expect(resolveEntryFile(manifest, '@klarkxy/dsh-zhihu/client')).toBe('./lib/client.js')
     expect(resolveEntryFile(manifest, 'other')).toBeUndefined()
     expect(resolveInside('/pkg', '../etc/passwd')).toBeUndefined()
   })

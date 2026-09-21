@@ -10,6 +10,7 @@ import { ExaSearchProvider } from '@deepseek-ai/dsh-web-search-exa'
 import { HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http'
 import { SEARCH_ENGINE_ID, SearchEngineProvider } from './search-engine.ts'
 import { BochaSearchProvider, BraveSearchProvider, FirecrawlSearchProvider, SerperSearchProvider } from './rest-search.ts'
+import { TavilySearchProvider } from './tavily.ts'
 import type { WebSearchManager } from './manager.ts'
 
 export function registerBuiltins(manager: WebSearchManager): () => void {
@@ -56,6 +57,12 @@ export function registerBuiltins(manager: WebSearchManager): () => void {
     defaultBaseURL: 'https://api.firecrawl.dev', credentialRef: 'DSH_EDITOR_WEB_FIRECRAWL_API_KEY', billing: 'request',
     signupUrl: 'https://www.firecrawl.dev',
   }, options => new FirecrawlSearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
+  const offTavily = manager.registerSearchProvider({
+    id: 'tavily', label: 'Tavily', defaultBaseURL: 'https://api.tavily.com',
+    description: 'Search API；固定 basic 检索，不自动升级搜索深度。',
+    credentialRef: 'DSH_EDITOR_WEB_TAVILY_API_KEY', billing: 'request',
+    signupUrl: 'https://app.tavily.com',
+  }, options => new TavilySearchProvider({ apiKey: options.apiKey ?? '', baseURL: options.baseURL }))
   const offHttp = manager.registerFetchProvider({
     id: 'http', label: 'HTTP 读取', billing: 'none',
     description: '本机直连公开网页，无需 Key，不产生搜索费用。',
@@ -64,6 +71,6 @@ export function registerBuiltins(manager: WebSearchManager): () => void {
     timeoutMs: options.timeoutMs, maxRedirects: 5, userAgent: 'dsh-editor/managed-web',
   }))
   return () => {
-    offHttp(); offFirecrawl(); offSerper(); offBocha(); offBrave(); offExa(); offDeepSeek(); offEngine()
+    offHttp(); offTavily(); offFirecrawl(); offSerper(); offBocha(); offBrave(); offExa(); offDeepSeek(); offEngine()
   }
 }

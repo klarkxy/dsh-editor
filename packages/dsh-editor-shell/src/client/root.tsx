@@ -2423,10 +2423,12 @@ function injectShellStyles(): () => void {
   const css = radixThemesStyles + redesignedStyles
   const existing = document.head.querySelector('style[data-dsh-editor-shell-styles]')
   if (existing) {
+    existing.setAttribute('data-plugin', 'dsh-editor-shell')
     existing.textContent = css
     return () => existing.remove()
   }
   const style = document.createElement('style')
+  style.setAttribute('data-plugin', 'dsh-editor-shell')
   style.setAttribute('data-dsh-editor-shell-styles', '')
   style.textContent = css
   document.head.appendChild(style)

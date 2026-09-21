@@ -28,6 +28,7 @@ type OverviewClientContext = Context & {
 function injectStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
   const style = document.createElement('style')
+  style.setAttribute('data-plugin', 'dsh-editor-overview-panel')
   style.setAttribute('data-dsh-overview-panel-styles', '')
   style.textContent = overviewPanelStyles
   document.head.appendChild(style)
