@@ -32,11 +32,11 @@ function run(command, args, options = {}) {
   if (result.error || result.status !== 0) throw new Error(`${command} failed: ${result.error?.message || result.stderr || result.stdout || `exit ${result.status}`}`)
   return result.stdout
 }
-async function registry(path) {
+async function registry(path, timeoutMs = 30000) {
   // A cached 404 can outlive a successful upload, even with Cache-Control: no-cache.
   const url = new URL(path, registryURL)
   url.searchParams.set('dsh-release-check', randomUUID())
-  const response = await fetch(url, { signal: AbortSignal.timeout(30000), redirect: 'error', headers: { 'cache-control': 'no-cache' } })
+  const response = await fetch(url, { signal: AbortSignal.timeout(Math.min(30000, timeoutMs)), redirect: 'error', headers: { 'cache-control': 'no-cache' } })
   if (response.status === 404) return null
   if (!response.ok) throw new Error(`npm registry HTTP ${response.status}`)
   return response.json()
@@ -112,7 +112,8 @@ try {
         if (publish) {
           const confirmation = await publishAndConfirm({ name: target.name, version: plan.version, contentHash: artifact.contentHash, integrity: artifact.integrity }, {
             publish: () => run('npm', ['publish', artifact.archive, '--access', 'public', '--registry', registryURL, '--ignore-scripts']),
-            readVersion: (name, version) => registry(`${encodeURIComponent(name)}/${encodeURIComponent(version)}`),
+            readVersion: (name, version, timeoutMs) => registry(`${encodeURIComponent(name)}/${encodeURIComponent(version)}`, timeoutMs),
+            readPackageVersion: async (name, version, timeoutMs) => (await registry(encodeURIComponent(name), timeoutMs))?.versions?.[version],
             wait: ms => new Promise(resolve => setTimeout(resolve, ms)),
           })
           row.status = confirmation.recovered ? 'confirmed-after-cli-error' : 'published'

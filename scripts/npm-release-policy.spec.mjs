@@ -47,32 +47,83 @@ describe('npm release content identity and versions', () => {
 describe('npm publication receipt recovery', () => {
   const expected = { name, version: '0.1.0', integrity: 'sha512-exact', contentHash: 'sha256-content' }
   const remote = { name, version: '0.1.0', dist: { integrity: expected.integrity }, dshRelease: { contentHash: expected.contentHash } }
-  const io = (options = {}) => ({ publish: vi.fn(), readVersion: vi.fn().mockResolvedValue(remote), wait: vi.fn(), ...options })
-  it('confirms a normal publish with registry integrity', async () => {
+  const io = (options = {}) => {
+    let elapsed = 0
+    return {
+      publish: vi.fn(),
+      readVersion: vi.fn().mockResolvedValue(remote),
+      readPackageVersion: vi.fn().mockResolvedValue(null),
+      now: () => elapsed,
+      advance: ms => { elapsed += ms },
+      wait: vi.fn(async ms => { elapsed += ms }),
+      ...options,
+    }
+  }
+  it('confirms a normal publish without an extra metadata request', async () => {
     const calls = io()
     await expect(publishAndConfirm(expected, calls)).resolves.toEqual({ recovered: false })
     expect(calls.publish).toHaveBeenCalledTimes(1)
+    expect(calls.readPackageVersion).not.toHaveBeenCalled()
   })
   it('recovers an accepted PUT whose CLI response failed, without publishing twice', async () => {
     const calls = io({ publish: vi.fn().mockRejectedValue(new Error('connection lost')) })
     await expect(publishAndConfirm(expected, calls)).resolves.toEqual({ recovered: true })
     expect(calls.publish).toHaveBeenCalledTimes(1)
   })
-  it('waits for registry propagation and rejects mismatched or unavailable receipts', async () => {
+  it.each([
+    ['cached absence', null],
+    ['incomplete receipt', { ...remote, dshRelease: undefined }],
+  ])('confirms the exact version from package metadata after %s', async (_label, stale) => {
+    const calls = io({ readVersion: vi.fn().mockResolvedValue(stale), readPackageVersion: vi.fn().mockResolvedValue(remote) })
+    await expect(publishAndConfirm(expected, calls)).resolves.toEqual({ recovered: false })
+    expect(calls.publish).toHaveBeenCalledTimes(1)
+    expect(calls.wait).not.toHaveBeenCalled()
+    expect(calls.readPackageVersion).toHaveBeenCalledWith(name, expected.version, expect.any(Number))
+  })
+  it('recovers through package metadata when the version endpoint is unavailable', async () => {
+    const calls = io({ readVersion: vi.fn().mockRejectedValue(new Error('HTTP 503')), readPackageVersion: vi.fn().mockResolvedValue(remote) })
+    await expect(publishAndConfirm(expected, calls)).resolves.toEqual({ recovered: false })
+    expect(calls.publish).toHaveBeenCalledTimes(1)
+  })
+  it('waits for registry propagation without uploading again', async () => {
     const calls = io({ readVersion: vi.fn().mockResolvedValueOnce(null).mockResolvedValue(remote) })
     await expect(publishAndConfirm(expected, calls)).resolves.toEqual({ recovered: false })
     expect(calls.wait).toHaveBeenCalledTimes(1)
-    for (const readVersion of [vi.fn().mockRejectedValue(new Error('HTTP 503')), vi.fn().mockResolvedValue({ ...remote, dist: { integrity: 'different' } })]) {
-      await expect(publishAndConfirm(expected, io({ readVersion }))).rejects.toThrow('unconfirmed')
-    }
-  })
-  it('allows delayed visibility without uploading again', async () => {
-    let reads = 0
-    const readVersion = vi.fn().mockImplementation(async () => ++reads < 10 ? null : remote)
-    const calls = io({ readVersion })
-    await expect(publishAndConfirm(expected, calls)).resolves.toEqual({ recovered: false })
     expect(calls.publish).toHaveBeenCalledTimes(1)
-    expect(calls.wait.mock.calls.flat()).toEqual([2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000, 30000])
+  })
+  it('allows visibility after four minutes, beyond the previous confirmation window', async () => {
+    const calls = io({ readVersion: vi.fn().mockResolvedValue(null) })
+    calls.readPackageVersion.mockImplementation(async () => calls.now() >= 240000 ? remote : null)
+    await expect(publishAndConfirm(expected, calls)).resolves.toEqual({ recovered: false })
+    expect(calls.now()).toBeGreaterThanOrEqual(240000)
+    expect(calls.now()).toBeLessThanOrEqual(300000)
+    expect(calls.publish).toHaveBeenCalledTimes(1)
+  })
+  it.each([
+    ['name', { ...remote, name: '@klarkxy/other' }],
+    ['version', { ...remote, version: '0.1.1' }],
+    ['dist.integrity', { ...remote, dist: { integrity: 'different' } }],
+    ['dshRelease.contentHash', { ...remote, dshRelease: { contentHash: 'different' } }],
+  ])('rejects mismatched %s on both endpoints with actionable diagnostics', async (field, wrong) => {
+    const calls = io({ readVersion: vi.fn().mockResolvedValue(wrong), readPackageVersion: vi.fn().mockResolvedValue(wrong) })
+    await expect(publishAndConfirm(expected, calls)).rejects.toThrow(field)
+    expect(calls.now()).toBe(300000)
+    expect(calls.publish).toHaveBeenCalledTimes(1)
+  })
+  it('bounds failed requests and waits together, retaining CLI and registry errors', async () => {
+    const calls = io({ publish: vi.fn().mockRejectedValue(new Error('connection lost')) })
+    const slowRead = async (_name, _version, budget) => {
+      calls.advance(Math.min(29000, budget))
+      throw new Error('HTTP 503')
+    }
+    calls.readVersion.mockImplementation(slowRead)
+    calls.readPackageVersion.mockImplementation(slowRead)
+    await expect(publishAndConfirm(expected, calls)).rejects.toThrow(/connection lost.*HTTP 503/)
+    expect(calls.now()).toBe(300000)
+    expect(calls.publish).toHaveBeenCalledTimes(1)
+    const budgets = [...calls.readVersion.mock.calls, ...calls.readPackageVersion.mock.calls].map(call => call[2])
+    expect(budgets.every(value => value > 0 && value <= 300000)).toBe(true)
+    expect(Math.min(...budgets)).toBeLessThan(30000)
   })
   it('keeps independently confirmed package evidence when the other package fails', async () => {
     const results = await Promise.allSettled([

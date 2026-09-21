@@ -49,27 +49,41 @@ export function planPackage(manifest, registry, contentHash) {
 }
 
 export function verifyPublished(remote, expected) {
-  if (!remote || remote.name !== expected.name || remote.version !== expected.version ||
-      remote.dist?.integrity !== expected.integrity || remote.dshRelease?.contentHash !== expected.contentHash) {
-    throw new Error(`Registry confirmation did not match ${expected.name}@${expected.version}`)
-  }
+  if (!remote) throw new Error(`Registry has not exposed ${expected.name}@${expected.version} yet`)
+  const mismatches = [
+    ['name', remote.name, expected.name],
+    ['version', remote.version, expected.version],
+    ['dist.integrity', remote.dist?.integrity, expected.integrity],
+    ['dshRelease.contentHash', remote.dshRelease?.contentHash, expected.contentHash],
+  ].filter(([, actual, wanted]) => actual !== wanted).map(([field]) => field)
+  if (mismatches.length) throw new Error(`Registry confirmation did not match ${expected.name}@${expected.version} (${mismatches.join(', ')})`)
 }
 
 /** A failed CLI receipt may still mean the PUT reached npm. Never bump again here. */
 export async function publishAndConfirm(expected, io) {
   let publishError
   try { await io.publish() } catch (error) { publishError = error }
-  // npm may acknowledge an OIDC upload before the version becomes publicly readable.
-  // Retry reads for up to three minutes of backoff; never repeat the upload here.
+  // Version and full-package metadata can become visible at different times.
+  // Bound the whole confirmation phase, including requests, to five minutes.
+  // Both endpoints must satisfy the same identity checks; never repeat the upload.
+  const now = io.now ?? Date.now
+  const deadline = now() + 5 * 60 * 1000
   let confirmationError
-  for (let attempt = 0; attempt < 10; attempt++) {
-    try {
-      verifyPublished(await io.readVersion(expected.name, expected.version), expected)
-      return { recovered: Boolean(publishError) }
-    } catch (error) { confirmationError = error }
-    if (attempt < 9) await io.wait(Math.min(2000 * 2 ** attempt, 30000))
+  for (let attempt = 0; now() < deadline; attempt++) {
+    const errors = []
+    for (const [label, read] of [['version endpoint', io.readVersion], ['package metadata', io.readPackageVersion]]) {
+      const remaining = deadline - now()
+      if (remaining <= 0) break
+      try {
+        verifyPublished(await read(expected.name, expected.version, remaining), expected)
+        return { recovered: Boolean(publishError) }
+      } catch (error) { errors.push(`${label}: ${error.message}`) }
+    }
+    confirmationError = errors.join('; ')
+    const remaining = deadline - now()
+    if (remaining > 0) await io.wait(Math.min(2000 * 2 ** attempt, 30000, remaining))
   }
-  throw new Error(`Publication state is unconfirmed for ${expected.name}@${expected.version}; rerun to reconcile before releasing again. ${publishError?.message ?? confirmationError?.message}`)
+  throw new Error(`Publication state is unconfirmed for ${expected.name}@${expected.version}; rerun to reconcile before releasing again. ${publishError ? `Publish command: ${publishError.message}. ` : ''}${confirmationError}`)
 }
 
 /** Explicit publishConfig opt-in keeps desktop-only and unscoped packages private to this workflow. */
