@@ -1,42 +1,12 @@
 # dsh-manuscript
 
-面向 DSH Web 的公开稿件插件：工作区文本树、正文编辑、安全保存、浏览器草稿、字数、前后篇导航、稿内查找替换、全文搜索、剪贴板改写交接与可选补全。官方 DSH 仍是唯一 Chat / Agent 界面。
-
-包版本独立维护，当前 `0.1.0`；兼容 DSH `0.1.5-rc.2`。桌面把本包当核心稿件 Host，并复用 `./client/editor-core`；桌面根界面由 `dsh-editor-shell` 提供。
-
-## 入口
-
-- Host `manuscript`（锁定）：`/manuscript`（`src/index.ts`）
-- Client：官方 `shell.overlay`（id `manuscript`，order `100`，`src/client/slots.ts`）
-- 可选 `manuscript-assist`（feature `completion`；当前三份桌面 recipe 均选，独立 Web 按 profile）：FIM / 选段改写
-
-## 使用行为
-
-- 公开 Web：默认收起的 360px「稿纸」抽屉。
-- `Ctrl+S` 保存；切换、关闭、冲突和晚到响应时都保留本地 buffer 并提示。
-- 「改这段」只复制请求到剪贴板，不注入官方 Chat DOM。
-- FIM / 选段改写由 Host 按写作角色设置与可信 live session 解析有效 provider/model，并调用 DSH `llm.stream`；无候选时返回空。可选 `chapterContext`（≤1 200）写入用户提示中的本章工作笔记；`patch.complete` 可带 `instruction`（≤400）。
-- editor-core 剪切先确认剪贴板写入再删除（`src/client/editor-core/editor-clipboard.ts`）。
-
-## 稿纸（editor-core）
-
-`EditorCore` 可选 props，默认与当前行为一致（关、17px / 1.9 / 宋体栈、不分段弱化）：
-
-- `typewriter` — 打字机滚动（`src/client/editor-core/typewriter.ts`）
-- `typography` — CSS 变量排版（`src/client/editor-core/typography.ts`）
-- `focusParagraph` — 弱化非光标段落
-
-editor-core 注册 Tab 采纳、Esc 取消 / 关闭查找、Ctrl / ⌘+Enter 应用提案；稿内查找基于 `@codemirror/search`（Ctrl / ⌘+F、Ctrl / ⌘+H）。跨文件搜索是 Host `search.text`，不属于 editor-core。
-
-## Host 契约
-
-Live `sessionId` → immutable workspace → membership 与 sandbox → DSH `ctx.fs`。创建 `createIfAbsent`，保存 `replaceIfVersion`。绝对路径、traversal、symlink、超过 2 MB 文本、stale version、未知 session、只读写入均 fail closed。`search.text` 只扫有界 Markdown/TXT，跳过隐藏、生成和链接路径。可选 `directory` 在文件数/总字节/结果数上限生效前把扫描限制在该目录，不默认 `正文/`；缺失、非法或逃逸路径 fail closed。`proposal.apply` 同时接受历史 V1 与新模式 V2。V2 edit 必须带生成时 Host-read 的 `targetVersion`；可选 `basis` 是独立来源依赖，不能代替目标基线。V2 接受可见项目相对 `.md`/`.txt`。V2 create 是严格 create-if-absent，已有空文件也不覆盖；历史 V1 create 可填充已有空文件。另有 `draft.list`、`usage.summary`。桌面导入 / 快照 / 归档不进入本公开 RPC。
-
-`dsh-manuscript/host-api` 是同进程窄 authority/file 子入口，不增加公开 RPC。RPC 经 `webServer` 挂 channel（`src/rpc/channel.ts`）。该 loopback 只适用于本地单用户模型。
+DSH Web 稿纸插件，提供文件树、正文编辑、保存、查找替换和补全。桌面也复用它的编辑器与文件能力。
 
 ## 安装
 
-在不含空格的目录放置 tarball，先停目标 Web profile，确认 `dsh --version` 为 `0.1.5-rc.2`：
+需要 Node.js ≥22、DSH `0.1.5-rc.2`。本包尚未发布到 npm，使用本仓库构建的 tarball：在仓库根运行 `pnpm build`、`pnpm pack:plugins`，产物位于 `.pack/`。
+
+将 tarball 放在不含空格的目录，停止目标 Web profile，再在该目录执行：
 
 ```powershell
 $packagePath = (Resolve-Path .\dsh-manuscript-0.1.0.tgz).Path.Replace('\', '/')
@@ -44,6 +14,14 @@ dsh plugin --profile web add "file:$packagePath"
 dsh --profile web
 ```
 
-卸载：`dsh plugin --profile web remove dsh-manuscript`。不删除工作区文件。
+文件名以实际打包版本为准。卸载用 `dsh plugin --profile web remove dsh-manuscript`，不会删除工作区文件。
 
-仓库文档（不打进 tarball）：[使用者指南](../../docs/user-guide.md) · [产品原则](../../docs/product-principles.md) · [架构决策](../../docs/architecture.md)
+## 使用
+
+打开「稿纸」抽屉编辑；`Ctrl+S` 保存，`Ctrl+F` / `Ctrl+H` 查找替换，`Tab` 采纳补全、`Esc` 放弃。「改这段」复制请求到剪贴板，再到 DSH 对话中使用。
+
+保存冲突时先保留本地草稿，再重新载入。插件仅面向本机单用户，不应将它的 RPC 暴露到网络。
+
+## 开发
+
+入口与导出见 [package.json](package.json)，接口见 [src/index.ts](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-manuscript/src/index.ts)。桌面独有的作品管理由 workbench 提供；独立 Web 安装不提供这些功能。

@@ -1,23 +1,19 @@
 # dsh-proofread
 
-可独立安装的中文文本校对插件：输入一段文本，按确定性规则返回问题列表。包版本独立维护，当前 `0.1.0`；兼容 DSH `0.1.5-rc.2`。
+按确定性规则检查中文文本的标点、错别字、敏感词、重复与口癖。可独立用于 DSH Web；桌面通过文稿校对面板复用引擎。
 
-官方 Web 入口是 `shell.overlay`（id `proofread`，`src/client.ts`）。桌面上的文稿校对由 `dsh-editor-proofread-panel` 提供（侧栏 / `Ctrl+Shift+L`），扫描走 workbench 的 `proofread.scan`；本包在桌面 profile 里只作为引擎库。
+## 安装
 
-## 契约
+需要 Node.js ≥22、DSH `0.1.5-rc.2`。本包尚未发布到 npm；在仓库根运行 `pnpm build`、`pnpm pack:plugins`，从 `.pack/` 取得 tarball。
 
-- Host：`/proofread` → `text.check({ text, kinds? })`（`src/index.ts`、`src/contracts.ts`）
-- 五种规则：`punctuation` / `typo` / `sensitive` / `repeat` / `habit`；输入 ≤2 MB UTF-8，最多 500 条；finding 为输入文本 UTF-16 下标
-- `dsh-proofread/engine`：同步纯函数。桌面作品扫描由 workbench `proofread.scan` 所有（当前文档 / 全部可见 Markdown/TXT），供 `dsh-editor-proofread-panel` 调用
-- Client 可用宿主传入的结构型 `Dialog`（`src/client-host-ui.ts`），不导入私有 Shell 包
-
-在不含空格的目录放置 tarball 后执行：
+将包放在不含空格的目录，停止目标 Web profile，再在该目录执行：
 
 ```powershell
 $packagePath = (Resolve-Path .\dsh-proofread-0.1.0.tgz).Path.Replace('\', '/')
-dsh plugin --profile web add "file:$packagePath"   # dsh-proofread-0.1.0.tgz
+dsh plugin --profile web add "file:$packagePath"
+dsh --profile web
 ```
 
-## 文档
+文件名以实际打包版本为准。重启后打开「校对」，输入文本检查。
 
-[使用者指南](../../docs/user-guide.md) · [产品原则](../../docs/product-principles.md)
+开发接口见 [src/contracts.ts](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-proofread/src/contracts.ts)；桌面整部作品的扫描与名单设置见[文稿校对面板](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-editor-proofread-panel/README.md)。

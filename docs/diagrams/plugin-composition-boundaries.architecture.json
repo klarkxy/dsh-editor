@@ -44,14 +44,14 @@
         "note": "四种写作模式随桌面集合交付，在设置里开关；文件权限仍由原 Host 控制。"
       },
       {
-        "id": "public",
-        "label": "独立公开插件",
+        "id": "standalone",
+        "label": "独立安装边界",
         "focus": [
           "proofread",
           "zhihu",
           "manuscript"
         ],
-        "note": "三个 tarball 已有独立装卸矩阵；桌面面板与写作模式不进公开包。"
+        "note": "三个插件已有独立装卸矩阵；manuscript 与 proofread 使用本地 tarball，知乎包已在 NPM 公开发布。"
       }
     ]
   },
@@ -207,7 +207,7 @@
       "items": [
         "锁定核心：shell、workbench、manuscript、plugins",
         "写作模式与作者面板按设置开关，不另起一套运行时",
-        "三个公开 tarball 仍可单独装卸"
+        "manuscript 与 proofread 使用本地 tarball；知乎包已在 NPM 公开发布"
       ]
     },
     {
@@ -216,7 +216,7 @@
       "items": [
         "面板经 dsh-editor-seats 接入，不直连官方 AppFrame",
         "workspace-kit 只给 Host 包共享文件原语",
-        "校对引擎可被桌面面板或公开 Web 插件调用"
+        "校对引擎可被桌面面板或独立 Web 插件调用"
       ]
     },
     {

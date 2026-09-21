@@ -4866,7 +4866,7 @@
       </div>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[{"id":"desktop-profile","label":"桌面 profile","focus":["electron","dsh-host","shell","plugins","workbench","manuscript","kernel","panels"],"note":"锁定核心、写作模式和作者工具都在同一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"},{"id":"author-tools","label":"作者工具","focus":["shell","plugins","panels","proofread","zhihu"],"note":"设置里按作者用途分组：校对、概览、人物卡、记忆、知乎；人物卡与记忆默认关。"},{"id":"public-web","label":"公开 Web 插件","focus":["web-dsh","manuscript","proofread","zhihu"],"note":"三个 tarball 仍可单独装进普通 web profile；桌面面板与写作模式不对外发布。"}]</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"desktop-profile","label":"桌面 profile","focus":["electron","dsh-host","shell","plugins","workbench","manuscript","kernel","panels"],"note":"锁定核心、写作模式和作者工具都在同一 DSH 子进程；缺必需私有包时 Host 在发布 URL 前失败。"},{"id":"author-tools","label":"作者工具","focus":["shell","plugins","panels","proofread","zhihu"],"note":"设置里按作者用途分组：校对、概览、人物卡、记忆、知乎；人物卡与记忆默认关。"},{"id":"standalone-web","label":"独立 Web 安装","focus":["web-dsh","manuscript","proofread","zhihu"],"note":"manuscript 与 proofread 使用本地 tarball；知乎包已在 NPM 公开发布。桌面面板与写作模式不对外发布。"}]</script>
 
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
       <button id="guided-view-prev" type="button" aria-label="Previous guided view" title="Previous guided view ([)">&#8592;</button>
@@ -4939,7 +4939,7 @@
         <text x="26" y="292" class="t-cloud" font-size="9" font-weight="600">桌面 profiles/dsh-editor（canonical desktop）</text>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" x="894" y="58" width="536" height="548" rx="12" class="c-region" stroke-width="1"/>
-        <text x="902" y="76" class="t-cloud" font-size="9" font-weight="600">公开 Web 交付</text>
+        <text x="902" y="76" class="t-cloud" font-size="9" font-weight="600">独立 Web 安装</text>
 
         <!-- Connection paths (before components for correct z-order) -->
         <path data-edge-from="electron" data-edge-to="dsh-host" data-edge-label="启动子进程" data-edge-key="0" data-edge-id="electron-to-host" data-composition-points="140,154;140,304" d="M 140 154 L 140 304" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
@@ -4966,8 +4966,8 @@
         <text data-detail="context" x="140" y="135" class="t-muted" font-size="9" text-anchor="middle">不可插件化</text>
         </g>
 
-        <g id="node-web-dsh" data-node-id="web-dsh" data-node-label="普通 web profile" tabindex="0" role="button" aria-label="Focus 普通 web profile, 可独立安装, 公开 Web 交付" aria-pressed="false" data-node-kind="external" data-node-sublabel="可独立安装" data-node-context="公开 Web 交付">
-          <title>普通 web profile · 可独立安装 · 公开 Web 交付</title>
+        <g id="node-web-dsh" data-node-id="web-dsh" data-node-label="普通 web profile" tabindex="0" role="button" aria-label="Focus 普通 web profile, 可独立安装, 独立 Web 安装" aria-pressed="false" data-node-kind="external" data-node-sublabel="可独立安装" data-node-context="独立 Web 安装">
+          <title>普通 web profile · 可独立安装 · 独立 Web 安装</title>
           <rect x="1216" y="88" width="184" height="66" rx="6" class="c-mask"/>
           <rect x="1216" y="88" width="184" height="66" rx="6" class="c-external" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(1222 94) scale(0.6875)">
@@ -5014,28 +5014,28 @@
         <text data-detail="context" x="724" y="351" class="t-muted" font-size="9" text-anchor="middle">开关 / 四种写作模式</text>
         </g>
 
-        <g id="node-proofread" data-node-id="proofread" data-node-label="dsh-proofread" tabindex="0" role="button" aria-label="Focus dsh-proofread, 公开 · 校对引擎, 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付" aria-pressed="false" data-node-kind="backend" data-node-sublabel="公开 · 校对引擎" data-node-tag="公开 tarball" data-node-context="桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付">
-          <title>dsh-proofread · 公开 · 校对引擎 · 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付 · 公开 tarball</title>
+        <g id="node-proofread" data-node-id="proofread" data-node-label="dsh-proofread" tabindex="0" role="button" aria-label="Focus dsh-proofread, 仓库内 · 校对引擎, 桌面 profiles/dsh-editor（canonical desktop） › 独立 Web 安装" aria-pressed="false" data-node-kind="backend" data-node-sublabel="仓库内 · 校对引擎" data-node-tag="本地 tarball" data-node-context="桌面 profiles/dsh-editor（canonical desktop） › 独立 Web 安装">
+          <title>dsh-proofread · 仓库内 · 校对引擎 · 桌面 profiles/dsh-editor（canonical desktop） › 独立 Web 安装 · 本地 tarball</title>
           <rect x="924" y="304" width="184" height="66" rx="6" class="c-mask"/>
           <rect x="924" y="304" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(930 310) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor x="1016" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-proofread</text>
-        <text data-detail="context" x="1016" y="351" class="t-muted" font-size="9" text-anchor="middle">公开 · 校对引擎</text>
-        <text data-detail="fine" x="1016" y="362" class="t-backend" font-size="7" text-anchor="middle">公开 tarball</text>
+        <text data-detail="context" x="1016" y="351" class="t-muted" font-size="9" text-anchor="middle">仓库内 · 校对引擎</text>
+        <text data-detail="fine" x="1016" y="362" class="t-backend" font-size="7" text-anchor="middle">本地 tarball</text>
         </g>
 
-        <g id="node-zhihu" data-node-id="zhihu" data-node-label="dsh-zhihu" tabindex="0" role="button" aria-label="Focus dsh-zhihu, 公开 · 资料, 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付" aria-pressed="false" data-node-kind="backend" data-node-sublabel="公开 · 资料" data-node-tag="公开 tarball" data-node-context="桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付">
-          <title>dsh-zhihu · 公开 · 资料 · 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付 · 公开 tarball</title>
+        <g id="node-zhihu" data-node-id="zhihu" data-node-label="@klarkxy/dsh-zhihu" tabindex="0" role="button" aria-label="Focus @klarkxy/dsh-zhihu, NPM 公开 · 资料, 桌面 profiles/dsh-editor（canonical desktop） › 独立 Web 安装" aria-pressed="false" data-node-kind="backend" data-node-sublabel="NPM 公开 · 资料" data-node-tag="NPM 公开包" data-node-context="桌面 profiles/dsh-editor（canonical desktop） › 独立 Web 安装">
+          <title>@klarkxy/dsh-zhihu · NPM 公开 · 资料 · 桌面 profiles/dsh-editor（canonical desktop） › 独立 Web 安装 · NPM 公开包</title>
           <rect x="1216" y="304" width="184" height="66" rx="6" class="c-mask"/>
           <rect x="1216" y="304" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1222 310) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-detail-anchor x="1308" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-zhihu</text>
-        <text data-detail="context" x="1308" y="351" class="t-muted" font-size="9" text-anchor="middle">公开 · 资料</text>
-        <text data-detail="fine" x="1308" y="362" class="t-backend" font-size="7" text-anchor="middle">公开 tarball</text>
+          <text data-detail-anchor x="1308" y="335" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">@klarkxy/dsh-zhihu</text>
+        <text data-detail="context" x="1308" y="351" class="t-muted" font-size="9" text-anchor="middle">NPM 公开 · 资料</text>
+        <text data-detail="fine" x="1308" y="362" class="t-backend" font-size="7" text-anchor="middle">NPM 公开包</text>
         </g>
 
         <g id="node-kernel" data-node-id="kernel" data-node-label="novel-kernel" tabindex="0" role="button" aria-label="Focus novel-kernel, 小说模式 + 知识卡, 桌面 profiles/dsh-editor（canonical desktop）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="小说模式 + 知识卡" data-node-context="桌面 profiles/dsh-editor（canonical desktop）">
@@ -5074,16 +5074,16 @@
         <text data-detail="context" x="724" y="567" class="t-muted" font-size="9" text-anchor="middle">概览 / 校对 / 人物卡 / 记忆</text>
         </g>
 
-        <g id="node-manuscript" data-node-id="manuscript" data-node-label="dsh-manuscript" tabindex="0" role="button" aria-label="Focus dsh-manuscript, 公开 · 稿纸, 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付" aria-pressed="false" data-node-kind="backend" data-node-sublabel="公开 · 稿纸" data-node-tag="公开 tarball" data-node-context="桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付">
-          <title>dsh-manuscript · 公开 · 稿纸 · 桌面 profiles/dsh-editor（canonical desktop） › 公开 Web 交付 · 公开 tarball</title>
+        <g id="node-manuscript" data-node-id="manuscript" data-node-label="dsh-manuscript" tabindex="0" role="button" aria-label="Focus dsh-manuscript, 仓库内 · 稿纸, 桌面 profiles/dsh-editor（canonical desktop） › 独立 Web 安装" aria-pressed="false" data-node-kind="backend" data-node-sublabel="仓库内 · 稿纸" data-node-tag="本地 tarball" data-node-context="桌面 profiles/dsh-editor（canonical desktop） › 独立 Web 安装">
+          <title>dsh-manuscript · 仓库内 · 稿纸 · 桌面 profiles/dsh-editor（canonical desktop） › 独立 Web 安装 · 本地 tarball</title>
           <rect x="924" y="520" width="184" height="66" rx="6" class="c-mask"/>
           <rect x="924" y="520" width="184" height="66" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(930 526) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-detail-anchor x="1016" y="551" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">dsh-manuscript</text>
-        <text data-detail="context" x="1016" y="567" class="t-muted" font-size="9" text-anchor="middle">公开 · 稿纸</text>
-        <text data-detail="fine" x="1016" y="578" class="t-backend" font-size="7" text-anchor="middle">公开 tarball</text>
+        <text data-detail="context" x="1016" y="567" class="t-muted" font-size="9" text-anchor="middle">仓库内 · 稿纸</text>
+        <text data-detail="fine" x="1016" y="578" class="t-backend" font-size="7" text-anchor="middle">本地 tarball</text>
         </g>
 
         <!-- Connection labels -->
@@ -5356,7 +5356,7 @@
         <ul>
           <li>&bull; 概览、校对、人物卡、记忆经 seats 接入 shell</li>
           <li>&bull; 校对面板默认开；人物卡与记忆默认关</li>
-          <li>&bull; manuscript、proofread、zhihu 仍是公开 tarball</li>
+          <li>&bull; manuscript 与 proofread 使用本地 tarball；知乎包已在 NPM 公开发布</li>
         </ul>
       </div>
     </div>

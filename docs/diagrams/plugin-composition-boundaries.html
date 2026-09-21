@@ -4866,7 +4866,7 @@
       </div>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[{"id":"normal","label":"普通业务","focus":["shell","panels","workbench","zhihu","proofread"],"note":"校对、概览、人物卡、记忆和知乎都走界面座位或独立 RPC，不必经过 Agent。"},{"id":"agent","label":"可选智能增强","focus":["presets","kernel","dsh-host","manuscript"],"note":"四种写作模式随桌面集合交付，在设置里开关；文件权限仍由原 Host 控制。"},{"id":"public","label":"独立公开插件","focus":["proofread","zhihu","manuscript"],"note":"三个 tarball 已有独立装卸矩阵；桌面面板与写作模式不进公开包。"}]</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"normal","label":"普通业务","focus":["shell","panels","workbench","zhihu","proofread"],"note":"校对、概览、人物卡、记忆和知乎都走界面座位或独立 RPC，不必经过 Agent。"},{"id":"agent","label":"可选智能增强","focus":["presets","kernel","dsh-host","manuscript"],"note":"四种写作模式随桌面集合交付，在设置里开关；文件权限仍由原 Host 控制。"},{"id":"standalone","label":"独立安装边界","focus":["proofread","zhihu","manuscript"],"note":"三个插件已有独立装卸矩阵；manuscript 与 proofread 使用本地 tarball，知乎包已在 NPM 公开发布。"}]</script>
 
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
       <button id="guided-view-prev" type="button" aria-label="Previous guided view" title="Previous guided view ([)">&#8592;</button>
@@ -5296,7 +5296,7 @@
         <ul>
           <li>&bull; 锁定核心：shell、workbench、manuscript、plugins</li>
           <li>&bull; 写作模式与作者面板按设置开关，不另起一套运行时</li>
-          <li>&bull; 三个公开 tarball 仍可单独装卸</li>
+          <li>&bull; manuscript 与 proofread 使用本地 tarball；知乎包已在 NPM 公开发布</li>
         </ul>
       </div>
 
@@ -5308,7 +5308,7 @@
         <ul>
           <li>&bull; 面板经 dsh-editor-seats 接入，不直连官方 AppFrame</li>
           <li>&bull; workspace-kit 只给 Host 包共享文件原语</li>
-          <li>&bull; 校对引擎可被桌面面板或公开 Web 插件调用</li>
+          <li>&bull; 校对引擎可被桌面面板或独立 Web 插件调用</li>
         </ul>
       </div>
 

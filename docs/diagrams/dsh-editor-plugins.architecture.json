@@ -51,15 +51,15 @@
         "note": "设置里按作者用途分组：校对、概览、人物卡、记忆、知乎；人物卡与记忆默认关。"
       },
       {
-        "id": "public-web",
-        "label": "公开 Web 插件",
+        "id": "standalone-web",
+        "label": "独立 Web 安装",
         "focus": [
           "web-dsh",
           "manuscript",
           "proofread",
           "zhihu"
         ],
-        "note": "三个 tarball 仍可单独装进普通 web profile；桌面面板与写作模式不对外发布。"
+        "note": "manuscript 与 proofread 使用本地 tarball；知乎包已在 NPM 公开发布。桌面面板与写作模式不对外发布。"
       }
     ]
   },
@@ -108,19 +108,19 @@
       "id": "proofread",
       "type": "backend",
       "label": "dsh-proofread",
-      "sublabel": "公开 · 校对引擎",
+      "sublabel": "仓库内 · 校对引擎",
       "pos": [924, 304],
       "size": [184, 66],
-      "tag": "公开 tarball"
+      "tag": "本地 tarball"
     },
     {
       "id": "zhihu",
       "type": "backend",
-      "label": "dsh-zhihu",
-      "sublabel": "公开 · 资料",
+      "label": "@klarkxy/dsh-zhihu",
+      "sublabel": "NPM 公开 · 资料",
       "pos": [1216, 304],
       "size": [184, 66],
-      "tag": "公开 tarball"
+      "tag": "NPM 公开包"
     },
     {
       "id": "kernel",
@@ -150,10 +150,10 @@
       "id": "manuscript",
       "type": "backend",
       "label": "dsh-manuscript",
-      "sublabel": "公开 · 稿纸",
+      "sublabel": "仓库内 · 稿纸",
       "pos": [924, 520],
       "size": [184, 66],
-      "tag": "公开 tarball"
+      "tag": "本地 tarball"
     }
   ],
   "boundaries": [
@@ -174,7 +174,7 @@
     },
     {
       "kind": "region",
-      "label": "公开 Web 交付",
+      "label": "独立 Web 安装",
       "wraps": [
         "web-dsh",
         "manuscript",
@@ -268,7 +268,7 @@
       "items": [
         "概览、校对、人物卡、记忆经 seats 接入 shell",
         "校对面板默认开；人物卡与记忆默认关",
-        "manuscript、proofread、zhihu 仍是公开 tarball"
+        "manuscript 与 proofread 使用本地 tarball；知乎包已在 NPM 公开发布"
       ]
     }
   ]

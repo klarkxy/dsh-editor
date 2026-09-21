@@ -159,6 +159,10 @@ describe('plugin manifests and composition resolver', () => {
       'docs/README.md',
       'docs/architecture.md',
       'docs/product-principles.md',
+      'packages/README.md',
+      'packages/dsh-editor-shell/README.md',
+      'packages/dsh-editor-novel-kernel/README.md',
+      'packages/dsh-editor-writing-presets/README.md',
     ].map((path) => readFileSync(resolve(root, path), 'utf8')).join('\n')
     expect(docs).toContain('dsh-editor-writing')
     expect(docs).toContain('dsh-editor-novel')

@@ -1,11 +1,11 @@
 # dsh-editor-novel-kernel
 
-小说创作工具包，并提供「小说创作」对话模式（preset `dsh-editor-novel`）。私有包，只随桌面应用交付。
+桌面「小说创作」模式（`dsh-editor-novel`）。在「设置 → 插件 → 写作模式」开关，新对话创建时选择；进行中的对话不受影响。
 
-- **用途**：按挂载模式提供两级能力——
-  - `knowledge-only`（可见的 `dsh-editor-novel` 显式使用）：只注册只读知识检索 `novel_knowledge`，正文修改仍走 workbench 的通用 `writing_propose` 提案。
-  - `legacy` / `full`（仅隐藏的 legacy 会话 `dsh-editor`）：完整小说工具面，含 V1 `novel_propose` 提案、索引直写、scratch 草稿、overview / memory 工具、工具守卫与系统提示段。
-- **挂载规则**：`mode` 为必填；省略时拒绝加载（fail closed），避免误挂完整表面。
-- **运行时材料**：`resources/novel-knowledge/` 是搭档在对话中读取的小说知识卡，出处记录随包保留。
+当前模式提供只读小说知识，文件修改使用通用提案，先预览再由作者采用。[知识卡](resources/novel-knowledge/)是搭档读取的运行时材料，[出处](resources/novel-knowledge/SOURCES.md)随包保留。
 
-声明见 `package.json` 的 `dshEditor`（feature `assistant`，preset 目录 `presets/dsh-editor-novel`）。
+## 旧会话兼容
+
+隐藏的 `dsh-editor` preset 仅为旧会话保留采访、索引、临时草稿与自动资料维护。不要将完整旧工具挂到新写作模式；加载模式须显式声明。
+
+退出安排：恢复测试与迁移入口已上线；下一个 minor 版本删除旧流程与 preset，保留 V1 提案和章节 frontmatter 解析供转录兼容。删除前重新验证旧会话恢复与迁移，完成后移除此段。
