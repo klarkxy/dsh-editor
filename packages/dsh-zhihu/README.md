@@ -2,7 +2,7 @@
 
 Zhihu search, knowledge-base access, usage tracking, and optional agent tools for DSH. The service and tool entry points can be used separately.
 
-[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-zhihu/README.zh-CN.md)
+[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-zhihu/docs/README.zh-CN.md)
 
 ## Install in DSH Web
 

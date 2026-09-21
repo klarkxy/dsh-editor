@@ -66,6 +66,16 @@ describe('npm publication receipt recovery', () => {
       await expect(publishAndConfirm(expected, io({ readVersion }))).rejects.toThrow('unconfirmed')
     }
   })
+  it('allows delayed visibility without uploading again', async () => {
+    const readVersion = vi.fn()
+      .mockResolvedValueOnce(null).mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null).mockResolvedValueOnce(null)
+      .mockResolvedValue(remote)
+    const calls = io({ readVersion })
+    await expect(publishAndConfirm(expected, calls)).resolves.toEqual({ recovered: false })
+    expect(calls.publish).toHaveBeenCalledTimes(1)
+    expect(calls.wait.mock.calls.flat()).toEqual([2000, 4000, 8000, 16000])
+  })
   it('keeps independently confirmed package evidence when the other package fails', async () => {
     const results = await Promise.allSettled([
       publishAndConfirm(expected, io()),

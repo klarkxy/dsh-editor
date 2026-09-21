@@ -13,9 +13,9 @@ dsh plugin --profile web add @klarkxy/dsh-zhihu
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager
 ```
 
-两个包需要 Node.js ≥22，兼容目标是 DSH `0.1.5-rc.2`。安装后重启 DSH Web；模型工具的挂载方式见[知乎插件](../packages/dsh-zhihu/README.zh-CN.md)和[网络搜索插件](../packages/dsh-web-search-manager/README.zh-CN.md)。npm 上无 scope 的 `dsh-zhihu` 由其他维护者发布，与本仓库不是同一个包。
+两个包需要 Node.js ≥22，兼容目标是 DSH `0.1.5-rc.2`。安装后重启 DSH Web；模型工具的挂载方式见[知乎插件](../packages/dsh-zhihu/docs/README.zh-CN.md)和[网络搜索插件](../packages/dsh-web-search-manager/docs/README.zh-CN.md)。npm 上无 scope 的 `dsh-zhihu` 由其他维护者发布，与本仓库不是同一个包。
 
-npm 默认展示各包的英文 `README.md`；中文说明保留为 `README.zh-CN.md` 并随包附带，两种语言互相链接。
+npm 默认展示各包的英文 `README.md`；中文说明保留为 `docs/README.zh-CN.md` 并随包附带，两种语言互相链接。根目录只保留一份 README，避免 npm 从多个 README 变体中选错首页语言。
 
 源码目录保持原名，npm 包名、Cordis patch、客户端装载 ID 与工具入口统一使用 scoped 名称。每个包声明 `repository.url`、`repository.directory`、`homepage`、`bugs`、`dsh-plugin` 等 keywords，发布内容包含编译产物、类型声明、patch、README 和许可证。keywords 便于 npm 搜索，但不能代替市场收录。
 
@@ -66,7 +66,7 @@ description:
 
 构建与测试通过后，工作流检查实际 tarball 内容。包内 README、依赖、exports 和代码变化都会计入；其它插件或仓库说明的修改不会产生新版本。hash 只忽略版本号及明确列出的自动生成字段。首次使用源码版本，后续始终递增 npm 最高稳定版本的 patch。自动流程不发行 minor、major 或预发布版本。
 
-发布使用官方 `npm publish`。最终 tarball 再次校验内容 hash，并在上传后回读确切版本的 `dist.integrity` 与 `dshRelease.contentHash`。上传响应丢失时会先对账，不立即递增另一个版本。无依赖关系的包互不阻塞：只回写已确认成功包的版本；失败包及其下游保留失败记录。成功版本和内容 hash 回写各自 `package.json`，不会创建桌面发布标签。
+发布使用官方 `npm publish`。最终 tarball 再次校验内容 hash，并在上传后回读确切版本的 `dist.integrity` 与 `dshRelease.contentHash`。注册表读取使用独立查询参数避开旧缓存，确认重试逐步延长等待。上传响应丢失时会先对账，不立即递增另一个版本。无依赖关系的包互不阻塞：只回写已确认成功包的版本；失败包及其下游保留失败记录。成功版本和内容 hash 回写各自 `package.json`，不会创建桌面发布标签。
 
 重复运行时内容相同则跳过；上次已上传但 Git 回写失败，也能从 npm 恢复版本。若 `main` 在发布前已前进，旧任务跳过；若在上传期间前进，回写步骤停止，不强推或把旧制品版本套在新源码上。下一次主分支运行再对账。报告和 tarball 保留为 Actions artifact。
 
@@ -120,7 +120,7 @@ CI 按公开包之间的运行时依赖顺序处理。`workspace:*`、`workspace
 | Environment name | 留空（本工作流未指定 environment） |
 | Allowed actions | 允许直接 `npm publish` |
 
-按 [npm 官方说明](https://docs.npmjs.com/trusted-publishers/)完成绑定后，CI 使用短期 OIDC 身份，不再需要长期 token。维护者确认 OIDC 发布成功后，可移除引导用 secret 并撤销临时 token。仓库主分支规则还必须允许本工作流回写已确认发布包的 manifest；权限不足会明确失败，不绕过分支保护。
+按 [npm 官方说明](https://docs.npmjs.com/trusted-publishers/)完成绑定后，CI 使用短期 OIDC 身份，不再需要长期 token。2026-09-21 已核对两个现有包的实际发布者为 GitHub Actions trusted publisher，并附带 provenance，OIDC 绑定已生效。引导用 secret 可移除，临时 token 可撤销；以后新增包仍需完成上述首次创建与逐包绑定。仓库主分支规则还必须允许本工作流回写已确认发布包的 manifest；权限不足会明确失败，不绕过分支保护。
 
 ## 手动发布与排错
 

@@ -2,7 +2,7 @@
 
 Manage web search providers, credentials, permissions, and request lifecycles through DSH's existing `ctx.web` service. Includes a settings UI and an optional agent tool entry point.
 
-[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/README.zh-CN.md)
+[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/docs/README.zh-CN.md)
 
 ## Install in DSH Web
 

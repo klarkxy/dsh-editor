@@ -65,7 +65,7 @@ export async function publishAndConfirm(expected, io) {
       verifyPublished(await io.readVersion(expected.name, expected.version), expected)
       return { recovered: Boolean(publishError) }
     } catch (error) { confirmationError = error }
-    if (attempt < 4) await io.wait(2000)
+    if (attempt < 4) await io.wait(2000 * 2 ** attempt)
   }
   throw new Error(`Publication state is unconfirmed for ${expected.name}@${expected.version}; rerun to reconcile before releasing again. ${publishError?.message ?? confirmationError?.message}`)
 }

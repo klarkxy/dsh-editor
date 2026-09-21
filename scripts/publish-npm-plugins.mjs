@@ -1,5 +1,5 @@
 /** Run through pnpm run publish:plugins [--publish]. Default mode only previews. */
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -33,7 +33,10 @@ function run(command, args, options = {}) {
   return result.stdout
 }
 async function registry(path) {
-  const response = await fetch(new URL(path, registryURL), { signal: AbortSignal.timeout(30000), redirect: 'error', headers: { 'cache-control': 'no-cache' } })
+  // A cached 404 can outlive a successful upload, even with Cache-Control: no-cache.
+  const url = new URL(path, registryURL)
+  url.searchParams.set('dsh-release-check', randomUUID())
+  const response = await fetch(url, { signal: AbortSignal.timeout(30000), redirect: 'error', headers: { 'cache-control': 'no-cache' } })
   if (response.status === 404) return null
   if (!response.ok) throw new Error(`npm registry HTTP ${response.status}`)
   return response.json()
