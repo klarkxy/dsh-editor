@@ -74,6 +74,10 @@ export function AboutSettingsSection(props: {
   const [state, setState] = useState<CheckState>({ status: 'idle' })
   const [download, setDownload] = useState<DownloadState>({ status: 'idle' })
   const liveToken = useRef(0)
+  const downloadToken = useRef(0)
+  const operationBusy = useRef(false)
+  const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState('')
   const onBusyChange = props.onBusyChange
 
   useEffect(() => {
@@ -91,12 +95,15 @@ export function AboutSettingsSection(props: {
 
   const runCheck = async () => {
     const check = bridge?.checkForUpdate
-    if (!check) return
+    if (!check || operationBusy.current) return
     const token = ++liveToken.current
     setState({ status: 'loading' })
+    setInstallError('')
     try {
       const result = await check()
       if (liveToken.current !== token) return
+      setDownload((previous) => previous.status === 'done' && previous.updateId === result.latest?.asset?.id
+        ? previous : { status: 'idle' })
       setState({ status: 'ready', result, checkedAt: Date.now() })
     } catch (error) {
       if (liveToken.current !== token) return
@@ -113,6 +120,7 @@ export function AboutSettingsSection(props: {
   useEffect(() => {
     if (!active || !bridge?.checkForUpdate) return
     void runCheck()
+    return () => { liveToken.current += 1 }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridge, active])
 
@@ -134,24 +142,30 @@ export function AboutSettingsSection(props: {
   }, [bridge])
 
   useEffect(() => {
-    onBusyChange?.(download.status === 'downloading')
-  }, [download.status, onBusyChange])
+    onBusyChange?.(download.status === 'downloading' || installing)
+  }, [download.status, installing, onBusyChange])
   useEffect(() => () => onBusyChange?.(false), [onBusyChange])
+
+  useEffect(() => () => { downloadToken.current += 1 }, [])
 
   const startDownload = async (asset: Asset) => {
     const downloadUpdate = bridge?.downloadUpdate
-    if (!downloadUpdate) return
-    const token = ++liveToken.current
+    if (!downloadUpdate || operationBusy.current) return
+    operationBusy.current = true
+    setInstallError('')
+    const token = ++downloadToken.current
     setDownload({ status: 'downloading', received: 0, total: asset.size, mirror: '', verifying: false })
     try {
       const result = await downloadUpdate(asset.id)
-      if (liveToken.current !== token) return
+      if (downloadToken.current !== token) return
       setDownload({ status: 'done', updateId: result.updateId, revealed: false })
     } catch (error) {
-      if (liveToken.current !== token) return
+      if (downloadToken.current !== token) return
       const message = cleanIpcError(error)
       if (message.includes('下载已取消') || /cancelled|canceled/i.test(message)) { setDownload({ status: 'idle' }); return }
       setDownload({ status: 'error', message })
+    } finally {
+      operationBusy.current = false
     }
   }
 
@@ -161,15 +175,22 @@ export function AboutSettingsSection(props: {
 
   const installDownloaded = async (updateId: string) => {
     const install = bridge?.installUpdate
-    if (!install) return
+    if (!install || operationBusy.current) return
+    operationBusy.current = true
+    setInstalling(true)
+    setInstallError('')
+    const token = ++downloadToken.current
     try {
       const result = await install(updateId)
-      // 'restarting' 时应用随即退出,无需更新状态;'revealed' 展示手动替换说明。
+      if (downloadToken.current !== token) return
       if (result === 'revealed') {
         setDownload((prev) => (prev.status === 'done' ? { ...prev, revealed: true } : prev))
       }
     } catch (error) {
-      setDownload({ status: 'error', message: cleanIpcError(error) })
+      if (downloadToken.current === token) setInstallError(cleanIpcError(error))
+    } finally {
+      operationBusy.current = false
+      if (downloadToken.current === token) setInstalling(false)
     }
   }
 
@@ -180,35 +201,42 @@ export function AboutSettingsSection(props: {
 
   const hasBridge = Boolean(bridge?.checkForUpdate)
   const versionLabel = appInfo ? `${appInfo.name} ${appInfo.version}` : t('about.devMode')
-  const canCheck = hasBridge
+  const canCheck = hasBridge && download.status !== 'downloading' && !installing
 
   return (
     <section className="about-page" aria-label={t('settings.about')}>
       <Flex className="about-copy" direction="column" gap="4" minWidth="0">
-        <Flex className="about-header" direction="column" gap="2">
-          <Heading as="h3" size="3" className="about-title">
-            {t('about.title')}
-          </Heading>
-          <DataList.Root size="2">
-            <DataList.Item align="center">
-              <DataList.Label>
-                {t('settings.about')}
-              </DataList.Label>
-              <DataList.Value>
-                <Text weight="medium" className="about-version">
-                  {versionLabel}
-                </Text>
-              </DataList.Value>
-            </DataList.Item>
-          </DataList.Root>
-          {!hasBridge ? <Text size="1" color="gray" className="about-note">
-            {t('about.browserHint')}
-          </Text> : null}
+        <Flex className="about-header" justify="between" align="start" gap="4">
+          <Flex direction="column" gap="2" minWidth="0">
+            <Heading as="h3" size="3" className="about-title">
+              {t('about.title')}
+            </Heading>
+            <DataList.Root size="2">
+              <DataList.Item align="center">
+                <DataList.Label>
+                  {t('settings.about')}
+                </DataList.Label>
+                <DataList.Value>
+                  <Text weight="medium" className="about-version">
+                    {versionLabel}
+                  </Text>
+                </DataList.Value>
+              </DataList.Item>
+            </DataList.Root>
+            {!hasBridge ? <Text size="1" color="gray" className="about-note">
+              {t('about.browserHint')}
+            </Text> : null}
+          </Flex>
+          <AppMascot size="about" decorative />
         </Flex>
         <div className="about-status">
           {renderStatus(state)}
         </div>
+        {installError ? <Callout.Root color="red" role="alert" className="about-error">
+          <Callout.Text>{installError}</Callout.Text>
+        </Callout.Root> : null}
         {renderResultBody(state, download, appInfo, {
+          installing,
           onOpen: onOpenDownload,
           onDownload: (asset) => void startDownload(asset),
           onCancel: cancelDownload,
@@ -232,7 +260,6 @@ export function AboutSettingsSection(props: {
           </Button>
         </Flex>
       </Flex>
-      <AppMascot size="about" />
     </section>
   );
 }
@@ -281,6 +308,7 @@ function renderStatus(state: CheckState): ReactNode {
 }
 
 interface ResultBodyHandlers {
+  installing: boolean
   onOpen(url: string): void
   onDownload(asset: Asset): void
   onCancel(): void
@@ -380,7 +408,9 @@ function renderDownloadArea(
             type="button"
             variant="solid"
             className="about-button about-button-primary"
+            disabled={handlers.installing}
             onClick={() => handlers.onInstall(download.updateId)}>
+            {handlers.installing ? <ActivityDots /> : null}
             {installButtonLabel(appInfo)}
           </Button>
         </Flex> : null}

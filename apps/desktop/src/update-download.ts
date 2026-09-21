@@ -7,8 +7,8 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, mkdtemp, rm, rmdir, stat, writeFile } from 'node:fs/promises'
+import { dirname, join, relative } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
@@ -29,6 +29,7 @@ export interface UpdateProgress {
 }
 
 let activeDownload: AbortController | null = null
+let installing = false
 
 function updateDir(): string {
   return join(app.getPath('temp'), 'dsh-editor-update')
@@ -48,16 +49,32 @@ async function streamToFile(
   signal: AbortSignal,
   onProgress: (received: number, total: number) => void,
 ): Promise<void> {
-  const response = await fetch(url, { headers: { 'User-Agent': 'dsh-editor' }, signal })
-  if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
-  const total = Number(response.headers.get('content-length')) || 0
-  const source = Readable.fromWeb(response.body as unknown as WebReadableStream)
-  let received = 0
-  source.on('data', (chunk: Buffer | string) => {
-    received += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length
-    onProgress(received, total)
-  })
-  await pipeline(source, createWriteStream(target))
+  const stalled = new AbortController()
+  const combined = AbortSignal.any([signal, stalled.signal])
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const refreshTimeout = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => stalled.abort(new Error('下载源长时间没有响应')), 30_000)
+  }
+  refreshTimeout()
+  try {
+    const response = await fetch(url, { headers: { 'User-Agent': 'dsh-editor' }, signal: combined })
+    if (!response.ok || !response.body) {
+      await response.body?.cancel()
+      throw new Error(`HTTP ${response.status}`)
+    }
+    const total = Number(response.headers.get('content-length')) || 0
+    const source = Readable.fromWeb(response.body as unknown as WebReadableStream)
+    let received = 0
+    source.on('data', (chunk: Buffer | string) => {
+      refreshTimeout()
+      received += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length
+      onProgress(received, total)
+    })
+    await pipeline(source, createWriteStream(target, { flags: 'wx' }), { signal: combined })
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 async function sha256File(path: string): Promise<string> {
@@ -73,7 +90,6 @@ async function tryCandidate(
   sender: WebContents,
   signal: AbortSignal,
 ): Promise<void> {
-  await rm(target, { force: true })
   await streamToFile(candidate.url, target, signal, (received, total) => {
     sendProgress(sender, { phase: 'downloading', received, total: total || expected.size, mirror: candidate.label })
   })
@@ -82,6 +98,7 @@ async function tryCandidate(
     sha256: sha256File,
     size: async (path) => (await stat(path)).size,
   })
+  signal.throwIfAborted()
   const info = await stat(target)
   sendProgress(sender, { phase: 'done', received: info.size, total: info.size, mirror: candidate.label })
 }
@@ -92,16 +109,20 @@ export async function downloadUpdate(
   store: UpdateOfferStore,
 ): Promise<{ updateId: string }> {
   const offer = store.requireOffer(updateId)
-  if (activeDownload) throw new Error('已有更新下载在进行中')
+  if (activeDownload || installing) throw new Error('已有更新操作在进行中')
   const controller = new AbortController()
   activeDownload = controller
   const dir = updateDir()
-  const target = resolveUpdateFilePath(dir, offer.asset.name)
+  store.clearDownload()
   const errors: string[] = []
   try {
     await mkdir(dir, { recursive: true })
     const candidates = buildDownloadCandidates(offer.asset.url, process.env.DSH_UPDATE_MIRRORS)
     for (const candidate of candidates) {
+      if (controller.signal.aborted) throw new Error('下载已取消')
+      // 每次尝试使用独立目录，旧安装程序或杀毒软件的文件锁不影响重试。
+      const attemptDir = await mkdtemp(join(dir, 'download-'))
+      const target = resolveUpdateFilePath(attemptDir, offer.asset.name)
       try {
         await tryCandidate(
           candidate,
@@ -118,9 +139,11 @@ export async function downloadUpdate(
         })
         return { updateId: offer.id }
       } catch (error) {
+        // 清理失败不能覆盖原错误，也不能阻止下一个下载源。
+        await rm(target, { force: true }).catch(() => undefined)
+        await rmdir(attemptDir).catch(() => undefined)
         if (controller.signal.aborted) throw new Error('下载已取消')
         errors.push(`${candidate.label}:${errorMessage(error)}`)
-        await rm(target, { force: true })
       }
     }
     throw new Error(`所有下载源都失败了:\n${errors.join('\n')}`)
@@ -128,7 +151,6 @@ export async function downloadUpdate(
     activeDownload = null
     if (controller.signal.aborted) {
       store.clearDownload()
-      await rm(target, { force: true })
     }
   }
 }
@@ -142,28 +164,45 @@ export function cancelUpdateDownload(): void {
  * 脚本替换 EXE 并重启;mac 无签名做不到自替换,只打开所在文件夹交给用户。
  */
 export async function installUpdate(updateId: string, store: UpdateOfferStore): Promise<'restarting' | 'revealed'> {
-  const offer = store.requireOffer(updateId)
-  const downloaded = store.requireDownload(updateId)
-  const dir = updateDir()
-  const target = resolveUpdateFilePath(dir, downloaded.name)
-  if (target !== downloaded.path) throw new Error('非法的更新文件路径')
-  await assertUpdateFileMatches(target, { size: offer.asset.size, digest: downloaded.digest }, {
-    sha256: sha256File,
-    size: async (path) => (await stat(path)).size,
+  if (activeDownload || installing) throw new Error('已有更新操作在进行中')
+  installing = true
+  try {
+    const offer = store.requireOffer(updateId)
+    const downloaded = store.requireDownload(updateId)
+    const dir = updateDir()
+    const attemptDir = dirname(downloaded.path)
+    if (!/^download-[a-zA-Z0-9]+$/.test(relative(dir, attemptDir))) throw new Error('非法的更新文件路径')
+    const target = resolveUpdateFilePath(attemptDir, downloaded.name)
+    if (target !== downloaded.path) throw new Error('非法的更新文件路径')
+    await assertUpdateFileMatches(target, { size: offer.asset.size, digest: downloaded.digest }, {
+      sha256: sha256File,
+      size: async (path) => (await stat(path)).size,
+    })
+    if (process.platform === 'darwin') {
+      shell.showItemInFolder(target)
+      return 'revealed'
+    }
+    if (process.platform !== 'win32') throw new Error('当前平台不支持应用内安装')
+    const portableTarget = process.env.PORTABLE_EXECUTABLE_FILE
+    if (portableTarget) {
+      const script = join(attemptDir, 'dsh-editor-portable-update.bat')
+      await writeFile(script, buildPortableSwapScript(process.pid, portableTarget, target))
+      await launchDetached('cmd.exe', ['/d', '/c', script])
+    } else {
+      // NSIS 的 /D 必须是最后一个参数，且包括空格时也不能加引号。
+      await launchDetached(target, [`/D=${dirname(process.execPath)}`], true)
+    }
+    app.quit()
+    return 'restarting'
+  } finally {
+    installing = false
+  }
+}
+
+async function launchDetached(command: string, args: string[], windowsVerbatimArguments = false): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments })
+    child.once('error', reject)
+    child.once('spawn', () => { child.unref(); resolve() })
   })
-  if (process.platform === 'darwin') {
-    shell.showItemInFolder(target)
-    return 'revealed'
-  }
-  if (process.platform !== 'win32') throw new Error('当前平台不支持应用内安装')
-  const portableTarget = process.env.PORTABLE_EXECUTABLE_FILE
-  if (portableTarget) {
-    const script = join(dir, 'dsh-editor-portable-update.bat')
-    await writeFile(script, buildPortableSwapScript(process.pid, portableTarget, target))
-    spawn('cmd.exe', ['/c', 'start', '', '/min', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
-  } else {
-    spawn(target, [], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
-  }
-  app.quit()
-  return 'restarting'
 }

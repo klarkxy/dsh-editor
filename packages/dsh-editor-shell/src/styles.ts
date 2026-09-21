@@ -980,10 +980,11 @@ export const componentStyles = `
 .radix-themes .settings-dialog .usage-card-value { font-size: var(--font-size-5); font-weight: 600; font-variant-numeric: tabular-nums; }
 .radix-themes .settings-content.is-active:has(.about-page) { flex: 1; display: flex; }
 .radix-themes .settings-content:has(.about-page) .settings-page { flex: 1; display: flex; }
-.radix-themes .about-page { display: grid; grid-template-columns: minmax(0,1fr) minmax(160px,40%); gap: var(--space-4); flex: 1; min-width: 0; align-items: start; }
+.radix-themes .about-page { display: block; flex: 1; min-width: 0; }
 .radix-themes .about-copy { min-width: 0; }
 .radix-themes .about-status,.radix-themes .about-status .rt-CalloutRoot { width: fit-content; max-width: 100%; }
-.radix-themes .app-mascot-about { width: 100%; height: auto; max-height: 500px; object-fit: contain; align-self: end; pointer-events: none; }
+.radix-themes .app-mascot-about { width: 100px; max-width: 25%; height: auto; flex: none; object-fit: contain; pointer-events: none; }
+.radix-themes .about-error { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
 @media(max-width:1100px) {
   .radix-themes .settings-dialog { grid-template-columns: 148px minmax(0,1fr); }
   .radix-themes .settings-dialog .settings-row { flex-wrap: wrap; }
@@ -996,8 +997,6 @@ export const componentStyles = `
   .radix-themes .settings-dialog .models-writing-route { display: flex; }
   .radix-themes .settings-dialog .models-writing-route-controls { width: 100%; }
   .radix-themes .settings-dialog .models-field-row { grid-template-columns: minmax(0,1fr); }
-  .radix-themes .about-page { grid-template-columns: minmax(0,1fr); }
-  .radix-themes .app-mascot-about { max-width: 200px; justify-self: end; }
 }
 
 .radix-themes .settings-segmented {
@@ -1062,7 +1061,7 @@ export const componentStyles = `
 .radix-themes .models-candidate-list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; max-height: 360px; overflow: auto; }
 .radix-themes .models-candidate-dialog .models-candidate-label { display: flex; align-items: center; gap: var(--space-2); }
 
-.radix-themes .about-release-body { white-space: pre-wrap; max-height: 220px; overflow: auto; }
+.radix-themes .about-release-body { white-space: pre-wrap; max-height: 220px; overflow: auto; margin-block: var(--space-2) var(--space-3); }
 .radix-themes .preset-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-a3); color: var(--accent-11); font: 500 var(--font-size-1)/1.4 var(--default-font-family); }
 .radix-themes .update-toast { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 40; }
 
