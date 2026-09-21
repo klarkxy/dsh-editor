@@ -59,13 +59,15 @@ export function verifyPublished(remote, expected) {
 export async function publishAndConfirm(expected, io) {
   let publishError
   try { await io.publish() } catch (error) { publishError = error }
+  // npm may acknowledge an OIDC upload before the version becomes publicly readable.
+  // Retry reads for up to three minutes of backoff; never repeat the upload here.
   let confirmationError
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 10; attempt++) {
     try {
       verifyPublished(await io.readVersion(expected.name, expected.version), expected)
       return { recovered: Boolean(publishError) }
     } catch (error) { confirmationError = error }
-    if (attempt < 4) await io.wait(2000 * 2 ** attempt)
+    if (attempt < 9) await io.wait(Math.min(2000 * 2 ** attempt, 30000))
   }
   throw new Error(`Publication state is unconfirmed for ${expected.name}@${expected.version}; rerun to reconcile before releasing again. ${publishError?.message ?? confirmationError?.message}`)
 }
