@@ -1,0 +1,4 @@
+# Supporting service: inserted enabled. Features must call aiServices explicitly; this plugin never starts inference on load.
+- insert:
+    - id: ai-services
+      name: '@klarkxy/dsh-ai-services'
