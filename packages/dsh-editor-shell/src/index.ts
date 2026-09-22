@@ -1,3 +1,5 @@
+import type { AiServices } from '@klarkxy/dsh-ai-services/contracts'
+import { importWritingModels } from './writing-ai-migration.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { registerHostRpc, type HostRpcContext } from 'dsh-manuscript/host-api'
 import { SHELL_RPC_CHANNEL, resolveShellCapabilities, type ShellFeatureConfig } from './capabilities.ts'
@@ -7,7 +9,7 @@ import { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-s
 import { DEVELOPER_SETTINGS_NAMESPACE, type DeveloperSettings } from './developer-settings.ts'
 
 export const name = 'dsh-editor-shell'
-export const inject = ['settings', 'connection', 'webServer'] as const
+export const inject = ['aiServices', 'settings', 'connection', 'webServer'] as const
 export const Config: Schema<ShellFeatureConfig> = Schema.object({
   features: Schema.dict(Schema.string()).default({}),
 })
@@ -29,15 +31,20 @@ const WritingPreferencesSchema = Schema.object({
   paperWidth: Schema.union(['narrow', 'medium', 'wide']).default('wide'),
 })
 
-type HostSettings = { register<T>(namespace: string, schema: unknown): unknown }
+type HostSettings = { get(namespace: string): unknown; register<T>(namespace: string, schema: unknown): unknown }
 
 const DeveloperSettingsSchema = Schema.object({
   developerMode: Schema.boolean().default(false),
 })
 
 /** Host owns the editor's one durable writing-preference namespace. */
-export function apply(ctx: Context, config: ShellFeatureConfig = {}): void {
+export async function apply(ctx: Context, config: ShellFeatureConfig = {}): Promise<void> {
   ;(ctx as Context & { settings: HostSettings }).settings.register<WritingPreferences>(WRITING_SETTINGS_NAMESPACE, WritingPreferencesSchema)
+  const migration: { ready?: Promise<void>; error?: string } = {}
+  ctx.provide('writingAiMigration', migration)
+  migration.ready = importWritingModels(ctx.get('aiServices') as AiServices, (ctx as Context & { settings: HostSettings }).settings.get(WRITING_SETTINGS_NAMESPACE))
+    .catch(() => { migration.error = '旧写作模型配置迁移失败。请在模型设置中重新选择补全和改写模型，然后重新加载界面。' })
+  await migration.ready
   /* 未注册的命名空间在 settingsScope 里是 unavailable 死开关，客户端绑定读取不到它。 */
   ;(ctx as Context & { settings: HostSettings }).settings.register<DeveloperSettings>(DEVELOPER_SETTINGS_NAMESPACE, DeveloperSettingsSchema)
   ctx.effect(() => registerHostRpc(ctx as Context & HostRpcContext, SHELL_RPC_CHANNEL, async (endpoint) => {

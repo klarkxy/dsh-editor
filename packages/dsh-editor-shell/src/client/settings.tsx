@@ -8,7 +8,8 @@ import { AboutSettingsSection } from './settings-about.tsx'
 import { AssistantSettings } from './settings-assistant.tsx'
 import { SettingsGeneralSection, useDeveloperMode } from './settings-general.tsx'
 import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
-import { SettingsModelsSection } from './settings-models.tsx'
+import { SettingsChatModelRoute, SettingsModelsSection } from './settings-models.tsx'
+import { ModelSettingsSurface } from './plugin-surfaces.tsx'
 import {
   OfficialSettingsSectionPage,
   PLUGIN_SETTINGS_TAB_PREFIX,
@@ -101,6 +102,7 @@ export function SettingsTrigger(props: { onOpen(): void }) {
 
 export function SettingsDialog(props: {
   ctx: ShellContext
+  sessionId?: string
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
   /* 助手能力开关：false 时隐藏模型等助手专属设置；undefined 表示能力尚未加载，保持原样。 */
@@ -112,7 +114,7 @@ export function SettingsDialog(props: {
   focusTab?: SettingsTab
   onClose(): void
 }) {
-  useLocale()
+  const locale = useLocale()
   const open = props.open ?? true
   const [tab, setTab] = useState(readStoredTab)
   const [note, setNote] = useState('')
@@ -171,7 +173,10 @@ export function SettingsDialog(props: {
       ctx={props.ctx}
       showDeveloperMode={authorChrome.showDeveloperMode}
       onRevealDeveloper={() => setDeveloperRevealed(true)} />,
-    models: () => <SettingsModelsSection ctx={props.ctx} writingScope={props.writingScope} />,
+    models: () => <ModelSettingsSurface ctx={props.ctx} renderSlot={props.renderSlot} sessionId={props.sessionId} locale={locale}
+      renderProviders={options => <SettingsModelsSection ctx={props.ctx} writingScope={props.writingScope}
+        showWritingRoutes={options?.includeWritingRoutes !== false} />}
+      renderChatModel={() => <SettingsChatModelRoute ctx={props.ctx} writingScope={props.writingScope} />} />,
     assistant: () => <AssistantSettings scope={props.writingScope} migrate={props.migrateWriting} />,
     writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} />,
     usage: () => <SettingsUsageSection ctx={props.ctx} />,
@@ -257,6 +262,8 @@ export function SettingsDialog(props: {
                 renderSlot={props.renderSlot}
                 sectionId={activeOfficial.id}
                 version={official.version}
+                sessionId={props.sessionId}
+                locale={locale}
                 onClose={props.onClose} />
             </SettingsTabPage>
               : null}

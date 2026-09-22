@@ -389,7 +389,11 @@ function emptySectionState(): SectionState {
 /* The exported entry point. Builds the store once, subscribes to the
    store, and registers the host's invalidation listeners. The component
    delegates all rendering to `Loaded` once the store is ready. */
-export function SettingsModelsSection(props: { ctx: ShellContext; writingScope: SettingsScope<WritingPreferences> }): ReactNode {
+export function SettingsModelsSection(props: {
+  ctx: ShellContext
+  writingScope: SettingsScope<WritingPreferences>
+  showWritingRoutes?: boolean
+}): ReactNode {
   useLocale()
   const store = useMemo(
     () => new ModelsStore(props.ctx.remote, props.ctx.settingsScope.describe(), props.ctx.settingsSchema),
@@ -435,8 +439,30 @@ export function SettingsModelsSection(props: { ctx: ShellContext; writingScope: 
       ctx={props.ctx}
       store={store}
       state={state}
-      writingScope={props.writingScope} />
+      writingScope={props.writingScope}
+      showWritingRoutes={props.showWritingRoutes !== false} />
   );
+}
+
+export function SettingsChatModelRoute(props: {
+  ctx: ShellContext
+  writingScope: SettingsScope<WritingPreferences>
+}): ReactNode {
+  const [catalog, setCatalog] = useState<CatalogModelOption[]>([])
+  useEffect(() => {
+    let live = true
+    void props.ctx.remote.session.modelCatalog().then((result) => {
+      if (!live || !result.ok) return
+      setCatalog(catalogFromSessionGroups(result.value.groups))
+    }).catch(() => { /* selected route remains visible as missing */ })
+    return () => { live = false }
+  }, [props.ctx])
+  return <WritingModelRoutes
+    connection={props.ctx.connection}
+    scope={props.writingScope}
+    catalog={catalog}
+    writable={true}
+    showSharedPurposes={false} />
 }
 
 function catalogOptions(rows: ProviderRow[], namespaces: Map<string, SettingsNamespaceView>, schema: SettingsSchemaService): CatalogModelOption[] {
@@ -465,7 +491,13 @@ function catalogOptions(rows: ProviderRow[], namespaces: Map<string, SettingsNam
 
 /* Inner component: renders the page after the store is wired up. Owns the
    open-card bookkeeping and the delete confirmation target. */
-function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writingScope: SettingsScope<WritingPreferences> }): ReactNode {
+function Loaded(props: {
+  ctx: ShellContext
+  store: Store
+  state: Snapshot
+  writingScope: SettingsScope<WritingPreferences>
+  showWritingRoutes: boolean
+}): ReactNode {
   const { ctx, store, state } = props
   const [section, setSection] = useState<SectionState>(emptySectionState)
   useEffect(() => {
@@ -541,10 +573,11 @@ function Loaded(props: { ctx: ShellContext; store: Store; state: Snapshot; writi
   return (
     <section className="models-page" aria-label={t('settings.models')}>
       <Header note={section.savedNote} />
-      <WritingModelRoutes
+      {props.showWritingRoutes ? <WritingModelRoutes
+        connection={ctx.connection}
         scope={props.writingScope}
         catalog={mergeCatalogOptions(runtimeCatalog, catalogOptions(state.rows, state.namespaces, ctx.settingsSchema))}
-        writable={writable} />
+        writable={writable} /> : null}
       {!writable ? <Text size="1" color="gray" className="models-notice" role="status">
         {text().readOnly}
       </Text> : null}

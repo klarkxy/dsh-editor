@@ -59,7 +59,7 @@ import {
   type ConversationPresetChoice,
 } from '../conversation-presets.ts'
 import { shouldShowMigrationBanner } from '../legacy-migration.ts'
-import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
+import { ConversationRenameQueue, automaticTitleManaged, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
 import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
@@ -103,6 +103,8 @@ import {
   type ChatLifecycle,
 } from './chat-conversation.ts'
 import { ModelPicker } from './chat-model-picker.tsx'
+import { PluginChatEvents } from './plugin-surfaces.tsx'
+import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import {
   ProposalCard,
   buildExpectedVersions,
@@ -145,7 +147,7 @@ export async function settleConversationStop(input: {
 }
 
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, onAcceptMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, renderSlot, onAcceptMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; renderSlot?: SettingsRenderSlot; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [messageCardTick, setMessageCardTick] = useState(0)
@@ -428,8 +430,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   })
   const currentIsArchived = workRecord.archivedIds.includes(session.sessionId)
   const canMutateConversation = conversations.some((item) => item.id !== session.sessionId) || canArchiveOrDeleteConversation(conversations.length)
-  const queueConversationRename = (title: string, failureNote: string) => {
+  const queueConversationRename = (title: string, failureNote: string, automatic = false) => {
     void conversationRenameQueue.enqueue(session.sessionId, async () => {
+      if (automatic && automaticTitleManaged(ctx)) return
       try {
         const result = await session.rename(title)
         if (!result.ok) setNote(failureNote)
@@ -439,6 +442,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     })
   }
   useEffect(() => {
+    if (automaticTitleManaged(ctx)) return
     const summary = sessionList.byId?.[session.sessionId]
     const updatedAt = (summary as unknown as { updatedAt?: unknown } | undefined)?.updatedAt
     const title = nextAutomaticConversationTitle({
@@ -449,7 +453,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     })
     if (!title) return
     titleAttempted.current.add(session.sessionId)
-    queueConversationRename(title, t('chat.renameAutoFailed'))
+    queueConversationRename(title, t('chat.renameAutoFailed'), true)
   }, [rows, session.sessionId, sessionList.byId])
   useEffect(() => { onDraftDirtyChange(Boolean(draft.trim())) }, [draft, onDraftDirtyChange])
   useEffect(() => () => draftConfirm?.resolve(false), [draftConfirm])
@@ -985,6 +989,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
               </Text>
             </ChatEntry> : null}
             {pendingItems.map((item) => <PendingCard key={item.key} item={item} />)}
+            <PluginChatEvents ctx={ctx} renderSlot={renderSlot} sessionId={session.sessionId} locale={locale} hidden={hidden} />
             {snapshot.openState === 'error' ? <Callout.Root color="red" className="warning">
               <Callout.Text>
                 {t('chat.connectionInterrupted')}

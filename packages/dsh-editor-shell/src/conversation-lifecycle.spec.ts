@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { ConversationRenameQueue, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, conversationTitle, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from './conversation-lifecycle.ts'
+import { ConversationRenameQueue, automaticTitleManaged, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, conversationTitle, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from './conversation-lifecycle.ts'
 import { conversationWorkRecord, decodeConversationSettings, putConversationWork } from './conversation-store.ts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
 describe('conversation lifecycle projection', () => {
+  it('hands automatic title ownership back when the optional client is disposed', () => {
+    let owner: { active: boolean } | undefined
+    const ctx = { get: (name: string) => name === 'dshCurrentTitleClient' ? owner : undefined }
+    expect(automaticTitleManaged(ctx)).toBe(false)
+    owner = { active: true }
+    expect(automaticTitleManaged(ctx)).toBe(true)
+    owner.active = false
+    expect(automaticTitleManaged(ctx)).toBe(false)
+    owner = undefined
+    expect(automaticTitleManaged(ctx)).toBe(false)
+  })
+
   it('uses workspace membership, hides archived and non-current blank sessions', () => {
     expect(conversationRows({ workspaceSessionIds: ['a', 'b', 'c'], archivedIds: ['b'], reusableBlankIds: ['c'], currentId: 'c', titles: { a: '讨论', c: '' } })).toEqual([{ id: 'a', title: '讨论', current: false }, { id: 'c', title: '新对话', current: true }])
   })

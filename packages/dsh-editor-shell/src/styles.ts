@@ -58,11 +58,11 @@ export const baseStyles = `
   font: 400 var(--font-size-2)/1.45 var(--default-font-family);
   overflow: hidden;
 }
-.shell button:not([class^="rt-"]):not([class*=" rt-"]),
-.shell input:not([class^="rt-"]):not([class*=" rt-"]),
-.shell select:not([class^="rt-"]):not([class*=" rt-"]),
-.shell textarea:not([class^="rt-"]):not([class*=" rt-"]) { font: inherit; color: inherit; background: none; border: 0; margin: 0; padding: 0; }
-.shell button:not([class^="rt-"]):not([class*=" rt-"]) { cursor: pointer; transition: background-color 150ms ${EASE}, color 150ms ${EASE}, border-color 150ms ${EASE}, box-shadow 150ms ${EASE}; }
+.shell button:not([class^="rt-"]):not([class*=" rt-"]):not(:where([data-dsh-plugin-surface] *)),
+.shell input:not([class^="rt-"]):not([class*=" rt-"]):not(:where([data-dsh-plugin-surface] *)),
+.shell select:not([class^="rt-"]):not([class*=" rt-"]):not(:where([data-dsh-plugin-surface] *)),
+.shell textarea:not([class^="rt-"]):not([class*=" rt-"]):not(:where([data-dsh-plugin-surface] *)) { font: inherit; color: inherit; background: none; border: 0; margin: 0; padding: 0; }
+.shell button:not([class^="rt-"]):not([class*=" rt-"]):not(:where([data-dsh-plugin-surface] *)) { cursor: pointer; transition: background-color 150ms ${EASE}, color 150ms ${EASE}, border-color 150ms ${EASE}, box-shadow 150ms ${EASE}; }
 @keyframes shell-fade-in { from { opacity: 0; } }
 @keyframes shell-message-in { from { opacity: 0; transform: translateY(var(--space-3)); } }
 @keyframes shell-activity-pulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
@@ -70,10 +70,10 @@ export const baseStyles = `
 @keyframes shell-activity-shimmer { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 @keyframes shell-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
 @keyframes shell-success-draw { from { stroke-dashoffset: 42; } }
-.shell textarea:not([class^="rt-"]):not([class*=" rt-"]) { resize: none; outline: none; }
-.shell :focus { outline: none; }
+.shell textarea:not([class^="rt-"]):not([class*=" rt-"]):not(:where([data-dsh-plugin-surface] *)) { resize: none; outline: none; }
+.shell :focus:not(:where([data-dsh-plugin-surface] *)) { outline: none; }
 .shell :focus-visible:not([class^="rt-"]):not([class*=" rt-"]) { box-shadow: 0 0 0 2px var(--accent-10); }
-.shell button:not([class^="rt-"]):not([class*=" rt-"]):disabled { cursor: not-allowed; opacity: .55; }
+.shell button:not([class^="rt-"]):not([class*=" rt-"]):not(:where([data-dsh-plugin-surface] *)):disabled { cursor: not-allowed; opacity: .55; }
 .radix-themes .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 .radix-themes .muted { color: var(--gray-11); }
 .radix-themes .warning { color: var(--red-9); }

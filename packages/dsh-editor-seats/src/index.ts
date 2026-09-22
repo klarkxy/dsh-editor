@@ -21,6 +21,10 @@ import type { ComponentType, KeyboardEvent, MouseEvent, ReactNode, RefObject } f
 
 export const SIDEBAR_TOOLS_SLOT = 'dsh-editor.sidebar.tools'
 export const CENTER_OVERLAYS_SLOT = 'dsh-editor.center.overlays'
+/** Non-transcript cards. Rendering here never adds a user message or tool result. */
+export const CHAT_EVENTS_SLOT = 'dsh-editor.chat.events'
+/** Optional model settings page; its owner provides the native provider editor. */
+export const MODEL_SETTINGS_SLOT = 'dsh-editor.settings.models'
 export const COMMANDS_SERVICE = 'dshEditorCommands'
 /** Chat tool-result cards. Plugins `inject` this and `register` a renderer per tool name. */
 export const MESSAGE_CARDS_SERVICE = 'dshEditorMessageCards'

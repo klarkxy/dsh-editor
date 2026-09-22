@@ -2130,6 +2130,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               authorPreferences={authorPreferences}
               authorMemory={authorMemory}
               chatModel={writing.chatModel}
+              renderSlot={renderSlot}
               onAcceptMemory={onAcceptMemory}
               hidden={!assistantVisible}
               overlay={assistantVisible && overlayAssistant}
@@ -2343,6 +2344,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           url={(imagePreview ?? lastImagePreview.current)?.url ?? ''}
           onClose={closeImagePreview} />
         <SettingsDialog
+          sessionId={chatSession?.sessionId}
           open={settingsOpen}
           ctx={ctx}
           writingScope={writingScope}

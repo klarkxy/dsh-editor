@@ -211,7 +211,7 @@ class OfficialSettingsPageBoundary extends Component<BoundaryProps, BoundaryStat
       );
     }
     return (
-      <Box className="settings-official-page" data-testid="settings-official-page">
+      <Box className="settings-official-page" data-testid="settings-official-page" data-dsh-plugin-surface="">
         <Fragment key={this.state.nonce}>
           {this.props.children}
         </Fragment>
@@ -223,15 +223,19 @@ class OfficialSettingsPageBoundary extends Component<BoundaryProps, BoundaryStat
 function OfficialSettingsSlotOutlet(props: {
   renderSlot: SettingsRenderSlot
   sectionId: string
+  sessionId?: string
+  locale?: 'zh' | 'en'
   onClose(): void
 }) {
-  return props.renderSlot(OFFICIAL_SETTINGS_SLOT, { close: props.onClose }, { only: props.sectionId }) ?? null
+  return props.renderSlot(OFFICIAL_SETTINGS_SLOT, { close: props.onClose, sessionId: props.sessionId, locale: props.locale }, { only: props.sectionId }) ?? null
 }
 
 export function OfficialSettingsSectionPage(props: {
   renderSlot: SettingsRenderSlot
   sectionId: string
   version: number
+  sessionId?: string
+  locale?: 'zh' | 'en'
   onClose(): void
 }) {
   return (
@@ -239,6 +243,8 @@ export function OfficialSettingsSectionPage(props: {
       <OfficialSettingsSlotOutlet
         renderSlot={props.renderSlot}
         sectionId={props.sectionId}
+        sessionId={props.sessionId}
+        locale={props.locale}
         onClose={props.onClose} />
     </OfficialSettingsPageBoundary>
   );

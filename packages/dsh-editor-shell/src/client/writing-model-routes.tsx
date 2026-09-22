@@ -1,6 +1,7 @@
-import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Box, Callout, Flex, Text } from '@radix-ui/themes'
-import type { SettingsScope } from '../dsh-compat.ts'
+import type { AiPolicy, ModelTarget, RpcResult } from '@klarkxy/dsh-ai-services/contracts'
+import type { ConnectionHandle, SettingsScope } from '../dsh-compat.ts'
 import {
   normalizeWritingEffort,
   normalizeWritingModelRoute,
@@ -84,9 +85,11 @@ function optionFor(route: WritingModelRoute, catalog: CatalogModelOption[], fall
 }
 
 export function WritingModelRoutes(props: {
+  connection: ConnectionHandle
   scope: SettingsScope<WritingPreferences>
   catalog: CatalogModelOption[]
   writable: boolean
+  showSharedPurposes?: boolean
 }): ReactNode {
   useLocale()
   const snapshot = useSyncExternalStore(
@@ -99,7 +102,7 @@ export function WritingModelRoutes(props: {
   const [saving, setSaving] = useState<keyof WritingPreferences | null>(null)
   const [failure, setFailure] = useState('')
 
-  const save = async (field: 'completionModel' | 'rewriteModel' | 'chatModel', route: WritingModelRoute | undefined) => {
+  const save = async (field: 'chatModel', route: WritingModelRoute | undefined) => {
     setSaving(field)
     setFailure('')
     try {
@@ -114,23 +117,21 @@ export function WritingModelRoutes(props: {
     }
   }
 
-  const updateModel = (field: 'completionModel' | 'rewriteModel' | 'chatModel', value: string) => {
+  const updateModel = (field: 'chatModel', value: string) => {
     const parsed = parseRouteKey(value)
     const current = values[field]
     void save(field, parsed ? { ...parsed, reasoningEffort: current?.reasoningEffort } : undefined)
   }
 
-  const updateEffort = (field: 'completionModel' | 'rewriteModel' | 'chatModel', value: string) => {
+  const updateEffort = (field: 'chatModel', value: string) => {
     const current = values[field]
     if (!current) return
     const reasoningEffort = normalizeWritingEffort(value)
     void save(field, reasoningEffort ? { ...current, reasoningEffort } : { provider: current.provider, model: current.model })
   }
 
-  const rows: Array<{ field: 'completionModel' | 'rewriteModel' | 'chatModel'; label: 'models.completionModel' | 'models.rewriteModel' | 'models.chatModel'; empty?: string }> = [
+  const rows: Array<{ field: 'chatModel'; label: 'models.chatModel'; empty?: string }> = [
     { field: 'chatModel', label: 'models.chatModel' },
-    { field: 'completionModel', label: 'models.completionModel', empty: t('models.followChat') },
-    { field: 'rewriteModel', label: 'models.rewriteModel', empty: t('models.followChat') },
   ]
 
   if (snapshot.status === 'loading') {
@@ -211,6 +212,8 @@ export function WritingModelRoutes(props: {
           </Flex>
         );
       })}
+      {props.showSharedPurposes === false ? null
+        : <SharedWritingRoutes connection={props.connection} catalog={props.catalog} writable={props.writable} />}
       {failure ? <Callout.Root color="red" role="alert" className="models-warning">
         <Callout.Text>
           {failure}
@@ -218,4 +221,98 @@ export function WritingModelRoutes(props: {
       </Callout.Root> : null}
     </section>
   );
+}
+
+
+export const WRITING_PURPOSES = [
+  { id: 'manuscript.completion', label: 'models.completionModel' },
+  { id: 'manuscript.rewrite', label: 'models.rewriteModel' },
+] as const
+
+export function writingPurposeUpdate(policy: AiPolicy, purpose: string, target: ModelTarget) {
+  const { revision, ...data } = policy
+  return { expectedRevision: revision, policy: { ...data, purposes: { ...data.purposes, [purpose]: target } } }
+}
+
+function SharedWritingRoutes(props: { connection: ConnectionHandle; catalog: CatalogModelOption[]; writable: boolean }) {
+  const locale = useLocale()
+  const [policy, setPolicy] = useState<AiPolicy>()
+  const [failure, setFailure] = useState('')
+  const [saving, setSaving] = useState(false)
+  const generation = useRef(0)
+  const pending = useRef(false)
+  const rpc = async <T,>(endpoint: string, payload: unknown): Promise<T> => {
+    const result = await props.connection.rpc.call('/dsh-ai-services', endpoint, payload) as RpcResult<T>
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value
+  }
+  useEffect(() => {
+    let live = true
+    const refresh = async () => {
+      if (pending.current) return
+      const token = ++generation.current
+      try {
+        const status = await rpc<{ policy: AiPolicy }>('status', {})
+        if (live && token === generation.current) { setPolicy(status.policy); setFailure('') }
+      } catch (error) {
+        if (live && token === generation.current) { setPolicy(undefined); setFailure(error instanceof Error ? error.message : t('models.routeFailed')) }
+      }
+    }
+    void refresh()
+    window.addEventListener('focus', refresh)
+    return () => { live = false; generation.current++; window.removeEventListener('focus', refresh) }
+  }, [props.connection])
+  const save = async (purpose: string, target: ModelTarget) => {
+    if (!policy || pending.current) return
+    pending.current = true
+    const token = ++generation.current
+    setSaving(true); setFailure('')
+    try {
+      const next = await rpc<AiPolicy>('update', writingPurposeUpdate(policy, purpose, target))
+      if (token === generation.current) setPolicy(next)
+    } catch (error) {
+      if (token === generation.current) {
+        setFailure(error instanceof Error ? error.message : t('models.routeFailed'))
+        try { const status = await rpc<{ policy: AiPolicy }>('status', {}); if (token === generation.current) setPolicy(status.policy) } catch { if (token === generation.current) setPolicy(undefined) }
+      }
+    } finally {
+      pending.current = false
+      if (token === generation.current) setSaving(false)
+    }
+  }
+  const zh = locale !== 'en'
+  return <>
+    {WRITING_PURPOSES.map(row => {
+      const target = policy?.purposes[row.id] ?? { kind: 'session' as const }
+      const value = target.kind === 'model' ? routeKey(target) : target.kind === 'role' ? 'role:' + target.role : ''
+      const options: SelectOption[] = [
+        { value: '', label: t('models.followChat') },
+        { value: 'role:normal', label: zh ? '普通模型' : 'Normal model' },
+        { value: 'role:weak', label: zh ? '弱模型' : 'Weak model' },
+        { value: 'role:strong', label: zh ? '强模型' : 'Strong model' },
+        ...props.catalog.map(item => ({ value: routeKey(item), label: item.label })),
+      ]
+      if (target.kind === 'model' && !options.some(item => item.value === value)) options.push(optionFor(target, props.catalog, ''))
+      return <Flex key={row.id} className="settings-row models-writing-route" align="center" justify="between" gap="4" minWidth="0" py="2">
+        <Text size="2" weight="medium">{t(row.label)}</Text>
+        <Flex className="models-writing-route-controls" align="center" gap="2" minWidth="0">
+          <Select value={value} options={options} disabled={!props.writable || !policy || saving} aria-label={t(row.label)} onChange={value => {
+            const route = parseRouteKey(value)
+            const next: ModelTarget = value.startsWith('role:') ? { kind: 'role', role: value.slice(5) as 'normal' | 'weak' | 'strong' }
+              : route ? { kind: 'model', ...route, ...(target.kind === 'model' && target.reasoningEffort ? { reasoningEffort: target.reasoningEffort } : {}) } : { kind: 'session' }
+            void save(row.id, next)
+          }} />
+          {target.kind === 'model' ? <span className="model-effort"><Select value={target.reasoningEffort ?? 'off'} options={effortOptions()}
+            disabled={!props.writable || !policy || saving} aria-label={t(row.label) + ' · ' + t('chat.reasoning')}
+            selectedLabel={effortTriggerLabel(target.reasoningEffort ?? 'off')} onChange={value => {
+              const { reasoningEffort: _old, ...route } = target
+              const effort = normalizeWritingEffort(value)
+              void save(row.id, effort && effort !== 'off' ? { ...route, reasoningEffort: effort } : route)
+            }} /></span> : null}
+        </Flex>
+      </Flex>
+    })}
+    {!policy && !failure ? <ActivityDots /> : null}
+    {failure ? <Callout.Root color="red" role="alert"><Callout.Text>{failure}</Callout.Text></Callout.Root> : null}
+  </>
 }

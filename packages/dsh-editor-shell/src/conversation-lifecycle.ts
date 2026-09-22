@@ -3,6 +3,15 @@ import { isNovelIndexJobTitle } from './novel-index.ts'
 
 export type ConversationRow = { id: string; title: string; current: boolean }
 
+/** The optional title client owns auto-generation only for its activation lifetime. */
+export function automaticTitleManaged(ctx: unknown): boolean {
+  try {
+    const host = ctx as { get?(name: string): unknown }
+    const owner = host.get?.('dshCurrentTitleClient') as { active?: boolean } | undefined
+    return owner?.active === true
+  } catch { return false }
+}
+
 export function stripReasoningText(text: string): string {
   return text
     .replace(/<think\b[^>]*>[\s\S]*?<\/think\s*>/giu, '')

@@ -16,6 +16,8 @@ describe('root registration', () => {
         'dsh-editor.settings.zhihu': { kind: 'list', scope: 'root' },
         'dsh-editor.sidebar.tools': { kind: 'list', scope: 'root' },
         'dsh-editor.center.overlays': { kind: 'list', scope: 'root' },
+        'dsh-editor.chat.events': { kind: 'list', scope: 'root' },
+        'dsh-editor.settings.models': { kind: 'list', scope: 'root' },
         'settings.section': { kind: 'list', scope: 'root' },
       },
     })

@@ -119,13 +119,36 @@ export const DISCONNECTED = {
 }
 
 export function pendingForSession(
-  raw: ReadonlyMap<SessionId, PendingInteraction> | PendingInteraction[] | undefined,
+  raw: ReadonlyMap<SessionId, unknown> | unknown[] | undefined,
   sessionId: SessionId,
 ): PendingInteraction[] {
   if (!raw) return []
-  if (Array.isArray(raw)) return raw.filter((item) => item.sessionId === sessionId)
-  const item = raw.get(sessionId)
-  return item ? [item] : []
+  const items = Array.isArray(raw) ? raw : [raw.get(sessionId)]
+  return items.flatMap(item => {
+    if (!item || typeof item !== 'object') return []
+    const candidate = item as {
+      kind?: string; key?: string; sessionId?: SessionId
+      questions?: Extract<PendingInteraction, { kind: 'question' }>['payload']['questions']
+      answer?: (answer: { answers: Array<{ id: string; selected: string[]; custom?: string }> }) => Promise<void>
+    }
+    if (candidate.sessionId !== sessionId) return []
+    // rc.2's native question provider owns the request lifetime and settlement.
+    // Adapt its presentation only; never manufacture another request or transport.
+    if ((candidate.kind === 'question' || candidate.kind === 'plan-review')
+      && typeof candidate.key === 'string' && Array.isArray(candidate.questions)
+      && typeof candidate.answer === 'function') {
+      return [{
+        kind: 'question' as const, key: candidate.key, sessionId,
+        payload: { questions: candidate.questions },
+        respond: async ({ value }: { value: { sessionId: SessionId; answer: { answers: Array<{ id: string; selected: string[]; custom?: string }> } } }) => {
+          if (value.sessionId !== sessionId) return { accepted: false }
+          await candidate.answer!.call(candidate, value.answer)
+          return { accepted: true }
+        },
+      }]
+    }
+    return [item as PendingInteraction]
+  })
 }
 
 export type ChatLifecycle = SessionLifecycle & { hasMore?: boolean; loadingOlder?: boolean }
