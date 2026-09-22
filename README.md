@@ -23,6 +23,8 @@ Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / 
 | [dsh-manuscript](packages/dsh-manuscript/README.md) | 稿纸编辑 | 本地 tarball，尚未发布到 npm |
 | [dsh-proofread](packages/dsh-proofread/README.md) | 中文文本校对 | 本地 tarball，尚未发布到 npm |
 
+新增六个 AI 功能：当前标题、需求澄清、回顾、长期记忆、自我改进、模型中心；均预装并默认启用，仍可分别停用。Dream、Agent 检查点等额外自动行为保留独立开关。目前随本地构建交付，见 [使用与实现说明](docs/ai-plugins-implementation.md)。
+
 安装步骤在各包目录。仓库根目录是桌面应用 workspace，不能作为单个 DSH 插件安装。全部包与发布说明见 [packages/](packages/README.md)。
 
 ## 开发
