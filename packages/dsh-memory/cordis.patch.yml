@@ -1,0 +1,5 @@
+# Enabled when installed. Memory still does not enable Dream idle processing or load ai-services.
+- insert:
+    - id: memory
+      name: '@klarkxy/dsh-memory'
+      disabled: false

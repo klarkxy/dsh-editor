@@ -1,0 +1,101 @@
+{
+  "name": "@klarkxy/dsh-memory",
+  "version": "0.1.0",
+  "description": "Memory and optional Dream for long-term preferences, project facts, decisions, and lessons",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./contracts": {
+      "types": "./lib/contracts.d.ts",
+      "import": "./lib/contracts.js",
+      "default": "./lib/contracts.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/README.zh-CN.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "dshEditor": {
+    "role": "feature",
+    "visibility": "public",
+    "wrapClient": true,
+    "entries": [
+      {
+        "id": "memory",
+        "title": "记忆",
+        "description": "长期偏好、项目事实与决策；梦境整理可选",
+        "feature": "memory",
+        "service": "aiMemory"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsdown && node ../../scripts/wrap-client.mjs @klarkxy/dsh-memory",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. packages/dsh-memory/src"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-llm": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "0.1.5-rc.2",
+    "@klarkxy/dsh-ai-services": "workspace:*",
+    "zod": "^4.1.5"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "react": "^18.2.0",
+    "@types/react": "18.3.31"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "memory",
+    "dream"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-editor.git",
+    "directory": "packages/dsh-memory"
+  },
+  "homepage": "https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-memory#readme",
+  "bugs": {
+    "url": "https://github.com/klarkxy/dsh-editor/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

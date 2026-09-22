@@ -1,0 +1,104 @@
+{
+  "name": "@klarkxy/dsh-self-improvement",
+  "version": "0.1.0",
+  "description": "Self-improvement lessons and skill export over shared Memory",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./contracts": {
+      "types": "./lib/contracts.d.ts",
+      "import": "./lib/contracts.js",
+      "default": "./lib/contracts.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/README.zh-CN.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "dshEditor": {
+    "role": "feature",
+    "visibility": "public",
+    "wrapClient": true,
+    "entries": [
+      {
+        "id": "self-improvement",
+        "title": "自我改进",
+        "description": "从明确纠正和已核实的工具失败中摘录候选教训；需单独启用记忆",
+        "feature": "self-improvement",
+        "service": "selfImprovement"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsdown && node ../../scripts/wrap-client.mjs @klarkxy/dsh-self-improvement",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. packages/dsh-self-improvement/src"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-storage-domain": "0.1.5-rc.2",
+    "@klarkxy/dsh-ai-services": "workspace:*",
+    "@klarkxy/dsh-memory": "workspace:*",
+    "zod": "^4.1.5"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-llm": ">=0.1.5-rc.2 <0.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-llm": "0.1.5-rc.2",
+    "react": "^18.2.0",
+    "@types/react": "18.3.31"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "self-improvement",
+    "memory",
+    "lessons"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klarkxy/dsh-editor.git",
+    "directory": "packages/dsh-self-improvement"
+  },
+  "homepage": "https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-self-improvement#readme",
+  "bugs": {
+    "url": "https://github.com/klarkxy/dsh-editor/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

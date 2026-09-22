@@ -1,0 +1,5 @@
+# Enabled when installed. This plugin still does not enable Memory or Dream.
+- insert:
+    - id: self-improvement
+      name: '@klarkxy/dsh-self-improvement'
+      disabled: false
