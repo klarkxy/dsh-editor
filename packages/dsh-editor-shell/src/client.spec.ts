@@ -36,6 +36,7 @@ import {
   treeRowPadding,
   worldbookPaperProjection,
   workspaceOpenFailureMessage,
+  workspaceFileContent,
   workspaceShortcut,
   conversationChatSource,
   bindOfficialConversation,
@@ -64,6 +65,13 @@ describe('shell manuscript RPC safety', () => {
     expect(hasVisibleWorkspaceEntries([{ name: '.git' }])).toBe(true)
     expect(hasVisibleWorkspaceEntries([{ name: '.env' }])).toBe(true)
     expect(hasVisibleWorkspaceEntries([{ name: '.dsh-editor' }, { name: '已有正文.md' }])).toBe(true)
+  })
+
+  it('keeps an initialized work empty until it has author-facing files', () => {
+    expect(workspaceFileContent([])).toBe('empty')
+    expect(workspaceFileContent(['AGENTS.md', '.dsh-editor/作品索引.md'])).toBe('empty')
+    expect(workspaceFileContent(['AGENTS.md', '封面.jpg'])).toBe('unsupported')
+    expect(workspaceFileContent(['AGENTS.md', '正文/001.md'])).toBe('documents')
   })
 
   it('opens only supported visible text files and never probes an image as the first document', () => {

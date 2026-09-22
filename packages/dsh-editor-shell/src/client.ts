@@ -61,6 +61,7 @@ export {
   treeRowPadding,
   worldbookPaperProjection,
   workspaceOpenFailureMessage,
+  workspaceFileContent,
   workspaceShortcut,
 } from './client/shared.ts'
 export type {

@@ -251,6 +251,16 @@ try {
   await waitFor(async () => exists(resolve(targetWorkspace, 'AGENTS.md')), 'new project root rules created')
   await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
 
+  // An initialized work contains only the app-owned AGENTS.md until the
+  // author creates the first document. Reopening it from Recent must return
+  // to the empty workbench instead of reporting that no manuscript was found.
+  await page.getByRole('button', { name: '作品菜单' }).click()
+  await page.getByRole('menuitem', { name: '返回作品列表' }).click()
+  await page.locator('.home-stage').waitFor({ state: 'visible' })
+  await page.locator('.home-recent').getByRole('button', { name: /core-loop-workspace/ }).first().click()
+  await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+  await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
+
   // Top bar inventory: only the four chrome buttons that survived the refactor.
   await page.locator('.chrome').screenshot({ path: resolve(output, '01-chrome.png') })
   // The merged workspace menu is a <summary role="button"> with an aria-label.

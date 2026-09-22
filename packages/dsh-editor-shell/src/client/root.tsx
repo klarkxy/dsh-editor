@@ -29,7 +29,7 @@ import { writingPreferences, writingTypography, type WritingMigration, type Writ
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
 import { redesignedStyles } from '../styles.ts'
-import { errorMessage, isStaleFailure, canMoveTreeEntry, treeMoveTargetDir, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, hasVisibleWorkspaceEntries, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
+import { errorMessage, isStaleFailure, canMoveTreeEntry, treeMoveTargetDir, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceFileContent, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
 import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, type PanelImperativeHandle, type PanelSize } from 'react-resizable-panels'
@@ -959,17 +959,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     const initialPath = relocatedInitialPath ?? (await verifyWorkspaceSession(ctx, sessionId, knownTextFiles))
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
     if (!initialPath) {
-      const root = await safeRpcCall<{ entries?: { name: string; type: 'file' | 'directory' | 'other' }[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId, path: '.' }))
+      const allFiles = await collectWorkspaceFiles(ctx, sessionId)
       if (!workspaceOpenGate.isCurrent(pending.ticket)) return
-      if (!root.ok) throw new Error(errorMessage(root))
-      if (hasVisibleWorkspaceEntries(root.value.entries ?? [])) throw new Error('workspace has no supported text files')
-      pendingWorkspaceOpen.current = pending
-      setWorkspaceOpen({
-        kind: 'needs-intent', workspaceId: pending.workspace.workspaceId,
-        path: pending.workspace.path, title: pending.workspace.title, intent: 'create',
-        message: t('note.folderNotWork'),
-      })
-      setHomeNote('')
+      if (workspaceFileContent(allFiles) === 'unsupported') throw new Error('workspace has no supported text files')
+      await finishWorkspaceOpen(pending, sessionId, undefined)
       return
     }
     await finishWorkspaceOpen(pending, sessionId, initialPath)
@@ -979,9 +972,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     // 只按可见文件判定：新建作品只预建了空目录，不能因此被认为“已有其他内容”
     const allFiles = await collectWorkspaceFiles(ctx, sessionId)
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
-    if (allFiles.length) {
-      const files = supportedWorkspaceTextPaths(allFiles)
-      if (!files.length) throw new Error('new workspace folder contains unrelated files')
+    const content = workspaceFileContent(allFiles)
+    if (content !== 'empty') {
+      if (content === 'unsupported') throw new Error('new workspace folder contains unrelated files')
       pendingWorkspaceOpen.current = pending
       setWorkspaceOpen({
         kind: 'needs-intent', workspaceId: pending.workspace.workspaceId,

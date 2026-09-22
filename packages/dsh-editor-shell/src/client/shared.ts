@@ -17,6 +17,7 @@ import type {
 import { stripChapterFrontmatter, worldbookEditorMetadata, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import type { WritingSettingsSlots } from '../writing-settings.tsx'
 import { isChapterMetaPath } from '../chapter-meta-view.ts'
+import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
 import { intlLocale, t } from '../i18n/index.ts'
 import { isImeEvent } from './ui/ime.ts'
 
@@ -336,8 +337,21 @@ export function hasVisibleWorkspaceEntries(entries: readonly { name: string }[])
   return entries.some((entry) => entry.name !== '.dsh-editor')
 }
 
+export type WorkspaceFileContent = 'empty' | 'documents' | 'unsupported'
+
+/**
+ * Classify files by what an author can actually open. App-owned assistant
+ * instructions do not turn an otherwise empty work into manuscript content.
+ */
+export function workspaceFileContent(files: readonly string[]): WorkspaceFileContent {
+  const visible = files.filter((path) => !path.replace(/\\/g, '/').split('/').some((part) => part.startsWith('.')))
+  const authored = visible.filter((path) => !isAuxiliaryAuthorFile(path))
+  if (!authored.length) return 'empty'
+  return supportedWorkspaceTextPaths(authored).length ? 'documents' : 'unsupported'
+}
+
 export function hasRelocatableManuscriptFiles(files: readonly string[]): boolean {
-  return supportedWorkspaceTextPaths(files).length > 0
+  return workspaceFileContent(files) === 'documents'
 }
 
 /**
