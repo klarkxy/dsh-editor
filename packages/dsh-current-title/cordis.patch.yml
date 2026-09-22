@@ -1,0 +1,5 @@
+# Enabled when installed. Do not disable the host built-in title provider.
+- insert:
+    - id: current-title
+      name: '@klarkxy/dsh-current-title'
+      disabled: false
