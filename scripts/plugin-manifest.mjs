@@ -146,11 +146,11 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
     const patchRel = typeof pkg.dsh?.bundle?.patch === 'string' ? pkg.dsh.bundle.patch.trim() : ''
     const block = pkg.dshEditor
     if (!patchRel && !block) {
-      if (typeof pkg.name === 'string' && pkg.name.startsWith('dsh-')) {
+      if (typeof pkg.name === 'string' && (pkg.name.startsWith('dsh-') || pkg.name.startsWith('@klarkxy/dsh-'))) {
         libraryCandidates.push({
           name: pkg.name,
           dir,
-          workspaceDeps: Object.keys(pkg.dependencies ?? {}).filter((name) => typeof name === 'string' && name.startsWith('dsh-')),
+          workspaceDeps: Object.keys(pkg.dependencies ?? {}).filter((name) => typeof name === 'string' && (name.startsWith('dsh-') || name.startsWith('@klarkxy/dsh-'))),
         })
       }
       continue
@@ -194,7 +194,7 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
     if (missingFromPatch.length || extraInPatch.length) {
       fail(`${pkg.name}: dshEditor.entries must match insert ids in ${patchRel} (missing ${missingFromPatch.join(', ') || '—'}; extra ${extraInPatch.join(', ') || '—'})`)
     }
-    const workspaceDeps = Object.keys(pkg.dependencies ?? {}).filter((name) => typeof name === 'string' && name.startsWith('dsh-'))
+    const workspaceDeps = Object.keys(pkg.dependencies ?? {}).filter((name) => typeof name === 'string' && (name.startsWith('dsh-') || name.startsWith('@klarkxy/dsh-')))
     manifests.push({
       name: pkg.name,
       dir,
@@ -319,7 +319,13 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
   }
   const selectedFeatures = new Set(recipe.features)
   const byName = new Map(manifests.map((manifest) => [manifest.name, manifest]))
-  const selected = new Set()
+  const preinstalled = recipe.preinstalled ?? []
+  if (!Array.isArray(preinstalled) || preinstalled.some(name => typeof name !== 'string' || !byName.has(name))) {
+    fail(`${recipe.id}: preinstalled must name known plugin packages`)
+  }
+  if (new Set(preinstalled).size !== preinstalled.length) fail(`${recipe.id}: duplicate preinstalled packages`)
+  const preinstalledPackages = new Set(preinstalled)
+  const selected = new Set(preinstalled)
   for (const manifest of manifests) {
     if (manifest.role === 'core') selected.add(manifest.name)
     if (rowsOf(manifest).some((row) => row.feature && selectedFeatures.has(row.feature))) selected.add(manifest.name)
@@ -360,7 +366,13 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
   for (const name of packages) {
     const manifest = byName.get(name)
     for (const entry of manifest.entries) {
-      if (entry.feature && !selectedFeatures.has(entry.feature)) disabledEntries.push(entry.id)
+      // A product recipe that explicitly preinstalls a first-party feature should
+      // make it usable out of the box. Keep it out of shellFeatures so the author
+      // can still turn the plugin off without turning an optional service into a
+      // required Shell capability.
+      if (entry.feature && !selectedFeatures.has(entry.feature) && !preinstalledPackages.has(name)) {
+        disabledEntries.push(entry.id)
+      }
     }
     for (const insert of manifest.inserts) {
       if (!insert.feature || !selectedFeatures.has(insert.feature)) continue

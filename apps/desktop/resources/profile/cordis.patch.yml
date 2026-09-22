@@ -51,9 +51,8 @@
   disabled: true
 - id: ui-plan
   disabled: true
-# The editor Shell renders the question card itself.
-- id: ui-user-questions
-  disabled: true
+# Keep native user-questions enabled: it owns Remote requests and pending
+# interactions. The editor renders the resulting carrier in its own card.
 - id: ui-trajectory
   disabled: true
 # Writing sessions mount the editor's own presets (deployed into

@@ -62,8 +62,29 @@ type LoaderFace = {
   remove?(id: string): Promise<unknown> | unknown
 }
 
+/** Native optional client-modules service: `graph().entries` owns current browser module ids. */
+export type ClientModulesFace = {
+  graph(): { entries?: Iterable<{ id?: unknown } | null | undefined> }
+}
+
 type RpcHost = Context & HostRpcContext & {
   loader: LoaderFace
+  clientModules?: ClientModulesFace
+}
+
+function clientPackagesFromGraph(clientModules: ClientModulesFace | undefined): string[] | undefined {
+  if (clientModules == null || typeof clientModules.graph !== 'function') return undefined
+  try {
+    const graph = clientModules.graph()
+    if (!graph || graph.entries == null) return undefined
+    const ids: string[] = []
+    for (const entry of graph.entries) {
+      if (entry && typeof entry.id === 'string') ids.push(entry.id)
+    }
+    return ids
+  } catch {
+    return undefined
+  }
 }
 
 function fail(code: 'bad-request' | 'cancelled' | 'forbidden' | 'not-found' | 'network' | 'internal', message: string, details: Record<string, unknown> = {}): PluginsRpcResult {
@@ -244,7 +265,14 @@ export async function handlePluginsRpc(
   endpoint: string,
   payload: unknown,
   signal: AbortSignal,
-  options: { loader: LoaderFace; paths: PluginPaths; fetch?: typeof fetch; catalog?: RuntimeCatalog; io?: PersistIo },
+  options: {
+    loader: LoaderFace
+    paths: PluginPaths
+    fetch?: typeof fetch
+    catalog?: RuntimeCatalog
+    io?: PersistIo
+    clientModules?: ClientModulesFace
+  },
 ): Promise<PluginsRpcResult> {
   if (signal.aborted) return cancelled()
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
@@ -264,6 +292,8 @@ export async function handlePluginsRpc(
         ? true
         : hasPluginPackage(options.paths.profileDir, card.packageName)))
       inventory.community = inventory.community.filter((_card, index) => present[index])
+      const clientPackages = clientPackagesFromGraph(options.clientModules)
+      if (clientPackages !== undefined) inventory.clientPackages = clientPackages
       return { ok: true, value: inventory }
     }
     if (endpoint === 'entry.setEnabled') {
@@ -400,6 +430,10 @@ export function apply(ctx: Context): void {
     return run
   }
   ctx.effect(() => registerHostRpc(host, PLUGINS_RPC_CHANNEL, (endpoint, payload, signal) => (
-    serialize(() => handlePluginsRpc(endpoint, payload, signal, { loader: host.loader, paths }))
+    serialize(() => handlePluginsRpc(endpoint, payload, signal, {
+      loader: host.loader,
+      paths,
+      clientModules: host.get('clientModules') as ClientModulesFace | undefined,
+    }))
   )))
 }

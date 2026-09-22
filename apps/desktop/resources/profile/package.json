@@ -13,7 +13,8 @@
         "@klarkxy/dsh-zhihu",
         "dsh-editor-shell",
         "dsh-editor-plugins"
-      ]
+      ],
+      "patchReload": "startup"
     }
   }
 }

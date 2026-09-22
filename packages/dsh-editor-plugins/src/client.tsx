@@ -117,6 +117,59 @@ export function isCurrentInstallAttempt(input: {
   return input.mounted && input.token === input.currentToken && input.openSpec === input.resultSpec
 }
 
+/** Pinned DSH 0.1.5-rc.2 client-hmr ignores graph frames; boot ids stay until reload. */
+export const CLIENT_GRAPH_RELOAD_NOTICE = '插件后台已更新。保存工作后，重启应用以更新界面。'
+
+export function sortedClientEntryIds(ids: readonly string[]): string[] {
+  return [...ids].sort()
+}
+
+export function bootClientEntryIds(boot: unknown = (globalThis as { __DSH_BOOT__?: unknown }).__DSH_BOOT__): string[] | undefined {
+  if (!boot || typeof boot !== 'object') return undefined
+  const entries = (boot as { entries?: unknown }).entries
+  if (!Array.isArray(entries)) return undefined
+  const ids: string[] = []
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue
+    const id = (entry as { id?: unknown }).id
+    if (typeof id === 'string') ids.push(id)
+  }
+  return ids
+}
+
+export function clientGraphNeedsReload(
+  nativePackages: readonly string[] | undefined,
+  bootEntryIds: readonly string[] | undefined,
+): boolean {
+  if (nativePackages === undefined || bootEntryIds === undefined) return false
+  const native = sortedClientEntryIds(nativePackages)
+  const boot = sortedClientEntryIds(bootEntryIds)
+  return native.length !== boot.length || native.some((id, index) => id !== boot[index])
+}
+
+export function pluginToggleFollowUp(input: {
+  restartRequired: boolean
+  enabledMatches: boolean
+  enabled: boolean
+  title: string
+  clientGraphChanged: boolean
+}): { persist: boolean; error: boolean; message: string } {
+  if (input.clientGraphChanged) {
+    return { persist: true, error: false, message: CLIENT_GRAPH_RELOAD_NOTICE }
+  }
+  if (input.restartRequired) {
+    return { persist: false, error: false, message: '已保存，重启应用后完全生效。' }
+  }
+  if (input.enabledMatches) {
+    return {
+      persist: false,
+      error: false,
+      message: input.enabled ? `已启用 ${input.title}。` : `已停用 ${input.title}。`,
+    }
+  }
+  return { persist: false, error: true, message: '插件状态未完全同步，请重试或重启后再确认。' }
+}
+
 function toggleTestId(card: PluginCard): string {
   const id = card.entryId.includes(':') ? card.entryId.slice(card.entryId.indexOf(':') + 1) : card.entryId
   return `plugins-toggle-${id}`
@@ -873,7 +926,10 @@ function PluginPanel(props: PluginPanelProps) {
           市场
         </SeatButton>
       </div>
-      {props.note ? <p className="dsh-plugins-note" role="status">
+      {props.note ? <p
+        className="dsh-plugins-note"
+        role="status"
+        data-testid={props.note === CLIENT_GRAPH_RELOAD_NOTICE ? 'plugins-client-reload-notice' : undefined}>
         {props.note}
       </p> : null}
       {props.error
@@ -1051,6 +1107,7 @@ function PluginSettings(props: {
   const [errorDetail, setErrorDetail] = useState('')
   const [note, setNote] = useState('')
   const [busyPackage, setBusyPackage] = useState<string | null>(null)
+  const [clientReloadNotice, setClientReloadNotice] = useState(false)
   const attemptRef = useRef(0)
   const mountedRef = useRef(true)
   const inspectAbortRef = useRef<AbortController | null>(null)
@@ -1093,6 +1150,7 @@ function PluginSettings(props: {
       if (presetResult?.ok) setPresets(presetResult.value.presets)
       if (result.ok) {
         setInventory(result.value)
+        setClientReloadNotice(clientGraphNeedsReload(result.value.clientPackages, bootClientEntryIds()))
         return result.value
       }
       const view = errorView(result, '未能读取插件列表')
@@ -1149,9 +1207,19 @@ function PluginSettings(props: {
       else if (listed) {
         const current = [...listed.optional, ...listed.community].filter((card) => targets.some((item) => item.entryId === card.entryId))
         const allMatch = current.length > 0 && current.every((card) => card.enabled === enabled)
-        if (restart && !allMatch) flashNote('已保存，重启应用后完全生效。')
-        else if (allMatch) flashNote(enabled ? `已启用 ${title}。` : `已停用 ${title}。`)
-        else showError('插件状态未完全同步，请重试或重启后再确认。')
+        const followUp = pluginToggleFollowUp({
+          restartRequired: restart,
+          enabledMatches: allMatch,
+          enabled,
+          title,
+          clientGraphChanged: clientGraphNeedsReload(listed.clientPackages, bootClientEntryIds()),
+        })
+        if (followUp.error) showError(followUp.message)
+        else if (followUp.persist) {
+          setClientReloadNotice(true)
+          clearNote()
+        }
+        else flashNote(followUp.message)
       }
     }
   }
@@ -1393,7 +1461,7 @@ function PluginSettings(props: {
       pendingUninstall={pendingUninstall}
       error={error}
       errorDetail={errorDetail}
-      note={note}
+      note={clientReloadNotice ? CLIENT_GRAPH_RELOAD_NOTICE : note}
       busyPackage={busyPackage}
       busyPreset={busyPreset}
       uninstalling={uninstalling}

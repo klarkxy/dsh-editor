@@ -33,6 +33,8 @@ export type PluginInventory = {
   core: PluginCard[]
   optional: PluginCard[]
   community: PluginCard[]
+  /** Native `clientModules.graph().entries` ids; omitted on a clientless host. */
+  clientPackages?: string[]
 }
 
 export type MarketplaceListing = {

@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest'
 import type { PluginInspectReport } from './contracts.ts'
 import {
   apply,
+  bootClientEntryIds,
   canConfirmPluginInstall,
+  CLIENT_GRAPH_RELOAD_NOTICE,
+  clientGraphNeedsReload,
   handleMarketplaceGithubClick,
   isCurrentInstallAttempt,
   pluginInstallNotice,
+  pluginToggleFollowUp,
 } from './client.tsx'
 import { pluginsClientStyles } from './client-styles.ts'
 
@@ -121,5 +125,76 @@ describe('plugin settings chrome', () => {
     expect(pluginsClientStyles).toContain('.dsh-plugins button.dsh-plugins-switch')
     expect(pluginsClientStyles).toContain('background: var(--gray-7)')
     expect(pluginsClientStyles).toContain('background: var(--accent-9)')
+  })
+})
+
+describe('client graph reload notice', () => {
+  const boot = ['dsh-editor-plugins', 'dsh-editor-shell']
+
+  it('treats enable and disable graph changes as a real mismatch', () => {
+    expect(clientGraphNeedsReload(
+      ['dsh-editor-plugins', 'dsh-editor-shell', '@klarkxy/dsh-model-center'],
+      boot,
+    )).toBe(true)
+    expect(clientGraphNeedsReload(
+      ['dsh-editor-plugins'],
+      boot,
+    )).toBe(true)
+    expect(pluginToggleFollowUp({
+      restartRequired: false,
+      enabledMatches: true,
+      enabled: true,
+      title: '模型中心',
+      clientGraphChanged: true,
+    })).toEqual({ persist: true, error: false, message: CLIENT_GRAPH_RELOAD_NOTICE })
+    expect(pluginToggleFollowUp({
+      restartRequired: false,
+      enabledMatches: true,
+      enabled: false,
+      title: '模型中心',
+      clientGraphChanged: true,
+    })).toEqual({ persist: true, error: false, message: CLIENT_GRAPH_RELOAD_NOTICE })
+  })
+
+  it('does not warn for a clientless host or missing boot graph', () => {
+    expect(clientGraphNeedsReload(undefined, boot)).toBe(false)
+    expect(clientGraphNeedsReload(boot, undefined)).toBe(false)
+    expect(bootClientEntryIds(null)).toBeUndefined()
+    expect(bootClientEntryIds({ rev: '1' })).toBeUndefined()
+    expect(pluginToggleFollowUp({
+      restartRequired: false,
+      enabledMatches: true,
+      enabled: true,
+      title: '知乎资料',
+      clientGraphChanged: false,
+    })).toEqual({ persist: false, error: false, message: '已启用 知乎资料。' })
+  })
+
+  it('clears the notice when refreshed boot ids equal the native graph', () => {
+    const native = ['dsh-editor-shell', '@klarkxy/dsh-model-center', 'dsh-editor-plugins']
+    expect(clientGraphNeedsReload(native, ['dsh-editor-plugins', 'dsh-editor-shell'])).toBe(true)
+    expect(clientGraphNeedsReload(native, ['@klarkxy/dsh-model-center', 'dsh-editor-plugins', 'dsh-editor-shell'])).toBe(false)
+    const scope = globalThis as { __DSH_BOOT__?: unknown }
+    const previous = scope.__DSH_BOOT__
+    scope.__DSH_BOOT__ = {
+      entries: native.map((id) => ({ id })),
+    }
+    try {
+      expect(bootClientEntryIds()).toEqual(native)
+      expect(clientGraphNeedsReload(native, bootClientEntryIds())).toBe(false)
+    } finally {
+      if (previous === undefined) delete scope.__DSH_BOOT__
+      else scope.__DSH_BOOT__ = previous
+    }
+  })
+
+  it('does not ignore restartRequired just because the loader enabled boolean matches', () => {
+    expect(pluginToggleFollowUp({
+      restartRequired: true,
+      enabledMatches: true,
+      enabled: true,
+      title: '模型中心',
+      clientGraphChanged: false,
+    })).toEqual({ persist: false, error: false, message: '已保存，重启应用后完全生效。' })
   })
 })

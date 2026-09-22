@@ -18,8 +18,16 @@ import {
 import { desktopComposition } from './desktop-compositions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const aiPackages = new Set(['ai-services', 'current-title', 'memory', 'model-center', 'mood', 'recap', 'self-improvement'].map(name => '@klarkxy/dsh-' + name))
+const aiEntries = new Set(['ai-services', 'current-title', 'memory', 'model-center', 'mood', 'recap', 'self-improvement'])
+const withoutAi = names => names.filter(name => !aiPackages.has(name))
 
 describe('desktop dev prepare', () => {
+  it('uses a single runtime writer for Editor plugin switches', () => {
+    const profile = JSON.parse(readFileSync(resolve(root, 'apps/desktop/resources/profile/package.json'), 'utf8'))
+    expect(profile.dsh.profile.patchReload).toBe('startup')
+  })
+
   it('links workspace packages into the template instead of copying plugin bundles', () => {
     const prepare = readFileSync(resolve(root, 'scripts/prepare-desktop-dev.mjs'), 'utf8')
     expect(prepare).toContain("await symlink(source, destination, 'junction')")
@@ -39,7 +47,7 @@ describe('plugin manifests and composition resolver', () => {
   const manifests = loadPluginManifests(root)
 
   it('loads the product packages with unique entry ids', () => {
-    expect(desktopPackageNames(manifests)).toEqual([
+    expect(withoutAi(desktopPackageNames(manifests))).toEqual([
       'dsh-manuscript',
       'dsh-proofread',
       'dsh-editor-workbench',
@@ -54,14 +62,14 @@ describe('plugin manifests and composition resolver', () => {
       'dsh-editor-proofread-panel',
       '@klarkxy/dsh-web-search-manager',
     ])
-    expect(publicPackages(manifests)).toEqual(['dsh-manuscript', 'dsh-proofread', '@klarkxy/dsh-zhihu', '@klarkxy/dsh-web-search-manager'])
-    expect(corePackageNames(manifests)).toEqual([
+    expect(withoutAi(publicPackages(manifests))).toEqual(['dsh-manuscript', 'dsh-proofread', '@klarkxy/dsh-zhihu', '@klarkxy/dsh-web-search-manager'])
+    expect(withoutAi(corePackageNames(manifests))).toEqual([
       'dsh-manuscript',
       'dsh-editor-workbench',
       'dsh-editor-shell',
       'dsh-editor-plugins',
     ])
-    expect(clientPackages(manifests)).toEqual([
+    expect(withoutAi(clientPackages(manifests))).toEqual([
       'dsh-manuscript',
       'dsh-proofread',
       '@klarkxy/dsh-zhihu',
@@ -80,8 +88,8 @@ describe('plugin manifests and composition resolver', () => {
     })
     expect(loadWorkspaceLibraries(root).map((item) => item.name)).toEqual(['dsh-editor-seats', 'dsh-editor-workspace-kit'])
     // The resolver preserves the established desktop/library order, then appends new packages.
-    expect(desktopCopiedPackageNames(manifests)).toEqual([
-      ...desktopPackageNames(manifests).filter((name) => !name.includes('dsh-web-search-')),
+    expect(withoutAi(desktopCopiedPackageNames(manifests))).toEqual([
+      ...withoutAi(desktopPackageNames(manifests)).filter((name) => !name.includes('dsh-web-search-')),
       'dsh-editor-seats',
       'dsh-editor-workspace-kit',
       '@klarkxy/dsh-web-search-manager',
@@ -115,7 +123,7 @@ describe('plugin manifests and composition resolver', () => {
       expect(item.id in labels).toBe(true)
       expect(item.label).toBe(labels[item.id])
       const { id: _id, label: _label, ...rest } = item
-      expect(rest).toEqual(capability)
+      expect({ ...rest, packages: withoutAi(rest.packages), bundles: withoutAi(rest.bundles), disabledEntries: rest.disabledEntries.filter(id => !aiEntries.has(id)) }).toEqual(capability)
     }
     const stripped = resolved.map(({ id: _id, label: _label, ...rest }) => rest)
     for (let index = 1; index < stripped.length; index += 1) {
@@ -131,6 +139,23 @@ describe('plugin manifests and composition resolver', () => {
     expect(capability.packages).not.toContain('dsh-editor-memory-panel')
     expect(capability.extraInserts.map((row) => row.id)).not.toContain('editor-workbench-tools')
     expect(capability.extraInserts.map((row) => row.id)).not.toContain('editor-novel-kernel')
+  })
+
+  it('preinstalls six independently switchable AI features enabled plus one inert shared service', async () => {
+    const composition = await desktopComposition()
+    expect(composition.packages.filter(name => aiPackages.has(name)).sort()).toEqual([...aiPackages].sort())
+    expect(publicPackages(manifests).filter(name => aiPackages.has(name)).sort()).toEqual([...aiPackages].sort())
+    expect(corePackageNames(manifests).filter(name => aiPackages.has(name))).toEqual(['@klarkxy/dsh-ai-services'])
+    const featureIds = [...aiEntries].filter(id => id !== 'ai-services')
+    expect(composition.disabledEntries.filter(id => aiEntries.has(id))).toEqual([])
+    for (const id of featureIds) {
+      expect(composition.features).not.toContain(id)
+      const owner = manifests.find(item => item.name === '@klarkxy/dsh-' + id)
+      expect(owner.role).toBe('feature')
+      const patch = readFileSync(join(owner.dir, 'cordis.patch.yml'), 'utf8')
+      expect(patch).toMatch(new RegExp('id: ' + id + '[\\s\\S]*?disabled: false'))
+      expect(patch).not.toMatch(/- id: (session-title|session-title-llm)/)
+    }
   })
 
   it('defaults new sessions to dsh-editor-writing and mounts novel-kernel only on novel and legacy presets', () => {
@@ -246,6 +271,23 @@ describe('plugin conversation preset manifests', () => {
     const invalid = basePkg('invalid-runtime-plugin')
     invalid.dshEditor.runtimeDependencies = ['missing-adapter']
     expect(() => loadPluginManifests(manifestRoot({ 'invalid-runtime-plugin': invalid }))).toThrow(/must be declared in dependencies/)
+  })
+
+  it('loads scoped workspace dependencies and enables preinstalled entries without requiring Shell services', () => {
+    const base = basePkg('@klarkxy/dsh-ai-services')
+    base.dshEditor.entries[0].id = 'entry-shared'
+    base.dshEditor.role = 'core'
+    const feature = basePkg('@klarkxy/dsh-feature')
+    feature.dshEditor.entries[0] = { id: 'entry-feature', title: 'Feature', description: 'Optional', feature: 'optional' }
+    feature.dependencies = { '@klarkxy/dsh-ai-services': 'workspace:*' }
+    const root = manifestRoot({ shared: base, feature })
+    const manifests = loadPluginManifests(root)
+    const result = resolveComposition(manifests, { id: 'x', label: 'x', features: [], preinstalled: ['@klarkxy/dsh-feature'] })
+    expect(result.packages).toEqual(['@klarkxy/dsh-ai-services', '@klarkxy/dsh-feature'])
+    expect(result.disabledEntries).toEqual([])
+    expect(result.shellFeatures).toEqual({})
+    expect(manifests.find(item => item.name === '@klarkxy/dsh-feature').workspaceDeps).toEqual(['@klarkxy/dsh-ai-services'])
+    expect(() => resolveComposition(manifests, { id: 'x', label: 'x', features: [], preinstalled: ['missing'] })).toThrow(/preinstalled/)
   })
 
   it('selects feature-only packages and flows their presets into resolveComposition', () => {

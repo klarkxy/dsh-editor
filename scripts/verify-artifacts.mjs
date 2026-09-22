@@ -92,6 +92,12 @@ for (const name of packageNames) {
   }
   const codeEntries = entries.filter((entry) => /package\/lib\/.*\.(?:js|cjs)$/.test(entry))
   const code = codeEntries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
+  for (const entry of codeEntries.filter(file => /client(?:\.inner)?\.(?:js|cjs)$/.test(file))) {
+    const browserCode = tar(['-xOf', absolute, entry])
+    if (/require\(["']@klarkxy\/dsh-ai-services\/(?:contracts|client-utils)["']\)/.test(browserCode)) {
+      throw new Error(name + ' client must bundle browser-safe AI contracts: ' + entry)
+    }
+  }
   const runtimeForbidden = name === 'dsh-manuscript'
     ? ['proposal.list', 'proposal.accept', 'proposal.reject']
     : [

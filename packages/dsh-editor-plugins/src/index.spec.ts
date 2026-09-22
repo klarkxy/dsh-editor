@@ -567,3 +567,66 @@ describe('first-party writing preset RPC', () => {
     expect(malformed).toMatchObject({ ok: false, error: { code: 'bad-request' } })
   })
 })
+
+describe('native client graph inventory', () => {
+  it('reports current clientModules.graph() entry ids after enable and disable', async () => {
+    const paths = await fixture()
+    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
+    const boot = [{ id: 'dsh-editor-plugins' }, { id: 'dsh-editor-shell' }]
+    const enabled = [...boot, { id: '@klarkxy/dsh-model-center' }]
+    const listedEnabled = await handlePluginsRpc('inventory.list', {}, signal(), {
+      loader: host,
+      paths,
+      catalog,
+      clientModules: { graph: () => ({ entries: enabled }) },
+    })
+    expect(listedEnabled).toMatchObject({
+      ok: true,
+      value: { clientPackages: ['dsh-editor-plugins', 'dsh-editor-shell', '@klarkxy/dsh-model-center'] },
+    })
+    const listedDisabled = await handlePluginsRpc('inventory.list', {}, signal(), {
+      loader: host,
+      paths,
+      catalog,
+      clientModules: { graph: () => ({ entries: boot }) },
+    })
+    expect(listedDisabled).toMatchObject({
+      ok: true,
+      value: { clientPackages: ['dsh-editor-plugins', 'dsh-editor-shell'] },
+    })
+  })
+
+  it('omits clientPackages when the optional graph callback is absent', async () => {
+    const paths = await fixture()
+    const listed = await handlePluginsRpc('inventory.list', {}, signal(), {
+      loader: loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }]),
+      paths,
+      catalog,
+    })
+    expect(listed.ok).toBe(true)
+    if (listed.ok) expect(listed.value).not.toHaveProperty('clientPackages')
+    const withoutGraph = await handlePluginsRpc('inventory.list', {}, signal(), {
+      loader: loader([]),
+      paths,
+      catalog,
+      clientModules: {} as { graph(): { entries: { id: string }[] } },
+    })
+    expect(withoutGraph.ok).toBe(true)
+    if (withoutGraph.ok) expect(withoutGraph.value).not.toHaveProperty('clientPackages')
+  })
+
+  it('keeps inventory.list working when graph() throws', async () => {
+    const paths = await fixture()
+    const listed = await handlePluginsRpc('inventory.list', {}, signal(), {
+      loader: loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }]),
+      paths,
+      catalog,
+      clientModules: { graph: () => { throw new Error('no modules') } },
+    })
+    expect(listed.ok).toBe(true)
+    if (listed.ok) {
+      expect(listed.value).not.toHaveProperty('clientPackages')
+      expect(listed.value.optional.map((card) => card.entryId)).toEqual(['include:zhihu'])
+    }
+  })
+})

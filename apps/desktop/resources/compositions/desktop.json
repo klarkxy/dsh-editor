@@ -10,5 +10,13 @@
     "proofread-panel",
     "writing-presets",
     "web-search"
+  ],
+  "preinstalled": [
+    "@klarkxy/dsh-current-title",
+    "@klarkxy/dsh-mood",
+    "@klarkxy/dsh-recap",
+    "@klarkxy/dsh-memory",
+    "@klarkxy/dsh-self-improvement",
+    "@klarkxy/dsh-model-center"
   ]
 }
