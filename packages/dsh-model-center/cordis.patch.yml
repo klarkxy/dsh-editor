@@ -1,0 +1,5 @@
+# Enabled when installed. It does not start inference; disabling restores native model settings.
+- insert:
+    - id: model-center
+      name: '@klarkxy/dsh-model-center'
+      disabled: false
