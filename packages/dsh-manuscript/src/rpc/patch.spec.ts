@@ -1,3 +1,6 @@
+import { AiServicesRuntime } from '@klarkxy/dsh-ai-services'
+import { sessionModelsFromApi } from '../../../dsh-ai-services/src/routing.ts'
+import { testAiScope } from './test-ai-scope.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { dispatch, mapError } from '../index.ts'
@@ -59,8 +62,15 @@ async function fixture(
     },
     async writeText() { throw new Error('patch.complete must not write files') },
   }
-  const stream = vi.fn(() => chunks([{ type: 'text-delta', text: '雨落在窗台上。' }]))
+  const stream = vi.fn(() => chunks([{ type: 'text-delta', index: 0, text: '雨落在窗台上。' } as StreamChunkLike, { type: 'finish', reason: { kind: 'stop' } }]))
   const services = new Map<string, unknown>([['llm', { stream }]])
+  services.set('apiProxy', { sessions: { models: async () => ({ result: { ok: true, value: { current: config, routable: true } } }) } })
+  const ai = new AiServicesRuntime({
+    llm: { resolveCallConfig: async (config: any) => config, prepareCall: async (config: any) => ({ config, stream }) } as any,
+    store: { savePolicy: async () => {}, saveReceipts: async () => {} },
+    sessionModels: sessionModelsFromApi(() => services.get('apiProxy')),
+  })
+  services.set('aiServices', ai)
   const rows = new Map<string, unknown>()
   const host = {
     get(name: string) { return services.get(name) },
@@ -81,7 +91,7 @@ async function fixture(
     connection: { rpc: { call: vi.fn(), handle: vi.fn() } },
   } as unknown as ManuscriptHost
   await applyAssist(host as unknown as Context)
-  return { host, stream, services, nodes, canonical }
+  return { host, stream, services, nodes, canonical, ai }
 }
 
 async function* chunks(items: StreamChunkLike[]) {
@@ -161,7 +171,7 @@ describe('patch.complete', () => {
     expect(captured(stream).user.startsWith('【文件】')).toBe(true)
     expect(captured(stream).user).not.toContain('【本章工作笔记】')
     expect(captured(stream).user).not.toContain('【改写要求】')
-    expect(captured(stream).maxTokens).toBeUndefined()
+    expect(captured(stream).maxTokens).toBe(2048)
   })
 
   it('places chapterContext before the file block and instruction before the selection', async () => {
@@ -208,7 +218,7 @@ describe('patch.complete', () => {
       'patch.complete',
       { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句', before: '', after: '' },
       new AbortController().signal,
-    )).rejects.toThrow('尚未配置写作模型')
+    )).rejects.toThrow('当前会话模型响应无效')
     expect(stream).not.toHaveBeenCalled()
   })
 
@@ -217,7 +227,7 @@ describe('patch.complete', () => {
     const stream = vi.fn(() => chunks([{ type: 'text-delta', text: 'partial' }]))
     controller.abort()
     await expect(completePatch({
-      ctx: { get: () => ({ stream }) },
+      ctx: { get: () => testAiScope(stream) },
       provider: 'provider',
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
@@ -236,7 +246,7 @@ describe('patch.complete', () => {
     })).rejects.toThrow('写作模型服务未启用')
 
     await expect(completePatch({
-      ctx: { get: () => ({ stream: () => chunks([{ type: 'text-delta', text: 'partial' }, { type: 'finish', reason: { kind: 'error' } }]) }) },
+      ctx: { get: () => testAiScope(() => chunks([{ type: 'text-delta', text: 'partial' }, { type: 'finish', reason: { kind: 'error' } }])) },
       provider: 'provider',
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
@@ -248,7 +258,7 @@ describe('patch.complete', () => {
       throw new Error('provider failed')
     }
     await expect(completePatch({
-      ctx: { get: () => ({ stream: () => failed() }) },
+      ctx: { get: () => testAiScope(() => failed()) },
       provider: 'provider',
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
@@ -258,7 +268,7 @@ describe('patch.complete', () => {
 
   it('caps a successful proposal to the short replacement bound', async () => {
     const result = await completePatch({
-      ctx: { get: () => ({ stream: () => chunks([{ type: 'text-delta', text: 'x'.repeat(PATCH_LIMITS.proposal + 20) }]) }) },
+      ctx: { get: () => testAiScope(() => chunks([{ type: 'text-delta', text: 'x'.repeat(PATCH_LIMITS.proposal + 20) }])) },
       provider: 'provider',
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
@@ -401,42 +411,31 @@ describe('session-bound project rules for FIM and patch', () => {
   })
 })
 
-describe('independent writing model preferences', () => {
-  it('uses each configured route without querying or mutating conversation selection, and rereads changes', async () => {
-    const {host, stream, services} = await fixture()
-    let preferences = {completionModel: {provider: 'fast', model: 'small'}, rewriteModel: {provider: 'edit', model: 'large'}}
-    services.set('settings', {get: (ns: string) => ns === 'dsh-editor-writing' ? preferences : undefined})
-    const models = vi.fn(() => {throw new Error('chat is unavailable')})
-    services.set('apiProxy', {sessions: {models}})
-    const payload = {sessionId: 'session-1', path: 'chapter.md', prefix: '雨声', suffix: '', selectedText: '旧句'}
+describe('central writing purpose policy', () => {
+  it('uses centralized purposes immediately and ignores legacy settings and RPC routes', async () => {
+    const { host, stream, services, ai } = await fixture()
+    services.set('settings', { get: () => ({ completionModel: { provider: 'old', model: 'old' } }) })
+    await ai.importPurposes('test-v1', {
+      'manuscript.completion': { kind: 'model', provider: 'fast', model: 'small' },
+      'manuscript.rewrite': { kind: 'model', provider: 'edit', model: 'large', reasoningEffort: 'high' },
+    })
+    const payload = { sessionId: 'session-1', path: 'chapter.md', prefix: '雨声', suffix: '', selectedText: '旧句', provider: 'forged', model: 'forged' }
     await dispatch(host as unknown as Context, 'fim.complete', payload, new AbortController().signal)
     await dispatch(host as unknown as Context, 'patch.complete', payload, new AbortController().signal)
-    expect(stream).toHaveBeenNthCalledWith(1, expect.objectContaining(preferences.completionModel))
-    expect(stream).toHaveBeenNthCalledWith(2, expect.objectContaining(preferences.rewriteModel))
-    preferences = {...preferences, completionModel: {provider: 'other', model: 'next'}}
+    expect(stream).toHaveBeenNthCalledWith(1, expect.objectContaining({ provider: 'fast', model: 'small' }))
+    expect(stream).toHaveBeenNthCalledWith(2, expect.objectContaining({ provider: 'edit', model: 'large', reasoningEffort: 'high' }))
+    const { revision, ...policy } = ai.getPolicy()
+    await ai.updatePolicy({ ...policy, purposes: { ...policy.purposes, 'manuscript.completion': { kind: 'role', role: 'weak' } }, roles: { normal: { provider: 'central', model: 'normal' } } }, revision)
     await dispatch(host as unknown as Context, 'fim.complete', payload, new AbortController().signal)
-    expect(stream).toHaveBeenNthCalledWith(3, expect.objectContaining(preferences.completionModel))
-    expect(models).not.toHaveBeenCalled()
+    expect(stream).toHaveBeenNthCalledWith(3, expect.objectContaining({ provider: 'central', model: 'normal' }))
+    expect(ai.usage().map(row => [row.purpose, row.status])).toEqual([['manuscript.completion', 'success'], ['manuscript.rewrite', 'success'], ['manuscript.completion', 'success']])
+    expect(ai.usage()[0].sourceVersion).toMatch(/^[a-f0-9]{64}$/)
   })
-  it('forwards a configured reasoning effort on the writing route', async () => {
-    const {host, stream, services} = await fixture()
-    services.set('settings', {get: () => ({completionModel: {provider: 'fast', model: 'small', reasoningEffort: 'high'}})})
-    await dispatch(host as unknown as Context, 'fim.complete', {sessionId: 'session-1', prefix: '雨声', suffix: ''}, new AbortController().signal)
-    expect(stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'fast', model: 'small', reasoningEffort: 'high' }))
-  })
-  it('does not send an off reasoning effort', async () => {
-    const {host, stream, services} = await fixture()
-    services.set('settings', {get: () => ({completionModel: {provider: 'fast', model: 'small', reasoningEffort: 'off'}})})
-    await dispatch(host as unknown as Context, 'fim.complete', {sessionId: 'session-1', prefix: '雨声', suffix: ''}, new AbortController().signal)
-    const options = stream.mock.calls[0]?.[0] as Record<string, unknown>
-    expect(options.provider).toBe('fast')
-    expect(options.model).toBe('small')
-    expect(options).not.toHaveProperty('reasoningEffort')
-  })
-  it('rejects a partially configured route instead of silently using chat', async () => {
-    const {host, stream, services} = await fixture()
-    services.set('settings', {get: () => ({completionModel: {provider: 'fast', model: ''}})})
-    await expect(dispatch(host as unknown as Context, 'fim.complete', {sessionId: 'session-1', prefix: '雨声'}, new AbortController().signal)).rejects.toThrow('配置不完整')
-    expect(stream).not.toHaveBeenCalled()
+  it('does not publish after the feature scope is disposed', async () => {
+    const { host, services, ai } = await fixture()
+    ;(services.get('manuscriptAiScope') as { dispose(): void }).dispose()
+    expect(await dispatch(host as unknown as Context, 'fim.complete', { sessionId: 'session-1', prefix: '雨声' }, new AbortController().signal)).toMatchObject({ text: '' })
+    expect(ai.usage().at(-1)?.status).toBe('cancelled')
+    expect(ai.purposes()).toEqual([])
   })
 })

@@ -1,4 +1,5 @@
-import { collectInsertText } from './completion.ts'
+import type { AiFeatureScope } from '@klarkxy/dsh-ai-services/contracts'
+import { runWritingAi } from '../ai-purposes.ts'
 import {
   chapterContextUserPrefix,
   parseChapterContext,
@@ -15,10 +16,6 @@ export type FimContext = {
   get?: (name: string) => unknown
 }
 
-type LlmBag = {
-  stream?: (options: Record<string, unknown>) => AsyncIterable<FimStreamChunk>
-}
-
 const CHAT_SYSTEM =
   '你是文稿行内补全引擎。只输出应插入光标位置的短插入文本，不解释、不复述前后文，并自然衔接后文。不要用Markdown围栏。'
 
@@ -31,7 +28,8 @@ function fimSystem(input: { chapterContext: string; authorPreferences: string; p
 }
 
 async function streamCompletion(input: {
-  llm: LlmBag
+  scope?: AiFeatureScope
+  sessionId?: string
   provider: string
   model: string
   reasoningEffort?: string
@@ -42,30 +40,12 @@ async function streamCompletion(input: {
   projectRules?: string
   signal: AbortSignal
 }): Promise<string> {
-  if (input.signal.aborted) return ''
-  if (!input.llm.stream) throw new Error('写作模型服务未启用')
-  const stream = input.llm.stream({
-    provider: input.provider,
-    model: input.model,
-    ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
-    signal: input.signal,
-    system: fimSystem(input),
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: `${chapterContextUserPrefix(input.chapterContext)}【光标前】\n${input.prefix.slice(-5000)}\n\n【光标后】\n${input.suffix.slice(0, 1500)}\n\n只输出插入内容：`,
-          },
-        ],
-      },
-    ],
-  })
-  return collectInsertText(stream, { signal: input.signal, maxChars: 240 })
+  return runWritingAi({ scope: input.scope, purpose: 'manuscript.completion', sessionId: input.sessionId,
+    system: fimSystem(input), text: `${chapterContextUserPrefix(input.chapterContext)}【光标前】\n${input.prefix.slice(-5000)}\n\n【光标后】\n${input.suffix.slice(0, 1500)}\n\n只输出插入内容：`, signal: input.signal, maxChars: 240 })
 }
 
 export async function completeFim(input: {
+  sessionId?: string
   ctx: FimContext
   provider: string
   model: string
@@ -77,9 +57,10 @@ export async function completeFim(input: {
   projectRules?: string
   signal: AbortSignal
 }): Promise<{ text: string; route: FimRoute }> {
-  const llm = (input.ctx.get?.('llm') ?? {}) as LlmBag
+  const scope = input.ctx.get?.('manuscriptAiScope') as AiFeatureScope | undefined
   const text = await streamCompletion({
-    llm,
+    scope,
+    sessionId: input.sessionId,
     provider: input.provider,
     model: input.model,
     reasoningEffort: input.reasoningEffort,

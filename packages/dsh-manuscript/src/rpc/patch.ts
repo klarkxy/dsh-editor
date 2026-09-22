@@ -1,4 +1,5 @@
-import { collectInsertText } from './completion.ts'
+import type { AiFeatureScope } from '@klarkxy/dsh-ai-services/contracts'
+import { runWritingAi } from '../ai-purposes.ts'
 import { normalizeWorkspaceRelative, PathConfineError } from './paths.ts'
 import {
   chapterContextUserPrefix,
@@ -42,10 +43,6 @@ export type PatchStreamChunk = { type: string; text?: string; reason?: { kind?: 
 
 export type PatchContext = {
   get?: (name: string) => unknown
-}
-
-type LlmBag = {
-  stream?: (options: Record<string, unknown>) => AsyncIterable<PatchStreamChunk>
 }
 
 const PATCH_SYSTEM =
@@ -96,7 +93,8 @@ function patchSystem(request: PatchRequest, projectRules?: string): string {
 }
 
 async function streamPatch(input: {
-  llm: LlmBag
+  scope?: AiFeatureScope
+  sessionId?: string
   provider: string
   model: string
   reasoningEffort?: string
@@ -104,36 +102,8 @@ async function streamPatch(input: {
   projectRules?: string
   signal: AbortSignal
 }): Promise<string> {
-  if (input.signal.aborted) return ''
-  if (!input.llm.stream) throw new Error('写作模型服务未启用')
-  try {
-    const stream = input.llm.stream({
-      provider: input.provider,
-      model: input.model,
-      ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
-      signal: input.signal,
-      system: patchSystem(input.request, input.projectRules),
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `${chapterContextUserPrefix(input.request.chapterContext)}【文件】${input.request.path}\n\n【前文】\n${input.request.before}\n\n${input.request.instruction ? `【改写要求】\n${input.request.instruction}\n\n` : ''}【待改写】\n${input.request.selectedText}\n\n【后文】\n${input.request.after}\n\n只输出替换后的文本：`,
-            },
-          ],
-        },
-      ],
-    })
-    return collectPatchText(stream, input.signal)
-  } catch (error) {
-    if (input.signal.aborted) return ''
-    throw error
-  }
-}
-
-function collectPatchText(stream: AsyncIterable<PatchStreamChunk>, signal: AbortSignal): Promise<string> {
-  return collectInsertText(stream, { signal, maxChars: PATCH_LIMITS.proposal })
+  return runWritingAi({ scope: input.scope, purpose: 'manuscript.rewrite', sessionId: input.sessionId,
+    system: patchSystem(input.request, input.projectRules), text: `${chapterContextUserPrefix(input.request.chapterContext)}【文件】${input.request.path}\n\n【前文】\n${input.request.before}\n\n${input.request.instruction ? `【改写要求】\n${input.request.instruction}\n\n` : ''}【待改写】\n${input.request.selectedText}\n\n【后文】\n${input.request.after}\n\n只输出替换后的文本：`, signal: input.signal, maxChars: PATCH_LIMITS.proposal })
 }
 
 /**
@@ -142,6 +112,7 @@ function collectPatchText(stream: AsyncIterable<PatchStreamChunk>, signal: Abort
  * and applying an accepted proposal to its editor buffer.
  */
 export async function completePatch(input: {
+  sessionId?: string
   ctx: PatchContext
   provider: string
   model: string
@@ -150,9 +121,10 @@ export async function completePatch(input: {
   projectRules?: string
   signal: AbortSignal
 }): Promise<{ text: string; route: PatchRoute }> {
-  const llm = (input.ctx.get?.('llm') ?? {}) as LlmBag
+  const scope = input.ctx.get?.('manuscriptAiScope') as AiFeatureScope | undefined
   const text = await streamPatch({
-    llm,
+    scope,
+    sessionId: input.sessionId,
     provider: input.provider,
     model: input.model,
     reasoningEffort: input.reasoningEffort,

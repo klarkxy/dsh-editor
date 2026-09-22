@@ -1,3 +1,4 @@
+import { testAiScope } from './test-ai-scope.ts'
 import { describe, expect, it, vi } from 'vitest'
 import { CHAPTER_CONTEXT_GUIDANCE, CHAPTER_CONTEXT_LIMIT } from './author-preferences.ts'
 import { completeFim } from './fim.ts'
@@ -8,14 +9,14 @@ function captured(request: ReturnType<typeof vi.fn>): { system: string; user: st
 }
 
 describe('completeFim', () => {
-  it('always uses the DSH LLM service, including official providers', async () => {
+  it('uses the public AI scope for completion', async () => {
     async function* stream() {
       yield { type: 'text-delta', text: '便利店的灯' }
     }
     const result = await completeFim({
       ctx: {
         get(name: string) {
-          if (name === 'llm') return { stream: () => stream() }
+          if (name === 'manuscriptAiScope') return testAiScope(() => stream())
           return undefined
         },
       },
@@ -37,7 +38,7 @@ describe('completeFim', () => {
     async function* stream() { yield { type: 'text-delta', text: '续句' } }
     const request = vi.fn(() => stream())
     await completeFim({
-      ctx: { get: () => ({ stream: request }) },
+      ctx: { get: () => testAiScope(request) },
       provider: 'provider', model: 'model', prefix: '足够长的前文', suffix: '', authorPreferences: '少用感叹号',
       signal: new AbortController().signal,
     })
@@ -48,7 +49,7 @@ describe('completeFim', () => {
     async function* stream() { yield { type: 'text-delta', text: '续句' } }
     const request = vi.fn(() => stream())
     await completeFim({
-      ctx: { get: () => ({ stream: request }) },
+      ctx: { get: () => testAiScope(request) },
       provider: 'provider',
       model: 'model',
       prefix: '前文',
@@ -71,7 +72,7 @@ describe('completeFim', () => {
     async function* stream() { yield { type: 'text-delta', text: '续句' } }
     const request = vi.fn(() => stream())
     await completeFim({
-      ctx: { get: () => ({ stream: request }) },
+      ctx: { get: () => testAiScope(request) },
       provider: 'provider',
       model: 'model',
       prefix: '前文',
@@ -89,7 +90,7 @@ describe('completeFim', () => {
     async function* stream() { yield { type: 'text-delta', text: '续句' } }
     const request = vi.fn(() => stream())
     await completeFim({
-      ctx: { get: () => ({ stream: request }) },
+      ctx: { get: () => testAiScope(request) },
       provider: 'provider',
       model: 'model',
       prefix: '前文',
@@ -111,7 +112,7 @@ describe('completeFim', () => {
     async function* stream() { yield { type: 'text-delta', text: '续句' } }
     const request = vi.fn(() => stream())
     await completeFim({
-      ctx: { get: () => ({ stream: request }) },
+      ctx: { get: () => testAiScope(request) },
       provider: 'provider',
       model: 'model',
       prefix: '前文',

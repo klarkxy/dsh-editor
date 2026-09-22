@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto'
+import type { AiServices } from '@klarkxy/dsh-ai-services/contracts'
+import { WRITING_PURPOSES } from './ai-purposes.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ManuscriptAssist } from './assist-api.ts'
 import { asHost, resolveWorkspaceAccess } from './host.ts'
@@ -9,29 +10,15 @@ import { readProjectRules } from './rpc/project-rules.ts'
 import { collectUsageLog, createUsageRecorder, usageDomainSpec, resolveDays, type UsageRecorder } from './rpc/usage.ts'
 import { trackUsageStream } from './usage-stream.ts'
 
-type SessionModelsProxy = {
-  sessions?: {
-    models(request: unknown): Promise<{
-      result: {
-        ok: boolean
-        value?: { current?: { provider?: string; model?: string; reasoningEffort?: string }; routable?: boolean }
-        error?: { message?: string }
-      }
-    }>
-  }
-}
-
-function streamReasoningEffort(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const id = value.trim()
-  if (!id || id === 'off' || id === 'none') return undefined
-  return id
-}
-
 export const name = 'dsh-manuscript-assist'
-export const inject = ['llm', 'storageDomain', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
+export const inject = ['aiServices', 'llm', 'storageDomain', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
 
 export async function apply(ctx: Context): Promise<void> {
+  const ai = ctx.get('aiServices') as AiServices
+  const scope = ai.activate('dsh-manuscript-assist')
+  for (const purpose of WRITING_PURPOSES) scope.registerPurpose(purpose)
+  ctx.effect(() => () => scope.dispose(), 'manuscript-assist.aiScope')
+  ctx.provide('manuscriptAiScope', scope)
   const domain = await ctx.storageDomain.open(usageDomainSpec)
   const usage = createUsageRecorder(domain.table('daily'))
   ctx.effect(() => () => domain.close(), 'manuscript-assist.usageDomainClose')
@@ -42,35 +29,11 @@ export async function apply(ctx: Context): Promise<void> {
       return { days: rows, log: collectUsageLog(rows) }
     },
     async complete(endpoint, body, route, signal) {
-      const settings = ctx.get('settings') as { get(namespace: string): Record<string, unknown> | undefined } | undefined
-      const configured = settings?.get('dsh-editor-writing')?.[endpoint === 'fim.complete' ? 'completionModel' : 'rewriteModel']
-      const preference = configured && typeof configured === 'object' ? configured as Record<string, unknown> : undefined
-      const provider = typeof preference?.provider === 'string' ? preference.provider.trim() : ''
-      const model = typeof preference?.model === 'string' ? preference.model.trim() : ''
-      const reasoningEffort = streamReasoningEffort(preference?.reasoningEffort)
-      const hasOverride = Boolean(provider || model)
-      if (hasOverride) {
-        if (!provider || !model) throw new Error('写作模型配置不完整，请在设置中重新选择模型')
-        route = reasoningEffort ? { provider, model, reasoningEffort } : { provider, model }
-      }
-      // requestHeader is the last executed request, not the current picker value.
-      // Reuse the existing gateway's selection owner when this host provides it.
-      const api = ctx.get('apiProxy') as SessionModelsProxy | undefined
       if (signal.aborted) return { text: '', route: 'dsh-llm' }
-      if (!hasOverride && api?.sessions?.models) {
-        const response = await api.sessions.models({ type: 'client-request', rpcId: randomUUID(), method: 'session.models', payload: { sessionId: body.sessionId } })
-        if (signal.aborted) return { text: '', route: 'dsh-llm' }
-        if (!response.result.ok) throw new Error(response.result.error?.message || '无法读取当前写作模型')
-        const selected = response.result.value?.current
-        if (!selected || typeof selected.provider !== 'string' || typeof selected.model !== 'string') throw new Error('当前写作模型响应无效')
-        if (response.result.value?.routable === false) throw new Error('当前写作模型不可用')
-        const selectedEffort = streamReasoningEffort(selected.reasoningEffort)
-        route = selectedEffort
-          ? { provider: selected.provider, model: selected.model, reasoningEffort: selectedEffort }
-          : { provider: selected.provider, model: selected.model }
-      }
-      if (!route.provider || !route.model) throw new Error('尚未配置写作模型，请在设置中选择补全或改写模型')
-
+      const migration = ctx.get('writingAiMigration') as { ready?: Promise<void>; error?: string } | undefined
+      await migration?.ready
+      if (signal.aborted) return { text: '', route: 'dsh-llm' }
+      if (migration?.error) throw new Error(migration.error)
       const host = asHost(ctx)
       const access = await resolveWorkspaceAccess(host, String(body.sessionId), signal)
       const rules = await readProjectRules({
@@ -82,7 +45,7 @@ export async function apply(ctx: Context): Promise<void> {
       })
 
       if (endpoint === 'fim.complete') return completeFim({
-        ctx, ...route,
+        ctx, ...route, sessionId: String(body.sessionId),
         prefix: typeof body.prefix === 'string' ? body.prefix : '',
         suffix: typeof body.suffix === 'string' ? body.suffix : '',
         authorPreferences: parseAuthorPreferences(body.authorPreferences),
@@ -90,7 +53,7 @@ export async function apply(ctx: Context): Promise<void> {
         projectRules: rules.text,
         signal,
       })
-      return completePatch({ ctx, ...route, request: parsePatchRequest(body), projectRules: rules.text, signal })
+      return completePatch({ ctx, ...route, sessionId: String(body.sessionId), request: parsePatchRequest(body), projectRules: rules.text, signal })
     },
   }
   ctx.provide('manuscriptAssist', service)
@@ -113,7 +76,7 @@ function installUsageWaterfall(ctx: Context, recorder: UsageRecorder): void {
     listener: LlmStreamEvent,
     options?: { global?: boolean; prepend?: boolean },
   ) => () => boolean
-  on(
+  on.call(ctx,
     'llm/stream',
     (options, next) => trackUsage(ctx, options, next, recorder),
     { global: true, prepend: true },
