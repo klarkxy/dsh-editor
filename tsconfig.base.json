@@ -61,6 +61,57 @@
       ],
       "@klarkxy/dsh-zhihu/contracts": [
         "packages/dsh-zhihu/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-ai-services": [
+        "packages/dsh-ai-services/src/index.ts"
+      ],
+      "@klarkxy/dsh-ai-services/contracts": [
+        "packages/dsh-ai-services/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-current-title": [
+        "packages/dsh-current-title/src/index.ts"
+      ],
+      "@klarkxy/dsh-current-title/contracts": [
+        "packages/dsh-current-title/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-mood": [
+        "packages/dsh-mood/src/index.ts"
+      ],
+      "@klarkxy/dsh-mood/contracts": [
+        "packages/dsh-mood/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-recap": [
+        "packages/dsh-recap/src/index.ts"
+      ],
+      "@klarkxy/dsh-recap/contracts": [
+        "packages/dsh-recap/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-memory": [
+        "packages/dsh-memory/src/index.ts"
+      ],
+      "@klarkxy/dsh-memory/contracts": [
+        "packages/dsh-memory/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-self-improvement": [
+        "packages/dsh-self-improvement/src/index.ts"
+      ],
+      "@klarkxy/dsh-self-improvement/contracts": [
+        "packages/dsh-self-improvement/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-model-center": [
+        "packages/dsh-model-center/src/index.ts"
+      ],
+      "@klarkxy/dsh-model-center/contracts": [
+        "packages/dsh-model-center/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-ai-services/host-rpc": [
+        "packages/dsh-ai-services/src/host-rpc.ts"
+      ],
+      "@klarkxy/dsh-ai-services/client-utils": [
+        "packages/dsh-ai-services/src/client-utils.ts"
+      ],
+      "@klarkxy/dsh-ai-services/insert-output": [
+        "packages/dsh-ai-services/src/insert-output.ts"
       ]
     }
   }
