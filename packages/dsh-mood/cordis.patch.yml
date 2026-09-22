@@ -1,0 +1,5 @@
+# Enabled when installed. It does not replace native permissions or writing proposal confirmation.
+- insert:
+    - id: mood
+      name: '@klarkxy/dsh-mood'
+      disabled: false

@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "react"],
+    "baseUrl": ".",
+    "paths": {
+      "@deepseek-ai/cordis": ["../dsh-web-search-manager/node_modules/@deepseek-ai/cordis"],
+      "@deepseek-ai/dsh-llm": ["./node_modules/@deepseek-ai/dsh-llm"],
+      "@deepseek-ai/dsh-storage-domain": ["../dsh-ai-services/node_modules/@deepseek-ai/dsh-storage-domain"],
+      "@klarkxy/dsh-ai-services": ["../dsh-ai-services/src/contracts.ts"],
+      "@klarkxy/dsh-ai-services/contracts": ["../dsh-ai-services/src/contracts.ts"],
+      "@klarkxy/dsh-ai-services/host-rpc": ["../dsh-ai-services/src/host-rpc.ts"],
+      "@klarkxy/dsh-ai-services/client-utils": ["../dsh-ai-services/src/client-utils.ts"],
+      "zod": ["../dsh-ai-services/node_modules/zod"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.spec.ts", "src/**/*.spec.tsx"]
+}
