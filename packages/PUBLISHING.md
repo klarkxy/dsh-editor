@@ -24,6 +24,8 @@ pnpm run publish:plugins
 
 npm 首页使用包根英文 `README.md`；中文放在 `docs/README.zh-CN.md`，两者互链并随包交付。避免在包根放多份 README 变体。
 
+发现入口使用不同的标签：GitHub 仓库同时保留 `dsh-plugin` 和 `dsh-plugins` topic；公开 npm 包的 `keywords` 使用 `dsh`、`dsh-plugin`、`dsh-plugins`、`deepseek-harness`，再添加与功能对应的关键词。npm 关键词支持 registry 搜索，不能代替精选市场的逐包投稿。
+
 新包先完成首次 npm 创建，再逐包绑定 GitHub Actions trusted publisher。已有包的绑定不能代替新包授权。
 
 | Trusted publishing 字段 | 值 |
