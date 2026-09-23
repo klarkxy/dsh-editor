@@ -6,7 +6,7 @@ export const MEMORY_UPDATE_TOOL_NAME = 'novel_memory_update'
 export function createMemoryUpdateTool(resolve: (sessionId: string, signal: AbortSignal) => Promise<MemoryAccess>) {
   return defineTool({
     name: MEMORY_UPDATE_TOOL_NAME,
-    description: '协作中维护项目规则、世界书或人物卡。先 read 目标与来源，使用回执中的文件版本。明确长期要求、无冲突新事实可自动创建或追加；推断、歧义、修订已有内容必须 certainty=uncertain 或 operation=edit，形成待确认提案。正文对话/谎言不自动当成事实，事件注明章节。只在当前任务自然发现内容时使用，不必每轮维护。',
+    description: '协作中维护项目规则、世界书或人物卡。先 read 目标与来源，使用回执中的文件版本。校验通过即直接写入生效，作者可在记忆面板查看历史并撤销。规则必须来自作者明确要求，不能从正文推断；正文对话/谎言不自动当成事实，事件注明章节。只在当前任务自然发现内容时使用，不必每轮维护。',
     parameters: {
       path: { type: 'string', required: true, description: '根 AGENTS.md（沿用已有大小写）或 世界书/、人物卡/ 下的 Markdown。' },
       operation: { type: 'string', enum: ['create', 'append', 'edit'], required: true },

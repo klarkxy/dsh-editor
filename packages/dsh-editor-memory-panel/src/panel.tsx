@@ -27,7 +27,12 @@ const STATUS_LABEL: Record<MemoryStatus, MessageKey> = {
   undone: 'memory.status.undone',
 }
 
-const STATUS_FILTERS: MemoryStatus[] = ['pending', 'applied', 'stale', 'failed', 'undone']
+const STATUS_FILTERS: Array<{ status: MemoryStatus | null; label: MessageKey }> = [
+  { status: null, label: 'memory.filter.all' },
+  { status: 'applied', label: 'memory.status.applied' },
+  { status: 'undone', label: 'memory.status.undone' },
+  { status: 'failed', label: 'memory.status.failed' },
+]
 
 /* 活动暗示:三点呼吸与骨架行,参数改写自 Amicro(MIT)pulse-dots / fluid-skeleton;
    装饰性 aria-hidden,关键帧在 styles.ts,reduced-motion 停循环后保留静态可读态。 */
@@ -252,7 +257,7 @@ export function MemoryChangeDetail(props: {
       {busy ? activityDots() : null}
       {note}
     </span>
-    {record.status === 'pending' ? <SeatButton host={props.hostButton} disabled={Boolean(busy)} onClick={() => void apply()}>
+    {record.status === 'pending' && (!props.chatCard || record.undoOf) ? <SeatButton host={props.hostButton} disabled={Boolean(busy)} onClick={() => void apply()}>
       {busy === 'apply' ? <Fragment>
         {activityDots()}
         {t('memory.applying')}
@@ -381,12 +386,12 @@ function MemoryPanel(props: MemorySeatProps & { request?: MemoryRequest | null; 
         </SeatButton>
       </header>
       <div className="memory-filters" role="group" aria-label={t('memory.filter')}>
-        {STATUS_FILTERS.map((status) => <SeatButton
+        {STATUS_FILTERS.map((filter) => <SeatButton
           host={props.Button}
-          key={status}
-          aria-pressed={statusFilter === status}
-          onClick={() => setStatusFilter((current) => current === status ? null : status)}>
-          {t(STATUS_LABEL[status])}
+          key={filter.label}
+          aria-pressed={statusFilter === filter.status}
+          onClick={() => setStatusFilter((current) => current === filter.status ? null : filter.status)}>
+          {t(filter.label)}
         </SeatButton>)}
       </div>
       {note ? <p className="memory-status warning" role="alert">

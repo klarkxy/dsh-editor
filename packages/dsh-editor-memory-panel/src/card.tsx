@@ -10,7 +10,7 @@ function asReceipt(result: unknown): MemoryUpdateReceipt | undefined {
   return parseMemoryUpdateReceipt(JSON.stringify(result))
 }
 
-/** Chat `novel_memory_update` tool-result → the same confirm/undo card the sidebar uses. */
+/** Chat `novel_memory_update` tool-result → the same audit/undo card the sidebar uses. */
 export function renderMemoryUpdateMessageCard(props: {
   result: unknown
   context: ShellMessageCardContext

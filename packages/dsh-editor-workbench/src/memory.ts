@@ -196,10 +196,7 @@ export async function updateMemory(access: MemoryAccess, input: unknown): Promis
   }
   base.after = updatedText(base.before, update)
   if (Buffer.byteLength(base.after) > MAX_TEXT_BYTES) throw new MemoryError('目标资料过大，请拆分为独立条目。', 'INVALID')
-  base.message = update.operation === 'edit' ? '修订已有内容，需要作者确认。' : update.certainty === 'uncertain' ? '依据或含义存在歧义，需要作者确认。' : undefined
-  if (access.hasDraft(base.path)) base.message = '目标有未保存草稿；保存或放弃草稿后再确认。'
-  await saveRecord(access, base)
-  if (base.message) return memoryReceipt(base)
+  if (access.hasDraft(base.path)) throw new MemoryError('目标有未保存草稿，请稍后重试。', 'BLOCKED')
   return commitMemory(access, base)
 }
 
