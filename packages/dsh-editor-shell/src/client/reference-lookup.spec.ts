@@ -30,7 +30,11 @@ describe('on-demand reference lookup', () => {
     const search = vi.fn(async (directory: string) => directory === '世界书' ? response([hit('世界书/王城.md')]) : response())
     const result = await lookupReferences({ query: '娜娜', files, search })
     expect(search.mock.calls.map(([directory]) => directory)).toEqual(['人物卡', '世界书'])
-    expect(result.candidates.map((candidate) => candidate.path)).toEqual(files.slice(0, 3))
+    // Chinese collation is locale-defined, not the numeric order of 卷一/卷二.
+    expect(result.candidates).toHaveLength(3)
+    expect(result.candidates.map((candidate) => candidate.path).sort()).toEqual(files.slice(0, 3).sort())
+    expect(result.candidates.slice(0, 2).every((candidate) => candidate.filenameMatch)).toBe(true)
+    expect(result.candidates[2]!.path).toBe('世界书/王城.md')
     expect(result.candidates[2]!.hit!.version).toBe('v1')
   })
   it('deduplicates repeated matches in a file and rejects out-of-scope host hits', async () => {
