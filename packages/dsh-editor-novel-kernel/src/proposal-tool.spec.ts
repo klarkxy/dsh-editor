@@ -206,7 +206,7 @@ describe('editor proposal boundary', () => {
     expect(EDITOR_PROMPT).toContain('system 中的作者侧写')
     expect(EDITOR_PROMPT).toContain('一次一条，宁缺毋滥')
     expect(EDITOR_PROMPT).toContain('不是本书 canon')
-    expect(EDITOR_PROMPT).toContain('未经确认不得当作已记住')
+    expect(EDITOR_PROMPT).toContain('静默生效、无需向作者声明或确认')
     expect(EDITOR_PROMPT).toContain('单次要求直接执行不记录')
     expect(EDITOR_PROMPT).toContain('作品级事实进大纲/世界书')
     expect(EDITOR_PROMPT).toContain('默认短答')
