@@ -360,8 +360,10 @@ export class SelfImprovementEngine {
         const record = await this.mutateWhileCurrent(generation, memory, guards => memory.create(candidateRecord(draft, trigger, projectId), guards))
         if (this.failed(record)) return record
         this.rememberProject(projectId)
-        created.push(record)
-        existing.push(record)
+        const activated = await this.mutateWhileCurrent(generation, memory, guards => memory.update(record.id, { status: 'active' }, record.revision, guards))
+        if (this.failed(activated)) { skipped += 1; existing.push(record); continue }
+        created.push(activated)
+        existing.push(activated)
       }
       const watermarkWrite = await this.mutateWhileCurrent(generation, memory, () => this.writeWatermark(sessionId, lastSeq, projectId))
       if (this.failed(watermarkWrite)) return watermarkWrite
@@ -449,14 +451,14 @@ export class SelfImprovementEngine {
     const work = this.beginWork()
     if (!this.isWork(work)) return work
     const { generation, memory } = work
-    if (lessonIds.length === 0) return fail('INVALID', '请选择已接受的教训。')
+    if (lessonIds.length === 0) return fail('INVALID', '请选择已生效的教训。')
     const lessons = await this.liveSkillLessons(lessonIds, memory, generation)
     if (!Array.isArray(lessons)) return lessons
     const stale = this.revalidate(generation, memory)
     if (stale) return stale
     const now = this.now()
     if (lessons.some(item => item.status !== 'active' || isExpired(item, now))) {
-      return fail('INVALID', '只能从未过期且已接受的教训生成技能草稿。')
+      return fail('INVALID', '只能从未过期且已生效的教训生成技能草稿。')
     }
     const record: SkillRecord = {
       id: crypto.randomUUID(),

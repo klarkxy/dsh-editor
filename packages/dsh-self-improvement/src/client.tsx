@@ -49,8 +49,8 @@ export function memoryUnavailableCopy(locale: 'zh' | 'en'): string {
 }
 
 function statusLabel(status: MemoryRecord['status'], locale: 'zh' | 'en'): string {
-  const zh = { candidate: '候选', active: '已接受', rejected: '已拒绝', superseded: '已替代', revoked: '已撤回', deleted: '已删除' }
-  const en = { candidate: 'Candidate', active: 'Accepted', rejected: 'Rejected', superseded: 'Superseded', revoked: 'Revoked', deleted: 'Deleted' }
+  const zh = { candidate: '候选', active: '已生效', rejected: '已拒绝', superseded: '已替代', revoked: '已撤回', deleted: '已删除' }
+  const en = { candidate: 'Candidate', active: 'Active', rejected: 'Rejected', superseded: 'Superseded', revoked: 'Revoked', deleted: 'Deleted' }
   return (locale === 'en' ? en : zh)[status]
 }
 
@@ -71,23 +71,45 @@ function LessonEvidence({ record, locale }: { record: MemoryRecord; locale: 'zh'
     </ul>
 }
 
+function ConfirmButton(props: { label: string; confirmLabel: string; disabled?: boolean; onConfirm(): void }) {
+  const [armed, setArmed] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  function disarm() {
+    clearTimeout(timer.current)
+    setArmed(false)
+  }
+  return <button type="button" className="si-danger" disabled={props.disabled}
+    onClick={() => {
+      if (!armed) {
+        setArmed(true)
+        timer.current = setTimeout(() => setArmed(false), 3000)
+        return
+      }
+      disarm()
+      props.onConfirm()
+    }}
+    onBlur={disarm}>{armed ? props.confirmLabel : props.label}</button>
+}
+
 function LessonList(props: {
   lessons: MemoryRecord[]
   locale: 'zh' | 'en'
   busy: boolean
   projectId?: string
-  onAccept(record: MemoryRecord, scope: 'project' | 'global'): void
+  onPromote(record: MemoryRecord): void
   onReject(record: MemoryRecord): void
   onRevoke(record: MemoryRecord): void
 }) {
-  const { lessons, locale, busy, projectId, onAccept, onReject, onRevoke } = props
+  const { lessons, locale, busy, projectId, onPromote, onReject, onRevoke } = props
   if (lessons.length === 0) {
-    return <p className="si-empty">{locale === 'en' ? 'No lessons to review.' : '当前没有可审阅的教训。'}</p>
+    return <p className="si-empty">{locale === 'en' ? 'No lessons yet.' : '还没有教训。'}</p>
   }
   return <ol className="si-list">
     {lessons.map(record => {
       const candidate = record.status === 'candidate'
       const active = record.status === 'active'
+      const foreignProject = record.scope.kind === 'project' && Boolean(projectId) && record.scope.projectId !== projectId
       const scope = record.scope.kind === 'global' ? (locale === 'en' ? 'global' : '全局') : record.scope.projectId
       return <li key={record.id} className="si-card" data-status={record.status}>
         <header>
@@ -97,20 +119,19 @@ function LessonList(props: {
         <p>{record.content}</p>
         <LessonEvidence record={record} locale={locale} />
         <div className="si-actions">
-          {candidate ? <button type="button" disabled={busy} onClick={() => onAccept(record, 'project')}>
-            {locale === 'en' ? 'Accept for current project' : '接受（当前项目）'}
+          {active && record.scope.kind === 'project' && !foreignProject ? <button type="button" disabled={busy} onClick={() => onPromote(record)}>
+            {locale === 'en' ? 'Promote to global' : '提升为全局'}
           </button> : null}
-          {candidate ? <button type="button" disabled={busy} onClick={() => onAccept(record, 'global')}>
-            {locale === 'en' ? 'Accept as global' : '接受为全局'}
-          </button> : null}
-          {candidate ? <button type="button" disabled={busy} onClick={() => onReject(record)}>
-            {locale === 'en' ? 'Reject' : '拒绝'}
-          </button> : null}
-          {active ? <button type="button" disabled={busy} onClick={() => onRevoke(record)}>
-            {locale === 'en' ? 'Revoke' : '撤回'}
-          </button> : null}
-          {record.scope.kind === 'project' && projectId && record.scope.projectId !== projectId
-            ? <p className="si-meta">{locale === 'en' ? 'Other project — accept is blocked here.' : '其他项目的教训，此处不能接受。'}</p>
+          {candidate ? <ConfirmButton disabled={busy}
+            label={locale === 'en' ? 'Reject' : '拒绝'}
+            confirmLabel={locale === 'en' ? 'Confirm reject?' : '确认拒绝？'}
+            onConfirm={() => onReject(record)} /> : null}
+          {active ? <ConfirmButton disabled={busy}
+            label={locale === 'en' ? 'Revoke' : '撤回'}
+            confirmLabel={locale === 'en' ? 'Confirm revoke?' : '确认撤回？'}
+            onConfirm={() => onRevoke(record)} /> : null}
+          {foreignProject
+            ? <p className="si-meta">{locale === 'en' ? 'Other project — promotion is blocked here.' : '其他项目的教训，此处不能提升。'}</p>
             : null}
         </div>
       </li>
@@ -150,12 +171,14 @@ function SkillList(props: {
           {record.status === 'accepted' || record.status === 'preview' ? <button type="button" disabled={busy} onClick={() => props.onExport(record)}>
             {locale === 'en' ? 'Download Markdown' : '下载 Markdown'}
           </button> : null}
-          {record.exportState === 'recorded' ? <button type="button" disabled={busy} onClick={() => props.onUnexport(record)}>
-            {locale === 'en' ? 'Revoke export record' : '撤回导出记录'}
-          </button> : null}
-          {record.status === 'accepted' ? <button type="button" disabled={busy} onClick={() => props.onRevoke(record)}>
-            {locale === 'en' ? 'Revoke skill' : '撤回技能'}
-          </button> : null}
+          {record.exportState === 'recorded' ? <ConfirmButton disabled={busy}
+            label={locale === 'en' ? 'Revoke export record' : '撤回导出记录'}
+            confirmLabel={locale === 'en' ? 'Confirm revoke export record?' : '确认撤回导出记录？'}
+            onConfirm={() => props.onUnexport(record)} /> : null}
+          {record.status === 'accepted' ? <ConfirmButton disabled={busy}
+            label={locale === 'en' ? 'Revoke skill' : '撤回技能'}
+            confirmLabel={locale === 'en' ? 'Confirm revoke skill?' : '确认撤回技能？'}
+            onConfirm={() => props.onRevoke(record)} /> : null}
         </div>
       </li>
     ))}
@@ -280,6 +303,9 @@ export function ReviewPanel({ client, sessionId, locale }: {
     </div>
     <div role="tabpanel" id={`${tabsId}-lessons-panel`}
       aria-labelledby={`${tabsId}-lessons-tab`} hidden={tab !== 'lessons'} tabIndex={0}>
+      <p className="si-meta">{locale === 'en'
+        ? 'Extracted lessons take effect automatically and join prompts; revoke any time to retire one.'
+        : '摘录的教训自动生效并进入提示，可随时撤回。'}</p>
       {sessionId ? <button type="button" disabled={busy || !data.memoryAvailable} onClick={() => void action(async ctx => {
         if (!reviewRequestStillCurrent({
           token: ctx.token, gate: gate.current, signal: ctx.signal, sessionId: ctx.sessionId, viewSessionId: sessionRef.current,
@@ -297,8 +323,8 @@ export function ReviewPanel({ client, sessionId, locale }: {
         locale={locale}
         busy={busy || !data.memoryAvailable}
         projectId={data.projectId}
-        onAccept={(record, scope) => void action(async ctx => {
-          await call('accept', { id: record.id, expectedRevision: record.revision, scope, sessionId: ctx.sessionId })
+        onPromote={record => void action(async ctx => {
+          await call('accept', { id: record.id, expectedRevision: record.revision, scope: 'global', sessionId: ctx.sessionId })
           const next = await loadReviewSnapshot({
             rpc, sessionId: ctx.sessionId, token: ctx.token, gate: gate.current, signal: ctx.signal, viewSessionId: () => sessionRef.current,
           })
@@ -328,7 +354,7 @@ export function ReviewPanel({ client, sessionId, locale }: {
   function skillManagement() {
     return <>
       <fieldset className="si-select" disabled={busy || !data.memoryAvailable}>
-        <legend>{locale === 'en' ? 'Accepted lessons for a skill draft' : '从已接受的教训生成草稿'}</legend>
+        <legend>{locale === 'en' ? 'Active lessons for a skill draft' : '从已生效的教训生成草稿'}</legend>
         {data.lessons.filter(record => record.status === 'active').map(record => (
           <label key={record.id}>
             <input type="checkbox" checked={selected.includes(record.id)}
@@ -336,6 +362,8 @@ export function ReviewPanel({ client, sessionId, locale }: {
             {record.title}
           </label>
         ))}
+        {data.lessons.some(record => record.status === 'active') ? null
+          : <p className="si-meta">{locale === 'en' ? 'No active lessons yet.' : '还没有已生效的教训。'}</p>}
       </fieldset>
       <button type="button" disabled={busy || selected.length === 0 || !data.memoryAvailable} onClick={() => void action(async ctx => {
         await call('skill.preview', { lessonIds: selected, sessionId: ctx.sessionId })
@@ -399,8 +427,8 @@ export function ReviewPanel({ client, sessionId, locale }: {
 
   return <section className="si-settings" data-testid="self-improvement-settings" data-session={sessionId || undefined}>
     {sessionId ? null : <p className="si-meta">{locale === 'en'
-      ? 'Select a session to accept lessons for the current project.'
-      : '选择一个会话后即可按当前项目接受教训。'}</p>}
+      ? 'Select a session to view lessons for the current project.'
+      : '选择一个会话后可查看当前项目的教训。'}</p>}
     {body}
   </section>
 }
@@ -411,20 +439,26 @@ const styles = `
 .si-settings p{margin:0;line-height:1.5}
 .si-meta,.si-empty{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
 .si-error{color:var(--red-11,#b42318)}
-.si-card{display:grid;gap:8px;padding:12px 0;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
+.si-card{display:grid;gap:8px;padding:12px 14px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:12px}
 .si-card h3{margin:0;font-size:var(--font-size-3,16px);font-weight:600}
 .si-list{margin:0;padding:0;list-style:none}
 .si-evidence{margin:0;padding-left:1.2em;font-size:var(--font-size-1,13px)}
 .si-actions{display:flex;flex-wrap:wrap;gap:8px}
-.si-settings button:not([role="tab"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:6px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start}
+.si-settings button:not([role="tab"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
+.si-settings button:not([role="tab"]):hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent));border-color:color-mix(in srgb,currentColor 35%,transparent)}
+.si-settings button:not([role="tab"]):active:not(:disabled){transform:scale(.97)}
+.si-danger:hover:not(:disabled){border-color:var(--red-11,#b42318);color:var(--red-11,#b42318);background:color-mix(in srgb,var(--red-11,#b42318) 8%,transparent)}
 .si-settings button:disabled{opacity:.45;cursor:not-allowed}
 .si-tabs{display:flex;gap:20px;border-bottom:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
-.si-tabs button[role="tab"]{padding:8px 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--gray-11,inherit);cursor:pointer;font:inherit}
+.si-tabs button[role="tab"]{padding:8px 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--gray-11,inherit);cursor:pointer;font:inherit;transition:color 150ms ease,border-color 150ms ease}
+.si-tabs button[role="tab"]:hover{color:inherit}
 .si-tabs button[aria-selected="true"]{border-bottom-color:var(--accent-9,#3b82f6);color:var(--accent-11,inherit);font-weight:600}
-.si-settings :focus-visible{outline:2px solid currentColor;outline-offset:3px}
-.si-preview{margin:0;white-space:pre-wrap;overflow:auto;max-height:240px;font:400 var(--font-size-1,13px)/1.45 var(--code-font-family,ui-monospace,monospace)}
-.si-select{margin:0;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:6px;padding:8px 12px;display:grid;gap:6px}
+.si-settings [role="tabpanel"]{border-radius:12px}
+.si-settings :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
+.si-preview{margin:0;padding:8px 10px;border-radius:8px;background:var(--gray-2,color-mix(in srgb,currentColor 4%,transparent));white-space:pre-wrap;overflow:auto;max-height:240px;font:400 var(--font-size-1,13px)/1.45 var(--code-font-family,ui-monospace,monospace)}
+.si-select{margin:0;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px;padding:8px 12px;display:grid;gap:6px}
 .si-select label{display:flex;gap:8px;align-items:flex-start}
+@media(prefers-reduced-motion:reduce){.si-settings button{transition:none}}
 `
 
 export function reviewPanelKey(sessionId: string, locale: 'zh' | 'en'): string {

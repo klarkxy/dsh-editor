@@ -141,7 +141,7 @@ describe('self-improvement engine', () => {
     expect(decision.messages.filter(isSelfImprovementLessonMessage)).toHaveLength(0)
   })
 
-  it('dedupes evidence and persists candidates only', async () => {
+  it('dedupes evidence and persists active lessons only', async () => {
     const memory = new MemoryFake()
     const { impl, sessions } = engine(memory)
     const events = [
@@ -154,14 +154,48 @@ describe('self-improvement engine', () => {
     if (!first.ok) return
     const created = first.value as { created: Array<{ id: string; status: string }>; skipped: number }
     expect(created.created).toHaveLength(1)
-    expect(created.created[0]?.status).toBe('candidate')
+    expect(created.created[0]?.status).toBe('active')
+    expect(memory.updates).toBe(1)
     const second = await impl.call('extract', { sessionId: 's1' }, new AbortController().signal)
     expect(second.ok).toBe(true)
     if (!second.ok) return
     const again = second.value as { created: unknown[]; skipped: number }
     expect(again.created).toHaveLength(0)
     expect(again.skipped).toBeGreaterThanOrEqual(1)
+    expect([...memory.records.values()].filter(item => item.status === 'active')).toHaveLength(1)
+    expect([...memory.records.values()].filter(item => item.status === 'candidate')).toHaveLength(0)
+  })
+
+  it('counts a failed auto-activation as skipped and leaves a candidate the author can still accept', async () => {
+    const memory = new MemoryFake()
+    let updatesFail = true
+    const originalUpdate = memory.update.bind(memory)
+    memory.update = (id, patch, revision, options) => {
+      if (!updatesFail) return originalUpdate(id, patch, revision, options)
+      const error = new Error('memory disabled') as Error & { code?: string }
+      error.code = 'MEMORY_DISABLED'
+      return Promise.reject(error)
+    }
+    const { impl, sessions } = engine(memory)
+    sessions.set('s1', liveSession('s1', '/novel', [
+      assistantMessage(1, 'changed'),
+      userMessage(2, '不对，应该用相对路径'),
+    ]))
+    const first = await impl.call('extract', { sessionId: 's1' }, new AbortController().signal)
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    expect(first.value.created).toHaveLength(0)
+    expect(first.value.skipped).toBe(1)
     expect([...memory.records.values()].filter(item => item.status === 'candidate')).toHaveLength(1)
+    updatesFail = false
+    const stranded = [...memory.records.values()].find(item => item.status === 'candidate')!
+    const accepted = await impl.acceptLesson(stranded.id, stranded.revision, 'project', '/novel')
+    expect(accepted.ok).toBe(true)
+    const again = await impl.call('extract', { sessionId: 's1' }, new AbortController().signal)
+    expect(again.ok).toBe(true)
+    if (!again.ok) return
+    expect(again.value.created).toHaveLength(0)
+    expect([...memory.records.values()]).toHaveLength(1)
   })
 
   it('rejects stale extraction after disable and stale revocation', async () => {
@@ -389,7 +423,7 @@ describe('self-improvement engine', () => {
     expect(result.value.created).toHaveLength(1)
     expect(result.value.created[0]).toMatchObject({
       kind: 'lesson',
-      status: 'candidate',
+      status: 'active',
       source: 'self-improvement',
       evidence: [{ sessionId, seq: 24, kind: 'user', excerpt: correction }],
     })
@@ -399,7 +433,7 @@ describe('self-improvement engine', () => {
       kinds: ['lesson'],
     })
     expect(listed).toHaveLength(1)
-    expect(listed[0]?.status).toBe('candidate')
+    expect(listed[0]?.status).toBe('active')
   })
 
   it('serializes delayed auto and manual extract of the same native correction', async () => {
@@ -497,7 +531,7 @@ describe('self-improvement engine', () => {
     expect(runs).toBe(1)
     const listed = await memory.list({ scope: { kind: 'project', projectId }, kinds: ['lesson'] })
     expect(listed).toHaveLength(1)
-    expect(listed[0]).toMatchObject({ status: 'candidate', source: 'self-improvement', kind: 'lesson' })
+    expect(listed[0]).toMatchObject({ status: 'active', source: 'self-improvement', kind: 'lesson' })
     const idle = await impl.snapshot(sessionId)
     expect(idle.ok).toBe(true)
     if (idle.ok) expect(idle.value.extracting).toBe(false)
