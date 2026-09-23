@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Manage web search providers and public-page fetching in DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -116,6 +116,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-72ad10649aa4bc6ea62a71cfe9aef9714b17f702a322a8f31e761a0cdd00c344"
+    "contentHash": "sha256-272bba6fa80215205075f1586af4e90c8c79da374684a06b30ed9fddb0d4272d"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-memory",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Long-term memory and idle consolidation for DeepSeek Harness, with scoped preferences, facts, decisions, and lessons.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -101,6 +101,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-6af0db4b9718744fc9244d7837d3704979a498515b7b3720c34949886f5b81f9"
+    "contentHash": "sha256-b3e5310a7975b51c82ab37cf3fd2fdc11a9063314dc6af03f6bc4d9db1e4bf5f"
   }
 }

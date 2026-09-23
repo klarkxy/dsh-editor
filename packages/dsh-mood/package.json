@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-mood",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Clarify ambiguous requests before agent execution in DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -101,6 +101,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-6a156f65bef97e99884a2b5f0bbb6cafd8a8b82320f5dd6d9afb8ed34323afe3"
+    "contentHash": "sha256-c11a6b64162be8234b95c81032e836382a54d108a2cb294a11b90b2298782879"
   }
 }
