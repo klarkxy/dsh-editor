@@ -54,6 +54,8 @@ export const MEMORY_ACTIVATE_ID = MEMORY_PLUGIN
 export const DEFAULT_IDLE_MS = 15 * 60 * 1000
 export const MIN_IDLE_MS = 60_000
 export const MAX_IDLE_MS = 180 * 60_000
+export const DREAM_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000
+export const DREAM_MIN_MATERIAL = 3
 export const MIN_RECALL_RECORDS = 1
 export const MAX_RECALL_RECORDS = 5
 export const MAX_RECALL_TOKENS = 800
@@ -73,11 +75,11 @@ export interface MemorySettings {
 export const defaultSettings = (): MemorySettings => ({
   revision: 0,
   injectEnabled: true,
-  dreamIdleEnabled: false,
+  dreamIdleEnabled: true,
   idleMs: DEFAULT_IDLE_MS,
 })
 
-export type DreamPlanStatus = 'preview' | 'applied' | 'cancelled' | 'stale' | 'failed'
+export type DreamPlanStatus = 'preview' | 'applied' | 'cancelled' | 'stale' | 'failed' | 'noop'
 
 export interface DreamSnapshotEntry {
   id: string
@@ -124,6 +126,7 @@ export interface MemoryPersistedState {
   records: MemoryRecord[]
   tombstones: MemoryTombstone[]
   dreams: DreamPlan[]
+  lastAttemptAt?: number
 }
 
 export interface MemoryStatus {

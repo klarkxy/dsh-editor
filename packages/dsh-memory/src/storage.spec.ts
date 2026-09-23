@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultSettings, type DreamPlan, type MemoryRecord } from './contracts.ts'
 import {
   createRpcSchema, MAX_MEMORY_DREAMS, MAX_MEMORY_RECORDS, MAX_MEMORY_TOMBSTONES, memoryStateSchema, newMemoryRecordSchema,
-  tombstoneSchema,
+  storedSettings, tombstoneSchema,
 } from './storage.ts'
 
 function record(id: string): MemoryRecord {
@@ -56,5 +56,22 @@ describe('memory aggregate schema bounds', () => {
       scope: { kind: 'global' }, kind: 'preference', status: 'active', title: '语气', content: '克制',
       tags: [], evidence: [], exceptions: [], source: 'user',
     }).success).toBe(false)
+  })
+
+  it('accepts lastAttemptAt and noop dreams, and backfills legacy settings with the new default', () => {
+    expect(defaultSettings().dreamIdleEnabled).toBe(true)
+    const minimal = {
+      settings: defaultSettings(),
+      records: [],
+      tombstones: [],
+      dreams: [{ ...dream('d0'), status: 'noop' as const }],
+      lastAttemptAt: 123,
+    }
+    expect(memoryStateSchema.safeParse(minimal).success).toBe(true)
+    expect(memoryStateSchema.safeParse({ ...minimal, lastAttemptAt: -1 }).success).toBe(false)
+    expect(memoryStateSchema.safeParse({ ...minimal, lastAttemptAt: 1.5 }).success).toBe(false)
+    const legacy = { revision: 3, injectEnabled: true, idleMs: 60_000 } as unknown as Parameters<typeof storedSettings>[0]
+    expect(storedSettings(legacy)).toEqual({ revision: 3, injectEnabled: true, dreamIdleEnabled: true, idleMs: 60_000 })
+    expect(storedSettings(undefined).dreamIdleEnabled).toBe(true)
   })
 })

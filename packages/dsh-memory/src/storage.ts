@@ -87,7 +87,7 @@ export const dreamPlanSchema = z.object({
   revision: z.number().int().nonnegative(),
   sessionId: z.string().min(1).max(200),
   projectId: z.string().min(1).max(MAX_PROJECT_ID_CHARS).optional(),
-  status: z.enum(['preview', 'applied', 'cancelled', 'stale', 'failed']),
+  status: z.enum(['preview', 'applied', 'cancelled', 'stale', 'failed', 'noop']),
   sourceVersion: z.string().min(1).max(64),
   snapshot: z.array(dreamSnapshotSchema).max(64),
   proposals: z.array(dreamProposalSchema).max(16),
@@ -136,12 +136,6 @@ export const listRpcSchema = z.object({
   limit: z.number().int().min(1).max(100).optional(),
 }).strict()
 
-export const dreamApplySchema = z.object({
-  sessionId: z.string().min(1).max(200),
-  planId: z.string().min(1).max(80),
-  expectedRevision: z.number().int().nonnegative(),
-}).strict()
-
 export const MAX_MEMORY_RECORDS = 4096
 export const MAX_MEMORY_TOMBSTONES = 4096
 export const MAX_MEMORY_DREAMS = 256
@@ -151,6 +145,7 @@ export const memoryStateSchema = z.object({
   records: z.array(memoryRecordSchema).max(MAX_MEMORY_RECORDS),
   tombstones: z.array(tombstoneSchema).max(MAX_MEMORY_TOMBSTONES),
   dreams: z.array(dreamPlanSchema).max(MAX_MEMORY_DREAMS),
+  lastAttemptAt: z.number().int().nonnegative().optional(),
 }).strict()
 
 export const memoryDomain = defineDomain({

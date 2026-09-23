@@ -95,8 +95,10 @@ export async function apply(ctx: Context): Promise<void> {
           lastActivityAt: idle.lastActivity.get(sessionId) ?? now,
           now: Date.now(),
           idleMs: settings.idleMs,
+          lastAttemptAt: runtime.dreamLastAttemptAt,
+          materialCount: runtime.dreamMaterialCount(),
         })) return
-        void runtime.previewDream(sessionId, projectIdFromCwd(sessionCwd(readSession(ctx, sessionId))), 'idle').catch(() => {})
+        void runtime.runIdleDream(sessionId, projectIdFromCwd(sessionCwd(readSession(ctx, sessionId))), 'idle').catch(() => {})
       }, wait))
     })
     return () => { offStep?.(); offStatus?.() }
@@ -121,6 +123,7 @@ function domainStore(domain: DomainHandle): MemoryStore {
         records: stored.records ?? [],
         tombstones: stored.tombstones ?? [],
         dreams: stored.dreams ?? [],
+        lastAttemptAt: stored.lastAttemptAt,
       })
     },
     async save(state) {

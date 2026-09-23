@@ -213,7 +213,7 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
       <header>
         <div>
           <h3>{t(locale, '闲时梦境', 'Idle Dream')}</h3>
-          <p className="dsh-memory-meta">{t(locale, '空闲后做一次整理预览，不会轮询模型。应用前须确认。', 'One idle preview; no polling. Apply remains explicit.')}</p>
+          <p className="dsh-memory-meta">{t(locale, '闲时自动整理记忆（每天至多一次，自动生效）。', 'Auto-organizes memory while idle (at most once a day, applies automatically).')}</p>
         </div>
         <button type="button" role="switch" className={`dsh-memory-switch${draft.dreamIdleEnabled ? ' is-on' : ''}`}
           aria-checked={draft.dreamIdleEnabled} aria-label={draft.dreamIdleEnabled ? t(locale, '关闭闲时整理', 'Disable idle Dream') : t(locale, '启用闲时整理', 'Enable idle Dream')}
@@ -336,7 +336,7 @@ function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessio
     if (!query.trim()) return true
     return `${record.title}\n${record.content}`.toLowerCase().includes(query.trim().toLowerCase())
   })
-  const dream = status?.dreams.filter(plan => plan.status === 'preview').sort((a, b) => b.updatedAt - a.updatedAt)[0]
+  const dreams = (status?.dreams ?? []).slice().sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8)
   const candidateCount = (status?.records ?? []).filter(record => record.status === 'candidate').length
 
   const body = <>
@@ -352,7 +352,7 @@ function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessio
         aria-label={t(locale, '搜索记忆', 'Search memory')} />
     </label>
     <ul className="dsh-memory-list">
-      {records.length === 0 ? <li className="dsh-memory-meta">{t(locale, '暂无条目。', 'No records.')}</li> : records.map(record => (
+      {records.length === 0 ? <li className="dsh-memory-meta">{query.trim() ? t(locale, '没有匹配的条目。', 'No matching records.') : t(locale, '暂无条目。', 'No records.')}</li> : records.map(record => (
         <MemoryRow key={record.id} record={record} locale={locale} busy={busy}
           onEditingChange={setEditing}
           onAccept={() => void action(captured => rpc('records.accept', { sessionId: captured, id: record.id, expectedRevision: record.revision }).then(() => { if (sessionRef.current === captured) setNote(t(locale, '已采纳。', 'Accepted.')) }))}
@@ -400,7 +400,7 @@ function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessio
       </label>
       <button type="submit" disabled={busy}>{t(locale, '添加', 'Add')}</button>
     </form>
-    <DreamPanel locale={locale} busy={busy} dream={dream} running={Boolean(status?.runningDreams?.length)}
+    <DreamPanel locale={locale} busy={busy} dreams={dreams} running={Boolean(status?.runningDreams?.length)}
       aiAvailable={status?.aiAvailable === true} action={action} rpc={rpc} />
   </>
 
@@ -428,7 +428,7 @@ function MemoryRow(props: {
         <input value={title} disabled={props.busy} onChange={event => setTitle(event.target.value)} />
       </label>
       <label>{t(locale, '内容', 'Content')}
-        <textarea value={content} disabled={props.busy} rows={3} onChange={event => setContent(event.target.value)} />
+        <textarea value={content} disabled={props.busy} rows={3} maxLength={4000} onChange={event => setContent(event.target.value)} />
       </label>
       <div className="dsh-memory-row-actions">
         <button type="button" disabled={props.busy} onClick={() => { props.onSave(title, content); setRowEditing(false) }}>{t(locale, '保存', 'Save')}</button>
@@ -446,36 +446,64 @@ function MemoryRow(props: {
       {canAccept(record) && <button type="button" disabled={props.busy} onClick={props.onAccept}>{t(locale, '采纳', 'Accept')}</button>}
       {canReject(record) && <button type="button" disabled={props.busy} onClick={props.onReject}>{t(locale, '拒绝', 'Reject')}</button>}
       {canRevoke(record) && <button type="button" disabled={props.busy} onClick={props.onRevoke}>{t(locale, '撤销', 'Revoke')}</button>}
-      <button type="button" disabled={props.busy} onClick={props.onDelete}>{t(locale, '删除', 'Delete')}</button>
+      <ConfirmButton disabled={props.busy} label={t(locale, '删除', 'Delete')} confirmLabel={t(locale, '确认删除？', 'Confirm delete?')} onConfirm={props.onDelete} />
     </div>
   </li>
 }
 
+function ConfirmButton(props: { label: string; confirmLabel: string; disabled?: boolean; onConfirm(): void }) {
+  const [armed, setArmed] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  function disarm() {
+    clearTimeout(timer.current)
+    setArmed(false)
+  }
+  return <button type="button" className="dsh-memory-danger" disabled={props.disabled}
+    onClick={() => {
+      if (!armed) {
+        setArmed(true)
+        timer.current = setTimeout(() => setArmed(false), 3000)
+        return
+      }
+      disarm()
+      props.onConfirm()
+    }}
+    onBlur={disarm}>{armed ? props.confirmLabel : props.label}</button>
+}
+
+export function dreamStatusLabel(plan: DreamPlan, locale: Locale): string {
+  if (plan.status === 'applied') return t(locale, '已应用', 'Applied')
+  if (plan.status === 'noop') return t(locale, '无变化', 'No change')
+  if (plan.status === 'failed' || plan.status === 'stale') return t(locale, '失败', 'Failed')
+  if (plan.status === 'cancelled') return t(locale, '已取消', 'Cancelled')
+  return plan.proposals.length ? t(locale, '未应用', 'Not applied') : t(locale, '无变化', 'No change')
+}
+
 function DreamPanel(props: {
   running: boolean
-  locale: Locale; busy: boolean; dream?: DreamPlan; aiAvailable: boolean
+  locale: Locale; busy: boolean; dreams: DreamPlan[]; aiAvailable: boolean
   action(run: (sessionId: string) => Promise<void>): Promise<void>
   rpc(endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown>
 }) {
   const locale = props.locale
   return <article className="dsh-memory-dream">
     <h4>{t(locale, '梦境整理', 'Dream')}</h4>
-    <p className="dsh-memory-meta">{t(locale, '生成候选预览，不会覆盖已生效条目。', 'Preview only; active records are not overwritten.')}</p>
+    <p className="dsh-memory-meta">{t(locale, '闲置且新材料足够时每天至多自动整理一次，结果自动生效。', 'Runs at most once a day when idle with enough new material; results apply automatically.')}</p>
     <div className="dsh-memory-row-actions">
       <button type="button" disabled={props.busy || props.running || !props.aiAvailable} onClick={() => void props.action(async captured => {
-        await props.rpc('dream.preview', { sessionId: captured })
-      })}>{t(locale, '预览', 'Preview')}</button>
-      {props.dream && <button type="button" disabled={props.busy || props.running} onClick={() => void props.action(async captured => {
-        await props.rpc('dream.apply', { sessionId: captured, planId: props.dream!.id, expectedRevision: props.dream!.revision })
-      })}>{t(locale, '应用', 'Apply')}</button>}
-      {props.dream && <button type="button" disabled={props.busy} onClick={() => void props.action(async captured => {
-        await props.rpc('dream.cancel', { sessionId: captured, planId: props.dream!.id, expectedRevision: props.dream!.revision })
-      })}>{t(locale, '取消', 'Cancel')}</button>}
+        await props.rpc('dream.run', { sessionId: captured })
+      })}>{t(locale, '立即整理', 'Organize now')}</button>
+      {props.running && <span className="dsh-memory-meta">{t(locale, '整理中…', 'Organizing…')}</span>}
     </div>
-    {props.dream?.error && <p role="alert" className="dsh-memory-error">{props.dream.error}</p>}
-    {props.dream && props.dream.proposals.length > 0 && <ul>
-      {props.dream.proposals.map((proposal, index) => (
-        <li key={index}><strong>{proposal.title}</strong><p>{proposal.content}</p></li>
+    {props.dreams.length > 0 && <ul>
+      {props.dreams.map(plan => (
+        <li key={plan.id}>
+          <strong>{dreamStatusLabel(plan, locale)}</strong>{' '}
+          <span className="dsh-memory-meta">{new Date(plan.createdAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')}</span>
+          {plan.proposals.length > 0 && <p className="dsh-memory-meta">{plan.proposals.map(proposal => proposal.title).join('、')}</p>}
+          {plan.error && <p className="dsh-memory-error">{plan.error}</p>}
+        </li>
       ))}
     </ul>}
   </article>
@@ -498,24 +526,28 @@ const styles = `
 .dsh-memory-settings p,.dsh-memory-chat p{margin:0;line-height:1.5}
 .dsh-memory-meta,.dsh-memory-chat small{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
 .dsh-memory-error{color:var(--red-11,#b42318)}
-.dsh-memory-card,.dsh-memory-dream,.dsh-memory-add{display:grid;gap:10px}
+.dsh-memory-card,.dsh-memory-dream,.dsh-memory-add{display:grid;gap:10px;padding:14px 16px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:12px}
 .dsh-memory-card header,.dsh-memory-chat-body header{display:flex;justify-content:space-between;gap:12px;align-items:center}
 .dsh-memory-card h3,.dsh-memory-add h4,.dsh-memory-dream h4{margin:0;font-size:var(--font-size-3,16px);font-weight:600}
-.dsh-memory-settings input,.dsh-memory-chat input,.dsh-memory-chat textarea,.dsh-memory-chat select{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:6px;background:var(--color-surface,transparent);color:inherit;font:inherit}
-.dsh-memory-settings button:not([role="switch"]),.dsh-memory-chat button:not([role="switch"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:6px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start}
+.dsh-memory-settings input,.dsh-memory-chat input,.dsh-memory-chat textarea,.dsh-memory-chat select{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit;transition:border-color 150ms ease,box-shadow 150ms ease}
+.dsh-memory-settings input:focus,.dsh-memory-chat input:focus,.dsh-memory-chat textarea:focus,.dsh-memory-chat select:focus{border-color:var(--accent-9,#3b82f6);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-9,#3b82f6) 25%,transparent)}
+.dsh-memory-settings button:not([role="switch"]),.dsh-memory-chat button:not([role="switch"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
+.dsh-memory-settings button:not([role="switch"]):hover:not(:disabled),.dsh-memory-chat button:not([role="switch"]):hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent));border-color:color-mix(in srgb,currentColor 35%,transparent)}
+.dsh-memory-settings button:not([role="switch"]):active:not(:disabled),.dsh-memory-chat button:not([role="switch"]):active:not(:disabled){transform:scale(.97)}
+.dsh-memory-danger:hover:not(:disabled){border-color:var(--red-11,#b42318);color:var(--red-11,#b42318);background:color-mix(in srgb,var(--red-11,#b42318) 8%,transparent)}
 .dsh-memory-settings button:disabled,.dsh-memory-chat button:disabled{opacity:.45;cursor:not-allowed}
 .dsh-memory-settings .dsh-memory-switch,.dsh-memory-chat .dsh-memory-switch{all:unset;box-sizing:border-box;position:relative;display:inline-block;width:36px;height:20px;flex:none;border-radius:999px;background:var(--gray-7,color-mix(in srgb,currentColor 28%,transparent));cursor:pointer}
 .dsh-memory-switch.is-on{background:var(--accent-9,#3b82f6)}
 .dsh-memory-switch-thumb{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:999px;background:#fff;transition:transform 150ms ease}
 .dsh-memory-switch.is-on .dsh-memory-switch-thumb{transform:translateX(16px)}
-.dsh-memory-settings :focus-visible,.dsh-memory-chat :focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.dsh-memory-settings :focus-visible,.dsh-memory-chat :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
 .dsh-memory-list{list-style:none;margin:0;padding:0;display:grid;gap:12px}
-.dsh-memory-list li{display:grid;gap:6px;padding:10px 0;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
+.dsh-memory-list li{display:grid;gap:6px;padding:10px 4px;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px;overflow-wrap:anywhere}
 .dsh-memory-row-actions{display:flex;flex-wrap:wrap;gap:8px}
 .dsh-memory-check{display:flex;gap:8px;align-items:center}
 .dsh-memory-check input{width:auto}
 .dsh-memory-chat>summary{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:baseline;cursor:pointer;min-height:34px;list-style:revert}
-@media(prefers-reduced-motion:reduce){.dsh-memory-switch-thumb{transition:none}}
+@media(prefers-reduced-motion:reduce){.dsh-memory-switch-thumb{transition:none}.dsh-memory-settings button:not([role="switch"]),.dsh-memory-chat button:not([role="switch"]),.dsh-memory-settings input,.dsh-memory-chat input,.dsh-memory-chat textarea,.dsh-memory-chat select{transition:none}}
 `
 
 export function apply(ctx: Context): void {

@@ -3,7 +3,7 @@ import { fail, ok, parseSessionId, projectIdFromCwd, sessionCwd } from './contra
 import { MemoryError } from './errors.ts'
 import type { MemoryRuntime } from './service.ts'
 import {
-  createRpcSchema, dreamApplySchema, listRpcSchema, patchRpcSchema, revisionRpcSchema, updateSettingsSchema,
+  createRpcSchema, listRpcSchema, patchRpcSchema, revisionRpcSchema, updateSettingsSchema,
 } from './storage.ts'
 
 export type SessionLookup = (sessionId: string) => unknown
@@ -73,25 +73,10 @@ export async function handleMemoryRpc(
     if (endpoint === 'records.accept') return mutation(runtime.accept.bind(runtime), payload)
     if (endpoint === 'records.reject') return mutation(runtime.reject.bind(runtime), payload)
     if (endpoint === 'records.revoke') return mutation(runtime.revoke.bind(runtime), payload)
-    if (endpoint === 'dream.preview') {
+    if (endpoint === 'dream.run') {
       const sessionId = parseSessionId(payload)
       if (!sessionId) return fail('MEMORY_INVALID', '缺少会话。')
-      return ok(await runtime.previewDream(sessionId, projectOf(sessions, sessionId), 'manual'))
-    }
-    if (endpoint === 'dream.idle') {
-      const sessionId = parseSessionId(payload)
-      if (!sessionId) return fail('MEMORY_INVALID', '缺少会话。')
-      return ok(await runtime.previewDream(sessionId, projectOf(sessions, sessionId), 'idle'))
-    }
-    if (endpoint === 'dream.apply') {
-      const parsed = dreamApplySchema.safeParse(payload)
-      if (!parsed.success) return fail('MEMORY_INVALID', '应用参数无效。')
-      return ok(await runtime.applyDream(parsed.data.planId, parsed.data.expectedRevision))
-    }
-    if (endpoint === 'dream.cancel') {
-      const parsed = dreamApplySchema.safeParse(payload)
-      if (!parsed.success) return fail('MEMORY_INVALID', '取消参数无效。')
-      return ok(await runtime.cancelDream(parsed.data.planId, parsed.data.expectedRevision))
+      return ok(await runtime.runIdleDream(sessionId, projectOf(sessions, sessionId), 'manual'))
     }
     return fail('MEMORY_INVALID', '未知操作。')
   } catch (error) {

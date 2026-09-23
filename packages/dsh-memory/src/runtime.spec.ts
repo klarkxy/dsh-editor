@@ -109,7 +109,7 @@ describe('storage CAS and lifecycle', () => {
     })
     expect(nextCalls).toBe(1)
     expect(injected.kind).toBe('enter')
-    if (injected.kind === 'enter') expect(injected.messages[0]).toMatchObject({ source: { kind: 'plugin', plugin: '@klarkxy/dsh-memory' } })
+    if (injected.kind === 'enter') expect(injected.messages[0]).toMatchObject({ source: { kind: 'plugin:@klarkxy/dsh-memory', plugin: '@klarkxy/dsh-memory' } })
     await memory.updateSettings({ injectEnabled: false, dreamIdleEnabled: false, idleMs: 15 * 60_000 }, 0)
     const stripped = await memory.handlePreStep({
       sessionId: 's1',
@@ -118,7 +118,7 @@ describe('storage CAS and lifecycle', () => {
       next: async () => { nextCalls += 1; return injected },
     })
     expect(nextCalls).toBe(2)
-    if (stripped.kind === 'enter') expect(stripped.messages.every(message => !message || typeof message !== 'object' || (message as { source?: { kind?: string } }).source?.kind !== 'plugin')).toBe(true)
+    if (stripped.kind === 'enter') expect(stripped.messages.every(message => !message || typeof message !== 'object' || (message as { source?: { kind?: string } }).source?.kind !== 'plugin:@klarkxy/dsh-memory')).toBe(true)
     expect((await memory.list({ scope: { kind: 'project', projectId: '/work/novel' } })).map(item => item.id)).toEqual([created.id])
   })
 
@@ -134,7 +134,7 @@ describe('storage CAS and lifecycle', () => {
 })
 
 describe('dream CAS', () => {
-  it('applies candidate merges only when snapshot revisions still match', async () => {
+  it('applies merges into active injectable records and supersedes the sources', async () => {
     const { memory } = runtime({
       ai: aiScope(async request => success(JSON.stringify({
         proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
@@ -147,13 +147,14 @@ describe('dream CAS', () => {
     expect(plan.sourceVersion).toMatch(/^[0-9a-f]{64}$/)
     const applied = await memory.applyDream(plan.id, plan.revision)
     expect(applied.status).toBe('applied')
-    const candidates = (await memory.list({ scope: { kind: 'project', projectId: '/work/novel' }, statuses: ['candidate'] }))
-    expect(candidates).toHaveLength(1)
-    expect(candidates[0]?.source).toBe('dream')
-    expect(candidates[0]?.status).toBe('candidate')
-    expect(candidates[0]?.basis).toEqual([{ id: created.id, revision: created.revision }])
-    const original = await memory.list({ scope: { kind: 'project', projectId: '/work/novel' }, statuses: ['active'] })
-    expect(original.some(item => item.id === created.id && item.status === 'active')).toBe(true)
+    const derived = (await memory.list({ scope: { kind: 'project', projectId: '/work/novel' }, statuses: ['active'] }))
+      .filter(item => item.source === 'dream')
+    expect(derived).toHaveLength(1)
+    expect(derived[0]?.status).toBe('active')
+    expect(derived[0]?.basis).toEqual([{ id: created.id, revision: created.revision }])
+    const recalled = await memory.recall({ scope: { kind: 'project', projectId: '/work/novel' }, query: '语气' })
+    expect(recalled.map(item => item.id)).toContain(derived[0]!.id)
+    expect(memory.status().records.find(item => item.id === created.id)?.status).toBe('superseded')
   })
 
   it('fails apply after correction or deletion and never resurrects', async () => {
@@ -193,6 +194,88 @@ describe('dream CAS', () => {
   })
 })
 
+describe('idle dream auto-run', () => {
+  it('applies a non-empty plan, stamps the attempt time, and injects the derived record immediately', async () => {
+    const { memory } = runtime({
+      ai: aiScope(async request => success(JSON.stringify({
+        proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
+      }), request.sourceVersion)),
+    })
+    await memory.create(draft())
+    const applied = await memory.runIdleDream('s1', '/work/novel', 'idle')
+    expect(applied.status).toBe('applied')
+    expect(memory.dreamLastAttemptAt).toBe(1_000)
+    const derived = (await memory.list({ scope: { kind: 'project', projectId: '/work/novel' }, statuses: ['active'] }))
+      .filter(item => item.source === 'dream')
+    expect(derived).toHaveLength(1)
+    const recalled = await memory.recall({ scope: { kind: 'project', projectId: '/work/novel' }, query: '语气' })
+    expect(recalled.map(item => item.id)).toContain(derived[0]!.id)
+    expect(memory.dreamMaterialCount()).toBe(0)
+  })
+
+  it('marks an empty plan as noop, stamps the attempt, and writes no candidates', async () => {
+    const { memory } = runtime({
+      ai: aiScope(async request => success('{"proposals":[]}', request.sourceVersion)),
+    })
+    await memory.create(draft())
+    const plan = await memory.runIdleDream('s1', '/work/novel', 'idle')
+    expect(plan.status).toBe('noop')
+    expect(memory.status().dreams.find(item => item.id === plan.id)?.status).toBe('noop')
+    expect(memory.dreamLastAttemptAt).toBe(1_000)
+    expect(await memory.list({ scope: { kind: 'project', projectId: '/work/novel' }, statuses: ['candidate'] })).toEqual([])
+  })
+
+  it('stamps the attempt and records a failed dream when the model run fails', async () => {
+    const { memory } = runtime({
+      ai: aiScope(async request => ({
+        text: '',
+        receipt: {
+          id: 'u1', plugin: 'dsh-memory', purpose: 'memory.dream', sourceVersion: request.sourceVersion,
+          status: 'failed', attempts: 1, cost: null, startedAt: 1, finishedAt: 2, error: '模型调用失败。',
+        },
+      })),
+    })
+    await memory.create(draft())
+    const plan = await memory.runIdleDream('s1', '/work/novel', 'idle')
+    expect(plan.status).toBe('failed')
+    expect(memory.dreamLastAttemptAt).toBe(1_000)
+    expect(memory.status().dreams.filter(item => item.status === 'failed')).toHaveLength(1)
+  })
+
+  it('records a failed dream and backoff stamp when AI is unavailable', async () => {
+    const { memory } = runtime()
+    await memory.create(draft())
+    await expect(memory.runIdleDream('s1', '/work/novel', 'idle')).rejects.toMatchObject({ code: 'MEMORY_AI_UNAVAILABLE' })
+    expect(memory.dreamLastAttemptAt).toBe(1_000)
+    const dreams = memory.status().dreams
+    expect(dreams).toHaveLength(1)
+    expect(dreams[0]?.status).toBe('failed')
+    expect(dreams[0]?.snapshot).toEqual([])
+  })
+
+  it('keeps a stale plan stale when apply no longer validates, and still stamps the attempt', async () => {
+    let now = 10
+    let n = 0
+    const memory = new MemoryRuntime({
+      store: createMemoryStore(),
+      now: () => now,
+      id: () => `id-${++n}`,
+      activateAi: () => aiScope(async request => {
+        now = 2_000
+        return success(JSON.stringify({
+          proposals: [{ title: '合并', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
+        }), request.sourceVersion)
+      }),
+      createInjectMessage: payload => payload,
+    })
+    await memory.create(draft({ expiresAt: 1_000 }))
+    const settled = await memory.runIdleDream('s1', '/work/novel', 'idle')
+    expect(settled.status).toBe('stale')
+    expect(memory.dreamLastAttemptAt).toBe(2_000)
+    expect(memory.status().records.filter(item => item.source === 'dream')).toEqual([])
+  })
+})
+
 describe('uuid restart, aggregate persist, basis, and inject races', () => {
   it('refuses sequential ids that collide after restart, and default ids stay unique', async () => {
     const store = createMemoryStore()
@@ -222,7 +305,7 @@ describe('uuid restart, aggregate persist, basis, and inject races', () => {
     expect(restarted.memory.status().records).toEqual([])
   })
 
-  it('persists accept and supersede in one aggregate write, and rolls back when save fails', async () => {
+  it('persists apply supersede and accept in one aggregate write, and rolls back when save fails', async () => {
     const { memory, store } = runtime({
       ai: aiScope(async request => success(JSON.stringify({
         proposals: [{ title: '合并语气', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
@@ -232,31 +315,36 @@ describe('uuid restart, aggregate persist, basis, and inject races', () => {
     const plan = await memory.previewDream('s1', '/work/novel')
     const applied = await memory.applyDream(plan.id, plan.revision)
     expect(applied.status).toBe('applied')
-    const candidate = (await memory.list({ scope: { kind: 'project', projectId: '/work/novel' }, statuses: ['candidate'] }))[0]!
-    store.failNext()
-    await expect(memory.accept(candidate.id, candidate.revision)).rejects.toMatchObject({ code: 'MEMORY_SAVE_FAILED' })
-    expect(store.snapshot().records.find(item => item.id === candidate.id)?.status).toBe('candidate')
-    expect(store.snapshot().records.find(item => item.id === source.id)?.status).toBe('active')
-    expect(memory.status().records.find(item => item.id === candidate.id)?.status).toBe('candidate')
-    const accepted = await memory.accept(candidate.id, candidate.revision)
-    expect(accepted.status).toBe('active')
+    const derived = memory.status().records.find(item => item.source === 'dream')!
+    expect(derived.status).toBe('active')
     expect(memory.status().records.find(item => item.id === source.id)?.status).toBe('superseded')
+    const legacy = await memory.create(draft({
+      status: 'candidate',
+      title: '遗留候选',
+      basis: [{ id: source.id, revision: source.revision + 1 }],
+    }))
+    store.failNext()
+    await expect(memory.accept(legacy.id, legacy.revision)).rejects.toMatchObject({ code: 'MEMORY_SAVE_FAILED' })
+    expect(store.snapshot().records.find(item => item.id === legacy.id)?.status).toBe('candidate')
     expect(store.snapshot().records.find(item => item.id === source.id)?.status).toBe('superseded')
+    expect(memory.status().records.find(item => item.id === legacy.id)?.status).toBe('candidate')
+    const accepted = await memory.accept(legacy.id, legacy.revision)
+    expect(accepted.status).toBe('active')
+    expect(memory.status().records.find(item => item.id === legacy.id)?.status).toBe('active')
   })
 
   it('revalidates exact basis revisions on adoption', async () => {
-    const { memory } = runtime({
-      ai: aiScope(async request => success(JSON.stringify({
-        proposals: [{ title: '合并', content: '更克制', kind: 'preference', sourceIds: ['id-1'] }],
-      }), request.sourceVersion)),
-    })
+    const { memory } = runtime()
     const source = await memory.create(draft())
-    const plan = await memory.previewDream('s1', '/work/novel')
-    await memory.applyDream(plan.id, plan.revision)
-    const candidate = (await memory.list({ scope: { kind: 'project', projectId: '/work/novel' }, statuses: ['candidate'] }))[0]!
+    const legacy = await memory.create(draft({
+      status: 'candidate',
+      title: '合并',
+      content: '更克制',
+      basis: [{ id: source.id, revision: source.revision }],
+    }))
     await memory.update(source.id, { content: '已修正' }, source.revision)
-    await expect(memory.accept(candidate.id, candidate.revision)).rejects.toMatchObject({ code: 'MEMORY_STALE' })
-    expect(memory.status().records.find(item => item.id === candidate.id)?.status).toBe('candidate')
+    await expect(memory.accept(legacy.id, legacy.revision)).rejects.toMatchObject({ code: 'MEMORY_STALE' })
+    expect(memory.status().records.find(item => item.id === legacy.id)?.status).toBe('candidate')
     expect(memory.status().records.find(item => item.id === source.id)?.status).toBe('active')
   })
 
@@ -287,7 +375,7 @@ describe('uuid restart, aggregate persist, basis, and inject races', () => {
     const decision = await pending
     expect(decision.kind).toBe('enter')
     if (decision.kind === 'enter') {
-      expect(decision.messages.every(message => !message || typeof message !== 'object' || (message as { source?: { kind?: string } }).source?.kind !== 'plugin')).toBe(true)
+      expect(decision.messages.every(message => !message || typeof message !== 'object' || (message as { source?: { kind?: string } }).source?.kind !== 'plugin:@klarkxy/dsh-memory')).toBe(true)
     }
   })
 
@@ -356,30 +444,28 @@ describe('dream expiry liveness', () => {
     expect(await clock.memory.recall({ scope: { kind: 'project', projectId: '/work/novel' }, query: '临时语气' })).toEqual([])
   })
 
-  it('stamps earliest source expiry on apply and refuses accept after that expiry passes', async () => {
+  it('stamps earliest source expiry on auto-apply and keeps the derivative active', async () => {
     const clock = clockRuntime()
     await clock.memory.create(draft({ title: '临时语气', content: '活动期间克制', expiresAt: 50 }))
     const plan = await clock.memory.previewDream('s1', '/work/novel')
     const applied = await clock.memory.applyDream(plan.id, plan.revision)
     expect(applied.status).toBe('applied')
-    const candidate = clock.memory.status().records.find(item => item.source === 'dream')
-    expect(candidate?.expiresAt).toBe(50)
-    expect(candidate?.status).toBe('candidate')
+    const derived = clock.memory.status().records.find(item => item.source === 'dream')
+    expect(derived?.expiresAt).toBe(50)
+    expect(derived?.status).toBe('active')
     clock.setNow(100)
-    await expect(clock.memory.accept(candidate!.id, candidate!.revision)).rejects.toMatchObject({ code: 'MEMORY_STALE' })
-    expect(clock.memory.status().records.find(item => item.id === candidate!.id)?.status).toBe('candidate')
-    expect(await clock.memory.recall({ scope: { kind: 'project', projectId: '/work/novel' }, query: '临时语气' })).toEqual([])
+    expect(clock.memory.status().records.find(item => item.source === 'dream')?.status).toBe('active')
+    expect(await clock.memory.recall({ scope: { kind: 'project', projectId: '/work/novel' }, query: '克制' })).toEqual([])
   })
 
-  it('recalls an accepted derivative only until the inherited expiry', async () => {
+  it('recalls an applied derivative only until the inherited expiry', async () => {
     const clock = clockRuntime()
     await clock.memory.create(draft({ title: '临时语气', content: '活动期间克制', expiresAt: 80 }))
     const plan = await clock.memory.previewDream('s1', '/work/novel')
     await clock.memory.applyDream(plan.id, plan.revision)
-    const candidate = clock.memory.status().records.find(item => item.source === 'dream')!
-    const accepted = await clock.memory.accept(candidate.id, candidate.revision)
-    expect(accepted.expiresAt).toBe(80)
-    expect((await clock.memory.recall({ scope: { kind: 'project', projectId: '/work/novel' }, query: '克制' })).map(item => item.id)).toEqual([accepted.id])
+    const derived = clock.memory.status().records.find(item => item.source === 'dream')!
+    expect(derived.status).toBe('active')
+    expect((await clock.memory.recall({ scope: { kind: 'project', projectId: '/work/novel' }, query: '克制' })).map(item => item.id)).toEqual([derived.id])
     clock.setNow(80)
     expect(await clock.memory.recall({ scope: { kind: 'project', projectId: '/work/novel' }, query: '克制' })).toEqual([])
   })

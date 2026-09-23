@@ -15,6 +15,7 @@ import {
 } from './errors.ts'
 import { assertCreatable, assertNoSilentGlobal, hasEvidence } from './evidence.ts'
 import { applyMemoryInjection, requestTextFromMessages, stripMemoryInjection } from './inject.ts'
+import { countDreamMaterial } from './idle.ts'
 import { boundRecall, injectKinds, isExpired, recordMatchesQuery } from './recall.ts'
 import { compactMemoryState, memoryStateOverCapacity } from './capacity.ts'
 import { cloneState, type MemoryStore } from './store.ts'
@@ -353,6 +354,37 @@ export class MemoryRuntime implements MemoryService {
     }
   }
 
+  async runIdleDream(sessionId: string, projectId: string | undefined, trigger: 'manual' | 'idle' = 'idle'): Promise<DreamPlan> {
+    try {
+      const plan = await this.previewDream(sessionId, projectId, trigger)
+      if (plan.status !== 'preview' || plan.proposals.length === 0) {
+        if (plan.status === 'preview') await this.markDreamQuietly(plan.id, { status: 'noop' })
+        await this.stampDreamAttempt()
+        return this.currentDream(plan.id) ?? plan
+      }
+      try {
+        const applied = await this.applyDream(plan.id, plan.revision)
+        await this.stampDreamAttempt()
+        return applied
+      } catch {
+        await this.markDreamQuietly(plan.id, { status: 'failed', error: '自动整理应用失败。' })
+        await this.stampDreamAttempt()
+        return this.currentDream(plan.id) ?? plan
+      }
+    } catch (error) {
+      await this.recordFailedDreamAttempt(sessionId, projectId, error)
+      throw error
+    }
+  }
+
+  get dreamLastAttemptAt(): number | undefined {
+    return this.live.lastAttemptAt
+  }
+
+  dreamMaterialCount(): number {
+    return countDreamMaterial(this.live, this.live.lastAttemptAt)
+  }
+
   async applyDream(planId: string, expectedRevision: number): Promise<DreamPlan> {
     return this.serialize(async () => {
       this.assertOpen()
@@ -372,6 +404,7 @@ export class MemoryRuntime implements MemoryService {
         this.commit(proposed)
         throw error instanceof Error ? error : fail(MEMORY_STALE, '预览已过期。')
       }
+      const touched = new Set<string>()
       for (const proposal of plan.proposals) {
         const id = this.mintId(proposed)
         const sources = proposal.sourceIds
@@ -382,7 +415,7 @@ export class MemoryRuntime implements MemoryService {
           revision: 1,
           scope: proposal.scope,
           kind: proposal.kind,
-          status: 'candidate',
+          status: 'active',
           title: proposal.title,
           content: proposal.content,
           tags: proposal.tags,
@@ -398,10 +431,22 @@ export class MemoryRuntime implements MemoryService {
         if (isExpired(record, now)) fail(MEMORY_STALE, '依据记录已过期，梦境预览作废。')
         assertCreatable(record)
         proposed.records.push(record)
+        touched.add(id)
+        for (const sourceId of proposal.sourceIds) {
+          const source = proposed.records.find(item => item.id === sourceId)
+          if (!source || this.tombstonedIn(proposed, sourceId)) continue
+          if (source.status === 'active') {
+            source.status = 'superseded'
+            source.revision += 1
+            source.updatedAt = now
+          }
+          touched.add(sourceId)
+        }
       }
       plan.status = 'applied'
       plan.revision += 1
       plan.updatedAt = now
+      this.staleDreamsTouching(proposed, [...touched])
       await this.persistProposed(proposed)
       this.commit(proposed)
       return structuredClone(this.requireDreamIn(this.live, planId))
@@ -545,6 +590,58 @@ export class MemoryRuntime implements MemoryService {
     await this.persistProposed(proposed)
     this.commit(proposed)
     return structuredClone(this.requireDreamIn(this.live, id))
+  }
+
+  private currentDream(id: string): DreamPlan | undefined {
+    const plan = this.live.dreams.find(item => item.id === id)
+    return plan ? structuredClone(plan) : undefined
+  }
+
+  private async markDreamQuietly(id: string, patch: Partial<Pick<DreamPlan, 'status' | 'proposals' | 'error'>>): Promise<void> {
+    try {
+      await this.serialize(async () => {
+        const current = this.live.dreams.find(item => item.id === id)
+        if (!current || current.status !== 'preview') return
+        await this.markDream(id, patch)
+      })
+    } catch {}
+  }
+
+  private async stampDreamAttempt(): Promise<void> {
+    try {
+      await this.serialize(async () => {
+        const proposed = this.snapshot()
+        proposed.lastAttemptAt = this.now()
+        await this.persistProposed(proposed)
+        this.commit(proposed)
+      })
+    } catch {}
+  }
+
+  private async recordFailedDreamAttempt(sessionId: string, projectId: string | undefined, error: unknown): Promise<void> {
+    try {
+      await this.serialize(async () => {
+        const proposed = this.snapshot()
+        const now = this.now()
+        proposed.lastAttemptAt = now
+        proposed.dreams.push({
+          id: this.mintId(proposed),
+          revision: 1,
+          sessionId,
+          projectId,
+          status: 'failed',
+          sourceVersion: dreamSourceVersion([]),
+          snapshot: [],
+          proposals: [],
+          generation: this.generation,
+          createdAt: now,
+          updatedAt: now,
+          error: error instanceof Error ? error.message.slice(0, 240) : '整理失败。',
+        })
+        await this.persistProposed(proposed)
+        this.commit(proposed)
+      })
+    } catch {}
   }
 
   private staleDreamsTouching(state: MemoryPersistedState, ids: readonly string[]): void {

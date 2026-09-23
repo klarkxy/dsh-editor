@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { CHAT_EVENTS_SLOT, projectIdFromCwd, sessionCwd } from './contracts.ts'
 import {
   apply, beginMemoryRequest, candidateAvailabilityLabel, canAccept, canReject, canRevoke,
-  chatSummaryTitle, disposeMemoryRequest, inject, loadMemoryStatus, MemoryChatShell, MemorySettings,
+  chatSummaryTitle, disposeMemoryRequest, dreamStatusLabel, inject, loadMemoryStatus, MemoryChatShell, MemorySettings,
   memoryPanelKey, parseSeatProps, peekMemoryStatus, shouldSkipMemoryRefresh,
 } from './client.tsx'
 
@@ -73,6 +73,26 @@ describe('frozen seat and project identity', () => {
     expect(canRevoke(candidate as never)).toBe(false)
     expect(canAccept(active as never)).toBe(false)
     expect(canRevoke(active as never)).toBe(true)
+  })
+
+  it('labels dream history read-only without pending states', () => {
+    const base = {
+      id: 'd', revision: 1, sessionId: 's1', status: 'applied' as const, sourceVersion: 'v',
+      snapshot: [], proposals: [], generation: 0, createdAt: 1, updatedAt: 1,
+    }
+    const proposal = {
+      title: '合并语气', content: '更克制', kind: 'preference' as const, tags: [], exceptions: [],
+      evidence: [], sourceIds: ['id-1'], scope: { kind: 'global' as const },
+    }
+    expect(dreamStatusLabel(base, 'zh')).toBe('已应用')
+    expect(dreamStatusLabel({ ...base, status: 'noop' }, 'zh')).toBe('无变化')
+    expect(dreamStatusLabel({ ...base, status: 'failed' }, 'zh')).toBe('失败')
+    expect(dreamStatusLabel({ ...base, status: 'stale' }, 'zh')).toBe('失败')
+    expect(dreamStatusLabel({ ...base, status: 'cancelled' }, 'zh')).toBe('已取消')
+    expect(dreamStatusLabel({ ...base, status: 'preview' }, 'zh')).toBe('无变化')
+    expect(dreamStatusLabel({ ...base, status: 'preview', proposals: [proposal] }, 'zh')).toBe('未应用')
+    expect(dreamStatusLabel(base, 'en')).toBe('Applied')
+    expect(dreamStatusLabel({ ...base, status: 'noop' }, 'en')).toBe('No change')
   })
 })
 

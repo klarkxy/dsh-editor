@@ -1,7 +1,7 @@
 import type { DreamPlan, MemoryPersistedState } from './contracts.ts'
 import { MAX_MEMORY_DREAMS, MAX_MEMORY_RECORDS, MAX_MEMORY_TOMBSTONES } from './storage.ts'
 
-const TERMINAL_DREAM = new Set<DreamPlan['status']>(['applied', 'cancelled', 'stale', 'failed'])
+const TERMINAL_DREAM = new Set<DreamPlan['status']>(['applied', 'cancelled', 'stale', 'failed', 'noop'])
 
 export function memoryStateOverCapacity(state: MemoryPersistedState): boolean {
   return state.records.length > MAX_MEMORY_RECORDS
