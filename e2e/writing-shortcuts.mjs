@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { mkdir, writeFile, appendFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
@@ -51,6 +51,7 @@ env.DSH_AI_TEST_KEY = 'local-fixture'
 console.log('Preparing isolated profile')
 await deployProfile(home, resolve(root, '.dev/desktop-profile-template'), resolve(runtime, 'node_modules'))
 const patch = resolve(home, 'profiles/dsh-editor/cordis.patch.yml')
+if ((await readFile(patch, 'utf8')).trim() === '[]') await writeFile(patch, '')
 await appendFile(patch, [
   '\n- id: llm-deepseek', '  disabled: true',
   '- id: llm-pi-ai', '  config:', '    providers:', '      local-test:', '        displayName: Local acceptance',

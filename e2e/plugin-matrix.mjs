@@ -19,6 +19,7 @@ import { loadPluginManifests, publicPackages } from '../scripts/plugin-manifest.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const pluginManifests = loadPluginManifests(root)
 const publicPluginPackages = publicPackages(pluginManifests)
+const sharedService = '@klarkxy/dsh-ai-services'
 const out = path.join(root, 'e2e', 'out', 'plugin-matrix')
 const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-matrix-'))
 const dshHome = path.join(runRoot, 'home')
@@ -119,13 +120,14 @@ function inspectState(name, expectedPlugins) {
   const dependencies = Object.keys(manifest.dependencies || {}).filter((item) => publicPluginPackages.includes(item))
   const bundles = manifest.dsh?.profile?.bundles || []
   const pluginBundles = bundles.filter((item) => publicPluginPackages.includes(item))
-  assertEqualSet(dependencies, expectedPlugins, `${name} dependencies`)
-  assertEqualSet(pluginBundles, expectedPlugins, `${name} bundles`)
+  const installed = [sharedService, ...expectedPlugins]
+  assertEqualSet(dependencies, installed, `${name} dependencies`)
+  assertEqualSet(pluginBundles, installed, `${name} bundles`)
 
   const config = runDsh(['--profile', profile, '--dump-config']).stdout
   const expectedEntries = {}
   for (const manifest of pluginManifests.filter((item) => publicPluginPackages.includes(item.name))) {
-    const included = expectedPlugins.includes(manifest.name)
+    const included = installed.includes(manifest.name)
     for (const entry of manifest.entries) expectedEntries[entry.id] = included
     for (const insert of manifest.inserts) expectedEntries[insert.id] = false
   }
@@ -673,6 +675,7 @@ async function probeWeb(browser, name, expectedPlugins, index) {
   const pageErrors = []
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, locale: 'zh-CN' })
   page.on('pageerror', (error) => pageErrors.push(error.message))
+  page.on('console', message => { if (message.type() === 'error') pageErrors.push(message.text()) })
   try {
     const ready = await waitReady(port, child, stdout)
     const origin = ready.origin
@@ -680,11 +683,12 @@ async function probeWeb(browser, name, expectedPlugins, index) {
     await page.waitForTimeout(2_000)
     await page.waitForFunction(() => document.body !== null && document.body.children.length > 0)
     const onboardingContinue = page.getByRole('button', { name: '继续', exact: true })
-    for (let step = 0; step < 5 && await onboardingContinue.isVisible({ timeout: 1_000 }).catch(() => false); step += 1) {
+    for (let step = 0; step < 5 && await onboardingContinue.isVisible({ timeout: 1_000 }).catch(() => false) && await onboardingContinue.isEnabled().catch(() => false); step += 1) {
       await onboardingContinue.click()
       await page.waitForTimeout(500)
     }
     const configureLater = page.getByRole('button', { name: '稍后配置', exact: true })
+    if (index === 0) await configureLater.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {})
     if (await configureLater.isVisible({ timeout: 2_000 }).catch(() => false)) {
       await configureLater.click()
       await page.waitForTimeout(500)
@@ -807,6 +811,7 @@ async function probeWeb(browser, name, expectedPlugins, index) {
     await page.screenshot({ path: path.join(out, `${name}.failure.png`) }).catch(() => {})
     const html = await page.content().catch(() => '')
     fs.writeFileSync(path.join(out, `${name}.failure.html`), html, 'utf8')
+    fs.writeFileSync(path.join(out, `${name}.page-errors.json`), JSON.stringify(pageErrors, null, 2), 'utf8')
     throw error
   } finally {
     await page.close().catch(() => {})
@@ -827,6 +832,7 @@ function safeCleanup() {
 }
 
 resetOutput()
+const sharedServiceTarball = stageTarball(sharedService)
 const manuscriptTarball = stageTarball('dsh-manuscript')
 const proofreadTarball = stageTarball('dsh-proofread')
 const zhihuTarball = stageTarball('@klarkxy/dsh-zhihu')
@@ -839,6 +845,10 @@ try {
   } finally {
     await probePage.close()
   }
+  transition('add', sharedService, `file:${sharedServiceTarball}`)
+  const profileManifest = readProfileManifest()
+  profileManifest.pnpm = { ...profileManifest.pnpm, overrides: { ...profileManifest.pnpm?.overrides, [sharedService]: 'file:' + sharedServiceTarball } }
+  fs.writeFileSync(path.join(dshHome, 'profiles', profile, 'package.json'), JSON.stringify(profileManifest, null, 2) + '\n')
   transition('add', 'dsh-manuscript', `file:${manuscriptTarball}`)
   inspectState('01-manuscript-only', ['dsh-manuscript'])
   await probeWeb(browser, '01-manuscript-only', ['dsh-manuscript'], 0)

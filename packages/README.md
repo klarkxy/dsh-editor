@@ -29,6 +29,6 @@
 
 `dsh-editor-*` 为桌面私有包。入口、依赖与默认开关以各包 `package.json` 为准；组合定义在 [desktop.json](../apps/desktop/resources/compositions/desktop.json)，`basic` / `smart` / `full` 是同一组合的兼容别名。
 
-这六个 AI 功能预装并默认启用，仍可分别停用。Dream、Agent 检查点等额外自动行为需要另行开启；共享服务只提供机制，不会自行调用模型。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。
+这六个 AI 功能预装并默认启用，仍可分别停用。Dream、Agent 与语义检查点等自动行为默认开启，可分别关闭；共享服务只提供机制，不会自行调用模型。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。
 
 [发布维护](PUBLISHING.md) · [桌面使用指南](../docs/user-guide.md)

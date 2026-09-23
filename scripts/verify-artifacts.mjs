@@ -28,9 +28,8 @@ function readManifest(name) {
 }
 
 function tar(args) {
-  /* --force-local:Windows 上 GNU tar 会把 D:\ 盘符当成远程主机名(Cannot connect to D:)。 */
-  const result = spawnSync('tar', ['--force-local', ...args], {
-    cwd: root,
+  const result = spawnSync('tar', args, {
+    cwd: packDir,
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 32 * 1024 * 1024,
@@ -69,10 +68,10 @@ const artifacts = []
 for (const name of packageNames) {
   const filename = `${name.replace(/^@/, '').replaceAll('/', '-')}-${manifests[name].version}.tgz`
   const absolute = path.join(packDir, filename)
-  const entries = tar(['-tf', absolute]).trim().split(/\r?\n/).filter(Boolean)
+  const entries = tar(['-tf', filename]).trim().split(/\r?\n/).filter(Boolean)
   assertExact(`${name} archive contents`, entries, expectedEntries(name))
 
-  const packageJson = JSON.parse(tar(['-xOf', absolute, 'package/package.json']))
+  const packageJson = JSON.parse(tar(['-xOf', filename, 'package/package.json']))
   if (packageJson.name !== name || packageJson.version !== manifests[name].version) {
     throw new Error(`${name} packed manifest identity mismatch`)
   }
@@ -92,9 +91,9 @@ for (const name of packageNames) {
     throw new Error(`${name} contains unresolved workspace runtime dependencies`)
   }
   const codeEntries = entries.filter((entry) => /package\/lib\/.*\.(?:js|cjs)$/.test(entry))
-  const code = codeEntries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
+  const code = codeEntries.map((entry) => tar(['-xOf', filename, entry])).join('\n')
   for (const entry of codeEntries.filter(file => /client(?:\.inner)?\.(?:js|cjs)$/.test(file))) {
-    const browserCode = tar(['-xOf', absolute, entry])
+    const browserCode = tar(['-xOf', filename, entry])
     if (/require\(["']@klarkxy\/dsh-ai-services\/(?:contracts|client-utils)["']\)/.test(browserCode)) {
       throw new Error(name + ' client must bundle browser-safe AI contracts: ' + entry)
     }
@@ -110,7 +109,7 @@ for (const name of packageNames) {
     if (code.includes(token)) throw new Error(`${name} packed code contains forbidden coupling: ${token}`)
   }
   if (name === 'dsh-manuscript') {
-    const archiveText = entries.map((entry) => tar(['-xOf', absolute, entry])).join('\n')
+    const archiveText = entries.map((entry) => tar(['-xOf', filename, entry])).join('\n')
     const archiveForbidden = [
       ...desktopOnlyNames.filter((item) => item === 'dsh-editor-workbench' || item === 'dsh-editor-novel-kernel'),
       '/dsh-editor-workbench',

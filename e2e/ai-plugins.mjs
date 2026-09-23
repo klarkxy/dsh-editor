@@ -49,6 +49,7 @@ const server = createServer(async (req, res) => {
   }
   else if (system.includes('Extract at most one durable lesson')) { kind = 'lesson'; answer = JSON.stringify({ title: '保留剧情', content: '调整语言时保留已有剧情。', tags: ['writing'], exceptions: [] }) }
   else if (system.includes('根据给定事实写一段简短回顾')) { kind = 'recap'; answer = '已确认当前任务范围；下一步检查结果。' }
+  else if (system.includes('在给定约束和证据上补充检查点条目')) { kind = 'checkpoint'; answer = '{"items":[]}' }
   report.calls.push({ kind, model: request.model, input: input.slice(-4000), hasMood: input.includes('@klarkxy/dsh-mood') || input.includes('优化章节表达'), hasMemory: input.includes('调整语言时保留已有剧情'), hasLesson: input.includes('保留剧情') })
   const completion = { id: 'local-' + report.calls.length, object: 'chat.completion', created: Math.floor(Date.now()/1000), model: 'fixture', choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 32, completion_tokens: 16, total_tokens: 48 } }
   if (!request.stream) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(completion)); return }
@@ -311,8 +312,10 @@ try {
     await memory.locator('.dsh-memory-dream').getByText('已应用', { exact: true }).waitFor()
     await screenshot('06-memory-dream')
     await derived.getByRole('button', { name: '删除', exact: true }).click()
+    await derived.getByRole('button', { name: '确认删除？', exact: true }).click()
     await derived.waitFor({ state: 'detached' })
     await record.getByRole('button', { name: '删除', exact: true }).click()
+    await record.getByRole('button', { name: '确认删除？', exact: true }).click()
     await record.waitFor({ state: 'detached' })
     report.checks.push('memory add, review, edit, Dream auto-run and deletion')
     await page.keyboard.press('Escape')

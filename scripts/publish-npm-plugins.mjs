@@ -1,7 +1,7 @@
 /** Run through pnpm run publish:plugins [--publish]. Default mode only previews. */
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { packageContentHash, planPackage, publishAndConfirm, orderReleaseTargets } from './npm-release-policy.mjs'
@@ -33,21 +33,36 @@ function run(command, args, options = {}) {
   return result.stdout
 }
 async function registry(path, timeoutMs = 30000) {
-  // A cached 404 can outlive a successful upload, even with Cache-Control: no-cache.
-  const url = new URL(path, registryURL)
-  url.searchParams.set('dsh-release-check', randomUUID())
-  const response = await fetch(url, { signal: AbortSignal.timeout(Math.min(30000, timeoutMs)), redirect: 'error', headers: { 'cache-control': 'no-cache' } })
-  if (response.status === 404) return null
-  if (!response.ok) throw new Error(`npm registry HTTP ${response.status}`)
-  return response.json()
+  // Registry connections occasionally reset during metadata reads; retry with a fresh URL.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const url = new URL(path, registryURL)
+    url.searchParams.set('dsh-release-check', randomUUID())
+    let response
+    try {
+      response = await fetch(url, { signal: AbortSignal.timeout(Math.min(30000, timeoutMs)), redirect: 'error', headers: { 'cache-control': 'no-cache' } })
+    } catch (error) {
+      if (attempt === 2) throw error
+      await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)))
+      continue
+    }
+    if (response.status === 404) return null
+    if (response.ok) return response.json()
+    if ((response.status === 429 || response.status >= 500) && attempt < 2) {
+      await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)))
+      continue
+    }
+    throw new Error(`npm registry HTTP ${response.status}`)
+  }
 }
 function writeManifest(path, manifest) { writeFileSync(path, JSON.stringify(manifest, null, 2) + '\n') }
 function build(target) { run('pnpm', ['--filter', target.name, 'run', '--if-present', 'build']) }
 function pack(target, manifest) {
   run('pnpm', ['--filter', target.name, 'pack', '--pack-destination', output])
   const archive = resolve(output, `${target.name.replace(/^@/, '').replaceAll('/', '-')}-${manifest.version}.tgz`)
-  const names = run('tar', ['--force-local', '-tf', archive]).trim().split(/\r?\n/)
-  const entries = new Map(names.map(name => [name, run('tar', ['--force-local', '-xOf', archive, name], { encoding: 'buffer' })]))
+  // Read from the archive directory so drive letters are never parsed as remote tar paths.
+  const tarArchive = basename(archive)
+  const names = run('tar', ['-tf', tarArchive], { cwd: output }).trim().split(/\r?\n/)
+  const entries = new Map(names.map(name => [name, run('tar', ['-xOf', tarArchive, name], { cwd: output, encoding: 'buffer' })]))
   const packed = JSON.parse(entries.get('package/package.json').toString())
   if (packed.name !== target.name || packed.version !== manifest.version) throw new Error('Packed package identity mismatch')
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {

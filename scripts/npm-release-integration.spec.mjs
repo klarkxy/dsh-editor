@@ -1,7 +1,7 @@
 /** Real pnpm build/pack integration; registry reads and npm uploads are intercepted local fixtures. */
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, existsSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve, delimiter } from 'node:path'
+import { basename, join, resolve, delimiter } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { expect, it } from 'vitest'
 
@@ -32,6 +32,7 @@ it('discovers new packages, packs updated workspace versions, and reconciles a l
   writeFileSync(join(root, 'mock-registry.mjs'), String.raw`import fs from 'node:fs'
 import { createHash } from 'node:crypto'
 import childProcess from 'node:child_process'
+import path from 'node:path'
 import { syncBuiltinESMExports } from 'node:module'
 const registry = JSON.parse(fs.readFileSync('registry.json'))
 const seen = new Set()
@@ -40,7 +41,7 @@ childProcess.spawnSync = (command, args, options) => {
   if (!args.includes('publish')) return spawnSync(command, args, options)
   // Intercept the actual publish command before it can execute or reach npm.
   const archive = args[args.indexOf('publish') + 1]
-  const packed = spawnSync('tar', ['--force-local', '-xOf', archive, 'package/package.json'], { encoding: 'utf8' })
+  const packed = spawnSync('tar', ['-xOf', path.basename(archive), 'package/package.json'], { encoding: 'utf8', cwd: path.dirname(archive) })
   if (packed.status !== 0) throw new Error(packed.stderr)
   const manifest = JSON.parse(packed.stdout)
   const version = { ...manifest, dist: { integrity: 'sha512-' + createHash('sha512').update(fs.readFileSync(archive)).digest('base64') } }
@@ -80,9 +81,9 @@ globalThis.fetch = async (url, options) => {
     ['@klarkxy/fixture-core', '0.1.3', 'publish'], ['@klarkxy/fixture-consumer', '0.1.5', 'publish'],
   ])
   const archive = join(root, '.pack/npm-release/klarkxy-fixture-consumer-0.1.5.tgz')
-  const packed = JSON.parse(run('tar', ['--force-local', '-xOf', archive, 'package/package.json']))
+  const packed = JSON.parse(run('tar', ['-xOf', join('.pack', 'npm-release', basename(archive)), 'package/package.json']))
   expect(packed.dependencies['@klarkxy/fixture-core']).toBe('0.1.3')
-  expect(run('tar', ['--force-local', '-xOf', archive, 'package/lib/index.js'])).toContain('"version":"0.1.5","dependency":"0.1.3"')
+  expect(run('tar', ['-xOf', join('.pack', 'npm-release', basename(archive)), 'package/lib/index.js'])).toContain('"version":"0.1.5","dependency":"0.1.3"')
   for (const [dir, manifest] of manifests) expect(JSON.parse(readFileSync(join(root, 'packages', dir, 'package.json'), 'utf8'))).toEqual(manifest)
   for (const row of first.packages) registry[row.name] = { 'dist-tags': { latest: row.version }, versions: { [row.version]: { name: row.name, version: row.version, dshRelease: { contentHash: row.contentHash } } } }
   writeFileSync(join(root, 'registry.json'), JSON.stringify(registry))

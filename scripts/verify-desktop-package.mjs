@@ -44,7 +44,11 @@ for (const dependencyName of composition.runtimeDependencies ?? []) {
   const dependency = await json(resolve(resources, 'dsh', 'node_modules', ...dependencyName.split('/'), 'package.json'))
   if (dependency.name !== dependencyName) throw new Error(`packaged runtime dependency identity mismatch: ${dependencyName}`)
 }
-const installedNames = compositionInstallNames(composition)
+const profile = await json(resolve(resources, 'profile-template', 'package.json'))
+if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify([...composition.bundles, 'dsh-editor-profile-config'])) {
+  throw new Error('packaged profile bundles mismatch')
+}
+const installedNames = [...compositionInstallNames(composition), 'dsh-editor-profile-config']
 for (const packageName of installedNames) {
   await stat(resolve(resources, 'profile-template', 'node_modules', packageName, 'package.json'))
 }

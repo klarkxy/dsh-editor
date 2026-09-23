@@ -20,7 +20,7 @@ This implementation follows the accepted six-plugin design: current title, requi
 
 Verify the default-enabled state and each feature enabled/disabled/enabled again; loading the surfaces does not infer, and disabled features add no inference or context injection; stale results are rejected; storage failure preserves previous state; role/session/explicit model selection, native approval boundaries, cross-plugin source filtering, clean npm tarball imports/installation, and usable UI flows all remain intact. Report automated, UI, packaging and live-model evidence separately.
 
-Publication and archiving the former repository follow separately after local implementation and compatibility acceptance.
+The npm packages are published from this repository's main branch after compatibility checks. Archiving the former repository remains separate.
 
 ## 使用
 
@@ -32,7 +32,7 @@ Publication and archiving the former repository follow separately after local im
 
 DSH 0.1.7-alpha.1 支持客户端模块图动态更新。插件设置订阅原生加载状态；正常启停无需重启，仅实际加载失败时提示保存工作后重试。安装、卸载或宿主明确返回需要重启的变更，仍按提示处理。关闭后的后台任务和注入立即取消。
 
-独立安装需要先显式加载共享服务 bundle，再安装所需功能；Self-improvement 还需要单独加载并启用 Memory。各包 README 给出对应命令。本轮新增包属于本地候选，npm 发布和旧仓库归档另行处理。
+独立安装需要先显式加载共享服务 bundle，再安装所需功能；Self-improvement 还需要单独加载并启用 Memory。各包 README 给出对应命令。新增包由主线的 npm 发布流程交付；旧仓库归档另行处理。
 
 ## Local verification
 
@@ -44,7 +44,7 @@ Editor 自有 profile 使用原生 patchReload: startup。插件管理器保存�
 
 各插件在原生“设置”页提供入口，并从宿主的会话选择绑定读取当前选择。Memory、Mood、Recap 和经验学习的管理界面不要求 Editor 侧栏。模型中心在 Editor 内复用供应商界面；独立 web 的供应商编辑仍由原生“模型”页负责。
 
-本地候选尚未发布到 npm。运行 `pnpm test:e2e:ai-plugins:standalone` 会把七个当前 tarball 安装到全新隔离 profile；其中未发布的包依赖只在该测试 profile 内绑定到对应 tarball，不修改全局包管理器配置。手动安装到原生 web 后功能默认启用；如需停用，可在插件设置中关闭后重启。
+运行 `pnpm test:e2e:ai-plugins:standalone` 会把七个当前 tarball 安装到全新隔离 profile；本地包依赖只在该测试 profile 内绑定到对应 tarball，不修改全局包管理器配置。手动安装到原生 web 后功能默认启用；如需停用，可在插件设置中关闭后重启。
 
 原生提问接收器在 Editor 中保持加载，问题由原有写作卡片呈现。需求确认、权限审批和正文修改提案各走原有边界。
 

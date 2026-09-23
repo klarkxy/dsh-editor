@@ -236,10 +236,12 @@ try {
   }
   await window.screenshot({ path: resolve(output, 'window.png') })
   const origin = url.origin
+  const closeStarted = Date.now()
   await window.close()
   await browser.close()
   browser = undefined
-  await waitForExit(child, 30_000)
+  await waitForExit(child, 90_000)
+  state.closeExitMs = Date.now() - closeStarted
   await new Promise((resolvePromise) => setTimeout(resolvePromise, 750))
   const portReleased = await fetch(origin, { signal: AbortSignal.timeout(1_000) }).then(() => false, () => true)
   const debuggerReleased = await fetch(`http://127.0.0.1:${debuggingPort}/json/version`, { signal: AbortSignal.timeout(1_000) }).then(() => false, () => true)

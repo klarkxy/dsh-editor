@@ -24,11 +24,4 @@ Only recent real human `user/message` events are used. Plugin auxiliary messages
 
 [SATA License 2.1](LICENSE), including attribution for the original `dsh-plugins` sources.
 
-The Editor preinstalls this feature disabled. On pinned DSH 0.1.7-alpha.1, a change to the active client module graph needs a page reload or app restart; save your work first. Standalone DSH must load the shared AI service bundle explicitly as well as this feature. New 0.1.0 packages are local candidates until published; use the corresponding tarballs in .pack for local installation.
-
-For native web profiles, append the following entry to the profile directory's `cordis.patch.yml` and restart DSH (the Editor provides its own per-feature switch):
-
-```yaml
-- id: current-title
-  disabled: false
-```
+The Editor preinstalls this feature enabled. In the Editor, use Settings → Plugins to switch it without restarting. Standalone DSH must load `@klarkxy/dsh-ai-services` before this package; installation or removal may require a restart when the host asks for one.

@@ -6,16 +6,29 @@ const { promisify } = require('node:util')
 
 const execFileAsync = promisify(execFile)
 
+async function restoreDependencies(source, target) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(source, target)
+      return
+    } catch (error) {
+      if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)
+        || existsSync(target) || attempt >= 59) throw error
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+  }
+}
+
 /** Electron Builder ignores directories named node_modules in extraResources. */
 exports.default = async function afterPack(context) {
   const resources = context.electronPlatformName === 'darwin'
     ? join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources')
     : join(context.appOutDir, 'resources')
-  await rename(join(resources, 'dsh', 'vendor-dependencies'), join(resources, 'dsh', 'node_modules'))
-  await rename(join(resources, 'profile-template', 'vendor-dependencies'), join(resources, 'profile-template', 'node_modules'))
+  await restoreDependencies(join(resources, 'dsh', 'vendor-dependencies'), join(resources, 'dsh', 'node_modules'))
+  await restoreDependencies(join(resources, 'profile-template', 'vendor-dependencies'), join(resources, 'profile-template', 'node_modules'))
   const nodeVendor = join(resources, 'node', 'vendor-dependencies')
   if (existsSync(nodeVendor)) {
-    await rename(nodeVendor, join(resources, 'node', 'node_modules'))
+    await restoreDependencies(nodeVendor, join(resources, 'node', 'node_modules'))
   }
   if (context.electronPlatformName === 'win32') {
     const executable = join(context.appOutDir, `${context.packager.appInfo.productFilename}.exe`)

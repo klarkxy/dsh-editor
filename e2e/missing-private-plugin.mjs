@@ -253,35 +253,16 @@ async function probeMissing(packageName) {
       join(isolatedRuntime, 'package.json'),
       join(damagedTemplate, 'package.json'),
     ], `${packageName}: before deploy`)
-    await deployProfile(home, damagedTemplate, join(isolatedRuntime, 'node_modules'))
-    const profileDir = join(home, 'profiles', 'dsh-editor')
-    if (existsSync(join(profileDir, 'node_modules', packageName))) {
-      throw new Error(`${packageName}: deployed profile still contains the package`)
+    let failure
+    try {
+      await deployProfile(home, damagedTemplate, join(isolatedRuntime, 'node_modules'))
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error)
     }
-    assertUnresolved(packageName, [
-      join(isolatedRuntime, 'package.json'),
-      join(profileDir, 'package.json'),
-    ], `${packageName}: after deploy`)
+    if (!failure?.includes(packageName)) throw new Error(`${packageName}: deployment did not reject the missing required package: ${failure ?? 'no error'}`)
+    if (existsSync(join(home, 'profiles', 'dsh-editor'))) throw new Error(`${packageName}: missing package check touched the user profile`)
     assertProtected(packageName)
-    const child = spawn(process.execPath, [join(isolatedRuntime, 'lib', 'bin.js'), '--profile', 'dsh-editor', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
-      cwd: sandbox,
-      env: dshEnv(home),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    })
-    track(child)
-    const read = attachOutput(child)
-    const exited = await waitForExit(child, 30_000)
-    const output = read()
-    if (exited.timedOut) {
-      throw new Error(`${packageName}: DSH did not fail within 30 seconds\n--- output ---\n${formatOutput(output)}`)
-    }
-    if (READY.test(output)) throw new Error(`${packageName}: DSH became ready without a required private plugin\n--- output ---\n${formatOutput(output)}`)
-    if (exited.code === 0) throw new Error(`${packageName}: DSH exited successfully despite the missing required plugin\n--- output ---\n${formatOutput(output)}`)
-    const tail = output.slice(-4_000)
-    if (!tail.includes(packageName)) throw new Error(`${packageName}: failure did not identify the missing package: ${tail}`)
-    assertProtected(packageName)
-    return { packageName, exitCode: exited.code, signal: exited.signal, failure: tail }
+    return { packageName, failure }
   })
 }
 
@@ -299,5 +280,5 @@ console.log(JSON.stringify({
   ok: true,
   dsh: report.dsh,
   healthy: { ok: healthy.ok },
-  results: results.map(({ packageName, exitCode }) => ({ packageName, exitCode })),
+  results: results.map(({ packageName, failure }) => ({ packageName, failure })),
 }, null, 2))

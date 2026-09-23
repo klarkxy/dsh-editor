@@ -85,6 +85,32 @@ async function readTemplateBundles(template: string): Promise<string[]> {
   }
 }
 
+async function assertRequiredCompositionPackages(template: string): Promise<void> {
+  let composition: { packages?: unknown; libraries?: unknown }
+  try {
+    composition = JSON.parse(await readFile(join(template, 'composition.json'), 'utf8')) as typeof composition
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+  if (!Array.isArray(composition.packages) || composition.packages.length === 0) return
+  const packages = composition.packages as unknown[]
+  const libraries = Array.isArray(composition.libraries) ? composition.libraries as unknown[] : []
+  for (const name of [...packages, ...libraries, 'dsh-editor-profile-config']) {
+    if (typeof name !== 'string' || !/^(?:@[^/]+\/)?[A-Za-z0-9._-]+$/.test(name)) {
+      throw new Error(`Invalid required profile package: ${String(name)}`)
+    }
+    let manifest: { name?: unknown; dsh?: { bundle?: unknown } }
+    try {
+      manifest = JSON.parse(await readFile(join(template, 'node_modules', name, 'package.json'), 'utf8')) as typeof manifest
+    } catch {
+      throw new Error(`Required profile package is missing or unreadable: ${name}`)
+    }
+    if (manifest.name !== name || ((packages.includes(name) || name === 'dsh-editor-profile-config') && !manifest.dsh?.bundle)) {
+      throw new Error(`Required profile package is invalid: ${name}`)
+    }
+  }
+}
 async function requiredTemplateFilesPresent(template: string, profilePath: string): Promise<boolean> {
   let entries: import('node:fs').Dirent[]
   try { entries = await readdir(template, { withFileTypes: true }) } catch { return false }
@@ -219,6 +245,7 @@ export async function deployOwnedProfile(
   runtimeNodeModules?: string,
   deploy?: ProfileDeployIdentity,
 ): Promise<ProfileDeployResult> {
+  if (runtimeNodeModules) await assertRequiredCompositionPackages(template)
   await sanitizeHostLockedPluginOverrides(home)
   const profiles = join(home, 'profiles')
   const target = join(profiles, PROFILE_NAME)

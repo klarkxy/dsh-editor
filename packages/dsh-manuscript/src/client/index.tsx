@@ -14,18 +14,21 @@ import {
 } from './editor-core/index.ts'
 
 export const name = 'dsh-manuscript-client'
-export const inject = ['slots', 'sessions', 'uiWorkspace', 'connection'] as const
+export const inject = ['slots', 'sessions', 'uiWorkspace', 'uiSession', 'connection'] as const
 
 type Entry = { name: string; type: 'file' | 'directory' | 'other' }
 
 function useWorkspace(ctx: ManuscriptClient): ActiveWorkspace | null {
-  const [workspace, setWorkspace] = useState(() => activeWorkspaceFromSessionList(ctx.sessions.list?.getSnapshot?.(), ctx.uiWorkspace.current.getSnapshot()?.sessionId))
+  const selectedSessionId = () => ctx.uiWorkspace.current
+    ? ctx.uiWorkspace.current.getSnapshot()?.sessionId ?? ''
+    : ctx.uiSession.adapter.current.getSnapshot().key ?? ''
+  const [workspace, setWorkspace] = useState(() => activeWorkspaceFromSessionList(ctx.sessions.list?.getSnapshot?.(), selectedSessionId()))
   useEffect(() => {
     const list = ctx.sessions.list
-    const sync = () => setWorkspace(activeWorkspaceFromSessionList(list?.getSnapshot?.(), ctx.uiWorkspace.current.getSnapshot()?.sessionId))
+    const sync = () => setWorkspace(activeWorkspaceFromSessionList(list?.getSnapshot?.(), selectedSessionId()))
     sync()
     const offList = list?.subscribe?.(sync)
-    const offSelection = ctx.uiWorkspace.current.subscribe(sync)
+    const offSelection = (ctx.uiWorkspace.current ?? ctx.uiSession.adapter.current).subscribe(sync)
     return () => { offList?.(); offSelection() }
   }, [ctx])
   return workspace

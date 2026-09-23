@@ -74,7 +74,7 @@ async function boot(label) {
   await page.getByRole('button', { name: '继续', exact: true }).waitFor({ timeout: 5000 }).catch(() => {})
   for (let i = 0; i < 5; i++) {
     const next = page.getByRole('button', { name: '继续', exact: true })
-    if (!await next.isVisible()) break
+    if (!await next.isVisible() || !await next.isEnabled()) break
     await next.click(); await delay(500)
   }
   const later = page.getByRole('button', { name: '稍后配置', exact: true })
@@ -90,8 +90,10 @@ try {
   if (!process.env.AI_STANDALONE_HOME) {
     for (const id of ['ai-services', ...ids]) {
       console.log('install:' + id)
-      const archive = resolve(root, '.pack', 'klarkxy-dsh-' + id + '-0.1.0.tgz')
-      const staged = resolve(staging, 'klarkxy-dsh-' + id + '-0.1.0.tgz')
+      const packageManifest = JSON.parse(await readFile(resolve(root, 'packages', 'dsh-' + id, 'package.json'), 'utf8'))
+      const archiveName = packageManifest.name.replace(/^@/, '').replaceAll('/', '-') + '-' + packageManifest.version + '.tgz'
+      const archive = resolve(root, '.pack', archiveName)
+      const staged = resolve(staging, archiveName)
       await copyFile(archive, staged)
       command(['plugin', '--profile', 'web', 'add', 'file:' + staged.replaceAll('\\', '/')])
       {
@@ -129,8 +131,7 @@ try {
   }
   const center = dialog.getByTestId('model-center')
   await center.getByRole('tab', { name: '模型配置', exact: true }).click()
-  await center.getByText('高级设置', { exact: true }).click()
-  await center.getByRole('combobox', { name: '默认模型 会话模型', exact: true }).selectOption({ label: 'Local acceptance / Fixture' })
+  await center.getByRole('combobox', { name: '对话 模型', exact: true }).selectOption({ label: 'Local acceptance / Fixture' })
   await center.getByRole('button', { name: '保存', exact: true }).click()
   await center.getByText('已保存。', { exact: true }).waitFor()
   await page.keyboard.press('Escape')
