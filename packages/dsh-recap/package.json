@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-recap",
   "version": "0.1.0",
-  "description": "Folded recap cards (on when the plugin is enabled) and opt-in bounded agent checkpoints for DSH",
+  "description": "Folded recap cards (on when the plugin is enabled) and default-on bounded agent checkpoints for DSH",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {

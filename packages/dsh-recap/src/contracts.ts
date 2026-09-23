@@ -61,8 +61,8 @@ export interface RecapSettings {
 export const defaultSettings = (): RecapSettings => ({
   revision: 0,
   cardsEnabled: true,
-  checkpointsEnabled: false,
-  semanticCheckpointsEnabled: false,
+  checkpointsEnabled: true,
+  semanticCheckpointsEnabled: true,
   idleReturnMs: DEFAULT_IDLE_RETURN_MS,
 })
 

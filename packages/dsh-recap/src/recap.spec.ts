@@ -228,12 +228,12 @@ describe('recap service', () => {
     expect(await service.idleReturn('s1')).toBeUndefined()
   })
 
-  it('enables user cards by default without a second settings toggle', async () => {
+  it('enables cards and checkpoints by default without a second settings toggle', async () => {
     const log = longCompleted()
     const service = new RecapService({ store: memoryStore(), readEvents: () => log, id: () => 'default-on' })
     expect(service.status().settings.cardsEnabled).toBe(true)
-    expect(service.status().settings.checkpointsEnabled).toBe(false)
-    expect(service.status().settings.semanticCheckpointsEnabled).toBe(false)
+    expect(service.status().settings.checkpointsEnabled).toBe(true)
+    expect(service.status().settings.semanticCheckpointsEnabled).toBe(true)
     const card = await service.onSessionEvent('s1', log[6]!)
     expect(card?.id).toBe('default-on')
   })
@@ -250,7 +250,7 @@ describe('recap service', () => {
     }, new AbortController().signal)
     expect(result).toEqual({ ok: false, error: { code: 'RECAP_STORAGE', message: '回顾保存失败，已保留原内容。' } })
     expect(service.status().settings.revision).toBe(0)
-    expect(service.status().settings.checkpointsEnabled).toBe(false)
+    expect(service.status().settings.checkpointsEnabled).toBe(true)
     expect(service.status().storageFailed).toBe(true)
   })
 

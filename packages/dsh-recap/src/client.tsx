@@ -143,22 +143,50 @@ const styles = `
 .dsh-recap-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 0;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
 .dsh-recap-row p{margin:4px 0 0;font-size:var(--font-size-1,13px);opacity:.75}
 .dsh-recap-settings button,.dsh-recap-card button{font:inherit}
+.dsh-recap-settings button:not([role="switch"]):not([role="tab"]),.dsh-recap-card button:not([role="switch"]):not([role="tab"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;justify-self:start;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
+.dsh-recap-settings button:not([role="switch"]):not([role="tab"]):hover:not(:disabled),.dsh-recap-card button:not([role="switch"]):not([role="tab"]):hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent));border-color:color-mix(in srgb,currentColor 35%,transparent)}
+.dsh-recap-settings button:not([role="switch"]):not([role="tab"]):active:not(:disabled),.dsh-recap-card button:not([role="switch"]):not([role="tab"]):active:not(:disabled){transform:scale(.97)}
+.dsh-recap-settings button:disabled,.dsh-recap-card button:disabled{opacity:.45;cursor:not-allowed}
+.dsh-recap-settings [role="tablist"]{display:flex;gap:20px;border-bottom:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
+.dsh-recap-settings button[role="tab"]{padding:8px 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--gray-11,inherit);cursor:pointer;transition:color 150ms ease,border-color 150ms ease}
+.dsh-recap-settings button[role="tab"]:hover:not(:disabled){color:inherit}
+.dsh-recap-settings button[role="tab"][aria-selected="true"]{border-bottom-color:var(--accent-9,#3b82f6);color:var(--accent-11,inherit);font-weight:600}
+.dsh-recap-settings [role="tabpanel"]{border-radius:12px}
+.dsh-recap-settings input{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit;transition:border-color 150ms ease,box-shadow 150ms ease}
+.dsh-recap-settings input:focus{border-color:var(--accent-9,#3b82f6);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-9,#3b82f6) 25%,transparent)}
+.dsh-recap-settings :focus-visible,.dsh-recap-card :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
 .dsh-recap-switch{width:40px;height:24px;border:0;border-radius:999px;background:var(--gray-7,color-mix(in srgb,currentColor 22%,transparent));position:relative}
-.dsh-recap-switch[aria-pressed="true"]{background:var(--accent-9,#3b82f6)}
+.dsh-recap-switch[aria-checked="true"]{background:var(--accent-9,#3b82f6)}
 .dsh-recap-switch::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s}
-.dsh-recap-switch[aria-pressed="true"]::after{transform:translateX(16px)}
+.dsh-recap-switch[aria-checked="true"]::after{transform:translateX(16px)}
 .dsh-recap-history{margin:0;padding:0;list-style:none;display:grid;gap:8px}
-.dsh-recap-history li,.dsh-recap-card details{padding:10px 0;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
+.dsh-recap-history li,.dsh-recap-card details{padding:10px 4px;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px}
 .dsh-recap-card{max-width:42rem}
 .dsh-recap-card pre{margin:8px 0 0;white-space:pre-wrap;font:inherit}
 .dsh-recap-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .dsh-recap-error{color:var(--red-9,#b91c1c)}
-@media(prefers-reduced-motion:reduce){.dsh-recap-switch::after{transition:none}}
+@media(prefers-reduced-motion:reduce){.dsh-recap-switch::after{transition:none}.dsh-recap-settings button,.dsh-recap-card button,.dsh-recap-settings input{transition:none}}
 `
 
 function Switch({ pressed, label, disabled, onToggle }: { pressed: boolean; label: string; disabled?: boolean; onToggle(): void }) {
-  return <button type="button" className="dsh-recap-switch" aria-pressed={pressed} aria-label={label} disabled={disabled}
+  return <button type="button" role="switch" className="dsh-recap-switch" aria-checked={pressed} aria-label={label} disabled={disabled}
     onClick={onToggle} />
+}
+
+function IdleMinutesInput({ minutes, disabled, onCommit }: { minutes: number; disabled?: boolean; onCommit(minutes: number): void }) {
+  const [draft, setDraft] = useState<string>()
+  function commit() {
+    if (draft === undefined) return
+    const next = Number(draft)
+    setDraft(undefined)
+    if (!Number.isInteger(next) || next < 1 || next > 180 || next === minutes) return
+    onCommit(next)
+  }
+  return <input type="number" min={1} max={180} step={1} disabled={disabled}
+    value={draft ?? String(minutes)} aria-label="闲置返回分钟"
+    onChange={event => setDraft(event.target.value)}
+    onBlur={commit}
+    onKeyDown={event => { if (event.key === 'Enter') commit() }} />
 }
 
 export function RecapSettingsPanel({ client, sessionId, locale }: { client: RecapClient; sessionId: string; locale?: string }) {
@@ -235,7 +263,7 @@ export function RecapSettingsPanel({ client, sessionId, locale }: { client: Reca
     {error ? <p role="alert" className="dsh-recap-error">{error}</p> : null}
     {status.storageFailed ? <p role="alert" className="dsh-recap-error">保存失败，仍显示上次成功写入的内容。</p> : null}
     {sessionId ? <RecapEventsCard client={client} sessionId={sessionId} locale={locale} idle={false} /> : null}
-    <div role="tabpanel" id={`${tabsId}-options-panel`} hidden={tab !== 'options'} aria-labelledby={`${tabsId}-options-tab`}>
+    <div role="tabpanel" id={`${tabsId}-options-panel`} hidden={tab !== 'options'} aria-labelledby={`${tabsId}-options-tab`} tabIndex={0}>
       <div className="dsh-recap-row">
         <div>
           <h3>回顾卡片</h3>
@@ -245,18 +273,13 @@ export function RecapSettingsPanel({ client, sessionId, locale }: { client: Reca
       </div>
       <label className="dsh-recap-row">
         <span>闲置返回（分钟）</span>
-        <input type="number" min={1} max={180} step={1} disabled={busy || !settings.cardsEnabled}
-          value={minutesOf(settings.idleReturnMs)} aria-label="闲置返回分钟"
-          onChange={event => {
-            const minutes = Number(event.target.value)
-            if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) return
-            void save({ idleReturnMs: minutes * 60_000 })
-          }} />
+        <IdleMinutesInput minutes={minutesOf(settings.idleReturnMs)} disabled={busy || !settings.cardsEnabled}
+          onCommit={minutes => void save({ idleReturnMs: minutes * 60_000 })} />
       </label>
       <div className="dsh-recap-row">
         <div>
           <h3>检查点</h3>
-          <p>默认关闭。打开后在下一步前把有界检查点交给搭档，不会在每次工具调用时注入。</p>
+          <p>默认开启，维持搭档跨步的连贯性。在下一步前交出，有界检查点不会变成每次工具调用都注入；可在此关闭。</p>
         </div>
         <Switch pressed={settings.checkpointsEnabled} disabled={busy} label="检查点"
           onToggle={() => void save({ checkpointsEnabled: !settings.checkpointsEnabled, semanticCheckpointsEnabled: settings.checkpointsEnabled ? false : settings.semanticCheckpointsEnabled })} />
@@ -264,13 +287,13 @@ export function RecapSettingsPanel({ client, sessionId, locale }: { client: Reca
       <div className="dsh-recap-row">
         <div>
           <h3>语义检查点</h3>
-          <p>默认关闭。仅在有意义的边界额外调用模型。关闭检查点时此项无效。</p>
+          <p>默认开启。仅在有意义的边界额外调用模型；关闭检查点时此项无效。</p>
         </div>
         <Switch pressed={settings.checkpointsEnabled && settings.semanticCheckpointsEnabled} disabled={busy || !settings.checkpointsEnabled} label="语义检查点"
           onToggle={() => void save({ semanticCheckpointsEnabled: !settings.semanticCheckpointsEnabled })} />
       </div>
     </div>
-    <div role="tabpanel" id={`${tabsId}-history-panel`} hidden={tab !== 'history'} aria-labelledby={`${tabsId}-history-tab`}>
+    <div role="tabpanel" id={`${tabsId}-history-panel`} hidden={tab !== 'history'} aria-labelledby={`${tabsId}-history-tab`} tabIndex={0}>
       <HistoryList cards={status.cards} checkpoints={status.checkpoints} busy={busy} rpc={rpc} work={work}
         onChange={next => setStatus(next)} onError={setError} onBusy={setBusy} />
     </div>

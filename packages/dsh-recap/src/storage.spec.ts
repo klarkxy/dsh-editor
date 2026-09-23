@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSettings, type RecapPersistedState } from './contracts.ts'
+import type { RecapPersistedState } from './contracts.ts'
 import { RecapService } from './service.ts'
 import { domainStore, recapDomain, type RecapDomainHandle } from './storage.ts'
 
@@ -74,7 +74,13 @@ function createRecapDomain(options?: { failPuts?: number; initial?: RecapPersist
 }
 
 const previous: RecapPersistedState = {
-  settings: { ...defaultSettings(), revision: 1, idleReturnMs: 15 * 60_000 },
+  settings: {
+    revision: 1,
+    cardsEnabled: true,
+    checkpointsEnabled: false,
+    semanticCheckpointsEnabled: false,
+    idleReturnMs: 15 * 60_000,
+  },
   cards: [card('keep-a'), card('keep-b')],
   checkpoints: [checkpoint('cp-1')],
 }
