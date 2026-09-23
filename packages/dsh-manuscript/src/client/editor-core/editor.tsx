@@ -16,6 +16,8 @@ import { externalSync, ghostField, livePreview, paperHighlight, paperMarkdown, p
 import { closeSearchPanelIfFocused, isPaperSearchPanelFocused, openFindPanel, openReplacePanel, paperEscapePriority, paperSearch, revealEditorRange } from './search.ts'
 import { normalizeTypography, typographyCssVariables, type TypographyInput } from './typography.ts'
 import { focusParagraphExtension, typewriterExtension } from './typewriter.ts'
+import { SelectionDiff } from './selection-diff.tsx'
+import { selectParagraphInView } from './paragraph-selection.ts'
 import {
   captureEditorTarget,
   contextMenuSource,
@@ -142,6 +144,8 @@ export type EditorCoreHandle = {
   undo(): boolean
   redo(): boolean
   selectAll(): boolean
+  /** Select a visible paragraph without changing text; optional for older hosts. */
+  selectParagraph?(target?: EditorTargetSnapshot): boolean
   replaceSelection(text: string, target?: EditorTargetSnapshot): boolean
   getVisibleSelectionText(): string
   getVisiblePaperText(): string
@@ -1135,6 +1139,12 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         view.focus()
         return true
       },
+      selectParagraph: (target) => {
+        const view = viewRef.current
+        if (!view || !isDocumentReady() || view.composing) return false
+        if (target && !restoreTarget(target)) return false
+        return selectParagraphInView(view)
+      },
       replaceSelection,
       getVisibleSelectionText: () => {
         const view = viewRef.current
@@ -1534,24 +1544,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         <strong>
           选段修改建议
         </strong>
-        {showProposalDiff ? <div className="selection-diff">
-          <section className="selection-diff-original">
-            <small>
-              原文
-            </small>
-            <p>
-              {proposal.ticket.selectedText}
-            </p>
-          </section>
-          <section className="selection-diff-revised">
-            <small>
-              修改后
-            </small>
-            <p>
-              {proposal.text}
-            </p>
-          </section>
-        </div> : <p>
+        {showProposalDiff ? <SelectionDiff original={proposal.ticket.selectedText} revised={proposal.text} /> : <p>
           {proposal.text}
         </p>}
         <div className="proposal-actions">

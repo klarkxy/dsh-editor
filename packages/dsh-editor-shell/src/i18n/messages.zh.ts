@@ -1,4 +1,15 @@
 export const zh = {
+  "editor.selectParagraph": "选中当前段落",
+  "reference.title": "查相关资料",
+  "reference.query": "所选文字：{query}",
+  "reference.description": "按文件名和正文查找已有的人物卡、世界书。同名结果分别显示，不会自动整理或修改资料。",
+  "reference.results": "相关资料候选",
+  "reference.noMatch": "当前资料文件中未找到匹配项。",
+  "reference.partial": "结果可能不完整：搜索或显示已达上限，或有 {skipped} 项被跳过。",
+  "reference.failed": "未能搜索 {directory}：{error}",
+  "reference.open": "打开资料",
+  "reference.pin": "钉在旁边",
+
   'app.slotLabel': 'DSH 编辑器',
 
   'common.cancel': '取消',

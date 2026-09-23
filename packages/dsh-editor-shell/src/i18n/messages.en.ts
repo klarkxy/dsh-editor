@@ -1,6 +1,17 @@
 import type { zh } from './messages.zh.ts'
 
 export const en: { [K in keyof typeof zh]: string } = {
+  "editor.selectParagraph": "Select current paragraph",
+  "reference.title": "Find related references",
+  "reference.query": "Selected text: {query}",
+  "reference.description": "Search existing character and worldbook filenames and text. Same-named sources remain separate; nothing is created or changed.",
+  "reference.results": "Related reference candidates",
+  "reference.noMatch": "No matches in the current reference files.",
+  "reference.partial": "Results may be incomplete: search/display limits were reached, or {skipped} items were skipped.",
+  "reference.failed": "Could not search {directory}: {error}",
+  "reference.open": "Open reference",
+  "reference.pin": "Pin beside manuscript",
+
   'app.slotLabel': 'DSH Editor',
 
   'common.cancel': 'Cancel',

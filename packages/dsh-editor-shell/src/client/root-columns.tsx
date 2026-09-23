@@ -226,6 +226,10 @@ export const EditorColumn = memo(function EditorColumn(props: {
   fileSession: SessionFace
   path: string
   files: string[]
+  referenceFiles?: readonly string[]
+  referenceRevision?: number
+  onOpenReference?(path: string, hit?: SearchHit): void
+  onPinReference?(path: string): void
   onCreate(): void
   onHandle(handle: EditorCoreHandle | null): void
   contentRevision: number
@@ -256,6 +260,10 @@ export const EditorColumn = memo(function EditorColumn(props: {
         session={fileSession}
         path={path}
         files={files}
+        referenceFiles={props.referenceFiles}
+        referenceRevision={props.referenceRevision}
+        onOpenReference={props.onOpenReference}
+        onPinReference={props.onPinReference}
         create={props.onCreate}
         onHandle={props.onHandle}
         externalRevision={props.contentRevision}
