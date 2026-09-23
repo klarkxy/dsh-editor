@@ -12,7 +12,7 @@ import type {
 } from './dsh-compat.ts'
 import { catalogToSessionModels, modelSelectionOf } from './dsh-compat.ts'
 import { parseProposalMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
-import { parseAuthorMemoryMarker, type AuthorMemoryMarker } from 'dsh-editor-workbench/contracts'
+import { AUTHOR_OBSERVE_TOOL_NAME, parseAuthorMemoryMarker } from 'dsh-editor-workbench/contracts'
 import { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME, type WritingProposalV2 } from 'dsh-manuscript/client/editor-core'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
@@ -30,7 +30,7 @@ export function parseAuthorProposal(text: string): AuthorProposal | undefined {
   return parseWritingProposalMarker(text) ?? parseProposalMarker(text)
 }
 
-const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'novel_index_write', 'novel_scratch_write', 'novel_scratch_read', 'novel_scratch_list'])
+const HIDDEN_TOOL_NAMES = new Set(['novel_knowledge', 'novel_index_write', 'novel_scratch_write', 'novel_scratch_read', 'novel_scratch_list', AUTHOR_OBSERVE_TOOL_NAME])
 const HIDDEN_REASONING_BLOCKS = new Set(['reasoning', 'thinking', 'thought', 'analysis'])
 
 export function visibleRunningCalls<T extends { name: string }>(calls: readonly T[]): T[] {
@@ -51,7 +51,6 @@ export type ChatRow = {
   /** Author-readable cause of a failed tool call, shown above the verbatim body. */
   reason?: string
   proposal?: AuthorProposal
-  memory?: AuthorMemoryMarker
   /** `node.call.name` when present; Chat looks up plugin message cards by this key. */
   toolName?: string
   /** Payload for a registered message card. Today: the parsed `novel_memory_update` receipt. */
@@ -75,7 +74,7 @@ export type PendingApproval = {
   kind: 'approval'
   key: string
   sessionId: SessionId
-  payload: { approvalId: string }
+  payload: { approvalId: string; toolName?: string; reason?: string }
   respond: (value: { ok: true; value: ApprovalResponsePayload }) => Promise<RpcReceipt>
 }
 
@@ -178,10 +177,6 @@ export function toolResultRow(node: Extract<ConversationNode, { kind: 'tool-resu
   if (proposal) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: proposal.summary, detail: proposalDetailText(proposal), proposal, toolName }
   }
-  const memory = name === 'author_observe' ? parseAuthorMemoryMarker(body) : undefined
-  if (memory) {
-    return { id: `tool-result:${node.seq}`, role: 'tool', text: memory.observation, detail: t('adapter.rememberProposal'), memory, toolName }
-  }
   const memoryUpdate = name === 'novel_memory_update' ? parseMemoryUpdateReceipt(body) : undefined
   if (memoryUpdate) {
     return { id: `tool-result:${node.seq}`, role: 'tool', text: memoryUpdate.summary, detail: t('adapter.memoryUpdate'), toolName, result: memoryUpdate }
@@ -274,6 +269,21 @@ export function chatRows(snapshot: ChatTranscript): ChatRow[] {
     else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: t('chat.retrying') })
   }
   return markRecoveredToolErrors(rows)
+}
+
+/**
+ * author_observe 的观察结果:该工具回合在聊天里完全隐藏(同 novel_index_write),
+ * 由客户端把这些结果静默追加进本机作者侧写,不渲染卡片也不等待确认。
+ */
+export function authorMemoryObservations(snapshot: ChatTranscript): Array<{ seq: number; observation: string }> {
+  const observations: Array<{ seq: number; observation: string }> = []
+  for (const node of snapshot.nodes) {
+    const tool = asToolResult(node)
+    if (!tool || tool.call?.name !== AUTHOR_OBSERVE_TOOL_NAME) continue
+    const memory = parseAuthorMemoryMarker(blocksText(tool.content))
+    if (memory) observations.push({ seq: tool.seq, observation: memory.observation })
+  }
+  return observations
 }
 
 /** 同一轮里同名工具后来成功了，就不要把先前的失败条一直当警报摊开。 */

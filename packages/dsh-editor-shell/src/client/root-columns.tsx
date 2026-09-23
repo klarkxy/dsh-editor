@@ -5,13 +5,12 @@ import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
 import type { CompletionPreference, EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
 import { CENTER_OVERLAYS_SLOT, SIDEBAR_TOOLS_SLOT } from '../root-registration.ts'
 import type { ShellProposalCardProps, ShellToolSeatContext } from '../seats.ts'
-import type { WritingModelRoute } from '../writing-settings.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import { isSuccessWorkbenchNote, type RevealRequest, type ShellContext } from './shared.ts'
 import { ShellErrorBoundary } from './components.tsx'
 import { Chat, ProposalCard } from './chat.tsx'
 import { Editor } from './editor.tsx'
-import { SearchIcon } from './icons.tsx'
+import { DotsIcon, SearchIcon } from './icons.tsx'
 import { Tree } from './sidebar.tsx'
 import { SearchPanel, type SearchHit } from './search-panel.tsx'
 import type { SettingsRenderSlot } from './settings.tsx'
@@ -113,7 +112,7 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
               size="2"
               title={t('sidebar.versionMenu')}
               aria-label={t('sidebar.versionMenu')}>
-              ⋯
+              <DotsIcon size={14} />
             </IconButton>
           </DropdownMenu.Trigger>
           <MenuContent
@@ -178,9 +177,9 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
         activeDirty={props.activeDirty}
         onOpen={(hit: SearchHit) => props.onOpenDocument(hit.path, hit)}
         onReplaced={props.onSearchReplaced} /> : null}
-      <m.div className="sidebar-tools" {...panelMotion}>
+      <div className="sidebar-tools">
         {props.renderSlot?.(SIDEBAR_TOOLS_SLOT, props.seatContext) ?? null}
-      </m.div>
+      </div>
       {props.createNote ? <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="alert">
         <Callout.Text>
           {props.createNote}
@@ -231,6 +230,7 @@ export const EditorColumn = memo(function EditorColumn(props: {
   contentRevision: number
   onDirtyChange(dirty: boolean): void
   completionPreference: CompletionPreference
+  completionDelayMs?: number
   completionEnabled: boolean
   authorPreferences: string
   authorMemory: string
@@ -262,6 +262,7 @@ export const EditorColumn = memo(function EditorColumn(props: {
         onDirtyChange={props.onDirtyChange}
         reveal={props.reveal}
         completionPreference={props.completionPreference}
+        completionDelayMs={props.completionDelayMs}
         /* 能力未加载完成前不发起补全/改写 RPC;显式错误态由用户重试恢复。 */
         completionEnabled={props.completionEnabled}
         authorPreferences={props.authorPreferences}
@@ -281,9 +282,8 @@ export const ChatColumn = memo(function ChatColumn(props: {
   activePath?: string
   authorPreferences: string
   authorMemory: string
-  chatModel?: WritingModelRoute
   renderSlot?: SettingsRenderSlot
-  onAcceptMemory(observation: string): Promise<boolean> | boolean
+  onRememberMemory(observation: string): Promise<boolean> | boolean
   hidden: boolean
   overlay?: boolean
   onConfigure(): void
@@ -301,9 +301,8 @@ export const ChatColumn = memo(function ChatColumn(props: {
         activePath={props.activePath}
         authorPreferences={props.authorPreferences}
         authorMemory={props.authorMemory}
-        chatModel={props.chatModel}
         renderSlot={props.renderSlot}
-        onAcceptMemory={props.onAcceptMemory}
+        onRememberMemory={props.onRememberMemory}
         hidden={props.hidden}
         overlay={props.overlay}
         onConfigure={props.onConfigure}

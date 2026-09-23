@@ -14,14 +14,15 @@ export {
 } from './author-memory.ts'
 
 /**
- * author_observe：助手在协作中观察作者稳定偏好或雷点时，提议把"一条偏好/雷点"
+ * author_observe：助手在协作中观察作者稳定偏好或雷点时，把"一条偏好/雷点"
  * 追加进 authorMemory。本工具只产出 marker 走 workbench contracts 的严格解析，
- * 不写任何 Host 文件；作者必须确认才由 Shell 追加到本机 authorMemory。
+ * 不写任何 Host 文件；Shell 客户端解析 marker 后静默追加到本机 authorMemory，
+ * 不再向作者展示确认卡片。
  */
 export function createAuthorObserveTool() {
   return defineTool({
     name: AUTHOR_OBSERVE_TOOL_NAME,
-    description: '提议把一条稳定的作者偏好或雷点追加到本机"作者侧写"。每次只追加一条，宁缺毋滥；未经作者确认不会写入。',
+    description: '把一条稳定的作者偏好或雷点追加到本机"作者侧写"。每次只追加一条，宁缺毋滥；观察到的偏好会直接记住，无需作者确认。',
     parameters: {
       observation: { type: 'string', required: true, description: `稳定、跨作品可复用的偏好或雷点（≤ ${AUTHOR_OBSERVE_MAX_CHARS} 字）。` },
       reason: { type: 'string', required: true, description: '为什么这是稳定、重复的偏好，而不是单次要求或作品设定。' },

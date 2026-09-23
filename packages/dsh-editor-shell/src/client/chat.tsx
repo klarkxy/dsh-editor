@@ -12,6 +12,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import {
+  authorMemoryObservations,
   chatRows,
   internalIndexTurnActive,
   loadOlder,
@@ -122,7 +123,6 @@ import {
   processDetailRows,
   InitGuideCard,
   LegacyMigrationBanner,
-  MemoryCard,
   PendingCard,
   ProjectContextReceiptView,
 } from './chat-cards.tsx'
@@ -143,7 +143,7 @@ export async function settleConversationStop(input: {
 }
 
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, renderSlot, onAcceptMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, renderSlot, onRememberMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; onRememberMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [messageCardTick, setMessageCardTick] = useState(0)
@@ -235,6 +235,19 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   /* rows 只依赖 nodes 引用:流式期间 partial 每个令牌都换新对象,但 nodes 引用不变,
      历史行得以凭缓存引用跳过重渲染;t() 文案(停止标记/通知行)随 locale 一起失效。 */
   const rows = useMemo(() => chatRows(transcript), [transcript.nodes, locale])
+  /* author_observe 静默落盘:该工具回合不在聊天渲染(同 novel_index_write),
+     这里扫描 transcript 把观察结果自动追加进本机作者侧写;写入失败等下个更新重试。 */
+  const rememberedObservations = useRef(new Set<string>())
+  useEffect(() => {
+    const pending = authorMemoryObservations(transcript)
+      .filter((item) => !rememberedObservations.current.has(`${session.sessionId}:${item.seq}`))
+    if (!pending.length) return
+    void (async () => {
+      for (const item of pending) {
+        if (await onRememberMemory(item.observation)) rememberedObservations.current.add(`${session.sessionId}:${item.seq}`)
+      }
+    })()
+  }, [transcript, onRememberMemory, session.sessionId])
   const historyBlocks = useMemo(() => clusterChatRows(rows, messageCards), [rows, messageCards, messageCardTick])
   const visibleCalls = useMemo(() => visibleRunningCalls(transcript.runningCalls ?? []), [transcript.runningCalls])
   /* 流式更新跟随到底部；用户主动上翻阅读时松开，回到底部附近再重新跟随。
@@ -881,8 +894,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                   enter={isNewMessage(block.row.id)}
                   messageCards={messageCards}
                   messageCardContext={messageCardContext}
-                  onApplied={handleApplied}
-                  onAcceptMemory={onAcceptMemory} />
+                  onApplied={handleApplied} />
               )
               const attachLive = liveOpen && index === historyBlocks.length - 1
               if (attachLive) return (
@@ -1124,7 +1136,6 @@ export {
   clusterChatRows,
   InitGuideCard,
   LegacyMigrationBanner,
-  MemoryCard,
   PendingCard,
   ProjectContextReceiptView,
 }

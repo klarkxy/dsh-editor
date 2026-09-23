@@ -25,17 +25,17 @@ import {
   type PendingInteraction,
   type QuestionAnswerItem,
 } from '../adapter.ts'
-import type { AuthorMemoryMarker, ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
+import type { ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import type { ShellMessageCardContext, ShellMessageCardRegistry } from '../seats.ts'
 import { Markdown } from './markdown.tsx'
-import { ChevronDownIcon, ChevronRightIcon } from './icons.tsx'
+import { ChevronDownIcon, ChevronRightIcon, CrossIcon } from './icons.tsx'
 import { ActivityDots, SuccessMark } from './ui/index.ts'
 import { t, type Locale } from '../i18n/index.ts'
 import { ProposalCard } from './chat-proposal.tsx'
 import type { ShellContext } from './shared.ts'
 
 export function isChatStepRow(row: ChatRow, cards?: ShellMessageCardRegistry) {
-  if (row.proposal || row.memory) return false
+  if (row.proposal) return false
   if (row.toolName && cards?.get(row.toolName)) return false
   if (row.role === 'thinking') return true
   return row.role === 'tool' && Boolean(row.error || row.content)
@@ -268,7 +268,8 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
               {t('chat.needsAuth')}
             </Text>
             <Text size="2">
-              {t('chat.allowStep')}
+              {item.payload.reason || t('chat.allowStep')}
+              {item.payload.toolName ? <code> {item.payload.toolName}</code> : null}
             </Text>
             <Flex gap="2" wrap="wrap">
               <Button type="button" variant="solid" disabled={busy} onClick={() => decide('allowed-once')}>
@@ -278,7 +279,7 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
                 {t('chat.refuse')}
               </Button>
             </Flex>
-            {note ? <Text size="1" className="warning" color="red">
+            {note ? <Text size="1" className="warning" color="red" role="alert">
               {note}
             </Text> : null}
           </Flex>
@@ -372,7 +373,7 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
                   setAnswers((old) => ({ ...old, [current.id]: value }))
                   setNote('')
                 }}
-                ref={(el) => { el?.classList.add('question-custom') }} />
+                className="question-custom" />
             </Flex>
           </Box> : null}
           <Button type="submit" variant="solid" disabled={busy}>
@@ -381,7 +382,7 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
               {t('chat.submitting')}
             </Fragment> : t('chat.submitAllAnswers')}
           </Button>
-          {note ? <Text size="1" className="warning" color="red">
+          {note ? <Text size="1" className="warning" color="red" role="alert">
             {note}
           </Text> : null}
         </Flex>
@@ -395,62 +396,6 @@ export function PendingCard({ item }: { item: PendingInteraction }) {
  * 与内核 ProposalMarker 保持对齐：edit 走 /manuscript 通道；create、章纲/章末小结与
  * split/merge/renames 走 workbench，prepare 响应按 kind 包裹。
  */
-
-export function MemoryCard(props: { memory: AuthorMemoryMarker; onAccept(observation: string): Promise<boolean> | boolean }) {
-  const [state, setState] = useState<'ready' | 'saving' | 'saved' | 'rejected' | 'failed'>('ready')
-  const [note, setNote] = useState('')
-  const accept = async () => {
-    if (state !== 'ready') return
-    setState('saving'); setNote(t('chat.writingMemory'))
-    let ok = false
-    try {
-      ok = Boolean(await props.onAccept(props.memory.observation))
-    } catch {
-      ok = false
-    }
-    if (ok) { setState('saved'); setNote(t('chat.remembered')) }
-    else { setState('failed'); setNote(t('chat.memoryFull')) }
-  }
-  return (
-    <Card size="2">
-      <article className={`memory-card ${state}`} aria-label={t('chat.memoryTitle')}>
-        <Flex direction="column" gap="3">
-          <Box className="memory-observation">
-            <Text size="2">
-              {props.memory.observation}
-            </Text>
-          </Box>
-          <Box className="memory-reason">
-            <Text size="1" color="gray">
-              {t('chat.why')}
-            </Text>
-            <Text size="2">
-              {props.memory.reason}
-            </Text>
-          </Box>
-          <Flex asChild align="center" gap="2" wrap="wrap">
-            <footer>
-              <Text size="1" color={state === 'failed' ? 'red' : 'gray'} role={state === 'failed' ? 'alert' : 'status'}>
-                {state === 'saving' ? <ActivityDots /> : state === 'saved' ? <SuccessMark /> : null}
-                {note}
-              </Text>
-              {state === 'ready' ? <Button type="button" variant="solid" onClick={() => void accept()}>
-                {t('chat.remember')}
-              </Button> : null}
-              {state === 'ready' ? <Button
-                type="button"
-                variant="soft"
-                color="gray"
-                onClick={() => { setState('rejected'); setNote(t('chat.ignoredMemory')) }}>
-                {t('common.ignore')}
-              </Button> : null}
-            </footer>
-          </Flex>
-        </Flex>
-      </article>
-    </Card>
-  );
-}
 
 export function InitGuideCard(props: { state: 'explore' | 'interview'; busy: boolean; running: boolean; done: boolean; note: string; onStart(): void; onDismiss(): void }) {
   const explore = props.state === 'explore'
@@ -518,7 +463,7 @@ export function LegacyMigrationBanner(props: { onMigrate(): void; onDismiss(): v
           size="1"
           aria-label={t('common.close')}
           onClick={props.onDismiss}>
-          ×
+          <CrossIcon size={14} />
         </IconButton>
       </Flex>
     </Callout.Root>
@@ -576,7 +521,6 @@ type ChatRowViewProps = {
   messageCards?: ShellMessageCardRegistry
   messageCardContext: ShellMessageCardContext
   onApplied(path: string): void
-  onAcceptMemory(observation: string): Promise<boolean> | boolean
 }
 
 /* 单行 memo:流式期间 transcript 每个令牌都换新引用,但 rows 按 nodes 引用缓存,
@@ -591,7 +535,6 @@ export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
       proposal={row.proposal}
       onApplied={props.onApplied} />
   );
-  if (row.memory) return <MemoryCard memory={row.memory} onAccept={props.onAcceptMemory} />;
   const registered = row.toolName ? props.messageCards?.get(row.toolName) : undefined
   const pluginCard = registered?.render({ result: row.result ?? row.content ?? row.text, context: props.messageCardContext })
   if (pluginCard != null) return (

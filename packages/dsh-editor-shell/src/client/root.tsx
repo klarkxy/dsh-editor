@@ -21,7 +21,8 @@ import {
   type ProjectOverview,
   type SnapshotResponse,
 } from 'dsh-editor-workbench/contracts'
-import { AUTHOR_MEMORY_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
+import { normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
+import { appendAuthorMemory } from '../author-memory.ts'
 import { defaultCreateDirectory, exportDirectoryOf, firstOpenDocumentPath, isManuscriptChapterPath, normalizeProjectDirectory, sortChapterPaths, sortDocumentPaths } from '../project-files.ts'
 import { CENTER_OVERLAYS_SLOT, EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, ZHIHU_SETTINGS_SLOT, registerRoot } from '../root-registration.ts'
 import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry, type ShellProposalCardProps, type ShellRange, type ShellToolSeatContext } from '../seats.ts'
@@ -214,22 +215,22 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const writingSnapshot = useObservable(writingScope)
   const writing = writingPreferences(writingSnapshot, globalThis.localStorage)
   const conversationScope = useMemo(() => ctx.configForms.get<NonNullable<ReturnType<typeof decodeConversationSettings>>>(CONVERSATION_SETTINGS_NAMESPACE), [ctx])
-  /* 助手提议 author_observe 时的写入回调：把 observation 作为新行追加到 authorMemory。
-     限 AUTHOR_MEMORY_MAX_CHARS 字(2000),追加后超限直接拒绝,提示作者去设置页整理。 */
-  const onAcceptMemory = useCallback(async (observation: string): Promise<boolean> => {
-    const trimmed = observation.trim()
-    if (!trimmed) return false
-    const current = writing.authorMemory ?? ''
-    const next = current ? `${current}
-${trimmed}` : trimmed
-    if (next.length > AUTHOR_MEMORY_MAX_CHARS) return false
+  /* author_observe 的静默写入回调:observation 追加进本机 authorMemory,超限时自动
+     丢弃最旧的自动条目腾位,手写部分不动;ref 镜像保证同渲染周期内的连续追加不丢条目。 */
+  const authorMemoryRef = useRef(writing.authorMemory)
+  authorMemoryRef.current = writing.authorMemory
+  const onRememberMemory = useCallback(async (observation: string): Promise<boolean> => {
+    const next = appendAuthorMemory(authorMemoryRef.current ?? '', observation)
+    if (next === undefined) return true
+    if (next === (authorMemoryRef.current ?? '')) return true
     try {
-      await writingScope.set('authorMemory', next)
+      if (await writingScope.set('authorMemory', next) === false) return false
+      authorMemoryRef.current = next
       return true
     } catch {
       return false
     }
-  }, [writing.authorMemory, writingScope])
+  }, [writingScope])
   const [path, setPath] = useState('')
   const [files, setFiles] = useState<string[]>([])
   const [workbenchNote, setWorkbenchNote] = useState('')
@@ -2170,11 +2171,10 @@ ${trimmed}` : trimmed
               activePath={path}
               authorPreferences={authorPreferences}
               authorMemory={authorMemory}
-              chatModel={writing.chatModel}
               renderSlot={renderSlot}
-              onAcceptMemory={onAcceptMemory}
+              onRememberMemory={onRememberMemory}
               hidden={!assistantVisible}
-              overlay={assistantVisible && overlayAssistant}
+              overlay={overlayAssistant}
               onConfigure={openSettings}
               onDraftDirtyChange={setAssistantDraftDirty}
               onWritten={refreshWrittenPath}

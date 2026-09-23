@@ -37,7 +37,7 @@ describe('workbench author-memory contracts', () => {
     expect(parseAuthorMemoryMarker('not json')).toBeUndefined()
   })
 
-  it('author_observe is preview-only and returns the same marker', async () => {
+  it('author_observe returns the marker the shell persists silently', async () => {
     const tool = createAuthorObserveTool()
     expect(tool.name).toBe(AUTHOR_OBSERVE_TOOL_NAME)
     const result = await tool.execute({ observation: '  留白优先\n', reason: ' 三次要求  ' })
