@@ -201,7 +201,9 @@ function TreeRows(props: RowProps): ReactNode {
                   </IconButton>
                 </Flex>
               </Flex>
-              {isOpen ? <TreeRows {...props} path={child} level={level + 1} /> : null}
+              {isOpen ? <div role="group" className="tree-children">
+                <TreeRows {...props} path={child} level={level + 1} />
+              </div> : null}
             </div>
           );
         }
@@ -490,7 +492,7 @@ export function Tree(props: {
           onTreeDrop={onTreeDrop}
           onTreeDragEnd={onTreeDragEnd} />}
         <div hidden={!note} className="warning">
-          <Callout.Root color="red" size="1">
+          <Callout.Root color="red" size="1" role="alert">
             <Callout.Text>
               {note}
             </Callout.Text>

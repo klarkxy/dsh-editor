@@ -5,7 +5,7 @@ import {
   restoreOwnDisplacement, type LoaderEntry, type LoaderFace, type SessionTitleServiceLike,
 } from './native-slot.ts'
 
-/** Mirrors DSH 0.1.5-rc.2 SessionTitleService.register exclusivity (no extra error stack fields). */
+/** Mirrors DSH 0.1.7-alpha.1 SessionTitleService.register exclusivity (no extra error stack fields). */
 function nativeExclusive(initial?: string) {
   let registration: { id: string } | undefined = initial ? { id: initial } : undefined
   const active = new Set<Promise<unknown>>()

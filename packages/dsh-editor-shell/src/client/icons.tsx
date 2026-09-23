@@ -44,6 +44,18 @@ export function FolderIcon({ size = 16 }: IconProps) {
   );
 }
 
+export function CrossIcon({ size = 16 }: IconProps) {
+  return svg(size,
+    <path d="m6 6 12 12M18 6 6 18" />,
+  );
+}
+
+export function DotsIcon({ size = 16 }: IconProps) {
+  return svg(size,
+    <path d="M5 12h.01M12 12h.01M19 12h.01" />,
+  );
+}
+
 export function ChevronRightIcon({ size = 16 }: IconProps) {
   return svg(size,
     <path d="m9 6 6 6-6 6" />,

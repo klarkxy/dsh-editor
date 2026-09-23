@@ -45,7 +45,7 @@ describe('rules and history on the actual host contracts', () => {
   it('loads current root rules once, preserving literal templates and global preferences', async () => {
     const files = createMemoryContext({ 'AGENTS.md': '规则 {{model}} 与 {{ 未闭合', '世界书/不要读.md': 'SECRET' })
     const s = session()
-    const ctx = { fs: files.fs, sessions: { get: () => s }, workspaceRegistry: { resolveByPath: async () => ({ path: '/workspace', sessionIds: ['rules-test'] }) }, sandboxPolicy: { resolve: () => files.policy }, get: (name: string) => name === 'settings' ? { get: () => ({ authorPreferences: '全局偏好', authorMemory: '全局侧写' }) } : undefined } as unknown as Context
+    const ctx = { fs: files.fs, sessions: { get: () => s }, workspaceRegistry: { resolveByPath: async () => ({ path: '/workspace', sessionIds: ['rules-test'] }) }, sandboxPolicy: { resolve: () => files.policy }, get: (name: string) => name === 'editorWritingPreferences' ? { read: () => ({ authorPreferences: '全局偏好', authorMemory: '全局侧写' }) } : undefined } as unknown as Context
     const first = await assembleProjectRules(ctx, emptyAssembly(), { session: s })
     expect(renderPrompt(first)).toContain('规则 {{model}} 与 {{ 未闭合')
     expect(renderPrompt(first)).toContain('全局偏好')

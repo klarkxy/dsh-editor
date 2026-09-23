@@ -5,12 +5,13 @@ import type { WorkspaceOpenState } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import { formatRecentTime, homeStageCopy, recentWorkPath } from '../home-stage.ts'
 import { PaperStage } from './components.tsx'
-import { AppBrandMark, FolderIcon, NewDocIcon } from './icons.tsx'
+import { AppBrandMark, CrossIcon, FolderIcon, NewDocIcon } from './icons.tsx'
 import { AppMascot } from './mascot.tsx'
 import { CommandPaletteTrigger } from './command-palette.tsx'
 import { SettingsTrigger, type SettingsTab } from './settings.tsx'
 import { titleBarDoubleClick, WindowControls } from './window-controls.tsx'
 import { ActivityRing, ActivityShimmer, ActivityText, m, useChromeMotion } from './ui/index.ts'
+import { useReducedMotion } from 'motion/react'
 import { ConfirmDialog } from './dialogs.tsx'
 
 function HomeChrome(props: {
@@ -73,10 +74,15 @@ export function HomeScreen(props: {
 }) {
   const { workspaceOpen, extensionsDock } = props
   useLocale()
+  const reduceMotion = useReducedMotion()
   const homeCopy = homeStageCopy()
   if (workspaceOpen.kind === 'checking') {
     return (
       <main className="shell no-session" style={{ minWidth: 0, display: 'grid' }}>
+        <HomeChrome
+          extensionsDock={extensionsDock}
+          onOpenPalette={props.onOpenPalette}
+          onOpenSettings={props.onOpenSettings} />
         <Flex
           className="workspace-checking"
           direction="column"
@@ -84,6 +90,7 @@ export function HomeScreen(props: {
           justify="center"
           gap="3"
           p="8"
+          role="status"
           aria-label={t('home.verifying')}>
           <ActivityRing size={40} />
           <Heading as="h1" size="6">
@@ -99,7 +106,6 @@ export function HomeScreen(props: {
             </code>
           </Text>
         </Flex>
-        {extensionsDock}
       </main>
     );
   }
@@ -138,7 +144,7 @@ export function HomeScreen(props: {
                     style={{
                       width: 36,
                       height: 36,
-                      borderRadius: 'var(--radius-3)',
+                      borderRadius: 'var(--radius-4)',
                       background: 'var(--accent-a3)',
                       color: 'var(--accent-11)',
                     }}>
@@ -174,7 +180,7 @@ export function HomeScreen(props: {
                     style={{
                       width: 36,
                       height: 36,
-                      borderRadius: 'var(--radius-3)',
+                      borderRadius: 'var(--radius-4)',
                       background: 'var(--accent-a3)',
                       color: 'var(--accent-11)',
                     }}>
@@ -243,13 +249,17 @@ export function HomeScreen(props: {
             </Heading>
             {props.workspaces.length ? <ScrollArea type="auto" scrollbars="vertical" style={{ maxHeight: '40vh' }}>
               <Flex className="workspace-list" direction="column" gap="2" pr="2">
-                {props.workspaces.map((workspace) => {
+                {props.workspaces.map((workspace, index) => {
                   const needsRelocation = workspaceOpen.kind === 'needs-relocation' && workspaceOpen.workspaceId === workspace.workspaceId
                   const recentLabel = formatRecentTime(workspace.updatedAt)
                   return (
-                    <Card
-                      className={`workspace-row${needsRelocation ? ' needs-relocation' : ''}`}
+                    <m.div
                       key={workspace.workspaceId}
+                      initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 340, damping: 24, mass: 0.85, delay: Math.min(index * 0.05, 0.3) }}>
+                      <Card
+                      className={`workspace-row${needsRelocation ? ' needs-relocation' : ''}`}
                       size="2">
                       <Flex align="center" gap="2">
                         <Box flexGrow="1" minWidth="0">
@@ -288,7 +298,7 @@ export function HomeScreen(props: {
                           title={t('home.removeRecent')}
                           aria-label={t('home.removeRecent')}
                           onClick={() => props.onRequestRemoveRecent(workspace)}>
-                          ×
+                          <CrossIcon size={14} />
                         </IconButton>
                       </Flex>
                       {needsRelocation ? <Callout.Root className="workspace-relocation" role="alert" color="red" mt="2">
@@ -319,7 +329,8 @@ export function HomeScreen(props: {
                           </Button>
                         </Flex>
                       </Callout.Root> : null}
-                    </Card>
+                      </Card>
+                    </m.div>
                   );
                 })}
               </Flex>

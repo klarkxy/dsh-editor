@@ -9,6 +9,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from './ui/index.ts'
+import { DotsIcon } from './icons.tsx'
 
 export type EditorMenuAction =
   | 'undo'
@@ -75,7 +76,7 @@ export function EditorOverflowMenu(props: {
           aria-label={t('editor.menu')}
           data-testid="paper-editor-menu-trigger"
         >
-          ⋯
+          <DotsIcon size={14} />
         </IconButton>
       </DropdownMenu.Trigger>
       <MenuContent

@@ -120,7 +120,7 @@ export function PinnedPane(props: {
                 {t('pin.loading')}
               </span>
             </div> : null}
-            {note ? <Callout.Root className="warning" color="red" size="1" role="status">
+            {note ? <Callout.Root className="warning" color="red" size="1" role="alert">
               <Callout.Text>
                 {note}
               </Callout.Text>

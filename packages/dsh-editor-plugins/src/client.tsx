@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ComponentType,
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
@@ -35,7 +36,7 @@ import {
 import { parseGitHubSpec } from './github.ts'
 
 export const name = 'dsh-editor-plugins-client'
-export const inject = ['slots', 'connection'] as const
+export const inject = ['slots', 'connection', 'modules'] as const
 
 type RpcCaller = {
   call: (channel: string, endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>
@@ -47,6 +48,7 @@ type SlotHandle = {
 type PluginsClientContext = Context & {
   slots: SlotHandle
   connection: { rpc: RpcCaller }
+  modules: { entries: { state: ClientEntrySource } }
 }
 
 function injectStyles(): () => void {
@@ -117,34 +119,14 @@ export function isCurrentInstallAttempt(input: {
   return input.mounted && input.token === input.currentToken && input.openSpec === input.resultSpec
 }
 
-/** Pinned DSH 0.1.5-rc.2 client-hmr ignores graph frames; boot ids stay until reload. */
-export const CLIENT_GRAPH_RELOAD_NOTICE = '插件后台已更新。保存工作后，重启应用以更新界面。'
+/** Native DSH applies client graph updates; warn only after an actual reconciliation failure. */
+export const CLIENT_GRAPH_RELOAD_NOTICE = '插件界面加载失败。保存工作后，重启应用以重试。'
 
-export function sortedClientEntryIds(ids: readonly string[]): string[] {
-  return [...ids].sort()
-}
+type ClientEntryState = { syncing: boolean; failures: readonly { id: string; message: string }[] }
+type ClientEntrySource = { getSnapshot(): ClientEntryState; subscribe(listener: () => void): () => void }
 
-export function bootClientEntryIds(boot: unknown = (globalThis as { __DSH_BOOT__?: unknown }).__DSH_BOOT__): string[] | undefined {
-  if (!boot || typeof boot !== 'object') return undefined
-  const entries = (boot as { entries?: unknown }).entries
-  if (!Array.isArray(entries)) return undefined
-  const ids: string[] = []
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object') continue
-    const id = (entry as { id?: unknown }).id
-    if (typeof id === 'string') ids.push(id)
-  }
-  return ids
-}
-
-export function clientGraphNeedsReload(
-  nativePackages: readonly string[] | undefined,
-  bootEntryIds: readonly string[] | undefined,
-): boolean {
-  if (nativePackages === undefined || bootEntryIds === undefined) return false
-  const native = sortedClientEntryIds(nativePackages)
-  const boot = sortedClientEntryIds(bootEntryIds)
-  return native.length !== boot.length || native.some((id, index) => id !== boot[index])
+export function clientGraphNeedsReload(state: ClientEntryState): boolean {
+  return !state.syncing && state.failures.length > 0
 }
 
 export function pluginToggleFollowUp(input: {
@@ -152,9 +134,9 @@ export function pluginToggleFollowUp(input: {
   enabledMatches: boolean
   enabled: boolean
   title: string
-  clientGraphChanged: boolean
+  clientGraphFailed: boolean
 }): { persist: boolean; error: boolean; message: string } {
-  if (input.clientGraphChanged) {
+  if (input.clientGraphFailed) {
     return { persist: true, error: false, message: CLIENT_GRAPH_RELOAD_NOTICE }
   }
   if (input.restartRequired) {
@@ -1084,6 +1066,7 @@ function PluginPanel(props: PluginPanelProps) {
 
 function PluginSettings(props: {
   rpc: RpcCaller
+  entryState: ClientEntrySource
   Dialog?: ComponentType<HostDialogProps>
   Button?: ComponentType<HostButtonProps>
   Input?: ComponentType<HostInputProps>
@@ -1107,7 +1090,8 @@ function PluginSettings(props: {
   const [errorDetail, setErrorDetail] = useState('')
   const [note, setNote] = useState('')
   const [busyPackage, setBusyPackage] = useState<string | null>(null)
-  const [clientReloadNotice, setClientReloadNotice] = useState(false)
+  const entryState = useSyncExternalStore(props.entryState.subscribe, props.entryState.getSnapshot, props.entryState.getSnapshot)
+  const clientReloadNotice = clientGraphNeedsReload(entryState)
   const attemptRef = useRef(0)
   const mountedRef = useRef(true)
   const inspectAbortRef = useRef<AbortController | null>(null)
@@ -1150,7 +1134,6 @@ function PluginSettings(props: {
       if (presetResult?.ok) setPresets(presetResult.value.presets)
       if (result.ok) {
         setInventory(result.value)
-        setClientReloadNotice(clientGraphNeedsReload(result.value.clientPackages, bootClientEntryIds()))
         return result.value
       }
       const view = errorView(result, '未能读取插件列表')
@@ -1212,11 +1195,10 @@ function PluginSettings(props: {
           enabledMatches: allMatch,
           enabled,
           title,
-          clientGraphChanged: clientGraphNeedsReload(listed.clientPackages, bootClientEntryIds()),
+          clientGraphFailed: clientGraphNeedsReload(props.entryState.getSnapshot()),
         })
         if (followUp.error) showError(followUp.message)
         else if (followUp.persist) {
-          setClientReloadNotice(true)
           clearNote()
         }
         else flashNote(followUp.message)
@@ -1495,6 +1477,7 @@ export function apply(ctx: Context): void {
   }) {
     return <PluginSettings
       rpc={client.connection.rpc}
+      entryState={client.modules.entries.state}
       Dialog={props?.Dialog}
       Button={props?.Button}
       Input={props?.Input} />;

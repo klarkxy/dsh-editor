@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type {
-  AiFeatureScope, AiPolicy, AiServices, AuxiliaryRequest, AuxiliaryResult, ModelTarget, PurposeSpec, ResolvedRoute,
+  AiFeatureScope, AiPolicy, AiServices, AuxiliaryRequest, AuxiliaryResult, ModelRoute, ModelTarget, PurposeSpec, ResolvedRoute,
   UsageReceipt,
 } from './contracts.ts'
 import { AiServicesError, AI_DUPLICATE_PURPOSE, AI_INACTIVE, AI_POLICY_CONFLICT, AI_POLICY_INVALID, AI_POLICY_SAVE_FAILED, abortable, fail, isAbortError } from './errors.ts'
@@ -23,6 +23,9 @@ export type AiServicesOptions = {
   initialReceipts?: UsageReceipt[]
   store: AiServicesStore
   sessionModels?: SessionModelsFn
+  /** Read lazily so host model changes and manager unloads apply to the next call. */
+  defaultModel?: () => ModelRoute | undefined
+  modelCenterAvailable?: () => boolean
   now?: () => number
   id?: () => string
 }
@@ -88,16 +91,16 @@ export class AiServicesRuntime implements AiServices {
     return this.receipts.map(item => structuredClone(item))
   }
 
-  importPurposes(migrationId: string, defaults: Record<string, ModelTarget>): Promise<AiPolicy> {
+  importPurposes(migrationId: string, defaults: Record<string, ModelTarget>, roles: AiPolicy['roles'] = {}): Promise<AiPolicy> {
     const task = this.pending.then(async () => {
       this.assertOpen()
       if (!/^[A-Za-z][A-Za-z0-9._:-]{0,79}$/.test(migrationId)) fail(AI_POLICY_INVALID, '迁移标识无效。')
       if (this.imports.includes(migrationId)) return this.getPolicy()
       if (this.imports.length >= 100) fail(AI_POLICY_INVALID, '迁移记录已满。')
       const { revision: _revision, ...current } = this.policy
-      const parsed = parsePolicyData({ ...current, purposes: { ...defaults, ...this.policy.purposes } })
+      const parsed = parsePolicyData({ ...current, roles: { ...roles, ...current.roles }, purposes: { ...defaults, ...this.policy.purposes } })
       const purposes = { ...parsed.purposes, ...this.policy.purposes }
-      const next = { ...this.getPolicy(), purposes, revision: this.policy.revision + 1 }
+      const next = { ...this.getPolicy(), roles: parsed.roles, purposes, revision: this.policy.revision + 1 }
       const imports = [...this.imports, migrationId]
       try { await this.options.store.savePolicy(next, imports) }
       catch { this.storageFailed = true; fail(AI_POLICY_SAVE_FAILED, '旧模型配置迁移失败，已保留原设置。') }
@@ -142,6 +145,8 @@ export class AiServicesRuntime implements AiServices {
       sessionId,
       override,
       sessionModels: this.options.sessionModels,
+      defaultModel: this.options.defaultModel,
+      modelCenterAvailable: this.options.modelCenterAvailable?.(),
     })
   }
 
@@ -302,6 +307,8 @@ export class AiServicesRuntime implements AiServices {
         sessionId: request.sessionId,
         override: request.override,
         sessionModels: this.options.sessionModels,
+        defaultModel: this.options.defaultModel,
+        modelCenterAvailable: this.options.modelCenterAvailable?.(),
         signal: combined,
       }), combined)
     } catch (error) {

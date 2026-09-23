@@ -8,7 +8,7 @@ import {
 import { readinessLabel } from './contracts.ts'
 
 export const name = 'dsh-mood-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale'] as const
+export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 
 type Client = NativeSurfaceClient & {
   connection: {
@@ -422,11 +422,16 @@ const styles = `
 .mood-settings label{display:flex;gap:8px;align-items:center;min-height:32px}
 .mood-card header{display:flex;justify-content:space-between;gap:12px;align-items:center}
 .mood-card ul{margin:0;padding-left:1.2em}
-.mood-card textarea{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:6px;background:var(--color-surface,transparent);color:inherit;font:inherit}
+.mood-card{padding:14px 16px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:12px}
+.mood-card textarea{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit;transition:border-color 150ms ease,box-shadow 150ms ease}
+.mood-card textarea:focus{border-color:var(--accent-9,#3b82f6);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-9,#3b82f6) 25%,transparent)}
 .mood-actions{display:flex;flex-wrap:wrap;gap:8px}
-.mood-settings button,.mood-card button{min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:6px;background:transparent;color:inherit;cursor:pointer;font:inherit}
+.mood-settings button,.mood-card button{min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
+.mood-settings button:hover:not(:disabled),.mood-card button:hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent));border-color:color-mix(in srgb,currentColor 35%,transparent)}
+.mood-settings button:active:not(:disabled),.mood-card button:active:not(:disabled){transform:scale(.97)}
 .mood-settings button:disabled,.mood-card button:disabled{opacity:.45;cursor:not-allowed}
-.mood-settings :focus-visible,.mood-card :focus-visible,.mood-settings-root :focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.mood-settings :focus-visible,.mood-card :focus-visible,.mood-settings-root :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.mood-settings button,.mood-card button,.mood-card textarea{transition:none}}
 `
 
 export function apply(ctx: Context): void {

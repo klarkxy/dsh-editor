@@ -27,7 +27,7 @@ export function guardImeEnter(event: {
   return true
 }
 
-export type RenderInputProps = ShellInputProps & { ref?: Ref<HTMLInputElement> }
+export type RenderInputProps = ShellInputProps & { ref?: Ref<HTMLInputElement>; inputMode?: 'numeric' }
 
 /** Host Input when the seat provides one; otherwise a native control. */
 export function renderInput(

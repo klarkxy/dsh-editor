@@ -3,9 +3,9 @@ import { emptyTranscript, type ChatTranscript } from '../dsh-compat.ts'
 import type { PendingInteraction } from '../adapter.ts'
 import type { ShellContext } from './shared.ts'
 
-export const EMPTY_PENDING_LIST: PendingInteraction[] = []
+export const EMPTY_PENDING_LIST: ReadonlyMap<SessionId, { pendingInteraction?: unknown }> = new Map()
 export const EMPTY_PENDING = {
-  getSnapshot: (): PendingInteraction[] => EMPTY_PENDING_LIST,
+  getSnapshot: () => EMPTY_PENDING_LIST,
   subscribe: () => () => {},
 }
 
@@ -119,20 +119,35 @@ export const DISCONNECTED = {
 }
 
 export function pendingForSession(
-  raw: ReadonlyMap<SessionId, unknown> | unknown[] | undefined,
+  raw: ReadonlyMap<SessionId, { pendingInteraction?: unknown }> | undefined,
   sessionId: SessionId,
 ): PendingInteraction[] {
   if (!raw) return []
-  const items = Array.isArray(raw) ? raw : [raw.get(sessionId)]
-  return items.flatMap(item => {
+  const items = [raw.get(sessionId)?.pendingInteraction]
+  return items.flatMap<PendingInteraction>(item => {
     if (!item || typeof item !== 'object') return []
+    const approval = item as { kind?: string; key?: string; sessionId?: SessionId; toolName?: string; reason?: string;
+      answer?: (outcome: 'allowed-once' | 'rejected') => Promise<void> }
+    if (approval.kind === 'approval' && approval.sessionId === sessionId
+      && typeof approval.key === 'string' && typeof approval.answer === 'function') {
+      const key = approval.key
+      return [{ kind: 'approval' as const, key, sessionId,
+        payload: { approvalId: key, toolName: approval.toolName, reason: approval.reason },
+        respond: async ({ value }: { value: { sessionId: SessionId; approvalId: string; outcome: string } }) => {
+          if (value.sessionId !== sessionId || value.approvalId !== key
+            || (value.outcome !== 'allowed-once' && value.outcome !== 'rejected')) return { accepted: false }
+          await approval.answer!.call(approval, value.outcome)
+          return { accepted: true }
+        },
+      }]
+    }
     const candidate = item as {
       kind?: string; key?: string; sessionId?: SessionId
       questions?: Extract<PendingInteraction, { kind: 'question' }>['payload']['questions']
       answer?: (answer: { answers: Array<{ id: string; selected: string[]; custom?: string }> }) => Promise<void>
     }
     if (candidate.sessionId !== sessionId) return []
-    // rc.2's native question provider owns the request lifetime and settlement.
+    // The native question provider owns the request lifetime and settlement.
     // Adapt its presentation only; never manufacture another request or transport.
     if ((candidate.kind === 'question' || candidate.kind === 'plan-review')
       && typeof candidate.key === 'string' && Array.isArray(candidate.questions)
@@ -147,7 +162,7 @@ export function pendingForSession(
         },
       }]
     }
-    return [item as PendingInteraction]
+    return []
   })
 }
 

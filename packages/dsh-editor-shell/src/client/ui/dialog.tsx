@@ -42,6 +42,7 @@ export function Dialog(props: DialogProps) {
     >
       {/* Themes Content owns the overlay; overlayClassName is kept for the seat API and ignored. */}
       <ThemesDialog.Content
+        aria-modal="true"
         className={props.className ?? 'file-dialog'}
         {...(props.description ? {} : { 'aria-describedby': undefined })}
         onOpenAutoFocus={(event: Event) => {

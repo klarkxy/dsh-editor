@@ -55,9 +55,10 @@ describe('session log facts', () => {
   it('skips recap plugin auxiliary events and does not treat proposals as applied writes', () => {
     expect(isRecapAuxiliary(event({
       seq: 4, type: 'user/message', time: 4,
-      data: { source: { kind: 'plugin', plugin: RECAP_PLUGIN }, content: [{ type: 'text', text: '检查点' }] },
+      data: { source: { kind: 'plugin:@klarkxy/dsh-recap', plugin: RECAP_PLUGIN }, content: [{ type: 'text', text: '检查点' }] },
     }))).toBe(true)
-    expect(incomingMessagesAreRecapOnly([{ source: { kind: 'plugin', plugin: RECAP_PLUGIN } }])).toBe(true)
+    expect(incomingMessagesAreRecapOnly([{ source: { kind: 'plugin:@klarkxy/dsh-recap', plugin: RECAP_PLUGIN } }])).toBe(true)
+    expect(incomingMessagesAreRecapOnly([{ source: { kind: 'plugin', plugin: RECAP_PLUGIN } }])).toBe(false)
     const facts = collectFacts('s1', [
       event({ seq: 0, type: 'turn/start', time: 0, data: { turn: 1 } }),
       event({
@@ -68,7 +69,7 @@ describe('session log facts', () => {
       nativeResult(3, 'p', '{"marker":"dsh-editor.proposal","kind":"edit"}'),
       event({
         seq: 4, type: 'user/message', time: 4,
-        data: { source: { kind: 'plugin', plugin: RECAP_PLUGIN }, content: [{ type: 'text', text: '不应进入回顾事实' }] },
+        data: { source: { kind: 'plugin:@klarkxy/dsh-recap', plugin: RECAP_PLUGIN }, content: [{ type: 'text', text: '不应进入回顾事实' }] },
       }),
       event({ seq: 5, type: 'turn/end', time: 5, data: { turn: 1, reason: { kind: 'completed' } } }),
     ])

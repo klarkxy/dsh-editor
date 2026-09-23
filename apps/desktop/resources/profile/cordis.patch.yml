@@ -59,7 +59,7 @@
 # <dshHome>/.agent-presets by the desktop app) instead of the shipped
 # `standard` coding agent. The new default is dsh-editor-writing; the
 # historical dsh-editor preset remains selectable.
-- id: agent-presets
+- id: agent-preset-registry
   config:
     default: dsh-editor-writing
 

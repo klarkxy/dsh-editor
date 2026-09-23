@@ -1,7 +1,7 @@
 import {
   MAX_EXCERPT_CHARS,
   MAX_LOG_EVENTS,
-  RECAP_PLUGIN,
+  RECAP_PLUGIN, RECAP_SOURCE_KIND,
   recapSourceVersion,
   type RecapFacts,
   type RecapLogEvent,
@@ -27,7 +27,7 @@ export function turnEndStatus(reason: unknown): Exclude<RecapSourceStatus, 'runn
 export function isRecapAuxiliary(event: RecapLogEvent): boolean {
   if (event.type !== 'user/message' && event.type !== 'system/message') return false
   const source = messageSource(event)
-  return source?.kind === 'plugin' && source.plugin === RECAP_PLUGIN
+  return source?.kind === RECAP_SOURCE_KIND && source.plugin === RECAP_PLUGIN
 }
 
 function messageSource(event: RecapLogEvent): { kind?: string; plugin?: string } | undefined {
@@ -264,5 +264,5 @@ export function deterministicReceiptsSuffice(facts: RecapFacts): boolean {
 }
 
 export function incomingMessagesAreRecapOnly(messages: ReadonlyArray<{ source?: { kind?: string; plugin?: string } }>): boolean {
-  return messages.length > 0 && messages.every(message => message.source?.kind === 'plugin' && message.source.plugin === RECAP_PLUGIN)
+  return messages.length > 0 && messages.every(message => message.source?.kind === RECAP_SOURCE_KIND && message.source.plugin === RECAP_PLUGIN)
 }

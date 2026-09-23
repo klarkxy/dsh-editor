@@ -20,7 +20,7 @@ describe('native provider listing', () => {
     expect(JSON.stringify(rows)).not.toMatch(/OPENAI_API_KEY/)
   })
 
-  it('uses only apiKeyEnv resolved from settingsScope/settingsSchema', () => {
+  it('uses only apiKeyEnv resolved from configForms/settingsSchema', () => {
     const namespaces = new Map<string, unknown>([
       ['llm-deepseek', { providers: { official: { apiKeyEnv: 'MY_REAL_KEY' } } }],
     ])

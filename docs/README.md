@@ -3,6 +3,7 @@
 - [使用指南](user-guide.md)：安装、写作、作品管理与问题处理。
 - [产品原则](product-principles.md)：作者工作流与产品取舍。
 - [架构决策](architecture.md)：运行时权威、信任边界与发布约定。
+- [DSH 0.1.7 升级审计](dsh-0.1.7-upgrade.md)：兼容性修复、能力重叠与验收范围。
 - [AI 插件](ai-plugins-implementation.md)：六个可选功能、共享模型配置与启停方式。
 - [插件目录](../packages/README.md)：各包说明与发布维护。
 - [变更记录](../CHANGELOG.md)：版本历史。

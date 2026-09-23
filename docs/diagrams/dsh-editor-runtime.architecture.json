@@ -99,7 +99,7 @@
       "id": "dsh-host",
       "type": "cloud",
       "label": "DSH Host",
-      "sublabel": "0.1.5-rc.2 · 唯一 Agent",
+      "sublabel": "0.1.7-alpha.1 · 唯一 Agent",
       "pos": [
         608,
         328

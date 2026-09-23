@@ -1,5 +1,5 @@
 /**
- * Editor-facing 0.1.5-rc.2 shapes.
+ * Editor-facing 0.1.7-alpha.1 shapes.
  *
  * Official client types now live across session-controller / ui-conversation /
  * ui-chat / remotes, and those packages pull the Host graph. The shell only
@@ -41,15 +41,16 @@ export type SessionModels = {
   groups: ModelCatalog['groups']
 }
 
-export type QueuedMessage = {
-  id: string
-  placement: 'queued' | 'steering' | 'context'
-  preview: string
+export type PendingSubmission = {
+  requestId: string
+  placement: 'transcript' | 'queued' | 'steering'
+  text: string
 }
 
 export type SessionLifecycle = {
   sessionId: SessionId
-  queue: readonly QueuedMessage[]
+  /** Local prompt echoes only. Durable queued turns belong to uiConversation. */
+  pendingSubmissions: readonly PendingSubmission[]
   running: boolean
   removed?: boolean
   openState: 'cold' | 'loading' | 'open' | 'error'
@@ -162,9 +163,9 @@ export type SettingsScopeSnapshot<T> = {
 }
 
 export type SettingsScope<T> = ObservableSource<SettingsScopeSnapshot<T>> & {
-  mutate(ops: readonly SettingsPathOpView[], expectedRevision?: number): Promise<void>
-  set(field: string, value: unknown): Promise<void>
-  unset(field: string): Promise<void>
+  mutate(ops: readonly SettingsPathOpView[], expectedRevision?: number): Promise<boolean | void>
+  set(field: string, value: unknown): Promise<boolean | void>
+  unset(field: string): Promise<boolean | void>
 }
 
 export type RootOwnerProps = { children?: never }
@@ -218,10 +219,16 @@ export type EditorRemote = {
 
 export type EditorSessions = {
   list: ObservableSource<SessionListState>
-  open(id: SessionId): void
-  clear(): void
   create(opts?: { workspaceId?: WorkspaceId; cwd?: string }): Promise<SessionId>
+  retain(id: SessionId, options: { source: 'workspaceOperation'; signal?: AbortSignal }): EditorSessionReference
   binding(id: SessionId): { session: SessionFace } | undefined
+}
+
+export type EditorSessionReference = {
+  sessionId: SessionId
+  binding: { session: SessionFace }
+  ready: Promise<{ session: SessionFace }>
+  release(): void
 }
 
 export type EditorWorkspaces = {
@@ -234,7 +241,13 @@ export type EditorWorkspaces = {
 export type EditorUiWorkspace = {
   connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>
   createSession(workspaceId: WorkspaceId): Promise<SessionId>
-  openSession(sessionId: SessionId): void
+  /** The shell's editor-owned main session. It is retained while selected. */
+  current: ObservableSource<SessionFace | undefined>
+  /** Retained file/workspace RPC session; it outlives chat conversation switches. */
+  workspace: ObservableSource<SessionFace | undefined>
+  openWorkspaceSession(sessionId: SessionId): Promise<void>
+  openSession(sessionId: SessionId): Promise<void>
+  clearSession(): void
   openWorkspace(workspaceId: WorkspaceId, beforeOpen?: (sessionId: SessionId) => void): Promise<void>
   pickDirectory(): Promise<string | null>
   archiveSession(sessionId: SessionId): Promise<void>
@@ -247,14 +260,14 @@ export type EditorUiConversation = {
 }
 
 export type EditorUiSession = {
-  pendingInteractions?: ObservableSource<ReadonlyMap<SessionId, PendingInteraction> | PendingInteraction[]>
+  sessionStatus?: ObservableSource<ReadonlyMap<SessionId, { pendingInteraction?: unknown }>>
 }
 
 export type PendingApproval = {
   kind: 'approval'
   key: string
   sessionId: SessionId
-  payload: { approvalId: string }
+  payload: { approvalId: string; toolName?: string; reason?: string }
   respond: (value: { ok: true; value: ApprovalResponsePayload }) => Promise<unknown>
 }
 

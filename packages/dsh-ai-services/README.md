@@ -6,7 +6,7 @@ Shared Cordis service for model-role routing, bounded auxiliary calls, cancellat
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.5-rc.2`. The host must provide `llm`, `storageDomain`, `connection`, and `webServer`.
+Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. The host must provide `llm`, `storageDomain`, `connection`, and `webServer`.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services
@@ -16,7 +16,7 @@ DSH Editor includes this package as a locked core service. Feature plugins call 
 
 ## Routing
 
-Roles `normal`, `weak`, and `strong` are configured aliases. Unset weak/strong inherit a configured normal route. An unset normal role fails visibly. An explicit invalid provider/model/reasoning choice fails without switching to another route. Session targets read the current picker via `session.models`, not the last request header.
+Roles `weak`, `normal`, `strong`, and `fantasy` represent Quick, Chat, Thinking, and Fantasy (the Haiku, Sonnet, Opus, and Fable tiers respectively). They can bind models from any provider. Built-in plugins never default to Fantasy; it is reserved for explicit user selection. Unbound tiers inherit Chat, falling back to the host default chat model if Chat is unset. Without Model Center, tier-based calls use Chat or the host default directly; saved tier bindings remain intact. The host default is read on each call, so standalone plugins need no Editor initialization. A missing default chat model fails visibly. An explicit invalid provider/model/reasoning choice fails without switching to another route. Session targets read the current picker via `session.models`, not the last request header.
 
 Policy is one storage-domain record with compare-and-swap revision. It does not copy provider credentials. Manuscript completion and rewrite settings stay on their existing path.
 

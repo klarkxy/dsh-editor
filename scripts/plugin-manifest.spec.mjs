@@ -161,8 +161,8 @@ describe('plugin manifests and composition resolver', () => {
   it('defaults new sessions to dsh-editor-writing and mounts novel-kernel only on novel and legacy presets', () => {
     const profile = resolve(root, 'apps/desktop/resources/profile')
     const patch = readFileSync(resolve(profile, 'cordis.patch.yml'), 'utf8')
-    expect(patch).toMatch(/- id: agent-presets\s+config:\s+default: dsh-editor-writing/)
-    expect(patch).not.toMatch(/- id: agent-presets\s+config:\s+default: dsh-editor\s*$/m)
+    expect(patch).toMatch(/- id: agent-preset-registry\s+config:\s+default: dsh-editor-writing/)
+    expect(patch).not.toMatch(/- id: agent-preset-registry\s+config:\s+default: dsh-editor\s*$/m)
 
     /* 模板只保留 legacy 与核心通用写作；小说/文章/技术由第一方包提供。 */
     const sourceDir = (id) => {

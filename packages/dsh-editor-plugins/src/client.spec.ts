@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { PluginInspectReport } from './contracts.ts'
 import {
   apply,
-  bootClientEntryIds,
   canConfirmPluginInstall,
   CLIENT_GRAPH_RELOAD_NOTICE,
   clientGraphNeedsReload,
@@ -109,6 +108,7 @@ describe('plugin market install confirmation', () => {
         },
       },
       connection: { rpc: { call: async () => ({}) } },
+      modules: { entries: { state: { getSnapshot: () => ({ syncing: false, failures: [] }), subscribe: () => () => {} } } },
     } as never)
     expect(renders.length).toBe(1)
     const hosted = renders[0]!({ Button: MockButton, Input: MockInput })
@@ -128,73 +128,21 @@ describe('plugin settings chrome', () => {
   })
 })
 
-describe('client graph reload notice', () => {
-  const boot = ['dsh-editor-plugins', 'dsh-editor-shell']
-
-  it('treats enable and disable graph changes as a real mismatch', () => {
-    expect(clientGraphNeedsReload(
-      ['dsh-editor-plugins', 'dsh-editor-shell', '@klarkxy/dsh-model-center'],
-      boot,
-    )).toBe(true)
-    expect(clientGraphNeedsReload(
-      ['dsh-editor-plugins'],
-      boot,
-    )).toBe(true)
-    expect(pluginToggleFollowUp({
-      restartRequired: false,
-      enabledMatches: true,
-      enabled: true,
-      title: '模型中心',
-      clientGraphChanged: true,
-    })).toEqual({ persist: true, error: false, message: CLIENT_GRAPH_RELOAD_NOTICE })
-    expect(pluginToggleFollowUp({
-      restartRequired: false,
-      enabledMatches: true,
-      enabled: false,
-      title: '模型中心',
-      clientGraphChanged: true,
-    })).toEqual({ persist: true, error: false, message: CLIENT_GRAPH_RELOAD_NOTICE })
+describe('native client graph status', () => {
+  it('only requests recovery after a settled failure and clears on retry or success', () => {
+    const failures = [{ id: 'test-plugin', message: 'load failed' }]
+    expect(clientGraphNeedsReload({ syncing: false, failures })).toBe(true)
+    expect(clientGraphNeedsReload({ syncing: true, failures })).toBe(false)
+    expect(clientGraphNeedsReload({ syncing: false, failures: [] })).toBe(false)
   })
-
-  it('does not warn for a clientless host or missing boot graph', () => {
-    expect(clientGraphNeedsReload(undefined, boot)).toBe(false)
-    expect(clientGraphNeedsReload(boot, undefined)).toBe(false)
-    expect(bootClientEntryIds(null)).toBeUndefined()
-    expect(bootClientEntryIds({ rev: '1' })).toBeUndefined()
-    expect(pluginToggleFollowUp({
-      restartRequired: false,
-      enabledMatches: true,
-      enabled: true,
-      title: '知乎资料',
-      clientGraphChanged: false,
-    })).toEqual({ persist: false, error: false, message: '已启用 知乎资料。' })
+  it('reports successful hot enablement without requiring a restart', () => {
+    expect(pluginToggleFollowUp({ restartRequired: false, enabledMatches: true, enabled: true,
+      title: '模型中心', clientGraphFailed: false })).toEqual({ persist: false, error: false, message: '已启用 模型中心。' })
   })
-
-  it('clears the notice when refreshed boot ids equal the native graph', () => {
-    const native = ['dsh-editor-shell', '@klarkxy/dsh-model-center', 'dsh-editor-plugins']
-    expect(clientGraphNeedsReload(native, ['dsh-editor-plugins', 'dsh-editor-shell'])).toBe(true)
-    expect(clientGraphNeedsReload(native, ['@klarkxy/dsh-model-center', 'dsh-editor-plugins', 'dsh-editor-shell'])).toBe(false)
-    const scope = globalThis as { __DSH_BOOT__?: unknown }
-    const previous = scope.__DSH_BOOT__
-    scope.__DSH_BOOT__ = {
-      entries: native.map((id) => ({ id })),
-    }
-    try {
-      expect(bootClientEntryIds()).toEqual(native)
-      expect(clientGraphNeedsReload(native, bootClientEntryIds())).toBe(false)
-    } finally {
-      if (previous === undefined) delete scope.__DSH_BOOT__
-      else scope.__DSH_BOOT__ = previous
-    }
-  })
-
-  it('does not ignore restartRequired just because the loader enabled boolean matches', () => {
-    expect(pluginToggleFollowUp({
-      restartRequired: true,
-      enabledMatches: true,
-      enabled: true,
-      title: '模型中心',
-      clientGraphChanged: false,
-    })).toEqual({ persist: false, error: false, message: '已保存，重启应用后完全生效。' })
+  it('preserves host restart requirements and client failure recovery', () => {
+    expect(pluginToggleFollowUp({ restartRequired: true, enabledMatches: true, enabled: true,
+      title: '模型中心', clientGraphFailed: false }).message).toContain('重启')
+    expect(pluginToggleFollowUp({ restartRequired: false, enabledMatches: true, enabled: true,
+      title: '模型中心', clientGraphFailed: true })).toEqual({ persist: true, error: false, message: CLIENT_GRAPH_RELOAD_NOTICE })
   })
 })

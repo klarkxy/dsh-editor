@@ -75,7 +75,7 @@ export function parseLimits(value: unknown): AiPolicy['limits'] | undefined {
 export function parseRoles(value: unknown): AiPolicy['roles'] | undefined {
   if (!isRecord(value)) return undefined
   const roles: AiPolicy['roles'] = {}
-  for (const role of ['normal', 'weak', 'strong'] as const) {
+  for (const role of ['normal', 'weak', 'strong', 'fantasy'] as const) {
     if (value[role] === undefined) continue
     const route = parseModelRoute(value[role])
     if (!route) return undefined

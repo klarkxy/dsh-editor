@@ -75,9 +75,11 @@ function mockClient(
 
 describe('model center client seats', () => {
   it('uses user-facing preset names and direct purpose model values', () => {
-    expect(presetLabel('normal', 'zh')).toBe('默认模型')
-    expect(presetLabel('weak', 'zh')).toBe('省资源模型')
-    expect(presetLabel('strong', 'zh')).toBe('高质量模型')
+    expect(presetLabel('normal', 'zh')).toBe('对话')
+    expect(presetLabel('weak', 'zh')).toBe('快速')
+    expect(presetLabel('strong', 'zh')).toBe('思考')
+    expect(presetLabel('fantasy', 'zh')).toBe('幻想')
+    expect(purposeTargetFromValue('role:fantasy')).toEqual({ kind: 'role', role: 'fantasy' })
     const target = { kind: 'model', provider: 'custom', model: 'm3' } as const
     expect(purposeTargetFromValue(purposeTargetValue(target))).toEqual(target)
     expect(purposeTargetFromValue('session')).toEqual({ kind: 'session' })

@@ -15,7 +15,7 @@ export const DEFAULT_LIMITS = {
   maxAttempts: 2,
 } as const
 
-const roleSchema = z.enum(['normal', 'weak', 'strong'])
+const roleSchema = z.enum(['normal', 'weak', 'strong', 'fantasy'])
 
 export const modelRouteSchema = z.object({
   provider: z.string().trim().min(1).max(128),
@@ -42,6 +42,7 @@ export const policyDataSchema = z.object({
     normal: modelRouteSchema.optional(),
     weak: modelRouteSchema.optional(),
     strong: modelRouteSchema.optional(),
+    fantasy: modelRouteSchema.optional(),
   }).strict(),
   purposes: z.record(z.string().min(1).max(80), modelTargetSchema).refine(value => Object.keys(value).length <= 200),
   limits: limitsSchema,
@@ -152,7 +153,7 @@ export const aiServicesDomain = defineDomain({
 })
 
 export function isModelRole(value: unknown): value is ModelRole {
-  return value === 'normal' || value === 'weak' || value === 'strong'
+  return value === 'normal' || value === 'weak' || value === 'strong' || value === 'fantasy'
 }
 
 export function cloneRoute(route: ModelRoute): ModelRoute {

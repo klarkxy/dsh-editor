@@ -59,3 +59,25 @@ describe('atomic one-time purpose imports', () => {
     await service.dispose()
   })
 })
+
+it('imports missing tier bindings atomically, preserves existing roles, and reloads fantasy', async () => {
+  const f = fixture(); const service = f.open()
+  const { revision, ...data } = service.getPolicy()
+  const normal = { provider: 'existing', model: 'chat' }
+  const fantasy = { provider: 'creative', model: 'writer', reasoningEffort: 'high' }
+  await service.updatePolicy({ ...data, roles: { normal, fantasy } }, revision)
+  f.fail(true)
+  await expect(service.importPurposes('tiers-v1', { chat: { kind: 'role', role: 'normal' } }, { normal: { provider: 'legacy', model: 'old' }, weak: normal })).rejects.toThrow('迁移失败')
+  expect(service.getPolicy().roles.weak).toBeUndefined()
+  f.fail(false)
+  await service.importPurposes('tiers-v1', { chat: { kind: 'role', role: 'normal' } }, { normal: { provider: 'legacy', model: 'old' }, weak: normal })
+  expect(service.getPolicy().roles).toEqual({ normal, weak: normal, fantasy })
+  await service.dispose()
+  const reopened = f.open()
+  expect(reopened.getPolicy().roles.fantasy).toEqual(fantasy)
+  const { revision: next, ...saved } = reopened.getPolicy()
+  await reopened.updatePolicy({ ...saved, roles: {} }, next)
+  await reopened.importPurposes('tiers-v1', {}, { normal })
+  expect(reopened.getPolicy().roles).toEqual({})
+  await reopened.dispose()
+})

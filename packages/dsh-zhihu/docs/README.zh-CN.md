@@ -6,7 +6,7 @@ DSH 知乎搜索、直答、知识库与用量插件。
 
 ## 安装
 
-需要 Node.js ≥22、DSH `0.1.5-rc.2`，无需构建本仓库。
+需要 Node.js ≥22、DSH `0.1.7-alpha.1`，无需构建本仓库。
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-zhihu

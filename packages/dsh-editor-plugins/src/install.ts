@@ -1,3 +1,4 @@
+import { syncPresetDeclarations } from './preset-config.ts'
 import { randomUUID } from 'node:crypto'
 import { publishedArtifact, verifyPublishedArchive, matchesRepository } from './published.ts'
 import { spawn } from 'node:child_process'
@@ -236,6 +237,7 @@ export async function installGitHubPlugin(
     await io.link(destination, join(paths.profileDir, 'node_modules', manifest.name))
     await addBundleToProfile(paths.profileDir, manifest.name)
     await deployPluginPresets(paths.home, manifest.name, destination)
+    await syncPresetDeclarations(paths.home, paths.profileDir)
     return { name: manifest.name, version: manifest.version, spec: spec.spec, inspect: manifest.inspect }
   } finally {
     await rm(staged.staging, { recursive: true, force: true })
@@ -248,4 +250,5 @@ export async function uninstallUserPlugin(packageName: string, paths: PluginPath
   await rm(join(paths.profileDir, 'node_modules', packageName), { recursive: true, force: true })
   await rm(join(paths.userPluginsDir, packageName), { recursive: true, force: true })
   await removePluginPresets(paths.home, packageName)
+  await syncPresetDeclarations(paths.home, paths.profileDir)
 }

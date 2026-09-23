@@ -2,18 +2,26 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 
 export interface NativeSurfaceClient {
   sessions: {
-    list: { getSnapshot(): { current?: string }; subscribe(listener: () => void): () => void }
     binding?(sessionId: string): { eventSource: { subscribe(listener: () => void): () => void } } | undefined
   }
+  uiWorkspace: { current?: { getSnapshot(): { sessionId: string } | undefined; subscribe(listener: () => void): () => void } }
+  uiSession: { adapter: { current: { getSnapshot(): { key?: string }; subscribe(listener: () => void): () => void } } }
   locale: { getSnapshot(): { active: string }; subscribe(listener: () => void): () => void }
   connection?: { generation?: { subscribe(listener: () => void): () => void } }
+}
+
+/** The Editor retains its manuscript session separately; native DSH exposes the main-view binding. */
+export function selectedSessionId(client: Pick<NativeSurfaceClient, 'uiWorkspace' | 'uiSession'>): string {
+  return client.uiWorkspace.current
+    ? client.uiWorkspace.current.getSnapshot()?.sessionId ?? ''
+    : client.uiSession.adapter.current.getSnapshot().key ?? ''
 }
 
 /** Owner props win; native settings only supplies close, so resolve its selected session. */
 export function useNativeSeat(client: NativeSurfaceClient, props: unknown) {
   const current = useSyncExternalStore(
-    useCallback((fn: () => void) => client.sessions.list.subscribe(fn), [client]),
-    useCallback(() => client.sessions.list.getSnapshot().current ?? '', [client]),
+    useCallback((fn: () => void) => (client.uiWorkspace.current ?? client.uiSession.adapter.current).subscribe(fn), [client]),
+    useCallback(() => selectedSessionId(client), [client]),
     () => '',
   )
   const language = useSyncExternalStore(

@@ -16,6 +16,7 @@ import type {
   MemoryService,
   NewMemoryRecord,
   PurposeSpec,
+  ProducerMessageSource,
   RpcResult,
   UsageReceipt,
 } from '@klarkxy/dsh-ai-services/contracts'
@@ -33,6 +34,7 @@ export type {
   MemoryService,
   NewMemoryRecord,
   PurposeSpec,
+  ProducerMessageSource,
   RpcResult,
   UsageReceipt,
 }
@@ -42,6 +44,7 @@ export const CHAT_EVENTS_SLOT = FROZEN_CHAT_EVENTS_SLOT
 /** Shared untruncated cwd identity. Drive roots (`/` / `C:/`) stay intact. */
 export const projectIdFromCwd = frozenProjectIdFromCwd
 export const MEMORY_PLUGIN = '@klarkxy/dsh-memory'
+export const MEMORY_SOURCE_KIND = 'plugin:@klarkxy/dsh-memory' as const
 export const MEMORY_RPC_CHANNEL = '/dsh-memory'
 export const MEMORY_DREAM_PURPOSE = 'memory.dream'
 export const MEMORY_INJECTION_SECTION = 'dsh-memory:recall'
@@ -145,9 +148,9 @@ export type PreStepDecision = { kind: 'reject' } | PreStepEnter
 
 export interface InjectedMemoryMessage {
   content: Array<{ type: 'text'; text: string }>
-  source: {
-    kind: 'plugin'
-    plugin: string
+  source: ProducerMessageSource & {
+    kind: typeof MEMORY_SOURCE_KIND
+    plugin: typeof MEMORY_PLUGIN
     form: 'snapshot'
     sections: Array<{ name: string; text: string }>
   }

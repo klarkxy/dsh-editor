@@ -156,7 +156,77 @@ export function TextPromptDialog(props: {
     <NativePromptFallback
       busy={props.busy}
       titleId={`${props.id}-title`}
-      input={input}
+      firstFocus={() => { input.current?.focus(); input.current?.select() }}
+      onCancel={props.onCancel}>
+      {children}
+    </NativePromptFallback>
+  );
+}
+
+export function ConfirmDialog(props: {
+  Dialog?: ComponentType<ShellDialogProps>
+  Button?: ShellToolSeatContext['Button']
+  id: string
+  open: boolean
+  title: string
+  message: string
+  confirmLabel: string
+  onCancel(): void
+  onConfirm(): void
+}) {
+  const confirm = useRef<HTMLButtonElement | null>(null)
+  const children = [
+    <header key="header">
+      <h2 id={`${props.id}-title`}>
+        {props.title}
+      </h2>
+      <SeatButton
+        host={props.Button}
+        variant="icon"
+        className="icon-button"
+        aria-label={t('common.close')}
+        onClick={props.onCancel}>
+        ×
+      </SeatButton>
+    </header>,
+    <p key="message">
+      {props.message}
+    </p>,
+    <footer key="footer">
+      <SeatButton host={props.Button} onClick={props.onCancel}>
+        {t('common.cancel')}
+      </SeatButton>
+      <SeatButton
+        host={props.Button}
+        variant="primary"
+        className="primary-action"
+        ref={confirm}
+        onClick={props.onConfirm}>
+        {props.confirmLabel}
+      </SeatButton>
+    </footer>,
+  ]
+
+  if (props.Dialog) {
+    return (
+      <props.Dialog
+        open={props.open}
+        onOpenChange={(next: boolean) => { if (!next) props.onCancel() }}
+        title={props.title}
+        className="file-dialog prompt-dialog"
+        overlayClassName="file-dialog-overlay"
+        dismissible={true}
+        initialFocusRef={confirm}>
+        {children}
+      </props.Dialog>
+    );
+  }
+
+  if (!props.open) return null
+  return (
+    <NativePromptFallback
+      titleId={`${props.id}-title`}
+      firstFocus={() => confirm.current?.focus()}
       onCancel={props.onCancel}>
       {children}
     </NativePromptFallback>
@@ -166,12 +236,12 @@ export function TextPromptDialog(props: {
 function NativePromptFallback(props: {
   busy?: boolean
   titleId: string
-  input: { current: HTMLInputElement | null }
+  firstFocus(): void
   onCancel(): void
   children?: unknown
 }) {
   const dialog = useRef<HTMLDivElement | null>(null)
-  useDialogReturnFocus(dialog, () => { props.input.current?.focus(); props.input.current?.select() })
+  useDialogReturnFocus(dialog, props.firstFocus)
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape' && !props.busy) { event.preventDefault(); props.onCancel(); return }
     focusableBoundary(dialog.current, event)

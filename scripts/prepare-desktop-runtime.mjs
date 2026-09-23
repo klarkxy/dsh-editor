@@ -1,3 +1,4 @@
+import { materializeDsh } from './materialize-dsh.mjs'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
@@ -11,7 +12,7 @@ import { prepareNodeRuntime } from './prepare-node-runtime.mjs'
 import { treeDigest } from '../apps/desktop/dist/runtime-tree.js'
 
 const NODE_VERSION = '24.16.0'
-const DSH_VERSION = '0.1.5-rc.2'
+const DSH_VERSION = '0.1.7-alpha.1'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputRoot = resolve(root, '.pack', 'desktop-runtime')
 const nodeOutput = resolve(outputRoot, `node-${NODE_VERSION}`)
@@ -108,11 +109,7 @@ await mkdir(nodeOutput, { recursive: true })
 await mkdir(dshOutput, { recursive: true })
 
 await prepareNodeRuntime(nodeOutput)
-await cp(dsh.packageRoot, dshOutput, {
-  recursive: true,
-  dereference: true,
-  filter: dshCopyFilter,
-})
+await materializeDsh(dsh.packageRoot, dshOutput, dshCopyFilter)
 for (const dependency of runtimeDependencies) await copyRuntimeDependency(dependency)
 
 for (const packageName of privateProfilePackages) {
@@ -149,7 +146,7 @@ for (const packageName of privateProfilePackages) {
 const profileDigest = await treeDigest(profileOutput)
 await rename(resolve(profileOutput, 'node_modules'), resolve(profileOutput, 'vendor-dependencies'))
 const profile = await readJson(resolve(profileOutput, 'package.json'))
-if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify(composition.bundles)) {
+if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify([...composition.bundles, 'dsh-editor-profile-config'])) {
   throw new Error('desktop profile bundles are missing, reordered, or unexpected')
 }
 

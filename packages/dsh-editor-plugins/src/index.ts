@@ -1,3 +1,4 @@
+import { syncPresetDeclarations } from './preset-config.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { registerHostRpc, type HostRpcContext } from 'dsh-manuscript/host-api'
 import { readFile, rm } from 'node:fs/promises'
@@ -272,6 +273,7 @@ export async function handlePluginsRpc(
     catalog?: RuntimeCatalog
     io?: PersistIo
     clientModules?: ClientModulesFace
+    reloadProfile?: () => Promise<boolean>
   },
 ): Promise<PluginsRpcResult> {
   if (signal.aborted) return cancelled()
@@ -406,7 +408,9 @@ export async function handlePluginsRpc(
         } catch { /* best-effort rollback; the next boot re-applies the saved state */ }
         return persistFailed(error)
       }
-      return { ok: true, value: { restartRequired: false } satisfies PluginActionReceipt }
+      await syncPresetDeclarations(options.paths.home, options.paths.profileDir)
+      const applied = await options.reloadProfile?.().catch(() => false)
+      return { ok: true, value: { restartRequired: applied !== true } satisfies PluginActionReceipt }
     }
     return bad('不支持的插件操作')
   } catch (error) {
@@ -434,6 +438,14 @@ export function apply(ctx: Context): void {
       loader: host.loader,
       paths,
       clientModules: host.get('clientModules') as ClientModulesFace | undefined,
+      reloadProfile: async () => {
+        if (!host.get('hmr')) return false
+        const profile = host.get('profileContext') as import('@deepseek-ai/dsh-app-boot').ProfileContext | undefined
+        if (!profile) return false
+        const { readProfilePatches, reconcileProfilePatches } = await import('@deepseek-ai/dsh-app-boot')
+        await reconcileProfilePatches(host.root, readProfilePatches('dsh-editor', profile), 'dsh-editor')
+        return true
+      },
     }))
   )))
 }

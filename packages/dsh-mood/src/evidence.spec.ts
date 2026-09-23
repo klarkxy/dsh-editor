@@ -6,6 +6,7 @@ describe('evidence and auxiliary filtering', () => {
   it('does not treat plugin context as a human revision', () => {
     const mood = createMoodContextMessage('约定') as { source?: { kind?: string } }
     expect(isMoodMessage(mood)).toBe(true)
+    expect(isMoodMessage({ ...mood, source: { ...(mood.source ?? {}), kind: 'plugin' } })).toBe(false)
     expect(incomingAreAuxiliaryOnly([mood])).toBe(true)
     expect(collectClaimedHumans([mood])).toEqual([])
   })

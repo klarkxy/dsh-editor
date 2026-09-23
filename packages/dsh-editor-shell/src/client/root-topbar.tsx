@@ -178,8 +178,8 @@ export function WorkbenchTopbar(props: {
         gap="1"
         flexShrink="0">
         <LayoutToggle
-          pressed={props.sidebarOpen && !props.compactChrome}
-          disabled={props.focusMode || props.compactChrome}
+          pressed={props.sidebarOpen}
+          disabled={props.focusMode}
           label={t('workspace.files')}
           tooltip={props.sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
           onClick={props.onToggleSidebar}>
@@ -193,8 +193,8 @@ export function WorkbenchTopbar(props: {
           <FocusIcon size={16} />
         </LayoutToggle>
         <LayoutToggle
-          pressed={props.assistantOpen && !props.compactChrome}
-          disabled={props.focusMode || props.compactChrome}
+          pressed={props.assistantOpen}
+          disabled={props.focusMode}
           label={t('workspace.assistant')}
           tooltip={props.assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant')}
           onClick={props.onToggleAssistant}>

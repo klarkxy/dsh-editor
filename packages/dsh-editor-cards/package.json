@@ -66,14 +66,14 @@
     "test": "vitest run --root ../.. packages/dsh-editor-cards/src"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2"
+    "@deepseek-ai/cordis": "^4.0.3"
   },
   "dependencies": {
     "dsh-editor-workspace-kit": "workspace:*",
     "dsh-manuscript": "workspace:*"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/cordis": "^4.0.3",
     "@types/react": "18.3.31",
     "dsh-editor-seats": "workspace:*",
     "react": "^18.2.0",

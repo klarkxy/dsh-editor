@@ -10,7 +10,7 @@ const active: MemoryRecord = {
 describe('pre-step injection', () => {
   it('uses plugin snapshot source, not a fake human message', () => {
     const payload = memoryInjectPayload([active])
-    expect(payload.source.kind).toBe('plugin')
+    expect(payload.source.kind).toBe('plugin:@klarkxy/dsh-memory')
     expect(payload.source.plugin).toBe('@klarkxy/dsh-memory')
     expect(payload.source.form).toBe('snapshot')
     expect(payload.content[0]?.text).toContain('lessons omitted')
@@ -32,6 +32,7 @@ describe('pre-step injection', () => {
     const snapshot = memoryInjectPayload([active])
     const other = { source: { kind: 'user' } }
     expect(isMemoryInjectMessage(snapshot)).toBe(true)
+    expect(isMemoryInjectMessage({ ...snapshot, source: { ...snapshot.source, kind: 'plugin' } })).toBe(false)
     expect(stripMemoryInjection({ kind: 'enter', messages: [snapshot, other] })).toEqual({ kind: 'enter', messages: [other] })
   })
 

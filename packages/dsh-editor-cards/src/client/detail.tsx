@@ -1,6 +1,7 @@
 import {
   Fragment,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -29,7 +30,8 @@ import {
 } from '../cards-view.ts'
 import { errorMessage, isStaleFailure, safeRpcCall } from './rpc.ts'
 import { setCardsLocale, t } from './messages.ts'
-import { closeCardsDetail, getCardsState, selectCard, subscribeCardsStore } from './store.ts'
+import { closeCardsDetail, getCardsState, selectCard, setCardsDetailLeaveGuard, subscribeCardsStore } from './store.ts'
+import { ConfirmDialog } from './dialog.tsx'
 import { ReferenceGroups, type CardsSeatProps, type ReferenceState } from './panel.tsx'
 
 /* 活动暗示:三点呼吸(参数改写自 Amicro pulse-dots,MIT);装饰 aria-hidden,
@@ -57,13 +59,55 @@ export function CardsDetailSeat(props: CardsSeatProps) {
   );
 }
 
+type DetailNote = { text: string; kind: 'success' | 'error' }
+
+type DetailSnapshot = {
+  name: string
+  aliases: string
+  role: string
+  gender: string
+  age: string
+  faction: string
+  status: string
+  tags: string
+  summary: string
+  relations: { to: string; kind: string }[]
+  category: string
+  categoryCustom: string
+}
+
+function snapshotFromCard(kind: CardKind, card: CharacterCard | WorldbookCard): DetailSnapshot {
+  const character = kind === 'character' ? card as CharacterCard : null
+  const worldbook = kind === 'character' ? null : card as WorldbookCard
+  const categoryCurrent = worldbook?.frontmatter.category ?? ''
+  const preset = WORLDBOOK_CATEGORIES.includes(categoryCurrent as typeof WORLDBOOK_CATEGORIES[number]) || !categoryCurrent
+  return {
+    name: character?.frontmatter.name ?? card.title,
+    aliases: formatListInput(character?.frontmatter.aliases),
+    role: character?.frontmatter.role ?? '',
+    gender: character?.frontmatter.gender ?? '',
+    age: character?.frontmatter.age ?? '',
+    faction: character?.frontmatter.faction ?? '',
+    status: character?.frontmatter.status ?? '',
+    tags: formatListInput(card.frontmatter.tags),
+    summary: card.frontmatter.summary ?? card.summary,
+    relations: character?.frontmatter.relations?.map((row) => ({ ...row })) ?? [],
+    category: preset ? categoryCurrent : '__custom__',
+    categoryCustom: preset ? '' : categoryCurrent,
+  }
+}
+
+function sameRelations(a: readonly { to: string; kind: string }[], b: readonly { to: string; kind: string }[]): boolean {
+  return a.length === b.length && a.every((row, index) => row.to === b[index]!.to && row.kind === b[index]!.kind)
+}
+
 function CardsDetail(props: CardsSeatProps & {
   kind: CardKind
   card: CharacterCard | WorldbookCard
   characters: readonly CharacterCard[]
 }) {
   const card = props.card
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState<DetailNote | null>(null)
   const [busy, setBusy] = useState(false)
   const [references, setReferences] = useState<ReferenceState>({ status: 'idle' })
   const isCharacter = props.kind === 'character'
@@ -83,11 +127,51 @@ function CardsDetail(props: CardsSeatProps & {
   const categoryPreset = WORLDBOOK_CATEGORIES.includes(categoryCurrent as typeof WORLDBOOK_CATEGORIES[number]) || !categoryCurrent
   const [category, setCategory] = useState(categoryPreset ? categoryCurrent : '__custom__')
   const [categoryCustom, setCategoryCustom] = useState(categoryPreset ? '' : categoryCurrent)
+  const [baseline, setBaseline] = useState<DetailSnapshot>(() => snapshotFromCard(props.kind, props.card))
+  const [confirmLeave, setConfirmLeave] = useState(false)
+  const pendingLeave = useRef<(() => void) | null>(null)
+
+  const dirty = name !== baseline.name
+    || aliases !== baseline.aliases
+    || role !== baseline.role
+    || gender !== baseline.gender
+    || age !== baseline.age
+    || faction !== baseline.faction
+    || status !== baseline.status
+    || tags !== baseline.tags
+    || summary !== baseline.summary
+    || !sameRelations(relations, baseline.relations)
+    || category !== baseline.category
+    || categoryCustom !== baseline.categoryCustom
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
+
+  useEffect(() => {
+    setCardsDetailLeaveGuard((proceed) => {
+      if (!dirtyRef.current) return true
+      pendingLeave.current = proceed
+      setConfirmLeave(true)
+      return false
+    })
+    return () => setCardsDetailLeaveGuard(null)
+  }, [])
+
+  const cancelLeave = () => {
+    pendingLeave.current = null
+    setConfirmLeave(false)
+  }
+
+  const discardAndLeave = () => {
+    const proceed = pendingLeave.current
+    pendingLeave.current = null
+    setConfirmLeave(false)
+    proceed?.()
+  }
 
   useEffect(() => {
     const nextCharacter = props.kind === 'character' ? props.card as CharacterCard : null
     const nextWorldbook = props.kind === 'character' ? null : props.card as WorldbookCard
-    setNote('')
+    setNote(null)
     setName(nextCharacter?.frontmatter.name ?? props.card.title)
     setAliases(formatListInput(nextCharacter?.frontmatter.aliases))
     setRole(nextCharacter?.frontmatter.role ?? '')
@@ -102,6 +186,7 @@ function CardsDetail(props: CardsSeatProps & {
     const preset = WORLDBOOK_CATEGORIES.includes(nextCategory as typeof WORLDBOOK_CATEGORIES[number]) || !nextCategory
     setCategory(preset ? nextCategory : '__custom__')
     setCategoryCustom(preset ? '' : nextCategory)
+    setBaseline(snapshotFromCard(props.kind, props.card))
     setReferences({ status: 'idle' })
   }, [props.card.path, props.card.version, props.kind])
 
@@ -111,8 +196,8 @@ function CardsDetail(props: CardsSeatProps & {
       sessionId: props.sessionId,
       path: hit.path,
     }))
-    if (!read.ok) { setNote(errorMessage(read, props.locale)); return }
-    closeCardsDetail()
+    if (!read.ok) { setNote({ text: errorMessage(read, props.locale), kind: 'error' }); return }
+    if (!closeCardsDetail()) return
     props.openDocument(hit.path, { ...hit, version: read.value.version } satisfies ShellRange)
   }
 
@@ -152,7 +237,7 @@ function CardsDetail(props: CardsSeatProps & {
       }
     }
     setBusy(true)
-    setNote('')
+    setNote(null)
     const saved = await safeRpcCall<CardsMetaSetResponse>(() => props.rpc.call(CARDS_RPC_CHANNEL, 'cards.metaSet', {
       sessionId: props.sessionId,
       path: card.path,
@@ -161,11 +246,25 @@ function CardsDetail(props: CardsSeatProps & {
     }))
     setBusy(false)
     if (!saved.ok) {
-      setNote(isStaleFailure(saved) ? t('cards.staleReread') : errorMessage(saved, props.locale))
+      setNote({ text: isStaleFailure(saved) ? t('cards.staleReread') : errorMessage(saved, props.locale), kind: 'error' })
       props.refresh('tree')
       return
     }
-    setNote(t('cards.saved'))
+    setNote({ text: t('cards.saved'), kind: 'success' })
+    setBaseline({
+      name,
+      aliases,
+      role,
+      gender,
+      age,
+      faction,
+      status,
+      tags,
+      summary,
+      relations: relations.map((row) => ({ ...row })),
+      category,
+      categoryCustom,
+    })
     props.refresh('tree')
   }
 
@@ -230,6 +329,7 @@ function CardsDetail(props: CardsSeatProps & {
           {field(t('cards.age'), renderInput(props.Input, {
             value: age,
             onChange: setAge,
+            inputMode: 'numeric',
             'aria-label': t('cards.age'),
           }))}
           {field(t('cards.faction'), renderInput(props.Input, {
@@ -356,9 +456,9 @@ function CardsDetail(props: CardsSeatProps & {
           </SeatButton>
         </div>
         {note ? <p
-          className={/已保存|已重新读取|saved|re-?read/i.test(note) ? 'muted' : 'warning'}
-          role="status">
-          {note}
+          className={note.kind === 'success' ? 'muted' : 'warning'}
+          role={note.kind === 'success' ? 'status' : 'alert'}>
+          {note.text}
         </p> : null}
         {props.editorDirty ? <p className="warning">
           {t('cards.saveBeforeRef')}
@@ -372,6 +472,16 @@ function CardsDetail(props: CardsSeatProps & {
           navigationBlocked={props.editorDirty}
           onOpenHit={(item) => void openHit(item)} /> : null}
       </div>
+      <ConfirmDialog
+        Dialog={props.Dialog}
+        Button={props.Button}
+        id="cards-discard"
+        open={confirmLeave}
+        title={t('cards.unsavedTitle')}
+        message={t('cards.unsavedNote')}
+        confirmLabel={t('cards.discard')}
+        onCancel={cancelLeave}
+        onConfirm={discardAndLeave} />
     </section>
   );
 }

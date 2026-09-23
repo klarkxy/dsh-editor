@@ -6,7 +6,6 @@ import {
   WRITING_SETTINGS_NAMESPACE,
   createWritingMigration,
   decodeWritingPreferences,
-  writingPreferences,
 } from './writing-settings.tsx'
 import { decodeHostThemePreference, writeHostThemePreference, type HostThemeSync } from './client/theme.tsx'
 import { decodeLocalePreference } from './client/settings-general.tsx'
@@ -19,7 +18,7 @@ import { COMMANDS_SERVICE, MESSAGE_CARDS_SERVICE, createCommandRegistry, createM
 
 export const name = 'dsh-editor-shell-client'
 export const inject = [
-  'slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote',
+  'slots', 'sessions', 'workspaces', 'connection', 'configForms', 'settingsSchema', 'remote',
   'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker', 'remote.agentPresets',
   'uiSession', 'locale',
 ] as const
@@ -85,23 +84,21 @@ export { Editor } from './client/editor.tsx'
 export { FileContextMenu, Tree } from './client/sidebar.tsx'
 export { DeepSeekWhaleMark, PaperStage, currentSession, useObservable } from './client/components.tsx'
 
-type SettingsSlot = { bind<T>(spec: { namespace: string; decode?(value: unknown): T | undefined }): SettingsScope<T> }
+type SettingsSlot = { get<T>(entryId: string): SettingsScope<T> }
 
 export function apply(ctx: Context): void {
-  const client = ctx as ShellContext & { settingsScope: SettingsSlot }
-  const writingScope = client.settingsScope.bind({ namespace: WRITING_SETTINGS_NAMESPACE, decode: decodeWritingPreferences })
-  provideEditorUiWorkspace(client, {
-    defaultChatModel: () => writingPreferences(writingScope.getSnapshot()).chatModel,
-  })
+  const client = ctx as ShellContext & { configForms: SettingsSlot }
+  const writingScope = client.configForms.get<NonNullable<ReturnType<typeof decodeWritingPreferences>>>(WRITING_SETTINGS_NAMESPACE)
+  provideEditorUiWorkspace(client)
   bindOfficialConversation(client)
   const migrateWritingPreferences = createWritingMigration(writingScope, globalThis.localStorage)
   void migrateWritingPreferences()
   // Host chrome follows the host `ui-theme` preference; sync it so the
   // paper/ink toggle themes the host chrome too. Best-effort: when the scope
   // is read-only or the write fails, the local toggle still works.
-  const localeScope = client.settingsScope.bind({ namespace: 'locale', decode: decodeLocalePreference })
+  const localeScope = client.configForms.get<NonNullable<ReturnType<typeof decodeLocalePreference>>>('locale')
   bindLocalePreference(localeScope)
-  const hostThemeScope = client.settingsScope.bind({ namespace: 'ui-theme', decode: decodeHostThemePreference })
+  const hostThemeScope = client.configForms.get<NonNullable<ReturnType<typeof decodeHostThemePreference>>>('ui-theme')
   const hostThemeSync: HostThemeSync = {
     read: () => hostThemeScope.getSnapshot().value?.preference,
     write: (preference) => writeHostThemePreference(hostThemeScope, preference),

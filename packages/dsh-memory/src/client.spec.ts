@@ -132,7 +132,7 @@ describe('memory settings and host locale', () => {
   })
 
   it('resolves native settings seats and refreshes without clobbering edits or writes', () => {
-    expect(inject).toEqual(['slots', 'connection', 'sessions', 'locale'])
+    expect(inject).toEqual(['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
     expect(clientSrc).toContain("from '@klarkxy/dsh-ai-services/client-utils'")
     expect(clientSrc).toContain('type Client = NativeSurfaceClient &')
     expect(clientSrc).toContain('useNativeSeat(client, props)')

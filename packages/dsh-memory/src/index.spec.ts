@@ -19,7 +19,7 @@ it('uses native dsh-llm createUserMessage without a local ambient shim', () => {
   expect(message.role).toBe('user')
   expect(typeof message.id).toBe('string')
   expect(message.id.length).toBeGreaterThan(0)
-  expect(message.source).toMatchObject({ kind: 'plugin', plugin: '@klarkxy/dsh-memory', form: 'snapshot' })
+  expect(message.source).toMatchObject({ kind: 'plugin:@klarkxy/dsh-memory', plugin: '@klarkxy/dsh-memory', form: 'snapshot' })
   expect(payload).not.toHaveProperty('role')
 })
 

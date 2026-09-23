@@ -23,10 +23,17 @@ export function detectShortcutPlatform(input: {
   return 'linux'
 }
 
-export function runtimePaletteShortcutHint(): string {
+export function runtimeShortcutPlatform(): string {
   const nav = typeof navigator === 'undefined' ? undefined : navigator
-  return paletteShortcutHint(detectShortcutPlatform({
-    navigatorPlatform: nav?.platform,
-    userAgent: nav?.userAgent,
-  }))
+  return detectShortcutPlatform({ navigatorPlatform: nav?.platform, userAgent: nav?.userAgent })
+}
+
+export function runtimePaletteShortcutHint(): string {
+  return paletteShortcutHint(runtimeShortcutPlatform())
+}
+
+/** Format Mod-based hints consistently with the browser's actual platform. */
+export function runtimeShortcutHint(keys: string): string {
+  const mac = runtimeShortcutPlatform() === 'darwin'
+  return keys.replace(/Mod/g, mac ? '⌘' : 'Ctrl').replace(/Alt/g, mac ? 'Option' : 'Alt')
 }

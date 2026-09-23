@@ -161,3 +161,12 @@ describe('author memory normalization and decode', () => {
     })).toMatchObject({ fontSize: 14, lineHeight: 2.4, paperWidth: 'medium', typewriter: false })
   })
 })
+
+
+describe('completion pause preference', () => {
+  it.each([[undefined, 1500], [NaN, 1500], [0, 500], [9000, 5000], [2500, 2500]])('normalizes stored delay %s to %s', (stored, expected) => {
+    const value = { ...DEFAULT_WRITING_PREFERENCES, completionDelayMs: stored }
+    expect(decodeWritingPreferences(value)?.completionDelayMs).toBe(expected)
+    expect(writingPreferences({ status: 'ready', value, user: value, base: {}, revision: 1, writable: true, mode: 'host' }).completionDelayMs).toBe(expected)
+  })
+})

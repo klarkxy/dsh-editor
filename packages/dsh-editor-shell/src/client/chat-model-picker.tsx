@@ -39,7 +39,7 @@ const DEFAULT_FALLBACK_EFFORT = 'medium'
 
 /** Read the hand-declared pi-ai provider profile for `provider`, when the route is one. */
 function piAiCustomProfile(ctx: ShellContext, provider: string): { profile: Record<string, unknown>; revision: number } | undefined {
-  const ns = ctx.settingsScope.describe().getSnapshot().view?.namespaces.find((entry) => entry.ns === 'llm-pi-ai')
+  const ns = ctx.configForms.describe().getSnapshot().view?.namespaces.find((entry) => entry.ns === 'llm-pi-ai')
   const user = ns?.user
   const providers = typeof user === 'object' && user !== null && !Array.isArray(user)
     ? (user as Record<string, unknown>)['providers'] : undefined
@@ -58,7 +58,7 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
   const refresh = async () => {
     const result = await readModels(ctx.remote.session, session)
     if (!result.ok) { setNote(t('chat.apiUnavailable')); return }
-    await ctx.settingsScope.describe().ensure()
+    await ctx.configForms.describe().ensure()
     setModels(result.value)
     setCustomRoute(piAiCustomProfile(ctx, result.value.current.provider) !== undefined)
     setNote('')
@@ -188,7 +188,7 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
       {showReasoning ? <Flex className="model-effort" flexShrink="0">
         <Select
           value={effortOptions.some((option) => option.value === effortValue) ? effortValue : ''}
-          placeholder="none"
+          placeholder={t('chat.effortOff')}
           selectedLabel={effortLabel}
           aria-label={t('chat.reasoning')}
           title={effortLabel}

@@ -171,7 +171,7 @@ function CardsPanel(props: CardsSeatProps & { kind: CardKind; selectedPath: stri
       path: hit.path,
     }))
     if (!read.ok) { setNote(errorMessage(read, props.locale)); return }
-    closeCardsDetail()
+    if (!closeCardsDetail()) return
     props.openDocument(hit.path, { ...hit, version: read.value.version } satisfies ShellRange)
   }
 

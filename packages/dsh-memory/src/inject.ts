@@ -1,5 +1,5 @@
 import {
-  MEMORY_INJECTION_SECTION, MEMORY_PLUGIN,
+  MEMORY_INJECTION_SECTION, MEMORY_PLUGIN, MEMORY_SOURCE_KIND,
   type InjectedMemoryMessage, type MemoryRecord, type PreStepDecision,
 } from './contracts.ts'
 import { estimateTokens, formatMemorySnapshot } from './recall.ts'
@@ -7,7 +7,7 @@ import { estimateTokens, formatMemorySnapshot } from './recall.ts'
 export function isMemoryInjectMessage(message: unknown): boolean {
   if (!message || typeof message !== 'object') return false
   const row = message as { source?: { kind?: string; plugin?: string; form?: string; sections?: Array<{ name?: string }> } }
-  if (row.source?.kind !== 'plugin' || row.source.plugin !== MEMORY_PLUGIN) return false
+  if (row.source?.kind !== MEMORY_SOURCE_KIND || row.source.plugin !== MEMORY_PLUGIN) return false
   return row.source.form === 'snapshot'
     && Boolean(row.source.sections?.some(section => section.name === MEMORY_INJECTION_SECTION))
 }
@@ -45,7 +45,7 @@ export function memoryInjectPayload(records: readonly MemoryRecord[]): InjectedM
   return {
     content: [{ type: 'text', text }],
     source: {
-      kind: 'plugin',
+      kind: MEMORY_SOURCE_KIND,
       plugin: MEMORY_PLUGIN,
       form: 'snapshot',
       sections: [{ name: MEMORY_INJECTION_SECTION, text }],

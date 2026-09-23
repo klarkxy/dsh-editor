@@ -4,49 +4,26 @@ import type { Context } from '@deepseek-ai/cordis'
 import { registerHostRpc, type HostRpcContext } from 'dsh-manuscript/host-api'
 import { SHELL_RPC_CHANNEL, resolveShellCapabilities, type ShellFeatureConfig } from './capabilities.ts'
 import Schema from '@deepseek-ai/schemastery'
-import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
-import { WRITING_SETTINGS_NAMESPACE, type WritingPreferences } from './writing-settings-contract.ts'
-import { DEVELOPER_SETTINGS_NAMESPACE, type DeveloperSettings } from './developer-settings.ts'
 
 export const name = 'dsh-editor-shell'
-export const inject = ['aiServices', 'settings', 'connection', 'webServer'] as const
+export const inject = ['aiServices', 'agentDefaultModel', 'editorWritingPreferences', 'connection', 'webServer'] as const
 export const Config: Schema<ShellFeatureConfig> = Schema.object({
   features: Schema.dict(Schema.string()).default({}),
 })
 
-const WritingPreferencesSchema = Schema.object({
-  completion: Schema.union(['manual', 'pause']).default('manual'),
-  completionModel: Schema.object({ provider: Schema.string().default(''), model: Schema.string().default(''), reasoningEffort: Schema.string().default('') }).default({ provider: '', model: '', reasoningEffort: '' }),
-  rewriteModel: Schema.object({ provider: Schema.string().default(''), model: Schema.string().default(''), reasoningEffort: Schema.string().default('') }).default({ provider: '', model: '', reasoningEffort: '' }),
-  chatModel: Schema.object({ provider: Schema.string().default(''), model: Schema.string().default(''), reasoningEffort: Schema.string().default('') }).default({ provider: '', model: '', reasoningEffort: '' }),
-
-  authorPreferences: Schema.transform(Schema.string().max(AUTHOR_PREFERENCES_MAX_CHARS), normalizeAuthorPreferences).default(''),
-  authorMemory: Schema.transform(Schema.string().max(AUTHOR_MEMORY_MAX_CHARS), normalizeAuthorMemory).default(''),
-  typewriter: Schema.boolean().default(false),
-  focusParagraph: Schema.boolean().default(false),
-  fontSize: Schema.number().min(14).max(28).default(17),
-  lineHeight: Schema.number().min(1.4).max(2.4).default(1.9),
-  fontFamily: Schema.union(['serif', 'sans', 'mono']).default('serif'),
-  paragraphSpacing: Schema.number().min(0).max(1.5).default(0),
-  paperWidth: Schema.union(['narrow', 'medium', 'wide']).default('wide'),
-})
-
-type HostSettings = { get(namespace: string): unknown; register<T>(namespace: string, schema: unknown): unknown }
-
-const DeveloperSettingsSchema = Schema.object({
-  developerMode: Schema.boolean().default(false),
-})
-
 /** Host owns the editor's one durable writing-preference namespace. */
 export async function apply(ctx: Context, config: ShellFeatureConfig = {}): Promise<void> {
-  ;(ctx as Context & { settings: HostSettings }).settings.register<WritingPreferences>(WRITING_SETTINGS_NAMESPACE, WritingPreferencesSchema)
   const migration: { ready?: Promise<void>; error?: string } = {}
   ctx.provide('writingAiMigration', migration)
-  migration.ready = importWritingModels(ctx.get('aiServices') as AiServices, (ctx as Context & { settings: HostSettings }).settings.get(WRITING_SETTINGS_NAMESPACE))
+  migration.ready = importWritingModels(ctx.get('aiServices') as AiServices, (ctx.get('editorWritingPreferences') as { read(): unknown }).read(),
+    (ctx.get('agentDefaultModel') as { currentSelection?(): import('@klarkxy/dsh-ai-services/contracts').ModelRoute } | undefined)?.currentSelection?.())
     .catch(() => { migration.error = '旧写作模型配置迁移失败。请在模型设置中重新选择补全和改写模型，然后重新加载界面。' })
   await migration.ready
-  /* 未注册的命名空间在 settingsScope 里是 unavailable 死开关，客户端绑定读取不到它。 */
-  ;(ctx as Context & { settings: HostSettings }).settings.register<DeveloperSettings>(DEVELOPER_SETTINGS_NAMESPACE, DeveloperSettingsSchema)
+  ctx.effect(() => {
+    const scope = (ctx.get('aiServices') as AiServices).activate(name)
+    scope.registerPurpose({ id: 'chat', label: '新对话', defaultTarget: { kind: 'role', role: 'normal' } })
+    return () => scope.dispose()
+  }, 'shell.chat-model')
   ctx.effect(() => registerHostRpc(ctx as Context & HostRpcContext, SHELL_RPC_CHANNEL, async (endpoint) => {
     if (endpoint !== 'capabilities.get') return { ok: false, error: { code: 'bad-request', message: '不支持的界面操作', details: {} } }
     return resolveShellCapabilities(config, (name) => ctx.get(name))

@@ -21,7 +21,7 @@ import {
 import { LIMIT_BOUNDS, editablePolicy } from './schema.ts'
 
 export const name = 'dsh-model-center-client'
-export const inject = ['slots', 'connection', 'remote', 'remote.llm', 'remote.settings', 'remote.session', 'remote.credentials', 'settingsScope', 'settingsSchema'] as const
+export const inject = ['slots', 'connection', 'remote', 'remote.llm', 'remote.settings', 'remote.session', 'remote.credentials', 'configForms', 'settingsSchema'] as const
 
 interface CredentialsRemote {
   describe(refs: string[]): Promise<unknown>
@@ -42,7 +42,7 @@ export interface ModelCenterClient {
     session: { modelCatalog(): Promise<unknown> }
     credentials?: CredentialsRemote
   }
-  settingsScope?: { describe?: () => { getSnapshot?: () => unknown; ensure?: () => Promise<unknown> } }
+  configForms?: { describe?: () => { getSnapshot?: () => unknown; ensure?: () => Promise<unknown> } }
   settingsSchema?: { getPath?(value: unknown, path: string[]): unknown }
   slots: {
     inject(key: string, callback: () => unknown): () => void
@@ -50,11 +50,11 @@ export interface ModelCenterClient {
   }
 }
 
-const COMMON_PURPOSES = new Set(['manuscript.completion', 'manuscript.rewrite'])
+const COMMON_PURPOSES = ['chat', 'manuscript.completion', 'manuscript.rewrite']
 
 export function presetLabel(role: ModelRole, locale: ModelCenterLocale): string {
   const text = copy(locale)
-  return role === 'normal' ? text.defaultPreset : role === 'weak' ? text.efficientPreset : text.qualityPreset
+  return role === 'normal' ? text.defaultPreset : role === 'weak' ? text.efficientPreset : role === 'strong' ? text.qualityPreset : text.fantasyPreset
 }
 
 export function purposeTargetValue(target: ModelTarget): string {
@@ -67,7 +67,7 @@ export function purposeTargetFromValue(value: string): ModelTarget {
   if (value === 'session') return { kind: 'session' }
   if (value.startsWith('role:')) {
     const role = value.slice(5) as ModelRole
-    if (role === 'normal' || role === 'weak' || role === 'strong') return { kind: 'role', role }
+    if (MODEL_ROLES.includes(role)) return { kind: 'role', role }
   }
   if (value.startsWith('model:')) {
     const parsed = parseRouteKey(value.slice(6))
@@ -131,6 +131,7 @@ export function ModelCenterSettings(props: ModelCenterRenderProps & { client: Mo
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [policy, setPolicy] = useState<AiPolicy>()
+  const [savedPolicy, setSavedPolicy] = useState('')
   const [purposes, setPurposes] = useState<RegisteredPurpose[]>([])
   const [providers, setProviders] = useState<ProviderListing[]>([])
   const [resolved, setResolved] = useState<Record<string, ResolvedRoute | { error: string }>>({})
@@ -160,12 +161,13 @@ export function ModelCenterSettings(props: ModelCenterRenderProps & { client: Mo
       llm: props.client.remote.llm,
       credentials: props.client.remote.credentials,
       session: props.client.remote.session,
-      settingsScope: props.client.settingsScope,
+      configForms: props.client.configForms,
       settingsSchema: props.client.settingsSchema,
       signal,
     }, () => stillCurrent(token, gate, signal))
     if (!stillCurrent(token, gate, signal) || !snapshot) return
     setPolicy(snapshot.policy)
+    setSavedPolicy(JSON.stringify(editablePolicy(snapshot.policy)))
     setPurposes(snapshot.purposes)
     setProviders(snapshot.providers)
     setResolved(snapshot.resolved)
@@ -285,19 +287,20 @@ export function ModelCenterSettings(props: ModelCenterRenderProps & { client: Mo
       {draft ? <PolicyPanel
         locale={locale}
         busy={busy}
+        dirty={JSON.stringify(editablePolicy(draft)) !== savedPolicy}
         policy={draft}
         catalog={catalog}
         rows={rows}
         resolved={resolved}
         renderChatModel={props.renderChatModel}
-        onRoles={roles => setPolicy({ ...draft, roles })}
-        onPurpose={(id, target) => setPolicy({ ...draft, purposes: { ...draft.purposes, [id]: target } })}
+        onRoles={roles => { setNote(''); setPolicy({ ...draft, roles }) }}
+        onPurpose={(id, target) => { setNote(''); setPolicy({ ...draft, purposes: { ...draft.purposes, [id]: target } }) }}
         onSave={saveDraft}
       /> : <p role="alert">{text.policyMissing}</p>}
     </div>
     <div role="tabpanel" id={`${tabsId}-runtime-panel`} aria-labelledby={`${tabsId}-runtime-tab`} hidden={tab !== 'runtime'} tabIndex={0}>
       {draft ? <RuntimePanel locale={locale} busy={busy} limits={draft.limits}
-        onLimits={limits => setPolicy({ ...draft, limits })} onSave={saveDraft} /> : <p role="alert">{text.policyMissing}</p>}
+        onLimits={limits => { setNote(''); setPolicy({ ...draft, limits }) }} onSave={saveDraft} /> : <p role="alert">{text.policyMissing}</p>}
     </div>
   </section>
 }
@@ -378,9 +381,10 @@ function RuntimePanel(props: {
   </div>
 }
 
-function PolicyPanel(props: {
+export function PolicyPanel(props: {
   locale: ModelCenterLocale
   busy: boolean
+  dirty?: boolean
   policy: AiPolicy
   catalog: SessionModelCatalog
   rows: ReturnType<typeof purposeRows>
@@ -391,80 +395,75 @@ function PolicyPanel(props: {
   onSave(): void
 }): ReactNode {
   const text = copy(props.locale)
-  const commonRows = props.rows.filter(row => COMMON_PURPOSES.has(row.id))
-  const otherRows = props.rows.filter(row => !COMMON_PURPOSES.has(row.id))
-  const purposeRow = (row: ReturnType<typeof purposeRows>[number]) => {
-    const label = purposeLabel(row.id, row.label, props.locale)
-    const choices = catalogChoices(props.catalog, row.target.kind === 'model' ? row.target : undefined)
-    const value = purposeTargetValue(row.target)
-    const options = [
-      { value: 'session', label: text.followSession },
-      { value: 'role:normal', label: text.followDefault },
-      { value: 'role:weak', label: text.followEfficient },
-      { value: 'role:strong', label: text.followQuality },
-      ...choices.map(item => ({ value: `model:${routeKey(item.provider, item.model)}`, label: item.label })),
-    ]
-    if (row.target.kind === 'model' && !options.some(option => option.value === value)) {
-      options.push({ value, label: formatRoute(row.target) })
-    }
-    return <div key={row.id} className="model-center-purpose-row">
-      <label>
-        <span>{label}</span>
-        <select aria-label={`${label} ${text.useModel}`} value={value}
-          onChange={event => props.onPurpose(row.id, purposeTargetFromValue(event.target.value))}>
-          {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-      </label>
-      {row.target.kind === 'model' ? <ReasoningField
-        locale={props.locale}
-        route={row.target}
-        catalog={props.catalog}
-        disabled={props.busy}
-        ariaPrefix={label}
-        onChange={next => props.onPurpose(row.id, { kind: 'model', ...next })} /> : null}
-      <RouteProblem view={props.resolved[row.id]} fallbackPurpose={row.id}
-        target={row.target} policy={props.policy} specs={props.rows} />
-    </div>
+  const rows = [...COMMON_PURPOSES.flatMap(id => props.rows.filter(row => row.id === id)), ...props.rows.filter(row => !COMMON_PURPOSES.includes(row.id))]
+  const describe = (route: ModelRoute) => {
+    const selected = choiceOf(catalogChoices(props.catalog, route), route.provider, route.model)
+    const effort = route.reasoningEffort ?? selected?.defaultEffort
+    return (selected?.label ?? formatRoute(route)) + (effort ? ' · ' + reasoningLabel(effort, selected?.efforts.find(item => item.id === effort)?.name ?? effort, props.locale) : '')
   }
   return <div className="model-center-policy">
-    <fieldset className="model-center-common" disabled={props.busy} aria-label={text.commonModels}>
-      <legend>{text.commonModels}</legend>
-      {typeof props.renderChatModel === 'function' ? props.renderChatModel() as ReactNode : null}
-      {commonRows.map(purposeRow)}
-    </fieldset>
-    <details className="model-center-secondary">
-      <summary>{text.otherModels}</summary>
-      <fieldset disabled={props.busy} aria-label={text.otherModels}>
-        <legend className="sr-only">{text.otherModels}</legend>
-        {otherRows.length === 0 ? <p className="model-center-meta">{text.noPurposes}</p> : otherRows.map(purposeRow)}
+    <section className="model-center-tier-section" aria-label={text.roles}>
+      <header><h3>{text.roles}</h3></header>
+      <fieldset className="model-center-tiers" disabled={props.busy} aria-label={text.roles}>
+        {props.catalog.groups.length ? <div className="model-center-tier-head" aria-hidden="true"><span /><span>{text.model}</span><span>{text.effort}</span></div> : null}
+        {MODEL_ROLES.map(role => {
+          const route = props.policy.roles[role] ?? { provider: '', model: '' }
+          const label = presetLabel(role, props.locale)
+          return <div key={role} className="model-center-tier" data-tier={role}>
+            <div className="model-center-tier-name"><strong>{label}</strong></div>
+            <RouteFields locale={props.locale} route={route} disabled={props.busy}
+              catalog={props.catalog} ariaPrefix={label}
+              emptyLabel={role === 'normal' ? text.chooseModel : text.followDefault}
+              onChange={next => {
+                const roles = { ...props.policy.roles }
+                if (!next.provider && !next.model && !next.reasoningEffort) delete roles[role]
+                else roles[role] = next
+                props.onRoles(roles)
+              }} />
+          </div>
+        })}
       </fieldset>
-    </details>
-    <details className="model-center-advanced">
-      <summary>{text.advanced}</summary>
-      <div className="model-center-advanced-body">
-        <fieldset disabled={props.busy} aria-label={text.roles}>
-          <legend>{text.roles}</legend>
-          {MODEL_ROLES.map(role => {
-            const route = props.policy.roles[role] ?? { provider: '', model: '' }
-            const label = presetLabel(role, props.locale)
-            return <div key={role} className="model-center-role">
-              <strong>{label}</strong>
-              <RouteFields locale={props.locale} route={route} disabled={props.busy}
-                catalog={props.catalog} ariaPrefix={label}
-                emptyLabel={role === 'normal' ? text.chooseModel : text.followDefault}
-                onChange={next => {
-                  const roles = { ...props.policy.roles }
-                  if (role !== 'normal' && (!next.provider.trim() || !next.model.trim())) delete roles[role]
-                  else roles[role] = next
-                  props.onRoles(roles)
-                }} />
+    </section>
+    <section className="model-center-capabilities" aria-label={text.capabilities}>
+      <header><h3>{text.capabilities}</h3><p className="model-center-meta">{text.capabilityHint}</p></header>
+      <fieldset disabled={props.busy} aria-label={text.capabilities}>
+        {rows.length === 0 ? <p className="model-center-meta">{text.noPurposes}</p> : rows.map(row => {
+          const label = purposeLabel(row.id, row.label, props.locale)
+          const preview = previewResolve(props.policy, row.id, { specs: props.rows })
+          const custom = row.target.kind === 'model'
+          const value = custom ? 'custom' : purposeTargetValue(row.target)
+          return <div key={row.id} className="model-center-capability" data-purpose={row.id}>
+            <div className="model-center-capability-heading">
+              <label htmlFor={'capability-' + row.id}>{label}</label>
+              <select id={'capability-' + row.id} aria-label={label + ' ' + text.useModel} value={value}
+                onChange={event => {
+                  if (event.target.value === 'custom') {
+                    const route = preview.ok ? preview.route : props.policy.roles.normal ?? props.catalog.default ?? { provider: '', model: '' }
+                    props.onPurpose(row.id, { kind: 'model', provider: route.provider, model: route.model, ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}) })
+                  } else props.onPurpose(row.id, purposeTargetFromValue(event.target.value))
+                }}>
+                {MODEL_ROLES.map(role => <option key={role} value={'role:' + role}>{presetLabel(role, props.locale)}</option>)}
+                <option value="custom">{text.explicit}</option>
+                {row.id !== 'chat' ? <option value="session">{text.followSession}</option> : null}
+              </select>
             </div>
-          })}
-        </fieldset>
-      </div>
-    </details>
-    <button type="button" disabled={props.busy} onClick={props.onSave}>{text.save}</button>
+            {custom ? <RouteFields locale={props.locale} route={row.target as ModelRoute} disabled={props.busy}
+              catalog={props.catalog} ariaPrefix={label} onChange={route => props.onPurpose(row.id, { kind: 'model', ...route })} />
+              : row.target.kind === 'role' ? <p className="model-center-meta model-center-route-summary">{preview.ok ? describe(preview.route) : text.notConfigured}</p> : null}
+          </div>
+        })}
+      </fieldset>
+    </section>
+    <div className="model-center-savebar">
+      <button type="button" disabled={props.busy || props.dirty === false} onClick={props.onSave}>{text.save}</button>
+      {props.dirty ? <span className="model-center-meta" role="status">{text.unsaved}</span> : null}
+    </div>
   </div>
+}
+
+function reasoningLabel(id: string, name: string, locale: ModelCenterLocale): string {
+  if (locale === 'en') return name
+  return ({ off: '关', none: '关', minimal: '极低', low: '低', medium: '中', high: '高', xhigh: '极高', max: '最高' } as Record<string, string>)[id] ?? name
 }
 
 function withEffort(route: ModelRoute, reasoningEffort: string): ModelRoute {
@@ -489,26 +488,7 @@ function RouteFields(props: {
   const defaultLabel = selected?.defaultEffort
     ? `${text.defaultEffort} (${selected.defaultEffort})`
     : text.defaultEffort
-  const exactFields = <>
-    {hasCatalog ? <>
-      <label>{text.provider}
-        <input value={props.route.provider} disabled={props.disabled}
-          aria-label={`${props.ariaPrefix} ${text.provider}`}
-          onChange={event => props.onChange({ ...props.route, provider: event.target.value })} />
-      </label>
-      <label>{text.exactModel}
-        <input value={props.route.model} disabled={props.disabled}
-          aria-label={`${props.ariaPrefix} ${text.exactModel}`}
-          onChange={event => props.onChange({ ...props.route, model: event.target.value })} />
-      </label>
-    </> : null}
-    <label>{text.exactEffort}
-      <input value={props.route.reasoningEffort ?? ''} disabled={props.disabled}
-        aria-label={`${props.ariaPrefix} ${text.exactEffort}`}
-        onChange={event => props.onChange(withEffort(props.route, event.target.value))} />
-    </label>
-  </>
-  return <div className="model-center-route">
+  return <div className="model-center-route" data-catalog={hasCatalog}>
     {hasCatalog ? <label>{text.catalog}
       <select value={key} disabled={props.disabled} aria-label={`${props.ariaPrefix} ${text.catalog}`}
         onChange={event => {
@@ -537,92 +517,61 @@ function RouteFields(props: {
       </label>
     </>}
     <label>{text.effort}
-      <select value={props.route.reasoningEffort ?? ''} disabled={props.disabled}
+      <select value={props.route.reasoningEffort ?? ''} disabled={props.disabled || !key}
         aria-label={`${props.ariaPrefix} ${text.effort}`}
         onChange={event => props.onChange(withEffort(props.route, event.target.value))}>
         <option value="">{defaultLabel}</option>
-        {efforts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        {efforts.map(item => <option key={item.id} value={item.id}>{reasoningLabel(item.id, item.name, props.locale)}</option>)}
       </select>
     </label>
-    <details className="model-center-exact">
-      <summary>{text.exactIds}</summary>
-      <div className="model-center-route">{exactFields}</div>
-    </details>
   </div>
 }
 
-function ReasoningField(props: {
-  locale: ModelCenterLocale
-  route: ModelRoute
-  disabled: boolean
-  catalog: SessionModelCatalog
-  ariaPrefix: string
-  onChange(route: ModelRoute): void
-}): ReactNode {
-  const text = copy(props.locale)
-  const selected = choiceOf(catalogChoices(props.catalog, props.route), props.route.provider, props.route.model)
-  const efforts = effortOptions(selected, props.route.reasoningEffort)
-  const defaultLabel = selected?.defaultEffort
-    ? `${text.defaultEffort} (${selected.defaultEffort})`
-    : text.defaultEffort
-  return <label className="model-center-effort">{text.effort}
-    <select value={props.route.reasoningEffort ?? ''} disabled={props.disabled}
-      aria-label={`${props.ariaPrefix} ${text.effort}`}
-      onChange={event => props.onChange(withEffort(props.route, event.target.value))}>
-      <option value="">{defaultLabel}</option>
-      {efforts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-    </select>
-  </label>
-}
 
-function RouteProblem(props: {
-  view: ResolvedRoute | { error: string } | undefined
-  fallbackPurpose: string
-  target: ModelTarget
-  policy: AiPolicy
-  specs: ReturnType<typeof purposeRows>
-}): ReactNode {
-  if (props.target.kind !== 'model') return null
-  const view = props.view ?? previewToView(previewResolve(props.policy, props.fallbackPurpose, { specs: props.specs }))
-  if ('error' in view) return <p role="alert" className="model-center-error">{view.error}</p>
-  const local = previewResolve(props.policy, props.fallbackPurpose, { specs: props.specs })
-  const conflict = !local.ok ? local.error : local.conflict
-  return conflict ? <p role="alert" className="model-center-error">{conflict}</p> : null
-}
-
-function previewToView(preview: ReturnType<typeof previewResolve>): ResolvedRoute | { error: string } {
-  return preview.ok ? preview.route : { error: preview.error }
-}
-
-const styles = `
+export const styles = `
 .model-center{max-width:760px;display:grid;gap:20px;color:inherit;font:400 var(--font-size-2,14px)/1.5 var(--default-font-family,system-ui,sans-serif)}
 .model-center p,.model-center h3{margin:0}
 .model-center-meta,.model-center small{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
 .model-center-error{color:var(--red-11,#b42318)}
 .model-center-tabs{display:flex;gap:20px;border-bottom:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
-.model-center-tabs button[role="tab"]{padding:8px 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--gray-11,inherit);font:inherit;cursor:pointer}
+.model-center-tabs button[role="tab"]{padding:8px 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--gray-11,inherit);font:inherit;cursor:pointer;transition:color 150ms ease,border-color 150ms ease}
+.model-center-tabs button[role="tab"]:hover{color:inherit}
 .model-center-tabs button[aria-selected="true"]{border-bottom-color:var(--accent-9,#3b82f6);color:var(--accent-11,inherit);font-weight:600}
-.model-center fieldset{margin:0;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:8px;padding:12px;display:grid;gap:12px}
+.model-center [role="tabpanel"]{border-radius:12px}
+.model-center fieldset{margin:0;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px;padding:12px;display:grid;gap:12px}
 .model-center label{display:grid;gap:6px}
-.model-center input,.model-center select{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:6px;background:var(--color-surface,transparent);color:inherit;font:inherit}
-.model-center button{min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:6px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start}
+.model-center input,.model-center select{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit;transition:border-color 150ms ease,box-shadow 150ms ease}
+.model-center input:focus,.model-center select:focus{border-color:var(--accent-9,#3b82f6);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-9,#3b82f6) 25%,transparent)}
+.model-center button{min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
+.model-center button:not([role="tab"]):hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent));border-color:color-mix(in srgb,currentColor 35%,transparent)}
+.model-center button:not([role="tab"]):active:not(:disabled){transform:scale(.97)}
 .model-center button:disabled{opacity:.45;cursor:not-allowed}
-.model-center :focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.model-center :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
 .model-center-list,.model-center-models{margin:0;padding:0;list-style:none;display:grid;gap:12px}
-.model-center-list>li{display:grid;gap:8px;padding:12px 0;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
+.model-center-list>li{display:grid;gap:8px;padding:12px 4px;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px}
 .model-center-provider-head,.model-center-actions,.model-center-route{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
 .model-center-route label{flex:1 1 160px}
-.model-center-policy,.model-center-runtime,.model-center-advanced-body{display:grid;gap:16px}
-.model-center-purpose-row{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 12px;padding:4px 0}
-.model-center-purpose-row>label:first-child{flex:1 1 320px}
-.model-center-purpose-row>.model-center-effort{flex:0 1 180px}
-.model-center-purpose-row>.model-center-error{flex:1 1 100%}
-.model-center-secondary>summary,.model-center-advanced>summary{cursor:pointer;font-weight:600;padding:6px 0}
-.model-center-secondary>fieldset{margin-top:12px}
-.model-center-advanced-body{padding-top:12px}
+.model-center-policy,.model-center-runtime{display:grid;gap:24px}
 .model-center-limits{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px}
-.model-center-role{display:grid;gap:8px}
-.model-center-exact{flex:1 1 100%}
-.model-center-exact summary{cursor:pointer}
+.model-center-tier-section,.model-center-capabilities{display:grid;gap:14px}
+.model-center header{display:grid;gap:4px}
+.model-center h3{font-size:16px;font-weight:600}
+.model-center .model-center-tiers,.model-center-capabilities>fieldset{padding:0;border:0;border-radius:0;gap:0;min-width:0}
+.model-center-tier{display:grid;grid-template-columns:68px minmax(0,1fr);gap:4px 14px;padding:8px 0;border-bottom:1px solid var(--gray-6)}
+.model-center-tier-name{padding-top:9px}
+.model-center-tier .model-center-route{display:grid;grid-template-columns:minmax(0,1fr) 132px;align-items:start}
+.model-center-tier .model-center-route label{font-size:12px;color:var(--gray-11)}
+.model-center-tier-head{display:grid;grid-template-columns:68px minmax(0,1fr) 132px;gap:14px;font-size:12px;color:var(--gray-11)}
+.model-center-tier .model-center-route[data-catalog="true"]>label{font-size:0;gap:0}
+.model-center-tier .model-center-route select,.model-center-tier .model-center-route input{font-size:14px;color:var(--gray-12)}
+.model-center-capability{display:grid;gap:10px;padding:14px 0;border-bottom:1px solid var(--gray-6)}
+.model-center-capability-heading{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:16px;align-items:center}
+.model-center-capability-heading>label{font-weight:500}
+.model-center-route-summary{overflow-wrap:anywhere}
+.model-center-savebar{position:sticky;bottom:0;display:flex;align-items:center;gap:14px;padding:12px 0;background:var(--color-panel-solid,var(--gray-1));border-top:1px solid var(--gray-6);z-index:1}
+.model-center-savebar button{background:var(--accent-9);color:var(--accent-contrast,white);border-color:transparent;min-width:80px}
+.model-center .model-center-savebar button:hover:not(:disabled){background:var(--accent-10,var(--accent-9,#3b82f6))}
+@media(max-width:560px){.model-center-tier-head{display:none}.model-center-tier .model-center-route[data-catalog="true"]>label{font-size:12px;gap:6px}.model-center-tier{grid-template-columns:1fr}.model-center-tier-name{padding-top:0}.model-center-capability-heading{grid-template-columns:minmax(0,1fr) 150px}}
 @media(max-width:560px){.model-center-limits{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.model-center button,.model-center input,.model-center select,.model-center-tabs button[role="tab"]{transition:none}}
 `

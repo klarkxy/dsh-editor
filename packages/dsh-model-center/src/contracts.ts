@@ -18,7 +18,7 @@ export const MODEL_CENTER_RPC_CHANNEL = '/dsh-model-center'
 export const MODEL_CENTER_PLUGIN = '@klarkxy/dsh-model-center'
 export const MODEL_CENTER_ENTRY_ID = 'model-center'
 
-export const MODEL_ROLES = ['normal', 'weak', 'strong'] as const satisfies readonly ModelRole[]
+export const MODEL_ROLES = ['weak', 'normal', 'strong', 'fantasy'] as const satisfies readonly ModelRole[]
 
 export interface ModelCenterStatus {
   enabled: boolean
@@ -94,7 +94,7 @@ export type RoutePreview = {
 }
 
 export function isModelRole(value: unknown): value is ModelRole {
-  return value === 'normal' || value === 'weak' || value === 'strong'
+  return value === 'normal' || value === 'weak' || value === 'strong' || value === 'fantasy'
 }
 
 export function isBoundRoute(route: ModelRoute | undefined): route is ModelRoute {

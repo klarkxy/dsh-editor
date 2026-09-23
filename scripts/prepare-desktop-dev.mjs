@@ -1,3 +1,4 @@
+import { materializeDsh } from './materialize-dsh.mjs'
 import { cp, mkdir, readFile, rm, symlink } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,14 +9,14 @@ import { workspacePackageDir, desktopComposition, configureProfile, DESKTOP_PACK
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceTemplate = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 const template = resolve(root, '.dev', 'desktop-profile-template')
-const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime')
+const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime-0.1.7-alpha.1')
 const composition = await desktopComposition()
 const packages = compositionInstallNames(composition)
 
 if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.node !== '24.16.0') {
   throw new Error(`desktop development requires Windows x64 Node 24.16.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
 }
-const dsh = resolveDshInstallation('0.1.5-rc.2')
+const dsh = resolveDshInstallation('0.1.7-alpha.1')
 
 function packageCopyFilter(source) {
   const normalized = source.replaceAll('\\', '/')
@@ -50,16 +51,13 @@ for (const packageName of packages) {
 let runtimeReady = false
 try {
   const manifest = JSON.parse(await readFile(resolve(devDshRuntime, 'package.json'), 'utf8'))
-  runtimeReady = manifest.name === '@deepseek-ai/dsh' && manifest.version === '0.1.5-rc.2'
+  runtimeReady = manifest.name === '@deepseek-ai/dsh' && manifest.version === '0.1.7-alpha.1'
+    && JSON.parse(await readFile(resolve(devDshRuntime, '.dsh-editor-materialized'), 'utf8')).version === manifest.version
 } catch {}
 if (!runtimeReady) {
   console.log('desktop-dev: materializing the pinned app-owned DSH runtime (first run only)')
   await rm(devDshRuntime, { recursive: true, force: true })
-  await cp(dsh.packageRoot, devDshRuntime, {
-    recursive: true,
-    dereference: true,
-    filter: (source) => !source.replaceAll('\\', '/').includes('/node_modules/.bin/'),
-  })
+  await materializeDsh(dsh.packageRoot, devDshRuntime)
 }
 for (const packageName of DESKTOP_PACKAGE_NAMES) {
   const destination = resolve(devDshRuntime, 'node_modules', packageName)

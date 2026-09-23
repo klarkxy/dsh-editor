@@ -3,7 +3,7 @@ import {
   BlockAssembler, LlmError, ReasoningEffortId, createUserMessage,
   type GenerateOptions, type LlmRuntime, type StreamChunk,
 } from '@deepseek-ai/dsh-llm'
-import type { ResolvedRoute } from './contracts.ts'
+import { producerMessageSource, type ResolvedRoute } from './contracts.ts'
 import { abortable, isAbortError, publicCallError } from './errors.ts'
 
 export type LlmGenerate = Pick<LlmRuntime, 'prepareCall'>
@@ -125,7 +125,7 @@ export async function generateAuxiliary(input: {
         ...(prepared.config.stop ? { stop: [...prepared.config.stop] } : {}),
         system,
         messages: [createUserMessage({
-          source: { kind: 'plugin', plugin },
+          source: producerMessageSource(plugin),
           content: [{ type: 'text', text }],
         })],
         signal: outputSignal,

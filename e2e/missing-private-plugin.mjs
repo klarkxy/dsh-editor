@@ -14,10 +14,10 @@ const devRoot = resolve(root, '.dev')
 const workRoot = resolve(devRoot, 'missing-plugin-repair')
 const packRoot = resolve(root, '.pack')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.1.7-alpha.1')
 const sharedCli = resolve(runtime, 'lib', 'bin.js')
 const READY = /https?:\/\/127\.0\.0\.1:\d+/
-resolveDshInstallation('0.1.5-rc.2')
+resolveDshInstallation('0.1.7-alpha.1')
 
 function assertInside(path, boundary) {
   const resolved = resolve(path)
@@ -293,7 +293,7 @@ if (!privateHosts.length) throw new Error('no private host plugins declared')
 const healthy = await probeHealthy()
 const results = []
 for (const packageName of privateHosts) results.push(await probeMissing(packageName))
-const report = { ok: true, dsh: '0.1.5-rc.2', healthy, results }
+const report = { ok: true, dsh: '0.1.7-alpha.1', healthy, results }
 await writeFile(resolve(packRoot, 'missing-private-plugin-smoke.json'), `${JSON.stringify(report, null, 2)}\n`)
 console.log(JSON.stringify({
   ok: true,

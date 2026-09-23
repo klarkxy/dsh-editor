@@ -10,7 +10,7 @@ export function isLeftoverDevCommand(commandLine, root) {
   if (!command || !rootKey || !command.includes(rootKey)) return false
   if (command.includes('tsdown') && command.includes('--watch')) return true
   if (command.includes('apps\\desktop\\dist\\main.js')) return true
-  if (command.includes('desktop-dsh-runtime\\lib\\bin.js')) return true
+  if (command.includes('desktop-dsh-runtime-0.1.7-alpha.1\\lib\\bin.js')) return true
   return false
 }
 

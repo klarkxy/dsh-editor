@@ -15,7 +15,7 @@ import { useReducedMotion } from 'motion/react'
 import type { RpcResult } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { ActivitySkeleton } from './ui/index.ts'
-import { t, useLocale } from '../i18n/index.ts'
+import { intlLocale, t, useLocale } from '../i18n/index.ts'
 
 use([BarChart, GridComponent, TooltipComponent, AriaComponent, SVGRenderer])
 
@@ -87,20 +87,10 @@ function text() {
   }
 }
 
-/** Compact token/request counts: 999 stays, then K / M / T. */
+/** Compact token/request counts in the UI locale (zh: 万/亿, en: K/M/B/T). */
 export function formatCompactNumber(value: number): string {
   if (!Number.isFinite(value)) return '0'
-  const sign = value < 0 ? '-' : ''
-  const amount = Math.round(Math.abs(value))
-  const scale = (raw: number, suffix: string) => {
-    const rounded = raw >= 10 ? Math.round(raw) : Math.round(raw * 10) / 10
-    const body = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
-    return `${sign}${body}${suffix}`
-  }
-  if (amount >= 1_000_000_000_000) return scale(amount / 1_000_000_000_000, 'T')
-  if (amount >= 1_000_000) return scale(amount / 1_000_000, 'M')
-  if (amount >= 1_000) return scale(amount / 1_000, 'K')
-  return `${sign}${amount}`
+  return new Intl.NumberFormat(intlLocale(), { notation: 'compact' }).format(value)
 }
 
 function formatNumber(value: number): string {
@@ -114,11 +104,7 @@ export function logTokens(entry: UsageLogEntry): number {
 export function formatUsageLogTime(at: string): string {
   const date = new Date(at)
   if (Number.isNaN(date.getTime())) return at
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hour = String(date.getHours()).padStart(2, '0')
-  const minute = String(date.getMinutes()).padStart(2, '0')
-  return `${month}/${day} ${hour}:${minute}`
+  return new Intl.DateTimeFormat(intlLocale(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date)
 }
 
 export function usageLogFromSummary(summary: UsageSummary): UsageLogEntry[] {

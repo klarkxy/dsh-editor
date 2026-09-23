@@ -11,7 +11,7 @@ import {
 } from './view-lifetime.ts'
 
 export const name = 'dsh-memory-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale'] as const
+export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export {
   beginMemoryRequest, createMemoryGeneration, disposeMemoryRequest, loadMemoryStatus, memoryRequestStillCurrent,
   peekMemoryStatus, shouldSkipMemoryRefresh, unwrapMemoryResult,

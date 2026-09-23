@@ -12,7 +12,7 @@ const output = resolve(root, 'e2e/out/settings-ui', stage)
 const home = resolve(root, '.dev', 'settings-ui-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.1.7-alpha.1/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -60,12 +60,12 @@ try {
   await sample('project')
 
   // Replay the runtime's ownership cleanup using the same bundled function.
-  const hmrSource=await (await import('node:fs/promises')).readFile(resolve(root,'.dev/desktop-dsh-runtime/node_modules/@deepseek-ai/dsh-client-hmr/lib/client.js'),'utf8')
+  const hmrSource=await (await import('node:fs/promises')).readFile(resolve(root,'.dev/desktop-dsh-runtime-0.1.7-alpha.1/node_modules/@deepseek-ai/dsh-client-hmr/lib/client.js'),'utf8')
   const cleanup=hmrSource.match(/function removeOwnedStyles\(id\) \{[\s\S]*?\n\t\t\}/)[0]
 
   const ids=['dsh-editor-plugins','@klarkxy/dsh-web-search-manager','@klarkxy/dsh-zhihu']
   const selectors=['style[data-dsh-plugins-styles]','style[data-dsh-web-search]','style[data-dsh-zhihu-styles]']
-  const modulesSource=await (await import('node:fs/promises')).readFile(resolve(root,'.dev/desktop-dsh-runtime/node_modules/@deepseek-ai/dsh-client-modules/lib/client.js'),'utf8')
+  const modulesSource=await (await import('node:fs/promises')).readFile(resolve(root,'.dev/desktop-dsh-runtime-0.1.7-alpha.1/node_modules/@deepseek-ai/dsh-client-modules/lib/client.js'),'utf8')
   const claim=modulesSource.match(/const claimStyles = \(id\) => \{[\s\S]*?\n\t\t\};/)[0]
   report.fixture=baseline?'Remove the three ownership declarations to reproduce the pre-fix injection contract.':'Unmodified product styles.'
   await page.evaluate(({code,selectors,baseline})=>{

@@ -4,7 +4,7 @@ This implementation follows the accepted six-plugin design: current title, requi
 
 ## Fixed boundaries
 
-- DSH owns agents, sessions, model/provider catalogs, credentials, questions, approvals, and history. Keep the pinned DSH version `0.1.5-rc.2`.
+- DSH owns agents, sessions, model/provider catalogs, credentials, questions, approvals, and history. Keep the pinned DSH version `0.1.7-alpha.1`.
 - All six feature bundle entries are enabled when installed and remain independently switchable. Loading their UI does not start inference. Dream and agent checkpoints keep separate opt-in switches, and the shared service is inert until a feature explicitly calls it.
 - The shared package owns model roles/purpose routing, bounded auxiliary calls, cancellation, usage receipts, and shared types. It does not own a parallel task engine, chat history, credential store, or generic artifact database.
 - Normal/weak/strong are configured aliases; session-following is a distinct target. Unconfigured weak/strong can inherit normal; an explicitly broken route fails visibly without silently changing providers. Manuscript completion and rewrite now use the same service with dedicated purposes; their existing settings UI edits the central policy.
@@ -30,7 +30,7 @@ Publication and archiving the former repository follow separately after local im
 2. 当前标题、需求澄清、回顾、记忆默认可用；不需要的功能可在插件页关闭。Dream、Agent 检查点等额外自动行为有独立开关，不会随插件一起打开。
 3. 经验学习依赖记忆；两者在桌面组合中默认同时可用。候选经验经审核采纳后才参与上下文；Skill 草稿可以预览、采纳、下载和撤回，不会自动改写政策文件或执行脚本。
 
-当前固定版本 DSH 0.1.5-rc.2 在后台即时更新插件状态，但现有页面不接纳新客户端模块图。插件设置会持续提示界面需要重载；保存工作后重新加载页面或重启应用。关闭后的后台任务和注入仍立即取消。模型中心关闭并重载后恢复原生模型设置。
+DSH 0.1.7-alpha.1 支持客户端模块图动态更新。插件设置订阅原生加载状态；正常启停无需重启，仅实际加载失败时提示保存工作后重试。安装、卸载或宿主明确返回需要重启的变更，仍按提示处理。关闭后的后台任务和注入立即取消。
 
 独立安装需要先显式加载共享服务 bundle，再安装所需功能；Self-improvement 还需要单独加载并启用 Memory。各包 README 给出对应命令。本轮新增包属于本地候选，npm 发布和旧仓库归档另行处理。
 
@@ -42,7 +42,7 @@ Editor 自有 profile 使用原生 patchReload: startup。插件管理器保存�
 
 ## 独立 web 验收
 
-各插件在原生“设置”页提供入口，并从原生会话列表读取当前选择。Memory、Mood、Recap 和经验学习的管理界面不要求 Editor 侧栏。模型中心在 Editor 内复用供应商界面；独立 web 的供应商编辑仍由原生“模型”页负责。
+各插件在原生“设置”页提供入口，并从宿主的会话选择绑定读取当前选择。Memory、Mood、Recap 和经验学习的管理界面不要求 Editor 侧栏。模型中心在 Editor 内复用供应商界面；独立 web 的供应商编辑仍由原生“模型”页负责。
 
 本地候选尚未发布到 npm。运行 `pnpm test:e2e:ai-plugins:standalone` 会把七个当前 tarball 安装到全新隔离 profile；其中未发布的包依赖只在该测试 profile 内绑定到对应 tarball，不修改全局包管理器配置。手动安装到原生 web 后功能默认启用；如需停用，可在插件设置中关闭后重启。
 
@@ -50,7 +50,9 @@ Editor 自有 profile 使用原生 patchReload: startup。插件管理器保存�
 
 长期存储在每次写入前验证容量；只能清理无引用的已结束整理历史与删除标记，不自动删除作者记录或待审核候选。达到容量时保留原状态并返回明确错误。
 
-## 本轮验证（2026-09-22）
+## 升级前验证（2026-09-22，DSH 0.1.5-rc.2）
+
+下面记录保留原验证范围；0.1.7-alpha.1 的现行结果见 [升级审计](dsh-0.1.7-upgrade.md)。
 
 - 全仓类型检查与构建通过；全量自动化为 261 个测试文件、1857 项通过、3 项跳过；写作调用统一的增量验收见下方。
 - 独立审查完成，已报告问题均修复并复核。

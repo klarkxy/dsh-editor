@@ -51,7 +51,7 @@ import { createCommandRegistry, matchRegistryShortcut, registryPaletteItems, typ
 describe('shell client inject', () => {
   it('declares every Remote face the renderer reads through ctx.remote', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'connection', 'settingsScope', 'settingsSchema', 'remote',
+      'slots', 'sessions', 'workspaces', 'connection', 'configForms', 'settingsSchema', 'remote',
       'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker', 'remote.agentPresets',
       'uiSession', 'locale',
     ])

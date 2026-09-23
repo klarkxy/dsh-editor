@@ -2,6 +2,7 @@ import { memo, type ReactNode } from 'react'
 import { Box } from '@radix-ui/themes'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { windowBridge } from './window-controls.tsx'
 
 /*
  * 聊天回复的 Markdown 渲染。react-markdown 产出 React 节点、不经过
@@ -17,7 +18,22 @@ function safeHref(url: string): string | undefined {
 
 function PlainLink(props: { href?: string; children?: ReactNode }) {
   if (!props.href) return <>{props.children}</>
-  return <a href={props.href}>{props.children}</a>
+  const href = props.href
+  /* 桌面端 shell 禁止窗内导航与新窗口(will-navigate/setWindowOpenHandler),
+     外链统一交给主进程白名单校验后的系统浏览器;web 端退化为新标签页。 */
+  return <a
+    href={href}
+    onClick={(event) => {
+      event.preventDefault()
+      const bridge = windowBridge()
+      if (bridge?.openExternal) {
+        bridge.openExternal(href)
+        return
+      }
+      globalThis.open?.(href, '_blank', 'noopener,noreferrer')
+    }}>
+    {props.children}
+  </a>
 }
 
 export const Markdown = memo(function Markdown(props: { text: string }) {

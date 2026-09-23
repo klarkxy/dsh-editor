@@ -5,7 +5,7 @@ import { formatNumber, t } from './i18n/index.ts'
  * 写作目标与今日进度:每日字数目标(goalChars) + 每个作品每天的总字数基线
  * (baselines[workspaceId] = { date, startChars }),用于计算"今日写了多少字"。
  *
- * 数据通过 settingsScope 持久化,key 命名空间 'dsh-editor-progress';
+ * 数据通过 configForms 持久化,key 命名空间 'dsh-editor-progress';
  * 视图层 (writing-progress chip) 直接读基线,纯函数负责解码/计算/判定。
  */
 

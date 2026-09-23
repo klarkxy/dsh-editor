@@ -52,7 +52,7 @@ export function AssistantSettings({ scope, migrate }: {
     setWriteFailure('')
     try {
       const normalized = normalizeAuthorPreferences(authorDraft)
-      await scope.set('authorPreferences', normalized)
+      if (await scope.set('authorPreferences', normalized) === false) throw new Error('Host refused settings write')
       if (!hasOwn(scope.getSnapshot().user, 'authorPreferences')) throw new Error('write did not commit')
     } catch {
       setWriteFailure(t('writing.authorFailed'))

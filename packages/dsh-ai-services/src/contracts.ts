@@ -1,5 +1,24 @@
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
 /** Public, browser-safe contracts. Host implementations stay in their owning packages. */
-export type ModelRole = 'normal' | 'weak' | 'strong'
+export type ProducerSourceKind = `plugin:${string}`
+export type ProducerMessageSource = { kind: ProducerSourceKind; plugin: string } & ContextFormed
+
+/**
+ * V4 sessions persist the producing extension in `kind`; the retired generic
+ * `plugin` wrapper is not admitted. The AI service is the shared producer for
+ * feature scopes, so its map must cover every registered feature id.
+ */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    [kind: ProducerSourceKind]: ProducerMessageSource
+  }
+}
+
+export function producerMessageSource(plugin: string): ProducerMessageSource {
+  return { kind: `plugin:${plugin}`, plugin }
+}
+export type ModelRole = 'normal' | 'weak' | 'strong' | 'fantasy'
 export interface ModelRoute { provider: string; model: string; reasoningEffort?: string }
 export type ModelTarget = { kind: 'role'; role: ModelRole } | { kind: 'session' } | ({ kind: 'model' } & ModelRoute)
 export interface AiPolicy {
@@ -70,7 +89,7 @@ export interface AiFeatureScope {
 export interface AiServices {
   activate(plugin: string): AiFeatureScope
   /** Atomically import missing purpose defaults once; host-only compatibility entrypoint. */
-  importPurposes(migrationId: string, defaults: Record<string, ModelTarget>): Promise<AiPolicy>
+  importPurposes(migrationId: string, defaults: Record<string, ModelTarget>, roles?: AiPolicy['roles']): Promise<AiPolicy>
   getPolicy(): AiPolicy
   updatePolicy(policy: Omit<AiPolicy, 'revision'>, expectedRevision: number): Promise<AiPolicy>
   resolve(purpose: string, sessionId?: string, override?: ModelTarget): Promise<ResolvedRoute>

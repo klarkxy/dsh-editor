@@ -9,7 +9,7 @@ import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack', 'desktop-e2e')
-resolveDshInstallation('0.1.5-rc.2')
+resolveDshInstallation('0.1.7-alpha.1')
 const e2eHomeRoot = resolve(root, '.dev', 'desktop-e2e-home')
 const template = resolve(root, '.dev', 'desktop-profile-template')
 const electronDist = resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'dist')
@@ -172,7 +172,7 @@ const baseEnv = {
   ...process.env,
   DSH_TELEMETRY_DISABLED: '1',
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev', 'desktop-dsh-runtime', 'lib', 'bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev', 'desktop-dsh-runtime-0.1.7-alpha.1', 'lib', 'bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: template,
   DSH_EDITOR_PROJECTS_ROOT: resolve(e2eHomeRoot, 'projects'),
 }
@@ -222,7 +222,7 @@ async function launchPhase(name, extraEnv, inspect) {
     window.on('crash', () => browserErrors.push('page crashed'))
     try {
       await delay(5_000)
-      console.log(`[desktop-e2e] ${name}: initial page ${JSON.stringify(await readWindowDiagnostic(window, processLogs))}`)
+      console.log(`[desktop-e2e] ${name}: initial page loaded`)
       await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 90_000 })
       console.log(`[desktop-e2e] ${name}: shell mounted`)
     } catch (error) {
@@ -252,6 +252,7 @@ async function launchPhase(name, extraEnv, inspect) {
     try {
       await inspect({ ...state, nativeOnboarding }, { app, window })
     } catch (error) {
+      await writeFile(resolve(output, `${name}-failure-dom.txt`), await window.locator('body').innerText()).catch(() => {})
       throw new Error(`${error instanceof Error ? error.message : String(error)}; browserErrors: ${JSON.stringify(browserErrors.slice(-20))}; processLogs: ${JSON.stringify(processLogs.slice(-30))}`)
     }
     console.log(`[desktop-e2e] ${name}: assertions passed`)

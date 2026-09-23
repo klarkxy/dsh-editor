@@ -1,3 +1,5 @@
+import { syncPresetDeclarations } from './preset-config.js'
+import { migrateWritingSettings } from './settings-migration.js'
 import { copyFile, cp, lstat, mkdir, readdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { restoreUserPlugins, sanitizeHostLockedPluginOverrides } from './user-plugins.js'
 import { linkPointsTo, sameFileTree } from './file-tree.js'
@@ -8,7 +10,7 @@ import { randomUUID } from 'node:crypto'
 export const PROFILE_NAME = 'dsh-editor'
 export const PROFILE_MARKER = '.dsh-editor-owner.json'
 /** Bump when skip-path invariants change so old stamps restage. */
-export const PROFILE_DEPLOY_ALGORITHM = 1
+export const PROFILE_DEPLOY_ALGORITHM = 2
 
 export interface ProfileDeployIdentity {
   algorithm: number
@@ -36,7 +38,7 @@ export function resolveDshHome(env: NodeJS.ProcessEnv, homeDirectory: string): s
   return env.DSH_HOME?.trim() || join(homeDirectory, '.dsh-editor')
 }
 
-async function readOwnerMarker(profilePath: string): Promise<{ app?: unknown; schema?: unknown; deploy?: unknown } | undefined> {
+async function readOwnerMarker(profilePath: string): Promise<{ app?: unknown; schema?: unknown; configVersion?: unknown; deploy?: unknown } | undefined> {
   try {
     return JSON.parse(await readFile(join(profilePath, PROFILE_MARKER), 'utf8')) as { app?: unknown; schema?: unknown; deploy?: unknown }
   } catch {
@@ -61,8 +63,8 @@ function deployStamp(identity: ProfileDeployIdentity): ProfileDeployIdentity {
 
 async function writeOwnerMarker(profilePath: string, deploy?: ProfileDeployIdentity): Promise<void> {
   const marker = deploy
-    ? { app: 'dsh-editor', schema: 1, deploy: deployStamp(deploy) }
-    : { app: 'dsh-editor', schema: 1 }
+    ? { app: 'dsh-editor', schema: 1, configVersion: 2, deploy: deployStamp(deploy) }
+    : { app: 'dsh-editor', schema: 1, configVersion: 2 }
   await writeFile(join(profilePath, PROFILE_MARKER), `${JSON.stringify(marker)}\n`, 'utf8')
 }
 
@@ -185,6 +187,18 @@ async function replaceOwnedProfile(profiles: string, target: string, template: s
   const backup = join(profiles, `.${PROFILE_NAME}.backup-${nonce}`)
   try {
     await stageProfileTree(template, stage, runtimeNodeModules)
+    // Since DSH 0.1.7 this file is user data, separate from the generated bundle.
+    const previousMarker = await readOwnerMarker(target)
+    const hasUserConfig = previousMarker?.configVersion === 2 || existsSync(join(target, '.editor-writing-migrated'))
+      || existsSync(join(target, 'node_modules', 'dsh-editor-profile-config', 'package.json'))
+    if (hasUserConfig) {
+      for (const file of ['cordis.patch.yml', '.editor-writing-migrated']) {
+        try { await copyFile(join(target, file), join(stage, file)) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+      }
+    } else if (existsSync(join(target, 'cordis.patch.yml'))) {
+      await copyFile(join(target, 'cordis.patch.yml'), join(stage, 'cordis.patch.before-dsh-0.1.7.yml'))
+    }
+    try { await copyFile(join(target, 'cordis.patch.before-dsh-0.1.7.yml'), join(stage, 'cordis.patch.before-dsh-0.1.7.yml')) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
     await writeOwnerMarker(stage)
     if (existsSync(target)) await renameDirectory(target, backup)
     try { await renameDirectory(stage, target) } catch (error) {
@@ -217,6 +231,8 @@ export async function deployOwnedProfile(
   try {
     await deployAgentPresets(home, template)
     await restoreUserPlugins(home, target, bundled)
+    await syncPresetDeclarations(home, target)
+    await migrateWritingSettings(home, target)
     if (deploy) await writeOwnerMarker(target, deploy)
   } catch (error) {
     if (existsSync(target) && await isOwnedProfile(target)) await writeOwnerMarker(target)

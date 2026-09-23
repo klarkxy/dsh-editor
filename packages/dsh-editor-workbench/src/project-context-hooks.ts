@@ -35,11 +35,11 @@ export async function assembleProjectRules(ctx: Context, assembly: PromptAssembl
   const host = asHost(ctx)
   const access = await resolveWorkspaceAccess(host, String(agent.session.id), signal)
   const rules = await readProjectRules({ fs: host.fs, cwd: access.workspace.path, root: access.root, policy: access.policy, signal })
-  const settings = ctx.get('settings') as { get(namespace: string): unknown } | undefined
+  const settings = ctx.get('editorWritingPreferences') as { read(): unknown } | undefined
   let raw: Record<string, unknown> = {}
   if (settings) {
     // Settings service may exist without the optional editor Shell namespace.
-    const value = settings.get('dsh-editor-writing')
+    const value = settings.read()
     if (value && typeof value === 'object') raw = value as Record<string, unknown>
   }
   const preferences = normalizeAuthorPreferences(raw.authorPreferences)

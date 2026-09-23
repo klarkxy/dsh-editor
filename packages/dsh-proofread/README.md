@@ -4,7 +4,7 @@
 
 ## 安装
 
-需要 Node.js ≥22、DSH `0.1.5-rc.2`。本包尚未发布到 npm；在仓库根运行 `pnpm build`、`pnpm pack:plugins`，从 `.pack/` 取得 tarball。
+需要 Node.js ≥22、DSH `0.1.7-alpha.1`。本包尚未发布到 npm；在仓库根运行 `pnpm build`、`pnpm pack:plugins`，从 `.pack/` 取得 tarball。
 
 将包放在不含空格的目录，停止目标 Web profile，再在该目录执行：
 

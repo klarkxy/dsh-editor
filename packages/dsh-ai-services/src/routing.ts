@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { LlmError, ReasoningEffortId, type LlmCallConfig, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { ModelRole, ModelRoute, ModelTarget, PurposeSpec, ResolvedRoute } from './contracts.ts'
 import {
@@ -52,9 +51,11 @@ export async function resolveTarget(input: {
   source: ResolvedRoute['source']
   sessionId?: string
   sessionModels?: SessionModelsFn
+  defaultModel?: () => ModelRoute | undefined
+  modelCenterAvailable?: boolean
   signal?: AbortSignal
 }): Promise<ResolvedRoute> {
-  const { llm, policy, target, source, sessionId, sessionModels, signal } = input
+  const { llm, policy, target, source, sessionId, sessionModels, defaultModel, modelCenterAvailable, signal } = input
   const policyRevision = policy.revision
   if (target.kind === 'model') {
     const route = cloneRoute({
@@ -86,13 +87,14 @@ export async function resolveTarget(input: {
   }
   if (!isModelRole(target.role)) fail(AI_UNKNOWN_ROLE, '未知模型角色。')
   let inheritedRole: ModelRole | undefined
-  let route = configuredRole(policy, target.role)
+  // Without the manager, every tier uses the default chat model. Explicit
+  // model/session choices above remain authoritative, including invalid ones.
+  let route = modelCenterAvailable === false ? undefined : configuredRole(policy, target.role)
   if (!route) {
-    if (target.role === 'normal') fail(AI_ROLE_UNSET, '尚未配置常用模型。')
-    const normal = configuredRole(policy, 'normal')
-    if (!normal) fail(AI_ROLE_UNSET, '尚未配置常用模型。')
-    route = normal
-    inheritedRole = 'normal'
+    route = configuredRole(policy, 'normal') ?? defaultModel?.()
+    if (!route) fail(AI_ROLE_UNSET, '请先设置默认对话模型。')
+    route = cloneRoute(route)
+    if (target.role !== 'normal') inheritedRole = 'normal'
   }
   await validateRoute(llm, route, signal)
   return inheritedRole
@@ -108,63 +110,73 @@ export async function resolvePurposeRoute(input: {
   sessionId?: string
   override?: ModelTarget
   sessionModels?: SessionModelsFn
+  defaultModel?: () => ModelRoute | undefined
+  modelCenterAvailable?: boolean
   signal?: AbortSignal
 }): Promise<ResolvedRoute> {
-  const { llm, policy, purpose, spec, sessionId, override, sessionModels, signal } = input
+  const { llm, policy, purpose, spec, sessionId, override, sessionModels, defaultModel, modelCenterAvailable, signal } = input
   if (override) {
-    return resolveTarget({ llm, policy, target: override, source: 'override', sessionId, sessionModels, signal })
+    return resolveTarget({ llm, policy, target: override, source: 'override', sessionId, sessionModels, defaultModel, modelCenterAvailable, signal })
   }
   const mapped = policy.purposes[purpose]
   if (mapped) {
-    return resolveTarget({ llm, policy, target: mapped, source: 'purpose', sessionId, sessionModels, signal })
+    return resolveTarget({ llm, policy, target: mapped, source: 'purpose', sessionId, sessionModels, defaultModel, modelCenterAvailable, signal })
   }
   if (spec) {
-    return resolveTarget({ llm, policy, target: spec.defaultTarget, source: 'default', sessionId, sessionModels, signal })
+    return resolveTarget({ llm, policy, target: spec.defaultTarget, source: 'default', sessionId, sessionModels, defaultModel, modelCenterAvailable, signal })
   }
   fail(AI_UNKNOWN_PURPOSE, '用途未注册。')
 }
 
-type SessionModelsProxy = {
-  sessions?: {
-    models(request: unknown): Promise<{
-      result: {
-        ok: boolean
-        value?: { current?: { provider?: string; model?: string; reasoningEffort?: string }; routable?: boolean }
-        error?: { message?: string }
-      }
-    }>
-  }
+type ModelSelectionLike = { provider?: unknown; model?: unknown; reasoningEffort?: unknown }
+type RequestHeaderLike = { config?: ModelSelectionLike; adapterDefaults?: { reasoningEffort?: unknown } }
+
+type SessionModelsHost = {
+  agents?: { get(sessionId: string): { session?: { requestHeader?: () => RequestHeaderLike | undefined } } | undefined }
+  sessionProjections?: { stateOf(session: unknown, key: string): { pending?: ModelSelectionLike | null } | undefined }
+  agentDefaultModel?: { currentSelection(): ModelSelectionLike }
 }
 
-/** Read the current picker via session.models, never the last request header. */
-export function sessionModelsFromApi(getApi: () => unknown): SessionModelsFn {
+function routeFromSelection(value: ModelSelectionLike | undefined, message: string): ModelRoute {
+  if (typeof value?.provider !== 'string' || typeof value.model !== 'string') fail(AI_SESSION_INVALID, message)
+  const effort = streamReasoningEffort(value.reasoningEffort)
+  return effort
+    ? { provider: value.provider, model: value.model, reasoningEffort: effort }
+    : { provider: value.provider, model: value.model }
+}
+
+/**
+ * Read the live host picker. A durable pending choice wins, then the route
+ * recorded by the current request, then the host's default model.
+ */
+export function sessionModelsFromHost(getHost: () => unknown): SessionModelsFn {
   return async (sessionId, signal) => {
     signal?.throwIfAborted()
-    const api = getApi() as SessionModelsProxy | undefined
-    if (!api?.sessions?.models) fail(AI_SESSION_UNAVAILABLE, '无法读取当前会话模型。')
-    const request = {
-      type: 'client-request', rpcId: randomUUID(), method: 'session.models', payload: { sessionId },
-    }
-    let response: Awaited<ReturnType<NonNullable<NonNullable<SessionModelsProxy['sessions']>['models']>>>
+    const host = getHost() as SessionModelsHost | undefined
+    if (!host?.agents || !host.sessionProjections) fail(AI_SESSION_UNAVAILABLE, '无法读取当前会话模型。')
+    const agent = host.agents.get(sessionId)
+    const session = agent?.session
+    if (!session) fail(AI_SESSION_UNAVAILABLE, '当前会话不在 Host 中，无法读取模型。')
+    let projection: { pending?: ModelSelectionLike | null } | undefined
     try {
-      const work = () => api.sessions!.models!(request)
-      response = signal ? await abortable(work, signal) : await work()
+      projection = host.sessionProjections.stateOf(session, 'modelSelection')
     } catch (error) {
       if (signal?.aborted || isAbortError(error)) throw error
-      if (error instanceof AiServicesError) throw error
-      if (error instanceof Error && error.message) fail(AI_SESSION_INVALID, error.message)
       fail(AI_SESSION_UNAVAILABLE, '无法读取当前会话模型。')
     }
     signal?.throwIfAborted()
-    if (!response.result.ok) fail(AI_SESSION_INVALID, response.result.error?.message || '无法读取当前会话模型。')
-    const selected = response.result.value?.current
-    if (!selected || typeof selected.provider !== 'string' || typeof selected.model !== 'string') {
-      fail(AI_SESSION_INVALID, '当前会话模型响应无效。')
+    if (!projection) fail(AI_SESSION_UNAVAILABLE, '当前会话模型投影不可用。')
+    if (projection.pending !== null && projection.pending !== undefined) {
+      return routeFromSelection(projection.pending, '当前会话模型选择无效。')
     }
-    if (response.result.value?.routable === false) fail(AI_SESSION_INVALID, '当前会话模型不可用。')
-    const effort = streamReasoningEffort(selected.reasoningEffort)
-    return effort
-      ? { provider: selected.provider, model: selected.model, reasoningEffort: effort }
-      : { provider: selected.provider, model: selected.model }
+    const header = session.requestHeader?.()
+    const recorded = header?.config
+    if (recorded !== undefined) {
+      const selected = header?.adapterDefaults?.reasoningEffort === true
+        ? { provider: recorded.provider, model: recorded.model }
+        : recorded
+      return routeFromSelection(selected, '当前会话模型记录无效。')
+    }
+    return routeFromSelection(host.agentDefaultModel?.currentSelection(), '默认对话模型不可用。')
   }
 }

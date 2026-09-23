@@ -10,7 +10,7 @@ import {
 import { applyMarkerFromStatus, createTitleClientMarker, disposeTitleClientMarker } from './marker.ts'
 
 export const name = 'dsh-current-title-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale'] as const
+export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export { createTitleClientMarker, disposeTitleClientMarker, applyMarkerFromStatus }
 
 type Client = NativeSurfaceClient & {
@@ -109,7 +109,8 @@ export function TitleSettings(props: {
   const canRegenerate = Boolean(sessionId) && weOwn && !busy
 
   return <section className="current-title-settings" data-testid="current-title-settings">
-    {title ? <p>{title}</p> : null}
+    {!status && !error ? <p role="status">{seat.locale === 'en' ? 'Loading title settings…' : '正在读取标题设置…'}</p> : null}
+    {title ? <p translate="no">{title}</p> : null}
     {pinned ? <p className="current-title-meta">{text.pinned}</p> : null}
     {status?.session?.generating ? <p role="status">{text.generating}</p> : null}
     {error ? <p role="alert">{error}</p> : null}
@@ -164,12 +165,16 @@ export function TitleSettings(props: {
 const styles = `
 .current-title-settings{display:grid;gap:8px;color:inherit;font:400 var(--font-size-2,14px)/1.5 var(--default-font-family,system-ui,sans-serif)}
 .current-title-settings p{margin:0}
+.current-title-settings p[translate="no"]{overflow-wrap:anywhere}
 .current-title-meta{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
-.current-title-settings button{min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:6px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start}
+.current-title-settings button{min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
+.current-title-settings button:hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent));border-color:color-mix(in srgb,currentColor 35%,transparent)}
+.current-title-settings button:active:not(:disabled){transform:scale(.97)}
 .current-title-settings button:disabled{opacity:.45;cursor:not-allowed}
-.current-title-settings fieldset{margin:0;border:0;padding:0;display:grid;gap:8px}
+.current-title-settings fieldset{margin:0;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:10px;padding:8px 12px;display:grid;gap:8px}
 .current-title-settings label{display:flex;gap:8px;align-items:center}
 .current-title-settings :focus-visible{outline:2px solid currentColor;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.current-title-settings button{transition:none}}
 `
 
 declare module '@deepseek-ai/cordis' {

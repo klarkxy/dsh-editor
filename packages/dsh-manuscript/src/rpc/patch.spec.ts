@@ -1,5 +1,5 @@
 import { AiServicesRuntime } from '@klarkxy/dsh-ai-services'
-import { sessionModelsFromApi } from '../../../dsh-ai-services/src/routing.ts'
+import { sessionModelsFromHost } from '../../../dsh-ai-services/src/routing.ts'
 import { testAiScope } from './test-ai-scope.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
@@ -64,11 +64,12 @@ async function fixture(
   }
   const stream = vi.fn(() => chunks([{ type: 'text-delta', index: 0, text: '雨落在窗台上。' } as StreamChunkLike, { type: 'finish', reason: { kind: 'stop' } }]))
   const services = new Map<string, unknown>([['llm', { stream }]])
-  services.set('apiProxy', { sessions: { models: async () => ({ result: { ok: true, value: { current: config, routable: true } } }) } })
+  services.set('sessionModelsHost', { agents: { get: () => ({ session: {} }) }, sessionProjections: { stateOf: () => ({ pending: config }) } })
   const ai = new AiServicesRuntime({
     llm: { resolveCallConfig: async (config: any) => config, prepareCall: async (config: any) => ({ config, stream }) } as any,
     store: { savePolicy: async () => {}, saveReceipts: async () => {} },
-    sessionModels: sessionModelsFromApi(() => services.get('apiProxy')),
+    sessionModels: sessionModelsFromHost(() => services.get('sessionModelsHost')),
+    defaultModel: () => config.provider && config.model ? { provider: config.provider, model: config.model } : undefined,
   })
   services.set('aiServices', ai)
   const rows = new Map<string, unknown>()
@@ -147,7 +148,7 @@ describe('patch.complete', () => {
     expect(bounded.instruction).not.toContain('\u0001')
   })
 
-  it('derives provider and model from the live session, never from RPC input', async () => {
+  it('derives provider and model from the default chat model, never from RPC input', async () => {
     const { host, stream } = await fixture()
     await expect(dispatch(
       host as unknown as Context,
@@ -211,14 +212,14 @@ describe('patch.complete', () => {
     expect(user).not.toContain('【改写要求】')
   })
 
-  it('reports missing live-session model configuration', async () => {
+  it('reports missing default chat model configuration', async () => {
     const { host, stream } = await fixture({})
     await expect(dispatch(
       host as unknown as Context,
       'patch.complete',
       { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句', before: '', after: '' },
       new AbortController().signal,
-    )).rejects.toThrow('当前会话模型响应无效')
+    )).rejects.toThrow('请先设置默认对话模型。')
     expect(stream).not.toHaveBeenCalled()
   })
 
@@ -291,10 +292,11 @@ describe('patch.complete', () => {
 
 describe('current model selection for optional writing assist',()=>{
  it('completes before any chat request and follows later model selection instead of historical headers',async()=>{
-   const {host,stream,services}=await fixture({});
+   const {host,stream,services,ai}=await fixture({});
+   await ai.importPurposes('explicit-session', { 'manuscript.completion': { kind: 'session' }, 'manuscript.rewrite': { kind: 'session' } });
    let selected={provider:'minimax-live',model:'MiniMax-M3'};
-   const models=vi.fn(async()=>({result:{ok:true,value:{current:selected,routable:true}}}));
-   services.set('apiProxy',{sessions:{models}});
+   const models=vi.fn(()=>({pending:selected}));
+   services.set('sessionModelsHost',{agents:{get:()=>({session:{requestHeader:()=>({config:{provider:'old',model:'old'}})}})},sessionProjections:{stateOf:models}});
    const payload={sessionId:'session-1',path:'chapter.md',prefix:'雨声',suffix:''};
    expect(await dispatch(host as unknown as Context,'fim.complete',payload,new AbortController().signal)).toMatchObject({text:'雨落在窗台上。'});
    expect(stream).toHaveBeenNthCalledWith(1,expect.objectContaining(selected));
@@ -304,9 +306,10 @@ describe('current model selection for optional writing assist',()=>{
    expect(models).toHaveBeenCalledTimes(2);
  });
  it('does not fall back to an old model when the authoritative selection fails',async()=>{
-   const {host,stream,services}=await fixture();
-   services.set('apiProxy',{sessions:{models:async()=>({result:{ok:false,error:{message:'selected model unavailable'}}})}});
-   await expect(dispatch(host as unknown as Context,'fim.complete',{sessionId:'session-1',prefix:'正文',suffix:''},new AbortController().signal)).rejects.toThrow('selected model unavailable');
+   const {host,stream,services,ai}=await fixture();
+   await ai.importPurposes('explicit-session', { 'manuscript.completion': { kind: 'session' } });
+   services.set('sessionModelsHost',{agents:{get:()=>({session:{requestHeader:()=>({config:{provider:'old',model:'old'}})}})},sessionProjections:{stateOf:()=>{throw new Error('selected model unavailable')}}});
+   await expect(dispatch(host as unknown as Context,'fim.complete',{sessionId:'session-1',prefix:'正文',suffix:''},new AbortController().signal)).rejects.toThrow('无法读取当前会话模型。');
    expect(stream).not.toHaveBeenCalled();
  });
 });
@@ -438,4 +441,27 @@ describe('central writing purpose policy', () => {
     expect(ai.usage().at(-1)?.status).toBe('cancelled')
     expect(ai.purposes()).toEqual([])
   })
+})
+
+
+it('uses Quick and Chat by default and only uses Fantasy after explicit selection', async () => {
+  const { host, stream, services, ai } = await fixture()
+  const models = vi.fn(async () => { throw new Error('must not read session picker') })
+  services.set('apiProxy', { sessions: { models } })
+  const { revision, ...policy } = ai.getPolicy()
+  await ai.updatePolicy({ ...policy, roles: {
+    weak: { provider: 'tiers', model: 'haiku' }, normal: { provider: 'tiers', model: 'sonnet' }, fantasy: { provider: 'tiers', model: 'fable' },
+  } }, revision)
+  await dispatch(host as unknown as Context, 'fim.complete', { sessionId: 'session-1', prefix: '雨声', suffix: '' }, new AbortController().signal)
+  await dispatch(host as unknown as Context, 'patch.complete', { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句' }, new AbortController().signal)
+  expect(stream).toHaveBeenNthCalledWith(1, expect.objectContaining({ provider: 'tiers', model: 'haiku' }))
+  expect(stream).toHaveBeenNthCalledWith(2, expect.objectContaining({ provider: 'tiers', model: 'sonnet' }))
+  expect(stream.mock.calls.some(([options]) => options.model === 'fable')).toBe(false)
+  const { revision: nextRevision, ...nextPolicy } = ai.getPolicy()
+  await ai.updatePolicy({ ...nextPolicy, purposes: {
+    ...nextPolicy.purposes, 'manuscript.rewrite': { kind: 'role', role: 'fantasy' },
+  } }, nextRevision)
+  await dispatch(host as unknown as Context, 'patch.complete', { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句' }, new AbortController().signal)
+  expect(stream).toHaveBeenNthCalledWith(3, expect.objectContaining({ provider: 'tiers', model: 'fable' }))
+  expect(models).not.toHaveBeenCalled()
 })

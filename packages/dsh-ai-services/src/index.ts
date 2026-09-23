@@ -4,7 +4,7 @@ import { AI_RPC_CHANNEL, type AiServices, type RpcResult } from './contracts.ts'
 import { registerHostRpc, type HostRpcContext } from './host-rpc.ts'
 import { handleAiRpc } from './rpc.ts'
 import { AiServicesRuntime } from './service.ts'
-import { sessionModelsFromApi } from './routing.ts'
+import { sessionModelsFromHost } from './routing.ts'
 import { POLICY_KEY, RECEIPTS_KEY, aiServicesDomain, boundedReceipts } from './storage.ts'
 
 export { AiServicesRuntime } from './service.ts'
@@ -13,7 +13,7 @@ export { AI_RPC_CHANNEL, CHAT_EVENTS_SLOT, MODEL_SETTINGS_SLOT } from './contrac
 export type * from './contracts.ts'
 
 export const name = '@klarkxy/dsh-ai-services'
-export const inject = ['llm', 'storageDomain', 'connection', 'webServer'] as const
+export const inject = ['llm', 'storageDomain', 'connection', 'webServer', 'agents', 'sessionProjections', 'agentDefaultModel'] as const
 
 declare module '@deepseek-ai/cordis' { interface Context { aiServices: AiServices } }
 
@@ -58,7 +58,9 @@ export async function apply(ctx: Context): Promise<void> {
       savePolicy: (policy, imports) => policyTable.put(POLICY_KEY, { ...policy, imports }),
       saveReceipts: items => receiptTable.put(RECEIPTS_KEY, { items: boundedReceipts(items) }),
     },
-    sessionModels: sessionModelsFromApi(() => ctx.get('apiProxy')),
+    sessionModels: sessionModelsFromHost(() => ctx),
+    defaultModel: () => (ctx.get('agentDefaultModel') as { currentSelection(): import('./contracts.ts').ModelRoute } | undefined)?.currentSelection(),
+    modelCenterAvailable: () => Boolean(ctx.get('modelCenter')),
   })
   ctx.effect(() => async () => { await service.dispose(); await domain.close() }, 'ai-services.dispose')
   ctx.effect(() => installForegroundPriority(ctx, service), 'ai-services.foreground')

@@ -24,7 +24,7 @@ const PINNED_PACKAGES = [
   '@deepseek-ai/dsh-session',
   '@deepseek-ai/dsh-system-prompt',
 ]
-const SKIP_REWRITE_PREFIXES = []
+const SKIP_REWRITE_PREFIXES = ['CHANGELOG.md']
 const LOCKFILE = 'pnpm-lock.yaml'
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.pack', '.pnpm-store', '.dev', '.playwright-mcp', 'dist', 'lib', 'out'])
 
@@ -41,11 +41,12 @@ options:
   --channel <name>    release channel for auto resolution: rc (default) | alpha
   --dry-run           only print what would change
   --skip-install      do not run pnpm install after rewriting pins
-  --skip-global       do not npm install -g ${DSH_PACKAGE} after rewriting pins`)
+  --global            also update the machine-wide CLI (workspace-only by default)
+  --skip-global       keep workspace-only installation (compatibility option)`)
 }
 
 function parseArgs(argv) {
-  const options = { channel: 'rc' }
+  const options = { channel: 'rc', skipGlobal: true }
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === '--to') options.to = argv[++i]
@@ -53,6 +54,7 @@ function parseArgs(argv) {
     else if (arg === '--dry-run') options.dryRun = true
     else if (arg === '--skip-install') options.skipInstall = true
     else if (arg === '--skip-global') options.skipGlobal = true
+    else if (arg === '--global') options.skipGlobal = false
     else if (arg === '--help' || arg === '-h') options.help = true
     else throw new Error(`unknown argument: ${arg}`)
   }

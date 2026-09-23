@@ -1,35 +1,14 @@
-import { createRequire } from 'node:module'
-import { fileURLToPath } from 'node:url'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import {
-  LESSON_INJECTION_SECTION, SELF_IMPROVEMENT_PLUGIN,
+  LESSON_INJECTION_SECTION, SELF_IMPROVEMENT_PLUGIN, SELF_IMPROVEMENT_SOURCE_KIND,
   type LessonInjectPayload, type MemoryRecord, type PreStepDecision,
 } from './contracts.ts'
 import { formatLessonSnapshot, lessonSnapshotPrefix } from './recall.ts'
 
-type CreateUserMessage = (input: LessonInjectPayload & { readonly id?: never; readonly role?: never }) => unknown
-
-function loadCreateUserMessage(): CreateUserMessage {
-  const require = createRequire(import.meta.url)
-  const candidates = [
-    '@deepseek-ai/dsh-llm',
-    fileURLToPath(new URL('../../dsh-ai-services/node_modules/@deepseek-ai/dsh-llm', import.meta.url)),
-    fileURLToPath(new URL('../../dsh-memory/node_modules/@deepseek-ai/dsh-llm', import.meta.url)),
-  ]
-  for (const id of candidates) {
-    try {
-      const mod = require(id) as { createUserMessage?: CreateUserMessage }
-      if (typeof mod.createUserMessage === 'function') return mod.createUserMessage
-    } catch { /* try the next resolve path */ }
-  }
-  throw new Error('@deepseek-ai/dsh-llm createUserMessage is required')
-}
-
-const createUserMessage = loadCreateUserMessage()
-
 export function isSelfImprovementLessonMessage(message: unknown): boolean {
   if (!message || typeof message !== 'object') return false
   const row = message as { source?: { kind?: string; plugin?: string; form?: string; sections?: Array<{ name?: string }> } }
-  if (row.source?.kind !== 'plugin' || row.source.plugin !== SELF_IMPROVEMENT_PLUGIN) return false
+  if (row.source?.kind !== SELF_IMPROVEMENT_SOURCE_KIND || row.source.plugin !== SELF_IMPROVEMENT_PLUGIN) return false
   return row.source.form === 'snapshot'
     && Boolean(row.source.sections?.some(section => section.name === LESSON_INJECTION_SECTION))
 }
@@ -38,7 +17,7 @@ export function lessonInjectPayload(lessons: readonly MemoryRecord[]): LessonInj
   const text = formatLessonSnapshot(lessons)
   return {
     source: {
-      kind: 'plugin',
+      kind: SELF_IMPROVEMENT_SOURCE_KIND,
       plugin: SELF_IMPROVEMENT_PLUGIN,
       form: 'snapshot',
       sections: [{ name: LESSON_INJECTION_SECTION, text }],

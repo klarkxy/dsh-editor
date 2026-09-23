@@ -40,7 +40,7 @@ childProcess.spawnSync = (command, args, options) => {
   if (!args.includes('publish')) return spawnSync(command, args, options)
   // Intercept the actual publish command before it can execute or reach npm.
   const archive = args[args.indexOf('publish') + 1]
-  const packed = spawnSync('tar', ['-xOf', archive, 'package/package.json'], { encoding: 'utf8' })
+  const packed = spawnSync('tar', ['--force-local', '-xOf', archive, 'package/package.json'], { encoding: 'utf8' })
   if (packed.status !== 0) throw new Error(packed.stderr)
   const manifest = JSON.parse(packed.stdout)
   const version = { ...manifest, dist: { integrity: 'sha512-' + createHash('sha512').update(fs.readFileSync(archive)).digest('base64') } }
@@ -80,9 +80,9 @@ globalThis.fetch = async (url, options) => {
     ['@klarkxy/fixture-core', '0.1.3', 'publish'], ['@klarkxy/fixture-consumer', '0.1.5', 'publish'],
   ])
   const archive = join(root, '.pack/npm-release/klarkxy-fixture-consumer-0.1.5.tgz')
-  const packed = JSON.parse(run('tar', ['-xOf', archive, 'package/package.json']))
+  const packed = JSON.parse(run('tar', ['--force-local', '-xOf', archive, 'package/package.json']))
   expect(packed.dependencies['@klarkxy/fixture-core']).toBe('0.1.3')
-  expect(run('tar', ['-xOf', archive, 'package/lib/index.js'])).toContain('"version":"0.1.5","dependency":"0.1.3"')
+  expect(run('tar', ['--force-local', '-xOf', archive, 'package/lib/index.js'])).toContain('"version":"0.1.5","dependency":"0.1.3"')
   for (const [dir, manifest] of manifests) expect(JSON.parse(readFileSync(join(root, 'packages', dir, 'package.json'), 'utf8'))).toEqual(manifest)
   for (const row of first.packages) registry[row.name] = { 'dist-tags': { latest: row.version }, versions: { [row.version]: { name: row.name, version: row.version, dshRelease: { contentHash: row.contentHash } } } }
   writeFileSync(join(root, 'registry.json'), JSON.stringify(registry))

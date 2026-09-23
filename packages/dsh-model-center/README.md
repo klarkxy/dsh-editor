@@ -8,7 +8,7 @@ Model Center for DSH. Starts enabled and remains independently switchable.
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.5-rc.2`.
+Requires Node.js ≥22 and DSH `0.1.7-alpha.1`.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services
@@ -21,10 +21,10 @@ AI policy is stored by `@klarkxy/dsh-ai-services`. Provider credentials stay in 
 
 Settings → **模型中心** (or the host Models page when the editor supplies that seat).
 
-- **Model routing** opens first. Chat, completion, and rewrite are grouped under common features; other plugin features can follow a preset or choose a model directly.
+- **Model routing** opens with four tiers: Quick, Chat, Thinking, and Fantasy. These correspond to Haiku, Sonnet, Opus, and Fable respectively, while allowing models from any provider. Fantasy is reserved for explicit user selection and is never a built-in plugin default. Each tier configures a model and reasoning effort; unconfigured tiers inherit Chat. Capability defaults can follow any tier or use a separate model and effort. Auxiliary capabilities can also follow the current session.
 - **Runtime** owns concurrency, timeout, input/output caps, and retry attempts.
 - **Providers** only manages connections and available models.
-- Default, efficient, and high-quality presets live under **Advanced settings**.
+- Tier changes apply to capabilities that follow them. New conversations read the saved default; existing conversation selections stay unchanged.
 
 ## Develop
 
@@ -34,7 +34,7 @@ pnpm exec vitest run packages/dsh-model-center/src
 pnpm --filter @klarkxy/dsh-model-center build
 ```
 
-The Editor preinstalls this feature disabled. On pinned DSH 0.1.5-rc.2, a change to the active client module graph needs a page reload or app restart; save your work first. Standalone DSH must load the shared AI service bundle explicitly as well as this feature. New 0.1.0 packages are local candidates until published; use the corresponding tarballs in .pack for local installation.
+The Editor preinstalls this feature disabled. On pinned DSH 0.1.7-alpha.1, a change to the active client module graph needs a page reload or app restart; save your work first. Standalone DSH must load the shared AI service bundle explicitly as well as this feature. New 0.1.0 packages are local candidates until published; use the corresponding tarballs in .pack for local installation.
 
 For native web profiles, append the following entry to the profile directory's `cordis.patch.yml` and restart DSH (the Editor provides its own per-feature switch):
 

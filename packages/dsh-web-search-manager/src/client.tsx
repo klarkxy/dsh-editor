@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { PROVIDER_PRICING_CHECKED, searchProviderInfo } from './provider-info.ts'
 import {
   WEB_SEARCH_RPC_CHANNEL, pickActiveSearch, resolveSearchOrder,
@@ -96,6 +96,27 @@ export function nextSearchEnabled(
   return currentlyEnabled && canEnableSearch(nextOrder, providers, keys, writable)
 }
 
+function ConfirmButton(props: { label: string; confirmLabel: string; disabled?: boolean; onConfirm(): void }) {
+  const [armed, setArmed] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  function disarm() {
+    clearTimeout(timer.current)
+    setArmed(false)
+  }
+  return <button type="button" className="web-search-danger" disabled={props.disabled}
+    onClick={() => {
+      if (!armed) {
+        setArmed(true)
+        timer.current = setTimeout(() => setArmed(false), 3000)
+        return
+      }
+      disarm()
+      props.onConfirm()
+    }}
+    onBlur={disarm}>{armed ? props.confirmLabel : props.label}</button>
+}
+
 export function NetworkSearchSettings({ client }: { client: Client }) {
   const tabsId = useId()
   const [tab, setTab] = useState<'providers' | 'limits'>('providers')
@@ -148,10 +169,14 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
       unwrap(await client.remote.credentials.set(provider.credentialRef, typed))
       setKeys(current => current[provider.id] === snapshot ? { ...current, [provider.id]: '' } : current)
     }
+    const bounded = (key: (typeof limits)[number][0]) => {
+      const row = limits.find(item => item[0] === key)!
+      return Math.min(row[3], Math.max(row[2], Number.isFinite(draft[key]) ? draft[key] : row[2]))
+    }
     await update({
       ...editable(status.settings),
-      maxResults: draft.maxResults, maxQueries: draft.maxQueries,
-      timeoutMs: draft.timeoutMs, maxFetchChars: draft.maxFetchChars,
+      maxResults: bounded('maxResults'), maxQueries: bounded('maxQueries'),
+      timeoutMs: bounded('timeoutMs'), maxFetchChars: bounded('maxFetchChars'),
       endpoints: draft.endpoints, searchOrder: order,
       searchEnabled: on, fetchProvider: 'http', fetchEnabled: on,
     }, status.settings.revision)
@@ -169,7 +194,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
   if (!status || !draft) {
     return <section className="web-search-settings">
       <p role="status">{error || '正在读取设置…'}</p>
-      <button type="button" onClick={() => void action(async () => { await load() })}>重新连接</button>
+      {error ? <button type="button" onClick={() => void action(async () => { await load() })}>重新连接</button> : null}
     </section>
   }
 
@@ -320,9 +345,10 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
                     placeholder={provider.configured ? '已配置，留空不替换' : '请输入 API Key'}
                     onChange={event => setKeys(current => ({ ...current, [provider.id]: event.target.value }))} />
                 </label> : null}
-                {needsKey && !shared && provider.configured ? <button type="button"
+                {needsKey && !shared && provider.configured ? <ConfirmButton
                   disabled={busy || writable[provider.credentialRef ?? ''] === false}
-                  onClick={() => void action(() => removeKey(provider))}>删除 Key</button> : null}
+                  label="删除 Key" confirmLabel="确认删除 Key？"
+                  onConfirm={() => void action(() => removeKey(provider))} /> : null}
               </div>
               <div className="web-search-rank-move">
                 <button
@@ -376,7 +402,7 @@ const styles = `
 .web-search-settings p{margin:0;line-height:1.5}
 .web-search-settings small,.web-search-meta,.web-search-empty{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
 .web-search-error{color:var(--red-11,#b42318)}
-.web-search-card{display:grid;gap:12px}
+.web-search-card{display:grid;gap:12px;padding:16px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:12px}
 .web-search-card header{display:flex;justify-content:space-between;gap:12px;align-items:center;padding-bottom:8px}
 .web-search-card h3{margin:0;font-size:var(--font-size-3,16px);font-weight:600}
 .web-search-provider{display:grid;gap:8px;min-width:0}
@@ -384,18 +410,24 @@ const styles = `
 .web-search-provider-heading{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-height:24px}
 .web-search-provider-heading strong{font-weight:500}
 .web-search-card label{display:grid;gap:6px}
-.web-search-settings input{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:6px;background:var(--color-surface,transparent);color:inherit;font:inherit}
-.web-search-settings button:not([role="switch"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:6px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start}
+.web-search-settings input{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit;transition:border-color 150ms ease,box-shadow 150ms ease}
+.web-search-settings input:focus{border-color:var(--accent-9,#3b82f6);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-9,#3b82f6) 25%,transparent)}
+.web-search-settings button:not([role="switch"]){min-height:34px;padding:6px 12px;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit;justify-self:start;transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease}
+.web-search-settings button:not([role="switch"]):not([role="tab"]):not(.web-search-drag-handle):hover:not(:disabled){background:var(--gray-3,color-mix(in srgb,currentColor 6%,transparent));border-color:color-mix(in srgb,currentColor 35%,transparent)}
+.web-search-settings button:not([role="switch"]):not([role="tab"]):not(.web-search-drag-handle):active:not(:disabled){transform:scale(.97)}
+.web-search-danger:hover:not(:disabled){border-color:var(--red-11,#b42318);color:var(--red-11,#b42318);background:color-mix(in srgb,var(--red-11,#b42318) 8%,transparent)}
 .web-search-settings button:disabled{opacity:.45;cursor:not-allowed}
 .web-search-tabs{display:flex;gap:20px;border-bottom:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
 .web-search-tabs button[role="tab"]{padding:8px 0;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--gray-11,inherit)}
+.web-search-tabs button[role="tab"]:hover{color:inherit}
 .web-search-tabs button[aria-selected="true"]{border-bottom-color:var(--accent-9,#3b82f6);color:var(--accent-11,inherit);font-weight:600}
+.web-search-settings [role="tabpanel"]{border-radius:12px}
 .web-search-settings .web-search-switch{all:unset;box-sizing:border-box;position:relative;display:inline-block;width:36px;height:20px;flex:none;border-radius:999px;background:var(--gray-7,color-mix(in srgb,currentColor 28%,transparent));cursor:pointer}
 .web-search-switch.is-on{background:var(--accent-9,#3b82f6)}
 .web-search-switch:disabled{cursor:not-allowed;opacity:.7}
 .web-search-switch-thumb{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:999px;background:#fff;transition:transform 150ms ease}
 .web-search-switch.is-on .web-search-switch-thumb{transform:translateX(16px)}
-.web-search-settings :focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.web-search-settings :focus-visible{outline:2px solid var(--accent-9,currentColor);outline-offset:3px}
 .web-search-card-actions{display:flex;flex-wrap:wrap;gap:8px}
 .web-search-rank{margin:0;padding:0;list-style:none}
 .web-search-rank li{position:relative;display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:start;padding:14px 0;border-top:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent))}
@@ -414,7 +446,7 @@ const styles = `
 .web-search-limits{margin:0;border:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px}
 .web-search-limits label{display:grid;gap:6px;font-size:var(--font-size-2,14px)}
 @media(max-width:560px){.web-search-rank-move{flex-direction:column;align-items:flex-end}.web-search-limits{grid-template-columns:minmax(0,1fr)}}
-@media(prefers-reduced-motion:reduce){.web-search-switch-thumb{transition:none}}
+@media(prefers-reduced-motion:reduce){.web-search-switch-thumb{transition:none}.web-search-settings button:not([role="switch"]),.web-search-settings input{transition:none}}
 `
 
 export function apply(ctx: Context): void {

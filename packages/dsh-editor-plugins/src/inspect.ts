@@ -11,7 +11,7 @@ import {
 import { isProtectedPackage, isSafeEntryId, isSafePackageName, type RuntimeCatalog } from './core.ts'
 import { inspectPluginPresets } from './presets.ts'
 
-export const PINNED_DSH = '0.1.5-rc.2'
+export const PINNED_DSH = '0.1.7-alpha.1'
 export const PINNED_CORDIS = '4.0.2'
 export type { InspectEntry, InspectFinding, InspectSeverity, InspectVerdict, PluginInspectReport }
 

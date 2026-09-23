@@ -54,7 +54,7 @@ describe('model center load and save', () => {
     expect(calls).toEqual(['/dsh-ai-services:status'])
   })
 
-  it('describes only apiKeyEnv from settingsScope and never guesses PROVIDER_API_KEY', async () => {
+  it('describes only apiKeyEnv from configForms and never guesses PROVIDER_API_KEY', async () => {
     const described: string[][] = []
     const snapshot = await loadModelCenter({
       call: async (_channel, endpoint) => endpoint === 'status' ? { ok: true, value: status } : { ok: true, value: {} },
@@ -76,7 +76,7 @@ describe('model center load and save', () => {
           return { ok: true, value: { MY_REAL_KEY: { configured: true, writable: false } } }
         },
       },
-      settingsScope: {
+      configForms: {
         describe: () => ({
           getSnapshot: () => ({
             view: {
@@ -139,4 +139,10 @@ describe('model center load and save', () => {
     )
     expect(stale).toEqual({ ok: false, reason: 'stale', error: '' })
   })
+})
+
+it('reports conflicts returned as RPC envelopes', async () => {
+  const result = await savePolicyUpdate(async () => ({ ok: false, error: { code: 'AI_POLICY_CONFLICT', message: '策略已被修改' } }),
+    { expectedRevision: 2, policy: { roles: policy.roles, purposes: {}, limits } }, () => true)
+  expect(result).toMatchObject({ ok: false, reason: 'conflict' })
 })

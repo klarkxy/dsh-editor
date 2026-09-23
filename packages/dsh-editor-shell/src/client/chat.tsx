@@ -16,8 +16,6 @@ import {
   internalIndexTurnActive,
   loadOlder,
   partialView,
-  readModels,
-  selectModel,
   send,
   sendProjectContext,
   stop,
@@ -28,7 +26,6 @@ import {
 import type {
   SessionFace,
   SessionId,
-  SessionModels,
   WorkspaceId,
 } from '../dsh-compat.ts'
 import { emptyTranscript, type ChatTranscript } from '../dsh-compat.ts'
@@ -59,7 +56,7 @@ import {
   type ConversationPresetChoice,
 } from '../conversation-presets.ts'
 import { shouldShowMigrationBanner } from '../legacy-migration.ts'
-import { ConversationRenameQueue, automaticTitleManaged, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
+import { ConversationRenameQueue, automaticTitleManaged, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
 import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
@@ -81,8 +78,7 @@ import {
   TextArea,
 } from '@radix-ui/themes'
 import { ActivityDots, SuccessMark } from './ui/index.ts'
-import type { WritingModelRoute } from '../writing-settings.tsx'
-import { discardCreatedChatModelError, rememberCreatedChatModelError, takeCreatedChatModelError } from './ui-workspace.ts'
+import { applyChatModelDefault, takeCreatedChatModelError } from './ui-workspace.ts'
 import { t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
 import {
   canSubmitComposer,
@@ -90,7 +86,7 @@ import {
   shouldSubmitComposer,
   type ShellContext,
 } from './shared.ts'
-import { PlusIcon, StopIcon } from './icons.tsx'
+import { DotsIcon, PlusIcon, StopIcon } from './icons.tsx'
 import {
   bindOfficialConversation,
   conversationChatSource,
@@ -147,7 +143,7 @@ export async function settleConversationStop(input: {
 }
 
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, chatModel, renderSlot, onAcceptMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; chatModel?: WritingModelRoute; renderSlot?: SettingsRenderSlot; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, renderSlot, onAcceptMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; onAcceptMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [messageCardTick, setMessageCardTick] = useState(0)
@@ -157,7 +153,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     if (isObservableSource(session)) return session
     const fallback: ChatLifecycle = {
       sessionId,
-      queue: [],
+      pendingSubmissions: [],
       running: false,
       openState: 'open',
       promptError: null,
@@ -169,13 +165,17 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   }, [session])
   const lifecycle = useObservable(sessionSource) as ChatLifecycle
   const snapshot = lifecycle
+  const queuedSubmissions = useMemo(
+    () => snapshot.pendingSubmissions.filter((item) => item.placement === 'queued' || item.placement === 'steering'),
+    [snapshot.pendingSubmissions],
+  )
   const chatSource = useMemo(() => conversationChatSource(ctx, session.sessionId), [ctx, session.sessionId])
   const chat = useObservable(chatSource)
   const transcript = chat?.legacy ?? EMPTY_TRANSCRIPT
   const chatLegacy = transcript
-  const pendingRaw = useObservable(ctx.uiSession?.pendingInteractions ?? EMPTY_PENDING)
+  const pendingRaw = useObservable(ctx.uiSession?.sessionStatus ?? EMPTY_PENDING)
   const pendingItems = useMemo(
-    () => pendingForSession(pendingRaw as ReadonlyMap<SessionId, PendingInteraction> | PendingInteraction[], session.sessionId),
+    () => pendingForSession(pendingRaw, session.sessionId),
     [pendingRaw, session.sessionId],
   )
   const sessionList = useObservable(ctx.sessions.list)
@@ -243,7 +243,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   useLayoutEffect(() => {
     const el = historyRef.current
     if (el && bottomPinnedRef.current) el.scrollTop = el.scrollHeight
-  }, [rows, partial, outgoing, visibleCalls, snapshot.queue, pendingItems])
+  }, [rows, partial, outgoing, visibleCalls, queuedSubmissions, pendingItems])
   const historyPrimed = useRef(false)
   const primedEmpty = useRef(false)
   const initialMessageIds = useRef(new Set<string>())
@@ -264,11 +264,11 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const isNewMessage = (id: string): boolean => historyPrimed.current && !initialMessageIds.current.has(id)
   const hasTurnError = rows.some((row) => row.id.startsWith('turn-error:'))
   const workspace = workspaceList.items.find((item) => item.workspaceId === workspaceId)
-  const initScope = useMemo(() => ctx.settingsScope.bind({ namespace: INIT_SETTINGS_NAMESPACE, decode: decodeInitSettings }), [ctx])
+  const initScope = useMemo(() => ctx.configForms.get<NonNullable<ReturnType<typeof decodeInitSettings>>>(INIT_SETTINGS_NAMESPACE), [ctx])
   const initSettings = useObservable(initScope)
-  const conversationScope = useMemo(() => ctx.settingsScope.bind({ namespace: CONVERSATION_SETTINGS_NAMESPACE, decode: decodeConversationSettings }), [ctx])
+  const conversationScope = useMemo(() => ctx.configForms.get<NonNullable<ReturnType<typeof decodeConversationSettings>>>(CONVERSATION_SETTINGS_NAMESPACE), [ctx])
   const conversationSettings = useObservable(conversationScope)
-  const developerScope = useMemo(() => ctx.settingsScope.bind({ namespace: DEVELOPER_SETTINGS_NAMESPACE, decode: decodeDeveloperSettings }), [ctx])
+  const developerScope = useMemo(() => ctx.configForms.get<NonNullable<ReturnType<typeof decodeDeveloperSettings>>>(DEVELOPER_SETTINGS_NAMESPACE), [ctx])
   const developerSettings = useObservable(developerScope)
   const developerMode = developerSettings.value?.developerMode === true
   const [inspection, setInspection] = useState<ProjectInspectionResponse | null>(null)
@@ -399,7 +399,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     && !showInitGuide
     && !outgoing
     && !snapshot.running
-    && snapshot.queue.length === 0
+    && queuedSubmissions.length === 0
     && visibleCalls.length === 0
     && !partial.text
     && !partial.thinking
@@ -466,7 +466,8 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setDraftConfirm(null)
   }
   const openConversation = (nextId: SessionId) => {
-    setDraft(''); setNote(''); setOutgoing(null); onDraftDirtyChange(false); ctx.sessions.open(nextId)
+    setDraft(''); setNote(''); setOutgoing(null); onDraftDirtyChange(false)
+    void ctx.uiWorkspace.openSession(nextId).catch(() => setNote(t('chat.sendFailedRetry')))
     setModelRevision((value) => value + 1)
   }
   const switchConversation = async (nextId: string) => {
@@ -485,30 +486,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     }).catch(() => setNote(t('chat.renameFailed')))
   }
 
-  const applyDefaultChatModel = async (sessionId: SessionId) => {
-    let groups: SessionModels['groups'] = []
-    const preferred = resolveNewConversationModel({ preferred: chatModel })
-    if (!preferred) {
-      const catalog = await readModels(ctx.remote.session, session)
-      if (catalog.ok) groups = catalog.value.groups
-    }
-    const route = preferred ?? resolveNewConversationModel({ groups })
-    if (!route) return
-    const selected = await selectModel(ctx.remote.session, sessionId, route.provider, route.model, route.reasoningEffort)
-    if (!selected.ok) rememberCreatedChatModelError(sessionId, t('chat.defaultModelFailed'))
-    else discardCreatedChatModelError(sessionId)
-  }
-  const hadPreferredChatModel = useRef(Boolean(resolveNewConversationModel({ preferred: chatModel })))
-  useEffect(() => {
-    const preferred = resolveNewConversationModel({ preferred: chatModel })
-    if (!preferred) {
-      hadPreferredChatModel.current = false
-      return
-    }
-    if (hadPreferredChatModel.current) return
-    hadPreferredChatModel.current = true
-    void applyDefaultChatModel(session.sessionId)
-  }, [chatModel?.provider, chatModel?.model, session.sessionId])
+  const applyDefaultChatModel = (sessionId: SessionId) => applyChatModelDefault(ctx, sessionId)
   const closePresetPicker = () => {
     setPresetPicker({ kind: 'closed', presets: [] })
   }
@@ -604,7 +582,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const persistConversationWork = async (record: typeof workRecord) => {
     if (!workspaceId) throw new Error('workspace unavailable')
     const current = conversationScope.getSnapshot().value ?? DEFAULT_CONVERSATION_SETTINGS
-    await conversationScope.set('works', putConversationWork(current, workspaceId, record).works)
+    if (await conversationScope.set('works', putConversationWork(current, workspaceId, record).works) === false) throw new Error('Host refused conversation settings write')
   }
   const leaveIfCurrent = async (id: string) => {
     if (id !== session.sessionId) return true
@@ -678,12 +656,15 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       void send(session, value).then((result) => {
         if (!result || !result.ok) {
           setOutgoing((current) => current?.text === value ? { ...current, state: 'failed' } : current)
+          /* 失败时把草稿还给输入框,避免瞬时故障丢掉整段文字。 */
+          setDraft((current) => current || value)
           setNote(t('chat.sendFailedRetry'))
           return
         }
         setOutgoing((current) => current?.text === value ? { ...current, state: 'accepted' } : current)
       }).catch(() => {
         setOutgoing((current) => current?.text === value ? { ...current, state: 'failed' } : current)
+        setDraft((current) => current || value)
         setNote(t('chat.sendFailedRetry'))
       })
       return
@@ -700,6 +681,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       if (receipt) setOutgoing((current) => current?.text === value ? { ...current, projectContextReceipt: receipt } : current)
       if (!result || !result.ok) {
         setOutgoing((current) => current?.text === value ? { ...current, state: 'failed' } : current)
+        setDraft((current) => current || value)
         setNote(t('chat.sendFailedRetry'))
         return
       }
@@ -709,7 +691,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       if (contextCompileFailed) {
         setDraft((current) => current || value)
         setNote(t('chat.contextBlocked'))
-      } else setNote(t('chat.sendFailedRetry'))
+      } else {
+        setDraft((current) => current || value)
+        setNote(t('chat.sendFailedRetry'))
+      }
     })
   }
   const liveOpen = snapshot.running
@@ -788,7 +773,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                     title={t('chat.conversationActions')}
                     aria-label={t('chat.conversationActions')}
                     disabled={conversationBusy}>
-                    ⋯
+                    <DotsIcon size={14} />
                   </IconButton>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content
@@ -959,12 +944,12 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
               </Text>
             </ChatEntry>
               : null}
-            {snapshot.queue.map((item) => <ChatEntry
+            {queuedSubmissions.map((item) => <ChatEntry
               className="chat-row notice"
-              key={`queue:${item.id}`}
-              enter={isNewMessage(`queue:${item.id}`)}>
+              key={`queue:${item.requestId}`}
+              enter={isNewMessage(`queue:${item.requestId}`)}>
               <Text size="2" as="p">
-                {item.preview}
+                {item.text}
               </Text>
               <Text size="1" color="gray">
                 {item.placement === 'queued' ? t('chat.queued') : t('chat.steering')}
@@ -973,7 +958,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
             {partial.text ? <ChatEntry
               className="chat-row assistant"
               key="partial-text"
-              aria-live="polite"
               enter={isNewMessage('partial-text')}>
               <Text size="2" as="div">
                 <Markdown text={partial.text} />
@@ -1023,7 +1007,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
               }}
               placeholder={t('chat.placeholder')}
               aria-label={t('chat.inputLabel')} />
-            {note ? <Text size="1" className="warning" color="red">
+            {note ? <Text size="1" className="warning" color="red" role="alert">
               {note}
             </Text> : null}
             <Flex className="composer-toolbar" align="center" justify="between" gap="2" wrap="wrap" minWidth="0">
@@ -1066,9 +1050,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                     height={16}
                     fill="none"
                     stroke="currentColor"
-                    stroke-width={2}
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     aria-hidden="true"
                     focusable="false">
                     <path d="m22 2-7 20-4-9-9-4Z" />

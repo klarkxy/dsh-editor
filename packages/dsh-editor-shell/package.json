@@ -20,7 +20,15 @@
       "import": "./lib/seats.js",
       "default": "./lib/seats.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./writing-config": {
+      "types": "./lib/writing-config.d.ts",
+      "default": "./lib/writing-config.js"
+    },
+    "./developer-config": {
+      "types": "./lib/developer-config.d.ts",
+      "default": "./lib/developer-config.js"
+    }
   },
   "files": [
     "lib",
@@ -57,6 +65,18 @@
         "title": "写作界面",
         "description": "三栏稿纸与设置",
         "locked": true
+      },
+      {
+        "id": "dsh-editor-writing",
+        "title": "写作偏好",
+        "description": "原生写作配置",
+        "locked": true
+      },
+      {
+        "id": "ui-developer",
+        "title": "开发者偏好",
+        "description": "编辑器开发者配置",
+        "locked": true
       }
     ]
   },
@@ -66,13 +86,13 @@
     "test": "vitest run --root ../.. packages/dsh-editor-shell/src"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-client-connection": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-settings": "0.1.5-rc.2",
+    "@deepseek-ai/cordis": "^4.0.3",
+    "@deepseek-ai/dsh-client-connection": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-settings": "0.1.7-alpha.1",
     "react": "^18.2.0"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.1",
+    "@deepseek-ai/schemastery": "^3.18.3",
     "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
@@ -91,9 +111,9 @@
     "@klarkxy/dsh-ai-services": "workspace:*"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-client-connection": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-settings": "0.1.5-rc.2",
+    "@deepseek-ai/cordis": "^4.0.3",
+    "@deepseek-ai/dsh-client-connection": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-settings": "0.1.7-alpha.1",
     "@types/react": "18.3.31",
     "dsh-editor-novel-kernel": "workspace:*",
     "dsh-editor-seats": "workspace:*",

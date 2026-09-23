@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto'
 import type { AiFeatureScope } from '@klarkxy/dsh-ai-services/contracts'
 
 export const WRITING_PURPOSES = [
-  { id: 'manuscript.completion', label: '正文补全', defaultTarget: { kind: 'session' as const } },
-  { id: 'manuscript.rewrite', label: '选区改写', defaultTarget: { kind: 'session' as const } },
+  { id: 'manuscript.completion', label: '正文补全', defaultTarget: { kind: 'role' as const, role: 'weak' as const } },
+  { id: 'manuscript.rewrite', label: '选区改写', defaultTarget: { kind: 'role' as const, role: 'normal' as const } },
 ]
 export async function runWritingAi(input: {
   scope?: AiFeatureScope; purpose: string; sessionId?: string; system: string; text: string; signal: AbortSignal; maxChars: number

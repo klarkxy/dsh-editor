@@ -53,13 +53,14 @@ import {
 } from './settings-models-store.ts'
 import { Badge, Box, Callout, Card, Checkbox, Flex, Heading, Text, TextField } from '@radix-ui/themes'
 import { Select, type SelectOption } from './select.tsx'
+import { ChevronDownIcon, ChevronRightIcon, CrossIcon } from './icons.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
 import { ActivityDots, ActivitySkeleton, Button, Dialog } from './ui/index.ts'
 import { isSuccessWorkbenchNote, TRANSIENT_STATUS_NOTE_MS, type SettingsDescribeFace, type SettingsSchemaService, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import type { SettingsScope } from '../dsh-compat.ts'
-import { writingModelRouteValue, writingPreferences, type WritingPreferences } from '../writing-settings.tsx'
-import { catalogFromSessionGroups, firstUsableCatalogModel, mergeCatalogOptions, WritingModelRoutes, type CatalogModelOption } from './writing-model-routes.tsx'
+import { type WritingPreferences } from '../writing-settings.tsx'
+import { catalogFromSessionGroups, mergeCatalogOptions, WritingModelRoutes, type CatalogModelOption } from './writing-model-routes.tsx'
 
 type ModelsRemote = EditorRemote
 
@@ -380,10 +381,11 @@ type SectionState = {
   deleteTarget: ProviderRow | undefined
   dismissing: Set<string>
   savedNote: string | null
+  deleteError: string | null
 }
 
 function emptySectionState(): SectionState {
-  return { editing: undefined, adding: false, declaring: false, deleteTarget: undefined, dismissing: new Set(), savedNote: null }
+  return { editing: undefined, adding: false, declaring: false, deleteTarget: undefined, dismissing: new Set(), savedNote: null, deleteError: null }
 }
 
 /* The exported entry point. Builds the store once, subscribes to the
@@ -396,7 +398,7 @@ export function SettingsModelsSection(props: {
 }): ReactNode {
   useLocale()
   const store = useMemo(
-    () => new ModelsStore(props.ctx.remote, props.ctx.settingsScope.describe(), props.ctx.settingsSchema),
+    () => new ModelsStore(props.ctx.remote, props.ctx.configForms.describe(), props.ctx.settingsSchema),
     [props.ctx],
   )
 
@@ -517,18 +519,7 @@ function Loaded(props: {
     }).catch(() => { /* keep profile catalog */ })
     return () => { live = false }
   }, [ctx, state.rows])
-  useEffect(() => {
-    if (state.status !== 'ready' || !state.writable) return
-    const current = writingPreferences(props.writingScope.getSnapshot()).chatModel
-    if (current?.provider?.trim() && current?.model?.trim()) return
-    const catalog = mergeCatalogOptions(runtimeCatalog, catalogOptions(state.rows, state.namespaces, ctx.settingsSchema))
-    const usable = firstUsableCatalogModel(
-      catalog,
-      state.rows.filter(providerUsable).map((row) => providerIdOf(row.entry)),
-    )
-    if (!usable) return
-    void props.writingScope.set('chatModel', writingModelRouteValue({ provider: usable.provider, model: usable.model }))
-  }, [ctx.settingsSchema, props.writingScope, runtimeCatalog, state.namespaces, state.rows, state.status, state.writable])
+
 
   if (state.status === 'idle' || state.status === 'loading') {
     return (
@@ -573,6 +564,11 @@ function Loaded(props: {
   return (
     <section className="models-page" aria-label={t('settings.models')}>
       <Header note={section.savedNote} />
+      {section.deleteError ? <Callout.Root color="red" className="models-error" role="alert">
+        <Callout.Text>
+          {section.deleteError}
+        </Callout.Text>
+      </Callout.Root> : null}
       {props.showWritingRoutes ? <WritingModelRoutes
         connection={ctx.connection}
         scope={props.writingScope}
@@ -640,7 +636,7 @@ function Loaded(props: {
                   }))
                 }}
                 onDelete={() => {
-                  setSection((current) => ({ ...current, deleteTarget: target, savedNote: null }))
+                  setSection((current) => ({ ...current, deleteTarget: target, savedNote: null, deleteError: null }))
                 }} />
               {editing ? <ProviderEditor
                 ctx={ctx}
@@ -744,10 +740,10 @@ function Loaded(props: {
           const target = section.deleteTarget
           if (target === undefined) return
           void removeProviderProfile(ctx, store, target)
-            .then(() => setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: text().saved })))
+            .then(() => setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: text().saved, deleteError: null })))
             .catch((error: unknown) => {
               const message = error instanceof Error ? error.message : String(error)
-              setSection((current) => ({ ...current, deleteTarget: undefined, savedNote: message }))
+              setSection((current) => ({ ...current, deleteTarget: undefined, deleteError: message }))
             })
         }} />
     </section>
@@ -1327,7 +1323,7 @@ function ModelListEditor(props: {
             aria-label={`${t.modelAdvanced} ${index + 1}`}
             aria-expanded={expanded.has(index)}
             onClick={() => toggle(index)}>
-            {expanded.has(index) ? '▾' : '▸'}
+            {expanded.has(index) ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
           </Button>
           <Button
             variant="danger"
@@ -1335,7 +1331,7 @@ function ModelListEditor(props: {
             aria-label={`${t.removeModel} ${index + 1}`}
             disabled={disabled}
             onClick={() => remove(index)}>
-            ×
+            <CrossIcon size={14} />
           </Button>
         </Flex>
         {expanded.has(index) ? <Flex className="models-catalog-advanced" direction="column" gap="2">
@@ -1491,7 +1487,7 @@ function CustomProviderCard(props: {
   onClose(changed: boolean): void
 }): ReactNode {
   const { ctx, store, protocols, taken, readOnly, onClose } = props
-  const piAiNamespace = ctx.settingsScope.describe().getSnapshot().view?.namespaces.find((view) => view.ns === 'llm-pi-ai')
+  const piAiNamespace = ctx.configForms.describe().getSnapshot().view?.namespaces.find((view) => view.ns === 'llm-pi-ai')
   const revision = piAiNamespace?.revision ?? 0
   const [route, setRoute] = useState('')
   const [displayName, setDisplayName] = useState('')

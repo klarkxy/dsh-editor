@@ -5,7 +5,7 @@ import {
 } from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AI_INVALID_ROUTE, AI_ROLE_UNSET, AI_UNKNOWN_ROLE } from './errors.ts'
-import { AiServicesRuntime } from './service.ts'
+import { AiServicesRuntime, type AiServicesOptions } from './service.ts'
 import { defaultPolicy } from './storage.ts'
 import type { AiPolicy, AuxiliaryRequest, ModelRoute, PurposeSpec } from './contracts.ts'
 
@@ -56,7 +56,7 @@ function request(patch: Partial<AuxiliaryRequest> = {}): AuxiliaryRequest {
   return { purpose: 'title', input: '章节', system: '系统', sourceVersion: 'v1', ...patch }
 }
 
-function harness(policy?: Partial<AiPolicy>, sessionModels?: (sessionId: string, signal?: AbortSignal) => Promise<ModelRoute>) {
+function harness(policy?: Partial<AiPolicy>, sessionModels?: (sessionId: string, signal?: AbortSignal) => Promise<ModelRoute>, routing: Pick<AiServicesOptions, 'defaultModel' | 'modelCenterAvailable'> = {}) {
   const ctx = new Context()
   const llm = new LlmRuntime(ctx)
   const adapter = new StubAdapter()
@@ -82,6 +82,7 @@ function harness(policy?: Partial<AiPolicy>, sessionModels?: (sessionId: string,
       },
     },
     sessionModels,
+    ...routing,
   })
   return {
     ctx, llm, adapter, service, saved,
@@ -446,5 +447,91 @@ describe('AiServices contracts', () => {
     const owned = await mood.run(request())
     expect(owned.receipt.status).toBe('success')
     expect(adapter.streams).toBe(1)
+  })
+})
+
+it('follows fantasy model and effort changes while retaining an explicit capability override', async () => {
+  const { adapter, service } = started(harness({
+    roles: { normal: { provider: 'stub', model: 'chat' }, fantasy: { provider: 'stub', model: 'creative', reasoningEffort: 'high' } },
+    purposes: { fixed: { kind: 'model', provider: 'stub', model: 'editor', reasoningEffort: 'low' } },
+  }))
+  const scope = service.activate('writing')
+  scope.registerPurpose({ id: 'title', label: '创作', defaultTarget: { kind: 'role', role: 'fantasy' } })
+  scope.registerPurpose({ id: 'fixed', label: '独立模型', defaultTarget: { kind: 'role', role: 'fantasy' } })
+  await scope.run(request())
+  expect(adapter.lastOptions).toMatchObject({ model: 'creative', reasoningEffort: 'high' })
+  const { revision, ...data } = service.getPolicy()
+  await service.updatePolicy({ ...data, roles: { ...data.roles, fantasy: { provider: 'stub', model: 'creative-next', reasoningEffort: 'low' } } }, revision)
+  const next = await scope.run(request())
+  expect(adapter.lastOptions).toMatchObject({ model: 'creative-next', reasoningEffort: 'low' })
+  expect(next.receipt.route).toMatchObject({ target: { kind: 'role', role: 'fantasy' }, policyRevision: revision + 1 })
+  await scope.run(request({ purpose: 'fixed' }))
+  expect(adapter.lastOptions).toMatchObject({ model: 'editor', reasoningEffort: 'low' })
+})
+
+
+describe('tier defaults without the model manager', () => {
+  it.each(['normal', 'weak', 'strong', 'fantasy'] as const)('runs %s with the host chat default without a session or policy writes', async role => {
+    let selected = { provider: 'stub', model: 'host-chat', reasoningEffort: 'low' }
+    const models = vi.fn(async () => ({ provider: 'stub', model: 'session-only' }))
+    const { service, adapter, saved } = started(harness(undefined, models, {
+      defaultModel: () => selected, modelCenterAvailable: () => false,
+    }))
+    const scope = service.activate('plugin')
+    scope.registerPurpose({ id: 'title', label: '默认档位', defaultTarget: { kind: 'role', role } })
+    expect(adapter.streams).toBe(0)
+    expect(await service.resolve('title')).toMatchObject({ ...selected, target: { kind: 'role', role } })
+    const result = await scope.run(request())
+    expect(result.receipt.status).toBe('success')
+    expect(adapter.lastOptions).toMatchObject(selected)
+    selected = { provider: 'stub', model: 'new-chat', reasoningEffort: 'high' }
+    await scope.run(request({ sessionId: 'irrelevant-session' }))
+    expect(adapter.lastOptions).toMatchObject(selected)
+    expect(models).not.toHaveBeenCalled()
+    expect(saved.policy).toBeUndefined()
+    expect(service.getPolicy().roles).toEqual({})
+  })
+
+  it('uses the configured chat default while the manager is absent and restores saved tiers on reactivation', async () => {
+    let enabled = true
+    const roles = { normal: { provider: 'stub', model: 'chat' }, fantasy: { provider: 'stub', model: 'creative', reasoningEffort: 'high' } }
+    const { service, adapter } = started(harness({ roles }, undefined, {
+      modelCenterAvailable: () => enabled, defaultModel: () => ({ provider: 'stub', model: 'host-chat' }),
+    }))
+    const scope = service.activate('writing')
+    scope.registerPurpose({ id: 'title', label: '创作', defaultTarget: { kind: 'role', role: 'fantasy' } })
+    await scope.run(request())
+    expect(adapter.lastOptions).toMatchObject(roles.fantasy)
+    enabled = false
+    expect(await service.resolve('title')).toMatchObject({ ...roles.normal, inheritedRole: 'normal' })
+    await scope.run(request())
+    expect(adapter.lastOptions).toMatchObject(roles.normal)
+    expect(adapter.lastOptions?.reasoningEffort).toBeUndefined()
+    enabled = true
+    await scope.run(request())
+    expect(adapter.lastOptions).toMatchObject(roles.fantasy)
+    expect(service.getPolicy().roles).toEqual(roles)
+  })
+
+  it('preserves explicit selections and rejects invalid ones when the manager is absent', async () => {
+    const fallback = vi.fn(() => ({ provider: 'stub', model: 'host-chat' }))
+    const { service, adapter } = started(harness(undefined, undefined, { defaultModel: fallback, modelCenterAvailable: () => false }))
+    const scope = service.activate('plugin')
+    scope.registerPurpose(purpose())
+    await scope.run(request())
+    expect(adapter.lastOptions).toMatchObject({ provider: 'stub', model: 'chat' })
+    await expect(service.resolve('title', undefined, { kind: 'model', provider: 'missing', model: 'invalid' })).rejects.toMatchObject({ code: AI_INVALID_ROUTE })
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('uses the host default for unbound manager tiers without masking invalid configured routes', async () => {
+    const { service } = started(harness(undefined, undefined, {
+      defaultModel: () => ({ provider: 'stub', model: 'host-chat' }), modelCenterAvailable: () => true,
+    }))
+    service.activate('plugin').registerPurpose({ id: 'title', label: '思考', defaultTarget: { kind: 'role', role: 'strong' } })
+    expect(await service.resolve('title')).toMatchObject({ model: 'host-chat', inheritedRole: 'normal' })
+    const { revision, ...data } = service.getPolicy()
+    await service.updatePolicy({ ...data, roles: { strong: { provider: 'missing', model: 'invalid' } } }, revision)
+    await expect(service.resolve('title')).rejects.toMatchObject({ code: AI_INVALID_ROUTE })
   })
 })

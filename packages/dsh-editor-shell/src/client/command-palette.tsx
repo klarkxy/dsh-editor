@@ -192,9 +192,11 @@ export function CommandPalette(props: CommandPaletteProps) {
      onOpenChange 路径在 hotkey 阶段还是直接阶段而漏掉 ESC 关闭。 */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229 || event.repeat) return
+      if (!props.open && document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
       const mod = event.ctrlKey || event.metaKey
       const key = event.key.toLowerCase()
-      if (mod && key === 'k') {
+      if (mod && !event.shiftKey && !event.altKey && key === 'k') {
         event.preventDefault()
         props.onOpenChange(!props.open)
         return

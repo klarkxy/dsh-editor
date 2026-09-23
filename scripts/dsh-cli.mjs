@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-export const EXPECTED_DSH_VERSION = '0.1.5-rc.2'
+export const EXPECTED_DSH_VERSION = '0.1.7-alpha.1'
 
 function candidatePackageRoots() {
   const configuredCli = process.env.DSH_CLI_PATH?.trim()
@@ -10,7 +10,7 @@ function candidatePackageRoots() {
     return [{ packageRoot: path.dirname(path.dirname(cli)), source: 'DSH_CLI_PATH' }]
   }
 
-  const candidates = []
+  const candidates = [{ packageRoot: path.join(process.cwd(), 'node_modules', '@deepseek-ai', 'dsh'), source: 'workspace' }]
   for (const entry of (process.env.PATH || '').split(path.delimiter).filter(Boolean)) {
     const binDir = path.resolve(entry.replace(/^"|"$/g, ''))
     const shims = process.platform === 'win32' ? ['dsh.exe', 'dsh.cmd', 'dsh.ps1', 'dsh'] : ['dsh']
@@ -19,7 +19,6 @@ function candidatePackageRoots() {
     }
   }
 
-  candidates.push({ packageRoot: path.join(process.cwd(), 'node_modules', '@deepseek-ai', 'dsh'), source: 'workspace' })
   return [...new Map(candidates.map((item) => [path.resolve(item.packageRoot), {
     packageRoot: path.resolve(item.packageRoot),
     source: item.source,

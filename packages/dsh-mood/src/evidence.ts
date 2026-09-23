@@ -1,5 +1,5 @@
 import {
-  CONTRACT_SECTION, MOOD_PLUGIN, excerptOf, type EvidenceRef,
+  CONTRACT_SECTION, MOOD_PLUGIN, MOOD_SOURCE_KIND, excerptOf, type EvidenceRef,
 } from './contracts.ts'
 
 export interface ContentBlockLike { type?: string; text?: string }
@@ -43,7 +43,7 @@ export function isHumanUserMessage(message: UserMessageLike | undefined): boolea
 }
 
 export function isMoodMessage(message: UserMessageLike | undefined): boolean {
-  if (message?.source?.kind !== 'plugin' || message.source.plugin !== MOOD_PLUGIN) return false
+  if (message?.source?.kind !== MOOD_SOURCE_KIND || message.source.plugin !== MOOD_PLUGIN) return false
   if (message.source.form === 'snapshot') {
     return Boolean(message.source.sections?.some(section => section.name === CONTRACT_SECTION))
   }

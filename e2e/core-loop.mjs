@@ -34,9 +34,9 @@ for (const target of [projectsRoot, home, output, targetWorkspace]) {
   }
 }
 
-resolveDshInstallation('0.1.5-rc.2')
+resolveDshInstallation('0.1.7-alpha.1')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.1.7-alpha.1')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 const failures = []
@@ -89,6 +89,7 @@ async function startDsh(env) {
     const inspect = (chunk) => {
       const text = String(chunk)
       logs.push(text)
+      void writeFile(output + '/host.log', logs.join('')).catch(() => undefined)
       buffer += text
       const match = /https?:\/\/127\.0\.0\.1:\d+\/?(?:\?token=[A-Za-z0-9._~-]+)?/.exec(buffer)
       if (match) resolve(new URL(match[0]))
@@ -417,6 +418,7 @@ try {
     const pages = browser.contexts().flatMap((context) => context.pages())
     for (const page of pages) {
       await page.screenshot({ path: resolve(output, 'failure.png'), fullPage: true }).catch(() => undefined)
+      await writeFile(resolve(output, 'failure.txt'), await page.locator('body').innerText()).catch(() => undefined)
     }
   }
   failures.push(error instanceof Error ? error.stack || error.message : String(error))

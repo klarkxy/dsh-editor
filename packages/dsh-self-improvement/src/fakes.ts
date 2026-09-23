@@ -144,7 +144,7 @@ export function userMessage(seq: number, text: string): SessionEventLike {
   return event('user/message', seq, { id: `u${seq}`, role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text }] })
 }
 export function pluginMessage(seq: number, text: string): SessionEventLike {
-  return event('user/message', seq, { id: `p${seq}`, role: 'user', source: { kind: 'plugin', plugin: 'other' }, content: [{ type: 'text', text }] })
+  return event('user/message', seq, { id: `p${seq}`, role: 'user', source: { kind: 'plugin:other', plugin: 'other' }, content: [{ type: 'text', text }] })
 }
 export function assistantMessage(seq: number, text: string): SessionEventLike {
   return event('assistant/message', seq, { turn: 1, step: 1, message: { content: [{ type: 'text', text }] } })

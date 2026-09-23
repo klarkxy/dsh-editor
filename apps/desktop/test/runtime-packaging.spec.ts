@@ -65,7 +65,7 @@ async function fixture() {
     format: 1,
     platform: `${process.platform}-${process.arch}`,
     node: { version: '24.16.0', ...await treeDigest(join(resources, 'node')) },
-    dsh: { version: '0.1.5-rc.2', ...await treeDigest(join(resources, 'dsh')) },
+    dsh: { version: '0.1.7-alpha.1', ...await treeDigest(join(resources, 'dsh')) },
     profile: await treeDigest(join(resources, 'profile-template')),
   }
   await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify(manifest))

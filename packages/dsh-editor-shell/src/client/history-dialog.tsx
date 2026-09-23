@@ -4,6 +4,7 @@ import type { SnapshotChange, SnapshotResponse } from 'dsh-editor-workbench/cont
 import { formatRecentTime } from '../home-stage.ts'
 import { formatBytes, intlLocale, t, useLocale } from '../i18n/index.ts'
 import { ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
+import { CrossIcon } from './icons.tsx'
 
 export type SnapshotView = SnapshotResponse
 
@@ -116,7 +117,7 @@ function HistoryPanel(props: {
             aria-label={t('common.close')}
             disabled={props.busy}
             onClick={props.onClose}>
-            ×
+            <CrossIcon size={14} />
           </IconButton>
         </Flex>
         {loading ? <Flex className="history-split" gap="3">

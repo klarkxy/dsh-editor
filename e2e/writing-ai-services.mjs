@@ -11,7 +11,7 @@ const root = resolve(import.meta.dirname, '..')
 const runId = String(Date.now())
 const home = resolve(root, '.dev', 'writing-ai-' + runId)
 const output = resolve(root, 'e2e/out/writing-ai', runId)
-const runtime = resolve(root, '.dev/desktop-dsh-runtime')
+const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.1.7-alpha.1')
 const featureIds = ['current-title', 'mood', 'recap', 'memory', 'self-improvement', 'model-center']
 const report = { ok: false, mode: process.env.AI_PLUGINS_E2E_MODE || 'enabled', checks: [], calls: [], errors: [], home, output }
 await mkdir(output, { recursive: true })
@@ -32,7 +32,7 @@ const server = createServer(async (req, res) => {
   let request
   try { request = JSON.parse(raw) } catch { res.writeHead(400); res.end(); return }
   const messages = request.messages ?? []
-  const system = messages.filter(m => m.role === 'system').map(m => String(m.content)).join('\n')
+  const system = messages.filter(m => m.role === 'system' || m.role === 'developer').map(m => typeof m.content === 'string' ? m.content : (m.content ?? []).map(block => block.text ?? '').join('\n')).join('\n')
   const input = messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : (m.content ?? []).map(block => block.text ?? '').join('\n')).join('\n')
   let kind = 'chat'
   let answer = '已收到。测试回复已完成。'
@@ -51,7 +51,7 @@ const server = createServer(async (req, res) => {
   }
   else if (system.includes('Extract at most one durable lesson')) { kind = 'lesson'; answer = JSON.stringify({ title: '保留剧情', content: '调整语言时保留已有剧情。', tags: ['writing'], exceptions: [] }) }
   else if (system.includes('根据给定事实写一段简短回顾')) { kind = 'recap'; answer = '已确认当前任务范围；下一步检查结果。' }
-  report.calls.push({ kind, model: request.model, input: input.slice(-4000), hasMood: input.includes('@klarkxy/dsh-mood') || input.includes('优化章节表达'), hasMemory: input.includes('调整语言时保留已有剧情'), hasLesson: input.includes('保留剧情') })
+  report.calls.push({ kind, model: request.model, effort: request.reasoning_effort, input: input.slice(-4000), hasMood: input.includes('@klarkxy/dsh-mood') || input.includes('优化章节表达'), hasMemory: input.includes('调整语言时保留已有剧情'), hasLesson: input.includes('保留剧情') })
   const completion = { id: 'local-' + report.calls.length, object: 'chat.completion', created: Math.floor(Date.now()/1000), model: 'fixture', choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 32, completion_tokens: 16, total_tokens: 48 } }
   if (!request.stream) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(completion)); return }
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
@@ -65,6 +65,8 @@ const providerPort = server.address().port
 const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'), SSH_CONNECTION: 'dsh-ai-plugins-acceptance' }
 for (const key of Object.keys(env)) if (/API_KEY|ACCESS_SECRET|ELECTRON_RUN_AS_NODE/.test(key)) delete env[key]
 env.DSH_AI_TEST_KEY = 'local-fixture'
+await mkdir(home, { recursive: true })
+await writeFile(resolve(home, 'settings.yaml'), 'ui-theme:\n  preference: light\ndsh-editor-writing:\n  completionModel:\n    provider: local-test\n    model: fixture-legacy\n  rewriteModel:\n    provider: local-test\n    model: fixture-legacy\n')
 await deployProfile(home, resolve(root, '.dev/desktop-profile-template'), resolve(runtime, 'node_modules'))
 const patch = resolve(home, 'profiles/dsh-editor/cordis.patch.yml')
 await appendFile(patch, [
@@ -72,7 +74,7 @@ await appendFile(patch, [
   '- id: llm-pi-ai', '  config:', '    providers:', '      local-test:', '        displayName: Local acceptance',
   '        api: openai-completions', '        baseURL: http://127.0.0.1:' + providerPort + '/v1',
   '        apiKeyEnv: DSH_AI_TEST_KEY', '        models:', '          - id: fixture', '            name: Fixture',
-  '            contextWindow: 32768', '            maxTokens: 4096', '          - id: fixture-legacy', '            name: Legacy', '            contextWindow: 32768', '            maxTokens: 4096', '          - id: fixture-new', '            name: New', '            contextWindow: 32768', '            maxTokens: 4096',
+  '            contextWindow: 32768', '            maxTokens: 4096', '            reasoningEfforts:', '              off: null', '              low: low', '              high: high', '          - id: fixture-legacy', '            name: Legacy', '            contextWindow: 32768', '            maxTokens: 4096', '            reasoningEfforts:', '              off: null', '              low: low', '              high: high', '          - id: fixture-new', '            name: New', '            contextWindow: 32768', '            maxTokens: 4096', '            reasoningEfforts:', '              off: null', '              low: low', '              high: high',
   '- id: agent-default-model', '  config:', '    provider: local-test', '    model: fixture', '',
 ].join('\n'))
 
@@ -111,7 +113,6 @@ async function openSettings(target = page) {
   await dialog.waitFor()
   return dialog
 }
-await writeFile(resolve(home, 'settings.yaml'), 'ui-theme:\n  preference: light\ndsh-editor-writing:\n  completionModel:\n    provider: local-test\n    model: fixture-legacy\n  rewriteModel:\n    provider: local-test\n    model: fixture-legacy\n')
 async function startHost() {
   child = spawn(process.execPath, [resolve(runtime, 'lib/bin.js'), '--profile', 'dsh-editor', '--host', '127.0.0.1', '--port', '0', '--no-open'], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   return new Promise((done, reject) => {
@@ -162,8 +163,8 @@ try {
   await effort.click(); await page.getByRole('option', { name: '关', exact: true }).click()
   await page.waitForTimeout(200)
   status = await rpc('/dsh-ai-services', 'status')
-  assert.equal(status.policy.purposes['manuscript.completion'].reasoningEffort, undefined)
-  report.checks.push('turning reasoning off omits unsupported effort from the central route')
+  assert.equal(status.policy.purposes['manuscript.completion'].reasoningEffort, 'off')
+  report.checks.push('explicit reasoning off is preserved separately from model default')
   await screenshot('01-unified-writing-settings')
   report.checks.push('original settings writes central policy while Model Center disabled')
   await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'})
@@ -186,6 +187,34 @@ try {
   assert.ok(receipts.some(x=>x.purpose==='manuscript.completion'&&x.status==='success'))
   assert.ok(receipts.some(x=>x.purpose==='manuscript.rewrite'&&x.status==='success'))
   report.checks.push('both real host requests use central routes, record usage and leave text unchanged until author acceptance')
+  // Default tiers are declared by the plugin even when explicit legacy routes exist.
+  status = await rpc('/dsh-ai-services', 'status')
+  assert.deepEqual(status.purposes.find(row => row.id === 'manuscript.completion').defaultTarget, { kind: 'role', role: 'weak' })
+  assert.deepEqual(status.purposes.find(row => row.id === 'manuscript.rewrite').defaultTarget, { kind: 'role', role: 'normal' })
+  const { revision: beforeFallbackRevision, ...beforeFallbackPolicy } = status.policy
+  let fallbackPolicy = await rpc('/dsh-ai-services', 'update', { expectedRevision: beforeFallbackRevision, policy: {
+    ...beforeFallbackPolicy,
+    roles: { normal: { provider: 'local-test', model: 'fixture' }, weak: { provider: 'local-test', model: 'fixture-new' }, strong: { provider: 'local-test', model: 'fixture-new' }, fantasy: { provider: 'local-test', model: 'fixture-new' } },
+  } })
+  for (const role of ['weak', 'normal', 'strong', 'fantasy']) {
+    const { revision, ...data } = fallbackPolicy
+    fallbackPolicy = await rpc('/dsh-ai-services', 'update', { expectedRevision: revision, policy: {
+      ...data, purposes: { ...data.purposes, 'manuscript.completion': { kind: 'role', role } },
+    } })
+    const resolved = await rpc('/dsh-ai-services', 'resolve', { purpose: 'manuscript.completion' })
+    assert.equal(resolved.model, 'fixture')
+    await rpc('/manuscript', 'fim.complete', { ...payload, prefix: '无管理器默认档位。' })
+    assert.equal(report.calls.filter(call => call.kind === 'completion').at(-1).model, 'fixture')
+  }
+  // A standalone host with no saved Chat binding reads agentDefaultModel lazily.
+  const { revision: fallbackRevision, ...fallbackData } = fallbackPolicy
+  delete fallbackData.roles.normal
+  fallbackPolicy = await rpc('/dsh-ai-services', 'update', { expectedRevision: fallbackRevision, policy: fallbackData })
+  assert.equal((await rpc('/dsh-ai-services', 'resolve', { purpose: 'manuscript.completion' })).model, 'fixture')
+  await rpc('/manuscript', 'fim.complete', { ...payload, prefix: '未配置对话档时使用宿主默认模型。' })
+  assert.equal(report.calls.filter(call => call.kind === 'completion').at(-1).model, 'fixture')
+  await rpc('/dsh-ai-services', 'update', { expectedRevision: fallbackPolicy.revision, policy: beforeFallbackPolicy })
+  report.checks.push('all four tiers use default Chat without Model Center, including host default fallback with no Chat binding')
   dialog=await openSettings();await dialog.getByRole('tab',{name:'插件',exact:true}).click()
   modelCenterToggle=dialog.locator('[role="switch"][data-testid$="-model-center"]');await modelCenterToggle.click();await waitForChecked(modelCenterToggle,true)
   await page.reload();await page.locator('.shell').waitFor();dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click()
@@ -193,6 +222,72 @@ try {
   await center.getByText('正文补全',{exact:true}).waitFor();await center.getByText('选区改写',{exact:true}).waitFor()
   await screenshot('02-model-center-writing-purposes')
   report.checks.push('Model Center lists both live writing purposes')
+  assert.equal(await center.locator('[data-tier]').count(), 4)
+  const routeKey = model => 'local-test' + String.fromCharCode(31) + model
+  await center.getByRole('combobox', { name: '快速 模型', exact: true }).selectOption(routeKey('fixture-legacy'))
+  await center.getByRole('combobox', { name: '快速 思考强度', exact: true }).selectOption('low')
+  await center.getByRole('combobox', { name: '思考 模型', exact: true }).selectOption(routeKey('fixture-new'))
+  await center.getByRole('combobox', { name: '思考 思考强度', exact: true }).selectOption('high')
+  await center.getByRole('combobox', { name: '幻想 模型', exact: true }).selectOption(routeKey('fixture-new'))
+  await center.getByRole('combobox', { name: '幻想 思考强度', exact: true }).selectOption('high')
+  await center.getByRole('combobox', { name: '正文补全 使用模型', exact: true }).selectOption('role:fantasy')
+  await center.getByRole('combobox', { name: '新对话 使用模型', exact: true }).selectOption('role:weak')
+  const save = async () => {
+    await center.locator('.model-center-savebar button').click()
+    await center.getByText('已保存。', { exact: true }).waitFor()
+    assert.equal(await center.locator('.model-center-savebar button').isDisabled(), true)
+  }
+  await save()
+  assert.equal((await rpc('/dsh-ai-services','resolve',{purpose:'chat',sessionId})).reasoningEffort,'low')
+  let route=await rpc('/dsh-ai-services','resolve',{purpose:'manuscript.completion',sessionId})
+  assert.equal(route.model,'fixture-new');assert.equal(route.reasoningEffort,'high')
+  await rpc('/manuscript','fim.complete',{...payload,prefix:'档位第一次调用。'})
+  assert.equal(report.calls.filter(call=>call.kind==='completion').at(-1).model,'fixture-new')
+  assert.equal(report.calls.filter(call=>call.kind==='completion').at(-1).effort,'high')
+  await center.getByRole('combobox', { name: '幻想 模型', exact: true }).selectOption(routeKey('fixture-legacy'))
+  await center.getByRole('combobox', { name: '幻想 思考强度', exact: true }).selectOption('low')
+  await save()
+  await rpc('/manuscript','fim.complete',{...payload,prefix:'档位第二次调用。'})
+  assert.equal(report.calls.filter(call=>call.kind==='completion').at(-1).model,'fixture-legacy')
+  assert.equal(report.calls.filter(call=>call.kind==='completion').at(-1).effort,'low')
+  route=await rpc('/dsh-ai-services','resolve',{purpose:'manuscript.rewrite',sessionId})
+  assert.equal(route.model,'fixture-legacy');assert.equal(route.reasoningEffort,undefined)
+  report.checks.push('four tiers save model and effort; referenced capabilities follow tier changes in real local-provider requests; explicit overrides stay unchanged')
+  await center.getByRole('combobox', { name: '正文补全 使用模型', exact: true }).selectOption('custom')
+  await center.getByRole('combobox', { name: '正文补全 模型', exact: true }).selectOption(routeKey('fixture-new'))
+  await center.getByRole('combobox', { name: '正文补全 思考强度', exact: true }).selectOption('high')
+  await save()
+  route=await rpc('/dsh-ai-services','resolve',{purpose:'manuscript.completion',sessionId})
+  assert.equal(route.target.kind,'model');assert.equal(route.model,'fixture-new');assert.equal(route.reasoningEffort,'high')
+  await center.getByRole('combobox', { name: '正文补全 使用模型', exact: true }).selectOption('role:fantasy')
+  await save()
+  await center.locator('[data-tier="weak"]').scrollIntoViewIfNeeded()
+  await screenshot('03-four-model-tiers')
+  await center.locator('[data-purpose="manuscript.completion"]').scrollIntoViewIfNeeded()
+  await screenshot('04-capability-defaults')
+  report.checks.push('capability switches between tier and explicit model plus effort through the visible UI')
+  await page.setViewportSize({ width: 900, height: 820 })
+  await center.locator('.model-center-tier-section').scrollIntoViewIfNeeded()
+  assert.ok(await center.evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'model settings must not overflow horizontally')
+  await screenshot('05-narrow-model-settings')
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await dialog.getByRole('tab', { name: '通用设置', exact: true }).click()
+  await dialog.getByRole('button', { name: '深色', exact: true }).click()
+  await page.locator('html[data-theme="dark"]').waitFor()
+  await dialog.getByRole('tab', { name: '模型', exact: true }).click()
+  await center.locator('.model-center-tier-section').scrollIntoViewIfNeeded()
+  await screenshot('06-dark-model-settings')
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'})
+  await page.getByRole('combobox', {name:'选择模型',exact:true}).filter({hasText:'Fixture'}).waitFor()
+  await page.locator('.chat-header-actions button[aria-label="新对话"]').click()
+  const presetDialog=page.getByRole('dialog',{name:'选择对话模式',exact:true})
+  await presetDialog.getByRole('button',{name:'开始对话',exact:true}).click()
+  await presetDialog.waitFor({state:'detached'})
+  await page.getByRole('combobox',{name:'选择模型',exact:true}).filter({hasText:'Legacy'}).waitFor()
+  await page.getByRole('combobox',{name:'思考强度',exact:true}).filter({hasText:'低'}).waitFor()
+  report.checks.push('narrow and dark settings render; tier updates preserve the existing session picker and a new conversation inherits Quick model and low reasoning')
+
+
   status=await rpc('/dsh-ai-services','status');const {revision,...policy}=status.policy
   delete policy.purposes['manuscript.completion']
   await rpc('/dsh-ai-services','update',{expectedRevision:revision,policy})
@@ -201,6 +296,9 @@ try {
   status=await rpc('/dsh-ai-services','status')
   assert.equal(status.policy.purposes['manuscript.completion'],undefined)
   assert.equal(status.policy.purposes['manuscript.rewrite'].model,'fixture-legacy')
+  assert.equal(status.policy.roles.fantasy.reasoningEffort,'low')
+  assert.equal(status.policy.roles.fantasy.model,'fixture-legacy')
+  assert.equal(status.policy.purposes.chat.role,'weak')
   report.checks.push('real process restart preserves policy and does not reimport deleted legacy route')
   assert.equal(report.errors.length,0,report.errors.join('\n'));report.ok=true
 } catch(error) {

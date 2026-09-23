@@ -1,3 +1,7 @@
 - insert:
     - id: editor-shell
       name: dsh-editor-shell
+    - id: dsh-editor-writing
+      name: dsh-editor-shell/writing-config
+    - id: ui-developer
+      name: dsh-editor-shell/developer-config

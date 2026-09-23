@@ -4,6 +4,8 @@ import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { WritingSettings } from '../writing-settings.tsx'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.tsx'
+import { ShortcutsSettings } from './settings-shortcuts.tsx'
+import type { ShellCommandRegistry } from '../seats.ts'
 import { AboutSettingsSection } from './settings-about.tsx'
 import { AssistantSettings } from './settings-assistant.tsx'
 import { SettingsGeneralSection, useDeveloperMode } from './settings-general.tsx'
@@ -20,15 +22,15 @@ import {
 } from './settings-plugins.tsx'
 import { SettingsUsageSection } from './settings-usage.tsx'
 import { t, useLocale } from '../i18n/index.ts'
-import { SettingsIcon } from './icons.tsx'
+import { CrossIcon, SettingsIcon } from './icons.tsx'
 import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger } from './ui/index.ts'
 
 export type { SettingsRenderSlot }
 
-export type SettingsTab = 'general' | 'models' | 'assistant' | 'writing' | 'usage' | 'zhihu' | 'plugins' | 'about'
+export type SettingsTab = 'general' | 'models' | 'assistant' | 'writing' | 'shortcuts' | 'usage' | 'zhihu' | 'plugins' | 'about'
 
 const SETTINGS_TAB_KEY = 'dsh-editor.settings.tab'
-const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'assistant', 'writing', 'usage', 'zhihu', 'plugins', 'about']
+const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'assistant', 'writing', 'shortcuts', 'usage', 'zhihu', 'plugins', 'about']
 /** 侧栏末两项：插件管理与关于。官方插件设置页插在它们前面。 */
 const SETTINGS_TRAILING_TABS: SettingsTab[] = ['plugins', 'about']
 
@@ -66,6 +68,7 @@ function tabLabel(tab: SettingsTab): string {
   if (tab === 'models') return t('settings.models')
   if (tab === 'assistant') return t('settings.assistant')
   if (tab === 'writing') return t('settings.writing')
+  if (tab === 'shortcuts') return t('settings.shortcuts')
   if (tab === 'plugins') return t('settings.plugins')
   if (tab === 'zhihu') return t('settings.zhihu')
   if (tab === 'about') return t('settings.about')
@@ -103,6 +106,7 @@ export function SettingsTrigger(props: { onOpen(): void }) {
 export function SettingsDialog(props: {
   ctx: ShellContext
   sessionId?: string
+  commands?: ShellCommandRegistry
   writingScope: SettingsScope<WritingPreferences>
   migrateWriting: WritingMigration
   /* 助手能力开关：false 时隐藏模型等助手专属设置；undefined 表示能力尚未加载，保持原样。 */
@@ -120,10 +124,7 @@ export function SettingsDialog(props: {
   const [note, setNote] = useState('')
   const [aboutBusy, setAboutBusy] = useState(false)
   const [developerRevealed, setDeveloperRevealed] = useState(false)
-  const developerScope = useMemo(() => props.ctx.settingsScope.bind({
-    namespace: DEVELOPER_SETTINGS_NAMESPACE,
-    decode: decodeDeveloperSettings,
-  }), [props.ctx])
+  const developerScope = useMemo(() => props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeDeveloperSettings>>>(DEVELOPER_SETTINGS_NAMESPACE), [props.ctx])
   const [developerMode] = useDeveloperMode(developerScope)
   const developerGate = developerRevealed || developerMode
   const authorChrome = authorSettingsChrome(developerGate)
@@ -160,8 +161,8 @@ export function SettingsDialog(props: {
   }
 
   const featureTabs: SettingsTab[] = props.assistant === false
-    ? ['general', 'writing', 'usage', 'zhihu']
-    : ['general', 'models', 'assistant', 'writing', 'usage', 'zhihu']
+    ? ['general', 'writing', 'shortcuts', 'usage', 'zhihu']
+    : ['general', 'models', 'assistant', 'writing', 'shortcuts', 'usage', 'zhihu']
   const navTabs = composeSettingsNavTabs(featureTabs, officialSections)
   /* 能力在弹窗打开期间变为停用时，或动态插件页消失时，回落到仍可用的分类。 */
   const activeTab = navTabs.includes(tab) ? tab : 'general'
@@ -178,7 +179,8 @@ export function SettingsDialog(props: {
         showWritingRoutes={options?.includeWritingRoutes !== false} />}
       renderChatModel={() => <SettingsChatModelRoute ctx={props.ctx} writingScope={props.writingScope} />} />,
     assistant: () => <AssistantSettings scope={props.writingScope} migrate={props.migrateWriting} />,
-    writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} />,
+    writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} onOpenShortcuts={() => selectTab('shortcuts')} />,
+    shortcuts: () => <ShortcutsSettings commands={props.commands} />,
     usage: () => <SettingsUsageSection ctx={props.ctx} />,
     zhihu: () => props.zhihuTab ?? <Text size="2" color="gray" className="muted">
       {t('settings.zhihuUnavailable')}
@@ -196,8 +198,7 @@ export function SettingsDialog(props: {
       title={t('common.settings')}
       className="file-dialog settings-dialog"
       overlayClassName="file-dialog-overlay settings-overlay"
-      dismissible={!aboutBusy}
-      initialFocusRef={closeRef}>
+      dismissible={!aboutBusy}>
       <Tabs
         value={activeTab}
         onValueChange={selectTab}
@@ -212,7 +213,7 @@ export function SettingsDialog(props: {
               key={key}
               value={key}
               className={`settings-tab${activeTab === key ? ' active' : ''}`}
-              aria-current={activeTab === key}>
+              aria-current={activeTab === key ? 'true' : undefined}>
               {navLabel(key, officialSections)}
             </TabsTrigger>)}
           </TabsList>
@@ -235,7 +236,7 @@ export function SettingsDialog(props: {
                 aria-label={t('settings.close')}
                 disabled={aboutBusy}
                 onClick={props.onClose}>
-                ×
+                <CrossIcon size={14} />
               </Button>
             </Flex>
           </Flex>

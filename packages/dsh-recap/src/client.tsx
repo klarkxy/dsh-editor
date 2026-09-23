@@ -11,7 +11,7 @@ import {
 } from './idle.ts'
 
 export const name = 'dsh-recap-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale'] as const
+export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export {
   createRecapClientWork, isCurrentRecapRequest, shouldRequestIdleReturn, shouldSkipRecapAutoRefresh,
   nextActivityTimestamp,

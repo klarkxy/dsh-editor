@@ -28,7 +28,8 @@ function readManifest(name) {
 }
 
 function tar(args) {
-  const result = spawnSync('tar', args, {
+  /* --force-local:Windows 上 GNU tar 会把 D:\ 盘符当成远程主机名(Cannot connect to D:)。 */
+  const result = spawnSync('tar', ['--force-local', ...args], {
     cwd: root,
     encoding: 'utf8',
     windowsHide: true,
@@ -140,7 +141,7 @@ const releaseManifest = {
     dirty: Boolean(git(['status', '--porcelain', '--untracked-files=normal'])),
   },
   compatibility: {
-    dsh: '0.1.5-rc.2',
+    dsh: '0.1.7-alpha.1',
     node: '>=22',
     pnpm: '10.14.0',
   },

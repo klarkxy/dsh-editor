@@ -14,17 +14,19 @@ import {
 } from './editor-core/index.ts'
 
 export const name = 'dsh-manuscript-client'
-export const inject = ['slots', 'sessions', 'connection'] as const
+export const inject = ['slots', 'sessions', 'uiWorkspace', 'connection'] as const
 
 type Entry = { name: string; type: 'file' | 'directory' | 'other' }
 
 function useWorkspace(ctx: ManuscriptClient): ActiveWorkspace | null {
-  const [workspace, setWorkspace] = useState(() => activeWorkspaceFromSessionList(ctx.sessions.list?.getSnapshot?.()))
+  const [workspace, setWorkspace] = useState(() => activeWorkspaceFromSessionList(ctx.sessions.list?.getSnapshot?.(), ctx.uiWorkspace.current.getSnapshot()?.sessionId))
   useEffect(() => {
     const list = ctx.sessions.list
-    const sync = () => setWorkspace(activeWorkspaceFromSessionList(list?.getSnapshot?.()))
+    const sync = () => setWorkspace(activeWorkspaceFromSessionList(list?.getSnapshot?.(), ctx.uiWorkspace.current.getSnapshot()?.sessionId))
     sync()
-    return list?.subscribe?.(sync)
+    const offList = list?.subscribe?.(sync)
+    const offSelection = ctx.uiWorkspace.current.subscribe(sync)
+    return () => { offList?.(); offSelection() }
   }, [ctx])
   return workspace
 }
@@ -115,7 +117,8 @@ function Tree(props: {
                 if (expanded) setOpen((cur) => { const next = { ...cur }; delete next[child]; return next })
                 else void load(child)
               }}>
-              {`${expanded ? '▾' : '▸'} ${entry.name}`}
+              <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+              {` ${entry.name}`}
             </Button>
             {expanded ? render(child, depth + 1) : null}
           </div>
@@ -129,6 +132,7 @@ function Tree(props: {
           variant="ghost"
           color="gray"
           className={`manuscript-tree-row${isActive ? ' is-active' : ''}`}
+          aria-current={isActive ? 'page' : undefined}
           onClick={() => props.onOpen(child)}
           style={{ paddingLeft: 12 + depth * 12 }}>
           {entry.name}
@@ -208,9 +212,18 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
     setPath(next)
   }
 
+  const [confirmClose, setConfirmClose] = useState(false)
+  const confirmCloseTimer = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null)
+  const resetConfirmClose = useCallback(() => {
+    if (confirmCloseTimer.current != null) { globalThis.clearTimeout(confirmCloseTimer.current); confirmCloseTimer.current = null }
+    setConfirmClose(false)
+  }, [])
+  useEffect(() => () => { if (confirmCloseTimer.current != null) globalThis.clearTimeout(confirmCloseTimer.current) }, [])
+
   const requestClose = () => {
-    if (dirty && !window.confirm('当前文件有未保存的修改。关闭稿纸后会保留草稿，确定关闭吗？')) return
-    setOpen(false)
+    if (!dirty || confirmClose) { resetConfirmClose(); setOpen(false); return }
+    setConfirmClose(true)
+    confirmCloseTimer.current = globalThis.setTimeout(() => { confirmCloseTimer.current = null; setConfirmClose(false) }, 4_000)
   }
 
   // Spec anchor: addEventListener('beforeunload' for unsaved drafts. EditorCore
@@ -250,24 +263,38 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
     if (next) requestPath(next)
   }
 
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [createError, setCreateError] = useState('')
+
   const createFile = () => {
     if (!cwd || !sessionId) return
-    const raw = window.prompt('新文件名（不含路径）', '未命名')
-    if (!raw) return
+    setCreateError('')
+    setNewName('未命名')
+    setCreating(true)
+  }
+
+  const submitCreate = () => {
+    const raw = newName.trim()
+    if (!raw) { setCreating(false); return }
     const dir = path ? parentOf(path) : '.'
-    const name = /\.md$/i.test(raw.trim()) ? raw.trim() : `${raw.trim()}.md`
+    const name = /\.md$/i.test(raw) ? raw : `${raw}.md`
     const target = dir === '.' ? name : `${dir}/${name}`
     const stem = name.replace(/\.md$/i, '')
     void (async () => {
       const result = await rpc.call('/manuscript', 'file.create', { sessionId, path: target, text: `# ${stem}\n\n` })
       if (!result.ok) {
-        window.alert(result.error.message)
+        setCreateError(result.error.message)
         return
       }
+      setCreating(false)
+      setCreateError('')
       requestPath(target)
       mutate()
     })()
   }
+
+  const cancelCreate = () => { setCreating(false); setCreateError('') }
 
   // Mirror the current document for the buildFimPayload callback so the
   // manuscript RPC keeps the spec anchor `sessionId: current.sessionId` in
@@ -282,11 +309,10 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
 
   // Manuscript-specific "改这段" action: copy a rewrite request prompt to
   // the clipboard and surface a status message.
+  const [rewriteNotice, setRewriteNotice] = useState('')
   const onRewriteSelection = useCallback(async (selection: string, docPath: string) => {
     const copied = await copySelectionPrompt(docPath, selection)
-    if (typeof window !== 'undefined') {
-      window.alert(copied ? '已复制改写请求，请粘贴到官方 Chat。' : '无法访问剪贴板，请手动复制选区后在官方 Chat 请求改写。')
-    }
+    setRewriteNotice(copied ? '已复制改写请求，请粘贴到官方 Chat。' : '无法访问剪贴板，请手动复制选区到官方 Chat 请求改写。')
   }, [])
 
   const onDirtyChange = useCallback((next: boolean) => { setDirty(next) }, [])
@@ -324,9 +350,16 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
             稿纸
           </h2>
           <div className="manuscript-panel-actions">
-            <Button type="button" variant="ghost" color="gray" data-testid="manuscript-close" onClick={requestClose}>
+            {confirmClose ? <>
+              <Button type="button" variant="soft" color="red" data-testid="manuscript-close" onClick={requestClose}>
+                确认关闭？
+              </Button>
+              <Button type="button" variant="ghost" color="gray" onClick={resetConfirmClose}>
+                取消
+              </Button>
+            </> : <Button type="button" variant="ghost" color="gray" data-testid="manuscript-close" onClick={requestClose}>
               关闭
-            </Button>
+            </Button>}
             <Button
               type="button"
               variant="solid"
@@ -356,6 +389,32 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
           </div>
         </header>
         <aside className="manuscript-panel-tree">
+          {creating ? <div
+            data-testid="manuscript-create-row"
+            style={{ padding: '4px 8px', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              aria-label="新文件名（不含路径）"
+              value={newName}
+              autoFocus
+              onChange={(event) => setNewName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') submitCreate()
+                if (event.key === 'Escape') cancelCreate()
+              }}
+              style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-1)', padding: '2px 6px', border: '1px solid var(--gray-6)', borderRadius: 4, background: 'var(--gray-2)', color: 'var(--gray-12)' }} />
+            <Button type="button" variant="solid" size="1" onClick={submitCreate}>
+              创建
+            </Button>
+            <Button type="button" variant="soft" color="gray" size="1" onClick={cancelCreate}>
+              取消
+            </Button>
+          </div> : null}
+          {createError ? <div
+            data-testid="manuscript-create-error"
+            role="alert"
+            style={{ padding: '4px 12px', fontSize: 'var(--font-size-1)', color: 'var(--red-11)' }}>
+            {createError}
+          </div> : null}
           {cwd && sessionId ? <Tree
             sessionId={sessionId}
             cwd={cwd}
@@ -400,6 +459,12 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
             : <div className="manuscript-panel-empty">
             从上方打开文本文件
           </div>}
+          {rewriteNotice ? <div
+            data-testid="manuscript-rewrite-notice"
+            role="status"
+            style={{ padding: '6px 8px', fontSize: 'var(--font-size-1)' }}>
+            {rewriteNotice}
+          </div> : null}
           {capability.kind === 'error' ? <div
             data-testid="manuscript-capability-error"
             role="alert"

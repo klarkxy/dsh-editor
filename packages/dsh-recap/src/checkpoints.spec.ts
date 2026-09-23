@@ -72,7 +72,7 @@ describe('checkpoint lineage', () => {
     expect(isMeaningfulCheckpointBoundary({
       facts: collectFacts('s1', events()),
       previous: buildCheckpoint(collectFacts('s1', events().slice(0, 1)), { id: 'c0', now: 1, revision: 1 }),
-      incoming: [{ source: { kind: 'plugin', plugin: RECAP_PLUGIN } }],
+      incoming: [{ source: { kind: 'plugin:@klarkxy/dsh-recap', plugin: RECAP_PLUGIN } }],
       step: 3,
     })).toBe(false)
     expect(isMeaningfulCheckpointBoundary({
@@ -118,7 +118,7 @@ describe('checkpoint lineage', () => {
     expect(shouldRunSemanticCheckpoint(true, facts, contract)).toBe(true)
     expect(shouldRunSemanticCheckpoint(false, facts, contract)).toBe(false)
     const payload = checkpointInjectPayload(checkpoint)
-    expect(payload.source.kind).toBe('plugin')
+    expect(payload.source.kind).toBe('plugin:@klarkxy/dsh-recap')
     expect(payload.source.plugin).toBe(RECAP_PLUGIN)
     expect(payload.content[0]?.text).toContain('未确认已写入')
     expect(payload.content[0]?.text).not.toContain('回顾 ·')

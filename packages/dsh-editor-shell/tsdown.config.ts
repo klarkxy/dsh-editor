@@ -24,7 +24,7 @@ const cssAsTextPlugin = {
 
 export default defineConfig([
   {
-    entry: { index: 'src/index.ts', seats: 'src/seats.ts' },
+    entry: { index: 'src/index.ts', seats: 'src/seats.ts', 'writing-config': 'src/writing-config.ts', 'developer-config': 'src/developer-config.ts' },
     format: ['esm'],
     dts: true,
     clean: true,
@@ -60,6 +60,7 @@ export default defineConfig([
       neverBundle: ['react', 'react-dom', 'react/jsx-runtime'],
       alwaysBundle: [
         'dsh-editor-seats',
+        '@klarkxy/dsh-ai-services/contracts',
         'dsh-editor-workbench/contracts',
         'dsh-editor-novel-kernel/contracts',
         'dsh-manuscript/client/editor-core',

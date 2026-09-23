@@ -1,13 +1,13 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import {
-  CONTRACT_SECTION, MOOD_PLUGIN, readinessLabel, type ClarificationItem, type TaskContract,
+  CONTRACT_SECTION, MOOD_PLUGIN, MOOD_SOURCE_KIND, readinessLabel, type ClarificationItem, type ProducerMessageSource, type TaskContract,
 } from './contracts.ts'
 import { isMoodMessage, type UserMessageLike } from './evidence.ts'
 
 export interface ContractMessageInput {
-  source: {
-    kind: 'plugin'
-    plugin: string
+  source: ProducerMessageSource & {
+    kind: typeof MOOD_SOURCE_KIND
+    plugin: typeof MOOD_PLUGIN
     form: 'snapshot'
     sections: Array<{ name: string; text: string }>
   }
@@ -17,7 +17,7 @@ export interface ContractMessageInput {
 export function contractMessageInput(text: string): ContractMessageInput {
   return {
     source: {
-      kind: 'plugin',
+      kind: MOOD_SOURCE_KIND,
       plugin: MOOD_PLUGIN,
       form: 'snapshot',
       sections: [{ name: CONTRACT_SECTION, text }],

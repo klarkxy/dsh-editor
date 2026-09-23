@@ -67,10 +67,10 @@
     "@klarkxy/dsh-ai-services": "workspace:*"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2"
+    "@deepseek-ai/cordis": "^4.0.3"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/cordis": "^4.0.3",
     "react": "^18.2.0",
     "@types/react": "18.3.31"
   },

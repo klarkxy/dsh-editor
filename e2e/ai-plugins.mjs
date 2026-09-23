@@ -11,7 +11,7 @@ const root = resolve(import.meta.dirname, '..')
 const runId = String(Date.now())
 const home = resolve(root, '.dev', 'ai-plugins-' + runId)
 const output = resolve(root, 'e2e/out/ai-plugins', runId)
-const runtime = resolve(root, '.dev/desktop-dsh-runtime')
+const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.1.7-alpha.1')
 const featureIds = ['current-title', 'mood', 'recap', 'memory', 'self-improvement', 'model-center']
 const report = { ok: false, mode: process.env.AI_PLUGINS_E2E_MODE || 'enabled', checks: [], calls: [], errors: [], home, output }
 await mkdir(output, { recursive: true })
@@ -32,7 +32,7 @@ const server = createServer(async (req, res) => {
   let request
   try { request = JSON.parse(raw) } catch { res.writeHead(400); res.end(); return }
   const messages = request.messages ?? []
-  const system = messages.filter(m => m.role === 'system').map(m => String(m.content)).join('\n')
+  const system = messages.filter(m => m.role === 'system' || m.role === 'developer').map(m => typeof m.content === 'string' ? m.content : (m.content ?? []).map(block => block.text ?? '').join('\n')).join('\n')
   const input = messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : (m.content ?? []).map(block => block.text ?? '').join('\n')).join('\n')
   let kind = 'chat'
   let answer = '已收到。测试回复已完成。'
@@ -65,6 +65,7 @@ for (const key of Object.keys(env)) if (/API_KEY|ACCESS_SECRET|ELECTRON_RUN_AS_N
 env.DSH_AI_TEST_KEY = 'local-fixture'
 await deployProfile(home, resolve(root, '.dev/desktop-profile-template'), resolve(runtime, 'node_modules'))
 const patch = resolve(home, 'profiles/dsh-editor/cordis.patch.yml')
+if ((await readFile(patch, 'utf8')).trim() === '[]') await writeFile(patch, '')
 await appendFile(patch, [
   '\n- id: llm-deepseek', '  disabled: true',
   '- id: llm-pi-ai', '  config:', '    providers:', '      local-test:', '        displayName: Local acceptance',
@@ -169,12 +170,11 @@ try {
   if (report.mode !== 'disabled') {
     const center = dialog.getByTestId('model-center')
     assert.equal(await center.getByRole('tab', { name: '模型配置', exact: true }).getAttribute('aria-selected'), 'true')
-    const commonModels = center.locator('fieldset[aria-label="常用功能"]')
-    await commonModels.getByText('对话模型', { exact: true }).waitFor()
+    const commonModels = center.locator('fieldset[aria-label="能力默认值"]')
+    await commonModels.getByText('新对话', { exact: true }).waitFor()
     await commonModels.getByText('正文补全', { exact: true }).waitFor()
     await commonModels.getByText('选区改写', { exact: true }).waitFor()
-    assert.equal(await center.locator('details.model-center-secondary').getAttribute('open'), null, 'Other feature models must start collapsed')
-    assert.equal(await center.locator('details.model-center-advanced').getAttribute('open'), null, 'Advanced model settings must start collapsed')
+    assert.equal(await center.locator('[data-tier]').count(), 4, 'Four model tiers must be visible above capability defaults')
     const policyPanel = center.getByRole('tabpanel', { name: '模型配置', exact: true })
     assert.equal(await policyPanel.getByText('限额与超时', { exact: true }).count(), 0)
     await center.getByRole('tab', { name: '运行设置', exact: true }).click()
@@ -193,13 +193,12 @@ try {
     assert.equal(await providerPanel.getByText('选区改写', { exact: true }).count(), 0)
     await screenshot('03-model-center-providers')
     await center.getByRole('tab', { name: '模型配置', exact: true }).click()
-    await center.getByText('高级设置', { exact: true }).click()
-    const normal = center.getByRole('combobox', { name: '默认模型 会话模型', exact: true })
+    const normal = center.getByRole('combobox', { name: '幻想 模型', exact: true })
     await normal.selectOption({ label: 'Local acceptance / Fixture' })
     await center.getByRole('button', { name: '保存', exact: true }).click()
     await center.getByText('已保存。', { exact: true }).waitFor()
     await screenshot('04-model-center-policy')
-    report.checks.push('model configuration opens first, groups chat/completion/rewrite, keeps runtime limits and providers separate, and saves the default preset')
+    report.checks.push('model configuration opens first, exposes four tiers and capability defaults, keeps runtime limits and providers separate, and saves a tier')
     await dialog.getByRole('tab', { name: '插件', exact: true }).click()
     const modelToggle = dialog.locator('[role="switch"][data-testid$="-model-center"]')
     await setChecked(modelToggle, false)

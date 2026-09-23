@@ -61,6 +61,7 @@ describe('pinned llm generate path', () => {
     expect(result).toMatchObject({ status: 'success', text: 'hello', attempts: 1, inputTokens: 2 })
     expect(adapter.last?.tools).toBeUndefined()
     expect(adapter.last?.system).toBe('sys')
+    expect(adapter.last?.messages[0]?.source).toMatchObject({ kind: 'plugin:mood', plugin: 'mood' })
   })
 
   it('maps finish errors and does not retry past maxAttempts', async () => {

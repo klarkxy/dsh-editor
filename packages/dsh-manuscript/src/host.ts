@@ -118,6 +118,7 @@ export type ManuscriptClient = Context & {
       subscribe?: (fn: () => void) => () => void
     }
   }
+  uiWorkspace: { current: { getSnapshot(): { sessionId: string } | undefined; subscribe(listener: () => void): () => void } }
   connection: { rpc: RpcBag }
 }
 

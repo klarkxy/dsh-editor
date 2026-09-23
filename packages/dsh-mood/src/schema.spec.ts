@@ -16,9 +16,9 @@ describe('storage and inject shapes', () => {
 
   it('builds plugin-source context with pinned createUserMessage, not a synthetic human prompt', () => {
     const input = contractMessageInput('约定')
-    expect(input.source).toMatchObject({ kind: 'plugin', plugin: MOOD_PLUGIN, form: 'snapshot' })
+    expect(input.source).toMatchObject({ kind: 'plugin:@klarkxy/dsh-mood', plugin: MOOD_PLUGIN, form: 'snapshot' })
     const message = createMoodContextMessage('约定') as { id: string; role: string; source?: { kind?: string; plugin?: string } }
-    expect(message.source?.kind).toBe('plugin')
+    expect(message.source?.kind).toBe('plugin:@klarkxy/dsh-mood')
     expect(message.source?.plugin).toBe(MOOD_PLUGIN)
     expect(message.role).toBe('user')
     expect(message.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)

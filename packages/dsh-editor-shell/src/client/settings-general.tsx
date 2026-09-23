@@ -75,9 +75,9 @@ export function SettingsGeneralSection(props: {
   onRevealDeveloper?(): void
 }) {
   const scopes = useMemo(() => ({
-    theme: props.ctx.settingsScope.bind({ namespace: 'ui-theme', decode: decodeThemePreference }),
-    conversation: props.ctx.settingsScope.bind({ namespace: 'ui-conversation', decode: decodeBusyEnter }),
-    developer: props.ctx.settingsScope.bind({ namespace: DEVELOPER_SETTINGS_NAMESPACE, decode: decodeDeveloperSettings }),
+    theme: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeThemePreference>>>('ui-theme'),
+    conversation: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeBusyEnter>>>('ui-conversation'),
+    developer: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeDeveloperSettings>>>(DEVELOPER_SETTINGS_NAMESPACE),
   }), [props.ctx])
 
   const [theme, setTheme, themeWritable] = usePreference(scopes.theme, 'system')

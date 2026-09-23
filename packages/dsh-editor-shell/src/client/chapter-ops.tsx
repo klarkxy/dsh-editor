@@ -25,6 +25,7 @@ import {
   suggestSplitName,
 } from '../chapter-ops-view.ts'
 import { ProposalCard } from './chat.tsx'
+import { CrossIcon } from './icons.tsx'
 import { ActivityDots, Button, Dialog, Input } from './ui/index.ts'
 import { errorMessage, safeRpcCall, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
@@ -199,7 +200,7 @@ function SplitFormDialog(props: {
             aria-label={t('common.close')}
             disabled={busy}
             onClick={props.onCancel}>
-            ×
+            <CrossIcon size={14} />
           </IconButton>
         </Flex>
         <Flex
@@ -299,7 +300,7 @@ function ProposalReviewDialog(props: {
             className="icon-button"
             aria-label={t('common.close')}
             onClick={props.onClose}>
-            ×
+            <CrossIcon size={14} />
           </IconButton>
         </Flex>
         {props.proposal.kind === 'merge' ? <Text size="1" color="gray">

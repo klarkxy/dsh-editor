@@ -26,9 +26,9 @@ for (const target of [projectsRoot, home, toggleHome, output, targetWorkspace]) 
   }
 }
 
-resolveDshInstallation('0.1.5-rc.2')
+resolveDshInstallation('0.1.7-alpha.1')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.1.7-alpha.1')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 let browser
@@ -134,7 +134,7 @@ async function readMaterialized(dest) {
   const compositionJson = JSON.parse(await readFile(resolve(dest, 'composition.json'), 'utf8'))
   const catalog = JSON.parse(await readFile(resolve(dest, 'dsh-editor-catalog.json'), 'utf8'))
   const manifest = JSON.parse(await readFile(resolve(dest, 'package.json'), 'utf8'))
-  const patch = await readFile(resolve(dest, 'cordis.patch.yml'), 'utf8')
+  const patch = await readFile(resolve(dest, 'node_modules/dsh-editor-profile-config/base.patch.yml'), 'utf8')
   return {
     identity: withoutIdentity(compositionJson),
     catalog,
@@ -188,11 +188,11 @@ async function assertWritingPresetsHealthy(profileRoot) {
     const meta = await readFile(resolve(dir, 'preset.yml'), 'utf8')
     if (!/name:\s*\S/.test(meta)) throw new Error(`${id} preset.yml has no name`)
   }
-  const patch = await readFile(resolve(profileRoot, 'cordis.patch.yml'), 'utf8')
-  if (!/- id: agent-presets\s+config:\s+default: dsh-editor-writing/.test(patch)) {
+  const patch = await readFile(resolve(profileRoot, 'node_modules/dsh-editor-profile-config/base.patch.yml'), 'utf8')
+  if (!/- id: agent-preset-registry\s+config:\s+default: dsh-editor-writing/.test(patch)) {
     throw new Error('app-owned profile default is not dsh-editor-writing')
   }
-  if (/- id: agent-presets\s+config:\s+default: dsh-editor\s*$/m.test(patch)) {
+  if (/- id: agent-preset-registry\s+config:\s+default: dsh-editor\s*$/m.test(patch)) {
     throw new Error('app-owned profile still defaults to legacy dsh-editor')
   }
 }
@@ -216,7 +216,7 @@ try {
  evidence.capability=shared;
  evidence.checks.push('desktop/basic/smart/full materialize to one capability set except id/label');
 
- if(!/- id: agent-presets\s+config:\s+default: dsh-editor-writing/.test(aliases[0].files.patch))throw new Error('materialized profile default is not dsh-editor-writing');
+ if(!/- id: agent-preset-registry\s+config:\s+default: dsh-editor-writing/.test(aliases[0].files.patch))throw new Error('materialized profile default is not dsh-editor-writing');
  const sourcePresetIds=(await readdir(resolve(root,'apps','desktop','resources','profile','agent-presets'))).sort();
  if(JSON.stringify(sourcePresetIds)!==JSON.stringify(['dsh-editor','dsh-editor-writing']))throw new Error('template source must keep only the locked core and legacy presets: '+sourcePresetIds.join(','));
  await assertWritingPresetsHealthy(template);
@@ -287,22 +287,22 @@ try {
  const createFolder=page.getByRole('dialog',{name:'新建文件夹'});await createFolder.getByLabel('文件夹名称').fill('正文');await createFolder.getByRole('button',{name:'创建',exact:true}).click();
  await page.locator('.tree-row').filter({hasText:'正文'}).first().waitFor({timeout:20000});
  // Create the document via the actual product command; the ordinary flow must work without AI.
- await page.locator('.tree-row').filter({hasText:'正文'}).first().hover();await page.getByRole('button',{name:'在 正文 中新建文件',exact:true}).click();const create=page.getByRole('dialog',{name:'新建文件'});await create.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001');await create.getByRole('button',{name:'创建',exact:true}).click();
+ await page.locator('.tree-row').filter({hasText:'正文'}).first().hover();await page.getByRole('button',{name:'在 正文 中新建文件',exact:true}).click();const create=page.getByRole('dialog',{name:'新建文件'});await create.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001');await create.getByRole('button',{name:'创建',exact:true}).click();await create.waitFor({state:'detached'});
  const editor=page.locator('[data-testid="paper-editor"] .cm-content');await editor.waitFor({timeout:30000});
  if(await page.locator('[aria-label="正文编辑区"]').count())throw new Error('manuscript paper still uses 正文编辑区');
  await page.locator('[aria-label="文稿编辑区"]').waitFor({state:'visible',timeout:10000});
- await editor.click();await page.keyboard.insertText('我们以经做好准备。组合保存验证。');await page.keyboard.press('Control+s');await page.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor();
- const saved=await readFile(resolve(targetWorkspace,'正文','001.md'),'utf8');if(!saved.includes('组合保存验证'))throw new Error('disk save missing');evidence.checks.push('create project/document and save through UI');
+ await editor.focus();await page.keyboard.insertText('我们以经做好准备。组合保存验证。');await page.keyboard.press('Control+s');await page.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor();
+ let saved='';for(let attempt=0;attempt<50;attempt++){saved=await readFile(resolve(targetWorkspace,'正文','001.md'),'utf8');if(saved.includes('组合保存验证'))break;await new Promise(done=>setTimeout(done,100));}if(!saved.includes('组合保存验证'))throw new Error('disk save missing');evidence.checks.push('create project/document and save through UI');
  const notesBox=await tree.boundingBox();if(!notesBox)throw new Error('tree missing after first file');
  await tree.click({button:'right',position:{x:16,y:Math.max(12,notesBox.height-18)}});
  await page.getByRole('menu',{name:'文档操作'}).getByRole('menuitem',{name:'新建文件夹'}).click();
  const notesFolder=page.getByRole('dialog',{name:'新建文件夹'});await notesFolder.getByLabel('文件夹名称').fill('资料');await notesFolder.getByRole('button',{name:'创建',exact:true}).click();
  await page.locator('.tree-row').filter({hasText:'资料'}).first().waitFor({timeout:20000});
  await page.locator('.tree-row').filter({hasText:'资料'}).first().hover();await page.getByRole('button',{name:'在 资料 中新建文件',exact:true}).click();
- const createTxt=page.getByRole('dialog',{name:'新建文件'});await createTxt.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('笔记.txt');await createTxt.getByRole('button',{name:'创建',exact:true}).click();
+ const createTxt=page.getByRole('dialog',{name:'新建文件'});await createTxt.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('笔记.txt');await createTxt.getByRole('button',{name:'创建',exact:true}).click();await createTxt.waitFor({state:'detached'});
  await page.locator('[data-testid="paper-path"]',{hasText:'资料/笔记.txt'}).waitFor({timeout:20000});
  await page.locator('[aria-label="文稿编辑区"]').waitFor({state:'visible',timeout:10000});
- await editor.click();await page.keyboard.press('Control+A');await page.keyboard.insertText('组合普通文本验证。');await page.keyboard.press('Control+s');await page.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor();
+ await editor.focus();await page.keyboard.press('Control+A');await page.keyboard.insertText('组合普通文本验证。');await page.keyboard.press('Control+s');await page.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor();
  const savedTxt=await readFile(resolve(targetWorkspace,'资料','笔记.txt'),'utf8');if(!savedTxt.includes('组合普通文本验证。'))throw new Error('plain txt save missing');
  const chapterRow=page.locator('.tree-row.tree-main').filter({hasText:'001.md'}).first();
  if(!(await chapterRow.count())){const bodyDir=page.locator('.tree-row').filter({hasText:'正文'}).first();await bodyDir.click();}

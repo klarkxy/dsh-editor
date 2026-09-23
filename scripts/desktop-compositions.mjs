@@ -68,7 +68,7 @@ export function runtimeDependencySources(composition) {
 export async function configureProfile(destination, composition) {
   const manifestPath = resolve(destination, 'package.json')
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-  manifest.dsh.profile.bundles = composition.bundles
+  manifest.dsh.profile.bundles = [...composition.bundles, 'dsh-editor-profile-config']
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
   const basePatch = await readFile(resolve(root, 'apps/desktop/resources/profile/cordis.patch.yml'), 'utf8')
   const extraInsertPatch = composition.extraInserts.length
@@ -80,7 +80,12 @@ export async function configureProfile(destination, composition) {
     ? `    features:\n${featureKeys.map((feature) => `      ${feature}: ${composition.shellFeatures[feature]}\n`).join('')}`
     : '    features: {}\n'
   const selectionPatch = `${extraInsertPatch}${disabledPatch}- id: editor-shell\n  config:\n${featuresPatch}`
-  await writeFile(resolve(destination, 'cordis.patch.yml'), `${basePatch.trimEnd()}\n${selectionPatch}`)
+  const configBundle = resolve(destination, 'node_modules', 'dsh-editor-profile-config')
+  await mkdir(configBundle, { recursive: true })
+  await writeFile(resolve(configBundle, 'package.json'), JSON.stringify({ name: 'dsh-editor-profile-config', private: true, version: '1.0.0', dsh: { bundle: { patch: ['./base.patch.yml', './presets.patch.json'] } } }))
+  await writeFile(resolve(configBundle, 'base.patch.yml'), `${basePatch.trimEnd()}\n${selectionPatch}`)
+  await writeFile(resolve(configBundle, 'presets.patch.json'), '[]\n')
+  await writeFile(resolve(destination, 'cordis.patch.yml'), '[]\n')
   await writeFile(resolve(destination, 'composition.json'), `${JSON.stringify(composition, null, 2)}\n`)
   const selected = manifests.filter((item) => composition.packages.includes(item.name))
   await writeFile(resolve(destination, 'dsh-editor-catalog.json'), `${JSON.stringify({

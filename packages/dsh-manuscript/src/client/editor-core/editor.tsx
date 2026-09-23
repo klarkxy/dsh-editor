@@ -209,6 +209,8 @@ export type EditorCoreProps = {
   slotStyle?: Partial<Record<EditorCoreSlot, CSSProperties>>
 
   completionPreference?: CompletionPreference
+  /** Host may identify author documents outside the legacy 正文/ directory. */
+  automaticCompletionEligible?: boolean
   /**
    * Optional completion capability gate (default true for compatibility).
    * When false, no FIM or selection-rewrite RPC is ever issued — the manual
@@ -379,7 +381,7 @@ export function defaultPatchPayload(input: PatchPayloadInput): Record<string, un
 
 function describeStatus(state: SaveState, conflict: boolean): string {
   if (state === 'empty') return ''
-  if (state === 'loading') return '读取中'
+  if (state === 'loading') return '读取中…'
   if (state === 'saved') return '已保存'
   if (state === 'draft') return '草稿未保存'
   if (state === 'conflict') return conflict ? '版本冲突' : '需处理'
@@ -390,9 +392,14 @@ function isStaleMessage(message: string): boolean {
   return /changed on disk|\bSTALE\b|version|版本/i.test(message);
 }
 
-/** 备份按钮的小标签：序号 + 可读的更新时间（没有 updatedAt 时只有序号）。 */
+/** 备份按钮的小标签：序号 + 本地化的可读更新时间（没有 updatedAt 时只有序号）。 */
 function draftBackupLabel(backup: EditorCoreDraftBackup, index: number): string {
-  const stamp = backup.updatedAt ? backup.updatedAt.replace('T', ' ').slice(5, 16) : ''
+  const date = backup.updatedAt ? new Date(backup.updatedAt) : null
+  const stamp = date && !Number.isNaN(date.getTime())
+    ? new Intl.DateTimeFormat(globalThis.navigator?.language || undefined, {
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(date)
+    : ''
   return stamp ? `备份 ${index + 1} · ${stamp}` : `备份 ${index + 1}`
 }
 
@@ -414,6 +421,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     slotClassName = {},
     slotStyle = {},
     completionPreference = 'manual',
+    automaticCompletionEligible,
     completionEnabled = true,
     authorPreferences,
     chapterContext,
@@ -661,7 +669,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       if (restoredText !== null) {
         setTextState(restoredText)
         setConflict(conflictOnLoad)
-        report(conflictOnLoad ? '磁盘版本已变化；本地草稿已保留，请另存或手动合并。' : '已恢复未保存的草稿。')
+        report(conflictOnLoad ? '磁盘版本已变化；草稿已保留，请另存或手动合并。' : '已恢复未保存的草稿。')
       } else {
         setTextState(disk.text)
         setConflict(false)
@@ -701,7 +709,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         void draft.call(endpoint, payload).then((raw: unknown) => {
           const result = raw as RpcResult
           if (!result.ok) report(`草稿同步失败：${result.error.message}`)
-        }).catch(() => { report('草稿同步失败：连接中断，内容仍保留在本地缓冲区。') })
+        }).catch(() => { report('草稿同步失败：连接中断，内容仍保留在本地。') })
       } else if (draft.kind === 'session' && typeof globalThis.sessionStorage !== 'undefined') {
         try {
           const key = SESSION_DRAFT_KEY(cwd, doc.path)
@@ -718,7 +726,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     /* conflict 必须先经 放弃/重新载入/另存副本 解决，Ctrl+S 不得绕过。 */
     const savingDoc = docRef.current
     if (!savingDoc || !isDocumentReady() || saving.current) return false
-    if (conflictRef.current) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
+    if (conflictRef.current) { report('草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
     cancelPendingDraftSync()
     /* 保存以 textRef 为准已包含最新键入；这里同步收敛去抖，让读 React state 的 UI 一致。 */
     flushText()
@@ -825,8 +833,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     /* 备份真正的 base：冲突时随 put 回传，重启后冲突依旧成立。 */
     draftBaseRef.current = { text: backup.baseText, version: backup.baseVersion }
     report(backup.baseVersion !== current.version
-      ? '已把备份内容放入当前草稿；备份基于的磁盘版本已变化，请确认后再保存。原备份仍保留给其他窗口。'
-      : '已把备份内容放入当前草稿；原备份仍保留给其他窗口，不会自动清理。')
+      ? '备份内容已放入草稿；其磁盘版本已变化，请确认后再保存。原备份仍保留。'
+      : '备份内容已放入草稿；原备份仍保留，不会自动清理。')
   }, [conflict, setText, report])
 
   useEffect(() => {
@@ -837,10 +845,16 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     return () => globalThis.removeEventListener('beforeunload', warn)
   }, [enableBeforeUnload, doc, revision, conflict])
 
+  const stopCompletion = useCallback(() => {
+    fimAbort.current?.abort()
+    setLoadingFim(false)
+    report('已停止补全。')
+  }, [report])
+
   const complete = useCallback(async (append = false) => {
     if (!doc || !isDocumentReady() || docRef.current !== doc || isGenerating() || viewRef.current?.composing) return
     if (!completionEnabled) { report('写作补全未启用。'); return }
-    if (conflict) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return }
+    if (conflict) { report('草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return }
     const main = viewRef.current!.state.selection.main
     if (!append && !main.empty) { report('请先把光标放到要补全的位置。'); return }
     lastAutomaticCompletion.current = Math.max(lastAutomaticCompletion.current, userEditRevision)
@@ -894,7 +908,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     const view = viewRef.current
     if (!doc || !view || !isDocumentReady() || !completionEnabled) return
     const cursor = selection.start
-    const isManuscript = /^正文\/.+\.(?:md|txt)$/i.test(doc.path)
+    const isManuscript = automaticCompletionEligible ?? /^正文\/.+\.(?:md|txt)$/i.test(doc.path)
     const ready = (at: number) => automaticCompletionReady({
       preference: completionPreference,
       manuscript: isManuscript,
@@ -916,7 +930,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       void complete()
     }, fimDelayMs)
     return () => globalThis.clearTimeout(timer)
-  }, [completionEnabled, completionPreference, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, paperOffset, complete])
+  }, [completionEnabled, completionPreference, automaticCompletionEligible, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, paperOffset, complete])
 
   const liveTarget = useCallback((): EditorTargetLive | null => {
     const current = docRef.current
@@ -947,7 +961,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const saveMetadataText = useCallback(async (next: string, target: EditorTargetSnapshot): Promise<boolean> => {
     const current = docRef.current
     if (!current || !isDocumentReady() || saving.current) return false
-    if (conflictRef.current) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
+    if (conflictRef.current) { report('草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return false }
     const live = liveTarget()
     if (!live || !isEditorTargetCurrent(target, live)) {
       report('章节内容已变化，请关闭本窗口后重新打开再写入。')
@@ -966,7 +980,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     if (!doc || !isDocumentReady() || docRef.current !== doc || isGenerating() || viewRef.current?.composing) return
     if (!completionEnabled) { report('写作补全未启用。'); return }
     if (!enablePatch) return
-    if (conflict) { report('当前草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return }
+    if (conflict) { report('草稿与磁盘版本冲突，请先另存冲突副本或放弃草稿。'); return }
     const live = liveTarget()
     if (!live) return
     if (target && !isEditorTargetCurrent(target, live)) {
@@ -1229,6 +1243,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     onSelection: (_start: number, _end: number) => {},
     acceptGhost: () => {},
     acceptPatch: () => {},
+    complete: () => {},
     cancelSuggestions: (): boolean => false,
     save: () => {},
     hasGhost: (): boolean => false,
@@ -1251,6 +1266,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     },
     acceptGhost,
     acceptPatch,
+    complete: () => { void complete() },
     cancelSuggestions,
     save: () => { void save() },
     hasGhost: () => ghostCandidatesRef.current.length > 0,
@@ -1348,8 +1364,9 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
             {
               key: 'Mod-Enter',
               run: (v) => {
-                if (isPaperSearchPanelFocused(v) || !cb.current.hasProposal()) return false
-                cb.current.acceptPatch()
+                if (isPaperSearchPanelFocused(v) || v.composing) return false
+                if (cb.current.hasProposal()) cb.current.acceptPatch()
+                else cb.current.complete()
                 return true
               },
             },
@@ -1499,14 +1516,14 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           color={loadingFim ? 'gray' : undefined}
           size="1"
           data-testid={`${testIdPrefix}-fim`}
-          onClick={() => { void complete(false) }}>
+          onClick={() => { if (loadingFim) stopCompletion(); else void complete(false) }}>
           {loadingFim ? '停止补全' : ghost ? '重新补全' : '补全'}
         </Button> : null}
-        <span data-testid={`${testIdPrefix}-wordcount`} style={{ opacity: 0.55 }}>
+        <span data-testid={`${testIdPrefix}-wordcount`} style={{ color: 'var(--gray-11)' }}>
           {`${wordCount} 字`}
         </span>
-        <span data-testid={`${testIdPrefix}-save-state`} style={{ opacity: 0.55 }}>
-          {loadingFim ? '正在补全' : patching ? '正在改写' : describeStatus(state, conflict)}
+        <span data-testid={`${testIdPrefix}-save-state`} style={{ color: 'var(--gray-11)' }}>
+          {loadingFim ? '正在补全…' : patching ? '正在改写…' : describeStatus(state, conflict)}
         </span>
         {headerExtras}
       </header>
@@ -1574,7 +1591,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         className={cls('conflict')}
         style={{ padding: '6px 8px', borderTop: '1px solid var(--gray-6)', fontSize: 'var(--font-size-1)', ...sty('conflict') }}>
         <span>
-          当前草稿与磁盘版本不一致，已保留本地内容。
+          草稿与磁盘版本不一致，已保留本地内容。
         </span>
       </div> : null}
       {note && sty('notice')?.display !== 'none' ? <div
@@ -1596,7 +1613,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         role="status"
         style={{ padding: '4px 8px', fontSize: 'var(--font-size-1)', opacity: 0.8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <span>
-          {`发现 ${backups.length} 份其他窗口留下的未保存备份（采纳后原备份仍保留）：`}
+          {`发现 ${backups.length} 份其他窗口的未保存备份（采纳后原备份保留）：`}
         </span>
         {backups.map((backup, index) => <Button
           key={`${backup.ownerId ?? 'legacy'}-${backup.revision ?? index}`}
@@ -1626,7 +1643,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           variant="soft"
           color="gray"
           size="1"
-          onClick={() => { fimAbort.current?.abort(); setLoadingFim(false); report('已停止补全。') }}>
+          onClick={stopCompletion}>
           停止补全
         </Button> : null}
         {patching ? <Button

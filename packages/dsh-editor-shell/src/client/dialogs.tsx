@@ -3,12 +3,15 @@ import { Button as ThemesButton, Callout, Flex, Heading, IconButton, RadioCards,
 import type { ConversationPresetChoice } from '../conversation-presets.ts'
 import { t } from '../i18n/index.ts'
 import { ActivityDots, Button, Confirm, ConfirmCancel, Dialog, Input } from './ui/index.ts'
+import { CrossIcon } from './icons.tsx'
 
 export function ConfirmDialog(props: {
   id: string
   title: string
   message: string
   confirmLabel: string
+  note?: string
+  busy?: boolean
   open?: boolean
   returnFocusRef?: RefObject<HTMLElement | null>
   onCancel(): void
@@ -36,12 +39,17 @@ export function ConfirmDialog(props: {
         <Text size="2" id={`${props.id}-message`}>
           {display.message}
         </Text>
+        {props.note ? <Callout.Root color="red" role="alert" size="1">
+          <Callout.Text>
+            {props.note}
+          </Callout.Text>
+        </Callout.Root> : null}
         <Flex justify="end" gap="2">
           <ConfirmCancel
-            children={<Button ref={cancel}>
+            children={<Button ref={cancel} disabled={props.busy}>
               {t('common.cancel')}
             </Button>} />
-          <ThemesButton variant="solid" color="red" className="danger-action" onClick={props.onConfirm}>
+          <ThemesButton variant="solid" color="red" className="danger-action" disabled={props.busy} onClick={props.onConfirm}>
             {display.confirmLabel}
           </ThemesButton>
         </Flex>
@@ -96,7 +104,7 @@ export function TextPromptDialog(props: {
             aria-label={t('common.close')}
             disabled={props.busy}
             onClick={props.onCancel}>
-            ×
+            <CrossIcon size={14} />
           </IconButton>
         </Flex>
         <Flex
@@ -190,7 +198,7 @@ export function NewProjectDialog(props: {
             aria-label={t('common.close')}
             disabled={props.busy}
             onClick={props.onClose}>
-            ×
+            <CrossIcon size={14} />
           </IconButton>
         </Flex>
         <Flex
@@ -291,7 +299,7 @@ export function ConversationPresetPicker(props: {
             aria-label={t('common.close')}
             disabled={props.busy}
             onClick={props.onCancel}>
-            ×
+            <CrossIcon size={14} />
           </IconButton>
         </Flex>
         {props.phase === 'loading' ? <Text size="2" role="status" aria-live="polite">

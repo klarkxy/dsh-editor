@@ -2,6 +2,7 @@ import { useRef, type RefObject } from 'react';
 import { Callout, Card, Flex, Heading, IconButton, Text } from '@radix-ui/themes'
 import type { ArchiveResponse } from 'dsh-editor-workbench/contracts'
 import { documentName } from './shared.ts'
+import { CrossIcon } from './icons.tsx'
 import { intlLocale, t } from '../i18n/index.ts'
 import { ActivityText, Button, Dialog } from './ui/index.ts'
 
@@ -66,7 +67,7 @@ export function ArchivePanel(props: {
             aria-label={t('common.close')}
             disabled={props.busy}
             onClick={props.onClose}>
-            ×
+            <CrossIcon size={14} />
           </IconButton>
         </Flex>
         <Flex className="archive-list" direction="column" gap="2">

@@ -6,7 +6,7 @@ Zhihu search, answers, knowledge bases, and usage tracking for DSH.
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.5-rc.2`. No repository build is needed.
+Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. No repository build is needed.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-zhihu

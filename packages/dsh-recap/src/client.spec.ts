@@ -45,7 +45,7 @@ function statusFor(sessionId: string, title = '回顾'): RecapStatus {
 
 describe('recap client seats', () => {
   it('registers settings and a quiet background chat controller', () => {
-    expect([...inject]).toEqual(['slots', 'connection', 'sessions', 'locale'])
+    expect([...inject]).toEqual(['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
     const injected: string[] = []
     const names: Array<{ name: string; id?: string; label?: string }> = []
     apply({

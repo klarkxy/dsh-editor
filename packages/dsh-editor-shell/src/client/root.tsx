@@ -31,12 +31,12 @@ import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChar
 import { redesignedStyles } from '../styles.ts'
 import { errorMessage, isStaleFailure, canMoveTreeEntry, treeMoveTargetDir, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceFileContent, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
-import { currentSession, DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
+import { DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, type PanelImperativeHandle, type PanelSize } from 'react-resizable-panels'
 import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarColumn, panelPixels, type FileMenuKind } from './root-columns.tsx'
 import { HomeScreen } from './root-home.tsx'
 import { WorkbenchTopbar } from './root-topbar.tsx'
-import { FolderIcon, FocusIcon, NewDocIcon } from './icons.tsx'
+import { CrossIcon, FolderIcon, FocusIcon, NewDocIcon } from './icons.tsx'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.tsx'
 import { SettingsDialog, SettingsTrigger, type SettingsRenderSlot, type SettingsTab } from './settings.tsx'
 import { ThemeToggle, useAccent, useTheme, type HostThemeSync } from './theme.tsx'
@@ -197,13 +197,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const assistantEnabled = capabilityState.kind === 'ready' && featureEnabled(capabilityState.value, 'assistant')
   const sessions = useObservable(ctx.sessions.list)
   const workspaces = useObservable(ctx.workspaces.list)
-  const session = currentSession(ctx)
-  const current = sessions.current
+  const session = useObservable(ctx.uiWorkspace.current)
+  const current = session?.sessionId
   const selectedWorkspace = workspaces.items.find((workspace) => current && workspace.sessionIds.includes(current))
     ?? workspaces.items.find((workspace) => workspace.path === (current ? sessions.byId[current]?.cwd : undefined))
   const [workspaceOpen, setWorkspaceOpen] = useState<WorkspaceOpenState>({ kind: 'idle' })
-  const fileSessionId = workspaceOpen.kind === 'ready' ? workspaceOpen.sessionId : undefined
-  const fileSession: FileSession | undefined = fileSessionId ? ctx.sessions.binding(fileSessionId)?.session : undefined
+  const workspaceSession = useObservable(ctx.uiWorkspace.workspace)
+  const fileSessionId = workspaceOpen.kind === 'ready' ? workspaceSession?.sessionId : undefined
+  const fileSession: FileSession | undefined = workspaceOpen.kind === 'ready' ? workspaceSession : undefined
   const fileSessionIdRef = useRef<SessionId | undefined>(fileSessionId)
   fileSessionIdRef.current = fileSessionId
   const openWorkspaceId = workspaceOpen.kind === 'ready' ? workspaceOpen.workspaceId : undefined
@@ -212,14 +213,15 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     : selectedWorkspace
   const writingSnapshot = useObservable(writingScope)
   const writing = writingPreferences(writingSnapshot, globalThis.localStorage)
-  const conversationScope = useMemo(() => ctx.settingsScope.bind({ namespace: CONVERSATION_SETTINGS_NAMESPACE, decode: decodeConversationSettings }), [ctx])
+  const conversationScope = useMemo(() => ctx.configForms.get<NonNullable<ReturnType<typeof decodeConversationSettings>>>(CONVERSATION_SETTINGS_NAMESPACE), [ctx])
   /* 助手提议 author_observe 时的写入回调：把 observation 作为新行追加到 authorMemory。
      限 AUTHOR_MEMORY_MAX_CHARS 字(2000),追加后超限直接拒绝,提示作者去设置页整理。 */
   const onAcceptMemory = useCallback(async (observation: string): Promise<boolean> => {
     const trimmed = observation.trim()
     if (!trimmed) return false
     const current = writing.authorMemory ?? ''
-    const next = current ? `${current}\n${trimmed}` : trimmed
+    const next = current ? `${current}
+${trimmed}` : trimmed
     if (next.length > AUTHOR_MEMORY_MAX_CHARS) return false
     try {
       await writingScope.set('authorMemory', next)
@@ -417,29 +419,53 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   useEffect(() => {
     try { globalThis.localStorage?.setItem('dsh-editor.layout.pinned-width', String(pinnedWidth)) } catch { /* View preferences remain optional. */ }
   }, [pinnedWidth])
+  /* 侧栏/助手开关:专注模式下打开 = 退出专注并打开;窄窗下两个覆盖层互斥。 */
+  const toggleSidebarChrome = () => {
+    const next = focusMode ? true : !sidebarOpen
+    if (focusMode) setFocusMode(false)
+    setSidebarOpen(next)
+    if (next && compactChrome) setAssistantOpen(false)
+  }
+  const toggleAssistantChrome = () => {
+    const next = focusMode ? true : !assistantOpen
+    if (focusMode) setFocusMode(false)
+    setAssistantOpen(next)
+    if (next && compactChrome) setSidebarOpen(false)
+  }
   useEffect(() => {
     const hotkey = (event: globalThis.KeyboardEvent) => {
-      if (document.querySelector('[aria-modal="true"]')) return
+      if (event.isComposing || event.keyCode === 229) return
+      if (document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
+      /* 覆盖层抽屉:Esc 关闭;菜单/下拉打开时让位给它们自己的 Esc 处理。 */
+      if (event.key === 'Escape') {
+        if (!document.querySelector('[role="menu"], [role="listbox"], [data-radix-select-content]')) {
+          if (compactChrome && sidebarOpen && !focusMode) {
+            event.preventDefault()
+            setSidebarOpen(false)
+            return
+          }
+          if (overlayAssistant && assistantOpen && !focusMode && assistantEnabled) {
+            event.preventDefault()
+            setAssistantOpen(false)
+            return
+          }
+        }
+        return
+      }
       const action = workspaceShortcut(event)
       if (action) {
       if (event.repeat) return
       if (action !== 'settings' && !session) return
       event.preventDefault()
       if (action === 'settings') { void openSettings(); return }
-      if (action === 'toggle-sidebar') {
-        if (focusMode) { setFocusMode(false); setSidebarOpen(true) } else setSidebarOpen((value) => !value)
-        return
-      }
-      if (action === 'toggle-assistant') {
-        if (!assistantEnabled) return
-        if (focusMode) { setFocusMode(false); setAssistantOpen(true) } else setAssistantOpen((value) => !value)
-        return
-      }
+      if (action === 'toggle-sidebar') { toggleSidebarChrome(); return }
+      if (action === 'toggle-assistant') { toggleAssistantChrome(); return }
       if (action === 'toggle-focus') { setFocusMode((value) => !value); return }
       if (action === 'focus-assistant') {
         if (!assistantEnabled) return
         setFocusMode(false)
         setAssistantOpen(true)
+        if (compactChrome) setSidebarOpen(false)
         setChatFocusNonce((value) => value + 1)
         return
       }
@@ -447,6 +473,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         if (workspaceOpen.kind !== 'ready') return
         setFocusMode(false)
         setSidebarOpen(true)
+        if (compactChrome) setAssistantOpen(false)
         setSearchOpen(true)
         return
       }
@@ -463,17 +490,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       const command = matchRegistryShortcut(commands.list(), event)
       if (!command) return
       if (command.when === 'workspace' && (!session || workspaceOpen.kind !== 'ready')) return
+      const seat = seatContextRef.current
+      if (!seat || command.enabled?.(seat) === false) return
       event.preventDefault()
       setFocusMode(false)
       setPaletteOpen(false)
-      const seat = seatContextRef.current
-      if (!seat) return
       if (command.when === 'workspace') seat.revealSidebar()
       command.run(seat)
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [assistantEnabled, commands, focusMode, path, session?.sessionId, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
+  }, [assistantEnabled, assistantOpen, commands, compactChrome, focusMode, overlayAssistant, path, session?.sessionId, sidebarOpen, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
   useEffect(() => {
     if (!chatFocusNonce || !assistantOpen || focusMode || !assistantEnabled) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
@@ -707,21 +734,26 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const requestDeleteEntry = (kind: FileMenuKind, targetPath: string) => {
     if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
     yieldMenuToDialog()
+    setManageNote('')
     setDeleteTarget({ kind, path: targetPath })
   }
   const closeDeleteConfirm = () => {
+    if (manageBusy) return
     setDeleteTarget(null)
+    setManageNote('')
   }
   const confirmDeleteEntry = async () => {
     const target = deleteTarget
     if (!fileSession || !target || manageBusy) return
     setManageBusy(true)
+    setManageNote('')
     const result = await safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'entry.delete', {
       sessionId: fileSession.sessionId,
       path: target.path,
     }))
     setManageBusy(false)
-    if (!result.ok) { setWorkbenchNote(errorMessage(result)); return }
+    /* 失败原因内联在确认框里，不再只写进遮罩后面的侧栏通知。 */
+    if (!result.ok) { setManageNote(errorMessage(result)); return }
     setDeleteTarget(null)
     if (target.kind === 'file' && path === target.path) setPath('')
     else if (target.kind === 'directory' && path.startsWith(`${target.path}/`)) {
@@ -905,21 +937,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       }
       if (!workspaceOpenGate.isCurrent(pending.ticket)) return
     }
-    pendingWorkspaceOpen.current = null
-    setPath(initialPath ?? '')
-    setWorkspaceOpen({
-      kind: 'ready',
-      workspaceId: pending.workspace.workspaceId,
-      sessionId,
-      path: pending.workspace.path,
-      warning,
-    })
-    /* 右侧对话回到这个作品上一次使用的会话；连接用的空白会话仍保留给文件 RPC。 */
+    /* 0.1.7 only exposes a bound session while it is retained. The resumed
+     * conversation is therefore also the editor RPC session; no stale blank
+     * binding survives alongside the visible conversation. */
     const workspaceListState = ctx.workspaces.list.getSnapshot()
     const sessionListState = ctx.sessions.list.getSnapshot()
     const workspaceView = workspaceListState.items.find((item) => item.workspaceId === pending.workspace.workspaceId) ?? pending.workspace
     const conversationWork = conversationWorkRecord(conversationScope.getSnapshot().value, pending.workspace.workspaceId)
-    ctx.sessions.open(resumableConversationId({
+    const selectedSessionId = resumableConversationId({
       sessionIds: workspaceView.sessionIds,
       byId: sessionListState.byId ?? {},
       archivedIds: [
@@ -928,7 +953,20 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         ...conversationWork.tombstoneIds as SessionId[],
       ],
       fallback: sessionId,
-    }))
+    })
+    await ctx.uiWorkspace.openWorkspaceSession(sessionId)
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    await ctx.uiWorkspace.openSession(selectedSessionId)
+    if (!workspaceOpenGate.isCurrent(pending.ticket)) return
+    pendingWorkspaceOpen.current = null
+    setPath(initialPath ?? '')
+    setWorkspaceOpen({
+      kind: 'ready',
+      workspaceId: pending.workspace.workspaceId,
+      sessionId: selectedSessionId,
+      path: pending.workspace.path,
+      warning,
+    })
   }
   const prepareExistingWorkspace = async (pending: PendingWorkspaceOpen, sessionId: SessionId, knownTextFiles?: string[]) => {
     if (!workspaceOpenGate.isCurrent(pending.ticket)) return
@@ -1003,7 +1041,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       pending.workspace = registered
     } catch {
       if (!workspaceOpenGate.isCurrent(ticket)) return
-      ctx.sessions.clear()
+      ctx.uiWorkspace.clearSession()
       const message = t('note.folderMoved')
       setWorkspaceOpen({ kind: 'needs-relocation', workspaceId: workspace.workspaceId, path: workspace.path, title: workspace.title, message })
       setHomeNote(message)
@@ -1046,7 +1084,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       await prepareExistingWorkspace(pending, connectedSessionId, inspection.textFiles)
     } catch (error) {
       if (!workspaceOpenGate.isCurrent(ticket)) return
-      ctx.sessions.clear()
+      ctx.uiWorkspace.clearSession()
       const message = workspaceOpenFailureMessage(error)
       setWorkspaceOpen({ kind: 'error', workspaceId: current.workspaceId, path: current.path, title: current.title, message })
       setHomeNote(message)
@@ -1346,7 +1384,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     workspaceOpenGate.begin('home')
     pendingWorkspaceOpen.current = null
     setWorkspaceOpen({ kind: 'idle' })
-    ctx.sessions.clear()
+    ctx.uiWorkspace.clearSession()
   }
   const switchToWorkspace = async (id: WorkspaceId) => {
     closeWorkspaceChrome()
@@ -1689,7 +1727,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       receiptId: flow.receiptId,
     }))
     if (cleaned.ok) {
-      if (current === flow.targetSessionId) ctx.sessions.clear()
+      if (current === flow.targetSessionId) ctx.uiWorkspace.clearSession()
       const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
       if (pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
         workspaceOpenGate.begin('home')
@@ -1708,7 +1746,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       }))
       return
     }
-    if (current === flow.targetSessionId) ctx.sessions.clear()
+    if (current === flow.targetSessionId) ctx.uiWorkspace.clearSession()
     closeImportFlow()
     setHomeNote(t('note.importCleanFailed'))
   }
@@ -1720,7 +1758,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       const targetCleaned = await cleanupFlowWorkspace(flow.targetWorkspaceId)
       cleaned = sourceCleaned && targetCleaned
     }
-    if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.sessions.clear()
+    if ((flow.kind === 'recover' || flow.kind === 'cleanup-confirm') && current === flow.targetSessionId) ctx.uiWorkspace.clearSession()
     if (flow.kind !== 'idle' && flow.kind !== 'working' && pendingWorkspaceOpen.current?.workspace.workspaceId === flow.targetWorkspaceId) {
       workspaceOpenGate.begin('home')
       pendingWorkspaceOpen.current = null
@@ -1896,7 +1934,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const chatSession = session ?? fileSession
   const sidebarVisible = sidebarOpen && !focusMode
   const sidebarInGrid = sidebarVisible && !compactChrome
-  const assistantVisible = assistantOpen && !focusMode && assistantEnabled && !compactChrome
+  /* 窄窗(≤760px):侧栏与助手改成覆盖层抽屉,不再整个禁用。 */
+  const assistantVisible = assistantOpen && !focusMode && assistantEnabled
   const assistantInGrid = assistantVisible && !overlayAssistant
   const pinnedVisible = pinnedPath !== null && !focusMode
   /* 写作搭档面板始终挂载（草稿是 Chat 本地 state），关闭=折叠到 0 宽；
@@ -1948,6 +1987,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           settingsDialog={<SettingsDialog
             open={settingsOpen}
             ctx={ctx}
+            commands={commands}
             writingScope={writingScope}
             migrateWriting={migrateWriting}
             assistant={capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined}
@@ -1992,9 +2032,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           compactChrome={compactChrome}
           focusMode={focusMode}
           assistantOpen={assistantOpen}
-          onToggleSidebar={() => setSidebarOpen((value) => !value)}
+          onToggleSidebar={toggleSidebarChrome}
           onToggleFocusMode={() => setFocusMode((value) => !value)}
-          onToggleAssistant={() => setAssistantOpen((value) => !value)}
+          onToggleAssistant={toggleAssistantChrome}
           extensionsDock={extensionsDock}
           theme={theme}
           onThemeChange={setTheme}
@@ -2065,6 +2105,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               onDirtyChange={setEditorDirty}
               reveal={reveal}
               completionPreference={writing.completion}
+              completionDelayMs={writing.completionDelayMs}
               completionEnabled={capabilityReady ? featureEnabled(capabilityState.value, 'completion') : false}
               authorPreferences={authorPreferences}
               authorMemory={authorMemory}
@@ -2140,14 +2181,54 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               onApplied={onAppliedChat} />
           </Panel> : null}
         </PanelGroup>
-        {assistantVisible && overlayAssistant ? <ThemesButton
+        {assistantEnabled && chatSession && overlayAssistant ? <ThemesButton
           type="button"
           variant="ghost"
           color="gray"
           className="chat-overlay-dismiss"
+          hidden={!assistantVisible}
+          tabIndex={-1}
           aria-label={t('workspace.hideAssistant')}
           onClick={() => setAssistantOpen(false)} /> : null}
-        {!assistantVisible && !focusMode && !compactChrome ? (
+        {compactChrome ? <div className="sidebar-overlay" hidden={!sidebarVisible}>
+          <SidebarColumn
+            ctx={ctx}
+            sessionId={fileSession.sessionId}
+            searchOpen={searchOpen}
+            onSearchRequestOpen={onSearchRequestOpen}
+            onOpenDocument={openDocument}
+            onSearchReplaced={onSearchReplaced}
+            activePath={path}
+            activeDirty={editorDirty}
+            fileRevision={treeRevision}
+            historyOpen={historyOpen}
+            snapshotBusy={snapshotBusy}
+            onCommitSnapshot={onCommitSnapshot}
+            onOpenHistory={openHistoryPanel}
+            createNote={createNote}
+            workspaceWarning={workspaceOpen.warning}
+            workbenchNote={workbenchNote}
+            expandPath={treeExpansionPath}
+            highlightPath={highlightPath ?? undefined}
+            onOpen={openDocument}
+            onPreviewImage={openImagePreview}
+            onFileMenu={openFileMenu}
+            onCreateFile={onTreeCreateFile}
+            onCreateFolder={onTreeCreateFolder}
+            onMove={moveTreeEntry}
+            renderSlot={renderSlot}
+            seatContext={seatContext} />
+        </div> : null}
+        {compactChrome ? <ThemesButton
+          type="button"
+          variant="ghost"
+          color="gray"
+          className="side-overlay-dismiss"
+          hidden={!sidebarVisible}
+          tabIndex={-1}
+          aria-label={t('workspace.hideFiles')}
+          onClick={() => setSidebarOpen(false)} /> : null}
+        {!assistantVisible && !focusMode ? (
           capabilityState.kind === 'error'
             ? <Callout.Root className="assistant-launcher capability-note" color="red" role="alert">
             <Flex direction="column" gap="2">
@@ -2176,7 +2257,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             type="button"
             aria-label={t('workspace.openAssistant')}
             aria-expanded={false}
-            onClick={() => setAssistantOpen(true)}>
+            onClick={() => { setAssistantOpen(true); if (compactChrome) setSidebarOpen(false) }}>
             <span aria-hidden="true">
               <DeepSeekWhaleMark />
             </span>
@@ -2293,6 +2374,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           title={deleteTarget?.kind === 'directory' ? t('workspace.deleteFolderTitle') : t('workspace.deleteFileTitle')}
           message={t('workspace.deleteBody', { path: deleteTarget?.path ?? '' })}
           confirmLabel={t('common.delete')}
+          note={manageNote}
+          busy={manageBusy}
           returnFocusRef={fileManageReturnFocus}
           onCancel={closeDeleteConfirm}
           onConfirm={() => void confirmDeleteEntry()} />
@@ -2347,6 +2430,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           sessionId={chatSession?.sessionId}
           open={settingsOpen}
           ctx={ctx}
+          commands={commands}
           writingScope={writingScope}
           migrateWriting={migrateWriting}
           assistant={capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined}
@@ -2376,7 +2460,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               className="icon-button update-toast-close"
               aria-label={t('about.dismissToast')}
               onClick={() => setStartupUpdate(null)}>
-              ×
+              <CrossIcon size={14} />
             </IconButton>
           </Flex>
         </Callout.Root> : null}

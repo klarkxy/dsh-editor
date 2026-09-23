@@ -1,12 +1,13 @@
 /** Browser-safe Mood contracts. Shared TaskContract fields match frozen @klarkxy/dsh-ai-services. */
-import type { AiFeatureScope, EvidenceRef, RpcResult, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+import type { AiFeatureScope, EvidenceRef, ProducerMessageSource, RpcResult, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
 
-export type { AiFeatureScope, EvidenceRef, RpcResult, TaskContract }
+export type { AiFeatureScope, EvidenceRef, ProducerMessageSource, RpcResult, TaskContract }
 export { projectIdFromCwd } from '@klarkxy/dsh-ai-services/contracts'
 
 /** Frozen shared chat-events seat. Must stay equal to @klarkxy/dsh-ai-services CHAT_EVENTS_SLOT. */
 export const CHAT_EVENTS_SLOT = 'dsh-editor.chat.events'
 export const MOOD_PLUGIN = '@klarkxy/dsh-mood'
+export const MOOD_SOURCE_KIND = 'plugin:@klarkxy/dsh-mood' as const
 /** Production activate identity after scoped pluginName support. */
 export const MOOD_AI_PLUGIN = MOOD_PLUGIN
 export const MOOD_RPC_CHANNEL = '/dsh-mood'

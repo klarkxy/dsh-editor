@@ -212,7 +212,7 @@ describe('mood pre-step lifecycle', () => {
   it('does not process plugin-only batches even in strict mode', async () => {
     const { service, run, ask, agent } = setup()
     await service.call('mode', { mode: 'strict', expectedRevision: 0 }, new AbortController().signal)
-    const plugin = { id: 'p1', source: { kind: 'plugin', plugin: 'other' }, content: [{ type: 'text', text: '辅助' }] }
+    const plugin = { id: 'p1', source: { kind: 'plugin:other', plugin: 'other' }, content: [{ type: 'text', text: '辅助' }] }
     const { decision } = await step(service, agent, [plugin])
     expect(run).not.toHaveBeenCalled()
     expect(ask).not.toHaveBeenCalled()
@@ -360,7 +360,7 @@ describe('mood pre-step lifecycle', () => {
 
 function pluginSnapshot(plugin: string, section: string, text: string) {
   return createUserMessage({
-    source: { kind: 'plugin', plugin, form: 'snapshot', sections: [{ name: section, text }] },
+    source: { kind: 'plugin:' + plugin, plugin, form: 'snapshot', sections: [{ name: section, text }] },
     content: [{ type: 'text', text }],
   })
 }

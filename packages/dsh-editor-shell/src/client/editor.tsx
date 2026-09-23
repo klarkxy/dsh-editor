@@ -96,6 +96,7 @@ export function Editor(props: {
   externalRevision: number
   onDirtyChange(dirty: boolean): void
   completionPreference: CompletionPreference
+  completionDelayMs?: number
   /* 可选补全能力开关：false 时停止 FIM 与选段改写 RPC(含快捷键);缺省 true 保持兼容。 */
   completionEnabled?: boolean
   authorPreferences: string
@@ -122,6 +123,7 @@ export function Editor(props: {
     externalRevision: incomingRevision,
     onDirtyChange,
     completionPreference,
+    completionDelayMs,
     completionEnabled = true,
     authorPreferences,
     typewriter = false,
@@ -406,7 +408,7 @@ export function Editor(props: {
   return (
     <Fragment>
       {/* .editor-stack 接管原 .editor 的直接子级网格座位（grid-row: 2，见 styles.ts），
-         内联布局样式与原稿纸根一致：flex 列 + 100% 高，子级 .editor-pane/.editor 尺寸行为不变。 */
+         内联布局样式与原稿纸根一致：flex 列 + 100% 高，子级 .editor-pane/.editor 尺寸行为不变。 */}
       <div
         className="editor-stack"
         style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -434,6 +436,8 @@ export function Editor(props: {
             }}
             slotStyle={{ notice: HIDE_NOTICE }}
             completionPreference={completionPreference}
+            automaticCompletionEligible={isAuthorFacingDocumentPath(path)}
+            fimDelayMs={completionDelayMs}
             completionEnabled={completionEnabled}
             authorPreferences={authorPreferences}
             typewriter={typewriter}
@@ -473,7 +477,7 @@ export function Editor(props: {
               </Callout.Text>
             </Callout.Root> : null} />
         </div>
-      </div>}
+      </div>
       {contextMenu ? <EditorContextMenu
         x={contextMenu.x}
         y={contextMenu.y}

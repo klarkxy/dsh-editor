@@ -9,6 +9,7 @@ import type { SessionFace } from '../dsh-compat.ts'
 import type { RpcResult, ShellContext } from './shared.ts'
 import { Box, Card, Flex, Heading } from '@radix-ui/themes'
 import { Button, Dialog } from './ui/index.ts'
+import { CrossIcon } from './icons.tsx'
 import { t } from '../i18n/index.ts'
 
 export function DeepSeekWhaleMark(props: { size?: number }) {
@@ -87,7 +88,7 @@ export function ImagePreviewOverlay(props: { path: string; url: string; onClose(
         className="image-preview-close"
         aria-label={t('preview.close')}
         onClick={props.onClose}>
-        ×
+        <CrossIcon size={14} />
       </Button>
     </Dialog>
   );
@@ -131,8 +132,7 @@ export class ShellErrorBoundary extends Component<{ children?: ReactNode; fallba
 }
 
 export function currentSession(ctx: ShellContext): SessionFace | undefined {
-  const id = ctx.sessions.list.getSnapshot().current
-  return id ? ctx.sessions.binding(id)?.session : undefined
+  return ctx.uiWorkspace.current.getSnapshot()
 }
 
 export { type RpcResult }

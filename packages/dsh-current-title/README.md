@@ -10,7 +10,7 @@ The bundle insert is enabled after installation. It does not permanently turn of
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.5-rc.2`. The **当前标题** entry starts enabled and can be disabled in plugin settings. Native title storage and scheduling come from host `sessionTitle`; generation needs `@klarkxy/dsh-ai-services`.
+Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. The **当前标题** entry starts enabled and can be disabled in plugin settings. Native title storage and scheduling come from host `sessionTitle`; generation needs `@klarkxy/dsh-ai-services`.
 
 ## Title shape
 
@@ -24,7 +24,7 @@ Only recent real human `user/message` events are used. Plugin auxiliary messages
 
 [SATA License 2.1](LICENSE), including attribution for the original `dsh-plugins` sources.
 
-The Editor preinstalls this feature disabled. On pinned DSH 0.1.5-rc.2, a change to the active client module graph needs a page reload or app restart; save your work first. Standalone DSH must load the shared AI service bundle explicitly as well as this feature. New 0.1.0 packages are local candidates until published; use the corresponding tarballs in .pack for local installation.
+The Editor preinstalls this feature disabled. On pinned DSH 0.1.7-alpha.1, a change to the active client module graph needs a page reload or app restart; save your work first. Standalone DSH must load the shared AI service bundle explicitly as well as this feature. New 0.1.0 packages are local candidates until published; use the corresponding tarballs in .pack for local installation.
 
 For native web profiles, append the following entry to the profile directory's `cordis.patch.yml` and restart DSH (the Editor provides its own per-feature switch):
 

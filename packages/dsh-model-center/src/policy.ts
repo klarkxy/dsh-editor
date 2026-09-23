@@ -10,13 +10,13 @@ export function roleRoute(policy: AiPolicy, role: ModelRole): { route: ModelRout
     const normal = policy.roles.normal
     if (isBoundRoute(normal)) return { route: normal, inheritedRole: 'normal' }
   }
-  if (role === 'normal') return { error: '普通模型未绑定。' }
-  return { error: `${roleLabel(role)}未绑定，且普通模型不可用。` }
+  if (role === 'normal') return { error: '对话档尚未设置模型。' }
+  return { error: `${roleLabel(role)}档尚未设置模型，且对话档不可用。` }
 }
 
 export function roleLabel(role: ModelRole, locale: 'zh' | 'en' = 'zh'): string {
-  if (locale === 'en') return role === 'normal' ? 'Normal' : role === 'weak' ? 'Weak' : 'Strong'
-  return role === 'normal' ? '普通' : role === 'weak' ? '弱' : '强'
+  if (locale === 'en') return { normal: 'Chat', weak: 'Quick', strong: 'Thinking', fantasy: 'Fantasy' }[role]
+  return { normal: '对话', weak: '快速', strong: '思考', fantasy: '幻想' }[role]
 }
 
 export function sourceLabel(source: ResolvedRoute['source'], locale: 'zh' | 'en' = 'zh'): string {

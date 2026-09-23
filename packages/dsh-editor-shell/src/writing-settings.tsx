@@ -10,10 +10,11 @@ import {
 import { Button, Callout, Card, Flex, Heading, Kbd, RadioGroup, Separator, Slider, Switch, Text } from '@radix-ui/themes'
 import { AUTHOR_PREFERENCES_KEY, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
-import { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
+import { COMPLETION_DELAY, WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
 import { t, useLocale } from './i18n/index.ts'
 import { ActivityDots } from './client/ui/index.ts'
 import { Select } from './client/select.tsx'
+import { runtimeShortcutHint } from './palette-shortcut.ts'
 
 
 export { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
@@ -25,6 +26,7 @@ export const PAPER_WIDTH_CH = { narrow: 60, medium: 76 } as const
 
 export const DEFAULT_WRITING_PREFERENCES: WritingPreferences = {
   completion: 'manual',
+  completionDelayMs: COMPLETION_DELAY.default,
   authorPreferences: '',
   authorMemory: '',
   typewriter: false,
@@ -178,7 +180,7 @@ export async function migrateLegacyWritingPreferences(
     const value = legacyValue(storage, field)
     if (value === undefined) continue
     try {
-      await scope.set(field, value)
+      if (await scope.set(field, value) === false) throw new Error('Host refused settings write')
       const committed = scope.getSnapshot()
       if (!hasOwn(committed.user, field)) throw new Error(`${field} migration did not commit`)
       removeLegacy(storage, field)
@@ -197,6 +199,7 @@ export function decodeWritingPreferences(value: unknown): WritingPreferences | u
   if (typeof record.authorMemory !== 'string') return undefined
   return {
     completion: record.completion,
+    completionDelayMs: clampNumber(record.completionDelayMs, COMPLETION_DELAY.min, COMPLETION_DELAY.max, COMPLETION_DELAY.default),
     authorPreferences: normalizeAuthorPreferences(record.authorPreferences),
     authorMemory: normalizeAuthorMemory(record.authorMemory),
     ...normalizePaperPreferences(record),
@@ -209,6 +212,7 @@ export function writingPreferences(snapshot: SettingsScopeSnapshot<WritingPrefer
     ? {
       ...DEFAULT_WRITING_PREFERENCES,
       ...snapshot.value,
+      completionDelayMs: clampNumber(snapshot.value.completionDelayMs, COMPLETION_DELAY.min, COMPLETION_DELAY.max, COMPLETION_DELAY.default),
       ...normalizePaperPreferences(snapshot.value as unknown as Record<string, unknown>),
       ...normalizeModelPreferences(snapshot.value as unknown as Record<string, unknown>),
     }
@@ -235,7 +239,7 @@ export type WritingSettingsSlots = {
  * 写作设置页内容。渲染进 shell 自建的设置弹窗（settings.tsx）的"写作"
  * 标签页;上游 DSH 设置弹窗（settings.section slot）在桌面 profile 中已被
  * 禁用,不再注册进去。
- * 作者侧写不对作者暴露设置入口,记忆仍只通过对话里的确认卡写入。
+ * 作者侧写不对作者暴露设置入口,由助手观察后静默写入,超限时自动淘汰最旧的自动条目。
  */
 function LabeledSlider(props: {
   label: string
@@ -288,7 +292,8 @@ function SettingRow(props: { title: string; children: ReactNode }) {
   )
 }
 
-export function WritingSettings({ scope, migrate }: {
+export function WritingSettings({ scope, migrate, onOpenShortcuts }: {
+  onOpenShortcuts?(): void
   scope: SettingsScope<WritingPreferences>
   migrate: WritingMigration
 }) {
@@ -316,11 +321,13 @@ export function WritingSettings({ scope, migrate }: {
   }, [snapshot.status])
 
   const update = async <K extends keyof WritingPreferences>(field: K, value: WritingPreferences[K]) => {
-    const paperField = field !== 'completion'
+    const paperField = field !== 'completion' && field !== 'completionDelayMs'
     if (!paperField) setSaving(field)
     setWriteFailure('')
     try {
-      const normalized = field === 'fontSize'
+      const normalized = field === 'completionDelayMs'
+        ? clampNumber(value, COMPLETION_DELAY.min, COMPLETION_DELAY.max, COMPLETION_DELAY.default)
+        : field === 'fontSize'
         ? clampNumber(value, PAPER_FONT_SIZE.min, PAPER_FONT_SIZE.max, PAPER_FONT_SIZE.default)
         : field === 'lineHeight'
           ? clampNumber(value, PAPER_LINE_HEIGHT.min, PAPER_LINE_HEIGHT.max, PAPER_LINE_HEIGHT.default)
@@ -331,10 +338,10 @@ export function WritingSettings({ scope, migrate }: {
               : field === 'paperWidth'
                 ? normalizePaperWidth(value)
                 : value
-      await scope.set(field, normalized as WritingPreferences[K])
+      if (await scope.set(field, normalized as WritingPreferences[K]) === false) throw new Error('Host refused settings write')
       if (!hasOwn(scope.getSnapshot().user, field)) throw new Error('write did not commit')
     } catch {
-      setWriteFailure(field === 'completion' ? t('writing.completionFailed') : t('writing.paperFailed'))
+      setWriteFailure(!paperField ? t('writing.completionFailed') : t('writing.paperFailed'))
     } finally {
       if (!paperField) setSaving(null)
     }
@@ -378,6 +385,20 @@ export function WritingSettings({ scope, migrate }: {
             <RadioGroup.Item value="pause">{t('writing.pauseHint')}</RadioGroup.Item>
           </Flex>
         </RadioGroup.Root>
+        {values.completion === 'pause' ? <SettingRow title={t('writing.completionDelay')}>
+          <Select
+            value={String(values.completionDelayMs ?? COMPLETION_DELAY.default)}
+            options={Array.from(new Set([500, 1000, 1500, 2000, 3000, 5000, values.completionDelayMs ?? COMPLETION_DELAY.default])).sort((a, b) => a - b).map(value => ({ value: String(value), label: t('writing.seconds', { seconds: value / 1000 }) }))}
+            disabled={saving !== null}
+            onChange={value => void update('completionDelayMs', Number(value))}
+            aria-label={t('writing.completionDelay')} />
+        </SettingRow> : null}
+        {values.completion === 'pause' ? <Text as="p" size="2" color="gray">{t('writing.delayHelp')}</Text> : null}
+        <Flex direction="column" align="start" gap="2" mt="3">
+          <Text size="2"><Kbd>{runtimeShortcutHint('Mod+Enter')}</Kbd> {t('writing.triggerCompletion')}</Text>
+          <Text size="2"><Kbd>Tab</Kbd> {t('writing.acceptCompletion')} · <Kbd>Esc</Kbd> {t('writing.dismissCompletion')}</Text>
+          {onOpenShortcuts ? <Button variant="ghost" onClick={onOpenShortcuts}>{t('writing.allShortcuts')}</Button> : null}
+        </Flex>
       </Card>
       <Card className="paper-typography settings-block">
         <header className="settings-block-head">
@@ -388,7 +409,7 @@ export function WritingSettings({ scope, migrate }: {
         <SettingRow title={t('writing.typewriter')}>
           <Flex align="center" gap="2">
             <Kbd>
-              Ctrl+Alt+T
+              {runtimeShortcutHint('Mod+Alt+T')}
             </Kbd>
             <Switch
               checked={values.typewriter}
@@ -400,7 +421,7 @@ export function WritingSettings({ scope, migrate }: {
         <SettingRow title={t('writing.focusParagraph')}>
           <Flex align="center" gap="2">
             <Kbd>
-              Ctrl+Alt+P
+              {runtimeShortcutHint('Mod+Alt+P')}
             </Kbd>
             <Switch
               checked={values.focusParagraph}

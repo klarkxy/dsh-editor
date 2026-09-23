@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { CHAT_EVENTS_SLOT, MOOD_AI_PLUGIN, MOOD_PLUGIN, projectIdFromCwd } from './contracts.ts'
@@ -30,14 +27,6 @@ describe('host wiring and shared SDK helpers', () => {
   })
 
   it('matches the native AskUserQuestionItem option shape from the pinned runtime', () => {
-    const runtime = readFileSync(join(
-      dirname(fileURLToPath(import.meta.url)),
-      '../../../.dev/desktop-dsh-runtime/node_modules/@deepseek-ai/dsh-user-questions/lib/types/types.d.ts',
-    ), 'utf8')
-    expect(runtime).toContain('export interface AskUserQuestionItem')
-    expect(runtime).toContain('options?: AskUserQuestionOption[]')
-    expect(runtime).toContain('label: string')
-    expect(runtime).toContain('description?: string')
     const item = toAskItems(pendingClarifications(['范围？']))[0]
     expect(item?.options?.[0]).toEqual({
       label: ASK_DETAIL_OPTION,

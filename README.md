@@ -29,7 +29,7 @@ Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / 
 
 ## 开发
 
-使用 Node `24.16.0`、pnpm `10.14.0`，内置 DSH 固定为 `0.1.5-rc.2`。
+使用 Node `24.16.0`、pnpm `10.14.0`，内置 DSH 固定为 `0.1.7-alpha.1`。
 
 ```sh
 pnpm install --frozen-lockfile

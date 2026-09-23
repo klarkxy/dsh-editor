@@ -213,8 +213,9 @@ export const componentStyles = `
   flex: 1 1 auto;
 }
 .radix-themes .path-fallback { min-width: 0; }
-.radix-themes .icon-button { display: grid; place-items: center; min-width: 32px; min-height: 32px; padding: 3px; border: 0; border-radius: var(--radius-2); background: transparent; cursor: pointer; color: var(--gray-10); }
+.radix-themes .icon-button { display: grid; place-items: center; min-width: 32px; min-height: 32px; padding: 3px; border: 0; border-radius: var(--radius-3); background: transparent; cursor: pointer; color: var(--gray-10); transition: transform 120ms ${EASE}, background-color 150ms ${EASE}, color 150ms ${EASE}; }
 .radix-themes .icon-button:hover { background: var(--gray-a3); color: var(--gray-12); }
+.radix-themes .icon-button:active { transform: scale(.9); }
 
 /* ── Sidebar / tree ─────────────────────────────────────── */
 .shell .sidebar {
@@ -272,6 +273,7 @@ export const componentStyles = `
 .shell .tree .tree-row[aria-current="page"]::before { opacity: 1; }
 .shell .tree .tree-row[data-drop="true"] { background: var(--accent-a4); }
 .shell .tree[data-drop="true"] { box-shadow: inset 0 0 0 1px var(--accent-a8); }
+.shell .tree .tree-children { animation: shell-panel-enter 160ms ${EASE}; }
 .shell .tree .tree-marker {
   display: inline-flex;
   align-items: center;
@@ -413,8 +415,10 @@ export const componentStyles = `
   box-shadow: 0 0 0 1px var(--gray-a6);
 }
 
-.shell > .assistant-launcher { position: fixed; right: var(--space-5); bottom: var(--space-5); z-index: 12; display: grid; place-items: center; width: var(--space-8); height: var(--space-8); padding: 0; border: 1px solid var(--gray-a6); border-radius: 999px; background: var(--color-panel-solid); color: var(--gray-12); box-shadow: var(--shadow-4); cursor: pointer; }
-.shell > .assistant-launcher:hover { background: var(--gray-3); }
+.shell > .assistant-launcher { position: fixed; right: var(--space-5); bottom: var(--space-5); z-index: 12; display: grid; place-items: center; width: var(--space-8); height: var(--space-8); padding: 0; border: 1px solid var(--gray-a6); border-radius: 999px; background: var(--color-panel-solid); color: var(--gray-12); box-shadow: var(--shadow-4); cursor: pointer; animation: shell-launcher-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; transition: transform 160ms ${EASE}, background-color 150ms ${EASE}, color 150ms ${EASE}, box-shadow 150ms ${EASE}; }
+.shell > .assistant-launcher:not(.capability-note):hover { background: var(--gray-3); transform: translateY(-2px); box-shadow: var(--shadow-5); }
+.shell > .assistant-launcher:not(.capability-note):active { transform: scale(.94); }
+@keyframes shell-launcher-in { from { opacity: 0; transform: scale(.5); } }
 .shell > .assistant-launcher .whale-mark { width: var(--space-4); height: var(--space-4); color: var(--accent-9); }
 .shell > .assistant-launcher.capability-note { width: auto; height: auto; max-width: min(360px, calc(100vw - 32px)); display: block; padding: var(--space-3); border-radius: var(--radius-3); }
 
@@ -478,7 +482,9 @@ export const componentStyles = `
 @keyframes ghost-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -80% 0; } }
 
 .radix-themes .editor-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: var(--space-8); padding: var(--space-2) var(--space-5); border-top: 1px solid var(--gray-a5); background: var(--paper-fill); color: var(--gray-11); flex-shrink: 0; }
-.radix-themes .editor-tools button { display: inline-flex; align-items: center; justify-content: center; min-height: var(--space-6); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-2); background: var(--gray-a3); color: var(--gray-12); cursor: pointer; font-size: var(--font-size-1); }
+.radix-themes .editor-tools button { display: inline-flex; align-items: center; justify-content: center; min-height: var(--space-6); padding: 0 var(--space-3); border: 1px solid transparent; border-radius: var(--radius-3); background: var(--gray-a3); color: var(--gray-12); cursor: pointer; font-size: var(--font-size-1); transition: transform 140ms ${EASE}, background-color 150ms ${EASE}, border-color 150ms ${EASE}, box-shadow 150ms ${EASE}; }
+.radix-themes .editor-tools button:hover:not(:disabled) { background: var(--gray-a4); border-color: var(--gray-a5); box-shadow: var(--shadow-2); transform: translateY(-1px); }
+.radix-themes .editor-tools button:active:not(:disabled) { transform: scale(.97); }
 .radix-themes .editor-ghost-tip { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-4); color: var(--gray-11); font-size: var(--font-size-1); }
 .radix-themes .editor-tools .ghost-actions { display: flex; gap: var(--space-1); align-items: center; padding: 0 var(--space-1); }
 .radix-themes .editor-tools .ghost-actions > small { font-size: var(--font-size-1); color: var(--gray-11); }
@@ -510,32 +516,63 @@ export const componentStyles = `
 }
 .shell .chat > * { min-width: 0; max-width: 100%; }
 .shell .chat[hidden] { display: none !important; pointer-events: none; }
-.shell .chat.chat-overlay:not([hidden]) {
+/* 覆盖层抽屉:overlay class 与可见性解耦(root.tsx 的 overlay prop 只看断点),
+   定位属性无条件生效;hidden 时保持渲染(覆盖 .chat[hidden] 的 display:none),
+   visibility+transform 过渡让开/关两个方向都有动画;reduced-motion 由末尾全局块归零。
+   抽屉是悬浮圆角面板:四边留白 8px,大圆角 + 深阴影浮在遮罩上。 */
+.shell .chat.chat-overlay {
   position: fixed;
-  top: var(--topbar-h);
-  right: 0;
-  bottom: 0;
-  width: min(24rem, 100vw);
-  max-width: 100vw;
+  top: calc(var(--topbar-h) + 8px);
+  right: 8px;
+  bottom: 8px;
+  width: min(24rem, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
   z-index: 36;
   display: grid;
+  border-radius: var(--radius-5);
+  overflow: hidden;
   box-shadow: var(--shadow-5);
+  transition: transform 240ms ${EASE}, opacity 240ms ${EASE}, visibility 240ms ${EASE};
 }
-.shell > .chat-overlay-dismiss {
+.shell .chat.chat-overlay[hidden] { display: grid !important; visibility: hidden; opacity: 0; transform: translateX(32px); }
+/* ghost 变体的 Radix Button 是 height: fit-content,空内容的遮罩会塌成 0 高,
+   必须显式 height: auto 让 inset 拉伸生效。 */
+.shell > .chat-overlay-dismiss,
+.shell > .side-overlay-dismiss {
   position: fixed;
   inset: var(--topbar-h) 0 0 0;
   z-index: 35;
+  height: auto;
   margin: 0;
   padding: 0;
   border: 0;
   background: var(--gray-a6);
   cursor: pointer;
+  transition: opacity 200ms ${EASE}, visibility 200ms ${EASE};
 }
+.shell > .chat-overlay-dismiss[hidden],
+.shell > .side-overlay-dismiss[hidden] { visibility: hidden; opacity: 0; }
+/* 窄窗(≤760px)侧栏覆盖层:与助手抽屉同一词汇,从左进的悬浮圆角面板。 */
+.shell > .sidebar-overlay {
+  position: fixed;
+  left: 8px;
+  top: calc(var(--topbar-h) + 8px);
+  bottom: 8px;
+  width: min(20rem, calc(100vw - 56px));
+  z-index: 36;
+  overflow: hidden;
+  border-radius: var(--radius-5);
+  background: var(--gray-2);
+  box-shadow: var(--shadow-5);
+  transition: transform 240ms ${EASE}, opacity 240ms ${EASE}, visibility 240ms ${EASE};
+}
+.shell > .sidebar-overlay[hidden] { display: block !important; visibility: hidden; opacity: 0; transform: translateX(-32px); }
 .shell .chat-header {
   min-height: var(--space-8);
   border-bottom: 1px solid var(--gray-a5);
 }
 .shell .chat-history { min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
+.shell .chat-history .rt-ScrollAreaViewport { overscroll-behavior: contain; }
 .shell .conversation-select .select { display: block; min-width: 0; max-width: 100%; }
 .radix-themes .chat-row { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .shell .proposal-card pre { max-height: 12rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -718,6 +755,7 @@ export const componentStyles = `
 .shell .chat-markdown th, .shell .chat-markdown td { border: 1px solid var(--gray-5); padding: var(--space-1) var(--space-2); }
 
 .radix-themes .workspace-checking { grid-column: 1 / -1; grid-row: 1 / -1; }
+.shell.no-session > .chrome + .workspace-checking { grid-row: 2; }
 
 .radix-themes .file-dialog { max-width: min(520px, calc(100vw - 32px)); }
 .radix-themes .confirm-dialog { z-index: 56; }
@@ -819,7 +857,9 @@ export const componentStyles = `
   width: 100%;
   height: 100%;
   text-align: start;
+  transition: box-shadow 220ms ${EASE}, border-color 200ms ${EASE};
 }
+.radix-themes .home-entry-card:hover { box-shadow: var(--shadow-4); }
 .radix-themes .app-mascot {
   display: block;
   height: auto;
@@ -845,7 +885,7 @@ export const componentStyles = `
 .palette-overlay { position: fixed; z-index: 40; inset: 0; background: var(--gray-a6); }
 .palette-overlay[data-state="open"] { animation: palette-overlay-in 150ms ${EASE}; }
 .palette-overlay[data-state="closed"] { animation: palette-overlay-out 150ms ${EASE}; }
-.palette-content { position: fixed; z-index: 41; top: 20vh; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); max-height: min(540px, 64dvh); display: flex; flex-direction: column; padding: 0; border: 1px solid var(--gray-a6); border-radius: var(--radius-4); background: var(--color-panel-solid); box-shadow: var(--shadow-5); overflow: hidden; }
+.palette-content { position: fixed; z-index: 41; top: 20vh; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); max-height: min(540px, 64dvh); display: flex; flex-direction: column; padding: 0; border: 1px solid var(--gray-a6); border-radius: var(--radius-5); background: var(--color-panel-solid); box-shadow: var(--shadow-5); overflow: hidden; }
 .palette-content[data-state="open"] { animation: palette-content-in 250ms ${EASE}; }
 .palette-content[data-state="closed"] { animation: palette-content-out 150ms ${EASE} forwards; }
 @keyframes palette-overlay-in { from { opacity: 0; } to { opacity: 1; } }
@@ -947,6 +987,8 @@ export const componentStyles = `
 .radix-themes .settings-content { min-height: 0; overflow: visible; padding: var(--space-5); }
 .radix-themes .settings-content[hidden] { display: none; }
 .radix-themes .settings-content.is-active { position: relative; z-index: 1; display: block; }
+.radix-themes .settings-content.is-active .settings-page { animation: shell-settings-page-in 200ms ${EASE}; }
+@keyframes shell-settings-page-in { from { opacity: 0; transform: translateY(8px); } }
 .radix-themes .settings-page > :is(.settings-general,.models-page,.usage-page) { display: grid; gap: var(--space-5); }
 .radix-themes .settings-dialog .settings-block { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
 .radix-themes .settings-dialog .settings-block.rt-Card { --card-padding: 0px; --card-border-width: 0px; }
@@ -1063,7 +1105,8 @@ export const componentStyles = `
 
 .radix-themes .about-release-body { white-space: pre-wrap; max-height: 220px; overflow: auto; margin-block: var(--space-2) var(--space-3); }
 .radix-themes .preset-badge { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-a3); color: var(--accent-11); font: 500 var(--font-size-1)/1.4 var(--default-font-family); }
-.radix-themes .update-toast { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 40; }
+.radix-themes .update-toast { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 40; animation: shell-toast-in 260ms ${EASE}; }
+@keyframes shell-toast-in { from { opacity: 0; transform: translateY(12px) scale(.98); } }
 
 .radix-themes .usage-chart-plot { width: 100%; height: 200px; min-height: 160px; max-height: 220px; }
 .usage-chart-tooltip { max-width: min(280px, calc(100vw - 32px)); white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
@@ -1085,8 +1128,12 @@ export const componentStyles = `
 }
 @media (max-width: 760px) {
   .radix-themes .editor { --paper-pad-inline: 22px; --paper-pad-block: 28px; }
-  .shell.assistant-overlay #assistant,
-  .shell.assistant-overlay .chat-overlay-dismiss { display: none !important; }
+  /* 窄窗覆盖层收窄,留出可点击关闭的遮罩余量。 */
+  .shell .chat.chat-overlay { width: min(24rem, calc(100vw - 56px)); }
+  /* 顶栏让位:作品菜单收成图标,保住布局开关/窗口控制的命中区域。 */
+  .shell .workspace-chrome,
+  .shell > .chrome .workspace-menu-trigger { min-width: 0 !important; }
+  .shell > .chrome .workspace-menu-trigger > .rt-Text { display: none; }
 }
 
 /* ── 活动反馈(ui/activity.tsx + 面板共享类) ─────────────── */
@@ -1130,6 +1177,8 @@ export const componentStyles = `
   .palette-overlay, .palette-overlay::before, .palette-overlay::after,
   .palette-content, .palette-content *, .palette-content *::before, .palette-content *::after,
   .select-list, .select-list *, .select-list *::before, .select-list *::after,
+  .radix-themes [role="dialog"], .radix-themes [role="dialog"] *, .radix-themes [role="dialog"] *::before, .radix-themes [role="dialog"] *::after,
+  .radix-themes [role="alertdialog"], .radix-themes [role="alertdialog"] *, .radix-themes [role="alertdialog"] *::before, .radix-themes [role="alertdialog"] *::after,
   [data-radix-popper-content-wrapper], [data-radix-popper-content-wrapper] * {
     scroll-behavior: auto !important;
     transition: none !important;

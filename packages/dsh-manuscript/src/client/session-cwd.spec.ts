@@ -1,22 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { activeWorkspaceFromSessionList, cwdFromSessionList } from './session-cwd.ts'
 
-describe('cwdFromSessionList', () => {
-  it('binds cwd from snapshot.current, not a root sessionId prop', () => {
-    const snap = {
-      current: 'sess-2',
-      byId: {
-        'sess-1': { cwd: 'D:/other' },
-        'sess-2': { cwd: 'D:/novel' },
-      },
-    }
-    expect(cwdFromSessionList(snap)).toBe('D:/novel')
-    expect(activeWorkspaceFromSessionList(snap)).toEqual({ sessionId: 'sess-2', cwd: 'D:/novel' })
+describe('selected workspace', () => {
+  it('uses the navigation selection and the catalog cwd', () => {
+    const snap = { byId: { a: { cwd: 'D:/other' }, b: { cwd: 'D:/novel' } } }
+    expect(cwdFromSessionList(snap, 'b')).toBe('D:/novel')
+    expect(activeWorkspaceFromSessionList(snap, 'b')).toEqual({ sessionId: 'b', cwd: 'D:/novel' })
   })
-
-  it('returns empty when nothing is current', () => {
+  it('does not invent a selection from catalog membership', () => {
     expect(cwdFromSessionList(undefined)).toBe('')
     expect(cwdFromSessionList({ byId: { a: { cwd: 'D:/x' } } })).toBe('')
-    expect(cwdFromSessionList({ current: 'missing', byId: {} })).toBe('')
+    expect(cwdFromSessionList({ byId: {} }, 'missing')).toBe('')
   })
 })

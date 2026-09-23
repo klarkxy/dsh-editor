@@ -8,6 +8,6 @@
 
 安装后默认启用，不会永久停用宿主自带的标题插件。启用期间占用 `sessionTitle` 槽位；关闭时若仍由本包持有，且被让出的加载项身份未变，则交还。
 
-需要 Node.js ≥22 与 DSH `0.1.5-rc.2`。标题写入宿主 `sessionTitle`。生成依赖 `@klarkxy/dsh-ai-services`。
+需要 Node.js ≥22 与 DSH `0.1.7-alpha.1`。标题写入宿主 `sessionTitle`。生成依赖 `@klarkxy/dsh-ai-services`。
 
 许可证为 [SATA 2.1](../LICENSE)，保留原插件出处。

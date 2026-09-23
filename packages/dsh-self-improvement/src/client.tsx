@@ -13,7 +13,7 @@ import { unwrap } from './rpc-result.ts'
 import { exportRevocationCopy, skillExportStateLabel } from './skills.ts'
 
 export const name = 'dsh-self-improvement-client'
-export const inject = ['slots', 'connection', 'sessions', 'locale'] as const
+export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const
 export { unwrap }
 export {
   beginReviewRequest, createReviewGeneration, disposeReviewRequest, exportSkillIfCurrent,

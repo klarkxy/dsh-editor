@@ -6,7 +6,7 @@ import { AI_RPC_CHANNEL } from './contracts.ts'
 import type { MemoryService, TaskContract } from './index.ts'
 import type { AiServicesRuntime } from './service.ts'
 
-function context() {
+function context(services = new Map<string, unknown>()) {
   const policy = new Map()
   const receipts = new Map()
   const table = (map: Map<string, unknown>) => ({
@@ -32,7 +32,7 @@ function context() {
     },
     connection: { requestRejection: () => undefined },
     webServer: { register: vi.fn(() => () => {}) },
-    get: () => undefined,
+    get: (name: string) => services.get(name),
     on,
     provide: vi.fn((_name: string, value: AiServicesRuntime) => { provided = value }),
     effect: (fn: () => unknown) => { effects.push(fn()) },
@@ -76,4 +76,26 @@ describe('plugin apply is inert', () => {
     await expect((async () => { for await (const _chunk of gen) { /* drain */ } })()).rejects.toThrow('sync-next')
     expect(spy.mock.calls).toEqual([['stub', 1], ['stub', -1]])
   })
+})
+
+
+it('reads the host chat default lazily without requiring Editor or Model Center', async () => {
+  let selected = { provider: 'host', model: 'chat' }
+  const services = new Map<string, unknown>([['agentDefaultModel', { currentSelection: () => selected }]])
+  const host = context(services)
+  await apply(host.ctx)
+  const ai = host.provided!
+  ai.activate('plugin').registerPurpose({ id: 'creative', label: '创作', defaultTarget: { kind: 'role', role: 'fantasy' } })
+  expect(await ai.resolve('creative')).toMatchObject(selected)
+  selected = { provider: 'host', model: 'chat-next' }
+  expect(await ai.resolve('creative')).toMatchObject(selected)
+  const { revision, ...policy } = ai.getPolicy()
+  await ai.updatePolicy({ ...policy, roles: { fantasy: { provider: 'host', model: 'fable' } } }, revision)
+  expect(await ai.resolve('creative')).toMatchObject(selected)
+  services.set('modelCenter', {})
+  expect(await ai.resolve('creative')).toMatchObject({ model: 'fable' })
+  services.delete('modelCenter')
+  expect(await ai.resolve('creative')).toMatchObject(selected)
+  expect(host.stream).not.toHaveBeenCalled()
+  await ai.dispose()
 })

@@ -6,6 +6,7 @@ import type {
   AuxiliaryResult,
   EvidenceRef,
   PurposeSpec,
+  ProducerMessageSource,
   RpcResult,
   TaskCheckpoint,
   TaskContract,
@@ -19,6 +20,7 @@ export type {
   AuxiliaryResult,
   EvidenceRef,
   PurposeSpec,
+  ProducerMessageSource,
   RpcResult,
   TaskCheckpoint,
   TaskContract,
@@ -29,6 +31,7 @@ export { CHAT_EVENTS_SLOT } from '@klarkxy/dsh-ai-services/contracts'
 
 /** DSH message source identity and aiServices.activate() plugin id. */
 export const RECAP_PLUGIN = '@klarkxy/dsh-recap'
+export const RECAP_SOURCE_KIND = 'plugin:@klarkxy/dsh-recap' as const
 export const RECAP_RPC_CHANNEL = '/dsh-recap'
 export const RECAP_DISPLAY_PURPOSE = 'recap.display'
 export const RECAP_CHECKPOINT_PURPOSE = 'recap.checkpoint'

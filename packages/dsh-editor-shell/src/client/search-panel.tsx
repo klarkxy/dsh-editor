@@ -137,6 +137,7 @@ function SearchPanel(props: {
     setOutcome(null)
     setConfirming(false)
     setNote('')
+    setNoteAlert(false)
   }
   const setQuery = (value: string) => {
     if (props.onQueryChange) props.onQueryChange(value)
@@ -152,6 +153,7 @@ function SearchPanel(props: {
   const [result, setResult] = useState<SearchResponse | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const [noteAlert, setNoteAlert] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [outcome, setOutcome] = useState<ReplaceOutcome | null>(null)
   const input = useRef<HTMLInputElement | null>(null)
@@ -164,6 +166,7 @@ function SearchPanel(props: {
     setReplacement('')
     setResult(null)
     setNote('')
+    setNoteAlert(false)
     setBusy(false)
     setConfirming(false)
     setOutcome(null)
@@ -180,6 +183,7 @@ function SearchPanel(props: {
       setOutcome(null)
       setConfirming(false)
       setNote(t('search.emptyQuery'))
+      setNoteAlert(true)
       return
     }
     if (!options?.keepOutcome) setOutcome(null)
@@ -187,6 +191,7 @@ function SearchPanel(props: {
     const ticket = requestGate.begin(requestScope)
     setBusy(true)
     setNote('')
+    setNoteAlert(false)
     const searched = await safeRpcCall<SearchResponse>(() => props.ctx.connection.rpc.call('/manuscript', 'search.text', searchTextRequest({
       sessionId: props.sessionId,
       query: value,
@@ -195,10 +200,11 @@ function SearchPanel(props: {
     })))
     if (!requestGate.isCurrent(ticket)) return
     setBusy(false)
-    if (!searched.ok) { setResult(null); setNote(errorMessage(searched)); return }
+    if (!searched.ok) { setResult(null); setNote(errorMessage(searched)); setNoteAlert(true); return }
     const accepted = scopeSearchResults(acceptSearchResults(searched.value), nextScope, props.activePath)
     setResult(accepted)
     setNote(accepted.results.length ? '' : t('search.noMatch'))
+    setNoteAlert(false)
   }
 
   useEffect(() => {
@@ -213,6 +219,7 @@ function SearchPanel(props: {
     if (!replacePlan || !replaceEnabled) return
     if (replaceBlockedByDirty({ activePath: props.activePath, activeDirty: props.activeDirty, paths: replacePlan.files.map((file) => file.path) })) {
       setNote(t('search.replaceSaveFirst'))
+      setNoteAlert(true)
       return
     }
     setOutcome(null)
@@ -222,12 +229,14 @@ function SearchPanel(props: {
   const runReplace = async (plan: ReplacePlan) => {
     if (replaceBlockedByDirty({ activePath: props.activePath, activeDirty: props.activeDirty, paths: plan.files.map((file) => file.path) })) {
       setNote(t('search.replaceSaveFirst'))
+      setNoteAlert(true)
       setConfirming(false)
       return
     }
     const ticket = requestGate.begin(requestScope)
     setBusy(true)
     setNote('')
+    setNoteAlert(false)
     setConfirming(false)
     const needle = query.trim()
     const stale = [...plan.stale]
@@ -415,7 +424,7 @@ function SearchPanel(props: {
               {t('search.saveBeforeJump')}
             </Callout.Text>
           </Callout.Root> : null}
-          {note ? <Text as="p" size="1" color="gray" role="status">
+          {note ? <Text as="p" size="1" color="gray" role={noteAlert ? 'alert' : 'status'}>
             {note}
           </Text> : null}
           {grouped.length ? <ScrollArea type="auto" scrollbars="vertical" style={{ maxHeight: 240 }}>

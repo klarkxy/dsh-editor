@@ -1,9 +1,9 @@
-import type { EvidenceRef, TaskCheckpoint, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
+import type { EvidenceRef, ProducerMessageSource, TaskCheckpoint, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
 import {
   MAX_CHECKPOINT_CHARS,
   MEANINGFUL_TOOL_DELTA,
   RECAP_CHECKPOINT_PURPOSE,
-  RECAP_PLUGIN,
+  RECAP_PLUGIN, RECAP_SOURCE_KIND,
   type RecapFacts,
   type RecapToolFact,
 } from './contracts.ts'
@@ -122,7 +122,7 @@ export function shouldRunSemanticCheckpoint(enabled: boolean, facts: RecapFacts,
 }
 
 export function checkpointInjectPayload(checkpoint: TaskCheckpoint): {
-  source: { kind: 'plugin'; plugin: string; form: 'snapshot'; sections: Array<{ name: string; text: string }> }
+  source: ProducerMessageSource & { kind: typeof RECAP_SOURCE_KIND; plugin: typeof RECAP_PLUGIN; form: 'snapshot'; sections: Array<{ name: string; text: string }> }
   content: Array<{ type: 'text'; text: string }>
 } {
   const lines = [
@@ -133,7 +133,7 @@ export function checkpointInjectPayload(checkpoint: TaskCheckpoint): {
   ].filter(Boolean)
   const text = lines.join('\n').slice(0, MAX_CHECKPOINT_CHARS)
   return {
-    source: { kind: 'plugin', plugin: RECAP_PLUGIN, form: 'snapshot', sections: [{ name: 'checkpoint', text }] },
+    source: { kind: RECAP_SOURCE_KIND, plugin: RECAP_PLUGIN, form: 'snapshot', sections: [{ name: 'checkpoint', text }] },
     content: [{ type: 'text', text }],
   }
 }

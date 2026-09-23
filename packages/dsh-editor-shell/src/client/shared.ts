@@ -50,7 +50,7 @@ export interface SettingsDescribeFace {
 }
 
 export interface SettingsScopeBinder {
-  bind<T>(spec: { namespace: string; decode?(value: unknown): T | undefined }): CompatSettingsScope<T>
+  get<T>(entryId: string): CompatSettingsScope<T>
   describe(): SettingsDescribeFace
 }
 
@@ -72,7 +72,7 @@ export type ShellContext = ClientContext & WritingSettingsSlots & {
   uiWorkspace: EditorUiWorkspace
   uiConversation?: EditorUiConversation
   uiSession?: EditorUiSession
-  settingsScope: SettingsScopeBinder
+  configForms: SettingsScopeBinder
   settingsSchema: SettingsSchemaService
 }
 

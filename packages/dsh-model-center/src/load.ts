@@ -43,7 +43,7 @@ export interface LoadModelCenterInput {
   }
   credentials?: { describe(refs: string[]): Promise<unknown> }
   session?: { modelCatalog(): Promise<unknown> }
-  settingsScope?: { describe?: () => { getSnapshot?: () => unknown; ensure?: () => Promise<unknown> } }
+  configForms?: { describe?: () => { getSnapshot?: () => unknown; ensure?: () => Promise<unknown> } }
   settingsSchema?: SettingsSchemaWalk
   signal?: AbortSignal
 }
@@ -101,7 +101,7 @@ export async function loadModelCenter(
     const live = asList<LiveProvider>(liveResult)
 
     let namespaces = new Map<string, unknown>()
-    const described = input.settingsScope?.describe?.()
+    const described = input.configForms?.describe?.()
     if (described?.ensure) {
       try { await described.ensure() }
       catch { /* describe stays empty */ }
@@ -178,7 +178,7 @@ export async function savePolicyUpdate(
   try {
     const raw = await call(AI_RPC_CHANNEL, 'update', parsed.value, signal)
     if (!isCurrent()) return { ok: false, reason: 'stale', error: '' }
-    const policy = parseAiPolicy(statusValue(raw))
+    const policy = parseAiPolicy(unwrapRpc(raw))
     if (!policy) return { ok: false, reason: 'invalid', error: 'AI 策略接口与约定不一致。' }
     return { ok: true, policy }
   } catch (error) {

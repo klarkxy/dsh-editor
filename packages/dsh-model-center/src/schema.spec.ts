@@ -73,3 +73,13 @@ describe('policy schema', () => {
     expect(parseModelTarget({ kind: 'role', role: 'session' })).toBeUndefined()
   })
 })
+
+it('round-trips fantasy bindings and capability targets without dropping their effort', () => {
+  const fantasy = { provider: 'custom', model: 'writer', reasoningEffort: 'high' }
+  const parsed = parsePolicyUpdate({ expectedRevision: 1, policy: { roles: { fantasy }, purposes: { creative: { kind: 'role', role: 'fantasy' } }, limits } })
+  expect(parsed.ok).toBe(true)
+  if (parsed.ok) {
+    expect(parsed.value.policy.roles.fantasy).toEqual(fantasy)
+    expect(parsed.value.policy.purposes.creative).toEqual({ kind: 'role', role: 'fantasy' })
+  }
+})

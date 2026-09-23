@@ -46,8 +46,8 @@ function build(target) { run('pnpm', ['--filter', target.name, 'run', '--if-pres
 function pack(target, manifest) {
   run('pnpm', ['--filter', target.name, 'pack', '--pack-destination', output])
   const archive = resolve(output, `${target.name.replace(/^@/, '').replaceAll('/', '-')}-${manifest.version}.tgz`)
-  const names = run('tar', ['-tf', archive]).trim().split(/\r?\n/)
-  const entries = new Map(names.map(name => [name, run('tar', ['-xOf', archive, name], { encoding: 'buffer' })]))
+  const names = run('tar', ['--force-local', '-tf', archive]).trim().split(/\r?\n/)
+  const entries = new Map(names.map(name => [name, run('tar', ['--force-local', '-xOf', archive, name], { encoding: 'buffer' })]))
   const packed = JSON.parse(entries.get('package/package.json').toString())
   if (packed.name !== target.name || packed.version !== manifest.version) throw new Error('Packed package identity mismatch')
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {

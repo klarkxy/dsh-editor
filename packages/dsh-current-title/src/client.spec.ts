@@ -32,7 +32,7 @@ describe('current title UI', () => {
   it('injects native session and locale and keeps regenerate labels', () => {
     expect(clientSource).toContain("from '@klarkxy/dsh-ai-services/client-utils'")
     expect(clientSource).toContain('type Client = NativeSurfaceClient &')
-    expect(clientSource).toContain("export const inject = ['slots', 'connection', 'sessions', 'locale'] as const")
+    expect(clientSource).toContain("export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const")
     expect(clientSource).toContain('const seat = useNativeSeat(props.client, props.owner)')
     expect(clientSource).toContain('useFeatureRefresh(')
     expect(clientSource).toContain('(props: unknown) => <TitleSettings client={client} marker={marker} owner={props} />')
