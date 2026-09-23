@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-web-search-manager",
   "version": "0.1.4",
-  "description": "Opt-in web search settings and managed provider lifecycle over DSH ctx.web",
+  "description": "Manage web search providers and public-page fetching in DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -97,8 +97,10 @@
     "dsh-plugin",
     "deepseek-harness",
     "web-search",
-    "tavily",
-    "search-provider"
+    "search-provider",
+    "page-fetching",
+    "duckduckgo",
+    "tavily"
   ],
   "repository": {
     "type": "git",

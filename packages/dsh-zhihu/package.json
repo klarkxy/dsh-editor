@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-zhihu",
   "version": "0.1.4",
-  "description": "Independent Zhihu services, tools and UI for DSH",
+  "description": "Zhihu search, agent tools, knowledge bases, and usage tracking for DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -114,8 +114,9 @@
     "dsh-plugin",
     "deepseek-harness",
     "zhihu",
-    "search",
-    "knowledge-base"
+    "zhihu-search",
+    "knowledge-base",
+    "web-search"
   ],
   "repository": {
     "type": "git",

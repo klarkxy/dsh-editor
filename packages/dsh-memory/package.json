@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-memory",
   "version": "0.1.0",
-  "description": "Memory and optional Dream for long-term preferences, project facts, decisions, and lessons",
+  "description": "Long-term memory and idle consolidation for DeepSeek Harness, with scoped preferences, facts, decisions, and lessons.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -84,6 +84,7 @@
     "dsh-plugin",
     "deepseek-harness",
     "memory",
+    "long-term-memory",
     "dream"
   ],
   "repository": {

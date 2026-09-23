@@ -2,7 +2,7 @@
 
 默认启用的模型中心。Editor 在「设置 → 模型」中先显示模型配置，再显示供应商管理；独立 DSH 使用「模型中心」设置页。
 
-[English](../README.md)
+[English](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-model-center/README.md)
 
 需要 Node.js ≥22、DSH 0.1.7-alpha.1，以及已加载的 @klarkxy/dsh-ai-services。供应商和凭据仍由 DSH 原生设置管理。
 

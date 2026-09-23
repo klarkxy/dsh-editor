@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-current-title",
   "version": "0.1.0",
-  "description": "Session titles from the latest human task, using DSH native title storage",
+  "description": "Update DeepSeek Harness session titles from the latest human task while preserving manual names.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -82,7 +82,8 @@
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
-    "session-title"
+    "session-title",
+    "title-generation"
   ],
   "repository": {
     "type": "git",

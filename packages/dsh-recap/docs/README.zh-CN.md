@@ -2,7 +2,7 @@
 
 默认启用的回顾与检查点插件。
 
-[English](../README.md)
+[English](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-recap/README.md)
 
 需要 Node.js ≥22、DSH 0.1.7-alpha.1，以及已加载的 @klarkxy/dsh-ai-services。Editor 已预装；独立 DSH 需要显式加载共享服务和此插件。
 

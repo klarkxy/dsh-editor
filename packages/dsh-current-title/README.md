@@ -22,6 +22,6 @@ Only recent real human `user/message` events are used. Plugin auxiliary messages
 
 ## License
 
-[SATA License 2.1](LICENSE), including attribution for the original `dsh-plugins` sources.
+[SATA License 2.1](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-current-title/LICENSE), including attribution for the original `dsh-plugins` sources.
 
 The Editor preinstalls this feature enabled. In the Editor, use Settings → Plugins to switch it without restarting. Standalone DSH must load `@klarkxy/dsh-ai-services` before this package; installation or removal may require a restart when the host asks for one.

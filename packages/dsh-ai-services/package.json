@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-ai-services",
   "version": "0.1.0",
-  "description": "Inert shared Cordis service for purpose routing, bounded auxiliary model calls, and usage receipts",
+  "description": "Shared model routing, bounded auxiliary calls, and usage receipts for DeepSeek Harness plugins.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -85,7 +85,9 @@
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
-    "ai-services"
+    "ai-services",
+    "model-routing",
+    "usage-receipts"
   ],
   "repository": {
     "type": "git",

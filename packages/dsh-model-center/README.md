@@ -1,10 +1,10 @@
 # @klarkxy/dsh-model-center
 
-[简体中文](./docs/README.zh-CN.md)
+[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-model-center/docs/README.zh-CN.md)
 
 Model Center for DSH. Starts enabled and remains independently switchable.
 
-[License](./LICENSE)
+[License](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-model-center/LICENSE)
 
 ## Install
 

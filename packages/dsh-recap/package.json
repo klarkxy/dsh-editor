@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-recap",
   "version": "0.1.0",
-  "description": "Folded recap cards (on when the plugin is enabled) and default-on bounded agent checkpoints for DSH",
+  "description": "Generate session recaps and inject bounded agent checkpoints in DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -54,7 +54,7 @@
       {
         "id": "recap",
         "title": "回顾与检查点",
-        "description": "折叠回顾卡片，以及可选的任务检查点",
+        "description": "后台回顾，以及可选的任务检查点",
         "feature": "recap",
         "service": "recap"
       }
@@ -87,7 +87,8 @@
     "dsh-plugin",
     "deepseek-harness",
     "recap",
-    "checkpoint"
+    "agent-checkpoint",
+    "session-summary"
   ],
   "repository": {
     "type": "git",

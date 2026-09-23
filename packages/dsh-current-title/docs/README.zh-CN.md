@@ -10,4 +10,4 @@
 
 需要 Node.js ≥22 与 DSH `0.1.7-alpha.1`。标题写入宿主 `sessionTitle`。生成依赖 `@klarkxy/dsh-ai-services`。
 
-许可证为 [SATA 2.1](../LICENSE)，保留原插件出处。
+许可证为 [SATA 2.1](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-current-title/LICENSE)，保留原插件出处。

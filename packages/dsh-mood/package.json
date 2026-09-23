@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-mood",
   "version": "0.1.0",
-  "description": "Requirements clarification at the DSH Host pre-step boundary",
+  "description": "Clarify ambiguous requests before agent execution in DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -84,7 +84,8 @@
     "dsh-plugin",
     "deepseek-harness",
     "mood",
-    "requirements"
+    "requirements-clarification",
+    "task-contract"
   ],
   "repository": {
     "type": "git",

@@ -11,10 +11,10 @@
 | [dsh-ai-services](dsh-ai-services/docs/README.zh-CN.md) | 共享的模型角色、调用限额、取消与用量记录；无独立功能开关；npm 包名 @klarkxy/dsh-ai-services |
 | [dsh-current-title](dsh-current-title/docs/README.zh-CN.md) | 按当前任务更新会话标题，保留手动命名；npm 包名 @klarkxy/dsh-current-title |
 | [dsh-mood](dsh-mood/docs/README.zh-CN.md) | 需求澄清与可修订的任务约定；npm 包名 @klarkxy/dsh-mood |
-| [dsh-recap](dsh-recap/docs/README.zh-CN.md) | 作者回顾卡与独立开关的 Agent 检查点；npm 包名 @klarkxy/dsh-recap |
+| [dsh-recap](dsh-recap/docs/README.zh-CN.md) | 后台回顾与独立开关的 Agent 检查点；npm 包名 @klarkxy/dsh-recap |
 | [dsh-memory](dsh-memory/docs/README.zh-CN.md) | 偏好、项目事实与决策；内含 Dream 整理；npm 包名 @klarkxy/dsh-memory |
-| [dsh-self-improvement](dsh-self-improvement/docs/README.zh-CN.md) | 经验候选审核与 Skill 草稿导出；复用 Memory；npm 包名 @klarkxy/dsh-self-improvement |
-| [dsh-model-center](dsh-model-center/docs/README.zh-CN.md) | 供应商与普通／弱／强模型、各用途配置；npm 包名 @klarkxy/dsh-model-center |
+| [dsh-self-improvement](dsh-self-improvement/docs/README.zh-CN.md) | 教训自动生效、可审计撤回与 Skill 草稿导出；复用 Memory；npm 包名 @klarkxy/dsh-self-improvement |
+| [dsh-model-center](dsh-model-center/docs/README.zh-CN.md) | 供应商、快速／对话／思考／幻想档位与用途配置；npm 包名 @klarkxy/dsh-model-center |
 | [dsh-editor-shell](dsh-editor-shell/README.md) | 桌面写作界面 |
 | [dsh-editor-workbench](dsh-editor-workbench/README.md) | 作品管理与写作提案 |
 | [dsh-editor-plugins](dsh-editor-plugins/README.md) | 插件设置与社区安装 |

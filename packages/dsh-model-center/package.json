@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-model-center",
   "version": "0.1.0",
-  "description": "Model Center for provider status and purpose model routing",
+  "description": "Configure model tiers, provider connections, and AI call limits for DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -78,7 +78,9 @@
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
-    "model-center"
+    "model-center",
+    "model-routing",
+    "model-settings"
   ],
   "repository": {
     "type": "git",

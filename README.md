@@ -20,10 +20,17 @@ Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / 
 | --- | --- | --- |
 | [@klarkxy/dsh-zhihu](packages/dsh-zhihu/docs/README.zh-CN.md) | 知乎搜索与知识库 | npm |
 | [@klarkxy/dsh-web-search-manager](packages/dsh-web-search-manager/docs/README.zh-CN.md) | 网络搜索与网页读取 | npm |
+| [@klarkxy/dsh-ai-services](packages/dsh-ai-services/docs/README.zh-CN.md) | 插件共用的模型路由与用量服务 | npm |
+| [@klarkxy/dsh-current-title](packages/dsh-current-title/docs/README.zh-CN.md) | 按当前任务更新会话标题 | npm |
+| [@klarkxy/dsh-mood](packages/dsh-mood/docs/README.zh-CN.md) | 需求澄清 | npm |
+| [@klarkxy/dsh-recap](packages/dsh-recap/docs/README.zh-CN.md) | 后台回顾与 Agent 检查点 | npm |
+| [@klarkxy/dsh-memory](packages/dsh-memory/docs/README.zh-CN.md) | 长期记忆与闲时整理 | npm |
+| [@klarkxy/dsh-self-improvement](packages/dsh-self-improvement/docs/README.zh-CN.md) | 教训摘录与技能草稿导出 | npm |
+| [@klarkxy/dsh-model-center](packages/dsh-model-center/docs/README.zh-CN.md) | 模型档位与用途配置 | npm |
 | [dsh-manuscript](packages/dsh-manuscript/README.md) | 稿纸编辑 | 本地 tarball，尚未发布到 npm |
 | [dsh-proofread](packages/dsh-proofread/README.md) | 中文文本校对 | 本地 tarball，尚未发布到 npm |
 
-新增六个 AI 功能：当前标题、需求澄清、回顾、长期记忆、自我改进、模型中心；均预装并默认启用，仍可分别停用。Dream、Agent 检查点等额外自动行为保留独立开关。桌面版预装；独立 DSH 可按各包说明从 npm 安装，见 [使用与实现说明](docs/ai-plugins-implementation.md)。
+六个 AI 功能均随桌面版预装并默认启用，可分别停用。Dream、Agent 检查点等自动行为有独立开关。独立 DSH 可按各包说明从 npm 安装，见 [使用与实现说明](docs/ai-plugins-implementation.md)。
 
 安装步骤在各包目录。仓库根目录是桌面应用 workspace，不能作为单个 DSH 插件安装。全部包与发布说明见 [packages/](packages/README.md)。
 

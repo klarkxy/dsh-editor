@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-self-improvement",
   "version": "0.1.0",
-  "description": "Self-improvement lessons and skill export over shared Memory",
+  "description": "Extract verified lessons into Memory and export Markdown skill drafts for DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -86,8 +86,8 @@
     "dsh-plugin",
     "deepseek-harness",
     "self-improvement",
-    "memory",
-    "lessons"
+    "lessons",
+    "skill-export"
   ],
   "repository": {
     "type": "git",
