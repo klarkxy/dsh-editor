@@ -23,6 +23,12 @@ const dshHome = join(home, '.dsh-editor')
 await mkdir(home, { recursive: true })
 let application
 let page
+let processLog = ''
+const events = []
+const record = (event) => { events.push(`${new Date().toISOString()} ${event}`); if (events.length > 100) events.shift() }
+const safeUrl = (value) => {
+  try { const url = new URL(value); return url.protocol === 'data:' ? 'data:' : `${url.origin}${url.pathname}` } catch { return 'unknown' }
+}
 try {
   // Test the distributable ZIP, not the development Electron executable.
   execFileSync('/usr/bin/ditto', ['-x', '-k', join(artifactOutput, zipName), unpacked])
@@ -47,6 +53,27 @@ try {
   }
   for (const key of ['PORTABLE_EXECUTABLE_FILE', 'PORTABLE_EXECUTABLE_DIR', 'DSH_CLI_PATH', 'DSH_DESKTOP_NODE_PATH', 'DSH_DESKTOP_CLI_PATH', 'DSH_DESKTOP_PROFILE_TEMPLATE', 'DSH_EDITOR_CUSTOM_API_KEY', 'NODE_PATH', 'NODE_OPTIONS', 'ELECTRON_RUN_AS_NODE']) delete env[key]
   application = await electron.launch({ executablePath: join(bundle, 'MacOS', 'DSH Editor'), env, timeout: 120_000 })
+  const child = application.process()
+  for (const stream of [child.stdout, child.stderr]) stream?.on('data', (chunk) => { processLog = (processLog + chunk.toString()).slice(-65_536) })
+  child.on('exit', (code, signal) => record(`process exit code=${code} signal=${signal}`))
+  application.on('close', () => record('Playwright application closed'))
+  const observe = (window) => {
+    record(`page opened ${safeUrl(window.url())}`)
+    window.on('close', () => record('page closed'))
+    window.on('crash', () => record('page crashed'))
+    window.on('pageerror', (error) => record(`page error ${error.message.slice(0, 500)}`))
+    window.on('framenavigated', (frame) => { if (frame === window.mainFrame()) record(`navigation ${safeUrl(frame.url())}`) })
+  }
+  for (const window of application.windows()) observe(window)
+  application.on('window', observe)
+  await application.evaluate(({ app, webContents }) => {
+    const observeContents = (contents) => contents.on('render-process-gone', (_event, details) => console.error('[packaged-smoke] renderer exit', JSON.stringify(details)))
+    for (const contents of webContents.getAllWebContents()) observeContents(contents)
+    app.on('web-contents-created', (_event, contents) => observeContents(contents))
+    app.on('child-process-gone', (_event, details) => console.error('[packaged-smoke] child exit', JSON.stringify(details)))
+    app.on('window-all-closed', () => console.error('[packaged-smoke] all windows closed'))
+    app.on('will-quit', () => console.error('[packaged-smoke] app will quit'))
+  })
   page = await application.firstWindow({ timeout: 120_000 })
   await page.waitForSelector('.shell', { timeout: 180_000 })
   const url = new URL(page.url())
@@ -58,9 +85,14 @@ try {
   await writeFile(join(output, 'report.json'), JSON.stringify({ ok: true, artifact: zipName, packaged, shell: true, runtimeCopied: false }, null, 2))
   console.log('macOS packaged ZIP first-launch smoke passed')
 } catch (error) {
-  const diagnostic = page ? await page.locator('body').innerText().catch(() => 'unavailable') : 'no window'
-  await writeFile(join(output, 'failure.txt'), `${String(error)}\n${diagnostic}`)
-  if (page) await page.screenshot({ path: join(output, 'failure.png') }).catch(() => undefined)
+  const diagnostic = page ? await page.locator('body').innerText({ timeout: 2_000 }).catch(() => 'unavailable') : 'no window'
+  const child = application?.process()
+  const processState = child ? { exitCode: child.exitCode, signalCode: child.signalCode } : null
+  const livePages = application?.windows().map((window) => ({ closed: window.isClosed(), url: safeUrl(window.url()) })) ?? []
+  const details = `${String(error)}\n${diagnostic}\nProcess: ${JSON.stringify(processState)}\nPages: ${JSON.stringify(livePages)}\n${events.join('\n')}\n${processLog}`
+  await writeFile(join(output, 'failure.txt'), details)
+  console.error(details)
+  if (page) await page.screenshot({ path: join(output, 'failure.png'), timeout: 2_000 }).catch(() => undefined)
   throw error
 } finally {
   if (application) await application.close()
