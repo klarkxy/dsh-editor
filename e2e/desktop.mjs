@@ -80,6 +80,12 @@ async function waitForPath(path, timeoutMs = 20_000) {
 }
 
 async function openTreeFile(page, directory, file) {
+  // A second window may open with the writing assistant over the manuscript tree.
+  const dismissAssistant = page.getByRole('button', { name: '隐藏写作搭档' })
+  if (await dismissAssistant.isVisible()) {
+    await dismissAssistant.click()
+    await dismissAssistant.waitFor({ state: 'hidden', timeout: 10_000 })
+  }
   const folder = page.locator('.tree-row', { hasText: directory }).first()
   const fileRow = page.locator('.tree-row', { hasText: file }).first()
   await folder.waitFor({ state: 'visible', timeout: 20_000 })
