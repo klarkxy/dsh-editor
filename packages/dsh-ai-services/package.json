@@ -104,5 +104,8 @@
     "react": {
       "optional": true
     }
+  },
+  "dshRelease": {
+    "contentHash": "sha256-eeec387db42aaa76ed7ad0edb238fff693322f85dfacdd39a450e63c750cb127"
   }
 }

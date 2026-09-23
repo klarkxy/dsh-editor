@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-zhihu",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Independent Zhihu services, tools and UI for DSH",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -131,6 +131,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-44f4605c6a872ba2107bfccaeb2e273a0261f9de19ae634c5bec9dfda64cc740"
+    "contentHash": "sha256-f66b81b022d7f5b2851517c19b4e1ba77671e96531ffaf00141bedf9dfc1b3d3"
   }
 }
