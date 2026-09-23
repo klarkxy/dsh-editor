@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-ai-services",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Shared model routing, bounded auxiliary calls, and usage receipts for DeepSeek Harness plugins.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -109,6 +109,6 @@
     }
   },
   "dshRelease": {
-    "contentHash": "sha256-60ecfb143f66fea0b20975a47fcceacb54f143fafe4636c1cc2bba00156f8400"
+    "contentHash": "sha256-588bd0cf42c6a4b3154536e72b967b1bddeb6217f1ca4d4774d9754407301b90"
   }
 }

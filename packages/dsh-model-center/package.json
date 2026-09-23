@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-model-center",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Configure model tiers, provider connections, and AI call limits for DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -97,6 +97,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-c211c93d0633225a27cd9f8394364ef260ec84ef4b896fa40cd427ba83b5db78"
+    "contentHash": "sha256-1db420bf35ce2154298f16c63b1361a07da690aa44f7f09cd776c3dd7d08984a"
   }
 }

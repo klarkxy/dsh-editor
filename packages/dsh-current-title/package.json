@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-current-title",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Update DeepSeek Harness session titles from the latest human task while preserving manual names.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -100,6 +100,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-e6c79369c9ffec218c5ca6eacb39b68b03dde311b3de7945bffaf3f35060011b"
+    "contentHash": "sha256-4267cfef19e146d7620520e56213e862396db8108894fd9acd659fc4333fa82b"
   }
 }
