@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@deepseek-ai/dsh-agent": ["node_modules/.pnpm/node_modules/@deepseek-ai/dsh-agent/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-session": ["node_modules/.pnpm/node_modules/@deepseek-ai/dsh-session/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-llm": ["node_modules/.pnpm/node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts"],
+      "@deepseek-ai/dsh-subagent": ["node_modules/.pnpm/node_modules/@deepseek-ai/dsh-subagent/lib/types/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

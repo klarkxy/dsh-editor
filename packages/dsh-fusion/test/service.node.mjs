@@ -64,6 +64,7 @@ describe('Fusion business lifecycle', () => {
     const { service, notifications } = setup(); const task = await service.delegate(lead, request())
     await report(service, task); await report(service, task)
     assert.equal(service.pairFor('lead').tasks[0].candidates.length, 1); assert.equal(notifications.length, 1)
+    assert.equal(service.pairFor('lead').tasks[0].notifiedReportId, '1:r-1')
   })
   it('rejects stale or forged review hashes', async () => {
     const { service } = setup(); let task = await service.delegate(lead, request()); task = await report(service, task)
@@ -132,6 +133,88 @@ describe('Fusion business lifecycle', () => {
     store.save = async () => { throw new Error('disk full') }
     await assert.rejects(service.delegate(lead, request()), /disk full/)
     assert.deepEqual(service.snapshot(), before)
+  })
+  it('rejects persisted candidate tampering and reviews of unknown candidates', async () => {
+    const first = setup(); let task = await first.service.delegate(lead, request())
+    task = await report(first.service, task); await accept(first.service, task)
+    const changedText = first.saved()
+    changedText.pairs[0].tasks[0].candidates[0].text = 'forged prose'
+    assert.throws(() => setup(changedText), { code: 'INVALID_STATE' })
+    const changedReview = first.saved()
+    changedReview.pairs[0].tasks[0].reviews[0].candidateId = 'missing'
+    assert.throws(() => setup(changedReview), { code: 'INVALID_STATE' })
+    const changedReceipt = first.saved()
+    changedReceipt.pairs[0].tasks[0].notifiedReportId = '1:missing'
+    assert.throws(() => setup(changedReceipt), { code: 'INVALID_STATE' })
+  })
+  it('cancellation aborts a report notification still pending at the native boundary', async () => {
+    const entered = deferred()
+    const { service } = setup(undefined, { notify: ({ signal }) => {
+      entered.resolve(signal)
+      return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))
+    } })
+    const task = await service.delegate(lead, request())
+    const reporting = report(service, task)
+    const signal = await entered.promise
+    await service.cancel(lead, task.id, task.revision)
+    assert.equal(signal.aborted, true)
+    await assert.rejects(reporting, { name: 'AbortError' })
+    assert.equal(service.pairFor('lead').tasks[0].state, 'cancelled')
+  })
+  it('a caller abort after a durable report does not erase its notification', async () => {
+    const entered = deferred(), release = deferred()
+    const { service } = setup(undefined, { notify: async ({ signal }) => {
+      entered.resolve(signal)
+      await release.promise
+      signal.throwIfAborted()
+    } })
+    const task = await service.delegate(lead, request())
+    const caller = new AbortController()
+    const reporting = service.report(child(service), { taskId: task.id, taskRevision: task.revision,
+      reportId: 'caller-aborted', kind: 'candidate', text: 'Durable prose', signal: caller.signal })
+    const nativeSignal = await entered.promise
+    caller.abort()
+    assert.equal(nativeSignal.aborted, false)
+    release.resolve()
+    assert.equal((await reporting).state, 'review')
+  })
+  it('aborts both old and current native notifications across revise and cancel', async () => {
+    const firstEntered = deferred(), secondEntered = deferred()
+    const firstRelease = deferred(), secondRelease = deferred(), signals = []
+    const { service } = setup(undefined, { notify: async ({ signal }) => {
+      signals.push(signal)
+      if (signals.length === 1) { firstEntered.resolve(); await firstRelease.promise }
+      else { secondEntered.resolve(); await secondRelease.promise }
+    } })
+    const original = await service.delegate(lead, request())
+    const firstReport = report(service, original, 'First revision')
+    await firstEntered.promise
+    const candidate = service.pairFor('lead').tasks[0].candidates[0]
+    const revised = await service.review(lead, { taskId: original.id, taskRevision: 1,
+      candidateId: candidate.id, hash: candidate.hash, verdict: 'revise',
+      feedback: 'Change the ending', signal: request().signal })
+    assert.equal(signals[0].aborted, true)
+    const secondReport = report(service, revised, 'Second revision')
+    await secondEntered.promise
+    await service.cancel(lead, original.id, revised.revision)
+    assert.deepEqual(signals.map(signal => signal.aborted), [true, true])
+    firstRelease.resolve(); secondRelease.resolve()
+    await Promise.all([firstReport, secondReport])
+    assert.equal(service.pairFor('lead').tasks[0].notifiedReportId, undefined)
+  })
+  it('a failed Lead notice stays uncertain on duplicate report and cold restore', async () => {
+    let calls = 0
+    const first = setup(undefined, { notify: async () => { calls++; throw new Error('native delivery unknown') } })
+    const task = await first.service.delegate(lead, request())
+    await assert.rejects(report(first.service, task), /native delivery unknown/)
+    assert.equal(first.service.pairFor('lead').tasks[0].candidates.length, 1)
+    await assert.rejects(report(first.service, task), { code: 'NOTIFICATION_UNCERTAIN' })
+    assert.equal(calls, 1)
+    const restored = setup(first.saved())
+    await restored.service.initialized()
+    assert.equal(restored.service.pairFor('lead').tasks[0].state, 'interrupted')
+    await assert.rejects(report(restored.service, task), { code: 'NOTIFICATION_UNCERTAIN' })
+    assert.equal(restored.notifications.length, 0)
   })
   it('rejects malformed persistent identity and oversized input', async () => {
     assert.throws(() => validateState({ version: 2, revision: 0, pairs: [] }), { code: 'INVALID_STATE' })

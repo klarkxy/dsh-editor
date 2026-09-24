@@ -16,6 +16,7 @@ export class FusionService {
   private storageFailed = false
   private readonly controller = new AbortController()
   private readonly dispatches = new Map<string, AbortController>()
+  private readonly notifications = new Map<string, Set<AbortController>>()
   private readonly inFlight = new Set<Promise<unknown>>()
   private readonly ready: Promise<void>
   private readonly store: FusionStore
@@ -81,6 +82,9 @@ export class FusionService {
     this.inFlight.add(operation)
     void operation.finally(() => this.inFlight.delete(operation)).catch(() => {})
     return operation
+  }
+  private abortNotifications(taskId: string): void {
+    for (const controller of this.notifications.get(taskId) ?? []) controller.abort()
   }
   async delegate(actor: FusionActor, input: { profile: FusionProfile; route: ModelRoute; brief: FusionBrief; target?: FusionTarget; signal: AbortSignal }): Promise<FusionTask> {
     await this.ready
@@ -174,7 +178,7 @@ export class FusionService {
       if (task.reportIds.includes(reportKey)) {
         const candidate = task.candidates.at(-1)
         requireFusion(input.kind === 'decision' ? task.decision === input.text : candidate?.text === input.text && candidate.report === (input.report ?? ''), 'DUPLICATE_CONFLICT', 'A report id cannot be reused for different content.')
-        return { pair, task, duplicate: true }
+        return { pair, task, reportKey, duplicate: true }
       }
       requireFusion(task.state === 'dispatching' || task.state === 'working', 'STALE', 'The task is no longer accepting reports.')
       task.reportIds.push(reportKey)
@@ -185,17 +189,35 @@ export class FusionService {
         task.state = 'review'
       }
       task.updatedAt = this.now()
-      return { pair, task, duplicate: false }
+      return { pair, task, reportKey, duplicate: false }
     })
-    if (result.duplicate) return result.task
-    if (this.isCurrent(result.pair.id, result.task.id, result.task.revision, generation)) {
-      const candidate = result.task.candidates.at(-1)
-      const body = result.task.state === 'decision'
-        ? `Decision requested for ${result.task.id} revision ${result.task.revision}: ${result.task.decision}`
-        : `Candidate ready for ${result.task.id} revision ${result.task.revision}: ${candidate!.id}, sha256 ${candidate!.hash}. Read the exact candidate using fusion_read before fusion_review. Report: ${candidate!.report}`
-      await this.track(this.native.notify({ pair: result.pair, task: result.task, actor, text: body, signal: this.controller.signal }))
+    if (result.duplicate) {
+      requireFusion(result.task.notifiedReportId === result.reportKey, 'NOTIFICATION_UNCERTAIN', 'The report was saved, but Lead notification is not confirmed. Inspect the exact task record before any explicit recovery.')
+      return result.task
     }
-    return result.task
+    const controller = new AbortController()
+    const controllers = this.notifications.get(result.task.id) ?? new Set<AbortController>()
+    controllers.add(controller)
+    this.notifications.set(result.task.id, controllers)
+    try {
+      if (this.isCurrent(result.pair.id, result.task.id, result.task.revision, generation)) {
+        const candidate = result.task.candidates.at(-1)
+        const body = result.task.state === 'decision'
+          ? `Decision requested for ${result.task.id} revision ${result.task.revision}: ${result.task.decision}`
+          : `Candidate ready for ${result.task.id} revision ${result.task.revision}: ${candidate!.id}, sha256 ${candidate!.hash}. Read the exact candidate using fusion_read before fusion_review. Report: ${candidate!.report}`
+        const signal = AbortSignal.any([controller.signal, this.controller.signal])
+        signal.throwIfAborted()
+        await this.track(this.native.notify({ pair: result.pair, task: result.task, actor, text: body, signal }))
+        await this.change(next => {
+          const row = next.pairs.find(pair => pair.id === result.pair.id)?.tasks.find(task => task.id === result.task.id)
+          if (row?.revision === result.task.revision && isWorking(row.state)) row.notifiedReportId = result.reportKey
+        }, true)
+      }
+    } finally {
+      controllers.delete(controller)
+      if (controllers.size === 0) this.notifications.delete(result.task.id)
+    }
+    return clone(this.state.pairs.find(pair => pair.id === result.pair.id)?.tasks.find(task => task.id === result.task.id) ?? result.task)
   }
   read(actor: FusionActor, taskId: string, candidateId?: string): { task: FusionTask; candidate?: FusionCandidate } {
     const pair = this.owned(this.state, actor, 'lead')
@@ -222,10 +244,11 @@ export class FusionService {
       else {
         requireFusion(task.candidates.length < 16, 'RETRY_LIMIT', 'Revision limit reached. Keep the candidate and ask the author for direction.')
         requireFusion(input.feedback.trim(), 'INVALID_INPUT', 'Revision requires actionable feedback.')
-        task.revision++; task.state = 'dispatching'; task.dispatchId = this.id(); task.delivery = 'pending'; task.decision = input.feedback
+        task.revision++; task.state = 'dispatching'; task.dispatchId = this.id(); task.delivery = 'pending'; task.decision = input.feedback; delete task.notifiedReportId
       }
       return { pair, task }
     })
+    this.abortNotifications(result.task.id)
     if (input.verdict === 'revise') return this.dispatch(result.pair, result.task, input.signal)
     return result.task
   }
@@ -237,10 +260,11 @@ export class FusionService {
       requireFusion(['decision', 'interrupted'].includes(task.state), 'STALE', 'Only a blocked or explicitly interrupted task can resume.')
       requireFusion(pair.established && task.delivery !== 'pending', 'UNCERTAIN_ADMISSION', 'Inspect uncertain initial admission before resuming.')
       requireFusion(task.revision < 32, 'RETRY_LIMIT', 'Task revision limit reached.')
-      task.revision++; task.state = 'dispatching'; task.delivery = 'pending'; task.dispatchId = this.id(); task.decision = input.feedback; delete task.error
+      task.revision++; task.state = 'dispatching'; task.delivery = 'pending'; task.dispatchId = this.id(); task.decision = input.feedback; delete task.error; delete task.notifiedReportId
       task.updatedAt = this.now()
       return { pair, task }
     })
+    this.abortNotifications(result.task.id)
     return this.dispatch(result.pair, result.task, input.signal)
   }
   async cancel(actor: FusionActor, taskId: string, taskRevision: number, stopLead = false): Promise<void> {
@@ -249,10 +273,11 @@ export class FusionService {
     const pair = await this.change(next => {
       const pair = this.owned(next, actor, 'lead'), task = this.task(pair, taskId, integer(taskRevision, 'task revision'))
       requireFusion(task.adoption !== 'applied', 'ALREADY_APPLIED', 'Stopping does not undo an applied change.')
-      this.dispatches.get(taskId)?.abort()
       task.state = 'cancelled'; task.cleanup = 'pending'; task.updatedAt = this.now()
       return pair
     })
+    this.dispatches.get(taskId)?.abort()
+    this.abortNotifications(taskId)
     try {
       await this.track(this.native.stop(pair, stopLead))
       await this.change(next => { this.task(this.owned(next, actor, 'lead'), taskId, taskRevision).cleanup = 'done' }, true)
@@ -276,6 +301,7 @@ export class FusionService {
     if (!this.enabled) return
     this.enabled = false; this.generation++; this.controller.abort()
     for (const controller of this.dispatches.values()) controller.abort()
+    for (const taskId of this.notifications.keys()) this.abortNotifications(taskId)
     const errors: unknown[] = []
     try {
       await this.ready

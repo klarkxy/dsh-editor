@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { FusionBrief, FusionState, FusionTarget, Json, ModelRoute } from './contracts.ts'
 
 export class FusionError extends Error {
@@ -77,17 +78,26 @@ export function validateState(value: unknown): FusionState {
       requireFusion(['dispatching','working','decision','review','accepted','cancelled','failed','interrupted'].includes(String(task.state)), 'INVALID_STATE', 'Unknown task state.')
       requireFusion(['pending','accepted','uncertain'].includes(String(task.delivery)), 'INVALID_STATE', 'Unknown delivery state.')
       text(task.dispatchId, 'dispatch id', 200)
-      stringList(task.messageIds, 'message ids', 64); stringList(task.reportIds, 'report ids', 64)
+      stringList(task.messageIds, 'message ids', 64); const reportIds = stringList(task.reportIds, 'report ids', 64)
+      if (task.notifiedReportId !== undefined) requireFusion(reportIds.includes(text(task.notifiedReportId, 'notified report id', 256)), 'INVALID_STATE', 'Notification references an unknown report.')
       requireFusion(Array.isArray(task.candidates) && task.candidates.length <= 16 && Array.isArray(task.reviews) && task.reviews.length <= 32, 'INVALID_STATE', 'Invalid candidate history.')
-      for (const item of task.candidates) {
+      const candidates = new Map<string, string>()
+      for (const [index, item] of task.candidates.entries()) {
         const candidate = object(item)
-        text(candidate.id, 'candidate id', 200); integer(candidate.revision, 'candidate revision'); integer(candidate.taskRevision, 'candidate task revision')
-        text(candidate.text, 'candidate', 200_000); text(candidate.report, 'report', 16_000, true)
+        const candidateId = text(candidate.id, 'candidate id', 200)
+        requireFusion(!candidates.has(candidateId), 'INVALID_STATE', 'Duplicate candidate identity.')
+        requireFusion(integer(candidate.revision, 'candidate revision') === index + 1, 'INVALID_STATE', 'Invalid candidate order.')
+        requireFusion(integer(candidate.taskRevision, 'candidate task revision') <= Number(task.revision), 'INVALID_STATE', 'Candidate belongs to a future task revision.')
+        const candidateText = text(candidate.text, 'candidate', 200_000); text(candidate.report, 'report', 16_000, true)
         requireFusion(typeof candidate.hash === 'string' && /^[a-f0-9]{64}$/.test(candidate.hash), 'INVALID_STATE', 'Invalid candidate hash.')
+        requireFusion(createHash('sha256').update(candidateText, 'utf8').digest('hex') === candidate.hash, 'INVALID_STATE', 'Candidate content does not match its stored hash.')
+        candidates.set(candidateId, candidate.hash)
       }
       for (const item of task.reviews) {
         const review = object(item)
-        text(review.candidateId, 'review candidate', 200); text(review.candidateHash, 'review hash', 64)
+        const candidateId = text(review.candidateId, 'review candidate', 200)
+        const hash = text(review.candidateHash, 'review hash', 64)
+        requireFusion(candidates.get(candidateId) === hash, 'INVALID_STATE', 'Review references an unknown candidate revision.')
         requireFusion(['accept','revise','reject'].includes(String(review.verdict)), 'INVALID_STATE', 'Invalid review verdict.')
         text(review.feedback, 'feedback', 16_000, true)
       }

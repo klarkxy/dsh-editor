@@ -12,6 +12,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:web": "node scripts/dev-web.mjs",
     "test": "vitest run",
+    "test:fusion": "node scripts/check-fusion-foundation.mjs",
     "typecheck": "pnpm -r typecheck",
     "prepare:desktop-runtime": "pnpm build && node scripts/prepare-desktop-runtime.mjs",
     "pack:desktop": "pnpm prepare:desktop-runtime && pnpm --filter @dsh-editor/desktop exec electron-builder --config electron-builder.yml --publish never && node scripts/verify-desktop-package.mjs",

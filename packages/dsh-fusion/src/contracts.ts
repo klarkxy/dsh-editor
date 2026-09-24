@@ -44,6 +44,8 @@ export interface FusionTask {
   messageIds: string[]
   dispatchId: string
   reportIds: string[]
+  /** Last report whose native Lead notification was confirmed and durably recorded. */
+  notifiedReportId?: string
   /** Whether the latest native inbox submission is known to have been accepted. */
   delivery: 'pending' | 'accepted' | 'uncertain'
   decision?: string
