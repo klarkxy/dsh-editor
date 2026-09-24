@@ -19,6 +19,7 @@ const tsdownCli = resolve(root, 'node_modules', 'tsdown', 'dist', 'run.mjs')
 const electronUserData = resolve(devHome, 'electron-user-data')
 const win = process.platform === 'win32'
 const FIRST_COMPILE_MS = 90_000
+const WATCHER_START_BATCH_SIZE = 4
 
 if (!pnpmCli || !existsSync(pnpmCli)) {
   console.error('dev: start this command through pnpm: pnpm run dev')
@@ -84,7 +85,7 @@ function runTaskkill(pid) {
 }
 
 function killTree(child) {
-  if (!child?.pid) return Promise.resolve()
+  if (!child?.pid || child.exitCode != null || child.signalCode != null) return Promise.resolve()
   return runTaskkill(child.pid)
 }
 
@@ -202,7 +203,6 @@ async function shutdown(code = 0) {
   if (stopping) return
   stopping = true
   await Promise.all(children.map(killTree))
-  await killLeftoverDevProcesses()
   process.exit(code)
 }
 
@@ -218,7 +218,7 @@ function bindChild(child, role) {
       void shutdown(code ?? 0)
       return
     }
-    console.error(`dev: watcher exited ${code ?? 1}; stopping the desktop process`)
+    console.error(`dev: ${role} exited ${code ?? 1}; stopping the desktop process`)
     void shutdown(code || 1)
   })
 }
@@ -228,24 +228,39 @@ process.on('SIGTERM', () => { void shutdown(0) })
 
 console.log('dev: starting plugin watchers')
 const wrapClients = new Set(clientPackages(loadPluginManifests(root)))
-const watchers = compositionInstallNames(composition).map((name) => {
-  const wrapClient = wrapClients.has(name)
-  const child = spawnNode(tsdownCli, [
-    '--watch', '--no-clean',
-    ...(wrapClient ? ['--on-success', `node ../../scripts/wrap-client.mjs ${name}`] : []),
-  ], workspacePackageDir(name), ['ignore', 'pipe', 'pipe'])
-  bindChild(child, 'watcher')
-  return { name, child, wrapClient }
-})
+const watcherNames = compositionInstallNames(composition)
+for (let offset = 0; offset < watcherNames.length; offset += WATCHER_START_BATCH_SIZE) {
+  const batch = watcherNames.slice(offset, offset + WATCHER_START_BATCH_SIZE)
+  const pending = new Set(batch)
+  const watchers = batch.map((name) => {
+    const wrapClient = wrapClients.has(name)
+    const child = spawnNode(tsdownCli, [
+      '--watch', '--no-clean',
+      ...(wrapClient ? ['--on-success', 'node ../../scripts/wrap-client.mjs ' + name] : []),
+    ], workspacePackageDir(name), ['ignore', 'pipe', 'pipe'])
+    bindChild(child, 'watcher ' + name)
+    return { name, child, wrapClient }
+  })
 
-try {
-  await Promise.race([
-    Promise.all(watchers.map((row) => waitForFirstCompile(row.child, row.name, row.wrapClient))),
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`plugin watchers did not finish the first compile within ${FIRST_COMPILE_MS}ms`)), FIRST_COMPILE_MS)),
-  ])
-} catch (error) {
-  console.error(`dev: ${error instanceof Error ? error.message : String(error)}`)
-  await shutdown(1)
+  let timeout
+  try {
+    await Promise.race([
+      Promise.all(watchers.map(async (row) => {
+        await waitForFirstCompile(row.child, row.name, row.wrapClient)
+        pending.delete(row.name)
+      })),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(
+          'plugin watchers did not finish the first compile within ' + FIRST_COMPILE_MS + 'ms: ' + [...pending].join(', '),
+        )), FIRST_COMPILE_MS)
+      }),
+    ])
+  } catch (error) {
+    console.error(`dev: ${error instanceof Error ? error.message : String(error)}`)
+    await shutdown(1)
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 console.log('dev: starting Electron')
