@@ -19,13 +19,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.16.0
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - name: Archive dependencies and build outputs for offline tests
-        run: tar -czf /tmp/learning-review-deps.tar.gz --exclude='node_modules/.pnpm/electron@*/node_modules/electron/dist' node_modules $(find packages apps -mindepth 2 -maxdepth 2 -type d \( -name node_modules -o -name lib \))
+      - name: Archive exact CI toolchain for offline verification
+        run: |
+          mkdir -p /tmp/learning-toolchain/bin
+          cp "$(command -v node)" /tmp/learning-toolchain/bin/node
+          cp -a "$(dirname "$(dirname "$(realpath "$(command -v pnpm)")")")" /tmp/learning-toolchain/pnpm
+          tar -czf /tmp/learning-toolchain.tar.gz -C /tmp learning-toolchain
       - uses: actions/upload-artifact@v4
         with:
-          name: learning-review-deps
-          path: /tmp/learning-review-deps.tar.gz
+          name: learning-toolchain
+          path: /tmp/learning-toolchain.tar.gz
           retention-days: 1
