@@ -30,13 +30,13 @@ export function DesignSystemGallery() {
         </Dialog.Description>
         <Flex direction={{ initial: 'column', md: 'row' }} gap="4">
           {(['light', 'dark'] as const).map((appearance) => (
-            <Theme key={appearance} appearance={appearance} accentColor="blue" grayColor="gray" radius="medium" style={{ flex: 1, minWidth: 0, padding: 16, borderRadius: 12 }}>
+            <Theme key={appearance} appearance={appearance} accentColor="blue" grayColor="gray" radius="medium" style={{ flex: 1, minWidth: 0, padding: 'var(--dsh-ui-space-4)', borderRadius: 'var(--dsh-ui-radius-lg)' }}>
               <Flex direction="column" gap="4">
                 <Heading size="3">{appearance === 'light' ? 'Light' : 'Dark'}</Heading>
                 <Flex gap="2" wrap="wrap">
                   {(['bg', 'sidebar', 'text', 'muted', 'accent'] as const).map((name) => (
                     <Flex key={name} direction="column" gap="1" style={{ minWidth: 40 }}>
-                      <span aria-hidden="true" style={{ height: 28, borderRadius: 6, background: (appearance === 'light' ? LIGHT_TOKENS : DARK_TOKENS)[name], border: '1px solid var(--dsh-ui-line)' }} />
+                      <span aria-hidden="true" style={{ height: 28, borderRadius: 'var(--dsh-ui-radius-sm)', background: (appearance === 'light' ? LIGHT_TOKENS : DARK_TOKENS)[name], border: '1px solid var(--dsh-ui-line)' }} />
                       <Text size="1">{name}</Text>
                     </Flex>
                   ))}
