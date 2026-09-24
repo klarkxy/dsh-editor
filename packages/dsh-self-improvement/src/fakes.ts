@@ -149,8 +149,8 @@ export function pluginMessage(seq: number, text: string): SessionEventLike {
 export function assistantMessage(seq: number, text: string): SessionEventLike {
   return event('assistant/message', seq, { turn: 1, step: 1, message: { content: [{ type: 'text', text }] } })
 }
-export function toolCall(seq: number, name: string, callId: string): SessionEventLike {
-  return event('tool/call', seq, { turn: 1, step: 1, callId, name, arguments: '{}' })
+export function toolCall(seq: number, name: string, callId: string, args: Record<string, unknown> = {}): SessionEventLike {
+  return event('tool/call', seq, { turn: 1, step: 1, callId, name, arguments: JSON.stringify(args) })
 }
 export function toolResult(seq: number, callId: string, isError: boolean, text: string): SessionEventLike {
   return event('tool/result', seq, {

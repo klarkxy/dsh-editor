@@ -22,11 +22,30 @@ export const basisRefSchema = z.object({
   revision: z.number().int().nonnegative(),
 }).strict()
 
+export const contextKnowledgeSchema = z.object({
+  subject: z.string().min(1).max(160),
+  domain: z.string().min(1).max(160),
+  key: z.string().min(1).max(160),
+  aliases: z.array(z.string().min(1).max(160)).max(8),
+  observedAt: z.number().int().nonnegative(),
+  eventTime: z.string().min(1).max(160).optional(),
+  activityStatus: z.enum(['planned', 'in-progress', 'blocked', 'paused', 'completed', 'cancelled', 'unknown']).optional(),
+}).strict()
+
+export const procedureKnowledgeSchema = z.object({
+  origin: z.enum(['instruction', 'observation']),
+  goal: z.string().min(1).max(400),
+  when: z.array(z.string().min(1).max(200)).min(1).max(8),
+  steps: z.array(z.string().min(1).max(400)).max(8),
+  avoid: z.array(z.string().min(1).max(200)).max(8),
+  verify: z.array(z.string().min(1).max(200)).min(1).max(8),
+}).strict()
+
 export const memoryRecordSchema = z.object({
   id: z.string().min(1).max(80),
   revision: z.number().int().nonnegative(),
   scope: knowledgeScopeSchema,
-  kind: z.enum(['preference', 'project-fact', 'decision', 'lesson']),
+  kind: z.enum(['preference', 'project-fact', 'decision', 'vocabulary', 'activity', 'lesson']),
   status: z.enum(['candidate', 'active', 'rejected', 'superseded', 'revoked', 'deleted']),
   title: z.string().min(1).max(160),
   content: z.string().min(1).max(4000),
@@ -34,6 +53,8 @@ export const memoryRecordSchema = z.object({
   evidence: z.array(evidenceSchema).max(16),
   exceptions: z.array(z.string().max(200)).max(16),
   source: z.enum(['user', 'memory', 'dream', 'self-improvement']),
+  context: contextKnowledgeSchema.optional(),
+  procedure: procedureKnowledgeSchema.optional(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   expiresAt: z.number().int().positive().optional(),
@@ -69,17 +90,20 @@ export const dreamSnapshotSchema = z.object({
   status: memoryRecordSchema.shape.status,
   scope: knowledgeScopeSchema,
   expiresAt: z.number().int().positive().optional(),
+  kind: memoryRecordSchema.shape.kind.optional(),
+  context: contextKnowledgeSchema.optional(),
 }).strict()
 
 export const dreamProposalSchema = z.object({
   title: z.string().min(1).max(160),
   content: z.string().min(1).max(4000),
-  kind: z.enum(['preference', 'project-fact', 'decision']),
+  kind: z.enum(['preference', 'project-fact', 'decision', 'vocabulary', 'activity']),
   tags: z.array(z.string().min(1).max(40)).max(16),
   exceptions: z.array(z.string().max(200)).max(16),
   evidence: z.array(evidenceSchema).max(16),
   sourceIds: z.array(z.string().min(1).max(80)).min(1).max(16),
   scope: knowledgeScopeSchema,
+  context: contextKnowledgeSchema.optional(),
 }).strict()
 
 export const dreamPlanSchema = z.object({
@@ -101,7 +125,7 @@ export const createRpcSchema = z.object({
   sessionId: z.string().min(1).max(200),
   title: z.string().min(1).max(160),
   content: z.string().min(1).max(4000),
-  kind: z.enum(['preference', 'project-fact', 'decision', 'lesson']),
+  kind: z.enum(['preference', 'project-fact', 'decision', 'vocabulary', 'activity', 'lesson']),
   global: z.boolean().optional(),
   tags: z.array(z.string().min(1).max(40)).max(16).optional(),
   exceptions: z.array(z.string().max(200)).max(16).optional(),
@@ -130,7 +154,7 @@ export const revisionRpcSchema = z.object({
 export const listRpcSchema = z.object({
   sessionId: z.string().min(1).max(200),
   query: z.string().max(200).optional(),
-  kinds: z.array(memoryRecordSchema.shape.kind).max(4).optional(),
+  kinds: z.array(memoryRecordSchema.shape.kind).max(6).optional(),
   statuses: z.array(memoryRecordSchema.shape.status).max(8).optional(),
   global: z.boolean().optional(),
   limit: z.number().int().min(1).max(100).optional(),
@@ -146,6 +170,9 @@ export const memoryStateSchema = z.object({
   tombstones: z.array(tombstoneSchema).max(MAX_MEMORY_TOMBSTONES),
   dreams: z.array(dreamPlanSchema).max(MAX_MEMORY_DREAMS),
   lastAttemptAt: z.number().int().nonnegative().optional(),
+  observations: z.array(z.object({
+    sessionId: z.string().min(1).max(200), seq: z.number().int().nonnegative(), updatedAt: z.number().int().nonnegative(),
+  }).strict()).max(512).optional(),
 }).strict()
 
 export const memoryDomain = defineDomain({

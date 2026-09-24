@@ -12,8 +12,8 @@
 | [dsh-current-title](dsh-current-title/docs/README.zh-CN.md) | 按当前任务更新会话标题，保留手动命名；npm 包名 @klarkxy/dsh-current-title |
 | [dsh-mood](dsh-mood/docs/README.zh-CN.md) | 需求澄清与可修订的任务约定；npm 包名 @klarkxy/dsh-mood |
 | [dsh-recap](dsh-recap/docs/README.zh-CN.md) | 后台回顾与独立开关的 Agent 检查点；npm 包名 @klarkxy/dsh-recap |
-| [dsh-memory](dsh-memory/docs/README.zh-CN.md) | 偏好、项目事实与决策；内含 Dream 整理；npm 包名 @klarkxy/dsh-memory |
-| [dsh-self-improvement](dsh-self-improvement/docs/README.zh-CN.md) | 教训自动生效、可审计撤回与 Skill 草稿导出；复用 Memory；npm 包名 @klarkxy/dsh-self-improvement |
+| [dsh-memory](dsh-memory/docs/README.zh-CN.md) | 作者用语、偏好与近期状态；内含 Dream 观察与整理；npm 包名 @klarkxy/dsh-memory |
+| [dsh-self-improvement](dsh-self-improvement/docs/README.zh-CN.md) | 明确方法要求与候选结果观察、审计撤回与 Skill 导出；复用 Memory；npm 包名 @klarkxy/dsh-self-improvement |
 | [dsh-model-center](dsh-model-center/docs/README.zh-CN.md) | 供应商、快速／对话／思考／幻想档位与用途配置；npm 包名 @klarkxy/dsh-model-center |
 | [dsh-editor-shell](dsh-editor-shell/README.md) | 桌面写作界面 |
 | [dsh-editor-workbench](dsh-editor-workbench/README.md) | 作品管理与写作提案 |
@@ -32,3 +32,5 @@
 这六个 AI 功能预装并默认启用，仍可分别停用。Dream、Agent 与语义检查点等自动行为默认开启，可分别关闭；共享服务只提供机制，不会自行调用模型。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。
 
 [发布维护](PUBLISHING.md) · [桌面使用指南](../docs/user-guide.md)
+
+Dream 与 Self Improve 的数据分流、独立 Web 依赖和后续维护约束见 [可移植学习边界](../docs/portable-learning.md)。

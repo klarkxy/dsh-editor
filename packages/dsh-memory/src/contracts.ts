@@ -60,7 +60,7 @@ export const MIN_RECALL_RECORDS = 1
 export const MAX_RECALL_RECORDS = 5
 export const MAX_RECALL_TOKENS = 800
 export const MAX_PROJECT_ID_CHARS = 32_768
-export const INJECT_KINDS: readonly KnowledgeKind[] = ['preference', 'project-fact', 'decision']
+export const INJECT_KINDS: readonly KnowledgeKind[] = ['preference', 'project-fact', 'decision', 'vocabulary', 'activity']
 export const RECALL_EXCLUDED_STATUSES: readonly MemoryRecord['status'][] = [
   'candidate', 'rejected', 'revoked', 'deleted', 'superseded',
 ]
@@ -87,6 +87,8 @@ export interface DreamSnapshotEntry {
   status: MemoryRecord['status']
   scope: KnowledgeScope
   expiresAt?: number
+  kind?: KnowledgeKind
+  context?: MemoryRecord['context']
 }
 
 export interface DreamProposal {
@@ -98,6 +100,7 @@ export interface DreamProposal {
   evidence: EvidenceRef[]
   sourceIds: string[]
   scope: KnowledgeScope
+  context?: MemoryRecord['context']
 }
 
 export interface DreamPlan {
@@ -127,6 +130,8 @@ export interface MemoryPersistedState {
   tombstones: MemoryTombstone[]
   dreams: DreamPlan[]
   lastAttemptAt?: number
+  /** Bounded per-session source cursors; retained when a derived record is deleted. */
+  observations?: Array<{ sessionId: string; seq: number; updatedAt: number }>
 }
 
 export interface MemoryStatus {

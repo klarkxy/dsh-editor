@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type {
   AiFeatureScope, DreamPlan, InjectedMemoryMessage, KnowledgeScope, MemoryMutationOptions, MemoryPersistedState,
   MemoryQuery, MemoryRecord, MemoryService, MemorySettings, MemoryStatus, NewMemoryRecord, PreStepDecision, PurposeSpec,
@@ -20,6 +20,10 @@ import { boundRecall, injectKinds, isExpired, recordMatchesQuery } from './recal
 import { compactMemoryState, memoryStateOverCapacity } from './capacity.ts'
 import { cloneState, type MemoryStore } from './store.ts'
 import { memoryStateSchema, newMemoryRecordSchema } from './storage.ts'
+import {
+  ACTIVITY_RETENTION_MS, contextIdentity, contextVersion, humanObservations, MAX_OBSERVATION_SESSIONS,
+  OBSERVE_PURPOSE, OBSERVE_SYSTEM, parseObservations,
+} from './observe.ts'
 
 export interface MemoryRuntimeOptions {
   store: MemoryStore
@@ -48,6 +52,8 @@ export class MemoryRuntime implements MemoryService {
   private pending = Promise.resolve()
   private ai?: AiFeatureScope
   private unregisterPurpose?: () => void
+  private unregisterObserverPurpose?: () => void
+  private readonly observationJobs = new Map<string, { abort: AbortController; promise: Promise<void> }>()
   private readonly jobs = new Map<string, DreamJob>()
   private readonly now: () => number
   private readonly customId?: () => string
@@ -278,6 +284,87 @@ export class MemoryRuntime implements MemoryService {
     return applyMemoryInjection(decision, records, create)
   }
 
+  /** Bounded human-only observation, independent of editor services and idle consolidation. */
+  async observeSession(sessionId: string, session: unknown, signal: AbortSignal): Promise<void> {
+    if (this.disposed || !this.live.settings.dreamIdleEnabled || signal.aborted || !sessionId || sessionId.length > 200) return
+    const previous = this.observationJobs.get(sessionId)
+    if (previous) {
+      await previous.promise.catch(() => {})
+      return this.observeSession(sessionId, session, signal)
+    }
+    const abort = new AbortController()
+    const promise = this.collectContext(sessionId, session, AbortSignal.any([signal, abort.signal]))
+    this.observationJobs.set(sessionId, { abort, promise })
+    try { await promise } finally {
+      if (this.observationJobs.get(sessionId)?.promise === promise) this.observationJobs.delete(sessionId)
+    }
+  }
+
+  private async collectContext(sessionId: string, session: unknown, signal: AbortSignal): Promise<void> {
+    await this.pending
+    const projectId = projectIdFromCwd(sessionCwd(session))
+    if (!projectId || this.disposed || !this.live.settings.dreamIdleEnabled || signal.aborted) return
+    const cursors = this.live.observations ?? []
+    const cursor = cursors.find(row => row.sessionId === sessionId)
+    // Do not evict deletion-protecting cursors to make room for more sessions.
+    if (!cursor && cursors.length >= MAX_OBSERVATION_SESSIONS) return
+    const all = humanObservations(session)
+    const lastSeq = all.at(-1)?.seq
+    if (lastSeq === undefined || lastSeq <= (cursor?.seq ?? -1)) return
+    const messages = (cursor ? all.filter(row => row.seq > cursor.seq).slice(-4) : all.slice(-1))
+      .map(row => ({ ...row, text: row.text.slice(0, 2000) }))
+    const messageVersion = JSON.stringify(messages)
+    const generation = this.generation
+    const version = contextVersion(this.live.records, this.live.tombstones)
+    const current = () => !this.disposed && !signal.aborted && this.live.settings.dreamIdleEnabled
+      && this.generation === generation && projectIdFromCwd(sessionCwd(session)) === projectId
+      && humanObservations(session).at(-1)?.seq === lastSeq
+      && JSON.stringify((cursor ? humanObservations(session).filter(row => row.seq > cursor.seq).slice(-4) : humanObservations(session).slice(-1))
+        .map(row => ({ ...row, text: row.text.slice(0, 2000) }))) === messageVersion
+    const scope: KnowledgeScope = { kind: 'project', projectId }
+    const now = this.now()
+    let records: NewMemoryRecord[] = []
+    if (messages.some(row => !/^(?:继续|好的?|同意|谢谢|ok|thanks|continue)[。.!！]?$/i.test(row.text.trim()))) {
+      const ai = this.requireAi()
+      const existing = this.live.records.filter(record => record.scope.kind === 'project'
+        && record.scope.projectId === projectId && record.context && record.status === 'active' && !isExpired(record, now)).slice(-4)
+      const input = JSON.stringify({ messages, existing: existing.map(record => ({
+        kind: record.kind, context: record.context, content: record.content.slice(0, 240),
+      })) })
+      const result = await ai.run({
+        purpose: OBSERVE_PURPOSE, sessionId, sourceVersion: createHash('sha256').update(`${version}:${lastSeq}:${input}`).digest('hex'),
+        system: OBSERVE_SYSTEM, input, signal, isCurrent: current, priority: 'background',
+      })
+      if (!current()) return
+      if (result.receipt.status === 'success') records = parseObservations(result.text, messages, sessionId, scope, now)
+    }
+    await this.serialize(async () => {
+      if (!current()) return
+      const proposed = this.snapshot()
+      const cursors = proposed.observations ??= []
+      if ((cursors.find(row => row.sessionId === sessionId)?.seq ?? -1) >= lastSeq) return
+      if (contextVersion(proposed.records, proposed.tombstones) === version) {
+        const touched: string[] = []
+        for (const draft of records) {
+          assertCreatable(draft)
+          const identity = contextIdentity(draft)
+          const sources = proposed.records.filter(record => record.status === 'active' && contextIdentity(record) === identity)
+          const id = this.mintId(proposed)
+          proposed.records.push({ ...draft, id, revision: 1, createdAt: now, updatedAt: now, supersedes: sources.map(source => source.id) })
+          for (const source of sources) { source.status = 'superseded'; source.revision += 1; source.updatedAt = now; touched.push(source.id) }
+        }
+        this.staleDreamsTouching(proposed, touched)
+      }
+      // Also checkpoint failed/malformed/stale attempts: never replay old evidence after deletion or restart.
+      const cursor = cursors.find(row => row.sessionId === sessionId)
+      if (cursor) { cursor.seq = lastSeq; cursor.updatedAt = now }
+      else if (cursors.length < MAX_OBSERVATION_SESSIONS) cursors.push({ sessionId, seq: lastSeq, updatedAt: now })
+      else return
+      await this.persistProposed(proposed)
+      this.commit(proposed)
+    })
+  }
+
   async previewDream(sessionId: string, projectId: string | undefined, trigger: 'manual' | 'idle' = 'manual'): Promise<DreamPlan> {
     this.requireAi()
     const prepared = await this.serialize(async () => {
@@ -322,7 +409,7 @@ export class MemoryRuntime implements MemoryService {
           records: prepared.records.map(record => ({
             id: record.id, kind: record.kind, title: record.title, content: record.content,
             scope: record.scope, exceptions: record.exceptions, evidence: record.evidence,
-            status: record.status, revision: record.revision, expiresAt: record.expiresAt ?? null,
+            status: record.status, revision: record.revision, expiresAt: record.expiresAt ?? null, context: record.context,
           })),
         }),
         priority: trigger === 'idle' ? 'background' : 'interactive',
@@ -340,7 +427,7 @@ export class MemoryRuntime implements MemoryService {
         const proposals = parseDreamText(result.text, prepared.snapshot, prepared.scope).map(proposal => ({
           ...proposal,
           evidence: inheritEvidence(prepared.records, proposal.sourceIds),
-        }))
+        })).filter(proposal => hasEvidence(proposal.evidence))
         return this.markDream(prepared.plan.id, { proposals, status: 'preview' })
       })
     } catch (error) {
@@ -416,11 +503,12 @@ export class MemoryRuntime implements MemoryService {
           revision: 1,
           scope: proposal.scope,
           kind: proposal.kind,
-          status: 'active',
+          status: sources.every(source => source.status === 'active') ? 'active' : 'candidate',
           title: proposal.title,
           content: proposal.content,
           tags: proposal.tags,
-          evidence: hasEvidence(proposal.evidence) ? proposal.evidence : [{ sessionId: plan.sessionId, seq: 0, kind: 'manual', excerpt: 'dream' }],
+          evidence: proposal.evidence,
+          ...(proposal.context ? { context: structuredClone(proposal.context) } : {}),
           exceptions: proposal.exceptions,
           source: 'dream',
           createdAt: now,
@@ -436,7 +524,7 @@ export class MemoryRuntime implements MemoryService {
         for (const sourceId of proposal.sourceIds) {
           const source = proposed.records.find(item => item.id === sourceId)
           if (!source || this.tombstonedIn(proposed, sourceId)) continue
-          if (source.status === 'active') {
+          if (record.status === 'active' && source.status === 'active') {
             source.status = 'superseded'
             source.revision += 1
             source.updatedAt = now
@@ -489,11 +577,12 @@ export class MemoryRuntime implements MemoryService {
       exceptions: input.exceptions ?? [],
       evidence: input.evidence ?? [],
       source: 'user',
-      expiresAt: input.expiresAt,
+      expiresAt: input.expiresAt ?? (input.kind === 'activity' ? this.now() + ACTIVITY_RETENTION_MS : undefined),
     })
   }
 
   abortDreams(): void {
+    for (const job of this.observationJobs.values()) job.abort.abort()
     for (const job of this.jobs.values()) job.abort.abort()
     this.jobs.clear()
   }
@@ -529,6 +618,7 @@ export class MemoryRuntime implements MemoryService {
       createdAt: current.createdAt,
       updatedAt: this.now(),
     })
+    assertCreatable(current)
     this.staleDreamsTouching(proposed, [id])
     if (persist) {
       await this.persistProposed(proposed)
@@ -688,10 +778,16 @@ export class MemoryRuntime implements MemoryService {
     if (ai) {
       try { this.unregisterPurpose = ai.registerPurpose(dreamPurpose) }
       catch { this.unregisterPurpose = undefined }
+      try { this.unregisterObserverPurpose = ai.registerPurpose({
+        id: OBSERVE_PURPOSE, label: '语境观察', defaultTarget: { kind: 'role', role: 'normal' },
+        maxOutputTokens: 1600, maxInputChars: 12000, timeoutMs: 30_000,
+      }) } catch { this.unregisterObserverPurpose = undefined }
     }
   }
 
   private detachAi(): void {
+    this.unregisterObserverPurpose?.()
+    this.unregisterObserverPurpose = undefined
     this.unregisterPurpose?.()
     this.unregisterPurpose = undefined
     this.ai?.dispose()

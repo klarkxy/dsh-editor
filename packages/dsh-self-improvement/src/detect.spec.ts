@@ -28,20 +28,20 @@ describe('conservative lesson triggers', () => {
     expect(triggers[0]?.evidence[0]).toMatchObject({ sessionId: 'sess', seq: 2, kind: 'user' })
   })
 
-  it('detects a verified tool failure then success, not an unfixed failure', () => {
+  it('correlates changed methods on the same target as observations, not verified success', () => {
     const unfixed = detectLessonTriggers([
-      toolCall(1, 'write', 'c1'),
+      toolCall(1, 'write', 'c1', { path: 'chapter.md', encoding: 'bad' }),
       toolResult(2, 'c1', true, 'EACCES'),
     ], 's', -1)
     expect(unfixed).toEqual([])
     const fixed = detectLessonTriggers([
-      toolCall(1, 'write', 'c1'),
+      toolCall(1, 'write', 'c1', { path: 'chapter.md', encoding: 'bad' }),
       toolResult(2, 'c1', true, 'EACCES'),
-      toolCall(3, 'write', 'c2'),
+      toolCall(3, 'write', 'c2', { path: 'chapter.md', encoding: 'utf8' }),
       toolResult(4, 'c2', false, 'ok'),
     ], 's', -1)
     expect(fixed).toHaveLength(1)
-    expect(fixed[0]?.kind).toBe('verified-tool-fix')
+    expect(fixed[0]?.kind).toBe('tool-recovery')
     expect(fixed[0]?.toolName).toBe('write')
     expect(fixed[0]?.evidence.map(item => item.seq)).toEqual([2, 4])
   })

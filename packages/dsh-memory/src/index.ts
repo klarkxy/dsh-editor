@@ -67,6 +67,11 @@ export async function apply(ctx: Context): Promise<void> {
       signal: payload.signal,
       next,
     }))
+    const offStop = listen(ctx, 'agent/turn-stopping', (payload: { agent: { id?: unknown; session?: unknown }; signal: AbortSignal }) => {
+      const session = payload.agent.session
+      const sessionId = String((session as { id?: unknown } | undefined)?.id ?? payload.agent.id ?? '')
+      void runtime.observeSession(sessionId, session, payload.signal).catch(() => {})
+    })
     const offStatus = listen(ctx, 'agent/status', (payload: { agent: { id?: unknown; session?: unknown }; status: string }) => {
       const sessionId = String((payload.agent as { id?: unknown }).id ?? '')
       if (!sessionId) return
@@ -101,7 +106,7 @@ export async function apply(ctx: Context): Promise<void> {
         void runtime.runIdleDream(sessionId, projectIdFromCwd(sessionCwd(readSession(ctx, sessionId))), 'idle').catch(() => {})
       }, wait))
     })
-    return () => { offStep?.(); offStatus?.() }
+    return () => { offStep?.(); offStop?.(); offStatus?.() }
   }, 'dsh-memory.hooks')
 }
 
@@ -124,6 +129,7 @@ function domainStore(domain: DomainHandle): MemoryStore {
         tombstones: stored.tombstones ?? [],
         dreams: stored.dreams ?? [],
         lastAttemptAt: stored.lastAttemptAt,
+        observations: stored.observations,
       })
     },
     async save(state) {

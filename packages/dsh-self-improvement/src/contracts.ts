@@ -91,7 +91,7 @@ export interface SessionWatermark {
   updatedAt: number
 }
 
-export type LessonTriggerKind = 'human-correction' | 'verified-tool-fix' | 'manual'
+export type LessonTriggerKind = 'human-correction' | 'human-instruction' | 'human-feedback' | 'tool-recovery' | 'verified-tool-fix' | 'manual'
 export interface LessonTrigger {
   kind: LessonTriggerKind
   evidence: EvidenceRef[]
