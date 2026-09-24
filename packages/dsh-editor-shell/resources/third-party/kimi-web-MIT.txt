@@ -1,0 +1,31 @@
+Kimi Web design tokens and component styling reference
+Upstream: https://github.com/MoonshotAI/kimi-code
+Revision: e7d5a0aee74e7f116cca0273c416ece9139a78a0
+Source: apps/kimi-web/src/style.css; apps/kimi-web/src/components/ui/Button.vue;
+        apps/kimi-web/src/views/DesignSystemView.vue
+Adapted for DSH Editor's React/Radix shell. DSH Editor is not a Moonshot AI
+product and does not use Kimi logos, character artwork or bundled font assets.
+The following license applies to the adapted upstream portions, independently
+of the rest of DSH Editor's license.
+
+MIT License
+
+Copyright (c) 2026 Moonshot AI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
