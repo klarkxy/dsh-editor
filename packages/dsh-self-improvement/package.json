@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-self-improvement",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Extract verified lessons into Memory and export Markdown skill drafts for DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -104,6 +104,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-316cab7bf554e5aa3dad842a8683f183413c01258764c7dde979f4ea1d54acb4"
+    "contentHash": "sha256-e1b5f847151843c3d01d728d63fb9301f08f3657151d34fdd640479245b6a18b"
   }
 }
