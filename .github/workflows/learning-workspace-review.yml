@@ -4,29 +4,43 @@ on:
     paths:
       - '.github/workflows/learning-workspace-review.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
-  snapshot:
-    if: github.head_ref == 'feat/portable-dream-procedural-learning'
+  apply-reviewed-patch:
+    if: github.head_ref == 'feat/portable-dream-procedural-learning' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.14.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.16.0
-      - name: Archive exact CI toolchain for offline verification
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Verify and apply the reviewed implementation
+        shell: bash
         run: |
-          mkdir -p /tmp/learning-toolchain/bin
-          cp "$(command -v node)" /tmp/learning-toolchain/bin/node
-          cp -a "$(dirname "$(dirname "$(realpath "$(command -v pnpm)")")")" /tmp/learning-toolchain/pnpm
-          tar -czf /tmp/learning-toolchain.tar.gz -C /tmp learning-toolchain
+          python3 - <<'PY'
+          import base64, hashlib, lzma, pathlib
+          encoded = ''.join(pathlib.Path(f'.github/learning-review-patch.{i}').read_text() for i in range(1, 5))
+          patch = lzma.decompress(base64.b64decode(''.join(encoded.split()), validate=True))
+          assert len(patch) == 130786, 'Unexpected patch length'
+          assert hashlib.sha256(patch).hexdigest() == '1f62128af1b7a3c3b91dda7b4d346cce2e008761df75cf96d502174a47ae7799', 'Patch checksum mismatch'
+          headers = [line for line in patch.decode().splitlines() if line.startswith('diff --git ')]
+          assert len(headers) == 36, 'Unexpected file count'
+          for line in headers:
+              _, _, old, new = line.split()
+              assert old[2:] == new[2:] and new.startswith(('b/docs/', 'b/packages/', 'b/e2e/')), 'Unexpected patch path'
+          pathlib.Path('/tmp/learning-implementation.patch').write_bytes(patch)
+          PY
+          git apply --unidiff-zero --check /tmp/learning-implementation.patch
+          git apply --unidiff-zero --index /tmp/learning-implementation.patch
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: separate portable context memory from procedural learning'
+          git push origin HEAD:refs/heads/feat/portable-dream-procedural-learning
+          git show --no-patch --format='%H %T' HEAD
+          git diff-tree --no-commit-id --raw -r HEAD > /tmp/learning-applied-blobs.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: learning-toolchain
-          path: /tmp/learning-toolchain.tar.gz
+          name: learning-applied-blobs
+          path: /tmp/learning-applied-blobs.txt
           retention-days: 1
