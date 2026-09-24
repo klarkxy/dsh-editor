@@ -12,10 +12,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prepare:
-    if: github.head_ref == 'feat/fusion-collaboration'
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,19 +31,7 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - name: Preserve public offline validation toolchain
-        shell: bash
-        run: |
-          mkdir /tmp/fusion-toolchain
-          cp -L "$(command -v node)" /tmp/fusion-toolchain/node
-          PNPM_MAIN="$(find "$(dirname "$(dirname "$(command -v pnpm)")")" -path '*/pnpm/bin/pnpm.cjs' -type f -print -quit)"
-          test -n "$PNPM_MAIN"
-          cp -a "$(dirname "$(dirname "$PNPM_MAIN")")" /tmp/fusion-toolchain/pnpm
-          tar -C /tmp -czf /tmp/fusion-toolchain.tgz fusion-toolchain
-      - uses: actions/upload-artifact@v4
-        with:
-          name: fusion-validation-toolchain
-          path: /tmp/fusion-toolchain.tgz
-          retention-days: 1
-      - name: Build and validate baseline
+      - name: Fusion lifecycle tests
+        run: node --experimental-strip-types --test packages/dsh-fusion/test/*.node.mjs
+      - name: Workspace validation
         run: pnpm build && pnpm typecheck && pnpm test --maxWorkers=2
