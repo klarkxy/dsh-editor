@@ -37,6 +37,9 @@ import { useTransientSuccessNote } from './transient-note.ts'
 import { isAuthorFacingDocumentPath } from '../project-files.ts'
 import { canRewritePath, CUSTOM_INSTRUCTION_MAX, normalizeCustomInstruction } from '../rewrite-presets-view.ts'
 import { t } from '../i18n/index.ts'
+import type { SearchHit } from './search-panel.tsx'
+import { normalizeReferenceQuery } from './reference-lookup.ts'
+import { ReferenceLookupDialog } from './reference-lookup-dialog.tsx'
 import { Button, Dialog, isImeEvent } from './ui/index.ts'
 import { Button as ThemesButton, Callout, Flex, Heading, Text, TextArea } from '@radix-ui/themes'
 import { readableDocumentTitle, rewriteSelectionExcerpt } from '../wrap-up-view.ts'
@@ -92,6 +95,10 @@ export function Editor(props: {
   session: SessionFace
   path: string
   files: string[]
+  referenceFiles?: readonly string[]
+  referenceRevision?: number
+  onOpenReference?(path: string, hit?: SearchHit): void
+  onPinReference?(path: string): void
   create(): void
   externalRevision: number
   onDirtyChange(dirty: boolean): void
@@ -158,6 +165,7 @@ export function Editor(props: {
   const [customRewriteOpen, setCustomRewriteOpen] = useState(false)
   const [customText, setCustomText] = useState('')
   const [customTarget, setCustomTarget] = useState<EditorTargetSnapshot | null>(null)
+  const [referenceQuery, setReferenceQuery] = useState<string | null>(null)
 
   // Serialize draft RPCs so a delayed put cannot land after save's delete.
   // Every call carries this window's ownerId; the queue tracks per-file
@@ -248,6 +256,12 @@ export function Editor(props: {
     if (action === 'undo') { if (live.canUndo) handle.undo(); return }
     if (action === 'redo') { if (live.canRedo) handle.redo(); return }
     if (action === 'selectAll') { if (live.canSelectAll) handle.selectAll(); return }
+    if (action === 'selectParagraph') { if (live.canSelectAll) afterMenu(() => handleRef.current?.selectParagraph?.(target ?? undefined)); return }
+    if (action === 'lookupReferences') {
+      const query = normalizeReferenceQuery(target?.selectedText ?? '')
+      if (query && props.onOpenReference && props.onPinReference) afterMenu(() => setReferenceQuery(query))
+      return
+    }
     if (action === 'save') { if (live.canSave) void handle.save(); return }
     if (action === 'find') { if (live.canFind) afterMenu(() => handleRef.current?.openFind()); return }
     if (action === 'replace') { if (live.canReplace) afterMenu(() => handleRef.current?.openReplace()); return }
@@ -286,7 +300,7 @@ export function Editor(props: {
         if (message) setNote(message)
       })
     }
-  }, [menuTarget, path, closeMenus])
+  }, [menuTarget, path, closeMenus, props.onOpenReference, props.onPinReference])
 
   const onEditorContextMenu = useCallback((event: EditorContextMenuEvent) => {
     if (!snapshotMenu()) return
@@ -297,6 +311,8 @@ export function Editor(props: {
   const menuModel: EditorMenuModel = {
     state: menuState,
     canRewritePath: canRewritePath(path) && completionEnabled,
+    canSelectParagraph: menuState.canSelectAll && Boolean(handleRef.current?.selectParagraph),
+    canLookupReferences: menuState.canCopy && Boolean(props.onOpenReference && props.onPinReference && normalizeReferenceQuery(menuTarget?.selectedText ?? '')),
   }
 
   const runCustomRewrite = () => {
@@ -366,6 +382,7 @@ export function Editor(props: {
     setContextMenu(null)
     setCustomRewriteOpen(false)
     setCustomTarget(null)
+    setReferenceQuery(null)
   }, [path, session.sessionId, externalRevision])
 
   const currentText = bufferText || handleRef.current?.getText() || ''
@@ -478,6 +495,17 @@ export function Editor(props: {
             </Callout.Root> : null} />
         </div>
       </div>
+      {referenceQuery && props.onOpenReference && props.onPinReference ? <ReferenceLookupDialog
+        key={`${session.sessionId}:${path}:${referenceQuery}`}
+        ctx={ctx}
+        sessionId={session.sessionId}
+        query={referenceQuery}
+        files={props.referenceFiles ?? files}
+        revision={props.referenceRevision ?? externalRevision}
+        returnFocusRef={editorFocusTarget}
+        onClose={() => setReferenceQuery(null)}
+        onOpen={props.onOpenReference}
+        onPin={props.onPinReference} /> : null}
       {contextMenu ? <EditorContextMenu
         x={contextMenu.x}
         y={contextMenu.y}
