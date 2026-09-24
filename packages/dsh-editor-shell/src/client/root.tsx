@@ -2100,6 +2100,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               fileSession={fileSession}
               path={path}
               files={isManuscriptChapterPath(path) ? chapterFiles : files}
+              referenceFiles={files}
+              referenceRevision={treeRevision}
+              onOpenReference={openDocument}
+              onPinReference={setPinnedPath}
               onCreate={onEditorCreate}
               onHandle={onEditorHandle}
               contentRevision={contentRevision}
