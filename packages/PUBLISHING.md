@@ -4,7 +4,7 @@
 
 ## 发布
 
-推送到 `main` 会触发 [npm-publish.yml](../.github/workflows/npm-publish.yml)。公开包的实际内容变化会自动发 patch，**包内 README 的变化也计入**；minor、major 和预发布版本不走这套自动流程。push 与发布须获授权。
+仅从当前 `main` 提交推送与桌面版本一致的 `v*` 标签时才触发 [npm-publish.yml](../.github/workflows/npm-publish.yml)；普通提交不运行 npm 发布检测或上传。版本标签触发后，公开包的实际内容变化会自动发 patch，**包内 README 的变化也计入**；minor、major 和预发布版本不走这套自动流程。push 与发布须获授权。
 
 本地预览：
 

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const ci = readFileSync(resolve(root, '.github/workflows/ci.yml'), 'utf8')
 const release = readFileSync(resolve(root, '.github/workflows/release.yml'), 'utf8')
+const npmPublish = readFileSync(resolve(root, '.github/workflows/npm-publish.yml'), 'utf8')
 
 describe('github workflows', () => {
   it('runs build, typecheck and tests on push and pull requests', () => {
@@ -14,6 +15,13 @@ describe('github workflows', () => {
     expect(ci).toContain('tags-ignore:')
   })
 
+  it('publishes npm packages only for version tags', () => {
+    expect(npmPublish).toMatch(/push:\s*\r?\n\s*tags: \['v\*'\]/)
+    expect(npmPublish).not.toContain('branches: [main]')
+    expect(npmPublish).not.toContain('workflow_dispatch:')
+    expect(npmPublish).toContain("startsWith(github.ref, 'refs/tags/v')")
+    expect(npmPublish).toContain('node scripts/verify-release-version.mjs')
+  })
   it('creates a draft release when the tag has no release yet', () => {
     expect(release).toContain('gh release create "$RELEASE_TAG" --draft --title')
     expect(release).not.toMatch(/gh release create "\$RELEASE_TAG" --title/)

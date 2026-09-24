@@ -15,9 +15,11 @@ it('discovers new packages, packs updated workspace versions, and reconciles a l
     return result.stdout
   }
   mkdirSync(join(root, 'scripts'))
-  for (const file of ['publish-npm-plugins.mjs', 'npm-release-policy.mjs']) copyFileSync(resolve('scripts', file), join(root, 'scripts', file))
+  for (const file of ['publish-npm-plugins.mjs', 'npm-release-policy.mjs', 'verify-release-version.mjs']) copyFileSync(resolve('scripts', file), join(root, 'scripts', file))
   writeFileSync(join(root, 'package.json'), JSON.stringify({ private: true, type: 'module', packageManager: 'pnpm@10.14.0' }))
   writeFileSync(join(root, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n")
+  mkdirSync(join(root, 'apps', 'desktop'), { recursive: true })
+  writeFileSync(join(root, 'apps', 'desktop', 'package.json'), JSON.stringify({ version: '0.1.0' }))
   const manifests = new Map()
   for (const [dir, deps] of [['core', {}], ['consumer', { '@klarkxy/fixture-core': 'workspace:*' }]]) {
     const location = join(root, 'packages', dir)
@@ -94,12 +96,20 @@ globalThis.fetch = async (url, options) => {
   // Execute the production publication path with intercepted uploads and a local Git remote.
   run('git', ['branch', '-M', 'main'])
   run('git', ['remote', 'add', 'origin', root])
+  for (const ref of ['refs/heads/main', 'refs/tags/v0.1.1']) {
+    const denied = spawnSync(process.execPath, ['--import', './mock-registry.mjs', 'scripts/publish-npm-plugins.mjs', '--publish'], {
+      cwd: root, encoding: 'utf8', windowsHide: true, timeout: 60000,
+      env: { ...process.env, npm_execpath: pnpm, GITHUB_ACTIONS: 'true', GITHUB_REF: ref, GITHUB_REPOSITORY: 'klarkxy/dsh-editor' },
+    })
+    expect(denied.status).not.toBe(0)
+    expect(denied.stderr).toMatch(/version tags|release tag/)
+  }
   for (const value of Object.values(registry)) value.versions[value['dist-tags'].latest].dshRelease.contentHash = 'changed'
   writeFileSync(join(root, 'registry.json'), JSON.stringify(registry))
   const publish = () => {
     const result = spawnSync(process.execPath, ['--import', './mock-registry.mjs', 'scripts/publish-npm-plugins.mjs', '--publish'], {
       cwd: root, encoding: 'utf8', windowsHide: true, timeout: 60000,
-      env: { ...process.env, npm_execpath: pnpm, GITHUB_ACTIONS: 'true', GITHUB_REF: 'refs/heads/main', GITHUB_REPOSITORY: 'klarkxy/dsh-editor', GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: '' },
+      env: { ...process.env, npm_execpath: pnpm, GITHUB_ACTIONS: 'true', GITHUB_REF: 'refs/tags/v0.1.0', GITHUB_REPOSITORY: 'klarkxy/dsh-editor', GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: '' },
     })
     expect(result.status, result.stderr || result.stdout).toBe(0)
     return JSON.parse(readFileSync(join(root, '.pack/npm-release/report.json'), 'utf8'))

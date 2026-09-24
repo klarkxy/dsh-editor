@@ -5,6 +5,7 @@ import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { packageContentHash, planPackage, publishAndConfirm, orderReleaseTargets } from './npm-release-policy.mjs'
+import { assertReleaseTag, readDesktopVersion } from './verify-release-version.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack/npm-release')
@@ -17,9 +18,11 @@ const targets = orderReleaseTargets(readdirSync(resolve(root, 'packages'), { wit
   }))
 const publish = process.argv.includes('--publish')
 if (!process.env.npm_execpath?.replaceAll('\\', '/').includes('pnpm')) throw new Error('Run through pnpm run publish:plugins')
-if (publish && (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_REF !== 'refs/heads/main' || process.env.GITHUB_REPOSITORY !== 'klarkxy/dsh-editor')) {
-  throw new Error('Automatic publication is restricted to klarkxy/dsh-editor main in GitHub Actions')
+const releaseTag = process.env.GITHUB_REF?.startsWith('refs/tags/') ? process.env.GITHUB_REF.slice('refs/tags/'.length) : ''
+if (publish && (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_REPOSITORY !== 'klarkxy/dsh-editor' || !/^v[^/]+$/.test(releaseTag))) {
+  throw new Error('Automatic publication is restricted to klarkxy/dsh-editor version tags in GitHub Actions')
 }
+if (publish) assertReleaseTag(releaseTag, readDesktopVersion())
 mkdirSync(output, { recursive: true })
 const report = { sourceCommit: run('git', ['rev-parse', 'HEAD']).trim(), mode: publish ? 'publish' : 'plan', packages: [] }
 function run(command, args, options = {}) {
@@ -86,11 +89,10 @@ try {
   if (publish) {
     run('git', ['fetch', 'origin', 'main'])
     if (run('git', ['rev-parse', 'origin/main']).trim() !== report.sourceCommit) {
-      report.skipped = 'main advanced before publication; the newest queued run will reconcile'
-      console.log(report.skipped)
+      throw new Error('Release tag no longer points to current main; aborting before npm registry checks')
     }
   }
-  if (!report.skipped) for (const target of targets) {
+  for (const target of targets) {
     const manifestPath = resolve(root, target.directory, 'package.json')
     const original = readFileSync(manifestPath, 'utf8')
     const manifest = JSON.parse(original)
