@@ -30,4 +30,4 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Check types and tests
-        run: pnpm typecheck && pnpm test --maxWorkers=2
+        run: pnpm typecheck && pnpm test --maxWorkers=2 && pnpm test:fusion
