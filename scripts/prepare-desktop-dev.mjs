@@ -1,10 +1,11 @@
 import { materializeDsh } from './materialize-dsh.mjs'
+import { copyRuntimeDependencies } from './runtime-dependencies.mjs'
 import { cp, mkdir, readFile, rm, symlink } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
 import { compositionInstallNames } from './plugin-manifest.mjs'
-import { workspacePackageDir, desktopComposition, configureProfile, DESKTOP_PACKAGE_NAMES } from './desktop-compositions.mjs'
+import { workspacePackageDir, desktopComposition, configureProfile, runtimeDependencySources, DESKTOP_PACKAGE_NAMES } from './desktop-compositions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceTemplate = resolve(root, 'apps', 'desktop', 'resources', 'profile')
@@ -59,6 +60,7 @@ if (!runtimeReady) {
   await rm(devDshRuntime, { recursive: true, force: true })
   await materializeDsh(dsh.packageRoot, devDshRuntime)
 }
+await copyRuntimeDependencies(devDshRuntime, runtimeDependencySources(composition))
 for (const packageName of DESKTOP_PACKAGE_NAMES) {
   const destination = resolve(devDshRuntime, 'node_modules', packageName)
   if (packages.includes(packageName)) await installPackage(packageName, destination)

@@ -115,8 +115,46 @@ try {
   const packaged = await application.evaluate(({ app }) => app.isPackaged)
   if (!packaged) throw new Error('smoke launched development Electron rather than the package')
   if (existsSync(join(dshHome, 'runtime', 'dsh-editor-runtime'))) throw new Error('macOS installed launch unexpectedly materialized its runtime')
+  // A mounted shell alone does not prove its scoped writing tools can start a session.
+  const notice = page.getByRole('button', { name: '继续', exact: true })
+  for (let step = 0; step < 5 && await notice.waitFor({ state: 'visible', timeout: 1000 }).then(() => true, () => false); step++) {
+    await notice.click()
+  }
+  const later = page.getByRole('button', { name: '稍后配置', exact: true })
+  if (await later.waitFor({ state: 'visible', timeout: 1000 }).then(() => true, () => false)) await later.click()
+  await page.getByRole('button', { name: '新建', exact: true }).click()
+  await page.getByLabel('作品名称').fill('packaged-smoke-workspace')
+  await page.getByRole('button', { name: '创建', exact: true }).click()
+  const tree = page.getByRole('tree', { name: '稿件目录' })
+  await tree.waitFor({ state: 'visible', timeout: 45_000 })
+  const box = await tree.boundingBox()
+  if (!box) throw new Error('packaged manuscript tree has no bounds')
+  await tree.click({ button: 'right', position: { x: 16, y: Math.max(12, box.height - 18) } })
+  await page.getByRole('menu', { name: '文档操作' }).getByRole('menuitem', { name: '新建文件夹' }).click()
+  const folderDialog = page.getByRole('dialog', { name: '新建文件夹' })
+  await folderDialog.getByLabel('文件夹名称').fill('正文')
+  await folderDialog.getByRole('button', { name: '创建', exact: true }).click()
+  await folderDialog.waitFor({ state: 'detached' })
+  await page.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
+  await page.getByRole('button', { name: '在 正文 中新建文件', exact: true }).click()
+  await page.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001')
+  await page.getByRole('button', { name: '创建', exact: true }).click()
+  const editor = page.locator('[data-testid="paper-editor"]')
+  await editor.waitFor({ state: 'visible', timeout: 30_000 })
+  const manuscript = '# 安装包验证\n\n此内容必须由实际稿纸自动保存。\n'
+  await editor.evaluate((el, text) => {
+    const view = el.__cmView
+    if (!view) throw new Error('packaged paper editor has no CodeMirror view')
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } })
+  }, manuscript)
+  const manuscriptPath = join(home, 'projects', 'packaged-smoke-workspace', '正文', '001.md')
+  const deadline = Date.now() + 30_000
+  while (await readFile(manuscriptPath, 'utf8').catch(() => '') !== manuscript) {
+    if (Date.now() > deadline) throw new Error('packaged manuscript was not saved to disk')
+    await delay(100)
+  }
   await page.screenshot({ path: join(output, 'window.png') })
-  await writeFile(join(output, 'report.json'), JSON.stringify({ ok: true, artifact: zipName, packaged, shell: true, runtimeCopied: false }, null, 2))
+  await writeFile(join(output, 'report.json'), JSON.stringify({ ok: true, artifact: zipName, packaged, shell: true, projectCreated: true, manuscriptSaved: true, runtimeCopied: false }, null, 2))
   console.log('macOS packaged ZIP first-launch smoke passed')
 } catch (error) {
   const diagnostic = page ? await page.locator('body').innerText({ timeout: 2_000 }).catch(() => 'unavailable') : 'no window'
