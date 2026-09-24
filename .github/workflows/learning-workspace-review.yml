@@ -13,10 +13,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Archive tracked source for offline review
-        run: git archive --format=tar -o /tmp/dsh-editor-source.tar HEAD
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Archive dependencies and build outputs for offline tests
+        run: tar -czf /tmp/learning-review-deps.tar.gz --exclude='node_modules/.pnpm/electron@*/node_modules/electron/dist' node_modules $(find packages apps -mindepth 2 -maxdepth 2 -type d \( -name node_modules -o -name lib \))
       - uses: actions/upload-artifact@v4
         with:
-          name: learning-review-source
-          path: /tmp/dsh-editor-source.tar
+          name: learning-review-deps
+          path: /tmp/learning-review-deps.tar.gz
           retention-days: 1
