@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { chromium } from 'playwright'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const build = spawnSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['exec', 'tsdown', '--config', 'e2e/ui-design.config.ts'], { cwd: root, stdio: 'inherit' })
+const build = spawnSync(process.execPath, [fileURLToPath(import.meta.resolve('tsdown/run')), '--config', 'e2e/ui-design.config.ts'], { cwd: root, stdio: 'inherit' })
 if (build.error) throw build.error
 if (build.status !== 0) throw new Error(`UI preview build failed (${build.status})`)
 const out = new URL('../.artifacts/ui-design/', import.meta.url)
@@ -39,6 +39,10 @@ try {
   assert.equal(await page.locator('.plugin-sentinel').evaluate(el => getComputedStyle(el).borderRadius), '2px')
   await page.screenshot({ path: fileURLToPath(new URL('light-1440.png', out)), fullPage: true })
   await page.getByRole('button', { name: 'Toggle theme' }).click()
+  await page.waitForFunction(() => {
+    const chat = document.querySelector('.chat')
+    return chat && getComputedStyle(chat).backgroundColor === 'rgb(13, 17, 23)'
+  })
   assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(13, 17, 23)')
   assert(await paper.evaluate(el => el === window.__paperNode))
   assert.equal(await paper.inputValue(), '保留的正文，切换主题不应丢失。')

@@ -2485,11 +2485,13 @@ type RegisterShellRootOptions = {
 // open panels position against their launcher via the --dsh-ext-* contract.
 type RootSlotProps = { renderSlot?: SettingsRenderSlot }
 
-function ExtensionsDock(props: { rootProps: unknown }) {
+export function ExtensionsDock(props: { rootProps: unknown }) {
   const renderSlot = (props.rootProps as RootSlotProps | null | undefined)?.renderSlot
   return (
     <div className="shell-extensions-dock" data-testid="shell-extensions-dock">
-      {renderSlot ? renderSlot(EXTENSIONS_SLOT, HOST_UI_OWNER) : null}
+      <div data-dsh-plugin-surface="" style={{ display: 'contents' }}>
+        {renderSlot ? renderSlot(EXTENSIONS_SLOT, HOST_UI_OWNER) : null}
+      </div>
     </div>
   );
 }

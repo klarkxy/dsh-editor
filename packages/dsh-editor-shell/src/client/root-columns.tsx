@@ -67,6 +67,14 @@ export const TreeColumn = memo(function TreeColumn(props: SidebarFileMenuProps &
   );
 })
 
+export function SidebarTools(props: { renderSlot?: SettingsRenderSlot; seatContext: ShellToolSeatContext }) {
+  return <div className="sidebar-tools">
+    <div data-dsh-plugin-surface="" style={{ display: 'contents' }}>
+      {props.renderSlot?.(SIDEBAR_TOOLS_SLOT, props.seatContext) ?? null}
+    </div>
+  </div>
+}
+
 export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuProps & {
   ctx: ShellContext
   sessionId: string
@@ -177,9 +185,7 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
         activeDirty={props.activeDirty}
         onOpen={(hit: SearchHit) => props.onOpenDocument(hit.path, hit)}
         onReplaced={props.onSearchReplaced} /> : null}
-      <div className="sidebar-tools">
-        {props.renderSlot?.(SIDEBAR_TOOLS_SLOT, props.seatContext) ?? null}
-      </div>
+      <SidebarTools renderSlot={props.renderSlot} seatContext={props.seatContext} />
       {props.createNote ? <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="alert">
         <Callout.Text>
           {props.createNote}
@@ -320,7 +326,9 @@ export const CenterOverlays = memo(function CenterOverlays(props: {
 }) {
   return props.show
     ? <Box className="center-overlays">
-    {props.renderSlot?.(CENTER_OVERLAYS_SLOT, props.seatContext) ?? null}
+    <div data-dsh-plugin-surface="" style={{ display: 'contents' }}>
+      {props.renderSlot?.(CENTER_OVERLAYS_SLOT, props.seatContext) ?? null}
+    </div>
   </Box>
     : null;
 })
