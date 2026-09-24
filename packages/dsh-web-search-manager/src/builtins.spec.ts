@@ -35,7 +35,8 @@ describe('builtin web providers', () => {
       kind: 'search', billing: 'none', configured: true, label: 'DuckDuckGo',
     })
     expect(providers.find(row => row.id === 'deepseek-official')).toMatchObject({
-      credentialRef: 'DEEPSEEK_API_KEY', credentialShared: true, billing: 'model-and-tools', configured: true,
+      credentialRef: 'DEEPSEEK_API_KEY', credentialShared: true, credentialHint: '与模型设置共用 Key',
+      billing: 'model-and-tools', configured: true,
     })
     expect(providers.find(row => row.id === 'http')).toMatchObject({
       kind: 'fetch', configured: true, billing: 'none',

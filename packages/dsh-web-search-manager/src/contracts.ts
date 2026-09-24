@@ -12,9 +12,15 @@ export interface ProviderDescriptor {
   readonly description: string
   readonly defaultBaseURL?: string
   readonly credentialRef?: string
-  /** True when the key is shared with another surface (e.g. the chat model Key). The page must not delete it. */
+  /** True when the key is shared with another surface. The page must not delete it. */
   readonly credentialShared?: boolean
+  /** Optional notice naming the settings surface that owns a shared credential. */
+  readonly credentialHint?: string
   readonly billing: 'request' | 'model-and-tools' | 'none'
+  /** Optional provider-supplied billing summary. */
+  readonly pricing?: string
+  /** Public HTTPS page explaining provider charges. */
+  readonly pricingUrl?: string
   /** Public HTTPS page where the user can create an API key. */
   readonly signupUrl?: string
 }

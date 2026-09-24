@@ -3,6 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { WebRuntime, WebError } from '@deepseek-ai/dsh-web'
 import { WebSearchManager } from './manager.ts'
 import { defaultSettings, type WebSettings } from './contracts.ts'
+import { searchProviderInfo } from './provider-info.ts'
 
 const fixtures: WebSearchManager[] = []
 afterEach(async () => { await Promise.all(fixtures.splice(0).map(manager => manager.dispose())); vi.unstubAllEnvs() })
@@ -99,6 +100,30 @@ describe('managed web authorization over the actual DSH WebRuntime', () => {
     await update(manager, { searchOrder: ['tavily', 'exa'], searchProvider: 'tavily' })
     await web.search({ query: 'hello' })
     expect(other).toHaveBeenCalledOnce()
+  })
+  it('passes provider-owned display metadata through status and rejects unsafe pricing links', () => {
+    const { manager } = setup()
+    const descriptor = {
+      id: 'custom-search', label: 'Custom', description: 'Extension description',
+      credentialRef: 'CUSTOM_SEARCH_KEY', credentialShared: true,
+      credentialHint: 'Shared with Custom settings', billing: 'request' as const,
+      pricing: 'Custom plan terms', pricingUrl: 'https://example.com/pricing',
+    }
+    const factory = () => ({ id: 'custom-search', available: () => true,
+      search: async () => ({ sources: [], truncated: false }),
+    })
+    const off = manager.registerSearchProvider(descriptor, factory)
+    const view = manager.status().providers.find(row => row.id === descriptor.id)
+    expect(view).toMatchObject(descriptor)
+    expect(searchProviderInfo(view!)).toEqual({
+      description: 'Extension description', pricing: 'Custom plan terms',
+      pricingUrl: 'https://example.com/pricing',
+    })
+    for (const pricingUrl of ['javascript:alert(1)', 'https://user@example.com/pricing']) {
+      expect(() => manager.registerSearchProvider({ ...descriptor, id: 'unsafe', pricingUrl }, factory))
+        .toThrow('费用说明地址须为 HTTPS。')
+    }
+    off()
   })
   it('rejects duplicate IDs and unloads the provider without retaining a route', async () => {
     const { manager, web, off } = setup()

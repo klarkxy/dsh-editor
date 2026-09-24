@@ -127,11 +127,12 @@ export class WebSearchManager {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(descriptor.id) || !descriptor.label.trim()) fail('WEB_INVALID_PROVIDER', '供应商标识或名称无效。')
     if (descriptor.credentialRef && !/^[A-Z][A-Z0-9_]{1,127}$/.test(descriptor.credentialRef)) fail('WEB_INVALID_PROVIDER', '供应商凭据引用无效。')
     if (descriptor.defaultBaseURL) validateBaseURL(descriptor.defaultBaseURL)
-    if (descriptor.signupUrl) {
+    for (const [value, label] of [[descriptor.signupUrl, '注册地址'], [descriptor.pricingUrl, '费用说明地址']] as const) {
+      if (!value) continue
       try {
-        const url = new URL(descriptor.signupUrl)
-        if (url.protocol !== 'https:' || url.username || url.password) fail('WEB_INVALID_PROVIDER', '注册地址须为 HTTPS。')
-      } catch { fail('WEB_INVALID_PROVIDER', '注册地址须为 HTTPS。') }
+        const url = new URL(value)
+        if (url.protocol !== 'https:' || url.username || url.password) fail('WEB_INVALID_PROVIDER', `${label}须为 HTTPS。`)
+      } catch { fail('WEB_INVALID_PROVIDER', `${label}须为 HTTPS。`) }
     }
     if (this.entries.has(key)) fail('WEB_DUPLICATE_PROVIDER', '供应商标识已注册。')
     const entry: Entry = {

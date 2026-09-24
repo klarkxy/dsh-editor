@@ -337,7 +337,7 @@ export function NetworkSearchSettings({ client }: { client: Client }) {
                     label={provider.label + ' 费用说明'}>{provider.id === 'ddg' ? '官网' : '费用说明'}</ExternalLink></>}</p>
                 </div>
                 {participating && !provider.configured && <p className="web-search-meta">{needsKey ? '待配置 Key' : '暂不可用'}</p>}
-                {shared && participating && <small>{provider.id === 'zhihu-global' ? '与「知乎资料」共用 Access Secret' : '与模型设置共用 Key'}</small>}
+                {shared && participating && <small>{provider.credentialHint ?? '与其他设置共用凭据'}</small>}
                 {showKey ? <label>API Key
                   <input type="password" autoComplete="off" spellCheck={false}
                     disabled={busy || writable[provider.credentialRef ?? ''] === false}

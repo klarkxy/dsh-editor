@@ -26,7 +26,7 @@ DSH Web 提供搜索、设置、用量与知识库视图。DSH Editor 在「设�
 
 可查询站内、全网、热榜、直答和公开知识库。上传的参考文件保存在知乎云端，请勿上传未发表手稿。
 
-同一 profile 安装 [@klarkxy/dsh-web-search-manager](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) 后，可在网络搜索的后端列表开启「知乎全网搜索」，共用 Access Secret。专用知乎工具仍可独立使用。
+同一 profile 还安装 [@klarkxy/dsh-web-search-manager](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) 时，本插件会向网络搜索注册「知乎全网搜索」后端。在网络搜索设置中启用它，即可让通用网络搜索工具使用知乎的全网搜索能力，并共用「知乎资料」中配置的 Access Secret。专用知乎工具仍可独立使用。
 
 ## 开发
 

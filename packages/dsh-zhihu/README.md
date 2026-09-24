@@ -26,7 +26,7 @@ DSH Web provides search, settings, usage, and knowledge-base views. In DSH Edito
 
 Search covers Zhihu, the wider web, trending topics, answers, and public knowledge bases. Uploaded reference files are stored in Zhihu's cloud; do not upload unpublished manuscripts.
 
-Installing [@klarkxy/dsh-web-search-manager](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) in the same profile adds **Zhihu global search** to its provider list. Enable it there to use standard web search with the same Access Secret. The dedicated Zhihu tools work independently.
+When [@klarkxy/dsh-web-search-manager](https://www.npmjs.com/package/@klarkxy/dsh-web-search-manager) is also installed in the same profile, this plugin registers **Zhihu global search** as a provider in its web search settings. Enable that provider to use Zhihu's global search through the standard web search tool with the Access Secret from Zhihu settings. The dedicated Zhihu tools work independently.
 
 ## Development
 

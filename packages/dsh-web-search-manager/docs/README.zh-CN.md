@@ -26,8 +26,6 @@ DSH Editor 已内置此插件、模型工具及 Tavily 适配器。
 
 按优先级使用第一个就绪后端，缺密钥的跳过，失败不自动换家。开启搜索也会启用公开网页读取。连接测试发送固定查询，不发送作品内容，可能产生一次调用费用。
 
-安装 [@klarkxy/dsh-zhihu](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) 后，「知乎全网搜索」共用知乎设置中的 Access Secret。
-
 只配置可信 HTTPS 端点，密钥会发送到该地址。凭据由 DSH 保存，落盘保护取决于其后端配置。用量计数是调用尝试，不等于账单或消费上限。
 
 关闭受管后端会取消其请求，但不能阻止其它插件自行联网。搜索结果是外部资料，不授权修改稿件。
@@ -36,7 +34,7 @@ DSH Editor 已内置此插件、模型工具及 Tavily 适配器。
 
 ## 扩展与开发
 
-复用 DSH 的 `ctx.web`。扩展供应商可参照[管理接口](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/contracts.ts)、[内置注册](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/builtins.ts)和 [Tavily 适配器](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/tavily.ts)。须传递取消信号；`available()` 只检查本地状态，不发送网络请求。
+复用 DSH 的 `ctx.web`。扩展供应商可参照[管理接口](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/contracts.ts)、[内置注册](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/builtins.ts)和 [Tavily 适配器](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/tavily.ts)。须传递取消信号；`available()` 只检查本地状态，不发送网络请求。扩展后端可在注册描述中提供 `pricing`、HTTPS `pricingUrl`；共用凭据时可提供 `credentialHint`，由后端维护自己的设置页文案。
 
 在仓库根运行：
 

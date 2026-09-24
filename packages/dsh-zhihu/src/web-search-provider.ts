@@ -20,10 +20,13 @@ export const ZHIHU_WEB_SEARCH_ID = 'zhihu-global'
 export const ZHIHU_WEB_SEARCH_DESCRIPTOR = {
   id: ZHIHU_WEB_SEARCH_ID,
   label: '知乎全网搜索',
-  description: '使用已配置的知乎 Access Secret 检索公开网页。与「知乎资料」共用同一份凭证。',
+  description: '融合知乎问答与全网内容，返回可溯源的搜索结果。',
   credentialRef: ZHIHU_CREDENTIAL_REF,
   credentialShared: true,
+  credentialHint: '与「知乎资料」共用 Access Secret',
   billing: 'request' as const,
+  pricing: '注册可获 5,000 次/天试用额度；超额价格需向平台咨询。',
+  pricingUrl: 'https://developer.zhihu.com/',
   signupUrl: 'https://developer.zhihu.com',
 }
 

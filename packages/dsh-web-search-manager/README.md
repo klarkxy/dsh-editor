@@ -26,8 +26,6 @@ DuckDuckGo is enabled by default and requires no key. Enable another provider an
 
 The first ready provider by priority is used. Missing credentials are skipped; failed requests do not automatically switch providers. Enabling search also enables public-page fetching. A connection test sends a fixed query, not manuscript content, and may incur a provider charge.
 
-With [@klarkxy/dsh-zhihu](https://www.npmjs.com/package/@klarkxy/dsh-zhihu) installed, **Zhihu global search** shares the Access Secret from Zhihu settings.
-
 Only configure trusted HTTPS endpoints: API keys are sent to them. Credentials use DSH storage; protection at rest depends on its configured backend. Usage counters are call attempts, not billing statements or a spending cap.
 
 Disabling a managed provider cancels its requests, but does not sandbox HTTP calls made directly by other plugins. Search results are external material and cannot authorize changes to manuscripts.
@@ -36,7 +34,7 @@ If deployment environment overrides conflict with the settings selection, remove
 
 ## Extend or develop
 
-Use DSH's existing `ctx.web` service. For a provider extension, see [manager contracts](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/contracts.ts), [built-in registration](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/builtins.ts), and the [Tavily adapter](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/tavily.ts). Forward cancellation signals; `available()` must check local state without a network request.
+Use DSH's existing `ctx.web` service. For a provider extension, see [manager contracts](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/contracts.ts), [built-in registration](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/builtins.ts), and the [Tavily adapter](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-web-search-manager/src/tavily.ts). Forward cancellation signals; `available()` must check local state without a network request. Provider extensions can supply `pricing`, an HTTPS `pricingUrl`, and `credentialHint` for a shared credential in their registration metadata.
 
 From the repository root:
 

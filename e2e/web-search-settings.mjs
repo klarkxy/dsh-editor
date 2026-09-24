@@ -85,7 +85,7 @@ function failResult(error) {
   return { ok: false, error: { code, message, details: {} } }
 }
 
-function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings }) {
+function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings, zhihuDescriptor }) {
   const state = {
     manager: null,
     keys: new Map(),
@@ -176,10 +176,14 @@ function createHost({ WebSearchManager, BraveSearchProvider, defaultSettings }) 
         ['zhihu-global', '知乎全网搜索'], ['bocha', '博查'], ['deepseek-official', 'DeepSeek 搜索'],
         ['exa', 'Exa'], ['firecrawl', 'Firecrawl'], ['serper', 'Serper'], ['tavily', 'Tavily'],
       ]) {
-        state.manager.registerSearchProvider({
-          id, label, description: 'Provider fixture', billing: 'request',
-          credentialRef: 'FIXTURE_' + id.replaceAll('-', '_').toUpperCase(), credentialShared: id === 'zhihu-global' || id === 'deepseek-official',
-        }, options => ({ id, available: () => Boolean(options.apiKey),
+        const descriptor = id === zhihuDescriptor.id
+          ? { ...zhihuDescriptor, credentialRef: 'FIXTURE_ZHIHU_GLOBAL' }
+          : { id, label, description: 'Provider fixture', billing: 'request',
+              credentialRef: 'FIXTURE_' + id.replaceAll('-', '_').toUpperCase(),
+              credentialShared: id === 'deepseek-official',
+              ...(id === 'deepseek-official' ? { credentialHint: '与模型设置共用 Key' } : {}),
+            }
+        state.manager.registerSearchProvider(descriptor, options => ({ id, available: () => Boolean(options.apiKey),
           async search() { throw new Error('Catalog rendering must not call providers') },
         }))
       }
@@ -346,12 +350,14 @@ try {
     }],
   })
 
-  const [{ WebSearchManager }, { BraveSearchProvider }, contracts] = await Promise.all([
+  const [{ WebSearchManager }, { BraveSearchProvider }, contracts, { ZHIHU_WEB_SEARCH_DESCRIPTOR }] = await Promise.all([
     vite.ssrLoadModule('/packages/dsh-web-search-manager/src/manager.ts'),
     vite.ssrLoadModule('/packages/dsh-web-search-manager/src/rest-search.ts'),
     vite.ssrLoadModule('/packages/dsh-web-search-manager/src/contracts.ts'),
+    vite.ssrLoadModule('/packages/dsh-zhihu/src/web-search-provider.ts'),
   ])
-  host = createHost({ WebSearchManager, BraveSearchProvider, defaultSettings: contracts.defaultSettings })
+  host = createHost({ WebSearchManager, BraveSearchProvider, defaultSettings: contracts.defaultSettings,
+    zhihuDescriptor: ZHIHU_WEB_SEARCH_DESCRIPTOR })
   await host.reset()
 
   httpServer = createHttpServer((req, res) => {
@@ -742,6 +748,7 @@ try {
     await remount(page)
     const zhihu = page.getByTestId('web-search-rank-zhihu-global')
     assert.match(await zhihu.innerText(), /与「知乎资料」共用 Access Secret/)
+    assert.match(await zhihu.innerText(), /融合知乎问答与全网内容/)
     assert.doesNotMatch(await zhihu.innerText(), /与模型设置共用/)
   })
 } catch (error) {

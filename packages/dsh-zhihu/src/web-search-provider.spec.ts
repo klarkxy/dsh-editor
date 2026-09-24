@@ -101,6 +101,9 @@ describe('bindZhihuWebSearch', () => {
       id: 'zhihu-global',
       credentialRef: 'ZHIHU_ACCESS_TOKEN',
       credentialShared: true,
+      credentialHint: '与「知乎资料」共用 Access Secret',
+      pricing: '注册可获 5,000 次/天试用额度；超额价格需向平台咨询。',
+      pricingUrl: 'https://developer.zhihu.com/',
     })
     expect(ZHIHU_WEB_SEARCH_DESCRIPTOR.id).toMatch(/^[a-z][a-z0-9-]{0,63}$/)
     expect(ZHIHU_WEB_SEARCH_DESCRIPTOR.credentialRef).toMatch(/^[A-Z][A-Z0-9_]{1,127}$/)

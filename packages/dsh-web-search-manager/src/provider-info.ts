@@ -15,11 +15,6 @@ const providerInfo: Record<string, ProviderInfo> = {
     pricing: '免费使用，不产生搜索 API 费用。',
     pricingUrl: 'https://duckduckgo.com/',
   },
-  'zhihu-global': {
-    description: '融合知乎问答与全网内容，返回可溯源的搜索结果。',
-    pricing: '注册可获 5,000 次/天试用额度；超额价格需向平台咨询。',
-    pricingUrl: 'https://developer.zhihu.com/',
-  },
   bocha: {
     description: '面向中文内容的网页搜索，返回标题、链接和摘要。',
     pricing: '按调用次数计费，目录价 ¥0.036/次；试用额度以官方活动为准。',
@@ -58,11 +53,12 @@ const providerInfo: Record<string, ProviderInfo> = {
 }
 
 export function searchProviderInfo(provider: ProviderView): ProviderInfo {
-  return (Object.hasOwn(providerInfo, provider.id) ? providerInfo[provider.id] : undefined) ?? {
-    description: provider.description,
-    pricing: provider.billing === 'none' ? '此后端不收取搜索费用。'
+  const known = Object.hasOwn(providerInfo, provider.id) ? providerInfo[provider.id] : undefined
+  return {
+    description: known?.description ?? provider.description,
+    pricing: provider.pricing ?? known?.pricing ?? (provider.billing === 'none' ? '此后端不收取搜索费用。'
       : provider.billing === 'model-and-tools' ? '按模型用量和工具调用计费；免费额度及单价请查看供应商说明。'
-        : '按 API 调用计费；免费额度及单价请查看供应商说明。',
-    pricingUrl: provider.signupUrl,
+        : '按 API 调用计费；免费额度及单价请查看供应商说明。'),
+    pricingUrl: provider.pricingUrl ?? known?.pricingUrl ?? provider.signupUrl,
   }
 }

@@ -22,7 +22,7 @@ export function registerBuiltins(manager: WebSearchManager): () => void {
     id: 'deepseek-official', label: 'DeepSeek 搜索',
     description: '使用已配置的 DeepSeek API Key。可能产生额外搜索费用。',
     defaultBaseURL: DEEPSEEK_DEFAULT_BASE_URL, credentialRef: 'DEEPSEEK_API_KEY',
-    credentialShared: true, billing: 'model-and-tools',
+    credentialShared: true, credentialHint: '与模型设置共用 Key', billing: 'model-and-tools',
     signupUrl: 'https://platform.deepseek.com/api_keys',
   }, options => new DeepSeekSearchProvider(() => ({
     apiKey: options.apiKey, baseURL: options.baseURL ?? DEEPSEEK_DEFAULT_BASE_URL,
