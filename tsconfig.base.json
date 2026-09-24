@@ -112,6 +112,15 @@
       ],
       "@klarkxy/dsh-ai-services/insert-output": [
         "packages/dsh-ai-services/src/insert-output.ts"
+      ],
+      "@klarkxy/dsh-fusion": [
+        "packages/dsh-fusion/src/index.ts"
+      ],
+      "@klarkxy/dsh-fusion/contracts": [
+        "packages/dsh-fusion/src/contracts.ts"
+      ],
+      "@klarkxy/dsh-fusion/host-contracts": [
+        "packages/dsh-fusion/src/host-contracts.ts"
       ]
     }
   }

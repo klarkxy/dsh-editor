@@ -421,6 +421,9 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: 0.1.7-alpha.1
         version: 0.1.7-alpha.1(91629e4de0997f449fbd5f67172bb201)
+      '@klarkxy/dsh-fusion':
+        specifier: workspace:*
+        version: link:../dsh-fusion
 
   packages/dsh-editor-workspace-kit:
     dependencies:
@@ -449,6 +452,55 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/debug@4.1.13)(@types/node@25.9.5)(jiti@2.7.0)(yaml@2.9.1)
+
+  packages/dsh-fusion:
+    dependencies:
+      '@deepseek-ai/dsh-storage-domain':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)(@deepseek-ai/dsh-invariants@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3))(@deepseek-ai/dsh-storage@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3))
+      '@klarkxy/dsh-ai-services':
+        specifier: workspace:*
+        version: link:../dsh-ai-services
+      zod:
+        specifier: ^4.1.5
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.3
+        version: 4.0.3(@deepseek-ai/cordis-plugin-include@1.0.8)(@deepseek-ai/cordis-plugin-loader@1.0.4)
+      '@deepseek-ai/dsh-agent':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(8aad7794221bef769db11911a1864d3f)
+      '@deepseek-ai/dsh-llm':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)
+      '@deepseek-ai/dsh-session':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)(@deepseek-ai/dsh-scope@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)(@deepseek-ai/dsh-invariants@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)))
+      '@deepseek-ai/dsh-session-projection':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)(@deepseek-ai/dsh-session@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)(@deepseek-ai/dsh-scope@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)(@deepseek-ai/dsh-invariants@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3))))
+      '@deepseek-ai/dsh-session-query':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(156df306f2b5c9adde907cef77a4712f)
+      '@deepseek-ai/dsh-subagent':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(a5921f3c4f0d636d024a391af0eb2a9e)
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)(@deepseek-ai/dsh-invariants@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3))(@deepseek-ai/dsh-llm@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3))(@deepseek-ai/dsh-scope@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)(@deepseek-ai/dsh-invariants@0.1.7-alpha.1(@deepseek-ai/cordis@4.0.3)))
+      '@deepseek-ai/dsh-tools':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(91629e4de0997f449fbd5f67172bb201)
+      '@deepseek-ai/dsh-workspace':
+        specifier: 0.1.7-alpha.1
+        version: 0.1.7-alpha.1(bb5203b180e3eea92ab78ee55fea39f1)
+      '@types/react':
+        specifier: 18.3.31
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
   packages/dsh-manuscript:
     dependencies:

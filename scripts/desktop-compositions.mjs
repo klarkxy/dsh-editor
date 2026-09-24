@@ -75,11 +75,12 @@ export async function configureProfile(destination, composition) {
     ? `- insert:\n${composition.extraInserts.map((row) => `    - id: ${row.id}\n      name: ${JSON.stringify(row.name)}\n`).join('')}`
     : ''
   const disabledPatch = composition.disabledEntries.map((id) => `- id: ${id}\n  disabled: true\n`).join('')
+  const enabledPatch = (composition.enabledEntries ?? []).map((id) => `- id: ${id}\n  disabled: false\n`).join('')
   const featureKeys = Object.keys(composition.shellFeatures)
   const featuresPatch = featureKeys.length
     ? `    features:\n${featureKeys.map((feature) => `      ${feature}: ${composition.shellFeatures[feature]}\n`).join('')}`
     : '    features: {}\n'
-  const selectionPatch = `${extraInsertPatch}${disabledPatch}- id: editor-shell\n  config:\n${featuresPatch}`
+  const selectionPatch = `${extraInsertPatch}${disabledPatch}${enabledPatch}- id: editor-shell\n  config:\n${featuresPatch}`
   const configBundle = resolve(destination, 'node_modules', 'dsh-editor-profile-config')
   await mkdir(configBundle, { recursive: true })
   await writeFile(resolve(configBundle, 'package.json'), JSON.stringify({ name: 'dsh-editor-profile-config', private: true, version: '1.0.0', dsh: { bundle: { patch: ['./base.patch.yml', './presets.patch.json'] } } }))

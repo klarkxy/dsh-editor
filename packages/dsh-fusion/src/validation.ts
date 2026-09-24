@@ -55,15 +55,20 @@ export function target(value: unknown): FusionTarget | undefined {
   requireFusion(JSON.stringify(data).length <= 200_000, 'INVALID_INPUT', 'Target exceeds storage limit.')
   return { domain, data: structuredClone(data) as { [key: string]: Json } }
 }
+function timestamp(value: unknown): void {
+  requireFusion(typeof value === 'number' && Number.isSafeInteger(value) && value >= 0, 'INVALID_STATE', 'Invalid record timestamp.')
+}
 /** Validate persisted control records before allowing any native work to resume. */
 export function validateState(value: unknown): FusionState {
   const row = object(value)
   requireFusion(row.version === 1 && Number.isSafeInteger(row.revision) && Number(row.revision) >= 0, 'INVALID_STATE', 'Unsupported Fusion storage version.')
   requireFusion(Array.isArray(row.pairs) && row.pairs.length <= 512, 'INVALID_STATE', 'Invalid Fusion pair table.')
-  const leads = new Set<string>(), children = new Set<string>(), tasks = new Set<string>()
+  const pairIds = new Set<string>(), leads = new Set<string>(), children = new Set<string>(), tasks = new Set<string>()
   for (const value of row.pairs) {
     const pair = object(value)
-    text(pair.id, 'pair id', 200); text(pair.project, 'project identity', 8192)
+    const pairId = text(pair.id, 'pair id', 200)
+    requireFusion(!pairIds.has(pairId), 'INVALID_STATE', 'Duplicate pair identity.'); pairIds.add(pairId)
+    timestamp(pair.createdAt); text(pair.project, 'project identity', 8192)
     const lead = text(pair.leadSessionId, 'lead id', 200), child = text(pair.childSessionId, 'child id', 200)
     requireFusion(!leads.has(lead) && !children.has(child) && lead !== child, 'INVALID_STATE', 'Duplicate Fusion identity.')
     leads.add(lead); children.add(child)
@@ -74,6 +79,9 @@ export function validateState(value: unknown): FusionState {
     for (const value of pair.tasks) {
       const task = object(value), id = text(task.id, 'task id', 200)
       requireFusion(!tasks.has(id), 'INVALID_STATE', 'Duplicate task identity.'); tasks.add(id)
+      timestamp(task.createdAt); timestamp(task.updatedAt)
+      if (task.error !== undefined) text(task.error, 'task error', 16_000, true)
+      if (task.decision !== undefined) text(task.decision, 'task decision', 16_000, true)
       integer(task.revision, 'task revision'); brief(task.brief); target(task.target)
       requireFusion(['dispatching','working','decision','review','accepted','cancelled','failed','interrupted'].includes(String(task.state)), 'INVALID_STATE', 'Unknown task state.')
       requireFusion(['pending','accepted','uncertain'].includes(String(task.delivery)), 'INVALID_STATE', 'Unknown delivery state.')
@@ -84,22 +92,47 @@ export function validateState(value: unknown): FusionState {
       const candidates = new Map<string, string>()
       for (const [index, item] of task.candidates.entries()) {
         const candidate = object(item)
+        timestamp(candidate.createdAt)
         const candidateId = text(candidate.id, 'candidate id', 200)
         requireFusion(!candidates.has(candidateId), 'INVALID_STATE', 'Duplicate candidate identity.')
         requireFusion(integer(candidate.revision, 'candidate revision') === index + 1, 'INVALID_STATE', 'Invalid candidate order.')
         requireFusion(integer(candidate.taskRevision, 'candidate task revision') <= Number(task.revision), 'INVALID_STATE', 'Candidate belongs to a future task revision.')
-        const candidateText = text(candidate.text, 'candidate', 200_000); text(candidate.report, 'report', 16_000, true)
+        const candidateText = text(candidate.text, 'candidate', 200_000, true); text(candidate.report, 'report', 16_000, true)
         requireFusion(typeof candidate.hash === 'string' && /^[a-f0-9]{64}$/.test(candidate.hash), 'INVALID_STATE', 'Invalid candidate hash.')
         requireFusion(createHash('sha256').update(candidateText, 'utf8').digest('hex') === candidate.hash, 'INVALID_STATE', 'Candidate content does not match its stored hash.')
         candidates.set(candidateId, candidate.hash)
       }
+      if (task.cleanup !== undefined) requireFusion(['pending', 'done', 'failed'].includes(String(task.cleanup)), 'INVALID_STATE', 'Invalid cleanup state.')
+      if (task.adoption !== undefined) requireFusion(['pending', 'applied', 'dismissed', 'conflict'].includes(String(task.adoption)) && pair.profile === 'writing' && task.target, 'INVALID_STATE', 'Invalid adoption state.')
+      if (task.application !== undefined) {
+        const application = object(task.application)
+        text(application.id, 'application id', 200); text(application.path, 'application path', 8192)
+        text(application.beforeVersion, 'application baseline', 8192, true)
+        const destination = target(task.target)
+        requireFusion(destination && (destination.data.path === undefined || destination.data.path === application.path), 'INVALID_STATE', 'Application path differs from its captured target.')
+        const candidateId = text(application.candidateId, 'application candidate', 200)
+        const latest = object(task.candidates.at(-1))
+        requireFusion(latest.id === candidateId && latest.taskRevision === task.revision && candidates.get(candidateId) === application.candidateHash, 'INVALID_STATE', 'Application references an unknown candidate.')
+        requireFusion(typeof application.afterHash === 'string' && /^[a-f0-9]{64}$/.test(application.afterHash), 'INVALID_STATE', 'Invalid resulting file hash.')
+        requireFusion(['pending', 'applied', 'conflict'].includes(String(application.state)) && pair.profile === 'writing' && task.target && task.state === 'accepted', 'INVALID_STATE', 'Invalid application state.')
+        if (application.version !== undefined) text(application.version, 'application receipt version', 8192)
+        if (application.state === 'pending') requireFusion(task.adoption === 'pending', 'INVALID_STATE', 'Pending intent requires pending adoption.')
+        if (application.state === 'conflict') requireFusion(task.adoption === 'conflict' || task.adoption === 'dismissed', 'INVALID_STATE', 'Conflicting intent requires conflict or dismissal.')
+        if (application.state === 'applied') requireFusion(task.adoption === 'applied' && application.version, 'INVALID_STATE', 'Applied intent requires a receipt.')
+      }
       for (const item of task.reviews) {
         const review = object(item)
+        timestamp(review.createdAt)
         const candidateId = text(review.candidateId, 'review candidate', 200)
         const hash = text(review.candidateHash, 'review hash', 64)
         requireFusion(candidates.get(candidateId) === hash, 'INVALID_STATE', 'Review references an unknown candidate revision.')
         requireFusion(['accept','revise','reject'].includes(String(review.verdict)), 'INVALID_STATE', 'Invalid review verdict.')
         text(review.feedback, 'feedback', 16_000, true)
+      }
+      if (task.state === 'accepted') {
+        const candidate = task.candidates.at(-1) && object(task.candidates.at(-1))
+        const review = task.reviews.at(-1) && object(task.reviews.at(-1))
+        requireFusion(candidate && candidate.taskRevision === task.revision && review?.verdict === 'accept' && review.candidateId === candidate.id && review.candidateHash === candidate.hash, 'INVALID_STATE', 'Accepted task must reference the latest accepted candidate.')
       }
     }
   }

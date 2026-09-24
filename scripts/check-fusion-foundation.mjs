@@ -8,7 +8,7 @@ const tests = readdirSync(join(root, 'packages/dsh-fusion/test'))
   .filter(name => name.endsWith('.node.mjs'))
   .sort()
   .map(name => join(root, 'packages/dsh-fusion/test', name))
-if (tests.length === 0) throw new Error('Fusion foundation has no Node suites.')
+if (tests.length === 0) throw new Error('Fusion has no Node suites.')
 
 for (const [label, args] of [
   ['Fusion Node suites', ['--experimental-strip-types', '--test', ...tests]],

@@ -985,7 +985,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
               </Text>
             </ChatEntry> : null}
             {pendingItems.map((item) => <PendingCard key={item.key} item={item} />)}
-            <PluginChatEvents ctx={ctx} renderSlot={renderSlot} sessionId={session.sessionId} locale={locale} hidden={hidden} />
+            <PluginChatEvents ctx={ctx} renderSlot={renderSlot} sessionId={session.sessionId} locale={locale} hidden={hidden} onApplied={handleApplied} />
             {snapshot.openState === 'error' ? <Callout.Root color="red" className="warning">
               <Callout.Text>
                 {t('chat.connectionInterrupted')}

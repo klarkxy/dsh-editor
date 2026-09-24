@@ -82,11 +82,13 @@ function normalizeEntry(row, label) {
     fail(`${label} (${row.id}) has an invalid service`)
   }
   if (row.locked !== undefined && typeof row.locked !== 'boolean') fail(`${label} (${row.id}) has an invalid locked flag`)
+  if (row.defaultEnabled !== undefined && typeof row.defaultEnabled !== 'boolean') fail(`${label} (${row.id}) has an invalid defaultEnabled flag`)
   return {
     id: row.id,
     title: row.title,
     description: row.description,
     ...(row.locked ? { locked: true } : {}),
+    ...(row.defaultEnabled === false ? { defaultEnabled: false } : {}),
     ...(row.feature ? { feature: row.feature } : {}),
     ...(row.service ? { service: row.service } : {}),
   }
@@ -362,15 +364,18 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
   const resolvedLibraries = sortPackageNames([...selectedLibraries])
   const runtimeDependencies = [...new Set(packages.flatMap((name) => byName.get(name)?.runtimeDependencies ?? []))].sort()
   const disabledEntries = []
+  const enabledEntries = []
   const extraInserts = []
   for (const name of packages) {
     const manifest = byName.get(name)
     for (const entry of manifest.entries) {
+      if (entry.defaultEnabled === false && selectedFeatures.has(entry.feature)) enabledEntries.push(entry.id)
       // A product recipe that explicitly preinstalls a first-party feature should
-      // make it usable out of the box. Keep it out of shellFeatures so the author
+      // make it usable out of the box unless its manifest explicitly defaults off.
+      // Keep it out of shellFeatures so the author
       // can still turn the plugin off without turning an optional service into a
       // required Shell capability.
-      if (entry.feature && !selectedFeatures.has(entry.feature) && !preinstalledPackages.has(name)) {
+      if (entry.feature && !selectedFeatures.has(entry.feature) && (entry.defaultEnabled === false || !preinstalledPackages.has(name))) {
         disabledEntries.push(entry.id)
       }
     }
@@ -403,6 +408,7 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
     libraries: resolvedLibraries,
     runtimeDependencies,
     disabledEntries,
+    ...(enabledEntries.length ? { enabledEntries } : {}),
     extraInserts,
     shellFeatures,
     presets,

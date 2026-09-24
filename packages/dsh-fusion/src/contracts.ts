@@ -2,7 +2,7 @@
 export const FUSION_PLUGIN = '@klarkxy/dsh-fusion'
 export const FUSION_RPC_CHANNEL = '/dsh-fusion'
 export const FUSION_PURPOSE = 'fusion.sidekick'
-export const FUSION_TOOLS = ['fusion_delegate', 'fusion_report', 'fusion_review', 'fusion_read'] as const
+export const FUSION_TOOLS = ['fusion_delegate', 'fusion_report', 'fusion_review', 'fusion_read', 'fusion_decide', 'fusion_cancel'] as const
 export type FusionProfile = 'generic' | 'writing'
 export type TaskState = 'dispatching' | 'working' | 'decision' | 'review' | 'accepted' | 'cancelled' | 'failed' | 'interrupted'
 export type ModelRoute = { provider: string; model: string; reasoningEffort?: string }
@@ -52,6 +52,11 @@ export interface FusionTask {
   error?: string
   cleanup?: 'pending' | 'done' | 'failed'
   adoption?: 'pending' | 'applied' | 'dismissed' | 'conflict'
+  /** Persist before filesystem mutation; never replay an uncertain write. */
+  application?: {
+    id: string; candidateId: string; candidateHash: string; path: string
+    beforeVersion: string; afterHash: string; state: 'pending' | 'applied' | 'conflict'; version?: string
+  }
   createdAt: number
   updatedAt: number
 }
@@ -79,6 +84,8 @@ export interface FusionStatus {
   available: boolean
   profile: FusionProfile
   configured: boolean
+  revision?: number
+  error?: string
   pair?: FusionPair
   /** Cumulative native-session figures, not an estimate of this task's cost. */
   usage?: { leadTokens: number | null; sidekickTokens: number | null; cost: null }
@@ -87,3 +94,12 @@ export interface FusionStatus {
 export type RpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
 export const isWorking = (state: TaskState): boolean => ['dispatching', 'working', 'decision', 'review'].includes(state)
 export const emptyFusionState = (): FusionState => ({ version: 1, revision: 0, pairs: [] })
+
+/** Browser commands identify stored authority; no command accepts replacement candidate text. */
+export interface FusionCandidateAction {
+  sessionId: string; taskId: string; taskRevision: number; candidateId: string; hash: string
+}
+export interface FusionPreview {
+  path: string; before: string; after: string; version: string
+  candidateId: string; hash: string
+}

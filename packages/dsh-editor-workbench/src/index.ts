@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { withWorkspaceWrite, FileOpError, asHost, badRequest, mapHostError, registerHostRpc, resolveWorkspaceAccess, ProposalError, WritingProposalError } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL, type WorkbenchRpcResult } from './contracts.ts'
+import { createFusionWritingHost } from './fusion-host.ts'
 import { BinaryError } from './binary.ts'
 import { ImportError } from './import.ts'
 import { LifecycleError } from './lifecycle.ts'
@@ -122,6 +123,7 @@ export function registerWorkbenchRpc(ctx: Context): () => void {
 }
 
 export function apply(ctx: Context): void {
+  ctx.provide('fusionWriting', createFusionWritingHost(ctx))
   ctx.effect(() => registerWorkbenchRpc(ctx), 'dsh-editor-workbench.rpc')
 }
 

@@ -62,8 +62,10 @@ describe('private editor workbench Host RPC', () => {
     const { host } = fixture()
     const guard = vi.fn()
     const effectNames: string[] = []
+    const provide = vi.fn()
     apply({
       ...host,
+      provide,
       effect: (setup: () => unknown, name?: string) => {
         if (name) effectNames.push(name)
         return setup()
@@ -72,6 +74,7 @@ describe('private editor workbench Host RPC', () => {
     } as unknown as Context)
     expect(guard).not.toHaveBeenCalled()
     expect(effectNames).not.toContain('dsh-editor-workbench.host-guard')
+    expect(provide).toHaveBeenCalledWith('fusionWriting', expect.objectContaining({ capture: expect.any(Function), transact: expect.any(Function) }))
   })
 
   it('does not remount a tool guard from the tools plugin', () => {

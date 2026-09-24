@@ -20,7 +20,7 @@ import { desktopComposition } from './desktop-compositions.mjs'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const aiPackages = new Set(['ai-services', 'current-title', 'memory', 'model-center', 'mood', 'recap', 'self-improvement'].map(name => '@klarkxy/dsh-' + name))
 const aiEntries = new Set(['ai-services', 'current-title', 'memory', 'model-center', 'mood', 'recap', 'self-improvement'])
-const withoutAi = names => names.filter(name => !aiPackages.has(name))
+const withoutAi = names => names.filter(name => !aiPackages.has(name) && name !== '@klarkxy/dsh-fusion')
 
 describe('desktop dev prepare', () => {
   it('uses a single runtime writer for Editor plugin switches', () => {
@@ -123,7 +123,7 @@ describe('plugin manifests and composition resolver', () => {
       expect(item.id in labels).toBe(true)
       expect(item.label).toBe(labels[item.id])
       const { id: _id, label: _label, ...rest } = item
-      expect({ ...rest, packages: withoutAi(rest.packages), bundles: withoutAi(rest.bundles), disabledEntries: rest.disabledEntries.filter(id => !aiEntries.has(id)) }).toEqual(capability)
+      expect({ ...rest, packages: withoutAi(rest.packages).filter(name => name !== '@klarkxy/dsh-fusion'), bundles: withoutAi(rest.bundles).filter(name => name !== '@klarkxy/dsh-fusion'), disabledEntries: rest.disabledEntries.filter(id => !aiEntries.has(id) && id !== 'fusion') }).toEqual(capability)
     }
     const stripped = resolved.map(({ id: _id, label: _label, ...rest }) => rest)
     for (let index = 1; index < stripped.length; index += 1) {
@@ -139,6 +139,17 @@ describe('plugin manifests and composition resolver', () => {
     expect(capability.packages).not.toContain('dsh-editor-memory-panel')
     expect(capability.extraInserts.map((row) => row.id)).not.toContain('editor-workbench-tools')
     expect(capability.extraInserts.map((row) => row.id)).not.toContain('editor-novel-kernel')
+  })
+
+  it('preinstalls Fusion disabled without adding a required Shell capability', async () => {
+    const composition = await desktopComposition()
+    expect(composition.packages).toContain('@klarkxy/dsh-fusion')
+    expect(publicPackages(manifests)).toContain('@klarkxy/dsh-fusion')
+    expect(composition.disabledEntries).toContain('fusion')
+    expect(composition.shellFeatures).not.toHaveProperty('fusion')
+    const owner = manifests.find(item => item.name === '@klarkxy/dsh-fusion')
+    expect(owner.entries).toEqual([expect.objectContaining({ id: 'fusion', defaultEnabled: false })])
+    expect(readFileSync(join(owner.dir, 'cordis.patch.yml'), 'utf8')).toMatch(/id: fusion[\s\S]*?disabled: true/)
   })
 
   it('preinstalls six independently switchable AI features enabled plus one inert shared service', async () => {
@@ -288,6 +299,20 @@ describe('plugin conversation preset manifests', () => {
     expect(result.shellFeatures).toEqual({})
     expect(manifests.find(item => item.name === '@klarkxy/dsh-feature').workspaceDeps).toEqual(['@klarkxy/dsh-ai-services'])
     expect(() => resolveComposition(manifests, { id: 'x', label: 'x', features: [], preinstalled: ['missing'] })).toThrow(/preinstalled/)
+  })
+
+  it('preserves an explicitly disabled preinstalled feature default', () => {
+    const feature = basePkg('@klarkxy/dsh-optional')
+    feature.dshEditor.entries[0] = { id: 'entry-feature', title: 'Optional', description: 'Off until enabled', feature: 'optional', defaultEnabled: false }
+    const loaded = loadPluginManifests(manifestRoot({ feature }))
+    const composition = resolveComposition(loaded, { id: 'x', label: 'x', features: [], preinstalled: ['@klarkxy/dsh-optional'] })
+    expect(composition.disabledEntries).toEqual(['entry-feature'])
+    expect(composition.shellFeatures).toEqual({})
+    const explicitlyEnabled = resolveComposition(loaded, { id: 'x', label: 'x', features: ['optional'] })
+    expect(explicitlyEnabled.enabledEntries).toEqual(['entry-feature'])
+    expect(explicitlyEnabled.disabledEntries).toEqual([])
+    feature.dshEditor.entries[0].defaultEnabled = 'false'
+    expect(() => loadPluginManifests(manifestRoot({ feature }))).toThrow(/defaultEnabled/)
   })
 
   it('selects feature-only packages and flows their presets into resolveComposition', () => {

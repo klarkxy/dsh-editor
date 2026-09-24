@@ -17,6 +17,7 @@
     "@klarkxy/dsh-recap",
     "@klarkxy/dsh-memory",
     "@klarkxy/dsh-self-improvement",
-    "@klarkxy/dsh-model-center"
+    "@klarkxy/dsh-model-center",
+    "@klarkxy/dsh-fusion"
   ]
 }

@@ -49,12 +49,14 @@ function Outlet(props: { renderSlot: SettingsRenderSlot; slot: string; owner: ob
 
 export function PluginChatEvents(props: {
   ctx: unknown; renderSlot?: SettingsRenderSlot; sessionId: string; locale: 'zh' | 'en'; hidden?: boolean
+  /** Refresh/navigation only; the plugin Host must already have confirmed its write. */
+  onApplied?(path: string): void
 }) {
   const { entries, version } = useSurface(props.ctx, CHAT_EVENTS_SLOT)
   if (!props.renderSlot || !entries.length) return null
   return <SurfaceBoundary identity={props.sessionId + ':' + version}>
     <div data-dsh-plugin-surface="" style={{ display: 'contents' }}><Outlet renderSlot={props.renderSlot} slot={CHAT_EVENTS_SLOT}
-      owner={{ sessionId: props.sessionId, locale: props.locale, hidden: Boolean(props.hidden) }} /></div>
+      owner={{ sessionId: props.sessionId, locale: props.locale, hidden: Boolean(props.hidden), ...(props.onApplied ? { onApplied: props.onApplied } : {}) }} /></div>
   </SurfaceBoundary>
 }
 

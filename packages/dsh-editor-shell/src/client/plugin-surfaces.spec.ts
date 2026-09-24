@@ -30,6 +30,19 @@ describe('optional plugin surfaces', () => {
     expect(render).toHaveBeenCalledWith(MODEL_SETTINGS_SLOT,
       { sessionId: 'session-1', locale: 'zh', renderProviders: providerEditor, renderChatModel: chatModel }, { only: 'center' })
   })
+  it('offers optional Host-confirmed write refresh through the existing chat surface', () => {
+    const onApplied = vi.fn()
+    const render = vi.fn((_slot: string, owner?: object) => {
+      ;(owner as { onApplied(path: string): void }).onApplied('正文/001.md')
+      return createElement('article', null, 'Applied')
+    })
+    renderToStaticMarkup(createElement(PluginChatEvents, {
+      ctx: host({ [CHAT_EVENTS_SLOT]: [{ options: { id: 'fusion' } }] }),
+      renderSlot: render, sessionId: 'session-2', locale: 'zh', onApplied,
+    }))
+    expect(onApplied).toHaveBeenCalledExactlyOnceWith('正文/001.md')
+  })
+
   it('renders event cards without creating transcript messages or requiring a tool result', () => {
     const render = vi.fn((_slot: string, owner?: object) => createElement('article', null, (owner as { sessionId: string }).sessionId))
     const html = renderToStaticMarkup(createElement(PluginChatEvents, {

@@ -93,3 +93,34 @@ describe('native Fusion boundary', () => {
     await assert.rejects(bridge.dispatch(request), { name: 'AbortError' }); assert.equal(calls.length, 0)
   })
 })
+
+describe('production native notice and composition boundaries', () => {
+  it('clears inherited reasoning when the pair route intentionally uses the provider default', async () => {
+    const { bridge, request, pair, calls, lead } = setup()
+    pair.route = { provider: 'p', model: 'm' }; lead.options = { provider: 'p', model: 'm', reasoningEffort: 'high' }
+    await bridge.dispatch(request)
+    const options = calls.find(row => row[0] === 'start')[1].request.agentOptions
+    assert.equal(Object.hasOwn(options, 'reasoningEffort'), true); assert.equal(options.reasoningEffort, undefined)
+  })
+  it('production filtering leaves report registration to the owned child creation hook', async () => {
+    const { bridge, request, calls, composition } = setup(); composition.scopedReport = true
+    await bridge.dispatch(request)
+    assert.deepEqual(calls.find(row => row[0] === 'start')[1].request.toolFilter, { allow: [] })
+  })
+  it('explicit saved-report recovery can notify a live Lead without activating a cold Writer', async () => {
+    const { bridge, pair, lead, calls } = setup(); lead.followup = message => calls.push(['followup', message])
+    await bridge.notify({ pair, task: { id: 'task', revision: 1 }, actor: { sessionId: 'lead', project: '/work' }, text: 'Saved report', signal: new AbortController().signal })
+    assert.equal(calls.length, 1); assert.equal(calls[0][0], 'followup'); assert.equal(calls[0][1].source.kind, 'plugin:@klarkxy/dsh-fusion')
+  })
+  it('removes structured owned notices while preserving unrelated child and user inbox entries', async () => {
+    const { bridge, pair, lead, make, calls } = setup(); make('writer', 'lead')
+    lead.inbox.nextTurn = [
+      { id: 'owned', source: { kind: 'subagent-settled', senderSessionId: 'writer' }, content: [] },
+      { id: 'other', source: { kind: 'subagent-settled', senderSessionId: 'other-child' }, content: [] },
+      { id: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '[fusion:pair:fake]' }] },
+    ]
+    lead.inbox.nextStep = []; lead.inbox.remove = id => calls.push(['remove', id])
+    await bridge.stop(pair, false)
+    assert.deepEqual(calls.filter(row => row[0] === 'remove'), [['remove', 'owned']])
+  })
+})

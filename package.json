@@ -31,7 +31,8 @@
     "test:e2e:ai-plugins": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/ai-plugins.mjs",
     "test:e2e:ai-plugins:standalone": "pnpm build && node scripts/prepare-desktop-dev.mjs && pnpm pack:plugins && node e2e/ai-plugins-standalone.mjs",
     "test:e2e:writing-ai-services": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-ai-services.mjs",
-    "test:e2e:writing-shortcuts": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-shortcuts.mjs"
+    "test:e2e:writing-shortcuts": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-shortcuts.mjs",
+    "test:e2e:fusion": "pnpm build && node scripts/prepare-desktop-dev.mjs && pnpm pack:plugins && node e2e/fusion.mjs && node e2e/fusion-standalone.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
