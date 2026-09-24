@@ -28,8 +28,8 @@ describe('radix themes css rewrite', () => {
     expect(rewritten).toContain(':root:where(:has(.radix-themes[data-is-root-theme=')
   })
 
-  it('anchors neutrals on sand so accents sit on warm chrome', () => {
-    expect(SHELL_GRAY_COLOR).toBe('sand')
+  it('anchors neutrals on gray for the official web design adapter', () => {
+    expect(SHELL_GRAY_COLOR).toBe('gray')
   })
 
   it('maps stored accents onto Radix accent colors', () => {

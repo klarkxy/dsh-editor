@@ -1,7 +1,10 @@
 import { Theme, type ThemeProps } from '@radix-ui/themes'
 import radixThemesCss from '@radix-ui/themes/styles.css'
-import type { ReactNode } from 'react'
+import { useLayoutEffect, type ReactNode } from 'react'
 import type { AccentValue, ThemeValue } from '../theme.tsx'
+import { designSystemStyles } from '../../design-system/styles.ts'
+import { mountDesignScope } from '../../design-system/scope.ts'
+import { DesignSystemGallery } from '../../design-system/gallery.tsx'
 
 export function rewriteRadixThemesCss(css: string): string {
   const rewritten = css
@@ -25,24 +28,29 @@ export const ACCENT_TO_RADIX: Record<AccentValue, ThemeProps['accentColor']> = {
   violet: 'violet',
 }
 
-export const SHELL_GRAY_COLOR: ThemeProps['grayColor'] = 'sand'
+export const SHELL_GRAY_COLOR: ThemeProps['grayColor'] = 'gray'
 
 export function ShellTheme(props: {
   appearance: ThemeValue
   accent: AccentValue
   children?: ReactNode
 }) {
+  // Scope includes body portals, but disappears when this shell unmounts.
+  // It never keys/remounts the editor or changes the host's theme preference.
+  useLayoutEffect(() => mountDesignScope(document.documentElement), [])
   return (
     <Theme
       className="shell-theme"
       appearance={props.appearance}
       accentColor={ACCENT_TO_RADIX[props.accent]}
       grayColor={SHELL_GRAY_COLOR}
-      radius="large"
+      radius="medium"
       scaling="100%"
       panelBackground="solid"
     >
+      <style data-dsh-design-styles="kimi-web">{designSystemStyles}</style>
       {props.children}
+      <DesignSystemGallery />
     </Theme>
   )
 }

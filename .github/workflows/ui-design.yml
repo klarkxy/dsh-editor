@@ -1,0 +1,40 @@
+name: UI design contracts
+
+on:
+  pull_request:
+    paths:
+      - 'packages/dsh-editor-shell/**'
+      - 'e2e/ui-design*'
+      - 'scripts/check-ui-design.mjs'
+      - '.github/workflows/ui-design.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check design contracts
+        run: node --experimental-strip-types scripts/check-ui-design.mjs
+      - name: Install browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test real Radix controls and scoped CSS in Chromium
+        run: node e2e/ui-design.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-component-fixture-screenshots
+          path: .artifacts/ui-design/*.png
+          if-no-files-found: ignore
