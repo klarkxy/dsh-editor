@@ -1085,7 +1085,7 @@ export const componentStyles = `
 .radix-themes .models-writing-route .model-effort .select-trigger { width: auto; }
 .shell .sidebar-tools { min-width: 0; }
 @keyframes shell-panel-enter { from { opacity: 0; transform: translateY(6px); } }
-.shell .sidebar-tools > *:not(.memory-panel):not(.proofread-panel) { animation: shell-panel-enter 200ms ${EASE}; }
+.shell .sidebar-tools > [data-dsh-plugin-surface] > *:not(.memory-panel):not(.proofread-panel) { animation: shell-panel-enter 200ms ${EASE}; }
 .radix-themes .models-rows { margin: 0; padding: 0; list-style: none; }
 .radix-themes .models-add-card { border: 0; }
 .radix-themes .models-editor { display: grid; gap: var(--space-3); }

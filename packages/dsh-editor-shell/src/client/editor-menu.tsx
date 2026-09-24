@@ -18,6 +18,8 @@ export type EditorMenuAction =
   | 'copy'
   | 'paste'
   | 'selectAll'
+  | 'selectParagraph'
+  | 'lookupReferences'
   | 'save'
   | 'find'
   | 'replace'
@@ -27,6 +29,8 @@ export type EditorMenuAction =
 export type EditorMenuModel = {
   state: EditorCommandState
   canRewritePath: boolean
+  canSelectParagraph?: boolean
+  canLookupReferences?: boolean
 }
 
 const ITEM = 'editor-menu-item'
@@ -46,10 +50,12 @@ export function EditorActionMenuItems(props: {
       <MenuItem className={ITEM} disabled={!state.canCopy} data-testid="editor-menu-copy" onSelect={() => props.onAction('copy')}>{t('common.copy')}</MenuItem>
       <MenuItem className={ITEM} disabled={!state.canPaste} data-testid="editor-menu-paste" onSelect={() => props.onAction('paste')}>{t('common.paste')}</MenuItem>
       <MenuItem className={ITEM} disabled={!state.canSelectAll} data-testid="editor-menu-select-all" onSelect={() => props.onAction('selectAll')}>{t('editor.selectAll')}</MenuItem>
+      <MenuItem className={ITEM} disabled={!props.model.canSelectParagraph} data-testid="editor-menu-select-paragraph" onSelect={() => props.onAction('selectParagraph')}>{t('editor.selectParagraph')}</MenuItem>
       <MenuSeparator className="editor-menu-separator" aria-hidden="true" />
       {props.showSave ? <MenuItem className={ITEM} disabled={!state.canSave} data-testid="editor-menu-save" onSelect={() => props.onAction('save')}>{t('common.save')}</MenuItem> : null}
       <MenuItem className={ITEM} disabled={!state.canFind} data-testid="editor-menu-find" onSelect={() => props.onAction('find')}>{t('editor.find')}</MenuItem>
       <MenuItem className={ITEM} disabled={!state.canReplace} data-testid="editor-menu-replace" onSelect={() => props.onAction('replace')}>{t('editor.replace')}</MenuItem>
+      <MenuItem className={ITEM} disabled={!props.model.canLookupReferences} data-testid="editor-menu-lookup-references" onSelect={() => props.onAction('lookupReferences')}>{t('reference.title')}</MenuItem>
       <MenuSeparator className="editor-menu-separator" aria-hidden="true" />
       <MenuItem className={ITEM} disabled={!state.canComplete} data-testid="editor-menu-complete" onSelect={() => props.onAction('complete')}>{t('editor.complete')}</MenuItem>
       <MenuItem className={ITEM} disabled={rewriteDisabled} data-testid="editor-menu-rewrite" onSelect={() => props.onAction('rewrite')}>{t('editor.rewrite')}</MenuItem>

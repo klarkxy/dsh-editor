@@ -3,6 +3,7 @@ import { t, useLocale } from '../i18n/index.ts'
 import { IconButton } from '@radix-ui/themes'
 import { ThemeInkIcon, ThemePaperIcon } from './icons.tsx'
 import { Tooltip } from './ui/index.ts'
+import { DEFAULT_SHELL_ACCENT } from '../design-system/tokens.ts'
 
 
 export const THEME_STORAGE_KEY = 'dsh-editor.theme'
@@ -56,8 +57,8 @@ export type HostThemeScope = {
  * document is often still loading (`writable: false`, no value), and a
  * fire-and-forget write is silently dropped, leaving the host chrome on the
  * default theme while the editor renders dark. Subscribe BEFORE the first
- * attempt so a load completing between check and subscribe cannot strand
- * the write; once the scope is readable the write lands (or is skipped
+ * attempt so a load completing between check and subscribe cannot strand the
+ * write; once the scope is readable the write lands (or is skipped
  * because the host already agrees) and the subscription disposes.
  */
 export function writeHostThemePreference(scope: HostThemeScope, preference: HostThemePreference): void {
@@ -192,7 +193,7 @@ export const ACCENT_STORAGE_KEY = 'dsh-editor.accent'
 export const ACCENT_VALUES = ['indigo', 'blue', 'teal', 'green', 'amber', 'crimson', 'violet'] as const
 export type AccentValue = (typeof ACCENT_VALUES)[number]
 
-const DEFAULT_ACCENT: AccentValue = 'indigo'
+const DEFAULT_ACCENT: AccentValue = DEFAULT_SHELL_ACCENT
 
 const LEGACY_ACCENT_VALUES: Record<string, AccentValue> = {
   pine: 'green',

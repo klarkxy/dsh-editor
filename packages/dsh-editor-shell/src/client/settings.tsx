@@ -63,6 +63,12 @@ function SettingsTabPage(props: { tab: string; active: boolean; children?: React
   )
 }
 
+export function PluginSettingsContent(props: { contribution?: ReactNode; fallback: ReactNode }) {
+  return props.contribution == null ? props.fallback : <div data-dsh-plugin-surface="" style={{ display: 'contents' }}>
+    {props.contribution}
+  </div>
+}
+
 function tabLabel(tab: SettingsTab): string {
   if (tab === 'general') return t('settings.general')
   if (tab === 'models') return t('settings.models')
@@ -182,12 +188,12 @@ export function SettingsDialog(props: {
     writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} onOpenShortcuts={() => selectTab('shortcuts')} />,
     shortcuts: () => <ShortcutsSettings commands={props.commands} />,
     usage: () => <SettingsUsageSection ctx={props.ctx} />,
-    zhihu: () => props.zhihuTab ?? <Text size="2" color="gray" className="muted">
+    zhihu: () => <PluginSettingsContent contribution={props.zhihuTab} fallback={<Text size="2" color="gray" className="muted">
       {t('settings.zhihuUnavailable')}
-    </Text>,
-    plugins: () => props.pluginsTab ?? <Text size="2" color="gray" className="muted">
+    </Text>} />,
+    plugins: () => <PluginSettingsContent contribution={props.pluginsTab} fallback={<Text size="2" color="gray" className="muted">
       {t('settings.pluginsUnavailable')}
-    </Text>,
+    </Text>} />,
     about: () => <AboutSettingsSection active={activeTab === 'about'} onBusyChange={setAboutBusy} />,
   }
 
