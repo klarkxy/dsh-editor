@@ -42,41 +42,10 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: node scripts/verify-release-version.mjs "$RELEASE_TAG"
-      - name: Resolve the npm global package root
-        id: npm-root
-        shell: bash
-        run: |
-          PREFIX=$(npm prefix -g)
-          # The global layout differs by OS: Windows keeps node_modules directly
-          # under the prefix, POSIX nests it under lib/.
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            echo "dir=$PREFIX/node_modules/@deepseek-ai"
-          else
-            echo "dir=$PREFIX/lib/node_modules/@deepseek-ai"
-          fi >> "$GITHUB_OUTPUT"
-      # npm install -g of the pinned DSH CLI takes ~5 minutes on Windows runners
-      # (huge small-file tree + Defender); restore it from the cache instead.
-      # The key hashes scripts/dsh-cli.mjs, so a version bump busts the cache.
-      - name: Cache the pinned DSH CLI
-        id: dsh-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.npm-root.outputs.dir }}
-          key: dsh-cli-${{ runner.os }}-${{ hashFiles('scripts/dsh-cli.mjs') }}
-      - name: Install the pinned DSH CLI
-        if: steps.dsh-cache.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          DSH_VERSION=$(node -p "require('node:fs').readFileSync('scripts/dsh-cli.mjs','utf8').match(/EXPECTED_DSH_VERSION = '([^']+)'/)[1]")
-          npm install -g "@deepseek-ai/dsh@$DSH_VERSION"
-      # The npm global bin directory is not guaranteed to stay on PATH for
-      # later steps (observed on macos runners); pin the resolver instead.
-      # The cache restores only the package tree, which is all this needs.
-      - name: Pin the DSH CLI path
-        shell: bash
-        run: echo "DSH_CLI_PATH=${{ steps.npm-root.outputs.dir }}/dsh/lib/bin.js" >> "$GITHUB_ENV"
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify the locked DSH runtime
+        run: node --input-type=module -e "import { resolveDshInstallation } from './scripts/dsh-cli.mjs'; console.log(resolveDshInstallation())"
       # Workspace exports resolve to generated lib/*.d.ts on a fresh checkout.
       - name: Build
         run: pnpm build

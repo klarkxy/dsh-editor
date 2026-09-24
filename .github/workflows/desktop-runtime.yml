@@ -34,12 +34,10 @@ jobs:
           cache: pnpm
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
-      - name: Install the pinned DSH runtime
-        shell: bash
-        run: |
-          DSH_VERSION=$(node -p "require('node:fs').readFileSync('scripts/dsh-cli.mjs','utf8').match(/EXPECTED_DSH_VERSION = '([^']+)'/)[1]")
-          npm install -g "@deepseek-ai/dsh@$DSH_VERSION"
-          echo "DSH_CLI_PATH=$(npm root -g)/@deepseek-ai/dsh/lib/bin.js" >> "$GITHUB_ENV"
+      # Use the dependency graph already verified by the frozen workspace lockfile.
+      # A global npm install of the same CLI version can resolve newer transitive packages.
+      - name: Verify the locked DSH runtime
+        run: node --input-type=module -e "import { resolveDshInstallation } from './scripts/dsh-cli.mjs'; console.log(resolveDshInstallation())"
       - name: Build, verify portable materialization and boot the macOS ZIP
         run: pnpm pack:desktop
       - name: Run runtime regression tests
