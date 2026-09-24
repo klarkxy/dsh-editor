@@ -15,10 +15,15 @@ assert.ok(relative(resolve(root, '.dev'), home) && !relative(resolve(root, '.dev
 const output = resolve(root, 'e2e/out/ai-standalone', stamp)
 const workspace = resolve(home, 'workspace')
 await mkdir(workspace, { recursive: true })
-const cli = resolve(root, '.dev/desktop-dsh-runtime-0.1.7-alpha.1/lib/bin.js')
+const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.1.7-alpha.1/lib/bin.js')
 const staging = await mkdtemp(resolve(tmpdir(), 'dsh-ai-pack-'))
 const ids = ['current-title', 'mood', 'recap', 'memory', 'self-improvement', 'model-center']
-const report = { ok: false, home, output, checks: [], errors: [], calls: 0 }
+const report = { ok: false, home, output, checks: [], errors: [], calls: 0, observerCalls: 0, methodCalls: 0 }
+const meaning = '我说的蓝图指事件结构，不是正文。'
+const activity = '我最近正在修改第三章。'
+const method = '以后修改正文前先读取最新版本，再核对修改范围。'
+const method2 = '以后整理资料时先核对原始来源，再检查引用。'
+function textOf(value) { return typeof value === 'string' ? value : Array.isArray(value) ? value.map(block => block.text ?? '').join('\n') : '' }
 await mkdir(output, { recursive: true })
 const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', DSH_AI_TEST_KEY: 'local-fixture', SSH_CONNECTION: 'ai-standalone-acceptance' }
 for (const key of Object.keys(env)) if (/API_KEY|ACCESS_SECRET|ELECTRON_RUN_AS_NODE/.test(key)) delete env[key]
@@ -28,8 +33,28 @@ const server = createServer(async (req, res) => {
   let raw = ''; for await (const chunk of req) raw += chunk
   const body = JSON.parse(raw || '{}')
   report.calls++
-  const system = (body.messages ?? []).filter(m => m.role === 'system').map(m => String(m.content)).join(' ')
-  const answer = system.includes('Name the current task') ? JSON.stringify({ type: 'discuss', summary: '独立插件' }) : '独立宿主测试回复。'
+  const messages = body.messages ?? []
+  const system = messages.filter(m => m.role === 'system' || m.role === 'developer').map(m => textOf(m.content)).join(' ')
+  const input = messages.filter(m => m.role === 'user').map(m => textOf(m.content)).join('\n')
+  let answer = '独立宿主测试回复。'
+  if (system.includes('Name the current task')) answer = JSON.stringify({ type: 'discuss', summary: '独立插件' })
+  else if (system.includes('Extract descriptive context')) {
+    report.observerCalls++
+    const data = JSON.parse(input)
+    const original = (data.messages ?? []).find(row => row.text.includes(meaning))
+    answer = JSON.stringify({ items: original ? [
+      { kind: 'vocabulary', title: '蓝图的用法', content: '蓝图指事件结构，不是正文。', subject: 'user', domain: 'general', key: '蓝图', aliases: [], evidence: [{ seq: original.seq, quote: meaning }] },
+      { kind: 'activity', title: '第三章当前工作', content: '用户正在修改第三章。', subject: 'user', domain: 'general', key: '第三章', aliases: [], activityStatus: 'in-progress', evidence: [{ seq: original.seq, quote: activity }] },
+    ] : [] })
+  }
+  else if (system.includes('Extract at most one reusable PROCEDURAL')) {
+    report.methodCalls++
+    const data = JSON.parse(input)
+    const quote = data.hint?.includes(method2) ? method2 : method
+    answer = JSON.stringify({ kind: 'procedure', title: quote === method2 ? '核对资料来源' : '局部修改先读后核对', content: '', exceptions: [],
+      procedure: { origin: 'instruction', goal: '保持修改与依据一致', when: ['修改正文或整理资料时'], steps: [quote], avoid: ['依靠过期信息覆盖当前资料'], verify: ['检查目标范围和来源是否正确'] }, evidenceQuotes: [quote] })
+  }
+  else if (system.includes('Consolidate descriptive context')) answer = '{"proposals":[]}'
   const common = { id: 'local-' + report.calls, created: 1, model: 'fixture' }
   const usage = { prompt_tokens: 12, completion_tokens: 12, total_tokens: 24 }
   if (!body.stream) {
@@ -108,7 +133,7 @@ try {
   }
   const profileFile = resolve(home, 'profiles/web/package.json')
   const manifest = JSON.parse(await readFile(profileFile, 'utf8'))
-  assert.ok(!Object.keys(manifest.dependencies).some(name => name.startsWith('dsh-editor')))
+  assert.ok(!Object.keys(manifest.dependencies).some(name => /(?:^|\/)dsh-editor/.test(name)))
   report.checks.push('native web profile has no private Editor dependency')
   const patch = resolve(home, 'profiles/web/cordis.patch.yml')
   const model = [
@@ -118,7 +143,7 @@ try {
     '            contextWindow: 32768', '            maxTokens: 4096', '- id: agent-default-model', '  config:', '    provider: local-test', '    model: fixture',
   ].join('\n')
   await writeFile(patch, model + '\n')
-  browser = await chromium.launch({ headless: true })
+  browser = await chromium.launch({ headless: true, ...(process.env.DSH_BROWSER_EXECUTABLE ? { executablePath: process.env.DSH_BROWSER_EXECUTABLE } : {}) })
   await boot('00-default-on')
   let entries = await page.evaluate(() => globalThis.__DSH_BOOT__?.entries?.map(row => row.id) ?? [])
   for (const id of ids) assert.ok(entries.includes('@klarkxy/dsh-' + id))
@@ -151,30 +176,67 @@ try {
     await picker.getByRole('button', { name: '打开', exact: true }).click()
     await picker.waitFor({ state: 'detached' })
   }
-  await composer.fill('解释什么是光合作用')
+  await composer.fill(meaning + activity + method)
   await composer.press('Enter')
   await page.getByText('独立宿主测试回复。', { exact: true }).first().waitFor()
   await page.getByText(/独立插件/).first().waitFor()
   report.checks.push('current title owns the native title provider in the standalone host')
+  for (let attempt = 0; attempt < 100 && !(report.observerCalls && report.methodCalls); attempt++) await delay(100)
+  assert.ok(report.observerCalls > 0, 'native turn hook must invoke Dream observer')
+  assert.ok(report.methodCalls > 0, 'native turn hook must invoke Self Improve')
   dialog = await settings()
   await dialog.getByRole('button', { name: '记忆', exact: true }).click()
   const memory = dialog.getByTestId('memory-chat')
   await memory.locator('summary').click()
+  await memory.getByText('蓝图的用法', { exact: true }).waitFor()
+  await memory.getByText('第三章当前工作', { exact: true }).waitFor()
+  const review = dialog.getByTestId('self-improvement-entry')
+  await review.locator('summary').click()
+  const methodCard = review.locator('.si-card').filter({ has: page.getByRole('heading', { name: '局部修改先读后核对', exact: true }) })
+  await methodCard.waitFor()
+  assert.equal(await methodCard.getAttribute('data-status'), 'active')
+  assert.ok(!(await methodCard.locator(':scope > p').innerText()).includes('蓝图'))
+  report.checks.push('mixed human message becomes two descriptive records and one active procedural instruction without manual extraction')
   await memory.getByLabel('标题', { exact: true }).fill(recordTitle)
   await memory.getByLabel('内容', { exact: true }).fill('保留作者原有剧情。')
   await memory.getByRole('button', { name: '添加', exact: true }).click()
   await memory.locator('.dsh-memory-list').getByText(recordTitle, { exact: true }).waitFor()
   report.checks.push('native settings supplies selected session for record management and role configuration')
   await page.screenshot({ path: resolve(output, '02-native-memory.png'), fullPage: true })
+  await dialog.getByRole('switch', { name: '关闭 Dream 观察与整理', exact: true }).click()
+  await dialog.getByRole('switch', { name: '启用 Dream 观察与整理', exact: true }).waitFor()
+  const beforeObserver = report.observerCalls
+  const beforeMethods = report.methodCalls
+  await page.keyboard.press('Escape')
+  await composer.fill(method2); await composer.press('Enter')
+  for (let attempt = 0; attempt < 100 && report.methodCalls === beforeMethods; attempt++) await delay(100)
+  assert.ok(report.methodCalls > beforeMethods, 'Self Improve must still run with Dream disabled')
+  await delay(500)
+  assert.equal(report.observerCalls, beforeObserver, 'disabled Dream must not observe')
+  dialog = await settings()
+  await dialog.getByRole('button', { name: '记忆', exact: true }).click()
+  const secondReview = dialog.getByTestId('self-improvement-entry')
+  await secondReview.locator('summary').click()
+  await secondReview.getByRole('heading', { name: '核对资料来源', exact: true }).waitFor()
+  report.checks.push('Self Improve continues to learn while Dream is independently disabled')
+  await page.screenshot({ path: resolve(output, '02-independent-toggle.png'), fullPage: true })
   await stopHost()
   await boot('03-restarted')
-  await page.getByText(/独立插件|解释什么是光合作用/).first().click()
+  await page.getByText(/独立插件|我说的蓝图/).first().click()
   dialog = await settings()
   await dialog.getByRole('button', { name: '记忆', exact: true }).click()
   const restored = dialog.getByTestId('memory-chat')
   await restored.locator('summary').click()
   await restored.locator('.dsh-memory-list').getByText(recordTitle, { exact: true }).waitFor()
-  report.checks.push('accepted memory survives native host restart')
+  await restored.getByText('蓝图的用法', { exact: true }).waitFor()
+  await restored.getByText('第三章当前工作', { exact: true }).waitFor()
+  await dialog.getByRole('switch', { name: '启用 Dream 观察与整理', exact: true }).waitFor()
+  const persistedReview = dialog.getByTestId('self-improvement-entry')
+  await persistedReview.locator('summary').click()
+  await persistedReview.getByRole('heading', { name: '局部修改先读后核对', exact: true }).waitFor()
+  await persistedReview.getByRole('heading', { name: '核对资料来源', exact: true }).waitFor()
+  await page.screenshot({ path: resolve(output, '04-persisted-learning.png'), fullPage: true })
+  report.checks.push('manual memory, contextual records, procedural methods and independent Dream toggle survive native host restart')
   assert.equal(report.errors.length, 0, report.errors.join('\n'))
   report.ok = true
 } catch (error) {

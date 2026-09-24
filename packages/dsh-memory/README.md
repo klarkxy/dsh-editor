@@ -1,33 +1,35 @@
 # @klarkxy/dsh-memory
 
-Default-enabled Memory with idle Dream consolidation. Stores long-term preferences, project facts, decisions, and lessons. Novel canon stays in author-confirmed worldbook files, not here.
+Descriptive context for DeepSeek Harness: scoped vocabulary, explicit preferences, project facts, decisions and recent activity. Dream observes human context and consolidates it. The shared store can hold procedural lessons, but Self Improve owns their creation and injection. Novel canon stays in authoritative worldbook files.
 
-[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-memory/docs/README.zh-CN.md)
+[简体中文](docs/README.zh-CN.md)
 
-## Install
+## Standalone DSH Web
 
-Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. The bundle entry starts enabled, but loading it does not start inference or load `@klarkxy/dsh-ai-services`.
-
-Standalone DSH must load the shared service explicitly before this feature can start:
+Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. Install and load the shared service explicitly:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-memory
 ```
 
-Idle Dream is on by default and needs no confirmation: once a session has been idle for 15 minutes, at least 24 hours have passed since the last attempt, and at least 3 records were added or changed since then (deletions count), it runs once and applies automatically — at most once a day. Apply writes candidates only and never overwrites active records; failures back off for the same 24 hours. Turn it off under **Settings → 记忆**, or run the full flow manually via **Organize now**. Memory itself remains independently switchable in plugin settings.
+No Editor packages or Self Improve are required. The bundle starts enabled; merely opening its UI does not call a model. Use Settings → Memory to manage records, prompt injection and the Dream observation/consolidation switch. Editor preinstalls the same public plugin, not a second implementation.
 
-## Behaviour
+## Context, not procedures
 
-`ctx.aiMemory` implements the frozen `MemoryService`. Project identity is the shared untruncated `projectIdFromCwd(session.meta.cwd)` (DSH also exposes it as `session.header.cwd`). RPC derives that path from the live session id; clients cannot submit an arbitrary directory. Record ids are UUID-backed and cannot reuse a tombstone after restart. Durable writes are one typed aggregate snapshot.
+`ctx.aiMemory` implements the shared `MemoryService`. New `vocabulary` and `activity` records may carry subject, domain, term/topic key, aliases, host observation time, literal event-time text and activity status. Project scope comes from the native session cwd, never an arbitrary client path. Automatic observation without a cwd is skipped rather than promoted to global.
 
-Recall injects at most 3–5 active records (~800 tokens) at Host `agent/pre-step`, exact project scope plus explicit global records. Memory stores lesson records but does not inject them. Candidates, rejected, revoked, deleted, expired, and superseded records stay out of prompts.
+At turn end, Dream observes original human messages only. A new session contributes its latest message; later batches include at most four new messages, each capped at 2000 characters. Accepted output requires exact quoted evidence from real human events. Pure continuation acknowledgements do not trigger inference. The `memory.observe-context` purpose uses the normal model role and shared budgets.
 
-Human preference and project-fact candidates need evidence or an explicit manual add. Global writes require the global checkbox. Dream produces merge/dedup candidates and applies them automatically under the idle gates above; apply writes candidates only, never overwrites active records or expands project scope to global. Corrections and deletions win over in-flight runs. Deleted ids cannot be resurrected.
+Activity has a default seven-day freshness bound. Expiry removes it from recall; it does not prove completion. A new explicit update supersedes the previous matching subject/domain/topic while preserving history. Stable vocabulary has no automatic activity expiry. Existing authoritative task records and project documents remain authoritative.
 
-Disabling the plugin or injection/Dream switches cancels pending results and injection. Stored records remain.
+Idle Dream runs after roughly 15 minutes of inactivity, at least 24 hours after the previous attempt, with at least three changes. It never consolidates lessons, crosses kinds or identities, extends source expiry, refreshes observation dates, or confirms candidate sources. Only all-active sources produce active replacements; otherwise the result stays candidate. Old manual records without referenceable evidence are left unchanged rather than assigned invented provenance. Corrections, deletion and lifecycle cancellation invalidate stale results.
 
-From the repository root:
+Recall contains at most five active records, about 800 tokens including the wrapper. Lessons are omitted. For a continuation request, recent in-scope activity can restore the task context. Candidates, revoked, rejected, deleted, superseded and expired records are not injected. Current instructions and permissions take precedence.
+
+Observation cursors are persisted across restart and deletion. The 512-session cursor bound fails closed for new sessions instead of evicting deletion protection. Disabling Dream stops observation and idle consolidation, not Memory storage or Self Improve. Disabling the plugin preserves stored data.
+
+Existing records remain readable without synthetic metadata. Update the shared service and both learning packages together when testing these new fields; merging source does not publish an npm release.
 
 ```sh
 pnpm --filter @klarkxy/dsh-memory typecheck
@@ -35,6 +37,4 @@ pnpm exec vitest run packages/dsh-memory/src
 pnpm --filter @klarkxy/dsh-memory build
 ```
 
-[Publishing](https://github.com/klarkxy/dsh-editor/blob/main/packages/PUBLISHING.md) · [License](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-memory/LICENSE)
-
-The Editor preinstalls this feature enabled. In the Editor, use Settings → Plugins to switch it without restarting. Standalone DSH must load `@klarkxy/dsh-ai-services` before this package; installation or removal may require a restart when the host asks for one.
+[Design and limits](../../docs/portable-learning.md) · [Publishing](../PUBLISHING.md) · [License](LICENSE)

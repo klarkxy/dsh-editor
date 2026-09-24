@@ -6,6 +6,7 @@ import {
 } from './contracts.ts'
 import { detectLessonTriggers, lastHumanRequestText, requestTextFromMessages, type SessionEventLike } from './detect.ts'
 import { candidateRecord, draftFromTrigger, EXTRACT_SYSTEM, hasSameEvidence, parseExtraction } from './extract.ts'
+import { canAutoActivate, groundedProcedure } from './procedure.ts'
 import { injectLessonMessages } from './inject.ts'
 import { collectLessonRecords, isExpired, selectActiveLessons } from './recall.ts'
 import {
@@ -212,6 +213,14 @@ export class SelfImprovementEngine {
     const generation = this.generation
     const memory = expectedMemory ?? this.options.memory()
     if (!memory || !this.active) return []
+    if (projectId && /^(?:继续|接着|接着做|continue|go on)[。.!！]?$/i.test(requestText.trim())) {
+      // Retrieve descriptive context before selecting methods; never rely on hook registration order.
+      const context = await memory.recall({ scope: { kind: 'project', projectId }, kinds: ['activity'], query: requestText, limit: 2 })
+      requestText = [requestText, ...context.filter(record => record.kind === 'activity' && record.status === 'active'
+        && record.scope.kind === 'project' && record.scope.projectId === projectId && !isExpired(record, this.now()))
+        .map(record => record.content.slice(0, 600))].join('\n')
+      if (!this.active || this.generation !== generation || !this.sameMemory(memory)) return []
+    }
     const listed = await collectLessonRecords(scope => memory.list({ scope, kinds: ['lesson'] }), projectId)
     if (!this.active || this.generation !== generation || !this.sameMemory(memory)) return []
     return selectActiveLessons(listed, projectId, { now: this.now(), requestText })
@@ -245,7 +254,7 @@ export class SelfImprovementEngine {
       id: EXTRACT_PURPOSE,
       label: '自我改进摘录',
       defaultTarget: { kind: 'role', role: 'normal' },
-      maxOutputTokens: 400,
+      maxOutputTokens: 1200,
       maxInputChars: 8000,
     })
     return this.aiScope
@@ -267,7 +276,7 @@ export class SelfImprovementEngine {
     if (!this.active || this.generation !== generation) return undefined
     if (result.receipt.status !== 'success') return undefined
     const parsed = parseExtraction(result.text)
-    if (!parsed || 'skip' in parsed) return undefined
+    if (!parsed || 'skip' in parsed || !groundedProcedure(parsed, trigger)) return undefined
     return parsed
   }
 
@@ -360,6 +369,7 @@ export class SelfImprovementEngine {
         const record = await this.mutateWhileCurrent(generation, memory, guards => memory.create(candidateRecord(draft, trigger, projectId), guards))
         if (this.failed(record)) return record
         this.rememberProject(projectId)
+        if (!canAutoActivate(draft, trigger)) { created.push(record); existing.push(record); continue }
         const activated = await this.mutateWhileCurrent(generation, memory, guards => memory.update(record.id, { status: 'active' }, record.revision, guards))
         if (this.failed(activated)) { skipped += 1; existing.push(record); continue }
         created.push(activated)

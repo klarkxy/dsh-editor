@@ -141,6 +141,9 @@ try {
   await page.getByRole('button', { name: '创建', exact: true }).click()
   const editor = page.locator('[data-testid="paper-editor"]')
   await editor.waitFor({ state: 'visible', timeout: 30_000 })
+  // The container mounts before the asynchronous disk/draft load is ready.
+  // Match a real user's editable surface before dispatching the test edit.
+  await editor.locator('.cm-content[contenteditable="true"]').waitFor({ state: 'visible', timeout: 30_000 })
   const manuscript = '# 安装包验证\n\n此内容必须由实际稿纸自动保存。\n'
   await editor.evaluate((el, text) => {
     const view = el.__cmView

@@ -56,10 +56,11 @@ export function candidateAvailabilityLabel(count: number, locale: Locale): strin
 }
 
 export function kindLabel(kind: MemoryRecord['kind'], locale: Locale): string {
-  if (locale === 'en') {
-    return kind === 'preference' ? 'Preference' : kind === 'project-fact' ? 'Project fact' : kind === 'decision' ? 'Decision' : 'Lesson'
+  const labels: Record<MemoryRecord['kind'], [string, string]> = {
+    preference: ['偏好', 'Preference'], 'project-fact': ['项目事实', 'Project fact'], decision: ['决策', 'Decision'],
+    vocabulary: ['用语释义', 'Vocabulary'], activity: ['近期状态', 'Recent activity'], lesson: ['行动经验', 'Method'],
   }
-  return kind === 'preference' ? '偏好' : kind === 'project-fact' ? '项目事实' : kind === 'decision' ? '决策' : '教训'
+  return labels[kind][locale === 'en' ? 1 : 0]
 }
 
 export function statusLabel(status: MemoryRecord['status'], locale: Locale): string {
@@ -212,11 +213,11 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
     <article className="dsh-memory-card">
       <header>
         <div>
-          <h3>{t(locale, '闲时梦境', 'Idle Dream')}</h3>
-          <p className="dsh-memory-meta">{t(locale, '闲时自动整理记忆（每天至多一次，自动生效）。', 'Auto-organizes memory while idle (at most once a day, applies automatically).')}</p>
+          <h3>{t(locale, 'Dream 语境记忆', 'Dream context memory')}</h3>
+          <p className="dsh-memory-meta">{t(locale, '从原始用户消息记录用语与近期状态，闲时整理已有语境。行动方法由自我改进负责。', 'Records vocabulary and recent activity from original user messages, then consolidates context while idle. Self Improve owns methods.')}</p>
         </div>
         <button type="button" role="switch" className={`dsh-memory-switch${draft.dreamIdleEnabled ? ' is-on' : ''}`}
-          aria-checked={draft.dreamIdleEnabled} aria-label={draft.dreamIdleEnabled ? t(locale, '关闭闲时整理', 'Disable idle Dream') : t(locale, '启用闲时整理', 'Enable idle Dream')}
+          aria-checked={draft.dreamIdleEnabled} aria-label={draft.dreamIdleEnabled ? t(locale, '关闭 Dream 观察与整理', 'Disable Dream observation and consolidation') : t(locale, '启用 Dream 观察与整理', 'Enable Dream observation and consolidation')}
           disabled={busy}
           onClick={() => void action(async () => {
             await rpc('settings.update', {
@@ -378,6 +379,8 @@ function MemoryChatPanel({ client, sessionId, locale }: { client: Client; sessio
           <option value="preference">{kindLabel('preference', locale)}</option>
           <option value="project-fact">{kindLabel('project-fact', locale)}</option>
           <option value="decision">{kindLabel('decision', locale)}</option>
+          <option value="vocabulary">{kindLabel('vocabulary', locale)}</option>
+          <option value="activity">{kindLabel('activity', locale)}</option>
         </select>
       </label>
       <label htmlFor={formId + '-evidence'}>{t(locale, '依据（可选）', 'Evidence (optional)')}
@@ -429,6 +432,12 @@ function MemoryRow(props: {
   return <li>
     <strong>{record.title}</strong>
     <p className="dsh-memory-meta">{kindLabel(record.kind, locale)} · {statusLabel(record.status, locale)} · {scope}</p>
+    {record.context && <p className="dsh-memory-meta">{record.context.subject} · {record.context.domain} · {record.context.key}
+      {' · '}{t(locale, '记录于', 'Observed')} {new Date(record.context.observedAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-CN')}
+      {record.context.activityStatus && ` · ${record.context.activityStatus}`}
+      {record.context.eventTime && ` · ${record.context.eventTime}`}
+    </p>}
+    {record.kind === 'activity' && <p className="dsh-memory-meta">{t(locale, '仅表示上次报告的状态；到期不代表任务已完成。', 'Last reported state only; expiry never means completion.')}</p>}
     <p>{record.content}</p>
     {record.evidence.length > 0 && <p className="dsh-memory-meta">{t(locale, '依据', 'Evidence')}：{record.evidence.map(item => item.excerpt ?? `${item.kind}#${item.seq}`).join('；')}</p>}
     <div className="dsh-memory-row-actions">
@@ -479,7 +488,7 @@ function DreamPanel(props: {
   const locale = props.locale
   return <article className="dsh-memory-dream">
     <h4>{t(locale, '梦境整理', 'Dream')}</h4>
-    <p className="dsh-memory-meta">{t(locale, '闲置且新材料足够时每天至多自动整理一次，结果自动生效。', 'Runs at most once a day when idle with enough new material; results apply automatically.')}</p>
+    <p className="dsh-memory-meta">{t(locale, '每天至多闲时整理一次；不把候选升级为事实，不延长近期状态的有效期。', 'Consolidates at most once a day while idle, without confirming candidates or extending activity freshness.')}</p>
     <div className="dsh-memory-row-actions">
       <button type="button" disabled={props.busy || props.running || !props.aiAvailable} onClick={() => void props.action(async captured => {
         await props.rpc('dream.run', { sessionId: captured })
