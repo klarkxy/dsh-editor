@@ -132,7 +132,7 @@ describe('recap service', () => {
     expect(card?.title).toContain('已取消')
   })
 
-  it('rejects late generation after cards are turned off', async () => {
+  it('rejects late generation after the plugin is disposed', async () => {
     let finish!: (result: AuxiliaryResult) => void
     const pending = new Promise<AuxiliaryResult>(resolve => { finish = resolve })
     let entered = false
@@ -158,17 +158,10 @@ describe('recap service', () => {
     const started = service.onSessionEvent('s1', log[6]!)
     while (!entered) await Promise.resolve()
     expect(service.status().cards[0]?.generation).toBe('running')
-    const current = service.status().settings
-    await service.updateSettings({
-      cardsEnabled: false,
-      checkpointsEnabled: false,
-      semanticCheckpointsEnabled: false,
-      idleReturnMs: current.idleReturnMs,
-    }, current.revision)
+    await service.dispose()
     finish({ text: '不该出现', receipt: receipt('success') })
     await started
     const card = service.status().cards[0]
-    expect(card?.generation).toBe('superseded')
     expect(card?.kind).not.toBe('generated')
     expect(card?.body).not.toContain('不该出现')
   })
@@ -182,7 +175,7 @@ describe('recap service', () => {
       id: () => `x${++ids}`,
       createInjectMessage: payload => payload,
     })
-    await settingsOn(service, { cardsEnabled: true, checkpointsEnabled: false })
+    await settingsOn(service)
     await service.onSessionEvent('s1', log[6]!)
     const recapBody = service.status().cards[0]?.body
     const decision = await service.handlePreStep({
@@ -192,30 +185,13 @@ describe('recap service', () => {
       signal: new AbortController().signal,
       next: async () => ({ kind: 'enter', messages: [{ source: { kind: 'user' as const } }] }),
     })
-    expect(decision.messages).toEqual([{ source: { kind: 'user' } }])
     expect(JSON.stringify(decision)).not.toContain(recapBody)
     expect(JSON.stringify(decision)).not.toContain(RECAP_DISPLAY_PURPOSE)
-
-    await service.updateSettings({
-      cardsEnabled: false,
-      checkpointsEnabled: true,
-      semanticCheckpointsEnabled: false,
-      idleReturnMs: defaultSettings().idleReturnMs,
-    }, service.status().settings.revision)
-    const withCheckpoint = await service.handlePreStep({
-      sessionId: 's1',
-      messages: [{ source: { kind: 'user' } }],
-      step: 1,
-      signal: new AbortController().signal,
-      next: async () => ({ kind: 'enter', messages: [{ source: { kind: 'user' as const } }], skipTools: true, otherFeature: 'keep' }),
-    })
-    const extra = withCheckpoint.messages?.at(-1) as ReturnType<typeof checkpointInjectPayload>
+    const extra = decision.messages?.at(-1) as ReturnType<typeof checkpointInjectPayload>
     expect(extra.source.plugin).toBe(RECAP_PLUGIN)
     expect(extra.content[0]?.text).not.toContain('回顾 ·')
     expect(JSON.stringify(extra)).not.toContain(recapBody)
-    expect(withCheckpoint.skipTools).toBe(true)
-    expect(withCheckpoint.otherFeature).toBe('keep')
-    expect(withCheckpoint.messages?.[0]).toEqual({ source: { kind: 'user' } })
+    expect(decision.messages?.[0]).toEqual({ source: { kind: 'user' } })
   })
 
   it('creates an idle-return card once for new work and skips a second idle on the same watermark', async () => {
@@ -236,6 +212,35 @@ describe('recap service', () => {
     expect(service.status().settings.semanticCheckpointsEnabled).toBe(true)
     const card = await service.onSessionEvent('s1', log[6]!)
     expect(card?.id).toBe('default-on')
+  })
+
+  it('ignores persisted disabled flags and keeps stored cards', async () => {
+    const log = longCompleted()
+    const service = new RecapService({
+      store: memoryStore({
+        settings: {
+          ...defaultSettings(),
+          revision: 4,
+          cardsEnabled: false,
+          checkpointsEnabled: false,
+          semanticCheckpointsEnabled: false,
+          idleReturnMs: 60_000,
+        },
+        cards: [existingCard()],
+        checkpoints: [],
+      }),
+      readEvents: () => log,
+      id: () => 'from-old',
+    })
+    expect(service.status().settings).toMatchObject({
+      revision: 4,
+      cardsEnabled: true,
+      checkpointsEnabled: true,
+      semanticCheckpointsEnabled: true,
+      idleReturnMs: defaultSettings().idleReturnMs,
+    })
+    expect(service.status().cards[0]?.id).toBe('recap-1')
+    expect(await service.onSessionEvent('s1', log[6]!)).toBeUndefined()
   })
 
   it('rejects storage failure without committing settings or activation', async () => {
@@ -279,8 +284,8 @@ describe('recap service', () => {
     expect(lost.status).toBe('rejected')
     expect((lost as PromiseRejectedResult).reason).toMatchObject({ code: 'RECAP_STALE' })
     expect(service.status().settings.revision).toBe(1)
-    expect(service.status().settings.idleReturnMs).toBe(120_000)
-    expect(persisted?.settings.idleReturnMs).toBe(120_000)
+    expect(service.status().settings.idleReturnMs).toBe(defaultSettings().idleReturnMs)
+    expect(persisted?.settings.idleReturnMs).toBe(defaultSettings().idleReturnMs)
     expect(persisted?.settings.revision).toBe(1)
   })
 
@@ -352,7 +357,7 @@ describe('recap service', () => {
         entered = true
         await gate
         saved = true
-        expect(next.settings.idleReturnMs).toBe(120_000)
+        expect(next.settings.idleReturnMs).toBe(defaultSettings().idleReturnMs)
       },
     }
     const service = new RecapService({ store, readEvents: () => [] })
@@ -361,7 +366,7 @@ describe('recap service', () => {
     const disposing = service.dispose()
     expect(saved).toBe(false)
     release()
-    await expect(updating).resolves.toMatchObject({ settings: { idleReturnMs: 120_000, revision: 1 } })
+    await expect(updating).resolves.toMatchObject({ settings: { idleReturnMs: defaultSettings().idleReturnMs, revision: 1 } })
     await disposing
     expect(saved).toBe(true)
   })
@@ -688,8 +693,8 @@ describe('recap service', () => {
     const raced = service.call('status', {}, new AbortController().signal)
     release()
     const [updated, status] = await Promise.all([updating, raced])
-    expect(updated.settings.idleReturnMs).toBe(120_000)
+    expect(updated.settings.idleReturnMs).toBe(defaultSettings().idleReturnMs)
     expect(status).toEqual(expect.objectContaining({ ok: true }))
-    expect(status.ok && status.value.settings.idleReturnMs).toBe(120_000)
+    expect(status.ok && status.value.settings.idleReturnMs).toBe(defaultSettings().idleReturnMs)
   })
 })

@@ -31,6 +31,11 @@ export interface MoodSettings {
 
 export const defaultSettings = (): MoodSettings => ({ revision: 0, mode: 'auto' })
 
+/** Enabled Mood always runs auto; persisted manual/strict flags are ignored. */
+export function operationalSettings(settings: MoodSettings): MoodSettings {
+  return { revision: settings.revision, mode: 'auto' }
+}
+
 export interface ClarificationItem {
   id: string
   question: string

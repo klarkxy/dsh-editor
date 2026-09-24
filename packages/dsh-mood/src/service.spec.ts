@@ -209,9 +209,8 @@ describe('mood pre-step lifecycle', () => {
     expect(JSON.stringify(held[0])).toContain('帮我改一下')
   })
 
-  it('does not process plugin-only batches even in strict mode', async () => {
+  it('does not process plugin-only batches', async () => {
     const { service, run, ask, agent } = setup()
-    await service.call('mode', { mode: 'strict', expectedRevision: 0 }, new AbortController().signal)
     const plugin = { id: 'p1', source: { kind: 'plugin:other', plugin: 'other' }, content: [{ type: 'text', text: '辅助' }] }
     const { decision } = await step(service, agent, [plugin])
     expect(run).not.toHaveBeenCalled()
@@ -325,9 +324,9 @@ describe('mood pre-step lifecycle', () => {
     expect(won.ok).toBe(true)
     expect(lost.ok).toBe(false)
     if (!lost.ok) expect(lost.error.code).toBe('MOOD_STALE')
+    expect(service.status().settings.mode).toBe('auto')
     expect(service.status().settings.revision).toBe(1)
-    expect(service.status().settings.mode).toBe('manual')
-    expect(persisted?.settings.mode).toBe('manual')
+    expect(persisted?.settings.mode).toBe('auto')
     expect(persisted?.settings.revision).toBe(1)
   })
 

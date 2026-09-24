@@ -14,7 +14,7 @@ dsh plugin --profile web add @klarkxy/dsh-memory
 dsh plugin --profile web add @klarkxy/dsh-self-improvement
 ```
 
-Open **Settings → 自我改进** to audit lessons and skill drafts. The plugin does not render status, empty states, or management controls in chat.
+Open **Settings → 记忆** and expand **自我改进** to audit lessons and skill drafts. The plugin does not render status, empty states, or management controls in chat, and it has no standalone settings page.
 
 ## Behaviour
 

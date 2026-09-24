@@ -11,9 +11,9 @@ dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-mood
 ```
 
-Open **Settings → 需求澄清** and choose 自动, 手动, or 严格. The chat card uses seat `dsh-editor.chat.events` with `{sessionId, locale}`.
+Enable or disable the feature under **Settings → Plugins**. When enabled, it uses automatic clarification. The chat card uses seat `dsh-editor.chat.events` with `{sessionId, locale}`.
 
-Clear requests do not call `mood.analyze`. Auto mode only asks when a conservative check finds material ambiguity or risk. Clarification waits in the same pre-step, then resumes that intercepted request once. Recap can read `ctx.aiMood.getContract(sessionId)`.
+Clear requests do not call `mood.analyze`. Auto mode only asks when a conservative check finds material ambiguity or risk. Clarification waits in the same pre-step, then resumes that intercepted request once.
 
 From the repository root:
 

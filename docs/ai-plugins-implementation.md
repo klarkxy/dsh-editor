@@ -5,15 +5,15 @@ This implementation follows the accepted six-plugin design: current title, requi
 ## Fixed boundaries
 
 - DSH owns agents, sessions, model/provider catalogs, credentials, questions, approvals, and history. Keep the pinned DSH version `0.1.7-alpha.1`.
-- All six feature bundle entries are enabled when installed and remain independently switchable. Loading their UI does not start inference. Dream, agent checkpoints and semantic checkpoints default on with independent settings switches, and the shared service is inert until a feature explicitly calls it.
+- All six feature bundle entries are enabled when installed and remain independently switchable. Loading their UI does not start inference. Mood, current title, Recap, and self-improvement have no extra settings pages: enable them under Settings → Plugins and they use fixed automatic defaults (Mood auto, title locale auto, Recap cards/checkpoints/semantic/idle-return on). Memory and web search still have settings pages. Dream still defaults on with an independent Memory switch. The shared service is inert until a feature explicitly calls it.
 - The shared package owns model roles/purpose routing, bounded auxiliary calls, cancellation, usage receipts, and shared types. It does not own a parallel task engine, chat history, credential store, or generic artifact database.
 - Normal/weak/strong are configured aliases; session-following is a distinct target. Unconfigured weak/strong can inherit normal; an explicitly broken route fails visibly without silently changing providers. Manuscript completion and rewrite now use the same service with dedicated purposes; their existing settings UI edits the central policy.
 - Feature packages own their typed records. Memory is the single authority for long-term preferences, project facts, decisions and lessons; maintenance writes take effect directly, stay silent and can be undone from the history. Novel 正文与大纲 remain author-confirmed through proposals, while AGENTS.md、世界书、人物卡 are agent-maintained via direct writes. Rules still come only from the author's explicit statements.
-- Self-improvement requires an explicitly enabled Memory service; enabling it must not enable Memory or Dream. Extracted lessons take effect automatically and join context injection, and can be revoked in settings at any time. Skill proposals can be previewed, accepted/exported and revoked without writing executable or policy files automatically.
+- Self-improvement requires an explicitly enabled Memory service; enabling it must not enable Memory or Dream. Extracted lessons take effect automatically and join context injection, and can be revoked from Settings → Memory. Skill proposals can be previewed, accepted/exported and revoked from the same Memory compact entry without writing executable or policy files automatically.
 - Every asynchronous publication checks session/source identity, input version and activation generation. Disabling cancels work and rejects late results. Data survives disable/uninstall.
 - Mood runs at the Host pre-step boundary. Clarification distinguishes pending, answered, skipped, cancelled and stale; it resumes the same intercepted request once. Requirements confirmation never substitutes for file or publication approval.
 - Recap display is not model context. Checkpoints have their own lineage and bounded context channel. Cards do not fabricate tool calls or human messages.
-- Dream works on bounded snapshots and uses revision checks. Idle consolidation defaults on: it runs only while the project is idle, at least 24 hours after the last run, with at least 3 new items, at most once a day, and results take effect automatically; it can be turned off in settings. Corrections/deletions win over in-flight consolidation; expired plans do not become completed facts.
+- Dream works on bounded snapshots and uses revision checks. Idle consolidation defaults on: it runs only while the project is idle for about 15 minutes, at least 24 hours after the last run, with at least 3 new items, at most once a day, and results take effect automatically; it can be turned off in Memory settings. The idle wait is a fixed default. Corrections/deletions win over in-flight consolidation; expired plans do not become completed facts.
 - Public packages cannot depend on private Editor runtime packages. Editor provides narrow optional UI seats; native provider APIs remain authoritative.
 
 ## Acceptance
@@ -27,8 +27,8 @@ The npm packages are published from this repository's main branch after compatib
 桌面组合已预装并启用六个功能。在「设置 → 插件」中可分别停用。
 
 1. 在「设置 → 模型 → 模型配置」为对话、补全和改写选择模型。默认／省资源／高质量预设在「高级设置」；并发、超时和输入输出上限在「运行设置」。
-2. 当前标题、需求澄清、回顾、记忆默认可用；不需要的功能可在插件页关闭。Dream 闲时整理、Agent 检查点、语义检查点等自动行为默认开启，不需要时可在设置页关闭。
-3. 经验学习依赖记忆；两者在桌面组合中默认同时可用。摘录的教训自动生效并参与注入，随时可在设置页撤回；Skill 草稿可以预览、采纳、下载和撤回，不会自动改写政策文件或执行脚本。
+2. 当前标题、需求澄清、回顾默认可用；不需要的功能可在插件页关闭。启用后按固定自动行为运行，不再提供单独设置页。记忆仍可在「设置 → 记忆」管理条目、注入和闲时整理；闲时等待约 15 分钟，不可调。
+3. 经验学习依赖记忆；两者在桌面组合中默认同时可用。摘录的教训自动生效并参与注入，随时可在「设置 → 记忆」的自我改进条目撤回；Skill 草稿可以预览、采纳、下载和撤回，不会自动改写政策文件或执行脚本。
 
 DSH 0.1.7-alpha.1 支持客户端模块图动态更新。插件设置订阅原生加载状态；正常启停无需重启，仅实际加载失败时提示保存工作后重试。安装、卸载或宿主明确返回需要重启的变更，仍按提示处理。关闭后的后台任务和注入立即取消。
 
@@ -42,7 +42,7 @@ Editor 自有 profile 使用原生 patchReload: startup。插件管理器保存�
 
 ## 独立 web 验收
 
-各插件在原生“设置”页提供入口，并从宿主的会话选择绑定读取当前选择。Memory、Mood、Recap 和经验学习的管理界面不要求 Editor 侧栏。模型中心在 Editor 内复用供应商界面；独立 web 的供应商编辑仍由原生“模型”页负责。
+原生“设置”页保留 Memory 的管理入口，并从宿主的会话选择绑定读取当前选择。教训与 Skill 草稿在 Memory 页面管理；Mood、当前标题、Recap 和自我改进只通过插件开关控制。模型中心在 Editor 内复用供应商界面；独立 web 的供应商编辑仍由原生“模型”页负责。
 
 运行 `pnpm test:e2e:ai-plugins:standalone` 会把七个当前 tarball 安装到全新隔离 profile；本地包依赖只在该测试 profile 内绑定到对应 tarball，不修改全局包管理器配置。手动安装到原生 web 后功能默认启用；如需停用，可在插件设置中关闭后重启。
 

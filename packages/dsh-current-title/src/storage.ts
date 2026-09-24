@@ -1,6 +1,6 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
-import { SETTINGS_KEY, defaultSettings, isTitleLocaleMode, type TitleSettings } from './contracts.ts'
+import { SETTINGS_KEY, isTitleLocaleMode, type TitleSettings } from './contracts.ts'
 
 export { SETTINGS_KEY }
 
@@ -24,6 +24,7 @@ export function parseTitleSettings(value: unknown): TitleSettings | undefined {
   return parsed.data
 }
 
-export function storedSettings(value: unknown, fallbackLocale: TitleSettings['locale'] = 'auto'): TitleSettings {
-  return parseTitleSettings(value) ?? defaultSettings(fallbackLocale)
+export function storedSettings(value: unknown, _fallbackLocale: TitleSettings['locale'] = 'auto'): TitleSettings {
+  const parsed = parseTitleSettings(value)
+  return { revision: parsed?.revision ?? 0, locale: 'auto' }
 }

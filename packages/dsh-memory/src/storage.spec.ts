@@ -71,7 +71,7 @@ describe('memory aggregate schema bounds', () => {
     expect(memoryStateSchema.safeParse({ ...minimal, lastAttemptAt: -1 }).success).toBe(false)
     expect(memoryStateSchema.safeParse({ ...minimal, lastAttemptAt: 1.5 }).success).toBe(false)
     const legacy = { revision: 3, injectEnabled: true, idleMs: 60_000 } as unknown as Parameters<typeof storedSettings>[0]
-    expect(storedSettings(legacy)).toEqual({ revision: 3, injectEnabled: true, dreamIdleEnabled: true, idleMs: 60_000 })
+    expect(storedSettings(legacy)).toEqual({ revision: 3, injectEnabled: true, dreamIdleEnabled: true, idleMs: 15 * 60_000 })
     expect(storedSettings(undefined).dreamIdleEnabled).toBe(true)
   })
 })

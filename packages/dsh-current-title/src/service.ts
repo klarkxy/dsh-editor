@@ -110,14 +110,14 @@ export class CurrentTitleService {
     }
   }
 
-  async updateLocale(locale: TitleLocaleMode, expectedRevision: number): Promise<TitleSettings> {
+  async updateLocale(_locale: TitleLocaleMode, expectedRevision: number): Promise<TitleSettings> {
     if (this.settings.revision !== expectedRevision) {
       throw Object.assign(new Error('current-title settings changed'), { code: 'revision' })
     }
-    const next = { revision: this.settings.revision + 1, locale }
+    const next = { revision: this.settings.revision + 1, locale: 'auto' as const }
     if (this.options.store) await this.options.store.save(next)
     this.settings = next
-    this.config = { ...this.config, locale }
+    this.config = { ...this.config, locale: 'auto' }
     return { ...this.settings }
   }
 

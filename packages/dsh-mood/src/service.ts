@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { AiFeatureScope, AuxiliaryResult, RpcResult, TaskContract } from '@klarkxy/dsh-ai-services/contracts'
 import {
   MOOD_ANALYZE_PURPOSE, PROMPT_VERSION, SCHEMA_VERSION, cloneContract, defaultSettings, excerptOf, fail, ok,
+  operationalSettings,
   parseSessionId, projectIdFromCwd, sessionIdOf, type AskUserRequest, type AskUserQuestionAnswer, type ClarificationItem,
   type HeldRequest, type MoodMode, type MoodSessionView, type MoodSettings, type MoodStatus,
 } from './contracts.ts'
@@ -83,7 +84,7 @@ export class MoodService {
 
   constructor(private readonly options: MoodServiceOptions) {
     const loaded = cloneState(options.store?.load() ?? { settings: defaultSettings(), sessions: {} })
-    this.settings = loaded.settings
+    this.settings = operationalSettings(loaded.settings)
     for (const [sessionId, row] of Object.entries(loaded.sessions)) {
       this.sessions.set(sessionId, {
         ...row,
@@ -463,12 +464,12 @@ export class MoodService {
     void input.inner
   }
 
-  private async updateMode(mode: MoodMode, expectedRevision: number): Promise<MoodStatus> {
+  private async updateMode(_mode: MoodMode, expectedRevision: number): Promise<MoodStatus> {
     return this.serialize(async () => {
       this.assertLive()
       if (expectedRevision !== this.settings.revision) coded('MOOD_STALE', '需求澄清设置已更新，请刷新后重试。')
       const proposed = this.snapshot()
-      proposed.settings = { mode, revision: this.settings.revision + 1 }
+      proposed.settings = operationalSettings({ mode: 'auto', revision: this.settings.revision + 1 })
       await this.persistProposed(proposed)
       this.commitState(proposed)
       return this.status()

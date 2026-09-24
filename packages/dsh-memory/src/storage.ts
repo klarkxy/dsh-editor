@@ -1,7 +1,7 @@
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { z } from 'zod'
 import {
-  defaultSettings, MAX_PROJECT_ID_CHARS, type DreamPlan, type MemoryPersistedState, type MemoryRecord,
+  DEFAULT_IDLE_MS, defaultSettings, MAX_PROJECT_ID_CHARS, type DreamPlan, type MemoryPersistedState, type MemoryRecord,
   type MemorySettings, type MemoryTombstone,
 } from './contracts.ts'
 
@@ -157,7 +157,8 @@ export const memoryDomain = defineDomain({
 })
 
 export function storedSettings(value: MemorySettings | undefined): MemorySettings {
-  return value ? { ...defaultSettings(), ...value } : defaultSettings()
+  const merged = value ? { ...defaultSettings(), ...value } : defaultSettings()
+  return { ...merged, idleMs: DEFAULT_IDLE_MS }
 }
 
 export type { DreamPlan, MemoryRecord, MemoryTombstone }

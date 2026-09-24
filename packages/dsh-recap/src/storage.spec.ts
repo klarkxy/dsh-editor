@@ -116,7 +116,12 @@ describe('aggregate recap domain adapter', () => {
       },
     }, new AbortController().signal)
     expect(result).toEqual({ ok: false, error: { code: 'RECAP_STORAGE', message: '回顾保存失败，已保留原内容。' } })
-    expect(service.status().settings).toMatchObject({ revision: 1, checkpointsEnabled: false, semanticCheckpointsEnabled: false, idleReturnMs: 15 * 60_000 })
+    expect(service.status().settings).toMatchObject({
+      revision: 1,
+      checkpointsEnabled: true,
+      semanticCheckpointsEnabled: true,
+      idleReturnMs: 15 * 60_000,
+    })
     expect(service.status().cards.map(row => row.id)).toEqual(['keep-a', 'keep-b'])
     expect(service.status().checkpoints.map(row => row.id)).toEqual(['cp-1'])
     expect(disk.snapshot()).toEqual(previous)
@@ -126,7 +131,7 @@ describe('aggregate recap domain adapter', () => {
       store: domainStore(disk.open()),
       readEvents: () => [],
     })
-    expect(reopened.status().settings).toMatchObject({ revision: 1, checkpointsEnabled: false, idleReturnMs: 15 * 60_000 })
+    expect(reopened.status().settings).toMatchObject({ revision: 1, checkpointsEnabled: true, idleReturnMs: 15 * 60_000 })
     expect(reopened.status().cards.map(row => row.id)).toEqual(['keep-a', 'keep-b'])
     expect(reopened.status().checkpoints).toEqual([expect.objectContaining({ id: 'cp-1', nextAction: '继续' })])
     expect(disk.puts()).toBe(1)

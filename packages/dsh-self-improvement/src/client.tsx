@@ -3,7 +3,7 @@ import { useFeatureRefresh, useNativeSeat, type NativeSurfaceClient } from '@kla
 import { useEffect, useId, useRef, useState } from 'react'
 import {
   MEMORY_UNAVAILABLE_MESSAGE, MEMORY_UNAVAILABLE_MESSAGE_EN,
-  SELF_IMPROVEMENT_RPC_CHANNEL, type MemoryRecord, type ReviewSnapshot, type RpcResult, type SkillRecord,
+  SELF_IMPROVEMENT_REVIEW_SERVICE, SELF_IMPROVEMENT_RPC_CHANNEL, type MemoryRecord, type ReviewSnapshot, type RpcResult, type SkillRecord,
 } from './contracts.ts'
 import {
   beginReviewRequest, createReviewGeneration, disposeReviewRequest, exportSkillIfCurrent,
@@ -470,8 +470,17 @@ export function SelfImprovementSettings({ client, props }: { client: Client; pro
   return <ReviewPanel key={reviewPanelKey(seat.sessionId, seat.locale)} client={client} sessionId={seat.sessionId} locale={seat.locale} />
 }
 
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    dshSelfImprovementReview: { render(props: unknown): unknown }
+  }
+}
+
 export function apply(ctx: Context): void {
   const client = ctx as unknown as Client
+  ctx.provide(SELF_IMPROVEMENT_REVIEW_SERVICE, {
+    render: (props: unknown) => <SelfImprovementSettings client={client} props={props} />,
+  })
   ctx.effect(() => {
     if (typeof document === 'undefined') return () => {}
     const style = document.createElement('style')
@@ -480,7 +489,4 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'self-improvement.styles')
-  ctx.effect(() => client.slots.inject('settings.section', () => client.slots.register({
-    name: 'settings.section', id: 'self-improvement', order: 85, label: '自我改进',
-  }, (props: unknown) => <SelfImprovementSettings client={client} props={props} />)), 'self-improvement.settings')
 }

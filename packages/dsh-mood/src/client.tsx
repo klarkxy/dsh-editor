@@ -444,9 +444,6 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'dsh-mood.styles')
-  ctx.effect(() => client.slots.inject('settings.section', () => client.slots.register({
-    name: 'settings.section', id: 'mood', order: 55, label: '需求澄清',
-  }, (props: unknown) => <MoodSettings client={client} props={props} />)), 'dsh-mood.settings')
   ctx.effect(() => client.slots.inject(CHAT_EVENTS_SLOT, () => client.slots.register({
     name: CHAT_EVENTS_SLOT, id: 'mood', order: 10, label: '需求约定',
   }, (props: unknown) => <MoodChatCard client={client} props={props} />)), 'dsh-mood.card')

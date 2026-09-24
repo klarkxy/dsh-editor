@@ -93,11 +93,11 @@ describe('aggregate mood domain adapter', () => {
       store: domainStore(disk.open()),
       readEvents: () => [],
     })
-    expect(service.status().settings).toMatchObject({ revision: 1, mode: 'manual' })
+    expect(service.status().settings).toMatchObject({ revision: 1, mode: 'auto' })
     expect(service.getContract('sess-1')?.goal).toBe('保留原约定')
     const result = await service.call('mode', { expectedRevision: 1, mode: 'strict' }, new AbortController().signal)
     expect(result).toEqual({ ok: false, error: { code: 'MOOD_STORAGE', message: '需求澄清保存失败，已保留原内容。' } })
-    expect(service.status().settings).toMatchObject({ revision: 1, mode: 'manual' })
+    expect(service.status().settings).toMatchObject({ revision: 1, mode: 'auto' })
     expect(service.getContract('sess-1')?.goal).toBe('保留原约定')
     expect(service.status('sess-1').session?.clarification[0]?.answer).toBe('对白')
     expect(disk.snapshot()).toEqual(previous)
@@ -107,7 +107,7 @@ describe('aggregate mood domain adapter', () => {
       store: domainStore(disk.open()),
       readEvents: () => [],
     })
-    expect(reopened.status().settings).toMatchObject({ revision: 1, mode: 'manual' })
+    expect(reopened.status().settings).toMatchObject({ revision: 1, mode: 'auto' })
     expect(reopened.getContract('sess-1')).toMatchObject({ id: 'keep-contract', goal: '保留原约定', readiness: 'user-confirmed' })
     expect(reopened.status('sess-1').session?.projectId).toBe('/work/novel')
     expect(disk.puts()).toBe(1)

@@ -194,15 +194,4 @@ export function apply(ctx: Context): void {
     }).catch(() => { if (live) applyMarkerFromStatus(marker, undefined, live) })
     return () => { live = false; disposeTitleClientMarker(marker) }
   }, 'current-title.marker')
-  ctx.effect(() => {
-    if (typeof document === 'undefined') return () => {}
-    const style = document.createElement('style')
-    style.setAttribute('data-plugin', '@klarkxy/dsh-current-title')
-    style.textContent = styles
-    document.head.appendChild(style)
-    return () => style.remove()
-  }, 'current-title.styles')
-  ctx.effect(() => client.slots.inject('settings.section', () => client.slots.register({
-    name: 'settings.section', id: 'current-title', order: 80, label: '当前标题',
-  }, (props: unknown) => <TitleSettings client={client} marker={marker} owner={props} />)), 'current-title.settings')
 }

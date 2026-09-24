@@ -29,13 +29,12 @@ function titleStatus(sessionId: string, title: string): TitleStatus {
 }
 
 describe('current title UI', () => {
-  it('injects native session and locale and keeps regenerate labels', () => {
+  it('injects native session and locale for the title marker', () => {
     expect(clientSource).toContain("from '@klarkxy/dsh-ai-services/client-utils'")
     expect(clientSource).toContain('type Client = NativeSurfaceClient &')
     expect(clientSource).toContain("export const inject = ['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'] as const")
-    expect(clientSource).toContain('const seat = useNativeSeat(props.client, props.owner)')
-    expect(clientSource).toContain('useFeatureRefresh(')
-    expect(clientSource).toContain('(props: unknown) => <TitleSettings client={client} marker={marker} owner={props} />')
+    expect(clientSource).toContain("ctx.provide(TITLE_CLIENT_SERVICE, marker)")
+    expect(clientSource).not.toContain('settings.section')
     expect(settingsCopy('zh').regenerate).toBe('重新生成')
     expect(settingsCopy('en').regenerate).toBe('Regenerate')
     expect(settingsCopy('zh').label).toBe('当前标题')

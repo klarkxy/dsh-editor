@@ -116,7 +116,7 @@ describe('CurrentTitleService', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
-  it('persists locale with CAS across disable and restart', async () => {
+  it('forces auto locale with CAS across disable and restart', async () => {
     const persisted = store()
     const exclusive = nativeExclusive()
     const service = new CurrentTitleService({
@@ -128,10 +128,10 @@ describe('CurrentTitleService', () => {
       store: persisted,
     })
     await service.start()
-    expect((await service.updateLocale('en', 0)).locale).toBe('en')
-    expect(persisted.value()?.locale).toBe('en')
+    expect((await service.updateLocale('en', 0)).locale).toBe('auto')
+    expect(persisted.value()?.locale).toBe('auto')
     await expect(service.updateLocale('zh', 0)).rejects.toThrow(/changed/)
-    expect(service.status().settings.locale).toBe('en')
+    expect(service.status().settings.locale).toBe('auto')
     await service.dispose()
     const again = new CurrentTitleService({
       plugin: PLUGIN_NAME,
@@ -142,7 +142,7 @@ describe('CurrentTitleService', () => {
       store: persisted,
     })
     await again.start()
-    expect(again.status().settings).toEqual({ revision: 1, locale: 'en' })
+    expect(again.status().settings).toEqual({ revision: 1, locale: 'auto' })
     await again.dispose()
   })
 
@@ -158,6 +158,21 @@ describe('CurrentTitleService', () => {
     await service.start()
     await expect(service.updateLocale('zh', 0)).rejects.toThrow(/disk/)
     expect(service.status().settings.locale).toBe('auto')
+    await service.dispose()
+  })
+
+  it('ignores a persisted locale and runs auto without dropping revision', async () => {
+    const persisted = store({ revision: 4, locale: 'en' })
+    const service = new CurrentTitleService({
+      plugin: PLUGIN_NAME,
+      ai: ai(),
+      sessionTitle: nativeExclusive(),
+      sessions: { get: () => undefined },
+      loader: loader([]),
+      store: persisted,
+    })
+    await service.start()
+    expect(service.status().settings).toEqual({ revision: 4, locale: 'auto' })
     await service.dispose()
   })
 

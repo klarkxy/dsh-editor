@@ -1,4 +1,4 @@
-import { createElement, isValidElement, type ReactElement } from 'react'
+import { createElement, isValidElement } from 'react'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -34,11 +34,6 @@ function captureRenders() {
     connection: client.connection,
   } as never)
   return { renders, names }
-}
-
-function propsOf(node: unknown): Record<string, unknown> {
-  if (!isValidElement(node)) throw new Error('expected a React element')
-  return (node as ReactElement<Record<string, unknown>>).props
 }
 
 function deferred() {
@@ -90,24 +85,17 @@ describe('mood settings and card helpers', () => {
 })
 
 describe('native settings seat and contract refresh', () => {
-  it('registers settings.section and the shared chat events seat', () => {
+  it('registers the shared chat events seat without a settings page', () => {
     const { names } = captureRenders()
     expect(names).toEqual([
-      { name: 'settings.section', id: 'mood', order: 55, label: '需求澄清' },
       { name: CHAT_EVENTS_SLOT, id: 'mood', order: 10, label: '需求约定' },
     ])
   })
 
-  it('forwards native close-only props into MoodSettings so the seat can resolve the session', () => {
-    const { renders } = captureRenders()
+  it('keeps MoodSettings available for native seat props without registering a nav page', () => {
     const close = () => {}
-    const native = renders['settings.section']!({ close })
-    expect(isValidElement(native)).toBe(true)
-    expect(native.type).toBe(MoodSettings)
-    expect(propsOf(native).props).toEqual({ close })
-    const hosted = renders['settings.section']!({ sessionId: 'sess-9', locale: 'en' })
-    expect(hosted.type).toBe(MoodSettings)
-    expect(propsOf(hosted).props).toEqual({ sessionId: 'sess-9', locale: 'en' })
+    expect(createElement(MoodSettings, { client, props: { close } }).type).toBe(MoodSettings)
+    expect(createElement(MoodSettings, { client, props: { sessionId: 'sess-9', locale: 'en' } }).type).toBe(MoodSettings)
     expect(createElement(MoodSettings, { client, props: { owner: { sessionId: 'sess-9', locale: 'en' } } }).type).toBe(MoodSettings)
   })
 

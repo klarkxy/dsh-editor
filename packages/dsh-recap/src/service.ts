@@ -14,7 +14,7 @@ import {
   isMeaningfulCheckpointBoundary, sameCheckpointLineage, shouldRunSemanticCheckpoint,
 } from './checkpoints.ts'
 import { collectFacts, deterministicBody } from './log.ts'
-import { parseUpdate } from './schema.ts'
+import { parseUpdate, storedSettings } from './schema.ts'
 
 export type { RecapPersistedState, RecapStore }
 
@@ -70,7 +70,7 @@ export class RecapService {
 
   constructor(private readonly options: RecapServiceOptions) {
     const loaded = cloneState(options.store.load())
-    this.settings = loaded.settings
+    this.settings = storedSettings(loaded.settings)
     this.cards = loaded.cards
     this.checkpoints = loaded.checkpoints
     this.checkpointRevisions = recoverCheckpointRevisions(loaded.checkpoints)
@@ -111,7 +111,7 @@ export class RecapService {
       this.assertLive()
       if (expectedRevision !== this.settings.revision) coded('RECAP_STALE', '回顾设置已更新，请刷新后重试。')
       const proposed = this.snapshot()
-      proposed.settings = { ...settings, revision: this.settings.revision + 1 }
+      proposed.settings = storedSettings({ ...settings, revision: this.settings.revision + 1 })
       const cardsOff = this.settings.cardsEnabled && !proposed.settings.cardsEnabled
       const checkpointsOff = this.settings.checkpointsEnabled && !proposed.settings.checkpointsEnabled
       const semanticOff = this.settings.semanticCheckpointsEnabled && !proposed.settings.semanticCheckpointsEnabled

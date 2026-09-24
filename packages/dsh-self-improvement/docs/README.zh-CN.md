@@ -6,13 +6,15 @@
 
 ## 安装
 
-需要 Node.js ≥22、DSH `0.1.7-alpha.1`。捆绑入口安装后默认启用，也可在插件设置中关闭。本插件**不会**替宿主加载记忆或开启 Dream；独立部署仍需安装并加载 `@klarkxy/dsh-memory`。
+需要 Node.js ≥22、DSH `0.1.7-alpha.1`。捆绑入口安装后默认启用，也可在插件设置中关闭。本插件**不会**替宿主加载记忆或开启 Dream；独立部署需先加载共享服务 `@klarkxy/dsh-ai-services`，再安装、加载并启用 `@klarkxy/dsh-memory`。
 
 ```sh
+dsh plugin --profile web add @klarkxy/dsh-ai-services
+dsh plugin --profile web add @klarkxy/dsh-memory
 dsh plugin --profile web add @klarkxy/dsh-self-improvement
 ```
 
-教训与技能草稿统一在 **设置 → 自我改进** 审计；聊天区不显示插件状态、空状态或管理控件。
+在 **设置 → 记忆** 展开 **自我改进** 审计教训与技能草稿；本插件没有单独设置页，聊天区也不显示管理控件。
 
 ## 行为
 

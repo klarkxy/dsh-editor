@@ -44,7 +44,7 @@ function statusFor(sessionId: string, title = '回顾'): RecapStatus {
 }
 
 describe('recap client seats', () => {
-  it('registers settings and a quiet background chat controller', () => {
+  it('registers a quiet background chat controller without a settings page', () => {
     expect([...inject]).toEqual(['slots', 'connection', 'sessions', 'locale', 'uiWorkspace', 'uiSession'])
     const injected: string[] = []
     const names: Array<{ name: string; id?: string; label?: string }> = []
@@ -63,10 +63,9 @@ describe('recap client seats', () => {
       },
       connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
     } as never)
-    expect(injected).toEqual(['settings.section', CHAT_EVENTS_SLOT])
+    expect(injected).toEqual([CHAT_EVENTS_SLOT])
     expect(CHAT_EVENTS_SLOT).toBe('dsh-editor.chat.events')
     expect(names).toEqual([
-      { name: 'settings.section', id: 'recap', order: 80, label: '回顾' },
       { name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '回顾' },
     ])
     expect(readFileSync(fileURLToPath(new URL('./client.tsx', import.meta.url)), 'utf8')).toContain('hidden={seat.hidden} quiet')

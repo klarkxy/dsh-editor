@@ -25,5 +25,8 @@ export function parseUpdate(payload: unknown): { expectedRevision: number; setti
 }
 
 export function storedSettings(value: RecapSettings | undefined): RecapSettings {
-  return value ? { ...defaultSettings(), ...value } : defaultSettings()
+  const revision = value && typeof value.revision === 'number' && Number.isInteger(value.revision) && value.revision >= 0
+    ? value.revision
+    : 0
+  return { ...defaultSettings(), revision }
 }

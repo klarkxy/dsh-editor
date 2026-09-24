@@ -3,7 +3,7 @@ import type {
   AiFeatureScope, DreamPlan, InjectedMemoryMessage, KnowledgeScope, MemoryMutationOptions, MemoryPersistedState,
   MemoryQuery, MemoryRecord, MemoryService, MemorySettings, MemoryStatus, NewMemoryRecord, PreStepDecision, PurposeSpec,
 } from './contracts.ts'
-import { cloneRecord, INJECT_KINDS, MEMORY_DREAM_PURPOSE, projectIdFromCwd, sessionCwd } from './contracts.ts'
+import { cloneRecord, DEFAULT_IDLE_MS, INJECT_KINDS, MEMORY_DREAM_PURPOSE, projectIdFromCwd, sessionCwd } from './contracts.ts'
 import {
   DREAM_SYSTEM, assertBasisCurrent, assertDreamApply, basisFromSnapshot, inheritEvidence, isDreamSource,
   parseDreamText, recordMap, snapshotRecords, stampInheritedExpiry, tombstoneSet, dreamSourceVersion,
@@ -54,6 +54,7 @@ export class MemoryRuntime implements MemoryService {
 
   constructor(private readonly options: MemoryRuntimeOptions) {
     this.live = cloneState(options.store.load())
+    this.live.settings = { ...this.live.settings, idleMs: DEFAULT_IDLE_MS }
     this.now = options.now ?? Date.now
     this.customId = options.id
     this.syncAi()
@@ -99,7 +100,7 @@ export class MemoryRuntime implements MemoryService {
       this.assertOpen()
       if (expectedRevision !== this.live.settings.revision) fail(MEMORY_CONFLICT, '记忆设置已更新，请刷新后重试。')
       const proposed = this.snapshot()
-      proposed.settings = { ...next, revision: expectedRevision + 1 }
+      proposed.settings = { ...next, idleMs: DEFAULT_IDLE_MS, revision: expectedRevision + 1 }
       const disableInject = this.live.settings.injectEnabled && !proposed.settings.injectEnabled
       const disableDream = this.live.settings.dreamIdleEnabled && !proposed.settings.dreamIdleEnabled
       await this.persistProposed(proposed)

@@ -125,9 +125,12 @@ try {
   assert.equal(report.calls, 0)
   report.checks.push('all six independently installed features start enabled without inference before a task')
   let dialog = await settings()
-  for (const label of ['当前标题', '需求澄清', '回顾', '记忆', '自我改进', '模型中心']) {
+  for (const label of ['记忆', '模型中心']) {
     await dialog.getByRole('button', { name: label, exact: true }).click()
     await page.screenshot({ path: resolve(output, label + '.png'), fullPage: true })
+  }
+  for (const label of ['当前标题', '需求澄清', '回顾', '自我改进']) {
+    assert.equal(await dialog.getByRole('button', { name: label, exact: true }).count(), 0, label + ' must not keep a settings entry')
   }
   const center = dialog.getByTestId('model-center')
   await center.getByRole('tab', { name: '模型配置', exact: true }).click()
@@ -151,10 +154,9 @@ try {
   await composer.fill('解释什么是光合作用')
   await composer.press('Enter')
   await page.getByText('独立宿主测试回复。', { exact: true }).first().waitFor()
-  dialog = await settings()
-  await dialog.getByRole('button', { name: '当前标题', exact: true }).click()
-  await dialog.getByTestId('current-title-settings').getByText(/独立插件/).waitFor()
+  await page.getByText(/独立插件/).first().waitFor()
   report.checks.push('current title owns the native title provider in the standalone host')
+  dialog = await settings()
   await dialog.getByRole('button', { name: '记忆', exact: true }).click()
   const memory = dialog.getByTestId('memory-chat')
   await memory.locator('summary').click()

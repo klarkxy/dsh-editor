@@ -45,6 +45,7 @@ export const CHAT_EVENTS_SLOT = FROZEN_CHAT_EVENTS_SLOT
 export const projectIdFromCwd = sharedProjectIdFromCwd
 export const SELF_IMPROVEMENT_RPC_CHANNEL = '/dsh-self-improvement'
 export const SELF_IMPROVEMENT_PLUGIN = '@klarkxy/dsh-self-improvement'
+export const SELF_IMPROVEMENT_REVIEW_SERVICE = 'dshSelfImprovementReview'
 export const SELF_IMPROVEMENT_SOURCE_KIND = 'plugin:@klarkxy/dsh-self-improvement' as const
 /** Production activate identity. Core owns the scoped pluginName regex. */
 export const SELF_IMPROVEMENT_ACTIVATE_ID = SELF_IMPROVEMENT_PLUGIN

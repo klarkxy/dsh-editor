@@ -522,9 +522,6 @@ export function apply(ctx: Context): void {
     document.head.appendChild(style)
     return () => style.remove()
   }, 'dsh-recap.styles')
-  ctx.effect(() => client.slots.inject('settings.section', () => client.slots.register({
-    name: 'settings.section', id: 'recap', order: 80, label: '回顾',
-  }, () => <RecapSettingsSeat client={client} />)), 'dsh-recap.settings')
   ctx.effect(() => client.slots.inject(CHAT_EVENTS_SLOT, () => client.slots.register({
     name: CHAT_EVENTS_SLOT, id: 'recap', order: 40, label: '回顾',
   }, (props: unknown) => <RecapBackgroundSeat client={client} {...(props as object)} />)), 'dsh-recap.background')

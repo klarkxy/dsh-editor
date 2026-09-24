@@ -227,17 +227,7 @@ function MemorySettingsPanel({ client, sessionId, locale }: { client: Client; se
           <span className="dsh-memory-switch-thumb" aria-hidden="true" />
         </button>
       </header>
-      <label>{t(locale, '空闲间隔（分钟）', 'Idle interval (minutes)')}
-        <input type="number" min={1} max={180} step={1} disabled={busy}
-          value={Math.round(draft.idleMs / 60_000)}
-          onChange={event => { settingsDirty.current = true; setDraft({ ...draft, idleMs: Math.round(Number(event.target.value) * 60_000) }) }} />
-      </label>
-      <button type="button" disabled={busy} onClick={() => void action(async () => {
-        await rpc('settings.update', {
-          expectedRevision: draft.revision,
-          settings: editable(draft),
-        })
-      })}>{t(locale, '保存', 'Save')}</button>
+      <p className="dsh-memory-meta">{t(locale, '闲时整理在会话空闲约 15 分钟后尝试。', 'Idle organization waits about 15 minutes of inactivity.')}</p>
     </article>
   </section>
 }
@@ -509,10 +499,29 @@ function DreamPanel(props: {
   </article>
 }
 
-export function MemorySettings({ client, props }: { client: Client; props: unknown }) {
+function readSelfImprovementReview(host: unknown): { render(props: unknown): ReactNode } | undefined {
+  if (!host || typeof host !== 'object') return undefined
+  const context = host as { get?: (name: string) => unknown }
+  if (typeof context.get !== 'function') return undefined
+  let row: unknown
+  try { row = context.get('dshSelfImprovementReview') } catch { return undefined }
+  if (!row || typeof row !== 'object') return undefined
+  const render = (row as { render?: unknown }).render
+  if (typeof render !== 'function') return undefined
+  return { render: render as (props: unknown) => ReactNode }
+}
+
+export function MemorySettings({ client, host, props }: { client: Client; host?: unknown; props: unknown }) {
   const seat = useNativeSeat(client, props)
+  const review = readSelfImprovementReview(host)
   return <div className="dsh-memory-settings-root" data-testid="memory-settings-root">
     <MemorySettingsPanel key={`settings:${memoryPanelKey(seat.sessionId, seat.locale)}`} client={client} sessionId={seat.sessionId} locale={seat.locale} />
+    {review && seat.sessionId && !seat.hidden
+      ? <details className="dsh-memory-si" data-testid="self-improvement-entry">
+        <summary>{t(seat.locale, '自我改进', 'Self-improvement')}</summary>
+        <div className="dsh-memory-si-body">{review.render({ sessionId: seat.sessionId, locale: seat.locale })}</div>
+      </details>
+      : null}
     {seat.sessionId && !seat.hidden
       ? <MemoryChatPanel key={`manage:${memoryPanelKey(seat.sessionId, seat.locale)}`} client={client} sessionId={seat.sessionId} locale={seat.locale} />
       : <p className="dsh-memory-meta">{t(seat.locale, '选择一个会话后可以管理该会话的记忆。', 'Select a session to manage its memory.')}</p>}
@@ -526,7 +535,7 @@ const styles = `
 .dsh-memory-settings p,.dsh-memory-chat p{margin:0;line-height:1.5}
 .dsh-memory-meta,.dsh-memory-chat small{font-size:var(--font-size-1,13px);color:var(--gray-11,inherit)}
 .dsh-memory-error{color:var(--red-11,#b42318)}
-.dsh-memory-card,.dsh-memory-dream,.dsh-memory-add{display:grid;gap:10px;padding:14px 16px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:12px}
+.dsh-memory-card,.dsh-memory-dream,.dsh-memory-add,.dsh-memory-si{display:grid;gap:10px;padding:14px 16px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 15%,transparent));border-radius:12px}
 .dsh-memory-card header,.dsh-memory-chat-body header{display:flex;justify-content:space-between;gap:12px;align-items:center}
 .dsh-memory-card h3,.dsh-memory-add h4,.dsh-memory-dream h4{margin:0;font-size:var(--font-size-3,16px);font-weight:600}
 .dsh-memory-settings input,.dsh-memory-chat input,.dsh-memory-chat textarea,.dsh-memory-chat select{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--gray-6,color-mix(in srgb,currentColor 22%,transparent));border-radius:8px;background:var(--color-surface,transparent);color:inherit;font:inherit;transition:border-color 150ms ease,box-shadow 150ms ease}
@@ -546,7 +555,8 @@ const styles = `
 .dsh-memory-row-actions{display:flex;flex-wrap:wrap;gap:8px}
 .dsh-memory-check{display:flex;gap:8px;align-items:center}
 .dsh-memory-check input{width:auto}
-.dsh-memory-chat>summary{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:baseline;cursor:pointer;min-height:34px;list-style:revert}
+.dsh-memory-chat>summary,.dsh-memory-si>summary{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:baseline;cursor:pointer;min-height:34px;list-style:revert}
+.dsh-memory-si-body{margin-top:8px}
 @media(prefers-reduced-motion:reduce){.dsh-memory-switch-thumb{transition:none}.dsh-memory-settings button:not([role="switch"]),.dsh-memory-chat button:not([role="switch"]),.dsh-memory-settings input,.dsh-memory-chat input,.dsh-memory-chat textarea,.dsh-memory-chat select{transition:none}}
 `
 
@@ -562,5 +572,5 @@ export function apply(ctx: Context): void {
   }, 'dsh-memory.styles')
   ctx.effect(() => client.slots.inject('settings.section', () => client.slots.register({
     name: 'settings.section', id: 'memory', order: 65, label: '记忆',
-  }, (props: unknown) => <MemorySettings client={client} props={props} />)), 'dsh-memory.settings')
+  }, (props: unknown) => <MemorySettings client={client} host={ctx} props={props} />)), 'dsh-memory.settings')
 }

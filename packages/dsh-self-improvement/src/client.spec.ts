@@ -2,7 +2,7 @@ import { createElement, isValidElement, type ReactElement } from 'react'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { MEMORY_UNAVAILABLE_MESSAGE } from './contracts.ts'
+import { MEMORY_UNAVAILABLE_MESSAGE, SELF_IMPROVEMENT_REVIEW_SERVICE } from './contracts.ts'
 import {
   apply, beginReviewRequest, disposeReviewRequest, exportSkillIfCurrent, inject, loadReviewSnapshot,
   memoryUnavailableCopy, parseSeatProps, peekReviewSnapshot, ReviewPanel, reviewPanelKey, SelfImprovementSettings,
@@ -17,25 +17,21 @@ const client = {
 
 const clientSrc = readFileSync(fileURLToPath(new URL('./client.tsx', import.meta.url)), 'utf8')
 
-function captureRenders() {
-  const renders: Record<string, (props: unknown) => unknown> = {}
-  const names: Array<{ name: string; id?: string; order?: number; label?: string }> = []
+function captureReview() {
+  const provided: Record<string, { render(props: unknown): unknown }> = {}
   apply({
     effect(fn: () => (() => void) | void) { fn() },
+    provide(name: string, value: { render(props: unknown): unknown }) { provided[name] = value },
     slots: {
       inject(_key: string, callback: () => unknown) {
         callback()
         return () => {}
       },
-      register(spec: { name: string; id?: string; order?: number; label?: string }, render: unknown) {
-        names.push(spec)
-        renders[spec.name] = render as (props: unknown) => unknown
-        return () => {}
-      },
+      register() { return () => {} },
     },
     connection: client.connection,
   } as never)
-  return { renders, names }
+  return provided
 }
 
 function propsOf(node: unknown): Record<string, unknown> {
@@ -44,20 +40,19 @@ function propsOf(node: unknown): Record<string, unknown> {
 }
 
 describe('self-improvement client seats', () => {
-  it('registers review in settings without exposing self-improvement in chat', () => {
-    const { names, renders } = captureRenders()
-    expect(names).toEqual([
-      { name: 'settings.section', id: 'self-improvement', order: 85, label: '自我改进' },
-    ])
-    expect(renders['dsh-editor.chat.events']).toBeUndefined()
-  })
-
-  it('passes host settings.section session and locale into the full review panel', () => {
-    const { renders } = captureRenders()
-    const wrapped = renders['settings.section']!({ sessionId: 'sess-9', locale: 'en' })
+  it('provides the review panel for Memory without a settings nav row or chat seat', () => {
+    const provided = captureReview()
+    const review = provided[SELF_IMPROVEMENT_REVIEW_SERVICE]
+    expect(review).toBeDefined()
+    expect(clientSrc).not.toContain('settings.section')
+    expect(clientSrc).not.toContain('dsh-editor.chat.events')
+    const wrapped = review!.render({ sessionId: 'sess-9', locale: 'en' })
     expect(isValidElement(wrapped)).toBe(true)
     expect(wrapped.type).toBe(SelfImprovementSettings)
     expect(propsOf(wrapped).props).toEqual({ sessionId: 'sess-9', locale: 'en' })
+  })
+
+  it('passes host session and locale into the full review panel', () => {
     expect(createElement(SelfImprovementSettings, { client, props: { owner: { sessionId: 'sess-9', locale: 'en' } } }).type).toBe(SelfImprovementSettings)
     expect(createElement(SelfImprovementSettings, { client, props: { close() {} } }).type).toBe(SelfImprovementSettings)
     expect(reviewPanelKey('sess-9', 'en')).toBe('sess-9:en')
