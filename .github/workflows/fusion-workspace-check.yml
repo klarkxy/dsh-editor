@@ -32,12 +32,19 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - name: Preserve isolated validation workspace
-        run: tar --exclude=.git --exclude=.dev --exclude=.pack -czf /tmp/fusion-workspace.tgz .
+      - name: Preserve public offline validation toolchain
+        shell: bash
+        run: |
+          mkdir /tmp/fusion-toolchain
+          cp -L "$(command -v node)" /tmp/fusion-toolchain/node
+          PNPM_MAIN="$(find "$(dirname "$(dirname "$(command -v pnpm)")")" -path '*/pnpm/bin/pnpm.cjs' -type f -print -quit)"
+          test -n "$PNPM_MAIN"
+          cp -a "$(dirname "$(dirname "$PNPM_MAIN")")" /tmp/fusion-toolchain/pnpm
+          tar -C /tmp -czf /tmp/fusion-toolchain.tgz fusion-toolchain
       - uses: actions/upload-artifact@v4
         with:
-          name: fusion-validation-workspace
-          path: /tmp/fusion-workspace.tgz
+          name: fusion-validation-toolchain
+          path: /tmp/fusion-toolchain.tgz
           retention-days: 1
       - name: Build and validate baseline
         run: pnpm build && pnpm typecheck && pnpm test --maxWorkers=2
