@@ -1,0 +1,43 @@
+name: Fusion workspace check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fusion-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    if: github.head_ref == 'feat/fusion-collaboration'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - name: Install exact workspace dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: Preserve isolated validation workspace
+        run: tar --exclude=.git --exclude=.dev --exclude=.pack -czf /tmp/fusion-workspace.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fusion-validation-workspace
+          path: /tmp/fusion-workspace.tgz
+          retention-days: 1
+      - name: Build and validate baseline
+        run: pnpm build && pnpm typecheck && pnpm test --maxWorkers=2
