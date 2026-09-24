@@ -1,6 +1,6 @@
 # dsh-proofread
 
-按确定性规则检查中文文本的标点、错别字、敏感词、重复与口癖。可独立用于 DSH Web；桌面通过文稿校对面板复用引擎。
+按确定性规则检查中文文本的标点、错别字、敏感词、重复与口癖。可独立用于 DSH Web。
 
 ## 安装
 
@@ -16,4 +16,4 @@ dsh --profile web
 
 文件名以实际打包版本为准。重启后打开「校对」，输入文本检查。
 
-开发接口见 [src/contracts.ts](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-proofread/src/contracts.ts)；桌面整部作品的扫描与名单设置见[文稿校对面板](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-editor-proofread-panel/README.md)。
+开发接口见 [src/contracts.ts](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-proofread/src/contracts.ts)。

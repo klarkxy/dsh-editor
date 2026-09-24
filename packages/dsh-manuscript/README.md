@@ -29,3 +29,5 @@ dsh --profile web
 入口与导出见 [package.json](package.json)，接口见 [src/index.ts](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-manuscript/src/index.ts)。桌面独有的作品管理由 workbench 提供；独立 Web 安装不提供这些功能。
 
 行内补全与桌面选区改写通过 `@klarkxy/dsh-ai-services` 调用模型。用途为 `manuscript.completion`、`manuscript.rewrite`，分别默认使用快速档和对话档；幻想档仅在用户显式选择时使用；可由模型中心统一配置。未安装或停用模型中心时使用默认对话模型，保留手动指定的模型或会话选择。公开包依赖共享服务，不依赖私有 Editor 运行时。
+
+桌面旧写作模型设置只导入一次，迁移标记与缺失的用途默认值一同保存；补全和改写共用取消、限额与用量回执。生成结果仍是候选，需作者采纳才改变正文。

@@ -15,7 +15,7 @@ dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-model-center
 ```
 
-AI policy is stored by `@klarkxy/dsh-ai-services`. Provider credentials stay in native DSH settings.
+AI policy is stored by `@klarkxy/dsh-ai-services`. Provider credentials stay in native DSH settings. When Model Center is absent or disabled, tier-based calls use Chat or the host default directly; saved tier bindings remain intact.
 
 ## Use
 

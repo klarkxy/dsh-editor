@@ -21,7 +21,7 @@ Idle Dream is on by default and needs no confirmation: once a session has been i
 
 `ctx.aiMemory` implements the frozen `MemoryService`. Project identity is the shared untruncated `projectIdFromCwd(session.meta.cwd)` (DSH also exposes it as `session.header.cwd`). RPC derives that path from the live session id; clients cannot submit an arbitrary directory. Record ids are UUID-backed and cannot reuse a tombstone after restart. Durable writes are one typed aggregate snapshot.
 
-Recall injects at most 3–5 active records (~800 tokens) at Host `agent/pre-step`, exact project scope plus explicit global records. Lessons are not injected here (self-improvement owns them). Candidates, rejected, revoked, deleted, expired, and superseded records stay out of prompts.
+Recall injects at most 3–5 active records (~800 tokens) at Host `agent/pre-step`, exact project scope plus explicit global records. Memory stores lesson records but does not inject them. Candidates, rejected, revoked, deleted, expired, and superseded records stay out of prompts.
 
 Human preference and project-fact candidates need evidence or an explicit manual add. Global writes require the global checkbox. Dream produces merge/dedup candidates and applies them automatically under the idle gates above; apply writes candidates only, never overwrites active records or expands project scope to global. Corrections and deletions win over in-flight runs. Deleted ids cannot be resurrected.
 
