@@ -82,7 +82,18 @@ async function stop(parent: ChildProcess) {
   parent.kill()
   await exited
 }
-async function status(dir: string) { return JSON.parse((await readFile(join(dir, 'status.json'), 'utf8')).replace(/^\uFEFF/, '')) as { phase: string; backup: string; message: string } }
+async function status(dir: string) {
+  const deadline = Date.now() + 2_000
+  for (;;) {
+    try {
+      return JSON.parse((await readFile(join(dir, 'status.json'), 'utf8')).replace(/^\uFEFF/, '')) as { phase: string; backup: string; message: string }
+    } catch (error) {
+      // Windows can report ENOENT while ReplaceFile publishes the next snapshot.
+      if (Date.now() >= deadline || (!(error instanceof SyntaxError) && (error as NodeJS.ErrnoException).code !== 'ENOENT')) throw error
+      await delay(25)
+    }
+  }
+}
 
 afterEach(async () => {
   await Promise.all(processes.splice(0).map(stop))

@@ -193,7 +193,9 @@ try {
   const review = dialog.getByTestId('self-improvement-entry')
   await review.locator('summary').click()
   const methodCard = review.locator('.si-card').filter({ has: page.getByRole('heading', { name: '局部修改先读后核对', exact: true }) })
-  await methodCard.waitFor()
+  // Extraction publishes a candidate before activation finishes. Wait for the
+  // persisted state to reach the UI, not merely for the first card render.
+  await methodCard.and(review.locator('[data-status="active"]')).waitFor()
   assert.equal(await methodCard.getAttribute('data-status'), 'active')
   assert.ok(!(await methodCard.locator(':scope > p').innerText()).includes('蓝图'))
   report.checks.push('mixed human message becomes two descriptive records and one active procedural instruction without manual extraction')

@@ -95,7 +95,9 @@ try {
   $deadline = [DateTime]::UtcNow.AddMilliseconds($plan.waitMs)
   while (-not [IO.File]::Exists($commit)) {
     Cancelled
-    if ($parent.HasExited -or [DateTime]::UtcNow -ge $deadline) { throw 'Update was not committed by the application' }
+    # Commit is published before parent exit. Recheck after observing exit: the
+    # file may have appeared since the loop condition was evaluated.
+    if (($parent.HasExited -or [DateTime]::UtcNow -ge $deadline) -and -not [IO.File]::Exists($commit)) { throw 'Update was not committed by the application' }
     Start-Sleep -Milliseconds 100
   }
   if ([IO.File]::ReadAllText($commit) -ne $plan.nonce) { throw 'Invalid update commit token' }
