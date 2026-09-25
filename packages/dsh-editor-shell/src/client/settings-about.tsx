@@ -70,6 +70,11 @@ export function AboutSettingsSection(props: {
   const [installing, setInstalling] = useState(false)
   const [installError, setInstallError] = useState('')
   const onBusyChange = props.onBusyChange
+  // Capture optional preload methods before entering asynchronous callbacks.
+  const restoreDownload = bridge?.getDownloadedUpdate
+  const revealDownload = bridge?.revealDownloadedUpdate
+  const openDownloadFolder = bridge?.openUpdateFolder
+  const openExternal = bridge?.openExternal
 
   useEffect(() => {
     if (!active) return
@@ -95,15 +100,15 @@ export function AboutSettingsSection(props: {
       if (liveToken.current !== token) return
       let restored: DownloadedUpdateInfo | null = null
       const id = result.latest?.asset?.id
-      if (id && bridge?.getDownloadedUpdate) {
-        try { restored = await bridge.getDownloadedUpdate(id) }
+      if (id && restoreDownload) {
+        try { restored = await restoreDownload(id) }
         catch (error) { if (liveToken.current === token) setInstallError(cleanIpcError(error)) }
       }
       if (liveToken.current !== token) return
       setDownload((previous) => {
         if (result.status === 'error') return previous
         if (restored) return { status: 'done', ...restored, revealed: false }
-        return previous.status === 'done' && previous.updateId === id && !bridge?.getDownloadedUpdate
+        return previous.status === 'done' && previous.updateId === id && !restoreDownload
           ? previous : { status: 'idle' }
       })
       setState({ status: 'ready', result, checkedAt: Date.now() })
@@ -135,7 +140,11 @@ export function AboutSettingsSection(props: {
   useEffect(() => {
     onBusyChange?.(download.status === 'downloading' || installing)
   }, [download.status, installing, onBusyChange])
-  useEffect(() => () => onBusyChange?.(false), [onBusyChange])
+  useEffect(() => {
+    return () => {
+      if (onBusyChange) onBusyChange(false)
+    }
+  }, [onBusyChange])
   useEffect(() => () => { downloadToken.current += 1 }, [])
 
   const startDownload = async (asset: Asset) => {
@@ -157,8 +166,12 @@ export function AboutSettingsSection(props: {
     } finally { operationBusy.current = false }
   }
 
-  const cancelDownload = () => {
-    void bridge?.cancelUpdateDownload?.().catch((error: unknown) => setInstallError(cleanIpcError(error)))
+  const cancelDownload = (): void => {
+    const cancel = bridge?.cancelUpdateDownload
+    if (!cancel) return
+    void cancel().catch((error: unknown) => {
+      setInstallError(cleanIpcError(error))
+    })
   }
 
   const installDownloaded = async (updateId: string) => {
@@ -182,12 +195,12 @@ export function AboutSettingsSection(props: {
 
   const openFolder = async (updateId?: string) => {
     try {
-      if (updateId && bridge?.revealDownloadedUpdate) await bridge.revealDownloadedUpdate(updateId)
-      else await bridge?.openUpdateFolder?.()
+      if (updateId && revealDownload) await revealDownload(updateId)
+      else if (openDownloadFolder) await openDownloadFolder()
     } catch (error) { setInstallError(cleanIpcError(error)) }
   }
   const onOpenDownload = (url: string) => {
-    if (bridge?.openExternal) { bridge.openExternal(url); return }
+    if (openExternal) { openExternal(url); return }
     globalThis.open(url, '_blank', 'noopener,noreferrer')
   }
   const hasBridge = Boolean(bridge?.checkForUpdate)
@@ -197,7 +210,7 @@ export function AboutSettingsSection(props: {
     installing: installing || state.status === 'loading', onOpen: onOpenDownload,
     onDownload: (asset) => void startDownload(asset), onCancel: cancelDownload,
     onInstall: (updateId) => void installDownloaded(updateId),
-    onReveal: bridge?.revealDownloadedUpdate ? (updateId) => void openFolder(updateId) : undefined,
+    onReveal: revealDownload ? (updateId) => { void openFolder(updateId) } : undefined,
   }
 
   return (
@@ -226,7 +239,7 @@ export function AboutSettingsSection(props: {
           <Button type="button" variant="soft" color="gray" className="about-button" disabled={!canCheck || state.status === 'loading'} onClick={() => void runCheck()}>
             {state.status === 'loading' ? <Fragment><ActivityDots />{t('about.checking')}</Fragment> : t('about.check')}
           </Button>
-          {bridge?.openUpdateFolder ? <Button type="button" variant="soft" color="gray" className="about-button" onClick={() => void openFolder()}>
+          {openDownloadFolder ? <Button type="button" variant="soft" color="gray" className="about-button" onClick={() => void openFolder()}>
             {t('about.openFolder')}
           </Button> : null}
         </Flex>
