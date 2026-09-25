@@ -27,7 +27,7 @@ export const proofreadPanelStyles = `
 .radix-themes .proofread-file ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-1); }
 .radix-themes .proofread-row { display: grid; gap: 3px; min-width: 0; }
 .radix-themes .proofread-hit {
-  width: 100%; display: grid; gap: 2px; text-align: left; min-height: 32px; padding: var(--space-2); border: 0; border-radius: var(--radius-2);
+  width: 100%; height: auto; white-space: normal; display: grid; gap: 2px; text-align: left; min-height: 32px; padding: var(--space-2); border: 0; border-radius: var(--radius-2);
   background: transparent; color: var(--gray-11); cursor: pointer; font-size: var(--font-size-2);
 }
 .radix-themes .proofread-hit:hover:not([disabled]) { background: var(--gray-a3); color: var(--gray-12); box-shadow: inset 3px 0 0 var(--accent-9); }
