@@ -1,4 +1,5 @@
 import { dirname, join } from 'node:path'
+import type { CrashReportSource } from './crash-report.js'
 import { installNavigationPolicy } from './navigation.js'
 import { resolveDshHome, type ProfileDeployIdentity, type ProfileDeployResult } from './profile.js'
 import { StartupTiming } from './startup-timing.js'
@@ -50,6 +51,13 @@ export interface DesktopLifecycleDeps {
   getHomePath(): string
   env: NodeJS.ProcessEnv
   timeoutMs: number
+  /** 后端短时间第二次意外退出等致命错误的上报入口;缺省时只落错误页。 */
+  reportFatal?(error: unknown, source: CrashReportSource): void
+  /** 退出前确认(如仍有 AI 任务在跑);缺省直接放行。返回 false 中止本次退出。 */
+  confirmBusyQuit?(): Promise<boolean>
+  /** 意外退出后的自动重启间隔与稳定运行复位窗口;测试注入小值。 */
+  autoRestartDelayMs?: number
+  autoRestartResetMs?: number
 }
 
 export interface DesktopLifecycle {
@@ -58,6 +66,8 @@ export interface DesktopLifecycle {
   retry(): Promise<void>
   shutdown(): Promise<void>
   needsGracefulShutdown(): boolean
+  isShuttingDown(): boolean
+  confirmBeforeQuit(): Promise<boolean>
   isOwnedWindow(window: EditorWindow | undefined): boolean
   expectedUrl(): URL | undefined
 }
@@ -73,6 +83,10 @@ function isNewWindowShortcut(input: EditorInput): boolean {
   return input.type === 'keyDown' && input.control && input.shift && !input.alt && !input.meta && input.key.toLowerCase() === 'n'
 }
 
+/* 后端意外退出:第一次自动重启一次;复位窗口内第二次才走错误页 + 致命恢复。 */
+const AUTO_RESTART_DELAY_MS = 1_000
+const AUTO_RESTART_RESET_MS = 30_000
+
 export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifecycle {
   const windows = new Set<EditorWindow>()
   const navigationPolicies = new Map<EditorWindow, ReturnType<typeof installNavigationPolicy>>()
@@ -83,6 +97,15 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
   let closing = false
   let downloadInstalled = false
   let bootTiming: StartupTiming | undefined
+  let autoRestartUsed = false
+  let stabilityTimer: ReturnType<typeof setTimeout> | undefined
+
+  /* 连续运行满复位窗口才允许下一次自动重启,避免崩溃循环里无限重启。 */
+  function noteBackendStable(): void {
+    if (stabilityTimer) clearTimeout(stabilityTimer)
+    stabilityTimer = setTimeout(() => { autoRestartUsed = false }, deps.autoRestartResetMs ?? AUTO_RESTART_RESET_MS)
+    ;(stabilityTimer as { unref?: () => void }).unref?.()
+  }
 
   function installDownloadHandler(window: EditorWindow): void {
     if (downloadInstalled) return
@@ -143,11 +166,22 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
         onUnexpectedExit: (reason) => {
           if (closing) return
           currentUrl = undefined
+          if (stabilityTimer) { clearTimeout(stabilityTimer); stabilityTimer = undefined }
+          if (!autoRestartUsed) {
+            /* 第一次意外退出:自动重启一次,窗口回到加载页;重启失败仍落错误页,可手动重试。 */
+            autoRestartUsed = true
+            const timer = setTimeout(() => { void retryAll() }, deps.autoRestartDelayMs ?? AUTO_RESTART_DELAY_MS)
+            ;(timer as { unref?: () => void }).unref?.()
+            return
+          }
+          /* 复位窗口内第二次意外退出:错误页 + 致命恢复(对话框去重由 recovery 保证)。 */
           void loadAll(deps.errorHtml(reason))
+          deps.reportFatal?.(reason, 'supervisor')
         },
       })
       const url = await timing.measure('spawn-ready', () => supervisor!.start({ ...runtime, home, env: deps.env, timeoutMs: deps.timeoutMs }))
       currentUrl = url
+      noteBackendStable()
       return url
     } catch (error) {
       timing.flush()
@@ -215,6 +249,7 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
     async shutdown() {
       if (closing) return
       closing = true
+      if (stabilityTimer) { clearTimeout(stabilityTimer); stabilityTimer = undefined }
       const pending = inflight
       if (pending) await pending.catch(() => undefined)
       currentUrl = undefined
@@ -222,6 +257,12 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
     },
     needsGracefulShutdown() {
       return !closing && Boolean(supervisor || inflight)
+    },
+    isShuttingDown() {
+      return closing
+    },
+    confirmBeforeQuit() {
+      return deps.confirmBusyQuit?.() ?? Promise.resolve(true)
     },
     isOwnedWindow(window) {
       return Boolean(window && windows.has(window))
@@ -247,10 +288,17 @@ export function claimPrimaryInstance(app: PrimaryApp, lifecycle: DesktopLifecycl
     const event = args[0] as { preventDefault(): void }
     if (allowQuit || !lifecycle.needsGracefulShutdown()) return
     event.preventDefault()
-    shutdown ??= lifecycle.shutdown().finally(() => {
+    /* 仍有窗口报告 AI 任务在跑时先弹确认;取消则中止本次退出,下次 quit 重新询问。 */
+    shutdown ??= (async () => {
+      let proceed = true
+      try {
+        proceed = await lifecycle.confirmBeforeQuit()
+      } catch { /* 确认失败不阻塞退出 */ }
+      if (!proceed) { shutdown = undefined; return }
+      await lifecycle.shutdown()
       allowQuit = true
       app.quit()
-    })
+    })()
   })
   app.on('window-all-closed', () => app.quit())
   return true

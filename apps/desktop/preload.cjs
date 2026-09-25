@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('dshWindow', {
   toggleMaximize: () => ipcRenderer.send('dsh-window:toggle-maximize'),
   close: () => ipcRenderer.send('dsh-window:close'),
   retry: () => ipcRenderer.send('dsh-window:retry'),
+  // 退出前确认:渲染端上报编辑器是否仍有进行中的 AI 任务,主进程按窗口记账。
+  reportActivity: (activity) => ipcRenderer.send('dsh-window:report-activity', activity),
   // Whitelisted https links only; the main process validates before opening.
   openExternal: (url) => ipcRenderer.send('dsh-window:open-external', url),
   // About / update page: renderer is locked behind a strict CSP that blocks

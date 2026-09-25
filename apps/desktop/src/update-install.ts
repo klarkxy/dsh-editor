@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, open, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, open, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { buildWindowsUpdateScript, type WindowsUpdatePlan } from './windows-update-helper.js'
@@ -56,7 +56,9 @@ export async function waitForUpdateHelper(
             directory, cancel, finished,
             async commit() {
               if (ended) throw failure
-              await writeFile(join(directory, 'commit'), nonce, { flag: 'wx' })
+              const pending = join(directory, 'commit.tmp')
+              await writeFile(pending, nonce, { flag: 'wx' })
+              await rename(pending, join(directory, 'commit'))
               if (ended) throw failure
             },
           }
@@ -81,11 +83,22 @@ export async function launchWindowsUpdate(
   await writeFile(script, buildWindowsUpdateScript(plan), { flag: 'wx' })
   const log = await open(join(directory, 'helper-startup.log'), 'a')
   try {
-    // Absolute system executable, no cmd.exe, no interpolated -Command, and no
-    // PowerShell profiles. Node quotes the -File argument, including spaces.
+    // Absolute system executable and no PowerShell profiles. Paths travel as
+    // encoded JSON data; the worker script path is quoted for -File.
     const executable = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-    const child = spawn(executable, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], {
-      detached: true, windowsHide: true, stdio: ['ignore', log.fd, log.fd],
+    // Start-Process gives Windows PowerShell its own hidden console. libuv's
+    // DETACHED_PROCESS can make PowerShell exit without executing; sharing the
+    // launcher's console can instead terminate it when the application exits.
+    // The bootstrap waits while the app is alive; the worker owns the transaction.
+    const payload = Buffer.from(JSON.stringify({ executable, script, log: join(directory, 'helper-worker.log') }), 'utf8').toString('base64')
+    const bootstrap = `$ErrorActionPreference='Stop'
+$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${payload}')) | ConvertFrom-Json
+$arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $p.script + '"'
+$worker=Start-Process -FilePath $p.executable -ArgumentList $arguments -WindowStyle Hidden -PassThru -RedirectStandardOutput $p.log -RedirectStandardError ($p.log + '.err')
+$worker.WaitForExit()
+exit $worker.ExitCode`
+    const child = spawn(executable, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(bootstrap, 'utf16le').toString('base64')], {
+      windowsHide: true, stdio: ['ignore', log.fd, log.fd],
     })
     return await waitForUpdateHelper(child, directory, plan.nonce)
   } finally {

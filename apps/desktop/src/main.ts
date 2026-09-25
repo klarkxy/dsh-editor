@@ -1,6 +1,8 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import { readTrustedClipboardText, writeTrustedClipboardText } from './clipboard.js'
-import { assertTrustedIpcSender } from './ipc-trust.js'
+import { RendererConsoleTail, pruneCrashReports, writeCrashReport, writeStartupDiagnostic, type CrashReportFacts, type CrashReportSource } from './crash-report.js'
+import { DesktopFatalRecovery } from './fatal-recovery.js'
+import { assertTrustedIpcSender, isTrustedIpcSender } from './ipc-trust.js'
 import { isAllowedExternalUrl } from './navigation.js'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
@@ -10,6 +12,7 @@ import { deployOwnedProfile, resolveDshHome } from './profile.js'
 import { hasPackagedRuntimeCache, materializePackagedRuntime, readProfileDeployIdentity, runtimeFromResources, shouldMaterializePackagedRuntime } from './runtime-cache.js'
 import { DshSupervisor } from './supervisor.js'
 import { checkLatest } from './update-checker.js'
+import { disableMarketplacePlugins } from './user-plugins.js'
 import { cancelUpdateDownload, downloadUpdate, getDownloadedUpdate, installUpdate, isUpdateBusy, openUpdateFolder, revealDownloadedUpdate } from './update-download.js'
 import { presentUpdateCheck, UpdateOfferStore, type PublicUpdateCheckResult } from './update-session.js'
 import { claimPrimaryInstance, createDesktopLifecycle, exportFileFilter, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
@@ -26,6 +29,8 @@ const isolatedUserData = process.env.DSH_DESKTOP_USER_DATA_DIR?.trim()
 if (isolatedUserData) app.setPath('userData', isolatedUserData)
 if (!app.isPackaged) app.setName('dsh-editor-dev')
 app.setAppUserModelId(app.isPackaged ? DESKTOP_APP_ID : `${DESKTOP_APP_ID}.dev`)
+/* 崩溃报告落在应用 logs 目录;尽早固定路径,使进程级致命错误也有处可写。 */
+app.setAppLogsPath()
 
 async function resolveRuntime(home: string): Promise<{
   nodePath: string
@@ -75,6 +80,31 @@ function firstLaunchLoading(): boolean {
     && !hasPackagedRuntimeCache(resolveDshHome(process.env, app.getPath('home')))
 }
 
+const rendererConsoleTail = new RendererConsoleTail()
+/* 各窗口上报的"编辑器仍有 AI 任务"集合,按 webContents id 记账;窗口关闭或渲染进程退出时清除。 */
+const busyContents = new Set<number>()
+
+function crashReportFacts(): CrashReportFacts {
+  return {
+    name: DESKTOP_PRODUCT_NAME,
+    version: desktopVersion,
+    platform: process.platform,
+    arch: process.arch,
+    electron: process.versions.electron ?? 'unknown',
+    node: process.version,
+    locale: app.getLocale(),
+  }
+}
+
+function persistCrashReport(error: unknown, source: CrashReportSource): Promise<string | undefined> {
+  return writeCrashReport(app.getPath('logs'), { source, error, rendererConsole: rendererConsoleTail.snapshot() }, crashReportFacts())
+}
+
+/* 致命错误入口:关机途中只落崩溃报告,否则走恢复对话框(首错胜出,只弹一次)。 */
+function reportFatal(error: unknown, source: CrashReportSource): void {
+  void recovery.reportFatal(error, source)
+}
+
 const lifecycle = createDesktopLifecycle({
   createBrowserWindow: () => {
     const window = new BrowserWindow({
@@ -93,6 +123,26 @@ const lifecycle = createDesktopLifecycle({
     // Frameless window: forward maximize state to the renderer's own title bar.
     window.on('maximize', () => window.webContents.send('dsh-window:maximized', true))
     window.on('unmaximize', () => window.webContents.send('dsh-window:maximized', false))
+    /* 渲染进程崩溃三件套:非干净退出、非主动打断的加载失败、预加载脚本失败都进恢复流程;
+     * error 级控制台消息留尾,随崩溃报告落盘。 */
+    const contentsId = window.webContents.id
+    window.webContents.on('render-process-gone', (_event, details) => {
+      busyContents.delete(contentsId)
+      if (details.reason === 'clean-exit') return
+      reportFatal(new Error(`渲染进程意外退出（${details.reason}，退出码 ${details.exitCode}）`), 'renderer')
+    })
+    window.webContents.on('preload-error', (_event, preloadPath, error) => {
+      reportFatal(new Error(`预加载脚本执行失败（${preloadPath}）：${error.message}`), 'renderer')
+    })
+    window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+      if (errorCode === -3) return // ERR_ABORTED:同窗口连续加载的正常打断
+      if (validatedURL.startsWith('data:')) return // 加载页/错误页自身的失败不进恢复流程
+      reportFatal(new Error(`页面加载失败（${errorCode} ${errorDescription}）：${validatedURL}`), 'renderer')
+    })
+    window.webContents.on('console-message', (event) => {
+      if (event.level === 'error') rendererConsoleTail.append(event.message)
+    })
+    window.on('closed', () => busyContents.delete(contentsId))
     return window as unknown as EditorWindow
   },
   fromWebContents: (contents) => {
@@ -119,6 +169,34 @@ const lifecycle = createDesktopLifecycle({
   getHomePath: () => app.getPath('home'),
   env: process.env,
   timeoutMs: 120_000,
+  reportFatal: (error, source) => reportFatal(error, source),
+  /* 有窗口报告 AI 任务在跑时,退出前原生确认;取消则中止退出。 */
+  confirmBusyQuit: async () => {
+    if (busyContents.size === 0) return true
+    const { response } = await dialog.showMessageBox({
+      type: 'warning',
+      title: DESKTOP_PRODUCT_NAME,
+      message: '有 AI 任务正在进行，确定退出？',
+      detail: '退出会中断正在进行的生成任务。',
+      buttons: ['退出', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    })
+    return response === 0
+  },
+})
+
+const recovery = new DesktopFatalRecovery({
+  writeReport: persistCrashReport,
+  showDialog: (options) => dialog.showMessageBox(options).then(({ response }) => response),
+  stopBackend: () => lifecycle.shutdown(),
+  disablePlugins: async () => {
+    await disableMarketplacePlugins(resolveDshHome(process.env, app.getPath('home')))
+  },
+  relaunch: () => { app.relaunch(); app.exit(0) },
+  exit: () => { app.exit(1) },
+  isShuttingDown: () => lifecycle.isShuttingDown(),
 })
 
 const isPrimary = claimPrimaryInstance(app as unknown as PrimaryApp, lifecycle)
@@ -159,7 +237,10 @@ function requireCompletedUpdateCheck(): void {
   if (updateCheckInFlight) throw new Error('正在检查更新,请稍后重试')
 }
 if (isPrimary) {
-  void app.whenReady().then(() => { startupUpdate ??= runUpdateCheck() })
+  void app.whenReady().then(() => {
+    startupUpdate ??= runUpdateCheck()
+    void pruneCrashReports(app.getPath('logs'))
+  })
 }
 
 // Frameless window controls: the renderer's own title bar drives these through
@@ -270,4 +351,26 @@ ipcMain.handle('dsh-window:open-update-folder', (event) => {
 ipcMain.on('dsh-window:open-external', (_event, url) => {
   if (!isAllowedExternalUrl(url)) return
   void shell.openExternal(new URL(url).toString())
+})
+
+/* 渲染端推送编辑器 busy(AI 生成中);before-quit 据此确认,不需要反向查询 renderer。 */
+ipcMain.on('dsh-window:report-activity', (event, payload) => {
+  const trust = senderTrust(event)
+  if (!isTrustedIpcSender(trust)) return
+  const busy = Boolean(payload && typeof payload === 'object' && (payload as { busy?: unknown }).busy)
+  if (busy) busyContents.add(event.sender.id)
+  else busyContents.delete(event.sender.id)
+})
+
+/* 最外层兜底:未捕获的致命错误先写诊断文件(供打包环境排查),再走恢复流程。 */
+const diagnosticFile = process.env.DSH_EDITOR_DESKTOP_DIAGNOSTIC_FILE?.trim()
+process.on('uncaughtException', (error) => {
+  console.error(error)
+  if (diagnosticFile) writeStartupDiagnostic(diagnosticFile, error)
+  if (isPrimary) reportFatal(error, 'main')
+})
+process.on('unhandledRejection', (reason) => {
+  console.error(reason)
+  if (diagnosticFile) writeStartupDiagnostic(diagnosticFile, reason)
+  if (isPrimary) reportFatal(reason, 'main')
 })

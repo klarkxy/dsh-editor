@@ -49,8 +49,8 @@ On Windows, open `%TEMP%\dsh-editor-update`. Each completed download has a uniqu
 cleanup; they are never offered for installation.
 
 Each Windows install attempt keeps `install-*` under its download directory:
-`helper-startup.log` captures PowerShell startup errors, `install.log` records the
-transaction, and `status.json` contains the final phase and backup path. The old
+`helper-startup.log` captures bootstrap errors, `helper-worker.log` and its `.err`
+companion capture worker output, `install.log` records the transaction, and `status.json` contains the final phase and backup path. The old
 single `%TEMP%\dsh-editor-portable-update.log` belongs to the retired batch updater.
 
 Portable backups are adjacent to the original executable, named `.bak-<nonce>`.

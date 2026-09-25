@@ -7,6 +7,9 @@ import { once } from 'node:events'
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { setTimeout as delay } from 'node:timers/promises'
+import ts from 'typescript'
 import { afterEach, describe, it } from 'vitest'
 import { launchWindowsUpdate } from '../src/update-install.js'
 
@@ -91,6 +94,41 @@ afterEach(async () => {
 })
 
 windows('Windows update transactions', () => {
+  it('finishes the update after the process that launched the helper exits', async () => {
+    const f = await fixture()
+    await stop(f.parent)
+    for (const name of ['update-install', 'windows-update-helper']) {
+      const source = await readFile(new URL(`../src/${name}.ts`, import.meta.url), 'utf8')
+      const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText
+      await writeFile(join(f.dir, `${name}.js`), output)
+    }
+    await writeFile(join(f.dir, 'package.json'), '{"type":"module"}')
+    const moduleUrl = pathToFileURL(join(f.dir, 'update-install.js')).href
+    const input = { ...plan(f), mode: 'portable', waitMs: 10_000 }
+    const script = `import { launchWindowsUpdate } from ${JSON.stringify(moduleUrl)};
+      const helper = await launchWindowsUpdate({ ...${JSON.stringify(input)}, parentPid: process.pid });
+      await helper.commit();
+      process.exit(0);`
+    const launcher = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    processes.push(launcher)
+    let errors = ''
+    launcher.stderr?.on('data', (chunk) => { errors += String(chunk) })
+    const [code] = await once(launcher, 'exit')
+    assert.equal(code, 0, errors)
+    const helperName = (await readdir(join(f.source, '..'))).find((name) => name.startsWith('install-'))!
+    assert.ok(helperName)
+    const helperDir = join(f.source, '..', helperName)
+    const deadline = Date.now() + 15_000
+    let result = await status(helperDir)
+    while (!['launched', 'failed'].includes(result.phase) && Date.now() < deadline) {
+      await delay(100)
+      result = await status(helperDir)
+    }
+    assert.equal(result.phase, 'launched', result.message)
+    assert.deepEqual(await readFile(f.target), f.bytes)
+    assert.equal(await readFile(result.backup, 'utf8'), 'old application bytes')
+  }, 30_000)
+
   it('replaces the portable app after exit, keeps a backup and clears launcher-only environment', async () => {
     const f = await fixture()
     const helper = await launchWindowsUpdate({ ...plan(f), mode: 'portable', waitMs: 10_000 })

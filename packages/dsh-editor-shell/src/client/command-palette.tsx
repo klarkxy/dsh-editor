@@ -10,7 +10,7 @@
  *     命令条目叠在稿纸上。
  *   - 不与 root.ts 现有的工作区快捷键冲突:Cmd/Ctrl+K 是新增的,没有占用
  *     workspaceShortcut 的 Ctrl+,/B/J/\\/L 分支;全文搜索走
- *     Ctrl+Shift+F,由 root.ts 打开侧栏搜索面板;作品概览走注册表命令 Ctrl+Shift+O;
+ *     Ctrl+Shift+F,由 root.ts 打开侧栏搜索面板;文档概览走注册表命令 Ctrl+Shift+O;
  *     校对走注册表命令 Ctrl+Shift+L；人物卡/世界书走注册表命令 Ctrl+Shift+C/W。
  *   - 关闭时不残留热键:本组件挂自己的 keydown 监听(只接受 K 切换 / Esc 关
  *     闭),卸载时移除;同时在 root.ts 的全局热键里也加入 Cmd+K 触发入口,

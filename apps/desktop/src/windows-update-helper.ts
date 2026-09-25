@@ -51,7 +51,7 @@ function State([string]$phase, [string]$message = '') {
   $text = @{ nonce = $plan.nonce; phase = $phase; message = $message; backup = $backup } | ConvertTo-Json -Compress
   $temp = $status + '.tmp'
   [IO.File]::WriteAllText($temp, $text, (New-Object Text.UTF8Encoding($false)))
-  if ([IO.File]::Exists($status)) { [IO.File]::Replace($temp, $status, $null) }
+  if ([IO.File]::Exists($status)) { [IO.File]::Replace($temp, $status, [NullString]::Value) }
   else { [IO.File]::Move($temp, $status) }
   Log ($phase + ': ' + $message)
 }
@@ -59,7 +59,11 @@ function Verify([string]$path) {
   $file = Get-Item -LiteralPath $path -Force
   if ($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Update is not a regular file' }
   if ($file.Length -ne $plan.size) { throw 'Update size mismatch' }
-  $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+  # Use the framework directly; PSModulePath may come from PowerShell 7.
+  $stream = [IO.File]::OpenRead($path)
+  $algorithm = [Security.Cryptography.SHA256]::Create()
+  try { $hash = [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '') }
+  finally { $algorithm.Dispose(); $stream.Dispose() }
   if ($hash -ne $plan.digest) { throw 'Update SHA-256 mismatch' }
 }
 function Cancelled {
@@ -129,7 +133,11 @@ try {
     Verify $plan.source
     # NSIS /D must be the final, unquoted command-line argument, including spaces.
     # Start-Process uses Windows shell execution and reports UAC cancellation.
-    $installer = Start-Process -FilePath $plan.source -ArgumentList ('/D=' + $targetDir) -PassThru
+    $start = New-Object Diagnostics.ProcessStartInfo
+    $start.FileName = $plan.source
+    $start.Arguments = '/D=' + $targetDir
+    $start.UseShellExecute = $true
+    $installer = [Diagnostics.Process]::Start($start)
     $installer.WaitForExit()
     if ($installer.ExitCode -ne 0 -and $installer.ExitCode -ne 3010) {
       throw ('Installer cancelled or failed, exit code ' + $installer.ExitCode)

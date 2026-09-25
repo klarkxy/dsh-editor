@@ -28,6 +28,8 @@ type WindowBridge = {
   minimize(): void
   toggleMaximize(): void
   close(): void
+  /** 桌面端退出确认:上报编辑器是否仍有进行中的 AI 任务;浏览器端无此方法。 */
+  reportActivity?(activity: { busy: boolean }): void
   /** 桌面端经主进程白名单校验后用系统浏览器打开;浏览器端无此方法,回退 window.open。 */
   openExternal?(url: string): void
   /** 主进程返回当前应用名、版本与平台形态;开发模式或浏览器端无此方法,UI 需走 t('about.devMode') 兜底。 */

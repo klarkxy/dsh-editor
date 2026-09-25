@@ -64,10 +64,10 @@ export default defineConfig({
   test: {
     watch: false,
     include: [
-      'packages/*/src/**/*.spec.ts',
-      'packages/*/test/**/*.spec.ts',
-      'apps/*/src/**/*.spec.ts',
-      'apps/*/test/**/*.spec.ts',
+      'packages/*/src/**/*.spec.{ts,tsx}',
+      'packages/*/test/**/*.spec.{ts,tsx}',
+      'apps/*/src/**/*.spec.{ts,tsx}',
+      'apps/*/test/**/*.spec.{ts,tsx}',
       'scripts/**/*.spec.mjs',
     ],
   },

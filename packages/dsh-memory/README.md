@@ -6,14 +6,20 @@ Descriptive context for DeepSeek Harness: scoped vocabulary, explicit preference
 
 ## Standalone DSH Web
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. Install and load the shared service explicitly:
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. On a standalone DSH Web host, install:
+
+```sh
+npm install @klarkxy/dsh-memory
+```
+
+Load it and the shared service explicitly:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-memory
 ```
 
-No Editor packages or Self Improve are required. The bundle starts enabled; merely opening its UI does not call a model. Use Settings → Memory to manage records, prompt injection and the Dream observation/consolidation switch. Editor preinstalls the same public plugin, not a second implementation.
+No application-private packages or Self Improve are required. The bundle starts enabled; merely opening its UI does not call a model. Use Settings → Memory to manage records, prompt injection and the Dream observation/consolidation switch.
 
 ## Context, not procedures
 
@@ -36,5 +42,17 @@ pnpm --filter @klarkxy/dsh-memory typecheck
 pnpm exec vitest run packages/dsh-memory/src
 pnpm --filter @klarkxy/dsh-memory build
 ```
+
+## API and exports
+
+The package has three entry points:
+
+- `.` — the Cordis plugin (`name`, `inject`, `apply`), the `MemoryRuntime` service class and the shared constants `CHAT_EVENTS_SLOT`, `MEMORY_RPC_CHANNEL`, `defaultSettings` and `projectIdFromCwd`. `apply` provides the runtime as `ctx.aiMemory` and registers the host RPC channel.
+- `./contracts` — browser-safe types and constants. `MemoryRecord`, `MemoryService`, `MemoryQuery`, `NewMemoryRecord` and the other shared interfaces are re-exported from the frozen `@klarkxy/dsh-ai-services` contracts; this package adds `MemorySettings`, `DreamPlan`, `MemoryStatus`, the recall/injection bounds and the `/dsh-memory` channel name.
+- `./client` — the settings UI bundle loaded by the host web client.
+
+`MemoryRuntime` implements the frozen `MemoryService` surface — `list`, `create`, `update`, `promoteToGlobal`, `remove` and `recall` — and adds settings (`status`/`readStatus`, `updateSettings`), the candidate lifecycle (`accept`, `reject`, `revoke`), manual records (`createManualRecord`), turn hooks (`handlePreStep`, `observeSession`) and the Dream lifecycle (`previewDream`, `runIdleDream`, `applyDream`, `cancelDream`).
+
+The host RPC channel is `/dsh-memory` with endpoints `status`, `settings.update`, `records.list`, `records.create`, `records.update`, `records.remove`, `records.accept`, `records.reject`, `records.revoke` and `dream.run`.
 
 [Design and limits](../../docs/portable-learning.md) · [Publishing](../PUBLISHING.md) · [License](LICENSE)
