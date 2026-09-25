@@ -12,7 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pnpmCli = process.env.npm_execpath
 const devHome = resolve(root, '.dev', 'desktop-home')
 const template = resolve(root, '.dev', 'desktop-profile-template')
-const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime-0.1.7-alpha.1')
+const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime-0.1.7-rc.2')
 const prepareDesktopDev = resolve(root, 'scripts', 'prepare-desktop-dev.mjs')
 const electronCli = resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'cli.js')
 const tsdownCli = resolve(root, 'node_modules', 'tsdown', 'dist', 'run.mjs')
@@ -32,7 +32,7 @@ if (process.versions.node !== '24.16.0' || process.arch !== 'x64' || !win) {
 
 let dsh
 try {
-  dsh = resolveDshInstallation('0.1.7-alpha.1')
+  dsh = resolveDshInstallation('0.1.7-rc.2')
 } catch (error) {
   console.error(`dev: ${error instanceof Error ? error.message : String(error)}`)
   process.exit(1)

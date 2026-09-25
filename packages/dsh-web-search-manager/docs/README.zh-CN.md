@@ -6,7 +6,7 @@
 
 ## 安装
 
-需要 Node.js ≥22、DSH `0.1.7-alpha.1`，无需构建本仓库。
+需要 Node.js ≥22、DSH `0.1.7-rc.2`，无需构建本仓库。
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-web-search-manager

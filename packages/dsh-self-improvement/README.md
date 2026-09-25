@@ -6,7 +6,7 @@ Default-enabled self-improvement: extracted lessons take effect automatically in
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. The bundle entry starts enabled and remains independently switchable. It does **not** load Memory or turn on Dream; standalone hosts must install and load `@klarkxy/dsh-memory` separately.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The bundle entry starts enabled and remains independently switchable. It does **not** load Memory or turn on Dream; standalone hosts must install and load `@klarkxy/dsh-memory` separately.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services

@@ -86,9 +86,9 @@
     "test": "vitest run --root ../.. packages/dsh-editor-shell/src"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.3",
-    "@deepseek-ai/dsh-client-connection": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-settings": "0.1.7-alpha.1",
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-client-connection": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-settings": "0.1.7-rc.2",
     "react": "^18.2.0"
   },
   "dependencies": {
@@ -111,9 +111,9 @@
     "@klarkxy/dsh-ai-services": "workspace:*"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.3",
-    "@deepseek-ai/dsh-client-connection": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-settings": "0.1.7-alpha.1",
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-client-connection": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-settings": "0.1.7-rc.2",
     "@types/react": "18.3.31",
     "dsh-editor-novel-kernel": "workspace:*",
     "dsh-editor-seats": "workspace:*",

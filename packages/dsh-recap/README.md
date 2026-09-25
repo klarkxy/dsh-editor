@@ -4,7 +4,7 @@
 
 Background recap generation and separate agent checkpoints. The plugin starts enabled and can be switched off under Settings → Plugins. Recaps, agent checkpoints, and semantic checkpoints use fixed automatic defaults. Recaps are display-only and are not model context.
 
-Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. Auxiliary generation requires `@klarkxy/dsh-ai-services`. `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-session` are required peers.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. Auxiliary generation requires `@klarkxy/dsh-ai-services`. `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-session` are required peers.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services

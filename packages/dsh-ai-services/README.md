@@ -6,7 +6,7 @@ Shared Cordis service for model-role routing, bounded auxiliary calls, cancellat
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. The host must provide `llm`, `storageDomain`, `connection`, and `webServer`.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The host must provide `llm`, `storageDomain`, `connection`, and `webServer`.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services

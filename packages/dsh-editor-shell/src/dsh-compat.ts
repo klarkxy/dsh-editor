@@ -1,5 +1,5 @@
 /**
- * Editor-facing 0.1.7-alpha.1 shapes.
+ * Editor-facing 0.1.7-rc.2 shapes.
  *
  * Official client types now live across session-controller / ui-conversation /
  * ui-chat / remotes, and those packages pull the Host graph. The shell only

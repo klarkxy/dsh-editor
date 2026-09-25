@@ -4,7 +4,7 @@ DSH Web 稿纸插件，提供文件树、正文编辑、保存、查找替换和
 
 ## 安装
 
-需要 Node.js ≥22、DSH `0.1.7-alpha.1`。本包尚未发布到 npm，使用本仓库构建的 tarball：在仓库根运行 `pnpm build`、`pnpm pack:plugins`，产物位于 `.pack/`。
+需要 Node.js ≥22、DSH `0.1.7-rc.2`。本包尚未发布到 npm，使用本仓库构建的 tarball：在仓库根运行 `pnpm build`、`pnpm pack:plugins`，产物位于 `.pack/`。
 
 将稿纸和 ai-services 两个 tarball 放在不含空格的目录，停止目标 Web profile，先加载共享服务再加载稿纸：
 

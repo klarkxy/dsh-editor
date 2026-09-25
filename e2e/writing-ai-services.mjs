@@ -11,7 +11,7 @@ const root = resolve(import.meta.dirname, '..')
 const runId = String(Date.now())
 const home = resolve(root, '.dev', 'writing-ai-' + runId)
 const output = resolve(root, 'e2e/out/writing-ai', runId)
-const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.1.7-alpha.1')
+const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.1.7-rc.2')
 const featureIds = ['current-title', 'mood', 'recap', 'memory', 'self-improvement', 'model-center']
 const report = { ok: false, mode: process.env.AI_PLUGINS_E2E_MODE || 'enabled', checks: [], calls: [], errors: [], home, output }
 await mkdir(output, { recursive: true })

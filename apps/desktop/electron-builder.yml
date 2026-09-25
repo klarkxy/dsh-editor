@@ -27,7 +27,7 @@ extraResources:
   # Primary integration must materialize these exact, dependency-closed inputs.
   - from: ../../.pack/desktop-runtime/node-24.16.0
     to: node
-  - from: ../../.pack/desktop-runtime/dsh-0.1.7-alpha.1
+  - from: ../../.pack/desktop-runtime/dsh-0.1.7-rc.2
     to: dsh
   - from: ../../.pack/desktop-runtime/manifest.json
     to: runtime-manifest.json

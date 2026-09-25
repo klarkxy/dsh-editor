@@ -4,7 +4,7 @@
 
 [English](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-recap/README.md)
 
-需要 Node.js ≥22、DSH 0.1.7-alpha.1，以及已加载的 @klarkxy/dsh-ai-services。Editor 已预装；独立 DSH 需要显式加载共享服务和此插件。
+需要 Node.js ≥22、DSH 0.1.7-rc.2，以及已加载的 @klarkxy/dsh-ai-services。Editor 已预装；独立 DSH 需要显式加载共享服务和此插件。
 
 启用后，较长轮次结束或闲置返回会在后台生成回顾；聊天区不显示卡片、按钮、空状态或错误。回顾不再提供单独设置页或手动生成入口。回顾不作为模型上下文。
 

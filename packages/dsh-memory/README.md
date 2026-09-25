@@ -6,7 +6,7 @@ Default-enabled Memory with idle Dream consolidation. Stores long-term preferenc
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. The bundle entry starts enabled, but loading it does not start inference or load `@klarkxy/dsh-ai-services`.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The bundle entry starts enabled, but loading it does not start inference or load `@klarkxy/dsh-ai-services`.
 
 Standalone DSH must load the shared service explicitly before this feature can start:
 

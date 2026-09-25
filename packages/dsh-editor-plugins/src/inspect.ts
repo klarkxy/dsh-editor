@@ -11,8 +11,8 @@ import {
 import { isProtectedPackage, isSafeEntryId, isSafePackageName, type RuntimeCatalog } from './core.ts'
 import { inspectPluginPresets } from './presets.ts'
 
-export const PINNED_DSH = '0.1.7-alpha.1'
-export const PINNED_CORDIS = '4.0.2'
+export const PINNED_DSH = '0.1.7-rc.2'
+export const PINNED_CORDIS = '4.0.4'
 export type { InspectEntry, InspectFinding, InspectSeverity, InspectVerdict, PluginInspectReport }
 
 type Manifest = {
@@ -137,6 +137,8 @@ export function peerAllows(range: string, pinned: string): boolean | 'unknown' {
   }
   const otherMajor = /\b(\d+)\./.exec(text)
   if (otherMajor && otherMajor[1] !== pinnedMajor) return false
+  const upperOnly = /^<\s*(\d+)\.(\d+)/.exec(text)
+  if (upperOnly && upperOnly[1] === pinnedMajor) return +upperOnly[2] > +pinnedMinor
   if (pinnedMajor === '0' && /0\.2\b/.test(text) && pinnedMinor === '1') return false
   if (text.includes(`^${pinnedMajor}`) || text.includes(`>=${pinnedMajor}`)) return true
   return 'unknown'

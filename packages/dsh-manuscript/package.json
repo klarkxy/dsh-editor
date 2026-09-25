@@ -86,7 +86,7 @@
     "test": "vitest run --root ../.. packages/dsh-manuscript/src"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.3"
+    "@deepseek-ai/cordis": "^4.0.4"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",
@@ -94,7 +94,7 @@
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.2",
     "@codemirror/view": "^6.43.10",
-    "@deepseek-ai/dsh-storage-domain": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
     "@lezer/highlight": "^1.2.3",
     "@lezer/markdown": "^1.7.2",
     "@radix-ui/themes": "^3.3.0",
@@ -102,7 +102,7 @@
     "@klarkxy/dsh-ai-services": "workspace:*"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.3",
+    "@deepseek-ai/cordis": "^4.0.4",
     "dsh-editor-seats": "workspace:*"
   }
 }

@@ -6,7 +6,7 @@
 
 ## 安装
 
-需要 Node.js ≥22、DSH `0.1.7-alpha.1`。捆绑入口安装后默认启用，也可在插件设置中关闭。本插件**不会**替宿主加载记忆或开启 Dream；独立部署需先加载共享服务 `@klarkxy/dsh-ai-services`，再安装、加载并启用 `@klarkxy/dsh-memory`。
+需要 Node.js ≥22、DSH `0.1.7-rc.2`。捆绑入口安装后默认启用，也可在插件设置中关闭。本插件**不会**替宿主加载记忆或开启 Dream；独立部署需先加载共享服务 `@klarkxy/dsh-ai-services`，再安装、加载并启用 `@klarkxy/dsh-memory`。
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services

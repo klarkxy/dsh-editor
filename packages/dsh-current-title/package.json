@@ -67,14 +67,14 @@
   },
   "dependencies": {
     "@klarkxy/dsh-ai-services": "workspace:*",
-    "@deepseek-ai/dsh-storage-domain": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
     "zod": "^4.1.5"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.3"
+    "@deepseek-ai/cordis": "^4.0.4"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.3",
+    "@deepseek-ai/cordis": "^4.0.4",
     "react": "^18.2.0",
     "@types/react": "18.3.31"
   },

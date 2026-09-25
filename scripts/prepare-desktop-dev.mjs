@@ -10,14 +10,14 @@ import { workspacePackageDir, desktopComposition, configureProfile, runtimeDepen
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceTemplate = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 const template = resolve(root, '.dev', 'desktop-profile-template')
-const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime-0.1.7-alpha.1')
+const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime-0.1.7-rc.2')
 const composition = await desktopComposition()
 const packages = compositionInstallNames(composition)
 
 if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.node !== '24.16.0') {
   throw new Error(`desktop development requires Windows x64 Node 24.16.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
 }
-const dsh = resolveDshInstallation('0.1.7-alpha.1')
+const dsh = resolveDshInstallation('0.1.7-rc.2')
 
 function packageCopyFilter(source) {
   const normalized = source.replaceAll('\\', '/')
@@ -52,7 +52,7 @@ for (const packageName of packages) {
 let runtimeReady = false
 try {
   const manifest = JSON.parse(await readFile(resolve(devDshRuntime, 'package.json'), 'utf8'))
-  runtimeReady = manifest.name === '@deepseek-ai/dsh' && manifest.version === '0.1.7-alpha.1'
+  runtimeReady = manifest.name === '@deepseek-ai/dsh' && manifest.version === '0.1.7-rc.2'
     && JSON.parse(await readFile(resolve(devDshRuntime, '.dsh-editor-materialized'), 'utf8')).version === manifest.version
 } catch {}
 if (!runtimeReady) {

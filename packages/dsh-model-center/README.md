@@ -8,7 +8,7 @@ Model Center for DSH. Starts enabled and remains independently switchable.
 
 ## Install
 
-Requires Node.js ≥22 and DSH `0.1.7-alpha.1`.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services

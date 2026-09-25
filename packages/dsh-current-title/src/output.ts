@@ -81,7 +81,7 @@ export function truncateTitleUtf8(input: string, maxBytes: number): string {
   return output
 }
 
-/** Same sanitizing rules as DSH 0.1.7-alpha.1 `normalizeSessionTitle`. */
+/** Same sanitizing rules as DSH 0.1.7-rc.2 `normalizeSessionTitle`. */
 export function normalizeSessionTitle(input: string, maxBytes: number): string {
   return truncateTitleUtf8(cleanTitleText(input), maxBytes).trimEnd()
 }

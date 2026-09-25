@@ -83,9 +83,11 @@ describe('peer ranges against the pinned host', () => {
   it('accepts the current DSH/cordis majors and rejects the next major', () => {
     expect(peerAllows('^4.0.1', '4.0.1')).toBe(true)
     expect(peerAllows('^5.0.0', '4.0.1')).toBe(false)
-    expect(peerAllows('0.1.7-alpha.1', '0.1.7-alpha.1')).toBe(true)
-    expect(peerAllows('^0.2.0', '0.1.7-alpha.1')).toBe(false)
-    expect(peerAllows('workspace:*', '0.1.7-alpha.1')).toBe(false)
+    expect(peerAllows('0.1.7-rc.2', '0.1.7-rc.2')).toBe(true)
+    expect(peerAllows('^0.2.0', '0.1.7-rc.2')).toBe(false)
+    expect(peerAllows('<0.2.0', '0.1.7-rc.2')).toBe(true)
+    expect(peerAllows('<0.1.0', '0.1.7-rc.2')).toBe(false)
+    expect(peerAllows('workspace:*', '0.1.7-rc.2')).toBe(false)
   })
 })
 

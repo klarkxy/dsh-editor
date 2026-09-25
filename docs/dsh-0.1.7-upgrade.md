@@ -1,6 +1,6 @@
 # DSH 0.1.7 升级与能力审计
 
-日期：2026-09-22。目标版本为用户确认的 **0.1.7-alpha.1**，不是无后缀稳定版。上游依据为 [官方发布](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-alpha.1) 与该 tag 源码（c36a83ff6bb95e3f82cf79f9be7c724270a8aa61）。
+日期：2026-09-22。目标版本为用户确认的 **0.1.7-alpha.1**，不是无后缀稳定版。上游依据为 [官方发布](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-alpha.1) 与该 tag 源码（c36a83ff6bb95e3f82cf79f9be7c724270a8aa61）。后续已升级到 0.1.7-rc.2，见文末补充。
 
 ## 升级范围
 
@@ -50,8 +50,21 @@
 - AI 插件：12 项交互通过，包括标题、Memory／Dream、经验与 Skill、手动回顾、原生提问等待与单次恢复、全部停用后的聊天（e2e/out/ai-plugins/1790077320621）。
 - 配置组合：desktop/basic/smart/full 等价、预设部署与开关、Markdown/TXT 保存和搜索、重载通过（e2e/out/composition-desktop/report.json）。
 - Electron：首次启动、配置后启动、多窗口、重开及正常关闭通过（.pack/desktop-e2e/report.json）。
-- 最终桌面运行时已生成，manifest 的 DSH 版本为 0.1.7-alpha.1；最终 shell 客户端与运行时内两个副本哈希一致（.pack/desktop-runtime/manifest.json）。
+- 最终桌面运行时已生成，manifest 的 DSH 版本为 0.1.7-alpha.1；最终 shell 客户端与运行时内两个副本哈希一致（.pack/desktop-runtime/manifest.json，该证据属于 alpha.1 轮次）。
 - 独立审查复核配置保留、二次导入、默认推理强度与运行时 bundle；末轮复核当前会话选择、动态加载状态，以及真实原生审批载体的允许、拒绝、身份校验和取消后过期响应。
 - 工作树差异检查通过（忽略 Windows CRLF 行尾）。
 
 所有模型交互验收使用隔离目录和本地固定响应服务，验证集成、数据流与生命周期，不代表真实模型质量。没有对用户真实历史执行破坏性迁移，没有生成或发布安装程序；运行时物化与安装包发布是不同证据。升级前的 AI 插件验收记录保留在原实现文档，并已标注旧版本范围。
+
+## 2026-09-25 补充：升级到 0.1.7-rc.2 并解除插件后向限制
+
+目标版本为 **0.1.7-rc.2**（上游 [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2)），仍不是无后缀稳定版。以上各节的审计结论与验证记录属于 alpha.1 轮次，本节记录 rc.2 轮次的增量。
+
+- 版本切换仍由 `node scripts/upgrade-dsh.mjs --to 0.1.7-rc.2` 完成，工作区 pin、e2e 与打包脚本同步改写；未改全局 CLI，未提交、推送或发布。
+- 解除插件后向限制：各插件 peerDependencies 中的 DSH 下限（`>=0.1.7-alpha.1 <0.2.0`）全部移除，只保留 `<0.2.0` 上限，插件不再要求宿主达到某个最低 0.1.7 预发布版本；`inspect.ts` 的 `peerAllows` 同步支持纯上限范围，`PINNED_CORDIS` 从 4.0.2 更正为实际解析的 4.0.4。
+- cordis 从 `^4.0.3` 升到 `^4.0.4`：rc.2 各包的 peer 要求 `~4.0.4`。
+- 依赖闭包：rc.2 发布后部分上游包的内部 peer 仍指向上一个预发布版本，pnpm 会在闭包中留下 alpha.1 副本；根 `package.json` 的 overrides 扩展到全部受影响的 `@deepseek-ai/dsh-*` 包（在原 sandbox/invariants/scope/storage 之外新增 25 个），并重新生成锁文件（注意需同时删除 `node_modules/.pnpm/lock.yaml`，否则 pnpm 复用旧解析）。最终锁文件 0.1.7-alpha.1 引用为 0，与 alpha.1 轮次的单一版本闭包一致。
+- 增量验证：全仓类型检查通过，无 rc.2 相对 alpha.1 的 API 破坏；全量 Vitest 272 个文件、2023 项通过、3 项跳过；全仓构建通过；`node --test scripts/check-ui-drift.test.mjs` 通过；核心写作闭环 e2e 通过（新建、保存、重开）；AI 插件 e2e 12 项检查通过（e2e/out/ai-plugins/1790307815844，六项独立功能启停、模型中心档位、Memory/Dream、经验与 Skill、Mood 原生提问）。
+- playwright 经 overrides 固定在 1.62.1：锁文件重建会让 `^1.62.1` 浮到需要重新下载浏览器的版本，而本机网络下载浏览器二进制失败；固定后与 alpha.1 轮次使用同一浏览器构建。
+
+未重新运行完整桌面打包（pack:desktop）、安装程序发布与组合矩阵 e2e；这些证据仍属于 alpha.1 轮次，发布前需要补齐。

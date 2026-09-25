@@ -4,7 +4,7 @@
 
 [English](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-model-center/README.md)
 
-需要 Node.js ≥22、DSH 0.1.7-alpha.1，以及已加载的 @klarkxy/dsh-ai-services。供应商和凭据仍由 DSH 原生设置管理。
+需要 Node.js ≥22、DSH 0.1.7-rc.2，以及已加载的 @klarkxy/dsh-ai-services。供应商和凭据仍由 DSH 原生设置管理。
 
 「模型档位」提供快速、对话、思考、幻想四档，四档分别对应 Haiku、Sonnet、Opus、Fable 的定位，可绑定任意供应商模型，每档分别设置模型与思考强度。未单独设置的档位跟随对话档。「能力默认值」中的新对话、补全、改写、标题、澄清、回顾等可引用任一档，也可单独设置模型与思考强度；辅助能力仍可跟随当前会话。修改档位会影响引用它的能力；新对话使用保存后的默认值，已有对话的手动选择保持不变。并发、超时、输入输出上限和重试次数统一放在「运行设置」。供应商页只管理连接与模型。无效配置会报告错误，不自动改用其他供应商；推理强度来自当前模型目录。
 

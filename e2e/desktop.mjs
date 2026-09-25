@@ -9,7 +9,7 @@ import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack', 'desktop-e2e')
-resolveDshInstallation('0.1.7-alpha.1')
+resolveDshInstallation('0.1.7-rc.2')
 const e2eHomeRoot = resolve(root, '.dev', 'desktop-e2e-home')
 const template = resolve(root, '.dev', 'desktop-profile-template')
 const electronDist = resolve(root, 'apps', 'desktop', 'node_modules', 'electron', 'dist')
@@ -178,7 +178,7 @@ const baseEnv = {
   ...process.env,
   DSH_TELEMETRY_DISABLED: '1',
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev', 'desktop-dsh-runtime-0.1.7-alpha.1', 'lib', 'bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev', 'desktop-dsh-runtime-0.1.7-rc.2', 'lib', 'bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: template,
   DSH_EDITOR_PROJECTS_ROOT: resolve(e2eHomeRoot, 'projects'),
 }

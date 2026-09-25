@@ -72,23 +72,23 @@
     "test": "vitest run --root ../.. packages/dsh-web-search-manager/src"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-storage-domain": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-web-search-deepseek": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-web-search-exa": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-web-fetch-http": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-web-search-deepseek": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-web-search-exa": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-web-fetch-http": "0.1.7-rc.2",
     "zod": "^4.1.5"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.3",
-    "@deepseek-ai/dsh-credentials": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-web": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-tool-web": "0.1.7-alpha.1"
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-credentials": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-web": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-tool-web": "0.1.7-rc.2"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.3",
-    "@deepseek-ai/dsh-credentials": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-web": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-tool-web": "0.1.7-alpha.1",
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-credentials": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-web": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-tool-web": "0.1.7-rc.2",
     "react": "^18.2.0",
     "@types/react": "18.3.31"
   },

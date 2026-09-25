@@ -4,7 +4,7 @@
 
 [English](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-mood/README.md)
 
-需要 Node.js ≥22 和 DSH `0.1.7-alpha.1`。插件安装后默认启用，也可在插件设置中关闭。它不会替代原生权限或写作提案确认。
+需要 Node.js ≥22 和 DSH `0.1.7-rc.2`。插件安装后默认启用，也可在插件设置中关闭。它不会替代原生权限或写作提案确认。
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services

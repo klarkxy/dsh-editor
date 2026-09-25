@@ -4,7 +4,7 @@ Default-enabled requirements clarification at the Host `agent/pre-step` boundary
 
 [简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-mood/docs/README.zh-CN.md)
 
-Requires Node.js ≥22 and DSH `0.1.7-alpha.1`. The bundle entry starts enabled and remains independently switchable. Mood does not replace native permissions or writing proposal confirmation.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The bundle entry starts enabled and remains independently switchable. Mood does not replace native permissions or writing proposal confirmation.
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services

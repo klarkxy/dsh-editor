@@ -20,7 +20,7 @@ A process restart does not replay uncertain messages or file writes. Inspect the
 
 ## Package use
 
-This package has no dependency on private Editor packages. Install its bundle together with `@klarkxy/dsh-ai-services` on compatible DSH `0.1.7-alpha.1`. Enable its `fusion` entry through the host plugin configuration. The native Web adapter uses the existing conversation and child-session navigation.
+This package has no dependency on private Editor packages. Install its bundle together with `@klarkxy/dsh-ai-services` on compatible DSH `0.1.7-rc.2`. Enable its `fusion` entry through the host plugin configuration. The native Web adapter uses the existing conversation and child-session navigation.
 
 The Editor Host supplies a narrow `fusionWriting` service. Only Host code receives that application port; browser commands supply stored candidate identity and author actions, never replacement candidate content or a new destination.
 

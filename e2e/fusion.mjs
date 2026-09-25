@@ -9,7 +9,7 @@ import { FusionModelFixture } from './fusion-fixture.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const stamp = String(Date.now())
-const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.1.7-alpha.1')
+const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.1.7-rc.2')
 const home = resolve(root, '.dev', `fusion-${stamp}`)
 const output = resolve(root, 'e2e/out/fusion', stamp)
 const projectName = `Fusion 验收 ${stamp}`
