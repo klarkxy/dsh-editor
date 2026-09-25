@@ -52,6 +52,13 @@ declare module 'electron' {
     handle(channel: string, listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown): void
   }
 
+  export const shell: {
+    openExternal(url: string): Promise<void>
+    showItemInFolder(path: string): void
+    /** Resolves to an empty string on success, otherwise an OS error message. */
+    openPath(path: string): Promise<string>
+  }
+
   export const clipboard: {
     readText(): string
     writeText(text: string): void

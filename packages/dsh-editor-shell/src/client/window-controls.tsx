@@ -20,7 +20,9 @@ export type UpdateCheckResult = {
   error?: string
 }
 /** 一键下载的进度推送:phase=downloading/verifying/done,mirror 为当前下载源。 */
-export type UpdateProgress = { phase: 'downloading' | 'verifying' | 'done'; received: number; total: number; mirror: string }
+export type UpdateProgress = { phase: 'downloading' | 'verifying' | 'done'; received: number; total: number; mirror: string; updateId?: string }
+/** filePath is display-only. No IPC accepts a renderer-provided path. */
+export type DownloadedUpdateInfo = { updateId: string; filePath?: string }
 
 type WindowBridge = {
   minimize(): void
@@ -37,7 +39,10 @@ type WindowBridge = {
   /** 启动时主进程在后台完成的更新检查;渲染端挂载后拉取,仅 update-available 时提示。 */
   getStartupUpdate?(): Promise<UpdateCheckResult>
   /** 按主进程签发的 updateId 下载;渲染端不能指定 URL 或落盘路径。 */
-  downloadUpdate?(updateId: string): Promise<{ updateId: string }>
+  downloadUpdate?(updateId: string): Promise<DownloadedUpdateInfo>
+  getDownloadedUpdate?(updateId: string): Promise<DownloadedUpdateInfo | null>
+  revealDownloadedUpdate?(updateId: string): Promise<void>
+  openUpdateFolder?(): Promise<void>
   cancelUpdateDownload?(): Promise<void>
   /** 安装已下载并复验过的更新:Windows 退出并替换/运行安装器,mac 仅打开所在文件夹。 */
   installUpdate?(updateId: string): Promise<'restarting' | 'revealed'>

@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('dshWindow', {
   getStartupUpdate: () => ipcRenderer.invoke('dsh-window:startup-update'),
   // 一键更新:渲染端只传主进程签发的 updateId,不能指定 URL、文件名或安装路径。
   downloadUpdate: (updateId) => ipcRenderer.invoke('dsh-window:download-update', { updateId }),
+  getDownloadedUpdate: (updateId) => ipcRenderer.invoke('dsh-window:get-downloaded-update', { updateId }),
+  revealDownloadedUpdate: (updateId) => ipcRenderer.invoke('dsh-window:reveal-downloaded-update', { updateId }),
+  openUpdateFolder: () => ipcRenderer.invoke('dsh-window:open-update-folder'),
   cancelUpdateDownload: () => ipcRenderer.invoke('dsh-window:cancel-update-download'),
   installUpdate: (updateId) => ipcRenderer.invoke('dsh-window:install-update', { updateId }),
   onUpdateProgress: (listener) => {

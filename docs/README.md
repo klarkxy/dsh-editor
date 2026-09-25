@@ -1,6 +1,7 @@
 # 文档
 
 - [使用指南](user-guide.md)：安装、写作、作品管理与问题处理。
+- [桌面更新审查与恢复](update-audit.md)：下载校验、Windows 安装交接、恢复入口与验证边界。
 - [产品原则](product-principles.md)：作者工作流与产品取舍。
 - [架构决策](architecture.md)：运行时权威、信任边界与发布约定。
 - [界面设计](ui-design.md)：官方 Kimi Web 视觉适配、组件预览与验证范围。
