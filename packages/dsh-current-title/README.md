@@ -12,6 +12,18 @@ The bundle insert is enabled after installation. It does not permanently turn of
 
 Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The **当前标题** entry starts enabled and can be disabled in plugin settings. Native title storage and scheduling come from host `sessionTitle`; generation needs `@klarkxy/dsh-ai-services`.
 
+```sh
+npm install @klarkxy/dsh-current-title
+```
+
+## Host RPC
+
+Channel `/dsh-current-title` requires the host authorization policy.
+
+- `status` — current settings, slot support and ownership, and per-session title state (title, source kind, generating, pinned) when `sessionId` is given.
+- `settings` — update the stored locale mode with compare-and-swap (`{ locale, expectedRevision }`). The stored mode is `auto`, so type labels follow the host locale preference.
+- `regenerate` — regenerate one session's title (`{ sessionId }`); fails with `not-found` for an unknown session and `unavailable` while the title provider is inactive.
+
 ## Title shape
 
 ```text
@@ -24,4 +36,4 @@ Only recent real human `user/message` events are used. Plugin auxiliary messages
 
 [SATA License 2.1](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-current-title/LICENSE), including attribution for the original `dsh-plugins` sources.
 
-The Editor preinstalls this feature enabled. In the Editor, use Settings → Plugins to switch it without restarting. Standalone DSH must load `@klarkxy/dsh-ai-services` before this package; installation or removal may require a restart when the host asks for one.
+Hosts that bundle this feature usually enable it by default; where the host supports live plugin switching, toggling needs no restart. Standalone DSH must load `@klarkxy/dsh-ai-services` before this package; installation or removal may require a restart when the host asks for one.

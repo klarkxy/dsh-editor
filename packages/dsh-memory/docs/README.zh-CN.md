@@ -6,14 +6,20 @@ Dream 负责“怎样理解用户和当前项目”：作者用语、偏好、�
 
 ## 独立 DSH Web 安装
 
-需要 Node.js ≥22 和 DSH `0.1.7-rc.2`。不依赖任何 Editor 私有包，也不要求安装 Self Improve。
+需要 Node.js ≥22 和 DSH `0.1.7-rc.2`。不依赖任何应用私有包，也不要求安装 Self Improve。独立 DSH Web 宿主手动安装：
+
+```sh
+npm install @klarkxy/dsh-memory
+```
+
+宿主需明确加载共享服务与记忆插件：
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services
 dsh plugin --profile web add @klarkxy/dsh-memory
 ```
 
-宿主需明确加载共享服务。插件安装后默认启用，单纯打开界面不发起推理。在「设置 → 记忆」管理条目、提示注入和 Dream 观察与整理开关；Editor 预装的也是同一个公开包。
+插件安装后默认启用，单纯打开界面不发起推理。在「设置 → 记忆」管理条目、提示注入和 Dream 观察与整理开关。
 
 ## 行为
 
@@ -26,5 +32,17 @@ dsh plugin --profile web add @klarkxy/dsh-memory
 注入最多 5 条、含包装约 800 tokens，仅使用当前项目及明确全局的 active 条目；候选、过期、被替代或撤回内容不注入。删除墓碑与持久化观察游标阻止重启后重放旧消息。游标最多 512 个会话，满后停止新会话观察，不淘汰删除保护。关闭 Dream 不关闭存储或 Self Improve；关闭插件保留数据。
 
 旧记录不强制补造结构化字段。测试新能力时使用同一源码构建的共享服务与学习插件；源码合入不代表已经发布新版 npm 包。
+
+## 接口与导出
+
+本包有三个入口：
+
+- `.`：Cordis 插件（`name`、`inject`、`apply`）、`MemoryRuntime` 服务类，以及共享常量 `CHAT_EVENTS_SLOT`、`MEMORY_RPC_CHANNEL`、`defaultSettings`、`projectIdFromCwd`。`apply` 把运行时挂到 `ctx.aiMemory`，并注册宿主 RPC 通道。
+- `./contracts`：浏览器安全的类型与常量。`MemoryRecord`、`MemoryService`、`MemoryQuery`、`NewMemoryRecord` 等共享接口转引自冻结的 `@klarkxy/dsh-ai-services` contracts；本包另加 `MemorySettings`、`DreamPlan`、`MemoryStatus`、回忆与注入上限，以及 `/dsh-memory` 通道名。
+- `./client`：宿主 Web 客户端加载的设置界面 bundle。
+
+`MemoryRuntime` 实现冻结的 `MemoryService` 方法面——`list`、`create`、`update`、`promoteToGlobal`、`remove`、`recall`——另加设置（`status`/`readStatus`、`updateSettings`）、候选生命周期（`accept`、`reject`、`revoke`）、手动条目（`createManualRecord`）、回合钩子（`handlePreStep`、`observeSession`）与 Dream 生命周期（`previewDream`、`runIdleDream`、`applyDream`、`cancelDream`）。
+
+宿主 RPC 通道为 `/dsh-memory`，端点包括 `status`、`settings.update`、`records.list`、`records.create`、`records.update`、`records.remove`、`records.accept`、`records.reject`、`records.revoke`、`dream.run`。
 
 [设计与限制](../../../docs/portable-learning.md) · [发布维护](../../PUBLISHING.md) · [许可证](../LICENSE)
