@@ -61,7 +61,7 @@
 目标版本为 **0.1.7-rc.2**（上游 [dsh-v0.1.7-rc.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2)），仍不是无后缀稳定版。以上各节的审计结论与验证记录属于 alpha.1 轮次，本节记录 rc.2 轮次的增量。
 
 - 版本切换仍由 `node scripts/upgrade-dsh.mjs --to 0.1.7-rc.2` 完成，工作区 pin、e2e 与打包脚本同步改写；未改全局 CLI，未提交、推送或发布。
-- 解除插件后向限制：各插件 peerDependencies 中的 DSH 下限（`>=0.1.7-alpha.1 <0.2.0`）全部移除，只保留 `<0.2.0` 上限，插件不再要求宿主达到某个最低 0.1.7 预发布版本；`inspect.ts` 的 `peerAllows` 同步支持纯上限范围，`PINNED_CORDIS` 从 4.0.2 更正为实际解析的 4.0.4。
+- 插件版本边界：各插件 peerDependencies 保留最低宿主版本下限 `>=0.1.7-alpha.1 <0.2.0`——插件依赖的原生接口（配置 entry、Session V4 `plugin:<id>` kind、`sessionStatus.pendingInteraction` 等）从 alpha.1 才存在，下限如实标注接口起点；安装检查器 `inspect.ts` 的 `peerAllows` 由字符串启发式改为真实 semver 比较器求值，`>=0.1.7-alpha.1 <0.2.0` 对宿主 0.1.7-rc.2 正确判定为兼容，不再误拦。`PINNED_CORDIS` 从 4.0.2 更正为实际解析的 4.0.4。
 - cordis 从 `^4.0.3` 升到 `^4.0.4`：rc.2 各包的 peer 要求 `~4.0.4`。
 - 依赖闭包：rc.2 发布后部分上游包的内部 peer 仍指向上一个预发布版本，pnpm 会在闭包中留下 alpha.1 副本；根 `package.json` 的 overrides 扩展到全部受影响的 `@deepseek-ai/dsh-*` 包（在原 sandbox/invariants/scope/storage 之外新增 25 个），并重新生成锁文件（注意需同时删除 `node_modules/.pnpm/lock.yaml`，否则 pnpm 复用旧解析）。最终锁文件 0.1.7-alpha.1 引用为 0，与 alpha.1 轮次的单一版本闭包一致。
 - 增量验证：全仓类型检查通过，无 rc.2 相对 alpha.1 的 API 破坏；全量 Vitest 272 个文件、2023 项通过、3 项跳过；全仓构建通过；`node --test scripts/check-ui-drift.test.mjs` 通过；核心写作闭环 e2e 通过（新建、保存、重开）；AI 插件 e2e 12 项检查通过（e2e/out/ai-plugins/1790307815844，六项独立功能启停、模型中心档位、Memory/Dream、经验与 Skill、Mood 原生提问）。

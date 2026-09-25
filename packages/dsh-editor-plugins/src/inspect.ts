@@ -118,30 +118,77 @@ export function parseBundlePatch(text: string): { inserts: InspectEntry[]; empty
   return { inserts, empty: inserts.length === 0, hasJs }
 }
 
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('-')
+  const pb = b.split('-')
+  const na = pa[0].split('.').map(Number)
+  const nb = pb[0].split('.').map(Number)
+  for (let i = 0; i < 3; i += 1) {
+    if ((na[i] || 0) !== (nb[i] || 0)) return (na[i] || 0) - (nb[i] || 0)
+  }
+  const prea = pa.slice(1).join('-')
+  const preb = pb.slice(1).join('-')
+  if (prea === preb) return 0
+  if (!prea) return 1
+  if (!preb) return -1
+  const sa = prea.split('.')
+  const sb = preb.split('.')
+  for (let i = 0; i < Math.max(sa.length, sb.length); i += 1) {
+    if (sa[i] === undefined) return -1
+    if (sb[i] === undefined) return 1
+    const xa = /^\d+$/.test(sa[i]) ? +sa[i] : null
+    const xb = /^\d+$/.test(sb[i]) ? +sb[i] : null
+    if (xa !== null && xb !== null && xa !== xb) return xa - xb
+    if (xa !== null && xb === null) return -1
+    if (xa === null && xb !== null) return 1
+    if (xa === null && xb === null && sa[i] !== sb[i]) return sa[i] < sb[i] ? -1 : 1
+  }
+  return 0
+}
+
+function caretUpperBound(version: string): string {
+  const [major = '0', minor = '0', patch = '0'] = version.split('-')[0].split('.')
+  if (+major > 0) return `${+major + 1}.0.0`
+  if (+minor > 0) return `0.${+minor + 1}.0`
+  return `0.0.${+patch + 1}`
+}
+
+function tildeUpperBound(version: string): string {
+  const parts = version.split('-')[0].split('.')
+  if (parts.length < 2) return `${+parts[0] + 1}.0.0`
+  return `${parts[0]}.${+parts[1] + 1}.0`
+}
+
+function comparatorAllows(comparator: string, pinned: string): boolean | 'unknown' {
+  const match = /^(>=|<=|>|<|=)?\s*(\^|~)?\s*(\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?)$/.exec(comparator)
+  if (!match) return 'unknown'
+  const [, op = '', expand = '', raw] = match
+  const cmp = compareVersions(pinned, raw)
+  if (expand === '^') return cmp >= 0 && compareVersions(pinned, caretUpperBound(raw)) < 0
+  if (expand === '~') return cmp >= 0 && compareVersions(pinned, tildeUpperBound(raw)) < 0
+  if (op === '>=') return cmp >= 0
+  if (op === '<=') return cmp <= 0
+  if (op === '>') return cmp > 0
+  if (op === '<') return cmp < 0
+  return cmp === 0
+}
+
 export function peerAllows(range: string, pinned: string): boolean | 'unknown' {
   const text = range.trim()
   if (!text) return 'unknown'
   if (text.includes('workspace:')) return false
-  if (text === pinned || text.includes(pinned)) return true
-  const [pinnedMajor = '', pinnedMinor = ''] = pinned.split('.')
-  const caret = /^\^(\d+)(?:\.(\d+))?/.exec(text)
-  if (caret) {
-    if (caret[1] !== pinnedMajor) return false
-    if (pinnedMajor === '0') return (caret[2] ?? '0') === pinnedMinor
-    return true
+  const groups = text.split('||').map((group) => group.trim()).filter(Boolean)
+  let sawUnknown = false
+  for (const group of groups) {
+    let ok = true
+    for (const comparator of group.split(/\s+/)) {
+      const allowed = comparatorAllows(comparator, pinned)
+      if (allowed === 'unknown') { sawUnknown = true; ok = false; break }
+      if (!allowed) { ok = false; break }
+    }
+    if (ok) return true
   }
-  const tilde = /^~(\d+)(?:\.(\d+))?/.exec(text)
-  if (tilde) {
-    if (tilde[1] !== pinnedMajor) return false
-    return !tilde[2] || tilde[2] === pinnedMinor
-  }
-  const otherMajor = /\b(\d+)\./.exec(text)
-  if (otherMajor && otherMajor[1] !== pinnedMajor) return false
-  const upperOnly = /^<\s*(\d+)\.(\d+)/.exec(text)
-  if (upperOnly && upperOnly[1] === pinnedMajor) return +upperOnly[2] > +pinnedMinor
-  if (pinnedMajor === '0' && /0\.2\b/.test(text) && pinnedMinor === '1') return false
-  if (text.includes(`^${pinnedMajor}`) || text.includes(`>=${pinnedMajor}`)) return true
-  return 'unknown'
+  return sawUnknown ? 'unknown' : false
 }
 
 function looksLikeSourceOnly(pkgDir: string): boolean {
