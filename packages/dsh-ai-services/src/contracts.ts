@@ -133,7 +133,27 @@ export interface TaskCheckpoint {
   createdAt: number
 }
 export type KnowledgeScope = { kind: 'global' } | { kind: 'project'; projectId: string }
-export type KnowledgeKind = 'preference' | 'project-fact' | 'decision' | 'lesson'
+export type KnowledgeKind = 'preference' | 'project-fact' | 'decision' | 'vocabulary' | 'activity' | 'lesson'
+/** Descriptive context, never an executable instruction or authorization. */
+export interface ContextKnowledge {
+  subject: string
+  domain: string
+  key: string
+  aliases: string[]
+  observedAt: number
+  /** The user's own time expression, not an inferred completion date. */
+  eventTime?: string
+  activityStatus?: 'planned' | 'in-progress' | 'blocked' | 'paused' | 'completed' | 'cancelled' | 'unknown'
+}
+/** A scoped method. Observations remain candidates until explicitly accepted. */
+export interface ProcedureKnowledge {
+  origin: 'instruction' | 'observation'
+  goal: string
+  when: string[]
+  steps: string[]
+  avoid: string[]
+  verify: string[]
+}
 export interface MemoryRecord {
   id: string
   revision: number
@@ -146,6 +166,8 @@ export interface MemoryRecord {
   evidence: EvidenceRef[]
   exceptions: string[]
   source: 'user' | 'memory' | 'dream' | 'self-improvement'
+  context?: ContextKnowledge
+  procedure?: ProcedureKnowledge
   createdAt: number
   updatedAt: number
   expiresAt?: number

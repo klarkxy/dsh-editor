@@ -61,13 +61,29 @@ export function requestTextFromMessages(messages: readonly unknown[]): string {
   return ''
 }
 
-function toolCallName(events: readonly SessionEventLike[], callId: string): string | undefined {
-  for (const event of events) {
-    if (event.type !== 'tool/call') continue
-    const row = asRecord(event.data)
-    if (row && String(row.callId) === callId && typeof row.name === 'string') return row.name
-  }
-  return undefined
+/** Conservative fallback for explicit method instructions; semantic classification still runs when AI is available. */
+export function isExplicitMethodInstruction(text: string): boolean {
+  if (/```|[“”「」]|(?:角色|人物)(?:说|台词)|例如|假如|假设|这一次|仅这次|本次先|hypothetical|for example|only this time/i.test(text)) return false
+  const durable = /以后|今后|每次|始终|总是|不要再|别再|\b(?:always|never)\b|from now on/i.test(text)
+  const correction = HUMAN_CORRECTION.test(text) && /应该|不要|必须|\b(?:should|must)\b|don't|do not/i.test(text)
+  const conditional = /(?:改稿|修改|写入|提交|调用|运行|执行|测试)(?:前|时).*(?:先|检查|核对|验证)|\b(?:when|before)\b.{1,80}\b(?:check|verify|read|test)\b/i.test(text)
+  return (durable || correction || conditional)
+    && /使用|读取|检查|核对|验证|搜索|修改|写入|保留|删除|运行|执行|测试|调用|确认|比较|重试|提交|保存|拆分|用(?:相对|绝对)路径|\b(?:use|read|check|verify|test|keep|preserve|avoid|write|retry)\b/i.test(text)
+}
+
+function callInfo(event: SessionEventLike): { callId: string; name: string; target: string; arguments: string } | undefined {
+  if (event.type !== 'tool/call') return undefined
+  const row = asRecord(event.data)
+  if (!row || typeof row.callId !== 'string' || typeof row.name !== 'string') return undefined
+  let args: unknown = row.arguments
+  if (typeof args === 'string') { try { args = JSON.parse(args) } catch { return undefined } }
+  const values = asRecord(args)
+  if (!values) return undefined
+  const targetKeys = ['path', 'filePath', 'file', 'uri', 'url', 'resourceId', 'documentId', 'id', 'query', 'target']
+  const targets = targetKeys.flatMap(key => typeof values[key] === 'string' && (values[key] as string).trim() ? [[key, values[key]]] : [])
+  if (!targets.length) return undefined
+  const canonical = JSON.stringify(Object.fromEntries(Object.entries(values).sort(([a], [b]) => a.localeCompare(b))))
+  return { callId: row.callId, name: row.name, target: JSON.stringify([row.name, targets]), arguments: canonical }
 }
 
 function toolResultInfo(event: SessionEventLike): { callId: string; isError: boolean; text: string } | undefined {
@@ -89,53 +105,51 @@ export function detectLessonTriggers(
 ): LessonTrigger[] {
   const triggers: LessonTrigger[] = []
   const seen = new Set<string>()
-  const range = events.filter(event => event.seq > afterSeq).sort((a, b) => a.seq - b.seq)
-  const priorActivity = events.some(event => event.seq <= afterSeq && (event.type === 'assistant/message' || event.type === 'tool/result' || event.type === 'tool/call'))
-    || range.some(event => event.type === 'assistant/message' || event.type === 'tool/call' || event.type === 'tool/result')
-
-  for (const event of range) {
-    if (!isHumanUserMessage(event) || !priorActivity) continue
-    const text = textFromContent(asRecord(event.data)?.content).trim()
-    if (!text || !HUMAN_CORRECTION.test(text)) continue
-    const evidence: EvidenceRef[] = [{ sessionId, seq: event.seq, kind: 'user', excerpt: excerptOf(text) }]
-    const key = evidence.map(item => `${item.seq}:${item.kind}`).join('|')
-    if (seen.has(key)) continue
-    seen.add(key)
-    triggers.push({
-      kind: 'human-correction',
-      evidence,
-      titleHint: excerptOf(text.split(/[。.!?\n]/, 1)[0] ?? text),
-      contentHint: text,
-    })
-  }
-
-  const results = range.flatMap(event => {
-    const info = toolResultInfo(event)
-    return info ? [{ event, ...info, name: toolCallName(events, info.callId) }] : []
-  })
-  const pendingFailure = new Map<string, { seq: number; text: string; name: string }>()
-  for (const row of results) {
-    const name = row.name ?? row.callId
-    if (row.isError) {
-      if (!pendingFailure.has(name)) pendingFailure.set(name, { seq: row.event.seq, text: row.text, name })
+  const ordered = [...events].sort((a, b) => a.seq - b.seq)
+  const calls = new Map<string, NonNullable<ReturnType<typeof callInfo>>>()
+  const failures = new Map<string, { event: SessionEventLike; text: string; call: NonNullable<ReturnType<typeof callInfo>> }>()
+  let priorActivity = false
+  for (const event of ordered) {
+    if (isHumanUserMessage(event)) {
+      // A new human request is a task boundary; never pair unrelated requests.
+      failures.clear()
+      calls.clear()
+      const text = textFromContent(asRecord(event.data)?.content).trim()
+      if (event.seq > afterSeq && text) {
+        const kind = priorActivity && HUMAN_CORRECTION.test(text) ? 'human-correction'
+          : isExplicitMethodInstruction(text) ? 'human-instruction'
+          : priorActivity && /^(?:这个|这种|刚才的)(?:方法|做法|流程).*(?:有效|很好|成功)|^this (?:approach|method|workflow) (?:worked|was effective)/i.test(text) ? 'human-feedback' : undefined
+        if (kind && !seen.has(`user:${event.seq}`)) {
+          seen.add(`user:${event.seq}`)
+          triggers.push({ kind, evidence: [{ sessionId, seq: event.seq, kind: 'user', excerpt: excerptOf(text) }],
+            titleHint: excerptOf(text.split(/[。.!?\n]/, 1)[0] ?? text), contentHint: text })
+        }
+      }
       continue
     }
-    const failure = pendingFailure.get(name)
-    if (!failure) continue
-    pendingFailure.delete(name)
-    const evidence: EvidenceRef[] = [
-      { sessionId, seq: failure.seq, kind: 'tool', excerpt: excerptOf(failure.text || `${name} failed`) },
-      { sessionId, seq: row.event.seq, kind: 'tool', excerpt: excerptOf(row.text || `${name} succeeded`) },
-    ]
-    const key = evidence.map(item => `${item.seq}:${item.kind}`).join('|')
+    if (event.type === 'assistant/message' || event.type === 'tool/call' || event.type === 'tool/result') priorActivity = true
+    const call = callInfo(event)
+    if (call) { calls.set(call.callId, call); continue }
+    const result = toolResultInfo(event)
+    if (!result) continue
+    const called = calls.get(result.callId)
+    if (!called) continue
+    calls.delete(result.callId)
+    if (result.isError) { failures.set(called.target, { event, text: result.text, call: called }); continue }
+    const failure = failures.get(called.target)
+    failures.delete(called.target)
+    if (!failure || event.seq <= afterSeq || called.arguments === failure.call.arguments) continue
+    const key = `${failure.event.seq}:${event.seq}`
     if (seen.has(key)) continue
     seen.add(key)
+    const evidence: EvidenceRef[] = [
+      { sessionId, seq: failure.event.seq, kind: 'tool', excerpt: excerptOf(failure.text) },
+      { sessionId, seq: event.seq, kind: 'tool', excerpt: excerptOf(result.text) },
+    ]
     triggers.push({
-      kind: 'verified-tool-fix',
-      evidence,
-      toolName: name,
-      titleHint: `工具 ${name} 失败后已核实修复`,
-      contentHint: `工具 ${name} 曾失败，随后同名调用返回非错误结果。失败摘录：${evidence[0]?.excerpt ?? ''}。成功摘录：${evidence[1]?.excerpt ?? ''}。`,
+      kind: 'tool-recovery', evidence, toolName: called.name,
+      titleHint: `工具 ${called.name} 的同目标恢复观察`,
+      contentHint: `Same request and target, changed arguments. This is an observation, NOT verified task success. Before: ${failure.call.arguments.slice(0, 1500)}; after: ${called.arguments.slice(0, 1500)}. Results: ${JSON.stringify(evidence)}`,
     })
   }
   return triggers

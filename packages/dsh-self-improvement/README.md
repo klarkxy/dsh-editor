@@ -1,12 +1,12 @@
 # @klarkxy/dsh-self-improvement
 
-Default-enabled self-improvement: extracted lessons take effect automatically in shared Memory, with an audit view and optional Markdown skill export.
+Procedural learning for DeepSeek Harness: what to do, under which conditions, what to avoid and how to check the result. Dream owns vocabulary, author context and recent activity.
 
-[简体中文](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-self-improvement/docs/README.zh-CN.md)
+[简体中文](docs/README.zh-CN.md)
 
-## Install
+## Standalone DSH Web
 
-Requires Node.js ≥22 and DSH `0.1.7-rc.2`. The bundle entry starts enabled and remains independently switchable. It does **not** load Memory or turn on Dream; standalone hosts must install and load `@klarkxy/dsh-memory` separately.
+Requires Node.js ≥22 and DSH `0.1.7-rc.2`. No Editor runtime packages are needed. Install the public shared service and explicitly enable Memory storage:
 
 ```sh
 dsh plugin --profile web add @klarkxy/dsh-ai-services
@@ -14,22 +14,18 @@ dsh plugin --profile web add @klarkxy/dsh-memory
 dsh plugin --profile web add @klarkxy/dsh-self-improvement
 ```
 
-Open **Settings → 记忆** and expand **自我改进** to audit lessons and skill drafts. The plugin does not render status, empty states, or management controls in chat, and it has no standalone settings page.
+This plugin never enables Memory or Dream on the user's behalf. Dream may remain off. Review methods and Skill drafts under Settings → Memory → Self Improve; there is no extra chat panel or separate settings page. The bundle starts enabled and can be switched off independently.
 
-## Behaviour
+## Evidence and activation
 
-Candidates come only from explicit human corrections or a tool failure that is later verified by a successful result for the same tool. Silence and model self-report are not treated as success. Extracted lessons are stored as Memory `kind: lesson` with `source: self-improvement` and take effect immediately — they join prompts as soon as they are relevant, and can be revoked any time from the audit view. Host pre-step injection uses `createUserMessage`, keeps decision flags such as `startsRequestSeries`, and only inserts active unexpired lessons relevant to the current user request (at most 5, ~800 tokens including the wrapper). Disabling this plugin or Memory mid-await stops lesson injection even if Memory stays on.
+New `lesson` records carry a structured procedure: origin (`instruction` or `observation`), goal, applicability conditions, recommended steps, actions to avoid and verification checks. Exceptions and original evidence are retained. Descriptive corrections are skipped; mixed messages contribute only their method clause. One-off requests, fictional dialogue and quoted documents do not become durable methods.
 
-Accepted lessons can preview a skill Markdown draft with `name`/`description` frontmatter. Export is a browser download of that proposal; it does not install a skill or write `AGENTS.md`, scripts, or other plugins. The in-app export record is written only after the download is invoked. Revoking an export updates the in-app record only — downloaded files are not recalled.
+Explicit human method requirements may become active immediately within their scope. Positive method feedback and correlated tool recoveries remain candidates until accepted. Acceptance means permission to use the method, not independent proof of its quality. Current instructions, task acceptance criteria and permissions always prevail.
 
-From the repository root:
+A tool recovery requires the same human request, an explicit matching target and changed arguments. The same tool succeeding elsewhere, an unknown target or an unchanged transient retry is insufficient. Even a correlated recovery is an observation, not verified task success. Silence and assistant self-reports are not evidence. Without AI, the fallback only preserves conservative explicit method instructions, never raw error narratives or word definitions.
 
-```sh
-pnpm --filter @klarkxy/dsh-self-improvement typecheck
-pnpm exec vitest run packages/dsh-self-improvement/src
-pnpm --filter @klarkxy/dsh-self-improvement build
-```
+Host pre-step injection uses native `createUserMessage`, preserves decision flags and inserts at most five active, unexpired, relevant lessons, about 800 tokens including the wrapper. Chinese retrieval is supported. On a continuation request, recent in-scope activity is read before selecting methods, independently of hook registration order. Disabling the plugin or losing Memory during an await stops injection.
 
-[Publishing](https://github.com/klarkxy/dsh-editor/blob/main/packages/PUBLISHING.md) · [License](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-self-improvement/LICENSE)
+Active methods can form a Skill Markdown draft with name/description frontmatter. Preview, acceptance, browser download and revocation remain explicit. No skill is installed automatically; no AGENTS.md or executable script is changed. Download revocation only changes the application record, not files already downloaded. Legacy lessons remain readable without inventing new metadata or validation history.
 
-The Editor preinstalls this feature enabled. In the Editor, use Settings → Plugins to switch it without restarting. Standalone DSH must load `@klarkxy/dsh-ai-services` before this package; installation or removal may require a restart when the host asks for one. It also requires Memory to be installed and enabled.
+[Design and limits](../../docs/portable-learning.md) · [Publishing](../PUBLISHING.md) · [License](LICENSE)

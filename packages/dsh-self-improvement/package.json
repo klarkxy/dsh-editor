@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-self-improvement",
   "version": "0.1.3",
-  "description": "Extract verified lessons into Memory and export Markdown skill drafts for DeepSeek Harness.",
+  "description": "Evidence-backed procedural learning for DSH Web: conditional methods, outcome observations and optional skill export.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -54,7 +54,7 @@
       {
         "id": "self-improvement",
         "title": "自我改进",
-        "description": "从明确纠正和已核实的工具失败中自动摘录教训并即时生效；需单独启用记忆",
+        "description": "从明确要求与结果反馈提炼行动方法；可审计、可撤回",
         "feature": "self-improvement",
         "service": "selfImprovement"
       }

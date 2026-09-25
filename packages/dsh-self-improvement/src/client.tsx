@@ -97,11 +97,12 @@ function LessonList(props: {
   locale: 'zh' | 'en'
   busy: boolean
   projectId?: string
+  onAccept(record: MemoryRecord): void
   onPromote(record: MemoryRecord): void
   onReject(record: MemoryRecord): void
   onRevoke(record: MemoryRecord): void
 }) {
-  const { lessons, locale, busy, projectId, onPromote, onReject, onRevoke } = props
+  const { lessons, locale, busy, projectId, onAccept, onPromote, onReject, onRevoke } = props
   if (lessons.length === 0) {
     return <p className="si-empty">{locale === 'en' ? 'No lessons yet.' : '还没有教训。'}</p>
   }
@@ -119,6 +120,9 @@ function LessonList(props: {
         <p>{record.content}</p>
         <LessonEvidence record={record} locale={locale} />
         <div className="si-actions">
+          {candidate && !foreignProject ? <button type="button" disabled={busy} onClick={() => onAccept(record)}>
+            {locale === 'en' ? 'Accept in this scope' : '按当前范围采纳'}
+          </button> : null}
           {active && record.scope.kind === 'project' && !foreignProject ? <button type="button" disabled={busy} onClick={() => onPromote(record)}>
             {locale === 'en' ? 'Promote to global' : '提升为全局'}
           </button> : null}
@@ -295,7 +299,7 @@ export function ReviewPanel({ client, sessionId, locale }: {
       buttons[next]?.focus()
       buttons[next]?.click()
     }}>
-      {([['lessons', locale === 'en' ? 'Lessons' : '教训'], ['skills', locale === 'en' ? 'Skills' : '技能草稿']] as const).map(([key, label]) => (
+      {([['lessons', locale === 'en' ? 'Methods' : '行动经验'], ['skills', locale === 'en' ? 'Skills' : '技能草稿']] as const).map(([key, label]) => (
         <button key={key} type="button" role="tab" id={`${tabsId}-${key}-tab`}
           aria-controls={`${tabsId}-${key}-panel`} aria-selected={tab === key}
           tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)}>{label}</button>
@@ -304,8 +308,8 @@ export function ReviewPanel({ client, sessionId, locale }: {
     <div role="tabpanel" id={`${tabsId}-lessons-panel`}
       aria-labelledby={`${tabsId}-lessons-tab`} hidden={tab !== 'lessons'} tabIndex={0}>
       <p className="si-meta">{locale === 'en'
-        ? 'Extracted lessons take effect automatically and join prompts; revoke any time to retire one.'
-        : '摘录的教训自动生效并进入提示，可随时撤回。'}</p>
+        ? 'Explicit method requirements can take effect directly. Outcome observations remain candidates until accepted. Vocabulary and recent activity belong to Dream.'
+        : '明确的方法要求可直接生效；结果观察保留为候选，采纳后才参与行动。用语与近期状态由 Dream 管理。'}</p>
       {sessionId ? <button type="button" disabled={busy || !data.memoryAvailable} onClick={() => void action(async ctx => {
         if (!reviewRequestStillCurrent({
           token: ctx.token, gate: gate.current, signal: ctx.signal, sessionId: ctx.sessionId, viewSessionId: sessionRef.current,
@@ -323,6 +327,13 @@ export function ReviewPanel({ client, sessionId, locale }: {
         locale={locale}
         busy={busy || !data.memoryAvailable}
         projectId={data.projectId}
+        onAccept={record => void action(async ctx => {
+          await call('accept', { id: record.id, expectedRevision: record.revision, scope: 'project', sessionId: ctx.sessionId })
+          const next = await loadReviewSnapshot({
+            rpc, sessionId: ctx.sessionId, token: ctx.token, gate: gate.current, signal: ctx.signal, viewSessionId: () => sessionRef.current,
+          })
+          if (next) setSnapshot(next)
+        })}
         onPromote={record => void action(async ctx => {
           await call('accept', { id: record.id, expectedRevision: record.revision, scope: 'global', sessionId: ctx.sessionId })
           const next = await loadReviewSnapshot({

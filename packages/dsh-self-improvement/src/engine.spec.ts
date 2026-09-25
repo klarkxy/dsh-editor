@@ -352,11 +352,20 @@ describe('self-improvement engine', () => {
     expect(exported).toMatchObject({ ok: false, error: { code: 'STALE' } })
   })
 
-  it('extracts a verified tool fix without treating an unfixed failure as success', async () => {
+  it('keeps correlated tool recovery as a candidate until independently accepted', async () => {
     const memory = new MemoryFake()
-    const { impl, sessions } = engine(memory)
+    const ai: Pick<AiServices, 'activate'> = { activate: () => ({
+      plugin: 'test', active: true, signal: new AbortController().signal, dispose() {}, registerPurpose: () => () => {},
+      run: async request => ({
+        text: JSON.stringify({ kind: 'procedure', title: '相对路径写入', procedure: {
+          origin: 'observation', goal: '写入目标文件', when: ['写入失败'], steps: ['更正编码后重试'], avoid: [], verify: ['读取目标文件检查实际内容'],
+        }, evidenceQuotes: ['EACCES', 'wrote'], exceptions: [] }),
+        receipt: { id: 'r', plugin: 'test', purpose: request.purpose, sourceVersion: request.sourceVersion, status: 'success', attempts: 1, cost: null, startedAt: 1, finishedAt: 2 },
+      }),
+    }) }
+    const { impl, sessions } = engine(memory, ai)
     sessions.set('s1', liveSession('s1', '/novel', [
-      toolCall(1, 'write', 'c1'),
+      toolCall(1, 'write', 'c1', { path: 'chapter.md', encoding: 'bad' }),
       toolResult(2, 'c1', true, 'EACCES'),
     ]))
     const none = await impl.call('extract', { sessionId: 's1' }, new AbortController().signal)
@@ -364,15 +373,21 @@ describe('self-improvement engine', () => {
     if (!none.ok) return
     expect((none.value as { created: unknown[] }).created).toHaveLength(0)
     sessions.set('s1', liveSession('s1', '/novel', [
-      toolCall(1, 'write', 'c1'),
+      toolCall(1, 'write', 'c1', { path: 'chapter.md', encoding: 'bad' }),
       toolResult(2, 'c1', true, 'EACCES'),
-      toolCall(3, 'write', 'c2'),
+      toolCall(3, 'write', 'c2', { path: 'chapter.md', encoding: 'utf8' }),
       toolResult(4, 'c2', false, 'wrote'),
     ]))
     const fixed = await impl.call('extract', { sessionId: 's1' }, new AbortController().signal)
     expect(fixed.ok).toBe(true)
     if (!fixed.ok) return
     expect((fixed.value as { created: unknown[] }).created).toHaveLength(1)
+    const [record] = [...memory.records.values()]
+    expect(record).toMatchObject({ status: 'candidate', procedure: { origin: 'observation' } })
+    expect(await impl.recordsForInjection('/novel', '相对路径写入')).toEqual([])
+    const accepted = await impl.setLessonStatus(record!.id, record!.revision, 'active', '/novel')
+    expect(accepted.ok).toBe(true)
+    expect(await impl.recordsForInjection('/novel', '相对路径写入')).toHaveLength(1)
   })
 
   it('extracts a native-host correction through MemoryRuntime', async () => {
@@ -517,7 +532,7 @@ describe('self-improvement engine', () => {
     expect(still.ok).toBe(true)
     if (still.ok) expect(still.value.extracting).toBe(true)
     finish?.({
-      text: '{"title":"保留剧情","content":"调整语言时保留已有剧情。"}',
+      text: JSON.stringify({ kind: 'procedure', title: '保留剧情', procedure: { origin: 'instruction', goal: '调整语言', when: ['语言润色'], steps: ['保留已有剧情'], avoid: [], verify: ['核对修改前后的剧情'] }, evidenceQuotes: [correction], exceptions: [] }),
       receipt: {
         id: 'r', plugin: 'p', purpose: 'self-improvement.extract', sourceVersion: 'v',
         status: 'success', attempts: 1, cost: null, startedAt: 1, finishedAt: 2,

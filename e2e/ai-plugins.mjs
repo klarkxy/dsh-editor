@@ -38,7 +38,7 @@ const server = createServer(async (req, res) => {
   let answer = '已收到。测试回复已完成。'
   if (system.includes('Name the current task')) { kind = 'title'; answer = JSON.stringify({ type: 'discuss', summary: '插件验收' }) }
   else if (system.includes('确认写作任务需求')) { kind = 'mood'; answer = JSON.stringify({ goal: '优化章节表达', deliverables: ['修订建议'], inScope: ['表达'], outOfScope: ['剧情'], constraints: ['保留人物与事件'], acceptance: ['表达更清晰'], assumptions: [], questions: ['仅调整表达，还是也允许修改剧情？'] }) }
-  else if (system.includes('Consolidate the supplied memory')) {
+  else if (system.includes('Consolidate descriptive context')) {
     kind = 'dream'
     const data = JSON.parse(input)
     const rows = (data.records ?? []).filter(record => record.status === 'active')
@@ -47,7 +47,13 @@ const server = createServer(async (req, res) => {
       sourceIds: rows.map(record => record.id), exceptions: [],
     }] : [] })
   }
-  else if (system.includes('Extract at most one durable lesson')) { kind = 'lesson'; answer = JSON.stringify({ title: '保留剧情', content: '调整语言时保留已有剧情。', tags: ['writing'], exceptions: [] }) }
+  else if (system.includes('Extract descriptive context')) { kind = 'observe'; answer = '{"items":[]}' }
+  else if (system.includes('Extract at most one reusable PROCEDURAL')) {
+    kind = 'lesson'
+    const data = JSON.parse(input)
+    const quote = (data.evidence ?? []).find(ref => ref.kind === 'user')?.excerpt
+    answer = JSON.stringify(quote ? { kind: 'procedure', title: '保留剧情', procedure: { origin: 'instruction', goal: '保留剧情', when: ['调整语言时'], steps: ['保留已有剧情'], avoid: ['改写人物事件'], verify: ['核对修改前后的剧情是否一致'] }, evidenceQuotes: [quote], exceptions: [] } : { skip: true })
+  }
   else if (system.includes('根据给定事实写一段简短回顾')) { kind = 'recap'; answer = '已确认当前任务范围；下一步检查结果。' }
   else if (system.includes('在给定约束和证据上补充检查点条目')) { kind = 'checkpoint'; answer = '{"items":[]}' }
   report.calls.push({ kind, model: request.model, input: input.slice(-4000), hasMood: input.includes('@klarkxy/dsh-mood') || input.includes('优化章节表达'), hasMemory: input.includes('调整语言时保留已有剧情'), hasLesson: input.includes('保留剧情') })
@@ -278,6 +284,7 @@ try {
     await memory.locator('summary').click()
     await memory.getByLabel('标题', { exact: true }).fill('表达调整范围')
     await memory.getByLabel('内容', { exact: true }).fill('调整语言时保留已有剧情。')
+    await memory.getByLabel('依据（可选）', { exact: true }).fill('作者手动确认：调整语言时保留已有剧情和人物动机。')
     await memory.getByRole('button', { name: '添加', exact: true }).click()
     const record = memory.locator('.dsh-memory-list > li').filter({ hasText: '表达调整范围' })
     await record.waitFor()

@@ -1,7 +1,7 @@
 {
   "name": "@klarkxy/dsh-memory",
   "version": "0.1.3",
-  "description": "Long-term memory and idle consolidation for DeepSeek Harness, with scoped preferences, facts, decisions, and lessons.",
+  "description": "Descriptive context and Dream consolidation for DSH Web: scoped vocabulary, preferences and recent activity.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
@@ -54,7 +54,7 @@
       {
         "id": "memory",
         "title": "记忆",
-        "description": "长期偏好、项目事实与决策；梦境整理可选",
+        "description": "作者用语、偏好与近期状态；Dream 语境观察与整理",
         "feature": "memory",
         "service": "aiMemory"
       }

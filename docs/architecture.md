@@ -21,3 +21,5 @@ commit、push、tag、release 与签名须获授权。桌面发布先建 draft R
 插件的发布流程见 [发布维护](../packages/PUBLISHING.md)。命令以根 [package.json](../package.json) 为准。
 
 跨包关系见[架构图](diagrams/index.html)。接口与包配置从[插件目录](../packages/README.md)进入源码。
+
+语境知识与行动经验共享公开存储，但写入类型和生效规则分离，见 [Dream / Self Improve 边界](portable-learning.md)。

@@ -15,7 +15,7 @@ function draft(patch: Partial<NewMemoryRecord> = {}): NewMemoryRecord {
     title: '语气',
     content: '克制',
     tags: [],
-    evidence: [],
+    evidence: [{ sessionId: 's1', seq: 1, kind: 'user', excerpt: '语气要克制' }],
     exceptions: [],
     source: 'user',
     ...patch,
