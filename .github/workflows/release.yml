@@ -50,8 +50,7 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Check types and tests
-        # Windows integration tests spawn PowerShell; the production move deadline
-        # is 15s, so let assertions observe that result instead of timing out at 5s.
+        # Native Windows helper fixtures need process startup and bounded handoff.
         # Windows + vitest threads can trip libuv fs-event.c assertions; forks + one
         # worker keep the suite isolated from that watcher crash.
         run: pnpm typecheck && pnpm test --pool=forks --maxWorkers=${{ runner.os == 'Windows' && '1' || '2' }} --testTimeout=${{ runner.os == 'Windows' && '20000' || '5000' }}
@@ -102,6 +101,11 @@ jobs:
         shell: bash
         run: |
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --draft --title "DSH Editor ${RELEASE_TAG#v}"
+          # Never expose a partially replaced live release to an update check.
+          if [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" != "true" ]; then
+            echo '::error::Refusing to overwrite a published release. Create a new version or explicitly prepare a draft first.'
+            exit 1
+          fi
           cd artifacts
           for file in DSH\ Editor-*; do
             [ -f "$file" ] || continue

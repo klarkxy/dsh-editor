@@ -1,0 +1,38 @@
+name: Update regression
+
+on:
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'packages/dsh-editor-shell/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/update-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-update:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build and check types
+        run: pnpm build && pnpm typecheck
+      - name: Exercise downloads, readiness, real Windows replacement and rollback
+        run: pnpm exec vitest run apps/desktop/test --pool=forks --maxWorkers=1 --testTimeout=30000

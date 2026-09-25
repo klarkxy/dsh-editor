@@ -10,7 +10,7 @@ import { deployOwnedProfile, resolveDshHome } from './profile.js'
 import { hasPackagedRuntimeCache, materializePackagedRuntime, readProfileDeployIdentity, runtimeFromResources, shouldMaterializePackagedRuntime } from './runtime-cache.js'
 import { DshSupervisor } from './supervisor.js'
 import { checkLatest } from './update-checker.js'
-import { cancelUpdateDownload, downloadUpdate, installUpdate } from './update-download.js'
+import { cancelUpdateDownload, downloadUpdate, getDownloadedUpdate, installUpdate, isUpdateBusy, openUpdateFolder, revealDownloadedUpdate } from './update-download.js'
 import { presentUpdateCheck, UpdateOfferStore, type PublicUpdateCheckResult } from './update-session.js'
 import { claimPrimaryInstance, createDesktopLifecycle, exportFileFilter, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
 import { DESKTOP_APP_ID, DESKTOP_PRODUCT_NAME, readDesktopVersion } from './app-identity.js'
@@ -131,20 +131,35 @@ const updateStore = new UpdateOfferStore()
 function presentCheckedUpdate(result: Awaited<ReturnType<typeof checkLatest>>): Promise<PublicUpdateCheckResult> {
   return presentUpdateCheck(result, {
     platform: process.platform,
+    arch: process.arch,
     portable: Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
     store: updateStore,
     fetchImpl: (input, init) => globalThis.fetch(input, init),
   })
 }
 
-/* 启动时后台检查更新:与窗口创建并行,慢网络不阻塞启动。渲染端挂载后通过
- * dsh-window:startup-update 拉取缓存的 Promise——拉取模型没有推送竞态,
- * 晚挂载的窗口也能拿到同一份结果。 */
+// Startup and manual checks share one in-flight request. A late startup result
+// must not replace an offer while another window is downloading/installing it.
 let startupUpdate: Promise<PublicUpdateCheckResult> | undefined
-if (isPrimary) {
-  void app.whenReady().then(() => {
-    startupUpdate ??= checkLatest(desktopVersion).then(presentCheckedUpdate)
+let updateCheckInFlight: Promise<PublicUpdateCheckResult> | undefined
+function runUpdateCheck(): Promise<PublicUpdateCheckResult> {
+  if (updateCheckInFlight) return updateCheckInFlight
+  if (isUpdateBusy()) return startupUpdate ?? Promise.resolve({
+    status: 'error', currentVersion: desktopVersion, error: '已有更新操作在进行中',
   })
+  const pending = checkLatest(desktopVersion).then(presentCheckedUpdate).catch((error: unknown): PublicUpdateCheckResult => ({
+    status: 'error', currentVersion: desktopVersion, error: error instanceof Error ? error.message : String(error),
+  }))
+  startupUpdate = pending
+  updateCheckInFlight = pending
+  void pending.then(() => { if (updateCheckInFlight === pending) updateCheckInFlight = undefined })
+  return pending
+}
+function requireCompletedUpdateCheck(): void {
+  if (updateCheckInFlight) throw new Error('正在检查更新,请稍后重试')
+}
+if (isPrimary) {
+  void app.whenReady().then(() => { startupUpdate ??= runUpdateCheck() })
 }
 
 // Frameless window controls: the renderer's own title bar drives these through
@@ -215,16 +230,17 @@ ipcMain.handle('dsh-window:get-app-info', (event) => {
 })
 ipcMain.handle('dsh-window:check-update', (event) => {
   assertTrustedIpcSender(senderTrust(event), 'update')
-  return checkLatest(desktopVersion).then(presentCheckedUpdate)
+  return runUpdateCheck()
 })
 // 启动检查走同一轮询;渲染端拉缓存结果,仅 update-available 时提示,其余静默。
 ipcMain.handle('dsh-window:startup-update', (event) => {
   assertTrustedIpcSender(senderTrust(event), 'update')
-  return startupUpdate ?? checkLatest(desktopVersion).then(presentCheckedUpdate)
+  return startupUpdate ?? runUpdateCheck()
 })
 // 一键下载/安装:主进程按已验证的 updateId 下载并安装,渲染端不能指定 URL 或路径。
 ipcMain.handle('dsh-window:download-update', (event, payload) => {
   assertTrustedIpcSender(senderTrust(event), 'update')
+  requireCompletedUpdateCheck()
   return downloadUpdate(updateIdFrom(payload), event.sender, updateStore)
 })
 ipcMain.handle('dsh-window:cancel-update-download', (event) => {
@@ -233,7 +249,21 @@ ipcMain.handle('dsh-window:cancel-update-download', (event) => {
 })
 ipcMain.handle('dsh-window:install-update', (event, payload) => {
   assertTrustedIpcSender(senderTrust(event), 'update')
+  requireCompletedUpdateCheck()
   return installUpdate(updateIdFrom(payload), updateStore)
+})
+ipcMain.handle('dsh-window:get-downloaded-update', (event, payload) => {
+  assertTrustedIpcSender(senderTrust(event), 'update')
+  requireCompletedUpdateCheck()
+  return getDownloadedUpdate(updateIdFrom(payload), updateStore)
+})
+ipcMain.handle('dsh-window:reveal-downloaded-update', (event, payload) => {
+  assertTrustedIpcSender(senderTrust(event), 'update')
+  return revealDownloadedUpdate(updateIdFrom(payload), updateStore)
+})
+ipcMain.handle('dsh-window:open-update-folder', (event) => {
+  assertTrustedIpcSender(senderTrust(event), 'update')
+  return openUpdateFolder()
 })
 
 // Open marketplace and help links in the OS browser; in-app popups stay blocked.
