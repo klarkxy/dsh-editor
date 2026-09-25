@@ -10,12 +10,25 @@ import { createFusionWritingHost } from './fusion-host.ts'
 
 // Real filesystem-backed provider with deterministic version checks and the same
 // provider contract as production. No live model or second draft store is involved.
+
+/** realpath that also canonicalizes the nearest existing ancestor of a missing path. */
+async function canonicalizeExisting(absolute: string): Promise<string> {
+  try {
+    return await fs.realpath(absolute)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    const parent = path.dirname(absolute)
+    if (parent === absolute) return absolute
+    return path.join(await canonicalizeExisting(parent), path.basename(absolute))
+  }
+}
+
 class TestFs implements FileSystemLike {
   writes: Array<{ text: string; intent?: FsWriteIntentLike; policy?: SandboxExecutionPolicyLike }> = []
   constructor(readonly root: string) {}
   async resolve(value: string, opts?: { cwd?: string }): Promise<FsTargetLike> {
     const absolute = path.resolve(opts?.cwd ?? this.root, value)
-    const canonical = await fs.realpath(absolute).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return absolute; throw error })
+    const canonical = await canonicalizeExisting(absolute)
     return { targetKey: canonical, displayPath: canonical }
   }
   contains(parent: FsTargetLike, child: FsTargetLike) {
@@ -67,7 +80,7 @@ let drafts: Array<{ window: string; path: string; dirty: boolean }>
 let context: Context
 let draftService: { hasUnsaved: (workspace: string, relative: string) => boolean } | undefined
 beforeEach(async () => {
-  root = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-fusion-host-'))
+  root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-fusion-host-')))
   provider = new TestFs(root)
   actor = { sessionId: 'lead', project: root }
   controller = new AbortController()
@@ -84,7 +97,7 @@ beforeEach(async () => {
   await fs.writeFile(path.join(root, 'basis.md'), '依据')
 })
 afterEach(async () => {
-  if (path.dirname(root) !== os.tmpdir() || !path.basename(root).startsWith('dsh-fusion-host-')) throw new Error('unsafe fixture cleanup')
+  if (path.dirname(root) !== await fs.realpath(os.tmpdir()) || !path.basename(root).startsWith('dsh-fusion-host-')) throw new Error('unsafe fixture cleanup')
   await fs.rm(root, { recursive: true, force: true })
 })
 const candidate = (text = '新的原文'): FusionCandidate => ({ id: 'candidate', revision: 1, taskRevision: 1, hash: 'backend-verified', text, report: '', createdAt: 1 })
