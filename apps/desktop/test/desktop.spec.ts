@@ -14,7 +14,7 @@ import { sanitizeHostLockedPluginOverrides } from '../src/user-plugins.js'
 import { installNavigationPolicy, isAllowedExternalUrl } from '../src/navigation.js'
 import { DshSupervisor } from '../src/supervisor.js'
 import { hasPackagedRuntimeCache, materializePackagedRuntime, readProfileDeployIdentity, runtimeFromResources, shouldMaterializePackagedRuntime, treeDigest } from '../src/runtime-cache.js'
-import { claimPrimaryInstance, createDesktopLifecycle, type DesktopLifecycleDeps, type EditorInput, type EditorWindow } from '../src/window-lifecycle.js'
+import { claimPrimaryInstance, createDesktopLifecycle, exportFileFilter, type DesktopLifecycleDeps, type EditorInput, type EditorWindow } from '../src/window-lifecycle.js'
 import type { ChildLike } from '../src/contracts.js'
 
 class FakeChild extends EventEmitter implements ChildLike {
@@ -1296,15 +1296,15 @@ describe('controlled multi-window', () => {
     expect(harness.windows[0]!.loaded).toEqual(['loading:', 'error:backend missing', 'loading:', 'http://127.0.0.1:43111/'])
   })
 
-  it('registers the download handler once and routes the save dialog to the initiating window', async () => {
+  it.each(['md', 'txt', 'docx', 'epub', 'DOCX', 'EPUB'])('routes %s exports to the initiating window and blocks executable downloads', async (extension) => {
     const harness = multiWindowHarness()
     const lifecycle = createDesktopLifecycle(harness.deps)
     await Promise.all([lifecycle.createWindow(), lifecycle.createWindow()])
     expect(harness.session.downloadListeners).toHaveLength(1)
-    const allowed = { path: undefined as string | undefined, getFilename: () => 'chapter.md', setSavePath(path: string) { this.path = path } }
+    const allowed = { path: undefined as string | undefined, getFilename: () => `chapter.${extension}`, setSavePath(path: string) { this.path = path } }
     harness.session.downloadListeners[0]!({ preventDefault: vi.fn() }, allowed, harness.windows[1]!.webContents)
-    expect(harness.showSaveDialog).toHaveBeenCalledWith(harness.windows[1], 'chapter.md')
-    expect(allowed.path).toBe('saved:chapter.md:1')
+    expect(harness.showSaveDialog).toHaveBeenCalledWith(harness.windows[1], `chapter.${extension}`)
+    expect(allowed.path).toBe(`saved:chapter.${extension}:1`)
     const blocked = { preventDefault: vi.fn() }
     harness.session.downloadListeners[0]!(blocked, { getFilename: () => 'payload.exe', setSavePath: vi.fn() }, harness.windows[0]!.webContents)
     expect(blocked.preventDefault).toHaveBeenCalledOnce()
@@ -1398,5 +1398,14 @@ describe('Tavily integration upgrade', () => {
     expect(await readFile(join(home, '.credentials.yaml'), 'utf8')).toBe('fixture credentials remain byte-for-byte')
     await deployProfile(home, template)
     expect(await readFile(join(home, 'dsh-plugins.json.before-tavily-merge'), 'utf8')).toBe(oldState)
+  })
+})
+
+describe('manuscript export save filters', () => {
+  it.each([['md', 'Markdown'], ['txt', '纯文本'], ['docx', 'Word 文档'], ['epub', 'EPUB 电子书']]) ('preserves %s format in the native save dialog', (extension, name) => {
+    expect(exportFileFilter(`作品.${extension.toUpperCase()}`)).toEqual({ name, extensions: [extension] })
+  })
+  it.each(['payload.exe', 'document.docx.exe', 'untitled', 'book.epub.bak']) ('does not offer a save filter for %s', (filename) => {
+    expect(exportFileFilter(filename)).toBeUndefined()
   })
 })

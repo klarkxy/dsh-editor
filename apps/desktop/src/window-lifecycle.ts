@@ -89,7 +89,7 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
     downloadInstalled = true
     window.webContents.session.on('will-download', (event, item, contents) => {
       const suggested = item.getFilename()
-      if (!/\.(?:md|txt)$/i.test(suggested)) {
+      if (!exportFileFilter(suggested)) {
         event.preventDefault()
         return
       }
@@ -254,4 +254,12 @@ export function claimPrimaryInstance(app: PrimaryApp, lifecycle: DesktopLifecycl
   })
   app.on('window-all-closed', () => app.quit())
   return true
+}
+
+/** Keep the desktop download gate and native save dialog aligned with manuscript exports. */
+export function exportFileFilter(filename: string): { name: string; extensions: string[] } | undefined {
+  const extension = /\.(md|txt|docx|epub)$/i.exec(filename)?.[1]?.toLowerCase()
+  if (!extension) return undefined
+  const names: Record<string, string> = { md: 'Markdown', txt: '纯文本', docx: 'Word 文档', epub: 'EPUB 电子书' }
+  return { name: names[extension]!, extensions: [extension] }
 }

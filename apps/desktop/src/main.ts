@@ -12,7 +12,7 @@ import { DshSupervisor } from './supervisor.js'
 import { checkLatest } from './update-checker.js'
 import { cancelUpdateDownload, downloadUpdate, installUpdate } from './update-download.js'
 import { presentUpdateCheck, UpdateOfferStore, type PublicUpdateCheckResult } from './update-session.js'
-import { claimPrimaryInstance, createDesktopLifecycle, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
+import { claimPrimaryInstance, createDesktopLifecycle, exportFileFilter, type EditorWindow, type PrimaryApp } from './window-lifecycle.js'
 import { DESKTOP_APP_ID, DESKTOP_PRODUCT_NAME, readDesktopVersion } from './app-identity.js'
 import { loadingPageDataUrl } from './loading-page.js'
 
@@ -100,10 +100,12 @@ const lifecycle = createDesktopLifecycle({
     return ctor.fromWebContents(contents) ?? undefined
   },
   showSaveDialog: (window, suggested) => {
+    const filter = exportFileFilter(suggested)
+    if (!filter) return undefined
     const options = {
       title: '导出作品',
       defaultPath: suggested,
-      filters: [{ name: suggested.toLowerCase().endsWith('.md') ? 'Markdown' : '纯文本', extensions: [suggested.toLowerCase().endsWith('.md') ? 'md' : 'txt'] }],
+      filters: [filter],
     }
     return window
       ? dialog.showSaveDialogSync(window as unknown as BrowserWindow, options)
