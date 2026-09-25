@@ -215,6 +215,17 @@ describe('desktop clipboard IPC trust', () => {
     expect(main).toContain("'dsh-window:clipboard-write-text'")
   })
 
+  it('wires renderer activity reporting through preload IPC', async () => {
+    const preload = await readFile(join(import.meta.dirname, '..', 'preload.cjs'), 'utf8')
+    const main = await readFile(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8')
+    expect(preload).toContain("send('dsh-window:report-activity', activity)")
+    expect(preload).toContain('reportActivity: (activity) =>')
+    expect(main).toContain("'dsh-window:report-activity'")
+    expect(main).toContain('isTrustedIpcSender(trust)')
+    expect(main).toContain('busyContents.add(event.sender.id)')
+    expect(main).toContain('busyContents.delete(contentsId)')
+  })
+
   it('wires the startup error retry button through preload IPC', async () => {
     const preload = await readFile(join(import.meta.dirname, '..', 'preload.cjs'), 'utf8')
     const main = await readFile(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8')
@@ -1022,6 +1033,20 @@ describe('child supervision', () => {
     expect(child.killedWith).toBe('SIGTERM')
     expect(forceKillTree).toHaveBeenCalledWith(8123)
   })
+  it('does not wait out the force-kill timeout when the child exits mid-taskkill', async () => {
+    const child = new FakeChild()
+    child.kill = (signal?: NodeJS.Signals | number) => { child.killedWith = signal; return true }
+    const forceKillTree = vi.fn(() => new Promise<void>((resolve) => setTimeout(resolve, 60_000)))
+    const supervisor = new DshSupervisor({ spawn: () => child, forceKillTree, gracefulStopMs: 5 })
+    const ready = supervisor.start(launch)
+    child.stdout.write('dsh web: http://127.0.0.1:43111\n')
+    await ready
+    const stopped = supervisor.stop()
+    setTimeout(() => child.exit(0), 20)
+    await stopped
+    expect(child.killedWith).toBe('SIGTERM')
+    expect(forceKillTree).toHaveBeenCalledWith(8123)
+  })
   it('does not force-kill a child that exits during graceful shutdown', async () => {
     const child = new FakeChild()
     child.kill = (signal?: NodeJS.Signals | number) => { child.killedWith = signal; queueMicrotask(() => child.exit()); return true }
@@ -1142,6 +1167,7 @@ function multiWindowHarness() {
   let unexpected: ((reason: Error) => void) | undefined
   const showSaveDialog = vi.fn((window: EditorWindow | undefined, suggested: string) => `saved:${suggested}:${window ? windows.indexOf(window as FakeWindow) : -1}`)
   const deploy = vi.fn(async () => 'profile')
+  const fatal = vi.fn()
   const deps: DesktopLifecycleDeps = {
     createBrowserWindow: () => {
       const window = new FakeWindow(session)
@@ -1170,9 +1196,11 @@ function multiWindowHarness() {
     getHomePath: () => 'D:/home',
     env: { DSH_HOME: 'D:/custom-home' },
     timeoutMs: 20_000,
+    reportFatal: fatal,
+    autoRestartDelayMs: 5,
   }
   return {
-    session, windows, deps, deploy, showSaveDialog,
+    session, windows, deps, deploy, fatal, showSaveDialog,
     counts: () => ({ starts, stops, supervisors, windows: windows.length }),
     unexpected: () => unexpected,
   }
@@ -1257,24 +1285,38 @@ describe('controlled multi-window', () => {
     expect(stop).toHaveBeenCalledOnce()
   })
 
-  it('broadcasts unexpected backend exit and deduplicates concurrent retries across windows', async () => {
+  it('auto-restarts the backend once after an unexpected exit, then reports the next one as fatal', async () => {
     const harness = multiWindowHarness()
     const lifecycle = createDesktopLifecycle(harness.deps)
     await Promise.all([lifecycle.createWindow(), lifecycle.createWindow()])
+    /* 第一次意外退出:自动重启一次,全部窗口经加载页回到编辑器。 */
     harness.unexpected()?.(new Error('DSH exited unexpectedly (code 23, signal none)'))
+    await vi.waitFor(() => expect(harness.counts().starts).toBe(2))
     await vi.waitFor(() => {
-      expect(harness.windows[0]!.loaded.at(-1)).toBe('error:DSH exited unexpectedly (code 23, signal none)')
-      expect(harness.windows[1]!.loaded.at(-1)).toBe('error:DSH exited unexpectedly (code 23, signal none)')
+      expect(harness.windows[0]!.loaded.at(-1)).toBe('http://127.0.0.1:43111/')
+      expect(harness.windows[1]!.loaded.at(-1)).toBe('http://127.0.0.1:43111/')
     })
+    expect(harness.counts()).toEqual({ starts: 2, stops: 1, supervisors: 1, windows: 2 })
+    expect(harness.deploy).toHaveBeenCalledTimes(2)
+    expect(harness.fatal).not.toHaveBeenCalled()
+    /* 复位窗口内第二次意外退出:错误页 + reportFatal,不再自动重启。 */
+    harness.unexpected()?.(new Error('DSH exited unexpectedly (code 24, signal none)'))
+    await vi.waitFor(() => {
+      expect(harness.windows[0]!.loaded.at(-1)).toBe('error:DSH exited unexpectedly (code 24, signal none)')
+      expect(harness.windows[1]!.loaded.at(-1)).toBe('error:DSH exited unexpectedly (code 24, signal none)')
+    })
+    expect(harness.fatal).toHaveBeenCalledOnce()
+    expect(harness.fatal.mock.calls[0]?.[1]).toBe('supervisor')
+    expect(harness.counts().starts).toBe(2)
+    /* 手动重试链不变:并发 retry 去重。 */
     void lifecycle.retry()
     void lifecycle.retry()
     await vi.waitFor(() => {
       expect(harness.windows[0]!.loaded.at(-1)).toBe('http://127.0.0.1:43111/')
       expect(harness.windows[1]!.loaded.at(-1)).toBe('http://127.0.0.1:43111/')
     })
-    expect(harness.windows[0]!.loaded.filter((url) => url === 'loading:')).toHaveLength(2)
-    expect(harness.counts()).toEqual({ starts: 2, stops: 1, supervisors: 1, windows: 2 })
-    expect(harness.deploy).toHaveBeenCalledTimes(2)
+    expect(harness.counts()).toEqual({ starts: 3, stops: 2, supervisors: 1, windows: 2 })
+    expect(harness.deploy).toHaveBeenCalledTimes(3)
   })
 
   it('retries a failed first start from the error page', async () => {
@@ -1309,6 +1351,31 @@ describe('controlled multi-window', () => {
     harness.session.downloadListeners[0]!(blocked, { getFilename: () => 'payload.exe', setSavePath: vi.fn() }, harness.windows[0]!.webContents)
     expect(blocked.preventDefault).toHaveBeenCalledOnce()
     expect(harness.showSaveDialog).toHaveBeenCalledOnce()
+  })
+
+  it('asks before quitting while a window reports busy AI work, and aborts on cancel', async () => {
+    const harness = multiWindowHarness()
+    const confirm = vi.fn(async () => false)
+    harness.deps.confirmBusyQuit = confirm
+    const app = fakeApp(true)
+    const lifecycle = createDesktopLifecycle(harness.deps)
+    expect(claimPrimaryInstance(app, lifecycle)).toBe(true)
+    await vi.waitFor(() => expect(harness.windows).toHaveLength(1))
+    await vi.waitFor(() => expect(harness.windows[0]?.loaded.at(-1)).toBe('http://127.0.0.1:43111/'))
+    /* 取消:不 quit、不停后端;再次 quit 重新询问。 */
+    const cancelled = { preventDefault: vi.fn() }
+    app.handlers.get('before-quit')![0]!(cancelled)
+    expect(cancelled.preventDefault).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce())
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(app.quit).not.toHaveBeenCalled()
+    expect(harness.counts().stops).toBe(0)
+    confirm.mockImplementation(async () => true)
+    const confirmed = { preventDefault: vi.fn() }
+    app.handlers.get('before-quit')![0]!(confirmed)
+    await vi.waitFor(() => expect(harness.counts().stops).toBe(1))
+    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledOnce())
+    expect(confirm).toHaveBeenCalledTimes(2)
   })
 
   it('quits a secondary process without registering startup handlers or starting the backend', async () => {

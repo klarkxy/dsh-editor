@@ -128,14 +128,22 @@ export class DshSupervisor {
     if (!child || child.exitCode !== null) return
     this.stopping = true
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
+    const waitExitOrTimeout = (ms: number) => Promise.race([
+      exited.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), ms)),
+    ])
     child.kill('SIGTERM')
-    const graceful = await Promise.race([exited.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), this.gracefulStopMs))])
-    if (!graceful && child.pid) {
-      await Promise.race([
-        this.forceKillTree(child.pid),
-        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-      ])
-      await Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, 1_000))])
+    if (await waitExitOrTimeout(this.gracefulStopMs)) return
+    if (!child.pid) {
+      await waitExitOrTimeout(1_000)
+      return
     }
+    /* taskkill 可能挂住;子进程在强杀期间(或检查间隙)退出时直接收工,不再白等剩余超时。 */
+    await Promise.race([
+      this.forceKillTree(child.pid),
+      exited,
+      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+    ])
+    await waitExitOrTimeout(1_000)
   }
 }

@@ -364,6 +364,25 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     return () => { live = false }
   }, [])
   useEffect(() => () => leaveConfirm?.resolve(false), [leaveConfirm])
+  /* 桌面端退出确认:每秒读一次编辑器命令状态,busy 翻转时经预加载桥上报主进程;
+     卸载时若仍 busy 补一条 false。浏览器端没有桥,直接不跑。 */
+  useEffect(() => {
+    const report = windowBridge()?.reportActivity
+    if (!report) return
+    const read = () => Boolean(editorHandleRef.current?.getCommandState().busy)
+    let last = read()
+    report({ busy: last })
+    const timer = globalThis.setInterval(() => {
+      const busy = read()
+      if (busy === last) return
+      last = busy
+      report({ busy })
+    }, 1_000)
+    return () => {
+      globalThis.clearInterval(timer)
+      if (last) report({ busy: false })
+    }
+  }, [])
   const canLeaveAssistantDraft = async (): Promise<boolean> => {
     if (!assistantDraftDirty) return true
     return await new Promise<boolean>((resolve) => setLeaveConfirm({ resolve }))

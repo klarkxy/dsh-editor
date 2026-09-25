@@ -222,6 +222,32 @@ async function linkUserPlugin(source: string, destination: string): Promise<void
   }
 }
 
+/**
+ * 致命恢复：把全部市集插件从 dsh-plugins.json 的 installed 名单中移除（停用），
+ * 下次启动 restoreUserPlugins 不再把它们链接进 profile。插件文件保留在
+ * user-plugins/ 下，作者可从市集重新安装。改写前备份原文件。
+ * 返回停用的插件数；状态文件缺失或无可停用项时为 0。
+ */
+export async function disableMarketplacePlugins(home: string): Promise<number> {
+  const statePath = join(home, 'dsh-plugins.json')
+  let state: { schema?: unknown; installed?: unknown }
+  try {
+    state = JSON.parse(await readFile(statePath, 'utf8')) as typeof state
+  } catch {
+    return 0
+  }
+  if (state.schema !== 1 || !Array.isArray(state.installed) || state.installed.length === 0) return 0
+  const disabled = state.installed.length
+  try {
+    await copyFile(statePath, statePath + '.before-fatal-recovery', constants.COPYFILE_EXCL)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+  }
+  state.installed = []
+  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+  return disabled
+}
+
 export async function restoreUserPlugins(home: string, profilePath: string, bundledNames: readonly string[] = []): Promise<void> {
   let state: { schema?: unknown; installed?: unknown }
   try {
