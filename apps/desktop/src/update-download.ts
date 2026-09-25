@@ -163,7 +163,11 @@ export async function revealDownloadedUpdate(updateId: string, store: UpdateOffe
 export async function openUpdateFolder(): Promise<void> {
   const dir = updateDir()
   await mkdir(dir, { recursive: true })
-  const error = await shell.openPath(dir)
+  // Some standalone authoring shims expose only part of Electron's shell API.
+  // Keep the real API contract and feature-check instead of suppressing types.
+  const folderShell = shell as typeof shell & { openPath?: (path: string) => Promise<string> }
+  if (typeof folderShell.openPath !== 'function') throw new Error(`当前环境无法打开文件夹,下载位置:${dir}`)
+  const error = await folderShell.openPath(dir)
   if (error) throw new Error(error)
 }
 
