@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-recap",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Generate session recaps and inject bounded agent checkpoints in DeepSeek Harness.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -105,6 +105,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-48cc040f68bed4d9b99350bb5b0ea96e3d0601a0d6d6d036495730ebe2f18114"
+    "contentHash": "sha256-a764cf671a71c5b857dcba85e344c0b6a2fb87379b5754b1483cf6c7895c8c5e"
   }
 }

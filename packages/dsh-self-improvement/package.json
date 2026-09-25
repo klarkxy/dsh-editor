@@ -1,6 +1,6 @@
 {
   "name": "@klarkxy/dsh-self-improvement",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Evidence-backed procedural learning for DSH Web: conditional methods, outcome observations and optional skill export.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -104,6 +104,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dshRelease": {
-    "contentHash": "sha256-e1b5f847151843c3d01d728d63fb9301f08f3657151d34fdd640479245b6a18b"
+    "contentHash": "sha256-0454e6f6e8e6093f9e1fdf5f6f0f810a520e28334475619d7e0d55af04445cfb"
   }
 }
