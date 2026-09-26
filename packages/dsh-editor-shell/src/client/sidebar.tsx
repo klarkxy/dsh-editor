@@ -15,7 +15,6 @@ import {
   canMoveTreeEntry,
   errorMessage,
   isImagePath,
-  orderTreeEntries,
   safeRpcCall,
   treeDropDirectory,
   treeMoveTargetDir,
@@ -24,7 +23,7 @@ import {
   type ShellContext,
   type TreeEntry,
 } from './shared.ts'
-import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
+import { visibleManuscriptEntries } from './sidebar-chrome.ts'
 import { DOCUMENT_ARCHIVE_UI } from './archive.tsx'
 import { t } from '../i18n/index.ts'
 import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, PlusIcon } from './icons.tsx'
@@ -44,10 +43,7 @@ function isTreeMenuKey(event: ReactKeyboardEvent<HTMLElement>): boolean {
 /* 排序与隐藏规则在写入 loaded 时一次性完成,树渲染不再每层递归 sort/filter。
    只保留磁盘上真实存在的条目;隐藏 . 开头的系统项与辅助作者文件。 */
 function visibleTreeEntries(entries: TreeEntry[]): TreeEntry[] {
-  return orderTreeEntries(entries).filter((item) => {
-    if (item.name.startsWith('.')) return false
-    return !isAuxiliaryAuthorFile(item.name)
-  })
+  return visibleManuscriptEntries(entries)
 }
 
 /* 可见行的扁平路径序列(与 DOM 顺序一致),用于推导唯一的 tab 停靠行。 */
@@ -172,7 +168,7 @@ function TreeRows(props: RowProps): ReactNode {
                     {isOpen ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
                   </span>
                   <FolderIcon size={14} />
-                  <Text size="2" truncate>
+                  <Text as="span" size="2" className="tree-name" title={item.name}>
                     {item.name}
                   </Text>
                 </Button>
@@ -223,7 +219,7 @@ function TreeRows(props: RowProps): ReactNode {
               draggable={true}
               data-drop={dropHover === child ? 'true' : undefined}
               onFocus={() => onRowFocus(child)}
-              onClick={() => (isImagePath(child) ? onPreviewImage(child) : onOpen(child))}
+              onClick={() => ((isImagePath(child) || /\.(?:pdf|docx?|pptx?|xlsx?|csv|tsv)$/i.test(child)) ? onPreviewImage(child) : onOpen(child))}
               onDragStart={(event: ReactDragEvent<HTMLButtonElement>) => onTreeDragStart({ kind: 'file', path: child }, event)}
               onDragOver={(event: ReactDragEvent<HTMLButtonElement>) => onTreeDragOver(treeDropDirectory('file', child), child, event)}
               onDrop={(event: ReactDragEvent<HTMLButtonElement>) => onTreeDrop(treeDropDirectory('file', child), event)}
@@ -239,7 +235,7 @@ function TreeRows(props: RowProps): ReactNode {
               }}>
               <span className="tree-marker" aria-hidden="true" />
               <FileIcon size={14} />
-              <Text size="2" truncate>
+              <Text as="span" size="2" className="tree-name" title={item.name}>
                 {item.name}
               </Text>
             </Button>

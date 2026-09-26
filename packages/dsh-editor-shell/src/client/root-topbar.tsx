@@ -149,7 +149,7 @@ export function WorkbenchTopbar(props: {
                 className="workspace-menu-item"
                 disabled={props.openingWorkspace || props.newProjectBusy}
                 onSelect={() => { props.onWorkspaceMenuYield(); void props.onNewProject() }}>
-                {t('home.new')}
+                {t('command.newWork')}
               </MenuItem>
               <MenuItem
                 className="workspace-menu-item"

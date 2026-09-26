@@ -57,6 +57,9 @@ describe('usage chart model series', () => {
     })
     const stacked = option.series as Array<{ stack?: string; data: number[]; name: string }>
     expect(option.animation).toBe(false)
+    const description = (option.aria as { label: { description: string } }).label.description
+    expect(description).toContain('2025-01-02: 18')
+    expect(description).not.toContain('NaN')
     expect(stacked).toHaveLength(1)
     expect(stacked[0]).toMatchObject({ stack: 'tokens', data: [0, 18], name: 'dsh-editor-custom/MiniMax-M3' })
     expect((option.yAxis as { min: number }).min).toBe(0)

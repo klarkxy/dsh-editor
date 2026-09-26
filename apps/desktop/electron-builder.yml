@@ -1,6 +1,6 @@
 appId: com.dsh-editor.desktop
 productName: DSH Editor
-electronVersion: 37.2.6
+electronVersion: 42.11.8
 npmRebuild: false
 afterPack: ../../scripts/after-pack-desktop.cjs
 # Declaring the GitHub provider lets electron-builder generate update metadata

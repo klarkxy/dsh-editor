@@ -374,7 +374,7 @@ try {
   const composer = page.getByRole('textbox', { name: '输入消息' })
   if (await composer.inputValue() !== '') failures.push('chat composer should start empty')
   const placeholder = await composer.getAttribute('placeholder')
-  if (placeholder !== '问剧情、审一段、对质人物……') {
+  if (placeholder !== '问问这篇稿、审一段、提议一处修改……') {
     failures.push(`composer placeholder drifted: ${placeholder}`)
   }
   // Type a draft; Ctrl+B closes sidebar, Ctrl+\\ focus mode hides both sidebars.

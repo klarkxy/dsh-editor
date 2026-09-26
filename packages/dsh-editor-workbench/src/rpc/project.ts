@@ -26,6 +26,10 @@ export const projectHandlers = {
       return await inspectProjectRoot(workspace.path, signal)
     },
   },
+  'project.homeDirectory': {
+    sessionless: true,
+    async run() { return { path: defaultProjectsRoot() } },
+  },
   'project.createHome': {
     sessionless: true,
     async run({ body, signal }) {

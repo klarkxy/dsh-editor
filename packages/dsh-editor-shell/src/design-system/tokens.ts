@@ -65,7 +65,7 @@ export const FOUNDATION_TOKENS = {
   'weight-regular': '400', 'weight-medium': '500', 'weight-strong': '600',
   'duration-fast': '120ms', 'duration-base': '160ms', 'duration-slow': '260ms',
   'ease-out': 'cubic-bezier(0.16, 1, 0.3, 1)',
-  'control-sm': '30px', 'control-md': '36px', 'control-lg': '42px',
+  'control-sm': '32px', 'control-md': '36px', 'control-lg': '42px',
   'icon-sm': '14px', 'icon-md': '16px', 'icon-lg': '20px',
   'header-height': '48px', 'content-max': '760px',
 } as const

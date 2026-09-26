@@ -25,6 +25,7 @@ export type UpdateProgress = { phase: 'downloading' | 'verifying' | 'done'; rece
 export type DownloadedUpdateInfo = { updateId: string; filePath?: string }
 
 type WindowBridge = {
+  newWindow?(): void
   minimize(): void
   toggleMaximize(): void
   close(): void

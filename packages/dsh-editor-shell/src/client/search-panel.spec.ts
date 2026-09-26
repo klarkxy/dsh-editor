@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { planReplace } from '../search-replace.ts'
-import { acceptSearchResults, canReplaceAll, groupSearchHits, paperRevealRange, replaceBlockedByDirty, scopeSearchResults, searchQueryClearsResults, searchTextRequest, type SearchHit } from './search-panel.tsx'
+import { acceptSearchResults, canReplaceAll, executeReplacePlan, groupSearchHits, paperRevealRange, replaceBlockedByDirty, replaceOutcomeForIdentity, scopeSearchResults, searchIdentity, searchQueryClearsResults, searchTextRequest, type SearchHit } from './search-panel.tsx'
 
 function hit(path: string, start: number, excerpt: string): SearchHit {
   return { path, line: 1, column: 1, start, end: start + excerpt.length, excerpt, version: 'v1' }
@@ -129,5 +129,77 @@ describe('replace panel helpers', () => {
     expect(replaceBlockedByDirty({ activePath: '正文/001.md', activeDirty: true, paths: ['正文/002.md'] })).toBe(false)
     expect(replaceBlockedByDirty({ activePath: '正文/001.md', activeDirty: false, paths: ['正文/001.md'] })).toBe(false)
     expect(replaceBlockedByDirty({ activePath: '', activeDirty: true, paths: ['正文/001.md'] })).toBe(false)
+  })
+})
+
+
+describe('search context identity', () => {
+  it('invalidates accepted hits and confirmation on query, scope, or active directory changes', () => {
+    const project = searchIdentity({ sessionId: 's1', revision: 1, query: '港口', scope: 'project', activePath: 'docs/a.md' })
+    const directory = searchIdentity({ sessionId: 's1', revision: 1, query: '港口', scope: 'directory', activePath: 'docs/a.md' })
+    expect(project).not.toBe(directory)
+    expect(directory).not.toBe(searchIdentity({ sessionId: 's1', revision: 1, query: '港口', scope: 'directory', activePath: 'other/b.md' }))
+    expect(directory).not.toBe(searchIdentity({ sessionId: 's1', revision: 1, query: '海港', scope: 'directory', activePath: 'docs/a.md' }))
+    expect(directory).toBe(searchIdentity({ sessionId: 's1', revision: 1, query: '港口', scope: 'directory', activePath: 'docs/b.md' }))
+  })
+})
+
+describe('replacement outcome context', () => {
+  it('retains completed and partial counts across a remount of the same context, then hides them after identity changes', () => {
+    const identity = searchIdentity({ sessionId: 's1', revision: 1, query: 'foo', scope: 'directory', activePath: 'docs/a.md' })
+    const outcome = { files: 1, occurrences: 2, stale: ['docs/b.md'], changed: [], failed: ['docs/c.md'] }
+    const report = { identity, outcome }
+    expect(replaceOutcomeForIdentity(report, identity)).toBe(outcome)
+    expect(replaceOutcomeForIdentity(report, searchIdentity({
+      sessionId: 's1', revision: 1, query: 'other', scope: 'directory', activePath: 'docs/a.md',
+    }))).toBeNull()
+    expect(replaceOutcomeForIdentity(report, searchIdentity({
+      sessionId: 's2', revision: 1, query: 'foo', scope: 'directory', activePath: 'docs/a.md',
+    }))).toBeNull()
+  })
+})
+
+describe('confirmed replace execution', () => {
+  it('waits for delayed writes, continues to remaining files, and reports every completed write', async () => {
+    const plan = planReplace([hit('docs/a.md', 0, 'foo'), hit('docs/b.md', 0, 'foo')], 'bar')
+    let finishFirstWrite!: (value: { ok: true; value: { version: string } }) => void
+    const firstWrite = new Promise<{ ok: true; value: { version: string } }>((resolve) => { finishFirstWrite = resolve })
+    const writes: string[] = []
+    const pending = executeReplacePlan({
+      plan,
+      query: 'foo',
+      read: async () => ({ ok: true, value: { text: 'foo', version: 'v1' } }),
+      write: async (path, text, version) => {
+        expect(text).toBe('bar')
+        expect(version).toBe('v1')
+        writes.push(path)
+        return path === 'docs/a.md' ? firstWrite : { ok: true as const, value: { version: 'v2' } }
+      },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(writes).toEqual(['docs/a.md'])
+    finishFirstWrite({ ok: true, value: { version: 'v2' } })
+    const completed = await pending
+    expect(writes).toEqual(['docs/a.md', 'docs/b.md'])
+    expect(completed.written).toEqual(writes)
+    expect(completed.outcome).toEqual({ files: 2, occurrences: 2, stale: [], changed: [], failed: [] })
+  })
+
+  it('retains stale and failed counts alongside a successful write', async () => {
+    const plan = planReplace([
+      hit('docs/a.md', 0, 'foo'),
+      hit('docs/b.md', 0, 'foo'),
+      hit('docs/c.md', 0, 'foo'),
+    ], 'bar')
+    const completed = await executeReplacePlan({
+      plan,
+      query: 'foo',
+      read: async (path) => ({ ok: true, value: { text: 'foo', version: path === 'docs/b.md' ? 'v2' : 'v1' } }),
+      write: async (path) => path === 'docs/c.md'
+        ? { ok: false, error: { code: 'DENIED', message: 'denied' } }
+        : { ok: true, value: { version: 'v2' } },
+    })
+    expect(completed.written).toEqual(['docs/a.md'])
+    expect(completed.outcome).toEqual({ files: 1, occurrences: 1, stale: ['docs/b.md'], changed: [], failed: ['docs/c.md'] })
   })
 })

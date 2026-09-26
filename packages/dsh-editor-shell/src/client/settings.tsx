@@ -1,20 +1,21 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Box, Callout, Flex, Heading, IconButton, Text } from '@radix-ui/themes'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
-import { WritingSettings } from '../writing-settings.tsx'
+import { WritingSettings, writingPreferences } from '../writing-settings.tsx'
+import { normalizeAuthorPreferences } from '../author-preferences.ts'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.tsx'
 import { ShortcutsSettings } from './settings-shortcuts.tsx'
 import type { ShellCommandRegistry } from '../seats.ts'
 import { AboutSettingsSection } from './settings-about.tsx'
-import { AssistantSettings } from './settings-assistant.tsx'
+import { AssistantSettings, completeAuthorDraftSave, reconcileAuthorDraft, type AuthorDraft } from './settings-assistant.tsx'
 import { SettingsGeneralSection, useDeveloperMode } from './settings-general.tsx'
 import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { SettingsChatModelRoute, SettingsModelsSection } from './settings-models.tsx'
 import { ModelSettingsSurface } from './plugin-surfaces.tsx'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import { SettingsUsageSection } from './settings-usage.tsx'
-import { t, useLocale } from '../i18n/index.ts'
+import { t, useLocale, type MessageKey } from '../i18n/index.ts'
 import { CrossIcon, SettingsIcon } from './icons.tsx'
 import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger } from './ui/index.ts'
 
@@ -27,6 +28,18 @@ const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'assistant', 'writing
 /** Application preferences only; plugin pages live in the plugin workspace. */
 export function composeSettingsNavTabs(featureTabs: readonly SettingsTab[]): SettingsTab[] {
   return [...featureTabs, 'about']
+}
+
+export function composeSettingsNavGroups(
+  featureTabs: readonly SettingsTab[],
+): { label: MessageKey; tabs: SettingsTab[] }[] {
+  const available = (tabs: SettingsTab[]) => tabs.filter(tab => featureTabs.includes(tab))
+  const groups: { label: MessageKey; tabs: SettingsTab[] }[] = [
+    { label: 'settings.groupWriting', tabs: available(['writing', 'shortcuts']) },
+    { label: 'settings.groupAssistant', tabs: available(['assistant', 'models', 'usage']) },
+    { label: 'settings.groupApp', tabs: ['general', 'about'] },
+  ]
+  return groups.filter(group => group.tabs.length)
 }
 
 function readStoredTab(): string {
@@ -108,6 +121,51 @@ export function SettingsDialog(props: {
   const authorChrome = authorSettingsChrome(developerGate)
   const closeRef = useRef<HTMLButtonElement | null>(null)
   const pagesRef = useRef<HTMLDivElement | null>(null)
+  const writingSnapshot = useSyncExternalStore(
+    props.writingScope.subscribe.bind(props.writingScope),
+    props.writingScope.getSnapshot.bind(props.writingScope),
+    props.writingScope.getSnapshot.bind(props.writingScope),
+  )
+  const hostAuthor = writingPreferences(writingSnapshot, globalThis.localStorage).authorPreferences
+  const [authorState, setAuthorState] = useState<AuthorDraft>(() => ({ value: hostAuthor, saved: hostAuthor, conflicted: false }))
+  // An unavailable scope is not a new saved value; keep the last confirmed baseline.
+  const savedAuthor = writingSnapshot.status === 'ready' ? hostAuthor : authorState.saved
+  const authorDraft = reconcileAuthorDraft(authorState, savedAuthor)
+  const authorSavingRef = useRef(false)
+  const [authorSaving, setAuthorSaving] = useState(false)
+  const [authorWriteFailure, setAuthorWriteFailure] = useState('')
+  useEffect(() => { setAuthorState(current => reconcileAuthorDraft(current, savedAuthor)) }, [savedAuthor])
+  const changeAuthorDraft = (value: string) => {
+    setAuthorWriteFailure('')
+    setAuthorState(current => reconcileAuthorDraft({ ...current, value }, savedAuthor))
+  }
+  const saveAuthor = async () => {
+    if (authorSavingRef.current || writingSnapshot.status !== 'ready'
+      || authorDraft.conflicted || authorDraft.value === authorDraft.saved) return
+    authorSavingRef.current = true
+    setAuthorSaving(true)
+    setAuthorWriteFailure('')
+    const submitted = authorDraft.value
+    const normalized = normalizeAuthorPreferences(submitted)
+    const scope = props.writingScope
+    try {
+      if (await scope.mutate([{ op: 'set', path: ['authorPreferences'], value: normalized }], writingSnapshot.revision) === false) {
+        throw new Error('Host refused settings write')
+      }
+      const committed = scope.getSnapshot().user
+      if (!committed || typeof committed !== 'object' || Array.isArray(committed)
+        || !Object.prototype.hasOwnProperty.call(committed, 'authorPreferences')
+        || (committed as { authorPreferences?: unknown }).authorPreferences !== normalized) {
+        throw new Error('write did not commit')
+      }
+      setAuthorState(current => completeAuthorDraftSave(current, submitted, normalized))
+    } catch {
+      setAuthorWriteFailure(t('writing.authorFailed'))
+    } finally {
+      authorSavingRef.current = false
+      setAuthorSaving(false)
+    }
+  }
   useEffect(() => {
     if (!open) {
       setNote('')
@@ -140,6 +198,7 @@ export function SettingsDialog(props: {
     ? ['general', 'writing', 'shortcuts', 'usage']
     : ['general', 'models', 'assistant', 'writing', 'shortcuts', 'usage']
   const navTabs = composeSettingsNavTabs(featureTabs)
+  const navGroups = composeSettingsNavGroups(featureTabs)
   /* 能力在弹窗打开期间变为停用时，或动态插件页消失时，回落到仍可用的分类。 */
   const activeTab: SettingsTab = navTabs.includes(tab as SettingsTab) ? tab as SettingsTab : 'general'
   useEffect(() => { pagesRef.current?.scrollTo({ top: 0 }) }, [activeTab])
@@ -153,9 +212,14 @@ export function SettingsDialog(props: {
       renderProviders={options => <SettingsModelsSection ctx={props.ctx} writingScope={props.writingScope}
         showWritingRoutes={options?.includeWritingRoutes !== false} />}
       renderChatModel={() => <SettingsChatModelRoute ctx={props.ctx} writingScope={props.writingScope} />} />,
-    assistant: () => <AssistantSettings scope={props.writingScope} migrate={props.migrateWriting} />,
+    assistant: () => <AssistantSettings snapshot={writingSnapshot} migrate={props.migrateWriting}
+      authorDraft={authorDraft} saving={authorSaving} writeFailure={authorWriteFailure}
+      onAuthorDraftChange={changeAuthorDraft}
+      onUseLatest={() => setAuthorState({ value: savedAuthor, saved: savedAuthor, conflicted: false })}
+      onKeepDraft={() => setAuthorState({ value: authorDraft.value, saved: savedAuthor, conflicted: false })}
+      onSave={() => void saveAuthor()} />,
     writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} onOpenShortcuts={() => selectTab('shortcuts')} />,
-    shortcuts: () => <ShortcutsSettings commands={props.commands} />,
+    shortcuts: () => <ShortcutsSettings commands={props.commands} renderSlot={props.renderSlot} />,
     usage: () => <SettingsUsageSection ctx={props.ctx} />,
     about: () => <AboutSettingsSection active={activeTab === 'about'} onBusyChange={setAboutBusy} />,
   }
@@ -178,13 +242,18 @@ export function SettingsDialog(props: {
             {t('common.settings')}
           </Heading>
           <TabsList aria-label={t('settings.nav')}>
-            {navTabs.map((key) => <TabsTrigger
-              key={key}
-              value={key}
-              className={`settings-tab${activeTab === key ? ' active' : ''}`}
-              aria-current={activeTab === key ? 'true' : undefined}>
-              {tabLabel(key)}
-            </TabsTrigger>)}
+            {navGroups.map(group => <div key={group.label} className="settings-nav-section" role="presentation">
+              <Text as="div" size="1" color="gray" className="settings-nav-group" role="presentation" aria-hidden="true">
+                {t(group.label)}
+              </Text>
+              {group.tabs.map(key => <TabsTrigger
+                key={key}
+                value={key}
+                className={`settings-tab${activeTab === key ? ' active' : ''}`}
+                aria-current={activeTab === key ? 'true' : undefined}>
+                {tabLabel(key)}
+              </TabsTrigger>)}
+            </div>)}
           </TabsList>
         </aside>
         <Flex className="settings-body" direction="column" minWidth="0" minHeight="0" overflow="hidden">

@@ -75,7 +75,7 @@ describe('provideEditorUiWorkspace', () => {
     const beforeOpen = vi.fn()
     await uiWorkspace.openWorkspace('ws-1', beforeOpen)
     expect(beforeOpen).toHaveBeenCalledWith('blank-1')
-    expect(retain).toHaveBeenCalledWith('blank-1', expect.objectContaining({ source: 'workspaceOperation' }))
+    expect(retain).toHaveBeenCalledWith('blank-1', expect.objectContaining({ source: 'mainView' }))
   })
 
   it('unwraps the host directory picker remote', async () => {
@@ -107,9 +107,11 @@ describe('provideEditorUiWorkspace', () => {
   })
 
   it('keeps the workspace RPC session retained when chat switches to a new conversation', async () => {
-    const { releases, uiWorkspace } = fixture()
+    const { releases, retain, uiWorkspace } = fixture()
     await uiWorkspace.openWorkspaceSession('blank-1')
     await uiWorkspace.openSession('conversation-2')
+    expect(retain).toHaveBeenCalledWith('blank-1', expect.objectContaining({ source: 'workspaceOperation' }))
+    expect(retain).toHaveBeenCalledWith('conversation-2', expect.objectContaining({ source: 'mainView' }))
     expect(uiWorkspace.workspace.getSnapshot()?.sessionId).toBe('blank-1')
     expect(uiWorkspace.current.getSnapshot()?.sessionId).toBe('conversation-2')
     expect(releases.get('blank-1')).not.toHaveBeenCalled()

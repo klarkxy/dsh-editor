@@ -55,7 +55,7 @@ export const componentStyles = [
   r(['button.rt-Button.rt-r-size-1'], 'min-height: var(--dsh-ui-control-sm); border-radius: var(--dsh-ui-radius-sm); font-size: var(--dsh-ui-text-sm);'),
   r(['button.rt-Button.rt-r-size-2'], 'min-height: var(--dsh-ui-control-md); border-radius: var(--dsh-ui-radius-md); font-size: var(--dsh-ui-text-base);'),
   r(['button.rt-Button.rt-r-size-3'], 'min-height: var(--dsh-ui-control-lg); border-radius: var(--dsh-ui-radius-lg);'),
-  r(['button.rt-IconButton'], 'border-radius: var(--dsh-ui-radius-md);'),
+  r(['button.rt-IconButton'], 'min-width: var(--dsh-ui-control-sm); min-height: var(--dsh-ui-control-sm); border-radius: var(--dsh-ui-radius-md);'),
   r(['button.rt-BaseButton.rt-variant-solid'], 'box-shadow: var(--dsh-ui-shadow-xs);'),
   r(['button.rt-BaseButton.rt-variant-outline'], 'background: var(--dsh-ui-raised); box-shadow: inset 0 0 0 1px var(--dsh-ui-line-strong), var(--dsh-ui-shadow-xs); color: var(--dsh-ui-text);'),
   r(['button.rt-BaseButton.rt-variant-outline:hover'], 'background: var(--dsh-ui-sunken);'),
@@ -71,7 +71,8 @@ export const componentStyles = [
   r(['.shell .sidebar'], 'background: var(--dsh-ui-sidebar); border-right: 0;'),
   r(['.shell .sidebar .side-title'], 'min-height: var(--dsh-ui-header-height); border-bottom: 1px solid var(--dsh-ui-line);'),
   r(['.shell .sidebar .side-title-label'], 'font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-muted);'),
-  r(['.shell .tree .tree-row'], 'min-height: var(--dsh-ui-space-8); border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
+  r(['.shell .tree .tree-row'], 'min-height: var(--dsh-ui-space-8); height: auto; align-items: flex-start; padding-block: var(--dsh-ui-space-1); white-space: normal; border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
+  r(['.shell .tree .tree-name'], 'min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; line-height: var(--dsh-ui-leading-tight); text-align: start;'),
   r(['.shell .tree .tree-row:hover'], 'background: var(--dsh-ui-hover);'),
   r(['.shell .tree .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.shell .tree .tree-row::before'], 'display: none;'),
@@ -79,6 +80,11 @@ export const componentStyles = [
   r(['.shell .tree-row-actions'], 'opacity: 1;'),
   r(['.shell .panel-resizer::before'], 'background: var(--dsh-ui-line);'),
   r(['.shell .panel-resizer:hover::before', '.shell .panel-resizer:focus-visible::before', '.shell .panel-resizer[data-separator="active"]::before'], 'background: var(--dsh-ui-accent);'),
+  r(['.search-results-scroll'], 'max-height: min(50dvh, 24rem);'),
+  r(['.project-directory'], 'overflow-wrap: anywhere;'),
+  r(['.settings-nav-section'], 'display: flex; flex-direction: column; width: 100%; gap: var(--dsh-ui-space-1);'),
+  r(['.settings-nav-section + .settings-nav-section'], 'margin-top: var(--dsh-ui-space-4);'),
+  r(['.settings-nav-group'], 'padding-inline: var(--dsh-ui-space-3); padding-block: var(--dsh-ui-space-1); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
   r(['.sidebar-tools'], 'gap: var(--dsh-ui-space-2);'),
 
   // Writing stays in the existing CodeMirror instance. Do not override the
@@ -108,12 +114,15 @@ export const componentStyles = [
   r(['.chat-row.user > .rt-Card::before', '.chat-row.user > .rt-Card::after'], 'display: none;'),
   r(['.chat-row.assistant', '.chat-markdown'], 'font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed); color: var(--dsh-ui-text);'),
   r(['.chat-markdown p'], 'margin-block: 0 var(--dsh-ui-space-3);'),
+  r(['.chat-markdown > :last-child'], 'margin-bottom: 0;'),
   r(['.chat-markdown h1', '.chat-markdown h2'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-strong);'),
   r(['.chat-markdown h3', '.chat-markdown h4'], 'font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-strong);'),
   r(['.chat-markdown a'], 'color: var(--dsh-ui-accent-solid); text-underline-offset: 3px;'),
   r(['.chat-markdown pre', '.chat-step-code', '.chat-step-body pre'], 'background: var(--dsh-ui-surface); border: 1px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-md); font-family: var(--dsh-ui-font-mono);'),
   r(['.chat-markdown th', '.chat-markdown td'], 'border-color: var(--dsh-ui-line); padding: var(--dsh-ui-space-2);'),
-  r(['.chat-empty'], 'padding: var(--dsh-ui-space-6) var(--dsh-ui-space-2); color: var(--dsh-ui-muted);'),
+  r(['.chat-empty-panel'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-1); padding: 0 var(--dsh-ui-space-1) var(--dsh-ui-space-2);'),
+  r(['.chat-empty', '.chat-empty-mode'], 'margin: 0; padding: 0; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); line-height: var(--dsh-ui-leading-relaxed);'),
+  r(['.chat-quiet-title'], 'margin: 0; min-width: 0; color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
   r(['.chat-process-toggle'], 'min-height: var(--dsh-ui-space-8); height: auto; padding: var(--dsh-ui-space-1) 0; border: 0; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
   r(['.chat-process-body'], 'margin-left: var(--dsh-ui-space-1); padding-left: var(--dsh-ui-space-3); border-left: 1px solid var(--dsh-ui-line);'),
   r(['.chat-step:not([open])'], 'height: var(--dsh-ui-space-8);'),
@@ -124,17 +133,17 @@ export const componentStyles = [
   r(['.chat-step-status.is-error', '.chat-step-error-dot'], 'background: var(--dsh-ui-danger);'),
 
   // A single composer surface, not an input box plus a separate configuration bar.
-  r(['.chat > .composer'], 'flex-shrink: 0; width: auto; margin: var(--dsh-ui-space-3) var(--dsh-ui-space-3) var(--dsh-ui-space-4); padding: var(--dsh-ui-space-3); background: var(--dsh-ui-raised); border: 1px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-xl); box-shadow: var(--dsh-ui-shadow-sm); transition: border-color var(--dsh-ui-duration-base) var(--dsh-ui-ease-out), box-shadow var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
+  r(['.chat > .composer'], 'flex-shrink: 0; width: auto; margin: var(--dsh-ui-space-2) var(--dsh-ui-space-2) var(--dsh-ui-space-3); padding: var(--dsh-ui-space-2); background: var(--dsh-ui-raised); border: 1px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-xl); box-shadow: var(--dsh-ui-shadow-sm); transition: border-color var(--dsh-ui-duration-base) var(--dsh-ui-ease-out), box-shadow var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
   r(['.chat > .composer:focus-within'], 'border-color: var(--dsh-ui-accent); box-shadow: 0 0 0 3px var(--dsh-ui-accent-soft);'),
-  r(['.composer .rt-TextAreaRoot', '.composer .rt-TextAreaRoot:focus-within'], 'background: transparent; border: 0; box-shadow: none;'),
+  r(['.composer .rt-TextAreaRoot', '.composer .rt-TextAreaRoot:focus-within'], 'min-height: 0; padding: 0; background: transparent; border: 0; box-shadow: none;'),
   r(['.composer .rt-TextAreaRoot::before', '.composer .rt-TextAreaRoot::after'], 'display: none;'),
-  r(['.composer .rt-TextAreaInput'], 'min-height: 64px; max-height: min(240px, 32dvh); padding: var(--dsh-ui-space-1); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed);'),
+  r(['.composer .rt-TextAreaInput'], 'min-height: var(--dsh-ui-control-sm); max-height: min(240px, 32dvh); padding: var(--dsh-ui-space-1); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed);'),
   r(['.composer-toolbar'], 'gap: var(--dsh-ui-space-2); min-height: var(--dsh-ui-space-8);'),
   r(['.composer-model'], 'min-width: 0;'),
   r(['.composer-model .select-trigger'], 'min-height: var(--dsh-ui-control-sm); max-width: 100%; box-shadow: none; background: transparent; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
   r(['.composer-actions .send'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); min-width: var(--dsh-ui-space-8); min-height: var(--dsh-ui-space-8); margin: 0; border-radius: var(--dsh-ui-radius-full); background: var(--dsh-ui-accent-solid); color: var(--dsh-ui-on-accent);'),
   r(['.composer-actions .send:hover:not(:disabled)'], 'background: var(--dsh-ui-accent-hover);'),
-  r(['.composer-actions .send:disabled'], 'background: var(--dsh-ui-sunken); color: var(--dsh-ui-muted); opacity: 0.65;'),
+  r(['.composer-actions .send:disabled'], 'background: transparent; color: var(--dsh-ui-text); opacity: 1; box-shadow: inset 0 0 0 1px var(--dsh-ui-line-strong);'),
   r(['.composer-actions .chat-stop'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); margin: 0; border-radius: var(--dsh-ui-radius-full); background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger);'),
 
   // Review and approvals remain visually distinct from routine tool logs.
@@ -196,7 +205,7 @@ export const responsiveStyles = `
   ${r(['.chat > .composer'], 'margin: var(--dsh-ui-space-2);')}
   ${r(['.editor-header'], 'gap: var(--dsh-ui-space-2); padding-inline: var(--dsh-ui-space-3); flex-wrap: wrap;')}
   ${r(['.editor-doc-title'], 'padding-inline-start: 0;')}
-  ${r(['.settings-dialog'], 'width: calc(100vw - 16px); height: calc(100dvh - 16px); grid-template-columns: 104px minmax(0, 1fr);')}
+  ${r(['.settings-dialog'], 'grid-template-columns: 104px minmax(0, 1fr);')}
   ${r(['.settings-nav'], 'padding-inline: var(--dsh-ui-space-2);')}
   ${r(['.settings-content', '.settings-header'], 'padding: var(--dsh-ui-space-3);')}
 }
@@ -210,4 +219,9 @@ export const responsiveStyles = `
 }
 `
 
-export const designSystemStyles = `${tokenStyles}\n${componentStyles}\n${responsiveStyles}`
+const officialResourceStyles = `
+${r(['.official-resource-panel'], 'position: absolute; inset: 52px 0 0 auto; width: min(680px, 100%); overflow: hidden; background: var(--dsh-ui-bg); border-left: 1px solid var(--dsh-ui-line); box-shadow: var(--dsh-ui-shadow-lg);')}
+${r(['.official-resource-panel[hidden]'], 'display: none;')}
+`
+
+export const designSystemStyles = `${tokenStyles}\n${componentStyles}\n${responsiveStyles}\n${officialResourceStyles}`

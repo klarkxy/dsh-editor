@@ -91,3 +91,17 @@
   disabled: true
 - id: tool-web
   disabled: true
+
+# The Editor exposes document previews; coding surfaces and schedules stay outside this composition.
+- id: ui-sidebar-terminal
+  disabled: true
+- id: ui-sidebar-browser
+  disabled: true
+- id: ui-schedule
+  disabled: true
+- id: schedule
+  disabled: true
+
+# Editor owns layout and implements the official public layout contract.
+- id: ui-layout
+  disabled: true

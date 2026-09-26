@@ -21,6 +21,7 @@ export const WORKBENCH_RPC_CHANNEL = '/dsh-editor-workbench'
 
 export type WorkbenchEndpoint =
   | 'project.inspect'
+  | 'project.homeDirectory'
   | 'project.createHome'
   | 'project.init'
   | 'project.prepareIndex'
@@ -78,6 +79,7 @@ export type ProposalApplyResult = { applied: string[]; failed?: { from: string; 
 
 export type WorkbenchRequestMap = {
   'project.inspect': { workspacePath: string }
+  'project.homeDirectory': Record<string, never>
   'project.createHome': { title: string }
   'project.init': { sessionId: string; newProject: boolean }
   'project.prepareIndex': { sessionId: string }
@@ -119,6 +121,7 @@ export type WorkbenchRequestMap = {
 
 export type WorkbenchResponseMap = {
   'project.inspect': ProjectInspectionResponse
+  'project.homeDirectory': WorkbenchPathResponse
   'project.createHome': WorkbenchPathResponse
   'project.init': ProjectInitResponse
   'project.prepareIndex': ProjectInitResponse

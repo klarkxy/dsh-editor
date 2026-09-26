@@ -821,7 +821,9 @@ function RowHead(props: {
 
 /* Drop a user-added provider and (if its key is one this page owns) the
    matching stored credential. The unset lands first so a settings-rejected
-   second step leaves the row visible and the operation safely retryable. */
+   second step leaves the row visible and the operation safely retryable.
+   The client gateway counts settings/mutate's revision argument, so this
+   call always sends the revision the page last read. */
 async function removeProviderProfile(ctx: ShellContext, store: Store, row: ProviderRow): Promise<void> {
   const managedRef = managedCredentialRef(row)
   if (managedRef !== undefined) {
@@ -829,12 +831,18 @@ async function removeProviderProfile(ctx: ShellContext, store: Store, row: Provi
     const result = rpcResult<void>(response)
     if (!result.ok) throw new Error(failureMessage(result))
   }
+  const expectedRevision = store.getSnapshot().namespaces.get(row.entry.settingsNs)?.revision
+  if (expectedRevision === undefined) throw new Error(text().loadFailed)
   const response = await ctx.remote.settings.mutate(
     row.entry.settingsNs,
     [{ op: 'unset', path: [...row.entry.settingsPath] }],
+    expectedRevision,
   )
   const result = rpcResult<SettingsNamespaceView>(response)
-  if (!result.ok) throw new Error(failureMessage(result))
+  if (!result.ok) {
+    if (result.error?.code === 'settings-conflict') throw new Error(text().conflict)
+    throw new Error(failureMessage(result))
+  }
   await store.load()
 }
 

@@ -18,10 +18,10 @@ describe('reasoning effort labels', () => {
     expect(effortDisplay('')).toBe('')
   })
 
-  it('keeps the trigger on the effort name, not the field label', () => {
-    expect(effortTriggerLabel('')).toBe('关')
-    expect(effortTriggerLabel('off')).toBe('关')
-    expect(effortTriggerLabel('xhigh')).toBe('极高')
+  it('prefixes the trigger so Off is readable as a thinking level', () => {
+    expect(effortTriggerLabel('')).toBe('思考 关')
+    expect(effortTriggerLabel('off')).toBe('思考 关')
+    expect(effortTriggerLabel('xhigh')).toBe('思考 极高')
     expect(effortTriggerLabel('high')).not.toBe('思考强度')
   })
 
@@ -29,6 +29,6 @@ describe('reasoning effort labels', () => {
     setLocale('en')
     expect(effortDisplay('off')).toBe('Off')
     expect(effortDisplay('xhigh')).toBe('Extra high')
-    expect(effortTriggerLabel('max')).toBe('Max')
+    expect(effortTriggerLabel('max')).toBe('Think Max')
   })
 })

@@ -223,11 +223,6 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
     const window = deps.createBrowserWindow()
     windows.add(window)
     installDownloadHandler(window)
-    window.webContents.on('before-input-event', (event, input) => {
-      if (!isNewWindowShortcut(input)) return
-      event.preventDefault()
-      void createWindow()
-    })
     window.on('closed', () => {
       windows.delete(window)
       navigationPolicies.delete(window)

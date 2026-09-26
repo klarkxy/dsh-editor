@@ -288,11 +288,12 @@ export const componentStyles = `
 .shell .tree-directory-row:hover .tree-row-actions,
 .shell .tree-directory-row:focus-within .tree-row-actions { visibility: visible; }
 .radix-themes .file-dialog.history-dialog { max-width: min(860px, calc(100vw - 32px)); width: min(860px, calc(100vw - 32px)); }
+.radix-themes .file-dialog.history-dialog-empty { width: min(560px, calc(100vw - 32px)); }
 .radix-themes .history-split {
   display: grid;
   grid-template-columns: minmax(240px, 0.95fr) minmax(280px, 1.15fr);
   gap: var(--space-3);
-  min-height: min(420px, 56dvh);
+  min-height: 0;
   max-height: min(560px, calc(100dvh - 220px));
 }
 .radix-themes .history-commits,
@@ -521,6 +522,7 @@ export const componentStyles = `
    visibility+transform 过渡让开/关两个方向都有动画;reduced-motion 由末尾全局块归零。
    抽屉是悬浮圆角面板:四边留白 8px,大圆角 + 深阴影浮在遮罩上。 */
 .shell .chat.chat-overlay {
+  height: auto;
   position: fixed;
   top: calc(var(--topbar-h) + 8px);
   right: 8px;
@@ -596,13 +598,12 @@ export const componentStyles = `
   text-align: left;
   cursor: pointer;
 }
-.radix-themes .chat-process-toggle:not([data-open]) { margin-bottom: var(--space-2); }
 .radix-themes .chat-process-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: var(--space-6);
+  line-height: normal;
 }
 .radix-themes .chat-process-chevron {
   display: inline-flex;
@@ -808,7 +809,7 @@ export const componentStyles = `
 }
 .shell .shell-panel { height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--gray-2); }
 .shell .shell-panel.editor-cell { background: var(--paper-fill); }
-.shell .shell-panel > .sidebar, .shell .shell-panel > .editor, .shell .shell-panel > .editor-stack, .shell .shell-panel > .empty-paper, .shell .shell-panel > .chat, .shell .shell-panel > .pinned-pane { height: 100%; }
+.shell .shell-panel > .sidebar, .shell .shell-panel > .editor, .shell .shell-panel > .editor-stack, .shell .shell-panel > .empty-paper, .shell .shell-panel > .chat:not(.chat-overlay), .shell .shell-panel > .pinned-pane { height: 100%; }
 .shell.assistant-overlay .shell-panels,
 .shell.assistant-overlay #assistant,
 .shell.assistant-overlay #assistant > div {
@@ -928,9 +929,10 @@ export const componentStyles = `
 
 /* ── Settings dialog ────────────────────────────────────── */
 .radix-themes .settings-dialog {
-  width: min(960px, calc(100vw - 48px));
+  width: min(960px, calc(100vw - 2 * var(--space-4)));
   max-width: 960px;
-  height: min(760px, calc(100dvh - 48px));
+  /* 预留 Radix 外层滚动容器的边距，仅让导航和内容在窗口内滚动。 */
+  height: min(760px, calc(100dvh - var(--space-6) - max(var(--space-6), 6vh)));
   font: 400 var(--font-size-2)/1.5 var(--default-font-family);
   color: var(--gray-12);
   --control-h: 34px;
@@ -1009,7 +1011,7 @@ export const componentStyles = `
 .radix-themes .settings-dialog :is(p,small,.muted) { line-height: 1.5; }
 .radix-themes .settings-dialog :is(button,input,textarea,summary,a,[tabindex]):focus-visible { outline: 2px solid var(--accent-8); outline-offset: 2px; }
 .radix-themes .settings-dialog :is(.models-hint,.models-warning,.about-note) { overflow-wrap: anywhere; }
-.radix-themes .settings-dialog .author-preferences textarea { min-height: 156px; line-height: 1.7; }
+.radix-themes .settings-dialog .author-preferences textarea { field-sizing: content; min-height: 156px; max-height: min(320px, 40dvh); line-height: 1.7; }
 .radix-themes .settings-dialog .models-writing-route { display: grid; grid-template-columns: 112px minmax(0,1fr) 16px; }
 .radix-themes .settings-dialog .models-writing-route-controls { justify-content: flex-end; }
 .radix-themes .settings-dialog .models-writing-route-controls > .select { flex: 1; min-width: 0; }
@@ -1033,7 +1035,7 @@ export const componentStyles = `
   .radix-themes .settings-dialog .models-writing-route { grid-template-columns: 96px minmax(0,1fr) 16px; }
 }
 @media(max-width:760px) {
-  .radix-themes .settings-dialog { width: calc(100vw - 24px); height: calc(100dvh - 24px); grid-template-columns: 116px minmax(0,1fr); }
+  .radix-themes .settings-dialog { grid-template-columns: 116px minmax(0,1fr); }
   .radix-themes .settings-header,.radix-themes .settings-content { padding: var(--space-4); }
   .radix-themes .settings-dialog .settings-row { align-items: flex-start; flex-direction: column; gap: var(--space-2); }
   .radix-themes .settings-dialog .models-writing-route { display: flex; }
@@ -1133,7 +1135,7 @@ export const componentStyles = `
   /* 顶栏让位:作品菜单收成图标,保住布局开关/窗口控制的命中区域。 */
   .shell .workspace-chrome,
   .shell > .chrome .workspace-menu-trigger { min-width: 0 !important; }
-  .shell > .chrome .workspace-menu-trigger > .rt-Text { display: none; }
+  .shell > .chrome .workspace-menu-trigger > .rt-Text { max-width: 7em; }
 }
 
 /* ── 活动反馈(ui/activity.tsx + 面板共享类) ─────────────── */

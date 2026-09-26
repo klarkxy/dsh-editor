@@ -1,3 +1,5 @@
+import { useOfficialShortcut } from './official-surfaces.tsx'
+import { isAuxiliaryAuthorFile } from '../auxiliary-files.ts'
 /*
  * DSH Editor 命令面板:Cmd/Ctrl+K 触发的浮层。Radix Dialog 负责焦点陷阱/aria
  * (cmdk 自带 Dialog 用的是同一个底层库,但我们要把 token 和现有对话框/首页卡
@@ -34,7 +36,6 @@ import { Button, Flex, Kbd } from '@radix-ui/themes'
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ThemeValue } from './theme.tsx'
 import { t, useLocale } from '../i18n/index.ts'
-import { runtimePaletteShortcutHint } from '../palette-shortcut.ts'
 import { DOCUMENT_ARCHIVE_UI } from './archive.tsx'
 import {
   ArchiveIcon,
@@ -149,6 +150,7 @@ export type CommandPaletteProps = {
   /* 动作闭包。palette 只关心"按下时调一下",不关心是不是同步。 */
   onOpenWorkspace(): void
   onNewProject(): void
+  onCreateFile?(): void
   onOpenSettings(): void
   onToggleFocus(): void
   onOpenDocument(path: string): void
@@ -186,6 +188,7 @@ function splitPath(path: string): { directory: string; name: string } {
 }
 
 export function CommandPalette(props: CommandPaletteProps) {
+  const focusSearchOnClose = useRef(false)
   useLocale()
   const { container: portalContainer, anchor: themeAnchor } = useThemePortalContainer()
   /* 全局 Cmd/Ctrl+K 监听:不管 palette 当前开没开,都能切换。
@@ -241,6 +244,14 @@ export function CommandPalette(props: CommandPaletteProps) {
     id: 'writing',
     heading: t('command.writing'),
     items: [
+      {
+        id: 'cmd.newFile',
+        label: t('sidebar.newDocument'),
+        keywords: ['new', 'document', 'file'],
+        icon: <PlusIcon />,
+        disabled: !props.hasWorkspace || !props.onCreateFile,
+        run: () => props.onCreateFile?.(),
+      },
       {
         id: 'cmd.search',
         label: t('command.search'),
@@ -364,7 +375,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     ? {
         id: 'files',
         heading: t('command.jumpFile'),
-        items: props.files.map((filePath) => {
+        items: props.files.filter((filePath) => !isAuxiliaryAuthorFile(filePath)).map((filePath) => {
           const { directory, name } = splitPath(filePath)
           return {
             id: `file.${filePath}`,
@@ -372,7 +383,7 @@ export function CommandPalette(props: CommandPaletteProps) {
             hint: directory || t('command.rootDir'),
             keywords: [directory, filePath],
             icon: <FileIcon />,
-            disabled: props.activePath === filePath,
+
             run: () => props.onOpenDocument(filePath),
           };
         }),
@@ -401,6 +412,12 @@ export function CommandPalette(props: CommandPaletteProps) {
         <RadixDialogContent
           className="palette-content"
           aria-label={t('command.searchCommands')}
+          onCloseAutoFocus={(event: Event) => {
+            if (!focusSearchOnClose.current) return
+            focusSearchOnClose.current = false
+            event.preventDefault()
+            document.querySelector<HTMLInputElement>('[data-workspace-search]')?.focus()
+          }}
           onOpenAutoFocus={(event: Event) => {
             /* cmdk 的 Input 已经会自己 focus,我们只需要阻止 Radix 把焦点
                抢到它觉得合适的容器上,让 input 在挂载的同一帧拿到光标。 */
@@ -442,6 +459,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                       disabled={action.disabled}
                       onSelect={() => {
                         if (action.disabled) return
+                        focusSearchOnClose.current = action.id === 'cmd.search'
                         action.run()
                         props.onOpenChange(false)
                       }}
@@ -473,7 +491,7 @@ export function CommandPalette(props: CommandPaletteProps) {
 /* 顶栏触发按钮:放大镜 + 当前系统的快捷键提示。可访问名称仍是「搜索与命令」。 */
 export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
   useLocale()
-  const shortcut = runtimePaletteShortcutHint()
+  const shortcut = useOfficialShortcut('editor.palette.open')
   return (
     <Button
       type="button"
@@ -483,12 +501,12 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
       className="palette-trigger"
       onClick={onClick}
       aria-label={t('command.searchCommands')}
-      title={t('command.searchTitle')}
+      title={shortcut ? `${t('command.searchCommands')} (${shortcut})` : t('command.searchCommands')}
     >
       <span className="palette-trigger-icon" aria-hidden="true">
         <SearchIcon size={14} />
       </span>
-      <Kbd className="palette-trigger-kbd">{shortcut}</Kbd>
+      <Kbd className="palette-trigger-kbd">{shortcut || t('command.searchCommands')}</Kbd>
     </Button>
   )
 }

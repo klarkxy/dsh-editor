@@ -1297,6 +1297,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
       state: EditorState.create({
         doc: '',
         extensions: [
+          EditorView.contentAttributes.of({ 'aria-label': '文稿正文' }),
           writingCompartments.current.history.of(history()),
           writingCompartments.current.editability.of([EditorState.readOnly.of(true), EditorView.editable.of(false)]),
           EditorState.changeFilter.of((transaction) => !transaction.docChanged || Boolean(transaction.annotation(externalSync)) || cb.current.canEdit()),

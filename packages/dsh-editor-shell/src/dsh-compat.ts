@@ -129,6 +129,7 @@ export type SessionListState = {
 export type WorkspaceListState = {
   items: readonly WorkspaceView[]
   archivedSessionIds?: readonly SessionId[]
+  pinnedSessionIds?: readonly SessionId[]
 }
 
 export type SettingsPathOpView = { op: string; path: string[]; value?: unknown }
@@ -190,7 +191,7 @@ export type EditorRemote = {
     selectModel(request: { sessionId: SessionId } & ModelSelection): Promise<RpcResult<{ selected: ModelSelection }>>
   }
   settings: {
-    mutate(ns: string, ops: readonly SettingsPathOpView[], expectedRevision?: number): Promise<RpcResult<SettingsNamespaceView>>
+    mutate(ns: string, ops: readonly SettingsPathOpView[], expectedRevision: number): Promise<RpcResult<SettingsNamespaceView>>
     openSettingsDocument(signal?: AbortSignal): Promise<RpcResult<{ path?: string }>>
   }
   credentials: {
@@ -220,7 +221,7 @@ export type EditorRemote = {
 export type EditorSessions = {
   list: ObservableSource<SessionListState>
   create(opts?: { workspaceId?: WorkspaceId; cwd?: string }): Promise<SessionId>
-  retain(id: SessionId, options: { source: 'workspaceOperation'; signal?: AbortSignal }): EditorSessionReference
+  retain(id: SessionId, options: { source: 'workspaceOperation' | 'mainView'; signal?: AbortSignal }): EditorSessionReference
   binding(id: SessionId): { session: SessionFace } | undefined
 }
 
@@ -235,7 +236,10 @@ export type EditorWorkspaces = {
   list: ObservableSource<WorkspaceListState>
   create(input: { path: string }): Promise<WorkspaceView>
   delete(workspaceId: WorkspaceId): Promise<void>
-  archiveSession(sessionId: SessionId): Promise<void>
+  archiveSession(sessionId: SessionId, options?: { stopActivity?: boolean }): Promise<void>
+  unarchiveSession(sessionId: SessionId): Promise<void>
+  pinSession(sessionId: SessionId): Promise<void>
+  unpinSession(sessionId: SessionId): Promise<void>
 }
 
 export type EditorUiWorkspace = {

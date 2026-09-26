@@ -1,3 +1,4 @@
+import { installOfficialShortcuts } from './official-shortcuts.js'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import { readTrustedClipboardText, writeTrustedClipboardText } from './clipboard.js'
 import { RendererConsoleTail, pruneCrashReports, writeCrashReport, writeStartupDiagnostic, type CrashReportFacts, type CrashReportSource } from './crash-report.js'
@@ -105,10 +106,18 @@ function reportFatal(error: unknown, source: CrashReportSource): void {
   void recovery.reportFatal(error, source)
 }
 
+const officialShortcuts = installOfficialShortcuts({
+  ipc: ipcMain as never,
+  userDataPath: app.getPath('userData'),
+  platform: process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux',
+  fromWebContents: sender => (BrowserWindow.fromWebContents(sender as never) ?? undefined) as never,
+  senderTrust: event => senderTrust(event as never),
+})
+
 const lifecycle = createDesktopLifecycle({
   createBrowserWindow: () => {
     const window = new BrowserWindow({
-      title: 'DSH Editor', width: 1440, height: 900, minWidth: 1280, minHeight: 720,
+      title: 'DSH Editor', width: 1440, height: 900, minWidth: 760, minHeight: 560,
       show: false, frame: false, backgroundColor: '#faf9f5',
       icon: join(desktopRoot, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
       webPreferences: {
@@ -120,6 +129,7 @@ const lifecycle = createDesktopLifecycle({
         backgroundThrottling: false,
       },
     })
+    officialShortcuts.attach(window as never)
     // Frameless window: forward maximize state to the renderer's own title bar.
     window.on('maximize', () => window.webContents.send('dsh-window:maximized', true))
     window.on('unmaximize', () => window.webContents.send('dsh-window:maximized', false))
@@ -277,6 +287,11 @@ function senderTrust(event: {
 
 // Startup error pages are sandboxed data: documents. A custom-scheme <a>
 // never reaches will-navigate, so retry goes through the preload bridge.
+ipcMain.on('dsh-window:new-window', event => {
+  if (!isTrustedIpcSender(senderTrust(event))) return
+  void lifecycle.createWindow()
+})
+
 ipcMain.on('dsh-window:retry', (event) => {
   const trust = senderTrust(event)
   if (!trust.owned || trust.destroyed || !trust.isMainFrame) return

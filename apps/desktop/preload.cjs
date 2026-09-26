@@ -6,6 +6,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('dshWindow', {
+  newWindow: () => ipcRenderer.send('dsh-window:new-window'),
   minimize: () => ipcRenderer.send('dsh-window:minimize'),
   toggleMaximize: () => ipcRenderer.send('dsh-window:toggle-maximize'),
   close: () => ipcRenderer.send('dsh-window:close'),
@@ -42,3 +43,31 @@ contextBridge.exposeInMainWorld('dshWindow', {
     writeText: (text) => ipcRenderer.invoke('dsh-window:clipboard-write-text', text),
   },
 })
+
+// The official command service selects the OS-specific desktop keyboard profile.
+const markPlatform = () => { if (document.documentElement) document.documentElement.dataset.platform = process.platform }
+markPlatform()
+if (!document.documentElement) {
+  const observer = new MutationObserver(() => {
+    if (document.documentElement) { markPlatform(); observer.disconnect() }
+  })
+  observer.observe(document, { childList: true })
+}
+function subscribeShortcuts(channel, listener) {
+  if (typeof listener !== 'function') throw new TypeError('Shortcut listener required')
+  const handler = (_event, payload) => listener(payload)
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
+}
+contextBridge.exposeInMainWorld('dshDesktop', Object.freeze({
+  shortcuts: Object.freeze({
+    get: definitions => ipcRenderer.invoke('dsh-shortcuts:get', definitions),
+    edit: (edit, revision) => ipcRenderer.invoke('dsh-shortcuts:edit', edit, revision),
+    subscribe: listener => subscribeShortcuts('dsh-shortcuts:configuration', listener),
+    recording: active => ipcRenderer.invoke('dsh-shortcuts:recording', active),
+  }),
+  keyboard: Object.freeze({
+    subscribe: listener => subscribeShortcuts('dsh-shortcuts:keyboard', listener),
+    closeWindow: revision => ipcRenderer.invoke('dsh-shortcuts:close-window', revision),
+  }),
+}))

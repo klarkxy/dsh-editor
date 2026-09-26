@@ -9,6 +9,7 @@ export default defineConfig([
   {
     entry: { 'client.inner': 'src/client.tsx' }, format: ['cjs'], dts: false, clean: false, outDir: 'lib',
     platform: 'browser', target: 'es2022', sourcemap: true, hash: false,
+    suppressWarnings: [/module level directive/],
     deps: { neverBundle: ['react', 'react/jsx-runtime'], alwaysBundle: ['@klarkxy/dsh-ai-services/client-utils', '@klarkxy/dsh-ai-services/contracts'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.cjs' }),
   },

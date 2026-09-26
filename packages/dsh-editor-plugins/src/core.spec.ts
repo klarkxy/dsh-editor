@@ -90,6 +90,16 @@ describe('plugin core protection', () => {
     expect(packageNameOf('@scope/pkg/tools')).toBe('@scope/pkg')
   })
 
+  it('exposes explicitly catalogued official entries while protecting their packages', () => {
+    const catalog = { bundles: [], entries: {
+      'ui-voice-input': { title: '语音输入', description: '官方语音', locked: false, packageName: '@deepseek-ai/dsh-experimental-client-ui-voice-input' },
+    } }
+    expect(classifyEntry('ui-voice-input', '@deepseek-ai/dsh-experimental-client-ui-voice-input', catalog)).toBe('optional')
+    expect(isProtectedEntry('ui-voice-input', '@deepseek-ai/dsh-experimental-client-ui-voice-input', catalog)).toBe(false)
+    expect(isProtectedPackage('@deepseek-ai/dsh-experimental-client-ui-voice-input', catalog.bundles)).toBe(true)
+    expect(classifyEntry('ui-layout', '@deepseek-ai/dsh-client-ui-layout', catalog)).toBe('hidden')
+  })
+
   it('rejects unsafe identifiers', () => {
     expect(isSafeEntryId('zhihu')).toBe(true)
     expect(isSafeEntryId('../etc')).toBe(false)

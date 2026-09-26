@@ -1,3 +1,4 @@
+import { OFFICIAL_INPUT_SLOT } from './client/official-surfaces.tsx'
 import type { Context } from '@deepseek-ai/cordis'
 import type { RootOwnerProps } from './dsh-compat.ts'
 import { t } from './i18n/index.ts'
@@ -15,7 +16,7 @@ export type RootSlots = { register: (spec: {
   id: string
   priority: number
   label: string
-  children: Record<string, { kind: 'list' | 'keyed'; scope: 'root' }>
+  children: Record<string, { kind: 'list' | 'keyed' | 'single'; scope: 'root' | 'session' }>
 }, render: unknown) => unknown }
 
 /** The package deliberately wins the public root slot; no layout/conversation internals are imported. */
@@ -25,10 +26,12 @@ export function registerRoot(ctx: Context & { slots: RootSlots }, render: (props
     id: ROOT_ID,
     priority: -100,
     label: t('app.slotLabel'),
-    // Additive seats only: declaring shell.overlay here would awaken the
-    // manuscript overlay, which belongs to the shadowed AppFrame. The plugins
-    // settings seat is consumed by the independent plugin page, not the chrome dock.
+    // Editor is the sole layout owner; official plugins retain their own child slots.
     children: {
+      [OFFICIAL_INPUT_SLOT]: { kind: 'single', scope: 'session' },
+      'rightbar': { kind: 'single', scope: 'root' },
+      'shell.overlay': { kind: 'list', scope: 'root' },
+      'settings.general.item': { kind: 'list', scope: 'root' },
       [EXTENSIONS_SLOT]: { kind: 'list', scope: 'root' },
       [PLUGINS_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
       'plugins.item': { kind: 'list', scope: 'root' },

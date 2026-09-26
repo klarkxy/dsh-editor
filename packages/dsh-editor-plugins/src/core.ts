@@ -109,9 +109,9 @@ export function isProtectedEntry(entryId: string, moduleName: string, catalog: R
 }
 
 export function classifyEntry(entryId: string, moduleName: string, catalog: RuntimeCatalog): PluginGroup | 'hidden' {
-  if (moduleName.startsWith('@deepseek-ai/') || moduleName.includes(':')) return 'hidden'
   const row = catalogRow(entryId, catalog)
   if (row) return row.locked ? 'core' : 'optional'
+  if (moduleName.startsWith('@deepseek-ai/') || moduleName.includes(':')) return 'hidden'
   if (isProtectedPackage(packageNameOf(moduleName), catalog.bundles)) return 'hidden'
   return 'community'
 }

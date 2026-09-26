@@ -11,6 +11,10 @@ describe('root registration', () => {
       priority: -100,
       label: 'DSH 编辑器',
       children: {
+        'dsh-editor.official-input': { kind: 'single', scope: 'session' },
+        'rightbar': { kind: 'single', scope: 'root' },
+        'shell.overlay': { kind: 'list', scope: 'root' },
+        'settings.general.item': { kind: 'list', scope: 'root' },
         'dsh-editor.extensions': { kind: 'list', scope: 'root' },
         'dsh-editor.settings.plugins': { kind: 'list', scope: 'root' },
         'dsh-editor.settings.zhihu': { kind: 'list', scope: 'root' },

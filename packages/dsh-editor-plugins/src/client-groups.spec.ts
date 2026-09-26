@@ -41,7 +41,7 @@ describe('plugin feature grouping', () => {
     expect(views.map((view) => view.id)).toEqual(['writing', 'proofread', 'overview', 'cards', 'memory', 'zhihu'])
     expect(views.find((view) => view.id === 'zhihu')?.cards.map((item) => item.entryId)).toEqual(['include:zhihu', 'include:zhihu-tools'])
     expect(views.find((view) => view.id === 'proofread')?.title).toBe('校对')
-    expect(views.find((view) => view.id === 'overview')?.title).toBe('作品概览')
+    expect(views.find((view) => view.id === 'overview')?.title).toBe('文档概览')
     expect(views.find((view) => view.id === 'writing')?.cards.map((item) => item.packageName)).toEqual(['dsh-manuscript'])
     expect(views.find((view) => view.id === 'proofread')?.cards.map((item) => item.packageName)).toEqual(['dsh-editor-proofread-panel'])
     expect(views.find((view) => view.id === 'overview')?.cards.map((item) => item.packageName)).toEqual(['dsh-editor-overview-panel'])

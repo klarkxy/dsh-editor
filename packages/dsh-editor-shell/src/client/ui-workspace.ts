@@ -43,7 +43,7 @@ export async function applyChatModelDefault(ctx: ShellContext, sessionId: Sessio
 
 /**
  * The editor owns the visible session because the upstream workspace UI is not
- * mounted. One completed selection owns one `workspaceOperation` reference. A new
+ * mounted. The visible selection owns one native `mainView` reference. A new
  * selection becomes visible only after its open settles; cancellation, failure
  * and teardown release their provisional references without disturbing a
  * working previous view.
@@ -56,7 +56,7 @@ class MainSessionSelection implements ObservableSource<SessionFace | undefined> 
   private token = 0
   private disposed = false
 
-  constructor(private readonly sessions: ShellContext['sessions']) {}
+  constructor(private readonly sessions: ShellContext['sessions'], private readonly source: 'mainView' | 'workspaceOperation' = 'workspaceOperation') {}
 
   getSnapshot = (): SessionFace | undefined => this.current
 
@@ -71,7 +71,7 @@ class MainSessionSelection implements ObservableSource<SessionFace | undefined> 
     this.cancelPending()
     const token = ++this.token
     const controller = new AbortController()
-    const reference = this.sessions.retain(sessionId, { source: 'workspaceOperation', signal: controller.signal })
+    const reference = this.sessions.retain(sessionId, { source: this.source, signal: controller.signal })
     const pending = { token, controller, reference }
     this.pending = pending
     try {
@@ -129,7 +129,7 @@ class MainSessionSelection implements ObservableSource<SessionFace | undefined> 
 
 export function provideEditorUiWorkspace(ctx: ShellContext): void {
   const connecting = new Map<WorkspaceId, Promise<SessionId>>()
-  const selection = new MainSessionSelection(ctx.sessions)
+  const selection = new MainSessionSelection(ctx.sessions, 'mainView')
   const workspaceSelection = new MainSessionSelection(ctx.sessions)
   ctx.effect(() => () => {
     selection.dispose()

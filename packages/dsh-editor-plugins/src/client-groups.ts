@@ -19,6 +19,10 @@ export const HIDDEN_OPTIONAL_PACKAGES = new Set([
 
 /** Author-purpose groups. Package names stay in details; do not merge packages. */
 export const FEATURE_GROUP_DEFS: readonly FeatureGroupDef[] = [
+  { id: 'official-voice', title: '语音输入', description: '将本地语音识别结果放入对话草稿。', packages: [
+    '@deepseek-ai/dsh-experimental-speech-to-text', '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice',
+    '@deepseek-ai/dsh-experimental-api-speech-to-text', '@deepseek-ai/dsh-experimental-client-ui-voice-input',
+  ] },
   {
     id: 'writing',
     title: '写作辅助',
@@ -33,7 +37,7 @@ export const FEATURE_GROUP_DEFS: readonly FeatureGroupDef[] = [
   },
   {
     id: 'overview',
-    title: '作品概览',
+    title: '文档概览',
     description: '章节状态、字数分布与写作进度。',
     packages: ['dsh-editor-overview-panel'],
   },

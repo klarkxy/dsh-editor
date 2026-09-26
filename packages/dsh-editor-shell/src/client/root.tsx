@@ -1,3 +1,6 @@
+import { registerEditorWorkspaceShortcuts } from './official-shortcuts.ts'
+import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
+import { OfficialSurfaceProvider, OfficialOverlays, PLUGIN_NAVIGATION_EVENT, type OfficialRootProps } from './official-surfaces.tsx'
 import {
   Fragment,
   memo,
@@ -32,7 +35,7 @@ import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChar
 import { redesignedStyles } from '../styles.ts'
 import { errorMessage, isStaleFailure, canMoveTreeEntry, treeMoveTargetDir, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceFileContent, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
-import { DeepSeekWhaleMark, ImagePreviewOverlay, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
+import { DeepSeekWhaleMark, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, type PanelImperativeHandle, type PanelSize } from 'react-resizable-panels'
 import { BoundProposalCard, CenterOverlays, ChatColumn, EditorColumn, SidebarColumn, panelPixels, type FileMenuKind } from './root-columns.tsx'
 import { HomeScreen } from './root-home.tsx'
@@ -43,6 +46,7 @@ import { PluginWorkspace } from './plugins-page.tsx'
 import { SettingsDialog, SettingsTrigger, type SettingsRenderSlot, type SettingsTab } from './settings.tsx'
 import { ThemeToggle, useAccent, useTheme, type HostThemeSync } from './theme.tsx'
 import { Tree, FileContextMenu } from './sidebar.tsx'
+import { isSingleManuscriptRoot, readSingleSidebarChoice, sidebarAfterManuscriptCensus, writeSingleSidebarChoice } from './sidebar-chrome.ts'
 import { ChapterOpsLayer, chapterMenuModel, requestMergeChapter, requestSplitChapter, shouldOpenAfterChapterApply, snapshotFromHandle, type ChapterOpsRequest, type EditorSnapshotHandle } from './chapter-ops.tsx'
 import { isMarkdownChapterPath } from '../chapter-ops-view.ts'
 import { Editor } from './editor.tsx'
@@ -56,7 +60,7 @@ import { Select as HostSelect } from './select.tsx'
 import { ActivityDots, ActivityRing, ActivityShimmer, ActivitySkeleton, ActivityText, Button as HostButton, Dialog as HostDialog, Input, Input as HostInput, TextArea as HostTextArea, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ShellUiProvider, Tooltip, m, radixThemesStyles, useChromeMotion } from './ui/index.ts'
 import { Button as ThemesButton, Callout, Flex, IconButton, Text } from '@radix-ui/themes'
 import { WindowControls, titleBarDoubleClick, windowBridge } from './window-controls.tsx'
-import { SearchPanel, toRevealRequest, type SearchHit } from './search-panel.tsx'
+import { SearchPanel, replaceOutcomeForIdentity, searchIdentity, toRevealRequest, type ReplaceOutcome, type SearchHit, type SearchReplaceReport, type SearchScope } from './search-panel.tsx'
 import { PinnedPane } from './pinned-pane.tsx'
 import { canPinPath, storedPinnedPath, validatePinnedPath } from '../pinned-pane-view.ts'
 
@@ -256,18 +260,38 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [manualWorkspaceMode, setManualWorkspaceMode] = useState<'existing' | null>(null)
   const [manualWorkspacePath, setManualWorkspacePath] = useState('')
   const [newProject, setNewProject] = useState<{ busy: boolean; note: string } | null>(null)
+  const [projectDirectory, setProjectDirectory] = useState<string>()
+  const newProjectOpen = Boolean(newProject)
+  useEffect(() => {
+    if (!newProjectOpen) return
+    let current = true
+    setProjectDirectory(undefined)
+    void safeRpcCall<{ path: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.homeDirectory', {}))
+      .then((result) => { if (current) setProjectDirectory(result.ok ? result.value.path : '') })
+    return () => { current = false }
+  }, [newProjectOpen, ctx.connection.rpc])
   const [relocatingWorkspaceId, setRelocatingWorkspaceId] = useState<WorkspaceId | undefined>()
   const [sidebarOpen, setSidebarOpen] = useState(() => storedPanelOpen('dsh-editor.layout.sidebar-open', true))
+  const sidebarOpenRef = useRef(sidebarOpen)
+  sidebarOpenRef.current = sidebarOpen
+  const sidebarAutoCollapsed = useRef(false)
+  const skipSidebarOpenPersist = useRef(false)
+  const rootSingleRef = useRef(false)
+  const sidebarChoicePending = useRef<boolean | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
   const [assistantOpen, setAssistantOpen] = useState(() => storedPanelOpen('dsh-editor.layout.assistant-open', true))
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
   const overlayAssistant = useMediaQuery('(max-width: 1040px)')
   const compactChrome = useMediaQuery('(max-width: 760px)')
+  useEffect(() => {
+    if (compactChrome && sidebarOpen && assistantOpen) setSidebarOpen(false)
+  }, [compactChrome, sidebarOpen, assistantOpen])
   const [pinnedPath, setPinnedPath] = useState<string | null>(() => {
     const stored = storedPinnedPath('dsh-editor.layout.pinned-path')
     return stored && canPinPath(stored) ? stored : null
   })
   const [pinnedWidth, setPinnedWidth] = useState(() => storedPanelWidth('dsh-editor.layout.pinned-width', PINNED_DEFAULT, PINNED_MIN, PINNED_MAX))
+  const sidebarPanelRef = useRef<PanelImperativeHandle>(null)
   const sidebarWidthRef = useRef(sidebarWidth)
   const assistantWidthRef = useRef(assistantWidth)
   const pinnedWidthRef = useRef(pinnedWidth)
@@ -323,9 +347,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [clipboard, setClipboard] = useState<ClipboardEntry>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
   const [renameTarget, setRenameTarget] = useState<{ path: string; kind: FileMenuKind } | null>(null)
-  const [imagePreview, setImagePreview] = useState<{ path: string; url: string } | null>(null)
-  const lastImagePreview = useRef<{ path: string; url: string } | null>(null)
-  if (imagePreview) lastImagePreview.current = imagePreview
+
   const [managePath, setManagePath] = useState<string | null>(null)
   const [manageBusy, setManageBusy] = useState(false)
   const [manageNote, setManageNote] = useState('')
@@ -334,7 +356,16 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [accent] = useAccent()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  /* searchQuery/searchSubmitTick 已下沉到 SidebarColumn：输入按键不再上升到 Root。 */
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchScope, setSearchScope] = useState<SearchScope>('project')
+  const [searchReplaceBusy, setSearchReplaceBusy] = useState(false)
+  const [searchReplaceReport, setSearchReplaceReport] = useState<SearchReplaceReport | null>(null)
+  const searchContextIdentity = fileSessionId
+    ? searchIdentity({ sessionId: fileSessionId, revision: treeRevision, query: searchQuery, scope: searchScope, activePath: path })
+    : ''
+  const searchContextRef = useRef(searchContextIdentity)
+  searchContextRef.current = searchContextIdentity
+  useEffect(() => setSearchReplaceReport(null), [searchContextIdentity])
   const [highlightPath, setHighlightPath] = useState<string | null>(null)
   const [reveal, setReveal] = useState<RevealRequest | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -394,6 +425,30 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pluginsOpen, setPluginsOpen] = useState(false)
+  const [requestedPlugin, setRequestedPlugin] = useState<string>()
+  const [officialPreviewOpen, setOfficialPreviewOpen] = useState(false)
+  const [previewViewport, setPreviewViewport] = useState(() => globalThis.innerWidth)
+  useEffect(() => {
+    const resized = () => setPreviewViewport(globalThis.innerWidth)
+    globalThis.addEventListener('resize', resized)
+    return () => globalThis.removeEventListener('resize', resized)
+  }, [])
+  useEffect(() => {
+    const navigate = (event: Event) => {
+      const packageName = (event as CustomEvent<unknown>).detail
+      if (typeof packageName !== 'string') return
+      setRequestedPlugin(packageName)
+      setPluginsOpen(true)
+    }
+    globalThis.addEventListener(PLUGIN_NAVIGATION_EVENT, navigate)
+    return () => globalThis.removeEventListener(PLUGIN_NAVIGATION_EVENT, navigate)
+  }, [])
+  useEffect(() => {
+    const source = (ctx as unknown as { layout: { presentation: { getSnapshot(): { shown: boolean }; subscribe(fn: () => void): () => void } } }).layout.presentation
+    const update = () => setOfficialPreviewOpen(source.getSnapshot().shown)
+    update()
+    return source.subscribe(update)
+  }, [ctx])
   const openPlugins = () => { setSettingsOpen(false); setPluginsOpen(true) }
   const [settingsFocusTab, setSettingsFocusTab] = useState<SettingsTab | undefined>()
   const openSettings = useCallback((tab?: SettingsTab) => {
@@ -422,8 +477,58 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const pinValidatedSession = useRef<string | undefined>()
   useEffect(() => { document.title = 'DSH Editor' }, [])
   useEffect(() => {
+    if (skipSidebarOpenPersist.current) {
+      skipSidebarOpenPersist.current = false
+      return
+    }
     try { globalThis.localStorage?.setItem('dsh-editor.layout.sidebar-open', String(sidebarOpen)) } catch { /* View preferences remain optional. */ }
   }, [sidebarOpen])
+  const openWorkspaceIdRef = useRef(openWorkspaceId)
+  openWorkspaceIdRef.current = openWorkspaceId
+  const noteSidebarChoice = (open: boolean) => {
+    sidebarAutoCollapsed.current = false
+    if (!rootSingleRef.current) {
+      sidebarChoicePending.current = open
+      return
+    }
+    sidebarChoicePending.current = null
+    writeSingleSidebarChoice(openWorkspaceIdRef.current, open ? 'open' : 'closed')
+  }
+  useEffect(() => {
+    sidebarAutoCollapsed.current = false
+    rootSingleRef.current = false
+    sidebarChoicePending.current = null
+    setSidebarOpen(storedPanelOpen('dsh-editor.layout.sidebar-open', true))
+  }, [openWorkspaceId])
+  useEffect(() => {
+    const sessionId = fileSession?.sessionId
+    if (!sessionId) return
+    let live = true
+    void safeRpcCall<{ entries?: { name: string; type: 'file' | 'directory' | 'other' }[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', {
+      sessionId,
+      path: '.',
+    })).then((result) => {
+      if (!live || !result.ok) return
+      const single = isSingleManuscriptRoot(result.value.entries ?? [])
+      rootSingleRef.current = single
+      if (single && sidebarChoicePending.current !== null) {
+        writeSingleSidebarChoice(openWorkspaceIdRef.current, sidebarChoicePending.current ? 'open' : 'closed')
+        sidebarAutoCollapsed.current = false
+      }
+      sidebarChoicePending.current = null
+      const next = sidebarAfterManuscriptCensus({
+        open: sidebarOpenRef.current,
+        autoCollapsed: sidebarAutoCollapsed.current,
+        single,
+        explicit: readSingleSidebarChoice(openWorkspaceIdRef.current),
+      })
+      sidebarAutoCollapsed.current = next.autoCollapsed
+      if (next.open === sidebarOpenRef.current) return
+      if (next.autoCollapsed) skipSidebarOpenPersist.current = true
+      setSidebarOpen(next.open)
+    })
+    return () => { live = false }
+  }, [ctx, fileSession?.sessionId, treeRevision])
   useEffect(() => {
     try { globalThis.localStorage?.setItem('dsh-editor.layout.assistant-open', String(assistantOpen)) } catch { /* View preferences remain optional. */ }
   }, [assistantOpen])
@@ -446,6 +551,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const toggleSidebarChrome = () => {
     const next = focusMode ? true : !sidebarOpen
     if (focusMode) setFocusMode(false)
+    noteSidebarChoice(next)
     setSidebarOpen(next)
     if (next && compactChrome) setAssistantOpen(false)
   }
@@ -455,6 +561,41 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     setAssistantOpen(next)
     if (next && compactChrome) setSidebarOpen(false)
   }
+  const officialActionRef = useRef<Record<string, () => void>>({})
+  officialActionRef.current = {
+    'toggle-sidebar': toggleSidebarChrome,
+    'new-window': () => windowBridge()?.newWindow?.(),
+    'palette': () => setPaletteOpen(value => !value),
+    'settings': () => { void openSettings() },
+    'toggle-assistant': toggleAssistantChrome,
+    'toggle-focus': () => setFocusMode(value => !value),
+    'focus-assistant': () => {
+      if (!assistantEnabled) return
+      setFocusMode(false); setAssistantOpen(true)
+      if (compactChrome) setSidebarOpen(false)
+      setChatFocusNonce(value => value + 1)
+    },
+    'search': () => {
+      if (workspaceOpen.kind !== 'ready') return
+      setFocusMode(false); noteSidebarChoice(true); setSidebarOpen(true)
+      if (compactChrome) setAssistantOpen(false)
+      setSearchOpen(true)
+    },
+    'toggle-typewriter': () => { void writingScope.set('typewriter', !writing.typewriter) },
+    'toggle-focus-paragraph': () => { void writingScope.set('focusParagraph', !writing.focusParagraph) },
+  }
+  useEffect(() => {
+    const toggle = () => officialActionRef.current['toggle-sidebar']?.()
+    globalThis.addEventListener('dsh-editor:official-layout', toggle)
+    return () => globalThis.removeEventListener('dsh-editor:official-layout', toggle)
+  }, [])
+  const shortcutEnabled = useRef({ pluginsOpen, session: Boolean(session) })
+  shortcutEnabled.current = { pluginsOpen, session: Boolean(session) }
+  useEffect(() => registerEditorWorkspaceShortcuts(
+    (ctx as unknown as { shortcuts: Parameters<typeof registerEditorWorkspaceShortcuts>[0] }).shortcuts,
+    Object.fromEntries(Object.keys(officialActionRef.current).map(key => [key, () => officialActionRef.current[key]?.()])),
+    action => !shortcutEnabled.current.pluginsOpen && (['settings', 'new-window', 'palette'].includes(action) || shortcutEnabled.current.session),
+  ), [ctx])
   useEffect(() => {
     const hotkey = (event: globalThis.KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229) return
@@ -475,40 +616,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           }
         }
         return
-      }
-      const action = workspaceShortcut(event)
-      if (action) {
-      if (event.repeat) return
-      if (action !== 'settings' && !session) return
-      event.preventDefault()
-      if (action === 'settings') { void openSettings(); return }
-      if (action === 'toggle-sidebar') { toggleSidebarChrome(); return }
-      if (action === 'toggle-assistant') { toggleAssistantChrome(); return }
-      if (action === 'toggle-focus') { setFocusMode((value) => !value); return }
-      if (action === 'focus-assistant') {
-        if (!assistantEnabled) return
-        setFocusMode(false)
-        setAssistantOpen(true)
-        if (compactChrome) setSidebarOpen(false)
-        setChatFocusNonce((value) => value + 1)
-        return
-      }
-      if (action === 'search') {
-        if (workspaceOpen.kind !== 'ready') return
-        setFocusMode(false)
-        setSidebarOpen(true)
-        if (compactChrome) setAssistantOpen(false)
-        setSearchOpen(true)
-        return
-      }
-      if (action === 'toggle-typewriter') {
-        void writingScope.set('typewriter', !writing.typewriter)
-        return
-      }
-      if (action === 'toggle-focus-paragraph') {
-        void writingScope.set('focusParagraph', !writing.focusParagraph)
-        return
-      }
       }
       if (event.repeat) return
       const command = matchRegistryShortcut(commands.list(), event)
@@ -618,35 +725,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       totalChars: chars,
     }))
   }
-  const openImagePreview = useCallback(async (imagePath: string) => {
-    if (!fileSession) return
-    const read = await safeRpcCall<{ base64: string; mime: string }>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'file.readBinary', {
-      sessionId: fileSession.sessionId,
-      path: imagePath,
-    }))
-    if (!read.ok) { setWorkbenchNote(errorMessage(read)); return }
-    setWorkbenchNote('')
-    const bytes = Uint8Array.from(globalThis.atob(read.value.base64), (char) => char.charCodeAt(0))
-    const url = URL.createObjectURL(new Blob([bytes], { type: read.value.mime }))
-    setImagePreview((old) => {
-      const stale = old ?? lastImagePreview.current
-      if (stale?.url && stale.url !== url) URL.revokeObjectURL(stale.url)
-      return { path: imagePath, url }
-    })
-  }, [fileSession, ctx])
-  const closeImagePreview = () => setImagePreview(null)
-  useEffect(() => {
-    if (imagePreview) return undefined
-    const last = lastImagePreview.current
-    if (!last) return undefined
-    const timer = globalThis.setTimeout(() => {
-      if (lastImagePreview.current?.url === last.url) {
-        URL.revokeObjectURL(last.url)
-        lastImagePreview.current = null
-      }
-    }, 400)
-    return () => globalThis.clearTimeout(timer)
-  }, [imagePreview])
+  const openImagePreview = useCallback(async (resourcePath: string) => {
+    if (!fileSession || workspaceOpen.kind !== 'ready') return
+    try {
+      const sidebar = (ctx as unknown as { sidebarRight: { openResource(address: string): unknown } }).sidebarRight
+      await sidebar.openResource(fileAddressFor(fileSession.sessionId, workspaceOpen.path, resourcePath))
+      setWorkbenchNote('')
+    } catch (error) { setWorkbenchNote(error instanceof Error ? error.message : String(error)) }
+  }, [fileSession, workspaceOpen, ctx])
   const openFileMenu = useCallback((kind: FileMenuKind, selectedPath: string, position: { x: number; y: number }, trigger?: HTMLElement | null) => {
     if (editorDirtyRef.current) { setWorkbenchNote(t('error.saveFirst')); return }
     setWorkbenchNote('')
@@ -1454,6 +1540,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     setNewProject(null)
   }
   const renderNewProjectDialog = () => <NewProjectDialog
+    directory={projectDirectory}
     open={Boolean(newProject)}
     busy={newProject?.busy ?? false}
     note={newProject?.note ?? ''}
@@ -1462,7 +1549,9 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     onCreate={(title: string) => void submitNewProject(title)} />
   const openSearchPanel = () => {
     if (!fileSession) return
+    if (compactChrome) setAssistantOpen(false)
     setFocusMode(false)
+    noteSidebarChoice(true)
     setSidebarOpen(true)
     setSearchOpen(true)
     setPaletteOpen(false)
@@ -1499,9 +1588,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [commandTick, setCommandTick] = useState(0)
   useEffect(() => commands.subscribe(() => setCommandTick((value) => value + 1)), [commands])
   const revealSidebar = useCallback(() => {
+    const width = Math.max(sidebarWidthRef.current, 336)
+    setSidebarWidth(width)
+    sidebarPanelRef.current?.resize(width + 'px')
+    if (compactChrome) setAssistantOpen(false)
     setFocusMode(false)
+    noteSidebarChoice(true)
     setSidebarOpen(true)
-  }, [])
+  }, [compactChrome])
   const refreshSeat = useCallback((scope: 'tree' | 'content' | 'overview') => {
     if (scope === 'tree') setTreeRevision((value) => value + 1)
     else if (scope === 'content') setContentRevision((value) => value + 1)
@@ -1570,6 +1664,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     })),
     [commandTick, commands, hasFileSession, locale, seatContext, seatRegistryContext],
   )
+  const documentTools = useMemo(() => ['overview', 'proofread-document'].flatMap((id) => registryCommands.filter((item) => item.id === id)), [registryCommands])
   /* 自动写入落盘后的轻量刷新：只刷新树与当前内容，不做编辑器导航。 */
   const refreshWrittenPath = useCallback((writtenPath: string) => {
     setTreeRevision((old) => old + 1)
@@ -1589,12 +1684,20 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }, [openDocument, path])
   /* 侧栏搜索命中/替换后的刷新：均经保存 gate 或内容修订，供 memo 化的侧栏列复用。 */
   const onSearchHitOpen = useCallback((hit: SearchHit) => openDocument(hit.path, hit), [openDocument])
-  const onSearchReplaced = useCallback((paths: string[]) => {
-    if (!paths.includes(path)) return
-    const navigation = proposalAppliedNavigation(path, path, editorDirtyRef.current)
+  const onSearchReplaced = useCallback((sourceSessionId: string, paths: string[]) => {
+    if (fileSessionIdRef.current !== sourceSessionId) return
+    const activePath = latestDocRef.current.path
+    if (!paths.includes(activePath)) return
+    const navigation = proposalAppliedNavigation(activePath, activePath, editorDirtyRef.current)
     if (navigation.refreshContent) setContentRevision((old) => old + 1)
-  }, [path])
+  }, [])
+  const onSearchReplaceOutcomeChange = useCallback((identity: string, outcome: ReplaceOutcome | null) => {
+    if (searchContextRef.current !== identity) return
+    setSearchReplaceReport(outcome ? { identity, outcome } : null)
+  }, [])
   const onSearchRequestOpen = useCallback(() => setSearchOpen(true), [])
+  const onSearchRequestClose = useCallback(() => setSearchOpen(false), [])
+  const configureChatModel = useCallback(() => openSettings('models'), [openSettings])
   /* 树内新建文件/文件夹：openTreeCreate 读取 fileSession/fileMenu，二者列入依赖。 */
   const onTreeCreateFile = useCallback((directory: string) => openTreeCreate('file', directory), [fileSession, fileMenu])
   const onTreeCreateFolder = useCallback((directory: string) => openTreeCreate('folder', directory), [fileSession, fileMenu])
@@ -1918,7 +2021,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
      是排过序的 .md/.txt),不另外发 RPC。 */
   const renderCommandPalette = () => <CommandPalette
     open={paletteOpen}
-    hotkeysEnabled={!pluginsOpen}
+    hotkeysEnabled={false}
     onOpenChange={setPaletteOpen}
     theme={theme}
     onThemeChange={setTheme}
@@ -1945,6 +2048,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     hasWorkspace={Boolean(fileSession)}
     focusMode={focusMode}
     files={files}
+    onCreateFile={() => onTreeCreateFile('')}
     activePath={path} />
   const openAnotherWorkspace = async () => {
     closeWorkspaceChrome()
@@ -1957,12 +2061,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
 
   const chatSession = session ?? fileSession
-  const sidebarVisible = sidebarOpen && !focusMode
+  const sidebarVisible = sidebarOpen && !focusMode && !(officialPreviewOpen && compactChrome)
   const sidebarInGrid = sidebarVisible && !compactChrome
   /* 窄窗(≤760px):侧栏与助手改成覆盖层抽屉,不再整个禁用。 */
-  const assistantVisible = assistantOpen && !focusMode && assistantEnabled
+  const assistantVisible = assistantOpen && !focusMode && assistantEnabled && !(officialPreviewOpen && overlayAssistant)
   const assistantInGrid = assistantVisible && !overlayAssistant
-  const pinnedVisible = pinnedPath !== null && !focusMode
+  const pinnedVisible = pinnedPath !== null && !focusMode && !overlayAssistant
   /* 写作搭档面板始终挂载（草稿是 Chat 本地 state），关闭=折叠到 0 宽；
      窄窗 overlay 抽屉与网格共用同一实例，窗口越过断点不丢草稿。
      hooks 必须全部早于下方的首页早退分支，否则违反渲染顺序。 */
@@ -1984,7 +2088,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
       <ShellUiProvider theme={theme} accent={accent}>
-        <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
+        <PluginWorkspace requestedPackage={requestedPlugin} open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
           sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={() => setPluginsOpen(false)}>
         <HomeScreen
           workspaceOpen={workspaceOpen}
@@ -2032,7 +2136,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
 
   return (
     <ShellUiProvider theme={theme} accent={accent}>
-        <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
+        <PluginWorkspace requestedPackage={requestedPlugin} open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
           sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={() => setPluginsOpen(false)}>
       <main
         className={`shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantInGrid ? ' assistant-in-grid' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`}
@@ -2071,6 +2175,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         <PanelGroup
           orientation="horizontal"
           className="shell-panels"
+          style={{ isolation: officialPreviewOpen ? 'isolate' : undefined }}
           resizeTargetMinimumSize={{ coarse: 28, fine: 12 }}
           onLayoutChanged={(_layout, meta) => {
             /* 拖动中途不要 setState：v4 会把变化中的 defaultSize 当成新布局，pointer capture 也会丢。 */
@@ -2082,6 +2187,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           {sidebarInGrid ? <>
             <Panel
               id="sidebar"
+              panelRef={sidebarPanelRef}
               className="shell-panel"
               defaultSize={sidebarWidth}
               minSize={SIDEBAR_MIN}
@@ -2092,7 +2198,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
                 ctx={ctx}
                 sessionId={fileSession.sessionId}
                 searchOpen={searchOpen}
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                searchScope={searchScope}
+                onSearchScopeChange={setSearchScope}
+                replaceOutcome={replaceOutcomeForIdentity(searchReplaceReport, searchContextIdentity)}
+                onReplaceOutcomeChange={onSearchReplaceOutcomeChange}
+                replaceBusy={searchReplaceBusy}
+                onReplaceBusyChange={setSearchReplaceBusy}
+                documentTools={documentTools}
                 onSearchRequestOpen={onSearchRequestOpen}
+                onSearchRequestClose={onSearchRequestClose}
                 onOpenDocument={openDocument}
                 onSearchReplaced={onSearchReplaced}
                 activePath={path}
@@ -2206,12 +2322,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               onRememberMemory={onRememberMemory}
               hidden={!assistantVisible}
               overlay={overlayAssistant}
-              onConfigure={openSettings}
+              onConfigure={configureChatModel}
               onDraftDirtyChange={setAssistantDraftDirty}
               onWritten={refreshWrittenPath}
               onApplied={onAppliedChat} />
           </Panel> : null}
         </PanelGroup>
+        <aside className="official-resource-panel" hidden={!officialPreviewOpen} aria-label="资料预览">
+          <div data-dsh-plugin-surface="" style={{ height: '100%' }}>{renderSlot?.('rightbar', {
+            width: Math.min(680, previewViewport), viewportWidth: previewViewport, canShow: !pluginsOpen,
+          })}</div>
+        </aside>
         {assistantEnabled && chatSession && overlayAssistant ? <ThemesButton
           type="button"
           variant="ghost"
@@ -2226,7 +2347,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             ctx={ctx}
             sessionId={fileSession.sessionId}
             searchOpen={searchOpen}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            searchScope={searchScope}
+            onSearchScopeChange={setSearchScope}
+            replaceOutcome={replaceOutcomeForIdentity(searchReplaceReport, searchContextIdentity)}
+            onReplaceOutcomeChange={onSearchReplaceOutcomeChange}
+            replaceBusy={searchReplaceBusy}
+            onReplaceBusyChange={setSearchReplaceBusy}
+                documentTools={documentTools}
             onSearchRequestOpen={onSearchRequestOpen}
+                onSearchRequestClose={onSearchRequestClose}
             onOpenDocument={openDocument}
             onSearchReplaced={onSearchReplaced}
             activePath={path}
@@ -2259,7 +2390,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           tabIndex={-1}
           aria-label={t('workspace.hideFiles')}
           onClick={() => setSidebarOpen(false)} /> : null}
-        {!assistantVisible && !focusMode ? (
+        {!assistantVisible && !focusMode && !officialPreviewOpen ? (
           capabilityState.kind === 'error'
             ? <Callout.Root className="assistant-launcher capability-note" color="red" role="alert">
             <Flex direction="column" gap="2">
@@ -2428,6 +2559,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             busy={snapshotBusy}
             editorDirty={editorDirty}
             onRollback={onRequestRollback}
+            onSaveVersion={onCommitSnapshot}
             onClose={() => { if (!snapshotBusy) setHistoryOpen(false) }} />
         </ShellErrorBoundary>
         {DOCUMENT_ARCHIVE_UI ? <ArchivePanel
@@ -2452,11 +2584,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           returnFocusRef={workspaceMenuTrigger}>
           {pathFallbackForm}
         </HostDialog>
-        <ImagePreviewOverlay
-          open={Boolean(imagePreview)}
-          path={(imagePreview ?? lastImagePreview.current)?.path ?? ''}
-          url={(imagePreview ?? lastImagePreview.current)?.url ?? ''}
-          onClose={closeImagePreview} />
         <SettingsDialog
           sessionId={chatSession?.sessionId}
           open={settingsOpen}
@@ -2513,7 +2640,7 @@ type RegisterShellRootOptions = {
 // collapsed launchers can never cover the composer. The rail stays
 // click-through and each contributed component opts into pointer events;
 // open panels position against their launcher via the --dsh-ext-* contract.
-type RootSlotProps = { renderSlot?: SettingsRenderSlot }
+type RootSlotProps = OfficialRootProps
 
 export function ExtensionsDock(props: { rootProps: unknown }) {
   const renderSlot = (props.rootProps as RootSlotProps | null | undefined)?.renderSlot
@@ -2550,6 +2677,7 @@ export function registerShellRoot(ctx: Context, options: RegisterShellRootOption
   if (typeof document !== 'undefined') ctx.effect(() => injectShellStyles(), 'dsh-editor-shell-client.styles')
   const client = ctx as ShellContext
   options.registerRoot(client, (props) => <ShellErrorBoundary>
+    <OfficialSurfaceProvider value={{ ...props as OfficialRootProps, shortcuts: (client as unknown as { shortcuts: import('@deepseek-ai/dsh-client-shortcuts/client').Shortcuts }).shortcuts }}>
     <Root
       ctx={client}
       writingScope={options.writingScope}
@@ -2560,6 +2688,8 @@ export function registerShellRoot(ctx: Context, options: RegisterShellRootOption
       extensionsDock={<ExtensionsDock rootProps={props} />}
       pluginsSettings={(props as RootSlotProps).renderSlot?.(PLUGINS_SETTINGS_SLOT, HOST_UI_OWNER) ?? null}
       zhihuSettings={(props as RootSlotProps).renderSlot?.(ZHIHU_SETTINGS_SLOT, HOST_UI_OWNER) ?? null} />
+    <OfficialOverlays {...props as OfficialRootProps} />
+    </OfficialSurfaceProvider>
   </ShellErrorBoundary>)
 }
 

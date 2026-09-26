@@ -46,6 +46,8 @@ export default defineConfig([
     target: 'es2022',
     sourcemap: true,
     hash: false,
+    /* motion 源文件带 RSC 的 "use client"。本包是浏览器 CJS,关掉这条检查。 */
+    checks: { moduleLevelDirective: false },
     loader: { '.css': 'text', '.webp': 'dataurl' },
     plugins: [cssAsTextPlugin],
     /* react-markdown 依赖链(unified → vfile/min*)会在模块加载期 require
@@ -59,6 +61,7 @@ export default defineConfig([
     deps: {
       neverBundle: ['react', 'react-dom', 'react/jsx-runtime'],
       alwaysBundle: [
+        '@deepseek-ai/dsh-util-workspace-path',
         'dsh-editor-seats',
         '@klarkxy/dsh-ai-services/contracts',
         'dsh-editor-workbench/contracts',

@@ -19,6 +19,7 @@ export function PluginsTrigger(props: { onOpen(): void }) {
 
 type PluginWorkspaceProps = {
   open: boolean
+  requestedPackage?: string
   ctx: ShellContext
   renderSlot?: SettingsRenderSlot
   plugins?: ReactNode
@@ -47,6 +48,9 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
   const official = usePluginConfigurations(props.ctx)
   const [selected, setSelected] = useState('manage')
   const [query, setQuery] = useState('')
+  useLayoutEffect(() => {
+    if (props.requestedPackage) setSelected('official:plugins.bundle.config:' + props.requestedPackage)
+  }, [props.requestedPackage])
   const back = useRef<HTMLButtonElement>(null)
   const pages = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {

@@ -155,6 +155,7 @@ export function TextPromptDialog(props: {
 }
 
 export function NewProjectDialog(props: {
+  directory?: string
   open?: boolean
   busy: boolean
   note: string
@@ -175,7 +176,7 @@ export function NewProjectDialog(props: {
       open={open}
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onClose() }}
       title={t('dialog.newProject')}
-      description={t('dialog.newProjectHint')}
+      description={props.directory ? t('dialog.projectDirectory', { path: props.directory }) : undefined}
       className="file-dialog create-dialog file-dialog-overlay"
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
@@ -187,8 +188,9 @@ export function NewProjectDialog(props: {
             <Heading as="h2" size="4" id="new-project-dialog-title">
               {t('dialog.newProject')}
             </Heading>
-            <Text size="1" color="gray">
-              {t('dialog.newProjectHint')}
+            <Text size="2" color="gray" className="project-directory">
+              {props.directory === undefined ? t('dialog.projectDirectoryLoading') : props.directory
+                ? t('dialog.projectDirectory', { path: props.directory }) : t('dialog.newProjectHint')}
             </Text>
           </Flex>
           <IconButton

@@ -68,6 +68,7 @@ function HistoryPanel(props: {
   busy: boolean
   editorDirty: boolean
   onRollback(item: SnapshotView): void
+  onSaveVersion?(): void
   onClose(): void
   returnFocusRef?: RefObject<HTMLElement | null>
 }) {
@@ -95,7 +96,7 @@ function HistoryPanel(props: {
       onOpenChange={(next: boolean) => { if (!next && !props.busy) props.onClose() }}
       title={t('workspace.commitHistory')}
       description={t('workspace.historyHint')}
-      className="file-dialog history-dialog file-dialog-overlay"
+      className={`file-dialog history-dialog${empty ? ' history-dialog-empty' : ''} file-dialog-overlay`}
       overlayClassName="file-dialog-overlay"
       dismissible={!props.busy}
       initialFocusRef={close}
@@ -126,9 +127,12 @@ function HistoryPanel(props: {
             <span className="sr-only">{t('workspace.historyLoading')}</span>
           </div>
         </Flex> : null}
-        {empty ? <Text size="1" color="gray">
-          {t('workspace.historyEmpty')}
-        </Text> : null}
+        {empty ? <Flex direction="column" align="start" gap="3">
+          <Text size="2" color="gray">{t('workspace.historyEmpty')}</Text>
+          {props.onSaveVersion ? <Button disabled={props.busy} onClick={props.onSaveVersion}>
+            {t('workspace.saveFirstVersion')}
+          </Button> : null}
+        </Flex> : null}
         {!loading && !empty ? <div className="history-split">
           <div className="history-commits" role="listbox" aria-label={t('workspace.commitHistory')}>
               {items.map((item, index) => {

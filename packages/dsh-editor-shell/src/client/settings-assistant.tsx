@@ -1,36 +1,41 @@
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Button, Callout, Card, Flex, Heading, Text, TextArea } from '@radix-ui/themes'
-import type { SettingsScope } from '../dsh-compat.ts'
-import { AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorPreferences } from '../author-preferences.ts'
-import { writingPreferences, type WritingMigration, type WritingPreferences } from '../writing-settings.tsx'
+import type { SettingsScopeSnapshot } from '../dsh-compat.ts'
+import { AUTHOR_PREFERENCES_MAX_CHARS } from '../author-preferences.ts'
+import type { WritingMigration, WritingPreferences } from '../writing-settings.tsx'
 import { t, useLocale } from '../i18n/index.ts'
 import { ActivityDots } from './ui/index.ts'
 
-function object(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+export type AuthorDraft = { value: string; saved: string; conflicted: boolean }
+
+/** A Host update replaces a clean draft, but cannot silently replace local edits. */
+export function reconcileAuthorDraft(draft: AuthorDraft, saved: string): AuthorDraft {
+  if (draft.value === saved) return { value: saved, saved, conflicted: false }
+  if (draft.saved === saved) return draft
+  if (draft.value === draft.saved) return { value: saved, saved, conflicted: false }
+  return { ...draft, saved, conflicted: true }
 }
 
-function hasOwn(value: unknown, field: keyof WritingPreferences): boolean {
-  const record = object(value)
-  return record !== undefined && Object.prototype.hasOwnProperty.call(record, field)
+/** An older save may finish after the author has started a newer draft. */
+export function completeAuthorDraftSave(draft: AuthorDraft, submitted: string, saved: string): AuthorDraft {
+  if (draft.value === submitted || draft.value === saved) return { value: saved, saved, conflicted: false }
+  return { value: draft.value, saved, conflicted: false }
 }
 
-export function AssistantSettings({ scope, migrate }: {
-  scope: SettingsScope<WritingPreferences>
+export function AssistantSettings({ snapshot, migrate, authorDraft, saving, writeFailure, onAuthorDraftChange, onUseLatest, onKeepDraft, onSave }: {
+  snapshot: SettingsScopeSnapshot<WritingPreferences>
   migrate: WritingMigration
+  authorDraft: AuthorDraft
+  saving: boolean
+  writeFailure: string
+  onAuthorDraftChange(value: string): void
+  onUseLatest(): void
+  onKeepDraft(): void
+  onSave(): void
 }) {
   useLocale()
-  const snapshot = useSyncExternalStore(
-    scope.subscribe.bind(scope),
-    scope.getSnapshot.bind(scope),
-    scope.getSnapshot.bind(scope),
-  )
-  const values = writingPreferences(snapshot, globalThis.localStorage)
   const migrated = useRef(false)
   const [migrationFailure, setMigrationFailure] = useState<(keyof WritingPreferences)[]>([])
-  const [saving, setSaving] = useState(false)
-  const [writeFailure, setWriteFailure] = useState('')
-  const [authorDraft, setAuthorDraft] = useState(values.authorPreferences)
 
   const runMigration = async () => {
     const result = await migrate()
@@ -42,24 +47,6 @@ export function AssistantSettings({ scope, migrate }: {
     migrated.current = true
     void runMigration()
   }, [snapshot.status])
-
-  useEffect(() => {
-    setAuthorDraft(values.authorPreferences)
-  }, [values.authorPreferences])
-
-  const save = async () => {
-    setSaving(true)
-    setWriteFailure('')
-    try {
-      const normalized = normalizeAuthorPreferences(authorDraft)
-      if (await scope.set('authorPreferences', normalized) === false) throw new Error('Host refused settings write')
-      if (!hasOwn(scope.getSnapshot().user, 'authorPreferences')) throw new Error('write did not commit')
-    } catch {
-      setWriteFailure(t('writing.authorFailed'))
-    } finally {
-      setSaving(false)
-    }
-  }
 
   if (snapshot.status === 'loading') return (
     <section className="assistant-settings" aria-label={t('settings.assistant')}>
@@ -90,23 +77,33 @@ export function AssistantSettings({ scope, migrate }: {
         </header>
         <Flex className="author-preferences" direction="column" gap="2">
           <TextArea
-            value={authorDraft}
+            value={authorDraft.value}
             maxLength={AUTHOR_PREFERENCES_MAX_CHARS}
             rows={5}
             placeholder={t('writing.authorPlaceholder')}
             aria-labelledby="writing-author-pref"
             disabled={saving}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setAuthorDraft(event.target.value)} />
+            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onAuthorDraftChange(event.target.value)} />
           <Text size="1" color="gray">
-            {t('writing.authorCount', { count: authorDraft.length, max: AUTHOR_PREFERENCES_MAX_CHARS })}
+            {t('writing.authorCount', { count: authorDraft.value.length, max: AUTHOR_PREFERENCES_MAX_CHARS })}
           </Text>
+          {authorDraft.value !== authorDraft.saved ? <Text size="1" color="gray" role="status">
+            {t('writing.authorUnsaved')}
+          </Text> : null}
         </Flex>
+        {authorDraft.conflicted ? <Callout.Root color="amber" role="alert" mt="3">
+          <Callout.Text>{t('writing.authorConflict')}</Callout.Text>
+          <Flex gap="2" wrap="wrap" mt="2">
+            <Button type="button" variant="soft" color="gray" disabled={saving} onClick={onUseLatest}>{t('writing.authorUseLatest')}</Button>
+            <Button type="button" variant="soft" color="gray" disabled={saving} onClick={onKeepDraft}>{t('writing.authorKeepDraft')}</Button>
+          </Flex>
+        </Callout.Root> : null}
         <Button
           type="button"
           variant="solid"
           mt="3"
-          disabled={saving || authorDraft === values.authorPreferences}
-          onClick={() => void save()}>
+          disabled={saving || authorDraft.conflicted || authorDraft.value === authorDraft.saved}
+          onClick={onSave}>
           {saving ? <Fragment>
             <ActivityDots />
             {t('common.saving')}

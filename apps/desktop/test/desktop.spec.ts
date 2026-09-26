@@ -1230,13 +1230,12 @@ describe('controlled multi-window', () => {
     expect(harness.deploy).toHaveBeenCalledOnce()
   })
 
-  it('opens a window only for the focused Ctrl+Shift+N shortcut', async () => {
+  it('leaves configurable new-window keys to the official shortcut adapter', async () => {
     const harness = multiWindowHarness()
     const lifecycle = createDesktopLifecycle(harness.deps)
     await lifecycle.createWindow()
     const accepted = harness.windows[0]!.emitInput({ type: 'keyDown', key: 'N', control: true, shift: true, alt: false, meta: false })
-    expect(accepted.preventDefault).toHaveBeenCalledOnce()
-    await vi.waitFor(() => expect(harness.windows).toHaveLength(2))
+    expect(accepted.preventDefault).not.toHaveBeenCalled()
     for (const input of [
       { type: 'keyUp', key: 'N', control: true, shift: true, alt: false, meta: false },
       { type: 'keyDown', key: 'n', control: true, shift: false, alt: false, meta: false },
@@ -1248,7 +1247,7 @@ describe('controlled multi-window', () => {
       const ignored = harness.windows[0]!.emitInput(input)
       expect(ignored.preventDefault).not.toHaveBeenCalled()
     }
-    expect(harness.counts()).toEqual({ starts: 1, stops: 0, supervisors: 1, windows: 2 })
+    expect(harness.counts()).toEqual({ starts: 1, stops: 0, supervisors: 1, windows: 1 })
   })
 
   it('keeps the backend running when one window closes and stops it once on shutdown', async () => {

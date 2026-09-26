@@ -157,6 +157,10 @@ describe('private editor workbench Host RPC', () => {
       host.sessions.get = vi.fn(() => { throw new Error('session lookup must not run') })
       expect(defaultProjectsRoot()).toBe(parent)
       await expect(dispatchEditorFiles(
+        host as unknown as Context, 'project.homeDirectory', { root: '/forged/outside' },
+        new AbortController().signal,
+      )).resolves.toEqual({ path: parent })
+      await expect(dispatchEditorFiles(
         host as unknown as Context,
         'project.createHome',
         { title: '未名之书', root: '/forged/outside' },

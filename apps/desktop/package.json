@@ -11,13 +11,14 @@
     "test": "vitest run --root ../.. apps/desktop/test"
   },
   "devDependencies": {
-    "electron": "37.2.6",
+    "electron": "42.11.8",
     "electron-builder": "26.0.12",
     "electron-winstaller": "5.4.0",
     "typescript": "5.9.3",
     "vitest": "3.2.7"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-client-shortcuts": "0.1.7-rc.2",
     "yaml": "^2.8.2"
   }
 }

@@ -1,3 +1,4 @@
+import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import { useEffect, useState } from 'react'
 import { Card, Heading, Kbd, Table, Text } from '@radix-ui/themes'
 import { useLocale } from '../i18n/index.ts'
@@ -6,18 +7,6 @@ import type { ShellCommandRegistry } from '../seats.ts'
 
 type Row = [keys: string, zh: string, en: string]
 const groups = (platform: string): { title: [string, string]; rows: Row[] }[] => [
-  { title: ['全局与工作区', 'App and workspace'], rows: [
-    ['Ctrl+Shift+N', '新建窗口（仅桌面版）', 'New window (desktop only)'],
-    ['Mod+,', '打开设置', 'Open settings'],
-    ['Mod+K', '命令面板 / 快速打开文件', 'Command palette / open a file'],
-    ['Mod+B', '显示 / 隐藏侧栏', 'Toggle sidebar'],
-    ['Mod+J', '显示 / 隐藏助手', 'Toggle assistant'],
-    ['Mod+L', '聚焦助手输入框', 'Focus assistant input'],
-    ['Mod+\\', '切换专注模式', 'Toggle focus mode'],
-    ['Mod+Shift+F', '搜索整个作品', 'Search the workspace'],
-    ['Mod+Alt+T', '切换打字机模式', 'Toggle typewriter mode'],
-    ['Mod+Alt+P', '切换段落聚焦', 'Toggle paragraph focus'],
-  ] },
   { title: ['稿纸与补全', 'Manuscript and completion'], rows: [
     ['Mod+S', '保存文稿', 'Save manuscript'],
     ['Mod+Enter', '手动补全；有改写预览时接受改写', 'Request completion; accept an open rewrite preview'],
@@ -52,7 +41,7 @@ const groups = (platform: string): { title: [string, string]; rows: Row[] }[] =>
   ] },
 ]
 
-export function ShortcutsSettings({ commands }: { commands?: ShellCommandRegistry }) {
+export function ShortcutsSettings({ commands, renderSlot }: { commands?: ShellCommandRegistry; renderSlot?: SettingsRenderSlot }) {
   const locale = useLocale()
   const [registered, setRegistered] = useState(() => commands?.list() ?? [])
   useEffect(() => {
@@ -111,6 +100,7 @@ export function ShortcutsSettings({ commands }: { commands?: ShellCommandRegistr
     </Table.Row>)}</Table.Body>
   </Table.Root>
   return <section aria-label={locale === 'en' ? 'Keyboard shortcuts' : '快捷键'}>
+    <div data-dsh-plugin-surface="">{renderSlot?.('settings.general.item', {}, { only: 'shortcuts' })}</div>
     <Text as="p" size="2" color="gray" mb="4">{locale === 'en'
       ? 'Shortcuts apply to the focused area. Workspace commands require an open project; AI features must be enabled. Keys below follow your platform.'
       : '快捷键按当前焦点生效。工作区操作需要打开作品，AI 操作需要启用对应功能。下方按键随系统显示。'}</Text>
@@ -125,8 +115,6 @@ export function ShortcutsSettings({ commands }: { commands?: ShellCommandRegistr
     <Text as="p" size="2" color="gray">{locale === 'en'
       ? 'Some keys may be reserved by your browser or OS. Use the command palette or menus if a shortcut is intercepted.'
       : '部分组合键可能被浏览器或系统占用；遇到冲突时可从命令面板或菜单执行。'}</Text>
-    {mac ? <Text as="p" size="2" color="gray">{locale === 'en'
-      ? 'App and plugin commands also accept Ctrl on macOS. Ctrl+B, Ctrl+K and Ctrl+L therefore control the sidebar, palette and assistant instead of cursor movement.'
-      : 'macOS 的全局与插件命令也接受 Ctrl；Ctrl+B、Ctrl+K、Ctrl+L 分别控制侧栏、命令面板和助手，会覆盖同键的光标操作。'}</Text> : null}
+
   </section>
 }

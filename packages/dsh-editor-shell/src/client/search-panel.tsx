@@ -3,7 +3,7 @@ import { Box, Button, Callout, Card, Flex, ScrollArea, Text, TextField } from '@
 import { Select } from './select.tsx'
 import { ActivityDots, isImeEvent } from './ui/index.ts'
 import { m, useChromeMotion } from './ui/motion.ts'
-import { errorMessage, isStaleFailure, LatestRequestGate, safeRpcCall, searchSkippedText, worldbookPaperProjection, type RevealRequest, type ShellContext } from './shared.ts'
+import { errorMessage, isStaleFailure, LatestRequestGate, safeRpcCall, searchSkippedText, worldbookPaperProjection, type RevealRequest, type RpcResult, type ShellContext } from './shared.ts'
 import {
   planReplace,
   prepareReplaceWrite,
@@ -42,6 +42,12 @@ export type ReplaceOutcome = {
   stale: string[]
   changed: string[]
   failed: string[]
+}
+
+export type SearchReplaceReport = { identity: string; outcome: ReplaceOutcome }
+
+export function replaceOutcomeForIdentity(report: SearchReplaceReport | null, identity: string): ReplaceOutcome | null {
+  return report?.identity === identity ? report.outcome : null
 }
 
 /** Sidebar owns the live query; a blank field must drop the current hit list. */
@@ -117,6 +123,45 @@ export function replaceBlockedByDirty(input: { activePath: string; activeDirty: 
   return input.activeDirty && Boolean(input.activePath) && input.paths.includes(input.activePath)
 }
 
+/** Results and confirmation belong to one exact search context, including the active folder. */
+export function searchIdentity(input: { sessionId: string; revision: number; query: string; scope: SearchScope; activePath: string }): string {
+  return JSON.stringify([input.sessionId, input.revision, input.query, input.scope,
+    input.scope === 'directory' ? documentDirectory(input.activePath) : ''])
+}
+
+/** Once confirmed, completed writes are accounted for independently of search reads. */
+export async function executeReplacePlan(input: {
+  plan: ReplacePlan
+  query: string
+  read(path: string): Promise<RpcResult<{ text: string; version: string }>>
+  write(path: string, text: string, version: string): Promise<RpcResult<{ version: string }>>
+}): Promise<{ outcome: ReplaceOutcome; written: string[] }> {
+  const stale = [...input.plan.stale]
+  const changed: string[] = []
+  const failed: string[] = []
+  const written: string[] = []
+  let occurrences = 0
+  for (const file of input.plan.files) {
+    const read = await input.read(file.path)
+    if (!read.ok) { failed.push(file.path); continue }
+    const prepared = prepareReplaceWrite(file, read.value, input.query, input.plan.replacement)
+    if (!prepared.ok) {
+      if (prepared.reason === 'stale') stale.push(file.path)
+      else changed.push(file.path)
+      continue
+    }
+    const result = await input.write(file.path, prepared.text, read.value.version)
+    if (!result.ok) {
+      if (isStaleFailure(result)) stale.push(file.path)
+      else failed.push(file.path)
+      continue
+    }
+    written.push(file.path)
+    occurrences += file.spans.length
+  }
+  return { outcome: { files: written.length, occurrences, stale, changed, failed }, written }
+}
+
 function SearchPanel(props: {
   ctx: ShellContext
   sessionId: string
@@ -126,70 +171,102 @@ function SearchPanel(props: {
   activeDirty: boolean
   query?: string
   onQueryChange?(value: string): void
+  scope?: SearchScope
+  onScopeChange?(value: SearchScope): void
+  outcome?: ReplaceOutcome | null
+  onOutcomeChange?(identity: string, outcome: ReplaceOutcome | null): void
   submitTick?: number
+  composing?: boolean
+  onReplaceBusyChange?(busy: boolean): void
   onOpen(hit: SearchHit): void
   onReplaced?(paths: string[]): void
 }) {
   const [internalQuery, setInternalQuery] = useState('')
   const query = props.onQueryChange ? props.query ?? '' : internalQuery
+  const [replacement, setReplacement] = useState('')
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const [internalScope, setInternalScope] = useState<SearchScope>('project')
+  const scope = props.onScopeChange ? props.scope ?? 'project' : internalScope
+  const setScope = (value: SearchScope) => {
+    if (props.onScopeChange) props.onScopeChange(value)
+    else setInternalScope(value)
+  }
+  const [result, setResult] = useState<{ identity: string; response: SearchResponse } | null>(null)
+  const [searchBusy, setSearchBusy] = useState(false)
+  const [replaceBusy, setReplaceBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const [noteAlert, setNoteAlert] = useState(false)
+  const [confirming, setConfirming] = useState<{ identity: string; replacement: string } | null>(null)
+  const [internalOutcome, setInternalOutcome] = useState<ReplaceOutcome | null>(null)
+  const outcome = props.onOutcomeChange ? props.outcome ?? null : internalOutcome
+  const input = useRef<HTMLInputElement | null>(null)
+  const requestGate = useRef(new LatestRequestGate()).current
+  const replaceBusyRef = useRef(false)
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const identity = searchIdentity({ sessionId: props.sessionId, revision: props.revision, query, scope, activePath: props.activePath })
+  const identityRef = useRef(identity)
+  identityRef.current = identity
+  requestGate.setScope(identity)
+  const acceptedResult = result?.identity === identity ? result.response : null
+  const setOutcome = (value: ReplaceOutcome | null) => {
+    if (props.onOutcomeChange) props.onOutcomeChange(identity, value)
+    else setInternalOutcome(value)
+  }
+  const currentConfirmation = confirming?.identity === identity && confirming.replacement === replacement
+  const busy = searchBusy || replaceBusy
+
   const clearResults = () => {
     setResult(null)
     setOutcome(null)
-    setConfirming(false)
+    setConfirming(null)
     setNote('')
     setNoteAlert(false)
   }
   const setQuery = (value: string) => {
+    if (replaceBusyRef.current) return
     if (props.onQueryChange) props.onQueryChange(value)
     else setInternalQuery(value)
-    if (searchQueryClearsResults(value)) clearResults()
+    clearResults()
   }
-  /* Sidebar owns the live query field; this panel only sees props.query. */
   useEffect(() => {
     if (searchQueryClearsResults(query)) clearResults()
   }, [query])
-  const [replacement, setReplacement] = useState('')
-  const [scope, setScope] = useState<SearchScope>('project')
-  const [result, setResult] = useState<SearchResponse | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState('')
-  const [noteAlert, setNoteAlert] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const [outcome, setOutcome] = useState<ReplaceOutcome | null>(null)
-  const input = useRef<HTMLInputElement | null>(null)
-  const requestGate = useRef(new LatestRequestGate()).current
-  const requestScope = `${props.sessionId}\u0000${props.revision}`
-  requestGate.setScope(requestScope)
 
+  const previousSession = useRef(props.sessionId)
   useEffect(() => {
+    const sessionChanged = previousSession.current !== props.sessionId
+    previousSession.current = props.sessionId
     if (!props.onQueryChange) setInternalQuery('')
     setReplacement('')
     setResult(null)
     setNote('')
     setNoteAlert(false)
-    setBusy(false)
-    setConfirming(false)
-    setOutcome(null)
-  }, [props.sessionId, props.revision])
+    setSearchBusy(false)
+    setConfirming(null)
+    if (sessionChanged) setOutcome(null)
+  }, [props.sessionId])
 
   useEffect(() => {
     globalThis.setTimeout(() => input.current?.focus(), 0)
   }, [props.sessionId])
 
   const search = async (raw: string, nextScope: SearchScope, options?: { keepOutcome?: boolean }) => {
+    if (debounceTimer.current) { globalThis.clearTimeout(debounceTimer.current); debounceTimer.current = null }
+    if (replaceBusyRef.current || props.composing || identityRef.current !== identity) return
     const value = raw.trim()
     if (!value) {
       setResult(null)
       setOutcome(null)
-      setConfirming(false)
+      setConfirming(null)
       setNote(t('search.emptyQuery'))
       setNoteAlert(true)
       return
     }
     if (!options?.keepOutcome) setOutcome(null)
-    setConfirming(false)
-    const ticket = requestGate.begin(requestScope)
-    setBusy(true)
+    setConfirming(null)
+    setResult(null)
+    const ticket = requestGate.begin(identity)
+    setSearchBusy(true)
     setNote('')
     setNoteAlert(false)
     const searched = await safeRpcCall<SearchResponse>(() => props.ctx.connection.rpc.call('/manuscript', 'search.text', searchTextRequest({
@@ -199,91 +276,83 @@ function SearchPanel(props: {
       activePath: props.activePath,
     })))
     if (!requestGate.isCurrent(ticket)) return
-    setBusy(false)
-    if (!searched.ok) { setResult(null); setNote(errorMessage(searched)); setNoteAlert(true); return }
+    setSearchBusy(false)
+    if (!searched.ok) { setNote(errorMessage(searched)); setNoteAlert(true); return }
     const accepted = scopeSearchResults(acceptSearchResults(searched.value), nextScope, props.activePath)
-    setResult(accepted)
+    setResult({ identity, response: accepted })
     setNote(accepted.results.length ? '' : t('search.noMatch'))
     setNoteAlert(false)
   }
+
+  const latestSearch = useRef({ search, query, scope })
+  latestSearch.current = { search, query, scope }
+
+  useEffect(() => {
+    if (!query.trim() || props.composing || replaceBusy) {
+      setSearchBusy(false)
+      return
+    }
+    const keepOutcome = Boolean(outcome)
+    const timer = globalThis.setTimeout(() => { debounceTimer.current = null; void search(query, scope, { keepOutcome }) }, 350)
+    debounceTimer.current = timer
+    return () => { globalThis.clearTimeout(timer); if (debounceTimer.current === timer) debounceTimer.current = null }
+  }, [identity, props.composing])
 
   useEffect(() => {
     if (props.submitTick) void search(query, scope)
   }, [props.submitTick])
 
-  const replacePlan = result ? planReplace(result.results, replacement) : null
+  const replacePlan = acceptedResult ? planReplace(acceptedResult.results, replacement) : null
   const replaceSummary = replacePlan ? summarizeReplacePlan(replacePlan) : null
-  const replaceEnabled = canReplaceAll({ query, replacement, hits: result?.results.length ?? 0 })
+  const replaceEnabled = canReplaceAll({ query, replacement, hits: acceptedResult?.results.length ?? 0 })
 
   const openReplaceConfirm = () => {
-    if (!replacePlan || !replaceEnabled) return
+    if (!replacePlan || !replaceEnabled || busy) return
     if (replaceBlockedByDirty({ activePath: props.activePath, activeDirty: props.activeDirty, paths: replacePlan.files.map((file) => file.path) })) {
       setNote(t('search.replaceSaveFirst'))
       setNoteAlert(true)
       return
     }
     setOutcome(null)
-    setConfirming(true)
+    setConfirming({ identity, replacement })
   }
 
   const runReplace = async (plan: ReplacePlan) => {
+    if (replaceBusyRef.current || !currentConfirmation || !acceptedResult) return
     if (replaceBlockedByDirty({ activePath: props.activePath, activeDirty: props.activeDirty, paths: plan.files.map((file) => file.path) })) {
       setNote(t('search.replaceSaveFirst'))
       setNoteAlert(true)
-      setConfirming(false)
+      setConfirming(null)
       return
     }
-    const ticket = requestGate.begin(requestScope)
-    setBusy(true)
+    replaceBusyRef.current = true
+    props.onReplaceBusyChange?.(true)
+    setReplaceBusy(true)
     setNote('')
     setNoteAlert(false)
-    setConfirming(false)
-    const needle = query.trim()
-    const stale = [...plan.stale]
-    const changed: string[] = []
-    const failed: string[] = []
-    const written: string[] = []
-    let occurrences = 0
-
-    for (const file of plan.files) {
-      const read = await safeRpcCall<{ text: string; version: string }>(() => props.ctx.connection.rpc.call('/manuscript', 'file.read', {
-        sessionId: props.sessionId,
-        path: file.path,
-      }))
-      if (!requestGate.isCurrent(ticket)) return
-      if (!read.ok) {
-        failed.push(file.path)
-        continue
-      }
-      const prepared = prepareReplaceWrite(file, read.value, needle, plan.replacement)
-      if (!prepared.ok) {
-        if (prepared.reason === 'stale') stale.push(file.path)
-        else changed.push(file.path)
-        continue
-      }
-      const writtenFile = await safeRpcCall<{ version: string }>(() => props.ctx.connection.rpc.call('/manuscript', 'file.write', {
-        sessionId: props.sessionId,
-        path: file.path,
-        text: prepared.text,
-        version: read.value.version,
-      }))
-      if (!requestGate.isCurrent(ticket)) return
-      if (!writtenFile.ok) {
-        if (isStaleFailure(writtenFile)) stale.push(file.path)
-        else failed.push(file.path)
-        continue
-      }
-      written.push(file.path)
-      occurrences += file.spans.length
+    setConfirming(null)
+    setResult(null)
+    const sessionId = props.sessionId
+    const onReplaced = props.onReplaced
+    try {
+      const completed = await executeReplacePlan({
+        plan,
+        query: query.trim(),
+        read: (path) => safeRpcCall(() => props.ctx.connection.rpc.call('/manuscript', 'file.read', { sessionId, path })),
+        write: (path, text, version) => safeRpcCall(() => props.ctx.connection.rpc.call('/manuscript', 'file.write', { sessionId, path, text, version })),
+      })
+      setOutcome(completed.outcome)
+      if (completed.written.length) onReplaced?.(completed.written)
+    } finally {
+      replaceBusyRef.current = false
+      props.onReplaceBusyChange?.(false)
+      setReplaceBusy(false)
+      const latest = latestSearch.current
+      void latest.search(latest.query, latest.scope, { keepOutcome: true })
     }
-
-    setOutcome({ files: written.length, occurrences, stale, changed, failed })
-    if (written.length) props.onReplaced?.(written)
-    if (!requestGate.isCurrent(ticket)) return
-    await search(query, scope, { keepOutcome: true })
   }
 
-  const grouped = result ? groupSearchHits(result.results) : []
+  const grouped = acceptedResult ? groupSearchHits(acceptedResult.results) : []
 
   const panelMotion = useChromeMotion('panel')
   const blockImeEnter = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -304,6 +373,7 @@ function SearchPanel(props: {
                 size="2"
                 style={{ flex: 1, minWidth: 0 }}
                 value={query}
+                disabled={replaceBusy}
                 maxLength={120}
                 placeholder={t('search.placeholder')}
                 aria-label={t('search.aria')}
@@ -313,9 +383,9 @@ function SearchPanel(props: {
                 type="submit"
                 size="2"
                 variant="solid"
-                disabled={busy || !query.trim()}
+                disabled={busy || !query.trim() || props.composing}
                 aria-label={t('search.start')}>
-                {busy ? <ActivityDots /> : t('search.go')}
+                {searchBusy ? <ActivityDots /> : t('search.go')}
               </Button>
               <Select
                 value={scope}
@@ -324,10 +394,16 @@ function SearchPanel(props: {
                   { value: 'project', label: t('search.wholeWork') },
                   { value: 'directory', label: t('search.manuscriptOnly') },
                 ]}
-                onChange={(value: string) => setScope(value === 'directory' ? 'directory' : 'project')} />
+                disabled={replaceBusy}
+                onChange={(value: string) => { setScope(value === 'directory' ? 'directory' : 'project'); clearResults() }} />
             </form>
           </Flex>
-          <Flex asChild align="center" gap="2">
+          <Button type="button" size="2" variant="ghost" color="gray" aria-expanded={replaceOpen}
+            disabled={replaceBusy}
+            onClick={() => { setReplaceOpen((value) => !value); setConfirming(null) }}>
+            {replaceOpen ? t('search.hideReplace') : t('search.showReplace')}
+          </Button>
+          {replaceOpen ? <Flex asChild align="center" gap="2">
             <form
               className="search-replace"
               onSubmit={(event: FormEvent) => { event.preventDefault(); openReplaceConfirm() }}>
@@ -335,16 +411,17 @@ function SearchPanel(props: {
                 size="2"
                 style={{ flex: 1, minWidth: 0 }}
                 value={replacement}
+                disabled={replaceBusy}
                 placeholder={t('search.replacePlaceholder')}
                 aria-label={t('search.replaceAria')}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => setReplacement(event.target.value)}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => { setReplacement(event.target.value); setConfirming(null) }}
                 onKeyDown={blockImeEnter} />
               <Button type="submit" size="2" variant="soft" disabled={busy || !replaceEnabled}>
                 {t('search.replaceAll')}
               </Button>
             </form>
-          </Flex>
-          {confirming && replacePlan && replaceSummary ? <Box
+          </Flex> : null}
+          {currentConfirmation && replacePlan && replaceSummary ? <Box
             className="search-replace-confirm"
             role="region"
             aria-label={t('search.replaceConfirmTitle')}>
@@ -378,7 +455,7 @@ function SearchPanel(props: {
                   {t('search.replaceConfirm')}
                 </Fragment> : t('search.replaceConfirm')}
               </Button>
-              <Button type="button" size="2" variant="soft" color="gray" disabled={busy} onClick={() => setConfirming(false)}>
+              <Button type="button" size="2" variant="soft" color="gray" disabled={busy} onClick={() => setConfirming(null)}>
                 {t('common.cancel')}
               </Button>
             </Flex>
@@ -408,18 +485,18 @@ function SearchPanel(props: {
               </Fragment> : t('search.replaceAgain')}
             </Button>
           </Box> : null}
-          {result ? <Flex className="search-summary" wrap="wrap" gap="2" role="status">
+          {acceptedResult ? <Flex className="search-summary" wrap="wrap" gap="2" role="status">
             <Text size="1" color="gray">
-              {t('search.summary', { hits: result.results.length, files: result.scannedFiles })}
+              {t('search.summary', { hits: acceptedResult.results.length, files: acceptedResult.scannedFiles })}
             </Text>
-            {result.truncated ? <Text size="1" weight="bold">
+            {acceptedResult.truncated ? <Text size="1" weight="bold">
               {t('search.capped')}
             </Text> : null}
-            {result.skipped ? <Text size="1" color="gray">
-              {searchSkippedText(result.skipped)}
+            {acceptedResult.skipped ? <Text size="1" color="gray">
+              {searchSkippedText(acceptedResult.skipped)}
             </Text> : null}
           </Flex> : null}
-          {props.navigationBlocked && result?.results.length ? <Callout.Root className="warning" color="red" size="1" role="alert">
+          {props.navigationBlocked && acceptedResult?.results.length ? <Callout.Root className="warning" color="red" size="1" role="alert">
             <Callout.Text>
               {t('search.saveBeforeJump')}
             </Callout.Text>
@@ -427,7 +504,7 @@ function SearchPanel(props: {
           {note ? <Text as="p" size="1" color="gray" role={noteAlert ? 'alert' : 'status'}>
             {note}
           </Text> : null}
-          {grouped.length ? <ScrollArea type="auto" scrollbars="vertical" style={{ maxHeight: 240 }}>
+          {grouped.length ? <ScrollArea type="auto" scrollbars="vertical" className="search-results-scroll">
             <Box asChild>
               <ol className="search-results">
                 {grouped.map((group) => <li key={group.path} className="search-file">

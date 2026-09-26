@@ -62,7 +62,7 @@ function Preview() {
             {sent ? <Text role="status">Fixture message submitted. No model request.</Text> : null}
           </Flex></ScrollArea></div>
           <form className="composer" onSubmit={event => { event.preventDefault(); setSent(true); setDraft('') }}>
-            <Flex direction="column" gap="2"><TextArea aria-label="Chat input" value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的想法…" />
+            <Flex direction="column" gap="2"><TextArea rows={1} aria-label="Chat input" value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的想法…" />
               <Flex className="composer-toolbar" justify="between" align="center"><Text size="1" color="gray">写作模型 · 标准</Text><div className="composer-actions"><IconButton className="send" type="submit" disabled={!draft.trim()} aria-label="Send message">↑</IconButton></div></Flex>
             </Flex>
           </form>

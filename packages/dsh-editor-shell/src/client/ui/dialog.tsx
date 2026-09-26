@@ -75,11 +75,11 @@ export function Dialog(props: DialogProps) {
           }
         }}
       >
-        <VisuallyHidden>
+        <VisuallyHidden aria-hidden="true">
           <ThemesDialog.Title>{props.title}</ThemesDialog.Title>
         </VisuallyHidden>
         {props.description
-          ? <VisuallyHidden><ThemesDialog.Description>{props.description}</ThemesDialog.Description></VisuallyHidden>
+          ? <VisuallyHidden aria-hidden="true"><ThemesDialog.Description>{props.description}</ThemesDialog.Description></VisuallyHidden>
           : null}
         {props.children}
       </ThemesDialog.Content>

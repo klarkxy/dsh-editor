@@ -193,7 +193,10 @@ export function buildUsageChartOption(input: {
   const totals = days.map((day) => dayTotal(day, series))
   const peak = Math.max(0, ...totals)
   return {
-    aria: { enabled: true },
+    aria: { enabled: true, label: { description: [
+      t('usage.recent7'),
+      ...days.map((day, index) => day.date + ': ' + input.formatNumber(totals[index] ?? 0) + ' ' + t('usage.tokens')),
+    ].join('。') } },
     animation: !reduceMotion,
     color: series.map((item) => item.color),
     grid: { left: 4, right: 8, top: 28, bottom: 4, containLabel: true },

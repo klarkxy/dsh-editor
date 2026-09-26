@@ -25,9 +25,10 @@ export function effortDisplay(id: string): string {
   return key ? t(key) : id
 }
 
-/** Visible trigger next to the model name; never the field name “思考强度”. */
+/** Visible trigger next to the model name: “思考 关”, not the bare “关” or the field name “思考强度”. */
 export function effortTriggerLabel(id: string): string {
-  return effortDisplay(id) || t('chat.effortOff')
+  const name = effortDisplay(id) || t('chat.effortOff')
+  return t('chat.effortTrigger', { name })
 }
 
 function fallbackEffortOptions(): { value: string; label: string }[] {
@@ -169,6 +170,7 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
     ? efforts.map((effort) => ({ value: effort.id, label: effortDisplay(effort.id) }))
     : fallbackEffortOptions()
   const showReasoning = efforts.length > 0 || customRoute
+  const effortName = effortDisplay(effortValue) || t('chat.effortOff')
   const effortLabel = effortTriggerLabel(effortValue)
   return (
     <Flex className="model-picker" align="center" gap="1" wrap="nowrap" minWidth="0">
@@ -191,7 +193,7 @@ export function ModelPicker({ ctx, session, onConfigure }: { ctx: ShellContext; 
           placeholder={t('chat.effortOff')}
           selectedLabel={effortLabel}
           aria-label={t('chat.reasoning')}
-          title={effortLabel}
+          title={t('chat.effortValue', { name: effortName })}
           align="end"
           disabled={busy}
           options={effortOptions}

@@ -53,7 +53,7 @@ describe('shell client inject', () => {
     expect(inject).toEqual([
       'slots', 'sessions', 'workspaces', 'connection', 'configForms', 'settingsSchema', 'remote',
       'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker', 'remote.agentPresets',
-      'uiSession', 'locale',
+      'uiSession', 'locale', 'theme', 'shortcuts',
     ])
   })
 })

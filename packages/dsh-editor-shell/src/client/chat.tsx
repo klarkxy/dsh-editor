@@ -1,3 +1,4 @@
+import { OfficialInputActivity, type OfficialInputActions } from './official-surfaces.tsx'
 import {
   Fragment,
   memo,
@@ -57,8 +58,9 @@ import {
   type ConversationPresetChoice,
 } from '../conversation-presets.ts'
 import { shouldShowMigrationBanner } from '../legacy-migration.ts'
-import { ConversationRenameQueue, automaticTitleManaged, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
+import { ConversationRenameQueue, automaticTitleManaged, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
+import { isActiveSessionArchiveError, enqueueConversationSettingsWrite, coordinateLegacyConversationArchives, waitForLegacyConversationArchives, orderedConversationIds, type ConversationFilter } from '../native-conversation-state.ts'
 import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
 import { isObservableSource, useObservable } from './components.tsx'
@@ -99,6 +101,7 @@ import {
   EMPTY_TRANSCRIPT,
   type ChatLifecycle,
 } from './chat-conversation.ts'
+import { chatEmptyPrompt } from './chat-empty.ts'
 import { ModelPicker } from './chat-model-picker.tsx'
 import { PluginChatEvents } from './plugin-surfaces.tsx'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
@@ -193,14 +196,32 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const currentMode = useMemo(() => conversationPresetLabel(agentPreset, presetRoster), [agentPreset, presetRoster, locale])
   const connectionState = useObservable(isObservableSource(ctx.connection.state) ? ctx.connection.state : DISCONNECTED)
   const connected = connectionState === 'connected'
-  const [draft, setDraft] = useState('')
+  const [draft, projectNativeDraft] = useState('')
+  const nativeInput = useRef<OfficialInputActions | null>(null)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const [nativeInputReady, setNativeInputReady] = useState(false)
+  const [voiceActive, setVoiceActive] = useState(false)
+  const bindNativeInput = useCallback((actions: OfficialInputActions | null) => {
+    nativeInput.current = actions
+    setNativeInputReady(actions !== null)
+  }, [])
+  const readNativeDraft = useCallback((text: string) => { draftRef.current = text; projectNativeDraft(text) }, [])
+  const setDraft = useCallback((value: string | ((current: string) => string)) => {
+    const next = typeof value === 'function' ? value(draftRef.current) : value
+    nativeInput.current?.setDraft(next)
+  }, [])
   const [note, setNote] = useState('')
   const [outgoing, setOutgoing] = useState<{ text: string; state: 'sending' | 'accepted' | 'failed'; afterRows: number; projectContextReceipt?: ProjectContextReceiptBundle } | null>(null)
   const [renamingConversation, setRenamingConversation] = useState(false)
   const [conversationMenuOpen, setConversationMenuOpen] = useState(false)
   const conversationMenuTrigger = useRef<HTMLButtonElement | null>(null)
   const conversationMenuYields = useRef(false)
-  const [conversationBusy, setConversationBusy] = useState(false)
+  const [conversationOperationBusy, setConversationBusy] = useState(false)
+  const [archiveMigrationBusy, setArchiveMigrationBusy] = useState(false)
+  const conversationBusy = conversationOperationBusy || archiveMigrationBusy
+  const [conversationFilter, setConversationFilter] = useState<ConversationFilter>('active')
+  const [archiveStopConfirm, setArchiveStopConfirm] = useState<{ id: string; nextId?: string } | null>(null)
   const [titleOverrides, setTitleOverrides] = useState<Record<string, string>>({})
   const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   const [presetPicker, setPresetPicker] = useState<{
@@ -222,7 +243,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const growComposer = (el: HTMLTextAreaElement | null) => {
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 64), 132)}px`
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`
   }
   useLayoutEffect(() => { growComposer(composerRef.current) }, [draft])
   useEffect(() => {
@@ -406,8 +427,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     legacy: legacyEditor,
     dismissed: dismissedMigrations.has(session.sessionId),
   })
-  /* 空白列占位:没有任何历史行,且引导卡与在途内容(发送中/排队/运行中/思考/审批)都不在时,
-     给一句 muted 提示,避免空对话只剩一列空白。 */
+  /* 空白对话:说明贴在输入框上,并点出当前稿。栏头在没有消息时不展开模式徽标和会话菜单。 */
   const showEmptyHistory = rows.length === 0
     && !showInitGuide
     && !outgoing
@@ -417,10 +437,15 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     && !partial.text
     && !partial.thinking
     && pendingItems.length === 0
-  const sessionIds = sessionList.ids.filter((id) => workspace?.sessionIds.includes(id))
-  const workspaceSessionIds = sessionIds.length ? sessionIds : [session.sessionId]
+  const emptyPrompt = useMemo(
+    () => chatEmptyPrompt(currentMode?.id, activePath),
+    [currentMode?.id, activePath, locale],
+  )
+  const workspaceSessionIds = workspace?.sessionIds.length ? [...workspace.sessionIds] : [session.sessionId]
   const hostArchivedIds = workspaceList.archivedSessionIds ?? []
+  const hostPinnedIds = workspaceList.pinnedSessionIds ?? []
   const workRecord = conversationWorkRecord(conversationSettings.value ?? DEFAULT_CONVERSATION_SETTINGS, workspaceId)
+  const archivedIds = [...new Set([...hostArchivedIds, ...workRecord.archivedIds])]
   const conversationTitles = {
     ...Object.fromEntries(Object.entries(sessionList.byId ?? {}).map(([id, value]) => [id, value.title])),
     ...workRecord.titles,
@@ -428,7 +453,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   }
   const conversations = conversationRows({
     workspaceSessionIds,
-    archivedIds: [...workRecord.archivedIds, ...hostArchivedIds],
+    archivedIds,
     forgottenIds: workRecord.tombstoneIds,
     reusableBlankIds: Object.values(sessionList.byId ?? {}).filter((item) => item.blank).map((item) => item.id),
     currentId: session.sessionId,
@@ -436,12 +461,21 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   })
   const archivedConversations = archivedConversationRows({
     workspaceSessionIds,
-    archivedIds: workRecord.archivedIds,
-    forgottenIds: [...workRecord.tombstoneIds, ...hostArchivedIds],
+    archivedIds,
+    forgottenIds: workRecord.tombstoneIds,
     currentId: session.sessionId,
     titles: conversationTitles,
   })
-  const currentIsArchived = workRecord.archivedIds.includes(session.sessionId)
+  const visibleConversationIds = orderedConversationIds({
+    ids: [...conversations, ...archivedConversations].map((item) => item.id),
+    archivedIds,
+    pinnedIds: hostPinnedIds,
+    filter: conversationFilter,
+  })
+  const conversationById = new Map([...conversations, ...archivedConversations].map((item) => [item.id, item]))
+  const filteredConversations = visibleConversationIds.map((id) => conversationById.get(id)!).filter(Boolean)
+  const currentIsArchived = archivedIds.includes(session.sessionId)
+  const currentIsPinned = hostPinnedIds.includes(session.sessionId)
   const canMutateConversation = conversations.some((item) => item.id !== session.sessionId) || canArchiveOrDeleteConversation(conversations.length)
   const queueConversationRename = (title: string, failureNote: string, automatic = false) => {
     void conversationRenameQueue.enqueue(session.sessionId, async () => {
@@ -484,6 +518,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setModelRevision((value) => value + 1)
   }
   const switchConversation = async (nextId: string) => {
+    if (archivedIds.includes(nextId)) {
+      await restoreConversation(nextId)
+      return
+    }
     if (!(await canDiscardDraft(nextId))) return
     openConversation(nextId as SessionId)
   }
@@ -493,10 +531,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setNote('')
     setTitleOverrides((current) => ({ ...current, [session.sessionId]: title }))
     queueConversationRename(title, t('chat.renameFailed'))
-    void persistConversationWork({
-      ...workRecord,
-      titles: { ...workRecord.titles, [session.sessionId]: title },
-    }).catch(() => setNote(t('chat.renameFailed')))
+    void persistConversationField(['titles', session.sessionId], title).catch(() => setNote(t('chat.renameFailed')))
   }
 
   const applyDefaultChatModel = (sessionId: SessionId) => applyChatModelDefault(ctx, sessionId)
@@ -592,32 +627,53 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       archive: (id) => ctx.workspaces.archiveSession(id),
     })
   }
-  const persistConversationWork = async (record: typeof workRecord) => {
+  const persistConversationField = async (path: string[], value: unknown) => {
     if (!workspaceId) throw new Error('workspace unavailable')
+    await enqueueConversationSettingsWrite(conversationScope, async () => {
+      if (await conversationScope.mutate([{ op: 'set', path: ['works', workspaceId, ...path], value }]) === false) throw new Error('Host refused conversation settings write')
+    })
+  }
+  const clearLegacyArchive = (id: string, workId: string) => enqueueConversationSettingsWrite(conversationScope, async () => {
     const current = conversationScope.getSnapshot().value ?? DEFAULT_CONVERSATION_SETTINGS
-    if (await conversationScope.set('works', putConversationWork(current, workspaceId, record).works) === false) throw new Error('Host refused conversation settings write')
-  }
-  const leaveIfCurrent = async (id: string) => {
-    if (id !== session.sessionId) return true
-    const nextId = nextVisibleConversationId(conversations.map((item) => item.id), id)
-    if (!nextId) return false
-    if (!(await canDiscardDraft(nextId))) return false
-    openConversation(nextId as SessionId)
-    return true
-  }
-  const archiveConversation = async (id: string) => {
+    const record = conversationWorkRecord(current, workId)
+    if (!record.archivedIds.includes(id)) return
+    if (await conversationScope.mutate([{ op: 'set', path: ['works', workId, 'archivedIds'], value: restoreConversationIds(record.archivedIds, id) }]) === false) throw new Error('Host refused conversation settings write')
+  })
+  useEffect(() => {
+    if (!workspaceId || !workspace) return
+    const pending = workRecord.archivedIds.filter((id) => workspaceSessionIds.includes(id as SessionId))
+    let live = true
+    setArchiveMigrationBusy(true)
+    void coordinateLegacyConversationArchives(ctx.workspaces, workspaceId, {
+      ids: pending,
+      nativeArchivedIds: hostArchivedIds,
+      archive: (id) => ctx.workspaces.archiveSession(id),
+      clear: (id) => clearLegacyArchive(id, workspaceId),
+    }).finally(() => { if (live) setArchiveMigrationBusy(false) })
+    return () => { live = false }
+  }, [workspaceId, workspaceSessionIds.join('|'), workRecord.archivedIds.join('|')])
+
+  const archiveConversation = async (id: string, stopActivity = false, selectedNextId?: string) => {
     if (!workspaceId || conversationBusy || !canMutateConversation) return
     setConversationMenuOpen(false)
-    if (!(await leaveIfCurrent(id))) return
+    const nextId = selectedNextId ?? (id === session.sessionId
+      ? nextVisibleConversationId(conversations.map((item) => item.id), id)
+      : undefined)
+    if (id === session.sessionId) {
+      if (!nextId || (!selectedNextId && !(await canDiscardDraft(nextId)))) return
+    }
     setConversationBusy(true)
     setNote('')
     try {
-      await persistConversationWork({
-        ...workRecord,
-        archivedIds: archiveConversationIds(workRecord.archivedIds, id),
-      })
-    } catch {
-      setNote(t('chat.archiveFailed'))
+      await ctx.workspaces.archiveSession(id as SessionId, stopActivity ? { stopActivity: true } : undefined)
+      setArchiveStopConfirm(null)
+      if (id === session.sessionId && nextId) openConversation(nextId as SessionId)
+    } catch (error) {
+      if (!stopActivity && isActiveSessionArchiveError(error)) {
+        setArchiveStopConfirm({ id, nextId })
+      } else {
+        setNote(t('chat.archiveFailed'))
+      }
     } finally {
       setConversationBusy(false)
     }
@@ -629,13 +685,26 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setConversationBusy(true)
     setNote('')
     try {
-      await persistConversationWork({
-        ...workRecord,
-        archivedIds: restoreConversationIds(workRecord.archivedIds, id),
-      })
+      await waitForLegacyConversationArchives(ctx.workspaces, workspaceId)
+      await ctx.workspaces.unarchiveSession(id as SessionId)
+      await clearLegacyArchive(id, workspaceId)
       openConversation(id as SessionId)
     } catch {
       setNote(t('chat.restoreFailed'))
+    } finally {
+      setConversationBusy(false)
+    }
+  }
+  const toggleConversationPin = async () => {
+    if (conversationBusy || currentIsArchived) return
+    setConversationMenuOpen(false)
+    setConversationBusy(true)
+    setNote('')
+    try {
+      if (currentIsPinned) await ctx.workspaces.unpinSession(session.sessionId)
+      else await ctx.workspaces.pinSession(session.sessionId)
+    } catch {
+      setNote(t(currentIsPinned ? 'chat.unpinFailed' : 'chat.pinFailed'))
     } finally {
       setConversationBusy(false)
     }
@@ -659,7 +728,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     ?? (currentConversationTitle === t('chat.newConversation') ? '' : currentConversationTitle)
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!composerCanSubmit) return
+    if (!composerCanSubmit || voiceActive || !nativeInputReady) return
     const value = draft.trim()
     bottomPinnedRef.current = true
     setOutgoing({ text: value, state: 'sending', afterRows: rows.length })
@@ -738,15 +807,26 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       <Flex asChild align="center" gap="2" px="3" py="2" justify="between" width="100%" minWidth="0">
         <header className="chat-header">
           <Box className="conversation-select" flexGrow="1" minWidth="0">
-            <Select
+            {showEmptyHistory && conversations.length <= 1 && archivedConversations.length === 0 ? <Text
+              as="p"
+              size="2"
+              weight="medium"
+              truncate
+              className="chat-quiet-title"
+              title={currentConversationTitle}>
+              {currentConversationTitle}
+            </Text> : <Select
               value={session.sessionId}
               aria-label={t('chat.switchConversation')}
               title={currentConversationTitle}
               selectedLabel={currentConversationTitle}
-              options={conversations.map((item) => ({ value: item.id, label: item.title }))}
-              onChange={(next) => void switchConversation(next)} />
+              options={filteredConversations.map((item) => ({
+                value: item.id,
+                label: `${hostPinnedIds.includes(item.id) ? `${t('chat.pinnedConversation')} · ` : ''}${item.title}${archivedIds.includes(item.id) ? ` · ${t('chat.archivedConversations')}` : ''}`,
+              }))}
+              onChange={(next) => void switchConversation(next)} />}
           </Box>
-          {currentMode ? <Badge
+          {!showEmptyHistory && currentMode ? <Badge
             className="composer-mode"
             variant="soft"
             color="gray"
@@ -773,7 +853,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
               onClick={() => { void createConversation() }}>
               <PlusIcon size={14} />
             </IconButton>
-            <Box className="conversation-menu">
+            {showEmptyHistory && conversations.length <= 1 && archivedConversations.length === 0 ? null : <Box className="conversation-menu">
               <DropdownMenu.Root
                 open={conversationMenuOpen}
                 onOpenChange={(open: boolean) => { if (open) conversationMenuYields.current = false; setConversationMenuOpen(open) }}>
@@ -802,6 +882,18 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                     {t('chat.renameConversation')}
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
+                    disabled={conversationBusy || currentIsArchived}
+                    onSelect={() => { void toggleConversationPin() }}>
+                    {t(currentIsPinned ? 'chat.unpinConversation' : 'chat.pinConversation')}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.RadioGroup value={conversationFilter} onValueChange={(value: string) => setConversationFilter(value as ConversationFilter)}>
+                    <DropdownMenu.RadioItem value="active">{t('chat.showActiveConversations')}</DropdownMenu.RadioItem>
+                    <DropdownMenu.RadioItem value="all">{t('chat.showAllConversations')}</DropdownMenu.RadioItem>
+                    <DropdownMenu.RadioItem value="archived">{t('chat.showArchivedConversations')}</DropdownMenu.RadioItem>
+                  </DropdownMenu.RadioGroup>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item
                     disabled={conversationBusy || currentIsArchived || !canMutateConversation}
                     title={!canMutateConversation ? t('chat.archiveNeedAnother') : undefined}
                     onSelect={() => { void archiveConversation(session.sessionId) }}>
@@ -814,7 +906,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
-            </Box>
+            </Box>}
           </Flex>
         </header>
       </Flex>
@@ -916,9 +1008,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
               enter={visibleCalls.some((call) => isNewMessage(`running:${call.callId}`)) || isNewMessage('partial-thinking')}>
               {liveSteps}
             </ChatProcessStack> : null}
-            {showEmptyHistory ? <Text as="p" size="2" color="gray" className="chat-empty">
-              {t('chat.emptyHistory')}
-            </Text> : null}
             {outgoing && !outgoingIsCanonical ? <ChatEntry
               className="chat-row user"
               key="local-outgoing"
@@ -1001,13 +1090,23 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       </Box>
       <Box asChild px="3" py="2">
         <form className="composer" onSubmit={submit}>
+          {showEmptyHistory ? <Flex direction="column" gap="1" className="chat-empty-panel">
+            <Text as="p" size="2" className="chat-empty">
+              {emptyPrompt.empty}
+            </Text>
+            {currentMode ? <Text as="p" size="2" className="chat-empty-mode">
+              {currentMode.name}
+            </Text> : null}
+          </Flex> : null}
           <Flex direction="column" gap="2">
             <TextArea
               ref={composerRef}
+              rows={1}
               resize="none"
               size="2"
               style={{ width: '100%' }}
               value={draft}
+              disabled={!nativeInputReady || voiceActive}
               onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
                 setDraft(event.target.value)
                 growComposer(event.currentTarget)
@@ -1017,11 +1116,17 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                 event.preventDefault()
                 event.currentTarget.form?.requestSubmit()
               }}
-              placeholder={t('chat.placeholder')}
+              placeholder={emptyPrompt.placeholder}
               aria-label={t('chat.inputLabel')} />
-            {note ? <Text size="1" className="warning" color="red" role="alert">
-              {note}
-            </Text> : null}
+            {note ? <Flex direction="column" align="start" gap="2" role="alert">
+              <Text size="2" className="warning" color="red">{note}</Text>
+              {note === t('chat.defaultModelFailed') ? <Button type="button" size="2" variant="soft" onClick={onConfigure}>
+                {t('chat.fixDefaultModel')}
+              </Button> : null}
+            </Flex> : null}
+            <OfficialInputActivity ctx={ctx} sessionId={session.sessionId} locked={!connected || hidden}
+              getSelection={() => ({ start: composerRef.current?.selectionStart ?? draftRef.current.length, end: composerRef.current?.selectionEnd ?? draftRef.current.length, length: draftRef.current.length })}
+              onActiveChange={setVoiceActive} onDraft={readNativeDraft} onBind={bindNativeInput} />
             <Flex className="composer-toolbar" align="center" justify="between" gap="2" wrap="wrap" minWidth="0">
               <Box className="composer-model" flexGrow="1" minWidth="0">
                 <ModelPicker
@@ -1053,7 +1158,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                   variant="ghost"
                   color="gray"
                   size="2"
-                  disabled={!composerCanSubmit}
+                  disabled={!composerCanSubmit || voiceActive || !nativeInputReady}
                   title={t('chat.send')}
                   aria-label={t('chat.send')}>
                   <svg
@@ -1086,6 +1191,18 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
         returnFocusRef={conversationMenuTrigger}
         onCancel={() => setRenamingConversation(false)}
         onConfirm={renameConversation} />
+      <ConfirmDialog
+        open={Boolean(archiveStopConfirm)}
+        id="archive-running-conversation"
+        title={t('chat.archiveRunningTitle')}
+        message={t('chat.archiveRunningBody')}
+        confirmLabel={t('chat.archiveAndStop')}
+        busy={conversationBusy}
+        returnFocusRef={conversationMenuTrigger}
+        onCancel={() => setArchiveStopConfirm(null)}
+        onConfirm={() => {
+          if (archiveStopConfirm) void archiveConversation(archiveStopConfirm.id, true, archiveStopConfirm.nextId)
+        }} />
       <ConfirmDialog
         open={Boolean(draftConfirm)}
         id="discard-message-draft"

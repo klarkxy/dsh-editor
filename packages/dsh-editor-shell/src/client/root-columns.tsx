@@ -1,5 +1,5 @@
-import { memo, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Box, Callout, DropdownMenu, Flex, IconButton, Text, TextField } from '@radix-ui/themes'
+import { memo, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { Box, Button, Callout, DropdownMenu, Flex, IconButton, Text, TextField } from '@radix-ui/themes'
 import type { PanelSize } from 'react-resizable-panels'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
 import type { CompletionPreference, EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
@@ -10,9 +10,9 @@ import { isSuccessWorkbenchNote, type RevealRequest, type ShellContext } from '.
 import { ShellErrorBoundary } from './components.tsx'
 import { Chat, ProposalCard } from './chat.tsx'
 import { Editor } from './editor.tsx'
-import { DotsIcon, SearchIcon } from './icons.tsx'
+import { CrossIcon, DotsIcon, PlusIcon, SearchIcon } from './icons.tsx'
 import { Tree } from './sidebar.tsx'
-import { SearchPanel, type SearchHit } from './search-panel.tsx'
+import { SearchPanel, type ReplaceOutcome, type SearchHit, type SearchScope } from './search-panel.tsx'
 import type { SettingsRenderSlot } from './settings.tsx'
 import { isImeEvent, Menu, MenuContent, MenuItem, m, useChromeMotion } from './ui/index.ts'
 
@@ -78,10 +78,20 @@ export function SidebarTools(props: { renderSlot?: SettingsRenderSlot; seatConte
 export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuProps & {
   ctx: ShellContext
   sessionId: string
+  documentTools?: readonly { id: string; label: string; disabled?: boolean; run(): void }[]
   searchOpen: boolean
+  searchQuery: string
+  onSearchQueryChange(value: string): void
+  searchScope: SearchScope
+  onSearchScopeChange(value: SearchScope): void
+  replaceOutcome: ReplaceOutcome | null
+  onReplaceOutcomeChange(identity: string, outcome: ReplaceOutcome | null): void
+  replaceBusy: boolean
+  onReplaceBusyChange(busy: boolean): void
   onSearchRequestOpen(): void
+  onSearchRequestClose(): void
   onOpenDocument(path: string, hit?: SearchHit): void
-  onSearchReplaced(paths: string[]): void
+  onSearchReplaced(sessionId: string, paths: string[]): void
   activePath: string
   activeDirty: boolean
   fileRevision: number
@@ -97,9 +107,13 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
   renderSlot?: SettingsRenderSlot
   seatContext: ShellToolSeatContext
 }) {
-  /* 搜索查询串留在侧栏层：按键只重渲染本列，不上升到 Root 惊动其余两栏。 */
-  const [searchQuery, setSearchQuery] = useState('')
+  /* Search draft and write lock live in Root so switching narrow/wide sidebars retains them. */
   const [searchSubmitTick, setSearchSubmitTick] = useState(0)
+  const [composing, setComposing] = useState(false)
+  const searchInput = useRef<HTMLInputElement | null>(null)
+  const mountedDuringReplace = useRef(props.replaceBusy).current
+  useEffect(() => { if (props.searchOpen) searchInput.current?.focus() }, [props.searchOpen])
+  const closeSearch = () => { if (props.replaceBusy) return; props.onSearchQueryChange(''); props.onSearchRequestClose() }
   const panelMotion = useChromeMotion('panel', 0, 'left')
   useLocale()
   return (
@@ -111,6 +125,10 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
         <Text size="2" weight="medium" className="side-title-label" truncate>
           {t('sidebar.manuscriptTree')}
         </Text>
+        <Flex align="center" gap="1">
+        <Button variant="ghost" color="gray" size="1" onClick={() => props.onCreateFile('')}>
+          <PlusIcon size={14} />{t('sidebar.newDocument')}
+        </Button>
         <Menu>
           <DropdownMenu.Trigger>
             <IconButton
@@ -118,8 +136,8 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
               variant="ghost"
               color="gray"
               size="2"
-              title={t('sidebar.versionMenu')}
-              aria-label={t('sidebar.versionMenu')}>
+              title={t('sidebar.actions')}
+              aria-label={t('sidebar.actions')}>
               <DotsIcon size={14} />
             </IconButton>
           </DropdownMenu.Trigger>
@@ -127,7 +145,10 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
             className="file-context-menu"
             align="end"
             side="bottom"
-            aria-label={t('sidebar.versionMenu')}>
+            aria-label={t('sidebar.actions')}>
+            <MenuItem onSelect={() => props.onCreateFolder('')}>
+              {t('sidebar.newFolder')}
+            </MenuItem>
             <MenuItem
               disabled={props.snapshotBusy}
               title={t('workspace.commitTitle')}
@@ -142,24 +163,37 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
             </MenuItem>
           </MenuContent>
         </Menu>
+        </Flex>
       </Flex>
+      {props.documentTools?.length ? <Flex className="side-document-tools" gap="2" px="3" pb="2" wrap="wrap">
+        {props.documentTools.map((tool) => <Button key={tool.id} size="1" variant="soft" color="gray"
+          disabled={tool.disabled} onClick={tool.run}>{tool.label}</Button>)}
+      </Flex> : null}
       <TextField.Root
+        ref={searchInput}
+        data-workspace-search=""
         className="side-search"
         type="search"
         size="2"
         mx="3"
         mb="2"
-        value={searchQuery}
+        value={props.searchQuery}
+        disabled={props.replaceBusy}
         maxLength={120}
         placeholder={t('search.placeholder')}
         aria-label={t('search.aria')}
         title={t('workspace.searchTitle')}
         onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          setSearchQuery(event.target.value)
-          if (!props.searchOpen) props.onSearchRequestOpen()
+          if (props.replaceBusy) return
+          props.onSearchQueryChange(event.target.value)
+          if (event.target.value.trim()) props.onSearchRequestOpen()
+          else props.onSearchRequestClose()
         }}
-        onFocus={() => props.onSearchRequestOpen()}
+        onCompositionStart={() => setComposing(true)}
+        onCompositionEnd={() => setComposing(false)}
         onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
+          if (props.replaceBusy) return
+          if (event.key === 'Escape') { closeSearch(); return }
           if (event.key !== 'Enter') return
           if (isImeEvent({ isComposing: event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
             event.preventDefault()
@@ -171,20 +205,31 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
         <TextField.Slot>
           <SearchIcon size={14} />
         </TextField.Slot>
+        {props.searchOpen || props.searchQuery ? <TextField.Slot side="right">
+          <IconButton variant="ghost" color="gray" size="1" aria-label={t('search.close')} disabled={props.replaceBusy} onClick={closeSearch}>
+            <CrossIcon size={14} />
+          </IconButton>
+        </TextField.Slot> : null}
       </TextField.Root>
-      {props.searchOpen ? <SearchPanel
+      {props.searchOpen && !(mountedDuringReplace && props.replaceBusy) ? <fieldset disabled={props.replaceBusy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}><SearchPanel
         ctx={props.ctx}
         sessionId={props.sessionId}
         revision={props.fileRevision}
-        query={searchQuery}
-        onQueryChange={setSearchQuery}
+        query={props.searchQuery}
+        onQueryChange={props.onSearchQueryChange}
+        scope={props.searchScope}
+        onScopeChange={props.onSearchScopeChange}
+        outcome={props.replaceOutcome}
+        onOutcomeChange={props.onReplaceOutcomeChange}
         submitTick={searchSubmitTick}
+        composing={composing}
+        onReplaceBusyChange={props.onReplaceBusyChange}
         /* 跳转统一走 openDocument 的保存 gate，不再因脏禁用；替换写入仍受 activeDirty 保护。 */
         navigationBlocked={false}
         activePath={props.activePath}
         activeDirty={props.activeDirty}
         onOpen={(hit: SearchHit) => props.onOpenDocument(hit.path, hit)}
-        onReplaced={props.onSearchReplaced} /> : null}
+        onReplaced={(paths) => props.onSearchReplaced(props.sessionId, paths)} /></fieldset> : null}
       <SidebarTools renderSlot={props.renderSlot} seatContext={props.seatContext} />
       {props.createNote ? <Callout.Root className="warning" color="red" size="1" mx="3" mb="2" role="alert">
         <Callout.Text>
@@ -340,4 +385,3 @@ export const CenterOverlays = memo(function CenterOverlays(props: {
   </Box>
     : null;
 })
-

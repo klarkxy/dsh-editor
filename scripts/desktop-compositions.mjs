@@ -91,7 +91,16 @@ export async function configureProfile(destination, composition) {
   const selected = manifests.filter((item) => composition.packages.includes(item.name))
   await writeFile(resolve(destination, 'dsh-editor-catalog.json'), `${JSON.stringify({
     bundles: composition.bundles,
-    entries: catalogFromManifests(selected),
+    entries: {
+      ...catalogFromManifests(selected),
+      'ui-shortcuts': { title: '快捷键', description: '使用官方快捷键搜索、录制和重置。', locked: false, packageName: '@deepseek-ai/dsh-client-ui-shortcuts' },
+      'ui-sidebar-documentpreview': { title: '资料预览', description: '预览图片、PDF、Office 文档和表格。', locked: false, packageName: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview' },
+      'mcp-resources': { title: 'MCP 资源', description: '读取已配置 MCP 服务提供的资源。', locked: false, packageName: '@deepseek-ai/dsh-mcp-resources' },
+      ...Object.fromEntries(['speech-to-text', 'speech-to-text-sensevoice', 'api-speech-to-text', 'ui-voice-input'].map(id => [id, {
+        title: '语音输入', description: '使用官方本地语音识别，将转写放入对话草稿。首次使用需准备模型。', locked: false,
+        packageName: '@deepseek-ai/dsh-experimental-voice-input-bundle',
+      }])),
+    },
   }, null, 2)}\n`)
   // First-party plugin presets ship through the same template channel as the
   // app-owned ones: copy each declared dir next to them and mark it app-owned.
