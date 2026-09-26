@@ -113,6 +113,8 @@ try {
     await project.getByLabel('作品名称').fill('plugin-page-acceptance')
     await project.getByRole('button', { name: '创建', exact: true }).click()
     await page.locator('.shell.layout-shell').waitFor()
+    // Narrow layouts may leave the file sidebar collapsed after returning to desktop width.
+    if (!await page.locator('.tree').isVisible()) await page.getByRole('button', { name: '文件', exact: true }).click()
     await page.locator('.tree-empty').waitFor()
     await page.locator('.tree').click({button:'right',position:{x:20,y:80}})
     await page.getByRole('menuitem', {name:'新建文件',exact:true}).click()
