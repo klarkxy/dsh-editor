@@ -9,6 +9,7 @@ import {
   combineReplacements,
   documentPunctuationFindings,
   excerptParts,
+  findingExcerptPreview,
   filterProofreadFindings,
   groupFindingsByFile,
   isStaleFinding,
@@ -82,6 +83,12 @@ describe('proofread view helpers', () => {
     ]
     expect(kindCounts(items)).toEqual({ punctuation: 1, typo: 0, sensitive: 0, repeat: 0, habit: 0 })
     expect(filterProofreadFindings(items, { kinds: allProofreadKinds(), habitTerm: null }).map((item) => item.kind)).toEqual(['punctuation'])
+  })
+
+  it('keeps a short locating excerpt around a repeated issue', () => {
+    const excerpt = '前'.repeat(80) + '忽然' + '后'.repeat(80)
+    expect(findingExcerptPreview(excerpt, '忽然')).toBe('…' + '前'.repeat(16) + '忽然' + '后'.repeat(16) + '…')
+    expect(findingExcerptPreview('甲,乙', ',')).toBe('甲,乙')
   })
 
   it('highlights the matched span inside an excerpt', () => {

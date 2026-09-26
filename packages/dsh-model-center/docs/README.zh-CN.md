@@ -16,6 +16,8 @@ AI 策略由 `@klarkxy/dsh-ai-services` 存储。模型中心未安装或停用�
 
 ## 使用
 
+模型配置先显示新对话、补全和改写等常用默认值，其余能力在「更多能力设置」中展开。已保存的供应商或模型不在当前目录时，界面会标出旧绑定和受影响能力；选择可用模型并保存后才修改策略，连接变化本身不会自动改写。退出供应商页返回模型配置时会刷新模型目录，恢复提示中也可手动刷新。
+
 「模型档位」提供快速、对话、思考、幻想四档：快速档用于低成本、低延迟的辅助调用，对话档是日常默认，思考档用于更重的推理，幻想档是成本最高的创作档位。四档可绑定任意供应商模型，每档分别设置模型与思考强度。未单独设置的档位跟随对话档。「能力默认值」中的新对话、补全、改写、标题、澄清、回顾等可引用任一档，也可单独设置模型与思考强度；辅助能力仍可跟随当前会话。修改档位会影响引用它的能力；新对话使用保存后的默认值，已有对话的手动选择保持不变。并发、超时、输入输出上限和重试次数统一放在「运行设置」。供应商页只管理连接与模型。无效配置会报告错误，不自动改用其他供应商；推理强度来自当前模型目录。
 
 宿主支持热切换时启停即时生效；关闭模型中心后可恢复原模型设置页。安装、卸载或加载失败时按插件设置的提示操作。
@@ -24,7 +26,8 @@ AI 策略由 `@klarkxy/dsh-ai-services` 存储。模型中心未安装或停用�
 
 ## API / 导出
 
-- `.` — Cordis 插件入口（`name`、`inject`、`apply`）、以 `ctx.modelCenter` 提供的 `ModelCenter` 服务（`status()`），以及 `handleHostRpc`。
+- `.` — Cordis 插件入口（
+ame`、`inject`、`apply`）、以 `ctx.modelCenter` 提供的 `ModelCenter` 服务（`status()`），以及 `handleHostRpc`。
 - `./contracts` — 频道与插件常量（`MODEL_CENTER_RPC_CHANNEL`、`MODEL_CENTER_PLUGIN`、`MODEL_CENTER_ENTRY_ID`、`MODEL_ROLES`）、从 `@klarkxy/dsh-ai-services/contracts` 再导出的策略类型，以及界面类型（`ModelCenterStatus`、`ModelCenterTab`、`RegisteredPurpose`、`ProviderListing`、`DiscoveredModel`、`RoutePreview`）。
 - `./client` — Web 客户端入口（`apply`），注册设置座位并渲染模型中心标签页。
 

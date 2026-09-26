@@ -14,6 +14,7 @@ import {
   dailyCurveSeries,
   filterChapters,
   formatCount,
+  formatSignedCount,
   formatModifiedAt,
   localDateKey,
   weeklyCurveSeries,
@@ -28,8 +29,6 @@ export type RpcCaller = {
 
 export type OverviewSeatProps = ShellToolSeatContext & { rpc: RpcCaller }
 
-const STATUS_BAR_MAX = 28
-const CHAR_BAR_MAX = 72
 const CURVE_BAR_MAX = 56
 
 /* 活动暗示:骨架行(fluid-skeleton),参数改写自
@@ -110,6 +109,8 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
   const charBars = overview ? chapterCharBars(overview.chapters) : []
   const daily = history ? dailyCurveSeries(history.days, today, 30) : []
   const weekly = history ? weeklyCurveSeries(history.weeks, 12) : []
+  const hasDailyActivity = daily.some((bar) => bar.delta !== 0)
+  const hasWeeklyActivity = weekly.some((bar) => bar.delta !== 0)
   const loading = overview === undefined
   const failed = overview === null
 
@@ -215,25 +216,21 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
             ? <p className="muted">
             {t('overview.noChart')}
           </p>
-            : <div className="overview-char-bars">
-            {charBars.map((bar) => <div
+            : <ol className="overview-char-bars">
+            {charBars.map((bar) => <li
               key={bar.path}
               className={`overview-char-col${bar.empty ? ' empty' : ''}`}
               title={t('overview.barTitle', { title: bar.title, chars: formatCount(bar.chars) })}>
-              <span className="overview-char-value">
-                {bar.empty ? t('overview.empty') : formatCount(bar.chars)}
-              </span>
-              <i
-                style={{ height: `${barHeight(bar.ratio, CHAR_BAR_MAX)}px` }}
-                aria-hidden="true" />
               <SeatButton
                 host={props.Button}
                 className="overview-char-label"
                 onClick={() => openChapter(bar.path)}>
                 {bar.title}
               </SeatButton>
-            </div>)}
-          </div>}
+              <span className="overview-char-meter" aria-hidden="true"><i style={{ width: `${bar.ratio * 100}%` }} /></span>
+              <span className="overview-char-value">{bar.empty ? t('overview.empty') : t('overview.charsOnly', { chars: formatCount(bar.chars) })}</span>
+            </li>)}
+          </ol>}
         </section>
         <section className="overview-chart" aria-label={t('overview.curve')}>
           <h3>
@@ -242,34 +239,39 @@ function OverviewPanel(props: OverviewSeatProps & { request?: OverviewRequest | 
           {historyNote ? <p className="warning" role="status">
             {historyNote}
           </p> : null}
-          {daily.length ? <div className="overview-curve" aria-label={t('overview.last30')}>
+          {history ? <>
+          <h4>{t('overview.dailyTitle')}</h4>
+          <p className="overview-chart-summary">{t('overview.dailySummary', { delta: formatSignedCount(daily.at(-1)?.delta ?? 0) })}</p>
+          {hasDailyActivity ? <div className="overview-curve daily" aria-label={t('overview.last30')}>
             {daily.map((bar) => <div
               key={bar.key}
               className={`overview-curve-col${bar.today ? ' today' : ''}${bar.delta < 0 ? ' negative' : ''}`}
-              title={`${bar.key} · ${bar.delta >= 0 ? '+' : ''}${formatCount(bar.delta)}`}>
+              title={`${bar.key} · ${formatSignedCount(bar.delta)}`}>
               <i
                 style={{ height: `${barHeight(bar.ratio, CURVE_BAR_MAX)}px` }}
                 aria-hidden="true" />
               <small>
-                {bar.today ? t('overview.todayMark') : bar.label.slice(3)}
+                {bar.today ? t('overview.todayMark') : Number(bar.key.slice(-2)) % 5 === 0 ? bar.label.slice(3) : ''}
               </small>
             </div>)}
-          </div> : <p className="muted">
-            {t('overview.noDaily')}
+          </div> : <p className="muted overview-chart-empty">
+            {history?.days.length ? t('overview.noDailyChange') : t('overview.noDaily')}
           </p>}
-          {weekly.length ? <div className="overview-curve weekly" aria-label={t('overview.last12w')}>
+          <h4>{t('overview.weeklyTitle')}</h4>
+          {hasWeeklyActivity ? <div className="overview-curve weekly" aria-label={t('overview.last12w')}>
             {weekly.map((bar) => <div
               key={bar.key}
               className={`overview-curve-col${bar.delta < 0 ? ' negative' : ''}`}
-              title={t('overview.weekDelta', { key: bar.key, delta: `${bar.delta >= 0 ? '+' : ''}${formatCount(bar.delta)}` })}>
+              title={t('overview.weekDelta', { key: bar.key, delta: formatSignedCount(bar.delta) })}>
               <i
-                style={{ height: `${barHeight(bar.ratio, STATUS_BAR_MAX)}px` }}
+                style={{ height: `${barHeight(bar.ratio, CURVE_BAR_MAX)}px` }}
                 aria-hidden="true" />
               <small>
                 {bar.label.slice(3)}
               </small>
             </div>)}
-          </div> : null}
+          </div> : <p className="muted overview-chart-empty">{t('overview.noWeeklyChange')}</p>}
+          </> : historyNote ? null : <p className="muted">{t('overview.historyLoading')}</p>}
         </section>
         <section className="overview-recent" aria-label={t('overview.recentEdits')}>
           <h3>

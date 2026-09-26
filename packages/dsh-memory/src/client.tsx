@@ -527,7 +527,10 @@ export function MemorySettings({ client, host, props }: { client: Client; host?:
     <MemorySettingsPanel key={`settings:${memoryPanelKey(seat.sessionId, seat.locale)}`} client={client} sessionId={seat.sessionId} locale={seat.locale} />
     {review && seat.sessionId && !seat.hidden
       ? <details className="dsh-memory-si" data-testid="self-improvement-entry">
-        <summary>{t(seat.locale, '自我改进', 'Self-improvement')}</summary>
+        <summary>
+          <svg className="dsh-memory-si-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
+          {t(seat.locale, '自我改进', 'Self-improvement')}
+        </summary>
         <div className="dsh-memory-si-body">{review.render({ sessionId: seat.sessionId, locale: seat.locale })}</div>
       </details>
       : null}
@@ -565,6 +568,11 @@ const styles = `
 .dsh-memory-check{display:flex;gap:8px;align-items:center}
 .dsh-memory-check input{width:auto}
 .dsh-memory-chat>summary,.dsh-memory-si>summary{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:baseline;cursor:pointer;min-height:34px;list-style:revert}
+.dsh-memory-si:not([open]){padding-block:var(--space-1,4px);gap:0}
+.dsh-memory-si>summary{list-style:none;align-items:center}
+.dsh-memory-si>summary::-webkit-details-marker{display:none}
+.dsh-memory-si-chevron{flex:none}
+.dsh-memory-si[open] .dsh-memory-si-chevron{transform:rotate(90deg)}
 .dsh-memory-si-body{margin-top:8px}
 @media(prefers-reduced-motion:reduce){.dsh-memory-switch-thumb{transition:none}.dsh-memory-settings button:not([role="switch"]),.dsh-memory-chat button:not([role="switch"]),.dsh-memory-settings input,.dsh-memory-chat input,.dsh-memory-chat textarea,.dsh-memory-chat select{transition:none}}
 `

@@ -15,6 +15,7 @@ import {
   canProposeProofreadPath,
   documentPunctuationFindings,
   excerptParts,
+  findingExcerptPreview,
   filterProofreadFindings,
   formatPerThousand,
   groupFindingsByFile,
@@ -304,6 +305,7 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
         className="proofread-kinds"
         role="group"
         aria-label={t('proofread.kinds')}>
+        <span className="proofread-filter-label">{t('proofread.kinds')}</span>
         {PROOFREAD_KIND_CHIP_ORDER.map((kind) => <SeatButton
           host={props.Button}
           key={kind}
@@ -315,6 +317,7 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
       </div>
       {result ? <div className="proofread-summary" role="status">
         {t('proofread.summary', { hits: visible.length, files: result.scannedFiles })}
+        {visible.length !== result.findings.length ? <span>{t('proofread.filtered', { total: result.findings.length })}</span> : null}
         {result.truncated ? <strong>
           {t('proofread.truncated')}
         </strong> : null}
@@ -353,10 +356,12 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
           {t('proofread.checking')}
         </span>
       </div> : null}
+      {result && result.findings.length > 0 && visible.length === 0 ? <p className="muted proofread-empty-filter">{t('proofread.noMatches')}</p> : null}
       {grouped.length ? <ol className="proofread-results">
         {grouped.map((group) => <li key={group.path} className="proofread-file">
-          <strong>
+          <strong className="proofread-file-title" title={group.path}>
             {group.path}
+            <span>{t('proofread.fileHits', { count: group.findings.length })}</span>
           </strong>
           <ul>
             {group.findings.map((item, index) => <li
@@ -372,11 +377,12 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
                   <span className="proofread-kind">
                     {proofreadKindLabel(item.kind)}
                   </span>
+                  <span className="proofread-location">{t('proofread.location', { line: item.line, column: item.column })}</span>
                   <span className="proofread-message">
                     {item.message}
                   </span>
                 </span>
-                <span className="proofread-excerpt">
+                <span className="proofread-excerpt" title={item.excerpt}>
                   {ExcerptView(item)}
                 </span>
                 {item.suggestion !== undefined ? <span className="proofread-suggestion">
@@ -453,7 +459,8 @@ function ProofreadPanel(props: ProofreadSeatProps & { request?: ProofreadRequest
 }
 
 function ExcerptView(finding: ProofreadFinding) {
-  const parts = excerptParts(finding.excerpt, quotedTerm(finding.message))
+  const term = quotedTerm(finding.message)
+  const parts = excerptParts(findingExcerptPreview(finding.excerpt, term), term)
   if (!parts.match) return finding.excerpt
   return (
     <span>

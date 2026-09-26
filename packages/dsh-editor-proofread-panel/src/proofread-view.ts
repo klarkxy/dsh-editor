@@ -108,6 +108,15 @@ export function groupFindingsByFile(findings: readonly ProofreadFinding[]): Grou
   return [...groups.entries()].map(([path, group]) => ({ path, findings: sortProofreadFindings(group) }))
 }
 
+/** Keep the issue visible without repeating a paragraph of manuscript in every result. */
+export function findingExcerptPreview(excerpt: string, needle: string, context = 16): string {
+  if (excerpt.length <= context * 2 + needle.length) return excerpt
+  const match = needle ? excerpt.indexOf(needle) : -1
+  const start = match < 0 ? 0 : Math.max(0, match - context)
+  const end = Math.min(excerpt.length, match < 0 ? context * 2 : match + needle.length + context)
+  return `${start ? '…' : ''}${excerpt.slice(start, end)}${end < excerpt.length ? '…' : ''}`
+}
+
 export function excerptParts(excerpt: string, needle: string): ExcerptParts {
   if (!needle) return { before: excerpt, match: '', after: '' }
   const index = excerpt.indexOf(needle)

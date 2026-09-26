@@ -99,6 +99,17 @@ export function choiceOf(choices: readonly CatalogChoice[], provider: string, mo
   return choices.find(item => item.provider === provider && item.model === model)
 }
 
+/** An empty catalogue cannot establish whether a saved route is available. */
+export function catalogRouteIssue(
+  catalog: SessionModelCatalog,
+  route: Pick<ModelRoute, 'provider' | 'model'>,
+): 'provider' | 'model' | undefined {
+  if (!route.provider || !route.model || catalog.groups.length === 0) return undefined
+  const provider = catalog.groups.find(group => group.id === route.provider)
+  if (!provider) return 'provider'
+  return provider.models.some(model => model.id === route.model) ? undefined : 'model'
+}
+
 /** Advertised efforts plus the current value if it is not in the list. Unlisted IDs stay selectable. */
 export function effortOptions(choice: CatalogChoice | undefined, current?: string): CatalogEffort[] {
   const listed = choice?.efforts.map(item => ({ ...item })) ?? []

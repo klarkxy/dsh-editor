@@ -12,7 +12,7 @@ import {
 } from './client-view.ts'
 import { loadModelCenter, savePolicyUpdate, stillCurrent, createGenerationGate } from './load.ts'
 import {
-  catalogChoices, choiceOf, effortOptions, emptyCatalog, parseRouteKey, routeKey, type SessionModelCatalog,
+  catalogChoices, catalogRouteIssue, choiceOf, effortOptions, emptyCatalog, parseModelCatalog, parseRouteKey, routeKey, type SessionModelCatalog,
 } from './model-catalog.ts'
 import { formatRoute, previewResolve, purposeRows } from './policy.ts'
 import {
@@ -126,6 +126,7 @@ export function ModelCenterSettings(props: ModelCenterRenderProps & { client: Mo
   const text = copy(locale)
   const tabsId = useId()
   const generation = useRef(createGenerationGate())
+  const catalogRefreshInFlight = useRef(false)
   const [tab, setTab] = useState<ModelCenterTab>('policy')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -222,6 +223,23 @@ export function ModelCenterSettings(props: ModelCenterRenderProps & { client: Mo
 
   const draft = policy
   const rows = draft ? purposeRows(draft, purposes) : []
+  const refreshCatalog = () => {
+    if (busy || catalogRefreshInFlight.current) return
+    catalogRefreshInFlight.current = true
+    void action(async () => {
+      try {
+        const token = generation.current.current()
+        const result = unwrapRpc(await props.client.remote.session.modelCatalog())
+        if (generation.current.isCurrent(token)) setCatalog(parseModelCatalog(result))
+      } finally {
+        catalogRefreshInFlight.current = false
+      }
+    })
+  }
+  const selectTab = (next: ModelCenterTab) => {
+    if (tab === 'providers' && next !== 'providers' && !busy) refreshCatalog()
+    setTab(next)
+  }
   const saveDraft = () => {
     if (!draft) return
     void action(async () => {
@@ -249,14 +267,14 @@ export function ModelCenterSettings(props: ModelCenterRenderProps & { client: Mo
       const next = tablistKey(tab, event.key)
       if (!next) return
       event.preventDefault()
-      setTab(next)
+      selectTab(next)
       const button = event.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)
       button?.focus()
     }}>
       {(['policy', 'runtime', 'providers'] as const).map(key => (
         <button key={key} type="button" role="tab" data-tab={key} id={`${tabsId}-${key}-tab`}
           aria-controls={`${tabsId}-${key}-panel`} aria-selected={tab === key}
-          tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)}>{tabLabel(key, locale)}</button>
+          tabIndex={tab === key ? 0 : -1} onClick={() => selectTab(key)}>{tabLabel(key, locale)}</button>
       ))}
     </div>
     {storageFailed ? <p role="alert" className="model-center-error">{text.storageFailed}</p> : null}
@@ -296,6 +314,8 @@ export function ModelCenterSettings(props: ModelCenterRenderProps & { client: Mo
         onRoles={roles => { setNote(''); setPolicy({ ...draft, roles }) }}
         onPurpose={(id, target) => { setNote(''); setPolicy({ ...draft, purposes: { ...draft.purposes, [id]: target } }) }}
         onSave={saveDraft}
+        onShowProviders={() => selectTab('providers')}
+        onRefreshCatalog={refreshCatalog}
       /> : <p role="alert">{text.policyMissing}</p>}
     </div>
     <div role="tabpanel" id={`${tabsId}-runtime-panel`} aria-labelledby={`${tabsId}-runtime-tab`} hidden={tab !== 'runtime'} tabIndex={0}>
@@ -393,15 +413,64 @@ export function PolicyPanel(props: {
   onRoles(roles: AiPolicy['roles']): void
   onPurpose(id: string, target: ModelTarget): void
   onSave(): void
+  onShowProviders(): void
+  onRefreshCatalog(): void
 }): ReactNode {
   const text = copy(props.locale)
-  const rows = [...COMMON_PURPOSES.flatMap(id => props.rows.filter(row => row.id === id)), ...props.rows.filter(row => !COMMON_PURPOSES.includes(row.id))]
+  const commonRows = COMMON_PURPOSES.flatMap(id => props.rows.filter(row => row.id === id))
+  const advancedRows = props.rows.filter(row => !COMMON_PURPOSES.includes(row.id))
+  const affected = props.rows.filter(row => {
+    const preview = previewResolve(props.policy, row.id, { specs: props.rows })
+    return preview.ok && catalogRouteIssue(props.catalog, preview.route)
+  })
+  const affectedAdvanced = affected.filter(row => !COMMON_PURPOSES.includes(row.id))
   const describe = (route: ModelRoute) => {
     const selected = choiceOf(catalogChoices(props.catalog, route), route.provider, route.model)
     const effort = route.reasoningEffort ?? selected?.defaultEffort
     return (selected?.label ?? formatRoute(route)) + (effort ? ' · ' + reasoningLabel(effort, selected?.efforts.find(item => item.id === effort)?.name ?? effort, props.locale) : '')
   }
+  const renderCapability = (row: ReturnType<typeof purposeRows>[number]) => {
+    const label = purposeLabel(row.id, row.label, props.locale)
+    const preview = previewResolve(props.policy, row.id, { specs: props.rows })
+    const issue = preview.ok ? catalogRouteIssue(props.catalog, preview.route) : undefined
+    const custom = row.target.kind === 'model'
+    const value = custom ? 'custom' : purposeTargetValue(row.target)
+    return <div key={row.id} className="model-center-capability" data-purpose={row.id}>
+      <div className="model-center-capability-heading">
+        <label htmlFor={'capability-' + row.id}>{label}</label>
+        <select id={'capability-' + row.id} aria-label={label + ' ' + text.useModel} value={value}
+          onChange={event => {
+            if (event.target.value === 'custom') {
+              const route = preview.ok ? preview.route : props.policy.roles.normal ?? props.catalog.default ?? { provider: '', model: '' }
+              props.onPurpose(row.id, { kind: 'model', provider: route.provider, model: route.model, ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}) })
+            } else props.onPurpose(row.id, purposeTargetFromValue(event.target.value))
+          }}>
+          {MODEL_ROLES.map(role => <option key={role} value={'role:' + role}>{presetLabel(role, props.locale)}</option>)}
+          <option value="custom">{text.explicit}</option>
+          {row.id !== 'chat' ? <option value="session">{text.followSession}</option> : null}
+        </select>
+      </div>
+      {custom ? <RouteFields locale={props.locale} route={row.target as ModelRoute} disabled={props.busy}
+        catalog={props.catalog} ariaPrefix={label} onChange={route => props.onPurpose(row.id, { kind: 'model', ...route })} />
+        : row.target.kind === 'role' ? <p className="model-center-meta model-center-route-summary">{preview.ok ? describe(preview.route) : text.notConfigured}</p> : null}
+      {issue && !custom ? <p role="alert" className="model-center-error">{issue === 'provider' ? text.unavailableProvider : text.unavailableModel}</p> : null}
+    </div>
+  }
   return <div className="model-center-policy">
+    <p className="model-center-meta">{text.flowHint}</p>
+    {affected.length ? <div role="alert" className="model-center-recovery">
+      <strong>{props.locale === 'zh' ? `${affected.length}${text.affectedSummary}` : `${affected.length} ${affected.length === 1 ? text.affectedSummarySingular : text.affectedSummary}`}</strong>
+      <p>{text.recoveryHint}</p>
+      <button type="button" disabled={props.busy} onClick={props.onRefreshCatalog}>{text.refreshCatalog}</button>
+      {affectedAdvanced.length ? <p>{text.affectedAdvanced}{affectedAdvanced.map(row => purposeLabel(row.id, row.label, props.locale)).join(props.locale === 'zh' ? '、' : ', ')}</p> : null}
+    </div> : null}
+    {!props.catalog.groups.length ? <div className="model-center-recovery">
+      <p>{text.noCatalog}</p>
+      <div className="model-center-actions">
+        <button type="button" onClick={props.onShowProviders}>{tabLabel('providers', props.locale)}</button>
+        <button type="button" disabled={props.busy} onClick={props.onRefreshCatalog}>{text.refreshCatalog}</button>
+      </div>
+    </div> : null}
     <section className="model-center-tier-section" aria-label={text.roles}>
       <header><h3>{text.roles}</h3></header>
       <fieldset className="model-center-tiers" disabled={props.busy} aria-label={text.roles}>
@@ -426,33 +495,16 @@ export function PolicyPanel(props: {
     </section>
     <section className="model-center-capabilities" aria-label={text.capabilities}>
       <header><h3>{text.capabilities}</h3><p className="model-center-meta">{text.capabilityHint}</p></header>
-      <fieldset disabled={props.busy} aria-label={text.capabilities}>
-        {rows.length === 0 ? <p className="model-center-meta">{text.noPurposes}</p> : rows.map(row => {
-          const label = purposeLabel(row.id, row.label, props.locale)
-          const preview = previewResolve(props.policy, row.id, { specs: props.rows })
-          const custom = row.target.kind === 'model'
-          const value = custom ? 'custom' : purposeTargetValue(row.target)
-          return <div key={row.id} className="model-center-capability" data-purpose={row.id}>
-            <div className="model-center-capability-heading">
-              <label htmlFor={'capability-' + row.id}>{label}</label>
-              <select id={'capability-' + row.id} aria-label={label + ' ' + text.useModel} value={value}
-                onChange={event => {
-                  if (event.target.value === 'custom') {
-                    const route = preview.ok ? preview.route : props.policy.roles.normal ?? props.catalog.default ?? { provider: '', model: '' }
-                    props.onPurpose(row.id, { kind: 'model', provider: route.provider, model: route.model, ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}) })
-                  } else props.onPurpose(row.id, purposeTargetFromValue(event.target.value))
-                }}>
-                {MODEL_ROLES.map(role => <option key={role} value={'role:' + role}>{presetLabel(role, props.locale)}</option>)}
-                <option value="custom">{text.explicit}</option>
-                {row.id !== 'chat' ? <option value="session">{text.followSession}</option> : null}
-              </select>
-            </div>
-            {custom ? <RouteFields locale={props.locale} route={row.target as ModelRoute} disabled={props.busy}
-              catalog={props.catalog} ariaPrefix={label} onChange={route => props.onPurpose(row.id, { kind: 'model', ...route })} />
-              : row.target.kind === 'role' ? <p className="model-center-meta model-center-route-summary">{preview.ok ? describe(preview.route) : text.notConfigured}</p> : null}
-          </div>
-        })}
+      <fieldset disabled={props.busy} aria-label={text.commonModels}>
+        <legend className="model-center-subheading">{text.commonModels}</legend>
+        {commonRows.length ? commonRows.map(renderCapability) : <p className="model-center-meta">{text.noPurposes}</p>}
       </fieldset>
+      {advancedRows.length ? <details className="model-center-advanced">
+        <summary>{text.advanced}{affectedAdvanced.length ? ` (${affectedAdvanced.length})` : ''}</summary>
+        <fieldset disabled={props.busy} aria-label={text.otherModels}>
+          {advancedRows.map(renderCapability)}
+        </fieldset>
+      </details> : null}
     </section>
     <div className="model-center-savebar">
       <button type="button" disabled={props.busy || props.dirty === false} onClick={props.onSave}>{text.save}</button>
@@ -460,7 +512,6 @@ export function PolicyPanel(props: {
     </div>
   </div>
 }
-
 function reasoningLabel(id: string, name: string, locale: ModelCenterLocale): string {
   if (locale === 'en') return name
   return ({ off: '关', none: '关', minimal: '极低', low: '低', medium: '中', high: '高', xhigh: '极高', max: '最高' } as Record<string, string>)[id] ?? name
@@ -482,6 +533,7 @@ function RouteFields(props: {
   const text = copy(props.locale)
   const choices = catalogChoices(props.catalog, props.route)
   const selected = choiceOf(choices, props.route.provider, props.route.model)
+  const issue = catalogRouteIssue(props.catalog, props.route)
   const efforts = effortOptions(selected, props.route.reasoningEffort)
   const key = props.route.provider && props.route.model ? routeKey(props.route.provider, props.route.model) : ''
   const hasCatalog = choices.length > 0
@@ -497,11 +549,14 @@ function RouteFields(props: {
             props.onChange({ provider: '', model: '' })
             return
           }
-          props.onChange(withEffort({ provider: parsed.provider, model: parsed.model }, props.route.reasoningEffort ?? ''))
+          const next = choiceOf(choices, parsed.provider, parsed.model)
+          const effort = props.route.reasoningEffort
+          props.onChange(withEffort({ provider: parsed.provider, model: parsed.model },
+            effort && next?.efforts.some(item => item.id === effort) ? effort : ''))
         }}>
         <option value="">{props.emptyLabel ?? text.chooseModel}</option>
         {choices.map(item => (
-          <option key={routeKey(item.provider, item.model)} value={routeKey(item.provider, item.model)}>{item.label}</option>
+          <option key={routeKey(item.provider, item.model)} value={routeKey(item.provider, item.model)}>{item.label}{catalogRouteIssue(props.catalog, item) ? text.unavailableOption : ''}</option>
         ))}
       </select>
     </label> : <>
@@ -524,6 +579,7 @@ function RouteFields(props: {
         {efforts.map(item => <option key={item.id} value={item.id}>{reasoningLabel(item.id, item.name, props.locale)}</option>)}
       </select>
     </label>
+    {issue ? <p role="alert" className="model-center-error">{issue === 'provider' ? text.unavailableProvider : text.unavailableModel}</p> : null}
   </div>
 }
 
@@ -556,7 +612,13 @@ export const styles = `
 .model-center-tier-section,.model-center-capabilities{display:grid;gap:14px}
 .model-center header{display:grid;gap:4px}
 .model-center h3{font-size:16px;font-weight:600}
-.model-center .model-center-tiers,.model-center-capabilities>fieldset{padding:0;border:0;border-radius:0;gap:0;min-width:0}
+.model-center .model-center-tiers,.model-center-capabilities>fieldset,.model-center-advanced>fieldset{padding:0;border:0;border-radius:0;gap:0;min-width:0}
+.model-center-subheading{padding:0 0 4px}
+.model-center-recovery{display:grid;gap:8px;padding:12px;border:1px solid var(--gray-6);border-radius:var(--radius-3);background:var(--gray-2,transparent)}
+.model-center-advanced{border-top:1px solid var(--gray-6);padding-top:12px}
+.model-center-advanced summary{cursor:pointer;padding:8px 0}
+.model-center-advanced>fieldset{margin-top:4px}
+.model-center-route>.model-center-error{flex-basis:100%}
 .model-center-tier{display:grid;grid-template-columns:68px minmax(0,1fr);gap:4px 14px;padding:8px 0;border-bottom:1px solid var(--gray-6)}
 .model-center-tier-name{padding-top:9px}
 .model-center-tier .model-center-route{display:grid;grid-template-columns:minmax(0,1fr) 132px;align-items:start}

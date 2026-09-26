@@ -124,6 +124,10 @@ export function formatCount(value: number): string {
   return formatNumber(Math.max(0, Math.floor(value)))
 }
 
+export function formatSignedCount(value: number): string {
+  return `${value < 0 ? '-' : '+'}${formatCount(Math.abs(value))}`
+}
+
 export function formatModifiedAt(iso: string | null): string {
   if (!iso) return t('common.emDash')
   const stamp = Date.parse(iso)

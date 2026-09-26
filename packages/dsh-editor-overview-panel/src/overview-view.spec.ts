@@ -8,6 +8,7 @@ import {
   filterChapters,
   dailyCurveSeries,
   formatCount,
+  formatSignedCount,
   formatModifiedAt,
   scaleBar,
   weeklyCurveSeries,
@@ -63,6 +64,7 @@ describe('overview view helpers', () => {
   it('pads a 30-day writing curve and highlights today', () => {
     const series = dailyCurveSeries([
       { date: '2026-09-01', chars: 800, delta: 300 },
+      { date: '2026-09-05', chars: 900, delta: -120 },
       { date: '2026-09-07', chars: 1100, delta: 150 },
     ], '2026-09-07', 7)
     expect(series).toHaveLength(7)
@@ -71,18 +73,21 @@ describe('overview view helpers', () => {
     expect(series[0]?.ratio).toBe(1)
     expect(series.at(-1)).toMatchObject({ key: '2026-09-07', today: true, delta: 150, ratio: 0.5 })
     expect(series[1]).toMatchObject({ key: '2026-09-02', delta: 0, today: false, ratio: 0 })
+    expect(series[4]).toMatchObject({ key: '2026-09-05', delta: -120, ratio: 0.4 })
+    expect(formatSignedCount(series[4]!.delta)).toBe('-120')
   })
 
   it('keeps the last twelve weekly sums and scales from the peak delta', () => {
     const weeks = Array.from({ length: 14 }, (_, index) => ({
       weekStart: `2026-0${index < 9 ? 1 : 2}-${String((index % 9) + 1).padStart(2, '0')}`,
       chars: 1000 + index,
-      delta: index === 13 ? 80 : 20,
+      delta: index === 13 ? -80 : 20,
     }))
     const series = weeklyCurveSeries(weeks, 12)
     expect(series).toHaveLength(12)
     expect(series[0]?.key).toBe(weeks[2]!.weekStart)
     expect(series.at(-1)?.ratio).toBe(1)
+    expect(formatSignedCount(series.at(-1)!.delta)).toBe('-80')
     expect(series[0]?.ratio).toBe(0.25)
   })
 
@@ -104,6 +109,9 @@ describe('overview view helpers', () => {
 
   it('formats counts and missing modification times', () => {
     expect(formatCount(1240)).toBe('1,240')
+    expect(formatSignedCount(-120)).toBe('-120')
+    expect(formatSignedCount(120)).toBe('+120')
+    expect(formatSignedCount(0)).toBe('+0')
     expect(formatModifiedAt(null)).toBe('—')
     expect(formatModifiedAt('not-a-date')).toBe('—')
     expect(formatModifiedAt('2026-09-07T04:05:00.000Z')).toMatch(/\d/)

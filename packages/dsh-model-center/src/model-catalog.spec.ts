@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  catalogChoices, choiceOf, effortOptions, parseModelCatalog, parseRouteKey, routeKey,
+  catalogChoices, catalogRouteIssue, choiceOf, effortOptions, parseModelCatalog, parseRouteKey, routeKey,
 } from './model-catalog.ts'
 
 const catalog = parseModelCatalog({
@@ -65,6 +65,13 @@ describe('session model catalog', () => {
   it('keeps a bound route that is missing from the catalog as an extra choice', () => {
     const extra = catalogChoices(catalog, { provider: 'anthropic', model: 'sonnet' })
     expect(extra.at(-1)).toMatchObject({ provider: 'anthropic', model: 'sonnet', efforts: [] })
+  })
+
+  it('distinguishes unavailable saved bindings from an unknown empty catalogue', () => {
+    expect(catalogRouteIssue(catalog, { provider: 'deepseek', model: 'deepseek-chat' })).toBeUndefined()
+    expect(catalogRouteIssue(catalog, { provider: 'deepseek', model: 'removed' })).toBe('model')
+    expect(catalogRouteIssue(catalog, { provider: 'removed', model: 'old' })).toBe('provider')
+    expect(catalogRouteIssue(parseModelCatalog({ groups: [] }), { provider: 'removed', model: 'old' })).toBeUndefined()
   })
 
   it('round-trips catalog route keys', () => {
