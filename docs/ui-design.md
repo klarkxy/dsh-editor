@@ -104,9 +104,14 @@ theme changes, disabled send state, plugin isolation, viewport overflow and
 reduced motion. Screenshots are written to `.artifacts/ui-design/` and uploaded
 by the `UI design contracts` workflow. No new package or lockfile is needed.
 
-**The fixture is not the complete app.** It does not validate real CodeMirror IME,
-Electron window controls, model streaming or saving/conflict handling. Final
-acceptance still needs the running desktop: 100/125/150% OS scaling, Chinese IME,
-long titles and documents, docked/pinned/focus layouts, long conversations,
-reconnecting, pending approvals, conflicts, and actual installed plugin surfaces.
-Passing CSS checks or reviewing fixture screenshots is not a substitute.
+**The fixture is not the complete app.** It does not validate Electron window
+controls, model streaming or saving/conflict handling. Final acceptance still
+needs the running desktop: long titles and documents, docked/pinned/focus layouts,
+long conversations, reconnecting, pending approvals, conflicts, and actual
+installed plugin surfaces. Passing CSS checks or reviewing fixture screenshots
+is not a substitute.
+
+Input methods and display scaling use the existing operating system, Electron
+and CodeMirror capabilities. Do not build replacements or require a fixed
+dedicated acceptance checklist for them. Preserve existing input guards and
+verify affected behavior when it changes or a problem is reported.

@@ -16,6 +16,9 @@ dist
 .dev
 # Pack outputs. Delete and regenerate with pack:desktop / pack:plugins.
 .pack
+# Local merge evidence and nested integration worktrees.
+.artifacts/
+.worktrees/
 # Generated E2E / pack / diagram-check outputs. Do not commit them.
 e2e/out
 e2e/demo/

@@ -28,6 +28,18 @@
 | [dsh-editor-seats](dsh-editor-seats/README.md) | 界面扩展合同 |
 | [dsh-editor-workspace-kit](dsh-editor-workspace-kit/README.md) | 工作区共享库 |
 
+## 官方 DSH 能力
+
+| 官方包或能力 | Editor 中的用途 |
+| --- | --- |
+| DSH 0.1.7-rc.2 原生会话管理 | 对话归档、恢复、置顶与列表筛选；旧归档记录逐项迁入原生状态 |
+| `@deepseek-ai/dsh-client-ui-shortcuts` | 「设置 → 快捷键」搜索、录制和重置；桌面修改持久化 |
+| `@deepseek-ai/dsh-client-ui-sidebar-documentpreview` | 文件栏图片、PDF、Office 文档和表格预览 |
+| `@deepseek-ai/dsh-mcp-resources` | 读取已配置 MCP 服务的资源 |
+| `@deepseek-ai/dsh-experimental-voice-input-bundle` | 可选语音输入；首次使用由作者选择准备模型 |
+
+Editor 保留稿纸布局，以官方公有布局合同和界面槽位承载这些插件；定时任务不加入组合。官方包由桌面内置 DSH 提供，并非本仓库发布的 `@klarkxy/` 包。
+
 `dsh-editor-*` 为桌面私有包。入口、依赖与默认开关以各包 `package.json` 为准；组合定义在 [desktop.json](../apps/desktop/resources/compositions/desktop.json)，`basic` / `smart` / `full` 是同一组合的兼容别名。
 
 这六个 AI 功能预装并默认启用，仍可分别停用；Fusion 协作预装但默认关闭。Dream、Agent 与语义检查点等自动行为默认开启，可分别关闭；共享服务只提供机制，不会自行调用模型。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。

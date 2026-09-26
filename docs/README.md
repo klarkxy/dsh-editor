@@ -1,6 +1,6 @@
 # 文档
 
-- [使用指南](user-guide.md)：安装、写作、作品管理与问题处理。
+- [使用指南](user-guide.md)：安装、写作、作品管理、[官方插件](user-guide.md#官方-dsh-功能)与问题处理。
 - [桌面更新审查与恢复](update-audit.md)：下载校验、Windows 安装交接、恢复入口与验证边界。
 - [产品原则](product-principles.md)：作者工作流与产品取舍。
 - [架构决策](architecture.md)：运行时权威、信任边界与发布约定。

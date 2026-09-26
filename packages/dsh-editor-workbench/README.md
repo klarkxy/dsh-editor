@@ -4,9 +4,9 @@
 
 ## RPC 端点
 
-Host 在 `/dsh-editor-workbench` 通道（`WORKBENCH_RPC_CHANNEL`，仅本机回环）暴露 39 个端点，按域分组（src/contracts/channel.ts）：
+Host 在 `/dsh-editor-workbench` 通道（`WORKBENCH_RPC_CHANNEL`，仅本机回环）暴露端点，按域分组（src/contracts/channel.ts）：
 
-- 作品与进度：`project.inspect` / `createHome` / `init` / `prepareIndex` / `overview`，`progress.record` / `history`
+- 作品与进度：`project.inspect` / `homeDirectory` / `createHome` / `init` / `prepareIndex` / `overview`，`progress.record` / `history`
 - 目录与条目：`structure.groupCreate`、`directory.create`，`entry.copy` / `move` / `delete` / `rename`
 - 文件：`file.rename` / `moveManuscript` / `readBinary`（带版本校验或二进制读取）
 - 上下文与规则：`context.compile`，`rules.get` / `open`
@@ -16,6 +16,8 @@ Host 在 `/dsh-editor-workbench` 通道（`WORKBENCH_RPC_CHANNEL`，仅本机回
 - 归档：`archive.list` / `apply` / `restore`
 - 提案：`proposal.prepare` / `apply`（支持 create、章节计划/小结、拆分、合并、批量改名与写作 V2 提案）
 - 校对：`proofread.scan`
+
+`project.homeDirectory` 只读返回实际新作品根目录，不创建文件，也不接受客户端指定根目录。
 
 错误统一映射为 `WorkbenchRpcError`（src/index.ts），保留可操作的失败原因。
 
