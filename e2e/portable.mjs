@@ -207,11 +207,12 @@ try {
   if (smoke) {
     state.operations = ['smoke: packed wrapper started and home identity passed']
   } else {
-  await window.getByRole('button', { name: '设置', exact: true }).click()
-  await window.locator('.settings-nav').getByRole('tab', { name: '知乎资料', exact: true }).click()
-  await window.getByTestId('zhihu-settings-embed').waitFor()
-  await window.getByRole('button', { name: '关闭设置', exact: true }).click()
-  await window.locator('.settings-dialog').waitFor({ state: 'hidden' })
+  await window.getByRole('button', { name: '插件', exact: true }).click()
+  const pluginsPage = window.locator('section.plugins-page[aria-label="插件管理"]')
+  await pluginsPage.locator('nav.plugins-page-nav').getByRole('button', { name: '知乎资料', exact: true }).click()
+  await pluginsPage.getByTestId('zhihu-settings-embed').waitFor()
+  await pluginsPage.getByRole('button', { name: '返回首页', exact: true }).click()
+  await pluginsPage.waitFor({ state: 'detached' })
   await window.getByRole('button',{name:'新建',exact:true}).first().click()
   const project = window.getByRole('dialog',{name:'新建作品'})
   await project.getByLabel('作品名称').fill('便携组合验证')

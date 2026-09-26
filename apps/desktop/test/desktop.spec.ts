@@ -624,6 +624,9 @@ describe('profile deployment', () => {
     const patch = await readFile(join(destination, 'node_modules', 'dsh-editor-profile-config', 'base.patch.yml'), 'utf8')
     expect(patch).toMatch(/- id: editor-workbench-tools\r?\n  disabled: true/)
     expect(patch).toMatch(/- id: editor-novel-kernel\r?\n  disabled: true/)
+    // One UI owns the global plugin configuration slots; Host management stays available.
+    expect(patch).toMatch(/- id: ui-plugin-manager\r?\n  disabled: true/)
+    expect(patch).not.toMatch(/- id: plugin-manager\r?\n  disabled: true/)
     expect(patch).not.toMatch(/- id: editor-cards\r?\n/)
     expect(patch).not.toMatch(/- id: editor-workbench-tools\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-novel-kernel\r?\n  disabled: false/)

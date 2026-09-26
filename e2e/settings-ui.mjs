@@ -57,10 +57,7 @@ try {
       for (let i = 0; i < tabs.length; i++) {
         const tab = tabs[i].trim()
         await dialog.locator('.settings-nav [role="tab"]').nth(i).click()
-        if(tab === '网络搜索') await dialog.getByTestId('web-search-settings').waitFor()
-        if(tab === '知乎资料') await dialog.getByRole('textbox',{name:'Access Secret',exact:true}).waitFor()
         if(tab === '用量') await dialog.locator('.usage-cards').waitFor()
-        if(tab === '插件') await dialog.getByTestId('plugins-writing-presets').waitFor()
         await page.waitForTimeout(300)
         const content = dialog.locator('.settings-content.is-active')
         const metrics = await content.evaluate(el => {
@@ -89,6 +86,60 @@ try {
       }
     }
   }
+  await page.keyboard.press('Escape')
+  await dialog.waitFor({ state: 'hidden' })
+  for (const [width, height] of (process.env.SETTINGS_UI_MATRIX === 'skip' ? [] : [[1440, 900], [1024, 720]])) {
+    await app.evaluate(({ BrowserWindow }, bounds) => BrowserWindow.getAllWindows()[0].setSize(...bounds), [width, height])
+    for (const theme of ['dark', 'light']) {
+      await page.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
+      await dialog.getByRole('tab', { name: '通用设置', exact: true }).click()
+      await dialog.getByRole('button', { name: theme === 'dark' ? '深色' : '浅色', exact: true }).click()
+      await page.keyboard.press('Escape')
+      await dialog.waitFor({ state: 'hidden' })
+      await page.getByRole('button', { name: '插件', exact: true }).click()
+      const plugins = page.locator('section.plugins-page[aria-label="插件管理"]')
+      const nav = plugins.locator('nav.plugins-page-nav button.plugins-page-link')
+      await nav.getByRole('button', { name: '知乎资料', exact: true }).waitFor()
+      await nav.getByRole('button', { name: '网络搜索', exact: true }).waitFor()
+      const labels = (await nav.allTextContents()).map(text => text.trim())
+      assert.ok(labels.includes('已安装与市场'), 'Plugin manager navigation missing')
+      for (let i = 0; i < labels.length; i++) {
+        const tab = labels[i]
+        await nav.nth(i).click()
+        if (tab === '网络搜索') await plugins.getByTestId('web-search-settings').waitFor()
+        if (tab === '知乎资料') await plugins.getByRole('textbox', { name: 'Access Secret', exact: true }).waitFor()
+        if (tab === '已安装与市场') await plugins.getByTestId('plugins-writing-presets').waitFor()
+        await page.waitForTimeout(300)
+        const content = plugins.locator('.plugins-page-content')
+        const metrics = await content.evaluate(el => {
+          const visible = node => node.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }) && node.getBoundingClientRect().width > 1 && node.getBoundingClientRect().height > 1
+          const items = [...el.querySelectorAll('h1,h2,h3,h4,label,button,input,textarea,select,p,span,summary,a')].filter(visible)
+          const fonts = items.filter(node => node.textContent?.trim() || node.matches('input,textarea,select')).map(node => {
+            const style = getComputedStyle(node)
+            return { tag: node.tagName, cls: node.className, text: (node.getAttribute('aria-label') || node.textContent || '').trim().slice(0,90), size: style.fontSize, weight: style.fontWeight, family: style.fontFamily, height: node.getBoundingClientRect().height }
+          })
+          const bounds = el.getBoundingClientRect()
+          const overflow = items.filter(node => { const r=node.getBoundingClientRect(); return r.width>0 && (r.right > bounds.right+2 || r.left < bounds.left-2) }).map(node => ({tag:node.tagName,cls:node.className,text:node.textContent?.trim().slice(0,60)}))
+          return { fonts, overflow, text: el.innerText, scrollWidth: el.scrollWidth, contentWidth: el.clientWidth }
+        })
+        const file = `plugins-${width}-${theme}-${i}.jpg`
+        await plugins.screenshot({ path: resolve(output, file), quality: 85 })
+        const scan = await new AxeBuilder({ page }).setLegacyMode().include('.plugins-page').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()
+        metrics.accessibility = scan.violations.map(v => ({id:v.id,impact:v.impact,description:v.description,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))}))
+        assert.equal(await content.evaluate(el=>el.scrollTop), 0, tab + ' should open at the top')
+        if (await content.evaluate(el=>el.scrollHeight > el.clientHeight + 2)) {
+          await content.evaluate(el=>{el.scrollTop=el.scrollHeight})
+          await plugins.screenshot({path:resolve(output, `plugins-${width}-${theme}-${i}-bottom.jpg`),quality:85})
+        }
+        report.pages.push({ tab: '插件 / ' + tab, width, height, theme, file, ...metrics })
+        console.log(`${width} ${theme} 插件 / ${tab}: ${metrics.fonts.length} elements; overflow ${metrics.overflow.length}; a11y ${metrics.accessibility.length}`)
+      }
+      await plugins.getByRole('button', { name: '返回首页', exact: true }).click()
+      await plugins.waitFor({ state: 'detached' })
+    }
+  }
+  await page.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
+  await dialog.waitFor()
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1024,720))
   await dialog.getByRole('tab',{name:'通用设置',exact:true}).click()
   await dialog.getByRole('button',{name:'浅色',exact:true}).click()
@@ -154,35 +205,54 @@ try {
   await captureExtra('model-custom')
   await dialog.locator('.models-add-card').getByRole('button',{name:'取消',exact:true}).click()
   await app.evaluate(({shell})=>{globalThis.settingsExternalUrls=[];shell.openExternal=async url=>{globalThis.settingsExternalUrls.push(url)}})
-  await tabTo('知乎资料')
-  await dialog.getByRole('link',{name:'获取密钥',exact:true}).click()
+  await page.keyboard.press('Escape')
+  await dialog.waitFor({ state: 'hidden' })
+  await page.getByRole('button',{name:'插件',exact:true}).click()
+  const plugins = page.locator('section.plugins-page[aria-label="插件管理"]')
+  const pluginNav = plugins.locator('nav.plugins-page-nav')
+  const pluginTo = async name => {
+    await pluginNav.getByRole('button',{name,exact:true}).click()
+    await page.waitForTimeout(150)
+  }
+  const capturePluginExtra = async name => {
+    await page.waitForTimeout(300)
+    await plugins.screenshot({ path: resolve(output, name + '.jpg'), quality: 85 })
+    const scan = await new AxeBuilder({ page }).setLegacyMode().include('.plugins-page').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()
+    report.interactions.push({ name, accessibility: scan.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})) })
+  }
+  await pluginTo('知乎资料')
+  await plugins.getByRole('link',{name:'获取密钥',exact:true}).click()
   assert.deepEqual(await app.evaluate(()=>globalThis.settingsExternalUrls),['https://developer.zhihu.com/'])
-  const zhihuTabs=dialog.getByRole('tablist',{name:'知乎资料分区'})
+  const zhihuTabs=plugins.getByRole('tablist',{name:'知乎资料分区'})
   await zhihuTabs.getByRole('tab',{name:'设置',exact:true}).focus()
   for(const name of ['用量','知识库','连接测试']) {
     await page.keyboard.press('ArrowRight')
     assert.equal(await zhihuTabs.getByRole('tab',{name,exact:true}).getAttribute('aria-selected'),'true')
-    await captureExtra('zhihu-'+name)
+    await capturePluginExtra('zhihu-'+name)
   }
-  await dialog.getByRole('combobox',{name:'搜索方式',exact:true}).click()
+  await plugins.getByRole('combobox',{name:'搜索方式',exact:true}).click()
   await page.getByRole('option',{name:'知识库检索',exact:true}).click()
-  const personal = dialog.getByRole('checkbox',{name:'个人库',exact:true})
+  const personal = plugins.getByRole('checkbox',{name:'个人库',exact:true})
   const wasChecked = await personal.getAttribute('aria-checked')
   await personal.focus()
   await page.keyboard.press('Space')
   assert.notEqual(await personal.getAttribute('aria-checked'),wasChecked)
-  await captureExtra('zhihu-search-scopes')
-  await tabTo('网络搜索')
-  const signupLinks=dialog.locator('.web-search-settings a')
+  await capturePluginExtra('zhihu-search-scopes')
+  await pluginTo('网络搜索')
+  const signupLinks=plugins.locator('.web-search-settings a')
   const expectedUrls=await signupLinks.evaluateAll(nodes=>nodes.map(n=>n.href))
   for(const link of await signupLinks.all())await link.click()
   assert.deepEqual((await app.evaluate(()=>globalThis.settingsExternalUrls)).slice(1),expectedUrls)
-  await tabTo('插件')
-  const pluginTabs=dialog.getByRole('tablist',{name:'插件分类'})
+  await pluginTo('已安装与市场')
+  const pluginTabs=plugins.getByRole('tablist',{name:'插件分类'})
   await pluginTabs.getByRole('tab',{name:'已安装',exact:true}).focus()
   await page.keyboard.press('ArrowRight')
   assert.equal(await pluginTabs.getByRole('tab',{name:'市场',exact:true}).getAttribute('aria-selected'),'true')
-  await captureExtra('plugin-market')
+  await capturePluginExtra('plugin-market')
+  await page.keyboard.press('Escape')
+  await plugins.waitFor({ state: 'detached' })
+  await page.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
+  await dialog.waitFor()
   await tabTo('关于')
   await app.evaluate(({ipcMain})=>{
     ipcMain.removeHandler('dsh-window:check-update')

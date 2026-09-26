@@ -8,6 +8,7 @@ import { PaperStage } from './components.tsx'
 import { AppBrandMark, CrossIcon, FolderIcon, NewDocIcon } from './icons.tsx'
 import { AppMascot } from './mascot.tsx'
 import { CommandPaletteTrigger } from './command-palette.tsx'
+import { PluginsTrigger } from './plugins-page.tsx'
 import { SettingsTrigger, type SettingsTab } from './settings.tsx'
 import { titleBarDoubleClick, WindowControls } from './window-controls.tsx'
 import { ActivityRing, ActivityShimmer, ActivityText, m, useChromeMotion } from './ui/index.ts'
@@ -18,6 +19,7 @@ function HomeChrome(props: {
   extensionsDock?: ReactNode
   onOpenPalette(): void
   onOpenSettings(tab?: SettingsTab): void
+  onOpenPlugins(): void
 }) {
   return (
     <Flex
@@ -40,6 +42,7 @@ function HomeChrome(props: {
       </Flex>
       <Flex className="topbar-actions" align="center" gap="2" flexShrink="0">
         <CommandPaletteTrigger onClick={props.onOpenPalette} />
+        <PluginsTrigger onOpen={props.onOpenPlugins} />
         <SettingsTrigger onOpen={props.onOpenSettings} />
       </Flex>
       <WindowControls />
@@ -71,6 +74,7 @@ export function HomeScreen(props: {
   settingsDialog: ReactNode
   onOpenPalette(): void
   onOpenSettings(tab?: SettingsTab): void
+  onOpenPlugins(): void
 }) {
   const { workspaceOpen, extensionsDock } = props
   useLocale()
@@ -82,7 +86,8 @@ export function HomeScreen(props: {
         <HomeChrome
           extensionsDock={extensionsDock}
           onOpenPalette={props.onOpenPalette}
-          onOpenSettings={props.onOpenSettings} />
+          onOpenSettings={props.onOpenSettings}
+          onOpenPlugins={props.onOpenPlugins} />
         <Flex
           className="workspace-checking"
           direction="column"
@@ -115,7 +120,8 @@ export function HomeScreen(props: {
       <HomeChrome
         extensionsDock={extensionsDock}
         onOpenPalette={props.onOpenPalette}
-        onOpenSettings={props.onOpenSettings} />
+        onOpenSettings={props.onOpenSettings}
+          onOpenPlugins={props.onOpenPlugins} />
       <PaperStage label={t('home.blankPaper')} companion={<AppMascot size="home" />}>
         <Text className="home-hint" size="2" color="gray">
           {homeCopy.intro}

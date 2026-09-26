@@ -41,18 +41,18 @@ try {
   })
 
   const sample=async label=>{
-    await page.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
-    const dialog=page.getByRole('dialog',{name:'设置',exact:true});await dialog.waitFor()
-    for(const tab of ['知乎资料','网络搜索','插件']){
-      await dialog.locator('.settings-nav').getByRole('tab',{name:tab,exact:true}).click()
-      if(tab==='知乎资料')await dialog.getByRole('textbox',{name:'Access Secret',exact:true}).waitFor()
-      if(tab==='网络搜索')await dialog.getByTestId('web-search-settings').waitFor()
-      if(tab==='插件')await dialog.getByTestId('plugins-writing-presets').waitFor()
+    await page.getByRole('button',{name:'插件',exact:true}).click()
+    const plugins=page.locator('section.plugins-page[aria-label="插件管理"]')
+    for(const tab of ['知乎资料','网络搜索','已安装与市场']){
+      await plugins.locator('nav.plugins-page-nav').getByRole('button',{name:tab,exact:true}).click()
+      if(tab==='知乎资料')await plugins.getByRole('textbox',{name:'Access Secret',exact:true}).waitFor()
+      if(tab==='网络搜索')await plugins.getByTestId('web-search-settings').waitFor()
+      if(tab==='已安装与市场')await plugins.getByTestId('plugins-writing-presets').waitFor()
       await page.waitForTimeout(150)
-      const data=await page.evaluate(()=>({styles:[...document.querySelectorAll('style')].map(s=>({attrs:s.getAttributeNames(),owner:s.getAttribute('data-plugin'),length:s.textContent.length})), switch:[...document.querySelectorAll('.settings-content.is-active [role="switch"]')].map(e=>({cls:e.className,w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height})),lists:[...document.querySelectorAll('.settings-content.is-active ol')].map(e=>({cls:e.className,display:getComputedStyle(e).display}))}))
-      report.pages.push({label,tab,...data});console.log(label,tab,JSON.stringify({...data,styles:data.styles.filter(s=>s.attrs.some(a=>a.startsWith('data-dsh')))}));await dialog.screenshot({path:resolve(output,label+'-'+tab+'.jpg'),quality:85})
+      const data=await page.evaluate(()=>({styles:[...document.querySelectorAll('style')].map(s=>({attrs:s.getAttributeNames(),owner:s.getAttribute('data-plugin'),length:s.textContent.length})), switch:[...document.querySelectorAll('.plugins-page-content [role="switch"]')].filter(e=>e.checkVisibility()).map(e=>({cls:e.className,w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height})),lists:[...document.querySelectorAll('.plugins-page-content ol')].filter(e=>e.checkVisibility()).map(e=>({cls:e.className,display:getComputedStyle(e).display}))}))
+      report.pages.push({label,tab,...data});console.log(label,tab,JSON.stringify({...data,styles:data.styles.filter(s=>s.attrs.some(a=>a.startsWith('data-dsh')))}));await plugins.screenshot({path:resolve(output,label+'-'+tab+'.jpg'),quality:85})
     }
-    await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'})
+    await page.keyboard.press('Escape');await plugins.waitFor({state:'detached'})
   }
   await sample('home')
   await page.getByRole('button',{name:'新建',exact:true}).first().click()

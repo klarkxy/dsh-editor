@@ -139,6 +139,7 @@ export function appendRegistryCommands(groups: CommandGroup[], extras: readonly 
 
 export type CommandPaletteProps = {
   open: boolean
+  hotkeysEnabled?: boolean
   onOpenChange(next: boolean): void
   /* 主题与切换(theme.ts 已经提供 useTheme,palette 不直接 import,避免把
      内部 hook 暴露给 props 之外的调用方;根组件把 setTheme 当作回调传进来
@@ -192,6 +193,7 @@ export function CommandPalette(props: CommandPaletteProps) {
      onOpenChange 路径在 hotkey 阶段还是直接阶段而漏掉 ESC 关闭。 */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (props.hotkeysEnabled === false) return
       if (event.isComposing || event.keyCode === 229 || event.repeat) return
       if (!props.open && document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
       const mod = event.ctrlKey || event.metaKey
@@ -209,7 +211,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     }
     globalThis.addEventListener('keydown', onKey)
     return () => globalThis.removeEventListener('keydown', onKey)
-  }, [props.open, props.onOpenChange])
+  }, [props.open, props.onOpenChange, props.hotkeysEnabled])
 
   const themeNext: ThemeValue = props.theme === 'light' ? 'dark' : 'light'
   const workspaceGroup: CommandGroup = {

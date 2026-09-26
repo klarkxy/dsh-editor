@@ -122,6 +122,15 @@ async function openSettings(target = page) {
   await dialog.waitFor()
   return dialog
 }
+async function openPlugins(target = page) {
+  await target.getByRole('button', { name: '插件', exact: true }).click()
+  const plugins = target.locator('section.plugins-page[aria-label="插件管理"]')
+  await plugins.getByTestId('plugins-settings').waitFor()
+  return plugins
+}
+async function selectPluginConfiguration(plugins, name) {
+  await plugins.locator('nav.plugins-page-nav').getByRole('button', { name, exact: true }).click()
+}
 try {
   child = spawn(process.execPath, [resolve(runtime, 'lib/bin.js'), '--profile', 'dsh-editor', '--host', '127.0.0.1', '--port', '0', '--no-open'], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   const ready = new Promise((done, reject) => {
@@ -153,9 +162,7 @@ try {
   const later = page.getByRole('button', { name: '稍后配置', exact: true })
   if (await later.isVisible()) await later.click()
   await screenshot('00-default-home')
-  let dialog = await openSettings()
-  await dialog.getByRole('tab', { name: '插件', exact: true }).click()
-  await dialog.getByTestId('plugins-settings').waitFor()
+  let dialog = await openPlugins()
   await dialog.locator('[role="switch"][data-testid$="-current-title"]').waitFor({ state: 'attached' })
   const initial = await dialog.locator('[role="switch"][data-testid]').evaluateAll(nodes => nodes.map(node => ({ id: node.getAttribute('data-testid'), checked: node.getAttribute('aria-checked'), disabled: node.hasAttribute('disabled') })))
   for (const id of featureIds) {
@@ -169,6 +176,9 @@ try {
   report.checks.push('six independent features start enabled; loading their surfaces does not infer')
   await dialog.locator('[role="switch"][data-testid$="-model-center"]').scrollIntoViewIfNeeded()
   await screenshot('01-default-plugins')
+  await dialog.getByRole('button', { name: '返回首页', exact: true }).click()
+  await dialog.waitFor({ state: 'detached' })
+  dialog = await openSettings()
   await dialog.getByRole('tab', { name: '模型', exact: true }).click()
   const defaultCenter = dialog.getByTestId('model-center')
   await defaultCenter.waitFor()
@@ -206,7 +216,9 @@ try {
     await center.getByText('已保存。', { exact: true }).waitFor()
     await screenshot('04-model-center-policy')
     report.checks.push('model configuration opens first, exposes four tiers and capability defaults, keeps runtime limits and providers separate, and saves a tier')
-    await dialog.getByRole('tab', { name: '插件', exact: true }).click()
+    await page.keyboard.press('Escape')
+    await dialog.waitFor({ state: 'detached' })
+    dialog = await openPlugins()
     const modelToggle = dialog.locator('[role="switch"][data-testid$="-model-center"]')
     await setChecked(modelToggle, false)
     await page.reload({ waitUntil: 'domcontentloaded' })
@@ -235,8 +247,7 @@ try {
     const launcher = page.getByRole('button', { name: '打开写作搭档', exact: true })
     if (await launcher.isVisible()) await launcher.click()
     await page.locator('aside.chat').waitFor()
-    dialog = await openSettings()
-    await dialog.getByRole('tab', { name: '插件', exact: true }).click()
+    dialog = await openPlugins()
     for (const id of ['current-title', 'memory', 'self-improvement', 'recap', 'mood']) {
       report.stage = 'ensure-enabled:' + id
       console.log(report.stage)
@@ -265,10 +276,13 @@ try {
     await page.getByText(/插件验收/).first().waitFor()
     report.checks.push('current title generates automatically without a settings page')
     dialog = await openSettings()
-    for (const name of ['当前标题', '需求澄清', '回顾', '自我改进']) {
+    for (const name of ['插件', '记忆', '当前标题', '需求澄清', '回顾', '自我改进']) {
       assert.equal(await dialog.getByRole('tab', { name, exact: true }).count(), 0, name + ' must not keep a settings tab')
     }
-    await dialog.getByRole('tab', { name: '记忆', exact: true }).click()
+    await page.keyboard.press('Escape')
+    await dialog.waitFor({ state: 'detached' })
+    dialog = await openPlugins()
+    await selectPluginConfiguration(dialog, '记忆')
     const memorySettings = dialog.getByTestId('memory-settings')
     await memorySettings.getByRole('switch', { name: '关闭记忆注入', exact: true }).click()
     await memorySettings.getByText('已保存。', { exact: true }).waitFor()
@@ -277,8 +291,8 @@ try {
     report.checks.push('Memory injection switch remains available; idle minutes are a fixed default')
     await page.keyboard.press('Escape')
     await dialog.waitFor({ state: 'detached' })
-    dialog = await openSettings()
-    await dialog.getByRole('tab', { name: '记忆', exact: true }).click()
+    dialog = await openPlugins()
+    await selectPluginConfiguration(dialog, '记忆')
     const memory = dialog.getByTestId('memory-chat')
     await memory.waitFor()
     await memory.locator('summary').click()
@@ -311,8 +325,8 @@ try {
     await composer.fill('不对，以后调整语言时保留已有剧情。')
     await composer.press('Enter')
     await page.getByText('已收到。测试回复已完成。', { exact: true }).nth(1).waitFor()
-    dialog = await openSettings()
-    await dialog.getByRole('tab', { name: '记忆', exact: true }).click()
+    dialog = await openPlugins()
+    await selectPluginConfiguration(dialog, '记忆')
     const siEntry = dialog.getByTestId('self-improvement-entry')
     await siEntry.locator('summary').click()
     const learning = dialog.getByTestId('self-improvement-settings')
@@ -355,8 +369,7 @@ try {
     await screenshot('09-mood-confirmed')
     report.checks.push('Mood native question holds main turn, records answer and resumes once; contract updates automatically')
 
-    dialog = await openSettings()
-    await dialog.getByRole('tab', { name: '插件', exact: true }).click()
+    dialog = await openPlugins()
     for (const id of ['mood', 'recap', 'self-improvement', 'memory', 'current-title']) {
       const toggle = dialog.locator('[role="switch"][data-testid$="-' + id + '"]')
       await toggle.click()

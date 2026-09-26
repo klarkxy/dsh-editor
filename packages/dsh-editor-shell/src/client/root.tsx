@@ -39,6 +39,7 @@ import { HomeScreen } from './root-home.tsx'
 import { WorkbenchTopbar } from './root-topbar.tsx'
 import { CrossIcon, FolderIcon, FocusIcon, NewDocIcon } from './icons.tsx'
 import { ConfirmDialog, NewProjectDialog, TextPromptDialog } from './dialogs.tsx'
+import { PluginWorkspace } from './plugins-page.tsx'
 import { SettingsDialog, SettingsTrigger, type SettingsRenderSlot, type SettingsTab } from './settings.tsx'
 import { ThemeToggle, useAccent, useTheme, type HostThemeSync } from './theme.tsx'
 import { Tree, FileContextMenu } from './sidebar.tsx'
@@ -392,6 +393,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     setLeaveConfirm(null)
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [pluginsOpen, setPluginsOpen] = useState(false)
+  const openPlugins = () => { setSettingsOpen(false); setPluginsOpen(true) }
   const [settingsFocusTab, setSettingsFocusTab] = useState<SettingsTab | undefined>()
   const openSettings = useCallback((tab?: SettingsTab) => {
     setSettingsFocusTab(tab)
@@ -455,6 +458,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   useEffect(() => {
     const hotkey = (event: globalThis.KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229) return
+      if (pluginsOpen) return
       if (document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
       /* 覆盖层抽屉:Esc 关闭;菜单/下拉打开时让位给它们自己的 Esc 处理。 */
       if (event.key === 'Escape') {
@@ -520,7 +524,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [assistantEnabled, assistantOpen, commands, compactChrome, focusMode, overlayAssistant, path, session?.sessionId, sidebarOpen, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
+  }, [pluginsOpen, assistantEnabled, assistantOpen, commands, compactChrome, focusMode, overlayAssistant, path, session?.sessionId, sidebarOpen, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
   useEffect(() => {
     if (!chatFocusNonce || !assistantOpen || focusMode || !assistantEnabled) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
@@ -1914,6 +1918,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
      是排过序的 .md/.txt),不另外发 RPC。 */
   const renderCommandPalette = () => <CommandPalette
     open={paletteOpen}
+    hotkeysEnabled={!pluginsOpen}
     onOpenChange={setPaletteOpen}
     theme={theme}
     onThemeChange={setTheme}
@@ -1979,6 +1984,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
       <ShellUiProvider theme={theme} accent={accent}>
+        <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
+          sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={() => setPluginsOpen(false)}>
         <HomeScreen
           workspaceOpen={workspaceOpen}
           extensionsDock={extensionsDock}
@@ -2011,13 +2018,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             writingScope={writingScope}
             migrateWriting={migrateWriting}
             assistant={capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined}
-            pluginsTab={pluginsSettings}
-            zhihuTab={zhihuSettings}
             focusTab={settingsFocusTab}
             renderSlot={renderSlot}
             onClose={() => setSettingsOpen(false)} />}
           onOpenPalette={() => setPaletteOpen(true)}
-          onOpenSettings={openSettings} />
+          onOpenSettings={openSettings} onOpenPlugins={openPlugins} />
+      </PluginWorkspace>
       </ShellUiProvider>
     );
   }
@@ -2026,6 +2032,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
 
   return (
     <ShellUiProvider theme={theme} accent={accent}>
+        <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
+          sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={() => setPluginsOpen(false)}>
       <main
         className={`shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantInGrid ? ' assistant-in-grid' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`}
         ref={shellMainRef}
@@ -2059,7 +2067,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           theme={theme}
           onThemeChange={setTheme}
           onOpenPalette={() => setPaletteOpen(true)}
-          onOpenSettings={openSettings} />
+          onOpenSettings={openSettings} onOpenPlugins={openPlugins} />
         <PanelGroup
           orientation="horizontal"
           className="shell-panels"
@@ -2457,8 +2465,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           writingScope={writingScope}
           migrateWriting={migrateWriting}
           assistant={capabilityReady ? featureEnabled(capabilityState.value, 'assistant') : undefined}
-          pluginsTab={pluginsSettings}
-          zhihuTab={zhihuSettings}
           focusTab={settingsFocusTab}
           renderSlot={renderSlot}
           onClose={() => setSettingsOpen(false)} />
@@ -2488,7 +2494,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           </Flex>
         </Callout.Root> : null}
       </main>
-    </ShellUiProvider>
+    </PluginWorkspace>
+      </ShellUiProvider>
   );
 }
 

@@ -12,14 +12,7 @@ import { SettingsGeneralSection, useDeveloperMode } from './settings-general.tsx
 import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { SettingsChatModelRoute, SettingsModelsSection } from './settings-models.tsx'
 import { ModelSettingsSurface } from './plugin-surfaces.tsx'
-import {
-  OfficialSettingsSectionPage,
-  PLUGIN_SETTINGS_TAB_PREFIX,
-  isPluginSettingsTab,
-  useOfficialSettingsSections,
-  type OfficialSettingsSection,
-  type SettingsRenderSlot,
-} from './settings-plugins.tsx'
+import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import { SettingsUsageSection } from './settings-usage.tsx'
 import { t, useLocale } from '../i18n/index.ts'
 import { CrossIcon, SettingsIcon } from './icons.tsx'
@@ -27,25 +20,19 @@ import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger } from './ui/i
 
 export type { SettingsRenderSlot }
 
-export type SettingsTab = 'general' | 'models' | 'assistant' | 'writing' | 'shortcuts' | 'usage' | 'zhihu' | 'plugins' | 'about'
+export type SettingsTab = 'general' | 'models' | 'assistant' | 'writing' | 'shortcuts' | 'usage' | 'about'
 
 const SETTINGS_TAB_KEY = 'dsh-editor.settings.tab'
-const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'assistant', 'writing', 'shortcuts', 'usage', 'zhihu', 'plugins', 'about']
-/** 侧栏末两项：插件管理与关于。官方插件设置页插在它们前面。 */
-const SETTINGS_TRAILING_TABS: SettingsTab[] = ['plugins', 'about']
-
-export function composeSettingsNavTabs(
-  featureTabs: readonly SettingsTab[],
-  official: readonly Pick<OfficialSettingsSection, 'navId'>[],
-): string[] {
-  return [...featureTabs, ...official.map((section) => section.navId), ...SETTINGS_TRAILING_TABS]
+const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'assistant', 'writing', 'shortcuts', 'usage', 'about']
+/** Application preferences only; plugin pages live in the plugin workspace. */
+export function composeSettingsNavTabs(featureTabs: readonly SettingsTab[]): SettingsTab[] {
+  return [...featureTabs, 'about']
 }
 
 function readStoredTab(): string {
   try {
     const value = globalThis.localStorage?.getItem(SETTINGS_TAB_KEY)
     if (value && (SETTINGS_TABS as string[]).includes(value)) return value
-    if (value && isPluginSettingsTab(value)) return value
   } catch { /* optional preference */ }
   return 'general'
 }
@@ -63,27 +50,14 @@ function SettingsTabPage(props: { tab: string; active: boolean; children?: React
   )
 }
 
-export function PluginSettingsContent(props: { contribution?: ReactNode; fallback: ReactNode }) {
-  return props.contribution == null ? props.fallback : <div data-dsh-plugin-surface="" style={{ display: 'contents' }}>
-    {props.contribution}
-  </div>
-}
-
 function tabLabel(tab: SettingsTab): string {
   if (tab === 'general') return t('settings.general')
   if (tab === 'models') return t('settings.models')
   if (tab === 'assistant') return t('settings.assistant')
   if (tab === 'writing') return t('settings.writing')
   if (tab === 'shortcuts') return t('settings.shortcuts')
-  if (tab === 'plugins') return t('settings.plugins')
-  if (tab === 'zhihu') return t('settings.zhihu')
   if (tab === 'about') return t('settings.about')
   return t('settings.usage')
-}
-
-function navLabel(tab: string, sections: readonly OfficialSettingsSection[]): string {
-  if ((SETTINGS_TABS as string[]).includes(tab)) return tabLabel(tab as SettingsTab)
-  return sections.find((section) => section.navId === tab)?.label ?? tab.slice(PLUGIN_SETTINGS_TAB_PREFIX.length)
 }
 
 /** 顶栏设置入口。保留 .native-settings-control 包裹和 aria-haspopup 约定（e2e 依赖）。 */
@@ -117,8 +91,6 @@ export function SettingsDialog(props: {
   migrateWriting: WritingMigration
   /* 助手能力开关：false 时隐藏模型等助手专属设置；undefined 表示能力尚未加载，保持原样。 */
   assistant?: boolean
-  pluginsTab?: ReactNode
-  zhihuTab?: ReactNode
   renderSlot?: SettingsRenderSlot
   open?: boolean
   focusTab?: SettingsTab
@@ -136,8 +108,6 @@ export function SettingsDialog(props: {
   const authorChrome = authorSettingsChrome(developerGate)
   const closeRef = useRef<HTMLButtonElement | null>(null)
   const pagesRef = useRef<HTMLDivElement | null>(null)
-  const official = useOfficialSettingsSections(props.ctx)
-  const officialSections = props.renderSlot ? official.sections : []
   useEffect(() => {
     if (!open) {
       setNote('')
@@ -167,14 +137,13 @@ export function SettingsDialog(props: {
   }
 
   const featureTabs: SettingsTab[] = props.assistant === false
-    ? ['general', 'writing', 'shortcuts', 'usage', 'zhihu']
-    : ['general', 'models', 'assistant', 'writing', 'shortcuts', 'usage', 'zhihu']
-  const navTabs = composeSettingsNavTabs(featureTabs, officialSections)
+    ? ['general', 'writing', 'shortcuts', 'usage']
+    : ['general', 'models', 'assistant', 'writing', 'shortcuts', 'usage']
+  const navTabs = composeSettingsNavTabs(featureTabs)
   /* 能力在弹窗打开期间变为停用时，或动态插件页消失时，回落到仍可用的分类。 */
-  const activeTab = navTabs.includes(tab) ? tab : 'general'
+  const activeTab: SettingsTab = navTabs.includes(tab as SettingsTab) ? tab as SettingsTab : 'general'
   useEffect(() => { pagesRef.current?.scrollTo({ top: 0 }) }, [activeTab])
-  const activeOfficial = officialSections.find((section) => section.navId === activeTab)
-  const builtinPages: SettingsTab[] = [...featureTabs, ...SETTINGS_TRAILING_TABS]
+  const builtinPages = navTabs
   const content: Record<SettingsTab, () => ReactNode> = {
     general: () => <SettingsGeneralSection
       ctx={props.ctx}
@@ -188,12 +157,6 @@ export function SettingsDialog(props: {
     writing: () => <WritingSettings scope={props.writingScope} migrate={props.migrateWriting} onOpenShortcuts={() => selectTab('shortcuts')} />,
     shortcuts: () => <ShortcutsSettings commands={props.commands} />,
     usage: () => <SettingsUsageSection ctx={props.ctx} />,
-    zhihu: () => <PluginSettingsContent contribution={props.zhihuTab} fallback={<Text size="2" color="gray" className="muted">
-      {t('settings.zhihuUnavailable')}
-    </Text>} />,
-    plugins: () => <PluginSettingsContent contribution={props.pluginsTab} fallback={<Text size="2" color="gray" className="muted">
-      {t('settings.pluginsUnavailable')}
-    </Text>} />,
     about: () => <AboutSettingsSection active={activeTab === 'about'} onBusyChange={setAboutBusy} />,
   }
 
@@ -220,14 +183,14 @@ export function SettingsDialog(props: {
               value={key}
               className={`settings-tab${activeTab === key ? ' active' : ''}`}
               aria-current={activeTab === key ? 'true' : undefined}>
-              {navLabel(key, officialSections)}
+              {tabLabel(key)}
             </TabsTrigger>)}
           </TabsList>
         </aside>
         <Flex className="settings-body" direction="column" minWidth="0" minHeight="0" overflow="hidden">
           <Flex className="settings-header" align="center" gap="2" px="4" py="3" flexShrink="0">
             <Heading size="4" className="settings-header-title">
-              {navLabel(activeTab, officialSections)}
+              {tabLabel(activeTab)}
             </Heading>
             <Flex align="center" gap="2" ml="auto">
               {authorChrome.showOpenConfig && props.ctx.connection.isLoopback ? <Button
@@ -256,24 +219,10 @@ export function SettingsDialog(props: {
             scrollTop / scrollHeight。Themes ScrollArea 把滚动放在内层 viewport,
             所以这里用 Box 而不是 ScrollArea。
           */}
-          <Box ref={pagesRef} className="settings-pages" tabIndex={0} role="region" aria-label={navLabel(activeTab, officialSections)} overflow="auto" flexGrow="1" minWidth="0" minHeight="0">
+          <Box ref={pagesRef} className="settings-pages" tabIndex={0} role="region" aria-label={tabLabel(activeTab)} overflow="auto" flexGrow="1" minWidth="0" minHeight="0">
             {builtinPages.map((key) => <SettingsTabPage key={key} tab={key} active={key === activeTab}>
               {content[key]()}
             </SettingsTabPage>)}
-            {open && activeOfficial && props.renderSlot
-              ? <SettingsTabPage
-              key={activeOfficial.navId}
-              tab={activeOfficial.navId}
-              active={true}>
-              <OfficialSettingsSectionPage
-                renderSlot={props.renderSlot}
-                sectionId={activeOfficial.id}
-                version={official.version}
-                sessionId={props.sessionId}
-                locale={locale}
-                onClose={props.onClose} />
-            </SettingsTabPage>
-              : null}
           </Box>
         </Flex>
       </Tabs>

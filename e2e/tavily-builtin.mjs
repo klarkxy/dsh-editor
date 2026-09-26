@@ -38,21 +38,21 @@ try {
   })
 
 
-  await page.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
-  const settings=page.getByRole('dialog',{name:'设置',exact:true});await settings.waitFor()
-  await settings.locator('.settings-nav').getByRole('tab',{name:'网络搜索',exact:true}).click()
-  const row=settings.getByTestId('web-search-rank-tavily');await row.waitFor()
+  await page.getByRole('button',{name:'插件',exact:true}).click()
+  const plugins=page.locator('section.plugins-page[aria-label="插件管理"]')
+  await plugins.locator('nav.plugins-page-nav').getByRole('button',{name:'网络搜索',exact:true}).click()
+  const row=plugins.getByTestId('web-search-rank-tavily');await row.waitFor()
   assert.equal(await row.count(),1)
   const toggle=row.getByRole('switch');assert.equal(await toggle.getAttribute('aria-checked'),'false')
   report.tavily={count:await row.count(),enabled:await toggle.getAttribute('aria-checked'),text:await row.innerText()}
-  await row.scrollIntoViewIfNeeded();await settings.screenshot({path:resolve(output,'network-search.jpg'),quality:85})
-  await settings.locator('.settings-nav').getByRole('tab',{name:'插件',exact:true}).click()
-  await settings.getByTestId('plugins-writing-presets').waitFor()
-  const pluginText=await settings.getByTestId('plugins-settings').innerText()
+  await row.scrollIntoViewIfNeeded();await plugins.screenshot({path:resolve(output,'network-search.jpg'),quality:85})
+  await plugins.locator('nav.plugins-page-nav').getByRole('button',{name:'已安装与市场',exact:true}).click()
+  await plugins.getByTestId('plugins-writing-presets').waitFor()
+  const pluginText=await plugins.getByTestId('plugins-settings').innerText()
   assert.ok(!pluginText.includes('Tavily'))
   assert.ok(pluginText.includes('网络搜索'))
   report.separatePlugin=false
-  await settings.screenshot({path:resolve(output,'plugins.jpg'),quality:85})
+  await plugins.screenshot({path:resolve(output,'plugins.jpg'),quality:85})
   const readFile=(await import('node:fs/promises')).readFile
   const manifest=JSON.parse(await readFile(resolve(home,'profiles/dsh-editor/package.json'),'utf8'))
   assert.ok(manifest.dsh.profile.bundles.includes('@klarkxy/dsh-web-search-manager'))

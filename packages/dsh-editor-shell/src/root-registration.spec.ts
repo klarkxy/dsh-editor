@@ -18,6 +18,9 @@ describe('root registration', () => {
         'dsh-editor.center.overlays': { kind: 'list', scope: 'root' },
         'dsh-editor.chat.events': { kind: 'list', scope: 'root' },
         'dsh-editor.settings.models': { kind: 'list', scope: 'root' },
+        'plugins.item': { kind: 'list', scope: 'root' },
+        'plugins.bundle.config': { kind: 'keyed', scope: 'root' },
+        'plugins.row.config': { kind: 'keyed', scope: 'root' },
         'settings.section': { kind: 'list', scope: 'root' },
       },
     })

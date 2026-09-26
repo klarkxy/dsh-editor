@@ -113,6 +113,12 @@ async function openSettings(target = page) {
   await dialog.waitFor()
   return dialog
 }
+async function openPlugins(target = page) {
+  await target.getByRole('button', { name: '插件', exact: true }).click()
+  const plugins = target.locator('section.plugins-page[aria-label="插件管理"]')
+  await plugins.getByTestId('plugins-settings').waitFor()
+  return plugins
+}
 async function startHost() {
   child = spawn(process.execPath, [resolve(runtime, 'lib/bin.js'), '--profile', 'dsh-editor', '--host', '127.0.0.1', '--port', '0', '--no-open'], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   return new Promise((done, reject) => {
@@ -144,13 +150,16 @@ try {
   assert.ok(status.purposes.some(row=>row.id==='manuscript.completion'))
   assert.equal(report.calls.length,0)
   report.checks.push('legacy writing models imported once without inference')
-  let dialog=await openSettings()
-  await dialog.getByRole('tab',{name:'插件',exact:true}).click()
-  let modelCenterToggle=dialog.locator('[role="switch"][data-testid$="-model-center"]')
+  let plugins=await openPlugins()
+  let modelCenterToggle=plugins.locator('[role="switch"][data-testid$="-model-center"]')
   if(await modelCenterToggle.getAttribute('aria-checked')==='true'){
     await modelCenterToggle.click();await waitForChecked(modelCenterToggle,false)
-    await page.reload();await page.locator('.shell').waitFor();dialog=await openSettings()
+    await page.reload();await page.locator('.shell').waitFor()
+  } else {
+    await plugins.getByRole('button',{name:/返回首页|返回写作/}).click()
+    await plugins.waitFor({state:'detached'})
   }
+  let dialog=await openSettings()
   await dialog.getByRole('tab',{name:'模型',exact:true}).click()
   const select=dialog.getByRole('combobox',{name:'补全模型',exact:true})
   await select.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click()
@@ -215,8 +224,8 @@ try {
   assert.equal(report.calls.filter(call => call.kind === 'completion').at(-1).model, 'fixture')
   await rpc('/dsh-ai-services', 'update', { expectedRevision: fallbackPolicy.revision, policy: beforeFallbackPolicy })
   report.checks.push('all four tiers use default Chat without Model Center, including host default fallback with no Chat binding')
-  dialog=await openSettings();await dialog.getByRole('tab',{name:'插件',exact:true}).click()
-  modelCenterToggle=dialog.locator('[role="switch"][data-testid$="-model-center"]');await modelCenterToggle.click();await waitForChecked(modelCenterToggle,true)
+  plugins=await openPlugins()
+  modelCenterToggle=plugins.locator('[role="switch"][data-testid$="-model-center"]');await modelCenterToggle.click();await waitForChecked(modelCenterToggle,true)
   await page.reload();await page.locator('.shell').waitFor();dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click()
   const center=dialog.getByTestId('model-center');await center.waitFor();await center.getByRole('tab',{name:'模型配置',exact:true}).click()
   await center.getByText('正文补全',{exact:true}).waitFor();await center.getByText('选区改写',{exact:true}).waitFor()

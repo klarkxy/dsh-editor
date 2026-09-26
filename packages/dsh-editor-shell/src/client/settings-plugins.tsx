@@ -29,7 +29,7 @@ const HOST_SETTINGS_SECTION_IDS = new Set(['general', 'models', 'usage', 'plugin
 export type SettingsRenderSlot = (
   key: string,
   owner?: object,
-  opts?: { only?: string },
+  opts?: { only?: string; entryKey?: string },
 ) => ReactNode
 
 export type OfficialSettingsSection = {
@@ -248,4 +248,8 @@ export function OfficialSettingsSectionPage(props: {
         onClose={props.onClose} />
     </OfficialSettingsPageBoundary>
   );
+}
+
+export function PluginSettingsContent(props: { contribution?: ReactNode; fallback: ReactNode }) {
+  return props.contribution == null ? props.fallback : <div data-dsh-plugin-surface="" style={{ display: 'contents' }}>{props.contribution}</div>
 }

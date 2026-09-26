@@ -5,7 +5,7 @@ import { CENTER_OVERLAYS_SLOT, EXTENSIONS_SLOT, SIDEBAR_TOOLS_SLOT } from '../ro
 import { componentStyles } from '../styles.ts'
 import { CenterOverlays, SidebarTools } from './root-columns.tsx'
 import { ExtensionsDock } from './root.tsx'
-import { PluginSettingsContent } from './settings.tsx'
+import { PluginSettingsContent } from './settings-plugins.tsx'
 
 const seatContext = {} as Parameters<typeof SidebarTools>[0]['seatContext']
 const pluginButton = createElement('button', { className: 'rt-BaseButton' }, 'Plugin control')

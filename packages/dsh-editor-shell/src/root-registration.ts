@@ -15,7 +15,7 @@ export type RootSlots = { register: (spec: {
   id: string
   priority: number
   label: string
-  children: Record<string, { kind: 'list'; scope: 'root' }>
+  children: Record<string, { kind: 'list' | 'keyed'; scope: 'root' }>
 }, render: unknown) => unknown }
 
 /** The package deliberately wins the public root slot; no layout/conversation internals are imported. */
@@ -27,10 +27,13 @@ export function registerRoot(ctx: Context & { slots: RootSlots }, render: (props
     label: t('app.slotLabel'),
     // Additive seats only: declaring shell.overlay here would awaken the
     // manuscript overlay, which belongs to the shadowed AppFrame. The plugins
-    // settings seat is consumed by the settings dialog, not the chrome dock.
+    // settings seat is consumed by the independent plugin page, not the chrome dock.
     children: {
       [EXTENSIONS_SLOT]: { kind: 'list', scope: 'root' },
       [PLUGINS_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
+      'plugins.item': { kind: 'list', scope: 'root' },
+      'plugins.bundle.config': { kind: 'keyed', scope: 'root' },
+      'plugins.row.config': { kind: 'keyed', scope: 'root' },
       [OFFICIAL_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
       [ZHIHU_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
       [SIDEBAR_TOOLS_SLOT]: { kind: 'list', scope: 'root' },

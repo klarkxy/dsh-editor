@@ -5,6 +5,7 @@ import { t } from '../i18n/index.ts'
 import { DeepSeekWhaleMark } from './components.tsx'
 import { FolderIcon, FocusIcon } from './icons.tsx'
 import { CommandPaletteTrigger } from './command-palette.tsx'
+import { PluginsTrigger } from './plugins-page.tsx'
 import { SettingsTrigger, type SettingsTab } from './settings.tsx'
 import { ThemeToggle, type ThemeValue } from './theme.tsx'
 import { titleBarDoubleClick, WindowControls } from './window-controls.tsx'
@@ -69,6 +70,7 @@ export function WorkbenchTopbar(props: {
   onThemeChange(theme: ThemeValue): void
   onOpenPalette(): void
   onOpenSettings(tab?: SettingsTab): void
+  onOpenPlugins(): void
 }) {
   const currentWorkspace = props.currentWorkspace
   const workspaceTitle = currentWorkspace?.title || currentWorkspace?.path || t('workspace.work')
@@ -206,6 +208,7 @@ export function WorkbenchTopbar(props: {
       <Flex className="topbar-actions" align="center" gap="2" flexShrink="0">
         <ThemeToggle theme={props.theme} onChange={props.onThemeChange} />
         <CommandPaletteTrigger onClick={props.onOpenPalette} />
+        <PluginsTrigger onOpen={props.onOpenPlugins} />
         <SettingsTrigger onOpen={props.onOpenSettings} />
       </Flex>
       <WindowControls />

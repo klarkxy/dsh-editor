@@ -296,8 +296,7 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
     throw new Error(`configured home assertion failed: ${JSON.stringify({ ...state, body: undefined, onboarding, settingsEntry, technicalChrome, clientBoundaryReady })}`)
   }
 
-  // The editor owns the settings dialog now: open it from the topbar trigger,
-  // walk the three tabs, and close it again.
+  // Global settings and plugin management have separate entry points.
   const window = ctx.window
   await window.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
   const dialog = window.getByRole('dialog', { name: '设置' })
@@ -317,9 +316,13 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   await dialog.getByRole('radio').first().waitFor({ state: 'visible', timeout: 10_000 })
   const writingRadios = await dialog.getByRole('radio').count()
   if (writingRadios < 2) throw new Error('settings writing tab lost the completion radios')
-  await dialog.getByRole('tab', { name: '插件', exact: true }).click()
+  await window.keyboard.press('Escape')
+  await dialog.waitFor({ state: 'detached', timeout: 10_000 })
+  await window.getByRole('button', { name: '插件', exact: true }).click()
+  const pluginsPage = window.locator('section.plugins-page[aria-label="插件管理"]')
+  await pluginsPage.locator('nav.plugins-page-nav').getByRole('button', { name: '已安装与市场', exact: true }).click()
   await window.waitForTimeout(600)
-  const pluginsRoot = dialog.getByTestId('plugins-settings')
+  const pluginsRoot = pluginsPage.getByTestId('plugins-settings')
   await pluginsRoot.waitFor({ state: 'visible', timeout: 10_000 })
   if (!(await pluginsRoot.getByText('系统核心').count()) || !(await pluginsRoot.getByText('稿纸').count())) {
     throw new Error('settings plugins tab did not list locked core plugins')
@@ -337,7 +340,7 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   const lockedCore = pluginsRoot.getByTestId('plugins-preset-dsh-editor-writing')
   if (await lockedCore.locator('[role="switch"]').count()) throw new Error('core writing preset exposes a toggle')
   await window.keyboard.press('Escape')
-  await dialog.waitFor({ state: 'detached', timeout: 10_000 })
+  await pluginsPage.waitFor({ state: 'detached', timeout: 10_000 })
 }))
 
 phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (state, ctx) => {

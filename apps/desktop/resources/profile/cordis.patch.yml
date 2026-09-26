@@ -2,6 +2,9 @@
 # upstream UI entries are not used on desktop.
 - id: ui-sidebar
   disabled: true
+# The independent Editor plugin page owns configuration slots and management.
+- id: ui-plugin-manager
+  disabled: true
 - id: ui-settings-plugin-inventory
   disabled: true
 - id: ui-brand-official

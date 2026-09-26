@@ -277,8 +277,10 @@ try {
  if(await page.getByTestId('zhihu-open').count())throw new Error('Zhihu must not contribute a desktop launcher');
  const openSettings=async(tab)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('.settings-nav').getByRole('tab',{name:tab,exact:true}).click();await page.waitForTimeout(250)};
  const closeSettings=async()=>{await page.getByRole('button',{name:'关闭设置',exact:true}).click();await page.locator('.settings-dialog').waitFor({state:'hidden'})};
- await openSettings('知乎资料');await page.getByTestId('zhihu-capabilities').waitFor();await page.locator('.settings-content.is-active').getByText('Access Secret',{exact:false}).first().waitFor();await closeSettings();
- evidence.checks.push('proofreading paused; Zhihu configuration is inside settings');
+ const openPlugins=async(tab)=>{await page.getByRole('button',{name:'插件',exact:true}).click();const plugins=page.locator('section.plugins-page[aria-label="插件管理"]');await plugins.locator('nav.plugins-page-nav').getByRole('button',{name:tab,exact:true}).click();await page.waitForTimeout(250);return plugins};
+ const closePlugins=async(plugins)=>{await plugins.getByRole('button',{name:/返回首页|返回写作/}).click();await plugins.waitFor({state:'detached'})};
+ let plugins=await openPlugins('知乎资料');await plugins.getByTestId('zhihu-capabilities').waitFor();await plugins.getByText('Access Secret',{exact:false}).first().waitFor();await closePlugins(plugins);
+ evidence.checks.push('proofreading paused; Zhihu configuration is inside the plugin page');
  await page.getByRole('button',{name:'新建',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator('.tree').waitFor({timeout:30000});
  await page.locator('.tree-empty').waitFor({state:'visible',timeout:20000});
  const tree=page.locator('.tree');const treeBox=await tree.boundingBox();if(!treeBox)throw new Error('tree missing');
@@ -319,10 +321,10 @@ try {
  for(const theme of ['light','dark']){
    if(theme==='dark')await page.locator('.chrome .theme-toggle').click();
    await openSettings('通用设置');panelColors.push(await page.locator('.settings-dialog').evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
-   await openSettings('知乎资料');await page.screenshot({path:resolve(output,'zhihu-settings-'+theme+'.png')});await closeSettings();
+   plugins=await openPlugins('知乎资料');await page.screenshot({path:resolve(output,'zhihu-settings-'+theme+'.png')});await closePlugins(plugins);
  }
  if(panelColors[0]===panelColors[1])throw new Error('settings theme did not adapt');
- await page.locator('.chrome .theme-toggle').click();evidence.checks.push('light/dark settings and embedded Zhihu configuration');
+ await page.locator('.chrome .theme-toggle').click();evidence.checks.push('light/dark settings and plugin-page Zhihu configuration');
 
  const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();await page.locator('aside.chat').waitFor();evidence.checks.push('optional Chat mounts');
  await page.reload();await page.locator('.shell').waitFor();await dismissNativeOnboarding(page);if(await page.getByTestId('proofread-open').count()||await page.getByTestId('zhihu-open').count())throw new Error('removed desktop launcher returned after reload');

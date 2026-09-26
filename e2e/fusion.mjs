@@ -250,18 +250,17 @@ try {
   assert.equal(requests.filter(row => row?.__path === '/dsh-fusion/status' && row?.payload?.sessionId === sessionId).length, statusBeforeEnable,
     'disabled Fusion must not poll status continuously')
   report.stage = 'editor-enable'
-  const dialog = page.getByRole('dialog', { name: '设置', exact: true })
-  await page.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
-  await dialog.waitFor()
-  await dialog.getByRole('tab', { name: '插件', exact: true }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  const pluginsPage = page.locator('section.plugins-page[aria-label="插件管理"]')
+  await pluginsPage.getByTestId('plugins-settings').waitFor()
   const inferenceBeforeEnable = fixture.calls.length
-  const toggle = dialog.locator('[role="switch"][data-testid$="-fusion"]')
+  const toggle = pluginsPage.locator('[role="switch"][data-testid$="-fusion"]')
   await toggle.waitFor()
   assert.equal(await toggle.getAttribute('aria-checked'), 'false', 'Fusion must be default-off')
   await toggle.click()
   await waitUntil(() => toggle.getAttribute('aria-checked'), value => value === 'true', 'Fusion enabled switch')
   await page.keyboard.press('Escape')
-  await dialog.waitFor({ state: 'detached' })
+  await pluginsPage.waitFor({ state: 'detached' })
   assert.equal(fixture.calls.length, inferenceBeforeEnable, 'enabling Fusion must not itself start inference')
   report.checks.push('Fusion defaults off and enables without inference in the normal Editor plugin composition')
 
@@ -498,10 +497,10 @@ try {
   const activeDisableRevision = state.pair.tasks.at(-1).revision
   const leadBeforeDisable = nativeLeadCalls()
   const childBeforeDisable = nativeChildCalls()
-  await page.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
-  const settings = page.getByRole('dialog', { name: '设置', exact: true })
-  await settings.getByRole('tab', { name: '插件', exact: true }).click()
-  const enabled = settings.locator('[role="switch"][data-testid$="-fusion"]')
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  const activePluginsPage = page.locator('section.plugins-page[aria-label="插件管理"]')
+  await activePluginsPage.getByTestId('plugins-settings').waitFor()
+  const enabled = activePluginsPage.locator('[role="switch"][data-testid$="-fusion"]')
   assert.equal(await enabled.getAttribute('aria-checked'), 'true')
   await enabled.click()
   await waitUntil(() => enabled.getAttribute('aria-checked'), value => value === 'false', 'Fusion disabled during active inference')

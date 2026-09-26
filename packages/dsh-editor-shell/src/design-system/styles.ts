@@ -23,6 +23,22 @@ export function uiRule(selectors: readonly string[], declarations: string): stri
 const r = uiRule
 
 export const componentStyles = [
+  // Global plugin page shares the workspace cell without resizing the manuscript.
+  r(['.plugin-workspace'], 'display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); width: 100%; height: 100%; min-height: 0;'),
+  r(['.plugin-workspace-writing', '.plugins-page'], 'grid-area: 1 / 1; min-width: 0; min-height: 0;'),
+  r(['.plugin-workspace-writing.is-covered'], 'visibility: hidden; pointer-events: none;'),
+  r(['.plugins-page'], 'display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--dsh-ui-header-height) minmax(0, 1fr); background: var(--dsh-ui-bg); color: var(--dsh-ui-text);'),
+  r(['.plugins-page-header'], 'padding-inline-start: var(--dsh-ui-space-3); border-bottom: 1px solid var(--dsh-ui-line);'),
+  r(['.plugins-page-header button', '.plugins-trigger'], '-webkit-app-region: no-drag;'),
+  r(['.plugins-page-layout'], 'display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0;'),
+  r(['.plugins-page-nav'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-4); overflow: auto; background: var(--dsh-ui-sidebar); border-right: 1px solid var(--dsh-ui-line);'),
+  r(['.plugins-page-nav > *'], 'flex-shrink: 0;'),
+  r(['.plugins-config-label'], 'margin-top: var(--dsh-ui-space-4);'),
+  r(['.plugins-config-links'], 'display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0;'),
+  r(['.plugins-page .plugins-page-nav .plugins-page-link'], 'justify-content: flex-start; width: 100%; margin: 0; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); border-radius: 0; background: transparent; box-shadow: none; color: var(--dsh-ui-text); white-space: normal; text-align: start; height: auto; min-height: var(--dsh-ui-control-md); overflow-wrap: anywhere;'),
+  r(['.plugins-page .plugins-page-nav .plugins-page-link:hover'], 'background: var(--dsh-ui-hover);'),
+  r(['.plugins-page .plugins-page-nav .plugins-page-link[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
+  r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-5); overflow: auto; min-width: 0; min-height: 0; overflow-wrap: anywhere;'),
   // Shell and native chrome. Keep draggable/no-drag regions and native controls.
   `${SCOPE}.shell-theme { --topbar-h: var(--dsh-ui-header-height); --control-h: var(--dsh-ui-control-md); }`,
   r(['.shell'], 'background: var(--dsh-ui-bg); color: var(--dsh-ui-text); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-normal);'),
@@ -172,6 +188,10 @@ export const responsiveStyles = `
   ${r(['.editor'], '--paper-pad-inline: clamp(24px, 7cqi, 64px);')}
 }
 @media (max-width: 760px) {
+  ${r(['.plugins-page-layout'], 'grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);')}
+  ${r(['.plugins-page-nav'], 'padding: var(--dsh-ui-space-3); max-height: 34dvh; border-right: 0; border-bottom: 1px solid var(--dsh-ui-line); gap: var(--dsh-ui-space-2);')}
+  ${r(['.plugins-config-label'], 'margin-top: 0;')}
+  ${r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-3);')}
   ${r(['.composer-mode'], 'max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;')}
   ${r(['.chat > .composer'], 'margin: var(--dsh-ui-space-2);')}
   ${r(['.editor-header'], 'gap: var(--dsh-ui-space-2); padding-inline: var(--dsh-ui-space-3); flex-wrap: wrap;')}
