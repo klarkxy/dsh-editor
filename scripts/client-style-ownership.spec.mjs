@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply as plugins } from '../packages/dsh-editor-plugins/src/client.tsx'
-import { apply as search } from '../packages/dsh-web-search-manager/src/client.tsx'
-import { apply as zhihu } from '../packages/dsh-zhihu/src/client.tsx'
 
 function documentFixture() {
   const nodes = []
@@ -38,7 +36,7 @@ function reloadUnrelatedModule(nodes) {
 }
 afterEach(() => vi.unstubAllGlobals())
 describe('settings stylesheet ownership', () => {
-  for (const [id, apply] of [['dsh-editor-plugins', plugins], ['@klarkxy/dsh-web-search-manager', search], ['@klarkxy/dsh-zhihu', zhihu]]) {
+  for (const [id, apply] of [['dsh-editor-plugins', plugins]]) {
     it(`${id} survives another module's materialization and reload`, () => {
       const nodes = documentFixture()
       mount(apply)
@@ -59,14 +57,4 @@ describe('settings stylesheet ownership', () => {
       expect(nodes[0].attrs.get('data-plugin')).toBe(id)
     })
   }
-  it('recreates Zhihu styles when the same effect restarts', () => {
-    const nodes = documentFixture()
-    const effect = mount(zhihu).find(effect => effect.label === 'zhihu.styles')
-    effect.dispose()
-    expect(nodes).toHaveLength(0)
-    const dispose = effect.run()
-    expect(nodes).toHaveLength(1)
-    dispose()
-    expect(nodes).toHaveLength(0)
-  })
 })

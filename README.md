@@ -18,16 +18,16 @@ Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / 
 
 | 插件 | 用途 | 安装来源 |
 | --- | --- | --- |
-| [@klarkxy/dsh-zhihu](packages/dsh-zhihu/docs/README.zh-CN.md) | 知乎搜索与知识库 | npm |
-| [@klarkxy/dsh-web-search-manager](packages/dsh-web-search-manager/docs/README.zh-CN.md) | 网络搜索与网页读取 | npm |
-| [@klarkxy/dsh-ai-services](packages/dsh-ai-services/docs/README.zh-CN.md) | 插件共用的模型路由与用量服务 | npm |
-| [@klarkxy/dsh-current-title](packages/dsh-current-title/docs/README.zh-CN.md) | 按当前任务更新会话标题 | npm |
-| [@klarkxy/dsh-mood](packages/dsh-mood/docs/README.zh-CN.md) | 需求澄清 | npm |
-| [@klarkxy/dsh-recap](packages/dsh-recap/docs/README.zh-CN.md) | 后台回顾与 Agent 检查点 | npm |
-| [@klarkxy/dsh-memory](packages/dsh-memory/docs/README.zh-CN.md) | 长期记忆与闲时整理 | npm |
-| [@klarkxy/dsh-self-improvement](packages/dsh-self-improvement/docs/README.zh-CN.md) | 教训摘录与技能草稿导出 | npm |
-| [@klarkxy/dsh-model-center](packages/dsh-model-center/docs/README.zh-CN.md) | 模型档位与用途配置 | npm |
-| [@klarkxy/dsh-fusion](packages/dsh-fusion/README.md) | Fusion 协作：主助手委派任务、持久执笔搭档产出候选，作者采用后写入 | npm |
+| [@klarkxy/dsh-zhihu](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/docs/README.zh-CN.md) | 知乎搜索与知识库 | npm |
+| [@klarkxy/dsh-web-search-manager](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager/docs/README.zh-CN.md) | 网络搜索与网页读取 | npm |
+| [@klarkxy/dsh-ai-services](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services/docs/README.zh-CN.md) | 插件共用的模型路由与用量服务 | npm |
+| [@klarkxy/dsh-current-title](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title/docs/README.zh-CN.md) | 按当前任务更新会话标题 | npm |
+| [@klarkxy/dsh-mood](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood/docs/README.zh-CN.md) | 需求澄清 | npm |
+| [@klarkxy/dsh-recap](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap/docs/README.zh-CN.md) | 后台回顾与 Agent 检查点 | npm |
+| [@klarkxy/dsh-memory](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory/docs/README.zh-CN.md) | 长期记忆与闲时整理 | npm |
+| [@klarkxy/dsh-self-improvement](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement/docs/README.zh-CN.md) | 教训摘录与技能草稿导出 | npm |
+| [@klarkxy/dsh-model-center](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center/docs/README.zh-CN.md) | 模型档位与用途配置 | npm |
+| [@klarkxy/dsh-fusion](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion/README.md) | Fusion 协作：主助手委派任务、持久执笔搭档产出候选，作者采用后写入 | npm |
 | [dsh-manuscript](packages/dsh-manuscript/README.md) | 稿纸编辑 | 本地 tarball，尚未发布到 npm |
 | [dsh-proofread](packages/dsh-proofread/README.md) | 中文文本校对 | 本地 tarball，尚未发布到 npm |
 

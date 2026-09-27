@@ -23,3 +23,7 @@ commit、push、tag、release 与签名须获授权。桌面发布先建 draft R
 跨包关系见[架构图](diagrams/index.html)。接口与包配置从[插件目录](../packages/README.md)进入源码。
 
 语境知识与行动经验共享公开存储，但写入类型和生效规则分离，见 [Dream / Self Improve 边界](portable-learning.md)。
+
+## 公共插件源码归属
+
+10 个可移植公共插件（含知乎）由 dsh-plugins 维护，Editor 使用精确版本的外部 npm 制品参与原有离线组合。仓库归属与随包交付独立；详见[迁移与发布交接](public-plugin-migration.md)。

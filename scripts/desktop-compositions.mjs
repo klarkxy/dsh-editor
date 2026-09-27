@@ -27,10 +27,10 @@ export { BASE_BUNDLES }
 export const DESKTOP_PACKAGE_NAMES = desktopCopiedPackageNames(manifests)
 export const PUBLIC_PLUGIN_PACKAGES = publicPackages(manifests)
 
-/** Package names can be scoped while source directories stay flat. */
+/** Resolve local workspace or explicitly pinned external package directories. */
 export function workspacePackageDir(name) {
   const pkg = [...manifests, ...(manifests.libraries ?? [])].find((item) => item.name === name)
-  if (!pkg) throw new Error(`unknown workspace package: ${name}`)
+  if (!pkg) throw new Error(`unknown composition package: ${name}`)
   return pkg.dir
 }
 
