@@ -6,8 +6,10 @@ import { mkdir, readFile, writeFile, mkdtemp, copyFile } from 'node:fs/promises'
 import { resolve, relative } from 'node:path'
 import { tmpdir } from 'node:os'
 import { chromium } from 'playwright'
+import { externalPluginDirectories } from '../scripts/external-plugins.mjs'
 
 const root = resolve(import.meta.dirname, '..')
+const packageDirectories = new Map(externalPluginDirectories(root).map(pkg => [pkg.name, pkg.dir]))
 const stamp = String(Date.now())
 const recordTitle = '独立安装记忆 ' + stamp
 const home = process.env.AI_STANDALONE_HOME ? resolve(process.env.AI_STANDALONE_HOME) : resolve(root, '.dev', 'ai-standalone-' + stamp)
@@ -115,14 +117,16 @@ try {
   if (!process.env.AI_STANDALONE_HOME) {
     for (const id of ['ai-services', ...ids]) {
       console.log('install:' + id)
-      const packageManifest = JSON.parse(await readFile(resolve(root, 'packages', 'dsh-' + id, 'package.json'), 'utf8'))
+      const directory = packageDirectories.get('@klarkxy/dsh-' + id)
+      assert.ok(directory, 'standalone acceptance requires an approved external package: ' + id)
+      const packageManifest = JSON.parse(await readFile(resolve(directory, 'package.json'), 'utf8'))
       const archiveName = packageManifest.name.replace(/^@/, '').replaceAll('/', '-') + '-' + packageManifest.version + '.tgz'
       const archive = resolve(root, '.pack', archiveName)
       const staged = resolve(staging, archiveName)
       await copyFile(archive, staged)
       command(['plugin', '--profile', 'web', 'add', 'file:' + staged.replaceAll('\\', '/')])
       {
-        // Unpublished workspace dependency: resolve this candidate from its exact archive.
+        // Resolve this acceptance candidate from its exact archive.
         const localManifest = resolve(home, 'profiles/web/package.json')
         const value = JSON.parse(await readFile(localManifest, 'utf8'))
         value.pnpm = { ...value.pnpm, overrides: { ...value.pnpm?.overrides, ['@klarkxy/dsh-' + id]: 'file:' + staged.replaceAll('\\', '/') } }
