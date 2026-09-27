@@ -26,9 +26,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.16.0
-      - name: Apply pinned consumer migration
+      - name: Apply pinned consumer migration and shared-filter regression
         working-directory: work
-        run: python3 ../migration-tools/scripts/migrate-zhihu-once.py editor .
+        run: |
+          python3 ../migration-tools/scripts/migrate-zhihu-once.py editor .
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/plugin-manifest.spec.mjs')
+          text = p.read_text()
+          old = '    expect(prepare).toContain("!normalized.endsWith(\'.map\')")'
+          assert text.count(old) == 1
+          text = text.replace("import { desktopComposition } from './desktop-compositions.mjs'", "import { desktopComposition } from './desktop-compositions.mjs'\nimport { packageCopyFilter } from './package-copy.mjs'")
+          text = text.replace(old, '''    expect(prepare).toContain('filter: packageCopyFilter(source, { omitMaps: true })')
+              const source = resolve(root, 'node_modules/@klarkxy/dsh-zhihu')
+              const filter = packageCopyFilter(source, { omitMaps: true })
+              expect(filter(source)).toBe(true)
+              expect(filter(resolve(source, 'lib/client.js'))).toBe(true)
+              expect(filter(resolve(source, 'lib/client.js.map'))).toBe(false)
+              expect(filter(resolve(source, 'src/client.tsx'))).toBe(false)''')
+          p.write_text(text)
+          PY
       - name: Refresh and freeze lockfile
         working-directory: work
         run: |
@@ -53,7 +70,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A packages/dsh-zhihu
-          git add package.json pnpm-lock.yaml apps/desktop/resources/external-plugins.json tsconfig.base.json vitest.config.ts scripts/client-style-ownership.spec.mjs scripts/public-package-boundaries.spec.mjs scripts/codemod/targets.txt README.md packages/README.md docs/user-guide.md packages/PUBLISHING.md docs/architecture.md docs/public-plugin-migration.md CHANGELOG.md scripts/external-plugins.test.mjs
+          git add package.json pnpm-lock.yaml apps/desktop/resources/external-plugins.json tsconfig.base.json vitest.config.ts scripts/client-style-ownership.spec.mjs scripts/public-package-boundaries.spec.mjs scripts/codemod/targets.txt scripts/plugin-manifest.spec.mjs README.md packages/README.md docs/user-guide.md packages/PUBLISHING.md docs/architecture.md docs/public-plugin-migration.md CHANGELOG.md scripts/external-plugins.test.mjs
           git diff --cached --stat
           git commit -m 'refactor: consume Zhihu as pinned offline artifact and move independent tests'
           git push origin HEAD:refactor/consume-external-public-plugins
