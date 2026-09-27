@@ -25,6 +25,10 @@ jobs:
           if [ ! -f apps/desktop/resources/external-plugins.json ]; then
             node scripts/externalize-editor-plugins.mjs
           fi
+          # Leave the permanent CI workflow unchanged. Its existing test:fusion entry
+          # also runs the new boundary tests through package.json instead.
+          git restore --source=HEAD -- .github/workflows/ci.yml
+          node --input-type=module -e "import fs from 'node:fs'; const p=JSON.parse(fs.readFileSync('package.json','utf8')); if(!p.scripts['test:fusion'].includes('test:external-plugins')) p.scripts['test:fusion']+=' && pnpm test:external-plugins'; fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');"
       - name: Resolve already-published exact versions
         run: pnpm install --no-frozen-lockfile
       - name: Commit generated migration only to feature branch
@@ -44,7 +48,7 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
       - name: Integration and boundary tests
-        run: pnpm test --maxWorkers=2 && pnpm test:fusion && pnpm test:external-plugins
+        run: pnpm test --maxWorkers=2 && pnpm test:fusion
       - name: Verify repacked offline plugin artifacts
         run: pnpm pack:plugins
       - name: Snapshot resulting tracked source
