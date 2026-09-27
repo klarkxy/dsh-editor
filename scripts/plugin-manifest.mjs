@@ -1,4 +1,5 @@
 /** Declarative dshEditor manifests and composition resolution. */
+import { externalPluginDirectories } from './external-plugins.mjs'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -136,8 +137,12 @@ export function loadPluginManifests(root = resolve(dirname(fileURLToPath(import.
   }
   const manifests = []
   const libraryCandidates = []
-  for (const entry of entries.filter((item) => item.isDirectory()).sort((left, right) => left.name.localeCompare(right.name))) {
-    const dir = join(packagesDir, entry.name)
+  const directories = [
+    ...entries.filter(item => item.isDirectory()).map(entry => ({ name: entry.name, dir: join(packagesDir, entry.name) })),
+    ...externalPluginDirectories(root),
+  ].sort((left, right) => left.name.localeCompare(right.name))
+  for (const entry of directories) {
+    const dir = entry.dir
     const manifestPath = join(dir, 'package.json')
     let pkg
     try {

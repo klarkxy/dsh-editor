@@ -59,7 +59,7 @@ Fusion 协作随桌面版预装，默认关闭。在「设置 → 插件」开�
 
 开启后，写作搭档可把限定任务委派给一位持久的执笔搭档：主搭档负责讨论、规划与审阅，执笔搭档产出候选文本。审阅通过不等于写入——正文与大纲的候选仍需你在预览中点「采用」，应用核对来源版本和未保存草稿后才写入。文件内容变化后，旧候选保留但不能覆盖新正文，须让搭档基于当前内容重新修订。修订与后续任务沿用同一位执笔搭档；停止任务或关闭卡片不会撤销已采用的正文。
 
-协作模型在首次配对时绑定，之后的模型设置改动只影响新配对。重启应用不会自动重发未决任务，需核对任务卡与执行记录后明确恢复。实现边界见 [Fusion 说明](../packages/dsh-fusion/docs/README.zh-CN.md)。
+协作模型在首次配对时绑定，之后的模型设置改动只影响新配对。重启应用不会自动重发未决任务，需核对任务卡与执行记录后明确恢复。实现边界见 [Fusion 说明](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion/docs/README.zh-CN.md)。
 
 ## 管理作品
 
@@ -85,7 +85,7 @@ Fusion 协作随桌面版预装，默认关闭。在「设置 → 插件」开�
 | 人物与世界书 | 文件树直接编辑；[可选卡片面板](../packages/dsh-editor-cards/README.md) |
 | 写作记忆 | 按需开启；查看规则、人物卡与世界书的维护历史并撤销写入，[面板说明](../packages/dsh-editor-memory-panel/README.md) |
 | 知乎资料 | 设置中配置；[使用与上传须知](../packages/dsh-zhihu/docs/README.zh-CN.md) |
-| 网络搜索 | 设置中选择后端；[配置与费用](../packages/dsh-web-search-manager/docs/README.zh-CN.md) |
+| 网络搜索 | 设置中选择后端；[配置与费用](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager/docs/README.zh-CN.md) |
 
 「通用设置」调整中英文、外观及搭档忙碌时的发送方式。「用量」显示本机模型调用记录，不是费用账单。
 

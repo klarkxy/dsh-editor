@@ -12,7 +12,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:web": "node scripts/dev-web.mjs",
     "test": "vitest run",
-    "test:fusion": "node scripts/check-fusion-foundation.mjs",
+    "test:fusion": "node scripts/check-fusion-foundation.mjs && pnpm test:external-plugins",
     "typecheck": "pnpm -r typecheck",
     "prepare:desktop-runtime": "pnpm build && node scripts/prepare-desktop-runtime.mjs",
     "pack:desktop": "pnpm prepare:desktop-runtime && pnpm --filter @dsh-editor/desktop exec electron-builder --config electron-builder.yml --publish never && node scripts/verify-desktop-package.mjs",
@@ -32,7 +32,8 @@
     "test:e2e:ai-plugins:standalone": "pnpm build && node scripts/prepare-desktop-dev.mjs && pnpm pack:plugins && node e2e/ai-plugins-standalone.mjs",
     "test:e2e:writing-ai-services": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-ai-services.mjs",
     "test:e2e:writing-shortcuts": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-shortcuts.mjs",
-    "test:e2e:fusion": "pnpm build && node scripts/prepare-desktop-dev.mjs && pnpm pack:plugins && node e2e/fusion.mjs && node e2e/fusion-standalone.mjs"
+    "test:e2e:fusion": "pnpm build && node scripts/prepare-desktop-dev.mjs && pnpm pack:plugins && node e2e/fusion.mjs && node e2e/fusion-standalone.mjs",
+    "test:external-plugins": "node --test scripts/external-plugins.test.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -79,6 +80,15 @@
     "tsdown": "^0.22.14",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
-    "@deepseek-ai/dsh": "0.1.7-rc.2"
+    "@deepseek-ai/dsh": "0.1.7-rc.2",
+    "@klarkxy/dsh-ai-services": "0.1.3",
+    "@klarkxy/dsh-current-title": "0.1.4",
+    "@klarkxy/dsh-mood": "0.1.4",
+    "@klarkxy/dsh-recap": "0.1.4",
+    "@klarkxy/dsh-memory": "0.1.4",
+    "@klarkxy/dsh-self-improvement": "0.1.4",
+    "@klarkxy/dsh-model-center": "0.1.3",
+    "@klarkxy/dsh-fusion": "0.1.0",
+    "@klarkxy/dsh-web-search-manager": "0.1.7"
   }
 }

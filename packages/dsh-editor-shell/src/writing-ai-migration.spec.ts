@@ -1,4 +1,4 @@
-import { AiServicesRuntime } from '../../dsh-ai-services/src/service.ts'
+import { AiServicesRuntime } from '@klarkxy/dsh-ai-services'
 import type { AiPolicy } from '@klarkxy/dsh-ai-services/contracts'
 import { describe, expect, it } from 'vitest'
 import { legacyWritingTargets, importWritingModels } from './writing-ai-migration.ts'

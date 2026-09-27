@@ -1,5 +1,4 @@
-import { AiServicesRuntime } from '@klarkxy/dsh-ai-services'
-import { sessionModelsFromHost } from '../../../dsh-ai-services/src/routing.ts'
+import { apply as applyAiServices, type AiServicesRuntime } from '@klarkxy/dsh-ai-services'
 import { testAiScope } from './test-ai-scope.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
@@ -65,14 +64,27 @@ async function fixture(
   const stream = vi.fn(() => chunks([{ type: 'text-delta', index: 0, text: '雨落在窗台上。' } as StreamChunkLike, { type: 'finish', reason: { kind: 'stop' } }]))
   const services = new Map<string, unknown>([['llm', { stream }]])
   services.set('sessionModelsHost', { agents: { get: () => ({ session: {} }) }, sessionProjections: { stateOf: () => ({ pending: config }) } })
-  const ai = new AiServicesRuntime({
-    llm: { resolveCallConfig: async (config: any) => config, prepareCall: async (config: any) => ({ config, stream }) } as any,
-    store: { savePolicy: async () => {}, saveReceipts: async () => {} },
-    sessionModels: sessionModelsFromHost(() => services.get('sessionModelsHost')),
-    defaultModel: () => config.provider && config.model ? { provider: config.provider, model: config.model } : undefined,
-  })
-  services.set('aiServices', ai)
   const rows = new Map<string, unknown>()
+  // Exercise the published plugin entry point, not its private routing source.
+  await applyAiServices({
+    llm: { resolveCallConfig: async (config: any) => config, prepareCall: async (config: any) => ({ config, stream }) },
+    storageDomain: { async open() { return { table: (name: string) => ({ get: (key: string) => rows.get(name + ':' + key), async put(key: string, value: unknown) { rows.set(name + ':' + key, value) } }), close() {} } } },
+    get(name: string) {
+      if (name === 'agentDefaultModel') return { currentSelection: () => config.provider && config.model ? { provider: config.provider, model: config.model } : undefined }
+      // Tests that explicitly configure tiers are exercising an installed model center.
+      if (name === 'modelCenter') return {}
+      return services.get(name)
+    },
+    get agents() { return (services.get('sessionModelsHost') as any)?.agents },
+    get sessionProjections() { return (services.get('sessionModelsHost') as any)?.sessionProjections },
+    get agentDefaultModel() { return (services.get('sessionModelsHost') as any)?.agentDefaultModel },
+    provide(name: string, value: unknown) { services.set(name, value) },
+    on() { return () => {} },
+    effect(setup: () => unknown) { return setup() },
+    webServer: { register() { return () => {} } },
+    connection: {},
+  } as unknown as Context)
+  const ai = services.get('aiServices') as AiServicesRuntime
   const host = {
     get(name: string) { return services.get(name) },
     provide(name: string, value: unknown) { services.set(name, value) },

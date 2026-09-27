@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply as plugins } from '../packages/dsh-editor-plugins/src/client.tsx'
-import { apply as search } from '../packages/dsh-web-search-manager/src/client.tsx'
 import { apply as zhihu } from '../packages/dsh-zhihu/src/client.tsx'
 
 function documentFixture() {
@@ -38,7 +37,7 @@ function reloadUnrelatedModule(nodes) {
 }
 afterEach(() => vi.unstubAllGlobals())
 describe('settings stylesheet ownership', () => {
-  for (const [id, apply] of [['dsh-editor-plugins', plugins], ['@klarkxy/dsh-web-search-manager', search], ['@klarkxy/dsh-zhihu', zhihu]]) {
+  for (const [id, apply] of [['dsh-editor-plugins', plugins], ['@klarkxy/dsh-zhihu', zhihu]]) {
     it(`${id} survives another module's materialization and reload`, () => {
       const nodes = documentFixture()
       mount(apply)
