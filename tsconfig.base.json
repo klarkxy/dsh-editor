@@ -55,12 +55,6 @@
       ],
       "dsh-proofread/defaults": [
         "packages/dsh-proofread/src/defaults.ts"
-      ],
-      "@klarkxy/dsh-zhihu/usage": [
-        "packages/dsh-zhihu/src/usage.ts"
-      ],
-      "@klarkxy/dsh-zhihu/contracts": [
-        "packages/dsh-zhihu/src/contracts.ts"
       ]
     }
   }

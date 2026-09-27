@@ -18,7 +18,7 @@ Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / 
 
 | 插件 | 用途 | 安装来源 |
 | --- | --- | --- |
-| [@klarkxy/dsh-zhihu](packages/dsh-zhihu/docs/README.zh-CN.md) | 知乎搜索与知识库 | npm |
+| [@klarkxy/dsh-zhihu](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/docs/README.zh-CN.md) | 知乎搜索与知识库 | npm |
 | [@klarkxy/dsh-web-search-manager](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager/docs/README.zh-CN.md) | 网络搜索与网页读取 | npm |
 | [@klarkxy/dsh-ai-services](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services/docs/README.zh-CN.md) | 插件共用的模型路由与用量服务 | npm |
 | [@klarkxy/dsh-current-title](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title/docs/README.zh-CN.md) | 按当前任务更新会话标题 | npm |

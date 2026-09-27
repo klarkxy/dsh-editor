@@ -16,6 +16,7 @@ import {
   resolveComposition,
 } from './plugin-manifest.mjs'
 import { desktopComposition } from './desktop-compositions.mjs'
+import { packageCopyFilter } from './package-copy.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const aiPackages = new Set(['ai-services', 'current-title', 'memory', 'model-center', 'mood', 'recap', 'self-improvement'].map(name => '@klarkxy/dsh-' + name))
@@ -31,7 +32,13 @@ describe('desktop dev prepare', () => {
   it('links workspace packages into the template instead of copying plugin bundles', () => {
     const prepare = readFileSync(resolve(root, 'scripts/prepare-desktop-dev.mjs'), 'utf8')
     expect(prepare).toContain("await symlink(source, destination, 'junction')")
-    expect(prepare).toContain("!normalized.endsWith('.map')")
+    expect(prepare).toContain('filter: packageCopyFilter(source, { omitMaps: true })')
+    const source = resolve(root, 'node_modules/@klarkxy/dsh-zhihu')
+    const filter = packageCopyFilter(source, { omitMaps: true })
+    expect(filter(source)).toBe(true)
+    expect(filter(resolve(source, 'lib/client.js'))).toBe(true)
+    expect(filter(resolve(source, 'lib/client.js.map'))).toBe(false)
+    expect(filter(resolve(source, 'src/client.tsx'))).toBe(false)
     const dev = readFileSync(resolve(root, 'scripts/dev.mjs'), 'utf8')
     expect(dev).toContain('reusing existing package builds')
     expect(dev).toContain('DSH_DEV_FORCE_BUILD')

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { EXTERNAL_PLUGIN_MANIFEST, externalPluginPins, externalPluginDirectories } from './external-plugins.mjs';
@@ -35,3 +35,15 @@ test('duplicate local source ownership is rejected', t => { const root = fixture
 test('private/non-bundle packages are not silently accepted', t => { const root = fixture(t); install(root, { dshEditor: { visibility: 'desktop' } }); assert.throws(() => externalPluginDirectories(root), /public Editor-compatible bundle/); });
 test('old isolated manifest fixtures without external inputs still work', t => { const root = fixture(t); rmSync(join(root, EXTERNAL_PLUGIN_MANIFEST)); assert.deepEqual(externalPluginDirectories(root), []); });
 test('malformed external manifests are rejected', t => { const root = fixture(t); put(root, EXTERNAL_PLUGIN_MANIFEST, { schema: 1, packages: [] }); assert.throws(() => externalPluginPins(root), /Invalid external/); });
+
+test('Zhihu has one source owner and retains a pinned offline product input', () => {
+  const root = new URL('../', import.meta.url);
+  const name = '@klarkxy/dsh-zhihu';
+  const pins = JSON.parse(readFileSync(new URL(EXTERNAL_PLUGIN_MANIFEST, root), 'utf8'));
+  const pkg = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
+  assert.equal(pins.packages[name], '0.1.7');
+  assert.equal(pkg.devDependencies[name], pins.packages[name]);
+  assert.equal(existsSync(new URL('packages/dsh-zhihu', root)), false);
+  const config = JSON.parse(readFileSync(new URL('tsconfig.base.json', root), 'utf8'));
+  assert.equal(Object.keys(config.compilerOptions.paths).some(key => key.startsWith(name)), false);
+});

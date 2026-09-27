@@ -9,6 +9,7 @@
     "@klarkxy/dsh-self-improvement": "0.1.4",
     "@klarkxy/dsh-model-center": "0.1.3",
     "@klarkxy/dsh-fusion": "0.1.0",
-    "@klarkxy/dsh-web-search-manager": "0.1.7"
+    "@klarkxy/dsh-web-search-manager": "0.1.7",
+    "@klarkxy/dsh-zhihu": "0.1.7"
   }
 }

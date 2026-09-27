@@ -15,8 +15,9 @@
 - @klarkxy/dsh-model-center@0.1.3
 - @klarkxy/dsh-fusion@0.1.0
 - @klarkxy/dsh-web-search-manager@0.1.7
+- @klarkxy/dsh-zhihu@0.1.7
 
-知乎仍有 Editor 私有界面合同的构建依赖；稿纸和校对仍按本地 tarball 交付。这三项与所有 dsh-editor-* 包暂留本仓库。
+知乎一并迁出；新仓库解除其按钮控件对 Editor 私有包的构建依赖，保留工具、凭据、RPC、存储和可选界面插槽。稿纸、校对与所有 dsh-editor-* 包仍留本仓库。
 
 ## 构建和交付
 
@@ -26,8 +27,12 @@ apps/desktop/resources/external-plugins.json 明确批准包名与精确版本�
 
 ## 合并及发布交接
 
-先合并 dsh-plugins 的迁入 PR（迁入包保持 holdPublish），再合并本 PR。Editor 使用已有同名同版本 npm 包，不依赖先发布新版本。删除源码目录后，本仓库的发现式发布器不再发布这9个包。确认旧发布任务结束、每个包的 npm Trusted Publisher 切换到新仓库，并验证完整发布制品，再单独解除新仓库发布闸门。此 PR 不改凭据、不发布、不合并其他 PR。
+先合并 dsh-plugins 的迁入 PR（迁入包保持 holdPublish），再合并本 PR。Editor 使用已有同名同版本 npm 包，不依赖先发布新版本。删除源码目录后，本仓库的发现式发布器不再发布这10个包。确认旧发布任务结束、每个包的 npm Trusted Publisher 切换到新仓库，并验证完整发布制品，再单独解除新仓库发布闸门。此 PR 不改凭据、不发布、不合并其他 PR。
 
 ## 后续方向
 
 保留通过蓝图复现 Editor 写作环境的方向，本次不让蓝图接管桌面壳、升级、进程或用户数据，不要求 Editor 完全蓝图化。
+
+## 知乎补充说明
+
+Editor 仍锁定已发布的 @klarkxy/dsh-zhihu@0.1.7 制品，包含原有预装界面和 Agent 工具，不需要先发布新版本。新仓库中的独立按钮适配会在后续获准发布并更新 pin 后进入桌面版，不能把源码迁入当成 npm 已更新。原有知乎包测试及样式生命周期测试迁往 dsh-plugins，Editor 继续检查外部制品和组合顺序。没有变更密钥、设置或用户数据。

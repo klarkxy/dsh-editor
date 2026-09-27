@@ -84,7 +84,7 @@ Fusion 协作随桌面版预装，默认关闭。在「设置 → 插件」开�
 | 文档概览 | `Ctrl+Shift+O`；[字数与写作曲线](../packages/dsh-editor-overview-panel/README.md) |
 | 人物与世界书 | 文件树直接编辑；[可选卡片面板](../packages/dsh-editor-cards/README.md) |
 | 写作记忆 | 按需开启；查看规则、人物卡与世界书的维护历史并撤销写入，[面板说明](../packages/dsh-editor-memory-panel/README.md) |
-| 知乎资料 | 设置中配置；[使用与上传须知](../packages/dsh-zhihu/docs/README.zh-CN.md) |
+| 知乎资料 | 设置中配置；[使用与上传须知](https://github.com/klarkxy/dsh-plugins/blob/main/plugins/dsh-zhihu/docs/README.zh-CN.md) |
 | 网络搜索 | 设置中选择后端；[配置与费用](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager/docs/README.zh-CN.md) |
 
 「通用设置」调整中英文、外观及搭档忙碌时的发送方式。「用量」显示本机模型调用记录，不是费用账单。
