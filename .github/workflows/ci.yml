@@ -31,3 +31,5 @@ jobs:
         run: pnpm build
       - name: Check types and tests
         run: pnpm typecheck && pnpm test --maxWorkers=2 && pnpm test:fusion
+      - name: Verify local and external plugin archives
+        run: pnpm pack:plugins

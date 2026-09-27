@@ -1,5 +1,6 @@
 import { materializeDsh } from './materialize-dsh.mjs'
 import { copyRuntimeDependencies } from './runtime-dependencies.mjs'
+import { packageCopyFilter } from './package-copy.mjs'
 import { cp, mkdir, readFile, rm, symlink } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,21 +20,11 @@ if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.n
 }
 const dsh = resolveDshInstallation('0.1.7-rc.2')
 
-function packageCopyFilter(source) {
-  const normalized = source.replaceAll('\\', '/')
-  return !normalized.includes('/node_modules/') &&
-    !normalized.includes('/src/') &&
-    !normalized.includes('/test/') &&
-    !normalized.endsWith('.map') &&
-    !normalized.endsWith('/tsconfig.json') &&
-    !normalized.endsWith('/tsdown.config.ts')
-}
-
 async function installPackage(packageName, destination) {
   await rm(destination, { recursive: true, force: true })
   const source = workspacePackageDir(packageName)
   if (process.env.DSH_EDITOR_COPY_PACKAGES === '1') {
-    await cp(source, destination, { recursive: true, filter: packageCopyFilter })
+    await cp(source, destination, { recursive: true, dereference: true, filter: packageCopyFilter(source, { omitMaps: true }) })
     return
   }
   await mkdir(dirname(destination), { recursive: true })

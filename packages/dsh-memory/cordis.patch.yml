@@ -1,5 +1,0 @@
-# Enabled when installed. Dream uses its own persisted switch; load ai-services explicitly.
-- insert:
-    - id: memory
-      name: '@klarkxy/dsh-memory'
-      disabled: false

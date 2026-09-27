@@ -44,7 +44,7 @@ npm 首页使用包根英文 `README.md`；中文放在 `docs/README.zh-CN.md`�
 
 npm 发布不会自动获得市场收录。向 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md) 投稿时，分别提交以下包目录：
 
-- [知乎资料](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-zhihu)
+- [知乎资料](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-zhihu)
 - [网络搜索](https://github.com/klarkxy/dsh-editor/tree/main/packages/dsh-web-search-manager)
 
 按上游当前格式填写条目；仓库 topic 只能帮助发现，不能保证每个子包都被展示。收录状态以市场实际结果为准。

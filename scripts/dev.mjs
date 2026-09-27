@@ -4,6 +4,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
+import { externalPluginPins } from './external-plugins.mjs'
 import { workspacePackageDir, desktopComposition } from './desktop-compositions.mjs'
 import { firstCompilePattern, isLeftoverDevCommand } from './dev-process.mjs'
 import { clientPackages, compositionInstallNames, loadPluginManifests } from './plugin-manifest.mjs'
@@ -228,7 +229,8 @@ process.on('SIGTERM', () => { void shutdown(0) })
 
 console.log('dev: starting plugin watchers')
 const wrapClients = new Set(clientPackages(loadPluginManifests(root)))
-const watcherNames = compositionInstallNames(composition)
+const externalPlugins = externalPluginPins(root)
+const watcherNames = compositionInstallNames(composition).filter(name => !(name in externalPlugins))
 for (let offset = 0; offset < watcherNames.length; offset += WATCHER_START_BATCH_SIZE) {
   const batch = watcherNames.slice(offset, offset + WATCHER_START_BATCH_SIZE)
   const pending = new Set(batch)

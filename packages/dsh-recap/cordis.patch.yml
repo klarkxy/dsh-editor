@@ -1,4 +1,0 @@
-- insert:
-    - id: recap
-      name: '@klarkxy/dsh-recap'
-      disabled: false

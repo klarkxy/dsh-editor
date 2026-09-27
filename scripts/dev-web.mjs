@@ -1,3 +1,4 @@
+import { externalPluginPins } from './external-plugins.mjs'
 import { workspacePackageDir } from './desktop-compositions.mjs'
 /**
  * Local DSH plugin loop: build, link into an isolated profile, watch, boot the web UI.
@@ -103,7 +104,7 @@ await runNode(dshInstallation.cliPath, ['plugin', '--profile', profile, 'install
 console.log('dev: watching. Refresh the browser after editor/client rebuilds; restart this command after host/tool changes if HMR misses them.')
 
 const kids = []
-for (const name of publicPlugins) {
+for (const name of publicPlugins.filter(name => !(name in externalPluginPins(root)))) {
   kids.push(spawnNode(pnpmCli, [
     '--filter', name, 'exec', 'tsdown', '--watch', '--no-clean',
     '--on-success', `node ../../scripts/wrap-client.mjs ${name}`,

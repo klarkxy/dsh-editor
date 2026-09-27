@@ -1,5 +1,6 @@
 import { materializeDsh } from './materialize-dsh.mjs'
 import { copyRuntimeDependencies } from './runtime-dependencies.mjs'
+import { packageCopyFilter } from './package-copy.mjs'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
@@ -31,15 +32,6 @@ function assertSafeOutput(path) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'))
-}
-
-function packageCopyFilter(source) {
-  const normalized = source.replaceAll('\\', '/')
-  return !normalized.includes('/node_modules/') &&
-    !normalized.includes('/src/') &&
-    !normalized.includes('/test/') &&
-    !normalized.endsWith('/tsconfig.json') &&
-    !normalized.endsWith('/tsdown.config.ts')
 }
 
 function dshCopyFilter(source) {
@@ -80,7 +72,7 @@ for (const packageName of privateProfilePackages) {
   const source = workspacePackageDir(packageName)
   const destination = resolve(dshOutput, 'node_modules', packageName)
   await rm(destination, { recursive: true, force: true })
-  await cp(source, destination, { recursive: true, dereference: true, filter: packageCopyFilter })
+  await cp(source, destination, { recursive: true, dereference: true, filter: packageCopyFilter(source) })
 }
 
 const bundledDsh = await readJson(resolve(dshOutput, 'package.json'))
@@ -101,10 +93,11 @@ const profileSource = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 await cp(profileSource, profileOutput, { recursive: true, dereference: true })
 await configureProfile(profileOutput, composition)
 for (const packageName of privateProfilePackages) {
-  await cp(workspacePackageDir(packageName), resolve(profileOutput, 'node_modules', packageName), {
+  const source = workspacePackageDir(packageName)
+  await cp(source, resolve(profileOutput, 'node_modules', packageName), {
     recursive: true,
     dereference: true,
-    filter: packageCopyFilter,
+    filter: packageCopyFilter(source),
   })
 }
 const profileDigest = await treeDigest(profileOutput)

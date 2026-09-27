@@ -42,5 +42,3 @@ packages/dsh-editor-shell/src/writing-settings.ts
 packages/dsh-manuscript/src/client/editor-core/editor.tsx
 packages/dsh-manuscript/src/client/index.ts
 packages/dsh-proofread/src/client.ts
-packages/dsh-zhihu/src/client-host-ui.ts
-packages/dsh-zhihu/src/client.ts
