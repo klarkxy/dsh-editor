@@ -12,7 +12,8 @@ const stage = process.env.BUILTIN_PLUGINS_STAGE || 'after'
 const runId = stage + '-' + Date.now()
 const home = resolve(root, '.dev', 'builtin-plugins-' + runId)
 const output = resolve(root, 'e2e/out/builtin-plugins', runId)
-const runtime = resolve(root, '.dev/desktop-dsh-runtime-0.1.7-rc.2')
+const runtimeVersion = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8')).devDependencies['@deepseek-ai/dsh']
+const runtime = resolve(root, '.dev', 'desktop-dsh-runtime-' + runtimeVersion)
 const featureIds = ['current-title', 'mood', 'recap', 'memory', 'self-improvement', 'model-center']
 const report = { ok: false, mode: process.env.AI_PLUGINS_E2E_MODE || 'enabled', checks: [], calls: [], errors: [], home, output }
 await mkdir(output, { recursive: true })
