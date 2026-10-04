@@ -12,6 +12,8 @@ ${surfaceTokenAliases}
   display: grid;
   gap: var(--space-5);
   min-height: 0;
+  /* Reading measure: full-width rows on wide windows left ~600px of dead space. */
+  max-width: var(--dsh-ui-content-max, 47.5rem);
   padding-bottom: var(--space-2);
   line-height: 1.5;
   font-size: var(--font-size-2);
@@ -124,17 +126,21 @@ ${surfaceTokenAliases}
   font: var(--dsh-ui-weight-strong, 600) var(--font-size-3)/1.5 var(--s-font);
   color: var(--s-text);
 }
+/* Flat rows with hairline separators, same pattern as the proofread panel:
+   equal-weight filled cards made the container louder than the information. */
 .dsh-plugins-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  padding: var(--space-3);
-  border: 0.5px solid var(--s-line-strong);
-  border-radius: var(--s-radius-xl);
-  background: var(--s-raised);
+  padding: var(--space-3) var(--space-1);
+  border: 0;
+  border-bottom: 0.5px solid var(--s-line);
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
+.dsh-plugins-group .dsh-plugins-card:last-child { border-bottom: 0; }
 .dsh-plugins-card:hover { background: var(--s-hover); }
 .dsh-plugins-card-title { font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--s-font); }
 .dsh-plugins-card-desc, .dsh-plugins-meta {

@@ -329,6 +329,7 @@ export const zh = {
   'editor.conflictNameFallback': '{path}.冲突-{stamp}.md',
 
   'chat.assistant': '写作助手',
+  'chat.closeAssistant': '关闭写作助手',
   'chat.newConversation': '新对话',
   'chat.switchConversation': '切换对话',
   'chat.reconnecting': '重连中',
@@ -976,7 +977,7 @@ export const zh = {
   'search.hideReplace': '收起替换',
   'workspace.saveFirstVersion': '保存第一个版本',
   'chat.fixDefaultModel': '修复默认模型',
-  'settings.groupWriting': '写作',
+  'settings.groupWriting': '写作与快捷键',
   'settings.groupAssistant': '助手与模型',
   'settings.groupExtensions': '扩展与连接',
   'settings.groupApp': '应用',

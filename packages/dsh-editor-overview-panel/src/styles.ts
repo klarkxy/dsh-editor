@@ -18,9 +18,11 @@ ${surfaceTokenAliases}
 .radix-themes .overview-header p { margin: var(--space-2) 0 0; color: var(--s-muted); }
 .radix-themes .overview-body { display: grid; gap: var(--space-5); padding: var(--space-4) var(--space-5) var(--space-6); }
 .radix-themes .overview-totals { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); }
+/* Stat tiles are plain text blocks, not filled cards: the container must not
+   compete with the numbers it presents. */
 .radix-themes .overview-totals > article {
-  display: grid; gap: var(--space-2); padding: var(--space-3); border: 0.5px solid var(--s-line-strong);
-  border-radius: var(--s-radius-xl); background: var(--s-bg); box-shadow: none;
+  display: grid; gap: var(--space-2); padding: var(--space-2) 0; border: 0;
+  border-radius: 0; background: transparent; box-shadow: none;
 }
 .radix-themes .overview-chapters, .radix-themes .overview-chart { min-width: 0; }
 .radix-themes .overview-totals span { font: var(--font-weight-medium) var(--font-size-2)/var(--line-height-2) var(--s-font); color: var(--s-faint); }
@@ -71,7 +73,8 @@ ${surfaceTokenAliases}
 .radix-themes .overview-char-value { color: var(--s-faint); font-size: var(--font-size-1); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .radix-themes .overview-chart h4 { margin: var(--space-3) 0 var(--space-1); font: var(--font-weight-medium) var(--font-size-2)/var(--line-height-2) var(--s-font); color: var(--s-text); }
 .radix-themes .overview-chart-summary { margin: 0 0 var(--space-2); color: var(--s-muted); font-variant-numeric: tabular-nums; }
-.radix-themes .overview-chart-empty { margin: 0; padding: var(--space-3); border: 0.5px solid var(--s-line); border-radius: var(--s-radius-lg); background: var(--s-bg); color: var(--s-muted); }
+/* Empty states stay quieter than real data: muted flat text, no card chrome. */
+.radix-themes .overview-chart-empty { margin: 0; padding: var(--space-2) 0; border: 0; border-radius: 0; background: transparent; color: var(--s-muted); }
 .radix-themes .overview-curve {
   display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: end; gap: var(--space-1);
   min-height: 96px; padding: var(--space-3); border: 0.5px solid var(--s-line-strong);
@@ -100,7 +103,7 @@ ${surfaceTokenAliases}
 @keyframes overview-activity-sheen { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
 .radix-themes .overview-loading { display: grid; gap: var(--space-5); padding: var(--space-4) var(--space-5) var(--space-6); }
 .radix-themes .overview-loading-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); }
-.radix-themes .overview-loading-cards i { position: relative; display: block; height: 56px; border: 0.5px solid var(--s-line-strong); border-radius: var(--s-radius-xl); background: var(--s-bg); box-shadow: none; overflow: hidden; }
+.radix-themes .overview-loading-cards i { position: relative; display: block; height: 56px; border: 0; border-radius: var(--s-radius-lg); background: var(--s-sunken); box-shadow: none; overflow: hidden; }
 .radix-themes .overview-loading-cards i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--s-hover), transparent); animation: overview-activity-sheen 1.5s linear infinite; }
 .overview-panel button:focus-visible:not([class^="rt-"]):not([class*=" rt-"]), .overview-panel input:focus-visible:not([class^="rt-"]):not([class*=" rt-"]), .overview-panel select:focus-visible:not([class^="rt-"]):not([class*=" rt-"]), .overview-panel textarea:focus-visible, .overview-panel a:focus-visible, .overview-panel [tabindex]:focus-visible:not([class^="rt-"]):not([class*=" rt-"]) { outline: 2px solid var(--s-accent); outline-offset: 2px; }
 @media (max-width: 720px) {

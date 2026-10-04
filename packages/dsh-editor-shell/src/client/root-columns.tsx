@@ -349,6 +349,7 @@ export const ChatColumn = memo(function ChatColumn(props: {
   onDraftDirtyChange(dirty: boolean): void
   onWritten?(path: string): void
   onApplied(path: string): void
+  onHide?(): void
 }) {
   const { ctx, chatSession } = props
   return (
@@ -367,7 +368,8 @@ export const ChatColumn = memo(function ChatColumn(props: {
         onConfigure={props.onConfigure}
         onDraftDirtyChange={props.onDraftDirtyChange}
         onWritten={props.onWritten}
-        onApplied={props.onApplied} />
+        onApplied={props.onApplied}
+        onHide={props.onHide} />
     </ShellErrorBoundary>
   );
 })

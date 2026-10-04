@@ -463,9 +463,9 @@ export function Editor(props: {
             compactControls={true}
             onEditorContextMenu={onEditorContextMenu}
             headerExtras={<Fragment>
-              <Text weight="medium" className="editor-doc-title" title={path} truncate>
+              <Heading as="h1" size="2" weight="medium" className="editor-doc-title" title={path} truncate>
                 {readableDocumentTitle(path, currentText)}
-              </Text>
+              </Heading>
               <EditorOverflowMenu
                 open={overflowOpen}
                 onOpenChange={(open: boolean) => {

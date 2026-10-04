@@ -68,6 +68,7 @@ const accentSwatchStyles = SHELL_ACCENTS.flatMap((accent) => {
   ]
 }).join('\n')
 
+
 export const componentStyles = [
   // Global plugin page shares the workspace cell without resizing the manuscript.
   r(['.plugin-workspace'], 'display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); width: 100%; height: 100%; min-height: 0;'),
@@ -75,11 +76,15 @@ export const componentStyles = [
   r(['.plugin-workspace-writing.is-covered'], 'visibility: hidden; pointer-events: none;'),
   r(['.plugins-page'], 'display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--dsh-ui-header-height) minmax(0, 1fr); background: var(--dsh-ui-bg); color: var(--dsh-ui-text);'),
   r(['.plugins-page-header'], `padding-inline-start: var(--dsh-ui-space-3); border-bottom: ${hairline};`),
+  // Page title outranks the plugin group h3 (16px/600); the header default left it smaller.
+  r(['.plugins-page-header .rt-Heading'], 'font-size: var(--dsh-ui-text-xl); font-weight: var(--dsh-ui-weight-strong);'),
   r(['.plugins-page-header button', '.plugins-trigger'], '-webkit-app-region: no-drag;'),
   r(['.plugins-page-layout'], 'display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0;'),
   r(['.plugins-page-nav'], `display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-4); overflow: auto; background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
   r(['.plugins-page-nav > *'], 'flex-shrink: 0;'),
-  r(['.plugins-config-label'], 'margin-top: var(--dsh-ui-space-4);'),
+  /* Nav section label follows the settings-nav-group treatment (muted, small,
+     medium weight) so it never out-weighs the content group headings. */
+  r(['.plugins-config-label'], 'margin-top: var(--dsh-ui-space-4); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium);'),
   r(['.plugins-config-links'], 'display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0;'),
   r(['.plugins-page .plugins-page-nav .plugins-page-link'], 'justify-content: flex-start; width: 100%; margin: 0; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); border: 0; border-radius: var(--dsh-ui-radius-md); background: transparent; box-shadow: none; color: var(--dsh-ui-text); white-space: normal; text-align: start; height: auto; min-height: var(--dsh-ui-control-md); overflow-wrap: anywhere;'),
   r(['.plugins-page .plugins-page-nav .plugins-page-link:hover'], 'background: var(--dsh-ui-hover);'),
@@ -116,6 +121,10 @@ export const componentStyles = [
   r(['.rt-TextFieldInput::placeholder', '.rt-TextAreaInput::placeholder'], 'color: var(--dsh-ui-muted); opacity: 1;'),
   r(['.rt-Badge'], 'font-weight: var(--dsh-ui-weight-medium); letter-spacing: 0;'),
   r(['.rt-Card', '.home-card', '.home-entry-card', '.settings-block.rt-Card'], cardSurface),
+  // Settings dialog blocks stay flat sections: the structural sheet zeroes their
+  // padding, so the generic .rt-Card surface above left labels flush against a
+  // visible border. Neutralize the chrome inside the settings dialog.
+  r(['.settings-dialog .settings-block.rt-Card'], 'background: transparent; border: 0; border-radius: 0; box-shadow: none;'),
   r(['.rt-Card::before', '.rt-Card::after', '.home-entry-card::before', '.home-entry-card::after'], 'backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;'),
   r(['.home-entry-card:hover', '.home-card:hover'], 'background: var(--dsh-ui-raised); box-shadow: none;'),
   r(['.home-entry-icon'], 'border-radius: var(--dsh-ui-radius-md);'),
@@ -128,8 +137,15 @@ export const componentStyles = [
   r(['.shell .sidebar'], `background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
   r(['.shell .sidebar .side-title'], `min-height: var(--dsh-ui-header-height); border-bottom: ${hairline};`),
   r(['.shell .sidebar .side-title-label'], 'font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-muted);'),
-  r(['.shell .tree .tree-row', '.home-recent .workspace-row .tree-row'], 'min-height: var(--dsh-ui-space-8); height: auto; align-items: flex-start; padding-block: var(--dsh-ui-space-1); white-space: normal; border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
-  r(['.shell .tree .tree-name'], 'min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; line-height: var(--dsh-ui-leading-tight); text-align: start;'),
+  // Home recent-work rows stack a title, a path and a timestamp, so they keep the
+  // wrapping block. File-tree rows do not: one entry is one line, and the full name
+  // stays reachable through the row's title attribute.
+  r(['.home-recent .workspace-row .tree-row'], 'min-height: var(--dsh-ui-space-8); height: auto; align-items: flex-start; padding-block: var(--dsh-ui-space-1); white-space: normal;'),
+  r(['.shell .tree .tree-row'], 'min-height: var(--dsh-ui-space-8); border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
+  r(['.shell .tree .tree-name'], 'min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: var(--dsh-ui-leading-tight); text-align: start;'),
+  // The empty-tree message carried no inset of its own and sat flush against the panel
+  // edge, under the search field that keeps the same content inset as the title.
+  r(['.shell .tree .tree-empty'], 'padding-inline: var(--dsh-ui-space-3);'),
   r(['.shell .tree .tree-row:hover', '.home-recent .workspace-row .tree-row:hover'], 'background: var(--dsh-ui-hover);'),
   r(['.shell .tree .tree-row[aria-current="page"]', '.home-recent .workspace-row .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.shell .tree .tree-row::before'], 'display: none;'),
@@ -272,8 +288,14 @@ export const responsiveStyles = `
 }
 @media (max-width: 760px) {
   ${r(['.plugins-page-layout'], 'grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);')}
-  ${r(['.plugins-page-nav'], `padding: var(--dsh-ui-space-3); max-height: 34dvh; border-right: 0; border-bottom: ${hairline}; gap: var(--dsh-ui-space-2);`)}
-  ${r(['.plugins-config-label'], 'margin-top: 0;')}
+  /* Narrow: the section list becomes one horizontally scrollable chip row, so
+     the first plugin row stays near the top instead of below a 34dvh nav block. */
+  ${r(['.plugins-page-nav'], `flex-direction: row; flex-wrap: wrap; align-items: center; padding: var(--dsh-ui-space-3); max-height: none; border-right: 0; border-bottom: ${hairline}; gap: var(--dsh-ui-space-2);`)}
+  ${r(['.plugins-config-label'], 'position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;')}
+  ${r(['.plugins-page .plugins-page-nav > .plugins-page-link'], 'width: auto; flex: none;')}
+  ${r(['.plugins-page-nav > .ui-input'], 'flex: 1 1 12rem; min-width: 0;')}
+  ${r(['.plugins-config-links'], 'flex: 1 1 100%; order: 3; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: var(--dsh-ui-space-1); padding-bottom: 2px;')}
+  ${r(['.plugins-page .plugins-page-nav .plugins-config-links .plugins-page-link'], 'width: auto; flex: none; white-space: nowrap; min-height: var(--dsh-ui-control-sm);')}
   ${r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-3);')}
   ${r(['.composer-mode'], 'max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;')}
   ${r(['.chat > .composer'], 'margin: var(--dsh-ui-space-2);')}

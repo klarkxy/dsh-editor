@@ -1126,8 +1126,9 @@ export const componentStyles = `
 }
 @media (max-width: 760px) {
   .radix-themes .editor { --paper-pad-inline: 22px; --paper-pad-block: 28px; }
-  /* 窄窗覆盖层收窄,留出可点击关闭的遮罩余量。 */
-  .shell .chat.chat-overlay { width: min(24rem, calc(100vw - 56px)); }
+  /* 最小窗口(760px)下抽屉占满可用宽度：稿纸与对话二选一,不再让正文在抽屉
+     边缘断行；抽屉头部提供关闭按钮,Escape 与顶栏开关照常。 */
+  .shell .chat.chat-overlay { left: 8px; width: auto; }
   /* 顶栏让位:作品菜单收成图标,保住布局开关/窗口控制的命中区域。 */
   .shell .workspace-chrome,
   .shell > .chrome .workspace-menu-trigger { min-width: 0 !important; }

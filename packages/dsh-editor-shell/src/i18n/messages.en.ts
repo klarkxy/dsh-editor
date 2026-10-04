@@ -331,6 +331,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'editor.conflictNameFallback': '{path}.conflict-{stamp}.md',
 
   'chat.assistant': 'Writing partner',
+  'chat.closeAssistant': 'Close writing partner',
   'chat.newConversation': 'New chat',
   'chat.switchConversation': 'Switch chat',
   'chat.reconnecting': 'Reconnecting',
@@ -978,7 +979,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'search.hideReplace': 'Hide replace',
   'workspace.saveFirstVersion': 'Save first version',
   'chat.fixDefaultModel': 'Fix default model',
-  'settings.groupWriting': 'Writing',
+  'settings.groupWriting': 'Writing & shortcuts',
   'settings.groupAssistant': 'Assistant and models',
   'settings.groupExtensions': 'Extensions and connections',
   'settings.groupApp': 'App',

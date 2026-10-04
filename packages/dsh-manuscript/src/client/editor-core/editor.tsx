@@ -782,7 +782,9 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
         }
       }
       setConflict(false)
-      report(retainDraft ? '已保存；继续键入的内容仍保留为草稿。' : '已保存。')
+      /* 标题栏已有持久的保存状态显示，普通保存成功不再重复瞬时提示；
+         保留草稿的情况标题栏表达不了，仍给出说明。 */
+      report(retainDraft ? '已保存；继续键入的内容仍保留为草稿。' : '')
       onSaved?.()
       return true
     } catch (cause) {

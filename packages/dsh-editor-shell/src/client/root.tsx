@@ -2325,7 +2325,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               onConfigure={configureChatModel}
               onDraftDirtyChange={setAssistantDraftDirty}
               onWritten={refreshWrittenPath}
-              onApplied={onAppliedChat} />
+              onApplied={onAppliedChat}
+              onHide={() => setAssistantOpen(false)} />
           </Panel> : null}
         </PanelGroup>
         <aside className="official-resource-panel" hidden={!officialPreviewOpen} aria-label="资料预览">
