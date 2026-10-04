@@ -119,6 +119,40 @@ describe('host theme preference write-through', () => {
     expect(state.writes).toEqual(['dark'])
     expect(state.listeners.size).toBe(0)
   })
+
+  it('returns the actual write receipt and propagates rejection, including undefined', async () => {
+    const { scope } = fakeScope({ writable: true, value: { preference: 'light' } })
+    let complete!: (value: unknown) => void
+    const held = { ...scope, set: () => new Promise(resolve => { complete = resolve }) }
+    let settled = false
+    const receipt = writeHostThemePreference(held, 'dark').then(value => { settled = true; return value })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    complete('saved')
+    await expect(receipt).resolves.toBe('saved')
+    await expect(writeHostThemePreference({ ...scope, set: () => Promise.reject(undefined) }, 'dark')).rejects.toBeUndefined()
+  })
+
+  it('cancels a queued loading write without writing when that old scope later loads', async () => {
+    const { state, scope, load } = fakeScope({ writable: false, value: undefined })
+    const controller = new AbortController()
+    const receipt = writeHostThemePreference(scope, 'dark', controller.signal)
+    expect(state.listeners.size).toBe(1)
+    controller.abort()
+    await expect(receipt).rejects.toMatchObject({ name: 'AbortError' })
+    expect(state.listeners.size).toBe(0)
+    load({ preference: 'light' })
+    expect(state.writes).toEqual([])
+  })
+
+  it('does not subscribe or write for an already cancelled caller', async () => {
+    const { state, scope } = fakeScope({ writable: true, value: { preference: 'light' } })
+    const controller = new AbortController()
+    controller.abort()
+    await expect(writeHostThemePreference(scope, 'dark', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(state.listeners.size).toBe(0)
+    expect(state.writes).toEqual([])
+  })
 })
 
 describe('legacy theme and accent migration', () => {

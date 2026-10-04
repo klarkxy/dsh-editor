@@ -13,11 +13,13 @@ import { _electron as electron } from 'playwright'
 
 const root = resolve(import.meta.dirname, '..')
 const stage = process.env.SETTINGS_UI_STAGE || 'after'
+const searchPluginName = /^(网络搜索|@klarkxy\/dsh-web-search-manager)$/
+const zhihuPluginName = /^(知乎资料|知乎)$/
 const output = resolve(root, 'e2e/out/settings-ui', stage)
 const home = resolve(root, '.dev', 'settings-ui-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.1.7-rc.2/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -54,6 +56,7 @@ try {
     for (const theme of ['dark', 'light']) {
       await dialog.getByRole('tab', { name: '通用设置', exact: true }).click()
       await dialog.getByRole('button', { name: theme === 'dark' ? '深色' : '浅色', exact: true }).click()
+      await page.waitForFunction(theme => document.querySelector('.shell-theme')?.classList.contains(theme), theme)
       for (let i = 0; i < tabs.length; i++) {
         const tab = tabs[i].trim()
         await dialog.locator('.settings-nav [role="tab"]').nth(i).click()
@@ -94,20 +97,22 @@ try {
       await page.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
       await dialog.getByRole('tab', { name: '通用设置', exact: true }).click()
       await dialog.getByRole('button', { name: theme === 'dark' ? '深色' : '浅色', exact: true }).click()
+      await page.waitForFunction(theme => document.querySelector('.shell-theme')?.classList.contains(theme), theme)
       await page.keyboard.press('Escape')
       await dialog.waitFor({ state: 'hidden' })
       await page.getByRole('button', { name: '插件', exact: true }).click()
       const plugins = page.locator('section.plugins-page[aria-label="插件管理"]')
       const nav = plugins.locator('nav.plugins-page-nav button.plugins-page-link')
-      await nav.getByRole('button', { name: '知乎资料', exact: true }).waitFor()
-      await nav.getByRole('button', { name: '网络搜索', exact: true }).waitFor()
+      await plugins.locator('nav.plugins-page-nav').getByRole('button', { name: zhihuPluginName }).waitFor()
+      assert.equal(await plugins.locator('nav.plugins-page-nav').getByRole('button', { name: zhihuPluginName }).count(), 1, 'Zhihu configuration must have one reachable entry')
+      await plugins.locator('nav.plugins-page-nav').getByRole('button', { name: searchPluginName }).waitFor()
       const labels = (await nav.allTextContents()).map(text => text.trim())
       assert.ok(labels.includes('已安装与市场'), 'Plugin manager navigation missing')
       for (let i = 0; i < labels.length; i++) {
         const tab = labels[i]
         await nav.nth(i).click()
-        if (tab === '网络搜索') await plugins.getByTestId('web-search-settings').waitFor()
-        if (tab === '知乎资料') await plugins.getByRole('textbox', { name: 'Access Secret', exact: true }).waitFor()
+        if (searchPluginName.test(tab)) await plugins.getByTestId('web-search-settings').waitFor()
+        if (zhihuPluginName.test(tab)) await plugins.getByLabel('Access Secret', { exact: true }).waitFor()
         if (tab === '已安装与市场') await plugins.getByTestId('plugins-writing-presets').waitFor()
         await page.waitForTimeout(300)
         const content = plugins.locator('.plugins-page-content')
@@ -191,7 +196,7 @@ try {
   const oldSize=await fontSlider.getAttribute('aria-valuenow')
   await fontSlider.focus()
   await page.keyboard.press('ArrowRight')
-  await page.waitForTimeout(250)
+  await page.waitForFunction(oldSize => document.querySelector('[role="slider"][aria-label="字号"]')?.getAttribute('aria-valuenow') !== oldSize, oldSize)
   assert.notEqual(await fontSlider.getAttribute('aria-valuenow'),oldSize)
   await page.keyboard.press('ArrowLeft')
   await captureExtra('writing-keyboard')
@@ -220,26 +225,37 @@ try {
     const scan = await new AxeBuilder({ page }).setLegacyMode().include('.plugins-page').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()
     report.interactions.push({ name, accessibility: scan.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})) })
   }
-  await pluginTo('知乎资料')
+  await pluginTo(zhihuPluginName)
   await plugins.getByRole('link',{name:'获取密钥',exact:true}).click()
   assert.deepEqual(await app.evaluate(()=>globalThis.settingsExternalUrls),['https://developer.zhihu.com/'])
   const zhihuTabs=plugins.getByRole('tablist',{name:'知乎资料分区'})
   await zhihuTabs.getByRole('tab',{name:'设置',exact:true}).focus()
-  for(const name of ['用量','知识库','连接测试']) {
+  for(const name of ['用量','知识库','搜索']) {
     await page.keyboard.press('ArrowRight')
     assert.equal(await zhihuTabs.getByRole('tab',{name,exact:true}).getAttribute('aria-selected'),'true')
     await capturePluginExtra('zhihu-'+name)
   }
-  await plugins.getByRole('combobox',{name:'搜索方式',exact:true}).click()
-  await page.getByRole('option',{name:'知识库检索',exact:true}).click()
+  const searchMethod = plugins.getByRole('combobox',{name:'搜索方式',exact:true})
+  if (await searchMethod.evaluate(el => el.tagName === 'SELECT')) {
+    await searchMethod.selectOption({label:'知识库检索'})
+  } else {
+    await searchMethod.click()
+    await page.getByRole('option',{name:'知识库检索',exact:true}).click()
+  }
   const personal = plugins.getByRole('checkbox',{name:'个人库',exact:true})
-  const wasChecked = await personal.getAttribute('aria-checked')
+  const wasChecked = await personal.isChecked()
   await personal.focus()
   await page.keyboard.press('Space')
-  assert.notEqual(await personal.getAttribute('aria-checked'),wasChecked)
+  assert.notEqual(await personal.isChecked(),wasChecked)
   await capturePluginExtra('zhihu-search-scopes')
-  await pluginTo('网络搜索')
-  const signupLinks=plugins.locator('.web-search-settings a')
+  await pluginTo(searchPluginName)
+  for (const details of await plugins.locator('.web-search-settings details').all()) {
+    if (!await details.evaluate(el => el.open)) await details.locator(':scope > summary').click()
+  }
+  const feeLinks = plugins.locator('.web-search-settings a[aria-label$="费用说明"]')
+  assert(await feeLinks.count() > 0)
+  assert(await feeLinks.evaluateAll(nodes => nodes.every(node => node.href.startsWith('https://') && node.rel.includes('noopener'))))
+  const signupLinks=plugins.locator('.web-search-settings a[aria-label$="去注册"]')
   const expectedUrls=await signupLinks.evaluateAll(nodes=>nodes.map(n=>n.href))
   for(const link of await signupLinks.all())await link.click()
   assert.deepEqual((await app.evaluate(()=>globalThis.settingsExternalUrls)).slice(1),expectedUrls)
@@ -248,6 +264,9 @@ try {
   await pluginTabs.getByRole('tab',{name:'已安装',exact:true}).focus()
   await page.keyboard.press('ArrowRight')
   assert.equal(await pluginTabs.getByRole('tab',{name:'市场',exact:true}).getAttribute('aria-selected'),'true')
+  const marketSubmit = plugins.getByTestId('plugins-market-submit')
+  assert.equal(await marketSubmit.evaluate(el => getComputedStyle(el).borderRadius),'12px')
+  assert.equal(await marketSubmit.evaluate(el => getComputedStyle(el).minHeight),'36px')
   await capturePluginExtra('plugin-market')
   await page.keyboard.press('Escape')
   await plugins.waitFor({ state: 'detached' })
@@ -261,14 +280,21 @@ try {
   await dialog.getByRole('button',{name:'检查更新',exact:true}).click()
   await dialog.locator('.about-release').waitFor()
   await captureExtra('about-update')
-  assert.equal(await dialog.getByText('macOS',{exact:false}).count(),0)
+  assert.equal(await dialog.locator('.about-page .about-note').filter({hasText:'macOS'}).count(),0)
   await page.emulateMedia({reducedMotion:'reduce'})
   await tabTo('通用设置')
   assert.equal(await dialog.locator('.settings-page').first().evaluate(el=>getComputedStyle(el).transform),'none')
   report.interactions.push({name:'settings keyboard, draft retention, save, native link dispatch, and reduced motion',ok:true})
   await page.keyboard.press('Escape')
   await dialog.waitFor({ state: 'hidden' })
-  report.layoutIssues = report.pages.filter(p=>p.overflow.length || p.fonts.some(f=>parseFloat(f.size)<13)).map(p=>({tab:p.tab,width:p.width,theme:p.theme,overflow:p.overflow,small:p.fonts.filter(f=>parseFloat(f.size)<13)}))
+  // DSH permits peripheral 12px text and compact H20–28 controls. Keep the
+  // 13px floor for standard controls; compact targets here must still be H24+.
+  const tooSmall = f => {
+    const interactive = /^(BUTTON|INPUT|TEXTAREA|SELECT)$/.test(f.tag)
+    const compact = interactive && f.height >= 24 && f.height <= 28
+    return parseFloat(f.size) < (interactive && !compact ? 13 : 12)
+  }
+  report.layoutIssues = report.pages.filter(p=>p.overflow.length || p.fonts.some(tooSmall)).map(p=>({tab:p.tab,width:p.width,theme:p.theme,overflow:p.overflow,small:p.fonts.filter(tooSmall)}))
   report.accessibilityIssues = [...report.pages,...report.interactions].filter(p=>p.accessibility?.length).map(p=>({page:p.tab||p.name,width:p.width,theme:p.theme,violations:p.accessibility}))
   report.ok = report.errors.length === 0 && report.layoutIssues.length === 0 && report.accessibilityIssues.length === 0
 } catch(error) {

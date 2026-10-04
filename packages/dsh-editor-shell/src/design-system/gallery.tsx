@@ -26,7 +26,7 @@ export function DesignSystemGallery() {
         }}>
         <Dialog.Title>DSH UI / Design system</Dialog.Title>
         <Dialog.Description id="dsh-design-description" size="2" color="gray" mb="4">
-          Official Kimi Web reference, adapted to the existing DSH React/Radix shell. Preview states only; no workspace writes.
+          Official DSH {DESIGN_SOURCE.tag} reference, adapted to the existing React/Radix shell. Preview states only; no workspace writes.
         </Dialog.Description>
         <Flex direction={{ initial: 'column', md: 'row' }} gap="4">
           {(['light', 'dark'] as const).map((appearance) => (
@@ -34,7 +34,7 @@ export function DesignSystemGallery() {
               <Flex direction="column" gap="4">
                 <Heading size="3">{appearance === 'light' ? 'Light' : 'Dark'}</Heading>
                 <Flex gap="2" wrap="wrap">
-                  {(['bg', 'sidebar', 'text', 'muted', 'accent'] as const).map((name) => (
+                  {(['bg', 'sidebar', 'text', 'muted', 'brand', 'accent'] as const).map((name) => (
                     <Flex key={name} direction="column" gap="1" style={{ minWidth: 40 }}>
                       <span aria-hidden="true" style={{ height: 28, borderRadius: 'var(--dsh-ui-radius-sm)', background: (appearance === 'light' ? LIGHT_TOKENS : DARK_TOKENS)[name], border: '1px solid var(--dsh-ui-line)' }} />
                       <Text size="1">{name}</Text>

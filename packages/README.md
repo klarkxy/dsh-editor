@@ -34,7 +34,7 @@
 
 | 官方包或能力 | Editor 中的用途 |
 | --- | --- |
-| DSH 0.1.7-rc.2 原生会话管理 | 对话归档、恢复、置顶与列表筛选；旧归档记录逐项迁入原生状态 |
+| DSH 0.2.0-rc.2 原生会话管理 | 对话归档、恢复、置顶与列表筛选；旧归档记录逐项迁入原生状态 |
 | `@deepseek-ai/dsh-client-ui-shortcuts` | 「设置 → 快捷键」搜索、录制和重置；桌面修改持久化 |
 | `@deepseek-ai/dsh-client-ui-sidebar-documentpreview` | 文件栏图片、PDF、Office 文档和表格预览 |
 | `@deepseek-ai/dsh-mcp-resources` | 读取已配置 MCP 服务的资源 |

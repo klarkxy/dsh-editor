@@ -32,7 +32,7 @@ Editor 自有功能与随发行版提供的官方功能统一列在“内置插�
 | [@klarkxy/dsh-fusion](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion/README.md) | Fusion 协作：主助手委派任务、持久执笔搭档产出候选，作者采用后写入 | npm |
 | [dsh-manuscript](packages/dsh-manuscript/README.md) | 稿纸编辑 | 本地 tarball，尚未发布到 npm |
 | [dsh-proofread](packages/dsh-proofread/README.md) | 中文文本校对 | 本地 tarball，尚未发布到 npm |
-| DSH 原生会话管理 | 对话归档、恢复、置顶与列表筛选 | 内置 DSH 0.1.7-rc.2 |
+| DSH 原生会话管理 | 对话归档、恢复、置顶与列表筛选 | 内置 DSH 0.2.0-rc.2 |
 | @deepseek-ai/dsh-client-ui-shortcuts | 搜索、录制、重置快捷键；桌面设置持久化 | 内置官方插件 |
 | @deepseek-ai/dsh-client-ui-sidebar-documentpreview | 文件栏资料预览 | 内置官方插件 |
 | @deepseek-ai/dsh-mcp-resources | 读取已配置 MCP 服务提供的资源 | 内置官方插件 |
@@ -44,7 +44,7 @@ Editor 自有功能与随发行版提供的官方功能统一列在“内置插�
 
 ## 开发
 
-使用 Node `24.16.0`、pnpm `10.14.0`，内置 DSH 固定为 `0.1.7-rc.2`。
+使用 Node `24.16.0`、pnpm `10.14.0`，内置 DSH 固定为 `0.2.0-rc.2`。
 
 ```sh
 pnpm install --frozen-lockfile

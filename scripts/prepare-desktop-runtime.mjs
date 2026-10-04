@@ -13,7 +13,7 @@ import { prepareNodeRuntime } from './prepare-node-runtime.mjs'
 import { treeDigest } from '../apps/desktop/dist/runtime-tree.js'
 
 const NODE_VERSION = '24.16.0'
-const DSH_VERSION = '0.1.7-rc.2'
+const DSH_VERSION = '0.2.0-rc.2'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputRoot = resolve(root, '.pack', 'desktop-runtime')
 const nodeOutput = resolve(outputRoot, `node-${NODE_VERSION}`)

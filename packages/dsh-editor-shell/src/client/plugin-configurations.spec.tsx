@@ -2,9 +2,14 @@ import { createElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getLocale, resetLocaleForTests, setLocale } from '../i18n/index.ts'
-import { PluginConfigurationPage, projectPluginConfigurations, usePluginConfigurations } from './plugin-configurations.tsx'
+import { ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
+import { legacyZhihuVisible, PluginConfigurationPage, projectPluginConfigurations, usePluginConfigurations } from './plugin-configurations.tsx'
+import { PluginsPage } from './plugins-page.tsx'
 
-type Entry = { options: { id?: string; key?: string; order?: number; label?: string | (() => string) } }
+type Entry = {
+  options: { id?: string; key?: string; order?: number; label?: string | (() => string) }
+  registrant?: string
+}
 type SlotRender = (slot: string, owner?: object, opts?: { only?: string; entryKey?: string }) => ReactNode
 
 function fixture(rows: Record<string, Entry[]> = {}) {
@@ -151,4 +156,169 @@ it('names the adopted voice configuration in the active language', () => {
 it('routes the adopted model-center bundle through the native plugin-model entry', () => {
  const host=fixture({'plugins.bundle.config':[{options:{key:'@klarkxy/dsh-model-center'}},{options:{key:'@scope/other'}}]})
  expect(projectPluginConfigurations(host.slots).map(entry=>entry.entryKey)).toEqual(['@scope/other'])
+})
+
+function navigation(rows: Record<string, Entry[]>, zhihu?: ReactNode) {
+  const host = fixture(rows)
+  const write = console.error
+  console.error = (...args: unknown[]) => {
+    if (typeof args[0] === 'string' && args[0].includes('useLayoutEffect')) return
+    write(...args)
+  }
+  try {
+    return renderToStaticMarkup(createElement(PluginsPage, {
+      ctx: host as never,
+      renderSlot: () => createElement('div', null, 'official-slot'),
+      plugins: createElement('p', null, 'installed-management'),
+      zhihu,
+      hasWorkspace: true,
+      onClose() {},
+    }))
+  } finally {
+    console.error = write
+  }
+}
+
+const emptyZhihuSlot = createElement('div', { 'data-slot': ZHIHU_SETTINGS_SLOT })
+
+describe('plugin configuration navigation', () => {
+  it('hides the legacy Zhihu page when the slot has no registration', () => {
+    const rows: Record<string, Entry[]> = {
+      'plugins.bundle.config': [{ options: { key: '@klarkxy/dsh-zhihu', label: '知乎' }, registrant: 'dsh-zhihu-client' }],
+    }
+    const host = fixture(rows)
+    expect(legacyZhihuVisible(host.slots)).toBe(false)
+    expect(projection(host).legacyZhihu).toBe(false)
+    const html = navigation(rows, emptyZhihuSlot)
+    expect(html).not.toContain('知乎资料')
+    expect(html).toContain('知乎')
+    expect(html).toContain('installed-management')
+    expect(html).toContain('插件模型')
+    expect(html).toContain('已安装与市场')
+  })
+
+  it('drops a legacy Zhihu registration replaced by that plugin\'s official configuration', () => {
+    const rows: Record<string, Entry[]> = {
+      [ZHIHU_SETTINGS_SLOT]: [{ options: { id: 'zhihu', label: '知乎资料' }, registrant: 'dsh-zhihu-client' }],
+      'plugins.bundle.config': [{ options: { key: '@klarkxy/dsh-zhihu', label: '知乎' }, registrant: 'dsh-zhihu-client' }],
+    }
+    expect(legacyZhihuVisible(fixture(rows).slots)).toBe(false)
+    const official = projectPluginConfigurations(fixture(rows).slots)[0]
+    expect(official).toMatchObject({ entryKey: '@klarkxy/dsh-zhihu', label: '知乎', id: 'plugins.bundle.config:@klarkxy/dsh-zhihu' })
+    expect(navigation(rows, emptyZhihuSlot)).not.toContain('知乎资料')
+    const sameKey = fixture({
+      [ZHIHU_SETTINGS_SLOT]: [{ options: { id: '@klarkxy/dsh-zhihu' } }],
+      'plugins.bundle.config': [{ options: { key: '@klarkxy/dsh-zhihu', label: '知乎' } }],
+    })
+    expect(legacyZhihuVisible(sameKey.slots)).toBe(false)
+  })
+
+  it('keeps legacy Zhihu when the same registrant has no routable official configuration', () => {
+    const rows: Record<string, Entry[]> = {
+      [ZHIHU_SETTINGS_SLOT]: [{ options: { id: 'zhihu' }, registrant: 'dsh-zhihu-client' }],
+      'plugins.bundle.config': [{ options: { label: '不可达' }, registrant: 'dsh-zhihu-client' }],
+      'plugins.item': [{ options: { key: 'item-without-id' }, registrant: 'dsh-zhihu-client' }],
+      'plugins.row.config': [{ options: { id: 'row-without-key' }, registrant: 'dsh-zhihu-client' }],
+    }
+    expect(projectPluginConfigurations(fixture(rows).slots)).toEqual([])
+    expect(legacyZhihuVisible(fixture(rows).slots)).toBe(true)
+    const modelCenter = fixture({
+      [ZHIHU_SETTINGS_SLOT]: [{ options: { id: 'zhihu' }, registrant: 'dsh-zhihu-client' }],
+      'plugins.bundle.config': [{ options: { key: '@klarkxy/dsh-model-center' }, registrant: 'dsh-zhihu-client' }],
+    })
+    expect(projectPluginConfigurations(modelCenter.slots)).toEqual([])
+    expect(legacyZhihuVisible(modelCenter.slots)).toBe(true)
+  })
+
+  it('keeps a real legacy Zhihu contribution the official catalogue does not replace', () => {
+    const rows: Record<string, Entry[]> = {
+      [ZHIHU_SETTINGS_SLOT]: [{ options: { id: 'zhihu' }, registrant: 'legacy-zhihu' }],
+      'plugins.bundle.config': [{ options: { key: '@klarkxy/dsh-memory' }, registrant: 'dsh-memory-client' }],
+    }
+    expect(legacyZhihuVisible(fixture(rows).slots)).toBe(true)
+    const html = navigation(rows, createElement('p', null, 'legacy-zhihu-body'))
+    expect(html).toContain('知乎资料')
+    expect(html).toContain('记忆')
+    expect(html).not.toContain('@klarkxy/dsh-memory')
+  })
+
+  it('follows legacy registration and removal through the ledger version', () => {
+    const host = fixture({})
+    const absent = projection(host)
+    expect(absent.legacyZhihu).toBe(false)
+    host.update(ZHIHU_SETTINGS_SLOT, [{ options: { id: 'zhihu' }, registrant: 'legacy-zhihu' }])
+    const registered = projection(host)
+    expect(registered.legacyZhihu).toBe(true)
+    expect(registered.version).not.toBe(absent.version)
+    host.update('plugins.bundle.config', [{ options: { key: '@klarkxy/dsh-zhihu', label: '知乎' }, registrant: 'legacy-zhihu' }])
+    const replaced = projection(host)
+    expect(replaced.legacyZhihu).toBe(false)
+    expect(replaced.version).not.toBe(registered.version)
+    host.update('plugins.bundle.config', [])
+    const restored = projection(host)
+    expect(restored.legacyZhihu).toBe(true)
+    host.update(ZHIHU_SETTINGS_SLOT, [])
+    expect(projection(host).legacyZhihu).toBe(false)
+  })
+
+  it('keeps prototype-shaped bundle keys as their own titles', () => {
+    const bare = fixture({ 'plugins.bundle.config': [
+      { options: { key: '__proto__' } },
+      { options: { key: 'constructor' } },
+      { options: { key: 'toString' } },
+    ] })
+    expect(projectPluginConfigurations(bare.slots).map((entry) => [entry.entryKey, entry.label])).toEqual([
+      ['__proto__', '__proto__'],
+      ['constructor', 'constructor'],
+      ['toString', 'toString'],
+    ])
+    const labeled = fixture({ 'plugins.bundle.config': [
+      { options: { key: '__proto__', label: '  自带标题  ' } },
+    ] })
+    expect(projectPluginConfigurations(labeled.slots)[0]).toMatchObject({ entryKey: '__proto__', label: '自带标题' })
+  })
+
+  it('prefers a plugin label and otherwise names only the adopted bundles', () => {
+    const host = fixture({ 'plugins.bundle.config': [
+      { options: { key: '@klarkxy/dsh-memory' } },
+      { options: { key: '@klarkxy/dsh-web-search-manager', label: '  自定义搜索  ' } },
+      { options: { key: '@deepseek-ai/dsh-experimental-voice-input-bundle', label: () => 'Spoken' } },
+      { options: { key: '@scope/unknown' } },
+      { options: { key: '@scope/blank', label: '   ' } },
+      { options: { key: '@klarkxy/dsh-memory-extra', label: () => { throw new Error('broken translation') } } },
+    ] })
+    expect(projectPluginConfigurations(host.slots).map((entry) => [entry.entryKey, entry.label])).toEqual([
+      ['@deepseek-ai/dsh-experimental-voice-input-bundle', 'Spoken'],
+      ['@klarkxy/dsh-memory', '记忆'],
+      ['@klarkxy/dsh-memory-extra', '@klarkxy/dsh-memory-extra'],
+      ['@klarkxy/dsh-web-search-manager', '自定义搜索'],
+      ['@scope/blank', '@scope/blank'],
+      ['@scope/unknown', '@scope/unknown'],
+    ])
+  })
+
+  it('switches adopted bundle titles with the locale and leaves unknown keys unchanged', () => {
+    const host = fixture({ 'plugins.bundle.config': [
+      { options: { key: '@klarkxy/dsh-memory' } },
+      { options: { key: '@klarkxy/dsh-web-search-manager' } },
+      { options: { key: '@deepseek-ai/dsh-experimental-voice-input-bundle', label: () => getLocale() === 'en' ? 'Plugin voice' : '插件语音' } },
+      { options: { key: '@scope/unknown' } },
+    ] })
+    const zh = projection(host)
+    setLocale('en')
+    const en = projection(host)
+    setLocale('zh')
+    const again = projection(host)
+    expect(zh.entries.map((entry) => [entry.entryKey, entry.label])).toEqual([
+      ['@deepseek-ai/dsh-experimental-voice-input-bundle', '插件语音'],
+      ['@klarkxy/dsh-memory', '记忆'],
+      ['@klarkxy/dsh-web-search-manager', '网络搜索'],
+      ['@scope/unknown', '@scope/unknown'],
+    ])
+    expect(en.entries.map((entry) => entry.label)).toEqual(['Plugin voice', 'Memory', 'Web search', '@scope/unknown'])
+    expect(en.entries.map((entry) => entry.entryKey)).toEqual(zh.entries.map((entry) => entry.entryKey))
+    expect(en.version).not.toBe(zh.version)
+    expect(again.entries.map((entry) => entry.label)).toEqual(zh.entries.map((entry) => entry.label))
+    expect(again.version).not.toBe(en.version)
+  })
 })

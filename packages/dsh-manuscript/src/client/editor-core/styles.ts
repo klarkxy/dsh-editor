@@ -1,4 +1,4 @@
-import { radixFallbackTokens } from 'dsh-editor-seats/tokens'
+import { radixFallbackTokens, surfaceTokenAliases } from 'dsh-editor-seats/tokens'
 /*
  * DSH editor-core paper styles — for the standalone manuscript overlay.
  *
@@ -37,6 +37,7 @@ ${radixFallbackTokens}
   --paper-font-family: var(--paper-serif);
   --paper-paragraph-spacing: 0em;
   --paper-max-width: none;
+  /* Legacy token. Nothing reads it. Do not point .cm-paper-dim at it or raise the alpha. */
   --paper-dim-opacity: 0.35;
   --topbar-h: 52px;
   --control-h: 34px;
@@ -50,12 +51,13 @@ ${radixFallbackTokens}
 export const editorCoreStyles = `
 ${editorCoreTokens}
 .manuscript-paper {
+${surfaceTokenAliases}
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--color-background);
-  color: var(--gray-12);
-  font-family: var(--default-font-family);
+  background: var(--s-bg);
+  color: var(--s-text);
+  font-family: var(--s-font);
   --paper-pad-inline: 64px;
   --paper-pad-block: 36px;
 }
@@ -68,11 +70,11 @@ ${editorCoreTokens}
   min-width: 0;
   min-height: var(--topbar-h);
   padding: 0 var(--paper-pad-inline);
-  border-bottom: 1px solid var(--gray-a5);
-  background: var(--color-background);
-  color: var(--gray-11);
-  font: var(--font-weight-medium) var(--font-size-2)/1 var(--default-font-family);
-  letter-spacing: .06em;
+  border-bottom: 0.5px solid var(--s-line);
+  background: var(--s-bg);
+  color: var(--s-muted);
+  font: var(--font-weight-medium) var(--font-size-2)/1 var(--s-font);
+  letter-spacing: 0;
 }
 .manuscript-paper-header [data-testid$="-path"] {
   flex: 1;
@@ -80,7 +82,7 @@ ${editorCoreTokens}
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--gray-12);
+  color: var(--s-text);
   font: var(--font-weight-medium) var(--font-size-3)/1.2 var(--paper-serif);
   letter-spacing: .12em;
 }
@@ -89,36 +91,38 @@ ${editorCoreTokens}
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: var(--control-h, 34px);
-  padding: 5px 12px;
-  border: 0;
-  border-radius: var(--radius-3);
+  min-height: var(--s-control-sm);
+  padding: 0 var(--space-3);
+  border: 0.5px solid var(--s-line-strong);
+  border-radius: var(--s-radius-md);
   background: transparent;
-  box-shadow: 0 0 0 1px var(--gray-a5);
-  color: var(--gray-11);
-  font: var(--font-weight-medium) var(--font-size-2)/1 var(--default-font-family);
-  letter-spacing: .08em;
+  box-shadow: none;
+  color: var(--s-muted);
+  font: var(--font-weight-medium) var(--font-size-2)/1 var(--s-font);
+  letter-spacing: 0;
   cursor: pointer;
-  transition: box-shadow var(--motion-base) var(--ease), background var(--motion-fast) var(--ease);
+  transition: background var(--motion-fast) var(--ease);
 }
 .manuscript-paper-header [data-testid$="-fim"]:hover,
-.manuscript-paper-header [data-testid$="-rewrite"]:hover { background: var(--gray-a3); color: var(--gray-12); }
+.manuscript-paper-header [data-testid$="-rewrite"]:hover { background: var(--s-hover); color: var(--s-text); }
 .manuscript-paper-header [data-testid$="-fim"]:active,
-.manuscript-paper-header [data-testid$="-rewrite"]:active { background: var(--gray-a4); }
+.manuscript-paper-header [data-testid$="-rewrite"]:active { background: var(--s-selected); }
 .manuscript-paper-header [data-testid$="-wordcount"],
 .manuscript-paper-header [data-testid$="-save-state"] {
   font-size: var(--font-size-1);
-  color: var(--gray-11);
-  letter-spacing: .04em;
+  color: var(--s-muted);
+  letter-spacing: 0;
 }
 .manuscript-paper-header select {
-  padding: 4px 8px;
-  border: 1px solid var(--gray-6);
-  border-radius: var(--radius-2);
-  background: var(--color-background);
-  color: var(--gray-12);
-  font: var(--font-weight-medium) var(--font-size-1)/1 var(--default-font-family);
-  letter-spacing: .12em;
+  min-height: var(--s-control-sm);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--s-radius-md);
+  box-shadow: var(--s-elevate-soft);
+  background: var(--s-bg);
+  color: var(--s-text);
+  font: var(--font-weight-medium) var(--font-size-1)/1 var(--s-font);
+  letter-spacing: 0;
 }
 /* Paper surface — CodeMirror mounts inside the wrapper div. Layout only;
    typography lives in the CM theme (editor-core/codemirror.ts) so the same
@@ -156,8 +160,9 @@ ${editorCoreTokens}
 .manuscript-paper-textarea .cm-line {
   padding-bottom: var(--paper-paragraph-spacing, 0em);
 }
-.manuscript-paper-textarea .cm-paper-dim {
-  opacity: var(--paper-dim-opacity, 0.35);
+/* Match paperTheme: secondary text only while the editor is focused. */
+.manuscript-paper-textarea .cm-editor.cm-focused .cm-paper-dim {
+  color: var(--gray-11);
 }
 .manuscript-paper-textarea .cm-editor .cm-placeholder {
   color: var(--gray-9);
@@ -213,26 +218,26 @@ ${editorCoreTokens}
 .manuscript-paper-ghost-tip {
   padding: 4px 20px !important;
   font-size: var(--font-size-1) !important;
-  color: var(--gray-11) !important;
+  color: var(--s-muted) !important;
   opacity: 1 !important;
-  background: var(--color-background);
+  background: var(--s-bg);
 }
 .manuscript-paper-proposal {
   margin: 14px 0 8px 2em;
   padding: 12px 14px 10px !important;
-  background: var(--color-panel-solid) !important;
-  box-shadow: var(--shadow-2) !important;
-  border: 0 !important;
-  border-radius: var(--radius-3) !important;
+  background: var(--s-raised) !important;
+  box-shadow: none !important;
+  border: 0.5px solid var(--s-line-strong) !important;
+  border-radius: var(--s-radius-xl) !important;
   display: grid;
   gap: 8px;
-  color: var(--gray-12) !important;
+  color: var(--s-text) !important;
   font-family: var(--paper-serif);
 }
 .manuscript-paper-proposal > strong {
-  font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--default-font-family);
-  letter-spacing: .08em;
-  color: var(--gray-12);
+  font: var(--font-weight-medium) var(--font-size-2)/1.4 var(--s-font);
+  letter-spacing: 0;
+  color: var(--s-text);
 }
 .manuscript-paper-proposal .selection-diff,
 .manuscript-paper-proposal > div:not([class]) {
@@ -247,21 +252,21 @@ ${editorCoreTokens}
 .manuscript-paper-proposal .selection-diff-original small,
 .manuscript-paper-proposal .selection-diff section small,
 .manuscript-paper-proposal > div:not([class]) section small {
-  font: var(--font-weight-medium) var(--font-size-1)/1 var(--default-font-family);
-  letter-spacing: .12em;
-  color: var(--gray-11);
+  font: var(--font-weight-medium) var(--font-size-1)/1 var(--s-font);
+  letter-spacing: 0;
+  color: var(--s-muted);
 }
 .manuscript-paper-proposal .selection-diff-revised p {
-  color: var(--gray-12);
+  color: var(--s-text);
 }
 .manuscript-paper-proposal p {
   margin: 0;
   white-space: pre-wrap;
   font: 400 16px/1.85 var(--paper-serif);
   letter-spacing: .03em;
-  color: var(--gray-11);
+  color: var(--s-muted);
 }
-.manuscript-paper-proposal p:last-child { color: var(--gray-12); }
+.manuscript-paper-proposal p:last-child { color: var(--s-text); }
 .manuscript-paper-proposal .proposal-actions,
 .manuscript-paper-proposal > div:last-child {
   display: flex;
@@ -273,44 +278,49 @@ ${editorCoreTokens}
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
-  padding: 5px 12px;
-  border: 0;
-  border-radius: var(--radius-3);
-  background: transparent;
-  box-shadow: 0 0 0 1px var(--gray-a5);
-  color: var(--gray-11);
-  font: var(--font-weight-medium) var(--font-size-2)/1 var(--default-font-family);
-  letter-spacing: .08em;
+  min-height: var(--s-control-sm);
+  padding: 0 var(--space-3);
+  border: 0.5px solid var(--s-line-strong);
+  border-radius: var(--s-radius-md);
+  background: var(--s-bg);
+  box-shadow: none;
+  color: var(--s-text);
+  font: var(--font-weight-medium) var(--font-size-2)/1 var(--s-font);
+  letter-spacing: 0;
   cursor: pointer;
 }
 .manuscript-paper-proposal .proposal-actions button:hover,
-.manuscript-paper-proposal > div:last-child button:hover { background: var(--gray-a3); color: var(--gray-12); }
+.manuscript-paper-proposal > div:last-child button:hover { background: var(--s-hover); color: var(--s-text); }
 .manuscript-paper-proposal .proposal-actions .primary-action,
 .manuscript-paper-proposal > div:last-child button:first-child {
-  background: var(--accent-9);
-  color: var(--accent-contrast);
-  box-shadow: 0 0 0 1px var(--accent-9);
+  border: 0;
+  background: var(--s-brand);
+  color: var(--s-on-brand);
+  box-shadow: none;
 }
 .manuscript-paper-proposal .proposal-actions .primary-action:hover,
 .manuscript-paper-proposal > div:last-child button:first-child:hover {
-  box-shadow: 0 0 0 1px var(--accent-9), var(--shadow-2);
+  background: var(--s-brand-hover);
+  color: var(--s-on-brand);
+  box-shadow: none;
 }
 
 .manuscript-paper-conflict {
   padding: 6px 10px !important;
-  border-top: 1px solid var(--gray-a5) !important;
+  border-top: 1px solid var(--s-danger) !important;
+  border-inline-start: 2px solid var(--s-danger);
   font-size: var(--font-size-1) !important;
-  color: var(--red-9) !important;
-  background: var(--color-background) !important;
-  font-family: var(--default-font-family);
+  font-weight: var(--font-weight-medium);
+  color: var(--s-danger) !important;
+  background: var(--s-bg) !important;
+  font-family: var(--s-font);
 }
 .manuscript-paper-notice {
   padding: 4px 10px !important;
   font-size: var(--font-size-1) !important;
-  color: var(--gray-11) !important;
-  background: var(--color-background) !important;
-  font-family: var(--default-font-family);
+  color: var(--s-muted) !important;
+  background: var(--s-bg) !important;
+  font-family: var(--s-font);
 }
 
 /* Footer with action buttons. */
@@ -320,30 +330,30 @@ ${editorCoreTokens}
   gap: var(--space-2);
   min-height: 36px;
   padding: 0 20px !important;
-  border-top: 1px solid var(--gray-a5);
-  background: var(--color-background);
-  color: var(--gray-11);
-  font-family: var(--default-font-family);
+  border-top: 0.5px solid var(--s-line);
+  background: var(--s-bg);
+  color: var(--s-muted);
+  font-family: var(--s-font);
   font-size: var(--font-size-1);
-  letter-spacing: .04em;
+  letter-spacing: 0;
   flex-shrink: 0;
 }
 .manuscript-paper-footer > button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
-  padding: 5px 12px;
-  border: 0;
-  border-radius: var(--radius-3);
+  min-height: var(--s-control-sm);
+  padding: 0 var(--space-3);
+  border: 0.5px solid var(--s-line-strong);
+  border-radius: var(--s-radius-md);
   background: transparent;
-  box-shadow: 0 0 0 1px var(--gray-a5);
-  color: var(--gray-11);
-  font: var(--font-weight-medium) var(--font-size-2)/1 var(--default-font-family);
-  letter-spacing: .08em;
+  box-shadow: none;
+  color: var(--s-text);
+  font: var(--font-weight-medium) var(--font-size-2)/1 var(--s-font);
+  letter-spacing: 0;
   cursor: pointer;
 }
-.manuscript-paper-footer > button:hover { background: var(--gray-a3); color: var(--gray-12); }
+.manuscript-paper-footer > button:hover { background: var(--s-hover); color: var(--s-text); }
 .manuscript-paper-footer > div {
   display: flex;
   gap: 6px;
@@ -351,40 +361,46 @@ ${editorCoreTokens}
   align-items: center;
   padding: 0 4px;
 }
-.manuscript-paper-footer > div strong { font-weight: var(--font-weight-medium); letter-spacing: .04em; }
-.manuscript-paper-footer > div small { font-size: var(--font-size-1); color: var(--gray-11); }
+.manuscript-paper-footer > div strong { font-weight: var(--font-weight-medium); letter-spacing: 0; }
+.manuscript-paper-footer > div small { font-size: var(--font-size-1); color: var(--s-muted); }
 .manuscript-paper-footer > div > button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 28px;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: var(--radius-2);
+  padding: 0 var(--space-2);
+  border: 0.5px solid var(--s-line-strong);
+  border-radius: var(--s-radius-sm);
   background: transparent;
-  box-shadow: 0 0 0 1px var(--gray-a5);
-  color: var(--gray-11);
-  font: var(--font-weight-medium) var(--font-size-1)/1 var(--default-font-family);
-  letter-spacing: .08em;
+  box-shadow: none;
+  color: var(--s-text);
+  font: var(--font-weight-medium) var(--font-size-1)/1 var(--s-font);
+  letter-spacing: 0;
   cursor: pointer;
 }
-.manuscript-paper-footer > div > button:hover { background: var(--gray-a3); color: var(--gray-12); }
+.manuscript-paper-footer > div > button:hover { background: var(--s-hover); color: var(--s-text); }
 .manuscript-paper-footer > nav { display: flex; gap: 4px; }
 .manuscript-paper-footer > nav button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 28px;
-  padding: 4px 10px;
+  padding: 0 var(--space-2);
   border: 0;
-  border-radius: var(--radius-2);
+  border-radius: var(--s-radius-sm);
   background: transparent;
-  color: var(--gray-11);
-  font: var(--font-weight-medium) var(--font-size-1)/1 var(--default-font-family);
-  letter-spacing: .08em;
+  color: var(--s-muted);
+  font: var(--font-weight-medium) var(--font-size-1)/1 var(--s-font);
+  letter-spacing: 0;
   cursor: pointer;
 }
-.manuscript-paper-footer > nav button:hover { background: var(--gray-a3); color: var(--gray-12); }
+.manuscript-paper-footer > nav button:hover { background: var(--s-hover); color: var(--s-text); }
+.manuscript-paper button:focus-visible,
+.manuscript-paper select:focus-visible,
+.manuscript-paper input:focus-visible {
+  outline: 2px solid var(--s-accent);
+  outline-offset: 2px;
+}
 
 /* Reduced motion. */
 @media (prefers-reduced-motion: reduce) {

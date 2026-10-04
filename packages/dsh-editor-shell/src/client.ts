@@ -106,7 +106,7 @@ export function apply(ctx: Context): void {
     const hostThemeScope = client.configForms.get<NonNullable<ReturnType<typeof decodeHostThemePreference>>>('ui-theme')
     const hostThemeSync: HostThemeSync = {
       read: () => hostThemeScope.getSnapshot().value?.preference,
-      write: (preference) => writeHostThemePreference(hostThemeScope, preference),
+      write: (preference, signal) => writeHostThemePreference(hostThemeScope, preference, signal),
       subscribe: (listener) => hostThemeScope.subscribe(listener),
     }
     const commands = createCommandRegistry()

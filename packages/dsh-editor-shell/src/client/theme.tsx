@@ -30,7 +30,7 @@ export type HostThemePreference = (typeof HOST_THEME_PREFERENCES)[number]
 
 export type HostThemeSync = {
   read(): HostThemePreference | undefined
-  write(preference: HostThemePreference): void
+  write(preference: HostThemePreference, signal?: AbortSignal): Promise<unknown> | void
   subscribe(listener: () => void): () => void
 }
 
@@ -61,27 +61,41 @@ export type HostThemeScope = {
  * write; once the scope is readable the write lands (or is skipped
  * because the host already agrees) and the subscription disposes.
  */
-export function writeHostThemePreference(scope: HostThemeScope, preference: HostThemePreference): void {
-  const attempt = (): boolean => {
-    const snapshot = scope.getSnapshot()
-    if (snapshot.writable === false || snapshot.value === undefined) return false
-    if (snapshot.value.preference === preference) return true
-    void scope.set('preference', preference).catch(() => { /* localStorage already holds the truth */ })
-    return true
-  }
-  // The listener may fire synchronously from inside subscribe() (scopes that
-  // replay their current value), before dispose is assigned — gate on done
-  // and dispose defensively.
-  let done = false
-  let dispose: (() => void) | undefined
-  const listener = () => {
-    if (done || !attempt()) return
-    done = true
-    dispose?.()
-  }
-  dispose = scope.subscribe(listener)
-  if (!done && attempt()) done = true
-  if (done) dispose()
+export function writeHostThemePreference(
+  scope: HostThemeScope,
+  preference: HostThemePreference,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let issued = false
+    let settled = false
+    let dispose: (() => void) | undefined
+    const cleanup = () => { dispose?.(); signal?.removeEventListener('abort', abort) }
+    const finish = (success: boolean, result?: unknown) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (success) resolve(result)
+      else reject(result)
+    }
+    const abort = () => finish(false, new DOMException('Theme sync cancelled', 'AbortError'))
+    const attempt = () => {
+      if (issued || settled) return
+      const snapshot = scope.getSnapshot()
+      if (snapshot.writable === false || snapshot.value === undefined) return
+      issued = true // set() may synchronously notify the scope's subscribers.
+      dispose?.()
+      if (snapshot.value.preference === preference) { finish(true); return }
+      try { Promise.resolve(scope.set('preference', preference)).then(result => finish(true, result), error => finish(false, error)) }
+      catch (error) { finish(false, error) }
+    }
+    if (signal?.aborted) { abort(); return }
+    signal?.addEventListener('abort', abort, { once: true })
+    // Subscribe before checking: a load may replay synchronously from subscribe.
+    dispose = scope.subscribe(attempt)
+    if (issued || settled) dispose()
+    attempt()
+  })
 }
 
 export function hostPreferenceToTheme(preference: HostThemePreference): ThemeValue {
@@ -130,53 +144,69 @@ export function useTheme(
   const [theme, setThemeState] = useState<ThemeValue>(() => readInitialTheme(storage))
   const themeRef = useRef(theme)
   themeRef.current = theme
-  // The local light/dark choice is the source of truth at mount: the host may
-  // still hold its default `system` preference, and its scope replays that
-  // value to subscribers before our write lands. Ignore host events until the
-  // first write is issued, then only mirror genuine host-side edits (values
-  // that differ from what we wrote ourselves).
-  const wroteHostRef = useRef(false)
+  const syncRef = useRef<{ request(): void }>()
 
   useEffect(() => {
     applyTheme(theme)
-    if (!hostSync) return
-    // Skip the write when the host already agrees, so the subscribe echo cannot loop.
-    const current = hostSync.read()
-    if (current && hostPreferenceToTheme(current) === theme) {
-      wroteHostRef.current = true
-      return
-    }
-    wroteHostRef.current = true
-    hostSync.write(themeToHostPreference(theme))
-  }, [theme, hostSync])
+    syncRef.current?.request()
+  }, [theme])
 
   useEffect(() => {
     if (!hostSync) return
-    // Snapshot the host value after the write effect above has run: replays of
-    // that same stale value are echoes, not user edits. Only values that differ
-    // from both the baseline and the current theme are genuine host-side edits.
-    const baseline = hostSync.read()
-    let baselineValue = baseline
-    return hostSync.subscribe(() => {
-      if (!wroteHostRef.current) return
+    const controller = new AbortController()
+    let active = true
+    let ready = false
+    let pending = false
+    let notifiedWhilePending = false
+    const request = () => {
+      if (!active || pending) return
+      ready = true
+      const desired = themeRef.current
+      const current = hostSync.read()
+      if (current && hostPreferenceToTheme(current) === desired) return
+      pending = true
+      notifiedWhilePending = false
+      // One write at a time. Its echo cannot override a newer local choice;
+      // after its receipt settles, converge to that choice instead.
+      try {
+        Promise.resolve(hostSync.write(themeToHostPreference(desired), controller.signal)).then(() => {
+          if (!active) return
+          pending = false
+          // A Host edit may arrive between the write echo and its receipt.
+          // Reconcile that snapshot too; otherwise Host and paper can diverge.
+          if (notifiedWhilePending || themeRef.current !== desired) request()
+        }, () => {
+          if (active) pending = false // A failed save must not retry forever.
+        })
+      } catch { pending = false }
+    }
+    const dispose = hostSync.subscribe(() => {
+      if (!active || !ready) return
+      if (pending) { notifiedWhilePending = true; return }
       const preference = hostSync.read()
       if (!preference) return
-      // The scope may still be loading at subscribe time (baseline undefined);
-      // the first concrete value is the persisted state, not a user edit —
-      // adopt it as the baseline instead of mirroring it over the local theme.
-      if (baselineValue === undefined) { baselineValue = preference; return }
-      if (preference === baselineValue) return
-      baselineValue = preference
       const mapped = hostPreferenceToTheme(preference)
       if (mapped === themeRef.current) return
+      themeRef.current = mapped
       persistTheme(storage, mapped)
       setThemeState(mapped)
     })
+    const sync = { request }
+    syncRef.current = sync
+    request() // The local preference remains authoritative at startup/loading.
+    return () => {
+      active = false
+      controller.abort()
+      dispose()
+      if (syncRef.current === sync) syncRef.current = undefined
+    }
   }, [hostSync, storage])
 
   const setTheme = (value: ThemeValue) => {
+    themeRef.current = value
     persistTheme(storage, value)
     setThemeState(value)
+    syncRef.current?.request()
   }
   return [theme, setTheme]
 }

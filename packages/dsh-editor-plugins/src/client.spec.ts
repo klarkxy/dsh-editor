@@ -124,10 +124,11 @@ describe('plugin market install confirmation', () => {
 describe('plugin settings chrome', () => {
   it('separates plugin rows while keeping switch states visible', () => {
     expect(pluginsClientStyles).toContain('.dsh-plugins-card')
-    expect(pluginsClientStyles).toContain('border-top: 1px solid var(--gray-a5)')
+    expect(pluginsClientStyles).toContain('border: 0.5px solid var(--s-line-strong)')
     expect(pluginsClientStyles).toContain('.dsh-plugins button.dsh-plugins-switch')
-    expect(pluginsClientStyles).toContain('background: var(--gray-7)')
-    expect(pluginsClientStyles).toContain('background: var(--accent-9)')
+    expect(pluginsClientStyles).toContain('background: var(--s-track)')
+    expect(pluginsClientStyles).toContain('background: var(--s-track-on)')
+    expect(pluginsClientStyles).toContain('transform: translateX(16px)')
   })
 })
 

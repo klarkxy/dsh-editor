@@ -17,7 +17,7 @@ assert.ok(relative(resolve(root, '.dev'), home) && !relative(resolve(root, '.dev
 const output = resolve(root, 'e2e/out/ai-standalone', stamp)
 const workspace = resolve(home, 'workspace')
 await mkdir(workspace, { recursive: true })
-const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.1.7-rc.2/lib/bin.js')
+const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js')
 const staging = await mkdtemp(resolve(tmpdir(), 'dsh-ai-pack-'))
 const ids = ['current-title', 'mood', 'recap', 'memory', 'self-improvement', 'model-center']
 const report = { ok: false, home, output, checks: [], errors: [], calls: 0, observerCalls: 0, methodCalls: 0 }

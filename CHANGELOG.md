@@ -17,6 +17,8 @@
 
 ### 官方 DSH 能力
 
+- 内置 DSH 升至 `0.2.0-rc.2`：模型目录更新（部分旧模型 ID 被移除，已保存的选择可能需要重选）、工具调度异常恢复、图片失效重传、Bash/PowerShell 删除前路径核对等随上游获得。官方自动化任务（schedule/ui-schedule）已移出 web-app 改为可选插件包，编辑器组合继续禁用；新增的官方设置区块 ui-settings-session-log 同步禁用。详见 docs/dsh-0.2.0-upgrade.md。
+
 - 桌面 Electron 升至 42.11.8，使官方 PDF / Office 预览所需的浏览器接口可用；DSH 的独立 Node 24.16.0 运行时保持不变。
 
 - 接入 0.1.7-rc.2 原生会话归档、恢复、置顶与列表筛选；旧 Editor 归档记录逐项迁移，活动中的对话归档前需确认停止。

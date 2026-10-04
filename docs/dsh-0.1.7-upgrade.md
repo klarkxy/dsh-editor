@@ -2,7 +2,7 @@
 
 > 本文档为已完成工作的历史留档，仅供查证。
 
-日期：2026-09-22。目标版本为用户确认的 **0.1.7-alpha.1**，不是无后缀稳定版。上游依据为 [官方发布](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-alpha.1) 与该 tag 源码（c36a83ff6bb95e3f82cf79f9be7c724270a8aa61）。后续已升级到 0.1.7-rc.2，见文末补充。
+日期：2026-09-22。目标版本为用户确认的 **0.1.7-alpha.1**，不是无后缀稳定版。上游依据为 [官方发布](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-alpha.1) 与该 tag 源码（c36a83ff6bb95e3f82cf79f9be7c724270a8aa61）。后续已升级到 0.1.7-rc.2，见文末补充。再之后升级到 0.2.0-rc.2 的记录见 docs/dsh-0.2.0-upgrade.md。
 
 ## 升级范围
 

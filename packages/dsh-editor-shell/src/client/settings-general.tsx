@@ -1,8 +1,9 @@
-import { useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { Button, Card, Flex, Heading, IconButton, Separator, Switch, Text } from '@radix-ui/themes'
+import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Button, Callout, Card, Flex, Heading, IconButton, Separator, Switch, Text } from '@radix-ui/themes'
 import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
+import { ConfirmDialog } from './dialogs.tsx'
 import { ACCENT_VALUES, useAccent, type AccentValue } from './theme.tsx'
 import { setLocale, t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
 import {
@@ -10,10 +11,16 @@ import {
   decodeDeveloperSettings,
   type DeveloperSettings,
 } from '../developer-settings.ts'
+import {
+  LIMIT_BREAK_SETTINGS_NAMESPACE,
+  decodeLimitBreakSettings,
+  type LimitBreakSettings,
+} from '../limit-break-settings.ts'
 
 /*
  * 通用设置页:语言 / 外观 / 繁忙时 Enter 行为,与上游 dsh-client-ui-settings-general
  * 的偏好写同一个 settings namespace,宿主其它模块(主题、会话 composer)照常生效。
+ * 破限模式另起一个卡片:常驻封号风险声明,从关到开必须过一次确认框。
  */
 
 type ThemePreference = 'light' | 'dark' | 'system'
@@ -78,6 +85,7 @@ export function SettingsGeneralSection(props: {
     theme: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeThemePreference>>>('ui-theme'),
     conversation: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeBusyEnter>>>('ui-conversation'),
     developer: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeDeveloperSettings>>>(DEVELOPER_SETTINGS_NAMESPACE),
+    limitBreak: props.ctx.configForms.get<NonNullable<ReturnType<typeof decodeLimitBreakSettings>>>(LIMIT_BREAK_SETTINGS_NAMESPACE),
   }), [props.ctx])
 
   const [theme, setTheme, themeWritable] = usePreference(scopes.theme, 'system')
@@ -85,7 +93,14 @@ export function SettingsGeneralSection(props: {
   const locale = useLocale()
   const [busyEnter, setBusyEnter, conversationWritable] = useBusyEnter(scopes.conversation)
   const [developerMode, setDeveloperMode, developerWritable] = useDeveloperMode(scopes.developer)
+  const [limitBreakMode, setLimitBreakMode, limitBreakWritable] = useLimitBreakMode(scopes.limitBreak)
+  const [limitBreakConfirm, setLimitBreakConfirm] = useState(false)
   const showDeveloperMode = props.showDeveloperMode === true
+  /* 关闭立即生效；开启要过确认框，避免误触把封号风险打开。 */
+  const requestLimitBreak = (next: boolean) => {
+    if (next) setLimitBreakConfirm(true)
+    else setLimitBreakMode(false)
+  }
 
   const appearanceOptions: { value: ThemePreference; label: string }[] = [
     { value: 'light', label: t('settings.themeLight') },
@@ -165,6 +180,27 @@ export function SettingsGeneralSection(props: {
             onChange={(value) => setBusyEnter(value as BusyEnterBehavior)}
             aria-label={t('settings.busyEnter')} />} />
       </Card>
+      <Card className="settings-block">
+        <header className="settings-block-head">
+          <Heading as="h3" size="3" className="settings-block-title">
+            {t('settings.limitBreak')}
+          </Heading>
+        </header>
+        <Row
+          title={t('settings.limitBreak')}
+          description={t('settings.limitBreakModeHint')}
+          children={<Switch
+            className="settings-switch"
+            checked={limitBreakMode}
+            disabled={!limitBreakWritable}
+            aria-label={t('settings.limitBreak')}
+            onCheckedChange={requestLimitBreak} />} />
+        <Callout.Root className="warning" color="red" role="alert" size="1" mt="2">
+          <Callout.Text>
+            {t('settings.limitBreakWarning')}
+          </Callout.Text>
+        </Callout.Root>
+      </Card>
       {showDeveloperMode ? <Card className="settings-block">
         <header className="settings-block-head">
           <Heading as="h3" size="3" className="settings-block-title">
@@ -191,6 +227,14 @@ export function SettingsGeneralSection(props: {
           {t('settings.showDeveloper')}
         </Button>
       </Card> : null}
+      {limitBreakConfirm ? <ConfirmDialog
+        id="limit-break"
+        title={t('settings.limitBreakConfirmTitle')}
+        message={t('settings.limitBreakConfirmBody')}
+        confirmLabel={t('settings.limitBreakConfirmAction')}
+        note={t('settings.limitBreakWarning')}
+        onCancel={() => setLimitBreakConfirm(false)}
+        onConfirm={() => { setLimitBreakConfirm(false); setLimitBreakMode(true) }} /> : null}
     </section>
   );
 }
@@ -200,6 +244,14 @@ export function useDeveloperMode(scope: SettingsScope<DeveloperSettings>): [bool
   const value = snapshot.status === 'ready' && snapshot.value ? snapshot.value.developerMode : false
   const writable = snapshot.status === 'ready' && snapshot.writable !== false
   const set = (next: boolean) => { if (writable) void scope.set('developerMode', next).catch(() => { /* 同上 */ }) }
+  return [value, set, writable]
+}
+
+export function useLimitBreakMode(scope: SettingsScope<LimitBreakSettings>): [boolean, (value: boolean) => void, boolean] {
+  const snapshot = useSyncExternalStore(scope.subscribe.bind(scope), scope.getSnapshot.bind(scope), scope.getSnapshot.bind(scope))
+  const value = snapshot.status === 'ready' && snapshot.value ? snapshot.value.limitBreakMode : false
+  const writable = snapshot.status === 'ready' && snapshot.writable !== false
+  const set = (next: boolean) => { if (writable) void scope.set('limitBreakMode', next).catch(() => { /* 同上 */ }) }
   return [value, set, writable]
 }
 

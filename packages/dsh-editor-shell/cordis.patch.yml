@@ -5,3 +5,5 @@
       name: dsh-editor-shell/writing-config
     - id: ui-developer
       name: dsh-editor-shell/developer-config
+    - id: ui-limit-break
+      name: dsh-editor-shell/limit-break-config

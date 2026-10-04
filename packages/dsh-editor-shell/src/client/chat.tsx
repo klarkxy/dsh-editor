@@ -89,7 +89,7 @@ import {
   shouldSubmitComposer,
   type ShellContext,
 } from './shared.ts'
-import { DotsIcon, PlusIcon, StopIcon } from './icons.tsx'
+import { CrossIcon, DotsIcon, PlusIcon, StopIcon } from './icons.tsx'
 import {
   bindOfficialConversation,
   conversationChatSource,
@@ -146,7 +146,7 @@ export async function settleConversationStop(input: {
 }
 
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, renderSlot, onRememberMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; onRememberMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, renderSlot, onRememberMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange, onHide }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; onRememberMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [messageCardTick, setMessageCardTick] = useState(0)
@@ -907,6 +907,18 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
             </Box>}
+            {/* Overlay drawers cover the dismiss scrim, so the header carries
+                an explicit close control (Escape and the topbar toggle still work). */}
+            {overlay && onHide ? <IconButton
+              variant="ghost"
+              color="gray"
+              size="2"
+              type="button"
+              title={t('chat.closeAssistant')}
+              aria-label={t('chat.closeAssistant')}
+              onClick={onHide}>
+              <CrossIcon size={14} />
+            </IconButton> : null}
           </Flex>
         </header>
       </Flex>

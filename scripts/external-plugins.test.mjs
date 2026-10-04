@@ -41,7 +41,7 @@ test('Zhihu has one source owner and retains a pinned offline product input', ()
   const name = '@klarkxy/dsh-zhihu';
   const pins = JSON.parse(readFileSync(new URL(EXTERNAL_PLUGIN_MANIFEST, root), 'utf8'));
   const pkg = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
-  assert.equal(pins.packages[name], '0.1.7');
+  assert.equal(pins.packages[name], '0.1.9');
   assert.equal(pkg.devDependencies[name], pins.packages[name]);
   assert.equal(existsSync(new URL('packages/dsh-zhihu', root)), false);
   const config = JSON.parse(readFileSync(new URL('tsconfig.base.json', root), 'utf8'));

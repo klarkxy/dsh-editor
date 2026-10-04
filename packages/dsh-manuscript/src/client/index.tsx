@@ -404,7 +404,7 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
                 if (event.key === 'Enter') submitCreate()
                 if (event.key === 'Escape') cancelCreate()
               }}
-              style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-1)', padding: '2px 6px', border: '1px solid var(--gray-6)', borderRadius: 4, background: 'var(--gray-2)', color: 'var(--gray-12)' }} />
+              style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-1)', padding: '4px 8px', border: 0, borderRadius: 'var(--s-radius-md)', boxShadow: 'var(--s-elevate-soft)', background: 'var(--s-surface)', color: 'var(--s-text)' }} />
             <Button type="button" variant="solid" size="1" onClick={submitCreate}>
               创建
             </Button>
@@ -415,7 +415,7 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
           {createError ? <div
             data-testid="manuscript-create-error"
             role="alert"
-            style={{ padding: '4px 12px', fontSize: 'var(--font-size-1)', color: 'var(--red-11)' }}>
+            style={{ padding: '4px 12px', fontSize: 'var(--font-size-1)', color: 'var(--s-danger)', fontWeight: 'var(--font-weight-medium)', borderInlineStart: '2px solid var(--s-danger)' }}>
             {createError}
           </div> : null}
           {cwd && sessionId ? <Tree

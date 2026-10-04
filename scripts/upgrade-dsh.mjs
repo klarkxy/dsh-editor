@@ -24,7 +24,7 @@ const PINNED_PACKAGES = [
   '@deepseek-ai/dsh-session',
   '@deepseek-ai/dsh-system-prompt',
 ]
-const SKIP_REWRITE_PREFIXES = ['CHANGELOG.md']
+const SKIP_REWRITE_PREFIXES = ['CHANGELOG.md', 'docs/dsh-0.1.7-upgrade.md', 'docs/dsh-0.2.0-upgrade.md']
 const LOCKFILE = 'pnpm-lock.yaml'
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.pack', '.pnpm-store', '.dev', '.playwright-mcp', 'dist', 'lib', 'out'])
 
