@@ -84,7 +84,7 @@ export function projectPluginConfigurations(ledger: SlotLedger | undefined): Plu
     for (const entry of entries) {
       const raw = slot === 'plugins.item' ? entry?.options?.id : entry?.options?.key
       const key = typeof raw === 'string' ? raw.trim() : ''
-      if (!key) continue
+      if (!key || (slot === 'plugins.bundle.config' && key === '@klarkxy/dsh-model-center')) continue
       const id = `${slot}:${key}`
       if (seen.has(id)) continue
       seen.add(id)

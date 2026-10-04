@@ -146,3 +146,9 @@ it('names the adopted voice configuration in the active language', () => {
  setLocale('en')
  expect(projectPluginConfigurations(host.slots)[0]?.label).toBe('Voice input')
 })
+
+
+it('routes the adopted model-center bundle through the native plugin-model entry', () => {
+ const host=fixture({'plugins.bundle.config':[{options:{key:'@klarkxy/dsh-model-center'}},{options:{key:'@scope/other'}}]})
+ expect(projectPluginConfigurations(host.slots).map(entry=>entry.entryKey)).toEqual(['@scope/other'])
+})

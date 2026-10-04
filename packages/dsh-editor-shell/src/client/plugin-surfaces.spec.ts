@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { ModelSettingsSurface, PluginChatEvents, PluginModelSettingsSurface, modelSettingsSections } from './plugin-surfaces.tsx'
+import { ModelSettingsSurface, PluginChatEvents, PluginModelSettingsSurface, modelSettingsSections, usePluginModelSettings } from './plugin-surfaces.tsx'
 import { CHAT_EVENTS_SLOT, MODEL_SETTINGS_SLOT } from '../seats.ts'
 
 function host(entries: Record<string, Array<{ options: { id: string; order?: number } }>>) {
@@ -70,4 +70,17 @@ describe('optional plugin surfaces', () => {
     expect(html).not.toContain('Providers')
     expect(render).not.toHaveBeenCalled()
   })
+})
+
+
+it('always offers one native plugin-model entry across absent, old and new plugin registrations', () => {
+  const render = (entries: Array<{options:{id:string}}>,locale:'zh'|'en') => {
+    function Probe(){return createElement('p',null,usePluginModelSettings(host({[MODEL_SETTINGS_SLOT]:entries}),locale).sections.map(row=>row.id+':'+row.label).join('|'))}
+    return renderToStaticMarkup(createElement(Probe))
+  }
+  expect(render([], 'zh')).toContain('model-center:插件模型')
+  expect(render([], 'en')).toContain('model-center:Plugin models')
+  const html=render([{options:{id:'model-center'}},{options:{id:'other'}}], 'zh')
+  expect(html.match(/model-center:/g)).toHaveLength(1)
+  expect(html).toContain('other:other')
 })

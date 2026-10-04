@@ -85,7 +85,8 @@ export function modelSettingsSections(entries: readonly SlotEntry[], locale: 'zh
 
 export function usePluginModelSettings(ctx: unknown, locale: 'zh' | 'en') {
   const { entries, version } = useSurface(ctx, MODEL_SETTINGS_SLOT)
-  return { sections: modelSettingsSections(entries, locale), version }
+  const native = { id: 'model-center', label: locale === 'en' ? 'Plugin models' : '插件模型', order: 0, index: -1 }
+  return { sections: [native, ...modelSettingsSections(entries, locale).filter(entry => entry.id !== native.id)], version }
 }
 
 export function PluginModelSettingsSurface(props: {

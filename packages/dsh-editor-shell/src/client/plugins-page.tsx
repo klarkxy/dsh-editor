@@ -52,7 +52,7 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
   const [selected, setSelected] = useState('manage')
   const [query, setQuery] = useState('')
   useLayoutEffect(() => {
-    if (props.requestedPackage) setSelected('official:plugins.bundle.config:' + props.requestedPackage)
+    if (props.requestedPackage) setSelected(props.requestedPackage === '@klarkxy/dsh-model-center' ? 'model:model-center' : 'official:plugins.bundle.config:' + props.requestedPackage)
   }, [props.requestedPackage])
   const back = useRef<HTMLButtonElement>(null)
   const pages = useRef<HTMLDivElement>(null)
