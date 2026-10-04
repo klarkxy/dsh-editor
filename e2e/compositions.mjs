@@ -26,9 +26,9 @@ for (const target of [projectsRoot, home, toggleHome, output, targetWorkspace]) 
   }
 }
 
-resolveDshInstallation('0.1.7-rc.2')
+resolveDshInstallation('0.2.0-rc.2')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.1.7-rc.2')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.0-rc.2')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 let browser
@@ -280,7 +280,7 @@ try {
  const closeSettings=async()=>{await page.getByRole('button',{name:'关闭设置',exact:true}).click();await page.locator('.settings-dialog').waitFor({state:'hidden'})};
  const openPlugins=async(tab)=>{await page.getByRole('button',{name:'插件',exact:true}).click();const plugins=page.locator('section.plugins-page[aria-label="插件管理"]');await plugins.locator('nav.plugins-page-nav').getByRole('button',{name:tab,exact:true}).click();await page.waitForTimeout(250);return plugins};
  const closePlugins=async(plugins)=>{await plugins.getByRole('button',{name:/返回首页|返回写作/}).click();await plugins.waitFor({state:'detached'})};
- let plugins=await openPlugins('知乎资料');await plugins.getByTestId('zhihu-capabilities').waitFor();await plugins.getByText('Access Secret',{exact:false}).first().waitFor();await closePlugins(plugins);
+ let plugins=await openPlugins('知乎');await plugins.getByTestId('zhihu-capabilities').waitFor();await plugins.getByText('Access Secret',{exact:false}).first().waitFor();await closePlugins(plugins);
  evidence.checks.push('proofreading paused; Zhihu configuration is inside the plugin page');
  await page.getByRole('button',{name:'新建',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator('.tree').waitFor({timeout:30000});
  await page.locator('.tree-empty').waitFor({state:'visible',timeout:20000});
@@ -322,7 +322,7 @@ try {
  for(const theme of ['light','dark']){
    if(theme==='dark')await page.locator('.chrome .theme-toggle').click();
    await openSettings('通用设置');panelColors.push(await page.locator('.settings-dialog').evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
-   plugins=await openPlugins('知乎资料');await page.screenshot({path:resolve(output,'zhihu-settings-'+theme+'.png')});await closePlugins(plugins);
+   plugins=await openPlugins('知乎');await page.screenshot({path:resolve(output,'zhihu-settings-'+theme+'.png')});await closePlugins(plugins);
  }
  if(panelColors[0]===panelColors[1])throw new Error('settings theme did not adapt');
  await page.locator('.chrome .theme-toggle').click();evidence.checks.push('light/dark settings and plugin-page Zhihu configuration');

@@ -20,14 +20,37 @@ export function ensureManuscriptThemes(): void {
   document.head.appendChild(style)
 }
 
+export function manuscriptHostAppearance(doc: {
+  documentElement: { getAttribute(name: string): string | null }
+  body: { hasAttribute(name: string): boolean } | null
+}): 'dark' | 'light' {
+  if (doc.documentElement.getAttribute('data-theme') === 'dark') return 'dark'
+  if (doc.body?.hasAttribute('data-ds-dark-theme')) return 'dark'
+  return 'light'
+}
+
+function readManuscriptAppearance(): 'dark' | 'light' {
+  if (typeof document === 'undefined') return 'light'
+  return manuscriptHostAppearance(document)
+}
+
 export function ManuscriptTheme(props: { children?: ReactNode }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [needsTheme, setNeedsTheme] = useState(false)
+  const [appearance, setAppearance] = useState<'dark' | 'light'>(readManuscriptAppearance)
 
   useLayoutEffect(() => {
     const node = hostRef.current
     if (!node) return
-    setNeedsTheme(!node.closest('.radix-themes'))
+    const standalone = !node.closest('.radix-themes')
+    setNeedsTheme(standalone)
+    if (!standalone) return
+    const sync = () => setAppearance(readManuscriptAppearance())
+    sync()
+    const observer = new MutationObserver(sync)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    if (document.body) observer.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
+    return () => observer.disconnect()
   }, [])
 
   const body = (
@@ -36,9 +59,6 @@ export function ManuscriptTheme(props: { children?: ReactNode }) {
     </div>
   )
   if (!needsTheme) return body
-  const appearance = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark'
-    ? 'dark'
-    : 'light'
   return (
     <Theme
       appearance={appearance}

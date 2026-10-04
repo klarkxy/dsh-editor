@@ -63,7 +63,8 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
   }, [])
   const entries = [
     ...(props.renderSlot ? models.sections.map(entry => ({ id: 'model:' + entry.id, label: entry.label })) : []),
-    ...(props.zhihu != null ? [{ id: 'zhihu', label: t('settings.zhihu') }] : []),
+    // An empty Slot element is truthy. The ledger says whether a legacy contribution is still there.
+    ...(official.legacyZhihu && props.zhihu != null ? [{ id: 'zhihu', label: t('settings.zhihu') }] : []),
     ...(props.renderSlot ? official.entries.map(entry => ({ id: 'official:' + entry.id, label: entry.label })) : []),
     ...(props.renderSlot ? legacy.sections.map(entry => ({ id: entry.navId, label: entry.label })) : []),
   ]

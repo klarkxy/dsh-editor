@@ -22,12 +22,12 @@ function pdfFixture() {
 const packaged = process.argv.includes('--packaged')
 const executable = packaged ? resolve(root,'.pack/desktop/win-unpacked/DSH Editor.exe') : resolve(root,'apps/desktop/node_modules/electron/dist/electron.exe')
 const launchArgs = packaged ? [] : [resolve(root,'apps/desktop/dist/main.js')]
-const runtimeRoot = packaged ? resolve(root,'.pack/desktop/win-unpacked/resources/dsh') : resolve(root,'.dev/desktop-dsh-runtime-0.1.7-rc.2')
+const runtimeRoot = packaged ? resolve(root,'.pack/desktop/win-unpacked/resources/dsh') : resolve(root,'.dev/desktop-dsh-runtime-0.2.0-rc.2')
 const output = resolve(root, packaged ? 'e2e/out/official-plugins-packaged' : 'e2e/out/official-plugins')
 const home = resolve(root, '.dev/official-plugins-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.1.7-rc.2/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: packaged ? resolve(root,'.pack/desktop/win-unpacked/resources/profile-template') : resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -93,11 +93,17 @@ try {
   }
   check('official plugins available in existing manager')
   await page.screenshot({path:resolve(output,'plugins-light.png')})
+  // Voice input ships installed but off: the composer microphone only exists once the
+  // author turns the plugin on, and the preparation page needs the enabled services.
+  const voiceSwitch = page.getByRole('switch', {name:'语音输入',exact:true})
+  assert.equal(await voiceSwitch.getAttribute('data-state'), 'unchecked', 'voice input must ship disabled')
+  await voiceSwitch.click()
+  await voiceSwitch.waitFor({state:'visible'})
   await page.locator('.plugins-page-nav button').filter({hasText:'@deepseek-ai/dsh-experimental-voice-input-bundle'}).first().click()
   await page.getByTestId('plugin-configuration-page').waitFor()
   assert.equal(await page.getByTestId('plugin-configuration-error').count(),0)
   await page.screenshot({path:resolve(output,'voice-preparation.png')})
-  check('official voice preparation page without model download')
+  check('official voice preparation page after the author enables voice input')
   await page.locator('.plugins-back').click()
   if (process.argv.includes('--staged')) { report.ok=true; throw Object.assign(new Error('staged checks complete'), { stagedComplete: true }) }
   await page.locator('.native-settings-control button').click()

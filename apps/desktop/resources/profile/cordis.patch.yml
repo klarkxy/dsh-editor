@@ -52,6 +52,10 @@
   disabled: true
 - id: ui-settings-models
   disabled: true
+# New in DSH 0.2.0: official settings section for session-log export. The
+# editor owns writing-session export routes, so the official section stays out.
+- id: ui-settings-session-log
+  disabled: true
 - id: ui-plan
   disabled: true
 # Keep native user-questions enabled: it owns Remote requests and pending
@@ -93,6 +97,9 @@
   disabled: true
 
 # The Editor exposes document previews; coding surfaces and schedules stay outside this composition.
+# Since DSH 0.2.0 the official automation tasks live in an optional bundle outside
+# dsh-web-app; these entries stay as a guard so a later automation-bundle install
+# cannot light up schedules inside the editor composition.
 - id: ui-sidebar-terminal
   disabled: true
 - id: ui-sidebar-browser

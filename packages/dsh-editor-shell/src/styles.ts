@@ -1071,10 +1071,6 @@ export const componentStyles = `
   --margin-top-override: 0px; --margin-right-override: 0px; --margin-bottom-override: 0px; --margin-left-override: 0px;
   box-shadow: 0 0 0 1px var(--gray-a6);
 }
-.radix-themes .accent-swatch[data-swatch="indigo"] { background: var(--indigo-9); }
-.radix-themes .accent-swatch[data-swatch="pine"] { background: var(--green-9); }
-.radix-themes .accent-swatch[data-swatch="ochre"] { background: var(--amber-9); }
-.radix-themes .accent-swatch[data-swatch="violet"] { background: var(--violet-9); }
 .radix-themes .accent-swatch.active {
   box-shadow: 0 0 0 2px var(--color-panel-solid), 0 0 0 4px var(--accent-9);
 }

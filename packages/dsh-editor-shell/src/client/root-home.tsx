@@ -150,7 +150,7 @@ export function HomeScreen(props: {
                     style={{
                       width: 36,
                       height: 36,
-                      borderRadius: 'var(--radius-4)',
+                      borderRadius: 'var(--dsh-ui-radius-md)',
                       background: 'var(--accent-a3)',
                       color: 'var(--accent-11)',
                     }}>
@@ -186,7 +186,7 @@ export function HomeScreen(props: {
                     style={{
                       width: 36,
                       height: 36,
-                      borderRadius: 'var(--radius-4)',
+                      borderRadius: 'var(--dsh-ui-radius-md)',
                       background: 'var(--accent-a3)',
                       color: 'var(--accent-11)',
                     }}>

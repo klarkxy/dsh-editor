@@ -3,6 +3,7 @@ import radixThemesCss from '@radix-ui/themes/styles.css'
 import { useLayoutEffect, type ReactNode } from 'react'
 import type { AccentValue, ThemeValue } from '../theme.tsx'
 import { designSystemStyles } from '../../design-system/styles.ts'
+import { DESIGN_SYSTEM_ID } from '../../design-system/tokens.ts'
 import { mountDesignScope } from '../../design-system/scope.ts'
 import { DesignSystemGallery } from '../../design-system/gallery.tsx'
 
@@ -48,7 +49,7 @@ export function ShellTheme(props: {
       scaling="100%"
       panelBackground="solid"
     >
-      <style data-dsh-design-styles="kimi-web">{designSystemStyles}</style>
+      <style data-dsh-design-styles={DESIGN_SYSTEM_ID}>{designSystemStyles}</style>
       {props.children}
       <DesignSystemGallery />
     </Theme>

@@ -24,7 +24,7 @@ const cssAsTextPlugin = {
 
 export default defineConfig([
   {
-    entry: { index: 'src/index.ts', seats: 'src/seats.ts', 'writing-config': 'src/writing-config.ts', 'developer-config': 'src/developer-config.ts' },
+    entry: { index: 'src/index.ts', seats: 'src/seats.ts', 'writing-config': 'src/writing-config.ts', 'developer-config': 'src/developer-config.ts', 'limit-break-config': 'src/limit-break-config.ts' },
     format: ['esm'],
     dts: true,
     clean: true,

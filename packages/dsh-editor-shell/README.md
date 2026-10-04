@@ -13,6 +13,7 @@
 - 固定分栏：把一份文档钉在稿纸旁只读对照，随树与内容版本刷新（src/client/pinned-pane.tsx）。
 - 改写预设栏：选区上方提供内置改写预设与自定义指令入口（src/client/rewrite-presets-bar.tsx）。
 - 设置页：通用设置、模型、助手、写作、用量、插件、知乎资料、关于 8 个分类（插件与知乎资料不可用时隐藏，分类名以 src/i18n/messages.zh.ts 为准）。
+- 破限模式：通用设置页的独立卡片与开关（src/limit-break-config.ts、src/client/settings-general.tsx）。开启后宿主把 `resources/limit-break/agents-spec.md` 作为最后一段系统提示词追加到每次组装，关闭时不贡献文本。卡片常驻封号风险声明，从关到开须过一次确认框。
 
 归档视图（src/client/archive.tsx）当前不在界面开放：文档归档入口已收起（`DOCUMENT_ARCHIVE_UI = false`），Host 的 `archive.*` 与合章内部归档仍保留。
 
@@ -23,6 +24,7 @@
 | `editor-shell` | 写作界面 | 本包根插件（三栏稿纸与设置，锁定） |
 | `dsh-editor-writing` | 写作偏好 | `dsh-editor-shell/writing-config`（原生写作配置，锁定） |
 | `ui-developer` | 开发者偏好 | `dsh-editor-shell/developer-config`（developerMode 开关，锁定） |
+| `ui-limit-break` | 破限模式 | `dsh-editor-shell/limit-break-config`（limitBreakMode 开关，锁定） |
 
 映射关系见 package.json 的 `dshEditor.entries` 与 cordis.patch.yml。注意区分两个相近命名：「写作偏好」是本包的原生写作设置项（补全方式、写作/改写/对话模型路由、字号行宽等，src/writing-config.ts）；「通用写作」是桌面 profile 的 agent preset（apps/desktop/resources/profile/agent-presets/dsh-editor-writing/preset.yml），由 [dsh-editor-plugins](../dsh-editor-plugins/README.md) 的「写作模式」开关管理。
 
@@ -30,7 +32,7 @@
 
 - `./client`：浏览器侧 shell 客户端（src/client.ts）。
 - `./seats`：原样转发 [dsh-editor-seats](../dsh-editor-seats/README.md) 的座位合同（src/seats.ts）。
-- `./writing-config`、`./developer-config`：上表两个设置项插件。
+- `./writing-config`、`./developer-config`、`./limit-break-config`：上表的设置项插件。
 
 ## 兼容约束
 

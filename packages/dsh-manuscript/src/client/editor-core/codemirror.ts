@@ -88,8 +88,11 @@ export const paperThemeSpec = {
 
 export const paperTheme: Extension = EditorView.theme({
   ...paperThemeSpec,
-  '.cm-paper-dim': {
-    opacity: 'var(--paper-dim-opacity, 0.35)',
+  /* Non-current paragraphs stay secondary text only while typing.
+     Blur removes .cm-focused, so those lines fall back to --gray-12.
+     Color, not opacity: a line alpha would also fade links and quotes. */
+  '&.cm-focused .cm-paper-dim': {
+    color: 'var(--gray-11)',
   },
   '&.cm-focused': { outline: 'none' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent-9)' },

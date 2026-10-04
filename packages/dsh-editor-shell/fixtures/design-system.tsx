@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { Badge, Button, Card, Dialog, DropdownMenu, Flex, IconButton, ScrollArea, Text, TextArea } from '@radix-ui/themes'
 import { ShellTheme, radixThemesStyles } from '../src/client/ui/theme-root.tsx'
 import { redesignedStyles } from '../src/styles.ts'
+import { Markdown } from '../src/client/markdown.tsx'
 
 /** Browser contract fixture, not an Electron/runtime simulation. */
 function Preview() {
@@ -53,12 +54,12 @@ function Preview() {
           <Flex className="editor-tools"><Button size="1" variant="ghost" color="gray">补全</Button><Button size="1" variant="ghost" color="gray">改写</Button><Button size="1" variant="ghost" color="gray">校对</Button></Flex>
         </main></div>
         <aside className="chat">
-          <Flex className="chat-header" align="center" justify="between" px="3"><Text weight="medium">写作搭档</Text><Badge className="composer-mode" color="gray">小说创作</Badge></Flex>
+          <Flex className="chat-header" align="center" justify="between" px="3"><Text weight="medium">写作搭档</Text><span className="preset-badge">预设</span><button type="button" className="accent-swatch" aria-label="Accent swatch" /><span className="models-credential-dot" /><span className="activity-dots"><i /><i /><i /></span><Badge className="composer-mode" color="gray">小说创作</Badge></Flex>
           <div className="chat-history"><ScrollArea style={{height:'100%'}}><Flex direction="column" gap="4" p="4">
             <div className="chat-row user"><Card>保留悬念，让人物说话更自然一点。</Card></div>
             <div className="chat-process"><button className="chat-process-toggle" onClick={event => { const target = event.currentTarget.nextElementSibling as HTMLElement; target.hidden = !target.hidden }}>已阅读 2 份资料 · 展开过程</button><div className="chat-process-body" hidden><Text size="1">章节正文、人物设定。该夹具没有连接模型服务。</Text></div></div>
-            <div className="chat-row assistant"><div className="chat-markdown"><p>我会保留“来信者是谁”这个悬念，把解释移到人物的动作里。</p></div></div>
-            <Card className="proposal-card"><Text weight="medium">正文提案 · 第二章</Text><Text as="p" size="2" mt="2">“今天？”她抬起头。\n\n门口的人把湿外套挂好，才说：“信上是这么写的。”</Text><Flex className="proposal-actions" justify="end" gap="2"><Button size="1" variant="outline">查看修改</Button><Button size="1">采用</Button></Flex></Card>
+            <div className="chat-row assistant"><Markdown text={'## 阅读与修订建议\n\n先保留正文的叙述节奏，再逐项核对资料和修改范围。长回复需要清楚的段落边界，作者应能在正文和建议之间来回阅读。\n\n- **段落层级：** 普通叙述保持正常字重，重点只标在关键句上，避免整段都变成强调文字。\n- **资料说明：** 来源、限制与结论分开写，让读者能逐项判断，而不是挤成连续的信息墙。\n- **修改范围：** 保留人物动机与已有事件，只调整本次讨论中的表达和节奏。\n\n### 下一步\n\n可以先对照第二段，再决定是否采用下方提案。代码、引用与链接仍保留各自的语义。'} /></div>
+            <Card className="proposal-card"><Text weight="medium">正文提案 · 第二章</Text><Text as="p" size="2" mt="2">“今天？”她抬起头。\n\n门口的人把湿外套挂好，才说：“信上是这么写的。”</Text><Flex className="proposal-actions" justify="end" gap="2"><Button size="1" variant="outline">查看修改</Button><Button size="1" color="red">撤回</Button><Button size="1" color="gray">归档</Button><Button size="1" disabled>暂不采用</Button><Button size="1">采用</Button></Flex></Card>
             {sent ? <Text role="status">Fixture message submitted. No model request.</Text> : null}
           </Flex></ScrollArea></div>
           <form className="composer" onSubmit={event => { event.preventDefault(); setSent(true); setDraft('') }}>
@@ -68,6 +69,7 @@ function Preview() {
           </form>
         </aside>
       </div>
+      <button type="button" className="assistant-launcher" aria-label="Assistant launcher" tabIndex={-1} style={{ pointerEvents: 'none' }} />
     </div>
   </ShellTheme>
 }

@@ -1,11 +1,12 @@
 /**
- * Kimi Web visual adapter for the existing React/Radix shell.
+ * DSH official visual adapter for the existing React/Radix shell.
  * This is the single owner of product appearance. Existing styles.ts retains
  * structural, editor, native-window, plugin-seat and interaction contracts.
  * Do not add screen-specific competing overrides in either stylesheet.
- * Upstream attribution: resources/third-party/kimi-web-MIT.txt.
+ * Upstream attribution: resources/third-party/deepseek-harness-MIT.txt.
+ * The earlier Kimi Web notice remains at resources/third-party/kimi-web-MIT.txt.
  */
-import { SCOPE, tokenStyles } from './tokens.ts'
+import { SCOPE, tokenStyles, SHELL_ACCENTS, ACCENT_SOLIDS } from './tokens.ts'
 
 // Portalled menus share the HTML scope. Plugin surfaces inherit tokens but not
 // our element rules; plugins own their internal layout and component variants.
@@ -22,64 +23,121 @@ export function uiRule(selectors: readonly string[], declarations: string): stri
 }
 const r = uiRule
 
+// Radix portals put `.radix-themes` on the floating node itself. A descendant
+// selector misses that node, so menu and mask rules also match the theme root.
+function withThemeSelf(selectors: readonly string[], declarations: string): string {
+  const forms = selectors.flatMap((selector) => {
+    const pseudo = selector.indexOf('::')
+    const body = pseudo < 0 ? selector : selector.slice(0, pseudo)
+    const after = pseudo < 0 ? '' : selector.slice(pseudo)
+    const descendant = `${SCOPE} ${body}${excludePlugin}${after}`
+    const self = `${SCOPE.replace(' .radix-themes', '')} .radix-themes${body}${excludePlugin}${after}`
+    return [descendant, self]
+  })
+  return `${forms.join(',\n')} { ${declarations} }\n`
+}
+
+const hairline = '0.5px solid var(--dsh-ui-line)'
+// Structural 50%, 100% and 999px circles/pills. The capability note is a rounded
+// rectangle and keeps the superellipse. Plugin surfaces stay outside uiRule.
+const roundShapes = [
+  '.composer-actions .send', '.composer-actions .chat-stop', 'button.send', 'button.chat-stop',
+  '.shell ::-webkit-scrollbar-thumb',
+  '.rt-AvatarRoot', '.rt-AvatarImage', '.rt-AvatarFallback',
+  '.accent-swatch',
+  '.models-credential-dot',
+  '.preset-badge', '.cards-badge',
+  '.activity-dots i', '.panel-activity-dots i',
+  '.activity-shimmer', '.activity-shimmer i',
+  '.assistant-launcher:not(.capability-note)',
+  '.history-commit-dot',
+  '.image-preview-close',
+  '.chat-step-status', '.chat-step-error-dot',
+]
+const cardSurface = 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-xl); box-shadow: none;'
+const menuSelectors = ['.rt-DropdownMenuContent', '.rt-ContextMenuContent', '.rt-SelectContent', '.rt-BaseMenuContent'] as const
+
+// Every saved accent needs its own swatch, and it must show the exact fill the
+// choice produces in the current mode, otherwise the picker offers colours the
+// shell will not use. Generated from the same table as the primary button.
+const accentSwatchStyles = SHELL_ACCENTS.flatMap((accent) => {
+  const selector = `.accent-swatch[data-swatch="${accent}"]${excludePlugin}`
+  return [
+    `${SCOPE} ${selector} { background: ${ACCENT_SOLIDS[accent].light.fill}; }`,
+    `${SCOPE}.dark ${selector} { background: ${ACCENT_SOLIDS[accent].dark.fill}; }`,
+  ]
+}).join('\n')
+
 export const componentStyles = [
   // Global plugin page shares the workspace cell without resizing the manuscript.
   r(['.plugin-workspace'], 'display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); width: 100%; height: 100%; min-height: 0;'),
   r(['.plugin-workspace-writing', '.plugins-page'], 'grid-area: 1 / 1; min-width: 0; min-height: 0;'),
   r(['.plugin-workspace-writing.is-covered'], 'visibility: hidden; pointer-events: none;'),
   r(['.plugins-page'], 'display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--dsh-ui-header-height) minmax(0, 1fr); background: var(--dsh-ui-bg); color: var(--dsh-ui-text);'),
-  r(['.plugins-page-header'], 'padding-inline-start: var(--dsh-ui-space-3); border-bottom: 1px solid var(--dsh-ui-line);'),
+  r(['.plugins-page-header'], `padding-inline-start: var(--dsh-ui-space-3); border-bottom: ${hairline};`),
   r(['.plugins-page-header button', '.plugins-trigger'], '-webkit-app-region: no-drag;'),
   r(['.plugins-page-layout'], 'display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0;'),
-  r(['.plugins-page-nav'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-4); overflow: auto; background: var(--dsh-ui-sidebar); border-right: 1px solid var(--dsh-ui-line);'),
+  r(['.plugins-page-nav'], `display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-4); overflow: auto; background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
   r(['.plugins-page-nav > *'], 'flex-shrink: 0;'),
   r(['.plugins-config-label'], 'margin-top: var(--dsh-ui-space-4);'),
   r(['.plugins-config-links'], 'display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0;'),
-  r(['.plugins-page .plugins-page-nav .plugins-page-link'], 'justify-content: flex-start; width: 100%; margin: 0; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); border-radius: 0; background: transparent; box-shadow: none; color: var(--dsh-ui-text); white-space: normal; text-align: start; height: auto; min-height: var(--dsh-ui-control-md); overflow-wrap: anywhere;'),
+  r(['.plugins-page .plugins-page-nav .plugins-page-link'], 'justify-content: flex-start; width: 100%; margin: 0; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); border: 0; border-radius: var(--dsh-ui-radius-md); background: transparent; box-shadow: none; color: var(--dsh-ui-text); white-space: normal; text-align: start; height: auto; min-height: var(--dsh-ui-control-md); overflow-wrap: anywhere;'),
   r(['.plugins-page .plugins-page-nav .plugins-page-link:hover'], 'background: var(--dsh-ui-hover);'),
   r(['.plugins-page .plugins-page-nav .plugins-page-link[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-5); overflow: auto; min-width: 0; min-height: 0; overflow-wrap: anywhere;'),
+
   // Shell and native chrome. Keep draggable/no-drag regions and native controls.
   `${SCOPE}.shell-theme { --topbar-h: var(--dsh-ui-header-height); --control-h: var(--dsh-ui-control-md); }`,
   r(['.shell'], 'background: var(--dsh-ui-bg); color: var(--dsh-ui-text); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-normal);'),
-  r(['.shell > .chrome'], 'height: var(--topbar-h); background: var(--dsh-ui-bg); border-bottom: 1px solid var(--dsh-ui-line); box-shadow: none;'),
+  r(['.shell > .chrome'], `height: var(--topbar-h); background: var(--dsh-ui-bg); border-bottom: ${hairline}; box-shadow: none;`),
   r(['.workspace-menu-trigger'], 'border-radius: var(--dsh-ui-radius-md); background: transparent; color: var(--dsh-ui-text); box-shadow: none;'),
   r(['.workspace-menu-trigger:hover'], 'background: var(--dsh-ui-hover);'),
   r(['.layout-controls'], 'gap: var(--dsh-ui-space-1);'),
   r(['.layout-controls button[aria-pressed="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.topbar-actions'], 'gap: var(--dsh-ui-space-1);'),
-  r(['.shell .window-controls button.window-close:hover'], 'background: var(--dsh-ui-danger); color: white;'),
+  r(['.shell .window-controls button.window-close:hover'], 'background: var(--dsh-ui-danger); color: #ffffff;'),
 
-  // Primitives. Preserve per-control Radix color overrides (red, gray, etc.).
+  // Primitives. Preserve explicit Radix color overrides (red, gray, and the rest).
   r(['button.rt-BaseButton'], 'font-family: var(--dsh-ui-font-ui); font-weight: var(--dsh-ui-weight-medium); transition: background-color var(--dsh-ui-duration-base) var(--dsh-ui-ease-out), color var(--dsh-ui-duration-base) var(--dsh-ui-ease-out), box-shadow var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
-  r(['button.rt-Button.rt-r-size-1'], 'min-height: var(--dsh-ui-control-sm); border-radius: var(--dsh-ui-radius-sm); font-size: var(--dsh-ui-text-sm);'),
-  r(['button.rt-Button.rt-r-size-2'], 'min-height: var(--dsh-ui-control-md); border-radius: var(--dsh-ui-radius-md); font-size: var(--dsh-ui-text-base);'),
+  r(['button.rt-Button.rt-r-size-1', 'button.rt-Button.rt-r-size-2'], 'min-height: var(--dsh-ui-control-sm); border-radius: var(--dsh-ui-radius-md); font-size: var(--dsh-ui-text-sm);'),
+  r(['button.rt-Button.rt-r-size-2'], 'min-height: var(--dsh-ui-control-md); font-size: var(--dsh-ui-text-base);'),
   r(['button.rt-Button.rt-r-size-3'], 'min-height: var(--dsh-ui-control-lg); border-radius: var(--dsh-ui-radius-lg);'),
   r(['button.rt-IconButton'], 'min-width: var(--dsh-ui-control-sm); min-height: var(--dsh-ui-control-sm); border-radius: var(--dsh-ui-radius-md);'),
-  r(['button.rt-BaseButton.rt-variant-solid'], 'box-shadow: var(--dsh-ui-shadow-xs);'),
-  r(['button.rt-BaseButton.rt-variant-outline'], 'background: var(--dsh-ui-raised); box-shadow: inset 0 0 0 1px var(--dsh-ui-line-strong), var(--dsh-ui-shadow-xs); color: var(--dsh-ui-text);'),
-  r(['button.rt-BaseButton.rt-variant-outline:hover'], 'background: var(--dsh-ui-sunken);'),
+  // Radix accent default is the empty string, so absence and "" are both implicit.
+  // A non-empty color (red, gray, blue, …) keeps that color's own solid styles.
+  r(['button.rt-BaseButton.rt-variant-solid:is(:not([data-accent-color]), [data-accent-color=""]):not(.send):not(.chat-stop):not(:disabled):not([data-disabled])', 'button.primary-action:not(:disabled):not([data-disabled])'], 'background: var(--dsh-ui-brand); color: var(--dsh-ui-on-brand); box-shadow: none;'),
+  r(['button.rt-BaseButton.rt-variant-solid:is(:not([data-accent-color]), [data-accent-color=""]):not(.send):not(.chat-stop):hover:not(:disabled):not([data-disabled])', 'button.primary-action:hover:not(:disabled):not([data-disabled])'], 'background: var(--dsh-ui-brand-hover); color: var(--dsh-ui-on-brand);'),
+  r(['button.rt-BaseButton.rt-variant-solid:is(:not([data-accent-color]), [data-accent-color=""]):not(.send):not(.chat-stop):disabled', 'button.rt-BaseButton.rt-variant-solid:is(:not([data-accent-color]), [data-accent-color=""]):not(.send):not(.chat-stop)[data-disabled]', 'button.primary-action:disabled', 'button.primary-action[data-disabled]'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-muted); box-shadow: none;'),
+  r(['button.rt-BaseButton.rt-variant-outline'], 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); box-shadow: none; color: var(--dsh-ui-text);'),
+  r(['button.rt-BaseButton.rt-variant-outline:hover'], 'background: var(--dsh-ui-hover);'),
   r(['button:disabled', 'button[data-disabled]'], 'cursor: not-allowed;'),
-  r(['.rt-TextFieldRoot', '.rt-TextAreaRoot', '.rt-SelectTrigger'], 'background: var(--dsh-ui-raised); border-radius: var(--dsh-ui-radius-md); box-shadow: inset 0 0 0 1px var(--dsh-ui-line-strong);'),
-  r(['.rt-TextFieldRoot:focus-within', '.rt-TextAreaRoot:focus-within', '.rt-SelectTrigger:focus-visible'], 'box-shadow: inset 0 0 0 1px var(--dsh-ui-accent), 0 0 0 3px var(--dsh-ui-accent-soft);'),
+  r(['.rt-TextFieldRoot', '.rt-TextAreaRoot', '.rt-SelectTrigger'], 'background: var(--dsh-ui-raised); border: 0; border-radius: var(--dsh-ui-radius-md); box-shadow: var(--dsh-ui-elevation-soft);'),
+  r(['.rt-TextFieldRoot:focus-within', '.rt-TextAreaRoot:focus-within', '.rt-SelectTrigger:focus-visible'], 'border: 0; box-shadow: var(--dsh-ui-elevation-focus);'),
   r(['.rt-TextFieldInput::placeholder', '.rt-TextAreaInput::placeholder'], 'color: var(--dsh-ui-muted); opacity: 1;'),
   r(['.rt-Badge'], 'font-weight: var(--dsh-ui-weight-medium); letter-spacing: 0;'),
+  r(['.rt-Card', '.home-card', '.home-entry-card', '.settings-block.rt-Card'], cardSurface),
+  r(['.rt-Card::before', '.rt-Card::after', '.home-entry-card::before', '.home-entry-card::after'], 'backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;'),
+  r(['.home-entry-card:hover', '.home-card:hover'], 'background: var(--dsh-ui-raised); box-shadow: none;'),
+  r(['.home-entry-icon'], 'border-radius: var(--dsh-ui-radius-md);'),
+  r(['.home-hint', '.home-recent-empty'], 'color: var(--dsh-ui-muted);'),
   r(['.icon-button:active', '.editor-tools button:active', '.editor-tools button:hover'], 'transform: none;'),
-  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.chat-step-summary:focus-visible', '.chat-process-toggle:focus-visible', '.icon-button:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px;'),
+  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.chat-step-summary:focus-visible', '.chat-process-toggle:focus-visible', '.icon-button:focus-visible', '.home-entry-card:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px;'),
+  r(['a:not(.rt-BaseButton)'], 'color: var(--dsh-ui-link);'),
 
   // Neutral navigation: location is not a primary action.
-  r(['.shell .sidebar'], 'background: var(--dsh-ui-sidebar); border-right: 0;'),
-  r(['.shell .sidebar .side-title'], 'min-height: var(--dsh-ui-header-height); border-bottom: 1px solid var(--dsh-ui-line);'),
+  r(['.shell .sidebar'], `background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
+  r(['.shell .sidebar .side-title'], `min-height: var(--dsh-ui-header-height); border-bottom: ${hairline};`),
   r(['.shell .sidebar .side-title-label'], 'font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-muted);'),
-  r(['.shell .tree .tree-row'], 'min-height: var(--dsh-ui-space-8); height: auto; align-items: flex-start; padding-block: var(--dsh-ui-space-1); white-space: normal; border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
+  r(['.shell .tree .tree-row', '.home-recent .workspace-row .tree-row'], 'min-height: var(--dsh-ui-space-8); height: auto; align-items: flex-start; padding-block: var(--dsh-ui-space-1); white-space: normal; border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
   r(['.shell .tree .tree-name'], 'min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; line-height: var(--dsh-ui-leading-tight); text-align: start;'),
-  r(['.shell .tree .tree-row:hover'], 'background: var(--dsh-ui-hover);'),
-  r(['.shell .tree .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
+  r(['.shell .tree .tree-row:hover', '.home-recent .workspace-row .tree-row:hover'], 'background: var(--dsh-ui-hover);'),
+  r(['.shell .tree .tree-row[aria-current="page"]', '.home-recent .workspace-row .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.shell .tree .tree-row::before'], 'display: none;'),
-  r(['.shell .tree .tree-row[data-drop="true"]'], 'background: var(--dsh-ui-accent-soft); box-shadow: inset 0 0 0 1px var(--dsh-ui-accent);'),
+  r(['.shell .tree .tree-row[data-drop="true"]'], 'background: var(--dsh-ui-accent-soft); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-accent);'),
   r(['.shell .tree-row-actions'], 'opacity: 1;'),
   r(['.shell .panel-resizer::before'], 'background: var(--dsh-ui-line);'),
   r(['.shell .panel-resizer:hover::before', '.shell .panel-resizer:focus-visible::before', '.shell .panel-resizer[data-separator="active"]::before'], 'background: var(--dsh-ui-accent);'),
+  r(['.search-panel', '.side-search'], 'background: transparent; color: var(--dsh-ui-text);'),
   r(['.search-results-scroll'], 'max-height: min(50dvh, 24rem);'),
   r(['.project-directory'], 'overflow-wrap: anywhere;'),
   r(['.settings-nav-section'], 'display: flex; flex-direction: column; width: 100%; gap: var(--dsh-ui-space-1);'),
@@ -90,105 +148,121 @@ export const componentStyles = [
   // Writing stays in the existing CodeMirror instance. Do not override the
   // author's font, size, line-height, line width or typography preferences.
   r(['.editor'], 'background: var(--dsh-ui-bg); --paper-pad-inline: clamp(24px, 4vw, 64px); --paper-pad-block: 32px;'),
-  r(['.editor-header', '.pinned-header'], 'min-height: var(--dsh-ui-header-height); background: var(--dsh-ui-bg); border-bottom: 1px solid var(--dsh-ui-line);'),
+  r(['.editor-header', '.pinned-header'], `min-height: var(--dsh-ui-header-height); background: var(--dsh-ui-bg); border-bottom: ${hairline};`),
   r(['.editor-doc-title'], 'color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium);'),
   r(['.editor-header [data-testid="paper-wordcount"]', '.editor-header [data-testid="paper-save-state"]'], 'color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); font-variant-numeric: tabular-nums;'),
-  r(['.editor-tools'], 'background: var(--dsh-ui-bg); border-top: 1px solid var(--dsh-ui-line); padding: var(--dsh-ui-space-2) var(--dsh-ui-space-4); gap: var(--dsh-ui-space-2);'),
-  r(['.editor-tools button'], 'min-height: var(--dsh-ui-control-sm); padding-inline: var(--dsh-ui-space-3); background: transparent; border: 1px solid transparent; border-radius: var(--dsh-ui-radius-sm); color: var(--dsh-ui-muted); box-shadow: none;'),
+  r(['.editor-tools'], `background: var(--dsh-ui-bg); border-top: ${hairline}; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-4); gap: var(--dsh-ui-space-2);`),
+  r(['.editor-tools button'], 'min-height: var(--dsh-ui-control-sm); padding-inline: var(--dsh-ui-space-3); background: transparent; border: 0.5px solid transparent; border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-muted); box-shadow: none;'),
   r(['.editor-tools button:hover:not(:disabled)'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text); border-color: transparent; box-shadow: none;'),
   r(['.paper-input .cm-placeholder'], 'color: var(--dsh-ui-muted); font-style: normal;'),
   r(['.ghost.is-loading'], 'color: var(--dsh-ui-muted); background: none; animation: none;'),
 
-  // Conversation: open assistant prose, inset neutral user bubbles and grouped
-  // process disclosures. Flex accommodates optional banners without extra grid rows.
+  // Conversation: open assistant prose, one bubble fill, grouped process rows.
   r(['.shell .chat'], 'display: flex; flex-direction: column; background: var(--dsh-ui-bg);'),
-  r(['.chat-header'], 'flex-shrink: 0; min-height: var(--dsh-ui-header-height); border-bottom: 1px solid var(--dsh-ui-line); background: var(--dsh-ui-bg);'),
+  r(['.chat-header'], `flex-shrink: 0; min-height: var(--dsh-ui-header-height); border-bottom: ${hairline}; background: var(--dsh-ui-bg);`),
   r(['.conversation-select .select-trigger'], 'border: 0; box-shadow: none; background: transparent; font-weight: var(--dsh-ui-weight-medium);'),
   r(['.chat-status', '.composer-mode'], 'font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);'),
-  r(['.chat .archived-conversations'], 'flex-shrink: 0; border-bottom: 1px solid var(--dsh-ui-line);'),
+  r(['.chat .archived-conversations'], `flex-shrink: 0; border-bottom: ${hairline};`),
   r(['.chat > .chat-history'], 'flex: 1 1 0%; min-height: 0; height: auto; overflow: hidden;'),
   r(['.chat-history .rt-ScrollAreaViewport > div > .rt-Flex'], 'gap: var(--dsh-ui-space-5); padding: var(--dsh-ui-space-4);'),
   r(['.chat-row'], 'min-width: 0; max-width: 100%; overflow-wrap: anywhere;'),
   r(['.chat-row.user'], 'align-self: flex-end; width: fit-content; max-width: 92%;'),
-  r(['.chat-row.user > .rt-Card'], 'background: var(--dsh-ui-sunken); border: 0; border-radius: var(--dsh-ui-radius-lg); box-shadow: none; padding: var(--dsh-ui-space-3) var(--dsh-ui-space-4);'),
+  r(['.chat-row.user > .rt-Card'], 'background: var(--dsh-ui-bubble); border: 0; border-radius: var(--dsh-ui-radius-xl); box-shadow: none; padding: var(--dsh-ui-space-3) var(--dsh-ui-space-4);'),
   r(['.chat-row.user > .rt-Card::before', '.chat-row.user > .rt-Card::after'], 'display: none;'),
-  r(['.chat-row.assistant', '.chat-markdown'], 'font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed); color: var(--dsh-ui-text);'),
-  r(['.chat-markdown p'], 'margin-block: 0 var(--dsh-ui-space-3);'),
+  r(['.chat-row.assistant', '.chat-markdown'], 'font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-regular); line-height: var(--dsh-ui-leading-relaxed); color: var(--dsh-ui-text);'),
+  r(['.chat-markdown p'], 'margin-block: 0 var(--dsh-ui-space-4);'),
+  r(['.chat-markdown li'], 'margin-block: var(--dsh-ui-space-2);'),
   r(['.chat-markdown > :last-child'], 'margin-bottom: 0;'),
-  r(['.chat-markdown h1', '.chat-markdown h2'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-strong);'),
-  r(['.chat-markdown h3', '.chat-markdown h4'], 'font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-strong);'),
-  r(['.chat-markdown a'], 'color: var(--dsh-ui-accent-solid); text-underline-offset: 3px;'),
-  r(['.chat-markdown pre', '.chat-step-code', '.chat-step-body pre'], 'background: var(--dsh-ui-surface); border: 1px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-md); font-family: var(--dsh-ui-font-mono);'),
-  r(['.chat-markdown th', '.chat-markdown td'], 'border-color: var(--dsh-ui-line); padding: var(--dsh-ui-space-2);'),
-  r(['.chat-empty-panel'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-1); padding: 0 var(--dsh-ui-space-1) var(--dsh-ui-space-2);'),
-  r(['.chat-empty', '.chat-empty-mode'], 'margin: 0; padding: 0; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); line-height: var(--dsh-ui-leading-relaxed);'),
+  r(['.chat-markdown h1', '.chat-markdown h2'], 'font-size: var(--dsh-ui-text-xl); font-weight: var(--dsh-ui-weight-strong);'),
+  r(['.chat-markdown h3', '.chat-markdown h4'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-strong);'),
+  r(['.chat-markdown a'], 'color: var(--dsh-ui-link); font-weight: var(--dsh-ui-weight-medium); text-decoration: none; text-underline-offset: 3px;'),
+  r(['.chat-markdown a:hover', '.chat-markdown a:focus-visible'], 'text-decoration: underline dotted; text-underline-offset: 3px;'),
+  r(['.chat-markdown code'], 'border-radius: var(--dsh-ui-radius-xs);'),
+  r(['.chat-markdown pre', '.chat-step-code', '.chat-step-body pre'], 'background: var(--dsh-ui-surface); border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); box-shadow: none; font-family: var(--dsh-ui-font-mono);'),
+  r(['.chat-markdown th', '.chat-markdown td'], `border-width: 0.5px; border-style: solid; border-color: var(--dsh-ui-line); padding: var(--dsh-ui-space-2);`),
   r(['.chat-quiet-title'], 'margin: 0; min-width: 0; color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
   r(['.chat-process-toggle'], 'min-height: var(--dsh-ui-space-8); height: auto; padding: var(--dsh-ui-space-1) 0; border: 0; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
-  r(['.chat-process-body'], 'margin-left: var(--dsh-ui-space-1); padding-left: var(--dsh-ui-space-3); border-left: 1px solid var(--dsh-ui-line);'),
+  r(['.chat-process-body'], `margin-left: var(--dsh-ui-space-1); padding-left: var(--dsh-ui-space-3); border-left: ${hairline};`),
   r(['.chat-step:not([open])'], 'height: var(--dsh-ui-space-8);'),
   r(['.chat-step-head'], 'height: var(--dsh-ui-space-8); font-size: var(--dsh-ui-text-sm);'),
-  r(['.chat-step-summary'], 'border-radius: var(--dsh-ui-radius-sm);'),
+  r(['.chat-step-summary'], 'border-radius: var(--dsh-ui-radius-md);'),
   r(['.chat-step-summary:hover'], 'background: var(--dsh-ui-hover);'),
   r(['.chat-step-status.is-ok'], 'background: var(--dsh-ui-success);'),
   r(['.chat-step-status.is-error', '.chat-step-error-dot'], 'background: var(--dsh-ui-danger);'),
 
   // A single composer surface, not an input box plus a separate configuration bar.
-  r(['.chat > .composer'], 'flex-shrink: 0; width: auto; margin: var(--dsh-ui-space-2) var(--dsh-ui-space-2) var(--dsh-ui-space-3); padding: var(--dsh-ui-space-2); background: var(--dsh-ui-raised); border: 1px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-xl); box-shadow: var(--dsh-ui-shadow-sm); transition: border-color var(--dsh-ui-duration-base) var(--dsh-ui-ease-out), box-shadow var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
-  r(['.chat > .composer:focus-within'], 'border-color: var(--dsh-ui-accent); box-shadow: 0 0 0 3px var(--dsh-ui-accent-soft);'),
+  r(['.chat > .composer'], 'flex-shrink: 0; width: auto; margin: var(--dsh-ui-space-2) var(--dsh-ui-space-2) var(--dsh-ui-space-3); padding: var(--dsh-ui-space-2); background: var(--dsh-ui-raised); border: 0; border-radius: var(--dsh-ui-radius-panel); box-shadow: var(--dsh-ui-elevation-soft); transition: box-shadow var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
+  r(['.chat > .composer:focus-within'], 'border: 0; box-shadow: var(--dsh-ui-elevation-focus);'),
   r(['.composer .rt-TextAreaRoot', '.composer .rt-TextAreaRoot:focus-within'], 'min-height: 0; padding: 0; background: transparent; border: 0; box-shadow: none;'),
   r(['.composer .rt-TextAreaRoot::before', '.composer .rt-TextAreaRoot::after'], 'display: none;'),
   r(['.composer .rt-TextAreaInput'], 'min-height: var(--dsh-ui-control-sm); max-height: min(240px, 32dvh); padding: var(--dsh-ui-space-1); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed);'),
   r(['.composer-toolbar'], 'gap: var(--dsh-ui-space-2); min-height: var(--dsh-ui-space-8);'),
+  // Voice input is an optional plugin surface: idle it is one compact trigger beside send,
+  // an active capture takes the first wrapped line. `order` and `flex-basis` are structural
+  // placement, not a new visual scale; an absent plugin contributes no flex item at all.
+  r(['.composer-voice'], 'display: flex; align-items: center; flex-shrink: 0; min-width: 0;'),
+  r(['.composer-voice:not(:has(> div:not(:empty)))'], 'display: none;'),
+  r(['.composer-voice-expanded'], 'order: -1; flex-basis: 100%;'),
   r(['.composer-model'], 'min-width: 0;'),
-  r(['.composer-model .select-trigger'], 'min-height: var(--dsh-ui-control-sm); max-width: 100%; box-shadow: none; background: transparent; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
-  r(['.composer-actions .send'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); min-width: var(--dsh-ui-space-8); min-height: var(--dsh-ui-space-8); margin: 0; border-radius: var(--dsh-ui-radius-full); background: var(--dsh-ui-accent-solid); color: var(--dsh-ui-on-accent);'),
-  r(['.composer-actions .send:hover:not(:disabled)'], 'background: var(--dsh-ui-accent-hover);'),
-  r(['.composer-actions .send:disabled'], 'background: transparent; color: var(--dsh-ui-text); opacity: 1; box-shadow: inset 0 0 0 1px var(--dsh-ui-line-strong);'),
-  r(['.composer-actions .chat-stop'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); margin: 0; border-radius: var(--dsh-ui-radius-full); background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger);'),
+  r(['.composer-model .select-trigger'], 'min-height: var(--dsh-ui-control-sm); max-width: 100%; border: 0; box-shadow: none; background: transparent; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
+  r(['button.rt-BaseButton.send', '.composer-actions .send'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); min-width: var(--dsh-ui-space-8); min-height: var(--dsh-ui-space-8); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; background: var(--dsh-ui-brand); color: var(--dsh-ui-on-brand); box-shadow: none; transition: none;'),
+  r(['button.rt-BaseButton.send:hover:not(:disabled)', '.composer-actions .send:hover:not(:disabled)'], 'background: var(--dsh-ui-brand-hover); color: var(--dsh-ui-on-brand);'),
+  r(['button.rt-BaseButton.send:disabled', '.composer-actions .send:disabled'], 'background: transparent; color: var(--dsh-ui-text); opacity: 1; box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
+  r(['button.rt-BaseButton.chat-stop', '.composer-actions .chat-stop'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); box-shadow: none; transition: none;'),
 
   // Review and approvals remain visually distinct from routine tool logs.
-  r(['.proposal', '.proposal-card'], 'background: var(--dsh-ui-raised); border: 1px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); box-shadow: var(--dsh-ui-shadow-xs); padding: var(--dsh-ui-space-4);'),
+  r(['.proposal', '.proposal-card'], 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-xl); box-shadow: none; padding: var(--dsh-ui-space-4);'),
   r(['.proposal-card > strong', '.proposal > strong'], 'font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-text);'),
   r(['.proposal-actions'], 'gap: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-2);'),
-  r(['.proposal-card pre'], 'max-height: min(48dvh, 28rem); border-radius: var(--dsh-ui-radius-md); background: var(--dsh-ui-surface); color: var(--dsh-ui-text); scrollbar-gutter: stable;'),
-  r(['.proposal-conflict'], 'background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); border: 1px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-md); padding: var(--dsh-ui-space-3);'),
+  r(['.proposal-card pre'], 'max-height: min(48dvh, 28rem); border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); background: var(--dsh-ui-surface); color: var(--dsh-ui-text); box-shadow: none; scrollbar-gutter: stable;'),
+  r(['.proposal-conflict'], 'background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); border: 1px solid var(--dsh-ui-danger); border-radius: var(--dsh-ui-radius-md); padding: var(--dsh-ui-space-3);'),
   r(['.chat-row.notice'], 'padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); background: var(--dsh-ui-surface); border-left: 2px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-sm); color: var(--dsh-ui-muted);'),
 
-  // Portals: neutral menus, bounded scroll, consistent keyboard focus.
-  r(['.rt-DropdownMenuContent', '.rt-ContextMenuContent', '.rt-SelectContent'], 'background: var(--dsh-ui-raised); border: 1px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); box-shadow: var(--dsh-ui-shadow-lg);'),
-  r(['.rt-DropdownMenuItem', '.rt-ContextMenuItem', '.rt-SelectItem'], 'min-height: var(--dsh-ui-space-8); border-radius: var(--dsh-ui-radius-sm); font-size: var(--dsh-ui-text-sm);'),
+  // Portals. Menus keep the official translucent material. Modal masks stay sharp.
+  withThemeSelf(menuSelectors, 'background: var(--dsh-ui-menu-fill); border: 0; border-radius: var(--dsh-ui-radius-lg); box-shadow: var(--dsh-ui-elevation-panel); backdrop-filter: var(--dsh-ui-menu-blur); -webkit-backdrop-filter: var(--dsh-ui-menu-blur);'),
+  r(['.rt-DropdownMenuItem', '.rt-ContextMenuItem', '.rt-SelectItem', '.rt-BaseMenuItem'], 'min-height: var(--dsh-ui-control-sm); border-radius: var(--dsh-ui-radius-md); font-size: var(--dsh-ui-text-sm);'),
+  r(['.rt-BaseMenuSeparator', '.rt-DropdownMenuSeparator', '.rt-ContextMenuSeparator'], 'height: 0.5px; background: var(--dsh-ui-line);'),
   r(['.rt-DropdownMenuItem[data-highlighted]:not([data-accent-color="red"])', '.rt-ContextMenuItem[data-highlighted]:not([data-accent-color="red"])', '.rt-SelectItem[data-highlighted]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
-  r(['.rt-DialogContent', '.rt-AlertDialogContent'], 'background: var(--dsh-ui-raised); border: 1px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-xl); box-shadow: var(--dsh-ui-shadow-xl);'),
-  r(['.palette-content'], 'border: 1px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-xl); background: var(--dsh-ui-raised); box-shadow: var(--dsh-ui-shadow-xl);'),
+  withThemeSelf(['.rt-BaseDialogOverlay', '.rt-BaseDialogOverlay::before', '.palette-overlay', '.file-dialog-overlay'], 'backdrop-filter: none; -webkit-backdrop-filter: none;'),
+  withThemeSelf(['.rt-BaseDialogOverlay::before', '.palette-overlay', '.file-dialog-overlay'], 'background: var(--dsh-ui-scrim);'),
+  r(['.rt-DialogContent', '.rt-AlertDialogContent', '.file-dialog'], 'background: var(--dsh-ui-raised); border: 0; border-radius: var(--dsh-ui-radius-panel); box-shadow: var(--dsh-ui-elevation-prominent);'),
+  r(['.palette-content'], 'border: 0; border-radius: var(--dsh-ui-radius-panel); background: var(--dsh-ui-raised); box-shadow: var(--dsh-ui-elevation-prominent);'),
+  r(['.palette-item', '[cmdk-item]'], 'border-radius: var(--dsh-ui-radius-md);'),
   r(['.palette-item[data-selected="true"]', '[cmdk-item][data-selected="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.palette-item-icon', '.palette-item[data-selected="true"] .palette-item-icon'], 'background: transparent; color: var(--dsh-ui-muted);'),
-  r(['.palette-footer'], 'background: var(--dsh-ui-surface); border-top: 1px solid var(--dsh-ui-line); color: var(--dsh-ui-muted);'),
+  r(['.palette-footer'], `background: var(--dsh-ui-surface); border-top: ${hairline}; color: var(--dsh-ui-muted);`),
+  r(['.history-commit'], 'border-radius: var(--dsh-ui-radius-md);'),
+  r(['.rt-AvatarRoot', '.rt-AvatarImage', '.rt-AvatarFallback'], 'border-radius: 50%; corner-shape: round;'),
 
   // Settings are a settings window, not a collection of differently themed cards.
-  r(['.settings-nav'], 'background: var(--dsh-ui-sidebar); border-right: 1px solid var(--dsh-ui-line); padding: var(--dsh-ui-space-5) var(--dsh-ui-space-3);'),
+  r(['.settings-nav'], `background: var(--dsh-ui-sidebar); border-right: ${hairline}; padding: var(--dsh-ui-space-5) var(--dsh-ui-space-3);`),
   r(['.settings-nav .settings-tab'], 'min-height: var(--dsh-ui-control-md); border-radius: var(--dsh-ui-radius-md); font-size: var(--dsh-ui-text-sm);'),
   r(['.settings-nav .settings-tab[data-state="active"]', '.settings-nav .settings-tab.active'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
-  r(['.settings-header'], 'background: var(--dsh-ui-raised); border-bottom: 1px solid var(--dsh-ui-line);'),
+  r(['.settings-header'], `background: var(--dsh-ui-raised); border-bottom: ${hairline};`),
   r(['.settings-header-title', '.settings-nav h2'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-medium);'),
   r(['.settings-block-title', '.settings-page h3'], 'font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium);'),
   r(['.settings-dialog .settings-row'], 'min-height: 56px; padding-block: var(--dsh-ui-space-3);'),
   r(['.settings-row-description'], 'font-size: var(--dsh-ui-text-sm); color: var(--dsh-ui-muted);'),
-  r(['.settings-dialog .settings-block + .settings-block'], 'border-top: 1px solid var(--dsh-ui-line); padding-top: var(--dsh-ui-space-5);'),
-  r(['.settings-segmented'], 'background: var(--dsh-ui-sunken); border-radius: var(--dsh-ui-radius-md);'),
+  r(['.settings-dialog .settings-block + .settings-block'], `border-top: ${hairline}; padding-top: var(--dsh-ui-space-5);`),
+  r(['.settings-segmented'], 'background: var(--dsh-ui-sunken); border-radius: var(--dsh-ui-radius-lg); box-shadow: none;'),
+  r(['.settings-segmented button[aria-pressed="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); box-shadow: none;'),
   r(['.settings-content.is-active .settings-page'], 'animation: none;'),
-  r(['.history-commit[aria-current="true"]', '.history-commit[aria-selected="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
+  r(['.history-commit[aria-current="true"]', '.history-commit[aria-selected="true"]', '.history-commit[data-selected="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
 
   // Shared scroll and activity grammar. No perpetual decorative shimmer.
   r(['.activity-dots.is-typing i'], 'animation-name: shell-activity-pulse;'),
   r(['.panel-skeleton i::after'], 'display: none;'),
   r(['.activity-shimmer'], 'height: 2px; background: var(--dsh-ui-line);'),
-  r(['.shell > .assistant-launcher'], 'background: var(--dsh-ui-raised); border: 1px solid var(--dsh-ui-line); box-shadow: var(--dsh-ui-shadow-md); animation: none;'),
-  r(['.shell > .assistant-launcher:not(.capability-note):hover'], 'transform: none; background: var(--dsh-ui-hover); box-shadow: var(--dsh-ui-shadow-md);'),
+  r(['.shell > .assistant-launcher'], 'background: var(--dsh-ui-raised); border: 0; box-shadow: var(--dsh-ui-elevation-panel); animation: none;'),
+  r(['.shell > .assistant-launcher:not(.capability-note):hover'], 'transform: none; background: var(--dsh-ui-hover); box-shadow: var(--dsh-ui-elevation-panel);'),
   r(['.shell ::-webkit-scrollbar'], 'width: 6px; height: 6px;'),
-  r(['.shell ::-webkit-scrollbar-thumb'], 'background: var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-full);'),
+  r(['.shell ::-webkit-scrollbar-thumb'], 'background: var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-full); corner-shape: round;'),
   r(['.shell ::-webkit-scrollbar-thumb:hover'], 'background: var(--dsh-ui-muted);'),
-  r(['.shell .chat.chat-overlay', '.shell > .sidebar-overlay'], 'border: 1px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-xl); box-shadow: var(--dsh-ui-shadow-xl);'),
-  r(['.shell > .chat-overlay-dismiss', '.shell > .side-overlay-dismiss'], 'background: var(--dsh-ui-scrim);'),
+  r(['.shell .chat.chat-overlay', '.shell > .sidebar-overlay'], 'border: 0; border-radius: var(--dsh-ui-radius-panel); box-shadow: var(--dsh-ui-elevation-prominent);'),
+  r(['.shell > .chat-overlay-dismiss', '.shell > .side-overlay-dismiss'], 'background: var(--dsh-ui-scrim); backdrop-filter: none; -webkit-backdrop-filter: none;'),
+
+  // Superellipse only where the engine supports it. Circles and pills stay round.
+  `@supports (corner-shape: superellipse(1.5)) {\n${r([':where(:not([data-dsh-plugin-surface], [data-dsh-plugin-surface] *))', ':where(:not([data-dsh-plugin-surface], [data-dsh-plugin-surface] *))::before', ':where(:not([data-dsh-plugin-surface], [data-dsh-plugin-surface] *))::after'], 'corner-shape: superellipse(1.5);')}${r(roundShapes, 'corner-shape: round;')}}`,
 ].join('\n')
 
 export const responsiveStyles = `
@@ -198,7 +272,7 @@ export const responsiveStyles = `
 }
 @media (max-width: 760px) {
   ${r(['.plugins-page-layout'], 'grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);')}
-  ${r(['.plugins-page-nav'], 'padding: var(--dsh-ui-space-3); max-height: 34dvh; border-right: 0; border-bottom: 1px solid var(--dsh-ui-line); gap: var(--dsh-ui-space-2);')}
+  ${r(['.plugins-page-nav'], `padding: var(--dsh-ui-space-3); max-height: 34dvh; border-right: 0; border-bottom: ${hairline}; gap: var(--dsh-ui-space-2);`)}
   ${r(['.plugins-config-label'], 'margin-top: 0;')}
   ${r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-3);')}
   ${r(['.composer-mode'], 'max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;')}
@@ -215,13 +289,13 @@ export const responsiveStyles = `
 @media (forced-colors: active) {
   ${r(['button:focus-visible', '[tabindex]:focus-visible'], 'outline: 2px solid Highlight;')}
   ${r(['.tree-row[aria-current="page"]', '.settings-tab[data-state="active"]'], 'outline: 1px solid Highlight; outline-offset: -1px;')}
-  ${r(['.composer', '.proposal-card'], 'border: 1px solid CanvasText;')}
+  ${r(['.composer', '.proposal-card', '.rt-DialogContent'], 'border: 1px solid CanvasText;')}
 }
 `
 
 const officialResourceStyles = `
-${r(['.official-resource-panel'], 'position: absolute; inset: 52px 0 0 auto; width: min(680px, 100%); overflow: hidden; background: var(--dsh-ui-bg); border-left: 1px solid var(--dsh-ui-line); box-shadow: var(--dsh-ui-shadow-lg);')}
+${r(['.official-resource-panel'], `position: absolute; inset: 52px 0 0 auto; width: min(680px, 100%); overflow: hidden; background: var(--dsh-ui-bg); border-left: ${hairline}; box-shadow: none;`)}
 ${r(['.official-resource-panel[hidden]'], 'display: none;')}
 `
 
-export const designSystemStyles = `${tokenStyles}\n${componentStyles}\n${responsiveStyles}\n${officialResourceStyles}`
+export const designSystemStyles = `${tokenStyles}\n${componentStyles}\n${responsiveStyles}\n${officialResourceStyles}\n${accentSwatchStyles}`

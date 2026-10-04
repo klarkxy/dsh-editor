@@ -34,9 +34,9 @@ for (const target of [projectsRoot, home, output, targetWorkspace]) {
   }
 }
 
-resolveDshInstallation('0.1.7-rc.2')
+resolveDshInstallation('0.2.0-rc.2')
 const template = resolve(devRoot, 'desktop-profile-template')
-const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.1.7-rc.2')
+const runtime = resolve(devRoot, 'desktop-dsh-runtime-0.2.0-rc.2')
 const cli = resolve(runtime, 'lib', 'bin.js')
 
 const failures = []
@@ -335,6 +335,8 @@ try {
   if (darkStored !== 'dark') failures.push(`localStorage theme did not persist dark; got ${darkStored}`)
   const darkToggle = await page.getByRole('button', { name: /主题（当前深色）/ }).count()
   if (!darkToggle) failures.push('theme toggle did not re-label itself as 当前深色 after switching to dark')
+  await page.waitForFunction(() => document.querySelector('.shell-theme')?.classList.contains('dark'))
+  await page.waitForTimeout(350)
   await page.screenshot({ path: resolve(output, '05-editor-dark.png') })
 
   await page.reload({ waitUntil: 'domcontentloaded' })
@@ -365,11 +367,13 @@ try {
   await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'light')
   await page.waitForFunction(() => globalThis.localStorage.getItem('dsh-editor.theme') === 'light')
 
-  // Chat: open via the launcher, focus composer via Ctrl+L, verify the placeholder.
+  // Chat: open via the launcher, focus composer via the web binding
+  // (DSH 0.2.0 matches platform bindings strictly; web is Ctrl+Alt+L, while
+  // bare Ctrl+L is the desktop-only binding).
   const launcher = page.getByRole('button', { name: '打开写作搭档' })
   if (await launcher.isVisible().catch(() => false)) await launcher.click()
   await page.locator('aside.chat').waitFor({ state: 'visible', timeout: 10_000 })
-  await page.keyboard.press('Control+l')
+  await page.keyboard.press('Control+Alt+l')
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '输入消息')
   const composer = page.getByRole('textbox', { name: '输入消息' })
   if (await composer.inputValue() !== '') failures.push('chat composer should start empty')
@@ -377,17 +381,18 @@ try {
   if (placeholder !== '问问这篇稿、审一段、提议一处修改……') {
     failures.push(`composer placeholder drifted: ${placeholder}`)
   }
-  // Type a draft; Ctrl+B closes sidebar, Ctrl+\\ focus mode hides both sidebars.
+  // Type a draft; Ctrl+Alt+B closes sidebar, Ctrl+Alt+F focus mode hides both
+  // sidebars (web bindings; DSH 0.2.0 matches platform bindings strictly).
   await composer.fill('不要丢失的草稿')
-  await page.keyboard.press('Control+b')
+  await page.keyboard.press('Control+Alt+b')
   await page.locator('.sidebar').waitFor({ state: 'detached' })
-  await page.keyboard.press('Control+\\')
+  await page.keyboard.press('Control+Alt+f')
   await page.locator('.shell.focus-mode').waitFor({ state: 'visible' })
   await page.screenshot({ path: resolve(output, '06-focus-mode.png') })
-  // In focus mode, Ctrl+B exits focus mode AND reopens the sidebar in one
+  // In focus mode, Ctrl+Alt+B exits focus mode AND reopens the sidebar in one
   // keystroke (root.ts:231). Reusing it is more realistic than toggling
   // focus mode off and then asking the test to find a hidden sidebar.
-  await page.keyboard.press('Control+b')
+  await page.keyboard.press('Control+Alt+b')
   await page.locator('.shell.focus-mode').waitFor({ state: 'detached' })
   await page.locator('.sidebar').waitFor({ state: 'visible' })
   if (await composer.inputValue() !== '不要丢失的草稿') failures.push('composer draft lost across focus toggle')

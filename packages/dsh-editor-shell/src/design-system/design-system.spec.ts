@@ -7,7 +7,7 @@ describe('official web design contracts', () => {
   it('checks token parity, contrast, isolation and scope lifecycle', () => {
     const script = fileURLToPath(new URL('../../../../scripts/check-ui-design.mjs', import.meta.url))
     const output = execFileSync(process.execPath, ['--experimental-strip-types', script], { encoding: 'utf8' })
-    expect(output).toContain('13 passed')
+    expect(output).toContain('14 passed')
   })
   it('defaults to blue without overwriting existing accent preferences', () => {
     const values = new Map<string, string>()

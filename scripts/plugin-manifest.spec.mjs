@@ -15,13 +15,15 @@ import {
   publicPackages,
   resolveComposition,
 } from './plugin-manifest.mjs'
-import { desktopComposition } from './desktop-compositions.mjs'
+import { DEFAULT_OFF_OFFICIAL_ENTRIES, desktopComposition } from './desktop-compositions.mjs'
 import { packageCopyFilter } from './package-copy.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const aiPackages = new Set(['ai-services', 'current-title', 'memory', 'model-center', 'mood', 'recap', 'self-improvement'].map(name => '@klarkxy/dsh-' + name))
 const aiEntries = new Set(['ai-services', 'current-title', 'memory', 'model-center', 'mood', 'recap', 'self-improvement'])
 const withoutAi = names => names.filter(name => !aiPackages.has(name) && name !== '@klarkxy/dsh-fusion')
+/** Official entries the app manages itself, so they are not part of the first-party capability set. */
+const officialEntries = new Set(DEFAULT_OFF_OFFICIAL_ENTRIES)
 
 describe('desktop dev prepare', () => {
   it('uses a single runtime writer for Editor plugin switches', () => {
@@ -131,7 +133,7 @@ describe('plugin manifests and composition resolver', () => {
       expect(item.id in labels).toBe(true)
       expect(item.label).toBe(labels[item.id])
       const { id: _id, label: _label, ...rest } = item
-      expect({ ...rest, packages: withoutAi(rest.packages).filter(name => name !== '@klarkxy/dsh-fusion'), bundles: withoutAi(rest.bundles).filter(name => name !== '@klarkxy/dsh-fusion'), disabledEntries: rest.disabledEntries.filter(id => !aiEntries.has(id) && id !== 'fusion') }).toEqual(capability)
+      expect({ ...rest, packages: withoutAi(rest.packages).filter(name => name !== '@klarkxy/dsh-fusion'), bundles: withoutAi(rest.bundles).filter(name => name !== '@klarkxy/dsh-fusion'), disabledEntries: rest.disabledEntries.filter(id => !aiEntries.has(id) && id !== 'fusion' && !officialEntries.has(id)) }).toEqual(capability)
     }
     const stripped = resolved.map(({ id: _id, label: _label, ...rest }) => rest)
     for (let index = 1; index < stripped.length; index += 1) {
@@ -159,6 +161,14 @@ describe('plugin manifests and composition resolver', () => {
     const owner = manifests.find(item => item.name === '@klarkxy/dsh-fusion')
     expect(owner.entries).toEqual([expect.objectContaining({ id: 'fusion', defaultEnabled: false })])
     expect(readFileSync(join(owner.dir, 'cordis.patch.yml'), 'utf8')).toMatch(/id: fusion[\s\S]*?disabled: true/)
+  })
+
+  it('ships voice input installed but off, so the composer stays clean until the author enables it', async () => {
+    const composition = await desktopComposition()
+    expect(composition.bundles).toContain('@deepseek-ai/dsh-experimental-voice-input-bundle')
+    expect([...DEFAULT_OFF_OFFICIAL_ENTRIES]).toEqual(['speech-to-text', 'speech-to-text-sensevoice', 'api-speech-to-text', 'ui-voice-input'])
+    for (const id of DEFAULT_OFF_OFFICIAL_ENTRIES) expect(composition.disabledEntries).toContain(id)
+    expect(composition.enabledEntries ?? []).not.toContain('ui-voice-input')
   })
 
   it('preinstalls five optional AI features and the essential model configuration carrier', async () => {

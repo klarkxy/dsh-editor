@@ -32,6 +32,8 @@ export function useOfficialShortcut(id: string): string | undefined {
 type InputOwner = {
   getSelection(): { start: number; end: number; length: number }
   locked: boolean
+  /** The plugin reports an expanded capture row; the shell only repositions the slot. */
+  expanded: boolean
   onActiveChange(active: boolean): void
   onDraft(text: string): void
   onBind(actions: OfficialInputActions | null): void
@@ -51,9 +53,15 @@ function NativeInputSurface(props: InputOwner & {
     return () => props.onBind(null)
   }, [props.inputActions, props.onBind])
   useLayoutEffect(() => { if (draft !== undefined) props.onDraft(draft) }, [draft, props.onDraft])
-  return <div data-dsh-plugin-surface="">{props.renderSlot('conversation.input.activity', {
-    locked: props.locked, onActiveChange: props.onActiveChange,
-  })}</div>
+  /* One mount point, two placements: the idle trigger is a compact item in the composer
+   * toolbar, while an active capture claims the full width above it. Reparenting would
+   * remount the plugin and drop a running recording, so only the class changes. The
+   * shell owns the layout box; the plugin keeps its own surface and internals. */
+  return <div className={props.expanded ? 'composer-voice composer-voice-expanded' : 'composer-voice'}>
+    <div data-dsh-plugin-surface="" style={{ display: 'contents' }}>{props.renderSlot('conversation.input.activity', {
+      locked: props.locked, onActiveChange: props.onActiveChange,
+    })}</div>
+  </div>
 }
 
 /** The renderer supplies SessionProvider; its scope owns the official input actions. */

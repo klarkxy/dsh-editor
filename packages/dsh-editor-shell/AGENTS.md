@@ -1,6 +1,6 @@
 # Shell UI: preserve the design contract
 
-先读仓库根目录 `AGENTS.md`、`docs/ui-agent-guide.md`、`docs/ui-design.md`。
+先读 `docs/ui-agent-guide.md` 和 `docs/ui-design.md`。
 本文件适用于 shell 全包，不只是 `src/client/ui/`。
 
 ## 修改落点
@@ -18,7 +18,8 @@
 
 ## 必须保持
 
-- 外观选择器使用 `uiRule()`，保留 `html[data-dsh-ui="kimi-web"]` 与插件排除边界。Portal 必须继承所在 Radix Theme 的主题，不凭全局 DOM 猜主题。
+- 外观选择器使用 `uiRule()`，保留 `html[data-dsh-ui="dsh-official"]` 与插件排除边界。Portal 必须继承所在 Radix Theme 的主题，不凭全局 DOM 猜主题。
+- 主按钮使用中性 brand。链接、焦点和业务状态使用 accent，七种已保存的 accent 偏好一起变化。平面卡片和分割线是 0.5px 且无阴影。菜单、对话框和 composer 只用含 0.5px 描边的 elevation。菜单模糊只留在现有菜单规则。模态遮罩不模糊。
 - `scope.ts` 的引用计数、卸载恢复、StrictMode 行为不变；不全局重新编号 Radix spacing 和 z-index。
 - 位置选中用中性高亮；强调色服务操作/焦点；错误、冲突和待确认不能仅靠颜色或被折叠隐藏。
 - 普通助手文本不层层套卡片；执行记录可折叠；提案/审批是明确的决策区域。

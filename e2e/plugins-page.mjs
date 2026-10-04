@@ -5,12 +5,12 @@ import { _electron as electron } from 'playwright'
 
 const root = resolve(import.meta.dirname, '..')
 const before = process.argv.includes('--before')
-const stage = before ? 'before' : 'after'
+const stage = process.env.PLUGINS_UI_STAGE || (before ? 'before' : 'after')
 const output = resolve(root, '.artifacts/plugin-page', stage)
 const home = resolve(root, '.dev', 'plugin-page-' + stage + '-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
   DSH_DESKTOP_NODE_PATH: process.execPath,
-  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.1.7-rc.2/lib/bin.js'),
+  DSH_DESKTOP_CLI_PATH: resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js'),
   DSH_DESKTOP_PROFILE_TEMPLATE: resolve(root, '.dev/desktop-profile-template'),
   DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
   DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
@@ -74,11 +74,12 @@ try {
     await pluginPage.getByTestId('plugins-settings').waitFor()
     await pluginPage.getByTestId('plugins-writing-presets').waitFor()
     await shot(theme + '-manage-1440')
-    const config = pluginPage.locator('.plugins-page-nav').getByRole('button', { name: '知乎资料', exact: true })
+    const config = pluginPage.locator('.plugins-page-nav').getByRole('button', { name: /^(知乎资料|知乎)$/ })
+    assert.equal(await config.count(), 1, 'Zhihu configuration must not expose a duplicate empty entry')
     await config.click()
-    await pluginPage.getByRole('textbox', { name: 'Access Secret', exact: true }).waitFor()
+    await pluginPage.getByLabel('Access Secret', { exact: true }).waitFor()
     await shot(theme + '-zhihu')
-    await pluginPage.locator('.plugins-page-nav').getByRole('button', { name: '网络搜索', exact: true }).click()
+    await pluginPage.locator('.plugins-page-nav').getByRole('button', { name: /^(网络搜索|@klarkxy\/dsh-web-search-manager)$/ }).click()
     await pluginPage.getByTestId('web-search-settings').waitFor()
     await shot(theme + '-web-search')
     if (theme === '浅色') {
@@ -124,10 +125,46 @@ try {
     const editor = page.locator('.cm-content[contenteditable="true"]').first()
     await editor.waitFor()
     const paper = page.getByTestId('paper-editor')
+    const writingSettings = await openSettings()
+    await writingSettings.getByRole('tab', {name:'写作',exact:true}).click()
+    for (const name of ['字号', '行距']) {
+      const slider = writingSettings.getByRole('slider', {name,exact:true})
+      await slider.focus()
+      for (let i = 0; i < 2; i++) {
+        const previous = await slider.getAttribute('aria-valuenow')
+        await page.keyboard.press('ArrowRight')
+        await page.waitForFunction(({name,previous}) => [...document.querySelectorAll('[role="slider"]')].some(el => el.getAttribute('aria-label') === name && el.getAttribute('aria-valuenow') !== previous), {name,previous})
+      }
+    }
+    for (const [name, option] of [['字体','无衬线'], ['稿纸宽度','窄栏']]) {
+      await writingSettings.getByRole('combobox', {name,exact:true}).click()
+      await page.getByRole('option', {name:option,exact:true}).click()
+    }
+    const paragraphFocus = writingSettings.getByRole('switch', {name:'聚焦当前段落',exact:true})
+    if (!await paragraphFocus.isChecked()) await paragraphFocus.click()
+    await page.waitForFunction(() => document.querySelector('[role="switch"][aria-label="聚焦当前段落"]')?.getAttribute('aria-checked') === 'true')
+    await closeSettings()
+    await page.waitForFunction(() => {
+      const paper = document.querySelector('[data-testid="paper-editor"]')
+      if (!paper) return false
+      const style = getComputedStyle(paper)
+      return style.getPropertyValue('--paper-font-size').trim() === '19px'
+        && style.getPropertyValue('--paper-line-height').trim() === '2.1'
+        && style.getPropertyValue('--paper-max-width').trim() === '60ch'
+        && style.getPropertyValue('--paper-font-family').includes('sans-serif')
+    })
+    const typography = await paper.evaluate(el => {
+      const style = getComputedStyle(el)
+      return Object.fromEntries(['--paper-font-size','--paper-line-height','--paper-font-family','--paper-max-width'].map(name => [name, style.getPropertyValue(name).trim()]))
+    })
+    assert.equal(typography['--paper-font-size'], '19px')
+    assert.equal(typography['--paper-line-height'], '2.1')
+    assert.equal(typography['--paper-max-width'], '60ch')
+    assert.match(typography['--paper-font-family'], /sans-serif/)
     await paper.evaluate(el => {
       const view = el.__cmView
       if (!view) throw new Error('Missing actual CodeMirror view')
-      view.dispatch({changes:{from:0,to:view.state.doc.length,insert:'插件页面切换应保留正文。\n'.repeat(100)},selection:{anchor:120}})
+      view.dispatch({changes:{from:0,to:view.state.doc.length,insert:'# 长文阅读验收\n\n' + '插件页面切换应保留正文。这里是阅读中的普通段落，包含 **重点** 和 `代码`。\n\n'.repeat(100)},selection:{anchor:120}})
     })
     const chat = page.locator('.composer textarea')
     await chat.fill('保留的聊天草稿')
@@ -140,6 +177,48 @@ try {
       globalThis.__pluginTestScroll=view.scrollDOM.scrollTop
       globalThis.__pluginTestCursor=view.state.selection.main.anchor
     })
+    for (const label of [/主题（当前深色）/, /主题（当前浅色）/]) {
+      await page.getByRole('button', {name:label}).click()
+      await page.waitForFunction(label => document.documentElement.getAttribute('data-theme') === label, label.source.includes('浅色') ? 'dark' : 'light')
+      assert(await editor.evaluate(el => el === globalThis.__pluginTestEditor))
+      assert.deepEqual(await paper.evaluate(el => {
+        const style = getComputedStyle(el)
+        return Object.fromEntries(['--paper-font-size','--paper-line-height','--paper-font-family','--paper-max-width'].map(name => [name, style.getPropertyValue(name).trim()]))
+      }), typography)
+      assert.equal(await paper.evaluate(el => el.__cmView.state.selection.main.anchor), 120)
+      const theme = label.source.includes('浅色') ? 'dark' : 'light'
+      await page.waitForFunction(theme => document.documentElement.getAttribute('data-theme') === theme && document.querySelector('.shell-theme')?.classList.contains(theme), theme)
+      await page.waitForTimeout(350)
+      for (const focus of ['reading','typing']) {
+        if (focus === 'typing') await editor.focus()
+        else await chat.focus()
+        await page.waitForTimeout(100)
+        const readability = await paper.evaluate(el => {
+          const view = el.__cmView
+          const line = [...view.contentDOM.querySelectorAll('.cm-paper-dim')].find(node => node.textContent.trim())
+          if (!line) throw new Error('Focus paragraph scenario has no inactive visible paragraph')
+          const style = getComputedStyle(line)
+          let surface = el
+          while (surface && getComputedStyle(surface).backgroundColor === 'rgba(0, 0, 0, 0)') surface = surface.parentElement
+          const rgb = value => value.match(/[\d.]+/g).slice(0,3).map(Number)
+          const luminance = channels => channels.map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum,value,index) => sum + value * [.2126,.7152,.0722][index],0)
+          const background = rgb(getComputedStyle(surface).backgroundColor)
+          const foreground = rgb(style.color)
+          const alpha = Number(style.opacity)
+          const foregroundLight = luminance(foreground.map((value,index) => alpha * value + (1-alpha) * background[index]))
+          const backgroundLight = luminance(background)
+          return {theme:document.documentElement.getAttribute('data-theme'),focused:view.hasFocus,opacity:alpha,color:style.color,background:getComputedStyle(surface).backgroundColor,contrast:(Math.max(foregroundLight,backgroundLight)+.05)/(Math.min(foregroundLight,backgroundLight)+.05)}
+        })
+        report.readability ??= []
+        report.readability.push({expectedTheme:theme,focus,...readability})
+        await shot(theme + '-focus-' + focus)
+        assert.equal(readability.focused,focus === 'typing')
+        assert.equal(readability.theme,theme)
+        assert.equal(readability.opacity,1)
+        assert(readability.contrast >= 4.5, `${theme}/${focus} contrast ${readability.contrast}`)
+      }
+    }
+    await paper.evaluate(el => { globalThis.__pluginTestScroll = el.__cmView.scrollDOM.scrollTop })
     await page.locator('.plugins-trigger').click()
     await page.locator('.plugins-page').waitFor()
     assert(await page.locator('.plugin-workspace-writing').evaluate(el => el.inert))
@@ -155,10 +234,46 @@ try {
       cursorBefore:globalThis.__pluginTestCursor, cursorAfter:el.__cmView.state.selection.main.anchor,
     }))
     report.preservation = preservation
+    report.typography = typography
     assert.equal(preservation.scrollAfter, preservation.scrollBefore)
     assert.equal(preservation.cursorAfter, preservation.cursorBefore)
     await shot('workspace-return')
     report.checks.push('real CodeMirror instance, manuscript, scroll, chat draft and hotkey isolation preserved')
+    const openCommand = async label => {
+      await page.locator('.palette-trigger').click()
+      const palette = page.getByRole('dialog', {name:'搜索与命令',exact:true})
+      await palette.locator('.palette-input').fill(label)
+      await palette.locator('.palette-item').filter({has:page.getByText(label,{exact:true})}).first().click()
+      await palette.waitFor({state:'hidden'})
+    }
+    for (const theme of ['light','dark']) {
+      if (!await page.locator('.shell-theme').evaluate((el,theme) => el.classList.contains(theme), theme)) {
+        await page.locator('.theme-toggle').click()
+        await page.waitForFunction(theme => document.querySelector('.shell-theme')?.classList.contains(theme), theme)
+      }
+      await page.waitForTimeout(350)
+      for (const [command, selector, close] of [
+        ['文档概览','.overview-panel','关闭概览'],
+        ['校对当前文档','.proofread-panel','关闭文稿校对'],
+      ]) {
+        await openCommand(command)
+        const panel = page.locator(selector)
+        await panel.waitFor()
+        await page.waitForTimeout(350)
+        assert.equal(await panel.evaluate(el => getComputedStyle(el).borderTopLeftRadius), '28px')
+        if (selector === '.memory-panel') {
+          const filter = panel.locator('.memory-filters button').first()
+          await filter.click()
+          assert.equal(await filter.getAttribute('aria-pressed'),'true')
+          await filter.focus()
+        }
+        await shot(theme + '-' + selector.slice(1))
+        await panel.getByRole('button',{name:close,exact:true}).click()
+        await panel.waitFor({state:'hidden'})
+      }
+    }
+    report.checks.push('real overview and proofread panels opened and closed in both themes')
+    report.panelScope = 'Desktop composition intentionally disables editor-cards and editor-memory-panel; their styles and native/Radix states are verified by independent component fixtures.'
     // Clear the synthetic unsent draft before closing the isolated test app.
     await chat.fill('')
     await editor.press('Control+s')

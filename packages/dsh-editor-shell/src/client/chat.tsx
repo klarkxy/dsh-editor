@@ -427,7 +427,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     legacy: legacyEditor,
     dismissed: dismissedMigrations.has(session.sessionId),
   })
-  /* 空白对话:说明贴在输入框上,并点出当前稿。栏头在没有消息时不展开模式徽标和会话菜单。 */
+  /* 空白对话:输入框只留占位提示,不贴说明文字。栏头在没有消息时不展开模式徽标和会话菜单。 */
   const showEmptyHistory = rows.length === 0
     && !showInitGuide
     && !outgoing
@@ -437,9 +437,9 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     && !partial.text
     && !partial.thinking
     && pendingItems.length === 0
-  const emptyPrompt = useMemo(
-    () => chatEmptyPrompt(currentMode?.id, activePath),
-    [currentMode?.id, activePath, locale],
+  const composerPlaceholder = useMemo(
+    () => chatEmptyPrompt(currentMode?.id),
+    [currentMode?.id, locale],
   )
   const workspaceSessionIds = workspace?.sessionIds.length ? [...workspace.sessionIds] : [session.sessionId]
   const hostArchivedIds = workspaceList.archivedSessionIds ?? []
@@ -1090,14 +1090,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       </Box>
       <Box asChild px="3" py="2">
         <form className="composer" onSubmit={submit}>
-          {showEmptyHistory ? <Flex direction="column" gap="1" className="chat-empty-panel">
-            <Text as="p" size="2" className="chat-empty">
-              {emptyPrompt.empty}
-            </Text>
-            {currentMode ? <Text as="p" size="2" className="chat-empty-mode">
-              {currentMode.name}
-            </Text> : null}
-          </Flex> : null}
           <Flex direction="column" gap="2">
             <TextArea
               ref={composerRef}
@@ -1116,7 +1108,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                 event.preventDefault()
                 event.currentTarget.form?.requestSubmit()
               }}
-              placeholder={emptyPrompt.placeholder}
+              placeholder={composerPlaceholder}
               aria-label={t('chat.inputLabel')} />
             {note ? <Flex direction="column" align="start" gap="2" role="alert">
               <Text size="2" className="warning" color="red">{note}</Text>
@@ -1124,9 +1116,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                 {t('chat.fixDefaultModel')}
               </Button> : null}
             </Flex> : null}
-            <OfficialInputActivity ctx={ctx} sessionId={session.sessionId} locked={!connected || hidden}
-              getSelection={() => ({ start: composerRef.current?.selectionStart ?? draftRef.current.length, end: composerRef.current?.selectionEnd ?? draftRef.current.length, length: draftRef.current.length })}
-              onActiveChange={setVoiceActive} onDraft={readNativeDraft} onBind={bindNativeInput} />
             <Flex className="composer-toolbar" align="center" justify="between" gap="2" wrap="wrap" minWidth="0">
               <Box className="composer-model" flexGrow="1" minWidth="0">
                 <ModelPicker
@@ -1135,6 +1124,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
                   session={session}
                   onConfigure={onConfigure} />
               </Box>
+              <OfficialInputActivity ctx={ctx} sessionId={session.sessionId} locked={!connected || hidden}
+                expanded={voiceActive}
+                getSelection={() => ({ start: composerRef.current?.selectionStart ?? draftRef.current.length, end: composerRef.current?.selectionEnd ?? draftRef.current.length, length: draftRef.current.length })}
+                onActiveChange={setVoiceActive} onDraft={readNativeDraft} onBind={bindNativeInput} />
               <Flex className="composer-actions" align="center" gap="2" flexShrink="0">
                 {snapshot.running ? <IconButton
                   type="button"

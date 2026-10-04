@@ -34,6 +34,27 @@ export function workspacePackageDir(name) {
   return pkg.dir
 }
 
+/**
+ * Official plugin entries the app manages itself. `defaultOff` keeps a plugin's
+ * surface out of the composer until the author turns it on from 内置插件; the
+ * package stays in the distribution either way.
+ */
+const OFFICIAL_CATALOG_ENTRIES = {
+  'ui-shortcuts': { title: '快捷键', description: '使用官方快捷键搜索、录制和重置。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-shortcuts' },
+  'ui-sidebar-documentpreview': { title: '资料预览', description: '预览图片、PDF、Office 文档和表格。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview' },
+  'mcp-resources': { title: 'MCP 资源', description: '读取已配置 MCP 服务提供的资源。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-mcp-resources' },
+  ...Object.entries({ 'speech-to-text': '@deepseek-ai/dsh-experimental-speech-to-text', 'speech-to-text-sensevoice': '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice', 'api-speech-to-text': '@deepseek-ai/dsh-experimental-api-speech-to-text', 'ui-voice-input': '@deepseek-ai/dsh-experimental-client-ui-voice-input' }).reduce((rows, [id, packageName]) => ({ ...rows, [id]: {
+    title: '语音输入', description: '使用官方本地语音识别，将转写放入对话草稿。首次使用需准备模型。', locked: false, builtin: true, defaultOff: true,
+    packageName,
+  } }), {}),
+}
+/** Cordis ids that ship installed but stay disabled until the author opts in. */
+export const DEFAULT_OFF_OFFICIAL_ENTRIES = Object.entries(OFFICIAL_CATALOG_ENTRIES)
+  .filter(([, entry]) => entry.defaultOff)
+  .map(([id]) => id)
+const publishedCatalogEntries = Object.fromEntries(Object.entries(OFFICIAL_CATALOG_ENTRIES)
+  .map(([id, { defaultOff: _defaultOff, ...entry }]) => [id, entry]))
+
 export async function desktopComposition(id = process.env.DSH_EDITOR_COMPOSITION || 'desktop') {
   if (!COMPOSITION_IDS.includes(id)) throw new Error(`unsupported desktop composition: ${id}`)
   const aliasLabel = COMPOSITION_ALIASES[id]
@@ -42,6 +63,9 @@ export async function desktopComposition(id = process.env.DSH_EDITOR_COMPOSITION
     throw new Error(`invalid composition recipe: ${id}`)
   }
   const resolved = resolveComposition(manifests, recipe)
+  /* Official entries carry no workspace manifest, so their default state is applied here
+   * and stays visible in the materialized patch and composition record. */
+  resolved.disabledEntries = [...new Set([...resolved.disabledEntries, ...DEFAULT_OFF_OFFICIAL_ENTRIES])]
   if (aliasLabel) {
     resolved.id = id
     resolved.label = aliasLabel
@@ -100,13 +124,7 @@ export async function configureProfile(destination, composition) {
     bundles: composition.bundles,
     entries: {
       ...catalogFromManifests(selected),
-      'ui-shortcuts': { title: '快捷键', description: '使用官方快捷键搜索、录制和重置。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-shortcuts' },
-      'ui-sidebar-documentpreview': { title: '资料预览', description: '预览图片、PDF、Office 文档和表格。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview' },
-      'mcp-resources': { title: 'MCP 资源', description: '读取已配置 MCP 服务提供的资源。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-mcp-resources' },
-      ...Object.entries({ 'speech-to-text': '@deepseek-ai/dsh-experimental-speech-to-text', 'speech-to-text-sensevoice': '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice', 'api-speech-to-text': '@deepseek-ai/dsh-experimental-api-speech-to-text', 'ui-voice-input': '@deepseek-ai/dsh-experimental-client-ui-voice-input' }).reduce((rows, [id, packageName]) => ({ ...rows, [id]: {
-        title: '语音输入', description: '使用官方本地语音识别，将转写放入对话草稿。首次使用需准备模型。', locked: false, builtin: true,
-        packageName,
-      } }), {}),
+      ...publishedCatalogEntries,
     },
   }, null, 2)}\n`)
   // First-party plugin presets ship through the same template channel as the

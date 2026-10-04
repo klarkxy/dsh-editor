@@ -2,63 +2,94 @@
 
 ## Reference and scope
 
-The visual reference is **the official MoonshotAI/kimi-code Web UI**, at revision
-`e7d5a0aee74e7f116cca0273c416ece9139a78a0`, before `apps/kimi-web` was moved out
-of the public repository. It is not a third-party Kimi desktop client, and it is
-not a claim of pixel parity with today's internally maintained desktop client.
+The visual reference is the official **deepseek-ai/deepseek-harness** Web UI at tag
+`dsh-v0.2.0-rc.2`, commit `639ed015397290b3745d163aafe02ffee4aa3f84`.
 
-Reference files: `apps/kimi-web/src/style.css`, `components/ui/Button.vue`, and
-`views/DesignSystemView.vue`. Adapted upstream portions retain their MIT notice
-in `packages/dsh-editor-shell/resources/third-party/kimi-web-MIT.txt`, included
-by the shell package's existing `resources` packaging rule. DSH's name, artwork
-and identity stay DSH's; no Kimi logo, character art or font files are copied.
+Reference files: `docs/web-styling.zh.md`, `docs/ui-radius.zh.md`, and
+`packages/client/ui-theme/src/styles/base.css`, `design-platform.css`, and
+`gradient-shadow-text.css`. Adapted upstream portions keep their MIT notice in
+`packages/dsh-editor-shell/resources/third-party/deepseek-harness-MIT.txt`.
+The earlier Kimi Web notice stays at
+`packages/dsh-editor-shell/resources/third-party/kimi-web-MIT.txt`.
+DSH's name, artwork and identity stay DSH's. No upstream font files are copied.
 
 React, Electron, Radix, CodeMirror, DSH's connection/runtime services, the model
 router, conversation state, approval checks and file-write contracts are unchanged.
 This is a **visual adapter**, not a replacement frontend or an engine fork.
+UI chrome uses the system font stack. Author typography for manuscript text is unchanged.
 
 ## Appearance ownership
 
-`src/design-system/tokens.ts` owns the namespaced semantic tokens. Light/dark
-palettes follow the official reference: white/near-black reading surfaces,
-slightly separate navigation surfaces, neutral selection and a blue action accent.
-The darker upstream blue is used for small white primary-button labels to meet
-4.5:1 contrast. Dark primary labels use dark ink on the lighter blue. Existing
-explicit accent preferences are retained; only an unset accent defaults to blue.
+`src/design-system/tokens.ts` owns the namespaced semantic tokens.
+
+Light surfaces sit one step down from pure white: page `#f7f7f8`, surface and
+sunken `#eff0f2`, raised `#ffffff`, sidebar `#f2f3f4`, text `#1a1c1f` and muted
+`#5c6166`. Pure white paper with near-black body text was the light-mode glare
+source, so raised surfaces stay the brightest layer and cards read as cards by
+depth rather than by a pure-white comparison. Dark surfaces are background
+`#151517`, surface `#232324`, raised `#2c2c2e`, sidebar `#1b1b1c`, text
+`#f9fafb` and muted `#adb2b8`. Links, business state and focus use `#4176e6` /
+`#7aaaff`. Small link text uses the darker official step `#4868b2` in light so
+it stays at or above 4.5:1. An unset accent defaults to blue.
+
+**The saved accent owns the shell, not only the links.** The primary action,
+the send button, the current location in the sidebar and settings, the user
+bubble, links and focus all follow the saved accent, so a saved accent is
+recognisable from the main interface alone. The primary fill is not taken from
+Radix's accent scale: Radix pairs `accent-9` with `accent-contrast` and that
+pair does not clear 4.5:1 for every saved accent in light mode (teal is
+3.07:1, blue 3.26:1). `ACCENT_SOLIDS` therefore pins a fill, hover and label
+per accent and per mode, and `scripts/check-ui-design.mjs` verifies all fourteen
+pairs. A Radix `Theme` without an `accentColor` keeps the static blue values.
+The accent picker shows each choice as the exact fill that choice produces in
+the current mode, because a swatch that previews a different colour is worse
+than no swatch.
+
+Radius follows the official roles: R4 details, R8 compact, R12 standard controls
+and menu items, R16 code, diff and menus, R20 settings cards and bubbles, R28
+composer, dialogs and main floating panels. Circles and pills set `corner-shape: round`.
+`superellipse(1.5)` applies only inside `@supports`. Planar dividers and cards use
+a 0.5px neutral border and no shadow. Menus, dialogs and the composer use
+`border: 0` and an elevation shadow whose first layer is the 0.5px stroke.
+Menu content may use the official translucent fill and `blur(40px) saturate(150%)`.
+Modal masks are black and do not blur the page.
 
 `src/design-system/styles.ts` owns appearance over the existing Radix and shell
 DOM. `styles.ts` still provides structural contracts (CodeMirror, native titlebar,
-resizers, hidden/inert panels and plugin seats). The adapter is an explicit bridge
-for the frozen frontend stack, not permission to add a second competing skin.
-For subsequent changes, edit the relevant rule in this adapter; do not append
-new overrides to the old file or scatter per-screen color literals.
+resizers, hidden/inert panels and plugin seats). Edit the relevant adapter rule
+when the appearance changes. Do not append a second skin to the old stylesheet.
 
-The active shell installs a reference-counted `html[data-dsh-ui="kimi-web"]`
+The active shell installs a reference-counted `html[data-dsh-ui="dsh-official"]`
 scope before paint. This reaches Radix's body portals, whose theme wrappers do
 not necessarily retain `.shell-theme`. Each wrapper's own light/dark class is
 respected, including the two simultaneous themes in the component gallery.
 Unmount restores the prior host marker without undoing a later external change.
 
-Namespaced spacing/radius/type/motion tokens coexist with Radix's own scales.
-Radix spacing and stacking values are not globally renumbered, preserving existing
-geometry and overlay ordering. Plugins inherit tokens but component-selector
-rules explicitly stop at `[data-dsh-plugin-surface]`.
+Namespaced spacing, radius, type and motion tokens coexist with Radix's own scales.
+Radix spacing and stacking values are not globally renumbered. Plugins inherit
+tokens, but component-selector rules stop at `[data-dsh-plugin-surface]`.
+
+Official configuration components inherit DSH background, label, button, link
+and border aliases from their local Radix Theme, including portals. Plugin
+selectors remain with their owner. Small descriptions use the readable
+secondary color step. Standard controls use 13px or larger text; the official
+compact H20–28 controls and peripheral descriptions may use the 12px scale.
 
 ## Surfaces covered
 
-The adapter covers shell chrome, neutral file navigation and active settings tabs,
-buttons/inputs/selects/badges, manuscript surroundings and action strip, assistant
-prose and user bubbles, disclosure/process rows, one-surface composer, send/stop
-controls, proposal/conflict cards, menus, dialogs, command palette, scrollbars,
-narrow layouts and reduced-motion/forced-colors fallbacks.
+The adapter covers home and recent work, shell chrome, neutral file navigation,
+search, buttons, inputs, selects, badges, manuscript surroundings, assistant prose
+and user bubbles, disclosure and process rows, one composer, send and stop,
+proposal and conflict cards, menus, dialogs, command palette, import and export,
+history, the plugin-page shell, scrollbars, narrow layouts, and reduced-motion
+and forced-colors fallbacks.
 
 The author's font, size, line-height, line-width and completion settings are not
-reset. Theme changes do not replace or key the editor. Existing actions remain
-reachable; hiding advanced capabilities is not part of this change. Process
-cards keep their real statuses and no synthetic progress percentages are added.
-The proposal preview's height cap is increased; proposal approval and stale-file
-checks are unchanged. A dedicated full-document review workflow is not introduced
-by this visual change.
+reset. Theme changes do not replace or key the editor. Process rows keep their
+real statuses. Proposal approval and stale-file checks are unchanged.
+
+Built-in plugin panels, cards, overview, memory and proofread keep their own
+style owners. This shell pass does not restyle their interiors.
 
 ## Live component reference
 
@@ -71,12 +102,12 @@ not an additional everyday authoring toolbar.
 
 Before changing UI: identify the user action and hierarchy, reuse the existing
 primitive, use the finite token scales, and inspect both themes and keyboard
-states. Avoid gradients, blur, glowing shadows, tiny essential copy, unrelated
-emoji icons and perpetual decorative animation. Color is not the only status cue.
+states. Do not add a second glass surface. Menu blur stays on the existing menu
+rule. Color is not the only status cue.
 
 ## Validation
 
-Dependency-free token/lifecycle/contrast checks:
+Dependency-free token, lifecycle and contrast checks:
 
 ```sh
 node --experimental-strip-types scripts/check-ui-design.mjs
@@ -98,20 +129,16 @@ node e2e/ui-design.mjs
 ```
 
 The fixture bundles the production `ShellTheme`, production Radix stylesheet,
-existing structural shell CSS and the new adapter through the existing tsdown
-stack. It checks portalled dialog theming, focus return, stable input nodes on
-theme changes, disabled send state, plugin isolation, viewport overflow and
-reduced motion. Screenshots are written to `.artifacts/ui-design/` and uploaded
-by the `UI design contracts` workflow. No new package or lockfile is needed.
+existing structural shell CSS and the adapter through the existing tsdown stack.
+It checks portalled dialog theming, an unblurred modal mask, menu material,
+focus return, stable input nodes on theme changes, disabled send state, plugin
+isolation, viewport overflow and reduced motion. Screenshots are written to
+`.artifacts/ui-design/`. No new package or lockfile is needed.
 
 **The fixture is not the complete app.** It does not validate Electron window
-controls, model streaming or saving/conflict handling. Final acceptance still
-needs the running desktop: long titles and documents, docked/pinned/focus layouts,
-long conversations, reconnecting, pending approvals, conflicts, and actual
-installed plugin surfaces. Passing CSS checks or reviewing fixture screenshots
-is not a substitute.
+controls, model streaming or saving and conflict handling. Passing CSS checks
+or reviewing fixture screenshots is not a substitute for the running desktop.
 
 Input methods and display scaling use the existing operating system, Electron
-and CodeMirror capabilities. Do not build replacements or require a fixed
-dedicated acceptance checklist for them. Preserve existing input guards and
-verify affected behavior when it changes or a problem is reported.
+and CodeMirror capabilities. Preserve existing input guards and verify affected
+behavior when it changes or a problem is reported.

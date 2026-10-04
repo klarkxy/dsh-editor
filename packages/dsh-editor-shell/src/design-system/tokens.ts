@@ -1,71 +1,128 @@
 /**
- * Adapted from MoonshotAI/kimi-code (MIT), apps/kimi-web/src/style.css,
- * revision e7d5a0aee74e7f116cca0273c416ece9139a78a0. Not a Kimi-branded client.
- * Copyright (c) 2026 Moonshot AI. See resources/third-party/kimi-web-MIT.txt.
+ * Shell appearance tokens adapted from deepseek-ai/deepseek-harness (MIT),
+ * tag dsh-v0.2.0-rc.2, commit 639ed015397290b3745d163aafe02ffee4aa3f84.
+ * See resources/third-party/deepseek-harness-MIT.txt.
+ * The earlier Kimi Web notice remains at resources/third-party/kimi-web-MIT.txt.
  *
  * Namespaced tokens deliberately do not replace Radix spacing or z-index scales:
  * existing panel geometry, plugins and portalled controls retain their contracts.
  */
-export const DESIGN_SYSTEM_ID = 'kimi-web' as const
+export const DESIGN_SYSTEM_ID = 'dsh-official' as const
 export const DEFAULT_SHELL_ACCENT = 'blue' as const
 export const DESIGN_SOURCE = {
-  repository: 'MoonshotAI/kimi-code',
-  revision: 'e7d5a0aee74e7f116cca0273c416ece9139a78a0',
-  files: ['apps/kimi-web/src/style.css', 'apps/kimi-web/src/components/ui/Button.vue', 'apps/kimi-web/src/views/DesignSystemView.vue'],
+  repository: 'deepseek-ai/deepseek-harness',
+  revision: '639ed015397290b3745d163aafe02ffee4aa3f84',
+  tag: 'dsh-v0.2.0-rc.2',
+  files: [
+    'docs/web-styling.zh.md',
+    'docs/ui-radius.zh.md',
+    'packages/client/ui-theme/src/styles/base.css',
+    'packages/client/ui-theme/src/styles/design-platform.css',
+    'packages/client/ui-theme/src/styles/gradient-shadow-text.css',
+  ],
 } as const
 
+/*
+ * Saved accents own the whole shell, not only links: the primary action, the
+ * current location and the user bubble all follow the choice, so a saved accent
+ * is recognisable from the main interface alone.
+ *
+ * The primary fill cannot reuse Radix's own accent scale. Radix pairs accent-9
+ * with accent-contrast, and that pair does not clear 4.5:1 for every saved
+ * accent in light mode (teal is 3.07:1, blue 3.26:1). Each accent therefore
+ * carries a pinned solid that clears 4.5:1 against its own label in both modes;
+ * `scripts/check-ui-design.mjs` verifies all fourteen pairs.
+ */
+export const SHELL_ACCENTS = ['indigo', 'blue', 'teal', 'green', 'amber', 'crimson', 'violet'] as const
+export type ShellAccent = (typeof SHELL_ACCENTS)[number]
+
+export type AccentSolid = { fill: string; hover: string; on: string }
+
+export const ACCENT_SOLIDS: Record<ShellAccent, { light: AccentSolid; dark: AccentSolid }> = {
+  // Blue keeps the pinned official solid so the default still matches the source.
+  indigo: { light: { fill: '#3a5bc7', hover: '#2b3a75', on: '#ffffff' }, dark: { fill: '#9eb1ff', hover: '#8098f0', on: '#0f1115' } },
+  blue: { light: { fill: '#4868b2', hover: '#36497f', on: '#ffffff' }, dark: { fill: '#7aaaff', hover: '#5f9ae8', on: '#0f1115' } },
+  teal: { light: { fill: '#008573', hover: '#00604f', on: '#ffffff' }, dark: { fill: '#0bd8b6', hover: '#09bfa0', on: '#0f1115' } },
+  green: { light: { fill: '#218358', hover: '#14503a', on: '#ffffff' }, dark: { fill: '#3dd68c', hover: '#2fbd78', on: '#0f1115' } },
+  amber: { light: { fill: '#ab6400', hover: '#7a4700', on: '#ffffff' }, dark: { fill: '#ffca16', hover: '#eab308', on: '#0f1115' } },
+  crimson: { light: { fill: '#cb1d63', hover: '#9c1449', on: '#ffffff' }, dark: { fill: '#ff92ad', hover: '#f4728f', on: '#0f1115' } },
+  violet: { light: { fill: '#6550b9', hover: '#4a3a8c', on: '#ffffff' }, dark: { fill: '#baa7ff', hover: '#a58ff5', on: '#0f1115' } },
+}
+
 export const LIGHT_TOKENS = {
-  bg: '#ffffff', surface: '#fafbfc', raised: '#ffffff', sunken: '#f3f5f8',
-  sidebar: '#fbfaf9', text: '#191919', muted: '#6b7280', faint: '#9aa3af',
-  line: '#e7eaee', 'line-strong': '#d4d9e0',
-  selected: '#00000014', hover: '#0000000d',
-  accent: '#1783ff', 'accent-hover': '#0f6fe0', 'accent-soft': '#e8f3ff', 'accent-border': '#cfe6ff',
-  // Use the upstream darker blue for small white button labels (contrast >= 4.5).
-  'accent-solid': '#0f6fe0', 'on-accent': '#ffffff',
-  success: '#0e7a38', 'success-soft': '#e7f6ee',
-  warning: '#a9610a', 'warning-soft': '#fbf1e0',
-  danger: '#c0392b', 'danger-soft': '#fbeaea',
-  scrim: '#00000052',
-  'shadow-xs': '0 1px 2px rgb(16 24 40 / 4%)',
-  'shadow-sm': '0 1px 2px rgb(16 24 40 / 5%), 0 1px 3px rgb(16 24 40 / 6%)',
-  'shadow-md': '0 4px 12px rgb(16 24 40 / 7%), 0 2px 4px rgb(16 24 40 / 5%)',
-  'shadow-lg': '0 12px 32px rgb(16 24 40 / 12%), 0 4px 10px rgb(16 24 40 / 8%)',
-  'shadow-xl': '0 24px 64px rgb(16 24 40 / 18%), 0 8px 20px rgb(16 24 40 / 10%)',
+  // One step down from pure white. Pure white paper plus near-black body text
+  // is the glare source in light mode; the page now sits a step down and raised
+  // surfaces stay the brightest layer, so cards read as cards by depth.
+  bg: '#f7f7f8', surface: '#eff0f2', raised: '#ffffff', sunken: '#eff0f2',
+  sidebar: '#f2f3f4', text: '#1a1c1f', muted: '#5c6166', faint: '#7b8087',
+  line: 'rgba(0, 0, 0, 0.1)', 'line-strong': 'rgba(0, 0, 0, 0.16)',
+  selected: '#e6e8ec', hover: '#eceef1',
+  // Focus, business state and non-text accent. Small text uses the darker step.
+  accent: '#4176e6', 'accent-hover': '#2f4c8f', 'accent-soft': '#edf3fe', 'accent-border': '#d3e2ff',
+  'accent-solid': '#4868b2', 'on-accent': '#ffffff', link: '#4868b2',
+  // Primary follows the saved accent. These blue values are the fallback for a
+  // host Theme that carries no accentColor, and must match the blue table row.
+  brand: '#4868b2', 'on-brand': '#ffffff', 'brand-hover': '#36497f',
+  bubble: '#e6eefb',
+  success: '#01a241', 'success-soft': '#e6faed',
+  warning: '#27241f', 'warning-soft': '#fef5e7',
+  danger: '#ec1313', 'danger-soft': '#fef2f2',
+  scrim: 'rgba(0, 0, 0, 0.48)',
+  'menu-fill': 'rgba(248, 249, 250, 0.58)',
+  'menu-blur': 'blur(40px) saturate(150%)',
+  'elevation-panel': '0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 3px 8px 0 rgba(0, 0, 0, 0.03), 0 0 16px 0 rgba(0, 0, 0, 0.02)',
+  'elevation-prominent': '0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 3px 8px 0 rgba(0, 0, 0, 0.04), 0 0 20px 0 rgba(0, 0, 0, 0.05)',
+  'elevation-soft': '0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 4px 16px 0 rgba(0, 0, 0, 0.03), 0 0 24px 0 rgba(0, 0, 0, 0.03)',
+  'elevation-focus': '0 0 0 0.5px var(--dsh-ui-accent), 0 0 0 3px var(--dsh-ui-accent-soft)',
+  'shadow-xs': 'none',
+  'shadow-sm': '0 0 0 0.5px rgba(0, 0, 0, 0.16)',
+  'shadow-md': '0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 3px 8px 0 rgba(0, 0, 0, 0.03), 0 0 16px 0 rgba(0, 0, 0, 0.02)',
+  'shadow-lg': '0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 3px 8px 0 rgba(0, 0, 0, 0.04), 0 0 20px 0 rgba(0, 0, 0, 0.05)',
+  'shadow-xl': '0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 3px 8px 0 rgba(0, 0, 0, 0.04), 0 0 20px 0 rgba(0, 0, 0, 0.05)',
 } as const
 
 export const DARK_TOKENS: Record<keyof typeof LIGHT_TOKENS, string> = {
-  bg: '#0d1117', surface: '#161b22', raised: '#1c2128', sunken: '#0d1117',
-  sidebar: '#181817', text: '#c9cdd4', muted: '#9aa0a8', faint: '#6b7280',
-  line: '#2d333b', 'line-strong': '#3d444d',
-  selected: '#ffffff14', hover: '#ffffff0d',
-  accent: '#58a6ff', 'accent-hover': '#79b8ff',
-  'accent-soft': 'rgb(88 166 255 / 14%)', 'accent-border': 'rgb(88 166 255 / 28%)',
-  'accent-solid': '#58a6ff', 'on-accent': '#0d1117',
-  success: '#3fb950', 'success-soft': 'rgb(63 185 80 / 14%)',
-  warning: '#d29922', 'warning-soft': 'rgb(210 153 34 / 14%)',
-  danger: '#f85149', 'danger-soft': 'rgb(248 81 73 / 14%)',
-  scrim: '#00000080',
-  'shadow-xs': '0 1px 2px rgb(0 0 0 / 20%)',
-  'shadow-sm': '0 1px 2px rgb(0 0 0 / 22%), 0 1px 3px rgb(0 0 0 / 18%)',
-  'shadow-md': '0 4px 12px rgb(0 0 0 / 30%), 0 2px 4px rgb(0 0 0 / 24%)',
-  'shadow-lg': '0 12px 32px rgb(0 0 0 / 34%), 0 4px 10px rgb(0 0 0 / 28%)',
-  'shadow-xl': '0 24px 64px rgb(0 0 0 / 42%), 0 8px 20px rgb(0 0 0 / 32%)',
+  bg: '#151517', surface: '#232324', raised: '#2c2c2e', sunken: '#1b1b1c',
+  sidebar: '#1b1b1c', text: '#f9fafb', muted: '#adb2b8', faint: '#81858c',
+  line: 'rgba(255, 255, 255, 0.12)', 'line-strong': 'rgba(255, 255, 255, 0.2)',
+  selected: '#43454a', hover: 'rgba(255, 255, 255, 0.08)',
+  accent: '#7aaaff', 'accent-hover': '#b7c8fe',
+  'accent-soft': 'rgba(122, 170, 255, 0.16)', 'accent-border': 'rgba(122, 170, 255, 0.4)',
+  'accent-solid': '#7aaaff', 'on-accent': '#0f1115', link: '#7aaaff',
+  // Primary follows the saved accent; see the blue row of ACCENT_SOLIDS.
+  brand: '#7aaaff', 'on-brand': '#0f1115', 'brand-hover': '#5f9ae8',
+  bubble: '#2c2c2e',
+  success: '#4ed17e', 'success-soft': '#233c2c',
+  warning: '#f59e0b', 'warning-soft': '#27241f',
+  danger: '#f25a5a', 'danger-soft': '#570c0c',
+  scrim: 'rgba(0, 0, 0, 0.5)',
+  'menu-fill': 'rgba(67, 69, 74, 0.45)',
+  'menu-blur': 'blur(40px) saturate(150%)',
+  'elevation-panel': '0 0 0 0.5px rgba(255, 255, 255, 0.16), 0 3px 8px 0 rgba(0, 0, 0, 0.03), 0 0 16px 0 rgba(0, 0, 0, 0.02)',
+  'elevation-prominent': '0 0 0 0.5px rgba(255, 255, 255, 0.2), 0 3px 8px 0 rgba(0, 0, 0, 0.04), 0 0 20px 0 rgba(0, 0, 0, 0.05)',
+  'elevation-soft': '0 0 0 0.5px rgba(255, 255, 255, 0.2), 0 4px 16px 0 rgba(0, 0, 0, 0.03), 0 0 24px 0 rgba(0, 0, 0, 0.03)',
+  'elevation-focus': '0 0 0 0.5px var(--dsh-ui-accent), 0 0 0 3px var(--dsh-ui-accent-soft)',
+  'shadow-xs': 'none',
+  'shadow-sm': '0 0 0 0.5px rgba(255, 255, 255, 0.16)',
+  'shadow-md': '0 0 0 0.5px rgba(255, 255, 255, 0.16), 0 3px 8px 0 rgba(0, 0, 0, 0.03), 0 0 16px 0 rgba(0, 0, 0, 0.02)',
+  'shadow-lg': '0 0 0 0.5px rgba(255, 255, 255, 0.2), 0 3px 8px 0 rgba(0, 0, 0, 0.04), 0 0 20px 0 rgba(0, 0, 0, 0.05)',
+  'shadow-xl': '0 0 0 0.5px rgba(255, 255, 255, 0.2), 0 3px 8px 0 rgba(0, 0, 0, 0.04), 0 0 20px 0 rgba(0, 0, 0, 0.05)',
 }
 
 export const FOUNDATION_TOKENS = {
-  'font-ui': '"Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Noto Sans SC", sans-serif',
-  'font-mono': '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+  'font-ui': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  'font-mono': '"SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, Courier, "PingFang SC", "Microsoft YaHei"',
   'space-1': '4px', 'space-2': '8px', 'space-3': '12px', 'space-4': '16px',
   'space-5': '20px', 'space-6': '24px', 'space-8': '32px',
-  'radius-xs': '4px', 'radius-sm': '6px', 'radius-md': '8px',
-  'radius-lg': '12px', 'radius-xl': '16px', 'radius-2xl': '20px', 'radius-full': '999px',
+  'radius-xs': '4px', 'radius-sm': '8px', 'radius-md': '12px',
+  'radius-lg': '16px', 'radius-xl': '20px', 'radius-2xl': '28px', 'radius-panel': '28px', 'radius-full': '999px',
   'text-xs': '12px', 'text-sm': '13px', 'text-base': '14px',
   'text-lg': '16px', 'text-xl': '18px', 'text-2xl': '22px',
   'leading-tight': '1.25', 'leading-normal': '1.5', 'leading-relaxed': '1.7',
   'weight-regular': '400', 'weight-medium': '500', 'weight-strong': '600',
-  'duration-fast': '120ms', 'duration-base': '160ms', 'duration-slow': '260ms',
-  'ease-out': 'cubic-bezier(0.16, 1, 0.3, 1)',
-  'control-sm': '32px', 'control-md': '36px', 'control-lg': '42px',
+  'duration-fast': '100ms', 'duration-base': '200ms', 'duration-slow': '300ms',
+  'ease-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
+  'control-sm': '32px', 'control-md': '36px', 'control-lg': '40px',
   'icon-sm': '14px', 'icon-md': '16px', 'icon-lg': '20px',
   'header-height': '48px', 'content-max': '760px',
 } as const
@@ -77,62 +134,106 @@ export function cssVariables(values: Readonly<Record<string, string>>): string {
 // HTML scope also reaches Radix portals, which need not retain .shell-theme.
 // A theme inside the host uses its own .dark class, not a stale global preference.
 export const SCOPE = `html[data-dsh-ui="${DESIGN_SYSTEM_ID}"] .radix-themes`
+// Saved accents recolor links, focus, business state, the current location and
+// the user bubble together. These rules are emitted after both theme blocks so
+// their (0,3,1)/(0,4,1) specificity wins over the static tokens they override.
+// A Theme with no accentColor keeps the static blue values untouched.
+const accentRoleRules = `
+${SCOPE}[data-accent-color] {
+  --dsh-ui-accent: var(--accent-9, #4176e6);
+  --dsh-ui-accent-hover: var(--accent-10, #2f4c8f);
+  --dsh-ui-accent-solid: var(--accent-11, #4868b2);
+  --dsh-ui-accent-soft: var(--accent-a3, #edf3fe);
+  --dsh-ui-accent-border: var(--accent-a6, #d3e2ff);
+  --dsh-ui-on-accent: var(--accent-contrast, #ffffff);
+  --dsh-ui-link: var(--accent-11, #4868b2);
+  --dsh-ui-selected: var(--accent-a4, #e6e8ec);
+  --dsh-ui-bubble: var(--accent-a3, #e6eefb);
+}
+${SCOPE}.dark[data-accent-color] {
+  --dsh-ui-accent: var(--accent-9, #7aaaff);
+  --dsh-ui-accent-hover: var(--accent-10, #b7c8fe);
+  --dsh-ui-accent-solid: var(--accent-11, #7aaaff);
+  --dsh-ui-accent-soft: var(--accent-a3, rgba(122, 170, 255, 0.16));
+  --dsh-ui-accent-border: var(--accent-a6, rgba(122, 170, 255, 0.4));
+  --dsh-ui-on-accent: var(--accent-contrast, #0f1115);
+  --dsh-ui-link: var(--accent-11, #7aaaff);
+  --dsh-ui-selected: var(--accent-a4, #2b3145);
+  --dsh-ui-bubble: var(--accent-a3, #2c2c2e);
+}`
+
+// The primary action is the strongest accent signal in the shell, so each saved
+// accent names its own fill, hover and label instead of aliasing the Radix
+// scale, whose readable step is not readable enough in light mode.
+const accentSolidRules = SHELL_ACCENTS.flatMap((accent) => {
+  const { light, dark } = ACCENT_SOLIDS[accent]
+  return [
+    `${SCOPE}[data-accent-color="${accent}"] { --dsh-ui-brand: ${light.fill}; --dsh-ui-brand-hover: ${light.hover}; --dsh-ui-on-brand: ${light.on}; }`,
+    `${SCOPE}.dark[data-accent-color="${accent}"] { --dsh-ui-brand: ${dark.fill}; --dsh-ui-brand-hover: ${dark.hover}; --dsh-ui-on-brand: ${dark.on}; }`,
+  ]
+}).join('\n')
+
 export const tokenStyles = `
 ${SCOPE} {
 ${cssVariables(FOUNDATION_TOKENS)}
 ${cssVariables(LIGHT_TOKENS)}
   color-scheme: light;
-  --gray-1: #ffffff; --gray-2: #fafbfc; --gray-3: #f3f5f8;
-  --gray-4: #eceff3; --gray-5: #e7eaee; --gray-6: #d4d9e0;
-  --gray-7: #bdc4ce; --gray-8: #9aa3af; --gray-9: #7c8694;
-  --gray-10: #6b7280; --gray-11: #6b7280; --gray-12: #191919;
-  --gray-a1: #00000003; --gray-a2: #00000006; --gray-a3: #0000000d;
-  --gray-a4: #00000014; --gray-a5: #0000001a; --gray-a6: #00000029;
-  --gray-a7: #0000003b; --gray-a8: #00000052; --gray-a9: #00000085;
-  --gray-a10: #0000008f; --gray-a11: #00000094; --gray-a12: #000000e6;
+  --gray-1: #ffffff; --gray-2: #f7f7f8; --gray-3: #eff0f2;
+  --gray-4: #e9ebee; --gray-5: #e2e5e9; --gray-6: #d7dbe1;
+  --gray-7: #c6cbd2; --gray-8: #a7acb3; --gray-9: #93989f;
+  --gray-10: #5c6166; --gray-11: #5c6166; --gray-12: #1a1c1f;
+  --gray-a1: rgba(38, 49, 72, 0.03); --gray-a2: rgba(38, 49, 72, 0.04); --gray-a3: rgba(38, 49, 72, 0.06);
+  --gray-a4: rgba(38, 49, 72, 0.1); --gray-a5: rgba(0, 0, 0, 0.1); --gray-a6: rgba(0, 0, 0, 0.12);
+  --gray-a7: rgba(0, 0, 0, 0.16); --gray-a8: rgba(0, 0, 0, 0.28);
+  --gray-a9: rgba(15, 17, 21, 0.52); --gray-a10: rgba(15, 17, 21, 0.62);
+  --gray-a11: rgba(15, 17, 21, 0.72); --gray-a12: rgba(15, 17, 21, 0.92);
   --default-font-family: var(--dsh-ui-font-ui);
   --code-font-family: var(--dsh-ui-font-mono);
   --font-size-1: var(--dsh-ui-text-xs);
   --font-size-2: var(--dsh-ui-text-base);
   --color-background: var(--dsh-ui-bg);
+  --color-overlay: var(--dsh-ui-scrim);
+  --backdrop-filter-panel: none;
   --color-panel-solid: var(--dsh-ui-raised);
   --color-panel-translucent: var(--dsh-ui-raised);
   --color-surface: var(--dsh-ui-raised);
+  /* Official configuration components inherit this local Theme, including
+     portals; they must not fall back to a different body theme. Keep their
+     selectors owned by the plugin. Small descriptions use the readable step. */
+  --dsw-alias-bg-base: var(--dsh-ui-bg);
+  --dsw-alias-bg-layer-1: var(--dsh-ui-surface);
+  --dsw-alias-bg-layer-2: var(--dsh-ui-raised);
+  --dsw-alias-bg-module-platform: var(--dsh-ui-sunken);
+  --dsw-alias-label-primary: var(--dsh-ui-text);
+  --dsw-alias-label-secondary: var(--dsh-ui-muted);
+  --dsw-alias-label-tertiary: var(--dsh-ui-muted);
+  --dsw-alias-label-primary-foreground: var(--dsh-ui-on-brand);
+  --dsw-alias-button-primary-fill: var(--dsh-ui-brand);
+  --dsw-alias-button-primary-hover: var(--dsh-ui-brand-hover);
+  --dsw-alias-link: var(--dsh-ui-link);
+  --dsw-alias-border-l2: var(--dsh-ui-line);
+  --dsw-alias-border-l4: var(--dsh-ui-line-strong);
   --paper-fill: var(--dsh-ui-bg);
   --radius-1: var(--dsh-ui-radius-xs); --radius-2: var(--dsh-ui-radius-sm);
   --radius-3: var(--dsh-ui-radius-md); --radius-4: var(--dsh-ui-radius-lg);
-  --radius-5: var(--dsh-ui-radius-xl); --radius-6: var(--dsh-ui-radius-2xl);
-  --shadow-1: var(--dsh-ui-shadow-xs); --shadow-2: var(--dsh-ui-shadow-sm);
-  --shadow-3: var(--dsh-ui-shadow-md); --shadow-4: var(--dsh-ui-shadow-lg);
-  --shadow-5: var(--dsh-ui-shadow-xl);
+  --radius-5: var(--dsh-ui-radius-xl); --radius-6: var(--dsh-ui-radius-panel);
+  --shadow-1: var(--dsh-ui-shadow-sm); --shadow-2: var(--dsh-ui-elevation-soft);
+  --shadow-3: var(--dsh-ui-elevation-panel); --shadow-4: var(--dsh-ui-elevation-panel);
+  --shadow-5: var(--dsh-ui-elevation-prominent);
 }
 ${SCOPE}.dark {
 ${cssVariables(DARK_TOKENS)}
   color-scheme: dark;
-  --gray-1: #0d1117; --gray-2: #161b22; --gray-3: #1c2128;
-  --gray-4: #252b33; --gray-5: #2d333b; --gray-6: #3d444d;
-  --gray-7: #4d5662; --gray-8: #6b7280; --gray-9: #858d98;
-  --gray-10: #9aa0a8; --gray-11: #9aa0a8; --gray-12: #c9cdd4;
-  --gray-a1: #ffffff03; --gray-a2: #ffffff06; --gray-a3: #ffffff0d;
-  --gray-a4: #ffffff14; --gray-a5: #ffffff1a; --gray-a6: #ffffff29;
-  --gray-a7: #ffffff3b; --gray-a8: #ffffff52; --gray-a9: #ffffff85;
-  --gray-a10: #ffffff8f; --gray-a11: #ffffff94; --gray-a12: #ffffffe6;
+  --gray-1: #151517; --gray-2: #1b1b1c; --gray-3: #232324;
+  --gray-4: #2c2c2e; --gray-5: #353638; --gray-6: #43454a;
+  --gray-7: #535458; --gray-8: #81858c; --gray-9: #979da6;
+  --gray-10: #adb2b8; --gray-11: #adb2b8; --gray-12: #f9fafb;
+  --gray-a1: rgba(255, 255, 255, 0.03); --gray-a2: rgba(255, 255, 255, 0.05); --gray-a3: rgba(255, 255, 255, 0.08);
+  --gray-a4: rgba(255, 255, 255, 0.14); --gray-a5: rgba(255, 255, 255, 0.12); --gray-a6: rgba(255, 255, 255, 0.16);
+  --gray-a7: rgba(255, 255, 255, 0.2); --gray-a8: rgba(255, 255, 255, 0.32);
+  --gray-a9: rgba(249, 250, 251, 0.52); --gray-a10: rgba(249, 250, 251, 0.62);
+  --gray-a11: rgba(249, 250, 251, 0.72); --gray-a12: rgba(249, 250, 251, 0.92);
 }
-/* Keep every explicitly saved accent. Blue is the default, not a forced reset. */
-${SCOPE}:not([data-accent-color="blue"]) {
-  --dsh-ui-accent: var(--accent-9);
-  --dsh-ui-accent-hover: var(--accent-10);
-  --dsh-ui-accent-solid: var(--accent-9);
-  --dsh-ui-accent-soft: var(--accent-a3);
-  --dsh-ui-accent-border: var(--accent-a6);
-  --dsh-ui-on-accent: var(--accent-contrast);
-}
-${SCOPE}[data-accent-color="blue"] {
-  --accent-9: var(--dsh-ui-accent-solid);
-  --accent-10: var(--dsh-ui-accent-hover);
-  --accent-11: var(--dsh-ui-accent-solid);
-  --accent-contrast: var(--dsh-ui-on-accent);
-  --accent-a3: var(--dsh-ui-accent-soft);
-  --accent-a4: var(--dsh-ui-accent-border);
-}
+${accentRoleRules}
+${accentSolidRules}
 `
