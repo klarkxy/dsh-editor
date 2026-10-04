@@ -22,3 +22,16 @@ describe('shell capability resolution', () => {
     })
   })
 })
+
+ describe('author-controlled feature lifecycle', () => {
+  it('accepts deliberately unloaded selected features without disabling the assistant', () => {
+    const config = { features: { assistant: 'sessions', completion: 'manuscriptAssist' }, featureEntries: { assistant: ['editor-workbench-tools'], completion: ['manuscript-assist'] } }
+    expect(resolveShellCapabilities(config, name => name === 'sessions' ? {} : undefined, () => true)).toEqual({ ok: true, value: { features: { assistant: true, completion: false } } })
+    expect(resolveShellCapabilities(config, name => name === 'sessions' ? {} : undefined, () => false)).toMatchObject({ ok: false, error: { details: { missing: ['completion'] } } })
+  })
+  it('does not conceal a partially missing or untracked selected feature', () => {
+    const config = { features: { zhihu: 'zhihu' }, featureEntries: { zhihu: ['zhihu', 'zhihu-tools'] } }
+    expect(resolveShellCapabilities(config, () => undefined, id => id === 'zhihu')).toMatchObject({ ok: false })
+    expect(resolveShellCapabilities({ features: config.features }, () => undefined, () => true)).toMatchObject({ ok: false })
+  })
+})

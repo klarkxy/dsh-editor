@@ -6,9 +6,10 @@ import { SHELL_RPC_CHANNEL, resolveShellCapabilities, type ShellFeatureConfig } 
 import Schema from '@deepseek-ai/schemastery'
 
 export const name = 'dsh-editor-shell'
-export const inject = ['aiServices', 'agentDefaultModel', 'editorWritingPreferences', 'connection', 'webServer'] as const
+export const inject = ['aiServices', 'agentDefaultModel', 'editorWritingPreferences', 'connection', 'webServer', 'loader', 'modelCenter'] as const
 export const Config: Schema<ShellFeatureConfig> = Schema.object({
   features: Schema.dict(Schema.string()).default({}),
+  featureEntries: Schema.dict(Schema.array(Schema.string())).default({}),
 })
 
 /** Host owns the editor's one durable writing-preference namespace. */
@@ -26,6 +27,8 @@ export async function apply(ctx: Context, config: ShellFeatureConfig = {}): Prom
   }, 'shell.chat-model')
   ctx.effect(() => registerHostRpc(ctx as Context & HostRpcContext, SHELL_RPC_CHANNEL, async (endpoint) => {
     if (endpoint !== 'capabilities.get') return { ok: false, error: { code: 'bad-request', message: '不支持的界面操作', details: {} } }
-    return resolveShellCapabilities(config, (name) => ctx.get(name))
+    const loader = ctx.get('loader') as { entries(): Iterable<{ id: string; disabled: boolean }> }
+    const disabled = new Set([...loader.entries()].filter(entry => entry.disabled).map(entry => entry.id.replace(/^include:/, '')))
+    return resolveShellCapabilities(config, (name) => ctx.get(name, true), id => disabled.has(id))
   }))
 }

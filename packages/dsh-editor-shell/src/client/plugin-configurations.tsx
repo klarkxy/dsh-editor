@@ -91,7 +91,9 @@ export function projectPluginConfigurations(ledger: SlotLedger | undefined): Plu
       const order = entry.options?.order
       result.push({
         id,
-        label: labelOf(entry.options?.label, key),
+        label: slot === 'plugins.bundle.config' && key === '@deepseek-ai/dsh-experimental-voice-input-bundle'
+          ? (getLocale() === 'en' ? 'Voice input' : '语音输入')
+          : labelOf(entry.options?.label, key),
         slot,
         ...(slot === 'plugins.item' ? { namespace: key } : { entryKey: key }),
         ...(slot === 'plugins.row.config' ? { namespace: rowNamespace(key) } : {}),

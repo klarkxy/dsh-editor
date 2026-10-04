@@ -2,7 +2,7 @@ import { Component, useCallback, useSyncExternalStore, type ReactNode } from 're
 import { CHAT_EVENTS_SLOT, MODEL_SETTINGS_SLOT } from '../seats.ts'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 
-type SlotEntry = { options?: { id?: string; order?: number } }
+type SlotEntry = { options?: { id?: string; order?: number; label?: string | (() => string) } }
 type Ledger = {
   entries(key: string): readonly SlotEntry[]
   getVersion(key: string): number
@@ -60,19 +60,44 @@ export function PluginChatEvents(props: {
   </SurfaceBoundary>
 }
 
+/** Built-in settings stay owned by Editor even when a model contribution registers. */
 export function ModelSettingsSurface(props: {
-  ctx: unknown
-  renderSlot?: SettingsRenderSlot
-  sessionId?: string
-  locale: 'zh' | 'en'
+  ctx: unknown; renderSlot?: SettingsRenderSlot; sessionId?: string; locale: 'zh' | 'en'
+  renderProviders(options?: { includeWritingRoutes?: boolean }): ReactNode
+  renderChatModel(): ReactNode
+}) { return props.renderProviders() }
+
+export function modelSettingsSections(entries: readonly SlotEntry[], locale: 'zh' | 'en') {
+  const seen = new Set<string>()
+  return entries.flatMap((entry, index) => {
+    const id = entry.options?.id?.trim()
+    if (!id || seen.has(id)) return []
+    seen.add(id)
+    let label = id
+    try {
+      const raw = typeof entry.options?.label === 'function' ? entry.options.label() : entry.options?.label
+      if (typeof raw === 'string' && raw.trim()) label = raw.trim()
+    } catch { /* A label failure cannot hide other plugin settings. */ }
+    if (id === 'model-center') label = locale === 'en' ? 'Plugin models' : '插件模型'
+    return [{ id, label, order: entry.options?.order ?? 0, index }]
+  }).sort((a, b) => a.order - b.order || a.index - b.index)
+}
+
+export function usePluginModelSettings(ctx: unknown, locale: 'zh' | 'en') {
+  const { entries, version } = useSurface(ctx, MODEL_SETTINGS_SLOT)
+  return { sections: modelSettingsSections(entries, locale), version }
+}
+
+export function PluginModelSettingsSurface(props: {
+  ctx: unknown; id: string; renderSlot: SettingsRenderSlot; sessionId?: string; locale: 'zh' | 'en'
+  renderPluginModels(): ReactNode
   renderProviders(options?: { includeWritingRoutes?: boolean }): ReactNode
   renderChatModel(): ReactNode
 }) {
-  const { entries, version } = useSurface(props.ctx, MODEL_SETTINGS_SLOT)
-  const id = firstSurfaceEntry(entries)
-  if (!props.renderSlot || !id) return props.renderProviders()
-  return <SurfaceBoundary identity={id + ':' + version} fallback={props.renderProviders()}>
-    <div data-dsh-plugin-surface="" style={{ display: 'contents' }}><Outlet renderSlot={props.renderSlot} slot={MODEL_SETTINGS_SLOT} only={id}
+  const { version } = useSurface(props.ctx, MODEL_SETTINGS_SLOT)
+  if (props.id === 'model-center') return props.renderPluginModels()
+  return <SurfaceBoundary identity={props.id + ':' + version}>
+    <div data-dsh-plugin-surface="" style={{ display: 'contents' }}><Outlet renderSlot={props.renderSlot} slot={MODEL_SETTINGS_SLOT} only={props.id}
       owner={{ sessionId: props.sessionId, locale: props.locale, renderProviders: props.renderProviders, renderChatModel: props.renderChatModel }} /></div>
   </SurfaceBoundary>
 }

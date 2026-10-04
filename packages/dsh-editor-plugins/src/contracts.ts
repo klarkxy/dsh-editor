@@ -21,6 +21,10 @@ export type PluginCard = {
   locked: boolean
   fiberPhase: PluginFiberPhase
   origin: PluginOrigin
+  /** App-generated distribution ownership, independent of locking and origin. */
+  builtin?: boolean
+  /** Entry is controlled by its session or another built-in feature. */
+  managedBy?: 'session' | 'feature'
   /** Installed on disk but not yet present in the running loader. */
   pendingRestart?: boolean
   /** Startup failure from the loader, distinct from installation success. */

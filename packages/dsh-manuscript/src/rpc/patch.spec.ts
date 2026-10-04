@@ -62,12 +62,17 @@ async function fixture(
     async writeText() { throw new Error('patch.complete must not write files') },
   }
   const stream = vi.fn(() => chunks([{ type: 'text-delta', index: 0, text: '雨落在窗台上。' } as StreamChunkLike, { type: 'finish', reason: { kind: 'stop' } }]))
-  const services = new Map<string, unknown>([['llm', { stream }]])
+  const llm = {
+    stream,
+    resolveCallConfig: async (config: unknown) => config,
+    prepareCall: async (config: unknown) => ({ config, stream }),
+  }
+  const services = new Map<string, unknown>([['llm', llm]])
   services.set('sessionModelsHost', { agents: { get: () => ({ session: {} }) }, sessionProjections: { stateOf: () => ({ pending: config }) } })
   const rows = new Map<string, unknown>()
   // Exercise the published plugin entry point, not its private routing source.
   await applyAiServices({
-    llm: { resolveCallConfig: async (config: any) => config, prepareCall: async (config: any) => ({ config, stream }) },
+    llm,
     storageDomain: { async open() { return { table: (name: string) => ({ get: (key: string) => rows.get(name + ':' + key), async put(key: string, value: unknown) { rows.set(name + ':' + key, value) } }), close() {} } } },
     get(name: string) {
       if (name === 'agentDefaultModel') return { currentSelection: () => config.provider && config.model ? { provider: config.provider, model: config.model } : undefined }
@@ -86,6 +91,7 @@ async function fixture(
   } as unknown as Context)
   const ai = services.get('aiServices') as AiServicesRuntime
   const host = {
+    llm,
     get(name: string) { return services.get(name) },
     provide(name: string, value: unknown) { services.set(name, value) },
     on() { return () => {} },
@@ -240,7 +246,7 @@ describe('patch.complete', () => {
     const stream = vi.fn(() => chunks([{ type: 'text-delta', text: 'partial' }]))
     controller.abort()
     await expect(completePatch({
-      ctx: { get: () => testAiScope(stream) },
+      ctx: testAiScope(stream),
       provider: 'provider',
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
@@ -259,7 +265,7 @@ describe('patch.complete', () => {
     })).rejects.toThrow('写作模型服务未启用')
 
     await expect(completePatch({
-      ctx: { get: () => testAiScope(() => chunks([{ type: 'text-delta', text: 'partial' }, { type: 'finish', reason: { kind: 'error' } }])) },
+      ctx: testAiScope(() => chunks([{ type: 'text-delta', text: 'partial' }, { type: 'finish', reason: { kind: 'error' } }])),
       provider: 'provider',
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
@@ -271,7 +277,7 @@ describe('patch.complete', () => {
       throw new Error('provider failed')
     }
     await expect(completePatch({
-      ctx: { get: () => testAiScope(() => failed()) },
+      ctx: testAiScope(() => failed()),
       provider: 'provider',
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
@@ -281,7 +287,7 @@ describe('patch.complete', () => {
 
   it('caps a successful proposal to the short replacement bound', async () => {
     const result = await completePatch({
-      ctx: { get: () => testAiScope(() => chunks([{ type: 'text-delta', text: 'x'.repeat(PATCH_LIMITS.proposal + 20) }])) },
+      ctx: testAiScope(() => chunks([{ type: 'text-delta', text: 'x'.repeat(PATCH_LIMITS.proposal + 20) }])),
       provider: 'provider',
       model: 'model',
       request: parsePatchRequest({ path: 'chapter.md', selectedText: '旧句', before: '', after: '' }),
@@ -443,14 +449,15 @@ describe('central writing purpose policy', () => {
     await ai.updatePolicy({ ...policy, purposes: { ...policy.purposes, 'manuscript.completion': { kind: 'role', role: 'weak' } }, roles: { normal: { provider: 'central', model: 'normal' } } }, revision)
     await dispatch(host as unknown as Context, 'fim.complete', payload, new AbortController().signal)
     expect(stream).toHaveBeenNthCalledWith(3, expect.objectContaining({ provider: 'central', model: 'normal' }))
-    expect(ai.usage().map(row => [row.purpose, row.status])).toEqual([['manuscript.completion', 'success'], ['manuscript.rewrite', 'success'], ['manuscript.completion', 'success']])
-    expect(ai.usage()[0].sourceVersion).toMatch(/^[a-f0-9]{64}$/)
+    expect(stream).toHaveBeenCalledTimes(3)
+    expect(ai.usage()).toEqual([])
   })
   it('does not publish after the feature scope is disposed', async () => {
-    const { host, services, ai } = await fixture()
+    const { host, services, ai, stream } = await fixture()
     ;(services.get('manuscriptAiScope') as { dispose(): void }).dispose()
     expect(await dispatch(host as unknown as Context, 'fim.complete', { sessionId: 'session-1', prefix: '雨声' }, new AbortController().signal)).toMatchObject({ text: '' })
-    expect(ai.usage().at(-1)?.status).toBe('cancelled')
+    expect(stream).not.toHaveBeenCalled()
+    expect(ai.usage()).toEqual([])
     expect(ai.purposes()).toEqual([])
   })
 })

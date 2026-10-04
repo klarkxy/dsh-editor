@@ -1,7 +1,7 @@
 // llm/stream 用量包装：消费方提前退出时必须关掉底层迭代器。
 // finally 里的关闭或记量失败不能覆盖上游已经抛出的异常。
 
-export type UsageChunk = { type: string; usage?: Record<string, number> }
+export type UsageChunk = { type: string; usage?: Record<string, number>; reason?: { kind?: string } }
 
 export async function* trackUsageStream<T extends UsageChunk>(
   source: AsyncIterable<T>,
@@ -12,17 +12,24 @@ export async function* trackUsageStream<T extends UsageChunk>(
   let lastUsage: Record<string, number> | undefined
   let observed = false
   let completed = false
+  let ended = false
+  let terminal = false
   let streamError: unknown
   try {
     while (true) {
       const result = await iterator.next()
       if (result.done) {
-        completed = true
+        ended = true
+        if (!terminal) completed = true
         break
       }
       if (result.value?.type === 'usage' && result.value.usage) {
         lastUsage = result.value.usage
         observed = true
+      }
+      if (result.value?.type === 'finish') {
+        terminal = true
+        completed = ['stop', 'max-tokens', 'tool-calls'].includes(result.value.reason?.kind ?? '')
       }
       yield result.value
     }
@@ -30,7 +37,7 @@ export async function* trackUsageStream<T extends UsageChunk>(
     streamError = error
     throw error
   } finally {
-    if (!completed) {
+    if (!ended) {
       try {
         await iterator.return?.()
       } catch (closeError) {

@@ -1,1 +1,1 @@
-export { collectInsertText, sanitizeInsert, type StreamChunkLike } from '@klarkxy/dsh-ai-services/insert-output'
+export { collectInsertText, sanitizeInsert, type StreamChunkLike } from '../llm-bridge.ts'

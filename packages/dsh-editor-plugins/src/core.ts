@@ -35,6 +35,10 @@ export type RuntimeCatalogEntry = {
   locked: boolean
   packageName: string
   feature?: string
+  /** Exact prepared-catalog boolean. Scanned package.json cannot set this. */
+  builtin?: boolean
+  /** Exact prepared `'session'` or `'feature'`. Any other claim is dropped. */
+  managedBy?: 'session' | 'feature'
 }
 
 export type RuntimeCatalog = {
@@ -102,14 +106,19 @@ export function catalogRow(entryId: string, catalog: RuntimeCatalog): RuntimeCat
   return catalog.entries[entryId] ?? catalog.entries[catalogLookupId(entryId)]
 }
 
-export function isProtectedEntry(entryId: string, moduleName: string, catalog: RuntimeCatalog): boolean {
+function ownedCatalogRow(entryId: string, moduleName: string, catalog: RuntimeCatalog): RuntimeCatalogEntry | undefined {
   const row = catalogRow(entryId, catalog)
+  return row && row.packageName === packageNameOf(moduleName) ? row : undefined
+}
+
+export function isProtectedEntry(entryId: string, moduleName: string, catalog: RuntimeCatalog): boolean {
+  const row = ownedCatalogRow(entryId, moduleName, catalog)
   if (row) return row.locked
   return isProtectedPackage(packageNameOf(moduleName), catalog.bundles)
 }
 
 export function classifyEntry(entryId: string, moduleName: string, catalog: RuntimeCatalog): PluginGroup | 'hidden' {
-  const row = catalogRow(entryId, catalog)
+  const row = ownedCatalogRow(entryId, moduleName, catalog)
   if (row) return row.locked ? 'core' : 'optional'
   if (moduleName.startsWith('@deepseek-ai/') || moduleName.includes(':')) return 'hidden'
   if (isProtectedPackage(packageNameOf(moduleName), catalog.bundles)) return 'hidden'
@@ -117,7 +126,7 @@ export function classifyEntry(entryId: string, moduleName: string, catalog: Runt
 }
 
 export function catalogFor(entryId: string, moduleName: string, catalog: RuntimeCatalog): CatalogEntry {
-  const row = catalogRow(entryId, catalog)
+  const row = ownedCatalogRow(entryId, moduleName, catalog)
   if (row) return { title: row.title, description: row.description, group: row.locked ? 'core' : 'optional' }
   const short = packageNameOf(moduleName)
   const group = classifyEntry(entryId, moduleName, catalog)
@@ -174,6 +183,8 @@ function asRuntimeCatalog(value: unknown): RuntimeCatalog | undefined {
       locked: item.locked === true,
       packageName: item.packageName,
       ...(typeof item.feature === 'string' ? { feature: item.feature } : {}),
+      ...(item.builtin === true || item.builtin === false ? { builtin: item.builtin } : {}),
+      ...(item.managedBy === 'session' || item.managedBy === 'feature' ? { managedBy: item.managedBy } : {}),
     }
   }
   return {
@@ -206,5 +217,6 @@ export async function loadRuntimeCatalog(profileDir: string, packageNames: Itera
   }
   const scanned = catalogFromEditorBlocks(packages, bundles)
   if (!prepared) return scanned
-  return { bundles, entries: { ...prepared.entries, ...scanned.entries } }
+  // Prepared ids win. An installed package.json must not spoof or replace them.
+  return { bundles, entries: { ...scanned.entries, ...prepared.entries } }
 }

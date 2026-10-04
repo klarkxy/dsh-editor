@@ -211,7 +211,8 @@ try {
   note('materialized', id);
  }
  const shared=assertAliasParity(aliases);
- if(shared.features.includes('cards')||shared.packages.includes('dsh-editor-cards'))throw new Error('canonical composition still includes cards');
+ if(shared.features.includes('cards') || shared.features.includes('memory-panel'))throw new Error('on-demand builtin panels must not be forced on');
+ for(const [name,id] of [['dsh-editor-cards','editor-cards'],['dsh-editor-memory-panel','editor-memory-panel']]) { if(!shared.packages.includes(name) || !shared.disabledEntries.includes(id))throw new Error('missing default-off builtin panel '+name) }
  evidence.aliases=aliases.map((item)=>({id:item.id,label:item.label}));
  evidence.capability=shared;
  evidence.checks.push('desktop/basic/smart/full materialize to one capability set except id/label');

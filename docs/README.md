@@ -12,6 +12,7 @@
 - [可移植学习边界](portable-learning.md)：Dream 与 Self Improve 的所有权、数据分流与独立部署约束。
 - [H3 宣传片方案](h3-promo-preproduction.md)（历史留档，已完成）：品牌宣传片制作前的分镜与文案。
 - [实机演示方案](live-demo-preproduction.md)（历史留档，已完成）：实机录屏演示制作前的脚本与清单。
+- [内置插件与设置](builtin-plugins.md)：功能归类、必需模块、会话工具与模型设置归属。
 - [插件目录](../packages/README.md)：各包说明与发布维护。
 - [变更记录](../CHANGELOG.md)：版本历史。
 - [交互架构图](https://klarkxy.github.io/dsh-editor/)：跨包关系与写入流程；[规范源](diagrams/)。

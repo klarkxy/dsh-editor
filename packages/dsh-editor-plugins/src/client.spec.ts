@@ -1,5 +1,6 @@
+import { createElement, Fragment, type ReactElement, type ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
-import type { PluginInspectReport } from './contracts.ts'
+import type { PluginCard, PluginInspectReport, PluginInventory, WritingPresetCard } from './contracts.ts'
 import {
   apply,
   canConfirmPluginInstall,
@@ -7,8 +8,10 @@ import {
   clientGraphNeedsReload,
   handleMarketplaceGithubClick,
   isCurrentInstallAttempt,
+  PluginInstalledGroups,
   pluginInstallNotice,
   pluginToggleFollowUp,
+  splitBundledCards,
 } from './client.tsx'
 import { pluginsClientStyles } from './client-styles.ts'
 
@@ -144,5 +147,156 @@ describe('native client graph status', () => {
       title: '模型中心', clientGraphFailed: false }).message).toContain('重启')
     expect(pluginToggleFollowUp({ restartRequired: false, enabledMatches: true, enabled: true,
       title: '模型中心', clientGraphFailed: true })).toEqual({ persist: true, error: false, message: CLIENT_GRAPH_RELOAD_NOTICE })
+  })
+})
+
+function pluginCard(partial: Partial<PluginCard> & Pick<PluginCard, 'entryId' | 'packageName' | 'title'>): PluginCard {
+  return {
+    moduleName: partial.packageName,
+    description: partial.description ?? partial.title,
+    group: partial.group ?? 'optional',
+    enabled: partial.enabled ?? true,
+    locked: partial.locked ?? false,
+    fiberPhase: partial.fiberPhase ?? 'active',
+    origin: partial.origin ?? 'bundled',
+    ...partial,
+  }
+}
+
+const groupsInventory: PluginInventory = {
+  core: [
+    pluginCard({ entryId: 'include:editor-shell', packageName: 'dsh-editor-shell', title: '写作界面', group: 'core', locked: true, builtin: true }),
+    pluginCard({ entryId: 'include:editor-novel-kernel', packageName: 'dsh-editor-novel-kernel', title: '小说工具', group: 'core', locked: true, builtin: true, managedBy: 'session' }),
+    pluginCard({ entryId: 'proofread', packageName: 'dsh-proofread', title: '校对引擎', group: 'core', locked: true, builtin: false, managedBy: 'feature' }),
+  ],
+  optional: [
+    pluginCard({ entryId: 'include:manuscript-assist', packageName: 'dsh-manuscript', title: '行内补全', builtin: true }),
+    pluginCard({ entryId: 'include:zhihu', packageName: '@klarkxy/dsh-zhihu', title: '知乎资料', builtin: false }),
+    pluginCard({ entryId: 'include:counterfeit', packageName: 'dsh-editor-counterfeit', title: '伪装内置包' }),
+  ],
+  community: [
+    pluginCard({ entryId: 'include:theme', packageName: 'community-theme', title: '主题', group: 'community', origin: 'installed' }),
+  ],
+}
+
+const groupsPresets: WritingPresetCard[] = [
+  { id: 'dsh-editor-writing', title: '通用写作', description: '默认写作模式', enabled: true, locked: true },
+  { id: 'novel-writing', title: '小说创作', description: '长篇小说', enabled: false, locked: false },
+]
+
+/* 本包不带 react-dom 依赖；设置页子树均为无 hook 纯组件（SeatButton 是无 hook 的
+   forwardRef），用最小静态序列化做 SSR 断言，等价于 renderToStaticMarkup 的检查面。 */
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function staticMarkup(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return escapeHtml(String(node))
+  if (Array.isArray(node)) return node.map(staticMarkup).join('')
+  const element = node as ReactElement<{ children?: ReactNode }>
+  if (element.type === Fragment) return staticMarkup(element.props.children)
+  if (typeof element.type === 'function') return staticMarkup((element.type as (props: unknown) => ReactNode)(element.props))
+  const forwardRef = element.type as unknown as { render?: (props: unknown, ref: null) => ReactNode }
+  if (typeof forwardRef === 'object' && typeof forwardRef.render === 'function') return staticMarkup(forwardRef.render(element.props, null))
+  const tag = String(element.type)
+  const attrs = Object.entries(element.props as Record<string, unknown>)
+    .filter(([key]) => key !== 'children')
+    .map(([key, value]) => {
+      if (typeof value === 'boolean') return ` ${key}="${value}"`
+      if (typeof value === 'string' || typeof value === 'number') return ` ${key}="${escapeHtml(String(value))}"`
+      return ''
+    })
+    .join('')
+  return `<${tag}${attrs}>${staticMarkup(element.props.children)}</${tag}>`
+}
+
+function renderInstalledGroups(overrides: { busyPackage?: string | null; inventory?: PluginInventory | null; presets?: WritingPresetCard[] | null } = {}): string {
+  return staticMarkup(createElement(PluginInstalledGroups, {
+    inventory: overrides.inventory === undefined ? groupsInventory : overrides.inventory,
+    presets: overrides.presets === undefined ? groupsPresets : overrides.presets,
+    busyPackage: overrides.busyPackage ?? null,
+    busyPreset: null,
+    onToggle: () => {},
+    onTogglePreset: () => {},
+    onUninstall: () => {},
+  }))
+}
+
+describe('plugin installed grouping', () => {
+  it('splits bundled cards by the trusted builtin flag, never by package prefix', () => {
+    const { builtin, preinstalled } = splitBundledCards([...groupsInventory.core, ...groupsInventory.optional])
+    expect(builtin.map((card) => card.packageName)).toEqual(['dsh-editor-shell', 'dsh-editor-novel-kernel', 'dsh-manuscript'])
+    expect(preinstalled.map((card) => card.packageName)).toEqual(['dsh-proofread', '@klarkxy/dsh-zhihu', 'dsh-editor-counterfeit'])
+  })
+
+  it('renders one 内置插件 / 预装插件 / 已安装插件 section in order', () => {
+    const html = renderInstalledGroups()
+    const builtinAt = html.indexOf('plugins-section-builtin')
+    const preinstalledAt = html.indexOf('plugins-section-preinstalled')
+    const installedAt = html.indexOf('plugins-section-installed')
+    expect(builtinAt).toBeGreaterThanOrEqual(0)
+    expect(preinstalledAt).toBeGreaterThan(builtinAt)
+    expect(installedAt).toBeGreaterThan(preinstalledAt)
+    for (const heading of ['内置插件', '预装插件', '已安装插件']) {
+      expect(html).toContain(`<h3>${heading}</h3>`)
+    }
+    expect(html.indexOf('写作辅助')).toBeGreaterThan(builtinAt)
+    expect(html.indexOf('写作辅助')).toBeLessThan(preinstalledAt)
+    expect(html.indexOf('小说工具')).toBeLessThan(preinstalledAt)
+    for (const text of ['知乎资料', '伪装内置包', '由校对功能管理']) {
+      expect(html.indexOf(text)).toBeGreaterThan(preinstalledAt)
+      expect(html.indexOf(text)).toBeLessThan(installedAt)
+    }
+    expect(html.indexOf('主题（community-theme）')).toBeGreaterThan(installedAt)
+  })
+
+  it('keeps writing presets inside the builtin section on the same group', () => {
+    const html = renderInstalledGroups()
+    const builtinAt = html.indexOf('plugins-section-builtin')
+    const preinstalledAt = html.indexOf('plugins-section-preinstalled')
+    const presetsAt = html.indexOf('plugins-writing-presets')
+    expect(presetsAt).toBeGreaterThan(builtinAt)
+    expect(presetsAt).toBeLessThan(preinstalledAt)
+    expect(html.indexOf('写作模式')).toBeGreaterThan(presetsAt)
+    expect(html.indexOf('写作模式')).toBeLessThan(preinstalledAt)
+    expect(html.indexOf('plugins-preset-toggle-novel-writing')).toBeGreaterThan(presetsAt)
+    expect(html.indexOf('必需')).toBeGreaterThan(presetsAt)
+    expect(html).not.toContain('plugins-preset-toggle-dsh-editor-writing')
+  })
+
+  it('shows ownership labels for locked cards and never a switch for session-owned entries', () => {
+    const html = renderInstalledGroups()
+    expect(html).toContain('由会话控制')
+    expect(html).toContain('由校对功能管理')
+    expect(html).toContain('必需')
+    expect(html).not.toContain('plugins-toggle-include:editor-shell')
+    expect(html).not.toContain('plugins-toggle-include:editor-novel-kernel')
+    expect(html).not.toContain('plugins-toggle-proofread')
+    expect(html.match(/role="switch"/g)).toHaveLength(5)
+  })
+
+  it('keeps real optional switches with existing test ids, aria wiring, and busy state', () => {
+    const html = renderInstalledGroups()
+    for (const testId of ['plugins-toggle-writing', 'plugins-toggle-zhihu', 'plugins-toggle-dsh-editor-counterfeit', 'plugins-toggle-community-theme']) {
+      expect(html).toContain(`data-testid="${testId}"`)
+    }
+    const writingSwitch = html.indexOf('data-testid="plugins-toggle-writing"')
+    expect(html.slice(Math.max(0, writingSwitch - 400), writingSwitch)).toContain('aria-checked="true"')
+    expect(html.slice(Math.max(0, writingSwitch - 400), writingSwitch)).toContain('aria-labelledby="plugin-title-writing"')
+    const busy = renderInstalledGroups({ busyPackage: 'dsh-manuscript' })
+    const busySwitch = busy.indexOf('data-testid="plugins-toggle-writing"')
+    const busyWindow = busy.slice(Math.max(0, busySwitch - 400), busySwitch + 200)
+    expect(busyWindow).toContain('is-pending')
+    expect(busyWindow).toContain('disabled="true"')
+    expect(html).toContain('卸载')
+  })
+
+  it('renders honest empty states when nothing is listed', () => {
+    const html = renderInstalledGroups({ inventory: null, presets: null })
+    expect(html).toContain('未找到内置插件。')
+    expect(html).toContain('没有预装插件。')
+    expect(html).toContain('还没有从市场安装插件。')
+    expect(html).not.toContain('role="switch"')
   })
 })

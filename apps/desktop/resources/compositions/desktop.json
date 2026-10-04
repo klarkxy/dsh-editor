@@ -18,6 +18,8 @@
     "@klarkxy/dsh-memory",
     "@klarkxy/dsh-self-improvement",
     "@klarkxy/dsh-model-center",
-    "@klarkxy/dsh-fusion"
+    "@klarkxy/dsh-fusion",
+    "dsh-editor-cards",
+    "dsh-editor-memory-panel"
   ]
 }

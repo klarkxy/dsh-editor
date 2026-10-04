@@ -608,8 +608,10 @@ describe('profile deployment', () => {
       expect(item.features).not.toContain('memory-panel')
       expect(item.packages).toContain('dsh-editor-proofread-panel')
       expect(item.packages).toContain('dsh-editor-writing-presets')
-      expect(item.packages).not.toContain('dsh-editor-cards')
-      expect(item.packages).not.toContain('dsh-editor-memory-panel')
+      expect(item.packages).toContain('dsh-editor-cards')
+      expect(item.disabledEntries).toContain('editor-cards')
+      expect(item.packages).toContain('dsh-editor-memory-panel')
+      expect(item.disabledEntries).toContain('editor-memory-panel')
       expect(item.extraInserts.map((row: { id: string }) => row.id)).not.toContain('editor-workbench-tools')
       expect(item.extraInserts.map((row: { id: string }) => row.id)).not.toContain('editor-novel-kernel')
     }
@@ -627,7 +629,8 @@ describe('profile deployment', () => {
     // One UI owns the global plugin configuration slots; Host management stays available.
     expect(patch).toMatch(/- id: ui-plugin-manager\r?\n  disabled: true/)
     expect(patch).not.toMatch(/- id: plugin-manager\r?\n  disabled: true/)
-    expect(patch).not.toMatch(/- id: editor-cards\r?\n/)
+    expect(patch).toMatch(/- id: editor-cards\r?\n  disabled: true/)
+    expect(patch).toMatch(/- id: editor-memory-panel\r?\n  disabled: true/)
     expect(patch).not.toMatch(/- id: editor-workbench-tools\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-novel-kernel\r?\n  disabled: false/)
     expect(patch).not.toMatch(/- id: editor-workbench\r?\n  disabled: true/)
@@ -1476,5 +1479,21 @@ describe('manuscript export save filters', () => {
   })
   it.each(['payload.exe', 'document.docx.exe', 'untitled', 'book.epub.bak']) ('does not offer a save filter for %s', (filename) => {
     expect(exportFileFilter(filename)).toBeUndefined()
+  })
+})
+
+ describe('essential model service upgrade', () => {
+  it('sanitizes managed off preference and preserves every other record and unmanaged patch', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-builtin-models-'))
+    const state = { schema: 1, overrides: { 'model-center': false, zhihu: false }, presets: { 'dsh-editor-article': false }, installed: [{ name: 'sample', spec: 'github:a/b', version: '1' }] }
+    await writeFile(join(home, 'dsh-plugins.json'), JSON.stringify(state))
+    await writeFile(join(home, 'cordis.patch.yml'), '# managed-by: dsh-editor-plugins\n- id: model-center\n  disabled: true\n- id: zhihu\n  disabled: true\n')
+    await sanitizeHostLockedPluginOverrides(home)
+    expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toEqual({ ...state, overrides: { zhihu: false } })
+    expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe('# managed-by: dsh-editor-plugins\n- id: zhihu\n  disabled: true\n')
+    const manual = '- id: model-center\n  disabled: true\n- id: custom\n  config:\n    keep: true\n'
+    await writeFile(join(home, 'cordis.patch.yml'), manual)
+    await sanitizeHostLockedPluginOverrides(home)
+    expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe(manual)
   })
 })

@@ -1,5 +1,5 @@
-import type { AiFeatureScope } from '@klarkxy/dsh-ai-services/contracts'
 import { runWritingAi } from '../ai-purposes.ts'
+import type { WritingContext } from '../llm-bridge.ts'
 import { normalizeWorkspaceRelative, PathConfineError } from './paths.ts'
 import {
   chapterContextUserPrefix,
@@ -41,9 +41,7 @@ export type PatchRequest = {
 
 export type PatchStreamChunk = { type: string; text?: string; reason?: { kind?: string; failure?: { message?: string } } }
 
-export type PatchContext = {
-  get?: (name: string) => unknown
-}
+export type PatchContext = WritingContext
 
 const PATCH_SYSTEM =
   '你是小说编辑。只输出一段可直接替换选中文本的简短改写，不解释、不复述提示、不使用 Markdown 围栏。保持原语言、人物视角与叙述时态。'
@@ -93,17 +91,21 @@ function patchSystem(request: PatchRequest, projectRules?: string): string {
 }
 
 async function streamPatch(input: {
-  scope?: AiFeatureScope
+  ctx: PatchContext
   sessionId?: string
-  provider: string
-  model: string
-  reasoningEffort?: string
   request: PatchRequest
   projectRules?: string
   signal: AbortSignal
 }): Promise<string> {
-  return runWritingAi({ scope: input.scope, purpose: 'manuscript.rewrite', sessionId: input.sessionId,
-    system: patchSystem(input.request, input.projectRules), text: `${chapterContextUserPrefix(input.request.chapterContext)}【文件】${input.request.path}\n\n【前文】\n${input.request.before}\n\n${input.request.instruction ? `【改写要求】\n${input.request.instruction}\n\n` : ''}【待改写】\n${input.request.selectedText}\n\n【后文】\n${input.request.after}\n\n只输出替换后的文本：`, signal: input.signal, maxChars: PATCH_LIMITS.proposal })
+  return runWritingAi({
+    ctx: input.ctx,
+    purpose: 'manuscript.rewrite',
+    sessionId: input.sessionId,
+    system: patchSystem(input.request, input.projectRules),
+    text: `${chapterContextUserPrefix(input.request.chapterContext)}【文件】${input.request.path}\n\n【前文】\n${input.request.before}\n\n${input.request.instruction ? `【改写要求】\n${input.request.instruction}\n\n` : ''}【待改写】\n${input.request.selectedText}\n\n【后文】\n${input.request.after}\n\n只输出替换后的文本：`,
+    signal: input.signal,
+    maxChars: PATCH_LIMITS.proposal,
+  })
 }
 
 /**
@@ -121,13 +123,9 @@ export async function completePatch(input: {
   projectRules?: string
   signal: AbortSignal
 }): Promise<{ text: string; route: PatchRoute }> {
-  const scope = input.ctx.get?.('manuscriptAiScope') as AiFeatureScope | undefined
   const text = await streamPatch({
-    scope,
+    ctx: input.ctx,
     sessionId: input.sessionId,
-    provider: input.provider,
-    model: input.model,
-    reasoningEffort: input.reasoningEffort,
     request: input.request,
     projectRules: input.projectRules,
     signal: input.signal,

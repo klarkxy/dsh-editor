@@ -5,9 +5,9 @@ This implementation follows the accepted six-plugin design: current title, requi
 ## Fixed boundaries
 
 - DSH owns agents, sessions, model/provider catalogs, credentials, questions, approvals, and history. Keep the pinned DSH version `0.1.7-rc.2`.
-- All six feature bundle entries are enabled when installed and remain independently switchable. Loading their UI does not start inference. Mood, current title, Recap, and self-improvement have no extra settings pages: enable them under Plugins → Installed and Market and they use fixed automatic defaults (Mood auto, title locale auto, Recap cards/checkpoints/semantic/idle-return on). Memory and web search have configuration views in the Plugins page. Dream still defaults on with an independent Memory switch. The shared service is inert until a feature explicitly calls it.
+- The portable design contains six feature bundles. In Editor, current title, Mood, Recap, Memory and self-improvement remain independently switchable; the existing Model Center service is adopted as the essential built-in model configuration carrier. Loading their UI does not start inference. Mood, current title, Recap, and self-improvement have no extra settings pages: enable them under Plugins → Installed and Market and they use fixed automatic defaults (Mood auto, title locale auto, Recap cards/checkpoints/semantic/idle-return on). Memory and web search have configuration views in the Plugins page. Dream still defaults on with an independent Memory switch. The shared service is inert until a feature explicitly calls it.
 - The shared package owns model roles/purpose routing, bounded auxiliary calls, cancellation, usage receipts, and shared types. It does not own a parallel task engine, chat history, credential store, or generic artifact database.
-- Normal/weak/strong are configured aliases; session-following is a distinct target. Unconfigured weak/strong can inherit normal; an explicitly broken route fails visibly without silently changing providers. Manuscript completion and rewrite now use the same service with dedicated purposes; their existing settings UI edits the central policy.
+- Normal/weak/strong are configured aliases; session-following is a distinct target. Unconfigured weak/strong can inherit normal; an explicitly broken route fails visibly without silently changing providers. Manuscript completion and rewrite keep dedicated purposes in the same policy; their settings UI edits that policy, while generation calls the pinned official LLM directly.
 - Feature packages own their typed records. Memory is the shared record store for descriptive context and procedural lessons; current instructions and authoritative project documents take precedence. Maintenance remains auditable and reversible. Novel 正文与大纲 remain author-confirmed through proposals, while AGENTS.md、世界书、人物卡 are agent-maintained via direct writes. Rules still come only from the author's explicit statements.
 - Self-improvement requires an explicitly enabled Memory service; enabling it must not enable Memory or Dream. Explicit human method requirements may take effect directly; outcome observations stay candidates until accepted. Vocabulary and recent activity belong to Dream. See [portable learning](portable-learning.md). Skill proposals can be previewed, accepted/exported and revoked from the same Memory compact entry without writing executable or policy files automatically.
 - Every asynchronous publication checks session/source identity, input version and activation generation. Disabling cancels work and rejects late results. Data survives disable/uninstall.
@@ -24,9 +24,9 @@ The npm packages are published from this repository's main branch after compatib
 
 ## 使用
 
-桌面组合已预装并启用六个功能。在全局「插件」页的「已安装与市场」中可分别停用。
+桌面组合已预装并启用当前标题、需求澄清、回顾、记忆与自我改进，可在插件页分别停用。模型配置为必需内置模块；归属与升级边界见[内置插件与设置](builtin-plugins.md)。
 
-1. 在「设置 → 模型 → 模型配置」为对话、补全和改写选择模型。默认／省资源／高质量预设在「高级设置」；并发、超时和输入输出上限在「运行设置」。
+1. 在「设置 → 模型」为对话、补全和改写选择模型。四个档位可分别选择模型及其支持的思考强度；并发、超时和输入输出上限在同页的「限额与超时」。
 2. 当前标题、需求澄清、回顾默认可用；不需要的功能可在插件页关闭。启用后按固定自动行为运行，不再提供单独设置页。记忆仍可在「插件 → 记忆」管理条目、注入和闲时整理；闲时等待约 15 分钟，不可调。
 3. 经验学习依赖记忆；两者在桌面组合中默认同时可用。明确方法要求可直接生效，结果观察保留为候选；随时可在「插件 → 记忆」的自我改进条目撤回；Skill 草稿可以预览、采纳、下载和撤回，不会自动改写政策文件或执行脚本。
 
@@ -42,7 +42,7 @@ Editor 自有 profile 使用原生 patchReload: startup。插件管理器保存�
 
 ## 独立 web 验收
 
-独立 DSH web 的原生“设置”页保留 Memory 的管理入口，并从宿主的会话选择绑定读取当前选择；Editor 中的入口位于「插件 → 记忆」。教训与 Skill 草稿在 Memory 页面管理；Mood、当前标题、Recap 和自我改进只通过插件开关控制。模型中心在 Editor 内复用供应商界面；独立 web 的供应商编辑仍由原生“模型”页负责。
+独立 DSH web 的原生“设置”页保留 Memory 的管理入口，并从宿主的会话选择绑定读取当前选择；Editor 中的入口位于「插件 → 记忆」。教训与 Skill 草稿在 Memory 页面管理；Mood、当前标题、Recap 和自我改进只通过插件开关控制。Editor 的模型与供应商始终在原生“模型”设置管理，插件用途在“插件模型”管理；独立 web 的供应商编辑仍由原生“模型”页负责。
 
 运行 `pnpm test:e2e:ai-plugins:standalone` 会把七个当前 tarball 安装到全新隔离 profile；本地包依赖只在该测试 profile 内绑定到对应 tarball，不修改全局包管理器配置。手动安装到原生 web 后功能默认启用；如需停用，可在插件设置中关闭后重启。
 
@@ -56,7 +56,7 @@ Editor 自有 profile 使用原生 patchReload: startup。插件管理器保存�
 
 - 全仓类型检查与构建通过；全量自动化为 261 个测试文件、1857 项通过、3 项跳过；写作调用统一的增量验收见下方。
 - 独立审查完成，已报告问题均修复并复核。
-- 真实 DSH 宿主及 Chromium 流程覆盖：六插件默认启用且仅加载界面不触发推理、模型配置及原生恢复、标题生成、双窗口设置冲突、Memory/Dream、经验采纳与 Skill 预览/下载/撤回、Mood 等待回答后恢复一次、全部停用后正常聊天。
+- 真实 DSH 宿主及 Chromium 流程覆盖：桌面五项可选插件与必需模型服务默认启用，且仅加载界面不触发推理、模型配置及原生恢复、标题生成、双窗口设置冲突、Memory/Dream、经验采纳与 Skill 预览/下载/撤回、Mood 等待回答后恢复一次、全部停用后正常聊天。
 - 原生 web 的七包独立安装、设置管理、标题接管与记忆重启回读通过。
 - 上述模型请求使用本地固定响应服务，验证的是集成与生命周期；没有把它作为真实模型生成质量或正式发布证明。
 
@@ -64,12 +64,14 @@ Editor 自有 profile 使用原生 patchReload: startup。插件管理器保存�
 
 ## 补全与改写统一管理
 
-正文行内补全、选区改写现已依赖 ai-services，分别使用 manuscript.completion、manuscript.rewrite 用途，默认跟随当前会话。模型中心开启后，它们与对话模型一起显示在「常用功能」，可跟随预设、直接选择模型或跟随会话；关闭模型中心时，原来的「补全模型／改写模型」仍直接编辑同一份中央策略。
+正文行内补全、选区改写分别使用 `manuscript.completion`、`manuscript.rewrite` 用途，默认使用快速档与对话档。模型策略仍由 ai-services 解析，生成直接调用固定版本的官方 `ctx.llm.stream`。这三项始终在 Editor「设置 → 模型」中配置，可跟随档位、直接选择模型或跟随会话；插件页只编辑其他已注册的插件用途。
 
 旧写作模型配置在 Editor 启动时仅导入一次，已有中央用途优先。迁移标记与策略一起保存；删除中央覆盖并重启不会恢复旧值。迁移失败会保留原数据并阻止这两个写作调用，可在模型设置重新选择后重载。旧字段留作回退数据，后续中央修改不会同步给旧版本。
 
-两项调用共用中央并发、输入、输出、超时、取消和用量记录。补全最多 240 字符、改写最多 1200 字符；达到上限就终止生成。结果仍是候选，需作者接受才改变正文。模型中心关闭不会停用共享服务，也不会自动启用其他 AI 插件。
+两项调用在同一写作插件实例内按供应商共用并发额度，读取中央策略的并发、输入、输出与超时上限。写作额度与其他辅助调用的额度独立计数，因此并发设置不再是两类请求合计的总上限。写作只尝试一次，辅助调用的 `maxAttempts` 不控制写作重试。
 
-运行 pnpm test:e2e:writing-ai-services 可验证旧配置迁移、模型中心关闭时的配置、两项正式 RPC 调用与用量、正文不被候选直接改写、模型中心用途展示和真实进程重启。使用本地固定响应，未验证真实模型生成质量。
+写作用量进入稿纸原有的 `usage.summary` 日统计与请求日志，不再生成 ai-services 的写作用途回执。补全最多 240 字符、改写最多 1200 字符，达到上限就停止生成；若供应商尚未返回用量，提前停止的调用可能没有统计记录。取消、停用或同一会话同一用途的新请求会作废旧候选；超时与模型失败不会返回半段文本。结果仍需作者接受才改变正文。模型配置服务为必需载体，不会自动启用其他 AI 功能。
 
-写作统一最终验收：261 个测试文件，1857 项通过、3 项跳过；类型检查、构建和 11 个公开 tarball 校验通过。写作宿主流程记录为 e2e/out/writing-ai/1790017489601/report.json；默认启用后的桌面兼容回归记录为 e2e/out/ai-plugins/1790038923396/report.json，独立安装记录为 e2e/out/ai-standalone/1790039206241/report.json，均 ok=true。
+运行 `pnpm test:e2e:writing-ai-services` 可验证旧配置迁移、内置设置的配置、两项正式 RPC 调用、原生用量记录、候选不直接改写正文、内置用途与插件用途分开配置和真实进程重启。`pnpm test:e2e:writing-routes` 单独验证模型切换、思考强度兼容、保存冲突、连接切换与卸载后的迟到响应。宿主验收使用本地固定响应，未验证真实模型生成质量。
+
+历史验收（2026-09-21，迁移前的共享调用路径）：261 个测试文件，1857 项通过、3 项跳过；类型检查、构建和 11 个公开 tarball 校验通过。写作宿主流程记录为 e2e/out/writing-ai/1790017489601/report.json；默认启用后的桌面兼容回归记录为 e2e/out/ai-plugins/1790038923396/report.json，独立安装记录为 e2e/out/ai-standalone/1790039206241/report.json，均 ok=true。

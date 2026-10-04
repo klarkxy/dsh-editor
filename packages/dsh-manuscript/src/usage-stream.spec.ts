@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { trackUsageStream } from './usage-stream.ts'
 
 async function* chunks(
-  items: Array<{ type: string; usage?: Record<string, number> }>,
+  items: Array<{ type: string; usage?: Record<string, number>; reason?: { kind: string } }>,
   onClose: () => void,
 ) {
   try {
@@ -105,5 +105,35 @@ describe('trackUsageStream close propagation', () => {
     expect(seen).toEqual(['text-delta', 'usage'])
     expect(closed).toBe(true)
     expect(recordError).toEqual(expect.objectContaining({ message: 'recorder failed' }))
+  })
+})
+
+
+describe('provider terminal usage', () => {
+  it('counts a successful terminal response even when the consumer closes at finish', async () => {
+    let closed = false
+    const recorded: Array<{ completed: boolean }> = []
+    for await (const chunk of trackUsageStream(chunks([
+      { type: 'text-delta' },
+      { type: 'usage', usage: { inputTokens: 3, outputTokens: 2 } },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ], () => { closed = true }), (_usage, completed) => { recorded.push({ completed }) })) {
+      if (chunk.type === 'finish') break
+    }
+    expect(closed).toBe(true)
+    expect(recorded).toEqual([{ completed: true }])
+  })
+
+  it.each(['error', 'aborted'])('does not count a %s terminal response as completed', async (kind) => {
+    let closed = false
+    const recorded: Array<{ completed: boolean }> = []
+    for await (const _chunk of trackUsageStream(chunks([
+      { type: 'usage', usage: { outputTokens: 2 } },
+      { type: 'finish', reason: { kind } },
+    ], () => { closed = true }), (_usage, completed) => { recorded.push({ completed }) })) {
+      void _chunk
+    }
+    expect(closed).toBe(true)
+    expect(recorded).toEqual([{ completed: false }])
   })
 })

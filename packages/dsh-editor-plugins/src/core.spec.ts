@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -120,7 +120,51 @@ describe('plugin core protection', () => {
     const loaded = await loadRuntimeCatalog(profileDir, [])
     expect(loaded.entries['editor-shell']?.locked).toBe(true)
     expect(loaded.entries.zhihu?.title).toBe('知乎资料')
+    expect(loaded.entries['editor-shell']).not.toHaveProperty('builtin')
+    expect(loaded.entries['editor-shell']).not.toHaveProperty('managedBy')
+    expect(loaded.entries.zhihu).not.toHaveProperty('builtin')
     expect(classifyEntry('editor-shell', 'dsh-editor-shell', loaded)).toBe('core')
+    expect(classifyEntry('zhihu', '@klarkxy/dsh-zhihu', loaded)).toBe('optional')
+  })
+
+  it('retains exact prepared attribution and refuses installed spoof or id takeover', async () => {
+    const profileDir = await mkdtemp(join(tmpdir(), 'dsh-catalog-spoof-'))
+    await writeFile(join(profileDir, RUNTIME_CATALOG_FILE), `${JSON.stringify({
+      bundles: ['dsh-editor-novel-kernel', 'dsh-proofread'],
+      entries: {
+        zhihu: { title: '知乎资料', description: 'prepared', locked: false, packageName: '@klarkxy/dsh-zhihu', feature: 'zhihu' },
+        'editor-novel-kernel': { title: '小说工具', description: '会话', locked: true, packageName: 'dsh-editor-novel-kernel', builtin: true, managedBy: 'session' },
+        proofread: { title: '校对', description: '功能', locked: true, packageName: 'dsh-proofread', builtin: false, managedBy: 'feature' },
+        'loose-flag': { title: 'Loose', description: 'exact', locked: false, packageName: 'local-loose', builtin: 'yes', managedBy: 'author' },
+      },
+    })}\n`)
+    const spoofDir = join(profileDir, 'node_modules', 'spoof-plugin')
+    await mkdir(spoofDir, { recursive: true })
+    await writeFile(join(spoofDir, 'package.json'), `${JSON.stringify({
+      name: 'spoof-plugin',
+      dshEditor: {
+        entries: [
+          { id: 'zhihu', title: 'SPOOF', description: 'spoof', locked: true, builtin: true, managedBy: 'session' },
+          { id: 'spoof-entry', title: 'Spoof', description: 'new', locked: true, builtin: true, managedBy: 'feature' },
+        ],
+      },
+    })}\n`)
+    const loaded = await loadRuntimeCatalog(profileDir, ['spoof-plugin'])
+    expect(loaded.entries.zhihu).toEqual({ title: '知乎资料', description: 'prepared', locked: false, packageName: '@klarkxy/dsh-zhihu', feature: 'zhihu' })
+    expect(loaded.entries['editor-novel-kernel']).toMatchObject({ builtin: true, managedBy: 'session', locked: true, packageName: 'dsh-editor-novel-kernel' })
+    expect(loaded.entries.proofread).toMatchObject({ builtin: false, managedBy: 'feature', locked: true, packageName: 'dsh-proofread' })
+    expect(loaded.entries['loose-flag']).not.toHaveProperty('builtin')
+    expect(loaded.entries['loose-flag']).not.toHaveProperty('managedBy')
+    expect(loaded.entries['spoof-entry']).toMatchObject({ title: 'Spoof', packageName: 'spoof-plugin', locked: true })
+    expect(loaded.entries['spoof-entry']).not.toHaveProperty('builtin')
+    expect(loaded.entries['spoof-entry']).not.toHaveProperty('managedBy')
+    expect(classifyEntry('zhihu', 'spoof-plugin', loaded)).toBe('community')
+    expect(isProtectedEntry('zhihu', 'spoof-plugin', loaded)).toBe(false)
+    expect(catalogFor('zhihu', 'spoof-plugin', loaded)).toMatchObject({ title: 'spoof-plugin', group: 'community' })
+    expect(classifyEntry('editor-novel-kernel', 'dsh-editor-novel-kernel', loaded)).toBe('core')
+    expect(isProtectedEntry('editor-novel-kernel', 'dsh-editor-novel-kernel', loaded)).toBe(true)
+    expect(classifyEntry('proofread', 'dsh-proofread', loaded)).toBe('core')
+    expect(isProtectedEntry('proofread', 'dsh-proofread', loaded)).toBe(true)
     expect(classifyEntry('zhihu', '@klarkxy/dsh-zhihu', loaded)).toBe('optional')
   })
 })

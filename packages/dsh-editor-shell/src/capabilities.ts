@@ -1,6 +1,6 @@
 /** Product-selected optional features, distinct from a missing/broken selected plugin. */
 export const SHELL_RPC_CHANNEL = '/dsh-editor-shell'
-export type ShellFeatureConfig = { features?: Record<string, string> }
+export type ShellFeatureConfig = { features?: Record<string, string>; featureEntries?: Record<string, string[]> }
 export type ShellCapabilities = { features: Record<string, boolean> }
 export type ShellCapabilityResult =
   | { ok: true; value: ShellCapabilities }
@@ -13,6 +13,7 @@ export function featureEnabled(caps: ShellCapabilities | undefined, feature: str
 export function resolveShellCapabilities(
   config: ShellFeatureConfig,
   getService: (name: string) => unknown,
+  isDisabled: (entryId: string) => boolean = () => false,
 ): ShellCapabilityResult {
   const selected = config.features ?? {}
   const features: Record<string, boolean> = {}
@@ -21,7 +22,7 @@ export function resolveShellCapabilities(
     if (typeof service !== 'string' || !service) continue
     const present = Boolean(getService(service))
     features[feature] = present
-    if (!present) missing.push(feature)
+    if (!present && !(config.featureEntries?.[feature]?.length && config.featureEntries[feature]!.every(isDisabled))) missing.push(feature)
   }
   if (missing.length) {
     return { ok: false, error: { code: 'internal', message: '所选组合缺少已启用的插件', details: { missing } } }

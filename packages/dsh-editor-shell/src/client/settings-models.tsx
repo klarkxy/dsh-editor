@@ -60,7 +60,7 @@ import { isSuccessWorkbenchNote, TRANSIENT_STATUS_NOTE_MS, type SettingsDescribe
 import { t, useLocale } from '../i18n/index.ts'
 import type { SettingsScope } from '../dsh-compat.ts'
 import { type WritingPreferences } from '../writing-settings.tsx'
-import { catalogFromSessionGroups, mergeCatalogOptions, WritingModelRoutes, type CatalogModelOption } from './writing-model-routes.tsx'
+import { catalogFromSessionGroups, mergeCatalogOptions, WritingModelRoutes, EditorModelSettings, PluginModelRoutes, type CatalogModelOption } from './writing-model-routes.tsx'
 
 type ModelsRemote = EditorRemote
 
@@ -446,6 +446,51 @@ export function SettingsModelsSection(props: {
   );
 }
 
+/** Runtime-owned model catalogue; a newer refresh or connection supersedes older responses. */
+function useModelCatalog(ctx: ShellContext): CatalogModelOption[] {
+  const [catalog, setCatalog] = useState<CatalogModelOption[]>([])
+  useEffect(() => {
+    let live = true
+    let generation = 0
+    const load = async () => {
+      const ticket = ++generation
+      try {
+        const result = await ctx.remote.session.modelCatalog()
+        if (live && ticket === generation && result.ok) setCatalog(catalogFromSessionGroups(result.value.groups))
+      } catch { /* Stored selections remain visible while the catalogue is unavailable. */ }
+    }
+    void load()
+    const refresh = () => { void load() }
+    window.addEventListener('focus', refresh)
+    const disposers: unknown[] = []
+    for (const event of ['settings/document-updated', 'llm/adapters-updated']) {
+      try { disposers.push(ctx.remote.$on(event as 'settings/document-updated', refresh)) } catch { /* Host may not forward the event. */ }
+    }
+    return () => {
+      live = false
+      generation++
+      window.removeEventListener('focus', refresh)
+      for (const dispose of disposers) if (typeof dispose === 'function') dispose()
+    }
+  }, [ctx])
+  return catalog
+}
+
+export function SettingsEditorModelsSection(props: { ctx: ShellContext; writingScope: SettingsScope<WritingPreferences> }): ReactNode {
+  const catalog = useModelCatalog(props.ctx)
+  const locale = useLocale()
+  return <>
+    <EditorModelSettings connection={props.ctx.connection} catalog={catalog} writable={true} />
+    <Heading as="h3" size="3" mt="4" mb="3">{locale === 'en' ? 'Providers' : '供应商'}</Heading>
+    <SettingsModelsSection {...props} showWritingRoutes={false} />
+  </>
+}
+
+export function SettingsPluginModelsSection(props: { ctx: ShellContext }): ReactNode {
+  const catalog = useModelCatalog(props.ctx)
+  return <PluginModelRoutes connection={props.ctx.connection} catalog={catalog} writable={true} />
+}
+
 export function SettingsChatModelRoute(props: {
   ctx: ShellContext
   writingScope: SettingsScope<WritingPreferences>
@@ -512,13 +557,14 @@ function Loaded(props: {
   }, [section.savedNote])
   const [runtimeCatalog, setRuntimeCatalog] = useState<CatalogModelOption[]>([])
   useEffect(() => {
+    if (!props.showWritingRoutes) return
     let live = true
     void ctx.remote.session.modelCatalog().then((result) => {
       if (!live || !result.ok) return
       setRuntimeCatalog(catalogFromSessionGroups(result.value.groups))
     }).catch(() => { /* keep profile catalog */ })
     return () => { live = false }
-  }, [ctx, state.rows])
+  }, [ctx, state.rows, props.showWritingRoutes])
 
 
   if (state.status === 'idle' || state.status === 'loading') {

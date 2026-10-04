@@ -324,15 +324,11 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   await window.waitForTimeout(600)
   const pluginsRoot = pluginsPage.getByTestId('plugins-settings')
   await pluginsRoot.waitFor({ state: 'visible', timeout: 10_000 })
-  if (!(await pluginsRoot.getByText('系统核心').count()) || !(await pluginsRoot.getByText('稿纸').count())) {
-    throw new Error('settings plugins tab did not list locked core plugins')
-  }
-  const core = pluginsRoot.locator('.dsh-plugins-core')
-  await core.locator('summary').click()
-  await core.getByText('写作必需的部分，不能关闭。', { exact: true }).waitFor()
-  if (await core.locator('button, [role="switch"], input').count()) {
-    throw new Error('core plugin group exposes a mutation control')
-  }
+  const builtins=pluginsRoot.getByTestId('plugins-section-builtin')
+  await builtins.getByRole('heading',{name:'内置插件',exact:true}).waitFor()
+  const paper=builtins.locator('.dsh-plugins-card').filter({has:window.getByText('稿纸',{exact:true})})
+  await paper.getByText('必需',{exact:true}).waitFor()
+  if(await paper.locator('[role="switch"]').count()) throw new Error('required manuscript exposes a mutation control')
   await pluginsRoot.getByTestId('plugins-writing-presets').getByText('小说创作', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 })
   const presetSwitch = pluginsRoot.getByTestId('plugins-preset-toggle-dsh-editor-novel')
   await presetSwitch.waitFor({ state: 'visible', timeout: 10_000 })

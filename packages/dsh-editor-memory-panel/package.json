@@ -46,7 +46,8 @@
         "id": "editor-memory-panel",
         "title": "记忆维护",
         "description": "查看写作搭档自动写入的 AGENTS.md / 人物卡 / 世界书维护历史，可撤销",
-        "feature": "memory-panel"
+        "feature": "memory-panel",
+        "defaultEnabled": false
       }
     ]
   },

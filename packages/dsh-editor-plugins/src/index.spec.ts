@@ -113,6 +113,49 @@ describe('plugin manager RPC', () => {
     const blocked = await handlePluginsRpc('marketplace.uninstall', { name: 'dsh-editor-shell' }, signal(), { loader: loader([]), paths, catalog })
     expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
   })
+
+  it('shows trusted session and feature cards, and keeps a colliding install as community', async () => {
+    const trusted = {
+      bundles: ['dsh-editor-novel-kernel', 'dsh-proofread', 'dsh-editor-shell'],
+      entries: {
+        'editor-novel-kernel': { title: '小说工具', description: '会话', locked: true, packageName: 'dsh-editor-novel-kernel', builtin: true, managedBy: 'session' as const },
+        proofread: { title: '校对', description: '功能', locked: true, packageName: 'dsh-proofread', builtin: true, managedBy: 'feature' as const },
+        zhihu: { title: '知乎资料', description: '知乎搜索', locked: false, packageName: '@klarkxy/dsh-zhihu', builtin: false },
+        'editor-shell': { title: '写作界面', description: '三栏', locked: true, packageName: 'dsh-editor-shell' },
+      },
+    }
+    const installed = [{ name: 'community-theme', spec: 'github:acme/community-theme', version: '1.0.0' }]
+    const inventory = inventoryFromLoader(loader([
+      { id: 'include:editor-novel-kernel', name: 'dsh-editor-novel-kernel' },
+      { id: 'proofread', name: 'dsh-proofread' },
+      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
+      { id: 'zhihu', name: 'community-theme' },
+    ]), { schema: 1, overrides: {}, presets: {}, installed }, trusted)
+    expect(inventory.core).toEqual([
+      expect.objectContaining({ entryId: 'include:editor-novel-kernel', packageName: 'dsh-editor-novel-kernel', locked: true, builtin: true, managedBy: 'session', origin: 'bundled', group: 'core' }),
+      expect.objectContaining({ entryId: 'proofread', packageName: 'dsh-proofread', locked: true, builtin: true, managedBy: 'feature', origin: 'bundled', group: 'core' }),
+    ])
+    expect(inventory.optional[0]).toMatchObject({ entryId: 'include:zhihu', packageName: '@klarkxy/dsh-zhihu', builtin: false, locked: false, origin: 'bundled' })
+    expect(inventory.optional[0]).not.toHaveProperty('managedBy')
+    expect(inventory.community).toEqual([
+      expect.objectContaining({ entryId: 'zhihu', packageName: 'community-theme', title: 'community-theme', locked: false, origin: 'installed', group: 'community', spec: 'github:acme/community-theme' }),
+    ])
+    expect(inventory.community[0]).not.toHaveProperty('builtin')
+    expect(inventory.community[0]).not.toHaveProperty('managedBy')
+
+    const paths = await fixture()
+    const session = loader([{ id: 'include:editor-novel-kernel', name: 'dsh-editor-novel-kernel' }])
+    const refused = await handlePluginsRpc('entry.setEnabled', { entryId: 'include:editor-novel-kernel', enabled: false }, signal(), { loader: session, paths, catalog: trusted })
+    expect(refused).toMatchObject({ ok: false, error: { code: 'forbidden', message: '系统核心插件不能关闭' } })
+    const community = loader([{ id: 'zhihu', name: 'community-theme' }])
+    const toggled = await handlePluginsRpc('entry.setEnabled', { entryId: 'zhihu', enabled: false }, signal(), { loader: community, paths, catalog: trusted })
+    expect(toggled).toMatchObject({ ok: true, value: { restartRequired: false } })
+    expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({ zhihu: false })
+    const uninstall = await handlePluginsRpc('marketplace.uninstall', { name: 'community-theme' }, signal(), { loader: community, paths, catalog: trusted })
+    expect(uninstall).toMatchObject({ ok: false, error: { code: 'not-found' } })
+    const bundled = await handlePluginsRpc('marketplace.uninstall', { name: 'dsh-editor-shell' }, signal(), { loader: loader([]), paths, catalog: trusted })
+    expect(bundled).toMatchObject({ ok: false, error: { code: 'forbidden', message: '系统核心插件不能卸载' } })
+  })
 })
 
 describe('plugin paths', () => {

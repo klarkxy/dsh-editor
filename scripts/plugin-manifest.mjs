@@ -1,7 +1,7 @@
 /** Declarative dshEditor manifests and composition resolution. */
 import { externalPluginDirectories } from './external-plugins.mjs'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-experimental-voice-input-bundle']
@@ -333,6 +333,10 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
   if (new Set(preinstalled).size !== preinstalled.length) fail(`${recipe.id}: duplicate preinstalled packages`)
   const preinstalledPackages = new Set(preinstalled)
   const selected = new Set(preinstalled)
+  if (byName.has('@klarkxy/dsh-model-center')) {
+    selected.add('@klarkxy/dsh-model-center')
+    preinstalledPackages.add('@klarkxy/dsh-model-center')
+  }
   for (const manifest of manifests) {
     if (manifest.role === 'core') selected.add(manifest.name)
     if (rowsOf(manifest).some((row) => row.feature && selectedFeatures.has(row.feature))) selected.add(manifest.name)
@@ -374,6 +378,7 @@ export function resolveComposition(manifests, recipe, libraries = manifests.libr
   for (const name of packages) {
     const manifest = byName.get(name)
     for (const entry of manifest.entries) {
+      if (name === '@klarkxy/dsh-model-center' && entry.id === 'model-center') enabledEntries.push(entry.id)
       if (entry.defaultEnabled === false && selectedFeatures.has(entry.feature)) enabledEntries.push(entry.id)
       // A product recipe that explicitly preinstalls a first-party feature should
       // make it usable out of the box unless its manifest explicitly defaults off.
@@ -448,15 +453,22 @@ export function protectedPackageNames(manifests) {
   return desktopPackageNames(manifests)
 }
 
-export function catalogFromManifests(manifests) {
+export function catalogFromManifests(manifests, packagesDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'packages')) {
   const catalog = {}
   for (const manifest of manifests) {
+    const rel = typeof manifest.dir === 'string' ? relative(packagesDir, manifest.dir) : ''
+    const local = Boolean(rel) && !rel.startsWith('..') && !isAbsolute(rel)
     for (const row of rowsOf(manifest)) {
+      const adoptedModels = row.id === 'model-center' && manifest.name === '@klarkxy/dsh-model-center'
+      const session = ['editor-novel-kernel', 'editor-workbench-tools'].includes(row.id)
       catalog[row.id] = {
-        title: row.title,
+        title: adoptedModels ? '模型配置' : row.title,
         description: row.description,
-        locked: Boolean(row.locked),
+        locked: Boolean(row.locked) || adoptedModels || session || row.id === 'proofread',
         packageName: manifest.name,
+        builtin: local || adoptedModels,
+        ...(session ? { managedBy: 'session' } : {}),
+        ...(row.id === 'proofread' ? { managedBy: 'feature' } : {}),
         ...(row.feature ? { feature: row.feature } : {}),
       }
     }

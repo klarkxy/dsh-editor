@@ -11,7 +11,7 @@ import {
   type PluginsRpcResult,
 } from './contracts.ts'
 import {
-  catalogFor, catalogLookupId, classifyEntry, isProtectedEntry, isProtectedPackage, isSafeEntryId, isSafePackageName,
+  catalogFor, catalogLookupId, catalogRow, classifyEntry, isProtectedEntry, isProtectedPackage, isSafeEntryId, isSafePackageName,
   hasPluginPackage, loadRuntimeCatalog, packageNameOf, type RuntimeCatalog,
 } from './core.ts'
 import { githubHeaders, marketplaceSearchUrl, parseGitHubSpec, parseMarketplaceSearch, sanitizeMarketplaceQuery } from './github.ts'
@@ -173,6 +173,9 @@ export function inventoryFromLoader(loader: LoaderFace, state: PluginState, cata
     const info = catalogFor(entry.id, moduleName, catalog)
     const packageName = packageNameOf(moduleName)
     const extra = installed.get(packageName)
+    const row = catalogRow(entry.id, catalog)
+    const attribution = row && row.packageName === packageName ? row : undefined
+    const managedBy = attribution?.managedBy
     const card: PluginCard = {
       entryId: entry.id,
       moduleName,
@@ -184,6 +187,8 @@ export function inventoryFromLoader(loader: LoaderFace, state: PluginState, cata
       locked: isProtectedEntry(entry.id, moduleName, catalog),
       fiberPhase: fiberPhaseOf(entry),
       origin: extra ? 'installed' : 'bundled',
+      ...(attribution && (attribution.builtin === true || attribution.builtin === false) ? { builtin: attribution.builtin } : {}),
+      ...(managedBy === 'session' || managedBy === 'feature' ? { managedBy } : {}),
       spec: extra?.spec,
       version: extra?.version,
     }

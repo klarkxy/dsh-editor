@@ -105,7 +105,7 @@ describe('plugin manifests and composition resolver', () => {
 
   it('resolves desktop and the basic/smart/full aliases as one capability set, differing only by id and label', async () => {
     const labels = { desktop: '桌面写作', basic: '基础写作', smart: '智能写作', full: '智能写作与资料' }
-    const panels = ['dsh-editor-overview-panel', 'dsh-editor-proofread-panel']
+    const panels = ['dsh-editor-cards', 'dsh-editor-memory-panel', 'dsh-editor-overview-panel', 'dsh-editor-proofread-panel']
     const core = ['dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench']
     const tail = ['dsh-editor-shell', 'dsh-editor-plugins', ...panels, '@klarkxy/dsh-web-search-manager']
     const packages = [...core, 'dsh-editor-novel-kernel', 'dsh-editor-writing-presets', '@klarkxy/dsh-zhihu', ...tail]
@@ -114,7 +114,8 @@ describe('plugin manifests and composition resolver', () => {
       packages,
       libraries: ['dsh-editor-seats', 'dsh-editor-workspace-kit'],
       runtimeDependencies: ['@deepseek-ai/dsh-web-search-exa'],
-      disabledEntries: [],
+      disabledEntries: ['editor-cards', 'editor-memory-panel'],
+      enabledEntries: ['model-center'],
       extraInserts: [{ id: 'zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' }],
       shellFeatures: { assistant: 'sessions', completion: 'manuscriptAssist', zhihu: 'zhihu', 'web-search': 'webSearchManager' },
       presets: [
@@ -142,8 +143,9 @@ describe('plugin manifests and composition resolver', () => {
     expect(capability.packages).toContain('dsh-editor-novel-kernel')
     expect(capability.packages).toContain('dsh-editor-writing-presets')
     expect(capability.packages).toContain('dsh-editor-proofread-panel')
-    expect(capability.packages).not.toContain('dsh-editor-cards')
-    expect(capability.packages).not.toContain('dsh-editor-memory-panel')
+    expect(capability.packages).toContain('dsh-editor-cards')
+    expect(capability.packages).toContain('dsh-editor-memory-panel')
+    expect(capability.disabledEntries).toEqual(['editor-cards', 'editor-memory-panel'])
     expect(capability.extraInserts.map((row) => row.id)).not.toContain('editor-workbench-tools')
     expect(capability.extraInserts.map((row) => row.id)).not.toContain('editor-novel-kernel')
   })
@@ -159,7 +161,7 @@ describe('plugin manifests and composition resolver', () => {
     expect(readFileSync(join(owner.dir, 'cordis.patch.yml'), 'utf8')).toMatch(/id: fusion[\s\S]*?disabled: true/)
   })
 
-  it('preinstalls six independently switchable AI features enabled plus one inert shared service', async () => {
+  it('preinstalls five optional AI features and the essential model configuration carrier', async () => {
     const composition = await desktopComposition()
     expect(composition.packages.filter(name => aiPackages.has(name)).sort()).toEqual([...aiPackages].sort())
     expect(publicPackages(manifests).filter(name => aiPackages.has(name)).sort()).toEqual([...aiPackages].sort())
@@ -335,5 +337,20 @@ describe('plugin conversation preset manifests', () => {
     const dropped = resolveComposition(manifests, { id: 'x', label: 'x', features: [] })
     expect(dropped.packages).toEqual([])
     expect(dropped.presets).toEqual([])
+  })
+})
+
+ describe('trusted builtin distribution catalogue', () => {
+  it('marks local public and private functionality while retaining external ownership', () => {
+    const catalogue = catalogFromManifests(loadPluginManifests(root))
+    expect(catalogue.manuscript.builtin).toBe(true)
+    expect(catalogue['editor-cards']).toMatchObject({ builtin: true, locked: false })
+    expect(catalogue['editor-novel-kernel']).toMatchObject({ builtin: true, locked: true, managedBy: 'session' })
+    expect(catalogue.proofread).toMatchObject({ builtin: true, locked: true, managedBy: 'feature' })
+    expect(catalogue['model-center']).toMatchObject({ builtin: true, locked: true, title: '模型配置' })
+    expect(catalogue['current-title'].builtin).toBe(false)
+    expect(catalogue.zhihu.builtin).toBe(false)
+    const counterfeit = { name: 'dsh-editor-imitation', dir: join(root, 'node_modules', 'dsh-editor-imitation'), builtin: true, entries: [{ id: 'imitation', title: 'Fake', description: 'Fake', builtin: true }], inserts: [] }
+    expect(catalogFromManifests([counterfeit]).imitation.builtin).toBe(false)
   })
 })

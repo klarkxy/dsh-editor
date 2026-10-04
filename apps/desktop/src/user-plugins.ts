@@ -181,6 +181,9 @@ export async function sanitizeHostLockedPluginOverrides(home: string): Promise<v
           if (Object.prototype.hasOwnProperty.call(overrides, id)) { delete overrides[id]; changed = true }
         }
       }
+      if (state.overrides && typeof state.overrides === 'object' && !Array.isArray(state.overrides) && (state.overrides as Record<string, unknown>)['model-center'] === false) {
+        delete (state.overrides as Record<string, unknown>)['model-center']; changed = true
+      }
       if (Array.isArray(state.installed)) {
         const installed = state.installed.filter(item => item?.name !== 'dsh-web-search-tavily')
         if (installed.length !== state.installed.length) { state.installed = installed; changed = true; retired = true }
@@ -199,7 +202,7 @@ export async function sanitizeHostLockedPluginOverrides(home: string): Promise<v
     if (!parsed) return
     const next: Record<string, boolean> = {}
     for (const [id, enabled] of Object.entries(parsed)) {
-      if (!HOST_LOCKED_PLUGIN_IDS.has(id)) next[id] = enabled
+      if (!HOST_LOCKED_PLUGIN_IDS.has(id) && !(id === 'model-center' && enabled === false)) next[id] = enabled
     }
     const rendered = renderManagedOverridePatch(next)
     const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')

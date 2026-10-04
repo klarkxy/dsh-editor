@@ -8,14 +8,28 @@ export type FeatureGroupDef = {
 }
 
 /**
- * Host-owned or session-scoped entries. Authors toggle the user-facing
- * panel instead; these must not leak as leftover switches or mixed state.
+ * Lock presentation. Session- and feature-owned cards stay visible with an
+ * honest ownership label instead of a switch; anything else locked is
+ * essential to the distribution. Labels never collapse into a fake toggle.
  */
-export const HIDDEN_OPTIONAL_PACKAGES = new Set([
-  'dsh-proofread',
-  'dsh-editor-novel-kernel',
-  'dsh-editor-workbench',
-])
+export type PluginLockKind = 'session' | 'feature' | 'required'
+
+export const PLUGIN_LOCK_LABELS: Record<PluginLockKind, string> = {
+  session: '由会话控制',
+  feature: '由校对功能管理',
+  required: '必需',
+}
+
+export function pluginLockKind(card: PluginCard): PluginLockKind {
+  if (card.managedBy === 'session') return 'session'
+  if (card.managedBy === 'feature') return 'feature'
+  return 'required'
+}
+
+/** Section bucketing trusts the trusted-catalogue flag only, never names or prefixes. */
+export function isBuiltinCard(card: PluginCard): boolean {
+  return card.builtin === true
+}
 
 /** Author-purpose groups. Package names stay in details; do not merge packages. */
 export const FEATURE_GROUP_DEFS: readonly FeatureGroupDef[] = [
@@ -143,7 +157,6 @@ export function groupOptionalFeatures(cards: PluginCard[]): FeatureGroupView[] {
   }
   for (const group of groupByPackage(remaining)) {
     const primary = group[0]!
-    if (HIDDEN_OPTIONAL_PACKAGES.has(primary.packageName)) continue
     views.push({
       id: primary.packageName,
       title: primary.title,

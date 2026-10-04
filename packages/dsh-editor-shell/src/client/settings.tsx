@@ -11,8 +11,7 @@ import { AboutSettingsSection } from './settings-about.tsx'
 import { AssistantSettings, completeAuthorDraftSave, reconcileAuthorDraft, type AuthorDraft } from './settings-assistant.tsx'
 import { SettingsGeneralSection, useDeveloperMode } from './settings-general.tsx'
 import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
-import { SettingsChatModelRoute, SettingsModelsSection } from './settings-models.tsx'
-import { ModelSettingsSurface } from './plugin-surfaces.tsx'
+import { SettingsEditorModelsSection } from './settings-models.tsx'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import { SettingsUsageSection } from './settings-usage.tsx'
 import { t, useLocale, type MessageKey } from '../i18n/index.ts'
@@ -208,10 +207,7 @@ export function SettingsDialog(props: {
       ctx={props.ctx}
       showDeveloperMode={authorChrome.showDeveloperMode}
       onRevealDeveloper={() => setDeveloperRevealed(true)} />,
-    models: () => <ModelSettingsSurface ctx={props.ctx} renderSlot={props.renderSlot} sessionId={props.sessionId} locale={locale}
-      renderProviders={options => <SettingsModelsSection ctx={props.ctx} writingScope={props.writingScope}
-        showWritingRoutes={options?.includeWritingRoutes !== false} />}
-      renderChatModel={() => <SettingsChatModelRoute ctx={props.ctx} writingScope={props.writingScope} />} />,
+    models: () => <SettingsEditorModelsSection ctx={props.ctx} writingScope={props.writingScope} />,
     assistant: () => <AssistantSettings snapshot={writingSnapshot} migrate={props.migrateWriting}
       authorDraft={authorDraft} saving={authorSaving} writeFailure={authorWriteFailure}
       onAuthorDraftChange={changeAuthorDraft}

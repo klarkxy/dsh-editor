@@ -138,3 +138,11 @@ describe('official plugin configuration adapter', () => {
     expect(result.html).toContain('plugin-owned recovery')
   })
 })
+
+
+it('names the adopted voice configuration in the active language', () => {
+ const host=fixture({'plugins.bundle.config':[{options:{key:'@deepseek-ai/dsh-experimental-voice-input-bundle'}}]})
+ expect(projectPluginConfigurations(host.slots)[0]?.label).toBe('语音输入')
+ setLocale('en')
+ expect(projectPluginConfigurations(host.slots)[0]?.label).toBe('Voice input')
+})

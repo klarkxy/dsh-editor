@@ -76,3 +76,14 @@ it('ignores the retired Tavily plugin while preserving other plugin settings', (
   })).toMatchObject({ overrides: { 'web-search-manager': true, zhihu: false },
     installed: [{ name: 'community-plugin', spec: 'community-plugin', version: '1' }] })
 })
+
+ describe('essential Editor model configuration migration', () => {
+  it('drops only the obsolete off preference without losing other plugin state', () => {
+    const input = { schema: 1, overrides: { 'model-center': false, zhihu: false }, presets: { 'dsh-editor-article': false }, installed: [{ name: 'test-plugin', spec: 'github:acme/test', version: '1' }] }
+    const parsed = parsePluginState(input)!
+    expect(parsed.overrides).toEqual({ zhihu: false })
+    expect(parsed.presets).toEqual(input.presets)
+    expect(parsed.installed).toEqual(input.installed)
+    expect(parsePluginState({ ...input, overrides: { 'model-center': true } })?.overrides).toEqual({ 'model-center': true })
+  })
+})

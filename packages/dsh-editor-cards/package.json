@@ -56,7 +56,8 @@
         "id": "editor-cards",
         "title": "人物卡与世界书",
         "description": "卡片列表、frontmatter 编辑、引用导航与新建",
-        "feature": "cards"
+        "feature": "cards",
+        "defaultEnabled": false
       }
     ]
   },

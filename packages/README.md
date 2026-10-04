@@ -28,6 +28,8 @@
 | [dsh-editor-seats](dsh-editor-seats/README.md) | 界面扩展合同 |
 | [dsh-editor-workspace-kit](dsh-editor-workspace-kit/README.md) | 工作区共享库 |
 
+功能在产品中的归属、开关与设置入口见[内置插件与设置](../docs/builtin-plugins.md)；库依赖不提供空开关。
+
 ## 官方 DSH 能力
 
 | 官方包或能力 | Editor 中的用途 |
@@ -42,7 +44,7 @@ Editor 保留稿纸布局，以官方公有布局合同和界面槽位承载这�
 
 `dsh-editor-*` 为桌面私有包。入口、依赖与默认开关以各包 `package.json` 为准；组合定义在 [desktop.json](../apps/desktop/resources/compositions/desktop.json)，`basic` / `smart` / `full` 是同一组合的兼容别名。
 
-这六个 AI 功能预装并默认启用，仍可分别停用；Fusion 协作预装但默认关闭。Dream、Agent 与语义检查点等自动行为默认开启，可分别关闭；共享服务只提供机制，不会自行调用模型。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。
+当前标题、需求澄清、回顾、记忆与自我改进预装并默认启用，可分别停用；模型配置纳入必需内置模块，Fusion 协作预装但默认关闭。Dream、Agent 与语义检查点等自动行为默认开启，可分别关闭；共享服务只提供机制，不会自行调用模型。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。
 
 [发布维护](PUBLISHING.md) · [桌面使用指南](../docs/user-guide.md)
 

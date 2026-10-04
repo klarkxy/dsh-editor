@@ -32,6 +32,8 @@ dsh --profile web
 
 Host RPC 挂在 `/manuscript` 通道，端点包括：`tree.list`、`file.read` / `file.create` / `file.write`、`draft.get` / `draft.list` / `draft.put` / `draft.delete`、`search.text`、`proposal.prepare` / `proposal.apply`、`fim.complete`、`patch.complete`、`capabilities.get`、`usage.summary`。除 `capabilities.get` 与 `usage.summary` 外都需要有效会话；写入类端点在工作区写锁下执行。
 
-行内补全与选段改写通过 `@klarkxy/dsh-ai-services` 调用模型。用途为 `manuscript.completion`、`manuscript.rewrite`，分别默认使用快速档和对话档；幻想档仅在用户显式选择时使用；可由模型中心统一配置。未安装或停用模型中心时使用默认对话模型，保留手动指定的模型或会话选择。公开包依赖共享服务，不依赖私有 Editor 运行时。
+行内补全与选段改写通过官方 `@deepseek-ai/dsh-llm` 直接调用模型，`@klarkxy/dsh-ai-services` 负责解析现有模型策略。用途为 `manuscript.completion`、`manuscript.rewrite`，分别默认使用快速档和对话档；幻想档仅在用户显式选择时使用；可由模型中心统一配置。未安装或停用模型中心时使用默认对话模型，保留手动指定的模型或会话选择。公开包依赖共享服务，不依赖私有 Editor 运行时。
 
-桌面旧写作模型设置只导入一次，迁移标记与缺失的用途默认值一同保存；补全和改写共用取消、限额与用量回执。生成结果仍是候选，需作者采纳才改变正文。
+桌面旧写作模型设置只导入一次，迁移标记与缺失的用途默认值一同保存。补全和改写在本插件内按供应商共用写作并发额度，读取中央策略的并发、输入、输出与超时上限；这份额度与其他 AI 插件的辅助调用队列分开计数。写作调用只尝试一次，不使用辅助调用的 `maxAttempts` 重试设置。
+
+用量通过原有 `llm/stream` 统计进入 `usage.summary`，不再产生 `aiServices.usage()` 的写作用途回执。达到补全 240 字符或改写 1200 字符的上限时停止生成；如果供应商尚未返回用量，该次调用可能没有统计记录，不估算缺失的 token。生成结果仍是候选，需作者采纳才改变正文。

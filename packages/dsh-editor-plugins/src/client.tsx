@@ -30,6 +30,9 @@ import {
   enabledState,
   groupByPackage,
   groupOptionalFeatures,
+  isBuiltinCard,
+  PLUGIN_LOCK_LABELS,
+  pluginLockKind,
   toggleableCards,
   type FeatureGroupView,
 } from './client-groups.ts'
@@ -152,6 +155,17 @@ export function pluginToggleFollowUp(input: {
   return { persist: false, error: true, message: '插件状态未完全同步，请重试或重启后再确认。' }
 }
 
+/** 内置归属只信目录下发的 builtin 标记，从不按包名前缀猜。 */
+export function splitBundledCards(cards: readonly PluginCard[]): { builtin: PluginCard[]; preinstalled: PluginCard[] } {
+  const builtin: PluginCard[] = []
+  const preinstalled: PluginCard[] = []
+  for (const card of cards) {
+    if (isBuiltinCard(card)) builtin.push(card)
+    else preinstalled.push(card)
+  }
+  return { builtin, preinstalled }
+}
+
 function toggleTestId(card: PluginCard): string {
   const id = card.entryId.includes(':') ? card.entryId.slice(card.entryId.indexOf(':') + 1) : card.entryId
   return `plugins-toggle-${id}`
@@ -252,7 +266,7 @@ function FeatureCard(props: {
     primary.version ? primary.version : '',
     ...props.composition,
   ].filter(Boolean)
-  const locked = cards.every((card) => card.locked)
+  const managed = cards.every((card) => card.locked || card.managedBy !== undefined)
   const canToggle = toggleableCards(cards).length > 0
   const activating = cards.some((card) => card.fiberPhase === 'pending' || card.fiberPhase === 'loading' || card.fiberPhase === 'unloading')
   return (
@@ -286,9 +300,9 @@ function FeatureCard(props: {
           : null}
       </div>
       <div className="dsh-plugins-actions">
-        {locked
+        {managed
           ? <span className="dsh-plugins-locked">
-          核心
+          {PLUGIN_LOCK_LABELS[pluginLockKind(primary)]}
         </span>
           : canToggle
             ? <Switch
@@ -445,7 +459,7 @@ function WritingPresetGroup(props: {
             <div className="dsh-plugins-actions">
               {preset.locked
                 ? <span className="dsh-plugins-locked">
-                核心
+                必需
               </span>
                 : <Switch
                 checked={preset.enabled}
@@ -461,63 +475,20 @@ function WritingPresetGroup(props: {
   );
 }
 
-function CoreGroup(props: { cards: PluginCard[] }) {
-  if (props.cards.length === 0) return (
-    <section className="dsh-plugins-group">
-      <h3>
-        系统核心
-      </h3>
-      <p className="dsh-plugins-empty">
-        未找到核心插件。
-      </p>
-    </section>
-  );
-  return (
-    <section className="dsh-plugins-group">
-      <details className="dsh-plugins-core">
-        <summary>
-          {`系统核心（${props.cards.length}）`}
-        </summary>
-        <p className="dsh-plugins-core-hint">
-          写作必需的部分，不能关闭。
-        </p>
-        <ul className="dsh-plugins-core-list">
-          {props.cards.map((card) => <li key={card.entryId}>
-            <span className="dsh-plugins-card-title">
-              {card.title}
-            </span>
-            <span className="dsh-plugins-card-desc">
-              {card.description}
-            </span>
-          </li>)}
-        </ul>
-      </details>
-    </section>
-  );
-}
-
-function FeatureGroup(props: {
+function BundledSection(props: {
   title: string
+  testId: string
   cards: PluginCard[]
   empty: string
   busyPackage: string | null
   onToggle: PluginToggle
-  onUninstall?: (card: PluginCard) => void
-  byPurpose?: boolean
-  community?: boolean
   hostButton?: ComponentType<HostButtonProps>
+  children?: ReactNode
 }) {
-  const groups: FeatureGroupView[] = props.byPurpose
-    ? groupOptionalFeatures(props.cards)
-    : groupByPackage(props.cards).map((cards) => ({
-      id: cards[0]!.packageName,
-      title: cards[0]!.title,
-      description: cards.map((card) => card.description).filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('；'),
-      cards,
-      composition: cards.map((card) => `${card.title}（${card.packageName}）`),
-    }))
-  if (groups.length === 0) return (
-    <section className="dsh-plugins-group">
+  const managed = props.cards.filter((card) => card.locked || card.managedBy !== undefined)
+  const views = groupOptionalFeatures(props.cards.filter((card) => !card.locked && card.managedBy === undefined))
+  if (managed.length === 0 && views.length === 0 && !props.children) return (
+    <section className="dsh-plugins-group" data-testid={props.testId}>
       <h3>
         {props.title}
       </h3>
@@ -527,7 +498,65 @@ function FeatureGroup(props: {
     </section>
   );
   return (
-    <section className="dsh-plugins-group">
+    <section className="dsh-plugins-group" data-testid={props.testId}>
+      <h3>
+        {props.title}
+      </h3>
+      {props.children}
+      {views.map((group) => <FeatureCard
+        key={group.id}
+        groupId={group.id}
+        title={group.title}
+        description={group.description}
+        composition={group.composition}
+        cards={group.cards}
+        busy={props.busyPackage === group.id || group.cards.some((card) => card.packageName === props.busyPackage)}
+        onToggle={props.onToggle}
+        hostButton={props.hostButton} />)}
+      {managed.map((card) => <FeatureCard
+        key={card.entryId}
+        groupId={card.entryId}
+        title={card.title}
+        description={card.description}
+        composition={[]}
+        cards={[card]}
+        busy={false}
+        onToggle={props.onToggle}
+        hostButton={props.hostButton} />)}
+    </section>
+  );
+}
+
+function FeatureGroup(props: {
+  title: string
+  testId?: string
+  cards: PluginCard[]
+  empty: string
+  busyPackage: string | null
+  onToggle: PluginToggle
+  onUninstall?: (card: PluginCard) => void
+  community?: boolean
+  hostButton?: ComponentType<HostButtonProps>
+}) {
+  const groups: FeatureGroupView[] = groupByPackage(props.cards).map((cards) => ({
+    id: cards[0]!.packageName,
+    title: cards[0]!.title,
+    description: cards.map((card) => card.description).filter(Boolean).filter((value, index, all) => all.indexOf(value) === index).join('；'),
+    cards,
+    composition: cards.map((card) => `${card.title}（${card.packageName}）`),
+  }))
+  if (groups.length === 0) return (
+    <section className="dsh-plugins-group" data-testid={props.testId}>
+      <h3>
+        {props.title}
+      </h3>
+      <p className="dsh-plugins-empty">
+        {props.empty}
+      </p>
+    </section>
+  );
+  return (
+    <section className="dsh-plugins-group" data-testid={props.testId}>
       <h3>
         {props.title}
       </h3>
@@ -544,6 +573,60 @@ function FeatureGroup(props: {
         onUninstall={props.onUninstall}
         hostButton={props.hostButton} />)}
     </section>
+  );
+}
+
+export function PluginInstalledGroups(props: {
+  inventory: PluginInventory | null
+  presets: WritingPresetCard[] | null
+  busyPackage: string | null
+  busyPreset: string | null
+  onToggle: PluginToggle
+  onTogglePreset(id: string, enabled: boolean): void
+  onUninstall(card: PluginCard): void
+  hostButton?: ComponentType<HostButtonProps>
+}) {
+  const { builtin, preinstalled } = splitBundledCards([
+    ...(props.inventory?.core ?? []),
+    ...(props.inventory?.optional ?? []),
+  ])
+  return (
+    <div className="dsh-plugins-groups">
+      <BundledSection
+        title="内置插件"
+        testId="plugins-section-builtin"
+        cards={builtin}
+        empty="未找到内置插件。"
+        busyPackage={props.busyPackage}
+        onToggle={props.onToggle}
+        hostButton={props.hostButton}>
+        {props.presets
+          ? <WritingPresetGroup
+          hostButton={props.hostButton}
+          presets={props.presets}
+          busyPreset={props.busyPreset}
+          onToggle={props.onTogglePreset} />
+          : null}
+      </BundledSection>
+      <BundledSection
+        title="预装插件"
+        testId="plugins-section-preinstalled"
+        cards={preinstalled}
+        empty="没有预装插件。"
+        busyPackage={props.busyPackage}
+        onToggle={props.onToggle}
+        hostButton={props.hostButton} />
+      <FeatureGroup
+        hostButton={props.hostButton}
+        title="已安装插件"
+        testId="plugins-section-installed"
+        cards={props.inventory?.community ?? []}
+        empty="还没有从市场安装插件。"
+        busyPackage={props.busyPackage}
+        onToggle={props.onToggle}
+        onUninstall={props.onUninstall}
+        community={true} />
+    </div>
   );
 }
 
@@ -954,33 +1037,15 @@ function PluginPanel(props: PluginPanelProps) {
         {activityDots()}
         正在读取已安装插件…
       </p>
-          : <div className="dsh-plugins-groups">
-        {props.presets
-          ? <WritingPresetGroup
-          hostButton={props.Button}
-          presets={props.presets}
-          busyPreset={props.busyPreset}
-          onToggle={props.onTogglePreset} />
-          : null}
-        <CoreGroup cards={props.inventory?.core ?? []} />
-        <FeatureGroup
-          hostButton={props.Button}
-          title="写作功能"
-          cards={props.inventory?.optional ?? []}
-          empty="没有可开关的写作功能。"
-          busyPackage={props.busyPackage}
-          onToggle={props.onToggle}
-          byPurpose={true} />
-        <FeatureGroup
-          hostButton={props.Button}
-          title="已安装的社区插件"
-          cards={props.inventory?.community ?? []}
-          empty="还没有从市场安装插件。"
-          busyPackage={props.busyPackage}
-          onToggle={props.onToggle}
-          onUninstall={props.onUninstall}
-          community={true} />
-      </div>
+          : <PluginInstalledGroups
+        inventory={props.inventory}
+        presets={props.presets}
+        busyPackage={props.busyPackage}
+        busyPreset={props.busyPreset}
+        onToggle={props.onToggle}
+        onTogglePreset={props.onTogglePreset}
+        onUninstall={props.onUninstall}
+        hostButton={props.Button} />
         : <div className="dsh-plugins-market">
         <form className="dsh-plugins-search" onSubmit={onMarketSubmit}>
           {props.Input

@@ -76,11 +76,18 @@ export async function configureProfile(destination, composition) {
     : ''
   const disabledPatch = composition.disabledEntries.map((id) => `- id: ${id}\n  disabled: true\n`).join('')
   const enabledPatch = (composition.enabledEntries ?? []).map((id) => `- id: ${id}\n  disabled: false\n`).join('')
+  const featureEntries = {}
+  for (const manifest of manifests.filter(item => composition.packages.includes(item.name))) {
+    for (const row of [...manifest.entries, ...manifest.inserts]) {
+      if (row.feature && row.service === composition.shellFeatures[row.feature]) (featureEntries[row.feature] ??= []).push(row.id)
+    }
+  }
+  const featureEntriesPatch = `    featureEntries: ${JSON.stringify(featureEntries)}\n`
   const featureKeys = Object.keys(composition.shellFeatures)
   const featuresPatch = featureKeys.length
     ? `    features:\n${featureKeys.map((feature) => `      ${feature}: ${composition.shellFeatures[feature]}\n`).join('')}`
     : '    features: {}\n'
-  const selectionPatch = `${extraInsertPatch}${disabledPatch}${enabledPatch}- id: editor-shell\n  config:\n${featuresPatch}`
+  const selectionPatch = `${extraInsertPatch}${disabledPatch}${enabledPatch}- id: editor-shell\n  config:\n${featuresPatch}${featureEntriesPatch}`
   const configBundle = resolve(destination, 'node_modules', 'dsh-editor-profile-config')
   await mkdir(configBundle, { recursive: true })
   await writeFile(resolve(configBundle, 'package.json'), JSON.stringify({ name: 'dsh-editor-profile-config', private: true, version: '1.0.0', dsh: { bundle: { patch: ['./base.patch.yml', './presets.patch.json'] } } }))
@@ -93,13 +100,13 @@ export async function configureProfile(destination, composition) {
     bundles: composition.bundles,
     entries: {
       ...catalogFromManifests(selected),
-      'ui-shortcuts': { title: '快捷键', description: '使用官方快捷键搜索、录制和重置。', locked: false, packageName: '@deepseek-ai/dsh-client-ui-shortcuts' },
-      'ui-sidebar-documentpreview': { title: '资料预览', description: '预览图片、PDF、Office 文档和表格。', locked: false, packageName: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview' },
-      'mcp-resources': { title: 'MCP 资源', description: '读取已配置 MCP 服务提供的资源。', locked: false, packageName: '@deepseek-ai/dsh-mcp-resources' },
-      ...Object.fromEntries(['speech-to-text', 'speech-to-text-sensevoice', 'api-speech-to-text', 'ui-voice-input'].map(id => [id, {
-        title: '语音输入', description: '使用官方本地语音识别，将转写放入对话草稿。首次使用需准备模型。', locked: false,
-        packageName: '@deepseek-ai/dsh-experimental-voice-input-bundle',
-      }])),
+      'ui-shortcuts': { title: '快捷键', description: '使用官方快捷键搜索、录制和重置。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-shortcuts' },
+      'ui-sidebar-documentpreview': { title: '资料预览', description: '预览图片、PDF、Office 文档和表格。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview' },
+      'mcp-resources': { title: 'MCP 资源', description: '读取已配置 MCP 服务提供的资源。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-mcp-resources' },
+      ...Object.entries({ 'speech-to-text': '@deepseek-ai/dsh-experimental-speech-to-text', 'speech-to-text-sensevoice': '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice', 'api-speech-to-text': '@deepseek-ai/dsh-experimental-api-speech-to-text', 'ui-voice-input': '@deepseek-ai/dsh-experimental-client-ui-voice-input' }).reduce((rows, [id, packageName]) => ({ ...rows, [id]: {
+        title: '语音输入', description: '使用官方本地语音识别，将转写放入对话草稿。首次使用需准备模型。', locked: false, builtin: true,
+        packageName,
+      } }), {}),
     },
   }, null, 2)}\n`)
   // First-party plugin presets ship through the same template channel as the
