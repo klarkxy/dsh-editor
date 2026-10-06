@@ -25,9 +25,6 @@ Host 在 `/dsh-editor-workbench` 通道（`WORKBENCH_RPC_CHANNEL`，仅本机回
 
 独立 entry「写作工具」（跟随「助手」功能开关），注册 `writing_propose`（写作提案）与 `author_observe`（作者侧写观察）两个通用写作工具，并按权限边界禁用继承自宿主的编码工具：`write` / `edit` / `pwsh` / `bash` / `shell` / `str_replace` / `NotebookEdit`（src/tools.ts）。小说专有的 `novel_*` 工具由 novel-kernel 经 `installNovelWorkbenchTools` 另行挂载。
 
-## Fusion host
-
-`apply` 提供 `fusionWriting` 服务（src/index.ts、src/fusion-host.ts），作为 dsh-fusion 的写作 Host：采用候选前重新解析会话身份、工作区与沙箱访问，校验目标文件版本、原始读取基线和未保存的作者草稿；版本漂移、访问变化或存在未保存草稿都会拒绝写入，候选文本只按字节采用、不重新生成。
 
 ## 子路径导出
 

@@ -1,5 +1,7 @@
 # Fusion collaboration implementation
 
+历史留档：Fusion 已从 Editor 发行组合、依赖和宿主接入中移除。本文记录先前设计，不是当前可用功能；历史任务与作者文件不删除。
+
 Fusion is a production plugin built on native DSH continuable sessions. It is preinstalled but disabled by default. This document records its implementation boundaries; current verification evidence belongs to the acceptance report, not to this design document.
 
 ## Accepted boundaries

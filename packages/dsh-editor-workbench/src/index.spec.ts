@@ -74,7 +74,7 @@ describe('private editor workbench Host RPC', () => {
     } as unknown as Context)
     expect(guard).not.toHaveBeenCalled()
     expect(effectNames).not.toContain('dsh-editor-workbench.host-guard')
-    expect(provide).toHaveBeenCalledWith('fusionWriting', expect.objectContaining({ capture: expect.any(Function), transact: expect.any(Function) }))
+    expect(provide).not.toHaveBeenCalledWith('fusionWriting', expect.anything())
   })
 
   it('does not remount a tool guard from the tools plugin', () => {
