@@ -64,7 +64,7 @@ async function fixture() {
   const manifest = {
     format: 1,
     platform: `${process.platform}-${process.arch}`,
-    node: { version: '24.16.0', ...await treeDigest(join(resources, 'node')) },
+    node: { version: '26.10.0', ...await treeDigest(join(resources, 'node')) },
     dsh: { version: '0.2.0-rc.2', ...await treeDigest(join(resources, 'dsh')) },
     profile: await treeDigest(join(resources, 'profile-template')),
   }
@@ -115,6 +115,25 @@ describe('desktop runtime packaging regressions (#1)', () => {
     expect(shouldMaterializePackagedRuntime({})).toBe(false)
     expect(shouldMaterializePackagedRuntime({ PORTABLE_EXECUTABLE_FILE: 'app.exe' })).toBe(true)
     expect(runtimeFromResources(resources).cliPath).toBe(join(resources, 'dsh', 'lib', 'bin.js'))
+  })
+
+  it('replaces an owned Node 24 cache with Node 26 while preserving user files', async () => {
+    const { resources, home, manifest } = await fixture()
+    const first = await materializePackagedRuntime(home, resources)
+    const cache = join(home, 'runtime', 'dsh-editor-runtime')
+    const oldManifest = { ...manifest, node: { ...manifest.node, version: '24.16.0' } }
+    await writeFile(join(cache, '.dsh-editor-runtime.json'), JSON.stringify({
+      app: 'dsh-editor', schema: 1, manifest: JSON.stringify(oldManifest),
+    }))
+    await writeFile(first.nodePath, 'old Node 24 runtime')
+    await writeFile(join(home, 'author-work.txt'), 'keep this manuscript')
+
+    const upgraded = await materializePackagedRuntime(home, resources)
+    expect(await readFile(upgraded.nodePath, 'utf8')).toBe('node fixture')
+    expect(await readFile(join(home, 'author-work.txt'), 'utf8')).toBe('keep this manuscript')
+    const marker = JSON.parse(await readFile(join(cache, '.dsh-editor-runtime.json'), 'utf8'))
+    expect(JSON.parse(marker.manifest).node.version).toBe('26.10.0')
+    expect(await readdir(join(home, 'runtime'))).toEqual(['dsh-editor-runtime'])
   })
 
   it('drains delayed sibling writers before reporting a copy failure or removing stage', async () => {
@@ -185,7 +204,8 @@ describe('desktop runtime packaging regressions (#1)', () => {
       const probe = JSON.parse(execFileSync(join(output, name), ['--version', 'argument with spaces'], { encoding: 'utf8', env: { ...process.env, PATH: '/usr/bin:/bin' } }))
       expect(probe).toEqual({ dependency: 'bundled dependency', node: await realpath(join(output, 'node')), args: ['--version', 'argument with spaces'] })
     }
-    expect((await treeDigest(output)).files).toBe(7)
+    const pnpm = JSON.parse(await readFile(join(output, 'node_modules', 'pnpm', 'package.json'), 'utf8'))
+    expect(pnpm).toMatchObject({ name: 'pnpm', version: '11.7.0' })
   }, 20_000)
 
   it('keeps Windows npm/npx command shims with their complete package', async () => {
@@ -204,6 +224,6 @@ describe('desktop runtime packaging regressions (#1)', () => {
       expect(await readFile(join(output, `${name}.cmd`), 'utf8')).toContain('%~dp0node.exe')
       expect(await readFile(join(output, 'node_modules', 'npm', 'bin', `${name}-cli.js`), 'utf8')).toBe(name)
     }
-    expect((await treeDigest(output)).files).toBe(6)
-  })
+    expect(JSON.parse(await readFile(join(output, 'node_modules', 'pnpm', 'package.json'), 'utf8'))).toMatchObject({ name: 'pnpm', version: '11.7.0' })
+  }, 20_000)
 })

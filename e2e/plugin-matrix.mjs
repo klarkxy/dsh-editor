@@ -19,7 +19,6 @@ import { loadPluginManifests, publicPackages } from '../scripts/plugin-manifest.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const pluginManifests = loadPluginManifests(root)
 const publicPluginPackages = publicPackages(pluginManifests)
-const sharedService = '@klarkxy/dsh-ai-services'
 const out = path.join(root, 'e2e', 'out', 'plugin-matrix')
 const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-editor-matrix-'))
 const dshHome = path.join(runRoot, 'home')
@@ -68,6 +67,21 @@ function manifestFor(name) {
 }
 
 function stageTarball(name) {
+  if (name === '@klarkxy/dsh-zhihu') {
+    // On-demand public plugin: test its published artifact without adding it to the distribution.
+    const npm = process.env.npm_execpath
+    if (!npm) throw new Error('run the matrix through pnpm')
+    const result = spawnSync(process.execPath, [npm, 'exec', 'npm', 'pack', name + '@0.1.10', '--ignore-scripts', '--json', '--pack-destination', staging], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 120000 })
+    if (result.status !== 0) throw new Error('optional Zhihu fixture download failed: ' + result.stderr)
+    const archive = path.join(staging, 'klarkxy-dsh-zhihu-0.1.10.tgz')
+    const contents = spawnSync('tar', ['-xOf', archive, 'package/package.json'], { encoding: 'utf8', windowsHide: true })
+    if (contents.status !== 0) throw new Error('cannot read optional fixture manifest')
+    const pkg = JSON.parse(contents.stdout)
+    if (pkg.name !== name || pkg.version !== '0.1.10') throw new Error('optional fixture identity mismatch')
+    publicPluginPackages.push(name)
+    pluginManifests.push({ name, entries: pkg.dshEditor.entries ?? [], inserts: pkg.dshEditor.inserts ?? [] })
+    return archive.replaceAll('\\', '/')
+  }
   const manifest = manifestFor(name)
   const source = path.join(root, '.pack', `${name.replace(/^@/, '').replaceAll('/', '-')}-${manifest.version}.tgz`)
   if (!fs.existsSync(source)) throw new Error(`missing current tarball: ${source}`)
@@ -120,7 +134,7 @@ function inspectState(name, expectedPlugins) {
   const dependencies = Object.keys(manifest.dependencies || {}).filter((item) => publicPluginPackages.includes(item))
   const bundles = manifest.dsh?.profile?.bundles || []
   const pluginBundles = bundles.filter((item) => publicPluginPackages.includes(item))
-  const installed = [sharedService, ...expectedPlugins]
+  const installed = [...expectedPlugins]
   assertEqualSet(dependencies, installed, `${name} dependencies`)
   assertEqualSet(pluginBundles, installed, `${name} bundles`)
 
@@ -832,7 +846,6 @@ function safeCleanup() {
 }
 
 resetOutput()
-const sharedServiceTarball = stageTarball(sharedService)
 const manuscriptTarball = stageTarball('dsh-manuscript')
 const proofreadTarball = stageTarball('dsh-proofread')
 const zhihuTarball = stageTarball('@klarkxy/dsh-zhihu')
@@ -845,10 +858,6 @@ try {
   } finally {
     await probePage.close()
   }
-  transition('add', sharedService, `file:${sharedServiceTarball}`)
-  const profileManifest = readProfileManifest()
-  profileManifest.pnpm = { ...profileManifest.pnpm, overrides: { ...profileManifest.pnpm?.overrides, [sharedService]: 'file:' + sharedServiceTarball } }
-  fs.writeFileSync(path.join(dshHome, 'profiles', profile, 'package.json'), JSON.stringify(profileManifest, null, 2) + '\n')
   transition('add', 'dsh-manuscript', `file:${manuscriptTarball}`)
   inspectState('01-manuscript-only', ['dsh-manuscript'])
   await probeWeb(browser, '01-manuscript-only', ['dsh-manuscript'], 0)

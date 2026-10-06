@@ -1,10 +1,19 @@
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parse } from 'yaml'
 
 /** Existing preset directories are distribution artifacts; the native registry owns live definitions. */
 export async function syncPresetDeclarations(home: string, profileDir: string): Promise<void> {
+  // Product profiles share the plugin manager's writer so restart preserves
+  // independently installed tool entries. Minimal profiles retain preset-only sync.
+  const sharedWriter = join(profileDir, 'node_modules', 'dsh-editor-plugins', 'lib', 'preset-config.js')
+  if (existsSync(sharedWriter)) {
+    const implementation = await import(pathToFileURL(sharedWriter).href) as { syncPresetDeclarations: typeof syncPresetDeclarations }
+    await implementation.syncPresetDeclarations(home, profileDir)
+    return
+  }
   const root = join(home, '.agent-presets')
   let entries: import('node:fs').Dirent[]
   try { entries = await readdir(root, { withFileTypes: true }) } catch (error) {

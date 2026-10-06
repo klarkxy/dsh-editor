@@ -50,7 +50,7 @@ async function resolveRuntime(home: string): Promise<{
   if (!nodePath || !cliPath) throw new Error('Development requires DSH_DESKTOP_NODE_PATH and DSH_DESKTOP_CLI_PATH.')
   for (const path of [nodePath, cliPath, template]) if (!existsSync(path)) throw new Error(`Required desktop resource is missing: ${path}`)
   const nodeVersion = execFileSync(nodePath, ['--version'], { encoding: 'utf8', windowsHide: true }).trim()
-  if (nodeVersion !== 'v24.16.0') throw new Error(`Node runtime mismatch: expected v24.16.0, found ${nodeVersion || 'unknown'}`)
+  if (nodeVersion !== 'v26.10.0') throw new Error(`Node runtime mismatch: expected v26.10.0, found ${nodeVersion || 'unknown'}`)
   const manifest = JSON.parse(readFileSync(join(dirname(dirname(cliPath)), 'package.json'), 'utf8')) as { name?: string; version?: string }
   if (manifest.name !== '@deepseek-ai/dsh' || manifest.version !== '0.2.0-rc.2') {
     throw new Error(`DSH runtime mismatch: expected @deepseek-ai/dsh@0.2.0-rc.2, found ${manifest.name ?? 'unknown'}@${manifest.version ?? 'unknown'}`)

@@ -1,6 +1,6 @@
 import { registerEditorWorkspaceShortcuts } from './official-shortcuts.ts'
 import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
-import { OfficialSurfaceProvider, OfficialOverlays, PLUGIN_NAVIGATION_EVENT, type OfficialRootProps } from './official-surfaces.tsx'
+import { OfficialSurfaceProvider, OfficialOverlays, type OfficialRootProps } from './official-surfaces.tsx'
 import {
   Fragment,
   memo,
@@ -425,7 +425,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pluginsOpen, setPluginsOpen] = useState(false)
-  const [requestedPlugin, setRequestedPlugin] = useState<string>()
   const [officialPreviewOpen, setOfficialPreviewOpen] = useState(false)
   const [previewViewport, setPreviewViewport] = useState(() => globalThis.innerWidth)
   useEffect(() => {
@@ -434,22 +433,24 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     return () => globalThis.removeEventListener('resize', resized)
   }, [])
   useEffect(() => {
-    const navigate = (event: Event) => {
-      const packageName = (event as CustomEvent<unknown>).detail
-      if (typeof packageName !== 'string') return
-      setRequestedPlugin(packageName)
-      setPluginsOpen(true)
-    }
-    globalThis.addEventListener(PLUGIN_NAVIGATION_EVENT, navigate)
-    return () => globalThis.removeEventListener(PLUGIN_NAVIGATION_EVENT, navigate)
-  }, [])
+    const source = (ctx as unknown as { layout: { panelInfo: { getSnapshot(): { activePanelId: string | null }; subscribe(fn: () => void): () => void } } }).layout.panelInfo
+    const update = () => setPluginsOpen(source.getSnapshot().activePanelId === 'plugins')
+    update()
+    return source.subscribe(update)
+  }, [ctx])
   useEffect(() => {
     const source = (ctx as unknown as { layout: { presentation: { getSnapshot(): { shown: boolean }; subscribe(fn: () => void): () => void } } }).layout.presentation
     const update = () => setOfficialPreviewOpen(source.getSnapshot().shown)
     update()
     return source.subscribe(update)
   }, [ctx])
-  const openPlugins = () => { setSettingsOpen(false); setPluginsOpen(true) }
+  const openPlugins = () => {
+    setSettingsOpen(false)
+    ;(ctx as unknown as { layout: { selectPanel(id: string | null): void } }).layout.selectPanel('plugins')
+  }
+  const closePlugins = () => {
+    ;(ctx as unknown as { layout: { selectPanel(id: string | null): void } }).layout.selectPanel(null)
+  }
   const [settingsFocusTab, setSettingsFocusTab] = useState<SettingsTab | undefined>()
   const openSettings = useCallback((tab?: SettingsTab) => {
     setSettingsFocusTab(tab)
@@ -2088,8 +2089,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   if (workspaceOpen.kind === 'checking' || !fileSession || workspaceOpen.kind !== 'ready') {
     return (
       <ShellUiProvider theme={theme} accent={accent}>
-        <PluginWorkspace requestedPackage={requestedPlugin} open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
-          sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={() => setPluginsOpen(false)}>
+        <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
+          sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={closePlugins}>
         <HomeScreen
           workspaceOpen={workspaceOpen}
           extensionsDock={extensionsDock}
@@ -2136,8 +2137,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
 
   return (
     <ShellUiProvider theme={theme} accent={accent}>
-        <PluginWorkspace requestedPackage={requestedPlugin} open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
-          sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={() => setPluginsOpen(false)}>
+        <PluginWorkspace open={pluginsOpen} ctx={ctx} renderSlot={renderSlot} plugins={pluginsSettings} zhihu={zhihuSettings}
+          sessionId={session?.sessionId} hasWorkspace={Boolean(fileSession)} onClose={closePlugins}>
       <main
         className={`shell layout-shell${focusMode ? ' focus-mode' : ''}${sidebarInGrid ? ' files-open' : ''}${assistantVisible ? ' assistant-open' : ''}${assistantInGrid ? ' assistant-in-grid' : ''}${assistantVisible && overlayAssistant ? ' assistant-overlay' : ''}${pinnedVisible ? ' pinned-open' : ''}`}
         ref={shellMainRef}

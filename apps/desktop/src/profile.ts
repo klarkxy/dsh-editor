@@ -1,16 +1,37 @@
 import { syncPresetDeclarations } from './preset-config.js'
 import { migrateWritingSettings } from './settings-migration.js'
-import { copyFile, cp, lstat, mkdir, readdir, readFile, readlink, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, readdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import {
+  BUNDLED_PACKAGES_DIR,
+  copyRetargetedProfileTree,
+  ensureNativeWorkspace,
+  importerSpecsEqual,
+  linkSdkIntoArtifactTree,
+  nativeMigrationComplete,
+  nativeReuseLayoutReady,
+  preserveNativeProfileState,
+  PROFILE_CONFIG_PACKAGE,
+  projectRuntimeLinks,
+  readCompositionPackages,
+  readNativeBaseline,
+  reconcileNativeLockfile,
+  resolveNativeNodePath,
+  restoreHomePluginFiles,
+  retargetInternalLinkTargets,
+  snapshotHomePluginFiles,
+  writeNativeMigrationMarker,
+  type NativePluginCommand,
+} from './native-profile.js'
 import { restoreUserPlugins, sanitizeHostLockedPluginOverrides } from './user-plugins.js'
 import { linkPointsTo, sameFileTree } from './file-tree.js'
 import { existsSync } from 'node:fs'
-import { isAbsolute, join, resolve as resolvePath } from 'node:path'
+import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 export const PROFILE_NAME = 'dsh-editor'
 export const PROFILE_MARKER = '.dsh-editor-owner.json'
 /** Bump when skip-path invariants change so old stamps restage. */
-export const PROFILE_DEPLOY_ALGORITHM = 2
+export const PROFILE_DEPLOY_ALGORITHM = 4
 
 export interface ProfileDeployIdentity {
   algorithm: number
@@ -23,6 +44,13 @@ export interface ProfileDeployIdentity {
 export interface ProfileDeployResult {
   path: string
   reused: boolean
+}
+
+export interface ProfileDeployOptions {
+  writeFile?: typeof writeFile
+  nodePath?: string
+  env?: NodeJS.ProcessEnv
+  runPluginCommand?: NativePluginCommand
 }
 
 const PEER_PACKAGES = ['dsh-tools', 'dsh-llm'] as const
@@ -85,6 +113,26 @@ async function readTemplateBundles(template: string): Promise<string[]> {
   }
 }
 
+async function readTemplatePackageManifest(template: string, name: string): Promise<{ name?: unknown; dsh?: { bundle?: unknown } }> {
+  const candidates = name === PROFILE_CONFIG_PACKAGE
+    ? [
+      join(template, 'profile-config', 'package.json'),
+      join(template, 'node_modules', name, 'package.json'),
+    ]
+    : [
+      join(template, BUNDLED_PACKAGES_DIR, ...name.split('/'), 'package.json'),
+      join(template, 'node_modules', ...name.split('/'), 'package.json'),
+    ]
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(await readFile(candidate, 'utf8')) as { name?: unknown; dsh?: { bundle?: unknown } }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+  throw new Error(`Required profile package is missing or unreadable: ${name}`)
+}
+
 async function assertRequiredCompositionPackages(template: string): Promise<void> {
   let composition: { packages?: unknown; libraries?: unknown }
   try {
@@ -96,17 +144,12 @@ async function assertRequiredCompositionPackages(template: string): Promise<void
   if (!Array.isArray(composition.packages) || composition.packages.length === 0) return
   const packages = composition.packages as unknown[]
   const libraries = Array.isArray(composition.libraries) ? composition.libraries as unknown[] : []
-  for (const name of [...packages, ...libraries, 'dsh-editor-profile-config']) {
+  for (const name of [...packages, ...libraries, PROFILE_CONFIG_PACKAGE]) {
     if (typeof name !== 'string' || !/^(?:@[^/]+\/)?[A-Za-z0-9._-]+$/.test(name)) {
       throw new Error(`Invalid required profile package: ${String(name)}`)
     }
-    let manifest: { name?: unknown; dsh?: { bundle?: unknown } }
-    try {
-      manifest = JSON.parse(await readFile(join(template, 'node_modules', name, 'package.json'), 'utf8')) as typeof manifest
-    } catch {
-      throw new Error(`Required profile package is missing or unreadable: ${name}`)
-    }
-    if (manifest.name !== name || ((packages.includes(name) || name === 'dsh-editor-profile-config') && !manifest.dsh?.bundle)) {
+    const manifest = await readTemplatePackageManifest(template, name)
+    if (manifest.name !== name || ((packages.includes(name) || name === PROFILE_CONFIG_PACKAGE) && !manifest.dsh?.bundle)) {
       throw new Error(`Required profile package is invalid: ${name}`)
     }
   }
@@ -149,8 +192,12 @@ async function canReuseProfile(
 ): Promise<boolean> {
   if (!await stampMatches(profilePath, deploy)) return false
   if (!await requiredTemplateFilesPresent(template, profilePath)) return false
-  if (!await bundledEntriesPresent(template, profilePath)) return false
-  if (runtimeNodeModules && !await peerLinksValid(profilePath, runtimeNodeModules)) return false
+  const gate = await nativeReuseLayoutReady(profilePath, template, runtimeNodeModules)
+  if (gate === 'restage') return false
+  if (gate === 'legacy') {
+    if (!await bundledEntriesPresent(template, profilePath)) return false
+    if (runtimeNodeModules && !await peerLinksValid(profilePath, runtimeNodeModules)) return false
+  }
   return true
 }
 
@@ -174,30 +221,19 @@ async function renameDirectory(source: string, target: string): Promise<void> {
   }
 }
 
-/** Copy a profile template, recreating Windows junctions instead of following or file-symlinking them. */
-async function copyTemplateTree(source: string, target: string): Promise<void> {
-  await mkdir(target, { recursive: true })
-  const entries = await readdir(source, { withFileTypes: true })
-  for (const entry of entries) {
-    const from = join(source, entry.name)
-    const to = join(target, entry.name)
-    const link = entry.isSymbolicLink() || (await lstat(from)).isSymbolicLink()
-    if (link) {
-      const real = await readlink(from)
-      await symlink(isAbsolute(real) ? real : resolvePath(source, real), to, 'junction')
-      continue
-    }
-    if (entry.isDirectory()) {
-      await copyTemplateTree(from, to)
-      continue
-    }
-    await copyFile(from, to)
-  }
-}
-
 async function stageProfileTree(template: string, stage: string, runtimeNodeModules?: string): Promise<void> {
-  await copyTemplateTree(template, stage)
+  const nativeLayout = existsSync(join(template, 'bundled-packages')) || await readNativeBaseline(template) !== undefined
+  await copyRetargetedProfileTree(template, stage, { skip: runtimeNodeModules && nativeLayout ? ['runtime-links'] : [] })
   if (!runtimeNodeModules) return
+  if (nativeLayout) {
+    const appNames = new Set<string>([PROFILE_CONFIG_PACKAGE])
+    for (const name of await readCompositionPackages(stage)) appNames.add(name)
+    const baseline = await readNativeBaseline(stage)
+    if (baseline) for (const name of Object.keys(baseline)) appNames.add(name)
+    await projectRuntimeLinks(stage, runtimeNodeModules, appNames)
+    await linkSdkIntoArtifactTree(stage, runtimeNodeModules)
+    return
+  }
   const peerParent = join(stage, 'node_modules', '@deepseek-ai')
   await mkdir(peerParent, { recursive: true })
   for (const peer of PEER_PACKAGES) {
@@ -207,33 +243,73 @@ async function stageProfileTree(template: string, stage: string, runtimeNodeModu
   }
 }
 
-async function replaceOwnedProfile(profiles: string, target: string, template: string, runtimeNodeModules?: string): Promise<void> {
+async function replaceOwnedProfile(
+  profiles: string,
+  target: string,
+  template: string,
+  runtimeNodeModules: string | undefined,
+  options: ProfileDeployOptions = {},
+  deploy?: ProfileDeployIdentity,
+): Promise<string | undefined> {
   const nonce = randomUUID()
   const stage = join(profiles, `.${PROFILE_NAME}.stage-${nonce}`)
   const backup = join(profiles, `.${PROFILE_NAME}.backup-${nonce}`)
+  let swapped = false
+  let backedUp = false
   try {
     await stageProfileTree(template, stage, runtimeNodeModules)
-    // Since DSH 0.1.7 this file is user data, separate from the generated bundle.
     const previousMarker = await readOwnerMarker(target)
     const hasUserConfig = previousMarker?.configVersion === 2 || existsSync(join(target, '.editor-writing-migrated'))
-      || existsSync(join(target, 'node_modules', 'dsh-editor-profile-config', 'package.json'))
-    if (hasUserConfig) {
-      for (const file of ['cordis.patch.yml', '.editor-writing-migrated']) {
-        try { await copyFile(join(target, file), join(stage, file)) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
-      }
-    } else if (existsSync(join(target, 'cordis.patch.yml'))) {
+      || existsSync(join(target, 'node_modules', PROFILE_CONFIG_PACKAGE, 'package.json'))
+      || existsSync(join(target, 'profile-config', 'package.json'))
+    if (!hasUserConfig && existsSync(join(target, 'cordis.patch.yml'))) {
       await copyFile(join(target, 'cordis.patch.yml'), join(stage, 'cordis.patch.before-dsh-0.1.7.yml'))
     }
-    try { await copyFile(join(target, 'cordis.patch.before-dsh-0.1.7.yml'), join(stage, 'cordis.patch.before-dsh-0.1.7.yml')) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+    const preserved = await preserveNativeProfileState(target, stage, {
+      mergePatch: hasUserConfig,
+      runtimeNodeModules,
+    })
+    const canReconcile = Boolean(options.runPluginCommand || runtimeNodeModules)
+      && existsSync(join(stage, 'pnpm-lock.yaml'))
+      && !importerSpecsEqual(preserved.previousDependencies, preserved.mergedDependencies)
+    if (canReconcile) {
+      if (!runtimeNodeModules) throw new Error('Native lock reconciliation requires the actual runtime node_modules')
+      await reconcileNativeLockfile({
+        stage,
+        runtimeNodeModules,
+        nodePath: resolveNativeNodePath(options, deploy, options.env),
+        env: options.env,
+        previousDependencies: preserved.previousDependencies,
+        mergedDependencies: preserved.mergedDependencies,
+        runPluginCommand: options.runPluginCommand,
+      })
+    }
     await writeOwnerMarker(stage)
-    if (existsSync(target)) await renameDirectory(target, backup)
-    try { await renameDirectory(stage, target) } catch (error) {
-      if (existsSync(backup) && !existsSync(target)) await renameDirectory(backup, target)
+    if (existsSync(target)) {
+      await renameDirectory(target, backup)
+      backedUp = true
+    }
+    try {
+      await renameDirectory(stage, target)
+      swapped = true
+    } catch (error) {
+      try {
+        if (backedUp && existsSync(backup) && !existsSync(target)) await renameDirectory(backup, target)
+      } catch (cleanupError) {
+        console.warn('Could not restore owned profile backup:', backup, cleanupError)
+      }
       throw error
     }
-    if (existsSync(backup)) await rm(backup, { recursive: true, force: true })
+    await retargetInternalLinkTargets(target, stage, target)
+    return backedUp && existsSync(backup) ? backup : undefined
   } catch (error) {
-    if (existsSync(stage)) await rm(stage, { recursive: true, force: true })
+    try {
+      if (swapped && existsSync(target)) await rm(target, { recursive: true, force: true })
+      if (backedUp && existsSync(backup) && !existsSync(target)) await renameDirectory(backup, target)
+      if (existsSync(stage)) await rm(stage, { recursive: true, force: true })
+    } catch (cleanupError) {
+      console.warn('Could not roll back owned profile replacement:', target, cleanupError)
+    }
     throw error
   }
 }
@@ -244,25 +320,44 @@ export async function deployOwnedProfile(
   template: string,
   runtimeNodeModules?: string,
   deploy?: ProfileDeployIdentity,
+  options: ProfileDeployOptions = {},
 ): Promise<ProfileDeployResult> {
   if (runtimeNodeModules) await assertRequiredCompositionPackages(template)
-  await sanitizeHostLockedPluginOverrides(home)
+  const bundled = await readTemplateBundles(template)
   const profiles = join(home, 'profiles')
   const target = join(profiles, PROFILE_NAME)
-  await mkdir(profiles, { recursive: true })
-  await ensureDirectory(target)
-  if (existsSync(target) && !(await isOwnedProfile(target))) throw new ProfileCollisionError(target)
-  const reused = Boolean(deploy && existsSync(target) && await canReuseProfile(target, template, runtimeNodeModules, deploy))
-  if (!reused) await replaceOwnedProfile(profiles, target, template, runtimeNodeModules)
-  const bundled = await readTemplateBundles(template)
+  const previousOwned = existsSync(target) && await isOwnedProfile(target)
+  const homeSnaps = await snapshotHomePluginFiles(home)
+  const presetSwaps: PresetSwap[] = []
+  let backup: string | undefined
+  let reused = false
   try {
-    await deployAgentPresets(home, template)
+    await sanitizeHostLockedPluginOverrides(home, bundled)
+    await mkdir(profiles, { recursive: true })
+    await ensureDirectory(target)
+    if (existsSync(target) && !(await isOwnedProfile(target))) throw new ProfileCollisionError(target)
+    reused = Boolean(deploy && existsSync(target) && await canReuseProfile(target, template, runtimeNodeModules, deploy))
+    if (!reused) backup = await replaceOwnedProfile(profiles, target, template, runtimeNodeModules, options, deploy)
+    await deployAgentPresets(home, template, presetSwaps)
     await restoreUserPlugins(home, target, bundled)
     await syncPresetDeclarations(home, target)
     await migrateWritingSettings(home, target)
+    await ensureNativeWorkspace(target)
+    if (!(await nativeMigrationComplete(home))) {
+      await writeNativeMigrationMarker(home, options?.writeFile ?? writeFile)
+    }
     if (deploy) await writeOwnerMarker(target, deploy)
+    await commitPresetSwaps(presetSwaps)
+    if (backup && existsSync(backup)) await rm(backup, { recursive: true, force: true })
   } catch (error) {
-    if (existsSync(target) && await isOwnedProfile(target)) await writeOwnerMarker(target)
+    await restoreHomePluginFiles(homeSnaps)
+    await restorePresetSwaps(presetSwaps)
+    if (backup && existsSync(backup)) {
+      if (existsSync(target)) await rm(target, { recursive: true, force: true })
+      await renameDirectory(backup, target)
+    } else if (!previousOwned && existsSync(target) && await isOwnedProfile(target)) {
+      await rm(target, { recursive: true, force: true })
+    }
     throw error
   }
   return { path: target, reused }
@@ -318,7 +413,26 @@ async function readDisabledPresetIds(home: string, toggleable: ReadonlySet<strin
  * Toggleable first-party presets the author disabled are skipped, and a
  * previously deployed app-owned copy is removed so the roster drops it.
  */
-async function deployAgentPresets(home: string, template: string): Promise<void> {
+type PresetSwap = { target: string; backup?: string }
+
+async function commitPresetSwaps(swaps: readonly PresetSwap[]): Promise<void> {
+  for (const swap of swaps) {
+    if (swap.backup && existsSync(swap.backup)) await rm(swap.backup, { recursive: true, force: true })
+  }
+}
+
+async function restorePresetSwaps(swaps: readonly PresetSwap[]): Promise<void> {
+  for (const swap of [...swaps].reverse()) {
+    if (swap.backup && existsSync(swap.backup)) {
+      if (existsSync(swap.target)) await rm(swap.target, { recursive: true, force: true })
+      await renameDirectory(swap.backup, swap.target)
+    } else if (existsSync(swap.target)) {
+      await rm(swap.target, { recursive: true, force: true })
+    }
+  }
+}
+
+async function deployAgentPresets(home: string, template: string, swaps: PresetSwap[]): Promise<void> {
   let entries: import('node:fs').Dirent[]
   try { entries = await readdir(join(template, 'agent-presets'), { withFileTypes: true }) } catch { return }
   const toggleable = await readToggleablePresetIds(template)
@@ -331,7 +445,12 @@ async function deployAgentPresets(home: string, template: string): Promise<void>
     const target = join(presets, entry.name)
     if (disabled.has(entry.name)) {
       const owner = await readPresetOwnerMarker(target)
-      if (owner) await rm(target, { recursive: true, force: true })
+      if (owner) {
+        const nonce = randomUUID()
+        const backup = join(presets, `.${entry.name}.backup-${nonce}`)
+        await renameDirectory(target, backup)
+        swaps.push({ target, backup })
+      }
       continue
     }
     await ensureDirectory(target)
@@ -347,7 +466,7 @@ async function deployAgentPresets(home: string, template: string): Promise<void>
         if (existsSync(backup) && !existsSync(target)) await renameDirectory(backup, target)
         throw error
       }
-      if (existsSync(backup)) await rm(backup, { recursive: true, force: true })
+      swaps.push({ target, backup: existsSync(backup) ? backup : undefined })
     } catch (error) {
       if (existsSync(stage)) await rm(stage, { recursive: true, force: true })
       throw error

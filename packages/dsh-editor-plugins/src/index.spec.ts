@@ -1,46 +1,15 @@
-import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { catalogFromEditorBlocks } from './core.ts'
-import { handlePluginsRpc, inventoryFromLoader, persistPluginState } from './index.ts'
+import { handlePluginsRpc, persistPluginState, resolveProfileArtifactDir } from './index.ts'
 import { MANAGED_PATCH_MARK, renderOverridePatch } from './overlay.ts'
 import type { PluginPaths } from './paths.ts'
 import { profileDirFromPluginModule, resolvePluginPaths } from './paths.ts'
 
-const catalog = catalogFromEditorBlocks([
-  {
-    name: 'dsh-editor-shell',
-    dshEditor: {
-      entries: [{ id: 'editor-shell', title: '写作界面', description: '三栏稿纸与设置', locked: true }],
-    },
-  },
-  {
-    name: '@klarkxy/dsh-zhihu',
-    dshEditor: {
-      entries: [{ id: 'zhihu', title: '知乎资料', description: '知乎搜索、知识库与用量' }],
-    },
-  },
-], ['dsh-editor-shell', '@klarkxy/dsh-zhihu'])
-
 const signal = () => new AbortController().signal
-
-function loader(entries: Array<{ id: string; name: string; disabled?: boolean; group?: boolean }>) {
-  const rows = entries.map((entry) => ({
-    id: entry.id,
-    disabled: Boolean(entry.disabled),
-    options: { name: entry.name, group: entry.group ?? false },
-    fiber: entry.disabled ? undefined : { state: 2 },
-  }))
-  return {
-    entries: () => rows,
-    async update(id: string, options: { disabled?: boolean | null }) {
-      const match = rows.find((row) => row.id === id)
-      if (match) match.disabled = Boolean(options.disabled)
-    },
-  }
-}
+const host = { entries: () => [], update: async () => {} }
 
 async function fixture(): Promise<PluginPaths> {
   const home = await mkdtemp(join(tmpdir(), 'dsh-plugins-'))
@@ -58,40 +27,8 @@ async function fixture(): Promise<PluginPaths> {
 }
 
 describe('plugin manager RPC', () => {
-  it('lists core and optional plugins and hides harness internals', () => {
-    const inventory = inventoryFromLoader(loader([
-      { id: 'include:editor-shell', name: 'dsh-editor-shell' },
-      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
-      { id: 'ui-sidebar', name: '@deepseek-ai/dsh-client-ui-sidebar' },
-      { id: 'group-a', name: 'ignored', group: true },
-    ]), { schema: 1, overrides: {}, presets: {}, installed: [] }, catalog)
-    expect(inventory.core.map((card) => card.entryId)).toEqual(['include:editor-shell'])
-    expect(inventory.optional.map((card) => card.entryId)).toEqual(['include:zhihu'])
-    expect(inventory.community).toEqual([])
-    expect(inventory.core[0]?.locked).toBe(true)
-    expect(inventory.optional[0]?.locked).toBe(false)
-  })
-
-  it('refuses to disable a core plugin and persists optional toggles', async () => {
-    const paths = await fixture()
-    const host = loader([
-      { id: 'editor-shell', name: 'dsh-editor-shell' },
-      { id: 'zhihu', name: '@klarkxy/dsh-zhihu' },
-    ])
-    const blocked = await handlePluginsRpc('entry.setEnabled', { entryId: 'editor-shell', enabled: false }, signal(), { loader: host, paths, catalog })
-    expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-    const toggled = await handlePluginsRpc('entry.setEnabled', { entryId: 'zhihu', enabled: false }, signal(), { loader: host, paths, catalog })
-    expect(toggled).toMatchObject({ ok: true, value: { restartRequired: false } })
-    const patch = await readFile(paths.patchFile, 'utf8')
-    expect(patch).toContain(MANAGED_PATCH_MARK)
-    expect(patch).toContain('id: zhihu')
-    expect(patch).toContain('disabled: true')
-    expect([...host.entries()].find((entry) => entry.id === 'zhihu')?.disabled).toBe(true)
-  })
-
   it('searches the GitHub topic marketplace and rejects unsafe queries', async () => {
     const paths = await fixture()
-    const host = loader([])
     const unsafe = await handlePluginsRpc('marketplace.search', { query: 'a;b' }, signal(), { loader: host, paths })
     expect(unsafe).toMatchObject({ ok: false, error: { code: 'bad-request' } })
     const result = await handlePluginsRpc('marketplace.search', { query: 'theme' }, signal(), {
@@ -108,53 +45,13 @@ describe('plugin manager RPC', () => {
     if (result.ok) expect(result.value).toEqual({ listings: [expect.objectContaining({ spec: 'github:acme/dsh-theme', stars: 3 })] })
   })
 
-  it('does not uninstall bundled packages', async () => {
+  it('rejects removed installer and inventory endpoints', async () => {
     const paths = await fixture()
-    const blocked = await handlePluginsRpc('marketplace.uninstall', { name: 'dsh-editor-shell' }, signal(), { loader: loader([]), paths, catalog })
-    expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-  })
-
-  it('shows trusted session and feature cards, and keeps a colliding install as community', async () => {
-    const trusted = {
-      bundles: ['dsh-editor-novel-kernel', 'dsh-proofread', 'dsh-editor-shell'],
-      entries: {
-        'editor-novel-kernel': { title: '小说工具', description: '会话', locked: true, packageName: 'dsh-editor-novel-kernel', builtin: true, managedBy: 'session' as const },
-        proofread: { title: '校对', description: '功能', locked: true, packageName: 'dsh-proofread', builtin: true, managedBy: 'feature' as const },
-        zhihu: { title: '知乎资料', description: '知乎搜索', locked: false, packageName: '@klarkxy/dsh-zhihu', builtin: false },
-        'editor-shell': { title: '写作界面', description: '三栏', locked: true, packageName: 'dsh-editor-shell' },
-      },
+    for (const endpoint of ['inventory.list', 'entry.setEnabled', 'marketplace.install', 'marketplace.inspect', 'marketplace.uninstall']) {
+      expect(await handlePluginsRpc(endpoint, {}, signal(), { loader: host, paths })).toMatchObject({
+        ok: false, error: { code: 'bad-request', message: '不支持的插件操作' },
+      })
     }
-    const installed = [{ name: 'community-theme', spec: 'github:acme/community-theme', version: '1.0.0' }]
-    const inventory = inventoryFromLoader(loader([
-      { id: 'include:editor-novel-kernel', name: 'dsh-editor-novel-kernel' },
-      { id: 'proofread', name: 'dsh-proofread' },
-      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
-      { id: 'zhihu', name: 'community-theme' },
-    ]), { schema: 1, overrides: {}, presets: {}, installed }, trusted)
-    expect(inventory.core).toEqual([
-      expect.objectContaining({ entryId: 'include:editor-novel-kernel', packageName: 'dsh-editor-novel-kernel', locked: true, builtin: true, managedBy: 'session', origin: 'bundled', group: 'core' }),
-      expect.objectContaining({ entryId: 'proofread', packageName: 'dsh-proofread', locked: true, builtin: true, managedBy: 'feature', origin: 'bundled', group: 'core' }),
-    ])
-    expect(inventory.optional[0]).toMatchObject({ entryId: 'include:zhihu', packageName: '@klarkxy/dsh-zhihu', builtin: false, locked: false, origin: 'bundled' })
-    expect(inventory.optional[0]).not.toHaveProperty('managedBy')
-    expect(inventory.community).toEqual([
-      expect.objectContaining({ entryId: 'zhihu', packageName: 'community-theme', title: 'community-theme', locked: false, origin: 'installed', group: 'community', spec: 'github:acme/community-theme' }),
-    ])
-    expect(inventory.community[0]).not.toHaveProperty('builtin')
-    expect(inventory.community[0]).not.toHaveProperty('managedBy')
-
-    const paths = await fixture()
-    const session = loader([{ id: 'include:editor-novel-kernel', name: 'dsh-editor-novel-kernel' }])
-    const refused = await handlePluginsRpc('entry.setEnabled', { entryId: 'include:editor-novel-kernel', enabled: false }, signal(), { loader: session, paths, catalog: trusted })
-    expect(refused).toMatchObject({ ok: false, error: { code: 'forbidden', message: '系统核心插件不能关闭' } })
-    const community = loader([{ id: 'zhihu', name: 'community-theme' }])
-    const toggled = await handlePluginsRpc('entry.setEnabled', { entryId: 'zhihu', enabled: false }, signal(), { loader: community, paths, catalog: trusted })
-    expect(toggled).toMatchObject({ ok: true, value: { restartRequired: false } })
-    expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({ zhihu: false })
-    const uninstall = await handlePluginsRpc('marketplace.uninstall', { name: 'community-theme' }, signal(), { loader: community, paths, catalog: trusted })
-    expect(uninstall).toMatchObject({ ok: false, error: { code: 'not-found' } })
-    const bundled = await handlePluginsRpc('marketplace.uninstall', { name: 'dsh-editor-shell' }, signal(), { loader: loader([]), paths, catalog: trusted })
-    expect(bundled).toMatchObject({ ok: false, error: { code: 'forbidden', message: '系统核心插件不能卸载' } })
   })
 })
 
@@ -177,65 +74,7 @@ describe('plugin paths', () => {
   })
 })
 
-it('toggles real include IDs and persists the unprefixed profile patch ID', async () => {
-  const paths = await fixture()
-  const host = loader([{id: 'include:zhihu', name: '@klarkxy/dsh-zhihu'}, {id: 'include:editor-shell', name: 'dsh-editor-shell'}])
-  expect(await handlePluginsRpc('entry.setEnabled', {entryId: 'include:editor-shell', enabled: false}, signal(), {loader: host, paths, catalog})).toMatchObject({ok: false, error: {code: 'forbidden'}})
-  expect(await handlePluginsRpc('entry.setEnabled', {entryId: 'include:zhihu', enabled: false}, signal(), {loader: host, paths, catalog})).toMatchObject({ok: true, value: {restartRequired: false}})
-  expect([...host.entries()][0].disabled).toBe(true)
-  expect(await readFile(paths.patchFile, 'utf8')).toContain('- id: zhihu\n  disabled: true')
-  expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({zhihu: false})
-})
-it('reports restart required if the live loader rejects a saved toggle', async () => {
-  const paths = await fixture()
-  const host = loader([{id: 'include:zhihu', name: '@klarkxy/dsh-zhihu'}])
-  host.update = async () => { throw new Error('busy') }
-  expect(await handlePluginsRpc('entry.setEnabled', {entryId: 'include:zhihu', enabled: false}, signal(), {loader: host, paths, catalog})).toMatchObject({ok: true, value: {restartRequired: true}})
-  expect([...host.entries()][0].disabled).toBe(false)
-  expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({zhihu: false})
-})
-
-const zhihuCatalog = catalogFromEditorBlocks([
-  {
-    name: 'dsh-editor-shell',
-    dshEditor: { entries: [{ id: 'editor-shell', title: '写作界面', description: '三栏稿纸与设置', locked: true }] },
-  },
-  {
-    name: '@klarkxy/dsh-zhihu',
-    dshEditor: {
-      entries: [{ id: 'zhihu', title: '知乎资料', description: '知乎搜索' }],
-      inserts: [{ id: 'zhihu-tools', title: '知乎工具', description: '检索' }],
-    },
-  },
-], ['dsh-editor-shell', '@klarkxy/dsh-zhihu'])
-
-describe('grouped plugin enable', () => {
-  it('validates the whole group before persisting any override', async () => {
-    const paths = await fixture()
-    const host = loader([
-      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
-      { id: 'include:editor-shell', name: 'dsh-editor-shell' },
-    ])
-    const blocked = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:zhihu', 'include:editor-shell'],
-      enabled: false,
-    }, signal(), { loader: host, paths, catalog: zhihuCatalog })
-    expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-    await expect(readFile(paths.stateFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-    expect([...host.entries()].every((entry) => !entry.disabled)).toBe(true)
-  })
-
-  it('refuses to toggle host-locked writing entries', async () => {
-    const paths = await fixture()
-    const host = loader([{ id: 'include:editor-novel-kernel', name: 'dsh-editor-novel-kernel' }])
-    const blocked = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:editor-novel-kernel'],
-      enabled: true,
-    }, signal(), { loader: host, paths, catalog })
-    expect(blocked).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-    await expect(readFile(paths.stateFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-  })
-
+describe('plugin state persist', () => {
   it('strips host-locked overrides when persisting plugin state', async () => {
     const paths = await fixture()
     await persistPluginState(paths, {
@@ -246,299 +85,7 @@ describe('grouped plugin enable', () => {
     })
     expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({ zhihu: false })
     expect(await readFile(paths.patchFile, 'utf8')).toBe(renderOverridePatch({ zhihu: false }))
-  })
-
-  it('refuses a missing entry without writing overrides', async () => {
-    const paths = await fixture()
-    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
-    const missing = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:zhihu', 'include:zhihu-tools'],
-      enabled: false,
-    }, signal(), { loader: host, paths, catalog: zhihuCatalog })
-    expect(missing).toMatchObject({ ok: false, error: { code: 'not-found' } })
-    await expect(readFile(paths.stateFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-  })
-
-  it('persists both Zhihu entries in one override write and confirms inventory', async () => {
-    const paths = await fixture()
-    const host = loader([
-      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
-      { id: 'include:zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' },
-    ])
-    const toggled = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:zhihu', 'include:zhihu-tools'],
-      enabled: false,
-    }, signal(), { loader: host, paths, catalog: zhihuCatalog })
-    expect(toggled).toMatchObject({ ok: true, value: { restartRequired: false } })
-    expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({ zhihu: false, 'zhihu-tools': false })
-    const patch = await readFile(paths.patchFile, 'utf8')
-    expect(patch).toContain(MANAGED_PATCH_MARK)
-    expect(patch).toContain('id: zhihu\n  disabled: true')
-    expect(patch).toContain('id: zhihu-tools\n  disabled: true')
-    const listed = await handlePluginsRpc('inventory.list', {}, signal(), { loader: host, paths, catalog: zhihuCatalog })
-    expect(listed.ok).toBe(true)
-    if (listed.ok) {
-      const cards = (listed.value as { optional: Array<{ entryId: string; enabled: boolean }> }).optional
-      expect(cards.filter((card) => card.entryId.startsWith('include:zhihu')).every((card) => card.enabled === false)).toBe(true)
-    }
-  })
-
-  it('blocks an unmanaged custom patch with no state or runtime mutation', async () => {
-    const paths = await fixture()
-    const custom = '- id: custom\n  config: {}\n'
-    await writeFile(paths.patchFile, custom)
-    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
-    const result = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:zhihu'],
-      enabled: false,
-    }, signal(), { loader: host, paths, catalog: zhihuCatalog })
-    expect(result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-    expect(await readFile(paths.patchFile, 'utf8')).toBe(custom)
-    await expect(readFile(paths.stateFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-    expect([...host.entries()][0].disabled).toBe(false)
-  })
-
-  it('returns an author-facing persist error and does not apply the loader', async () => {
-    const paths = await fixture()
-    const host = loader([
-      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
-      { id: 'include:zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' },
-    ])
-    const result = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:zhihu', 'include:zhihu-tools'],
-      enabled: false,
-    }, signal(), {
-      loader: host,
-      paths,
-      catalog: zhihuCatalog,
-      io: {
-        readFile,
-        writeFile,
-        rm,
-        rename: async (from, to) => {
-          throw Object.assign(new Error(`EPERM: operation not permitted, rename '${from}' -> '${to}'`), { code: 'EPERM' })
-        },
-      },
-    })
-    expect(result).toMatchObject({ ok: false, error: { code: 'internal', message: '未能保存插件开关，请重试。' } })
-    if (!result.ok) expect(String(result.error.details.cause)).toContain('EPERM')
-    expect([...host.entries()].every((entry) => !entry.disabled)).toBe(true)
-  })
-
-  it('retries a transient rename failure and then confirms inventory', async () => {
-    const paths = await fixture()
-    const host = loader([
-      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
-      { id: 'include:zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' },
-    ])
-    const { rename } = await import('node:fs/promises')
-    let failures = 0
-    const result = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:zhihu', 'include:zhihu-tools'],
-      enabled: false,
-    }, signal(), {
-      loader: host,
-      paths,
-      catalog: zhihuCatalog,
-      io: {
-        readFile,
-        writeFile,
-        rm: async (path, opts) => rm(path, opts),
-        rename: async (from, to) => {
-          failures += 1
-          if (failures === 1) throw Object.assign(new Error('EPERM'), { code: 'EPERM' })
-          return rename(from, to)
-        },
-      },
-    })
-    expect(result).toMatchObject({ ok: true, value: { restartRequired: false } })
-    expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({ zhihu: false, 'zhihu-tools': false })
-  })
-
-  it('restores JSON when the patch rename fails permanently', async () => {
-    const paths = await fixture()
-    const oldState = { schema: 1, overrides: { zhihu: true, 'zhihu-tools': true }, installed: [] }
-    const stateText = `${JSON.stringify(oldState, null, 2)}\n`
-    const patchText = renderOverridePatch(oldState.overrides)
-    await writeFile(paths.stateFile, stateText)
-    await writeFile(paths.patchFile, patchText)
-    const host = loader([
-      { id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' },
-      { id: 'include:zhihu-tools', name: '@klarkxy/dsh-zhihu/tools' },
-    ])
-    const { rename } = await import('node:fs/promises')
-    const result = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:zhihu', 'include:zhihu-tools'],
-      enabled: false,
-    }, signal(), {
-      loader: host,
-      paths,
-      catalog: zhihuCatalog,
-      io: {
-        readFile,
-        writeFile,
-        rm,
-        rename: async (from, to) => {
-          if (String(to) === paths.patchFile) throw Object.assign(new Error('synthetic persistent Windows lock'), { code: 'EPERM' })
-          return rename(from, to)
-        },
-      },
-    })
-    expect(result.ok).toBe(false)
-    expect(await readFile(paths.stateFile, 'utf8')).toBe(stateText)
-    expect(await readFile(paths.patchFile, 'utf8')).toBe(patchText)
-    expect([...host.entries()].every((entry) => !entry.disabled)).toBe(true)
-  })
-
-  it('removes a just-written state when a missing patch cannot be created', async () => {
-    const paths = await fixture()
-    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
-    const { rename } = await import('node:fs/promises')
-    const result = await handlePluginsRpc('entry.setEnabled', { entryId: 'include:zhihu', enabled: false }, signal(), {
-      loader: host,
-      paths,
-      catalog: zhihuCatalog,
-      io: {
-        readFile,
-        writeFile,
-        rm,
-        rename: async (from, to) => {
-          if (String(to) === paths.patchFile) throw Object.assign(new Error('synthetic persistent Windows lock'), { code: 'EPERM' })
-          return rename(from, to)
-        },
-      },
-    })
-    expect(result).toMatchObject({ ok: false, error: { code: 'internal', details: { recovery: 'restored' } } })
-    await expect(readFile(paths.stateFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-    await expect(readFile(paths.patchFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-    expect([...host.entries()][0].disabled).toBe(false)
-  })
-
-  it('reports failed cleanup truthfully after a missing-state rollback failure', async () => {
-    const paths = await fixture()
-    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
-    const { rename } = await import('node:fs/promises')
-    const result = await handlePluginsRpc('entry.setEnabled', { entryId: 'include:zhihu', enabled: false }, signal(), {
-      loader: host,
-      paths,
-      catalog: zhihuCatalog,
-      io: {
-        readFile,
-        writeFile,
-        rm: async (path, options) => {
-          if (String(path) === paths.stateFile) throw new Error('synthetic cleanup failure')
-          return rm(path, options)
-        },
-        rename: async (from, to) => {
-          if (String(to) === paths.patchFile) throw Object.assign(new Error('synthetic persistent Windows lock'), { code: 'EPERM' })
-          return rename(from, to)
-        },
-      },
-    })
-    expect(result).toMatchObject({ ok: false, error: { code: 'internal', details: { recovery: 'failed', recoveryCause: 'synthetic cleanup failure' } } })
-    expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({ zhihu: false })
-    await expect(readFile(paths.patchFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-    expect([...host.entries()][0].disabled).toBe(false)
-  })
-
-  it('does not treat an unreadable patch as missing', async () => {
-    const paths = await fixture()
-    const oldState = { schema: 1, overrides: { zhihu: true }, installed: [] }
-    const stateText = `${JSON.stringify(oldState, null, 2)}\n`
-    const patchText = '- id: custom-author-rule\n  config:\n    preserve: true\n'
-    await writeFile(paths.stateFile, stateText)
-    await writeFile(paths.patchFile, patchText)
-    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
-    const result = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:zhihu'],
-      enabled: false,
-    }, signal(), {
-      loader: host,
-      paths,
-      catalog: zhihuCatalog,
-      io: {
-        readFile: async (path, ...args) => {
-          if (String(path) === paths.patchFile) throw Object.assign(new Error('synthetic unreadable patch'), { code: 'EACCES' })
-          return readFile(path, ...args)
-        },
-        writeFile,
-        rm,
-        rename,
-      },
-    })
-    expect(result).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-    expect(await readFile(paths.stateFile, 'utf8')).toBe(stateText)
-    expect(await readFile(paths.patchFile, 'utf8')).toBe(patchText)
-    expect([...host.entries()][0].disabled).toBe(false)
-  })
-
-  it('preserves a managed patch that has appended user YAML', async () => {
-    const paths = await fixture()
-    const oldState = { schema: 1, overrides: { zhihu: true }, installed: [] }
-    const stateText = `${JSON.stringify(oldState, null, 2)}\n`
-    const patchText = `${renderOverridePatch(oldState.overrides)}- id: custom-author-rule\n  config:\n    preserve: true\n`
-    await writeFile(paths.stateFile, stateText)
-    await writeFile(paths.patchFile, patchText)
-    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
-    const result = await handlePluginsRpc('entries.setEnabled', {
-      entryIds: ['include:zhihu'],
-      enabled: false,
-    }, signal(), { loader: host, paths, catalog: zhihuCatalog })
-    expect(result.ok).toBe(false)
-    expect(await readFile(paths.stateFile, 'utf8')).toBe(stateText)
-    expect(await readFile(paths.patchFile, 'utf8')).toBe(patchText)
-    expect([...host.entries()][0].disabled).toBe(false)
-  })
-  it('blocks marketplace install before a fetch when the patch is unreadable', async () => {
-    const paths = await fixture()
-    let fetched = false
-    const result = await handlePluginsRpc('marketplace.install', { spec: 'github:acme/plugin' }, signal(), {
-      loader: loader([]),
-      paths,
-      fetch: async () => {
-        fetched = true
-        throw new Error('fetch must not run')
-      },
-      io: {
-        readFile: async (path, ...args) => {
-          if (String(path) === paths.patchFile) throw Object.assign(new Error('synthetic unreadable patch'), { code: 'EACCES' })
-          return readFile(path, ...args)
-        },
-        writeFile,
-        rm,
-        rename,
-      },
-    })
-    expect(result).toMatchObject({ ok: false, error: { code: 'forbidden', details: { reason: 'unreadable-patch' } } })
-    expect(fetched).toBe(false)
-    await expect(readFile(paths.stateFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-  })
-
-  it('blocks marketplace uninstall before package removal or loader unload for a custom patch', async () => {
-    const paths = await fixture()
-    const state = { schema: 1, overrides: {}, installed: [{ name: 'acme-plugin', version: '1.0.0', spec: 'github:acme/plugin' }] }
-    const stateText = `${JSON.stringify(state, null, 2)}\n`
-    const patchText = '- id: author-rule\n  config: {}\n'
-    await writeFile(paths.stateFile, stateText)
-    await writeFile(paths.patchFile, patchText)
-    const profilePath = join(paths.profileDir, 'package.json')
-    const profileText = await readFile(profilePath, 'utf8')
-    const userMarker = join(paths.userPluginsDir, 'acme-plugin', 'keep.txt')
-    const linkMarker = join(paths.profileDir, 'node_modules', 'acme-plugin', 'keep.txt')
-    await mkdir(join(paths.userPluginsDir, 'acme-plugin'), { recursive: true })
-    await mkdir(join(paths.profileDir, 'node_modules', 'acme-plugin'), { recursive: true })
-    await writeFile(userMarker, 'user package')
-    await writeFile(linkMarker, 'profile link')
-    let removed = 0
-    const host = { ...loader([{ id: 'include:acme', name: 'acme-plugin' }]), async remove() { removed += 1 } }
-    const result = await handlePluginsRpc('marketplace.uninstall', { name: 'acme-plugin' }, signal(), { loader: host, paths, catalog: zhihuCatalog })
-    expect(result).toMatchObject({ ok: false, error: { code: 'forbidden', details: { reason: 'unmanaged-patch' } } })
-    expect(removed).toBe(0)
-    expect(await readFile(paths.stateFile, 'utf8')).toBe(stateText)
-    expect(await readFile(paths.patchFile, 'utf8')).toBe(patchText)
-    expect(await readFile(profilePath, 'utf8')).toBe(profileText)
-    expect(await readFile(userMarker, 'utf8')).toBe('user package')
-    expect(await readFile(linkMarker, 'utf8')).toBe('profile link')
+    expect(await readFile(paths.patchFile, 'utf8')).toContain(MANAGED_PATCH_MARK)
   })
 })
 
@@ -562,7 +109,7 @@ describe('first-party writing preset RPC', () => {
 
   it('lists the locked core plus toggleable first-party presets', async () => {
     const paths = await presetFixture()
-    const result = await handlePluginsRpc('presets.list', {}, signal(), { loader: loader([]), paths })
+    const result = await handlePluginsRpc('presets.list', {}, signal(), { loader: host, paths })
     expect(result).toMatchObject({ ok: true })
     const value = (result as { ok: true; value: { presets: Array<Record<string, unknown>> } }).value
     expect(value.presets).toEqual([
@@ -581,21 +128,20 @@ describe('first-party writing preset RPC', () => {
   it('toggles a first-party preset live: removes and redeploys the roster dir without restart', async () => {
     const paths = await presetFixture()
     const deployed = join(paths.home, '.agent-presets', 'dsh-editor-novel')
-    const disabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { loader: loader([]), paths, reloadProfile: async () => true })
+    const disabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { loader: host, paths, reloadProfile: async () => true })
     expect(disabled).toMatchObject({ ok: true, value: { restartRequired: false } })
     const state = JSON.parse(await readFile(paths.stateFile, 'utf8'))
     expect(state.presets).toEqual({ 'dsh-editor-novel': false })
-    const listed = await handlePluginsRpc('presets.list', {}, signal(), { loader: loader([]), paths, reloadProfile: async () => true })
+    const listed = await handlePluginsRpc('presets.list', {}, signal(), { loader: host, paths, reloadProfile: async () => true })
     expect(listed).toMatchObject({ ok: true })
     const rows = (listed as { ok: true; value: { presets: Array<{ id: string; enabled: boolean }> } }).value.presets
     expect(rows.find((row) => row.id === 'dsh-editor-novel')?.enabled).toBe(false)
 
-    /* 停用前已部署的目录先放一个，验证停用会移除；再启用会带 marker 重新部署。 */
-    const enabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: true }, signal(), { loader: loader([]), paths, reloadProfile: async () => true })
+    const enabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: true }, signal(), { loader: host, paths, reloadProfile: async () => true })
     expect(enabled).toMatchObject({ ok: true, value: { restartRequired: false } })
     expect(JSON.parse(await readFile(join(deployed, '.dsh-editor-owner.json'), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
     expect(await readFile(join(deployed, 'preset.yml'), 'utf8')).toContain('name: 小说创作')
-    const again = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { loader: loader([]), paths, reloadProfile: async () => true })
+    const again = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { loader: host, paths, reloadProfile: async () => true })
     expect(again).toMatchObject({ ok: true })
     expect(await readFile(join(paths.home, '.agent-presets', 'dsh-editor-writing', 'preset.yml'), 'utf8')).toContain('通用写作')
     await expect(readFile(join(deployed, 'preset.yml'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
@@ -603,74 +149,158 @@ describe('first-party writing preset RPC', () => {
 
   it('refuses to disable the core writing preset or unknown ids', async () => {
     const paths = await presetFixture()
-    const core = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-writing', enabled: false }, signal(), { loader: loader([]), paths })
+    const core = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-writing', enabled: false }, signal(), { loader: host, paths })
     expect(core).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-    const unknown = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-article', enabled: false }, signal(), { loader: loader([]), paths })
+    const unknown = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-article', enabled: false }, signal(), { loader: host, paths })
     expect(unknown).toMatchObject({ ok: false, error: { code: 'not-found' } })
-    const malformed = await handlePluginsRpc('presets.setEnabled', { id: '' }, signal(), { loader: loader([]), paths })
+    const malformed = await handlePluginsRpc('presets.setEnabled', { id: '' }, signal(), { loader: host, paths })
     expect(malformed).toMatchObject({ ok: false, error: { code: 'bad-request' } })
   })
 })
 
-describe('native client graph inventory', () => {
-  it('reports current clientModules.graph() entry ids after enable and disable', async () => {
+describe('local distribution discovery', () => {
+  async function writeBundle(root: string, name: string, manifest: Record<string, unknown>) {
+    const dir = join(root, ...name.split('/'))
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'package.json'), `${JSON.stringify(manifest)}\n`)
+  }
+
+  async function localFixture() {
     const paths = await fixture()
-    const host = loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }])
-    const boot = [{ id: 'dsh-editor-plugins' }, { id: 'dsh-editor-shell' }]
-    const enabled = [...boot, { id: '@klarkxy/dsh-model-center' }]
-    const listedEnabled = await handlePluginsRpc('inventory.list', {}, signal(), {
-      loader: host,
-      paths,
-      catalog,
-      clientModules: { graph: () => ({ entries: enabled }) },
+    const artifacts = join(paths.profileDir, 'bundled-packages', 'node_modules')
+    await writeBundle(artifacts, 'dsh-editor-cards', { name: 'dsh-editor-cards', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeBundle(artifacts, 'dsh-editor-memory-panel', { name: 'dsh-editor-memory-panel', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeBundle(artifacts, '@klarkxy/dsh-web-search-manager', { name: '@klarkxy/dsh-web-search-manager', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeBundle(artifacts, 'dsh-editor-shell', { name: 'dsh-editor-shell', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeBundle(artifacts, 'dsh-editor-profile-config', { name: 'dsh-editor-profile-config', dsh: { bundle: { patch: './base.patch.yml' } } })
+    await writeBundle(artifacts, '@klarkxy/dsh-memory', { name: '@klarkxy/dsh-memory', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeFile(join(paths.profileDir, 'composition.json'), JSON.stringify({
+      nativeDependencies: {
+        'dsh-editor-cards': 'file:./bundled-packages/node_modules/dsh-editor-cards',
+        'dsh-editor-memory-panel': 'file:./bundled-packages/node_modules/dsh-editor-memory-panel',
+        '@klarkxy/dsh-web-search-manager': 'file:./bundled-packages/node_modules/@klarkxy/dsh-web-search-manager',
+        'dsh-editor-shell': 'file:./bundled-packages/node_modules/dsh-editor-shell',
+        'dsh-editor-profile-config': 'link:./profile-config',
+        '@klarkxy/dsh-memory': 'file:./bundled-packages/node_modules/@klarkxy/dsh-memory',
+      },
+    }))
+    await writeFile(join(paths.profileDir, 'dsh-editor-catalog.json'), JSON.stringify({
+      bundles: ['dsh-editor-cards', 'dsh-editor-memory-panel', 'dsh-editor-shell'],
+      entries: {
+        'editor-cards': { title: '人物卡与世界书', description: '卡片列表与引用', locked: false, packageName: 'dsh-editor-cards' },
+        'editor-memory-panel': { title: '写作记忆', description: '阅读与撤回写作记忆', locked: false, packageName: 'dsh-editor-memory-panel' },
+        'web-search-manager': { title: '网页搜索', description: '按需检索网页资料', locked: false, packageName: '@klarkxy/dsh-web-search-manager' },
+        'editor-shell': { title: '写作界面', description: '三栏稿纸', locked: true, packageName: 'dsh-editor-shell' },
+      },
+    }))
+    return paths
+  }
+
+  function listingsOf(result: Awaited<ReturnType<typeof handlePluginsRpc>>) {
+    expect(result).toMatchObject({ ok: true })
+    return (result as { ok: true; value: { listings: Array<Record<string, unknown>> } }).value.listings
+  }
+
+  it('lists optional local artifacts from immutable composition without GitHub', async () => {
+    const paths = await localFixture()
+    const fetch = async () => { throw new Error('network must not run for empty local query') }
+    const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '' }, signal(), { loader: host, paths, fetch }))
+    expect(listings.map((row) => row.packageName)).toEqual(['dsh-editor-cards', 'dsh-editor-memory-panel', '@klarkxy/dsh-web-search-manager'])
+    expect(listings[0]).toMatchObject({
+      source: 'local',
+      title: '人物卡与世界书',
+      packageName: 'dsh-editor-cards',
+      description: '卡片列表与引用',
     })
-    expect(listedEnabled).toMatchObject({
-      ok: true,
-      value: { clientPackages: ['dsh-editor-plugins', 'dsh-editor-shell', '@klarkxy/dsh-model-center'] },
-    })
-    const listedDisabled = await handlePluginsRpc('inventory.list', {}, signal(), {
-      loader: host,
-      paths,
-      catalog,
-      clientModules: { graph: () => ({ entries: boot }) },
-    })
-    expect(listedDisabled).toMatchObject({
-      ok: true,
-      value: { clientPackages: ['dsh-editor-plugins', 'dsh-editor-shell'] },
-    })
+    expect(String(listings[0]?.spec)).toMatch(/^link:/)
+    expect(String(listings[0]?.spec).replaceAll('\\', '/')).toContain('/bundled-packages/node_modules/dsh-editor-cards')
+    expect(listings[0]).not.toHaveProperty('enabled')
+    expect(listings[0]).not.toHaveProperty('installed')
+    expect(listings.some((row) => row.packageName === 'dsh-editor-shell' || row.packageName === 'dsh-editor-profile-config' || row.packageName === '@klarkxy/dsh-memory')).toBe(false)
   })
 
-  it('omits clientPackages when the optional graph callback is absent', async () => {
-    const paths = await fixture()
-    const listed = await handlePluginsRpc('inventory.list', {}, signal(), {
-      loader: loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }]),
-      paths,
-      catalog,
-    })
-    expect(listed.ok).toBe(true)
-    if (listed.ok) expect(listed.value).not.toHaveProperty('clientPackages')
-    const withoutGraph = await handlePluginsRpc('inventory.list', {}, signal(), {
-      loader: loader([]),
-      paths,
-      catalog,
-      clientModules: {} as { graph(): { entries: { id: string }[] } },
-    })
-    expect(withoutGraph.ok).toBe(true)
-    if (withoutGraph.ok) expect(withoutGraph.value).not.toHaveProperty('clientPackages')
+  it('matches exact private names and ASCII keywords before unversioned npm listings', async () => {
+    const paths = await localFixture()
+    const fetch = async () => { throw new Error('network must not run for local name or keyword') }
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-cards' }, signal(), { loader: host, paths, fetch }))).toEqual([
+      expect.objectContaining({ source: 'local', packageName: 'dsh-editor-cards', title: '人物卡与世界书' }),
+    ])
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'cards' }, signal(), { loader: host, paths, fetch }))).toEqual([
+      expect.objectContaining({ source: 'local', packageName: 'dsh-editor-cards' }),
+    ])
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: '@klarkxy/dsh-web-search-manager' }, signal(), { loader: host, paths, fetch }))).toEqual([
+      expect.objectContaining({ source: 'local', packageName: '@klarkxy/dsh-web-search-manager', title: '网页搜索' }),
+    ])
   })
 
-  it('keeps inventory.list working when graph() throws', async () => {
-    const paths = await fixture()
-    const listed = await handlePluginsRpc('inventory.list', {}, signal(), {
-      loader: loader([{ id: 'include:zhihu', name: '@klarkxy/dsh-zhihu' }]),
+  it('keeps versioned npm specs on the public npm listing path', async () => {
+    const paths = await localFixture()
+    const fetch = async () => { throw new Error('network must not run for versioned npm') }
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: '@klarkxy/dsh-web-search-manager@1.2.3' }, signal(), { loader: host, paths, fetch }))).toEqual([
+      expect.objectContaining({ source: 'npm', spec: 'npm:@klarkxy/dsh-web-search-manager@1.2.3' }),
+    ])
+  })
+
+  it('keeps local choices after the profile node_modules copy is gone', async () => {
+    const paths = await localFixture()
+    const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '人物卡' }, signal(), {
+      loader: host,
       paths,
-      catalog,
-      clientModules: { graph: () => { throw new Error('no modules') } },
+      fetch: async () => { throw new Error('network must not run when a local query matches') },
+    }))
+    expect(listings).toEqual([expect.objectContaining({ packageName: 'dsh-editor-cards', title: '人物卡与世界书', source: 'local' })])
+    const byName = listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-memory-panel' }, signal(), { loader: host, paths }))
+    expect(byName).toEqual([expect.objectContaining({ packageName: 'dsh-editor-memory-panel' })])
+    const byDescription = listingsOf(await handlePluginsRpc('marketplace.search', { query: '阅读与撤回' }, signal(), { loader: host, paths }))
+    expect(byDescription).toEqual([expect.objectContaining({ packageName: 'dsh-editor-memory-panel' })])
+  })
+
+  it('refuses unsafe names, outside paths, identity spoof, and non-bundles', async () => {
+    const paths = await fixture()
+    const artifacts = join(paths.profileDir, 'bundled-packages', 'node_modules')
+    await writeBundle(artifacts, 'dsh-editor-cards', { name: 'dsh-editor-cards', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeBundle(artifacts, 'wrong-id', { name: 'other-name', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeBundle(artifacts, 'plain-lib', { name: 'plain-lib' })
+    const outside = join(paths.profileDir, '..', 'escape-pkg')
+    await writeBundle(join(paths.profileDir, '..'), 'escape-pkg', { name: 'escape-pkg', dsh: { bundle: { patch: './cordis.patch.yml' } } })
+    await writeFile(join(paths.profileDir, 'composition.json'), JSON.stringify({
+      nativeDependencies: {
+        '../evil': 'file:./bundled-packages/node_modules/../evil',
+        'wrong-id': 'file:./bundled-packages/node_modules/wrong-id',
+        'plain-lib': 'file:./bundled-packages/node_modules/plain-lib',
+        'escape-pkg': 'file:../escape-pkg',
+        'dsh-editor-cards': 'file:../../../etc',
+      },
+    }))
+    expect(resolveProfileArtifactDir(paths.profileDir, '../evil')).toBeUndefined()
+    const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '' }, signal(), {
+      loader: host,
+      paths,
+      fetch: async () => { throw new Error('network must not run for empty local query') },
+    }))
+    expect(listings.map((row) => row.packageName)).toEqual(['dsh-editor-cards'])
+    expect(listings.some((row) => row.packageName === 'wrong-id' || row.packageName === 'plain-lib' || row.packageName === 'escape-pkg')).toBe(false)
+    expect(outside.replaceAll('\\', '/')).toContain('escape-pkg')
+  })
+
+  it('keeps GitHub keyword search and network errors when no local match', async () => {
+    const paths = await localFixture()
+    const result = await handlePluginsRpc('marketplace.search', { query: 'theme' }, signal(), {
+      loader: host,
+      paths,
+      fetch: async (url) => {
+        expect(String(url)).toContain('topic%3Adsh-plugin')
+        return new Response(JSON.stringify({
+          items: [{ full_name: 'acme/dsh-theme', description: '纸', stargazers_count: 3, html_url: 'https://github.com/acme/dsh-theme', topics: ['dsh-plugin'] }],
+        }), { status: 200 })
+      },
     })
-    expect(listed.ok).toBe(true)
-    if (listed.ok) {
-      expect(listed.value).not.toHaveProperty('clientPackages')
-      expect(listed.value.optional.map((card) => card.entryId)).toEqual(['include:zhihu'])
-    }
+    expect(listingsOf(result)).toEqual([expect.objectContaining({ spec: 'github:acme/dsh-theme', stars: 3 })])
+    const denied = await handlePluginsRpc('marketplace.search', { query: 'theme' }, signal(), {
+      loader: host,
+      paths,
+      fetch: async () => new Response('', { status: 403 }),
+    })
+    expect(denied).toMatchObject({ ok: false, error: { code: 'network' } })
   })
 })

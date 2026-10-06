@@ -78,19 +78,16 @@ export function OfficialInputActivity(props: InputOwner & { ctx: ShellContext; s
 }
 
 export function OfficialOverlays({ renderSlot }: OfficialRootProps) {
-  return <div data-dsh-plugin-surface="">{renderSlot?.('shell.overlay', {}, { only: 'shortcuts' })}</div>
+  return <div data-dsh-plugin-surface="">{renderSlot?.('shell.overlay')}</div>
 }
 
-/** Implement the official navigation face using the Editor's existing plugin page. */
+/** Official input lives on the Editor composer; native pluginNavigation stays with ui-plugin-manager. */
 export function provideOfficialSurfaces(ctx: ShellContext): void {
-  ctx.provide('pluginNavigation', {
-    openBundle(packageName: string) {
-      globalThis.dispatchEvent(new CustomEvent(PLUGIN_NAVIGATION_EVENT, { detail: packageName }))
-    },
-  })
   const slots = ctx.slots as unknown as { inject(key: string, effect: () => unknown): unknown; register(spec: object, component: unknown): unknown }
   slots.inject(OFFICIAL_INPUT_SLOT, () => slots.register({
     name: OFFICIAL_INPUT_SLOT,
-    children: { 'conversation.input.activity': { kind: 'single', scope: 'session' } },
+    children: {
+      'conversation.input.activity': { kind: 'single', scope: 'session' },
+    },
   }, NativeInputSurface))
 }

@@ -36,14 +36,17 @@ test('private/non-bundle packages are not silently accepted', t => { const root 
 test('old isolated manifest fixtures without external inputs still work', t => { const root = fixture(t); rmSync(join(root, EXTERNAL_PLUGIN_MANIFEST)); assert.deepEqual(externalPluginDirectories(root), []); });
 test('malformed external manifests are rejected', t => { const root = fixture(t); put(root, EXTERNAL_PLUGIN_MANIFEST, { schema: 1, packages: [] }); assert.throws(() => externalPluginPins(root), /Invalid external/); });
 
-test('Zhihu has one source owner and retains a pinned offline product input', () => {
+test('only generic web search remains an external offline product input', () => {
   const root = new URL('../', import.meta.url);
-  const name = '@klarkxy/dsh-zhihu';
   const pins = JSON.parse(readFileSync(new URL(EXTERNAL_PLUGIN_MANIFEST, root), 'utf8'));
   const pkg = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
-  assert.equal(pins.packages[name], '0.1.9');
-  assert.equal(pkg.devDependencies[name], pins.packages[name]);
-  assert.equal(existsSync(new URL('packages/dsh-zhihu', root)), false);
+  assert.deepEqual(pins.packages, { '@klarkxy/dsh-web-search-manager': '0.1.11' });
+  assert.equal(pkg.devDependencies['@klarkxy/dsh-web-search-manager'], '0.1.11');
   const config = JSON.parse(readFileSync(new URL('tsconfig.base.json', root), 'utf8'));
-  assert.equal(Object.keys(config.compilerOptions.paths).some(key => key.startsWith(name)), false);
+  for (const suffix of ['zhihu', 'current-title', 'mood', 'recap']) {
+    const name = '@klarkxy/dsh-' + suffix;
+    assert.equal(pkg.devDependencies[name], undefined);
+    assert.equal(existsSync(new URL('packages/dsh-' + suffix, root)), false);
+    assert.equal(Object.keys(config.compilerOptions.paths).some(key => key.startsWith(name)), false);
+  }
 });

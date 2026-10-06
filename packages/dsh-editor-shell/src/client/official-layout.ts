@@ -5,22 +5,32 @@ type ThemeSnapshot = { active: { colorScheme: 'light' | 'dark'; tokens: Record<s
 export type OfficialPresentation = { shown: boolean; track: boolean; fullscreen: boolean }
 /** Editor is the layout owner; native plugins use the public layout contract. */
 export function provideOfficialLayout(ctx: ShellContext): void {
-  const panel = Object.freeze({ activePanelId: null })
+  let panel = { activePanelId: null as string | null }
+  const panelListeners = new Set<() => void>()
   let view: OfficialPresentation = { shown: false, track: false, fullscreen: false }
   const listeners = new Set<() => void>()
   const presentation = { getSnapshot: () => view, subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } } }
+  const panelInfo = {
+    getSnapshot: () => panel,
+    subscribe: (listener: () => void) => { panelListeners.add(listener); return () => { panelListeners.delete(listener) } },
+  }
   const publish = (next: OfficialPresentation) => {
     if (next.shown === view.shown && next.track === view.track && next.fullscreen === view.fullscreen) return
     view = next
     for (const listener of listeners) listener()
   }
-  const panelInfo = { getSnapshot: () => panel, subscribe: () => () => {} }
+  const publishPanel = (id: string | null) => {
+    if (panel.activePanelId === id) return
+    panel = { activePanelId: id }
+    for (const listener of panelListeners) listener()
+  }
   let navigation: AbortController | undefined
   ctx.provide('layout', {
     panelInfo, presentation,
     selectPanel(id: string | null) {
-      if (id !== null) throw new Error(`Editor has no main panel registered as ${id}`)
-      navigation?.abort()
+      if (id !== null && id !== 'plugins') throw new Error(`Editor has no main panel registered as ${id}`)
+      publishPanel(id)
+      if (id === null) navigation?.abort()
     },
     beginNavigation() { navigation?.abort(); navigation = new AbortController(); return navigation.signal },
     toggleSidebar() { globalThis.dispatchEvent(new CustomEvent(OFFICIAL_LAYOUT_EVENT, { detail: 'toggle-sidebar' })) },
@@ -29,7 +39,7 @@ export function provideOfficialLayout(ctx: ShellContext): void {
   })
   const slots = ctx.slots as unknown as { provideRoot(source: object): () => void }
   ctx.effect(() => slots.provideRoot({ hooks: { panelInfo } }))
-  ctx.effect(() => () => { navigation?.abort(); listeners.clear() })
+  ctx.effect(() => () => { navigation?.abort(); listeners.clear(); panelListeners.clear() })
   ctx.effect(() => {
     const body = document.body
     const root = document.documentElement

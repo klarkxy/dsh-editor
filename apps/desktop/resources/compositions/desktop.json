@@ -4,21 +4,12 @@
   "features": [
     "assistant",
     "completion",
-    "zhihu",
-    "zhihu-tools",
     "overview-panel",
     "proofread-panel",
     "writing-presets",
     "web-search"
   ],
   "preinstalled": [
-    "@klarkxy/dsh-current-title",
-    "@klarkxy/dsh-mood",
-    "@klarkxy/dsh-recap",
-    "@klarkxy/dsh-memory",
-    "@klarkxy/dsh-self-improvement",
-    "@klarkxy/dsh-model-center",
-    "@klarkxy/dsh-fusion",
     "dsh-editor-cards",
     "dsh-editor-memory-panel"
   ]

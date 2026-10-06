@@ -20,7 +20,6 @@ type ConfigSlot = typeof CONFIG_SLOTS[number]
 /** Display names for adopted bundles that publish no label. Routing keeps the package key. */
 const BUNDLE_FALLBACK_LABELS: Record<string, { zh: string; en: string }> = {
   '@deepseek-ai/dsh-experimental-voice-input-bundle': { zh: '语音输入', en: 'Voice input' },
-  '@klarkxy/dsh-memory': { zh: '记忆', en: 'Memory' },
   '@klarkxy/dsh-web-search-manager': { zh: '网络搜索', en: 'Web search' },
 }
 
@@ -93,11 +92,11 @@ function configurationLabel(slot: ConfigSlot, key: string, label: unknown): stri
   return key
 }
 
-/** Same route key the configuration nav keeps. Model center stays on its dedicated page. */
+/** Same route key the native configuration nav keeps. */
 function officialRouteKey(slot: ConfigSlot, entry: LedgerEntry | undefined): string {
   const raw = slot === 'plugins.item' ? entry?.options?.id : entry?.options?.key
   const key = typeof raw === 'string' ? raw.trim() : ''
-  if (!key || (slot === 'plugins.bundle.config' && key === '@klarkxy/dsh-model-center')) return ''
+  if (!key) return ''
   return key
 }
 

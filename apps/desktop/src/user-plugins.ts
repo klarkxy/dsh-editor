@@ -1,25 +1,28 @@
-import { copyFile, cp, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { constants, existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { dirname, isAbsolute, join } from 'node:path'
-import { linkPointsTo, sameFileTree } from './file-tree.js'
+import { isAbsolute, join } from 'node:path'
+import { sameFileTree } from './file-tree.js'
+import {
+  disableUserBundles,
+  ensureLocalFileLinks,
+  migrateLegacyPluginInventory,
+  nativeMigrationComplete,
+  readJsonFile,
+  selectedPresetOwners,
+  type ProfileManifest,
+} from './native-profile.js'
 
-const PACKAGE_NAME = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/
 /** Keep in sync with HOST_LOCKED_ENTRY_IDS in dsh-editor-plugins. */
-const HOST_LOCKED_PLUGIN_IDS = new Set(['editor-novel-kernel', 'editor-workbench-tools', 'proofread', 'web-search-tavily'])
+const HOST_LOCKED_PLUGIN_IDS = new Set(['editor-novel-kernel', 'editor-workbench-tools', 'proofread', 'web-search-tavily', 'ai-services', 'model-center', 'memory', 'self-improvement', 'fusion'])
+const RETIRED_PLUGIN_IDS = ['ai-services', 'model-center', 'memory', 'self-improvement', 'fusion'] as const
+const RETIRED_PLUGIN_PACKAGES = new Set<string>(RETIRED_PLUGIN_IDS.map(id => '@klarkxy/dsh-' + id))
+const OPTIONAL_PUBLIC_PLUGINS = { 'current-title': '@klarkxy/dsh-current-title', mood: '@klarkxy/dsh-mood', recap: '@klarkxy/dsh-recap', zhihu: '@klarkxy/dsh-zhihu', 'zhihu-tools': '@klarkxy/dsh-zhihu' }
 const MANAGED_PATCH_MARK = 'managed-by: dsh-editor-plugins'
 const PRESET_ID = /^[A-Za-z0-9._-]+$/
 const PRESET_OWNER_MARKER = '.dsh-editor-owner.json'
 /** 内置写作 preset 全部使用此前缀，插件 preset 不得占用。 */
 const PRESET_RESERVED_PREFIX = 'dsh-editor'
-
-function isProtectedName(name: string, bundles: readonly string[]): boolean {
-  return bundles.includes(name) || name.startsWith('@deepseek-ai/')
-}
-
-function isSafePackageName(name: string, bundles: readonly string[]): boolean {
-  return name !== 'dsh-web-search-tavily' && PACKAGE_NAME.test(name) && !name.includes('..') && !isProtectedName(name, bundles)
-}
 
 type PresetDeclaration = { id: string; path: string }
 
@@ -94,18 +97,16 @@ async function deployPluginPreset(presetsRoot: string, owner: string, preset: Pr
 }
 
 /**
- * 每次部署 profile 后同步插件 preset：扫描市集安装的 bundle，
+ * 每次部署 profile 后同步插件 preset：扫描 native 已选且非发行包的 bundle，
  * 把声明的 preset 部署进 <dshHome>/.agent-presets，并回收 owner 已不在
  * bundle 列表里的插件 preset。app-owned 目录(marker 无 plugin 字段)永不动。
- * 第一方包的 preset 由模板通道部署（configureProfile → deployAgentPresets），
- * 本通道只认 dsh-plugins.json 里登记为市集安装的包，避免重复部署或误拒
- * 第一方的 dsh-editor 前缀声明。
+ * 第一方包的 preset 由模板通道部署（configureProfile → deployAgentPresets）。
  */
-async function restorePluginPresets(home: string, profilePath: string, bundles: readonly string[], installedNames: ReadonlySet<string>): Promise<void> {
+async function restorePluginPresets(home: string, profilePath: string, bundles: readonly string[], owners: ReadonlySet<string>): Promise<void> {
   const presetsRoot = join(home, '.agent-presets')
   await mkdir(presetsRoot, { recursive: true })
   for (const name of bundles) {
-    if (!installedNames.has(name)) continue
+    if (!owners.has(name)) continue
     const packageDir = join(profilePath, 'node_modules', name)
     let manifest: unknown
     try {
@@ -167,33 +168,53 @@ async function backupBeforeTavilyMerge(file: string): Promise<void> {
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error }
 }
 
-export async function sanitizeHostLockedPluginOverrides(home: string): Promise<void> {
+async function backupBeforePluginRetirement(file: string): Promise<void> {
+  try { await copyFile(file, file + '.before-plugin-retirement', constants.COPYFILE_EXCL) }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error }
+}
+
+export async function sanitizeHostLockedPluginOverrides(home: string, bundledNames?: readonly string[]): Promise<void> {
+  const uninstalledOptional = new Set(Object.entries(OPTIONAL_PUBLIC_PLUGINS)
+    .filter(([, name]) => bundledNames && !bundledNames.includes(name)).map(([id]) => id))
+  const backupTrimmed = async (file: string): Promise<void> => {
+    try { await copyFile(file, file + '.before-preinstall-trim', constants.COPYFILE_EXCL) }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error }
+  }
   const statePath = join(home, 'dsh-plugins.json')
   try {
     const state = JSON.parse(await readFile(statePath, 'utf8')) as { schema?: unknown; overrides?: unknown; installed?: unknown }
     if (state.schema === 1) {
+      const installed = new Set(Array.isArray(state.installed) ? state.installed.map(item => item?.name) : [])
+      for (const [id, name] of Object.entries(OPTIONAL_PUBLIC_PLUGINS)) {
+        if (installed.has(name)) uninstalledOptional.delete(id)
+      }
       let changed = false
       let retired = false
+      let trimmed = false
       if (state.overrides && typeof state.overrides === 'object' && !Array.isArray(state.overrides)) {
         const overrides = state.overrides as Record<string, unknown>
-        retired = Object.prototype.hasOwnProperty.call(overrides, 'web-search-tavily')
+        retired = Object.prototype.hasOwnProperty.call(overrides, 'web-search-tavily') || RETIRED_PLUGIN_IDS.some(id => Object.prototype.hasOwnProperty.call(overrides, id))
         for (const id of HOST_LOCKED_PLUGIN_IDS) {
           if (Object.prototype.hasOwnProperty.call(overrides, id)) { delete overrides[id]; changed = true }
         }
-      }
-      if (state.overrides && typeof state.overrides === 'object' && !Array.isArray(state.overrides) && (state.overrides as Record<string, unknown>)['model-center'] === false) {
-        delete (state.overrides as Record<string, unknown>)['model-center']; changed = true
+        for (const id of uninstalledOptional) {
+          if (Object.prototype.hasOwnProperty.call(overrides, id)) { delete overrides[id]; changed = true; trimmed = true }
+        }
       }
       if (Array.isArray(state.installed)) {
-        const installed = state.installed.filter(item => item?.name !== 'dsh-web-search-tavily')
+        const installed = state.installed.filter(item => item?.name !== 'dsh-web-search-tavily' && !RETIRED_PLUGIN_PACKAGES.has(item?.name))
         if (installed.length !== state.installed.length) { state.installed = installed; changed = true; retired = true }
       }
       if (changed) {
-        if (retired) await backupBeforeTavilyMerge(statePath)
+        if (trimmed) await backupTrimmed(statePath)
+        if (retired) { await backupBeforeTavilyMerge(statePath); await backupBeforePluginRetirement(statePath) }
         await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
       }
-    }
-  } catch { /* missing or unreadable state is left alone */ }
+    } else uninstalledOptional.clear()
+  } catch (error) {
+    // Without readable installation records, preserve optional plugin choices.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') uninstalledOptional.clear()
+  }
 
   const patchPath = join(home, 'cordis.patch.yml')
   try {
@@ -202,44 +223,35 @@ export async function sanitizeHostLockedPluginOverrides(home: string): Promise<v
     if (!parsed) return
     const next: Record<string, boolean> = {}
     for (const [id, enabled] of Object.entries(parsed)) {
-      if (!HOST_LOCKED_PLUGIN_IDS.has(id) && !(id === 'model-center' && enabled === false)) next[id] = enabled
+      if (!HOST_LOCKED_PLUGIN_IDS.has(id) && !uninstalledOptional.has(id)) next[id] = enabled
     }
     const rendered = renderManagedOverridePatch(next)
     const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
     const comparable = normalized.endsWith('\n') ? normalized : `${normalized}\n`
     if (comparable !== rendered) {
+      if ([...uninstalledOptional].some(id => Object.prototype.hasOwnProperty.call(parsed, id))) await backupTrimmed(patchPath)
       if (Object.prototype.hasOwnProperty.call(parsed, 'web-search-tavily')) await backupBeforeTavilyMerge(patchPath)
+      if (RETIRED_PLUGIN_IDS.some(id => Object.prototype.hasOwnProperty.call(parsed, id))) await backupBeforePluginRetirement(patchPath)
       await writeFile(patchPath, rendered, 'utf8')
     }
   } catch { /* missing overlay is a clean home */ }
 }
 
-async function linkUserPlugin(source: string, destination: string): Promise<void> {
-  if (await linkPointsTo(destination, source)) return
-  await mkdir(dirname(destination), { recursive: true })
-  if (existsSync(destination)) await rm(destination, { recursive: true, force: true })
-  try {
-    await symlink(source, destination, process.platform === 'win32' ? 'junction' : 'dir')
-  } catch {
-    await cp(source, destination, { recursive: true })
-  }
-}
-
 /**
- * 致命恢复：把全部市集插件从 dsh-plugins.json 的 installed 名单中移除（停用），
- * 下次启动 restoreUserPlugins 不再把它们链接进 profile。插件文件保留在
- * user-plugins/ 下，作者可从市集重新安装。改写前备份原文件。
- * 返回停用的插件数；状态文件缺失或无可停用项时为 0。
+ * 致命恢复：停用 native profile 中的用户所选包。尚未完成一次性迁移时
+ * 同时清空遗留 installed 名单，避免重启后再迁入。插件文件与作者数据保留。
  */
 export async function disableMarketplacePlugins(home: string): Promise<number> {
+  const native = await disableUserBundles(home)
+  if (await nativeMigrationComplete(home)) return native
   const statePath = join(home, 'dsh-plugins.json')
   let state: { schema?: unknown; installed?: unknown }
   try {
     state = JSON.parse(await readFile(statePath, 'utf8')) as typeof state
   } catch {
-    return 0
+    return native
   }
-  if (state.schema !== 1 || !Array.isArray(state.installed) || state.installed.length === 0) return 0
+  if (state.schema !== 1 || !Array.isArray(state.installed) || state.installed.length === 0) return native
   const disabled = state.installed.length
   try {
     await copyFile(statePath, statePath + '.before-fatal-recovery', constants.COPYFILE_EXCL)
@@ -248,45 +260,14 @@ export async function disableMarketplacePlugins(home: string): Promise<number> {
   }
   state.installed = []
   await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
-  return disabled
+  return native + disabled
 }
 
 export async function restoreUserPlugins(home: string, profilePath: string, bundledNames: readonly string[] = []): Promise<void> {
-  let state: { schema?: unknown; installed?: unknown }
-  try {
-    state = JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8')) as { schema?: unknown; installed?: unknown }
-  } catch {
-    state = { schema: 1, installed: [] }
-  }
-  if (state.schema !== 1 || !Array.isArray(state.installed)) return
-  const manifestPath = join(profilePath, 'package.json')
-  let manifest: { dsh?: { profile?: { bundles?: string[] } }; dependencies?: Record<string, string> }
-  try {
-    manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as typeof manifest
-  } catch {
-    return
-  }
-  const previous = [...(manifest.dsh?.profile?.bundles ?? [])]
-  const installedNames = new Set<string>()
-  for (const item of state.installed) {
-    if (!item || typeof item !== 'object') continue
-    const name = (item as { name?: unknown }).name
-    if (typeof name !== 'string' || !isSafePackageName(name, bundledNames)) continue
-    const source = join(home, 'user-plugins', name)
-    if (!existsSync(join(source, 'package.json'))) continue
-    await linkUserPlugin(source, join(profilePath, 'node_modules', name))
-    installedNames.add(name)
-  }
-  const bundles = [...bundledNames]
-  for (const name of installedNames) if (!bundles.includes(name)) bundles.push(name)
-  for (const name of previous) {
-    if (bundles.includes(name) || bundledNames.includes(name) || name.startsWith('@deepseek-ai/')) continue
-    const destination = join(profilePath, 'node_modules', name)
-    if (existsSync(destination)) await rm(destination, { recursive: true, force: true })
-  }
-  await restorePluginPresets(home, profilePath, bundles, installedNames)
-  const unchanged = previous.length === bundles.length && previous.every((name, index) => name === bundles[index])
-  if (unchanged) return
-  manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+  await migrateLegacyPluginInventory(home, profilePath, bundledNames)
+  await ensureLocalFileLinks(home, profilePath)
+  const manifest = await readJsonFile<ProfileManifest>(join(profilePath, 'package.json'))
+  if (!manifest) return
+  const bundles = [...(manifest.dsh?.profile?.bundles ?? [])]
+  await restorePluginPresets(home, profilePath, bundles, selectedPresetOwners(bundles, bundledNames))
 }

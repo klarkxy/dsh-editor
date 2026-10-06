@@ -78,25 +78,21 @@ export function modelSettingsSections(entries: readonly SlotEntry[], locale: 'zh
       const raw = typeof entry.options?.label === 'function' ? entry.options.label() : entry.options?.label
       if (typeof raw === 'string' && raw.trim()) label = raw.trim()
     } catch { /* A label failure cannot hide other plugin settings. */ }
-    if (id === 'model-center') label = locale === 'en' ? 'Plugin models' : '插件模型'
     return [{ id, label, order: entry.options?.order ?? 0, index }]
   }).sort((a, b) => a.order - b.order || a.index - b.index)
 }
 
 export function usePluginModelSettings(ctx: unknown, locale: 'zh' | 'en') {
   const { entries, version } = useSurface(ctx, MODEL_SETTINGS_SLOT)
-  const native = { id: 'model-center', label: locale === 'en' ? 'Plugin models' : '插件模型', order: 0, index: -1 }
-  return { sections: [native, ...modelSettingsSections(entries, locale).filter(entry => entry.id !== native.id)], version }
+  return { sections: modelSettingsSections(entries, locale), version }
 }
 
 export function PluginModelSettingsSurface(props: {
   ctx: unknown; id: string; renderSlot: SettingsRenderSlot; sessionId?: string; locale: 'zh' | 'en'
-  renderPluginModels(): ReactNode
   renderProviders(options?: { includeWritingRoutes?: boolean }): ReactNode
   renderChatModel(): ReactNode
 }) {
   const { version } = useSurface(props.ctx, MODEL_SETTINGS_SLOT)
-  if (props.id === 'model-center') return props.renderPluginModels()
   return <SurfaceBoundary identity={props.id + ':' + version}>
     <div data-dsh-plugin-surface="" style={{ display: 'contents' }}><Outlet renderSlot={props.renderSlot} slot={MODEL_SETTINGS_SLOT} only={props.id}
       owner={{ sessionId: props.sessionId, locale: props.locale, renderProviders: props.renderProviders, renderChatModel: props.renderChatModel }} /></div>

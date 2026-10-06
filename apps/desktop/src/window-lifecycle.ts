@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path'
 import type { CrashReportSource } from './crash-report.js'
 import { installNavigationPolicy } from './navigation.js'
-import { resolveDshHome, type ProfileDeployIdentity, type ProfileDeployResult } from './profile.js'
+import { resolveDshHome, type ProfileDeployIdentity, type ProfileDeployOptions, type ProfileDeployResult } from './profile.js'
 import { StartupTiming } from './startup-timing.js'
 import type { DshLaunch, DshSupervisorOptions } from './supervisor.js'
 
@@ -44,7 +44,7 @@ export interface DesktopLifecycleDeps {
   fromWebContents(contents: unknown): EditorWindow | undefined
   showSaveDialog(window: EditorWindow | undefined, suggested: string): string | undefined
   resolveRuntime(home: string): Promise<{ nodePath: string; cliPath: string; template: string; deploy?: ProfileDeployIdentity }>
-  deployProfile: (home: string, template: string, runtimeNodeModules?: string, deploy?: ProfileDeployIdentity) => Promise<ProfileDeployResult | string>
+  deployProfile: (home: string, template: string, runtimeNodeModules?: string, deploy?: ProfileDeployIdentity, options?: ProfileDeployOptions) => Promise<ProfileDeployResult | string>
   createSupervisor(options: DshSupervisorOptions): DesktopSupervisor
   errorHtml(error: unknown): string
   loadingHtml(): string
@@ -159,7 +159,7 @@ export function createDesktopLifecycle(deps: DesktopLifecycleDeps): DesktopLifec
       const home = resolveDshHome(deps.env, deps.getHomePath())
       const runtime = await timing.measure('runtime', () => deps.resolveRuntime(home))
       await timing.measure('profile', async () => {
-        const result = await deps.deployProfile(home, runtime.template, join(dirname(dirname(runtime.cliPath)), 'node_modules'), runtime.deploy)
+        const result = await deps.deployProfile(home, runtime.template, join(dirname(dirname(runtime.cliPath)), 'node_modules'), runtime.deploy, { nodePath: runtime.nodePath })
         return typeof result === 'string' ? { path: result, reused: false } : result
       }, (result) => result.reused ? 'hit' : 'deploy')
       supervisor ??= deps.createSupervisor({

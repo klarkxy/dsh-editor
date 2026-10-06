@@ -1,9 +1,11 @@
+import { existsSync } from 'node:fs'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parse } from 'yaml'
 import { afterEach, describe, expect, it } from 'vitest'
+import { NATIVE_PLUGIN_MIGRATION_MARKER, NATIVE_STATE_BACKUP_SUFFIX } from '../src/native-profile.js'
 import { deployProfile } from '../src/profile.js'
 import { syncPresetDeclarations } from '../src/preset-config.js'
 import { migrateWritingSettings } from '../src/settings-migration.js'
@@ -26,6 +28,13 @@ async function fixture() {
 describe('DSH 0.1.7 data migration', () => {
   it('keeps imported writing routes, later edits and plugin toggles through a forced redeploy', async () => {
     const { home, template } = await fixture()
+    const moodPkg = join(template, 'node_modules', '@klarkxy', 'dsh-mood')
+    await mkdir(moodPkg, { recursive: true })
+    await writeFile(join(moodPkg, 'package.json'), JSON.stringify({ name: '@klarkxy/dsh-mood', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+    await writeFile(join(moodPkg, 'cordis.patch.yml'), '[]\n')
+    await writeFile(join(template, 'package.json'), JSON.stringify({
+      dsh: { profile: { bundles: ['dsh-editor-profile-config', '@klarkxy/dsh-mood'] } },
+    }))
     const old = 'dsh-editor-writing:\n  authorPreferences: 原来的偏好\n  completionModel:\n    provider: local\n    model: writer\nui-developer:\n  developerMode: true\n'
     await writeFile(join(home, 'settings.yaml'), old)
     await writeFile(join(home, 'dsh-plugins.json'), JSON.stringify({ schema: 1, overrides: { mood: false }, installed: [] }))
@@ -33,7 +42,8 @@ describe('DSH 0.1.7 data migration', () => {
     const patch = join(profile, 'cordis.patch.yml')
     const imported = parse(await readFile(patch, 'utf8'))
     expect(imported.find((r: { id: string }) => r.id === 'dsh-editor-writing').config.completionModel).toEqual({ provider: 'local', model: 'writer' })
-    const edited = '- id: dsh-editor-writing\n  config:\n    authorPreferences: 作者后来选择的偏好\n- id: llm-pi-ai\n  config:\n    providers: []\n'
+    expect(imported.find((r: { id: string }) => r.id === 'mood')).toMatchObject({ id: 'mood', disabled: true })
+    const edited = '- id: dsh-editor-writing\n  config:\n    authorPreferences: 作者后来选择的偏好\n- id: llm-pi-ai\n  config:\n    providers: []\n- id: mood\n  disabled: true\n'
     await writeFile(patch, edited)
     await rm(join(profile, 'node_modules', 'dsh-editor-profile-config'), { recursive: true })
     await writeFile(join(profile, 'cordis.patch.before-dsh-0.1.7.yml'), 'historical backup')
@@ -43,7 +53,10 @@ describe('DSH 0.1.7 data migration', () => {
     expect(await readFile(patch, 'utf8')).toBe(edited)
     expect(await readFile(join(home, 'settings.yaml.before-dsh-0.1.7'), 'utf8')).toBe(old)
     expect(parse(await readFile(join(home, 'settings.yaml'), 'utf8'))?.['dsh-editor-writing']).toBeUndefined()
-    expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8')).overrides.mood).toBe(false)
+    expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8')).overrides).toEqual({})
+    expect(JSON.parse(await readFile(join(home, `dsh-plugins.json${NATIVE_STATE_BACKUP_SUFFIX}`), 'utf8')).overrides.mood).toBe(false)
+    expect(existsSync(join(home, NATIVE_PLUGIN_MIGRATION_MARKER))).toBe(true)
+    expect(parse(await readFile(patch, 'utf8')).find((r: { id: string }) => r.id === 'mood')).toMatchObject({ id: 'mood', disabled: true })
   })
   it('keeps an explicit existing override and refuses malformed legacy data without deleting it', async () => {
     const { home, template } = await fixture()

@@ -1,4 +1,5 @@
 import { provideOfficialLayout } from './client/official-layout.ts'
+import { adaptNativePluginManagerSeat } from './client/native-plugin-manager-seat.ts'
 import { provideOfficialSurfaces } from './client/official-surfaces.tsx'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsScope } from './dsh-compat.ts'
@@ -92,6 +93,7 @@ export function apply(ctx: Context): void {
   try {
     const client = ctx as ShellContext & { configForms: SettingsSlot }
     const writingScope = client.configForms.get<NonNullable<ReturnType<typeof decodeWritingPreferences>>>(WRITING_SETTINGS_NAMESPACE)
+    adaptNativePluginManagerSeat(client)
     provideOfficialLayout(client)
     provideOfficialSurfaces(client)
     provideEditorUiWorkspace(client)

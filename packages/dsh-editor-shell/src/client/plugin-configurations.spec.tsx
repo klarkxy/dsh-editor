@@ -153,9 +153,9 @@ it('names the adopted voice configuration in the active language', () => {
 })
 
 
-it('routes the adopted model-center bundle through the native plugin-model entry', () => {
+it('keeps every keyed bundle on its native configuration route without a special exclusion', () => {
  const host=fixture({'plugins.bundle.config':[{options:{key:'@klarkxy/dsh-model-center'}},{options:{key:'@scope/other'}}]})
- expect(projectPluginConfigurations(host.slots).map(entry=>entry.entryKey)).toEqual(['@scope/other'])
+ expect(projectPluginConfigurations(host.slots).map(entry=>entry.entryKey)).toEqual(['@klarkxy/dsh-model-center', '@scope/other'])
 })
 
 function navigation(rows: Record<string, Entry[]>, zhihu?: ReactNode) {
@@ -191,9 +191,10 @@ describe('plugin configuration navigation', () => {
     expect(projection(host).legacyZhihu).toBe(false)
     const html = navigation(rows, emptyZhihuSlot)
     expect(html).not.toContain('知乎资料')
-    expect(html).toContain('知乎')
+    expect(html).not.toContain('知乎')
     expect(html).toContain('installed-management')
-    expect(html).toContain('插件模型')
+    expect(html).toContain('official-slot')
+    expect(html).not.toContain('插件模型')
     expect(html).toContain('已安装与市场')
   })
 
@@ -226,8 +227,8 @@ describe('plugin configuration navigation', () => {
       [ZHIHU_SETTINGS_SLOT]: [{ options: { id: 'zhihu' }, registrant: 'dsh-zhihu-client' }],
       'plugins.bundle.config': [{ options: { key: '@klarkxy/dsh-model-center' }, registrant: 'dsh-zhihu-client' }],
     })
-    expect(projectPluginConfigurations(modelCenter.slots)).toEqual([])
-    expect(legacyZhihuVisible(modelCenter.slots)).toBe(true)
+    expect(projectPluginConfigurations(modelCenter.slots)).toHaveLength(1)
+    expect(legacyZhihuVisible(modelCenter.slots)).toBe(false)
   })
 
   it('keeps a real legacy Zhihu contribution the official catalogue does not replace', () => {
@@ -238,8 +239,8 @@ describe('plugin configuration navigation', () => {
     expect(legacyZhihuVisible(fixture(rows).slots)).toBe(true)
     const html = navigation(rows, createElement('p', null, 'legacy-zhihu-body'))
     expect(html).toContain('知乎资料')
-    expect(html).toContain('记忆')
     expect(html).not.toContain('@klarkxy/dsh-memory')
+    expect(html).not.toContain('>记忆<')
   })
 
   it('follows legacy registration and removal through the ledger version', () => {
@@ -289,7 +290,7 @@ describe('plugin configuration navigation', () => {
     ] })
     expect(projectPluginConfigurations(host.slots).map((entry) => [entry.entryKey, entry.label])).toEqual([
       ['@deepseek-ai/dsh-experimental-voice-input-bundle', 'Spoken'],
-      ['@klarkxy/dsh-memory', '记忆'],
+      ['@klarkxy/dsh-memory', '@klarkxy/dsh-memory'],
       ['@klarkxy/dsh-memory-extra', '@klarkxy/dsh-memory-extra'],
       ['@klarkxy/dsh-web-search-manager', '自定义搜索'],
       ['@scope/blank', '@scope/blank'],
@@ -311,11 +312,11 @@ describe('plugin configuration navigation', () => {
     const again = projection(host)
     expect(zh.entries.map((entry) => [entry.entryKey, entry.label])).toEqual([
       ['@deepseek-ai/dsh-experimental-voice-input-bundle', '插件语音'],
-      ['@klarkxy/dsh-memory', '记忆'],
+      ['@klarkxy/dsh-memory', '@klarkxy/dsh-memory'],
       ['@klarkxy/dsh-web-search-manager', '网络搜索'],
       ['@scope/unknown', '@scope/unknown'],
     ])
-    expect(en.entries.map((entry) => entry.label)).toEqual(['Plugin voice', 'Memory', 'Web search', '@scope/unknown'])
+    expect(en.entries.map((entry) => entry.label)).toEqual(['Plugin voice', '@klarkxy/dsh-memory', 'Web search', '@scope/unknown'])
     expect(en.entries.map((entry) => entry.entryKey)).toEqual(zh.entries.map((entry) => entry.entryKey))
     expect(en.version).not.toBe(zh.version)
     expect(again.entries.map((entry) => entry.label)).toEqual(zh.entries.map((entry) => entry.label))

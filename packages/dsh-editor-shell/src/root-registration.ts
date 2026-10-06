@@ -1,3 +1,4 @@
+import { NATIVE_PLUGIN_MANAGER_SEAT } from './client/native-plugin-manager-seat.ts'
 import { OFFICIAL_INPUT_SLOT } from './client/official-surfaces.tsx'
 import type { Context } from '@deepseek-ai/cordis'
 import type { RootOwnerProps } from './dsh-compat.ts'
@@ -29,14 +30,12 @@ export function registerRoot(ctx: Context & { slots: RootSlots }, render: (props
     // Editor is the sole layout owner; official plugins retain their own child slots.
     children: {
       [OFFICIAL_INPUT_SLOT]: { kind: 'single', scope: 'session' },
+      [NATIVE_PLUGIN_MANAGER_SEAT]: { kind: 'keyed', scope: 'root' },
       'rightbar': { kind: 'single', scope: 'root' },
       'shell.overlay': { kind: 'list', scope: 'root' },
       'settings.general.item': { kind: 'list', scope: 'root' },
       [EXTENSIONS_SLOT]: { kind: 'list', scope: 'root' },
       [PLUGINS_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
-      'plugins.item': { kind: 'list', scope: 'root' },
-      'plugins.bundle.config': { kind: 'keyed', scope: 'root' },
-      'plugins.row.config': { kind: 'keyed', scope: 'root' },
       [OFFICIAL_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
       [ZHIHU_SETTINGS_SLOT]: { kind: 'list', scope: 'root' },
       [SIDEBAR_TOOLS_SLOT]: { kind: 'list', scope: 'root' },

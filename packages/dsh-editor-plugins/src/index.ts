@@ -1,23 +1,19 @@
 import { syncPresetDeclarations } from './preset-config.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { registerHostRpc, type HostRpcContext } from 'dsh-manuscript/host-api'
-import { readFile, rm } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import {
   PLUGINS_RPC_CHANNEL,
-  type PluginCard,
-  type PluginFiberPhase,
-  type PluginInventory,
+  type MarketplaceListing,
   type PluginActionReceipt,
   type PluginsRpcResult,
 } from './contracts.ts'
-import {
-  catalogFor, catalogLookupId, catalogRow, classifyEntry, isProtectedEntry, isProtectedPackage, isSafeEntryId, isSafePackageName,
-  hasPluginPackage, loadRuntimeCatalog, packageNameOf, type RuntimeCatalog,
-} from './core.ts'
+import { CORE_PLUGIN_BUNDLE_NAMES, protectCorePluginManager } from './core-lock.ts'
+import { isSafePackageName, readPreparedCatalog } from './core.ts'
 import { githubHeaders, marketplaceSearchUrl, parseGitHubSpec, parseMarketplaceSearch, sanitizeMarketplaceQuery } from './github.ts'
-import { inspectPluginPackage } from './inspect.ts'
-import { defaultExtract, defaultLink, defaultNpmInstall, installGitHubPlugin, stageGitHubPlugin, uninstallUserPlugin } from './install.ts'
-import { emptyPluginState, HOST_LOCKED_ENTRY_IDS, isOwnedManagedPatch, parsePluginState, renderOverridePatch, withoutHostLockedOverrides, type PluginState } from './overlay.ts'
+import { npmMarketplaceListing, parseNpmSpec } from './npm.ts'
+import { emptyPluginState, isOwnedManagedPatch, parsePluginState, renderOverridePatch, withoutHostLockedOverrides, type PluginState } from './overlay.ts'
 import { resolvePluginPaths, type PluginPaths } from './paths.ts'
 import {
   CORE_WRITING_PRESET_ID,
@@ -26,7 +22,6 @@ import {
   readCompositionPresets,
   removeAppOwnedPreset,
 } from './writing-presets.ts'
-import { join } from 'node:path'
 import {
   defaultPersistIo,
   isEnoent,
@@ -41,51 +36,13 @@ import {
 export const name = 'dsh-editor-plugins'
 export const inject = ['connection', 'loader', 'webServer'] as const
 
-const FIBER_PHASE: Record<number, PluginFiberPhase> = {
-  0: 'pending',
-  1: 'loading',
-  2: 'active',
-  3: 'failed',
-  5: 'unloading',
-}
-
-type LoaderEntry = {
-  id: string
-  disabled: boolean
-  options: { id?: string; name: string; group?: boolean | null }
-  parent?: { remove(id: string): Promise<unknown> | unknown }
-  fiber?: { state: number }
-}
-
 type LoaderFace = {
-  entries(): Iterable<LoaderEntry>
-  update(id: string, options: { disabled?: boolean | null }): Promise<unknown> | unknown
-  remove?(id: string): Promise<unknown> | unknown
-}
-
-/** Native optional client-modules service: `graph().entries` owns current browser module ids. */
-export type ClientModulesFace = {
-  graph(): { entries?: Iterable<{ id?: unknown } | null | undefined> }
+  entries(): Iterable<unknown>
+  update?(id: string, options: { disabled?: boolean | null }): Promise<unknown> | unknown
 }
 
 type RpcHost = Context & HostRpcContext & {
   loader: LoaderFace
-  clientModules?: ClientModulesFace
-}
-
-function clientPackagesFromGraph(clientModules: ClientModulesFace | undefined): string[] | undefined {
-  if (clientModules == null || typeof clientModules.graph !== 'function') return undefined
-  try {
-    const graph = clientModules.graph()
-    if (!graph || graph.entries == null) return undefined
-    const ids: string[] = []
-    for (const entry of graph.entries) {
-      if (entry && typeof entry.id === 'string') ids.push(entry.id)
-    }
-    return ids
-  } catch {
-    return undefined
-  }
 }
 
 function fail(code: 'bad-request' | 'cancelled' | 'forbidden' | 'not-found' | 'network' | 'internal', message: string, details: Record<string, unknown> = {}): PluginsRpcResult {
@@ -95,6 +52,92 @@ function fail(code: 'bad-request' | 'cancelled' | 'forbidden' | 'not-found' | 'n
 const bad = (message: string, details: Record<string, unknown> = {}) => fail('bad-request', message, details)
 const forbidden = (message: string) => fail('forbidden', message)
 const cancelled = () => fail('cancelled', '请求已取消')
+
+const RETIRED_DISTRIBUTION_BUNDLES = new Set([
+  'dsh-web-search-tavily',
+  '@klarkxy/dsh-ai-services',
+  '@klarkxy/dsh-model-center',
+  '@klarkxy/dsh-memory',
+  '@klarkxy/dsh-self-improvement',
+  '@klarkxy/dsh-fusion',
+])
+
+function isPathInside(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate)
+  return Boolean(rel) && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+export function resolveProfileArtifactDir(profileDir: string, packageName: string): string | undefined {
+  if (!isSafePackageName(packageName)) return undefined
+  const artifactRoot = resolve(profileDir, 'bundled-packages', 'node_modules')
+  const candidate = resolve(artifactRoot, ...packageName.split('/'))
+  return isPathInside(artifactRoot, candidate) ? candidate : undefined
+}
+
+function isDshBundle(manifest: unknown): manifest is { name?: unknown } {
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return false
+  const dsh = (manifest as { dsh?: unknown }).dsh
+  if (!dsh || typeof dsh !== 'object' || Array.isArray(dsh)) return false
+  return (dsh as { bundle?: unknown }).bundle != null
+}
+
+function catalogCopy(packageName: string, catalog: Awaited<ReturnType<typeof readPreparedCatalog>>): { title: string; description: string } {
+  const row = Object.values(catalog?.entries ?? {}).find((item) => item.packageName === packageName)
+  return { title: row?.title || packageName, description: row?.description || '' }
+}
+
+function localMarketplaceListing(packageName: string, artifactDir: string, copy: { title: string; description: string }): MarketplaceListing {
+  const slash = packageName.indexOf('/')
+  return {
+    spec: `link:${artifactDir.replaceAll('\\', '/')}`,
+    source: 'local',
+    packageName,
+    title: copy.title,
+    owner: slash < 0 ? '' : packageName.slice(0, slash),
+    repo: slash < 0 ? packageName : packageName.slice(slash + 1),
+    description: copy.description,
+    stars: 0,
+    url: '',
+    updatedAt: '',
+    topics: [],
+  }
+}
+
+function matchesLocalQuery(item: MarketplaceListing, query: string): boolean {
+  const needle = query.trim().toLocaleLowerCase()
+  if (!needle) return true
+  if ([item.packageName, item.title, item.description].some((field) => typeof field === 'string' && field.toLocaleLowerCase().includes(needle))) return true
+  const npm = parseNpmSpec(query)
+  return Boolean(npm && !npm.version && item.packageName === npm.name)
+}
+
+async function listLocalMarketplaceListings(profileDir: string): Promise<MarketplaceListing[]> {
+  let names: string[] = []
+  try {
+    const composition = JSON.parse(await readFile(join(profileDir, 'composition.json'), 'utf8')) as { nativeDependencies?: unknown }
+    if (!composition.nativeDependencies || typeof composition.nativeDependencies !== 'object' || Array.isArray(composition.nativeDependencies)) {
+      return []
+    }
+    names = Object.keys(composition.nativeDependencies)
+  } catch {
+    return []
+  }
+  const catalog = await readPreparedCatalog(profileDir)
+  const listings: MarketplaceListing[] = []
+  for (const name of names) {
+    if (CORE_PLUGIN_BUNDLE_NAMES.has(name) || RETIRED_DISTRIBUTION_BUNDLES.has(name)) continue
+    const artifactDir = resolveProfileArtifactDir(profileDir, name)
+    if (!artifactDir) continue
+    try {
+      const manifest = JSON.parse(await readFile(join(artifactDir, 'package.json'), 'utf8')) as { name?: unknown }
+      if (!isDshBundle(manifest) || manifest.name !== name) continue
+      listings.push(localMarketplaceListing(name, artifactDir, catalogCopy(name, catalog)))
+    } catch {
+      continue
+    }
+  }
+  return listings
+}
 
 export async function readPluginState(paths: PluginPaths): Promise<PluginState> {
   try {
@@ -157,65 +200,6 @@ export async function persistPluginState(paths: PluginPaths, state: PluginState,
   })
 }
 
-function fiberPhaseOf(entry: LoaderEntry): PluginFiberPhase {
-  if (entry.fiber === undefined) return null
-  return FIBER_PHASE[entry.fiber.state] ?? null
-}
-
-export function inventoryFromLoader(loader: LoaderFace, state: PluginState, catalog: RuntimeCatalog): PluginInventory {
-  const installed = new Map(state.installed.map((item) => [item.name, item]))
-  const inventory: PluginInventory = { core: [], optional: [], community: [] }
-  for (const entry of loader.entries()) {
-    if (entry.options.group) continue
-    const moduleName = entry.options.name
-    const group = classifyEntry(entry.id, moduleName, catalog)
-    if (group === 'hidden') continue
-    const info = catalogFor(entry.id, moduleName, catalog)
-    const packageName = packageNameOf(moduleName)
-    const extra = installed.get(packageName)
-    const row = catalogRow(entry.id, catalog)
-    const attribution = row && row.packageName === packageName ? row : undefined
-    const managedBy = attribution?.managedBy
-    const card: PluginCard = {
-      entryId: entry.id,
-      moduleName,
-      packageName,
-      title: info.title,
-      description: info.description,
-      group,
-      enabled: !entry.disabled,
-      locked: isProtectedEntry(entry.id, moduleName, catalog),
-      fiberPhase: fiberPhaseOf(entry),
-      origin: extra ? 'installed' : 'bundled',
-      ...(attribution && (attribution.builtin === true || attribution.builtin === false) ? { builtin: attribution.builtin } : {}),
-      ...(managedBy === 'session' || managedBy === 'feature' ? { managedBy } : {}),
-      spec: extra?.spec,
-      version: extra?.version,
-    }
-    inventory[group].push(card)
-  }
-  const listed = new Set([...inventory.core, ...inventory.optional, ...inventory.community].map(card => card.packageName))
-  for (const item of installed.values()) {
-    if (listed.has(item.name) || isProtectedPackage(item.name, catalog.bundles)) continue
-    inventory.community.push({
-      entryId: `installed:${item.name}`,
-      moduleName: item.name,
-      packageName: item.name,
-      title: item.name,
-      description: item.spec,
-      group: 'community',
-      enabled: false,
-      locked: false,
-      fiberPhase: null,
-      origin: 'installed',
-      pendingRestart: true,
-      spec: item.spec,
-      version: item.version,
-    })
-  }
-  return inventory
-}
-
 function persistFailed(error: unknown): PluginsRpcResult {
   if (error instanceof PluginPersistBlockedError) {
     return fail('forbidden', error.message, { reason: error.reason, ...(error.detail ? { cause: error.detail } : {}) })
@@ -227,46 +211,6 @@ function persistFailed(error: unknown): PluginsRpcResult {
   return fail('internal', '未能保存插件开关，请重试。', { cause })
 }
 
-async function setEntriesEnabled(
-  entryIds: string[],
-  enabled: boolean,
-  options: { loader: LoaderFace; paths: PluginPaths; catalog?: RuntimeCatalog; io?: PersistIo },
-  catalogForCall: () => Promise<RuntimeCatalog>,
-): Promise<PluginsRpcResult> {
-  if (entryIds.length === 0 || typeof enabled !== 'boolean') return bad('请指定要开关的插件')
-  if (new Set(entryIds).size !== entryIds.length) return bad('请指定要开关的插件')
-  const running = [...options.loader.entries()]
-  const catalog = await catalogForCall()
-  const matches: Array<{ entryId: string; patchId: string }> = []
-  for (const entryId of entryIds) {
-    const patchId = entryId.startsWith('include:') ? catalogLookupId(entryId) : entryId
-    if (!isSafeEntryId(patchId)) return bad('请指定要开关的插件')
-    const match = running.find((entry) => entry.id === entryId)
-    if (!match) return fail('not-found', '未找到该插件')
-    if (isProtectedEntry(entryId, match.options.name, catalog)) return forbidden('系统核心插件不能关闭')
-    if (HOST_LOCKED_ENTRY_IDS.has(patchId)) return forbidden('该入口由写作模式挂载，不能在这里开关')
-    matches.push({ entryId, patchId })
-  }
-  const state = await readPluginState(options.paths)
-  const overrides = { ...state.overrides }
-  for (const match of matches) overrides[match.patchId] = enabled
-  state.overrides = overrides
-  try {
-    await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
-  } catch (error) {
-    return persistFailed(error)
-  }
-  let appliedCount = 0
-  for (const match of matches) {
-    try {
-      await options.loader.update(match.entryId, { disabled: !enabled })
-      const updated = [...options.loader.entries()].find((entry) => entry.id === match.entryId)
-      if (updated && updated.disabled === !enabled) appliedCount++
-    } catch { /* The saved override will apply on restart. */ }
-  }
-  return { ok: true, value: { restartRequired: appliedCount !== matches.length } satisfies PluginActionReceipt }
-}
-
 export async function handlePluginsRpc(
   endpoint: string,
   payload: unknown,
@@ -275,50 +219,25 @@ export async function handlePluginsRpc(
     loader: LoaderFace
     paths: PluginPaths
     fetch?: typeof fetch
-    catalog?: RuntimeCatalog
     io?: PersistIo
-    clientModules?: ClientModulesFace
     reloadProfile?: () => Promise<boolean>
   },
 ): Promise<PluginsRpcResult> {
   if (signal.aborted) return cancelled()
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
-  const catalogForCall = async (): Promise<RuntimeCatalog> => {
-    if (options.catalog) return options.catalog
-    const names = [...options.loader.entries()].map((entry) => packageNameOf(entry.options.name))
-    const state = await readPluginState(options.paths)
-    return loadRuntimeCatalog(options.paths.profileDir, names, state.installed.map(item => item.name))
-  }
   try {
-    if (endpoint === 'inventory.list') {
-      const state = await readPluginState(options.paths)
-      const inventory = inventoryFromLoader(options.loader, state, await catalogForCall())
-      // Live patch reload retains the boot-time bundle layers. An uninstalled
-      // module may linger in that loader, but is no longer an installed package.
-      const present = await Promise.all(inventory.community.map(card => card.origin === 'installed'
-        ? true
-        : hasPluginPackage(options.paths.profileDir, card.packageName)))
-      inventory.community = inventory.community.filter((_card, index) => present[index])
-      const clientPackages = clientPackagesFromGraph(options.clientModules)
-      if (clientPackages !== undefined) inventory.clientPackages = clientPackages
-      return { ok: true, value: inventory }
-    }
-    if (endpoint === 'entry.setEnabled') {
-      const entryId = typeof body.entryId === 'string' ? body.entryId : ''
-      if (!entryId || typeof body.enabled !== 'boolean') return bad('请指定要开关的插件')
-      return setEntriesEnabled([entryId], body.enabled, options, catalogForCall)
-    }
-    if (endpoint === 'entries.setEnabled') {
-      const entryIds = Array.isArray(body.entryIds) && body.entryIds.every((id) => typeof id === 'string')
-        ? body.entryIds as string[]
-        : null
-      if (!entryIds || typeof body.enabled !== 'boolean') return bad('请指定要开关的插件')
-      return setEntriesEnabled(entryIds, body.enabled, options, catalogForCall)
-    }
     if (endpoint === 'marketplace.search') {
       const query = typeof body.query === 'string' ? body.query : ''
-      if (sanitizeMarketplaceQuery(query) === undefined) return bad('搜索词含有不支持的字符')
+      const locals = await listLocalMarketplaceListings(options.paths.profileDir)
+      const matchedLocal = locals.filter((item) => matchesLocalQuery(item, query))
+      const npm = parseNpmSpec(query)
       const spec = parseGitHubSpec(query)
+      if (!query.trim()) return { ok: true, value: { listings: matchedLocal } }
+      if (!spec && !npm?.version && matchedLocal.length > 0) {
+        return { ok: true, value: { listings: matchedLocal } }
+      }
+      if (npm) return { ok: true, value: { listings: [npmMarketplaceListing(npm)] } }
+      if (sanitizeMarketplaceQuery(query) === undefined) return bad('搜索词含有不支持的字符')
       const ioFetch = options.fetch ?? fetch
       const response = await ioFetch(marketplaceSearchUrl(query), { headers: githubHeaders(), signal })
       if (signal.aborted) return cancelled()
@@ -330,58 +249,9 @@ export async function handlePluginsRpc(
           stars: 0, url: `https://github.com/${spec.owner}/${spec.repo}`, updatedAt: '', topics: [],
         })
       }
-      return { ok: true, value: { listings } }
-    }
-    if (endpoint === 'marketplace.inspect') {
-      const spec = typeof body.spec === 'string' ? parseGitHubSpec(body.spec) : undefined
-      if (!spec) return bad('请输入 GitHub 仓库，例如 owner/repo')
-      const staged = await stageGitHubPlugin(spec, options.paths, signal, {
-        fetch: options.fetch ?? fetch,
-        extract: defaultExtract,
-      })
-      try {
-        const inspect = await inspectPluginPackage(staged.unpacked, await catalogForCall())
-        if (staged.sourceNote) inspect.findings.push({ code: 'published-artifact', severity: 'info', message: staged.sourceNote })
-        return { ok: true, value: inspect }
-      } finally {
-        await rm(staged.staging, { recursive: true, force: true })
-      }
-    }
-    if (endpoint === 'marketplace.install') {
-      const spec = typeof body.spec === 'string' ? parseGitHubSpec(body.spec) : undefined
-      if (!spec) return bad('请输入 GitHub 仓库，例如 owner/repo')
-      await validatePluginPersistence(options.paths, options.io ?? defaultPersistIo)
-      const installed = await installGitHubPlugin(spec, options.paths, signal, {
-        fetch: options.fetch ?? fetch,
-        extract: defaultExtract,
-        npmInstall: defaultNpmInstall,
-        link: defaultLink,
-      }, await catalogForCall())
-      const state = await readPluginState(options.paths)
-      state.installed = [...state.installed.filter((item) => item.name !== installed.name), installed]
-      await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
-      return { ok: true, value: { ...installed, restartRequired: true } }
-    }
-    if (endpoint === 'marketplace.uninstall') {
-      const packageName = typeof body.name === 'string' ? body.name : ''
-      if (!isSafePackageName(packageName)) return bad('请指定要卸载的插件')
-      const catalog = await catalogForCall()
-      if (isProtectedPackage(packageName, catalog.bundles)) return forbidden('系统核心插件不能卸载')
-      const state = await readPluginState(options.paths)
-      if (!state.installed.some((item) => item.name === packageName)) return fail('not-found', '该插件不是从市场安装的，不能从这里卸载')
-      await validatePluginPersistence(options.paths, options.io ?? defaultPersistIo)
-      const running = [...options.loader.entries()].filter((entry) => packageNameOf(entry.options.name) === packageName)
-      for (const entry of running) {
-        // Nested entries expose qualified IDs (include:<id>); their owning
-        // group's remove API takes the local options.id, not the qualified ID.
-        if (entry.parent && entry.options.id) await entry.parent.remove(entry.options.id)
-        else await options.loader.remove?.(entry.id)
-      }
-      await uninstallUserPlugin(packageName, options.paths, catalog)
-      state.installed = state.installed.filter((item) => item.name !== packageName)
-      for (const entry of running) delete state.overrides[catalogLookupId(entry.id)]
-      await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
-      return { ok: true, value: { restartRequired: true } satisfies PluginActionReceipt }
+      if (!matchedLocal.length) return { ok: true, value: { listings } }
+      const seen = new Set(matchedLocal.map((item) => item.spec))
+      return { ok: true, value: { listings: [...matchedLocal, ...listings.filter((item) => !seen.has(item.spec))] } }
     }
     if (endpoint === 'presets.list') {
       const state = await readPluginState(options.paths)
@@ -442,7 +312,6 @@ export function apply(ctx: Context): void {
     serialize(() => handlePluginsRpc(endpoint, payload, signal, {
       loader: host.loader,
       paths,
-      clientModules: host.get('clientModules') as ClientModulesFace | undefined,
       reloadProfile: async () => {
         if (!host.get('hmr')) return false
         const profile = host.get('profileContext') as import('@deepseek-ai/dsh-app-boot').ProfileContext | undefined
@@ -453,4 +322,13 @@ export function apply(ctx: Context): void {
       },
     }))
   )))
+  ctx.effect(() => {
+    try {
+      const manager = host.get('pluginManager') as Parameters<typeof protectCorePluginManager>[0] | undefined
+      if (manager && typeof manager.listPlugins === 'function' && typeof manager.setPluginEnabled === 'function') {
+        return protectCorePluginManager(manager)
+      }
+    } catch { /* Official manager is the host service; tests may omit it. */ }
+    return () => {}
+  })
 }

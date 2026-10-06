@@ -1,3 +1,4 @@
+import { NATIVE_PLUGIN_MANAGER_KEY, NATIVE_PLUGIN_MANAGER_SEAT } from './native-plugin-manager-seat.ts'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Button as NavigationButton, Flex, Heading, IconButton, Text } from '@radix-ui/themes'
 import type { ShellContext } from './shared.ts'
@@ -5,9 +6,9 @@ import { t, useLocale } from '../i18n/index.ts'
 import { Button, Input } from './ui/index.ts'
 import { WindowControls, titleBarDoubleClick } from './window-controls.tsx'
 import { OfficialSettingsSectionPage, PluginSettingsContent, useOfficialSettingsSections, type SettingsRenderSlot } from './settings-plugins.tsx'
-import { SettingsChatModelRoute, SettingsModelsSection, SettingsPluginModelsSection } from './settings-models.tsx'
+import { SettingsChatModelRoute, SettingsModelsSection } from './settings-models.tsx'
 import { PluginModelSettingsSurface, usePluginModelSettings } from './plugin-surfaces.tsx'
-import { PluginConfigurationPage, usePluginConfigurations } from './plugin-configurations.tsx'
+import { usePluginConfigurations } from './plugin-configurations.tsx'
 
 export function PluginsTrigger(props: { onOpen(): void }) {
   useLocale()
@@ -21,7 +22,6 @@ export function PluginsTrigger(props: { onOpen(): void }) {
 
 type PluginWorkspaceProps = {
   open: boolean
-  requestedPackage?: string
   ctx: ShellContext
   renderSlot?: SettingsRenderSlot
   plugins?: ReactNode
@@ -35,42 +35,41 @@ type PluginWorkspaceProps = {
 /** The manuscript keeps its instance and dimensions while the global page is open. */
 export function PluginWorkspace(props: PluginWorkspaceProps) {
   const writing = useRef<HTMLDivElement>(null)
+  const overlay = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => { if (writing.current) writing.current.inert = props.open }, [props.open])
+  useLayoutEffect(() => { if (overlay.current) overlay.current.inert = !props.open }, [props.open])
   return <div className="plugin-workspace">
     <div ref={writing} className={props.open ? 'plugin-workspace-writing is-covered' : 'plugin-workspace-writing'} aria-hidden={props.open || undefined}>
       {props.children}
     </div>
-    {props.open ? <PluginsPage {...props} /> : null}
+    <div ref={overlay} hidden={!props.open} className="plugin-workspace-plugins">
+      <PluginsPage {...props} visible={props.open} />
+    </div>
   </div>
 }
 
-export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open'>) {
+export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open'> & { visible?: boolean }) {
   const locale = useLocale()
   const legacy = useOfficialSettingsSections(props.ctx)
   const official = usePluginConfigurations(props.ctx)
   const models = usePluginModelSettings(props.ctx, locale)
   const [selected, setSelected] = useState('manage')
   const [query, setQuery] = useState('')
-  useLayoutEffect(() => {
-    if (props.requestedPackage) setSelected(props.requestedPackage === '@klarkxy/dsh-model-center' ? 'model:model-center' : 'official:plugins.bundle.config:' + props.requestedPackage)
-  }, [props.requestedPackage])
   const back = useRef<HTMLButtonElement>(null)
   const pages = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
+    if (props.visible === false) return
     const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null
     back.current?.focus()
     return () => { globalThis.setTimeout(() => { if (invoker?.isConnected) invoker.focus() }, 0) }
-  }, [])
+  }, [props.visible])
   const entries = [
     ...(props.renderSlot ? models.sections.map(entry => ({ id: 'model:' + entry.id, label: entry.label })) : []),
-    // An empty Slot element is truthy. The ledger says whether a legacy contribution is still there.
     ...(official.legacyZhihu && props.zhihu != null ? [{ id: 'zhihu', label: t('settings.zhihu') }] : []),
-    ...(props.renderSlot ? official.entries.map(entry => ({ id: 'official:' + entry.id, label: entry.label })) : []),
     ...(props.renderSlot ? legacy.sections.map(entry => ({ id: entry.navId, label: entry.label })) : []),
   ]
   const active = selected === 'manage' || entries.some(entry => entry.id === selected) ? selected : 'manage'
   const activeModel = models.sections.find(entry => 'model:' + entry.id === active)
-  const activeOfficial = official.entries.find(entry => 'official:' + entry.id === active)
   const activeLegacy = legacy.sections.find(entry => entry.navId === active)
   const filtered = entries.filter(entry => entry.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   useLayoutEffect(() => { pages.current?.scrollTo({ top: 0 }) }, [active])
@@ -85,8 +84,8 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
       <Heading as="h1" size="4">{t('plugins.title')}</Heading>
       <Flex ml="auto"><WindowControls /></Flex>
     </Flex>
-    <div className="plugins-page-layout">
-      <nav className="plugins-page-nav" aria-label={t('plugins.title')}>
+    <div className={entries.length ? 'plugins-page-layout' : 'plugins-page-layout is-single'}>
+      {entries.length ? <nav className="plugins-page-nav" aria-label={t('plugins.title')}>
         <NavigationButton variant="ghost" color="gray" className="plugins-page-link" aria-current={active === 'manage' ? 'page' : undefined} onClick={() => setSelected('manage')}>
           {t('plugins.manage')}
         </NavigationButton>
@@ -97,20 +96,20 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
             onClick={() => setSelected(entry.id)}>{entry.label}</NavigationButton></li>)}
           {!filtered.length ? <li><Text size="2" color="gray">{t('plugins.empty')}</Text></li> : null}
         </ul>
-      </nav>
+      </nav> : null}
       <div ref={pages} className="plugins-page-content" tabIndex={0} role="region"
         aria-label={active === 'manage' ? t('plugins.manage') : entries.find(entry => entry.id === active)?.label}>
-        {/* Keep an in-progress install mounted while visiting configuration. */}
         <div hidden={active !== 'manage'}>
-          <PluginSettingsContent contribution={props.plugins} fallback={<Text color="gray">{t('plugins.unavailable')}</Text>} />
+          <PluginSettingsContent contribution={props.plugins} fallback={null} />
+          <div data-dsh-plugin-surface="">
+            {props.renderSlot ? props.renderSlot(NATIVE_PLUGIN_MANAGER_SEAT, {}, { entryKey: NATIVE_PLUGIN_MANAGER_KEY }) : <Text color="gray">{t('plugins.unavailable')}</Text>}
+          </div>
         </div>
-        {activeModel && props.renderSlot ? <PluginModelSettingsSurface ctx={props.ctx} id={activeModel.id} renderSlot={props.renderSlot}
-          sessionId={props.sessionId} locale={locale} renderPluginModels={() => <SettingsPluginModelsSection ctx={props.ctx} />}
+        {activeModel && props.renderSlot ? <PluginModelSettingsSurface key={activeModel.id} ctx={props.ctx} id={activeModel.id} renderSlot={props.renderSlot}
+          sessionId={props.sessionId} locale={locale}
           renderProviders={() => <SettingsModelsSection ctx={props.ctx} writingScope={props.ctx.configForms.get('dsh-editor-writing')} showWritingRoutes={false} />}
           renderChatModel={() => <SettingsChatModelRoute ctx={props.ctx} writingScope={props.ctx.configForms.get('dsh-editor-writing')} />} /> : null}
         {active === 'zhihu' ? <PluginSettingsContent contribution={props.zhihu} fallback={null} /> : null}
-        {activeOfficial && props.renderSlot ? <PluginConfigurationPage key={activeOfficial.id} ctx={props.ctx} renderSlot={props.renderSlot}
-          entry={activeOfficial} version={official.version} locale={locale} onClose={() => setSelected('manage')} /> : null}
         {activeLegacy && props.renderSlot ? <OfficialSettingsSectionPage renderSlot={props.renderSlot}
           sectionId={activeLegacy.id} version={legacy.version} sessionId={props.sessionId} locale={locale}
           onClose={() => setSelected('manage')} /> : null}

@@ -12,6 +12,7 @@ describe('root registration', () => {
       label: 'DSH 编辑器',
       children: {
         'dsh-editor.official-input': { kind: 'single', scope: 'session' },
+        'dsh-editor.native-plugin-manager': { kind: 'keyed', scope: 'root' },
         'rightbar': { kind: 'single', scope: 'root' },
         'shell.overlay': { kind: 'list', scope: 'root' },
         'settings.general.item': { kind: 'list', scope: 'root' },
@@ -22,9 +23,6 @@ describe('root registration', () => {
         'dsh-editor.center.overlays': { kind: 'list', scope: 'root' },
         'dsh-editor.chat.events': { kind: 'list', scope: 'root' },
         'dsh-editor.settings.models': { kind: 'list', scope: 'root' },
-        'plugins.item': { kind: 'list', scope: 'root' },
-        'plugins.bundle.config': { kind: 'keyed', scope: 'root' },
-        'plugins.row.config': { kind: 'keyed', scope: 'root' },
         'settings.section': { kind: 'list', scope: 'root' },
       },
     })

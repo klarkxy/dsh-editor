@@ -19,7 +19,7 @@ const workspace = resolve(home, 'workspace')
 await mkdir(workspace, { recursive: true })
 const cli = process.env.DSH_CLI_PATH ? resolve(process.env.DSH_CLI_PATH) : resolve(root, '.dev/desktop-dsh-runtime-0.2.0-rc.2/lib/bin.js')
 const staging = await mkdtemp(resolve(tmpdir(), 'dsh-ai-pack-'))
-const ids = ['current-title', 'mood', 'recap', 'memory', 'self-improvement', 'model-center']
+const ids = ['web-search-manager']
 const report = { ok: false, home, output, checks: [], errors: [], calls: 0, observerCalls: 0, methodCalls: 0 }
 const meaning = '我说的蓝图指事件结构，不是正文。'
 const activity = '我最近正在修改第三章。'
@@ -115,7 +115,7 @@ async function settings() {
 }
 try {
   if (!process.env.AI_STANDALONE_HOME) {
-    for (const id of ['ai-services', ...ids]) {
+    for (const id of ids) {
       console.log('install:' + id)
       const directory = packageDirectories.get('@klarkxy/dsh-' + id)
       assert.ok(directory, 'standalone acceptance requires an approved external package: ' + id)
@@ -133,7 +133,7 @@ try {
         await writeFile(localManifest, JSON.stringify(value, null, 2) + '\n')
       }
     }
-    report.checks.push('seven current tarballs installed through native plugin CLI in a fresh home')
+    report.checks.push('current web-search tarball installed through native plugin CLI in a fresh home')
   }
   const profileFile = resolve(home, 'profiles/web/package.json')
   const manifest = JSON.parse(await readFile(profileFile, 'utf8'))
@@ -150,101 +150,23 @@ try {
   browser = await chromium.launch({ headless: true, ...(process.env.DSH_BROWSER_EXECUTABLE ? { executablePath: process.env.DSH_BROWSER_EXECUTABLE } : {}) })
   await boot('00-default-on')
   let entries = await page.evaluate(() => globalThis.__DSH_BOOT__?.entries?.map(row => row.id) ?? [])
-  for (const id of ids) assert.ok(entries.includes('@klarkxy/dsh-' + id))
+  const clientIds=[];for(const id of ids){const pkg=JSON.parse(await readFile(resolve(packageDirectories.get('@klarkxy/dsh-'+id),'package.json'),'utf8'));if(pkg.dsh?.client)clientIds.push(id);}
+  const verifyLoaded=async()=>{
+    for(const id of clientIds)assert.ok(entries.includes('@klarkxy/dsh-'+id),id+' client');
+    for(const [channel,method] of [['/web-search-manager','status']]){
+      const response=await page.request.post(new URL(channel+'/'+method,page.url()).href,{data:{type:'client-request',rpcId:Math.random().toString(36),method,payload:{sessionId:'session-standalone-probe'}}});assert.ok(response.ok(),channel);const value=(await response.json()).result;if(channel==='/dsh-mood'){assert.ok(value?.ok===true||value?.error?.code==='MOOD_SESSION_NOT_FOUND',JSON.stringify(value));}else assert.equal(value?.ok,true,channel+': '+JSON.stringify(value));
+    }
+  };await verifyLoaded();
   assert.equal(report.calls, 0)
-  report.checks.push('all six independently installed features start enabled without inference before a task')
-  let dialog = await settings()
-  for (const label of ['记忆', '模型中心']) {
-    await dialog.getByRole('button', { name: label, exact: true }).click()
-    await page.screenshot({ path: resolve(output, label + '.png'), fullPage: true })
-  }
-  for (const label of ['当前标题', '需求澄清', '回顾', '自我改进']) {
-    assert.equal(await dialog.getByRole('button', { name: label, exact: true }).count(), 0, label + ' must not keep a settings entry')
-  }
-  const center = dialog.getByTestId('model-center')
-  await center.getByRole('tab', { name: '模型配置', exact: true }).click()
-  await center.getByRole('combobox', { name: '对话 模型', exact: true }).selectOption({ label: 'Local acceptance / Fixture' })
-  await center.getByRole('button', { name: '保存', exact: true }).click()
-  await center.getByText('已保存。', { exact: true }).waitFor()
-  await page.keyboard.press('Escape')
-  const composer = page.locator('textarea:not([disabled]),[contenteditable="true"]').first()
-  const choose = page.getByRole('button', { name: '选择工作区', exact: true })
-  if (!await composer.isVisible()) {
-    await choose.click()
-    const picker = page.getByRole('dialog', { name: '选择工作区目录', exact: true })
-    await picker.getByRole('button', { name: '编辑路径', exact: true }).click()
-    const pathInput = picker.getByRole('textbox', { name: '编辑路径', exact: true })
-    await pathInput.fill(workspace)
-    await pathInput.press('Enter')
-    await pathInput.waitFor({ state: 'detached' })
-    await picker.getByRole('button', { name: '打开', exact: true }).click()
-    await picker.waitFor({ state: 'detached' })
-  }
-  await composer.fill(meaning + activity + method)
-  await composer.press('Enter')
-  await page.getByText('独立宿主测试回复。', { exact: true }).first().waitFor()
-  await page.getByText(/独立插件/).first().waitFor()
-  report.checks.push('current title owns the native title provider in the standalone host')
-  for (let attempt = 0; attempt < 100 && !(report.observerCalls && report.methodCalls); attempt++) await delay(100)
-  assert.ok(report.observerCalls > 0, 'native turn hook must invoke Dream observer')
-  assert.ok(report.methodCalls > 0, 'native turn hook must invoke Self Improve')
-  dialog = await settings()
-  await dialog.getByRole('button', { name: '记忆', exact: true }).click()
-  const memory = dialog.getByTestId('memory-chat')
-  await memory.locator('summary').click()
-  await memory.getByText('蓝图的用法', { exact: true }).waitFor()
-  await memory.getByText('第三章当前工作', { exact: true }).waitFor()
-  const review = dialog.getByTestId('self-improvement-entry')
-  await review.locator('summary').click()
-  const methodCard = review.locator('.si-card').filter({ has: page.getByRole('heading', { name: '局部修改先读后核对', exact: true }) })
-  // Extraction publishes a candidate before activation finishes. Wait for the
-  // persisted state to reach the UI, not merely for the first card render.
-  await methodCard.and(review.locator('[data-status="active"]')).waitFor()
-  assert.equal(await methodCard.getAttribute('data-status'), 'active')
-  assert.ok(!(await methodCard.locator(':scope > p').innerText()).includes('蓝图'))
-  report.checks.push('mixed human message becomes two descriptive records and one active procedural instruction without manual extraction')
-  await memory.getByLabel('标题', { exact: true }).fill(recordTitle)
-  await memory.getByLabel('内容', { exact: true }).fill('保留作者原有剧情。')
-  await memory.getByRole('button', { name: '添加', exact: true }).click()
-  await memory.locator('.dsh-memory-list').getByText(recordTitle, { exact: true }).waitFor()
-  report.checks.push('native settings supplies selected session for record management and role configuration')
-  await page.screenshot({ path: resolve(output, '02-native-memory.png'), fullPage: true })
-  await dialog.getByRole('switch', { name: '关闭 Dream 观察与整理', exact: true }).click()
-  await dialog.getByRole('switch', { name: '启用 Dream 观察与整理', exact: true }).waitFor()
-  const beforeObserver = report.observerCalls
-  const beforeMethods = report.methodCalls
-  await page.keyboard.press('Escape')
-  await composer.fill(method2); await composer.press('Enter')
-  for (let attempt = 0; attempt < 100 && report.methodCalls === beforeMethods; attempt++) await delay(100)
-  assert.ok(report.methodCalls > beforeMethods, 'Self Improve must still run with Dream disabled')
-  await delay(500)
-  assert.equal(report.observerCalls, beforeObserver, 'disabled Dream must not observe')
-  dialog = await settings()
-  await dialog.getByRole('button', { name: '记忆', exact: true }).click()
-  const secondReview = dialog.getByTestId('self-improvement-entry')
-  await secondReview.locator('summary').click()
-  await secondReview.getByRole('heading', { name: '核对资料来源', exact: true }).waitFor()
-  report.checks.push('Self Improve continues to learn while Dream is independently disabled')
-  await page.screenshot({ path: resolve(output, '02-independent-toggle.png'), fullPage: true })
-  await stopHost()
-  await boot('03-restarted')
-  await page.getByText(/独立插件|我说的蓝图/).first().click()
-  dialog = await settings()
-  await dialog.getByRole('button', { name: '记忆', exact: true }).click()
-  const restored = dialog.getByTestId('memory-chat')
-  await restored.locator('summary').click()
-  await restored.locator('.dsh-memory-list').getByText(recordTitle, { exact: true }).waitFor()
-  await restored.getByText('蓝图的用法', { exact: true }).waitFor()
-  await restored.getByText('第三章当前工作', { exact: true }).waitFor()
-  await dialog.getByRole('switch', { name: '启用 Dream 观察与整理', exact: true }).waitFor()
-  const persistedReview = dialog.getByTestId('self-improvement-entry')
-  await persistedReview.locator('summary').click()
-  await persistedReview.getByRole('heading', { name: '局部修改先读后核对', exact: true }).waitFor()
-  await persistedReview.getByRole('heading', { name: '核对资料来源', exact: true }).waitFor()
-  await page.screenshot({ path: resolve(output, '04-persisted-learning.png'), fullPage: true })
-  report.checks.push('manual memory, contextual records, procedural methods and independent Dream toggle survive native host restart')
-  assert.equal(report.errors.length, 0, report.errors.join('\n'))
-  report.ok = true
+  report.checks.push('independently installed web search start enabled without inference before a task')
+
+  for(const id of ['ai-services','model-center','memory','self-improvement','fusion'])assert.equal(entries.includes('@klarkxy/dsh-'+id),false,id);
+  await stopHost();await boot('01-restart');
+  entries=await page.evaluate(()=>globalThis.__DSH_BOOT__?.entries?.map(row=>row.id)??[]);
+  await verifyLoaded();
+  assert.equal(report.calls,0);
+  report.checks.push('restart keeps current public bundles loaded in native web without retired plugins, inference or private Editor packages');
+  assert.equal(report.errors.length,0,report.errors.join('\n'));report.ok=true;
 } catch (error) {
   report.failure = String(error)
   if (page) {

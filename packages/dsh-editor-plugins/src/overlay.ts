@@ -18,13 +18,14 @@ export const HOST_LOCKED_ENTRY_IDS = new Set([
   'editor-novel-kernel',
   'editor-workbench-tools',
   'proofread',
+  'ai-services', 'model-center', 'memory', 'self-improvement', 'fusion',
   'web-search-tavily', // Supplied by web-search-manager; the old entry no longer exists.
 ])
 
 export function withoutHostLockedOverrides(overrides: Record<string, boolean>): Record<string, boolean> {
   const next: Record<string, boolean> = {}
   for (const [id, enabled] of Object.entries(overrides)) {
-    if (!HOST_LOCKED_ENTRY_IDS.has(id) && !(id === 'model-center' && enabled === false)) next[id] = enabled
+    if (!HOST_LOCKED_ENTRY_IDS.has(id)) next[id] = enabled
   }
   return next
 }
@@ -48,7 +49,7 @@ export function parsePluginState(value: unknown): PluginState | undefined {
     for (const item of row.installed) {
       if (!item || typeof item !== 'object') continue
       const record = item as Record<string, unknown>
-      if (typeof record.name !== 'string' || !isSafePackageName(record.name) || record.name === 'dsh-web-search-tavily') continue
+      if (typeof record.name !== 'string' || !isSafePackageName(record.name) || record.name === 'dsh-web-search-tavily' || ['ai-services', 'model-center', 'memory', 'self-improvement', 'fusion'].some(id => record.name === '@klarkxy/dsh-' + id)) continue
       if (typeof record.spec !== 'string' || record.spec.length > 200) continue
       installed.push({
         name: record.name,

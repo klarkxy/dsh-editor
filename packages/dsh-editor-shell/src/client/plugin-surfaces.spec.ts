@@ -55,32 +55,30 @@ describe('optional plugin surfaces', () => {
 })
 
  describe('plugin-only model settings', () => {
-  it('labels known model configuration as plugin models and retains genuine contributions', () => {
-    expect(modelSettingsSections([{ options: { id: 'model-center', order: 10 } }, { options: { id: 'other', order: 2, label: 'Other models' } }, { options: { id: 'model-center', order: 0 } }], 'zh').map(row => ({ id: row.id, label: row.label }))).toEqual([{ id: 'other', label: 'Other models' }, { id: 'model-center', label: '插件模型' }])
+  it('retains the labels and order owned by registered model contributions', () => {
+    expect(modelSettingsSections([{ options: { id: 'custom', order: 10, label: 'Custom models' } }, { options: { id: 'other', order: 2, label: 'Other models' } }, { options: { id: 'custom', order: 0 } }], 'zh').map(row => ({ id: row.id, label: row.label }))).toEqual([{ id: 'other', label: 'Other models' }, { id: 'custom', label: 'Custom models' }])
   })
-  it('adapts only the legacy model center to the filtered native editor', () => {
-    const render = vi.fn(() => createElement('div', null, 'Legacy whole policy editor'))
+  it('renders a plugin contribution through its own slot and scope', () => {
+    const render = vi.fn(() => createElement('div', null, 'Native plugin configuration'))
     const html = renderToStaticMarkup(createElement(PluginModelSettingsSurface, {
-      ctx: host({}), id: 'model-center', renderSlot: render, locale: 'zh',
-      renderPluginModels: () => createElement('p', null, 'Filtered plugin purposes'),
+      ctx: host({}), id: 'custom', renderSlot: render, locale: 'zh',
       renderProviders: () => createElement('p', null, 'Providers'),
       renderChatModel: () => createElement('p', null, 'Built-in chat'),
     }))
-    expect(html).toContain('Filtered plugin purposes')
+    expect(html).toContain('Native plugin configuration')
     expect(html).not.toContain('Providers')
-    expect(render).not.toHaveBeenCalled()
+    expect(render).toHaveBeenCalledWith(MODEL_SETTINGS_SLOT, expect.any(Object), { only: 'custom' })
   })
 })
 
 
-it('always offers one native plugin-model entry across absent, old and new plugin registrations', () => {
+it('offers plugin model entries only when their native contributions are registered', () => {
   const render = (entries: Array<{options:{id:string}}>,locale:'zh'|'en') => {
     function Probe(){return createElement('p',null,usePluginModelSettings(host({[MODEL_SETTINGS_SLOT]:entries}),locale).sections.map(row=>row.id+':'+row.label).join('|'))}
     return renderToStaticMarkup(createElement(Probe))
   }
-  expect(render([], 'zh')).toContain('model-center:插件模型')
-  expect(render([], 'en')).toContain('model-center:Plugin models')
-  const html=render([{options:{id:'model-center'}},{options:{id:'other'}}], 'zh')
-  expect(html.match(/model-center:/g)).toHaveLength(1)
+  expect(render([], 'zh')).toBe('<p></p>')
+  expect(render([], 'en')).toBe('<p></p>')
+  const html=render([{options:{id:'other'}}], 'zh')
   expect(html).toContain('other:other')
 })

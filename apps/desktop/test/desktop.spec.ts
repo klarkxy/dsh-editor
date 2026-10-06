@@ -11,6 +11,7 @@ import { isAllowedNavigation, parseDshWebUrl } from '../src/dsh-url.js'
 import { clipboardWritePayload, isTrustedClipboardSender, readTrustedClipboardText, writeTrustedClipboardText } from '../src/clipboard.js'
 import { PROFILE_DEPLOY_ALGORITHM, PROFILE_MARKER, ProfileCollisionError, deployOwnedProfile, deployProfile, resolveDshHome, type ProfileDeployIdentity } from '../src/profile.js'
 import { sanitizeHostLockedPluginOverrides } from '../src/user-plugins.js'
+import { syncPresetDeclarations as syncDesktopPresetDeclarations } from '../src/preset-config.js'
 import { installNavigationPolicy, isAllowedExternalUrl } from '../src/navigation.js'
 import { DshSupervisor } from '../src/supervisor.js'
 import { hasPackagedRuntimeCache, materializePackagedRuntime, readProfileDeployIdentity, runtimeFromResources, shouldMaterializePackagedRuntime, treeDigest } from '../src/runtime-cache.js'
@@ -131,7 +132,7 @@ async function runtimeFixture(version = 'one', executableNode = false): Promise<
   ])
   await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
     format: 1, platform: `${process.platform}-${process.arch}`,
-    node: { version: '24.16.0', ...node }, dsh: { version: '0.2.0-rc.2', ...dsh }, profile,
+    node: { version: '26.10.0', ...node }, dsh: { version: '0.2.0-rc.2', ...dsh }, profile,
   }))
   return { root, resources }
 }
@@ -408,8 +409,23 @@ describe('profile deployment', () => {
       installed: [{ name: 'community-theme', spec: 'github:acme/community-theme', version: '1.0.0' }],
     }))
     const installed = await deployProfile(root, template)
-    expect(JSON.parse(await readFile(join(installed, 'package.json'), 'utf8')).dsh.profile.bundles).toContain('community-theme')
+    const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8')) as { dependencies?: Record<string, string>; dsh: { profile: { bundles: string[] } } }
+    expect(manifest.dsh.profile.bundles).toContain('community-theme')
+    expect(manifest.dependencies?.['community-theme']).toMatch(/^file:/)
+    expect(manifest.dependencies?.['community-theme']).not.toBe('*')
     expect(existsSync(join(installed, 'node_modules', 'community-theme', 'package.json'))).toBe(true)
+    expect(existsSync(join(root, '.dsh-editor-native-plugins-migrated'))).toBe(true)
+    await writeFile(join(installed, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
+    await writeFile(join(installed, 'pnpm-workspace.yaml'), 'packages:\n  - .\nallowBuilds:\n  fixture: true\n')
+    await writeFile(join(installed, '.npmrc'), 'registry=https://registry.npmjs.org/\n')
+    const restaged = await deployProfile(root, template)
+    const restagedManifest = JSON.parse(await readFile(join(restaged, 'package.json'), 'utf8')) as { dependencies?: Record<string, string>; dsh: { profile: { bundles: string[] } } }
+    expect(restagedManifest.dsh.profile.bundles).toContain('community-theme')
+    expect(restagedManifest.dependencies?.['community-theme']).toMatch(/^file:/)
+    expect(await readFile(join(restaged, 'pnpm-lock.yaml'), 'utf8')).toBe('lockfileVersion: 9.0\n')
+    expect(await readFile(join(restaged, 'pnpm-workspace.yaml'), 'utf8')).toContain('allowBuilds:')
+    expect(await readFile(join(restaged, '.npmrc'), 'utf8')).toBe('registry=https://registry.npmjs.org/\n')
+    expect(JSON.parse(await readFile(join(root, 'dsh-plugins.json'), 'utf8')).installed).toEqual([])
   })
   it('points the agent preset default at generic writing and keeps the legacy preset compatible', async () => {
     const profileResources = join(import.meta.dirname, '..', 'resources', 'profile')
@@ -602,7 +618,7 @@ describe('profile deployment', () => {
     expect(stripped[0]).toEqual(stripped[1])
     expect(stripped[1]).toEqual(stripped[2])
     for (const item of resolved) {
-      expect(item.features).toEqual(['assistant', 'completion', 'zhihu', 'zhihu-tools', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search'])
+      expect(item.features).toEqual(['assistant', 'completion', 'overview-panel', 'proofread-panel', 'writing-presets', 'web-search'])
       expect(item.features).toContain('proofread-panel')
       expect(item.features).not.toContain('cards')
       expect(item.features).not.toContain('memory-panel')
@@ -627,7 +643,7 @@ describe('profile deployment', () => {
     expect(patch).toMatch(/- id: editor-workbench-tools\r?\n  disabled: true/)
     expect(patch).toMatch(/- id: editor-novel-kernel\r?\n  disabled: true/)
     // One UI owns the global plugin configuration slots; Host management stays available.
-    expect(patch).toMatch(/- id: ui-plugin-manager\r?\n  disabled: true/)
+    expect(patch).not.toMatch(/- id: ui-plugin-manager\r?\n  disabled: true/)
     expect(patch).not.toMatch(/- id: plugin-manager\r?\n  disabled: true/)
     expect(patch).toMatch(/- id: editor-cards\r?\n  disabled: true/)
     expect(patch).toMatch(/- id: editor-memory-panel\r?\n  disabled: true/)
@@ -681,6 +697,7 @@ describe('profile deployment', () => {
     await mkdir(occupied, { recursive: true })
     await writeFile(join(occupied, 'agent.cordis.yml'), '[]\n')
     await expect(deployProfile(root, template)).rejects.toBeInstanceOf(ProfileCollisionError)
+    expect(existsSync(join(root, 'profiles', 'dsh-editor'))).toBe(false)
   })
   it('deploys plugin-declared presets on restore and reclaims them once the plugin is gone', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
@@ -707,12 +724,16 @@ describe('profile deployment', () => {
     const deployed = join(root, '.agent-presets', 'team-style')
     expect(await readFile(join(deployed, 'preset.yml'), 'utf8')).toBe('name: 团队风格\n')
     expect(JSON.parse(await readFile(join(deployed, PROFILE_MARKER), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1, plugin: 'community-preset' })
-    await writeFile(join(root, 'dsh-plugins.json'), JSON.stringify({ schema: 1, installed: [] }))
+    const profile = join(root, 'profiles', 'dsh-editor', 'package.json')
+    const manifest = JSON.parse(await readFile(profile, 'utf8')) as { dependencies?: Record<string, string>; dsh: { profile: { bundles: string[] } } }
+    delete manifest.dependencies?.['community-preset']
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter((name) => name !== 'community-preset')
+    await writeFile(profile, `${JSON.stringify(manifest, null, 2)}\n`)
     await deployProfile(root, template)
     expect(existsSync(deployed)).toBe(false)
     expect((await (await import('node:fs/promises')).readdir(join(root, '.agent-presets'))).some((name) => name.includes('.stage-') || name.includes('.backup-'))).toBe(false)
   })
-  it('never deploys presets for bundles that are not marketplace installs', async () => {
+  it('never deploys presets for template bundles, only for selected native extras', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-desktop-'))
     const template = join(root, 'template')
     const bundled = join(template, 'node_modules', 'first-party-pack')
@@ -728,10 +749,6 @@ describe('profile deployment', () => {
       name: 'dsh-editor-profile',
       dsh: { profile: { bundles: ['first-party-pack'] } },
     }))
-    /* 第一方 bundle 不在 dsh-plugins.json 的 installed 里，社区 preset 通道跳过它。 */
-    await deployProfile(root, template)
-    expect(existsSync(join(root, '.agent-presets', 'team-style'))).toBe(false)
-    /* 另一个名字、登记为市集安装的包，同样声明才会部署。 */
     const installedSource = join(root, 'user-plugins', 'community-pack')
     await mkdir(join(installedSource, 'agent-presets', 'team-style'), { recursive: true })
     await writeFile(join(installedSource, 'package.json'), JSON.stringify({
@@ -825,7 +842,7 @@ describe('profile deployment', () => {
     }))
     const second = await deployOwnedProfile(root, template, undefined, id)
     expect(second.reused).toBe(true)
-    expect(JSON.parse(await readFile(join(root, 'dsh-plugins.json'), 'utf8')).overrides).toEqual({ zhihu: false })
+    expect(JSON.parse(await readFile(join(root, 'dsh-plugins.json'), 'utf8')).overrides).toEqual({})
     expect(existsSync(join(root, '.agent-presets', 'dsh-editor-novel'))).toBe(false)
   })
   it('relinks a community plugin already listed in profile bundles', async () => {
@@ -924,7 +941,7 @@ describe('persistent packaged runtime cache', () => {
       treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
     ])
     await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-      format: 1, platform: 'unsupported-platform', node: { version: '24.16.0', ...node }, dsh: { version: '0.2.0-rc.2', ...dsh }, profile,
+      format: 1, platform: 'unsupported-platform', node: { version: '26.10.0', ...node }, dsh: { version: '0.2.0-rc.2', ...dsh }, profile,
     }))
     await expect(materializePackagedRuntime(join(root, 'home'), resources)).rejects.toThrow('unsupported identity')
   })
@@ -937,7 +954,7 @@ describe('persistent packaged runtime cache', () => {
       treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
     ])
     await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-      format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '24.16.0', ...node }, dsh: { version: '0.2.0-rc.2', ...dsh }, profile,
+      format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.0-rc.2', ...dsh }, profile,
     }))
     const runtime = await materializePackagedRuntime(home, resources)
     expect(await readFile(runtime.cliPath, 'utf8')).toBe('dsh-two')
@@ -956,7 +973,7 @@ describe('persistent packaged runtime cache', () => {
         treeDigest(join(resources, 'node')), treeDigest(join(resources, 'dsh')), treeDigest(join(resources, 'profile-template')),
       ])
       await writeFile(join(resources, 'runtime-manifest.json'), JSON.stringify({
-        format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '24.16.0', ...node }, dsh: { version: '0.2.0-rc.2', ...dsh }, profile,
+        format: 1, platform: `${process.platform}-${process.arch}`, node: { version: '26.10.0', ...node }, dsh: { version: '0.2.0-rc.2', ...dsh }, profile,
       }))
 
       const committed = await materializePackagedRuntime(home, resources)
@@ -1001,49 +1018,98 @@ describe('persistent packaged runtime cache', () => {
 
 describe('child supervision', () => {
   const launch = { nodePath: 'node.exe', cliPath: 'dsh/lib/bin.js', home: 'D:/home', env: {}, timeoutMs: 25 }
+  function stubAnchor() {
+    const created: Array<{ installAnchor: string; dispose: ReturnType<typeof vi.fn> }> = []
+    const factory = vi.fn(async () => {
+      const dispose = vi.fn(async () => undefined)
+      const item = { installAnchor: `D:/anchor/${created.length}/package.json`, dispose }
+      created.push(item)
+      return item
+    })
+    return { factory, created }
+  }
   it('waits for readiness and reports an unexpected post-ready exit', async () => {
     const child = new FakeChild()
     const unexpected = vi.fn()
-    const supervisor = new DshSupervisor({ spawn: () => child, onUnexpectedExit: unexpected })
+    const anchor = stubAnchor()
+    const supervisor = new DshSupervisor({ spawn: () => child, onUnexpectedExit: unexpected, createInstallAnchor: anchor.factory })
     const ready = supervisor.start(launch)
     child.stdout.write('dsh web: http://127.0.0.1:43111\n')
     await expect(ready).resolves.toMatchObject({ port: '43111' })
     child.exit(23)
     expect(unexpected).toHaveBeenCalledOnce()
+    expect(anchor.created[0]!.dispose).toHaveBeenCalledOnce()
+  })
+  it('starts DSH with an eval bootstrap that calls runCli and the pinned package manager', async () => {
+    const child = new FakeChild()
+    const spawn = vi.fn(() => child)
+    const anchor = stubAnchor()
+    const supervisor = new DshSupervisor({ spawn, createInstallAnchor: anchor.factory })
+    const ready = supervisor.start(launch)
+    child.stdout.write('dsh web: http://127.0.0.1:43111\n')
+    await expect(ready).resolves.toMatchObject({ port: '43111' })
+    expect(spawn).toHaveBeenCalledOnce()
+    const [command, args, options] = spawn.mock.calls[0] as [string, string[], { env: NodeJS.ProcessEnv }]
+    expect(command).toBe('node.exe')
+    expect(args[0]).toBe('--input-type=module')
+    expect(args[1]).toBe('--eval')
+    expect(args[2]).toContain('runCli')
+    expect(args[2]).toContain('packageManager')
+    expect(args[2]).toContain('pnpm@11.7.0')
+    expect(args[2]).toMatch(/pnpm\.(mjs|cjs|js)/)
+    expect(args[2]).not.toContain('npm_execpath')
+    expect(args[2]).not.toContain('10.14.0')
+    expect(args[2]).toContain('--profile')
+    expect(args[2]).toContain('loadProfileDirectory')
+    expect(args[2]).toContain('dsh-app-boot')
+    expect(args[2]).toContain('resolvedProfile')
+    expect(args[2]).toContain('D:/anchor/0/package.json')
+    expect(args[2]).toContain(JSON.stringify(join('D:/home', 'profiles', 'dsh-editor')))
+    expect(options.env.DSH_HOME).toBe('D:/home')
+    expect(options.env.npm_execpath).toBeUndefined()
+    expect(anchor.factory).toHaveBeenCalledWith(launch.cliPath)
   })
   it('includes DSH output when the child exits before readiness', async () => {
     const child = new FakeChild()
-    const supervisor = new DshSupervisor({ spawn: () => child, gracefulStopMs: 1 })
-    const ready = supervisor.start(launch)
+    const spawn = vi.fn(() => child)
+    const anchor = stubAnchor()
+    const supervisor = new DshSupervisor({ spawn, gracefulStopMs: 1, createInstallAnchor: anchor.factory })
+    const ready = supervisor.start({ ...launch, timeoutMs: 5_000 })
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce())
     child.stderr.write('dsh: plugin tree failed to load: editor-novel-kernel requires an explicit mode\n')
     child.exit(1)
     await expect(ready).rejects.toThrow(/exited before readiness[\s\S]*editor-novel-kernel requires an explicit mode/)
+    expect(anchor.created[0]!.dispose).toHaveBeenCalledOnce()
   })
 
   it('rejects a readiness timeout', async () => {
     const child = new FakeChild()
     const forceKillTree = vi.fn(async () => undefined)
-    const supervisor = new DshSupervisor({ spawn: () => child, forceKillTree, gracefulStopMs: 1 })
+    const anchor = stubAnchor()
+    const supervisor = new DshSupervisor({ spawn: () => child, forceKillTree, gracefulStopMs: 1, createInstallAnchor: anchor.factory })
     await expect(supervisor.start(launch)).rejects.toThrow('Timed out waiting 25ms')
     expect(child.killedWith).toBe('SIGTERM')
     expect(forceKillTree).toHaveBeenCalledWith(8123)
+    expect(anchor.created[0]!.dispose).toHaveBeenCalledOnce()
   })
   it('uses graceful stop before exact process-tree fallback', async () => {
     const child = new FakeChild()
     const forceKillTree = vi.fn(async () => undefined)
-    const supervisor = new DshSupervisor({ spawn: () => child, forceKillTree, gracefulStopMs: 1 })
+    const anchor = stubAnchor()
+    const supervisor = new DshSupervisor({ spawn: () => child, forceKillTree, gracefulStopMs: 1, createInstallAnchor: anchor.factory })
     const ready = supervisor.start(launch)
     child.stdout.write('dsh web: http://127.0.0.1:43111\n')
     await ready
     await supervisor.stop()
     expect(child.killedWith).toBe('SIGTERM')
     expect(forceKillTree).toHaveBeenCalledWith(8123)
+    expect(anchor.created[0]!.dispose).toHaveBeenCalledOnce()
   })
   it('does not wait out the force-kill timeout when the child exits mid-taskkill', async () => {
     const child = new FakeChild()
     child.kill = (signal?: NodeJS.Signals | number) => { child.killedWith = signal; return true }
     const forceKillTree = vi.fn(() => new Promise<void>((resolve) => setTimeout(resolve, 60_000)))
-    const supervisor = new DshSupervisor({ spawn: () => child, forceKillTree, gracefulStopMs: 5 })
+    const supervisor = new DshSupervisor({ spawn: () => child, forceKillTree, gracefulStopMs: 5, createInstallAnchor: stubAnchor().factory })
     const ready = supervisor.start(launch)
     child.stdout.write('dsh web: http://127.0.0.1:43111\n')
     await ready
@@ -1057,7 +1123,7 @@ describe('child supervision', () => {
     const child = new FakeChild()
     child.kill = (signal?: NodeJS.Signals | number) => { child.killedWith = signal; queueMicrotask(() => child.exit()); return true }
     const forceKillTree = vi.fn(async () => undefined)
-    const supervisor = new DshSupervisor({ spawn: () => child, forceKillTree, gracefulStopMs: 25 })
+    const supervisor = new DshSupervisor({ spawn: () => child, forceKillTree, gracefulStopMs: 25, createInstallAnchor: stubAnchor().factory })
     const ready = supervisor.start(launch)
     child.stdout.write('dsh web: http://127.0.0.1:43111\n')
     await ready
@@ -1071,13 +1137,17 @@ describe('child supervision', () => {
     const usable = new FakeChild()
     const children = [blocked, usable]
     const spawn = vi.fn(() => children.shift()!)
-    const supervisor = new DshSupervisor({ spawn, gracefulStopMs: 25 })
+    const anchor = stubAnchor()
+    const supervisor = new DshSupervisor({ spawn, gracefulStopMs: 25, createInstallAnchor: anchor.factory })
     const ready = supervisor.start({ ...launch, timeoutMs: 5_000 })
     blocked.stdout.write('dsh web: http://127.0.0.1:6665\n')
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2))
     usable.stdout.write('dsh web: http://127.0.0.1:43112\n')
     await expect(ready).resolves.toMatchObject({ port: '43112' })
     expect(blocked.killedWith).toBe('SIGTERM')
+    expect(anchor.factory).toHaveBeenCalledTimes(2)
+    expect(anchor.created[0]!.dispose).toHaveBeenCalledOnce()
+    expect(anchor.created[1]!.dispose).not.toHaveBeenCalled()
   })
 })
 
@@ -1463,7 +1533,7 @@ describe('Tavily integration upgrade', () => {
     expect(JSON.parse(await readFile(join(deployed, 'package.json'), 'utf8')).dsh.profile.bundles).toEqual(['@klarkxy/dsh-web-search-manager'])
     expect(existsSync(join(deployed, 'node_modules', 'dsh-web-search-tavily'))).toBe(false)
     expect(existsSync(join(source, 'package.json'))).toBe(true)
-    expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toMatchObject({ overrides: { zhihu: false }, presets: { 'dsh-editor-novel': false }, installed: [] })
+    expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toMatchObject({ overrides: {}, presets: { 'dsh-editor-novel': false }, installed: [] })
     expect(await readFile(join(home, 'dsh-plugins.json.before-tavily-merge'), 'utf8')).toBe(oldState)
     expect(await readFile(join(home, 'cordis.patch.yml.before-tavily-merge'), 'utf8')).toBe(oldPatch)
     expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).not.toContain('web-search-tavily')
@@ -1495,5 +1565,87 @@ describe('manuscript export save filters', () => {
     await writeFile(join(home, 'cordis.patch.yml'), manual)
     await sanitizeHostLockedPluginOverrides(home)
     expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe(manual)
+  })
+})
+
+
+describe('desktop and runtime preset writer integration', () => {
+  it('delegates to the installed pure writer and propagates failure without replacing tools', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-shared-preset-writer-'))
+    try {
+      const profile = join(home, 'profiles', 'dsh-editor')
+      const implementation = join(profile, 'node_modules', 'dsh-editor-plugins', 'lib')
+      const generated = join(profile, 'node_modules', 'dsh-editor-profile-config')
+      await mkdir(implementation, { recursive: true })
+      await mkdir(generated, { recursive: true })
+      await writeFile(join(implementation, '..', 'package.json'), '{"type":"module"}')
+      await writeFile(join(implementation, 'preset-config.js'), `import { writeFile, access } from 'node:fs/promises'; import { join } from 'node:path'; export async function syncPresetDeclarations(home, profile) { try { await access(join(home, 'reject')); } catch { await writeFile(join(profile, 'node_modules/dsh-editor-profile-config/presets.patch.json'), '[{"insert":[{"id":"zhihu-tools","name":"@klarkxy/dsh-zhihu/tools"}]}]'); return; } throw new Error('shared writer failed'); }`)
+      await syncDesktopPresetDeclarations(home, profile)
+      const patch = join(generated, 'presets.patch.json')
+      const original = await readFile(patch, 'utf8')
+      expect(JSON.parse(original)[0].insert[0].id).toBe('zhihu-tools')
+      await writeFile(join(home, 'reject'), '')
+      await expect(syncDesktopPresetDeclarations(home, profile)).rejects.toThrow('shared writer failed')
+      expect(await readFile(patch, 'utf8')).toBe(original)
+    } finally { await rm(home, { recursive: true, force: true }) }
+  })
+})
+
+describe('optional public plugin distribution upgrade', () => {
+  it('removes obsolete preinstall switches with backups but preserves independently installed plugins and data', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-preinstall-trim-'))
+    try {
+      const state = { schema: 1, overrides: { 'current-title': true, mood: false, recap: false, zhihu: true, 'zhihu-tools': true, 'editor-cards': false }, installed: [{ name: '@klarkxy/dsh-zhihu', version: '0.1.10', spec: 'npm:@klarkxy/dsh-zhihu@0.1.10' }], presets: { 'dsh-editor-novel': false } }
+      const original = JSON.stringify(state)
+      const patch = '# managed-by: dsh-editor-plugins\n- id: current-title\n  disabled: false\n- id: editor-cards\n  disabled: true\n- id: mood\n  disabled: true\n- id: recap\n  disabled: true\n- id: zhihu\n  disabled: false\n- id: zhihu-tools\n  disabled: false\n'
+      await writeFile(join(home, 'dsh-plugins.json'), original)
+      await writeFile(join(home, 'cordis.patch.yml'), patch)
+      await mkdir(join(home, 'storages'))
+      await writeFile(join(home, 'storages', 'dsh_editor_mood.json'), 'historical requirements')
+      await sanitizeHostLockedPluginOverrides(home, ['@klarkxy/dsh-web-search-manager'])
+      expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toEqual({ ...state, overrides: { zhihu: true, 'zhihu-tools': true, 'editor-cards': false } })
+      expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe('# managed-by: dsh-editor-plugins\n- id: editor-cards\n  disabled: true\n- id: zhihu\n  disabled: false\n- id: zhihu-tools\n  disabled: false\n')
+      expect(await readFile(join(home, 'dsh-plugins.json.before-preinstall-trim'), 'utf8')).toBe(original)
+      expect(await readFile(join(home, 'cordis.patch.yml.before-preinstall-trim'), 'utf8')).toBe(patch)
+      expect(await readFile(join(home, 'storages', 'dsh_editor_mood.json'), 'utf8')).toBe('historical requirements')
+      await sanitizeHostLockedPluginOverrides(home, ['@klarkxy/dsh-web-search-manager'])
+      expect(await readFile(join(home, 'dsh-plugins.json.before-preinstall-trim'), 'utf8')).toBe(original)
+      const manual = '- id: mood\n  disabled: false\n- id: author-rule\n  config:\n    keep: true\n'
+      await writeFile(join(home, 'cordis.patch.yml'), manual)
+      await sanitizeHostLockedPluginOverrides(home, ['@klarkxy/dsh-web-search-manager'])
+      expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe(manual)
+    } finally { await rm(home, { recursive: true, force: true }) }
+  })
+
+  it('preserves optional switches when installation records cannot be read', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-preinstall-unreadable-'))
+    try {
+      const patch = '# managed-by: dsh-editor-plugins\n- id: mood\n  disabled: false\n'
+      await writeFile(join(home, 'dsh-plugins.json'), '{invalid')
+      await writeFile(join(home, 'cordis.patch.yml'), patch)
+      await sanitizeHostLockedPluginOverrides(home, [])
+      expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe(patch)
+    } finally { await rm(home, { recursive: true, force: true }) }
+  })
+})
+
+describe('retired public plugin upgrade', () => {
+  it('backs up and removes both enabled and disabled obsolete managed entries, keeping data and other preferences', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-retired-plugins-'))
+    const ids = ['ai-services', 'model-center', 'memory', 'self-improvement', 'fusion']
+    const overrides = { ...Object.fromEntries(ids.map((id, index) => [id, index % 2 === 0])), zhihu: false }
+    const state = { schema: 1, overrides, presets: { 'dsh-editor-article': false }, installed: [{ name: '@klarkxy/dsh-fusion', spec: '@klarkxy/dsh-fusion', version: '0.1.1' }, { name: 'community-plugin', spec: 'community-plugin', version: '1' }] }
+    const stateText = JSON.stringify(state)
+    const patchText = '# managed-by: dsh-editor-plugins\n' + Object.entries(overrides).sort(([a], [b]) => a.localeCompare(b)).map(([id, enabled]) => '- id: ' + id + '\n  disabled: ' + !enabled + '\n').join('')
+    await writeFile(join(home, 'dsh-plugins.json'), stateText)
+    await writeFile(join(home, 'cordis.patch.yml'), patchText)
+    await writeFile(join(home, 'author-memory.json'), 'preserve author records')
+    await sanitizeHostLockedPluginOverrides(home)
+    expect(JSON.parse(await readFile(join(home, 'dsh-plugins.json'), 'utf8'))).toEqual({ ...state, overrides: { zhihu: false }, installed: [state.installed[1]] })
+    expect(await readFile(join(home, 'cordis.patch.yml'), 'utf8')).toBe('# managed-by: dsh-editor-plugins\n- id: zhihu\n  disabled: true\n')
+    expect(await readFile(join(home, 'dsh-plugins.json.before-plugin-retirement'), 'utf8')).toBe(stateText)
+    expect(await readFile(join(home, 'cordis.patch.yml.before-plugin-retirement'), 'utf8')).toBe(patchText)
+    expect(await readFile(join(home, 'author-memory.json'), 'utf8')).toBe('preserve author records')
+    await rm(home, { recursive: true, force: true })
   })
 })

@@ -80,6 +80,7 @@ export const componentStyles = [
   r(['.plugins-page-header .rt-Heading'], 'font-size: var(--dsh-ui-text-xl); font-weight: var(--dsh-ui-weight-strong);'),
   r(['.plugins-page-header button', '.plugins-trigger'], '-webkit-app-region: no-drag;'),
   r(['.plugins-page-layout'], 'display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0;'),
+  r(['.plugins-page-layout.is-single'], 'grid-template-columns: minmax(0, 1fr);'),
   r(['.plugins-page-nav'], `display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-4); overflow: auto; background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
   r(['.plugins-page-nav > *'], 'flex-shrink: 0;'),
   /* Nav section label follows the settings-nav-group treatment (muted, small,

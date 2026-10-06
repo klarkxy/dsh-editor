@@ -1,7 +1,7 @@
 {
   "name": "dsh-editor-plugins",
   "version": "0.1.0",
-  "description": "Private DSH Editor plugin manager: toggle, GitHub marketplace search, and install",
+  "description": "Private DSH Editor plugin adapter: writing presets, discovery search, and core locking",
   "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "type": "module",
@@ -20,6 +20,11 @@
       "types": "./lib/contracts.d.ts",
       "import": "./lib/contracts.js",
       "default": "./lib/contracts.js"
+    },
+    "./preset-config": {
+      "types": "./lib/preset-config.d.ts",
+      "import": "./lib/preset-config.js",
+      "default": "./lib/preset-config.js"
     },
     "./client": {
       "default": "./lib/client.js"
@@ -50,7 +55,7 @@
       {
         "id": "editor-plugins",
         "title": "插件管理",
-        "description": "开关、搜索与安装插件",
+        "description": "发现插件并管理写作模式",
         "locked": true
       }
     ]

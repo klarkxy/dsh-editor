@@ -43,6 +43,7 @@ export type PluginInventory = {
 
 export type MarketplaceListing = {
   spec: string
+  source?: 'github' | 'npm' | 'local'
   owner: string
   repo: string
   description: string
@@ -50,6 +51,8 @@ export type MarketplaceListing = {
   url: string
   updatedAt: string
   topics: string[]
+  packageName?: string
+  title?: string
 }
 
 export type PluginActionReceipt = {
@@ -75,6 +78,7 @@ export type InspectVerdict = 'ready' | 'warn' | 'blocked'
 export type InspectFinding = { code: string; severity: InspectSeverity; message: string }
 export type InspectEntry = { id: string; name: string }
 export type PluginPresetDeclaration = { id: string; path: string }
+export type NpmArtifact = { spec: string; integrity: string }
 export type PluginInspectReport = {
   verdict: InspectVerdict
   name?: string
@@ -82,6 +86,10 @@ export type PluginInspectReport = {
   entries: InspectEntry[]
   hasClient: boolean
   findings: InspectFinding[]
+  /** Exact npm artifact approved in the current inspection attempt. */
+  npmArtifact?: NpmArtifact
+  /** Validated own ./tools modules contributed to the host's generated overlay. */
+  toolInserts?: InspectEntry[]
   /** 插件通过 dshEditor.presets 声明、且通过静态检查的对话 preset。 */
   presets?: PluginPresetDeclaration[]
 }

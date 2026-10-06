@@ -73,17 +73,26 @@ try {
     const pluginPage = page.locator('.plugins-page')
     await pluginPage.getByTestId('plugins-settings').waitFor()
     await pluginPage.getByTestId('plugins-writing-presets').waitFor()
+    const nativePanel = pluginPage.locator('[data-plugin-panel]')
+    await nativePanel.waitFor()
     await shot(theme + '-manage-1440')
     const config = pluginPage.locator('.plugins-page-nav').getByRole('button', { name: /^(知乎资料|知乎)$/ })
-    assert.equal(await config.count(), 1, 'Zhihu configuration must not expose a duplicate empty entry')
-    await config.click()
-    await pluginPage.getByLabel('Access Secret', { exact: true }).waitFor()
-    await shot(theme + '-zhihu')
-    await pluginPage.locator('.plugins-page-nav').getByRole('button', { name: /^(网络搜索|@klarkxy\/dsh-web-search-manager)$/ }).click()
-    await pluginPage.getByTestId('web-search-settings').waitFor()
-    await shot(theme + '-web-search')
+    assert.equal(await config.count(), 0, 'Zhihu is installed only on demand')
+    const searchCard = nativePanel.getByRole('button', { name: /网页搜索|网络搜索|Web search|web-search-manager/ }).first()
+    await searchCard.waitFor({ state: 'visible', timeout: 90000 })
+    if (await searchCard.count()) {
+      await searchCard.click()
+      await pluginPage.getByTestId('web-search-settings').waitFor()
+      await shot(theme + '-web-search')
+    } else {
+      await nativePanel.getByText(/网页搜索|网络搜索|Web search|@klarkxy\/dsh-web-search-manager/).first().click()
+      await pluginPage.getByTestId('web-search-settings').waitFor()
+      await shot(theme + '-web-search')
+    }
     if (theme === '浅色') {
-      await pluginPage.locator('.plugins-page-nav').getByRole('button', { name: 'Agent 循环', exact: true }).click()
+      await pluginPage.getByRole('button', { name: '返回插件列表', exact: true }).click()
+      const loop = nativePanel.getByText('Agent 循环', { exact: true }).first()
+      await loop.click()
       const parallel = pluginPage.locator('#plugin-config-agent-loop-parallel')
       await parallel.fill('7')
       await pluginPage.getByRole('button', { name: '保存', exact: true }).click()
@@ -91,12 +100,14 @@ try {
       await page.reload()
       await page.locator('.plugins-trigger').waitFor({timeout:90000})
       await page.locator('.plugins-trigger').click()
-      await pluginPage.locator('.plugins-page-nav').getByRole('button', { name: 'Agent 循环', exact: true }).click()
+      await nativePanel.waitFor()
+      await nativePanel.getByText('Agent 循环', { exact: true }).first().click()
       assert.equal(await pluginPage.locator('#plugin-config-agent-loop-parallel').inputValue(), '7')
       await shot('official-config-saved-after-reload')
       report.checks.push('official Agent loop configuration saved through Host and survived full reload')
     }
-    await pluginPage.locator('.plugins-page-nav').getByRole('button', { name: '已安装与市场', exact: true }).click()
+    const nativeBack = pluginPage.getByRole('button', { name: '返回插件列表', exact: true })
+    if (await nativeBack.isVisible()) await nativeBack.click()
     for (const width of [1024, 760, 390]) {
       await page.setViewportSize({ width, height: 900 })
       assert(await pluginPage.evaluate(el => el.scrollWidth <= el.clientWidth + 1), `page overflow ${width}: ${JSON.stringify(await pluginPage.evaluate(el => ({client:el.clientWidth,scroll:el.scrollWidth})))}`)
@@ -273,6 +284,28 @@ try {
       }
     }
     report.checks.push('real overview and proofread panels opened and closed in both themes')
+    /* 侧栏不再常驻文档工具 chip；作品级视图由作品菜单按命令声明的 placement 承载。 */
+    assert.equal(await page.locator('.side-document-tools').count(), 0)
+    for (const theme of ['light','dark']) {
+      if (!await page.locator('.shell-theme').evaluate((el,t) => el.classList.contains(t), theme)) {
+        await page.locator('.theme-toggle').click()
+        await page.waitForFunction(t => document.querySelector('.shell-theme')?.classList.contains(t), theme)
+      }
+      await page.locator('.workspace-menu-trigger').click()
+      const workMenu = page.locator('.workspace-menu-panel')
+      await workMenu.waitFor()
+      await page.waitForTimeout(350)
+      const overviewEntry = workMenu.getByRole('menuitem').filter({has:page.getByText('文档概览',{exact:true})})
+      assert.equal(await overviewEntry.count(), 1, theme + ': 作品菜单应只有一个「文档概览」入口')
+      await shot(theme + '-work-menu')
+      await overviewEntry.click()
+      const workMenuPanel = page.locator('.overview-panel')
+      await workMenuPanel.waitFor()
+      assert.equal(await workMenuPanel.getByRole('button',{name:'关闭概览',exact:true}).count(), 1, theme + ': 概览浮层应可关闭')
+      await workMenuPanel.getByRole('button',{name:'关闭概览',exact:true}).click()
+      await workMenuPanel.waitFor({state:'hidden'})
+    }
+    report.checks.push('work menu opened 文档概览 in both themes, and the sidebar no longer carries document tool chips')
     report.panelScope = 'Desktop composition intentionally disables editor-cards and editor-memory-panel; their styles and native/Radix states are verified by independent component fixtures.'
     // Clear the synthetic unsent draft before closing the isolated test app.
     await chat.fill('')
