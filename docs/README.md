@@ -4,7 +4,7 @@
 - [桌面更新审查与恢复](update-audit.md)：下载校验、Windows 安装交接、恢复入口与验证边界。
 - [产品原则](product-principles.md)：作者工作流与产品取舍。
 - [架构决策](architecture.md)：运行时权威、信任边界与发布约定。
-- [架构重构](refactoring-executive-summary.md)：重构方案执行摘要（Phase 1 已完成）；[完整方案](refactoring-proposal.md)、[架构对比](architecture-comparison.md)、[Phase 1 报告](refactor-phase1-adjusted.md)。
+- [架构重构](refactoring-executive-summary.md)：重构方案执行摘要（Phase 1 已完成）；[完整方案](refactoring-proposal.md)、[架构对比](architecture-comparison.md)、[Phase 1 报告](refactor-phase1-adjusted.md)、[审查报告](ARCHITECTURE_REVIEW_REPORT.md)、[审查摘要](REVIEW_SUMMARY.md)、[完成报告](refactor-completion-report.md)、[合并指南](MERGE_GUIDE.md)。
 - [界面设计](ui-design.md)：官方 Kimi Web 视觉适配、组件预览与验证范围。
 - [UI 施工约定](ui-agent-guide.md)：给 Agent 的组件用法、改动边界、防偏移检查与验收证据。
 - [DSH 0.1.7 升级审计](dsh-0.1.7-upgrade.md)（历史留档，已完成）：兼容性修复、能力重叠与验收范围。
