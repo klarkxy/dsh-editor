@@ -1,0 +1,60 @@
+=== Type Check Baseline ===
+
+> dsh-editor@ typecheck H:\Code\dsh-editor
+> pnpm -r typecheck
+
+Scope: 14 of 15 workspace projects
+apps/desktop typecheck$ tsc -p tsconfig.json --noEmit
+packages/dsh-editor-seats typecheck$ tsc --noEmit -p tsconfig.json
+packages/dsh-proofread typecheck$ tsc --noEmit -p tsconfig.json
+packages/dsh-editor-writing-presets typecheck$ tsc --noEmit -p tsconfig.json
+node:internal/child_process:486
+    throw new ErrnoException(err, 'spawn');
+    ^
+
+Error: spawn EPERM
+    at ChildProcess.spawn (node:internal/child_process:486:11)
+    at spawn (node:child_process:813:9)
+    at spawn (C:\Users\27837\AppData\Local\pnpm\.tools\pnpm\10.14.0_tmp_65596\node_modules\pnpm\dist\pnpm.cjs:68067:19)
+    at runCmd_ (C:\Users\27837\AppData\Local\pnpm\.tools\pnpm\10.14.0_tmp_65596\node_modules\pnpm\dist\pnpm.cjs:92674:20)
+    at runCmd (C:\Users\27837\AppData\Local\pnpm\.tools\pnpm\10.14.0_tmp_65596\node_modules\pnpm\dist\pnpm.cjs:92614:9)
+    at runPackageLifecycle (C:\Users\27837\AppData\Local\pnpm\.tools\pnpm\10.14.0_tmp_65596\node_modules\pnpm\dist\pnpm.cjs:92581:7)
+    at Array.<anonymous> (C:\Users\27837\AppData\Local\pnpm\.tools\pnpm\10.14.0_tmp_65596\node_modules\pnpm\dist\pnpm.cjs:91827:12)
+    at LOOP (C:\Users\27837\AppData\Local\pnpm\.tools\pnpm\10.14.0_tmp_65596\node_modules\pnpm\dist\pnpm.cjs:91852:18)
+    at chain (C:\Users\27837\AppData\Local\pnpm\.tools\pnpm\10.14.0_tmp_65596\node_modules\pnpm\dist\pnpm.cjs:91857:9)
+    at lifecycle_ (C:\Users\27837\AppData\Local\pnpm\.tools\pnpm\10.14.0_tmp_65596\node_modules\pnpm\dist\pnpm.cjs:92555:7) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'spawn'
+}
+
+Node.js v26.10.0
+ ELIFECYCLE  Command failed with exit code 1.
+
+=== Unit Tests Baseline ===
+
+> dsh-editor@ test H:\Code\dsh-editor
+> vitest run
+
+failed to load config from H:\Code\dsh-editor\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: spawn EPERM
+    at ChildProcess.spawn (node:internal/child_process:486:11)
+    at Object.spawn (node:child_process:813:9)
+    at ensureServiceIsRunning (H:\Code\dsh-editor\node_modules\.pnpm\esbuild@0.28.2\node_modules\esbuild\lib\main.js:2272:29)
+    at build (H:\Code\dsh-editor\node_modules\.pnpm\esbuild@0.28.2\node_modules\esbuild\lib\main.js:2170:26)
+    at bundleConfigFile (file:///H:/Code/dsh-editor/node_modules/.pnpm/vite@7.3.6_@types+node@24.19.0_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:35895:23)
+    at bundleAndLoadConfigFile (file:///H:/Code/dsh-editor/node_modules/.pnpm/vite@7.3.6_@types+node@24.19.0_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:35882:24)
+    at loadConfigFromFile (file:///H:/Code/dsh-editor/node_modules/.pnpm/vite@7.3.6_@types+node@24.19.0_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:35851:179)
+    at resolveConfig (file:///H:/Code/dsh-editor/node_modules/.pnpm/vite@7.3.6_@types+node@24.19.0_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:35500:28)
+    at _createServer (file:///H:/Code/dsh-editor/node_modules/.pnpm/vite@7.3.6_@types+node@24.19.0_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:25441:73)
+    at createServer$2 (file:///H:/Code/dsh-editor/node_modules/.pnpm/vite@7.3.6_@types+node@24.19.0_yaml@2.9.1/node_modules/vite/dist/node/chunks/config.js:25438:9) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'spawn'
+}
+
+
+
+ ELIFECYCLE  Test failed. See above for more details.

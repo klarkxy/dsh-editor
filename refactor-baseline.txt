@@ -1,0 +1,26 @@
+=== Architecture Refactor Baseline ===
+Date: 2026-10-06 21:26:54
+Branch: refactor/arch-v2
+Commit: 7e8ccdda1b5aae605e027b15fc78f282afa97004
+
+=== Package Structure ===
+- dsh-editor-cards v0.1.0
+- dsh-editor-memory-panel v0.1.0
+- dsh-editor-novel-kernel v0.1.0
+- dsh-editor-overview-panel v0.1.0
+- dsh-editor-plugins v0.1.0
+- dsh-editor-proofread-panel v0.1.0
+- dsh-editor-seats v0.1.0
+- dsh-editor-shell v0.1.0
+- dsh-editor-workbench v0.1.0
+- dsh-editor-workspace-kit v0.1.0
+- dsh-editor-writing-presets v0.1.0
+- dsh-manuscript v0.1.0
+- dsh-proofread v0.1.0
+
+=== Key Metrics ===
+packages/dsh-editor-workbench : 566736 lines
+packages/dsh-editor-shell : 2063987 lines
+packages/dsh-editor-memory-panel : 749825 lines
+packages/dsh-editor-overview-panel : 750007 lines
+packages/dsh-editor-proofread-panel : 750242 lines
