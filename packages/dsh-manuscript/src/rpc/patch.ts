@@ -93,6 +93,9 @@ function patchSystem(request: PatchRequest, projectRules?: string): string {
 async function streamPatch(input: {
   ctx: PatchContext
   sessionId?: string
+  provider?: string
+  model?: string
+  reasoningEffort?: string
   request: PatchRequest
   projectRules?: string
   signal: AbortSignal
@@ -105,6 +108,9 @@ async function streamPatch(input: {
     text: `${chapterContextUserPrefix(input.request.chapterContext)}【文件】${input.request.path}\n\n【前文】\n${input.request.before}\n\n${input.request.instruction ? `【改写要求】\n${input.request.instruction}\n\n` : ''}【待改写】\n${input.request.selectedText}\n\n【后文】\n${input.request.after}\n\n只输出替换后的文本：`,
     signal: input.signal,
     maxChars: PATCH_LIMITS.proposal,
+    provider: input.provider,
+    model: input.model,
+    reasoningEffort: input.reasoningEffort,
   })
 }
 
@@ -116,8 +122,8 @@ async function streamPatch(input: {
 export async function completePatch(input: {
   sessionId?: string
   ctx: PatchContext
-  provider: string
-  model: string
+  provider?: string
+  model?: string
   reasoningEffort?: string
   request: PatchRequest
   projectRules?: string
@@ -126,6 +132,9 @@ export async function completePatch(input: {
   const text = await streamPatch({
     ctx: input.ctx,
     sessionId: input.sessionId,
+    provider: input.provider,
+    model: input.model,
+    reasoningEffort: input.reasoningEffort,
     request: input.request,
     projectRules: input.projectRules,
     signal: input.signal,

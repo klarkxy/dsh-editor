@@ -1,1 +1,1 @@
-export { WRITING_PURPOSES, runWritingAi, type WritingPurpose } from './llm-bridge.ts'
+export { WRITING_PURPOSES, WRITING_LIMITS, runWritingAi, type WritingPurpose } from './llm-bridge.ts'

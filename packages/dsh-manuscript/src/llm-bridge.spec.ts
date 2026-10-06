@@ -1,48 +1,41 @@
 import { Context } from '@deepseek-ai/cordis'
 import { LlmAdapter, LlmRuntime, ReasoningEffortId, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, vi } from 'vitest'
-import { runWritingAi, type WritingContext } from './ai-purposes.ts'
+import { runWritingAi, WRITING_LIMITS, type WritingContext } from './ai-purposes.ts'
 import type { StreamChunkLike } from './rpc/completion.ts'
 
-const baseRoute = {
-  source: 'purpose' as const,
-  target: { kind: 'role' as const, role: 'weak' as const },
-  policyRevision: 1,
-}
-
-function limits(overrides: Partial<{ concurrency: number; timeoutMs: number; maxInputChars: number; maxOutputTokens: number }> = {}) {
-  return {
-    concurrency: 1,
-    timeoutMs: 60_000,
-    maxInputChars: 32_000,
-    maxOutputTokens: 2048,
-    maxAttempts: 2,
-    ...overrides,
-  }
-}
+type Route = { provider: string; model: string; reasoningEffort?: string }
 
 function host(input: {
   stream: (options: GenerateOptions) => AsyncIterable<StreamChunkLike>
-  resolve?: (purpose: string, sessionId?: string) => unknown
-  policy?: Partial<{ concurrency: number; timeoutMs: number; maxInputChars: number; maxOutputTokens: number }>
-  scope?: { active: boolean; signal: AbortSignal; run?: ReturnType<typeof vi.fn> }
-  purposes?: Array<{ id: string; maxOutputTokens?: number; maxInputChars?: number; timeoutMs?: number }>
-}): WritingContext & { run: ReturnType<typeof vi.fn> } {
-  const run = input.scope?.run ?? vi.fn()
-  const scope = input.scope ?? { active: true, signal: new AbortController().signal, run }
-  const ai = {
-    async resolve(purpose: string, sessionId?: string) {
-      return input.resolve?.(purpose, sessionId) ?? { provider: 'provider', model: 'model', ...baseRoute }
-    },
-    getPolicy: () => ({ revision: 1, roles: {}, purposes: {}, limits: limits(input.policy) }),
-    purposes: () => input.purposes ?? [],
-    usage: () => [],
-  }
+  prepareCall?: (config: unknown, signal?: AbortSignal) => Promise<{ config: unknown; stream: (options: GenerateOptions) => AsyncIterable<StreamChunkLike> }>
+  prefs?: { completionModel?: Route; rewriteModel?: Route; chatModel?: Route }
+  defaultRoute?: Route | undefined
+  sessionRoute?: (sessionId: string) => Route
+  scope?: { active: boolean; signal: AbortSignal }
+}): WritingContext {
+  const defaultRoute = input.defaultRoute === undefined && !('defaultRoute' in input)
+    ? { provider: 'provider', model: 'model' }
+    : input.defaultRoute
+  const scope = input.scope ?? { active: true, signal: new AbortController().signal }
   return {
-    run,
-    llm: { stream: input.stream },
+    llm: {
+      stream: input.stream,
+      ...(input.prepareCall ? { prepareCall: input.prepareCall } : {}),
+    },
     get(name) {
-      if (name === 'aiServices') return ai
+      if (name === 'editorWritingPreferences') return { read: () => input.prefs ?? {} }
+      if (name === 'agentDefaultModel') return { currentSelection: () => defaultRoute }
+      if (name === 'agents') {
+        return {
+          get: (sessionId: string) => {
+            if (!sessionId) return undefined
+            const route = input.sessionRoute?.(sessionId)
+            return { session: { requestHeader: () => route ? { config: route } : undefined } }
+          },
+        }
+      }
+      if (name === 'sessionProjections') return { stateOf: () => ({ pending: undefined }) }
       if (name === 'manuscriptAiScope') return scope
       return undefined
     },
@@ -55,13 +48,11 @@ async function* text(value: string): AsyncIterable<StreamChunkLike> {
 }
 
 describe('direct writing model calls', () => {
-  it('streams the resolved route, branded effort, policy token cap, and an identity-free user message', async () => {
-    const run = vi.fn()
+  it('streams the host preference route, branded effort, fixed token cap, and an identity-free user message', async () => {
     const stream = vi.fn((options: GenerateOptions) => text('下一句'))
     const ctx = host({
       stream,
-      scope: { active: true, signal: new AbortController().signal, run },
-      resolve: () => ({ provider: 'edit', model: 'large', reasoningEffort: 'high', ...baseRoute }),
+      prefs: { rewriteModel: { provider: 'edit', model: 'large', reasoningEffort: 'high' } },
     })
     await expect(runWritingAi({
       ctx, purpose: 'manuscript.rewrite', sessionId: 'session-1', system: '系统', text: '用户', signal: new AbortController().signal, maxChars: 20,
@@ -71,20 +62,45 @@ describe('direct writing model calls', () => {
       provider: 'edit',
       model: 'large',
       reasoningEffort: 'high',
-      maxTokens: 2048,
+      maxTokens: WRITING_LIMITS.maxOutputTokens,
       system: '系统',
     })
     expect(options?.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: '用户' }] }])
     expect(options?.messages[0]).not.toHaveProperty('id')
     expect(options?.messages[0]).not.toHaveProperty('source')
     expect(options?.tools).toBeUndefined()
-    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('prefers host per-purpose prefs over explicit FIM fields, then explicit fields over the native default', async () => {
+    const stream = vi.fn((options: GenerateOptions) => text('ok'))
+    const ctx = host({
+      stream,
+      prefs: { completionModel: { provider: 'pref', model: 'host' } },
+      defaultRoute: { provider: 'native', model: 'default' },
+    })
+    await runWritingAi({
+      ctx, purpose: 'manuscript.completion', sessionId: 'order', system: 's', text: 't', signal: new AbortController().signal, maxChars: 10,
+      provider: 'explicit', model: 'standalone',
+    })
+    expect(stream.mock.calls[0]?.[0]).toMatchObject({ provider: 'pref', model: 'host' })
+
+    const fallback = host({ stream, defaultRoute: { provider: 'native', model: 'default' } })
+    await runWritingAi({
+      ctx: fallback, purpose: 'manuscript.completion', sessionId: 'order-2', system: 's', text: 't', signal: new AbortController().signal, maxChars: 10,
+      provider: 'explicit', model: 'standalone', reasoningEffort: 'low',
+    })
+    expect(stream.mock.calls[1]?.[0]).toMatchObject({ provider: 'explicit', model: 'standalone', reasoningEffort: 'low' })
+
+    await runWritingAi({
+      ctx: fallback, purpose: 'manuscript.completion', sessionId: 'order-3', system: 's', text: 't', signal: new AbortController().signal, maxChars: 10,
+    })
+    expect(stream.mock.calls[2]?.[0]).toMatchObject({ provider: 'native', model: 'default' })
   })
 
   it('passes resolved off and none through as branded effort', async () => {
     for (const reasoningEffort of ['off', 'none', ' OFF ']) {
       const stream = vi.fn((options: GenerateOptions) => text('ok'))
-      const ctx = host({ stream, resolve: () => ({ provider: 'p', model: 'm', reasoningEffort, ...baseRoute }) })
+      const ctx = host({ stream, prefs: { completionModel: { provider: 'p', model: 'm', reasoningEffort } } })
       await runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: `effort-${reasoningEffort}`, system: 's', text: 't', signal: new AbortController().signal, maxChars: 10 })
       expect(stream.mock.calls[0]?.[0].reasoningEffort).toBe(reasoningEffort.trim())
     }
@@ -224,19 +240,20 @@ describe('direct writing model calls', () => {
     })())
     const ctx = host({
       stream,
-      policy: { concurrency: 2 },
-      resolve: (purpose) => ({
-        provider: 'p',
-        model: purpose === 'manuscript.completion' ? 'completion-model' : 'rewrite-model',
-        ...baseRoute,
-      }),
+      prefs: {
+        completionModel: { provider: 'p', model: 'completion-model' },
+        rewriteModel: { provider: 'p', model: 'rewrite-model' },
+      },
     })
     const completion = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'mix', system: 's', text: 't', signal: new AbortController().signal, maxChars: 40 })
     await vi.waitFor(() => { if (!release) throw new Error('completion has not blocked') })
     const rewrite = runWritingAi({ ctx, purpose: 'manuscript.rewrite', sessionId: 'mix', system: 's', text: 't', signal: new AbortController().signal, maxChars: 40 })
-    await expect(rewrite).resolves.toBe('rewrite-model')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(stream).toHaveBeenCalledTimes(1)
+    expect(stream.mock.calls[0]?.[0].signal?.aborted).toBe(false)
     release()
     await expect(completion).resolves.toBe('completion-model')
+    await expect(rewrite).resolves.toBe('rewrite-model')
   })
 
   it('drops the result and aborts the producer when the feature scope is disposed', async () => {
@@ -286,8 +303,8 @@ describe('direct writing model calls', () => {
   it('rejects oversized input and a caller timeout without publishing partial text', async () => {
     const oversized = vi.fn(() => text('nope'))
     await expect(runWritingAi({
-      ctx: host({ stream: oversized, policy: { maxInputChars: 4 } }),
-      purpose: 'manuscript.completion', sessionId: 'big', system: 'abcd', text: 'e', signal: new AbortController().signal, maxChars: 20,
+      ctx: host({ stream: oversized }),
+      purpose: 'manuscript.completion', sessionId: 'big', system: 'a'.repeat(WRITING_LIMITS.maxInputChars), text: 'e', signal: new AbortController().signal, maxChars: 20,
     })).rejects.toThrow('输入超出上限。')
     expect(oversized).not.toHaveBeenCalled()
 
@@ -298,8 +315,9 @@ describe('direct writing model calls', () => {
       })
     })())
     await expect(runWritingAi({
-      ctx: host({ stream, policy: { timeoutMs: 40 } }),
+      ctx: host({ stream }),
       purpose: 'manuscript.completion', sessionId: 'timeout', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
+      timeoutMs: 40,
     })).rejects.toThrow('调用超时。')
     expect(stream.mock.calls[0]?.[0].signal?.aborted).toBe(true)
   })
@@ -311,15 +329,15 @@ describe('direct writing model calls', () => {
     return settled
   }
 
-  it('stops waiting when route resolution ignores abort', async () => {
+  it('stops waiting when prepareCall ignores abort', async () => {
     const stream = vi.fn(() => text('nope'))
     const pending = runWritingAi({
       ctx: host({
         stream,
-        policy: { timeoutMs: 5 },
-        resolve: () => new Promise(() => {}),
+        prepareCall: () => new Promise(() => {}),
       }),
       purpose: 'manuscript.completion', sessionId: 'resolve-hang', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
+      timeoutMs: 5,
     })
     expect(await settles(pending)).toBe(true)
     await expect(pending).rejects.toThrow('调用超时。')
@@ -403,8 +421,9 @@ describe('direct writing model calls', () => {
       value: { type: 'finish', reason: { kind: 'error', failure: { message: 'model not available' } } },
     }))
     const finishPending = runWritingAi({
-      ctx: host({ stream: () => finishHang.stream, policy: { timeoutMs: 15 } }),
+      ctx: host({ stream: () => finishHang.stream }),
       purpose: 'manuscript.completion', sessionId: 'known-finish-timeout', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
+      timeoutMs: 15,
     })
     expect(await settles(finishPending)).toBe(true)
     await expect(finishPending).rejects.toThrow('model not available')
@@ -412,8 +431,9 @@ describe('direct writing model calls', () => {
 
     const nextHang = hanging(async () => { throw new Error('stream rejected') })
     const nextPending = runWritingAi({
-      ctx: host({ stream: () => nextHang.stream, policy: { timeoutMs: 15 } }),
+      ctx: host({ stream: () => nextHang.stream }),
       purpose: 'manuscript.completion', sessionId: 'known-next-timeout', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
+      timeoutMs: 15,
     })
     expect(await settles(nextPending)).toBe(true)
     await expect(nextPending).rejects.toThrow('stream rejected')
@@ -437,11 +457,9 @@ describe('direct writing model calls', () => {
     })())
     const ctx = host({
       stream,
-      policy: { concurrency: 1 },
-      resolve: (purpose, sessionId) => ({
+      sessionRoute: (sessionId) => ({
         provider: sessionId === 'other-provider' ? 'beta' : 'alpha',
         model: sessionId === 'hold' ? 'first' : sessionId,
-        ...baseRoute,
       }),
     })
     const first = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'hold', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
@@ -479,8 +497,7 @@ describe('direct writing model calls', () => {
     const held = holdingStream()
     const ctx = host({
       stream: held.stream,
-      policy: { concurrency: 1 },
-      resolve: (_purpose, sessionId) => ({ provider: 'alpha', model: sessionId ?? 'model', ...baseRoute }),
+      sessionRoute: (sessionId) => ({ provider: 'alpha', model: sessionId }),
     })
     const holder = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'holder', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await vi.waitFor(() => { if (!held.hold()) throw new Error('holder has not started') })
@@ -500,9 +517,8 @@ describe('direct writing model calls', () => {
     const scope = new AbortController()
     const ctx = host({
       stream: held.stream,
-      policy: { concurrency: 1 },
       scope: { active: true, signal: scope.signal },
-      resolve: (_purpose, sessionId) => ({ provider: 'alpha', model: sessionId ?? 'model', ...baseRoute }),
+      sessionRoute: (sessionId) => ({ provider: 'alpha', model: sessionId }),
     })
     const holder = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'holder', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await vi.waitFor(() => { if (!held.hold()) throw new Error('holder has not started') })
@@ -518,119 +534,21 @@ describe('direct writing model calls', () => {
 
   it('removes a queued call when its own timeout fires', async () => {
     const held = holdingStream()
-    let turn = 0
     const ctx = host({
       stream: held.stream,
-      resolve: (_purpose, sessionId) => ({ provider: 'alpha', model: sessionId ?? 'model', ...baseRoute }),
-    })
-    const ai = ctx.get?.('aiServices') as { getPolicy: () => { limits: ReturnType<typeof limits> } }
-    ai.getPolicy = () => ({
-      revision: 1,
-      roles: {},
-      purposes: {},
-      limits: limits({ concurrency: 1, timeoutMs: turn++ === 0 ? 60_000 : 5 }),
+      sessionRoute: (sessionId) => ({ provider: 'alpha', model: sessionId }),
     })
     const holder = runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'holder', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
     await vi.waitFor(() => { if (!held.hold()) throw new Error('holder has not started') })
-    const queued = runWritingAi({ ctx, purpose: 'manuscript.rewrite', sessionId: 'timeout-wait', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
+    const queued = runWritingAi({
+      ctx, purpose: 'manuscript.rewrite', sessionId: 'timeout-wait', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
+      timeoutMs: 5,
+    })
     expect(await settles(queued)).toBe(true)
     await expect(queued).rejects.toThrow('调用超时。')
     expect(held.stream).toHaveBeenCalledTimes(1)
     held.hold()()
     await expect(holder).resolves.toBe('holder')
-  })
-
-  function gatedCalls(initialConcurrency: number) {
-    let concurrency = initialConcurrency
-    const releases = new Map<string, () => void>()
-    const started: string[] = []
-    let active = 0
-    let peak = 0
-    const stream = vi.fn((options: GenerateOptions) => (async function* () {
-      const id = String(options.model)
-      started.push(id)
-      active += 1
-      peak = Math.max(peak, active)
-      try {
-        await new Promise<void>((resolve) => { releases.set(id, resolve) })
-        yield { type: 'text-delta', text: id }
-        yield { type: 'finish', reason: { kind: 'stop' } }
-      } finally {
-        active -= 1
-      }
-    })())
-    const ctx = host({
-      stream,
-      resolve: (_purpose, sessionId) => ({ provider: 'alpha', model: sessionId ?? 'model', ...baseRoute }),
-    })
-    const ai = ctx.get?.('aiServices') as { getPolicy: () => { revision: number; roles: object; purposes: object; limits: ReturnType<typeof limits> } }
-    ai.getPolicy = () => ({ revision: 1, roles: {}, purposes: {}, limits: limits({ concurrency }) })
-    return {
-      started,
-      releases,
-      occupancy: () => ({ started: started.length, active, peak }),
-      setConcurrency(value: number) { concurrency = value },
-      run(sessionId: string, purpose = 'manuscript.completion') {
-        return runWritingAi({ ctx, purpose, sessionId, system: 's', text: 't', signal: new AbortController().signal, maxChars: 20 })
-      },
-    }
-  }
-
-  it('keeps a queued call waiting when concurrency drops below the in-flight count', async () => {
-    const gate = gatedCalls(3)
-    const first = gate.run('a')
-    const second = gate.run('b', 'manuscript.rewrite')
-    const third = gate.run('c')
-    await vi.waitFor(() => { if (gate.started.length < 3) throw new Error('three calls have not started') })
-    gate.setConcurrency(1)
-    let fourthStarted = false
-    const fourth = gate.run('d', 'manuscript.rewrite').then((value) => { fourthStarted = true; return value })
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(fourthStarted).toBe(false)
-    expect(gate.started).toEqual(['a', 'b', 'c'])
-    gate.releases.get('a')!()
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(fourthStarted).toBe(false)
-    expect(gate.occupancy()).toEqual({ started: 3, active: 2, peak: 3 })
-    gate.releases.get('b')!()
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(gate.occupancy()).toEqual({ started: 3, active: 1, peak: 3 })
-    gate.releases.get('c')!()
-    await vi.waitFor(() => { if (!gate.started.includes('d')) throw new Error('queued call was not admitted') })
-    expect(gate.started).toEqual(['a', 'b', 'c', 'd'])
-    gate.releases.get('d')!()
-    await expect(first).resolves.toBe('a')
-    await expect(second).resolves.toBe('b')
-    await expect(third).resolves.toBe('c')
-    await expect(fourth).resolves.toBe('d')
-    expect(gate.occupancy()).toEqual({ started: 4, active: 0, peak: 3 })
-  })
-
-  it('admits an existing waiter before a new call when concurrency rises', async () => {
-    const gate = gatedCalls(1)
-    const holder = gate.run('holder')
-    await vi.waitFor(() => { if (!gate.releases.has('holder')) throw new Error('holder has not started') })
-    let waiterDone = false
-    const waiter = gate.run('waiter', 'manuscript.rewrite').then((value) => { waiterDone = true; return value })
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(gate.started).toEqual(['holder'])
-    gate.setConcurrency(2)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(waiterDone).toBe(false)
-    expect(gate.started).toEqual(['holder'])
-    const third = gate.run('third')
-    await vi.waitFor(() => { if (!gate.started.includes('waiter')) throw new Error('waiter was not admitted') })
-    expect(gate.started).toEqual(['holder', 'waiter'])
-    expect(gate.occupancy()).toEqual({ started: 2, active: 2, peak: 2 })
-    gate.releases.get('holder')!()
-    await vi.waitFor(() => { if (!gate.started.includes('third')) throw new Error('third was not admitted in order') })
-    expect(gate.started).toEqual(['holder', 'waiter', 'third'])
-    gate.releases.get('waiter')!()
-    gate.releases.get('third')!()
-    await expect(holder).resolves.toBe('holder')
-    await expect(waiter).resolves.toBe('waiter')
-    await expect(third).resolves.toBe('third')
-    expect(gate.occupancy()).toEqual({ started: 3, active: 0, peak: 2 })
   })
 
   it('does not let one writing context supersede another context with the same session and purpose', async () => {
@@ -697,7 +615,7 @@ describe('direct writing model calls', () => {
       await expect(runWritingAi({
         ctx: host({
           stream,
-          resolve: () => ({ provider: 'demo', model: 'writer', reasoningEffort: 'off', ...baseRoute }),
+          prefs: { completionModel: { provider: 'demo', model: 'writer', reasoningEffort: 'off' } },
         }),
         purpose: 'manuscript.completion', sessionId: 'effort-off', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
       })).resolves.toBe('kept')
@@ -705,5 +623,48 @@ describe('direct writing model calls', () => {
     } finally {
       await fiber.dispose()
     }
+  })
+
+  it('fails visibly when no host pref, explicit route, or native default is available', async () => {
+    const stream = vi.fn(() => text('nope'))
+    await expect(runWritingAi({
+      ctx: host({ stream, defaultRoute: undefined }),
+      purpose: 'manuscript.completion', sessionId: 'missing', system: 's', text: 't', signal: new AbortController().signal, maxChars: 20,
+    })).rejects.toThrow('请先设置默认对话模型。')
+    expect(stream).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('host model readiness', () => {
+  function waiting(ready: () => Promise<void>, stream: ReturnType<typeof vi.fn>): WritingContext {
+    let route = { provider: 'old', model: 'old' }
+    const ctx = host({ stream })
+    const get = ctx.get!
+    ctx.get = (name, optional) => name === 'editorWritingPreferences' ? { read: () => ({ completionModel: route }), modelsReady: async () => { await ready(); route = { provider: 'new', model: 'new' } } } : get(name, optional)
+    return ctx
+  }
+  const invoke = (ctx: WritingContext, signal = new AbortController().signal) => runWritingAi({ ctx, purpose: 'manuscript.completion', sessionId: 'ready', system: 's', text: 't', maxChars: 20, signal })
+  it('reads migrated choices only after the existing host preference becomes ready', async () => {
+    let release!: () => void
+    const ready = new Promise<void>(resolve => { release = resolve })
+    const stream = vi.fn(() => text('ready'))
+    const call = invoke(waiting(() => ready, stream))
+    await Promise.resolve();expect(stream).not.toHaveBeenCalled()
+    release();await expect(call).resolves.toBe('ready')
+    expect(stream).toHaveBeenCalledWith(expect.objectContaining({ provider: 'new', model: 'new' }))
+  })
+  it('cancels a wait that ignores abort and never publishes a late model call', async () => {
+    let release!: () => void
+    const ready = new Promise<void>(resolve => { release = resolve })
+    const stream = vi.fn(() => text('late'));const controller = new AbortController()
+    const call = invoke(waiting(() => ready, stream), controller.signal)
+    controller.abort();await expect(call).resolves.toBe('')
+    release();await Promise.resolve();expect(stream).not.toHaveBeenCalled()
+  })
+  it('reports failed migration without sending the previous preference to a model', async () => {
+    const stream = vi.fn(() => text('nope'))
+    await expect(invoke(waiting(async () => { throw new Error('migration failed') }, stream))).rejects.toThrow('migration failed')
+    expect(stream).not.toHaveBeenCalled()
   })
 })

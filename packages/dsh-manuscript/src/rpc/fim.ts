@@ -28,6 +28,9 @@ function fimSystem(input: { chapterContext: string; authorPreferences: string; p
 async function streamCompletion(input: {
   ctx: FimContext
   sessionId?: string
+  provider?: string
+  model?: string
+  reasoningEffort?: string
   prefix: string
   suffix: string
   authorPreferences: string
@@ -43,14 +46,17 @@ async function streamCompletion(input: {
     text: `${chapterContextUserPrefix(input.chapterContext)}【光标前】\n${input.prefix.slice(-5000)}\n\n【光标后】\n${input.suffix.slice(0, 1500)}\n\n只输出插入内容：`,
     signal: input.signal,
     maxChars: 240,
+    provider: input.provider,
+    model: input.model,
+    reasoningEffort: input.reasoningEffort,
   })
 }
 
 export async function completeFim(input: {
   sessionId?: string
   ctx: FimContext
-  provider: string
-  model: string
+  provider?: string
+  model?: string
   reasoningEffort?: string
   prefix: string
   suffix: string
@@ -62,6 +68,9 @@ export async function completeFim(input: {
   const text = await streamCompletion({
     ctx: input.ctx,
     sessionId: input.sessionId,
+    provider: input.provider,
+    model: input.model,
+    reasoningEffort: input.reasoningEffort,
     prefix: input.prefix,
     suffix: input.suffix,
     authorPreferences: input.authorPreferences ?? '',

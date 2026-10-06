@@ -15,12 +15,14 @@ function fixture(defaultChatModel?: () => { provider: string; model: string; rea
   const pick = vi.fn(async () => ({ ok: true as const, value: '/picked' }))
   const provide = vi.fn()
   let cleanup: (() => void) | undefined
-  const resolve = vi.fn(async (_channel: string, endpoint: string) => endpoint === 'resolve' ? ({ ok: true, value: defaultChatModel?.() ?? { provider: 'host', model: 'default' } }) : ({ ok: true, value: {} }))
+  const resolve = vi.fn(async (_channel: string, endpoint: string) => ({ ok: true, value: endpoint === 'models.migration.status' ? { chatModel: defaultChatModel?.() } : {} }))
   const selectModel = vi.fn(async (route: { sessionId: string; provider: string; model: string }) => ({ ok: true as const, value: { selected: { provider: route.provider, model: route.model } } }))
+  const getSnapshot = vi.fn(() => ({ status: 'ready', value: { chatModel: defaultChatModel?.() } }))
   const ctx = {
     provide,
     effect: vi.fn((setup: () => () => void) => { cleanup = setup(); return cleanup }),
     connection: { rpc: { call: resolve } },
+    configForms: { get: () => ({ getSnapshot, subscribe: () => () => {} }) },
     sessions: {
       create,
       retain,
@@ -54,7 +56,7 @@ function fixture(defaultChatModel?: () => { provider: string; model: string; rea
     workspace: { getSnapshot(): { sessionId: string } | undefined }
     openWorkspaceSession(id: string): Promise<void>
   }
-  return { archiveSession, cleanup: () => cleanup?.(), create, retain, releases, pick, uiWorkspace, selectModel, resolve }
+  return { archiveSession, cleanup: () => cleanup?.(), create, retain, releases, pick, uiWorkspace, selectModel, resolve, getSnapshot }
 }
 
 describe('provideEditorUiWorkspace', () => {
@@ -246,20 +248,68 @@ it('remembers a created-chat model error for the next Chat mount', () => {
   expect(takeCreatedChatModelError('s1')).toBeUndefined()
 })
 
-it('passes the shared tier effort and resolves again for the next new session', async () => {
+it('reads the saved native preference anew for each new session and preserves its effort', async () => {
   let model = 'first'
   const f = fixture(() => ({ provider: 'tier', model, reasoningEffort: 'high' }))
   await f.uiWorkspace.createSession('ws-1')
-  expect(f.resolve).toHaveBeenCalledWith('/dsh-ai-services', 'resolve', { purpose: 'chat', sessionId: 'session-new' })
+  expect(f.resolve).toHaveBeenCalledWith('/dsh-editor-shell', 'models.migration.status', {})
   expect(f.selectModel).toHaveBeenLastCalledWith({ sessionId: 'session-new', provider: 'tier', model: 'first', reasoningEffort: 'high' })
   model = 'changed'
   await f.uiWorkspace.createSession('ws-1')
   expect(f.selectModel).toHaveBeenLastCalledWith({ sessionId: 'session-new', provider: 'tier', model: 'changed', reasoningEffort: 'high' })
 })
-it('retains the session and offers picker recovery when policy resolution fails', async () => {
+it('retains the session and offers picker recovery when the Host preference request fails', async () => {
   const f = fixture()
-  f.resolve.mockRejectedValueOnce(new Error('missing tier'))
+  f.resolve.mockRejectedValueOnce(new Error('settings unavailable'))
   await expect(f.uiWorkspace.createSession('ws-1')).resolves.toBe('session-new')
+  expect(f.selectModel).not.toHaveBeenCalled()
+  expect(takeCreatedChatModelError('session-new')).toBeTruthy()
+})
+it('leaves the native default selection intact when no chat preference is saved', async () => {
+  const f = fixture()
+  f.getSnapshot.mockReturnValue({ status: 'ready', value: { chatModel: { provider: 'stale', model: 'cached-old-choice' } } })
+  await expect(f.uiWorkspace.createSession('ws-1')).resolves.toBe('session-new')
+  expect(f.selectModel).not.toHaveBeenCalled()
+  expect(f.getSnapshot).not.toHaveBeenCalled()
+  expect(f.resolve).toHaveBeenCalledExactlyOnceWith('/dsh-editor-shell', 'models.migration.status', {})
+  expect(takeCreatedChatModelError('session-new')).toBeUndefined()
+})
+it.each([
+  { provider: 'custom', model: '' },
+  { provider: '', model: 'named-model' },
+  { provider: 42, model: 'named-model' },
+  null,
+])('reports an invalid saved chat route %j instead of silently selecting native defaults', async route => {
+  const f = fixture(() => route as never)
+  await expect(f.uiWorkspace.createSession('ws-1')).resolves.toBe('session-new')
+  expect(f.selectModel).not.toHaveBeenCalled()
+  expect(takeCreatedChatModelError('session-new')).toBeTruthy()
+})
+it('waits for migration and uses its canonical Host route without reading the client mirror', async () => {
+  const f = fixture(() => ({ provider: 'configured', model: 'migrated' }))
+  let resolve!: (result: any) => void
+  f.resolve.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+  const creating = f.uiWorkspace.createSession('ws-1')
+  await vi.waitFor(() => expect(f.resolve).toHaveBeenCalled())
+  expect(f.getSnapshot).not.toHaveBeenCalled()
+  expect(f.selectModel).not.toHaveBeenCalled()
+  resolve({ ok: true, value: { chatModel: { provider: 'configured', model: 'migrated' } } })
+  await expect(creating).resolves.toBe('session-new')
+  expect(f.selectModel).toHaveBeenCalledWith({ sessionId: 'session-new', provider: 'configured', model: 'migrated' })
+  expect(f.getSnapshot).not.toHaveBeenCalled()
+})
+it('uses the new Host model while the ready client mirror still holds the old legacy route', async () => {
+  const f = fixture(() => ({ provider: 'new', model: 'current-host', reasoningEffort: 'off' }))
+  f.getSnapshot.mockReturnValue({ status: 'ready', value: { chatModel: { provider: 'old', model: 'legacy-client-cache' } } })
+  await f.uiWorkspace.createSession('ws-1')
+  expect(f.selectModel).toHaveBeenCalledWith({ sessionId: 'session-new', provider: 'new', model: 'current-host', reasoningEffort: 'off' })
+  expect(f.getSnapshot).not.toHaveBeenCalled()
+})
+it('reports migration failure without reading stale native chat preferences', async () => {
+  const f = fixture(() => ({ provider: 'stale', model: 'old-native' }))
+  f.resolve.mockResolvedValueOnce({ ok: true, value: { error: 'migration failed' } } as never)
+  await expect(f.uiWorkspace.createSession('ws-1')).resolves.toBe('session-new')
+  expect(f.getSnapshot).not.toHaveBeenCalled()
   expect(f.selectModel).not.toHaveBeenCalled()
   expect(takeCreatedChatModelError('session-new')).toBeTruthy()
 })

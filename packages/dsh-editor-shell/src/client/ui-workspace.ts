@@ -1,6 +1,8 @@
-import { AI_RPC_CHANNEL, type ResolvedRoute, type RpcResult } from '@klarkxy/dsh-ai-services/contracts'
 import type { EditorSessionReference, ObservableSource, SessionFace, SessionId, WorkspaceId } from '../dsh-compat.ts'
+import { normalizeWritingModelRoute } from '../writing-settings.tsx'
+import type { WritingModelMigrationStatus } from '../writing-settings-contract.ts'
 import { t } from '../i18n/index.ts'
+import { SHELL_RPC_CHANNEL } from '../capabilities.ts'
 import { errorMessage, isSessionMissing, safeRpcCall, type ShellContext } from './shared.ts'
 
 /**
@@ -27,12 +29,18 @@ export function rememberCreatedChatModelError(sessionId: SessionId, message: str
   createdChatModelErrors.set(sessionId, message)
 }
 
-/** Read the durable capability route once, only when creating a conversation. */
+/** Read the Host's current choice after migration; never use a potentially stale client mirror. */
 export async function applyChatModelDefault(ctx: ShellContext, sessionId: SessionId): Promise<void> {
   try {
-    const result = await ctx.connection.rpc.call(AI_RPC_CHANNEL, 'resolve', { purpose: 'chat', sessionId }) as RpcResult<ResolvedRoute>
-    if (!result.ok) throw new Error(result.error.message)
-    const { provider, model, reasoningEffort } = result.value
+    const migration = await safeRpcCall<WritingModelMigrationStatus>(() => ctx.connection.rpc.call(SHELL_RPC_CHANNEL, 'models.migration.status', {}))
+    if (!migration.ok || !migration.value || typeof migration.value !== 'object' || Array.isArray(migration.value) || migration.value.error) throw new Error('writing model migration unavailable')
+    const saved = migration.value.chatModel
+    if (saved !== undefined && (!saved || typeof saved !== 'object' || Array.isArray(saved) || typeof saved.provider !== 'string' || typeof saved.model !== 'string'
+      || (saved.reasoningEffort !== undefined && typeof saved.reasoningEffort !== 'string'))) throw new Error('invalid saved model route')
+    const route = normalizeWritingModelRoute(saved)
+    if (route && (!route.provider || !route.model)) throw new Error('incomplete saved model route')
+    if (!route) { discardCreatedChatModelError(sessionId); return }
+    const { provider, model, reasoningEffort } = route
     const selected = await ctx.remote.session.selectModel({ sessionId, provider, model, ...(reasoningEffort ? { reasoningEffort } : {}) })
     if (!selected.ok) throw new Error('selection failed')
     discardCreatedChatModelError(sessionId)

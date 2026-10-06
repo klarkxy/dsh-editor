@@ -1,5 +1,3 @@
-import type { AiServices } from '@klarkxy/dsh-ai-services/contracts'
-import { WRITING_PURPOSES } from './ai-purposes.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ManuscriptAssist } from './assist-api.ts'
 import { asHost, resolveWorkspaceAccess } from './host.ts'
@@ -11,12 +9,15 @@ import { collectUsageLog, createUsageRecorder, usageDomainSpec, resolveDays, typ
 import { trackUsageStream } from './usage-stream.ts'
 
 export const name = 'dsh-manuscript-assist'
-export const inject = ['aiServices', 'llm', 'storageDomain', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
+export const inject = ['llm', 'storageDomain', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy'] as const
 
 export async function apply(ctx: Context): Promise<void> {
-  const ai = ctx.get('aiServices') as AiServices
-  const scope = ai.activate('dsh-manuscript-assist')
-  for (const purpose of WRITING_PURPOSES) scope.registerPurpose(purpose)
+  const lifetime = new AbortController()
+  const scope = {
+    get active() { return !lifetime.signal.aborted },
+    signal: lifetime.signal,
+    dispose() { if (!lifetime.signal.aborted) lifetime.abort() },
+  }
   ctx.effect(() => () => scope.dispose(), 'manuscript-assist.aiScope')
   ctx.provide('manuscriptAiScope', scope)
   const domain = await ctx.storageDomain.open(usageDomainSpec)
@@ -28,12 +29,8 @@ export async function apply(ctx: Context): Promise<void> {
       const rows = await usage.read(resolveDays(days))
       return { days: rows, log: collectUsageLog(rows) }
     },
-    async complete(endpoint, body, route, signal) {
+    async complete(endpoint, body, _route, signal) {
       if (signal.aborted) return { text: '', route: 'dsh-llm' }
-      const migration = ctx.get('writingAiMigration') as { ready?: Promise<void>; error?: string } | undefined
-      await migration?.ready
-      if (signal.aborted) return { text: '', route: 'dsh-llm' }
-      if (migration?.error) throw new Error(migration.error)
       const host = asHost(ctx)
       const access = await resolveWorkspaceAccess(host, String(body.sessionId), signal)
       const rules = await readProjectRules({
@@ -45,7 +42,7 @@ export async function apply(ctx: Context): Promise<void> {
       })
 
       if (endpoint === 'fim.complete') return completeFim({
-        ctx, ...route, sessionId: String(body.sessionId),
+        ctx, sessionId: String(body.sessionId),
         prefix: typeof body.prefix === 'string' ? body.prefix : '',
         suffix: typeof body.suffix === 'string' ? body.suffix : '',
         authorPreferences: parseAuthorPreferences(body.authorPreferences),
@@ -53,7 +50,7 @@ export async function apply(ctx: Context): Promise<void> {
         projectRules: rules.text,
         signal,
       })
-      return completePatch({ ctx, ...route, sessionId: String(body.sessionId), request: parsePatchRequest(body), projectRules: rules.text, signal })
+      return completePatch({ ctx, sessionId: String(body.sessionId), request: parsePatchRequest(body), projectRules: rules.text, signal })
     },
   }
   ctx.provide('manuscriptAssist', service)

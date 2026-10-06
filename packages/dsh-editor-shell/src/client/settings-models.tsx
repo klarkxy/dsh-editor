@@ -55,12 +55,12 @@ import { Badge, Box, Callout, Card, Checkbox, Flex, Heading, Text, TextField } f
 import { Select, type SelectOption } from './select.tsx'
 import { ChevronDownIcon, ChevronRightIcon, CrossIcon } from './icons.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
-import { ActivityDots, ActivitySkeleton, Button, Dialog } from './ui/index.ts'
+import { ActivityDots, ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
 import { isSuccessWorkbenchNote, TRANSIENT_STATUS_NOTE_MS, type SettingsDescribeFace, type SettingsSchemaService, type ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import type { SettingsScope } from '../dsh-compat.ts'
 import { type WritingPreferences } from '../writing-settings.tsx'
-import { catalogFromSessionGroups, mergeCatalogOptions, WritingModelRoutes, EditorModelSettings, PluginModelRoutes, type CatalogModelOption } from './writing-model-routes.tsx'
+import { catalogFromSessionGroups, mergeCatalogOptions, WritingModelRoutes, EditorModelSettings, type CatalogModelOption } from './writing-model-routes.tsx'
 
 type ModelsRemote = EditorRemote
 
@@ -479,16 +479,35 @@ function useModelCatalog(ctx: ShellContext): CatalogModelOption[] {
 export function SettingsEditorModelsSection(props: { ctx: ShellContext; writingScope: SettingsScope<WritingPreferences> }): ReactNode {
   const catalog = useModelCatalog(props.ctx)
   const locale = useLocale()
+  const [migrationFailure, setMigrationFailure] = useState('')
+  const [migrationBusy, setMigrationBusy] = useState(true)
+  useEffect(() => {
+    let live = true
+    setMigrationBusy(true)
+    void props.ctx.connection.rpc.call('/dsh-editor-shell', 'models.migration.status', {}).then(raw => {
+      const result = rpcResult<{ error?: string }>(raw as RpcResult<{ error?: string }>)
+      if (live) setMigrationFailure(result.ok ? result.value.error ?? '' : failureMessage(result))
+    }).catch(error => { if (live) setMigrationFailure(error instanceof Error ? error.message : String(error)) })
+      .finally(() => { if (live) setMigrationBusy(false) })
+    return () => { live = false }
+  }, [props.ctx])
+  const retryMigration = async () => {
+    setMigrationBusy(true)
+    try {
+      const result = rpcResult<{ error?: string }>(await props.ctx.connection.rpc.call('/dsh-editor-shell', 'models.migrate', {}) as RpcResult<{ error?: string }>)
+      setMigrationFailure(result.ok ? result.value.error ?? '' : failureMessage(result))
+    } catch (error) { setMigrationFailure(error instanceof Error ? error.message : String(error)) }
+    finally { setMigrationBusy(false) }
+  }
   return <>
-    <EditorModelSettings connection={props.ctx.connection} catalog={catalog} writable={true} />
+    {migrationBusy ? <ActivityText>{t('common.loading')}</ActivityText> : null}
+    {migrationFailure ? <Callout.Root color="red" role="alert"><Callout.Text>{migrationFailure}</Callout.Text>
+      <Button disabled={migrationBusy} onClick={() => { void retryMigration() }}>{t('common.retry')}</Button>
+    </Callout.Root> : null}
+    <EditorModelSettings scope={props.writingScope} catalog={catalog} writable={!migrationBusy} />
     <Heading as="h3" size="3" mt="4" mb="3">{locale === 'en' ? 'Providers' : '供应商'}</Heading>
     <SettingsModelsSection {...props} showWritingRoutes={false} />
   </>
-}
-
-export function SettingsPluginModelsSection(props: { ctx: ShellContext }): ReactNode {
-  const catalog = useModelCatalog(props.ctx)
-  return <PluginModelRoutes connection={props.ctx.connection} catalog={catalog} writable={true} />
 }
 
 export function SettingsChatModelRoute(props: {

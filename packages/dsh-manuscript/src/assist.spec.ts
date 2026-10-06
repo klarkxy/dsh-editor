@@ -1,4 +1,3 @@
-import { apply as applyAiServices, inject as aiInject, name as aiName, type AiServices } from '@klarkxy/dsh-ai-services'
 import { Context } from '@deepseek-ai/cordis'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, vi } from 'vitest'
@@ -13,10 +12,9 @@ async function* stopped(text: string): AsyncIterable<StreamChunkLike> {
   yield { type: 'finish', reason: { kind: 'stop' } }
 }
 
-async function boot() {
+async function boot(options: { native?: boolean } = {}) {
   const ctx = new Context()
   const stream = vi.fn((_options: GenerateOptions) => stopped('窗上的雾'))
-  const migration: { ready?: Promise<void>; error?: string } = { ready: Promise.resolve() }
   ctx.provide('llm', {
     stream,
     async resolveCallConfig(config: unknown) { return config },
@@ -28,10 +26,12 @@ async function boot() {
   })
   ctx.provide('connection', {})
   ctx.provide('webServer', { register: () => () => {} })
-  ctx.provide('agents', { get: () => undefined })
-  ctx.provide('sessionProjections', { stateOf: () => undefined })
-  ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'live-provider', model: 'live-model' }) })
-  ctx.provide('writingAiMigration', migration)
+  if (options.native !== false) {
+    ctx.provide('agents', { get: () => undefined })
+    ctx.provide('sessionProjections', { stateOf: () => undefined })
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'live-provider', model: 'live-model' }) })
+    ctx.provide('editorWritingPreferences', { read: () => ({}) })
+  }
   ctx.provide('sessions', {
     get: (id: string) => id === 'session-1'
       ? { id, header: { cwd: canonical }, requestHeader: () => ({ config: { provider: 'stale', model: 'stale' } }) }
@@ -48,28 +48,21 @@ async function boot() {
     async listDir() { return [] },
     async writeText() { throw new Error('assist must not write manuscript files') },
   })
-  const aiFiber = ctx.plugin({ name: aiName, inject: [...aiInject], apply: applyAiServices })
-  await aiFiber
   const assistFiber = ctx.plugin({ name: assistName, inject: [...assistInject], apply: applyAssist })
   await assistFiber
   return {
     ctx,
     stream,
-    migration,
-    ai: ctx.get('aiServices') as AiServices,
     service: ctx.get('manuscriptAssist') as ManuscriptAssist,
-    aiFiber,
+    scope: ctx.get('manuscriptAiScope') as { active: boolean; signal: AbortSignal; dispose(): void },
     assistFiber,
   }
 }
 
 describe('manuscript assist on Cordis', () => {
-  it('registers writing purposes, calls the resolved model, and clears them when the fiber unloads', async () => {
-    const { stream, ai, service, aiFiber, assistFiber } = await boot()
-    expect(ai.purposes().map((row) => [row.id, row.defaultTarget])).toEqual([
-      ['manuscript.completion', { kind: 'role', role: 'weak' }],
-      ['manuscript.rewrite', { kind: 'role', role: 'normal' }],
-    ])
+  it('starts without registering retired purposes, calls the native default model, and aborts the local scope when the fiber unloads', async () => {
+    const { stream, service, scope, assistFiber } = await boot()
+    expect(scope.active).toBe(true)
     await expect(service.complete(
       'fim.complete',
       { sessionId: 'session-1', prefix: '雨', suffix: '' },
@@ -82,37 +75,22 @@ describe('manuscript assist on Cordis', () => {
     expect(options?.messages[0]).not.toHaveProperty('source')
     expect(options?.system).toContain('【本项目协作规则】')
     expect(options?.provider).not.toBe('stale')
+    expect(options?.provider).not.toBe('forged')
     await assistFiber.dispose()
-    expect(ai.purposes()).toEqual([])
-    await aiFiber.dispose()
+    expect(scope.active).toBe(false)
+    expect(scope.signal.aborted).toBe(true)
   })
 
-  it('waits for the one-time migration and then refuses calls when it failed', async () => {
-    const { stream, migration, service, aiFiber, assistFiber } = await boot()
-    let release!: () => void
-    migration.ready = new Promise<void>((resolve) => { release = resolve })
-    let settled = false
-    const pending = service.complete(
+  it('loads without optional native route services and ignores a retired writingAiMigration error', async () => {
+    const { ctx, stream, service, assistFiber } = await boot({ native: false })
+    ctx.provide('writingAiMigration', { ready: new Promise<void>(() => {}), error: '旧写作模型配置迁移失败。' })
+    await expect(service.complete(
       'fim.complete',
       { sessionId: 'session-1', prefix: '雨', suffix: '' },
       { provider: 'forged', model: 'forged' },
       new AbortController().signal,
-    ).then((value) => { settled = true; return value })
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(settled).toBe(false)
+    )).rejects.toThrow('请先设置默认对话模型。')
     expect(stream).not.toHaveBeenCalled()
-    release()
-    await expect(pending).resolves.toMatchObject({ text: '窗上的雾' })
-
-    migration.error = '旧写作模型配置迁移失败。'
-    await expect(service.complete(
-      'patch.complete',
-      { sessionId: 'session-1', path: 'chapter.md', selectedText: '旧句' },
-      { provider: 'forged', model: 'forged' },
-      new AbortController().signal,
-    )).rejects.toThrow('旧写作模型配置迁移失败。')
-    expect(stream).toHaveBeenCalledTimes(1)
     await assistFiber.dispose()
-    await aiFiber.dispose()
   })
 })

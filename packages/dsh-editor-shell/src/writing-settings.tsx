@@ -27,6 +27,7 @@ export const PAPER_WIDTH_CH = { narrow: 60, medium: 76 } as const
 export const DEFAULT_WRITING_PREFERENCES: WritingPreferences = {
   completion: 'manual',
   completionDelayMs: COMPLETION_DELAY.default,
+  writingModelsImported: false,
   authorPreferences: '',
   authorMemory: '',
   typewriter: false,
@@ -200,6 +201,7 @@ export function decodeWritingPreferences(value: unknown): WritingPreferences | u
   return {
     completion: record.completion,
     completionDelayMs: clampNumber(record.completionDelayMs, COMPLETION_DELAY.min, COMPLETION_DELAY.max, COMPLETION_DELAY.default),
+    writingModelsImported: record.writingModelsImported === true,
     authorPreferences: normalizeAuthorPreferences(record.authorPreferences),
     authorMemory: normalizeAuthorMemory(record.authorMemory),
     ...normalizePaperPreferences(record),
@@ -213,6 +215,7 @@ export function writingPreferences(snapshot: SettingsScopeSnapshot<WritingPrefer
       ...DEFAULT_WRITING_PREFERENCES,
       ...snapshot.value,
       completionDelayMs: clampNumber(snapshot.value.completionDelayMs, COMPLETION_DELAY.min, COMPLETION_DELAY.max, COMPLETION_DELAY.default),
+      writingModelsImported: snapshot.value.writingModelsImported === true,
       ...normalizePaperPreferences(snapshot.value as unknown as Record<string, unknown>),
       ...normalizeModelPreferences(snapshot.value as unknown as Record<string, unknown>),
     }

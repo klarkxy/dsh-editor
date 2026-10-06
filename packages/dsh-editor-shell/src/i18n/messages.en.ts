@@ -805,6 +805,8 @@ export const en: { [K in keyof typeof zh]: string } = {
   'models.routeFailed': 'The model choice could not be saved. Try again.',
   'models.intro': 'Add each provider’s API key to use its models.',
   'models.readOnly': 'The current settings document is read-only.',
+  'models.routeSaveFailed': 'The model selection could not be saved. Try again.',
+  'models.routeLoadFailed': 'Writing model settings are unavailable.',
   'models.credentialErrorPrefix': 'Could not read key status: ',
   'models.loadFailed': 'Could not load the provider catalog',
   'models.add': 'Add provider',

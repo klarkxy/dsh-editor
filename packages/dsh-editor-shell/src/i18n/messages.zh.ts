@@ -803,6 +803,8 @@ export const zh = {
   'models.routeFailed': '模型选择未能保存，请重试。',
   'models.intro': '填入各提供方的 API 密钥即可使用其模型。',
   'models.readOnly': '当前部署的设置文档为只读。',
+  'models.routeSaveFailed': '模型选择未能保存，请重试。',
+  'models.routeLoadFailed': '暂时无法读取写作模型设置。',
   'models.credentialErrorPrefix': '密钥状态读取失败：',
   'models.loadFailed': '加载提供方目录失败',
   'models.add': '添加提供方',

@@ -22,6 +22,11 @@ function scopeWith(snapshot: SettingsScopeSnapshot<WritingPreferences>, write?: 
 }
 
 describe('writing preference migration', () => {
+  it('preserves the private model-import fence through decoding and resolved preferences', () => {
+    const value = { ...DEFAULT_WRITING_PREFERENCES, writingModelsImported: true }
+    expect(decodeWritingPreferences(value)?.writingModelsImported).toBe(true)
+    expect(writingPreferences({ status: 'ready', value, user: value, writable: true }).writingModelsImported).toBe(true)
+  })
   it('uses defaults while the Host has no user layer yet', () => {
     expect(writingPreferences({
       status: 'loading', value: undefined, user: undefined, base: undefined, revision: undefined, writable: false, mode: 'host',

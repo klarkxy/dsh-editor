@@ -13,6 +13,8 @@ export type WritingPreferences = {
   completionModel?: WritingModelRoute
   rewriteModel?: WritingModelRoute
   chatModel?: WritingModelRoute
+  /** Application-private migration fence, committed atomically with imported model fields. */
+  writingModelsImported?: boolean
   authorPreferences: string
   authorMemory: string
   typewriter: boolean
@@ -23,3 +25,12 @@ export type WritingPreferences = {
   paragraphSpacing: number
   paperWidth: PaperWidth
 }
+
+/** Existing Host preference service; model consumers may wait for startup migration. */
+export type EditorWritingPreferences = {
+  read(): WritingPreferences
+  modelsReady?(): Promise<void>
+}
+
+/** Ephemeral Host model-readiness response; carries no author preference or memory data. */
+export type WritingModelMigrationStatus = { error?: string; chatModel?: WritingModelRoute }

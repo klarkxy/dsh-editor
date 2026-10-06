@@ -63,7 +63,6 @@ export default defineConfig([
       alwaysBundle: [
         '@deepseek-ai/dsh-util-workspace-path',
         'dsh-editor-seats',
-        '@klarkxy/dsh-ai-services/contracts',
         'dsh-editor-workbench/contracts',
         'dsh-editor-novel-kernel/contracts',
         'dsh-manuscript/client/editor-core',

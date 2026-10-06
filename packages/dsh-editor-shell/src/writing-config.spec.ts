@@ -3,6 +3,10 @@ import Schema from '@deepseek-ai/schemastery'
 import { Config } from './writing-config.ts'
 
 describe('native writing configuration form', () => {
+  it('keeps the atomic model-import fence hidden and live in the private schema', () => {
+    const restored = new Schema(JSON.parse(JSON.stringify(Config.toJSON())))
+    expect(restored.dict?.writingModelsImported.meta).toMatchObject({ default: false, hidden: true, volatile: true })
+  })
   it('validates in the browser after a JSON roundtrip without host closures', () => {
     const wire = JSON.parse(JSON.stringify(Config.toJSON()))
     const plain = (node: any) => {
