@@ -202,7 +202,7 @@ git revert dcbc267
 ### 相关文档
 - [完整重构方案](./refactoring-proposal.md)
 - [架构对比图](./architecture-comparison.md)
-- [架构分析报告](由子代理生成)
+- [工作完成报告](./refactor-completion-report.md)
 
 ### 验证命令
 ```bash
