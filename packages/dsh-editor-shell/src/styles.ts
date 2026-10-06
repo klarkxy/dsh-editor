@@ -372,7 +372,6 @@ export const componentStyles = `
 .shell .pinned-markdown { min-width: 0; overflow-wrap: anywhere; }
 
 .radix-themes .cards-badge { padding: 1px 6px; border-radius: 999px; background: var(--gray-3); color: var(--gray-11); font-style: normal; }
-.radix-themes .archive-list { min-width: 0; }
 .radix-themes .export-summary { min-width: 0; }
 .radix-themes .export-chapters { max-height: 280px; }
 .radix-themes .export-chapters ol { margin: 0; padding: 0; list-style: none; }

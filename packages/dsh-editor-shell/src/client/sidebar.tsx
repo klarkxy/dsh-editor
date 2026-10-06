@@ -24,7 +24,6 @@ import {
   type TreeEntry,
 } from './shared.ts'
 import { visibleManuscriptEntries } from './sidebar-chrome.ts'
-import { DOCUMENT_ARCHIVE_UI } from './archive.tsx'
 import { t } from '../i18n/index.ts'
 import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, PlusIcon } from './icons.tsx'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './ui/index.ts'
@@ -512,10 +511,8 @@ export function FileContextMenu(props: {
   onCut(): void
   onPaste(): void
   onRename(): void
-  onArchive(): void
   onDelete(): void
   onClose(): void
-  canArchive: boolean
   onSplit(): void
   onMergePrevious(): void
   onMergeNext(): void
@@ -605,13 +602,6 @@ export function FileContextMenu(props: {
           </MenuItem> : null}
           {props.kind === 'file' && props.isPinned ? <MenuItem role="menuitem" onSelect={() => props.onUnpin()}>
             {t('pin.unpin')}
-          </MenuItem> : null}
-          {DOCUMENT_ARCHIVE_UI ? <MenuItem
-            role="menuitem"
-            disabled={!props.canArchive}
-            title={props.canArchive ? t('sidebar.archiveTitle') : t('sidebar.archiveDisabled')}
-            onSelect={() => props.onArchive()}>
-            {t('common.archive')}
           </MenuItem> : null}
           <MenuItem role="menuitem" data-danger="true" onSelect={() => props.onDelete()}>
             {t('common.delete')}

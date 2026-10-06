@@ -41,7 +41,7 @@ export function parsePluginState(value: unknown): PluginState | undefined {
   const overrides: Record<string, boolean> = {}
   if (row.overrides && typeof row.overrides === 'object' && !Array.isArray(row.overrides)) {
     for (const [id, enabled] of Object.entries(row.overrides as Record<string, unknown>)) {
-      if (isSafeEntryId(id) && typeof enabled === 'boolean' && !HOST_LOCKED_ENTRY_IDS.has(id) && !(id === 'model-center' && enabled === false)) overrides[id] = enabled
+      if (isSafeEntryId(id) && typeof enabled === 'boolean' && !HOST_LOCKED_ENTRY_IDS.has(id)) overrides[id] = enabled
     }
   }
   const installed: InstalledPlugin[] = []

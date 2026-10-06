@@ -121,4 +121,4 @@ createRoot(document.getElementById('root')).render(<App/>)
  return report
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await runModelRoutes()
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await runModelRoutes({ editorModels: process.argv.includes('--editor-models') })

@@ -36,9 +36,7 @@ import { Button, Flex, Kbd } from '@radix-ui/themes'
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { ThemeValue } from './theme.tsx'
 import { t, useLocale } from '../i18n/index.ts'
-import { DOCUMENT_ARCHIVE_UI } from './archive.tsx'
 import {
-  ArchiveIcon,
   ExportIcon,
   HistoryIcon,
   FileIcon,
@@ -157,7 +155,6 @@ export type CommandPaletteProps = {
   onOpenSearch(): void
   registryCommands?: readonly RegistryCommandItem[]
   onExport(): void
-  onOpenArchives(): void
   onOpenHistory(): void
   onSplitAtCursor(): void
   canSplitAtCursor: boolean
@@ -288,15 +285,6 @@ export function CommandPalette(props: CommandPaletteProps) {
         disabled: !props.hasWorkspace,
         run: () => props.onExport(),
       },
-      ...(DOCUMENT_ARCHIVE_UI ? [{
-        id: 'cmd.archives',
-        label: t('command.archived'),
-        hint: t('command.archivedHint'),
-        keywords: ['archive', t('common.archive'), t('common.restore')],
-        icon: <ArchiveIcon />,
-        disabled: !props.hasWorkspace,
-        run: () => props.onOpenArchives(),
-      }] : []),
       {
         id: 'cmd.history',
         label: t('command.history'),

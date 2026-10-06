@@ -140,14 +140,6 @@ export function HistoryIcon({ size = 16 }: IconProps) {
   );
 }
 
-export function ArchiveIcon({ size = 16 }: IconProps) {
-  return svg(size,
-    <path d="M4 7.5h16v3H4z" />,
-    <path d="M6 10.5v8h12v-8" />,
-    <path d="M10 14h4" />,
-  );
-}
-
 export function PinIcon({ size = 16 }: IconProps) {
   return svg(size,
     <path d="M8.5 10.5 12 4.5l3.5 6v4.5l2.5 2.5H6l2.5-2.5z" />,

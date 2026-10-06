@@ -18,7 +18,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsScope, SessionFace, SessionId, WorkspaceId, WorkspaceView } from '../dsh-compat.ts'
 import {
   WORKBENCH_RPC_CHANNEL,
-  type ArchiveListResponse,
   type ProjectContextReceiptBundle,
   type ProjectInspectionResponse,
   type ProjectOverview,
@@ -68,7 +67,6 @@ import { collectDocuments, downloadExport, ExportPreviewDialog } from './export-
 import { prepareExport, type ChapterExport, type ExportFormat } from '../export.ts'
 import { idleImportFlow, importReview, recoverImport, type ImportFlow, type ImportProbeView } from './import-flow.ts'
 import { ImportDialog } from './import-dialog.tsx'
-import { ArchivePanel, DOCUMENT_ARCHIVE_UI, canArchivePath, type ArchiveView } from './archive.tsx'
 import { HistoryPanel } from './history-dialog.tsx'
 import { t, useLocale, type MessageKey } from '../i18n/index.ts'
 
@@ -371,17 +369,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState('')
   const [exportChapters, setExportChapters] = useState<ChapterExport[] | null>(null)
-  const [archiveOpen, setArchiveOpen] = useState(false)
-  const [archives, setArchives] = useState<ArchiveView[]>([])
-  const [archiveInvalid, setArchiveInvalid] = useState(0)
-  const [archiveBusy, setArchiveBusy] = useState(false)
-  const [archiveNote, setArchiveNote] = useState('')
   const [importFlow, setImportFlow] = useState<ImportFlow>(idleImportFlow)
   const [removeRecentTarget, setRemoveRecentTarget] = useState<WorkspaceView | null>(null)
 
   const temporaryFlowWorkspaces = useRef(new Set<string>())
   const temporarySourceWorkspaces = useRef(new Map<string, string>())
-  const archiveRequestGate = useRef(new LatestRequestGate()).current
   const [startupUpdate, setStartupUpdate] = useState<{ version: string } | null>(null)
   /* 启动更新检查:主进程在后台跑,挂载后拉取缓存结果;仅发现新版本时弹轻提示,
      已是最新/失败都静默。浏览器开发模式没有桥,直接不跑。 */
@@ -646,7 +638,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     setHistoryOpen(false); setSnapshots(null); setRollbackTarget(null)
     setSearchOpen(false); setHighlightPath(null); setReveal(null); setExportChapters(null); setExportNote('')
     progressRecord.cancel()
-    setArchiveOpen(false); setArchives([]); setArchiveNote('')
   }, [openWorkspaceId])
   useEffect(() => {
     if (!historyOpen || !fileSession) { setSnapshots(null); return }
@@ -1938,84 +1929,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       setExportNote(error instanceof Error ? error.message : t('note.exportFailed'))
     }
   }
-  const loadArchives = async () => {
-    if (!fileSession) return
-    const ticket = archiveRequestGate.begin(fileSession.sessionId)
-    setArchiveBusy(true)
-    setArchiveNote('')
-    const result = await safeRpcCall<ArchiveListResponse>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.list', { sessionId: fileSession.sessionId }))
-    if (!archiveRequestGate.isCurrent(ticket)) return
-    setArchiveBusy(false)
-    if (!result.ok) { setArchiveNote(errorMessage(result)); return }
-    setArchives(result.value.items)
-    setArchiveInvalid(result.value.invalid)
-  }
-  const openArchivePanel = () => {
-    closeWorkspaceChrome()
-    setPaletteOpen(false)
-    if (!fileSession) return
-    setArchiveOpen(true)
-    void loadArchives()
-  }
-  const archiveManaged = async (selectedPath: string) => {
-    setFileMenu(null)
-    if (!fileSession || archiveBusy) return
-    if (editorDirty) { setWorkbenchNote(t('error.saveFirst')); return }
-    setArchiveBusy(true)
-    setWorkbenchNote('')
-    const read = await safeRpcCall<{ version: string }>(() => ctx.connection.rpc.call('/manuscript', 'file.read', {
-      sessionId: fileSession.sessionId,
-      path: selectedPath,
-    }))
-    if (!read.ok) {
-      setArchiveBusy(false)
-      setWorkbenchNote(errorMessage(read))
-      return
-    }
-    const archived = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', {
-      sessionId: fileSession.sessionId,
-      path: selectedPath,
-      expectedVersion: read.value.version,
-    }))
-    setArchiveBusy(false)
-    if (!archived.ok) { setWorkbenchNote(errorMessage(archived)); return }
-    if (archived.value.state !== 'archived') { setWorkbenchNote(t('note.archiveIncomplete')); await loadArchives(); return }
-    if (path === selectedPath) { setPath(''); setReveal(null) }
-    setTreeRevision((value) => value + 1)
-    setWorkbenchNote(t('note.archived', { path: archived.value.path }))
-    await loadArchives()
-  }
-  const continueArchive = async (item: ArchiveView) => {
-    if (!fileSession || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote(t('error.saveFirst')); return }
-    setArchiveBusy(true)
-    setArchiveNote('')
-    const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.apply', {
-      sessionId: fileSession.sessionId,
-      archiveId: item.archiveId,
-    }))
-    setArchiveBusy(false)
-    if (!result.ok) { setArchiveNote(errorMessage(result)); return }
-    setTreeRevision((value) => value + 1)
-    await loadArchives()
-  }
-  const restoreArchived = async (item: ArchiveView) => {
-    if (!fileSession || archiveBusy || editorDirty) { if (editorDirty) setArchiveNote(t('error.saveFirst')); return }
-    if (!item.version) { setArchiveNote(t('note.archiveUnverified')); return }
-    setArchiveBusy(true)
-    setArchiveNote('')
-    const result = await safeRpcCall<ArchiveView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'archive.restore', {
-      sessionId: fileSession.sessionId,
-      archiveId: item.archiveId,
-      expectedVersion: item.version,
-    }))
-    setArchiveBusy(false)
-    if (!result.ok) { setArchiveNote(errorMessage(result)); return }
-    if (result.value.state !== 'restored') { setArchiveNote(t('note.restoreBlocked')); await loadArchives(); return }
-    setTreeRevision((value) => value + 1)
-    openDocument(result.value.path)
-    setWorkbenchNote(t('note.restored', { path: result.value.path }))
-    await loadArchives()
-  }
   /* 命令面板:复用 useTheme / openSettings / startWorkspaceFromPicker /
      startNewProject / openDocument / setFocusMode 全部已有的回调,palette
      本身只负责"按下执行"的分发。文件列表来自已加载好的 files 状态(已经
@@ -2034,7 +1947,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     onOpenSearch={() => openSearchPanel()}
     registryCommands={registryCommands}
     onExport={() => { void exportDocuments() }}
-    onOpenArchives={() => openArchivePanel()}
     onOpenHistory={() => openHistoryPanel()}
     onSplitAtCursor={() => beginChapterSplit(path, 'cursor')}
     canSplitAtCursor={Boolean(fileSession) && !editorDirty && isMarkdownChapterPath(path)}
@@ -2159,7 +2071,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           onOpenAnotherWorkspace={() => void openAnotherWorkspace()}
           onNewProject={() => void startNewProject()}
           onExportDocuments={() => void exportDocuments()}
-          onOpenArchive={openArchivePanel}
           onLeaveHome={() => void leaveToHome()}
           sidebarOpen={sidebarOpen}
           compactChrome={compactChrome}
@@ -2486,8 +2397,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               setManageNote('')
             }
           }}
-          onArchive={() => void archiveManaged(fileMenu.path)}
-          canArchive={canArchivePath(fileMenu.kind, fileMenu.path)}
           onDelete={() => requestDeleteEntry(fileMenu.kind, fileMenu.path)}
           onSplit={() => beginChapterSplit(fileMenu.path, 'tree')}
           onMergePrevious={() => beginChapterMerge(fileMenu.path, 'previous')}
@@ -2564,17 +2473,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             onSaveVersion={onCommitSnapshot}
             onClose={() => { if (!snapshotBusy) setHistoryOpen(false) }} />
         </ShellErrorBoundary>
-        {DOCUMENT_ARCHIVE_UI ? <ArchivePanel
-          open={archiveOpen}
-          items={archives}
-          invalid={archiveInvalid}
-          busy={archiveBusy}
-          note={archiveNote}
-          editorDirty={editorDirty}
-          returnFocusRef={workspaceMenuTrigger}
-          onRestore={(item: ArchiveView) => void restoreArchived(item)}
-          onContinue={(item: ArchiveView) => void continueArchive(item)}
-          onClose={() => { if (!archiveBusy) setArchiveOpen(false) }} /> : null}
         <HostDialog
           open={Boolean(manualWorkspaceMode)}
           onOpenChange={(next: boolean) => { if (!next) closePathFallback() }}

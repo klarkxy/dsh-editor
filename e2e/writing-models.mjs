@@ -190,8 +190,8 @@ try {
     assert.equal(value?.changed,false,id);
     assert.equal(value?.error?.code,'management-required',id);
   }
-  const plugins=await openPlugins();
-  for(const id of [...retired,...optionalIds])assert.equal(await plugins.locator('[data-testid="plugins-card-include:'+id+'"], [data-testid="plugins-card-'+id+'"]').count(),0,id);
+  const pluginsPage=await openPlugins();
+  for(const id of [...retired,...optionalIds])assert.equal(await pluginsPage.locator('[data-testid="plugins-card-include:'+id+'"], [data-testid="plugins-card-'+id+'"]').count(),0,id);
   await screenshot('00-plugin-inventory');
   await plugins.getByRole('button',{name:/返回首页|返回写作/}).click();await plugins.waitFor({state:'detached'});
   let dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();
@@ -248,7 +248,7 @@ try {
   child.kill();await new Promise(done=>child.once('exit',done));url=await startHost();await page.goto(url);await page.locator('.shell').waitFor({timeout:60000});
   dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();await dialog.getByRole('combobox',{name:'补全模型',exact:true}).filter({hasText:'New'}).waitFor();
   report.checks.push('real host restart preserves the native writing model selection');
-  if(process.env.E2E_OPTIONAL_INSTALL === '1') {
+  if(process.env.E2E_OPTIONAL_INSTALL === '1' || process.argv.includes('--optional-install')) {
     await page.keyboard.press('Escape');
     const versions = { 'current-title': '0.1.7', mood: '0.1.6', recap: '0.1.7', zhihu: '0.1.10' };
     const installReceipts = [];

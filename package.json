@@ -27,16 +27,13 @@
     "verify:desktop": "pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e:desktop && pnpm test:e2e:core-loop",
     "verify:delivery": "pnpm verify:desktop && pnpm test:e2e:matrix && pnpm test:e2e:missing-private && pnpm pack:desktop && pnpm test:e2e:portable",
     "publish:plugins": "node scripts/publish-npm-plugins.mjs",
-    "test:e2e:ai-plugins": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/ai-plugins.mjs",
     "test:e2e:ai-plugins:standalone": "pnpm build && node scripts/prepare-desktop-dev.mjs && pnpm pack:plugins && node e2e/ai-plugins-standalone.mjs",
     "test:e2e:writing-routes": "node e2e/writing-model-routes.mjs",
-    "test:e2e:writing-ai-services": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-ai-services.mjs",
     "test:e2e:writing-shortcuts": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-shortcuts.mjs",
     "test:external-plugins": "node --test scripts/external-plugins.test.mjs",
-    "test:e2e:builtin-plugins": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/builtin-plugins.mjs",
-    "test:e2e:editor-models": "node e2e/editor-model-settings.mjs",
+    "test:e2e:editor-models": "node e2e/writing-model-routes.mjs --editor-models",
     "test:e2e:writing-models": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-models.mjs",
-    "test:e2e:on-demand-plugins": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/on-demand-plugins.mjs"
+    "test:e2e:on-demand-plugins": "pnpm build && node scripts/prepare-desktop-dev.mjs && node e2e/writing-models.mjs --optional-install"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -9,7 +9,6 @@ import { PluginsTrigger } from './plugins-page.tsx'
 import { SettingsTrigger, type SettingsTab } from './settings.tsx'
 import { ThemeToggle, type ThemeValue } from './theme.tsx'
 import { titleBarDoubleClick, WindowControls } from './window-controls.tsx'
-import { DOCUMENT_ARCHIVE_UI } from './archive.tsx'
 import { Menu, MenuContent, MenuItem, MenuSeparator, Tooltip, m, useChromeMotion } from './ui/index.ts'
 
 function LayoutToggle(props: {
@@ -56,7 +55,6 @@ export function WorkbenchTopbar(props: {
   onOpenAnotherWorkspace(): void
   onNewProject(): void
   onExportDocuments(): void
-  onOpenArchive(): void
   onLeaveHome(): void
   sidebarOpen: boolean
   compactChrome: boolean
@@ -157,11 +155,6 @@ export function WorkbenchTopbar(props: {
                 onSelect={() => { props.onWorkspaceMenuYield(); void props.onExportDocuments() }}>
                 {props.exporting ? t('workspace.exporting') : t('command.export')}
               </MenuItem>
-              {DOCUMENT_ARCHIVE_UI ? <MenuItem
-                className="workspace-menu-item"
-                onSelect={() => { props.onWorkspaceMenuYield(); props.onOpenArchive() }}>
-                {t('workspace.archived')}
-              </MenuItem> : null}
               <MenuItem
                 className="workspace-menu-item"
                 aria-label={t('workspace.backHome')}

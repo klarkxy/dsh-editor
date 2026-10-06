@@ -15,7 +15,7 @@
 - 设置页：通用设置、模型、助手、写作、用量、插件、知乎资料、关于 8 个分类（插件与知乎资料不可用时隐藏，分类名以 src/i18n/messages.zh.ts 为准）。
 - 破限模式：通用设置页的独立卡片与开关（src/limit-break-config.ts、src/client/settings-general.tsx）。开启后宿主把 `resources/limit-break/agents-spec.md` 作为最后一段系统提示词追加到每次组装，关闭时不贡献文本。卡片常驻封号风险声明，从关到开须过一次确认框。
 
-归档视图（src/client/archive.tsx）当前不在界面开放：文档归档入口已收起（`DOCUMENT_ARCHIVE_UI = false`），Host 的 `archive.*` 与合章内部归档仍保留。
+文档归档界面已移除（原 src/client/archive.tsx 的入口长期隐藏后删除）；Host 的 `archive.*` RPC 与合章内部归档仍保留，供作品合并时归档来源文件。
 
 ## Manifest 条目
 
