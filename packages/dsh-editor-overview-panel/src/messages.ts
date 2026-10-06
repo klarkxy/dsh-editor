@@ -1,7 +1,7 @@
+import { createMessages, type MessageParams } from 'dsh-editor-panel-base/messages'
 import type { ShellLocale } from 'dsh-editor-seats'
 
-export type MessageKey = keyof typeof zh
-export type MessageParams = Record<string, string | number>
+export type { MessageParams }
 
 export const zh = {
   'common.emDash': '—',
@@ -54,7 +54,7 @@ export const zh = {
   'error.generic': '操作未能完成，请重试。',
 } as const
 
-export const en: Record<MessageKey, string> = {
+export const en: Record<keyof typeof zh, string> = {
   'common.emDash': '—',
   'overview.title': 'Document overview',
   'overview.intro': 'Character distribution and the last month of writing.',
@@ -105,40 +105,16 @@ export const en: Record<MessageKey, string> = {
   'error.generic': 'The action could not finish. Try again.',
 }
 
-const dictionaries: Record<ShellLocale, Record<MessageKey, string>> = { zh, en }
+export type MessageKey = keyof typeof zh
 
-let currentLocale: ShellLocale = 'zh'
+const { t, message, setLocale, intlLocale, interpolate } = createMessages({ zh, en })
 
-export function setOverviewLocale(locale: ShellLocale): void {
-  currentLocale = locale === 'en' ? 'en' : 'zh'
+export { t, message, setLocale as setOverviewLocale, intlLocale, interpolate }
+
+export function getOverviewLocale() {
+  return intlLocale() === 'en' ? 'en' : 'zh'
 }
 
-export function getOverviewLocale(): ShellLocale {
-  return currentLocale
-}
-
-export function intlLocale(locale: ShellLocale = currentLocale): string {
-  return locale === 'en' ? 'en' : 'zh-CN'
-}
-
-export function interpolate(template: string, params?: MessageParams): string {
-  if (!params) return template
-  return template.replace(/\{(\w+)\}/g, (_, name: string) => {
-    const value = params[name]
-    return value === undefined ? `{${name}}` : String(value)
-  })
-}
-
-export function t(key: MessageKey, params?: MessageParams): string {
-  const text = dictionaries[currentLocale][key] || zh[key] || String(key)
-  return interpolate(text, params)
-}
-
-export function message(locale: ShellLocale, key: MessageKey, params?: MessageParams): string {
-  const text = dictionaries[locale][key] || zh[key] || String(key)
-  return interpolate(text, params)
-}
-
-export function formatNumber(value: number, locale: ShellLocale = currentLocale): string {
+export function formatNumber(value: number, locale: ShellLocale = getOverviewLocale()): string {
   return new Intl.NumberFormat(intlLocale(locale)).format(value)
 }

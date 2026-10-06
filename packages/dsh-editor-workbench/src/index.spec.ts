@@ -6,8 +6,8 @@ import path from 'node:path'
 import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, FsTargetLike, FsWriteIntentLike, ManuscriptHost } from 'dsh-manuscript/host-api'
 import { WORKBENCH_RPC_CHANNEL } from './contracts.ts'
 import { apply, dispatchEditorFiles, inject, mapEditorFilesError, registerWorkbenchRpc } from './index.ts'
-import { apply as applyTools } from './tools.ts'
-import { defaultProjectsRoot } from './project.ts'
+import { apply as applyTools } from './tools/tools.ts'
+import { defaultProjectsRoot } from './lifecycle/project.ts'
 import { withWorkspaceWrite } from 'dsh-manuscript/host-api'
 
 function fixture() {

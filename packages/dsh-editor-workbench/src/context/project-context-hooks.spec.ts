@@ -4,9 +4,9 @@ import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-ses
 import { renderPrompt, type PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import { describe, expect, it } from 'vitest'
 import { writeTextFile } from 'dsh-manuscript/host-api'
-import { createMemoryContext } from './test-helpers.ts'
+import { createMemoryContext } from '../test-helpers.ts'
 import { compileProjectContext, compileProjectContextV2 } from '../contracts.ts'
-import { assembleProjectRules, installProjectContextHooks, retireLegacyContext } from '../lifecycle/project-context-hooks.ts'
+import { assembleProjectRules, installProjectContextHooks, retireLegacyContext } from './project-context-hooks.ts'
 import { WRITING_AGENT_PRESETS } from '../host-guard.ts'
 
 function session(agentPreset: string = 'dsh-editor') {

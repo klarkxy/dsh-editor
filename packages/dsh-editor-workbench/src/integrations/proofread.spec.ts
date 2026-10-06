@@ -16,7 +16,7 @@ import {
   scanProofread,
 } from '../integrations/proofread.ts'
 
-const resources = fileURLToPath(new URL('../resources/proofread', import.meta.url))
+const resources = fileURLToPath(new URL('../../resources/proofread', import.meta.url))
 
 let root = ''
 

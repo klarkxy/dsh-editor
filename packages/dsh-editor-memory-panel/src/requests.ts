@@ -1,27 +1,13 @@
-export type MemoryRequest = { nonce: number }
+import { createRequestManager, type PanelRequest } from 'dsh-editor-panel-base/requests'
 
-type Listener = (request: MemoryRequest) => void
+export type MemoryRequest = PanelRequest
 
-const listeners = new Set<Listener>()
-let pending: MemoryRequest | null = null
+const manager = createRequestManager<MemoryRequest>()
 
 export function requestMemoryOpen(): MemoryRequest {
-  pending = { nonce: Date.now() }
-  for (const listener of listeners) listener(pending)
-  return pending
+  return manager.request({ nonce: Date.now() })
 }
 
-export function pendingMemoryRequest(): MemoryRequest | null {
-  return pending
-}
-
-export function consumeMemoryRequest(request: MemoryRequest): void {
-  if (pending && pending.nonce === request.nonce) pending = null
-}
-
-export function subscribeMemoryRequest(listener: Listener): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
+export const pendingMemoryRequest = manager.pending
+export const consumeMemoryRequest = manager.consume
+export const subscribeMemoryRequest = manager.subscribe

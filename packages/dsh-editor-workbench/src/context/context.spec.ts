@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createMemoryContext } from './test-helpers.ts'
+import { createMemoryContext } from '../test-helpers.ts'
 import { compileContext } from '../context/context.ts'
 import { parseProjectContextEnvelope } from '../contracts.ts'
 

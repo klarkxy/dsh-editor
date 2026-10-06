@@ -1,7 +1,6 @@
-import type { ShellLocale } from 'dsh-editor-seats'
+import { createMessages, type MessageParams } from 'dsh-editor-panel-base/messages'
 
-export type MessageKey = keyof typeof zh
-export type MessageParams = Record<string, string | number>
+export type { MessageParams }
 
 export const zh = {
   'common.clear': '清除',
@@ -61,7 +60,7 @@ export const zh = {
   'error.generic': '操作未能完成，请重试。',
 } as const
 
-export const en: Record<MessageKey, string> = {
+export const en: Record<keyof typeof zh, string> = {
   'common.clear': 'Clear',
   'proofread.openDocFirst': 'Open a document first.',
   'proofread.openDocBefore': 'Open a document before proofreading the current file.',
@@ -119,36 +118,11 @@ export const en: Record<MessageKey, string> = {
   'error.generic': 'The action could not finish. Try again.',
 }
 
-const dictionaries: Record<ShellLocale, Record<MessageKey, string>> = { zh, en }
+export type MessageKey = keyof typeof zh
 
-let currentLocale: ShellLocale = 'zh'
+const { t, message, setLocale, intlLocale, interpolate } = createMessages({ zh, en })
 
-export function setProofreadLocale(locale: ShellLocale): void {
-  currentLocale = locale === 'en' ? 'en' : 'zh'
-}
+export { t, message, setLocale as setProofreadLocale, intlLocale, interpolate }
 
-export function getProofreadLocale(): ShellLocale {
-  return currentLocale
-}
-
-export function intlLocale(locale: ShellLocale = currentLocale): string {
-  return locale === 'en' ? 'en' : 'zh-CN'
-}
-
-export function interpolate(template: string, params?: MessageParams): string {
-  if (!params) return template
-  return template.replace(/\{(\w+)\}/g, (_, name: string) => {
-    const value = params[name]
-    return value === undefined ? `{${name}}` : String(value)
-  })
-}
-
-export function t(key: MessageKey, params?: MessageParams): string {
-  const text = dictionaries[currentLocale][key] || zh[key] || String(key)
-  return interpolate(text, params)
-}
-
-export function message(locale: ShellLocale, key: MessageKey, params?: MessageParams): string {
-  const text = dictionaries[locale][key] || zh[key] || String(key)
-  return interpolate(text, params)
-}
+// 保留兼容性导出
+export const getProofreadLocale = () => (intlLocale() === 'en' ? 'en' : 'zh') as 'zh' | 'en'

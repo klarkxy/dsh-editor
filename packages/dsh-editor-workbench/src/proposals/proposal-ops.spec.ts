@@ -515,7 +515,7 @@ describe('prepareRenames / applyRenames', () => {
     expect(source).toContain("mode === 'generic'")
     expect(source).toContain('expectedVersion: version')
     expect(source).not.toMatch(/moveEntry\s*\(/)
-    const rpc = await fs.readFile(new URL('./rpc/proposal.ts', import.meta.url), 'utf8')
+    const rpc = await fs.readFile(new URL('../rpc/proposal.ts', import.meta.url), 'utf8')
     expect(rpc).toContain("prepareRenames(files, legacy, 'generic')")
     expect(rpc).toContain("applyRenames(op, legacy, expectedVersions, 'generic')")
     expect(rpc).toMatch(/'proposal\.apply':\s*\{\s*mutation:\s*true/)

@@ -1,5 +1,7 @@
 # DSH Editor 架构重构 - 进度跟踪
 
+> **历史留档**: 本文档为早期进度跟踪，已被 [架构重构权威计划](refactoring/refactoring-plan.md) 和 [实施报告](refactoring/implementation-report.md) 替代。保留历史正文供参考。
+
 **项目启动**: 2026-10-06  
 **最后更新**: 2026-10-06 22:20
 

@@ -20,6 +20,7 @@
 | [dsh-editor-memory-panel](dsh-editor-memory-panel/README.md) | 记忆维护 |
 | [dsh-editor-overview-panel](dsh-editor-overview-panel/README.md) | 文档概览 |
 | [dsh-editor-proofread-panel](dsh-editor-proofread-panel/README.md) | 桌面校对 |
+| [dsh-editor-panel-base](dsh-editor-panel-base/README.md) | 面板公共基础设施（RPC / 请求 / 国际化） |
 | [dsh-editor-seats](dsh-editor-seats/README.md) | 界面扩展合同 |
 | [dsh-editor-workspace-kit](dsh-editor-workspace-kit/README.md) | 工作区共享库 |
 
@@ -39,7 +40,7 @@ Editor 保留稿纸布局，以官方公有布局合同和界面槽位承载这�
 
 `dsh-editor-*` 为桌面私有包。入口、依赖与默认开关以各包 `package.json` 为准；组合定义在 [desktop.json](../apps/desktop/resources/compositions/desktop.json)，`basic` / `smart` / `full` 是同一组合的兼容别名。
 
-网页搜索随桌面版预装。知乎、当前标题、需求记录和会话纪要不再预装，可在「插件 → 发现插件」复制规格，到官方「添加插件」粘贴，例如 `npm:@klarkxy/dsh-zhihu`。私有适配只提供发现搜索与写作模式开关；安装、清单与启停由官方管理器负责。内置模型设置使用 DSH 原生供应商与现有写作偏好，公共插件各自保存模型选择。AI Services、Model Center、Memory、Self-improvement 与 Fusion 已从组合和依赖中移除；私有写作记忆面板及作者记录保留。共享库 `@klarkxy/dsh-plugin-kit@0.1.0` 提供合同和原生调用辅助，没有插件开关。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。
+网页搜索随桌面版预装。知乎、当前标题、需求记录和会话纪要不再预装，可在「插件 → 发现插件」复制规格，到官方「添加插件」粘贴，例如 `npm:@klarkxy/dsh-zhihu`。私有适配只提供发现搜索与写作模式开关；安装、清单与启停由官方管理器负责。内置模型设置使用 DSH 原生供应商与现有写作偏好，公共插件各自保存模型选择。AI Services、Model Center、Memory、Self-improvement 与 Fusion 已从组合和依赖中移除；私有写作记忆面板及作者记录保留。共享库 `@klarkxy/dsh-plugin-kit@0.1.0` 提供合同和原生调用辅助，没有插件开关。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。`dsh-editor-panel-base` 是客户端构建时内联的 devDependency，运行时 manifest 的 libraries 只包括 seats 和 workspace-kit。
 
 [发布维护](PUBLISHING.md) · [桌面使用指南](../docs/user-guide.md)
 

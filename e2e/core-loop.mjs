@@ -173,7 +173,16 @@ const env = {
   DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key',
 }
 delete env.DSH_EDITOR_CUSTOM_API_KEY
-await deployProfile(home, template, resolve(runtime, 'node_modules'))
+const profileRoot = await deployProfile(home, template, resolve(runtime, 'node_modules'))
+const templateComposition = JSON.parse(await readFile(resolve(template, 'composition.json'), 'utf-8'))
+const { configureProfile } = await import('../scripts/desktop-compositions.mjs')
+const { syncPresetDeclarations } = await import('../apps/desktop/dist/preset-config.js')
+await configureProfile(profileRoot, {
+  ...templateComposition,
+  disabledEntries: templateComposition.disabledEntries.filter(id => id !== 'editor-memory-panel'),
+  enabledEntries: ['editor-memory-panel'],
+})
+await syncPresetDeclarations(home, profileRoot)
 
 try {
   const started = await startDsh(env)
@@ -263,16 +272,18 @@ try {
   await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
 
   // Top bar inventory: only the four chrome buttons that survived the refactor.
-  await page.locator('.chrome').screenshot({ path: resolve(output, '01-chrome.png') })
+  // Use the semantic role="banner" to target the main header uniquely.
+  const chromeHeader = page.locator('.chrome[role="banner"]')
+  await chromeHeader.screenshot({ path: resolve(output, '01-chrome.png') })
   // The merged workspace menu is a <summary role="button"> with an aria-label.
   // The theme toggle is matched by its stable .theme-toggle class because the
   // Chinese glyph in its text content can fall back to a placeholder "?" in
   // the headless font, which would defeat an accessible-name lookup.
   for (const label of ['作品菜单']) {
-    const present = await page.getByRole('button', { name: label }).count()
+    const present = await chromeHeader.getByRole('button', { name: label }).count()
     if (!present) failures.push(`topbar is missing ${label}`)
   }
-  if (!(await page.locator('.chrome .theme-toggle').count())) {
+  if (!(await chromeHeader.locator('.theme-toggle').count())) {
     failures.push('topbar is missing theme toggle')
   }
   for (const removed of ['作品快照', '导入作品', '导出 Markdown', '导出 TXT', '管理当前作品', '返回作品列表']) {
@@ -327,17 +338,158 @@ try {
   const savedChapter = await readFile(resolve(targetWorkspace, '正文', '001.md'), 'utf8')
   if (!savedChapter.includes('核心闭环保存验证。')) throw new Error('core-loop chapter save missing on disk')
 
+  // Three-panel validation: overview (文档概览), proofread (文稿校对), memory (记忆).
+  // Overview: center overlay opened with Ctrl+Shift+O, data-testid="overview-panel".
+  // Proofread: center overlay opened with Ctrl+Shift+L, data-testid="editor-proofread-panel".
+  // Memory: sidebar tool, requires enabling via plugin manager first (defaultEnabled: false).
+
+  // Open overview panel via Ctrl+Shift+O
+  await page.keyboard.press('Control+Shift+o')
+  const overviewPanel = page.getByTestId('overview-panel')
+  await overviewPanel.waitFor({ state: 'visible', timeout: 5_000 })
+
+  // Wait for real data load (not loading, not error)
+  // overview state: undefined=loading, null=failed, object=loaded
+  // Success: .overview-body appears AND .overview-loading disappears
+  await page.waitForFunction(() => {
+    const panel = document.querySelector('[data-testid="overview-panel"]')
+    if (!panel) return false
+    // Must have loaded body
+    if (!panel.querySelector('.overview-body')) return false
+    // Must not be in loading state
+    if (panel.querySelector('.overview-loading')) return false
+    return true
+  }, undefined, { timeout: 10_000 })
+
+  await page.screenshot({ path: resolve(output, '03-overview-panel.png') })
+
+  // Verify header
+  const overviewTitle = await overviewPanel.locator('h2').innerText()
+  if (!overviewTitle.includes('文档概览')) failures.push(`overview panel title unexpected: ${overviewTitle}`)
+
+  // Close via close button and verify detachment
+  const overviewCloseButton = overviewPanel.getByRole('button', { name: /关闭/ })
+  if (!(await overviewCloseButton.isVisible())) failures.push('overview panel close button not found')
+  await overviewCloseButton.click()
+  await overviewPanel.waitFor({ state: 'detached', timeout: 3_000 })
+
+  // Open proofread panel via Ctrl+Shift+L
+  await page.keyboard.press('Control+Shift+l')
+  const proofreadPanel = page.getByTestId('editor-proofread-panel')
+  await proofreadPanel.waitFor({ state: 'visible', timeout: 5_000 })
+
+  // Wait for scan complete (not busy loading)
+  // proofread state: result=null initially, then object after scan
+  // Success: .proofread-summary appears AND .proofread-loading disappears
+  await page.waitForFunction(() => {
+    const panel = document.querySelector('[data-testid="editor-proofread-panel"]')
+    if (!panel) return false
+    // Must have summary (scan completed)
+    if (!panel.querySelector('.proofread-summary')) return false
+    // Must not be in loading state during initial scan
+    const loading = panel.querySelector('.proofread-loading[role="status"]')
+    if (loading && !panel.querySelector('.proofread-summary')) return false
+    return true
+  }, undefined, { timeout: 10_000 })
+
+  await page.screenshot({ path: resolve(output, '04-proofread-panel.png') })
+
+  // Verify header
+  const proofreadTitle = await proofreadPanel.locator('h2').innerText()
+  if (!proofreadTitle.includes('文稿校对')) failures.push(`proofread panel title unexpected: ${proofreadTitle}`)
+
+  // Close via close button and verify detachment
+  const proofreadCloseButton = proofreadPanel.getByRole('button', { name: /关闭/ })
+  if (!(await proofreadCloseButton.isVisible())) failures.push('proofread panel close button not found')
+  await proofreadCloseButton.click()
+  await proofreadPanel.waitFor({ state: 'detached', timeout: 3_000 })
+
+  // Memory panel: sidebar tool, defaultEnabled: false in package.json.
+  // Already enabled via configureProfile with enabledEntries before DSH startup.
+  // Open via command palette trigger button, then type and select "记忆维护"
+
+  // Close chat sidebar if it's open to ensure command palette can be triggered
+  if (await page.locator('aside.chat').isVisible().catch(() => false)) {
+    await page.keyboard.press('Control+Alt+b')
+    await page.locator('aside.chat').waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => undefined)
+  }
+
+  await chromeHeader.locator('button.palette-trigger').click()
+  const commandPalette = page.locator('.palette-content')
+  await commandPalette.waitFor({ state: 'visible', timeout: 5_000 })
+
+  // Type command to filter
+  const commandInput = commandPalette.locator('input.palette-input')
+  await commandInput.fill('记忆维护')
+  await page.waitForTimeout(300)
+
+  // Find and click the memory command item
+  const memoryCommand = commandPalette.locator('.palette-item').filter({ hasText: '记忆维护' })
+  await memoryCommand.waitFor({ state: 'visible', timeout: 3_000 })
+  const memoryCommandDisabled = await memoryCommand.getAttribute('aria-disabled')
+  if (memoryCommandDisabled === 'true') failures.push('memory command is disabled in palette')
+  await memoryCommand.click()
+  await commandPalette.waitFor({ state: 'detached', timeout: 3_000 })
+
+  // Wait for memory panel to open in sidebar
+  const memoryPanel = page.getByTestId('memory-panel')
+  await memoryPanel.waitFor({ state: 'visible', timeout: 5_000 })
+
+  // Wait for data load or empty state (not loading, not error)
+  // memory state: items=undefined initially, null=failed, array=loaded
+  // Success: either .memory-list (has items) OR .memory-status with empty text (no role=alert)
+  // Loading: .memory-status[role=status] with skeleton
+  // Error: .memory-status with role=alert
+  await page.waitForFunction(() => {
+    const panel = document.querySelector('[data-testid="memory-panel"]')
+    if (!panel) return false
+    // Accept loaded list
+    if (panel.querySelector('.memory-list')) return true
+    // Accept empty state: .memory-status without role=alert
+    const status = panel.querySelector('.memory-status')
+    if (status && !status.hasAttribute('role')) return true
+    // Reject loading (role=status with skeleton) and error (role=alert)
+    return false
+  }, undefined, { timeout: 10_000 })
+
+  await page.screenshot({ path: resolve(output, '05-memory-panel.png') })
+
+  // Verify header
+  const memoryTitle = await memoryPanel.locator('h2').innerText()
+  if (!memoryTitle.includes('记忆')) failures.push(`memory panel title unexpected: ${memoryTitle}`)
+
+  // Verify empty state shows correct message (not error)
+  const memoryStatus = memoryPanel.locator('.memory-status')
+  if (await memoryStatus.count()) {
+    const hasAlert = await memoryStatus.evaluate(el => el.hasAttribute('role') && el.getAttribute('role') === 'alert')
+    if (hasAlert) {
+      const alertText = await memoryStatus.innerText()
+      failures.push(`memory panel shows error: ${alertText}`)
+    } else {
+      const statusText = await memoryStatus.innerText()
+      if (!statusText.includes('还没有记忆更新记录')) {
+        failures.push(`memory panel empty state unexpected: ${statusText}`)
+      }
+    }
+  }
+
+  // Close memory panel via close button
+  const memoryCloseButton = memoryPanel.getByRole('button', { name: /关闭/ })
+  if (!(await memoryCloseButton.isVisible())) failures.push('memory panel close button not found')
+  await memoryCloseButton.click()
+  await memoryPanel.waitFor({ state: 'detached', timeout: 3_000 })
+
   // Theme toggle: light → dark → light. The DOM data-theme and localStorage must
   // both update and survive a reload.
-  await page.getByRole('button', { name: /主题（当前浅色）/ }).click()
+  await chromeHeader.getByRole('button', { name: /主题（当前浅色）/ }).click()
   await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'dark')
   const darkStored = await page.evaluate(() => globalThis.localStorage.getItem('dsh-editor.theme'))
   if (darkStored !== 'dark') failures.push(`localStorage theme did not persist dark; got ${darkStored}`)
-  const darkToggle = await page.getByRole('button', { name: /主题（当前深色）/ }).count()
+  const darkToggle = await chromeHeader.getByRole('button', { name: /主题（当前深色）/ }).count()
   if (!darkToggle) failures.push('theme toggle did not re-label itself as 当前深色 after switching to dark')
   await page.waitForFunction(() => document.querySelector('.shell-theme')?.classList.contains('dark'))
   await page.waitForTimeout(350)
-  await page.screenshot({ path: resolve(output, '05-editor-dark.png') })
+  await page.screenshot({ path: resolve(output, '06-editor-dark.png') })
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   await page.waitForFunction(
@@ -363,7 +515,7 @@ try {
   if (reloadedState.stored !== 'dark') failures.push(`localStorage theme did not survive reload; got ${reloadedState.stored}`)
 
   // Back to light.
-  await page.getByRole('button', { name: /主题（当前深色）/ }).click()
+  await chromeHeader.getByRole('button', { name: /主题（当前深色）/ }).click()
   await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'light')
   await page.waitForFunction(() => globalThis.localStorage.getItem('dsh-editor.theme') === 'light')
 
@@ -388,7 +540,7 @@ try {
   await page.locator('.sidebar').waitFor({ state: 'detached' })
   await page.keyboard.press('Control+Alt+f')
   await page.locator('.shell.focus-mode').waitFor({ state: 'visible' })
-  await page.screenshot({ path: resolve(output, '06-focus-mode.png') })
+  await page.screenshot({ path: resolve(output, '07-focus-mode.png') })
   // In focus mode, Ctrl+Alt+B exits focus mode AND reopens the sidebar in one
   // keystroke (root.ts:231). Reusing it is more realistic than toggling
   // focus mode off and then asking the test to find a hidden sidebar.
@@ -415,7 +567,7 @@ try {
   await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
 
   // Final screenshot: full workbench in light theme for the visual reference set.
-  await page.screenshot({ path: resolve(output, '07-workbench-light.png'), fullPage: true })
+  await page.screenshot({ path: resolve(output, '08-workbench-light.png'), fullPage: true })
 
   if (browserErrors.length) failures.push(...browserErrors)
 } catch (error) {

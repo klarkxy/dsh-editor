@@ -27,7 +27,7 @@
         "packages/dsh-editor-workbench/src/index.ts"
       ],
       "dsh-editor-workbench/tools": [
-        "packages/dsh-editor-workbench/src/tools.ts"
+        "packages/dsh-editor-workbench/src/tools/tools.ts"
       ],
       "dsh-editor-workbench/contracts": [
         "packages/dsh-editor-workbench/src/contracts.ts"

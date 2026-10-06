@@ -1,27 +1,13 @@
-export type OverviewRequest = { nonce: number }
+import { createRequestManager, type PanelRequest } from 'dsh-editor-panel-base/requests'
 
-type Listener = (request: OverviewRequest) => void
+export type OverviewRequest = PanelRequest
 
-const listeners = new Set<Listener>()
-let pending: OverviewRequest | null = null
+const manager = createRequestManager<OverviewRequest>()
 
 export function requestOverview(): OverviewRequest {
-  pending = { nonce: Date.now() }
-  for (const listener of listeners) listener(pending)
-  return pending
+  return manager.request({ nonce: Date.now() })
 }
 
-export function pendingOverviewRequest(): OverviewRequest | null {
-  return pending
-}
-
-export function consumeOverviewRequest(request: OverviewRequest): void {
-  if (pending && pending.nonce === request.nonce) pending = null
-}
-
-export function subscribeOverviewRequest(listener: Listener): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
+export const pendingOverviewRequest = manager.pending
+export const consumeOverviewRequest = manager.consume
+export const subscribeOverviewRequest = manager.subscribe

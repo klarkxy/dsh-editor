@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FsTargetLike } from 'dsh-manuscript/host-api'
 import { BinaryError, readImageFile, type BinaryAccess } from '../io/binary.ts'
 import { FILE_READ_BINARY_MAX_BYTES } from '../contracts.ts'
-import { createMemoryContext, type MemoryFileSystem } from './test-helpers.ts'
+import { createMemoryContext, type MemoryFileSystem } from '../test-helpers.ts'
 
 function asBinary(value: ReturnType<typeof createMemoryContext>): BinaryAccess {
   return value as unknown as BinaryAccess

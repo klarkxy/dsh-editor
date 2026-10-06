@@ -1,0 +1,31 @@
+{
+  "name": "dsh-editor-panel-base",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Common infrastructure for DSH Editor panel packages",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./rpc": "./dist/rpc/index.mjs",
+    "./requests": "./dist/requests/index.mjs",
+    "./messages": "./dist/messages/index.mjs",
+    "./styles": "./dist/styles/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dsh-editor-seats": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.2"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}

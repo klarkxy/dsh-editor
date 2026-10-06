@@ -1,29 +1,14 @@
+import { createRequestManager, type PanelRequest } from 'dsh-editor-panel-base/requests'
 import type { ProofreadScope } from './proofread-view.ts'
 
-export type ProofreadRequest = { scope: ProofreadScope; nonce: number }
+export type ProofreadRequest = PanelRequest & { scope: ProofreadScope }
 
-type Listener = (request: ProofreadRequest) => void
-
-const listeners = new Set<Listener>()
-let pending: ProofreadRequest | null = null
+const manager = createRequestManager<ProofreadRequest>()
 
 export function requestProofread(scope: ProofreadScope): ProofreadRequest {
-  pending = { scope, nonce: Date.now() }
-  for (const listener of listeners) listener(pending)
-  return pending
+  return manager.request({ scope, nonce: Date.now() })
 }
 
-export function pendingProofreadRequest(): ProofreadRequest | null {
-  return pending
-}
-
-export function consumeProofreadRequest(request: ProofreadRequest): void {
-  if (pending && pending.nonce === request.nonce) pending = null
-}
-
-export function subscribeProofreadRequest(listener: Listener): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
+export const pendingProofreadRequest = manager.pending
+export const consumeProofreadRequest = manager.consume
+export const subscribeProofreadRequest = manager.subscribe
