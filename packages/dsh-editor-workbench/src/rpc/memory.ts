@@ -1,6 +1,6 @@
-import { compileContext } from '../context.ts'
-import { resolveMemoryAccess } from '../memory-access.ts'
-import { applyMemoryChange, getMemoryChange, listMemoryChanges, undoMemoryChange } from '../memory.ts'
+import { compileContext } from '../context/context.ts'
+import { resolveMemoryAccess } from '../memory/memory-access.ts'
+import { applyMemoryChange, getMemoryChange, listMemoryChanges, undoMemoryChange } from '../memory/memory.ts'
 import { str, type WorkbenchHandlers } from './types.ts'
 
 export const memoryHandlers = {

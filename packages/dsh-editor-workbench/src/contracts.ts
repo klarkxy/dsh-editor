@@ -5,16 +5,16 @@ export {
   type MemoryUpdateReceipt,
   type MemoryUpdate,
   type MemoryEvidence,
-} from './memory-contracts.ts'
+} from './memory/memory-contracts.ts'
 
 export type {
   CardMetaFields,
   CardRelation,
   CharacterCardFields,
   WorldbookCardFields,
-} from './frontmatter.ts'
+} from './io/frontmatter.ts'
 
-export type { ChapterMetaFields, ChapterStateFields } from './chapter-meta.ts'
+export type { ChapterMetaFields, ChapterStateFields } from './proposals/chapter-meta.ts'
 export {
   CHAPTER_BEATS_MAX,
   CHAPTER_BEAT_MAX_CHARS,
@@ -25,9 +25,9 @@ export {
   parseChapterMeta,
   stripChapterFrontmatter,
   validateChapterMeta,
-} from './chapter-meta.ts'
+} from './proposals/chapter-meta.ts'
 
-export { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
+export { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from './memory/author-preferences.ts'
 export {
   AUTHOR_MEMORY_MARKER,
   AUTHOR_OBSERVE_MAX_CHARS,
@@ -35,7 +35,7 @@ export {
   authorMemoryMarker,
   parseAuthorMemoryMarker,
   type AuthorMemoryMarker,
-} from './author-memory.ts'
+} from './memory/author-memory.ts'
 
 export {
   WORKBENCH_RPC_CHANNEL,

@@ -1,4 +1,4 @@
-import { applyImport, cleanupImport, probeImport } from '../import.ts'
+import { applyImport, cleanupImport, probeImport } from '../lifecycle/import.ts'
 import { str, type WorkbenchHandlers } from './types.ts'
 
 export const importHandlers = {

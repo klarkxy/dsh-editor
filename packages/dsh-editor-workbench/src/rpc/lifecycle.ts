@@ -1,4 +1,4 @@
-import { readImageFile, type BinaryAccess } from '../binary.ts'
+import { readImageFile, type BinaryAccess } from '../io/binary.ts'
 import {
   archiveDocument,
   copyEntry,
@@ -9,7 +9,7 @@ import {
   renameDocument,
   renameEntry,
   restoreArchive,
-} from '../lifecycle.ts'
+} from '../lifecycle/lifecycle.ts'
 import { str, type WorkbenchHandlers } from './types.ts'
 
 export const lifecycleHandlers = {

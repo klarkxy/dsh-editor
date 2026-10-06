@@ -8,7 +8,7 @@ import type {
   SandboxExecutionPolicyLike,
   WorkspaceFileContext,
 } from 'dsh-manuscript/host-api'
-import type { BinaryFileSystem } from './binary.ts'
+import type { BinaryFileSystem } from './io/binary.ts'
 
 type Node = { type: 'file' | 'directory'; version: string; text?: string; bytes?: Uint8Array }
 
