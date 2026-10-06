@@ -1,4 +1,4 @@
-import { applyChapterProposal, applyCreate, isPlanningKind, parsePlanningProposal, prepareChapterMeta, prepareCreate, type PlanningCreateProposal } from '../planning-proposals.ts'
+import { applyChapterProposal, applyCreate, isPlanningKind, parsePlanningProposal, prepareChapterMeta, prepareCreate, type PlanningCreateProposal } from '../proposals/planning-proposals.ts'
 import {
   applyMerge,
   applyRenames,
@@ -11,7 +11,7 @@ import {
   type MergeProposal,
   type RenamesProposal,
   type SplitProposal,
-} from '../proposal-ops.ts'
+} from '../proposals/proposal-ops.ts'
 import {
   WRITING_V2_CREATE,
   assertWritingProposalBasis,

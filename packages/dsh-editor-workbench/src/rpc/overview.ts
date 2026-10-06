@@ -1,5 +1,5 @@
-import { readProjectOverview } from '../overview.ts'
-import { readWritingHistory, recordWritingProgress } from '../writing-log.ts'
+import { readProjectOverview } from '../integrations/overview.ts'
+import { readWritingHistory, recordWritingProgress } from '../lifecycle/writing-log.ts'
 import { type WorkbenchHandlers } from './types.ts'
 
 export const overviewHandlers = {

@@ -1,4 +1,4 @@
-import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
+import { AUTHOR_MEMORY_MAX_CHARS, AUTHOR_PREFERENCES_MAX_CHARS, normalizeAuthorMemory, normalizeAuthorPreferences } from '../memory/author-preferences.ts'
 import {
   CHAPTER_BEATS_MAX,
   CHAPTER_BEAT_MAX_CHARS,
@@ -6,7 +6,7 @@ import {
   CHAPTER_STATE_MAX_TOTAL_CHARS,
   parseChapterMeta,
   type ChapterStateFields,
-} from '../chapter-meta.ts'
+} from '../proposals/chapter-meta.ts'
 import {
   applyFrontmatterFields,
   hasExplicitFrontmatter,
@@ -16,7 +16,7 @@ import {
   parseStringListField,
   splitFrontmatter,
   validWorldbookTriggers,
-} from '../frontmatter.ts'
+} from '../io/frontmatter.ts'
 
 export const PROJECT_CONTEXT_SCHEMA = 'dsh-editor.project-context'
 export const PROJECT_CONTEXT_VERSION = 1

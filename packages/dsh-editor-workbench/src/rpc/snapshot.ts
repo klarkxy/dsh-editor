@@ -1,4 +1,4 @@
-import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, rollbackSnapshot } from '../snapshot.ts'
+import { createSnapshot, listSnapshots, restoreApply, restoreCleanup, restoreProbe, rollbackSnapshot } from '../lifecycle/snapshot.ts'
 import { str, type WorkbenchHandlers } from './types.ts'
 
 export const snapshotHandlers = {

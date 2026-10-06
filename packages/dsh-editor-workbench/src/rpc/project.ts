@@ -7,7 +7,7 @@ import {
   initializeProject,
   inspectProjectRoot,
   prepareNovelIndex,
-} from '../project.ts'
+} from '../lifecycle/project.ts'
 import { str, type WorkbenchHandlers } from './types.ts'
 
 export const projectHandlers = {

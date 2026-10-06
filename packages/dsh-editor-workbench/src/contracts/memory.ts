@@ -5,4 +5,4 @@ export {
   type MemoryUpdateReceipt,
   type MemoryUpdate,
   type MemoryEvidence,
-} from '../memory-contracts.ts'
+} from '../memory/memory-contracts.ts'

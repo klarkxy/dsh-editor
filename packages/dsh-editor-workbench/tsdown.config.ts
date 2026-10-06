@@ -4,7 +4,7 @@ export default defineConfig([
   {
     entry: {
       index: 'src/index.ts',
-      tools: 'src/tools.ts',
+      tools: 'src/tools/tools.ts',
     },
     format: ['esm'],
     dts: { eager: true },

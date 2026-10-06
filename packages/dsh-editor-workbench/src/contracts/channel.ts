@@ -1,4 +1,4 @@
-import type { ChapterStateFields } from '../chapter-meta.ts'
+import type { ChapterStateFields } from '../proposals/chapter-meta.ts'
 import type { MemoryChange, MemoryChangeSummary, MemoryUpdateReceipt } from './memory.ts'
 import type {
   ProgressHistory,

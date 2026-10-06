@@ -1,4 +1,4 @@
-import { scanProofread } from '../proofread.ts'
+import { scanProofread } from '../integrations/proofread.ts'
 import { str, type WorkbenchHandlers } from './types.ts'
 
 export const proofreadHandlers = {
