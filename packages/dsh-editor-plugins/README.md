@@ -1,25 +1,27 @@
 # dsh-editor-plugins
 
-桌面全局「插件」页中的「已安装与市场」，核心包，不可关闭。内置功能按用途开关；稿纸、写作界面与插件管理始终保留。
+桌面「插件」页中的发现与写作模式适配，核心包，不可关闭。已安装清单、检查、进度、构建批准、取消、开关、卸载与配置由官方 DSH 插件管理器负责。
 
-内置功能、写作模式与必需基础模块统一放在“内置插件”；其他随包插件与市场安装插件分别显示。归属及开关边界见[内置插件与设置](../../docs/builtin-plugins.md)。
+写作模式仍由本包管理。归属及开关边界见[内置插件与设置](../../docs/builtin-plugins.md)。
 
-## 社区插件
+## 发现插件
 
-输入关键词搜索，或粘贴 GitHub 仓库地址安装。先阅读检查结果，再点「确认安装」；检查成功不保证运行时兼容。尚未加载的包会标为「待重启」，仍可卸载。
+本包只提供 `marketplace.search`。留空搜索、本机 ASCII 关键词，或能对上保留制品的未带版本 npm 包名时，列出 native profile 仍保留的本机包：标题与简介来自发行目录，规格为 `link:` 加制品绝对路径，不含已安装或启用状态。复制规格后在官方页用「添加插件」粘贴。带精确版本的 `npm:` 规格与无本机命中时的 GitHub 远程搜索仍走原路径。已安装的 npm 包可打开官方详情。
 
-安装或卸载后重启应用。失败时在弹窗中查看原因并重试；卸载不删除作品、对话或设置。第三方插件须来自可信来源。
+发现插件与写作模式是两个默认折叠的独立分组，展开后可搜索或切换模式。按需安装的可选公共插件包括知乎、当前标题、需求记录和会话纪要。网页搜索仍随桌面版预装。
 
 ## 写作模式
 
-「写作模式」分区列出第一方写作 preset（「通用写作」「小说创作」等）。核心 preset `dsh-editor-writing` 始终部署、不可关闭；其余 preset 可开关：启用时把包内 preset 原子部署到 `<dshHome>/.agent-presets/<id>`，停用时按同样的 owner marker 纪律删除（src/writing-presets.ts）。开关立即生效、无需重启，仅影响新对话，进行中的对话不变。
+RPC：`presets.list`、`presets.setEnabled`。核心 preset `dsh-editor-writing` 始终部署、不可关闭；其余 preset 可开关：启用时把包内 preset 原子部署到 `<dshHome>/.agent-presets/<id>`，停用时按同样的 owner marker 纪律删除（src/writing-presets.ts）。开关立即生效、无需重启，仅影响新对话，进行中的对话不变。
 
 ## 架构指针
 
-Host 侧在 `/dsh-editor-plugins` RPC 通道提供插件清单、安装、开关与 preset 管理（src/index.ts、src/contracts.ts）；开关与安装记录持久化在 `<dshHome>/dsh-plugins.json`（schema 版本见 `PLUGIN_STATE_SCHEMA`，src/paths.ts、src/overlay.ts）。
+官方 Host 服务 `pluginManager` 的 `listPlugins` / `listBundles` 是已安装清单的唯一权威；本包不提供 inventory RPC。有限核心守卫就地包装这两份列表以标记只读，并拒绝直接 `setPluginEnabled` / `setBundleEnabled` / `removeBundle`（src/core-lock.ts），dispose 时恢复原方法。`/dsh-editor-plugins` 仅有 `marketplace.search`、`presets.list`、`presets.setEnabled`（src/index.ts、src/contracts.ts）。写作模式记录仍在 `<dshHome>/dsh-plugins.json` 的 `presets` 字段。
+
+内部入口 `dsh-editor-plugins/preset-config` 导出 `syncPresetDeclarations(home, profileDir)`，由桌面部署和插件运行时共同生成 preset 与已选工具入口声明。工具入口来自 native profile 实际已选、且非发行包的 bundle，而不是遗留 `installed` 名单；preset 目录仍按既有 owner 纪律部署。此入口不注册 RPC、不启动插件；独立产物为 `lib/preset-config.js` 与 `lib/preset-config.d.ts`。
 
 ## 钉住宿主的客户端图
 
-当前桌面宿主固定为 DSH `0.2.0-rc.2`。原生 client-hmr 会同步客户端模块图，开关插件后正常加载的界面即时生效。插件设置订阅原生模块加载状态，仅在完成加载仍有失败时提示保存工作后重启重试；不会因启动时模块清单过时而误报。
+当前桌面宿主固定为 DSH `0.2.0-rc.2`。原生 client-hmr 会同步客户端模块图。官方插件页订阅 Host 变更事件刷新清单。
 
 本仓库插件的独立安装步骤见[插件目录](../README.md)，发布与市场收录见[发布维护](../PUBLISHING.md)。

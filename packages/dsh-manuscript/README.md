@@ -6,11 +6,9 @@ DSH Web 稿纸插件，提供文件树、正文编辑、保存、查找替换和
 
 需要 Node.js ≥22、DSH `0.2.0-rc.2`。本包尚未发布到 npm，使用本仓库构建的 tarball：在仓库根运行 `pnpm build`、`pnpm pack:plugins`，产物位于 `.pack/`。
 
-将稿纸和 ai-services 两个 tarball 放在不含空格的目录，停止目标 Web profile，先加载共享服务再加载稿纸：
+将稿纸 tarball 放在不含空格的目录，停止目标 Web profile 后加载稿纸；不再需要共享 AI 服务：
 
 ```powershell
-$aiPath = (Resolve-Path .\klarkxy-dsh-ai-services-0.1.3.tgz).Path.Replace('\', '/')
-dsh plugin --profile web add "file:$aiPath"
 $packagePath = (Resolve-Path .\dsh-manuscript-0.1.0.tgz).Path.Replace('\', '/')
 dsh plugin --profile web add "file:$packagePath"
 dsh --profile web
@@ -32,8 +30,8 @@ dsh --profile web
 
 Host RPC 挂在 `/manuscript` 通道，端点包括：`tree.list`、`file.read` / `file.create` / `file.write`、`draft.get` / `draft.list` / `draft.put` / `draft.delete`、`search.text`、`proposal.prepare` / `proposal.apply`、`fim.complete`、`patch.complete`、`capabilities.get`、`usage.summary`。除 `capabilities.get` 与 `usage.summary` 外都需要有效会话；写入类端点在工作区写锁下执行。
 
-行内补全与选段改写通过官方 `@deepseek-ai/dsh-llm` 直接调用模型，`@klarkxy/dsh-ai-services` 负责解析现有模型策略。用途为 `manuscript.completion`、`manuscript.rewrite`，分别默认使用快速档和对话档；幻想档仅在用户显式选择时使用；可由模型中心统一配置。未安装或停用模型中心时使用默认对话模型，保留手动指定的模型或会话选择。公开包依赖共享服务，不依赖私有 Editor 运行时。
+行内补全与选段改写通过官方 `@deepseek-ai/dsh-llm` 直接调用模型。宿主可通过现有写作偏好指定 `completionModel` 与 `rewriteModel`；独立调用也可明确传入提供方、模型与思考强度。未指定时使用当前会话的选择，再使用宿主原生默认模型。共享库 `@klarkxy/dsh-plugin-kit` 提供原生路由辅助，不需要加载额外模型中心或共享 AI 服务，也不依赖私有应用运行时。
 
-桌面旧写作模型设置只导入一次，迁移标记与缺失的用途默认值一同保存。补全和改写在本插件内按供应商共用写作并发额度，读取中央策略的并发、输入、输出与超时上限；这份额度与其他 AI 插件的辅助调用队列分开计数。写作调用只尝试一次，不使用辅助调用的 `maxAttempts` 重试设置。
+补全和改写在本插件内按供应商共用写作并发额度，并保持固定的输入、输出与超时上限。写作调用只尝试一次；取消、停用及同一会话的新请求会作废旧候选，不返回失败或超时的半段输出。
 
-用量通过原有 `llm/stream` 统计进入 `usage.summary`，不再产生 `aiServices.usage()` 的写作用途回执。达到补全 240 字符或改写 1200 字符的上限时停止生成；如果供应商尚未返回用量，该次调用可能没有统计记录，不估算缺失的 token。生成结果仍是候选，需作者采纳才改变正文。
+用量通过原有 `llm/stream` 统计进入 `usage.summary`。达到补全 240 字符或改写 1200 字符的上限时停止生成；如果供应商尚未返回用量，该次调用可能没有统计记录，不估算缺失的 token。生成结果仍是候选，需作者采纳才改变正文。

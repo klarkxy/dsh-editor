@@ -1,4 +1,23 @@
-# Optional AI plugins
+# AI 插件与写作模型
+
+当前桌面发行组合只预装网页搜索。当前标题、需求记录、会话纪要和知乎改为通过插件市场按需安装。版本以 [外部插件清单](../apps/desktop/resources/external-plugins.json) 为准，源码与公开插件独立测试由 dsh-plugins 维护。安装后的制品离线随包交付，应用启动不下载插件。
+
+AI Services、Model Center、Memory、Self-improvement 与 Fusion 已移除。人物卡、私有写作记忆面板和作者文件保留；旧公共插件的持久化数据不删除。共享库 @klarkxy/dsh-plugin-kit 提供原生调用辅助与合同，不是需要启用的插件服务。
+
+## 补全与改写
+
+新对话、正文补全、选区改写分别使用现有写作偏好的 chatModel、completionModel、rewriteModel，在「设置 → 模型」管理。新对话未指定时跟随原生默认模型；补全与改写未指定时先跟随当前会话的模型选择，再使用原生默认模型。公共插件在自己的原生配置页保存模型选择。没有新的全局用途路由、模型档位或政策存储。
+
+稿纸直接调用固定版本 DSH 0.2.0-rc.2 的 LLM。请求仍需经过工作区权限检查，候选不会自动改写正文；作者接受后才应用。取消、插件停用和同一会话同一用途的新请求会丢弃旧结果；超时、模型失败、工具调用和未完成输出不返回半段候选。补全最多 240 字符、改写最多 1200 字符，写作请求只尝试一次。用量保留在稿纸 usage.summary 与请求日志中，不估算未返回的 token。
+
+## 验证边界
+
+pnpm typecheck、pnpm test、pnpm build 检查源码与构建；pnpm pack:plugins 检查当前 tarball。模型设置夹具和隔离宿主测试使用本地固定响应，验证模型选择、保存、调用、启停和候选完整性；不能作为真实模型生成质量的证明。
+
+## 历史实现与验收
+
+以下为退役前的六插件与共享模型服务设计记录，不适用于当前运行时。历史测试数量、运行结果和发布交接仅对应记载的旧版本。
+
 
 This implementation follows the accepted six-plugin design: current title, requirements clarification (Mood), recap and checkpoints, Memory with Dream, self-improvement, and Model Center. `@klarkxy/dsh-ai-services` is their shared mechanism, not a seventh user feature.
 

@@ -8,17 +8,12 @@
 | [dsh-web-search-manager](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-web-search-manager/docs/README.zh-CN.md) | 网络搜索；npm 包名 `@klarkxy/dsh-web-search-manager` |
 | [dsh-manuscript](dsh-manuscript/README.md) | 稿纸编辑；独立 Web 使用本地 tarball |
 | [dsh-proofread](dsh-proofread/README.md) | 中文校对；独立 Web 使用本地 tarball |
-| [dsh-ai-services](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-ai-services/docs/README.zh-CN.md) | 共享的模型角色、调用限额、取消与用量记录；无独立功能开关；npm 包名 `@klarkxy/dsh-ai-services` |
 | [dsh-current-title](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-current-title/docs/README.zh-CN.md) | 按当前任务更新会话标题，保留手动命名；npm 包名 `@klarkxy/dsh-current-title` |
-| [dsh-mood](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood/docs/README.zh-CN.md) | 需求澄清与可修订的任务约定；npm 包名 `@klarkxy/dsh-mood` |
+| [dsh-mood](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-mood/docs/README.zh-CN.md) | 由当前 Agent 记录和更新需求，不额外调用模型；npm 包名 `@klarkxy/dsh-mood` |
 | [dsh-recap](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-recap/docs/README.zh-CN.md) | 后台回顾与独立开关的 Agent 检查点；npm 包名 `@klarkxy/dsh-recap` |
-| [dsh-memory](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-memory/docs/README.zh-CN.md) | 作者用语、偏好与近期状态；内含 Dream 观察与整理；npm 包名 `@klarkxy/dsh-memory` |
-| [dsh-self-improvement](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-self-improvement/docs/README.zh-CN.md) | 明确方法要求与候选结果观察、审计撤回与 Skill 导出；复用 Memory；npm 包名 `@klarkxy/dsh-self-improvement` |
-| [dsh-model-center](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-model-center/docs/README.zh-CN.md) | 供应商、快速／对话／思考／幻想档位与用途配置；npm 包名 `@klarkxy/dsh-model-center` |
-| [dsh-fusion](https://github.com/klarkxy/dsh-plugins/tree/main/plugins/dsh-fusion/docs/README.zh-CN.md) | Fusion 协作：主助手委派任务、持久执笔搭档产出候选、作者采用后写入；预装、默认关闭；npm 包名 `@klarkxy/dsh-fusion` |
 | [dsh-editor-shell](dsh-editor-shell/README.md) | 桌面写作界面 |
 | [dsh-editor-workbench](dsh-editor-workbench/README.md) | 作品管理与写作提案 |
-| [dsh-editor-plugins](dsh-editor-plugins/README.md) | 插件设置与社区安装 |
+| [dsh-editor-plugins](dsh-editor-plugins/README.md) | 发现搜索与写作模式；安装清单由官方管理器负责 |
 | [dsh-editor-novel-kernel](dsh-editor-novel-kernel/README.md) | 小说知识与小说创作模式 |
 | [dsh-editor-writing-presets](dsh-editor-writing-presets/README.md) | 文章与技术文档模式 |
 | [dsh-editor-cards](dsh-editor-cards/README.md) | 人物卡与世界书 |
@@ -37,17 +32,17 @@
 | DSH 0.2.0-rc.2 原生会话管理 | 对话归档、恢复、置顶与列表筛选；旧归档记录逐项迁入原生状态 |
 | `@deepseek-ai/dsh-client-ui-shortcuts` | 「设置 → 快捷键」搜索、录制和重置；桌面修改持久化 |
 | `@deepseek-ai/dsh-client-ui-sidebar-documentpreview` | 文件栏图片、PDF、Office 文档和表格预览 |
-| `@deepseek-ai/dsh-mcp-resources` | 读取已配置 MCP 服务的资源 |
+| `@deepseek-ai/dsh-mcp-resources` | 读取已配置 MCP 服务的资源，默认关闭 |
 | `@deepseek-ai/dsh-experimental-voice-input-bundle` | 语音输入，默认关闭；在「插件」页开启后输入区出现麦克风，首次使用由作者选择准备模型 |
 
 Editor 保留稿纸布局，以官方公有布局合同和界面槽位承载这些插件；定时任务不加入组合。官方包由桌面内置 DSH 提供，并非本仓库发布的 `@klarkxy/` 包。
 
 `dsh-editor-*` 为桌面私有包。入口、依赖与默认开关以各包 `package.json` 为准；组合定义在 [desktop.json](../apps/desktop/resources/compositions/desktop.json)，`basic` / `smart` / `full` 是同一组合的兼容别名。
 
-当前标题、需求澄清、回顾、记忆与自我改进预装并默认启用，可分别停用；模型配置纳入必需内置模块，Fusion 协作预装但默认关闭。Dream、Agent 与语义检查点等自动行为默认开启，可分别关闭；共享服务只提供机制，不会自行调用模型。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。
+网页搜索随桌面版预装。知乎、当前标题、需求记录和会话纪要不再预装，可在「插件 → 发现插件」复制规格，到官方「添加插件」粘贴，例如 `npm:@klarkxy/dsh-zhihu`。私有适配只提供发现搜索与写作模式开关；安装、清单与启停由官方管理器负责。内置模型设置使用 DSH 原生供应商与现有写作偏好，公共插件各自保存模型选择。AI Services、Model Center、Memory、Self-improvement 与 Fusion 已从组合和依赖中移除；私有写作记忆面板及作者记录保留。共享库 `@klarkxy/dsh-plugin-kit@0.1.0` 提供合同和原生调用辅助，没有插件开关。使用顺序与宿主限制见 [AI 插件说明](../docs/ai-plugins-implementation.md)。
 
 [发布维护](PUBLISHING.md) · [桌面使用指南](../docs/user-guide.md)
 
-Dream 与 Self Improve 的数据分流、独立 Web 依赖和后续维护约束见 [可移植学习边界](../docs/portable-learning.md)。
+退役插件的 Dream 与 Self Improve 设计历史见 [可移植学习边界](../docs/portable-learning.md)。
 
 公共插件已迁到 dsh-plugins；本仓库只保留需要本地维护的插件与桌面包。版本、构建和发布归属见[迁移说明](../docs/public-plugin-migration.md)。

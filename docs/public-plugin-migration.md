@@ -1,5 +1,7 @@
 # 公共插件仓库拆分
 
+历史留档：以下记录最初的十包源码迁移。自 2026-10-06 起，AI Services、Model Center、Memory、Self-improvement 与 Fusion 已退役；当前标题、需求记录、会话纪要和知乎改为按需安装。Editor 仅预装网页搜索，精确版本以 [external-plugins.json](../apps/desktop/resources/external-plugins.json) 为准。
+
 本次仅迁移源码所有权和构建依赖，不改变桌面预装、离线启动、插件 ID、数据位置或默认开关；不增加启动时网络安装。
 
 ## 唯一源码所有者

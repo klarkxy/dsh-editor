@@ -1,5 +1,7 @@
 # Dream 与 Self Improve：可独立部署的学习边界
 
+历史留档：公共 Memory 与 Self-improvement 已退役，当前 Editor 不再安装或加载。作者写作记忆由私有工作台与记忆面板维护，旧公共插件数据保留。
+
 Memory 与 Self Improve 的源码及独立测试已迁到 dsh-plugins，设计与数据边界也由该仓库维护，避免两个仓库各自修改同一份契约。
 
 参见 [可移植学习边界](https://github.com/klarkxy/dsh-plugins/blob/main/docs/editor-plugins/portable-learning.md) 与本仓库的[公共插件迁移说明](public-plugin-migration.md)。
