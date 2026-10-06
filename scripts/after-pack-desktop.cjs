@@ -26,6 +26,10 @@ exports.default = async function afterPack(context) {
     : join(context.appOutDir, 'resources')
   await restoreDependencies(join(resources, 'dsh', 'vendor-dependencies'), join(resources, 'dsh', 'node_modules'))
   await restoreDependencies(join(resources, 'profile-template', 'vendor-dependencies'), join(resources, 'profile-template', 'node_modules'))
+  const bundledVendor = join(resources, 'profile-template', 'bundled-packages', 'vendor-dependencies')
+  if (existsSync(bundledVendor)) {
+    await restoreDependencies(bundledVendor, join(resources, 'profile-template', 'bundled-packages', 'node_modules'))
+  }
   const nodeVendor = join(resources, 'node', 'vendor-dependencies')
   if (existsSync(nodeVendor)) {
     await restoreDependencies(nodeVendor, join(resources, 'node', 'node_modules'))

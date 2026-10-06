@@ -20,7 +20,11 @@ function expectedEntries(name) {
   )
   if (name === 'dsh-manuscript') output.push('client-editor-core.cjs')
   const localizedReadme = files?.includes('docs/README.zh-CN.md') ? ['package/docs/README.zh-CN.md'] : []
-  return ['package/LICENSE', 'package/README.md', ...localizedReadme, 'package/cordis.patch.yml', 'package/package.json', ...output.map(file => 'package/lib/' + file)]
+  const icons = files?.includes('icon.svg') ? ['package/icon.svg'] : []
+  const locales = files?.includes('locale/*.json')
+    ? fs.readdirSync(path.join(workspacePackageDir(name), 'locale')).filter(file => file.endsWith('.json')).map(file => 'package/locale/' + file)
+    : []
+  return ['package/LICENSE', 'package/README.md', ...localizedReadme, ...icons, ...locales, 'package/cordis.patch.yml', 'package/package.json', ...output.map(file => 'package/lib/' + file)]
 }
 
 function readManifest(name) {
@@ -82,8 +86,12 @@ for (const name of packageNames) {
   for (const value of Object.values(packageJson.exports ?? {})) {
     const targets = typeof value === 'string' ? [value] : Object.values(value)
     for (const target of targets) {
-      if (typeof target === 'string' && target.startsWith('./') && !entries.includes('package/' + target.slice(2))) {
-        throw new Error(`${name} exports a missing file: ${target}`)
+      if (typeof target === 'string' && target.startsWith('./')) {
+        const expected = 'package/' + target.slice(2)
+        const present = target.includes('*')
+          ? entries.some(entry => entry.startsWith(expected.slice(0, expected.indexOf('*'))) && entry.endsWith(expected.slice(expected.indexOf('*') + 1)))
+          : entries.includes(expected)
+        if (!present) throw new Error(`${name} exports a missing file: ${target}`)
       }
     }
   }
@@ -94,8 +102,8 @@ for (const name of packageNames) {
   const code = codeEntries.map((entry) => tar(['-xOf', filename, entry])).join('\n')
   for (const entry of codeEntries.filter(file => /client(?:\.inner)?\.(?:js|cjs)$/.test(file))) {
     const browserCode = tar(['-xOf', filename, entry])
-    if (/require\(["']@klarkxy\/dsh-ai-services\/(?:contracts|client-utils)["']\)/.test(browserCode)) {
-      throw new Error(name + ' client must bundle browser-safe AI contracts: ' + entry)
+    if (/(?:require\(|from\s+)["']@klarkxy\/dsh-(?:ai-services|model-center|memory|self-improvement|fusion)(?:\/|["'])/.test(browserCode)) {
+      throw new Error(name + ' client must not import a retired plugin: ' + entry)
     }
   }
   const runtimeForbidden = name === 'dsh-manuscript'

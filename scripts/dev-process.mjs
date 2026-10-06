@@ -14,7 +14,8 @@ export function isLeftoverDevCommand(commandLine, root) {
   return false
 }
 
-export function firstCompilePattern(packageName, wrapClient) {
+export function firstCompilePattern(packageName, wrapClient, sync) {
+  if (sync) return new RegExp(`desktop-dev-sync:\\s+${escapeRegExp(packageName)}(?:\\s|$)`)
   if (wrapClient) return new RegExp(`wrapped\\s+${escapeRegExp(packageName)}\\s+->`)
   return /Rebuilt in \d+ms/
 }

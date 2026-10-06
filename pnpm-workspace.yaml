@@ -1,3 +1,4 @@
 packages:
   - packages/*
   - apps/*
+useNodeVersion: 26.10.0

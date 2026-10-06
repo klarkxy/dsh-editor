@@ -30,7 +30,7 @@ jobs:
           version: 10.14.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.16.0
+          node-version: 26.10.0
           cache: pnpm
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile

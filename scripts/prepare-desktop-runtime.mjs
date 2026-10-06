@@ -1,6 +1,5 @@
 import { materializeDsh } from './materialize-dsh.mjs'
 import { copyRuntimeDependencies } from './runtime-dependencies.mjs'
-import { packageCopyFilter } from './package-copy.mjs'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
@@ -8,11 +7,19 @@ import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
 import { compositionInstallNames } from './plugin-manifest.mjs'
-import { workspacePackageDir, desktopComposition, configureProfile, runtimeDependencySources } from './desktop-compositions.mjs'
+import {
+  workspacePackageDir,
+  desktopComposition,
+  configureProfile,
+  runtimeDependencySources,
+  materializedRuntimePackageNames,
+  projectProfileArtifacts,
+  removeAppPackagesFromRuntime,
+} from './desktop-compositions.mjs'
 import { prepareNodeRuntime } from './prepare-node-runtime.mjs'
 import { treeDigest } from '../apps/desktop/dist/runtime-tree.js'
 
-const NODE_VERSION = '24.16.0'
+const NODE_VERSION = '26.10.0'
 const DSH_VERSION = '0.2.0-rc.2'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputRoot = resolve(root, '.pack', 'desktop-runtime')
@@ -67,13 +74,7 @@ await mkdir(dshOutput, { recursive: true })
 await prepareNodeRuntime(nodeOutput)
 await materializeDsh(dsh.packageRoot, dshOutput, dshCopyFilter)
 await copyRuntimeDependencies(dshOutput, runtimeDependencies)
-
-for (const packageName of privateProfilePackages) {
-  const source = workspacePackageDir(packageName)
-  const destination = resolve(dshOutput, 'node_modules', packageName)
-  await rm(destination, { recursive: true, force: true })
-  await cp(source, destination, { recursive: true, dereference: true, filter: packageCopyFilter(source) })
-}
+await removeAppPackagesFromRuntime(dshOutput)
 
 const bundledDsh = await readJson(resolve(dshOutput, 'package.json'))
 if (bundledDsh.name !== '@deepseek-ai/dsh' || bundledDsh.version !== DSH_VERSION) {
@@ -86,22 +87,17 @@ const nodeProbe = spawnSync(resolve(nodeOutput, nodeExecutableName), ['--version
 if (nodeProbe.status !== 0 || nodeProbe.stdout.trim() !== `v${NODE_VERSION}`) {
   throw new Error(`bundled Node probe failed: ${nodeProbe.stderr || nodeProbe.stdout}`)
 }
+const runtimePackageNames = await materializedRuntimePackageNames(dshOutput)
 const dshDigest = await treeDigest(dshOutput)
 await rename(resolve(dshOutput, 'node_modules'), resolve(dshOutput, 'vendor-dependencies'))
 
 const profileSource = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 await cp(profileSource, profileOutput, { recursive: true, dereference: true })
+await projectProfileArtifacts(profileOutput, composition, runtimePackageNames)
 await configureProfile(profileOutput, composition)
-for (const packageName of privateProfilePackages) {
-  const source = workspacePackageDir(packageName)
-  await cp(source, resolve(profileOutput, 'node_modules', packageName), {
-    recursive: true,
-    dereference: true,
-    filter: packageCopyFilter(source),
-  })
-}
 const profileDigest = await treeDigest(profileOutput)
 await rename(resolve(profileOutput, 'node_modules'), resolve(profileOutput, 'vendor-dependencies'))
+await rename(resolve(profileOutput, 'bundled-packages', 'node_modules'), resolve(profileOutput, 'bundled-packages', 'vendor-dependencies'))
 const profile = await readJson(resolve(profileOutput, 'package.json'))
 if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify([...composition.bundles, 'dsh-editor-profile-config'])) {
   throw new Error('desktop profile bundles are missing, reordered, or unexpected')

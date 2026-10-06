@@ -25,7 +25,7 @@ files:
   - "preload.cjs"
 extraResources:
   # Primary integration must materialize these exact, dependency-closed inputs.
-  - from: ../../.pack/desktop-runtime/node-24.16.0
+  - from: ../../.pack/desktop-runtime/node-26.10.0
     to: node
   - from: ../../.pack/desktop-runtime/dsh-0.2.0-rc.2
     to: dsh

@@ -11,6 +11,7 @@
     "test": "vitest run --root ../.. apps/desktop/test"
   },
   "devDependencies": {
+    "desktop-pnpm": "npm:pnpm@11.7.0",
     "electron": "42.11.8",
     "electron-builder": "26.0.12",
     "electron-winstaller": "5.4.0",

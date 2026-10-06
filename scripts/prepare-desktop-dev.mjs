@@ -1,44 +1,40 @@
 import { materializeDsh } from './materialize-dsh.mjs'
 import { copyRuntimeDependencies } from './runtime-dependencies.mjs'
-import { packageCopyFilter } from './package-copy.mjs'
-import { cp, mkdir, readFile, rm, symlink } from 'node:fs/promises'
+import { cp, mkdir, readFile, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
-import { compositionInstallNames } from './plugin-manifest.mjs'
-import { workspacePackageDir, desktopComposition, configureProfile, runtimeDependencySources, DESKTOP_PACKAGE_NAMES } from './desktop-compositions.mjs'
+import {
+  desktopComposition,
+  configureProfile,
+  runtimeDependencySources,
+  materializedRuntimePackageNames,
+  projectProfileArtifacts,
+  removeAppPackagesFromRuntime,
+} from './desktop-compositions.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourceTemplate = resolve(root, 'apps', 'desktop', 'resources', 'profile')
 const template = resolve(root, '.dev', 'desktop-profile-template')
 const devDshRuntime = resolve(root, '.dev', 'desktop-dsh-runtime-0.2.0-rc.2')
 const composition = await desktopComposition()
-const packages = compositionInstallNames(composition)
+// The cached runtime can outlive a product recipe. Remove only packages owned
+// by the previous generated composition; source directories and user data stay intact.
+let previousPackages = []
+try {
+  const previous = JSON.parse(await readFile(resolve(template, 'composition.json'), 'utf8'))
+  previousPackages = [...(previous.packages ?? []), ...(previous.libraries ?? [])]
+    .filter(name => typeof name === 'string' && /^(?:@klarkxy\/)?dsh-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name))
+} catch {}
 
-if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.node !== '24.16.0') {
-  throw new Error(`desktop development requires Windows x64 Node 24.16.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
+if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.node !== '26.10.0') {
+  throw new Error(`desktop development requires Windows x64 Node 26.10.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
 }
 const dsh = resolveDshInstallation('0.2.0-rc.2')
-
-async function installPackage(packageName, destination) {
-  await rm(destination, { recursive: true, force: true })
-  const source = workspacePackageDir(packageName)
-  if (process.env.DSH_EDITOR_COPY_PACKAGES === '1') {
-    await cp(source, destination, { recursive: true, dereference: true, filter: packageCopyFilter(source, { omitMaps: true }) })
-    return
-  }
-  await mkdir(dirname(destination), { recursive: true })
-  await symlink(source, destination, 'junction')
-}
 
 await rm(template, { recursive: true, force: true })
 await mkdir(dirname(template), { recursive: true })
 await cp(sourceTemplate, template, { recursive: true })
-await configureProfile(template, composition)
-await mkdir(resolve(template, 'node_modules'), { recursive: true })
-for (const packageName of packages) {
-  await installPackage(packageName, resolve(template, 'node_modules', packageName))
-}
 
 let runtimeReady = false
 try {
@@ -52,10 +48,9 @@ if (!runtimeReady) {
   await materializeDsh(dsh.packageRoot, devDshRuntime)
 }
 await copyRuntimeDependencies(devDshRuntime, runtimeDependencySources(composition))
-for (const packageName of DESKTOP_PACKAGE_NAMES) {
-  const destination = resolve(devDshRuntime, 'node_modules', packageName)
-  if (packages.includes(packageName)) await installPackage(packageName, destination)
-  else await rm(destination, { recursive: true, force: true })
-}
+await removeAppPackagesFromRuntime(devDshRuntime, previousPackages)
+const runtimePackageNames = await materializedRuntimePackageNames(devDshRuntime)
+await projectProfileArtifacts(template, composition, runtimePackageNames)
+await configureProfile(template, composition)
 
 console.log(`desktop-dev: prepared ${template}`)

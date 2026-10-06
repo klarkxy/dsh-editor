@@ -35,7 +35,7 @@ jobs:
           version: 10.14.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.16.0
+          node-version: 26.10.0
           cache: pnpm
       - name: Test incremental UI guard
         run: node --test scripts/check-ui-drift.test.mjs

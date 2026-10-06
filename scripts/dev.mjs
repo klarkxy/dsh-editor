@@ -26,8 +26,8 @@ if (!pnpmCli || !existsSync(pnpmCli)) {
   console.error('dev: start this command through pnpm: pnpm run dev')
   process.exit(1)
 }
-if (process.versions.node !== '24.16.0' || process.arch !== 'x64' || !win) {
-  console.error(`dev: Windows x64 with Node 24.16.0 is required; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
+if (process.versions.node !== '26.10.0' || process.arch !== 'x64' || !win) {
+  console.error(`dev: Windows x64 with Node 26.10.0 is required; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
   process.exit(1)
 }
 
@@ -126,7 +126,7 @@ async function killLeftoverDevProcesses() {
 }
 
 function waitForFirstCompile(child, packageName, wrapClient) {
-  const pattern = firstCompilePattern(packageName, wrapClient)
+  const pattern = firstCompilePattern(packageName, wrapClient, true)
   return new Promise((resolvePromise, reject) => {
     let settled = false
     let buffered = ''
@@ -238,7 +238,7 @@ for (let offset = 0; offset < watcherNames.length; offset += WATCHER_START_BATCH
     const wrapClient = wrapClients.has(name)
     const child = spawnNode(tsdownCli, [
       '--watch', '--no-clean',
-      ...(wrapClient ? ['--on-success', 'node ../../scripts/wrap-client.mjs ' + name] : []),
+      '--on-success', 'node ../../scripts/sync-desktop-dev-package.mjs ' + name,
     ], workspacePackageDir(name), ['ignore', 'pipe', 'pipe'])
     bindChild(child, 'watcher ' + name)
     return { name, child, wrapClient }

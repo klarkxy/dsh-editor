@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { compositionInstallNames } from './plugin-manifest.mjs'
-import { desktopComposition } from './desktop-compositions.mjs'
+import { desktopComposition, nativeDependencyBaseline, PROFILE_CONFIG_PACKAGE } from './desktop-compositions.mjs'
 import { localArtifactsForPlatform } from './release-artifacts.mjs'
 import { treeDigest } from '../apps/desktop/dist/runtime-tree.js'
 import { materializePackagedRuntime } from '../apps/desktop/dist/runtime-cache.js'
@@ -38,17 +38,32 @@ for (const key of ['node', 'dsh', 'profile']) {
 const dsh = await json(resolve(resources, 'dsh', 'package.json'))
 if (dsh.name !== '@deepseek-ai/dsh' || dsh.version !== '0.2.0-rc.2') throw new Error('packaged DSH identity mismatch')
 const composition = await json(resolve(resources, 'profile-template', 'composition.json'))
+const { nativeDependencies, ...packagedRecipe } = composition
 const expectedComposition = await desktopComposition(composition.id)
-if (JSON.stringify(composition) !== JSON.stringify(expectedComposition)) throw new Error('packaged composition mismatch')
+if (JSON.stringify(packagedRecipe) !== JSON.stringify(expectedComposition)) throw new Error('packaged composition mismatch')
+const expectedNative = nativeDependencyBaseline(expectedComposition)
+if (JSON.stringify(nativeDependencies) !== JSON.stringify(expectedNative)) throw new Error('packaged nativeDependencies mismatch')
 for (const dependencyName of composition.runtimeDependencies ?? []) {
   const dependency = await json(resolve(resources, 'dsh', 'node_modules', ...dependencyName.split('/'), 'package.json'))
   if (dependency.name !== dependencyName) throw new Error(`packaged runtime dependency identity mismatch: ${dependencyName}`)
 }
 const profile = await json(resolve(resources, 'profile-template', 'package.json'))
-if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify([...composition.bundles, 'dsh-editor-profile-config'])) {
+if (JSON.stringify(profile.dsh?.profile?.bundles) !== JSON.stringify([...composition.bundles, PROFILE_CONFIG_PACKAGE])) {
   throw new Error('packaged profile bundles mismatch')
 }
-const installedNames = [...compositionInstallNames(composition), 'dsh-editor-profile-config']
+if (JSON.stringify(profile.dependencies) !== JSON.stringify(nativeDependencies)) {
+  throw new Error('packaged profile native root dependencies mismatch')
+}
+for (const [name, spec] of Object.entries(nativeDependencies)) {
+  if (name === PROFILE_CONFIG_PACKAGE) {
+    if (spec !== 'link:./profile-config') throw new Error(`packaged native dependency spec mismatch: ${name}`)
+    await stat(resolve(resources, 'profile-template', 'profile-config', 'package.json'))
+    continue
+  }
+  if (spec !== `link:./bundled-packages/node_modules/${name}`) throw new Error(`packaged native dependency spec mismatch: ${name}`)
+  await stat(resolve(resources, 'profile-template', 'bundled-packages', 'node_modules', ...name.split('/'), 'package.json'))
+}
+const installedNames = [...compositionInstallNames(composition), PROFILE_CONFIG_PACKAGE]
 for (const packageName of installedNames) {
   await stat(resolve(resources, 'profile-template', 'node_modules', packageName, 'package.json'))
 }
@@ -74,7 +89,7 @@ for (const name of await readdir(profileModules)) {
 installed.sort()
 if (JSON.stringify(installed) !== JSON.stringify([...installedNames].sort())) throw new Error('unexpected packaged business dependencies')
 const nodeProbe = spawnSync(resolve(resources, 'node', nodeExecutableName), ['--version'], { encoding: 'utf8', windowsHide: true })
-if (nodeProbe.status !== 0 || nodeProbe.stdout.trim() !== 'v24.16.0') throw new Error('packaged Node probe failed')
+if (nodeProbe.status !== 0 || nodeProbe.stdout.trim() !== 'v26.10.0') throw new Error('packaged Node probe failed')
 
 // Exercise the real portable materializer against the final packaged resources,
 // even on macOS where the normal installed launch intentionally skips copying.
@@ -84,7 +99,7 @@ try {
   const reused = await materializePackagedRuntime(smokeHome, resources)
   if (runtime.nodePath !== reused.nodePath) throw new Error('packaged runtime cache was not reused')
   const probe = spawnSync(runtime.nodePath, ['--version'], { encoding: 'utf8', windowsHide: true })
-  if (probe.status !== 0 || probe.stdout.trim() !== 'v24.16.0') throw new Error('materialized Node probe failed')
+  if (probe.status !== 0 || probe.stdout.trim() !== 'v26.10.0') throw new Error('materialized Node probe failed')
   const npmRoot = resolve(dirname(runtime.nodePath), 'node_modules', 'npm')
   const npmVersion = (await json(resolve(npmRoot, 'package.json'))).version
   for (const name of ['npm', 'npx']) {
