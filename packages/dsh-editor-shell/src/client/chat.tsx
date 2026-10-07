@@ -13,7 +13,6 @@ import {
   type KeyboardEvent,
 } from 'react';
 import {
-  authorMemoryObservations,
   chatRows,
   internalIndexTurnActive,
   loadOlder,
@@ -58,9 +57,8 @@ import {
   type ConversationPresetChoice,
 } from '../conversation-presets.ts'
 import { shouldShowMigrationBanner } from '../legacy-migration.ts'
-import { ConversationRenameQueue, automaticTitleManaged, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, restoreConversationIds, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
-import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings, DEFAULT_CONVERSATION_SETTINGS, putConversationWork } from '../conversation-store.ts'
-import { isActiveSessionArchiveError, enqueueConversationSettingsWrite, coordinateLegacyConversationArchives, waitForLegacyConversationArchives, orderedConversationIds, type ConversationFilter } from '../native-conversation-state.ts'
+import { ConversationRenameQueue, automaticTitleManaged, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
+import { isActiveSessionArchiveError, orderedConversationIds, type ConversationFilter } from '../native-conversation-state.ts'
 import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
 import { isObservableSource, useObservable } from './components.tsx'
@@ -146,7 +144,7 @@ export async function settleConversationStop(input: {
 }
 
 
-export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, renderSlot, onRememberMemory, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange, onHide }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; onRememberMemory(observation: string): Promise<boolean> | boolean; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void }) {
+export function Chat({ ctx, session, workspaceId, activePath, authorPreferences, authorMemory, renderSlot, hidden, overlay, onConfigure, onApplied, onWritten, onDraftDirtyChange, onHide }: { ctx: ShellContext; session: SessionFace; workspaceId?: WorkspaceId; activePath?: string; authorPreferences: string; authorMemory: string; renderSlot?: SettingsRenderSlot; hidden: boolean; overlay?: boolean; onConfigure(): void; onApplied(path: string): void; onWritten?(path: string): void; onDraftDirtyChange(dirty: boolean): void; onHide?(): void }) {
   const locale = useLocale()
   const messageCards = (ctx as ShellContext & { [MESSAGE_CARDS_SERVICE]?: ShellMessageCardRegistry })[MESSAGE_CARDS_SERVICE]
   const [messageCardTick, setMessageCardTick] = useState(0)
@@ -217,12 +215,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const [conversationMenuOpen, setConversationMenuOpen] = useState(false)
   const conversationMenuTrigger = useRef<HTMLButtonElement | null>(null)
   const conversationMenuYields = useRef(false)
-  const [conversationOperationBusy, setConversationBusy] = useState(false)
-  const [archiveMigrationBusy, setArchiveMigrationBusy] = useState(false)
-  const conversationBusy = conversationOperationBusy || archiveMigrationBusy
+  const [conversationBusy, setConversationBusy] = useState(false)
   const [conversationFilter, setConversationFilter] = useState<ConversationFilter>('active')
   const [archiveStopConfirm, setArchiveStopConfirm] = useState<{ id: string; nextId?: string } | null>(null)
-  const [titleOverrides, setTitleOverrides] = useState<Record<string, string>>({})
+  const [titleOverrides, setTitleOverrides] = useState<Record<string, { title: string; status: 'pending' | 'confirmed' | 'failed' }>>({})
   const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
   const [presetPicker, setPresetPicker] = useState<{
     kind: 'closed' | 'loading' | 'list-error' | 'ready'
@@ -256,19 +252,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   /* rows 只依赖 nodes 引用:流式期间 partial 每个令牌都换新对象,但 nodes 引用不变,
      历史行得以凭缓存引用跳过重渲染;t() 文案(停止标记/通知行)随 locale 一起失效。 */
   const rows = useMemo(() => chatRows(transcript), [transcript.nodes, locale])
-  /* author_observe 静默落盘:该工具回合不在聊天渲染(同 novel_index_write),
-     这里扫描 transcript 把观察结果自动追加进本机作者侧写;写入失败等下个更新重试。 */
-  const rememberedObservations = useRef(new Set<string>())
-  useEffect(() => {
-    const pending = authorMemoryObservations(transcript)
-      .filter((item) => !rememberedObservations.current.has(`${session.sessionId}:${item.seq}`))
-    if (!pending.length) return
-    void (async () => {
-      for (const item of pending) {
-        if (await onRememberMemory(item.observation)) rememberedObservations.current.add(`${session.sessionId}:${item.seq}`)
-      }
-    })()
-  }, [transcript, onRememberMemory, session.sessionId])
   const historyBlocks = useMemo(() => clusterChatRows(rows, messageCards), [rows, messageCards, messageCardTick])
   const visibleCalls = useMemo(() => visibleRunningCalls(transcript.runningCalls ?? []), [transcript.runningCalls])
   /* 流式更新跟随到底部；用户主动上翻阅读时松开，回到底部附近再重新跟随。
@@ -300,8 +283,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const workspace = workspaceList.items.find((item) => item.workspaceId === workspaceId)
   const initScope = useMemo(() => ctx.configForms.get<NonNullable<ReturnType<typeof decodeInitSettings>>>(INIT_SETTINGS_NAMESPACE), [ctx])
   const initSettings = useObservable(initScope)
-  const conversationScope = useMemo(() => ctx.configForms.get<NonNullable<ReturnType<typeof decodeConversationSettings>>>(CONVERSATION_SETTINGS_NAMESPACE), [ctx])
-  const conversationSettings = useObservable(conversationScope)
   const developerScope = useMemo(() => ctx.configForms.get<NonNullable<ReturnType<typeof decodeDeveloperSettings>>>(DEVELOPER_SETTINGS_NAMESPACE), [ctx])
   const developerSettings = useObservable(developerScope)
   const developerMode = developerSettings.value?.developerMode === true
@@ -442,19 +423,27 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     [currentMode?.id, locale],
   )
   const workspaceSessionIds = workspace?.sessionIds.length ? [...workspace.sessionIds] : [session.sessionId]
-  const hostArchivedIds = workspaceList.archivedSessionIds ?? []
+  const archivedIds = workspaceList.archivedSessionIds ?? []
   const hostPinnedIds = workspaceList.pinnedSessionIds ?? []
-  const workRecord = conversationWorkRecord(conversationSettings.value ?? DEFAULT_CONVERSATION_SETTINGS, workspaceId)
-  const archivedIds = [...new Set([...hostArchivedIds, ...workRecord.archivedIds])]
   const conversationTitles = {
     ...Object.fromEntries(Object.entries(sessionList.byId ?? {}).map(([id, value]) => [id, value.title])),
-    ...workRecord.titles,
-    ...titleOverrides,
+    ...Object.fromEntries(Object.entries(titleOverrides).map(([id, value]) => [id, value.title])),
   }
+  useEffect(() => {
+    for (const [id, summary] of Object.entries(sessionList.byId ?? {})) conversationRenameQueue.observedTitle(id, summary.title)
+    setTitleOverrides((current) => {
+      const next = { ...current }
+      for (const [id, pending] of Object.entries(current)) {
+        const native = sessionList.byId?.[id]?.title
+        const observed = conversationRenameQueue.observedTitle(id, native)
+        if (pending.status === 'confirmed' && observed === native) delete next[id]
+      }
+      return Object.keys(next).length === Object.keys(current).length ? current : next
+    })
+  }, [sessionList.byId])
   const conversations = conversationRows({
     workspaceSessionIds,
     archivedIds,
-    forgottenIds: workRecord.tombstoneIds,
     reusableBlankIds: Object.values(sessionList.byId ?? {}).filter((item) => item.blank).map((item) => item.id),
     currentId: session.sessionId,
     titles: conversationTitles,
@@ -462,7 +451,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const archivedConversations = archivedConversationRows({
     workspaceSessionIds,
     archivedIds,
-    forgottenIds: workRecord.tombstoneIds,
     currentId: session.sessionId,
     titles: conversationTitles,
   })
@@ -478,13 +466,29 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const currentIsPinned = hostPinnedIds.includes(session.sessionId)
   const canMutateConversation = conversations.some((item) => item.id !== session.sessionId) || canArchiveOrDeleteConversation(conversations.length)
   const queueConversationRename = (title: string, failureNote: string, automatic = false) => {
+    const id = session.sessionId
+    const pending = { title, status: 'pending' as const }
+    setTitleOverrides((current) => ({ ...current, [id]: pending }))
     void conversationRenameQueue.enqueue(session.sessionId, async () => {
-      if (automatic && automaticTitleManaged(ctx)) return
       try {
+        if (automatic && !conversationRenameQueue.canAutomaticallyRename(id, ctx.sessions.list.getSnapshot().byId[id]?.title, automaticTitleManaged(ctx))) {
+          setTitleOverrides((current) => { const next = { ...current }; if (next[id] === pending) delete next[id]; return next })
+          return
+        }
         const result = await session.rename(title)
-        if (!result.ok) setNote(failureNote)
+        if (!result.ok) throw new Error(failureNote)
+        conversationRenameQueue.acknowledgeTitle(id, result.value.title, ctx.sessions.list.getSnapshot().byId[id]?.title)
+        setTitleOverrides((current) => {
+          if (current[id] !== pending) return current
+          const next = { ...current }
+          const native = ctx.sessions.list.getSnapshot().byId[id]?.title
+          if (conversationRenameQueue.observedTitle(id, native) === native) delete next[id]
+          else next[id] = { ...pending, title: result.value.title, status: 'confirmed' }
+          return next
+        })
       } catch {
         setNote(failureNote)
+        setTitleOverrides((current) => current[id] === pending ? { ...current, [id]: { ...pending, status: 'failed' } } : current)
       }
     })
   }
@@ -493,7 +497,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     const summary = sessionList.byId?.[session.sessionId]
     const updatedAt = (summary as unknown as { updatedAt?: unknown } | undefined)?.updatedAt
     const title = nextAutomaticConversationTitle({
-      durableTitle: workRecord.titles[session.sessionId] ?? titleOverrides[session.sessionId] ?? summary?.title?.trim(),
+      durableTitle: titleOverrides[session.sessionId]?.title ?? summary?.title?.trim(),
       assistantReplies: rows.filter((row) => row.role === 'assistant').map((row) => row.text),
       attempted: titleAttempted.current.has(session.sessionId),
       date: typeof updatedAt === 'number' ? updatedAt : Date.now(),
@@ -529,9 +533,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setRenamingConversation(false)
     titleAttempted.current.add(session.sessionId)
     setNote('')
-    setTitleOverrides((current) => ({ ...current, [session.sessionId]: title }))
     queueConversationRename(title, t('chat.renameFailed'))
-    void persistConversationField(['titles', session.sessionId], title).catch(() => setNote(t('chat.renameFailed')))
   }
 
   const applyDefaultChatModel = (sessionId: SessionId) => applyChatModelDefault(ctx, sessionId)
@@ -627,32 +629,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       archive: (id) => ctx.workspaces.archiveSession(id),
     })
   }
-  const persistConversationField = async (path: string[], value: unknown) => {
-    if (!workspaceId) throw new Error('workspace unavailable')
-    await enqueueConversationSettingsWrite(conversationScope, async () => {
-      if (await conversationScope.mutate([{ op: 'set', path: ['works', workspaceId, ...path], value }]) === false) throw new Error('Host refused conversation settings write')
-    })
-  }
-  const clearLegacyArchive = (id: string, workId: string) => enqueueConversationSettingsWrite(conversationScope, async () => {
-    const current = conversationScope.getSnapshot().value ?? DEFAULT_CONVERSATION_SETTINGS
-    const record = conversationWorkRecord(current, workId)
-    if (!record.archivedIds.includes(id)) return
-    if (await conversationScope.mutate([{ op: 'set', path: ['works', workId, 'archivedIds'], value: restoreConversationIds(record.archivedIds, id) }]) === false) throw new Error('Host refused conversation settings write')
-  })
-  useEffect(() => {
-    if (!workspaceId || !workspace) return
-    const pending = workRecord.archivedIds.filter((id) => workspaceSessionIds.includes(id as SessionId))
-    let live = true
-    setArchiveMigrationBusy(true)
-    void coordinateLegacyConversationArchives(ctx.workspaces, workspaceId, {
-      ids: pending,
-      nativeArchivedIds: hostArchivedIds,
-      archive: (id) => ctx.workspaces.archiveSession(id),
-      clear: (id) => clearLegacyArchive(id, workspaceId),
-    }).finally(() => { if (live) setArchiveMigrationBusy(false) })
-    return () => { live = false }
-  }, [workspaceId, workspaceSessionIds.join('|'), workRecord.archivedIds.join('|')])
-
   const archiveConversation = async (id: string, stopActivity = false, selectedNextId?: string) => {
     if (!workspaceId || conversationBusy || !canMutateConversation) return
     setConversationMenuOpen(false)
@@ -685,9 +661,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     setConversationBusy(true)
     setNote('')
     try {
-      await waitForLegacyConversationArchives(ctx.workspaces, workspaceId)
       await ctx.workspaces.unarchiveSession(id as SessionId)
-      await clearLegacyArchive(id, workspaceId)
       openConversation(id as SessionId)
     } catch {
       setNote(t('chat.restoreFailed'))
@@ -723,8 +697,7 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   const currentConversationTitle = conversations.find((item) => item.id === session.sessionId)?.title
     ?? archivedConversations.find((item) => item.id === session.sessionId)?.title
     ?? t('chat.newConversation')
-  const renameInitialValue = workRecord.titles[session.sessionId]
-    ?? titleOverrides[session.sessionId]
+  const renameInitialValue = titleOverrides[session.sessionId]?.title
     ?? (currentConversationTitle === t('chat.newConversation') ? '' : currentConversationTitle)
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -804,6 +777,10 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       {...(hidden ? { inert: '' } : {})}
       data-chat-face={conversationFace(ctx) ? 'official' : 'missing'}
       data-chat-nodes={String(transcript.nodes.length)}>
+      {titleOverrides[session.sessionId]?.status === 'failed' ? <Callout.Root color="red" role="alert">
+        <Callout.Text>{t('chat.renameFailed')}</Callout.Text>
+        <Button onClick={() => queueConversationRename(titleOverrides[session.sessionId]!.title, t('chat.renameFailed'))}>{t('common.retry')}</Button>
+      </Callout.Root> : null}
       <Flex asChild align="center" gap="2" px="3" py="2" justify="between" width="100%" minWidth="0">
         <header className="chat-header">
           <Box className="conversation-select" flexGrow="1" minWidth="0">

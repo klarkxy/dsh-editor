@@ -1,23 +1,5 @@
-export const CORE_PLUGIN_ENTRY_IDS = new Set([
-  'editor-shell',
-  'editor-plugins',
-  'editor-novel-kernel',
-  'editor-workbench-tools',
-  'editor-workbench',
-  'manuscript',
-  'proofread',
-])
-
-export const CORE_PLUGIN_BUNDLE_NAMES = new Set([
-  'dsh-editor-shell',
-  'dsh-editor-plugins',
-  'dsh-editor-workbench',
-  'dsh-editor-novel-kernel',
-  'dsh-editor-writing-presets',
-  'dsh-manuscript',
-  'dsh-proofread',
-  'dsh-editor-profile-config',
-])
+import { CORE_PLUGIN_ENTRY_IDS, CORE_PLUGIN_BUNDLE_NAMES } from '../../../apps/desktop/src/distribution-contract.ts'
+export { CORE_PLUGIN_ENTRY_IDS, CORE_PLUGIN_BUNDLE_NAMES } from '../../../apps/desktop/src/distribution-contract.ts'
 
 export function corePluginPatchId(entryId: string): string {
   const colon = entryId.lastIndexOf(':')

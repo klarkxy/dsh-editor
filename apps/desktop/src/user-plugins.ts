@@ -1,3 +1,4 @@
+import { HOST_LOCKED_ENTRY_IDS as HOST_LOCKED_PLUGIN_IDS, RETIRED_PLUGIN_IDS, RETIRED_PLUGIN_PACKAGES, OPTIONAL_PUBLIC_PLUGINS } from './distribution-contract.js'
 import { copyFile, cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { constants, existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -13,11 +14,6 @@ import {
   type ProfileManifest,
 } from './native-profile.js'
 
-/** Keep in sync with HOST_LOCKED_ENTRY_IDS in dsh-editor-plugins. */
-const HOST_LOCKED_PLUGIN_IDS = new Set(['editor-novel-kernel', 'editor-workbench-tools', 'proofread', 'web-search-tavily', 'ai-services', 'model-center', 'memory', 'self-improvement', 'fusion'])
-const RETIRED_PLUGIN_IDS = ['ai-services', 'model-center', 'memory', 'self-improvement', 'fusion'] as const
-const RETIRED_PLUGIN_PACKAGES = new Set<string>(RETIRED_PLUGIN_IDS.map(id => '@klarkxy/dsh-' + id))
-const OPTIONAL_PUBLIC_PLUGINS = { 'current-title': '@klarkxy/dsh-current-title', mood: '@klarkxy/dsh-mood', recap: '@klarkxy/dsh-recap', zhihu: '@klarkxy/dsh-zhihu', 'zhihu-tools': '@klarkxy/dsh-zhihu' }
 const MANAGED_PATCH_MARK = 'managed-by: dsh-editor-plugins'
 const PRESET_ID = /^[A-Za-z0-9._-]+$/
 const PRESET_OWNER_MARKER = '.dsh-editor-owner.json'
@@ -174,6 +170,7 @@ async function backupBeforePluginRetirement(file: string): Promise<void> {
 }
 
 export async function sanitizeHostLockedPluginOverrides(home: string, bundledNames?: readonly string[]): Promise<void> {
+  const migrated = await nativeMigrationComplete(home)
   const uninstalledOptional = new Set(Object.entries(OPTIONAL_PUBLIC_PLUGINS)
     .filter(([, name]) => bundledNames && !bundledNames.includes(name)).map(([id]) => id))
   const backupTrimmed = async (file: string): Promise<void> => {
@@ -193,7 +190,7 @@ export async function sanitizeHostLockedPluginOverrides(home: string, bundledNam
       let trimmed = false
       if (state.overrides && typeof state.overrides === 'object' && !Array.isArray(state.overrides)) {
         const overrides = state.overrides as Record<string, unknown>
-        retired = Object.prototype.hasOwnProperty.call(overrides, 'web-search-tavily') || RETIRED_PLUGIN_IDS.some(id => Object.prototype.hasOwnProperty.call(overrides, id))
+        retired = Object.prototype.hasOwnProperty.call(overrides, 'web-search-tavily') || [...RETIRED_PLUGIN_IDS].some(id => Object.prototype.hasOwnProperty.call(overrides, id))
         for (const id of HOST_LOCKED_PLUGIN_IDS) {
           if (Object.prototype.hasOwnProperty.call(overrides, id)) { delete overrides[id]; changed = true }
         }
@@ -202,7 +199,7 @@ export async function sanitizeHostLockedPluginOverrides(home: string, bundledNam
         }
       }
       if (Array.isArray(state.installed)) {
-        const installed = state.installed.filter(item => item?.name !== 'dsh-web-search-tavily' && !RETIRED_PLUGIN_PACKAGES.has(item?.name))
+        const installed = state.installed.filter(item => !RETIRED_PLUGIN_PACKAGES.has(item?.name))
         if (installed.length !== state.installed.length) { state.installed = installed; changed = true; retired = true }
       }
       if (changed) {
@@ -216,6 +213,9 @@ export async function sanitizeHostLockedPluginOverrides(home: string, bundledNam
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') uninstalledOptional.clear()
   }
 
+  // The stale JSON fields still need host guards on reused profiles. Home
+  // overlay conversion ends with the native migration and never resumes.
+  if (migrated) return
   const patchPath = join(home, 'cordis.patch.yml')
   try {
     const text = await readFile(patchPath, 'utf8')
@@ -231,7 +231,7 @@ export async function sanitizeHostLockedPluginOverrides(home: string, bundledNam
     if (comparable !== rendered) {
       if ([...uninstalledOptional].some(id => Object.prototype.hasOwnProperty.call(parsed, id))) await backupTrimmed(patchPath)
       if (Object.prototype.hasOwnProperty.call(parsed, 'web-search-tavily')) await backupBeforeTavilyMerge(patchPath)
-      if (RETIRED_PLUGIN_IDS.some(id => Object.prototype.hasOwnProperty.call(parsed, id))) await backupBeforePluginRetirement(patchPath)
+      if ([...RETIRED_PLUGIN_IDS].some(id => Object.prototype.hasOwnProperty.call(parsed, id))) await backupBeforePluginRetirement(patchPath)
       await writeFile(patchPath, rendered, 'utf8')
     }
   } catch { /* missing overlay is a clean home */ }

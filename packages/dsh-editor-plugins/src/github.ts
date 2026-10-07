@@ -42,13 +42,6 @@ export function marketplaceSearchUrl(query: string): string {
   return `https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=${MARKETPLACE_PAGE_SIZE}`
 }
 
-export function githubTarballUrl(spec: GitHubSpec): string {
-  const ref = spec.ref ? encodeURIComponent(spec.ref) : ''
-  return ref
-    ? `https://api.github.com/repos/${spec.owner}/${spec.repo}/tarball/${ref}`
-    : `https://api.github.com/repos/${spec.owner}/${spec.repo}/tarball`
-}
-
 export function githubHeaders(): Record<string, string> {
   return {
     Accept: 'application/vnd.github+json',
@@ -81,11 +74,4 @@ export function parseMarketplaceSearch(payload: unknown): MarketplaceListing[] {
     })
   }
   return listings
-}
-
-export function tarEntryIsSafe(entry: string): boolean {
-  const normalized = entry.replaceAll('\\', '/')
-  if (!normalized || normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized)) return false
-  const parts = normalized.split('/')
-  return parts.every((part) => part !== '..' && part !== '.')
 }

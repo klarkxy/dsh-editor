@@ -29,7 +29,8 @@ function composeAuthorMemory(head: string, entries: string[]): string {
 
 /**
  * 把一条 author_observe 观察结果追加进本机侧写,返回应写入的完整值。
- * 超限时自动丢弃最旧的自动条目腾位;手写部分永不动。返回 undefined 表示
+ * 超限时自动丢弃最旧的自动条目腾位;手写部分永不动。无法容纳新条目时失败。
+ * 返回 undefined 表示
  * 无需写入(空条目或完全重复的观察)。
  */
 export function appendAuthorMemory(current: string, observation: string, maxChars = AUTHOR_MEMORY_MAX_CHARS): string | undefined {
@@ -38,6 +39,9 @@ export function appendAuthorMemory(current: string, observation: string, maxChar
   const { head, entries } = splitAuthorMemory(current)
   if (entries.includes(entry)) return undefined
   const kept = [...entries, entry]
-  while (kept.length > 0 && composeAuthorMemory(head, kept).length > maxChars) kept.shift()
+  while (kept.length > 1 && composeAuthorMemory(head, kept).length > maxChars) kept.shift()
+  if (composeAuthorMemory(head, kept).length > maxChars) {
+    throw new Error('作者侧写空间不足，请缩短手写内容后重试。')
+  }
   return composeAuthorMemory(head, kept)
 }

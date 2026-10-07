@@ -1,21 +1,19 @@
 // The publisher and updater share the same product, platform and package names.
 import { basename } from 'node:path'
+import release from './release-artifacts.json' with { type: 'json' }
 
-export const RELEASE_PRODUCT_NAME = 'DSH Editor'
-export const RELEASE_OWNER = 'klarkxy'
-export const RELEASE_REPO = 'dsh-editor'
-export type ReleaseArtifactKind = 'win32-portable' | 'win32-setup' | 'darwin-dmg' | 'darwin-zip'
+export const RELEASE_PRODUCT_NAME = release.productName
+export const RELEASE_OWNER = release.owner
+export const RELEASE_REPO = release.repo
+export type ReleaseArtifactKind = keyof typeof release.templates
 
 export function sanitizeReleaseAssetName(localName: string): string {
   return localName.replaceAll(' ', '-')
 }
 export function localArtifactName(kind: ReleaseArtifactKind, version: string, arch = 'arm64'): string {
-  switch (kind) {
-    case 'win32-portable': return `${RELEASE_PRODUCT_NAME}-${version}-win-x64.exe`
-    case 'win32-setup': return `${RELEASE_PRODUCT_NAME}-Setup-${version}-win-x64.exe`
-    case 'darwin-dmg': return `${RELEASE_PRODUCT_NAME}-${version}-mac-${arch}.dmg`
-    case 'darwin-zip': return `${RELEASE_PRODUCT_NAME}-${version}-mac-${arch}.zip`
-  }
+  const template = release.templates[kind]
+  if (!template) throw new Error(`unknown release artifact kind: ${kind}`)
+  return template.replaceAll('{productName}', RELEASE_PRODUCT_NAME).replaceAll('{version}', version).replaceAll('{arch}', arch)
 }
 export function releaseArtifactName(kind: ReleaseArtifactKind, version: string, arch?: string): string {
   return sanitizeReleaseAssetName(localArtifactName(kind, version, arch))
@@ -29,15 +27,17 @@ export function localArtifactsForPlatform(platform: NodeJS.Platform | string, ve
 export function matchesReleaseAsset(name: string, platform: NodeJS.Platform | string, portable: boolean, arch?: string): boolean {
   if (!isSafeAssetFileName(name)) return false
   const normalized = sanitizeReleaseAssetName(name)
+  const matches = (kind: ReleaseArtifactKind, targetArch?: string): boolean => {
+    const escaped = releaseArtifactName(kind, 'VERSION', targetArch).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`^${escaped.replace('VERSION', '\\d+\\.\\d+\\.\\d+')}$`).test(normalized)
+  }
   if (platform === 'win32') {
     if (arch && arch !== 'x64') return false
-    return portable
-      ? /^DSH-Editor-\d+\.\d+\.\d+-win-x64\.exe$/.test(normalized)
-      : /^DSH-Editor-Setup-\d+\.\d+\.\d+-win-x64\.exe$/.test(normalized)
+    return matches(portable ? 'win32-portable' : 'win32-setup')
   }
   if (platform === 'darwin') {
     const target = arch ?? 'arm64'
-    return ['arm64', 'x64'].includes(target) && new RegExp(`^DSH-Editor-\\d+\\.\\d+\\.\\d+-mac-${target}\\.dmg$`).test(normalized)
+    return ['arm64', 'x64'].includes(target) && matches('darwin-dmg', target)
   }
   return false
 }

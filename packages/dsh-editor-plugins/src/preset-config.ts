@@ -1,25 +1,10 @@
+import { REQUIRED_CORE_BUNDLES, RETIRED_PLUGIN_PACKAGES } from '../../../apps/desktop/src/distribution-contract.ts'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parse } from 'yaml'
 import { isSafeEntryId, isSafePackageName } from './core.ts'
-
-/** Finite host packages. Unknown native extras in the same namespaces stay eligible. */
-const REQUIRED_CORE_PACKAGES = new Set([
-  '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app',
-  'dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench', 'dsh-editor-novel-kernel',
-  'dsh-editor-writing-presets', 'dsh-editor-shell', 'dsh-editor-plugins',
-  'dsh-editor-profile-config',
-])
-const RETIRED_PACKAGES = new Set([
-  '@klarkxy/dsh-ai-services',
-  '@klarkxy/dsh-model-center',
-  '@klarkxy/dsh-memory',
-  '@klarkxy/dsh-self-improvement',
-  '@klarkxy/dsh-fusion',
-  'dsh-web-search-tavily',
-])
 
 function exportTarget(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim()) return value
@@ -82,7 +67,7 @@ async function selectedToolInserts(profileDir: string): Promise<Array<{ id: stri
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error
   }
-  const skip = new Set([...shipped, ...REQUIRED_CORE_PACKAGES, ...RETIRED_PACKAGES])
+  const skip = new Set([...shipped, ...REQUIRED_CORE_BUNDLES, ...RETIRED_PLUGIN_PACKAGES])
   const rows: Array<{ id: string; name: string }> = []
   for (const name of [...new Set(bundles)].sort()) {
     if (!isSafePackageName(name) || skip.has(name)) continue

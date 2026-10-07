@@ -1,3 +1,5 @@
+import { REQUIRED_CORE_BUNDLES, RETIRED_PLUGIN_PACKAGES, HOST_LOCKED_ENTRY_IDS as HOST_LOCKED_PLUGIN_IDS, RESTORED_PATCH_IDS as CORE_PATCH_IDS } from './distribution-contract.js'
+export { REQUIRED_CORE_BUNDLES } from './distribution-contract.js'
 import { copyFile, cp, lstat, mkdir, readFile, readdir, readlink, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { constants, existsSync } from 'node:fs'
 import { dirname, isAbsolute, join, posix, relative, resolve as resolvePath, sep, win32 } from 'node:path'
@@ -15,33 +17,10 @@ autoInstallPeers: false
 `
 
 const PACKAGE_NAME = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/
-const RETIRED_PLUGIN_PACKAGES = new Set([
-  '@klarkxy/dsh-ai-services',
-  '@klarkxy/dsh-model-center',
-  '@klarkxy/dsh-memory',
-  '@klarkxy/dsh-self-improvement',
-  '@klarkxy/dsh-fusion',
-  'dsh-web-search-tavily',
-])
-const HOST_LOCKED_PLUGIN_IDS = new Set([
-  'editor-novel-kernel', 'editor-workbench-tools', 'proofread',
-  'web-search-tavily', 'ai-services', 'model-center', 'memory', 'self-improvement', 'fusion',
-])
-const CORE_PATCH_IDS = new Set([
-  'ui-layout', 'ui-sidebar', 'editor-workbench-tools', 'editor-novel-kernel', 'proofread',
-  'web', 'web-search-deepseek', 'web-fetch-http', 'tool-web',
-])
 export const PROFILE_CONFIG_PACKAGE = 'dsh-editor-profile-config'
 export const PROFILE_CONFIG_SPEC = 'link:./profile-config'
 export const BUNDLED_PACKAGES_DIR = join('bundled-packages', 'node_modules')
 export const RUNTIME_LINKS_DIR = join('runtime-links', 'node_modules')
-/** Finite required core bundles. Do not infer ownership from namespace or prefix. */
-export const REQUIRED_CORE_BUNDLES = new Set([
-  '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app',
-  'dsh-manuscript', 'dsh-proofread', 'dsh-editor-workbench', 'dsh-editor-novel-kernel',
-  'dsh-editor-writing-presets', 'dsh-editor-shell', 'dsh-editor-plugins',
-  PROFILE_CONFIG_PACKAGE,
-])
 const NATIVE_OWNED_FILES = ['pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'compatibility.json'] as const
 const MANAGED_PATCH_MARK = 'managed-by: dsh-editor-plugins'
 const HOME_PLUGIN_FILES = ['dsh-plugins.json', 'cordis.patch.yml', NATIVE_PLUGIN_MIGRATION_MARKER] as const
@@ -89,7 +68,7 @@ export function isRequiredCoreBundle(name: string): boolean {
 
 export function isSafeUserPackageName(name: string, protectedNames: readonly string[]): boolean {
   return PACKAGE_NAME.test(name) && !name.includes('..') && !protectedNames.includes(name)
-    && !name.startsWith('@deepseek-ai/') && !isRetiredPackage(name)
+    && !isRequiredCoreBundle(name) && !isRetiredPackage(name)
 }
 
 export async function nativeMigrationComplete(home: string): Promise<boolean> {

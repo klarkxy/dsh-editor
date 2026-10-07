@@ -1,3 +1,4 @@
+import { RETIRED_PLUGIN_PACKAGES } from '../../../apps/desktop/src/distribution-contract.ts'
 import { syncPresetDeclarations } from './preset-config.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { registerHostRpc, type HostRpcContext } from 'dsh-manuscript/host-api'
@@ -13,19 +14,17 @@ import { CORE_PLUGIN_BUNDLE_NAMES, protectCorePluginManager } from './core-lock.
 import { isSafePackageName, readPreparedCatalog } from './core.ts'
 import { githubHeaders, marketplaceSearchUrl, parseGitHubSpec, parseMarketplaceSearch, sanitizeMarketplaceQuery } from './github.ts'
 import { npmMarketplaceListing, parseNpmSpec } from './npm.ts'
-import { emptyPluginState, isOwnedManagedPatch, parsePluginState, renderOverridePatch, withoutHostLockedOverrides, type PluginState } from './overlay.ts'
+import { emptyPluginState, parsePluginState, type PluginState } from './overlay.ts'
 import { resolvePluginPaths, type PluginPaths } from './paths.ts'
 import {
   CORE_WRITING_PRESET_ID,
-  deployAppOwnedPreset,
   listWritingPresets,
   readCompositionPresets,
-  removeAppOwnedPreset,
+  updateAppOwnedPreset,
 } from './writing-presets.ts'
 import {
   defaultPersistIo,
   isEnoent,
-  PluginPersistBlockedError,
   PluginPersistError,
   replaceFileAtomic,
   runQueuedSorted,
@@ -34,16 +33,9 @@ import {
 } from './persist.ts'
 
 export const name = 'dsh-editor-plugins'
-export const inject = ['connection', 'loader', 'webServer'] as const
+export const inject = ['connection', 'webServer'] as const
 
-type LoaderFace = {
-  entries(): Iterable<unknown>
-  update?(id: string, options: { disabled?: boolean | null }): Promise<unknown> | unknown
-}
-
-type RpcHost = Context & HostRpcContext & {
-  loader: LoaderFace
-}
+type RpcHost = Context & HostRpcContext
 
 function fail(code: 'bad-request' | 'cancelled' | 'forbidden' | 'not-found' | 'network' | 'internal', message: string, details: Record<string, unknown> = {}): PluginsRpcResult {
   return { ok: false, error: { code, message, details } }
@@ -52,15 +44,6 @@ function fail(code: 'bad-request' | 'cancelled' | 'forbidden' | 'not-found' | 'n
 const bad = (message: string, details: Record<string, unknown> = {}) => fail('bad-request', message, details)
 const forbidden = (message: string) => fail('forbidden', message)
 const cancelled = () => fail('cancelled', '请求已取消')
-
-const RETIRED_DISTRIBUTION_BUNDLES = new Set([
-  'dsh-web-search-tavily',
-  '@klarkxy/dsh-ai-services',
-  '@klarkxy/dsh-model-center',
-  '@klarkxy/dsh-memory',
-  '@klarkxy/dsh-self-improvement',
-  '@klarkxy/dsh-fusion',
-])
 
 function isPathInside(root: string, candidate: string): boolean {
   const rel = relative(root, candidate)
@@ -125,7 +108,7 @@ async function listLocalMarketplaceListings(profileDir: string): Promise<Marketp
   const catalog = await readPreparedCatalog(profileDir)
   const listings: MarketplaceListing[] = []
   for (const name of names) {
-    if (CORE_PLUGIN_BUNDLE_NAMES.has(name) || RETIRED_DISTRIBUTION_BUNDLES.has(name)) continue
+    if (CORE_PLUGIN_BUNDLE_NAMES.has(name) || RETIRED_PLUGIN_PACKAGES.has(name)) continue
     const artifactDir = resolveProfileArtifactDir(profileDir, name)
     if (!artifactDir) continue
     try {
@@ -165,50 +148,40 @@ async function restoreText(path: string, previous: string | undefined, io: Persi
   await replaceFileAtomic(path, previous, io)
 }
 
-async function validatePluginPersistence(paths: PluginPaths, io: PersistIo): Promise<void> {
-  let previousPatch: string | undefined
-  try {
-    previousPatch = await readOptionalText(paths.patchFile, io)
-  } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error)
-    throw new PluginPersistBlockedError('unreadable-patch', cause)
-  }
-  if (!isOwnedManagedPatch(previousPatch)) throw new PluginPersistBlockedError('unmanaged-patch')
-}
-
-export async function persistPluginState(paths: PluginPaths, state: PluginState, io: PersistIo = defaultPersistIo): Promise<void> {
-  state.overrides = withoutHostLockedOverrides(state.overrides)
-  await runQueuedSorted([paths.home, paths.stateFile, paths.patchFile], async () => {
-    await validatePluginPersistence(paths, io)
+async function setWritingPreset(paths: PluginPaths, id: string, source: string, enabled: boolean, io: PersistIo): Promise<void> {
+  await runQueuedSorted([paths.home, paths.stateFile], async () => {
     const previousState = await readOptionalText(paths.stateFile, io)
-    await writeJsonAtomic(paths.stateFile, state, io)
-    try {
-      await replaceFileAtomic(paths.patchFile, renderOverridePatch(state.overrides), io)
-    } catch (error) {
-      const cause = error instanceof Error ? error.message : String(error)
+    const declarationFile = join(paths.profileDir, 'node_modules', 'dsh-editor-profile-config', 'presets.patch.json')
+    const previousDeclarations = await readOptionalText(declarationFile, io)
+    const state: Record<string, unknown> = previousState === undefined ? emptyPluginState() : JSON.parse(previousState)
+    if (!state || typeof state !== 'object' || Array.isArray(state) || state.schema !== 1) throw new Error('写作模式记录格式无效，未改动。')
+    const presets = state.presets && typeof state.presets === 'object' && !Array.isArray(state.presets) ? state.presets : {}
+    await updateAppOwnedPreset(paths.home, id, source, enabled, async () => {
       try {
-        await restoreText(paths.stateFile, previousState, io)
-      } catch (recovery) {
-        throw new PluginPersistError('未能保存插件开关，请重试。', {
-          cause,
-          recovery: 'failed',
-          recoveryCause: recovery instanceof Error ? recovery.message : String(recovery),
-        })
+        // Only the application's writing selection changes; native plugin settings
+        // and the author's home patch are outside this operation's ownership.
+        await writeJsonAtomic(paths.stateFile, { ...state, presets: { ...presets, [id]: enabled } }, io)
+        await syncPresetDeclarations(paths.home, paths.profileDir)
+      } catch (error) {
+        const cause = error instanceof Error ? error.message : String(error)
+        try {
+          await restoreText(paths.stateFile, previousState, io)
+          await restoreText(declarationFile, previousDeclarations, io)
+        } catch (recovery) {
+          throw new PluginPersistError('未能保存写作模式，请重试。', { cause, recovery: 'failed', recoveryCause: String(recovery) })
+        }
+        throw new PluginPersistError('未能保存写作模式，请重试。', { cause, recovery: 'restored' })
       }
-      throw new PluginPersistError('未能保存插件开关，请重试。', { cause, recovery: 'restored' })
-    }
+    })
   })
 }
 
 function persistFailed(error: unknown): PluginsRpcResult {
-  if (error instanceof PluginPersistBlockedError) {
-    return fail('forbidden', error.message, { reason: error.reason, ...(error.detail ? { cause: error.detail } : {}) })
-  }
   if (error instanceof PluginPersistError) {
     return fail('internal', error.message, error.details)
   }
   const cause = error instanceof Error ? error.message : String(error)
-  return fail('internal', '未能保存插件开关，请重试。', { cause })
+  return fail('internal', '未能保存写作模式，请重试。', { cause })
 }
 
 export async function handlePluginsRpc(
@@ -216,7 +189,6 @@ export async function handlePluginsRpc(
   payload: unknown,
   signal: AbortSignal,
   options: {
-    loader: LoaderFace
     paths: PluginPaths
     fetch?: typeof fetch
     io?: PersistIo
@@ -266,31 +238,17 @@ export async function handlePluginsRpc(
       if (!row) return fail('not-found', '未找到该写作模式')
       const source = join(options.paths.profileDir, 'node_modules', row.packageName, row.path)
       try {
-        if (body.enabled) await deployAppOwnedPreset(options.paths.home, id, source)
-        else await removeAppOwnedPreset(options.paths.home, id)
+        await setWritingPreset(options.paths, id, source, body.enabled, options.io ?? defaultPersistIo)
       } catch (error) {
-        const cause = error instanceof Error ? error.message : String(error)
-        return fail('internal', '未能更新写作模式，请重试。', { cause })
-      }
-      const state = await readPluginState(options.paths)
-      state.presets = { ...state.presets, [id]: body.enabled }
-      try {
-        await persistPluginState(options.paths, state, options.io ?? defaultPersistIo)
-      } catch (error) {
-        try {
-          if (body.enabled) await removeAppOwnedPreset(options.paths.home, id)
-          else await deployAppOwnedPreset(options.paths.home, id, source)
-        } catch { /* best-effort rollback; the next boot re-applies the saved state */ }
         return persistFailed(error)
       }
-      await syncPresetDeclarations(options.paths.home, options.paths.profileDir)
       const applied = await options.reloadProfile?.().catch(() => false)
       return { ok: true, value: { restartRequired: applied !== true } satisfies PluginActionReceipt }
     }
     return bad('不支持的插件操作')
   } catch (error) {
     if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return cancelled()
-    if (error instanceof PluginPersistBlockedError || error instanceof PluginPersistError) return persistFailed(error)
+    if (error instanceof PluginPersistError) return persistFailed(error)
     const message = error instanceof Error ? error.message : String(error)
     if (message.includes('GitHub') || message.includes('fetch') || message.includes('network')) {
       return fail('network', '网络请求失败，请稍后重试。', { cause: message })
@@ -310,7 +268,6 @@ export function apply(ctx: Context): void {
   }
   ctx.effect(() => registerHostRpc(host, PLUGINS_RPC_CHANNEL, (endpoint, payload, signal) => (
     serialize(() => handlePluginsRpc(endpoint, payload, signal, {
-      loader: host.loader,
       paths,
       reloadProfile: async () => {
         if (!host.get('hmr')) return false

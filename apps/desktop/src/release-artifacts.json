@@ -1,0 +1,11 @@
+{
+  "productName": "DSH Editor",
+  "owner": "klarkxy",
+  "repo": "dsh-editor",
+  "templates": {
+    "win32-portable": "{productName}-{version}-win-x64.exe",
+    "win32-setup": "{productName}-Setup-{version}-win-x64.exe",
+    "darwin-dmg": "{productName}-{version}-mac-{arch}.dmg",
+    "darwin-zip": "{productName}-{version}-mac-{arch}.zip"
+  }
+}

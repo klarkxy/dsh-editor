@@ -1,4 +1,4 @@
-import type { EditorSessionReference, ObservableSource, SessionFace, SessionId, WorkspaceId } from '../dsh-compat.ts'
+import type { EditorSessionReference, ObservableSource, SessionFace, SessionId, WorkspaceId, WorkspaceView } from '../dsh-compat.ts'
 import { normalizeWritingModelRoute } from '../writing-settings.tsx'
 import type { WritingModelMigrationStatus } from '../writing-settings-contract.ts'
 import { t } from '../i18n/index.ts'
@@ -156,11 +156,13 @@ export function provideEditorUiWorkspace(ctx: ShellContext): void {
     openWorkspaceSession(sessionId: SessionId) {
       return workspaceSelection.open(sessionId)
     },
-    async connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId> {
+    async connectWorkspace(workspaceId: WorkspaceId, authoritativeWorkspace?: WorkspaceView): Promise<SessionId> {
       const inflight = connecting.get(workspaceId)
       if (inflight) return inflight
       const listed = ctx.workspaces.list.getSnapshot()
+      // The Host create receipt bridges the first feed delay without storing a second registry.
       const workspace = listed.items.find((item) => item.workspaceId === workspaceId)
+        ?? (authoritativeWorkspace?.workspaceId === workspaceId ? authoritativeWorkspace : undefined)
       const archived = listed.archivedSessionIds ?? []
       const sessions = ctx.sessions.list.getSnapshot()
       if (workspace) {

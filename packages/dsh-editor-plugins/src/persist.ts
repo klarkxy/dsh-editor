@@ -13,20 +13,6 @@ export function isEnoent(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && 'code' in error && (error as { code: unknown }).code === 'ENOENT')
 }
 
-export class PluginPersistBlockedError extends Error {
-  readonly kind = 'persist-blocked' as const
-  readonly reason: 'unmanaged-patch' | 'unreadable-patch'
-  readonly detail?: string
-  constructor(reason: 'unmanaged-patch' | 'unreadable-patch', detail?: string) {
-    super(reason === 'unreadable-patch'
-      ? '未能读取插件配置，未改动。'
-      : '当前有自定义插件配置，未能保存开关。')
-    this.name = 'PluginPersistBlockedError'
-    this.reason = reason
-    this.detail = detail
-  }
-}
-
 export class PluginPersistError extends Error {
   readonly kind = 'persist-failed' as const
   readonly details: Record<string, unknown>

@@ -1,10 +1,10 @@
 // Pure release lookup; only the main process may use the network.
-import { isTrustedReleaseAssetUrl, parseGitHubDigest, selectAsset } from './release-artifacts.js'
+import { isTrustedReleaseAssetUrl, parseGitHubDigest, selectAsset, RELEASE_OWNER, RELEASE_REPO } from './release-artifacts.js'
 import type { InternalUpdateCheckResult } from './update-session.js'
 export { selectAsset }
 export interface UpdateAsset { name: string; url: string; size: number; digest?: string }
 export type UpdateCheckResult = InternalUpdateCheckResult
-const RELEASES_URL = 'https://api.github.com/repos/klarkxy/dsh-editor/releases/latest'
+const RELEASES_URL = `https://api.github.com/repos/${RELEASE_OWNER}/${RELEASE_REPO}/releases/latest`
 const BUILTIN_MIRROR_PREFIXES = ['https://ghproxy.net/', 'https://gh-proxy.com/', 'https://ghfast.top/']
 export interface DownloadCandidate { label: string; url: string }
 
@@ -106,7 +106,7 @@ export async function checkLatest(currentVersion: string, fetchImpl: FetchLike =
         version, tag,
         name: typeof payload.name === 'string' ? payload.name : '',
         publishedAt: typeof payload.published_at === 'string' ? payload.published_at : '',
-        url: `https://github.com/klarkxy/dsh-editor/releases/tag/${encodeURIComponent(tag)}`,
+        url: `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/tag/${encodeURIComponent(tag)}`,
         body: (typeof payload.body === 'string' ? payload.body : '').slice(0, 2000),
         assets: parseAssets(payload.assets),
       },

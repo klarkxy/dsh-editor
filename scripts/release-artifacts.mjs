@@ -1,26 +1,18 @@
 /** 桌面产物命名契约:打包校验、发布上传和选择器必须消费同一套名字。 */
+import release from '../apps/desktop/src/release-artifacts.json' with { type: 'json' }
 
-export const RELEASE_PRODUCT_NAME = 'DSH Editor'
-export const RELEASE_OWNER = 'klarkxy'
-export const RELEASE_REPO = 'dsh-editor'
+export const RELEASE_PRODUCT_NAME = release.productName
+export const RELEASE_OWNER = release.owner
+export const RELEASE_REPO = release.repo
 
 export function sanitizeReleaseAssetName(localName) {
   return localName.replaceAll(' ', '-')
 }
 
 export function localArtifactName(kind, version, arch = 'arm64') {
-  switch (kind) {
-    case 'win32-portable':
-      return `${RELEASE_PRODUCT_NAME}-${version}-win-x64.exe`
-    case 'win32-setup':
-      return `${RELEASE_PRODUCT_NAME}-Setup-${version}-win-x64.exe`
-    case 'darwin-dmg':
-      return `${RELEASE_PRODUCT_NAME}-${version}-mac-${arch}.dmg`
-    case 'darwin-zip':
-      return `${RELEASE_PRODUCT_NAME}-${version}-mac-${arch}.zip`
-    default:
-      throw new Error(`unknown release artifact kind: ${kind}`)
-  }
+  const template = release.templates[kind]
+  if (!template) throw new Error(`unknown release artifact kind: ${kind}`)
+  return template.replaceAll('{productName}', RELEASE_PRODUCT_NAME).replaceAll('{version}', version).replaceAll('{arch}', arch)
 }
 
 export function releaseArtifactName(kind, version, arch) {

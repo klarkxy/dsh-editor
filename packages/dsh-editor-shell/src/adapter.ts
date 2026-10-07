@@ -12,7 +12,7 @@ import type {
 } from './dsh-compat.ts'
 import { catalogToSessionModels, modelSelectionOf } from './dsh-compat.ts'
 import { parseProposalMarker, type ProposalMarker } from 'dsh-editor-novel-kernel/contracts'
-import { AUTHOR_OBSERVE_TOOL_NAME, parseAuthorMemoryMarker } from 'dsh-editor-workbench/contracts'
+import { AUTHOR_OBSERVE_TOOL_NAME } from 'dsh-editor-workbench/contracts'
 import { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME, type WritingProposalV2 } from 'dsh-manuscript/client/editor-core'
 import { parseProjectContextEnvelope, projectContextReceipt, type ProjectContextReceiptBundle } from 'dsh-editor-workbench/contracts'
 import { parseMemoryUpdateReceipt } from 'dsh-editor-workbench/contracts'
@@ -21,7 +21,6 @@ import { stripReasoningText } from './conversation-lifecycle.ts'
 import { isNovelIndexJobPrompt } from './novel-index.ts'
 
 export { parseProposalMarker } from 'dsh-editor-novel-kernel/contracts'
-export { parseAuthorMemoryMarker } from 'dsh-editor-workbench/contracts'
 export { parseWritingProposalMarker, WRITING_PROPOSE_TOOL_NAME } from 'dsh-manuscript/client/editor-core'
 
 export type AuthorProposal = ProposalMarker | WritingProposalV2
@@ -269,21 +268,6 @@ export function chatRows(snapshot: ChatTranscript): ChatRow[] {
     else if (node.kind === 'model-retry') rows.push({ ...common, role: 'notice', text: t('chat.retrying') })
   }
   return markRecoveredToolErrors(rows)
-}
-
-/**
- * author_observe 的观察结果:该工具回合在聊天里完全隐藏(同 novel_index_write),
- * 由客户端把这些结果静默追加进本机作者侧写,不渲染卡片也不等待确认。
- */
-export function authorMemoryObservations(snapshot: ChatTranscript): Array<{ seq: number; observation: string }> {
-  const observations: Array<{ seq: number; observation: string }> = []
-  for (const node of snapshot.nodes) {
-    const tool = asToolResult(node)
-    if (!tool || tool.call?.name !== AUTHOR_OBSERVE_TOOL_NAME) continue
-    const memory = parseAuthorMemoryMarker(blocksText(tool.content))
-    if (memory) observations.push({ seq: tool.seq, observation: memory.observation })
-  }
-  return observations
 }
 
 /** 同一轮里同名工具后来成功了，就不要把先前的失败条一直当警报摊开。 */

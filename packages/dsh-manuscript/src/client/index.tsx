@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { Button } from '@radix-ui/themes'
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { asClient, type ManuscriptClient } from '../host.ts'
 import { activeWorkspaceFromSessionList, type ActiveWorkspace } from './session-cwd.ts'
 import { registerManuscriptUi, type SlotHandle } from './slots.ts'
@@ -9,6 +9,8 @@ import { ManuscriptTheme, ensureManuscriptThemes } from './themes.tsx'
 import {
   EditorCore,
   editorCoreStyles,
+  saveOpenEditor,
+  type EditorCoreDraft,
   type EditorCoreHandle,
   type EditorCorePaperProjection,
 } from './editor-core/index.ts'
@@ -204,6 +206,9 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
   }, [props.ctx, loadCapability])
   const [pendingTarget, setPendingTarget] = useState<{ sessionId: string; cwd: string; path: string } | null>(null)
   const handleRef = useRef<EditorCoreHandle | null>(null)
+  const draft = useMemo<EditorCoreDraft>(() => ({ kind: 'session', cwd }), [cwd])
+  const pendingTargetRef = useRef(pendingTarget)
+  pendingTargetRef.current = pendingTarget
   const mutate = () => setRevision((n) => n + 1)
 
   const requestPath = (next: string) => {
@@ -321,10 +326,12 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
   const onDirtyChange = useCallback((next: boolean) => { setDirty(next) }, [])
 
   const acceptPendingSave = async () => {
-    if (!pendingTarget) return
-    const ok = await handleRef.current?.save()
-    if (ok) {
-      setPath(pendingTarget.path)
+    const target = pendingTarget
+    const handle = handleRef.current
+    if (!target || !handle) return
+    const result = await saveOpenEditor(handle, { sessionId, path })
+    if (result.ok && pendingTargetRef.current === target) {
+      setPath(target.path)
       setPendingTarget(null)
     }
   }
@@ -448,7 +455,7 @@ function ManuscriptFrame(props: { ctx: ManuscriptClient }) {
               notice: 'manuscript-paper-notice',
               footer: 'manuscript-paper-footer',
             }}
-            draft={{ kind: 'session', cwd }}
+            draft={draft}
             completionPreference="pause"
             completionEnabled={capability.kind === 'ready' && capability.completion}
             showGhostTip={true}

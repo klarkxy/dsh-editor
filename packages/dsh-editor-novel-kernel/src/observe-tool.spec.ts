@@ -4,7 +4,7 @@ import { editorToolGuard } from './proposal-tool.ts'
 
 describe('author_observe tool', () => {
   it('uses the canonical tool name and memory marker', () => {
-    const tool = createAuthorObserveTool()
+    const tool = createAuthorObserveTool(async () => 'added')
     expect(tool.name).toBe(AUTHOR_OBSERVE_TOOL_NAME)
     expect(AUTHOR_OBSERVE_TOOL_NAME).toBe('author_observe')
     expect(AUTHOR_MEMORY_MARKER).toBe('dsh-editor.memory')
@@ -12,13 +12,13 @@ describe('author_observe tool', () => {
   })
 
   it('returns a versioned memory marker from execute', async () => {
-    const tool = createAuthorObserveTool()
+    const tool = createAuthorObserveTool(async () => 'added')
     const result = await tool.execute({ observation: '  留白优先\n', reason: ' 三次要求  ' })
-    expect(result).toEqual({ marker: 'dsh-editor.memory', version: 1, observation: '留白优先', reason: '三次要求' })
+    expect(result).toEqual({ marker: 'dsh-editor.memory', version: 2, observation: '留白优先', reason: '三次要求', status: 'added' })
   })
 
   it('reports marker JSON as the verbatim text block', () => {
-    const tool = createAuthorObserveTool()
+    const tool = createAuthorObserveTool(async () => 'added')
     const rendered = tool.output?.render?.({ observation: '留白优先', reason: '多次出现' }, { marker: 'dsh-editor.memory', version: 1, observation: '留白优先', reason: '多次出现' })
     expect(rendered).toEqual([{ type: 'text', text: JSON.stringify({ marker: 'dsh-editor.memory', version: 1, observation: '留白优先', reason: '多次出现' }) }])
   })

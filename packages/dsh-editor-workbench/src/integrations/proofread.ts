@@ -6,7 +6,7 @@ import {
   type WorkspaceFileContext,
 } from 'dsh-manuscript/host-api'
 import type { OverviewAccess } from '../integrations/overview.ts'
-import { METADATA_DIRECTORY, readMetadataText } from '../io/metadata-io.ts'
+import { METADATA_DIRECTORY, MetadataIoError, readMetadataText } from '../io/metadata-io.ts'
 import { isGeneratedPath, isHiddenPath, MAX_FILES } from 'dsh-editor-workspace-kit'
 import {
   type ProofreadFinding,
@@ -186,6 +186,16 @@ function enabled(kinds: readonly ProofreadKind[], kind: ProofreadKind): boolean 
   return kinds.includes(kind)
 }
 
+/** Optional term lists may be unavailable; scanning does not rewrite them. */
+async function optionalTermList(root: string, relative: string): Promise<string[]> {
+  try {
+    return parseTermList(await readMetadataText(root, relative) ?? '')
+  } catch (error) {
+    if (error instanceof MetadataIoError) return []
+    throw error
+  }
+}
+
 export async function scanProofread(input: {
   access: OverviewAccess
   scope: unknown
@@ -194,8 +204,8 @@ export async function scanProofread(input: {
 }): Promise<ProofreadScanResponse> {
   const scope = parseScope(input.scope)
   const kinds = parseKinds(input.kinds)
-  const userList = parseTermList(await readMetadataText(input.access.path, SENSITIVE_LIST_PATH) ?? '')
-  const allowList = parseTermList(await readMetadataText(input.access.path, SENSITIVE_ALLOW_PATH) ?? '')
+  const userList = await optionalTermList(input.access.path, SENSITIVE_LIST_PATH)
+  const allowList = await optionalTermList(input.access.path, SENSITIVE_ALLOW_PATH)
   const sensitiveTerms = mergeSensitiveTerms(bundledSensitiveTerms(), userList, allowList)
   let files: LoadedDocument[]
   let skipped = 0

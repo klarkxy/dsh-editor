@@ -47,8 +47,8 @@ describe('appendAuthorMemory', () => {
     expect(third).toBe(`${head}\n${AUTHOR_MEMORY_AUTO_MARKER}\n第三条`)
   })
 
-  it('drops the new entry when even an empty auto section cannot fit it', () => {
+  it('fails without changing the handwritten head when the new entry cannot fit', () => {
     const head = 'x'.repeat(2_000)
-    expect(appendAuthorMemory(head, '放不下', 2_000)).toBe(head)
+    expect(() => appendAuthorMemory(head, '放不下', 2_000)).toThrow('空间不足')
   })
 })

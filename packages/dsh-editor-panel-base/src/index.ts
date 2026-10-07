@@ -5,7 +5,6 @@
  * - RPC communication patterns
  * - Request management (pub-sub)
  * - i18n message system
- * - Style utilities
  * 
  * @packageDocumentation
  */
@@ -14,4 +13,3 @@
 export * from './rpc/index.js'
 export * from './requests/index.js'
 export * from './messages/index.js'
-export * from './styles/index.js'

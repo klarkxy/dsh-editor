@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { Context, Service } from '@deepseek-ai/cordis'
+import { workspaceResumeExcludedIds } from './client/root.tsx'
+import { buildNovelIndexPrompt } from './novel-index.ts'
 import { zh } from './i18n/index.ts'
 import {
   canSubmitComposer,
@@ -52,9 +55,36 @@ describe('shell client inject', () => {
   it('declares every Remote face the renderer reads through ctx.remote', () => {
     expect(inject).toEqual([
       'slots', 'sessions', 'workspaces', 'connection', 'configForms', 'settingsSchema', 'remote',
-      'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker', 'remote.agentPresets',
+      'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.workspace', 'remote.directoryPicker', 'remote.agentPresets',
       'uiSession', 'locale', 'theme', 'shortcuts',
     ])
+  })
+
+  it('creates a workspace through the actual Cordis namespace declared by the shell', async () => {
+    const workspace = { workspaceId: 'created', path: 'H:/fixture', title: 'Fixture', sessionIds: [], createdAt: '', updatedAt: '' }
+    const create = vi.fn(async () => ({ ok: true as const, value: { workspace, created: true } }))
+    class Remote extends Service {
+      constructor(ctx: Context) { super(ctx, 'remote') }
+    }
+    class WorkspaceRemote extends Service {
+      constructor(ctx: Context) { super(ctx, 'remote.workspace') }
+      create = create
+    }
+    const root = new Context()
+    new Remote(root)
+    const namespace = root.plugin({ name: 'workspace-namespace-provider', apply(ctx: Context) { new WorkspaceRemote(ctx) } })
+    await namespace
+    let result: Awaited<ReturnType<typeof createFlowWorkspace>> | undefined
+    const fiber = root.plugin({
+      name: 'shell-workspace-namespace-regression',
+      inject: inject.filter((key) => key === 'remote' || key === 'remote.workspace'),
+      async apply(ctx: Context) { result = await createFlowWorkspace(ctx as never, workspace.path) },
+    })
+    try {
+      await fiber
+      expect(result).toEqual({ workspace, created: true })
+      expect(create).toHaveBeenCalledExactlyOnceWith({ path: workspace.path })
+    } finally { await fiber.dispose(); await namespace.dispose() }
   })
 })
 
@@ -151,6 +181,18 @@ describe('shell manuscript RPC safety', () => {
     /* 没有可恢复的会话（全新作品 / 只有空白会话）时保持打开连接得到的会话 */
     expect(resumableConversationId({ sessionIds: ['s-blank'], byId, archivedIds: [], fallback: 's-new' })).toBe('s-new')
     expect(resumableConversationId({ sessionIds: [], byId: {}, archivedIds: [], fallback: 's-new' })).toBe('s-new')
+  })
+
+  it('resumes a Host conversation while excluding Host archives and internal indexing sessions', () => {
+    const byId = {
+      old: { blank: false, updatedAt: 100, title: 'Earlier conversation' },
+      current: { blank: false, updatedAt: 300, title: 'Author discussion' },
+      archived: { blank: false, updatedAt: 500, title: 'Archived discussion' },
+      index: { blank: false, updatedAt: 700, title: buildNovelIndexPrompt().slice(0, 90) },
+    }
+    const excluded = workspaceResumeExcludedIds(['archived'], byId)
+    expect(excluded).toEqual(['archived', 'index'])
+    expect(resumableConversationId({ sessionIds: Object.keys(byId), byId, archivedIds: excluded, fallback: 'new' })).toBe('current')
   })
 
   it('commits with the current time as the message and rolls back in place with confirmation', () => {
@@ -533,21 +575,21 @@ describe('shell manuscript RPC safety', () => {
     expect(errorMessage({ ok: false, error: { code: 'workspace-invalid-path', message: 'manuscript group name is invalid' } })).toBe('名称或路径不符合规则。')
   })
 
-  it('registers a workspace through the controller and does not call Host remotes', async () => {
+  it.each([false, true])('keeps Host workspace creation ownership (%s) for import cleanup', async (created) => {
     const workspace = { workspaceId: 'workspace-1', path: 'D:\\novel', title: 'novel', sessionIds: [], createdAt: '', updatedAt: '' }
-    const createProjection = vi.fn(async () => workspace)
+    const createProjection = vi.fn(async () => ({ ok: true, value: { workspace, created } }))
     const result = await createFlowWorkspace({
-      workspaces: { create: createProjection, delete: vi.fn() },
+      remote: { workspace: { create: createProjection } },
     } as never, 'D:\\novel')
 
-    expect(result).toEqual({ workspace, created: true })
+    expect(result).toEqual({ workspace, created })
     expect(createProjection).toHaveBeenCalledWith({ path: 'D:\\novel' })
   })
 
   it('does not delete when workspace create itself fails', async () => {
     const remove = vi.fn()
     await expect(createFlowWorkspace({
-      workspaces: { create: async () => { throw new Error('projection failed') }, delete: remove },
+      remote: { workspace: { create: async () => { throw new Error('projection failed') } } }, workspaces: { delete: remove },
     } as never, 'D:\\target')).rejects.toThrow('projection failed')
 
     expect(remove).not.toHaveBeenCalled()

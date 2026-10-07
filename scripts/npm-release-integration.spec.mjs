@@ -15,11 +15,13 @@ it('discovers new packages, packs updated workspace versions, and reconciles a l
     return result.stdout
   }
   mkdirSync(join(root, 'scripts'))
-  for (const file of ['publish-npm-plugins.mjs', 'npm-release-policy.mjs', 'verify-release-version.mjs']) copyFileSync(resolve('scripts', file), join(root, 'scripts', file))
+  for (const file of ['publish-npm-plugins.mjs', 'npm-release-policy.mjs', 'verify-release-version.mjs', 'release-artifacts.mjs']) copyFileSync(resolve('scripts', file), join(root, 'scripts', file))
   writeFileSync(join(root, 'package.json'), JSON.stringify({ private: true, type: 'module', packageManager: 'pnpm@10.14.0' }))
   writeFileSync(join(root, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n")
   mkdirSync(join(root, 'apps', 'desktop'), { recursive: true })
   writeFileSync(join(root, 'apps', 'desktop', 'package.json'), JSON.stringify({ version: '0.1.0' }))
+  mkdirSync(join(root, 'apps', 'desktop', 'src'))
+  copyFileSync(resolve('apps', 'desktop', 'src', 'release-artifacts.json'), join(root, 'apps', 'desktop', 'src', 'release-artifacts.json'))
   const manifests = new Map()
   for (const [dir, deps] of [['core', {}], ['consumer', { '@klarkxy/fixture-core': 'workspace:*' }]]) {
     const location = join(root, 'packages', dir)

@@ -4,6 +4,8 @@
 
 DSH 管理 Agent、会话、模型、审批、文件权限与对话历史。Editor 提供写作界面，不另建这些状态的副本，避免出现两份真相。产品取舍见[产品原则](product-principles.md)。
 
+作者侧写由已有 Host 写作偏好服务写入原生 settings，工具在持久化完成后返回追加或已存在的结果。追加使用 namespace revision，拒绝覆盖并发的作者编辑；容量不足或写入失败作为工具失败返回。聊天界面读取历史不重放观察写入。升级保留当前侧写，不补导入旧版本生成但尚未落盘的观察。
+
 桌面外壳替换官方界面依赖固定版本的兼容接缝，升级约束见 [shell](../packages/dsh-editor-shell/README.md)。
 
 ## 官方插件管理器与 native profile

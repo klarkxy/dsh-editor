@@ -1,3 +1,4 @@
+import { isNovelIndexJobTitle } from '../novel-index.ts'
 import { registerEditorWorkspaceShortcuts } from './official-shortcuts.ts'
 import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
 import { OfficialSurfaceProvider, OfficialOverlays, type OfficialRootProps } from './official-surfaces.tsx'
@@ -25,15 +26,13 @@ import {
   type SnapshotResponse,
 } from 'dsh-editor-workbench/contracts'
 import { normalizeAuthorMemory, normalizeAuthorPreferences } from '../author-preferences.ts'
-import { appendAuthorMemory } from '../author-memory.ts'
 import { defaultCreateDirectory, exportDirectoryOf, firstOpenDocumentPath, isManuscriptChapterPath, normalizeProjectDirectory, sortChapterPaths, sortDocumentPaths } from '../project-files.ts'
 import { CENTER_OVERLAYS_SLOT, EXTENSIONS_SLOT, PLUGINS_SETTINGS_SLOT, SIDEBAR_TOOLS_SLOT, ZHIHU_SETTINGS_SLOT, registerRoot } from '../root-registration.ts'
 import { matchRegistryShortcut, registryPaletteItems, type ShellCommandRegistry, type ShellProposalCardProps, type ShellRange, type ShellToolSeatContext } from '../seats.ts'
 import { writingPreferences, writingTypography, type WritingMigration, type WritingModelRoute, type WritingPreferences } from '../writing-settings.tsx'
-import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversationSettings } from '../conversation-store.ts'
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
 import { redesignedStyles } from '../styles.ts'
-import { errorMessage, isStaleFailure, canMoveTreeEntry, treeMoveTargetDir, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceFileContent, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
+import { errorMessage, isStaleFailure, canMoveTreeEntry, treeMoveTargetDir, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceFileContent, workspaceOpenFailureMessage, createFlowWorkspace, cleanupFlowWorkspace as cleanupOwnedFlowWorkspace } from './shared.ts'
 import { railAtWidth, railByAuthor, type RailYieldState } from './narrow-layout.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
 import { DeepSeekWhaleMark, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
@@ -144,24 +143,30 @@ async function pingWorkspaceSession(ctx: ShellContext, sessionId: SessionId): Pr
   return await safeRpcCall<{ entries?: { name: string; type: 'file' | 'directory' | 'other' }[] }>(() => ctx.connection.rpc.call('/manuscript', 'tree.list', { sessionId, path: '.' }))
 }
 
+export function workspaceResumeExcludedIds(hostArchivedIds: readonly SessionId[], byId: Record<string, { title?: string } | undefined>): SessionId[] {
+  const internalIndexIds = Object.entries(byId).filter(([, item]) => item && isNovelIndexJobTitle(item.title ?? '')).map(([id]) => id)
+  return [...hostArchivedIds, ...internalIndexIds]
+}
+
 async function connectUsableWorkspaceSession(
   ctx: ShellContext,
   workspaceId: WorkspaceId,
   preferred?: SessionId,
+  authoritativeWorkspace?: WorkspaceView,
 ): Promise<SessionId> {
   if (preferred) {
     const listed = await pingWorkspaceSession(ctx, preferred)
     if (listed.ok) return preferred
     if (!isSessionMissing(listed)) throw new Error(errorMessage(listed))
   }
-  const first = await ctx.uiWorkspace.connectWorkspace(workspaceId)
+  const first = await ctx.uiWorkspace.connectWorkspace(workspaceId, authoritativeWorkspace)
   if (first !== preferred) {
     const listed = await pingWorkspaceSession(ctx, first)
     if (listed.ok) return first
     if (!isSessionMissing(listed)) throw new Error(errorMessage(listed))
   }
   await ctx.workspaces.archiveSession(first)
-  let second = await ctx.uiWorkspace.connectWorkspace(workspaceId)
+  let second = await ctx.uiWorkspace.connectWorkspace(workspaceId, authoritativeWorkspace)
   /* archive 后快照可能还挂着同一条空白会话；再拿到同一个 id 就强制新建，避免死循环。 */
   if (second === first) second = await ctx.uiWorkspace.createSession(workspaceId)
   if (second === first) throw new Error('session is not live')
@@ -219,23 +224,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     : selectedWorkspace
   const writingSnapshot = useObservable(writingScope)
   const writing = writingPreferences(writingSnapshot, globalThis.localStorage)
-  const conversationScope = useMemo(() => ctx.configForms.get<NonNullable<ReturnType<typeof decodeConversationSettings>>>(CONVERSATION_SETTINGS_NAMESPACE), [ctx])
-  /* author_observe 的静默写入回调:observation 追加进本机 authorMemory,超限时自动
-     丢弃最旧的自动条目腾位,手写部分不动;ref 镜像保证同渲染周期内的连续追加不丢条目。 */
-  const authorMemoryRef = useRef(writing.authorMemory)
-  authorMemoryRef.current = writing.authorMemory
-  const onRememberMemory = useCallback(async (observation: string): Promise<boolean> => {
-    const next = appendAuthorMemory(authorMemoryRef.current ?? '', observation)
-    if (next === undefined) return true
-    if (next === (authorMemoryRef.current ?? '')) return true
-    try {
-      if (await writingScope.set('authorMemory', next) === false) return false
-      authorMemoryRef.current = next
-      return true
-    } catch {
-      return false
-    }
-  }, [writingScope])
   const [path, setPath] = useState('')
   const [files, setFiles] = useState<string[]>([])
   const [workbenchNote, setWorkbenchNote] = useState('')
@@ -1099,21 +1087,15 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       }
       if (!workspaceOpenGate.isCurrent(pending.ticket)) return
     }
-    /* 0.1.7 only exposes a bound session while it is retained. The resumed
-     * conversation is therefore also the editor RPC session; no stale blank
-     * binding survives alongside the visible conversation. */
+    /* File RPCs retain the workspace session independently of the visible Chat
+     * selection, so reopening a conversation does not change the editor session. */
     const workspaceListState = ctx.workspaces.list.getSnapshot()
     const sessionListState = ctx.sessions.list.getSnapshot()
     const workspaceView = workspaceListState.items.find((item) => item.workspaceId === pending.workspace.workspaceId) ?? pending.workspace
-    const conversationWork = conversationWorkRecord(conversationScope.getSnapshot().value, pending.workspace.workspaceId)
     const selectedSessionId = resumableConversationId({
       sessionIds: workspaceView.sessionIds,
       byId: sessionListState.byId ?? {},
-      archivedIds: [
-        ...(workspaceListState.archivedSessionIds ?? []),
-        ...conversationWork.archivedIds as SessionId[],
-        ...conversationWork.tombstoneIds as SessionId[],
-      ],
+      archivedIds: workspaceResumeExcludedIds(workspaceListState.archivedSessionIds ?? [], sessionListState.byId ?? {}),
       fallback: sessionId,
     })
     await ctx.uiWorkspace.openWorkspaceSession(sessionId)
@@ -1240,7 +1222,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       return
     }
     try {
-      const connectedSessionId = await connectUsableWorkspaceSession(ctx, current.workspaceId, sessionId)
+      const connectedSessionId = await connectUsableWorkspaceSession(ctx, current.workspaceId, sessionId, current)
       if (!workspaceOpenGate.isCurrent(ticket)) return
       pending.sessionId = connectedSessionId
       await prepareExistingWorkspace(pending, connectedSessionId, inspection.textFiles)
@@ -1301,7 +1283,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         return
       }
       stage = 'connecting'
-      const sessionId = await connectUsableWorkspaceSession(ctx, registration.workspace.workspaceId)
+      const sessionId = await connectUsableWorkspaceSession(ctx, registration.workspace.workspaceId, undefined, registration.workspace)
       if (!workspaceOpenGate.isCurrent(ticket)) return
       pending.sessionId = sessionId
       stage = intent === 'create' ? 'initializing' : 'verifying'
@@ -1351,7 +1333,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     setHomeNote('')
     setWorkspaceOpen({ kind: 'checking', workspaceId: pending.workspace.workspaceId, path: pending.workspace.path, title: pending.workspace.title })
     try {
-      const sessionId = await connectUsableWorkspaceSession(ctx, pending.workspace.workspaceId, pending.sessionId)
+      const sessionId = await connectUsableWorkspaceSession(ctx, pending.workspace.workspaceId, pending.sessionId, pending.workspace)
       if (!workspaceOpenGate.isCurrent(pending.ticket)) return
       pending.sessionId = sessionId
       if (pending.intent === 'create') await prepareNewWorkspace(pending, sessionId)
@@ -1781,24 +1763,11 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     () => writingTypography(writing),
     [writing.fontSize, writing.lineHeight, writing.fontFamily, writing.paragraphSpacing, writing.paperWidth],
   )
-  const registerFlowWorkspace = async (workspacePath: string) => {
-    const registration = await createFlowWorkspace(ctx, workspacePath)
-    if (registration.created) temporaryFlowWorkspaces.current.add(registration.workspace.workspaceId)
-    return registration
-  }
+  const registerFlowWorkspace = (workspacePath: string) => createFlowWorkspace(ctx, workspacePath, temporaryFlowWorkspaces.current)
   const bindTemporarySource = (sessionId: string, workspaceId: string, created: boolean) => {
     if (created) temporarySourceWorkspaces.current.set(sessionId, workspaceId)
   }
-  const cleanupFlowWorkspace = async (workspaceId: string): Promise<boolean> => {
-    if (!temporaryFlowWorkspaces.current.has(workspaceId)) return true
-    try {
-      await ctx.workspaces.delete(workspaceId as WorkspaceId)
-      temporaryFlowWorkspaces.current.delete(workspaceId)
-      return true
-    } catch {
-      return false
-    }
-  }
+  const cleanupFlowWorkspace = (workspaceId: string): Promise<boolean> => cleanupOwnedFlowWorkspace(ctx.workspaces, temporaryFlowWorkspaces.current, workspaceId)
   const cleanupTemporarySource = async (sessionId: string): Promise<boolean> => {
     const workspaceId = temporarySourceWorkspaces.current.get(sessionId)
     if (!workspaceId) return true
@@ -1820,7 +1789,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     try {
       const sourceRegistration = await registerFlowWorkspace(sourcePath)
       if (sourceRegistration.created) createdSourceWorkspaceId = sourceRegistration.workspace.workspaceId
-      sourceSessionId = await ctx.uiWorkspace.connectWorkspace(sourceRegistration.workspace.workspaceId)
+      sourceSessionId = await ctx.uiWorkspace.connectWorkspace(sourceRegistration.workspace.workspaceId, sourceRegistration.workspace)
       bindTemporarySource(sourceSessionId, sourceRegistration.workspace.workspaceId, sourceRegistration.created)
       setImportFlow({ kind: 'working', message: t('note.importChecking') })
       const probe = await safeRpcCall<ImportProbeView>(() => ctx.connection.rpc.call(WORKBENCH_RPC_CHANNEL, 'project.importProbe', {
@@ -1838,7 +1807,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       const sourceCleaned = sourceSessionId
         ? await cleanupTemporarySource(sourceSessionId)
         : createdSourceWorkspaceId ? await cleanupFlowWorkspace(createdSourceWorkspaceId) : true
-      if (error instanceof FlowWorkspaceCleanupError || !sourceCleaned) {
+      if (!sourceCleaned) {
         closeImportFlow()
         setHomeNote(t('note.importStartCleanupFailed'))
         return
@@ -2293,7 +2262,6 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               authorPreferences={authorPreferences}
               authorMemory={authorMemory}
               renderSlot={renderSlot}
-              onRememberMemory={onRememberMemory}
               hidden={!assistantVisible}
               overlay={overlayAssistant}
               onConfigure={configureChatModel}

@@ -4,7 +4,7 @@
  * `dsh-editor-writing` 永远部署、不可关闭。开关立即生效：启用时把包内
  * preset 原子部署到 <dshHome>/.agent-presets/<id>（app-owned marker，无
  * plugin 字段，与模板通道一致），停用时按同样 marker 纪律删除目录；
- * roster 每次调用都重扫该目录，picker 下一次列表即反映，无需重启。
+ * 声明生成后由宿主重载 profile；不支持热重载时开关返回需重启。
  * 进行中的会话绑定的是会话级记录，不受影响。
  */
 import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
@@ -145,4 +145,38 @@ export async function removeAppOwnedPreset(home: string, presetId: string): Prom
   const owner = await readPresetOwner(target)
   if (!owner || typeof owner.plugin === 'string') fail(`写作模式 ${presetId} 的目录不归应用管理，未删除`)
   await rm(target, { recursive: true, force: true })
+}
+
+/** Preserve the exact previous owned directory until all selection writes commit. */
+export async function updateAppOwnedPreset<T>(home: string, presetId: string, source: string, enabled: boolean, commit: () => Promise<T>): Promise<T> {
+  const root = join(home, PLUGIN_PRESETS_DIRNAME)
+  const target = join(root, presetId)
+  const backup = join(root, `.${presetId}.rollback-${randomUUID()}`)
+  const existed = existsSync(target)
+  let preserveBackup = false
+  if (existed) {
+    const owner = await readPresetOwner(target)
+    if (!owner || typeof owner.plugin === 'string') fail(`写作模式 ${presetId} 的目录不归应用管理，未改动`)
+    await cp(target, backup, { recursive: true, force: false, errorOnExist: true })
+  }
+  try {
+    if (enabled) await deployAppOwnedPreset(home, presetId, source)
+    else await removeAppOwnedPreset(home, presetId)
+    return await commit()
+  } catch (error) {
+    try {
+      await removeAppOwnedPreset(home, presetId)
+      if (existed) await renameWithRetry(backup, target)
+    } catch (recovery) {
+      preserveBackup = true
+      throw new AggregateError([error, recovery], '未能更新写作模式，恢复原目录失败；请重启后检查。')
+    }
+    throw error
+  } finally {
+    if (!preserveBackup && existsSync(backup)) {
+      // A locked rollback copy is hidden from the roster. Cleanup cannot turn a
+      // committed selection into a failed request or replace a recovery error.
+      await rm(backup, { recursive: true, force: true }).catch(() => {})
+    }
+  }
 }

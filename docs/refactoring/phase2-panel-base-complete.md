@@ -1,5 +1,7 @@
 # Phase 2 完成报告: Panel Base 提取
 
+历史留档：本文保留当时的完成报告，样式生成接口后来已删除。当前接口见[面板基础包](../../packages/dsh-editor-panel-base/README.md)。
+
 ## 执行总结
 
 **状态**: ✅ 核心目标完成  

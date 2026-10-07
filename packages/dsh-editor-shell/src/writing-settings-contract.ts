@@ -29,6 +29,7 @@ export type WritingPreferences = {
 /** Existing Host preference service; model consumers may wait for startup migration. */
 export type EditorWritingPreferences = {
   read(): WritingPreferences
+  remember(observation: string): Promise<'added' | 'already-present'>
   modelsReady?(): Promise<void>
 }
 

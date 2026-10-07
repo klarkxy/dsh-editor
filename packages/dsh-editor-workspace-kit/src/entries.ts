@@ -9,7 +9,7 @@ const ENTRY_NAME_FORBIDDEN = /[<>:"/\\|?*\u0000-\u001f]/
 
 export type MkdirSafeFail = (kind: 'unsafe-root' | 'unsafe-dir' | 'escape') => Error
 
-/** Visible single-segment entry name used by `entry.*` and `cards.create`. */
+/** Visible single-segment entry name used by document operations. */
 export function validateEntryName(value: string): string {
   if (typeof value !== 'string') throw new LifecycleError('entry name is required', 'INVALID_PATH')
   const name = value.trim()

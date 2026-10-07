@@ -1,4 +1,3 @@
-import { WRITING_V2_CREATE } from 'dsh-manuscript/host-api'
 import { applyChapterProposal, applyCreate, parsePlanningProposal, prepareChapterMeta, prepareCreate } from '../proposals/planning-proposals.ts'
 import { parseChapterMeta, stripChapterFrontmatter } from '../proposals/chapter-meta.ts'
 /**
@@ -14,18 +13,43 @@ import { readTextFile } from 'dsh-manuscript/host-api'
 import type { LifecycleAccess } from '../lifecycle/lifecycle.ts'
 import {
   applyMerge,
-  applyRenames,
+  applyRenames as applyRenameOperations,
   applySplit,
-  parseProposal,
   prepareMerge,
-  prepareRenames,
+  prepareRenames as prepareRenameOperations,
   prepareSplit,
   ProposalOpsError,
   snapshotProposalTargets,
-  type MergeProposal,
-  type RenamesProposal,
-  type SplitProposal,
 } from '../proposals/proposal-ops.ts'
+import {
+  legacyRenamesChange,
+  parseLegacyOpsProposal as parseProposal,
+  parseProposalChange,
+  type LegacyMergeProposal as MergeProposal,
+  type LegacyRenamesProposal as RenamesProposal,
+  type LegacySplitProposal as SplitProposal,
+} from './proposal-adapters.ts'
+
+async function prepareRenames(files: WorkspaceFileContext, proposal: RenamesProposal) {
+  return await prepareRenameOperations(files, legacyRenamesChange(proposal))
+}
+async function applyRenames(access: LifecycleAccess, proposal: RenamesProposal, versions?: Record<string, string>) {
+  return await applyRenameOperations(access, legacyRenamesChange(proposal), versions)
+}
+async function writingRenames(files: WorkspaceFileContext, proposal: RenamesProposal) {
+  const renames = await Promise.all(proposal.renames.map(async (entry) => ({
+    ...entry, version: entry.version ?? (await readTextFile(files, entry.from)).version,
+  })))
+  const change = parseProposalChange({ ...proposal, version: 2, renames })
+  if (change.kind !== 'renames') throw new Error('expected renames')
+  return change
+}
+async function prepareWritingRenames(files: WorkspaceFileContext, proposal: RenamesProposal) {
+  return await prepareRenameOperations(files, await writingRenames(files, proposal))
+}
+async function applyWritingRenames(access: LifecycleAccess, proposal: RenamesProposal, versions?: Record<string, string>) {
+  return await applyRenameOperations(access, await writingRenames(access.files, proposal), versions)
+}
 
 let base = ''
 beforeEach(async () => {
@@ -448,19 +472,19 @@ describe('prepareRenames / applyRenames', () => {
     await writeText('notes/nested/a.txt', 'nested')
     await writeText('drafts/keep.md', 'keep')
     await fs.mkdir(path.join(base, 'archive'), { recursive: true })
-    const plan = await prepareRenames(filesContext(), renamesProposal({
+    const plan = await prepareWritingRenames(filesContext(), renamesProposal({
       renames: [
         { from: 'notes.md', to: 'drafts/intro.md' },
         { from: 'notes/nested/a.txt', to: 'archive/renamed.txt' },
       ],
-    }), 'generic')
+    }))
     expect(Object.keys(plan.versions)).toEqual(['notes.md', 'notes/nested/a.txt'])
-    const result = await applyRenames(lifecycleAccess(), renamesProposal({
+    const result = await applyWritingRenames(lifecycleAccess(), renamesProposal({
       renames: [
         { from: 'notes.md', to: 'drafts/intro.md' },
         { from: 'notes/nested/a.txt', to: 'archive/renamed.txt' },
       ],
-    }), plan.versions, 'generic')
+    }), plan.versions)
     expect(result.applied).toEqual(['drafts/intro.md', 'archive/renamed.txt'])
     expect(result.failed).toBeUndefined()
     expect(await readRelative('drafts/intro.md')).toBe('root')
@@ -474,21 +498,21 @@ describe('prepareRenames / applyRenames', () => {
   it('generic V2 renames keep stale, missing parents, generated, and no-replace checks', async () => {
     await writeText('notes/a.md', '一')
     await writeText('drafts/taken.md', 'occupied')
-    await expect(prepareRenames(filesContext(), renamesProposal({
+    await expect(prepareWritingRenames(filesContext(), renamesProposal({
       renames: [{ from: 'notes/a.md', to: 'missing/b.md' }],
-    }), 'generic')).rejects.toMatchObject({ code: 'INVALID' })
-    await expect(prepareRenames(filesContext(), renamesProposal({
+    }))).rejects.toMatchObject({ code: 'INVALID' })
+    await expect(prepareWritingRenames(filesContext(), renamesProposal({
       renames: [{ from: 'notes/a.md', to: 'drafts/taken.md' }],
-    }), 'generic')).rejects.toMatchObject({ code: 'EXISTS' })
-    await expect(prepareRenames(filesContext(), renamesProposal({
+    }))).rejects.toMatchObject({ code: 'EXISTS' })
+    await expect(prepareWritingRenames(filesContext(), renamesProposal({
       renames: [{ from: 'notes/a.md', to: 'dist/out.md' }],
-    }), 'generic')).rejects.toMatchObject({ code: 'INVALID' })
-    const plan = await prepareRenames(filesContext(), renamesProposal({
+    }))).rejects.toMatchObject({ code: 'INVALID' })
+    const plan = await prepareWritingRenames(filesContext(), renamesProposal({
       renames: [{ from: 'notes/a.md', to: 'drafts/moved.md' }],
-    }), 'generic')
-    const stale = await applyRenames(lifecycleAccess(), renamesProposal({
+    }))
+    const stale = await applyWritingRenames(lifecycleAccess(), renamesProposal({
       renames: [{ from: 'notes/a.md', to: 'drafts/moved.md' }],
-    }), { 'notes/a.md': 'stale-version' }, 'generic')
+    }), { 'notes/a.md': 'stale-version' })
     expect(stale.applied).toEqual([])
     expect(stale.failed?.from).toBe('notes/a.md')
     expect(await readRelative('notes/a.md')).toBe('一')
@@ -502,23 +526,25 @@ describe('prepareRenames / applyRenames', () => {
     }))).rejects.toMatchObject({ code: 'INVALID' })
     await expect(prepareRenames(filesContext(), renamesProposal({
       renames: [{ from: '正文/001.md', to: 'notes/renamed.md' }],
-    }), 'legacy')).rejects.toMatchObject({ code: 'INVALID' })
+    }))).rejects.toMatchObject({ code: 'INVALID' })
     expect(() => parseProposal({
       marker: 'dsh-editor.proposal', version: 1, kind: 'renames', summary: 'x',
       renames: [{ from: 'notes/a.txt', to: 'notes/b.txt' }],
     })).toThrow(/Markdown/)
   })
 
-  it('routes generic renames through moveDocument and never uses versionless moveEntry', async () => {
-    const source = await fs.readFile(new URL('./proposal-ops.ts', import.meta.url), 'utf8')
-    expect(source).toContain('moveDocument')
-    expect(source).toContain("mode === 'generic'")
-    expect(source).toContain('expectedVersion: version')
-    expect(source).not.toMatch(/moveEntry\s*\(/)
-    const rpc = await fs.readFile(new URL('../rpc/proposal.ts', import.meta.url), 'utf8')
-    expect(rpc).toContain("prepareRenames(files, legacy, 'generic')")
-    expect(rpc).toContain("applyRenames(op, legacy, expectedVersions, 'generic')")
-    expect(rpc).toMatch(/'proposal\.apply':\s*\{\s*mutation:\s*true/)
+  it('refuses a destination created after preview and keeps both author files', async () => {
+    await writeText('notes/a.md', 'source')
+    await fs.mkdir(path.join(base, 'drafts'))
+    const proposal = renamesProposal({ renames: [{ from: 'notes/a.md', to: 'drafts/moved.md' }] })
+    const plan = await prepareWritingRenames(filesContext(), proposal)
+    await writeText('drafts/moved.md', 'author raced the proposal')
+    const result = await applyWritingRenames(lifecycleAccess(), proposal, plan.versions)
+    expect(result.applied).toEqual([])
+    expect(result.failed?.from).toBe('notes/a.md')
+    expect(await readRelative('notes/a.md')).toBe('source')
+    expect(await readRelative('drafts/moved.md')).toBe('author raced the proposal')
+    expect(await readHistoryFile(result.snapshotDir, 'notes/a.md')).toBe('source')
   })
 })
 
@@ -728,7 +754,7 @@ describe('V2 generation baselines on split/merge/renames', () => {
 })
 
 describe('author planning proposals', () => {
-  const create = (pathValue: string, text = '# 内容\n') => ({ marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, summary: '创建资料', path: pathValue, text })
+  const create = (pathValue: string, text = '# 内容\n') => ({ marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, summary: '创建资料', path: pathValue, text, targetPolicy: 'fill-empty' as const })
 
   it('previews missing ancestors without writing, then creates a nested file in one apply', async () => {
     const files = filesContext()
@@ -754,7 +780,7 @@ describe('author planning proposals', () => {
   it('V2 exclusive create refuses an existing empty file and a TOCTOU create', async () => {
     const files = filesContext()
     await writeText('正文/占位.md', ' ')
-    const empty = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, summary: '创建资料', path: '正文/占位.md', text: '# 内容\n', writingV2: WRITING_V2_CREATE }
+    const empty = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, summary: '创建资料', path: '正文/占位.md', text: '# 内容\n', targetPolicy: 'exclusive' as const }
     await expect(prepareCreate(files, empty)).rejects.toMatchObject({ code: 'EXISTS' })
     await expect(applyCreate(files, empty, '')).rejects.toMatchObject({ code: 'EXISTS' })
     expect(await readRelative(empty.path)).toBe(' ')
@@ -849,7 +875,7 @@ describe('author planning proposals', () => {
 
 it('recovers the same create proposal after directory creation but before a failed file write', async () => {
   const files = filesContext()
-  const proposal = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, path: '资料/第一卷/大纲.md', text: '# 大纲', summary: '创建大纲' }
+  const proposal = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, path: '资料/第一卷/大纲.md', text: '# 大纲', summary: '创建大纲', targetPolicy: 'fill-empty' as const }
   const write = files.fs.writeText.bind(files.fs)
   files.fs.writeText = async () => { throw Object.assign(new Error('injected failure'), { code: 'FS_PERMISSION_DENIED' }) }
   await expect(applyCreate(files, proposal, '')).rejects.toMatchObject({ code: 'DENIED', message: expect.stringContaining('部分目录可能已建立') })
@@ -864,7 +890,7 @@ it('recovers the same create proposal after directory creation but before a fail
 
 it('does not replay a create after a reply is lost following the actual file write', async () => {
   const files = filesContext()
-  const proposal = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, path: '世界书/城市.md', text: '# 城市', summary: '创建城市设定' }
+  const proposal = { marker: 'dsh-editor.proposal' as const, version: 1 as const, kind: 'create' as const, path: '世界书/城市.md', text: '# 城市', summary: '创建城市设定', targetPolicy: 'fill-empty' as const }
   const write = files.fs.writeText.bind(files.fs)
   let writes = 0
   files.fs.writeText = async (...args) => { writes++; await write(...args); throw new Error('reply lost') }

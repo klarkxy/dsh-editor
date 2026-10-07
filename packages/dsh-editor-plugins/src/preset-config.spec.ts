@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { persistPluginState } from './index.ts'
 import { emptyPluginState } from './overlay.ts'
 import { resolvePluginPaths } from './paths.ts'
 import { syncPresetDeclarations } from './preset-config.ts'
@@ -32,7 +31,7 @@ async function fixture() {
   await mkdir(paths.profileDir, { recursive: true })
   await linkPackage(source, join(paths.profileDir, 'node_modules', name))
   await writeFile(join(paths.profileDir, 'package.json'), JSON.stringify({ name: 'profile', dsh: { profile: { bundles: [name] } } }))
-  await persistPluginState(paths, { ...emptyPluginState(), installed: [{ name, version: '1.0.0', spec: `npm:${name}@1.0.0` }] })
+  await writeFile(paths.stateFile, JSON.stringify({ ...emptyPluginState(), installed: [{ name, version: '1.0.0', spec: `npm:${name}@1.0.0` }] }))
   const preset = join(root, '.agent-presets', 'author-style')
   await mkdir(preset, { recursive: true })
   await writeFile(join(preset, 'preset.yml'), 'name: 作者风格\n')
@@ -55,7 +54,7 @@ describe('installed own tools in the existing preset overlay', () => {
   })
   it('requires a selected native bundle and the package on disk', async () => {
     const { paths, source, patch } = await fixture()
-    await persistPluginState(paths, emptyPluginState())
+    await writeFile(paths.stateFile, JSON.stringify(emptyPluginState()))
     await syncPresetDeclarations(paths.home, paths.profileDir)
     expect(await rows(patch)).toContainEqual({ id: 'research-tools', name: `${name}/tools` })
     await writeFile(join(paths.profileDir, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: [] } } }))
@@ -83,7 +82,7 @@ describe('installed own tools in the existing preset overlay', () => {
   })
   it('keeps selected-bundle tools in the overlay until the native bundle is dropped', async () => {
     const { paths, patch } = await fixture()
-    await persistPluginState(paths, emptyPluginState())
+    await writeFile(paths.stateFile, JSON.stringify(emptyPluginState()))
     await syncPresetDeclarations(paths.home, paths.profileDir)
     expect(await rows(patch)).toContainEqual({ id: 'research-tools', name: `${name}/tools` })
     await writeFile(join(paths.profileDir, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: [] } } }))
@@ -124,7 +123,7 @@ describe('installed own tools in the existing preset overlay', () => {
       await writeFile(join(dir, 'lib/tools.js'), 'export const name = "extra-tools"\n')
       await linkPackage(dir, join(paths.profileDir, 'node_modules', item.name))
     }
-    await persistPluginState(paths, emptyPluginState())
+    await writeFile(paths.stateFile, JSON.stringify(emptyPluginState()))
     await syncPresetDeclarations(paths.home, paths.profileDir)
     const generated = await rows(patch)
     expect(generated).toContainEqual({ id: 'research-tools', name: `${name}/tools` })

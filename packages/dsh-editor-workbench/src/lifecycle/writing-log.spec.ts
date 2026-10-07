@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WRITING_LOG_MAX_DAYS, WRITING_LOG_PATH, WritingLogError, readWritingHistory, recordWritingProgress } from '../lifecycle/writing-log.ts'
 import type { MetadataAccess } from '../io/metadata-io.ts'
 
@@ -10,7 +10,10 @@ let root = ''
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-editor-writing-log-'))
 })
-afterEach(async () => { await fs.rm(root, { recursive: true, force: true }) })
+afterEach(async () => {
+  vi.restoreAllMocks()
+  await fs.rm(root, { recursive: true, force: true })
+})
 
 function access(mode = 'workspace-write'): MetadataAccess {
   return { path: root, mode }
@@ -89,16 +92,48 @@ describe('writing log', () => {
     })
   })
 
-  it('fail-opens a corrupt log and rejects invalid arguments', async () => {
+  it('refuses to replace a corrupt log and rejects invalid arguments', async () => {
     await writeLog('{not json')
-    await expect(readWritingHistory(access(), 30, at(2026, 9, 7))).resolves.toEqual({ days: [], weeks: [] })
-    await expect(recordWritingProgress(access(), 42, at(2026, 9, 7))).resolves.toEqual({ date: '2026-09-07', chars: 42, delta: 0 })
-    expect(JSON.parse(await fs.readFile(path.join(root, '.dsh-editor', 'writing-log.json'), 'utf8'))).toEqual([
-      { date: '2026-09-07', chars: 42, delta: 0 },
-    ])
+    await expect(readWritingHistory(access(), 30, at(2026, 9, 7))).rejects.toMatchObject({ name: 'WritingLogError', code: 'BLOCKED' })
+    await expect(recordWritingProgress(access(), 42, at(2026, 9, 7))).rejects.toMatchObject({ code: 'BLOCKED' })
+    expect(await fs.readFile(path.join(root, WRITING_LOG_PATH), 'utf8')).toBe('{not json')
     await expect(recordWritingProgress(access(), -1, at(2026, 9, 7))).rejects.toMatchObject({ name: 'WritingLogError', code: 'INVALID' })
     await expect(recordWritingProgress(access(), 1.5, at(2026, 9, 7))).rejects.toBeInstanceOf(WritingLogError)
     await expect(readWritingHistory(access(), 0, at(2026, 9, 7))).rejects.toMatchObject({ code: 'INVALID' })
     await expect(recordWritingProgress(access('read-only'), 10, at(2026, 9, 7))).rejects.toMatchObject({ code: 'READ_ONLY' })
+  })
+
+  it.each(['', '{}', '[{"date":"2026-09-06","chars":500},null]', '[{"date":"2026-09-06","chars":-1}]'])('keeps malformed stored history unchanged: %s', async (text) => {
+    await writeLog(text)
+    await expect(recordWritingProgress(access(), 42, at(2026, 9, 7))).rejects.toMatchObject({ code: 'BLOCKED' })
+    expect(await fs.readFile(path.join(root, WRITING_LOG_PATH), 'utf8')).toBe(text)
+  })
+
+  it('does not overwrite existing history when its read is denied', async () => {
+    const text = '[{"date":"2026-09-06","chars":500}]'
+    await writeLog(text)
+    const target = path.join(root, WRITING_LOG_PATH)
+    const read = fs.readFile.bind(fs)
+    vi.spyOn(fs, 'readFile').mockImplementation(async (...args) => {
+      if (String(args[0]) === target) throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      return await read(...args)
+    })
+    const stage = vi.spyOn(fs, 'open')
+    await expect(recordWritingProgress(access(), 900, at(2026, 9, 7))).rejects.toMatchObject({ name: 'WritingLogError', code: 'IO' })
+    expect(stage).not.toHaveBeenCalled()
+    vi.restoreAllMocks()
+    expect(await fs.readFile(target, 'utf8')).toBe(text)
+  })
+
+  it('keeps an oversized log and rejects a blocked metadata parent', async () => {
+    const oversized = `[${' '.repeat(2_000_001)}]`
+    await writeLog(oversized)
+    await expect(recordWritingProgress(access(), 42, at(2026, 9, 7))).rejects.toMatchObject({ code: 'BLOCKED' })
+    expect(await fs.readFile(path.join(root, WRITING_LOG_PATH), 'utf8')).toBe(oversized)
+    await fs.unlink(path.join(root, WRITING_LOG_PATH))
+    await fs.rmdir(path.join(root, '.dsh-editor'))
+    await fs.writeFile(path.join(root, '.dsh-editor'), 'blocked parent')
+    await expect(recordWritingProgress(access(), 42, at(2026, 9, 7))).rejects.toMatchObject({ code: 'BLOCKED' })
+    expect(await fs.readFile(path.join(root, '.dsh-editor'), 'utf8')).toBe('blocked parent')
   })
 })

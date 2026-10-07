@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FileSystemLike, FsDirEntryLike, FsInfoLike, FsPathInfoLike, FsTargetLike, FsWriteIntentLike, SandboxExecutionPolicyLike, WorkspaceFileContext } from 'dsh-manuscript/host-api'
 import type { OverviewAccess } from '../integrations/overview.ts'
 import { BUNDLED_SENSITIVE_TEXT, BUNDLED_TYPOS } from '../integrations/proofread-defaults.ts'
@@ -80,7 +80,10 @@ beforeEach(async () => {
   await fs.mkdir(path.join(root, '正文'), { recursive: true })
   await fs.mkdir(path.join(root, '大纲'), { recursive: true })
 })
-afterEach(async () => { await fs.rm(root, { recursive: true, force: true }) })
+afterEach(async () => {
+  vi.restoreAllMocks()
+  await fs.rm(root, { recursive: true, force: true })
+})
 
 function access(mode = 'workspace-write'): OverviewAccess {
   const fileSystem = new NodeFileSystem(root)
@@ -135,6 +138,35 @@ describe('scanProofread', () => {
     await write(SENSITIVE_ALLOW_PATH, '忽略词\n冰毒\n')
     const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['sensitive'] })
     expect(result.findings.map((item) => item.message)).toEqual(['敏感词「自定义词」'])
+  })
+
+  it('chooses optional-list recovery at the scan boundary without modifying the lists', async () => {
+    await write('正文/001.md', '冰毒、自定义词。')
+    await write(SENSITIVE_LIST_PATH, '自定义词\n')
+    const target = path.join(root, SENSITIVE_LIST_PATH)
+    const read = fs.readFile.bind(fs)
+    vi.spyOn(fs, 'readFile').mockImplementation(async (...args) => {
+      if (String(args[0]) === target) throw Object.assign(new Error('denied optional list'), { code: 'EACCES' })
+      return await read(...args)
+    })
+    const result = await scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['sensitive'] })
+    expect(result.findings.map((item) => item.message)).toEqual(['敏感词「冰毒」'])
+    vi.restoreAllMocks()
+    expect(await fs.readFile(target, 'utf8')).toBe('自定义词\n')
+  })
+
+  it('scans with bundled terms when an optional list is oversized or its parent is blocked', async () => {
+    await write('正文/001.md', '冰毒。')
+    const oversized = '词'.repeat(700_000)
+    await write(SENSITIVE_LIST_PATH, oversized)
+    const scan = () => scanProofread({ access: access(), scope: 'document', path: '正文/001.md', kinds: ['sensitive'] })
+    expect((await scan()).findings).toMatchObject([{ message: '敏感词「冰毒」' }])
+    expect(await fs.readFile(path.join(root, SENSITIVE_LIST_PATH), 'utf8')).toBe(oversized)
+    await fs.unlink(path.join(root, SENSITIVE_LIST_PATH))
+    await fs.rmdir(path.join(root, '.dsh-editor'))
+    await fs.writeFile(path.join(root, '.dsh-editor'), 'blocked lists')
+    expect((await scan()).findings).toMatchObject([{ message: '敏感词「冰毒」' }])
+    expect(await fs.readFile(path.join(root, '.dsh-editor'), 'utf8')).toBe('blocked lists')
   })
 
   it('rejects invalid document scope paths with the workbench error style', async () => {

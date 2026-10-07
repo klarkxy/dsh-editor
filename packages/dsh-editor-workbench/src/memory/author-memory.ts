@@ -1,16 +1,21 @@
-/** Browser-safe author-memory marker shared with the editor Shell. */
+/** Browser-safe historical author-memory marker and current Host result. */
 export const AUTHOR_OBSERVE_TOOL_NAME = 'author_observe'
 export const AUTHOR_MEMORY_MARKER = 'dsh-editor.memory'
 
 /** 助手建议追加的作者侧写条目最大长度；与 V2 envelope 中 author_memory 的 2000 字预算协同。 */
 export const AUTHOR_OBSERVE_MAX_CHARS = 200
 
-/** 助手观察后写入的作者侧写条目；由 Shell 客户端解析 marker 后静默追加到本机 authorMemory。 */
+/** Historical observation result. Reading it must never replay a write. */
 export type AuthorMemoryMarker = {
   marker: typeof AUTHOR_MEMORY_MARKER
   version: 1
   observation: string
   reason: string
+}
+
+export type AuthorMemoryResult = Omit<AuthorMemoryMarker, 'version'> & {
+  version: 2
+  status: 'added' | 'already-present'
 }
 
 /** Validates and normalizes one proposed author-memory entry; runs on the Host inside the tool executor. */
@@ -23,7 +28,7 @@ export function authorMemoryMarker(args: Record<string, unknown>): AuthorMemoryM
   return { marker: AUTHOR_MEMORY_MARKER, version: 1, observation, reason }
 }
 
-/** Parses a serialized tool result before the browser persists it into local author memory. */
+/** Compatibility reader for historical tool results; it performs no writes. */
 export function parseAuthorMemoryMarker(text: string): AuthorMemoryMarker | undefined {
   let value: unknown
   try {

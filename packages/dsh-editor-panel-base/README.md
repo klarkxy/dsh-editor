@@ -29,13 +29,7 @@
 - `createMessages()` — 创建国际化工厂
 - 返回 `t()`, `message()`, `setLocale()`, `intlLocale()`, `interpolate()`
 
-### 样式工具 (`dsh-editor-panel-base/styles`)
-
-详见 [src/styles/index.ts](./src/styles/index.ts)：
-- `panelFadeInAnimation()`, `panelContainerStyles()`, `panelFocusStyles()`, `panelReducedMotion()`, `buildPanelStyles()`
-- `surfaceTokenAliases` (re-export from seats/tokens)
-
-**说明**: 提供设计 token 集成、动画辅助和无障碍模式；各面板业务样式仍在各自包内维护。
+各面板业务样式由各自包维护，设计 token 直接来自 `dsh-editor-seats/tokens`。
 
 ## 依赖
 

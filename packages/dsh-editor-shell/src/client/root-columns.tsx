@@ -342,7 +342,6 @@ export const ChatColumn = memo(function ChatColumn(props: {
   authorPreferences: string
   authorMemory: string
   renderSlot?: SettingsRenderSlot
-  onRememberMemory(observation: string): Promise<boolean> | boolean
   hidden: boolean
   overlay?: boolean
   onConfigure(): void
@@ -362,7 +361,6 @@ export const ChatColumn = memo(function ChatColumn(props: {
         authorPreferences={props.authorPreferences}
         authorMemory={props.authorMemory}
         renderSlot={props.renderSlot}
-        onRememberMemory={props.onRememberMemory}
         hidden={props.hidden}
         overlay={props.overlay}
         onConfigure={props.onConfigure}

@@ -25,6 +25,8 @@ Host 在 `/dsh-editor-workbench` 通道（`WORKBENCH_RPC_CHANNEL`，仅本机回
 
 独立 entry「写作工具」（跟随「助手」功能开关），注册 `writing_propose`（写作提案）与 `author_observe`（作者侧写观察）两个通用写作工具，并按权限边界禁用继承自宿主的编码工具：`write` / `edit` / `pwsh` / `bash` / `shell` / `str_replace` / `NotebookEdit`（src/tools.ts）。小说专有的 `novel_*` 工具由 novel-kernel 经 `installNovelWorkbenchTools` 另行挂载。
 
+`author_observe` 通过现有 `editorWritingPreferences.remember` Host 服务保存侧写，不依赖聊天界面的挂载。V2 工具结果区分追加与已存在，写入失败或容量不足不会返回成功。V1 历史结果保留读取兼容，但不重放写入；现有侧写内容沿用。
+
 
 ## 子路径导出
 

@@ -38,21 +38,19 @@ function conversationTitleFor(id: string, titles: Record<string, string | undefi
   return isUnnamedConversationTitle(title) ? t('chat.newConversation') : title
 }
 
-export function conversationRows(input: { workspaceSessionIds: readonly string[]; archivedIds?: readonly string[]; forgottenIds?: readonly string[]; currentId?: string; titles?: Record<string, string | undefined>; reusableBlankIds?: readonly string[] }): ConversationRow[] {
+export function conversationRows(input: { workspaceSessionIds: readonly string[]; archivedIds?: readonly string[]; currentId?: string; titles?: Record<string, string | undefined>; reusableBlankIds?: readonly string[] }): ConversationRow[] {
   const archived = new Set(input.archivedIds ?? [])
-  const forgotten = new Set(input.forgottenIds ?? [])
   const blank = new Set(input.reusableBlankIds ?? [])
   return input.workspaceSessionIds
-    .filter((id) => !forgotten.has(id) && !archived.has(id) && (id === input.currentId || !blank.has(id)))
+    .filter((id) => !archived.has(id) && (id === input.currentId || !blank.has(id)))
     .map((id) => ({ id, title: conversationTitleFor(id, input.titles), current: id === input.currentId }))
 }
 
-/** 已归档但仍可恢复的对话；墓碑 id 不会出现在这里。 */
-export function archivedConversationRows(input: { workspaceSessionIds: readonly string[]; archivedIds?: readonly string[]; forgottenIds?: readonly string[]; currentId?: string; titles?: Record<string, string | undefined> }): ConversationRow[] {
+/** Host 已归档但仍可恢复的对话。 */
+export function archivedConversationRows(input: { workspaceSessionIds: readonly string[]; archivedIds?: readonly string[]; currentId?: string; titles?: Record<string, string | undefined> }): ConversationRow[] {
   const archived = new Set(input.archivedIds ?? [])
-  const forgotten = new Set(input.forgottenIds ?? [])
   return input.workspaceSessionIds
-    .filter((id) => archived.has(id) && !forgotten.has(id))
+    .filter((id) => archived.has(id))
     .map((id) => ({ id, title: conversationTitleFor(id, input.titles), current: id === input.currentId }))
 }
 
@@ -62,21 +60,6 @@ export function canArchiveOrDeleteConversation(visibleCount: number): boolean {
 
 export function nextVisibleConversationId(visibleIds: readonly string[], removingId: string): string | undefined {
   return visibleIds.find((id) => id !== removingId)
-}
-
-export function archiveConversationIds(archivedIds: readonly string[], id: string): string[] {
-  return archivedIds.includes(id) ? [...archivedIds] : [...archivedIds, id]
-}
-
-export function restoreConversationIds(archivedIds: readonly string[], id: string): string[] {
-  return archivedIds.filter((item) => item !== id)
-}
-
-export function tombstoneConversationIds(input: { archivedIds: readonly string[]; tombstoneIds: readonly string[]; id: string }): { archivedIds: string[]; tombstoneIds: string[] } {
-  return {
-    archivedIds: input.archivedIds.filter((item) => item !== input.id),
-    tombstoneIds: input.tombstoneIds.includes(input.id) ? [...input.tombstoneIds] : [...input.tombstoneIds, input.id],
-  }
 }
 
 export function conversationTitle(text: string, limit = 36): string {
@@ -132,6 +115,31 @@ export function resolveNewConversationModel(input: {
 
 export class ConversationRenameQueue {
   private readonly pending = new Map<string, Promise<void>>()
+  private readonly acknowledgments = new Map<string, { title: string; predecessors: Set<string | undefined> }>()
+
+  /** Bridge a successful rename until the Host title feed catches up. Never persisted. */
+  acknowledgeTitle(sessionId: string, title: string, previousTitle: string | undefined): void {
+    const previous = this.acknowledgments.get(sessionId)
+    const predecessors = new Set(previous?.predecessors)
+    predecessors.add(previousTitle)
+    if (previous) predecessors.add(previous.title)
+    this.acknowledgments.set(sessionId, { title, predecessors })
+  }
+
+  observedTitle(sessionId: string, nativeTitle: string | undefined): string | undefined {
+    const acknowledged = this.acknowledgments.get(sessionId)
+    if (!acknowledged) return nativeTitle
+    if (nativeTitle === acknowledged.title || !acknowledged.predecessors.has(nativeTitle)) {
+      this.acknowledgments.delete(sessionId)
+      return nativeTitle
+    }
+    return acknowledged.title
+  }
+
+  /** Evaluate inside the queued operation after earlier Host acknowledgments. */
+  canAutomaticallyRename(sessionId: string, nativeTitle: string | undefined, managed: boolean): boolean {
+    return !managed && isUnnamedConversationTitle(this.observedTitle(sessionId, nativeTitle))
+  }
 
   enqueue(sessionId: string, operation: () => Promise<void>): Promise<void> {
     const previous = this.pending.get(sessionId) ?? Promise.resolve()

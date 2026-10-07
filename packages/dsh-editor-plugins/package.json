@@ -71,14 +71,12 @@
   },
   "dependencies": {
     "dsh-manuscript": "workspace:*",
-    "semver": "^7.8.5",
     "dsh-editor-seats": "workspace:*",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
     "@types/react": "18.3.31",
-    "@types/semver": "^7.8.0",
     "react": "^18.2.0",
     "tsdown": "^0.22.14",
     "typescript": "^5.9.2",

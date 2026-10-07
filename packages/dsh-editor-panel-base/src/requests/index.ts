@@ -89,10 +89,3 @@ export function createRequestManager<T extends PanelRequest>() {
     },
   }
 }
-
-/**
- * Helper to create a simple request (nonce only).
- */
-export function createSimpleRequest(): PanelRequest {
-  return { nonce: Date.now() }
-}

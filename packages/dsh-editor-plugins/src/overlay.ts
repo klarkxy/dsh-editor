@@ -1,3 +1,4 @@
+import { HOST_LOCKED_ENTRY_IDS, RETIRED_PLUGIN_PACKAGES } from '../../../apps/desktop/src/distribution-contract.ts'
 import { PLUGIN_STATE_SCHEMA } from './contracts.ts'
 import { isSafeEntryId, isSafePackageName } from './core.ts'
 
@@ -12,23 +13,6 @@ export type PluginState = {
 }
 
 export const MANAGED_PATCH_MARK = 'managed-by: dsh-editor-plugins'
-
-/** Entries controlled by session presets, or retired into another feature. */
-export const HOST_LOCKED_ENTRY_IDS = new Set([
-  'editor-novel-kernel',
-  'editor-workbench-tools',
-  'proofread',
-  'ai-services', 'model-center', 'memory', 'self-improvement', 'fusion',
-  'web-search-tavily', // Supplied by web-search-manager; the old entry no longer exists.
-])
-
-export function withoutHostLockedOverrides(overrides: Record<string, boolean>): Record<string, boolean> {
-  const next: Record<string, boolean> = {}
-  for (const [id, enabled] of Object.entries(overrides)) {
-    if (!HOST_LOCKED_ENTRY_IDS.has(id)) next[id] = enabled
-  }
-  return next
-}
 
 export function emptyPluginState(): PluginState {
   return { schema: PLUGIN_STATE_SCHEMA, overrides: {}, presets: {}, installed: [] }
@@ -49,7 +33,7 @@ export function parsePluginState(value: unknown): PluginState | undefined {
     for (const item of row.installed) {
       if (!item || typeof item !== 'object') continue
       const record = item as Record<string, unknown>
-      if (typeof record.name !== 'string' || !isSafePackageName(record.name) || record.name === 'dsh-web-search-tavily' || ['ai-services', 'model-center', 'memory', 'self-improvement', 'fusion'].some(id => record.name === '@klarkxy/dsh-' + id)) continue
+      if (typeof record.name !== 'string' || !isSafePackageName(record.name) || RETIRED_PLUGIN_PACKAGES.has(record.name)) continue
       if (typeof record.spec !== 'string' || record.spec.length > 200) continue
       installed.push({
         name: record.name,
@@ -65,48 +49,4 @@ export function parsePluginState(value: unknown): PluginState | undefined {
     }
   }
   return { schema: PLUGIN_STATE_SCHEMA, overrides, presets, installed }
-}
-
-export function renderOverridePatch(overrides: Record<string, boolean>): string {
-  const ids = Object.keys(overrides).filter(isSafeEntryId).sort()
-  if (ids.length === 0) return `[]\n`
-  const lines = [`# ${MANAGED_PATCH_MARK}`]
-  for (const id of ids) {
-    lines.push(`- id: ${id}`)
-    lines.push(`  disabled: ${overrides[id] ? 'false' : 'true'}`)
-  }
-  return `${lines.join('\n')}\n`
-}
-
-export function normalizePatchText(text: string): string {
-  return text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
-}
-
-export function parseManagedPatch(text: string): Record<string, boolean> | undefined {
-  const trimmed = normalizePatchText(text).trim()
-  if (!trimmed || trimmed === '[]') return {}
-  if (!trimmed.includes(MANAGED_PATCH_MARK)) return undefined
-  const overrides: Record<string, boolean> = {}
-  const pattern = /- id:\s*([A-Za-z0-9._-]+)\r?\n\s+disabled:\s*(true|false)/g
-  for (const match of trimmed.matchAll(pattern)) {
-    if (isSafeEntryId(match[1])) overrides[match[1]] = match[2] === 'false'
-  }
-  return overrides
-}
-
-/** True only for empty/`[]` or a file that is exactly our generated override YAML. */
-export function isOwnedManagedPatch(text: string | undefined): boolean {
-  if (text === undefined) return true
-  const normalized = normalizePatchText(text)
-  const trimmed = normalized.trim()
-  if (!trimmed || trimmed === '[]') return true
-  const parsed = parseManagedPatch(normalized)
-  if (parsed === undefined) return false
-  const rendered = renderOverridePatch(parsed)
-  const comparable = normalized.endsWith('\n') ? normalized : `${normalized}\n`
-  return comparable === rendered
-}
-
-export function canReplaceHomePatch(existing: string | undefined): boolean {
-  return isOwnedManagedPatch(existing)
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { answerApproval, answerQuestions, authorMemoryObservations, blocksText, chatRows, internalIndexTurnActive, parseAuthorMemoryMarker, parseAuthorProposal, parseProposalMarker, partialView, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
+import { answerApproval, answerQuestions, blocksText, chatRows, internalIndexTurnActive, parseAuthorProposal, parseProposalMarker, partialView, pendingRows, send, sendProjectContext, stop, toolResultRow, visibleRunningCalls } from './adapter.ts'
 import { compileProjectContext, compileProjectContextV2 } from 'dsh-editor-workbench/contracts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
@@ -49,7 +49,7 @@ describe('DSH snapshot adapter', () => {
     expect(renamesRow.detail).not.toBe('写作助手提出了一项文件修改提案')
     expect(renamesRow.proposal).not.toHaveProperty('path')
   })
-  it('completely hides author_observe turns and extracts observations for the silent client-side write', () => {
+  it('reads legacy author_observe markers without replaying writes and keeps their tool turns hidden', () => {
     const marker = JSON.stringify({ marker: 'dsh-editor.memory', version: 1, observation: '留白优先', reason: '多次出现' })
     const snapshot = { nodes: [
       { kind: 'assistant', seq: 8, blocks: [{ kind: 'tool-call', name: 'author_observe', argsRaw: '{}' }] },
@@ -59,9 +59,6 @@ describe('DSH snapshot adapter', () => {
     expect(chatRows(snapshot as never)).toEqual([
       { id: 'assistant:10', role: 'assistant', text: '记住了，后面按这个来。', detail: undefined },
     ])
-    expect(authorMemoryObservations(snapshot as never)).toEqual([{ seq: 9, observation: '留白优先' }])
-    expect(parseAuthorMemoryMarker(marker)).toEqual({ marker: 'dsh-editor.memory', version: 1, observation: '留白优先', reason: '多次出现' })
-    expect(parseAuthorMemoryMarker('not json')).toBeUndefined()
   })
   it('surfaces novel_memory_update markers as memory-update rows for the review card', () => {
     const marker = JSON.stringify({ marker: 'dsh-editor.memory-update', version: 1, id: 'mu-1', path: '项目规则.md', summary: '记录结局走向', status: 'pending', createdAt: '2026-09-09T08:00:00.000Z' })

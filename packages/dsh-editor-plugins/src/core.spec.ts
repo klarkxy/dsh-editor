@@ -1,170 +1,35 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import {
-  RUNTIME_CATALOG_FILE, catalogFor, catalogFromEditorBlocks, classifyEntry, isProtectedEntry, isProtectedPackage,
-  isSafeEntryId, isSafePackageName, loadRuntimeCatalog, packageNameOf,
-} from './core.ts'
+import { RUNTIME_CATALOG_FILE, isSafeEntryId, isSafePackageName, readPreparedCatalog } from './core.ts'
 
-const catalog = catalogFromEditorBlocks([
-  {
-    name: 'dsh-editor-shell',
-    dshEditor: {
-      role: 'core',
-      visibility: 'desktop',
-      entries: [{ id: 'editor-shell', title: '写作界面', description: '三栏稿纸与设置', locked: true }],
-    },
-  },
-  {
-    name: 'dsh-editor-plugins',
-    dshEditor: {
-      role: 'core',
-      visibility: 'desktop',
-      entries: [{ id: 'editor-plugins', title: '插件管理', description: '开关、搜索与安装插件', locked: true }],
-    },
-  },
-  {
-    name: 'dsh-manuscript',
-    dshEditor: {
-      role: 'core',
-      visibility: 'public',
-      entries: [
-        { id: 'manuscript', title: '稿纸', description: '正文读写、草稿与补全', locked: true },
-        { id: 'manuscript-assist', title: '补全服务', description: '行内补全与选段改写', feature: 'completion' },
-      ],
-    },
-  },
-  {
-    name: '@klarkxy/dsh-zhihu',
-    dshEditor: {
-      role: 'feature',
-      visibility: 'public',
-      entries: [{ id: 'zhihu', title: '知乎资料', description: '知乎搜索、知识库与用量', feature: 'zhihu' }],
-    },
-  },
-  {
-    name: 'dsh-proofread',
-    dshEditor: {
-      role: 'feature',
-      visibility: 'public',
-      entries: [{ id: 'proofread', title: '校对', description: '独立文本校对面板' }],
-    },
-  },
-], [
-  '@deepseek-ai/dsh-base',
-  'dsh-editor-shell',
-  'dsh-editor-plugins',
-  'dsh-manuscript',
-  '@klarkxy/dsh-zhihu',
-  'dsh-proofread',
-])
-
-describe('plugin core protection', () => {
-  it('locks the writing minimum and every DeepSeek Harness package', () => {
-    expect(isProtectedPackage('dsh-editor-shell', catalog.bundles)).toBe(true)
-    expect(isProtectedPackage('dsh-editor-plugins', catalog.bundles)).toBe(true)
-    expect(isProtectedPackage('@deepseek-ai/dsh-base', catalog.bundles)).toBe(true)
-    expect(isProtectedPackage('@deepseek-ai/dsh-client-ui-sidebar', catalog.bundles)).toBe(true)
-    expect(isProtectedPackage('community-theme', catalog.bundles)).toBe(false)
-    expect(isProtectedEntry('editor-shell', 'dsh-editor-shell', catalog)).toBe(true)
-    expect(isProtectedEntry('editor-plugins', 'dsh-editor-plugins', catalog)).toBe(true)
-    expect(isProtectedEntry('manuscript', 'dsh-manuscript', catalog)).toBe(true)
-    expect(isProtectedEntry('zhihu', '@klarkxy/dsh-zhihu', catalog)).toBe(false)
-    expect(isProtectedEntry('proofread', 'dsh-proofread', catalog)).toBe(false)
-    expect(isProtectedEntry('ui-sidebar', '@deepseek-ai/dsh-client-ui-sidebar', catalog)).toBe(true)
+describe('discovery prepared catalog', () => {
+  it('validates identifiers used by local artifacts and preset declarations', () => {
+    expect(isSafeEntryId('editor-shell')).toBe(true)
+    expect(isSafeEntryId('../escape')).toBe(false)
+    expect(isSafeEntryId('a'.repeat(81))).toBe(false)
+    expect(isSafePackageName('@deepseek-ai/unknown-extra')).toBe(true)
+    expect(isSafePackageName('../escape')).toBe(false)
+    expect(isSafePackageName('@scope/pkg/tools')).toBe(false)
   })
 
-  it('classifies catalog entries and hides harness internals', () => {
-    expect(classifyEntry('manuscript', 'dsh-manuscript', catalog)).toBe('core')
-    expect(classifyEntry('include:manuscript', 'dsh-manuscript', catalog)).toBe('core')
-    expect(classifyEntry('zhihu', '@klarkxy/dsh-zhihu', catalog)).toBe('optional')
-    expect(classifyEntry('include:zhihu', '@klarkxy/dsh-zhihu', catalog)).toBe('optional')
-    expect(classifyEntry('ui-sidebar', '@deepseek-ai/dsh-client-ui-sidebar', catalog)).toBe('hidden')
-    expect(classifyEntry('theme-paper', 'dsh-theme-paper', catalog)).toBe('community')
-    expect(classifyEntry('include', 'cordis:include', catalog)).toBe('hidden')
-    expect(catalogFor('include:manuscript', 'dsh-manuscript', catalog).title).toBe('稿纸')
-    expect(isProtectedEntry('include:editor-shell', 'dsh-editor-shell', catalog)).toBe(true)
-    expect(catalogFor('zhihu', '@klarkxy/dsh-zhihu', catalog).title).toBe('知乎资料')
-    expect(packageNameOf('@klarkxy/dsh-zhihu/tools')).toBe('@klarkxy/dsh-zhihu')
-    expect(packageNameOf('@scope/pkg/tools')).toBe('@scope/pkg')
-  })
-
-  it('exposes explicitly catalogued official entries while protecting their packages', () => {
-    const catalog = { bundles: [], entries: {
-      'ui-voice-input': { title: '语音输入', description: '官方语音', locked: false, packageName: '@deepseek-ai/dsh-experimental-client-ui-voice-input' },
-    } }
-    expect(classifyEntry('ui-voice-input', '@deepseek-ai/dsh-experimental-client-ui-voice-input', catalog)).toBe('optional')
-    expect(isProtectedEntry('ui-voice-input', '@deepseek-ai/dsh-experimental-client-ui-voice-input', catalog)).toBe(false)
-    expect(isProtectedPackage('@deepseek-ai/dsh-experimental-client-ui-voice-input', catalog.bundles)).toBe(true)
-    expect(classifyEntry('ui-layout', '@deepseek-ai/dsh-client-ui-layout', catalog)).toBe('hidden')
-  })
-
-  it('rejects unsafe identifiers', () => {
-    expect(isSafeEntryId('zhihu')).toBe(true)
-    expect(isSafeEntryId('../etc')).toBe(false)
-    expect(isSafePackageName('dsh-theme')).toBe(true)
-    expect(isSafePackageName('@acme/dsh-plugin')).toBe(true)
-    expect(isSafePackageName('../evil')).toBe(false)
-  })
-
-  it('reads the prepared catalog without scanning node_modules', async () => {
-    const profileDir = await mkdtemp(join(tmpdir(), 'dsh-catalog-'))
-    await writeFile(join(profileDir, RUNTIME_CATALOG_FILE), `${JSON.stringify({
-      bundles: ['dsh-editor-shell', '@klarkxy/dsh-zhihu'],
-      entries: {
-        'editor-shell': { title: '写作界面', description: '三栏稿纸与设置', locked: true, packageName: 'dsh-editor-shell' },
-        zhihu: { title: '知乎资料', description: '知乎搜索', locked: false, packageName: '@klarkxy/dsh-zhihu', feature: 'zhihu' },
-      },
-    }, null, 2)}\n`)
-    const loaded = await loadRuntimeCatalog(profileDir, [])
-    expect(loaded.entries['editor-shell']?.locked).toBe(true)
-    expect(loaded.entries.zhihu?.title).toBe('知乎资料')
-    expect(loaded.entries['editor-shell']).not.toHaveProperty('builtin')
-    expect(loaded.entries['editor-shell']).not.toHaveProperty('managedBy')
-    expect(loaded.entries.zhihu).not.toHaveProperty('builtin')
-    expect(classifyEntry('editor-shell', 'dsh-editor-shell', loaded)).toBe('core')
-    expect(classifyEntry('zhihu', '@klarkxy/dsh-zhihu', loaded)).toBe('optional')
-  })
-
-  it('retains exact prepared attribution and refuses installed spoof or id takeover', async () => {
-    const profileDir = await mkdtemp(join(tmpdir(), 'dsh-catalog-spoof-'))
-    await writeFile(join(profileDir, RUNTIME_CATALOG_FILE), `${JSON.stringify({
-      bundles: ['dsh-editor-novel-kernel', 'dsh-proofread'],
+  it('reads distribution metadata without scanning or trusting installed claims', async () => {
+    const profile = await mkdtemp(join(tmpdir(), 'dsh-catalog-'))
+    await writeFile(join(profile, RUNTIME_CATALOG_FILE), JSON.stringify({
+      bundles: ['dsh-editor-shell', 4],
       entries: {
         zhihu: { title: '知乎资料', description: 'prepared', locked: false, packageName: '@klarkxy/dsh-zhihu', feature: 'zhihu' },
-        'editor-novel-kernel': { title: '小说工具', description: '会话', locked: true, packageName: 'dsh-editor-novel-kernel', builtin: true, managedBy: 'session' },
-        proofread: { title: '校对', description: '功能', locked: true, packageName: 'dsh-proofread', builtin: false, managedBy: 'feature' },
-        'loose-flag': { title: 'Loose', description: 'exact', locked: false, packageName: 'local-loose', builtin: 'yes', managedBy: 'author' },
+        core: { title: 'Core', description: 'prepared', locked: true, packageName: 'dsh-editor-shell', builtin: true, managedBy: 'session' },
+        loose: { title: 'Loose', description: 'prepared', locked: 'yes', packageName: 'other', builtin: 'yes', managedBy: 'author' },
+        bad: { title: 'bad', packageName: 'other' },
       },
-    })}\n`)
-    const spoofDir = join(profileDir, 'node_modules', 'spoof-plugin')
-    await mkdir(spoofDir, { recursive: true })
-    await writeFile(join(spoofDir, 'package.json'), `${JSON.stringify({
-      name: 'spoof-plugin',
-      dshEditor: {
-        entries: [
-          { id: 'zhihu', title: 'SPOOF', description: 'spoof', locked: true, builtin: true, managedBy: 'session' },
-          { id: 'spoof-entry', title: 'Spoof', description: 'new', locked: true, builtin: true, managedBy: 'feature' },
-        ],
-      },
-    })}\n`)
-    const loaded = await loadRuntimeCatalog(profileDir, ['spoof-plugin'])
-    expect(loaded.entries.zhihu).toEqual({ title: '知乎资料', description: 'prepared', locked: false, packageName: '@klarkxy/dsh-zhihu', feature: 'zhihu' })
-    expect(loaded.entries['editor-novel-kernel']).toMatchObject({ builtin: true, managedBy: 'session', locked: true, packageName: 'dsh-editor-novel-kernel' })
-    expect(loaded.entries.proofread).toMatchObject({ builtin: false, managedBy: 'feature', locked: true, packageName: 'dsh-proofread' })
-    expect(loaded.entries['loose-flag']).not.toHaveProperty('builtin')
-    expect(loaded.entries['loose-flag']).not.toHaveProperty('managedBy')
-    expect(loaded.entries['spoof-entry']).toMatchObject({ title: 'Spoof', packageName: 'spoof-plugin', locked: true })
-    expect(loaded.entries['spoof-entry']).not.toHaveProperty('builtin')
-    expect(loaded.entries['spoof-entry']).not.toHaveProperty('managedBy')
-    expect(classifyEntry('zhihu', 'spoof-plugin', loaded)).toBe('community')
-    expect(isProtectedEntry('zhihu', 'spoof-plugin', loaded)).toBe(false)
-    expect(catalogFor('zhihu', 'spoof-plugin', loaded)).toMatchObject({ title: 'spoof-plugin', group: 'community' })
-    expect(classifyEntry('editor-novel-kernel', 'dsh-editor-novel-kernel', loaded)).toBe('core')
-    expect(isProtectedEntry('editor-novel-kernel', 'dsh-editor-novel-kernel', loaded)).toBe(true)
-    expect(classifyEntry('proofread', 'dsh-proofread', loaded)).toBe('core')
-    expect(isProtectedEntry('proofread', 'dsh-proofread', loaded)).toBe(true)
-    expect(classifyEntry('zhihu', '@klarkxy/dsh-zhihu', loaded)).toBe('optional')
+    }))
+    const catalog = await readPreparedCatalog(profile)
+    expect(catalog?.bundles).toEqual(['dsh-editor-shell'])
+    expect(catalog?.entries.zhihu).toMatchObject({ title: '知乎资料', feature: 'zhihu' })
+    expect(catalog?.entries.core).toMatchObject({ builtin: true, managedBy: 'session' })
+    expect(catalog?.entries.loose).toEqual({ title: 'Loose', description: 'prepared', locked: false, packageName: 'other' })
+    expect(catalog?.entries).not.toHaveProperty('bad')
   })
 })

@@ -35,6 +35,8 @@ export default defineConfig({
       'dsh-editor-workbench/contracts': `${root}packages/dsh-editor-workbench/src/contracts.ts`,
       'dsh-editor-workbench/tools': `${root}packages/dsh-editor-workbench/src/tools/tools.ts`,
       'dsh-editor-workbench': `${root}packages/dsh-editor-workbench/src/index.ts`,
+      'dsh-editor-workspace-kit/frontmatter': `${root}packages/dsh-editor-workspace-kit/src/frontmatter.ts`,
+      'dsh-editor-workspace-kit': `${root}packages/dsh-editor-workspace-kit/src/index.ts`,
       'dsh-editor-seats/tokens': `${root}packages/dsh-editor-seats/src/tokens.ts`,
       'dsh-editor-seats/seat-button': `${root}packages/dsh-editor-seats/src/seat-button.tsx`,
       'dsh-editor-seats': `${root}packages/dsh-editor-seats/src/index.ts`,

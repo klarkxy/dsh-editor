@@ -327,6 +327,10 @@ const IDENTITY_PROJECTION: EditorCorePaperProjection = {
   replace: (_path, _text, paperText) => paperText,
 }
 
+const NO_DRAFT: EditorCoreDraft = { kind: 'none' }
+const EMPTY_SLOT_CLASSES: NonNullable<EditorCoreProps['slotClassName']> = {}
+const EMPTY_SLOT_STYLES: NonNullable<EditorCoreProps['slotStyle']> = {}
+
 function extractText(value: unknown): string {
   if (value && typeof value === 'object' && 'text' in value) {
     const raw = (value as { text: unknown }).text
@@ -411,8 +415,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const {
     sessionId,
     path,
-    rpc,
-    draft = { kind: 'none' },
+    rpc: incomingRpc,
+    draft: incomingDraft = NO_DRAFT,
     onDirtyChange,
     onSaved,
     onError,
@@ -422,8 +426,8 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     testIdPrefix = 'paper',
     paperClassName = 'paper-stage',
     paperStyle,
-    slotClassName = {},
-    slotStyle = {},
+    slotClassName = EMPTY_SLOT_CLASSES,
+    slotStyle = EMPTY_SLOT_STYLES,
     completionPreference = 'manual',
     automaticCompletionEligible,
     completionEnabled = true,
@@ -455,7 +459,26 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     onEditorContextMenu,
   } = props
 
-  const cwd = props.cwd ?? (draft.kind === 'session' ? draft.cwd : '')
+  // Transport wrappers and callbacks may be recreated by the host on an ordinary
+  // render. Their references do not identify a different manuscript or draft.
+  const rpcRef = useRef(incomingRpc)
+  rpcRef.current = incomingRpc
+  const rpc = useMemo<EditorCoreRpc>(() => ({ call: (...args) => rpcRef.current.call(...args) }), [])
+  const draftRef = useRef(incomingDraft)
+  draftRef.current = incomingDraft
+  const draftKind = incomingDraft.kind
+  const draftCwd = incomingDraft.kind === 'session' ? incomingDraft.cwd : ''
+  const draftDelay = incomingDraft.kind === 'none' ? undefined : incomingDraft.syncDelayMs
+  const draft = useMemo<EditorCoreDraft>(() => {
+    if (draftKind === 'session') return { kind: 'session', cwd: draftCwd }
+    if (draftKind === 'none') return NO_DRAFT
+    return { kind: 'host', call: (endpoint, payload) => {
+      const current = draftRef.current
+      if (current.kind !== 'host') throw new Error('Host draft adapter is no longer active')
+      return current.call(endpoint, payload)
+    } }
+  }, [draftKind, draftCwd])
+  const cwd = props.cwd ?? draftCwd
 
   const [doc, setDoc] = useState<EditorDocument | null>(null)
   const [text, setTextState] = useState('')
@@ -509,11 +532,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const loadedGenerationRef = useRef(-1)
   const syncedGenerationRef = useRef(-1)
   const ghostSourceRef = useRef<{ generation: number; revision: number } | null>(null)
-  const loadIdentityRef = useRef({ sessionId, path, cwd, externalRevision, rpc, draft })
+  const loadIdentityRef = useRef({ sessionId, path, cwd, externalRevision, draftKind, draftCwd })
   const previousLoad = loadIdentityRef.current
   if (previousLoad.sessionId !== sessionId || previousLoad.path !== path || previousLoad.cwd !== cwd
-    || previousLoad.externalRevision !== externalRevision || previousLoad.rpc !== rpc || previousLoad.draft !== draft) {
-    loadIdentityRef.current = { sessionId, path, cwd, externalRevision, rpc, draft }
+    || previousLoad.externalRevision !== externalRevision || previousLoad.draftKind !== draftKind || previousLoad.draftCwd !== draftCwd) {
+    loadIdentityRef.current = { sessionId, path, cwd, externalRevision, draftKind, draftCwd }
     documentGenerationRef.current += 1
     loadedGenerationRef.current = -1
   }
@@ -544,8 +567,10 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     && loadedGenerationRef.current === documentGenerationRef.current)
   const setStatus = useCallback((status: EditorCoreStatus) => onStatusChange?.(status), [onStatusChange])
 
-  const report = useCallback((next: string) => { setNote(next); onNotice?.(next) }, [onNotice])
-  const reportError = useCallback((next: string) => { setError(next); onError?.(next) }, [onError])
+  const noticeCallbacksRef = useRef({ onNotice, onError })
+  noticeCallbacksRef.current = { onNotice, onError }
+  const report = useCallback((next: string) => { setNote(next); noticeCallbacksRef.current.onNotice?.(next) }, [])
+  const reportError = useCallback((next: string) => { setError(next); noticeCallbacksRef.current.onError?.(next) }, [])
   const clearGhost = useCallback(() => { ghostSourceRef.current = null; setGhostCandidates([]); setGhostIndex(0) }, [])
 
   const projected = useMemo(() => paperProjection.project(path, text), [paperProjection, path, text])
@@ -656,9 +681,12 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           const raw = globalThis.sessionStorage.getItem(SESSION_DRAFT_KEY(cwd, path))
           if (raw) {
             const parsed = JSON.parse(raw) as Partial<StoredDraft>
-            if (parsed.cwd === cwd && parsed.path === path && typeof parsed.text === 'string' && typeof parsed.version === 'string') {
+            // Older editor-core writes omitted cwd. The storage key already
+            // scopes that record to this workspace; explicit mismatches stay rejected.
+            if ((parsed.cwd === cwd || parsed.cwd === undefined) && parsed.path === path && typeof parsed.text === 'string' && typeof parsed.version === 'string') {
               restoredText = parsed.text
               conflictOnLoad = parsed.version !== disk.version
+              draftBaseRef.current = { text: disk.text, version: parsed.version }
             }
           }
         } catch { /* corrupted draft is best effort */ }
@@ -692,7 +720,7 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
 
   useEffect(() => {
     if (draft.kind === 'none' || !doc || !isDocumentReady()) return
-    const delay = draft.syncDelayMs ?? 250
+    const delay = draftDelay ?? 250
     draftSync.schedule(delay, () => {
       if (!isDocumentReady() || docRef.current?.path !== doc.path) return
       if (draft.kind === 'host') {
@@ -719,12 +747,12 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
           const key = SESSION_DRAFT_KEY(cwd, doc.path)
           const current = textRef.current
           if (current === doc.text) globalThis.sessionStorage.removeItem(key)
-          else globalThis.sessionStorage.setItem(key, JSON.stringify({ ...doc, text: current }))
+          else globalThis.sessionStorage.setItem(key, JSON.stringify({ ...doc, cwd, text: current, version: draftBaseRef.current?.version ?? doc.version }))
         } catch { /* best effort */ }
       }
     })
     return cancelPendingDraftSync
-  }, [draft, doc, revision, cwd, report, draftSync, cancelPendingDraftSync])
+  }, [draft, draftDelay, doc, revision, cwd, report, draftSync, cancelPendingDraftSync])
 
   const save = useCallback(async (): Promise<boolean> => {
     /* conflict 必须先经 放弃/重新载入/另存副本 解决，Ctrl+S 不得绕过。 */

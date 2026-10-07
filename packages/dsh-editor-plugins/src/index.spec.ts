@@ -3,13 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { handlePluginsRpc, persistPluginState, resolveProfileArtifactDir } from './index.ts'
-import { MANAGED_PATCH_MARK, renderOverridePatch } from './overlay.ts'
+import { handlePluginsRpc, resolveProfileArtifactDir } from './index.ts'
+import { defaultPersistIo } from './persist.ts'
 import type { PluginPaths } from './paths.ts'
 import { profileDirFromPluginModule, resolvePluginPaths } from './paths.ts'
 
 const signal = () => new AbortController().signal
-const host = { entries: () => [], update: async () => {} }
 
 async function fixture(): Promise<PluginPaths> {
   const home = await mkdtemp(join(tmpdir(), 'dsh-plugins-'))
@@ -29,10 +28,9 @@ async function fixture(): Promise<PluginPaths> {
 describe('plugin manager RPC', () => {
   it('searches the GitHub topic marketplace and rejects unsafe queries', async () => {
     const paths = await fixture()
-    const unsafe = await handlePluginsRpc('marketplace.search', { query: 'a;b' }, signal(), { loader: host, paths })
+    const unsafe = await handlePluginsRpc('marketplace.search', { query: 'a;b' }, signal(), { paths })
     expect(unsafe).toMatchObject({ ok: false, error: { code: 'bad-request' } })
     const result = await handlePluginsRpc('marketplace.search', { query: 'theme' }, signal(), {
-      loader: host,
       paths,
       fetch: async (url) => {
         expect(String(url)).toContain('topic%3Adsh-plugin')
@@ -48,7 +46,7 @@ describe('plugin manager RPC', () => {
   it('rejects removed installer and inventory endpoints', async () => {
     const paths = await fixture()
     for (const endpoint of ['inventory.list', 'entry.setEnabled', 'marketplace.install', 'marketplace.inspect', 'marketplace.uninstall']) {
-      expect(await handlePluginsRpc(endpoint, {}, signal(), { loader: host, paths })).toMatchObject({
+      expect(await handlePluginsRpc(endpoint, {}, signal(), { paths })).toMatchObject({
         ok: false, error: { code: 'bad-request', message: '不支持的插件操作' },
       })
     }
@@ -74,21 +72,6 @@ describe('plugin paths', () => {
   })
 })
 
-describe('plugin state persist', () => {
-  it('strips host-locked overrides when persisting plugin state', async () => {
-    const paths = await fixture()
-    await persistPluginState(paths, {
-      schema: 1,
-      overrides: { zhihu: false, 'editor-novel-kernel': true, proofread: true },
-      presets: {},
-      installed: [],
-    })
-    expect(JSON.parse(await readFile(paths.stateFile, 'utf8')).overrides).toEqual({ zhihu: false })
-    expect(await readFile(paths.patchFile, 'utf8')).toBe(renderOverridePatch({ zhihu: false }))
-    expect(await readFile(paths.patchFile, 'utf8')).toContain(MANAGED_PATCH_MARK)
-  })
-})
-
 describe('first-party writing preset RPC', () => {
   async function presetFixture() {
     const paths = await fixture()
@@ -109,7 +92,7 @@ describe('first-party writing preset RPC', () => {
 
   it('lists the locked core plus toggleable first-party presets', async () => {
     const paths = await presetFixture()
-    const result = await handlePluginsRpc('presets.list', {}, signal(), { loader: host, paths })
+    const result = await handlePluginsRpc('presets.list', {}, signal(), { paths })
     expect(result).toMatchObject({ ok: true })
     const value = (result as { ok: true; value: { presets: Array<Record<string, unknown>> } }).value
     expect(value.presets).toEqual([
@@ -128,20 +111,20 @@ describe('first-party writing preset RPC', () => {
   it('toggles a first-party preset live: removes and redeploys the roster dir without restart', async () => {
     const paths = await presetFixture()
     const deployed = join(paths.home, '.agent-presets', 'dsh-editor-novel')
-    const disabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { loader: host, paths, reloadProfile: async () => true })
+    const disabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { paths, reloadProfile: async () => true })
     expect(disabled).toMatchObject({ ok: true, value: { restartRequired: false } })
     const state = JSON.parse(await readFile(paths.stateFile, 'utf8'))
     expect(state.presets).toEqual({ 'dsh-editor-novel': false })
-    const listed = await handlePluginsRpc('presets.list', {}, signal(), { loader: host, paths, reloadProfile: async () => true })
+    const listed = await handlePluginsRpc('presets.list', {}, signal(), { paths, reloadProfile: async () => true })
     expect(listed).toMatchObject({ ok: true })
     const rows = (listed as { ok: true; value: { presets: Array<{ id: string; enabled: boolean }> } }).value.presets
     expect(rows.find((row) => row.id === 'dsh-editor-novel')?.enabled).toBe(false)
 
-    const enabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: true }, signal(), { loader: host, paths, reloadProfile: async () => true })
+    const enabled = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: true }, signal(), { paths, reloadProfile: async () => true })
     expect(enabled).toMatchObject({ ok: true, value: { restartRequired: false } })
     expect(JSON.parse(await readFile(join(deployed, '.dsh-editor-owner.json'), 'utf8'))).toEqual({ app: 'dsh-editor', schema: 1 })
     expect(await readFile(join(deployed, 'preset.yml'), 'utf8')).toContain('name: 小说创作')
-    const again = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { loader: host, paths, reloadProfile: async () => true })
+    const again = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { paths, reloadProfile: async () => true })
     expect(again).toMatchObject({ ok: true })
     expect(await readFile(join(paths.home, '.agent-presets', 'dsh-editor-writing', 'preset.yml'), 'utf8')).toContain('通用写作')
     await expect(readFile(join(deployed, 'preset.yml'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
@@ -149,12 +132,52 @@ describe('first-party writing preset RPC', () => {
 
   it('refuses to disable the core writing preset or unknown ids', async () => {
     const paths = await presetFixture()
-    const core = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-writing', enabled: false }, signal(), { loader: host, paths })
+    const core = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-writing', enabled: false }, signal(), { paths })
     expect(core).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-    const unknown = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-article', enabled: false }, signal(), { loader: host, paths })
+    const unknown = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-article', enabled: false }, signal(), { paths })
     expect(unknown).toMatchObject({ ok: false, error: { code: 'not-found' } })
-    const malformed = await handlePluginsRpc('presets.setEnabled', { id: '' }, signal(), { loader: host, paths })
+    const malformed = await handlePluginsRpc('presets.setEnabled', { id: '' }, signal(), { paths })
     expect(malformed).toMatchObject({ ok: false, error: { code: 'bad-request' } })
+  })
+
+  it('saves only writing selections beside an arbitrary author home patch', async () => {
+    const paths = await presetFixture()
+    const authorPatch = '\uFEFF# author comments\r\n- id: custom\r\n  config: &author\r\n    expression: !!js () => 42\r\n'
+    await writeFile(paths.patchFile, authorPatch)
+    const previous = { schema: 1, overrides: { proofread: true, unknown: false }, installed: [{ name: 'author-plugin', spec: 'file:author', version: '1' }], authorField: { retained: true }, presets: { 'other-mode': false } }
+    await writeFile(paths.stateFile, JSON.stringify(previous))
+    const result = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: false }, signal(), { paths })
+    expect(result).toMatchObject({ ok: true, value: { restartRequired: true } })
+    expect(await readFile(paths.patchFile, 'utf8')).toBe(authorPatch)
+    expect(JSON.parse(await readFile(paths.stateFile, 'utf8'))).toEqual({ ...previous, presets: { 'other-mode': false, 'dsh-editor-novel': false } })
+  })
+
+  it('rolls back a failed state write without removing an already enabled preset', async () => {
+    const paths = await presetFixture()
+    await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: true }, signal(), { paths })
+    const target = join(paths.home, '.agent-presets', 'dsh-editor-novel')
+    await writeFile(join(target, 'author-extra.txt'), 'exact previous contents')
+    const before = await readFile(paths.stateFile, 'utf8')
+    let rejected = false
+    const io = { ...defaultPersistIo, rename: async (from: string, to: string) => {
+      if (to === paths.stateFile && !rejected) { rejected = true; throw Object.assign(new Error('disk full'), { code: 'ENOSPC' }) }
+      return defaultPersistIo.rename(from, to)
+    } }
+    const result = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: true }, signal(), { paths, io })
+    expect(result).toMatchObject({ ok: false, error: { code: 'internal', details: { recovery: 'restored' } } })
+    expect(await readFile(paths.stateFile, 'utf8')).toBe(before)
+    expect(await readFile(join(target, 'author-extra.txt'), 'utf8')).toBe('exact previous contents')
+  })
+
+  it('rolls back selection and deployed directory when declaration generation fails', async () => {
+    const paths = await presetFixture()
+    const before = '{"schema":1,"presets":{"dsh-editor-novel":false},"authorField":42}\n'
+    await writeFile(paths.stateFile, before)
+    await writeFile(join(paths.home, '.agent-presets', 'dsh-editor-writing', 'agent.cordis.yml'), '{}\n')
+    const result = await handlePluginsRpc('presets.setEnabled', { id: 'dsh-editor-novel', enabled: true }, signal(), { paths })
+    expect(result).toMatchObject({ ok: false, error: { code: 'internal', details: { recovery: 'restored' } } })
+    expect(await readFile(paths.stateFile, 'utf8')).toBe(before)
+    await expect(readFile(join(paths.home, '.agent-presets', 'dsh-editor-novel', 'preset.yml'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })
 
@@ -204,7 +227,7 @@ describe('local distribution discovery', () => {
   it('lists optional local artifacts from immutable composition without GitHub', async () => {
     const paths = await localFixture()
     const fetch = async () => { throw new Error('network must not run for empty local query') }
-    const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '' }, signal(), { loader: host, paths, fetch }))
+    const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '' }, signal(), { paths, fetch }))
     expect(listings.map((row) => row.packageName)).toEqual(['dsh-editor-cards', 'dsh-editor-memory-panel', '@klarkxy/dsh-web-search-manager'])
     expect(listings[0]).toMatchObject({
       source: 'local',
@@ -222,13 +245,13 @@ describe('local distribution discovery', () => {
   it('matches exact private names and ASCII keywords before unversioned npm listings', async () => {
     const paths = await localFixture()
     const fetch = async () => { throw new Error('network must not run for local name or keyword') }
-    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-cards' }, signal(), { loader: host, paths, fetch }))).toEqual([
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-cards' }, signal(), { paths, fetch }))).toEqual([
       expect.objectContaining({ source: 'local', packageName: 'dsh-editor-cards', title: '人物卡与世界书' }),
     ])
-    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'cards' }, signal(), { loader: host, paths, fetch }))).toEqual([
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: 'cards' }, signal(), { paths, fetch }))).toEqual([
       expect.objectContaining({ source: 'local', packageName: 'dsh-editor-cards' }),
     ])
-    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: '@klarkxy/dsh-web-search-manager' }, signal(), { loader: host, paths, fetch }))).toEqual([
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: '@klarkxy/dsh-web-search-manager' }, signal(), { paths, fetch }))).toEqual([
       expect.objectContaining({ source: 'local', packageName: '@klarkxy/dsh-web-search-manager', title: '网页搜索' }),
     ])
   })
@@ -236,7 +259,7 @@ describe('local distribution discovery', () => {
   it('keeps versioned npm specs on the public npm listing path', async () => {
     const paths = await localFixture()
     const fetch = async () => { throw new Error('network must not run for versioned npm') }
-    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: '@klarkxy/dsh-web-search-manager@1.2.3' }, signal(), { loader: host, paths, fetch }))).toEqual([
+    expect(listingsOf(await handlePluginsRpc('marketplace.search', { query: '@klarkxy/dsh-web-search-manager@1.2.3' }, signal(), { paths, fetch }))).toEqual([
       expect.objectContaining({ source: 'npm', spec: 'npm:@klarkxy/dsh-web-search-manager@1.2.3' }),
     ])
   })
@@ -244,14 +267,13 @@ describe('local distribution discovery', () => {
   it('keeps local choices after the profile node_modules copy is gone', async () => {
     const paths = await localFixture()
     const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '人物卡' }, signal(), {
-      loader: host,
       paths,
       fetch: async () => { throw new Error('network must not run when a local query matches') },
     }))
     expect(listings).toEqual([expect.objectContaining({ packageName: 'dsh-editor-cards', title: '人物卡与世界书', source: 'local' })])
-    const byName = listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-memory-panel' }, signal(), { loader: host, paths }))
+    const byName = listingsOf(await handlePluginsRpc('marketplace.search', { query: 'dsh-editor-memory-panel' }, signal(), { paths }))
     expect(byName).toEqual([expect.objectContaining({ packageName: 'dsh-editor-memory-panel' })])
-    const byDescription = listingsOf(await handlePluginsRpc('marketplace.search', { query: '阅读与撤回' }, signal(), { loader: host, paths }))
+    const byDescription = listingsOf(await handlePluginsRpc('marketplace.search', { query: '阅读与撤回' }, signal(), { paths }))
     expect(byDescription).toEqual([expect.objectContaining({ packageName: 'dsh-editor-memory-panel' })])
   })
 
@@ -274,7 +296,6 @@ describe('local distribution discovery', () => {
     }))
     expect(resolveProfileArtifactDir(paths.profileDir, '../evil')).toBeUndefined()
     const listings = listingsOf(await handlePluginsRpc('marketplace.search', { query: '' }, signal(), {
-      loader: host,
       paths,
       fetch: async () => { throw new Error('network must not run for empty local query') },
     }))
@@ -286,7 +307,6 @@ describe('local distribution discovery', () => {
   it('keeps GitHub keyword search and network errors when no local match', async () => {
     const paths = await localFixture()
     const result = await handlePluginsRpc('marketplace.search', { query: 'theme' }, signal(), {
-      loader: host,
       paths,
       fetch: async (url) => {
         expect(String(url)).toContain('topic%3Adsh-plugin')
@@ -297,7 +317,6 @@ describe('local distribution discovery', () => {
     })
     expect(listingsOf(result)).toEqual([expect.objectContaining({ spec: 'github:acme/dsh-theme', stars: 3 })])
     const denied = await handlePluginsRpc('marketplace.search', { query: 'theme' }, signal(), {
-      loader: host,
       paths,
       fetch: async () => new Response('', { status: 403 }),
     })

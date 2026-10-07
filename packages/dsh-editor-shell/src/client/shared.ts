@@ -483,38 +483,30 @@ export function canSubmitComposer(input: { draft: string; connected: boolean; re
   return Boolean(input.draft.trim()) && input.connected && !input.removed && (!input.outgoingState || input.outgoingState === 'failed')
 }
 
-export class FlowWorkspaceCleanupError extends Error {
-  constructor(options?: ErrorOptions) {
-    super('workspace projection failed and its registration could not be removed', options)
-    this.name = 'FlowWorkspaceCleanupError'
-  }
+/** Keep the Host's idempotent-create ownership answer; the controller drops `created`. */
+export async function createFlowWorkspace(
+  ctx: Pick<ShellContext, 'remote'>,
+  workspacePath: string,
+  ownedRegistrations?: Set<WorkspaceId>,
+) {
+  const result = await ctx.remote.workspace.create({ path: workspacePath })
+  if (!result.ok) throw new Error(result.error.message ?? 'workspace create failed')
+  if (result.value.created) ownedRegistrations?.add(result.value.workspace.workspaceId)
+  return result.value
 }
 
-export async function createFlowWorkspace(
-  ctx: {
-    workspaces: {
-      create(input: { path: string }): Promise<WorkspaceView>
-      delete(workspaceId: WorkspaceId): Promise<void>
-    }
-  },
-  workspacePath: string,
-) {
-  let workspace: WorkspaceView | undefined
+/** Cancellation and import failure may remove only registrations this flow owns. */
+export async function cleanupFlowWorkspace(
+  workspaces: Pick<EditorWorkspaces, 'delete'>,
+  ownedRegistrations: Set<WorkspaceId>,
+  workspaceId: WorkspaceId,
+): Promise<boolean> {
+  if (!ownedRegistrations.has(workspaceId)) return true
   try {
-    workspace = await ctx.workspaces.create({ path: workspacePath })
-    return { workspace, created: true }
-  } catch (error) {
-    if (workspace) {
-      let cleanupFailed = false
-      try {
-        await ctx.workspaces.delete(workspace.workspaceId)
-      } catch {
-        cleanupFailed = true
-      }
-      if (cleanupFailed) throw new FlowWorkspaceCleanupError({ cause: error })
-    }
-    throw error
-  }
+    await workspaces.delete(workspaceId)
+    ownedRegistrations.delete(workspaceId)
+    return true
+  } catch { return false }
 }
 
 export function documentName(path: string): string {

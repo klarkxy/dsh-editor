@@ -3,6 +3,7 @@
 // the source files use the `./...` paths.
 export * from './editor-state.ts'
 export * from './completion-preference.ts'
+export { saveOpenEditor, type EditorSaveHandle, type EditorSaveBlockReason } from './save-before-leave.ts'
 export { editorCoreStyles } from './styles.ts'
 export {
   DEFAULT_TYPOGRAPHY,

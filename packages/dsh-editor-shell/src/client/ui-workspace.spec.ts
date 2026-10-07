@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { provideEditorUiWorkspace, rememberCreatedChatModelError, takeCreatedChatModelError } from './ui-workspace.ts'
 import type { ShellContext } from './shared.ts'
+import type { WorkspaceView } from '../dsh-compat.ts'
 
 function fixture(defaultChatModel?: () => { provider: string; model: string; reasoningEffort?: string } | undefined) {
   const create = vi.fn(async () => 'session-new')
@@ -46,7 +47,7 @@ function fixture(defaultChatModel?: () => { provider: string; model: string; rea
   } as unknown as ShellContext
   provideEditorUiWorkspace(ctx)
   const uiWorkspace = provide.mock.calls[0]?.[1] as {
-    connectWorkspace(id: string): Promise<string>
+    connectWorkspace(id: string, authoritativeWorkspace?: WorkspaceView): Promise<string>
     createSession(id: string): Promise<string>
     openWorkspace(id: string, beforeOpen?: (id: string) => void): Promise<void>
     pickDirectory(): Promise<string | null>
@@ -69,6 +70,23 @@ describe('provideEditorUiWorkspace', () => {
   it('creates a session when the workspace row is not in the local snapshot yet', async () => {
     const { create, uiWorkspace } = fixture()
     await expect(uiWorkspace.connectWorkspace('ws-missing')).resolves.toBe('session-new')
+    expect(create).toHaveBeenCalledWith({ workspaceId: 'ws-missing' })
+  })
+
+  it('reuses the Host create receipt while the first workspace feed is delayed', async () => {
+    const { create, uiWorkspace, selectModel } = fixture(() => ({ provider: 'configured', model: 'default-chat' }))
+    const receipt = { workspaceId: 'ws-missing', path: '/work', title: '作品', sessionIds: ['blank-1'], createdAt: '', updatedAt: '' }
+    await expect(uiWorkspace.connectWorkspace(receipt.workspaceId, receipt)).resolves.toBe('blank-1')
+    expect(create).not.toHaveBeenCalled()
+    expect(selectModel).not.toHaveBeenCalled()
+  })
+
+  it('uses a newer feed row before a stale create receipt and rejects a different workspace receipt', async () => {
+    const { create, uiWorkspace } = fixture()
+    const stale = { workspaceId: 'ws-1', path: '/old-path', title: '旧名称', sessionIds: [], createdAt: '', updatedAt: '' }
+    await expect(uiWorkspace.connectWorkspace('ws-1', stale)).resolves.toBe('blank-1')
+    await expect(uiWorkspace.connectWorkspace('ws-missing', stale)).resolves.toBe('session-new')
+    expect(create).toHaveBeenCalledOnce()
     expect(create).toHaveBeenCalledWith({ workspaceId: 'ws-missing' })
   })
 

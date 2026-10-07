@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { packageContentHash, planPackage, publishAndConfirm, orderReleaseTargets } from './npm-release-policy.mjs'
 import { assertReleaseTag, readDesktopVersion } from './verify-release-version.mjs'
+import { RELEASE_OWNER, RELEASE_REPO } from './release-artifacts.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack/npm-release')
@@ -19,8 +20,8 @@ const targets = orderReleaseTargets(readdirSync(resolve(root, 'packages'), { wit
 const publish = process.argv.includes('--publish')
 if (!process.env.npm_execpath?.replaceAll('\\', '/').includes('pnpm')) throw new Error('Run through pnpm run publish:plugins')
 const releaseTag = process.env.GITHUB_REF?.startsWith('refs/tags/') ? process.env.GITHUB_REF.slice('refs/tags/'.length) : ''
-if (publish && (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_REPOSITORY !== 'klarkxy/dsh-editor' || !/^v[^/]+$/.test(releaseTag))) {
-  throw new Error('Automatic publication is restricted to klarkxy/dsh-editor version tags in GitHub Actions')
+if (publish && (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_REPOSITORY !== `${RELEASE_OWNER}/${RELEASE_REPO}` || !/^v[^/]+$/.test(releaseTag))) {
+  throw new Error(`Automatic publication is restricted to ${RELEASE_OWNER}/${RELEASE_REPO} version tags in GitHub Actions`)
 }
 if (publish) assertReleaseTag(releaseTag, readDesktopVersion())
 mkdirSync(output, { recursive: true })

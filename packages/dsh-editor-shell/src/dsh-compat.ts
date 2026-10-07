@@ -243,7 +243,7 @@ export type EditorWorkspaces = {
 }
 
 export type EditorUiWorkspace = {
-  connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>
+  connectWorkspace(workspaceId: WorkspaceId, authoritativeWorkspace?: WorkspaceView): Promise<SessionId>
   createSession(workspaceId: WorkspaceId): Promise<SessionId>
   /** The shell's editor-owned main session. It is retained while selected. */
   current: ObservableSource<SessionFace | undefined>

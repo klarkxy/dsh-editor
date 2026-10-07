@@ -8,8 +8,7 @@
     ".": "./dist/index.mjs",
     "./rpc": "./dist/rpc/index.mjs",
     "./requests": "./dist/requests/index.mjs",
-    "./messages": "./dist/messages/index.mjs",
-    "./styles": "./dist/styles/index.mjs"
+    "./messages": "./dist/messages/index.mjs"
   },
   "files": [
     "dist"

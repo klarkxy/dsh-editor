@@ -4,7 +4,7 @@ import { asHost, type ManuscriptHost } from 'dsh-manuscript/host-api'
 import { createAuthorObserveTool } from '../tools/observe-tool.ts'
 import { createWritingProposeTool } from '../proposals/writing-propose-tool.ts'
 export const name = 'dsh-editor-workbench-tools'
-export const inject = ['sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'tools'] as const
+export const inject = ['sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'tools', 'editorWritingPreferences'] as const
 
 /** Host coding tools writing presets must not inherit. Unknown names are skipped. */
 const DENIED_INHERITED_TOOLS = ['write', 'edit', 'pwsh', 'bash', 'shell', 'str_replace', 'NotebookEdit'] as const
@@ -29,7 +29,10 @@ export function apply(ctx: Context): void {
   const tools = host.tools
   if (tools && typeof tools.register === 'function') {
     tools.register(createWritingProposeTool())
-    tools.register(createAuthorObserveTool())
+    tools.register(createAuthorObserveTool(async (observation) => {
+      const preferences = ctx.get('editorWritingPreferences') as { remember(observation: string): Promise<'added' | 'already-present'> }
+      return preferences.remember(observation)
+    }))
   }
   if (tools && typeof tools.restrict === 'function') {
     ctx.effect(() => restrictInheritedHostTools(tools), 'dsh-editor-workbench.tool-restrict')

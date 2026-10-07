@@ -1,6 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "types": ["node", "react"] },
-  "include": ["src"],
-  "exclude": ["src/**/*.spec.ts"]
+  "compilerOptions": {
+    "types": [
+      "node",
+      "react"
+    ],
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/**/*.spec.ts"
+  ]
 }

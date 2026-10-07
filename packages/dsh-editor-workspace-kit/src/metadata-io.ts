@@ -5,6 +5,9 @@ import { normalizeWorkspaceRelative } from 'dsh-manuscript/host-api'
 
 export const METADATA_DIRECTORY = '.dsh-editor'
 const MAX_TEXT_BYTES = 2_000_000
+const REPLACE_ATTEMPTS = 8
+const REPLACE_DELAY_MS = 25
+const TRANSIENT_REPLACE_ERRORS = new Set(['EPERM', 'EACCES', 'EBUSY', 'EEXIST', 'EAGAIN'])
 
 export type MetadataAccess = {
   path: string
@@ -44,7 +47,11 @@ async function safeWorkspaceRoot(root: string): Promise<string> {
     throw new MetadataIoError('workspace root is unavailable', 'IO', { cause: error })
   }
   if (state.isSymbolicLink() || !state.isDirectory()) throw new MetadataIoError('workspace root is unsafe', 'BLOCKED')
-  return await fs.realpath(resolved)
+  try {
+    return await fs.realpath(resolved)
+  } catch (error) {
+    throw new MetadataIoError('workspace root is unavailable', 'IO', { cause: error })
+  }
 }
 
 export async function ensureMetadataDirectory(root: string): Promise<void> {
@@ -67,10 +74,16 @@ export async function ensureMetadataDirectory(root: string): Promise<void> {
   }
 }
 
-async function resolveMetadataFile(root: string, relative: string): Promise<string | null> {
-  const normalized = normalizeWorkspaceRelative(relative)
+async function resolveMetadataFile(root: string, relative: string): Promise<{ path: string; size: number } | null> {
+  let normalized: string
+  try {
+    normalized = normalizeWorkspaceRelative(relative)
+  } catch (error) {
+    throw new MetadataIoError('metadata path is invalid', 'BLOCKED', { cause: error })
+  }
   const canonicalRoot = await safeWorkspaceRoot(root)
   let cursor = path.resolve(root)
+  let size = 0
   const parts = normalized.split('/')
   for (let index = 0; index < parts.length; index++) {
     cursor = path.join(cursor, parts[index]!)
@@ -87,6 +100,7 @@ async function resolveMetadataFile(root: string, relative: string): Promise<stri
       continue
     }
     if (!state.isFile()) throw new MetadataIoError('project metadata path is unsafe', 'BLOCKED')
+    size = state.size
   }
   let canonicalParent: string
   try {
@@ -96,55 +110,68 @@ async function resolveMetadataFile(root: string, relative: string): Promise<stri
     throw new MetadataIoError('failed to inspect project metadata', 'IO', { cause: error })
   }
   if (!isInside(canonicalRoot, canonicalParent)) throw new MetadataIoError('project metadata path escapes workspace', 'BLOCKED')
-  return cursor
+  return { path: cursor, size }
 }
 
-/** Missing, empty, oversized, or unreadable metadata is treated as absent. */
+/** Only a missing file is absent. Callers choose whether an optional read may fail. */
 export async function readMetadataText(root: string, relative: string): Promise<string | null> {
   try {
     const target = await resolveMetadataFile(root, relative)
     if (!target) return null
-    const text = await fs.readFile(target, 'utf8')
-    if (byteSize(text) > MAX_TEXT_BYTES) return null
+    if (target.size > MAX_TEXT_BYTES) throw new MetadataIoError('metadata file exceeds 2 MB', 'BLOCKED')
+    const text = await fs.readFile(target.path, 'utf8')
+    if (byteSize(text) > MAX_TEXT_BYTES) throw new MetadataIoError('metadata file exceeds 2 MB', 'BLOCKED')
     return text
   } catch (error) {
-    if (error instanceof MetadataIoError && error.code === 'BLOCKED') return null
+    if (error instanceof MetadataIoError) throw error
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
-    if (error instanceof MetadataIoError && error.code === 'IO') return null
-    return null
+    throw new MetadataIoError('failed to read project metadata', 'IO', { cause: error })
   }
 }
 
 /**
- * Same-directory temp file + rename. On Windows the existing target is unlinked
- * first; readers fail-open if they observe the brief gap.
+ * Same-directory temp file + replace. Windows locks receive bounded retries;
+ * replacement failure leaves the old target intact and never counts as success.
  */
 export async function writeMetadataTextAtomic(root: string, relative: string, text: string): Promise<void> {
   if (byteSize(text) > MAX_TEXT_BYTES) throw new MetadataIoError('metadata file exceeds 2 MB', 'BLOCKED')
-  const normalized = normalizeWorkspaceRelative(relative)
+  let normalized: string
+  try {
+    normalized = normalizeWorkspaceRelative(relative)
+  } catch (error) {
+    throw new MetadataIoError('metadata path is invalid', 'BLOCKED', { cause: error })
+  }
   const parts = normalized.split('/')
   if (parts[0] !== METADATA_DIRECTORY || parts.length !== 2 || parts[1]!.startsWith('.')) {
     throw new MetadataIoError('metadata path is invalid', 'BLOCKED')
   }
-  await ensureMetadataDirectory(root)
   const directory = path.join(root, METADATA_DIRECTORY)
   const target = path.join(directory, parts[1]!)
   const tmp = path.join(directory, `.${parts[1]!}.${randomUUID()}.tmp`)
+  let staged = false
   try {
-    await fs.writeFile(tmp, text, 'utf8')
+    await ensureMetadataDirectory(root)
+    // Reject an existing unsafe target rather than replacing it as if absent.
+    await resolveMetadataFile(root, normalized)
+    const handle = await fs.open(tmp, 'wx')
+    staged = true
     try {
-      await fs.rename(tmp, target)
-      return
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code
-      if (code !== 'EEXIST' && code !== 'EPERM' && code !== 'EACCES') throw error
+      await handle.writeFile(text, 'utf8')
+    } finally {
+      await handle.close()
     }
-    await fs.unlink(target).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== 'ENOENT') throw error
-    })
-    await fs.rename(tmp, target)
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await fs.rename(tmp, target)
+        return
+      } catch (error) {
+        if (process.platform !== 'win32' || attempt >= REPLACE_ATTEMPTS
+          || !TRANSIENT_REPLACE_ERRORS.has((error as NodeJS.ErrnoException).code ?? '')) throw error
+        await new Promise((resolve) => setTimeout(resolve, REPLACE_DELAY_MS * attempt))
+      }
+    }
   } catch (error) {
-    await fs.unlink(tmp).catch(() => undefined)
+    if (staged) await fs.unlink(tmp).catch(() => undefined)
     if (error instanceof MetadataIoError) throw error
     throw new MetadataIoError('failed to write project metadata', 'IO', { cause: error })
   }

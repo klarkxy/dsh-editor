@@ -26,7 +26,9 @@ dsh --profile web
 
 入口与导出见 [package.json](package.json)，接口见 [src/index.ts](https://github.com/klarkxy/dsh-editor/blob/main/packages/dsh-manuscript/src/index.ts)。桌面独有的作品管理由 workbench 提供；独立 Web 安装不提供这些功能。
 
-子路径导出：`./host-api`（Host 侧文件读写辅助）、`./assist`（补全与改写服务）、`./client/editor-core`（编辑器组件与改写预设）。
+子路径导出：`./host-api`（Host 侧文件读写辅助）、`./assist`（补全与改写服务）、`./client/editor-core`（编辑器组件、改写预设与离场保存守卫 `saveOpenEditor`）。离场守卫在保存后重新核对文档身份、冲突、组字与最新缓冲区；保存期间继续输入时保留当前文档。
+
+编辑器按会话、文件路径、工作区、草稿类型与 `externalRevision` 识别读取代际。普通重渲染或替换等价的 RPC / 草稿适配器不会重新读取文档；宿主需要明确重新读取时递增 `externalRevision`。独立宿主的会话草稿仍读取已有的 `dsh-editor:draft:` 存储键，并兼容早期未写入 `cwd` 的记录。
 
 Host RPC 挂在 `/manuscript` 通道，端点包括：`tree.list`、`file.read` / `file.create` / `file.write`、`draft.get` / `draft.list` / `draft.put` / `draft.delete`、`search.text`、`proposal.prepare` / `proposal.apply`、`fim.complete`、`patch.complete`、`capabilities.get`、`usage.summary`。除 `capabilities.get` 与 `usage.summary` 外都需要有效会话；写入类端点在工作区写锁下执行。
 

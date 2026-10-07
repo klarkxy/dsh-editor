@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ConversationRenameQueue, automaticTitleManaged, archiveConversationIds, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, conversationTitle, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, restoreConversationIds, shouldConfirmConversationSwitch, tombstoneConversationIds } from './conversation-lifecycle.ts'
-import { conversationWorkRecord, decodeConversationSettings, putConversationWork } from './conversation-store.ts'
+import { ConversationRenameQueue, automaticTitleManaged, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, conversationTitle, nextAutomaticConversationTitle, nextVisibleConversationId, resolveNewConversationModel, shouldConfirmConversationSwitch } from './conversation-lifecycle.ts'
 import { buildNovelIndexPrompt } from './novel-index.ts'
 
 describe('conversation lifecycle projection', () => {
@@ -101,29 +100,83 @@ describe('conversation lifecycle projection', () => {
     expect(applied).toEqual(['自动名称', '手工名称'])
   })
 
-  it('projects archived rows, restores them, and hides tombstones from both lists', () => {
-    const ids = ['a', 'b', 'c']
-    const titles = { a: '讨论', b: '旧稿', c: '备忘' }
-    expect(conversationRows({ workspaceSessionIds: ids, archivedIds: ['b'], forgottenIds: ['c'], currentId: 'a', titles })).toEqual([
-      { id: 'a', title: '讨论', current: true },
-    ])
-    expect(archivedConversationRows({ workspaceSessionIds: ids, archivedIds: ['b', 'c'], forgottenIds: ['c'], currentId: 'a', titles })).toEqual([
-      { id: 'b', title: '旧稿', current: false },
-    ])
-    expect(restoreConversationIds(archiveConversationIds(['b'], 'c'), 'b')).toEqual(['c'])
-    expect(tombstoneConversationIds({ archivedIds: ['b', 'c'], tombstoneIds: ['gone'], id: 'b' })).toEqual({
-      archivedIds: ['c'],
-      tombstoneIds: ['gone', 'b'],
+  it.each([true, false])('skips a new Chat mount automatic title after the prior mount author rename settles (feed caught up: %s)', async (feedCaughtUp) => {
+    const queue = new ConversationRenameQueue()
+    const writes: string[] = []
+    let native = ''
+    let release!: () => void
+    let markStarted!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const manual = queue.enqueue('session-a', async () => {
+      markStarted()
+      await gate
+      writes.push('Author title')
+      queue.acknowledgeTitle('session-a', 'Author title', native)
+      if (feedCaughtUp) native = 'Author title'
     })
-    expect(conversationRows({
-      workspaceSessionIds: ids,
-      archivedIds: restoreConversationIds(['b', 'c'], 'b'),
-      forgottenIds: tombstoneConversationIds({ archivedIds: ['b', 'c'], tombstoneIds: [], id: 'c' }).tombstoneIds,
-      currentId: 'a',
-      titles,
-    })).toEqual([
-      { id: 'a', title: '讨论', current: true },
-      { id: 'b', title: '旧稿', current: false },
+    await started
+    // A remount loses its prior optimistic title and attempted ref while the module queue survives.
+    const candidate = nextAutomaticConversationTitle({ durableTitle: native, assistantReplies: ['Assistant reply'], attempted: false, date: 0 })
+    expect(candidate).not.toBe('')
+    const automatic = queue.enqueue('session-a', async () => {
+      if (!queue.canAutomaticallyRename('session-a', native, false)) return
+      writes.push(candidate)
+    })
+    release()
+    await Promise.all([manual, automatic])
+    expect(writes).toEqual(['Author title'])
+    expect(queue.observedTitle('session-a', native)).toBe('Author title')
+  })
+
+  it.each(['Host rename', 'official title manager'])('rechecks %s when an automatic rename leaves the queue', async (change) => {
+    const queue = new ConversationRenameQueue()
+    const writes: string[] = []
+    let native = ''
+    let managed = false
+    let release!: () => void
+    let markStarted!: () => void
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const blocker = queue.enqueue('session-a', async () => {
+      markStarted()
+      await new Promise<void>((resolve) => { release = resolve })
+    })
+    await started
+    const candidate = nextAutomaticConversationTitle({ durableTitle: native, assistantReplies: ['Assistant reply'], attempted: false, date: 0 })
+    const automatic = queue.enqueue('session-a', async () => {
+      if (!queue.canAutomaticallyRename('session-a', native, managed)) return
+      writes.push(candidate)
+    })
+    if (change === 'Host rename') native = 'New Host title'
+    else managed = true
+    release()
+    await Promise.all([blocker, automatic])
+    expect(writes).toEqual([])
+  })
+
+  it('retires transient acknowledgments after the latest title feed or a fresh Host change', () => {
+    const queue = new ConversationRenameQueue()
+    queue.acknowledgeTitle('session-a', 'First author name', '')
+    queue.acknowledgeTitle('session-a', 'Second author name', '')
+    expect(queue.observedTitle('session-a', 'First author name')).toBe('Second author name')
+    expect(queue.observedTitle('session-a', 'Second author name')).toBe('Second author name')
+    expect(queue.observedTitle('session-a', 'Host later name')).toBe('Host later name')
+    queue.acknowledgeTitle('session-a', 'Third author name', 'Host later name')
+    expect(queue.observedTitle('session-a', 'External fresh name')).toBe('External fresh name')
+    expect(queue.observedTitle('session-a', 'Host later name')).toBe('Host later name')
+  })
+
+  it('projects active and archived rows only from the Host archive set', () => {
+    const workspaceSessionIds = ['a', 'b', 'c']
+    const titles = { a: 'Discussion', b: 'Previous draft', c: 'Notes' }
+    expect(conversationRows({ workspaceSessionIds, archivedIds: ['b', 'c'], currentId: 'a', titles })).toEqual([
+      { id: 'a', title: 'Discussion', current: true },
+    ])
+    expect(archivedConversationRows({ workspaceSessionIds, archivedIds: ['b', 'c'], currentId: 'a', titles })).toEqual([
+      { id: 'b', title: 'Previous draft', current: false }, { id: 'c', title: 'Notes', current: false },
+    ])
+    expect(conversationRows({ workspaceSessionIds, archivedIds: ['c'], currentId: 'b', titles })).toEqual([
+      { id: 'a', title: 'Discussion', current: false }, { id: 'b', title: 'Previous draft', current: true },
     ])
   })
 
@@ -132,34 +185,6 @@ describe('conversation lifecycle projection', () => {
     expect(canArchiveOrDeleteConversation(2)).toBe(true)
     expect(nextVisibleConversationId(['a', 'b'], 'a')).toBe('b')
     expect(nextVisibleConversationId(['only'], 'only')).toBeUndefined()
-  })
-
-  it('persists archived and tombstone ids per work beside the conversation settings record', () => {
-    expect(decodeConversationSettings({ works: { w1: { archivedIds: ['a', 'a', 1], tombstoneIds: ['gone'] } } })).toEqual({
-      works: { w1: { archivedIds: ['a'], tombstoneIds: ['gone'], titles: {} } },
-    })
-    const next = putConversationWork(decodeConversationSettings(undefined), 'w1', { archivedIds: ['a'], tombstoneIds: [], titles: {} })
-    expect(conversationWorkRecord(next, 'w1')).toEqual({ archivedIds: ['a'], tombstoneIds: [], titles: {} })
-    expect(conversationWorkRecord(next, 'missing')).toEqual({ archivedIds: [], tombstoneIds: [], titles: {} })
-  })
-
-  it('keeps trimmed custom titles per work and prefers them over host titles', () => {
-    expect(decodeConversationSettings({
-      works: { w1: { titles: { a: '  进度  ', b: 1, '': 'x' } } },
-    })).toEqual({
-      works: { w1: { archivedIds: [], tombstoneIds: [], titles: { a: '进度' } } },
-    })
-    const next = putConversationWork(decodeConversationSettings(undefined), 'w1', {
-      archivedIds: [],
-      tombstoneIds: [],
-      titles: { a: '自定义进度' },
-    })
-    expect(conversationWorkRecord(next, 'w1').titles).toEqual({ a: '自定义进度' })
-    expect(conversationRows({
-      workspaceSessionIds: ['a'],
-      currentId: 'a',
-      titles: { a: conversationWorkRecord(next, 'w1').titles.a ?? '2026-09-12 | 自动名称' },
-    })).toEqual([{ id: 'a', title: '自定义进度', current: true }])
   })
 
   it('uses the settings default model when set, otherwise the first catalog model', () => {

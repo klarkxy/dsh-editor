@@ -1,110 +1,38 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
-import { CENTER_OVERLAYS_SLOT, COMMANDS_SERVICE, SIDEBAR_TOOLS_SLOT, createCommandRegistry, type ShellToolSeatContext } from 'dsh-editor-seats'
-import { apply } from './client.tsx'
-import { getCardsState, openCardsPanel, resetCardsStore, selectCard } from './client/store.ts'
+import { COMMANDS_SERVICE, createCommandRegistry, type ShellToolSeatContext } from 'dsh-editor-seats'
+import { apply, inject } from './client.tsx'
 
-describe('cards client', () => {
-  it('registers sidebar and overlay seats plus character/worldbook commands, then disposes them', () => {
+describe('cards file navigation commands', () => {
+  it('registers localized workspace commands without a slot or RPC service, then disposes them', () => {
     const commands = createCommandRegistry()
-    const registered: Array<{ spec: { name: string; id?: string; label?: string; order?: number } }> = []
     const disposers: Array<() => void> = []
-    const ctx = {
-      effect(fn: () => (() => void) | void) {
-        const dispose = fn()
-        if (typeof dispose === 'function') disposers.push(dispose)
-        return dispose
-      },
-      slots: {
-        inject(_key: string, callback: () => unknown) {
-          callback()
-          return () => {}
-        },
-        register(spec: { name: string; id?: string; label?: string; order?: number }, _render: unknown) {
-          registered.push({ spec })
-          return () => {}
-        },
-      },
-      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
+    apply({
+      effect(fn: () => () => void) { disposers.push(fn()) },
       [COMMANDS_SERVICE]: commands,
+    } as never)
+    expect(inject).toEqual([COMMANDS_SERVICE])
+    expect(commands.list().map(command => command.id)).toEqual(['cards-character', 'cards-worldbook'])
+    const expandTreePath = vi.fn()
+    const highlightTreePath = vi.fn()
+    const context = { expandTreePath, highlightTreePath } as unknown as ShellToolSeatContext
+    for (const [index, folder] of ['人物卡', '世界书'].entries()) {
+      const command = commands.list()[index]!
+      expect(command.when).toBe('workspace')
+      expect(command.shortcut).toEqual({ key: index === 0 ? 'c' : 'w', ctrl: true, shift: true })
+      expect(command.label).toEqual(index === 0 ? { zh: '人物卡', en: 'Characters' } : { zh: '世界书', en: 'Worldbook' })
+      command.run(context)
+      expect(expandTreePath).toHaveBeenLastCalledWith(folder)
+      expect(highlightTreePath).toHaveBeenLastCalledWith(folder)
     }
-    apply(ctx as never)
-    expect(registered).toEqual([
-      { spec: { name: SIDEBAR_TOOLS_SLOT, id: 'cards', order: 150, label: '卡片' } },
-      { spec: { name: CENTER_OVERLAYS_SLOT, id: 'cards-detail', order: 150 } },
-    ])
-    expect(commands.list().map((item) => item.id)).toEqual(['cards-character', 'cards-worldbook'])
-    expect(commands.list()[0]?.shortcut).toEqual({ key: 'c', ctrl: true, shift: true })
-    expect(commands.list()[1]?.shortcut).toEqual({ key: 'w', ctrl: true, shift: true })
-    expect(commands.list()[0]?.label).toEqual({ zh: '人物卡', en: 'Characters' })
-    expect(commands.list()[1]?.label).toEqual({ zh: '世界书', en: 'Worldbook' })
-    expect(commands.list()[0]?.keywords).toEqual(expect.arrayContaining(['character', '人物卡']))
-    expect(commands.list()[1]?.keywords).toEqual(expect.arrayContaining(['worldbook', '世界书', '设定']))
     for (const dispose of disposers) dispose()
     expect(commands.list()).toEqual([])
   })
 
-  it('forwards optional host Select and Dialog from the seat owner into the panel', () => {
-    const Select = () => null
-    const Dialog = () => null
-    let renderPanel: ((props: unknown) => { type: unknown; props: Record<string, unknown> }) | undefined
-    const ctx = {
-      effect(fn: () => (() => void) | void) { fn() },
-      slots: {
-        inject(_key: string, callback: () => unknown) {
-          callback()
-          return () => {}
-        },
-        register(spec: { name: string; id?: string }, render: unknown) {
-          if (spec.id === 'cards') renderPanel = render as typeof renderPanel
-          return () => {}
-        },
-      },
-      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
-      [COMMANDS_SERVICE]: createCommandRegistry(),
-    }
-    apply(ctx as never)
-    const tree = renderPanel?.({
-      sessionId: 's1',
-      openDocument() {},
-      Select,
-      Dialog,
-    })
-    expect(tree?.props.Select).toBe(Select)
-    expect(tree?.props.Dialog).toBe(Dialog)
-  })
-
-  it('reveals the matching folder in the file tree instead of opening the catalog overlay', () => {
-    resetCardsStore()
-    const commands = createCommandRegistry()
-    const ctx = {
-      effect(fn: () => (() => void) | void) { fn() },
-      slots: {
-        inject(_key: string, callback: () => unknown) {
-          callback()
-          return () => {}
-        },
-        register() {
-          return () => {}
-        },
-      },
-      connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
-      [COMMANDS_SERVICE]: commands,
-    }
-    apply(ctx as never)
-    openCardsPanel('worldbook')
-    selectCard('世界书/港口.md')
-    const expandTreePath = vi.fn()
-    const highlightTreePath = vi.fn()
-    const context = {
-      expandTreePath,
-      highlightTreePath,
-    } as Pick<ShellToolSeatContext, 'expandTreePath' | 'highlightTreePath'> as ShellToolSeatContext
-    commands.list().find((item) => item.id === 'cards-character')?.run(context)
-    expect(expandTreePath).toHaveBeenCalledWith('人物卡')
-    expect(highlightTreePath).toHaveBeenCalledWith('人物卡')
-    expect(getCardsState()).toMatchObject({ open: false, selectedPath: null })
-    commands.list().find((item) => item.id === 'cards-worldbook')?.run(context)
-    expect(expandTreePath).toHaveBeenCalledWith('世界书')
-    expect(highlightTreePath).toHaveBeenCalledWith('世界书')
+  it('does not advertise the retired cards transport and metadata API', () => {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    expect(pkg.exports['./host-api']).toBeUndefined()
+    expect(pkg.exports['./contracts']).toBeUndefined()
+    expect(pkg.dsh.client.inject).toEqual([])
   })
 })

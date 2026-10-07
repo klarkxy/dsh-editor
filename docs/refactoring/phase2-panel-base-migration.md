@@ -1,5 +1,7 @@
 # Phase 2: Panel Base 提取 - 迁移指南
 
+历史留档：本文记录当时的迁移方案，`buildPanelStyles` 等无生产消费者接口后来已删除。当前接口见[面板基础包](../../packages/dsh-editor-panel-base/README.md)。
+
 ## 概述
 
 Phase 2 创建了 `dsh-editor-panel-base` 包,提取了三个面板包的公共基础设施。
@@ -174,5 +176,5 @@ export function snapshotTimeLabel(time: number): string {
 ## 相关文档
 
 - [Phase 2 架构设计](./phase2-panel-base-design.md)
-- [Phase 1 完成报告](./phase1-workbench-split-complete.md)
+- [面板基础重构实施与验收记录](./implementation-report.md)
 - [总体重构计划](./refactoring-plan.md)

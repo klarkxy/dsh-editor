@@ -70,6 +70,7 @@ type ModelsRemote = EditorRemote
    non-fatal warning surface for a failed describe batch. */
 type Snapshot = {
   status: 'idle' | 'loading' | 'ready' | 'error'
+  refreshing: boolean
   error: string | null
   credentialError: string | null
   writable: boolean
@@ -79,6 +80,7 @@ type Snapshot = {
 
 const INITIAL_SNAPSHOT: Snapshot = {
   status: 'idle',
+  refreshing: false,
   error: null,
   credentialError: null,
   writable: false,
@@ -141,7 +143,8 @@ class ModelsStore {
 
   async load(): Promise<void> {
     const generation = ++this.generation
-    this.state = shallowCopySnapshot(this.state, { status: 'loading', error: null })
+    const loaded = this.state.status === 'ready'
+    this.state = shallowCopySnapshot(this.state, { status: loaded ? 'ready' : 'loading', refreshing: loaded, error: null })
     for (const listener of this.listeners) listener()
 
     let providers: ConfigurableProviderView[]
@@ -161,7 +164,8 @@ class ModelsStore {
       if (generation !== this.generation) return
       this.state = {
         ...this.state,
-        status: 'error',
+        status: loaded ? 'ready' : 'error',
+        refreshing: false,
         error: error instanceof Error ? error.message : String(error),
       }
       for (const listener of this.listeners) listener()
@@ -205,6 +209,7 @@ class ModelsStore {
     this.state = {
       ...this.state,
       status: 'ready',
+      refreshing: false,
       error: null,
       credentialError,
       writable,
@@ -376,6 +381,8 @@ function formatTemplate(template: string, target: string): string {
    their own draft; this object only records which card (if any) is open. */
 type SectionState = {
   editing: ProviderRow | undefined
+  editingNamespace?: SettingsNamespaceView
+  setups: Map<string, { row: ProviderRow; namespace: SettingsNamespaceView }>
   adding: boolean
   declaring: boolean
   deleteTarget: ProviderRow | undefined
@@ -385,7 +392,7 @@ type SectionState = {
 }
 
 function emptySectionState(): SectionState {
-  return { editing: undefined, adding: false, declaring: false, deleteTarget: undefined, dismissing: new Set(), savedNote: null, deleteError: null }
+  return { editing: undefined, setups: new Map(), adding: false, declaring: false, deleteTarget: undefined, dismissing: new Set(), savedNote: null, deleteError: null }
 }
 
 /* The exported entry point. Builds the store once, subscribes to the
@@ -567,6 +574,19 @@ function Loaded(props: {
   const { ctx, store, state } = props
   const [section, setSection] = useState<SectionState>(emptySectionState)
   useEffect(() => {
+    if (state.status !== 'ready' || state.refreshing) return
+    const anyUsable = state.rows.some(providerUsable)
+    setSection((current) => {
+      const setups = new Map(current.setups)
+      for (const row of state.rows) {
+        const id = providerIdOf(row.entry)
+        const namespace = state.namespaces.get(row.entry.settingsNs)
+        if (namespace && needsSetup(row, anyUsable) && !current.dismissing.has(id) && !setups.has(id)) setups.set(id, { row, namespace })
+      }
+      return setups.size === current.setups.size ? current : { ...current, setups }
+    })
+  }, [state.rows, state.namespaces, state.status, state.refreshing])
+  useEffect(() => {
     const saved = section.savedNote
     if (!saved || !isSuccessWorkbenchNote(saved)) return
     const timer = globalThis.setTimeout(() => {
@@ -620,15 +640,26 @@ function Loaded(props: {
   const writable = state.writable
   const anyUsable = state.rows.some(providerUsable)
   const configured = state.rows.filter((row) => row.configured)
+  if (!section.adding && section.editing && !configured.some((row) => providerIdOf(row.entry) === providerIdOf(section.editing!.entry))) {
+    configured.push(section.editing)
+  }
+  for (const { row } of section.setups.values()) {
+    if (!configured.some((entry) => providerIdOf(entry.entry) === providerIdOf(row.entry))) configured.push(row)
+  }
   const addable = addableRows(state.rows)
   const piAiNamespace = state.namespaces.get('llm-pi-ai')
   const protocols = protocolChoices(piAiNamespace, ctx.settingsSchema)
   const addTarget = section.adding ? section.editing : undefined
-  const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.entry.settingsNs)
+  const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.entry.settingsNs) ?? section.editingNamespace
 
   return (
     <section className="models-page" aria-label={t('settings.models')}>
       <Header note={section.savedNote} />
+      {state.refreshing ? <ActivityText>{text().loading}</ActivityText> : null}
+      {state.error ? <Callout.Root color="red" className="models-error" role="alert">
+        <Callout.Text>{`${text().loadFailed}：${state.error}`}</Callout.Text>
+        <Button onClick={() => void store.load()}>{text().retry}</Button>
+      </Callout.Root> : null}
       {section.deleteError ? <Callout.Root color="red" className="models-error" role="alert">
         <Callout.Text>
           {section.deleteError}
@@ -653,10 +684,10 @@ function Loaded(props: {
         <ul className="models-rows">
         {configured.map((row) => {
           const target = row
-          const namespace = state.namespaces.get(target.entry.settingsNs)
+          const namespace = state.namespaces.get(target.entry.settingsNs) ?? section.setups.get(providerIdOf(target.entry))?.namespace ?? section.editingNamespace
           if (namespace === undefined) return null
           const editing = !section.adding && section.editing !== undefined && providerIdOf(section.editing.entry) === providerIdOf(target.entry)
-          const wantsSetup = needsSetup(target, anyUsable) && !section.dismissing.has(providerIdOf(target.entry))
+          const wantsSetup = (section.setups.has(providerIdOf(target.entry)) || needsSetup(target, anyUsable)) && !section.dismissing.has(providerIdOf(target.entry))
           if (wantsSetup) {
             return (
               <Card asChild key={providerIdOf(target.entry)}>
@@ -669,13 +700,17 @@ function Loaded(props: {
                   hideTitle={false}
                   setup={true}
                   readOnly={!writable}
+                  unavailable={!state.rows.some((row) => row.configured && providerIdOf(row.entry) === providerIdOf(target.entry))}
                   onClose={(changed) => {
                     setSection((current) => {
                       const dismissing = new Set(current.dismissing)
                       dismissing.add(providerIdOf(target.entry))
+                      const setups = new Map(current.setups)
+                      setups.delete(providerIdOf(target.entry))
                       return {
                         ...current,
                         dismissing,
+                        setups,
                         savedNote: changed ? text().saved : current.savedNote,
                       }
                     })
@@ -695,6 +730,7 @@ function Loaded(props: {
                   setSection((current) => ({
                     ...current,
                     editing: editing ? undefined : target,
+                    editingNamespace: editing ? undefined : namespace,
                     adding: false,
                     declaring: false,
                     savedNote: null,
@@ -711,6 +747,7 @@ function Loaded(props: {
                 hideTitle={false}
                 setup={false}
                 readOnly={!writable}
+                unavailable={!state.rows.some((row) => row.configured && providerIdOf(row.entry) === providerIdOf(target.entry))}
                 onClose={(changed) => {
                   setSection((current) => ({
                     ...current,
@@ -739,13 +776,14 @@ function Loaded(props: {
               onChange={(provider) => {
                 const next = addable.find((row) => providerIdOf(row.entry) === provider)
                 if (next === undefined) return
-                setSection((current) => ({ ...current, editing: next, adding: true }))
+                setSection((current) => ({ ...current, editing: next, editingNamespace: state.namespaces.get(next.entry.settingsNs), adding: true }))
               }}
               disabled={!writable}
               aria-label={t('models.provider')} />
           </Flex>
         </Box>
         <ProviderEditor
+          key={providerIdOf(addTarget.entry)}
           ctx={ctx}
           store={store}
           namespace={addNamespace}
@@ -786,7 +824,7 @@ function Loaded(props: {
           onClick={() => {
             const first = addable[0]
             if (first === undefined) return
-            setSection({ ...emptySectionState(), editing: first, adding: true })
+            setSection({ ...emptySectionState(), editing: first, editingNamespace: state.namespaces.get(first.entry.settingsNs), adding: true })
           }}>
           {text().add}
         </Button>
@@ -939,9 +977,12 @@ function ProviderEditor(props: {
   hideTitle: boolean
   setup: boolean
   readOnly: boolean
+  unavailable?: boolean
   onClose(changed: boolean): void
 }): ReactNode {
-  const { ctx, store, namespace, row, hideTitle, readOnly, onClose } = props
+  const { ctx, store, namespace: currentNamespace, row: currentRow, hideTitle, readOnly, onClose } = props
+  const [namespace] = useState(currentNamespace)
+  const [row] = useState(currentRow)
   const schema = ctx.settingsSchema
   const [draft, setDraft] = useState<ProfileDraft>(() => draftAt(schema, namespace, row.entry.settingsPath))
   const [committedOriginal, setCommittedOriginal] = useState<ProfileDraft>(() => {
@@ -951,10 +992,15 @@ function ProviderEditor(props: {
       : {}
   })
   const [expectedRevision, setExpectedRevision] = useState<number>(namespace.revision)
+  const revisionChanged = props.unavailable === true || currentNamespace.revision !== expectedRevision
+    || currentRow.entry.settingsNs !== row.entry.settingsNs
+    || JSON.stringify(currentRow.entry.settingsPath) !== JSON.stringify(row.entry.settingsPath)
   const [keyDraft, setKeyDraft] = useState('')
   const [keyState, setKeyState] = useState<CredentialView | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
+  const latestSnapshot = store.getSnapshot()
+  const sourceVerified = latestSnapshot.status === 'ready' && !latestSnapshot.refreshing && latestSnapshot.error === null
 
   const keyRef = useMemo(
     () => refFor(namespace, row.entry.settingsPath, providerIdOf(row.entry), schema),
@@ -1024,6 +1070,9 @@ function ProviderEditor(props: {
 
   const submit = async (): Promise<void> => {
     if (readOnly) return
+    const currentSnapshot = store.getSnapshot()
+    if (currentSnapshot.status !== 'ready' || currentSnapshot.refreshing || currentSnapshot.error !== null) return
+    if (revisionChanged) { setFailure(text().conflict); return }
     if (keyFailure !== undefined) return
     if (modelFailure !== undefined) return
     if (node === undefined) return
@@ -1186,9 +1235,9 @@ function ProviderEditor(props: {
             t={text()} />
         </div>
       </details>
-      {failure !== undefined ? <Callout.Root color="red" role="alert" className="models-warning">
+      {failure !== undefined || revisionChanged ? <Callout.Root color="red" role="alert" className="models-warning">
         <Callout.Text>
-          {failure}
+          {failure ?? text().conflict}
         </Callout.Text>
       </Callout.Root> : null}
       {isSetup || keyFailure === undefined && modelFailure === undefined
@@ -1202,7 +1251,7 @@ function ProviderEditor(props: {
         <Button
           variant="primary"
           className="models-button models-button-primary"
-          disabled={readOnly || busy || keyFailure !== undefined || modelFailure !== undefined}
+          disabled={readOnly || busy || !sourceVerified || keyFailure !== undefined || modelFailure !== undefined}
           onClick={() => void submit()}>
           {busy ? <Fragment>
             <ActivityDots />

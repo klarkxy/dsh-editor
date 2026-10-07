@@ -1,6 +1,7 @@
 import type { ProgressDay, ProgressHistory, ProgressRecordResult, ProgressWeek, WritingLogEntry } from '../contracts.ts'
 import {
   assertWritableMetadata,
+  MetadataIoError,
   readMetadataText,
   writeMetadataTextAtomic,
   type MetadataAccess,
@@ -50,15 +51,19 @@ function parseWritingLog(text: string): WritingLogEntry[] {
   let value: unknown
   try {
     value = JSON.parse(text)
-  } catch {
-    return []
+  } catch (error) {
+    throw new WritingLogError('writing log is not valid JSON; history was left unchanged', 'BLOCKED', { cause: error })
   }
-  if (!Array.isArray(value)) return []
+  if (!Array.isArray(value)) throw new WritingLogError('writing log must contain a history array; history was left unchanged', 'BLOCKED')
   const byDate = new Map<string, WritingLogEntry>()
   for (const item of value) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new WritingLogError('writing log contains an invalid record; history was left unchanged', 'BLOCKED')
+    }
     const row = item as Record<string, unknown>
-    if (typeof row.date !== 'string' || !DATE.test(row.date) || !isSafeChars(row.chars)) continue
+    if (typeof row.date !== 'string' || !DATE.test(row.date) || !isSafeChars(row.chars)) {
+      throw new WritingLogError('writing log contains an invalid record; history was left unchanged', 'BLOCKED')
+    }
     const entry: WritingLogEntry = { date: row.date, chars: row.chars }
     if (typeof row.delta === 'number' && Number.isInteger(row.delta) && Number.isSafeInteger(row.delta)) {
       entry.delta = row.delta
@@ -73,9 +78,14 @@ function serializeWritingLog(entries: readonly WritingLogEntry[]): string {
 }
 
 async function loadWritingLog(access: MetadataAccess): Promise<WritingLogEntry[]> {
-  const text = await readMetadataText(access.path, WRITING_LOG_PATH)
-  if (text === null) return []
-  return parseWritingLog(text)
+  try {
+    const text = await readMetadataText(access.path, WRITING_LOG_PATH)
+    if (text === null) return []
+    return parseWritingLog(text)
+  } catch (error) {
+    if (error instanceof MetadataIoError) throw new WritingLogError(error.message, error.code, { cause: error })
+    throw error
+  }
 }
 
 function withDeltas(entries: readonly WritingLogEntry[]): ProgressDay[] {

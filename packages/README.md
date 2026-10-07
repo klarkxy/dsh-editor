@@ -16,7 +16,7 @@
 | [dsh-editor-plugins](dsh-editor-plugins/README.md) | 发现搜索与写作模式；安装清单由官方管理器负责 |
 | [dsh-editor-novel-kernel](dsh-editor-novel-kernel/README.md) | 小说知识与小说创作模式 |
 | [dsh-editor-writing-presets](dsh-editor-writing-presets/README.md) | 文章与技术文档模式 |
-| [dsh-editor-cards](dsh-editor-cards/README.md) | 人物卡与世界书 |
+| [dsh-editor-cards](dsh-editor-cards/README.md) | 人物卡与世界书目录快捷入口 |
 | [dsh-editor-memory-panel](dsh-editor-memory-panel/README.md) | 记忆维护 |
 | [dsh-editor-overview-panel](dsh-editor-overview-panel/README.md) | 文档概览 |
 | [dsh-editor-proofread-panel](dsh-editor-proofread-panel/README.md) | 桌面校对 |

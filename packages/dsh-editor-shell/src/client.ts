@@ -22,7 +22,7 @@ import { COMMANDS_SERVICE, MESSAGE_CARDS_SERVICE, createCommandRegistry, createM
 export const name = 'dsh-editor-shell-client'
 export const inject = [
   'slots', 'sessions', 'workspaces', 'connection', 'configForms', 'settingsSchema', 'remote',
-  'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.directoryPicker', 'remote.agentPresets',
+  'remote.session', 'remote.settings', 'remote.credentials', 'remote.llm', 'remote.workspace', 'remote.directoryPicker', 'remote.agentPresets',
   'uiSession', 'locale', 'theme', 'shortcuts',
 ] as const
 

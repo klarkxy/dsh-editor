@@ -8,6 +8,9 @@ import {
   releaseArtifactName,
   sanitizeReleaseAssetName,
   selectAsset,
+  RELEASE_PRODUCT_NAME,
+  RELEASE_OWNER,
+  RELEASE_REPO,
 } from '../src/release-artifacts.js'
 import * as published from '../../../scripts/release-artifacts.mjs'
 
@@ -29,6 +32,10 @@ describe('release artifact naming contract', () => {
 
   it('matches the electron-builder templates after interpolating product, version and extension', async () => {
     const builder = await readFile(join(import.meta.dirname, '..', 'electron-builder.yml'), 'utf8')
+    expect(builder).toContain(`productName: ${RELEASE_PRODUCT_NAME}`)
+    expect(builder).toContain(`owner: ${RELEASE_OWNER}`)
+    expect(builder).toContain(`repo: ${RELEASE_REPO}`)
+    expect(builder).toContain('"dist/**"')
     const interpolate = (template: string, ext: string) => template
       .replaceAll('${productName}', 'DSH Editor')
       .replaceAll('${version}', VERSION)

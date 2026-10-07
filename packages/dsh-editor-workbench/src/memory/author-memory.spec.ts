@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   AUTHOR_MEMORY_MARKER,
   AUTHOR_OBSERVE_MAX_CHARS,
@@ -37,10 +37,24 @@ describe('workbench author-memory contracts', () => {
     expect(parseAuthorMemoryMarker('not json')).toBeUndefined()
   })
 
-  it('author_observe returns the marker the shell persists silently', async () => {
-    const tool = createAuthorObserveTool()
+  it('author_observe returns a receipt only after the Host persists the observation', async () => {
+    const remember = vi.fn(async () => 'added' as const)
+    const tool = createAuthorObserveTool(remember)
     expect(tool.name).toBe(AUTHOR_OBSERVE_TOOL_NAME)
     const result = await tool.execute({ observation: '  留白优先\n', reason: ' 三次要求  ' })
-    expect(result).toEqual({ marker: 'dsh-editor.memory', version: 1, observation: '留白优先', reason: '三次要求' })
+    expect(remember).toHaveBeenCalledWith('留白优先')
+    expect(result).toEqual({ marker: 'dsh-editor.memory', version: 2, observation: '留白优先', reason: '三次要求', status: 'added' })
+  })
+
+  it('does not report success when Host persistence fails', async () => {
+    const tool = createAuthorObserveTool(async () => { throw new Error('write failed') })
+    await expect(tool.execute({ observation: '观察', reason: '反复出现' })).rejects.toThrow('write failed')
+  })
+
+  it('does not persist invalid observations', async () => {
+    const remember = vi.fn(async () => 'added' as const)
+    const tool = createAuthorObserveTool(remember)
+    await expect(tool.execute({ observation: '', reason: '反复出现' })).rejects.toThrow('observation')
+    expect(remember).not.toHaveBeenCalled()
   })
 })

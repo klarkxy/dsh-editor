@@ -1,5 +1,7 @@
 # Phase 2: Panel Base 架构设计
 
+历史留档：本文记录当时的设计，样式生成接口后来已删除。当前接口见[面板基础包](../../packages/dsh-editor-panel-base/README.md)。
+
 ## 设计目标
 
 解决三个面板包 (memory-panel, overview-panel, proofread-panel) 的代码重复问题。

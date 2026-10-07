@@ -4,8 +4,6 @@ export default defineConfig([
   {
     entry: {
       index: 'src/index.ts',
-      'host-api': 'src/host-api.ts',
-      contracts: 'src/contracts.ts',
     },
     format: ['esm'],
     dts: true,
@@ -15,7 +13,7 @@ export default defineConfig([
     target: 'node22',
     sourcemap: true,
     hash: false,
-    deps: { neverBundle: ['@deepseek-ai/cordis', 'dsh-manuscript', 'dsh-editor-workspace-kit', 'dsh-editor-cards'] },
+    deps: { neverBundle: ['@deepseek-ai/cordis'] },
     outExtensions: () => ({ dts: '.d.ts', js: '.js' }),
   },
   {
@@ -31,8 +29,6 @@ export default defineConfig([
     deps: {
       alwaysBundle: [
         'dsh-editor-seats',
-        'dsh-editor-seats/seat-button',
-        'dsh-editor-cards/contracts',
       ],
       neverBundle: ['react', 'react-dom', 'react/jsx-runtime'],
     },

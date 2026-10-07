@@ -1,7 +1,7 @@
 {
   "name": "dsh-editor-cards",
   "version": "0.1.0",
-  "description": "Character and worldbook cards Host RPC and Client UI for DSH Editor",
+  "description": "Character and worldbook file navigation commands for DSH Editor",
   "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "type": "module",
@@ -15,16 +15,6 @@
       "types": "./lib/index.d.ts",
       "import": "./lib/index.js",
       "default": "./lib/index.js"
-    },
-    "./host-api": {
-      "types": "./lib/host-api.d.ts",
-      "import": "./lib/host-api.js",
-      "default": "./lib/host-api.js"
-    },
-    "./contracts": {
-      "types": "./lib/contracts.d.ts",
-      "import": "./lib/contracts.js",
-      "default": "./lib/contracts.js"
     },
     "./client": {
       "default": "./lib/client.js"
@@ -42,9 +32,7 @@
     },
     "client": {
       "platform": "web",
-      "inject": [
-        "@deepseek-ai/dsh-client-connection"
-      ]
+      "inject": []
     }
   },
   "dshEditor": {
@@ -55,7 +43,7 @@
       {
         "id": "editor-cards",
         "title": "人物卡与世界书",
-        "description": "卡片列表、frontmatter 编辑、引用导航与新建",
+        "description": "在文件树中定位人物卡与世界书",
         "feature": "cards",
         "defaultEnabled": false
       }
@@ -68,10 +56,6 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4"
-  },
-  "dependencies": {
-    "dsh-editor-workspace-kit": "workspace:*",
-    "dsh-manuscript": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",

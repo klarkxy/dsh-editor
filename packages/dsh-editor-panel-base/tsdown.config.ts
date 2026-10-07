@@ -6,7 +6,6 @@ export default defineConfig({
     'rpc/index': 'src/rpc/index.ts',
     'requests/index': 'src/requests/index.ts',
     'messages/index': 'src/messages/index.ts',
-    'styles/index': 'src/styles/index.ts',
   },
   format: ['esm'],
   dts: true,
