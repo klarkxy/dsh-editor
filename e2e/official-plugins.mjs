@@ -2,9 +2,10 @@ import { createServer } from 'node:http'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { mkdir, writeFile, readFile, appendFile } from 'node:fs/promises'
+import { mkdir, writeFile, readFile, appendFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
+import { nativePluginRpc, openPluginsPage, closePluginsPage } from './helpers/plugin-page.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const fixtureRequire = createRequire(resolve(root, 'packages/dsh-editor-shell/package.json'))
@@ -34,8 +35,55 @@ const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
 }
 for (const key of Object.keys(env)) if (/API_KEY|ACCESS_SECRET|ELECTRON_RUN_AS_NODE/.test(key)) delete env[key]
 await mkdir(output, { recursive: true })
-const report = { checks: [], errors: [], home }
+const report = { checks: [], errors: [], home, voiceIdle: [], microphoneRequests: 0 }
 function check(message) { report.checks.push(message); console.log(message) }
+const voiceName = '@deepseek-ai/dsh-experimental-voice-input-bundle'
+const voiceIds = ['speech-to-text', 'speech-to-text-sensevoice', 'api-speech-to-text', 'ui-voice-input']
+async function speechCatalog(page) {
+  const method = 'speech/catalog'
+  const response = await page.request.post(new URL(`/api/${method}`, page.url()).href, {
+    timeout: 15000,
+    data: { type: 'client-request', rpcId: `e2e-speech-${Date.now()}`, method, payload: { args: {} } },
+  })
+  assert.ok(response.ok(), `${method}: HTTP ${response.status()}`)
+  const body = await response.json()
+  const result = body.result ?? body
+  if (result && typeof result === 'object' && 'ok' in result) {
+    assert.ok(result.ok, `${method}: ${JSON.stringify(result)}`)
+    return result.value
+  }
+  return result
+}
+async function assertVoiceIdle(page, stage) {
+  let provider
+  for (let attempt = 0; attempt < 150; attempt++) {
+    provider = (await speechCatalog(page)).providers.find(provider => provider.id === 'sensevoice-local')
+    assert.ok(provider, `${stage}: local speech provider is registered`)
+    if (provider.preparation.phase !== 'checking') break
+    await page.waitForTimeout(100)
+  }
+  assert.equal(provider.preparation.phase, 'unprepared', `${stage}: no implicit recognition preparation`)
+  const microphoneRequests = await page.evaluate(() => window.__e2eMicrophoneRequests)
+  assert.equal(microphoneRequests, 0, `${stage}: no microphone request`)
+  assert.equal(report.microphoneRequests, 0, `${stage}: no microphone request across client reloads`)
+  const modelFiles = await readdir(resolve(home, 'speech-to-text/sensevoice/models'), { recursive: true })
+    .catch(error => { if (error.code === 'ENOENT') return []; throw error })
+  assert.deepEqual(modelFiles, [], `${stage}: no downloaded model files`)
+  report.voiceIdle.push({ stage, provider, microphoneRequests, modelFiles })
+}
+async function waitForVoiceState(page, enabled) {
+  let bundle, components
+  for (let attempt = 0; attempt < 150; attempt++) {
+    bundle = (await nativePluginRpc(page, 'listBundles')).find(bundle => bundle.name === voiceName)
+    components = (await nativePluginRpc(page, 'listPlugins'))
+      .filter(row => voiceIds.includes(row.entryId.split(':').at(-1)))
+    if (bundle?.enabled === enabled && (enabled
+      ? components.length === voiceIds.length && components.every(row => row.enabled)
+      : components.every(row => !row.enabled))) return { bundle, components }
+    await page.waitForTimeout(100)
+  }
+  assert.fail(`voice state did not settle to ${enabled}: ${JSON.stringify({ bundle, components })}`)
+}
 async function waitForPdfPaint(page) {
   await page.waitForFunction(() => [...document.querySelectorAll('.official-resource-panel canvas')].some(canvas => {
     if (canvas.width < 10 || canvas.height < 10) return false
@@ -73,8 +121,20 @@ try {
   page.on('dialog', dialog => { void dialog.accept().catch(() => {}) })
   page.on('console', message => { if (message.type() === 'error' || message.type() === 'warning') report.errors.push(message.type() + ': ' + message.text()) })
   page.on('pageerror', error => report.errors.push(error.message))
-  await page.waitForFunction(() => document.querySelector('.shell') || document.body?.innerText.includes('Failed to load plugins') || document.body?.innerText.includes('DSH Editor 启动失败'), undefined, { timeout: 90000 })
-  if (!await page.locator('.shell').count()) {
+  // Electron may finish its first navigation before launch returns. Install the
+  // observer before reloading so the complete client startup is measured.
+  await app.context().exposeBinding('__e2eObserveMicrophone', () => { report.microphoneRequests++ })
+  await app.context().addInitScript(() => {
+    window.__e2eMicrophoneRequests = 0
+    if (navigator.mediaDevices) navigator.mediaDevices.getUserMedia = async () => {
+      window.__e2eMicrophoneRequests++
+      await window.__e2eObserveMicrophone()
+      throw new Error('Unexpected microphone request during voice idle acceptance')
+    }
+  })
+  await page.reload()
+  await page.waitForFunction(() => document.querySelector('main.shell') || document.body?.innerText.includes('Failed to load plugins') || document.body?.innerText.includes('DSH Editor 启动失败'), undefined, { timeout: 90000 })
+  if (!await page.locator('main.shell').count()) {
     await page.getByText('dsh-editor-shell', { exact: true }).first().click().catch(() => {})
     throw new Error('Shell boot failed: ' + report.errors.join('\n') + '\n' + await page.locator('body').innerText())
   }
@@ -86,25 +146,68 @@ try {
   const later=page.getByRole('button',{name:'稍后配置',exact:true})
   if (await later.isVisible()) await later.click()
   check('native desktop startup')
-  await page.locator('.plugins-trigger').click()
-  await page.getByTestId('plugins-settings').waitFor()
-  for (const name of ['快捷键','资料预览','MCP 资源','语音输入']) {
-    await page.getByRole('switch', {name,exact:true}).waitFor()
+  await assertVoiceIdle(page, 'instrumented client startup')
+  check('selected voice bundle starts unprepared without model downloads or microphone requests')
+  const plugins = await openPluginsPage(page)
+  const inventory = await nativePluginRpc(page, 'listPlugins')
+  assert.ok(Array.isArray(inventory), 'native installed plugin inventory')
+  const capabilityStates = [
+    ['@deepseek-ai/dsh-client-shortcuts', true],
+    ['@deepseek-ai/dsh-client-ui-shortcuts', true],
+    ['@deepseek-ai/dsh-client-resources', true],
+    ['@deepseek-ai/dsh-client-ui-sidebar-documentpreview', true],
+    ['@deepseek-ai/dsh-office-to-pdf', true],
+    ['@deepseek-ai/dsh-mcp-resources', false],
+  ]
+  report.capabilities = []
+  for (const [moduleName, enabled] of capabilityStates) {
+    const rows = inventory.filter(row => row.moduleName === moduleName)
+    assert.equal(rows.length, 1, moduleName + ' must ship exactly once')
+    assert.equal(rows[0].enabled, enabled, moduleName + ' enabled state')
+    report.capabilities.push(rows[0])
   }
-  check('official plugins available in existing manager')
+  const bootModules = await page.evaluate(() => window.__DSH_BOOT__?.entries?.map(entry => entry.id))
+  assert.ok(Array.isArray(bootModules), 'client boot manifest is available')
+  for (const [moduleName] of capabilityStates.filter(([moduleName, enabled]) => enabled && moduleName.includes('/dsh-client-'))) {
+    assert.ok(bootModules.includes(moduleName), moduleName + ' is advertised to the client module loader')
+  }
+  await plugins.locator('[data-plugin-panel]').getByRole('button', {name:'查看 语音输入',exact:true}).waitFor()
+  check('native inventory and boot manifest enable shortcuts and document previews; MCP resources ship disabled')
   await page.screenshot({path:resolve(output,'plugins-light.png')})
-  // Voice input ships installed but off: the composer microphone only exists once the
-  // author turns the plugin on, and the preparation page needs the enabled services.
-  const voiceSwitch = page.getByRole('switch', {name:'语音输入',exact:true})
-  assert.equal(await voiceSwitch.getAttribute('data-state'), 'unchecked', 'voice input must ship disabled')
-  await voiceSwitch.click()
-  await voiceSwitch.waitFor({state:'visible'})
-  await page.locator('.plugins-page-nav button').filter({hasText:'@deepseek-ai/dsh-experimental-voice-input-bundle'}).first().click()
-  await page.getByTestId('plugin-configuration-page').waitFor()
-  assert.equal(await page.getByTestId('plugin-configuration-error').count(),0)
+  // Built-in availability, bundle selection, component activation and model
+  // preparation are separate native states.
+  await plugins.locator('[data-plugin-panel]').getByRole('button', {name:'查看 语音输入',exact:true}).click()
+  const voiceSwitch = plugins.getByRole('switch', {name:'启用 语音输入',exact:true})
+  const voiceBundle = (await nativePluginRpc(page, 'listBundles')).find(bundle => bundle.name === voiceName)
+  const voiceComponents = voiceIds
+    .map(id => inventory.find(row => row.entryId.split(':').at(-1) === id))
+  report.voice = { bundle: voiceBundle, components: voiceComponents, checked: await voiceSwitch.getAttribute('aria-checked') }
+  assert.ok(voiceBundle, 'voice bundle is available in the native distribution')
+  assert.equal(voiceBundle.enabled, true, 'voice bundle is selected by the distribution')
+  assert.equal(voiceBundle.installed, false, 'runtime-provided voice bundle is not a profile dependency')
+  assert.equal(await voiceSwitch.getAttribute('aria-checked'), String(voiceBundle.enabled), 'native switch reflects bundle selection')
+  for (const [index, row] of voiceComponents.entries()) {
+    assert.ok(row, 'voice component exists: ' + index)
+    assert.equal(row.enabled, true, row.entryId + ' is active with the selected voice bundle')
+  }
+  assert.ok(bootModules.includes('@deepseek-ai/dsh-experimental-client-ui-voice-input'), 'voice activity is advertised to the client module loader')
+  const voiceConfiguration = plugins.locator('[data-plugin-config]')
+  await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).waitFor()
+  assert.equal(await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).isEnabled(),true)
   await page.screenshot({path:resolve(output,'voice-preparation.png')})
-  check('official voice preparation page after the author enables voice input')
-  await page.locator('.plugins-back').click()
+  await assertVoiceIdle(page, 'preparation page visit')
+  check('official voice preparation page does not download or record on visit')
+  await voiceSwitch.click()
+  await page.waitForFunction(() => document.querySelector('[role="switch"][aria-label="启用 语音输入"]')?.getAttribute('aria-checked') === 'false')
+  report.voice.disabled = await waitForVoiceState(page, false)
+  assert.equal(await page.evaluate(() => window.__e2eMicrophoneRequests), 0, 'disabling voice does not request microphone')
+  await voiceSwitch.click()
+  await page.waitForFunction(() => document.querySelector('[role="switch"][aria-label="启用 语音输入"]')?.getAttribute('aria-checked') === 'true')
+  report.voice.reenabled = await waitForVoiceState(page, true)
+  await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).waitFor()
+  await assertVoiceIdle(page, 'bundle off/on')
+  check('native voice bundle off/on restores active components without preparing or recording')
+  await closePluginsPage(page)
   if (process.argv.includes('--staged')) { report.ok=true; throw Object.assign(new Error('staged checks complete'), { stagedComplete: true }) }
   await page.locator('.native-settings-control button').click()
   await page.getByRole('tab',{name:'快捷键',exact:true}).click()
@@ -211,7 +314,7 @@ try {
   await app.close(); app=undefined
   app = await electron.launch({ executablePath: executable, args: launchArgs,env,timeout:90000 })
   page=await app.firstWindow()
-  await page.locator('.shell').waitFor({timeout:90000})
+  await page.locator('main.shell').waitFor({timeout:90000})
   assert.equal(await page.locator('.palette-trigger-kbd').innerText(),'Ctrl+Alt+K')
   check('custom shortcut survives desktop restart')
   report.ok=true

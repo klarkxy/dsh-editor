@@ -194,11 +194,14 @@ describe('plugin manifests and composition resolver', () => {
     expect(Object.values(baseline).some((spec) => String(spec).includes('runtime-links'))).toBe(false)
   })
 
-  it('ships voice input installed but off, so the composer stays clean until the author enables it', async () => {
+  it('selects the native voice bundle without forcing its components off, while MCP resources stay disabled', async () => {
     const composition = await desktopComposition()
     expect(composition.bundles).toContain('@deepseek-ai/dsh-experimental-voice-input-bundle')
-    expect([...DEFAULT_OFF_OFFICIAL_ENTRIES]).toEqual(['mcp-resources', 'speech-to-text', 'speech-to-text-sensevoice', 'api-speech-to-text', 'ui-voice-input'])
+    expect([...DEFAULT_OFF_OFFICIAL_ENTRIES]).toEqual(['mcp-resources'])
     for (const id of DEFAULT_OFF_OFFICIAL_ENTRIES) expect(composition.disabledEntries).toContain(id)
+    for (const id of ['speech-to-text', 'speech-to-text-sensevoice', 'api-speech-to-text', 'ui-voice-input']) {
+      expect(composition.disabledEntries).not.toContain(id)
+    }
     expect(composition.enabledEntries ?? []).not.toContain('ui-voice-input')
   })
 

@@ -132,7 +132,7 @@ const OFFICIAL_CATALOG_ENTRIES = {
   'ui-sidebar-documentpreview': { title: '资料预览', description: '预览图片、PDF、Office 文档和表格。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview' },
   'mcp-resources': { defaultOff: true, title: 'MCP 资源', description: '读取已配置 MCP 服务提供的资源。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-mcp-resources' },
   ...Object.entries({ 'speech-to-text': '@deepseek-ai/dsh-experimental-speech-to-text', 'speech-to-text-sensevoice': '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice', 'api-speech-to-text': '@deepseek-ai/dsh-experimental-api-speech-to-text', 'ui-voice-input': '@deepseek-ai/dsh-experimental-client-ui-voice-input' }).reduce((rows, [id, packageName]) => ({ ...rows, [id]: {
-    title: '语音输入', description: '使用官方本地语音识别，将转写放入对话草稿。首次使用需准备模型。', locked: false, builtin: true, defaultOff: true,
+    title: '语音输入', description: '使用官方本地语音识别，将转写放入对话草稿。首次使用需准备模型。', locked: false, builtin: true,
     packageName,
   } }), {}),
 }
