@@ -1,5 +1,7 @@
 import { RETIRED_PLUGIN_PACKAGES } from '../../../apps/desktop/src/distribution-contract.ts'
 import { syncPresetDeclarations } from './preset-config.ts'
+import { adaptNativeToolProjection, readNativeToolState, type NativeToolManager } from './native-tools.ts'
+import type { NativeToolState } from './preset-config.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { registerHostRpc, type HostRpcContext } from 'dsh-manuscript/host-api'
 import { readFile } from 'node:fs/promises'
@@ -148,8 +150,11 @@ async function restoreText(path: string, previous: string | undefined, io: Persi
   await replaceFileAtomic(path, previous, io)
 }
 
-async function setWritingPreset(paths: PluginPaths, id: string, source: string, enabled: boolean, io: PersistIo): Promise<void> {
-  await runQueuedSorted([paths.home, paths.stateFile], async () => {
+async function setWritingPreset(paths: PluginPaths, id: string, source: string, enabled: boolean, io: PersistIo, options: {
+  reloadProfile?: () => Promise<boolean>
+  readToolState?: () => Promise<NativeToolState | undefined>
+}): Promise<boolean> {
+  return runQueuedSorted([paths.home, paths.stateFile], async () => {
     const previousState = await readOptionalText(paths.stateFile, io)
     const declarationFile = join(paths.profileDir, 'node_modules', 'dsh-editor-profile-config', 'presets.patch.json')
     const previousDeclarations = await readOptionalText(declarationFile, io)
@@ -161,7 +166,7 @@ async function setWritingPreset(paths: PluginPaths, id: string, source: string, 
         // Only the application's writing selection changes; native plugin settings
         // and the author's home patch are outside this operation's ownership.
         await writeJsonAtomic(paths.stateFile, { ...state, presets: { ...presets, [id]: enabled } }, io)
-        await syncPresetDeclarations(paths.home, paths.profileDir)
+        await syncPresetDeclarations(paths.home, paths.profileDir, { io, native: await options.readToolState?.() })
       } catch (error) {
         const cause = error instanceof Error ? error.message : String(error)
         try {
@@ -173,6 +178,7 @@ async function setWritingPreset(paths: PluginPaths, id: string, source: string, 
         throw new PluginPersistError('未能保存写作模式，请重试。', { cause, recovery: 'restored' })
       }
     })
+    return await options.reloadProfile?.().catch(() => false) === true
   })
 }
 
@@ -193,6 +199,7 @@ export async function handlePluginsRpc(
     fetch?: typeof fetch
     io?: PersistIo
     reloadProfile?: () => Promise<boolean>
+    readToolState?: () => Promise<NativeToolState | undefined>
   },
 ): Promise<PluginsRpcResult> {
   if (signal.aborted) return cancelled()
@@ -237,12 +244,12 @@ export async function handlePluginsRpc(
       const row = declared.find((item) => item.id === id)
       if (!row) return fail('not-found', '未找到该写作模式')
       const source = join(options.paths.profileDir, 'node_modules', row.packageName, row.path)
+      let applied: boolean
       try {
-        await setWritingPreset(options.paths, id, source, body.enabled, options.io ?? defaultPersistIo)
+        applied = await setWritingPreset(options.paths, id, source, body.enabled, options.io ?? defaultPersistIo, options)
       } catch (error) {
         return persistFailed(error)
       }
-      const applied = await options.reloadProfile?.().catch(() => false)
       return { ok: true, value: { restartRequired: applied !== true } satisfies PluginActionReceipt }
     }
     return bad('不支持的插件操作')
@@ -260,6 +267,14 @@ export async function handlePluginsRpc(
 export function apply(ctx: Context): void {
   const host = ctx as RpcHost
   const paths = resolvePluginPaths(process.env, process.argv, undefined, import.meta.url)
+  const reloadProfile = async () => {
+    if (!host.get('hmr')) return false
+    const profile = host.get('profileContext') as import('@deepseek-ai/dsh-app-boot').ProfileContext | undefined
+    if (!profile) return false
+    const { readProfilePatches, reconcileProfilePatches } = await import('@deepseek-ai/dsh-app-boot')
+    await reconcileProfilePatches(host.root, readProfilePatches('dsh-editor', profile), 'dsh-editor')
+    return true
+  }
   let queue = Promise.resolve()
   const serialize = <T>(work: () => Promise<T>) => {
     const run = queue.then(work, work)
@@ -269,13 +284,10 @@ export function apply(ctx: Context): void {
   ctx.effect(() => registerHostRpc(host, PLUGINS_RPC_CHANNEL, (endpoint, payload, signal) => (
     serialize(() => handlePluginsRpc(endpoint, payload, signal, {
       paths,
-      reloadProfile: async () => {
-        if (!host.get('hmr')) return false
-        const profile = host.get('profileContext') as import('@deepseek-ai/dsh-app-boot').ProfileContext | undefined
-        if (!profile) return false
-        const { readProfilePatches, reconcileProfilePatches } = await import('@deepseek-ai/dsh-app-boot')
-        await reconcileProfilePatches(host.root, readProfilePatches('dsh-editor', profile), 'dsh-editor')
-        return true
+      reloadProfile,
+      readToolState: async () => {
+        const manager = host.get('pluginManager') as NativeToolManager | undefined
+        return manager?.listBundles ? readNativeToolState(manager) : undefined
       },
     }))
   )))
@@ -283,7 +295,12 @@ export function apply(ctx: Context): void {
     try {
       const manager = host.get('pluginManager') as Parameters<typeof protectCorePluginManager>[0] | undefined
       if (manager && typeof manager.listPlugins === 'function' && typeof manager.setPluginEnabled === 'function') {
-        return protectCorePluginManager(manager)
+        const adapter = typeof manager.listBundles === 'function'
+          ? adaptNativeToolProjection(manager as NativeToolManager, { paths, reloadProfile })
+          : undefined
+        const unprotect = protectCorePluginManager(manager)
+        adapter?.ready.catch(error => ctx.logger.warn('Native tool projection startup synchronization failed: %s', String(error)))
+        return () => { unprotect(); adapter?.dispose() }
       }
     } catch { /* Official manager is the host service; tests may omit it. */ }
     return () => {}

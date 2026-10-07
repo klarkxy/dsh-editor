@@ -10,7 +10,9 @@ DSH 管理 Agent、会话、模型、审批、文件权限与对话历史。Edit
 
 ## 官方插件管理器与 native profile
 
-已安装清单、官方插件页与 `pluginManager` / `pluginManager:*` RPC（添加插件、检查、进度、构建批准、取消、开关、卸载、配置）以钉住的 DSH `0.2.0-rc.2` 官方管理器为唯一权威。Editor 用私有座位 `dsh-editor.native-plugin-manager` 托管其主页面，不占用全局 `main`，以免激活原生对话输入条。私有适配只保留发现搜索、写作模式和有限核心守卫。
+已安装清单、官方插件页与 `pluginManager` / `pluginManager:*` RPC（添加插件、检查、进度、构建批准、取消、开关、卸载、配置）以钉住的 DSH `0.2.0-rc.2` 官方管理器为唯一权威。Editor 用私有座位 `dsh-editor.native-plugin-manager` 托管其主页面，不占用全局 `main`，以免激活原生对话输入条。私有适配保留发现搜索、写作模式、有限核心守卫，以及自身生成的工具声明同步。
+
+按需插件的工具声明由当前 bundle 选择及其所需组件的有效开关派生。Editor 在原生禁用、卸载前更新这份声明，在安装、启用成功后同步并通过公开启动接口重新协调，避免工具留在已卸下的服务上。声明写入与写作模式复用同一应用内队列；原生锁、包操作、进度与取消仍归 DSH。失败恢复依据实际保留的依赖与选择，不把部分卸载声称为完整回滚，也不改写作者补丁、预设或插件数据。外部 CLI 不参与应用内队列；下次启动会按原生状态重建声明。
 
 native profile 顶层依赖用 `link:` 指向仍保留的已编译制品。`composition.json` 的 `nativeDependencies` 是不可变发行基线，与 `package.json` 里实际已选依赖分开。重部署时核心包与 `dsh-editor-profile-config` 恢复为模板规格和 `link:./profile-config`；基线中已卸下的可选依赖不会复活；作者改过的规格保留。进程在 TEMP 建立仅含 SDK 投影的 install anchor（复制 DSH 清单并链接运行时 `node_modules`），避开仓库祖先解析阴影，带所有者标记，停止时只清理自有目录。插件操作钉住随包 pnpm `11.7.0`（`--pm-on-fail=ignore`），与仓库构建用的 pnpm `10.14.0` 分开；随包 Node 为 `26.10.0`。importer 规格变化时用官方插件操作离线 `--lockfile-only` reconcile 锁文件；失败则中止，并按变更前快照恢复 DSH_HOME 中的插件配置、原 profile 与应用自有写作模式。
 

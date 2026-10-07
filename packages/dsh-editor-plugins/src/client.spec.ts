@@ -78,8 +78,10 @@ describe('plugin discovery', () => {
     const copied: string[] = []
     scope.window = { dshWindow: { clipboardWriteText(text) { copied.push(text) } } }
     try {
-      await copyInstallSpec('npm:@klarkxy/dsh-zhihu@0.1.10')
-      expect(copied).toEqual(['npm:@klarkxy/dsh-zhihu@0.1.10'])
+      expect(await copyInstallSpec('npm:@klarkxy/dsh-zhihu@0.1.10')).toBe('@klarkxy/dsh-zhihu@0.1.10')
+      await copyInstallSpec('@klarkxy/dsh-zhihu@0.1.10')
+      await copyInstallSpec('github:acme/plug')
+      expect(copied).toEqual(['@klarkxy/dsh-zhihu@0.1.10', '@klarkxy/dsh-zhihu@0.1.10', 'github:acme/plug'])
     } finally {
       if (previous) scope.window = previous
       else delete scope.window

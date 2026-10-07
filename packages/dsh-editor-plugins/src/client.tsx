@@ -74,16 +74,25 @@ export function discoverInstallSpec(query: string): { spec: string; packageName?
   return undefined
 }
 
-export async function copyInstallSpec(spec: string): Promise<void> {
+function nativeInstallSpec(spec: string): string {
+  // Discovery uses npm: as a source marker; the native installer takes a bare
+  // package spec. Preserve GitHub and local specs at this boundary.
+  const npm = parseNpmSpec(spec)
+  return npm ? npm.spec.slice(4) : spec
+}
+
+export async function copyInstallSpec(spec: string): Promise<string> {
+  const installSpec = nativeInstallSpec(spec)
   const scope = globalThis as { window?: { dshWindow?: MarketplaceBridge }; navigator?: { clipboard?: { writeText(text: string): Promise<void> } } }
   const bridge = scope.window?.dshWindow?.clipboardWriteText
   if (bridge) {
-    await bridge(spec)
-    return
+    await bridge(installSpec)
+    return installSpec
   }
   const writeText = scope.navigator?.clipboard?.writeText?.bind(scope.navigator.clipboard)
   if (!writeText) throw new Error('无法访问剪贴板')
-  await writeText(spec)
+  await writeText(installSpec)
+  return installSpec
 }
 
 export function listingPresentation(item: MarketplaceListing): {
@@ -271,10 +280,10 @@ function PluginSettings(props: {
   }
   const onCopy = async (spec: string) => {
     try {
-      await copyInstallSpec(spec)
-      setNote(`已复制 ${spec}。请在官方插件页使用「添加插件」粘贴。`)
+      const copied = await copyInstallSpec(spec)
+      setNote(`已复制 ${copied}。请在官方插件页使用「添加插件」粘贴。`)
     } catch {
-      setNote(`请手动复制：${spec}`)
+      setNote(`请手动复制：${nativeInstallSpec(spec)}`)
     }
   }
   const onTogglePreset = async (id: string, enabled: boolean) => {

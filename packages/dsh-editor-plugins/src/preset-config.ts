@@ -1,10 +1,28 @@
 import { REQUIRED_CORE_BUNDLES, RETIRED_PLUGIN_PACKAGES } from '../../../apps/desktop/src/distribution-contract.ts'
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parse } from 'yaml'
 import { isSafeEntryId, isSafePackageName } from './core.ts'
+import { defaultPersistIo, isEnoent, replaceFileAtomic, type PersistIo } from './persist.ts'
+
+export type NativeToolState = {
+  bundles: Array<{ name: string; enabled: boolean; installed?: boolean; rows?: Array<{ rowId: string; moduleName: string; entryId?: string }> }>
+  plugins: Array<{ entryId: string; patchId?: string; moduleName: string; enabled: boolean }>
+}
+
+export type ToolInsert = { id: string; name: string; packageName: string; requires: string[] }
+export type PresetDeclarationOptions = {
+  native?: NativeToolState
+  excludeBundle?: string
+  excludeEntry?: string
+  io?: PersistIo
+}
+
+export function presetDeclarationFile(profileDir: string): string {
+  return join(profileDir, 'node_modules', 'dsh-editor-profile-config', 'presets.patch.json')
+}
 
 function exportTarget(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim()) return value
@@ -27,7 +45,7 @@ function toolsExportExists(pkgDir: string, manifest: Record<string, unknown>): b
   return existsSync(join(pkgDir, ...cleaned.split('/')))
 }
 
-function declaredToolInserts(pkgDir: string, name: string, manifest: Record<string, unknown>): Array<{ id: string; name: string }> {
+function declaredToolInserts(pkgDir: string, name: string, manifest: Record<string, unknown>): ToolInsert[] {
   const dshEditor = manifest.dshEditor && typeof manifest.dshEditor === 'object' && !Array.isArray(manifest.dshEditor)
     ? manifest.dshEditor as Record<string, unknown>
     : {}
@@ -36,19 +54,19 @@ function declaredToolInserts(pkgDir: string, name: string, manifest: Record<stri
   const declaredEntries = Array.isArray(dshEditor.entries)
     ? dshEditor.entries.flatMap((row) => row && typeof row === 'object' && typeof (row as { id?: unknown }).id === 'string' ? [(row as { id: string }).id] : [])
     : []
-  const inserts: Array<{ id: string; name: string }> = []
+  const inserts: ToolInsert[] = []
   for (const declaration of declarations) {
     const row = declaration && typeof declaration === 'object' && !Array.isArray(declaration) ? declaration as Record<string, unknown> : {}
     if (typeof row.id !== 'string' || !isSafeEntryId(row.id) || row.id === 'root' || row.id.startsWith('editor-preset-')) continue
     if (declaredEntries.includes(row.id)) continue
     if (row.name !== `${name}/tools`) continue
     if (row.requires !== undefined && (!Array.isArray(row.requires) || row.requires.some((id) => typeof id !== 'string' || !declaredEntries.includes(id)))) continue
-    inserts.push({ id: row.id, name: row.name })
+    inserts.push({ id: row.id, name: row.name, packageName: name, requires: (row.requires ?? []) as string[] })
   }
   return inserts
 }
 
-async function selectedToolInserts(profileDir: string): Promise<Array<{ id: string; name: string }>> {
+export async function selectedToolInserts(profileDir: string, options: PresetDeclarationOptions = {}): Promise<ToolInsert[]> {
   let bundles: string[] = []
   try {
     const profile = JSON.parse(await readFile(join(profileDir, 'package.json'), 'utf8')) as { dsh?: { profile?: { bundles?: unknown } } }
@@ -57,6 +75,7 @@ async function selectedToolInserts(profileDir: string): Promise<Array<{ id: stri
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error
     return []
   }
+  if (options.native) bundles = options.native.bundles.filter(row => row.enabled).map(row => row.name)
   let shipped: string[] = []
   try {
     const composition = JSON.parse(await readFile(join(profileDir, 'composition.json'), 'utf8')) as { packages?: unknown; libraries?: unknown }
@@ -68,9 +87,9 @@ async function selectedToolInserts(profileDir: string): Promise<Array<{ id: stri
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error
   }
   const skip = new Set([...shipped, ...REQUIRED_CORE_BUNDLES, ...RETIRED_PLUGIN_PACKAGES])
-  const rows: Array<{ id: string; name: string }> = []
+  const rows: ToolInsert[] = []
   for (const name of [...new Set(bundles)].sort()) {
-    if (!isSafePackageName(name) || skip.has(name)) continue
+    if (!isSafePackageName(name) || skip.has(name) || name === options.excludeBundle) continue
     const pkgDir = join(profileDir, 'node_modules', name)
     let manifest: Record<string, unknown>
     try {
@@ -79,13 +98,21 @@ async function selectedToolInserts(profileDir: string): Promise<Array<{ id: stri
       continue
     }
     if (manifest.name !== name) continue
-    rows.push(...declaredToolInserts(pkgDir, name, manifest))
+    const bundle = options.native?.bundles.find(row => row.name === name)
+    rows.push(...declaredToolInserts(pkgDir, name, manifest).filter(insert => insert.requires.every(id => {
+      if (!options.native) return true // Deployment is followed by a sync against the live native inventory.
+      const required = bundle?.rows?.find(row => row.rowId === id)
+      const entry = options.native.plugins.find(row => required?.entryId
+        ? row.entryId === required.entryId
+        : (row.patchId === id || row.entryId === `include:${id}`) && row.moduleName === (required?.moduleName ?? name))
+      return entry?.enabled === true && entry.entryId !== options.excludeEntry
+    })))
   }
   return rows
 }
 
 /** Existing preset directories are distribution artifacts; the native registry owns live definitions. */
-export async function syncPresetDeclarations(home: string, profileDir: string): Promise<void> {
+export async function syncPresetDeclarations(home: string, profileDir: string, options: PresetDeclarationOptions = {}): Promise<void> {
   const root = join(home, '.agent-presets')
   let entries: import('node:fs').Dirent[]
   try { entries = await readdir(root, { withFileTypes: true }) } catch (error) {
@@ -125,13 +152,12 @@ export async function syncPresetDeclarations(home: string, profileDir: string): 
       plugins,
     } })
   }
-  rows.push(...await selectedToolInserts(profileDir))
-  const bundle = join(profileDir, 'node_modules', 'dsh-editor-profile-config')
+  rows.push(...(await selectedToolInserts(profileDir, options)).map(({ id, name }) => ({ id, name })))
+  const file = presetDeclarationFile(profileDir)
+  const bundle = join(file, '..')
   await mkdir(bundle, { recursive: true })
-  const file = join(bundle, 'presets.patch.json')
   const content = JSON.stringify([{ insert: rows }], null, 2) + '\n'
-  try { if (await readFile(file, 'utf8') === content) return } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
-  const temporary = `${file}.${process.pid}.tmp`
-  await writeFile(temporary, content)
-  await rename(temporary, file)
+  const io = options.io ?? defaultPersistIo
+  try { if (await io.readFile(file, 'utf8') === content) return } catch (error) { if (!isEnoent(error)) throw error }
+  await replaceFileAtomic(file, content, io)
 }

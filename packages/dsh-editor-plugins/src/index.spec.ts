@@ -2,13 +2,18 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { describe, expect, it } from 'vitest'
-import { handlePluginsRpc, resolveProfileArtifactDir } from './index.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { apply, handlePluginsRpc, resolveProfileArtifactDir } from './index.ts'
 import { defaultPersistIo } from './persist.ts'
 import type { PluginPaths } from './paths.ts'
 import { profileDirFromPluginModule, resolvePluginPaths } from './paths.ts'
 
 const signal = () => new AbortController().signal
+
+vi.mock('@deepseek-ai/dsh-app-boot', () => ({
+  readProfilePatches: vi.fn(() => [{ insert: [] }]),
+  reconcileProfilePatches: vi.fn(async () => []),
+}))
 
 async function fixture(): Promise<PluginPaths> {
   const home = await mkdtemp(join(tmpdir(), 'dsh-plugins-'))
@@ -50,6 +55,55 @@ describe('plugin manager RPC', () => {
         ok: false, error: { code: 'bad-request', message: '不支持的插件操作' },
       })
     }
+  })
+})
+
+describe('native manager host integration', () => {
+  it('attaches the projection lifecycle and core guards, uses public profile reconciliation and restores on dispose', async () => {
+    const paths = await fixture()
+    const name = '@acme/research'
+    const dir = join(paths.profileDir, 'node_modules', name)
+    await mkdir(join(dir, 'lib'), { recursive: true })
+    await writeFile(join(dir, 'lib', 'tools.js'), 'export const name = "research-tools"\n')
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name, exports: { './tools': './lib/tools.js' }, dshEditor: {
+      entries: [{ id: 'research' }], inserts: [{ id: 'research-tools', name: `${name}/tools`, requires: ['research'] }],
+    } }))
+    await writeFile(join(paths.profileDir, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: [name] } } }))
+    let enabled = true
+    const original = async (id: string, value: boolean) => { enabled = value;return { changed: true, application: 'applied', target: id, stage: 'enable', enabled: value } }
+    const manager = {
+      listBundles: async () => [{ name, enabled: true, installed: true, rows: [{ rowId: 'research', moduleName: name, entryId: 'include:research' }] }],
+      listPlugins: async () => [{ entryId: 'include:research', patchId: 'research', moduleName: name, enabled }],
+      setPluginEnabled: original,
+    }
+    const disposers: Array<() => void> = []
+    const profile = { name: 'dsh-editor', dir: paths.profileDir }
+    const root = {}
+    const host = {
+      root,
+      connection: {},
+      webServer: { register: vi.fn(() => () => {}) },
+      logger: { warn: vi.fn() },
+      get: (key: string) => key === 'pluginManager' ? manager : key === 'profileContext' ? profile : key === 'hmr' ? {} : undefined,
+      effect: (work: () => () => void) => { disposers.push(work()) },
+    }
+    const boot = await import('@deepseek-ai/dsh-app-boot')
+    vi.mocked(boot.readProfilePatches).mockClear()
+    vi.mocked(boot.reconcileProfilePatches).mockClear()
+    vi.stubEnv('DSH_HOME', paths.home)
+    try {
+      apply(host as never)
+      expect(manager.setPluginEnabled).not.toBe(original)
+      expect(await manager.setPluginEnabled('include:editor-workbench-tools', false)).toMatchObject({ changed: false, error: { code: 'management-required' } })
+      expect(await manager.setPluginEnabled('include:research', false)).toMatchObject({ application: 'applied' })
+      const file = join(dir, '..', '..', 'dsh-editor-profile-config', 'presets.patch.json')
+      expect(JSON.parse(await readFile(file, 'utf8'))[0].insert.some((row: { id: string }) => row.id === 'research-tools')).toBe(false)
+      expect(boot.readProfilePatches).toHaveBeenCalledWith('dsh-editor', profile)
+      expect(boot.reconcileProfilePatches).toHaveBeenCalledWith(root, [{ insert: [] }], 'dsh-editor')
+      expect(host.logger.warn).not.toHaveBeenCalled()
+      for (const dispose of disposers.reverse()) dispose()
+      expect(manager.setPluginEnabled).toBe(original)
+    } finally { vi.unstubAllEnvs() }
   })
 })
 

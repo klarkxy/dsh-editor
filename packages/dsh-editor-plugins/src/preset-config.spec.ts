@@ -90,6 +90,26 @@ describe('installed own tools in the existing preset overlay', () => {
     expect(await rows(patch)).toEqual([expect.objectContaining({ id: 'editor-preset-author-style' })])
   })
 
+  it('honors effective native required-entry state and excludes only the targeted service', async () => {
+    const { paths, patch } = await fixture()
+    const native = {
+      bundles: [{ name, enabled: true, installed: true, rows: [{ rowId: 'research', moduleName: name, entryId: 'include:research' }] }],
+      plugins: [{ entryId: 'include:research', patchId: 'research', moduleName: name, enabled: false }],
+    }
+    await syncPresetDeclarations(paths.home, paths.profileDir, { native })
+    expect(await rows(patch)).toHaveLength(1)
+    native.plugins[0].enabled = true
+    await syncPresetDeclarations(paths.home, paths.profileDir, { native, excludeEntry: 'include:unrelated' })
+    expect(await rows(patch)).toContainEqual({ id: 'research-tools', name: `${name}/tools` })
+    await syncPresetDeclarations(paths.home, paths.profileDir, { native, excludeEntry: 'include:research' })
+    expect(await rows(patch)).toHaveLength(1)
+    await syncPresetDeclarations(paths.home, paths.profileDir, { native: { ...native, plugins: [] } })
+    expect(await rows(patch)).toHaveLength(1)
+    native.bundles[0].enabled = false
+    await syncPresetDeclarations(paths.home, paths.profileDir, { native })
+    expect(await rows(patch)).toHaveLength(1)
+  })
+
   it('emits declared ./tools from native extras in official namespaces and ignores finite host packages', async () => {
     const { paths, source, patch } = await fixture()
     const extras = [
