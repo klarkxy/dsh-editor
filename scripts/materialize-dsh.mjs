@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve, sep } from 'node:path'
+import { incompatiblePackageError, packageSupportsPlatform } from './package-platform.mjs'
 
 /** Produce an ordinary, self-contained Node installation from npm or pnpm's linked tree. */
 export async function materializeDsh(source, destination, filter = () => true) {
@@ -14,7 +15,9 @@ export async function materializeDsh(source, destination, filter = () => true) {
     return manifests.get(source)
   }
   async function locate(owner, name, optional = false) {
-    for (const dir of createRequire(join(owner, 'package.json')).resolve.paths(name) ?? []) {
+    // A declared npm dependency can share a name with a Node built-in (punycode).
+    // Ask for package search paths, not the built-in's null resolution paths.
+    for (const dir of createRequire(join(owner, 'package.json')).resolve.paths(`${name}/package.json`) ?? []) {
       const candidate = join(dir, name)
       if (existsSync(join(candidate, 'package.json'))) return realpath(candidate)
     }
@@ -27,14 +30,21 @@ export async function materializeDsh(source, destination, filter = () => true) {
     for (const name of Object.keys(pkg.peerDependencies ?? {})) if (!(name in deps)) deps[name] = pkg.peerDependencies[name]
     const rows = []
     for (const name of Object.keys(deps)) {
-      const optional = name in (pkg.optionalDependencies ?? {}) || pkg.peerDependenciesMeta?.[name]?.optional === true
+      const optional = name in (pkg.optionalDependencies ?? {})
+        || (!(name in (pkg.dependencies ?? {})) && pkg.peerDependenciesMeta?.[name]?.optional === true)
       const resolved = await locate(source, name, optional)
-      if (resolved) rows.push({ name, source: resolved })
+      if (!resolved) continue
+      const dependency = await manifest(resolved)
+      if (!packageSupportsPlatform(dependency)) {
+        if (optional) continue
+        throw incompatiblePackageError(dependency, source)
+      }
+      rows.push({ name, source: resolved })
     }
     return rows
   }
   function destinationFor(owner, name, source) {
-    const searches = createRequire(join(owner, 'package.json')).resolve.paths(name) ?? []
+    const searches = createRequire(join(owner, 'package.json')).resolve.paths(`${name}/package.json`) ?? []
     for (const dir of searches) {
       const candidate = join(dir, name)
       if (!candidate.startsWith(root + sep)) continue
@@ -61,6 +71,7 @@ export async function materializeDsh(source, destination, filter = () => true) {
     }
   }
   const actual = await realpath(source)
+  if (!packageSupportsPlatform(await manifest(actual))) throw incompatiblePackageError(await manifest(actual), source)
   // Direct runtime dependencies take precedence over transitive versions.
   for (const dep of await dependencies(actual)) assigned.set(join(root, 'node_modules', dep.name), dep.source)
   await install(actual, root)

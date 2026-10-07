@@ -2,6 +2,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import { cp, mkdir, readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { incompatiblePackageError, packageSupportsPlatform } from './package-platform.mjs'
 
 async function readJson(path) { return JSON.parse(await readFile(path, 'utf8')) }
 
@@ -12,7 +13,7 @@ function physicallyInside(root, target) {
 
 function tryLocatePackageRoot(packageManifest, name, boundaryRoot) {
   const ownerRequire = createRequire(packageManifest)
-  for (const dir of ownerRequire.resolve.paths(name) ?? []) {
+  for (const dir of ownerRequire.resolve.paths(`${name}/package.json`) ?? []) {
     const candidate = join(dir, name)
     if (!existsSync(join(candidate, 'package.json'))) continue
     const actual = realpathSync(candidate)
@@ -35,23 +36,33 @@ function runtimeDependencyCopyFilter(packageRoot) {
   }
 }
 
-function requiredRuntimeNames(sourcePackage) {
-  const optionalPeers = sourcePackage.peerDependenciesMeta ?? {}
-  return [...Object.keys(sourcePackage.dependencies ?? {}), ...Object.keys(sourcePackage.peerDependencies ?? {})]
-    .filter((dependency) => !optionalPeers[dependency]?.optional)
+function runtimeDependencyDeclarations(pkg) {
+  const names = new Set([...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.optionalDependencies ?? {}), ...Object.keys(pkg.peerDependencies ?? {})])
+  return [...names].map(name => ({
+    name,
+    optional: name in (pkg.optionalDependencies ?? {})
+      || (!(name in (pkg.dependencies ?? {})) && pkg.peerDependenciesMeta?.[name]?.optional === true),
+  }))
 }
 
-async function copyRuntimeDependency(runtimeRoot, { name, packageManifest }, visited) {
+async function copyRuntimeDependency(runtimeRoot, { name, packageManifest, optional = false }, visited) {
   const sourceRoot = tryLocatePackageRoot(packageManifest, name)
-  if (!sourceRoot) throw new Error(`bundled runtime dependency cannot resolve ${name}`)
+  if (!sourceRoot) {
+    if (optional) return false
+    throw new Error(`bundled runtime dependency cannot resolve ${name}`)
+  }
   const sourcePackage = await readJson(join(sourceRoot, 'package.json'))
   if (sourcePackage.name !== name) throw new Error(`runtime dependency identity mismatch: expected ${name}, found ${sourcePackage.name}`)
+  if (!packageSupportsPlatform(sourcePackage)) {
+    if (optional) return false
+    throw incompatiblePackageError(sourcePackage, packageManifest)
+  }
   const previous = visited.get(name)
   if (previous !== undefined) {
     if (previous !== sourcePackage.version) {
       throw new Error(`bundled runtime dependency conflict for ${name}: expected ${sourcePackage.version}, found ${name}@${previous}`)
     }
-    return
+    return true
   }
   visited.set(name, sourcePackage.version)
   const destination = resolve(runtimeRoot, 'node_modules', ...name.split('/'))
@@ -65,19 +76,21 @@ async function copyRuntimeDependency(runtimeRoot, { name, packageManifest }, vis
     await mkdir(dirname(destination), { recursive: true })
     await cp(sourceRoot, destination, { recursive: true, dereference: true, filter: runtimeDependencyCopyFilter(sourceRoot) })
   }
-  for (const dependency of requiredRuntimeNames(sourcePackage)) {
+  for (const dependency of runtimeDependencyDeclarations(sourcePackage)) {
+    let installed
     try {
-      await copyRuntimeDependency(runtimeRoot, { name: dependency, packageManifest: join(sourceRoot, 'package.json') }, visited)
+      installed = await copyRuntimeDependency(runtimeRoot, { ...dependency, packageManifest: join(sourceRoot, 'package.json') }, visited)
     } catch (error) {
-      if (String(error?.message ?? '').includes(`cannot resolve ${dependency}`)) {
-        throw new Error(`bundled runtime dependency ${name} cannot resolve ${dependency}`)
+      if (String(error?.message ?? '').includes(`cannot resolve ${dependency.name}`)) {
+        throw new Error(`bundled runtime dependency ${name} cannot resolve ${dependency.name}`)
       }
       throw error
     }
-    if (!tryLocatePackageRoot(runtimeManifest(runtimeRoot), dependency, runtimeRoot)) {
-      throw new Error(`bundled runtime dependency ${name} cannot resolve ${dependency}`)
+    if (installed && !tryLocatePackageRoot(runtimeManifest(runtimeRoot), dependency.name, runtimeRoot)) {
+      throw new Error(`bundled runtime dependency ${name} cannot resolve ${dependency.name}`)
     }
   }
+  return true
 }
 
 /** Keep copied development and packaged runtimes on the same declared dependency closure. */
