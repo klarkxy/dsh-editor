@@ -1,44 +1,26 @@
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
-import { Button } from '@radix-ui/themes'
-import { Compartment, EditorSelection, EditorState, Prec } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
-import { defaultKeymap, history, historyKeymap, redo, redoDepth, undo, undoDepth } from '@codemirror/commands'
-import { externalSync, ghostField, livePreview, paperHighlight, paperMarkdown, paperTheme, setGhostEffect } from './codemirror.ts'
-import { closeSearchPanelIfFocused, isPaperSearchPanelFocused, openFindPanel, openReplacePanel, paperEscapePriority, paperSearch, revealEditorRange } from './search.ts'
-import { normalizeTypography, typographyCssVariables, type TypographyInput } from './typography.ts'
-import { focusParagraphExtension, typewriterExtension } from './typewriter.ts'
-import { SelectionDiff } from './selection-diff.tsx'
+  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode,
+} from 'react'
+import { EditorSelection } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
+import { redo, undo } from '@codemirror/commands'
+import { openFindPanel, openReplacePanel, revealEditorRange } from './search.ts'
 import { selectParagraphInView } from './paragraph-selection.ts'
+import { EditorChrome } from './editor-chrome.tsx'
+import { useEditorCommands } from './editor-commands.ts'
+import { usePaperView, type PaperViewCallbacks } from './editor-view.ts'
+import { createDraftSyncTimer } from './draft-sync.ts'
+import { defaultFimPayload, defaultPatchPayload, extractText } from './completion-payload.ts'
+import type {
+  EditorCoreDraft, EditorCoreDraftBackup, EditorCoreHandle, EditorCorePaperProjection,
+  EditorCoreProps, EditorCoreRpc, EditorCoreStatus,
+} from './editor-contracts.ts'
 import {
-  captureEditorTarget,
-  contextMenuSource,
-  editorCommandState,
   isEditorTargetCurrent,
-  isolateReplaceSpec,
-  paperRangeToView,
   paperSelectionText,
-  shouldPreserveSelectionOnContextMouseDown,
-  visiblePaperRange,
-  type EditorCommandState,
   type EditorContextMenuEvent,
-  type EditorTargetLive,
   type EditorTargetSnapshot,
 } from './editor-clipboard.ts'
-
-// EditorCore only needs to issue RPCs; hosts that also register handlers can
-// pass the full RpcBag and the structural type will still match.
-export type EditorCoreRpc = {
-  call: (channel: string, endpoint: string, payload: unknown, signal?: AbortSignal) => Promise<unknown>
-}
 
 type RpcResult<T = unknown> =
   | { ok: true; value: T }
@@ -94,202 +76,13 @@ export {
   type CompletionPreference,
 } from './completion-preference.ts'
 
-export type EditorCoreHandle = {
-  save(): Promise<boolean>
-  /**
-   * Writes a new full document text that must differ only in the hidden header
-   * (e.g. chapter beats / chapter-end state). Rechecks the caller's target
-   * snapshot (session/path/generation/revision), applies the text via the
-   * existing setText path, and persists through the same save mechanism as
-   * the body — awaiting the real file.write acknowledgement. Returns false
-   * (without writing) when a save is already in flight, the buffer conflicts,
-   * the target is stale, or the visible paper text would change.
-   */
-  saveMetadataText(next: string, target: EditorTargetSnapshot): Promise<boolean>
-  discard(): void
-  isDirty(): boolean
-  getText(): string
-  getDocument(): EditorDocument | null
-  getSelection(): { start: number; end: number }
-  setGhost(candidates: string[], index: number, at: number): void
-  clearGhost(): void
-  setProposal(proposal: { ticket: SelectionTicket; text: string } | null): void
-  /**
-   * Reveal and select an absolute character range in the open document.
-   * `start` / `end` are offsets in the full file text (including any
-   * projected prefix such as worldbook frontmatter). Out-of-range ends
-   * are clamped to the visible paper; the selection is scrolled into
-   * view and the editor is focused.
-   */
-  revealRange(start: number, end: number): void
-  /**
-   * Cancel a draft-sync timeout that has not yet called draft.put/delete.
-   * Does not abort an already-enqueued queue operation. Shell-owned
-   * conflict resolution must call this before deleting the owned draft.
-   */
-  cancelPendingDraftSync(): void
-  /**
-   * Request a selection rewrite. When `instruction` is omitted the Host uses
-   * the default patch prompt; the built-in footer button keeps that path.
-   * An optional snapshot pins the original range across a custom-dialog gap.
-   */
-  requestRewrite(instruction?: string, target?: EditorTargetSnapshot): void
-  focus(): void
-  getFocusTarget(): HTMLElement | null
-  isComposing(): boolean
-  getCommandState(): EditorCommandState
-  captureTarget(): EditorTargetSnapshot | null
-  isTargetCurrent(target: EditorTargetSnapshot): boolean
-  restoreTarget(target: EditorTargetSnapshot): boolean
-  undo(): boolean
-  redo(): boolean
-  selectAll(): boolean
-  /** Select a visible paragraph without changing text; optional for older hosts. */
-  selectParagraph?(target?: EditorTargetSnapshot): boolean
-  replaceSelection(text: string, target?: EditorTargetSnapshot): boolean
-  getVisibleSelectionText(): string
-  getVisiblePaperText(): string
-  getPaperOffset(): number
-  openFind(): boolean
-  openReplace(): boolean
-  requestCompletion(): void
-}
-
-export type EditorCoreDraftBackup = {
-  path: string
-  text: string
-  baseText: string
-  baseVersion: string
-  ownerId?: string
-  revision?: string
-  updatedAt?: string
-}
-
-export type EditorCoreDraft =
-  | {
-      kind: 'host'
-      call: (endpoint: 'draft.get' | 'draft.put' | 'draft.delete' | 'draft.list', payload: Record<string, unknown>) => Promise<unknown>
-      syncDelayMs?: number
-    }
-  | {
-      kind: 'session'
-      cwd: string
-      syncDelayMs?: number
-    }
-  | { kind: 'none' }
-
-export type EditorCorePaperProjection = {
-  project(path: string, text: string): { text: string; offset: number }
-  replace(path: string, text: string, paperText: string): string
-}
-
-/** Optional paper typography. Omitted fields keep today's 17px / 1.9 / serif defaults. */
-export type EditorCoreTypography = TypographyInput
-
-export type EditorCoreProps = {
-  sessionId: string
-  cwd?: string
-  path: string
-
-  rpc: EditorCoreRpc
-  draft?: EditorCoreDraft
-
-  onDirtyChange?(dirty: boolean): void
-  onSaved?(): void
-  onError?(message: string): void
-  onNotice?(message: string): void
-  onStatusChange?(status: EditorCoreStatus): void
-
-  // Caller receives a handle once mounted; the handle exposes imperative
-  // save / discard so the host can coordinate switch-while-dirty flows
-  // (manuscript's "保存后切换" / "放弃修改并切换" pattern). A `null`
-  // argument is delivered on unmount so the host can release its cache.
-  onHandle?(handle: EditorCoreHandle | null): void
-
-  testIdPrefix?: string
-  paperClassName?: string
-  paperStyle?: CSSProperties
-  slotClassName?: Partial<Record<EditorCoreSlot, string>>
-  slotStyle?: Partial<Record<EditorCoreSlot, CSSProperties>>
-
-  completionPreference?: CompletionPreference
-  /** Host may identify author documents outside the legacy 正文/ directory. */
-  automaticCompletionEligible?: boolean
-  /**
-   * Optional completion capability gate (default true for compatibility).
-   * When false, no FIM or selection-rewrite RPC is ever issued — the manual
-   * 补全/修改选段 buttons and the automatic FIM trigger are all disabled.
-   */
-  completionEnabled?: boolean
-  authorPreferences?: string
-  chapterContext?: string
-  fimDelayMs?: number
-  maxGhostCandidates?: number
-  showGhostTip?: boolean
-  buildFimPayload?(input: FimPayloadInput): Record<string, unknown>
-  buildPatchPayload?(input: PatchPayloadInput): Record<string, unknown>
-  extractFimText?(value: unknown): string
-  extractPatchText?(value: unknown): string
-
-  enablePatch?: boolean
-  showProposalDiff?: boolean
-
-  enableRewriteSelection?: boolean
-  onRewriteSelection?(selection: string, path: string): void | Promise<void>
-
-  paperProjection?: EditorCorePaperProjection
-
-  /** Keep the caret line at a fixed viewport ratio (default 0.5) while typing or moving the cursor. */
-  typewriter?: boolean
-  /** Paper measure and type. Applied as `--paper-*` CSS variables on the editor root. */
-  typography?: EditorCoreTypography
-  /** Dim every paragraph except the one that contains the caret. */
-  focusParagraph?: boolean
-
-  autoSaveDelayMs?: number
-  externalRevision?: number
-
-  // Shell-specific conflict recovery actions. When provided, the matching
-  // button is rendered alongside EditorCore's built-in discard. The host
-  // owns the actual flow (e.g. confirm dialog, copy-as-conflict).
-  onReloadDisk?(): void
-  onSaveConflictCopy?(): void
-
-  // Install a beforeunload warning while the buffer is dirty. The shell
-  // wants the browser prompt; the manuscript overlay adds its own.
-  enableBeforeUnload?: boolean
-
-  // Custom header/footer nodes for hosts that need to inject extra UI
-  // (e.g. a row of chapter shortcuts in the shell's footer). Rendered
-  // after the built-in controls.
-  headerExtras?: ReactNode
-  footerExtras?: ReactNode
-
-  /**
-   * Hide the built-in always-on complete/save/rewrite buttons. Ghosts,
-   * proposals, stop, conflict, and backups stay on demand. Overlay hosts
-   * keep the default (false) so their chrome does not change.
-   */
-  compactControls?: boolean
-  /** Fired after a paper context-menu gesture; hosts own the actual menu. */
-  onEditorContextMenu?(event: EditorContextMenuEvent): void
-}
-
-export type EditorCoreStatus = 'empty' | 'loading' | 'saved' | 'draft' | 'conflict' | 'error'
-
-export type EditorCoreSlot =
-  | 'outer'
-  | 'header'
-  | 'tools'
-  | 'textarea'
-  | 'mirror'
-  | 'ghost'
-  | 'ghostCard'
-  | 'ghostTip'
-  | 'proposal'
-  | 'conflict'
-  | 'notice'
-  | 'footer'
+export type {
+  EditorCoreRpc, EditorCoreHandle, EditorCoreDraftBackup, EditorCoreDraft,
+  EditorCorePaperProjection, EditorCoreTypography, EditorCoreProps, EditorCoreStatus,
+  EditorCoreSlot, FimPayloadInput, PatchPayloadInput,
+} from './editor-contracts.ts'
+export { defaultFimPayload, defaultPatchPayload } from './completion-payload.ts'
+export { createDraftSyncTimer, type DraftSyncTimer } from './draft-sync.ts'
 
 const SESSION_DRAFT_KEY = (cwd: string, path: string) =>
   `dsh-editor:draft:${encodeURIComponent(`${cwd}\u0000${path}`)}`
@@ -297,30 +90,6 @@ const SESSION_DRAFT_KEY = (cwd: string, path: string) =>
 /* 键入时权威文本同步进 textRef；驱动字数统计/投影/头部 UI 的 React `text` state
    由尾部去抖收敛，一次击键连发只全量穿透 React 一次，而不是每键一次。 */
 const TEXT_STATE_FLUSH_DELAY_MS = 150
-
-export type DraftSyncTimer = {
-  schedule(delayMs: number, run: () => void): void
-  cancelPending(): void
-}
-
-/** Owns the not-yet-fired draft.put/delete timeout so explicit cleanup can drop it. */
-export function createDraftSyncTimer(): DraftSyncTimer {
-  let timer: ReturnType<typeof globalThis.setTimeout> | null = null
-  return {
-    schedule(delayMs, run) {
-      if (timer != null) globalThis.clearTimeout(timer)
-      timer = globalThis.setTimeout(() => {
-        timer = null
-        run()
-      }, delayMs)
-    },
-    cancelPending() {
-      if (timer == null) return
-      globalThis.clearTimeout(timer)
-      timer = null
-    },
-  }
-}
 
 const IDENTITY_PROJECTION: EditorCorePaperProjection = {
   project: (_path, text) => ({ text, offset: 0 }),
@@ -331,84 +100,8 @@ const NO_DRAFT: EditorCoreDraft = { kind: 'none' }
 const EMPTY_SLOT_CLASSES: NonNullable<EditorCoreProps['slotClassName']> = {}
 const EMPTY_SLOT_STYLES: NonNullable<EditorCoreProps['slotStyle']> = {}
 
-function extractText(value: unknown): string {
-  if (value && typeof value === 'object' && 'text' in value) {
-    const raw = (value as { text: unknown }).text
-    return typeof raw === 'string' ? raw : ''
-  }
-  return ''
-}
-
-export type FimPayloadInput = {
-  sessionId: string
-  path: string
-  prefix: string
-  suffix: string
-  authorPreferences?: string
-  chapterContext?: string
-}
-
-export type PatchPayloadInput = {
-  sessionId: string
-  path: string
-  selectedText: string
-  before: string
-  after: string
-  authorPreferences?: string
-  chapterContext?: string
-  instruction?: string
-}
-
-function optionalPayloadField(value: string | undefined): string | undefined {
-  return value ? value : undefined
-}
-
-export function defaultFimPayload(input: FimPayloadInput): Record<string, unknown> {
-  return {
-    sessionId: input.sessionId,
-    path: input.path,
-    prefix: input.prefix,
-    suffix: input.suffix,
-    ...(optionalPayloadField(input.authorPreferences) ? { authorPreferences: input.authorPreferences } : {}),
-    ...(optionalPayloadField(input.chapterContext) ? { chapterContext: input.chapterContext } : {}),
-  }
-}
-
-export function defaultPatchPayload(input: PatchPayloadInput): Record<string, unknown> {
-  return {
-    sessionId: input.sessionId,
-    path: input.path,
-    selectedText: input.selectedText,
-    before: input.before,
-    after: input.after,
-    ...(optionalPayloadField(input.authorPreferences) ? { authorPreferences: input.authorPreferences } : {}),
-    ...(optionalPayloadField(input.chapterContext) ? { chapterContext: input.chapterContext } : {}),
-    ...(optionalPayloadField(input.instruction) ? { instruction: input.instruction } : {}),
-  }
-}
-
-function describeStatus(state: SaveState, conflict: boolean): string {
-  if (state === 'empty') return ''
-  if (state === 'loading') return '读取中…'
-  if (state === 'saved') return '已保存'
-  if (state === 'draft') return '草稿未保存'
-  if (state === 'conflict') return conflict ? '版本冲突' : '需处理'
-  return '读取失败'
-}
-
 function isStaleMessage(message: string): boolean {
   return /changed on disk|\bSTALE\b|version|版本/i.test(message);
-}
-
-/** 备份按钮的小标签：序号 + 本地化的可读更新时间（没有 updatedAt 时只有序号）。 */
-function draftBackupLabel(backup: EditorCoreDraftBackup, index: number): string {
-  const date = backup.updatedAt ? new Date(backup.updatedAt) : null
-  const stamp = date && !Number.isNaN(date.getTime())
-    ? new Intl.DateTimeFormat(globalThis.navigator?.language || undefined, {
-      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
-    }).format(date)
-    : ''
-  return stamp ? `备份 ${index + 1} · ${stamp}` : `备份 ${index + 1}`
 }
 
 export function EditorCore(props: EditorCoreProps): ReactNode {
@@ -530,7 +223,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
   const revisionRef = useRef(0)
   const documentGenerationRef = useRef(0)
   const loadedGenerationRef = useRef(-1)
-  const syncedGenerationRef = useRef(-1)
   const ghostSourceRef = useRef<{ generation: number; revision: number } | null>(null)
   const loadIdentityRef = useRef({ sessionId, path, cwd, externalRevision, draftKind, draftCwd })
   const previousLoad = loadIdentityRef.current
@@ -575,6 +267,10 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
 
   const projected = useMemo(() => paperProjection.project(path, text), [paperProjection, path, text])
   const paperOffset = projected.offset
+  // paperOffset for the currently rendered text; read by the update listener.
+  const paperOffsetRef = useRef(0)
+  paperOffsetRef.current = paperOffset
+
   const paperText = projected.text
   const wordCount = useMemo(() => paperText.replace(/\s/g, '').length, [paperText])
   const state: SaveState = documentReady ? saveState(doc, textRef.current, conflict) : error ? 'error' : path ? 'loading' : 'empty'
@@ -966,28 +662,11 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     return () => globalThis.clearTimeout(timer)
   }, [completionEnabled, completionPreference, automaticCompletionEligible, conflict, doc?.path, doc?.sessionId, ghost, loadingFim, patching, proposal, selection.end, selection.start, text, userEditRevision, fimDelayMs, paperOffset, complete])
 
-  const liveTarget = useCallback((): EditorTargetLive | null => {
-    const current = docRef.current
-    if (!current || !isDocumentReady()) return null
-    return {
-      sessionId: current.sessionId,
-      path: current.path,
-      documentGeneration: documentGenerationRef.current,
-      revision: revisionRef.current,
-      text: textRef.current,
-    }
-  }, [])
-
-  const captureTarget = useCallback((): EditorTargetSnapshot | null => {
-    const live = liveTarget()
-    if (!live) return null
-    const view = viewRef.current
-    const main = view?.state.selection.main
-    const offset = paperOffsetRef.current
-    const start = main ? main.from + offset : selection.start
-    const end = main ? main.to + offset : selection.end
-    return captureEditorTarget({ ...live, start, end })
-  }, [liveTarget, selection.start, selection.end])
+  const { liveTarget, captureTarget, readCommandState, replaceSelection, restoreTarget } = useEditorCommands({
+    viewRef, docRef, textRef, revisionRef, documentGenerationRef, paperOffsetRef,
+    paperProjection, selection, isDocumentReady, isGenerating,
+    conflictRef, completionEnabledRef, enablePatchRef,
+  })
 
   /* 章纲/章末小结等隐藏文件头的统一写入通道：只许改稿纸之外的内容，复用与正文完全相同的
    * 保存机制（setText → 最新缓冲区 → file.write 回执）。目标快照复用既有 captureTarget /
@@ -1058,72 +737,6 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     setProposal({ ticket, text: replacement })
     report('修改建议已就绪。')
   }, [doc, text, revision, selection, rpc, buildPatchPayload, authorPreferences, chapterContext, extractPatchText, report, reportError, clearGhost, completionEnabled, enablePatch, conflict, liveTarget])
-
-  const readCommandState = useCallback((): EditorCommandState => {
-    const view = viewRef.current
-    const current = docRef.current
-    const offset = paperOffsetRef.current
-    const main = view?.state.selection.main
-    const start = main ? main.from + offset : selection.start
-    const end = main ? main.to + offset : selection.end
-    const visible = current ? visiblePaperRange({
-      text: textRef.current,
-      paperOffset: offset,
-      start,
-      end,
-    }) : undefined
-    const paperLength = current ? Math.max(0, paperProjection.project(current.path, textRef.current).text.length) : 0
-    return editorCommandState({
-      loaded: isDocumentReady(),
-      conflict: conflictRef.current,
-      busy: isGenerating(),
-      completionEnabled: completionEnabledRef.current,
-      enablePatch: enablePatchRef.current,
-      hasVisibleSelection: Boolean(visible),
-      collapsed: start === end,
-      dirty: isDirty(current, textRef.current),
-      canUndo: view ? undoDepth(view.state) > 0 : false,
-      canRedo: view ? redoDepth(view.state) > 0 : false,
-      paperLength,
-    })
-  }, [paperProjection, selection.start, selection.end])
-
-  const replaceSelection = useCallback((insert: string, target?: EditorTargetSnapshot): boolean => {
-    const view = viewRef.current
-    const live = liveTarget()
-    if (!view || !live) return false
-    const snapshot = target ?? captureTarget()
-    if (!snapshot) return false
-    if (!isEditorTargetCurrent(snapshot, live)) return false
-    const range = paperRangeToView({
-      paperOffset: paperOffsetRef.current,
-      start: snapshot.start,
-      end: snapshot.end,
-      docLength: view.state.doc.length,
-    })
-    view.dispatch(isolateReplaceSpec({ from: range.from, to: range.to, insert }))
-    return true
-  }, [captureTarget, liveTarget])
-
-  const restoreTarget = useCallback((target: EditorTargetSnapshot): boolean => {
-    const view = viewRef.current
-    const live = liveTarget()
-    if (!view || !live || !isEditorTargetCurrent(target, live)) return false
-    const range = paperRangeToView({
-      paperOffset: paperOffsetRef.current,
-      start: target.start,
-      end: target.end,
-      docLength: view.state.doc.length,
-    })
-    view.dispatch({
-      selection: range.from === range.to
-        ? EditorSelection.cursor(range.from)
-        : EditorSelection.range(range.from, range.to),
-      scrollIntoView: true,
-    })
-    view.focus()
-    return true
-  }, [liveTarget])
 
   // Imperative handle via callback ref.
   useEffect(() => {
@@ -1264,20 +877,9 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
 
   /* ── CodeMirror view lifecycle ───────────────────────────────────── */
 
-  // paperOffset for the currently rendered text; read by the update listener.
-  const paperOffsetRef = useRef(0)
-  paperOffsetRef.current = paperOffset
-
-  const writingCompartments = useRef({
-    typewriter: new Compartment(),
-    focusParagraph: new Compartment(),
-    history: new Compartment(),
-    editability: new Compartment(),
-  })
-
   // Stable dispatch table for CM keymaps / listeners; always points at the
   // latest render's closures.
-  const callbacksRef = useRef({
+  const callbacksRef = useRef<PaperViewCallbacks>({
     setTextFromPaper: (_paper: string) => {},
     flushText: () => {},
     onSelection: (_start: number, _end: number) => {},
@@ -1317,448 +919,69 @@ export function EditorCore(props: EditorCoreProps): ReactNode {
     canEdit: isDocumentReady,
   }
 
-  // Mount the EditorView once; content flows in through the sync effect.
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    const cb = callbacksRef
-    const view = new EditorView({
-      parent: container,
-      state: EditorState.create({
-        doc: '',
-        extensions: [
-          EditorView.contentAttributes.of({ 'aria-label': '文稿正文' }),
-          writingCompartments.current.history.of(history()),
-          writingCompartments.current.editability.of([EditorState.readOnly.of(true), EditorView.editable.of(false)]),
-          EditorState.changeFilter.of((transaction) => !transaction.docChanged || Boolean(transaction.annotation(externalSync)) || cb.current.canEdit()),
-          paperMarkdown,
-          paperHighlight,
-          paperTheme,
-          livePreview,
-          ghostField,
-          paperSearch(),
-          writingCompartments.current.typewriter.of(typewriterExtension({ enabled: typewriter })),
-          writingCompartments.current.focusParagraph.of(focusParagraphExtension(focusParagraph)),
-          EditorView.lineWrapping,
-          Prec.highest(EditorView.domEventHandlers({
-            mousedown(event, view) {
-              if (event.button !== 2 || !cb.current.hasContextMenu() || view.composing) return false
-              const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-              if (pos == null) return false
-              const sel = view.state.selection.main
-              if (shouldPreserveSelectionOnContextMouseDown({ from: sel.from, to: sel.to, clickPos: pos })) {
-                event.preventDefault()
-                return true
-              }
-              view.dispatch({ selection: EditorSelection.cursor(pos), scrollIntoView: true })
-              return true
-            },
-            keydown(event, view) {
-              if (!cb.current.hasContextMenu() || (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey))) return false
-              event.preventDefault()
-              if (view.composing || event.isComposing || event.keyCode === 229) return true
-              const rect = view.coordsAtPos(view.state.selection.main.head) ?? view.contentDOM.getBoundingClientRect()
-              cb.current.onContextMenu({ x: rect.left, y: rect.bottom, source: 'keyboard' })
-              return true
-            },
-            contextmenu(event, view) {
-              if (!cb.current.hasContextMenu()) return false
-              event.preventDefault()
-              if (view.composing) return true
-              cb.current.onContextMenu({
-                x: event.clientX,
-                y: event.clientY,
-                source: contextMenuSource(event.button),
-              })
-              return true
-            },
-            blur() {
-              // Leaving the paper settles the debounced text state so header UI
-              // (word count / status) reflects the final buffer immediately.
-              cb.current.flushText()
-            },
-          })),
-          Prec.high(keymap.of([
-            {
-              key: 'Tab',
-              run: (v) => {
-                // Find-bar focus and IME composition both consume Tab
-                // before ghost acceptance.
-                if (isPaperSearchPanelFocused(v) || v.composing || !cb.current.hasGhost()) return false
-                cb.current.acceptGhost()
-                return true
-              },
-            },
-            {
-              key: 'Escape',
-              run: (v) => {
-                const action = paperEscapePriority({
-                  searchPanelFocused: isPaperSearchPanelFocused(v),
-                  completionActive: cb.current.hasCompletionActivity(),
-                })
-                if (action === 'close-search') return closeSearchPanelIfFocused(v)
-                if (action === 'cancel-completion') return cb.current.cancelSuggestions()
-                return false
-              },
-            },
-            { key: 'Mod-s', run: () => { cb.current.save(); return true } },
-            {
-              key: 'Mod-Enter',
-              run: (v) => {
-                if (isPaperSearchPanelFocused(v) || v.composing) return false
-                if (cb.current.hasProposal()) cb.current.acceptPatch()
-                else cb.current.complete()
-                return true
-              },
-            },
-          ])),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
-          EditorView.updateListener.of((update) => {
-            const external = update.transactions.some((tr) => tr.annotation(externalSync))
-            if (update.docChanged && !external) {
-              cb.current.setTextFromPaper(update.state.doc.toString())
-            }
-            if (update.docChanged || update.selectionSet) {
-              const main = update.state.selection.main
-              const offset = paperOffsetRef.current
-              cb.current.onSelection(main.from + offset, main.to + offset)
-            }
-          }),
-        ],
-      }),
-    })
-    viewRef.current = view
-    // Test handle for e2e scripts: read/write the document via evaluate.
-    ;(container as unknown as { __cmView: EditorView }).__cmView = view
-    return () => {
-      if (textFlushTimer.current != null) { globalThis.clearTimeout(textFlushTimer.current); textFlushTimer.current = null }
-      view.destroy()
-      viewRef.current = null
-      delete (container as unknown as { __cmView?: EditorView }).__cmView
-    }
-  }, [])
-
-  // Runtime toggle: typewriter / focus-paragraph are Compartment-backed so a
-  // prop change does not rebuild the EditorView (ghost, search, and proposal
-  // keymaps stay mounted).
-  useEffect(() => {
-    const view = viewRef.current
-    if (!view) return
-    view.dispatch({
-      effects: [
-        writingCompartments.current.typewriter.reconfigure(typewriterExtension({ enabled: typewriter })),
-        writingCompartments.current.focusParagraph.reconfigure(focusParagraphExtension(focusParagraph)),
-      ],
-    })
-  }, [typewriter, focusParagraph])
-
-  useEffect(() => {
-    viewRef.current?.dispatch({ effects: writingCompartments.current.editability.reconfigure([
-      EditorState.readOnly.of(!documentReady), EditorView.editable.of(documentReady),
-    ]) })
-  }, [documentReady])
-
-  // Replace a loaded document without carrying undo entries across chapters.
-  // Local edits keep their existing history and flow back through the listener.
-  // The dispatch guard compares CM against the authoritative textRef — never the
-  // debounced React state — so a lagging flush can never wipe fresh keystrokes,
-  // while external updates (load / chapter switch / proposal apply) still land.
-  useEffect(() => {
-    const view = viewRef.current
-    if (!view || !isDocumentReady()) return
-    const generation = documentGenerationRef.current
-    const changedDocument = syncedGenerationRef.current !== generation
-    if (changedDocument) view.dispatch({ effects: writingCompartments.current.history.reconfigure([]) })
-    const target = paperProjection.project(path, textRef.current).text
-    const current = view.state.doc.toString()
-    if (current !== target) {
-      const pending = pendingCursorRef.current
-      pendingCursorRef.current = null
-      const anchor = pending == null ? undefined : Math.max(0, Math.min(target.length, pending))
-      view.dispatch({
-        changes: { from: 0, to: current.length, insert: target },
-        selection: anchor == null ? undefined : { anchor },
-        annotations: externalSync.of(true),
-      })
-    }
-    if (changedDocument) {
-      view.dispatch({ effects: writingCompartments.current.history.reconfigure(history()) })
-      syncedGenerationRef.current = generation
-    }
-  }, [paperText, renderGeneration, documentReady, isDocumentReady, path, paperProjection])
-
-  // React ghost state → CM ghost widget (paper coordinates).
-  useEffect(() => {
-    const view = viewRef.current
-    if (!view) return
-    const at = Math.max(0, Math.min(view.state.doc.length, ghostAt - paperOffset))
-    view.dispatch({
-      effects: setGhostEffect.of(
-        ghost
-          ? { at, text: ghost, testId: `${testIdPrefix}-ghost`, className: slotClassName.ghost }
-          : null,
-      ),
-    })
-  }, [ghost, ghostAt, paperOffset, testIdPrefix, slotClassName])
+  usePaperView({
+    containerRef, viewRef, callbacksRef, paperOffsetRef, textFlushTimer,
+    typewriter, focusParagraph, documentReady, isDocumentReady,
+    path, paperProjection, textRef, documentGenerationRef, pendingCursorRef,
+    paperText, renderGeneration, ghost, ghostAt, paperOffset, testIdPrefix, slotClassName,
+  })
 
   if (!path) return null
-
-  const cls = (slot: EditorCoreSlot) => slotClassName[slot]
-  const sty = (slot: EditorCoreSlot) => slotStyle[slot]
-  const showFooter = Boolean(footerExtras) || loadingFim || patching || ghost || conflict || (!compactControls && (proposal || note))
-  const paperVars = typographyCssVariables(normalizeTypography(typography)) as CSSProperties
-
-  return (
-    <section
-      className={[paperClassName, cls('outer')].filter(Boolean).join(' ')}
-      aria-label="文稿编辑区"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        '--paper-dim-opacity': '0.35',
-        ...paperVars,
-        ...paperStyle,
-        ...sty('outer'),
-      } as CSSProperties}>
-      <header
-        className={cls('header')}
-        style={{
-          fontSize: 'var(--font-size-1)',
-          display: 'flex',
-          gap: 8,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          ...(cls('header') ? undefined : { padding: '4px 8px' }),
-          ...sty('header'),
-        }}>
-        <span
-          data-testid={`${testIdPrefix}-path`}
-          style={{ opacity: 0.7, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {doc?.path || path}
-        </span>
-        {!compactControls && enableRewriteSelection && completionEnabled ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
-          data-testid={`${testIdPrefix}-rewrite`}
-          disabled={!hasSelection}
-          onClick={() => {
-            const sel = textRef.current.slice(selection.start, selection.end)
-            if (!sel) return
-            void Promise.resolve(onRewriteSelection?.(sel, doc?.path || path))
-          }}>
-          改这段
-        </Button> : null}
-        {!compactControls && completionEnabled ? <Button
-          type="button"
-          variant={loadingFim ? 'soft' : 'solid'}
-          color={loadingFim ? 'gray' : undefined}
-          size="1"
-          data-testid={`${testIdPrefix}-fim`}
-          onClick={() => { if (loadingFim) stopCompletion(); else void complete(false) }}>
-          {loadingFim ? '停止补全' : ghost ? '重新补全' : '补全'}
-        </Button> : null}
-        <span data-testid={`${testIdPrefix}-wordcount`} style={{ color: 'var(--gray-11)' }}>
-          {`${wordCount} 字`}
-        </span>
-        <span data-testid={`${testIdPrefix}-save-state`} style={{ color: 'var(--gray-11)' }}>
-          {loadingFim ? '正在补全…' : patching ? '正在改写…' : describeStatus(state, conflict)}
-        </span>
-        {headerExtras}
-      </header>
-      <div
-        className={cls('textarea')}
-        style={{ position: 'relative', flex: 1, minHeight: 0, ...sty('textarea') }}>
-        {// CodeMirror mounts here. The container keeps the legacy testid and
-        // fills the wrapper; the EditorView lives on `__cmView` for e2e.
-        <div
-          ref={containerRef}
-          data-testid={`${testIdPrefix}-editor`}
-          aria-label="文档编辑器"
-          style={{ position: 'absolute', inset: 0 }} />}
-      </div>
-      {showGhostTip && ghost ? <div
-        className={cls('ghostTip')}
-        style={{ padding: '4px 8px', fontSize: 'var(--font-size-1)', opacity: 0.55, ...sty('ghostTip') }}>
-        Tab · Esc
-      </div> : null}
-      {proposal ? <div
-        ref={proposalRef}
-        className={[cls('proposal') || 'proposal', 'manuscript-paper-proposal'].filter(Boolean).join(' ')}
-        aria-label="选段修改建议"
-        style={{ padding: 12, border: '1px solid var(--gray-6)', borderRadius: 6, ...sty('proposal') }}>
-        <strong>
-          选段修改建议
-        </strong>
-        {showProposalDiff ? <SelectionDiff original={proposal.ticket.selectedText} revised={proposal.text} /> : <p>
-          {proposal.text}
-        </p>}
-        <div className="proposal-actions">
-          <Button type="button" variant="solid" className="primary-action" size="1" onClick={acceptPatch}>
-            应用修改
-          </Button>
-          <Button
-            type="button"
-            variant="soft"
-            color="red"
-            className="proposal-dismiss"
-            size="1"
-            onClick={() => { setProposal(null); report('已放弃修改建议。'); viewRef.current?.focus() }}>
-            放弃
-          </Button>
-        </div>
-      </div> : null}
-      {conflict ? <div
-        data-testid={`${testIdPrefix}-conflict-guard`}
-        className={cls('conflict')}
-        style={{ padding: '6px 8px', borderTop: '1px solid var(--gray-6)', fontSize: 'var(--font-size-1)', ...sty('conflict') }}>
-        <span>
-          草稿与磁盘版本不一致，已保留本地内容。
-        </span>
-      </div> : null}
-      {note && sty('notice')?.display !== 'none' ? <div
-        data-testid={`${testIdPrefix}-notice`}
-        className={cls('notice')}
-        role={conflict ? 'alert' : 'status'}
-        style={{ padding: '4px 8px', fontSize: 'var(--font-size-1)', opacity: 0.7, ...sty('notice') }}>
-        {note}
-      </div> : null}
-      {error ? <div
-        className={cls('notice')}
-        style={{ padding: 8, color: 'var(--red-11)', fontSize: 'var(--font-size-1)', ...sty('notice') }}>
-        {error}
-      </div> : null}
-      {/* 恢复备份入口独立于 notice 槽：shell 会把 slotStyle.notice 设为 display:none
-         只隐藏普通提示，这里的按钮必须始终可见可点。 */
-      backups.length > 0 && doc ? <div
-        data-testid={`${testIdPrefix}-draft-backups`}
-        role="status"
-        style={{ padding: '4px 8px', fontSize: 'var(--font-size-1)', opacity: 0.8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span>
-          {`发现 ${backups.length} 份其他窗口的未保存备份（采纳后原备份保留）：`}
-        </span>
-        {backups.map((backup, index) => <Button
-          key={`${backup.ownerId ?? 'legacy'}-${backup.revision ?? index}`}
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
-          disabled={isDirty(doc, textRef.current) || conflict}
-          title={isDirty(doc, textRef.current) || conflict ? '当前有未保存内容，请先保存或放弃修改，避免丢稿' : '把这份备份放入当前草稿'}
-          onClick={() => adoptBackup(backup)}>
-          {draftBackupLabel(backup, index)}
-        </Button>)}
-      </div> : null}
-      {showFooter ? <footer
-        className={cls('footer')}
-        style={{ padding: '6px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', ...sty('footer') }}>
-        {!compactControls ? <Button
-          type="button"
-          variant="solid"
-          size="1"
-          disabled={!doc || textRef.current === doc.text || conflict}
-          onClick={() => void save()}>
-          保存
-        </Button> : null}
-        {loadingFim ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
-          onClick={stopCompletion}>
-          停止补全
-        </Button> : null}
-        {patching ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
-          onClick={() => {
-            patchAbort.current?.abort()
-            setPatching(false)
-            report('已停止改写。')
-          }}>
-          停止改写
-        </Button> : null}
-        {!compactControls && enablePatch && completionEnabled ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
-          disabled={!doc || conflict || loadingFim || selection.start === selection.end}
-          onClick={() => { void requestPatch() }}>
-          修改选段
-        </Button> : null}
-        {ghost ? <div
-          style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <strong>
-            补全建议
-          </strong>
-          <small>
-            {`候选 ${ghostIndex + 1}/${ghostCandidates.length}`}
-          </small>
-          <Button type="button" variant="solid" size="1" onClick={acceptGhost}>
-            接受补全
-          </Button>
-          {ghostCandidates.length < maxGhostCandidates ? <Button type="button" variant="soft" color="gray" size="1" disabled={loadingFim} onClick={() => void complete(true)}>
-            再来一个
-          </Button> : <span style={{ opacity: 0.55 }}>
-            {`已满 ${maxGhostCandidates} 条`}
-          </span>}
-          <Button
-            type="button"
-            variant="soft"
-            color="red"
-            size="1"
-            onClick={() => { clearGhost(); report('已放弃补全。'); viewRef.current?.focus() }}>
-            放弃
-          </Button>
-          {ghostCandidates.length > 1 ? <nav aria-label="切换补全候选" style={{ display: 'flex', gap: 4 }}>
-            <Button
-              type="button"
-              variant="ghost"
-              color="gray"
-              size="1"
-              disabled={ghostIndex <= 0}
-              onClick={() => setGhostIndex((old) => Math.max(0, old - 1))}>
-              上一条
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              color="gray"
-              size="1"
-              disabled={ghostIndex >= ghostCandidates.length - 1}
-              onClick={() => setGhostIndex((old) => Math.min(ghostCandidates.length - 1, old + 1))}>
-              下一条
-            </Button>
-          </nav> : null}
-        </div> : null}
-        {conflict ? <Button type="button" variant="soft" color="red" size="1" onClick={discard}>
-          放弃草稿并重新读取
-        </Button> : null}
-        {conflict && onReloadDisk ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
-          data-testid={`${testIdPrefix}-reload-disk`}
-          onClick={onReloadDisk}>
-          重新载入磁盘版本
-        </Button> : null}
-        {conflict && onSaveConflictCopy ? <Button
-          type="button"
-          variant="soft"
-          color="gray"
-          size="1"
-          data-testid={`${testIdPrefix}-save-conflict-copy`}
-          onClick={onSaveConflictCopy}>
-          另存冲突副本
-        </Button> : null}
-        {loadingFim || patching ? null : footerExtras}
-      </footer> : null}
-    </section>
-  );
+  return <EditorChrome
+    path={path}
+    paperClassName={paperClassName}
+    paperStyle={paperStyle}
+    slotClassName={slotClassName}
+    slotStyle={slotStyle}
+    compactControls={compactControls}
+    enableRewriteSelection={enableRewriteSelection}
+    completionEnabled={completionEnabled}
+    onRewriteSelection={onRewriteSelection}
+    testIdPrefix={testIdPrefix}
+    headerExtras={headerExtras}
+    footerExtras={footerExtras}
+    showGhostTip={showGhostTip}
+    enablePatch={enablePatch}
+    showProposalDiff={showProposalDiff}
+    onReloadDisk={onReloadDisk}
+    onSaveConflictCopy={onSaveConflictCopy}
+    typography={typography}
+    maxGhostCandidates={maxGhostCandidates}
+    doc={doc}
+    textRef={textRef}
+    selection={selection}
+    hasSelection={hasSelection}
+    wordCount={wordCount}
+    state={state}
+    loadingFim={loadingFim}
+    patching={patching}
+    conflict={conflict}
+    error={error}
+    note={note}
+    ghost={ghost}
+    ghostCandidates={ghostCandidates}
+    ghostIndex={ghostIndex}
+    proposal={proposal}
+    backups={backups}
+    proposalRef={proposalRef}
+    containerRef={containerRef}
+    viewRef={viewRef}
+    save={save}
+    discard={discard}
+    stopCompletion={stopCompletion}
+    complete={complete}
+    requestPatch={requestPatch}
+    acceptGhost={acceptGhost}
+    acceptPatch={acceptPatch}
+    clearGhost={clearGhost}
+    report={report}
+    adoptBackup={adoptBackup}
+    setGhostIndex={setGhostIndex}
+    setProposal={setProposal}
+    stopPatch={() => {
+      patchAbort.current?.abort()
+      setPatching(false)
+      report('已停止改写。')
+    }}
+  />
 }
