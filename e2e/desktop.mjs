@@ -6,6 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings, openWritingPresets } from './helpers/plugin-page.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack', 'desktop-e2e')
@@ -229,7 +230,7 @@ async function launchPhase(name, extraEnv, inspect) {
     try {
       await delay(5_000)
       console.log(`[desktop-e2e] ${name}: initial page loaded`)
-      await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 90_000 })
+      await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('main.shell')), undefined, { timeout: 90_000 })
       console.log(`[desktop-e2e] ${name}: shell mounted`)
     } catch (error) {
       const diagnostic = await readWindowDiagnostic(window, processLogs)
@@ -244,12 +245,12 @@ async function launchPhase(name, extraEnv, inspect) {
     console.log(`[desktop-e2e] ${name}: onboarding dismissed`)
     const bounds = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getBounds())
     const state = await window.evaluate(() => ({
-      body: document.body.textContent ?? '',
+      body: document.querySelector('main.shell')?.textContent ?? '',
       title: document.title,
-      shell: Boolean(document.querySelector('.shell')),
+      shell: Boolean(document.querySelector('main.shell')),
       settings: Boolean(document.querySelector('[role="dialog"]')),
       settingsControl: [...document.querySelectorAll('.native-settings-control button')].some((button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').includes('设置')),
-      officialHome: document.body.textContent?.includes('DeepSeek Harness') ?? false,
+      officialHome: document.querySelector('main.shell')?.textContent?.includes('DeepSeek Harness') ?? false,
       editorName: Boolean(document.querySelector('.brand-lockup')),
       bootEntries: globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [],
       width: window.innerWidth,
@@ -318,25 +319,21 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   if (writingRadios < 2) throw new Error('settings writing tab lost the completion radios')
   await window.keyboard.press('Escape')
   await dialog.waitFor({ state: 'detached', timeout: 10_000 })
-  await window.getByRole('button', { name: '插件', exact: true }).click()
-  const pluginsPage = window.locator('section.plugins-page[aria-label="插件管理"]')
-  await pluginsPage.locator('nav.plugins-page-nav').getByRole('button', { name: '已安装与市场', exact: true }).click()
-  await window.waitForTimeout(600)
-  const pluginsRoot = pluginsPage.getByTestId('plugins-settings')
-  await pluginsRoot.waitFor({ state: 'visible', timeout: 10_000 })
-  const builtins=pluginsRoot.getByTestId('plugins-section-builtin')
-  await builtins.getByRole('heading',{name:'内置插件',exact:true}).waitFor()
-  const paper=builtins.locator('.dsh-plugins-card').filter({has:window.getByText('稿纸',{exact:true})})
-  await paper.getByText('必需',{exact:true}).waitFor()
-  if(await paper.locator('[role="switch"]').count()) throw new Error('required manuscript exposes a mutation control')
-  await pluginsRoot.getByTestId('plugins-writing-presets').getByText('小说创作', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 })
-  const presetSwitch = pluginsRoot.getByTestId('plugins-preset-toggle-dsh-editor-novel')
+  const pluginsPage = await openPluginsPage(window)
+  const bundles = await assertDefaultPluginPage(window, pluginsPage)
+  for (const name of ['dsh-manuscript', 'dsh-editor-shell', 'dsh-editor-plugins']) {
+    const bundle = bundles.find(item => item.name === name)
+    if (!bundle?.enabled || bundle.readOnlyReason !== 'management-required') throw new Error(`native manager lost the required core guard: ${name}`)
+  }
+  await openWebSearchSettings(pluginsPage)
+  const presets = await openWritingPresets(pluginsPage)
+  const presetSwitch = presets.getByTestId('plugins-preset-toggle-dsh-editor-novel')
   await presetSwitch.waitFor({ state: 'visible', timeout: 10_000 })
   if ((await presetSwitch.getAttribute('aria-checked')) !== 'true') throw new Error('小说创作 writing preset should be enabled by default')
-  const lockedCore = pluginsRoot.getByTestId('plugins-preset-dsh-editor-writing')
+  const lockedCore = presets.getByTestId('plugins-preset-dsh-editor-writing')
+  await lockedCore.getByText('必需', { exact: true }).waitFor()
   if (await lockedCore.locator('[role="switch"]').count()) throw new Error('core writing preset exposes a toggle')
-  await window.keyboard.press('Escape')
-  await pluginsPage.waitFor({ state: 'detached', timeout: 10_000 })
+  await closePluginsPage(window)
 }))
 
 phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key' }, async (state, ctx) => {
@@ -354,7 +351,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   } catch (error) {
     const body = await ctx.window.evaluate(() => ({
       text: document.body.innerText.slice(0, 1200),
-      shellClass: document.querySelector('.shell')?.className ?? null,
+      shellClass: document.querySelector('main.shell')?.className ?? null,
       checking: Boolean(document.querySelector('.workspace-checking')),
       home: Boolean(document.querySelector('.home-stage')),
       tree: Boolean(document.querySelector('.tree')),
@@ -388,7 +385,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     delay(30_000).then(() => { throw new Error('second window was not created within 30 seconds') }),
   ])
   try {
-    await second.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 90_000 })
+    await second.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('main.shell')), undefined, { timeout: 90_000 })
   } catch (error) {
     throw new Error(`second window shell did not mount: ${JSON.stringify(await readWindowDiagnostic(second, []))}; ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -432,10 +429,10 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await waitForFileText(resolve(multiWindowWorkspace, '正文', '001.md'), latestText)
   await second.close()
   if (ctx.window.isClosed()) throw new Error('remaining window closed after closing the second window')
-  await ctx.window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 15_000 })
+  await ctx.window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('main.shell')), undefined, { timeout: 15_000 })
   const remaining = await ctx.window.evaluate(() => ({
     title: document.title,
-    shell: Boolean(document.querySelector('.shell')),
+    shell: Boolean(document.querySelector('main.shell')),
     href: location.href,
   }))
   if (!remaining.shell || remaining.title !== 'DSH Editor' || new URL(remaining.href).origin !== firstUrl.origin) {
@@ -450,7 +447,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   } catch (error) {
     const body = await ctx.window.evaluate(() => ({
       text: document.body.innerText.slice(0, 1200),
-      shellClass: document.querySelector('.shell')?.className ?? null,
+      shellClass: document.querySelector('main.shell')?.className ?? null,
       checking: Boolean(document.querySelector('.workspace-checking')),
       home: Boolean(document.querySelector('.home-stage')),
       tree: Boolean(document.querySelector('.tree')),

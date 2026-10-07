@@ -47,8 +47,8 @@ win:
       arch:
         - x64
 portable:
-  # useZip only packs the payload; the published artifact is still an EXE.
-  # In-app update selection and verify-desktop-package both consume that EXE name.
+  # Use NSIS's direct file extraction for the portable payload instead of an
+  # additional shell copy of the whole runtime. The delivered artifact is an EXE.
   artifactName: "${productName}-${version}-win-x64.${ext}"
   useZip: true
 nsis:

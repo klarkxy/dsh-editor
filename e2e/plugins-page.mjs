@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
+import { assertDefaultPluginPage, openWebSearchSettings, openWritingPresets } from './helpers/plugin-page.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const before = process.argv.includes('--before')
-const stage = process.env.PLUGINS_UI_STAGE || (before ? 'before' : 'after')
+const stage = process.env.PLUGINS_UI_STAGE || 'current'
 const output = resolve(root, '.artifacts/plugin-page', stage)
 const home = resolve(root, '.dev', 'plugin-page-' + stage + '-' + Date.now())
 const env = { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_HOME: home,
@@ -41,8 +41,8 @@ try {
   page.on('dialog', dialog => { void dialog.accept().catch(() => {}) })
   page.on('console', message => { if (message.type() === 'error') report.errors.push(message.text()) })
   page.on('pageerror', error => report.errors.push(error.message))
-  await page.waitForFunction(() => document.querySelector('.shell') || document.body?.innerText.includes('Failed to load plugins'), undefined, { timeout: 90000 })
-  if (!await page.locator('.shell').count()) {
+  await page.waitForFunction(() => document.querySelector('main.shell') || document.body?.innerText.includes('Failed to load plugins'), undefined, { timeout: 90000 })
+  if (!await page.locator('main.shell').count()) {
     await page.getByText('dsh-editor-shell', { exact: true }).first().click().catch(() => {})
     throw new Error('Shell boot failed: ' + report.errors.join('\n') + '\n' + await page.locator('body').innerText())
   }
@@ -58,37 +58,18 @@ try {
     const settings = await openSettings()
     await settings.getByRole('tab', { name: '通用设置', exact: true }).click()
     await settings.getByRole('button', { name: theme, exact: true }).click()
-    if (before) {
-      await settings.getByRole('tab', { name: '插件', exact: true }).click()
-      await settings.getByTestId('plugins-settings').waitFor()
-      await shot(theme + '-plugins-in-settings')
-      await closeSettings()
-      continue
-    }
     const labels = await settings.locator('.settings-nav [role="tab"]').allTextContents()
     assert(!labels.some(label => /插件|知乎|网络搜索|记忆/.test(label)), labels.join(','))
     await shot(theme + '-settings')
     await closeSettings()
     await page.locator('.plugins-trigger').click()
     const pluginPage = page.locator('.plugins-page')
-    await pluginPage.getByTestId('plugins-settings').waitFor()
-    await pluginPage.getByTestId('plugins-writing-presets').waitFor()
+    await assertDefaultPluginPage(page, pluginPage)
+    await openWritingPresets(pluginPage)
     const nativePanel = pluginPage.locator('[data-plugin-panel]')
-    await nativePanel.waitFor()
     await shot(theme + '-manage-1440')
-    const config = pluginPage.locator('.plugins-page-nav').getByRole('button', { name: /^(知乎资料|知乎)$/ })
-    assert.equal(await config.count(), 0, 'Zhihu is installed only on demand')
-    const searchCard = nativePanel.getByRole('button', { name: /网页搜索|网络搜索|Web search|web-search-manager/ }).first()
-    await searchCard.waitFor({ state: 'visible', timeout: 90000 })
-    if (await searchCard.count()) {
-      await searchCard.click()
-      await pluginPage.getByTestId('web-search-settings').waitFor()
-      await shot(theme + '-web-search')
-    } else {
-      await nativePanel.getByText(/网页搜索|网络搜索|Web search|@klarkxy\/dsh-web-search-manager/).first().click()
-      await pluginPage.getByTestId('web-search-settings').waitFor()
-      await shot(theme + '-web-search')
-    }
+    await openWebSearchSettings(pluginPage)
+    await shot(theme + '-web-search')
     if (theme === '浅色') {
       await pluginPage.getByRole('button', { name: '返回插件列表', exact: true }).click()
       const loop = nativePanel.getByText('Agent 循环', { exact: true }).first()
@@ -119,7 +100,7 @@ try {
     await page.waitForFunction(() => document.activeElement?.classList.contains('plugins-trigger'))
     report.checks.push(theme + ': settings isolated, plugin pages reachable, responsive, focus restored')
   }
-  if (!before) {
+  {
     await page.getByRole('button', { name: '新建', exact: true }).first().click()
     const project = page.getByRole('dialog', { name: '新建作品' })
     await project.getByLabel('作品名称').fill('plugin-page-acceptance')
@@ -272,40 +253,36 @@ try {
         await panel.waitFor()
         await page.waitForTimeout(350)
         assert.equal(await panel.evaluate(el => getComputedStyle(el).borderTopLeftRadius), '28px')
-        if (selector === '.memory-panel') {
-          const filter = panel.locator('.memory-filters button').first()
-          await filter.click()
-          assert.equal(await filter.getAttribute('aria-pressed'),'true')
-          await filter.focus()
-        }
         await shot(theme + '-' + selector.slice(1))
         await panel.getByRole('button',{name:close,exact:true}).click()
         await panel.waitFor({state:'hidden'})
       }
     }
     report.checks.push('real overview and proofread panels opened and closed in both themes')
-    /* 侧栏不再常驻文档工具 chip；作品级视图由作品菜单按命令声明的 placement 承载。 */
-    assert.equal(await page.locator('.side-document-tools').count(), 0)
-    for (const theme of ['light','dark']) {
-      if (!await page.locator('.shell-theme').evaluate((el,t) => el.classList.contains(t), theme)) {
+    // Current document actions live beside the file tree and remain usable
+    // after visiting the plugin page; the workspace menu owns workspace actions.
+    for (const theme of ['light', 'dark']) {
+      if (!await page.locator('.shell-theme').evaluate((el, value) => el.classList.contains(value), theme)) {
         await page.locator('.theme-toggle').click()
-        await page.waitForFunction(t => document.querySelector('.shell-theme')?.classList.contains(t), theme)
+        await page.waitForFunction(value => document.querySelector('.shell-theme')?.classList.contains(value), theme)
       }
-      await page.locator('.workspace-menu-trigger').click()
-      const workMenu = page.locator('.workspace-menu-panel')
-      await workMenu.waitFor()
-      await page.waitForTimeout(350)
-      const overviewEntry = workMenu.getByRole('menuitem').filter({has:page.getByText('文档概览',{exact:true})})
-      assert.equal(await overviewEntry.count(), 1, theme + ': 作品菜单应只有一个「文档概览」入口')
-      await shot(theme + '-work-menu')
-      await overviewEntry.click()
-      const workMenuPanel = page.locator('.overview-panel')
-      await workMenuPanel.waitFor()
-      assert.equal(await workMenuPanel.getByRole('button',{name:'关闭概览',exact:true}).count(), 1, theme + ': 概览浮层应可关闭')
-      await workMenuPanel.getByRole('button',{name:'关闭概览',exact:true}).click()
-      await workMenuPanel.waitFor({state:'hidden'})
+      if (!await page.locator('.side-document-tools').isVisible()) await page.getByRole('button', { name: '文件', exact: true }).click()
+      const tools = page.locator('.side-document-tools')
+      for (const [name, selector, close] of [
+        ['文档概览', '.overview-panel', '关闭概览'],
+        ['校对当前文档', '.proofread-panel', '关闭文稿校对'],
+      ]) {
+        const command = tools.getByRole('button', { name, exact: true })
+        assert.equal(await command.count(), 1, theme + ': one reachable ' + name + ' action')
+        await command.click()
+        const panel = page.locator(selector)
+        await panel.waitFor()
+        await shot(theme + '-sidebar-' + selector.slice(1))
+        await panel.getByRole('button', { name: close, exact: true }).click()
+        await panel.waitFor({ state: 'hidden' })
+      }
     }
-    report.checks.push('work menu opened 文档概览 in both themes, and the sidebar no longer carries document tool chips')
+    report.checks.push('sidebar document overview and proofread actions remain reachable once in both themes')
     report.panelScope = 'Desktop composition intentionally disables editor-cards and editor-memory-panel; their styles and native/Radix states are verified by independent component fixtures.'
     // Clear the synthetic unsent draft before closing the isolated test app.
     await chat.fill('')

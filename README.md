@@ -31,9 +31,9 @@ Windows 提供便携版 EXE 和安装器，macOS 提供 Apple Silicon 的 dmg / 
 | @deepseek-ai/dsh-client-ui-shortcuts | 搜索、录制、重置快捷键；桌面设置持久化 | 内置官方插件 |
 | @deepseek-ai/dsh-client-ui-sidebar-documentpreview | 文件栏资料预览 | 内置官方插件 |
 | @deepseek-ai/dsh-mcp-resources | 读取已配置 MCP 服务提供的资源，默认关闭 | 内置官方插件 |
-| @deepseek-ai/dsh-experimental-voice-input-bundle | 语音输入，默认关闭；在「插件」页开启后输入区出现麦克风，首次使用由作者选择准备模型 | 内置官方插件 |
+| @deepseek-ai/dsh-experimental-voice-input-bundle | 语音输入，随包启用；首次点击麦克风可进入准备引导，模型由作者选择下载和准备 | 内置官方插件 |
 
-网页搜索随桌面版预装。知乎、当前标题、需求记录和会话纪要不再预装，可在插件页搜索 npm 包名后复制规格，到官方「添加插件」安装，例如 `npm:@klarkxy/dsh-zhihu`。模型供应商和新对话、补全、改写的选择由内置设置管理，其他插件使用各自配置。已退役的 AI Services、Model Center、Memory、Self-improvement 和 Fusion 不再进入发行组合；作者的写作记忆面板仍保留，旧插件数据不删除。官方插件通过公有布局与界面槽位接入，Editor 保留稿纸界面；定时任务未加入。独立 DSH 可按各包说明从 npm 安装，见 [使用与实现说明](docs/ai-plugins-implementation.md)。
+网页搜索随桌面版预装。知乎、当前标题、需求记录和会话纪要不再预装，可在插件页搜索 npm 包名后复制规格，到官方「添加插件」安装，例如 `@klarkxy/dsh-zhihu`。模型供应商和新对话、补全、改写的选择由内置设置管理，其他插件使用各自配置。已退役的 AI Services、Model Center、Memory、Self-improvement 和 Fusion 不再进入发行组合；作者的写作记忆面板仍保留，旧插件数据不删除。官方插件通过公有布局与界面槽位接入，Editor 保留稿纸界面；定时任务未加入。独立 DSH 可按各包说明从 npm 安装，见 [使用与实现说明](docs/ai-plugins-implementation.md)。
 
 安装步骤在各包目录。仓库根目录是桌面应用 workspace，不能作为单个 DSH 插件安装。全部包与发布说明见 [packages/](packages/README.md)。
 
@@ -48,14 +48,9 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Windows 工作区若带有 Low 完整性标签，Electron 会继承该标签并在启动时以 `0x80000003` 崩溃。可在普通终端用 `icacls` 检查实际运行文件，将已确认来源的 Electron 运行目录恢复为 Medium；备份原权限后，只修正该目录的完整性标签，保留 Chromium 沙箱。
+Windows 工作区若带有可继承的 Low 完整性标签，直接运行其中的 Electron 或便携 EXE 会以低权限启动，在 Chromium 创建沙箱窗口站时以 `0x80000003` 退出。资源管理器双击也受同一文件标签影响。保留工作区安全设置，将已校验的发行文件新建复制到普通用户目录后运行；运行时和测试数据也放在该普通目录中，保留 Chromium 沙箱。
 
-```powershell
-$electronDist = Split-Path (node -p "require('./apps/desktop/node_modules/electron')")
-icacls (Join-Path $electronDist "electron.exe")
-icacls $electronDist /save "$env:TEMP\dsh-editor-electron-acl.txt" /T
-icacls $electronDist /setintegritylevel "(OI)(CI)M"
-```
+`pnpm test:e2e:portable` 会将最终 EXE 复制到系统临时目录，核对 SHA-256，并使用独立 DSH_HOME 和 Electron 用户数据执行验证。报告保留原产物、实测路径与校验值。
 
 检查用 `pnpm build`、`pnpm typecheck`、`pnpm test`；打包与端到端命令见 [package.json](package.json)。
 

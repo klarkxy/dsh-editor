@@ -2,10 +2,13 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, appendFile, cp } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
+import { DshSupervisor } from '../apps/desktop/dist/supervisor.js'
+import { PINNED_PNPM_VERSION, resolveBundledPackageManager } from '../apps/desktop/dist/package-manager.js'
+import { nativePluginRpc, openPluginsPage, closePluginsPage, assertDefaultPluginPage } from './helpers/plugin-page.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const runId = String(Date.now())
@@ -19,6 +22,14 @@ await mkdir(output, { recursive: true })
 const delay = ms => new Promise(done => setTimeout(done, ms))
 let browser, child, page
 const logs = []
+const supervisor = new DshSupervisor({
+  spawn(command, args, options) {
+    child = spawn(command, args, { ...options, cwd: root })
+    for (const stream of [child.stdout, child.stderr]) stream?.on('data', chunk => logs.push(String(chunk)))
+    return child
+  },
+  onUnexpectedExit(error) { report.errors.push(error.message) },
+})
 report.console = []
 report.httpFailures = []
 report.toggles = []
@@ -87,16 +98,40 @@ await appendFile(patch, [
 ].join('\n'))
 
 async function stop() {
-  await browser?.close().catch(() => {})
-  if (child && child.exitCode === null) {
-    child.kill()
-    await Promise.race([new Promise(done => child.once('exit', done)), delay(3000)])
-    if (child.exitCode === null && process.platform === 'win32') {
-      await new Promise(done => { const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); killer.once('exit', done); killer.once('error', done) })
-    }
+  try {
+    await browser?.close().catch(() => {})
+    await stopHost()
+  } finally {
+    server.closeAllConnections()
+    await new Promise(done => server.close(done))
   }
-  server.closeAllConnections()
-  await new Promise(done => server.close(done))
+}
+
+async function stopHost() {
+  const stopping = child
+  await supervisor.stop()
+  assert.ok(!stopping || stopping.exitCode !== null || stopping.signalCode !== null, 'host must exit before restart or cleanup')
+  child = undefined
+}
+
+async function recordPackageManager(stage) {
+  const path = resolve(home, 'profiles/dsh-editor/node_modules/.modules.yaml')
+  const modules = await readFile(path, 'utf8')
+  const actual = modules.trimStart().startsWith('{')
+    ? JSON.parse(modules).packageManager
+    : /^packageManager:\s*['"]?([^\s'"]+)/m.exec(modules)?.[1]
+  report.packageManagers ??= []
+  report.packageManagers.push({ stage, path, actual })
+  assert.equal(actual, 'pnpm@' + PINNED_PNPM_VERSION, 'native plugin operations must use the desktop bundled pnpm')
+}
+
+async function preserveOperationLogs(stage) {
+  const path = resolve(output, 'native-operations-' + stage)
+  try {
+    await cp(resolve(home, 'profiles/dsh-editor/.plugin-manager/logs'), path, { recursive: true })
+    report.nativeOperationLogs ??= []
+    report.nativeOperationLogs.push(path)
+  } catch(error) { if(error.code !== 'ENOENT')throw error }
 }
 
 async function waitForChecked(locator, checked) {
@@ -122,20 +157,12 @@ async function openSettings(target = page) {
   await dialog.waitFor()
   return dialog
 }
-async function openPlugins(target = page) {
-  await target.getByRole('button', { name: '插件', exact: true }).click()
-  const plugins = target.locator('section.plugins-page[aria-label="插件管理"]')
-  await plugins.getByTestId('plugins-settings').waitFor()
-  return plugins
-}
+async function openPlugins(target = page) { return openPluginsPage(target) }
 async function startHost() {
-  child = spawn(process.execPath, [resolve(runtime, 'lib/bin.js'), '--profile', 'dsh-editor', '--host', '127.0.0.1', '--port', '0', '--no-open'], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
-  return new Promise((done, reject) => {
-    let all = ''; const timer = setTimeout(() => reject(new Error('Host startup timeout')), 60000)
-    const inspect = chunk => { const text=String(chunk); logs.push(text); all+=text; const match=/https?:\/\/127\.0\.0\.1:\d+\/?(?:\?token=[A-Za-z0-9._~-]+)?/.exec(all); if(match){clearTimeout(timer);done(match[0])} }
-    child.stdout.on('data',inspect); child.stderr.on('data',inspect)
-    child.once('error',reject); child.once('exit',code=>{clearTimeout(timer);reject(new Error('host exit '+code))})
-  })
+  const { command, args } = resolveBundledPackageManager(process.execPath, env)
+  report.packageManagerInvocation = { command, args }
+  const url = await supervisor.start({ nodePath: process.execPath, cliPath: resolve(runtime, 'lib/bin.js'), home, env, timeoutMs: 60000 })
+  return url.href
 }
 try {
   let url = await startHost()
@@ -145,7 +172,7 @@ try {
   const requests=[]
   page.on('request',req=>{if(req.method()==='POST'){try{requests.push(req.postDataJSON())}catch{}}})
   page.on('pageerror',error=>report.errors.push(error.message))
-  await page.goto(url); await page.locator('.shell').waitFor({timeout:60000})
+  await page.goto(url); await page.locator('main.shell').waitFor({timeout:60000})
   for(let n=0;n<5;n++){const next=page.getByRole('button',{name:'继续',exact:true});if(!await next.isVisible())break;await next.click()}
   const later=page.getByRole('button',{name:'稍后配置',exact:true});if(await later.isVisible())await later.click()
   const rpc=async(channel,method,payload={})=>{
@@ -153,20 +180,13 @@ try {
     assert.ok(res.ok(),method+': HTTP '+res.status());const result=(await res.json()).result
     assert.ok(result?.ok,method+': '+JSON.stringify(result));return result.value
   }
-  const native=async(method,payload)=>{
-    const res=await page.request.post(new URL('/pluginManager/'+method,url).href,{data:{type:'client-request',rpcId:Math.random().toString(36),method,payload}})
-    assert.ok(res.ok(),method+': HTTP '+res.status())
-    const body=await res.json()
-    const result=body.result ?? body
-    if(result && typeof result==='object' && 'ok' in result){
-      assert.ok(result.ok,method+': '+JSON.stringify(result));return result.value
-    }
-    return result
-  }
+  const native=(method,args={})=>nativePluginRpc(page,method,args)
 
   const retired=['ai-services','model-center','memory','self-improvement','fusion'];
-  const plugins=await native('listPlugins',[]);
-  const bundles=await native('listBundles',[]);
+  const plugins=await native('listPlugins');
+  const bundles=await native('listBundles');
+  assert.ok(Array.isArray(plugins),'native installed plugin inventory');
+  assert.ok(Array.isArray(bundles),'native installed bundle inventory');
   const find=id=>plugins.find(row=>String(row.entryId).replace(/^include:/,'')===id || row.patchId===id);
   const findBundle=name=>bundles.find(row=>row.name===name || row.name.endsWith('/'+name) || row.name.endsWith(name));
   for(const id of [...retired,...optionalIds])assert.equal(find(id),undefined,'retired plugin '+id);
@@ -184,16 +204,17 @@ try {
   };
   for(const id of ['editor-novel-kernel','editor-workbench-tools','proofread']){
     const row=find(id);assert.ok(row?.readOnlyReason,id);
-    const result=await page.request.post(new URL('/pluginManager/setPluginEnabled',url).href,{data:{type:'client-request',rpcId:Math.random().toString(36),method:'setPluginEnabled',payload:[row.entryId,!row.enabled]}});
-    const body=await result.json();
-    const value=body.result?.value ?? body.result ?? body;
+    const value=await native('setPluginEnabled',{id:row.entryId,enabled:!row.enabled});
     assert.equal(value?.changed,false,id);
     assert.equal(value?.error?.code,'management-required',id);
   }
   const pluginsPage=await openPlugins();
-  for(const id of [...retired,...optionalIds])assert.equal(await pluginsPage.locator('[data-testid="plugins-card-include:'+id+'"], [data-testid="plugins-card-'+id+'"]').count(),0,id);
+  await assertDefaultPluginPage(page,pluginsPage);
+  for(const name of ['AI Services','Model Center','Memory','Self-improvement','Fusion','当前标题','需求记录','会话纪要','知乎资料']) {
+    assert.equal(await pluginsPage.locator('[data-plugin-panel]').getByRole('button',{name:'查看 '+name,exact:true}).count(),0,name);
+  }
   await screenshot('00-plugin-inventory');
-  await plugins.getByRole('button',{name:/返回首页|返回写作/}).click();await plugins.waitFor({state:'detached'});
+  await closePluginsPage(page);
   let dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();
   const select=dialog.getByRole('combobox',{name:'补全模型',exact:true});await select.filter({hasText:process.env.RETIREMENT_LEGACY_FIXTURE==='1'?'New':'Legacy'}).waitFor();
   await select.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await select.filter({hasText:'New'}).waitFor();
@@ -230,9 +251,9 @@ try {
   report.checks.push('saved models and explicit reasoning off drive real native completion/rewrite, retain usage and do not modify author text');
   const assist=find('manuscript-assist');
   assert.ok(assist, 'manuscript-assist present')
-  await native('setPluginEnabled',[assist.entryId,false]);
+  assert.equal((await native('setPluginEnabled',{id:assist.entryId,enabled:false})).changed,true);
   const disabled=await requestResult('/manuscript','fim.complete',payload);assert.equal(disabled.ok,false);
-  await native('setPluginEnabled',[assist.entryId,true]);
+  assert.equal((await native('setPluginEnabled',{id:assist.entryId,enabled:true})).changed,true);
   assert.equal((await rpc('/manuscript','fim.complete',payload)).text,'雨'.repeat(240));
   report.checks.push('writing assist disabled/enabled without a model-center service and author text retained');
   dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();
@@ -245,42 +266,126 @@ try {
   dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();const restored=dialog.getByRole('combobox',{name:'补全模型',exact:true});await restored.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await restored.filter({hasText:'New'}).waitFor();await page.waitForFunction(()=>!document.querySelector('[aria-label="补全模型"]').disabled);await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
   await page.screenshot({path:resolve(output,'02-writing.png'),fullPage:true});
   const settingText=await readFile(patch,'utf8');assert.ok(settingText.includes('fixture-new'));
-  child.kill();await new Promise(done=>child.once('exit',done));url=await startHost();await page.goto(url);await page.locator('.shell').waitFor({timeout:60000});
+  await stopHost();url=await startHost();await page.goto(url);await page.locator('main.shell').waitFor({timeout:60000});
   dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();await dialog.getByRole('combobox',{name:'补全模型',exact:true}).filter({hasText:'New'}).waitFor();
   report.checks.push('real host restart preserves the native writing model selection');
   if(process.env.E2E_OPTIONAL_INSTALL === '1' || process.argv.includes('--optional-install')) {
     await page.keyboard.press('Escape');
     const versions = { 'current-title': '0.1.7', mood: '0.1.6', recap: '0.1.7', zhihu: '0.1.10' };
+    const homePatch = resolve(home, 'cordis.patch.yml');
+    try { await readFile(homePatch, 'utf8'); } catch(error) { if(error.code!=='ENOENT')throw error;await writeFile(homePatch,'[]\n'); }
+    await appendFile(homePatch, '\n# author-owned plugin lifecycle fixture\n');
+    const authorHomePatch = await readFile(homePatch, 'utf8');
+    const declarationFile = resolve(home, 'profiles/dsh-editor/node_modules/dsh-editor-profile-config/presets.patch.json');
+    const declaredTools = async () => JSON.parse(await readFile(declarationFile, 'utf8')).flatMap(patch=>patch.insert ?? []).filter(row=>String(row.name).endsWith('/tools'));
+    const chatTools = async label => {
+      await page.locator('aside.chat .chat-history[data-running="false"]').waitFor();
+      const at = report.calls.length;
+      const composer = page.getByRole('textbox',{name:'输入消息',exact:true});
+      await composer.fill('请只回复工具状态已检查，不要调用工具。'+label);await composer.press('Enter');
+      await waitForCall('chat',at);
+      await page.locator('aside.chat .chat-history[data-running="false"]').waitFor();
+      return report.calls.slice(at).find(call=>call.kind==='chat')?.tools ?? [];
+    };
+    const hasTool = (tools, name) => tools.some(tool=>tool===name || tool.endsWith('.'+name));
+    const storageFiles = ['dsh_editor_mood.json','dsh_editor_recap.json','dsh_editor_current_title.json','dsh_editor_zhihu.json'];
+    const captureStableStorages = async stage => {
+      await page.locator('aside.chat .chat-history[data-running="false"]').waitFor();
+      const end = Date.now() + 90000;
+      let previous, stableSince = 0;
+      do {
+        // Recap status waits for queued persistence; generation continues in the
+        // background after turn/end, so an idle composer alone is insufficient.
+        const recap = await rpc('/dsh-recap','status');
+        assert.equal(recap.storageFailed,false,'recap storage must remain healthy before the preservation snapshot');
+        const storages = new Map();
+        for(const file of storageFiles) {
+          try { storages.set(file,await readFile(resolve(home,'storages',file),'utf8')); } catch(error) { if(error.code!=='ENOENT')throw error; }
+        }
+        const current = JSON.stringify([...storages]);
+        if(recap.cards.some(card=>card.generation==='running') || current!==previous) stableSince = Date.now();
+        else if(Date.now()-stableSince>=1000) {
+          report.storageSnapshots ??= [];
+          report.storageSnapshots.push({ stage, at: Date.now(), files: [...storages.keys()], recapCards: recap.cards.length });
+          return storages;
+        }
+        previous = current;
+        await delay(250);
+      } while(Date.now()<end);
+      throw new Error('Plugin storage did not settle after the final tool-probe chat');
+    };
     const installReceipts = [];
     for(const [id,version] of Object.entries(versions)) {
-      const spec = 'npm:@klarkxy/dsh-' + id + '@' + version;
-      const inspected = await native('inspect', [spec]);
+      const spec = '@klarkxy/dsh-' + id + '@' + version;
+      const inspected = await native('inspect', {spec});
       assert.notEqual(inspected.status,'refused',JSON.stringify(inspected));
       let result;
       if(id === 'zhihu') {
         const marketplace = await openPlugins();
         await marketplace.locator('[data-plugin-panel]').waitFor();
-        await screenshot('03-npm-install-confirm');await page.setViewportSize({width:760,height:1000});assert.ok(await marketplace.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await screenshot('03-npm-install-confirm-760');await page.setViewportSize({width:1440,height:1000});
-        result = await native('installBundle', [spec, { requestId: 'e2e-' + id }]);
-        await marketplace.getByRole('button',{name:/返回首页|返回写作/}).click();
-        report.checks.push('npm input and official manager install Zhihu through the native plugin page');
+        await screenshot('03-native-manager-before-install');await page.setViewportSize({width:760,height:1000});assert.ok(await marketplace.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await screenshot('03-native-manager-before-install-760');await page.setViewportSize({width:1440,height:1000});
+        result = await native('installBundle', {spec,options:{requestId:'e2e-'+id}});
+        await closePluginsPage(page);
+        report.checks.push('official manager RPC installs exact npm Zhihu artifact while the native plugin page is open');
       } else {
-        result = await native('installBundle', [spec, { requestId: 'e2e-' + id }]);
+        result = await native('installBundle', {spec,options:{requestId:'e2e-'+id}});
       }
       assert.equal(result.changed,true,JSON.stringify(result));
-      assert.equal(result.application,'restart-required');
-      installReceipts.push({name:'@klarkxy/dsh-'+id,version,spec});
+      assert.ok(['applied','restart-required'].includes(result.application),JSON.stringify(result));
+      assert.equal(result.error,undefined,JSON.stringify(result));
+      await recordPackageManager('install-' + id);
+      const name = '@klarkxy/dsh-' + id;
+      const installed = (await native('listBundles')).find(bundle => bundle.name === name);
+      assert.equal(installed?.installed,true,name);
+      assert.equal(installed?.enabled,true,name);
+      if(result.application === 'applied') {
+        const end = Date.now() + 20000;
+        let active;
+        do {
+          active = (await native('listPlugins')).filter(row => String(row.moduleName).includes(name) && row.enabled && row.fiberPhase === 'active');
+          if(active.length)break;
+          await delay(100);
+        } while(Date.now() < end);
+        assert.ok(active.length,name + ': applied installation must activate its runtime components');
+      }
+      installReceipts.push({name,version,spec,application:result.application});
     }
     report.installReceipts = installReceipts;
     report.checks.push('all four optional public plugins inspected and installed from exact npm artifacts through the real Editor RPC');
+    const liveTools = await chatTools('安装后');
+    for(const tool of ['zhihu_search','zhihu_question_recommendations','zhihu_quota','mood_requirements'])assert.ok(hasTool(liveTools,tool),tool+': '+JSON.stringify(liveTools));
+    assert.ok((await declaredTools()).some(row=>row.id==='zhihu-tools'));
+    const zhihuName = '@klarkxy/dsh-zhihu';
+    const zhihuEntry = (await native('listPlugins')).find(row=>row.patchId==='zhihu' && String(row.moduleName).includes(zhihuName));
+    assert.ok(zhihuEntry,'native Zhihu required service');
+    report.toggleReceipts = [];
+    for(const [method,args,label,present] of [
+      ['setPluginEnabled',{id:zhihuEntry.entryId,enabled:false},'component-disabled',false],
+      ['setPluginEnabled',{id:zhihuEntry.entryId,enabled:true},'component-enabled',true],
+      ['setBundleEnabled',{name:zhihuName,enabled:false},'bundle-disabled',false],
+      ['setBundleEnabled',{name:zhihuName,enabled:true},'bundle-enabled',true],
+    ]) {
+      const result = await native(method,args);report.toggleReceipts.push({method,args,result});
+      assert.equal(result.changed,true,JSON.stringify(result));assert.equal(result.application,'applied',JSON.stringify(result));assert.equal(result.error,undefined,JSON.stringify(result));
+      assert.equal((await declaredTools()).some(row=>row.id==='zhihu-tools'),present,label);
+      const tools = await chatTools(label);assert.equal(hasTool(tools,'zhihu_search'),present,label+': '+JSON.stringify(tools));
+      assert.ok(hasTool(tools,'mood_requirements'),label+': unrelated Mood tools remain live');
+      assert.equal(await readFile(homePatch,'utf8'),authorHomePatch);
+    }
+    report.checks.push('optional tools are live immediately after install; required service and bundle disable/enable remove and restore only their own tools without restart');
+    // Recap 0.1.7 retains persisted generation flags across restart. Complete
+    // legitimate work before stopping this first host as well as before removal.
+    await captureStableStorages('before-installed-restart');
+    let restartCount = 0;
     const restart = async () => {
-      await page.goto('about:blank');child.kill();await new Promise(done=>child.once('exit',done));
+      await page.goto('about:blank');await stopHost();
+      await preserveOperationLogs('restart-' + ++restartCount);
       await deployProfile(home,resolve(root,'.dev/desktop-profile-template'),resolve(runtime,'node_modules'));
-      url=await startHost();await page.goto(url);await page.locator('.shell').waitFor({timeout:60000});
+      url=await startHost();await page.goto(url);await page.locator('main.shell').waitFor({timeout:60000});
     };
     await restart();
-    const installedPlugins = await native('listPlugins',[]);
-    const installedBundles = await native('listBundles',[]);
+    const installedPlugins = await native('listPlugins');
+    const installedBundles = await native('listBundles');
     for(const id of Object.keys(versions)) {
       const name = '@klarkxy/dsh-' + id;
       const bundle = installedBundles.find(row => row.name === name);
@@ -289,35 +394,65 @@ try {
       assert.ok(installedPlugins.some(row => String(row.moduleName || '').includes(name) || String(row.entryId).includes(id)), id);
     }
     const installedPage = await openPlugins();await screenshot('03-optional-plugins-installed');
-    assert.equal(await installedPage.locator('.plugins-page-nav').getByRole('button',{name:/^(知乎资料|知乎)$/}).count(),1);
-    await installedPage.getByRole('button',{name:/返回首页|返回写作/}).click();
+    await installedPage.locator('[data-plugin-panel]').getByRole('button',{name:/^查看 (知乎资料|知乎)$/}).click();
+    await installedPage.getByTestId('zhihu-settings').waitFor();
+    assert.equal(await installedPage.locator('[data-plugin-config]').getByTestId('zhihu-settings').count(),1);
+    await closePluginsPage(page);
     await page.locator('button.theme-toggle:visible').first().click();await page.locator('.shell-theme.dark').waitFor({timeout:10000});
     const darkPlugins=await openPlugins();await darkPlugins.locator('[data-plugin-panel]').waitFor();
-    await page.setViewportSize({width:760,height:1000});assert.ok(await darkPlugins.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await screenshot('03-market-dark-760');await page.setViewportSize({width:1440,height:1000});await darkPlugins.getByRole('button',{name:/返回首页|返回写作/}).click();
+    await page.setViewportSize({width:760,height:1000});assert.ok(await darkPlugins.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await screenshot('03-market-dark-760');await page.setViewportSize({width:1440,height:1000});await closePluginsPage(page);
     const toolCallAt=report.calls.length;
     await page.getByRole('textbox',{name:'输入消息',exact:true}).fill('请只回复工具已就绪，不要调用工具。');await page.getByRole('textbox',{name:'输入消息',exact:true}).press('Enter');await waitForCall('chat',toolCallAt);
     const actualTools=report.calls.slice(toolCallAt).find(call=>call.kind==='chat' && call.tools?.length)?.tools ?? [];
     for(const tool of ['zhihu_search','zhihu_question_recommendations','zhihu_quota','mood_requirements'])assert.ok(actualTools.some(name=>name===tool || name.endsWith('.'+tool)),tool+': '+JSON.stringify(actualTools));
-    await delay(1000);report.checks.push('real native chat advertises optional Zhihu and Mood tools after installation; native plugin page remains usable at 760px');
-    const storages = new Map();
-    for(const file of ['dsh_editor_mood.json','dsh_editor_recap.json','dsh_editor_current_title.json','dsh_editor_zhihu.json']) {
-      try { storages.set(file,await readFile(resolve(home,'storages',file),'utf8')); } catch(error) { if(error.code!=='ENOENT')throw error; }
-    }
+    await page.locator('aside.chat .chat-history[data-running="false"]').waitFor();
+    report.checks.push('real native chat advertises optional Zhihu and Mood tools after installation; native plugin page remains usable at 760px');
     report.checks.push('restart restores independently installed plugins as native bundles and exposes their configuration');
-    for(const id of Object.keys(versions))await native('removeBundle',['@klarkxy/dsh-'+id]);
+    report.removeReceipts = [];
+    const storages = await captureStableStorages('before-removal');
+    for(const id of Object.keys(versions)) {
+      const name = '@klarkxy/dsh-' + id;
+      const result = await native('removeBundle',{name});
+      report.removeReceipts.push({name,result});
+      assert.equal(result.changed,true,JSON.stringify(result));
+      assert.equal(result.error,undefined,JSON.stringify(result));
+      assert.ok(['applied','restart-required'].includes(result.application),JSON.stringify(result));
+      assert.equal((await native('listBundles')).some(bundle=>bundle.name===name),false,name);
+      assert.equal((await declaredTools()).some(row=>row.name===name+'/tools'),false,name+': no stale generated tools after removal');
+      assert.equal(await readFile(homePatch,'utf8'),authorHomePatch);
+    }
+    const removedTools = await chatTools('卸载后');
+    for(const tool of ['zhihu_search','zhihu_question_recommendations','zhihu_quota','mood_requirements'])assert.equal(hasTool(removedTools,tool),false,tool);
     await restart();
-    const cleanBundles = await native('listBundles',[]);
+    const cleanBundles = await native('listBundles');
     for(const id of Object.keys(versions))assert.equal(cleanBundles.some(row=>row.name==='@klarkxy/dsh-'+id),false,id);
+    for(const id of Object.keys(versions))assert.equal((await declaredTools()).some(row=>row.name==='@klarkxy/dsh-'+id+'/tools'),false,id);
     for(const [file,contents] of storages)assert.equal(await readFile(resolve(home,'storages',file),'utf8'),contents,file);
     await screenshot('04-after-optional-uninstall');
     report.checks.push('all four optional plugins uninstall and remain absent after restart while existing storage records survive');
+    const reinstalled = await native('installBundle',{spec:zhihuName+'@'+versions.zhihu,options:{requestId:'e2e-reinstall-zhihu'}});
+    report.reinstallReceipt = reinstalled;
+    assert.equal(reinstalled.changed,true,JSON.stringify(reinstalled));assert.equal(reinstalled.application,'applied',JSON.stringify(reinstalled));assert.equal(reinstalled.error,undefined,JSON.stringify(reinstalled));
+    await recordPackageManager('reinstall-zhihu');
+    assert.ok(hasTool(await chatTools('重新安装后'),'zhihu_search'));
+    assert.ok((await declaredTools()).some(row=>row.id==='zhihu-tools'));
+    assert.equal(await readFile(homePatch,'utf8'),authorHomePatch);
+    for(const [file,contents] of storages)assert.equal(await readFile(resolve(home,'storages',file),'utf8'),contents,file);
+    assert.equal(await editor.innerText(),before);
+    const reRemoved = await native('removeBundle',{name:zhihuName});
+    report.reRemoveReceipt = reRemoved;
+    assert.equal(reRemoved.application,'applied',JSON.stringify(reRemoved));assert.equal(reRemoved.error,undefined,JSON.stringify(reRemoved));
+    assert.equal((await declaredTools()).some(row=>row.id==='zhihu-tools'),false);
+    report.checks.push('Zhihu reinstalls live after removal and restart, keeps author patch/manuscript/storage data, and removes cleanly again');
   }
   assert.equal(report.errors.length,0,report.errors.join('\n'));report.ok=true;
 } catch(error) {
   report.failure=String(error);process.exitCode=1
   if(page){await screenshot('failure').catch(()=>{});await writeFile(resolve(output,'failure-dom.txt'),await page.locator('body').innerText()).catch(()=>{})}
 } finally {
+  try { await stop() } catch(error) { report.ok=false;report.failure ??= String(error);process.exitCode=1 }
+  try { await preserveOperationLogs('final') } catch(error) { report.ok=false;report.failure ??= String(error);process.exitCode=1 }
   await writeFile(resolve(output,'report.json'),JSON.stringify(report,null,2))
   await writeFile(resolve(output,'host.log'),logs.join('').replace(/\?token=[A-Za-z0-9._~-]+/g,'?token=<redacted>'))
-  await stop();console.log(JSON.stringify({ok:report.ok,checks:report.checks,output,failure:report.failure}))
+  console.log(JSON.stringify({ok:report.ok,checks:report.checks,output,failure:report.failure}))
 }

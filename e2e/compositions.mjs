@@ -6,6 +6,7 @@ import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { compositionInstallNames } from '../scripts/plugin-manifest.mjs'
 import { DESKTOP_PACKAGE_NAMES, desktopComposition, configureProfile } from '../scripts/desktop-compositions.mjs'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings } from './helpers/plugin-page.mjs'
 
 const composition = process.env.DSH_EDITOR_COMPOSITION || 'desktop'
 const CANONICAL_ID = 'desktop'
@@ -139,6 +140,8 @@ async function readMaterialized(dest) {
     identity: withoutIdentity(compositionJson),
     catalog,
     bundles: manifest.dsh?.profile?.bundles ?? [],
+    dependencies: manifest.dependencies,
+    nativeDependencies: compositionJson.nativeDependencies,
     patch,
     features: compositionJson.features,
     packages: compositionJson.packages,
@@ -161,6 +164,7 @@ function assertAliasParity(aliases) {
     if (!sameJson(current.identity, files[0].identity)) throw new Error(`${aliases[index].id} materialized composition differs from ${aliases[0].id}`)
     if (!sameJson(current.catalog, files[0].catalog)) throw new Error(`${aliases[index].id} catalog/entries differ from ${aliases[0].id}`)
     if (!sameJson(current.bundles, files[0].bundles)) throw new Error(`${aliases[index].id} package bundles differ from ${aliases[0].id}`)
+    if (!sameJson(current.dependencies, files[0].dependencies) || !sameJson(current.nativeDependencies, files[0].nativeDependencies)) throw new Error(`${aliases[index].id} native dependencies differ from ${aliases[0].id}`)
     if (current.patch !== files[0].patch) throw new Error(`${aliases[index].id} profile patch differs from ${aliases[0].id}`)
     if (!sameJson(current.features, files[0].features)) throw new Error(`${aliases[index].id} frontend features differ from ${aliases[0].id}`)
     if (!sameJson(current.packages, files[0].packages)) throw new Error(`${aliases[index].id} packages differ from ${aliases[0].id}`)
@@ -211,6 +215,12 @@ try {
   note('materialized', id);
  }
  const shared=assertAliasParity(aliases);
+ for (const item of aliases) {
+  if (!sameJson(item.files.dependencies, item.files.nativeDependencies)) throw new Error(item.id+' native dependency baseline differs from its initial selection');
+  const publicNames=Object.keys(item.files.nativeDependencies).filter(name=>name.startsWith('@klarkxy/')).sort();
+  if (!sameJson(publicNames,['@klarkxy/dsh-web-search-manager'])) throw new Error(item.id+' default public plugin roster mismatch: '+publicNames.join(','));
+  if (!Object.values(item.files.nativeDependencies).every(spec=>typeof spec==='string'&&spec.startsWith('link:'))) throw new Error(item.id+' native dependency baseline is not linked to bundled artifacts');
+ }
  if(shared.features.includes('cards') || shared.features.includes('memory-panel'))throw new Error('on-demand builtin panels must not be forced on');
  for(const [name,id] of [['dsh-editor-cards','editor-cards'],['dsh-editor-memory-panel','editor-memory-panel']]) { if(!shared.packages.includes(name) || !shared.disabledEntries.includes(id))throw new Error('missing default-off builtin panel '+name) }
  evidence.aliases=aliases.map((item)=>({id:item.id,label:item.label}));
@@ -251,7 +261,7 @@ try {
  browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1440,height:900},locale:'zh-CN'});page.setDefaultTimeout(15000);
  const calls=[];const errors=[];page.on('pageerror',e=>errors.push(e.message));
  page.on('request',request=>{if(request.method()==='POST'){try{calls.push({url:request.url(),body:request.postDataJSON()})}catch{}}});
- await page.goto(started.url.href);await page.locator('.shell').waitFor({timeout:45000});await dismissNativeOnboarding(page);
+ await page.goto(started.url.href);await page.locator('main.shell').waitFor({timeout:45000});await dismissNativeOnboarding(page);
  const rpc=async(channel,method,payload)=>{const response=await page.request.post(new URL(channel+'/'+method,started.url).href,{data:{type:'client-request',rpcId:Math.random().toString(36),method,payload}});if(!response.ok())throw new Error(method+': HTTP '+response.status());const result=(await response.json()).result;if(!result?.ok)throw new Error(method+': '+JSON.stringify(result));return result.value};
  const capabilities=await rpc('/dsh-editor-shell','capabilities.get',{});
  const expectedFeatures=Object.fromEntries(Object.entries(shared.shellFeatures).map(([feature])=>[feature,true]));
@@ -261,27 +271,28 @@ try {
  }
  evidence.capabilities=capabilities;
  const installed=[];
- for(const name of await readdir(resolve(runtime,'node_modules'))){
+ const bundledModules=resolve(home,'profiles','dsh-editor','bundled-packages','node_modules');
+ for(const name of await readdir(bundledModules)){
    if(name.startsWith('@')){
-     for(const child of await readdir(resolve(runtime,'node_modules',name))){const full=name+'/'+child;if(DESKTOP_PACKAGE_NAMES.includes(full))installed.push(full)}
+     for(const child of await readdir(resolve(bundledModules,name))){const full=name+'/'+child;if(DESKTOP_PACKAGE_NAMES.includes(full))installed.push(full)}
    }else if(DESKTOP_PACKAGE_NAMES.includes(name))installed.push(name);
  }
  installed.sort();
  const expected=[...compositionInstallNames({packages:shared.packages,libraries:shared.libraries})].sort();
  if(JSON.stringify(installed)!==JSON.stringify(expected))throw new Error('installed package set mismatch '+installed.join(','));evidence.installed=installed;
- if(process.env.DSH_EDITOR_COPY_PACKAGES==='1'){
-   for(const name of installed)if((await realpath(resolve(runtime,'node_modules',name))).startsWith(resolve(root,'packages')))throw new Error('repository link in copied composition '+name);
-   evidence.delivery='copied package artifacts; no workspace package links';
+ for(const name of installed){
+   if((await realpath(resolve(bundledModules,name))).startsWith(resolve(root,'packages')+sep))throw new Error('repository link in native profile artifacts '+name);
+   const manifest=JSON.parse(await readFile(resolve(bundledModules,name,'package.json'),'utf8'));
+   if(manifest.name!==name)throw new Error('native profile package identity mismatch '+name);
  }
+ evidence.delivery='copied native profile artifacts; exact package roster and no workspace package links';
 
  if(await page.getByTestId('proofread-open').count())throw new Error('paused proofreading launcher is visible');
  if(await page.getByTestId('zhihu-open').count())throw new Error('Zhihu must not contribute a desktop launcher');
  const openSettings=async(tab)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('.settings-nav').getByRole('tab',{name:tab,exact:true}).click();await page.waitForTimeout(250)};
  const closeSettings=async()=>{await page.getByRole('button',{name:'关闭设置',exact:true}).click();await page.locator('.settings-dialog').waitFor({state:'hidden'})};
- const openPlugins=async(tab)=>{await page.getByRole('button',{name:'插件',exact:true}).click();const plugins=page.locator('section.plugins-page[aria-label="插件管理"]');await plugins.locator('nav.plugins-page-nav').getByRole('button',{name:tab,exact:true}).click();await page.waitForTimeout(250);return plugins};
- const closePlugins=async(plugins)=>{await plugins.getByRole('button',{name:/返回首页|返回写作/}).click();await plugins.waitFor({state:'detached'})};
- let plugins=await openPlugins('知乎');await plugins.getByTestId('zhihu-capabilities').waitFor();await plugins.getByText('Access Secret',{exact:false}).first().waitFor();await closePlugins(plugins);
- evidence.checks.push('proofreading paused; Zhihu configuration is inside the plugin page');
+ let plugins=await openPluginsPage(page);await assertDefaultPluginPage(page,plugins);await openWebSearchSettings(plugins);await closePluginsPage(page);
+ evidence.checks.push('desktop launchers absent; native plugin manager lists the default web-search bundle and opens its configuration');
  await page.getByRole('button',{name:'新建',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator('.tree').waitFor({timeout:30000});
  await page.locator('.tree-empty').waitFor({state:'visible',timeout:20000});
  const tree=page.locator('.tree');const treeBox=await tree.boundingBox();if(!treeBox)throw new Error('tree missing');
@@ -320,15 +331,15 @@ try {
 
  const panelColors=[];
  for(const theme of ['light','dark']){
-   if(theme==='dark')await page.locator('.chrome .theme-toggle').click();
+   if(theme==='dark')await page.locator('main.shell .chrome .theme-toggle').click();
    await openSettings('通用设置');panelColors.push(await page.locator('.settings-dialog').evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
-   plugins=await openPlugins('知乎');await page.screenshot({path:resolve(output,'zhihu-settings-'+theme+'.png')});await closePlugins(plugins);
+   plugins=await openPluginsPage(page);await openWebSearchSettings(plugins);await page.screenshot({path:resolve(output,'web-search-settings-'+theme+'.png')});await closePluginsPage(page);
  }
  if(panelColors[0]===panelColors[1])throw new Error('settings theme did not adapt');
- await page.locator('.chrome .theme-toggle').click();evidence.checks.push('light/dark settings and plugin-page Zhihu configuration');
+ await page.locator('main.shell .chrome .theme-toggle').click();evidence.checks.push('light/dark settings and native web-search configuration');
 
  const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();await page.locator('aside.chat').waitFor();evidence.checks.push('optional Chat mounts');
- await page.reload();await page.locator('.shell').waitFor();await dismissNativeOnboarding(page);if(await page.getByTestId('proofread-open').count()||await page.getByTestId('zhihu-open').count())throw new Error('removed desktop launcher returned after reload');
+ await page.reload();await page.locator('main.shell').waitFor();await dismissNativeOnboarding(page);if(await page.getByTestId('proofread-open').count()||await page.getByTestId('zhihu-open').count())throw new Error('removed desktop launcher returned after reload');
  if(errors.length)throw new Error('browser errors '+errors.join('|'));await page.screenshot({path:resolve(output,'final.png')});evidence.checks.push('reload keeps desktop launchers absent and has no browser errors');
 } catch(error){evidence.failures.push(String(error));await page?.screenshot({path:resolve(output,'failure.png')}).catch(()=>{});await writeFile(resolve(output,'failure.html'),await page?.content().catch(()=> '')||'');}
 finally{await browser?.close();await stop(dshChild)}

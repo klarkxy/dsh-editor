@@ -36,7 +36,7 @@ describe('optional plugin surfaces', () => {
       return createElement('article', null, 'Applied')
     })
     renderToStaticMarkup(createElement(PluginChatEvents, {
-      ctx: host({ [CHAT_EVENTS_SLOT]: [{ options: { id: 'fusion' } }] }),
+      ctx: host({ [CHAT_EVENTS_SLOT]: [{ options: { id: 'author-events' } }] }),
       renderSlot: render, sessionId: 'session-2', locale: 'zh', onApplied,
     }))
     expect(onApplied).toHaveBeenCalledExactlyOnceWith('正文/001.md')

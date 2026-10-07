@@ -1,20 +1,31 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { existsSync } from 'node:fs'
-import { mkdir, rm, stat, writeFile, readFile } from 'node:fs/promises'
+import { createReadStream, existsSync } from 'node:fs'
+import { copyFile, mkdir, mkdtemp, realpath, rm, stat, writeFile, readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { tmpdir } from 'node:os'
 import { createServer } from 'node:net'
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { localArtifactName } from '../scripts/release-artifacts.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings } from './helpers/plugin-page.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack', 'portable-e2e')
 const desktopVersion = JSON.parse(await readFile(resolve(root, 'apps/desktop/package.json'), 'utf8')).version
 const portable = resolve(root, '.pack', 'desktop', localArtifactName('win32-portable', desktopVersion))
-const home = resolve(root, '.dev', 'portable-home')
-const portableStat = await stat(portable)
-await rm(home, { recursive: true, force: true })
+// A sandbox-writable checkout can label all descendants Low integrity. Running
+// its EXE in place would test that label instead of the distributed application.
+// Fresh copies inherit the ordinary test directory's label; keep workspace ACLs.
+const stagePrefix = 'dsh-editor-portable-e2e-'
+let tempRoot, stage, executable, home, child, sourceHash, portableStat
+let launched = false
+async function fileHash(file) {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(file)) hash.update(chunk)
+  return hash.digest('hex')
+}
 await rm(output, { recursive: true, force: true })
 await mkdir(output, { recursive: true })
 
@@ -45,13 +56,17 @@ async function connectToPortable(port, child) {
 }
 
 async function stopOwnedTree(child) {
-  if (child.exitCode !== null) return
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return
   const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
-  await Promise.race([once(killer, 'exit'), new Promise((resolvePromise) => setTimeout(resolvePromise, 10_000))])
+  let timer
+  try {
+    await Promise.race([once(killer, 'exit'), new Promise((resolvePromise) => { timer = setTimeout(resolvePromise, 10_000) })])
+  } finally { clearTimeout(timer) }
+  await waitForExit(child, 10_000)
 }
 
 async function waitForExit(child, timeoutMs) {
-  if (child.exitCode !== null) return
+  if (child.exitCode !== null || child.signalCode !== null) return
   await new Promise((resolvePromise, reject) => {
     const done = () => {
       clearTimeout(timer)
@@ -63,8 +78,18 @@ async function waitForExit(child, timeoutMs) {
       reject(new Error('portable wrapper did not exit after its window closed'))
     }, timeoutMs)
     child.once('exit', done)
-    if (child.exitCode !== null) done()
+    if (child.exitCode !== null || child.signalCode !== null) done()
   })
+}
+
+async function removeOwnedStage() {
+  if (!stage) return
+  const actual = await realpath(stage)
+  const normalize = path => process.platform === 'win32' ? path.toLowerCase() : path
+  if (normalize(actual) !== normalize(stage) || normalize(dirname(actual)) !== normalize(tempRoot) || !basename(actual).startsWith(stagePrefix)) {
+    throw new Error(`refusing to remove portable test stage outside its owned TEMP directory: ${actual}`)
+  }
+  await rm(actual, { recursive: true, force: true, maxRetries: 3 })
 }
 
 async function assertNewProjectHasNoManuscriptFolder(page, workspace) {
@@ -131,24 +156,35 @@ async function openAndCloseProofreadPanel(page) {
   await panel.waitFor({ state: 'hidden', timeout: 10_000 })
 }
 
-const debuggingPort = await freePort()
-const portableEnv = {
-  ...process.env,
-  DSH_HOME: home,
-  DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
-  DSH_TELEMETRY_DISABLED: '1',
-  DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key',
-}
-delete portableEnv.DSH_EDITOR_CUSTOM_API_KEY
-const child = spawn(portable, [`--remote-debugging-port=${debuggingPort}`], {
-  env: portableEnv,
-  stdio: 'ignore',
-  windowsHide: false,
-})
-
+let debuggingPort
 let browser
-let report
+let report = { ok: false }
 try {
+  portableStat = await stat(portable)
+  tempRoot = await realpath(tmpdir())
+  stage = await mkdtemp(resolve(tempRoot, stagePrefix))
+  executable = resolve(stage, localArtifactName('win32-portable', desktopVersion))
+  home = resolve(stage, 'home')
+  await copyFile(portable, executable)
+  sourceHash = await fileHash(portable)
+  if (await fileHash(executable) !== sourceHash) throw new Error('portable test copy differs from the final artifact')
+  debuggingPort = await freePort()
+  const portableEnv = {
+    ...process.env,
+    DSH_HOME: home,
+    DSH_DESKTOP_USER_DATA_DIR: resolve(home, 'electron-user-data'),
+    DSH_EDITOR_PROJECTS_ROOT: resolve(home, 'projects'),
+    DSH_TELEMETRY_DISABLED: '1',
+    DEEPSEEK_API_KEY: 'dsh-editor-e2e-placeholder-key',
+  }
+  delete portableEnv.DSH_EDITOR_CUSTOM_API_KEY
+  child = spawn(executable, [`--remote-debugging-port=${debuggingPort}`], {
+    env: portableEnv,
+    stdio: 'ignore',
+    windowsHide: false,
+  })
+  await new Promise((resolvePromise, reject) => { child.once('spawn', resolvePromise); child.once('error', reject) })
+  launched = true
   browser = await connectToPortable(debuggingPort, child)
   const context = browser.contexts()[0]
   if (!context) throw new Error('portable Electron process exposed no browser context')
@@ -166,7 +202,7 @@ try {
   }
   if (!window) throw new Error('portable Electron window was not exposed through Chromium')
   try {
-    await window.waitForSelector('.shell', { timeout: 180_000 })
+    await window.waitForSelector('main.shell', { timeout: 180_000 })
   } catch (error) {
     const diagnostic = await window.evaluate(() => ({ title: document.title, body: document.body.textContent, url: location.href }))
     await window.screenshot({ path: resolve(output, 'failure.png') })
@@ -184,13 +220,13 @@ try {
   nativeOnboarding.setup = await window.getByRole('button', { name: '稍后配置', exact: true }).isVisible({ timeout: 2_000 }).catch(() => false)
   if (nativeOnboarding.setup) await window.getByRole('button', { name: '稍后配置', exact: true }).click()
   const state = await window.evaluate(() => ({
-    onboarding: (document.body.textContent?.includes('打开作品') ?? false) && (document.body.textContent?.includes('新建') ?? false),
+    onboarding: (document.querySelector('main.shell')?.textContent?.includes('打开作品') ?? false) && (document.querySelector('main.shell')?.textContent?.includes('新建') ?? false),
     title: document.title,
-    shell: Boolean(document.querySelector('.shell')),
+    shell: Boolean(document.querySelector('main.shell')),
     settings: Boolean(document.querySelector('[role="dialog"]')),
     editorName: Boolean(document.querySelector('.brand-lockup')),
-    officialHome: document.body.textContent?.includes('DeepSeek Harness') ?? false,
-    technicalChrome: ['DSH_HOME', 'permission preset', '权限模式', '会话列表'].some((label) => document.body.textContent?.includes(label) ?? false),
+    officialHome: document.querySelector('main.shell')?.textContent?.includes('DeepSeek Harness') ?? false,
+    technicalChrome: ['DSH_HOME', 'permission preset', '权限模式', '会话列表'].some((label) => document.querySelector('main.shell')?.textContent?.includes(label) ?? false),
     homeSidebar: Boolean(document.querySelector('.no-session > .sidebar')),
     homeStage: Boolean(document.querySelector('.no-session > .empty-paper')),
     permanentChat: Boolean(document.querySelector('.no-session > .chat')),
@@ -207,12 +243,10 @@ try {
   if (smoke) {
     state.operations = ['smoke: packed wrapper started and home identity passed']
   } else {
-  await window.getByRole('button', { name: '插件', exact: true }).click()
-  const pluginsPage = window.locator('section.plugins-page[aria-label="插件管理"]')
-  await pluginsPage.locator('nav.plugins-page-nav').getByRole('button', { name: '知乎资料', exact: true }).click()
-  await pluginsPage.getByTestId('zhihu-settings-embed').waitFor()
-  await pluginsPage.getByRole('button', { name: '返回首页', exact: true }).click()
-  await pluginsPage.waitFor({ state: 'detached' })
+  const pluginsPage = await openPluginsPage(window)
+  await assertDefaultPluginPage(window, pluginsPage)
+  await openWebSearchSettings(pluginsPage)
+  await closePluginsPage(window)
   await window.getByRole('button',{name:'新建',exact:true}).first().click()
   const project = window.getByRole('dialog',{name:'新建作品'})
   await project.getByLabel('作品名称').fill('便携组合验证')
@@ -233,7 +267,7 @@ try {
   await window.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor()
   if(!(await readFile(resolve(portableWorkspace,'正文','001.md'),'utf8')).includes('最终便携产物保存验证'))throw new Error('portable save missing on disk')
   await openAndCloseProofreadPanel(window)
-  state.operations=['proofreading and Zhihu desktop launchers absent','Zhihu configuration opens inside settings','create ordinary 正文 from tree, then document, and save to disk','open and close 文稿校对 from command palette without card UI']
+  state.operations=['proofreading and Zhihu desktop launchers absent','native plugin manager lists the default web-search bundle and opens its configuration','create ordinary 正文 from tree, then document, and save to disk','open and close 文稿校对 from command palette without card UI']
   }
   await window.screenshot({ path: resolve(output, 'window.png') })
   const origin = url.origin
@@ -250,16 +284,40 @@ try {
   report = {
     ok: true,
     source: 'current-portable-wrapper',
-    portable: { path: portable, bytes: portableStat.size },
+    portable: { path: portable, bytes: portableStat.size, sha256: sourceHash, testedPath: executable },
     origin,
     portReleased,
     debuggerReleased,
     exitCode: child.exitCode,
     state,
   }
+} catch (error) {
+  report = { ok: false, failure: error instanceof Error ? error.stack : String(error) }
+  process.exitCode = 1
 } finally {
   if (browser) await browser.close().catch(() => undefined)
-  await stopOwnedTree(child)
+  let shutdownFailed = false
+  try { await stopOwnedTree(child) } catch (error) {
+    shutdownFailed = true
+    report.ok = false
+    report.shutdownFailure = String(error)
+    process.exitCode = 1
+  }
+  const stageState = { path: stage, retained: Boolean(stage), reason: shutdownFailed ? 'owned process shutdown failed' : launched && !report.ok ? 'portable launch or workflow failure; retained for diagnostics' : undefined }
+  if (stage && !stageState.reason) {
+    try {
+      await removeOwnedStage()
+      stageState.retained = false
+    } catch (error) {
+      report.ok = false
+      report.cleanupFailure = String(error)
+      stageState.reason = 'owned TEMP stage cleanup failed'
+      process.exitCode = 1
+    }
+  }
+  report.portable = { path: portable, bytes: portableStat?.size, sha256: sourceHash, testedPath: executable }
+  report.stage = stageState
+  await writeFile(resolve(output, 'launch.json'), `${JSON.stringify({ ...report.portable, home, debuggingPort, pid: child?.pid, exitCode: child?.exitCode, signalCode: child?.signalCode, stage: stageState }, null, 2)}\n`)
 }
 
 await writeFile(resolve(output, 'report.json'), `${JSON.stringify(report, null, 2)}\n`)

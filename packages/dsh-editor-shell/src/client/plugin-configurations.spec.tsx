@@ -154,8 +154,8 @@ it('names the adopted voice configuration in the active language', () => {
 
 
 it('keeps every keyed bundle on its native configuration route without a special exclusion', () => {
- const host=fixture({'plugins.bundle.config':[{options:{key:'@klarkxy/dsh-model-center'}},{options:{key:'@scope/other'}}]})
- expect(projectPluginConfigurations(host.slots).map(entry=>entry.entryKey)).toEqual(['@klarkxy/dsh-model-center', '@scope/other'])
+ const host=fixture({'plugins.bundle.config':[{options:{key:'@scope/configurable'}},{options:{key:'@scope/other'}}]})
+ expect(projectPluginConfigurations(host.slots).map(entry=>entry.entryKey)).toEqual(['@scope/configurable', '@scope/other'])
 })
 
 function navigation(rows: Record<string, Entry[]>, zhihu?: ReactNode) {
@@ -223,12 +223,12 @@ describe('plugin configuration navigation', () => {
     }
     expect(projectPluginConfigurations(fixture(rows).slots)).toEqual([])
     expect(legacyZhihuVisible(fixture(rows).slots)).toBe(true)
-    const modelCenter = fixture({
+    const configurablePlugin = fixture({
       [ZHIHU_SETTINGS_SLOT]: [{ options: { id: 'zhihu' }, registrant: 'dsh-zhihu-client' }],
-      'plugins.bundle.config': [{ options: { key: '@klarkxy/dsh-model-center' }, registrant: 'dsh-zhihu-client' }],
+      'plugins.bundle.config': [{ options: { key: '@scope/configurable' }, registrant: 'dsh-zhihu-client' }],
     })
-    expect(projectPluginConfigurations(modelCenter.slots)).toHaveLength(1)
-    expect(legacyZhihuVisible(modelCenter.slots)).toBe(false)
+    expect(projectPluginConfigurations(configurablePlugin.slots)).toHaveLength(1)
+    expect(legacyZhihuVisible(configurablePlugin.slots)).toBe(false)
   })
 
   it('keeps a real legacy Zhihu contribution the official catalogue does not replace', () => {
