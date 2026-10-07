@@ -1,7 +1,5 @@
 import { OfficialInputActivity, type OfficialInputActions } from './official-surfaces.tsx'
 import {
-  Fragment,
-  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -15,21 +13,17 @@ import {
 import {
   chatRows,
   internalIndexTurnActive,
-  loadOlder,
   partialView,
   send,
   sendProjectContext,
   stop,
   visibleRunningCalls,
-  WRITING_PROPOSE_TOOL_NAME,
-  type PendingInteraction,
 } from '../adapter.ts'
 import type {
   SessionFace,
   SessionId,
   WorkspaceId,
 } from '../dsh-compat.ts'
-import { emptyTranscript, type ChatTranscript } from '../dsh-compat.ts'
 import {
   WORKBENCH_RPC_CHANNEL,
   type ProjectContextReceiptBundle,
@@ -44,25 +38,12 @@ import {
   shouldShowInitGuide,
   startExploreInit,
 } from '../init-guide.ts'
-import {
-  canConfirmConversationPreset,
-  cancelNewConversationPresetPicker,
-  confirmNewConversationPreset,
-  conversationPresetLabel,
-  firstAvailableConversationPreset,
-  loadNewConversationPresets,
-  sessionAgentPreset,
-  shouldRunLegacyNovelPipeline,
-  startNewConversationPresetFlow,
-  type ConversationPresetChoice,
-} from '../conversation-presets.ts'
+import { conversationPresetLabel, sessionAgentPreset, shouldRunLegacyNovelPipeline } from '../conversation-presets.ts'
 import { shouldShowMigrationBanner } from '../legacy-migration.ts'
-import { ConversationRenameQueue, automaticTitleManaged, archivedConversationRows, canArchiveOrDeleteConversation, conversationRows, nextAutomaticConversationTitle, nextVisibleConversationId, shouldConfirmConversationSwitch } from '../conversation-lifecycle.ts'
-import { isActiveSessionArchiveError, orderedConversationIds, type ConversationFilter } from '../native-conversation-state.ts'
+import type { ConversationFilter } from '../native-conversation-state.ts'
 import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
 import { isObservableSource, useObservable } from './components.tsx'
-import { Markdown } from './markdown.tsx'
 import { ConfirmDialog, ConversationPresetPicker, TextPromptDialog } from './dialogs.tsx'
 import { Select } from './select.tsx'
 import {
@@ -70,17 +51,15 @@ import {
   Box,
   Button,
   Callout,
-  Card,
   DropdownMenu,
   Flex,
   IconButton,
-  ScrollArea,
   Text,
   TextArea,
 } from '@radix-ui/themes'
-import { ActivityDots, SuccessMark } from './ui/index.ts'
-import { applyChatModelDefault, takeCreatedChatModelError } from './ui-workspace.ts'
-import { t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
+import { ActivityDots } from './ui/index.ts'
+import { takeCreatedChatModelError } from './ui-workspace.ts'
+import { t, useLocale } from '../i18n/index.ts'
 import {
   canSubmitComposer,
   safeRpcCall,
@@ -100,8 +79,9 @@ import {
   type ChatLifecycle,
 } from './chat-conversation.ts'
 import { chatEmptyPrompt } from './chat-empty.ts'
+import { useChatConversationControls } from './chat-conversation-controls.ts'
+import { ChatHistory, type ChatOutgoing } from './chat-history.tsx'
 import { ModelPicker } from './chat-model-picker.tsx'
-import { PluginChatEvents } from './plugin-surfaces.tsx'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import {
   ProposalCard,
@@ -121,17 +101,11 @@ import {
   ChatStepHead,
   ChatStepItem,
   clusterChatRows,
-  processDetailRows,
   InitGuideCard,
   LegacyMigrationBanner,
   PendingCard,
   ProjectContextReceiptView,
 } from './chat-cards.tsx'
-
-
-
-const conversationRenameQueue = new ConversationRenameQueue()
-
 export async function settleConversationStop(input: {
   cancel(): Promise<unknown>
   releaseOutgoing(): void
@@ -210,27 +184,8 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     nativeInput.current?.setDraft(next)
   }, [])
   const [note, setNote] = useState('')
-  const [outgoing, setOutgoing] = useState<{ text: string; state: 'sending' | 'accepted' | 'failed'; afterRows: number; projectContextReceipt?: ProjectContextReceiptBundle } | null>(null)
-  const [renamingConversation, setRenamingConversation] = useState(false)
-  const [conversationMenuOpen, setConversationMenuOpen] = useState(false)
-  const conversationMenuTrigger = useRef<HTMLButtonElement | null>(null)
-  const conversationMenuYields = useRef(false)
-  const [conversationBusy, setConversationBusy] = useState(false)
-  const [conversationFilter, setConversationFilter] = useState<ConversationFilter>('active')
-  const [archiveStopConfirm, setArchiveStopConfirm] = useState<{ id: string; nextId?: string } | null>(null)
-  const [titleOverrides, setTitleOverrides] = useState<Record<string, { title: string; status: 'pending' | 'confirmed' | 'failed' }>>({})
-  const [draftConfirm, setDraftConfirm] = useState<{ resolve(value: boolean): void } | null>(null)
-  const [presetPicker, setPresetPicker] = useState<{
-    kind: 'closed' | 'loading' | 'list-error' | 'ready'
-    presets: ConversationPresetChoice[]
-    selectedId?: string
-    pendingSessionId?: SessionId
-    error?: string
-    busy?: boolean
-  }>({ kind: 'closed', presets: [] })
-  const newConversationButton = useRef<HTMLButtonElement | null>(null)
+  const [outgoing, setOutgoing] = useState<ChatOutgoing | null>(null)
   const [modelRevision, setModelRevision] = useState(0)
-  const titleAttempted = useRef(new Set<string>())
   /* 迁移横幅的关闭按会话记在内存里，不落盘。 */
   const [dismissedMigrations, setDismissedMigrations] = useState<ReadonlySet<string>>(new Set())
   const historyRef = useRef<HTMLDivElement | null>(null)
@@ -422,267 +377,25 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
     () => chatEmptyPrompt(currentMode?.id),
     [currentMode?.id, locale],
   )
-  const workspaceSessionIds = workspace?.sessionIds.length ? [...workspace.sessionIds] : [session.sessionId]
-  const archivedIds = workspaceList.archivedSessionIds ?? []
-  const hostPinnedIds = workspaceList.pinnedSessionIds ?? []
-  const conversationTitles = {
-    ...Object.fromEntries(Object.entries(sessionList.byId ?? {}).map(([id, value]) => [id, value.title])),
-    ...Object.fromEntries(Object.entries(titleOverrides).map(([id, value]) => [id, value.title])),
-  }
-  useEffect(() => {
-    for (const [id, summary] of Object.entries(sessionList.byId ?? {})) conversationRenameQueue.observedTitle(id, summary.title)
-    setTitleOverrides((current) => {
-      const next = { ...current }
-      for (const [id, pending] of Object.entries(current)) {
-        const native = sessionList.byId?.[id]?.title
-        const observed = conversationRenameQueue.observedTitle(id, native)
-        if (pending.status === 'confirmed' && observed === native) delete next[id]
-      }
-      return Object.keys(next).length === Object.keys(current).length ? current : next
-    })
-  }, [sessionList.byId])
-  const conversations = conversationRows({
-    workspaceSessionIds,
-    archivedIds,
-    reusableBlankIds: Object.values(sessionList.byId ?? {}).filter((item) => item.blank).map((item) => item.id),
-    currentId: session.sessionId,
-    titles: conversationTitles,
-  })
-  const archivedConversations = archivedConversationRows({
-    workspaceSessionIds,
-    archivedIds,
-    currentId: session.sessionId,
-    titles: conversationTitles,
-  })
-  const visibleConversationIds = orderedConversationIds({
-    ids: [...conversations, ...archivedConversations].map((item) => item.id),
-    archivedIds,
-    pinnedIds: hostPinnedIds,
-    filter: conversationFilter,
-  })
-  const conversationById = new Map([...conversations, ...archivedConversations].map((item) => [item.id, item]))
-  const filteredConversations = visibleConversationIds.map((id) => conversationById.get(id)!).filter(Boolean)
-  const currentIsArchived = archivedIds.includes(session.sessionId)
-  const currentIsPinned = hostPinnedIds.includes(session.sessionId)
-  const canMutateConversation = conversations.some((item) => item.id !== session.sessionId) || canArchiveOrDeleteConversation(conversations.length)
-  const queueConversationRename = (title: string, failureNote: string, automatic = false) => {
-    const id = session.sessionId
-    const pending = { title, status: 'pending' as const }
-    setTitleOverrides((current) => ({ ...current, [id]: pending }))
-    void conversationRenameQueue.enqueue(session.sessionId, async () => {
-      try {
-        if (automatic && !conversationRenameQueue.canAutomaticallyRename(id, ctx.sessions.list.getSnapshot().byId[id]?.title, automaticTitleManaged(ctx))) {
-          setTitleOverrides((current) => { const next = { ...current }; if (next[id] === pending) delete next[id]; return next })
-          return
-        }
-        const result = await session.rename(title)
-        if (!result.ok) throw new Error(failureNote)
-        conversationRenameQueue.acknowledgeTitle(id, result.value.title, ctx.sessions.list.getSnapshot().byId[id]?.title)
-        setTitleOverrides((current) => {
-          if (current[id] !== pending) return current
-          const next = { ...current }
-          const native = ctx.sessions.list.getSnapshot().byId[id]?.title
-          if (conversationRenameQueue.observedTitle(id, native) === native) delete next[id]
-          else next[id] = { ...pending, title: result.value.title, status: 'confirmed' }
-          return next
-        })
-      } catch {
-        setNote(failureNote)
-        setTitleOverrides((current) => current[id] === pending ? { ...current, [id]: { ...pending, status: 'failed' } } : current)
-      }
-    })
-  }
-  useEffect(() => {
-    if (automaticTitleManaged(ctx)) return
-    const summary = sessionList.byId?.[session.sessionId]
-    const updatedAt = (summary as unknown as { updatedAt?: unknown } | undefined)?.updatedAt
-    const title = nextAutomaticConversationTitle({
-      durableTitle: titleOverrides[session.sessionId]?.title ?? summary?.title?.trim(),
-      assistantReplies: rows.filter((row) => row.role === 'assistant').map((row) => row.text),
-      attempted: titleAttempted.current.has(session.sessionId),
-      date: typeof updatedAt === 'number' ? updatedAt : Date.now(),
-    })
-    if (!title) return
-    titleAttempted.current.add(session.sessionId)
-    queueConversationRename(title, t('chat.renameAutoFailed'), true)
-  }, [rows, session.sessionId, sessionList.byId])
-  useEffect(() => { onDraftDirtyChange(Boolean(draft.trim())) }, [draft, onDraftDirtyChange])
-  useEffect(() => () => draftConfirm?.resolve(false), [draftConfirm])
-  const canDiscardDraft = async (nextId: string): Promise<boolean> => {
-    if (!shouldConfirmConversationSwitch(draft, nextId, session.sessionId)) return true
-    return await new Promise<boolean>((resolve) => setDraftConfirm({ resolve }))
-  }
-  const resolveDraftConfirm = (value: boolean) => {
-    draftConfirm?.resolve(value)
-    setDraftConfirm(null)
-  }
   const openConversation = (nextId: SessionId) => {
     setDraft(''); setNote(''); setOutgoing(null); onDraftDirtyChange(false)
     void ctx.uiWorkspace.openSession(nextId).catch(() => setNote(t('chat.sendFailedRetry')))
     setModelRevision((value) => value + 1)
   }
-  const switchConversation = async (nextId: string) => {
-    if (archivedIds.includes(nextId)) {
-      await restoreConversation(nextId)
-      return
-    }
-    if (!(await canDiscardDraft(nextId))) return
-    openConversation(nextId as SessionId)
-  }
-  const renameConversation = (title: string) => {
-    setRenamingConversation(false)
-    titleAttempted.current.add(session.sessionId)
-    setNote('')
-    queueConversationRename(title, t('chat.renameFailed'))
-  }
-
-  const applyDefaultChatModel = (sessionId: SessionId) => applyChatModelDefault(ctx, sessionId)
-  const closePresetPicker = () => {
-    setPresetPicker({ kind: 'closed', presets: [] })
-  }
-  const createConversation = async () => {
-    if (!workspaceId || conversationBusy || presetPicker.kind !== 'closed') return
-    try {
-      const started = await startNewConversationPresetFlow({
-        canDiscardDraft: () => canDiscardDraft('__new-conversation__'),
-        list: () => {
-          setConversationBusy(true)
-          setNote('')
-          return ctx.remote.agentPresets.list()
-        },
-        projection: { developerMode },
-      })
-      if (started.kind === 'blocked') return
-      if (started.kind === 'list-error') {
-        setPresetPicker({ kind: 'list-error', presets: [], error: started.error })
-        return
-      }
-      setPresetPicker({
-        kind: 'ready',
-        presets: started.presets,
-        selectedId: firstAvailableConversationPreset(started.presets),
-      })
-    } catch {
-      setPresetPicker({ kind: 'list-error', presets: [], error: t('chat.presetListFailed') })
-    } finally {
-      setConversationBusy(false)
-    }
-  }
-  const retryPresetList = async () => {
-    if (presetPicker.busy) return
-    const pendingSessionId = presetPicker.pendingSessionId
-    setPresetPicker((current) => ({ ...current, kind: 'loading', error: undefined }))
-    const loaded = await loadNewConversationPresets(() => ctx.remote.agentPresets.list(), { developerMode })
-    if (!loaded.ok) {
-      setPresetPicker({ kind: 'list-error', presets: [], pendingSessionId, error: loaded.error })
-      return
-    }
-    setPresetPicker({
-      kind: 'ready',
-      presets: loaded.presets,
-      selectedId: firstAvailableConversationPreset(loaded.presets),
-      pendingSessionId,
-    })
-  }
-  const confirmPresetPicker = async () => {
-    if (!workspaceId || presetPicker.kind !== 'ready' || presetPicker.busy) return
-    if (!canConfirmConversationPreset(presetPicker.presets, presetPicker.selectedId)) return
-    const presetId = presetPicker.selectedId
-    if (!presetId) return
-    const pendingSessionId = presetPicker.pendingSessionId
-    setPresetPicker((current) => ({ ...current, busy: true, error: undefined }))
-    setConversationBusy(true)
-    try {
-      const result = await confirmNewConversationPreset({
-        create: ({ workspaceId }) => ctx.sessions.create({ workspaceId }),
-        select: (sessionId, id) => ctx.remote.agentPresets.select(sessionId, id),
-        applyDefaultModel: applyDefaultChatModel,
-        open: (id) => {
-          openConversation(id)
-          if (id === session.sessionId) {
-            const error = takeCreatedChatModelError(id)
-            if (error) setNote(error)
-          }
-        },
-      }, { workspaceId, presetId, pendingSessionId, allowCustomPreset: developerMode, allowedPresetIds: presetPicker.presets.map((preset) => preset.id) })
-      if (!result.ok) {
-        setPresetPicker((current) => ({
-          ...current,
-          kind: current.kind === 'closed' ? 'ready' : current.kind,
-          pendingSessionId: result.sessionId ?? pendingSessionId,
-          error: result.error,
-          busy: false,
-        }))
-        return
-      }
-      closePresetPicker()
-    } finally {
-      setConversationBusy(false)
-    }
-  }
-  const cancelPresetPicker = () => {
-    if (presetPicker.busy) return
-    const pendingSessionId = presetPicker.pendingSessionId
-    closePresetPicker()
-    void cancelNewConversationPresetPicker({
-      pendingSessionId,
-      archive: (id) => ctx.workspaces.archiveSession(id),
-    })
-  }
-  const archiveConversation = async (id: string, stopActivity = false, selectedNextId?: string) => {
-    if (!workspaceId || conversationBusy || !canMutateConversation) return
-    setConversationMenuOpen(false)
-    const nextId = selectedNextId ?? (id === session.sessionId
-      ? nextVisibleConversationId(conversations.map((item) => item.id), id)
-      : undefined)
-    if (id === session.sessionId) {
-      if (!nextId || (!selectedNextId && !(await canDiscardDraft(nextId)))) return
-    }
-    setConversationBusy(true)
-    setNote('')
-    try {
-      await ctx.workspaces.archiveSession(id as SessionId, stopActivity ? { stopActivity: true } : undefined)
-      setArchiveStopConfirm(null)
-      if (id === session.sessionId && nextId) openConversation(nextId as SessionId)
-    } catch (error) {
-      if (!stopActivity && isActiveSessionArchiveError(error)) {
-        setArchiveStopConfirm({ id, nextId })
-      } else {
-        setNote(t('chat.archiveFailed'))
-      }
-    } finally {
-      setConversationBusy(false)
-    }
-  }
-  const restoreConversation = async (id: string) => {
-    if (!workspaceId || conversationBusy) return
-    setConversationMenuOpen(false)
-    if (!(await canDiscardDraft(id))) return
-    setConversationBusy(true)
-    setNote('')
-    try {
-      await ctx.workspaces.unarchiveSession(id as SessionId)
-      openConversation(id as SessionId)
-    } catch {
-      setNote(t('chat.restoreFailed'))
-    } finally {
-      setConversationBusy(false)
-    }
-  }
-  const toggleConversationPin = async () => {
-    if (conversationBusy || currentIsArchived) return
-    setConversationMenuOpen(false)
-    setConversationBusy(true)
-    setNote('')
-    try {
-      if (currentIsPinned) await ctx.workspaces.unpinSession(session.sessionId)
-      else await ctx.workspaces.pinSession(session.sessionId)
-    } catch {
-      setNote(t(currentIsPinned ? 'chat.unpinFailed' : 'chat.pinFailed'))
-    } finally {
-      setConversationBusy(false)
-    }
-  }
+  const {
+    renamingConversation, setRenamingConversation, conversationMenuOpen, setConversationMenuOpen,
+    conversationMenuTrigger, conversationMenuYields, conversationBusy, conversationFilter, setConversationFilter,
+    archiveStopConfirm, setArchiveStopConfirm, titleOverrides, draftConfirm, presetPicker, setPresetPicker,
+    newConversationButton, conversations, archivedConversations, hostPinnedIds, archivedIds,
+    filteredConversations, currentIsArchived, currentIsPinned, canMutateConversation,
+    queueConversationRename, resolveDraftConfirm, switchConversation, renameConversation,
+    createConversation, retryPresetList, confirmPresetPicker, cancelPresetPicker,
+    archiveConversation, restoreConversation, toggleConversationPin, currentConversationTitle, renameInitialValue
+  } = useChatConversationControls({
+    ctx, session, workspaceId, workspace, sessionList, workspaceList, developerMode,
+    rows, draft, setNote, openConversation,
+  })
+  useEffect(() => { onDraftDirtyChange(Boolean(draft.trim())) }, [draft, onDraftDirtyChange])
   const outgoingIsCanonical = Boolean(outgoing && rows.slice(outgoing.afterRows)
     .some((row) => row.role === 'user' && row.text.trim() === outgoing.text))
   const composerCanSubmit = canSubmitComposer({
@@ -694,11 +407,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
   useEffect(() => {
     if (outgoingIsCanonical) setOutgoing(null)
   }, [outgoingIsCanonical])
-  const currentConversationTitle = conversations.find((item) => item.id === session.sessionId)?.title
-    ?? archivedConversations.find((item) => item.id === session.sessionId)?.title
-    ?? t('chat.newConversation')
-  const renameInitialValue = titleOverrides[session.sessionId]?.title
-    ?? (currentConversationTitle === t('chat.newConversation') ? '' : currentConversationTitle)
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!composerCanSubmit || voiceActive || !nativeInputReady) return
@@ -752,23 +460,6 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       }
     })
   }
-  const liveOpen = snapshot.running
-  const liveSteps = <Fragment>
-    {visibleCalls.map((call) => <ChatStepItem
-      key={`running:${call.callId}`}
-      className="tool"
-      busy
-      label={call.name === 'glob' || call.name === 'grep' ? t('chat.searchingNotes') : call.name === 'read' ? t('chat.readingNotes') : call.name === 'novel_propose' || call.name === WRITING_PROPOSE_TOOL_NAME ? t('chat.preparingProposal') : t('chat.processing')} />)}
-    {partial.thinking ? <ChatStepItem
-      key="partial-thinking"
-      className="thinking"
-      expandable
-      live
-      busy
-      label={t('chat.think')}>
-      {partial.thinking}
-    </ChatStepItem> : null}
-  </Fragment>
   return (
     <aside
       className={overlay ? 'chat chat-overlay' : 'chat'}
@@ -931,152 +622,18 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       {showMigrationBanner ? <LegacyMigrationBanner
         onMigrate={() => { void createConversation() }}
         onDismiss={() => setDismissedMigrations((current) => new Set(current).add(session.sessionId))} /> : null}
-      <Box className="chat-history" data-running={snapshot.running ? 'true' : 'false'} minWidth="0" minHeight="0" height="100%">
-        <ScrollArea
-          ref={historyRef}
-          type="hover"
-          scrollbars="vertical"
-          size="1"
-          style={{ height: '100%' }}
-          onScroll={(event: { currentTarget: HTMLDivElement }) => {
-            const el = event.currentTarget
-            bottomPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
-          }}>
-          <Flex direction="column" gap="3" p="3" minWidth="0" width="100%">
-            {showInitGuide ? <InitGuideCard
-              state={initState as 'explore' | 'interview'}
-              busy={initBusy}
-              running={initState === 'explore' ? internalIndexActive : snapshot.running}
-              done={initCompleted}
-              note={initNote}
-              onStart={startInitGuide}
-              onDismiss={dismissInitGuide} /> : null}
-            {snapshot.hasMore ? <Button
-              type="button"
-              variant="soft"
-              color="gray"
-              size="1"
-              onClick={() => void loadOlder(session)}
-              disabled={snapshot.loadingOlder}>
-              {snapshot.loadingOlder ? <Fragment>
-                <ActivityDots />
-                {t('chat.loadingMore')}
-              </Fragment> : t('chat.loadOlder')}
-            </Button> : null}
-            {historyBlocks.map((block, index) => {
-              if (block.kind === 'item') return (
-                <ChatRowView
-                  key={block.row.id}
-                  row={block.row}
-                  ctx={ctx}
-                  sessionId={session.sessionId}
-                  locale={locale}
-                  cardTick={messageCardTick}
-                  enter={isNewMessage(block.row.id)}
-                  messageCards={messageCards}
-                  messageCardContext={messageCardContext}
-                  onApplied={handleApplied} />
-              )
-              const attachLive = liveOpen && index === historyBlocks.length - 1
-              if (attachLive) return (
-                <ChatProcessStack
-                  key={block.rows[0]!.id}
-                  enter={block.rows.some((row) => isNewMessage(row.id)) || visibleCalls.some((call) => isNewMessage(`running:${call.callId}`)) || isNewMessage('partial-thinking')}>
-                  {processDetailRows(block.rows).map((row) => <ChatStepFromRow key={row.id} row={row} running />)}
-                  {liveSteps}
-                </ChatProcessStack>
-              )
-              return (
-                <ChatProcessBlock
-                  key={block.rows[0]!.id}
-                  rows={block.rows}
-                  enter={block.rows.some((row) => isNewMessage(row.id))} />
-              )
-            })}
-            {liveOpen && (visibleCalls.length > 0 || Boolean(partial.thinking)) && historyBlocks.at(-1)?.kind !== 'steps' ? <ChatProcessStack
-              enter={visibleCalls.some((call) => isNewMessage(`running:${call.callId}`)) || isNewMessage('partial-thinking')}>
-              {liveSteps}
-            </ChatProcessStack> : null}
-            {outgoing && !outgoingIsCanonical ? <ChatEntry
-              className="chat-row user"
-              key="local-outgoing"
-              enter={isNewMessage('local-outgoing')}>
-              <Card size="2">
-                <Text size="2" as="p">
-                  {outgoing.text}
-                </Text>
-                {outgoing.projectContextReceipt ? <ProjectContextReceiptView receipt={outgoing.projectContextReceipt} /> : null}
-                <Text size="1" color="gray" mt="1" role={outgoing.state === 'failed' ? 'alert' : 'status'}>
-                  {outgoing.state === 'sending'
-                    ? <Fragment>
-                    <ActivityDots />
-                    {t('chat.sending')}
-                  </Fragment>
-                    : outgoing.state === 'accepted'
-                      ? <Fragment>
-                    <SuccessMark />
-                    {' '}
-                    {t('chat.sent')}
-                  </Fragment>
-                      : t('chat.sendFailed')}
-                </Text>
-              </Card>
-            </ChatEntry> : null}
-            {outgoing?.state === 'accepted' && !outgoingIsCanonical
-              ? <ChatEntry
-              className="chat-row assistant"
-              key="local-replying"
-              aria-live="polite"
-              enter={isNewMessage('local-replying')}>
-              <Text size="2">
-                <ActivityDots variant="typing" />
-                {t('chat.replying')}
-              </Text>
-            </ChatEntry>
-              : null}
-            {queuedSubmissions.map((item) => <ChatEntry
-              className="chat-row notice"
-              key={`queue:${item.requestId}`}
-              enter={isNewMessage(`queue:${item.requestId}`)}>
-              <Text size="2" as="p">
-                {item.text}
-              </Text>
-              <Text size="1" color="gray">
-                {item.placement === 'queued' ? t('chat.queued') : t('chat.steering')}
-              </Text>
-            </ChatEntry>)}
-            {partial.text ? <ChatEntry
-              className="chat-row assistant"
-              key="partial-text"
-              enter={isNewMessage('partial-text')}>
-              <Text size="2" as="div">
-                <Markdown text={partial.text} />
-              </Text>
-            </ChatEntry> : chatLegacy.partial && !partial.thinking ? <ChatEntry
-              className="chat-row assistant"
-              key="partial-replying"
-              aria-live="polite"
-              enter={isNewMessage('partial-replying')}>
-              <Text size="2">
-                <ActivityDots variant="typing" />
-                {t('chat.replying')}
-              </Text>
-            </ChatEntry> : null}
-            {pendingItems.map((item) => <PendingCard key={item.key} item={item} />)}
-            <PluginChatEvents ctx={ctx} renderSlot={renderSlot} sessionId={session.sessionId} locale={locale} hidden={hidden} onApplied={handleApplied} />
-            {snapshot.openState === 'error' ? <Callout.Root color="red" className="warning">
-              <Callout.Text>
-                {t('chat.connectionInterrupted')}
-              </Callout.Text>
-            </Callout.Root> : null}
-            {snapshot.promptError && !hasTurnError ? <Callout.Root color="red" className="warning">
-              <Callout.Text>
-                {t('chat.requestFailed')}
-              </Callout.Text>
-            </Callout.Root> : null}
-          </Flex>
-        </ScrollArea>
-      </Box>
+      <ChatHistory
+        ctx={ctx} session={session} locale={locale} hidden={hidden} renderSlot={renderSlot}
+        snapshot={snapshot} historyRef={historyRef} bottomPinnedRef={bottomPinnedRef}
+        historyBlocks={historyBlocks} messageCards={messageCards} messageCardTick={messageCardTick}
+        messageCardContext={messageCardContext} handleApplied={handleApplied} isNewMessage={isNewMessage}
+        partial={partial} hasPartial={Boolean(chatLegacy.partial)} visibleCalls={visibleCalls}
+        queuedSubmissions={queuedSubmissions} pendingItems={pendingItems} outgoing={outgoing}
+        outgoingIsCanonical={outgoingIsCanonical} hasTurnError={hasTurnError}
+        initGuide={showInitGuide ? <InitGuideCard
+          state={initState as 'explore' | 'interview'} busy={initBusy}
+          running={initState === 'explore' ? internalIndexActive : snapshot.running}
+          done={initCompleted} note={initNote} onStart={startInitGuide} onDismiss={dismissInitGuide} /> : null} />
       <Box asChild px="3" py="2">
         <form className="composer" onSubmit={submit}>
           <Flex direction="column" gap="2">
