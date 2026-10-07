@@ -1,0 +1,15 @@
+diff --git a/lib/Tag.module.css b/lib/Tag.module.css
+index 65380320ac1cec80459f3d5fdcdce152c59bfe90..ed97579b4b4a67a5568d956a5f15afa2cf427548 100644
+--- a/lib/Tag.module.css
++++ b/lib/Tag.module.css
+@@ -7,8 +7,8 @@
+   border-radius: 999px;
+   corner-shape: round;
+   padding: 1px 8px;
+-  font-size: 11px;
+-  line-height: 17px;
++  font-size: 12px;
++  line-height: 18px;
+   font-weight: 500;
+   white-space: nowrap;
+ }

@@ -1,6 +1,7 @@
 import { materializeDsh } from './materialize-dsh.mjs'
 import { copyRuntimeDependencies } from './runtime-dependencies.mjs'
-import { cp, mkdir, readFile, rm } from 'node:fs/promises'
+import { cp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshInstallation } from './dsh-cli.mjs'
@@ -31,6 +32,11 @@ if (process.platform !== 'win32' || process.arch !== 'x64' || process.versions.n
   throw new Error(`desktop development requires Windows x64 Node 26.10.0; found ${process.platform} ${process.arch} Node ${process.versions.node}`)
 }
 const dsh = resolveDshInstallation('0.2.0-rc.2')
+// The version alone cannot distinguish patched dependencies at the same DSH tag.
+const sourceKey = createHash('sha256').update(await realpath(dsh.packageRoot))
+  .update(await readFile(resolve(root, 'pnpm-lock.yaml')))
+  .update(await readFile(new URL('./package-platform.mjs', import.meta.url)))
+  .update(await readFile(new URL('./materialize-dsh.mjs', import.meta.url))).digest('hex')
 
 await rm(template, { recursive: true, force: true })
 await mkdir(dirname(template), { recursive: true })
@@ -39,13 +45,16 @@ await cp(sourceTemplate, template, { recursive: true })
 let runtimeReady = false
 try {
   const manifest = JSON.parse(await readFile(resolve(devDshRuntime, 'package.json'), 'utf8'))
+  const materialized = JSON.parse(await readFile(resolve(devDshRuntime, '.dsh-editor-materialized'), 'utf8'))
   runtimeReady = manifest.name === '@deepseek-ai/dsh' && manifest.version === '0.2.0-rc.2'
-    && JSON.parse(await readFile(resolve(devDshRuntime, '.dsh-editor-materialized'), 'utf8')).version === manifest.version
+    && materialized.version === manifest.version && materialized.sourceKey === sourceKey
 } catch {}
 if (!runtimeReady) {
-  console.log('desktop-dev: materializing the pinned app-owned DSH runtime (first run only)')
+  console.log('desktop-dev: materializing the pinned app-owned DSH runtime for the current dependency lock')
   await rm(devDshRuntime, { recursive: true, force: true })
   await materializeDsh(dsh.packageRoot, devDshRuntime)
+  const marker = resolve(devDshRuntime, '.dsh-editor-materialized')
+  await writeFile(marker, JSON.stringify({ ...JSON.parse(await readFile(marker, 'utf8')), sourceKey }))
 }
 await copyRuntimeDependencies(devDshRuntime, runtimeDependencySources(composition))
 await removeAppPackagesFromRuntime(devDshRuntime, previousPackages)

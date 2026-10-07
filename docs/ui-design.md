@@ -104,6 +104,22 @@ secondary color step. Standard controls use 13px or larger text; compact
 controls and peripheral descriptions may use the 12px scale. The shell's own
 control heights run 32 / 36 / 40 / 44px with a 28px compact step.
 
+Native status tags tint their foreground color into their background. The host
+maps their state aliases to readable colors on that composite surface, including
+small error text and plugin links. Success and error text retain their semantic
+colors in both themes; the business state follows the saved accent. No component
+selector crosses the plugin boundary.
+
+Three version-pinned pnpm patches in `patches/` raise the official rc.2 tag and
+plugin-manager text to these same minimum sizes. They cover the plugin manager,
+the primitive source stylesheet, and the primitive tag CSS embedded in the
+prebundled Web frontend. They change the dependencies' own styles rather than
+adding host selectors for generated plugin class names.
+The patches apply during installation and are copied into development and
+packaged runtimes. Development preparation invalidates its cached runtime when
+the dependency lock changes. Review or remove these patches when upgrading DSH;
+do not carry them onto a different upstream version without checking its styles.
+
 ## Surfaces covered
 
 The adapter covers home and recent work, shell chrome, neutral file navigation,

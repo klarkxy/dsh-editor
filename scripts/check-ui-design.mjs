@@ -26,6 +26,11 @@ function contrast(a, b) {
   const x = luminance(a), y = luminance(b)
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
 }
+function mixColor(foreground, background, alpha) {
+  const rgb = value => value.slice(1).match(/../g).map(x => parseInt(x, 16))
+  const bg = rgb(background)
+  return '#' + rgb(foreground).map((value, index) => Math.round(value * alpha + bg[index] * (1 - alpha)).toString(16).padStart(2, '0')).join('')
+}
 check('pinned official source, not third-party desktop', () => {
   assert.equal(DESIGN_SYSTEM_ID, 'dsh-official')
   assert.equal(DESIGN_SOURCE.repository, 'deepseek-ai/deepseek-harness')
@@ -103,6 +108,17 @@ check('body, secondary text and small primary labels meet 4.5:1', () => {
     }
     assert(contrast(tokens['on-accent'], tokens['accent-solid']) >= 4.5)
     assert(contrast(tokens['on-brand'], tokens.brand) >= 4.5)
+  }
+})
+check('native status labels meet 4.5:1 on their tinted backgrounds', () => {
+  for (const tokens of [LIGHT_TOKENS, DARK_TOKENS]) {
+    const info = mixColor(tokens.link, tokens.text, 0.85)
+    for (const foreground of [info, tokens.success, tokens.danger]) {
+      for (const surface of ['bg', 'surface', 'raised', 'sidebar']) {
+        const background = mixColor(foreground, tokens[surface], 0.1)
+        assert(contrast(foreground, background) >= 4.5, `${foreground}/${surface} ${contrast(foreground, background)}`)
+      }
+    }
   }
 })
 check('component rules stay out of plugin surfaces', () => {

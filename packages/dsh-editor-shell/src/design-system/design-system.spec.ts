@@ -8,7 +8,8 @@ describe('official web design contracts', () => {
   it('checks token parity, contrast, isolation and scope lifecycle', () => {
     const script = fileURLToPath(new URL('../../../../scripts/check-ui-design.mjs', import.meta.url))
     const output = execFileSync(process.execPath, ['--experimental-strip-types', script], { encoding: 'utf8' })
-    expect(output).toContain('14 passed')
+    expect(output).toContain('PASS native status labels meet 4.5:1 on their tinted backgrounds')
+    expect(output).toMatch(/UI design checks: [1-9]\d* passed/)
   })
   it('defaults to blue without overwriting existing accent preferences', () => {
     const values = new Map<string, string>()

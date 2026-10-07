@@ -89,6 +89,11 @@
       "@deepseek-ai/dsh-web-search-deepseek": "0.2.0-rc.2",
       "@deepseek-ai/dsh-web-search-exa": "0.2.0-rc.2",
       "playwright": "1.62.1"
+    },
+    "patchedDependencies": {
+      "@deepseek-ai/dsh-client-ui-plugin-manager@0.2.0-rc.2": "patches/@deepseek-ai__dsh-client-ui-plugin-manager@0.2.0-rc.2.patch",
+      "@deepseek-ai/dsh-client-ui-primitives@0.2.0-rc.2": "patches/@deepseek-ai__dsh-client-ui-primitives@0.2.0-rc.2.patch",
+      "@deepseek-ai/dsh-web-frontend@0.2.0-rc.2": "patches/@deepseek-ai__dsh-web-frontend@0.2.0-rc.2.patch"
     }
   },
   "devDependencies": {

@@ -64,9 +64,9 @@ export const LIGHT_TOKENS = {
   // host Theme that carries no accentColor, and must match the blue table row.
   brand: '#4868b2', 'on-brand': '#ffffff', 'brand-hover': '#36497f',
   bubble: '#e6eefb',
-  success: '#01a241', 'success-soft': '#e6faed',
+  success: '#127034', 'success-soft': '#e6faed',
   warning: '#27241f', 'warning-soft': '#fef5e7',
-  danger: '#ec1313', 'danger-soft': '#fef2f2',
+  danger: '#b91c1c', 'danger-soft': '#fef2f2',
   scrim: 'rgba(0, 0, 0, 0.48)',
   'menu-fill': 'rgba(248, 249, 250, 0.58)',
   'menu-blur': 'blur(40px) saturate(150%)',
@@ -94,7 +94,7 @@ export const DARK_TOKENS: Record<keyof typeof LIGHT_TOKENS, string> = {
   bubble: '#2c2c2e',
   success: '#4ed17e', 'success-soft': '#233c2c',
   warning: '#f59e0b', 'warning-soft': '#27241f',
-  danger: '#f25a5a', 'danger-soft': '#570c0c',
+  danger: '#ff7b7b', 'danger-soft': '#570c0c',
   scrim: 'rgba(0, 0, 0, 0.5)',
   'menu-fill': 'rgba(67, 69, 74, 0.45)',
   'menu-blur': 'blur(40px) saturate(150%)',
@@ -212,6 +212,12 @@ ${cssVariables(LIGHT_TOKENS)}
   --dsw-alias-button-primary-fill: var(--dsh-ui-brand);
   --dsw-alias-button-primary-hover: var(--dsh-ui-brand-hover);
   --dsw-alias-link: var(--dsh-ui-link);
+  /* Native tags and plugin links use state aliases for small text as well as
+     icons. Map them to readable host colors without selecting plugin internals. */
+  --dsw-alias-state-business-primary: color-mix(in srgb, var(--dsh-ui-link) 85%, var(--dsh-ui-text));
+  --dsw-alias-state-success-primary: var(--dsh-ui-success);
+  --dsw-alias-state-error-primary: var(--dsh-ui-danger);
+  --dsw-alias-label-error: var(--dsh-ui-danger);
   --dsw-alias-border-l2: var(--dsh-ui-line);
   --dsw-alias-border-l4: var(--dsh-ui-line-strong);
   --paper-fill: var(--dsh-ui-bg);
