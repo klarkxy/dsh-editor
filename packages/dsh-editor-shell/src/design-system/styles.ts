@@ -121,17 +121,18 @@ export const componentStyles = [
   r(['.rt-TextFieldRoot:focus-within', '.rt-TextAreaRoot:focus-within', '.rt-SelectTrigger:focus-visible'], 'border: 0; box-shadow: var(--dsh-ui-elevation-focus);'),
   r(['.rt-TextFieldInput::placeholder', '.rt-TextAreaInput::placeholder'], 'color: var(--dsh-ui-muted); opacity: 1;'),
   r(['.rt-Badge'], 'font-weight: var(--dsh-ui-weight-medium); letter-spacing: 0;'),
-  r(['.rt-Card', '.home-card', '.home-entry-card', '.settings-block.rt-Card'], cardSurface),
+  r(['.rt-Card', '.home-card', '.home-entry-card', '.settings-block.rt-Card'], cardSurface + ' transition: all var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
   // Settings dialog blocks stay flat sections: the structural sheet zeroes their
   // padding, so the generic .rt-Card surface above left labels flush against a
   // visible border. Neutralize the chrome inside the settings dialog.
   r(['.settings-dialog .settings-block.rt-Card'], 'background: transparent; border: 0; border-radius: 0; box-shadow: none;'),
   r(['.rt-Card::before', '.rt-Card::after', '.home-entry-card::before', '.home-entry-card::after'], 'backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;'),
-  r(['.home-entry-card:hover', '.home-card:hover'], 'background: var(--dsh-ui-raised); box-shadow: none;'),
-  r(['.home-entry-icon'], 'border-radius: var(--dsh-ui-radius-md);'),
+  r(['.home-entry-card:hover', '.home-card:hover'], 'background: var(--dsh-ui-raised); box-shadow: var(--dsh-ui-elevation-prominent); transform: translateY(-2px);'),
+  r(['.home-entry-icon'], 'width: 40px; height: 40px; border-radius: var(--dsh-ui-radius-md); background: var(--dsh-ui-accent-soft); color: var(--dsh-ui-accent); display: flex; align-items: center; justify-content: center;'),
+  r(['.home-entry-title'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-strong);'),
   r(['.home-hint', '.home-recent-empty'], 'color: var(--dsh-ui-muted);'),
   r(['.icon-button:active', '.editor-tools button:active', '.editor-tools button:hover'], 'transform: none;'),
-  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.chat-step-summary:focus-visible', '.chat-process-toggle:focus-visible', '.icon-button:focus-visible', '.home-entry-card:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px;'),
+  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.chat-step-summary:focus-visible', '.chat-process-toggle:focus-visible', '.icon-button:focus-visible', '.home-entry-card:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--dsh-ui-accent-soft);'),
   r(['a:not(.rt-BaseButton)'], 'color: var(--dsh-ui-link);'),
 
   // Neutral navigation: location is not a primary action.
@@ -142,25 +143,31 @@ export const componentStyles = [
   // wrapping block. File-tree rows do not: one entry is one line, and the full name
   // stays reachable through the row's title attribute.
   r(['.home-recent .workspace-row .tree-row'], 'min-height: var(--dsh-ui-space-8); height: auto; align-items: flex-start; padding-block: var(--dsh-ui-space-1); white-space: normal;'),
-  r(['.shell .tree .tree-row'], 'min-height: var(--dsh-ui-space-8); border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
+  r(['.shell .tree .tree-row'], 'min-height: var(--dsh-ui-control-md); padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); gap: var(--dsh-ui-space-2); border-radius: var(--dsh-ui-radius-md); color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-base);'),
   r(['.shell .tree .tree-name'], 'min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: var(--dsh-ui-leading-tight); text-align: start;'),
   // The empty-tree message carried no inset of its own and sat flush against the panel
   // edge, under the search field that keeps the same content inset as the title.
   r(['.shell .tree .tree-empty'], 'padding-inline: var(--dsh-ui-space-3);'),
-  r(['.shell .tree .tree-row:hover', '.home-recent .workspace-row .tree-row:hover'], 'background: var(--dsh-ui-hover);'),
-  r(['.shell .tree .tree-row[aria-current="page"]', '.home-recent .workspace-row .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
+  r(['.shell .tree .tree-row:hover', '.home-recent .workspace-row .tree-row:hover'], 'background: var(--dsh-ui-hover); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
+  r(['.shell .tree .tree-row[aria-current="page"]', '.home-recent .workspace-row .tree-row[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text); box-shadow: inset 3px 0 0 var(--dsh-ui-accent);'),
   r(['.shell .tree .tree-row::before'], 'display: none;'),
   r(['.shell .tree .tree-row[data-drop="true"]'], 'background: var(--dsh-ui-accent-soft); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-accent);'),
   r(['.shell .tree-row-actions'], 'opacity: 1;'),
   r(['.shell .panel-resizer::before'], 'background: var(--dsh-ui-line);'),
   r(['.shell .panel-resizer:hover::before', '.shell .panel-resizer:focus-visible::before', '.shell .panel-resizer[data-separator="active"]::before'], 'background: var(--dsh-ui-accent);'),
   r(['.search-panel', '.side-search'], 'background: transparent; color: var(--dsh-ui-text);'),
+  r(['.side-search .rt-TextFieldInput', '.side-search input'], 'min-height: var(--dsh-ui-control-sm);'),
   r(['.search-results-scroll'], 'max-height: min(50dvh, 24rem);'),
   r(['.project-directory'], 'overflow-wrap: anywhere;'),
   r(['.settings-nav-section'], 'display: flex; flex-direction: column; width: 100%; gap: var(--dsh-ui-space-1);'),
-  r(['.settings-nav-section + .settings-nav-section'], 'margin-top: var(--dsh-ui-space-4);'),
-  r(['.settings-nav-group'], 'padding-inline: var(--dsh-ui-space-3); padding-block: var(--dsh-ui-space-1); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
+  r(['.settings-nav-section + .settings-nav-section'], 'margin-top: var(--dsh-ui-space-6); padding-top: var(--dsh-ui-space-6); border-top: 0.5px solid var(--dsh-ui-line);'),
+  // Uppercase does nothing for the Chinese group names, so the label/tab
+  // distinction is carried by size and colour instead of weight alone.
+  r(['.settings-nav-group'], 'padding: var(--dsh-ui-space-3) var(--dsh-ui-space-3) var(--dsh-ui-space-1); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); font-weight: var(--dsh-ui-weight-medium); letter-spacing: 0.08em; margin-bottom: var(--dsh-ui-space-2);'),
   r(['.sidebar-tools'], 'gap: var(--dsh-ui-space-2);'),
+  // The sidebar title gives up width first: the create action and the overflow
+  // menu are controls, and the label is the one thing that can truncate.
+  r(['.side-new-document'], 'flex-shrink: 0; white-space: nowrap;'),
 
   // Writing stays in the existing CodeMirror instance. Do not override the
   // author's font, size, line-height, line width or typography preferences.
@@ -175,13 +182,14 @@ export const componentStyles = [
   r(['.ghost.is-loading'], 'color: var(--dsh-ui-muted); background: none; animation: none;'),
 
   // Conversation: open assistant prose, one bubble fill, grouped process rows.
-  r(['.shell .chat'], 'display: flex; flex-direction: column; background: var(--dsh-ui-bg);'),
-  r(['.chat-header'], `flex-shrink: 0; min-height: var(--dsh-ui-header-height); border-bottom: ${hairline}; background: var(--dsh-ui-bg);`),
+  r(['.shell .chat'], 'display: flex; flex-direction: column; background: var(--dsh-ui-surface);'),
+  r(['.chat-header'], `flex-shrink: 0; min-height: var(--dsh-ui-header-height); border-bottom: ${hairline}; background: var(--dsh-ui-surface);`),
   r(['.conversation-select .select-trigger'], 'border: 0; box-shadow: none; background: transparent; font-weight: var(--dsh-ui-weight-medium);'),
   r(['.chat-status', '.composer-mode'], 'font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);'),
   r(['.chat .archived-conversations'], `flex-shrink: 0; border-bottom: ${hairline};`),
   r(['.chat > .chat-history'], 'flex: 1 1 0%; min-height: 0; height: auto; overflow: hidden;'),
-  r(['.chat-history .rt-ScrollAreaViewport > div > .rt-Flex'], 'gap: var(--dsh-ui-space-5); padding: var(--dsh-ui-space-4);'),
+  r(['.chat-header-actions'], 'flex: 0 0 auto; min-width: max-content;'),
+  r(['.chat-history .rt-ScrollAreaViewport > div > .rt-Flex'], 'gap: var(--dsh-ui-space-6); padding: var(--dsh-ui-space-5);'),
   r(['.chat-row'], 'min-width: 0; max-width: 100%; overflow-wrap: anywhere;'),
   r(['.chat-row.user'], 'align-self: flex-end; width: fit-content; max-width: 92%;'),
   r(['.chat-row.user > .rt-Card'], 'background: var(--dsh-ui-bubble); border: 0; border-radius: var(--dsh-ui-radius-xl); box-shadow: none; padding: var(--dsh-ui-space-3) var(--dsh-ui-space-4);'),
@@ -190,16 +198,19 @@ export const componentStyles = [
   r(['.chat-markdown p'], 'margin-block: 0 var(--dsh-ui-space-4);'),
   r(['.chat-markdown li'], 'margin-block: var(--dsh-ui-space-2);'),
   r(['.chat-markdown > :last-child'], 'margin-bottom: 0;'),
-  r(['.chat-markdown h1', '.chat-markdown h2'], 'font-size: var(--dsh-ui-text-xl); font-weight: var(--dsh-ui-weight-strong);'),
-  r(['.chat-markdown h3', '.chat-markdown h4'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-strong);'),
+  r(['.chat-markdown h1', '.chat-markdown h2'], 'font-size: var(--dsh-ui-text-2xl); font-weight: var(--dsh-ui-weight-strong); margin-bottom: var(--dsh-ui-space-3); line-height: var(--dsh-ui-leading-tight);'),
+  r(['.chat-markdown h3'], 'font-size: var(--dsh-ui-text-xl); font-weight: var(--dsh-ui-weight-strong); margin-bottom: var(--dsh-ui-space-2); line-height: var(--dsh-ui-leading-tight);'),
+  r(['.chat-markdown h4'], 'font-size: var(--dsh-ui-text-md); font-weight: var(--dsh-ui-weight-strong); margin-bottom: var(--dsh-ui-space-2); line-height: var(--dsh-ui-leading-normal);'),
   r(['.chat-markdown a'], 'color: var(--dsh-ui-link); font-weight: var(--dsh-ui-weight-medium); text-decoration: none; text-underline-offset: 3px;'),
   r(['.chat-markdown a:hover', '.chat-markdown a:focus-visible'], 'text-decoration: underline dotted; text-underline-offset: 3px;'),
   r(['.chat-markdown code'], 'border-radius: var(--dsh-ui-radius-xs);'),
   r(['.chat-markdown pre', '.chat-step-code', '.chat-step-body pre'], 'background: var(--dsh-ui-surface); border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); box-shadow: none; font-family: var(--dsh-ui-font-mono);'),
   r(['.chat-markdown th', '.chat-markdown td'], `border-width: 0.5px; border-style: solid; border-color: var(--dsh-ui-line); padding: var(--dsh-ui-space-2);`),
   r(['.chat-quiet-title'], 'margin: 0; min-width: 0; color: var(--dsh-ui-text); font-size: var(--dsh-ui-text-sm);'),
-  r(['.chat-process-toggle'], 'min-height: var(--dsh-ui-space-8); height: auto; padding: var(--dsh-ui-space-1) 0; border: 0; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
-  r(['.chat-process-body'], `margin-left: var(--dsh-ui-space-1); padding-left: var(--dsh-ui-space-3); border-left: ${hairline};`),
+  r(['.chat-process-toggle'], 'min-height: var(--dsh-ui-space-8); height: auto; padding: var(--dsh-ui-space-2) 0; border: 0; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); transition: color var(--dsh-ui-duration-base) var(--dsh-ui-ease-out);'),
+  r(['.chat-process-toggle:hover'], 'color: var(--dsh-ui-text);'),
+  r(['.chat-process'], 'padding: var(--dsh-ui-space-4); background: var(--dsh-ui-sunken); border-radius: var(--dsh-ui-radius-lg); border-left: 3px solid var(--dsh-ui-line-strong);'),
+  r(['.chat-process-body'], `margin-top: var(--dsh-ui-space-3); padding-top: var(--dsh-ui-space-3); border-top: 0.5px solid var(--dsh-ui-line);`),
   r(['.chat-step:not([open])'], 'height: var(--dsh-ui-space-8);'),
   r(['.chat-step-head'], 'height: var(--dsh-ui-space-8); font-size: var(--dsh-ui-text-sm);'),
   r(['.chat-step-summary'], 'border-radius: var(--dsh-ui-radius-md);'),
@@ -212,8 +223,8 @@ export const componentStyles = [
   r(['.chat > .composer:focus-within'], 'border: 0; box-shadow: var(--dsh-ui-elevation-focus);'),
   r(['.composer .rt-TextAreaRoot', '.composer .rt-TextAreaRoot:focus-within'], 'min-height: 0; padding: 0; background: transparent; border: 0; box-shadow: none;'),
   r(['.composer .rt-TextAreaRoot::before', '.composer .rt-TextAreaRoot::after'], 'display: none;'),
-  r(['.composer .rt-TextAreaInput'], 'min-height: var(--dsh-ui-control-sm); max-height: min(240px, 32dvh); padding: var(--dsh-ui-space-1); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed);'),
-  r(['.composer-toolbar'], 'gap: var(--dsh-ui-space-2); min-height: var(--dsh-ui-space-8);'),
+  r(['.composer .rt-TextAreaInput'], 'min-height: 48px; max-height: min(240px, 32dvh); padding: var(--dsh-ui-space-2); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-relaxed);'),
+  r(['.composer-toolbar'], 'gap: var(--dsh-ui-space-2); min-height: var(--dsh-ui-space-8); margin-top: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-2); border-top: 0.5px solid var(--dsh-ui-line);'),
   // Voice input is an optional plugin surface: idle it is one compact trigger beside send,
   // an active capture takes the first wrapped line. `order` and `flex-basis` are structural
   // placement, not a new visual scale; an absent plugin contributes no flex item at all.
@@ -222,15 +233,19 @@ export const componentStyles = [
   r(['.composer-voice-expanded'], 'order: -1; flex-basis: 100%;'),
   r(['.composer-model'], 'min-width: 0;'),
   r(['.composer-model .select-trigger'], 'min-height: var(--dsh-ui-control-sm); max-width: 100%; border: 0; box-shadow: none; background: transparent; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
-  r(['button.rt-BaseButton.send', '.composer-actions .send'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); min-width: var(--dsh-ui-space-8); min-height: var(--dsh-ui-space-8); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; background: var(--dsh-ui-brand); color: var(--dsh-ui-on-brand); box-shadow: none; transition: none;'),
-  r(['button.rt-BaseButton.send:hover:not(:disabled)', '.composer-actions .send:hover:not(:disabled)'], 'background: var(--dsh-ui-brand-hover); color: var(--dsh-ui-on-brand);'),
-  r(['button.rt-BaseButton.send:disabled', '.composer-actions .send:disabled'], 'background: transparent; color: var(--dsh-ui-text); opacity: 1; box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
+  // Send button: base dimensions and appearance apply to all states
+  r(['button.rt-BaseButton.send', '.composer-actions .send'], 'width: var(--dsh-ui-control-xl); height: var(--dsh-ui-control-xl); min-width: var(--dsh-ui-control-xl); min-height: var(--dsh-ui-control-xl); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; box-shadow: none; transition: background var(--dsh-ui-duration-base) var(--dsh-ui-ease-out), transform var(--dsh-ui-duration-fast) var(--dsh-ui-ease-out);'),
+  // Enabled send gets brand background
+  r(['button.rt-BaseButton.send:not(:disabled):not([disabled])', '.composer-actions .send:not(:disabled):not([disabled])'], 'background: var(--dsh-ui-brand); color: var(--dsh-ui-on-brand);'),
+  r(['button.rt-BaseButton.send:hover:not(:disabled):not([disabled])', '.composer-actions .send:hover:not(:disabled):not([disabled])'], 'background: var(--dsh-ui-brand-hover); transform: scale(1.05);'),
+  // Disabled send overrides with transparent
+  r(['button.rt-BaseButton.send:disabled', 'button.rt-BaseButton.send[disabled]', '.composer-actions .send:disabled', '.composer-actions .send[disabled]'], 'background: transparent; color: var(--dsh-ui-muted); opacity: 1; box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); transform: none; cursor: not-allowed;'),
   r(['button.rt-BaseButton.chat-stop', '.composer-actions .chat-stop'], 'width: var(--dsh-ui-space-8); height: var(--dsh-ui-space-8); margin: 0; border: 0; border-radius: var(--dsh-ui-radius-full); corner-shape: round; background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); box-shadow: none; transition: none;'),
 
   // Review and approvals remain visually distinct from routine tool logs.
-  r(['.proposal', '.proposal-card'], 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-xl); box-shadow: none; padding: var(--dsh-ui-space-4);'),
-  r(['.proposal-card > strong', '.proposal > strong'], 'font-size: var(--dsh-ui-text-base); font-weight: var(--dsh-ui-weight-medium); color: var(--dsh-ui-text);'),
-  r(['.proposal-actions'], 'gap: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-2);'),
+  r(['.proposal', '.proposal-card'], 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); border-left: 4px solid var(--dsh-ui-accent); border-radius: var(--dsh-ui-radius-xl); box-shadow: none; padding: var(--dsh-ui-space-5);'),
+  r(['.proposal-card > strong', '.proposal > strong'], 'font-size: var(--dsh-ui-text-md); font-weight: var(--dsh-ui-weight-strong); color: var(--dsh-ui-text); display: block; margin-bottom: var(--dsh-ui-space-3);'),
+  r(['.proposal-actions'], 'gap: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-4); margin-top: var(--dsh-ui-space-4); border-top: 0.5px solid var(--dsh-ui-line);'),
   r(['.proposal-card pre'], 'max-height: min(48dvh, 28rem); border: 0.5px solid var(--dsh-ui-line); border-radius: var(--dsh-ui-radius-lg); background: var(--dsh-ui-surface); color: var(--dsh-ui-text); box-shadow: none; scrollbar-gutter: stable;'),
   r(['.proposal-conflict'], 'background: var(--dsh-ui-danger-soft); color: var(--dsh-ui-danger); border: 1px solid var(--dsh-ui-danger); border-radius: var(--dsh-ui-radius-md); padding: var(--dsh-ui-space-3);'),
   r(['.chat-row.notice'], 'padding: var(--dsh-ui-space-2) var(--dsh-ui-space-3); background: var(--dsh-ui-surface); border-left: 2px solid var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-sm); color: var(--dsh-ui-muted);'),
@@ -248,6 +263,14 @@ export const componentStyles = [
   r(['.palette-item[data-selected="true"]', '[cmdk-item][data-selected="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.palette-item-icon', '.palette-item[data-selected="true"] .palette-item-icon'], 'background: transparent; color: var(--dsh-ui-muted);'),
   r(['.palette-footer'], `background: var(--dsh-ui-surface); border-top: ${hairline}; color: var(--dsh-ui-muted);`),
+  // The palette field is the whole point of the surface, so it is sized like a
+  // control rather than like a bare text line.
+  r(['.palette-input', 'input[cmdk-input]'], 'min-height: var(--dsh-ui-control-sm);'),
+  // Keyboard hints are peripheral copy, so the 12px scale is their floor; the
+  // Radix default renders them smaller than any other text in the window, and
+  // the Kbd inside the topbar trigger is its own element, not the button.
+  r(['.palette-kbd', '.palette-trigger-kbd'], 'font-size: var(--dsh-ui-text-xs);'),
+  r(['.shell > .chrome .palette-trigger'], 'font-size: var(--dsh-ui-text-xs);'),
   r(['.history-commit'], 'border-radius: var(--dsh-ui-radius-md);'),
   r(['.rt-AvatarRoot', '.rt-AvatarImage', '.rt-AvatarFallback'], 'border-radius: 50%; corner-shape: round;'),
 
@@ -307,7 +330,7 @@ export const responsiveStyles = `
   ${r(['.settings-content', '.settings-header'], 'padding: var(--dsh-ui-space-3);')}
 }
 @media (prefers-reduced-motion: reduce) {
-  ${r(['*', '*::before', '*::after'], 'animation: none !important; transition: none !important; scroll-behavior: auto !important;')}
+  ${SCOPE} *, ${SCOPE} *::before, ${SCOPE} *::after { animation: none; animation-duration: 0s; transition: none; transition-duration: 0s; scroll-behavior: auto; }
 }
 @media (forced-colors: active) {
   ${r(['button:focus-visible', '[tabindex]:focus-visible'], 'outline: 2px solid Highlight;')}

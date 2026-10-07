@@ -22,15 +22,16 @@ UI chrome uses the system font stack. Author typography for manuscript text is u
 
 `src/design-system/tokens.ts` owns the namespaced semantic tokens.
 
-Light surfaces sit one step down from pure white: page `#f7f7f8`, surface and
-sunken `#eff0f2`, raised `#ffffff`, sidebar `#f2f3f4`, text `#1a1c1f` and muted
-`#5c6166`. Pure white paper with near-black body text was the light-mode glare
-source, so raised surfaces stay the brightest layer and cards read as cards by
-depth rather than by a pure-white comparison. Dark surfaces are background
-`#151517`, surface `#232324`, raised `#2c2c2e`, sidebar `#1b1b1c`, text
-`#f9fafb` and muted `#adb2b8`. Links, business state and focus use `#4176e6` /
-`#7aaaff`. Small link text uses the darker official step `#4868b2` in light so
-it stays at or above 4.5:1. An unset accent defaults to blue.
+Light surfaces sit one step down from pure white: page `#f7f7f8`, surface
+`#eff0f2`, sunken `#e8e9ec`, sidebar `#f0f1f3`, raised `#ffffff`, text `#1a1c1f`
+and muted `#5c6166`. Pure white paper with near-black body text was the
+light-mode glare source, so raised surfaces stay the brightest layer and cards
+read as cards by depth rather than by a pure-white comparison. Dark surfaces run
+the other way: background `#151517`, surface `#1e1e20`, raised `#2a2a2c`,
+sidebar `#1a1a1c`, sunken `#0f0f11` below the surface, text `#f9fafb` and muted
+`#adb2b8`. Links, business state and focus use `#4176e6` / `#7aaaff`. Small link
+text uses the darker official step `#4868b2` in light so it stays at or above
+4.5:1. An unset accent defaults to blue.
 
 **The saved accent owns the shell, not only the links.** The primary action,
 the send button, the current location in the sidebar and settings, the user
@@ -48,11 +49,38 @@ than no swatch.
 Radius follows the official roles: R4 details, R8 compact, R12 standard controls
 and menu items, R16 code, diff and menus, R20 settings cards and bubbles, R28
 composer, dialogs and main floating panels. Circles and pills set `corner-shape: round`.
-`superellipse(1.5)` applies only inside `@supports`. Planar dividers and cards use
-a 0.5px neutral border and no shadow. Menus, dialogs and the composer use
-`border: 0` and an elevation shadow whose first layer is the 0.5px stroke.
+`superellipse(1.5)` applies only inside `@supports`. Planar dividers and resting
+cards use a 0.5px neutral border and no shadow: dividers take `--dsh-ui-line`
+(`rgba(0, 0, 0, 0.1)` light, `rgba(255, 255, 255, 0.12)` dark) and cards take
+the stronger `--dsh-ui-line-strong`, with `.rt-Card`, `.home-card` and
+`.home-entry-card` on one shared surface rule and Radix's `::before`/`::after`
+decoration layers stripped. Settings blocks are the deliberate exception: inside
+the settings dialog they drop the surface entirely — transparent, `border: 0`,
+no radius, no shadow — and a 0.5px `border-top` between consecutive blocks is the
+only thing separating them.
+
+Elevation is reserved for surfaces that float, and every elevation token starts
+with the 0.5px stroke as its first layer (`rgba(0, 0, 0, 0.16)` in light,
+`rgba(255, 255, 255, 0.16)`–`0.2` in dark):
+
+- `elevation-panel` — menu content and the assistant launcher;
+- `elevation-prominent` — dialogs, the command palette and the narrow-window
+  overlay drawers;
+- `elevation-soft` — text fields, textareas, select triggers and the composer;
+- `elevation-focus` — what fields and the composer swap in on focus-within: a
+  0.5px accent stroke plus a 3px accent-soft ring. Other focusable controls use a
+  2px accent outline with a 4px soft ring instead.
+
+Menus, dialogs and the composer therefore use `border: 0` and an elevation
+shadow rather than a hairline. The single exception to "flat cards stay flat" is
+the home card hover, which lifts 2px with `elevation-prominent` so the target
+under the pointer is unmistakable; every other interactive state is a fill
+change. The official resource rail stays flat too: a left hairline border and
+`box-shadow: none`.
+
 Menu content may use the official translucent fill and `blur(40px) saturate(150%)`.
-Modal masks are black and do not blur the page.
+Modal masks are a black scrim (`rgba(0, 0, 0, 0.48)` light, `0.5` dark) and do
+not blur the page.
 
 `src/design-system/styles.ts` owns appearance over the existing Radix and shell
 DOM. `styles.ts` still provides structural contracts (CodeMirror, native titlebar,
@@ -72,8 +100,9 @@ tokens, but component-selector rules stop at `[data-dsh-plugin-surface]`.
 Official configuration components inherit DSH background, label, button, link
 and border aliases from their local Radix Theme, including portals. Plugin
 selectors remain with their owner. Small descriptions use the readable
-secondary color step. Standard controls use 13px or larger text; the official
-compact H20–28 controls and peripheral descriptions may use the 12px scale.
+secondary color step. Standard controls use 13px or larger text; compact
+controls and peripheral descriptions may use the 12px scale. The shell's own
+control heights run 32 / 36 / 40 / 44px with a 28px compact step.
 
 ## Surfaces covered
 
@@ -87,6 +116,68 @@ and forced-colors fallbacks.
 The author's font, size, line-height, line-width and completion settings are not
 reset. Theme changes do not replace or key the editor. Process rows keep their
 real statuses. Proposal approval and stale-file checks are unchanged.
+
+## Layout and hit targets
+
+Controls are sized from the token scale, not from their label: the sidebar
+resizer keeps a 1px drawn rule inside a 12px hit strip, search fields are at
+least one control tall, and the palette field is sized like the control it is.
+The topbar shortcut hint is peripheral copy and never renders below the 12px
+scale, including the `Kbd` inside the palette trigger, which is its own element
+rather than the button.
+
+Below 760px the topbar gives up its least useful width first: the palette
+shortcut hint is hidden and the trigger keeps a full control width, while the
+work menu keeps a real hit target with a truncated title. An earlier rule forced
+`min-width: 0` on the work menu and left the author with an unreachable menu
+(measured: 3px) at 390px. Where a row is tight, the label yields and the
+controls do not: the sidebar title truncates before the create action and the
+overflow menu shrink.
+
+An empty conversation keeps the composer anchored at the bottom like a
+non-empty one. Lifting the composer to the top of an empty rail left a screen
+of dead space under the input and moved the input the moment the first turn
+arrived.
+
+## Narrow windows and author preference
+
+A window that cannot fit both rails beside the paper is a size event, not a
+layout choice, so `src/client/narrow-layout.ts` settles each rail as a pure
+function over `{ open, yielded, crowded, authored }`:
+
+- `yielded` records the choice the window made on the author's behalf, so
+  widening restores the author's own layout instead of leaving the collapse as
+  the new default;
+- `authored` records that the author opened or closed the rail themselves in the
+  current size class, and the width rule stands down until the class changes.
+  Clearing only `yielded` is not enough: the follow-up settle closes the rail
+  the author just opened, which makes the explicit control a no-op;
+- **The saved layout preference belongs to the author, not to the current window.**
+  `dsh-editor.layout.sidebar-open` / `assistant-open` may only be written by an
+  author action. A width settle records its own choice in `yielded` instead, and
+  the single-manuscript auto-collapse leaves the stored key alone, so neither
+  one can become the author's new default;
+- **"Skip the next write" is the wrong shape for that rule.** A one-shot skip flag
+  is consumed by whichever persist effect runs first, and on mount the settle and
+  the persist effect run in the same commit: the flag was spent writing the value
+  that was already stored, and the yielded value landed in localStorage
+  afterwards. A narrow-window reload permanently rewrote the assistant
+  preference to `false`. The shell instead tracks whether the current `open`
+  value *is* an author choice, and only an author action clears it — no
+  consumption counting, so mount order cannot defeat it;
+- **Every author open/close claims ownership**, including the ones that only exist
+  in a narrow window: the topbar toggles, the official layout actions, the search
+  and reveal paths, the assistant launcher, Escape closing an overlay drawer, and
+  the overlay dismiss buttons. A path that changes a rail without claiming is a
+  bug, because the preference silently stops following the author;
+- switching workspaces reads the stored preference back and hands ownership to
+  the author with it; the manuscript census claims it only when the decision came
+  from the author's explicit single-manuscript choice, not from the auto-collapse.
+
+Below 1040px the assistant becomes an overlay; below 760px the sidebar does
+too, and the two overlays are mutually exclusive by a forced yield that ignores
+`authored`. Nothing here writes to the author's saved preference except an
+explicit toggle.
 
 Built-in plugin panels, cards, overview, memory and proofread keep their own
 style owners. This shell pass does not restyle their interiors.
@@ -142,3 +233,8 @@ or reviewing fixture screenshots is not a substitute for the running desktop.
 Input methods and display scaling use the existing operating system, Electron
 and CodeMirror capabilities. Preserve existing input guards and verify affected
 behavior when it changes or a problem is reported.
+
+The fixture cannot see a window resize, a saved preference or an overlay that
+replaces the layout. For those, drive the real editor in a real host: see
+[UI/UX 实测记录](ui-ux-audit-2026-10.md) for the harness and the current
+measurements.

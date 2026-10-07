@@ -12,6 +12,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
   type ReactNode,
 } from 'react';
 import type { Context } from '@deepseek-ai/cordis'
@@ -33,6 +34,7 @@ import { CONVERSATION_SETTINGS_NAMESPACE, conversationWorkRecord, decodeConversa
 import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChars } from '../progress-record.ts'
 import { redesignedStyles } from '../styles.ts'
 import { errorMessage, isStaleFailure, canMoveTreeEntry, treeMoveTargetDir, partialApplyDetails, resumableConversationId, safeRpcCall, snapshotTimeLabel, storedPanelOpen, storedPanelWidth, workspaceShortcut, type RevealRequest, type RpcResult, type ShellContext, type WorkspaceOpenState, type PendingWorkspaceOpen, type WorkspaceIntent, LatestRequestGate, claimInitialWorkspaceResume, consumeInitialWorkspaceResume, startupResumeWorkspace, hasRelocatableManuscriptFiles, isSessionMissing, proposalAppliedNavigation, relocationFailureMessage, supportedWorkspaceTextPaths, workspaceFileContent, workspaceOpenFailureMessage, createFlowWorkspace, FlowWorkspaceCleanupError } from './shared.ts'
+import { railAtWidth, railByAuthor, type RailYieldState } from './narrow-layout.ts'
 import { useTransientSuccessNote } from './transient-note.ts'
 import { DeepSeekWhaleMark, PaperStage, ShellErrorBoundary, useMediaQuery, useObservable } from './components.tsx'
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle, type PanelImperativeHandle, type PanelSize } from 'react-resizable-panels'
@@ -82,15 +84,15 @@ const SAVE_STAY_NOTE: Record<EditorSaveBlockReason, MessageKey> = {
   identity: 'note.staySaveIdentity',
 }
 
-const SIDEBAR_DEFAULT = 248
-const SIDEBAR_MIN = 196
-const SIDEBAR_MAX = 420
-const ASSISTANT_DEFAULT = 384
-const ASSISTANT_MIN = 300
-const ASSISTANT_MAX = 720
-const PINNED_DEFAULT = 340
-const PINNED_MIN = 260
-const PINNED_MAX = 560
+const SIDEBAR_DEFAULT = 260
+const SIDEBAR_MIN = 200
+const SIDEBAR_MAX = 440
+const ASSISTANT_DEFAULT = 400
+const ASSISTANT_MIN = 320
+const ASSISTANT_MAX = 640
+const PINNED_DEFAULT = 360
+const PINNED_MIN = 280
+const PINNED_MAX = 520
 
 type TreeCreateRequest = { kind: 'file' | 'folder'; directory: string }
 type FileSession = NonNullable<NonNullable<ReturnType<ShellContext['sessions']['binding']>>['session']> | undefined
@@ -273,7 +275,13 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const sidebarOpenRef = useRef(sidebarOpen)
   sidebarOpenRef.current = sidebarOpen
   const sidebarAutoCollapsed = useRef(false)
-  const skipSidebarOpenPersist = useRef(false)
+  /* 落盘开合偏好由作者拥有：窗口让位和单稿件自动收起只是这一次窗口的结果，
+     写进 localStorage 就等于永久改掉作者的布局。早期实现用「跳过下一次落盘」
+     的布尔量：挂载时结算与落盘副作用在同一次提交里按声明顺序执行，落盘副作用
+     先把这个标记消费掉，等让位后的新值真的落盘时标记已经没了——窄窗重载一次，
+     搭档栏的 true 就被写成 false。改成「当前这个 open 值是不是作者的选择」的
+     状态量：只有作者自己开合才重新打开落盘，任何跳过都不靠消费次数。 */
+  const sidebarOpenDriven = useRef(false)
   const rootSingleRef = useRef(false)
   const sidebarChoicePending = useRef<boolean | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
@@ -281,9 +289,54 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
   const overlayAssistant = useMediaQuery('(max-width: 1040px)')
   const compactChrome = useMediaQuery('(max-width: 760px)')
-  useEffect(() => {
-    if (compactChrome && sidebarOpen && assistantOpen) setSidebarOpen(false)
-  }, [compactChrome, sidebarOpen, assistantOpen])
+  // A window that cannot fit both rails beside the paper is a transient
+  // condition, not a layout change the author asked for. Both rails yield to
+  // the manuscript and their stored preference is left untouched, so widening
+  // the window back restores the author's own layout instead of the collapse
+  // silently becoming their new default.
+  const sidebarRail = useRef<RailYieldState>({ yielded: null, crowded: compactChrome, authored: false })
+  const assistantRail = useRef<RailYieldState>({ yielded: null, crowded: overlayAssistant, authored: false })
+  const assistantOpenDriven = useRef(false)
+  // 宽度驱动的收起走这里：作者原本的选择留在 yielded 里，不写进 localStorage。
+  const settleRail = useCallback((
+    rail: MutableRefObject<RailYieldState>,
+    open: boolean,
+    crowded: boolean,
+    force: boolean,
+    apply: (next: boolean) => void,
+    driven: MutableRefObject<boolean>,
+  ) => {
+    const next = railAtWidth({ open, ...rail.current }, crowded, force)
+    if (next.yielded === rail.current.yielded
+      && next.authored === rail.current.authored
+      && next.crowded === rail.current.crowded
+      && next.open === open) return
+    rail.current = { yielded: next.yielded, authored: next.authored, crowded: next.crowded }
+    if (next.open === open) return
+    // 这一次的开合是窗口替作者决定的，不落盘；只标记这一条栏，另一条栏不受影响。
+    driven.current = true
+    apply(next.open)
+  }, [])
+  // 窄窗下两条栏互斥时用强制让位，作者对其中一条的接管不阻止另一条让位。
+  const yieldSidebarToWidth = useCallback(() => {
+    settleRail(sidebarRail, sidebarOpen, true, true, setSidebarOpen, sidebarOpenDriven)
+  }, [settleRail, sidebarOpen])
+  const yieldAssistantToWidth = useCallback(() => {
+    settleRail(assistantRail, assistantOpen, true, true, setAssistantOpen, assistantOpenDriven)
+  }, [settleRail, assistantOpen])
+  useEffect(() => { settleRail(sidebarRail, sidebarOpen, compactChrome, false, setSidebarOpen, sidebarOpenDriven) }, [compactChrome, sidebarOpen, settleRail])
+  useEffect(() => { settleRail(assistantRail, assistantOpen, overlayAssistant, false, setAssistantOpen, assistantOpenDriven) }, [overlayAssistant, assistantOpen, settleRail])
+  // 作者自己开合：记下接管，窗口规则在换档前不再替他改动，同时把落盘权还给作者。
+  const claimSidebar = useCallback((open: boolean) => {
+    sidebarOpenDriven.current = false
+    const next = railByAuthor(open, compactChrome)
+    sidebarRail.current = { yielded: next.yielded, crowded: next.crowded, authored: next.authored }
+  }, [compactChrome])
+  const claimAssistant = useCallback((open: boolean) => {
+    assistantOpenDriven.current = false
+    const next = railByAuthor(open, overlayAssistant)
+    assistantRail.current = { yielded: next.yielded, crowded: next.crowded, authored: next.authored }
+  }, [overlayAssistant])
   const [pinnedPath, setPinnedPath] = useState<string | null>(() => {
     const stored = storedPinnedPath('dsh-editor.layout.pinned-path')
     return stored && canPinPath(stored) ? stored : null
@@ -470,10 +523,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const pinValidatedSession = useRef<string | undefined>()
   useEffect(() => { document.title = 'DSH Editor' }, [])
   useEffect(() => {
-    if (skipSidebarOpenPersist.current) {
-      skipSidebarOpenPersist.current = false
-      return
-    }
+    // 窗口让位或单稿件自动收起的结果不落盘：作者下次自己开合时才写。
+    if (sidebarOpenDriven.current) return
     try { globalThis.localStorage?.setItem('dsh-editor.layout.sidebar-open', String(sidebarOpen)) } catch { /* View preferences remain optional. */ }
   }, [sidebarOpen])
   const openWorkspaceIdRef = useRef(openWorkspaceId)
@@ -491,6 +542,8 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     sidebarAutoCollapsed.current = false
     rootSingleRef.current = false
     sidebarChoicePending.current = null
+    // 换作品时读回的就是作者存下的偏好，落盘权随之回到作者手里。
+    sidebarOpenDriven.current = false
     setSidebarOpen(storedPanelOpen('dsh-editor.layout.sidebar-open', true))
   }, [openWorkspaceId])
   useEffect(() => {
@@ -517,12 +570,15 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
       })
       sidebarAutoCollapsed.current = next.autoCollapsed
       if (next.open === sidebarOpenRef.current) return
-      if (next.autoCollapsed) skipSidebarOpenPersist.current = true
+      // 自动收起是系统判断，不落盘；按作者显式记下的单稿件选择展开则是作者的选择。
+      sidebarOpenDriven.current = next.autoCollapsed
       setSidebarOpen(next.open)
     })
     return () => { live = false }
   }, [ctx, fileSession?.sessionId, treeRevision])
   useEffect(() => {
+    // 同上：让位或自动收起的结果不落盘。标记由作者操作清除，不是消费式的。
+    if (assistantOpenDriven.current) return
     try { globalThis.localStorage?.setItem('dsh-editor.layout.assistant-open', String(assistantOpen)) } catch { /* View preferences remain optional. */ }
   }, [assistantOpen])
   useEffect(() => {
@@ -544,15 +600,17 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   const toggleSidebarChrome = () => {
     const next = focusMode ? true : !sidebarOpen
     if (focusMode) setFocusMode(false)
+    claimSidebar(next)
     noteSidebarChoice(next)
     setSidebarOpen(next)
-    if (next && compactChrome) setAssistantOpen(false)
+    if (next && compactChrome) yieldAssistantToWidth()
   }
   const toggleAssistantChrome = () => {
     const next = focusMode ? true : !assistantOpen
     if (focusMode) setFocusMode(false)
+    claimAssistant(next)
     setAssistantOpen(next)
-    if (next && compactChrome) setSidebarOpen(false)
+    if (next && compactChrome) yieldSidebarToWidth()
   }
   const officialActionRef = useRef<Record<string, () => void>>({})
   officialActionRef.current = {
@@ -564,14 +622,14 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     'toggle-focus': () => setFocusMode(value => !value),
     'focus-assistant': () => {
       if (!assistantEnabled) return
-      setFocusMode(false); setAssistantOpen(true)
-      if (compactChrome) setSidebarOpen(false)
+      setFocusMode(false); claimAssistant(true); setAssistantOpen(true)
+      if (compactChrome) yieldSidebarToWidth()
       setChatFocusNonce(value => value + 1)
     },
     'search': () => {
       if (workspaceOpen.kind !== 'ready') return
-      setFocusMode(false); noteSidebarChoice(true); setSidebarOpen(true)
-      if (compactChrome) setAssistantOpen(false)
+      setFocusMode(false); noteSidebarChoice(true); claimSidebar(true); setSidebarOpen(true)
+      if (compactChrome) yieldAssistantToWidth()
       setSearchOpen(true)
     },
     'toggle-typewriter': () => { void writingScope.set('typewriter', !writing.typewriter) },
@@ -599,11 +657,13 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
         if (!document.querySelector('[role="menu"], [role="listbox"], [data-radix-select-content]')) {
           if (compactChrome && sidebarOpen && !focusMode) {
             event.preventDefault()
+            claimSidebar(false)
             setSidebarOpen(false)
             return
           }
           if (overlayAssistant && assistantOpen && !focusMode && assistantEnabled) {
             event.preventDefault()
+            claimAssistant(false)
             setAssistantOpen(false)
             return
           }
@@ -624,7 +684,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     }
     globalThis.addEventListener('keydown', hotkey, true)
     return () => globalThis.removeEventListener('keydown', hotkey, true)
-  }, [pluginsOpen, assistantEnabled, assistantOpen, commands, compactChrome, focusMode, overlayAssistant, path, session?.sessionId, sidebarOpen, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
+  }, [pluginsOpen, assistantEnabled, assistantOpen, claimAssistant, claimSidebar, commands, compactChrome, focusMode, overlayAssistant, path, session?.sessionId, sidebarOpen, workspaceOpen.kind, writing.typewriter, writing.focusParagraph])
   useEffect(() => {
     if (!chatFocusNonce || !assistantOpen || focusMode || !assistantEnabled) return
     globalThis.setTimeout(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(), 0)
@@ -1541,9 +1601,10 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     onCreate={(title: string) => void submitNewProject(title)} />
   const openSearchPanel = () => {
     if (!fileSession) return
-    if (compactChrome) setAssistantOpen(false)
+    if (compactChrome) yieldAssistantToWidth()
     setFocusMode(false)
     noteSidebarChoice(true)
+    claimSidebar(true)
     setSidebarOpen(true)
     setSearchOpen(true)
     setPaletteOpen(false)
@@ -1583,11 +1644,12 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
     const width = Math.max(sidebarWidthRef.current, 336)
     setSidebarWidth(width)
     sidebarPanelRef.current?.resize(width + 'px')
-    if (compactChrome) setAssistantOpen(false)
+    if (compactChrome) yieldAssistantToWidth()
     setFocusMode(false)
+    claimSidebar(true)
     noteSidebarChoice(true)
     setSidebarOpen(true)
-  }, [compactChrome])
+  }, [claimSidebar, compactChrome, yieldAssistantToWidth])
   const refreshSeat = useCallback((scope: 'tree' | 'content' | 'overview') => {
     if (scope === 'tree') setTreeRevision((value) => value + 1)
     else if (scope === 'content') setContentRevision((value) => value + 1)
@@ -2238,7 +2300,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               onDraftDirtyChange={setAssistantDraftDirty}
               onWritten={refreshWrittenPath}
               onApplied={onAppliedChat}
-              onHide={() => setAssistantOpen(false)} />
+              onHide={() => { claimAssistant(false); setAssistantOpen(false) }} />
           </Panel> : null}
         </PanelGroup>
         <aside className="official-resource-panel" hidden={!officialPreviewOpen} aria-label="资料预览">
@@ -2254,7 +2316,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           hidden={!assistantVisible}
           tabIndex={-1}
           aria-label={t('workspace.hideAssistant')}
-          onClick={() => setAssistantOpen(false)} /> : null}
+          onClick={() => { claimAssistant(false); setAssistantOpen(false) }} /> : null}
         {compactChrome ? <div className="sidebar-overlay" hidden={!sidebarVisible}>
           <SidebarColumn
             ctx={ctx}
@@ -2302,7 +2364,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
           hidden={!sidebarVisible}
           tabIndex={-1}
           aria-label={t('workspace.hideFiles')}
-          onClick={() => setSidebarOpen(false)} /> : null}
+          onClick={() => { claimSidebar(false); setSidebarOpen(false) }} /> : null}
         {!assistantVisible && !focusMode && !officialPreviewOpen ? (
           capabilityState.kind === 'error'
             ? <Callout.Root className="assistant-launcher capability-note" color="red" role="alert">
@@ -2332,7 +2394,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
             type="button"
             aria-label={t('workspace.openAssistant')}
             aria-expanded={false}
-            onClick={() => { setAssistantOpen(true); if (compactChrome) setSidebarOpen(false) }}>
+            onClick={() => { claimAssistant(true); setAssistantOpen(true); if (compactChrome) yieldSidebarToWidth() }}>
             <span aria-hidden="true">
               <DeepSeekWhaleMark />
             </span>

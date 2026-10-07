@@ -87,7 +87,6 @@ export function WorkbenchTopbar(props: {
           className="workspace-chrome"
           role="group"
           aria-label={t('workspace.work')}
-          style={{ display: 'flex', alignItems: 'center', width: 'auto', minWidth: '8.5rem', maxWidth: '16rem' }}
           {...props.workspaceChromeMotion}>
         <div className="workspace-menu">
           <Menu

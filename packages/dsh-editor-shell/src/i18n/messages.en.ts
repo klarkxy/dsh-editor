@@ -717,6 +717,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'settings.showDeveloper': 'Show developer options',
   'settings.developerMode': 'Developer mode',
   'settings.developerModeHint': 'New chats show every mode, including plugin-provided ones.',
+  'settings.reviewExemption': 'Content-review exemption',
   'settings.limitBreak': 'Limit-break mode',
   'settings.limitBreakModeHint': 'Every conversation sends a runtime specification that bypasses content review as the final system-prompt section.',
   'settings.limitBreakWarning': 'Disclaimer: this specification tells the model to ignore the provider\'s content review. That is misuse, and it can get your account banned. You carry the consequences.',

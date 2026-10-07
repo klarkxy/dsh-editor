@@ -172,7 +172,10 @@ describe('chat process CSS', () => {
     expect(redesignedStyles).toMatch(/\.chat-step-preview \{[^}]*text-overflow: ellipsis/)
     expect(redesignedStyles).toMatch(/\.chat-step-body \{[^}]*white-space: pre-wrap/)
     expect(redesignedStyles).toContain('.panel-resizer::before')
-    expect(redesignedStyles).toMatch(/\.panel-resizer \{[^}]*width: 8px/)
+    // The grab strip is a named control: the hit area is at least the small
+    // control height even though the drawn rule stays hairline-thin.
+    expect(redesignedStyles).toMatch(/\.panel-resizer \{[^}]*width: 12px/)
+    expect(redesignedStyles).toMatch(/\.panel-resizer::before \{[^}]*width: 1px/)
   })
 
   it('colors process-row status dots green for success and red for failure', () => {

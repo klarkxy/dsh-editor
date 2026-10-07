@@ -11,6 +11,8 @@ function Preview() {
   const [draft, setDraft] = useState('帮我把这段对话写得更自然。')
   const [selected, setSelected] = useState(2)
   const [sent, setSent] = useState(false)
+  // Mirrors root.tsx: ShellTheme already injects designSystemStyles, so this
+  // fixture must not add a second copy or it would no longer match production.
   return <ShellTheme appearance={appearance} accent="blue">
     <style>{radixThemesStyles}{redesignedStyles}{`
       .preview-panels { display:grid; grid-template-columns:248px minmax(0,1fr) 384px; min-height:0; }

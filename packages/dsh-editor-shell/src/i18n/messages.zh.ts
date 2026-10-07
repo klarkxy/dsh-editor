@@ -715,6 +715,7 @@ export const zh = {
   'settings.showDeveloper': '显示开发者选项',
   'settings.developerMode': '开发者模式',
   'settings.developerModeHint': '新对话会显示全部模式，包括插件提供的模式。',
+  'settings.reviewExemption': '内容审查豁免',
   'settings.limitBreak': '破限模式',
   'settings.limitBreakModeHint': '每次对话都会把一份绕过内容审查的运行规约作为最后一段系统提示词发给模型。',
   'settings.limitBreakWarning': '免责声明：该规约要求模型无视服务方的内容审查，属于违规使用，可能被判定为滥用，导致账号被封禁，后果自行承担。',

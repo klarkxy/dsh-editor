@@ -183,7 +183,7 @@ export function SettingsGeneralSection(props: {
       <Card className="settings-block">
         <header className="settings-block-head">
           <Heading as="h3" size="3" className="settings-block-title">
-            {t('settings.limitBreak')}
+            {t('settings.reviewExemption')}
           </Heading>
         </header>
         <Row

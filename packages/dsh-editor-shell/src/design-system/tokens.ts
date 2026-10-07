@@ -53,10 +53,10 @@ export const LIGHT_TOKENS = {
   // One step down from pure white. Pure white paper plus near-black body text
   // is the glare source in light mode; the page now sits a step down and raised
   // surfaces stay the brightest layer, so cards read as cards by depth.
-  bg: '#f7f7f8', surface: '#eff0f2', raised: '#ffffff', sunken: '#eff0f2',
-  sidebar: '#f2f3f4', text: '#1a1c1f', muted: '#5c6166', faint: '#7b8087',
+  bg: '#f7f7f8', surface: '#eff0f2', raised: '#ffffff', sunken: '#e8e9ec',
+  sidebar: '#f0f1f3', text: '#1a1c1f', muted: '#5c6166', faint: '#7b8087',
   line: 'rgba(0, 0, 0, 0.1)', 'line-strong': 'rgba(0, 0, 0, 0.16)',
-  selected: '#e6e8ec', hover: '#eceef1',
+  selected: '#dde1e6', hover: '#e6e8eb',
   // Focus, business state and non-text accent. Small text uses the darker step.
   accent: '#4176e6', 'accent-hover': '#2f4c8f', 'accent-soft': '#edf3fe', 'accent-border': '#d3e2ff',
   'accent-solid': '#4868b2', 'on-accent': '#ffffff', link: '#4868b2',
@@ -82,10 +82,10 @@ export const LIGHT_TOKENS = {
 } as const
 
 export const DARK_TOKENS: Record<keyof typeof LIGHT_TOKENS, string> = {
-  bg: '#151517', surface: '#232324', raised: '#2c2c2e', sunken: '#1b1b1c',
-  sidebar: '#1b1b1c', text: '#f9fafb', muted: '#adb2b8', faint: '#81858c',
+  bg: '#151517', surface: '#1e1e20', raised: '#2a2a2c', sunken: '#0f0f11',
+  sidebar: '#1a1a1c', text: '#f9fafb', muted: '#adb2b8', faint: '#81858c',
   line: 'rgba(255, 255, 255, 0.12)', 'line-strong': 'rgba(255, 255, 255, 0.2)',
-  selected: '#43454a', hover: 'rgba(255, 255, 255, 0.08)',
+  selected: '#33353a', hover: 'rgba(255, 255, 255, 0.12)',
   accent: '#7aaaff', 'accent-hover': '#b7c8fe',
   'accent-soft': 'rgba(122, 170, 255, 0.16)', 'accent-border': 'rgba(122, 170, 255, 0.4)',
   'accent-solid': '#7aaaff', 'on-accent': '#0f1115', link: '#7aaaff',
@@ -112,19 +112,20 @@ export const DARK_TOKENS: Record<keyof typeof LIGHT_TOKENS, string> = {
 export const FOUNDATION_TOKENS = {
   'font-ui': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif',
   'font-mono': '"SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, Courier, "PingFang SC", "Microsoft YaHei"',
-  'space-1': '4px', 'space-2': '8px', 'space-3': '12px', 'space-4': '16px',
-  'space-5': '20px', 'space-6': '24px', 'space-8': '32px',
+  'space-1': '4px', 'space-2': '8px', 'space-2-5': '10px', 'space-3': '12px', 'space-4': '16px',
+  'space-5': '20px', 'space-6': '24px', 'space-7': '28px', 'space-8': '32px',
   'radius-xs': '4px', 'radius-sm': '8px', 'radius-md': '12px',
   'radius-lg': '16px', 'radius-xl': '20px', 'radius-2xl': '28px', 'radius-panel': '28px', 'radius-full': '999px',
-  'text-xs': '12px', 'text-sm': '13px', 'text-base': '14px',
-  'text-lg': '16px', 'text-xl': '18px', 'text-2xl': '22px',
+  'text-xs': '12px', 'text-sm': '13px', 'text-base': '14px', 'text-md': '15px',
+  'text-lg': '17px', 'text-xl': '20px', 'text-2xl': '24px',
   'leading-tight': '1.25', 'leading-normal': '1.5', 'leading-relaxed': '1.7',
   'weight-regular': '400', 'weight-medium': '500', 'weight-strong': '600',
   'duration-fast': '100ms', 'duration-base': '200ms', 'duration-slow': '300ms',
   'ease-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
-  'control-sm': '32px', 'control-md': '36px', 'control-lg': '40px',
+  'control-xs': '28px', 'control-sm': '32px', 'control-md': '36px', 'control-lg': '40px', 'control-xl': '44px',
   'icon-sm': '14px', 'icon-md': '16px', 'icon-lg': '20px',
   'header-height': '48px', 'content-max': '760px',
+  'tap-target': '44px',
 } as const
 
 export function cssVariables(values: Readonly<Record<string, string>>): string {

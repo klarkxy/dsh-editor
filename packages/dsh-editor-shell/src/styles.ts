@@ -425,7 +425,9 @@ export const componentStyles = `
 .shell .panel-resizer {
   position: relative;
   z-index: 20;
-  width: 8px;
+  /* The grab strip is a control with an accessible name, so the hit area is
+     sized like one even though the drawn rule stays hairline-thin. */
+  width: 12px;
   cursor: col-resize;
   background: transparent;
 }
@@ -840,7 +842,7 @@ export const componentStyles = `
 .home-stage-cluster {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   gap: var(--space-5);
   width: min(1180px, 100%);
@@ -866,10 +868,11 @@ export const componentStyles = `
   user-select: none;
   pointer-events: none;
 }
+/* The mascot is a brand mark beside the lobby's actual task, so it is sized
+   as a companion rather than allowed to fill the stage on its own. */
 .radix-themes .app-mascot-home {
-  width: min(400px, 42vw);
+  width: min(260px, 28vw);
   flex: none;
-  margin-block-start: var(--space-4);
 }
 .radix-themes .home-recent .workspace-row .tree-row {
   justify-content: flex-start;
@@ -878,7 +881,7 @@ export const componentStyles = `
 }
 @media (max-width: 1180px) {
   .home-stage-cluster { flex-direction: column; align-items: center; }
-  .radix-themes .app-mascot-home { width: min(240px, 46vw); margin-block-start: 0; }
+  .radix-themes .app-mascot-home { width: min(180px, 40vw); }
 }
 
 /* ── Command palette (Cmd/Ctrl+K) ────────────────────────── */
@@ -930,8 +933,10 @@ export const componentStyles = `
 .radix-themes .settings-dialog {
   width: min(960px, calc(100vw - 2 * var(--space-4)));
   max-width: 960px;
-  /* 预留 Radix 外层滚动容器的边距，仅让导航和内容在窗口内滚动。 */
-  height: min(760px, calc(100dvh - var(--space-6) - max(var(--space-6), 6vh)));
+  /* 预留 Radix 外层滚动容器的边距，仅让导航和内容在窗口内滚动。
+     Short pages size to their own content; long ones still cap and scroll. */
+  height: auto;
+  max-height: min(760px, calc(100dvh - var(--space-6) - max(var(--space-6), 6vh)));
   font: 400 var(--font-size-2)/1.5 var(--default-font-family);
   color: var(--gray-12);
   --control-h: 34px;
@@ -1128,10 +1133,14 @@ export const componentStyles = `
   /* 最小窗口(760px)下抽屉占满可用宽度：稿纸与对话二选一,不再让正文在抽屉
      边缘断行；抽屉头部提供关闭按钮,Escape 与顶栏开关照常。 */
   .shell .chat.chat-overlay { left: 8px; width: auto; }
-  /* 顶栏让位:作品菜单收成图标,保住布局开关/窗口控制的命中区域。 */
-  .shell .workspace-chrome,
-  .shell > .chrome .workspace-menu-trigger { min-width: 0 !important; }
-  .shell > .chrome .workspace-menu-trigger > .rt-Text { max-width: 7em; }
+  /* 顶栏让位：快捷键提示是这里最宽又最不重要的元素，先让它让出宽度。早期实现
+     直接把作品菜单压到 min-width:0，作者在窄窗下完全够不到作品菜单（新建/切换/
+     返回首页/导出），实测按钮只剩 3px。菜单本身保留真实命中区，标题截断。 */
+  .shell > .chrome .palette-trigger-kbd { display: none; }
+  .shell > .chrome .palette-trigger { padding-inline: var(--space-2); min-width: var(--control-h); }
+  .shell .workspace-chrome { flex: 0 0 auto; min-width: 0; }
+  .shell > .chrome .workspace-menu-trigger { min-width: min(7em, 22vw) !important; padding-inline: var(--space-2); }
+  .shell > .chrome .workspace-menu-trigger > .rt-Text { max-width: 6em; }
 }
 
 /* ── 活动反馈(ui/activity.tsx + 面板共享类) ─────────────── */

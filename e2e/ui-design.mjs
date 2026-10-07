@@ -83,6 +83,28 @@ async function assertAccentRepaintsPrimary(page, colorName, expected) {
   assert.notEqual(painted.fg, expected, `${colorName} primary label`)
 }
 
+/*
+ * Buttons transition background-color for --dsh-ui-duration-base (200ms), so a
+ * fixed sleep reads a mid-transition frame rather than the resting fill. Poll
+ * on animation frames and only return once the expected value has been held for
+ * several consecutive frames, which proves the transition settled instead of
+ * merely passing through the target. The counter lives on the element so a
+ * re-render that swaps the node restarts the wait rather than reusing a frame
+ * count earned by the previous node.
+ */
+const SETTLE_FRAMES = 5
+
+async function waitForSettledBackground(page, name, expected) {
+  await page.waitForFunction(({ name, expected, frames }) => {
+    const el = [...document.querySelectorAll('button')]
+      .find(button => button.getAttribute('aria-label') === name || button.textContent === name)
+    if (!el) { return false }
+    if (getComputedStyle(el).backgroundColor !== expected) { el.__dshSettle = 0; return false }
+    el.__dshSettle = (el.__dshSettle ?? 0) + 1
+    return el.__dshSettle >= frames
+  }, { name, expected, frames: SETTLE_FRAMES }, { timeout: 5000 })
+}
+
 async function assertRoundShapes(page) {
   assert.equal(await page.evaluate(() => CSS.supports('corner-shape', 'superellipse(1.5)')), true)
   const shapes = await page.evaluate(() => {
@@ -147,15 +169,15 @@ try {
   const paper = page.getByRole('textbox', { name: 'Manuscript fixture' })
   await paper.fill('保留的正文，切换主题不应丢失。')
   await paper.evaluate(el => { window.__paperNode = el; el.setSelectionRange(2, 5) })
-  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(247, 247, 248)')
+  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(239, 240, 242)')
   assert.equal(await page.locator('.plugin-sentinel').evaluate(el => getComputedStyle(el).borderRadius), '2px')
   const readingType = await page.locator('.chat-markdown').evaluate(el => {
     const paragraph = getComputedStyle(el.querySelector('p'))
     return {size:paragraph.fontSize,weight:paragraph.fontWeight,lineHeight:paragraph.lineHeight,heading:getComputedStyle(el.querySelector('h2')).fontSize,listSpacing:getComputedStyle(el.querySelector('li')).marginTop}
   })
-  assert.equal(readingType.size,'16px')
+  assert.equal(readingType.size,'17px')
   assert.equal(readingType.weight,'400')
-  assert(parseFloat(readingType.lineHeight) >= 26)
+  assert(parseFloat(readingType.lineHeight) >= 28)
   assert(parseFloat(readingType.heading) > parseFloat(readingType.size))
   assert.equal(readingType.listSpacing,'8px')
   await assertRoundShapes(page)
@@ -164,7 +186,7 @@ try {
   await assertPrimaryButtons(page, {
     enabled: 'rgb(72, 104, 178)',
     enabledText: 'rgb(255, 255, 255)',
-    disabled: 'rgb(236, 238, 241)',
+    disabled: 'rgb(230, 232, 235)',
     disabledText: 'rgb(92, 97, 102)',
   })
   // amber and crimson are the two extremes of the saved set: the lightest and
@@ -189,21 +211,21 @@ try {
   await page.getByRole('button', { name: 'Toggle theme' }).click()
   await page.waitForFunction(() => {
     const chat = document.querySelector('.chat')
-    return chat && getComputedStyle(chat).backgroundColor === 'rgb(21, 21, 23)'
+    return chat && getComputedStyle(chat).backgroundColor === 'rgb(30, 30, 32)'
   })
-  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(21, 21, 23)')
+  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(30, 30, 32)')
   assert(await paper.evaluate(el => el === window.__paperNode))
   assert.equal(await paper.inputValue(), '保留的正文，切换主题不应丢失。')
   await assertPrimaryButtons(page, {
     enabled: 'rgb(122, 170, 255)',
     enabledText: 'rgb(15, 17, 21)',
-    disabled: 'rgba(255, 255, 255, 0.08)',
+    disabled: 'rgba(255, 255, 255, 0.12)',
     disabledText: 'rgb(173, 178, 184)',
   })
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Writing settings' })
   await dialog.waitFor()
-  assert.equal(await dialog.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(44, 44, 46)')
+  assert.equal(await dialog.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(42, 42, 44)')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopWidth), '0px')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopLeftRadius), '28px')
   assert.equal(await page.locator('.rt-BaseDialogOverlay').evaluate(el => getComputedStyle(el, '::before').backdropFilter), 'none')
@@ -219,10 +241,22 @@ try {
   await page.getByRole('dialog', { name: 'DSH UI / Design system' }).waitFor({ state: 'hidden' })
   await page.getByRole('textbox', { name: 'Chat input', exact: true }).fill('')
   const send = page.getByRole('button', { name: 'Send message' })
+  // Disabled pins `background: transparent` plus an inset hairline, so the send
+  // key must drop the brand primary entirely: a resting brand fill here would
+  // read as clickable. Wait for the 200ms transition to settle, not a fixed
+  // sleep, or this catches an in-between frame instead of the resting state.
+  await waitForSettledBackground(page, 'Send message', 'rgba(0, 0, 0, 0)')
   assert(await send.isDisabled())
-  assert.notEqual(await send.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(122, 170, 255)')
+  const disabledBg = await send.evaluate(el => getComputedStyle(el).backgroundColor)
+  assert.equal(disabledBg, 'rgba(0, 0, 0, 0)', 'disabled send bg')
+  assert.notEqual(disabledBg, 'rgb(122, 170, 255)', 'disabled send must not show the brand primary')
   await page.getByRole('textbox', { name: 'Chat input', exact: true }).fill('Test draft')
-  assert.equal(await send.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(122, 170, 255)')
+  // Enabled must land on the full ACCENT_SOLIDS blue dark fill. Anything less
+  // opaque is a transition frame, not the settled contract.
+  await waitForSettledBackground(page, 'Send message', 'rgb(122, 170, 255)')
+  assert.equal(await send.isDisabled(), false)
+  const enabledBg = await send.evaluate(el => getComputedStyle(el).backgroundColor)
+  assert.equal(enabledBg, 'rgb(122, 170, 255)', 'enabled send bg')
   await send.click()
   await page.getByRole('status').filter({ hasText: 'Fixture message submitted' }).waitFor()
   for (const width of [1440, 1024, 760, 390]) {

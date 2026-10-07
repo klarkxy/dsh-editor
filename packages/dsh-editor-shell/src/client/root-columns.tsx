@@ -125,8 +125,8 @@ export const SidebarColumn = memo(function SidebarColumn(props: SidebarFileMenuP
         <Text size="2" weight="medium" className="side-title-label" truncate>
           {t('sidebar.manuscriptTree')}
         </Text>
-        <Flex align="center" gap="1">
-        <Button variant="ghost" color="gray" size="1" onClick={() => props.onCreateFile('')}>
+        <Flex align="center" gap="1" flexShrink="0">
+        <Button variant="ghost" color="gray" size="1" className="side-new-document" onClick={() => props.onCreateFile('')}>
           <PlusIcon size={14} />{t('sidebar.newDocument')}
         </Button>
         <Menu>
