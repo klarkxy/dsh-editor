@@ -4,7 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getLocale, resetLocaleForTests, setLocale } from '../i18n/index.ts'
 import { ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
 import { legacyZhihuVisible, PluginConfigurationPage, projectPluginConfigurations, usePluginConfigurations } from './plugin-configurations.tsx'
-import { PluginsPage } from './plugins-page.tsx'
+import { mergeSections, PluginsPage, secondaryConfigKeys } from './plugins-page.tsx'
+import {
+  catalogSectionsOf,
+  catalogToggleRequest,
+  filterCatalogSections,
+  mergeConfigurationCards,
+  PluginsCatalog,
+  presetEnabledRequest,
+  type PluginCatalogSection,
+} from './plugins-catalog.tsx'
 
 type Entry = {
   options: { id?: string; key?: string; order?: number; label?: string | (() => string) }
@@ -191,11 +200,12 @@ describe('plugin configuration navigation', () => {
     expect(projection(host).legacyZhihu).toBe(false)
     const html = navigation(rows, emptyZhihuSlot)
     expect(html).not.toContain('知乎资料')
-    expect(html).not.toContain('知乎')
+    /* The routable official configuration is a nav link; the legacy page is gone. */
+    expect(html).toContain('知乎')
     expect(html).toContain('installed-management')
     expect(html).toContain('official-slot')
     expect(html).not.toContain('插件模型')
-    expect(html).toContain('已安装与市场')
+    expect(html).toContain('插件总览')
   })
 
   it('drops a legacy Zhihu registration replaced by that plugin\'s official configuration', () => {
@@ -239,8 +249,10 @@ describe('plugin configuration navigation', () => {
     expect(legacyZhihuVisible(fixture(rows).slots)).toBe(true)
     const html = navigation(rows, createElement('p', null, 'legacy-zhihu-body'))
     expect(html).toContain('知乎资料')
-    expect(html).not.toContain('@klarkxy/dsh-memory')
-    expect(html).not.toContain('>记忆<')
+    /* The package name may appear as a configuration link, never as page content. */
+    const content = html.slice(html.indexOf('plugins-page-content'))
+    expect(content).not.toContain('@klarkxy/dsh-memory')
+    expect(content).not.toContain('>记忆<')
   })
 
   it('follows legacy registration and removal through the ledger version', () => {
@@ -321,5 +333,256 @@ describe('plugin configuration navigation', () => {
     expect(en.version).not.toBe(zh.version)
     expect(again.entries.map((entry) => entry.label)).toEqual(zh.entries.map((entry) => entry.label))
     expect(again.version).not.toBe(en.version)
+  })
+})
+
+const SECTION_IDS = ['official', 'builtin', 'user'] as const
+
+const CATALOG_SECTIONS: PluginCatalogSection[] = [
+  { id: 'official', items: [
+    { key: 'bundle:@deepseek-ai/dsh-web-search', title: '网络搜索', description: '写作时检索公开资料', packageName: '@deepseek-ai/dsh-web-search', badges: ['experimental'], enabled: true, action: 'switch' },
+    { key: 'bundle:@klarkxy/dsh-terminal', title: '终端', description: '在应用内运行命令', packageName: '@klarkxy/dsh-terminal', badges: ['preinstalled'], action: 'detail' },
+  ] },
+  { id: 'builtin', items: [
+    { key: 'bundle:dsh-editor-proofread', title: '文稿校对', description: '检查错别字与标点', badges: ['builtin', 'session-managed'], action: 'config' },
+  ] },
+  { id: 'user', items: [] },
+]
+
+function catalog(props: Partial<Parameters<typeof PluginsCatalog>[0]> = {}) {
+  return renderToStaticMarkup(createElement(PluginsCatalog, {
+    status: 'ready',
+    sections: CATALOG_SECTIONS,
+    query: '',
+    pending: '',
+    actionError: '',
+    onToggle() {}, onTogglePreset() {}, onConfigure() {}, onDetail() {},
+    ...props,
+  }))
+}
+
+function sectionHtml(html: string, id: typeof SECTION_IDS[number]): string {
+  const start = html.indexOf(`data-testid="plugins-catalog-${id}"`)
+  if (start < 0) return ''
+  const ends = SECTION_IDS.filter((other) => other !== id)
+    .map((other) => html.indexOf(`data-testid="plugins-catalog-${other}"`, start + 1))
+    .filter((at) => at > start)
+  return html.slice(start, ends.length ? Math.min(...ends) : html.length)
+}
+
+function countIn(html: string, id: typeof SECTION_IDS[number]): string | undefined {
+  return sectionHtml(html, id).match(/plugins-catalog-count[^>]*>([^<]*)</)?.[1]
+}
+
+describe('plugin catalog', () => {
+  it('renders the three sections in the fixed order with their real counts', () => {
+    const html = catalog()
+    expect(html.indexOf('DSH 官方插件')).toBeGreaterThan(-1)
+    expect(html.indexOf('DSH 官方插件')).toBeLessThan(html.indexOf('DSH-Editor 内置插件'))
+    expect(html.indexOf('DSH-Editor 内置插件')).toBeLessThan(html.indexOf('用户插件'))
+    expect(countIn(html, 'official')).toBe('2')
+    expect(countIn(html, 'builtin')).toBe('1')
+    expect(countIn(html, 'user')).toBe('0')
+  })
+
+  it('renders every badge as text and exactly one primary control per row', () => {
+    const html = catalog()
+    expect(html).toContain('实验性')
+    expect(html).toContain('预装')
+    expect(html).toContain('内置')
+    expect(html).toContain('由会话控制')
+    expect(html).toContain('data-testid="plugins-catalog-toggle-bundle:@deepseek-ai/dsh-web-search"')
+    expect(html).toContain('data-testid="plugins-catalog-config-bundle:dsh-editor-proofread"')
+    expect(html).toContain('data-testid="plugins-catalog-detail-bundle:@klarkxy/dsh-terminal"')
+    const rows = html.match(/data-testid="plugins-catalog-row-[^"]+"/g) ?? []
+    expect(rows).toHaveLength(3)
+    for (const row of sectionHtml(html, 'official').match(/data-testid="plugins-catalog-row-[^"]+"[\s\S]*?(?=data-testid="plugins-catalog-row-|$)/g) ?? []) {
+      expect(row.match(/plugins-catalog-(?:toggle|config|detail)-/g)).toHaveLength(1)
+    }
+  })
+
+  it('adds a secondary 配置 beside the switch only for a reachable configuration page', () => {
+    const html = catalog({ configKeys: ['bundle:@deepseek-ai/dsh-web-search'] })
+    const official = sectionHtml(html, 'official')
+    expect(official).toContain('data-testid="plugins-catalog-toggle-bundle:@deepseek-ai/dsh-web-search"')
+    expect(official).toContain('data-testid="plugins-catalog-config-bundle:@deepseek-ai/dsh-web-search"')
+    expect(official).toContain('plugins-catalog-config"')
+    /* The switch stays the rightmost primary control; the detail row is untouched. */
+    const row = official.slice(0, official.indexOf('data-testid="plugins-catalog-row-bundle:@klarkxy/dsh-terminal"'))
+    expect(row.lastIndexOf('plugins-catalog-config-')).toBeLessThan(row.lastIndexOf('plugins-catalog-toggle-'))
+    expect(official).not.toContain('plugins-catalog-config-bundle:@klarkxy/dsh-terminal')
+    /* No reachable configuration page means no config affordance at all. */
+    expect(catalog()).not.toContain('plugins-catalog-config-bundle:@deepseek-ai/dsh-web-search')
+  })
+
+  it('keeps the one-line description with its full text in the row tooltip', () => {
+    const html = catalog()
+    expect(html).toContain('写作时检索公开资料')
+    expect(sectionHtml(html, 'official')).toContain('title="写作时检索公开资料"')
+  })
+
+  it('invites the author to discover plugins when the user section is empty', () => {
+    expect(sectionHtml(catalog(), 'user')).toContain('还没有安装用户插件。在「发现插件」里找找看。')
+  })
+
+  it('filters every section by title, description and package name', () => {
+    const byTitle = catalog({ query: '文稿' })
+    expect(sectionHtml(byTitle, 'builtin')).toContain('文稿校对')
+    expect(sectionHtml(byTitle, 'official')).not.toContain('网络搜索')
+    const byPackage = catalog({ query: 'TERMINAL' })
+    expect(sectionHtml(byPackage, 'official')).toContain('终端')
+    expect(sectionHtml(byPackage, 'builtin')).toContain('没有匹配的插件。')
+    expect(sectionHtml(catalog({ query: '命令' }), 'official')).toContain('终端')
+  })
+
+  it('reports loading and error instead of claiming an empty catalog', () => {
+    expect(catalog({ status: 'loading', sections: [] })).toContain('正在读取插件目录…')
+    const failed = catalog({ status: 'error', sections: [], error: 'internal boom', onRetry() {} })
+    expect(failed).toContain('data-testid="plugins-catalog-error"')
+    expect(failed).toContain('internal boom')
+    expect(failed).not.toContain('用户插件')
+  })
+
+  it('renders writing presets as a built-in sub-group and locks the required ones', () => {
+    const html = catalog({ presets: [
+      { id: 'dsh-editor-writing', title: '通用写作', description: '默认写作', enabled: true, locked: true },
+      { id: 'dsh-editor-novel', title: '小说工具', description: '长篇创作助手', enabled: false, locked: false },
+    ], restartRequired: true })
+    const builtin = sectionHtml(html, 'builtin')
+    expect(countIn(html, 'builtin')).toBe('3')
+    expect(builtin).toContain('写作模式')
+    expect(builtin).toContain('data-testid="plugins-catalog-preset-dsh-editor-writing"')
+    expect(builtin).toContain('data-testid="plugins-catalog-preset-toggle-dsh-editor-novel"')
+    expect(builtin).toContain('仅影响新对话，进行中的对话不变。')
+    expect(html).toContain('重启 DSH 后生效。')
+    const locked = builtin.slice(builtin.indexOf('data-testid="plugins-catalog-preset-dsh-editor-writing"'))
+    expect(locked.slice(0, locked.indexOf('data-testid="plugins-catalog-preset-dsh-editor-novel"'))).toContain('必需')
+    expect(sectionHtml(catalog(), 'official')).not.toContain('写作模式')
+  })
+
+  it('normalizes an unknown payload into the three fixed sections', () => {
+    const sections = catalogSectionsOf({ sections: [
+      { id: 'user', items: [{ key: 'bundle:a', title: 'A', description: '', badges: ['locked'], action: 'nonsense' }] },
+      { id: 'unknown', items: [{ key: 'bundle:dropped' }] },
+      { id: 'official', items: [{ title: 'no key' }, 'nope'] },
+    ] })
+    expect(sections.map((section) => section.id)).toEqual(['official', 'builtin', 'user'])
+    expect(sections[0]!.items).toEqual([])
+    expect(sections[2]!.items).toEqual([{ key: 'bundle:a', title: 'A', description: '', badges: ['locked'], action: 'detail' }])
+    expect(catalogSectionsOf(undefined).map((section) => section.items)).toEqual([[], [], []])
+  })
+
+  it('appends one configuration card per plugins.item entry to the official section', () => {
+    const merged = mergeConfigurationCards(catalogSectionsOf({ sections: [{ id: 'official', items: [
+      { key: 'bundle:@deepseek-ai/dsh-web-search', title: '网络搜索', description: '', badges: [], action: 'switch' },
+    ] }] }), [
+      { id: 'plugins.item:terminal', label: '终端', slot: 'plugins.item', namespace: 'terminal' },
+      { id: 'plugins.bundle.config:@klarkxy/dsh-memory', label: '记忆', slot: 'plugins.bundle.config', entryKey: '@klarkxy/dsh-memory' },
+      { id: 'plugins.item:terminal', label: '终端', slot: 'plugins.item', namespace: 'terminal' },
+    ])
+    expect(merged[0]!.items.map((card) => [card.key, card.action])).toEqual([
+      ['bundle:@deepseek-ai/dsh-web-search', 'switch'],
+      ['entry:plugins.item:terminal', 'config'],
+    ])
+    expect(merged[0]!.items[1]).toMatchObject({ title: '终端', entryId: 'terminal', badges: [] })
+    expect(merged[2]!.items).toEqual([])
+  })
+
+  it('gives a configuration card the config control only when its entry is reachable', () => {
+    const sections = mergeConfigurationCards(catalogSectionsOf({ sections: [{ id: 'official', items: [] }] }), [
+      { id: 'plugins.item:terminal', label: '终端', slot: 'plugins.item', namespace: 'terminal' },
+    ])
+    const unreachable = mergeSections(sections, [], [])
+    expect(unreachable[0]!.items[0]!.action).toBe('detail')
+    const reachable = mergeSections(sections, [], [
+      { id: 'official:plugins.item:terminal', label: '终端', entry: { id: 'plugins.item:terminal', label: '终端', slot: 'plugins.item', namespace: 'terminal' } },
+    ])
+    expect(reachable[0]!.items[0]!.action).toBe('config')
+    expect(catalog({ sections: reachable })).toContain('data-testid="plugins-catalog-config-entry:plugins.item:terminal"')
+  })
+
+  it('marks a switch row configurable through its package name, entry id or configuration key', () => {
+    const sections = mergeSections(catalogSectionsOf({ sections: [{ id: 'official', items: [
+      { key: 'bundle:@klarkxy/dsh-web-search-manager', title: '网页搜索', description: '', packageName: '@klarkxy/dsh-web-search-manager', badges: [], enabled: true, action: 'switch' },
+      { key: 'entry:terminal', title: '终端', description: '', entryId: 'terminal', badges: [], enabled: true, action: 'switch' },
+      { key: 'bundle:@scope/plain', title: '普通插件', description: '', packageName: '@scope/plain', badges: [], enabled: true, action: 'switch' },
+      { key: 'bundle:@klarkxy/dsh-terminal', title: '终端包', description: '', packageName: '@klarkxy/dsh-terminal', badges: [], action: 'detail' },
+    ] }] }), [], [])
+    const links = [
+      { id: 'official:plugins.bundle.config:@klarkxy/dsh-web-search-manager', label: '网络搜索', entry: { id: 'plugins.bundle.config:@klarkxy/dsh-web-search-manager', label: '网络搜索', slot: 'plugins.bundle.config', entryKey: '@klarkxy/dsh-web-search-manager' } },
+      { id: 'official:plugins.item:terminal', label: '终端', entry: { id: 'plugins.item:terminal', label: '终端', slot: 'plugins.item', namespace: 'terminal' } },
+      { id: 'official:plugins.bundle.config:@klarkxy/dsh-terminal', label: '终端包', entry: { id: 'plugins.bundle.config:@klarkxy/dsh-terminal', label: '终端包', slot: 'plugins.bundle.config', entryKey: '@klarkxy/dsh-terminal' } },
+    ]
+    /* Only the two switch rows with a reachable page get the secondary control. */
+    expect(secondaryConfigKeys(sections, links)).toEqual([
+      'bundle:@klarkxy/dsh-web-search-manager',
+      'entry:terminal',
+    ])
+    expect(secondaryConfigKeys(sections, [])).toEqual([])
+    const html = catalog({ sections, configKeys: secondaryConfigKeys(sections, links) })
+    expect(html).toContain('data-testid="plugins-catalog-config-bundle:@klarkxy/dsh-web-search-manager"')
+    expect(html).toContain('data-testid="plugins-catalog-toggle-bundle:@klarkxy/dsh-web-search-manager"')
+    expect(html).not.toContain('plugins-catalog-config-bundle:@scope/plain')
+    /* A detail row keeps its single primary control even with a reachable page. */
+    expect(html).toContain('data-testid="plugins-catalog-detail-bundle:@klarkxy/dsh-terminal"')
+    expect(html).not.toContain('plugins-catalog-config-bundle:@klarkxy/dsh-terminal')
+  })
+
+  it('filters a catalog projection without touching its source', () => {
+    const source = catalogSectionsOf({ sections: [{ id: 'user', items: [{ key: 'bundle:a', title: 'Alpha', description: 'first', badges: [], action: 'detail' }] }] })
+    expect(filterCatalogSections(source, 'alpha')[2]!.items).toHaveLength(1)
+    expect(filterCatalogSections(source, 'zzz')[2]!.items).toHaveLength(0)
+    expect(source[2]!.items).toHaveLength(1)
+  })
+
+  it('issues the bundle, entry and preset requests the Host contract defines', () => {
+    expect(catalogToggleRequest({ key: 'bundle:a', title: 'A', description: '', badges: [], packageName: '@scope/a', action: 'switch' }, false))
+      .toEqual({ channel: '/api', endpoint: 'pluginManager/setBundleEnabled', payload: { args: { name: '@scope/a', enabled: false } } })
+    expect(catalogToggleRequest({ key: 'entry:terminal', title: 'A', description: '', badges: [], entryId: 'terminal', action: 'switch' }, true))
+      .toEqual({ channel: '/api', endpoint: 'pluginManager/setPluginEnabled', payload: { args: { id: 'terminal', enabled: true } } })
+    /* An entry card may also name its package; the entry stays the toggle target. */
+    expect(catalogToggleRequest({ key: 'entry:terminal', title: 'A', description: '', badges: [], packageName: '@scope/a', entryId: 'terminal', action: 'switch' }, true))
+      .toEqual({ channel: '/api', endpoint: 'pluginManager/setPluginEnabled', payload: { args: { id: 'terminal', enabled: true } } })
+    expect(catalogToggleRequest({ key: 'entry:orphan', title: 'A', description: '', badges: [], action: 'switch' }, true)).toBeNull()
+    expect(presetEnabledRequest({ id: 'dsh-editor-novel', title: '小说工具', description: '', enabled: false, locked: false }, true))
+      .toEqual({ channel: '/dsh-editor-plugins', endpoint: 'presets.setEnabled', payload: { id: 'dsh-editor-novel', enabled: true } })
+  })
+})
+
+describe('plugins page navigation', () => {
+  it('keeps the nav and the three fixed entries with zero configuration entries', () => {
+    const html = navigation({})
+    expect(html).toContain('data-testid="plugins-page-nav"')
+    expect(html).toContain('data-testid="plugins-nav-overview"')
+    expect(html).toContain('data-testid="plugins-nav-discovery"')
+    expect(html).toContain('data-testid="plugins-nav-manager"')
+    expect(html).toContain('插件总览')
+    expect(html).toContain('发现插件')
+    expect(html).toContain('安装与卸载')
+    expect(html).toContain('插件配置')
+    expect(html).toContain('搜索插件配置')
+    expect(html).toContain('data-testid="plugins-catalog-search"')
+    expect(html).toContain('placeholder="搜索插件"')
+    expect(html).toContain('data-testid="plugins-page-add-plugin"')
+    expect(html).toContain('添加插件')
+    expect(html).toContain('暂无插件配置。')
+  })
+
+  it('keeps the discovery contribution and the official manager seat mounted', () => {
+    const html = navigation({}, emptyZhihuSlot)
+    expect(html).toContain('data-testid="plugins-discovery"')
+    expect(html).toContain('installed-management')
+    expect(html).toContain('data-testid="plugins-manager-seat"')
+    expect(html).toContain('official-slot')
+    expect(html).toContain('data-dsh-plugin-surface')
+    const manager = html.slice(html.indexOf('data-testid="plugins-manager-seat"'))
+    expect(manager).toContain('official-slot')
+    expect(html).toMatch(/hidden=""[^>]*data-testid="plugins-manager-seat"/)
+  })
+
+  it('routes the plugins.item configuration entries from the nav', () => {
+    const html = navigation({ 'plugins.item': [{ options: { id: 'terminal', label: () => '终端' } }] })
+    expect(html).toContain('终端')
+    expect(html).toContain('搜索插件配置')
   })
 })

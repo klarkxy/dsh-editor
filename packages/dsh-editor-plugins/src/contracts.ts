@@ -41,3 +41,31 @@ export type PluginsErrorCode = 'bad-request' | 'cancelled' | 'forbidden' | 'not-
 export type PluginsRpcResult<T = unknown> =
   | { ok: true; value: T }
   | { ok: false; error: { code: PluginsErrorCode; message: string; details: Record<string, unknown> } }
+
+/** Three-class plugin catalog served by the `catalog.list` endpoint. */
+export const PLUGIN_CATALOG_ENDPOINT = 'catalog.list'
+export type PluginCatalogBadge =
+  | 'required'
+  | 'locked'
+  | 'builtin'
+  | 'preinstalled'
+  | 'experimental'
+  | 'session-managed'
+  | 'feature-managed'
+export type PluginCatalogAction = 'switch' | 'config' | 'detail'
+export type PluginCatalogCard = {
+  /** Stable key: `bundle:<packageName>` or `entry:<entryId>`. */
+  key: string
+  title: string
+  description: string
+  packageName?: string
+  /** Cordis entry id when this card toggles a plugin entry. */
+  entryId?: string
+  badges: PluginCatalogBadge[]
+  /** Omit when the card carries no switch. */
+  enabled?: boolean
+  action: PluginCatalogAction
+}
+export type PluginCatalogSectionId = 'official' | 'builtin' | 'user'
+export type PluginCatalogSection = { id: PluginCatalogSectionId; items: PluginCatalogCard[] }
+export type PluginCatalog = { sections: PluginCatalogSection[] }

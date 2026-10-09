@@ -12,7 +12,6 @@ import {
   type MarketplaceListing,
   type PluginsRpcResult,
   type WritingPresetCard,
-  type WritingPresetInventory,
 } from './contracts.ts'
 import { pluginsClientStyles } from './client-styles.ts'
 import type { ShellToolSeatContext } from 'dsh-editor-seats'
@@ -52,7 +51,12 @@ async function callRpc<T>(caller: RpcCaller, endpoint: string, payload: unknown,
   return await caller.call(PLUGINS_RPC_CHANNEL, endpoint, payload, signal) as PluginsRpcResult<T>
 }
 
-type MarketplaceBridge = { openExternal?(url: string): void; clipboardWriteText?(text: string): void | Promise<void> }
+type MarketplaceBridge = {
+  openExternal?(url: string): void
+  /** Preload shape is nested (`dshWindow.clipboard.writeText`); the flat name is kept as a fallback. */
+  clipboard?: { writeText?(text: string): void | Promise<void> }
+  clipboardWriteText?(text: string): void | Promise<void>
+}
 
 export function marketplaceOpenExternal(): ((url: string) => void) | undefined {
   const scope = globalThis as { window?: { dshWindow?: MarketplaceBridge }; dshWindow?: MarketplaceBridge }
@@ -84,7 +88,7 @@ function nativeInstallSpec(spec: string): string {
 export async function copyInstallSpec(spec: string): Promise<string> {
   const installSpec = nativeInstallSpec(spec)
   const scope = globalThis as { window?: { dshWindow?: MarketplaceBridge }; navigator?: { clipboard?: { writeText(text: string): Promise<void> } } }
-  const bridge = scope.window?.dshWindow?.clipboardWriteText
+  const bridge = scope.window?.dshWindow?.clipboard?.writeText ?? scope.window?.dshWindow?.clipboardWriteText
   if (bridge) {
     await bridge(installSpec)
     return installSpec
@@ -131,7 +135,8 @@ function Switch(props: HostSwitchProps) {
   </button>
 }
 
-function WritingPresetGroup(props: {
+/** Preset rows are rendered by the shell settings page; kept for reuse, not mounted here. */
+export function WritingPresetGroup(props: {
   presets: WritingPresetCard[]
   busyPreset: string | null
   onToggle(id: string, enabled: boolean): void
@@ -245,8 +250,6 @@ function PluginSettings(props: {
   Input?: ShellToolSeatContext['Input']
   openBundle?(packageName: string): void
 }) {
-  const [presets, setPresets] = useState<WritingPresetCard[] | null>(null)
-  const [busyPreset, setBusyPreset] = useState<string | null>(null)
   const [listings, setListings] = useState<MarketplaceListing[]>([])
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
@@ -255,10 +258,6 @@ function PluginSettings(props: {
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
-    void callRpc<WritingPresetInventory>(props.rpc, 'presets.list', {}).then((result) => {
-      if (!mounted.current || !result.ok) return
-      setPresets(result.value.presets)
-    })
     void callRpc<{ listings: MarketplaceListing[] }>(props.rpc, 'marketplace.search', { query: '' }).then((result) => {
       if (!mounted.current || !result.ok) return
       setListings(result.value.listings)
@@ -281,28 +280,15 @@ function PluginSettings(props: {
   const onCopy = async (spec: string) => {
     try {
       const copied = await copyInstallSpec(spec)
-      setNote(`已复制 ${copied}。请在官方插件页使用「添加插件」粘贴。`)
+      setNote(`已复制 ${copied}。请在「安装与卸载」页用「添加插件」粘贴。`)
     } catch {
       setNote(`请手动复制：${nativeInstallSpec(spec)}`)
     }
-  }
-  const onTogglePreset = async (id: string, enabled: boolean) => {
-    setBusyPreset(id)
-    const result = await callRpc<{ restartRequired: boolean }>(props.rpc, 'presets.setEnabled', { id, enabled })
-    if (!mounted.current) return
-    setBusyPreset(null)
-    if (!result.ok) {
-      setError(result.error.message)
-      return
-    }
-    const listed = await callRpc<WritingPresetInventory>(props.rpc, 'presets.list', {})
-    if (listed.ok) setPresets(listed.value.presets)
   }
   return <div className="dsh-plugins">
     <PluginDiscovery query={query} listings={listings} searching={searching} note={note} error={error}
       Button={props.Button} Input={props.Input} onQuery={setQuery} onSearch={() => { void onSearch() }}
       onCopy={(spec) => { void onCopy(spec) }} onOpen={props.openBundle} />
-    {presets?.length ? <WritingPresetGroup presets={presets} busyPreset={busyPreset} onToggle={(id, enabled) => { void onTogglePreset(id, enabled) }} /> : null}
   </div>
 }
 

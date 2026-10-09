@@ -1,3 +1,4 @@
+import { readPluginCatalog, type CatalogManager } from './catalog.ts'
 import { RETIRED_PLUGIN_PACKAGES } from '../../../apps/desktop/src/distribution-contract.ts'
 import { syncPresetDeclarations } from './preset-config.ts'
 import { adaptNativeToolProjection, readNativeToolState, type NativeToolManager } from './native-tools.ts'
@@ -8,8 +9,10 @@ import { readFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import {
   PLUGINS_RPC_CHANNEL,
+  PLUGIN_CATALOG_ENDPOINT,
   type MarketplaceListing,
   type PluginActionReceipt,
+  type PluginCatalog,
   type PluginsRpcResult,
 } from './contracts.ts'
 import { CORE_PLUGIN_BUNDLE_NAMES, protectCorePluginManager } from './core-lock.ts'
@@ -200,11 +203,17 @@ export async function handlePluginsRpc(
     io?: PersistIo
     reloadProfile?: () => Promise<boolean>
     readToolState?: () => Promise<NativeToolState | undefined>
+    /** Official manager, read-only. Absent when the host has no plugin service. */
+    manager?: CatalogManager
   },
 ): Promise<PluginsRpcResult> {
   if (signal.aborted) return cancelled()
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {}
   try {
+    if (endpoint === PLUGIN_CATALOG_ENDPOINT) {
+      const value: PluginCatalog = await readPluginCatalog(options.paths.profileDir, options.manager)
+      return { ok: true, value }
+    }
     if (endpoint === 'marketplace.search') {
       const query = typeof body.query === 'string' ? body.query : ''
       const locals = await listLocalMarketplaceListings(options.paths.profileDir)
@@ -285,6 +294,16 @@ export function apply(ctx: Context): void {
     serialize(() => handlePluginsRpc(endpoint, payload, signal, {
       paths,
       reloadProfile,
+      manager: {
+        listBundles: async () => {
+          const manager = host.get('pluginManager') as NativeToolManager | undefined
+          return manager?.listBundles ? manager.listBundles() : undefined
+        },
+        listPlugins: async () => {
+          const manager = host.get('pluginManager') as NativeToolManager | undefined
+          return manager?.listPlugins ? manager.listPlugins() : undefined
+        },
+      },
       readToolState: async () => {
         const manager = host.get('pluginManager') as NativeToolManager | undefined
         return manager?.listBundles ? readNativeToolState(manager) : undefined

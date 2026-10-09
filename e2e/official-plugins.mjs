@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { mkdir, writeFile, readFile, appendFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { nativePluginRpc, openPluginsPage, closePluginsPage } from './helpers/plugin-page.mjs'
+import { nativePluginRpc, openPluginManager, openPluginsPage, closePluginsPage } from './helpers/plugin-page.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const fixtureRequire = createRequire(resolve(root, 'packages/dsh-editor-shell/package.json'))
@@ -171,12 +171,15 @@ try {
   for (const [moduleName] of capabilityStates.filter(([moduleName, enabled]) => enabled && moduleName.includes('/dsh-client-'))) {
     assert.ok(bootModules.includes(moduleName), moduleName + ' is advertised to the client module loader')
   }
-  await plugins.locator('[data-plugin-panel]').getByRole('button', {name:'查看 语音输入',exact:true}).waitFor()
+  // The official manager is the install, toggle and approval engine; it lives on
+  // the 安装与卸载 page, so select that page before touching its panel.
+  const manager = await openPluginManager(plugins)
+  await manager.locator('[data-plugin-panel]').getByRole('button', {name:'查看 语音输入',exact:true}).waitFor()
   check('native inventory and boot manifest enable shortcuts and document previews; MCP resources ship disabled')
   await page.screenshot({path:resolve(output,'plugins-light.png')})
   // Built-in availability, bundle selection, component activation and model
   // preparation are separate native states.
-  await plugins.locator('[data-plugin-panel]').getByRole('button', {name:'查看 语音输入',exact:true}).click()
+  await manager.locator('[data-plugin-panel]').getByRole('button', {name:'查看 语音输入',exact:true}).click()
   const voiceSwitch = plugins.getByRole('switch', {name:'启用 语音输入',exact:true})
   const voiceBundle = (await nativePluginRpc(page, 'listBundles')).find(bundle => bundle.name === voiceName)
   const voiceComponents = voiceIds
@@ -191,7 +194,7 @@ try {
     assert.equal(row.enabled, true, row.entryId + ' is active with the selected voice bundle')
   }
   assert.ok(bootModules.includes('@deepseek-ai/dsh-experimental-client-ui-voice-input'), 'voice activity is advertised to the client module loader')
-  const voiceConfiguration = plugins.locator('[data-plugin-config]')
+  const voiceConfiguration = manager.locator('[data-plugin-config]')
   await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).waitFor()
   assert.equal(await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).isEnabled(),true)
   await page.screenshot({path:resolve(output,'voice-preparation.png')})

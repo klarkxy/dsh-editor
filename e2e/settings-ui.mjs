@@ -10,7 +10,7 @@ catch {
   ;({ default: AxeBuilder } = createRequire(toolkit)('@axe-core/playwright'))
 }
 import { _electron as electron } from 'playwright'
-import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, closePluginsPage, openPluginDiscovery, openPluginManager, openPluginsPage, openWebSearchSettings, showPluginList } from './helpers/plugin-page.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const stage = process.env.SETTINGS_UI_STAGE || 'after'
@@ -101,14 +101,11 @@ try {
       await dialog.waitFor({ state: 'hidden' })
       const plugins = await openPluginsPage(page)
       await assertDefaultPluginPage(page, plugins)
-      const surfaces = ['已安装', '写作模式', '发现插件', '网页搜索']
+      const surfaces = ['插件总览', '发现插件', '安装与卸载', '网页搜索']
       for (const [i, tab] of surfaces.entries()) {
         await showPluginList(plugins)
-        if (tab === '写作模式') await openWritingPresets(plugins)
-        if (tab === '发现插件') {
-          const discovery = plugins.getByTestId('plugins-settings')
-          if (!await discovery.evaluate(element => element.open)) await discovery.locator(':scope > summary').click()
-        }
+        if (tab === '发现插件') await openPluginDiscovery(plugins)
+        if (tab === '安装与卸载') await openPluginManager(plugins)
         if (tab === '网页搜索') await openWebSearchSettings(plugins)
         await page.waitForTimeout(300)
         const content = plugins.locator('.plugins-page-content')
@@ -226,9 +223,7 @@ try {
   for(const link of await signupLinks.all())await link.click()
   assert.ok(expectedUrls.length > 0, 'web search must expose provider signup links')
   assert.deepEqual(await app.evaluate(()=>globalThis.settingsExternalUrls),expectedUrls)
-  await showPluginList(plugins)
-  const discovery = plugins.getByTestId('plugins-settings')
-  if (!await discovery.evaluate(element => element.open)) await discovery.locator(':scope > summary').click()
+  const discovery = await openPluginDiscovery(plugins)
   const query = discovery.getByRole('textbox')
   await app.evaluate(({ ipcMain }) => {
     globalThis.settingsCopiedSpec = undefined
@@ -237,7 +232,7 @@ try {
   })
   await query.fill('npm:@klarkxy/dsh-zhihu@0.1.10')
   await discovery.locator('form').getByRole('button', { name: '复制规格', exact: true }).click()
-  await discovery.getByText('已复制 @klarkxy/dsh-zhihu@0.1.10。请在官方插件页使用「添加插件」粘贴。', { exact: true }).waitFor()
+  await discovery.getByText('已复制 @klarkxy/dsh-zhihu@0.1.10。请在「安装与卸载」页用「添加插件」粘贴。', { exact: true }).waitFor()
   const installSpec = await app.evaluate(() => globalThis.settingsCopiedSpec)
   assert.equal(installSpec, '@klarkxy/dsh-zhihu@0.1.10')
   await app.evaluate(({ ipcMain }) => {
@@ -249,8 +244,11 @@ try {
   await query.fill('')
   await discovery.locator('form').getByRole('button', { name: '搜索', exact: true }).waitFor()
   await capturePluginExtra('plugin-discovery')
-  const add = plugins.locator('[data-plugin-panel]').getByRole('button', { name: '添加插件', exact: true })
-  await add.click()
+  await plugins.getByTestId('plugins-page-add-plugin').click()
+  // The header button routes to the manager page; return to its list first, since
+  // an earlier openBundle detail view sticks, then its own 添加插件 opens the dialog.
+  const seat = await openPluginManager(plugins)
+  await seat.getByRole('button', { name: '添加插件', exact: true }).first().click()
   const install = page.getByRole('dialog')
   await install.waitFor()
   const installInput = install.getByRole('textbox').first()

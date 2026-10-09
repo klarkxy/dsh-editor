@@ -80,7 +80,6 @@ export const componentStyles = [
   r(['.plugins-page-header .rt-Heading'], 'font-size: var(--dsh-ui-text-xl); font-weight: var(--dsh-ui-weight-strong);'),
   r(['.plugins-page-header button', '.plugins-trigger'], '-webkit-app-region: no-drag;'),
   r(['.plugins-page-layout'], 'display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0;'),
-  r(['.plugins-page-layout.is-single'], 'grid-template-columns: minmax(0, 1fr);'),
   r(['.plugins-page-nav'], `display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-4); overflow: auto; background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
   r(['.plugins-page-nav > *'], 'flex-shrink: 0;'),
   /* Nav section label follows the settings-nav-group treatment (muted, small,
@@ -91,6 +90,29 @@ export const componentStyles = [
   r(['.plugins-page .plugins-page-nav .plugins-page-link:hover'], 'background: var(--dsh-ui-hover);'),
   r(['.plugins-page .plugins-page-nav .plugins-page-link[aria-current="page"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-5); overflow: auto; min-width: 0; min-height: 0; overflow-wrap: anywhere;'),
+  // Header search + add action share the drag row; the title yields before them.
+  r(['.plugins-page-tools'], 'min-width: 0;'),
+  r(['.plugins-page-header .rt-Heading'], 'min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'),
+  r(['.plugins-page-search'], 'flex: 0 1 16rem; min-width: 0;'),
+  // Three-class catalog: one flat card per row, one primary control, no shadow.
+  r(['.plugins-catalog'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-6); min-width: 0;'),
+  r(['.plugins-catalog-section'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); min-width: 0;'),
+  r(['.plugins-catalog-head'], 'min-width: 0;'),
+  r(['.plugins-catalog-rows'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); list-style: none; margin: 0; padding: 0;'),
+  r(['.plugins-catalog-row'], `${cardSurface} display: flex; align-items: center; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-3); min-width: 0;`),
+  r(['.plugins-catalog-icon'], 'width: var(--dsh-ui-control-lg); height: var(--dsh-ui-control-lg); flex: none; border-radius: var(--dsh-ui-radius-md); background: var(--dsh-ui-surface); color: var(--dsh-ui-muted); display: flex; align-items: center; justify-content: center; font-weight: var(--dsh-ui-weight-strong);'),
+  r(['.plugins-catalog-row-text'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-1); flex: 1 1 auto; min-width: 0;'),
+  r(['.plugins-catalog-row-head'], 'flex-wrap: wrap; min-width: 0;'),
+  r(['.plugins-catalog-row-title'], 'min-width: 0; overflow-wrap: anywhere; font-weight: var(--dsh-ui-weight-medium);'),
+  // One line with the full text in the row tooltip keeps a long description from wrapping the control.
+  r(['.plugins-catalog-row-desc'], 'margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'),
+  r(['.plugins-catalog-row-action'], 'flex: none; display: flex; align-items: center; justify-content: flex-end; gap: var(--dsh-ui-space-2); min-width: var(--dsh-ui-control-lg);'),
+  /* Secondary 配置 beside a switch: a muted text affordance, never a second primary. */
+  r(['.plugins-catalog-config'], 'height: auto; min-height: var(--dsh-ui-control-sm); padding: 0 var(--dsh-ui-space-1); border: 0; background: transparent; box-shadow: none; color: var(--dsh-ui-muted);'),
+  r(['.plugins-catalog-config:hover'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text);'),
+  r(['.plugins-catalog-subsection'], `display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-3); border-top: ${hairline};`),
+  r(['.plugins-catalog-subsection-title'], 'color: var(--dsh-ui-muted); font-weight: var(--dsh-ui-weight-medium);'),
+  r(['.plugins-catalog-hint', '.plugins-catalog-empty', '.plugins-catalog-preset-locked'], 'margin: 0; color: var(--dsh-ui-muted);'),
 
   // Shell and native chrome. Keep draggable/no-drag regions and native controls.
   `${SCOPE}.shell-theme { --topbar-h: var(--dsh-ui-header-height); --control-h: var(--dsh-ui-control-md); }`,
@@ -321,6 +343,11 @@ export const responsiveStyles = `
   ${r(['.plugins-config-links'], 'flex: 1 1 100%; order: 3; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: var(--dsh-ui-space-1); padding-bottom: 2px;')}
   ${r(['.plugins-page .plugins-page-nav .plugins-config-links .plugins-page-link'], 'width: auto; flex: none; white-space: nowrap; min-height: var(--dsh-ui-control-sm);')}
   ${r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-3);')}
+  /* Narrow header: the fixed control height cannot hold search + add + window
+     controls on one line, so the drag row grows instead of dropping an action. */
+  ${r(['.plugins-page'], 'grid-template-rows: auto minmax(0, 1fr);')}
+  ${r(['.shell > .plugins-page-header'], 'height: auto; min-height: var(--dsh-ui-header-height); flex-wrap: wrap; row-gap: var(--dsh-ui-space-2); padding-block: var(--dsh-ui-space-2);')}
+  ${r(['.plugins-page-search'], 'flex: 1 1 6rem;')}
   ${r(['.composer-mode'], 'max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;')}
   ${r(['.chat > .composer'], 'margin: var(--dsh-ui-space-2);')}
   ${r(['.editor-header'], 'gap: var(--dsh-ui-space-2); padding-inline: var(--dsh-ui-space-3); flex-wrap: wrap;')}

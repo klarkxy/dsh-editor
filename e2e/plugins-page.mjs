@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { assertDefaultPluginPage, openWebSearchSettings, openWritingPresets } from './helpers/plugin-page.mjs'
+import { assertDefaultPluginPage, openPluginManager, openWebSearchSettings, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const stage = process.env.PLUGINS_UI_STAGE || 'current'
@@ -66,12 +66,11 @@ try {
     const pluginPage = page.locator('.plugins-page')
     await assertDefaultPluginPage(page, pluginPage)
     await openWritingPresets(pluginPage)
-    const nativePanel = pluginPage.locator('[data-plugin-panel]')
-    await shot(theme + '-manage-1440')
+    await shot(theme + '-overview-1440')
     await openWebSearchSettings(pluginPage)
     await shot(theme + '-web-search')
     if (theme === '浅色') {
-      await pluginPage.getByRole('button', { name: '返回插件列表', exact: true }).click()
+      const nativePanel = await openPluginManager(pluginPage)
       const loop = nativePanel.getByText('Agent 循环', { exact: true }).first()
       await loop.click()
       const parallel = pluginPage.locator('#plugin-config-agent-loop-parallel')
@@ -81,18 +80,17 @@ try {
       await page.reload()
       await page.locator('.plugins-trigger').waitFor({timeout:90000})
       await page.locator('.plugins-trigger').click()
-      await nativePanel.waitFor()
-      await nativePanel.getByText('Agent 循环', { exact: true }).first().click()
+      const reloadedPanel = await openPluginManager(pluginPage)
+      await reloadedPanel.getByText('Agent 循环', { exact: true }).first().click()
       assert.equal(await pluginPage.locator('#plugin-config-agent-loop-parallel').inputValue(), '7')
       await shot('official-config-saved-after-reload')
       report.checks.push('official Agent loop configuration saved through Host and survived full reload')
     }
-    const nativeBack = pluginPage.getByRole('button', { name: '返回插件列表', exact: true })
-    if (await nativeBack.isVisible()) await nativeBack.click()
+    await showPluginList(pluginPage)
     for (const width of [1024, 760, 390]) {
       await page.setViewportSize({ width, height: 900 })
       assert(await pluginPage.evaluate(el => el.scrollWidth <= el.clientWidth + 1), `page overflow ${width}: ${JSON.stringify(await pluginPage.evaluate(el => ({client:el.clientWidth,scroll:el.scrollWidth})))}`)
-      await shot(theme + '-manage-' + width)
+      await shot(theme + '-overview-' + width)
     }
     await page.setViewportSize({ width: 1440, height: 900 })
     await pluginPage.getByRole('button', { name: '返回首页', exact: true }).click()

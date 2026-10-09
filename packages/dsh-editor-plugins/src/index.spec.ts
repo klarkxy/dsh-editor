@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { apply, handlePluginsRpc, resolveProfileArtifactDir } from './index.ts'
 import { defaultPersistIo } from './persist.ts'
+import { RUNTIME_CATALOG_FILE } from './core.ts'
+import { PLUGIN_CATALOG_ENDPOINT, type PluginCatalog } from './contracts.ts'
 import type { PluginPaths } from './paths.ts'
 import { profileDirFromPluginModule, resolvePluginPaths } from './paths.ts'
 
@@ -55,6 +57,55 @@ describe('plugin manager RPC', () => {
         ok: false, error: { code: 'bad-request', message: '不支持的插件操作' },
       })
     }
+  })
+
+  it('serves the read-only three-section catalog and keeps mutations on the official manager', async () => {
+    const paths = await fixture()
+    await writeFile(join(paths.profileDir, RUNTIME_CATALOG_FILE), JSON.stringify({
+      bundles: ['dsh-editor-shell'],
+      entries: {
+        'ui-shortcuts': { title: '快捷键', description: '搜索、录制和重置。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-shortcuts' },
+        'ui-voice-input': { title: '语音输入', description: '本地语音识别。', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-experimental-client-ui-voice-input' },
+      },
+    }))
+    const manager = {
+      listBundles: async () => [
+        { name: '@deepseek-ai/dsh-experimental-voice-input-bundle', enabled: false, installed: true },
+        { name: 'dsh-editor-shell', enabled: true, installed: true, readOnlyReason: 'management-required' },
+        { name: '@klarkxy/dsh-web-search-manager', enabled: true, installed: true },
+      ],
+      listPlugins: async () => [{ entryId: 'ui-shortcuts', patchId: 'ui-shortcuts', enabled: true }],
+    }
+    const result = await handlePluginsRpc(PLUGIN_CATALOG_ENDPOINT, {}, signal(), { paths, manager })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const value = result.value as PluginCatalog
+    expect(value.sections.map((row) => row.id)).toEqual(['official', 'builtin', 'user'])
+    const official = value.sections[0]?.items ?? []
+    expect(official.map((card) => card.title)).toEqual(['语音输入'])
+    expect(official[0]).toMatchObject({ key: 'bundle:@deepseek-ai/dsh-experimental-voice-input-bundle', action: 'switch', enabled: false })
+    expect(official[0]?.badges).toContain('experimental')
+    const builtin = value.sections[1]?.items ?? []
+    expect(builtin.some((card) => card.title === '快捷键' && card.enabled === true)).toBe(true)
+    expect(builtin.some((card) => card.title === '网页搜索' && card.badges.includes('preinstalled'))).toBe(true)
+    // The folded voice entry must not reappear in builtin.
+    expect(builtin.some((card) => card.title === '语音输入')).toBe(false)
+    expect(value.sections[2]?.items).toEqual([])
+    // catalog.list stays read-only.
+    expect(await handlePluginsRpc('catalog.setEnabled', {}, signal(), { paths, manager })).toMatchObject({
+      ok: false, error: { code: 'bad-request' },
+    })
+  })
+
+  it('degrades to the builtin catalog when the official manager is absent', async () => {
+    const paths = await fixture()
+    const result = await handlePluginsRpc(PLUGIN_CATALOG_ENDPOINT, {}, signal(), { paths })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const value = result.value as PluginCatalog
+    expect(value.sections[0]?.items).toEqual([])
+    expect(value.sections[2]?.items).toEqual([])
+    expect(value.sections[1]?.items.some((card) => card.title === '网页搜索')).toBe(true)
   })
 })
 
