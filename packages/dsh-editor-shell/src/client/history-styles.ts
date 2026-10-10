@@ -63,12 +63,12 @@ export const historyStyles = `
 .radix-themes .history-change-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .radix-themes .history-change {
   display: grid;
-  grid-template-columns: 1.1em minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--space-2);
   align-items: baseline;
   font-size: var(--font-size-1);
 }
-.radix-themes .history-change code { overflow-wrap: anywhere; }
+.radix-themes .history-change > :last-child { overflow-wrap: anywhere; }
 .radix-themes .history-kind { font-family: var(--code-font-family); font-weight: var(--dsh-ui-weight-strong); }
 .radix-themes .history-change-added .history-kind { color: var(--green-11); }
 .radix-themes .history-change-removed .history-kind { color: var(--red-11); }

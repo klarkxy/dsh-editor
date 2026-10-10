@@ -36,6 +36,70 @@ type PatchContext = {
 
 const facades = new WeakMap<object, NativeSlots>()
 
+/** Read-only projection of the official manager's own accepted inventory. */
+export type NativePluginInventory = {
+  status: string
+  packages: readonly { name: string; installed: boolean; optional: boolean; enabled: boolean }[]
+  install?: { phase: string }
+}
+export type NativePluginInventorySource = {
+  getSnapshot(): NativePluginInventory
+  subscribe(listener: () => void): () => void
+}
+type ManagerLedgerEntry = {
+  options?: { key?: string }
+  inject?: (...args: never[]) => unknown
+}
+type ManagerLedger = {
+  entries(key: string): readonly ManagerLedgerEntry[]
+  entriesOfSlot?(key: string): readonly ManagerLedgerEntry[]
+  getVersion(key: string): number
+  subscribe(key: string, listener: () => void): () => void
+  isLive?(entry: ManagerLedgerEntry): boolean
+}
+function managerLedger(ctx: unknown): ManagerLedger | undefined {
+  if (!ctx || typeof ctx !== 'object') return undefined
+  const record = ctx as { slots?: ManagerLedger; get?(name: string): unknown }
+  try { return record.slots ?? record.get?.('slots') as ManagerLedger | undefined } catch { return undefined }
+}
+export function nativePluginManagerVersion(ctx: unknown): number {
+  try { return managerLedger(ctx)?.getVersion(NATIVE_PLUGIN_MANAGER_SEAT) ?? 0 } catch { return 0 }
+}
+export function subscribeNativePluginManager(ctx: unknown, listener: () => void): () => void {
+  try { return managerLedger(ctx)?.subscribe(NATIVE_PLUGIN_MANAGER_SEAT, listener) ?? (() => {}) } catch { return () => {} }
+}
+
+/**
+ * Borrow the live seat's injected face; never create a controller or cache it
+ * past registration. Every action checks the same live ledger before forwarding.
+ */
+export function nativePluginManagerBridge(ctx: unknown): {
+  inventory: NativePluginInventorySource
+  openInstall(spec?: string): boolean
+} | undefined {
+  const ledger = managerLedger(ctx)
+  if (!ledger) return undefined
+  try {
+    const entries = () => ledger.entriesOfSlot?.(NATIVE_PLUGIN_MANAGER_SEAT) ?? ledger.entries(NATIVE_PLUGIN_MANAGER_SEAT)
+    const entry = entries().find(row => row.options?.key === NATIVE_PLUGIN_MANAGER_KEY)
+    if (!entry?.inject) return undefined
+    const face = entry.inject() as {
+      hooks?: { pluginManager?: NativePluginInventorySource }
+      openInstall?(): void
+      editInstallSpec?(spec: string): void
+    }
+    const inventory = face?.hooks?.pluginManager
+    if (!inventory || typeof inventory.getSnapshot !== 'function' || typeof inventory.subscribe !== 'function'
+      || typeof face.openInstall !== 'function' || typeof face.editInstallSpec !== 'function') return undefined
+    return { inventory, openInstall(spec) {
+      if (ledger.isLive?.(entry) === false || !entries().includes(entry)) return false
+      face.openInstall!()
+      if (spec !== undefined) face.editInstallSpec!(spec)
+      return true
+    } }
+  } catch { return undefined }
+}
+
 function isMainRegister(spec: SlotRegisterSpec | undefined): spec is SlotRegisterSpec {
   return spec?.name === 'main' && (spec.key === undefined || spec.key === NATIVE_PLUGIN_MANAGER_KEY)
 }

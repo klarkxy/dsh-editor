@@ -5,9 +5,42 @@ import {
   NATIVE_PLUGIN_MANAGER_SEAT,
   adaptNativePluginManagerSeat,
   managerSeatFacade,
+  nativePluginManagerBridge,
+  nativePluginManagerVersion,
+  subscribeNativePluginManager,
 } from './native-plugin-manager-seat.ts'
 
 describe('native plugin manager seat facade', () => {
+  it('borrows the current official face and stops forwarding as soon as its registration leaves', () => {
+    const inventory = { getSnapshot: () => ({ status: 'ready', packages: [] }), subscribe: vi.fn(() => () => {}) }
+    const face = { hooks: { pluginManager: inventory }, openInstall: vi.fn(), editInstallSpec: vi.fn(), runInstall: vi.fn() }
+    const entry = { options: { key: 'plugins' }, inject: () => face }
+    let entries = [entry]
+    const slots = { entries: () => entries, getVersion: () => entries.length, subscribe: vi.fn(() => () => {}) }
+    const ctx = { slots }
+    const bridge = nativePluginManagerBridge(ctx)!
+    expect(bridge.inventory).toBe(inventory)
+    expect(bridge.openInstall('@scope/plugin')).toBe(true)
+    expect(face.openInstall).toHaveBeenCalledOnce()
+    expect(face.editInstallSpec).toHaveBeenCalledExactlyOnceWith('@scope/plugin')
+    expect(face.runInstall).not.toHaveBeenCalled()
+    const listener = () => {}
+    subscribeNativePluginManager(ctx, listener)
+    expect(slots.subscribe).toHaveBeenCalledWith(NATIVE_PLUGIN_MANAGER_SEAT, listener)
+    expect(nativePluginManagerVersion(ctx)).toBe(1)
+    entries = []
+    expect(nativePluginManagerBridge(ctx)).toBeUndefined()
+    expect(bridge.openInstall('@scope/other')).toBe(false)
+    expect(face.openInstall).toHaveBeenCalledOnce()
+    expect(nativePluginManagerVersion(ctx)).toBe(0)
+  })
+
+  it('does not invent a manager when the seat is missing, faulty, or abdicated', () => {
+    expect(nativePluginManagerBridge({})).toBeUndefined()
+    expect(nativePluginManagerBridge({ slots: { entries() { throw new Error('unloaded') } } })).toBeUndefined()
+    expect(nativePluginManagerBridge({ slots: { entries: () => [{ options: { key: 'plugins' }, inject: () => ({}) }] } })).toBeUndefined()
+    expect(nativePluginManagerBridge({ slots: { entries: () => [{ options: { key: 'plugins' }, inject: () => ({}) }], entriesOfSlot: () => [] } })).toBeUndefined()
+  })
   it('maps only official main inject/register onto the private seat and forwards the rest', () => {
     const inject = vi.fn((key: string, callback: unknown) => ({ key, callback }))
     const register = vi.fn((spec: object, component: unknown) => ({ spec, component }))

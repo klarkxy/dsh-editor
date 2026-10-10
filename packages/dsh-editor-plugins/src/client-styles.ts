@@ -148,7 +148,7 @@ ${surfaceTokenAliases}
   font-size: var(--font-size-1);
   line-height: 1.5;
 }
-.dsh-plugins-actions { display: flex; align-items: center; gap: var(--space-2); }
+.dsh-plugins-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .dsh-plugins button.dsh-plugins-switch,
 .dsh-plugins .dsh-plugins-switch {
   all: unset;
@@ -233,6 +233,11 @@ ${surfaceTokenAliases}
 .dsh-plugins-composition { margin-top: 4px; }
 .dsh-plugins-composition summary { cursor: pointer; color: var(--s-muted); font-size: var(--font-size-1); line-height: 1.3; }
 .dsh-plugins-composition ul { margin: 2px 0 0; padding-left: 1.1em; color: var(--s-muted); font-size: var(--font-size-1); line-height: 1.4; }
+.dsh-plugins-card > .dsh-plugins-composition { grid-column: 1 / -1; min-width: 0; }
+.dsh-plugins-spec { overflow-wrap: anywhere; max-width: 100%; color: var(--s-muted); font-size: var(--font-size-1); }
+@media (max-width: 760px) {
+  .dsh-plugins-card { grid-template-columns: minmax(0, 1fr); }
+}
 .dsh-plugins-note {
   margin: 0;
   padding: var(--space-2) var(--space-3);

@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react'
-import { describe, expect, it } from 'vitest'
+import { type ReactNode, type ReactElement } from 'react'
+import { describe, expect, it, vi } from 'vitest'
 import {
   apply,
   copyInstallSpec,
@@ -38,6 +38,12 @@ function collectHrefs(node: ReactNode): string[] {
     return [...href, ...collectHrefs(props?.children)]
   }
   return []
+}
+function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+  if (Array.isArray(node)) return node.flatMap(elements)
+  if (!node || typeof node !== 'object' || !('props' in node)) return []
+  const element = node as ReactElement<Record<string, unknown>>
+  return [element, ...elements(element.props.children as ReactNode)]
 }
 
 describe('plugin discovery', () => {
@@ -144,19 +150,19 @@ describe('plugin discovery', () => {
       onSearch() {},
       onCopy() {},
     })
-    expect(tree.type).toBe('details')
+    expect(tree.type).toBe('section')
     expect(tree.props.open).toBeUndefined()
-    expect((Array.isArray(tree.props.children) ? tree.props.children[0] : tree.props.children)?.type).toBe('summary')
+    expect((Array.isArray(tree.props.children) ? tree.props.children[0] : tree.props.children)?.type).toBe('h3')
     const html = collectText(tree)
     expect(html).toContain('人物卡与世界书')
     expect(html).toContain('本地发行')
     expect(html).toContain('复制规格')
-    expect(html).toContain('添加插件')
+    expect(html).toContain('安装')
     expect(html).not.toContain('★')
     expect(html).not.toContain('在 GitHub 打开')
     expect(collectHrefs(tree)).toEqual([])
     expect(html).toContain('搜索')
-    expect(html).toContain('留空点「搜索」列出本机可选包')
+    expect(html).toContain('留空查看本机可选插件')
     expect(collectPlaceholders(tree).some((text) => text.includes('留空列出本机可选包'))).toBe(true)
     const github = listingPresentation({
       spec: 'github:acme/plug', owner: 'acme', repo: 'plug', description: '纸', stars: 3,
@@ -174,6 +180,63 @@ describe('plugin discovery', () => {
       if (previous) scope.window = previous
       else delete scope.window
     }
+  })
+
+  it('hands an uninstalled listing to the native dialog with its exact spec and opens known bundles instead', () => {
+    const onInstall = vi.fn()
+    const onOpen = vi.fn()
+    const local: MarketplaceListing = { spec: 'link:/profile/optional', source: 'local', packageName: 'optional', title: '文稿校对',
+      owner: '', repo: 'optional', description: '检查稿件', stars: 0, url: '', updatedAt: '', topics: [] }
+    const render = (packages: { name: string; installed: boolean; optional: boolean; enabled: boolean }[]) => PluginDiscovery({
+      query: '', listings: [local], searching: false, note: '', error: '', inventory: { status: 'ready', packages },
+      onInstall, onOpen, onCopy: vi.fn(), onQuery: vi.fn(), onSearch: vi.fn(),
+    })
+    const absent = render([])
+    expect(collectText(absent)).toContain('未安装')
+    const install = elements(absent).find(el => el.props.children === '安装')!
+    expect(install.props.disabled).toBe(false)
+    ;(install.props.onClick as () => void)()
+    expect(onInstall).toHaveBeenCalledExactlyOnceWith(local.spec)
+    const present = render([{ name: 'optional', installed: true, optional: false, enabled: false }])
+    expect(collectText(present)).toContain('已安装 · 未启用')
+    const configure = elements(present).find(el => el.props.children === '配置与详情')!
+    ;(configure.props.onClick as () => void)()
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith('optional')
+    expect(onInstall).toHaveBeenCalledOnce()
+    expect(elements(present).some(el => el.type === 'details' && collectText(el).includes('复制规格'))).toBe(true)
+  })
+
+  it('disables installation when the native inventory is unavailable or an install is pending', () => {
+    for (const inventory of [{ status: 'unavailable', packages: [] }, { status: 'ready', packages: [], install: { phase: 'running' } }]) {
+      const tree = PluginDiscovery({ query: 'npm:@scope/plugin@1.2.3', listings: [], searching: false, note: '', error: '', inventory,
+        onInstall: vi.fn(), onCopy: vi.fn(), onQuery: vi.fn(), onSearch: vi.fn() })
+      expect(elements(tree).find(el => el.props.children === '安装指定版本')?.props.disabled).toBe(true)
+      expect(collectText(tree)).toContain(inventory.status === 'unavailable' ? '安装管理当前不可用' : '安装正在进行')
+    }
+  })
+
+  it('preserves the exact selected npm version in both query and listing when that package is already installed', () => {
+    const onInstall = vi.fn()
+    const onOpen = vi.fn()
+    const onSearch = vi.fn()
+    const tree = PluginDiscovery({
+      query: 'npm:@scope/plugin@2.0.0',
+      listings: [{ spec: 'npm:@scope/plugin@2.0.0', source: 'npm', packageName: '@scope/plugin',
+        owner: '@scope', repo: 'plugin', description: '写作插件', stars: 0, url: '', updatedAt: '', topics: [] }],
+      searching: false, note: '', error: '',
+      inventory: { status: 'ready', packages: [{ name: '@scope/plugin', installed: true, optional: false, enabled: true }] },
+      onInstall, onOpen, onCopy: vi.fn(), onQuery: vi.fn(), onSearch,
+    })
+    expect(collectText(tree)).toContain('已安装 · 已启用')
+    const actions = elements(tree).filter(el => el.props.children === '安装指定版本')
+    expect(actions).toHaveLength(2)
+    expect(actions.every(el => el.props.disabled === false)).toBe(true)
+    const form = elements(tree).find(el => el.type === 'form')!
+    ;(form.props.onSubmit as (event: { preventDefault(): void }) => void)({ preventDefault() {} })
+    ;(actions.find(el => el.props.type !== 'submit')!.props.onClick as () => void)()
+    expect(onInstall.mock.calls).toEqual([['@scope/plugin@2.0.0'], ['@scope/plugin@2.0.0']])
+    expect(onOpen).not.toHaveBeenCalled()
+    expect(onSearch).not.toHaveBeenCalled()
   })
 
   it('registers the discovery contribution on the editor plugins settings slot', () => {

@@ -114,6 +114,9 @@ export const componentStyles = [
   r(['.plugins-catalog-subsection-title'], 'color: var(--dsh-ui-muted); font-weight: var(--dsh-ui-weight-medium);'),
   r(['.plugins-catalog-hint', '.plugins-catalog-empty', '.plugins-catalog-preset-locked'], 'margin: 0; color: var(--dsh-ui-muted);'),
 
+  r(['.plugins-catalog-advanced > summary'], 'cursor: pointer; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); min-height: var(--dsh-ui-control-sm); padding-block: var(--dsh-ui-space-2);'),
+  r(['.plugins-catalog-advanced[open] > summary', '.plugins-catalog-advanced .plugins-catalog-hint'], 'margin-bottom: var(--dsh-ui-space-2);'),
+
   // Shell and native chrome. Keep draggable/no-drag regions and native controls.
   `${SCOPE}.shell-theme { --topbar-h: var(--dsh-ui-header-height); --control-h: var(--dsh-ui-control-md); }`,
   r(['.shell'], 'background: var(--dsh-ui-bg); color: var(--dsh-ui-text); font-family: var(--dsh-ui-font-ui); font-size: var(--dsh-ui-text-base); line-height: var(--dsh-ui-leading-normal);'),
@@ -294,6 +297,8 @@ export const componentStyles = [
   r(['.palette-kbd', '.palette-trigger-kbd'], 'font-size: var(--dsh-ui-text-xs);'),
   r(['.shell > .chrome .palette-trigger'], 'font-size: var(--dsh-ui-text-xs);'),
   r(['.history-commit'], 'border-radius: var(--dsh-ui-radius-md);'),
+  r(['.history-technical-details'], 'color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
+  r(['.history-technical-details > summary'], 'cursor: pointer; min-height: var(--dsh-ui-control-sm); padding-block: var(--dsh-ui-space-2);'),
   r(['.rt-AvatarRoot', '.rt-AvatarImage', '.rt-AvatarFallback'], 'border-radius: 50%; corner-shape: round;'),
 
   // Settings are a settings window, not a collection of differently themed cards.

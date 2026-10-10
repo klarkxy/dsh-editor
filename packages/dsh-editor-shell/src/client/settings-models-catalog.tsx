@@ -160,7 +160,8 @@ export function ModelListEditor(props: {
       </Text>
         : null}
       {models.map((model, index) => <Card
-        key={`${index}-${typeof model['id'] === 'string' ? model['id'] : ''}`}
+        // Rows only append or delete; the editable model ID must not own the input's identity.
+        key={index}
         className="models-catalog-entry">
         <Flex className="models-catalog-row" align="center" gap="2" wrap="wrap">
           <TextField.Root

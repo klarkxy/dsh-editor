@@ -1,16 +1,18 @@
-import { NATIVE_PLUGIN_MANAGER_KEY, NATIVE_PLUGIN_MANAGER_SEAT } from './native-plugin-manager-seat.ts'
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { NATIVE_PLUGIN_MANAGER_KEY, NATIVE_PLUGIN_MANAGER_SEAT, nativePluginManagerBridge, nativePluginManagerVersion, subscribeNativePluginManager } from './native-plugin-manager-seat.ts'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Button as NavigationButton, Flex, Heading, IconButton, Text } from '@radix-ui/themes'
 import type { ShellContext } from './shared.ts'
 import { t, useLocale } from '../i18n/index.ts'
 import { Button, Input } from './ui/index.ts'
 import { WindowControls, titleBarDoubleClick } from './window-controls.tsx'
+import { PLUGINS_SETTINGS_SLOT } from '../root-registration.ts'
 import { OfficialSettingsSectionPage, PluginSettingsContent, useOfficialSettingsSections, type SettingsRenderSlot } from './settings-plugins.tsx'
 import { SettingsChatModelRoute, SettingsModelsSection } from './settings-models.tsx'
 import { PluginModelSettingsSurface, usePluginModelSettings } from './plugin-surfaces.tsx'
 import { PluginConfigurationPage, usePluginConfigurations, type PluginConfigurationEntry } from './plugin-configurations.tsx'
 import {
   mergeConfigurationCards,
+  advancedCatalogCard,
   PluginsCatalog,
   usePluginCatalog,
   useWritingPresets,
@@ -91,6 +93,11 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
   const models = usePluginModelSettings(props.ctx, locale)
   const catalog = usePluginCatalog(props.ctx)
   const presets = useWritingPresets(props.ctx)
+  const subscribeManager = useCallback((listener: () => void) => subscribeNativePluginManager(props.ctx, listener), [props.ctx])
+  const managerVersion = useCallback(() => nativePluginManagerVersion(props.ctx), [props.ctx])
+  useSyncExternalStore(subscribeManager, managerVersion, managerVersion)
+  const manager = nativePluginManagerBridge(props.ctx)
+  const [managerError, setManagerError] = useState('')
   const [selected, setSelected] = useState(OVERVIEW)
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
@@ -115,6 +122,10 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
   const activeLegacy = legacy.sections.find(entry => entry.navId === active)
   const filtered = links.filter(link => link.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   const sections = mergeSections(catalog.sections, official.entries, links)
+  const advancedLink = (link: ConfigLink) => sections.some(section => section.id !== 'user' && section.items.some(card =>
+    configTargetOf(card, links) === link.id && advancedCatalogCard(card)))
+  const ordinaryLinks = filtered.filter(link => !advancedLink(link))
+  const advancedLinks = filtered.filter(advancedLink)
   const configKeys = secondaryConfigKeys(sections, links)
   /* Installs and removals happen on the manager page; refresh when the author
      comes back to the overview so the catalog never shows a stale inventory. */
@@ -122,7 +133,7 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
   useEffect(() => {
     const previous = seenActive.current
     seenActive.current = active
-    if (active === OVERVIEW && previous !== OVERVIEW) catalog.reload()
+    if ((active === OVERVIEW || active === DISCOVERY) && previous !== active) catalog.reload()
   }, [active, catalog.reload])
   useLayoutEffect(() => { pages.current?.scrollTo({ top: 0 }) }, [active])
   const openDetail = (card: PluginCatalogCard) => {
@@ -137,6 +148,13 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
       } catch { /* An absent detail route falls back to the manager page. */ }
     }
     setSelected(MANAGER)
+  }
+  const openInstall = (spec?: string) => {
+    setSelected(MANAGER)
+    try {
+      const live = nativePluginManagerBridge(props.ctx)
+      setManagerError(live?.openInstall(spec) ? '' : t('plugins.unavailable'))
+    } catch { setManagerError(t('plugins.unavailable')) }
   }
   /* Plugin configuration pages live in the official manager's own slot context
      (the root entry may not render them), so their entries jump there. */
@@ -164,7 +182,7 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
         <Input className="plugins-page-search" type="search" data-testid="plugins-catalog-search"
           aria-label={t('plugins.searchCatalog')} placeholder={t('plugins.searchCatalog')}
           value={search} onChange={setSearch} />
-        <Button data-testid="plugins-page-add-plugin" onClick={() => setSelected(MANAGER)}>{t('plugins.addPlugin')}</Button>
+        <Button data-testid="plugins-page-add-plugin" onClick={() => openInstall()}>{t('plugins.addPlugin')}</Button>
         <WindowControls />
       </Flex>
     </Flex>
@@ -177,10 +195,17 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
         <Heading as="h2" size="2" className="plugins-config-label">{t('plugins.configuration')}</Heading>
         <Input aria-label={t('plugins.search')} placeholder={t('plugins.search')} value={query} onChange={setQuery} />
         <ul className="plugins-config-links">
-          {filtered.map(link => <li key={link.id}><NavigationButton variant="ghost" color="gray" className="plugins-page-link" aria-current={active === link.id ? 'page' : undefined}
+          {ordinaryLinks.map(link => <li key={link.id}><NavigationButton variant="ghost" color="gray" className="plugins-page-link" aria-current={active === link.id ? 'page' : undefined}
             onClick={() => { if (link.entry) { openEntryInManager(link.entry); return } setSelected(link.id) }}>{link.label}</NavigationButton></li>)}
           {!filtered.length ? <li><Text size="2" color="gray">{t('plugins.empty')}</Text></li> : null}
         </ul>
+        {advancedLinks.length ? <details className="plugins-catalog-advanced" open={query.trim() ? true : undefined}>
+          <summary>{t('plugins.catalogAdvanced')}</summary>
+          <ul className="plugins-config-links">{advancedLinks.map(link => <li key={link.id}>
+            <NavigationButton variant="ghost" color="gray" className="plugins-page-link" aria-current={active === link.id ? 'page' : undefined}
+              onClick={() => { if (link.entry) openEntryInManager(link.entry); else setSelected(link.id) }}>{link.label}</NavigationButton>
+          </li>)}</ul>
+        </details> : null}
       </nav>
       <div ref={pages} className="plugins-page-content" tabIndex={0} role="region" aria-label={regionLabel}>
         <div hidden={active !== OVERVIEW}>
@@ -203,10 +228,15 @@ export function PluginsPage(props: Omit<PluginWorkspaceProps, 'children' | 'open
             onDetail={openDetail} />
         </div>
         <div hidden={active !== DISCOVERY} data-testid="plugins-discovery">
-          <PluginSettingsContent contribution={props.plugins} fallback={null} />
+          <PluginSettingsContent contribution={props.renderSlot
+            ? props.renderSlot(PLUGINS_SETTINGS_SLOT, { Button, Input, inventory: manager?.inventory,
+              onInstall: openInstall, onOpen: (packageName: string) => openDetail({ key: `bundle:${packageName}`, packageName,
+                title: '', description: '', badges: [], action: 'detail' }) })
+            : props.plugins} fallback={<Text color="gray">{t('plugins.unavailable')}</Text>} />
         </div>
         {/* The official manager stays mounted while hidden: its pluginNavigation service must survive. */}
         <div hidden={active !== MANAGER} data-testid="plugins-manager-seat">
+          {managerError ? <Text as="p" color="red" role="alert">{managerError}</Text> : null}
           <div data-dsh-plugin-surface="">
             {props.renderSlot ? props.renderSlot(NATIVE_PLUGIN_MANAGER_SEAT, {}, { entryKey: NATIVE_PLUGIN_MANAGER_KEY }) : <Text color="gray">{t('plugins.unavailable')}</Text>}
           </div>

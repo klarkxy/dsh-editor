@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createDirectory, createManuscriptGroup, createProjectHome, initializeProject, inspectProjectRoot, NOVEL_INDEX_PATH, prepareNovelIndex, PROJECT_DIRECTORIES } from '../lifecycle/project.ts'
+import { readWritingHistory, recordWritingProgress } from './writing-log.ts'
 
 let root = ''
 
@@ -38,6 +39,11 @@ describe('initializeProject', () => {
 
   it('includes project rules in a new project without inventing prose', async () => {
     await initializeProject({ root, mode: 'workspace-write', newProject: true })
+    const access = { path: root, mode: 'workspace-write' }
+    await expect(readWritingHistory(access)).resolves.toMatchObject({ days: [{ chars: 0, delta: 0 }] })
+    await recordWritingProgress(access, 111)
+    await initializeProject({ root, mode: 'workspace-write', newProject: true })
+    await expect(readWritingHistory(access)).resolves.toMatchObject({ days: [{ chars: 111, delta: 111 }] })
     await expect(inspectProjectRoot(root)).resolves.toMatchObject({ hasVisibleEntries: true, textFiles: ['AGENTS.md'] })
 
     await fs.mkdir(path.join(root, '正文'))
@@ -59,7 +65,8 @@ describe('initializeProject', () => {
     const first = await initializeProject({ root, mode: 'workspace-write', newProject: true })
     expect(first.created).toEqual(['AGENTS.md'])
     expect(first.skipped).toEqual([])
-    expect(await fs.readdir(root)).toEqual(['AGENTS.md'])
+    expect(await fs.readdir(root)).toEqual(['.dsh-editor', 'AGENTS.md'])
+    expect(await fs.readdir(path.join(root, '.dsh-editor'))).toEqual(['writing-log.json'])
     expect(first.created).not.toContain('正文/001.md')
     expect(first.created).not.toContain('大纲/总纲.md')
     await expect(fs.stat(path.join(root, '项目总览.md'))).rejects.toThrow()

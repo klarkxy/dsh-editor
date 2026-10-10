@@ -89,6 +89,15 @@ describe('repeat', () => {
 })
 
 describe('habit', () => {
+  it('keeps short-draft statistics without labelling one or two occurrences as overuse', () => {
+    for (const count of [1, 2]) {
+      const result = kindsOf('忽然。'.repeat(count) + '甲'.repeat(100), ['habit'])
+      expect(result.habitStats).toMatchObject([{ term: '忽然', count }])
+      expect(result.habitStats[0]!.perThousand).toBeGreaterThan(3)
+      expect(result.findings).toEqual([])
+    }
+    expect(kindsOf('忽然。'.repeat(3) + '甲'.repeat(100), ['habit']).findings).toHaveLength(3)
+  })
   it('returns per-thousand stats and only emits findings above the threshold', () => {
     const heavy = `然后。`.repeat(8) + '甲'.repeat(50)
     const heavyResult = kindsOf(heavy, ['habit'])

@@ -3,9 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getLocale, resetLocaleForTests, setLocale } from '../i18n/index.ts'
 import { ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
+import { PLUGINS_SETTINGS_SLOT } from '../root-registration.ts'
 import { legacyZhihuVisible, PluginConfigurationPage, projectPluginConfigurations, usePluginConfigurations } from './plugin-configurations.tsx'
 import { mergeSections, PluginsPage, secondaryConfigKeys } from './plugins-page.tsx'
 import {
+  advancedCatalogCard,
   catalogSectionsOf,
   catalogToggleRequest,
   filterCatalogSections,
@@ -177,7 +179,7 @@ function navigation(rows: Record<string, Entry[]>, zhihu?: ReactNode) {
   try {
     return renderToStaticMarkup(createElement(PluginsPage, {
       ctx: host as never,
-      renderSlot: () => createElement('div', null, 'official-slot'),
+      renderSlot: slot => createElement('div', null, slot === PLUGINS_SETTINGS_SLOT ? 'installed-management' : 'official-slot'),
       plugins: createElement('p', null, 'installed-management'),
       zhihu,
       hasWorkspace: true,
@@ -375,6 +377,21 @@ function countIn(html: string, id: typeof SECTION_IDS[number]): string | undefin
 }
 
 describe('plugin catalog', () => {
+  it('folds runtime and developer components while keeping author controls and search results reachable', () => {
+    const completion = { key: 'entry:manuscript-assist', entryId: 'manuscript-assist', title: '补全服务', description: '行内补全',
+      packageName: 'dsh-manuscript', badges: [], enabled: true, action: 'switch' as const }
+    const runtime = { key: 'entry:runtime', title: '运行时', description: 'Internal runtime', badges: ['required'], action: 'detail' as const }
+    expect(advancedCatalogCard(completion)).toBe(false)
+    expect(advancedCatalogCard(runtime)).toBe(true)
+    const html = catalog({ sections: [{ id: 'builtin', items: [completion, runtime] }] })
+    const advancedAt = html.indexOf('<details class="plugins-catalog-advanced"')
+    expect(advancedAt).toBeGreaterThan(-1)
+    expect(html.indexOf('plugins-catalog-toggle-entry:manuscript-assist')).toBeLessThan(advancedAt)
+    expect(html.indexOf('plugins-catalog-detail-entry:runtime')).toBeGreaterThan(advancedAt)
+    expect(html).not.toContain('<details class="plugins-catalog-advanced" open=""')
+    expect(catalog({ sections: [{ id: 'builtin', items: [runtime] }], query: 'runtime' }))
+      .toContain('<details class="plugins-catalog-advanced" open=""')
+  })
   it('renders the three sections in the fixed order with their real counts', () => {
     const html = catalog()
     expect(html.indexOf('DSH 官方插件')).toBeGreaterThan(-1)

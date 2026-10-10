@@ -111,7 +111,11 @@ colors in both themes; the business state follows the saved accent. No component
 selector crosses the plugin boundary.
 
 Three version-pinned pnpm patches in `patches/` raise the official rc.2 tag and
-plugin-manager text to these same minimum sizes. They cover the plugin manager,
+plugin-manager text to these same minimum sizes. The plugin-manager patch also
+keeps package names and internal component rows inside an advanced disclosure;
+failed components and component metadata errors expand it, while configuration
+and management errors remain visible.
+The patches cover the plugin manager,
 the primitive source stylesheet, and the primitive tag CSS embedded in the
 prebundled Web frontend. They change the dependencies' own styles rather than
 adding host selectors for generated plugin class names.

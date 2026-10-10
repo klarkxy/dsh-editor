@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SnapshotResponse } from 'dsh-editor-workbench/contracts'
-import { normalizeSnapshot, selectedSnapshot, snapshotChangeCounts, snapshotKindMark, snapshotSubject } from './history-dialog.tsx'
+import { normalizeSnapshot, selectedSnapshot, snapshotChangeCounts, snapshotKindMark, snapshotManuscriptChanges, snapshotSubject } from './history-dialog.tsx'
 
 function snapshot(partial: Partial<SnapshotResponse> & Pick<SnapshotResponse, 'snapshotId'>): SnapshotResponse {
   return {
@@ -15,6 +15,16 @@ function snapshot(partial: Partial<SnapshotResponse> & Pick<SnapshotResponse, 's
 }
 
 describe('version history presentation', () => {
+  it('shows manuscripts first while leaving project and assistant files in version details', () => {
+    const changes = [
+      { path: '正文/001.md', kind: 'modified' as const },
+      { path: 'AGENTS.md', kind: 'modified' as const },
+      { path: '.dsh-editor/作品索引.md', kind: 'added' as const },
+      { path: '说明.txt', kind: 'added' as const },
+    ]
+    expect(snapshotManuscriptChanges({ changes })).toEqual([changes[0], changes[3]])
+    expect(changes).toHaveLength(4)
+  })
   it('uses the commit message when present and falls back to the timestamp', () => {
     expect(snapshotSubject(snapshot({ snapshotId: 'a', label: '  修订  ' }))).toBe('修订')
     expect(snapshotSubject(snapshot({ snapshotId: 'b', createdAt: '2026-10-10T01:00:00.000Z' }))).toBe('2026-10-10T01:00:00.000Z')

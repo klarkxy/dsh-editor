@@ -436,7 +436,9 @@ export function emitHabitFindings(
   const emitted = new Map<string, number>()
   for (const hit of hits) {
     const count = counts.get(hit.key) ?? 0
-    if (chars === 0 || (count * 1000) / chars <= threshold) continue
+    // A single occurrence in a short draft has a high frequency, but does not
+    // establish a repeated habit. Keep its statistics without flagging it.
+    if (count < 3 || chars === 0 || (count * 1000) / chars <= threshold) continue
     const used = emitted.get(hit.key) ?? 0
     if (used >= maxOccurrences) continue
     emitted.set(hit.key, used + 1)

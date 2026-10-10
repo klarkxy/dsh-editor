@@ -183,6 +183,15 @@ function cardMatches(card: PluginCatalogCard, needle: string): boolean {
     .some((field) => field.toLocaleLowerCase().includes(needle))
 }
 
+/** Stable component identities, not localized labels, identify developer surfaces. */
+export function advancedCatalogCard(card: PluginCatalogCard): boolean {
+  const identity = `${card.packageName ?? ''}/${card.entryId ?? ''}/${card.key}`
+  const developerSurface = /(?:^|[:/#-])(?:terminal|mcp|agent-loop|developer)(?:$|[:/#-])/i.test(identity)
+  const internalRequired = card.badges.includes('required') && card.action === 'detail'
+  const unnamedComponent = Boolean(card.packageName && card.title === card.packageName)
+  return developerSurface || internalRequired || unnamedComponent
+}
+
 export function filterCatalogSections(
   sections: readonly PluginCatalogSection[],
   query: string,
@@ -454,6 +463,8 @@ function CatalogSection(props: {
 }) {
   const { section } = props
   const items = section.items
+  const ordinary = section.id === 'user' ? items : items.filter(card => !advancedCatalogCard(card))
+  const advanced = section.id === 'user' ? [] : items.filter(advancedCatalogCard)
   const presets = section.id === 'builtin' ? props.presets : []
   const count = items.length + presets.length
   const empty = props.query.trim()
@@ -464,11 +475,18 @@ function CatalogSection(props: {
       <Heading as="h2" size="3" className="plugins-catalog-title">{catalogSectionLabel(section.id)}</Heading>
       <Text size="1" color="gray" className="plugins-catalog-count">{count}</Text>
     </Flex>
-    {items.length
-      ? <ul className="plugins-catalog-rows">{items.map((card) => <CatalogRow key={card.key} card={card}
+    {ordinary.length
+      ? <ul className="plugins-catalog-rows">{ordinary.map((card) => <CatalogRow key={card.key} card={card}
         pending={props.pending === card.key} configurable={props.configKeys.includes(card.key)}
         onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
       : null}
+    {advanced.length ? <details className="plugins-catalog-advanced" open={props.query.trim() ? true : undefined}>
+      <summary>{t('plugins.catalogAdvanced')} ({advanced.length})</summary>
+      <Text as="p" size="1" color="gray" className="plugins-catalog-hint">{t('plugins.catalogAdvancedHint')}</Text>
+      <ul className="plugins-catalog-rows">{advanced.map(card => <CatalogRow key={card.key} card={card}
+        pending={props.pending === card.key} configurable={props.configKeys.includes(card.key)}
+        onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
+    </details> : null}
     {presets.length
       ? <div className="plugins-catalog-subsection">
         <Heading as="h3" size="2" className="plugins-catalog-subsection-title">{t('plugins.catalogPresets')}</Heading>

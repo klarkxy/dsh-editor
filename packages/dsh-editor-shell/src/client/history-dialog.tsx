@@ -5,6 +5,7 @@ import { formatRecentTime } from '../home-stage.ts'
 import { formatBytes, intlLocale, t, useLocale } from '../i18n/index.ts'
 import { ActivitySkeleton, ActivityText, Button, Dialog } from './ui/index.ts'
 import { CrossIcon } from './icons.tsx'
+import { isAuthorFacingDocumentPath } from '../project-files.ts'
 
 export type SnapshotView = SnapshotResponse
 
@@ -15,6 +16,10 @@ export function snapshotSubject(item: SnapshotView): string {
 
 export function snapshotChanges(item: { changes?: readonly SnapshotChange[] | undefined }): SnapshotChange[] {
   return Array.isArray(item.changes) ? [...item.changes] : []
+}
+
+export function snapshotManuscriptChanges(item: { changes?: readonly SnapshotChange[] | undefined }): SnapshotChange[] {
+  return snapshotChanges(item).filter(change => isAuthorFacingDocumentPath(change.path))
 }
 
 export function snapshotHashOf(item: { snapshotId: string; hash?: string }): string {
@@ -78,6 +83,8 @@ function HistoryPanel(props: {
   const items = Array.isArray(props.snapshots) ? props.snapshots.map(normalizeSnapshot) : []
   const selected = selectedSnapshot(items, selectedId)
   const selectedChanges = selected ? snapshotChanges(selected) : []
+  const manuscriptChanges = selected ? snapshotManuscriptChanges(selected) : []
+  const otherChanges = selectedChanges.filter(change => !isAuthorFacingDocumentPath(change.path))
   useLocale()
   useEffect(() => {
     const next = Array.isArray(props.snapshots) ? props.snapshots : []
@@ -87,7 +94,7 @@ function HistoryPanel(props: {
     }
     setSelectedId((current) => next.some((item) => item.snapshotId === current) ? current : next[0]!.snapshotId)
   }, [props.snapshots])
-  const counts = snapshotChangeCounts(selectedChanges)
+  const counts = snapshotChangeCounts(manuscriptChanges)
   const loading = props.snapshots === null
   const empty = !loading && items.length === 0
   return (
@@ -136,7 +143,7 @@ function HistoryPanel(props: {
         {!loading && !empty ? <div className="history-split">
           <div className="history-commits" role="listbox" aria-label={t('workspace.commitHistory')}>
               {items.map((item, index) => {
-                const current = snapshotChangeCounts(item.changes)
+                const current = snapshotChangeCounts(snapshotManuscriptChanges(item))
                 const active = item.snapshotId === selected?.snapshotId
                 return (
                   <button
@@ -150,7 +157,6 @@ function HistoryPanel(props: {
                     <span className="history-commit-dot" aria-hidden="true" />
                     <span className="history-commit-body">
                       <span className="history-commit-top">
-                        <code className="history-hash">{item.hash}</code>
                         <Text size="1" color="gray">
                           {formatRecentTime(item.createdAt)}
                         </Text>
@@ -175,38 +181,27 @@ function HistoryPanel(props: {
           <Flex className="history-detail" direction="column" gap="3" minWidth="0">
             {selected ? <>
               <Flex direction="column" gap="1" minWidth="0">
-                <Flex align="center" gap="2">
-                  <code className="history-hash history-hash-lg" title={selected.snapshotId}>
-                    {selected.hash}
-                  </code>
-                  <Text size="1" color="gray" truncate>
-                    {snapshotWhen(selected.createdAt)}
-                  </Text>
-                </Flex>
                 <Text size="3" weight="medium">
                   {snapshotSubject(selected)}
                 </Text>
                 <Text size="1" color="gray">
-                  {t('workspace.historyFiles', { count: selected.files })}
-                  {' · '}
-                  {t('workspace.historyBytes', { bytes: formatBytes(selected.bytes) })}
-                  {selected.excluded ? ` · ${t('workspace.historyExcluded', { count: selected.excluded })}` : ''}
+                  {snapshotWhen(selected.createdAt)}
                 </Text>
               </Flex>
               <Flex direction="column" gap="2" minWidth="0" className="history-changes">
-                {selectedChanges.length
+                {manuscriptChanges.length
                   ? <Text size="1" color="gray">
-                    {t('workspace.historyChanged', { count: selectedChanges.length })}
+                    {t('workspace.historyChanged', { count: manuscriptChanges.length })}
                     {' · '}
                     {t('workspace.historyDiff', counts)}
                   </Text>
                   : <Text size="1" color="gray">
-                    {items[items.length - 1]?.snapshotId === selected.snapshotId
+                    {otherChanges.length ? t('workspace.historyNoManuscriptChanges') : items[items.length - 1]?.snapshotId === selected.snapshotId
                       ? t('workspace.historyInitial')
                       : t('workspace.historyNoChanges')}
                   </Text>}
-                {selectedChanges.length ? <ul className="history-change-list">
-                  {selectedChanges.map((change) => <li key={`${change.kind}:${change.path}`} className={`history-change history-change-${change.kind}`}>
+                {manuscriptChanges.length ? <ul className="history-change-list">
+                  {manuscriptChanges.map((change) => <li key={`${change.kind}:${change.path}`} className={`history-change history-change-${change.kind}`}>
                     <span className="history-kind" aria-label={t(
                       change.kind === 'added'
                         ? 'workspace.historyAdded'
@@ -214,12 +209,32 @@ function HistoryPanel(props: {
                           ? 'workspace.historyRemoved'
                           : 'workspace.historyModified',
                     )}>
-                      {snapshotKindMark(change.kind)}
+                      {t(change.kind === 'added' ? 'workspace.historyAdded' : change.kind === 'removed' ? 'workspace.historyRemoved' : 'workspace.historyModified')}
                     </span>
-                    <code>{change.path}</code>
+                    <span>{change.path}</span>
                   </li>)}
                 </ul> : null}
+                {otherChanges.length ? <Text size="1" color="gray">
+                  {t('workspace.historyOtherChanges', { count: otherChanges.length })}
+                </Text> : null}
               </Flex>
+              <details key={selected.snapshotId} className="history-technical-details">
+                <summary>{t('workspace.historyDetails')}</summary>
+                <Flex direction="column" gap="2" pt="2">
+                  <Text size="1" color="gray">{t('workspace.historyId')}: <code>{selected.hash}</code></Text>
+                  <Text size="1" color="gray">
+                    {t('workspace.historyFiles', { count: selected.files })}
+                    {' · '}{t('workspace.historyBytes', { bytes: formatBytes(selected.bytes) })}
+                    {selected.excluded ? ` · ${t('workspace.historyExcluded', { count: selected.excluded })}` : ''}
+                  </Text>
+                  {otherChanges.length ? <ul className="history-change-list">
+                    {otherChanges.map(change => <li key={`${change.kind}:${change.path}`} className={`history-change history-change-${change.kind}`}>
+                      <span className="history-kind">{snapshotKindMark(change.kind)}</span><code>{change.path}</code>
+                    </li>)}
+                  </ul> : null}
+                </Flex>
+              </details>
+              <Text size="1" color="gray">{t('workspace.historyRestoreScope')}</Text>
               <Flex justify="end">
                 <Button
                   disabled={props.busy || props.editorDirty}

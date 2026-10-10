@@ -32,14 +32,35 @@ describe('writing log', () => {
   it('records today and dedupes by local date', async () => {
     const now = at(2026, 9, 7)
     await expect(recordWritingProgress(access(), 1200, now)).resolves.toEqual({ date: '2026-09-07', chars: 1200, delta: 0 })
-    await expect(recordWritingProgress(access(), 1500, now)).resolves.toEqual({ date: '2026-09-07', chars: 1500, delta: 0 })
+    await expect(recordWritingProgress(access(), 1500, now)).resolves.toEqual({ date: '2026-09-07', chars: 1500, delta: 300 })
     const stored = JSON.parse(await fs.readFile(path.join(root, '.dsh-editor', 'writing-log.json'), 'utf8'))
-    expect(stored).toEqual([{ date: '2026-09-07', chars: 1500, delta: 0 }])
+    expect(stored).toEqual([{ date: '2026-09-07', chars: 1500, delta: 300 }])
     await expect(recordWritingProgress(access(), 1800, at(2026, 9, 8))).resolves.toEqual({ date: '2026-09-08', chars: 1800, delta: 300 })
     expect(JSON.parse(await fs.readFile(path.join(root, '.dsh-editor', 'writing-log.json'), 'utf8'))).toEqual([
-      { date: '2026-09-07', chars: 1500, delta: 0 },
+      { date: '2026-09-07', chars: 1500, delta: 300 },
       { date: '2026-09-08', chars: 1800, delta: 300 },
     ])
+  })
+
+  it('counts the first day of a new project from its empty baseline', async () => {
+    const now = at(2026, 9, 7)
+    await recordWritingProgress(access(), 0, now)
+    await expect(recordWritingProgress(access(), 111, now)).resolves.toMatchObject({ delta: 111 })
+    await expect(recordWritingProgress(access(), 156, now)).resolves.toMatchObject({ delta: 156 })
+    await expect(readWritingHistory(access(), 30, now)).resolves.toEqual({
+      days: [{ date: '2026-09-07', chars: 156, delta: 156 }],
+      weeks: [{ weekStart: '2026-09-07', chars: 156, delta: 156 }],
+    })
+    await expect(recordWritingProgress(access(), 100, now)).resolves.toMatchObject({ delta: 100 })
+  })
+
+  it('keeps an imported or legacy first-day baseline without counting old text as new work', async () => {
+    await writeLog('[{"date":"2026-09-07","chars":1200}]')
+    const now = at(2026, 9, 7)
+    await expect(readWritingHistory(access(), 30, now)).resolves.toMatchObject({ days: [{ delta: 0 }] })
+    await expect(recordWritingProgress(access(), 1250, now)).resolves.toMatchObject({ delta: 50 })
+    await expect(recordWritingProgress(access(), 1100, now)).resolves.toMatchObject({ delta: -100 })
+    await expect(readWritingHistory(access(), 30, now)).resolves.toMatchObject({ days: [{ delta: -100 }] })
   })
 
   it('caps stored history at 400 days', async () => {

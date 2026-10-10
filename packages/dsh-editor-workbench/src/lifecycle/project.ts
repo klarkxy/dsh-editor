@@ -3,6 +3,7 @@ import { createVisibleDirectory, LifecycleError } from 'dsh-editor-workspace-kit
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { initializeWritingProgress } from './writing-log.ts'
 
 export class ProjectInitError extends Error {
   constructor(
@@ -279,6 +280,9 @@ export async function initializeProject(input: {
   const rulesPath = names[0] ?? 'AGENTS.md'
   const didCreate = await createFile(root, rulesPath, PROJECT_RULES_TEMPLATE, input.signal)
   ;(didCreate ? created : skipped).push(rulesPath)
+  // This path is only used for a new project; opening existing work remains
+  // read-only. Repeating initialization must not reset recorded progress.
+  await initializeWritingProgress({ path: root, mode: input.mode })
   created.sort()
   skipped.sort()
   return { created, skipped }

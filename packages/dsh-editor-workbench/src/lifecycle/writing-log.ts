@@ -94,7 +94,7 @@ function withDeltas(entries: readonly WritingLogEntry[]): ProgressDay[] {
     return {
       date: entry.date,
       chars: entry.chars,
-      delta: previous ? entry.chars - previous.chars : 0,
+      delta: previous ? entry.chars - previous.chars : entry.delta ?? 0,
     }
   })
 }
@@ -124,13 +124,23 @@ export async function recordWritingProgress(
   const today = localDateKey(now)
   const entries = await loadWritingLog(access)
   const previous = [...entries].reverse().find((entry) => entry.date < today)
-  const delta = previous ? totalChars - previous.chars : 0
+  const current = entries.find((entry) => entry.date === today)
+  // The first sample establishes the imported manuscript's baseline. A new
+  // project seeds zero before writing, so its first day's work is counted too.
+  const delta = previous ? totalChars - previous.chars
+    : current ? totalChars - current.chars + (current.delta ?? 0) : 0
   const next = entries.filter((entry) => entry.date !== today)
   next.push({ date: today, chars: totalChars, delta })
   next.sort((left, right) => left.date.localeCompare(right.date))
   const capped = next.slice(-WRITING_LOG_MAX_DAYS)
   await writeMetadataTextAtomic(access.path, WRITING_LOG_PATH, serializeWritingLog(capped))
   return { date: today, chars: totalChars, delta }
+}
+
+/** Seed an explicitly new project before its first manuscript is written. */
+export async function initializeWritingProgress(access: MetadataAccess): Promise<void> {
+  if ((await loadWritingLog(access)).length) return
+  await recordWritingProgress(access, 0)
 }
 
 export async function readWritingHistory(
