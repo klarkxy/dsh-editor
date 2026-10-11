@@ -35,7 +35,10 @@ export function resolveDshInstallation(expectedVersion = EXPECTED_DSH_VERSION) {
     if (expectedVersion && manifest.version !== expectedVersion) {
       throw new Error(`DSH version mismatch: expected ${expectedVersion}, found ${manifest.version} at ${packageRoot}`)
     }
-    return { cliPath, packageRoot, version: manifest.version, source }
+    // Module resolution must start at the physical package, not the pnpm junction.
+    // createRequire() does not canonicalize a synthetic package.json anchor.
+    const physicalRoot = fs.realpathSync(packageRoot)
+    return { cliPath: path.join(physicalRoot, 'lib', 'bin.js'), packageRoot: physicalRoot, version: manifest.version, source }
   }
 
   if (process.env.DSH_CLI_PATH?.trim()) {
