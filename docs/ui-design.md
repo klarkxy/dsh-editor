@@ -159,6 +159,34 @@ non-empty one. Lifting the composer to the top of an empty rail left a screen
 of dead space under the input and moved the input the moment the first turn
 arrived.
 
+The settings dialog keeps one height on every page
+(`min(760px, 100dvh - margins)`): sizing it to each page's content made the
+window jump between tabs, which is worse than slack inside a short page.
+
+The topbar layout toggles are neutral controls, not locations: pressed state is
+a sunken fill (hover fill in dark) with a hairline inset, never the accent
+block, and the sidebar/assistant toggles use the paired panel glyphs rather than
+the brand mark.
+
+## Paper defaults
+
+The manuscript surface is author-owned, so these are only the values an author
+gets before touching the writing settings: system sans
+(`"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+"Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif`), 17px /
+1.9, paragraph spacing 0.4em, paper width `medium` (76ch, centred). The serif
+stack stays selectable; it was the previous default and fell back to SimSun on
+Windows, where Noto Serif CJK is rarely installed. Headings in live preview
+scale 1.6 / 1.35 / 1.15 / 1.05em at weight 600. The shell
+(`writing-settings.tsx`, `writing-config.ts`) and the standalone editor core
+(`dsh-manuscript` `typography.ts`, editor-core `styles.ts`) declare the same
+defaults and their specs assert them.
+
+Plugin surfaces take their primary colour from `--s-brand`, which aliases
+`--dsh-ui-brand` (the saved accent) in `dsh-editor-seats/tokens`. It previously
+aliased the text colour, so every plugin primary button rendered black beside an
+accent-coloured shell.
+
 ## Narrow windows and author preference
 
 A window that cannot fit both rails beside the paper is a size event, not a
@@ -198,6 +226,23 @@ Below 1040px the assistant becomes an overlay; below 760px the sidebar does
 too, and the two overlays are mutually exclusive by a forced yield that ignores
 `authored`. Nothing here writes to the author's saved preference except an
 explicit toggle.
+
+**Pixel widths are re-asserted after a breakpoint, not trusted to the panel
+library.** react-resizable-panels keeps the assistant panel mounted at 0 width
+when it leaves the grid, and its ResizeObserver rebalances the group by
+percentage before the `collapse()` effect runs. On 1440 to 1024 the assistant's
+stale share pushed the editor below its minimum, which clamped the sidebar from
+260px to 200px, and `preserve-pixel-size` then kept 200px after widening. The
+sync effect in `root-layout.ts` therefore resizes each rail back to the
+author's stored pixel width whenever the grid membership or stored width
+changes (two animation frames, because the observer may run after the first),
+and wraps the imperative calls: a panel that has just remounted throws
+`Layout not found` until it has a layout slot, and an uncaught throw in that
+effect unmounted the whole tree when crossing 760px upward.
+
+A tool that reveals the sidebar (proofread, memory) widens it to at least 336px
+for the current window only; it does not write `sidebar-width`. An author drag
+still persists through `onLayoutChanged` with `isUserInteraction`.
 
 Built-in plugin panels, cards, overview, memory and proofread keep their own
 style owners. This shell pass does not restyle their interiors.

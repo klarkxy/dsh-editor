@@ -91,6 +91,32 @@ wide-1440-after-reload      files:true assistant:true  storedFiles:true storedAs
 
 这份记录里仍然成立的两条边界：设置开关的 35x20px 命中区是现存改善项，没有解决；真实模型回合、提案与审批交互始终没有实机验证。
 
+## 第二轮（2026-10-10）：外观与布局
+
+起点提交 `e3f5bd6`。这一轮用同一套隔离运行时逐屏截图（1440 浅/深、1024、760、390，共 66 屏），再对照源码定位，结论如下。自动审计在起点就几乎全绿（0 console 错误、0 横向溢出、2 个无名按钮），问题全部在默认排版、三栏比例与视觉一致性上。
+
+### 已修并复测
+
+- **稿纸默认排版**：此前默认衬线栈在 Windows 回落到 SimSun，`paperWidth` 默认 `wide`（无行宽、贴左），段距 0。改为系统无衬线、`medium`（76ch 居中）、0.4em；实测 1440 下正文栏约 630px。默认值见 `ui-design.md` 的 Paper defaults。
+- **侧栏被夹到 200px 并永久记住**：1440→1024 时面板库的 ResizeObserver 先按百分比再平衡，助手栏离开网格前仍占 28% 份额，编辑器被压到 `minSize` 以下，再从侧栏抢走宽度；`preserve-pixel-size` 随后把 200px 当作作者宽度。实测 1440 / 1024 / 回到 1440 分别为 260/756/400、**200**/812/覆盖层、**200**/816/400。修复后三档均为 260。修复过程中发现 ≤760 侧栏卸载后回宽时命令式调用抛 `Layout not found` 会卸掉整棵 React 树（白屏），已一并捕获。
+- **工具入口改写作者侧栏宽度**：校对/记忆入口通过 `revealSidebar` 把侧栏撑到 336 并写入 `dsh-editor.layout.sidebar-width`。现在只临时 `resize`，实测打开面板前后 localStorage 均为 260，重载回 260。
+- **设置窗口跳动**：上一轮「按内容定高」使三个页签的窗体分别落在 y=100–778 / 60–820 / 133–746。改为固定高度后三页 rect 完全一致（240, 59, 960×760）。
+- **搜索结果居中**：命中行是 Radix `Button`，文字居中、三种信息同字号。改为左对齐原生按钮，行号 12px 灰、摘录 13px；实测 11 条命中、760 覆盖层内同样可见。
+- **插件面板主按钮为黑色**：`dsh-editor-seats/tokens` 的 `--s-brand` 映射到 `--dsh-ui-text`。改为 `--dsh-ui-brand` 后 `.dsh-plugins-primary` 实测填充 `rgb(72,104,178)`（浅）/ `rgb(122,170,255)`（深）。
+- **首页常驻滚动条**：最近作品只有 1 项时 Radix ScrollArea 仍显示滚动条。根因是行入场动画 `translateY(16px)` 使 `scrollHeight` 瞬时大于视口，`ScrollAreaScrollbarAuto` 把可见态记住，而 transform 结束不触发 ResizeObserver。列表加 `overflow: clip` 后滚动条不再挂载。
+- 顶栏开关按下态、面板图标、命令面板触发器、已归档对话、校对/记忆面板平面化、文档工具按钮、设置导航分组标题：见 CHANGELOG「前端外观与布局」。
+
+### 仍然存在或未处理
+
+- **插件总览的单字占位图标**（终/子/人/记/文）：`plugin-configurations.spec.tsx` 断言了该字面标记，且该文件与 `plugins-catalog.tsx` 有在途改动，本轮未动。
+- **「安装与卸载」页与语音配置页的原生 `<select>`**：属于官方 `dsh-client-ui-plugin-manager` 与外部插件，改动需走 `patches/`，本轮未动。
+- 稿纸里光标所在的标题行按 live preview 规则显示原始 `#`，这是编辑器行为，不是样式缺陷。
+- 设置开关 35×20px、真实模型回合与提案审批交互仍未实机验证；Electron 窗口控制只在上一轮验过。
+
+### 门禁
+
+`pnpm typecheck`、`pnpm test --maxWorkers=2`（212 文件 / 1796 通过 / 4 跳过）、`pnpm build`、`check-ui-drift.test.mjs` 9/9、`check-ui-drift.mjs --base e3f5bd6` 16 个 UI 文件无新增字面量违规、`check-ui-design.mjs` 15/15、`node e2e/ui-design.mjs` 通过。第二轮的截图与探针脚本在 `.dev/frontend-ux-20261007/{extra,phaseA,phaseB,phaseD,phaseE,final}-20261010.mjs`，产物在 `.artifacts/frontend-ux-20261007/`。
+
 ## 复现命令
 
 ```sh
