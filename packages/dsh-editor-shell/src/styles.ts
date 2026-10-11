@@ -173,12 +173,10 @@ export const componentStyles = `
 .shell > .chrome .palette-trigger-icon svg,
 .shell > .chrome .settings-trigger-icon,
 .shell > .chrome .settings-trigger-icon svg,
-.shell > .chrome .workspace-menu-trigger svg,
-.shell > .chrome .layout-controls .whale-mark {
+.shell > .chrome .workspace-menu-trigger svg {
   display: block;
   flex-shrink: 0;
 }
-.shell > .chrome .layout-controls .whale-mark { width: 16px; height: 16px; }
 .shell .window-controls {
   -webkit-app-region: no-drag;
   flex-shrink: 0;
@@ -393,7 +391,7 @@ ${historyStyles}
 .radix-themes .paper-input .cm-scroller {
   align-items: flex-start !important;
   justify-content: flex-start;
-  font-family: var(--paper-font-family, "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif);
+  font-family: var(--paper-font-family, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif);
 }
 .radix-themes .paper-input .cm-content {
   width: 100%;
@@ -403,7 +401,7 @@ ${historyStyles}
   text-align: start;
 }
 .radix-themes .paper-input .cm-line { text-align: start; }
-.radix-themes .paper-input .cm-placeholder { color: var(--gray-10); font-style: italic; }
+.radix-themes .paper-input .cm-placeholder { color: var(--gray-10); }
 .radix-themes .paper-scroll { max-width: 36em; margin: 0 auto; }
 
 .radix-themes .ghost { color: var(--gray-9); font: inherit; letter-spacing: inherit; line-height: inherit; }
@@ -631,6 +629,11 @@ ${chatMessageStyles}
   width: 100%;
   text-align: start;
 }
+/* Row entrance translates overflow past the list edge; clip it inside the list
+   so the transformed paint never inflates the ScrollArea viewport's scrollable
+   area (ResizeObserver cannot see transforms, so the scrollbar state would
+   latch from the transient overflow). */
+.radix-themes .home-recent .workspace-list { overflow: clip; }
 @media (max-width: 1180px) {
   .home-stage-cluster { flex-direction: column; align-items: center; }
   .radix-themes .app-mascot-home { width: min(180px, 40vw); }
@@ -686,9 +689,8 @@ ${chatMessageStyles}
   width: min(960px, calc(100vw - 2 * var(--space-4)));
   max-width: 960px;
   /* 预留 Radix 外层滚动容器的边距，仅让导航和内容在窗口内滚动。
-     Short pages size to their own content; long ones still cap and scroll. */
-  height: auto;
-  max-height: min(760px, calc(100dvh - var(--space-6) - max(var(--space-6), 6vh)));
+     One height across every page: short pages keep the slack inside. */
+  height: min(760px, calc(100dvh - var(--space-6) - max(var(--space-6), 6vh)));
   font: 400 var(--font-size-2)/1.5 var(--default-font-family);
   color: var(--gray-12);
   --control-h: 34px;

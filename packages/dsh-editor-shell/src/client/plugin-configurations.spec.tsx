@@ -7,13 +7,18 @@ import { PLUGINS_SETTINGS_SLOT } from '../root-registration.ts'
 import { legacyZhihuVisible, PluginConfigurationPage, projectPluginConfigurations, usePluginConfigurations } from './plugin-configurations.tsx'
 import { mergeSections, PluginsPage, secondaryConfigKeys } from './plugins-page.tsx'
 import {
+  catalogBadgeLabel,
   advancedCatalogCard,
+  catalogIconSource,
   catalogSectionsOf,
   catalogToggleRequest,
+  CatalogRow,
   filterCatalogSections,
   mergeConfigurationCards,
+  newUserCardKeys,
   PluginsCatalog,
   presetEnabledRequest,
+  userSectionKeys,
   type PluginCatalogSection,
 } from './plugins-catalog.tsx'
 
@@ -423,7 +428,7 @@ describe('plugin catalog', () => {
     const official = sectionHtml(html, 'official')
     expect(official).toContain('data-testid="plugins-catalog-toggle-bundle:@deepseek-ai/dsh-web-search"')
     expect(official).toContain('data-testid="plugins-catalog-config-bundle:@deepseek-ai/dsh-web-search"')
-    expect(official).toContain('plugins-catalog-config"')
+    expect(official).toContain('plugins-catalog-action"')
     /* The switch stays the rightmost primary control; the detail row is untouched. */
     const row = official.slice(0, official.indexOf('data-testid="plugins-catalog-row-bundle:@klarkxy/dsh-terminal"'))
     expect(row.lastIndexOf('plugins-catalog-config-')).toBeLessThan(row.lastIndexOf('plugins-catalog-toggle-'))
@@ -475,6 +480,67 @@ describe('plugin catalog', () => {
     const locked = builtin.slice(builtin.indexOf('data-testid="plugins-catalog-preset-dsh-editor-writing"'))
     expect(locked.slice(0, locked.indexOf('data-testid="plugins-catalog-preset-dsh-editor-novel"'))).toContain('必需')
     expect(sectionHtml(catalog(), 'official')).not.toContain('写作模式')
+  })
+
+  it('renders the author brand icon and falls back to the monogram when it is absent or fails', () => {
+    const icon = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='
+    const withIcon = catalogSectionsOf({ sections: [{ id: 'user', items: [
+      { key: 'bundle:@klarkxy/dsh-zhihu', title: '知乎', description: '', icon, badges: ['installed'], action: 'switch' },
+      { key: 'bundle:@scope/plain', title: '甲插件', description: '', badges: [], action: 'detail' },
+    ] }] })
+    expect(withIcon[2]!.items[0]!.icon).toBe(icon)
+    expect('icon' in withIcon[2]!.items[1]!).toBe(false)
+    const html = sectionHtml(catalog({ sections: withIcon }), 'user')
+    expect(html).toContain(`<img class="plugins-catalog-icon-image" src="${icon}" alt=""/>`)
+    /* The monogram stays the fallback for a card with no icon: never a blank tile. */
+    expect(html).toContain('<span class="plugins-catalog-icon" aria-hidden="true">甲</span>')
+    expect(catalogIconSource({ icon, title: '知乎' })).toBe(icon)
+    expect(catalogIconSource({ title: '知乎' })).toBe('')
+    expect(catalogIconSource({ icon, title: '知乎' }, icon)).toBe('')
+    /* Only an inline image data URI is accepted: a remote URL or a script URI
+       would either leak the author's browsing or turn the row into script. */
+    expect(catalogSectionsOf({ sections: [{ id: 'user', items: [
+      { key: 'bundle:remote', title: 'A', icon: 'https://example.test/a.svg' },
+      { key: 'bundle:script', title: 'B', icon: 'javascript:alert(1)' },
+      { key: 'bundle:ok', title: 'C', icon: 'data:image/svg+xml;utf8,<svg/>' },
+    ] }] })[2]!.items.map((card) => card.icon)).toEqual([undefined, undefined, 'data:image/svg+xml;utf8,<svg/>'])
+  })
+
+  it('labels an installed bundle and keeps the ghost treatment on every non-switch control', () => {
+    expect(catalogBadgeLabel('installed')).toBe('已安装')
+    setLocale('en')
+    expect(catalogBadgeLabel('installed')).toBe('Installed')
+    setLocale('zh')
+    const html = catalog({ configKeys: ['bundle:@deepseek-ai/dsh-web-search'] })
+    /* 配置 beside a switch and a lone 详情 are one control, so they read alike:
+       the switch stays the row's only filled control. */
+    const official = sectionHtml(html, 'official')
+    expect(official.match(/plugins-catalog-action"/g)).toHaveLength(2)
+    expect(official).not.toContain('plugins-catalog-config"')
+    expect(official).toMatch(/data-testid="plugins-catalog-config-[^"]+"[^>]*class="[^"]*plugins-catalog-action"/)
+    expect(official).toMatch(/data-testid="plugins-catalog-detail-[^"]+"[^>]*class="[^"]*plugins-catalog-action"/)
+  })
+
+  it('anchors the user section and highlights only the rows a refresh added', () => {
+    const before: PluginCatalogSection[] = [{ id: 'user', items: [
+      { key: 'bundle:a', title: 'A', description: '', badges: [], action: 'detail' },
+    ] }, ...CATALOG_SECTIONS.slice(0, 2)]
+    const after: PluginCatalogSection[] = [{ id: 'user', items: [
+      { key: 'bundle:a', title: 'A', description: '', badges: [], action: 'detail' },
+      { key: 'bundle:b', title: 'B', description: '', badges: [], action: 'detail' },
+    ] }, ...CATALOG_SECTIONS.slice(0, 2)]
+    expect(userSectionKeys(after)).toEqual(['bundle:a', 'bundle:b'])
+    /* The baseline is the previous set, so an install is exactly the growth. */
+    expect(newUserCardKeys(userSectionKeys(before), userSectionKeys(after))).toEqual(['bundle:b'])
+    expect(newUserCardKeys(userSectionKeys(after), userSectionKeys(after))).toEqual([])
+    expect(newUserCardKeys(userSectionKeys(after), userSectionKeys(before))).toEqual([])
+    const row = (highlighted: boolean) => renderToStaticMarkup(createElement(CatalogRow, {
+      card: { key: 'bundle:b', title: 'B', description: '', badges: [], action: 'detail' },
+      pending: false, configurable: false, highlighted,
+      onToggle() {}, onConfigure() {}, onDetail() {},
+    }))
+    expect(row(true)).toContain('class="plugins-catalog-row is-new"')
+    expect(row(false)).toContain('class="plugins-catalog-row"')
   })
 
   it('normalizes an unknown payload into the three fixed sections', () => {

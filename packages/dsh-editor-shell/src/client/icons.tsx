@@ -56,6 +56,20 @@ export function DotsIcon({ size = 16 }: IconProps) {
   );
 }
 
+export function PanelLeftIcon({ size = 16 }: IconProps) {
+  return svg(size,
+    <rect x="3.5" y="5" width="17" height="14" rx="2" />,
+    <path d="M9.5 5v14" />,
+  );
+}
+
+export function PanelRightIcon({ size = 16 }: IconProps) {
+  return svg(size,
+    <rect x="3.5" y="5" width="17" height="14" rx="2" />,
+    <path d="M14.5 5v14" />,
+  );
+}
+
 export function ChevronRightIcon({ size = 16 }: IconProps) {
   return svg(size,
     <path d="m9 6 6 6-6 6" />,

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
-import { assertDefaultPluginPage, openPluginManager, openWebSearchSettings, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
+import { assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, openPluginManager, openWebSearchSettings, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const stage = process.env.PLUGINS_UI_STAGE || 'current'
@@ -65,6 +65,7 @@ try {
     await page.locator('.plugins-trigger').click()
     const pluginPage = page.locator('.plugins-page')
     await assertDefaultPluginPage(page, pluginPage)
+    await assertCatalogIconsRendered(pluginPage)
     await openWritingPresets(pluginPage)
     await shot(theme + '-overview-1440')
     await openWebSearchSettings(pluginPage)
@@ -90,8 +91,14 @@ try {
     for (const width of [1024, 760, 390]) {
       await page.setViewportSize({ width, height: 900 })
       assert(await pluginPage.evaluate(el => el.scrollWidth <= el.clientWidth + 1), `page overflow ${width}: ${JSON.stringify(await pluginPage.evaluate(el => ({client:el.clientWidth,scroll:el.scrollWidth})))}`)
+      /* Measure the links, not the nav's scroll metrics: the inner scroller hid
+         two configuration entries while the nav itself reported no overflow. */
+      const nav = await assertConfigNavLinksReachable(pluginPage)
+      await assertCatalogIconsRendered(pluginPage)
+      if (width === 390) report.configNav = nav
       await shot(theme + '-overview-' + width)
     }
+    report.checks.push(theme + ': every configuration nav entry stays reachable and every catalog icon renders at 1024/760/390')
     await page.setViewportSize({ width: 1440, height: 900 })
     await pluginPage.getByRole('button', { name: '返回首页', exact: true }).click()
     await pluginPage.waitFor({ state: 'hidden' })

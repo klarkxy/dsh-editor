@@ -2,8 +2,7 @@ import type { ReactNode, RefObject } from 'react'
 import { Button, DropdownMenu, Flex, IconButton, Text } from '@radix-ui/themes'
 import type { WorkspaceId, WorkspaceView } from '../dsh-compat.ts'
 import { t } from '../i18n/index.ts'
-import { DeepSeekWhaleMark } from './components.tsx'
-import { FolderIcon, FocusIcon } from './icons.tsx'
+import { FocusIcon, PanelLeftIcon, PanelRightIcon } from './icons.tsx'
 import { CommandPaletteTrigger } from './command-palette.tsx'
 import { PluginsTrigger } from './plugins-page.tsx'
 import { SettingsTrigger, type SettingsTab } from './settings.tsx'
@@ -24,8 +23,8 @@ function LayoutToggle(props: {
       content={props.tooltip}
       children={<IconButton
         type="button"
-        variant={props.pressed ? 'soft' : 'ghost'}
-        color={props.pressed ? undefined : 'gray'}
+        variant="ghost"
+        color="gray"
         size="2"
         disabled={props.disabled}
         aria-pressed={props.pressed}
@@ -177,7 +176,7 @@ export function WorkbenchTopbar(props: {
           label={t('workspace.files')}
           tooltip={props.sidebarOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
           onClick={props.onToggleSidebar}>
-          <FolderIcon size={16} />
+          <PanelLeftIcon size={16} />
         </LayoutToggle>
         <LayoutToggle
           pressed={props.focusMode}
@@ -192,7 +191,7 @@ export function WorkbenchTopbar(props: {
           label={t('workspace.assistant')}
           tooltip={props.assistantOpen ? t('workspace.hideAssistant') : t('workspace.showAssistant')}
           onClick={props.onToggleAssistant}>
-          <DeepSeekWhaleMark />
+          <PanelRightIcon size={16} />
         </LayoutToggle>
       </Flex>
       {props.extensionsDock}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { SessionFace, WorkspaceId } from '../dsh-compat.ts'
 import { safeRpcCall, storedPanelOpen, storedPanelWidth, type ShellContext } from './shared.ts'
-import { railAtWidth, railByAuthor, type RailYieldState } from './narrow-layout.ts'
+import { railAtWidth, railByAuthor, railPanelSync, type RailYieldState } from './narrow-layout.ts'
 import { useMediaQuery } from './components.tsx'
 import { type PanelImperativeHandle } from 'react-resizable-panels'
 import { isSingleManuscriptRoot, readSingleSidebarChoice, sidebarAfterManuscriptCensus, writeSingleSidebarChoice } from './sidebar-chrome.ts'
@@ -194,8 +194,12 @@ export function useRootLayout({ ctx, fileSession, openWorkspaceId, treeRevision,
   }
   const revealSidebar = useCallback(() => {
     const width = Math.max(sidebarWidthRef.current, 336)
-    setSidebarWidth(width)
-    sidebarPanelRef.current?.resize(width + 'px')
+    try {
+      sidebarPanelRef.current?.resize(width + 'px')
+    } catch {
+      /* 面板刚挂回 Group 时命令式 API 会抛 Layout not found；
+         临时加宽可放弃，作者宽度不落盘。 */
+    }
     if (compactChrome) yieldAssistantToWidth()
     setFocusMode(false)
     claimSidebar(true)
@@ -213,18 +217,41 @@ export function useRootLayout({ ctx, fileSession, openWorkspaceId, treeRevision,
      hooks 必须全部早于下方的首页早退分支，否则违反渲染顺序。 */
   const assistantPanelRef = useRef<PanelImperativeHandle>(null)
   useEffect(() => {
-    const panel = assistantPanelRef.current
-    if (!panel) return
     const sync = () => {
-      if (assistantInGrid) { if (panel.isCollapsed()) panel.expand() }
-      else if (!panel.isCollapsed()) panel.collapse()
+      const plan = railPanelSync(assistantInGrid)
+      const assistant = assistantPanelRef.current
+      try {
+        if (plan.collapseAssistant) {
+          if (assistant && !assistant.isCollapsed()) assistant.collapse()
+        } else if (assistant) {
+          if (assistant.isCollapsed()) assistant.expand()
+          else if (assistant.getSize().inPixels > 0 && Math.abs(assistant.getSize().inPixels - assistantWidth) >= 1) {
+            assistant.resize(`${assistantWidth}px`)
+          }
+        }
+      } catch {
+        /* 面板刚挂回 Group、布局槽还没分配时命令式 API 会抛 Layout not found，
+           由后面的 rAF 再补一次；异常不能击穿整棵树。 */
+      }
+      const sidebar = sidebarPanelRef.current
+      try {
+        if (sidebar && sidebar.getSize().inPixels > 0 && Math.abs(sidebar.getSize().inPixels - sidebarWidth) >= 1) {
+          sidebar.resize(`${sidebarWidth}px`)
+        }
+      } catch {
+        /* 同上。 */
+      }
     }
     /* 侧栏/钉住栏挂上或卸下时 Group 会重算尺寸；折叠态可能被 minSize 顶开。
-       先同步一次，再在下一帧补一次，避免空列留在稿纸右侧。 */
+       面板库的 ResizeObserver 也可能先跑一遍按百分比的再平衡，把栏宽夹走，
+       所以先同步一次，再补两帧，始终回到作者记下的像素宽度。 */
     sync()
-    const frame = globalThis.requestAnimationFrame(sync)
+    const frame = globalThis.requestAnimationFrame(() => {
+      sync()
+      globalThis.requestAnimationFrame(sync)
+    })
     return () => globalThis.cancelAnimationFrame(frame)
-  }, [assistantInGrid, sidebarInGrid, pinnedVisible])
+  }, [assistantInGrid, sidebarInGrid, pinnedVisible, sidebarWidth, assistantWidth])
 
   return {
     sidebarOpen, setSidebarOpen, sidebarWidth, setSidebarWidth, sidebarWidthRef, sidebarPanelRef,

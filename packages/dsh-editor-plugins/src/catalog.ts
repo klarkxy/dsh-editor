@@ -36,15 +36,23 @@ const UPSTREAM_DISPLAY: Readonly<Record<string, { title: string; description: st
 const BUNDLE_NAME_SUFFIX = /-bundle$/
 /** Words that do not identify a bundle on their own when folding catalog entries. */
 const GENERIC_TITLE_TOKENS = new Set(['bundle', 'to', 'for', 'and', 'of', 'the', 'ui', 'client', 'api'])
+/**
+ * Display order of the catalog badges. `builtin` stays in the order for cards that
+ * still carry it even though the 内置 section no longer emits it: the heading
+ * already says it, and a silently dropped badge would be worse than a redundant one.
+ */
 const BADGE_ORDER: readonly PluginCatalogBadge[] = [
   'required',
   'locked',
   'builtin',
   'preinstalled',
+  'installed',
   'experimental',
   'session-managed',
   'feature-managed',
 ]
+/** Icons are inline `data:` payloads; anything else is dropped instead of passed through. */
+const ICON_DATA_URI_PREFIX = 'data:image/'
 
 type BundleRow = {
   name: string
@@ -52,7 +60,7 @@ type BundleRow = {
   installed?: unknown
   readOnlyReason?: unknown
   description?: unknown
-  meta?: { title?: unknown; description?: unknown }
+  meta?: { title?: unknown; description?: unknown; icon?: unknown }
 }
 
 /** Inventory display metadata is a plain string or a locale map (`{ zh, en }`). */
@@ -75,7 +83,29 @@ function rowTitle(row: BundleRow): string {
 function rowDescription(row: BundleRow): string {
   return metaText(row.meta?.description) || (typeof row.description === 'string' ? row.description.trim() : '')
 }
-type PluginRow = { entryId?: unknown; patchId?: unknown; enabled?: unknown; readOnlyReason?: unknown }
+
+/**
+ * `meta.icon` is a plain `data:image/` URI, never a locale map like title and
+ * description, so it is passed through verbatim and anything else is dropped.
+ */
+function iconOf(meta: { icon?: unknown } | undefined): string | undefined {
+  const icon = meta?.icon
+  return typeof icon === 'string' && icon.startsWith(ICON_DATA_URI_PREFIX) ? icon : undefined
+}
+
+/** Optional field spread: a card without a declared icon carries no `icon` key at all. */
+function iconField(meta: { icon?: unknown } | undefined): { icon?: string } {
+  const icon = iconOf(meta)
+  return icon === undefined ? {} : { icon }
+}
+
+type PluginRow = {
+  entryId?: unknown
+  patchId?: unknown
+  enabled?: unknown
+  readOnlyReason?: unknown
+  meta?: { icon?: unknown }
+}
 export type CatalogManager = Partial<Pick<NativeToolManager, 'listBundles' | 'listPlugins'>>
 
 function readOnlyReason(row: { readOnlyReason?: unknown } | undefined): boolean {
@@ -106,6 +136,15 @@ function pluginPatchId(row: PluginRow): string | undefined {
 function orderedBadges(badges: Iterable<PluginCatalogBadge>): PluginCatalogBadge[] {
   const wanted = new Set(badges)
   return BADGE_ORDER.filter((badge) => wanted.has(badge))
+}
+
+/**
+ * 必需 already states the author cannot turn the plugin off, so a required card
+ * drops `locked`; `locked` stays only on cards that are locked but not required.
+ */
+function capabilityBadges(required: boolean, locked: boolean): PluginCatalogBadge[] {
+  if (required) return ['required']
+  return locked ? ['locked'] : []
 }
 
 /** A card only carries a switch while the author can actually flip it. */
@@ -180,6 +219,7 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
       key: `bundle:${row.name}`,
       title,
       description,
+      ...iconField(row.meta),
       packageName: row.name,
       badges: orderedBadges(['experimental', ...(locked ? ['locked' as const] : [])]),
       ...(enabled === undefined ? {} : { enabled }),
@@ -201,12 +241,11 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
       key: `entry:${id}`,
       title: entry.title || entry.packageName,
       description: entry.description ?? '',
+      ...iconField(plugin?.meta),
       packageName: entry.packageName,
       entryId: id,
       badges: orderedBadges([
-        ...(required ? ['required' as const] : []),
-        ...(locked ? ['locked' as const] : []),
-        'builtin',
+        ...capabilityBadges(required, locked),
         ...(entry.managedBy === 'session' ? ['session-managed' as const] : []),
         ...(entry.managedBy === 'feature' ? ['feature-managed' as const] : []),
       ]),
@@ -233,12 +272,9 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
       key: `bundle:${name}`,
       title: copy?.title ?? name,
       description: copy?.description ?? '',
+      ...iconField(row?.meta),
       packageName: name,
-      badges: orderedBadges([
-        ...(required ? ['required' as const] : []),
-        ...(locked ? ['locked' as const] : []),
-        'builtin',
-      ]),
+      badges: orderedBadges(capabilityBadges(required, locked)),
       ...(enabled === undefined ? {} : { enabled }),
       action: cardAction(enabled, locked),
     }
@@ -262,13 +298,9 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
       key: `bundle:${packageName}`,
       title: entry?.title || preset.title,
       description: entry?.description ?? preset.description,
+      ...iconField(row?.meta),
       packageName,
-      badges: orderedBadges([
-        ...(required ? ['required' as const] : []),
-        ...(locked ? ['locked' as const] : []),
-        'builtin',
-        'preinstalled',
-      ]),
+      badges: orderedBadges([...capabilityBadges(required, locked), 'preinstalled']),
       ...(enabled === undefined ? {} : { enabled }),
       action: cardAction(enabled, locked),
     })
@@ -289,8 +321,10 @@ export function buildPluginCatalog(input: { catalog?: RuntimeCatalog; bundles?: 
       key: `bundle:${name}`,
       title: copy?.title ?? (rowTitle(row) || name),
       description: copy?.description ?? rowDescription(row),
+      ...iconField(row.meta),
       packageName: name,
-      badges: orderedBadges(locked ? ['locked' as const] : []),
+      // Every card in this section is a plugin the author installed themselves.
+      badges: orderedBadges([...(locked ? ['locked' as const] : []), 'installed']),
       ...(enabled === undefined ? {} : { enabled }),
       action: cardAction(enabled, locked),
     })

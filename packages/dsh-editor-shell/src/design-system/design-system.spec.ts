@@ -35,4 +35,23 @@ describe('official web design contracts', () => {
     // while the title above it started 12px further in.
     expect(designSystemStyles).toMatch(/\.shell \.tree \.tree-empty[^{]*\{[^}]*padding-inline: var\(--dsh-ui-space-3\)/)
   })
+  it('keeps the installed-plugin anchor, its ghost controls and the narrow nav reachable', () => {
+    // The install highlight lasts a token-derived beat the client reads back, so
+    // the class can never outlive its own animation, and reduced motion ends it.
+    expect(designSystemStyles).toMatch(/\.plugins-catalog-row\.is-new[^{]*\{[^}]*animation: plugins-catalog-installed calc\(var\(--dsh-ui-duration-slow\) \* 4\)/)
+    expect(designSystemStyles).toMatch(/@keyframes plugins-catalog-installed\s*\{\s*from, 30% \{/)
+    expect(designSystemStyles).toMatch(/@keyframes plugins-catalog-installed\s*\{[\s\S]*?var\(--dsh-ui-accent-soft\)[\s\S]*?var\(--dsh-ui-raised\)/)
+    // 配置 and 详情 are one control: readable text, no resting fill, hover fill.
+    expect(designSystemStyles).toMatch(/\.plugins-catalog-action[^{]*\{[^}]*background: transparent;[^}]*color: var\(--dsh-ui-text\)/)
+    expect(designSystemStyles).toMatch(/\.plugins-catalog-action:hover[^{]*\{[^}]*background: var\(--dsh-ui-hover\)/)
+    expect(designSystemStyles).not.toMatch(/\.plugins-catalog-config[^-]/)
+    // The author brand art fills the monogram tile rather than a second slot.
+    expect(designSystemStyles).toMatch(/\.plugins-catalog-icon-image[^{]*\{[^}]*object-fit: contain/)
+    // At 390px the configuration entries stack as full-width rows. They used to
+    // run off a nowrap inner scroller, which reported no nav overflow while
+    // leaving 子智能体 and 知乎 unreachable.
+    expect(designSystemStyles).toMatch(/@media \(max-width: 760px\)[\s\S]*\.plugins-config-links[^{]*\{[^}]*flex-wrap: wrap/)
+    expect(designSystemStyles).not.toMatch(/\.plugins-config-links[^{]*\{[^}]*overflow-x: auto/)
+    expect(designSystemStyles).toMatch(/\.plugins-config-links \.plugins-page-link[^{]*\{[^}]*flex: 1 1 100%/)
+  })
 })

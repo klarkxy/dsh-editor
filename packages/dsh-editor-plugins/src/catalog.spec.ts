@@ -22,6 +22,10 @@ const VOICE_ENTRIES = {
   'ui-voice-input': '@deepseek-ai/dsh-experimental-client-ui-voice-input',
 }
 
+/** Brand icons arrive from the official manager as plain `data:image/` URIs. */
+const ZHIHU_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjMDA4NGZmIi8+PC9zdmc+'
+const CARDS_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIvPjwvc3ZnPg=='
+
 /** Mirrors the prepared catalog written by scripts/desktop-compositions.mjs. */
 function defaultCatalog(): RuntimeCatalog {
   return {
@@ -98,26 +102,49 @@ describe('plugin catalog classification', () => {
     expect(agentTeam?.title).toBe('@deepseek-ai/dsh-experimental-agent-team')
   })
 
-  it('marks the preinstalled public plugin builtin and preinstalled', () => {
+  it('marks the preinstalled public plugin preinstalled under the builtin section', () => {
     const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS })
     const card = byTitle(catalog, 'builtin', '网页搜索')[0]
     expect(card?.packageName).toBe('@klarkxy/dsh-web-search-manager')
-    expect(card?.badges).toContain('preinstalled')
-    expect(card?.badges).toContain('builtin')
+    expect(card?.badges).toEqual(['preinstalled'])
     expect(card?.enabled).toBe(true)
     expect(card?.action).toBe('switch')
   })
 
-  it('stamps required and locked core bundles and drops their switch', () => {
+  it('stamps required core bundles, drops the redundant locked badge and keeps their switch off', () => {
     const catalog = buildPluginCatalog({ catalog: defaultCatalog(), bundles: defaultBundles(), plugins: DEFAULT_PLUGINS })
     const shell = byTitle(catalog, 'builtin', '编辑器外壳')[0]
-    expect(shell?.badges).toContain('required')
-    expect(shell?.badges).toContain('locked')
+    expect(shell?.badges).toEqual(['required'])
+    // 必需 already states the author cannot turn it off.
+    expect(shell?.badges).not.toContain('locked')
     expect(shell?.enabled).toBeUndefined()
     expect(shell?.action).toBe('config')
     // A core bundle without a prepared-catalog product name is implementation
     // plumbing and must not masquerade as an author-facing feature card.
     expect(section(catalog, 'builtin').some((card) => card.packageName === 'dsh-editor-plugins')).toBe(false)
+  })
+
+  it('leaves no card with the section-carrying builtin badge and keeps locked only when locked without required', () => {
+    const catalog = buildPluginCatalog({
+      catalog: {
+        bundles: ['@acme/managed'],
+        entries: {
+          ...defaultCatalog().entries,
+          'locked-entry': { title: '受管插件', description: '被锁定的可选插件。', locked: true, builtin: true, packageName: '@acme/locked-entry' },
+          'managed-bundle': { title: '受管组件', description: '被官方管理的组件。', locked: false, builtin: false, packageName: '@acme/managed' },
+        },
+      },
+      bundles: [{ name: '@acme/managed', enabled: true, installed: true, readOnlyReason: 'management-required' }],
+      plugins: [],
+    })
+    expect(catalog.sections.flatMap((row) => row.items).some((card) => card.badges.includes('builtin'))).toBe(false)
+    // Optional builtin entries are neither required nor locked, so they read as plain cards.
+    expect(byTitle(catalog, 'builtin', '快捷键')[0]?.badges).toEqual([])
+    expect(byTitle(catalog, 'builtin', '编辑器外壳')[0]?.badges).toEqual(['required'])
+    // Locked but not required keeps locked on its own, on an entry card and a bundle card.
+    expect(byTitle(catalog, 'builtin', '受管插件')[0]?.badges).toEqual(['locked'])
+    expect(byTitle(catalog, 'builtin', '受管插件')[0]?.enabled).toBeUndefined()
+    expect(byTitle(catalog, 'builtin', '受管组件')[0]?.badges).toEqual(['locked'])
   })
 
   it('titles upstream experimental bundles and keeps runtime plumbing out of the list', () => {
@@ -158,6 +185,84 @@ describe('plugin catalog classification', () => {
     const user = section(catalog, 'user')
     expect(user.map((card) => card.title)).toEqual(['作者功能', '@acme/plain'])
     expect(user[0]?.description).toBe('来自 meta 的说明。')
+  })
+
+  it('passes a bundle brand icon through verbatim while title and description stay locale maps', () => {
+    const catalog = buildPluginCatalog({
+      catalog: { bundles: [], entries: {} },
+      bundles: [{
+        name: '@klarkxy/dsh-zhihu',
+        enabled: true,
+        installed: true,
+        meta: {
+          title: { en: 'Zhihu', zh: '知乎' },
+          description: { en: 'Read Zhihu threads.', zh: '读取知乎话题与回答。' },
+          icon: ZHIHU_ICON,
+        },
+      }],
+      plugins: [],
+    })
+    const card = section(catalog, 'user')[0]
+    expect(card?.title).toBe('知乎')
+    expect(card?.description).toBe('读取知乎话题与回答。')
+    expect(card?.icon).toBe(ZHIHU_ICON)
+  })
+
+  it('drops an icon that is not a data:image/ string instead of passing it through', () => {
+    const pngIcon = 'data:image/png;base64,iVBORw0KGgo='
+    const catalog = buildPluginCatalog({
+      catalog: { bundles: [], entries: {} },
+      bundles: [
+        { name: '@acme/locale-map-icon', enabled: true, installed: true, meta: { icon: { en: 'Icon', zh: '图标' } } },
+        { name: '@acme/remote-icon', enabled: true, installed: true, meta: { icon: 'https://example.com/icon.svg' } },
+        { name: '@acme/script-icon', enabled: true, installed: true, meta: { icon: 'javascript:alert(1)' } },
+        { name: '@acme/number-icon', enabled: true, installed: true, meta: { icon: 42 } },
+        { name: '@acme/empty-icon', enabled: true, installed: true, meta: { icon: '' } },
+        { name: '@acme/png-icon', enabled: true, installed: true, meta: { icon: pngIcon } },
+      ],
+      plugins: [],
+    })
+    expect(section(catalog, 'user').map((card) => card.icon)).toEqual([undefined, undefined, undefined, undefined, undefined, pngIcon])
+  })
+
+  it('carries the icon on builtin bundle cards and on entry cards only when the live row supplies one', () => {
+    const catalog = buildPluginCatalog({
+      catalog: {
+        bundles: ['dsh-editor-cards'],
+        entries: {
+          'ui-shortcuts': { title: '快捷键', description: '', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-client-ui-shortcuts' },
+          'mcp-resources': { title: 'MCP 资源', description: '', locked: false, builtin: true, packageName: '@deepseek-ai/dsh-mcp-resources' },
+          cards: { title: '卡片', description: '', locked: false, builtin: false, packageName: 'dsh-editor-cards' },
+        },
+      },
+      bundles: [{ name: 'dsh-editor-cards', enabled: true, installed: true, meta: { icon: CARDS_ICON } }],
+      plugins: [
+        { entryId: 'ui-shortcuts', patchId: 'ui-shortcuts', enabled: true },
+        { entryId: 'mcp-resources', patchId: 'mcp-resources', enabled: true, meta: { icon: CARDS_ICON } },
+      ],
+    })
+    expect(byTitle(catalog, 'builtin', '卡片')[0]?.icon).toBe(CARDS_ICON)
+    expect(byTitle(catalog, 'builtin', 'MCP 资源')[0]?.icon).toBe(CARDS_ICON)
+    // No icon field at all, not an empty one, when the row declares none.
+    expect('icon' in (byTitle(catalog, 'builtin', '快捷键')[0] ?? {})).toBe(false)
+  })
+
+  it('marks every author-installed card installed without mixing it with preinstalled', () => {
+    const catalog = buildPluginCatalog({
+      catalog: defaultCatalog(),
+      bundles: [
+        ...defaultBundles(),
+        { name: '@klarkxy/dsh-zhihu', enabled: true, installed: true, meta: { title: { en: 'Zhihu', zh: '知乎' } } },
+        { name: '@acme/locked-plugin', enabled: true, installed: true, readOnlyReason: 'management-required' },
+      ],
+      plugins: DEFAULT_PLUGINS,
+    })
+    const user = section(catalog, 'user')
+    expect(user.map((card) => card.badges)).toEqual([['installed'], ['locked', 'installed']])
+    const all = catalog.sections.flatMap((row) => row.items)
+    expect(all.filter((card) => card.badges.includes('installed')).length).toBe(user.length)
+    expect(all.some((card) => card.badges.includes('preinstalled') && card.badges.includes('installed'))).toBe(false)
+    expect(byTitle(catalog, 'builtin', '网页搜索')[0]?.badges).toEqual(['preinstalled'])
   })
 
   it('routes author-installed bundles to user and keeps retired packages out of every section', () => {

@@ -4,8 +4,8 @@ export const memoryPanelStyles = `
 @keyframes memory-panel-in { from { opacity: 0; transform: translateY(8px); } }
 .radix-themes .memory-panel {
 ${surfaceTokenAliases}
-  margin: 0 var(--space-2) var(--space-2); padding: var(--space-3); max-height: min(40vh, 320px); overflow: auto; display: flex; flex-direction: column; gap: var(--space-2);
-  border: 0; border-radius: var(--s-radius-panel); background: var(--s-raised); box-shadow: var(--s-elevate);
+  margin: 0; padding: var(--space-3); max-height: min(40vh, 320px); overflow: auto; display: flex; flex-direction: column; gap: var(--space-2);
+  border: 0; border-radius: 0; border-bottom: 0.5px solid var(--s-line); background: transparent; box-shadow: none;
   font-family: var(--s-font); font-size: var(--font-size-2); color: var(--s-text);
   animation: memory-panel-in 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }

@@ -162,9 +162,9 @@ export const surfaceTokenAliases = `
   --s-accent-hover: var(--dsh-ui-accent-hover, var(--dsw-alias-button-info-hover, var(--accent-10)));
   --s-accent-soft: var(--dsh-ui-accent-soft, var(--dsw-alias-state-business-tertiary, var(--accent-a3)));
   --s-on-accent: var(--dsh-ui-on-accent, var(--dsw-alias-label-primary-foreground, var(--accent-contrast)));
-  --s-brand: var(--dsh-ui-text, var(--dsw-alias-button-primary-fill, var(--gray-12)));
-  --s-on-brand: var(--dsw-alias-label-primary-foreground, var(--color-background));
-  --s-brand-hover: var(--dsw-alias-button-primary-hover, color-mix(in srgb, var(--s-brand) 86%, var(--s-on-brand)));
+  --s-brand: var(--dsh-ui-brand, var(--dsw-alias-button-primary-fill, var(--gray-12)));
+  --s-on-brand: var(--dsh-ui-on-brand, var(--dsw-alias-label-primary-foreground, var(--color-background)));
+  --s-brand-hover: var(--dsh-ui-brand-hover, var(--dsw-alias-button-primary-hover, color-mix(in srgb, var(--s-brand) 86%, var(--s-on-brand))));
   --s-danger: var(--dsh-ui-danger, var(--dsw-alias-state-error-primary, var(--red-11)));
   --s-warning: var(--dsh-ui-warning, var(--dsw-alias-state-warn-primary, var(--amber-9)));
   --s-success: var(--dsh-ui-success, var(--dsw-alias-state-success-primary, var(--green-9)));

@@ -5,7 +5,7 @@
  * so the shell can render it without a package dependency. Every value is
  * normalized: an unknown shape drops one card instead of the whole page.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Badge, Button as ThemeButton, Callout, Flex, Heading, Switch, Text } from '@radix-ui/themes'
 import { t } from '../i18n/index.ts'
 import { errorMessage, safeRpcCall } from './shared.ts'
@@ -29,6 +29,7 @@ export type PluginCatalogBadge =
   | 'preinstalled'
   | 'session-managed'
   | 'feature-managed'
+  | 'installed'
 export type PluginCatalogAction = 'switch' | 'config' | 'detail'
 export type PluginCatalogCard = {
   /** Stable key: `bundle:<packageName>` or `entry:<entryId>`. */
@@ -37,6 +38,11 @@ export type PluginCatalogCard = {
   description: string
   packageName?: string
   entryId?: string
+  /**
+   * Author-supplied brand art as a plain data URI (`data:image/svg+xml;base64,…`).
+   * Pure data from the Host, never markup; the monogram stays the fallback.
+   */
+  icon?: string
   badges: string[]
   /** Omit when the card carries no switch. */
   enabled?: boolean
@@ -74,10 +80,21 @@ const BADGE_LABELS: Record<string, () => string> = {
   preinstalled: () => t('plugins.badgePreinstalled'),
   'session-managed': () => t('plugins.badgeSessionManaged'),
   'feature-managed': () => t('plugins.badgeFeatureManaged'),
+  installed: () => t('plugins.badgeInstalled'),
 }
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * Brand art is plain data from the Host. Only an inline image data URI is
+ * accepted: a remote URL would leak the author's browsing and a `javascript:`
+ * URI would turn the row into script, so both fall back to the monogram.
+ */
+function iconOf(value: unknown): string {
+  const source = text(value)
+  return /^data:image\/[a-z0-9.+-]+[;,]/i.test(source) ? source : ''
 }
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -98,12 +115,14 @@ function cardOf(value: unknown): PluginCatalogCard | null {
   if (!key) return null
   const packageName = text(row.packageName)
   const entryId = text(row.entryId)
+  const icon = iconOf(row.icon)
   return {
     key,
     title: text(row.title) || packageName || entryId || key,
     description: text(row.description),
     ...(packageName ? { packageName } : {}),
     ...(entryId ? { entryId } : {}),
+    ...(icon ? { icon } : {}),
     badges: Array.isArray(row.badges)
       ? row.badges.map(text).filter((badge) => badge.length > 0)
       : [],
@@ -371,18 +390,42 @@ function monogramOf(title: string): string {
   return [...title.trim()][0]?.toLocaleUpperCase() ?? '·'
 }
 
-function CatalogRow(props: {
+/**
+ * The author's brand art when the Host supplied one and it has not failed to
+ * decode, otherwise an empty source so the title's monogram takes the tile. An
+ * undecodable data URI must never leave a blank tile, so the failure is keyed
+ * by the source itself rather than cleared on the next render.
+ */
+export function catalogIconSource(card: Pick<PluginCatalogCard, 'icon' | 'title'>, failed = ''): string {
+  return card.icon && card.icon !== failed ? card.icon : ''
+}
+
+/** The icon tile shows the author's brand art, or the title's monogram. */
+export function CatalogIcon(props: { icon?: string; title: string }) {
+  const [failed, setFailed] = useState('')
+  const source = catalogIconSource({ icon: props.icon, title: props.title }, failed)
+  return <span className="plugins-catalog-icon" aria-hidden="true">
+    {source
+      ? <img className="plugins-catalog-icon-image" src={source} alt="" onError={() => setFailed(source)} />
+      : monogramOf(props.title)}
+  </span>
+}
+
+export function CatalogRow(props: {
   card: PluginCatalogCard
   pending: boolean
   /** True when the row also reaches a 插件配置 page and may offer the secondary control. */
   configurable: boolean
+  /** True while a freshly installed user card carries its transient highlight. */
+  highlighted: boolean
   onToggle(card: PluginCatalogCard, enabled: boolean): void
   onConfigure(card: PluginCatalogCard): void
   onDetail(card: PluginCatalogCard): void
 }) {
   const card = props.card
-  return <li className="plugins-catalog-row" data-testid={`plugins-catalog-row-${card.key}`}>
-    <span className="plugins-catalog-icon" aria-hidden="true">{monogramOf(card.title)}</span>
+  return <li className={props.highlighted ? 'plugins-catalog-row is-new' : 'plugins-catalog-row'}
+    data-testid={`plugins-catalog-row-${card.key}`}>
+    <CatalogIcon icon={card.icon} title={card.title} />
     <div className="plugins-catalog-row-text">
       <Flex className="plugins-catalog-row-head" align="center" gap="2">
         <Text className="plugins-catalog-row-title">{card.title}</Text>
@@ -398,7 +441,7 @@ function CatalogRow(props: {
       {card.action === 'switch'
         ? <>
           {props.configurable
-            ? <ThemeButton variant="ghost" color="gray" className="plugins-catalog-config"
+            ? <ThemeButton variant="ghost" color="gray" className="plugins-catalog-action"
               data-testid={`plugins-catalog-config-${card.key}`} onClick={() => props.onConfigure(card)}>
               {t('plugins.catalogConfigure')}
             </ThemeButton>
@@ -408,12 +451,14 @@ function CatalogRow(props: {
             onCheckedChange={(enabled) => props.onToggle(card, enabled)} />
         </>
         : card.action === 'config'
-          ? <Button data-testid={`plugins-catalog-config-${card.key}`} onClick={() => props.onConfigure(card)}>
+          ? <ThemeButton variant="ghost" color="gray" className="plugins-catalog-action"
+            data-testid={`plugins-catalog-config-${card.key}`} onClick={() => props.onConfigure(card)}>
             {t('plugins.catalogConfigure')}
-          </Button>
-          : <Button data-testid={`plugins-catalog-detail-${card.key}`} onClick={() => props.onDetail(card)}>
+          </ThemeButton>
+          : <ThemeButton variant="ghost" color="gray" className="plugins-catalog-action"
+            data-testid={`plugins-catalog-detail-${card.key}`} onClick={() => props.onDetail(card)}>
             {t('plugins.catalogDetails')}
-          </Button>}
+          </ThemeButton>}
     </div>
   </li>
 }
@@ -425,7 +470,7 @@ function PresetRow(props: {
 }) {
   const preset = props.preset
   return <li className="plugins-catalog-row" data-testid={`plugins-catalog-preset-${preset.id}`}>
-    <span className="plugins-catalog-icon" aria-hidden="true">{monogramOf(preset.title)}</span>
+    <CatalogIcon title={preset.title} />
     <div className="plugins-catalog-row-text">
       <Flex className="plugins-catalog-row-head" align="center" gap="2">
         <Text className="plugins-catalog-row-title">{preset.title}</Text>
@@ -456,6 +501,10 @@ function CatalogSection(props: {
   presetError: string
   restartRequired: boolean
   configKeys: readonly string[]
+  /** Keys of user cards that just appeared, carrying the transient highlight. */
+  freshKeys: readonly string[]
+  /** The user section anchors the install scroll; other sections do not move. */
+  sectionRef?: RefObject<HTMLElement>
   onToggle(card: PluginCatalogCard, enabled: boolean): void
   onTogglePreset(preset: WritingPresetCard, enabled: boolean): void
   onConfigure(card: PluginCatalogCard): void
@@ -470,7 +519,8 @@ function CatalogSection(props: {
   const empty = props.query.trim()
     ? t('plugins.catalogNoMatch')
     : section.id === 'user' ? t('plugins.catalogUserEmpty') : t('plugins.catalogEmpty')
-  return <section className="plugins-catalog-section" data-testid={`plugins-catalog-${section.id}`}>
+  return <section className="plugins-catalog-section" ref={props.sectionRef}
+    data-testid={`plugins-catalog-${section.id}`}>
     <Flex className="plugins-catalog-head" align="baseline" justify="between" gap="3">
       <Heading as="h2" size="3" className="plugins-catalog-title">{catalogSectionLabel(section.id)}</Heading>
       <Text size="1" color="gray" className="plugins-catalog-count">{count}</Text>
@@ -478,13 +528,14 @@ function CatalogSection(props: {
     {ordinary.length
       ? <ul className="plugins-catalog-rows">{ordinary.map((card) => <CatalogRow key={card.key} card={card}
         pending={props.pending === card.key} configurable={props.configKeys.includes(card.key)}
+        highlighted={props.freshKeys.includes(card.key)}
         onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
       : null}
     {advanced.length ? <details className="plugins-catalog-advanced" open={props.query.trim() ? true : undefined}>
       <summary>{t('plugins.catalogAdvanced')} ({advanced.length})</summary>
       <Text as="p" size="1" color="gray" className="plugins-catalog-hint">{t('plugins.catalogAdvancedHint')}</Text>
       <ul className="plugins-catalog-rows">{advanced.map(card => <CatalogRow key={card.key} card={card}
-        pending={props.pending === card.key} configurable={props.configKeys.includes(card.key)}
+        pending={props.pending === card.key} configurable={props.configKeys.includes(card.key)} highlighted={false}
         onToggle={props.onToggle} onConfigure={props.onConfigure} onDetail={props.onDetail} />)}</ul>
     </details> : null}
     {presets.length
@@ -500,6 +551,89 @@ function CatalogSection(props: {
       : null}
     {count ? null : <Text as="p" size="2" color="gray" className="plugins-catalog-empty">{empty}</Text>}
   </section>
+}
+
+/** User-section card keys, in catalog order. The install signal is their growth. */
+export function userSectionKeys(sections: readonly PluginCatalogSection[]): string[] {
+  return sections.find((section) => section.id === 'user')?.items.map((card) => card.key) ?? []
+}
+
+/** Keys a catalog refresh added to the user section; the previous set stays authoritative. */
+export function newUserCardKeys(previous: readonly string[], current: readonly string[]): string[] {
+  const seen = new Set(previous)
+  return current.filter((key) => !seen.has(key))
+}
+
+const INSTALL_HIGHLIGHT_CLASS = 'is-new'
+/** Only used when the environment reports no computed animation duration at all. */
+const INSTALL_HIGHLIGHT_FALLBACK_MS = 2000
+
+function prefersReducedMotion(): boolean {
+  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+}
+
+/**
+ * The highlight length is the CSS animation's own token-derived duration, read
+ * back from the rendered row, so the class never outlives its own animation.
+ * A missing row or a host without computed styles falls back to the caller.
+ */
+function animationMs(element: Element | null | undefined): number {
+  if (!element || typeof globalThis.getComputedStyle !== 'function') return 0
+  const raw = globalThis.getComputedStyle(element).animationDuration
+  const first = raw?.split(',')[0]?.trim() ?? ''
+  const value = Number.parseFloat(first)
+  if (!Number.isFinite(value)) return 0
+  return first.endsWith('ms') ? value : value * 1000
+}
+
+/**
+ * The author's own bundles sit far below the fold, and the depth only matters
+ * in one moment: right after installing one and returning to 插件总览. So a
+ * refresh that grows the user section anchors to it and marks the new rows,
+ * without adding a section or reordering the approved 官方/内置/用户 classes.
+ *
+ * `visible` is the current query's view: anchoring to a row the author has
+ * filtered out would move them away from the search they are running.
+ */
+export function useInstalledUserCards(
+  sections: readonly PluginCatalogSection[],
+  status: CatalogStatus,
+  visible: readonly string[],
+): { freshKeys: readonly string[]; userSection: RefObject<HTMLElement> } {
+  const userSection = useRef<HTMLElement>(null)
+  const seen = useRef<readonly string[] | null>(null)
+  const [freshKeys, setFreshKeys] = useState<readonly string[]>([])
+  useEffect(() => {
+    // A loading or failed catalog carries no inventory; it must not reset the baseline.
+    if (status !== 'ready') return
+    const keys = userSectionKeys(sections)
+    const previous = seen.current
+    // The baseline is the whole catalog, so a later query change never reads
+    // as an installation; only what the refresh really added does.
+    seen.current = keys
+    // The first ready read is the page's own load, not an installation.
+    if (!previous) return
+    const added = newUserCardKeys(previous, keys).filter((key) => visible.includes(key))
+    if (!added.length) return
+    /* Reduced motion keeps the anchor scroll, which is information the author
+       asked for, and drops the decorative highlight entirely. */
+    if (prefersReducedMotion()) {
+      userSection.current?.scrollIntoView({ block: 'start', behavior: 'auto' })
+      return
+    }
+    userSection.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    setFreshKeys(added)
+  }, [sections, status, visible])
+  useEffect(() => {
+    if (!freshKeys.length) return
+    const duration = animationMs(userSection.current?.querySelector(`.${INSTALL_HIGHLIGHT_CLASS}`))
+    const timer = globalThis.setTimeout(
+      () => setFreshKeys([]),
+      duration || INSTALL_HIGHLIGHT_FALLBACK_MS,
+    )
+    return () => globalThis.clearTimeout(timer)
+  }, [freshKeys])
+  return { freshKeys, userSection }
 }
 
 export function PluginsCatalog(props: {
@@ -529,6 +663,8 @@ export function PluginsCatalog(props: {
     () => filterWritingPresets(props.presets ?? [], props.query),
     [props.presets, props.query],
   )
+  const visibleUserKeys = useMemo(() => userSectionKeys(sections), [sections])
+  const { freshKeys, userSection } = useInstalledUserCards(props.sections, props.status, visibleUserKeys)
   const body: ReactNode = props.status === 'loading'
     ? <ActivityText className="plugins-catalog-loading">{t('plugins.catalogLoading')}</ActivityText>
     : props.status === 'error'
@@ -550,7 +686,8 @@ export function PluginsCatalog(props: {
         {sections.map((section) => <CatalogSection key={section.id} section={section} presets={presets}
           query={props.query} pending={props.pending} presetPending={props.presetPending ?? ''}
           presetError={props.presetError ?? ''} restartRequired={props.restartRequired === true}
-          configKeys={props.configKeys ?? []}
+          configKeys={props.configKeys ?? []} freshKeys={freshKeys}
+          sectionRef={section.id === 'user' ? userSection : undefined}
           onToggle={props.onToggle} onTogglePreset={props.onTogglePreset}
           onConfigure={props.onConfigure} onDetail={props.onDetail} />)}
       </>

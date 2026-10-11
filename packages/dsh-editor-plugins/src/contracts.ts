@@ -49,6 +49,7 @@ export type PluginCatalogBadge =
   | 'locked'
   | 'builtin'
   | 'preinstalled'
+  | 'installed'
   | 'experimental'
   | 'session-managed'
   | 'feature-managed'
@@ -58,6 +59,11 @@ export type PluginCatalogCard = {
   key: string
   title: string
   description: string
+  /**
+   * Brand icon declared by the plugin itself as a `data:image/` URI.
+   * Omitted when the plugin ships none or declares anything else.
+   */
+  icon?: string
   packageName?: string
   /** Cordis entry id when this card toggles a plugin entry. */
   entryId?: string

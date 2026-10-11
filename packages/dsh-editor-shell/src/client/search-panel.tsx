@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Box, Button, Callout, Card, Flex, ScrollArea, Text, TextField } from '@radix-ui/themes'
+import { Box, Button, Callout, Flex, ScrollArea, Text, TextField } from '@radix-ui/themes'
 import { Select } from './select.tsx'
 import { ActivityDots, isImeEvent } from './ui/index.ts'
 import { m, useChromeMotion } from './ui/motion.ts'
@@ -362,7 +362,7 @@ function SearchPanel(props: {
   }
   return (
     <m.section className="search-panel" aria-label={t('search.title')} {...panelMotion}>
-      <Card size="1" mx="3" mb="2">
+      <Box className="search-panel-body" px="3" pb="2">
         <Flex direction="column" gap="2">
           <Flex asChild align="center" gap="2" wrap="wrap">
             <form
@@ -382,7 +382,8 @@ function SearchPanel(props: {
               <Button
                 type="submit"
                 size="2"
-                variant="solid"
+                variant="soft"
+                color="gray"
                 disabled={busy || !query.trim() || props.composing}
                 aria-label={t('search.start')}>
                 {searchBusy ? <ActivityDots /> : t('search.go')}
@@ -398,7 +399,7 @@ function SearchPanel(props: {
                 onChange={(value: string) => { setScope(value === 'directory' ? 'directory' : 'project'); clearResults() }} />
             </form>
           </Flex>
-          <Button type="button" size="2" variant="ghost" color="gray" aria-expanded={replaceOpen}
+          <Button type="button" size="2" variant="ghost" color="gray" className="search-replace-toggle" aria-expanded={replaceOpen}
             disabled={replaceBusy}
             onClick={() => { setReplaceOpen((value) => !value); setConfirming(null) }}>
             {replaceOpen ? t('search.hideReplace') : t('search.showReplace')}
@@ -508,24 +509,24 @@ function SearchPanel(props: {
             <Box asChild>
               <ol className="search-results">
                 {grouped.map((group) => <li key={group.path} className="search-file">
-                  <Text size="1" weight="medium">
-                    {group.path}
-                  </Text>
+                  <Flex className="search-file-head" justify="between" gap="2">
+                    <Text size="1" color="gray" truncate title={group.path}>
+                      {group.path}
+                    </Text>
+                    <Text size="1" color="gray">
+                      {group.hits.length}
+                    </Text>
+                  </Flex>
                   <ul>
                     {group.hits.map((hit, index) => <li key={`${hit.path}:${hit.start}:${index}`}>
-                      <Box>
-                        <Button
-                          type="button"
-                          size="1"
-                          variant="ghost"
-                          color="gray"
-                          disabled={props.navigationBlocked}
-                          onClick={() => props.onOpen(hit)}>
-                          <Text size="1">
-                            {t('search.hitLine', { line: hit.line, excerpt: hit.excerpt })}
-                          </Text>
-                        </Button>
-                      </Box>
+                      <button
+                        type="button"
+                        className="search-hit"
+                        disabled={props.navigationBlocked}
+                        onClick={() => props.onOpen(hit)}>
+                        <span className="search-hit-line">{t('search.hitLineOnly', { line: hit.line })}</span>
+                        <span className="search-hit-excerpt">{hit.excerpt}</span>
+                      </button>
                     </li>)}
                   </ul>
                 </li>)}
@@ -533,7 +534,7 @@ function SearchPanel(props: {
             </Box>
           </ScrollArea> : null}
         </Flex>
-      </Card>
+      </Box>
     </m.section>
   );
 }

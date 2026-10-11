@@ -483,7 +483,7 @@ export function CommandPaletteTrigger({ onClick }: { onClick(): void }) {
   return (
     <Button
       type="button"
-      variant="soft"
+      variant="ghost"
       color="gray"
       size="2"
       className="palette-trigger"

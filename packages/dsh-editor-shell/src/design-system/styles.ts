@@ -77,7 +77,7 @@ export const componentStyles = [
   r(['.plugins-page'], 'display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--dsh-ui-header-height) minmax(0, 1fr); background: var(--dsh-ui-bg); color: var(--dsh-ui-text);'),
   r(['.plugins-page-header'], `padding-inline-start: var(--dsh-ui-space-3); border-bottom: ${hairline};`),
   // Page title outranks the plugin group h3 (16px/600); the header default left it smaller.
-  r(['.plugins-page-header .rt-Heading'], 'font-size: var(--dsh-ui-text-xl); font-weight: var(--dsh-ui-weight-strong);'),
+  r(['.plugins-page-header .rt-Heading'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-medium); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'),
   r(['.plugins-page-header button', '.plugins-trigger'], '-webkit-app-region: no-drag;'),
   r(['.plugins-page-layout'], 'display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0;'),
   r(['.plugins-page-nav'], `display: flex; flex-direction: column; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-4); overflow: auto; background: var(--dsh-ui-sidebar); border-right: ${hairline};`),
@@ -92,7 +92,6 @@ export const componentStyles = [
   r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-5); overflow: auto; min-width: 0; min-height: 0; overflow-wrap: anywhere;'),
   // Header search + add action share the drag row; the title yields before them.
   r(['.plugins-page-tools'], 'min-width: 0;'),
-  r(['.plugins-page-header .rt-Heading'], 'min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'),
   r(['.plugins-page-search'], 'flex: 0 1 16rem; min-width: 0;'),
   // Three-class catalog: one flat card per row, one primary control, no shadow.
   r(['.plugins-catalog'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-6); min-width: 0;'),
@@ -101,19 +100,31 @@ export const componentStyles = [
   r(['.plugins-catalog-rows'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); list-style: none; margin: 0; padding: 0;'),
   r(['.plugins-catalog-row'], `${cardSurface} display: flex; align-items: center; gap: var(--dsh-ui-space-3); padding: var(--dsh-ui-space-3); min-width: 0;`),
   r(['.plugins-catalog-icon'], 'width: var(--dsh-ui-control-lg); height: var(--dsh-ui-control-lg); flex: none; border-radius: var(--dsh-ui-radius-md); background: var(--dsh-ui-surface); color: var(--dsh-ui-muted); display: flex; align-items: center; justify-content: center; font-weight: var(--dsh-ui-weight-strong);'),
+  // The author's own brand art fills the same tile the monogram used, so a card
+  // keeps one icon slot. contain keeps any oversized SVG inside the rounded tile.
+  r(['.plugins-catalog-icon-image'], 'width: 100%; height: 100%; object-fit: contain; border-radius: inherit; display: block;'),
   r(['.plugins-catalog-row-text'], 'display: flex; flex-direction: column; gap: var(--dsh-ui-space-1); flex: 1 1 auto; min-width: 0;'),
   r(['.plugins-catalog-row-head'], 'flex-wrap: wrap; min-width: 0;'),
   r(['.plugins-catalog-row-title'], 'min-width: 0; overflow-wrap: anywhere; font-weight: var(--dsh-ui-weight-medium);'),
   // One line with the full text in the row tooltip keeps a long description from wrapping the control.
   r(['.plugins-catalog-row-desc'], 'margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'),
   r(['.plugins-catalog-row-action'], 'flex: none; display: flex; align-items: center; justify-content: flex-end; gap: var(--dsh-ui-space-2); min-width: var(--dsh-ui-control-lg);'),
-  /* Secondary 配置 beside a switch: a muted text affordance, never a second primary. */
-  r(['.plugins-catalog-config'], 'height: auto; min-height: var(--dsh-ui-control-sm); padding: 0 var(--dsh-ui-space-1); border: 0; background: transparent; box-shadow: none; color: var(--dsh-ui-muted);'),
-  r(['.plugins-catalog-config:hover'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text);'),
+  /* 配置 and 详情 are the same kind of control, so they read the same way: a
+     ghost button that gains its fill on hover. 详情 is the most frequent action
+     in the catalog and a muted gray label made it look disabled next to the
+     switch; `--dsh-ui-text` on the raised row surface clears 4.5:1 in both
+     themes, and the switch stays the row's only filled control. */
+  r(['.plugins-catalog-action'], 'height: auto; min-height: var(--dsh-ui-control-sm); padding: 0 var(--dsh-ui-space-2); border: 0; background: transparent; box-shadow: none; color: var(--dsh-ui-text); font-weight: var(--dsh-ui-weight-medium);'),
+  r(['.plugins-catalog-action:hover'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text);'),
+  /* A freshly installed user card announces itself where it already sits: one
+     transient accent wash that settles back to the resting card surface. The
+     length is composed from the slow motion token, and the client reads this
+     same computed duration back to remove the class. */
+  r(['.plugins-catalog-row.is-new'], 'animation: plugins-catalog-installed calc(var(--dsh-ui-duration-slow) * 4) var(--dsh-ui-ease-out);'),
+  '@keyframes plugins-catalog-installed { from, 30% { background: var(--dsh-ui-accent-soft); border-color: var(--dsh-ui-accent-border); } to { background: var(--dsh-ui-raised); border-color: var(--dsh-ui-line-strong); } }',
   r(['.plugins-catalog-subsection'], `display: flex; flex-direction: column; gap: var(--dsh-ui-space-2); padding-top: var(--dsh-ui-space-3); border-top: ${hairline};`),
   r(['.plugins-catalog-subsection-title'], 'color: var(--dsh-ui-muted); font-weight: var(--dsh-ui-weight-medium);'),
   r(['.plugins-catalog-hint', '.plugins-catalog-empty', '.plugins-catalog-preset-locked'], 'margin: 0; color: var(--dsh-ui-muted);'),
-
   r(['.plugins-catalog-advanced > summary'], 'cursor: pointer; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); font-weight: var(--dsh-ui-weight-medium); min-height: var(--dsh-ui-control-sm); padding-block: var(--dsh-ui-space-2);'),
   r(['.plugins-catalog-advanced[open] > summary', '.plugins-catalog-advanced .plugins-catalog-hint'], 'margin-bottom: var(--dsh-ui-space-2);'),
 
@@ -124,7 +135,12 @@ export const componentStyles = [
   r(['.workspace-menu-trigger'], 'border-radius: var(--dsh-ui-radius-md); background: transparent; color: var(--dsh-ui-text); box-shadow: none;'),
   r(['.workspace-menu-trigger:hover'], 'background: var(--dsh-ui-hover);'),
   r(['.layout-controls'], 'gap: var(--dsh-ui-space-1);'),
-  r(['.layout-controls button[aria-pressed="true"]'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
+  r(['.layout-controls button'], 'color: var(--dsh-ui-muted);'),
+  r(['.layout-controls button:hover:not(:disabled)'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text);'),
+  r(['.layout-controls button[aria-pressed="true"]'], 'background: var(--dsh-ui-sunken); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong);'),
+  // Sunken reads as a hole in dark mode; pressed is a neutral on-state, so
+  // dark uses the hover fill under the same inset hairline.
+  `${SCOPE}.dark .layout-controls button[aria-pressed="true"]${excludePlugin} { background: var(--dsh-ui-hover); color: var(--dsh-ui-text); box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); }`,
   r(['.topbar-actions'], 'gap: var(--dsh-ui-space-1);'),
   r(['.shell .window-controls button.window-close:hover'], 'background: var(--dsh-ui-danger); color: #ffffff;'),
 
@@ -157,7 +173,7 @@ export const componentStyles = [
   r(['.home-entry-title'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-strong);'),
   r(['.home-hint', '.home-recent-empty'], 'color: var(--dsh-ui-muted);'),
   r(['.icon-button:active', '.editor-tools button:active', '.editor-tools button:hover'], 'transform: none;'),
-  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.chat-step-summary:focus-visible', '.chat-process-toggle:focus-visible', '.icon-button:focus-visible', '.home-entry-card:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--dsh-ui-accent-soft);'),
+  r(['.rt-BaseButton:focus-visible', '.tree-row:focus-visible', '.chat-step-summary:focus-visible', '.chat-process-toggle:focus-visible', '.icon-button:focus-visible', '.home-entry-card:focus-visible', '.search-hit:focus-visible'], 'outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; box-shadow: 0 0 0 4px var(--dsh-ui-accent-soft);'),
   r(['a:not(.rt-BaseButton)'], 'color: var(--dsh-ui-link);'),
 
   // Neutral navigation: location is not a primary action.
@@ -181,18 +197,28 @@ export const componentStyles = [
   r(['.shell .panel-resizer::before'], 'background: var(--dsh-ui-line);'),
   r(['.shell .panel-resizer:hover::before', '.shell .panel-resizer:focus-visible::before', '.shell .panel-resizer[data-separator="active"]::before'], 'background: var(--dsh-ui-accent);'),
   r(['.search-panel', '.side-search'], 'background: transparent; color: var(--dsh-ui-text);'),
+  r(['.search-panel'], 'border-bottom: 0.5px solid var(--dsh-ui-line);'),
+  r(['.search-replace-toggle'], 'align-self: flex-start; padding-inline: 0; color: var(--dsh-ui-muted);'),
+  r(['.search-file-head'], 'min-width: 0; padding: var(--dsh-ui-space-2) var(--dsh-ui-space-2) 0;'),
+  r(['.search-hit'], 'display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: var(--dsh-ui-control-sm); padding: var(--dsh-ui-space-1) var(--dsh-ui-space-2); border: 0; border-radius: var(--dsh-ui-radius-sm); background: transparent; color: var(--dsh-ui-text); text-align: start; font: inherit; font-size: var(--dsh-ui-text-sm); line-height: var(--dsh-ui-leading-normal); cursor: pointer; overflow-wrap: anywhere;'),
+  r(['.search-hit:hover'], 'background: var(--dsh-ui-hover);'),
+  r(['.search-hit:disabled'], 'color: var(--dsh-ui-muted); cursor: not-allowed;'),
+  r(['.search-hit-line'], 'color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); font-variant-numeric: tabular-nums;'),
   r(['.side-search .rt-TextFieldInput', '.side-search input'], 'min-height: var(--dsh-ui-control-sm);'),
+  r(['.search-results'], 'padding-inline: var(--dsh-ui-space-1);'),
   r(['.search-results-scroll'], 'max-height: min(50dvh, 24rem);'),
   r(['.project-directory'], 'overflow-wrap: anywhere;'),
   r(['.settings-nav-section'], 'display: flex; flex-direction: column; width: 100%; gap: var(--dsh-ui-space-1);'),
   r(['.settings-nav-section + .settings-nav-section'], 'margin-top: var(--dsh-ui-space-6); padding-top: var(--dsh-ui-space-6); border-top: 0.5px solid var(--dsh-ui-line);'),
   // Uppercase does nothing for the Chinese group names, so the label/tab
   // distinction is carried by size and colour instead of weight alone.
-  r(['.settings-nav-group'], 'padding: var(--dsh-ui-space-3) var(--dsh-ui-space-3) var(--dsh-ui-space-1); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); font-weight: var(--dsh-ui-weight-medium); letter-spacing: 0.08em; margin-bottom: var(--dsh-ui-space-2);'),
+  r(['.settings-nav-group'], 'padding: var(--dsh-ui-space-3) var(--dsh-ui-space-3) var(--dsh-ui-space-1); color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-xs); font-weight: var(--dsh-ui-weight-strong); letter-spacing: 0; margin-bottom: var(--dsh-ui-space-1);'),
   r(['.sidebar-tools'], 'gap: var(--dsh-ui-space-2);'),
   // The sidebar title gives up width first: the create action and the overflow
   // menu are controls, and the label is the one thing that can truncate.
   r(['.side-new-document'], 'flex-shrink: 0; white-space: nowrap;'),
+  r(['.side-document-tool'], 'background: var(--dsh-ui-raised); border: 0.5px solid var(--dsh-ui-line-strong); color: var(--dsh-ui-text); box-shadow: none; min-height: var(--dsh-ui-control-sm);'),
+  r(['.side-document-tool:hover:not(:disabled)'], 'background: var(--dsh-ui-hover);'),
 
   // Writing stays in the existing CodeMirror instance. Do not override the
   // author's font, size, line-height, line width or typography preferences.
@@ -212,6 +238,12 @@ export const componentStyles = [
   r(['.conversation-select .select-trigger'], 'border: 0; box-shadow: none; background: transparent; font-weight: var(--dsh-ui-weight-medium);'),
   r(['.chat-status', '.composer-mode'], 'font-size: var(--dsh-ui-text-xs); color: var(--dsh-ui-muted);'),
   r(['.chat .archived-conversations'], `flex-shrink: 0; border-bottom: ${hairline};`),
+  r(['.archived-conversations-summary'], 'display: flex; align-items: center; gap: var(--dsh-ui-space-2); min-height: var(--dsh-ui-control-sm); padding-inline: var(--dsh-ui-space-3); list-style: none; color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); cursor: pointer;'),
+  r(['.archived-conversations-summary::-webkit-details-marker'], 'display: none;'),
+  r(['.archived-conversations-summary > svg'], 'transition: transform var(--dsh-ui-duration-fast) var(--dsh-ui-ease-out);'),
+  r(['.archived-conversations[open] > .archived-conversations-summary > svg'], 'transform: rotate(90deg);'),
+  r(['.archived-conversations-list'], 'list-style: none; margin: 0; padding: 0 0 0 var(--dsh-ui-space-6);'),
+  r(['.archived-conversation-row'], 'min-height: var(--dsh-ui-control-sm); min-width: 0;'),
   r(['.chat > .chat-history'], 'flex: 1 1 0%; min-height: 0; height: auto; overflow: hidden;'),
   r(['.chat-header-actions'], 'flex: 0 0 auto; min-width: max-content;'),
   r(['.chat-history .rt-ScrollAreaViewport > div > .rt-Flex'], 'gap: var(--dsh-ui-space-6); padding: var(--dsh-ui-space-5);'),
@@ -294,8 +326,9 @@ export const componentStyles = [
   // Keyboard hints are peripheral copy, so the 12px scale is their floor; the
   // Radix default renders them smaller than any other text in the window, and
   // the Kbd inside the topbar trigger is its own element, not the button.
-  r(['.palette-kbd', '.palette-trigger-kbd'], 'font-size: var(--dsh-ui-text-xs);'),
-  r(['.shell > .chrome .palette-trigger'], 'font-size: var(--dsh-ui-text-xs);'),
+  r(['.palette-kbd', '.palette-trigger-kbd'], 'font-size: var(--dsh-ui-text-xs); background: transparent; box-shadow: inset 0 0 0 0.5px var(--dsh-ui-line-strong); color: var(--dsh-ui-muted);'),
+  r(['.shell > .chrome .palette-trigger'], 'font-size: var(--dsh-ui-text-xs); background: transparent; color: var(--dsh-ui-muted); box-shadow: none;'),
+  r(['.shell > .chrome .palette-trigger:hover'], 'background: var(--dsh-ui-hover); color: var(--dsh-ui-text);'),
   r(['.history-commit'], 'border-radius: var(--dsh-ui-radius-md);'),
   r(['.history-technical-details'], 'color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm);'),
   r(['.history-technical-details > summary'], 'cursor: pointer; min-height: var(--dsh-ui-control-sm); padding-block: var(--dsh-ui-space-2);'),
@@ -303,7 +336,7 @@ export const componentStyles = [
 
   // Settings are a settings window, not a collection of differently themed cards.
   r(['.settings-nav'], `background: var(--dsh-ui-sidebar); border-right: ${hairline}; padding: var(--dsh-ui-space-5) var(--dsh-ui-space-3);`),
-  r(['.settings-nav .settings-tab'], 'min-height: var(--dsh-ui-control-md); border-radius: var(--dsh-ui-radius-md); font-size: var(--dsh-ui-text-sm);'),
+  r(['.settings-nav .settings-tab'], 'min-height: var(--dsh-ui-control-md); border-radius: var(--dsh-ui-radius-md); font-size: var(--dsh-ui-text-sm); color: var(--dsh-ui-text);'),
   r(['.settings-nav .settings-tab[data-state="active"]', '.settings-nav .settings-tab.active'], 'background: var(--dsh-ui-selected); color: var(--dsh-ui-text);'),
   r(['.settings-header'], `background: var(--dsh-ui-raised); border-bottom: ${hairline};`),
   r(['.settings-header-title', '.settings-nav h2'], 'font-size: var(--dsh-ui-text-lg); font-weight: var(--dsh-ui-weight-medium);'),
@@ -339,14 +372,20 @@ export const responsiveStyles = `
 }
 @media (max-width: 760px) {
   ${r(['.plugins-page-layout'], 'grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);')}
-  /* Narrow: the section list becomes one horizontally scrollable chip row, so
-     the first plugin row stays near the top instead of below a 34dvh nav block. */
-  ${r(['.plugins-page-nav'], `flex-direction: row; flex-wrap: wrap; align-items: center; padding: var(--dsh-ui-space-3); max-height: none; border-right: 0; border-bottom: ${hairline}; gap: var(--dsh-ui-space-2);`)}
+  /* Narrow: the nav becomes a wrapping row of the three fixed pages and the
+     search field, so the first plugin row stays near the top instead of below
+     a 34dvh nav block. Nothing scrolls sideways here: every entry below has to
+     stay reachable, so the nav is allowed to grow. */
+  ${r(['.plugins-page-nav'], `flex-direction: row; flex-wrap: wrap; align-items: center; padding: var(--dsh-ui-space-3); max-height: none; overflow: visible; border-right: 0; border-bottom: ${hairline}; gap: var(--dsh-ui-space-2);`)}
   ${r(['.plugins-config-label'], 'position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;')}
   ${r(['.plugins-page .plugins-page-nav > .plugins-page-link'], 'width: auto; flex: none;')}
   ${r(['.plugins-page-nav > .ui-input'], 'flex: 1 1 12rem; min-width: 0;')}
-  ${r(['.plugins-config-links'], 'flex: 1 1 100%; order: 3; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: var(--dsh-ui-space-1); padding-bottom: 2px;')}
-  ${r(['.plugins-page .plugins-page-nav .plugins-config-links .plugins-page-link'], 'width: auto; flex: none; white-space: nowrap; min-height: var(--dsh-ui-control-sm);')}
+  /* At 390px the configuration entries used to run off the right edge of a
+     nowrap scroller: the nav itself reported no overflow because the inner <ul>
+     was the scroller, so 子智能体 and 知乎 were unreachable. Each entry now takes
+     a full-width row, so the nav grows instead of clipping. */
+  ${r(['.plugins-config-links'], 'flex: 1 1 100%; order: 3; flex-direction: row; flex-wrap: wrap; gap: var(--dsh-ui-space-1); min-width: 0;')}
+  ${r(['.plugins-page .plugins-page-nav .plugins-config-links .plugins-page-link'], 'flex: 1 1 100%; width: 100%; white-space: normal; min-height: var(--dsh-ui-control-sm);')}
   ${r(['.plugins-page-content'], 'padding: var(--dsh-ui-space-3);')}
   /* Narrow header: the fixed control height cannot hold search + add + window
      controls on one line, so the drag row grows instead of dropping an action. */

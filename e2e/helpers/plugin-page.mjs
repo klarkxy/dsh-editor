@@ -106,6 +106,65 @@ export async function nativePluginRpc(page, method, args = {}) {
   return result
 }
 
+/**
+ * Every nav link must sit inside the nav's own visible box.
+ *
+ * The nav used to clip instead of overflow: its inner <ul> was the horizontal
+ * scroller, so the nav itself reported scrollWidth === clientWidth while
+ * 子智能体 and 知乎 sat outside its rect at 390px. Measuring the links, not the
+ * nav's scroll metrics, is the only way to see that failure.
+ */
+export async function assertConfigNavLinksReachable(plugins) {
+  const nav = plugins.getByTestId('plugins-page-nav')
+  const measured = await nav.evaluate(element => {
+    const box = element.getBoundingClientRect()
+    const style = getComputedStyle(element)
+    const edges = {
+      top: box.top + parseFloat(style.borderTopWidth || '0'),
+      bottom: box.bottom - parseFloat(style.borderBottomWidth || '0'),
+      left: box.left + parseFloat(style.borderLeftWidth || '0'),
+      right: box.right - parseFloat(style.borderRightWidth || '0'),
+    }
+    const links = [...element.querySelectorAll('.plugins-page-link')].map(link => {
+      const rect = link.getBoundingClientRect()
+      return {
+        label: link.textContent.trim(),
+        width: rect.width,
+        height: rect.height,
+        reachable: rect.width > 0 && rect.height > 0
+          && rect.top >= edges.top - 1 && rect.bottom <= edges.bottom + 1
+          && rect.left >= edges.left - 1 && rect.right <= edges.right + 1,
+      }
+    })
+    return { links, nav: { client: element.clientWidth, scroll: element.scrollWidth } }
+  })
+  assert.ok(measured.links.length > 0, 'the plugins nav renders its links')
+  const unreachable = measured.links.filter(link => !link.reachable)
+  assert.equal(unreachable.length, 0,
+    'every configuration entry stays inside the nav box: ' + JSON.stringify(unreachable))
+  return measured
+}
+
+/** A catalog row shows the author's brand art or its monogram; a blank tile is a defect. */
+export async function assertCatalogIconsRendered(plugins) {
+  const tiles = await plugins.getByTestId('plugins-catalog')
+    .locator('.plugins-catalog-icon')
+    .evaluateAll(nodes => nodes.map(node => {
+      const image = node.querySelector('img')
+      return {
+        image: Boolean(image),
+        loaded: image ? image.complete && image.naturalWidth > 0 : false,
+        text: node.textContent.trim(),
+      }
+    }))
+  assert.ok(tiles.length > 0, 'the catalog renders at least one icon tile')
+  for (const tile of tiles) {
+    assert.ok(tile.image ? tile.loaded : tile.text.length > 0,
+      'an icon tile renders brand art or a monogram, never a blank: ' + JSON.stringify(tile))
+  }
+  return tiles
+}
+
 export async function assertDefaultPluginPage(page, plugins) {
   await showPluginList(plugins)
   const official = plugins.getByTestId('plugins-catalog-official')

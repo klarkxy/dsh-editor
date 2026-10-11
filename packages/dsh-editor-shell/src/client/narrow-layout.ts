@@ -56,3 +56,25 @@ export function railAtWidth(input: RailWidthState, crowded: boolean, force = fal
 export function railByAuthor(open: boolean, crowded: boolean): RailWidthState {
   return { open, yielded: null, crowded, authored: true }
 }
+
+/*
+ * 网格栏像素校准。窗口跨过断点时面板库按百分比重新分配空间：助手栏离开
+ * 网格前仍占一份布局份额，它的像素声明会在重排里把相邻栏夹到 min/max
+ * （侧栏曾被从 260px 压到 200px 并记住）。校准一律回到作者记下的像素
+ * 宽度，具体分配交给库自己的 resize 求解，不在这里复算百分比。
+ */
+export interface RailPanelSync {
+  /** 助手面板应当折叠到 0 宽（当前不在网格中）。 */
+  collapseAssistant: boolean
+  /** 助手面板在网格中，宽度以作者记下的像素为准。 */
+  resizeAssistant: boolean
+  /** 侧栏在网格中应重新 assert 到作者记下的像素宽度；未挂载时由调用方跳过。 */
+  resizeSidebar: boolean
+}
+
+/** 结算断点两侧各条网格栏应有的形态：折叠还是作者像素宽度。 */
+export function railPanelSync(assistantInGrid: boolean): RailPanelSync {
+  return assistantInGrid
+    ? { collapseAssistant: false, resizeAssistant: true, resizeSidebar: true }
+    : { collapseAssistant: true, resizeAssistant: false, resizeSidebar: true }
+}

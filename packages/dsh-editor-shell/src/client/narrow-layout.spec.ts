@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { railAtWidth, railByAuthor, type RailWidthState } from './narrow-layout.ts'
+import { railAtWidth, railByAuthor, railPanelSync, type RailWidthState } from './narrow-layout.ts'
 
 const wide: RailWidthState = { open: true, yielded: null, crowded: false, authored: false }
 
@@ -57,5 +57,17 @@ describe('窄窗让位', () => {
       open: false, yielded: null, crowded: true, authored: false,
     })
     expect(railAtWidth(railByAuthor(true, true), true)).toEqual(railByAuthor(true, true))
+  })
+})
+
+describe('网格栏像素校准', () => {
+  it('助手栏离开网格时折叠到 0 宽，并把侧栏校准回作者像素宽度', () => {
+    // 回归：助手栏折叠前仍占一份布局份额，窗口重排会把侧栏从 260px 夹到
+    // 最小宽 200px 并记住；校准必须始终重新 assert 作者记下的侧栏宽度。
+    expect(railPanelSync(false)).toEqual({ collapseAssistant: true, resizeAssistant: false, resizeSidebar: true })
+  })
+
+  it('助手栏在网格中时展开并校准到作者像素宽度，侧栏同步校准', () => {
+    expect(railPanelSync(true)).toEqual({ collapseAssistant: false, resizeAssistant: true, resizeSidebar: true })
   })
 })

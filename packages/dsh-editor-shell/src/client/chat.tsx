@@ -66,7 +66,7 @@ import {
   shouldSubmitComposer,
   type ShellContext,
 } from './shared.ts'
-import { CrossIcon, DotsIcon, PlusIcon, StopIcon } from './icons.tsx'
+import { ChevronRightIcon, CrossIcon, DotsIcon, PlusIcon, StopIcon } from './icons.tsx'
 import {
   bindOfficialConversation,
   conversationChatSource,
@@ -592,16 +592,17 @@ export function Chat({ ctx, session, workspaceId, activePath, authorPreferences,
       </Flex>
       {archivedConversations.length ? <Box asChild px="3" py="2">
         <details className="archived-conversations">
-          <summary>
+          <summary className="archived-conversations-summary">
+            <ChevronRightIcon size={14} />
             <Text size="1" color="gray">
               {t('chat.archivedConversations')}
             </Text>
           </summary>
           <Box asChild mt="2">
-            <ul>
+            <ul className="archived-conversations-list">
               {archivedConversations.map((item) => <li key={item.id}>
-                <Flex align="center" justify="between" gap="2">
-                  <Text size="2">
+                <Flex className="archived-conversation-row" align="center" justify="between" gap="2">
+                  <Text size="2" truncate title={item.title}>
                     {item.title}
                   </Text>
                   <Button
