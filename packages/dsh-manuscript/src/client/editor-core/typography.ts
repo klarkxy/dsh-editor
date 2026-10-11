@@ -8,7 +8,7 @@
 
 export const FONT_STACKS = {
   serif: '"Noto Serif CJK SC", "Source Han Serif", "Songti SC", "SimSun", Georgia, serif',
-  sans: '"Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
+  sans: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif',
   mono: 'ui-monospace, "SF Mono", "JetBrains Mono", Consolas, Monaco, monospace',
 } as const
 
@@ -38,9 +38,9 @@ export const TYPOGRAPHY_LIMITS = {
 export const DEFAULT_TYPOGRAPHY: ResolvedTypography = {
   fontSize: 17,
   lineHeight: 1.9,
-  fontFamily: FONT_STACKS.serif,
-  paragraphSpacing: 0,
-  maxWidth: 'none',
+  fontFamily: FONT_STACKS.sans,
+  paragraphSpacing: 0.4,
+  maxWidth: '76ch',
 }
 
 const NAMED_FONTS = new Set<string>(['serif', 'sans', 'mono'])
@@ -54,7 +54,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export function resolveFontFamily(fontFamily?: string): string {
-  if (!fontFamily) return FONT_STACKS.serif
+  if (!fontFamily) return FONT_STACKS.sans
   if (fontFamily === 'serif' || fontFamily === 'sans' || fontFamily === 'mono') {
     return FONT_STACKS[fontFamily]
   }

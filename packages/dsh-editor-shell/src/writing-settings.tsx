@@ -21,7 +21,7 @@ export { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type
 
 export const PAPER_FONT_SIZE = { min: 14, max: 28, default: 17 } as const
 export const PAPER_LINE_HEIGHT = { min: 1.4, max: 2.4, default: 1.9 } as const
-export const PAPER_PARAGRAPH_SPACING = { min: 0, max: 1.5, default: 0 } as const
+export const PAPER_PARAGRAPH_SPACING = { min: 0, max: 1.5, default: 0.4 } as const
 export const PAPER_WIDTH_CH = { narrow: 60, medium: 76 } as const
 
 export const DEFAULT_WRITING_PREFERENCES: WritingPreferences = {
@@ -34,9 +34,9 @@ export const DEFAULT_WRITING_PREFERENCES: WritingPreferences = {
   focusParagraph: false,
   fontSize: PAPER_FONT_SIZE.default,
   lineHeight: PAPER_LINE_HEIGHT.default,
-  fontFamily: 'serif',
+  fontFamily: 'sans',
   paragraphSpacing: PAPER_PARAGRAPH_SPACING.default,
-  paperWidth: 'wide',
+  paperWidth: 'medium',
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
@@ -45,11 +45,11 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 }
 
 export function normalizePaperFontFamily(value: unknown): PaperFontFamily {
-  return value === 'sans' || value === 'mono' || value === 'serif' ? value : 'serif'
+  return value === 'sans' || value === 'mono' || value === 'serif' ? value : 'sans'
 }
 
 export function normalizePaperWidth(value: unknown): PaperWidth {
-  return value === 'narrow' || value === 'medium' || value === 'wide' ? value : 'wide'
+  return value === 'narrow' || value === 'medium' || value === 'wide' ? value : 'medium'
 }
 
 export function paperWidthToMaxWidth(width: PaperWidth): number | undefined {

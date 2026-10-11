@@ -30,13 +30,18 @@ const editorCoreTokens = `
 ${radixFallbackTokens}
 :root {
   --paper-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
-  --paper-sans: var(--default-font-family);
+  --paper-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif;
   --paper-mono: var(--code-font-family);
   --paper-font-size: 17px;
   --paper-line-height: 1.9;
-  --paper-font-family: var(--paper-serif);
-  --paper-paragraph-spacing: 0em;
-  --paper-max-width: none;
+  --paper-font-family: var(--paper-sans);
+  --paper-paragraph-spacing: 0.4em;
+  --paper-max-width: 76ch;
+  --paper-heading-weight: 600;
+  --paper-h1-size: 1.6em;
+  --paper-h2-size: 1.35em;
+  --paper-h3-size: 1.15em;
+  --paper-h4-size: 1.05em;
   /* Legacy token. Nothing reads it. Do not point .cm-paper-dim at it or raise the alpha. */
   --paper-dim-opacity: 0.35;
   --topbar-h: 52px;
@@ -166,7 +171,6 @@ ${surfaceTokenAliases}
 }
 .manuscript-paper-textarea .cm-editor .cm-placeholder {
   color: var(--gray-9);
-  font-style: italic;
 }
 .manuscript-paper-textarea .cm-cursor,
 .manuscript-paper-textarea .cm-dropCursor {

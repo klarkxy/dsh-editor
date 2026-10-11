@@ -16,9 +16,9 @@ describe('typography normalization', () => {
     expect(DEFAULT_TYPOGRAPHY).toEqual({
       fontSize: 17,
       lineHeight: 1.9,
-      fontFamily: FONT_STACKS.serif,
-      paragraphSpacing: 0,
-      maxWidth: 'none',
+      fontFamily: FONT_STACKS.sans,
+      paragraphSpacing: 0.4,
+      maxWidth: '76ch',
     })
   })
 
@@ -26,16 +26,16 @@ describe('typography normalization', () => {
     expect(normalizeTypography({ fontSize: 10, lineHeight: 1, paragraphSpacing: -1 })).toEqual({
       fontSize: 14,
       lineHeight: 1.4,
-      fontFamily: FONT_STACKS.serif,
+      fontFamily: FONT_STACKS.sans,
       paragraphSpacing: 0,
-      maxWidth: 'none',
+      maxWidth: '76ch',
     })
     expect(normalizeTypography({ fontSize: 40, lineHeight: 3, paragraphSpacing: 2 })).toEqual({
       fontSize: 28,
       lineHeight: 2.4,
-      fontFamily: FONT_STACKS.serif,
+      fontFamily: FONT_STACKS.sans,
       paragraphSpacing: 1.5,
-      maxWidth: 'none',
+      maxWidth: '76ch',
     })
   })
 
@@ -76,9 +76,13 @@ describe('font stacks', () => {
     expect(FONT_STACKS.serif).toContain('Source Han Serif')
     expect(FONT_STACKS.serif).toContain('Songti SC')
     expect(FONT_STACKS.serif).toContain('SimSun')
-    expect(FONT_STACKS.sans).toContain('Noto Sans CJK SC')
     expect(FONT_STACKS.sans).toContain('PingFang SC')
+    expect(FONT_STACKS.sans).toContain('Hiragino Sans GB')
+    expect(FONT_STACKS.sans).toContain('Microsoft YaHei UI')
     expect(FONT_STACKS.sans).toContain('Microsoft YaHei')
+    expect(FONT_STACKS.sans).toContain('Noto Sans CJK SC')
+    expect(FONT_STACKS.sans).toContain('Source Han Sans SC')
+    expect(FONT_STACKS.sans.indexOf('Microsoft YaHei UI')).toBeLessThan(FONT_STACKS.sans.indexOf('Noto Sans CJK SC'))
     expect(resolveFontFamily('serif')).toBe(FONT_STACKS.serif)
     expect(resolveFontFamily('sans')).toBe(FONT_STACKS.sans)
     expect(resolveFontFamily('mono')).toBe(FONT_STACKS.mono)
@@ -97,9 +101,9 @@ describe('typography CSS variables', () => {
     expect(typographyCssVariables(DEFAULT_TYPOGRAPHY)).toEqual({
       '--paper-font-size': '17px',
       '--paper-line-height': '1.9',
-      '--paper-font-family': FONT_STACKS.serif,
-      '--paper-paragraph-spacing': '0em',
-      '--paper-max-width': 'none',
+      '--paper-font-family': FONT_STACKS.sans,
+      '--paper-paragraph-spacing': '0.4em',
+      '--paper-max-width': '76ch',
     })
     expect(typographyCssVariables(normalizeTypography({
       fontSize: 18,

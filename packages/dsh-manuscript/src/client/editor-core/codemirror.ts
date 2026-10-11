@@ -101,14 +101,13 @@ export const paperTheme: Extension = EditorView.theme({
   },
   '.cm-placeholder': {
     color: 'var(--gray-10)',
-    fontStyle: 'italic',
   },
   /* Live-preview decorations. */
-  '.cm-lp-h1': { fontSize: '1.9em', fontWeight: '700', lineHeight: '1.5' },
-  '.cm-lp-h2': { fontSize: '1.5em', fontWeight: '700', lineHeight: '1.55' },
-  '.cm-lp-h3': { fontSize: '1.25em', fontWeight: '700', lineHeight: '1.6' },
-  '.cm-lp-h4': { fontSize: '1.1em', fontWeight: '700' },
-  '.cm-lp-h5, .cm-lp-h6': { fontWeight: '700' },
+  '.cm-lp-h1': { fontSize: 'var(--paper-h1-size, 1.6em)', fontWeight: 'var(--paper-heading-weight, 600)', lineHeight: '1.5' },
+  '.cm-lp-h2': { fontSize: 'var(--paper-h2-size, 1.35em)', fontWeight: 'var(--paper-heading-weight, 600)', lineHeight: '1.55' },
+  '.cm-lp-h3': { fontSize: 'var(--paper-h3-size, 1.15em)', fontWeight: 'var(--paper-heading-weight, 600)', lineHeight: '1.6' },
+  '.cm-lp-h4': { fontSize: 'var(--paper-h4-size, 1.05em)', fontWeight: 'var(--paper-heading-weight, 600)' },
+  '.cm-lp-h5, .cm-lp-h6': { fontWeight: 'var(--paper-heading-weight, 600)' },
   '.cm-lp-strong': { fontWeight: '700' },
   '.cm-lp-em': { fontStyle: 'italic' },
   '.cm-lp-code': {
