@@ -132,7 +132,7 @@ export function buildExpectedVersions(proposal: AuthorProposal, prepared: Propos
   return undefined
 }
 
-export function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: AuthorProposal; onApplied(path: string): void }) {
+export function ProposalCard(props: { ctx: ShellContext; sessionId: string; proposal: AuthorProposal; receiptId?: string; onApplied(path: string): void }) {
   const [prepared, setPrepared] = useState<ProposalPrepared | null>(null)
   const [appliedVersion, setAppliedVersion] = useState('')
   const [undoText, setUndoText] = useState('')
@@ -157,6 +157,18 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
     const channel = isWorkbenchProposal ? WORKBENCH_RPC_CHANNEL : '/manuscript'
     let raw: unknown
     try {
+      if (!isWorkbenchProposal && props.receiptId) {
+        const saved = await props.ctx.connection.rpc.call('/manuscript', 'proposal.receipt', {
+          sessionId: props.sessionId, ...props.proposal, receiptId: props.receiptId,
+        }) as RpcResult<{ receipt: { state: 'applied' | 'undone' } | null }>
+        if (requestGeneration.current !== generation) return
+        if (!saved.ok) { setState('expired'); setCanRecheck(true); setNote(t('chat.checkFailed')); return }
+        if (saved.value.receipt) {
+          setState(saved.value.receipt.state)
+          setNote(t(saved.value.receipt.state === 'applied' ? 'chat.applied' : 'chat.undone'))
+          return
+        }
+      }
       raw = isWorkbenchProposal
         ? await props.ctx.connection.rpc.call(channel, 'proposal.prepare', {
           sessionId: props.sessionId,
@@ -195,7 +207,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   useEffect(() => {
     void check()
     return () => { requestGeneration.current += 1 }
-  }, [props.sessionId, fingerprint])
+  }, [props.sessionId, props.receiptId, fingerprint])
 
   const apply = async () => {
     if (!prepared) return
@@ -225,6 +237,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
           sessionId: props.sessionId,
           ...props.proposal,
           expectedVersion,
+          ...(props.receiptId ? { receiptId: props.receiptId } : {}),
         }) as RpcResult<ProposalApplyResult>
       } else {
         const expectedVersions = buildExpectedVersions(props.proposal, prepared) ?? {}
@@ -298,6 +311,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
         path: props.proposal.path,
         text: undoText,
         version: appliedVersion,
+        ...(props.receiptId ? { receiptId: props.receiptId, undoProposal: props.proposal } : {}),
       }) as RpcResult<{ version: string }>
       if (requestGeneration.current !== generation) return
       if (!result.ok) {
@@ -596,7 +610,7 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
   }
 
   const canRecheckNow = state === 'deferred' || (state === 'expired' && canRecheck)
-  const canUndo = state === 'applied' && props.proposal.kind === 'edit'
+  const canUndo = state === 'applied' && props.proposal.kind === 'edit' && Boolean(appliedVersion)
   const hasActions = state === 'ready' || canRecheckNow || canUndo
   const footer = <Flex asChild direction="column" gap="2" mt="3">
     <footer>

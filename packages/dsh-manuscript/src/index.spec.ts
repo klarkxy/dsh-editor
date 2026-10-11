@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { createProposalReceiptStore, type ProposalReceipt, type ProposalReceiptTable } from './rpc/proposal-receipt.ts'
 import { describe, expect, it, vi } from 'vitest'
 import type { FileSystemLike, ManuscriptHost, SandboxExecutionPolicyLike } from './host.ts'
 import { resolveWorkspaceAccess, WorkspaceAuthorityError } from './host.ts'
@@ -385,5 +386,79 @@ describe('manuscript proposal RPC envelope', () => {
       { ...envelope, expectedVersion: prepared.version },
       signal,
     )).resolves.toMatchObject({ operation: 'edit', path: '正文/001.md' })
+  })
+})
+
+
+describe('durable edit approval receipts', () => {
+  function receiptFixture(fail = false) {
+    const rows = new Map<string, ProposalReceipt>()
+    const table: ProposalReceiptTable = {
+      get: key => rows.get(key),
+      async put(key, row) { if (fail) throw new Error('storage unavailable'); rows.set(key, row) },
+    }
+    const { host } = proposalHost({ '正文/001.md': '# 第一章\n旧句。\n' })
+    const signal = new AbortController().signal
+    const envelope = { ...flatV2Edit(), sessionId: 'session-1', receiptId: 'tool-result:7' }
+    const rpc = (endpoint: string, body: Record<string, unknown> = envelope, store = createProposalReceiptStore(table)) =>
+      dispatch(host as unknown as Context, endpoint, body, signal, undefined, undefined, store)
+    return { rows, table, host, envelope, rpc }
+  }
+
+  it('restores a confirmed outcome after store reconstruction and rejects replay', async () => {
+    const { rows, table, envelope, rpc } = receiptFixture()
+    await rpc('proposal.prepare')
+    expect(rows.size).toBe(0)
+    await expect(rpc('proposal.receipt')).resolves.toEqual({ receipt: null })
+    const result = await rpc('proposal.apply', { ...envelope, expectedVersion: 'initial-正文/001.md' }) as { version: string }
+    await expect(rpc('proposal.receipt', envelope, createProposalReceiptStore(table))).resolves.toMatchObject({ receipt: { state: 'applied', version: result.version } })
+    await expect(rpc('proposal.apply', { ...envelope, expectedVersion: result.version })).rejects.toMatchObject({ code: 'STALE' })
+    expect(JSON.stringify([...rows.values()])).not.toContain('旧句。')
+  })
+
+  it('isolates workspace, session, tool result, content and generation baseline', async () => {
+    const { table, envelope, rpc } = receiptFixture()
+    await rpc('proposal.apply', { ...envelope, expectedVersion: 'initial-正文/001.md' })
+    const store = createProposalReceiptStore(table), proposal = parseProposal(flatV2Edit())
+    expect(store.get('/other', 'session-1', envelope.receiptId, proposal)).toBeNull()
+    expect(store.get('/workspace', 'session-2', envelope.receiptId, proposal)).toBeNull()
+    expect(store.get('/workspace', 'session-1', 'tool-result:8', proposal)).toBeNull()
+    expect(store.get('/workspace', 'session-1', envelope.receiptId, parseProposal(flatV2Edit({ newText: '另外一句。' })))).toBeNull()
+    expect(store.get('/workspace', 'session-1', envelope.receiptId, parseProposal(flatV2Edit({ targetVersion: 'later' })))).toBeNull()
+  })
+
+  it('does not record stale or read-only attempts', async () => {
+    const { rows, host, envelope, rpc } = receiptFixture()
+    await expect(rpc('proposal.apply', { ...envelope, expectedVersion: 'wrong' })).rejects.toMatchObject({ code: 'STALE' })
+    vi.spyOn(host.sandboxPolicy, 'resolve').mockReturnValue({ mode: 'read-only', workspaceRoot: '/workspace', sessionId: 'session-1' })
+    await expect(rpc('proposal.apply', { ...envelope, expectedVersion: 'initial-正文/001.md' })).rejects.toThrow()
+    expect(rows.size).toBe(0)
+  })
+
+  it('rejects invalid receipt identifiers before any manuscript write', async () => {
+    const { rows, envelope, rpc } = receiptFixture()
+    for (const receiptId of [42, '', 'bad\nidentifier']) {
+      await expect(rpc('proposal.apply', { ...envelope, receiptId, expectedVersion: 'initial-正文/001.md' })).rejects.toMatchObject({ code: 'INVALID' })
+    }
+    await expect(rpc('file.read', { sessionId: 'session-1', path: '正文/001.md' })).resolves.toMatchObject({ text: '# 第一章\n旧句。\n' })
+    expect(rows.size).toBe(0)
+  })
+
+  it('records version-guarded undo and refuses a mismatched undo', async () => {
+    const { envelope, rpc } = receiptFixture()
+    const result = await rpc('proposal.apply', { ...envelope, expectedVersion: 'initial-正文/001.md' }) as { version: string }
+    const undo = { sessionId: 'session-1', path: '正文/001.md', text: '# 第一章\n旧句。\n', receiptId: envelope.receiptId, undoProposal: flatV2Edit(), version: result.version }
+    await expect(rpc('file.write', { ...undo, version: 'wrong' })).rejects.toMatchObject({ code: 'STALE' })
+    await rpc('file.write', undo)
+    await expect(rpc('proposal.receipt')).resolves.toMatchObject({ receipt: { state: 'undone', path: '正文/001.md' } })
+    await expect(rpc('file.write', undo)).rejects.toMatchObject({ code: 'STALE' })
+  })
+
+  it('reports a failed receipt commit as a partial success with the actual written path', async () => {
+    const { rows, envelope, rpc } = receiptFixture(true)
+    const error = await rpc('proposal.apply', { ...envelope, expectedVersion: 'initial-正文/001.md' }).catch(error => error)
+    expect(mapError(error)).toMatchObject({ ok: false, error: { details: { partial: true, appliedPaths: ['正文/001.md'] } } })
+    await expect(rpc('file.read', { sessionId: 'session-1', path: '正文/001.md' })).resolves.toMatchObject({ text: '# 第一章\n新句。\n' })
+    expect(rows.size).toBe(0)
   })
 })

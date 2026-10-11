@@ -6,6 +6,7 @@ import { parsePatchRequest, PatchInputError } from './rpc/patch.ts'
 import type { ManuscriptAssist } from './assist-api.ts'
 import { createDraftStore, draftDomainSpec, DraftInputError, type DraftStore } from './rpc/draft.ts'
 import { applyProposal, parseProposal, prepareProposal, ProposalError } from './rpc/proposal.ts'
+import { createProposalReceiptStore, validateProposalReceiptId, proposalReceiptDomainSpec, ProposalReceiptWriteError, type ProposalReceiptStore } from './rpc/proposal-receipt.ts'
 import { WritingProposalError } from './rpc/writing-proposal.ts'
 import { SearchError, searchWorkspaceText } from './rpc/search.ts'
 import { badRequest, mapHostError, type HostRpcError } from './rpc/host-error.ts'
@@ -15,7 +16,11 @@ export const name = 'dsh-manuscript'
 export const inject = ['connection', 'sessions', 'workspaceRegistry', 'fs', 'sandboxPolicy', 'storageDomain', 'webServer'] as const
 
 type RpcOk<T> = { ok: true; value: T }
-type RpcError = HostRpcError
+type RpcError = HostRpcError | {
+  code: 'internal'
+  message: string
+  details: { partial: true; appliedPaths: string[]; reason: 'proposal-receipt-write-failed' }
+}
 type RpcErr = { ok: false; error: RpcError }
 type RpcResult<T> = RpcOk<T> | RpcErr
 
@@ -24,6 +29,10 @@ function fail(error: RpcError): RpcErr {
 }
 
 export function mapError(error: unknown): RpcErr {
+  if (error instanceof ProposalReceiptWriteError) return fail({
+    code: 'internal', message: error.message,
+    details: { partial: true, appliedPaths: [error.path], reason: 'proposal-receipt-write-failed' },
+  })
   const hostError = mapHostError(error)
   if (hostError) return hostError
   if (error instanceof SearchError) {
@@ -48,6 +57,7 @@ function proposalFromRpcBody(body: Payload): Record<string, unknown> {
   const proposal = { ...body }
   delete proposal.sessionId
   delete proposal.expectedVersion
+  delete proposal.receiptId
   return proposal
 }
 
@@ -58,6 +68,7 @@ export async function dispatch(
   signal: AbortSignal,
   drafts?: DraftStore,
   usage?: UsageRecorder,
+  receipts?: ProposalReceiptStore,
 ): Promise<unknown> {
   const body = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Payload) : {}
   // `usage.summary` is global data and must not require a live session; short-circuit
@@ -81,6 +92,7 @@ export async function dispatch(
     signal,
   }
   const run = async (): Promise<unknown> => {
+    if (body.receiptId !== undefined) validateProposalReceiptId(body.receiptId)
     const rel = str(body, 'path')
     if (endpoint.startsWith('draft.') && !drafts) throw new Error('manuscript draft storage is unavailable')
     if (endpoint === 'draft.get') return { draft: drafts!.get(access.workspace.path, body) }
@@ -90,16 +102,41 @@ export async function dispatch(
     if (endpoint === 'tree.list') return { entries: await listDir(files, rel) }
     if (endpoint === 'file.read') return await readTextFile(files, rel)
     if (endpoint === 'file.create') return await createTextFile(files, rel, str(body, 'text'))
-    if (endpoint === 'file.write') return await writeTextFile(files, rel, str(body, 'text'), str(body, 'version'))
+    if (endpoint === 'file.write') {
+      const receiptId = str(body, 'receiptId')
+      const undoProposal = receiptId && body.undoProposal && typeof body.undoProposal === 'object'
+        ? parseProposal(body.undoProposal as Payload) : undefined
+      if (undoProposal) {
+        const receipt = receipts?.get(access.workspace.path, targetSessionId, receiptId, undoProposal)
+        if (!receipt || receipt.state !== 'applied' || receipt.path !== rel || receipt.version !== str(body, 'version')) {
+          throw new ProposalError('undo does not match the applied proposal receipt', 'STALE')
+        }
+      }
+      const result = await writeTextFile(files, rel, str(body, 'text'), str(body, 'version'))
+      if (undoProposal) await receipts!.record(access.workspace.path, targetSessionId, receiptId, undoProposal, 'undone', { path: undoProposal.path, version: result.version })
+      return result
+    }
     if (endpoint === 'search.text') return await searchWorkspaceText({
       files,
       query: str(body, 'query'),
       scope: str(body, 'scope') === 'manuscript' ? 'manuscript' : 'project',
       directory: body.directory,
     })
+    if (endpoint === 'proposal.receipt') {
+      if (!receipts) throw new Error('proposal receipt storage is unavailable')
+      return { receipt: receipts.get(access.workspace.path, targetSessionId, str(body, 'receiptId'), parseProposal(proposalFromRpcBody(body))) }
+    }
     if (endpoint === 'proposal.prepare') return await prepareProposal(files, parseProposal(proposalFromRpcBody(body)))
     if (endpoint === 'proposal.apply') {
-      return await applyProposal(files, parseProposal(proposalFromRpcBody(body)), str(body, 'expectedVersion'))
+      const proposal = parseProposal(proposalFromRpcBody(body))
+      const receiptId = str(body, 'receiptId')
+      if (receiptId && !receipts) throw new Error('proposal receipt storage is unavailable')
+      if (receiptId && receipts!.get(access.workspace.path, targetSessionId, receiptId, proposal)) {
+        throw new ProposalError('proposal has already been settled', 'STALE')
+      }
+      const result = await applyProposal(files, proposal, str(body, 'expectedVersion'))
+      if (receiptId) await receipts!.record(access.workspace.path, targetSessionId, receiptId, proposal, 'applied', result)
+      return result
     }
     if (endpoint === 'fim.complete' || endpoint === 'patch.complete') {
       // Validate the legacy patch request even when no model is configured.
@@ -124,16 +161,19 @@ export async function apply(ctx: Context): Promise<void> {
   const host = asHost(ctx)
   const domain = await ctx.storageDomain.open(draftDomainSpec)
   const drafts = createDraftStore(domain.table('drafts'))
+  ctx.effect(() => () => domain.close(), 'dsh-manuscript.draftDomainClose')
+  const receiptDomain = await ctx.storageDomain.open(proposalReceiptDomainSpec)
+  const receipts = createProposalReceiptStore(receiptDomain.table('receipts'))
+  ctx.effect(() => () => receiptDomain.close(), 'dsh-manuscript.proposalReceiptDomainClose')
   // Read-only facade of the existing draft store; maintenance never owns a second draft store.
   ctx.provide('manuscriptDrafts', {
     hasUnsaved: (workspacePath: string, relative: string) => [...domain.table('drafts').entries()].some(([, row]) =>
       row.workspacePath === workspacePath && row.path.toLocaleLowerCase() === relative.toLocaleLowerCase() && row.text !== row.baseText),
   })
-  ctx.effect(() => () => domain.close(), 'dsh-manuscript.draftDomainClose')
 
   ctx.effect(() => registerHostRpc(host, '/manuscript', async (endpoint, payload, signal) => {
     try {
-      const value = await dispatch(ctx, endpoint, payload, signal, drafts)
+      const value = await dispatch(ctx, endpoint, payload, signal, drafts, undefined, receipts)
       return { ok: true, value } satisfies RpcResult<unknown>
     } catch (error) {
       return mapError(error)

@@ -533,6 +533,7 @@ export const ChatRowView = memo(function ChatRowView(props: ChatRowViewProps) {
       ctx={props.ctx}
       sessionId={props.sessionId}
       proposal={row.proposal}
+      receiptId={row.id}
       onApplied={props.onApplied} />
   );
   const registered = row.toolName ? props.messageCards?.get(row.toolName) : undefined

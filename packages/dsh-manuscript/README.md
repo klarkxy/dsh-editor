@@ -30,10 +30,14 @@ dsh --profile web
 
 编辑器按会话、文件路径、工作区、草稿类型与 `externalRevision` 识别读取代际。普通重渲染或替换等价的 RPC / 草稿适配器不会重新读取文档；宿主需要明确重新读取时递增 `externalRevision`。独立宿主的会话草稿仍读取已有的 `dsh-editor:draft:` 存储键，并兼容早期未写入 `cwd` 的记录。
 
-Host RPC 挂在 `/manuscript` 通道，端点包括：`tree.list`、`file.read` / `file.create` / `file.write`、`draft.get` / `draft.list` / `draft.put` / `draft.delete`、`search.text`、`proposal.prepare` / `proposal.apply`、`fim.complete`、`patch.complete`、`capabilities.get`、`usage.summary`。除 `capabilities.get` 与 `usage.summary` 外都需要有效会话；写入类端点在工作区写锁下执行。
+Host RPC 挂在 `/manuscript` 通道，端点包括：`tree.list`、`file.read` / `file.create` / `file.write`、`draft.get` / `draft.list` / `draft.put` / `draft.delete`、`search.text`、`proposal.prepare` / `proposal.apply` / `proposal.receipt`、`fim.complete`、`patch.complete`、`capabilities.get`、`usage.summary`。除 `capabilities.get` 与 `usage.summary` 外都需要有效会话；写入类端点在工作区写锁下执行。
 
 行内补全与选段改写通过官方 `@deepseek-ai/dsh-llm` 直接调用模型。宿主可通过现有写作偏好指定 `completionModel` 与 `rewriteModel`；独立调用也可明确传入提供方、模型与思考强度。未指定时使用当前会话的选择，再使用宿主原生默认模型。共享库 `@klarkxy/dsh-plugin-kit` 提供原生路由辅助，不需要加载额外模型中心或共享 AI 服务，也不依赖私有应用运行时。
 
 补全和改写在本插件内按供应商共用写作并发额度，并保持固定的输入、输出与超时上限。写作调用只尝试一次；取消、停用及同一会话的新请求会作废旧候选，不返回失败或超时的半段输出。
 
 用量通过原有 `llm/stream` 统计进入 `usage.summary`。达到补全 240 字符或改写 1200 字符的上限时停止生成；如果供应商尚未返回用量，该次调用可能没有统计记录，不估算缺失的 token。生成结果仍是候选，需作者采纳才改变正文。
+
+聊天中的 edit 提案使用稳定的 DSH 工具结果行 ID 保存审批回执。回执由成功写入后的 Host 保存到 DSH storageDomain，按工作区、会话、结果行及完整提案内容隔离；重开后显示真实的已应用或已撤回结果，不根据当前文本猜测历史写入。重复应用同一回执会被拒绝，目标版本和依据版本校验保持不变。回执保存失败会报告稿件已写入的部分成功情况。
+
+回执不保存旧稿正文。当前界面中的 edit 撤回仍按写入版本核对；重开后的历史卡片不提供依赖内存快照的撤回按钮。没有结果行 ID 的独立提案卡，以及 workbench 的其他提案类型，仍按原有版本核对流程工作。
