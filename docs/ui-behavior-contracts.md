@@ -57,7 +57,7 @@
 | C40 | 切换主题或主题色不更换编辑器 key，不重置草稿、滚动、选区或排版偏好 | `src/client/editor.tsx`、`src/client/theme.tsx` | `e2e/ui-design.mjs`（输入节点稳定） | 缺少稿纸实例级测试 |
 | C41 | 作者的稿纸字体、字号、行距、段距、纸宽与补全设置不被外观改动重置；shell 与 manuscript 默认值一致 | `src/writing-settings.tsx`、`src/writing-config.ts`、`packages/dsh-manuscript/src/client/editor-core/typography.ts` | `src/writing-settings.spec.ts`、`src/writing-config.spec.ts`、`packages/dsh-manuscript/src/client/typography.spec.ts` | 无 |
 | C42 | 主题偏好与宿主 `ui-theme` 双向同步；旧 paper/ink 值迁移 | `src/client/theme.tsx` | `src/theme.spec.ts` | 无 |
-| C43 | 每个主题色的主按钮实色与文字在明暗两种模式下对比度不低于 4.5:1 | `src/design-system/tokens.ts` 的 `ACCENT_SOLIDS` | `scripts/check-ui-design.mjs` | 无 |
+| C43 | 主色填充与其文字、正文与次要文字与所在表面、链接与稿纸之间，在明暗两种模式下对比度都不低于 4.5:1。G1 起主色固定为黛蓝，作者旧的主题色设置不再生效，但存储键保留不删 | `src/design-system/tokens.ts` | `scripts/check-ui-design.mjs`（重写后覆盖新 token） | 缺少测试：旧主题色存储键不被删除 |
 | C44 | 设计作用域标记引用计数安装，卸载时恢复先前值，StrictMode 下正确 | `src/design-system/scope.ts` | `scripts/check-ui-design.mjs`、`design-system.spec.ts` | 无 |
 | C45 | `dsh-manuscript` 在没有 shell 宿主的独立 Web 模式下仍有完整的降级 token 与控件 | `packages/dsh-manuscript/src/client/themes.tsx`、`packages/dsh-editor-seats/src/tokens.ts` | `packages/dsh-manuscript/src/client/themes.spec.ts`、`e2e/ai-plugins-standalone.mjs` | 无 |
 
