@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings, openWritingPresets } from './helpers/plugin-page.mjs'
+import { S } from './helpers/selectors.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const output = resolve(root, '.pack', 'desktop-e2e')
@@ -18,6 +19,14 @@ const electronExecutable = process.platform === 'darwin'
   ? resolve(electronDist, 'Electron.app', 'Contents', 'MacOS', 'Electron')
   : resolve(electronDist, 'electron.exe')
 const main = resolve(root, 'apps', 'desktop', 'dist', 'main.js')
+// Selectors passed into page.evaluate/waitForFunction callbacks (S is not
+// visible inside the page context).
+const DOM = {
+  SHELL: S.shell, DIALOG: S.dialog, BRAND: S.brandLockup, CHECKING: S.workspaceChecking,
+  HOME: S.homeStage, TREE: S.tree, ALERT: S.alert, SHELL_ERROR: S.shellError,
+  SAVE_STATE: S.paperSaveState, NOTICE: S.paperNotice, PAPER_PATH: S.paperPath,
+  CONFLICT_COPY: S.paperSaveConflictCopy, SETTINGS_BUTTON: S.nativeSettingsButton,
+}
 
 function run(script, args, env) {
   return new Promise((resolvePromise, reject) => {
@@ -87,8 +96,8 @@ async function openTreeFile(page, directory, file) {
     await dismissAssistant.click()
     await dismissAssistant.waitFor({ state: 'hidden', timeout: 10_000 })
   }
-  const folder = page.locator('.tree-row', { hasText: directory }).first()
-  const fileRow = page.locator('.tree-row', { hasText: file }).first()
+  const folder = page.locator(S.treeRow, { hasText: directory }).first()
+  const fileRow = page.locator(S.treeRow, { hasText: file }).first()
   await folder.waitFor({ state: 'visible', timeout: 20_000 })
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
@@ -152,17 +161,17 @@ async function dismissNativeOnboarding(page) {
 }
 
 async function assertNewProjectHasNoManuscriptFolder(page, workspace) {
-  await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
+  await page.locator(S.treeEmpty).waitFor({ state: 'visible', timeout: 20_000 })
   for (const extra of ['正文', '大纲', '人物卡', '世界书']) {
     if (existsSync(resolve(workspace, extra))) throw new Error(`new project should not pre-create ${extra}`)
-    if (await page.locator('.tree').getByText(extra, { exact: true }).count()) {
+    if (await page.locator(S.tree).getByText(extra, { exact: true }).count()) {
       throw new Error(`new project should not pre-seed ${extra}`)
     }
   }
 }
 
 async function createRootFolderFromTree(page, name) {
-  const tree = page.locator('.tree')
+  const tree = page.locator(S.tree)
   const box = await tree.boundingBox()
   if (!box) throw new Error('tree missing')
   await tree.click({ button: 'right', position: { x: 16, y: Math.max(12, box.height - 18) } })
@@ -172,7 +181,7 @@ async function createRootFolderFromTree(page, name) {
   await dialog.getByLabel('文件夹名称').fill(name)
   await dialog.getByRole('button', { name: '创建', exact: true }).click()
   await dialog.waitFor({ state: 'detached', timeout: 15_000 })
-  await page.locator('.tree-row').filter({ hasText: name }).first().waitFor({ state: 'visible', timeout: 20_000 })
+  await page.locator(S.treeRow).filter({ hasText: name }).first().waitFor({ state: 'visible', timeout: 20_000 })
 }
 
 const baseEnv = {
@@ -230,7 +239,7 @@ async function launchPhase(name, extraEnv, inspect) {
     try {
       await delay(5_000)
       console.log(`[desktop-e2e] ${name}: initial page loaded`)
-      await window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('main.shell')), undefined, { timeout: 90_000 })
+      await window.waitForFunction(({ SHELL }) => document.title === 'DSH Editor' && Boolean(document.querySelector(SHELL)), DOM, { timeout: 90_000 })
       console.log(`[desktop-e2e] ${name}: shell mounted`)
     } catch (error) {
       const diagnostic = await readWindowDiagnostic(window, processLogs)
@@ -244,22 +253,22 @@ async function launchPhase(name, extraEnv, inspect) {
     const nativeOnboarding = await dismissNativeOnboarding(window)
     console.log(`[desktop-e2e] ${name}: onboarding dismissed`)
     const bounds = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getBounds())
-    const state = await window.evaluate(() => ({
-      body: document.querySelector('main.shell')?.textContent ?? '',
+    const state = await window.evaluate(({ SHELL, DIALOG, BRAND, SETTINGS_BUTTON }) => ({
+      body: document.querySelector(SHELL)?.textContent ?? '',
       title: document.title,
-      shell: Boolean(document.querySelector('main.shell')),
-      settings: Boolean(document.querySelector('[role="dialog"]')),
-      settingsControl: [...document.querySelectorAll('.native-settings-control button')].some((button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').includes('设置')),
-      officialHome: document.querySelector('main.shell')?.textContent?.includes('DeepSeek Harness') ?? false,
-      editorName: Boolean(document.querySelector('.brand-lockup')),
+      shell: Boolean(document.querySelector(SHELL)),
+      settings: Boolean(document.querySelector(DIALOG)),
+      settingsControl: [...document.querySelectorAll(SETTINGS_BUTTON)].some((button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').includes('设置')),
+      officialHome: document.querySelector(SHELL)?.textContent?.includes('DeepSeek Harness') ?? false,
+      editorName: Boolean(document.querySelector(BRAND)),
       bootEntries: globalThis.__DSH_BOOT__?.entries?.map((entry) => entry.id) ?? [],
       width: window.innerWidth,
       height: window.innerHeight,
-    }))
+    }), DOM)
     try {
       await inspect({ ...state, nativeOnboarding }, { app, window })
     } catch (error) {
-      await writeFile(resolve(output, `${name}-failure-dom.txt`), await window.locator('body').innerText()).catch(() => {})
+      await writeFile(resolve(output, `${name}-failure-dom.txt`), await window.locator(S.body).innerText()).catch(() => {})
       throw new Error(`${error instanceof Error ? error.message : String(error)}; browserErrors: ${JSON.stringify(browserErrors.slice(-20))}; processLogs: ${JSON.stringify(processLogs.slice(-30))}`)
     }
     console.log(`[desktop-e2e] ${name}: assertions passed`)
@@ -299,15 +308,15 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
 
   // Global settings and plugin management have separate entry points.
   const window = ctx.window
-  await window.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
+  await window.locator(S.nativeSettingsTrigger).click()
   const dialog = window.getByRole('dialog', { name: '设置' })
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
   await dialog.getByRole('tab', { name: '通用设置', exact: true }).waitFor({ state: 'visible', timeout: 5_000 })
   await dialog.getByRole('tab', { name: '模型', exact: true }).click()
   try {
     await window.waitForFunction(
-      () => (document.querySelector('[role="dialog"]')?.textContent ?? '').includes('DeepSeek'),
-      undefined,
+      ({ DIALOG }) => (document.querySelector(DIALOG)?.textContent ?? '').includes('DeepSeek'),
+      DOM,
       { timeout: 15_000 },
     )
   } catch {
@@ -327,12 +336,12 @@ phases.push(await launchPhase('configured-home', { DEEPSEEK_API_KEY: 'dsh-editor
   }
   await openWebSearchSettings(pluginsPage)
   const presets = await openWritingPresets(pluginsPage)
-  const presetSwitch = presets.getByTestId('plugins-preset-toggle-dsh-editor-novel')
+  const presetSwitch = presets.locator(S.pluginsPresetToggleNovel)
   await presetSwitch.waitFor({ state: 'visible', timeout: 10_000 })
   if ((await presetSwitch.getAttribute('aria-checked')) !== 'true') throw new Error('小说创作 writing preset should be enabled by default')
-  const lockedCore = presets.getByTestId('plugins-preset-dsh-editor-writing')
-  await lockedCore.getByText('必需', { exact: true }).waitFor()
-  if (await lockedCore.locator('[role="switch"]').count()) throw new Error('core writing preset exposes a toggle')
+  const lockedCore = presets.locator(S.pluginsPresetWriting)
+  await lockedCore.locator(S.pluginsCatalogPresetLocked).filter({ hasText: '必需' }).waitFor()
+  if (await lockedCore.locator(S.switchAny).count()) throw new Error('core writing preset exposes a toggle')
   await closePluginsPage(window)
 }))
 
@@ -349,22 +358,22 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   try {
     await ctx.window.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   } catch (error) {
-    const body = await ctx.window.evaluate(() => ({
+    const body = await ctx.window.evaluate(({ SHELL, CHECKING, HOME, TREE, ALERT, SHELL_ERROR }) => ({
       text: document.body.innerText.slice(0, 1200),
-      shellClass: document.querySelector('main.shell')?.className ?? null,
-      checking: Boolean(document.querySelector('.workspace-checking')),
-      home: Boolean(document.querySelector('.home-stage')),
-      tree: Boolean(document.querySelector('.tree')),
-      errors: [...document.querySelectorAll('[role="alert"]')].map((node) => node.textContent?.slice(0, 200)),
-      shellError: document.querySelector('[data-testid="shell-error"]')?.textContent?.slice(0, 400) ?? null,
-    })).catch((error) => ({ evaluateError: error instanceof Error ? error.message : String(error) }))
+      shellClass: document.querySelector(SHELL)?.className ?? null,
+      checking: Boolean(document.querySelector(CHECKING)),
+      home: Boolean(document.querySelector(HOME)),
+      tree: Boolean(document.querySelector(TREE)),
+      errors: [...document.querySelectorAll(ALERT)].map((node) => node.textContent?.slice(0, 200)),
+      shellError: document.querySelector(SHELL_ERROR)?.textContent?.slice(0, 400) ?? null,
+    }), DOM).catch((error) => ({ evaluateError: error instanceof Error ? error.message : String(error) }))
     await ctx.window.screenshot({ path: resolve(output, 'multi-window-create-failure.png') }).catch(() => undefined)
     throw new Error(`manuscript tree did not appear after 新建: ${JSON.stringify(body)}; ${error instanceof Error ? error.message : String(error)}`)
   }
   // New works start empty. 正文 is an ordinary folder created from the tree, not mkdir.
   await assertNewProjectHasNoManuscriptFolder(ctx.window, multiWindowWorkspace)
   await createRootFolderFromTree(ctx.window, '正文')
-  await ctx.window.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
+  await ctx.window.locator(S.treeRow).filter({ hasText: '正文' }).first().hover()
   await ctx.window.getByRole('button', { name: '在 正文 中新建文件', exact: true }).click()
   const chapterNameBox = ctx.window.getByLabel('文件名称（无扩展名时按 .md 创建）')
   await chapterNameBox.waitFor({ state: 'visible', timeout: 10_000 })
@@ -372,7 +381,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await ctx.window.getByRole('button', { name: '创建', exact: true }).click()
   await waitForPath(resolve(multiWindowWorkspace, '正文', '001.md'))
   // The create flow opens the document directly; the tree starts collapsed.
-  const firstEditor = ctx.window.locator('[data-testid="paper-editor"]')
+  const firstEditor = ctx.window.locator(S.paperEditor)
   await firstEditor.waitFor({ state: 'visible', timeout: 30_000 })
   const secondWindow = ctx.app.waitForEvent('window')
   // Drive the shortcut through Electron's own input pipeline: synthetic CDP key
@@ -385,7 +394,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
     delay(30_000).then(() => { throw new Error('second window was not created within 30 seconds') }),
   ])
   try {
-    await second.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('main.shell')), undefined, { timeout: 90_000 })
+    await second.waitForFunction(({ SHELL }) => document.title === 'DSH Editor' && Boolean(document.querySelector(SHELL)), DOM, { timeout: 90_000 })
   } catch (error) {
     throw new Error(`second window shell did not mount: ${JSON.stringify(await readWindowDiagnostic(second, []))}; ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -396,7 +405,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   }
   await second.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   await openTreeFile(second, '正文', '001.md')
-  const secondEditor = second.locator('[data-testid="paper-editor"]')
+  const secondEditor = second.locator(S.paperEditor)
   await secondEditor.waitFor({ state: 'visible', timeout: 30_000 })
 
   const firstText = '# 第一窗口版本\n\n由第一窗口保存。\n'
@@ -416,7 +425,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await setEditorText(firstEditor, firstText)
   await waitForFileText(resolve(multiWindowWorkspace, '正文', '001.md'), firstText)
   await setEditorText(secondEditor, staleText)
-  await second.locator('[data-testid="paper-save-state"]', { hasText: '版本冲突' }).waitFor({ timeout: 30_000 })
+  await second.locator(S.paperSaveState, { hasText: '版本冲突' }).waitFor({ timeout: 30_000 })
   if (await getEditorText(secondEditor) !== staleText) throw new Error('stale second-window draft was not preserved')
   if (await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8') !== firstText) {
     throw new Error('stale second-window save overwrote the first-window disk version')
@@ -429,12 +438,12 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await waitForFileText(resolve(multiWindowWorkspace, '正文', '001.md'), latestText)
   await second.close()
   if (ctx.window.isClosed()) throw new Error('remaining window closed after closing the second window')
-  await ctx.window.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('main.shell')), undefined, { timeout: 15_000 })
-  const remaining = await ctx.window.evaluate(() => ({
+  await ctx.window.waitForFunction(({ SHELL }) => document.title === 'DSH Editor' && Boolean(document.querySelector(SHELL)), DOM, { timeout: 15_000 })
+  const remaining = await ctx.window.evaluate(({ SHELL }) => ({
     title: document.title,
-    shell: Boolean(document.querySelector('main.shell')),
+    shell: Boolean(document.querySelector(SHELL)),
     href: location.href,
-  }))
+  }), DOM)
   if (!remaining.shell || remaining.title !== 'DSH Editor' || new URL(remaining.href).origin !== firstUrl.origin) {
     throw new Error(`remaining window was not responsive: ${JSON.stringify(remaining)}`)
   }
@@ -445,27 +454,27 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   try {
     await ctx.window.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   } catch (error) {
-    const body = await ctx.window.evaluate(() => ({
+    const body = await ctx.window.evaluate(({ SHELL, CHECKING, HOME, TREE, SHELL_ERROR }) => ({
       text: document.body.innerText.slice(0, 1200),
-      shellClass: document.querySelector('main.shell')?.className ?? null,
-      checking: Boolean(document.querySelector('.workspace-checking')),
-      home: Boolean(document.querySelector('.home-stage')),
-      tree: Boolean(document.querySelector('.tree')),
-      shellError: document.querySelector('[data-testid="shell-error"]')?.textContent?.slice(0, 400) ?? null,
-    })).catch((evaluateError) => ({ evaluateError: evaluateError instanceof Error ? evaluateError.message : String(evaluateError) }))
+      shellClass: document.querySelector(SHELL)?.className ?? null,
+      checking: Boolean(document.querySelector(CHECKING)),
+      home: Boolean(document.querySelector(HOME)),
+      tree: Boolean(document.querySelector(TREE)),
+      shellError: document.querySelector(SHELL_ERROR)?.textContent?.slice(0, 400) ?? null,
+    }), DOM).catch((evaluateError) => ({ evaluateError: evaluateError instanceof Error ? evaluateError.message : String(evaluateError) }))
     await ctx.window.screenshot({ path: resolve(output, 'multi-window-resume-failure.png') }).catch(() => undefined)
     throw new Error(`manuscript tree did not appear after restart: ${JSON.stringify(body)}; ${error instanceof Error ? error.message : String(error)}`)
   }
-  const editor = ctx.window.locator('[data-testid="paper-editor"]')
+  const editor = ctx.window.locator(S.paperEditor)
   if (!await editor.isVisible()) await openTreeFile(ctx.window, '正文', '001.md')
   await editor.waitFor({ state: 'visible', timeout: 30_000 })
-  const backups = ctx.window.locator('[data-testid="paper-draft-backups"]')
+  const backups = ctx.window.locator(S.paperDraftBackups)
   await backups.waitFor({ state: 'visible', timeout: 15_000 })
   const disk = await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8')
   const before = await editor.evaluate(el => el.__cmView.state.doc.toString())
   if (before !== disk) throw new Error('another window draft was silently applied on restart')
   await backups.getByRole('button').first().click()
-  await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '版本冲突' }).waitFor({ timeout: 15_000 })
+  await ctx.window.locator(S.paperSaveState, { hasText: '版本冲突' }).waitFor({ timeout: 15_000 })
   const recovered = await editor.evaluate(el => el.__cmView.state.doc.toString())
   if (!recovered.includes('第二窗口草稿')) throw new Error('restart did not recover the second-window draft')
   if (await readFile(resolve(multiWindowWorkspace, '正文', '001.md'), 'utf8') !== disk) throw new Error('draft recovery overwrote the newer disk version')
@@ -485,7 +494,7 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await ctx.window.reload()
   await ctx.window.getByRole('tree', { name: '稿件目录' }).waitFor({ state: 'visible', timeout: 45_000 })
   if (!await editor.isVisible()) await openTreeFile(ctx.window, '正文', '001.md')
-  await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '版本冲突' }).waitFor({ timeout: 15_000 })
+  await ctx.window.locator(S.paperSaveState, { hasText: '版本冲突' }).waitFor({ timeout: 15_000 })
   // Reload restore schedules the same 250 ms host-draft put as adoptBackup.
   // Clicking 另存冲突副本 before that put lands lets delete run, then the
   // delayed put recreates the conflict draft and remount restores 版本冲突.
@@ -496,17 +505,17 @@ phases.push(await launchPhase('multi-window', { DEEPSEEK_API_KEY: 'dsh-editor-e2
   await ctx.window.screenshot({ path: resolve(output, 'draft-recovery.png'), fullPage: true })
   // Complete the author workflow before closing: preserve the recovered draft
   // as a conflict copy, then leave the original document in a clean state.
-  await ctx.window.locator('[data-testid="paper-save-conflict-copy"]').click()
+  await ctx.window.locator(S.paperSaveConflictCopy).click()
   try {
-    await ctx.window.locator('[data-testid="paper-save-state"]', { hasText: '已保存' }).waitFor({ state: 'visible', timeout: 15_000 })
+    await ctx.window.locator(S.paperSaveState, { hasText: '已保存' }).waitFor({ state: 'visible', timeout: 15_000 })
   } catch (error) {
     const names = await readdir(resolve(multiWindowWorkspace, '正文')).catch(() => [])
-    const ui = await ctx.window.evaluate(() => ({
-      saveStates: [...document.querySelectorAll('[data-testid="paper-save-state"]')].map((node) => node.textContent ?? ''),
-      notice: document.querySelector('[data-testid="paper-notice"]')?.textContent ?? '',
-      path: document.querySelector('[data-testid="paper-path"]')?.textContent ?? '',
-      conflictCopy: Boolean(document.querySelector('[data-testid="paper-save-conflict-copy"]')),
-    })).catch((evaluateError) => ({ evaluateError: evaluateError instanceof Error ? evaluateError.message : String(evaluateError) }))
+    const ui = await ctx.window.evaluate(({ SAVE_STATE, NOTICE, PAPER_PATH, CONFLICT_COPY }) => ({
+      saveStates: [...document.querySelectorAll(SAVE_STATE)].map((node) => node.textContent ?? ''),
+      notice: document.querySelector(NOTICE)?.textContent ?? '',
+      path: document.querySelector(PAPER_PATH)?.textContent ?? '',
+      conflictCopy: Boolean(document.querySelector(CONFLICT_COPY)),
+    }), DOM).catch((evaluateError) => ({ evaluateError: evaluateError instanceof Error ? evaluateError.message : String(evaluateError) }))
     await ctx.window.screenshot({ path: resolve(output, 'conflict-copy-timeout.png'), fullPage: true }).catch(() => undefined)
     throw new Error(`conflict copy did not reach 已保存: ${JSON.stringify({ ui, files: names })}; ${error instanceof Error ? error.message : String(error)}`)
   }

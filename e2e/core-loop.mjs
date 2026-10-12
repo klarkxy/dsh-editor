@@ -20,6 +20,7 @@ import { resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
+import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const devRoot = resolve(root, '.dev')
@@ -42,6 +43,19 @@ const cli = resolve(runtime, 'lib', 'bin.js')
 const failures = []
 let browser
 let dshChild
+
+// Selectors passed into page.evaluate/waitForFunction callbacks (S is not
+// visible inside the page context).
+const DOM = {
+  SHELL: S.shell, HOME_STAGE: S.homeStage, TREE: S.tree, SIDEBAR: S.sidebar,
+  EDITOR_AREA: S.editorArea, PAPER_EDITOR: S.paperEditor, PAPER_GHOST: S.paperGhost,
+  PAPER_SAVE: S.paperSaveState, PAPER_WORDS: S.paperWordcount, PAPER_PATH: S.paperPath,
+  CHAT: S.chatRail, COMPOSER: S.composerInputInner, THEME: S.themeToggle,
+  SHELL_THEME: S.shellTheme, OVERVIEW: S.overviewPanel, OVERVIEW_BODY: S.overviewBody,
+  OVERVIEW_LOADING: S.overviewLoading, PROOFREAD: S.editorProofreadPanel,
+  PROOFREAD_SUMMARY: S.proofreadSummary, PROOFREAD_LOADING: S.proofreadLoading,
+  MEMORY: S.memoryPanel, MEMORY_LIST: S.memoryList, MEMORY_STATUS: S.memoryStatus,
+}
 
 function note(label, detail = '') {
   console.log(`[core-loop] ${label}${detail ? ` — ${detail}` : ''}`)
@@ -121,26 +135,26 @@ async function dismissNativeOnboarding(page) {
 }
 
 async function readState(page) {
-  return page.evaluate(() => {
+  return page.evaluate(({ SHELL, HOME_STAGE, TREE, SIDEBAR, EDITOR_AREA, PAPER_EDITOR, PAPER_GHOST, PAPER_SAVE, PAPER_WORDS, PAPER_PATH, CHAT, COMPOSER, THEME }) => {
     const theme = document.documentElement.getAttribute('data-theme') || ''
     const stored = globalThis.localStorage?.getItem('dsh-editor.theme') || ''
     const title = document.title
-    const shell = Boolean(document.querySelector('.shell'))
-    const homeStage = Boolean(document.querySelector('.home-stage'))
-    const tree = Boolean(document.querySelector('.tree'))
-    const sidebar = Boolean(document.querySelector('.sidebar'))
-    const editorSection = Boolean(document.querySelector('[aria-label="文稿编辑区"]'))
-    const editorEl = document.querySelector('[data-testid="paper-editor"]')
+    const shell = Boolean(document.querySelector(SHELL))
+    const homeStage = Boolean(document.querySelector(HOME_STAGE))
+    const tree = Boolean(document.querySelector(TREE))
+    const sidebar = Boolean(document.querySelector(SIDEBAR))
+    const editorSection = Boolean(document.querySelector(EDITOR_AREA))
+    const editorEl = document.querySelector(PAPER_EDITOR)
     const cmView = editorEl && /** @type {any} */ (editorEl).__cmView
-    const ghost = Boolean(document.querySelector('[data-testid="paper-ghost"]'))
-    const saveState = document.querySelector('[data-testid="paper-save-state"]')?.textContent || ''
-    const wordCount = document.querySelector('[data-testid="paper-wordcount"]')?.textContent || ''
-    const headerPath = document.querySelector('[data-testid="paper-path"]')?.textContent || ''
-    const chat = document.querySelector('aside.chat')
-    const composer = chat?.querySelector('textarea[aria-label="输入消息"]') || null
+    const ghost = Boolean(document.querySelector(PAPER_GHOST))
+    const saveState = document.querySelector(PAPER_SAVE)?.textContent || ''
+    const wordCount = document.querySelector(PAPER_WORDS)?.textContent || ''
+    const headerPath = document.querySelector(PAPER_PATH)?.textContent || ''
+    const chat = document.querySelector(CHAT)
+    const composer = chat?.querySelector(COMPOSER) || null
     const placeholder = composer?.getAttribute('placeholder') || ''
-    const themeToggle = document.querySelector('.theme-toggle')?.getAttribute('aria-label') || ''
-    const themeToggleText = document.querySelector('.theme-toggle')?.textContent?.trim() || ''
+    const themeToggle = document.querySelector(THEME)?.getAttribute('aria-label') || ''
+    const themeToggleText = document.querySelector(THEME)?.textContent?.trim() || ''
     return {
       theme, stored, title, shell, homeStage, tree, sidebar, editorSection,
       editorValue: cmView ? cmView.state.doc.toString() : '',
@@ -151,7 +165,7 @@ async function readState(page) {
       themeToggleLabel: themeToggle,
       themeToggleText,
     }
-  })
+  }, DOM)
 }
 
 await rm(projectsRoot, { recursive: true, force: true })
@@ -197,7 +211,7 @@ try {
   })
 
   await page.goto(started.url.href, { waitUntil: 'domcontentloaded' })
-  await page.waitForFunction(() => document.title === 'DSH Editor' && Boolean(document.querySelector('.shell')), undefined, { timeout: 45_000 })
+  await page.waitForFunction(({ SHELL }) => document.title === 'DSH Editor' && Boolean(document.querySelector(SHELL)), DOM, { timeout: 45_000 })
   await page.screenshot({ path: resolve(output, '00-initial.png') })
   await dismissNativeOnboarding(page)
   // The theme is applied by the useTheme hook's useEffect, which only fires
@@ -241,7 +255,7 @@ try {
   if (homeState.tree) failures.push('tree should not be present on home')
 
   // The native settings trigger must exist in the topbar so Ctrl+, can fire.
-  const settingsTriggerCount = await page.locator('.native-settings-control button[aria-haspopup="dialog"]').count()
+  const settingsTriggerCount = await page.locator(S.nativeSettingsTrigger).count()
   if (!settingsTriggerCount) failures.push('native settings trigger missing from topbar')
 
   // The DeepSeek Harness "Internal Testing Notice" (内测声明) overlay can
@@ -255,25 +269,25 @@ try {
   await newProject.waitFor({ state: 'visible' })
   await newProject.getByLabel('作品名称').fill('core-loop-workspace')
   await newProject.getByRole('button', { name: '创建', exact: true }).click()
-  await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+  await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
   await waitFor(async () => exists(targetWorkspace), 'new project home directory created')
   if (await exists(resolve(targetWorkspace, '项目总览.md'))) failures.push('new project should not pre-seed 项目总览.md')
   await waitFor(async () => exists(resolve(targetWorkspace, 'AGENTS.md')), 'new project root rules created')
-  await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
+  await page.locator(S.treeEmpty).waitFor({ state: 'visible', timeout: 20_000 })
 
   // An initialized work contains only the app-owned AGENTS.md until the
   // author creates the first document. Reopening it from Recent must return
   // to the empty workbench instead of reporting that no manuscript was found.
   await page.getByRole('button', { name: '作品菜单' }).click()
   await page.getByRole('menuitem', { name: '返回作品列表' }).click()
-  await page.locator('.home-stage').waitFor({ state: 'visible' })
-  await page.locator('.home-recent').getByRole('button', { name: /core-loop-workspace/ }).first().click()
-  await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
-  await page.locator('.tree-empty').waitFor({ state: 'visible', timeout: 20_000 })
+  await page.locator(S.homeStage).waitFor({ state: 'visible' })
+  await page.locator(S.homeRecent).getByRole('button', { name: /core-loop-workspace/ }).first().click()
+  await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
+  await page.locator(S.treeEmpty).waitFor({ state: 'visible', timeout: 20_000 })
 
   // Top bar inventory: only the four chrome buttons that survived the refactor.
   // Use the semantic role="banner" to target the main header uniquely.
-  const chromeHeader = page.locator('.chrome[role="banner"]')
+  const chromeHeader = page.locator(S.chrome)
   await chromeHeader.screenshot({ path: resolve(output, '01-chrome.png') })
   // The merged workspace menu is a <summary role="button"> with an aria-label.
   // The theme toggle is matched by its stable .theme-toggle class because the
@@ -283,7 +297,7 @@ try {
     const present = await chromeHeader.getByRole('button', { name: label }).count()
     if (!present) failures.push(`topbar is missing ${label}`)
   }
-  if (!(await chromeHeader.locator('.theme-toggle').count())) {
+  if (!(await chromeHeader.locator(S.themeToggle).count())) {
     failures.push('topbar is missing theme toggle')
   }
   for (const removed of ['作品快照', '导入作品', '导出 Markdown', '导出 TXT', '管理当前作品', '返回作品列表']) {
@@ -300,11 +314,11 @@ try {
     if (await exists(resolve(targetWorkspace, label))) {
       failures.push(`new project should not pre-create ${label}`)
     }
-    if (await page.locator('.tree').getByText(label, { exact: true }).count()) {
+    if (await page.locator(S.tree).getByText(label, { exact: true }).count()) {
       failures.push(`preset directory leaked into new-project tree: ${label}`)
     }
   }
-  const tree = page.locator('.tree')
+  const tree = page.locator(S.tree)
   const treeBox = await tree.boundingBox()
   if (!treeBox) failures.push('tree missing after new project')
   else {
@@ -318,23 +332,23 @@ try {
       await createFolder.getByLabel('文件夹名称').fill('正文')
       await createFolder.getByRole('button', { name: '创建', exact: true }).click()
       await createFolder.waitFor({ state: 'detached', timeout: 15_000 })
-      await page.locator('.tree-row').filter({ hasText: '正文' }).first().waitFor({ state: 'visible', timeout: 20_000 })
+      await page.locator(S.treeRow).filter({ hasText: '正文' }).first().waitFor({ state: 'visible', timeout: 20_000 })
     }
   }
-  await page.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
+  await page.locator(S.treeRow).filter({ hasText: '正文' }).first().hover()
   if (!(await page.getByRole('button', { name: '在 正文 中新建文件', exact: true }).isVisible())) failures.push('folder create-file action missing')
 
   // Create and save through the real author workflow before theme/navigation checks.
-  await page.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
+  await page.locator(S.treeRow).filter({ hasText: '正文' }).first().hover()
   await page.getByRole('button', { name: '在 正文 中新建文件', exact: true }).click()
   const createFile = page.getByRole('dialog', { name: '新建文件', exact: true })
   await createFile.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001')
   await createFile.getByRole('button', { name: '创建', exact: true }).click()
-  const editor = page.getByTestId('paper-editor').locator('.cm-content')
+  const editor = page.locator(S.paperEditor).locator(S.cmContent)
   await editor.click()
   await page.keyboard.insertText('核心闭环保存验证。')
   await page.keyboard.press('Control+s')
-  await page.getByTestId('paper-save-state').filter({ hasText: '已保存' }).waitFor()
+  await page.locator(S.paperSaveState).filter({ hasText: '已保存' }).waitFor()
   const savedChapter = await readFile(resolve(targetWorkspace, '正文', '001.md'), 'utf8')
   if (!savedChapter.includes('核心闭环保存验证。')) throw new Error('core-loop chapter save missing on disk')
 
@@ -345,26 +359,26 @@ try {
 
   // Open overview panel via Ctrl+Shift+O
   await page.keyboard.press('Control+Shift+o')
-  const overviewPanel = page.getByTestId('overview-panel')
+  const overviewPanel = page.locator(S.overviewPanel)
   await overviewPanel.waitFor({ state: 'visible', timeout: 5_000 })
 
   // Wait for real data load (not loading, not error)
   // overview state: undefined=loading, null=failed, object=loaded
   // Success: .overview-body appears AND .overview-loading disappears
-  await page.waitForFunction(() => {
-    const panel = document.querySelector('[data-testid="overview-panel"]')
+  await page.waitForFunction(({ OVERVIEW, OVERVIEW_BODY, OVERVIEW_LOADING }) => {
+    const panel = document.querySelector(OVERVIEW)
     if (!panel) return false
     // Must have loaded body
-    if (!panel.querySelector('.overview-body')) return false
+    if (!panel.querySelector(OVERVIEW_BODY)) return false
     // Must not be in loading state
-    if (panel.querySelector('.overview-loading')) return false
+    if (panel.querySelector(OVERVIEW_LOADING)) return false
     return true
-  }, undefined, { timeout: 10_000 })
+  }, DOM, { timeout: 10_000 })
 
   await page.screenshot({ path: resolve(output, '03-overview-panel.png') })
 
   // Verify header
-  const overviewTitle = await overviewPanel.locator('h2').innerText()
+  const overviewTitle = await overviewPanel.locator(S.h2).innerText()
   if (!overviewTitle.includes('文档概览')) failures.push(`overview panel title unexpected: ${overviewTitle}`)
 
   // Close via close button and verify detachment
@@ -375,27 +389,27 @@ try {
 
   // Open proofread panel via Ctrl+Shift+L
   await page.keyboard.press('Control+Shift+l')
-  const proofreadPanel = page.getByTestId('editor-proofread-panel')
+  const proofreadPanel = page.locator(S.editorProofreadPanel)
   await proofreadPanel.waitFor({ state: 'visible', timeout: 5_000 })
 
   // Wait for scan complete (not busy loading)
   // proofread state: result=null initially, then object after scan
   // Success: .proofread-summary appears AND .proofread-loading disappears
-  await page.waitForFunction(() => {
-    const panel = document.querySelector('[data-testid="editor-proofread-panel"]')
+  await page.waitForFunction(({ PROOFREAD, PROOFREAD_SUMMARY, PROOFREAD_LOADING }) => {
+    const panel = document.querySelector(PROOFREAD)
     if (!panel) return false
     // Must have summary (scan completed)
-    if (!panel.querySelector('.proofread-summary')) return false
+    if (!panel.querySelector(PROOFREAD_SUMMARY)) return false
     // Must not be in loading state during initial scan
-    const loading = panel.querySelector('.proofread-loading[role="status"]')
-    if (loading && !panel.querySelector('.proofread-summary')) return false
+    const loading = panel.querySelector(PROOFREAD_LOADING)
+    if (loading && !panel.querySelector(PROOFREAD_SUMMARY)) return false
     return true
-  }, undefined, { timeout: 10_000 })
+  }, DOM, { timeout: 10_000 })
 
   await page.screenshot({ path: resolve(output, '04-proofread-panel.png') })
 
   // Verify header
-  const proofreadTitle = await proofreadPanel.locator('h2').innerText()
+  const proofreadTitle = await proofreadPanel.locator(S.h2).innerText()
   if (!proofreadTitle.includes('文稿校对')) failures.push(`proofread panel title unexpected: ${proofreadTitle}`)
 
   // Close via close button and verify detachment
@@ -409,22 +423,22 @@ try {
   // Open via command palette trigger button, then type and select "记忆维护"
 
   // Close chat sidebar if it's open to ensure command palette can be triggered
-  if (await page.locator('aside.chat').isVisible().catch(() => false)) {
+  if (await page.locator(S.chatRail).isVisible().catch(() => false)) {
     await page.keyboard.press('Control+Alt+b')
-    await page.locator('aside.chat').waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => undefined)
+    await page.locator(S.chatRail).waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => undefined)
   }
 
-  await chromeHeader.locator('button.palette-trigger').click()
-  const commandPalette = page.locator('.palette-content')
+  await chromeHeader.locator(S.paletteTriggerButton).click()
+  const commandPalette = page.locator(S.paletteContent)
   await commandPalette.waitFor({ state: 'visible', timeout: 5_000 })
 
   // Type command to filter
-  const commandInput = commandPalette.locator('input.palette-input')
+  const commandInput = commandPalette.locator(S.paletteInputField)
   await commandInput.fill('记忆维护')
   await page.waitForTimeout(300)
 
   // Find and click the memory command item
-  const memoryCommand = commandPalette.locator('.palette-item').filter({ hasText: '记忆维护' })
+  const memoryCommand = commandPalette.locator(S.paletteItem).filter({ hasText: '记忆维护' })
   await memoryCommand.waitFor({ state: 'visible', timeout: 3_000 })
   const memoryCommandDisabled = await memoryCommand.getAttribute('aria-disabled')
   if (memoryCommandDisabled === 'true') failures.push('memory command is disabled in palette')
@@ -432,7 +446,7 @@ try {
   await commandPalette.waitFor({ state: 'detached', timeout: 3_000 })
 
   // Wait for memory panel to open in sidebar
-  const memoryPanel = page.getByTestId('memory-panel')
+  const memoryPanel = page.locator(S.memoryPanel)
   await memoryPanel.waitFor({ state: 'visible', timeout: 5_000 })
 
   // Wait for data load or empty state (not loading, not error)
@@ -440,26 +454,26 @@ try {
   // Success: either .memory-list (has items) OR .memory-status with empty text (no role=alert)
   // Loading: .memory-status[role=status] with skeleton
   // Error: .memory-status with role=alert
-  await page.waitForFunction(() => {
-    const panel = document.querySelector('[data-testid="memory-panel"]')
+  await page.waitForFunction(({ MEMORY, MEMORY_LIST, MEMORY_STATUS }) => {
+    const panel = document.querySelector(MEMORY)
     if (!panel) return false
     // Accept loaded list
-    if (panel.querySelector('.memory-list')) return true
+    if (panel.querySelector(MEMORY_LIST)) return true
     // Accept empty state: .memory-status without role=alert
-    const status = panel.querySelector('.memory-status')
+    const status = panel.querySelector(MEMORY_STATUS)
     if (status && !status.hasAttribute('role')) return true
     // Reject loading (role=status with skeleton) and error (role=alert)
     return false
-  }, undefined, { timeout: 10_000 })
+  }, DOM, { timeout: 10_000 })
 
   await page.screenshot({ path: resolve(output, '05-memory-panel.png') })
 
   // Verify header
-  const memoryTitle = await memoryPanel.locator('h2').innerText()
+  const memoryTitle = await memoryPanel.locator(S.h2).innerText()
   if (!memoryTitle.includes('记忆')) failures.push(`memory panel title unexpected: ${memoryTitle}`)
 
   // Verify empty state shows correct message (not error)
-  const memoryStatus = memoryPanel.locator('.memory-status')
+  const memoryStatus = memoryPanel.locator(S.memoryStatus)
   if (await memoryStatus.count()) {
     const hasAlert = await memoryStatus.evaluate(el => el.hasAttribute('role') && el.getAttribute('role') === 'alert')
     if (hasAlert) {
@@ -487,7 +501,7 @@ try {
   if (darkStored !== 'dark') failures.push(`localStorage theme did not persist dark; got ${darkStored}`)
   const darkToggle = await chromeHeader.getByRole('button', { name: /主题（当前深色）/ }).count()
   if (!darkToggle) failures.push('theme toggle did not re-label itself as 当前深色 after switching to dark')
-  await page.waitForFunction(() => document.querySelector('.shell-theme')?.classList.contains('dark'))
+  await page.waitForFunction(({ SHELL_THEME }) => document.querySelector(SHELL_THEME)?.classList.contains('dark'), DOM)
   await page.waitForTimeout(350)
   await page.screenshot({ path: resolve(output, '06-editor-dark.png') })
 
@@ -505,10 +519,10 @@ try {
   // workspace is still on disk and openable (it has a .md file from the
   // author-created 正文/001.md above) the shell may re-enter the workbench
   // directly. Either way, the tree must be in scope; handle both landings.
-  if (await page.locator('.home-stage').isVisible().catch(() => false)) {
-    await page.locator('.home-recent').getByRole('button', { name: /core-loop-workspace/ }).first().click()
+  if (await page.locator(S.homeStage).isVisible().catch(() => false)) {
+    await page.locator(S.homeRecent).getByRole('button', { name: /core-loop-workspace/ }).first().click()
   }
-  await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+  await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
 
   const reloadedState = await readState(page)
   if (reloadedState.theme !== 'dark') failures.push(`theme did not survive reload; got ${reloadedState.theme}`)
@@ -524,7 +538,7 @@ try {
   // bare Ctrl+L is the desktop-only binding).
   const launcher = page.getByRole('button', { name: '打开写作搭档' })
   if (await launcher.isVisible().catch(() => false)) await launcher.click()
-  await page.locator('aside.chat').waitFor({ state: 'visible', timeout: 10_000 })
+  await page.locator(S.chatRail).waitFor({ state: 'visible', timeout: 10_000 })
   await page.keyboard.press('Control+Alt+l')
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '输入消息')
   const composer = page.getByRole('textbox', { name: '输入消息' })
@@ -537,22 +551,22 @@ try {
   // sidebars (web bindings; DSH 0.2.0 matches platform bindings strictly).
   await composer.fill('不要丢失的草稿')
   await page.keyboard.press('Control+Alt+b')
-  await page.locator('.sidebar').waitFor({ state: 'detached' })
+  await page.locator(S.sidebar).waitFor({ state: 'detached' })
   await page.keyboard.press('Control+Alt+f')
-  await page.locator('.shell.focus-mode').waitFor({ state: 'visible' })
+  await page.locator(S.shellFocus).waitFor({ state: 'visible' })
   await page.screenshot({ path: resolve(output, '07-focus-mode.png') })
   // In focus mode, Ctrl+Alt+B exits focus mode AND reopens the sidebar in one
   // keystroke (root.ts:231). Reusing it is more realistic than toggling
   // focus mode off and then asking the test to find a hidden sidebar.
   await page.keyboard.press('Control+Alt+b')
-  await page.locator('.shell.focus-mode').waitFor({ state: 'detached' })
-  await page.locator('.sidebar').waitFor({ state: 'visible' })
+  await page.locator(S.shellFocus).waitFor({ state: 'detached' })
+  await page.locator(S.sidebar).waitFor({ state: 'visible' })
   if (await composer.inputValue() !== '不要丢失的草稿') failures.push('composer draft lost across focus toggle')
   await composer.fill('')
 
   // Negative chat leak: without a model, the chat rail should not show any
   // internal strings even after a turn fails.
-  const chatText = await page.locator('aside.chat').innerText()
+  const chatText = await page.locator(S.chatRail).innerText()
   for (const leaked of ['novel_propose', 'novel_knowledge', '.dsh-editor/作品索引.md', '为当前工作区建立作品索引', '状态已更新。']) {
     if (chatText.includes(leaked)) failures.push(`chat rail leaked internal string: ${leaked}`)
   }
@@ -562,9 +576,9 @@ try {
   // the existing files and the editor can restore its current chapter.)
   await page.getByRole('button', { name: '作品菜单' }).click()
   await page.getByRole('menuitem', { name: '返回作品列表' }).click()
-  await page.locator('.home-stage').waitFor({ state: 'visible' })
-  await page.locator('.home-recent').getByRole('button', { name: /core-loop-workspace/ }).first().click()
-  await page.locator('.tree').waitFor({ state: 'visible', timeout: 30_000 })
+  await page.locator(S.homeStage).waitFor({ state: 'visible' })
+  await page.locator(S.homeRecent).getByRole('button', { name: /core-loop-workspace/ }).first().click()
+  await page.locator(S.tree).waitFor({ state: 'visible', timeout: 30_000 })
 
   // Final screenshot: full workbench in light theme for the visual reference set.
   await page.screenshot({ path: resolve(output, '08-workbench-light.png'), fullPage: true })
@@ -575,7 +589,7 @@ try {
     const pages = browser.contexts().flatMap((context) => context.pages())
     for (const page of pages) {
       await page.screenshot({ path: resolve(output, 'failure.png'), fullPage: true }).catch(() => undefined)
-      await writeFile(resolve(output, 'failure.txt'), await page.locator('body').innerText()).catch(() => undefined)
+      await writeFile(resolve(output, 'failure.txt'), await page.locator(S.body).innerText()).catch(() => undefined)
     }
   }
   failures.push(error instanceof Error ? error.stack || error.message : String(error))

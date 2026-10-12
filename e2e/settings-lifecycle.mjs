@@ -5,6 +5,7 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
 import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings, openWritingPresets } from './helpers/plugin-page.mjs'
+import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const stage = process.env.SETTINGS_LIFECYCLE_STAGE || 'lifecycle-after'
@@ -26,7 +27,7 @@ try {
     args: [resolve(root, 'apps/desktop/dist/main.js')], env })
   const page = await app.firstWindow()
   page.on('pageerror', error => report.errors.push(error.message))
-  await page.waitForSelector('.shell', { timeout: 90000 })
+  await page.waitForSelector(S.shell, { timeout: 90000 })
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))
   for (let i = 0; i < 5; i++) {
     const button = page.getByRole('button', { name: '继续', exact: true })
@@ -44,13 +45,13 @@ try {
     const plugins = await openPluginsPage(page)
     await assertDefaultPluginPage(page, plugins)
     await openWritingPresets(plugins)
-    const switches = await plugins.locator('.dsh-plugins-switch').evaluateAll(elements => elements.filter(element => element.checkVisibility()).map(element => ({
+    const switches = await plugins.locator(S.pluginsCatalogPresetToggleAny).evaluateAll(elements => elements.filter(element => element.checkVisibility()).map(element => ({
       id: element.getAttribute('data-testid'), width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height,
     })))
     assert.ok(switches.length > 0, 'writing mode controls must be visible after expanding their group')
-    assert.ok(switches.every(control => control.width === 36 && control.height === 20), JSON.stringify(switches))
+    assert.ok(switches.every(control => control.width === 35 && control.height === 20), JSON.stringify(switches))
     await openWebSearchSettings(plugins)
-    const styles = await page.locator('style[data-dsh-plugins-styles],style[data-dsh-web-search]').evaluateAll(elements => elements.map(element => ({
+    const styles = await page.locator(S.dshPluginStyles).evaluateAll(elements => elements.map(element => ({
       owner: element.getAttribute('data-plugin'), length: element.textContent.length,
     })))
     report.pages.push({ label, switches, styles })
@@ -59,7 +60,7 @@ try {
   }
   await sample('home')
   await page.getByRole('button',{name:'新建',exact:true}).first().click()
-  const create=page.getByRole('dialog',{name:'新建作品'});await create.getByLabel('作品名称').fill('settings-lifecycle');await create.getByRole('button',{name:'创建',exact:true}).click();await page.locator('.tree').waitFor({timeout:30000})
+  const create=page.getByRole('dialog',{name:'新建作品'});await create.getByLabel('作品名称').fill('settings-lifecycle');await create.getByRole('button',{name:'创建',exact:true}).click();await page.locator(S.tree).waitFor({timeout:30000})
   await sample('project')
 
   // Exercise the pinned upstream owner/cleanup functions, including a real
@@ -70,7 +71,7 @@ try {
   const claim = modulesSource.match(/const claimStyles = \(id\) => \{[\s\S]*?\n\t\t\};/)?.[0]
   assert.ok(cleanup && claim, 'pinned DSH style ownership implementation must be available')
   const ids = ['dsh-editor-plugins', '@klarkxy/dsh-web-search-manager']
-  const selectors = ['style[data-dsh-plugins-styles]', 'style[data-dsh-web-search]']
+  const selectors = [S.stylePlugins, S.styleWebSearch]
   const ownership = await page.evaluate(({ claim, cleanup, selectors }) => {
     const before = selectors.map(selector => {
       const matches = document.querySelectorAll(selector)

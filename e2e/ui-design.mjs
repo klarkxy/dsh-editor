@@ -4,6 +4,7 @@ import { readFile, mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { chromium } from 'playwright'
+import { S } from './helpers/selectors.mjs'
 
 async function buttonPaint(page, name) {
   return page.getByRole('button', { name, exact: true }).evaluate(el => {
@@ -67,9 +68,9 @@ async function assertPrimaryButtons(page, expected) {
  * ACCENT_SOLIDS fills, not Radix's accent-9, which cannot carry a white label.
  */
 async function assertAccentRepaintsPrimary(page, colorName, expected) {
-  await page.evaluate(name => {
-    document.querySelector('html[data-dsh-ui] .radix-themes').setAttribute('data-accent-color', name)
-  }, colorName)
+  await page.evaluate(({ sel, name }) => {
+    document.querySelector(sel).setAttribute('data-accent-color', name)
+  }, { sel: S.radixThemes, name: colorName })
   // Buttons transition background-color, so the first frame after the swap is
   // still the previous accent. Wait for the fill to settle before reading it.
   await page.waitForFunction(expected => {
@@ -119,8 +120,8 @@ async function assertRoundShapes(page) {
     assert.equal(item.missing, undefined, item.selector)
     assert.equal(item.shape, 'round', `${item.selector} ${item.shape}`)
   }
-  assert.equal(await page.locator('.composer').evaluate(el => getComputedStyle(el).cornerShape), 'superellipse(1.5)')
-  assert.notEqual(await page.locator('.plugin-sentinel').evaluate(el => getComputedStyle(el).cornerShape), 'superellipse(1.5)')
+  assert.equal(await page.locator(S.composer).evaluate(el => getComputedStyle(el).cornerShape), 'superellipse(1.5)')
+  assert.notEqual(await page.locator(S.pluginSentinel).evaluate(el => getComputedStyle(el).cornerShape), 'superellipse(1.5)')
 }
 
 async function assertSave(page, background, text) {
@@ -165,13 +166,13 @@ try {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(`http://127.0.0.1:${server.address().port}/`)
-  await page.locator('html[data-dsh-ui="dsh-official"]').waitFor()
+  await page.locator(S.dshUiHtml).waitFor()
   const paper = page.getByRole('textbox', { name: 'Manuscript fixture' })
   await paper.fill('保留的正文，切换主题不应丢失。')
   await paper.evaluate(el => { window.__paperNode = el; el.setSelectionRange(2, 5) })
-  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(244, 244, 243)')
-  assert.equal(await page.locator('.plugin-sentinel').evaluate(el => getComputedStyle(el).borderRadius), '2px')
-  const readingType = await page.locator('.chat-markdown').evaluate(el => {
+  assert.equal(await page.locator(S.chat).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(244, 244, 243)')
+  assert.equal(await page.locator(S.pluginSentinel).evaluate(el => getComputedStyle(el).borderRadius), '2px')
+  const readingType = await page.locator(S.chatMarkdown).evaluate(el => {
     const paragraph = getComputedStyle(el.querySelector('p'))
     return {size:paragraph.fontSize,weight:paragraph.fontWeight,lineHeight:paragraph.lineHeight,heading:getComputedStyle(el.querySelector('h2')).fontSize,listSpacing:getComputedStyle(el.querySelector('li')).marginTop}
   })
@@ -201,7 +202,7 @@ try {
   await page.keyboard.press('Escape')
   await lightDialog.waitFor({ state: 'hidden' })
   await page.getByRole('button', { name: /DSH Editor/ }).click()
-  const menu = page.locator('.rt-DropdownMenuContent')
+  const menu = page.locator(S.dropdownMenuContent)
   await menu.waitFor()
   assert.match(await menu.evaluate(el => getComputedStyle(el).backdropFilter), /blur/)
   assert.equal(await menu.evaluate(el => getComputedStyle(el).borderTopWidth), '0px')
@@ -209,11 +210,11 @@ try {
   await menu.waitFor({ state: 'hidden' })
   await page.screenshot({ path: fileURLToPath(new URL('light-1440.png', out)), fullPage: true })
   await page.getByRole('button', { name: 'Toggle theme' }).click()
-  await page.waitForFunction(() => {
-    const chat = document.querySelector('.chat')
+  await page.waitForFunction((sel) => {
+    const chat = document.querySelector(sel)
     return chat && getComputedStyle(chat).backgroundColor === 'rgb(38, 38, 38)'
-  })
-  assert.equal(await page.locator('.chat').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(38, 38, 38)')
+  }, S.chat)
+  assert.equal(await page.locator(S.chat).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(38, 38, 38)')
   assert(await paper.evaluate(el => el === window.__paperNode))
   assert.equal(await paper.inputValue(), '保留的正文，切换主题不应丢失。')
   await assertPrimaryButtons(page, {
@@ -228,7 +229,7 @@ try {
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(46, 46, 46)')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopWidth), '0px')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopLeftRadius), '28px')
-  assert.equal(await page.locator('.rt-BaseDialogOverlay').evaluate(el => getComputedStyle(el, '::before').backdropFilter), 'none')
+  assert.equal(await page.locator(S.baseDialogOverlay).evaluate(el => getComputedStyle(el, '::before').backdropFilter), 'none')
   await assertSave(page, 'rgb(122, 170, 255)', 'rgb(15, 17, 21)')
   await page.screenshot({ path: fileURLToPath(new URL('dark-portal.png', out)), fullPage: true })
   await page.keyboard.press('Escape')
@@ -262,12 +263,12 @@ try {
   for (const width of [1440, 1024, 760, 390]) {
     await page.setViewportSize({ width, height: 900 })
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow at ${width}`)
-    const box = await page.locator('.composer').boundingBox()
+    const box = await page.locator(S.composer).boundingBox()
     assert(box && box.x >= 0 && box.x + box.width <= width + 1, `composer at ${width}`)
     await page.screenshot({ path: fileURLToPath(new URL(`dark-${width}.png`, out)), fullPage: true })
   }
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  assert.equal(await page.locator('.composer').evaluate(el => getComputedStyle(el).transitionDuration), '0s')
+  assert.equal(await page.locator(S.composer).evaluate(el => getComputedStyle(el).transitionDuration), '0s')
   assert.deepEqual(errors, [])
   console.log('UI browser contracts passed. This is a component fixture, not a full Electron/runtime acceptance test.')
 } finally {

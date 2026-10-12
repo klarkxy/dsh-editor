@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 import { loadPluginManifests, publicPackages } from '../scripts/plugin-manifest.mjs'
+import { S } from './helpers/selectors.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const pluginManifests = loadPluginManifests(root)
@@ -532,15 +533,15 @@ function assertStandaloneOverlayChrome(chrome, label, expectDark) {
 }
 
 async function readProofreadPlacement(page) {
-  return page.evaluate(() => {
+  return page.evaluate((sel) => {
     const rect = (el) => {
       if (!el) return null
       const box = el.getBoundingClientRect()
       return { x: box.x, y: box.y, width: box.width, height: box.height, top: box.top, right: box.right, bottom: box.bottom, left: box.left }
     }
-    const dock = document.querySelector('.dsh-proofread-dock')
+    const dock = document.querySelector(sel.dock)
     const style = dock ? getComputedStyle(dock) : null
-    const panel = document.querySelector('[data-testid="proofread-panel"]')
+    const panel = document.querySelector(sel.panel)
     const panelStyle = panel ? getComputedStyle(panel) : null
     return {
       space4: dock ? getComputedStyle(dock).getPropertyValue('--space-4').trim() : '',
@@ -553,19 +554,19 @@ async function readProofreadPlacement(page) {
       panel: panelStyle ? { position: panelStyle.position, top: panelStyle.top, bottom: panelStyle.bottom, right: panelStyle.right } : null,
       boxes: {
         dock: rect(dock),
-        toggle: rect(document.querySelector('[data-testid="proofread-open"]')),
+        toggle: rect(document.querySelector(sel.open)),
         panel: rect(panel),
-        check: rect(document.querySelector('[data-testid="proofread-check"]')),
+        check: rect(document.querySelector(sel.check)),
       },
     }
-  })
+  }, { dock: S.proofreadDock, panel: S.proofreadPanel, open: S.proofreadOpen, check: S.proofreadCheck })
 }
 
 async function assertProofreadStandalonePlacement(page, label) {
   const viewport = page.viewportSize()
   if (!viewport) throw new Error(`${label}: missing viewport`)
-  await page.getByTestId('proofread-panel').waitFor({ state: 'visible' })
-  await page.getByTestId('proofread-check').waitFor({ state: 'visible' })
+  await page.locator(S.proofreadPanel).waitFor({ state: 'visible' })
+  await page.locator(S.proofreadCheck).waitFor({ state: 'visible' })
   const placement = await readProofreadPlacement(page)
   if (!placement.dock || !placement.dockVars) throw new Error(`${label}: missing .dsh-proofread-dock`)
   if (placement.dockVars.position || placement.dockVars.right || placement.dockVars.bottom) {
@@ -588,9 +589,9 @@ async function assertProofreadStandalonePlacement(page, label) {
   const expectDark = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
   const chrome = assertStandaloneOverlayChrome(
     await readOverlayChrome(page, {
-      panel: '[data-testid="proofread-panel"]',
+      panel: S.proofreadPanel,
       header: '.dsh-proofread-panel-header',
-      button: '[data-testid="proofread-check"]',
+      button: S.proofreadCheck,
       input: '[data-testid="proofread-input"]',
     }),
     label,
@@ -600,15 +601,15 @@ async function assertProofreadStandalonePlacement(page, label) {
 }
 
 async function readZhihuPlacement(page) {
-  return page.evaluate(() => {
+  return page.evaluate((sel) => {
     const rect = (el) => {
       if (!el) return null
       const box = el.getBoundingClientRect()
       return { x: box.x, y: box.y, width: box.width, height: box.height, top: box.top, right: box.right, bottom: box.bottom, left: box.left }
     }
-    const dock = document.querySelector('.zhihu-dock')
+    const dock = document.querySelector(sel.dock)
     const style = dock ? getComputedStyle(dock) : null
-    const panel = document.querySelector('[data-testid="zhihu-panel"]')
+    const panel = document.querySelector(sel.panel)
     const panelStyle = panel ? getComputedStyle(panel) : null
     return {
       space4: dock ? getComputedStyle(dock).getPropertyValue('--space-4').trim() : '',
@@ -621,19 +622,19 @@ async function readZhihuPlacement(page) {
       panel: panelStyle ? { position: panelStyle.position, top: panelStyle.top, bottom: panelStyle.bottom, right: panelStyle.right } : null,
       boxes: {
         dock: rect(dock),
-        toggle: rect(document.querySelector('[data-testid="zhihu-open"]')),
+        toggle: rect(document.querySelector(sel.open)),
         panel: rect(panel),
-        search: rect(document.querySelector('[data-testid="zhihu-search"]')),
+        search: rect(document.querySelector(sel.search)),
       },
     }
-  })
+  }, { dock: S.zhihuDock, panel: S.zhihuPanel, open: S.zhihuOpen, search: S.zhihuSearch })
 }
 
 async function assertZhihuStandalonePlacement(page, label) {
   const viewport = page.viewportSize()
   if (!viewport) throw new Error(`${label}: missing viewport`)
-  await page.getByTestId('zhihu-panel').waitFor({ state: 'visible' })
-  await page.getByTestId('zhihu-search').waitFor({ state: 'visible' })
+  await page.locator(S.zhihuPanel).waitFor({ state: 'visible' })
+  await page.locator(S.zhihuSearch).waitFor({ state: 'visible' })
   const placement = await readZhihuPlacement(page)
   if (!placement.dock || !placement.dockVars) throw new Error(`${label}: missing .zhihu-dock`)
   if (placement.dockVars.position || placement.dockVars.right || placement.dockVars.bottom) {
@@ -656,9 +657,9 @@ async function assertZhihuStandalonePlacement(page, label) {
   const expectDark = await page.evaluate(() => document.body.hasAttribute('data-ds-dark-theme'))
   const chrome = assertStandaloneOverlayChrome(
     await readOverlayChrome(page, {
-      panel: '[data-testid="zhihu-panel"]',
+      panel: S.zhihuPanel,
       header: '.zhihu-panel-header',
-      button: '[data-testid="zhihu-search"]',
+      button: S.zhihuSearch,
       input: '[data-testid="zhihu-query"]',
     }),
     label,
@@ -707,60 +708,60 @@ async function probeWeb(browser, name, expectedPlugins, index) {
       await configureLater.click()
       await page.waitForTimeout(500)
     }
-    const overlay = page.getByTestId('manuscript-overlay')
+    const overlay = page.locator(S.manuscriptOverlay)
     const expectsManuscript = expectedPlugins.includes('dsh-manuscript')
     if (expectsManuscript) {
       await overlay.waitFor({ state: 'visible', timeout: 15_000 })
       if ((await overlay.getAttribute('data-state')) !== 'closed') throw new Error(`${name}: manuscript drawer did not start closed`)
-      const openButton = page.getByTestId('manuscript-open')
+      const openButton = page.locator(S.manuscriptOpen)
       await openButton.waitFor({ state: 'visible', timeout: 5_000 })
       await openButton.click({ timeout: 5_000 })
-      await page.waitForFunction(() => document.querySelector('[data-testid="manuscript-overlay"]')?.getAttribute('data-state') === 'open')
+      await page.waitForFunction((sel) => document.querySelector(sel)?.getAttribute('data-state') === 'open', S.manuscriptOverlay)
     } else {
       await page.waitForTimeout(3_000)
       if (await overlay.count()) throw new Error(`${name}: manuscript UI remained after removal`)
     }
-    if (expectsManuscript) await page.getByTestId('manuscript-close').click();
+    if (expectsManuscript) await page.locator(S.manuscriptClose).click();
     const expectsProofread = expectedPlugins.includes('dsh-proofread');
     if (expectsProofread) {
-      await page.getByTestId('proofread-open').click();
-      await page.getByTestId('proofread-panel').waitFor();
-      await page.getByTestId('proofread-input').fill('我们以经做好准备。');
-      await page.getByTestId('proofread-input').press('Control+Enter');
-      await page.getByTestId('proofread-result').getByText('建议：已经',{exact:true}).waitFor();
+      await page.locator(S.proofreadOpen).click();
+      await page.locator(S.proofreadPanel).waitFor();
+      await page.locator(S.proofreadInput).fill('我们以经做好准备。');
+      await page.locator(S.proofreadInput).press('Control+Enter');
+      await page.locator(S.proofreadResult).getByText('建议：已经',{exact:true}).waitFor();
       if (name === '06-proofread-only') {
-        const panel = page.getByTestId('proofread-panel')
+        const panel = page.locator(S.proofreadPanel)
         const placements = {}
         placements['1280x800'] = await assertProofreadStandalonePlacement(page, `${name} 1280x800`)
         await assertStandaloneThemes(page, name, [
-          { label: 'finding-message', locator: panel.locator('.dsh-proofread-finding-message').first() },
-          { label: 'result-summary', locator: panel.locator('.dsh-proofread-result-summary').first() },
-          { label: 'input', locator: page.getByTestId('proofread-input') },
+          { label: 'finding-message', locator: panel.locator(S.proofreadFindingMessage).first() },
+          { label: 'result-summary', locator: panel.locator(S.proofreadResultSummary).first() },
+          { label: 'input', locator: page.locator(S.proofreadInput) },
         ], async (theme) => {
           placements[theme] = await assertProofreadStandalonePlacement(page, `${name} ${theme}`)
         })
         const state = report.states.find((item) => item.name === name)
         if (state) state.standaloneDock = placements
       }
-      await page.getByTestId('proofread-input').fill('今天晴天。');
-      boxInsideViewport(await page.getByTestId('proofread-check').boundingBox(), page.viewportSize(), `${name} proofread-check before click`)
-      await page.getByTestId('proofread-check').click();
-      await page.getByTestId('proofread-result').waitFor();
+      await page.locator(S.proofreadInput).fill('今天晴天。');
+      boxInsideViewport(await page.locator(S.proofreadCheck).boundingBox(), page.viewportSize(), `${name} proofread-check before click`)
+      await page.locator(S.proofreadCheck).click();
+      await page.locator(S.proofreadResult).waitFor();
       if (name === '06-proofread-only') {
         await page.setViewportSize({ width: 900, height: 640 })
         await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
         const narrow = await assertProofreadStandalonePlacement(page, `${name} 900x640`)
         const state = report.states.find((item) => item.name === name)
         if (state?.standaloneDock) state.standaloneDock['900x640'] = narrow
-        await page.getByTestId('proofread-input').fill('我们以经做好准备。')
-        await page.getByTestId('proofread-check').click()
-        await page.getByTestId('proofread-result').getByText('建议：已经', { exact: true }).waitFor()
+        await page.locator(S.proofreadInput).fill('我们以经做好准备。')
+        await page.locator(S.proofreadCheck).click()
+        await page.locator(S.proofreadResult).getByText('建议：已经', { exact: true }).waitFor()
         await page.setViewportSize({ width: 1280, height: 800 })
       }
-      await page.getByTestId('proofread-input').press('Escape');
-      await page.getByTestId('proofread-open').waitFor();
-      if (await page.getByTestId('proofread-open').count() !== 1) throw new Error('duplicate proofread contribution');
-    } else if (await page.getByTestId('proofread-open').count()) throw new Error('proofread entry survived removal');
+      await page.locator(S.proofreadInput).press('Escape');
+      await page.locator(S.proofreadOpen).waitFor();
+      if (await page.locator(S.proofreadOpen).count() !== 1) throw new Error('duplicate proofread contribution');
+    } else if (await page.locator(S.proofreadOpen).count()) throw new Error('proofread entry survived removal');
     const expectsZhihu = expectedPlugins.includes('@klarkxy/dsh-zhihu');
     if (expectsZhihu) {
       const callZhihu=async(method,payload)=>{const response=await page.request.post(`${origin}/zhihu/${method}`,{headers:{'content-type':'application/json'},data:{type:'client-request',rpcId:name,method,payload}});return (await response.json()).result};
@@ -774,34 +775,34 @@ async function probeWeb(browser, name, expectedPlugins, index) {
       if(!usage.ok||usage.value.days[0]?.calls!==1||usage.value.days[0]?.failures!==1)throw new Error('Zhihu usage lost or double-counted after restart/reinstall: '+JSON.stringify(usage));
       report.states.find(item=>item.name===name).zhihuUsageRetained=true;
 
-      await page.getByTestId('zhihu-open').click();
-      await page.getByTestId('zhihu-panel').waitFor();
+      await page.locator(S.zhihuOpen).click();
+      await page.locator(S.zhihuPanel).waitFor();
       if (name === '12-zhihu-only') {
         await page.route('**/zhihu/search', (route) => fulfillRpc(route, {
           ok: true,
           value: { items: [{ title: '合成资料', type: '回答', url: 'https://www.zhihu.com/x', summary: '合成摘要', votes: 0, comments: 0, author: '测试', editTime: '' }] },
         }))
         try {
-          const panel = page.getByTestId('zhihu-panel')
+          const panel = page.locator(S.zhihuPanel)
           const placements = {}
           placements['1280x800'] = await assertZhihuStandalonePlacement(page, `${name} 1280x800`)
-          await panel.getByTestId('zhihu-query').fill('合成查询')
-          boxInsideViewport(await panel.getByTestId('zhihu-search').boundingBox(), page.viewportSize(), `${name} zhihu-search before click`)
-          await panel.getByTestId('zhihu-search').click()
-          await panel.getByTestId('zhihu-results').waitFor()
+          await panel.locator(S.zhihuQuery).fill('合成查询')
+          boxInsideViewport(await panel.locator(S.zhihuSearch).boundingBox(), page.viewportSize(), `${name} zhihu-search before click`)
+          await panel.locator(S.zhihuSearch).click()
+          await panel.locator(S.zhihuResults).waitFor()
           await assertStandaloneThemes(page, name, [
-            { label: 'result-title', locator: panel.locator('.zhihu-result-title').first() },
-            { label: 'input', locator: panel.getByTestId('zhihu-query') },
-            { label: 'results-summary', locator: panel.locator('.zhihu-results-summary').first() },
+            { label: 'result-title', locator: panel.locator(S.zhihuResultTitle).first() },
+            { label: 'input', locator: panel.locator(S.zhihuQuery) },
+            { label: 'results-summary', locator: panel.locator(S.zhihuResultsSummary).first() },
           ], async (theme) => {
             placements[theme] = await assertZhihuStandalonePlacement(page, `${name} ${theme}`)
           })
           await page.setViewportSize({ width: 900, height: 640 })
           await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
           placements['900x640'] = await assertZhihuStandalonePlacement(page, `${name} 900x640`)
-          await panel.getByTestId('zhihu-query').fill('合成查询')
-          await panel.getByTestId('zhihu-search').click()
-          await panel.getByTestId('zhihu-results').waitFor()
+          await panel.locator(S.zhihuQuery).fill('合成查询')
+          await panel.locator(S.zhihuSearch).click()
+          await panel.locator(S.zhihuResults).waitFor()
           await page.setViewportSize({ width: 1280, height: 800 })
           const state = report.states.find((item) => item.name === name)
           if (state) state.standaloneDock = placements
@@ -809,10 +810,10 @@ async function probeWeb(browser, name, expectedPlugins, index) {
           await page.unroute('**/zhihu/search')
         }
       }
-      await page.getByTestId('zhihu-panel').press('Escape');
-      await page.getByTestId('zhihu-open').waitFor();
-      if (await page.getByTestId('zhihu-open').count() !== 1) throw new Error('duplicate zhihu contribution');
-    } else if (await page.getByTestId('zhihu-open').count()) throw new Error('zhihu entry survived removal');
+      await page.locator(S.zhihuPanel).press('Escape');
+      await page.locator(S.zhihuOpen).waitFor();
+      if (await page.locator(S.zhihuOpen).count() !== 1) throw new Error('duplicate zhihu contribution');
+    } else if (await page.locator(S.zhihuOpen).count()) throw new Error('zhihu entry survived removal');
     if (pageErrors.length) throw new Error(`${name}: browser errors: ${pageErrors.join(' | ')}`)
     await page.screenshot({ path: path.join(out, `${name}.png`) })
     report.states.find((item) => item.name === name).web = {

@@ -21,6 +21,7 @@ import { createRoot } from 'react-dom/client'
 import { ${editorModels ? 'EditorModelSettings' : 'WritingModelRoutes'} as Routes } from './packages/dsh-editor-shell/src/client/writing-model-routes.tsx'
 import { ShellTheme, radixThemesStyles } from './packages/dsh-editor-shell/src/client/ui/theme-root.tsx'
 import { redesignedStyles } from './packages/dsh-editor-shell/src/styles.ts'
+import { S } from './helpers/selectors.mjs'
 const catalog=[{provider:'fixture',model:'alpha',label:'Fixture · Alpha',efforts:[{id:'off',name:'Off'},{id:'high',name:'High'}]},{provider:'fixture',model:'beta',label:'Fixture · Beta',efforts:[{id:'off',name:'Off'},{id:'low',name:'Low'}]}]
 const clone=x=>structuredClone(x), calls=[], held=new Set(), pending=[]
 const records=Object.fromEntries(['a','b'].map(id=>[id,{completionModel:{provider:'fixture',model:id==='a'?'alpha':'beta',...(id==='a'?{reasoningEffort:'high'}:{})},chatModel:{provider:'',model:''},rewriteModel:{provider:'',model:''},authorPreferences:'保留作者偏好',fontSize:20}]))
@@ -53,7 +54,7 @@ createRoot(document.getElementById('root')).render(<App/>)
   page.on('pageerror',error=>report.errors.push(error.message))
   await page.goto('http://127.0.0.1:'+server.address().port)
   const route=page.getByRole('combobox',{name:'补全模型',exact:true})
-  const enabled=()=>page.waitForFunction(()=>!document.querySelector('[aria-label="补全模型"]').disabled)
+  const enabled=()=>page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.completionModel)
   const value=async model=>{await route.filter({hasText:model}).waitFor();await enabled()}
   const choose=async model=>{await route.click();await page.getByRole('option',{name:'Fixture · '+model,exact:true}).click()}
   await value('Alpha')
@@ -62,7 +63,7 @@ createRoot(document.getElementById('root')).render(<App/>)
    for(const width of [1024,760]){await page.setViewportSize({width,height:720});await page.screenshot({path:resolve(output,theme+'-'+width+'.png')});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'route overflow at '+width)}
   }
   assert.ok((await page.getByRole('combobox',{name:'对话模型',exact:true}).textContent()).includes('DSH 默认模型'))
-  assert.equal(await page.locator('[data-tier]').count(),0)
+  assert.equal(await page.locator(S.tier).count(),0)
   assert.equal(await page.getByRole('spinbutton',{name:'并发数',exact:true}).count(),0)
   report.checks.push('three native routes render in light/dark at 1024/760; native fallbacks replace retired global tiers and bounds')
   await choose('Beta');await value('Beta')
@@ -113,7 +114,7 @@ createRoot(document.getElementById('root')).render(<App/>)
   assert.deepEqual(await page.evaluate(()=>window.routeFixture.records.a.completionModel),{provider:'',model:'',reasoningEffort:''})
   report.checks.push('returning to the current session saves an explicit empty model route')
   await route.focus();await page.keyboard.press('ArrowDown');await page.getByRole('listbox').waitFor();await page.keyboard.press('Escape')
-  await page.waitForFunction(()=>document.querySelector('[aria-label="补全模型"]')===document.activeElement)
+  await page.waitForFunction(sel=>document.querySelector(sel)===document.activeElement,S.completionModel)
   report.checks.push('keyboard opens the native dropdown and Escape returns focus')
   assert.deepEqual(report.errors,[]);report.ok=true
  } catch(error){report.failure=String(error);process.exitCode=1}

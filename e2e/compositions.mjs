@@ -7,6 +7,7 @@ import { compositionInstallNames } from '../scripts/plugin-manifest.mjs'
 import { DESKTOP_PACKAGE_NAMES, desktopComposition, configureProfile } from '../scripts/desktop-compositions.mjs'
 import { resolveDshInstallation } from '../scripts/dsh-cli.mjs'
 import { assertDefaultPluginPage, closePluginsPage, openPluginsPage, openWebSearchSettings } from './helpers/plugin-page.mjs'
+import { S } from './helpers/selectors.mjs'
 
 const composition = process.env.DSH_EDITOR_COMPOSITION || 'desktop'
 const CANONICAL_ID = 'desktop'
@@ -261,7 +262,7 @@ try {
  browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1440,height:900},locale:'zh-CN'});page.setDefaultTimeout(15000);
  const calls=[];const errors=[];page.on('pageerror',e=>errors.push(e.message));
  page.on('request',request=>{if(request.method()==='POST'){try{calls.push({url:request.url(),body:request.postDataJSON()})}catch{}}});
- await page.goto(started.url.href);await page.locator('main.shell').waitFor({timeout:45000});await dismissNativeOnboarding(page);
+ await page.goto(started.url.href);await page.locator(S.shell).waitFor({timeout:45000});await dismissNativeOnboarding(page);
  const rpc=async(channel,method,payload)=>{const response=await page.request.post(new URL(channel+'/'+method,started.url).href,{data:{type:'client-request',rpcId:Math.random().toString(36),method,payload}});if(!response.ok())throw new Error(method+': HTTP '+response.status());const result=(await response.json()).result;if(!result?.ok)throw new Error(method+': '+JSON.stringify(result));return result.value};
  const capabilities=await rpc('/dsh-editor-shell','capabilities.get',{});
  const expectedFeatures=Object.fromEntries(Object.entries(shared.shellFeatures).map(([feature])=>[feature,true]));
@@ -287,41 +288,41 @@ try {
  }
  evidence.delivery='copied native profile artifacts; exact package roster and no workspace package links';
 
- if(await page.getByTestId('proofread-open').count())throw new Error('paused proofreading launcher is visible');
- if(await page.getByTestId('zhihu-open').count())throw new Error('Zhihu must not contribute a desktop launcher');
- const openSettings=async(tab)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('.settings-nav').getByRole('tab',{name:tab,exact:true}).click();await page.waitForTimeout(250)};
- const closeSettings=async()=>{await page.getByRole('button',{name:'关闭设置',exact:true}).click();await page.locator('.settings-dialog').waitFor({state:'hidden'})};
+ if(await page.locator(S.proofreadOpen).count())throw new Error('paused proofreading launcher is visible');
+ if(await page.locator(S.zhihuOpen).count())throw new Error('Zhihu must not contribute a desktop launcher');
+ const openSettings=async(tab)=>{await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator(S.settingsNav).getByRole('tab',{name:tab,exact:true}).click();await page.waitForTimeout(250)};
+ const closeSettings=async()=>{await page.getByRole('button',{name:'关闭设置',exact:true}).click();await page.locator(S.settingsDialog).waitFor({state:'hidden'})};
  let plugins=await openPluginsPage(page);await assertDefaultPluginPage(page,plugins);await openWebSearchSettings(plugins);await closePluginsPage(page);
  evidence.checks.push('desktop launchers absent; native plugin manager lists the default web-search bundle and opens its configuration');
- await page.getByRole('button',{name:'新建',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator('.tree').waitFor({timeout:30000});
- await page.locator('.tree-empty').waitFor({state:'visible',timeout:20000});
- const tree=page.locator('.tree');const treeBox=await tree.boundingBox();if(!treeBox)throw new Error('tree missing');
+ await page.getByRole('button',{name:'新建',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'新建作品'});await dialog.getByLabel('作品名称').fill('core-loop-workspace');await dialog.getByRole('button',{name:'创建',exact:true}).click();await page.locator(S.tree).waitFor({timeout:30000});
+ await page.locator(S.treeEmpty).waitFor({state:'visible',timeout:20000});
+ const tree=page.locator(S.tree);const treeBox=await tree.boundingBox();if(!treeBox)throw new Error('tree missing');
  await tree.click({button:'right',position:{x:16,y:Math.max(12,treeBox.height-18)}});
  await page.getByRole('menu',{name:'文档操作'}).getByRole('menuitem',{name:'新建文件夹'}).click();
  const createFolder=page.getByRole('dialog',{name:'新建文件夹'});await createFolder.getByLabel('文件夹名称').fill('正文');await createFolder.getByRole('button',{name:'创建',exact:true}).click();
- await page.locator('.tree-row').filter({hasText:'正文'}).first().waitFor({timeout:20000});
+ await page.locator(S.treeRow).filter({hasText:'正文'}).first().waitFor({timeout:20000});
  // Create the document via the actual product command; the ordinary flow must work without AI.
- await page.locator('.tree-row').filter({hasText:'正文'}).first().hover();await page.getByRole('button',{name:'在 正文 中新建文件',exact:true}).click();const create=page.getByRole('dialog',{name:'新建文件'});await create.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001');await create.getByRole('button',{name:'创建',exact:true}).click();await create.waitFor({state:'detached'});
- const editor=page.locator('[data-testid="paper-editor"] .cm-content');await editor.waitFor({timeout:30000});
- if(await page.locator('[aria-label="正文编辑区"]').count())throw new Error('manuscript paper still uses 正文编辑区');
- await page.locator('[aria-label="文稿编辑区"]').waitFor({state:'visible',timeout:10000});
- await editor.focus();await page.keyboard.insertText('我们以经做好准备。组合保存验证。');await page.keyboard.press('Control+s');await page.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor();
+ await page.locator(S.treeRow).filter({hasText:'正文'}).first().hover();await page.getByRole('button',{name:'在 正文 中新建文件',exact:true}).click();const create=page.getByRole('dialog',{name:'新建文件'});await create.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001');await create.getByRole('button',{name:'创建',exact:true}).click();await create.waitFor({state:'detached'});
+ const editor=page.locator(S.editorCm);await editor.waitFor({timeout:30000});
+ if(await page.locator(S.manuscriptAreaLegacy).count())throw new Error('manuscript paper still uses 正文编辑区');
+ await page.locator(S.editorArea).waitFor({state:'visible',timeout:10000});
+ await editor.focus();await page.keyboard.insertText('我们以经做好准备。组合保存验证。');await page.keyboard.press('Control+s');await page.locator(S.paperSaveState,{hasText:'已保存'}).waitFor();
  let saved='';for(let attempt=0;attempt<50;attempt++){saved=await readFile(resolve(targetWorkspace,'正文','001.md'),'utf8');if(saved.includes('组合保存验证'))break;await new Promise(done=>setTimeout(done,100));}if(!saved.includes('组合保存验证'))throw new Error('disk save missing');evidence.checks.push('create project/document and save through UI');
  const notesBox=await tree.boundingBox();if(!notesBox)throw new Error('tree missing after first file');
  await tree.click({button:'right',position:{x:16,y:Math.max(12,notesBox.height-18)}});
  await page.getByRole('menu',{name:'文档操作'}).getByRole('menuitem',{name:'新建文件夹'}).click();
  const notesFolder=page.getByRole('dialog',{name:'新建文件夹'});await notesFolder.getByLabel('文件夹名称').fill('资料');await notesFolder.getByRole('button',{name:'创建',exact:true}).click();
- await page.locator('.tree-row').filter({hasText:'资料'}).first().waitFor({timeout:20000});
- await page.locator('.tree-row').filter({hasText:'资料'}).first().hover();await page.getByRole('button',{name:'在 资料 中新建文件',exact:true}).click();
+ await page.locator(S.treeRow).filter({hasText:'资料'}).first().waitFor({timeout:20000});
+ await page.locator(S.treeRow).filter({hasText:'资料'}).first().hover();await page.getByRole('button',{name:'在 资料 中新建文件',exact:true}).click();
  const createTxt=page.getByRole('dialog',{name:'新建文件'});await createTxt.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('笔记.txt');await createTxt.getByRole('button',{name:'创建',exact:true}).click();await createTxt.waitFor({state:'detached'});
- await page.locator('[data-testid="paper-path"]',{hasText:'资料/笔记.txt'}).waitFor({timeout:20000});
- await page.locator('[aria-label="文稿编辑区"]').waitFor({state:'visible',timeout:10000});
- await editor.focus();await page.keyboard.press('Control+A');await page.keyboard.insertText('组合普通文本验证。');await page.keyboard.press('Control+s');await page.locator('[data-testid="paper-save-state"]',{hasText:'已保存'}).waitFor();
+ await page.locator(S.paperPath,{hasText:'资料/笔记.txt'}).waitFor({timeout:20000});
+ await page.locator(S.editorArea).waitFor({state:'visible',timeout:10000});
+ await editor.focus();await page.keyboard.press('Control+A');await page.keyboard.insertText('组合普通文本验证。');await page.keyboard.press('Control+s');await page.locator(S.paperSaveState,{hasText:'已保存'}).waitFor();
  const savedTxt=await readFile(resolve(targetWorkspace,'资料','笔记.txt'),'utf8');if(!savedTxt.includes('组合普通文本验证。'))throw new Error('plain txt save missing');
- const chapterRow=page.locator('.tree-row.tree-main').filter({hasText:'001.md'}).first();
- if(!(await chapterRow.count())){const bodyDir=page.locator('.tree-row').filter({hasText:'正文'}).first();await bodyDir.click();}
- await page.locator('.tree-row.tree-main').filter({hasText:'001.md'}).first().click();
- await page.locator('[data-testid="paper-path"]',{hasText:'正文/001.md'}).waitFor({timeout:20000});
+ const chapterRow=page.locator(S.treeRowMain).filter({hasText:'001.md'}).first();
+ if(!(await chapterRow.count())){const bodyDir=page.locator(S.treeRow).filter({hasText:'正文'}).first();await bodyDir.click();}
+ await page.locator(S.treeRowMain).filter({hasText:'001.md'}).first().click();
+ await page.locator(S.paperPath,{hasText:'正文/001.md'}).waitFor({timeout:20000});
  const sessionId=calls.map(x=>x.body?.payload?.sessionId).filter(Boolean).at(-1);if(!sessionId)throw new Error('no real session captured');
  const found=await rpc('/manuscript','search.text',{sessionId,query:'组合保存验证'});if(!JSON.stringify(found).includes('组合保存验证'))throw new Error('search did not find saved markdown');
  const foundTxt=await rpc('/manuscript','search.text',{sessionId,query:'组合普通文本验证'});if(!JSON.stringify(foundTxt).includes('组合普通文本验证'))throw new Error('search did not find saved txt');
@@ -331,15 +332,15 @@ try {
 
  const panelColors=[];
  for(const theme of ['light','dark']){
-   if(theme==='dark')await page.locator('main.shell .chrome .theme-toggle').click();
-   await openSettings('通用设置');panelColors.push(await page.locator('.settings-dialog').evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
+   if(theme==='dark')await page.locator(S.chromeThemeToggle).click();
+   await openSettings('通用设置');panelColors.push(await page.locator(S.settingsDialog).evaluate(el=>getComputedStyle(el).backgroundColor));await page.screenshot({path:resolve(output,'settings-'+theme+'.png')});await closeSettings();
    plugins=await openPluginsPage(page);await openWebSearchSettings(plugins);await page.screenshot({path:resolve(output,'web-search-settings-'+theme+'.png')});await closePluginsPage(page);
  }
  if(panelColors[0]===panelColors[1])throw new Error('settings theme did not adapt');
- await page.locator('main.shell .chrome .theme-toggle').click();evidence.checks.push('light/dark settings and native web-search configuration');
+ await page.locator(S.chromeThemeToggle).click();evidence.checks.push('light/dark settings and native web-search configuration');
 
- const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();await page.locator('aside.chat').waitFor();evidence.checks.push('optional Chat mounts');
- await page.reload();await page.locator('main.shell').waitFor();await dismissNativeOnboarding(page);if(await page.getByTestId('proofread-open').count()||await page.getByTestId('zhihu-open').count())throw new Error('removed desktop launcher returned after reload');
+ const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();await page.locator(S.chatRail).waitFor();evidence.checks.push('optional Chat mounts');
+ await page.reload();await page.locator(S.shell).waitFor();await dismissNativeOnboarding(page);if(await page.locator(S.proofreadOpen).count()||await page.locator(S.zhihuOpen).count())throw new Error('removed desktop launcher returned after reload');
  if(errors.length)throw new Error('browser errors '+errors.join('|'));await page.screenshot({path:resolve(output,'final.png')});evidence.checks.push('reload keeps desktop launchers absent and has no browser errors');
 } catch(error){evidence.failures.push(String(error));await page?.screenshot({path:resolve(output,'failure.png')}).catch(()=>{});await writeFile(resolve(output,'failure.html'),await page?.content().catch(()=> '')||'');}
 finally{await browser?.close();await stop(dshChild)}

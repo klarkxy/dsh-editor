@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { _electron as electron } from 'playwright'
 import { localArtifactsForPlatform } from '../scripts/release-artifacts.mjs'
 import { treeDigest } from '../apps/desktop/dist/runtime-tree.js'
+import { S } from './helpers/selectors.mjs'
 
 if (process.platform !== 'darwin') throw new Error('macOS packaged smoke must run on macOS')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -109,7 +110,7 @@ try {
     app.on('will-quit', () => console.error('[packaged-smoke] app will quit'))
   })
   page = await application.firstWindow({ timeout: 120_000 })
-  await page.waitForSelector('.shell', { timeout: 180_000 })
+  await page.waitForSelector(S.shell, { timeout: 180_000 })
   const url = new URL(page.url())
   if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port) throw new Error(`Unexpected packaged URL: ${url.href}`)
   const packaged = await application.evaluate(({ app }) => app.isPackaged)
@@ -135,15 +136,15 @@ try {
   await folderDialog.getByLabel('文件夹名称').fill('正文')
   await folderDialog.getByRole('button', { name: '创建', exact: true }).click()
   await folderDialog.waitFor({ state: 'detached' })
-  await page.locator('.tree-row').filter({ hasText: '正文' }).first().hover()
+  await page.locator(S.treeRow).filter({ hasText: '正文' }).first().hover()
   await page.getByRole('button', { name: '在 正文 中新建文件', exact: true }).click()
   await page.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001')
   await page.getByRole('button', { name: '创建', exact: true }).click()
-  const editor = page.locator('[data-testid="paper-editor"]')
+  const editor = page.locator(S.paperEditor)
   await editor.waitFor({ state: 'visible', timeout: 30_000 })
   // The container mounts before the asynchronous disk/draft load is ready.
   // Match a real user's editable surface before dispatching the test edit.
-  await editor.locator('.cm-content[contenteditable="true"]').waitFor({ state: 'visible', timeout: 30_000 })
+  await editor.locator(S.cmContentEditable).waitFor({ state: 'visible', timeout: 30_000 })
   const manuscript = '# 安装包验证\n\n此内容必须由实际稿纸自动保存。\n'
   await editor.evaluate((el, text) => {
     const view = el.__cmView
@@ -160,7 +161,7 @@ try {
   await writeFile(join(output, 'report.json'), JSON.stringify({ ok: true, artifact: zipName, packaged, shell: true, projectCreated: true, manuscriptSaved: true, runtimeCopied: false }, null, 2))
   console.log('macOS packaged ZIP first-launch smoke passed')
 } catch (error) {
-  const diagnostic = page ? await page.locator('body').innerText({ timeout: 2_000 }).catch(() => 'unavailable') : 'no window'
+  const diagnostic = page ? await page.locator(S.body).innerText({ timeout: 2_000 }).catch(() => 'unavailable') : 'no window'
   const child = application?.process()
   const processState = child ? { exitCode: child.exitCode, signalCode: child.signalCode } : null
   const livePages = application?.windows().map((window) => ({ closed: window.isClosed(), url: safeUrl(window.url()) })) ?? []

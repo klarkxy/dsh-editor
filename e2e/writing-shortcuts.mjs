@@ -6,6 +6,7 @@ import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { chromium } from 'playwright'
 import { deployProfile } from '../apps/desktop/dist/profile.js'
+import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const runId = String(Date.now())
@@ -75,7 +76,7 @@ async function stop() {
 
 async function screenshot(name) { await page.screenshot({ path: resolve(output, name + '.png'), fullPage: true }) }
 async function openSettings(target = page) {
-  await target.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
+  await target.locator(S.nativeSettingsButton).click()
   const dialog = target.getByRole('dialog', { name: '设置', exact: true })
   await dialog.waitFor()
   return dialog
@@ -98,7 +99,7 @@ try {
   page = await browser.newPage({ viewport: { width: 1024, height: 800 }, locale: 'zh-CN' })
   page.setDefaultTimeout(20000)
   page.on('pageerror', error => report.errors.push(error.message))
-  await page.goto(url); await page.locator('.shell').waitFor({ timeout: 60000 })
+  await page.goto(url); await page.locator(S.shell).waitFor({ timeout: 60000 })
   for (let n = 0; n < 5; n++) {
     const next = page.getByRole('button', { name: '继续', exact: true })
     if (!await next.isVisible()) break
@@ -113,23 +114,23 @@ try {
   const delaySelect = () => dialog.getByRole('combobox', { name: '停顿时间', exact: true })
   assert.match(await delaySelect().innerText(), /1.5/)
   await delaySelect().click(); await page.getByRole('option', { name: '2 秒', exact: true }).click()
-  await page.waitForFunction(() => document.querySelector('[aria-label="停顿时间"][role="combobox"]')?.textContent?.includes('2 秒'))
+  await page.waitForFunction(selector => document.querySelector(selector)?.textContent?.includes('2 秒'), S.stallCombobox)
   await screenshot('writing-settings')
   await dialog.getByRole('button', { name: '查看全部快捷键', exact: true }).click()
   assert.equal(await dialog.getByRole('tab', { name: '快捷键', exact: true }).getAttribute('aria-selected'), 'true')
-  assert.match(await dialog.locator('.settings-content.is-active').innerText(), /Ctrl\+Enter/)
-  assert.match(await dialog.locator('.settings-content.is-active').innerText(), /Ctrl\+Shift\+O/)
+  assert.match(await dialog.locator(S.settingsContentActive).innerText(), /Ctrl\+Enter/)
+  assert.match(await dialog.locator(S.settingsContentActive).innerText(), /Ctrl\+Shift\+O/)
   await screenshot('shortcuts')
-  assert.equal(await dialog.locator('.settings-pages').evaluate(el => el.scrollWidth > el.clientWidth + 1), false)
+  assert.equal(await dialog.locator(S.settingsPages).evaluate(el => el.scrollWidth > el.clientWidth + 1), false)
   await page.keyboard.press('Control+k')
-  assert.equal(await page.locator('.palette-content').count(), 0, 'palette must not open over settings')
+  assert.equal(await page.locator(S.paletteContent).count(), 0, 'palette must not open over settings')
   await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' })
-  await page.reload(); await page.locator('.shell').waitFor()
+  await page.reload(); await page.locator(S.shell).waitFor()
   dialog = await openSettings(); await writing()
   assert.match(await delaySelect().innerText(), /2 秒/)
   report.checks.push('delay defaults to 1.5 s, saves 2 s, survives reload, links to plugin-aware help without overflow')
   await dialog.getByRole('radio', { name: '仅手动', exact: true }).click()
-  await page.waitForFunction(() => !document.querySelector('[aria-label="停顿时间"][role="combobox"]'))
+  await page.waitForFunction(selector => !document.querySelector(selector), S.stallCombobox)
   await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' })
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.getByRole('button', { name: '新建', exact: true }).first().click()
@@ -140,18 +141,18 @@ try {
   const create = page.getByRole('dialog', { name: '新建文件', exact: true })
   await create.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001')
   await create.getByRole('button', { name: '创建', exact: true }).click(); await create.waitFor({ state: 'detached' })
-  const editor = page.getByTestId('paper-editor').locator('.cm-content')
-  const text = () => page.getByTestId('paper-editor').evaluate(el => el.__cmView.state.doc.toString())
+  const editor = page.locator(S.paperEditor).locator(S.cmContent)
+  const text = () => page.locator(S.paperEditor).evaluate(el => el.__cmView.state.doc.toString())
   const calls = () => report.calls.filter(call => call.kind === 'completion')
   await editor.click(); await page.keyboard.insertText('夜雨落在窗沿。她把旧信放回抽屉。')
   await page.waitForTimeout(2300); assert.equal(calls().length, 0, 'manual mode never auto-runs')
   const before = await text()
-  await page.keyboard.press('Control+Enter'); await page.locator('.cm-ghost').waitFor()
+  await page.keyboard.press('Control+Enter'); await page.locator(S.cmGhost).waitFor()
   assert.equal(await text(), before, 'generating does not change manuscript')
-  await page.keyboard.press('Escape'); await page.locator('.cm-ghost').waitFor({ state: 'detached' })
+  await page.keyboard.press('Escape'); await page.locator(S.cmGhost).waitFor({ state: 'detached' })
   assert.equal(await text(), before, 'dismiss preserves manuscript')
-  await page.keyboard.press('Control+Enter'); await page.locator('.cm-ghost').waitFor()
-  await page.keyboard.press('Tab'); await page.locator('.cm-ghost').waitFor({ state: 'detached' })
+  await page.keyboard.press('Control+Enter'); await page.locator(S.cmGhost).waitFor()
+  await page.keyboard.press('Tab'); await page.locator(S.cmGhost).waitFor({ state: 'detached' })
   assert.equal(await text(), before + '雨'.repeat(240))
   await page.keyboard.press('Control+z'); assert.equal(await text(), before)
   report.checks.push('manual Ctrl+Enter, Escape dismissal, Tab acceptance and undo preserve author control')
@@ -163,7 +164,7 @@ try {
   const count = calls().length; const began = Date.now()
   await page.keyboard.insertText('窗外起了风。')
   await page.waitForTimeout(900); assert.equal(calls().length, count, 'configured 2-second pause must not fire early')
-  await page.locator('.cm-ghost').waitFor()
+  await page.locator(S.cmGhost).waitFor()
   assert.ok(calls()[count].at - began >= 1900, 'configured delay reaches editor')
   report.checks.push('automatic completion observes configured 2-second delay')
   await page.keyboard.press('Escape')
@@ -174,17 +175,17 @@ try {
   await editor.click(); await page.keyboard.press('End'); await page.keyboard.press('Enter'); await page.keyboard.insertText('待删除行')
   await page.keyboard.press('Control+Shift+k')
   assert.equal((await text()).includes('待删除行'), false, 'delete-line shortcut must not be stolen by palette')
-  assert.equal(await page.locator('.palette-content').count(), 0)
+  assert.equal(await page.locator(S.paletteContent).count(), 0)
   await page.keyboard.press('Control+Alt+k'); await page.getByRole('dialog').waitFor()
   await page.keyboard.press('Escape')
-  await page.locator('.palette-content').waitFor({ state: 'detached' })
+  await page.locator(S.paletteContent).waitFor({ state: 'detached' })
   await editor.dispatchEvent('keydown', { key: 'k', ctrlKey: true, isComposing: true, keyCode: 229, bubbles: true })
-  assert.equal(await page.locator('.palette-content').count(), 0)
+  assert.equal(await page.locator(S.paletteContent).count(), 0)
   report.checks.push('find field, IME and Ctrl+Shift+K do not trigger unrelated commands')
   assert.equal(report.errors.length, 0, report.errors.join('\n')); report.ok = true
 } catch (error) {
   report.failure = error.stack || String(error); process.exitCode = 1
-  if (page) { await screenshot('failure').catch(() => {}); await writeFile(resolve(output, 'failure-dom.txt'), await page.locator('body').innerText()).catch(() => {}) }
+  if (page) { await screenshot('failure').catch(() => {}); await writeFile(resolve(output, 'failure-dom.txt'), await page.locator(S.body).innerText()).catch(() => {}) }
 } finally {
   await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2))
   await writeFile(resolve(output, 'host.log'), logs.join('').replace(/\?token=[A-Za-z0-9._~-]+/g, '?token=<redacted>'))

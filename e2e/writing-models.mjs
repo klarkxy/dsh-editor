@@ -9,6 +9,7 @@ import { deployProfile } from '../apps/desktop/dist/profile.js'
 import { DshSupervisor } from '../apps/desktop/dist/supervisor.js'
 import { PINNED_PNPM_VERSION, resolveBundledPackageManager } from '../apps/desktop/dist/package-manager.js'
 import { nativePluginRpc, openPluginsPage, openPluginManager, closePluginsPage, assertDefaultPluginPage } from './helpers/plugin-page.mjs'
+import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const runId = String(Date.now())
@@ -152,7 +153,7 @@ async function waitForCall(kind, after = 0) {
 }
 async function screenshot(name) { await page.screenshot({ path: resolve(output, name + '.png'), fullPage: true }) }
 async function openSettings(target = page) {
-  await target.locator('.native-settings-control button[aria-haspopup="dialog"]').click()
+  await target.locator(S.nativeSettingsTrigger).click()
   const dialog = target.getByRole('dialog', { name: '设置', exact: true })
   await dialog.waitFor()
   return dialog
@@ -172,7 +173,7 @@ try {
   const requests=[]
   page.on('request',req=>{if(req.method()==='POST'){try{requests.push(req.postDataJSON())}catch{}}})
   page.on('pageerror',error=>report.errors.push(error.message))
-  await page.goto(url); await page.locator('main.shell').waitFor({timeout:60000})
+  await page.goto(url); await page.locator(S.shell).waitFor({timeout:60000})
   for(let n=0;n<5;n++){const next=page.getByRole('button',{name:'继续',exact:true});if(!await next.isVisible())break;await next.click()}
   const later=page.getByRole('button',{name:'稍后配置',exact:true});if(await later.isVisible())await later.click()
   const rpc=async(channel,method,payload={})=>{
@@ -214,28 +215,28 @@ try {
   // the 安装与卸载 page, not merely from the default catalog.
   const inventoryManager=await openPluginManager(pluginsPage);
   for(const name of ['AI Services','Model Center','Memory','Self-improvement','Fusion','当前标题','需求记录','会话纪要','知乎资料']) {
-    assert.equal(await inventoryManager.locator('[data-plugin-panel]').getByRole('button',{name:'查看 '+name,exact:true}).count(),0,name);
+    assert.equal(await inventoryManager.locator(S.pluginPanel).getByRole('button',{name:'查看 '+name,exact:true}).count(),0,name);
   }
   await screenshot('00-plugin-inventory');
   await closePluginsPage(page);
   let dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();
   const select=dialog.getByRole('combobox',{name:'补全模型',exact:true});await select.filter({hasText:process.env.RETIREMENT_LEGACY_FIXTURE==='1'?'New':'Legacy'}).waitFor();
   await select.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await select.filter({hasText:'New'}).waitFor();
-  await page.waitForFunction(()=>!document.querySelector('[aria-label="补全模型"]').disabled);
+  await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.completionModel);
   const effort=dialog.getByRole('combobox',{name:'补全模型 · 思考强度',exact:true});
   await effort.click();await page.getByRole('option',{name:'关',exact:true}).click();await effort.filter({hasText:'关'}).waitFor();
-  await page.waitForFunction(()=>!document.querySelector('[aria-label="补全模型 · 思考强度"]').disabled);
+  await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.completionStrength);
   for(const name of ['对话模型','补全模型','改写模型'])assert.equal(await dialog.getByRole('combobox',{name,exact:true}).count(),1);
   const chatSelection=dialog.getByRole('combobox',{name:'对话模型',exact:true});
   await chatSelection.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await chatSelection.filter({hasText:'New'}).waitFor();
-  await page.waitForFunction(()=>!document.querySelector('[aria-label="对话模型"]').disabled);
+  await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.chatModelSelect);
   await screenshot('01-native-models-light');
   await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
   await page.getByRole('button',{name:'新建',exact:true}).first().click();
   const project=page.getByRole('dialog',{name:'新建作品',exact:true});await project.getByLabel('作品名称').fill('原生写作模型验收');await project.getByRole('button',{name:'创建',exact:true}).click();await project.waitFor({state:'detached'});
   await page.getByRole('button',{name:'写第一篇',exact:true}).click();
   const create=page.getByRole('dialog',{name:'新建文件',exact:true});await create.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('001');await create.getByRole('button',{name:'创建',exact:true}).click();
-  const editor=page.getByTestId('paper-editor').locator('.cm-content');await editor.click();await page.keyboard.insertText('夜雨落在窗沿。她把旧信放回抽屉。');await page.keyboard.press('Control+s');await page.getByTestId('paper-save-state').filter({hasText:'已保存'}).waitFor();
+  const editor=page.locator(S.paperEditor).locator(S.cmContent);await editor.click();await page.keyboard.insertText('夜雨落在窗沿。她把旧信放回抽屉。');await page.keyboard.press('Control+s');await page.locator(S.paperSaveState).filter({hasText:'已保存'}).waitFor();
   const sessionId=requests.map(row=>row?.payload?.sessionId).filter(Boolean).at(-1);assert.ok(sessionId);
   const payload={sessionId,path:'正文/001.md',prefix:'夜雨落在窗沿。',suffix:'',selectedText:'她把旧信放回抽屉。'};
   const launcher=page.getByRole('button',{name:'打开写作搭档'});if(await launcher.isVisible().catch(()=>false))await launcher.click();
@@ -260,16 +261,16 @@ try {
   assert.equal((await rpc('/manuscript','fim.complete',payload)).text,'雨'.repeat(240));
   report.checks.push('writing assist disabled/enabled without a model-center service and author text retained');
   dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();
-  for(const name of ['补全模型','改写模型']){const picker=dialog.getByRole('combobox',{name,exact:true});await picker.click();await page.getByRole('option',{name:'跟随当前对话',exact:true}).click();await picker.filter({hasText:'跟随当前对话'}).waitFor();await page.waitForFunction(name=>!document.querySelector('[aria-label="'+name+'"]').disabled,name);}
+  for(const name of ['补全模型','改写模型']){const picker=dialog.getByRole('combobox',{name,exact:true});await picker.click();await page.getByRole('option',{name:'跟随当前对话',exact:true}).click();await picker.filter({hasText:'跟随当前对话'}).waitFor();await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.ariaLabel(name));}
   await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
-  const liveModel=page.locator('aside.chat').getByRole('combobox',{name:'选择模型',exact:true});await liveModel.click();await page.getByRole('option',{name:'Local acceptance · Legacy',exact:true}).click();await liveModel.filter({hasText:'Legacy'}).waitFor();
+  const liveModel=page.locator(S.chatRail).getByRole('combobox',{name:'选择模型',exact:true});await liveModel.click();await page.getByRole('option',{name:'Local acceptance · Legacy',exact:true}).click();await liveModel.filter({hasText:'Legacy'}).waitFor();
   const fallbackAt=report.calls.length;assert.equal((await rpc('/manuscript','fim.complete',payload)).text,'雨'.repeat(240));assert.equal((await rpc('/manuscript','patch.complete',payload)).text,'她将旧信收进抽屉，轻轻合上。');
   assert.equal(report.calls.slice(fallbackAt).find(row=>row.kind==='completion').model,'fixture-legacy');assert.equal(report.calls.slice(fallbackAt).find(row=>row.kind==='rewrite').model,'fixture-legacy');assert.equal(await editor.innerText(),before);
   report.checks.push('follow-current routes use the live pending session choice before another chat turn commits it, without writing author text');
-  dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();const restored=dialog.getByRole('combobox',{name:'补全模型',exact:true});await restored.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await restored.filter({hasText:'New'}).waitFor();await page.waitForFunction(()=>!document.querySelector('[aria-label="补全模型"]').disabled);await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
+  dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();const restored=dialog.getByRole('combobox',{name:'补全模型',exact:true});await restored.click();await page.getByRole('option',{name:'Local acceptance · New',exact:true}).click();await restored.filter({hasText:'New'}).waitFor();await page.waitForFunction(sel=>!document.querySelector(sel).disabled,S.completionModel);await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});
   await page.screenshot({path:resolve(output,'02-writing.png'),fullPage:true});
   const settingText=await readFile(patch,'utf8');assert.ok(settingText.includes('fixture-new'));
-  await stopHost();url=await startHost();await page.goto(url);await page.locator('main.shell').waitFor({timeout:60000});
+  await stopHost();url=await startHost();await page.goto(url);await page.locator(S.shell).waitFor({timeout:60000});
   dialog=await openSettings();await dialog.getByRole('tab',{name:'模型',exact:true}).click();await dialog.getByRole('combobox',{name:'补全模型',exact:true}).filter({hasText:'New'}).waitFor();
   report.checks.push('real host restart preserves the native writing model selection');
   if(process.env.E2E_OPTIONAL_INSTALL === '1' || process.argv.includes('--optional-install')) {
@@ -282,18 +283,18 @@ try {
     const declarationFile = resolve(home, 'profiles/dsh-editor/node_modules/dsh-editor-profile-config/presets.patch.json');
     const declaredTools = async () => JSON.parse(await readFile(declarationFile, 'utf8')).flatMap(patch=>patch.insert ?? []).filter(row=>String(row.name).endsWith('/tools'));
     const chatTools = async label => {
-      await page.locator('aside.chat .chat-history[data-running="false"]').waitFor();
+      await page.locator(S.chatHistoryIdle).waitFor();
       const at = report.calls.length;
       const composer = page.getByRole('textbox',{name:'输入消息',exact:true});
       await composer.fill('请只回复工具状态已检查，不要调用工具。'+label);await composer.press('Enter');
       await waitForCall('chat',at);
-      await page.locator('aside.chat .chat-history[data-running="false"]').waitFor();
+      await page.locator(S.chatHistoryIdle).waitFor();
       return report.calls.slice(at).find(call=>call.kind==='chat')?.tools ?? [];
     };
     const hasTool = (tools, name) => tools.some(tool=>tool===name || tool.endsWith('.'+name));
     const storageFiles = ['dsh_editor_mood.json','dsh_editor_recap.json','dsh_editor_current_title.json','dsh_editor_zhihu.json'];
     const captureStableStorages = async stage => {
-      await page.locator('aside.chat .chat-history[data-running="false"]').waitFor();
+      await page.locator(S.chatHistoryIdle).waitFor();
       const end = Date.now() + 90000;
       let previous, stableSince = 0;
       do {
@@ -326,7 +327,7 @@ try {
       if(id === 'zhihu') {
         const marketplace = await openPlugins();
         const preInstallManager = await openPluginManager(marketplace);
-        await preInstallManager.locator('[data-plugin-panel]').waitFor();
+        await preInstallManager.locator(S.pluginPanel).waitFor();
         await screenshot('03-native-manager-before-install');await page.setViewportSize({width:760,height:1000});assert.ok(await marketplace.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await screenshot('03-native-manager-before-install-760');await page.setViewportSize({width:1440,height:1000});
         result = await native('installBundle', {spec,options:{requestId:'e2e-'+id}});
         await closePluginsPage(page);
@@ -385,7 +386,7 @@ try {
       await page.goto('about:blank');await stopHost();
       await preserveOperationLogs('restart-' + ++restartCount);
       await deployProfile(home,resolve(root,'.dev/desktop-profile-template'),resolve(runtime,'node_modules'));
-      url=await startHost();await page.goto(url);await page.locator('main.shell').waitFor({timeout:60000});
+      url=await startHost();await page.goto(url);await page.locator(S.shell).waitFor({timeout:60000});
     };
     await restart();
     const installedPlugins = await native('listPlugins');
@@ -400,18 +401,18 @@ try {
     const installedPage = await openPlugins();
     const installedManager = await openPluginManager(installedPage);
     await screenshot('03-optional-plugins-installed');
-    await installedManager.locator('[data-plugin-panel]').getByRole('button',{name:/^查看 (知乎资料|知乎)$/}).click();
-    await installedPage.getByTestId('zhihu-settings').waitFor();
-    assert.equal(await installedManager.locator('[data-plugin-config]').getByTestId('zhihu-settings').count(),1);
+    await installedManager.locator(S.pluginPanel).getByRole('button',{name:/^查看 (知乎资料|知乎)$/}).click();
+    await installedPage.locator(S.zhihuSettings).waitFor();
+    assert.equal(await installedManager.locator(S.pluginConfig).locator(S.zhihuSettings).count(),1);
     await closePluginsPage(page);
-    await page.locator('button.theme-toggle:visible').first().click();await page.locator('.shell-theme.dark').waitFor({timeout:10000});
+    await page.locator(S.themeToggleVisible).first().click();await page.locator(S.shellThemeDark).waitFor({timeout:10000});
     const darkPlugins=await openPlugins();await openPluginManager(darkPlugins);
     await page.setViewportSize({width:760,height:1000});assert.ok(await darkPlugins.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await screenshot('03-market-dark-760');await page.setViewportSize({width:1440,height:1000});await closePluginsPage(page);
     const toolCallAt=report.calls.length;
     await page.getByRole('textbox',{name:'输入消息',exact:true}).fill('请只回复工具已就绪，不要调用工具。');await page.getByRole('textbox',{name:'输入消息',exact:true}).press('Enter');await waitForCall('chat',toolCallAt);
     const actualTools=report.calls.slice(toolCallAt).find(call=>call.kind==='chat' && call.tools?.length)?.tools ?? [];
     for(const tool of ['zhihu_search','zhihu_question_recommendations','zhihu_quota','mood_requirements'])assert.ok(actualTools.some(name=>name===tool || name.endsWith('.'+tool)),tool+': '+JSON.stringify(actualTools));
-    await page.locator('aside.chat .chat-history[data-running="false"]').waitFor();
+    await page.locator(S.chatHistoryIdle).waitFor();
     report.checks.push('real native chat advertises optional Zhihu and Mood tools after installation; native plugin page remains usable at 760px');
     report.checks.push('restart restores independently installed plugins as native bundles and exposes their configuration');
     report.removeReceipts = [];
@@ -454,7 +455,7 @@ try {
   assert.equal(report.errors.length,0,report.errors.join('\n'));report.ok=true;
 } catch(error) {
   report.failure=String(error);process.exitCode=1
-  if(page){await screenshot('failure').catch(()=>{});await writeFile(resolve(output,'failure-dom.txt'),await page.locator('body').innerText()).catch(()=>{})}
+  if(page){await screenshot('failure').catch(()=>{});await writeFile(resolve(output,'failure-dom.txt'),await page.locator(S.body).innerText()).catch(()=>{})}
 } finally {
   try { await stop() } catch(error) { report.ok=false;report.failure ??= String(error);process.exitCode=1 }
   try { await preserveOperationLogs('final') } catch(error) { report.ok=false;report.failure ??= String(error);process.exitCode=1 }

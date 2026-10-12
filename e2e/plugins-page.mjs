@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
 import { assertCatalogIconsRendered, assertConfigNavLinksReachable, assertDefaultPluginPage, openPluginManager, openWebSearchSettings, openWritingPresets, showPluginList } from './helpers/plugin-page.mjs'
+import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const stage = process.env.PLUGINS_UI_STAGE || 'current'
@@ -20,7 +21,7 @@ await mkdir(output, { recursive: true })
 const report = { stage, pages: [], errors: [], checks: [] }
 let app, page
 const openSettings = async () => {
-  await page.locator('.native-settings-control button').click()
+  await page.locator(S.nativeSettingsButton).click()
   const settings = page.getByRole('dialog', { name: '设置', exact: true })
   await settings.waitFor()
   return settings
@@ -41,10 +42,10 @@ try {
   page.on('dialog', dialog => { void dialog.accept().catch(() => {}) })
   page.on('console', message => { if (message.type() === 'error') report.errors.push(message.text()) })
   page.on('pageerror', error => report.errors.push(error.message))
-  await page.waitForFunction(() => document.querySelector('main.shell') || document.body?.innerText.includes('Failed to load plugins'), undefined, { timeout: 90000 })
-  if (!await page.locator('main.shell').count()) {
+  await page.waitForFunction(sel => document.querySelector(sel) || document.body?.innerText.includes('Failed to load plugins'), S.shell, { timeout: 90000 })
+  if (!await page.locator(S.shell).count()) {
     await page.getByText('dsh-editor-shell', { exact: true }).first().click().catch(() => {})
-    throw new Error('Shell boot failed: ' + report.errors.join('\n') + '\n' + await page.locator('body').innerText())
+    throw new Error('Shell boot failed: ' + report.errors.join('\n') + '\n' + await page.locator(S.body).innerText())
   }
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))
   for (let i = 0; i < 5; i++) {
@@ -58,12 +59,12 @@ try {
     const settings = await openSettings()
     await settings.getByRole('tab', { name: '通用设置', exact: true }).click()
     await settings.getByRole('button', { name: theme, exact: true }).click()
-    const labels = await settings.locator('.settings-nav [role="tab"]').allTextContents()
+    const labels = await settings.locator(S.settingsNavTab).allTextContents()
     assert(!labels.some(label => /插件|知乎|网络搜索|记忆/.test(label)), labels.join(','))
     await shot(theme + '-settings')
     await closeSettings()
-    await page.locator('.plugins-trigger').click()
-    const pluginPage = page.locator('.plugins-page')
+    await page.locator(S.pluginsTrigger).click()
+    const pluginPage = page.locator(S.pluginsPage)
     await assertDefaultPluginPage(page, pluginPage)
     await assertCatalogIconsRendered(pluginPage)
     await openWritingPresets(pluginPage)
@@ -74,16 +75,16 @@ try {
       const nativePanel = await openPluginManager(pluginPage)
       const loop = nativePanel.getByText('Agent 循环', { exact: true }).first()
       await loop.click()
-      const parallel = pluginPage.locator('#plugin-config-agent-loop-parallel')
+      const parallel = pluginPage.locator(S.pluginConfigAgentLoopParallel)
       await parallel.fill('7')
       await pluginPage.getByRole('button', { name: '保存', exact: true }).click()
-      await page.waitForFunction(() => [...document.querySelectorAll('.plugins-page button')].some(el => el.textContent?.trim() === '保存' && el.disabled))
+      await page.waitForFunction(sel => [...document.querySelectorAll(sel)].some(el => el.textContent?.trim() === '保存' && el.disabled), S.pluginsPageButton)
       await page.reload()
-      await page.locator('.plugins-trigger').waitFor({timeout:90000})
-      await page.locator('.plugins-trigger').click()
+      await page.locator(S.pluginsTrigger).waitFor({timeout:90000})
+      await page.locator(S.pluginsTrigger).click()
       const reloadedPanel = await openPluginManager(pluginPage)
       await reloadedPanel.getByText('Agent 循环', { exact: true }).first().click()
-      assert.equal(await pluginPage.locator('#plugin-config-agent-loop-parallel').inputValue(), '7')
+      assert.equal(await pluginPage.locator(S.pluginConfigAgentLoopParallel).inputValue(), '7')
       await shot('official-config-saved-after-reload')
       report.checks.push('official Agent loop configuration saved through Host and survived full reload')
     }
@@ -102,7 +103,7 @@ try {
     await page.setViewportSize({ width: 1440, height: 900 })
     await pluginPage.getByRole('button', { name: '返回首页', exact: true }).click()
     await pluginPage.waitFor({ state: 'hidden' })
-    await page.waitForFunction(() => document.activeElement?.classList.contains('plugins-trigger'))
+    await page.waitForFunction(cls => document.activeElement?.classList.contains(cls), S.pluginsTriggerClass)
     report.checks.push(theme + ': settings isolated, plugin pages reachable, responsive, focus restored')
   }
   {
@@ -110,18 +111,18 @@ try {
     const project = page.getByRole('dialog', { name: '新建作品' })
     await project.getByLabel('作品名称').fill('plugin-page-acceptance')
     await project.getByRole('button', { name: '创建', exact: true }).click()
-    await page.locator('.shell.layout-shell').waitFor()
+    await page.locator(S.shellLayout).waitFor()
     // Narrow layouts may leave the file sidebar collapsed after returning to desktop width.
-    if (!await page.locator('.tree').isVisible()) await page.getByRole('button', { name: '文件', exact: true }).click()
-    await page.locator('.tree-empty').waitFor()
-    await page.locator('.tree').click({button:'right',position:{x:20,y:80}})
+    if (!await page.locator(S.tree).isVisible()) await page.getByRole('button', { name: '文件', exact: true }).click()
+    await page.locator(S.treeEmpty).waitFor()
+    await page.locator(S.tree).click({button:'right',position:{x:20,y:80}})
     await page.getByRole('menuitem', {name:'新建文件',exact:true}).click()
     const file = page.getByRole('dialog', { name: '新建文件', exact: true })
     await file.getByLabel('文件名称（无扩展名时按 .md 创建）').fill('插件页面验收.md')
     await file.getByRole('button', { name: '创建', exact: true }).click()
-    const editor = page.locator('.cm-content[contenteditable="true"]').first()
+    const editor = page.locator(S.cmContentEditable).first()
     await editor.waitFor()
-    const paper = page.getByTestId('paper-editor')
+    const paper = page.locator(S.paperEditor)
     const writingSettings = await openSettings()
     await writingSettings.getByRole('tab', {name:'写作',exact:true}).click()
     for (const name of ['字号', '行距']) {
@@ -130,7 +131,7 @@ try {
       for (let i = 0; i < 2; i++) {
         const previous = await slider.getAttribute('aria-valuenow')
         await page.keyboard.press('ArrowRight')
-        await page.waitForFunction(({name,previous}) => [...document.querySelectorAll('[role="slider"]')].some(el => el.getAttribute('aria-label') === name && el.getAttribute('aria-valuenow') !== previous), {name,previous})
+        await page.waitForFunction(({name,previous,sel}) => [...document.querySelectorAll(sel)].some(el => el.getAttribute('aria-label') === name && el.getAttribute('aria-valuenow') !== previous), {name,previous,sel:S.sliderAny})
       }
     }
     for (const [name, option] of [['字体','无衬线'], ['稿纸宽度','窄栏']]) {
@@ -139,17 +140,17 @@ try {
     }
     const paragraphFocus = writingSettings.getByRole('switch', {name:'聚焦当前段落',exact:true})
     if (!await paragraphFocus.isChecked()) await paragraphFocus.click()
-    await page.waitForFunction(() => document.querySelector('[role="switch"][aria-label="聚焦当前段落"]')?.getAttribute('aria-checked') === 'true')
+    await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'true', S.switch('聚焦当前段落'))
     await closeSettings()
-    await page.waitForFunction(() => {
-      const paper = document.querySelector('[data-testid="paper-editor"]')
+    await page.waitForFunction(sel => {
+      const paper = document.querySelector(sel)
       if (!paper) return false
       const style = getComputedStyle(paper)
       return style.getPropertyValue('--paper-font-size').trim() === '19px'
         && style.getPropertyValue('--paper-line-height').trim() === '2.1'
         && style.getPropertyValue('--paper-max-width').trim() === '60ch'
         && style.getPropertyValue('--paper-font-family').includes('sans-serif')
-    })
+    }, S.paperEditor)
     const typography = await paper.evaluate(el => {
       const style = getComputedStyle(el)
       return Object.fromEntries(['--paper-font-size','--paper-line-height','--paper-font-family','--paper-max-width'].map(name => [name, style.getPropertyValue(name).trim()]))
@@ -163,7 +164,7 @@ try {
       if (!view) throw new Error('Missing actual CodeMirror view')
       view.dispatch({changes:{from:0,to:view.state.doc.length,insert:'# 长文阅读验收\n\n' + '插件页面切换应保留正文。这里是阅读中的普通段落，包含 **重点** 和 `代码`。\n\n'.repeat(100)},selection:{anchor:120}})
     })
-    const chat = page.locator('.composer textarea')
+    const chat = page.locator(S.composerTextarea)
     await chat.fill('保留的聊天草稿')
     await paper.evaluate(async el => {
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -184,15 +185,15 @@ try {
       }), typography)
       assert.equal(await paper.evaluate(el => el.__cmView.state.selection.main.anchor), 120)
       const theme = label.source.includes('浅色') ? 'dark' : 'light'
-      await page.waitForFunction(theme => document.documentElement.getAttribute('data-theme') === theme && document.querySelector('.shell-theme')?.classList.contains(theme), theme)
+      await page.waitForFunction(({theme,sel}) => document.documentElement.getAttribute('data-theme') === theme && document.querySelector(sel)?.classList.contains(theme), {theme,sel:S.shellTheme})
       await page.waitForTimeout(350)
       for (const focus of ['reading','typing']) {
         if (focus === 'typing') await editor.focus()
         else await chat.focus()
         await page.waitForTimeout(100)
-        const readability = await paper.evaluate(el => {
+        const readability = await paper.evaluate((el, sel) => {
           const view = el.__cmView
-          const line = [...view.contentDOM.querySelectorAll('.cm-paper-dim')].find(node => node.textContent.trim())
+          const line = [...view.contentDOM.querySelectorAll(sel)].find(node => node.textContent.trim())
           if (!line) throw new Error('Focus paragraph scenario has no inactive visible paragraph')
           const style = getComputedStyle(line)
           let surface = el
@@ -205,7 +206,7 @@ try {
           const foregroundLight = luminance(foreground.map((value,index) => alpha * value + (1-alpha) * background[index]))
           const backgroundLight = luminance(background)
           return {theme:document.documentElement.getAttribute('data-theme'),focused:view.hasFocus,opacity:alpha,color:style.color,background:getComputedStyle(surface).backgroundColor,contrast:(Math.max(foregroundLight,backgroundLight)+.05)/(Math.min(foregroundLight,backgroundLight)+.05)}
-        })
+        }, S.cmPaperDim)
         report.readability ??= []
         report.readability.push({expectedTheme:theme,focus,...readability})
         await shot(theme + '-focus-' + focus)
@@ -216,13 +217,13 @@ try {
       }
     }
     await paper.evaluate(el => { globalThis.__pluginTestScroll = el.__cmView.scrollDOM.scrollTop })
-    await page.locator('.plugins-trigger').click()
-    await page.locator('.plugins-page').waitFor()
-    assert(await page.locator('.plugin-workspace-writing').evaluate(el => el.inert))
+    await page.locator(S.pluginsTrigger).click()
+    await page.locator(S.pluginsPage).waitFor()
+    assert(await page.locator(S.pluginWorkspaceWriting).evaluate(el => el.inert))
     await page.keyboard.press('Control+k')
     await page.keyboard.press('Control+Shift+P')
     assert.equal(await page.getByRole('dialog').count(), 0)
-    await page.locator('.plugins-back').click()
+    await page.locator(S.pluginsBack).click()
     assert(await editor.evaluate(el => el === globalThis.__pluginTestEditor))
     assert.equal(await chat.inputValue(), '保留的聊天草稿')
     assert.match(await editor.innerText(), /插件页面切换应保留正文/)
@@ -237,23 +238,23 @@ try {
     await shot('workspace-return')
     report.checks.push('real CodeMirror instance, manuscript, scroll, chat draft and hotkey isolation preserved')
     const openCommand = async label => {
-      await page.locator('.palette-trigger').click()
+      await page.locator(S.paletteTrigger).click()
       const palette = page.getByRole('dialog', {name:'搜索与命令',exact:true})
-      await palette.locator('.palette-input').fill(label)
-      await palette.locator('.palette-item').filter({has:page.getByText(label,{exact:true})}).first().click()
+      await palette.locator(S.paletteInput).fill(label)
+      await palette.locator(S.paletteItem).filter({has:page.getByText(label,{exact:true})}).first().click()
       await palette.waitFor({state:'hidden'})
     }
     for (const theme of ['light','dark']) {
-      if (!await page.locator('.shell-theme').evaluate((el,theme) => el.classList.contains(theme), theme)) {
-        await page.locator('.theme-toggle').click()
-        await page.waitForFunction(theme => document.querySelector('.shell-theme')?.classList.contains(theme), theme)
+      if (!await page.locator(S.shellTheme).evaluate((el,theme) => el.classList.contains(theme), theme)) {
+        await page.locator(S.themeToggle).click()
+        await page.waitForFunction(({theme,sel}) => document.querySelector(sel)?.classList.contains(theme), {theme,sel:S.shellTheme})
       }
       await page.waitForTimeout(350)
       // The overview is a floating card; the proofread panel is a flat sidebar
       // section by design (校对与记忆面板成为侧栏区段).
       for (const [command, selector, close, radius] of [
-        ['文档概览','.overview-panel','关闭概览','28px'],
-        ['校对当前文档','.proofread-panel','关闭文稿校对','0px'],
+        ['文档概览',S.overviewPanelSurface,'关闭概览','28px'],
+        ['校对当前文档',S.proofreadPanelSurface,'关闭文稿校对','0px'],
       ]) {
         await openCommand(command)
         const panel = page.locator(selector)
@@ -270,15 +271,15 @@ try {
     // reachable through the palette (verified above) and their registered
     // shortcuts, with the editor focused so the keydown reaches the workspace.
     for (const theme of ['light', 'dark']) {
-      if (!await page.locator('.shell-theme').evaluate((el, value) => el.classList.contains(value), theme)) {
-        await page.locator('.theme-toggle').click()
-        await page.waitForFunction(value => document.querySelector('.shell-theme')?.classList.contains(value), theme)
+      if (!await page.locator(S.shellTheme).evaluate((el, value) => el.classList.contains(value), theme)) {
+        await page.locator(S.themeToggle).click()
+        await page.waitForFunction(({value,sel}) => document.querySelector(sel)?.classList.contains(value), {value:theme,sel:S.shellTheme})
       }
-      assert.equal(await page.locator('.side-document-tools').count(), 0, theme + ': no sidebar document tool buttons')
+      assert.equal(await page.locator(S.sideDocumentTools).count(), 0, theme + ': no sidebar document tool buttons')
       await editor.focus()
       for (const [shortcut, selector, close] of [
-        ['Control+Shift+O', '.overview-panel', '关闭概览'],
-        ['Control+Shift+L', '.proofread-panel', '关闭文稿校对'],
+        ['Control+Shift+O', S.overviewPanelSurface, '关闭概览'],
+        ['Control+Shift+L', S.proofreadPanelSurface, '关闭文稿校对'],
       ]) {
         await page.keyboard.press(shortcut)
         const panel = page.locator(selector)
@@ -301,7 +302,7 @@ try {
   report.failure = String(error)
   if (page) {
     await page.screenshot({ path: resolve(output, 'failure.png') }).catch(() => {})
-    await writeFile(resolve(output, 'failure.txt'), await page.locator('body').innerText().catch(() => ''), 'utf8')
+    await writeFile(resolve(output, 'failure.txt'), await page.locator(S.body).innerText().catch(() => ''), 'utf8')
   }
   throw error
 } finally {

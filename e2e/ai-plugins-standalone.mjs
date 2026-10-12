@@ -7,6 +7,7 @@ import { resolve, relative } from 'node:path'
 import { tmpdir } from 'node:os'
 import { chromium } from 'playwright'
 import { externalPluginDirectories } from '../scripts/external-plugins.mjs'
+import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const packageDirectories = new Map(externalPluginDirectories(root).map(pkg => [pkg.name, pkg.dir]))
@@ -170,7 +171,7 @@ try {
 } catch (error) {
   report.failure = String(error)
   if (page) {
-    await writeFile(resolve(output, 'failure-dom.txt'), await page.locator('body').innerText()).catch(() => {})
+    await writeFile(resolve(output, 'failure-dom.txt'), await page.locator(S.body).innerText()).catch(() => {})
     await page.screenshot({ path: resolve(output, 'failure.png'), fullPage: true }).catch(() => {})
   }
   process.exitCode = 1

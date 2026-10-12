@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
+import { S } from './selectors.mjs'
 
 export function getPluginsPage(page) {
-  return page.locator('section.plugins-page[aria-label="插件管理"]')
+  return page.locator(S.pluginsPageSection)
 }
 
 export async function openPluginsPage(page) {
@@ -20,15 +21,32 @@ export async function closePluginsPage(page) {
 }
 
 export async function showPluginList(plugins) {
-  const overview = plugins.getByTestId('plugins-nav-overview')
+  const overview = plugins.locator(S.pluginsNavOverview)
   if (await overview.isVisible()) await overview.click()
-  await plugins.getByTestId('plugins-catalog').waitFor()
+  await plugins.locator(S.pluginsCatalog).waitFor()
+}
+
+/**
+ * Open every closed <details> in the locator subtree, outermost first, via real
+ * summary clicks. Setting `.open` directly is not enough — the groups are
+ * React-controlled and re-collapse on the next render.
+ */
+export async function expandAllDetails(locator) {
+  let previous = -1
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const closed = locator.locator('details:not([open])')
+    const count = await closed.count()
+    if (!count || count === previous) return
+    previous = count
+    await closed.first().locator('summary').first().click()
+    await locator.page().waitForTimeout(120)
+  }
 }
 
 /** The preinstalled web search bundle is a distribution built-in, listed under the builtin catalog. */
 export function webSearchRow(plugins) {
-  return plugins.getByTestId('plugins-catalog-builtin')
-    .locator('[data-testid^="plugins-catalog-row-"]')
+  return plugins.locator(S.pluginsCatalogBuiltin)
+    .locator(S.pluginsCatalogRow)
     .filter({ hasText: '网页搜索' })
 }
 
@@ -37,28 +55,32 @@ export async function openWebSearchSettings(plugins) {
   const row = webSearchRow(plugins)
   // A row carries one action: the configuration button, or the detail button
   // when the bundle has no configuration of its own.
-  const configure = row.locator('[data-testid^="plugins-catalog-config-"]')
-  const detail = row.locator('[data-testid^="plugins-catalog-detail-"]')
+  const configure = row.locator(S.pluginsCatalogConfig)
+  const detail = row.locator(S.pluginsCatalogDetail)
   await (await configure.count() ? configure : detail).click()
-  const settings = plugins.getByTestId('web-search-settings')
+  const settings = plugins.locator(S.webSearchSettings)
   await settings.waitFor()
   return settings
 }
 
 export async function openWritingPresets(plugins) {
   await showPluginList(plugins)
-  const builtin = plugins.getByTestId('plugins-catalog-builtin')
+  const builtin = plugins.locator(S.pluginsCatalogBuiltin)
+  // The preset rows live in a 写作模式 subsection of the builtin catalog and
+  // arrive once presets.list resolves. Older layouts wrapped them in a
+  // collapsed <details>, so still expand any closed disclosures first.
+  await expandAllDetails(builtin)
   const presets = await writingPresetGroup(builtin)
   await presets.scrollIntoViewIfNeeded()
-  if (await presets.evaluate(element => element instanceof HTMLDetailsElement && !element.open))
-    await presets.locator(':scope > summary').click()
-  await builtin.getByText('小说创作', { exact: true }).waitFor()
+  await builtin.getByText('小说创作', { exact: true }).waitFor({ state: 'visible' })
   return presets
 }
 
-/** The preset sub-group is a collapsible group in the old layout and a plain subsection now. */
+/** The preset sub-group is a plain subsection now; a collapsible group in older layouts. */
 async function writingPresetGroup(builtin) {
-  const group = builtin.locator('[data-testid="plugins-writing-presets"]')
+  const subsection = builtin.locator(S.pluginsCatalogPresets)
+  if (await subsection.count()) return subsection.first()
+  const group = builtin.locator(S.pluginsWritingPresets)
   if (await group.count()) return group.first()
   const collapsible = builtin.locator('details').filter({ hasText: '写作模式' })
   if (await collapsible.count()) return collapsible.first()
@@ -66,25 +88,39 @@ async function writingPresetGroup(builtin) {
 }
 
 export async function openPluginDiscovery(plugins) {
-  const nav = plugins.getByTestId('plugins-nav-discovery')
+  const nav = plugins.locator(S.pluginsNavDiscovery)
   if (await nav.isVisible()) await nav.click()
-  const discovery = plugins.getByTestId('plugins-discovery')
+  const discovery = plugins.locator(S.pluginsDiscovery)
   await discovery.waitFor()
-  if (await discovery.evaluate(element => element instanceof HTMLDetailsElement && !element.open))
-    await discovery.locator(':scope > summary').click()
-  // The seat contribution keeps its own collapsed disclosure inside the page.
-  const inner = discovery.locator('[data-testid="plugins-settings"]')
-  if (await inner.count() && await inner.first().evaluate(element => element instanceof HTMLDetailsElement && !element.open))
-    await inner.first().locator(':scope > summary').click()
+  // The install-spec form sits behind the 高级 disclosure, and the seat
+  // contribution keeps its own collapsed disclosure inside the page.
+  await expandAllDetails(discovery)
   return discovery
 }
 
-/** The official manager keeps its install, uninstall and script-approval UI on this page. */
+/**
+ * The 复制规格 / install-spec block of a discovery listing card lives inside its
+ * own 高级信息 <details>, which renders closed and arrives after the async
+ * marketplace search resolves. Find the card by its spec text and open the
+ * disclosure so its actions are clickable.
+ */
+export async function openListingSpec(discovery, specText) {
+  const card = discovery.locator(S.pluginsCard)
+    .filter({ has: discovery.page().locator(S.pluginsSpec).filter({ hasText: specText }) })
+    .first()
+  await card.waitFor({ state: 'visible' })
+  const advanced = card.locator(S.pluginsComposition)
+  if (!await advanced.evaluate(element => element.open)) {
+    await advanced.locator(S.summaryScope).click()
+  }
+  return card
+}
+
 /** The official manager keeps its install, uninstall and script-approval UI on this page. */
 export async function openPluginManager(plugins) {
-  const nav = plugins.getByTestId('plugins-nav-manager')
+  const nav = plugins.locator(S.pluginsNavManager)
   if (await nav.isVisible()) await nav.click()
-  const seat = plugins.getByTestId('plugins-manager-seat')
+  const seat = plugins.locator(S.pluginsManagerSeat)
   await seat.waitFor()
   // A previous detail view (openBundle) sticks inside the manager; return to its list.
   const backToList = seat.getByText('插件列表', { exact: true }).first()
@@ -115,8 +151,8 @@ export async function nativePluginRpc(page, method, args = {}) {
  * nav's scroll metrics, is the only way to see that failure.
  */
 export async function assertConfigNavLinksReachable(plugins) {
-  const nav = plugins.getByTestId('plugins-page-nav')
-  const measured = await nav.evaluate(element => {
+  const nav = plugins.locator(S.pluginsPageNav)
+  const measured = await nav.evaluate((element, linkSelector) => {
     const box = element.getBoundingClientRect()
     const style = getComputedStyle(element)
     const edges = {
@@ -127,7 +163,7 @@ export async function assertConfigNavLinksReachable(plugins) {
     }
     // Links inside the collapsed 高级组件 <details> are intentionally not
     // laid out until the author expands it; they are not "outside the box".
-    const links = [...element.querySelectorAll('.plugins-page-link')]
+    const links = [...element.querySelectorAll(linkSelector)]
       .filter(link => !link.closest('details:not([open])'))
       .map(link => {
       const rect = link.getBoundingClientRect()
@@ -141,7 +177,7 @@ export async function assertConfigNavLinksReachable(plugins) {
       }
     })
     return { links, nav: { client: element.clientWidth, scroll: element.scrollWidth } }
-  })
+  }, S.pluginsPageLink)
   assert.ok(measured.links.length > 0, 'the plugins nav renders its links')
   const unreachable = measured.links.filter(link => !link.reachable)
   assert.equal(unreachable.length, 0,
@@ -151,8 +187,8 @@ export async function assertConfigNavLinksReachable(plugins) {
 
 /** A catalog row shows the author's brand art or its monogram; a blank tile is a defect. */
 export async function assertCatalogIconsRendered(plugins) {
-  const tiles = await plugins.getByTestId('plugins-catalog')
-    .locator('.plugins-catalog-icon')
+  const tiles = await plugins.locator(S.pluginsCatalog)
+    .locator(S.pluginsCatalogIcon)
     .evaluateAll(nodes => nodes.map(node => {
       const image = node.querySelector('img')
       return {
@@ -171,9 +207,9 @@ export async function assertCatalogIconsRendered(plugins) {
 
 export async function assertDefaultPluginPage(page, plugins) {
   await showPluginList(plugins)
-  const official = plugins.getByTestId('plugins-catalog-official')
-  const builtin = plugins.getByTestId('plugins-catalog-builtin')
-  const user = plugins.getByTestId('plugins-catalog-user')
+  const official = plugins.locator(S.pluginsCatalogOfficial)
+  const builtin = plugins.locator(S.pluginsCatalogBuiltin)
+  const user = plugins.locator(S.pluginsCatalogUser)
   for (const section of [official, builtin, user]) await section.waitFor()
   // Rows populate after the sections mount; sample after the row exists.
   await webSearchRow(plugins).first().waitFor()
@@ -186,7 +222,7 @@ export async function assertDefaultPluginPage(page, plugins) {
   assert.deepEqual(bundles.filter(bundle => bundle.name.startsWith('@klarkxy/')).map(bundle => bundle.name).sort(),
     ['@klarkxy/dsh-web-search-manager'], 'only web search is preinstalled from the public plugin repository')
   assert.equal(bundles.find(bundle => bundle.name === '@klarkxy/dsh-web-search-manager')?.enabled, true)
-  assert.equal(await plugins.getByTestId('plugins-page-nav').getByRole('button', { name: /^(知乎资料|知乎)$/ }).count(), 0,
+  assert.equal(await plugins.locator(S.pluginsPageNav).getByRole('button', { name: /^(知乎资料|知乎)$/ }).count(), 0,
     'Zhihu configuration is available after an explicit installation, not in the default distribution')
   return bundles
 }

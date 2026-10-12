@@ -6,6 +6,7 @@ import { mkdir, writeFile, readFile, appendFile, readdir } from 'node:fs/promise
 import { resolve } from 'node:path'
 import { _electron as electron } from 'playwright'
 import { nativePluginRpc, openPluginManager, openPluginsPage, closePluginsPage } from './helpers/plugin-page.mjs'
+import { S } from './helpers/selectors.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const fixtureRequire = createRequire(resolve(root, 'packages/dsh-editor-shell/package.json'))
@@ -85,14 +86,14 @@ async function waitForVoiceState(page, enabled) {
   assert.fail(`voice state did not settle to ${enabled}: ${JSON.stringify({ bundle, components })}`)
 }
 async function waitForPdfPaint(page) {
-  await page.waitForFunction(() => [...document.querySelectorAll('.official-resource-panel canvas')].some(canvas => {
+  await page.waitForFunction(sel => [...document.querySelectorAll(sel)].some(canvas => {
     if (canvas.width < 10 || canvas.height < 10) return false
     const ctx = canvas.getContext('2d'); if (!ctx) return false
     const pixels = ctx.getImageData(0,0,canvas.width,canvas.height).data
     let ink = 0
     for (let index=0; index<pixels.length; index+=4) if (pixels[index+3] > 0 && pixels[index] < 100 && pixels[index+1] < 100 && pixels[index+2] < 100 && ++ink>10) return true
     return false
-  }), undefined, {timeout:30000})
+  }), S.officialResourcePanelCanvas, {timeout:30000})
 }
 let app, page
 const server = createServer(async (req, res) => {
@@ -133,10 +134,10 @@ try {
     }
   })
   await page.reload()
-  await page.waitForFunction(() => document.querySelector('main.shell') || document.body?.innerText.includes('Failed to load plugins') || document.body?.innerText.includes('DSH Editor 启动失败'), undefined, { timeout: 90000 })
-  if (!await page.locator('main.shell').count()) {
+  await page.waitForFunction(sel => document.querySelector(sel) || document.body?.innerText.includes('Failed to load plugins') || document.body?.innerText.includes('DSH Editor 启动失败'), S.shell, { timeout: 90000 })
+  if (!await page.locator(S.shell).count()) {
     await page.getByText('dsh-editor-shell', { exact: true }).first().click().catch(() => {})
-    throw new Error('Shell boot failed: ' + report.errors.join('\n') + '\n' + await page.locator('body').innerText())
+    throw new Error('Shell boot failed: ' + report.errors.join('\n') + '\n' + await page.locator(S.body).innerText())
   }
   for (let i=0;i<5;i++) {
     const next=page.getByRole('button',{name:'继续',exact:true})
@@ -174,12 +175,12 @@ try {
   // The official manager is the install, toggle and approval engine; it lives on
   // the 安装与卸载 page, so select that page before touching its panel.
   const manager = await openPluginManager(plugins)
-  await manager.locator('[data-plugin-panel]').getByRole('button', {name:'查看 语音输入',exact:true}).waitFor()
+  await manager.locator(S.pluginPanel).getByRole('button', {name:'查看 语音输入',exact:true}).waitFor()
   check('native inventory and boot manifest enable shortcuts and document previews; MCP resources ship disabled')
   await page.screenshot({path:resolve(output,'plugins-light.png')})
   // Built-in availability, bundle selection, component activation and model
   // preparation are separate native states.
-  await manager.locator('[data-plugin-panel]').getByRole('button', {name:'查看 语音输入',exact:true}).click()
+  await manager.locator(S.pluginPanel).getByRole('button', {name:'查看 语音输入',exact:true}).click()
   const voiceSwitch = plugins.getByRole('switch', {name:'启用 语音输入',exact:true})
   const voiceBundle = (await nativePluginRpc(page, 'listBundles')).find(bundle => bundle.name === voiceName)
   const voiceComponents = voiceIds
@@ -194,29 +195,29 @@ try {
     assert.equal(row.enabled, true, row.entryId + ' is active with the selected voice bundle')
   }
   assert.ok(bootModules.includes('@deepseek-ai/dsh-experimental-client-ui-voice-input'), 'voice activity is advertised to the client module loader')
-  const voiceConfiguration = manager.locator('[data-plugin-config]')
+  const voiceConfiguration = manager.locator(S.pluginConfig)
   await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).waitFor()
   assert.equal(await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).isEnabled(),true)
   await page.screenshot({path:resolve(output,'voice-preparation.png')})
   await assertVoiceIdle(page, 'preparation page visit')
   check('official voice preparation page does not download or record on visit')
   await voiceSwitch.click()
-  await page.waitForFunction(() => document.querySelector('[role="switch"][aria-label="启用 语音输入"]')?.getAttribute('aria-checked') === 'false')
+  await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'false', S.switch('启用 语音输入'))
   report.voice.disabled = await waitForVoiceState(page, false)
   assert.equal(await page.evaluate(() => window.__e2eMicrophoneRequests), 0, 'disabling voice does not request microphone')
   await voiceSwitch.click()
-  await page.waitForFunction(() => document.querySelector('[role="switch"][aria-label="启用 语音输入"]')?.getAttribute('aria-checked') === 'true')
+  await page.waitForFunction(sel => document.querySelector(sel)?.getAttribute('aria-checked') === 'true', S.switch('启用 语音输入'))
   report.voice.reenabled = await waitForVoiceState(page, true)
   await voiceConfiguration.getByRole('button', {name:'下载并准备',exact:true}).waitFor()
   await assertVoiceIdle(page, 'bundle off/on')
   check('native voice bundle off/on restores active components without preparing or recording')
   await closePluginsPage(page)
   if (process.argv.includes('--staged')) { report.ok=true; throw Object.assign(new Error('staged checks complete'), { stagedComplete: true }) }
-  await page.locator('.native-settings-control button').click()
+  await page.locator(S.nativeSettingsButton).click()
   await page.getByRole('tab',{name:'快捷键',exact:true}).click()
   await page.getByRole('button',{name:'编辑快捷键',exact:true}).click()
   await page.screenshot({path:resolve(output,'shortcuts.png')})
-  assert((await page.locator('body').innerText()).includes('新建窗口'))
+  assert((await page.locator(S.body).innerText()).includes('新建窗口'))
   check('official shortcut dialog contains Editor commands')
   await page.getByRole('button', {name:'修改命令面板快捷键', exact:true}).click()
   await page.keyboard.press('Control+Alt+K')
@@ -227,19 +228,19 @@ try {
   await page.getByRole('button',{name:'关闭快捷键',exact:true}).click()
   await page.keyboard.press('Escape')
   await app.evaluate(({BrowserWindow}) => { const w=BrowserWindow.getAllWindows()[0]; w.focus(); w.webContents.sendInputEvent({type:'keyDown',keyCode:'K',modifiers:['control','alt']}); w.webContents.sendInputEvent({type:'keyUp',keyCode:'K',modifiers:['control','alt']}) })
-  await page.locator('[cmdk-root]').waitFor()
+  await page.locator(S.cmdkRoot).waitFor()
   await page.keyboard.press('Escape')
   check('edited shortcut executes Editor command')
   await page.getByRole('button', { name: '新建', exact: true }).first().click()
   const projectDialog = page.getByRole('dialog', { name: '新建作品' })
   await projectDialog.getByLabel('作品名称').fill('official-fixture')
   await projectDialog.getByRole('button', { name: '创建', exact: true }).click()
-  await page.locator('.tree').waitFor({timeout:30000})
+  await page.locator(S.tree).waitFor({timeout:30000})
   await page.getByRole('textbox',{name:'输入消息',exact:true}).fill('原生草稿接入检查')
   assert.equal(await page.getByRole('textbox',{name:'输入消息',exact:true}).inputValue(), '原生草稿接入检查')
   await page.getByRole('textbox',{name:'输入消息',exact:true}).fill('')
   check('native draft projects into Editor composer')
-  report.composer = await page.locator('.composer').innerText()
+  report.composer = await page.locator(S.composer).innerText()
   await page.screenshot({path:resolve(output,'workbench.png')})
   const project = resolve(home, 'projects/official-fixture')
   await writeFile(resolve(project, 'preview.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=', 'base64'))
@@ -249,44 +250,44 @@ try {
   await writeFile(resolve(project, 'preview.csv'), 'name,value\nPreview,42\n')
   await page.getByRole('button',{name:'作品菜单'}).click()
   await page.getByRole('menuitem',{name:'返回作品列表'}).click()
-  await page.locator('.home-recent').getByRole('button',{name:/official-fixture/}).first().click()
-  await page.locator('.tree').waitFor({timeout:30000})
-  await page.locator('[data-tree-path="preview.png"]').dblclick()
-  await page.locator('.official-resource-panel:not([hidden])').waitFor()
-  await page.waitForFunction(() => [...document.querySelectorAll('.official-resource-panel img')].some(img=>img.complete && img.naturalWidth > 0))
+  await page.locator(S.homeRecent).getByRole('button',{name:/official-fixture/}).first().click()
+  await page.locator(S.tree).waitFor({timeout:30000})
+  await page.locator(S.treePath('preview.png')).dblclick()
+  await page.locator(S.officialResourcePanelVisible).waitFor()
+  await page.waitForFunction(sel => [...document.querySelectorAll(sel)].some(img=>img.complete && img.naturalWidth > 0), S.officialResourcePanelImg)
   await page.screenshot({path:resolve(output,'preview-image.png')})
   check('official image preview renders local workspace resource')
-  await page.locator('[data-tree-path="preview.csv"]').dblclick()
-  await page.locator('.official-resource-panel').getByText('CSV', {exact:true}).waitFor()
-  await page.locator('.official-resource-panel canvas').first().waitFor()
+  await page.locator(S.treePath('preview.csv')).dblclick()
+  await page.locator(S.officialResourcePanel).getByText('CSV', {exact:true}).waitFor()
+  await page.locator(S.officialResourcePanelCanvas).first().waitFor()
   await page.screenshot({path:resolve(output,'preview-spreadsheet.png')})
   check('official spreadsheet preview renders CSV cells')
-  await page.locator('[data-tree-path="preview.pdf"]').dblclick()
-  await page.locator('.official-resource-panel canvas').first().waitFor({timeout:30000})
+  await page.locator(S.treePath('preview.pdf')).dblclick()
+  await page.locator(S.officialResourcePanelCanvas).first().waitFor({timeout:30000})
   await waitForPdfPaint(page)
   await page.screenshot({path:resolve(output,'preview-pdf.png')})
   check('official PDF preview renders a page')
-  await page.locator('[data-tree-path="preview.docx"]').dblclick()
-  await page.waitForFunction(() => document.querySelector('.official-resource-panel canvas') || document.querySelector('.official-resource-panel [data-textpreview-failed]'), undefined, {timeout:75000})
-  assert.equal(await page.locator('.official-resource-panel [data-textpreview-failed]').count(),0,await page.locator('.official-resource-panel').innerText())
+  await page.locator(S.treePath('preview.docx')).dblclick()
+  await page.waitForFunction(({ canvas, failed }) => document.querySelector(canvas) || document.querySelector(failed), { canvas: S.officialResourcePanelCanvas, failed: S.officialResourcePanelFailed }, {timeout:75000})
+  assert.equal(await page.locator(S.officialResourcePanelFailed).count(),0,await page.locator(S.officialResourcePanel).innerText())
   await waitForPdfPaint(page)
   check('official Office preview converts DOCX and renders PDF')
-  report.office = await page.locator('.official-resource-panel').innerText()
+  report.office = await page.locator(S.officialResourcePanel).innerText()
   await page.screenshot({path:resolve(output,'preview-office.png')})
 
   await page.getByRole('button',{name:'收起右侧边栏',exact:true}).click()
   // Explicit close button follows the native document panel's accessible controls.
-  report.panelButtons = await page.locator('.official-resource-panel button').evaluateAll(nodes=>nodes.map(node=>({label:node.getAttribute('aria-label'),title:node.title,text:node.textContent})))
-  await page.locator('.theme-toggle').click()
+  report.panelButtons = await page.locator(S.officialResourcePanelButton).evaluateAll(nodes=>nodes.map(node=>({label:node.getAttribute('aria-label'),title:node.title,text:node.textContent})))
+  await page.locator(S.themeToggle).click()
   await page.waitForFunction(() => document.body.hasAttribute('data-ds-dark-theme'))
-  await page.locator('[data-tree-path="preview.pdf"]').dblclick()
+  await page.locator(S.treePath('preview.pdf')).dblclick()
   await waitForPdfPaint(page)
   await page.screenshot({path:resolve(output,'preview-dark.png')})
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(860,720))
   await page.waitForFunction(()=>innerWidth<=860)
   await page.getByRole('button',{name:'收起右侧边栏',exact:true}).waitFor()
-  await page.waitForFunction(() => !document.querySelector('.shell.assistant-overlay'))
-  assert(await page.locator('.official-resource-panel').evaluate(panel => {const box=panel.getBoundingClientRect(); return panel.contains(document.elementFromPoint(box.right-20,box.top+30))}))
+  await page.waitForFunction(sel => !document.querySelector(sel), S.shellAssistantOverlay)
+  assert(await page.locator(S.officialResourcePanel).evaluate(panel => {const box=panel.getBoundingClientRect(); return panel.contains(document.elementFromPoint(box.right-20,box.top+30))}))
   await page.screenshot({path:resolve(output,'preview-narrow.png')})
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1440,900))
   check('official panel follows Editor dark theme')
@@ -301,12 +302,12 @@ try {
   await page.getByRole('button',{name:'对话操作',exact:true}).click()
   await page.getByRole('menuitem',{name:'取消置顶',exact:true}).waitFor()
   await page.getByRole('menuitem',{name:'归档',exact:true}).click()
-  await page.locator('.archived-conversations summary').click()
-  await page.locator('.archived-conversations').getByRole('button',{name:'恢复',exact:true}).click()
-  await page.locator('.archived-conversations').waitFor({state:'hidden'})
+  await page.locator(S.archivedConversationsSummary).click()
+  await page.locator(S.archivedConversations).getByRole('button',{name:'恢复',exact:true}).click()
+  await page.locator(S.archivedConversations).waitFor({state:'hidden'})
   check('native conversation pin, archive and restore')
-  await page.locator('.cm-content').fill('# Preview fixture\nSaved with upgraded desktop.')
-  await page.locator('.cm-content').press('Control+s')
+  await page.locator(S.cmContent).fill('# Preview fixture\nSaved with upgraded desktop.')
+  await page.locator(S.cmContent).press('Control+s')
   for (let attempt=0;attempt<50;attempt++) {
     if ((await readFile(resolve(project,'fixture.md'),'utf8')).includes('Saved with upgraded desktop.')) break
     await page.waitForTimeout(100)
@@ -317,14 +318,14 @@ try {
   await app.close(); app=undefined
   app = await electron.launch({ executablePath: executable, args: launchArgs,env,timeout:90000 })
   page=await app.firstWindow()
-  await page.locator('main.shell').waitFor({timeout:90000})
-  assert.equal(await page.locator('.palette-trigger-kbd').innerText(),'Ctrl+Alt+K')
+  await page.locator(S.shell).waitFor({timeout:90000})
+  assert.equal(await page.locator(S.paletteTriggerKbd).innerText(),'Ctrl+Alt+K')
   check('custom shortcut survives desktop restart')
   report.ok=true
 } catch(error) {
   if (!error.stagedComplete) { report.ok=false; report.failure=String(error?.stack || error) }
   if (page) {
-    report.body=await page.locator('body').innerText().catch(()=> '')
+    report.body=await page.locator(S.body).innerText().catch(()=> '')
     await page.screenshot({path:resolve(output,'failure.png')}).catch(()=>{})
   }
 } finally {

@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { build } from 'tsdown'
 import { chromium } from 'playwright'
+import { S } from './helpers/selectors.mjs'
 
 // Production ProposalCard browser fixture with RPC fault injection. Actual
 // manuscript writes and durable storage failures are covered by index.spec.ts.
@@ -91,26 +92,26 @@ try {
   for (const theme of ['light', 'dark']) {
     await page.goto(`${origin}/?theme=${theme}`)
     await page.getByRole('button', { name: '应用', exact: true }).click()
-    await page.locator('.proposal-card.applied').waitFor()
-    await page.locator('.proposal-card summary').click()
+    await page.locator(S.proposalCardApplied).waitFor()
+    await page.locator(S.proposalCardSummary).click()
     await page.getByRole('button', { name: '撤销此次修改', exact: true }).click()
-    await page.locator('.proposal-card.expired').waitFor()
-    assert.match(await page.locator('.proposal-status').innerText(), /操作未能全部完成/)
-    assert.match(await page.locator('.proposal-status').innerText(), /正文\/001.md/)
-    assert.doesNotMatch(await page.locator('.proposal-status').innerText(), /未写入任何内容/)
+    await page.locator(S.proposalCardExpired).waitFor()
+    assert.match(await page.locator(S.proposalStatus).innerText(), /操作未能全部完成/)
+    assert.match(await page.locator(S.proposalStatus).innerText(), /正文\/001.md/)
+    assert.doesNotMatch(await page.locator(S.proposalStatus).innerText(), /未写入任何内容/)
     assert.deepEqual(await page.evaluate(() => window.probe.refreshedPaths), ['正文/001.md', '正文/001.md'])
     assert.equal(await page.getByRole('button', { name: '应用', exact: true }).count(), 0)
     await page.screenshot({ path: resolve(output, `partial-undo-${theme}.png`) })
     await page.goto(`${origin}/?mode=mismatch&theme=${theme}`)
-    await page.locator('.proposal-card.expired').waitFor()
-    assert.match(await page.locator('.proposal-status').innerText(), /审批回执不一致/)
+    await page.locator(S.proposalCardExpired).waitFor()
+    assert.match(await page.locator(S.proposalStatus).innerText(), /审批回执不一致/)
     assert.equal(await page.getByRole('button', { name: '应用', exact: true }).count(), 0)
     assert.equal(await page.getByRole('button', { name: '撤销此次修改', exact: true }).count(), 0)
     assert.deepEqual(await page.evaluate(() => window.probe.requests), ['proposal.receipt', 'file.read'])
     await page.screenshot({ path: resolve(output, `mismatched-receipt-${theme}.png`) })
     for (const mode of ['applied', 'undone']) {
       await page.goto(`${origin}/?mode=${mode}&theme=${theme}`)
-      await page.locator(`.proposal-card.${mode}.proposal-card-settled`).waitFor()
+      await page.locator(S.proposalCardSettled(mode)).waitFor()
       assert.equal(await page.getByRole('button', { name: '应用', exact: true }).count(), 0)
     }
   }
@@ -121,7 +122,7 @@ try {
   const page = browser?.contexts()[0]?.pages()[0]
   if (page) {
     await page.screenshot({ path: resolve(output, 'failure.png') })
-    await writeFile(resolve(output, 'failure.txt'), JSON.stringify({ errors, body: await page.locator('body').innerText() }, null, 2))
+    await writeFile(resolve(output, 'failure.txt'), JSON.stringify({ errors, body: await page.locator(S.body).innerText() }, null, 2))
   }
   console.error('Proposal fixture errors:', errors)
   throw error
