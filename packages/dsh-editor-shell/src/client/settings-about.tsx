@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Callout, Card, DataList, Flex, Heading, Progress, Text } from '@radix-ui/themes'
-import { windowBridge, type DownloadedUpdateInfo } from './window-controls.tsx'
+import { windowBridge, type DownloadedUpdateInfo } from '../model/window-controls.ts'
 import { AppMascot } from './mascot.tsx'
 import { ActivityDots, ActivityText, SuccessMark } from './ui/index.ts'
 import { intlLocale, t, useLocale } from '../i18n/index.ts'

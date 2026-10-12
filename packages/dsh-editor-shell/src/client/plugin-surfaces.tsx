@@ -2,7 +2,8 @@ import { Component, useCallback, useSyncExternalStore, type ReactNode } from 're
 import { CHAT_EVENTS_SLOT, MODEL_SETTINGS_SLOT } from '../seats.ts'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 
-type SlotEntry = { options?: { id?: string; order?: number; label?: string | (() => string) } }
+import { firstSurfaceEntry, modelSettingsSections, type SlotEntry } from '../model/plugin-surfaces.ts'
+
 type Ledger = {
   entries(key: string): readonly SlotEntry[]
   getVersion(key: string): number
@@ -18,11 +19,6 @@ function slotLedger(ctx: unknown): Ledger | undefined {
 }
 
 /** Stable selection prevents competing provider editors from rendering together. */
-export function firstSurfaceEntry(entries: readonly SlotEntry[]): string | undefined {
-  return entries.filter(entry => typeof entry.options?.id === 'string' && entry.options.id.trim())
-    .map((entry, index) => ({ id: entry.options!.id!, order: entry.options?.order ?? 0, index }))
-    .sort((left, right) => left.order - right.order || left.index - right.index)[0]?.id
-}
 
 function useSurface(ctx: unknown, key: string) {
   const slots = slotLedger(ctx)
@@ -67,20 +63,6 @@ export function ModelSettingsSurface(props: {
   renderChatModel(): ReactNode
 }) { return props.renderProviders() }
 
-export function modelSettingsSections(entries: readonly SlotEntry[], locale: 'zh' | 'en') {
-  const seen = new Set<string>()
-  return entries.flatMap((entry, index) => {
-    const id = entry.options?.id?.trim()
-    if (!id || seen.has(id)) return []
-    seen.add(id)
-    let label = id
-    try {
-      const raw = typeof entry.options?.label === 'function' ? entry.options.label() : entry.options?.label
-      if (typeof raw === 'string' && raw.trim()) label = raw.trim()
-    } catch { /* A label failure cannot hide other plugin settings. */ }
-    return [{ id, label, order: entry.options?.order ?? 0, index }]
-  }).sort((a, b) => a.order - b.order || a.index - b.index)
-}
 
 export function usePluginModelSettings(ctx: unknown, locale: 'zh' | 'en') {
   const { entries, version } = useSurface(ctx, MODEL_SETTINGS_SLOT)

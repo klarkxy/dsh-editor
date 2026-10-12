@@ -11,6 +11,7 @@ import { Box, Card, Flex, Heading } from '@radix-ui/themes'
 import { Button, Dialog } from './ui/index.ts'
 import { CrossIcon } from './icons.tsx'
 import { t } from '../i18n/index.ts'
+import { currentSession, isObservableSource } from '../model/components.ts'
 
 export function DeepSeekWhaleMark(props: { size?: number }) {
   const size = props.size ?? 16
@@ -94,11 +95,6 @@ export function ImagePreviewOverlay(props: { path: string; url: string; onClose(
   );
 }
 
-export function isObservableSource(value: unknown): value is { getSnapshot(): unknown; subscribe(listener: () => void): () => void } {
-  return Boolean(value && typeof value === 'object'
-    && typeof (value as { getSnapshot?: unknown }).getSnapshot === 'function'
-    && typeof (value as { subscribe?: unknown }).subscribe === 'function')
-}
 
 export function useObservable<T>(source: { getSnapshot(): T; subscribe(listener: () => void): () => void }): T {
   return useSyncExternalStore(source.subscribe.bind(source), source.getSnapshot.bind(source), source.getSnapshot.bind(source))
@@ -131,8 +127,5 @@ export class ShellErrorBoundary extends Component<{ children?: ReactNode; fallba
   }
 }
 
-export function currentSession(ctx: ShellContext): SessionFace | undefined {
-  return ctx.uiWorkspace.current.getSnapshot()
-}
 
 export { type RpcResult }

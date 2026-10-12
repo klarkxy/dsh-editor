@@ -2,17 +2,9 @@ import type { Shortcuts } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { bindTextareaInsertion } from './official-input-selection.ts'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode, useSyncExternalStore } from 'react'
 import type { ShellContext } from './shared.ts'
+import { OFFICIAL_INPUT_SLOT, type OfficialInputActions } from '../model/official-surfaces.ts'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 
-export const OFFICIAL_INPUT_SLOT = 'dsh-editor.official-input'
-export const PLUGIN_NAVIGATION_EVENT = 'dsh-editor:plugin-navigation'
-export const OFFICIAL_LAYOUT_EVENT = 'dsh-editor:official-layout'
-
-export type OfficialInputActions = {
-  setDraft(text: string): void
-  captureInsertion(): { draftRev: number; start: number; end: number }
-  insertText(text: string, span: unknown): boolean
-}
 type SessionProvider = ComponentType<{ session: unknown; children?: ReactNode }>
 export type OfficialRootProps = { shortcuts?: Shortcuts; renderSlot?: SettingsRenderSlot; SessionProvider?: SessionProvider }
 const OfficialRoot = createContext<OfficialRootProps>({})

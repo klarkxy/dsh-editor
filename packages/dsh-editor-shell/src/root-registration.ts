@@ -1,5 +1,5 @@
 import { NATIVE_PLUGIN_MANAGER_SEAT } from './client/native-plugin-manager-seat.ts'
-import { OFFICIAL_INPUT_SLOT } from './client/official-surfaces.tsx'
+import { OFFICIAL_INPUT_SLOT } from './model/official-surfaces.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { RootOwnerProps } from './dsh-compat.ts'
 import { t } from './i18n/index.ts'

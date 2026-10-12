@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Badge, Button, Card, Dialog, DropdownMenu, Flex, IconButton, ScrollArea, Text, TextArea } from '@radix-ui/themes'
-import { ShellTheme, radixThemesStyles } from '../src/client/ui/theme-root.tsx'
+import { ShellTheme } from '../src/client/ui/theme-root.tsx'
+import { radixThemesStyles } from '../src/model/theme-root.ts'
 import { redesignedStyles } from '../src/styles.ts'
 import { Markdown } from '../src/client/markdown.tsx'
 

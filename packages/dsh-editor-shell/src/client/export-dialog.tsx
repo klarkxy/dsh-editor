@@ -8,6 +8,7 @@ import { buildBook } from '../export-book.ts'
 import { buildDocxBlob } from '../export-docx.ts'
 import { buildEpubBlob } from '../export-epub.ts'
 import { t } from '../i18n/index.ts'
+import { downloadBlob, downloadExport, previewExport } from '../model/export-dialog.ts'
 
 export async function collectDocuments(ctx: ShellContext, sessionId: string, directory: string): Promise<ChapterExport[]> {
   const root = normalizeProjectDirectory(directory)
@@ -36,23 +37,6 @@ export async function collectDocuments(ctx: ShellContext, sessionId: string, dir
   }))
 }
 
-export function downloadBlob(filename: string, blob: Blob): void {
-  const href = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = href
-  anchor.download = filename
-  anchor.click()
-  globalThis.setTimeout(() => URL.revokeObjectURL(href), 0)
-}
-
-export function downloadExport(filename: string, content: string, format: ExportFormat): void {
-  downloadBlob(filename, new Blob([content], { type: format === 'markdown' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8' }))
-}
-
-export function previewExport(chapters: readonly ChapterExport[], title: string): Omit<PreparedExport, 'filename' | 'content' | 'format'> {
-  const prepared = prepareExport(chapters, title, 'markdown')
-  return { chapters: prepared.chapters, totalChars: prepared.totalChars }
-}
 
 function ExportPreviewDialog(props: {
   open?: boolean

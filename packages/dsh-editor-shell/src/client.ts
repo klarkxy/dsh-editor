@@ -10,7 +10,7 @@ import {
   createWritingMigration,
   decodeWritingPreferences,
 } from './writing-settings.tsx'
-import { decodeHostThemePreference, writeHostThemePreference, type HostThemeSync } from './client/theme.tsx'
+import { decodeHostThemePreference, writeHostThemePreference, type HostThemeSync } from './model/theme.ts'
 import { decodeLocalePreference } from './client/settings-general.tsx'
 import { bindLocalePreference } from './i18n/index.ts'
 import { type ShellContext } from './client/shared.ts'
@@ -78,14 +78,15 @@ export type {
   WorkspaceOpenState,
   WorkspaceShortcutAction,
 } from './client/shared.ts'
-export { THEME_STORAGE_KEY, THEME_VALUES, ThemeToggle, useTheme } from './client/theme.tsx'
-export { ACCENT_STORAGE_KEY, ACCENT_VALUES, useAccent } from './client/theme.tsx'
-export type { AccentValue, HostThemeSync, ThemeValue } from './client/theme.tsx'
+export { THEME_STORAGE_KEY, THEME_VALUES, ACCENT_STORAGE_KEY, ACCENT_VALUES } from './model/theme.ts'
+export { ThemeToggle, useTheme, useAccent } from './client/theme.tsx'
+export type { AccentValue, HostThemeSync, ThemeValue } from './model/theme.ts'
 export { ConfirmDialog, ConversationPresetPicker, NewProjectDialog, TextPromptDialog } from './client/dialogs.tsx'
 export { Chat, ModelPicker, PendingCard, ProjectContextReceiptView, ProposalCard, bindOfficialConversation, conversationChatSource } from './client/chat.tsx'
 export { Editor } from './client/editor.tsx'
 export { FileContextMenu, Tree } from './client/sidebar.tsx'
-export { DeepSeekWhaleMark, PaperStage, currentSession, useObservable } from './client/components.tsx'
+export { DeepSeekWhaleMark, PaperStage, useObservable } from './client/components.tsx'
+export { currentSession } from './model/components.ts'
 
 type SettingsSlot = { get<T>(entryId: string): SettingsScope<T> }
 

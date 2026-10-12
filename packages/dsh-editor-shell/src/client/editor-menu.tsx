@@ -2,6 +2,7 @@ import type { EditorCommandState } from 'dsh-manuscript/client/editor-core'
 import { DropdownMenu, IconButton } from '@radix-ui/themes'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { t } from '../i18n/index.ts'
+import type { EditorMenuAction, EditorMenuModel } from '../model/editor-menu.ts'
 import {
   Menu,
   MenuContent,
@@ -11,27 +12,6 @@ import {
 } from './ui/index.ts'
 import { DotsIcon } from './icons.tsx'
 
-export type EditorMenuAction =
-  | 'undo'
-  | 'redo'
-  | 'cut'
-  | 'copy'
-  | 'paste'
-  | 'selectAll'
-  | 'selectParagraph'
-  | 'lookupReferences'
-  | 'save'
-  | 'find'
-  | 'replace'
-  | 'complete'
-  | 'rewrite'
-
-export type EditorMenuModel = {
-  state: EditorCommandState
-  canRewritePath: boolean
-  canSelectParagraph?: boolean
-  canLookupReferences?: boolean
-}
 
 const ITEM = 'editor-menu-item'
 

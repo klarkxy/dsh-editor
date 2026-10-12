@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { ACCENT_STORAGE_KEY, readStoredAccent } from '../client/theme.tsx'
+import { ACCENT_STORAGE_KEY, readStoredAccent } from '../model/theme.ts'
 import { designSystemStyles } from './styles.ts'
 
 describe('official web design contracts', () => {

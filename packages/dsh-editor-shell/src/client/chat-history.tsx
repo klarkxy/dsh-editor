@@ -12,15 +12,12 @@ import { PluginChatEvents } from './plugin-surfaces.tsx'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
 import {
   ChatEntry, ChatProcessBlock, ChatProcessStack, ChatRowView, ChatStepFromRow, ChatStepItem,
-  clusterChatRows, processDetailRows, PendingCard, ProjectContextReceiptView,
+  PendingCard, ProjectContextReceiptView,
 } from './chat-cards.tsx'
+import { clusterChatRows, processDetailRows } from '../model/chat-cards.ts'
 
-export type ChatOutgoing = {
-  text: string
-  state: 'sending' | 'accepted' | 'failed'
-  afterRows: number
-  projectContextReceipt?: ProjectContextReceiptBundle
-}
+
+import type { ChatOutgoing } from '../model/chat-history.ts'
 
 type ChatHistoryProps = {
   ctx: ShellContext

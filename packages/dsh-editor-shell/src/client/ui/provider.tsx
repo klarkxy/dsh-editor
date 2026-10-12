@@ -1,6 +1,6 @@
 import { LazyMotion, domAnimation } from 'motion/react'
 import type { ReactNode } from 'react'
-import type { AccentValue, ThemeValue } from '../theme.tsx'
+import type { AccentValue, ThemeValue } from '../../model/theme.ts'
 import { ShellTheme } from './theme-root.tsx'
 import { TooltipProvider } from './tooltip.tsx'
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { resetLocaleForTests, setLocale } from '../i18n/index.ts'
-import { currentModelNeedsKey, effortDisplay, effortTriggerLabel } from './chat-model-picker.tsx'
-import type { ModelsSnapshot } from './settings-models-state.ts'
+import { currentModelNeedsKey, effortDisplay, effortTriggerLabel } from './chat-model-picker.ts'
+import type { ModelsSnapshot } from '../client/settings-models-state.ts'
 
 afterEach(() => {
   resetLocaleForTests()

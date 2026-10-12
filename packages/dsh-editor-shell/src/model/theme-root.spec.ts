@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
-import { ACCENT_TO_RADIX, SHELL_GRAY_COLOR, radixThemesStyles, rewriteRadixThemesCss } from './theme-root.tsx'
+import { ACCENT_TO_RADIX, SHELL_GRAY_COLOR, radixThemesStyles, rewriteRadixThemesCss } from './theme-root.ts'
 
 const require = createRequire(import.meta.url)
 const publishedCss = readFileSync(require.resolve('@radix-ui/themes/styles.css'), 'utf8')

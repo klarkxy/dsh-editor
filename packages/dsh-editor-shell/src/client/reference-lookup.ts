@@ -1,4 +1,4 @@
-import type { SearchHit, SearchResponse } from './search-panel.tsx'
+import type { SearchHit, SearchResponse } from '../model/search-panel.ts'
 
 export const REFERENCE_QUERY_MAX = 120
 const REFERENCE_DIRECTORIES = ['人物卡', '世界书'] as const

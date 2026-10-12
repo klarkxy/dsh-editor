@@ -10,14 +10,14 @@ import {
 import { Button, Callout, Card, Flex, Heading, Kbd, RadioGroup, Separator, Slider, Switch, Text } from '@radix-ui/themes'
 import { AUTHOR_PREFERENCES_KEY, normalizeAuthorMemory, normalizeAuthorPreferences } from './author-preferences.ts'
 import { COMPLETION_PREFERENCE_KEY, type CompletionPreference } from './completion-preference.ts'
-import { COMPLETION_DELAY, WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
+import { COMPLETION_DELAY, normalizeWritingEffort, normalizeWritingModelRoute, object, WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
 import { t, useLocale } from './i18n/index.ts'
 import { ActivityDots } from './client/ui/index.ts'
 import { Select } from './client/select.tsx'
 import { runtimeShortcutHint } from './palette-shortcut.ts'
 
 
-export { WRITING_SETTINGS_NAMESPACE, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
+export { WRITING_SETTINGS_NAMESPACE, normalizeWritingEffort, normalizeWritingModelRoute, writingModelRouteValue, type PaperFontFamily, type PaperWidth, type WritingModelRoute, type WritingPreferences } from './writing-settings-contract.ts'
 
 export const PAPER_FONT_SIZE = { min: 14, max: 28, default: 17 } as const
 export const PAPER_LINE_HEIGHT = { min: 1.4, max: 2.4, default: 1.9 } as const
@@ -78,32 +78,6 @@ function normalizePaperPreferences(record: Record<string, unknown>): Pick<Writin
   }
 }
 
-const WRITING_EFFORTS = new Set(['off', 'low', 'medium', 'high', 'xhigh', 'max'])
-
-/** Host `off` and public `none` are the same none-thinking slot. */
-export function normalizeWritingEffort(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const id = value.trim()
-  if (id === 'none') return 'off'
-  return WRITING_EFFORTS.has(id) ? id : undefined
-}
-
-/** Empty provider+model means the documented fallback (current chat / runtime default). */
-export function normalizeWritingModelRoute(value: unknown): WritingModelRoute | undefined {
-  const record = object(value)
-  if (!record) return undefined
-  if (typeof record.provider !== 'string' || typeof record.model !== 'string') return undefined
-  const provider = record.provider.trim()
-  const model = record.model.trim()
-  if (!provider && !model) return undefined
-  const reasoningEffort = normalizeWritingEffort(record.reasoningEffort)
-  return reasoningEffort ? { provider, model, reasoningEffort } : { provider, model }
-}
-
-export function writingModelRouteValue(route: WritingModelRoute | undefined): WritingModelRoute {
-  return route ?? { provider: '', model: '' }
-}
-
 function normalizeModelPreferences(record: Record<string, unknown>): Pick<WritingPreferences, 'completionModel' | 'rewriteModel' | 'chatModel'> {
   return {
     completionModel: normalizeWritingModelRoute(record.completionModel),
@@ -113,10 +87,6 @@ function normalizeModelPreferences(record: Record<string, unknown>): Pick<Writin
 }
 
 type LegacyStorage = Pick<Storage, 'getItem' | 'removeItem'>
-
-function object(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
-}
 
 function hasOwn(value: unknown, field: keyof WritingPreferences): boolean {
   const record = object(value)

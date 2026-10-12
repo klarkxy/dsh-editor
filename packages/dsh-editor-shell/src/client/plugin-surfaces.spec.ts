@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { ModelSettingsSurface, PluginChatEvents, PluginModelSettingsSurface, modelSettingsSections, usePluginModelSettings } from './plugin-surfaces.tsx'
+import { ModelSettingsSurface, PluginChatEvents, PluginModelSettingsSurface, usePluginModelSettings } from './plugin-surfaces.tsx'
+import { modelSettingsSections } from '../model/plugin-surfaces.ts'
 import { CHAT_EVENTS_SLOT, MODEL_SETTINGS_SLOT } from '../seats.ts'
 
 function host(entries: Record<string, Array<{ options: { id: string; order?: number } }>>) {

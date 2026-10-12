@@ -28,6 +28,8 @@ import { t } from '../i18n/index.ts'
 import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, PlusIcon } from './icons.tsx'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './ui/index.ts'
 
+import type { FileMenuKind } from '../model/sidebar.ts'
+
 type LoadSubtree = (path: string) => Promise<TreeEntry[] | null> | null | void
 
 function treeMenuPosition(target: HTMLElement): { x: number; y: number } {
@@ -68,7 +70,6 @@ function treeSkeleton(): ReactNode {
   );
 }
 
-export type FileMenuKind = 'file' | 'directory'
 
 const TREE_DRAG_TYPE = 'application/x-dsh-tree'
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveThemePortalContainer, resolveThemePortalFromAnchor } from './command-palette.tsx'
+import { resolveThemePortalContainer, resolveThemePortalFromAnchor } from './command-palette.ts'
 
 function fakeRoot(classNames: readonly string[]) {
   const nodes = classNames.map((className) => ({ className }))

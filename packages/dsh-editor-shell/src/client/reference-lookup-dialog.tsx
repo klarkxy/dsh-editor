@@ -2,7 +2,7 @@ import { useEffect, useState, type RefObject } from 'react'
 import { Button, Callout, Flex, Heading, Text } from '@radix-ui/themes'
 import { t } from '../i18n/index.ts'
 import { errorMessage, safeRpcCall, type ShellContext } from './shared.ts'
-import type { SearchHit, SearchResponse } from './search-panel.tsx'
+import type { SearchHit, SearchResponse } from '../model/search-panel.ts'
 import { Dialog } from './ui/index.ts'
 import { lookupReferences, type ReferenceLookupResult } from './reference-lookup.ts'
 

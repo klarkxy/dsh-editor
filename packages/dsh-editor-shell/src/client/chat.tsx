@@ -1,4 +1,5 @@
-import { OfficialInputActivity, type OfficialInputActions } from './official-surfaces.tsx'
+import { OfficialInputActivity } from './official-surfaces.tsx'
+import type { OfficialInputActions } from '../model/official-surfaces.ts'
 import {
   useCallback,
   useEffect,
@@ -43,7 +44,8 @@ import { shouldShowMigrationBanner } from '../legacy-migration.ts'
 import type { ConversationFilter } from '../native-conversation-state.ts'
 import { DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { MESSAGE_CARDS_SERVICE, type ShellMessageCardContext, type ShellMessageCardRegistry } from '../seats.ts'
-import { isObservableSource, useObservable } from './components.tsx'
+import { useObservable } from './components.tsx'
+import { isObservableSource } from '../model/components.ts'
 import { ConfirmDialog, ConversationPresetPicker, TextPromptDialog } from './dialogs.tsx'
 import { Select } from './select.tsx'
 import {
@@ -80,18 +82,19 @@ import {
 } from './chat-conversation.ts'
 import { chatEmptyPrompt } from './chat-empty.ts'
 import { useChatConversationControls } from './chat-conversation-controls.ts'
-import { ChatHistory, type ChatOutgoing } from './chat-history.tsx'
+import { ChatHistory } from './chat-history.tsx'
+import type { ChatOutgoing } from '../model/chat-history.ts'
 import { ModelPicker } from './chat-model-picker.tsx'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
+import { ProposalCard } from './chat-proposal.tsx'
 import {
-  ProposalCard,
   buildExpectedVersions,
   proposalBasisItems,
   proposalBasisLine,
   proposalFingerprint,
   proposalTargetBaselines,
   unwrapWorkbenchPrepared,
-} from './chat-proposal.tsx'
+} from '../model/chat-proposal.ts'
 import {
   ChatEntry,
   ChatProcessBlock,
@@ -100,12 +103,12 @@ import {
   ChatStepFromRow,
   ChatStepHead,
   ChatStepItem,
-  clusterChatRows,
   InitGuideCard,
   LegacyMigrationBanner,
   PendingCard,
   ProjectContextReceiptView,
 } from './chat-cards.tsx'
+import { clusterChatRows } from '../model/chat-cards.ts'
 export async function settleConversationStop(input: {
   cancel(): Promise<unknown>
   releaseOutgoing(): void

@@ -44,7 +44,7 @@ import {
   conversationChatSource,
   bindOfficialConversation,
 } from './client.ts'
-import { isObservableSource } from './client/components.tsx'
+import { isObservableSource } from './model/components.ts'
 import { firstOpenDocumentPath, isVisibleTextPath } from './project-files.ts'
 import { partialApplyDetails } from './client/shared.ts'
 import { appendRegistryCommands } from './client/command-palette.tsx'

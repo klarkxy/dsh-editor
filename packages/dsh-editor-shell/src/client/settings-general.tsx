@@ -4,7 +4,8 @@ import type { SettingsScope } from '../dsh-compat.ts'
 import type { ShellContext } from './shared.ts'
 import { Select } from './select.tsx'
 import { ConfirmDialog } from './dialogs.tsx'
-import { ACCENT_VALUES, useAccent, type AccentValue } from './theme.tsx'
+import { useAccent } from './theme.tsx'
+import { ACCENT_VALUES, type AccentValue } from '../model/theme.ts'
 import { setLocale, t, useLocale, type Locale, type MessageKey } from '../i18n/index.ts'
 import {
   DEVELOPER_SETTINGS_NAMESPACE,

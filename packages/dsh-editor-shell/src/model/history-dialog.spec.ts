@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SnapshotResponse } from 'dsh-editor-workbench/contracts'
-import { normalizeSnapshot, selectedSnapshot, snapshotChangeCounts, snapshotKindMark, snapshotManuscriptChanges, snapshotSubject } from './history-dialog.tsx'
+import { normalizeSnapshot, selectedSnapshot, snapshotChangeCounts, snapshotKindMark, snapshotManuscriptChanges, snapshotSubject } from './history-dialog.ts'
 
 function snapshot(partial: Partial<SnapshotResponse> & Pick<SnapshotResponse, 'snapshotId'>): SnapshotResponse {
   return {

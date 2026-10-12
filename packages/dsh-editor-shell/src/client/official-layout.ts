@@ -1,5 +1,5 @@
 import type { ShellContext } from './shared.ts'
-import { OFFICIAL_LAYOUT_EVENT } from './official-surfaces.tsx'
+import { OFFICIAL_LAYOUT_EVENT } from '../model/official-surfaces.ts'
 
 type ThemeSnapshot = { active: { colorScheme: 'light' | 'dark'; tokens: Record<string, string> }; fontSize: number; preference: string }
 export type OfficialPresentation = { shown: boolean; track: boolean; fullscreen: boolean }

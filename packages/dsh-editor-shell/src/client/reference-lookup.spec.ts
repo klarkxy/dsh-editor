@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { isReferencePath, lookupReferences, normalizeReferenceQuery } from './reference-lookup.ts'
-import type { SearchHit, SearchResponse } from './search-panel.tsx'
+import type { SearchHit, SearchResponse } from '../model/search-panel.ts'
 
 const hit = (path: string, start = 0): SearchHit => ({ path, start, end: start + 2, line: 1, column: start + 1, excerpt: '娜娜在城里', version: 'v1' })
 const response = (results: SearchHit[] = [], overrides: Partial<SearchResponse> = {}): SearchResponse => ({ results, scannedFiles: 1, scannedBytes: 20, skipped: 0, truncated: false, ...overrides })

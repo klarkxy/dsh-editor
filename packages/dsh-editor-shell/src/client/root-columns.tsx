@@ -12,25 +12,18 @@ import { Chat, ProposalCard } from './chat.tsx'
 import { Editor } from './editor.tsx'
 import { CrossIcon, DotsIcon, PlusIcon, SearchIcon } from './icons.tsx'
 import { Tree } from './sidebar.tsx'
-import { SearchPanel, type ReplaceOutcome, type SearchHit, type SearchScope } from './search-panel.tsx'
+import { SearchPanel } from './search-panel.tsx'
+import type { ReplaceOutcome, SearchHit, SearchScope } from '../model/search-panel.ts'
 import type { SettingsRenderSlot } from './settings.tsx'
 import { isImeEvent, Menu, MenuContent, MenuItem, m, useChromeMotion } from './ui/index.ts'
+
+import { panelPixels, type FileMenuKind, type SidebarFileMenuProps } from '../model/root-columns.ts'
 
 /* 工作区三栏拆成模块级 memo 组件：侧栏搜索输入、面板拖拽、editorDirty 翻转等
    高频重渲染不再连带重渲染全部三栏与插槽内容。props 一律由 Root 以
    useMemo/useCallback 固化，memo 才能真的跳过渲染。 */
 
-export type FileMenuKind = 'file' | 'directory'
-export type SidebarFileMenuProps = {
-  onOpen(path: string): void
-  onPreviewImage(path: string): void
-  onFileMenu(kind: FileMenuKind, path: string, position: { x: number; y: number }, trigger?: HTMLElement | null): void
-  onCreateFile(directory: string): void
-  onCreateFolder(directory: string): void
-  onMove(source: { kind: FileMenuKind; path: string }, targetDir: string): void
-}
 
-export const panelPixels = (size: PanelSize): number => Math.round(size.inPixels)
 
 export function BoundProposalCard(props: ShellProposalCardProps & { ctx: ShellContext }) {
   return (

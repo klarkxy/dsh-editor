@@ -1,6 +1,6 @@
 import { useEffect, useState, type MutableRefObject } from 'react'
 import type { EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
-import { windowBridge } from './window-controls.tsx'
+import { windowBridge } from '../model/window-controls.ts'
 
 // Desktop notifications and exit activity follow the shell's mount lifetime.
 export function useRootDesktop(editorHandleRef: MutableRefObject<EditorCoreHandle | null>) {

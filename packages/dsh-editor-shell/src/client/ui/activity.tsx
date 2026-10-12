@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
    点、微光、完成勾仍是纯 CSS,配色走 Radix 变量;关键帧在 styles.ts。
    装饰元素一律 aria-hidden,reduced-motion 由全局媒体查询停掉循环。 */
 
-export type ActivityCue = 'dots' | 'typing' | 'ring' | 'none'
+import type { ActivityCue } from '../../model/activity.ts'
 
 /** 三点指示:pulse=呼吸明灭(忙碌/等待),typing=起伏跳动(回复/思考中)。 */
 export function ActivityDots(props: { variant?: 'pulse' | 'typing'; className?: string }) {

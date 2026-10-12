@@ -8,11 +8,13 @@ import type { WritingMigration, WritingPreferences } from '../writing-settings.t
 import { ShortcutsSettings } from './settings-shortcuts.tsx'
 import type { ShellCommandRegistry } from '../seats.ts'
 import { AboutSettingsSection } from './settings-about.tsx'
-import { AssistantSettings, completeAuthorDraftSave, reconcileAuthorDraft, type AuthorDraft } from './settings-assistant.tsx'
+import { AssistantSettings } from './settings-assistant.tsx'
+import { completeAuthorDraftSave, reconcileAuthorDraft, type AuthorDraft } from '../model/settings-assistant.ts'
 import { SettingsGeneralSection, useDeveloperMode } from './settings-general.tsx'
 import { authorSettingsChrome, DEVELOPER_SETTINGS_NAMESPACE, decodeDeveloperSettings } from '../developer-settings.ts'
 import { SettingsEditorModelsSection } from './settings-models.tsx'
 import type { SettingsRenderSlot } from './settings-plugins.tsx'
+import { composeSettingsNavGroups, composeSettingsNavTabs, persistTab, readStoredTab, type SettingsTab, SETTINGS_TABS } from '../model/settings.ts'
 import { SettingsUsageSection } from './settings-usage.tsx'
 import { t, useLocale, type MessageKey } from '../i18n/index.ts'
 import { CrossIcon, SettingsIcon } from './icons.tsx'
@@ -20,38 +22,6 @@ import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger } from './ui/i
 
 export type { SettingsRenderSlot }
 
-export type SettingsTab = 'general' | 'models' | 'assistant' | 'writing' | 'shortcuts' | 'usage' | 'about'
-
-const SETTINGS_TAB_KEY = 'dsh-editor.settings.tab'
-const SETTINGS_TABS: SettingsTab[] = ['general', 'models', 'assistant', 'writing', 'shortcuts', 'usage', 'about']
-/** Application preferences only; plugin pages live in the plugin workspace. */
-export function composeSettingsNavTabs(featureTabs: readonly SettingsTab[]): SettingsTab[] {
-  return [...featureTabs, 'about']
-}
-
-export function composeSettingsNavGroups(
-  featureTabs: readonly SettingsTab[],
-): { label: MessageKey; tabs: SettingsTab[] }[] {
-  const available = (tabs: SettingsTab[]) => tabs.filter(tab => featureTabs.includes(tab))
-  const groups: { label: MessageKey; tabs: SettingsTab[] }[] = [
-    { label: 'settings.groupWriting', tabs: available(['writing', 'shortcuts']) },
-    { label: 'settings.groupAssistant', tabs: available(['assistant', 'models', 'usage']) },
-    { label: 'settings.groupApp', tabs: ['general', 'about'] },
-  ]
-  return groups.filter(group => group.tabs.length)
-}
-
-function readStoredTab(): string {
-  try {
-    const value = globalThis.localStorage?.getItem(SETTINGS_TAB_KEY)
-    if (value && (SETTINGS_TABS as string[]).includes(value)) return value
-  } catch { /* optional preference */ }
-  return 'general'
-}
-
-function persistTab(tab: string): void {
-  try { globalThis.localStorage?.setItem(SETTINGS_TAB_KEY, tab) } catch { /* optional preference */ }
-}
 
 function SettingsTabPage(props: { tab: string; active: boolean; children?: ReactNode }) {
   return (

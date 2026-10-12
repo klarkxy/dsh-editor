@@ -8,7 +8,7 @@ import {
   modelDisplayName,
   modelTokens,
   usageLogFromSummary,
-} from './client/settings-usage.tsx'
+} from './settings-usage.ts'
 
 const theme = {
   axis: '#6b6a64',

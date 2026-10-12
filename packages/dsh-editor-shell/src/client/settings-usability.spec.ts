@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { completeAuthorDraftSave, reconcileAuthorDraft, type AuthorDraft } from './settings-assistant.tsx'
-import { composeSettingsNavGroups } from './settings.tsx'
+import { completeAuthorDraftSave, reconcileAuthorDraft, type AuthorDraft } from '../model/settings-assistant.ts'
+import { composeSettingsNavGroups } from '../model/settings.ts'
 
 const clean = (saved: string): AuthorDraft => ({ value: saved, saved, conflicted: false })
 

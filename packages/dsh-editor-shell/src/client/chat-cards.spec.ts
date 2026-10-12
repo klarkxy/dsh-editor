@@ -4,13 +4,15 @@ import {
   ChatStepFromRow,
   ChatStepHead,
   ChatStepItem,
+} from './chat-cards.tsx'
+import {
   clusterChatRows,
   isChatStepRow,
   processDetailRows,
   stepPreview,
   toolStepTitle,
   turnProcessLabel,
-} from './chat-cards.tsx'
+} from '../model/chat-cards.ts'
 import { ChevronRightIcon } from './icons.tsx'
 import { ActivityDots } from './ui/index.ts'
 import { redesignedStyles } from '../styles.ts'

@@ -20,11 +20,13 @@ export {
   ActivitySkeleton,
   ActivityText,
   SuccessMark,
-  type ActivityCue,
 } from './activity.tsx'
+export type { ActivityCue } from '../../model/activity.ts'
 export { Tooltip, TooltipProvider } from './tooltip.tsx'
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs.tsx'
-export { Button, Input, TextArea, type ButtonVariant } from './controls.tsx'
+export { Button, Input, TextArea } from './controls.tsx'
+export type { ButtonVariant } from '../../model/controls.ts'
 export { ShellUiProvider } from './provider.tsx'
-export { ShellTheme, radixThemesStyles, ACCENT_TO_RADIX, SHELL_GRAY_COLOR } from './theme-root.tsx'
+export { ShellTheme } from './theme-root.tsx'
+export { radixThemesStyles, ACCENT_TO_RADIX, SHELL_GRAY_COLOR } from '../../model/theme-root.ts'
 export { isImeEvent, IME_KEYCODE } from './ime.ts'

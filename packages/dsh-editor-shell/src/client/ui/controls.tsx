@@ -2,7 +2,7 @@ import { Button as ThemesButton, IconButton, TextArea as ThemesTextArea, TextFie
 import { forwardRef, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { isImeEvent } from './ime.ts'
 
-export type ButtonVariant = 'default' | 'primary' | 'danger' | 'icon'
+import type { ButtonVariant } from '../../model/controls.ts'
 
 export const Button = forwardRef<HTMLButtonElement, {
   type?: 'button' | 'submit'

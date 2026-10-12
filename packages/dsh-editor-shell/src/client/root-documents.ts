@@ -6,7 +6,7 @@ import { PROGRESS_RECORD_DEBOUNCE_MS, createDebouncedInvoker, progressRecordChar
 import { errorMessage, partialApplyDetails, safeRpcCall, snapshotTimeLabel, type RevealRequest, type ShellContext } from './shared.ts'
 import type { EditorCoreHandle } from 'dsh-manuscript/client/editor-core'
 import { saveOpenEditor, type EditorSaveBlockReason } from '../wrap-up-view.ts'
-import { toRevealRequest, type SearchHit } from './search-panel.tsx'
+import { toRevealRequest, type SearchHit } from '../model/search-panel.ts'
 import { t, type MessageKey } from '../i18n/index.ts'
 import type { Dispatch, SetStateAction } from 'react'
 

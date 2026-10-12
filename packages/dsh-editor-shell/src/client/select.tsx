@@ -2,7 +2,8 @@ import { Select as ThemesSelect } from '@radix-ui/themes'
 import { useRef, useState, type ComponentProps, type KeyboardEvent } from 'react';
 import { t } from '../i18n/index.ts'
 
-export type SelectOption = { value: string; label: string }
+
+import type { SelectOption } from '../model/select.ts'
 
 /*
  * Radix Select.Item 不接受空字符串 value,而模型设置里的"未选择"协议项

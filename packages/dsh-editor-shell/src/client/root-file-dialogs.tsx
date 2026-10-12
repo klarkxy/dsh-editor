@@ -6,7 +6,8 @@ import { t } from '../i18n/index.ts'
 import type { ShellContext } from './shared.ts'
 import { ConfirmDialog, TextPromptDialog } from './dialogs.tsx'
 import { FileContextMenu } from './sidebar.tsx'
-import { ChapterOpsLayer, chapterMenuModel, snapshotFromHandle } from './chapter-ops.tsx'
+import { ChapterOpsLayer } from './chapter-ops.tsx'
+import { chapterMenuModel, snapshotFromHandle } from '../model/chapter-ops.ts'
 import type { useRootFileActions } from './root-file-actions.ts'
 
 type FileActions = ReturnType<typeof useRootFileActions>

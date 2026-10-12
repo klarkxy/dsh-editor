@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeSettingsNavTabs } from './settings.tsx'
+import { composeSettingsNavTabs } from '../model/settings.ts'
 
 describe('application settings navigation', () => {
   it('contains application preferences without plugin management or contributed plugin pages', () => {

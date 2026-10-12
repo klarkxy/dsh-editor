@@ -8,7 +8,7 @@ import {
   type EditorTargetSnapshot,
 } from 'dsh-manuscript/client/editor-core'
 import { t } from '../i18n/index.ts'
-import { windowBridge } from './window-controls.tsx'
+import { windowBridge } from '../model/window-controls.ts'
 
 export type EditorClipboardBridge = {
   readText(): Promise<string>

@@ -2,7 +2,7 @@ import { memo, type ReactNode } from 'react'
 import { Box } from '@radix-ui/themes'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { windowBridge } from './window-controls.tsx'
+import { windowBridge } from '../model/window-controls.ts'
 
 /*
  * 聊天回复的 Markdown 渲染。react-markdown 产出 React 节点、不经过

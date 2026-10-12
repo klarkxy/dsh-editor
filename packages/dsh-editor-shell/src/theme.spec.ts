@@ -10,7 +10,7 @@ import {
   writeHostThemePreference,
   type HostThemePreference,
   type HostThemeScope,
-} from './client/theme.tsx'
+} from './model/theme.ts'
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const data = { ...initial }

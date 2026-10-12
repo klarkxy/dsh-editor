@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SettingsScope, SettingsScopeSnapshot } from '../dsh-compat.ts'
 import { DEFAULT_WRITING_PREFERENCES, type WritingPreferences } from '../writing-settings.tsx'
 import { resetLocaleForTests, setLocale } from '../i18n/index.ts'
-import { carriedReasoningEffort, firstUsableCatalogModel, mergeCatalogOptions, parseRouteKey, routeKey, saveWritingModelRoute, WritingModelRoutesView, type CatalogModelOption } from './writing-model-routes.tsx'
+import { WritingModelRoutesView } from './writing-model-routes.tsx'
+import { carriedReasoningEffort, firstUsableCatalogModel, mergeCatalogOptions, parseRouteKey, routeKey, saveWritingModelRoute, type CatalogModelOption } from '../model/writing-model-routes.ts'
 
 afterEach(resetLocaleForTests)
 const render = (node: ReactNode) => renderToStaticMarkup(createElement(Theme, null, node))

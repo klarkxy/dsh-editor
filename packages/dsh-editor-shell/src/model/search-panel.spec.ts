@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { planReplace } from '../search-replace.ts'
-import { acceptSearchResults, canReplaceAll, executeReplacePlan, groupSearchHits, paperRevealRange, replaceBlockedByDirty, replaceOutcomeForIdentity, scopeSearchResults, searchIdentity, searchQueryClearsResults, searchTextRequest, type SearchHit } from './search-panel.tsx'
+import { acceptSearchResults, canReplaceAll, executeReplacePlan, groupSearchHits, paperRevealRange, replaceBlockedByDirty, replaceOutcomeForIdentity, scopeSearchResults, searchIdentity, searchQueryClearsResults, searchTextRequest, type SearchHit } from './search-panel.ts'
 
 function hit(path: string, start: number, excerpt: string): SearchHit {
   return { path, line: 1, column: 1, start, end: start + excerpt.length, excerpt, version: 'v1' }

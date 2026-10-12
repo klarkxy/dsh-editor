@@ -5,22 +5,7 @@ import { AUTHOR_PREFERENCES_MAX_CHARS } from '../author-preferences.ts'
 import type { WritingMigration, WritingPreferences } from '../writing-settings.tsx'
 import { t, useLocale } from '../i18n/index.ts'
 import { ActivityDots } from './ui/index.ts'
-
-export type AuthorDraft = { value: string; saved: string; conflicted: boolean }
-
-/** A Host update replaces a clean draft, but cannot silently replace local edits. */
-export function reconcileAuthorDraft(draft: AuthorDraft, saved: string): AuthorDraft {
-  if (draft.value === saved) return { value: saved, saved, conflicted: false }
-  if (draft.saved === saved) return draft
-  if (draft.value === draft.saved) return { value: saved, saved, conflicted: false }
-  return { ...draft, saved, conflicted: true }
-}
-
-/** An older save may finish after the author has started a newer draft. */
-export function completeAuthorDraftSave(draft: AuthorDraft, submitted: string, saved: string): AuthorDraft {
-  if (draft.value === submitted || draft.value === saved) return { value: saved, saved, conflicted: false }
-  return { value: draft.value, saved, conflicted: false }
-}
+import { type AuthorDraft } from '../model/settings-assistant.ts'
 
 export function AssistantSettings({ snapshot, migrate, authorDraft, saving, writeFailure, onAuthorDraftChange, onUseLatest, onKeepDraft, onSave }: {
   snapshot: SettingsScopeSnapshot<WritingPreferences>

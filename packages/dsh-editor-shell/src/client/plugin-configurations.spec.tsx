@@ -4,23 +4,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getLocale, resetLocaleForTests, setLocale } from '../i18n/index.ts'
 import { ZHIHU_SETTINGS_SLOT } from '../root-registration.ts'
 import { PLUGINS_SETTINGS_SLOT } from '../root-registration.ts'
-import { legacyZhihuVisible, PluginConfigurationPage, projectPluginConfigurations, usePluginConfigurations } from './plugin-configurations.tsx'
-import { mergeSections, PluginsPage, secondaryConfigKeys } from './plugins-page.tsx'
+import { PluginConfigurationPage, usePluginConfigurations } from './plugin-configurations.tsx'
+import { legacyZhihuVisible, projectPluginConfigurations } from '../model/plugin-configurations.ts'
+import { PluginsPage } from './plugins-page.tsx'
+import { mergeSections, secondaryConfigKeys } from '../model/plugins-page.ts'
+import { CatalogRow, PluginsCatalog } from './plugins-catalog.tsx'
 import {
   catalogBadgeLabel,
   advancedCatalogCard,
   catalogIconSource,
   catalogSectionsOf,
   catalogToggleRequest,
-  CatalogRow,
   filterCatalogSections,
   mergeConfigurationCards,
   newUserCardKeys,
-  PluginsCatalog,
   presetEnabledRequest,
   userSectionKeys,
   type PluginCatalogSection,
-} from './plugins-catalog.tsx'
+} from '../model/plugins-catalog.ts'
 
 type Entry = {
   options: { id?: string; key?: string; order?: number; label?: string | (() => string) }
