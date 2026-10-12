@@ -25,5 +25,11 @@ defineStyles('dsh.components', 'dsh-gallery', `
 /* 静态快照看不到 :hover/:focus-visible；画廊用 data-demo-state 复用同一套
    外观做演示，只作用于画廊列内，不改组件行为。 */
 .dsh-gallery__col .dsh-button[data-demo-state="hover"][data-variant="secondary"] { background: var(--dsh-ui-hover); }
+.dsh-gallery__col .dsh-button[data-demo-state="focus"] { outline: 2px solid var(--dsh-ui-accent); outline-offset: 2px; }
 .dsh-gallery__col .dsh-input:has(> .dsh-input__control[data-demo-state="focus"]) { box-shadow: var(--dsh-ui-elevation-focus); }
+.dsh-gallery__ctx-target {
+  display: inline-flex; align-items: center; height: var(--dsh-ui-control-md); padding: 0 var(--dsh-ui-space-4);
+  border: 0.5px dashed var(--dsh-ui-line-strong); border-radius: var(--dsh-ui-radius-md);
+  color: var(--dsh-ui-muted); font-size: var(--dsh-ui-text-sm); user-select: none;
+}
 `)

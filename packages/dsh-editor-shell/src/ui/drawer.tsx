@@ -8,6 +8,8 @@ import './drawer.styles.ts'
 export function Drawer(props: {
   open: boolean
   onOpenChange(open: boolean): void
+  /** 非模态（画廊并排演示用）。 */
+  modal?: boolean
   side?: 'left' | 'right'
   title: ReactNode
   closeLabel: string
@@ -15,7 +17,7 @@ export function Drawer(props: {
 }) {
   const container = useDshPortalContainer()
   return (
-    <DialogPrimitive.Root open={props.open} onOpenChange={props.onOpenChange}>
+    <DialogPrimitive.Root open={props.open} modal={props.modal} onOpenChange={props.onOpenChange}>
       {(() => {
         const layer = (
           <>

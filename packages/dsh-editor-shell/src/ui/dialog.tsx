@@ -14,6 +14,8 @@ export type DialogProps = {
   initialFocusRef?: RefObject<HTMLElement | null>
   returnFocusRef?: RefObject<HTMLElement | null>
   dismissible?: boolean
+  /** 非模态：不锁滚动、不隐藏兄弟内容（画廊并排演示用）。 */
+  modal?: boolean
   footer?: ReactNode
   closeLabel?: string
   children?: ReactNode
@@ -37,6 +39,7 @@ export function Dialog(props: DialogProps) {
   return (
     <DialogPrimitive.Root
       open={props.open}
+      modal={props.modal}
       onOpenChange={(next) => {
         if (!next && !dismissible) return
         props.onOpenChange(next)

@@ -11,6 +11,8 @@ export function Tooltip(props: {
   children: ReactNode
   side?: 'top' | 'right' | 'bottom' | 'left'
   disabled?: boolean
+  /** 受控展开（画廊静态演示用）。 */
+  open?: boolean
 }) {
   const container = useDshPortalContainer()
   if (props.disabled) return <>{props.children}</>
@@ -20,7 +22,7 @@ export function Tooltip(props: {
     </TooltipPrimitive.Content>
   )
   return (
-    <TooltipPrimitive.Root>
+    <TooltipPrimitive.Root open={props.open}>
       <TooltipPrimitive.Trigger asChild>{props.children}</TooltipPrimitive.Trigger>
       {container ? <TooltipPrimitive.Portal container={container}>{content}</TooltipPrimitive.Portal> : content}
     </TooltipPrimitive.Root>

@@ -20,7 +20,7 @@ defineStyles('dsh.components', 'dsh-switch', `
 .dsh-switch:disabled { opacity: 0.5; cursor: default; }
 .dsh-switch__thumb {
   display: block; width: 16px; height: 16px; border-radius: var(--dsh-ui-radius-full);
-  background: var(--dsh-ui-raised); box-shadow: var(--dsh-ui-elevation-soft);
+  background: var(--dsh-ui-switch-thumb); box-shadow: var(--dsh-ui-elevation-soft);
   transform: translateX(2px);
   transition: transform var(--dsh-ui-duration-fast) var(--dsh-ui-ease-out);
 }
