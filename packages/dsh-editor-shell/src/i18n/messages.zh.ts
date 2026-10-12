@@ -460,6 +460,7 @@ export const zh = {
   'chat.undoStale': '文件此后又有变化，无法自动撤销；未写入任何内容。',
   'chat.undone': '已撤销，作品已恢复到应用前的内容',
   'chat.undoFailed': '未能完成撤销，请检查作品状态。',
+  'chat.receiptChanged': '稿件现状与保存的审批回执不一致，请核对当前文件。',
   'chat.fileCount': '{count} 个文件',
   'chat.original': '原文',
   'chat.revised': '修改后',

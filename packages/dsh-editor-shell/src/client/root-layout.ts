@@ -39,7 +39,14 @@ export function useRootLayout({ ctx, fileSession, openWorkspaceId, treeRevision,
   const sidebarOpenDriven = useRef(false)
   const rootSingleRef = useRef(false)
   const sidebarChoicePending = useRef<boolean | null>(null)
-  const [sidebarWidth, setSidebarWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
+  const [sidebarWidth, setSidebarAuthorWidth] = useState(() => storedPanelWidth('dsh-editor.layout.sidebar-width', SIDEBAR_DEFAULT, SIDEBAR_MIN, SIDEBAR_MAX))
+  const [sidebarRevealWidth, setSidebarRevealWidth] = useState<number | null>(null)
+  const sidebarViewWidth = sidebarRevealWidth ?? sidebarWidth
+  // Only the author's completed resize replaces the saved width and its temporary reveal.
+  const setSidebarWidth = useCallback((width: number) => {
+    setSidebarAuthorWidth(width)
+    setSidebarRevealWidth(null)
+  }, [])
   const [assistantOpen, setAssistantOpen] = useState(() => storedPanelOpen('dsh-editor.layout.assistant-open', true))
   const [assistantWidth, setAssistantWidth] = useState(() => storedPanelWidth('dsh-editor.layout.assistant-width', ASSISTANT_DEFAULT, ASSISTANT_MIN, ASSISTANT_MAX))
   const overlayAssistant = useMediaQuery('(max-width: 1040px)')
@@ -193,19 +200,14 @@ export function useRootLayout({ ctx, fileSession, openWorkspaceId, treeRevision,
     if (next && compactChrome) yieldSidebarToWidth()
   }
   const revealSidebar = useCallback(() => {
-    const width = Math.max(sidebarWidthRef.current, 336)
-    try {
-      sidebarPanelRef.current?.resize(width + 'px')
-    } catch {
-      /* 面板刚挂回 Group 时命令式 API 会抛 Layout not found；
-         临时加宽可放弃，作者宽度不落盘。 */
-    }
+    // A closed/overlay sidebar has no Panel handle; retain the width for its next mount.
+    setSidebarRevealWidth((width) => Math.max(width ?? sidebarWidth, 336))
     if (compactChrome) yieldAssistantToWidth()
     setFocusMode(false)
     claimSidebar(true)
     noteSidebarChoice(true)
     setSidebarOpen(true)
-  }, [claimSidebar, compactChrome, yieldAssistantToWidth])
+  }, [claimSidebar, compactChrome, yieldAssistantToWidth, sidebarWidth])
   const sidebarVisible = sidebarOpen && !focusMode && !(officialPreviewOpen && compactChrome)
   const sidebarInGrid = sidebarVisible && !compactChrome
   /* 窄窗(≤760px):侧栏与助手改成覆盖层抽屉,不再整个禁用。 */
@@ -235,8 +237,8 @@ export function useRootLayout({ ctx, fileSession, openWorkspaceId, treeRevision,
       }
       const sidebar = sidebarPanelRef.current
       try {
-        if (sidebar && sidebar.getSize().inPixels > 0 && Math.abs(sidebar.getSize().inPixels - sidebarWidth) >= 1) {
-          sidebar.resize(`${sidebarWidth}px`)
+        if (sidebar && sidebar.getSize().inPixels > 0 && Math.abs(sidebar.getSize().inPixels - sidebarViewWidth) >= 1) {
+          sidebar.resize(`${sidebarViewWidth}px`)
         }
       } catch {
         /* 同上。 */
@@ -244,17 +246,21 @@ export function useRootLayout({ ctx, fileSession, openWorkspaceId, treeRevision,
     }
     /* 侧栏/钉住栏挂上或卸下时 Group 会重算尺寸；折叠态可能被 minSize 顶开。
        面板库的 ResizeObserver 也可能先跑一遍按百分比的再平衡，把栏宽夹走，
-       所以先同步一次，再补两帧，始终回到作者记下的像素宽度。 */
+       所以先同步一次，再补两帧，回到当前窗口的像素宽度（含临时展开）。 */
     sync()
+    let followupFrame: number | undefined
     const frame = globalThis.requestAnimationFrame(() => {
       sync()
-      globalThis.requestAnimationFrame(sync)
+      followupFrame = globalThis.requestAnimationFrame(sync)
     })
-    return () => globalThis.cancelAnimationFrame(frame)
-  }, [assistantInGrid, sidebarInGrid, pinnedVisible, sidebarWidth, assistantWidth])
+    return () => {
+      globalThis.cancelAnimationFrame(frame)
+      if (followupFrame !== undefined) globalThis.cancelAnimationFrame(followupFrame)
+    }
+  }, [assistantInGrid, sidebarInGrid, pinnedVisible, sidebarViewWidth, assistantWidth])
 
   return {
-    sidebarOpen, setSidebarOpen, sidebarWidth, setSidebarWidth, sidebarWidthRef, sidebarPanelRef,
+    sidebarOpen, setSidebarOpen, sidebarWidth, sidebarViewWidth, setSidebarWidth, sidebarWidthRef, sidebarPanelRef,
     assistantOpen, setAssistantOpen, assistantWidth, setAssistantWidth, assistantWidthRef, assistantPanelRef,
     pinnedPath, setPinnedPath, pinnedWidth, setPinnedWidth, pinnedWidthRef,
     focusMode, setFocusMode, compactChrome, overlayAssistant, claimSidebar, claimAssistant,

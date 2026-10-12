@@ -462,6 +462,7 @@ export const en: { [K in keyof typeof zh]: string } = {
   'chat.undoStale': 'The files changed again, so the change cannot be undone automatically. Nothing was written.',
   'chat.undone': 'Undone. The work is back to the pre-apply content.',
   'chat.undoFailed': 'Undo did not finish. Check the work.',
+  'chat.receiptChanged': 'The current manuscript differs from the saved approval receipt. Check the current file.',
   'chat.fileCount': '{count} files',
   'chat.original': 'Original',
   'chat.revised': 'Revised',

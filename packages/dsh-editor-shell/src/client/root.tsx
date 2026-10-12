@@ -120,7 +120,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
   }
   const layout = useRootLayout({ ctx, fileSession, openWorkspaceId, treeRevision, assistantEnabled, officialPreviewOpen })
   const {
-    sidebarOpen, setSidebarOpen, sidebarWidth, setSidebarWidth, sidebarWidthRef, sidebarPanelRef,
+    sidebarOpen, setSidebarOpen, sidebarViewWidth, setSidebarWidth, sidebarWidthRef, sidebarPanelRef,
     assistantOpen, setAssistantOpen, assistantWidth, setAssistantWidth, assistantWidthRef, assistantPanelRef,
     pinnedPath, setPinnedPath, pinnedWidth, setPinnedWidth, pinnedWidthRef,
     focusMode, setFocusMode, compactChrome, overlayAssistant, claimSidebar, claimAssistant,
@@ -659,7 +659,7 @@ function Root({ ctx, writingScope, migrateWriting, hostThemeSync, extensionsDock
               id="sidebar"
               panelRef={sidebarPanelRef}
               className="shell-panel"
-              defaultSize={sidebarWidth}
+              defaultSize={sidebarViewWidth}
               minSize={SIDEBAR_MIN}
               maxSize={SIDEBAR_MAX}
               groupResizeBehavior="preserve-pixel-size"

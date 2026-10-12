@@ -461,4 +461,19 @@ describe('durable edit approval receipts', () => {
     await expect(rpc('file.read', { sessionId: 'session-1', path: '正文/001.md' })).resolves.toMatchObject({ text: '# 第一章\n新句。\n' })
     expect(rows.size).toBe(0)
   })
+
+  it('reports an undo receipt failure after restoring the actual file and rejects replay', async () => {
+    const { table, envelope, rpc } = receiptFixture()
+    const applied = await rpc('proposal.apply', { ...envelope, expectedVersion: 'initial-正文/001.md' }) as { version: string }
+    vi.spyOn(table, 'put').mockRejectedValue(new Error('storage unavailable'))
+    const undo = { sessionId: 'session-1', path: '正文/001.md', text: '# 第一章\n旧句。\n', receiptId: envelope.receiptId, undoProposal: flatV2Edit(), version: applied.version }
+    const error = await rpc('file.write', undo).catch(error => error)
+    expect(mapError(error)).toMatchObject({ ok: false, error: { details: { partial: true, appliedPaths: ['正文/001.md'] } } })
+    const restored = await rpc('file.read', { sessionId: 'session-1', path: '正文/001.md' }) as { text: string; version: string }
+    expect(restored.text).toBe('# 第一章\n旧句。\n')
+    expect(restored.version).not.toBe(applied.version)
+    await expect(rpc('proposal.receipt')).resolves.toMatchObject({ receipt: { state: 'applied', version: applied.version } })
+    await expect(rpc('file.write', undo)).rejects.toMatchObject({ code: 'STALE' })
+    await expect(rpc('proposal.apply', { ...envelope, expectedVersion: restored.version })).rejects.toMatchObject({ code: 'STALE' })
+  })
 })

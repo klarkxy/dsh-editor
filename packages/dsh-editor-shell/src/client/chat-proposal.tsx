@@ -160,10 +160,19 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
       if (!isWorkbenchProposal && props.receiptId) {
         const saved = await props.ctx.connection.rpc.call('/manuscript', 'proposal.receipt', {
           sessionId: props.sessionId, ...props.proposal, receiptId: props.receiptId,
-        }) as RpcResult<{ receipt: { state: 'applied' | 'undone' } | null }>
+        }) as RpcResult<{ receipt: { state: 'applied' | 'undone'; path: string; version: string } | null }>
         if (requestGeneration.current !== generation) return
         if (!saved.ok) { setState('expired'); setCanRecheck(true); setNote(t('chat.checkFailed')); return }
         if (saved.value.receipt) {
+          const current = await props.ctx.connection.rpc.call('/manuscript', 'file.read', {
+            sessionId: props.sessionId, path: saved.value.receipt.path,
+          }) as RpcResult<{ version: string }>
+          if (requestGeneration.current !== generation) return
+          if (!current.ok) { setState('expired'); setCanRecheck(true); setNote(errorMessage(current)); return }
+          if (current.value.version !== saved.value.receipt.version) {
+            setState('expired'); setNote(t('chat.receiptChanged'))
+            return
+          }
           setState(saved.value.receipt.state)
           setNote(t(saved.value.receipt.state === 'applied' ? 'chat.applied' : 'chat.undone'))
           return
@@ -316,7 +325,14 @@ export function ProposalCard(props: { ctx: ShellContext; sessionId: string; prop
       if (requestGeneration.current !== generation) return
       if (!result.ok) {
         setState('expired')
-        setNote(t('chat.undoStale'))
+        setCanRecheck(false)
+        const partial = partialApplyDetails(result)
+        if (partial) {
+          setNote(errorMessage(result))
+          for (const path of partial.appliedPaths) props.onApplied(path)
+        } else {
+          setNote(isStaleFailure(result) ? t('chat.undoStale') : errorMessage(result))
+        }
         return
       }
       setAppliedVersion(result.value.version)
