@@ -30,6 +30,17 @@ export const S = Object.freeze({
   dropdownMenuContent: '.rt-DropdownMenuContent',
   radixThemes: 'html[data-dsh-ui] .radix-themes',
   dshUiHtml: 'html[data-dsh-ui="dsh-yuangao"]',
+
+  // ---- dsh-ui component library (src/ui) ----------------------------------
+  dshRoot: '.dsh-root',
+  dshPortalRoot: '[data-dsh-portal-root]',
+  dshButton: '.dsh-button',
+  dshIconButton: '.dsh-icon-button',
+  dshMenu: '.dsh-menu',
+  dshOverlay: '.dsh-overlay',
+  dshDialog: '.dsh-dialog',
+  dshSwitchRow: '.dsh-switch-row',
+  dshSwitch: '.dsh-switch',
   tier: '[data-tier]',
   body: 'body',
   form: 'form',

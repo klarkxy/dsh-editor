@@ -129,9 +129,23 @@ export async function openPluginManager(plugins) {
 }
 
 export async function nativePluginRpc(page, method, args = {}) {
-  const response = await page.request.post(new URL(`/api/pluginManager/${method}`, page.url()).href, {
-    data: { type: 'client-request', rpcId: `e2e-${method}-${Date.now()}`, method: `pluginManager/${method}`, payload: { args } },
-  })
+  // The shared request context can hand back a stale keep-alive socket late in a
+  // long run (the runtime closes idle connections); retry on transport errors
+  // only — response assertions below stay unchanged.
+  let response, lastError
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      response = await page.request.post(new URL(`/api/pluginManager/${method}`, page.url()).href, {
+        data: { type: 'client-request', rpcId: `e2e-${method}-${Date.now()}-${attempt}`, method: `pluginManager/${method}`, payload: { args } },
+      })
+      break
+    } catch (error) {
+      lastError = error
+      if (!/ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE/.test(error.message)) throw error
+      await page.waitForTimeout(500 * (attempt + 1))
+    }
+  }
+  if (!response) throw lastError
   assert.ok(response.ok(), `${method}: HTTP ${response.status()}`)
   const body = await response.json()
   const result = body.result ?? body

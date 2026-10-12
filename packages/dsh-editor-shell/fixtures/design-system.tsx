@@ -1,10 +1,37 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Badge, Button, Card, Dialog, DropdownMenu, Flex, IconButton, ScrollArea, Text, TextArea } from '@radix-ui/themes'
+import { Card, ScrollArea } from '@radix-ui/themes'
 import { ShellTheme, radixThemesStyles } from '../src/client/ui/theme-root.tsx'
 import { redesignedStyles } from '../src/styles.ts'
-import { designSystemStyles } from '../src/design-system/styles.ts'
+import { componentStyles, officialResourceStyles, responsiveStyles } from '../src/design-system/styles.ts'
+import { tokenStyles } from '../src/design-system/tokens.ts'
+import { collectStyles, defineStyles } from '../src/design-system/layers.ts'
 import { Markdown } from '../src/client/markdown.tsx'
+import {
+  Badge,
+  Button,
+  Dialog,
+  IconButton,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+  PlusIcon,
+  SendIcon,
+  Switch,
+  TextArea,
+} from '../src/ui/index.ts'
+
+/* 与 client/root.tsx injectShellStyles 相同的注册次序；fixture 直接注入
+   collectStyles() 输出，层序声明也一并覆盖。 */
+defineStyles('legacy', 'radix-themes', radixThemesStyles)
+defineStyles('legacy', 'shell-legacy', redesignedStyles)
+defineStyles('legacy', 'yuangao-components', componentStyles)
+defineStyles('legacy', 'yuangao-responsive', responsiveStyles)
+defineStyles('legacy', 'yuangao-official-resource', officialResourceStyles)
+defineStyles('dsh.tokens', 'yuangao-tokens', tokenStyles)
+const shellCss = collectStyles()
 
 /** Browser contract fixture, not an Electron/runtime simulation. */
 function Preview() {
@@ -12,9 +39,11 @@ function Preview() {
   const [draft, setDraft] = useState('帮我把这段对话写得更自然。')
   const [selected, setSelected] = useState(2)
   const [sent, setSent] = useState(false)
-  // Mirrors production injection order: radix + structural + design-system.
+  const [settings, setSettings] = useState(false)
+  const [typewriter, setTypewriter] = useState(true)
+  const settingsFocus = useRef<HTMLTextAreaElement | null>(null)
   return <ShellTheme appearance={appearance}>
-    <style>{radixThemesStyles}{redesignedStyles}{designSystemStyles}{`
+    <style>{shellCss}{`
       .preview-panels { display:grid; grid-template-columns:248px minmax(0,1fr) 384px; min-height:0; }
       .preview-paper { width:100%; height:100%; resize:none; padding:32px; border:0; background:transparent; color:inherit; font:17px/1.9 serif; }
       .preview-sidebar { padding:8px 12px; }
@@ -23,27 +52,48 @@ function Preview() {
       @media(max-width:640px) { .preview-panels { grid-template-columns:1fr; } .preview-panels>.editor-stack { display:none; } }
     `}</style>
     <div className="shell">
-      <Flex className="chrome" align="center" justify="between" px="3">
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger><Button className="workspace-menu-trigger" variant="ghost" color="gray">DSH Editor · 长夜来信 ▾</Button></DropdownMenu.Trigger>
-          <DropdownMenu.Content><DropdownMenu.Item>Open workspace</DropdownMenu.Item><DropdownMenu.Item>Export manuscript</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item color="red">Archive</DropdownMenu.Item></DropdownMenu.Content>
-        </DropdownMenu.Root>
-        <Flex gap="2" align="center">
-          <Badge color="gray">UI fixture</Badge>
-          <Button variant="ghost" color="gray" onClick={() => setAppearance(x => x === 'light' ? 'dark' : 'light')}>Toggle theme</Button>
-          <Dialog.Root>
-            <Dialog.Trigger><Button variant="ghost" color="gray">Settings</Button></Dialog.Trigger>
-            <Dialog.Content className="file-dialog">
-              <Dialog.Title>Writing settings</Dialog.Title><Dialog.Description>Real Radix portal, theme and focus return.</Dialog.Description>
-              <TextArea aria-label="Settings sample" placeholder="Author preferences" mt="4"/>
-              <Flex gap="2" justify="end" mt="4"><Dialog.Close><Button variant="outline">Cancel</Button></Dialog.Close><Dialog.Close><Button>Save</Button></Dialog.Close></Flex>
-            </Dialog.Content>
-          </Dialog.Root>
-        </Flex>
-      </Flex>
+      <header className="chrome" role="banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }}>
+        <Menu>
+          <MenuTrigger>
+            <button type="button" className="workspace-menu-trigger">DSH Editor · 长夜来信 ▾</button>
+          </MenuTrigger>
+          <MenuContent aria-label="工作区">
+            <MenuItem>打开工作区</MenuItem>
+            <MenuItem shortcut="Ctrl+E">导出文稿</MenuItem>
+            <MenuSeparator />
+            <MenuItem tone="danger">归档</MenuItem>
+          </MenuContent>
+        </Menu>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Badge>UI fixture</Badge>
+          <Button variant="ghost" onClick={() => setAppearance(x => x === 'light' ? 'dark' : 'light')}>Toggle theme</Button>
+          <Button variant="ghost" onClick={() => setSettings(true)}>Settings</Button>
+          <Dialog
+            open={settings}
+            onOpenChange={setSettings}
+            title="Writing settings"
+            description="Real portal, theme inheritance and focus return."
+            closeLabel="关闭"
+            initialFocusRef={settingsFocus}
+            footer={<><Button variant="secondary" onClick={() => setSettings(false)}>Cancel</Button><Button onClick={() => setSettings(false)}>Save</Button></>}
+          >
+            <Switch
+              checked={typewriter}
+              onCheckedChange={setTypewriter}
+              label="打字机滚动"
+              description="整行可点击；行高不小于 40px。"
+              shortcut="Ctrl+Alt+T"
+            />
+            <TextArea ref={settingsFocus} aria-label="Settings sample" placeholder="Author preferences" style={{ marginTop: 12 }} />
+          </Dialog>
+        </div>
+      </header>
       <div className="preview-panels">
         <aside className="sidebar">
-          <Flex className="side-title" align="center" justify="between" px="4"><Text className="side-title-label">作品</Text><IconButton variant="ghost" color="gray" aria-label="New chapter">＋</IconButton></Flex>
+          <div className="side-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px' }}>
+            <span className="side-title-label">作品</span>
+            <IconButton label="New chapter"><PlusIcon /></IconButton>
+          </div>
           <div className="tree preview-sidebar">
             {['故事大纲', '第一章　雨夜', '第二章　来信', '第三章　访客', '人物与世界设定'].map((label, index) => <div key={label} className="tree-file-row"><button className="tree-row" aria-current={selected === index ? 'page' : undefined} onClick={() => setSelected(index)}>{label}</button></div>)}
           </div>
@@ -51,23 +101,27 @@ function Preview() {
           <style>{`.plugin-sentinel { border-radius:2px; border:1px dashed currentColor; padding:4px; font-size:13px; }`}</style>
         </aside>
         <div className="editor-stack"><main className="editor">
-          <Flex className="editor-header" align="center"><Text className="editor-doc-title">第二章　来信</Text><Text data-testid="paper-save-state">已保存</Text></Flex>
+          <div className="editor-header" style={{ display: 'flex', alignItems: 'center' }}>
+            <span className="editor-doc-title">第二章　来信</span><span data-testid="paper-save-state">已保存</span>
+          </div>
           <textarea aria-label="Manuscript fixture" className="preview-paper" defaultValue={'第二章　来信\n\n雨停的时候，信还没有拆。\n\n她将台灯向桌边移了半寸。信封上的字迹很轻，最后一笔却划破了纸，露出一道细白的口子。\n\n“你确定是今天送来的？”\n\n门口的人没有回答，只把湿透的外套搭在椅背上。\n\n窗外最后一滴雨，从檐角落下。'} />
-          <Flex className="editor-tools"><Button size="1" variant="ghost" color="gray">补全</Button><Button size="1" variant="ghost" color="gray">改写</Button><Button size="1" variant="ghost" color="gray">校对</Button></Flex>
+          <div className="editor-tools" style={{ display: 'flex' }}><Button size="sm" variant="ghost">补全</Button><Button size="sm" variant="ghost">改写</Button><Button size="sm" variant="ghost">校对</Button></div>
         </main></div>
         <aside className="chat">
-          <Flex className="chat-header" align="center" justify="between" px="3"><Text weight="medium">写作搭档</Text><span className="preset-badge">预设</span><span className="models-credential-dot" /><span className="activity-dots"><i /><i /><i /></span><Badge className="composer-mode" color="gray">小说创作</Badge></Flex>
-          <div className="chat-history"><ScrollArea style={{height:'100%'}}><Flex direction="column" gap="4" p="4">
+          <div className="chat-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }}>
+            <span>写作搭档</span><span className="preset-badge">预设</span><span className="models-credential-dot" /><span className="activity-dots"><i /><i /><i /></span><Badge>小说创作</Badge>
+          </div>
+          <div className="chat-history"><ScrollArea style={{height:'100%'}}><div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16 }}>
             <div className="chat-row user"><Card>保留悬念，让人物说话更自然一点。</Card></div>
-            <div className="chat-process"><button className="chat-process-toggle" onClick={event => { const target = event.currentTarget.nextElementSibling as HTMLElement; target.hidden = !target.hidden }}>已阅读 2 份资料 · 展开过程</button><div className="chat-process-body" hidden><Text size="1">章节正文、人物设定。该夹具没有连接模型服务。</Text></div></div>
+            <div className="chat-process"><button className="chat-process-toggle" onClick={event => { const target = event.currentTarget.nextElementSibling as HTMLElement; target.hidden = !target.hidden }}>已阅读 2 份资料 · 展开过程</button><div className="chat-process-body" hidden><span style={{ fontSize: 12 }}>章节正文、人物设定。该夹具没有连接模型服务。</span></div></div>
             <div className="chat-row assistant"><Markdown text={'## 阅读与修订建议\n\n先保留正文的叙述节奏，再逐项核对资料和修改范围。长回复需要清楚的段落边界，作者应能在正文和建议之间来回阅读。\n\n- **段落层级：** 普通叙述保持正常字重，重点只标在关键句上，避免整段都变成强调文字。\n- **资料说明：** 来源、限制与结论分开写，让读者能逐项判断，而不是挤成连续的信息墙。\n- **修改范围：** 保留人物动机与已有事件，只调整本次讨论中的表达和节奏。\n\n### 下一步\n\n可以先对照第二段，再决定是否采用下方提案。代码、引用与链接仍保留各自的语义。'} /></div>
-            <Card className="proposal-card"><Text weight="medium">正文提案 · 第二章</Text><Text as="p" size="2" mt="2">“今天？”她抬起头。\n\n门口的人把湿外套挂好，才说：“信上是这么写的。”</Text><Flex className="proposal-actions" justify="end" gap="2"><Button size="1" variant="outline">查看修改</Button><Button size="1" color="red">撤回</Button><Button size="1" color="gray">归档</Button><Button size="1" disabled>暂不采用</Button><Button size="1">采用</Button></Flex></Card>
-            {sent ? <Text role="status">Fixture message submitted. No model request.</Text> : null}
-          </Flex></ScrollArea></div>
+            <Card className="proposal-card"><strong>正文提案 · 第二章</strong><p>“今天？”她抬起头。门口的人把湿外套挂好，才说：“信上是这么写的。”</p><div className="proposal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><Button size="sm" variant="secondary">查看修改</Button><Button size="sm" variant="danger">撤回</Button><Button size="sm" variant="secondary">归档</Button><Button size="sm" disabled>暂不采用</Button><Button size="sm">采用</Button></div></Card>
+            {sent ? <span role="status">Fixture message submitted. No model request.</span> : null}
+          </div></ScrollArea></div>
           <form className="composer" onSubmit={event => { event.preventDefault(); setSent(true); setDraft('') }}>
-            <Flex direction="column" gap="2"><TextArea rows={1} aria-label="Chat input" value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的想法…" />
-              <Flex className="composer-toolbar" justify="between" align="center"><Text size="1" color="gray">写作模型 · 标准</Text><div className="composer-actions"><IconButton className="send" type="submit" disabled={!draft.trim()} aria-label="Send message">↑</IconButton></div></Flex>
-            </Flex>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}><TextArea aria-label="Chat input" value={draft} onChange={setDraft} placeholder="写下你的想法…" minRows={1} maxRows={6} />
+              <div className="composer-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 12, color: 'var(--dsh-ui-muted)' }}>写作模型 · 标准</span><div className="composer-actions"><IconButton className="send" type="submit" variant="primary" disabled={!draft.trim()} label="Send message"><SendIcon /></IconButton></div></div>
+            </div>
           </form>
         </aside>
       </div>

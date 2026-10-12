@@ -5,6 +5,7 @@ import type { ThemeValue } from '../../model/theme.ts'
 import { rewriteRadixThemesCss } from '../../model/theme-root.ts'
 import { mountDesignScope } from '../../design-system/scope.ts'
 import { DesignSystemGallery } from '../../design-system/gallery.tsx'
+import { UiRoot } from '../../ui/root.tsx'
 
 export const radixThemesStyles = rewriteRadixThemesCss(radixThemesCss)
 
@@ -31,8 +32,12 @@ export function ShellTheme(props: {
       scaling="100%"
       panelBackground="solid"
     >
-      {props.children}
-      <DesignSystemGallery />
+      {/* §3：迁移期 UiRoot 放在旧的 ShellTheme 内部。 */}
+      <UiRoot theme={props.appearance === 'dark' ? 'dark' : 'light'}>
+        {props.children}
+        {/* gallery 在 UiRoot 内：其 Dialog/IconButton 依赖 portal 容器与 TooltipProvider。 */}
+        <DesignSystemGallery />
+      </UiRoot>
     </Theme>
   )
 }

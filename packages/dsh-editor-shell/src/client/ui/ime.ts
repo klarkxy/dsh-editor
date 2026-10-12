@@ -1,6 +1,2 @@
-/** IME composition keyCode used by Chromium/WebKit while composing. */
-export const IME_KEYCODE = 229
-
-export function isImeEvent(input: { isComposing?: boolean; keyCode?: number }): boolean {
-  return Boolean(input.isComposing) || input.keyCode === IME_KEYCODE
-}
+/* 迁移期 re-export；实现已移至 src/ui/ime.ts（design-system-spec §5）。 */
+export { IME_KEYCODE, isImeEvent } from '../../ui/ime.ts'

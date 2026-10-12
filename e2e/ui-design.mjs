@@ -6,21 +6,10 @@ import { spawnSync } from 'node:child_process'
 import { chromium } from 'playwright'
 import { S } from './helpers/selectors.mjs'
 
-async function buttonPaint(page, name) {
-  return page.getByRole('button', { name, exact: true }).evaluate(el => {
+async function paint(page, selector) {
+  return page.locator(selector).first().evaluate(el => {
     const style = getComputedStyle(el)
-    const probe = document.createElement('span')
-    probe.style.backgroundColor = style.getPropertyValue('--accent-9')
-    el.appendChild(probe)
-    const accent = getComputedStyle(probe).backgroundColor
-    probe.remove()
-    return {
-      bg: style.backgroundColor,
-      fg: style.color,
-      accent,
-      accentAttr: el.getAttribute('data-accent-color'),
-      disabled: el.matches(':disabled'),
-    }
+    return { bg: style.backgroundColor, fg: style.color, disabled: el.matches(':disabled') }
   })
 }
 
@@ -29,14 +18,17 @@ async function assertPrimaryButtons(page, expected) {
     const adopt = [...document.querySelectorAll('button')].find(el => el.textContent === '采用')
     return adopt && getComputedStyle(adopt).backgroundColor === expected.enabled && getComputedStyle(adopt).color === expected.enabledText
   }, expected)
-  const adopt = await buttonPaint(page, '采用')
-  assert.equal(adopt.accentAttr, '')
+  const adopt = await page.getByRole('button', { name: '采用', exact: true }).evaluate(el => {
+    const style = getComputedStyle(el)
+    return { bg: style.backgroundColor, fg: style.color, disabled: el.disabled }
+  })
   assert.equal(adopt.disabled, false)
   assert.equal(adopt.bg, expected.enabled)
   assert.equal(adopt.fg, expected.enabledText)
-  assert.notEqual(adopt.bg, adopt.accent)
-  const held = await buttonPaint(page, '暂不采用')
-  assert.equal(held.accentAttr, '')
+  const held = await page.getByRole('button', { name: '暂不采用', exact: true }).evaluate(el => {
+    const style = getComputedStyle(el)
+    return { bg: style.backgroundColor, fg: style.color, disabled: el.disabled }
+  })
   assert.equal(held.disabled, true)
   assert.equal(held.bg, expected.disabled)
   assert.equal(held.fg, expected.disabledText)
@@ -44,7 +36,7 @@ async function assertPrimaryButtons(page, expected) {
 }
 
 /*
- * Buttons transition background-color for --dsh-ui-duration-base (200ms), so a
+ * Buttons transition background-color for --dsh-ui-duration-fast (120ms), so a
  * fixed sleep reads a mid-transition frame rather than the resting fill. Poll
  * on animation frames and only return once the expected value has been held for
  * several consecutive frames, which proves the transition settled instead of
@@ -83,22 +75,6 @@ async function assertRoundShapes(page) {
   assert.notEqual(await page.locator(S.pluginSentinel).evaluate(el => getComputedStyle(el).cornerShape), 'superellipse(1.5)')
 }
 
-async function assertSave(page, background, text) {
-  await page.waitForFunction(({ background, text }) => {
-    const save = [...document.querySelectorAll('button')].find(el => el.textContent === 'Save')
-    if (!save) return false
-    const style = getComputedStyle(save)
-    return style.backgroundColor === background && style.color === text
-  }, { background, text })
-  const save = await buttonPaint(page, 'Save')
-  assert.equal(save.accentAttr, '')
-  assert.equal(save.disabled, false)
-  assert.equal(save.bg, background)
-  assert.equal(save.fg, text)
-  assert.notEqual(save.bg, save.accent)
-  assert.notEqual(save.bg, 'rgb(65, 118, 230)')
-}
-
 const root = fileURLToPath(new URL('../', import.meta.url))
 const build = spawnSync(process.execPath, [fileURLToPath(import.meta.resolve('tsdown/run')), '--config', 'e2e/ui-design.config.ts'], { cwd: root, stdio: 'inherit' })
 if (build.error) throw build.error
@@ -130,6 +106,7 @@ try {
   await paper.fill('保留的正文，切换主题不应丢失。')
   await paper.evaluate(el => { window.__paperNode = el; el.setSelectionRange(2, 5) })
   assert.equal(await page.locator(S.chat).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(232, 235, 230)')
+  // 插件隔离：插件表面的按钮不受官方组件样式影响。
   assert.equal(await page.locator(S.pluginSentinel).evaluate(el => getComputedStyle(el).borderRadius), '2px')
   const readingType = await page.locator(S.chatMarkdown).evaluate(el => {
     const paragraph = getComputedStyle(el.querySelector('p'))
@@ -141,36 +118,64 @@ try {
   assert(parseFloat(readingType.heading) > parseFloat(readingType.size))
   assert.equal(readingType.listSpacing,'8px')
   await assertRoundShapes(page)
-  // The primary action is the fixed 原稿 黛蓝 brand, not a saved accent.
+  // 主按钮固定 原稿 黛蓝 brand；不存在自选主题色。
   await assertPrimaryButtons(page, {
     enabled: 'rgb(46, 79, 122)',
     enabledText: 'rgb(255, 255, 255)',
     disabled: 'rgba(30, 36, 32, 0.06)',
     disabledText: 'rgb(92, 101, 94)',
   })
+  // 浅色：Settings 对话框（portal、遮罩、焦点返回）。
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   const lightDialog = page.getByRole('dialog', { name: 'Writing settings' })
   await lightDialog.waitFor()
-  await assertSave(page, 'rgb(46, 79, 122)', 'rgb(255, 255, 255)')
+  // portal 继承所在主题：对话框与遮罩渲染在 dsh-root 的 portal-root 内。
+  assert(await lightDialog.evaluate((el, sel) => !!el.closest(sel), S.dshPortalRoot), 'dialog must render inside the dsh portal root')
+  assert.equal(await lightDialog.evaluate(el => el.closest('[data-dsh-theme]')?.getAttribute('data-dsh-theme')), 'light')
+  // 遮罩为黑色 scrim，不模糊。
+  const lightOverlay = await page.locator(S.dshOverlay).evaluate(el => {
+    const style = getComputedStyle(el)
+    return { bg: style.backgroundColor, blur: style.backdropFilter }
+  })
+  assert.equal(lightOverlay.bg, 'rgba(16, 20, 18, 0.48)')
+  assert.equal(lightOverlay.blur, 'none')
+  // Switch 整行可点击且行高不小于 40px。
+  const switchRow = page.locator(S.dshSwitchRow)
+  const switchBox = await switchRow.boundingBox()
+  assert(switchBox && switchBox.height >= 40, `switch row height ${switchBox?.height} < 40`)
+  assert.equal(await page.locator(S.dshSwitch).getAttribute('aria-checked'), 'true')
+  await switchRow.locator('.dsh-switch-row__label').click()
+  assert.equal(await page.locator(S.dshSwitch).getAttribute('aria-checked'), 'false', 'clicking the row label must toggle the switch')
+  await switchRow.locator('.dsh-switch-row__label').click()
+  assert.equal(await page.locator(S.dshSwitch).getAttribute('aria-checked'), 'true')
+  // Escape 关闭且焦点返回触发按钮。
   await page.keyboard.press('Escape')
   await lightDialog.waitFor({ state: 'hidden' })
+  // 焦点恢复安排在卸载后的宏任务（focus-return.ts），等最终态而非赌时序。
+  await page.waitForFunction(() => document.activeElement?.textContent === 'Settings')
+  // 菜单为实色、不模糊，同样经 portal 继承主题。
   await page.getByRole('button', { name: /DSH Editor/ }).click()
-  const menu = page.locator(S.dropdownMenuContent)
+  const menu = page.locator(S.dshMenu)
   await menu.waitFor()
-  // 原稿菜单为实色，不模糊。
-  assert.equal(await menu.evaluate(el => getComputedStyle(el).backdropFilter), 'none')
-  assert.equal(await menu.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 255, 255)')
-  assert.equal(await menu.evaluate(el => getComputedStyle(el).borderTopWidth), '0px')
+  assert(await menu.evaluate((el, sel) => !!el.closest(sel), S.dshPortalRoot), 'menu must render inside the dsh portal root')
+  const menuPaint = await menu.evaluate(el => {
+    const style = getComputedStyle(el)
+    return { bg: style.backgroundColor, blur: style.backdropFilter, border: style.borderTopWidth }
+  })
+  assert.equal(menuPaint.bg, 'rgb(255, 255, 255)')
+  assert.equal(menuPaint.blur, 'none')
+  assert.equal(menuPaint.border, '0px')
   await page.keyboard.press('Escape')
   await menu.waitFor({ state: 'hidden' })
   await page.screenshot({ path: fileURLToPath(new URL('light-1440.png', out)), fullPage: true })
+  // 深色：主题切换不重建输入节点。
   await page.getByRole('button', { name: 'Toggle theme' }).click()
   await page.waitForFunction((sel) => {
     const chat = document.querySelector(sel)
     return chat && getComputedStyle(chat).backgroundColor === 'rgb(21, 24, 22)'
   }, S.chat)
   assert.equal(await page.locator(S.chat).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(21, 24, 22)')
-  assert(await paper.evaluate(el => el === window.__paperNode))
+  assert(await paper.evaluate(el => el === window.__paperNode), 'manuscript node must not be rebuilt on theme switch')
   assert.equal(await paper.inputValue(), '保留的正文，切换主题不应丢失。')
   await assertPrimaryButtons(page, {
     enabled: 'rgb(143, 176, 222)',
@@ -181,40 +186,47 @@ try {
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Writing settings' })
   await dialog.waitFor()
+  assert.equal(await dialog.evaluate(el => el.closest('[data-dsh-theme]')?.getAttribute('data-dsh-theme')), 'dark')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(37, 42, 38)')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopWidth), '0px')
   assert.equal(await dialog.evaluate(el => getComputedStyle(el).borderTopLeftRadius), '20px')
-  assert.equal(await page.locator(S.baseDialogOverlay).evaluate(el => getComputedStyle(el, '::before').backdropFilter), 'none')
-  await assertSave(page, 'rgb(143, 176, 222)', 'rgb(20, 24, 27)')
+  const darkOverlay = await page.locator(S.dshOverlay).evaluate(el => {
+    const style = getComputedStyle(el)
+    return { bg: style.backgroundColor, blur: style.backdropFilter }
+  })
+  assert.equal(darkOverlay.bg, 'rgba(0, 0, 0, 0.55)')
+  assert.equal(darkOverlay.blur, 'none')
   await page.screenshot({ path: fileURLToPath(new URL('dark-portal.png', out)), fullPage: true })
   await page.keyboard.press('Escape')
   await dialog.waitFor({ state: 'hidden' })
-  assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Settings')
+  await page.waitForFunction(() => document.activeElement?.textContent === 'Settings')
+  // 深色菜单实色。
+  await page.getByRole('button', { name: /DSH Editor/ }).click()
+  await menu.waitFor()
+  assert.equal(await menu.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(37, 42, 38)')
+  await page.keyboard.press('Escape')
+  await menu.waitFor({ state: 'hidden' })
+  // 设计系统 gallery（Ctrl+Alt+Shift+D）：新组件库的 Dialog。
   await page.keyboard.press('Control+Alt+Shift+KeyD')
-  await page.getByRole('dialog', { name: 'DSH UI / Design system' }).waitFor()
+  await page.getByRole('dialog', { name: 'DSH UI · 原稿设计系统' }).waitFor()
   await page.screenshot({ path: fileURLToPath(new URL('live-design-system.png', out)), fullPage: true })
   await page.keyboard.press('Escape')
-  await page.getByRole('dialog', { name: 'DSH UI / Design system' }).waitFor({ state: 'hidden' })
+  await page.getByRole('dialog', { name: 'DSH UI · 原稿设计系统' }).waitFor({ state: 'hidden' })
+  // 禁用的发送键：disabled 语义 + 去掉 brand 实色。
   await page.getByRole('textbox', { name: 'Chat input', exact: true }).fill('')
   const send = page.getByRole('button', { name: 'Send message' })
-  // Disabled pins `background: transparent` plus an inset hairline, so the send
-  // key must drop the brand primary entirely: a resting brand fill here would
-  // read as clickable. Wait for the 200ms transition to settle, not a fixed
-  // sleep, or this catches an in-between frame instead of the resting state.
   await waitForSettledBackground(page, 'Send message', 'rgba(0, 0, 0, 0)')
   assert(await send.isDisabled())
   const disabledBg = await send.evaluate(el => getComputedStyle(el).backgroundColor)
   assert.equal(disabledBg, 'rgba(0, 0, 0, 0)', 'disabled send bg')
   assert.notEqual(disabledBg, 'rgb(143, 176, 222)', 'disabled send must not show the brand primary')
   await page.getByRole('textbox', { name: 'Chat input', exact: true }).fill('Test draft')
-  // Enabled must land on the full dark 黛蓝 brand fill. Anything less
-  // opaque is a transition frame, not the settled contract.
   await waitForSettledBackground(page, 'Send message', 'rgb(143, 176, 222)')
   assert.equal(await send.isDisabled(), false)
-  const enabledBg = await send.evaluate(el => getComputedStyle(el).backgroundColor)
-  assert.equal(enabledBg, 'rgb(143, 176, 222)', 'enabled send bg')
+  assert.equal(await send.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(143, 176, 222)', 'enabled send bg')
   await send.click()
   await page.getByRole('status').filter({ hasText: 'Fixture message submitted' }).waitFor()
+  // 四档宽度无横向溢出。
   for (const width of [1440, 1024, 760, 390]) {
     await page.setViewportSize({ width, height: 900 })
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow at ${width}`)
@@ -222,8 +234,34 @@ try {
     assert(box && box.x >= 0 && box.x + box.width <= width + 1, `composer at ${width}`)
     await page.screenshot({ path: fileURLToPath(new URL(`dark-${width}.png`, out)), fullPage: true })
   }
+  // 减少动态效果。
   await page.emulateMedia({ reducedMotion: 'reduce' })
   assert.equal(await page.locator(S.composer).evaluate(el => getComputedStyle(el).transitionDuration), '0s')
+  await page.emulateMedia({ reducedMotion: null })
+  // forced-colors：焦点与选中状态仍可见（系统色描边）。Switch 只在对话框打开时挂载。
+  await page.emulateMedia({ forcedColors: 'active' })
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  const fcDialog = page.getByRole('dialog', { name: 'Writing settings' })
+  await fcDialog.waitFor()
+  assert.equal(await page.locator(S.dshSwitch).evaluate(el => getComputedStyle(el).borderTopWidth), '1px', 'switch needs a border in forced-colors')
+  await page.keyboard.press('Escape')
+  await fcDialog.waitFor({ state: 'hidden' })
+  // 键盘 focus-visible 下按钮必须有可见描边。
+  await page.keyboard.press('Tab')
+  const focusVisible = await page.evaluate(() => {
+    const el = document.activeElement
+    const style = el ? getComputedStyle(el) : null
+    return { tag: el?.tagName, outline: style?.outlineStyle, width: style?.outlineWidth }
+  })
+  assert.equal(focusVisible.tag, 'BUTTON')
+  assert.notEqual(focusVisible.outline, 'none', 'focused control must show an outline in forced-colors')
+  assert.notEqual(focusVisible.width, '0px', 'focused control outline must be non-zero in forced-colors')
+  const selectedRow = await page.locator(`${S.treeRow}[aria-current="page"]`).evaluate(el => {
+    const style = getComputedStyle(el)
+    return { outline: style.outlineStyle, width: style.outlineWidth }
+  })
+  assert.notEqual(selectedRow.outline, 'none', 'selected row must be visible in forced-colors')
+  await page.emulateMedia({ forcedColors: null })
   assert.deepEqual(errors, [])
   console.log('UI browser contracts passed. This is a component fixture, not a full Electron/runtime acceptance test.')
 } finally {
